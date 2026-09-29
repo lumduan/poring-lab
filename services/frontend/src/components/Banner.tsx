@@ -1,0 +1,27 @@
+import type { Links } from "@/components/StatsPanel";
+import type { Status } from "@/lib/protocol";
+
+type Props = { links: Links; status: Status | null };
+
+/** A clear notice when the picture or the controls can't be trusted. */
+export default function Banner({ links, status }: Props) {
+  const problems: string[] = [];
+  if (!links.stream) problems.push("Stream disconnected: reconnecting to the backend…");
+  if (!links.input) problems.push("Input channel disconnected: keys and clicks are not being sent.");
+  if (links.stream && status?.rdp_window_present === false) {
+    problems.push(
+      "RDP session is down: the desktop container is reconnecting (docker compose logs desktop).",
+    );
+  }
+  if (links.stream && status && status.rdp_window_present === null) {
+    problems.push("The backend cannot reach the X display.");
+  }
+  if (problems.length === 0) return null;
+  return (
+    <div role="alert" className="rounded-md border border-amber-600 bg-amber-950 px-3 py-2 text-sm text-amber-100">
+      {problems.map((p) => (
+        <p key={p}>{p}</p>
+      ))}
+    </div>
+  );
+}

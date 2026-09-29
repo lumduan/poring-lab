@@ -2,10 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import Banner from "@/components/Banner";
 import ModeSwitch from "@/components/ModeSwitch";
 import OverlayCanvas from "@/components/OverlayCanvas";
 import StatsPanel, { EMPTY_STATS, type Links, type Stats } from "@/components/StatsPanel";
 import StreamCanvas from "@/components/StreamCanvas";
+import Toolbar from "@/components/Toolbar";
+import { HeldKeys, type KeyStep } from "@/lib/keys";
 import {
   browserNowNs,
   NO_FRAME,
@@ -16,9 +19,24 @@ import {
   type Mode,
   type Status,
 } from "@/lib/protocol";
+import type { Size, ViewMode } from "@/lib/view";
 import { backendWsBase, ReconnectingSocket } from "@/lib/ws";
 
 type Props = { backendUrl: string | null };
+
+const WINDOW = 90; // frames kept for the rolling p50 (~3 s at 30 fps)
+
+function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = sorted.length >> 1;
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+function push(buffer: number[], value: number): void {
+  buffer.push(value);
+  if (buffer.length > WINDOW) buffer.shift();
+}
 
 /** Owns both sockets. Video frames are drawn imperatively (never through React state); status,
  * detections and stats go through state at their own, much lower rates. */
@@ -26,11 +44,14 @@ export default function Console({ backendUrl }: Props) {
   const videoRef = useRef<HTMLCanvasElement>(null);
   const inputRef = useRef<ReconnectingSocket | null>(null);
   const frameIdRef = useRef<number>(NO_FRAME);
+  const [held] = useState(() => new HeldKeys());
   const [status, setStatus] = useState<Status | null>(null);
   const [detections, setDetections] = useState<Detections | null>(null);
   const [stats, setStats] = useState<Stats>(EMPTY_STATS);
   const [links, setLinks] = useState<Links>({ stream: false, input: false });
-  const [size, setSize] = useState({ width: 1280, height: 720 });
+  const [frameSize, setFrameSize] = useState<Size>({ width: 1280, height: 720 });
+  const [viewMode, setViewMode] = useState<ViewMode>("fit");
+  const [focused, setFocused] = useState(false);
 
   useEffect(() => {
     const base = backendWsBase(backendUrl);
@@ -39,8 +60,8 @@ export default function Console({ backendUrl }: Props) {
     let decoding = false;
     let frames = 0;
     let bytes = 0;
-    let captureToEncodeMs = 0;
-    let encodeToSendMs = 0;
+    const captureToEncode: number[] = [];
+    const encodeToSend: number[] = [];
     let rttMs: number | null = null;
     let windowStart = performance.now();
 
@@ -57,7 +78,7 @@ export default function Console({ backendUrl }: Props) {
             if (canvas.width !== meta.width || canvas.height !== meta.height) {
               canvas.width = meta.width;
               canvas.height = meta.height;
-              setSize({ width: meta.width, height: meta.height });
+              setFrameSize({ width: meta.width, height: meta.height });
             }
             canvas.getContext("2d")?.drawImage(bitmap, 0, 0);
           }
@@ -66,8 +87,8 @@ export default function Console({ backendUrl }: Props) {
           frames += 1;
           bytes += meta.nbytes;
           // Both intervals are on the backend's clock, so they are directly meaningful.
-          captureToEncodeMs = (meta.t_encoded_ns - meta.t_capture_ns) / 1e6;
-          encodeToSendMs = (meta.t_mono_ns - meta.t_encoded_ns) / 1e6;
+          push(captureToEncode, (meta.t_encoded_ns - meta.t_capture_ns) / 1e6);
+          push(encodeToSend, (meta.t_mono_ns - meta.t_encoded_ns) / 1e6);
         } catch {
           // A corrupt or truncated JPEG: skip it, the next one is ~33 ms away.
         }
@@ -117,8 +138,8 @@ export default function Console({ backendUrl }: Props) {
       setStats({
         fps: frames / seconds,
         kibps: bytes / 1024 / seconds,
-        captureToEncodeMs,
-        encodeToSendMs,
+        captureToEncodeP50: median(captureToEncode),
+        encodeToSendP50: median(encodeToSend),
         rttMs,
         frameId: frameIdRef.current,
       });
@@ -140,25 +161,65 @@ export default function Console({ backendUrl }: Props) {
     inputRef.current?.send(message);
   }, []);
 
-  const setMode = useCallback(
-    (mode: Mode) =>
-      send({ type: "set_mode", t_mono_ns: browserNowNs(), frame_id: frameIdRef.current, mode }),
-    [send],
-  );
+  const stamp = () => ({ t_mono_ns: browserNowNs(), frame_id: frameIdRef.current });
+
+  const setMode = (mode: Mode) => send({ type: "set_mode", ...stamp(), mode });
+
+  const sendKeys = (steps: KeyStep[]) => {
+    for (const step of steps) {
+      if (held.apply(step)) send({ type: "key", ...stamp(), code: step.code, action: step.action });
+    }
+  };
+
+  const releaseAll = () => {
+    held.clear();
+    send({ type: "release_all", ...stamp() });
+  };
+
+  const lease =
+    status?.lease_until_ns != null
+      ? Math.max(0, (status.lease_until_ns - status.t_mono_ns) / 1e9)
+      : null;
 
   return (
-    <main className="mx-auto flex max-w-[1320px] flex-col gap-3 p-4">
+    <main className="mx-auto flex max-w-[1600px] flex-col gap-3 p-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-lg font-semibold tracking-tight">poring-lab</h1>
-        <ModeSwitch mode={status?.mode ?? null} onChange={setMode} disabled={!links.input} />
+        <h1 className="text-lg font-semibold tracking-tight">poring-lab console</h1>
+        <div className="flex items-center gap-3">
+          <span className="font-mono text-xs text-neutral-400">
+            {status?.mode === "ASSIST"
+              ? lease == null
+                ? "lease: none (bot may act)"
+                : `human lease ${lease.toFixed(1)} s`
+              : ""}
+          </span>
+          <ModeSwitch mode={status?.mode ?? null} onChange={setMode} disabled={!links.input} />
+        </div>
       </header>
-      <StreamCanvas videoRef={videoRef} frameIdRef={frameIdRef} send={send}>
-        <OverlayCanvas detections={detections} width={size.width} height={size.height} />
+      <Banner links={links} status={status} />
+      <Toolbar
+        disabled={!links.input}
+        mode={viewMode}
+        onKeys={sendKeys}
+        onReleaseAll={releaseAll}
+        onModeChange={setViewMode}
+      />
+      <StreamCanvas
+        videoRef={videoRef}
+        frameIdRef={frameIdRef}
+        frameSize={frameSize}
+        mode={viewMode}
+        held={held}
+        send={send}
+        onFocusChange={setFocused}
+      >
+        <OverlayCanvas detections={detections} width={frameSize.width} height={frameSize.height} />
       </StreamCanvas>
       <StatsPanel stats={stats} status={status} links={links} />
       <p className="text-xs text-neutral-500">
-        Click the screen to control it. Keys and mouse go to the one RDP session through the
-        backend&apos;s input mux; leaving the screen (blur) releases anything you hold.
+        {focused
+          ? "Keyboard and mouse go to the remote desktop (through the backend's input mux). Click outside the screen to release."
+          : "Click the screen to control it. Leaving it (blur or hiding the tab) releases anything held."}
       </p>
     </main>
   );

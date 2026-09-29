@@ -12,6 +12,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Only present inside the frontend-dev container's tmpfs (compose.dev.yaml): the pnpm store,
+    // corepack cache and HOME hold thousands of third-party files that must not be linted.
+    ".pnpm-store/**",
+    ".corepack/**",
+    ".home/**",
   ]),
 ]);
 
