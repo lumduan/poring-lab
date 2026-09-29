@@ -1,0 +1,20 @@
+[project]
+name = "poring-env"
+version = "0.1.0"
+description = "poring-lab environment contract: observe through pixels (grab), act through mouse/keyboard (send_input), plus the wire protocol that carries both."
+requires-python = ">=3.12"
+dependencies = ["pydantic>=2.13", "numpy>=2.0"]
+
+[project.optional-dependencies]
+# X11 implementation: mss (XCB + XShmGetImage) for capture, python-xlib XTest for input.
+x11 = ["mss>=10.2.0", "python-xlib>=0.33"]
+# MuxedEnv: input goes to the backend's /internal/agent socket instead of straight into X.
+remote = ["websockets>=17.1"]
+
+[project.scripts]
+# Prints the protocol JSON Schema; scripts/gen_protocol.sh commits it and derives the TS types.
+poring-protocol-schema = "poring_env.protocol:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

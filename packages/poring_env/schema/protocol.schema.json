@@ -1,0 +1,842 @@
+{
+  "$defs": {
+    "AgentHello": {
+      "additionalProperties": false,
+      "description": "First message on /internal/agent.",
+      "properties": {
+        "agent_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        "frame_id": {
+          "default": -1,
+          "description": "Frame this message refers to or was produced from; -1 means none.",
+          "minimum": -1,
+          "type": "integer"
+        },
+        "t_mono_ns": {
+          "description": "Sender's monotonic clock, ns (see module docstring).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "agent_hello",
+          "default": "agent_hello",
+          "type": "string"
+        },
+        "version": {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "frame_id",
+        "type",
+        "agent_id",
+        "version"
+      ],
+      "title": "AgentHello",
+      "type": "object"
+    },
+    "AgentInput": {
+      "additionalProperties": false,
+      "description": "A batch of bot input decided on ``frame_id`` (captured at ``t_capture_ns``).",
+      "properties": {
+        "events": {
+          "items": {
+            "$ref": "#/$defs/InputEvent"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "type": "array"
+        },
+        "frame_id": {
+          "default": -1,
+          "description": "Frame this message refers to or was produced from; -1 means none.",
+          "minimum": -1,
+          "type": "integer"
+        },
+        "t_capture_ns": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "t_mono_ns": {
+          "description": "Sender's monotonic clock, ns (see module docstring).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "agent_input",
+          "default": "agent_input",
+          "type": "string"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "frame_id",
+        "type",
+        "t_capture_ns",
+        "events"
+      ],
+      "title": "AgentInput",
+      "type": "object"
+    },
+    "AgentToBackend": {
+      "discriminator": {
+        "mapping": {
+          "agent_hello": "#/$defs/AgentHello",
+          "agent_input": "#/$defs/AgentInput",
+          "detections": "#/$defs/Detections",
+          "ping": "#/$defs/Ping"
+        },
+        "propertyName": "type"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/AgentHello"
+        },
+        {
+          "$ref": "#/$defs/AgentInput"
+        },
+        {
+          "$ref": "#/$defs/Detections"
+        },
+        {
+          "$ref": "#/$defs/Ping"
+        }
+      ]
+    },
+    "BackendToAgent": {
+      "discriminator": {
+        "mapping": {
+          "input_ack": "#/$defs/InputAck",
+          "pong": "#/$defs/Pong",
+          "status": "#/$defs/Status"
+        },
+        "propertyName": "type"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/Status"
+        },
+        {
+          "$ref": "#/$defs/InputAck"
+        },
+        {
+          "$ref": "#/$defs/Pong"
+        }
+      ]
+    },
+    "BackendToBrowser": {
+      "discriminator": {
+        "mapping": {
+          "detections": "#/$defs/Detections",
+          "frame": "#/$defs/FrameMeta",
+          "pong": "#/$defs/Pong",
+          "status": "#/$defs/Status"
+        },
+        "propertyName": "type"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/FrameMeta"
+        },
+        {
+          "$ref": "#/$defs/Status"
+        },
+        {
+          "$ref": "#/$defs/Detections"
+        },
+        {
+          "$ref": "#/$defs/Pong"
+        }
+      ]
+    },
+    "Box": {
+      "additionalProperties": false,
+      "description": "One detection, corners normalized to [0, 1].",
+      "properties": {
+        "cls": {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        "conf": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "x1": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "x2": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "y1": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "y2": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "x1",
+        "y1",
+        "x2",
+        "y2",
+        "cls",
+        "conf"
+      ],
+      "title": "Box",
+      "type": "object"
+    },
+    "BrowserToBackend": {
+      "discriminator": {
+        "mapping": {
+          "key": "#/$defs/Key",
+          "mouse_button": "#/$defs/MouseButton",
+          "mouse_move": "#/$defs/MouseMove",
+          "ping": "#/$defs/Ping",
+          "release_all": "#/$defs/ReleaseAll",
+          "set_mode": "#/$defs/SetMode",
+          "wheel": "#/$defs/Wheel"
+        },
+        "propertyName": "type"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/MouseMove"
+        },
+        {
+          "$ref": "#/$defs/MouseButton"
+        },
+        {
+          "$ref": "#/$defs/Wheel"
+        },
+        {
+          "$ref": "#/$defs/Key"
+        },
+        {
+          "$ref": "#/$defs/ReleaseAll"
+        },
+        {
+          "$ref": "#/$defs/SetMode"
+        },
+        {
+          "$ref": "#/$defs/Ping"
+        }
+      ]
+    },
+    "Detections": {
+      "additionalProperties": false,
+      "description": "Detections computed on ``frame_id`` (the agent's own grab); relayed to viewers as overlay.",
+      "properties": {
+        "boxes": {
+          "items": {
+            "$ref": "#/$defs/Box"
+          },
+          "maxItems": 512,
+          "type": "array"
+        },
+        "frame_id": {
+          "default": -1,
+          "description": "Frame this message refers to or was produced from; -1 means none.",
+          "minimum": -1,
+          "type": "integer"
+        },
+        "t_capture_ns": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "t_mono_ns": {
+          "description": "Sender's monotonic clock, ns (see module docstring).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "detections",
+          "default": "detections",
+          "type": "string"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "frame_id",
+        "type",
+        "t_capture_ns",
+        "boxes"
+      ],
+      "title": "Detections",
+      "type": "object"
+    },
+    "FrameMeta": {
+      "additionalProperties": false,
+      "description": "Sent immediately before exactly one binary WebSocket message holding this frame's JPEG.",
+      "properties": {
+        "frame_id": {
+          "default": -1,
+          "description": "Frame this message refers to or was produced from; -1 means none.",
+          "minimum": -1,
+          "type": "integer"
+        },
+        "height": {
+          "exclusiveMinimum": 0,
+          "type": "integer"
+        },
+        "nbytes": {
+          "exclusiveMinimum": 0,
+          "type": "integer"
+        },
+        "t_capture_ns": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "t_encoded_ns": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "t_mono_ns": {
+          "description": "Sender's monotonic clock, ns (see module docstring).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "frame",
+          "default": "frame",
+          "type": "string"
+        },
+        "width": {
+          "exclusiveMinimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "frame_id",
+        "type",
+        "t_capture_ns",
+        "t_encoded_ns",
+        "width",
+        "height",
+        "nbytes"
+      ],
+      "title": "FrameMeta",
+      "type": "object"
+    },
+    "InputAck": {
+      "additionalProperties": false,
+      "description": "Mux verdict for one AgentInput batch.",
+      "properties": {
+        "accepted": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "dropped": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "frame_id": {
+          "default": -1,
+          "description": "Frame this message refers to or was produced from; -1 means none.",
+          "minimum": -1,
+          "type": "integer"
+        },
+        "reasons": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "t_mono_ns": {
+          "description": "Sender's monotonic clock, ns (see module docstring).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "input_ack",
+          "default": "input_ack",
+          "type": "string"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "frame_id",
+        "type",
+        "accepted",
+        "dropped",
+        "reasons"
+      ],
+      "title": "InputAck",
+      "type": "object"
+    },
+    "InputEvent": {
+      "discriminator": {
+        "mapping": {
+          "key": "#/$defs/Key",
+          "mouse_button": "#/$defs/MouseButton",
+          "mouse_move": "#/$defs/MouseMove",
+          "release_all": "#/$defs/ReleaseAll",
+          "wheel": "#/$defs/Wheel"
+        },
+        "propertyName": "type"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/MouseMove"
+        },
+        {
+          "$ref": "#/$defs/MouseButton"
+        },
+        {
+          "$ref": "#/$defs/Wheel"
+        },
+        {
+          "$ref": "#/$defs/Key"
+        },
+        {
+          "$ref": "#/$defs/ReleaseAll"
+        }
+      ]
+    },
+    "Key": {
+      "additionalProperties": false,
+      "description": "A physical key named by KeyboardEvent.code -- layout-independent (see keymap.py).",
+      "properties": {
+        "action": {
+          "enum": [
+            "down",
+            "up"
+          ],
+          "type": "string"
+        },
+        "code": {
+          "maxLength": 32,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9]+$",
+          "type": "string"
+        },
+        "frame_id": {
+          "default": -1,
+          "description": "Frame this message refers to or was produced from; -1 means none.",
+          "minimum": -1,
+          "type": "integer"
+        },
+        "t_mono_ns": {
+          "description": "Sender's monotonic clock, ns (see module docstring).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "key",
+          "default": "key",
+          "type": "string"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "frame_id",
+        "type",
+        "code",
+        "action"
+      ],
+      "title": "Key",
+      "type": "object"
+    },
+    "Mode": {
+      "description": "Input-mux mode (ADR-0002). The backend always boots in HUMAN.",
+      "enum": [
+        "HUMAN",
+        "BOT",
+        "ASSIST"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "MouseButton": {
+      "additionalProperties": false,
+      "description": "Button press or release. With x/y the pointer moves there first; without them (null) the\nbutton acts wherever the pointer already is -- used for the mux's synthetic releases, which\nmust never yank the pointer away from whoever now controls it.",
+      "properties": {
+        "action": {
+          "enum": [
+            "down",
+            "up"
+          ],
+          "type": "string"
+        },
+        "button": {
+          "enum": [
+            "left",
+            "middle",
+            "right"
+          ],
+          "type": "string"
+        },
+        "frame_id": {
+          "default": -1,
+          "description": "Frame this message refers to or was produced from; -1 means none.",
+          "minimum": -1,
+          "type": "integer"
+        },
+        "t_mono_ns": {
+          "description": "Sender's monotonic clock, ns (see module docstring).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "mouse_button",
+          "default": "mouse_button",
+          "type": "string"
+        },
+        "x": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "y": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "frame_id",
+        "type",
+        "button",
+        "action",
+        "x",
+        "y"
+      ],
+      "title": "MouseButton",
+      "type": "object"
+    },
+    "MouseMove": {
+      "additionalProperties": false,
+      "description": "Absolute pointer move; x/y are normalized to [0, 1] over the captured screen.",
+      "properties": {
+        "frame_id": {
+          "default": -1,
+          "description": "Frame this message refers to or was produced from; -1 means none.",
+          "minimum": -1,
+          "type": "integer"
+        },
+        "t_mono_ns": {
+          "description": "Sender's monotonic clock, ns (see module docstring).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "mouse_move",
+          "default": "mouse_move",
+          "type": "string"
+        },
+        "x": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "y": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "frame_id",
+        "type",
+        "x",
+        "y"
+      ],
+      "title": "MouseMove",
+      "type": "object"
+    },
+    "Ping": {
+      "additionalProperties": false,
+      "description": "Round-trip probe; its ``t_mono_ns`` comes back verbatim as ``Pong.echo_t_mono_ns``.",
+      "properties": {
+        "frame_id": {
+          "default": -1,
+          "description": "Frame this message refers to or was produced from; -1 means none.",
+          "minimum": -1,
+          "type": "integer"
+        },
+        "t_mono_ns": {
+          "description": "Sender's monotonic clock, ns (see module docstring).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "ping",
+          "default": "ping",
+          "type": "string"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "frame_id",
+        "type"
+      ],
+      "title": "Ping",
+      "type": "object"
+    },
+    "Pong": {
+      "additionalProperties": false,
+      "description": "Answer to a Ping. ``t_mono_ns`` is the backend clock; the echo is the pinger's clock.",
+      "properties": {
+        "echo_t_mono_ns": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "frame_id": {
+          "default": -1,
+          "description": "Frame this message refers to or was produced from; -1 means none.",
+          "minimum": -1,
+          "type": "integer"
+        },
+        "t_mono_ns": {
+          "description": "Sender's monotonic clock, ns (see module docstring).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "pong",
+          "default": "pong",
+          "type": "string"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "frame_id",
+        "type",
+        "echo_t_mono_ns"
+      ],
+      "title": "Pong",
+      "type": "object"
+    },
+    "ReleaseAll": {
+      "additionalProperties": false,
+      "description": "Release every key and button the sender holds (browser blur, agent reset).",
+      "properties": {
+        "frame_id": {
+          "default": -1,
+          "description": "Frame this message refers to or was produced from; -1 means none.",
+          "minimum": -1,
+          "type": "integer"
+        },
+        "t_mono_ns": {
+          "description": "Sender's monotonic clock, ns (see module docstring).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "release_all",
+          "default": "release_all",
+          "type": "string"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "frame_id",
+        "type"
+      ],
+      "title": "ReleaseAll",
+      "type": "object"
+    },
+    "SetMode": {
+      "additionalProperties": false,
+      "description": "Switch the input mux (HUMAN / BOT / ASSIST).",
+      "properties": {
+        "frame_id": {
+          "default": -1,
+          "description": "Frame this message refers to or was produced from; -1 means none.",
+          "minimum": -1,
+          "type": "integer"
+        },
+        "mode": {
+          "$ref": "#/$defs/Mode"
+        },
+        "t_mono_ns": {
+          "description": "Sender's monotonic clock, ns (see module docstring).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "set_mode",
+          "default": "set_mode",
+          "type": "string"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "frame_id",
+        "type",
+        "mode"
+      ],
+      "title": "SetMode",
+      "type": "object"
+    },
+    "Status": {
+      "additionalProperties": false,
+      "description": "Mux and pipeline state, pushed at ~1 Hz and on every change.",
+      "properties": {
+        "bot_connected": {
+          "type": "boolean"
+        },
+        "capture_fps": {
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "frame_id": {
+          "default": -1,
+          "description": "Frame this message refers to or was produced from; -1 means none.",
+          "minimum": -1,
+          "type": "integer"
+        },
+        "lease_until_ns": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "End of the ASSIST human lease (backend clock); null = none."
+        },
+        "mode": {
+          "$ref": "#/$defs/Mode"
+        },
+        "rdp_window_present": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "An xfreerdp window exists on the display; null = X unreachable."
+        },
+        "t_mono_ns": {
+          "description": "Sender's monotonic clock, ns (see module docstring).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "status",
+          "default": "status",
+          "type": "string"
+        },
+        "viewers": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "frame_id",
+        "type",
+        "mode",
+        "lease_until_ns",
+        "bot_connected",
+        "rdp_window_present",
+        "capture_fps",
+        "viewers"
+      ],
+      "title": "Status",
+      "type": "object"
+    },
+    "Wheel": {
+      "additionalProperties": false,
+      "description": "Wheel notches at the current pointer position; dy > 0 scrolls down (DOM deltaY sign).",
+      "properties": {
+        "dy": {
+          "maximum": 10,
+          "minimum": -10,
+          "type": "integer"
+        },
+        "frame_id": {
+          "default": -1,
+          "description": "Frame this message refers to or was produced from; -1 means none.",
+          "minimum": -1,
+          "type": "integer"
+        },
+        "t_mono_ns": {
+          "description": "Sender's monotonic clock, ns (see module docstring).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "wheel",
+          "default": "wheel",
+          "type": "string"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "frame_id",
+        "type",
+        "dy"
+      ],
+      "title": "Wheel",
+      "type": "object"
+    }
+  },
+  "description": "Schema root that pulls every channel into one document for json-schema-to-typescript.",
+  "properties": {
+    "agent_to_backend": {
+      "$ref": "#/$defs/AgentToBackend"
+    },
+    "backend_to_agent": {
+      "$ref": "#/$defs/BackendToAgent"
+    },
+    "backend_to_browser": {
+      "$ref": "#/$defs/BackendToBrowser"
+    },
+    "browser_to_backend": {
+      "$ref": "#/$defs/BrowserToBackend"
+    },
+    "input_event": {
+      "$ref": "#/$defs/InputEvent"
+    }
+  },
+  "required": [
+    "browser_to_backend",
+    "backend_to_browser",
+    "agent_to_backend",
+    "backend_to_agent",
+    "input_event"
+  ],
+  "title": "PoringProtocol",
+  "type": "object"
+}
