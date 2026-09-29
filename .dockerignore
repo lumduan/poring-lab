@@ -1,0 +1,17 @@
+# Context for the backend and vision images is the repo root; keep it to the uv workspace.
+.git
+.env
+.env.*
+data
+docs
+**/__pycache__
+**/.venv
+**/.mypy_cache
+**/.ruff_cache
+**/.pytest_cache
+services/frontend
+services/rathena
+services/desktop
+services/sniffer
+**/node_modules
+**/.next

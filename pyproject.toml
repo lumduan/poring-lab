@@ -1,0 +1,77 @@
+[project]
+name = "poring-lab"
+version = "0.1.0"
+description = "Vision-based Ragnarok Online agent research lab: pixels in, mouse/keyboard out."
+requires-python = ">=3.12,<3.13"
+authors = [{ name = "lumduan" }]
+# The virtual root installs what host-side dev/test needs. `poring-vision` is deliberately NOT here:
+# it pulls torch+CUDA (~3 GB) and only runs inside its GPU container (`uv sync --package poring-vision`).
+dependencies = ["poring-env[x11,remote]", "poring-backend"]
+
+[tool.uv]
+package = false
+default-groups = ["dev"]
+# Everything runs in linux/amd64 containers on one host; a single-platform lock keeps the
+# cu130 torch wheels resolvable (download.pytorch.org has no macOS builds for them).
+environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+# ultralytics hard-depends on GUI `opencv-python`; the vision member depends on the headless build
+# instead. Read only from the workspace root.
+exclude-dependencies = ["opencv-python"]
+
+[tool.uv.workspace]
+members = ["packages/poring_env", "services/backend", "services/vision"]
+
+[tool.uv.sources]
+poring-env = { workspace = true }
+poring-backend = { workspace = true }
+poring-vision = { workspace = true }
+torch = { index = "pytorch-cu130" }
+torchvision = { index = "pytorch-cu130" }
+
+# Declared at the ROOT: member-level indexes are not searched during workspace resolution.
+# cu130 is the only current variant with sm_120 (RTX 5060 Ti) kernels that also runs on driver 580.
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+[dependency-groups]
+dev = [
+  "ruff>=0.16.9",
+  "mypy>=2.3.1",
+  "pytest>=9.1.1",
+  "pytest-asyncio>=1.4.0",
+  "httpx2>=2.13",            # Starlette TestClient (successor of httpx)
+  "types-python-xlib>=0.33",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["services/frontend", "data"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["B008"] # FastAPI Depends() in defaults is idiomatic
+
+[tool.ruff.lint.isort]
+known-first-party = ["poring_env", "poring_backend", "poring_vision"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+# poring_env is the strict gate; backend is held to the same bar. vision is checked inside its
+# container only (torch/ultralytics are not installed in the host venv).
+files = ["packages/poring_env/src", "services/backend/src"]
+
+[[tool.mypy.overrides]]
+module = ["simplejpeg", "simplejpeg.*"] # ships .pyi but no py.typed marker
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["packages/poring_env/tests", "services/backend/tests", "services/vision/tests"]
+# vision's loop logic is tested without installing its GPU dependencies: its modules import
+# torch/ultralytics lazily, so the source tree is enough.
+pythonpath = ["services/vision/src"]
+addopts = ["-q", "--import-mode=importlib"]

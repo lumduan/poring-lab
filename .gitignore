@@ -1,0 +1,69 @@
+# ---- secrets --------------------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+
+# ---- runtime data: datasets, captures, weights, input logs ------------------------------------------
+# `data/` at ANY depth (this also covers a Ragnarok client's own data/ folder), except the root
+# data/README.md. Order matters: re-include the root dir, ignore its contents, re-include the README.
+**/data/
+!/data/
+/data/*
+!/data/README.md
+
+# ---- model weights / exports ------------------------------------------------------------------------
+*.pt
+*.pth
+*.onnx
+*.engine
+*.safetensors
+*.ckpt
+
+# ---- Ragnarok Online client assets: NEVER commit game client files ---------------------------------
+*.grf
+*.gpf
+*.exe
+*.dll
+*.lub
+*.spr
+*.act
+*.rsw
+*.gnd
+*.gat
+*.rsm
+*.rsm2
+*.str
+*.imf
+*.pal
+*.bmp
+*.tga
+*.mp3
+*.wav
+clientinfo.xml
+sclientinfo.xml
+
+# ---- packet captures: RO login packets carry credentials -------------------------------------------
+*.pcap
+*.pcapng
+*.pcap.gz
+
+# ---- Python -----------------------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+*.egg-info/
+dist/
+
+# ---- Node / Next.js ---------------------------------------------------------------------------------
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+
+# ---- editors / OS -----------------------------------------------------------------------------------
+.DS_Store
+.idea/
+.vscode/
