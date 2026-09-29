@@ -1,0 +1,22 @@
+[project]
+name = "poring-vision"
+version = "0.1.0"
+description = "poring-lab vision agent: grab -> infer -> decide -> act through the backend mux (GPU container)."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "poring-env[x11,remote]",
+  # Resolved from the root's explicit `pytorch-cu130` index -> 2.14.0+cu130 (sm_120 kernels).
+  "torch==2.14.0",
+  "torchvision==0.29.0",
+  "ultralytics==8.4.165",
+  # Replaces ultralytics' GUI `opencv-python` (excluded at the root). <5: ultralytics has not
+  # declared OpenCV 5 support yet.
+  "opencv-python-headless>=4.10,<5",
+]
+
+[project.scripts]
+poring-vision = "poring_vision.loop:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
