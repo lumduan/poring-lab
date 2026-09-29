@@ -59,7 +59,7 @@ class X11Capture:
     def _sct(self) -> mss.base.MSS:
         sct: mss.base.MSS | None = getattr(self._local, "sct", None)
         if sct is None:
-            sct = mss.mss(display=self._display, with_cursor=self._with_cursor)
+            sct = mss.MSS(display=self._display, with_cursor=self._with_cursor)
             self._local.sct = sct
             with self._lock:
                 self._instances.append(sct)
