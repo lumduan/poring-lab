@@ -46,7 +46,9 @@ rAthena in this repo, on the LAN. Start with `README.md` (topology, ports, quick
     `services/frontend/src/lib/protocol.gen.ts`.
   - `test_committed_schema_matches_models` fails on drift. Never hand-edit the generated files.
 - **Keys are `KeyboardEvent.code`**, mapped to the evdev code and then the X keycode (+8) in
-  `poring_env/keymap.py`. Meta keys are intentionally unmapped.
+  `poring_env/keymap.py`. Meta is mapped only for the console toolbar's Win button; the browser never
+  forwards physical Meta. `scripts/gen_protocol.sh` also regenerates the frontend's `keycodes.gen.ts`
+  (drift-tested).
 - **The mux boots in `HUMAN`**, and a handoff always releases what the losing source holds.
   Disconnect cleanup runs as a shielded task (`AppState.release_source`), because handlers can be
   cancelled mid-cleanup.
@@ -60,6 +62,18 @@ rAthena in this repo, on the LAN. Start with `README.md` (topology, ports, quick
 - **torch is `2.14.0+cu130`** from the explicit `pytorch-cu130` index declared in the **root**
   `pyproject.toml`. cu126 has no sm_120 kernels; cu132 images refuse to start on this R580 driver.
 
+## Dev mode (in use until the disk split)
+
+- `compose.dev.yaml` via `scripts/dev.sh`:
+  - `backend` runs the host source (read-only mount on `PYTHONPATH`); `scripts/dev.sh restart backend`
+    applies code changes;
+  - `frontend-dev` runs `next dev` with all writes on tmpfs.
+- Do not "fix" this by building images. Builds wait for the weekend disk split (docs/ROADMAP.md).
+- Inside `frontend-dev`: `docker exec -w /app poring-lab-frontend-dev-1 corepack pnpm lint`, and
+  likewise `typecheck` and `test`.
+- The 24 h IO baseline: `scripts/io_baseline.py` → `data/metrics/io_pressure_*.csv`; stop it with
+  `kill $(cat data/metrics/io_baseline.pid)`.
+
 ## Commands
 
 ```bash
@@ -68,7 +82,7 @@ uv run pytest                             # all Python tests
 uv run ruff check . && uv run ruff format --check .
 uv run mypy                               # strict: packages/poring_env/src + services/backend/src
 scripts/gen_protocol.sh                   # protocol schema + TS types
-(cd services/frontend && corepack pnpm lint && corepack pnpm typecheck)
+(cd services/frontend && node --test src/lib/*.test.ts)   # unit tests, no deps needed
 scripts/init_env.sh                       # first-time .env
 docker compose --profile core --profile remote up -d --build && scripts/smoke_test.sh
 docker compose --profile vision run --rm vision python scripts/check_gpu.py

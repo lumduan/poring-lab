@@ -60,7 +60,7 @@ humanization and LLM integration are clearly marked TODOs.
 | `HOST_LAN_IP:6900` | rathena | login server | LAN |
 | `HOST_LAN_IP:6121` | rathena | char server (advertises `HOST_LAN_IP`) | LAN |
 | `HOST_LAN_IP:5121` | rathena | map server (advertises `HOST_LAN_IP`) | LAN |
-| `HOST_LAN_IP:3000` | frontend | web console | LAN |
+| `HOST_LAN_IP:3000` | frontend **or** frontend-dev | web console (run one of them) | LAN |
 | `HOST_LAN_IP:8000` | backend | `/health`, `/ws/stream`, `/ws/input` | LAN |
 | `HOST_LAN_IP:6080` | desktop | noVNC — **no authentication** | LAN |
 | — (`:8001`) | backend | `/internal/agent` | compose network only |
@@ -71,9 +71,52 @@ humanization and LLM integration are clearly marked TODOs.
 **Security:**
 - Everything published binds to `HOST_LAN_IP`, never `0.0.0.0`.
 - **noVNC has no authentication.** It is view-only by default (`NOVNC_VIEW_ONLY=true`).
-- The backend's browser WebSockets require an `Origin` listed in `ALLOWED_ORIGINS`.
+- The backend's browser WebSockets require an `Origin` listed in `FRONTEND_ORIGINS`.
 - The agent API is not published at all.
 - Keep all of this on a trusted LAN.
+
+## Web console now (no image builds): `frontend-dev`
+
+Until the disk split lets images be built safely, the console runs as a dev server with **no image
+builds and no disk-heavy writes** (`compose.dev.yaml`, driven by `scripts/dev.sh`):
+
+- `backend` runs its source straight from the host, mounted read-only and put first on `PYTHONPATH`.
+  Picking up code changes is a restart, not a rebuild.
+- `frontend-dev` runs `next dev` on the local `node:24.17.0-slim` image (no pull):
+  - the source is mounted read-only at `/src`, then copied into tmpfs and kept in sync;
+  - tmpfs caps: `/app` 2 GiB (`node_modules` + pnpm store), `/app/.next` 1 GiB, `/tmp` 256 MiB;
+  - `mem_limit` 3.5 GiB, read-only rootfs, core dumps off.
+
+```bash
+scripts/dev.sh up -d backend frontend-dev     # start (desktop keeps its RDP session)
+scripts/dev.sh restart backend                # pick up backend / poring_env code changes
+scripts/dev.sh logs -f frontend-dev           # dev server output
+scripts/dev.sh stop frontend-dev              # console off
+```
+
+Open **http://192.168.1.13:3000** (`HOST_LAN_IP`). What it gives you:
+- **View:** Fit (aspect ratio kept, letterboxed) or 1:1.
+- **Input:** click the screen to give it keyboard focus. Leaving it, or hiding the tab, releases
+  everything held.
+- **Toolbar:** Ctrl+Alt+Del (sent as Ctrl+Alt+End, RDP's secure-attention mapping), Win, Alt+Tab, Esc,
+  Release keyboard.
+- **Header:** mode switch and ASSIST lease. **Panel:** stats. A banner shows if the stream or RDP is down.
+
+**Workstation alternative:** run the console on your own machine against this backend.
+1. Add your browser's origin to the backend allowlist in `.env`:
+   `FRONTEND_ORIGINS=http://192.168.1.13:3000,http://localhost:3000`
+2. Apply it: `scripts/dev.sh up -d backend`.
+3. Run the console:
+
+```bash
+cd services/frontend && corepack pnpm install
+BACKEND_PUBLIC_URL=http://192.168.1.13:8000 corepack pnpm dev    # open http://localhost:3000
+```
+
+`FRONTEND_ORIGINS` is the backend's WebSocket Origin allowlist: comma-separated, and unknown origins are
+refused. It defaults to `http://${HOST_LAN_IP}:3000`. Stream rate and quality are `STREAM_FPS` (30) and
+`JPEG_QUALITY` (80). The stream is sent without WebSocket compression: JPEG doesn't compress, and
+deflate cost 8 fps on the event loop.
 
 ## Quickstart
 
@@ -191,10 +234,14 @@ in the console's stats panel.
 match the client executable. Set it in `.env`, then run
 `docker compose --profile core build rathena && docker compose --profile core up -d`.
 
+## Roadmap
+
+Research phases 0–6, current status and the ordered plan: [`docs/ROADMAP.md`](docs/ROADMAP.md).
+
 ## Next step: Phase 0 (capture FPS and end-to-end latency)
 
-`scripts/ws_probe.py` already reports stream FPS and backend-side capture→encode→send latency. Phase 0
-extends it:
+`scripts/ws_probe.py` already reports stream FPS and backend-side capture→encode→send latency
+(30.0 fps; capture→encode p50 ~11 ms; encode→send p50 ~0.6 ms on 2026-09-29). Phase 0 extends it:
 
 - **mss XShm grab rate at 1280×720,** measured in the backend and in vision.
 - **Motion-to-photon latency:** inject a key through the mux that toggles a large, fixed UI element.

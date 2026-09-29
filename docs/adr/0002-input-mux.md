@@ -55,8 +55,13 @@ A human (browser) and a bot (vision agent) share one game session (ADR-0001). Th
    - A closed browser tab or a disconnected agent releases everything that source holds. That cleanup
      runs as a shielded task, so it completes even while the connection handler is being cancelled.
 5. **Refused before injection:**
-   - unknown `KeyboardEvent.code`s (`unknown_key_code`). Meta keys are unmapped on purpose: they open the
-     Windows Start menu.
+   - unknown `KeyboardEvent.code`s (`unknown_key_code`).
+   - Meta keys: *amended 2026-09-29.* Originally unmapped, because they open the Windows Start menu.
+     `MetaLeft`/`MetaRight` are now mapped so the web console's toolbar can send **Win**. The browser
+     still never forwards a *physical* Meta press, which belongs to the viewer's own OS. The toolbar's
+     "Ctrl+Alt+Del" is sent as Ctrl+Alt+End, RDP's secure-attention mapping.
+   - The console also drops unknown codes and reserved chords client-side (`services/frontend/src/lib/keys.ts`,
+     `keycodes.gen.ts` generated from the keymap), so they're never sent at all.
    - xfreerdp client hotkeys Ctrl+Alt+D and Ctrl+Alt+Enter (`reserved_chord`), which would act on the
      one RDP session itself.
 6. **Everything is logged.**
@@ -71,7 +76,7 @@ A human (browser) and a bot (vision agent) share one game session (ADR-0001). Th
    - The bot uses `/internal/agent` on a **second listener, `:8001`**: one uvicorn server with two
      sockets. It is reachable on the compose network only, and the route refuses connections that did
      not arrive on `:8001`.
-   - Browser WebSockets must present an `Origin` in `ALLOWED_ORIGINS`, which blocks cross-site
+   - Browser WebSockets must present an `Origin` in `FRONTEND_ORIGINS`, which blocks cross-site
      WebSocket hijacking from any LAN browser tab. Non-browser clients send no `Origin`.
 
 ## Consequences
