@@ -115,8 +115,9 @@ suffixing a new username with `_M` or `_F` (e.g. `bot01_M`).
 5. The client must match `PACKETVER` (its executable date) and point at `HOST_LAN_IP:6900`. Client
    patching and `clientinfo.xml` live on Windows; **never copy client files into this repo** (see
    `.gitignore`).
-6. Optional: set `RDP_CERT_SHA256` to the RDP certificate's SHA-256 so the connection is pinned instead
-   of `/cert:ignore`.
+6. Pin the RDP certificate: `python3 scripts/rdp_cert_fingerprint.py <WIN_HOST>` prints the
+   `RDP_CERT_SHA256=` line for `.env` (pre-auth handshake only; it never logs in). Unpinned means
+   `/cert:ignore`.
 
 ## Development
 
@@ -167,6 +168,12 @@ compiled in:
 | keyboard layout | `/kbd:0x409` | `/kbd:layout:0x409` |
 | credentials off argv | `/from-stdin` | `/args-from:stdin` (must be the only argument) |
 | binary | `xfreerdp` | `xfreerdp3` |
+
+**RDP worked for months, then stopped connecting.** Windows renews its self-signed RDP certificate
+about every six months, so the pinned fingerprint no longer matches. `rdp-loop` treats that as a
+TLS failure and backs off; no credentials are sent. Re-pin:
+`python3 scripts/rdp_cert_fingerprint.py <WIN_HOST>`, update `.env`, then
+`docker compose restart desktop`.
 
 **noVNC is black.** That's normal without RDP credentials: Xvfb is empty. Check the `RDP window` field
 in the console's stats panel.

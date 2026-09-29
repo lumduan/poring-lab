@@ -5,12 +5,17 @@ isolation). On 2026-09-29 an unguarded parallel build pushed the capture engines
 <=4% to 82-88%. So on this host, heavy builds/pulls go through this script.
 
 It watches the IO *full*-stall rate of the capture cgroups (from cumulative `total=` counters, not
-avg10) and backs off above --threshold percent over a --window-second rolling window:
-  build:<svc>   docker compose build <svc>                  breach -> SIGINT (build cancelled)
-  pull:<svc>    docker compose pull <svc>                   breach -> SIGINT
-  up:<seconds>  compose up -d (core+remote), watch seconds  breach -> compose stop
+avg10) over a --window-second rolling window. A breach is:
+  * default (strict): any window above --threshold percent;
+  * with --sustain S: the SAME cgroup above --threshold for S seconds in a row;
+  * with --spike P: any window above P percent, whatever --sustain says.
+On a breach:
+  build:<svc>   docker compose build <svc>                  -> SIGINT (build cancelled)
+  pull:<svc>    docker compose pull <svc>                   -> SIGINT
+  up:<seconds>  compose up -d (core+remote), watch seconds  -> compose stop
 
-    python3 scripts/guarded_build.py --threshold 10 build:desktop build:rathena pull:db up:180
+    python3 scripts/guarded_build.py build:desktop build:rathena pull:db up:180        # strict 10%
+    python3 scripts/guarded_build.py --sustain 30 --spike 25 build:rathena             # tolerant
     python3 scripts/guarded_build.py build:vision   # ~5 GB of writes: run in an operator window
 
 Logs go to $TMPDIR/poring-guarded-*.log. Exit 0 only if every step completed without a breach.
@@ -62,13 +67,34 @@ def full_total_us(path: Path) -> int:
 
 
 class Guard:
-    def __init__(self, paths: dict[str, Path], threshold: float, window: float) -> None:
+    def __init__(
+        self,
+        paths: dict[str, Path],
+        threshold: float,
+        window: float,
+        *,
+        sustain: float = 0.0,
+        spike: float | None = None,
+    ) -> None:
         self.paths, self.threshold, self.window = paths, threshold, window
+        self.sustain, self.spike = sustain, spike
         self.samples: collections.deque[tuple[float, dict[str, int]]] = collections.deque()
+        self.above_since: dict[str, float] = {}  # cgroup -> start of its current over-threshold run
         self.worst = (0.0, "")
+        self.seconds_above = 0.0  # time during which some cgroup was above --threshold
+        self._last = time.monotonic()
 
-    def breach(self) -> tuple[str, float] | None:
+    def describe(self) -> str:
+        rule = f">{self.threshold}%"
+        if self.sustain:
+            rule += f" for {self.sustain:.0f}s"
+        if self.spike is not None:
+            rule += f" or >{self.spike}% once"
+        return rule
+
+    def breach(self) -> tuple[str, float, str] | None:
         now = time.monotonic()
+        dt, self._last = now - self._last, now
         self.samples.append((now, {k: full_total_us(p) for k, p in self.paths.items()}))
         while self.samples and now - self.samples[0][0] > self.window:
             self.samples.popleft()
@@ -79,7 +105,24 @@ class Guard:
         name, rate = max(rates.items(), key=lambda kv: kv[1])
         if rate > self.worst[0]:
             self.worst = (rate, name)
-        return (name, rate) if rate > self.threshold else None
+        if rate > self.threshold:
+            self.seconds_above += dt
+        if self.spike is not None and rate > self.spike:
+            return name, rate, f"spike above {self.spike}%"
+        for cg, r in rates.items():
+            if r <= self.threshold:
+                self.above_since.pop(cg, None)
+                continue
+            since = self.above_since.setdefault(cg, now)
+            if now - since >= self.sustain:
+                return cg, r, f"above {self.threshold}% for {now - since:.0f}s"
+        return None
+
+    def summary(self) -> str:
+        return (
+            f"worst capture stall so far {self.worst[0]:.1f}% on {self.worst[1] or '-'}, "
+            f"{self.seconds_above:.0f}s above {self.threshold}%"
+        )
 
 
 def run_process(label: str, cmd: list[str], guard: Guard) -> bool:
@@ -91,8 +134,7 @@ def run_process(label: str, cmd: list[str], guard: Guard) -> bool:
             hit = guard.breach()
             if hit:
                 print(
-                    f"[{ts()}] ABORT {label}: {hit[0]} full IO stall {hit[1]:.1f}% "
-                    f"(threshold {guard.threshold}%)",
+                    f"[{ts()}] ABORT {label}: {hit[0]} full IO stall {hit[1]:.1f}% ({hit[2]})",
                     flush=True,
                 )
                 proc.send_signal(2)
@@ -101,8 +143,7 @@ def run_process(label: str, cmd: list[str], guard: Guard) -> bool:
             time.sleep(2)
     ok = proc.returncode == 0
     print(
-        f"[{ts()}] {label}: {'OK' if ok else f'FAILED rc={proc.returncode}'} "
-        f"(worst capture stall so far {guard.worst[0]:.1f}% on {guard.worst[1] or '-'})",
+        f"[{ts()}] {label}: {'OK' if ok else f'FAILED rc={proc.returncode}'} ({guard.summary()})",
         flush=True,
     )
     return ok
@@ -117,17 +158,13 @@ def run_up(seconds: float, guard: Guard) -> bool:
         hit = guard.breach()
         if hit:
             print(
-                f"[{ts()}] BREACH while running: {hit[0]} {hit[1]:.1f}% -> stopping the stack",
+                f"[{ts()}] BREACH while running: {hit[0]} {hit[1]:.1f}% ({hit[2]}) -> stopping",
                 flush=True,
             )
             subprocess.run(["docker", "compose", *RUNTIME, "stop"], cwd=REPO)
             return False
         time.sleep(2)
-    print(
-        f"[{ts()}] stack settled (worst capture stall {guard.worst[0]:.1f}% on "
-        f"{guard.worst[1] or '-'})",
-        flush=True,
-    )
+    print(f"[{ts()}] stack settled ({guard.summary()})", flush=True)
     return True
 
 
@@ -136,8 +173,13 @@ def main() -> int:
     ap.add_argument("steps", nargs="+")
     ap.add_argument("--threshold", type=float, default=10.0)
     ap.add_argument("--window", type=float, default=10.0)
+    ap.add_argument("--sustain", type=float, default=0.0, help="seconds above --threshold")
+    ap.add_argument("--spike", type=float, default=None, help="abort at once above this %%")
     args = ap.parse_args()
-    guard = Guard(cgroup_paths(), args.threshold, args.window)
+    guard = Guard(
+        cgroup_paths(), args.threshold, args.window, sustain=args.sustain, spike=args.spike
+    )
+    print(f"[{ts()}] rule: abort if {guard.describe()}", flush=True)
     print(f"[{ts()}] watching: {', '.join(guard.paths)}", flush=True)
     for step in args.steps:
         kind, _, arg = step.partition(":")
@@ -154,10 +196,7 @@ def main() -> int:
             return 2
         if not ok:
             return 1
-    print(
-        f"[{ts()}] ALL STEPS OK (worst capture stall {guard.worst[0]:.1f}% on {guard.worst[1]})",
-        flush=True,
-    )
+    print(f"[{ts()}] ALL STEPS OK ({guard.summary()})", flush=True)
     return 0
 
 
