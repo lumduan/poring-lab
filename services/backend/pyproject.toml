@@ -1,0 +1,19 @@
+[project]
+name = "poring-backend"
+version = "0.1.0"
+description = "poring-lab backend: screen stream, input mux (the single XTest writer), internal agent API."
+requires-python = ">=3.12"
+dependencies = [
+  "poring-env[x11]",
+  "fastapi>=0.141",
+  "uvicorn[standard]>=0.54",
+  "pydantic-settings>=2.10",
+  "simplejpeg>=1.9",
+]
+
+[project.scripts]
+poring-backend = "poring_backend.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

@@ -1,0 +1,59 @@
+"""Append-only JSONL log of every input decision: ``<data_dir>/input_log/YYYY-MM-DD.jsonl`` (UTC).
+
+One line per submitted event -- accepted or dropped -- plus one per synthetic release, each tagged
+``source=human|bot``. This is research data (human demonstrations, bot behaviour, mux arbitration);
+a mouse-heavy session writes on the order of 1 GB/day, so rotation/compression is a TODO for when
+it matters.
+"""
+
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any, TextIO
+
+from pydantic import BaseModel, ConfigDict
+
+from poring_env.protocol import Mode
+
+
+class InputLogRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    t_mono_ns: int
+    t_wall: str
+    source: str
+    mode: Mode
+    accepted: bool
+    reason: str
+    synthetic: bool
+    frame_id: int
+    event: dict[str, Any]
+
+
+def wall_clock_iso() -> str:
+    return datetime.now(UTC).isoformat(timespec="microseconds")
+
+
+class InputLog:
+    def __init__(self, data_dir: Path) -> None:
+        self._dir = data_dir / "input_log"
+        self._day: str | None = None
+        self._fh: TextIO | None = None
+
+    @property
+    def directory(self) -> Path:
+        return self._dir
+
+    def write(self, record: InputLogRecord) -> None:
+        day = record.t_wall[:10]
+        if day != self._day or self._fh is None:
+            self.close()
+            self._dir.mkdir(parents=True, exist_ok=True)
+            # Line-buffered: each record reaches the file as soon as it is written.
+            self._fh = (self._dir / f"{day}.jsonl").open("a", encoding="utf-8", buffering=1)
+            self._day = day
+        self._fh.write(record.model_dump_json() + "\n")
+
+    def close(self) -> None:
+        if self._fh is not None:
+            self._fh.close()
+            self._fh = None
