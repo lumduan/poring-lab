@@ -81,7 +81,7 @@ def make_client(tmp_path: Path) -> Iterator[Factory]:
             data_dir=tmp_path,
             stream_fps=100.0,
             status_hz=20.0,
-            allowed_origins=ORIGIN,
+            frontend_origins=ORIGIN,
             **overrides,
         )
         app = create_app(settings, capture_factory=FakeCapture, input_factory=lambda: fake)
@@ -220,6 +220,28 @@ def test_foreign_origin_is_refused(make_client: Factory) -> None:
         client.websocket_connect("/ws/input", headers={"origin": "http://evil.example"}),
     ):
         pass
+
+
+def test_configured_origin_is_accepted_and_missing_origin_too(make_client: Factory) -> None:
+    client, _ = make_client()
+    for headers in ({"origin": ORIGIN}, {"origin": ORIGIN + "/"}, {}):
+        with client.websocket_connect("/ws/stream", headers=headers) as ws:
+            assert json.loads(ws.receive_text())["type"] == "status"
+
+
+def test_foreign_origin_is_refused_on_the_stream_too(make_client: Factory) -> None:
+    client, _ = make_client()
+    with (
+        pytest.raises(WebSocketDisconnect),
+        client.websocket_connect("/ws/stream", headers={"origin": "http://192.168.1.99:3000"}),
+    ):
+        pass
+
+
+def test_health_reports_pacing(make_client: Factory) -> None:
+    client, _ = make_client()
+    body = client.get("/health").json()
+    assert body["stream_fps_target"] == 100.0 and body["frames_skipped_late"] == 0
 
 
 def test_internal_route_refuses_the_public_listener(make_client: Factory) -> None:

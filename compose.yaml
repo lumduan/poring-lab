@@ -119,7 +119,8 @@ services:
     environment:
       DISPLAY: ":99"
       DATA_DIR: /data
-      ALLOWED_ORIGINS: http://${HOST_LAN_IP:?}:3000
+      # Browser WebSocket Origin allowlist (comma-separated); unknown origins are refused.
+      FRONTEND_ORIGINS: ${FRONTEND_ORIGINS:-http://${HOST_LAN_IP:?}:3000}
       ASSIST_LEASE_S: ${ASSIST_LEASE_S:-3.0}
       STREAM_FPS: ${STREAM_FPS:-30}
       JPEG_QUALITY: ${JPEG_QUALITY:-80}

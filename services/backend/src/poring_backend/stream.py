@@ -76,6 +76,33 @@ async def pump(ws: WebSocket, outbox: Outbox) -> None:
             await ws.send_bytes(jpeg)
 
 
+class Pacer:
+    """Deadline pacing for the capture loop.
+
+    Frame slots sit on a fixed grid (start + k * period). After each frame, ``delay(now)`` returns
+    how long to sleep until the next slot. When a frame overruns, the loop starts the next one
+    immediately and the missed slots are skipped (counted in ``skipped``): the grid never shifts,
+    so drift never accumulates. The clock is passed in, so this is testable without sleeping.
+    """
+
+    def __init__(self, period_s: float, now: float) -> None:
+        if period_s <= 0:
+            raise ValueError("period must be positive")
+        self.period = period_s
+        self.next_due = now + period_s
+        self.skipped = 0
+
+    def delay(self, now: float) -> float:
+        if now < self.next_due:
+            wait = self.next_due - now
+            self.next_due += self.period
+            return wait
+        late_slots = int((now - self.next_due) // self.period)
+        self.skipped += late_slots
+        self.next_due += (late_slots + 1) * self.period
+        return 0.0
+
+
 class CaptureHub:
     def __init__(
         self,
@@ -94,6 +121,11 @@ class CaptureHub:
         self._task: asyncio.Task[None] | None = None
         self.capture_fps = 0.0
         self.last_frame_id = -1
+        self.frames_skipped_late = 0
+
+    @property
+    def target_fps(self) -> float:
+        return 1.0 / self._period_s
 
     @property
     def viewer_count(self) -> int:
@@ -133,8 +165,8 @@ class CaptureHub:
     async def _run(self) -> None:
         loop = asyncio.get_running_loop()
         last_ns: int | None = None
+        pacer = Pacer(self._period_s, loop.time())
         while True:
-            started = loop.time()
             try:
                 frame, jpeg, encoded_ns = await loop.run_in_executor(
                     self._executor, self._grab_and_encode
@@ -146,6 +178,7 @@ class CaptureHub:
                 await loop.run_in_executor(self._executor, self._reset_source)
                 self.capture_fps = 0.0
                 await asyncio.sleep(1.0)
+                pacer = Pacer(self._period_s, loop.time())
                 continue
             meta = FrameMeta(
                 t_mono_ns=encoded_ns,
@@ -165,7 +198,9 @@ class CaptureHub:
                     instant if self.capture_fps == 0.0 else (0.9 * self.capture_fps + 0.1 * instant)
                 )
             last_ns = frame.t_capture_ns
-            await asyncio.sleep(max(0.0, self._period_s - (loop.time() - started)))
+            wait = pacer.delay(loop.time())
+            self.frames_skipped_late = pacer.skipped
+            await asyncio.sleep(wait)
 
     async def stop(self) -> None:
         if self._task is not None:

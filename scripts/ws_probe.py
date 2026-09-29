@@ -35,6 +35,8 @@ def probe_stream(ws_base: str, seconds: float) -> dict[str, Any]:
     stray_binaries = 0
     size_mismatches = 0
     with connect(f"{ws_base}/ws/stream", max_size=2**24, open_timeout=5) as ws:
+        # Offered by default, like a browser; the server decides whether it is used.
+        extension = ws.response.headers.get("Sec-WebSocket-Extensions") if ws.response else None
         pending: FrameMeta | None = None
         deadline = time.monotonic() + seconds
         while time.monotonic() < deadline:
@@ -61,6 +63,7 @@ def probe_stream(ws_base: str, seconds: float) -> dict[str, Any]:
     elapsed = arrivals[-1] - arrivals[0] if len(arrivals) > 1 else 0.0
     gaps = [1000 * (b - a) for a, b in zip(arrivals, arrivals[1:], strict=False)]
     return {
+        "ws_extension": extension,
         "frames": len(frames),
         "fps": round((len(frames) - 1) / elapsed, 2) if elapsed > 0 else 0.0,
         "size": f"{frames[0].width}x{frames[0].height}" if frames else None,

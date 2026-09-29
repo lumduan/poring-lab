@@ -48,6 +48,8 @@ async def health(request: Request) -> dict[str, Any]:
         "viewers": state.hub.viewer_count,
         "bot_connected": bool(state.agents),
         "capture_fps": round(state.hub.capture_fps, 2),
+        "stream_fps_target": round(state.hub.target_fps, 2),
+        "frames_skipped_late": state.hub.frames_skipped_late,
         "input_log_dir": str(state.input_log.directory),
     }
 

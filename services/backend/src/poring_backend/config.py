@@ -16,11 +16,14 @@ class Settings(BaseSettings):
     public_port: int = 8000
     # Compose-network only (never published): /internal/agent.
     internal_port: int = 8001
-    # Comma-separated Origins allowed to open browser WebSockets (cross-site WS hijacking guard).
-    # Requests without an Origin header (scripts, the agent) are not browsers and are allowed.
-    allowed_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
+    # FRONTEND_ORIGINS: comma-separated Origins allowed to open browser WebSockets (cross-site
+    # WebSocket hijacking guard); anything else is refused. Requests without an Origin header
+    # (scripts, the agent) are not browsers and are allowed. compose.yaml defaults it to
+    # http://${HOST_LAN_IP}:3000; add e.g. http://localhost:3000 for `pnpm dev` on a workstation.
+    frontend_origins: str = "http://192.168.1.13:3000"
 
     assist_lease_s: float = 3.0
+    # STREAM_FPS / JPEG_QUALITY: browser stream only (the agent grabs frames itself).
     stream_fps: float = 30.0
     jpeg_quality: int = 80
     capture_with_cursor: bool = False
@@ -29,7 +32,7 @@ class Settings(BaseSettings):
     @property
     def origins(self) -> frozenset[str]:
         return frozenset(
-            o.strip().rstrip("/") for o in self.allowed_origins.split(",") if o.strip()
+            o.strip().rstrip("/") for o in self.frontend_origins.split(",") if o.strip()
         )
 
     @property

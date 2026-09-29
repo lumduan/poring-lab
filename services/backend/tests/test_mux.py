@@ -185,8 +185,12 @@ def test_ctrl_d_without_alt_is_fine() -> None:
 
 
 def test_unknown_key_code_is_rejected() -> None:
-    decision = new_mux(Mode.HUMAN).submit(HUMAN, key("MetaLeft"), 0)
+    decision = new_mux(Mode.HUMAN).submit(HUMAN, key("Fn"), 0)
     assert (decision.accepted, decision.reason) == (False, "unknown_key_code")
+
+
+def test_windows_key_is_accepted_for_the_toolbar() -> None:
+    assert new_mux(Mode.HUMAN).submit(HUMAN, key("MetaLeft"), 0).accepted
 
 
 def test_wheel_is_not_tracked_as_held() -> None:

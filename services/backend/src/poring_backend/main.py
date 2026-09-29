@@ -66,18 +66,24 @@ def _listen(host: str, port: int) -> socket.socket:
     return sock
 
 
+def build_config(app: FastAPI) -> uvicorn.Config:
+    return uvicorn.Config(
+        app,
+        log_level="info",
+        proxy_headers=False,
+        ws_max_size=1 << 20,
+        # No permessage-deflate: JPEG frames don't compress, and zlib ran on the event loop for
+        # every ~600 KB frame, delaying the capture loop (22 fps instead of 30, measured).
+        ws_per_message_deflate=False,
+    )
+
+
 def main() -> None:
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )
     settings = Settings()
-    config = uvicorn.Config(
-        create_app(settings),
-        log_level="info",
-        proxy_headers=False,
-        ws_max_size=1 << 20,
-    )
-    server = uvicorn.Server(config)
+    server = uvicorn.Server(build_config(create_app(settings)))
     server.run(
         sockets=[
             _listen(settings.bind_host, settings.public_port),
