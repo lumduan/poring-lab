@@ -1,0 +1,8 @@
+// Rendered by entrypoint.sh from services/rathena/conf/import/log_conf.txt.tmpl -- edit the template.
+// Server-side logs are non-backfillable OFFLINE ground truth for evaluating the agent (what it
+// actually picked up, spent, killed, said). The agent never reads them: it perceives pixels only.
+// Upstream defaults already log all item movements, commands and NPC scripts; these add the rest.
+log_zeny: 1
+log_mvpdrop: yes
+log_branch: yes
+log_chat: 63

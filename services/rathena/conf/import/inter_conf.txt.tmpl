@@ -1,0 +1,37 @@
+// Rendered by entrypoint.sh from services/rathena/conf/import/inter_conf.txt.tmpl -- edit the template.
+// Every SQL endpoint points at the compose `db` service. Logs share the main schema (lab scale).
+login_server_ip: ${DB_HOST}
+login_server_port: ${DB_PORT}
+login_server_id: ${DB_USER}
+login_server_pw: ${DB_PASSWORD}
+login_server_db: ${DB_NAME}
+
+ipban_db_ip: ${DB_HOST}
+ipban_db_port: ${DB_PORT}
+ipban_db_id: ${DB_USER}
+ipban_db_pw: ${DB_PASSWORD}
+ipban_db_db: ${DB_NAME}
+
+char_server_ip: ${DB_HOST}
+char_server_port: ${DB_PORT}
+char_server_id: ${DB_USER}
+char_server_pw: ${DB_PASSWORD}
+char_server_db: ${DB_NAME}
+
+map_server_ip: ${DB_HOST}
+map_server_port: ${DB_PORT}
+map_server_id: ${DB_USER}
+map_server_pw: ${DB_PASSWORD}
+map_server_db: ${DB_NAME}
+
+web_server_ip: ${DB_HOST}
+web_server_port: ${DB_PORT}
+web_server_id: ${DB_USER}
+web_server_pw: ${DB_PASSWORD}
+web_server_db: ${DB_NAME}
+
+log_db_ip: ${DB_HOST}
+log_db_port: ${DB_PORT}
+log_db_id: ${DB_USER}
+log_db_pw: ${DB_PASSWORD}
+log_db_db: ${DB_NAME}

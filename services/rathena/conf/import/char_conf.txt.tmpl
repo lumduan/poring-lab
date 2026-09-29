@@ -1,0 +1,15 @@
+// Rendered by entrypoint.sh from services/rathena/conf/import/char_conf.txt.tmpl -- edit the template.
+// Inter-server account: must equal map_conf.txt and the login row account_id=1 (sex 'S').
+userid: ${RATHENA_SERVER_USER}
+passwd: ${RATHENA_SERVER_PASSWORD}
+
+server_name: ${RATHENA_SERVER_NAME}
+
+// char -> login runs inside this container.
+login_ip: 127.0.0.1
+
+// The IP ADVERTISED to game clients -- the Docker host's LAN IP, not the container's.
+char_ip: ${HOST_LAN_IP}
+
+// A PIN prompt after every login is friction for both humans and the agent in a lab.
+pincode_enabled: ${RATHENA_PINCODE}

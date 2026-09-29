@@ -1,0 +1,9 @@
+// Rendered by entrypoint.sh from services/rathena/conf/import/map_conf.txt.tmpl -- edit the template.
+userid: ${RATHENA_SERVER_USER}
+passwd: ${RATHENA_SERVER_PASSWORD}
+
+// map -> char runs inside this container. (Same key name as in char_conf, different meaning.)
+char_ip: 127.0.0.1
+
+// The IP ADVERTISED to game clients -- the Docker host's LAN IP, not the container's.
+map_ip: ${HOST_LAN_IP}
