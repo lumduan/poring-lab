@@ -1,0 +1,65 @@
+# Dev overlay: work on the stack WITHOUT building images. Always used through scripts/dev.sh
+# (= docker compose -f compose.yaml -f compose.dev.yaml ...).
+#
+# Why: this host's Docker data-root shares one ext4 filesystem with live capture databases; image
+# builds and node_modules/.next trees (thousands of small files) stall them. So:
+#   * backend runs its source from the host, mounted read-only (no rebuild for code changes);
+#   * frontend-dev runs `next dev` with node_modules, the pnpm store and .next on tmpfs.
+# The production services (frontend, and the images backend/desktop were built from) are untouched.
+
+services:
+  backend:
+    environment:
+      # Mounted source wins over the copy installed in the image's site-packages.
+      PYTHONPATH: /dev-src/poring_env:/dev-src/backend
+      PYTHONDONTWRITEBYTECODE: "1"
+    volumes:
+      - ./packages/poring_env/src:/dev-src/poring_env:ro
+      - ./services/backend/src:/dev-src/backend:ro
+
+  frontend-dev:
+    profiles: [dev]
+    # Already on this host: no pull. (The production frontend image uses node:24.21.0-alpine.)
+    image: node:24.17.0-slim
+    user: "1000:1000"
+    init: true
+    restart: unless-stopped
+    oom_score_adj: 500
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    depends_on:
+      backend:
+        condition: service_healthy
+    # Nothing may be written to the image layer (= the shared disk); every writable path is tmpfs.
+    read_only: true
+    working_dir: /app
+    command: ["node", "/src/dev/run-dev.mjs"]
+    environment:
+      BACKEND_PUBLIC_URL: http://${HOST_LAN_IP:?}:8000
+      HOST_LAN_IP: ${HOST_LAN_IP:?}
+      HOME: /app/.home
+      COREPACK_HOME: /app/.corepack
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      # Store on the same tmpfs as node_modules, so pnpm hardlinks instead of copying.
+      npm_config_store_dir: /app/.pnpm-store
+      NEXT_TELEMETRY_DISABLED: "1"
+      TMPDIR: /tmp
+    volumes:
+      - ./services/frontend:/src:ro
+    tmpfs:
+      # source copy + node_modules + pnpm store + corepack cache
+      - /app:size=2g,uid=1000,gid=1000,mode=0755,exec
+      # next dev output and caches
+      - /app/.next:size=1g,uid=1000,gid=1000,mode=0755,exec
+      - /tmp:size=256m,mode=1777
+    ports:
+      - "${HOST_LAN_IP:?}:3000:3000"
+    # A crashing node must never try to write a multi-GB core dump.
+    ulimits:
+      core: 0
+    # tmpfs pages count against this limit: 3.25 GiB of tmpfs caps + the node process.
+    mem_limit: 3584m
+    memswap_limit: 3584m
