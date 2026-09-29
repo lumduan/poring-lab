@@ -26,11 +26,15 @@ ARG VIP=no
 # Each big translation unit takes ~1-1.5 GB of RAM; this host also runs live capture services.
 ARG MAKE_JOBS=4
 
-WORKDIR /src
-RUN curl -fsSL "https://github.com/rathena/rathena/archive/${RATHENA_REF}.tar.gz" \
-      | tar -xz --strip-components=1
-# `make common` first, serially: rapidyaml has a parallel directory-creation race.
-RUN ./configure --enable-packetver="${PACKETVER}" --enable-prere="${PRERE}" --enable-vip="${VIP}" \
+# The whole compile runs in a tmpfs: source (~250 MB), objects and g++ temp files never touch the
+# host disk, which is shared with live capture databases. Only the finished runtime tree is written
+# (to /out). `make common` runs first, serially: rapidyaml has a parallel directory-creation race.
+RUN --mount=type=tmpfs,target=/src \
+    cd /src \
+ && export TMPDIR=/src/.tmp && mkdir -p "$TMPDIR" \
+ && curl -fsSL "https://github.com/rathena/rathena/archive/${RATHENA_REF}.tar.gz" \
+      | tar -xz --strip-components=1 \
+ && ./configure --enable-packetver="${PACKETVER}" --enable-prere="${PRERE}" --enable-vip="${VIP}" \
  && make common \
  && make -j"${MAKE_JOBS}" server \
  && mkdir -p /out/log \
@@ -49,7 +53,13 @@ RUN apt-get update \
  && (userdel --remove ubuntu 2>/dev/null || true) \
  && useradd --uid 1000 --home-dir /opt/rathena --no-create-home --shell /usr/sbin/nologin rathena
 
-COPY --from=build --chown=rathena:rathena /out /opt/rathena
+# The runtime tree is ~thousands of small db/npc files. A plain COPY writes them in one burst, which
+# stalled the capture Postgres (ext4 data=ordered: its fsyncs wait behind the flush). Stream it through
+# tar with checkpoint sleeps instead (~10 MB/s), owned by uid 1000 at creation (no chown pass).
+RUN --mount=type=bind,from=build,source=/out,target=/mnt/out \
+    mkdir -p /opt/rathena \
+ && tar -C /mnt/out --owner=1000 --group=1000 -cf - . \
+      | tar -C /opt/rathena --same-owner -xf - --checkpoint=1000 --checkpoint-action=sleep=1
 COPY --chown=rathena:rathena conf/import/ /opt/rathena/conf-templates/
 COPY --chmod=0755 entrypoint.sh /usr/local/bin/rathena-entrypoint
 

@@ -7,17 +7,17 @@ ENV NEXT_TELEMETRY_DISABLED=1 \
     COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 RUN corepack enable pnpm
 
-FROM base AS deps
-WORKDIR /app
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
-    pnpm install --frozen-lockfile
-
+# Install + build in ONE step with the pnpm store and node_modules in tmpfs: ~20k files / ~700 MB
+# of writes stay in RAM instead of hitting the host disk (shared with live capture databases).
+# Only .next (the standalone server + static assets) lands in the layer.
 FROM base AS builder
 WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN pnpm build
+RUN --mount=type=tmpfs,target=/root/.local/share/pnpm/store \
+    --mount=type=tmpfs,target=/app/node_modules \
+    --mount=type=tmpfs,target=/app/.next/cache \
+    pnpm install --frozen-lockfile \
+ && pnpm build
 
 FROM node:24.21.0-alpine AS runner
 WORKDIR /app
