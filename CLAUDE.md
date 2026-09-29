@@ -26,6 +26,10 @@ rAthena in this repo, on the LAN. Start with `README.md` (topology, ports, quick
    - The rAthena build stays capped (`RATHENA_MAKE_JOBS`).
    - vision keeps its VRAM cap (`VISION_MAX_VRAM_FRACTION`).
    - Don't remove these to make something fit; raise the limit consciously instead.
+   - **Heavy builds and pulls go through `scripts/guarded_build.py`**, one image at a time. It
+     aborts when capture IO stall exceeds 10%. The host has one shared virtual disk: on 2026-09-29
+     an unguarded parallel build pushed capture IO stall from ≤4% to 82–88%. The torch vision
+     image (~5 GB of writes) needs an operator-chosen window.
 
 ## Invariants worth knowing before you edit
 

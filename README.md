@@ -79,9 +79,13 @@ humanization and LLM integration are clearly marked TODOs.
 
 ```bash
 scripts/init_env.sh                          # .env from .env.example: detects HOST_LAN_IP, random secrets
-docker compose --profile core --profile remote up -d --build
+python3 scripts/guarded_build.py build:desktop build:backend build:rathena build:frontend pull:db up:180
 scripts/smoke_test.sh                        # health, LAN ports, >=30 frames, input round trip, input log
 ```
+
+`guarded_build.py` builds one image at a time and backs off if the host's live capture services start
+stalling on disk IO. On a dedicated machine, `docker compose --profile core --profile remote up -d --build`
+does the same thing unguarded.
 
 - **Web console:** `http://HOST_LAN_IP:3000`. Click the screen to control it; switch between HUMAN,
   ASSIST and BOT at the top.
