@@ -33,9 +33,11 @@ def wall_clock_iso() -> str:
     return datetime.now(UTC).isoformat(timespec="microseconds")
 
 
-class InputLog:
-    def __init__(self, data_dir: Path) -> None:
-        self._dir = data_dir / "input_log"
+class DailyJsonl:
+    """``<directory>/YYYY-MM-DD.jsonl``, one file per UTC day, line-buffered appends."""
+
+    def __init__(self, directory: Path) -> None:
+        self._dir = directory
         self._day: str | None = None
         self._fh: TextIO | None = None
 
@@ -43,17 +45,24 @@ class InputLog:
     def directory(self) -> Path:
         return self._dir
 
-    def write(self, record: InputLogRecord) -> None:
-        day = record.t_wall[:10]
+    def append(self, day: str, line: str) -> None:
         if day != self._day or self._fh is None:
             self.close()
             self._dir.mkdir(parents=True, exist_ok=True)
             # Line-buffered: each record reaches the file as soon as it is written.
             self._fh = (self._dir / f"{day}.jsonl").open("a", encoding="utf-8", buffering=1)
             self._day = day
-        self._fh.write(record.model_dump_json() + "\n")
+        self._fh.write(line + "\n")
 
     def close(self) -> None:
         if self._fh is not None:
             self._fh.close()
             self._fh = None
+
+
+class InputLog(DailyJsonl):
+    def __init__(self, data_dir: Path) -> None:
+        super().__init__(data_dir / "input_log")
+
+    def write(self, record: InputLogRecord) -> None:
+        self.append(record.t_wall[:10], record.model_dump_json())

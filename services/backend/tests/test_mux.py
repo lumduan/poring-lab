@@ -204,3 +204,45 @@ def test_no_lease_outside_assist() -> None:
     mux.submit(HUMAN, key("KeyA"), 0)
     assert not mux.lease_active(0)
     assert mux.lease_until_ns(0) is None
+
+
+# --- ADR-0004: the bot may never paste ------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("modifier", "target"),
+    [
+        ("ControlLeft", "KeyV"),
+        ("ControlRight", "KeyV"),
+        ("MetaLeft", "KeyV"),  # Win+V: Windows clipboard history
+        ("MetaRight", "KeyV"),
+        ("ShiftLeft", "Insert"),
+        ("ShiftRight", "Insert"),
+    ],
+)
+def test_bot_paste_chords_are_refused_in_both_key_orders(modifier: str, target: str) -> None:
+    mux = new_mux(Mode.BOT)
+    assert mux.submit(BOT, key(modifier), 0).accepted
+    refused = mux.submit(BOT, key(target), 0)
+    assert (refused.accepted, refused.reason, refused.inject) == (False, "paste_chord_bot", ())
+    mux.submit(BOT, key(modifier, "up"), 0)
+    # Other order: X autorepeats a held XTest key, so "hold V, then press Ctrl" pastes too.
+    assert mux.submit(BOT, key(target), 0).accepted
+    late = mux.submit(BOT, key(modifier), 0)
+    assert (late.accepted, late.reason) == (False, "paste_chord_bot")
+
+
+@pytest.mark.parametrize("mode", [Mode.HUMAN, Mode.ASSIST])
+def test_the_human_may_paste(mode: Mode) -> None:
+    mux = new_mux(mode)
+    for event in (key("ControlLeft"), key("KeyV"), key("KeyV", "up"), key("ControlLeft", "up")):
+        assert mux.submit(HUMAN, event, 0).accepted
+
+
+def test_bot_keeps_ordinary_keys_and_copy() -> None:
+    mux = new_mux(Mode.BOT)
+    assert mux.submit(BOT, key("KeyV"), 0).accepted  # plain V (e.g. a game hotkey)
+    assert mux.submit(BOT, key("KeyV", "up"), 0).accepted
+    assert mux.submit(BOT, key("ControlLeft"), 0).accepted
+    assert mux.submit(BOT, key("KeyC"), 0).accepted  # Ctrl+C copies, it does not paste
+    assert mux.submit(BOT, key("Insert"), 0).accepted  # Ctrl+Insert is copy, not paste

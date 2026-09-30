@@ -12,10 +12,14 @@ from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI
+from starlette.middleware.cors import CORSMiddleware
 
+from poring_backend.clipboard import SelectionIO
 from poring_backend.config import Settings
 from poring_backend.routes_internal import router as internal_router
 from poring_backend.routes_public import router as public_router
+from poring_backend.routes_transfer import router as transfer_router
+from poring_backend.routes_transfer import sweep_partials
 from poring_backend.state import AppState, XInput
 from poring_env.env import FrameSource
 
@@ -25,6 +29,7 @@ def create_app(
     *,
     capture_factory: Callable[[], FrameSource] | None = None,
     input_factory: Callable[[], XInput] | None = None,
+    clipboard_factory: Callable[[], SelectionIO] | None = None,
 ) -> FastAPI:
     cfg = settings or Settings()
 
@@ -38,13 +43,21 @@ def create_app(
 
         return X11Input(cfg.display)
 
+    def default_clipboard() -> SelectionIO:
+        from poring_backend.clipboard import XSelectionIO
+
+        return XSelectionIO(cfg.display)
+
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         state = AppState(
             cfg,
             capture_factory=capture_factory or default_capture,
             input_factory=input_factory or default_input,
+            clipboard_factory=clipboard_factory or default_clipboard,
         )
+        if cfg.transfer_enabled:
+            sweep_partials(cfg.transfer_dir)
         app.state.poring = state
         await state.start()
         try:
@@ -55,6 +68,18 @@ def create_app(
     app = FastAPI(title="poring-lab backend", version="0.1.0", lifespan=lifespan)
     app.include_router(public_router)
     app.include_router(internal_router)
+    app.include_router(transfer_router)
+    # The console (another origin: :3000) calls the /transfer HTTP routes with fetch/XHR. Only the
+    # allowlisted console origins may read the responses; the routes also refuse any request
+    # without an allowlisted Origin (routes_transfer.transfer_root).
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=sorted(cfg.origins),
+        allow_methods=["GET", "PUT", "DELETE"],
+        allow_headers=["content-type"],
+        expose_headers=["content-disposition", "x-content-sha256"],
+        max_age=600,
+    )
     return app
 
 

@@ -2,18 +2,32 @@
 
 import asyncio
 import contextlib
+import hashlib
 import logging
+from collections import Counter
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Protocol, TypeVar
 
+from poring_backend.clipboard import ClipboardService, PasteOutcome, SelectionIO
 from poring_backend.config import Settings
+from poring_backend.drops import DropCounter
 from poring_backend.input_log import InputLog, InputLogRecord, wall_clock_iso
 from poring_backend.mux import Decision, InputMux, Routed, Source
 from poring_backend.stream import CaptureHub, Outbox
+from poring_backend.transfer_log import TransferLog
 from poring_env.clock import monotonic_ns
 from poring_env.env import FrameSource
-from poring_env.protocol import InputEvent, ReleaseAll, SetMode, Status
+from poring_env.protocol import (
+    ClipboardPaste,
+    InputEvent,
+    Key,
+    Mode,
+    PasteResult,
+    ReleaseAll,
+    SetMode,
+    Status,
+)
 
 log = logging.getLogger(__name__)
 
@@ -87,10 +101,20 @@ class AppState:
         *,
         capture_factory: Callable[[], FrameSource],
         input_factory: Callable[[], XInput],
+        clipboard_factory: Callable[[], SelectionIO] | None = None,
     ) -> None:
         self.settings = settings
         self.mux = InputMux(lease_ns=settings.lease_ns)  # always boots in HUMAN
         self.input_log = InputLog(settings.data_dir)
+        self.transfer_log = TransferLog(settings.data_dir)
+        # Never silent (ADR-0004 decision 4): unreadable messages and mux refusals are counted.
+        self.drops = DropCounter()
+        self.refused: Counter[tuple[str, str]] = Counter()
+        self.clipboard: ClipboardService | None = None
+        if settings.clipboard_enabled and clipboard_factory is not None:
+            self.clipboard = ClipboardService(
+                clipboard_factory, settle_s=settings.clipboard_settle_s
+            )
         self.injector = Injector(input_factory)
         self.hub = CaptureHub(
             capture_factory, fps=settings.stream_fps, jpeg_quality=settings.jpeg_quality
@@ -103,6 +127,8 @@ class AppState:
     # --- lifecycle --------------------------------------------------------------------------------
 
     async def start(self) -> None:
+        if self.clipboard is not None:
+            self.clipboard.start()
         self._status_task = asyncio.create_task(self._status_loop(), name="status-loop")
 
     async def stop(self) -> None:
@@ -114,7 +140,10 @@ class AppState:
             await asyncio.wait(self._background, timeout=2.0)
         await self.hub.stop()
         await self.injector.close()
+        if self.clipboard is not None:
+            await asyncio.to_thread(self.clipboard.stop)
         self.input_log.close()
+        self.transfer_log.close()
 
     async def _status_loop(self) -> None:
         period = 1.0 / self.settings.status_hz
@@ -136,7 +165,16 @@ class AppState:
             rdp_window_present=self.rdp_window_present,
             capture_fps=round(self.hub.capture_fps, 2),
             viewers=self.hub.viewer_count,
+            clipboard_enabled=self.clipboard is not None,
+            transfer_enabled=self.settings.transfer_enabled,
         )
+
+    def refused_snapshot(self) -> dict[str, dict[str, int]]:
+        """``{source: {reason: count}}`` of mux refusals, for /health."""
+        out: dict[str, dict[str, int]] = {}
+        for (source, reason), count in sorted(self.refused.items()):
+            out.setdefault(source, {})[reason] = count
+        return out
 
     def broadcast_status(self) -> None:
         text = self.status().model_dump_json()
@@ -154,20 +192,33 @@ class AppState:
         await self._inject(released)
         self.broadcast_status()
 
-    async def submit_many(self, source: Source, events: Sequence[InputEvent]) -> list[Decision]:
+    async def submit_many(
+        self,
+        source: Source,
+        events: Sequence[InputEvent],
+        *,
+        synthetic_reason: str | None = None,
+    ) -> list[Decision]:
+        """Run ``events`` through the mux and inject what it allows. ``synthetic_reason`` marks
+        events the backend generated on the source's behalf (e.g. the Ctrl+V of a paste)."""
         now = monotonic_ns()
         lease_before = self.mux.lease_active(now)
         decisions: list[Decision] = []
         routed: list[Routed] = []
         for event in events:
             decision = self.mux.submit(source, event, now)
+            # Refused housekeeping (a disconnect's ReleaseAll for a source without control) is
+            # still in the input log, but it is not a dropped input worth counting.
+            if not decision.accepted and not isinstance(event, ReleaseAll):
+                self.refused[(source.value, decision.reason)] += 1
             self._log(
                 source,
                 event.model_dump(mode="json"),
                 event.frame_id,
                 decision.accepted,
-                decision.reason,
+                synthetic_reason if decision.accepted and synthetic_reason else decision.reason,
                 now,
+                synthetic=synthetic_reason is not None,
             )
             self._log_synthetic(decision.inject, now)
             decisions.append(decision)
@@ -176,6 +227,58 @@ class AppState:
         if self.mux.lease_active(now) != lease_before:
             self.broadcast_status()
         return decisions
+
+    async def paste(self, msg: ClipboardPaste, *, browser: bool, client: str | None) -> PasteResult:
+        """Human-only paste (ADR-0004). ``browser``: the connection presented an allowlisted
+        Origin. Only the length and sha256 of the text are ever logged."""
+        data = msg.text.encode("utf-8")
+        digest = hashlib.sha256(data).hexdigest()
+        refusal: str | None = None
+        if self.clipboard is None:
+            refusal = "clipboard_disabled"
+        elif not browser:
+            refusal = "origin_required"
+        elif self.mux.mode is Mode.BOT:
+            refusal = "mode_bot"
+        now = monotonic_ns()
+        summary = {"type": msg.type, "chars": len(msg.text), "bytes": len(data), "sha256": digest}
+        self._log(Source.HUMAN, summary, msg.frame_id, refusal is None, refusal or "ok", now)
+        if refusal is not None or self.clipboard is None:
+            outcome = PasteOutcome(False, refusal or "clipboard_disabled")
+        else:
+            outcome = await self.clipboard.paste(msg.text, self._inject_paste_chord)
+        if not outcome.ok:
+            self.refused[(Source.HUMAN.value, f"paste:{outcome.reason}")] += 1
+        self.transfer_log.write(
+            "paste",
+            name=None,
+            size=len(data),
+            sha256=digest,
+            ok=outcome.ok,
+            reason=outcome.reason,
+            client=client,
+        )
+        return PasteResult(
+            t_mono_ns=monotonic_ns(),
+            frame_id=msg.frame_id,
+            request_id=msg.request_id,
+            ok=outcome.ok,
+            reason=outcome.reason,
+            chars=len(msg.text) if outcome.ok else 0,
+        )
+
+    async def _inject_paste_chord(self) -> str | None:
+        """Ctrl+V as the human, through the mux; returns the refusal reason, if any."""
+        now = monotonic_ns()
+        chord = [
+            Key(t_mono_ns=now, code="ControlLeft", action="down"),
+            Key(t_mono_ns=now, code="KeyV", action="down"),
+            Key(t_mono_ns=now, code="KeyV", action="up"),
+            Key(t_mono_ns=now, code="ControlLeft", action="up"),
+        ]
+        decisions = await self.submit_many(Source.HUMAN, chord, synthetic_reason="clipboard_paste")
+        refused = [d.reason for d in decisions if not d.accepted]
+        return refused[0] if refused else None
 
     async def release_source(self, source: Source) -> None:
         """Release everything ``source`` holds -- a closed tab or a dead agent must never leave a

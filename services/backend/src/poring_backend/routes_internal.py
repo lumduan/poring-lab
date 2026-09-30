@@ -4,10 +4,10 @@ import asyncio
 import logging
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from pydantic import ValidationError
 
+from poring_backend.drops import ReplyThrottle
 from poring_backend.mux import Source
-from poring_backend.routes_public import get_state, stop_task
+from poring_backend.routes_public import get_state, offer, read_message, stop_task
 from poring_backend.stream import Outbox, pump
 from poring_env.clock import monotonic_ns
 from poring_env.protocol import (
@@ -36,14 +36,14 @@ async def ws_agent(ws: WebSocket) -> None:
     state.agents.add(outbox)
     sender = asyncio.create_task(pump(ws, outbox), name="agent-pump")
     state.broadcast_status()  # bot_connected flipped
+    throttle = ReplyThrottle()
+    reply = offer(outbox.offer_control)
     try:
         while True:
-            try:
-                msg = parse_agent_to_backend(await ws.receive_text())
-            except ValidationError as exc:
-                log.warning("agent sent an invalid message: %s", exc)
-                continue
+            msg = await read_message(ws, parse_agent_to_backend, "agent", state, throttle, reply)
             match msg:
+                case None:
+                    continue
                 case AgentHello():
                     log.info("agent %s (%s) connected", msg.agent_id, msg.version)
                 case AgentInput():

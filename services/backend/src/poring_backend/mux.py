@@ -17,13 +17,18 @@ Handoffs
 Reserved chords
   Ctrl+Alt+D and Ctrl+Alt+Enter are xfreerdp client hotkeys (disconnect / fullscreen toggle). They
   would act on the ONE RDP session itself, so they are never delivered.
+
+Paste chords (ADR-0004)
+  The clipboard is a human-only tool. The bot may never press Ctrl+V, Meta+V (Windows clipboard
+  history) or Shift+Insert -- in either key order, because X autorepeats a held XTest key, so
+  "hold V, then press Ctrl" pastes too. The human is unaffected.
 """
 
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Literal
 
-from poring_env.keymap import ALT_CODES, CONTROL_CODES, is_known
+from poring_env.keymap import ALT_CODES, CONTROL_CODES, META_CODES, SHIFT_CODES, is_known
 from poring_env.protocol import (
     NO_FRAME,
     InputEvent,
@@ -34,6 +39,12 @@ from poring_env.protocol import (
 )
 
 RESERVED_CHORD_KEYS = frozenset({"KeyD", "Enter", "NumpadEnter"})
+
+# key -> the modifiers that turn it into a paste (ADR-0004). Checked in both key orders.
+PASTE_CHORDS: dict[str, frozenset[str]] = {
+    "KeyV": CONTROL_CODES | META_CODES,
+    "Insert": SHIFT_CODES,
+}
 
 ButtonName = Literal["left", "middle", "right"]
 
@@ -127,6 +138,8 @@ class InputMux:
             return Decision(False, "human_lease")
         if self._is_reserved_chord(source, event):
             return Decision(False, "reserved_chord")
+        if source is Source.BOT and self._is_paste_chord(source, event):
+            return Decision(False, "paste_chord_bot")
 
         inject: list[Routed] = []
         if source is Source.HUMAN and self._mode is Mode.ASSIST:
@@ -150,6 +163,16 @@ class InputMux:
             return False
         keys = self._keys[source]
         return bool(keys & CONTROL_CODES) and bool(keys & ALT_CODES)
+
+    def _is_paste_chord(self, source: Source, event: InputEvent) -> bool:
+        if not (isinstance(event, Key) and event.action == "down"):
+            return False
+        keys = self._keys[source]
+        modifiers = PASTE_CHORDS.get(event.code)
+        if modifiers is not None and keys & modifiers:
+            return True
+        # The other order: a modifier going down while the paste key is already held.
+        return any(event.code in mods and key in keys for key, mods in PASTE_CHORDS.items())
 
     def _track(self, source: Source, event: InputEvent) -> None:
         if isinstance(event, Key):

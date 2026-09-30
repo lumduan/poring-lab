@@ -1,6 +1,7 @@
 """End-to-end through FastAPI with fake X capture/input: real WebSockets, real mux, real log."""
 
 import json
+import logging
 import time
 from collections.abc import Callable, Iterator
 from pathlib import Path
@@ -18,6 +19,7 @@ from poring_env.frame import Frame
 from poring_env.protocol import (
     AgentHello,
     AgentInput,
+    ClipboardPaste,
     InputEvent,
     Key,
     Mode,
@@ -51,12 +53,19 @@ class FakeInput:
     def __init__(self) -> None:
         self.events: list[InputEvent] = []
         self.pos = (0, 0)
+        self.ctrl = False
+        self.on_ctrl_v: Callable[[], None] | None = None  # "Windows" reacting to a paste
 
     def send_many(self, events: list[InputEvent]) -> None:
         for event in events:
             self.events.append(event)
             if isinstance(event, MouseMove):
                 self.pos = to_pixels(event.x, event.y, 1280, 720)
+            if isinstance(event, Key) and event.code == "ControlLeft":
+                self.ctrl = event.action == "down"
+            is_v = isinstance(event, Key) and event.code == "KeyV" and event.action == "down"
+            if is_v and self.ctrl and self.on_ctrl_v is not None:
+                self.on_ctrl_v()
 
     def pointer(self) -> tuple[int, int]:
         return self.pos
@@ -75,8 +84,10 @@ Factory = Callable[..., tuple[TestClient, FakeInput]]
 def make_client(tmp_path: Path) -> Iterator[Factory]:
     clients: list[TestClient] = []
 
-    def factory(**overrides: Any) -> tuple[TestClient, FakeInput]:
+    def factory(*, clipboard: Any = None, **overrides: Any) -> tuple[TestClient, FakeInput]:
         fake = FakeInput()
+        if clipboard is not None:
+            fake.on_ctrl_v = clipboard.ctrl_v
         settings = Settings(
             data_dir=tmp_path,
             stream_fps=100.0,
@@ -84,7 +95,12 @@ def make_client(tmp_path: Path) -> Iterator[Factory]:
             frontend_origins=ORIGIN,
             **overrides,
         )
-        app = create_app(settings, capture_factory=FakeCapture, input_factory=lambda: fake)
+        app = create_app(
+            settings,
+            capture_factory=FakeCapture,
+            input_factory=lambda: fake,
+            clipboard_factory=(lambda: clipboard) if clipboard is not None else None,
+        )
         client = TestClient(app)
         client.__enter__()
         clients.append(client)
@@ -107,6 +123,16 @@ def receive_until(ws: WebSocketTestSession, type_: str) -> dict[str, Any]:
         msg: dict[str, Any] = json.loads(ws.receive_text())
         if msg["type"] == type_:
             return msg
+
+
+def receive_text_until(ws: WebSocketTestSession, type_: str) -> dict[str, Any]:
+    """Like receive_until, but skips the stream's binary JPEG frames."""
+    while True:
+        raw = ws.receive()
+        if raw.get("text"):
+            msg: dict[str, Any] = json.loads(raw["text"])
+            if msg["type"] == type_:
+                return msg
 
 
 def wait_for(pred: Callable[[], bool], timeout: float = 2.0) -> None:
@@ -248,3 +274,155 @@ def test_internal_route_refuses_the_public_listener(make_client: Factory) -> Non
     client, _ = make_client()  # internal_port stays 8001; TestClient arrives on 80
     with pytest.raises(WebSocketDisconnect), client.websocket_connect("/internal/agent"):
         pass
+
+
+# --- ADR-0004: human-only clipboard paste -------------------------------------------------------
+
+SECRET_TEXT = "PASTE-SECRET-91c4 สวัสดีครับ"
+
+
+def paste(ws: WebSocketTestSession, text: str = SECRET_TEXT, request_id: int = 7) -> dict[str, Any]:
+    ws.send_text(ClipboardPaste(t_mono_ns=1, request_id=request_id, text=text).model_dump_json())
+    return receive_until(ws, "paste_result")
+
+
+def keys(fake: FakeInput) -> list[tuple[str, str]]:
+    return [(e.code, e.action) for e in fake.events if isinstance(e, Key)]
+
+
+CTRL_V = [("ControlLeft", "down"), ("KeyV", "down"), ("KeyV", "up"), ("ControlLeft", "up")]
+
+
+def clipboard_client(make_client: Factory, make_xfreerdp: Any, **kw: Any) -> tuple[Any, ...]:
+    xfreerdp = make_xfreerdp()
+    client, fake = make_client(
+        clipboard=xfreerdp, rdp_clipboard="text-to-remote", clipboard_settle_s=0.01, **kw
+    )
+    return client, fake, xfreerdp
+
+
+def test_paste_goes_through_the_mux_and_never_logs_its_text(
+    make_client: Factory, make_xfreerdp: Any, tmp_path: Path
+) -> None:
+    client, fake, xfreerdp = clipboard_client(make_client, make_xfreerdp)
+    with client.websocket_connect("/ws/input", headers={"origin": ORIGIN}) as ws:
+        result = paste(ws)
+    assert (result["ok"], result["reason"], result["request_id"]) == (True, "ok", 7)
+    assert result["chars"] == len(SECRET_TEXT)
+    assert keys(fake) == CTRL_V
+    assert ("data", SECRET_TEXT.encode()) in xfreerdp.replies
+
+    lines = log_lines(tmp_path)
+    summary = next(r for r in lines if r["event"]["type"] == "clipboard_paste")
+    assert summary["event"]["chars"] == len(SECRET_TEXT) and "text" not in summary["event"]
+    synthetic = [r for r in lines if r["synthetic"]]
+    assert [(r["source"], r["reason"]) for r in synthetic] == [("human", "clipboard_paste")] * 4
+    for path in tmp_path.rglob("*"):
+        if path.is_file():
+            assert "PASTE-SECRET" not in path.read_text(errors="replace"), path
+    audit = (tmp_path / "transfer_log").glob("*.jsonl")
+    record = json.loads(next(audit).read_text().splitlines()[-1])
+    assert (record["action"], record["ok"], record["name"]) == ("paste", True, None)
+
+
+def test_paste_needs_a_browser_connection(make_client: Factory, make_xfreerdp: Any) -> None:
+    client, fake, _ = clipboard_client(make_client, make_xfreerdp)
+    with client.websocket_connect("/ws/input") as ws:  # no Origin: a script, or the agent
+        result = paste(ws)
+    assert (result["ok"], result["reason"], result["chars"]) == (False, "origin_required", 0)
+    assert keys(fake) == []
+
+
+def test_paste_is_refused_in_bot_mode(make_client: Factory, make_xfreerdp: Any) -> None:
+    client, fake, _ = clipboard_client(make_client, make_xfreerdp)
+    with client.websocket_connect("/ws/input", headers={"origin": ORIGIN}) as ws:
+        ws.send_text(SetMode(t_mono_ns=1, mode=Mode.BOT).model_dump_json())
+        sync(ws)
+        result = paste(ws)
+    assert (result["ok"], result["reason"]) == (False, "mode_bot")
+    assert keys(fake) == []
+
+
+def test_paste_in_assist_takes_the_human_lease(make_client: Factory, make_xfreerdp: Any) -> None:
+    client, fake, _ = clipboard_client(make_client, make_xfreerdp)
+    with client.websocket_connect("/ws/input", headers={"origin": ORIGIN}) as ws:
+        ws.send_text(SetMode(t_mono_ns=1, mode=Mode.ASSIST).model_dump_json())
+        sync(ws)
+        assert paste(ws)["ok"]
+        sync(ws)  # the input socket is still live
+    assert keys(fake) == CTRL_V
+
+
+def test_paste_is_off_unless_configured(make_client: Factory) -> None:
+    client, fake = make_client()
+    with client.websocket_connect("/ws/input", headers={"origin": ORIGIN}) as ws:
+        result = paste(ws)
+    assert (result["ok"], result["reason"]) == (False, "clipboard_disabled")
+    with client.websocket_connect("/ws/stream", headers={"origin": ORIGIN}) as ws:
+        status = receive_text_until(ws, "status")
+    assert (status["clipboard_enabled"], status["transfer_enabled"]) == (False, False)
+
+
+def test_status_advertises_the_clipboard(make_client: Factory, make_xfreerdp: Any) -> None:
+    client, _, _ = clipboard_client(make_client, make_xfreerdp)
+    with client.websocket_connect("/ws/stream", headers={"origin": ORIGIN}) as ws:
+        assert receive_text_until(ws, "status")["clipboard_enabled"] is True
+    health = client.get("/health").json()["clipboard"]
+    assert health["enabled"] is True and health["foreign_owner_clears"] == 0
+
+
+# --- no silent drops ---------------------------------------------------------------------------
+
+
+def test_invalid_input_is_answered_counted_and_logged_once(
+    make_client: Factory, caplog: pytest.LogCaptureFixture
+) -> None:
+    client, fake = make_client()
+    missing_ts = '{"type":"key","frame_id":0,"code":"KeyA","action":"down"}'
+    with (
+        caplog.at_level(logging.WARNING, logger="poring_backend.drops"),
+        client.websocket_connect("/ws/input", headers={"origin": ORIGIN}) as ws,
+    ):
+        ws.send_text(missing_ts)
+        error = receive_until(ws, "error")
+        for _ in range(4):
+            ws.send_text(missing_ts)
+        ws.send_text("{not json")
+        ws.send_bytes(b"\x00\x01")
+        sync(ws)  # still connected after all of it
+    assert (error["channel"], error["reason"], error["ref_type"]) == (
+        "ws_input",
+        "missing:key.t_mono_ns",
+        "key",
+    )
+    dropped = client.get("/health").json()["dropped_messages"]["ws_input"]
+    assert dropped == {"binary_frame": 1, "json_invalid": 1, "missing:key.t_mono_ns": 5}
+    warnings = [r.getMessage() for r in caplog.records if r.name == "poring_backend.drops"]
+    assert len(warnings) == 3  # one per reason, the burst of 5 is rate-limited
+    assert not any(isinstance(e, Key) for e in fake.events)
+
+
+def test_invalid_agent_messages_are_answered(make_client: Factory) -> None:
+    client, _ = make_client(internal_port=80)
+    with client.websocket_connect("/internal/agent") as ws:
+        ws.send_text('{"type":"agent_input","t_mono_ns":1,"frame_id":1,"t_capture_ns":1}')
+        error = receive_until(ws, "error")
+    assert (error["channel"], error["reason"]) == ("agent", "missing:agent_input.events")
+    assert client.get("/health").json()["dropped_messages"]["agent"] == {
+        "missing:agent_input.events": 1
+    }
+
+
+def test_invalid_stream_messages_are_answered(make_client: Factory) -> None:
+    client, _ = make_client()
+    with client.websocket_connect("/ws/stream", headers={"origin": ORIGIN}) as ws:
+        ws.send_text('{"type":"ping"}')
+        error = receive_text_until(ws, "error")
+    assert (error["channel"], error["reason"]) == ("ws_stream", "missing:ping.t_mono_ns")
+
+
+def test_mux_refusals_are_counted_in_health(make_client: Factory) -> None:
+    client, _ = make_client(internal_port=80)
+    with client.websocket_connect("/internal/agent") as ws:
+        send_agent_key(ws, "KeyA")
+    assert client.get("/health").json()["input_refused"] == {"bot": {"mode=HUMAN": 1}}

@@ -29,6 +29,19 @@ class Settings(BaseSettings):
     capture_with_cursor: bool = False
     status_hz: float = 1.0
 
+    # --- ADR-0004: human-only clipboard + file transfer ------------------------------------------
+    # The SAME keywords the desktop's rdp-loop.sh reads (compose passes them to both containers),
+    # so the backend offers exactly what the RDP session was started with.
+    #   RDP_CLIPBOARD: off (default) | text-to-remote
+    #   RDP_DRIVES:    "" (default)  | transfer
+    rdp_clipboard: str = "off"
+    rdp_drives: str = ""
+    # The tmpfs volume redirected into Windows as \\tsclient\transfer (compose: size=512m).
+    transfer_dir: Path = Path("/transfer")
+    transfer_max_bytes: int = 512 * 1024 * 1024
+    # Pause between xfreerdp announcing the text to Windows and the Ctrl+V (RDP format-list trip).
+    clipboard_settle_s: float = 0.5
+
     @property
     def origins(self) -> frozenset[str]:
         return frozenset(
@@ -38,3 +51,12 @@ class Settings(BaseSettings):
     @property
     def lease_ns(self) -> int:
         return int(self.assist_lease_s * 1e9)
+
+    @property
+    def clipboard_enabled(self) -> bool:
+        return self.rdp_clipboard.strip() == "text-to-remote"
+
+    @property
+    def transfer_enabled(self) -> bool:
+        drives = {d.strip() for d in self.rdp_drives.split(",")}
+        return "transfer" in drives and self.transfer_dir.is_dir()
