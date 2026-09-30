@@ -14,7 +14,7 @@ flowchart TD
     N2["Weekend · disk split<br/>quant data to its own vdisk<br/>OPERATOR"]
     N3["After the split · pending builds,<br/>smoke test, vision + check_gpu<br/>BLOCKED"]
     D1["PACKETVER 20211103 · pre-renewal<br/>DECIDED 2026-09-30"]
-    S1["RO client running on rAthena<br/>DONE · resolution + lag open"]
+    S1["RO client running on rAthena<br/>DONE · RDP delivery ~17 fps open"]
     D2["ADR-0005 · vision loses direct X access<br/>DECISION - PROPOSED"]
     D3["Environment interlock · ADR-0006 rule 2<br/>NOT BUILT - issue"]
     E1["Community-server permission evidence<br/>OPERATOR - pending"]
@@ -60,7 +60,7 @@ flowchart TD
 | **Weekend · disk split** | 🟥 OPERATOR | Move the quant Postgres/Mongo data to its own Proxmox vdisk; the window comes from the IO baseline (`scripts/io_summary.py`). | Operator, weekend |
 | **After the split** | ⬜ BLOCKED | Build the production frontend, desktop (bakes the ADR-0004 `rdp-loop.sh`/`run-x11vnc.sh`, today bind-mounted by the dev overlay), vision and the sniffer; `scripts/smoke_test.sh`; `check_gpu.py` (sm_120). **rathena and db are no longer waiting:** Batt made an exception on 2026-09-30 and they were built and started with the tolerant guard. | The disk split: on the shared disk, builds pushed capture Postgres past 25 % IO stall (2026-09-29) |
 | **PACKETVER + RO client** | ✅ DECIDED | Batt, 2026-09-30: the 2021-11-03 kRO exe at **PACKETVER 20211103**, **pre-renewal**, kRO 2021-06 data, WARP patches ([docs/client/rathena-client.md](client/rathena-client.md)). | — |
-| **RO client on rAthena** | ✅ DONE 2026-09-30 | A **separate client** in `C:\RO-rAthena\` logs in to this lab's rAthena. RagnarokClassic is untouched (a registry and folder baseline is compared at every step). What works: login, a character on `new_4-1`, movement. Thai typed via Kedmanee, rendered in chat, and stored byte-exact as CP874 in `chatlog`. Recipe: [rathena-client.md](client/rathena-client.md). **Open:** the 1024×740 window is taller than the 720-pixel session (the chat bar needs the window moved up). Under langtype 5 the UI shows `NO MSG` and Korean shows as mojibake (Thai Test B). Click→move latency varies widely: 0.17–1.3 s. | Follow-ups only: resolution, Thai Test A vs B, lag |
+| **RO client on rAthena** | ✅ DONE 2026-09-30 | A **separate client** in `C:\RO-rAthena\` logs in to this lab's rAthena. RagnarokClassic is untouched (a registry and folder baseline is compared at every step). What works: login, a character on `new_4-1`, movement. Thai typed via Kedmanee, rendered in chat, and stored byte-exact as CP874 in `chatlog`. Recipe: [rathena-client.md](client/rathena-client.md). Session now **1280×800**: the whole window fits, the stopgap is removed (2026-09-30). **Render performance measured:** the game renders at **60 fps on the Intel UHD 630** (not WARP). Clicks register at 20 ms holds; UI click→response is p50 64 ms from release. **Open:** only ~15–18 fps reach Xvfb during full-scene motion, for every FreeRDP codec, with xfreerdp burning 10+ cores. UI text: `NO MSG` / mojibake. The data-only English msgstringtable fix is recommended, not applied. | **RDP delivery ceiling: must be fixed before dataset collection.** UI-text option: Batt's decision |
 | **Environment interlock · ADR-0006 rule 2** | 🟥 NOT BUILT | Fail-closed: the mux refuses BOT/ASSIST automation unless a verifiable signal (not the agent's judgment) says the connected server is rAthena or the community server. Until it exists, no agent automation runs on the community server; Batt may play there manually. [Issue #2](https://github.com/lumduan/poring-lab/issues/2), `blocks-phase-4`. | Design + implementation; a prerequisite of Phase 4 (with ADR-0005) |
 | **Community-server permission evidence** | 🟥 OPERATOR | The server's bot/AI-testing rules, recorded for its exact host in [environments/community-server.md](environments/community-server.md). **Pending**, so the server counts as forbidden until then (ADR-0006 rule 1). | Batt supplies the link |
 | **ADR-0005 · vision X isolation** | 🟥 DECISION | vision can reach XTEST, selections and window contents directly, and can pose as HUMAN on `:8000`. Recommended: frames from the backend + an X auth cookie + an internal agent network + no RECORD ([ADR-0005](adr/0005-vision-x-access.md); [issue #1](https://github.com/lumduan/poring-lab/issues/1), `blocks-phase-4`). | Operator picks the option set; implemented before Phase 4 |
@@ -76,6 +76,8 @@ flowchart TD
 interlock (ADR-0006).**
 - Every other image build waits for the weekend disk split. That includes the sniffer, which is Phase 1's
   last blocker. rathena and db were an exception, and the RO client on rAthena runs (2026-09-30).
+- **Dataset collection waits for the RDP delivery ceiling** (the game renders 60 fps; ~17 reach the lab
+  during motion). See [rathena-client.md](client/rathena-client.md), "Render performance".
 - Phase 4 cannot start until vision loses direct X access (ADR-0005) AND the environment interlock
   exists (ADR-0006), however good perception gets.
 - Phase 6's social experiments also wait for the community server's permission evidence.
