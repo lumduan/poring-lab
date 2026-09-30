@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import Banner from "@/components/Banner";
+import FilesPanel from "@/components/FilesPanel";
 import ModeSwitch from "@/components/ModeSwitch";
 import OverlayCanvas from "@/components/OverlayCanvas";
+import PastePanel from "@/components/PastePanel";
 import StatsPanel, { EMPTY_STATS, type Links, type Stats } from "@/components/StatsPanel";
 import StreamCanvas from "@/components/StreamCanvas";
 import Toolbar from "@/components/Toolbar";
@@ -15,8 +17,10 @@ import {
   parseServerMessage,
   type BrowserToBackend,
   type Detections,
+  type ErrorReply,
   type FrameMeta,
   type Mode,
+  type PasteResult,
   type Status,
 } from "@/lib/protocol";
 import type { Size, ViewMode } from "@/lib/view";
@@ -52,6 +56,10 @@ export default function Console({ backendUrl }: Props) {
   const [frameSize, setFrameSize] = useState<Size>({ width: 1280, height: 720 });
   const [viewMode, setViewMode] = useState<ViewMode>("fit");
   const [focused, setFocused] = useState(false);
+  const pasteIdRef = useRef(0);
+  const [pasteResult, setPasteResult] = useState<PasteResult | null>(null);
+  const [pastePending, setPastePending] = useState(false);
+  const [dropped, setDropped] = useState<ErrorReply | null>(null);
 
   useEffect(() => {
     const base = backendWsBase(backendUrl);
@@ -64,6 +72,14 @@ export default function Console({ backendUrl }: Props) {
     const encodeToSend: number[] = [];
     let rttMs: number | null = null;
     let windowStart = performance.now();
+    let droppedTimer: ReturnType<typeof setTimeout> | null = null;
+
+    // The backend dropped one of our messages (never silently): show it for a while.
+    const showDropped = (msg: ErrorReply) => {
+      setDropped(msg);
+      if (droppedTimer) clearTimeout(droppedTimer);
+      droppedTimer = setTimeout(() => setDropped(null), 10_000);
+    };
 
     // Latest frame wins: while one JPEG decodes, newer arrivals overwrite `queued`.
     const drawLatest = async () => {
@@ -104,6 +120,7 @@ export default function Console({ backendUrl }: Props) {
         if (msg?.type === "frame") pendingMeta = msg;
         else if (msg?.type === "status") setStatus(msg);
         else if (msg?.type === "detections") setDetections(msg);
+        else if (msg?.type === "error") showDropped(msg);
       },
       onBinary: (blob) => {
         if (!pendingMeta) return; // a JPEG always follows its FrameMeta; ignore strays
@@ -115,11 +132,18 @@ export default function Console({ backendUrl }: Props) {
 
     const input = new ReconnectingSocket(`${base}/ws/input`, {
       onOpen: () => setLinks((l) => ({ ...l, input: true })),
-      onClose: () => setLinks((l) => ({ ...l, input: false })),
+      onClose: () => {
+        setLinks((l) => ({ ...l, input: false }));
+        setPastePending(false); // its answer died with the socket
+      },
       onText: (text) => {
         const msg = parseServerMessage(text);
         // Our own clock went out and came back: a same-domain round trip.
         if (msg?.type === "pong") rttMs = (browserNowNs() - msg.echo_t_mono_ns) / 1e6;
+        else if (msg?.type === "paste_result" && msg.request_id === pasteIdRef.current) {
+          setPasteResult(msg);
+          setPastePending(false);
+        } else if (msg?.type === "error") showDropped(msg);
       },
     });
     inputRef.current = input;
@@ -151,6 +175,7 @@ export default function Console({ backendUrl }: Props) {
     return () => {
       clearInterval(pinger);
       clearInterval(statsTimer);
+      if (droppedTimer) clearTimeout(droppedTimer);
       stream.close();
       input.close();
       inputRef.current = null;
@@ -176,6 +201,21 @@ export default function Console({ backendUrl }: Props) {
     send({ type: "release_all", ...stamp() });
   };
 
+  /** ADR-0004: the backend pastes ``text`` into the focused Windows window (human-only). */
+  const sendPaste = (text: string): boolean => {
+    pasteIdRef.current += 1;
+    setPasteResult(null);
+    const sent =
+      inputRef.current?.send({
+        type: "clipboard_paste",
+        ...stamp(),
+        request_id: pasteIdRef.current,
+        text,
+      } satisfies BrowserToBackend) ?? false;
+    setPastePending(sent);
+    return sent;
+  };
+
   const lease =
     status?.lease_until_ns != null
       ? Math.max(0, (status.lease_until_ns - status.t_mono_ns) / 1e9)
@@ -196,7 +236,7 @@ export default function Console({ backendUrl }: Props) {
           <ModeSwitch mode={status?.mode ?? null} onChange={setMode} disabled={!links.input} />
         </div>
       </header>
-      <Banner links={links} status={status} />
+      <Banner links={links} status={status} dropped={dropped} />
       <Toolbar
         disabled={!links.input}
         mode={viewMode}
@@ -215,6 +255,29 @@ export default function Console({ backendUrl }: Props) {
       >
         <OverlayCanvas detections={detections} width={frameSize.width} height={frameSize.height} />
       </StreamCanvas>
+      <div className="grid gap-3 lg:grid-cols-2">
+        <details className="rounded-md border border-neutral-800 p-3" open>
+          <summary className="cursor-pointer text-sm font-medium">Paste to Windows</summary>
+          <div className="mt-2">
+            <PastePanel
+              enabled={status?.clipboard_enabled === true}
+              connected={links.input}
+              mode={status?.mode ?? null}
+              pending={pastePending}
+              result={pasteResult}
+              onSend={sendPaste}
+            />
+          </div>
+        </details>
+        <details className="rounded-md border border-neutral-800 p-3">
+          <summary className="cursor-pointer text-sm font-medium">
+            Files ⇄ Windows (<span className="font-mono">\\tsclient\transfer</span>)
+          </summary>
+          <div className="mt-2">
+            <FilesPanel backendUrl={backendUrl} enabled={status?.transfer_enabled === true} />
+          </div>
+        </details>
+      </div>
       <StatsPanel stats={stats} status={status} links={links} />
       <p className="text-xs text-neutral-500">
         {focused

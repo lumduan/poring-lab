@@ -1,10 +1,10 @@
 import type { Links } from "@/components/StatsPanel";
-import type { Status } from "@/lib/protocol";
+import type { ErrorReply, Status } from "@/lib/protocol";
 
-type Props = { links: Links; status: Status | null };
+type Props = { links: Links; status: Status | null; dropped?: ErrorReply | null };
 
 /** A clear notice when the picture or the controls can't be trusted. */
-export default function Banner({ links, status }: Props) {
+export default function Banner({ links, status, dropped = null }: Props) {
   const problems: string[] = [];
   if (!links.stream) problems.push("Stream disconnected: reconnecting to the backend…");
   if (!links.input) problems.push("Input channel disconnected: keys and clicks are not being sent.");
@@ -15,6 +15,13 @@ export default function Banner({ links, status }: Props) {
   }
   if (links.stream && status && status.rdp_window_present === null) {
     problems.push("The backend cannot reach the X display.");
+  }
+  if (dropped) {
+    // Never silent (ADR-0004): the backend refused one of this page's messages -- a console bug.
+    problems.push(
+      `The backend dropped a ${dropped.ref_type ?? "unreadable"} message on ${dropped.channel}: ` +
+        `${dropped.reason}.`,
+    );
   }
   if (problems.length === 0) return null;
   return (

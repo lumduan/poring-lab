@@ -56,8 +56,14 @@ export class ReconnectingSocket {
   }
 }
 
-/** ws(s)://host:port of the backend: the configured public URL, else this page's host on :8000. */
-export function backendWsBase(configured: string | null): string {
+/** http(s)://host:port of the backend: the configured public URL, else this page's host on :8000.
+ * Browser only (reads window.location). */
+export function backendHttpBase(configured: string | null): string {
   const http = configured ?? `${window.location.protocol}//${window.location.hostname}:8000`;
-  return http.replace(/^http/, "ws").replace(/\/+$/, "");
+  return http.replace(/\/+$/, "");
+}
+
+/** ws(s)://host:port of the backend (see backendHttpBase). */
+export function backendWsBase(configured: string | null): string {
+  return backendHttpBase(configured).replace(/^http/, "ws");
 }
