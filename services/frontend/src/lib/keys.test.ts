@@ -5,7 +5,10 @@ import {
   chord,
   HeldKeys,
   isKnownCode,
+  isMacPlatform,
   isReservedChord,
+  keyDecision,
+  type KeyEventLike,
   shouldForwardPhysical,
   TOOLBAR,
 } from "./keys.ts";
@@ -71,4 +74,75 @@ test("HeldKeys refuses reserved chords, unknown codes and stray ups", () => {
   assert.equal(held.apply({ code: "KeyQ", action: "up" }), false);
   held.clear();
   assert.equal(held.codes.size, 0);
+});
+
+// --- ADR-0004: which chords paste natively (Mac clipboard -> Windows) and which are forwarded ---
+
+function k(code: string, mods: string = ""): KeyEventLike {
+  return {
+    code,
+    metaKey: mods.includes("cmd"),
+    ctrlKey: mods.includes("ctrl"),
+    altKey: mods.includes("alt"),
+    shiftKey: mods.includes("shift"),
+  };
+}
+
+const MAC = true;
+const PC = false;
+
+test("macOS: Cmd+V pastes the Mac clipboard; physical Ctrl+V stays a Windows combo", () => {
+  assert.equal(keyDecision(k("KeyV", "cmd"), MAC), "paste");
+  assert.equal(keyDecision(k("KeyV", "cmd shift"), MAC), "paste"); // paste and match style
+  assert.equal(keyDecision(k("KeyV", "ctrl"), MAC), "forward"); // Windows-internal paste
+  assert.equal(keyDecision(k("KeyV", "cmd alt"), MAC), "local"); // Cmd+Opt+V is not a paste
+  assert.equal(keyDecision(k("KeyV", "cmd ctrl"), MAC), "local");
+  assert.equal(keyDecision(k("KeyC", "cmd"), MAC), "local"); // other Cmd combos stay local
+  assert.equal(keyDecision(k("Tab", "cmd"), MAC), "local");
+});
+
+test("other OSes: Ctrl+V and Ctrl+Shift+V paste; Ctrl+Alt+V (AltGr) is forwarded", () => {
+  assert.equal(keyDecision(k("KeyV", "ctrl"), PC), "paste");
+  assert.equal(keyDecision(k("KeyV", "ctrl shift"), PC), "paste");
+  assert.equal(keyDecision(k("KeyV", "ctrl alt"), PC), "forward");
+  assert.equal(keyDecision(k("KeyV", "cmd"), PC), "local"); // Win+V: the viewer's own OS
+});
+
+test("Shift+Insert pastes everywhere; Ctrl+Insert (copy) is forwarded", () => {
+  for (const platform of [MAC, PC]) {
+    assert.equal(keyDecision(k("Insert", "shift"), platform), "paste");
+    assert.equal(keyDecision(k("Insert", "ctrl"), platform), "forward");
+    assert.equal(keyDecision(k("Insert", "shift ctrl"), platform), "forward");
+    assert.equal(keyDecision(k("Insert"), platform), "forward");
+  }
+});
+
+test("ordinary keys are forwarded by physical code; local-only and unknown keys are not", () => {
+  for (const platform of [MAC, PC]) {
+    assert.equal(keyDecision(k("KeyV"), platform), "forward"); // a plain V (game hotkey)
+    assert.equal(keyDecision(k("KeyV", "shift"), platform), "forward");
+    assert.equal(keyDecision(k("F5"), platform), "forward");
+    assert.equal(keyDecision(k("KeyA", "alt"), platform), "forward");
+    assert.equal(keyDecision(k("MetaLeft", "cmd"), platform), "local");
+    assert.equal(keyDecision(k("Fn"), platform), "local");
+    assert.equal(keyDecision(k(""), platform), "local");
+  }
+  // The modifiers themselves are forwarded (except Meta), so games keep Ctrl/Shift/Alt.
+  assert.equal(keyDecision(k("ControlLeft", "ctrl"), MAC), "forward");
+});
+
+test("platform detection", () => {
+  for (const p of ["MacIntel", "macOS", "iPad", "iPhone"]) assert.equal(isMacPlatform(p), true, p);
+  for (const p of ["Win32", "Windows", "Linux x86_64", ""]) assert.equal(isMacPlatform(p), false, p);
+});
+
+test("a paste chord's key-up is a stray up and never reaches Windows", () => {
+  const held = new HeldKeys();
+  // Cmd+V on a Mac: Meta stays local and the V down is the paste chord, so neither was sent.
+  assert.equal(held.apply({ code: "KeyV", action: "up" }), false);
+  // Ctrl+V elsewhere: Ctrl was forwarded, then the paste releases everything held.
+  assert.equal(held.apply({ code: "ControlLeft", action: "down" }), true);
+  held.clear(); // releaseAll() before the ClipboardPaste
+  assert.equal(held.apply({ code: "KeyV", action: "up" }), false);
+  assert.equal(held.apply({ code: "ControlLeft", action: "up" }), false);
 });

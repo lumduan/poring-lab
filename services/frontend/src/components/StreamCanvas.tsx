@@ -3,7 +3,13 @@
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 
 import { BUTTON_BITS, type ButtonName, buttonName, WheelAccumulator } from "@/lib/input";
-import { type HeldKeys, type KeyStep, shouldForwardPhysical } from "@/lib/keys";
+import {
+  type HeldKeys,
+  isMacPlatform,
+  keyDecision,
+  type KeyStep,
+  shouldForwardPhysical,
+} from "@/lib/keys";
 import { browserNowNs, type BrowserToBackend } from "@/lib/protocol";
 import { drawRect, normalizePoint, type Size, type ViewMode } from "@/lib/view";
 
@@ -15,13 +21,22 @@ type Props = {
   held: HeldKeys;
   send: (message: BrowserToBackend) => void;
   onFocusChange?: (focused: boolean) => void;
+  /** Text the viewer pasted onto the remote screen (Cmd+V / Ctrl+V / Shift+Insert, ADR-0004). */
+  onPaste?: (text: string) => void;
+  /** Drawn over the viewport (not the image): e.g. the paste toast. Never takes pointer events. */
+  overlay?: ReactNode;
   children?: ReactNode;
 };
 
 /** The remote screen and its input capture (a Proxmox-console-like view).
  *
  * Coordinates are normalized against the drawn image, never the letterbox around it. Every event
- * carries the id of the frame on screen when it happened, for reaction-latency measurement. */
+ * carries the id of the frame on screen when it happened, for reaction-latency measurement.
+ *
+ * Keyboard focus lives in a visually hidden <textarea>, not the canvas (the technique web RDP clients
+ * such as Guacamole use): an editable element is what lets the browser perform a native paste, so
+ * Cmd+V on the screen pastes the viewer's clipboard into Windows (ADR-0004). Every other key is
+ * prevented and forwarded by KeyboardEvent.code, and the textarea never keeps any text. */
 export default function StreamCanvas({
   videoRef,
   frameIdRef,
@@ -30,9 +45,12 @@ export default function StreamCanvas({
   held,
   send,
   onFocusChange,
+  onPaste,
+  overlay,
   children,
 }: Props) {
   const viewportRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const [viewport, setViewport] = useState<Size>({ width: 0, height: 0 });
 
   useEffect(() => {
@@ -49,7 +67,10 @@ export default function StreamCanvas({
   useEffect(() => {
     const box = viewportRef.current;
     const video = videoRef.current;
-    if (!box || !video) return;
+    const input = inputRef.current;
+    if (!box || !video || !input) return;
+    const nav = navigator as Navigator & { userAgentData?: { platform?: string } };
+    const isMac = isMacPlatform(nav.userAgentData?.platform || nav.platform || "");
 
     const stamp = () => ({ t_mono_ns: browserNowNs(), frame_id: frameIdRef.current });
     const at = (e: MouseEvent) => {
@@ -112,9 +133,12 @@ export default function StreamCanvas({
       pendingMove = { x: p.x, y: p.y };
       if (!raf) raf = requestAnimationFrame(flushMove);
     };
+    // The default action of a press would move focus to <body> right after we focus the capture
+    // textarea (the canvas is not focusable); it would also start a text selection.
+    const onMouseDown = (e: MouseEvent) => e.preventDefault();
     const onPointerDown = (e: PointerEvent) => {
       e.preventDefault();
-      box.focus();
+      input.focus({ preventScroll: true });
       const button = buttonName(e.button);
       if (!button) return;
       box.setPointerCapture(e.pointerId); // the matching up arrives even outside the viewport
@@ -134,15 +158,35 @@ export default function StreamCanvas({
         send({ type: "wheel", ...stamp(), dy });
       }
     };
-    const onKey = (action: "down" | "up") => (e: KeyboardEvent) => {
-      if (e.metaKey) return; // Cmd/Win combos stay with the viewer's own OS
-      if (!shouldForwardPhysical(e.code)) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      // "paste": let the browser paste natively (-> onPasteEvent); never send the chord itself.
+      // "local": Cmd/Win combos and keys the backend can't inject stay with the viewer's OS.
+      if (keyDecision(e, isMac) !== "forward") return;
       e.preventDefault(); // F-keys, Tab, Esc, Backspace, arrows... belong to the remote session
       if (e.repeat) return; // Windows runs its own key repeat for a held key
-      sendKey({ code: e.code, action });
+      sendKey({ code: e.code, action: "down" });
     };
-    const onKeyDown = onKey("down");
-    const onKeyUp = onKey("up");
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.metaKey || !shouldForwardPhysical(e.code)) return;
+      e.preventDefault();
+      // HeldKeys drops stray ups, e.g. the V of a paste chord, which was never sent down.
+      sendKey({ code: e.code, action: "up" });
+    };
+    const onPasteEvent = (e: ClipboardEvent) => {
+      e.preventDefault(); // nothing lands in the textarea
+      const text = e.clipboardData?.getData("text/plain") ?? "";
+      input.value = "";
+      // A forwarded Ctrl/Shift still held on Windows would turn the backend's Ctrl+V into
+      // Ctrl+Shift+V (or worse): release everything first, exactly as a blur does.
+      releaseAll();
+      onPaste?.(text);
+    };
+    // The textarea must never accumulate text: block every insertion, and clear what can't be
+    // blocked (IME composition text is not cancelable).
+    const onBeforeInput = (e: Event) => e.preventDefault();
+    const clearInput = () => {
+      input.value = "";
+    };
     const onVisibility = () => {
       if (document.hidden) releaseAll();
     };
@@ -156,27 +200,37 @@ export default function StreamCanvas({
     box.addEventListener("pointermove", onPointerMove);
     box.addEventListener("pointerdown", onPointerDown);
     box.addEventListener("pointerup", onPointerUp);
+    box.addEventListener("mousedown", onMouseDown);
     box.addEventListener("wheel", onWheel, { passive: false });
-    box.addEventListener("keydown", onKeyDown);
-    box.addEventListener("keyup", onKeyUp);
-    box.addEventListener("focus", onFocus);
-    box.addEventListener("blur", onBlur);
     box.addEventListener("contextmenu", onContextMenu);
+    input.addEventListener("keydown", onKeyDown);
+    input.addEventListener("keyup", onKeyUp);
+    input.addEventListener("paste", onPasteEvent);
+    input.addEventListener("beforeinput", onBeforeInput);
+    input.addEventListener("input", clearInput);
+    input.addEventListener("compositionend", clearInput);
+    input.addEventListener("focus", onFocus);
+    input.addEventListener("blur", onBlur);
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
       if (raf) cancelAnimationFrame(raf);
       box.removeEventListener("pointermove", onPointerMove);
       box.removeEventListener("pointerdown", onPointerDown);
       box.removeEventListener("pointerup", onPointerUp);
+      box.removeEventListener("mousedown", onMouseDown);
       box.removeEventListener("wheel", onWheel);
-      box.removeEventListener("keydown", onKeyDown);
-      box.removeEventListener("keyup", onKeyUp);
-      box.removeEventListener("focus", onFocus);
-      box.removeEventListener("blur", onBlur);
       box.removeEventListener("contextmenu", onContextMenu);
+      input.removeEventListener("keydown", onKeyDown);
+      input.removeEventListener("keyup", onKeyUp);
+      input.removeEventListener("paste", onPasteEvent);
+      input.removeEventListener("beforeinput", onBeforeInput);
+      input.removeEventListener("input", clearInput);
+      input.removeEventListener("compositionend", clearInput);
+      input.removeEventListener("focus", onFocus);
+      input.removeEventListener("blur", onBlur);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [videoRef, frameIdRef, held, send, onFocusChange]);
+  }, [videoRef, frameIdRef, held, send, onFocusChange, onPaste]);
 
   const rect = drawRect(viewport, frameSize, mode);
   const stageStyle =
@@ -187,13 +241,24 @@ export default function StreamCanvas({
   return (
     <div
       ref={viewportRef}
-      tabIndex={0}
       role="application"
       aria-label="Remote Windows desktop. Click to control it."
-      className={`relative h-[calc(100vh-15rem)] min-h-64 w-full cursor-crosshair select-none rounded-md border border-neutral-800 bg-black outline-none focus:ring-2 focus:ring-sky-500 ${
+      className={`relative h-[calc(100vh-15rem)] min-h-64 w-full cursor-crosshair select-none rounded-md border border-neutral-800 bg-black outline-none focus-within:ring-2 focus-within:ring-sky-500 ${
         mode === "fit" ? "overflow-hidden" : "overflow-auto"
       }`}
     >
+      {/* The keyboard capture element: focusable (Tab lands here) and labelled, but invisible,
+          click-through and never holding text. See the component comment. */}
+      <textarea
+        ref={inputRef}
+        aria-label="Keyboard input for the remote desktop. Command+V pastes into Windows."
+        rows={1}
+        autoComplete="off"
+        autoCorrect="off"
+        autoCapitalize="off"
+        spellCheck={false}
+        className="pointer-events-none absolute top-0 left-0 m-0 h-px w-px resize-none overflow-hidden border-0 p-0 text-transparent caret-transparent opacity-0 outline-none"
+      />
       <div style={stageStyle}>
         <canvas
           ref={videoRef}
@@ -203,6 +268,11 @@ export default function StreamCanvas({
         />
         {children}
       </div>
+      {overlay && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center">
+          {overlay}
+        </div>
+      )}
     </div>
   );
 }

@@ -24,9 +24,19 @@ import {
   type Status,
 } from "@/lib/protocol";
 import type { Size, ViewMode } from "@/lib/view";
+import { checkPaste, describePaste } from "@/lib/transfer";
 import { backendWsBase, ReconnectingSocket } from "@/lib/ws";
 
 type Props = { backendUrl: string | null };
+
+type PasteSource = "screen" | "panel";
+type Toast = { tone: "pending" | "ok" | "error"; text: string };
+
+const TOAST_TONE: Record<Toast["tone"], string> = {
+  pending: "border-sky-700 bg-sky-950/90 text-sky-100",
+  ok: "border-emerald-700 bg-emerald-950/90 text-emerald-100",
+  error: "border-red-700 bg-red-950/90 text-red-100",
+};
 
 const WINDOW = 90; // frames kept for the rolling p50 (~3 s at 30 fps)
 
@@ -59,6 +69,18 @@ export default function Console({ backendUrl }: Props) {
   const pasteIdRef = useRef(0);
   const [pasteResult, setPasteResult] = useState<PasteResult | null>(null);
   const [pastePending, setPastePending] = useState(false);
+  // Where the latest paste came from: Cmd+V on the screen answers with a toast, the panel in place.
+  const pasteSourceRef = useRef<PasteSource>("panel");
+  const [pasteSource, setPasteSource] = useState<PasteSource>("panel");
+  const [toast, setToast] = useState<Toast | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showToast = useCallback((next: Toast) => {
+    setToast(next);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current =
+      next.tone === "pending" ? null : setTimeout(() => setToast(null), 4000);
+  }, []);
   const [dropped, setDropped] = useState<ErrorReply | null>(null);
 
   useEffect(() => {
@@ -135,6 +157,7 @@ export default function Console({ backendUrl }: Props) {
       onClose: () => {
         setLinks((l) => ({ ...l, input: false }));
         setPastePending(false); // its answer died with the socket
+        setToast((t) => (t?.tone === "pending" ? null : t));
       },
       onText: (text) => {
         const msg = parseServerMessage(text);
@@ -143,6 +166,13 @@ export default function Console({ backendUrl }: Props) {
         else if (msg?.type === "paste_result" && msg.request_id === pasteIdRef.current) {
           setPasteResult(msg);
           setPastePending(false);
+          if (pasteSourceRef.current === "screen") {
+            showToast(
+              msg.ok
+                ? { tone: "ok", text: `Pasted ${msg.chars} characters into Windows.` }
+                : { tone: "error", text: describePaste(msg.reason) },
+            );
+          }
         } else if (msg?.type === "error") showDropped(msg);
       },
     });
@@ -180,7 +210,7 @@ export default function Console({ backendUrl }: Props) {
       input.close();
       inputRef.current = null;
     };
-  }, [backendUrl]);
+  }, [backendUrl, showToast]);
 
   const send = useCallback((message: BrowserToBackend) => {
     inputRef.current?.send(message);
@@ -202,19 +232,39 @@ export default function Console({ backendUrl }: Props) {
   };
 
   /** ADR-0004: the backend pastes ``text`` into the focused Windows window (human-only). */
-  const sendPaste = (text: string): boolean => {
+  const sendPaste = useCallback((text: string, source: PasteSource): boolean => {
     pasteIdRef.current += 1;
+    pasteSourceRef.current = source;
+    setPasteSource(source);
     setPasteResult(null);
     const sent =
       inputRef.current?.send({
         type: "clipboard_paste",
-        ...stamp(),
+        t_mono_ns: browserNowNs(),
+        frame_id: frameIdRef.current,
         request_id: pasteIdRef.current,
         text,
       } satisfies BrowserToBackend) ?? false;
     setPastePending(sent);
     return sent;
-  };
+  }, []);
+
+  /** Cmd+V (Ctrl+V, Shift+Insert) on the remote screen: the viewer's clipboard text. */
+  const pasteFromScreen = useCallback(
+    (text: string) => {
+      const check = checkPaste(text);
+      if (text.length === 0) {
+        showToast({ tone: "error", text: "The clipboard holds no text to paste." });
+      } else if (!check.ok) {
+        showToast({ tone: "error", text: check.message ?? "Cannot paste this." });
+      } else if (!sendPaste(text, "screen")) {
+        showToast({ tone: "error", text: "Input channel disconnected: nothing was pasted." });
+      } else {
+        showToast({ tone: "pending", text: `Pasting ${text.length} characters…` });
+      }
+    },
+    [sendPaste, showToast],
+  );
 
   const lease =
     status?.lease_until_ns != null
@@ -252,6 +302,17 @@ export default function Console({ backendUrl }: Props) {
         held={held}
         send={send}
         onFocusChange={setFocused}
+        onPaste={pasteFromScreen}
+        overlay={
+          toast && (
+            <div
+              role="status"
+              className={`rounded-md border px-3 py-1.5 text-sm shadow-lg ${TOAST_TONE[toast.tone]}`}
+            >
+              {toast.text}
+            </div>
+          )
+        }
       >
         <OverlayCanvas detections={detections} width={frameSize.width} height={frameSize.height} />
       </StreamCanvas>
@@ -263,9 +324,9 @@ export default function Console({ backendUrl }: Props) {
               enabled={status?.clipboard_enabled === true}
               connected={links.input}
               mode={status?.mode ?? null}
-              pending={pastePending}
-              result={pasteResult}
-              onSend={sendPaste}
+              pending={pastePending && pasteSource === "panel"}
+              result={pasteSource === "panel" ? pasteResult : null}
+              onSend={(text) => sendPaste(text, "panel")}
             />
           </div>
         </details>
@@ -281,7 +342,7 @@ export default function Console({ backendUrl }: Props) {
       <StatsPanel stats={stats} status={status} links={links} />
       <p className="text-xs text-neutral-500">
         {focused
-          ? "Keyboard and mouse go to the remote desktop (through the backend's input mux). Click outside the screen to release."
+          ? "Keyboard and mouse go to the remote desktop (through the backend's input mux). ⌘V pastes your clipboard into the focused Windows field. Click outside the screen to release."
           : "Click the screen to control it. Leaving it (blur or hiding the tab) releases anything held."}
       </p>
     </main>

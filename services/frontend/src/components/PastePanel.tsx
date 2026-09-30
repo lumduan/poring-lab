@@ -63,8 +63,9 @@ export default function PastePanel({ enabled, connected, mode, pending, result, 
   return (
     <div className="flex flex-col gap-2">
       <p className="text-xs text-neutral-400">
-        1. Click the target field in the remote screen. 2. Press ⌘V in the box below. 3. Send
-        (⌘Enter). Text only, up to {formatBytes(PASTE_MAX_BYTES)}; Thai is fine.
+        Quickest: click the target field in the remote screen, then just press ⌘V there. Or: paste
+        into the box below (⌘V), check it, and Send (⌘Enter). Text only, up to{" "}
+        {formatBytes(PASTE_MAX_BYTES)}; Thai is fine.
       </p>
       <textarea
         value={text}

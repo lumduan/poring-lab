@@ -27,6 +27,47 @@ export function shouldForwardPhysical(code: string): boolean {
   return KNOWN.has(code) && !LOCAL_ONLY.has(code);
 }
 
+/** The modifier state of a keyboard event (a structural subset of KeyboardEvent). */
+export type KeyEventLike = {
+  code: string;
+  metaKey: boolean;
+  ctrlKey: boolean;
+  altKey: boolean;
+  shiftKey: boolean;
+};
+
+/**
+ * What the console does with a key-down on the remote screen:
+ *  - "forward": preventDefault and send it to Windows by KeyboardEvent.code (the normal case, also
+ *    while an input method composes: the physical key is what matters);
+ *  - "paste":   the viewer's paste chord. Neither prevented nor forwarded, so the browser performs a
+ *    native paste into the hidden capture textarea, and the paste event turns into a ClipboardPaste
+ *    (ADR-0004). The keystroke itself never reaches Windows, so there is no double paste;
+ *  - "local":   left to the viewer's own OS/browser (Cmd combos, physical Win/Cmd, unknown keys).
+ *
+ * macOS: Cmd+V (and Cmd+Shift+V) is the Mac clipboard, while physical Ctrl+V stays a Windows key
+ * combo, so a Windows-internal copy/paste keeps working, as in Microsoft's Windows App. Elsewhere
+ * Ctrl+V / Ctrl+Shift+V is the paste chord (Ctrl+Alt is AltGr, not paste). Shift+Insert pastes
+ * everywhere.
+ */
+export type KeyDecision = "forward" | "paste" | "local";
+
+export function isMacPlatform(platform: string): boolean {
+  return /mac|iphone|ipad/i.test(platform);
+}
+
+export function isPasteChord(e: KeyEventLike, isMac: boolean): boolean {
+  if (e.code === "Insert") return e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey;
+  if (e.code !== "KeyV" || e.altKey) return false;
+  return isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+}
+
+export function keyDecision(e: KeyEventLike, isMac: boolean): KeyDecision {
+  if (isPasteChord(e, isMac)) return "paste";
+  if (e.metaKey) return "local"; // Cmd/Win combos stay with the viewer's own OS
+  return shouldForwardPhysical(e.code) ? "forward" : "local";
+}
+
 /** True if pressing `code` while `held` is down would form a reserved xfreerdp chord. */
 export function isReservedChord(held: ReadonlySet<string>, code: string): boolean {
   if (!RESERVED_WITH_CTRL_ALT.has(code)) return false;
