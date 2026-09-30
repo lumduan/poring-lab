@@ -19,8 +19,10 @@ sed -i \
   -e "s|^DB_PASSWORD=$|DB_PASSWORD=$(secret)|" \
   -e "s|^DB_ROOT_PASSWORD=$|DB_ROOT_PASSWORD=$(secret)|" \
   -e "s|^RATHENA_SERVER_USER=$|RATHENA_SERVER_USER=srv_$(secret | cut -c1-8)|" \
-  -e "s|^RATHENA_SERVER_PASSWORD=$|RATHENA_SERVER_PASSWORD=$(secret)|" \
+  -e "s|^RATHENA_SERVER_PASSWORD=$|RATHENA_SERVER_PASSWORD=$(secret | cut -c1-23)|" \
+  -e "s|^RATHENA_TEST_USER=$|RATHENA_TEST_USER=lab_$(secret | cut -c1-8)|" \
+  -e "s|^RATHENA_TEST_PASSWORD=$|RATHENA_TEST_PASSWORD=$(secret | cut -c1-16)|" \
   .env
 
-echo "wrote .env (mode 600): HOST_LAN_IP=${lan_ip:-192.168.1.13}, random DB + server secrets."
+echo "wrote .env (mode 600): HOST_LAN_IP=${lan_ip:-192.168.1.13}, random DB, server and test-account secrets."
 echo "RDP is disabled until you set WIN_HOST, RDP_USER and RDP_PASSWORD in .env."

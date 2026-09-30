@@ -33,6 +33,10 @@ services:
       MARIADB_USER: ${DB_USER:-ragnarok}
       MARIADB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env (scripts/init_env.sh)}
       MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?set DB_ROOT_PASSWORD in .env (scripts/init_env.sh)}
+    # Thai end to end: the server default charset decides the charset of the `ragnarok` database the
+    # image creates, and of every table rathena imports into it (entrypoint.sh refuses anything but
+    # tis620). Only applies when the volume is first initialised.
+    command: ["--character-set-server=tis620", "--collation-server=tis620_bin"]
     volumes:
       - db-data:/var/lib/mysql
     healthcheck:
@@ -75,6 +79,14 @@ services:
       RATHENA_NEW_ACCOUNT: ${RATHENA_NEW_ACCOUNT:-yes}
       RATHENA_PINCODE: ${RATHENA_PINCODE:-no}
       RATHENA_WEB_SERVER: ${RATHENA_WEB_SERVER:-false}
+      # Optional test player account, upserted at every start (credentials only in .env).
+      RATHENA_TEST_USER: ${RATHENA_TEST_USER:-}
+      RATHENA_TEST_PASSWORD: ${RATHENA_TEST_PASSWORD:-}
+    # The runtime tree (binaries, conf, db, npc, sql-files) is extracted here from ONE tar in the
+    # image at every start: ~1600 files never touch the shared host disk. tmpfs pages count against
+    # mem_limit (the tree is ~70 MiB; exec: the servers run from it).
+    tmpfs:
+      - /opt/rathena:rw,exec,nosuid,nodev,size=192m,uid=1000,gid=1000,mode=0755
     ports:
       - "${HOST_LAN_IP:?}:6900:6900" # login
       - "${HOST_LAN_IP:?}:6121:6121" # char

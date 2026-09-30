@@ -1,0 +1,19 @@
+Thai character names: stop trimming CP874 bytes as whitespace.
+
+TRIM_CHARS contains \255 (octal) = 0xAD, which is the Thai letter ญ (YO YING) in CP874/TIS-620,
+and 0xA0 (NBSP). normalize_name() replaces runs of these with a space and trims them from the ends,
+so any name containing ญ is corrupted on character creation and rename (rathena#6157). This is the
+change of upstream PR #9990, closed unmerged on 2026-05-30. Applied by services/rathena/Dockerfile
+with --fuzz=0 against the pinned RATHENA_REF.
+
+--- a/src/char/char.hpp
++++ b/src/char/char.hpp
+@@ -158,7 +158,7 @@
+ 	bool char_rename_guild;	// Character renaming in a guild
+ };
+ 
+-#define TRIM_CHARS "\255\xA0\032\t\x0A\x0D " //The following characters are trimmed regardless because they cause confusion and problems on the servers. [Skotlex]
++#define TRIM_CHARS "\032\t\x0A\x0D " //The following characters are trimmed regardless because they cause confusion and problems on the servers. [Skotlex]
+ struct CharServ_Config {
+ 	char userid[24];
+ 	char passwd[24];

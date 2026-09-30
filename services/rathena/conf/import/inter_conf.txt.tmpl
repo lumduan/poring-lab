@@ -35,3 +35,11 @@ log_db_port: ${DB_PORT}
 log_db_id: ${DB_USER}
 log_db_pw: ${DB_PASSWORD}
 log_db_db: ${DB_NAME}
+
+// Thai end to end (see entrypoint.sh): rAthena stores the client's raw CP874 chat/name bytes and only
+// runs SET NAMES <codepage>. With the connection AND the tis620 tables on the same charset, MariaDB
+// stores the bytes unchanged. Unset, the connection is utf8mb4 and Thai becomes '?' (rathena#425).
+default_codepage: tis620
+login_codepage: tis620
+ipban_codepage: tis620
+log_codepage: tis620

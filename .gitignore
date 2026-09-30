@@ -39,8 +39,7 @@
 *.tga
 *.mp3
 *.wav
-clientinfo.xml
-sclientinfo.xml
+*clientinfo*.xml
 
 # ---- packet captures: RO login packets carry credentials -------------------------------------------
 *.pcap

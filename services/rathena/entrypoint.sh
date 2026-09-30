@@ -7,33 +7,53 @@
 # container's bridge IP (172.x) and every LAN client fails right after login. They are NOT bind
 # addresses -- that IP does not exist inside the container, so never set bind_ip to it.
 set -euo pipefail
-cd /opt/rathena
 
 log() { printf '%s rathena: %s\n' "$(date -Is)" "$*"; }
 die() { log "FATAL: $*"; exit 64; }
+
+# THE DISK RULE: the runtime tree (~1600 files) ships as ONE tar and is extracted into a tmpfs at
+# every start (compose.yaml mounts /opt/rathena as tmpfs), so it never becomes per-file metadata on
+# the shared host disk. Persistent state lives only in MariaDB.
+rt=/opt/rathena
+if ! grep -qs " ${rt} tmpfs " /proc/mounts; then
+  log "WARNING: ${rt} is not a tmpfs; the runtime tree is being written to disk"
+fi
+tar -C "${rt}" -xf /opt/rathena-runtime.tar
+log "runtime extracted into ${rt}: $(du -sm "${rt}" | cut -f1) MiB in ${SECONDS}s"
+cd "${rt}"
 
 : "${HOST_LAN_IP:?HOST_LAN_IP must be the Docker host LAN IP that game clients connect to}"
 : "${DB_HOST:=db}" "${DB_PORT:=3306}"
 : "${DB_NAME:?}" "${DB_USER:?}" "${DB_PASSWORD:?}"
 : "${RATHENA_SERVER_USER:?}" "${RATHENA_SERVER_PASSWORD:?}"
 : "${RATHENA_SERVER_NAME:=PoringLab}" "${RATHENA_NEW_ACCOUNT:=yes}" "${RATHENA_PINCODE:=no}"
-: "${RATHENA_WEB_SERVER:=false}"
+: "${RATHENA_WEB_SERVER:=false}" "${RATHENA_TEST_USER:=}" "${RATHENA_TEST_PASSWORD:=}"
 
 # rAthena's conf parser takes everything after "key: " to end of line, and the server account is
 # also written into SQL below -- keep these to a safe charset instead of escaping them.
 safe='^[A-Za-z0-9_.-]{4,64}$'
+# char/map keep the inter-server userid/passwd in NAME_LENGTH (24-byte) buffers: a longer value is
+# silently truncated and login then rejects it ("Invalid password", map never reaches char).
+server_safe='^[A-Za-z0-9_.-]{4,23}$'
 [[ "${DB_PASSWORD}" =~ ${safe} ]] || die "DB_PASSWORD must match ${safe}"
-[[ "${RATHENA_SERVER_USER}" =~ ${safe} ]] || die "RATHENA_SERVER_USER must match ${safe}"
-[[ "${RATHENA_SERVER_PASSWORD}" =~ ${safe} ]] || die "RATHENA_SERVER_PASSWORD must match ${safe}"
+[[ "${RATHENA_SERVER_USER}" =~ ${server_safe} ]] || die "RATHENA_SERVER_USER must match ${server_safe}"
+[[ "${RATHENA_SERVER_PASSWORD}" =~ ${server_safe} ]] ||
+  die "RATHENA_SERVER_PASSWORD must match ${server_safe} (rAthena truncates longer ones)"
 [[ "${RATHENA_SERVER_NAME}" =~ ^[A-Za-z0-9_.\ -]{1,20}$ ]] || die "RATHENA_SERVER_NAME: 1-20 plain chars"
 [[ "${HOST_LAN_IP}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || die "HOST_LAN_IP must be an IPv4 address"
+[[ "${DB_NAME}" =~ ^[A-Za-z0-9_]{1,64}$ ]] || die "DB_NAME must match ^[A-Za-z0-9_]{1,64}$"
+# Optional test player account (login.userid is varchar(23), user_pass varchar(32)).
+if [[ -n "${RATHENA_TEST_USER}${RATHENA_TEST_PASSWORD}" ]]; then
+  [[ "${RATHENA_TEST_USER}" =~ ^[A-Za-z0-9_]{4,23}$ ]] || die "RATHENA_TEST_USER: 4-23 of [A-Za-z0-9_]"
+  [[ "${RATHENA_TEST_PASSWORD}" =~ ^[A-Za-z0-9]{8,32}$ ]] || die "RATHENA_TEST_PASSWORD: 8-32 of [A-Za-z0-9]"
+fi
 
 export HOST_LAN_IP DB_HOST DB_PORT DB_NAME DB_USER DB_PASSWORD RATHENA_SERVER_USER \
   RATHENA_SERVER_PASSWORD RATHENA_SERVER_NAME RATHENA_NEW_ACCOUNT RATHENA_PINCODE
 vars='${HOST_LAN_IP} ${DB_HOST} ${DB_PORT} ${DB_NAME} ${DB_USER} ${DB_PASSWORD}'
 vars+=' ${RATHENA_SERVER_USER} ${RATHENA_SERVER_PASSWORD} ${RATHENA_SERVER_NAME}'
 vars+=' ${RATHENA_NEW_ACCOUNT} ${RATHENA_PINCODE}'
-for tmpl in conf-templates/*.txt.tmpl; do
+for tmpl in /opt/rathena-conf-templates/*.txt.tmpl; do
   out="conf/import/$(basename "${tmpl}" .tmpl)"
   envsubst "${vars}" <"${tmpl}" >"${out}"
   log "rendered ${out}"
@@ -52,6 +72,14 @@ until sql -e 'SELECT 1' >/dev/null 2>&1; do
   sleep 2
 done
 
+# Thai end to end: rAthena stores the client's raw chat/name bytes (CP874) and only runs SET NAMES
+# (conf/import/inter_conf.txt: *_codepage tis620). The database must already default to tis620 (the
+# db service's --character-set-server), or the imported tables would be utf8mb4 and mangle them.
+charset="$(sql -e "SELECT DEFAULT_CHARACTER_SET_NAME FROM information_schema.SCHEMATA \
+                   WHERE SCHEMA_NAME='${DB_NAME}'")"
+[[ "${charset}" == tis620 ]] || die "database ${DB_NAME} has charset '${charset}', expected tis620 \
+(the db volume was initialised without --character-set-server=tis620; recreate it)"
+
 if [[ -z "$(sql -e "SHOW TABLES LIKE 'login'")" ]]; then
   log "empty database: importing schema"
   for f in main.sql web.sql roulette_default_data.sql logs.sql; do
@@ -60,10 +88,32 @@ if [[ -z "$(sql -e "SHOW TABLES LIKE 'login'")" ]]; then
   done
 fi
 
+# Chat ground truth must be byte-exact: VARBINARY keeps every CP874 byte (no charset conversion at
+# all), and 300 holds the client's 255-byte maximum (stock varchar(150) loses longer lines).
+msgtype="$(sql -e "SELECT COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${DB_NAME}' \
+                   AND TABLE_NAME='chatlog' AND COLUMN_NAME='message'")"
+if [[ "${msgtype}" != "varbinary(300)" ]]; then
+  log "chatlog.message ${msgtype} -> varbinary(300)"
+  sql -e "ALTER TABLE chatlog MODIFY message VARBINARY(300) NOT NULL DEFAULT ''"
+fi
+
 # Replace main.sql's insecure default server account (s1/p1) with ours. char and map log in to
-# login with these exact credentials (conf/import/{char,map}_conf.txt).
-sql -e "UPDATE login SET userid='${RATHENA_SERVER_USER}', user_pass='${RATHENA_SERVER_PASSWORD}' \
-        WHERE account_id=1 AND sex='S'"
+# login with these exact credentials (conf/import/{char,map}_conf.txt). Credentials go through
+# stdin, never argv.
+sql <<SQL
+UPDATE login SET userid='${RATHENA_SERVER_USER}', user_pass='${RATHENA_SERVER_PASSWORD}'
+  WHERE account_id=1 AND sex='S';
+SQL
+if [[ -n "${RATHENA_TEST_USER}" ]]; then
+  sql <<SQL
+INSERT INTO login (userid, user_pass, sex, email, group_id)
+  SELECT '${RATHENA_TEST_USER}', '${RATHENA_TEST_PASSWORD}', 'M', 'a@a.com', 0 FROM DUAL
+  WHERE NOT EXISTS (SELECT 1 FROM login WHERE userid='${RATHENA_TEST_USER}');
+UPDATE login SET user_pass='${RATHENA_TEST_PASSWORD}'
+  WHERE userid='${RATHENA_TEST_USER}' AND sex <> 'S';
+SQL
+  log "test account ensured"
+fi
 rm -f "${mycnf}"
 
 pids=()
