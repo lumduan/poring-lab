@@ -31,6 +31,12 @@ rAthena in this repo, on the LAN. Start with `README.md` (topology, ports, quick
      an unguarded parallel build pushed capture IO stall from ≤4% to 82–88%. The torch vision
      image (~5 GB of writes) needs an operator-chosen window.
 
+6. **Never put a Docker network on a 192.168.x subnet on this host.** The LAN uses 192.168.1, 110, 111, 112
+   and 120, and Docker can't see the segments behind the router. On 2026-09-29 an auto-assigned
+   192.168.96.0/20 cut the operator's MacBook off from VM 103 (home-assistant-ops OS-034).
+   `compose.yaml` pins `10.210.96.0/24`; keep it pinned. Health check:
+   `ip route get 192.168.110.55` must say `via 192.168.1.1`, never `dev br-…`.
+
 ## Invariants worth knowing before you edit
 
 - **Every pipeline message carries `t_mono_ns` and `frame_id`.**

@@ -200,3 +200,13 @@ services:
 volumes:
   db-data:
   x11-unix:
+
+networks:
+  default:
+    # PINNED -- never let Docker pick this subnet. The daemon's fallback pools hand out 192.168.x.0/20
+    # blocks, and on 2026-09-29 it gave this network 192.168.96.0/20, which overlaps the operator's LAN
+    # segments behind the router (192.168.110-111) and cut the MacBook off from VM 103. Never use a
+    # 192.168.x range on this host (LAN uses 192.168.1, 110, 111, 112 and 120).
+    ipam:
+      config:
+        - subnet: 10.210.96.0/24
