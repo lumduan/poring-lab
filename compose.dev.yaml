@@ -8,6 +8,13 @@
 # The production services (frontend, and the images backend/desktop were built from) are untouched.
 
 services:
+  desktop:
+    volumes:
+      # Until the next desktop image build (after the disk split): the ADR-0004 rdp-loop.sh
+      # (clipboard/drive keywords) and x11vnc -nosel, without rebuilding the image.
+      - ./services/desktop/bin/rdp-loop.sh:/usr/local/bin/rdp-loop.sh:ro
+      - ./services/desktop/bin/run-x11vnc.sh:/usr/local/bin/run-x11vnc.sh:ro
+
   backend:
     environment:
       # Mounted source wins over the copy installed in the image's site-packages.

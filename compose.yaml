@@ -98,13 +98,20 @@ services:
       RDP_DOMAIN: ${RDP_DOMAIN:-}
       RDP_CERT_SHA256: ${RDP_CERT_SHA256:-}
       RDP_GFX: ${RDP_GFX:-}
+      # ADR-0004, human-only tools, by keyword (see rdp-loop.sh). Both default OFF.
+      RDP_CLIPBOARD: ${RDP_CLIPBOARD:-off} # off | text-to-remote
+      RDP_DRIVES: ${RDP_DRIVES:-} # "" | transfer  (-> \\tsclient\transfer in Windows)
       NOVNC_VIEW_ONLY: ${NOVNC_VIEW_ONLY:-true}
     volumes:
       - x11-unix:/tmp/.X11-unix
+      - transfer:/transfer
     ports:
       - "${HOST_LAN_IP:?}:6080:6080" # noVNC -- NO AUTHENTICATION, LAN only
-    mem_limit: 1g
-    memswap_limit: 1g
+    # 1.5 GiB: the 512 MiB transfer tmpfs is charged to whichever container WRITES a file, and
+    # Windows -> Linux copies are written by xfreerdp here. With no swap, overflowing the limit
+    # would OOM-kill the RDP session (peak without transfers: ~220 MiB).
+    mem_limit: 1536m
+    memswap_limit: 1536m
 
   backend:
     <<: *lab
@@ -125,9 +132,16 @@ services:
       STREAM_FPS: ${STREAM_FPS:-30}
       JPEG_QUALITY: ${JPEG_QUALITY:-80}
       CAPTURE_WITH_CURSOR: ${CAPTURE_WITH_CURSOR:-false}
+      # The same ADR-0004 keywords as the desktop: the backend offers exactly what RDP was started
+      # with (clipboard paste; the /transfer HTTP routes).
+      RDP_CLIPBOARD: ${RDP_CLIPBOARD:-off}
+      RDP_DRIVES: ${RDP_DRIVES:-}
+      TRANSFER_DIR: /transfer
     volumes:
       - x11-unix:/tmp/.X11-unix:ro
       - ./data:/data
+      # Browser uploads are written here (charged to this container's 1 GiB: peak ~90 MiB + 512).
+      - transfer:/transfer
     ports:
       - "${HOST_LAN_IP:?}:8000:8000" # /health, /ws/stream, /ws/input
     # 8001 (/internal/agent) is deliberately NOT published: compose network only.
@@ -200,6 +214,15 @@ services:
 volumes:
   db-data:
   x11-unix:
+  # ADR-0004 file transfer: \\tsclient\transfer in Windows. RAM only (tmpfs, 512 MiB cap), never the
+  # shared disk; emptied when both desktop and backend stop. Mounted in desktop + backend ONLY --
+  # never vision, rathena or sniffer (tests/test_guards.py).
+  transfer:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=512m,uid=1000,gid=1000,mode=0770
 
 networks:
   default:
