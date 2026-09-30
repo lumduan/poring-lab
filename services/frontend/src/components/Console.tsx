@@ -65,7 +65,7 @@ export default function Console({ backendUrl }: Props) {
   const [detections, setDetections] = useState<Detections | null>(null);
   const [stats, setStats] = useState<Stats>(EMPTY_STATS);
   const [links, setLinks] = useState<Links>({ stream: false, input: false });
-  const [frameSize, setFrameSize] = useState<Size>({ width: 1280, height: 720 });
+  const [frameSize, setFrameSize] = useState<Size>({ width: 1280, height: 800 });
   const [viewMode, setViewMode] = useState<ViewMode>("fit");
   const [focused, setFocused] = useState(false);
   const pasteIdRef = useRef(0);

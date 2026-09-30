@@ -21,7 +21,7 @@ humanization and LLM integration are clearly marked TODOs.
 ```
  Windows host (OptiPlex 3080)                     Ubuntu Docker host (HOST_LAN_IP)
 ┌────────────────────────────────┐               ┌────────────────────────────────────────────────────────────────┐
-│ ONE interactive session        │   RDP :3389   │ desktop   xfreerdp3 /f (no WM) ──► Xvfb :99 1280x720           │
+│ ONE interactive session        │   RDP :3389   │ desktop   xfreerdp3 /f (no WM) ──► Xvfb :99 1280x800           │
 │   └─ RO client                 │ ◄──────────── │           x11vnc (view-only) ──► noVNC :6080                   │
 │        │                       │  exactly one  │                                     │ /tmp/.X11-unix (volume)  │
 │        │ game traffic          │               │              ┌──────────────────────┴────┐                     │
@@ -217,7 +217,7 @@ suffixing a new username with `_M` or `_F` (e.g. `bot01_M`). `RATHENA_TEST_USER`
 1. Enable Remote Desktop. Use a dedicated account in "Remote Desktop Users" and put it in `RDP_*`.
 2. Give the host a fixed IP (DHCP reservation) → `WIN_HOST`.
 3. Disable sleep, the screen lock and the screensaver. A locked session shows the lock screen to the agent.
-4. Run the RO client **inside the RDP session** at `XVFB_RESOLUTION` (default 1280x720).
+4. Run the RO client **inside the RDP session** at `XVFB_RESOLUTION` (default 1280x800; the 1024×740 client window plus the taskbar need the height).
 5. Use a **separate client copy for rAthena** (ADR-0006). **Leave the existing community-server
    client untouched:** never patch, repoint or reuse it in place.
    - The rAthena copy must match `PACKETVER` (its executable date) and point at `HOST_LAN_IP:6900`.
