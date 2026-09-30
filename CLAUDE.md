@@ -76,6 +76,13 @@ rAthena in this repo, on the LAN. Start with `README.md` (topology, ports, quick
   - `scripts/clipboard_x11_check.py` exercises it against a real Xvfb.
 - **`RDP_CLIPBOARD` / `RDP_DRIVES` are keywords, not flags** (`rdp-loop.sh`): `off|text-to-remote`
   and `""|transfer`. Anything else stays off. The backend reads the same two variables.
+- **The console's keyboard focus is a hidden `<textarea>`** (`StreamCanvas.tsx`), so the browser can
+  paste natively. `keyDecision()` in `services/frontend/src/lib/keys.ts` decides:
+  - forward: prevented and sent by code;
+  - paste: ⌘V on macOS, Ctrl+V elsewhere, Shift+Insert. It is not prevented and **never forwarded**;
+    the paste event becomes a `ClipboardPaste`;
+  - local: left to the viewer's OS.
+  - Don't move key capture back to a non-editable element, or ⌘V stops working.
 - **Keys are `KeyboardEvent.code`**, mapped to the evdev code and then the X keycode (+8) in
   `poring_env/keymap.py`. Meta is mapped only for the console toolbar's Win button; the browser never
   forwards physical Meta. `scripts/gen_protocol.sh` also regenerates the frontend's `keycodes.gen.ts`

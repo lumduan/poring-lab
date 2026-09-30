@@ -51,7 +51,7 @@ flowchart TD
 
 | Step | Status | What it is | Blocker |
 |---|---|---|---|
-| **Now** | 🟡 ACTIVE | Web console on `frontend-dev` (tmpfs, no image builds); 30 fps stream; 24 h IO baseline in `data/metrics/`. **Clipboard paste + `\\tsclient\transfer` files ([ADR-0004](adr/0004-human-only-clipboard-and-file-transfer.md))**: ✅ deployed and live-verified 2026-09-30 11:34 ICT. | Batt's manual checks: console keys/toolbar, paste ASCII + Thai, upload/download |
+| **Now** | 🟡 ACTIVE | Web console on `frontend-dev` (tmpfs, no image builds); 30 fps stream; 24 h IO baseline in `data/metrics/`. **Clipboard paste + `\\tsclient\transfer` files ([ADR-0004](adr/0004-human-only-clipboard-and-file-transfer.md))**: ✅ deployed and live-verified 2026-09-30 11:34 ICT. ⌘V works directly on the remote screen (a hidden textarea captures the keys). Windows → Mac clipboard: future work, blocked on ADR-0005 + HTTPS. | Batt's manual checks: console keys/toolbar, paste ASCII + Thai, upload/download |
 | **Weekend · disk split** | 🟥 OPERATOR | Move the quant Postgres/Mongo data to its own Proxmox vdisk; the window comes from the IO baseline (`scripts/io_summary.py`). | Operator, weekend |
 | **After the split** | ⬜ BLOCKED | Build rathena, the production frontend, desktop (bakes the ADR-0004 `rdp-loop.sh`/`run-x11vnc.sh`, today bind-mounted by the dev overlay) and vision; pull db; `scripts/smoke_test.sh`; `check_gpu.py` (sm_120). | The disk split: on the shared disk, builds pushed capture Postgres past 25 % IO stall (2026-09-29) |
 | **PACKETVER + RO client** | 🟥 OPERATOR | Which client executable date (PACKETVER); renewal or pre-renewal. Defaults: 20211103, renewal. | Operator decision; deferred |

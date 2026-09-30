@@ -98,7 +98,8 @@ scripts/dev.sh stop frontend-dev              # console off
 
 Open **http://192.168.1.13:3000** (`HOST_LAN_IP`). What it gives you:
 - **View:** Fit (aspect ratio kept, letterboxed) or 1:1.
-- **Input:** click the screen to give it keyboard focus. Leaving it, or hiding the tab, releases
+- **Input:** click the screen to give it keyboard focus. That focus lives in a hidden textarea, so
+  ⌘V pastes your clipboard into Windows (ADR-0004). Leaving it, or hiding the tab, releases
   everything held.
 - **Toolbar:** Ctrl+Alt+Del (sent as Ctrl+Alt+End, RDP's secure-attention mapping), Win, Alt+Tab, Esc,
   Release keyboard.
@@ -132,10 +133,12 @@ RDP_DRIVES=transfer            # "" | transfer        (\\tsclient\transfer in Wi
 Applying a change reconnects the RDP session once, because desktop and backend are recreated together:
 `scripts/dev.sh up -d --no-deps desktop backend`.
 
-- **Paste to Windows** (console panel):
-  1. Click the target field in the remote screen.
-  2. Press ⌘V in the panel's box.
-  3. Send (⌘Enter).
+- **Paste to Windows:** click the target field in the remote screen, then press **⌘V** there, as
+  in Windows App.
+  - Off macOS the paste chord is Ctrl+V; Shift+Insert works everywhere.
+  - On a Mac, physical Ctrl+V still reaches Windows as Ctrl+V (Windows-internal paste).
+  - A toast on the screen shows the result.
+  - The "Paste to Windows" panel stays as a fallback: paste into its box, check it, then Send (⌘Enter).
   - Up to **64 KiB** of UTF-8; Thai is fine. It works over plain HTTP: the page uses the `paste`
     event, not `navigator.clipboard`.
   - The backend owns the X clipboard for about a second, the mux sends Ctrl+V as the human, and then
@@ -269,7 +272,8 @@ in the console's stats panel.
 match the client executable. Set it in `.env`, then run
 `docker compose --profile core build rathena && docker compose --profile core up -d`.
 
-**Paste does nothing, or says "did not paste".** The panel's message names the cause:
+**Paste does nothing, or says "did not paste".** The toast on the screen, or the panel's message,
+names the cause. If ⌘V shows no toast at all, the screen didn't have keyboard focus: click it first.
 - `rdp_clipboard_not_listening`: `RDP_CLIPBOARD` is not `text-to-remote`, or RDP is reconnecting.
   Check the connect line in `scripts/dev.sh logs desktop`, which reads `clipboard=… drives=…`.
 - `no_data_request`: the focused Windows window ignored Ctrl+V. Click a text field in the remote screen

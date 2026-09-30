@@ -125,6 +125,58 @@ Every key went through the mux as `source=human`. The experiments were reverted 
 5. **F2** (cliprdr file clipboard) stays **off**. It works Mac → Windows only; Windows → Mac would need
    FUSE, meaning `/dev/fuse` + `CAP_SYS_ADMIN`, which is rejected. F1 already covers both directions.
 
+## Amendment (2026-09-30): ⌘V directly on the remote screen
+
+Batt's manual check found the panel flow too slow. It took three steps (click the target in Windows,
+click the panel, ⌘V); Microsoft's Windows App takes two.
+
+**The console's keyboard focus now lives in a visually hidden `<textarea>` inside the screen**, the
+technique web RDP clients such as Guacamole use (`StreamCanvas.tsx`).
+- An editable element is what lets the browser paste natively; a canvas or `div` never receives a
+  `paste` event.
+- The policy is the pure `keyDecision()` in `services/frontend/src/lib/keys.ts`, unit-tested:
+
+  | Keys | Decision |
+  |---|---|
+  | macOS **⌘V**, ⌘⇧V | **paste**: the Mac clipboard |
+  | macOS *physical* Ctrl+V | **forwarded**: a Windows-internal copy/paste keeps working, as in Windows App |
+  | Other OSes: Ctrl+V, Ctrl+Shift+V | **paste** (Ctrl+Alt is AltGr: forwarded) |
+  | Shift+Insert, everywhere | **paste** |
+  | Every other key | preventDefault + forwarded by `event.code`, exactly as before |
+
+- **A paste chord is neither prevented nor forwarded.** The browser pastes into the textarea, and
+  the `paste` event reads `clipboardData.getData("text/plain")` (this works over plain HTTP). It
+  clears the textarea, releases everything held (so a forwarded Ctrl/Shift can't combine with the
+  backend's Ctrl+V), then sends the same `ClipboardPaste`.
+- **The keystroke itself never reaches Windows.** The V keyup is a stray up for `HeldKeys`, so there
+  is no double paste.
+- The textarea never keeps text: `beforeinput` is prevented, and `input`/`compositionend` clear it
+  (IME composition is not cancelable). Keys are forwarded by physical code even with the Thai input
+  source active, since the macOS Thai layouts are plain layouts, not composition IMEs.
+- Clicking the screen focuses the textarea (`preventScroll`; the viewport's `mousedown` is prevented
+  so the default action can't steal focus). Leaving it still releases held keys.
+- A toast on the screen reports the result: "Pasted N characters", or the refusal reason
+  (`mode_bot`, `no_data_request`, an oversize paste, a clipboard without text).
+- The panel stays as the fallback.
+- **Nothing on the backend changed.** The same message, the same Origin requirement, the same mode
+  rules (BOT refused; ASSIST takes the human lease), the same logging.
+- **Consequence off macOS:** Ctrl+V becomes "paste the viewer's clipboard", so a Windows-internal
+  paste there needs Windows' own menu or right-click. On a Mac, Cmd and Ctrl keep the two apart.
+
+## Future work: Windows → Mac clipboard (not planned yet)
+
+Copying in Windows and pasting on the Mac (the other half of what Windows App does) is **blocked on
+two things**:
+1. **ADR-0005.** The backend would need the Windows clipboard on the X display
+   (`direction-to:all`). While the vision container can still connect to X, that exposes every
+   Windows copy to it. Only after vision loses X access can Windows → X be switched on.
+2. **A secure context (HTTPS).** The Windows copy happens *after* the keystroke, so the text reaches
+   the browser asynchronously, and only the async `navigator.clipboard.writeText()` can put it on the
+   Mac clipboard then. That API needs HTTPS, or `localhost` through an SSH tunnel. The synchronous
+   `copy`-event path works over HTTP, but only for data already present at key time.
+
+Until both are resolved, reverse text goes through a file in `\\tsclient\transfer`.
+
 ## Enforcement: how "human-only" is held
 
 | Layer | Rule | Pinned by |
@@ -132,7 +184,7 @@ Every key went through the mux as `source=human`. The experiments were reverted 
 | Protocol | `ClipboardPaste` exists in `BrowserToBackend` only: not in `InputEvent`, `AgentInput.events` or `AgentToBackend`. | `test_protocol.py` walks every `$ref` reachable from the agent side. |
 | Listener | `/transfer/*` answers only on the public listener `:8000` (`scope["server"]`), never on the agent's `:8001`. | `test_transfer.py` |
 | Origin | A paste needs a `/ws/input` connection that presented an allowlisted `Origin`, i.e. a browser: `origin_required`. The `/transfer` routes need an allowlisted Origin on **every** method, GET included. Downloads are fetched as blobs, so the agent and scripts, which send no Origin, cannot list, read or write. CORS is limited to `FRONTEND_ORIGINS`. | `test_app.py`, `test_transfer.py` |
-| Mode | A paste is refused in BOT (`mode_bot`) and, in ASSIST, takes the human lease. | `test_app.py` |
+| Mode | A paste is refused in BOT (`mode_bot`) and, in ASSIST, takes the human lease. This holds for the panel and for ⌘V on the screen, which send the same message. | `test_app.py` |
 | Mux | A **BOT** Ctrl+V, Meta+V (Windows clipboard history) or Shift+Insert is refused (`paste_chord_bot`), in *both* key orders, because X autorepeats a held XTest key. | `test_mux.py` |
 | X display | **Watchdog.** XFixes on CLIPBOARD: any owner other than the backend's window is logged (rate-limited) and cleared at once. In `text-to-remote` xfreerdp never owns CLIPBOARD, so this only ever fires on a foreign client. | `test_clipboard.py`, `scripts/clipboard_x11_check.py` (real Xvfb) |
 | x11vnc | `-nosel`: the unauthenticated noVNC viewer never receives selections, so a paste's text is not relayed while the backend owns it. | `test_guards.py` |
