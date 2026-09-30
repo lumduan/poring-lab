@@ -63,7 +63,7 @@ ports, quickstart) and `docs/adr/`.
      - it counts as forbidden while its permission evidence is pending
        (`docs/environments/community-server.md`);
      - even with evidence, **no agent automation runs there until the interlock exists** (the
-       GitHub issue labelled `blocks-phase-4`);
+       [issue #2](https://github.com/lumduan/poring-lab/issues/2), `blocks-phase-4`);
      - Batt may play there manually, as the human;
      - pixels and input only; no packet capture unless its rules allow it.
    - **Client profiles:** the existing community-server client on Windows stays **untouched**. rAthena

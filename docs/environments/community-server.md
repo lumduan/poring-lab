@@ -15,7 +15,7 @@ next_action: Batt supplies the server's bot/AI-testing rules or announcement (li
 > **Status: EVIDENCE PENDING, so FORBIDDEN for any automation.**
 > - Batt may play there manually, through the console, as the human.
 > - Even once evidence is recorded, **no agent automation** runs there until the environment
->   interlock exists (ADR-0006 rule 2).
+>   interlock exists (ADR-0006 rule 2, [issue #2](https://github.com/lumduan/poring-lab/issues/2)).
 
 | Field | Value |
 |---|---|

@@ -90,7 +90,7 @@ that the two cannot be confused.
 | Rule | Status |
 |---|---|
 | 1 Evidence | The file exists; the evidence is pending (Batt to supply the rules/announcement link). |
-| 2 Interlock | **Not built.** It is tracked as a GitHub issue labelled `blocks-phase-4` (linked from [ROADMAP](../ROADMAP.md)). Until it exists, **no agent automation runs against the community server** (CLAUDE.md rule 9). Batt may play there manually through the console, as the human. |
+| 2 Interlock | **Not built.** It is tracked as [issue #2](https://github.com/lumduan/poring-lab/issues/2) (`blocks-phase-4`, `security`). Until it exists, **no agent automation runs against the community server** (CLAUDE.md rule 9). Batt may play there manually through the console, as the human. |
 | 3 Etiquette | Applies once automation exists (the Phase 4+ humanizer/rate limits). |
 | 4 Other players' data | Nothing is stored in the repo. The one debug frame with other players' names and chat (latency work, 2026-09-30) was deleted from scratch memory. |
 | 5 Typhoon | Phase 6, [ROADMAP](../ROADMAP.md). |
