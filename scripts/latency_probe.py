@@ -6,6 +6,7 @@ Runs INSIDE the backend container (it needs the X socket, and /debug/* answers l
     P="docker exec -i -e $E poring-lab-backend-1 python -"
     $P passive --seconds 30 --region 0,0,1280,720        < scripts/latency_probe.py   # no input
     $P cursor --a 1000,560 --b 1180,640 --trials 60      < scripts/latency_probe.py   # MOVES ONLY
+    $P cursor --k1 ControlLeft+KeyA --k2 ArrowRight --via agent < scripts/latency_probe.py  # bot
     $P jpeg-bench --frames 20                            < scripts/latency_probe.py   # no input
     $P tune '{"capture": "damage"}'                      < scripts/latency_probe.py
 
@@ -44,7 +45,8 @@ from Xlib.ext import damage as xdamage
 
 BACKEND = "http://127.0.0.1:8000"
 WS = "ws://127.0.0.1:8000"
-SCREEN_W, SCREEN_H = 1280, 720
+SCREEN_W, SCREEN_H = 1280, 720  # replaced by the real Xvfb size in main()
+AGENT_WS = "ws://127.0.0.1:8001/internal/agent"
 MS = 1e6
 
 
@@ -296,19 +298,35 @@ def cursor(args: argparse.Namespace) -> dict[str, Any]:
     trials: list[dict[str, Any]] = []
     aborted: str | None = None
     t_start = now_ns()
-    with connect(f"{WS}/ws/input", open_timeout=5) as ws, mss.MSS(display=":99") as sct:
+    # --via agent: the bot path (/internal/agent on :8001, source=bot, mux in ASSIST). That channel
+    # doesn't feed the latency recorder, so L1 isn't split out: rows get L12_ms = send -> change.
+    via_agent = args.via == "agent"
+    url = AGENT_WS if via_agent else f"{WS}/ws/input"
+    with connect(url, open_timeout=5) as ws, mss.MSS(display=":99") as sct:
+        if via_agent:
+            ws.send(json.dumps({"type": "agent_hello", "t_mono_ns": now_ns(), "frame_id": -1,
+                                "agent_id": "latency-probe", "version": "2"}))  # fmt: skip
+
+        def emit(event: dict[str, Any]) -> int:
+            t = now_ns()
+            event = {**event, "t_mono_ns": t, "frame_id": -1}
+            if not via_agent:
+                ws.send(json.dumps(event))
+                return t
+            ws.send(json.dumps({"type": "agent_input", "t_mono_ns": t, "frame_id": -1,
+                                "t_capture_ns": t, "events": [event]}))  # fmt: skip
+            while True:  # the mux verdict for this batch; a refusal (human lease) stops the probe
+                reply = json.loads(ws.recv(timeout=2))
+                if reply.get("type") == "input_ack":
+                    if reply["dropped"]:
+                        sys.exit(f"mux refused the probe's input: {reply['reasons']}")
+                    return t
 
         def move(p: tuple[int, int]) -> int:
-            t = now_ns()
-            ws.send(json.dumps({"type": "mouse_move", "t_mono_ns": t, "frame_id": -1,
-                                "x": p[0] / SCREEN_W, "y": p[1] / SCREEN_H}))  # fmt: skip
-            return t
+            return emit({"type": "mouse_move", "x": p[0] / SCREEN_W, "y": p[1] / SCREEN_H})
 
         def key(code: str, action: str) -> int:
-            t = now_ns()
-            ws.send(json.dumps({"type": "key", "t_mono_ns": t, "frame_id": -1,
-                                "code": code, "action": action}))  # fmt: skip
-            return t
+            return emit({"type": "key", "code": code, "action": action})
 
         def chord(spec: str) -> int:
             """Press the keys in order, release in reverse; returns the LAST key-down's send time
@@ -361,6 +379,8 @@ def cursor(args: argparse.Namespace) -> dict[str, Any]:
                 row["L1_ms"] = (rec["t_injected"] - t_send) / MS
                 if t_change:
                     row["L2_ms"] = (t_change - rec["t_injected"]) / MS
+            elif via_agent and t_change:
+                row["L12_ms"] = (t_change - t_send) / MS
             if frame and t_change:
                 row["frame_id"] = frame.frame_id
                 row["L3_ms"] = (frame.t_capture - t_change) / MS
@@ -369,7 +389,7 @@ def cursor(args: argparse.Namespace) -> dict[str, Any]:
                 row["server_total_ms"] = (frame.t_sent - t_send) / MS
             trials.append(row)
             here, there = there, here
-            misses = misses + 1 if "L2_ms" not in row else 0
+            misses = misses + 1 if "L2_ms" not in row and "L12_ms" not in row else 0
             if misses >= 3:  # focus moved (or the window changed): stop sending anything
                 aborted = f"no change for 3 trials in a row at trial {i}: stopped"
                 break
@@ -390,6 +410,7 @@ def cursor(args: argparse.Namespace) -> dict[str, Any]:
     keys = [
         "L1_ms",
         "L2_ms",
+        "L12_ms",
         "L3_ms",
         "L4_encode_ms",
         "L4_send_ms",
@@ -405,7 +426,9 @@ def cursor(args: argparse.Namespace) -> dict[str, Any]:
         "aborted": aborted,
         "tuning": http_json("/debug/stream-tuning"),
         "trials": len(trials),
-        "detected_in_xvfb": sum(1 for r in trials if "L2_ms" in r),
+        "via": args.via,
+        "screen": [SCREEN_W, SCREEN_H],
+        "detected_in_xvfb": sum(1 for r in trials if "L2_ms" in r or "L12_ms" in r),
         "detected_in_stream": sum(1 for r in trials if "L3_ms" in r),
         "summary": summary,
         "rows": trials if args.rows else None,
@@ -435,6 +458,9 @@ def jpeg_bench(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def main() -> int:
+    global SCREEN_W, SCREEN_H
+    with mss.MSS(display=":99") as sct:  # the real screen: XVFB_RESOLUTION can change
+        SCREEN_W, SCREEN_H = sct.monitors[1]["width"], sct.monitors[1]["height"]
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="mode", required=True)
     p = sub.add_parser("passive")
@@ -453,6 +479,8 @@ def main() -> int:
     c.add_argument("--watch", type=lambda s: [int(v) for v in s.split(",")], default=None)
     c.add_argument("--gap", type=float, default=0.25)
     c.add_argument("--rows", action="store_true")
+    # agent: send as the bot through /internal/agent (the mux must be in ASSIST or BOT).
+    c.add_argument("--via", choices=["input", "agent"], default="input")
     j = sub.add_parser("jpeg-bench")
     j.add_argument("--frames", type=int, default=20)
     t = sub.add_parser("tune")
