@@ -13,9 +13,15 @@ On a breach:
   build:<svc>   docker compose build <svc>                  -> SIGINT (build cancelled)
   pull:<svc>    docker compose pull <svc>                   -> SIGINT
   up:<seconds>  compose up -d (core+remote), watch seconds  -> compose stop
+                REFUSED while the dev overlay (scripts/dev.sh) runs: a plain `compose up` would
+                recreate backend/desktop without their mounts and build the production frontend.
+  start:<svc>[,<svc>...][@<seconds>]
+                scripts/dev.sh --profile core up -d --no-build <svcs>, watch seconds (default 180)
+                -> stops ONLY those services. The dev-mode way to bring up db/rathena.
 
     python3 scripts/guarded_build.py build:desktop build:rathena pull:db up:180        # strict 10%
     python3 scripts/guarded_build.py --sustain 30 --spike 25 build:rathena             # tolerant
+    python3 scripts/guarded_build.py --sustain 30 --spike 25 start:db@120 start:rathena@240
     python3 scripts/guarded_build.py build:vision   # ~5 GB of writes: run in an operator window
 
 Logs go to $TMPDIR/poring-guarded-*.log. Exit 0 only if every step completed without a breach.
@@ -24,6 +30,7 @@ Logs go to $TMPDIR/poring-guarded-*.log. Exit 0 only if every step completed wit
 import argparse
 import collections
 import os
+import re
 import subprocess
 import sys
 import time
@@ -43,6 +50,47 @@ CONTAINERS = [
 EXTRA_CGROUPS = {"cron.service(capture-streaming-pro)": "/sys/fs/cgroup/system.slice/cron.service"}
 ALL = ["--profile", "core", "--profile", "remote", "--profile", "vision"]
 RUNTIME = ["--profile", "core", "--profile", "remote"]
+# Dev mode (compose.yaml + compose.dev.yaml, see scripts/dev.sh) plus the core profile.
+DEV = ["scripts/dev.sh", "--profile", "core"]
+SERVICE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
+
+
+class Step:
+    """One parsed command-line step (see the module docstring)."""
+
+    def __init__(self, kind: str, services: list[str], seconds: float | None = None) -> None:
+        self.kind, self.services, self.seconds = kind, services, seconds
+
+    @property
+    def label(self) -> str:
+        return f"{self.kind}:{','.join(self.services)}" if self.services else self.kind
+
+
+def parse_step(step: str) -> Step:
+    kind, _, arg = step.partition(":")
+    if kind in ("build", "pull"):
+        if not SERVICE.match(arg):
+            raise ValueError(f"{step}: expected {kind}:<service>")
+        return Step(kind, [arg])
+    if kind == "up":
+        return Step(kind, [], float(arg or 180))
+    if kind == "start":
+        names, _, secs = arg.partition("@")
+        services = names.split(",")
+        if not all(SERVICE.match(s) for s in services):
+            raise ValueError(f"{step}: expected start:<svc>[,<svc>...][@<seconds>]")
+        return Step(kind, services, float(secs or 180))
+    raise ValueError(f"unknown step {step}")
+
+
+def dev_overlay_active() -> bool:
+    """True if any running poring-lab container was created through scripts/dev.sh."""
+    out = subprocess.run(
+        ["docker", "ps", "--filter", "label=com.docker.compose.project=poring-lab",
+         "--format", '{{.Label "com.docker.compose.project.config_files"}}'],
+        capture_output=True, text=True,
+    ).stdout  # fmt: skip
+    return "compose.dev.yaml" in out
 
 
 def ts() -> str:
@@ -149,10 +197,8 @@ def run_process(label: str, cmd: list[str], guard: Guard) -> bool:
     return ok
 
 
-def run_up(seconds: float, guard: Guard) -> bool:
-    if not run_process("up", ["docker", "compose", *RUNTIME, "up", "-d"], guard):
-        return False
-    print(f"[{ts()}] watching the running stack for {seconds:.0f}s", flush=True)
+def watch(seconds: float, guard: Guard, what: str, stop_cmd: list[str]) -> bool:
+    print(f"[{ts()}] watching {what} for {seconds:.0f}s", flush=True)
     deadline = time.monotonic() + seconds
     while time.monotonic() < deadline:
         hit = guard.breach()
@@ -161,11 +207,24 @@ def run_up(seconds: float, guard: Guard) -> bool:
                 f"[{ts()}] BREACH while running: {hit[0]} {hit[1]:.1f}% ({hit[2]}) -> stopping",
                 flush=True,
             )
-            subprocess.run(["docker", "compose", *RUNTIME, "stop"], cwd=REPO)
+            subprocess.run(stop_cmd, cwd=REPO)
             return False
         time.sleep(2)
-    print(f"[{ts()}] stack settled ({guard.summary()})", flush=True)
+    print(f"[{ts()}] {what} settled ({guard.summary()})", flush=True)
     return True
+
+
+def run_up(seconds: float, guard: Guard) -> bool:
+    if not run_process("up", ["docker", "compose", *RUNTIME, "up", "-d"], guard):
+        return False
+    return watch(seconds, guard, "the running stack", ["docker", "compose", *RUNTIME, "stop"])
+
+
+def run_start(services: list[str], seconds: float, guard: Guard) -> bool:
+    label = "start:" + ",".join(services)
+    if not run_process(label, [*DEV, "up", "-d", "--no-build", *services], guard):
+        return False
+    return watch(seconds, guard, ", ".join(services), [*DEV, "stop", *services])
 
 
 def main() -> int:
@@ -176,24 +235,34 @@ def main() -> int:
     ap.add_argument("--sustain", type=float, default=0.0, help="seconds above --threshold")
     ap.add_argument("--spike", type=float, default=None, help="abort at once above this %%")
     args = ap.parse_args()
+    try:
+        steps = [parse_step(s) for s in args.steps]
+    except ValueError as exc:
+        print(exc, flush=True)
+        return 2
+    if any(s.kind == "up" for s in steps) and dev_overlay_active():
+        print(
+            "up: refused -- the dev overlay (scripts/dev.sh) is running. A plain `compose up` "
+            "would recreate backend/desktop without their mounts and build the production "
+            "frontend. Use start:<svc>[,<svc>...][@<seconds>].",
+            flush=True,
+        )
+        return 2
     guard = Guard(
         cgroup_paths(), args.threshold, args.window, sustain=args.sustain, spike=args.spike
     )
     print(f"[{ts()}] rule: abort if {guard.describe()}", flush=True)
     print(f"[{ts()}] watching: {', '.join(guard.paths)}", flush=True)
-    for step in args.steps:
-        kind, _, arg = step.partition(":")
-        if kind == "build":
-            ok = run_process(
-                step, ["docker", "compose", *ALL, "build", "--progress=plain", arg], guard
-            )
-        elif kind == "pull":
-            ok = run_process(step, ["docker", "compose", *ALL, "pull", arg], guard)
-        elif kind == "up":
-            ok = run_up(float(arg or 180), guard)
+    for step in steps:
+        if step.kind == "build":
+            cmd = ["docker", "compose", *ALL, "build", "--progress=plain", *step.services]
+            ok = run_process(step.label, cmd, guard)
+        elif step.kind == "pull":
+            ok = run_process(step.label, ["docker", "compose", *ALL, "pull", *step.services], guard)
+        elif step.kind == "up":
+            ok = run_up(step.seconds or 180, guard)
         else:
-            print(f"unknown step {step}", flush=True)
-            return 2
+            ok = run_start(step.services, step.seconds or 180, guard)
         if not ok:
             return 1
     print(f"[{ts()}] ALL STEPS OK ({guard.summary()})", flush=True)
