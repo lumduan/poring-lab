@@ -49,7 +49,7 @@ humanization and LLM integration are clearly marked TODOs.
 |---|---|---|
 | `db` | core, sniffer | MariaDB 11.8 LTS, named volume, never published |
 | `rathena` | core, sniffer | login/char/map built from a pinned commit with `PACKETVER` (20211103, pre-renewal). The image ships the runtime tree as ONE tar, extracted into a 192m tmpfs on every start (~78 MiB). It renders `conf/import/*.txt` from `.env`, imports the schema on first start, and upserts the optional test account. Thai: tis620 end to end. |
-| `desktop` | remote | Xvfb + the ONE `xfreerdp3` session + view-only x11vnc/noVNC, under supervisord |
+| `desktop` | remote | Xvfb + the ONE `xfreerdp3` session + view-only x11vnc/noVNC, under supervisord. CPU: low weight (`cpu_shares: 64`) and an 8-core ceiling, because xfreerdp's software decode takes 7-15 cores in full-scene motion. |
 | `backend` | remote | FastAPI: screen stream, input mux, JSONL input log, internal agent API |
 | `frontend` | remote | Next.js console: video canvas, overlay canvas, mode switch, FPS/latency |
 | `vision` | vision | GPU agent loop skeleton (torch 2.14 cu130 + ultralytics), `scripts/check_gpu.py` |

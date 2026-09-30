@@ -28,6 +28,9 @@ ports, quickstart) and `docs/adr/`.
    credentials). `.gitignore` enforces this; don't weaken it.
 5. **This host is shared with live 24/7 capture services, Frigate (NVR) and Ollama.**
    - Every lab container keeps `mem_limit` equal to `memswap_limit` (no swap) and `oom_score_adj: 500`.
+   - CPU: desktop keeps `cpu_shares: 64` (cgroup v2 weight 12 vs the quant containers' 100) and `cpus: 8`,
+     backend `cpu_shares: 256`. xfreerdp's software decode takes 7-15 cores in motion; 8 was the
+     tightest cap with no fps loss (docs/phase0-latency.md). Pinned by `test_guards.py`.
    - The rAthena build stays capped (`RATHENA_MAKE_JOBS`).
    - vision keeps its VRAM cap (`VISION_MAX_VRAM_FRACTION`).
    - Don't remove these to make something fit; raise the limit consciously instead.

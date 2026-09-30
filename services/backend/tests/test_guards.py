@@ -53,6 +53,14 @@ def test_containers_that_write_the_tmpfs_have_room_for_it() -> None:
     assert services["desktop"]["mem_limit"] == "1536m"
 
 
+def test_cpu_heavy_lab_services_yield_to_the_quant_stack() -> None:
+    """xfreerdp takes 7-15 cores in full-scene motion; the host also runs live quant capture."""
+    services = compose("compose.yaml")["services"]
+    desktop, backend = services["desktop"], services["backend"]
+    assert desktop["cpu_shares"] < 1024 and backend["cpu_shares"] < 1024, "below the quant default"
+    assert 0 < float(desktop["cpus"]) <= 8, "desktop keeps a hard CPU ceiling"
+
+
 def rdp_args(**env: str) -> tuple[list[str], str]:
     """Source rdp-loop.sh (the loop does not start) and run clipboard_args + drive_args."""
     script = f'source "{RDP_LOOP}"; clipboard_args; drive_args'

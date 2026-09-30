@@ -7,7 +7,9 @@
 #
 # Host protection (this host also runs 24/7 capture services): every lab container has a hard
 # memory cap with NO swap (memswap_limit == mem_limit) and oom_score_adj 500, so under memory
-# pressure the kernel kills a lab container before anything else.
+# pressure the kernel kills a lab container before anything else. CPU: the heavy lab services
+# (desktop, backend) carry a low cpu_shares weight so the quant stack wins CPU contention, and
+# desktop also a hard `cpus` ceiling.
 
 name: poring-lab
 
@@ -124,6 +126,12 @@ services:
     # would OOM-kill the RDP session (peak without transfers: ~220 MiB).
     mem_limit: 1536m
     memswap_limit: 1536m
+    # CPU (2026-09-30, docs/phase0-latency.md "CPU protection"): xfreerdp's software decode takes
+    # 7-15 cores during full-scene motion. cpu_shares 64 = cgroup v2 cpu.weight ~12 (runc >= 1.3.2)
+    # vs 100 for the quant containers, so they win any contention; cpus 8 is the ceiling that cost
+    # no measured fps (6 cores: -35%, 4 cores: -60% and it throttles Xvfb itself).
+    cpu_shares: 64
+    cpus: 8
 
   backend:
     <<: *lab
@@ -164,6 +172,9 @@ services:
     expose: ["8001"]
     mem_limit: 1g
     memswap_limit: 1g
+    # ~1 core during full-scene motion (JPEG encode of the stream): a lower weight than the quant
+    # containers (cpu.weight ~35 vs 100), no hard ceiling (the console stream needs it).
+    cpu_shares: 256
 
   frontend:
     <<: *lab

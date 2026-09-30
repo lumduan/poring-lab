@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: With a VISIBLE console tab, A/B q70 + paint=raf + move_interval_ms=8 via /debug/stream-tuning; run Batt's glass-to-glass A/B vs Windows App; RO render rate (probe passive) while RO runs.
+next_action: The RDP delivery ceiling is client-side (FreeRDP decode; server skips 'insufficient client resources'). After the disk split, A/B AVC/H.264 hardware encode + a newer FreeRDP; then the console A/B (q70, paint=raf) and Batt's Windows App glass-to-glass.
 ---
 
 # Phase 0: web-console latency, measured and reduced
@@ -163,6 +163,56 @@ Not measured this run, with how to measure it:
 |---|---|
 | RO render rate | `latency_probe.py passive` while RO runs |
 | Browser-side effect of q70 / rAF paint / move interval | the knobs + `/health` `latency` with a visible tab |
+
+## Game render vs RDP delivery, and CPU protection (2026-09-30, 1280×800)
+
+**The game is not the bottleneck; RDP delivery to our FreeRDP client is.**
+- The rAthena client renders at 60 fps (PresentMon) on the Intel UHD 630. Details are in
+  [client/rathena-client.md](client/rathena-client.md), "Render performance".
+
+**Method.** A 200 s camera rotation (a bot right-drag: full-scene motion, no game-state change).
+- Host: frames reaching Xvfb (a passive counter on the game region, a change being >1 % of pixels
+  differing by >24 levels), and the lab and quant cgroups every 1 s (`cpu.stat`, `cpu.pressure`,
+  `io.pressure`).
+- Windows: `typeperf` at 1 s over `\RemoteFX Graphics(*)\*`, `\RemoteFX Network(*)\*`, per-process
+  CPU and GPU-engine counters. Nothing on Windows was changed.
+- The CPU caps were applied live with `docker update --cpus` (no reconnect).
+- Medians per arm.
+
+| Desktop CPU arm | Frames reaching Xvfb (p10–p90) | Desktop cores used | RDP input fps | RDP output fps | Skipped: client | Skipped: server / network | Avg encode | Quant cpu.pressure (some, sum) | quant-postgres io full |
+|---|---|---|---|---|---|---|---|---|---|
+| idle (no motion) | 0 | 0.17 | 32.0 | 9.8 | 0 | 0 / 0 | 1 ms | 0.88 % | 4.58 % |
+| unlimited | 7 (4–11) | 7.25 | 31.7 | 6.0 | 24.8/s | 0 / 0 | 10 ms | 0.47 % | 3.43 % |
+| `cpus 8` | 8 (4–12) | 6.86 | 32.6 | 6.9 | 24.8/s | 0 / 0 | 10 ms | 0.67 % | 4.16 % |
+| `cpus 6` | 5 (3–10) | 5.77 | 32.6 | 4.0 | 26.8/s | 0 / 0 | 12 ms | 0.74 % | 4.70 % |
+| `cpus 4` | 3 (1–4) | 4.00 | 31.6 | 2.0 | 28.2/s | 0 / 0 | 9 ms | 0.44 % | 3.45 % |
+
+**Where the ~6–17 fps ceiling comes from: the client (FreeRDP decode).**
+- The server captures ~32 fps. It skips 25–28 of them per second with the counter "Frames Skipped/Second
+  - **Insufficient Client Resources**". Server and network skips are 0.
+- Encoding takes ~10 ms, well under the 33 ms budget. Windows uses ~4 % total CPU (TermService ~11 %
+  of one core, dwm ~0). RTT is 1–5 ms.
+- Capping xfreerdp's CPU lowers the output fps in step: 6.9, then 4.0, then 2.0. So the client's
+  software decode, plus GDI into Xvfb, sets the rate through GFX frame acknowledgement.
+- RdpCoreTS event 162: the client supports GFX 0xA0701 with "AVC available: 1", but the server picked
+  **Initial profile 2** (RemoteFX progressive, not H.264).
+- There is no event 170 (no AVC hardware encoder) and no VideoEncode GPU engine use.
+- Transport is TCP only (event 135: "No UDP Packets Received").
+- The earlier outdoor run (17 fps) vs this indoor run (7 fps) shows the decode cost depends on content.
+- Next levers (Batt: deferred until after the disk split): H.264/AVC hardware encode on Windows plus
+  AVC decode in a newer FreeRDP, or UDP transport.
+
+**CPU protection (applied 2026-09-30 22:08, one desktop + backend recreate).**
+- **desktop:** `cpu_shares: 64` (cgroup v2 `cpu.weight` = 12 with runc 1.3.5's quadratic mapping,
+  vs 100 for every quant container) and `cpus: 8` (`cpu.max 800000 100000`).
+  - 8 is the tightest cap with no measured fps loss.
+  - 6 cores cost ~35 %.
+  - 4 cores cost ~60 %, and they also throttle Xvfb, whose grab rate fell from ~95/s to 58/s.
+- **backend:** `cpu_shares: 256` (weight 35), no ceiling. It uses ~1 core in motion (stream JPEG encode).
+- **frontend-dev:** unchanged. It used ~0 CPU in motion.
+- The quant containers' CPU pressure stayed below 1 % in every arm: 64 cores, so no real contention
+  today. The weight is the protection for when there is contention.
+- `test_guards.py::test_cpu_heavy_lab_services_yield_to_the_quant_stack` pins both.
 
 ## Rebuild-dependent options (not implemented), ranked
 
