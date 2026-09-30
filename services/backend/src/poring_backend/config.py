@@ -1,6 +1,7 @@
 """Backend settings, read from the environment (names are case-insensitive)."""
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -26,6 +27,18 @@ class Settings(BaseSettings):
     # STREAM_FPS / JPEG_QUALITY: browser stream only (the agent grabs frames itself).
     stream_fps: float = 30.0
     jpeg_quality: int = 80
+    # Phase 0 latency knobs (docs/phase0-latency.md); all switchable at runtime through
+    # POST /debug/stream-tuning (loopback only). These are the boot values.
+    #   STREAM_CAPTURE: fixed (a slot grid at STREAM_FPS) | damage (grab on XDamage, capped at
+    #   STREAM_MAX_FPS)
+    stream_capture: Literal["fixed", "damage"] = "fixed"
+    stream_max_fps: float = 60.0
+    #   CONSOLE_MOVE_INTERVAL_MS: unset = one pointer move per animation frame; N = send on the
+    #   event, at most one per N ms. CONSOLE_PAINT: decode | raf.
+    console_move_interval_ms: int | None = None
+    console_paint: Literal["decode", "raf"] = "decode"
+    # Clients allowed on /debug/* (the latency probe runs inside this container).
+    debug_hosts: str = "127.0.0.1,::1"
     capture_with_cursor: bool = False
     status_hz: float = 1.0
 
@@ -47,6 +60,10 @@ class Settings(BaseSettings):
         return frozenset(
             o.strip().rstrip("/") for o in self.frontend_origins.split(",") if o.strip()
         )
+
+    @property
+    def debug_clients(self) -> frozenset[str]:
+        return frozenset(h.strip() for h in self.debug_hosts.split(",") if h.strip())
 
     @property
     def lease_ns(self) -> int:

@@ -4,7 +4,8 @@ import asyncio
 import contextlib
 import logging
 from collections.abc import Awaitable, Callable
-from typing import Any, cast
+from dataclasses import asdict
+from typing import Any, Literal, cast
 
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
@@ -18,9 +19,13 @@ from poring_env.clock import monotonic_ns
 from poring_env.protocol import (
     ClipboardPaste,
     ErrorReply,
+    InputEvent,
+    Key,
+    MouseButton,
     Ping,
     Pong,
     SetMode,
+    ViewerTiming,
     parse_browser_to_backend,
 )
 
@@ -74,6 +79,14 @@ async def read_message[M](
     return None
 
 
+def input_kind(event: InputEvent) -> str:
+    if isinstance(event, Key):
+        return f"key:{event.code}:{event.action}"
+    if isinstance(event, MouseButton):
+        return f"button:{event.button}:{event.action}"
+    return event.type
+
+
 def offer(outbox_offer: Callable[[str], None]) -> Callable[[str], Awaitable[None]]:
     """Adapt a sync Outbox.offer_control to read_message's async reply."""
 
@@ -107,6 +120,15 @@ async def health(request: Request) -> dict[str, Any]:
             "foreign_owner_clears": state.clipboard.foreign_owner_clears if state.clipboard else 0,
         },
         "transfer_enabled": state.settings.transfer_enabled,
+        "stream": {
+            **asdict(state.tuning),
+            "damage_active": state.hub.damage_active,
+            "damage_events": state.hub.damage_events,
+            "grabs_on_damage": state.hub.grabs_on_damage,
+            "grabs_keepalive": state.hub.grabs_keepalive,
+            "frames_dropped_slow_viewer": state.hub.frames_dropped_slow_viewer,
+        },
+        "latency": state.latency.summary(window_ns=30_000_000_000, now=monotonic_ns()),
     }
 
 
@@ -119,7 +141,7 @@ async def ws_stream(ws: WebSocket) -> None:
     await ws.accept()
     outbox = state.hub.add_viewer()
     outbox.offer_control(state.status().model_dump_json())
-    sender = asyncio.create_task(pump(ws, outbox), name="stream-pump")
+    sender = asyncio.create_task(pump(ws, outbox, state.latency.frame_sent), name="stream-pump")
     throttle = ReplyThrottle()
     reply = offer(outbox.offer_control)
     try:
@@ -149,6 +171,10 @@ async def ws_input(ws: WebSocket) -> None:
     # not. The human-only clipboard requires a browser connection (ADR-0004).
     browser = ws.headers.get("origin") is not None
     client = ws.client.host if ws.client else None
+    # Phase 0: a browser tab's clock maps onto ours by the offset in its ViewerTiming reports.
+    # Script clients (no Origin) are assumed to run on this host, i.e. on our clock already.
+    clock: Literal["host", "browser"] = "browser" if browser else "host"
+    offset_ns: int | None = None
     await ws.accept()
     throttle = ReplyThrottle()
     pastes: set[asyncio.Task[None]] = set()
@@ -180,8 +206,15 @@ async def ws_input(ws: WebSocket) -> None:
                     await ws.send_text(pong.model_dump_json())
                 case SetMode():
                     await state.set_mode(msg)
+                case ViewerTiming():
+                    if msg.offset_ns is not None:
+                        offset_ns = msg.offset_ns
+                    state.latency.viewer_timing(msg)
                 case _:
-                    await state.submit_many(Source.HUMAN, [msg])
+                    record = state.latency.input_received(
+                        input_kind(msg), msg.t_mono_ns, monotonic_ns(), clock, offset_ns
+                    )
+                    await state.submit_many(Source.HUMAN, [msg], records=[record])
     except WebSocketDisconnect:
         pass
     finally:

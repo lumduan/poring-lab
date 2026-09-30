@@ -123,3 +123,48 @@ def test_agent_side_code_has_no_clipboard_or_transfer_access() -> None:
         for match in FORBIDDEN.finditer(path.read_text())
     ]
     assert offenders == []
+
+
+# --- Phase 0: the RDP A/B override file (docs/phase0-latency.md) ---------------------------------
+
+
+def rdp_override_args(tmp_path: Path, content: str) -> tuple[list[str], str]:
+    override = tmp_path / "rdp-override"
+    override.write_text(content)
+    script = f'source "{RDP_LOOP}"; load_overrides; build_args'
+    env = {
+        "PATH": "/usr/bin:/bin",
+        "WIN_HOST": "win.test",
+        "RDP_USER": "u",
+        "RDP_PASSWORD": "secret",
+        "RDP_CERT_SHA256": "ab",
+        "RDP_OVERRIDE_FILE": str(override),
+    }
+    result = subprocess.run(
+        ["bash", "-c", script], env=env, capture_output=True, text=True, check=True
+    )
+    return result.stdout.split(), result.stderr
+
+
+def test_override_file_switches_only_whitelisted_rdp_knobs(tmp_path: Path) -> None:
+    args, log = rdp_override_args(
+        tmp_path,
+        "RDP_GFX=RFX\nRDP_NETWORK=lan\nRDP_FRAME_ACK=off\nRDP_GDI=hw\n"
+        "RDP_GFX=$(touch /tmp/pwned)\nPATH=/evil\nRDP_CLIPBOARD=all\nRDP_DRIVES=transfer\n",
+    )
+    assert "/gfx:RFX,frame-ack:off" in args
+    assert "/network:lan" in args and "/gdi:hw" in args
+    assert "-clipboard" in args  # RDP_CLIPBOARD=all ignored: the clipboard stays off
+    assert not any(a.startswith("/drive") for a in args)
+    assert "(not KEY=word): PATH=/evil" in log and "(not KEY=word): RDP_GFX=$(touch" in log
+    assert "override ignored: RDP_CLIPBOARD=all" in log
+    assert not Path("/tmp/pwned").exists()
+
+
+def test_no_override_file_means_todays_arguments(tmp_path: Path) -> None:
+    args, _ = rdp_override_args(tmp_path, "")
+    assert not any(a.startswith(("/gfx", "/network", "/gdi", "-gfx")) for a in args)
+    args, _ = rdp_override_args(tmp_path, "RDP_GFX=off\n")
+    assert "-gfx" in args and "/bpp:32" in args
+    args, _ = rdp_override_args(tmp_path, "RDP_FRAME_ACK=off\n")
+    assert "/gfx:frame-ack:off" in args

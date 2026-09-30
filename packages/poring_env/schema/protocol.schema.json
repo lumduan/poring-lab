@@ -223,6 +223,7 @@
           "ping": "#/$defs/Ping",
           "release_all": "#/$defs/ReleaseAll",
           "set_mode": "#/$defs/SetMode",
+          "viewer_timing": "#/$defs/ViewerTiming",
           "wheel": "#/$defs/Wheel"
         },
         "propertyName": "type"
@@ -251,6 +252,9 @@
         },
         {
           "$ref": "#/$defs/ClipboardPaste"
+        },
+        {
+          "$ref": "#/$defs/ViewerTiming"
         }
       ]
     },
@@ -448,6 +452,36 @@
         "nbytes"
       ],
       "title": "FrameMeta",
+      "type": "object"
+    },
+    "FrameTiming": {
+      "additionalProperties": false,
+      "description": "When one frame reached a viewer, all on the VIEWER's clock (ns).",
+      "properties": {
+        "decoded_ns": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "frame_id": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "painted_ns": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "recv_ns": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "frame_id",
+        "recv_ns",
+        "decoded_ns",
+        "painted_ns"
+      ],
+      "title": "FrameTiming",
       "type": "object"
     },
     "InputAck": {
@@ -905,6 +939,29 @@
         "mode": {
           "$ref": "#/$defs/Mode"
         },
+        "move_interval_ms": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Pointer-move send interval; null = one per animation frame (the original)."
+        },
+        "paint": {
+          "default": "decode",
+          "description": "decode: draw each frame once decoded; raf: newest decoded frame per rAF.",
+          "enum": [
+            "decode",
+            "raf"
+          ],
+          "type": "string"
+        },
         "rdp_window_present": {
           "anyOf": [
             {
@@ -948,9 +1005,83 @@
         "capture_fps",
         "viewers",
         "clipboard_enabled",
-        "transfer_enabled"
+        "transfer_enabled",
+        "move_interval_ms",
+        "paint"
       ],
       "title": "Status",
+      "type": "object"
+    },
+    "ViewerTiming": {
+      "additionalProperties": false,
+      "description": "Latency telemetry from a console tab, about once a second (Phase 0).\n\n``offset_ns`` maps the tab's clock to the backend's: backend = browser + offset. It comes from\nCristian's algorithm on the ping/pong with the smallest round trip, so the mapping is uncertain\nby ``offset_uncertainty_ns`` (half that round trip).",
+      "properties": {
+        "frame_id": {
+          "default": -1,
+          "description": "Frame this message refers to or was produced from; -1 means none.",
+          "minimum": -1,
+          "type": "integer"
+        },
+        "frames": {
+          "items": {
+            "$ref": "#/$defs/FrameTiming"
+          },
+          "maxItems": 240,
+          "type": "array"
+        },
+        "offset_ns": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "offset_uncertainty_ns": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "t_mono_ns": {
+          "description": "Sender's monotonic clock, ns (see module docstring).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "viewer_timing",
+          "default": "viewer_timing",
+          "type": "string"
+        },
+        "user_agent": {
+          "default": "",
+          "maxLength": 200,
+          "type": "string"
+        },
+        "visible": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "frame_id",
+        "type",
+        "offset_ns",
+        "offset_uncertainty_ns",
+        "visible",
+        "user_agent",
+        "frames"
+      ],
+      "title": "ViewerTiming",
       "type": "object"
     },
     "Wheel": {

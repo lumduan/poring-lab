@@ -13,8 +13,9 @@ from poring_backend.clipboard import ClipboardService, PasteOutcome, SelectionIO
 from poring_backend.config import Settings
 from poring_backend.drops import DropCounter
 from poring_backend.input_log import InputLog, InputLogRecord, wall_clock_iso
+from poring_backend.latency import InputRecord, LatencyRecorder
 from poring_backend.mux import Decision, InputMux, Routed, Source
-from poring_backend.stream import CaptureHub, Outbox
+from poring_backend.stream import CaptureHub, ChangeWatcher, Outbox, StreamTuning
 from poring_backend.transfer_log import TransferLog
 from poring_env.clock import monotonic_ns
 from poring_env.env import FrameSource
@@ -102,6 +103,7 @@ class AppState:
         capture_factory: Callable[[], FrameSource],
         input_factory: Callable[[], XInput],
         clipboard_factory: Callable[[], SelectionIO] | None = None,
+        damage_factory: Callable[[Callable[[int], None]], ChangeWatcher] | None = None,
     ) -> None:
         self.settings = settings
         self.mux = InputMux(lease_ns=settings.lease_ns)  # always boots in HUMAN
@@ -116,8 +118,21 @@ class AppState:
                 clipboard_factory, settle_s=settings.clipboard_settle_s
             )
         self.injector = Injector(input_factory)
+        # Phase 0: runtime-switchable stream/console tuning, and latency instrumentation (memory).
+        self.tuning = StreamTuning(
+            capture=settings.stream_capture,
+            fps=settings.stream_fps,
+            max_fps=settings.stream_max_fps,
+            jpeg_quality=settings.jpeg_quality,
+            move_interval_ms=settings.console_move_interval_ms,
+            paint=settings.console_paint,
+        )
+        self.latency = LatencyRecorder()
         self.hub = CaptureHub(
-            capture_factory, fps=settings.stream_fps, jpeg_quality=settings.jpeg_quality
+            capture_factory,
+            tuning=self.tuning,
+            damage_factory=damage_factory,
+            on_frame=self.latency.frame_encoded,
         )
         self.agents: set[Outbox] = set()
         self.rdp_window_present: bool | None = None
@@ -167,6 +182,8 @@ class AppState:
             viewers=self.hub.viewer_count,
             clipboard_enabled=self.clipboard is not None,
             transfer_enabled=self.settings.transfer_enabled,
+            move_interval_ms=self.tuning.move_interval_ms,
+            paint=self.tuning.paint,
         )
 
     def refused_snapshot(self) -> dict[str, dict[str, int]]:
@@ -198,9 +215,11 @@ class AppState:
         events: Sequence[InputEvent],
         *,
         synthetic_reason: str | None = None,
+        records: Sequence[InputRecord] | None = None,
     ) -> list[Decision]:
         """Run ``events`` through the mux and inject what it allows. ``synthetic_reason`` marks
-        events the backend generated on the source's behalf (e.g. the Ctrl+V of a paste)."""
+        events the backend generated on the source's behalf (e.g. the Ctrl+V of a paste).
+        ``records`` (one per event) receive the decision and XTest-injection times (Phase 0)."""
         now = monotonic_ns()
         lease_before = self.mux.lease_active(now)
         decisions: list[Decision] = []
@@ -223,7 +242,16 @@ class AppState:
             self._log_synthetic(decision.inject, now)
             decisions.append(decision)
             routed.extend(decision.inject)
+        if records is not None:
+            for record, decision in zip(records, decisions, strict=True):
+                record.t_decided = now
+                record.accepted = decision.accepted
         await self._inject(routed)
+        if records is not None and routed:
+            injected = monotonic_ns()  # X has processed the XTest requests (the injector syncs)
+            for record in records:
+                if record.accepted:
+                    record.t_injected = injected
         if self.mux.lease_active(now) != lease_before:
             self.broadcast_status()
         return decisions

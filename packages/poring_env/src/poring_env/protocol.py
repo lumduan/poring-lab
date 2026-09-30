@@ -143,6 +143,32 @@ class ClipboardPaste(Message):
         return text
 
 
+class FrameTiming(BaseModel):
+    """When one frame reached a viewer, all on the VIEWER's clock (ns)."""
+
+    model_config = _MODEL_CONFIG
+
+    frame_id: int = Field(ge=0)
+    recv_ns: int = Field(ge=0)
+    decoded_ns: int = Field(ge=0)
+    painted_ns: int = Field(ge=0)
+
+
+class ViewerTiming(Message):
+    """Latency telemetry from a console tab, about once a second (Phase 0).
+
+    ``offset_ns`` maps the tab's clock to the backend's: backend = browser + offset. It comes from
+    Cristian's algorithm on the ping/pong with the smallest round trip, so the mapping is uncertain
+    by ``offset_uncertainty_ns`` (half that round trip)."""
+
+    type: Literal["viewer_timing"] = "viewer_timing"
+    offset_ns: int | None = None
+    offset_uncertainty_ns: int | None = Field(default=None, ge=0)
+    visible: bool
+    user_agent: str = Field(default="", max_length=200)
+    frames: list[FrameTiming] = Field(default_factory=list, max_length=240)
+
+
 class Ping(Message):
     """Round-trip probe; its ``t_mono_ns`` comes back verbatim as ``Pong.echo_t_mono_ns``."""
 
@@ -189,6 +215,17 @@ class Status(Message):
     )
     transfer_enabled: bool = Field(
         default=False, description="The \\\\tsclient\\transfer file area is available (ADR-0004)."
+    )
+    # Console tuning, switched at runtime by the backend (Phase 0, docs/phase0-latency.md)
+    move_interval_ms: int | None = Field(
+        default=None,
+        ge=0,
+        le=100,
+        description="Pointer-move send interval; null = one per animation frame (the original).",
+    )
+    paint: Literal["decode", "raf"] = Field(
+        default="decode",
+        description="decode: draw each frame once decoded; raf: newest decoded frame per rAF.",
     )
 
 
@@ -269,7 +306,15 @@ class InputAck(Message):
 # ClipboardPaste is deliberately ONLY on the browser channel: the agent protocol has no clipboard or
 # file-transfer message at all (ADR-0004), and tests pin that.
 type BrowserToBackend = Annotated[
-    MouseMove | MouseButton | Wheel | Key | ReleaseAll | SetMode | Ping | ClipboardPaste,
+    MouseMove
+    | MouseButton
+    | Wheel
+    | Key
+    | ReleaseAll
+    | SetMode
+    | Ping
+    | ClipboardPaste
+    | ViewerTiming,
     Field(discriminator="type"),
 ]
 type BackendToBrowser = Annotated[

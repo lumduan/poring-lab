@@ -71,6 +71,32 @@ drive_args() {
   done
 }
 
+# Phase 0 A/B of the RDP leg (docs/phase0-latency.md) without restarting the container: before each
+# connect, an optional override file (the desktop's own /dev/shm, RAM) may set these keywords. Only
+# KEY=VALUE lines with whitelisted keys and values are honoured; the file is never executed.
+#   RDP_GFX=""|off|progressive|AVC444|AVC420|RFX  RDP_NETWORK=auto|lan  RDP_FRAME_ACK=on|off
+#   RDP_GDI=sw|hw
+# A variant = write the file, then TERM xfreerdp3: the loop reconnects with it a few seconds later.
+load_overrides() {
+  local file="${RDP_OVERRIDE_FILE:-/dev/shm/rdp-override}" line key value
+  [[ -f "${file}" ]] || return 0
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    if [[ ! "${line}" =~ ^([A-Z_]+)=([A-Za-z0-9]*)$ ]]; then
+      [[ -n "${line}" ]] && log "override ignored (not KEY=word): ${line}"
+      continue
+    fi
+    key="${BASH_REMATCH[1]}" value="${BASH_REMATCH[2]}"
+    case "${key}=${value}" in
+      RDP_GFX= | RDP_GFX=off | RDP_GFX=progressive | RDP_GFX=AVC444 | RDP_GFX=AVC420 | RDP_GFX=RFX)
+        RDP_GFX="${value}" ;;
+      RDP_NETWORK=auto | RDP_NETWORK=lan) RDP_NETWORK="${value}" ;;
+      RDP_FRAME_ACK=on | RDP_FRAME_ACK=off) RDP_FRAME_ACK="${value}" ;;
+      RDP_GDI=sw | RDP_GDI=hw) RDP_GDI="${value}" ;;
+      *) log "override ignored: ${key}=${value}" ;;
+    esac
+  done <"${file}"
+}
+
 # One argument per line for /args-from:stdin (which stops at the first blank line). printf is a
 # bash builtin, so the password never appears in any process's argv.
 build_args() {
@@ -89,12 +115,18 @@ build_args() {
   drive_args
   # Codec knob for the Phase-0 fidelity/FPS/latency comparison. Passing any of /gfx /rfx /bpp
   # /network opts out of FreeRDP's autodetect (GFX + AVC444 + RFX), so empty passes none of them.
+  # RDP_FRAME_ACK=off asks the server to stop waiting for frame acknowledgements (GFX only).
+  local ack=""
+  [[ "${RDP_FRAME_ACK:-on}" == off ]] && ack="frame-ack:off"
   case "${RDP_GFX:-}" in
-    "") ;;
+    "") [[ -n "${ack}" ]] && printf '%s\n' "/gfx:${ack}" ;;
     off) printf '%s\n' -gfx /bpp:32 ;;
-    progressive | AVC444 | AVC420 | RFX) printf '%s\n' "/gfx:${RDP_GFX}" ;;
+    progressive | AVC444 | AVC420 | RFX) printf '%s\n' "/gfx:${RDP_GFX}${ack:+,${ack}}" ;;
     *) log "unknown RDP_GFX='${RDP_GFX}', using autodetect" ;;
   esac
+  [[ "${RDP_NETWORK:-auto}" == lan ]] && printf '%s\n' /network:lan
+  [[ "${RDP_GDI:-sw}" == hw ]] && printf '%s\n' /gdi:hw
+  return 0
 }
 
 main() {
@@ -108,7 +140,9 @@ main() {
   local backoff=2 rc
   while true; do
     wait_for_x
+    load_overrides
     log "connecting to ${WIN_HOST}:${RDP_PORT:-3389} as ${RDP_USER} (gfx=${RDP_GFX:-auto}" \
+      "network=${RDP_NETWORK:-auto} frame-ack=${RDP_FRAME_ACK:-on} gdi=${RDP_GDI:-sw}" \
       "clipboard=${RDP_CLIPBOARD:-off} drives=${RDP_DRIVES:-none})"
     env -u RDP_PASSWORD xfreerdp3 /args-from:stdin < <(build_args)
     rc=$?

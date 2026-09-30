@@ -16,11 +16,13 @@ from starlette.middleware.cors import CORSMiddleware
 
 from poring_backend.clipboard import SelectionIO
 from poring_backend.config import Settings
+from poring_backend.routes_debug import router as debug_router
 from poring_backend.routes_internal import router as internal_router
 from poring_backend.routes_public import router as public_router
 from poring_backend.routes_transfer import router as transfer_router
 from poring_backend.routes_transfer import sweep_partials
 from poring_backend.state import AppState, XInput
+from poring_backend.stream import ChangeWatcher
 from poring_env.env import FrameSource
 
 
@@ -30,6 +32,7 @@ def create_app(
     capture_factory: Callable[[], FrameSource] | None = None,
     input_factory: Callable[[], XInput] | None = None,
     clipboard_factory: Callable[[], SelectionIO] | None = None,
+    damage_factory: Callable[[Callable[[int], None]], ChangeWatcher] | None = None,
 ) -> FastAPI:
     cfg = settings or Settings()
 
@@ -43,6 +46,11 @@ def create_app(
 
         return X11Input(cfg.display)
 
+    def default_damage(on_damage: Callable[[int], None]) -> ChangeWatcher:
+        from poring_backend.damage import DamageWatcher
+
+        return DamageWatcher(cfg.display, on_damage)
+
     def default_clipboard() -> SelectionIO:
         from poring_backend.clipboard import XSelectionIO
 
@@ -55,6 +63,7 @@ def create_app(
             capture_factory=capture_factory or default_capture,
             input_factory=input_factory or default_input,
             clipboard_factory=clipboard_factory or default_clipboard,
+            damage_factory=damage_factory or default_damage,
         )
         if cfg.transfer_enabled:
             sweep_partials(cfg.transfer_dir)
@@ -69,6 +78,7 @@ def create_app(
     app.include_router(public_router)
     app.include_router(internal_router)
     app.include_router(transfer_router)
+    app.include_router(debug_router)
     # The console (another origin: :3000) calls the /transfer HTTP routes with fetch/XHR. Only the
     # allowlisted console origins may read the responses; the routes also refuse any request
     # without an allowlisted Origin (routes_transfer.transfer_root).
