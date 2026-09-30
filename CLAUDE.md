@@ -116,6 +116,21 @@ ports, quickstart) and `docs/adr/`.
 - **rAthena `char_ip` / `map_ip` are ADVERTISED addresses and must be `HOST_LAN_IP`.** Never set
   `bind_ip` to it. The conf files are rendered from `services/rathena/conf/import/*.tmpl` on every
   container start.
+- **The rathena runtime is ONE tar in the image** (`/opt/rathena-runtime.tar`, 1784 entries, ~79 MB).
+  - It is built inside the compile tmpfs, and the entrypoint extracts it into the 192m tmpfs at
+    `/opt/rathena` on every start. So the ~1600 files never become per-file metadata on the shared disk.
+  - The templates live in `/opt/rathena-conf-templates` (outside the tmpfs).
+  - Keep the `clients will be sent to char … and map …` log line: `smoke_test.sh` greps for it.
+  - Local source patches go in `services/rathena/patches/*.patch` (applied with `--fuzz=0`).
+- **Thai is tis620 end to end.**
+  - db `--character-set-server=tis620`; every `*_codepage: tis620`.
+  - `chatlog.message` is `VARBINARY(300)` (byte-exact CP874 ground truth: decode `HEX(message)` as cp874).
+  - The entrypoint refuses a non-tis620 database. Thai names: `char_name_option 2`, plus the
+    0xAD (ญ) `TRIM_CHARS` patch.
+- **Inter-server credentials are at most 23 characters** (`RATHENA_SERVER_USER`/`PASSWORD`). char and
+  map truncate them to 24-byte buffers and login then rejects them.
+- **In dev mode, bring core services up with `guarded_build.py start:<svc>@<s>`**, never `up:`
+  (refused: it would recreate backend/desktop without their mounts).
 - **FreeRDP is major 3** (`xfreerdp3`, Debian trixie 3.15). Use 3.x flag syntax only (see the README
   table). Credentials go through `/args-from:stdin`, never argv.
 - **torch is `2.14.0+cu130`** from the explicit `pytorch-cu130` index declared in the **root**
@@ -128,6 +143,9 @@ ports, quickstart) and `docs/adr/`.
     applies code changes;
   - `frontend-dev` runs `next dev` with all writes on tmpfs.
 - Do not "fix" this by building images. Builds wait for the weekend disk split (docs/ROADMAP.md).
+  - Exception (Batt, 2026-09-30): rathena and db were built, pulled and started with the TOLERANT guard
+    (`--sustain 30 --spike 25`) because quant capture gaps are backfilled at EOD. Other images still
+    wait.
 - Inside `frontend-dev`: `docker exec -w /app poring-lab-frontend-dev-1 corepack pnpm lint`, and
   likewise `typecheck` and `test`.
 - The 24 h IO baseline: `scripts/io_baseline.py` → `data/metrics/io_pressure_*.csv`; stop it with

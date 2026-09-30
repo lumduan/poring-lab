@@ -1,0 +1,37 @@
+# WARP (Neo-Mind/WARP, rock_win32) session for the poring-lab rAthena client -- see rathena-client.md.
+# Source: the Gravity-signed 2021-11-03_Ragexe_1635926200.exe (SHA-256 3f11ce85...1c3baa35); the
+# output is a NEW exe, the source is kept. Patch names are WARP's (Patches/*.yml), not titles.
+#   WARP_console.exe -using warp-session.yml
+# Approved by Batt 2026-09-30: the required set + NoNagle + FixChatAt + NoHardCodedIP + NoGNJoyLaunch,
+# and DataFolderFirst (kRO data.grf ships its own data\clientinfo.xml pointing at Gravity; GRF
+# contents win by default, so without it our LAN clientinfo.xml in data\ would be ignored).
+# Never: NoWavyScreen, packet-key/encryption patches (rAthena's keys are 0 for this date).
+# LoadKrExtSettings + CustomFontName (Tahoma) = Thai "Test A" (langtype 5 in clientinfo.xml).
+# NoHardCodedIP was approved too, but WARP cancels it on this exe ("No known HardCoded IPs
+# available"), so it is not listed. Inputs: type 10 = text; data = hex of the NUL-terminated string
+# (format taken from the LastSession.yml WARP writes).
+from: C:\RO-rAthena\client\2021-11-03_Ragexe_1635926200.exe
+to: C:\RO-rAthena\client\PoringLab.exe
+patches:
+    - No1and1Arg
+    - NoHardCodedAddr
+    - NoGNJoyLaunch
+    - NoFilenameCheck
+    - UseOldLogin
+    - CallKoreaClientInfo
+    - GRFsFromIni
+    - DataFolderFirst
+    - HKLMtoHKCU
+    - NoNagle
+    - FixChatAt
+    - LoadKrExtSettings
+    - CustomFontName
+inputs:
+    $newFont:
+        data: '5461686f6d6100'
+        display: "Tahoma"
+        type: 10
+    $dataINI:
+        data: '444154412e494e4900'
+        display: "DATA.INI"
+        type: 10
