@@ -17,6 +17,14 @@ next_action: Keep the mux the single XTest writer as policies land; add input-lo
   and log). Tests are in `services/backend/tests/test_mux.py` and `test_app.py`.
 - **Related:** [ADR-0001 single RDP session](0001-single-rdp-session.md),
   [ADR-0003 env abstraction](0003-env-abstraction.md)
+- **Amended by [ADR-0004](0004-human-only-clipboard-and-file-transfer.md) (2026-09-30):**
+  - the mux also refuses a **bot** Ctrl+V, Meta+V or Shift+Insert (`paste_chord_bot`, both key
+    orders);
+  - human clipboard pastes arrive as a synthetic human Ctrl+V (`reason=clipboard_paste`);
+  - refused inputs are also counted in `/health` (`input_refused`).
+- **Open gap: [ADR-0005](0005-vision-x-access.md).** The single-writer invariant (decision 1) is
+  enforced by convention for the vision container, which can still reach XTEST directly. It must be
+  resolved before Phase 4.
 
 ## Context
 

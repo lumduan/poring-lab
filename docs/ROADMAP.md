@@ -1,7 +1,7 @@
 ---
 doc_type: roadmap
 status: LIVING
-last_reviewed: 2026-09-29
+last_reviewed: 2026-09-30
 ---
 
 # poring-lab roadmap
@@ -10,24 +10,31 @@ last_reviewed: 2026-09-29
 
 ```mermaid
 flowchart TD
-    N1["Now · web console, 30 fps stream,<br/>24 h IO baseline<br/>ACTIVE"]
+    N1["Now · web console, 30 fps stream,<br/>clipboard + file transfer (ADR-0004)<br/>ACTIVE"]
     N2["Weekend · disk split<br/>quant data to its own vdisk<br/>OPERATOR"]
     N3["After the split · pending builds,<br/>smoke test, vision + check_gpu<br/>BLOCKED"]
     D1["PACKETVER + RO client<br/>OPERATOR DECISION"]
-    P0["Phase 0 · pipeline measurement<br/>motion-to-photon, codec fidelity<br/>READY"]
-    P1["Phase 1 · game server +<br/>synchronized recording<br/>BLOCKED"]
-    P2["Phase 2 · perception v1, YOLO<br/>BLOCKED"]
-    P3["Phase 3 · game-state reading<br/>BLOCKED"]
-    P4["Phase 4 · scripted policy in ASSIST<br/>BLOCKED"]
-    P5["Phase 5 · learned policy<br/>BLOCKED"]
-    P6["Phase 6 · evaluation + robustness<br/>GOAL"]
+    S1["RO client running on rAthena<br/>BLOCKED"]
+    D2["ADR-0005 · vision loses direct X access<br/>DECISION - PROPOSED"]
+    P0["Phase 0 · stack up, capture FPS,<br/>end-to-end latency<br/>READY - desktop + backend parts"]
+    P1["Phase 1 · packet decoder +<br/>world state, ground truth<br/>BLOCKED"]
+    P2["Phase 2 · isometric projection<br/>calibration + auto-labeling<br/>BLOCKED"]
+    P3["Phase 3 · YOLO training +<br/>evaluation vs ground truth<br/>BLOCKED"]
+    P4["Phase 4 · fast loop, FSM,<br/>input through the mux<br/>BLOCKED"]
+    P5["Phase 5 · humanizer +<br/>human-vs-bot detector<br/>BLOCKED"]
+    P6["Phase 6 · Typhoon slow loop,<br/>intents only<br/>BLOCKED"]
 
-    N1 --> N2 --> N3 --> P1
-    N1 --> P0 --> P1
-    D1 --> P1
-    P1 --> P2 --> P4
-    P1 --> P3 --> P4
-    P4 --> P5 --> P6
+    N1 --> N2 --> N3 --> S1
+    D1 --> S1
+    N1 --> P0
+    S1 --> P0
+    S1 --> P1
+    P0 --> P2
+    P1 --> P2
+    P2 --> P3 --> P4
+    D2 --> P4
+    P4 --> P5
+    P4 --> P6
 
     classDef done     fill:#d4f4dd,stroke:#2d8a4e,color:#1a5c33
     classDef active   fill:#fff3cd,stroke:#cc9a06,color:#7a5c04
@@ -37,57 +44,65 @@ flowchart TD
     classDef goal     fill:#ede0fb,stroke:#8a5cd8,color:#4d2e8f
 
     class N1 active
-    class N2,D1 decision
+    class N2,D1,D2 decision
     class P0 ready
-    class N3,P1,P2,P3,P4,P5 blocked
-    class P6 goal
+    class N3,S1,P1,P2,P3,P4,P5,P6 blocked
 ```
 
 | Step | Status | What it is | Blocker |
 |---|---|---|---|
-| **Now** | 🟡 ACTIVE | Web console on `frontend-dev` (tmpfs, no image builds), and the stream fixed at 30 fps (WebSocket deflate off, deadline pacing). A 24 h IO baseline is recording to `data/metrics/`. | Operator's manual check: view, click, type, toolbar keys |
-| **Weekend · disk split** | 🟥 OPERATOR | Move the quant Postgres/Mongo data to its own Proxmox vdisk. The window is picked from the 24 h baseline. | Operator, weekend |
-| **After the split** | ⬜ BLOCKED | Build rathena, the production frontend and vision; pull db; run `scripts/smoke_test.sh` and `check_gpu.py` (sm_120). | Needs the disk split: on the shared disk, builds pushed the capture Postgres past 25% IO stall (2026-09-29) |
-| **PACKETVER + RO client** | 🟥 OPERATOR | Which client executable date (PACKETVER), and renewal or pre-renewal. Defaults: 20211103, renewal. | Operator decision; deferred |
-| **Phase 0** | 🔵 READY | Motion-to-photon latency, RDP codec fidelity/fps (`RDP_GFX`), and capture budget. Needs only desktop + backend, which are running. | None technically. Sequenced after the builds by choice. The grab rate inside the vision container waits for the vision image. |
-| **Phase 1** | ⬜ BLOCKED | rAthena + the matching client on Windows. Record synchronized frames + human input logs (+ server logs, offline sniffer). | Needs ALL of: rathena image (after the split), the codec choice from Phase 0 (recordings should use it), and the PACKETVER decision |
-| **Phase 2** | ⬜ BLOCKED | Perception v1: YOLO on recorded frames, scored against server-log / sniffer ground truth (offline only). | Phase 1 data (and the vision image, via the split) |
-| **Phase 3** | ⬜ BLOCKED | Game-state reading from pixels: HP/SP, status, minimap, position. | Phase 1 data; independent of Phase 2 |
-| **Phase 4** | ⬜ BLOCKED | Scripted policy in ASSIST mode (the human can always take over); logged interventions. | Needs BOTH Phase 2 and Phase 3 |
-| **Phase 5** | ⬜ BLOCKED | Learned policy: imitation from the human input logs; the scripted policy is the baseline. | Phase 4 as baseline |
-| **Phase 6** | 🟪 GOAL | Long-run evaluation and robustness, including a replay Env for offline regression. | Phase 5 |
+| **Now** | 🟡 ACTIVE | Web console on `frontend-dev` (tmpfs, no image builds); 30 fps stream; 24 h IO baseline in `data/metrics/`. **Clipboard paste + `\\tsclient\transfer` files ([ADR-0004](adr/0004-human-only-clipboard-and-file-transfer.md))**: implemented and tests green; live apply 2026-09-30 (see the ADR's status line). | Batt's manual checks: console keys/toolbar, paste ASCII + Thai, upload/download |
+| **Weekend · disk split** | 🟥 OPERATOR | Move the quant Postgres/Mongo data to its own Proxmox vdisk; the window comes from the IO baseline (`scripts/io_summary.py`). | Operator, weekend |
+| **After the split** | ⬜ BLOCKED | Build rathena, the production frontend, desktop (bakes the ADR-0004 `rdp-loop.sh`/`run-x11vnc.sh`, today bind-mounted by the dev overlay) and vision; pull db; `scripts/smoke_test.sh`; `check_gpu.py` (sm_120). | The disk split: on the shared disk, builds pushed capture Postgres past 25 % IO stall (2026-09-29) |
+| **PACKETVER + RO client** | 🟥 OPERATOR | Which client executable date (PACKETVER); renewal or pre-renewal. Defaults: 20211103, renewal. | Operator decision; deferred |
+| **RO client on rAthena** | ⬜ BLOCKED | The Windows client logs in to this lab's rAthena. | Needs BOTH the rathena image (after the split) AND the PACKETVER decision |
+| **ADR-0005 · vision X isolation** | 🟥 DECISION | vision can reach XTEST, selections and window contents directly, and can pose as HUMAN on `:8000`. Recommended: frames from the backend + an X auth cookie + an internal agent network + no RECORD ([ADR-0005](adr/0005-vision-x-access.md); GitHub issue labelled `blocks-phase-4`). | Operator picks the option set; implemented before Phase 4 |
+| **Phase 0** | 🔵 READY (part) | Stack up; capture FPS; end-to-end (motion-to-photon) latency; RDP codec comparison (`RDP_GFX`). **Can start now** on desktop + backend: motion-to-photon, and the codec comparison on desktop content. **HP/SP text fidelity waits** for a working RO client on rAthena. | Full exit needs "RO client on rAthena"; the agent-side grab rate needs the vision image |
+| **Phase 1** | ⬜ BLOCKED | Packet decoder + world state as **offline ground truth** (sniffer pcaps + rAthena logs → a timeline of entities, positions, HP/SP, synchronised to frames by `t_mono_ns`). Never agent input. | RO client on rAthena (and the sniffer image, after the split) |
+| **Phase 2** | ⬜ BLOCKED | Isometric projection calibration (world → screen for the client's camera) + auto-labeling (project the ground-truth world state into frames to make YOLO labels). | Needs BOTH Phase 0 (capture pipeline + chosen codec) AND Phase 1 (ground-truth positions) |
+| **Phase 3** | ⬜ BLOCKED | YOLO training on the auto-labels + evaluation against ground truth on held-out sessions. | Phase 2 labels (and the vision image) |
+| **Phase 4** | ⬜ BLOCKED | Fast loop: an FSM acting only through `/internal/agent` and the mux (ASSIST first; interventions logged). | Needs BOTH Phase 3 (perception) AND ADR-0005 implemented (its acceptance test passing) |
+| **Phase 5** | ⬜ BLOCKED | Humanizer (timing and trajectories of the bot's input) + a human-vs-bot detector trained on the human and bot input logs; target ROC-AUC toward 0.5. | Phase 4 bot traces |
+| **Phase 6** | ⬜ BLOCKED | Typhoon slow loop: an LLM proposes **intents only**, consumed by the FSM; never in the fast loop. | Phase 4 (independent of Phase 5) |
 
-**The real bottlenecks are the SHARED DISK and OPERATOR DECISIONS.**
-- Every image build or pull waits for the weekend disk split.
-- Phase 1 also waits on the PACKETVER/client decision.
-- Nothing technical blocks Phase 0 today; it comes after the builds only by choice.
+**The real bottlenecks are the SHARED DISK, OPERATOR DECISIONS and ADR-0005.**
+- Every image build waits for the weekend disk split, and with it the RO client on rAthena. That is the
+  root of Phase 1 and Phase 0's HP/SP fidelity.
+- The PACKETVER/client decision gates the same node.
+- Phase 4 cannot start until vision loses direct X access (ADR-0005), however good perception gets.
+- Phase 0's desktop-only measurements have no blocker at all.
 
 ## Ordered plan
 
-1. **Now** — web console, fps fix, 24 h baseline (2026-09-29).
-2. **Weekend** — disk split (operator).
+1. **Now** (2026-09-29/30): web console, fps fix, 24 h IO baseline, ADR-0004 clipboard + file
+   transfer. In parallel, because nothing blocks it: Phase 0 on desktop content (motion-to-photon, codec
+   comparison).
+2. **Weekend:** disk split (operator), in the quietest window from `scripts/io_summary.py`.
 3. **After the split:**
-   - guarded builds (`scripts/guarded_build.py`): rathena, frontend, `pull:db`, `up`;
+   - guarded builds (`scripts/guarded_build.py`): rathena, frontend, desktop, then `pull:db` and `up`;
    - `scripts/smoke_test.sh`;
    - the vision build, then `check_gpu.py`.
-4. **Phase 0 measurements** — motion-to-photon, and codec fidelity per `RDP_GFX` (autodetect / progressive /
-   lossless legacy).
-5. **Phases 1 → 6** as the graph allows.
+4. **RO client on rAthena**, once PACKETVER is decided. Then Phase 0's HP/SP text fidelity.
+5. **Phase 1 → Phase 2 → Phase 3** as the graph allows. ADR-0005 can be implemented any time before
+   Phase 4, and the earlier the better.
+6. **Phase 4**, then **Phases 5 and 6** in parallel.
 
-## Phases (proposed — adjust as the research sharpens)
+## Phases (exit gates are proposals; adjust as the research sharpens)
 
 | Phase | Scope | Exit gate |
 |---|---|---|
-| 0 · Pipeline measurement | Stream/agent fps; motion-to-photon (a mux-injected key toggles a large UI element; time to the first changed pixel, on one host clock); codec fidelity vs a lossless on-Windows screenshot (SSIM/PSNR on UI text) | Numbers recorded; codec chosen |
-| 1 · Server + recording | rAthena with the client's PACKETVER; synchronized recording of frames + input JSONL (+ rAthena logs, offline pcaps) | N hours of clean, synchronized sessions |
-| 2 · Perception v1 | YOLO detection (monsters, players, items, UI) | Precision/recall vs ground truth, above an agreed bar |
-| 3 · Game state | HP/SP, status, minimap, position from pixels | Accuracy vs server logs |
-| 4 · Scripted policy | Farm loop in ASSIST; the human lease handles interventions | Stable multi-hour run; interventions logged |
-| 5 · Learned policy | Imitation from input logs (RL later) | Beats the scripted baseline on agreed metrics |
-| 6 · Evaluation | Long runs, robustness, replay-env regression suite | Reproducible evaluation report |
+| 0 · Stack up + measure | Capture FPS (backend and agent side); motion-to-photon latency (a mux-injected key toggles a large UI element; time to the first changed pixel, on one host clock); codec fidelity vs a lossless on-Windows screenshot (SSIM/PSNR), first on desktop content, then HP/SP text in the RO client | Numbers recorded; codec chosen |
+| 1 · Packet decoder + world state | Offline decoder for the client's PACKETVER; world-state timeline (entities, positions, HP/SP, map) aligned to frames; cross-checked against rAthena logs | The decoded state matches the server on N sessions |
+| 2 · Projection + auto-labeling | Calibrate isometric world → screen (zoom, camera) from ground-truth positions; generate YOLO labels by projection | Projection error within an agreed pixel bound; an auto-labelled dataset of agreed size |
+| 3 · YOLO + evaluation | Train on the auto-labels; precision/recall vs projected ground truth on held-out sessions | Above an agreed bar |
+| 4 · Fast loop (FSM) | Scripted FSM through `/internal/agent` only; ASSIST first; the human lease handles interventions | Stable multi-hour run; interventions logged; ADR-0005 acceptance test green |
+| 5 · Humanizer + detector | Detector on human vs bot input logs; humanizer shapes bot input | Detector ROC-AUC near 0.5 on held-out data |
+| 6 · Typhoon slow loop | LLM intents (goals) → FSM; never in the fast loop | Intents steer the FSM with no added fast-loop latency |
 
-Hard rule throughout: pixels in, mouse/keyboard out. Packet and server-log data are only ever *offline*
-ground truth, never agent input (see `CLAUDE.md`).
+Hard rule throughout: pixels in, mouse/keyboard out.
+- Packet and server-log data are only ever *offline* ground truth (Phases 1–3), never agent input
+  (see `CLAUDE.md`).
+- Clipboard and file transfer are human-only (ADR-0004).
 
 ## Maintenance
 

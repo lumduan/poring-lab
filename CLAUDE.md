@@ -37,6 +37,19 @@ rAthena in this repo, on the LAN. Start with `README.md` (topology, ports, quick
    `compose.yaml` pins `10.210.96.0/24`; keep it pinned. Health check:
    `ip route get 192.168.110.55` must say `via 192.168.1.1`, never `dev br-…`.
 
+7. **Scratch and evidence files go to `/dev/shm`, never host `/tmp`** (Batt, 2026-09-30). Host `/tmp`
+   sits on the same root LV as live capture; `/dev/shm` is RAM. That covers screenshots, frames,
+   probe scripts and temporary compose overlays. Host `/tmp` itself is not reconfigured.
+   - Keep test and tool caches off the disk too: `TMPDIR=/dev/shm/...`, `pytest --basetemp`,
+     `mypy --cache-dir=/dev/null`, `ruff --no-cache` (see Commands).
+8. **Clipboard and file transfer are human-only** (ADR-0004):
+   - never add a clipboard or file message to `AgentToBackend` / `InputEvent`;
+   - never mount the `transfer` volume anywhere but desktop and backend;
+   - never log paste text or file contents.
+   - The mux refuses a bot Ctrl+V / Meta+V / Shift+Insert.
+   - Vision's direct X access is the open gap, [ADR-0005](docs/adr/0005-vision-x-access.md). It
+     blocks Phase 4.
+
 ## Invariants worth knowing before you edit
 
 - **Every pipeline message carries `t_mono_ns` and `frame_id`.**
@@ -51,6 +64,18 @@ rAthena in this repo, on the LAN. Start with `README.md` (topology, ports, quick
     `packages/poring_env/schema/protocol.schema.json` and
     `services/frontend/src/lib/protocol.gen.ts`.
   - `test_committed_schema_matches_models` fails on drift. Never hand-edit the generated files.
+- **Dropped messages are never silent** (ADR-0004, decision 4). All three WebSocket channels read
+  through `routes_public.read_message`. A drop is counted in `/health` `dropped_messages`, logged as a
+  rate-limited WARNING (type and reason only), and answered with an `ErrorReply`. A new channel must
+  use the same reader. Mux refusals are counted in `input_refused`.
+- **The clipboard lives on its own X connection and thread** (`clipboard.py`, python-xlib is not
+  thread-safe). Two python-xlib traps found the hard way:
+  - `SelectionClear`'s field is `atom`, not `selection`;
+  - extension event classes are cloned per display, so match XFixes events by
+    `isinstance(e, xfixes.SelectionNotify)` plus `sub_code`, never by the subclass.
+  - `scripts/clipboard_x11_check.py` exercises it against a real Xvfb.
+- **`RDP_CLIPBOARD` / `RDP_DRIVES` are keywords, not flags** (`rdp-loop.sh`): `off|text-to-remote`
+  and `""|transfer`. Anything else stays off. The backend reads the same two variables.
 - **Keys are `KeyboardEvent.code`**, mapped to the evdev code and then the X keycode (+8) in
   `poring_env/keymap.py`. Meta is mapped only for the console toolbar's Win button; the browser never
   forwards physical Meta. `scripts/gen_protocol.sh` also regenerates the frontend's `keycodes.gen.ts`
@@ -84,9 +109,11 @@ rAthena in this repo, on the LAN. Start with `README.md` (topology, ports, quick
 
 ```bash
 uv sync                                   # host dev env (poring_env + backend + tools; no torch)
-uv run pytest                             # all Python tests
-uv run ruff check . && uv run ruff format --check .
-uv run mypy                               # strict: packages/poring_env/src + services/backend/src
+# Disk-light (rule 7): nothing lands in host /tmp or in on-disk caches.
+export PYTHONDONTWRITEBYTECODE=1 TMPDIR=/dev/shm/poring-lab-tmp && mkdir -p "$TMPDIR"
+uv run pytest -p no:cacheprovider --basetemp="$TMPDIR/pytest"   # all Python tests
+uv run ruff check --no-cache . && uv run ruff format --check --no-cache .
+uv run mypy --cache-dir=/dev/null         # strict: packages/poring_env/src + services/backend/src
 scripts/gen_protocol.sh                   # protocol schema + TS types
 (cd services/frontend && node --test src/lib/*.test.ts)   # unit tests, no deps needed
 scripts/init_env.sh                       # first-time .env
@@ -105,7 +132,10 @@ pnpm, ruff and mypy are not installed on the host. Use `corepack pnpm` (the vers
 | `compose.yaml` | all services, profiles, limits, LAN binds |
 | `packages/poring_env/src/poring_env/` | `env.py` contract, `protocol.py` wire models, `x11.py` (mss + XTest), `remote.py` (MuxedEnv), `keymap.py` |
 | `services/backend/src/poring_backend/` | `mux.py` (pure state machine), `state.py` (injector, log, status), `stream.py` (capture hub), `routes_*.py`, `main.py` (two-socket server) |
-| `services/desktop/bin/rdp-loop.sh` | the one RDP session + exit-code policy |
+| `services/backend/src/poring_backend/clipboard.py` | ADR-0004: X CLIPBOARD owner + watchdog (own thread) |
+| `services/backend/src/poring_backend/routes_transfer.py` | ADR-0004: `/transfer/*` (public port, Origin required, audit log) |
+| `services/backend/src/poring_backend/drops.py` | never-silent drops: counter, rate-limited WARNING, `ErrorReply` |
+| `services/desktop/bin/rdp-loop.sh` | the one RDP session + exit-code policy + ADR-0004 keywords |
 | `services/rathena/entrypoint.sh` | conf rendering, DB bootstrap, server supervision |
 | `services/vision/src/poring_vision/` | loop skeleton; `detector.py` / `policy.py` hold the TODO stubs |
 | `services/frontend/src/` | console: `components/Console.tsx` (sockets), `StreamCanvas.tsx` (input capture) |

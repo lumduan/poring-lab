@@ -61,7 +61,7 @@ humanization and LLM integration are clearly marked TODOs.
 | `HOST_LAN_IP:6121` | rathena | char server (advertises `HOST_LAN_IP`) | LAN |
 | `HOST_LAN_IP:5121` | rathena | map server (advertises `HOST_LAN_IP`) | LAN |
 | `HOST_LAN_IP:3000` | frontend **or** frontend-dev | web console (run one of them) | LAN |
-| `HOST_LAN_IP:8000` | backend | `/health`, `/ws/stream`, `/ws/input` | LAN |
+| `HOST_LAN_IP:8000` | backend | `/health`, `/ws/stream`, `/ws/input`, `/transfer/*` (ADR-0004) | LAN |
 | `HOST_LAN_IP:6080` | desktop | noVNC — **no authentication** | LAN |
 | — (`:8001`) | backend | `/internal/agent` | compose network only |
 | — (`:3306`) | db | MariaDB | compose network only |
@@ -71,7 +71,9 @@ humanization and LLM integration are clearly marked TODOs.
 **Security:**
 - Everything published binds to `HOST_LAN_IP`, never `0.0.0.0`.
 - **noVNC has no authentication.** It is view-only by default (`NOVNC_VIEW_ONLY=true`).
-- The backend's browser WebSockets require an `Origin` listed in `FRONTEND_ORIGINS`.
+- The backend's browser WebSockets require an `Origin` listed in `FRONTEND_ORIGINS`. The `/transfer`
+  routes and clipboard paste additionally require one to be *present*, so scripts and the agent can't
+  use them.
 - The agent API is not published at all.
 - Keep all of this on a trusted LAN.
 
@@ -117,6 +119,39 @@ BACKEND_PUBLIC_URL=http://192.168.1.13:8000 corepack pnpm dev    # open http://l
 refused. It defaults to `http://${HOST_LAN_IP}:3000`. Stream rate and quality are `STREAM_FPS` (30) and
 `JPEG_QUALITY` (80). The stream is sent without WebSocket compression: JPEG doesn't compress, and
 deflate cost 8 fps on the event loop.
+
+## Clipboard and file transfer (human-only, ADR-0004)
+
+Both are **off by default**. For this lab `.env` sets:
+
+```bash
+RDP_CLIPBOARD=text-to-remote   # off | text-to-remote  (text Mac -> Windows only; never Windows -> X)
+RDP_DRIVES=transfer            # "" | transfer        (\\tsclient\transfer in Windows)
+```
+
+Applying a change reconnects the RDP session once, because desktop and backend are recreated together:
+`scripts/dev.sh up -d --no-deps desktop backend`.
+
+- **Paste to Windows** (console panel):
+  1. Click the target field in the remote screen.
+  2. Press ⌘V in the panel's box.
+  3. Send (⌘Enter).
+  - Up to **64 KiB** of UTF-8; Thai is fine. It works over plain HTTP: the page uses the `paste`
+    event, not `navigator.clipboard`.
+  - The backend owns the X clipboard for about a second, the mux sends Ctrl+V as the human, and then
+    it lets go. Windows keeps no copy.
+  - Refused in BOT mode, and only accepted from the console page.
+  - Logged as length + sha256, never the text.
+- **Files ⇄ Windows** (console panel):
+  - Uploads land in `\\tsclient\transfer` (Win+R in Windows).
+  - Whatever Windows saves there can be downloaded from the panel.
+  - A **512 MiB tmpfs** (RAM, never the disk), emptied when desktop and backend stop.
+  - **Large files such as a multi-GB game client: use SMB or a direct download on Windows**, not
+    this.
+  - Audited in `data/transfer_log/` (name, size, sha256).
+- The bot can use neither. The mux refuses a bot Ctrl+V / Meta+V / Shift+Insert, the agent protocol
+  has no such messages, and a watchdog clears any foreign X clipboard owner. The remaining gap (vision
+  can still reach X directly) is [ADR-0005](docs/adr/0005-vision-x-access.md), which blocks Phase 4.
 
 ## Quickstart
 
@@ -233,6 +268,24 @@ in the console's stats panel.
 **The client disconnects right after character select, or shows garbled packets.** `PACKETVER` doesn't
 match the client executable. Set it in `.env`, then run
 `docker compose --profile core build rathena && docker compose --profile core up -d`.
+
+**Paste does nothing, or says "did not paste".** The panel's message names the cause:
+- `rdp_clipboard_not_listening`: `RDP_CLIPBOARD` is not `text-to-remote`, or RDP is reconnecting.
+  Check the connect line in `scripts/dev.sh logs desktop`, which reads `clipboard=… drives=…`.
+- `no_data_request`: the focused Windows window ignored Ctrl+V. Click a text field in the remote screen
+  first. The game's chat box needs to be open.
+- `mode_bot`: switch the mux to HUMAN or ASSIST.
+- Every refusal is also counted in `/health` (`input_refused`, `clipboard.foreign_owner_clears`).
+
+**`\\tsclient\transfer` is missing in Windows.**
+- `RDP_DRIVES=transfer` must be set in `.env`, and the desktop recreated.
+- Drives appear only for sessions started after that.
+- Explorer may need `\\tsclient` typed in full.
+
+**A message was dropped.** The backend never drops silently. The console banner shows it, and
+`/health` has `dropped_messages{channel: {reason: n}}`. A WARNING names the channel, message type and
+reason (e.g. `missing:key.t_mono_ns`), never the contents. Script clients must send `t_mono_ns` on
+every message.
 
 ## Roadmap
 
