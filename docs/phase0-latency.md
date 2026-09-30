@@ -36,10 +36,15 @@ own clock; it maps onto ours with Cristian's algorithm on the input socket's pin
 with the smallest round trip), so every browser→backend number carries an uncertainty of half that
 round trip (shown next to it). Segments within the tab (decode, paint) are exact.
 
-**The toggle.** RO is logged in on a live server, so the trial is a pointer **move** (never a click
-or a key) between two points on empty floor: RO draws its own cursor sprite, so the move shows up in
-the pixels. That makes L2 the real in-game motion-to-photon of the RDP leg (RDP round trip + RO's own
-render cadence).
+**The toggle.** The plan was a pointer **move** (never a click or a key) between two points on empty
+floor in RO. RO draws its own cursor sprite, so the move would show up in the pixels as the real
+in-game motion-to-photon.
+
+At the time, the RO client was logged in to the community server. Under
+[ADR-0006](adr/0006-sanctioned-test-environments.md) no agent automation runs there; Batt permitted
+only these moves, while watching. He closed RO before the runs, so **the measured toggle is `Ctrl+A`
+/ `→` in Notepad on the Windows desktop**. `latency_probe.py cursor --a … --b …` remains available
+for the RO-cursor variant on rAthena.
 
 ## Tools (no restart needed between changes)
 

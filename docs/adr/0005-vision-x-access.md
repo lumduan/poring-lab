@@ -18,6 +18,9 @@ next_action: Batt picks the option set (recommended a + c1 + c2 + c3); implement
   - [ADR-0002 input mux](0002-input-mux.md): "single input owner".
   - [ADR-0003 env abstraction](0003-env-abstraction.md): `Env.grab()`.
   - [ADR-0004 human-only clipboard + transfer](0004-human-only-clipboard-and-file-transfer.md).
+  - [ADR-0006 sanctioned environments](0006-sanctioned-test-environments.md): its environment
+    interlock (rule 2) is the other prerequisite of Phase 4. This ADR stops vision from bypassing
+    the mux; ADR-0006 stops the mux from automating the wrong server.
 
 ## Problem
 

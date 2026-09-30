@@ -1,7 +1,12 @@
 # CLAUDE.md — poring-lab
 
-Private research lab: a **vision-based Ragnarok Online agent**, tested **only** against the self-hosted
-rAthena in this repo, on the LAN. Start with `README.md` (topology, ports, quickstart) and `docs/adr/`.
+Private research lab: a **vision-based Ragnarok Online agent**. There are exactly **two sanctioned
+environments** ([ADR-0006](docs/adr/0006-sanctioned-test-environments.md)):
+- the self-hosted rAthena in this repo, on the LAN, for controlled ground truth;
+- a community bot-testing server, for multi-party social research.
+
+Official servers and every other public server are forbidden. Start with `README.md` (topology,
+ports, quickstart) and `docs/adr/`.
 
 ## Hard rules (never break these)
 
@@ -49,6 +54,22 @@ rAthena in this repo, on the LAN. Start with `README.md` (topology, ports, quick
    - The mux refuses a bot Ctrl+V / Meta+V / Shift+Insert.
    - Vision's direct X access is the open gap, [ADR-0005](docs/adr/0005-vision-x-access.md). It
      blocks Phase 4.
+
+9. **Environment allowlist** (ADR-0006). Automation (BOT/ASSIST) may act only on the sanctioned
+   environments in ADR-0006, verified by an interlock signal, not by judgment. Other players' chat
+   data stays local and pseudonymized. Concretely:
+   - **Official servers and any other public server: forbidden** for every component, in every mode.
+   - **The community server:**
+     - it counts as forbidden while its permission evidence is pending
+       (`docs/environments/community-server.md`);
+     - even with evidence, **no agent automation runs there until the interlock exists** (the
+       GitHub issue labelled `blocks-phase-4`);
+     - Batt may play there manually, as the human;
+     - pixels and input only; no packet capture unless its rules allow it.
+   - **Client profiles:** the existing community-server client on Windows stays **untouched**. rAthena
+     gets a **separate client copy**. Never modify one to serve the other.
+   - **Other players' chat, names and screenshots** stay local (gitignored `data/` or scratch),
+     pseudonymized in any dataset, never pushed.
 
 ## Invariants worth knowing before you edit
 

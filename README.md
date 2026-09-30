@@ -1,7 +1,12 @@
 # poring-lab
 
-Private research lab for a **vision-based Ragnarok Online agent**, tested **only** against a self-hosted
-rAthena server on the LAN.
+Private research lab for a **vision-based Ragnarok Online agent**. There are exactly two sanctioned
+environments ([ADR-0006](docs/adr/0006-sanctioned-test-environments.md)):
+- a self-hosted rAthena server on the LAN, for ground truth;
+- a community bot-testing server, for multi-party social research. It stays manual-only until its
+  permission evidence is recorded and the environment interlock exists.
+
+Official and other public servers are forbidden.
 
 > **Core principle.** The agent perceives the game **only through pixels** and acts **only through
 > mouse and keyboard**. There is no memory reading and no packet injection. Packet sniffing is allowed
@@ -203,9 +208,11 @@ suffixing a new username with `_M` or `_F` (e.g. `bot01_M`).
 2. Give the host a fixed IP (DHCP reservation) → `WIN_HOST`.
 3. Disable sleep, the screen lock and the screensaver. A locked session shows the lock screen to the agent.
 4. Run the RO client **inside the RDP session** at `XVFB_RESOLUTION` (default 1280x720).
-5. The client must match `PACKETVER` (its executable date) and point at `HOST_LAN_IP:6900`. Client
-   patching and `clientinfo.xml` live on Windows; **never copy client files into this repo** (see
-   `.gitignore`).
+5. Use a **separate client copy for rAthena** (ADR-0006). **Leave the existing community-server
+   client untouched:** never patch, repoint or reuse it in place.
+   - The rAthena copy must match `PACKETVER` (its executable date) and point at `HOST_LAN_IP:6900`.
+   - Client patching and `clientinfo.xml` live on Windows. **Never copy client files into this
+     repo** (see `.gitignore`).
 6. Pin the RDP certificate: `python3 scripts/rdp_cert_fingerprint.py <WIN_HOST>` prints the
    `RDP_CERT_SHA256=` line for `.env` (pre-auth handshake only; it never logs in). Unpinned means
    `/cert:ignore`.
