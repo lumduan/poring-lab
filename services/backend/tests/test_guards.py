@@ -168,3 +168,28 @@ def test_no_override_file_means_todays_arguments(tmp_path: Path) -> None:
     assert "-gfx" in args and "/bpp:32" in args
     args, _ = rdp_override_args(tmp_path, "RDP_FRAME_ACK=off\n")
     assert "/gfx:frame-ack:off" in args
+
+
+def test_a_missing_override_key_means_the_default_not_the_previous_value(tmp_path: Path) -> None:
+    """Regression (2026-09-30): an override survived later reconnects (network=lan stuck)."""
+    override = tmp_path / "rdp-override"
+    script = (
+        f'source "{RDP_LOOP}"; BASE_RDP_GFX=""; '
+        f'printf "RDP_NETWORK=lan\\nRDP_GFX=RFX\\n" > "{override}"; load_overrides; build_args; '
+        f'echo ---; printf "RDP_GDI=hw\\n" > "{override}"; load_overrides; build_args; '
+        f'echo ---; rm "{override}"; load_overrides; build_args'
+    )
+    env = {
+        "PATH": "/usr/bin:/bin",
+        "WIN_HOST": "w",
+        "RDP_USER": "u",
+        "RDP_PASSWORD": "p",
+        "RDP_CERT_SHA256": "ab",
+        "RDP_OVERRIDE_FILE": str(override),
+    }
+    out = subprocess.run(["bash", "-c", script], env=env, capture_output=True, text=True).stdout
+    first, second, third = (part.split() for part in out.split("---"))
+    assert "/network:lan" in first and "/gfx:RFX" in first
+    assert "/network:lan" not in second and "/gdi:hw" in second
+    assert not any(a.startswith(("/gfx", "/network", "/gdi")) for a in second if a != "/gdi:hw")
+    assert not any(a.startswith(("/gfx", "/network", "/gdi")) for a in third)

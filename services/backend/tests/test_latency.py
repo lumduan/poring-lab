@@ -221,8 +221,8 @@ def test_damage_mode_grabs_on_change_not_on_a_grid(make: Make) -> None:
     assert health["grabs_on_damage"] >= len(burst)
 
 
-def test_fixed_mode_is_the_default_grid(make: Make) -> None:
-    client, watchers = make()
+def test_fixed_mode_is_a_grid(make: Make) -> None:
+    client, watchers = make(stream_capture="fixed")
     with client.websocket_connect("/ws/stream", headers={"origin": ORIGIN}) as ws:
         assert len(frames_within(ws, 0.3)) >= 10
     assert watchers == []  # no damage watcher in fixed mode
@@ -232,6 +232,10 @@ def test_fixed_mode_is_the_default_grid(make: Make) -> None:
 # --- debug routes and runtime tuning --------------------------------------------------------------
 
 
+def test_damage_capture_is_the_default() -> None:
+    assert Settings().stream_capture == "damage" and Settings().stream_max_fps == 60.0
+
+
 def test_debug_routes_are_loopback_only(make: Make) -> None:
     client, _ = make()  # TestClient's peer is "testclient", not loopback
     assert client.get("/debug/latency").status_code == 404
@@ -239,7 +243,7 @@ def test_debug_routes_are_loopback_only(make: Make) -> None:
 
 
 def test_tuning_switches_at_runtime_and_reaches_the_console(make: Make) -> None:
-    client, _ = make(debug_hosts="testclient")
+    client, _ = make(debug_hosts="testclient", stream_capture="fixed")
     assert client.get("/debug/stream-tuning").json()["capture"] == "fixed"
     tuned = client.post(
         "/debug/stream-tuning",

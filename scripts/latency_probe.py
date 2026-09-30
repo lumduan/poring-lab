@@ -29,6 +29,7 @@ import statistics
 import sys
 import threading
 import time
+import urllib.error
 import urllib.request
 from collections import deque
 from dataclasses import dataclass, field
@@ -65,8 +66,15 @@ def http_json(path: str, body: dict[str, Any] | None = None) -> Any:
     req = urllib.request.Request(
         BACKEND + path, data=data, headers={"content-type": "application/json"}
     )
-    with urllib.request.urlopen(req, timeout=5) as resp:
-        return json.loads(resp.read())
+    for attempt in range(40):  # backends before 2026-09-30 R2 could race on /debug/latency (500)
+        try:
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                return json.loads(resp.read())
+        except urllib.error.HTTPError as exc:
+            if exc.code != 500 or attempt == 39:
+                raise
+            time.sleep(0.05)
+    raise AssertionError("unreachable")
 
 
 def box(x: int, y: int, w: int, h: int) -> tuple[int, int, int, int]:
@@ -106,8 +114,14 @@ class DamageLog(threading.Thread):
             while d.pending_events():
                 e = d.next_event()
                 if e.type == notify:
+                    # Xvfb's server time IS CLOCK_MONOTONIC in ms (verified 2026-09-30: receipt -
+                    # timestamp = 1 ms median). Receipt can lag by tens of ms while this process
+                    # decodes frames, so the change time is rebuilt from the X timestamp (+-1 ms).
+                    received = now_ns()
+                    lag_ms = ((received // 1_000_000) % 2**32 - int(e.timestamp)) % 2**32
+                    at = received - min(lag_ms, 1000) * 1_000_000
                     a = e.area
-                    self.events.append((now_ns(), int(e.timestamp), (a.x, a.y, a.width, a.height)))
+                    self.events.append((at, int(e.timestamp), (a.x, a.y, a.width, a.height)))
 
     def first_in(self, region: tuple[int, int, int, int], after_ns: int) -> int | None:
         for t, _ts, rect in list(self.events):
@@ -280,6 +294,7 @@ def cursor(args: argparse.Namespace) -> dict[str, Any]:
     view.ready.wait(5)
     time.sleep(0.5)
     trials: list[dict[str, Any]] = []
+    aborted: str | None = None
     t_start = now_ns()
     with connect(f"{WS}/ws/input", open_timeout=5) as ws, mss.MSS(display=":99") as sct:
 
@@ -289,15 +304,38 @@ def cursor(args: argparse.Namespace) -> dict[str, Any]:
                                 "x": p[0] / SCREEN_W, "y": p[1] / SCREEN_H}))  # fmt: skip
             return t
 
-        move(a)
-        time.sleep(0.8)
+        def key(code: str, action: str) -> int:
+            t = now_ns()
+            ws.send(json.dumps({"type": "key", "t_mono_ns": t, "frame_id": -1,
+                                "code": code, "action": action}))  # fmt: skip
+            return t
+
+        def chord(spec: str) -> int:
+            """Press the keys in order, release in reverse; returns the LAST key-down's send time
+            (the trigger: e.g. the A of Ctrl+A)."""
+            codes = spec.split("+")
+            t_trigger = 0
+            for code in codes:
+                t_trigger = key(code, "down")
+            for code in reversed(codes):
+                key(code, "up")
+            return t_trigger
+
+        if not args.k1:
+            move(a)
+            time.sleep(0.8)
         here, there = a, b
+        toggles = [args.k1, args.k2] if args.k1 else []
+        misses = 0
         for i in range(args.trials):
-            target = box(there[0] - args.box // 4, there[1] - args.box // 4, args.box, args.box)
+            if args.watch:  # a fixed box that changes both ways (e.g. a hover highlight)
+                target = box(*args.watch)
+            else:  # the destination (e.g. RO's drawn cursor appearing there)
+                target = box(there[0] - args.box // 4, there[1] - args.box // 4, args.box, args.box)
             base_x = grab_region(sct, target)
             last = view.frames[-1] if view.frames else None
             base_web = region_of_jpeg(last.jpeg, target) if last else None
-            t_send = move(there)
+            t_send = chord(toggles[i % 2]) if toggles else move(there)
             t_change = None
             deadline = time.monotonic() + 1.5
             while time.monotonic() < deadline and t_change is None:  # L2: damage + pixels
@@ -331,6 +369,10 @@ def cursor(args: argparse.Namespace) -> dict[str, Any]:
                 row["server_total_ms"] = (frame.t_sent - t_send) / MS
             trials.append(row)
             here, there = there, here
+            misses = misses + 1 if "L2_ms" not in row else 0
+            if misses >= 3:  # focus moved (or the window changed): stop sending anything
+                aborted = f"no change for 3 trials in a row at trial {i}: stopped"
+                break
     time.sleep(1.5)  # let the browser report the last frames
     dump = http_json(f"/debug/latency?since_ns={t_start}")
     viewer = {v["frame_id"]: v for v in dump["viewer"]}
@@ -359,7 +401,8 @@ def cursor(args: argparse.Namespace) -> dict[str, Any]:
     ]
     summary = {k: stats([r[k] for r in trials if k in r]) for k in keys}
     return {
-        "mode": "cursor",
+        "mode": "cursor" if not args.k1 else f"keys {args.k1} / {args.k2}",
+        "aborted": aborted,
         "tuning": http_json("/debug/stream-tuning"),
         "trials": len(trials),
         "detected_in_xvfb": sum(1 for r in trials if "L2_ms" in r),
@@ -399,10 +442,15 @@ def main() -> int:
     p.add_argument("--region", type=lambda s: [int(v) for v in s.split(",")],
                    default=[0, 0, SCREEN_W, SCREEN_H])  # fmt: skip
     c = sub.add_parser("cursor")
-    c.add_argument("--a", type=lambda s: [int(v) for v in s.split(",")], required=True)
-    c.add_argument("--b", type=lambda s: [int(v) for v in s.split(",")], required=True)
+    c.add_argument("--a", type=lambda s: [int(v) for v in s.split(",")], default=[0, 0])
+    c.add_argument("--b", type=lambda s: [int(v) for v in s.split(",")], default=[0, 0])
+    # Key toggle instead of moves (e.g. --k1 ControlLeft+KeyA --k2 ArrowRight in Notepad): only
+    # for a known, focused, safe window -- the probe cannot see where keys go.
+    c.add_argument("--k1", default=None)
+    c.add_argument("--k2", default=None)
     c.add_argument("--trials", type=int, default=60)
     c.add_argument("--box", type=int, default=64)
+    c.add_argument("--watch", type=lambda s: [int(v) for v in s.split(",")], default=None)
     c.add_argument("--gap", type=float, default=0.25)
     c.add_argument("--rows", action="store_true")
     j = sub.add_parser("jpeg-bench")

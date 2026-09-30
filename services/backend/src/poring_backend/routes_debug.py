@@ -41,18 +41,22 @@ class TuningUpdate(BaseModel):
     paint: Literal["decode", "raf"] | None = None
 
 
+# async on purpose: these run on the event-loop thread, which is the only thread that mutates the
+# recorder and the tuning, so no route can iterate a ring while it changes.
 @router.get("/latency")
-def latency(since_ns: int = 0, state: AppState = Depends(loopback_only)) -> dict[str, Any]:
+async def latency(since_ns: int = 0, state: AppState = Depends(loopback_only)) -> dict[str, Any]:
     return {"now_ns": monotonic_ns(), **state.latency.dump(since_ns)}
 
 
 @router.get("/stream-tuning")
-def get_tuning(state: AppState = Depends(loopback_only)) -> dict[str, Any]:
+async def get_tuning(state: AppState = Depends(loopback_only)) -> dict[str, Any]:
     return asdict(state.tuning)
 
 
 @router.post("/stream-tuning")
-def set_tuning(update: TuningUpdate, state: AppState = Depends(loopback_only)) -> dict[str, Any]:
+async def set_tuning(
+    update: TuningUpdate, state: AppState = Depends(loopback_only)
+) -> dict[str, Any]:
     tuning = state.tuning
     changes: dict[str, Any] = update.model_dump(exclude_none=True)
     if (

@@ -31,7 +31,8 @@ class Settings(BaseSettings):
     # POST /debug/stream-tuning (loopback only). These are the boot values.
     #   STREAM_CAPTURE: fixed (a slot grid at STREAM_FPS) | damage (grab on XDamage, capped at
     #   STREAM_MAX_FPS)
-    stream_capture: Literal["fixed", "damage"] = "fixed"
+    # damage since 2026-09-30: -12.5 ms p50 / -21 ms p95 key-to-sent (docs/phase0-latency.md).
+    stream_capture: Literal["fixed", "damage"] = "damage"
     stream_max_fps: float = 60.0
     #   CONSOLE_MOVE_INTERVAL_MS: unset = one pointer move per animation frame; N = send on the
     #   event, at most one per N ms. CONSOLE_PAINT: decode | raf.

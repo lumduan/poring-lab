@@ -79,6 +79,10 @@ drive_args() {
 # A variant = write the file, then TERM xfreerdp3: the loop reconnects with it a few seconds later.
 load_overrides() {
   local file="${RDP_OVERRIDE_FILE:-/dev/shm/rdp-override}" line key value
+  # Every connect starts from the container's own settings: a key missing from the file (or no
+  # file at all) means "back to the default", never "keep the previous override".
+  RDP_GFX="${BASE_RDP_GFX-}" RDP_NETWORK="${BASE_RDP_NETWORK-auto}"
+  RDP_FRAME_ACK="${BASE_RDP_FRAME_ACK-on}" RDP_GDI="${BASE_RDP_GDI-sw}"
   [[ -f "${file}" ]] || return 0
   while IFS= read -r line || [[ -n "${line}" ]]; do
     if [[ ! "${line}" =~ ^([A-Z_]+)=([A-Za-z0-9]*)$ ]]; then
@@ -95,6 +99,10 @@ load_overrides() {
       *) log "override ignored: ${key}=${value}" ;;
     esac
   done <"${file}"
+}
+
+override_mtime() {
+  stat -c %Y "${RDP_OVERRIDE_FILE:-/dev/shm/rdp-override}" 2>/dev/null || echo none
 }
 
 # One argument per line for /args-from:stdin (which stops at the first blank line). printf is a
@@ -137,10 +145,13 @@ main() {
     log "WARNING: RDP_CERT_SHA256 unset -> /cert:ignore (no server identity check). Pin it in .env."
   fi
 
-  local backoff=2 rc
+  BASE_RDP_GFX="${RDP_GFX:-}" BASE_RDP_NETWORK="${RDP_NETWORK:-auto}"
+  BASE_RDP_FRAME_ACK="${RDP_FRAME_ACK:-on}" BASE_RDP_GDI="${RDP_GDI:-sw}"
+  local backoff=2 rc override_stamp
   while true; do
     wait_for_x
     load_overrides
+    override_stamp="$(override_mtime)"
     log "connecting to ${WIN_HOST}:${RDP_PORT:-3389} as ${RDP_USER} (gfx=${RDP_GFX:-auto}" \
       "network=${RDP_NETWORK:-auto} frame-ack=${RDP_FRAME_ACK:-on} gdi=${RDP_GDI:-sw}" \
       "clipboard=${RDP_CLIPBOARD:-off} drives=${RDP_DRIVES:-none})"
@@ -165,6 +176,14 @@ main() {
         idle_forever "exit ${rc}: licensing or command-line error. NOT retrying; see log above."
         ;;
       *)
+        if [[ "$(override_mtime)" != "${override_stamp}" ]]; then
+          # A deliberate switch (the override file changed, then xfreerdp was TERMed): not a
+          # failing target, so no backoff growth.
+          log "exit ${rc} after an override change; reconnecting in 2s"
+          backoff=2
+          sleep 2
+          continue
+        fi
         log "exit ${rc}; retrying in ${backoff}s"
         sleep "${backoff}"
         backoff=$((backoff * 2 > 60 ? 60 : backoff * 2))

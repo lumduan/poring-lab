@@ -16,7 +16,7 @@ flowchart TD
     D1["PACKETVER + RO client<br/>OPERATOR DECISION"]
     S1["RO client running on rAthena<br/>BLOCKED"]
     D2["ADR-0005 · vision loses direct X access<br/>DECISION - PROPOSED"]
-    P0["Phase 0 · stack up, capture FPS,<br/>end-to-end latency<br/>READY - desktop + backend parts"]
+    P0["Phase 0 · stack up, capture FPS,<br/>end-to-end latency<br/>ACTIVE - console latency work"]
     P1["Phase 1 · packet decoder +<br/>world state, ground truth<br/>BLOCKED"]
     P2["Phase 2 · isometric projection<br/>calibration + auto-labeling<br/>BLOCKED"]
     P3["Phase 3 · YOLO training +<br/>evaluation vs ground truth<br/>BLOCKED"]
@@ -43,9 +43,8 @@ flowchart TD
     classDef decision fill:#fde0e0,stroke:#d05555,color:#8f2e2e
     classDef goal     fill:#ede0fb,stroke:#8a5cd8,color:#4d2e8f
 
-    class N1 active
+    class N1,P0 active
     class N2,D1,D2 decision
-    class P0 ready
     class N3,S1,P1,P2,P3,P4,P5,P6 blocked
 ```
 
@@ -57,7 +56,7 @@ flowchart TD
 | **PACKETVER + RO client** | 🟥 OPERATOR | Which client executable date (PACKETVER); renewal or pre-renewal. Defaults: 20211103, renewal. | Operator decision; deferred |
 | **RO client on rAthena** | ⬜ BLOCKED | The Windows client logs in to this lab's rAthena. | Needs BOTH the rathena image (after the split) AND the PACKETVER decision |
 | **ADR-0005 · vision X isolation** | 🟥 DECISION | vision can reach XTEST, selections and window contents directly, and can pose as HUMAN on `:8000`. Recommended: frames from the backend + an X auth cookie + an internal agent network + no RECORD ([ADR-0005](adr/0005-vision-x-access.md); [issue #1](https://github.com/lumduan/poring-lab/issues/1), `blocks-phase-4`). | Operator picks the option set; implemented before Phase 4 |
-| **Phase 0** | 🔵 READY (part) | Stack up; capture FPS; end-to-end (motion-to-photon) latency; RDP codec comparison (`RDP_GFX`). **Can start now** on desktop + backend: motion-to-photon, and the codec comparison on desktop content. **HP/SP text fidelity waits** for a working RO client on rAthena. | Full exit needs "RO client on rAthena"; the agent-side grab rate needs the vision image |
+| **Phase 0** | 🟡 ACTIVE (part) | Stack up; capture FPS; end-to-end (motion-to-photon) latency; RDP codec comparison (`RDP_GFX`). **Started 2026-09-30:** latency instrumentation, runtime knobs, and the probe ([phase0-latency.md](phase0-latency.md): method, results, ranked options, the Windows App A/B). **HP/SP text fidelity waits** for a working RO client on rAthena. | Full exit needs "RO client on rAthena"; the agent-side grab rate needs the vision image |
 | **Phase 1** | ⬜ BLOCKED | Packet decoder + world state as **offline ground truth** (sniffer pcaps + rAthena logs → a timeline of entities, positions, HP/SP, synchronised to frames by `t_mono_ns`). Never agent input. | RO client on rAthena (and the sniffer image, after the split) |
 | **Phase 2** | ⬜ BLOCKED | Isometric projection calibration (world → screen for the client's camera) + auto-labeling (project the ground-truth world state into frames to make YOLO labels). | Needs BOTH Phase 0 (capture pipeline + chosen codec) AND Phase 1 (ground-truth positions) |
 | **Phase 3** | ⬜ BLOCKED | YOLO training on the auto-labels + evaluation against ground truth on held-out sessions. | Phase 2 labels (and the vision image) |
