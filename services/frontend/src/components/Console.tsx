@@ -19,11 +19,13 @@ import {
   type Detections,
   type ErrorReply,
   type FrameMeta,
+  type FrameTiming,
   type Mode,
   type PasteResult,
   type Status,
 } from "@/lib/protocol";
 import type { Size, ViewMode } from "@/lib/view";
+import { LatestSlot, OffsetEstimator } from "@/lib/timing";
 import { checkPaste, describePaste } from "@/lib/transfer";
 import { backendWsBase, ReconnectingSocket } from "@/lib/ws";
 
@@ -67,6 +69,8 @@ export default function Console({ backendUrl }: Props) {
   const [viewMode, setViewMode] = useState<ViewMode>("fit");
   const [focused, setFocused] = useState(false);
   const pasteIdRef = useRef(0);
+  // Phase 0 console knob, pushed by the backend in Status (docs/phase0-latency.md).
+  const paintModeRef = useRef<"decode" | "raf">("decode");
   const [pasteResult, setPasteResult] = useState<PasteResult | null>(null);
   const [pastePending, setPastePending] = useState(false);
   // Where the latest paste came from: Cmd+V on the screen answers with a toast, the panel in place.
@@ -86,8 +90,17 @@ export default function Console({ backendUrl }: Props) {
   useEffect(() => {
     const base = backendWsBase(backendUrl);
     let pendingMeta: FrameMeta | null = null;
-    let queued: { meta: FrameMeta; blob: Blob } | null = null;
+    let queued: { meta: FrameMeta; blob: Blob; recv: number } | null = null;
     let decoding = false;
+    // Phase 0 telemetry: per-frame times on this tab's clock, reported once a second.
+    const offset = new OffsetEstimator();
+    let timings: FrameTiming[] = [];
+    const netMs: number[] = [];
+    const decodeMs: number[] = [];
+    const paintWaitMs: number[] = [];
+    type Decoded = { bitmap: ImageBitmap; meta: FrameMeta; recv: number; decoded: number };
+    const ready = new LatestSlot<Decoded>(); // paint=raf: only the newest decoded frame waits
+    let rafId = 0;
     let frames = 0;
     let bytes = 0;
     const captureToEncode: number[] = [];
@@ -103,30 +116,59 @@ export default function Console({ backendUrl }: Props) {
       droppedTimer = setTimeout(() => setDropped(null), 10_000);
     };
 
-    // Latest frame wins: while one JPEG decodes, newer arrivals overwrite `queued`.
+    const drawFrame = ({ bitmap, meta, recv, decoded }: Decoded) => {
+      const canvas = videoRef.current;
+      if (canvas) {
+        if (canvas.width !== meta.width || canvas.height !== meta.height) {
+          canvas.width = meta.width;
+          canvas.height = meta.height;
+          setFrameSize({ width: meta.width, height: meta.height });
+        }
+        canvas.getContext("2d")?.drawImage(bitmap, 0, 0);
+      }
+      bitmap.close();
+      const painted = browserNowNs();
+      frameIdRef.current = meta.frame_id;
+      frames += 1;
+      bytes += meta.nbytes;
+      // Both intervals are on the backend's clock, so they are directly meaningful.
+      push(captureToEncode, (meta.t_encoded_ns - meta.t_capture_ns) / 1e6);
+      push(encodeToSend, (meta.t_mono_ns - meta.t_encoded_ns) / 1e6);
+      push(decodeMs, (decoded - recv) / 1e6);
+      push(paintWaitMs, (painted - decoded) / 1e6);
+      const off = offset.offsetNs;
+      if (off != null) push(netMs, (recv + off - meta.t_mono_ns) / 1e6);
+      if (timings.length < 240) {
+        timings.push({
+          frame_id: meta.frame_id,
+          recv_ns: recv,
+          decoded_ns: decoded,
+          painted_ns: painted,
+        });
+      }
+    };
+    const paintReady = () => {
+      rafId = 0;
+      const next = ready.take();
+      if (next) drawFrame(next);
+    };
+
+    // Latest frame wins: while one JPEG decodes, newer arrivals overwrite `queued`. With
+    // paint=raf, a decoded frame waits for the next animation frame, and only the newest waits.
     const drawLatest = async () => {
       decoding = true;
       while (queued) {
-        const { meta, blob } = queued;
+        const { meta, blob, recv } = queued;
         queued = null;
         try {
           const bitmap = await createImageBitmap(blob);
-          const canvas = videoRef.current;
-          if (canvas) {
-            if (canvas.width !== meta.width || canvas.height !== meta.height) {
-              canvas.width = meta.width;
-              canvas.height = meta.height;
-              setFrameSize({ width: meta.width, height: meta.height });
-            }
-            canvas.getContext("2d")?.drawImage(bitmap, 0, 0);
+          const frame = { bitmap, meta, recv, decoded: browserNowNs() };
+          if (paintModeRef.current === "raf") {
+            ready.put(frame)?.bitmap.close();
+            if (!rafId) rafId = requestAnimationFrame(paintReady);
+          } else {
+            drawFrame(frame);
           }
-          bitmap.close();
-          frameIdRef.current = meta.frame_id;
-          frames += 1;
-          bytes += meta.nbytes;
-          // Both intervals are on the backend's clock, so they are directly meaningful.
-          push(captureToEncode, (meta.t_encoded_ns - meta.t_capture_ns) / 1e6);
-          push(encodeToSend, (meta.t_mono_ns - meta.t_encoded_ns) / 1e6);
         } catch {
           // A corrupt or truncated JPEG: skip it, the next one is ~33 ms away.
         }
@@ -140,13 +182,16 @@ export default function Console({ backendUrl }: Props) {
       onText: (text) => {
         const msg = parseServerMessage(text);
         if (msg?.type === "frame") pendingMeta = msg;
-        else if (msg?.type === "status") setStatus(msg);
+        else if (msg?.type === "status") {
+          paintModeRef.current = msg.paint ?? "decode";
+          setStatus(msg);
+        }
         else if (msg?.type === "detections") setDetections(msg);
         else if (msg?.type === "error") showDropped(msg);
       },
       onBinary: (blob) => {
         if (!pendingMeta) return; // a JPEG always follows its FrameMeta; ignore strays
-        queued = { meta: pendingMeta, blob };
+        queued = { meta: pendingMeta, blob, recv: browserNowNs() };
         pendingMeta = null;
         if (!decoding) void drawLatest();
       },
@@ -162,7 +207,11 @@ export default function Console({ backendUrl }: Props) {
       onText: (text) => {
         const msg = parseServerMessage(text);
         // Our own clock went out and came back: a same-domain round trip.
-        if (msg?.type === "pong") rttMs = (browserNowNs() - msg.echo_t_mono_ns) / 1e6;
+        if (msg?.type === "pong") {
+          const received = browserNowNs();
+          rttMs = (received - msg.echo_t_mono_ns) / 1e6;
+          offset.sample(msg.echo_t_mono_ns, msg.t_mono_ns, received, performance.now());
+        }
         else if (msg?.type === "paste_result" && msg.request_id === pasteIdRef.current) {
           setPasteResult(msg);
           setPastePending(false);
@@ -185,6 +234,19 @@ export default function Console({ backendUrl }: Props) {
         frame_id: frameIdRef.current,
       };
       input.send(ping);
+      // Phase 0 telemetry (docs/phase0-latency.md): this second's frames, on this tab's clock.
+      const report: BrowserToBackend = {
+        type: "viewer_timing",
+        t_mono_ns: browserNowNs(),
+        frame_id: frameIdRef.current,
+        offset_ns: offset.offsetNs,
+        offset_uncertainty_ns: offset.uncertaintyNs,
+        visible: document.visibilityState === "visible",
+        user_agent: navigator.userAgent.slice(0, 200),
+        frames: timings,
+      };
+      input.send(report);
+      timings = [];
     }, 1000);
     const statsTimer = setInterval(() => {
       const now = performance.now();
@@ -196,6 +258,10 @@ export default function Console({ backendUrl }: Props) {
         encodeToSendP50: median(encodeToSend),
         rttMs,
         frameId: frameIdRef.current,
+        netMs: netMs.length ? median(netMs) : null,
+        decodeMs: median(decodeMs),
+        paintWaitMs: median(paintWaitMs),
+        offsetUncertaintyMs: offset.uncertaintyNs == null ? null : offset.uncertaintyNs / 1e6,
       });
       frames = 0;
       bytes = 0;
@@ -206,6 +272,8 @@ export default function Console({ backendUrl }: Props) {
       clearInterval(pinger);
       clearInterval(statsTimer);
       if (droppedTimer) clearTimeout(droppedTimer);
+      if (rafId) cancelAnimationFrame(rafId);
+      ready.take()?.bitmap.close();
       stream.close();
       input.close();
       inputRef.current = null;
@@ -303,6 +371,7 @@ export default function Console({ backendUrl }: Props) {
         send={send}
         onFocusChange={setFocused}
         onPaste={pasteFromScreen}
+        moveIntervalMs={status?.move_interval_ms ?? null}
         overlay={
           toast && (
             <div

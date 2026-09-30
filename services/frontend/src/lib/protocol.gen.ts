@@ -31,7 +31,8 @@ export type BackendToBrowser = FrameMeta | Status | Detections | Pong | PasteRes
  * This interface was referenced by `PoringProtocol`'s JSON-Schema
  * via the `definition` "BrowserToBackend".
  */
-export type BrowserToBackend = MouseMove | MouseButton | Wheel | Key | ReleaseAll | SetMode | Ping | ClipboardPaste;
+export type BrowserToBackend =
+  MouseMove | MouseButton | Wheel | Key | ReleaseAll | SetMode | Ping | ClipboardPaste | ViewerTiming;
 
 /**
  * Schema root that pulls every channel into one document for json-schema-to-typescript.
@@ -258,6 +259,14 @@ export interface Status {
   lease_until_ns: number | null;
   mode: Mode;
   /**
+   * Pointer-move send interval; null = one per animation frame (the original).
+   */
+  move_interval_ms: number | null;
+  /**
+   * decode: draw each frame once decoded; raf: newest decoded frame per rAF.
+   */
+  paint: "decode" | "raf";
+  /**
    * An xfreerdp window exists on the display; null = X unreachable.
    */
   rdp_window_present: boolean | null;
@@ -429,4 +438,45 @@ export interface ClipboardPaste {
    */
   text: string;
   type: "clipboard_paste";
+}
+/**
+ * Latency telemetry from a console tab, about once a second (Phase 0).
+ *
+ * ``offset_ns`` maps the tab's clock to the backend's: backend = browser + offset. It comes from
+ * Cristian's algorithm on the ping/pong with the smallest round trip, so the mapping is uncertain
+ * by ``offset_uncertainty_ns`` (half that round trip).
+ *
+ * This interface was referenced by `PoringProtocol`'s JSON-Schema
+ * via the `definition` "ViewerTiming".
+ */
+export interface ViewerTiming {
+  /**
+   * Frame this message refers to or was produced from; -1 means none.
+   */
+  frame_id: number;
+  /**
+   * @maxItems 240
+   */
+  frames: FrameTiming[];
+  offset_ns: number | null;
+  offset_uncertainty_ns: number | null;
+  /**
+   * Sender's monotonic clock, ns (see module docstring).
+   */
+  t_mono_ns: number;
+  type: "viewer_timing";
+  user_agent: string;
+  visible: boolean;
+}
+/**
+ * When one frame reached a viewer, all on the VIEWER's clock (ns).
+ *
+ * This interface was referenced by `PoringProtocol`'s JSON-Schema
+ * via the `definition` "FrameTiming".
+ */
+export interface FrameTiming {
+  decoded_ns: number;
+  frame_id: number;
+  painted_ns: number;
+  recv_ns: number;
 }

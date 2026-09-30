@@ -10,7 +10,8 @@ import {
   type KeyStep,
   shouldForwardPhysical,
 } from "@/lib/keys";
-import { browserNowNs, type BrowserToBackend } from "@/lib/protocol";
+import { type BrowserToBackend } from "@/lib/protocol";
+import { eventTimeMs, moveDelayMs } from "@/lib/timing";
 import { drawRect, normalizePoint, type Size, type ViewMode } from "@/lib/view";
 
 type Props = {
@@ -25,6 +26,8 @@ type Props = {
   onPaste?: (text: string) => void;
   /** Drawn over the viewport (not the image): e.g. the paste toast. Never takes pointer events. */
   overlay?: ReactNode;
+  /** Pointer-move send interval (Status.move_interval_ms); null = one per animation frame. */
+  moveIntervalMs?: number | null;
   children?: ReactNode;
 };
 
@@ -47,10 +50,16 @@ export default function StreamCanvas({
   onFocusChange,
   onPaste,
   overlay,
+  moveIntervalMs = null,
   children,
 }: Props) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  // Read live by the input handlers, so a knob change never re-subscribes them.
+  const moveIntervalRef = useRef<number | null>(moveIntervalMs);
+  useEffect(() => {
+    moveIntervalRef.current = moveIntervalMs;
+  }, [moveIntervalMs]);
   const [viewport, setViewport] = useState<Size>({ width: 0, height: 0 });
 
   useEffect(() => {
@@ -72,7 +81,13 @@ export default function StreamCanvas({
     const nav = navigator as Navigator & { userAgentData?: { platform?: string } };
     const isMac = isMacPlatform(nav.userAgentData?.platform || nav.platform || "");
 
-    const stamp = () => ({ t_mono_ns: browserNowNs(), frame_id: frameIdRef.current });
+    // t_mono_ns is the EVENT's own time (performance.now() clock), so the backend's input latency
+    // includes this tab's handler and coalescing delay (Phase 0, docs/phase0-latency.md).
+    const stamp = (timeStampMs?: number) => {
+      const now = performance.now();
+      const at = timeStampMs === undefined ? now : eventTimeMs(timeStampMs, now);
+      return { t_mono_ns: Math.round(at * 1e6), frame_id: frameIdRef.current };
+    };
     const at = (e: MouseEvent) => {
       const r = video.getBoundingClientRect();
       return normalizePoint(e.clientX, e.clientY, { x: r.left, y: r.top, width: r.width, height: r.height });
@@ -80,23 +95,42 @@ export default function StreamCanvas({
     const wheel = new WheelAccumulator();
     const buttons = new Set<ButtonName>();
     let pendingMove: { x: number; y: number } | null = null;
+    let pendingSince = 0; // timeStamp of the oldest move not yet sent
+    let lastMoveSent = Number.NEGATIVE_INFINITY;
     let raf = 0;
+    let moveTimer = 0;
 
-    // Moves are coalesced to one per animation frame (~16 ms); anything else flushes a pending
-    // move first so the backend sees events in the order they happened.
+    // Moves are coalesced: one per animation frame (moveIntervalMs null, the original), or sent on
+    // the event with at most one per moveIntervalMs. Anything else flushes a pending move first so
+    // the backend sees events in the order they happened.
     const flushMove = () => {
       raf = 0;
-      if (pendingMove) send({ type: "mouse_move", ...stamp(), ...pendingMove });
+      if (moveTimer) window.clearTimeout(moveTimer);
+      moveTimer = 0;
+      if (pendingMove) {
+        send({ type: "mouse_move", ...stamp(pendingSince), ...pendingMove });
+        lastMoveSent = performance.now();
+      }
       pendingMove = null;
+    };
+    const scheduleMove = () => {
+      const interval = moveIntervalRef.current;
+      if (interval == null) {
+        if (!raf) raf = requestAnimationFrame(flushMove);
+        return;
+      }
+      const wait = moveDelayMs(performance.now() - lastMoveSent, interval);
+      if (wait === 0) flushMove();
+      else if (!moveTimer) moveTimer = window.setTimeout(flushMove, wait);
     };
     const flushNow = () => {
       if (raf) cancelAnimationFrame(raf);
       flushMove();
     };
-    const sendKey = (step: KeyStep) => {
+    const sendKey = (step: KeyStep, timeStampMs?: number) => {
       if (!held.apply(step)) return;
       flushNow();
-      send({ type: "key", ...stamp(), code: step.code, action: step.action });
+      send({ type: "key", ...stamp(timeStampMs), code: step.code, action: step.action });
     };
     const releaseAll = () => {
       flushNow();
@@ -109,13 +143,13 @@ export default function StreamCanvas({
       if (!p.inside) return; // presses in the letterbox are not clicks on the remote screen
       flushNow();
       buttons.add(button);
-      send({ type: "mouse_button", ...stamp(), button, action: "down", x: p.x, y: p.y });
+      send({ type: "mouse_button", ...stamp(e.timeStamp), button, action: "down", x: p.x, y: p.y });
     };
     const buttonUp = (e: PointerEvent, button: ButtonName) => {
       if (!buttons.delete(button)) return; // only release what we pressed
       const p = at(e);
       flushNow();
-      send({ type: "mouse_button", ...stamp(), button, action: "up", x: p.x, y: p.y });
+      send({ type: "mouse_button", ...stamp(e.timeStamp), button, action: "up", x: p.x, y: p.y });
     };
 
     const onPointerMove = (e: PointerEvent) => {
@@ -130,8 +164,9 @@ export default function StreamCanvas({
       const p = at(e);
       // Outside the image only drags continue (clamped to the edge); hovering sends nothing.
       if (!p.inside && buttons.size === 0) return;
+      if (!pendingMove) pendingSince = e.timeStamp;
       pendingMove = { x: p.x, y: p.y };
-      if (!raf) raf = requestAnimationFrame(flushMove);
+      scheduleMove();
     };
     // The default action of a press would move focus to <body> right after we focus the capture
     // textarea (the canvas is not focusable); it would also start a text selection.
@@ -155,7 +190,7 @@ export default function StreamCanvas({
       const dy = wheel.push(e);
       if (dy !== 0) {
         flushNow();
-        send({ type: "wheel", ...stamp(), dy });
+        send({ type: "wheel", ...stamp(e.timeStamp), dy });
       }
     };
     const onKeyDown = (e: KeyboardEvent) => {
@@ -164,13 +199,13 @@ export default function StreamCanvas({
       if (keyDecision(e, isMac) !== "forward") return;
       e.preventDefault(); // F-keys, Tab, Esc, Backspace, arrows... belong to the remote session
       if (e.repeat) return; // Windows runs its own key repeat for a held key
-      sendKey({ code: e.code, action: "down" });
+      sendKey({ code: e.code, action: "down" }, e.timeStamp);
     };
     const onKeyUp = (e: KeyboardEvent) => {
       if (e.metaKey || !shouldForwardPhysical(e.code)) return;
       e.preventDefault();
       // HeldKeys drops stray ups, e.g. the V of a paste chord, which was never sent down.
-      sendKey({ code: e.code, action: "up" });
+      sendKey({ code: e.code, action: "up" }, e.timeStamp);
     };
     const onPasteEvent = (e: ClipboardEvent) => {
       e.preventDefault(); // nothing lands in the textarea
@@ -214,6 +249,7 @@ export default function StreamCanvas({
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
       if (raf) cancelAnimationFrame(raf);
+      if (moveTimer) window.clearTimeout(moveTimer);
       box.removeEventListener("pointermove", onPointerMove);
       box.removeEventListener("pointerdown", onPointerDown);
       box.removeEventListener("pointerup", onPointerUp);
