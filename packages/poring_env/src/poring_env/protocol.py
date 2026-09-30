@@ -18,9 +18,13 @@ import sys
 from enum import StrEnum
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator
 
 NO_FRAME = -1
+
+# Cap on one clipboard paste, in UTF-8 bytes (ADR-0004). Well inside one X ChangeProperty request
+# (Xvfb's max request is ~256 KiB), so the backend never needs the INCR protocol.
+PASTE_MAX_BYTES = 64 * 1024
 
 _MODEL_CONFIG = ConfigDict(
     extra="forbid",
@@ -113,6 +117,32 @@ class SetMode(Message):
     mode: Mode
 
 
+class ClipboardPaste(Message):
+    """Paste this text into the focused Windows window (ADR-0004: human-only, browser channel only).
+
+    The backend owns the X CLIPBOARD for the duration of one paste, sends Ctrl+V through the mux and
+    answers with a ``PasteResult``. The text itself is never logged."""
+
+    type: Literal["clipboard_paste"] = "clipboard_paste"
+    request_id: int = Field(ge=0, description="Echoed in the PasteResult.")
+    text: str = Field(
+        min_length=1,
+        max_length=PASTE_MAX_BYTES,
+        description=f"At most {PASTE_MAX_BYTES} bytes once UTF-8 encoded.",
+    )
+
+    @field_validator("text")
+    @classmethod
+    def _utf8_within_cap(cls, text: str) -> str:
+        try:
+            size = len(text.encode("utf-8"))
+        except UnicodeEncodeError:  # lone surrogate from a broken JS string
+            raise ValueError("text is not valid Unicode") from None
+        if size > PASTE_MAX_BYTES:
+            raise ValueError(f"text is {size} bytes as UTF-8, over the {PASTE_MAX_BYTES} cap")
+        return text
+
+
 class Ping(Message):
     """Round-trip probe; its ``t_mono_ns`` comes back verbatim as ``Pong.echo_t_mono_ns``."""
 
@@ -154,6 +184,35 @@ class Status(Message):
     )
     capture_fps: float = Field(ge=0.0)
     viewers: int = Field(ge=0)
+    clipboard_enabled: bool = Field(
+        default=False, description="Clipboard paste to Windows is available (ADR-0004)."
+    )
+    transfer_enabled: bool = Field(
+        default=False, description="The \\\\tsclient\\transfer file area is available (ADR-0004)."
+    )
+
+
+class PasteResult(Message):
+    """Outcome of one ClipboardPaste. ``reason`` is "ok" or why it was refused or failed."""
+
+    type: Literal["paste_result"] = "paste_result"
+    request_id: int = Field(ge=0)
+    ok: bool
+    reason: str = Field(max_length=64)
+    chars: int = Field(ge=0, description="Characters offered to Windows (0 when refused).")
+
+
+class ErrorReply(Message):
+    """A message from this sender was dropped: it failed validation or could not be read.
+
+    Never silent (ADR-0004 decision 4): the drop is also logged and counted in /health."""
+
+    type: Literal["error"] = "error"
+    channel: Literal["ws_input", "ws_stream", "agent"]
+    reason: str = Field(max_length=128, description="e.g. missing:key.t_mono_ns, json_invalid.")
+    ref_type: str | None = Field(
+        default=None, max_length=32, description="The dropped message's type, if readable."
+    )
 
 
 class Box(BaseModel):
@@ -207,17 +266,20 @@ class InputAck(Message):
 
 # --- channels -------------------------------------------------------------------------------------
 
+# ClipboardPaste is deliberately ONLY on the browser channel: the agent protocol has no clipboard or
+# file-transfer message at all (ADR-0004), and tests pin that.
 type BrowserToBackend = Annotated[
-    MouseMove | MouseButton | Wheel | Key | ReleaseAll | SetMode | Ping,
+    MouseMove | MouseButton | Wheel | Key | ReleaseAll | SetMode | Ping | ClipboardPaste,
     Field(discriminator="type"),
 ]
 type BackendToBrowser = Annotated[
-    FrameMeta | Status | Detections | Pong, Field(discriminator="type")
+    FrameMeta | Status | Detections | Pong | PasteResult | ErrorReply,
+    Field(discriminator="type"),
 ]
 type AgentToBackend = Annotated[
     AgentHello | AgentInput | Detections | Ping, Field(discriminator="type")
 ]
-type BackendToAgent = Annotated[Status | InputAck | Pong, Field(discriminator="type")]
+type BackendToAgent = Annotated[Status | InputAck | Pong | ErrorReply, Field(discriminator="type")]
 
 _BROWSER_TO_BACKEND: TypeAdapter[BrowserToBackend] = TypeAdapter(BrowserToBackend)
 _BACKEND_TO_BROWSER: TypeAdapter[BackendToBrowser] = TypeAdapter(BackendToBrowser)

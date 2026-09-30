@@ -122,6 +122,8 @@ EVDEV_TO_X11_OFFSET = 8
 
 CONTROL_CODES = frozenset({"ControlLeft", "ControlRight"})
 ALT_CODES = frozenset({"AltLeft", "AltRight"})
+SHIFT_CODES = frozenset({"ShiftLeft", "ShiftRight"})
+META_CODES = frozenset({"MetaLeft", "MetaRight"})
 
 
 class UnknownKeyCode(ValueError):

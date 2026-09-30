@@ -7,16 +7,20 @@ from pydantic import BaseModel, ValidationError
 
 from poring_env.protocol import (
     NO_FRAME,
+    PASTE_MAX_BYTES,
     AgentHello,
     AgentInput,
     Box,
+    ClipboardPaste,
     Detections,
+    ErrorReply,
     FrameMeta,
     InputAck,
     Key,
     Mode,
     MouseButton,
     MouseMove,
+    PasteResult,
     Ping,
     Pong,
     ReleaseAll,
@@ -43,6 +47,7 @@ BROWSER_TO_BACKEND: list[BaseModel] = [
     ReleaseAll(t_mono_ns=T),
     SetMode(t_mono_ns=T, mode=Mode.ASSIST),
     Ping(t_mono_ns=T),
+    ClipboardPaste(t_mono_ns=T, request_id=1, text="hello สวัสดี\nline 2"),
 ]
 BACKEND_TO_BROWSER: list[BaseModel] = [
     FrameMeta(
@@ -70,6 +75,8 @@ BACKEND_TO_BROWSER: list[BaseModel] = [
         boxes=[Box(x1=0.1, y1=0.2, x2=0.3, y2=0.4, cls="poring", conf=0.9)],
     ),
     Pong(t_mono_ns=T, echo_t_mono_ns=12345),
+    PasteResult(t_mono_ns=T, request_id=1, ok=True, reason="ok", chars=17),
+    ErrorReply(t_mono_ns=T, channel="ws_input", reason="missing:key.t_mono_ns", ref_type="key"),
 ]
 AGENT_TO_BACKEND: list[BaseModel] = [
     AgentHello(t_mono_ns=T, agent_id="vision", version="0.1.0"),
@@ -86,6 +93,7 @@ BACKEND_TO_AGENT: list[BaseModel] = [
     BACKEND_TO_BROWSER[1],
     InputAck(t_mono_ns=T, frame_id=9, accepted=1, dropped=2, reasons=["human_lease"]),
     Pong(t_mono_ns=T, echo_t_mono_ns=1),
+    ErrorReply(t_mono_ns=T, channel="agent", reason="json_invalid"),
 ]
 
 
@@ -153,3 +161,67 @@ def test_schema_discriminants_are_required() -> None:
     for name in ("MouseMove", "Key", "FrameMeta", "Status", "AgentInput"):
         assert "type" in defs[name]["required"], name
         assert "frame_id" in defs[name]["required"], name
+
+
+# --- ADR-0004: the clipboard is on the browser channel only ---------------------------------
+
+
+def _reachable_defs(schema: dict[str, Any], start: dict[str, Any]) -> set[str]:
+    """Every $defs name reachable from ``start`` through $ref."""
+    defs = schema["$defs"]
+    seen: set[str] = set()
+    stack: list[Any] = [start]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, dict):
+            ref = node.get("$ref")
+            if isinstance(ref, str) and ref.startswith("#/$defs/"):
+                name = ref.removeprefix("#/$defs/")
+                if name not in seen:
+                    seen.add(name)
+                    stack.append(defs[name])
+            stack.extend(node.values())
+        elif isinstance(node, list):
+            stack.extend(node)
+    return seen
+
+
+@pytest.mark.parametrize("channel", ["agent_to_backend", "input_event"])
+def test_agent_side_schema_cannot_reach_clipboard_or_transfer(channel: str) -> None:
+    schema = json_schema()
+    reachable = _reachable_defs(schema, schema["properties"][channel])
+    assert "AgentInput" in reachable or channel == "input_event"
+    assert not {"ClipboardPaste", "PasteResult"} & reachable, reachable
+    assert not any("clip" in name.lower() or "transfer" in name.lower() for name in reachable)
+
+
+def test_clipboard_paste_is_refused_on_every_agent_path() -> None:
+    raw = ClipboardPaste(t_mono_ns=T, request_id=1, text="x").model_dump_json()
+    with pytest.raises(ValidationError):
+        parse_agent_to_backend(raw)
+    with pytest.raises(ValidationError):
+        parse_input_event(raw)
+    batch = {"type": "agent_input", "t_mono_ns": T, "frame_id": 1, "t_capture_ns": T}
+    with pytest.raises(ValidationError):
+        parse_agent_to_backend(json.dumps({**batch, "events": [json.loads(raw)]}))
+
+
+def test_paste_cap_counts_utf8_bytes_not_characters() -> None:
+    thai = "ส"  # 3 bytes in UTF-8
+    fits = thai * (PASTE_MAX_BYTES // 3)
+    assert len(fits.encode()) <= PASTE_MAX_BYTES
+    ClipboardPaste(t_mono_ns=T, request_id=0, text=fits)
+    with pytest.raises(ValidationError):
+        ClipboardPaste(t_mono_ns=T, request_id=0, text=fits + thai)
+    ClipboardPaste(t_mono_ns=T, request_id=0, text="a" * PASTE_MAX_BYTES)
+    with pytest.raises(ValidationError):
+        ClipboardPaste(t_mono_ns=T, request_id=0, text="a" * (PASTE_MAX_BYTES + 1))
+
+
+def test_paste_rejects_empty_text_and_lone_surrogates() -> None:
+    with pytest.raises(ValidationError):
+        ClipboardPaste(t_mono_ns=T, request_id=0, text="")
+    with pytest.raises(ValidationError):  # what JSON.stringify emits for a broken JS string
+        parse_browser_to_backend(
+            '{"type":"clipboard_paste","t_mono_ns":1,"frame_id":-1,"request_id":0,"text":"a\\ud800"}'
+        )

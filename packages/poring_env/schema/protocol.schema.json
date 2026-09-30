@@ -112,6 +112,7 @@
     "BackendToAgent": {
       "discriminator": {
         "mapping": {
+          "error": "#/$defs/ErrorReply",
           "input_ack": "#/$defs/InputAck",
           "pong": "#/$defs/Pong",
           "status": "#/$defs/Status"
@@ -127,6 +128,9 @@
         },
         {
           "$ref": "#/$defs/Pong"
+        },
+        {
+          "$ref": "#/$defs/ErrorReply"
         }
       ]
     },
@@ -134,7 +138,9 @@
       "discriminator": {
         "mapping": {
           "detections": "#/$defs/Detections",
+          "error": "#/$defs/ErrorReply",
           "frame": "#/$defs/FrameMeta",
+          "paste_result": "#/$defs/PasteResult",
           "pong": "#/$defs/Pong",
           "status": "#/$defs/Status"
         },
@@ -152,6 +158,12 @@
         },
         {
           "$ref": "#/$defs/Pong"
+        },
+        {
+          "$ref": "#/$defs/PasteResult"
+        },
+        {
+          "$ref": "#/$defs/ErrorReply"
         }
       ]
     },
@@ -204,6 +216,7 @@
     "BrowserToBackend": {
       "discriminator": {
         "mapping": {
+          "clipboard_paste": "#/$defs/ClipboardPaste",
           "key": "#/$defs/Key",
           "mouse_button": "#/$defs/MouseButton",
           "mouse_move": "#/$defs/MouseMove",
@@ -235,8 +248,53 @@
         },
         {
           "$ref": "#/$defs/Ping"
+        },
+        {
+          "$ref": "#/$defs/ClipboardPaste"
         }
       ]
+    },
+    "ClipboardPaste": {
+      "additionalProperties": false,
+      "description": "Paste this text into the focused Windows window (ADR-0004: human-only, browser channel only).\n\nThe backend owns the X CLIPBOARD for the duration of one paste, sends Ctrl+V through the mux and\nanswers with a ``PasteResult``. The text itself is never logged.",
+      "properties": {
+        "frame_id": {
+          "default": -1,
+          "description": "Frame this message refers to or was produced from; -1 means none.",
+          "minimum": -1,
+          "type": "integer"
+        },
+        "request_id": {
+          "description": "Echoed in the PasteResult.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "t_mono_ns": {
+          "description": "Sender's monotonic clock, ns (see module docstring).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "text": {
+          "description": "At most 65536 bytes once UTF-8 encoded.",
+          "maxLength": 65536,
+          "minLength": 1,
+          "type": "string"
+        },
+        "type": {
+          "const": "clipboard_paste",
+          "default": "clipboard_paste",
+          "type": "string"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "frame_id",
+        "type",
+        "request_id",
+        "text"
+      ],
+      "title": "ClipboardPaste",
+      "type": "object"
     },
     "Detections": {
       "additionalProperties": false,
@@ -278,6 +336,64 @@
         "boxes"
       ],
       "title": "Detections",
+      "type": "object"
+    },
+    "ErrorReply": {
+      "additionalProperties": false,
+      "description": "A message from this sender was dropped: it failed validation or could not be read.\n\nNever silent (ADR-0004 decision 4): the drop is also logged and counted in /health.",
+      "properties": {
+        "channel": {
+          "enum": [
+            "ws_input",
+            "ws_stream",
+            "agent"
+          ],
+          "type": "string"
+        },
+        "frame_id": {
+          "default": -1,
+          "description": "Frame this message refers to or was produced from; -1 means none.",
+          "minimum": -1,
+          "type": "integer"
+        },
+        "reason": {
+          "description": "e.g. missing:key.t_mono_ns, json_invalid.",
+          "maxLength": 128,
+          "type": "string"
+        },
+        "ref_type": {
+          "anyOf": [
+            {
+              "maxLength": 32,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The dropped message's type, if readable."
+        },
+        "t_mono_ns": {
+          "description": "Sender's monotonic clock, ns (see module docstring).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "error",
+          "default": "error",
+          "type": "string"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "frame_id",
+        "type",
+        "channel",
+        "reason",
+        "ref_type"
+      ],
+      "title": "ErrorReply",
       "type": "object"
     },
     "FrameMeta": {
@@ -578,6 +694,55 @@
       "title": "MouseMove",
       "type": "object"
     },
+    "PasteResult": {
+      "additionalProperties": false,
+      "description": "Outcome of one ClipboardPaste. ``reason`` is \"ok\" or why it was refused or failed.",
+      "properties": {
+        "chars": {
+          "description": "Characters offered to Windows (0 when refused).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "frame_id": {
+          "default": -1,
+          "description": "Frame this message refers to or was produced from; -1 means none.",
+          "minimum": -1,
+          "type": "integer"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "reason": {
+          "maxLength": 64,
+          "type": "string"
+        },
+        "request_id": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "t_mono_ns": {
+          "description": "Sender's monotonic clock, ns (see module docstring).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "paste_result",
+          "default": "paste_result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "frame_id",
+        "type",
+        "request_id",
+        "ok",
+        "reason",
+        "chars"
+      ],
+      "title": "PasteResult",
+      "type": "object"
+    },
     "Ping": {
       "additionalProperties": false,
       "description": "Round-trip probe; its ``t_mono_ns`` comes back verbatim as ``Pong.echo_t_mono_ns``.",
@@ -714,6 +879,11 @@
           "minimum": 0.0,
           "type": "number"
         },
+        "clipboard_enabled": {
+          "default": false,
+          "description": "Clipboard paste to Windows is available (ADR-0004).",
+          "type": "boolean"
+        },
         "frame_id": {
           "default": -1,
           "description": "Frame this message refers to or was produced from; -1 means none.",
@@ -752,6 +922,11 @@
           "minimum": 0,
           "type": "integer"
         },
+        "transfer_enabled": {
+          "default": false,
+          "description": "The \\\\tsclient\\transfer file area is available (ADR-0004).",
+          "type": "boolean"
+        },
         "type": {
           "const": "status",
           "default": "status",
@@ -771,7 +946,9 @@
         "bot_connected",
         "rdp_window_present",
         "capture_fps",
-        "viewers"
+        "viewers",
+        "clipboard_enabled",
+        "transfer_enabled"
       ],
       "title": "Status",
       "type": "object"

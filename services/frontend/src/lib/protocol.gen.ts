@@ -14,7 +14,7 @@ export type InputEvent = MouseMove | MouseButton | Wheel | Key | ReleaseAll;
  * This interface was referenced by `PoringProtocol`'s JSON-Schema
  * via the `definition` "BackendToAgent".
  */
-export type BackendToAgent = Status | InputAck | Pong;
+export type BackendToAgent = Status | InputAck | Pong | ErrorReply;
 /**
  * Input-mux mode (ADR-0002). The backend always boots in HUMAN.
  *
@@ -26,12 +26,12 @@ export type Mode = "HUMAN" | "BOT" | "ASSIST";
  * This interface was referenced by `PoringProtocol`'s JSON-Schema
  * via the `definition` "BackendToBrowser".
  */
-export type BackendToBrowser = FrameMeta | Status | Detections | Pong;
+export type BackendToBrowser = FrameMeta | Status | Detections | Pong | PasteResult | ErrorReply;
 /**
  * This interface was referenced by `PoringProtocol`'s JSON-Schema
  * via the `definition` "BrowserToBackend".
  */
-export type BrowserToBackend = MouseMove | MouseButton | Wheel | Key | ReleaseAll | SetMode | Ping;
+export type BrowserToBackend = MouseMove | MouseButton | Wheel | Key | ReleaseAll | SetMode | Ping | ClipboardPaste;
 
 /**
  * Schema root that pulls every channel into one document for json-schema-to-typescript.
@@ -245,6 +245,10 @@ export interface Status {
   bot_connected: boolean;
   capture_fps: number;
   /**
+   * Clipboard paste to Windows is available (ADR-0004).
+   */
+  clipboard_enabled: boolean;
+  /**
    * Frame this message refers to or was produced from; -1 means none.
    */
   frame_id: number;
@@ -261,6 +265,10 @@ export interface Status {
    * Sender's monotonic clock, ns (see module docstring).
    */
   t_mono_ns: number;
+  /**
+   * The \\tsclient\transfer file area is available (ADR-0004).
+   */
+  transfer_enabled: boolean;
   type: "status";
   viewers: number;
 }
@@ -303,6 +311,34 @@ export interface Pong {
   type: "pong";
 }
 /**
+ * A message from this sender was dropped: it failed validation or could not be read.
+ *
+ * Never silent (ADR-0004 decision 4): the drop is also logged and counted in /health.
+ *
+ * This interface was referenced by `PoringProtocol`'s JSON-Schema
+ * via the `definition` "ErrorReply".
+ */
+export interface ErrorReply {
+  channel: "ws_input" | "ws_stream" | "agent";
+  /**
+   * Frame this message refers to or was produced from; -1 means none.
+   */
+  frame_id: number;
+  /**
+   * e.g. missing:key.t_mono_ns, json_invalid.
+   */
+  reason: string;
+  /**
+   * The dropped message's type, if readable.
+   */
+  ref_type: string | null;
+  /**
+   * Sender's monotonic clock, ns (see module docstring).
+   */
+  t_mono_ns: number;
+  type: "error";
+}
+/**
  * Sent immediately before exactly one binary WebSocket message holding this frame's JPEG.
  *
  * This interface was referenced by `PoringProtocol`'s JSON-Schema
@@ -325,6 +361,30 @@ export interface FrameMeta {
   width: number;
 }
 /**
+ * Outcome of one ClipboardPaste. ``reason`` is "ok" or why it was refused or failed.
+ *
+ * This interface was referenced by `PoringProtocol`'s JSON-Schema
+ * via the `definition` "PasteResult".
+ */
+export interface PasteResult {
+  /**
+   * Characters offered to Windows (0 when refused).
+   */
+  chars: number;
+  /**
+   * Frame this message refers to or was produced from; -1 means none.
+   */
+  frame_id: number;
+  ok: boolean;
+  reason: string;
+  request_id: number;
+  /**
+   * Sender's monotonic clock, ns (see module docstring).
+   */
+  t_mono_ns: number;
+  type: "paste_result";
+}
+/**
  * Switch the input mux (HUMAN / BOT / ASSIST).
  *
  * This interface was referenced by `PoringProtocol`'s JSON-Schema
@@ -341,4 +401,32 @@ export interface SetMode {
    */
   t_mono_ns: number;
   type: "set_mode";
+}
+/**
+ * Paste this text into the focused Windows window (ADR-0004: human-only, browser channel only).
+ *
+ * The backend owns the X CLIPBOARD for the duration of one paste, sends Ctrl+V through the mux and
+ * answers with a ``PasteResult``. The text itself is never logged.
+ *
+ * This interface was referenced by `PoringProtocol`'s JSON-Schema
+ * via the `definition` "ClipboardPaste".
+ */
+export interface ClipboardPaste {
+  /**
+   * Frame this message refers to or was produced from; -1 means none.
+   */
+  frame_id: number;
+  /**
+   * Echoed in the PasteResult.
+   */
+  request_id: number;
+  /**
+   * Sender's monotonic clock, ns (see module docstring).
+   */
+  t_mono_ns: number;
+  /**
+   * At most 65536 bytes once UTF-8 encoded.
+   */
+  text: string;
+  type: "clipboard_paste";
 }
