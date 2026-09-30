@@ -13,7 +13,7 @@ next_action: Batt picks the option set (recommended a + c1 + c2 + c3); implement
 # ADR-0005: The vision container must not have full X access
 
 - **Status:** PROPOSED (2026-09-30). **Blocks roadmap Phase 4.** Nothing is implemented yet.
-- **Tracked in:** GitHub issue (see "Tracking" below).
+- **Tracked in:** [issue #1](https://github.com/lumduan/poring-lab/issues/1) (`blocks-phase-4`, `security`).
 - **Related:**
   - [ADR-0002 input mux](0002-input-mux.md): "single input owner".
   - [ADR-0003 env abstraction](0003-env-abstraction.md): `Env.grab()`.
@@ -123,4 +123,4 @@ It goes in `scripts/` with the implementation, and is part of Phase 4's entry ga
 
 ## Tracking
 
-GitHub issue, labelled `blocks-phase-4`; the link is added once the issue exists.
+[lumduan/poring-lab#1](https://github.com/lumduan/poring-lab/issues/1), labelled `blocks-phase-4` and `security`.

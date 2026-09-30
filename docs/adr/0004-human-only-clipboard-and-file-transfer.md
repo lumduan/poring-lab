@@ -13,6 +13,14 @@ next_action: Batt's manual check from the MacBook (paste ASCII + Thai, upload an
 # ADR-0004: Clipboard and file transfer are human-only tools
 
 - **Status:** accepted by Batt, 2026-09-30. T1 + F1 are implemented; F2 stays off; T2 is rejected.
+  **Deployed 2026-09-30 11:34 ICT** (dev overlay; one combined desktop + backend recreate). Live-verified
+  the same day, through the real feature path:
+  - a multi-line ASCII + Thai paste into Notepad (53 characters, exact);
+  - that note saved by Windows to `\\tsclient\transfer` and downloaded byte-identical (CRLF);
+  - a Thai-named upload visible in Windows Explorer;
+  - the watchdog clearing a foreign CLIPBOARD owner;
+  - no Origin → 403, and `:8001` → 404;
+  - the pasted text found in no log.
 - **Code:**
   - `services/backend/src/poring_backend/clipboard.py`: the X CLIPBOARD owner and its watchdog.
   - `routes_transfer.py`: the file routes.
