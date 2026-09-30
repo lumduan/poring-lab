@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: Finish the RDP codec A/B and the browser-side (L5) numbers with Batt's console tab open; run Batt's glass-to-glass A/B against Windows App.
+next_action: With a VISIBLE console tab, A/B q70 + paint=raf + move_interval_ms=8 via /debug/stream-tuning; run Batt's glass-to-glass A/B vs Windows App; RO render rate (probe passive) while RO runs.
 ---
 
 # Phase 0: web-console latency, measured and reduced
@@ -64,9 +64,100 @@ render cadence).
   `RDP_FRAME_ACK`, `RDP_GDI`) before each connect. A variant = write it, then TERM xfreerdp3; the
   loop reconnects in ~2 s.
 
-## Results
+## Results (2026-09-30)
 
-*(Filled in by the 2026-09-30 runs; see the report in the session log.)*
+**Setup.** Windows desktop, a maximised Notepad with 28 lines. The toggle is `Ctrl+A` (select all)
+then `→` (deselect); the watch box is inside the text; N = 60 per configuration (40 for RDP variants).
+p50/p95 in ms, host clock. RO had been closed by Batt (13:17), so the in-game cursor test and the RO
+render rate were not run.
+
+### Per change (one at a time; each row keeps the best so far)
+
+| # | Configuration | L1 inject | L2 RDP leg | L3 capture wait | encode | send | **key → frame sent** | Verdict |
+|---|---|---|---|---|---|---|---|---|
+| 0 | fixed 30 fps, q80, paint on decode (**before**) | 4.0 / 8.7 | 72.4 / 86.7 | 23.5 / 31.3 | 12.5 / 17.3 | 1.4 / 2.0 | **109.4 / 135.4** | baseline |
+| 1 | **damage capture, max 60 fps** | 3.2 / 5.7 | 69.5 / 88.8 | **4.8 / 22.0** | 12.8 / 16.7 | 0.7 / 0.9 | **96.9 / 114.2** | **kept**: −12.5 / −21.2 |
+| 1′ | same, after R2 (the new defaults) | 3.4 / 5.2 | 66.5 / 86.4 | 5.0 / 18.3 | 12.5 / 18.6 | 1.4 / 2.8 | **91.3 / 110.1** | confirms |
+| 2 | + JPEG q70 | 3.3 / 5.5 | 65.9 / 88.0 | 5.1 / 19.5 | 12.1 / 18.8 | – | 89.1 / 121.7 | not kept |
+| 3 | + JPEG q60 | 3.1 / 4.5 | 69.6 / 93.0 | 5.0 / 19.9 | 12.4 / 17.1 | – | 92.8 / 126.9 | not kept |
+| 4 | q70 + paint on rAF | – | 66.6 / 95.5 | 5.0 / 20.0 | 12.4 / 15.8 | – | 91.4 / 119.1 | not kept |
+| 5 | move interval 8 / 4 ms | – | – | – | – | – | – | **not measured** |
+
+Notes on the rows:
+- **Rows 2–4 did not change the server side** beyond the RDP leg's noise. Their benefit is on the
+  network and in the browser, which could not be measured then: Safari was a background tab, and
+  hidden tabs stop decoding.
+- **Row 5** needs real mouse use in a visible tab.
+
+**Browser side, in one run with Safari visible** (row 1′ settings; offset uncertainty 2–9.5 ms in
+those minutes):
+
+| Browser segment | p50 | p95 |
+|---|---|---|
+| sent → received (Wi-Fi/LAN) | 14.9 | **100.1** |
+| Safari decode | 13.5 | 47.5 |
+| decode → painted | 0.0 | 1.0 |
+| **key → painted in Safari** | **123.1** | **246.5** |
+
+Browser L1, from Batt's own mouse moves (n = 5, indicative only): **30.8 / 73.4 ms**. That
+includes the one-per-frame coalescing that the `move_interval_ms` knob removes.
+
+### RDP leg (L2) per variant
+
+N = 40. All runs were on fixed capture, so the capture mode doesn't differ between them.
+
+| Variant | L2 p50 / p95 |
+|---|---|
+| autodetect (default, N = 60) | 73.8 / 88.9 |
+| `/network:lan` | 70.7 / 88.9 |
+| `/gfx:progressive` | 73.8 / 86.4 |
+| `/gfx:RFX` | 75.7 / 92.9 |
+| `/gfx:AVC420` | 74.6 / 89.3 |
+| `/gfx:AVC444` | 74.5 / 95.3 |
+| legacy `-gfx /bpp:32` | 72.8 / 89.2 |
+| `frame-ack:off` | 71.5 / 84.3 |
+| `/gdi:hw` | 68.0 / 86.0 |
+| default again | 75.3 / 98.6 |
+
+- **Caveat:** the progressive through legacy variants also carried `network=lan`, because the first
+  version of the override loader let it stick (fixed since).
+- **Run-to-run noise is about ±4 ms**; the same default measured 73.8 and then 75.3. No variant is
+  meaningfully better, so the defaults stay.
+- The distribution is a **~58 ms floor plus 0–33 ms of jitter** (58–90 ms). That is the Windows side:
+  input → app redraw → DWM → the RDP server's ~30 fps graphics pacing. Windows App pays the same
+  cost.
+
+**JPEG at 1280×720, live frames** (encode is noisy on a loaded host):
+
+| Quality | Frame size | Encode p50 |
+|---|---|---|
+| q60 | 173 KiB | 7.7 ms |
+| q70 | 204 KiB | 8.1 ms |
+| q80 | 252 KiB | 11.1 ms |
+| q90 | 360 KiB | 9.0 ms |
+
+At 30 fps, q80 is about **60 Mbit/s**. That makes the network tail above (p95 100 ms) the next
+thing to attack.
+
+### Where the time goes now (p50, key → Safari paint ≈ 123 ms)
+
+```
+L1 3 | L2 RDP leg (Windows side) 66 | L3 5 | encode 12 | send 1 | net 15 | decode 14 | paint 0
+```
+
+Windows App pays the ~66 ms L2 too, since it is the server's. Our extra is roughly
+**L3 + encode + net + decode ≈ 45 ms at p50**, and far more at p95 (net and decode tails). So the
+next steps are **smaller frames** and **no queueing**:
+- q70, measured with a visible tab;
+- frame-ack flow control (rank 1 below);
+- H.264 (rank 3).
+
+Not measured this run, with how to measure it:
+
+| Item | How |
+|---|---|
+| RO render rate | `latency_probe.py passive` while RO runs |
+| Browser-side effect of q70 / rAF paint / move interval | the knobs + `/health` `latency` with a visible tab |
 
 ## Rebuild-dependent options (not implemented), ranked
 

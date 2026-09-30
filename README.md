@@ -121,6 +121,16 @@ refused. It defaults to `http://${HOST_LAN_IP}:3000`. Stream rate and quality ar
 `JPEG_QUALITY` (80). The stream is sent without WebSocket compression: JPEG doesn't compress, and
 deflate cost 8 fps on the event loop.
 
+**Latency (Phase 0, [docs/phase0-latency.md](docs/phase0-latency.md)).** The stream grabs when the
+screen changes (`STREAM_CAPTURE=damage`, at most `STREAM_MAX_FPS=60`); `fixed` restores the old
+`STREAM_FPS` grid. `/health` has a `latency` block:
+- capture/encode/send;
+- the open tab's network, decode and paint times, with the clock-offset uncertainty.
+
+`scripts/latency_probe.py` (inside the backend container) measures the segments and switches the
+knobs live through the loopback-only `/debug/stream-tuning`: `capture`, `max_fps`, `jpeg_quality`,
+and the console's `paint` and `move_interval_ms`.
+
 ## Clipboard and file transfer (human-only, ADR-0004)
 
 Both are **off by default**. For this lab `.env` sets:
