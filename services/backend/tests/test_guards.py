@@ -253,6 +253,12 @@ def test_no_override_file_means_todays_arguments(tmp_path: Path) -> None:
     assert "/gfx:frame-ack:off" in args
 
 
+def test_avc420only_selects_a_single_h264_stream_and_keeps_gfx(tmp_path: Path) -> None:
+    args, log = rdp_override_args(tmp_path, "RDP_GFX=AVC420only\nRDP_FRAME_ACK=off\n")
+    assert "/gfx:AVC420:on,AVC444:off,progressive:off,RFX:off,frame-ack:off" in args
+    assert "override ignored" not in log
+
+
 def test_a_missing_override_key_means_the_default_not_the_previous_value(tmp_path: Path) -> None:
     """Regression (2026-09-30): an override survived later reconnects (network=lan stuck)."""
     override = tmp_path / "rdp-override"

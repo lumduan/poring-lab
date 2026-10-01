@@ -74,7 +74,7 @@ drive_args() {
 # Phase 0 A/B of the RDP leg (docs/phase0-latency.md) without restarting the container: before each
 # connect, an optional override file (the desktop's own /dev/shm, RAM) may set these keywords. Only
 # KEY=VALUE lines with whitelisted keys and values are honoured; the file is never executed.
-#   RDP_GFX=""|off|progressive|AVC444|AVC420|RFX  RDP_NETWORK=auto|lan  RDP_FRAME_ACK=on|off
+#   RDP_GFX=""|off|progressive|AVC444|AVC420|AVC420only|RFX  RDP_NETWORK=auto|lan  RDP_FRAME_ACK=on|off
 #   RDP_GDI=sw|hw
 # A variant = write the file, then TERM xfreerdp3: the loop reconnects with it a few seconds later.
 load_overrides() {
@@ -91,7 +91,8 @@ load_overrides() {
     fi
     key="${BASH_REMATCH[1]}" value="${BASH_REMATCH[2]}"
     case "${key}=${value}" in
-      RDP_GFX= | RDP_GFX=off | RDP_GFX=progressive | RDP_GFX=AVC444 | RDP_GFX=AVC420 | RDP_GFX=RFX)
+      RDP_GFX= | RDP_GFX=off | RDP_GFX=progressive | RDP_GFX=AVC444 | RDP_GFX=AVC420 | \
+        RDP_GFX=AVC420only | RDP_GFX=RFX)
         RDP_GFX="${value}" ;;
       RDP_NETWORK=auto | RDP_NETWORK=lan) RDP_NETWORK="${value}" ;;
       RDP_FRAME_ACK=on | RDP_FRAME_ACK=off) RDP_FRAME_ACK="${value}" ;;
@@ -130,6 +131,10 @@ build_args() {
     "") [[ -n "${ack}" ]] && printf '%s\n' "/gfx:${ack}" ;;
     off) printf '%s\n' -gfx /bpp:32 ;;
     progressive | AVC444 | AVC420 | RFX) printf '%s\n' "/gfx:${RDP_GFX}${ack:+,${ack}}" ;;
+    # A single H.264 4:2:0 stream with GFX kept: each codec toggled explicitly (FreeRDP 3.15
+    # /gfx syntax). A bare /gfx:AVC420 was noted to drop the RDP10 caps (docs/h264-plan.md).
+    AVC420only)
+      printf '%s\n' "/gfx:AVC420:on,AVC444:off,progressive:off,RFX:off${ack:+,${ack}}" ;;
     *) log "unknown RDP_GFX='${RDP_GFX}', using autodetect" ;;
   esac
   [[ "${RDP_NETWORK:-auto}" == lan ]] && printf '%s\n' /network:lan
