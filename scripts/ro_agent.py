@@ -8,10 +8,12 @@ Rules it enforces (CLAUDE.md, ADR-0002/0006):
     stops at once (exit 3) on any refusal -- it never fights the human;
   * credentials come from .env and are typed as SENSITIVE batches (the input log keeps only counts
     and timing); they are never printed, logged or passed on a command line;
-  * before typing: the expected screen must be showing (a signature of the client area, or the
-    Run dialog), and before credentials the keyboard layout must be ENG (tray signature);
+  * before typing: the target must be verified in front -- the client by its active title bar,
+    a dialog by its signature, a PowerShell console by its tab template; secrets are re-verified
+    every 4 characters, and the keyboard layout must be ENG (tray signature);
   * in-game input only while OUR rAthena shows the account online=1;
-  * Windows commands go through the Run dialog as one-liners and touch only PoringLab.exe (the
+  * no Run-dialog commands (Defender's ClickFix detection, 2026-10-01): the client is launched
+    from the desktop shortcut and closed with Alt+F4; it touches PoringLab.exe only (the
     community-server client is never touched).
 
     ro_agent.py status
@@ -54,8 +56,8 @@ BACKEND = "poring-lab-backend-1"
 DB = "poring-lab-db-1"
 DESKTOP_W, DESKTOP_H = 1280, 800
 HOLD_S = 0.05  # 50 ms holds: 20 ms registers 6/6 in the client (docs/client/rathena-client.md)
+SHORTCUT_BOX = (80, 106, 64, 84)  # the "Ragnarok Offline" desktop icon + label
 TRAY_LANG = (1098, 764, 36, 22)  # the ENG / ไทย indicator, left of the clock (1280x800 desktop)
-RUN_DIALOG = (16, 537, 396, 90)  # Win+R dialog title + text (constant), bottom-left
 CLIENT = r"C:\RO-rAthena\client"
 EXE = "PoringLab"  # the rAthena copy ONLY (ADR-0006: the community client is never touched)
 SIG_SCALE = 8
@@ -220,8 +222,8 @@ def region_for(state: str) -> tuple[int, int, int, int]:
     client origin saved at calibration (a dialog, not the animated background)."""
     if state == "eng":
         return TRAY_LANG
-    if state == "run_dialog":
-        return RUN_DIALOG
+    if state in ("shortcut_icon", "shortcut_icon_sel"):
+        return SHORTCUT_BOX
     meta = signature_path(state).with_suffix(".json")
     x, y, w, h = game_region()
     if meta.exists():
@@ -457,29 +459,51 @@ def centre_offset(dx: int, dy: int) -> tuple[int, int]:
 
 # --- Windows one-liners through the Run dialog ----------------------------------------------------
 
-CLOSE_CMD = (
-    f'powershell -NoP -W Hidden -C "$p=Get-Process {EXE} -EA 0;if($p){{$p.CloseMainWindow()'
-    '|Out-Null;if(!$p.WaitForExit(10000)){$p.Kill()}}"'
-)
-LAUNCH_CMD = f'cmd /c "set __COMPAT_LAYER=RunAsInvoker&& start "" /D {CLIENT} {CLIENT}\\{EXE}.exe"'
+
+# --- an existing PowerShell console (never the Run dialog: Defender's ClickFix detection) -------
 
 
-def run_dialog(agent: Agent, screen: Screen, command: str) -> None:
-    """Win+R, verify the Run dialog is up (foreground check), type, Enter."""
-    agent.chord("MetaLeft", "KeyR")
-    end = time.monotonic() + 5
-    while not is_state(screen, "run_dialog"):
-        if time.monotonic() > end:
-            to_png(screen.full(), SHOTS / "run_dialog_missing.png")
-            raise Stop("the Run dialog did not appear: nothing typed")
-        time.sleep(0.2)
-    time.sleep(0.3)
-    agent.chord("ControlLeft", "KeyA")  # replace whatever the dialog remembered
-    agent.type_text(command)
-    agent.keys("Enter")
+def find_console(screen: Screen) -> tuple[int, int, float] | None:
+    """Locate an ACTIVE Windows PowerShell tab anywhere on screen by template (its icon + title),
+    anchored on the icon's blue pixels. Returns (x, y, error) of the template origin, or None.
+    A dark heuristic is not enough: the black wallpaper passed one (2026-10-01, Enter landed on
+    the desktop and launched CPU-Z's UAC prompt -- declined)."""
+    path = STATE_DIR / "signatures" / "ps_tab_template.npy"
+    if not path.exists():
+        raise Stop("no PowerShell tab template (data/ro_agent/signatures/ps_tab_template.npy)")
+    tmpl = np.load(path).astype(np.int16)  # RGB
+    th, tw = tmpl.shape[:2]
+    blue_t = np.argwhere((tmpl[..., 2] > 150) & (tmpl[..., 0] < 110))
+    ay, ax = (int(v) for v in blue_t[0])
+    rgb = screen.full()[:, :, 2::-1].astype(np.int16)
+    h, w = rgb.shape[:2]
+    anchor = tmpl[ay, ax]
+    cand = np.argwhere(np.abs(rgb - anchor).max(axis=2) <= 12)
+    best: tuple[int, int, float] | None = None
+    for y, x in cand[:5000]:
+        oy, ox = int(y) - ay, int(x) - ax
+        if oy < 0 or ox < 0 or oy + th > h or ox + tw > w:
+            continue
+        err = float(np.abs(rgb[oy : oy + th, ox : ox + tw] - tmpl).mean())
+        if best is None or err < best[2]:
+            best = (ox, oy, err)
+    return best if best is not None and best[2] < 10 else None
 
 
-# --- commands -------------------------------------------------------------------------------------
+def console_type(agent: Agent, screen: Screen, command: str) -> None:
+    """Focus the PowerShell console by clicking its own tab, re-verify, then type (non-secret
+    commands only; never credentials)."""
+    found = find_console(screen)
+    if found is None:
+        to_png(screen.full(), SHOTS / "console_missing.png")
+        raise Stop("no active PowerShell console on screen: nothing typed")
+    ox, oy, _ = found
+    agent.click(ox + 75, oy + 9)  # its tab: focuses that window
+    time.sleep(0.4)
+    again = find_console(screen)
+    if again is None or abs(again[0] - ox) > 2 or abs(again[1] - oy) > 2:
+        raise Stop("the console moved or lost focus after the click: nothing typed")
+    agent.type_text(command + "\n")
 
 
 def require_eng(screen: Screen) -> None:
@@ -488,12 +512,19 @@ def require_eng(screen: Screen) -> None:
         raise Stop("keyboard layout is not ENG (tray): no credentials typed")
 
 
-def activate_client(agent: Agent) -> None:
-    """Click the client's own title bar: it becomes the foreground window (a freshly launched
-    or uncovered window takes its first click as activation)."""
+def activate_client(agent: Agent, screen: Screen) -> None:
+    """Click the client's own title bar, then VERIFY it is the foreground window (its active
+    title-bar signature; inactive scores ~30). Another window can cover the title bar: on
+    2026-10-01 a console did, the click focused the console, and a camera rotation's
+    right-clicks pasted the Windows clipboard onto its prompt (not executed; cleared)."""
     x, y, w, _ = game_region()
     agent.click(x + w // 2, y - 15)
-    time.sleep(0.3)
+    time.sleep(0.4)
+    if signature_path("client_title_active").exists() and not is_state(
+        screen, "client_title_active"
+    ):
+        to_png(screen.full(), SHOTS / "client_not_front.png")
+        raise Stop("the client is not the foreground window after activation: stopped")
 
 
 def login_guard(screen: Screen) -> Callable[[], None]:
@@ -521,7 +552,7 @@ def to_char_select(agent: Agent, screen: Screen, which: str) -> None:
                 break
         else:
             raise Stop("the service-select OK did not register after 3 clicks")
-    activate_client(agent)
+    activate_client(agent, screen)
     guard = login_guard(screen)
     guard()
     # The ID field may hold a remembered id ("Save ID"): click it, go to the end, clear it.
@@ -539,10 +570,6 @@ def to_char_select(agent: Agent, screen: Screen, which: str) -> None:
     # (2026-10-01, both agent accounts; a human clicking logged in fine).
     agent.click(*layout("login_button"))
     log(f"{which} credentials sent (sensitive)")
-    if not signature_path("server_select").exists():  # calibrating: look, don't wait
-        time.sleep(2.5)
-        log(f"post-login screen saved: {to_png(screen.full(), SHOTS / 'post_login.png')}")
-        return
     # Choose the server AT ONCE: the client gives up ("Failed to Connect to Server", without even
     # dialling the char server) when no server is chosen within ~1-2 s of the list arriving.
     # A human picking it in 1.3 s worked; the agent waiting 2-19 s failed 8/8 (2026-10-01).
@@ -620,6 +647,14 @@ LAYOUTS: dict[tuple[int, int], dict[str, tuple[int, int]]] = {
         "char_name": (606, 358),
         "char_create": (798, 476),
     },
+    # 800x664 window (2026-10-01): client 784x625 at (248,99), fully above the taskbar.
+    (784, 625): {
+        "service_ok": (466, 495),
+        "id": (349, 439),
+        "password": (349, 461),
+        "login_button": (492, 463),
+        "server_ok": (466, 495),
+    },
 }
 
 
@@ -641,6 +676,16 @@ def account_chars(which: str) -> list[str]:
     return [r[0] for r in rows]
 
 
+def chat_line(agent: Agent, screen: Screen, text: str) -> None:
+    """Open the chat input if it is closed (Enter), type, send (Enter)."""
+    if not is_state(screen, "chat_open"):
+        agent.keys("Enter")
+        time.sleep(1.0)
+        if not is_state(screen, "chat_open"):
+            raise Stop("the chat input did not open: nothing typed")
+    agent.type_text(text + "\n")
+
+
 def gm(agent: Agent, screen: Screen, command: str) -> None:
     if not command.startswith("@"):
         raise Stop("GM commands start with @")
@@ -653,7 +698,7 @@ def gm(agent: Agent, screen: Screen, command: str) -> None:
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     with (STATE_DIR / "gm.jsonl").open("a") as fh:
         fh.write(json.dumps(record) + "\n")
-    agent.type_text(command + "\n")
+    chat_line(agent, screen, command)
     log(f"gm: {command}")
 
 
@@ -678,15 +723,44 @@ def say(agent: Agent, screen: Screen, which: str, text: str, thai_keys: bool) ->
     log(f"said ({'thai keys' if thai_keys else 'ascii'}) as {which}")
 
 
-def close_client(agent: Agent, screen: Screen) -> None:
-    run_dialog(agent, screen, CLOSE_CMD)
-    log("close requested (CloseMainWindow, kill after 10 s)")
-    time.sleep(12)
+SHORTCUT = (112, 140)  # the "Ragnarok Offline" desktop shortcut (C:\RO-rAthena\PoringLab.cmd)
+
+
+def close_client(agent: Agent, screen: Screen) -> None:  # noqa: ARG001
+    """Alt+F4 on the client itself (a lost-D3D client still takes window messages); confirm the
+    quit prompt if it shows. No PowerShell: Run-dialog PowerShell trips Defender's ClickFix
+    detection (2026-10-01, severity 5, the processes were killed)."""
+    activate_client(agent, screen)
+    # Paced: an Alt+F4 injected as one instantaneous chord is ignored; 60 ms steps close it at once.
+    for code, action in (("AltLeft", "down"), ("F4", "down"), ("F4", "up"), ("AltLeft", "up")):
+        agent.send([key(code, action)])
+        time.sleep(0.06)
+    time.sleep(3)
+    log("close requested (Alt+F4)")
 
 
 def launch_client(agent: Agent, screen: Screen) -> None:
-    run_dialog(agent, screen, LAUNCH_CMD)
-    log("launch requested (non-elevated)")
+    """Double-click the desktop shortcut (a plain user action; it starts PoringLab.exe with
+    __COMPAT_LAYER=RunAsInvoker, i.e. non-elevated)."""
+    def visible() -> bool:  # the icon, plain or selected (highlighted after a double-click)
+        return is_state(screen, "shortcut_icon") or (
+            signature_path("shortcut_icon_sel").exists() and is_state(screen, "shortcut_icon_sel")
+        )
+
+    if not visible():
+        agent.chord("MetaLeft", "KeyD")  # show the desktop: windows may cover the icon
+        time.sleep(1.5)
+    if not visible():
+        to_png(screen.full(), SHOTS / "shortcut_not_visible.png")
+        raise Stop("the desktop shortcut is not visible: no double-click")
+    x, y = SHORTCUT
+    agent.move(x, y)
+    time.sleep(0.1)
+    for action in ("down", "up", "down", "up"):
+        agent.send([{"type": "mouse_button", "t_mono_ns": ns(), "frame_id": -1, "button": "left",
+                     "action": action, "x": x / DESKTOP_W, "y": y / DESKTOP_H}])  # fmt: skip
+        time.sleep(0.04)
+    log("launch requested (desktop shortcut, non-elevated)")
     wait_state(screen, ["service_select", "login"], 90)
 
 
@@ -737,11 +811,14 @@ def main() -> None:
     cmd, args = a.cmd, a.args
     if cmd == "status":
         return status()
-    if cmd in ("shot", "calibrate", "where"):
+    if cmd in ("shot", "crop", "calibrate", "where"):
         screen = Screen()
         try:
             if cmd == "shot":
                 print(to_png(screen.full(), SHOTS / f"{args[0]}.png"))
+            elif cmd == "crop":  # crop NAME X Y W H (desktop pixels)
+                x, y, w, h = (int(v) for v in args[1:5])
+                print(to_png(screen.grab(x, y, w, h)[1], SHOTS / f"{args[0]}.png"))
             elif cmd == "calibrate":
                 calibrate(screen, args[0], [int(v) for v in args[1:5]] if len(args) == 5 else None)
             else:
@@ -770,6 +847,11 @@ def main() -> None:
             create_char(agent, screen, args[0])
         elif cmd == "enter-game":
             enter_game(agent, screen, args[0])
+        elif cmd == "console":  # console "<command>" [shot-name] [wait-s]
+            console_type(agent, screen, args[0])
+            time.sleep(float(args[2]) if len(args) > 2 else 2.0)
+            if len(args) > 1 and args[1] != "-":
+                to_png(screen.full(), SHOTS / f"{args[1]}.png")
         elif cmd == "gm":
             gm(agent, screen, args[0])
         elif cmd == "say":
