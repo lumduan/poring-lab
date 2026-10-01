@@ -171,13 +171,19 @@ ports, quickstart) and `docs/adr/`.
 ## Dev mode (the default; there will be no disk split -- Batt, 2026-10-01)
 
 - `compose.dev.yaml` via `scripts/dev.sh`:
-  - `backend` runs the host source (read-only mount on `PYTHONPATH`); `scripts/dev.sh restart backend`
+  - `backend` runs the host source (read-only mount on `PYTHONPATH`); `python3 scripts/guarded_build.py --sustain 30 --spike 25 restart:backend@30`
     applies code changes;
   - `frontend-dev` runs `next dev` with all writes on tmpfs.
 - `rathena` gets `entrypoint.sh` + `conf/import/groups.yml` bind-mounted, so the agent and GM accounts
   and group 20 apply with a recreate, not a build.
 - `sniffer` runs the backend image with the host `poring_packets` source (`build: !reset`; it can
   never retag the stub over `poring-lab/backend:local`).
+- **Every create/start/restart/recreate/build/pull goes through `scripts/guarded_build.py`** — enforced:
+  `scripts/dev.sh` refuses unless the guard is its parent, and the repo's `.claude/settings.json` hook
+  (`scripts/hooks/guard_docker.py`) refuses raw `docker`/`docker compose` forms. Don't route around them
+  (python subprocess, `$(…)`); add a guarded step instead.
+- After writing `.env` use `scripts/rotate_secrets.py set|rotate` (read-back built in); after editing a
+  mounted file run `scripts/verify_mount.py` before claiming it took effect.
 - **Single-file bind mounts (rdp-loop.sh, entrypoint.sh, groups.yml…) follow the INODE.** `sed -i`
   and most editors write a new file, so the container keeps the old one silently (three codec tests
   ran a stale `rdp-loop.sh` on 2026-10-01). Edit in place (`open(..., "w")`), or re-bind with a guarded

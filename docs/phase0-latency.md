@@ -291,7 +291,7 @@ kicks Windows App back.
    Then connect Windows App to `192.168.1.169` as `batt` and repeat the same 10 toggles on camera.
 4. **Hand it back.** Close the Windows App window (the Windows session stays), then:
 
-       cd ~/docker/poring-lab && scripts/dev.sh start desktop
+       cd ~/docker/poring-lab && python3 scripts/guarded_build.py --sustain 30 --spike 25 start:desktop@60
        curl -s http://192.168.1.13:8000/health | python3 -m json.tool | grep rdp_window_present
 
    It should read `true` within ~10 s.

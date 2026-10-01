@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"$CLAUDE_PROJECT_DIR/scripts/hooks/guard_docker.py\"; [ ! -f \"$f\" ] || python3 \"$f\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

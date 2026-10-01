@@ -95,8 +95,8 @@ builds and no disk-heavy writes** (`compose.dev.yaml`, driven by `scripts/dev.sh
   - `mem_limit` 3.5 GiB, read-only rootfs, core dumps off.
 
 ```bash
-scripts/dev.sh up -d backend frontend-dev     # start (desktop keeps its RDP session)
-scripts/dev.sh restart backend                # pick up backend / poring_env code changes
+python3 scripts/guarded_build.py --sustain 30 --spike 25 start:backend,frontend-dev@60   # start (desktop keeps RDP)
+python3 scripts/guarded_build.py --sustain 30 --spike 25 restart:backend@30   # pick up backend / poring_env code changes
 scripts/dev.sh logs -f frontend-dev           # dev server output
 scripts/dev.sh stop frontend-dev              # console off
 ```
@@ -113,7 +113,7 @@ Open **http://192.168.1.13:3000** (`HOST_LAN_IP`). What it gives you:
 **Workstation alternative:** run the console on your own machine against this backend.
 1. Add your browser's origin to the backend allowlist in `.env`:
    `FRONTEND_ORIGINS=http://192.168.1.13:3000,http://localhost:3000`
-2. Apply it: `scripts/dev.sh up -d backend`.
+2. Apply it: `python3 scripts/guarded_build.py --sustain 30 --spike 25 recreate:backend@30`.
 3. Run the console:
 
 ```bash
@@ -146,7 +146,7 @@ RDP_DRIVES=transfer            # "" | transfer        (\\tsclient\transfer in Wi
 ```
 
 Applying a change reconnects the RDP session once, because desktop and backend are recreated together:
-`scripts/dev.sh up -d --no-deps desktop backend`.
+`python3 scripts/guarded_build.py --sustain 30 --spike 25 recreate:desktop,backend@90`.
 
 - **Paste to Windows:** click the target field in the remote screen, then press **⌘V** there, as
   in Windows App.
@@ -178,6 +178,13 @@ scripts/init_env.sh                          # .env from .env.example: detects H
 python3 scripts/guarded_build.py build:desktop build:backend build:rathena build:frontend pull:db up:180
 scripts/smoke_test.sh                        # health, LAN ports, >=30 frames, input round trip, input log
 ```
+
+**Mechanical guard (2026-10-01).** `scripts/dev.sh` refuses `up create build pull run restart start
+down rm`, any `--force-recreate`, and an interpolated `config` unless `scripts/guarded_build.py` is its
+parent process. For agent sessions, the repo's `.claude/settings.json` PreToolUse hook
+(`scripts/hooks/guard_docker.py`) also refuses the same verbs typed as raw `docker` / `docker compose`.
+Read-only commands (`ps logs exec inspect config --no-interpolate`) and `stop` stay allowed.
+`scripts/verify_mount.py` checks that containers see the current single-file bind mounts.
 
 **On this host (dev mode, `scripts/dev.sh`):** `up:` is refused because it would recreate the dev
 containers. Bring the game server up with `start:` instead, using the tolerant IO guard (Batt,

@@ -21,6 +21,8 @@ On a breach:
   start:<svc>[,<svc>...][@<seconds>]
                 scripts/dev.sh --profile core up -d --no-build <svcs>, watch seconds (default 180)
                 -> stops ONLY those services. The dev-mode way to bring up db/rathena.
+  restart:<svc>[,<svc>...][@<seconds>]
+                scripts/dev.sh restart <svcs> (e.g. backend after a code change), then watch.
   recreate:<svc>[,<svc>...][@<seconds>]
                 the same with --force-recreate (re-binds single-file mounts, e.g. after a
                 bind-mounted script was replaced by a new inode). An unguarded force-recreate of
@@ -92,7 +94,7 @@ def parse_step(step: str) -> Step:
         return Step(kind, parts)
     if kind == "up":
         return Step(kind, [], float(arg or 180))
-    if kind in ("start", "recreate"):
+    if kind in ("start", "recreate", "restart"):
         names, _, secs = arg.partition("@")
         services = names.split(",")
         if not all(SERVICE.match(s) for s in services):
@@ -251,6 +253,12 @@ def run_up(seconds: float, guard: Guard) -> bool:
     return watch(seconds, guard, "the running stack", ["docker", "compose", *RUNTIME, "stop"])
 
 
+def run_restart(services: list[str], seconds: float, guard: Guard) -> bool:
+    if not run_process("restart:" + ",".join(services), [*DEV, "restart", *services], guard):
+        return False
+    return watch(seconds, guard, ", ".join(services), [*DEV, "stop", *services])
+
+
 def run_start(services: list[str], seconds: float, guard: Guard, *, recreate: bool = False) -> bool:
     label = ("recreate:" if recreate else "start:") + ",".join(services)
     force = ["--force-recreate"] if recreate else []
@@ -295,6 +303,8 @@ def main() -> int:
             ok = run_process(step.label, target_build_cmd(*step.services), guard)
         elif step.kind == "up":
             ok = run_up(step.seconds or 180, guard)
+        elif step.kind == "restart":
+            ok = run_restart(step.services, step.seconds or 180, guard)
         else:
             ok = run_start(
                 step.services, step.seconds or 180, guard, recreate=step.kind == "recreate"

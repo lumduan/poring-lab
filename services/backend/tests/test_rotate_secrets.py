@@ -63,3 +63,26 @@ def test_unknown_names_are_refused(rs: ModuleType, tmp_path: Path) -> None:
     with pytest.raises(SystemExit):
         rs.rotate(["RDP_PASSWORD"], env_path=env)
     assert env.read_text() == "A=1\n"
+
+
+def test_set_writes_non_secret_values_and_reads_them_back(rs: ModuleType, tmp_path: Path) -> None:
+    env = tmp_path / ".env"
+    env.write_text("RDP_GFX=\nX=1\n")
+    assert rs.set_values(["RDP_GFX=progressive", "GAME_REGION=248,99,784,625"], env_path=env)
+    back = rs.parse_env(env.read_text())
+    assert (back["RDP_GFX"], back["GAME_REGION"], back["X"]) == (
+        "progressive",
+        "248,99,784,625",
+        "1",
+    )
+
+
+@pytest.mark.parametrize(
+    "pair", ["RDP_PASSWORD=x", "WIN_LAB_PASSWORD=x", "API_TOKEN=x", "RDP_USER=x"]
+)
+def test_set_refuses_secret_looking_names(rs: ModuleType, tmp_path: Path, pair: str) -> None:
+    env = tmp_path / ".env"
+    env.write_text("A=1\n")
+    with pytest.raises(SystemExit):
+        rs.set_values([pair], env_path=env)
+    assert env.read_text() == "A=1\n"
