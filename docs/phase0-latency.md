@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: RDP delivery: the lab runs RDP_GFX=progressive (2026-10-01, ~2x outdoor delivery vs autodetect); Windows AVC policies applied (Arm A, no gain with FreeRDP 3.15). Next: FreeRDP 3.32.1 (Arm C) in a guarded build window -- docs/h264-plan.md.
+next_action: RDP delivery SOLVED on FreeRDP 3.32.1 (Arm C, 2026-10-01): 30 fps outdoor, 0 client skips, packet->frame p95 157 ms with RDP_GFX=progressive -- docs/h264-plan.md. Phase 0 baselines that predate it (fps, codec tables) are 3.15 numbers; re-run latency_probe.py key->paint on 3.32 before quoting end-to-end latency.
 ---
 
 # Phase 0: web-console latency, measured and reduced
@@ -203,6 +203,9 @@ Not measured this run, with how to measure it:
   `RDP_GFX=progressive`, which doubled outdoor delivery) -- see h264-plan.md "Arm A results". There is no disk split.
 - Next levers (Batt: deferred until after the disk split): H.264/AVC hardware encode on Windows plus
   AVC decode in a newer FreeRDP, or UDP transport.
+- ➡️ SUPERSEDED 2026-10-01 (Arm C): FreeRDP 3.32.1 removed the decode ceiling. Progressive now delivers
+  30 fps outdoors with 0 skips (h264-plan.md, "Arm C results"). The fps figures in this section
+  are FreeRDP 3.15 history.
 
 **CPU protection (applied 2026-09-30 22:08, one desktop + backend recreate).**
 - **desktop:** `cpu_shares: 64` (cgroup v2 `cpu.weight` = 12 with runc 1.3.5's quadratic mapping,

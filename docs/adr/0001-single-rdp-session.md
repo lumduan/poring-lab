@@ -13,6 +13,12 @@ next_action: Phase 0 - measure capture FPS, fidelity and end-to-end latency per 
 # ADR-0001: One RDP session serves the web UI and the agent
 
 - **Status:** accepted and implemented in the scaffold (2026-09-29)
+- ➡️ **AMENDED 2026-10-01 (Arm C): the pin moved to FreeRDP 3.32.1** from trixie-backports.
+  - Decision 6 and the CVE note below are updated.
+  - The rollback image is `poring-lab/desktop:freerdp-3.15`.
+  - Evidence: [h264-plan.md](../h264-plan.md), "Arm C results".
+  - [ADR-0009](0009-console-session-capture.md) (PROPOSED) would generalize this ADR to "one
+    Windows session, one display path at a time".
 - **Related:** [ADR-0002 input mux](0002-input-mux.md), [ADR-0003 env abstraction](0003-env-abstraction.md)
 
 ## Context
@@ -61,7 +67,11 @@ view plus control), the vision agent (pixels in, mouse and keyboard out), and oc
    and the smoke test run.
 6. **FreeRDP major 3 is pinned.**
    - Pin: apt glob `freerdp3-x11=3.15.0+dfsg-2.1+deb13u*`, plus a build-time `xfreerdp3 --version`
-     assertion.
+     assertion. ➡️ Since 2026-10-01 a second layer upgrades it to
+     `freerdp-x11`/`freerdp3-x11=3.32.1+dfsg-1~bpo13*` (trixie-backports).
+     - The build asserts version 3.32, `WITH_GFX_H264=ON` and FFmpeg.
+     - `xfreerdp3` is now a link to `xfreerdp`.
+     - The exit codes are unchanged up to 159 (160/161 are new and back off).
    - 2.x is end-of-life upstream, and its spellings (`/cert-ignore`, `/gfx-h264`, `/kbd:0x409`) are not
      even compiled into 3.x distro builds.
    - Ubuntu's FreeRDP 3 has no H.264 (`/gfx:AVC444` fails to parse there), so the base image is
@@ -91,6 +101,13 @@ view plus control), the vision agent (pixels in, mouse and keyboard out), and oc
 - Debian trixie's 3.15 carries a backlog of FreeRDP CVEs that are fixed upstream. Accepted for now,
   because the only server it ever connects to is our own LAN host. trixie-backports 3.32.x fixes them,
   but from 3.32.1 draws a "Reconnecting" window at (0,0) into the framebuffer. Revisit with Phase 0.
+  ➡️ **Revisited 2026-10-01: the lab runs 3.32.1** (Arm C: 3× delivery). The 3.15 CVE backlog no
+  longer applies. The "Reconnecting" window remains a known risk.
+  - It appears only during FreeRDP's *internal* auto-reconnect (`+auto-reconnect`) after a network
+    drop. That was **not reproduced**: tonight's reconnects were clean process restarts.
+  - It sits at (0,0). It overlaps `GAME_REGION` (248,99,784,625) only if it is wider than 248 px and
+    taller than 99 px.
+  - Vision and the black-screen detector may see it while it is up.
 - `/prevent-session-lock` is deliberately **not** used: it injects input outside the mux. Disable
   lock, sleep and the screensaver on the Windows host instead.
 

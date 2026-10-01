@@ -29,8 +29,9 @@ ports, quickstart) and `docs/adr/`.
 5. **This host is shared with live 24/7 capture services, Frigate (NVR) and Ollama.**
    - Every lab container keeps `mem_limit` equal to `memswap_limit` (no swap) and `oom_score_adj: 500`.
    - CPU: desktop keeps `cpu_shares: 64` (cgroup v2 weight 12 vs the quant containers' 100) and `cpus: 8`,
-     backend `cpu_shares: 256`. xfreerdp's software decode takes 7-15 cores in motion; 8 was the
-     tightest cap with no fps loss (docs/phase0-latency.md). Pinned by `test_guards.py`.
+     backend `cpu_shares: 256`. xfreerdp 3.15's software decode took 7-15 cores in motion, and 8 was the
+     tightest cap with no fps loss (docs/phase0-latency.md). 3.32.1 takes ~4.5 (progressive) or ~1 (AVCthin)
+     at 30 fps (h264-plan.md, Arm C). Pinned by `test_guards.py`.
    - The rAthena build stays capped (`RATHENA_MAKE_JOBS`).
    - vision keeps its VRAM cap (`VISION_MAX_VRAM_FRACTION`).
    - Don't remove these to make something fit; raise the limit consciously instead.
@@ -134,7 +135,8 @@ ports, quickstart) and `docs/adr/`.
   map truncate them to 24-byte buffers and login then rejects them.
 - **In dev mode, bring core services up with `guarded_build.py start:<svc>@<s>`**, never `up:`
   (refused: it would recreate backend/desktop without their mounts).
-- **FreeRDP is major 3** (`xfreerdp3`, Debian trixie 3.15). Use 3.x flag syntax only (see the README
+- **FreeRDP is major 3**: **3.32.1** from trixie-backports since 2026-10-01 (Arm C). `xfreerdp3` is a link
+  to `xfreerdp`, and the rollback image is `poring-lab/desktop:freerdp-3.15`. Use 3.x flag syntax only (see the README
   table). Credentials go through `/args-from:stdin`, never argv.
 - **torch is `2.14.0+cu130`** from the explicit `pytorch-cu130` index declared in the **root**
   `pyproject.toml`. cu126 has no sm_120 kernels; cu132 images refuse to start on this R580 driver.
@@ -162,8 +164,11 @@ ports, quickstart) and `docs/adr/`.
     approves UAC, and .env never holds his Windows credentials;
   - secrets on Windows go only through `Read-Host -AsSecureString` as a sensitive batch
     (`ro_agent.py console-secret`), never a command line (PSReadLine history);
-  - the lab runs `RDP_GFX=progressive`: with the Windows AVC policies on, autodetect means AVC444,
-    which FreeRDP 3.15 decodes in software (fewer frames, worse latency; docs/h264-plan.md).
+  - the lab runs `RDP_GFX=progressive`. On FreeRDP 3.32.1 it delivers 30 fps outdoors with 0 skips
+    and p95 packet→frame 157 ms. `AVCthin` matches it at ~1/5 of the CPU but is lossy
+    (docs/h264-plan.md, Arm C).
+  - FreeRDP 3.32.1 claims X CLIPBOARD (empty) on every Windows-side copy, and the watchdog clears it.
+    So `foreign_owner_clears` rising right after a Windows copy is expected (ADR-0004 amendment b).
 - **Human pastes are scrubbed** (ADR-0004 amendment): after every paste, the backend re-owns CLIPBOARD
   empty so Windows' copy is replaced. Released text otherwise stayed pasteable for over an hour.
   Paste audits log a 12-hex digest prefix only.

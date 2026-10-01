@@ -232,8 +232,8 @@ them as **sensitive** input (the input log keeps counts only); see `docs/client/
    This lab uses `poring-lab` (`WIN_LAB_USER`/`WIN_LAB_PASSWORD`, 2026-10-01): not an administrator,
    Modify on `C:\RO-rAthena` only, plus Performance Monitor Users and Event Log Readers for the RDP
    counters/events. Elevation is the operator's (UAC); see `docs/client/rathena-client.md` "Windows
-   account". The lab uses `RDP_GFX=progressive` (`docs/h264-plan.md`; `AVCthin` and `AVC444` are measured
-   alternatives, both fewer frames on FreeRDP 3.15).
+   account". The lab uses `RDP_GFX=progressive` (`docs/h264-plan.md`). On FreeRDP 3.32.1 it delivers 30 fps outdoors;
+   `AVCthin` is the measured alternative: the same frames at ~1/5 of the desktop CPU, but lossy.
 2. Give the host a fixed IP (DHCP reservation) → `WIN_HOST`.
 3. Disable sleep, the screen lock and the screensaver. A locked session shows the lock screen to the agent.
 4. Run the RO client **inside the RDP session** at `XVFB_RESOLUTION` (default 1280x800). The game window is 800×664
@@ -293,8 +293,8 @@ interactive session. `rdp-loop` reacts to xfreerdp3's exit code:
 
 Watch it with `docker compose logs -f desktop`.
 
-**FreeRDP 2 vs 3 flags.** This image pins FreeRDP **3.15** (`xfreerdp3`). 2.x spellings aren't even
-compiled in:
+**FreeRDP 2 vs 3 flags.** This image pins FreeRDP **3.32.1** from trixie-backports (`xfreerdp3`, a link to
+`xfreerdp`; rollback image `poring-lab/desktop:freerdp-3.15`). 2.x spellings aren't even compiled in:
 
 | Purpose | 2.x | 3.x (used here) |
 |---|---|---|

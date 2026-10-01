@@ -7,7 +7,7 @@ verdict_date: 2026-09-30
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: Live-verify the 2026-10-01 scrub (a dummy paste, then an empty Get-Clipboard on Windows); resolve ADR-0005 (vision's X access) before Phase 4.
+next_action: Live-verify on FreeRDP 3.32.1 (Batt) a dummy paste + scrub, then an empty Get-Clipboard on Windows, and that foreign_owner_clears rises only on Windows-side copies (amendment b); resolve ADR-0005 (vision's X access) before Phase 4.
 ---
 
 # ADR-0004: Clipboard and file transfer are human-only tools
@@ -15,6 +15,10 @@ next_action: Live-verify the 2026-10-01 scrub (a dummy paste, then an empty Get-
 - ➡️ **AMENDED 2026-10-01** (see "Amendment 2026-10-01" at the end): release alone did NOT empty the
   Windows clipboard; every paste is now followed by a **scrub**, and the audit logs only a 12-hex
   digest prefix. E1b below is superseded by that evidence.
+- ➡️ **AMENDED 2026-10-01 (b), FreeRDP 3.32.1** (see "Amendment 2026-10-01 (b)" at the end): a
+  Windows-side copy now makes xfreerdp *claim* the X CLIPBOARD with **no data targets**. The
+  watchdog clears it; content still cannot flow Windows → X. E1c's "owner stayed None" is
+  3.15-only.
 - **Status:** accepted by Batt, 2026-09-30. T1 + F1 are implemented; F2 stays off; T2 is rejected.
   **Deployed 2026-09-30 11:34 ICT** (dev overlay; one combined desktop + backend recreate). Live-verified
   the same day, through the real feature path:
@@ -61,14 +65,14 @@ Every key went through the mux as `source=human`. The experiments were reverted 
 |---|---|---|
 | E1 | The backend owns the X CLIPBOARD (python-xlib, no new packages) with a 36-char ASCII + Thai string, then Ctrl+V into Notepad | xfreerdp asked for `TARGETS`, then `UTF8_STRING` (70 bytes). Notepad showed the exact text: 36 characters, Ln 1 Col 37, Thai combining marks correct. |
 | E1b | Ctrl+V again after the backend released ownership | A pixel-identical frame: nothing pasteable is left on Windows. |
-| E1c | Ctrl+A, Ctrl+C inside Windows | The X CLIPBOARD owner stayed `None`. With `direction-to:remote`, the Windows clipboard never appears on the X display. |
+| E1c | Ctrl+A, Ctrl+C inside Windows | The X CLIPBOARD owner stayed `None`. With `direction-to:remote`, the Windows clipboard never appears on the X display. ➡️ FreeRDP 3.15 only; on 3.32.1 xfreerdp claims it empty (amendment b). |
 | E2 | A file written into the tmpfs, then Win+R `\\tsclient\transfer` | Explorer listed it, and a folder created from Windows appeared in `/transfer`. **Works both ways.** |
 | E3 | The backend owns CLIPBOARD with `text/uri-list`, then Ctrl+V in Windows Downloads | The file arrived, 32/32 bytes, through cliprdr file contents, without FUSE. |
 
 **Source facts** (FreeRDP 3.15.0: `client/common/cmdline.c:3072`, `channels/cliprdr/client/cliprdr_format.c:39`).
 `/clipboard:direction-to:remote,files-to:off` leaves only `CLIPRDR_FLAG_LOCAL_TO_REMOTE`:
 - the client format list is filtered to data formats (`FileGroupDescriptorW`/`FileContents` are dropped);
-- server format lists are filtered to nothing and ignored, so there is no remote → local;
+- server format lists are filtered to nothing and ignored, so there is no remote → local (3.15; ➡️ on 3.32.1 the empty list reaches the X11 handler, which claims CLIPBOARD with no data targets, and data requests are refused client-side: amendment (b));
 - file-contents requests are refused.
 
 > **Correction to the study's wording.** The study said "releasing ownership clears the Windows
@@ -285,4 +289,45 @@ Until both are resolved, reverse text goes through a file in `\\tsclient\transfe
 - `scripts/clipboard_x11_check.py` against a real Xvfb: **PASS** (2 TARGETS rounds, scrub completed).
 - **Not yet verified live end to end:** a dummy paste followed by an empty `Get-Clipboard` on
   Windows (the operator skipped the dummy paste on 2026-10-01). Do it at the next console session.
+
+## Amendment 2026-10-01 (b): FreeRDP 3.32.1 claims CLIPBOARD (empty) on every Windows copy
+
+**Found** during the Arm C regression checks ([h264-plan.md](../h264-plan.md), "Arm C results").
+- With `/clipboard:direction-to:remote,files-to:off` unchanged, `Set-Clipboard -Value
+  'poring-probe-332'` in the `poring-lab` session moved `/health` `clipboard.foreign_owner_clears`
+  from **0 to 3**.
+- The backend logged `CLIPBOARD taken by foreign window 0xc00002`, which is xfreerdp's own window
+  (class `xfreerdp`).
+- After the clears, both CLIPBOARD and PRIMARY were unowned.
+
+**Cause, from the tagged sources:**
+- **3.15.0 never reached the X11 handler.** `channels/cliprdr/client/cliprdr_format.c`
+  `cliprdr_process_format_list` stopped with `if (filteredFormatList.numFormats == 0) goto error_out;`.
+  With REMOTE_TO_LOCAL off, the X11 handler never saw a Windows copy. That is why E1c's owner
+  stayed None.
+- **3.32.1 always calls the handler.** It calls `ServerFormatList` with the (empty) filtered list.
+  `client/X11/xf_cliprdr.c` `xf_cliprdr_server_format_list` then:
+  - keeps only the implicit CF_RAW;
+  - advertises just TIMESTAMP and TARGETS (no data target is appended for zero formats);
+  - **takes selection ownership**.
+- **Content still cannot cross Windows → X.** 3.32.1 `cliprdr_main.c`
+  `cliprdr_client_format_data_request` returns early ("remote -> local copy disabled, ignoring
+  request") when REMOTE_TO_LOCAL is off. Any X requester gets no Windows data.
+  - This is from source. An empirical probe could not win the race with the watchdog, which clears
+    the claim on the XFixes event.
+
+**Consequences:**
+1. **The guarantee holds.** The Windows clipboard's content never appears on the display, by the
+   client-side request guard plus the watchdog (defence in depth, as designed).
+2. **`foreign_owner_clears` is no longer a clean alarm.** It now also counts xfreerdp's empty claims
+   (about 1–3 per Windows-side copy).
+   - A rise right after a Windows copy is expected.
+   - A rise with no Windows copy, or an owner that is not the `xfreerdp` window, is still the signal.
+   - A separate counter for xfreerdp's empty claims would restore it. **Not built**: it is a code
+     change for Batt to choose.
+3. **T1 paste interplay on 3.32 is unverified.** After the backend's paste, Windows may announce
+   its new clipboard, so xfreerdp claims, and the watchdog clears. The live check is Batt's (see
+   next_action).
+4. **Rolling back to 3.15** (`poring-lab/desktop:freerdp-3.15`) restores the old behaviour, at the
+   cost of Arm C's delivery gain (30 → 9 fps outdoor).
 

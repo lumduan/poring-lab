@@ -1,26 +1,31 @@
 ---
 doc_type: design
 hypothesis: null
-status: ACCUMULATING
+status: GO
 role: null
 verdict_date: 2026-10-01
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: Arm C -- FreeRDP 3.32.1 in one guarded desktop build (python3 scripts/guarded_build.py --sustain 30 --spike 25 build:desktop, operator window), then the same progressive/AVCthin tables. The AVC420 experiment (2026-10-01) showed the ~6.5-core ceiling is codec-independent; progressive stays.
+next_action: Arm C DONE -- FreeRDP 3.32.1 kept with RDP_GFX=progressive (30 fps outdoor, 0 skips, p95 157 ms). Open -- Batt's live paste check on 3.32 (ADR-0004 amendment b); optional DWMFRAMEINTERVAL/FPSLimit 60 now that delivery sits at the 30 fps cap; console capture is planned separately (ADR-0009).
 ---
 
 # H.264 for the RDP leg: plan and Arm A result
 
 Status:
-- **Arm A done 2026-10-01**: the Windows policies are on, and one reboot happened. With FreeRDP 3.15's
-  software decode it brings **no delivery gain and a worse latency tail**.
-- The lab therefore runs **`RDP_GFX=progressive`** (client-side; AVC not offered).
-- Arm C (a newer FreeRDP) is next.
+- ✅ **Arm C done 2026-10-01 (evening): FreeRDP 3.32.1 lifted the ceiling.** Outdoor delivery went
+  from 9 to **30 fps** (the dgVoodoo cap), there are 0 client-resource skips, desktop cores fell
+  6.8 → 4.8, and packet→frame p95 went from >1.5 s to **157 ms**. The lab keeps 3.32.1 with
+  **`RDP_GFX=progressive`**. See "Arm C results" below; it supersedes the Arm A and AVC420
+  conclusions about delivery.
+- Arm A, 2026-10-01 (history): the Windows policies are on, and one reboot happened. With FreeRDP
+  3.15's software decode it brought **no delivery gain and a worse latency tail**.
 - ➡️ There will be **no disk split** (Batt, 2026-10-01). Builds go through `scripts/guarded_build.py`
   in an operator-chosen window. Every "after the split" below means that.
 
 ## Arm A results (2026-10-01, `poring-lab` session, 800×664, dgVoodoo FPSLimit 30)
+
+➡️ **History, FreeRDP 3.15.** The delivery numbers here are superseded by "Arm C results" (3.32.1: 30 fps outdoor, 0 skips).
 
 The same scenes and tools as before:
 - `measure_motion.py rotate 60`: indoor `prt_church` 99,112; outdoor `new_4-1` 53,111;
@@ -117,7 +122,7 @@ new_4-1 53,111 later):
 | AVCthin | prt_fild08 170,375 (20:41) | 35/40 | 195 | 778 | >1500 | >1500 |
 | AVC444 (10.7, Arm A) | new_4-1 53,111 (18:33) | 29/40 | 740 | >1500 | >1500 | >1500 |
 
-**Decision: keep `progressive`.**
+**Decision: keep `progressive`.** ➡️ On 3.32.1 (Arm C below) both codecs deliver 30 fps; progressive is still kept, now for fidelity and idle cost, not delivery.
 - It delivers ~50 % more frames (Windows output 10–12 vs 6–7 fps; Xvfb 7–9 vs 6–8), consistently.
 - AVCthin's fresher-frame advantage was dramatic once (p75 269 ms) and modest on the repeat
   (778 vs 1007 ms). Not enough to give up a third of the frames.
@@ -139,6 +144,113 @@ fps of a 784×625 game: progressive, AVC444 and AVCthin alike.
 - GPU decode would therefore need a custom FreeRDP build (VAAPI, or an FFmpeg hwaccel), a render
   device passed to the desktop container, and VRAM next to Frigate, Ollama and vision.
 - Not worth it before Arm C shows whether decode is even the limit.
+
+## Arm C results (2026-10-01, 21:49–22:31 ICT, FreeRDP 3.32.1, poring-lab session, policies ON, 800×664, FPSLimit 30)
+
+**Build.** `services/desktop/Dockerfile` installs `freerdp-x11` + `freerdp3-x11` **3.32.1+dfsg-1~bpo13**
+from trixie-backports, in a layer of its own on top of the unchanged 3.15 layer.
+- The build asserts `xfreerdp3 --version` = 3.32 and `/buildconfig` has `WITH_GFX_H264=ON` and FFmpeg.
+  Measured in the container: `WITH_FFMPEG=ON WITH_VIDEO_FFMPEG=ON WITH_DSP_FFMPEG=ON WITH_SWSCALE=ON
+  WITH_VAAPI=OFF WITH_OPENH264=OFF`.
+- The binary is now `/usr/bin/xfreerdp`, and `xfreerdp3` is a link to it. rdp-loop.sh keeps calling
+  `xfreerdp3`, so the process's comm stays `xfreerdp3`.
+- **Rollback image:** `poring-lab/desktop:freerdp-3.15` (227cd4aac623): re-tag it as `:local`, then
+  a guarded `recreate:desktop@90`. The new `:local` is f49703cfee4d (864 MB, +9 MB).
+- **Build path and the IO guard** (quant-postgres ±5 min in the 2026-10-01 report):
+  1. Try 1 put the upgrade in the big RUN layer. Re-unpacking 135 packages tripped `--spike 25`
+     (27.8 %).
+  2. Try 2 had the upgrade in its own layer and every layer cached, but the **export** tripped:
+     the active buildx builder is `armbuilder` (docker-container driver), which loads the whole
+     image into dockerd as a tarball. That was ~5 s at 66–100 % io_full on postgres, ticker,
+     orderbook and cron; crypto-engine stayed at 0 %.
+  3. Try 3, export only, ran with `--spike 101` (Batt's one-time approval; the 30 s sustain rule
+     stayed on): worst 37.8 %, 8 s above 10 %.
+  4. The recreate: worst 6.6 %.
+
+**Negotiation is unchanged** (RdpCoreTS event 162 read by `poring-lab`):
+- `progressive`: 0xA0701, AVC 0, profile 2.
+- `AVCthin`: 0xA0301, AVC 1, profile 2048, plus event 170 (Quick Sync).
+- So `mask:` and `thin-client` behave as on 3.15.
+
+**Delivery and cost.** Same tools and spots as the AVC420 experiment. Rotations are 60 s; the Windows
+columns are `typeperf` over the same wall-clock windows.
+
+| FreeRDP | Arm | Scene | Xvfb frames/s median (p10–p90) | Desktop cores | RDP in | RDP out | Skips: client /s | Encode ms |
+|---|---|---|---|---|---|---|---|---|
+| 3.15 | progressive | indoor | 7 (3–14) | 6.70 | 30.11 | 12.01 | 17.64 | 9.6 |
+| 3.15 | progressive | outdoor | 9 (5–20) | 6.80 | 29.93 | 10.15 | 19.75 | 11.4 |
+| 3.15 | AVCthin | indoor | 6 (3–9) | 6.47 | 7.20 | 7.20 | 0.00 | 18.7 |
+| 3.15 | AVCthin | outdoor | 6 (4–9) | 6.39 | 6.71 | 6.71 | 0.00 | 18.7 |
+| **3.32.1** | progressive | indoor | **17 (15–23)** | **4.42** | 30.01 | **28.43** | **0.00** | 8.7 |
+| **3.32.1** | progressive | outdoor | **30 (29–30)** | **4.78** | 29.99 | **29.96** | **0.00** | 10.5 |
+| **3.32.1** | AVCthin | indoor | **17 (9–30)** | **0.94** | 30.00 | **30.00** | **0.00** | 16.0 |
+| **3.32.1** | AVCthin | outdoor | **30 (28–31)** | **0.98** | 30.01 | **30.01** | **0.00** | 19.6 |
+
+The AVCthin rows are a clean re-run at 22:22–22:25. The first run (22:16–22:19) was interrupted by
+two human leases, which paused the agent and put 0-fps seconds into the samples: 17 (0–28) and
+29 (0–31).
+
+**Packet → frame delay.** 40 walks at `prt_fild08 170,375`. Non-detections count as >1.5 s; p50 is
+from `measure_delay.py`, and p75+ is nearest-rank over all 40.
+
+| FreeRDP | Codec | Time | Matched | p50 | p75 | p90 | p95 |
+|---|---|---|---|---|---|---|---|
+| 3.15 | progressive | 20:44 (a human lease touched 2 trials) | 35/40 | 242 | 1007 | >1500 | >1500 |
+| 3.15 | AVCthin | 20:41 | 35/40 | 195 | 778 | >1500 | >1500 |
+| **3.32.1** | progressive | 22:06 | **39/40** | **119** | **139** | **151** | **157** |
+| **3.32.1** | AVCthin | 22:19 | **39/40** | **118** | **125** | **131** | **136** |
+
+Click-sent → server-packet p50 is 178 ms (progressive) and 180 ms (AVCthin). That leg is not the
+display path.
+
+**Client threads and idle cost.** The GM is standing, the game visible, and only the idle animation
+moves.
+
+| FreeRDP / codec | xfreerdp threads | Idle cores, prt_fild08 (180 s) | Idle cores, new_4-1 53,111 (120 s) | Windows idle in/out fps, encode ms |
+|---|---|---|---|---|
+| 3.15 progressive | **329** | 0.08 | 1.35 | not measured |
+| 3.32.1 progressive | **26** | 0.43 | 0.29 | 30.0/30.0, 1.3 ms; 30.0/30.0, 2.0 ms |
+| 3.32.1 AVCthin | 26 | 0.79 | 0.77 | 30.0/30.0, 18.0 ms; 30.0/30.0, 17.8 ms |
+
+**The quant stack does not notice the codec.** From the pressure sampler over the rotation windows:
+- quant-postgres `cpu_some` is 0.37–0.49 % (progressive) vs 0.16–0.17 % (AVCthin), against
+  0.27–0.31 % idle;
+- crypto-engine (the live capture tonight) sits at 0.22–0.29 % in every window.
+
+**Fidelity**, a quick check only: the same static scene, AVCthin frame vs progressive frame.
+- The Basic Information panel (HP/SP text) is PSNR **37.8 dB**, and the skill bar 39.5 dB. The text is
+  legible in both.
+- Chat and minimap come out at 28.9 and 30.4 dB, but their content may have changed between the two
+  shots (unverified).
+- This is not a fidelity study. Progressive refines static content toward lossless; AVC does not.
+
+**Decision: keep FreeRDP 3.32.1, and keep `RDP_GFX=progressive`** (`.env` unchanged).
+- Delivery ties at the 30 fps cap with zero skips. The 3.15 ceiling (6–12 fps at ~6.5 cores, 17–20
+  skips/s) was FreeRDP 3.15's client path, as suspected: 329 threads vs 26.
+- Progressive keeps near-lossless static fidelity for the perception work, and costs less when
+  idle, which is most of the time.
+- Its motion cost (~4.6 cores, under the 8-core cap) is invisible to the quant stack.
+- **`AVCthin` is the alternative, one keyword away** (`scripts/rdp_reconnect.sh AVCthin`): ~5× cheaper
+  in motion (0.95 cores) with a slightly tighter tail (p95 136 vs 157 ms). Prefer it for long
+  motion-heavy sessions or if the CPU budget tightens.
+
+**Regression checks on 3.32.1**
+- One client process. The certificate pin holds: it connected under `/cert:deny,fingerprint`.
+- The same Windows session (ID 2) came back with the game still running.
+- **Keyboard:** GM commands were typed and answered by the server.
+- **Clicks:** 39/40 walks moved the character, twice.
+- **`\\tsclient\transfer`:** visible from the session (`Test-Path` True).
+- **Auto-reconnect after TERM:** exit 145, then reconnect in 2 s, twice.
+- **Exit-code enum:** identical to 3.15 up to 159. 3.32 adds 160 `CONNECT_TARGET_BOOTING` and 161
+  `HYBRID_REQUIRED_BY_SERVER`, which fall into rdp-loop's backoff branch.
+- **⚠ The clipboard direction filter changed.** It is recorded as ADR-0004 amendment (b):
+  - A Windows-side copy now makes xfreerdp **claim** the X CLIPBOARD, with no data targets.
+  - The backend watchdog cleared it 3 times for one copy.
+  - Content still cannot flow Windows → X: 3.32.1 refuses the data request client-side.
+- **Not verified:** a live ⌘V paste through the console (ADR-0004 T1) on 3.32. It needs Batt.
+
+**What it unlocks.** Delivery now sits at dgVoodoo's FPSLimit 30 outdoors. The "only after delivery
+reaches ~30 fps" item below (DWMFRAMEINTERVAL 15 + FPSLimit 60) is now actionable. It is not done.
 
 ## Why: the client decode is the ceiling, and Windows chose the codec that costs the most
 
