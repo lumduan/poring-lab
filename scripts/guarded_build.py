@@ -47,7 +47,8 @@ import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-LOGDIR = Path(os.environ.get("TMPDIR", "/tmp"))
+LOGDIR = Path(os.environ.get("TMPDIR", "/dev/shm/poring-lab-tmp"))  # rule 7: never host /tmp
+LOGDIR.mkdir(parents=True, exist_ok=True)
 CONTAINERS = [
     "quant-orderbook-engine",
     "quant-ticker-engine",
