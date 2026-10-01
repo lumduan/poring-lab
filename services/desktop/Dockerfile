@@ -4,9 +4,14 @@
 # x11vnc/noVNC for debugging. Other services reach the display through the shared /tmp/.X11-unix
 # volume; only the backend's input mux ever injects input.
 #
-# FreeRDP is pinned to MAJOR 3 (3.15, Debian trixie). 2.x is EOL upstream and its CLI differs
-# (/cert-ignore, /gfx-h264, /kbd:0x409 are not even compiled into 3.x distro builds). Ubuntu's
-# FreeRDP 3 builds lack H.264 (/gfx:AVC444 is a parse error there), Debian's use FFmpeg.
+# FreeRDP is pinned to MAJOR 3. 2.x is EOL upstream and its CLI differs (/cert-ignore, /gfx-h264,
+# /kbd:0x409 are not even compiled into 3.x distro builds). Ubuntu's FreeRDP 3 builds lack H.264
+# (/gfx:AVC444 is a parse error there); Debian's use FFmpeg.
+# Arm C (docs/h264-plan.md, 2026-10-01): 3.32.1 from trixie-backports instead of trixie's 3.15.
+# In 3.32 the binary package is `freerdp-x11` (`xfreerdp`); `freerdp3-x11` is now a transitional
+# package whose `xfreerdp3` link rdp-loop.sh keeps using (the process's comm stays `xfreerdp3`;
+# scripts/rdp_reconnect.sh counts both names). Rollback image: poring-lab/desktop:freerdp-3.15
+# (re-tag it as :local, then a guarded recreate).
 FROM debian:trixie-20260918-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -25,6 +30,20 @@ RUN apt-get update \
       ca-certificates \
  && rm -rf /var/lib/apt/lists/* \
  && xfreerdp3 --version | tee /dev/stderr | grep -q 'version 3\.15\.'
+
+# Arm C: upgrade ONLY FreeRDP to 3.32.1 from trixie-backports, in its own small layer, so the big
+# dependency layer above stays cached. (Rebuilding it in one layer re-unpacked 135 packages and
+# tripped the IO guard at 27.8 % quant-postgres stall, 2026-10-01.)
+RUN echo 'deb http://deb.debian.org/debian trixie-backports main' \
+      > /etc/apt/sources.list.d/trixie-backports.list \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends -t trixie-backports \
+      'freerdp-x11=3.32.1+dfsg-1~bpo13*' \
+      'freerdp3-x11=3.32.1+dfsg-1~bpo13*' \
+ && rm -rf /var/lib/apt/lists/* \
+ && xfreerdp3 --version | tee /dev/stderr | grep -q 'version 3\.32\.' \
+ && xfreerdp3 /buildconfig > /tmp/bc 2>&1 \
+ && grep -q 'WITH_GFX_H264=ON' /tmp/bc && grep -Eq 'WITH_(VIDEO_)?FFMPEG=ON' /tmp/bc && rm /tmp/bc
 
 # noVNC static files from the upstream release. Debian's `novnc` package hard-depends on nodejs.
 ARG NOVNC_VERSION=1.7.0

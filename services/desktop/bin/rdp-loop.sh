@@ -5,7 +5,9 @@
 # and whoever connects next kicks us. So this loop must never fight a human for the session and
 # must never hammer a bad password into an account-lockout policy.
 #
-# Exit codes come from FreeRDP 3.15's xf_exit_code_from_disconnect_reason():
+# Exit codes come from FreeRDP's xf_exit_code_from_disconnect_reason(). The enum is identical in 3.15
+# and 3.32.1 up to 159; 3.32 adds 160 CONNECT_TARGET_BOOTING and 161 HYBRID_REQUIRED_BY_SERVER, which
+# fall to the backoff branch (diffed from the tagged sources, 2026-10-01):
 #   0 1 2 3 4 11 12        clean end / RPC / logoff / idle / logon timeout / user disconnect
 #                          -> reconnect after 2 s
 #   5                      DISCONNECTED_BY_OTHER_CONNECTION: someone took the session
@@ -177,7 +179,8 @@ main() {
         ;;
       132 | 134 | 135 | 14[89] | 15[0-9])
         idle_forever "exit ${rc}: authentication/account failure. NOT retrying (Windows account" \
-          "lockout risk). Fix RDP_* in .env, then: docker compose restart desktop"
+          "lockout risk). Fix RDP_* in .env, then: python3 scripts/guarded_build.py --sustain 30" \
+          "--spike 25 restart:desktop@90"
         ;;
       1[6-9] | 2[0-6])
         idle_forever "exit ${rc}: licensing or command-line error. NOT retrying; see log above."
