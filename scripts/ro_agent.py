@@ -742,6 +742,7 @@ def close_client(agent: Agent, screen: Screen) -> None:  # noqa: ARG001
 def launch_client(agent: Agent, screen: Screen) -> None:
     """Double-click the desktop shortcut (a plain user action; it starts PoringLab.exe with
     __COMPAT_LAYER=RunAsInvoker, i.e. non-elevated)."""
+
     def visible() -> bool:  # the icon, plain or selected (highlighted after a double-click)
         return is_state(screen, "shortcut_icon") or (
             signature_path("shortcut_icon_sel").exists() and is_state(screen, "shortcut_icon_sel")
