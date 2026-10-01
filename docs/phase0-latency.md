@@ -214,6 +214,44 @@ Not measured this run, with how to measure it:
   today. The weight is the protection for when there is contention.
 - `test_guards.py::test_cpu_heavy_lab_services_yield_to_the_quant_stack` pins both.
 
+## Window 800×664 and the 30 fps cap (2026-10-01)
+
+**Method.**
+- `scripts/measure_motion.py rotate 60`: a bot right-drag camera rotation, the character still.
+- Frames reaching Xvfb: a grab loop in the backend container on the middle band of `GAME_REGION`;
+  a frame is >1 % of pixels moved by >24 levels.
+- Desktop cores from the container's `cpu.stat`.
+- Windows: `typeperf` at 1 s on the three RemoteFX Graphics counters, typed into a PowerShell
+  console. Means over each run's 60 s rotation window only (the timestamp-filtered CSV).
+- Scenes:
+  - outdoor: `new_4-1` (53,111), with the player before and the hidden GM after;
+  - indoor: `prt_church` (99,112), with the hidden GM.
+- Desktop `cpus 8`, cpu.weight 12. Lunch break, quant-postgres io full ≤ 3.7 %.
+
+| Scene · client | Xvfb frames/s median (p10–p90) | Desktop cores | RDP input fps | RDP output fps | Skipped: client resources /s |
+|---|---|---|---|---|---|
+| outdoor · 1024×768 (client 1008×729) | 5 (3–10) | 6.70 | 32.0 | 5.5 | 26.4 |
+| indoor · 1024×768 | 4 (1–8) | 6.99 | 31.9 | 6.0 | 25.7 |
+| indoor · 800×664 (client 784×625) | 4 (3–6) | 7.05 | 32.0 | 5.6 | 26.4 |
+| outdoor · 800×664 | 6 (4–10) | 6.68 | 31.6 | 6.4 | 25.1 |
+| outdoor · 800×664 + dgVoodoo `FPSLimit 30` | **7 (4–14)** | 6.67 | 29.8 | **8.5** | **21.3** |
+
+**Reading.**
+- The ~40 % smaller window does **not** raise delivery: output stays ~6 fps. The client
+  (xfreerdp3's software decode of RemoteFX progressive, ~7 of its 8 cores) is the ceiling, as on
+  2026-09-30.
+- The 30 fps cap helps a little: +2 fps out, −4 skips/s. It is kept.
+- The window change is still worth keeping for another reason: the whole client, including the chat
+  input, now fits above the Windows taskbar.
+- The real lever is H.264 (AVC) end to end: [h264-plan.md](h264-plan.md).
+- A run contaminated by a human lease (12:34) was discarded and re-run.
+- Each run's Windows summary is also in the screenshots of that session.
+
+**Open (2026-10-01 13:47):** after the forced reconnect and the desktop recreate (black-screen
+test), xfreerdp3 sat at ~7 cores while the scene was idle. Only small animations were changing:
+~17 updates/s, median 0.3 % of pixels. Before, it sat at ~2 cores in a similar scene. Not yet
+explained. It does not touch quant (weight 12 vs 100, quant cpu.pressure ~0.1 %).
+
 ## Rebuild-dependent options (not implemented), ranked
 
 | Rank | Option | Expected gain | Effort | Disk / GPU cost |

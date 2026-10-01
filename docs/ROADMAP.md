@@ -1,7 +1,7 @@
 ---
 doc_type: roadmap
 status: LIVING
-last_reviewed: 2026-09-30
+last_reviewed: 2026-10-01
 ---
 
 # poring-lab roadmap
@@ -19,7 +19,8 @@ flowchart TD
     D3["Environment interlock · ADR-0006 rule 2<br/>NOT BUILT - issue"]
     E1["Community-server permission evidence<br/>OPERATOR - pending"]
     P0["Phase 0 · stack up, capture FPS,<br/>end-to-end latency<br/>ACTIVE - console latency work"]
-    P1["Phase 1 · packet decoder +<br/>world state, ground truth<br/>PLAN PROPOSED"]
+    P1["Phase 1 · packet decoder +<br/>world state, ground truth<br/>DONE first slice · validated"]
+    H1["H.264 end to end · RDP delivery<br/>PLAN PROPOSED - after the split"]
     P2["Phase 2 · isometric projection<br/>calibration + auto-labeling<br/>BLOCKED"]
     P3["Phase 3 · YOLO training +<br/>evaluation vs ground truth<br/>BLOCKED"]
     P4["Phase 4 · fast loop, FSM,<br/>input through the mux<br/>BLOCKED"]
@@ -27,7 +28,8 @@ flowchart TD
     P6["Phase 6 · Typhoon slow loop<br/>community server + rAthena<br/>BLOCKED"]
 
     N1 --> N2 --> N3
-    N3 --> P1
+    N3 --> H1
+    H1 --> P2
     D1 --> S1
     N1 --> P0
     S1 --> P0
@@ -48,9 +50,9 @@ flowchart TD
     classDef decision fill:#fde0e0,stroke:#d05555,color:#8f2e2e
     classDef goal     fill:#ede0fb,stroke:#8a5cd8,color:#4d2e8f
 
-    class D1,S1 done
+    class D1,S1,P1 done
     class N1,P0 active
-    class N2,D2,D3,E1,P1 decision
+    class N2,D2,D3,E1,H1 decision
     class N3,P2,P3,P4,P5,P6 blocked
 ```
 
@@ -60,12 +62,13 @@ flowchart TD
 | **Weekend · disk split** | 🟥 OPERATOR | Move the quant Postgres/Mongo data to its own Proxmox vdisk; the window comes from the IO baseline (`scripts/io_summary.py`). | Operator, weekend |
 | **After the split** | ⬜ BLOCKED | Build the production frontend, desktop (bakes the ADR-0004 `rdp-loop.sh`/`run-x11vnc.sh`, today bind-mounted by the dev overlay), vision and the sniffer; `scripts/smoke_test.sh`; `check_gpu.py` (sm_120). **rathena and db are no longer waiting:** Batt made an exception on 2026-09-30 and they were built and started with the tolerant guard. | The disk split: on the shared disk, builds pushed capture Postgres past 25 % IO stall (2026-09-29) |
 | **PACKETVER + RO client** | ✅ DECIDED | Batt, 2026-09-30: the 2021-11-03 kRO exe at **PACKETVER 20211103**, **pre-renewal**, kRO 2021-06 data, WARP patches ([docs/client/rathena-client.md](client/rathena-client.md)). | — |
-| **RO client on rAthena** | ✅ DONE 2026-09-30 | A **separate client** in `C:\RO-rAthena\` logs in to this lab's rAthena. RagnarokClassic is untouched (a registry and folder baseline is compared at every step). What works: login, a character on `new_4-1`, movement. Thai typed via Kedmanee, rendered in chat, and stored byte-exact as CP874 in `chatlog`. Recipe: [rathena-client.md](client/rathena-client.md). Session now **1280×800**: the whole window fits, the stopgap is removed (2026-09-30). **Render performance measured:** the game renders at **60 fps on the Intel UHD 630** (not WARP). Clicks register at 20 ms holds; UI click→response is p50 64 ms from release. English UI text applied (data only, 2026-10-01): no more `NO MSG`, and Thai chat is still byte-exact. Desktop is CPU-protected (weight 12, 8-core ceiling). **Open:** only ~6–17 fps reach Xvfb during full-scene motion. Windows RemoteFX counters show the server skipping 25–28 frames/s for "Insufficient Client Resources", so the bottleneck is FreeRDP decode ([phase0-latency.md](phase0-latency.md)). | **RDP delivery ceiling: must be fixed before dataset collection** (H.264 encode + a newer FreeRDP, after the disk split) |
+| **RO client on rAthena** | ✅ DONE 2026-09-30 | A **separate client** in `C:\RO-rAthena\` logs in to this lab's rAthena. RagnarokClassic is untouched (a registry and folder baseline is compared at every step). What works: login, a character on `new_4-1`, movement. Thai typed via Kedmanee, rendered in chat, and stored byte-exact as CP874 in `chatlog`. Recipe: [rathena-client.md](client/rathena-client.md). RDP session **1280×800** (2026-09-30). **Game window 800×664** (client area 784×625, fully above the taskbar) with dgVoodoo **FPSLimit 30**, and a "Ragnarok Offline" desktop shortcut (2026-10-01). **Render performance measured:** the game renders at **60 fps on the Intel UHD 630** (not WARP). Clicks register at 20 ms holds; UI click→response is p50 64 ms from release. English UI text applied (data only, 2026-10-01): no more `NO MSG`, and Thai chat is still byte-exact. Desktop is CPU-protected (weight 12, 8-core ceiling). **Open:** only ~6–17 fps reach Xvfb during full-scene motion. Windows RemoteFX counters show the server skipping 25–28 frames/s for "Insufficient Client Resources", so the bottleneck is FreeRDP decode ([phase0-latency.md](phase0-latency.md)). | **RDP delivery ceiling: must be fixed before dataset collection** (H.264 encode + a newer FreeRDP, after the disk split) |
 | **Environment interlock · ADR-0006 rule 2** | 🟥 NOT BUILT | Fail-closed: the mux refuses BOT/ASSIST automation unless a verifiable signal (not the agent's judgment) says the connected server is rAthena or the community server. Until it exists, no agent automation runs on the community server; Batt may play there manually. [Issue #2](https://github.com/lumduan/poring-lab/issues/2), `blocks-phase-4`. | Design + implementation; a prerequisite of Phase 4 (with ADR-0005) |
 | **Community-server permission evidence** | 🟥 OPERATOR | The server's bot/AI-testing rules, recorded for its exact host in [environments/community-server.md](environments/community-server.md). **Pending**, so the server counts as forbidden until then (ADR-0006 rule 1). | Batt supplies the link |
 | **ADR-0005 · vision X isolation** | 🟥 DECISION | vision can reach XTEST, selections and window contents directly, and can pose as HUMAN on `:8000`. Recommended: frames from the backend + an X auth cookie + an internal agent network + no RECORD ([ADR-0005](adr/0005-vision-x-access.md); [issue #1](https://github.com/lumduan/poring-lab/issues/1), `blocks-phase-4`). | Operator picks the option set; implemented before Phase 4 |
 | **Phase 0** | 🟡 ACTIVE (part) | Stack up; capture FPS; end-to-end (motion-to-photon) latency; RDP codec comparison (`RDP_GFX`). **Started 2026-09-30:** latency instrumentation, runtime knobs, and the probe ([phase0-latency.md](phase0-latency.md): method, results, ranked options, the Windows App A/B). **HP/SP text fidelity is now unblocked**: the RO client on rAthena works. | The agent-side grab rate needs the vision image |
-| **Phase 1** | 🟥 PLAN PROPOSED | Packet decoder + world state as **offline ground truth** (sniffer captures + rAthena logs → a timeline of entities, positions, HP/SP and chat, synchronised to frames by `t_mono_ns`). Never agent input. **Plan:** [phase1-plan.md](phase1-plan.md) + [ADR-0007](adr/0007-packet-ground-truth-channel.md) (2026-10-01), with verified packet IDs for RE 20211103. rAthena's `gettick()` is CLOCK_MONOTONIC, so server ticks share the host clock. | Batt's approval and the plan's open questions. No image build is needed to start (dev-overlay sniffer) |
+| **Phase 1** | ✅ FIRST SLICE DONE 2026-10-01 | Packet decoder + world state as **offline ground truth**, never agent input ([ADR-0007](adr/0007-packet-ground-truth-channel.md) ACCEPTED). `poring_packets` (build-time length tables from pinned rAthena + OpenKore), the sniffer on the dev overlay (no build), `/ingest/packets` → console "Packet timeline" (`/ws/packets`, LAN viewers only), the `captures` volume, agent player + validation GM accounts. **Validated live** ([phase1-validation.md](phase1-validation.md)): server tick = host CLOCK_MONOTONIC (406 samples, 0–1 ms); position, chat (ASCII + Thai, byte-exact), HP and entities (5/5 within 1 cell) against GM/DB truth; 0 unknown ids, 0 desyncs; packet→frame p50 150 / p95 585 ms. | Next slices (combat, items) as Phase 2 needs them; GAT paths in Phase 2; slim sniffer image after the split |
+| **H.264 end to end** | 🟥 PLAN PROPOSED | The RDP delivery fix: Windows AVC policies (full-screen AVC444 + Quick Sync) + FreeRDP 3.32.1 from trixie-backports. Today ~6–8 fps reach the lab during motion (the 800×664 window did not help; FPSLimit 30 gave +2 fps). [h264-plan.md](h264-plan.md). | Batt: two Windows policies + one reboot; one desktop image build after the split |
 | **Phase 2** | ⬜ BLOCKED | Isometric projection calibration (world → screen for the client's camera) + auto-labeling (project the ground-truth world state into frames to make YOLO labels). | Needs BOTH Phase 0 (capture pipeline + chosen codec) AND Phase 1 (ground-truth positions) |
 | **Phase 3** | ⬜ BLOCKED | YOLO training on the auto-labels + evaluation against ground truth on held-out sessions. | Phase 2 labels (and the vision image) |
 | **Phase 4** | ⬜ BLOCKED | Fast loop: an FSM acting only through `/internal/agent` and the mux (ASSIST first; interventions logged). | Needs ALL of Phase 3 (perception), ADR-0005 implemented (its acceptance test passing), AND the environment interlock (ADR-0006 rule 2) |
@@ -74,10 +77,11 @@ flowchart TD
 
 **The real bottlenecks are the SHARED DISK, OPERATOR DECISIONS, ADR-0005 and the environment
 interlock (ADR-0006).**
-- Every other image build waits for the weekend disk split. That includes the sniffer, which is Phase 1's
-  last blocker. rathena and db were an exception, and the RO client on rAthena runs (2026-09-30).
-- **Dataset collection waits for the RDP delivery ceiling** (the game renders 60 fps; ~17 reach the lab
-  during motion). See [rathena-client.md](client/rathena-client.md), "Render performance".
+- Every other image build waits for the weekend disk split. Phase 1 no longer does: its sniffer runs on
+  the dev overlay, and the first slice is validated (2026-10-01).
+- **Dataset collection (Phase 2) waits for the RDP delivery ceiling**: the game renders 30 fps (capped),
+  ~6–8 reach the lab during motion. The fix is H.264 end to end ([h264-plan.md](h264-plan.md)), which
+  needs the split (desktop build) and Batt's two Windows policies.
 - Phase 4 cannot start until vision loses direct X access (ADR-0005) AND the environment interlock
   exists (ADR-0006), however good perception gets.
 - Phase 6's social experiments also wait for the community server's permission evidence.

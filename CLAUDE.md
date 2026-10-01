@@ -139,12 +139,35 @@ ports, quickstart) and `docs/adr/`.
 - **torch is `2.14.0+cu130`** from the explicit `pytorch-cu130` index declared in the **root**
   `pyproject.toml`. cu126 has no sm_120 kernels; cu132 images refuse to start on this R580 driver.
 
+- **Packet ground truth (ADR-0007) never reaches the agent.**
+  - `/ingest/packets` takes only the internal port and rathena's pinned `10.210.96.6`.
+  - `/ws/packets` takes only `VIEWER_NETWORKS` (LAN browsers): the compose subnet, *gateway
+    included*, is refused, because a container dialling the published port arrives from the
+    gateway with any Origin it likes.
+  - `poring_packets` is never imported by `poring_env`, never installed in vision, and never
+    mounted there (`captures`).
+  - Entity identity is the block id (AID @5), not the char_id.
+- **Sensitive agent input:** `AgentInput.sensitive` gives one summary line in the input log (counts
+  and timing). A batch that leaves a key or button held is refused (`sensitive_unbalanced`).
+  Credentials are only ever typed that way.
+- **Driving Windows (ro_agent):**
+  - **never the Run dialog**: Defender's ClickFix detection;
+  - launch via the "Ragnarok Offline" shortcut; close with paced Alt+F4;
+  - **verify the target is in front before typing**: client = active title-bar signature, console
+    = tab template, secrets re-checked every 4 characters;
+  - this client fails ("Failed to Connect to Server") unless the server is picked within ~1–2 s of
+    the list.
+
 ## Dev mode (in use until the disk split)
 
 - `compose.dev.yaml` via `scripts/dev.sh`:
   - `backend` runs the host source (read-only mount on `PYTHONPATH`); `scripts/dev.sh restart backend`
     applies code changes;
   - `frontend-dev` runs `next dev` with all writes on tmpfs.
+- `rathena` gets `entrypoint.sh` + `conf/import/groups.yml` bind-mounted, so the agent and GM accounts
+  and group 20 apply with a recreate, not a build.
+- `sniffer` runs the backend image with the host `poring_packets` source (`build: !reset`; it can
+  never retag the stub over `poring-lab/backend:local`).
 - Do not "fix" this by building images. Builds wait for the weekend disk split (docs/ROADMAP.md).
   - Exception (Batt, 2026-09-30): rathena and db were built, pulled and started with the TOLERANT guard
     (`--sustain 30 --spike 25`) because quant capture gaps are backfilled at EOD. Other images still
@@ -187,7 +210,11 @@ pnpm, ruff and mypy are not installed on the host. Use `corepack pnpm` (the vers
 | `services/desktop/bin/rdp-loop.sh` | the one RDP session + exit-code policy + ADR-0004 keywords |
 | `services/rathena/entrypoint.sh` | conf rendering, DB bootstrap, server supervision |
 | `services/vision/src/poring_vision/` | loop skeleton; `detector.py` / `policy.py` hold the TODO stubs |
-| `services/frontend/src/` | console: `components/Console.tsx` (sockets), `StreamCanvas.tsx` (input capture) |
+| `services/frontend/src/` | console: `components/Console.tsx` (sockets), `StreamCanvas.tsx` (input capture), `PacketTimeline.tsx` |
+| `packages/poring_packets/` | ADR-0007: capture, TCP/RO framing, first-slice decode, world state, sniffer; `tables.lock.json` |
+| `scripts/gen_packet_tables.py` | build-time length tables from pinned rAthena + OpenKore (never committed) |
+| `services/backend/src/poring_backend/{routes_packets,packets,display}.py` | ingest + viewer channel; black-screen detector |
+| `scripts/ro_agent.py`, `measure_motion.py`, `measure_delay.py`, `pressure_sampler.py` | agent login/recovery/GM checks; motion and packet→frame benchmarks; quant pressure ±5 min |
 
 ## Conventions
 

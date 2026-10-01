@@ -1,18 +1,20 @@
 ---
 doc_type: decision
 hypothesis: null
-status: PROPOSED
+status: GO
 role: null
-verdict_date: null
+verdict_date: 2026-10-01
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: Batt decides (with docs/phase1-plan.md). If accepted, implement with the guards listed below before any packet event reaches the console.
+next_action: Implemented and validated (docs/phase1-validation.md). Slim sniffer image after the disk split; GAT in Phase 2.
 ---
 
 # ADR-0007: Packet ground truth — a viewer-only channel and a separate captures volume
 
-- Status: PROPOSED (2026-09-30)
+- Status: **ACCEPTED** (Batt, 2026-10-01). Proposed 2026-09-30. Implemented the same day; see
+  "Acceptance decisions" and "Implementation notes" below, and
+  [phase1-validation.md](../phase1-validation.md).
 - Deciders: Batt
 - Related:
   - [phase1-plan.md](../phase1-plan.md);
@@ -49,6 +51,8 @@ time):
    - connections that arrived on the internal port;
    - any peer in the compose subnet (`10.210.96.0/24`), which covers vision;
    - connections without a browser Origin in the allowlist.
+   - ➡️ TIGHTENED at implementation (2026-10-01): it **accepts only `VIEWER_NETWORKS`** (default
+     `192.168.0.0/16`), so the gateway is refused too. See "Implementation notes".
 4. **Nothing in the agent path can carry packet data.**
    - No `Packet*` model is reachable from the agent-side schemas (`agent_to_backend`, `input_event`,
      `backend_to_agent`); `test_protocol` reachability tests enforce this.
@@ -67,3 +71,33 @@ time):
   by this ADR. It remains a Phase 4 blocker. This ADR only guarantees that the new channel doesn't
   widen it.
 - One more route to test on both listeners, and one more volume in the guard tests.
+
+## Acceptance decisions (Batt, 2026-10-01)
+
+1. **Length tables are generated at build time from pinned sources, never committed.**
+   - The sources are rAthena at `e985006…` (struct sizes and the C→S packet DB) and OpenKore's
+     `recvpackets.txt` at `51de1dd…`, a cross-check that fills gaps.
+   - `scripts/gen_packet_tables.py` writes `_generated/lengths.json` (gitignored).
+   - What is committed is only the generator and `tables.lock.json`: input and output SHA-256, plus
+     every rAthena/OpenKore disagreement. Any disagreement on a decoded id is fatal, and so is drift
+     from the lock.
+2. **The sniffer runs on the dev overlay** (the backend image plus the host source; no build). A
+   slim image comes after the disk split.
+3. **GAT later (Phase 2).** Until then, paths are rAthena's diagonal-first fallback. That is exact
+   on open ground; around obstacles, the error is bounded by the detour.
+
+## Implementation notes (2026-10-01)
+
+- **The hairpin residual was real, and it is closed.**
+  - A live probe from the sniffer container (vision's network position) dialled the *published*
+    port with a forged Origin. Docker's proxy delivered it from the lab gateway `10.210.96.1`, the
+    same address host scripts use, and it was **accepted**.
+  - `/ws/packets` now accepts only `VIEWER_NETWORKS` (browsers keep their real LAN address through
+    Docker's DNAT) and refuses the whole compose subnet, gateway included.
+  - Re-probed: refused (`compose_peer`). Host scripts read `/captures` instead.
+- **Entity identity** is the block id (AID @5 of the entry packets), not the char_id (GID @9, 0 for
+  monsters). Found by the live entity check (`42e2d4d`).
+- **Sensitive agent input.** `AgentInput.sensitive` makes the input log keep counts and timing
+  only, and refuses a batch that leaves anything held. ro_agent types credentials this way.
+  - This is not part of the packet channel, but it shipped with it.
+

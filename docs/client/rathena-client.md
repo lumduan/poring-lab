@@ -190,15 +190,94 @@ source exe (output to `_scratch\`):
 | RDS policies, DWMFRAMEINTERVAL | absent | **unchanged** | – |
 | `C:\RO-rAthena\_downloads\RAG_SETUP_211105.exe` | 3,427,631,040 B | **deleted** (C: +3.19 GB) | re-download from `rofull.gnjoy.com` |
 | UI text files in `client\data\` | absent | 3 files (see "English UI text") | delete them |
+| `client\savedata\OptionInfo.lua` `WIDTH`/`HEIGHT` (2026-10-01) | 1024 / 768 | **800 / 664** (`OLD_*` kept 1024/768) | restore from `C:\RO-rAthena\_backup\2026-10-01-window\` |
+| `client\dgVoodoo.conf` (2026-10-01) | `ExtraEnumeratedResolutions =` (empty), `FPSLimit = 0` | `ExtraEnumeratedResolutions = 800x664`, **`FPSLimit = 30`** | restore from the same backup |
+| Desktop shortcut "Ragnarok Offline" + `C:\RO-rAthena\PoringLab.cmd` (2026-10-01, Batt's request) | absent | the launcher (`__COMPAT_LAYER=RunAsInvoker`, then `start /D client PoringLab.exe`) and a shortcut to it | delete both |
+| PSReadLine history (2026-10-01 incident) | – | one line removed (a GM password the agent typed into a console by mistake; rotated) | – |
+
+Backups taken before the window change: `C:\RO-rAthena\_backup\2026-10-01-window\` holds
+`OptionInfo.lua` (2,773 B), `dgVoodoo.conf` (21,967 B) and `gravity_hkcu.reg` (32,564 B; HKCU
+`Gravity Soft` still says 800×600, which the client ignores in favour of `OptionInfo.lua`).
 
 Tools added under `C:\RO-rAthena\_tools`: WARP, dgVoodoo2, Process Monitor, and PresentMon 2.6.0
 (980,320 B, SHA-256 `b2a706bc…188f1af`, signed Intel Corporation, valid).
 
 ## Launch
 
+Double-click **"Ragnarok Offline"** on the desktop (2026-10-01). It runs `C:\RO-rAthena\PoringLab.cmd`:
+
+```bat
+@set __COMPAT_LAYER=RunAsInvoker
+@start "" /D C:\RO-rAthena\client C:\RO-rAthena\client\PoringLab.exe
+```
+
+The same thing from a PowerShell console:
+
 ```powershell
 $env:__COMPAT_LAYER="RunAsInvoker"; Start-Process C:\RO-rAthena\client\PoringLab.exe -WorkingDirectory C:\RO-rAthena\client
 ```
+
+## Window 800×664, FPS cap 30 (2026-10-01)
+
+- **Where the resolution lives:** `savedata\OptionInfo.lua` (`WIDTH`, `HEIGHT`, `OLD_*`,
+  `ISFULLSCREENMODE`). HKCU `Gravity Soft\Ragnarok` `WIDTH`/`HEIGHT` (800×600) is ignored.
+  - 2019+ clients force 1024×768 when the height is below 664, so 800×600 needs a new exe, which
+    Smart App Control blocks. **800×664** is the smallest supported size.
+  - dgVoodoo enumerates it via `ExtraEnumeratedResolutions = 800x664`.
+- **The client sizes the window's *outer* frame to the configured size.**
+  - At 1024×768 the client area was **1008×729** at (136,31), and its bottom ~15 px sat under the
+    taskbar (the chat input was clipped).
+  - At 800×664 it is **784×625 at (248,99)**, entirely above the taskbar.
+  - So the game is presented slightly scaled (0.98×0.94). UI text stays readable at native
+    resolution (checked by reading crops of the Basic Information window, hotkey bar and chat).
+  - No OCR engine is installed on the host, so this was a visual check.
+- **Character select is laid out for ≥ 1024 px**: at 800 wide its left slot column and right info
+  panel are clipped. Enter still starts the game, and the agent never needs the clipped parts.
+- `GAME_REGION=248,99,784,625` in `.env` drives the black-screen detector and ro_agent.
+- **Effect on delivery** (`phase0-latency.md`): none material.
+  - Output stays 5.5–6.4 fps during camera rotation.
+  - Windows skips ~25/s for "insufficient client resources".
+  - The bottleneck is xfreerdp's decode of RemoteFX progressive ([h264-plan.md](../h264-plan.md)).
+- **`FPSLimit = 30`** (dgVoodoo): outdoor A/B, output **8.5 vs 6.4 fps**, skips 21.3 vs 25.1/s,
+  Xvfb p90 14 vs 10, same desktop CPU. **Kept.**
+  - The minimum click hold with the cap: 20 ms and 50 ms both register 6/6. ro_agent holds 50 ms.
+
+## Agent automation (scripts/ro_agent.py) — what the client and Windows require
+
+- **The server must be chosen within ~1–2 s of the server list arriving.** Otherwise this client
+  fails with "Failed to Connect to Server", **without even dialling the char server**, and exits on
+  OK.
+  - Found 2026-10-01. Batt picking at 1.3 s worked; the agent picking at 2–37 s failed 9/9, by
+    Enter, click and double-click alike. A 0.8 s fixed-delay pick worked every time since.
+  - The login reply, the packet bytes and the accounts are identical either way, so this is a
+    client-side timer.
+- **Edit keys injected back-to-back in one batch are dropped** (4 of 24 Backspaces registered).
+  Typed characters arrive intact (they come as `WM_CHAR`). So fields are cleared with paced
+  Backspaces.
+- **A freshly launched window takes its first click as activation**, and the service-select OK may
+  need a second click.
+- **Alt+F4 must be paced** (60 ms steps). Then it closes the client at once, with no prompt.
+- **No Run-dialog commands.** Run-dialog PowerShell one-liners tripped Microsoft Defender:
+  - `Behavior:Win32/SuspClickFix.G3` and `VirTool:Script/AmsiSuspClickfix.B`, severity 5,
+    2026-10-01 11:47 and 12:36;
+  - the processes were killed;
+  - ClickFix is the attack that tricks users into pasting commands into Win+R, so this is the
+    detection working, and **no exclusion was added**.
+  - Instead: launch via the desktop shortcut; close with Alt+F4; diagnostics are typed into an
+    already-open PowerShell console, found by its tab template and re-verified before typing.
+- **Foreground discipline** (three slips on 2026-10-01, all caught or contained):
+  1. A console covered the client: the GM password went into it, ran, and reached PSReadLine
+     history. The line was removed and the password rotated.
+  2. A dark-pixel heuristic took the black wallpaper for a console: Enter reached the desktop and
+     raised CPU-Z's UAC prompt, which was declined.
+  3. A console covered the client's title bar: camera right-drags pasted the Windows clipboard
+     (Batt's test password) onto a prompt. It was not executed, and was cleared.
+
+  The rules now in code:
+  - the client is verified in front by its **active** title-bar signature (inactive scores ~30);
+  - consoles by a tab template;
+  - secrets are re-verified every 4 characters;
+  - measurements refuse to run with a console visible.
 
 ## Server side (this repo)
 
