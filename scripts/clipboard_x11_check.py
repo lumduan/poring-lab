@@ -49,6 +49,7 @@ class StandInXfreerdp(threading.Thread):
         )
         self.d.sync()
         self.targets: list[str] = []
+        self.targets_asked = 0  # one per new owner: the paste, then its scrub (ADR-0004 amendment)
         self.text: bytes | None = None
         self.want_paste = threading.Event()
         self.stop = threading.Event()
@@ -85,6 +86,7 @@ class StandInXfreerdp(threading.Thread):
                 owner = int(getattr(getattr(e, "owner", 0), "id", 0))
                 if is_new_owner and owner not in (0, self.win.id):
                     atoms = self.convert("TARGETS")
+                    self.targets_asked += 1
                     self.targets = [self.d.get_atom_name(int(a)) for a in (atoms or [])]
             if self.want_paste.is_set():
                 self.want_paste.clear()
@@ -123,6 +125,10 @@ async def check(name: str) -> list[str]:
         expect(standin.text == TEXT.encode(), "stand-in received the exact UTF-8 text")
         owner = int(getattr(observer.get_selection_owner(clipboard), "id", 0))
         expect(owner == 0, "ownership released after the paste")
+        expect(
+            standin.targets_asked == 2, f"paste + scrub announced ({standin.targets_asked} rounds)"
+        )
+        expect(service.scrub_incomplete == 0, "scrub completed")
 
         foreign = observer.screen().root.create_window(0, 0, 1, 1, 0, X.CopyFromParent)
         foreign.set_selection_owner(clipboard, X.CurrentTime)

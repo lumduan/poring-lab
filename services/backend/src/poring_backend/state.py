@@ -34,6 +34,7 @@ from poring_env.protocol import (
 )
 
 log = logging.getLogger(__name__)
+PASTE_DIGEST_HEX = 12  # ADR-0004 amendment (2026-10-01)
 
 T = TypeVar("T")
 
@@ -301,9 +302,10 @@ class AppState:
 
     async def paste(self, msg: ClipboardPaste, *, browser: bool, client: str | None) -> PasteResult:
         """Human-only paste (ADR-0004). ``browser``: the connection presented an allowlisted
-        Origin. Only the length and sha256 of the text are ever logged."""
+        Origin. Only the length and a 12-hex sha256 PREFIX of the text are ever logged: enough to
+        match a paste against a known value, too short to brute-force a short paste offline."""
         data = msg.text.encode("utf-8")
-        digest = hashlib.sha256(data).hexdigest()
+        digest = hashlib.sha256(data).hexdigest()[:PASTE_DIGEST_HEX]
         refusal: str | None = None
         if self.clipboard is None:
             refusal = "clipboard_disabled"

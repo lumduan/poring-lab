@@ -1,5 +1,6 @@
 """End-to-end through FastAPI with fake X capture/input: real WebSockets, real mux, real log."""
 
+import hashlib
 import json
 import logging
 import time
@@ -323,6 +324,14 @@ def test_paste_goes_through_the_mux_and_never_logs_its_text(
     audit = (tmp_path / "transfer_log").glob("*.jsonl")
     record = json.loads(next(audit).read_text().splitlines()[-1])
     assert (record["action"], record["ok"], record["name"]) == ("paste", True, None)
+    # ADR-0004 amendment: only a 12-hex prefix of the digest is logged, nowhere the full digest.
+    full = hashlib.sha256(SECRET_TEXT.encode()).hexdigest()
+    assert summary["event"]["sha256"] == record["sha256"] == full[:12]
+    for path in tmp_path.rglob("*"):
+        if path.is_file():
+            assert full not in path.read_text(errors="replace"), path
+    # ...and the paste is followed by a scrub: CLIPBOARD re-owned (empty) and released again.
+    assert xfreerdp.history == ["own", "release", "own", "release"]
 
 
 def test_paste_needs_a_browser_connection(make_client: Factory, make_xfreerdp: Any) -> None:

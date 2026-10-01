@@ -118,6 +118,7 @@ async def health(request: Request) -> dict[str, Any]:
             "enabled": state.clipboard is not None,
             "x_connected": state.clipboard.connected if state.clipboard else False,
             "foreign_owner_clears": state.clipboard.foreign_owner_clears if state.clipboard else 0,
+            "scrub_incomplete": state.clipboard.scrub_incomplete if state.clipboard else 0,
         },
         "transfer_enabled": state.settings.transfer_enabled,
         "stream": {

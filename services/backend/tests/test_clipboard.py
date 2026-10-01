@@ -15,6 +15,7 @@ from poring_backend.clipboard import (
     ClipboardService,
     ConvertRequest,
     OwnerChanged,
+    OwnershipLost,
     PasteOutcome,
     SelectionIO,
 )
@@ -80,7 +81,11 @@ async def test_paste_is_offered_injected_served_and_released(
     assert injected == 1
     assert ("targets", OFFERED_TARGETS) in fake.replies
     assert ("data", TEXT.encode()) in fake.replies
-    assert fake.history == ["own", "release"] and fake.current_owner == 0
+    # Served, released, then scrubbed: re-owned with nothing so xfreerdp announces an empty offer
+    # that replaces Windows' copy (ADR-0004 amendment), and released again.
+    assert fake.history == ["own", "release", "own", "release"] and fake.current_owner == 0
+    assert [r for r in fake.replies if r[0] == "targets"] == [("targets", OFFERED_TARGETS)] * 2
+    assert service.scrub_incomplete == 0
 
 
 async def test_no_ctrl_v_when_xfreerdp_is_not_listening(
@@ -178,8 +183,53 @@ async def test_pastes_are_serialised(make: Make, make_xfreerdp: Callable[..., An
 
     first, second = await asyncio.gather(service.paste("one", inject), service.paste("two", inject))
     assert first.ok and second.ok
-    assert fake.history == ["own", "release", "own", "release"]
+    assert fake.history == ["own", "release", "own", "release"] * 2  # each paste + its scrub
     assert [d for kind, d in fake.replies if kind == "data"] == [b"one", b"two"]
+
+
+async def test_a_data_request_during_the_scrub_gets_nothing(
+    make: Make, make_xfreerdp: Callable[..., Any]
+) -> None:
+    """Windows may fetch the (scrub) offer at once: it must get an empty payload, never the text."""
+    fake = make_xfreerdp()
+    service = make(fake)
+    plain_own = fake.own
+    owns = 0
+
+    def own_then_fetch() -> bool:
+        nonlocal owns
+        owns += 1
+        ok = plain_own()
+        if owns == 2:  # the scrub
+            fake.push(ConvertRequest("UTF8_STRING"))
+        return ok
+
+    fake.own = own_then_fetch
+
+    async def inject() -> str | None:
+        fake.ctrl_v()
+        return None
+
+    assert await service.paste(TEXT, inject) == PasteOutcome(True, "ok")
+    assert [d for kind, d in fake.replies if kind == "data"] == [TEXT.encode(), b""]
+    assert fake.current_owner == 0
+
+
+async def test_an_incomplete_scrub_is_counted_not_a_failed_paste(
+    make: Make, make_xfreerdp: Callable[..., Any]
+) -> None:
+    """xfreerdp gone quiet after serving: the paste still succeeded, but it is never silent."""
+    fake = make_xfreerdp()
+    service = make(fake)
+
+    async def inject() -> str | None:
+        fake.ctrl_v()
+        fake.listening = False  # no TARGETS request for the scrub's re-own
+        return None
+
+    assert await service.paste(TEXT, inject) == PasteOutcome(True, "ok")
+    assert service.scrub_incomplete == 1
+    assert fake.current_owner == 0
 
 
 async def test_watchdog_clears_foreign_owners_and_warns_once_per_burst(
@@ -214,3 +264,32 @@ async def test_x_unavailable_is_an_outcome_not_an_exception(make: Make) -> None:
 
     assert await service.paste(TEXT, inject) == PasteOutcome(False, "x_unavailable")
     assert not service.connected
+
+
+async def test_a_stale_selection_clear_from_our_own_release_is_ignored(
+    make: Make, make_xfreerdp: Callable[..., Any]
+) -> None:
+    """A real X server delivers the SelectionClear of a release AFTER a quick re-own (the scrub,
+    or the next queued paste). We still own CLIPBOARD: that must not abort anything."""
+    fake = make_xfreerdp()
+    service = make(fake)
+    plain_own = fake.own
+    owns = 0
+
+    def own_with_late_clear() -> bool:
+        nonlocal owns
+        owns += 1
+        ok = plain_own()
+        if owns == 2:  # the scrub's re-own, chased by the clear of the release just before it
+            fake.push(OwnershipLost())
+        return ok
+
+    fake.own = own_with_late_clear
+
+    async def inject() -> str | None:
+        fake.ctrl_v()
+        return None
+
+    assert await service.paste(TEXT, inject) == PasteOutcome(True, "ok")
+    assert service.scrub_incomplete == 0
+    assert fake.history == ["own", "release", "own", "release"]

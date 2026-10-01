@@ -7,8 +7,11 @@ One paste (verified live on FreeRDP 3.15 + Windows 11, 2026-09-30):
      through XFixes, asks us for TARGETS and announces a text format to Windows.
   3. The caller injects Ctrl+V through the input mux, as the human. Windows asks xfreerdp for the
      data; xfreerdp converts our selection and we serve it.
-  4. We give up ownership. Windows keeps no copy of the text: a later paste finds no X owner and
-     renders nothing.
+  4. We give up ownership, then SCRUB: take CLIPBOARD again offering nothing, so xfreerdp announces
+     a fresh, empty text format that replaces Windows' copy, and give it up again.
+     Releasing alone is NOT enough (ADR-0004 amendment, 2026-10-01): once a Windows app has pasted,
+     the rendered text stays on the Windows clipboard. A password pasted at 12:10 was still
+     pasteable at 13:04, and a 4-character paste still sat there 1 h 40 min later.
 
 Watchdog: only this service may own CLIPBOARD. In text-to-remote mode xfreerdp never takes it
 (Windows -> X is off), so any other owner -- e.g. another client on the X socket (ADR-0005) -- is
@@ -237,8 +240,10 @@ class _Job:
         self.offered: asyncio.Future[None] = loop.create_future()
         self.done: asyncio.Future[PasteOutcome] = loop.create_future()
         # X-thread state
-        self.state = "queued"  # queued -> waiting_targets -> offered -> injected -> served
+        # queued -> waiting_targets -> offered -> injected -> served -> scrubbing
+        self.state = "queued"
         self.deadline: float | None = None
+        self.scrub_announced = False  # xfreerdp asked for TARGETS during the scrub
 
     def resolve_offered(self) -> None:
         with contextlib.suppress(RuntimeError):  # event loop already closed (shutdown)
@@ -284,6 +289,7 @@ class ClipboardService:
         self._thread: threading.Thread | None = None
         self._current: _Job | None = None
         self._waiting: deque[_Job] = deque()
+        self._scrub_incomplete = 0
         self._connected = False
         self._foreign_clears = 0
         self._last_foreign_warning: float | None = None
@@ -299,6 +305,11 @@ class ClipboardService:
     @property
     def foreign_owner_clears(self) -> int:
         return self._foreign_clears
+
+    @property
+    def scrub_incomplete(self) -> int:
+        """Pastes after which Windows' clipboard may still hold the text (never silent)."""
+        return self._scrub_incomplete
 
     def start(self) -> None:
         self._thread = threading.Thread(target=self._run, name="clipboard-x", daemon=True)
@@ -328,7 +339,8 @@ class ClipboardService:
             if not job.done.done():
                 refusal = await inject()
                 self._send("abort" if refusal else "injected", job, refusal or "")
-            budget = self._targets_timeout + self._data_timeout + self._linger + 5.0
+            # offer + serve, then the scrub (another TARGETS round and linger), with margin
+            budget = 2 * self._targets_timeout + self._data_timeout + 2 * self._linger + 5.0
             return await asyncio.wait_for(asyncio.shield(job.done), budget)
         except TimeoutError:
             self._send("abort", job, "timeout")
@@ -451,8 +463,15 @@ class ClipboardService:
                         job.state = "offered"
                         job.deadline = self._clock() + self._settle + self._data_timeout
                         job.resolve_offered()
+                    elif job.state == "scrubbing" and not job.scrub_announced:
+                        # xfreerdp is announcing our (empty) offer to Windows: linger to answer a
+                        # data request with nothing, then release.
+                        job.scrub_announced = True
+                        job.deadline = self._clock() + self._linger
                 elif ev.target in TEXT_TARGETS:
                     io.reply_data(ev, job.data)
+                    if job.state == "scrubbing":
+                        return
                     if job.state != "served":
                         log.info("clipboard: served a paste (%d bytes)", len(job.data))
                     job.state = "served"
@@ -460,7 +479,14 @@ class ClipboardService:
                 else:
                     io.refuse(ev)
             case OwnershipLost():
-                if job is not None:
+                if job is None or io.owner() == io.window:
+                    # Stale: the SelectionClear of our OWN earlier release, delivered after we took
+                    # CLIPBOARD again (the scrub, or the next queued paste). Found on a real X
+                    # server, 2026-10-01; we still own it, so nothing was taken.
+                    return
+                if job.state == "scrubbing":
+                    self._scrub_failed(io, "ownership taken during the scrub")
+                else:
                     self._finish(io, PasteOutcome(False, "ownership_taken"))
             case OwnerChanged(owner=owner):
                 if owner not in (0, io.window):
@@ -485,16 +511,43 @@ class ClipboardService:
         if io.own():
             io.release()
 
+    def _start_scrub(self, io: SelectionIO, job: _Job) -> None:
+        """The paste is served: replace Windows' copy of the text with an empty offer."""
+        io.release()
+        job.data = b""
+        job.state = "scrubbing"
+        job.deadline = self._clock() + self._targets_timeout
+        if not io.own():
+            self._scrub_failed(io, "could not take CLIPBOARD back")
+
+    def _scrub_failed(self, io: SelectionIO, why: str) -> None:
+        self._scrub_incomplete += 1
+        log.warning(
+            "clipboard: scrub incomplete (%s); Windows may still hold the last paste "
+            "(ADR-0004 amendment)",
+            why,
+        )
+        self._finish(io, PasteOutcome(True, "ok"))  # the paste itself succeeded
+
     def _check_deadline(self, io: SelectionIO) -> None:
         self._start_next(io)
         job = self._current
         if job is None or job.deadline is None or self._clock() < job.deadline:
             return
+        if job.state == "served":
+            self._start_scrub(io, job)
+            return
+        if job.state == "scrubbing":
+            if job.scrub_announced:
+                self._finish(io, PasteOutcome(True, "ok"))
+            else:
+                self._scrub_failed(io, "xfreerdp never asked for TARGETS")
+            self._start_next(io)
+            return
         outcome = {
             "waiting_targets": PasteOutcome(False, "rdp_clipboard_not_listening"),
             "offered": PasteOutcome(False, "inject_timeout"),
             "injected": PasteOutcome(False, "no_data_request"),
-            "served": PasteOutcome(True, "ok"),
         }.get(job.state, PasteOutcome(False, "timeout"))
         self._finish(io, outcome)
         self._start_next(io)
