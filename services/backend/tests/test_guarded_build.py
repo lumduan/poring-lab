@@ -74,3 +74,13 @@ def test_start_uses_dev_overlay_and_stops_only_its_services(
     up, stop = ran
     assert up == ["scripts/dev.sh", "--profile", "core", "up", "-d", "--no-build", "db", "rathena"]
     assert stop == ["scripts/dev.sh", "--profile", "core", "stop", "db", "rathena"]
+
+
+def test_parse_target_step(gb: ModuleType) -> None:
+    step = gb.parse_step("target:rathena:build:poring-lab/rathena-build:local")
+    assert (step.kind, step.services) == (
+        "target",
+        ["rathena", "build", "poring-lab/rathena-build:local"],
+    )
+    with pytest.raises(ValueError):
+        gb.parse_step("target:rathena:build:bad tag")

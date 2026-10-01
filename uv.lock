@@ -13,6 +13,7 @@ members = [
     "poring-backend",
     "poring-env",
     "poring-lab",
+    "poring-packets",
     "poring-vision",
 ]
 excludes = ["opencv-python"]
@@ -682,6 +683,7 @@ source = { editable = "services/backend" }
 dependencies = [
     { name = "fastapi" },
     { name = "poring-env", extra = ["x11"] },
+    { name = "poring-packets" },
     { name = "pydantic-settings" },
     { name = "simplejpeg" },
     { name = "uvicorn", extra = ["standard"] },
@@ -691,6 +693,7 @@ dependencies = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.141" },
     { name = "poring-env", extras = ["x11"], editable = "packages/poring_env" },
+    { name = "poring-packets", editable = "packages/poring_packets" },
     { name = "pydantic-settings", specifier = ">=2.10" },
     { name = "simplejpeg", specifier = ">=1.9" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.54" },
@@ -758,6 +761,26 @@ dev = [
     { name = "ruff", specifier = ">=0.16.9" },
     { name = "types-python-xlib", specifier = ">=0.33" },
 ]
+
+[[package]]
+name = "poring-packets"
+version = "0.1.0"
+source = { editable = "packages/poring_packets" }
+dependencies = [
+    { name = "pydantic" },
+]
+
+[package.optional-dependencies]
+sniffer = [
+    { name = "websockets" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pydantic", specifier = ">=2.13" },
+    { name = "websockets", marker = "extra == 'sniffer'", specifier = ">=17.1" },
+]
+provides-extras = ["sniffer"]
 
 [[package]]
 name = "poring-vision"

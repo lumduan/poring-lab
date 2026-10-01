@@ -1,0 +1,1213 @@
+{
+  "$defs": {
+    "CharSelected": {
+      "additionalProperties": false,
+      "properties": {
+        "char_id": {
+          "type": "integer"
+        },
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "map": {
+          "type": "string"
+        },
+        "map_port": {
+          "type": "integer"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "char_selected",
+          "default": "char_selected",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "type",
+        "char_id",
+        "map",
+        "map_port"
+      ],
+      "title": "CharSelected",
+      "type": "object"
+    },
+    "Chat": {
+      "additionalProperties": false,
+      "description": "Chat text decoded as cp874; `raw_hex` keeps the exact bytes (ground truth vs chatlog).",
+      "properties": {
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gid": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "kind": {
+          "enum": [
+            "public",
+            "self",
+            "party",
+            "guild",
+            "whisper_in",
+            "whisper_out",
+            "broadcast",
+            "npc"
+          ],
+          "type": "string"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "raw_hex": {
+          "type": "string"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "speaker": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "text": {
+          "type": "string"
+        },
+        "type": {
+          "const": "chat",
+          "default": "chat",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "type",
+        "kind",
+        "gid",
+        "speaker",
+        "text",
+        "raw_hex"
+      ],
+      "title": "Chat",
+      "type": "object"
+    },
+    "Desync": {
+      "additionalProperties": false,
+      "properties": {
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "skipped_bytes": {
+          "type": "integer"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "desync",
+          "default": "desync",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "type",
+        "skipped_bytes"
+      ],
+      "title": "Desync",
+      "type": "object"
+    },
+    "EntityAppear": {
+      "additionalProperties": false,
+      "description": "ZC_NOTIFY_{NEW,STAND,MOVE}ENTRY11.",
+      "properties": {
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gid": {
+          "type": "integer"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "job": {
+          "type": "integer"
+        },
+        "kind": {
+          "enum": [
+            "new",
+            "stand",
+            "move"
+          ],
+          "type": "string"
+        },
+        "move_start_tick": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "name": {
+          "type": "string"
+        },
+        "objtype": {
+          "type": "integer"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "speed": {
+          "type": "integer"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "entity_appear",
+          "default": "entity_appear",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        },
+        "x": {
+          "type": "integer"
+        },
+        "x1": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "y": {
+          "type": "integer"
+        },
+        "y1": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "type",
+        "kind",
+        "gid",
+        "objtype",
+        "job",
+        "speed",
+        "name",
+        "x",
+        "y",
+        "x1",
+        "y1",
+        "move_start_tick"
+      ],
+      "title": "EntityAppear",
+      "type": "object"
+    },
+    "EntityStop": {
+      "additionalProperties": false,
+      "properties": {
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gid": {
+          "type": "integer"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "entity_stop",
+          "default": "entity_stop",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        },
+        "x": {
+          "type": "integer"
+        },
+        "y": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "type",
+        "gid",
+        "x",
+        "y"
+      ],
+      "title": "EntityStop",
+      "type": "object"
+    },
+    "EntityVanish": {
+      "additionalProperties": false,
+      "properties": {
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gid": {
+          "type": "integer"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "reason": {
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "entity_vanish",
+          "default": "entity_vanish",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "type",
+        "gid",
+        "reason"
+      ],
+      "title": "EntityVanish",
+      "type": "object"
+    },
+    "LoginAccepted": {
+      "additionalProperties": false,
+      "properties": {
+        "aid": {
+          "type": "integer"
+        },
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "sex": {
+          "type": "integer"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "login_accepted",
+          "default": "login_accepted",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "type",
+        "aid",
+        "sex"
+      ],
+      "title": "LoginAccepted",
+      "type": "object"
+    },
+    "MapChange": {
+      "additionalProperties": false,
+      "properties": {
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "map": {
+          "type": "string"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "map_change",
+          "default": "map_change",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        },
+        "x": {
+          "type": "integer"
+        },
+        "y": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "type",
+        "map",
+        "x",
+        "y"
+      ],
+      "title": "MapChange",
+      "type": "object"
+    },
+    "MapEnter": {
+      "additionalProperties": false,
+      "description": "ZC_ACCEPT_ENTER: our character is on the map at (x, y); server tick at entry.",
+      "properties": {
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "facing": {
+          "type": "integer"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "server_tick": {
+          "type": "integer"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "map_enter",
+          "default": "map_enter",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        },
+        "x": {
+          "type": "integer"
+        },
+        "y": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "type",
+        "server_tick",
+        "x",
+        "y",
+        "facing"
+      ],
+      "title": "MapEnter",
+      "type": "object"
+    },
+    "PacketStats": {
+      "additionalProperties": false,
+      "description": "Periodic counters + world summary for the console (never silent).",
+      "properties": {
+        "clock_steps": {
+          "type": "integer"
+        },
+        "desyncs": {
+          "type": "integer"
+        },
+        "entities": {
+          "type": "integer"
+        },
+        "hp": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ingest_dropped": {
+          "default": 0,
+          "type": "integer"
+        },
+        "map": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "max_hp": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "max_sp": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "packets": {
+          "type": "integer"
+        },
+        "self_x": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "self_y": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "skipped_bytes": {
+          "type": "integer"
+        },
+        "sp": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "t_mono_ns": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "tcp_gaps": {
+          "type": "integer"
+        },
+        "type": {
+          "const": "packet_stats",
+          "default": "packet_stats",
+          "type": "string"
+        },
+        "unknown": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "type",
+        "t_mono_ns",
+        "packets",
+        "unknown",
+        "desyncs",
+        "skipped_bytes",
+        "tcp_gaps",
+        "clock_steps",
+        "map",
+        "self_x",
+        "self_y",
+        "entities",
+        "hp",
+        "max_hp",
+        "sp",
+        "max_sp",
+        "ingest_dropped"
+      ],
+      "title": "PacketStats",
+      "type": "object"
+    },
+    "SelfMove": {
+      "additionalProperties": false,
+      "description": "ZC_NOTIFY_PLAYERMOVE: our walk from (x0, y0) to (x1, y1) starting at server_tick.",
+      "properties": {
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "server_tick": {
+          "type": "integer"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "self_move",
+          "default": "self_move",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        },
+        "x0": {
+          "type": "integer"
+        },
+        "x1": {
+          "type": "integer"
+        },
+        "y0": {
+          "type": "integer"
+        },
+        "y1": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "type",
+        "server_tick",
+        "x0",
+        "y0",
+        "x1",
+        "y1"
+      ],
+      "title": "SelfMove",
+      "type": "object"
+    },
+    "SelfMoveRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "self_move_request",
+          "default": "self_move_request",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        },
+        "x": {
+          "type": "integer"
+        },
+        "y": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "type",
+        "x",
+        "y"
+      ],
+      "title": "SelfMoveRequest",
+      "type": "object"
+    },
+    "StatChange": {
+      "additionalProperties": false,
+      "properties": {
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "stat_change",
+          "default": "stat_change",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        },
+        "value": {
+          "type": "integer"
+        },
+        "var": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "type",
+        "var",
+        "name",
+        "value"
+      ],
+      "title": "StatChange",
+      "type": "object"
+    },
+    "TimeSync": {
+      "additionalProperties": false,
+      "description": "ZC_NOTIFY_TIME: rAthena gettick() (CLOCK_MONOTONIC ms, mod 2^32) at send.",
+      "properties": {
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "server_tick": {
+          "type": "integer"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "time_sync",
+          "default": "time_sync",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "type",
+        "server_tick"
+      ],
+      "title": "TimeSync",
+      "type": "object"
+    },
+    "Unknown": {
+      "additionalProperties": false,
+      "description": "A packet id the length table does not know; its stream is resynchronised (counted).",
+      "properties": {
+        "count": {
+          "type": "integer"
+        },
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "unknown",
+          "default": "unknown",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "type",
+        "count"
+      ],
+      "title": "Unknown",
+      "type": "object"
+    }
+  },
+  "description": "Root of the packet-event JSON Schema (packets.schema.json -> frontend packets.gen.ts).",
+  "properties": {
+    "event": {
+      "discriminator": {
+        "mapping": {
+          "char_selected": "#/$defs/CharSelected",
+          "chat": "#/$defs/Chat",
+          "desync": "#/$defs/Desync",
+          "entity_appear": "#/$defs/EntityAppear",
+          "entity_stop": "#/$defs/EntityStop",
+          "entity_vanish": "#/$defs/EntityVanish",
+          "login_accepted": "#/$defs/LoginAccepted",
+          "map_change": "#/$defs/MapChange",
+          "map_enter": "#/$defs/MapEnter",
+          "self_move": "#/$defs/SelfMove",
+          "self_move_request": "#/$defs/SelfMoveRequest",
+          "stat_change": "#/$defs/StatChange",
+          "time_sync": "#/$defs/TimeSync",
+          "unknown": "#/$defs/Unknown"
+        },
+        "propertyName": "type"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/LoginAccepted"
+        },
+        {
+          "$ref": "#/$defs/CharSelected"
+        },
+        {
+          "$ref": "#/$defs/MapEnter"
+        },
+        {
+          "$ref": "#/$defs/MapChange"
+        },
+        {
+          "$ref": "#/$defs/TimeSync"
+        },
+        {
+          "$ref": "#/$defs/SelfMoveRequest"
+        },
+        {
+          "$ref": "#/$defs/SelfMove"
+        },
+        {
+          "$ref": "#/$defs/EntityAppear"
+        },
+        {
+          "$ref": "#/$defs/EntityVanish"
+        },
+        {
+          "$ref": "#/$defs/EntityStop"
+        },
+        {
+          "$ref": "#/$defs/StatChange"
+        },
+        {
+          "$ref": "#/$defs/Chat"
+        },
+        {
+          "$ref": "#/$defs/Unknown"
+        },
+        {
+          "$ref": "#/$defs/Desync"
+        }
+      ]
+    },
+    "stats": {
+      "$ref": "#/$defs/PacketStats"
+    }
+  },
+  "required": [
+    "event",
+    "stats"
+  ],
+  "title": "PoringPackets",
+  "type": "object"
+}

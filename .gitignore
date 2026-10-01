@@ -66,3 +66,6 @@ out/
 .DS_Store
 .idea/
 .vscode/
+
+# ---- generated at build time (scripts/gen_packet_tables.py; only the lock is committed) -----------
+packages/poring_packets/src/poring_packets/_generated/

@@ -15,6 +15,9 @@ On a breach:
   up:<seconds>  compose up -d (core+remote), watch seconds  -> compose stop
                 REFUSED while the dev overlay (scripts/dev.sh) runs: a plain `compose up` would
                 recreate backend/desktop without their mounts and build the production frontend.
+  target:<svc>:<stage>:<image>
+                docker build --target <stage> -t <image> with the service's compose build args (e.g.
+                the rathena toolchain stage for scripts/gen_packet_tables.py)  -> SIGINT
   start:<svc>[,<svc>...][@<seconds>]
                 scripts/dev.sh --profile core up -d --no-build <svcs>, watch seconds (default 180)
                 -> stops ONLY those services. The dev-mode way to bring up db/rathena.
@@ -29,6 +32,7 @@ Logs go to $TMPDIR/poring-guarded-*.log. Exit 0 only if every step completed wit
 
 import argparse
 import collections
+import json
 import os
 import re
 import subprocess
@@ -72,6 +76,13 @@ def parse_step(step: str) -> Step:
         if not SERVICE.match(arg):
             raise ValueError(f"{step}: expected {kind}:<service>")
         return Step(kind, [arg])
+    if kind == "target":
+        parts = arg.split(":", 2)
+        if len(parts) != 3 or not SERVICE.match(parts[0]) or not SERVICE.match(parts[1]):
+            raise ValueError(f"{step}: expected target:<svc>:<stage>:<image>")
+        if not re.match(r"^[a-z0-9][a-z0-9._/-]*:[A-Za-z0-9._-]+$", parts[2]):
+            raise ValueError(f"{step}: bad image tag")
+        return Step(kind, parts)
     if kind == "up":
         return Step(kind, [], float(arg or 180))
     if kind == "start":
@@ -81,6 +92,19 @@ def parse_step(step: str) -> Step:
             raise ValueError(f"{step}: expected start:<svc>[,<svc>...][@<seconds>]")
         return Step(kind, services, float(secs or 180))
     raise ValueError(f"unknown step {step}")
+
+
+def target_build_cmd(service: str, stage: str, image: str) -> list[str]:
+    """`docker build --target` with the build args compose would pass for <service>."""
+    cfg = json.loads(subprocess.run(
+        ["docker", "compose", *ALL, "config", "--format", "json"],
+        cwd=REPO, capture_output=True, text=True, check=True,
+    ).stdout)  # fmt: skip
+    build = cfg["services"][service]["build"]
+    cmd = ["docker", "build", "--progress=plain", "--target", stage, "-t", image]
+    for key, value in sorted((build.get("args") or {}).items()):
+        cmd += ["--build-arg", f"{key}={value}"]
+    return [*cmd, build["context"]]
 
 
 def dev_overlay_active() -> bool:
@@ -259,6 +283,8 @@ def main() -> int:
             ok = run_process(step.label, cmd, guard)
         elif step.kind == "pull":
             ok = run_process(step.label, ["docker", "compose", *ALL, "pull", *step.services], guard)
+        elif step.kind == "target":
+            ok = run_process(step.label, target_build_cmd(*step.services), guard)
         elif step.kind == "up":
             ok = run_up(step.seconds or 180, guard)
         else:

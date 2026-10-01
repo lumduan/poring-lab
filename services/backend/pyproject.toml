@@ -5,6 +5,7 @@ description = "poring-lab backend: screen stream, input mux (the single XTest wr
 requires-python = ">=3.12"
 dependencies = [
   "poring-env[x11]",
+  "poring-packets",
   "fastapi>=0.141",
   "uvicorn[standard]>=0.54",
   "pydantic-settings>=2.10",

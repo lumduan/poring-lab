@@ -19,10 +19,11 @@ environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
 exclude-dependencies = ["opencv-python"]
 
 [tool.uv.workspace]
-members = ["packages/poring_env", "services/backend", "services/vision"]
+members = ["packages/poring_env", "packages/poring_packets", "services/backend", "services/vision"]
 
 [tool.uv.sources]
 poring-env = { workspace = true }
+poring-packets = { workspace = true }
 poring-backend = { workspace = true }
 poring-vision = { workspace = true }
 torch = { index = "pytorch-cu130" }
@@ -55,14 +56,14 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 ignore = ["B008"] # FastAPI Depends() in defaults is idiomatic
 
 [tool.ruff.lint.isort]
-known-first-party = ["poring_env", "poring_backend", "poring_vision"]
+known-first-party = ["poring_env", "poring_packets", "poring_backend", "poring_vision"]
 
 [tool.mypy]
 python_version = "3.12"
 strict = true
 # poring_env is the strict gate; backend is held to the same bar. vision is checked inside its
 # container only (torch/ultralytics are not installed in the host venv).
-files = ["packages/poring_env/src", "services/backend/src"]
+files = ["packages/poring_env/src", "packages/poring_packets/src", "services/backend/src"]
 
 [[tool.mypy.overrides]]
 module = ["simplejpeg", "simplejpeg.*"] # ships .pyi but no py.typed marker
@@ -70,7 +71,12 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["packages/poring_env/tests", "services/backend/tests", "services/vision/tests"]
+testpaths = [
+  "packages/poring_env/tests",
+  "packages/poring_packets/tests",
+  "services/backend/tests",
+  "services/vision/tests",
+]
 # vision's loop logic is tested without installing its GPU dependencies: its modules import
 # torch/ultralytics lazily, so the source tree is enough.
 pythonpath = ["services/vision/src"]
