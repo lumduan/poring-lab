@@ -1,0 +1,154 @@
+#!/usr/bin/env python3
+"""Rotate lab secrets in .env without ever printing them (or putting them on an argv).
+
+    rotate_secrets.py rotate VAR [VAR ...]
+
+Known variables and their generators:
+    DB_PASSWORD, DB_ROOT_PASSWORD   hex32. The running MariaDB is changed FIRST (ALTER USER for
+                                    ragnarok@% / root@localhost / root@%, authenticated with the
+                                    db container's current root password, SQL on stdin), and each
+                                    new password is verified with a fresh login (option file on
+                                    stdin) before .env is touched.
+    RATHENA_SERVER_PASSWORD         hex23 (char/map keep it in 24-byte buffers).
+    RATHENA_TEST_PASSWORD           16 alphanumerics (rathena's entrypoint rule).
+    WIN_LAB_PASSWORD                20 alphanumerics, at least one upper, lower and digit
+                                    (Windows complexity).
+
+.env is rewritten atomically (temp file + rename, mode 600); only variable NAMES are printed.
+After rotating DB_* or RATHENA_*: recreate db + rathena (+ the sniffer, which shares rathena's
+network namespace), e.g.
+    python3 scripts/guarded_build.py --sustain 30 --spike 25 start:db,rathena@180
+"""
+
+import argparse
+import os
+import secrets
+import string
+import subprocess
+import sys
+import tempfile
+from collections.abc import Callable
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+ENV = ROOT / ".env"
+DB = "poring-lab-db-1"
+ALNUM = string.ascii_letters + string.digits
+
+
+def _alnum(n: int) -> str:
+    return "".join(secrets.choice(ALNUM) for _ in range(n))
+
+
+def _complex(n: int) -> str:
+    while True:
+        v = _alnum(n)
+        if (
+            any(c.islower() for c in v)
+            and any(c.isupper() for c in v)
+            and any(c.isdigit() for c in v)
+        ):
+            return v
+
+
+GENERATORS: dict[str, Callable[[], str]] = {
+    "DB_PASSWORD": lambda: secrets.token_hex(16),
+    "DB_ROOT_PASSWORD": lambda: secrets.token_hex(16),
+    "RATHENA_SERVER_PASSWORD": lambda: secrets.token_hex(16)[:23],
+    "RATHENA_TEST_PASSWORD": lambda: _alnum(16),
+    "WIN_LAB_PASSWORD": lambda: _complex(20),
+}
+
+
+def parse_env(text: str) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for line in text.splitlines():
+        if "=" in line and not line.lstrip().startswith("#"):
+            k, v = line.split("=", 1)
+            out[k.strip()] = v
+    return out
+
+
+def rewrite_env(text: str, updates: dict[str, str]) -> str:
+    """Replace `KEY=...` lines in place (first occurrence; comments untouched), append missing
+    keys at the end. Values never contain newlines (the generators guarantee it)."""
+    lines = text.splitlines()
+    done: set[str] = set()
+    for i, line in enumerate(lines):
+        if line.lstrip().startswith("#") or "=" not in line:
+            continue
+        key = line.split("=", 1)[0].strip()
+        if key in updates and key not in done:
+            lines[i] = f"{key}={updates[key]}"
+            done.add(key)
+    lines += [f"{k}={v}" for k, v in updates.items() if k not in done]
+    return "\n".join(lines) + "\n"
+
+
+def write_env_atomic(path: Path, text: str) -> None:
+    fd, tmp = tempfile.mkstemp(prefix=".env.", dir=str(path.parent))
+    try:
+        with os.fdopen(fd, "w") as fh:
+            fh.write(text)
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, path)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
+
+
+def _db_exec(script: str, stdin: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["docker", "exec", "-i", DB, "sh", "-c", script],
+        input=stdin, capture_output=True, text=True,
+    )  # fmt: skip
+
+
+def _login_ok(user: str, password: str) -> bool:
+    cnf = f"[client]\nuser={user}\npassword={password}\n"
+    r = _db_exec('exec mariadb --defaults-extra-file=/dev/stdin -N -e "SELECT 1"', cnf)
+    return r.returncode == 0 and r.stdout.strip() == "1"
+
+
+def alter_db(new: dict[str, str]) -> None:
+    """Change the running MariaDB first; .env is only written if this succeeds."""
+    stmts = []
+    if "DB_PASSWORD" in new:
+        stmts.append(f"ALTER USER 'ragnarok'@'%' IDENTIFIED BY '{new['DB_PASSWORD']}';")
+    if "DB_ROOT_PASSWORD" in new:
+        for host in ("localhost", "%"):
+            stmts.append(f"ALTER USER 'root'@'{host}' IDENTIFIED BY '{new['DB_ROOT_PASSWORD']}';")
+    stmts.append("FLUSH PRIVILEGES;")
+    r = _db_exec('MYSQL_PWD="$MARIADB_ROOT_PASSWORD" exec mariadb -uroot', "\n".join(stmts))
+    if r.returncode != 0:
+        sys.exit(f"ALTER USER failed (exit {r.returncode}); .env unchanged")
+    if "DB_PASSWORD" in new and not _login_ok("ragnarok", new["DB_PASSWORD"]):
+        sys.exit("new ragnarok password does not log in; .env unchanged -- investigate before use")
+    if "DB_ROOT_PASSWORD" in new and not _login_ok("root", new["DB_ROOT_PASSWORD"]):
+        sys.exit("new root password does not log in; .env unchanged -- investigate before use")
+
+
+def rotate(names: list[str], env_path: Path = ENV) -> list[str]:
+    unknown = [n for n in names if n not in GENERATORS]
+    if unknown:
+        sys.exit(f"no generator for {unknown}; known: {sorted(GENERATORS)}")
+    new = {n: GENERATORS[n]() for n in names}
+    if {"DB_PASSWORD", "DB_ROOT_PASSWORD"} & new.keys():
+        alter_db({k: v for k, v in new.items() if k.startswith("DB_")})
+    text = env_path.read_text()
+    write_env_atomic(env_path, rewrite_env(text, new))
+    return names
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    r = sub.add_parser("rotate")
+    r.add_argument("names", nargs="+")
+    a = ap.parse_args()
+    changed = rotate(a.names)
+    print("rotated in .env (values not shown):", " ".join(changed))
+
+
+if __name__ == "__main__":
+    main()
