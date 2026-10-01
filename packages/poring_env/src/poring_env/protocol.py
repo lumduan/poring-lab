@@ -227,6 +227,13 @@ class Status(Message):
         default="decode",
         description="decode: draw each frame once decoded; raf: newest decoded frame per rAF.",
     )
+    game_black: bool | None = Field(
+        default=None,
+        description=(
+            "The game region has been near-uniformly black for the hold time (a lost D3D device "
+            "after an RDP reconnect); null = unknown (no recent grab)."
+        ),
+    )
 
 
 class PasteResult(Message):
@@ -245,7 +252,7 @@ class ErrorReply(Message):
     Never silent (ADR-0004 decision 4): the drop is also logged and counted in /health."""
 
     type: Literal["error"] = "error"
-    channel: Literal["ws_input", "ws_stream", "agent"]
+    channel: Literal["ws_input", "ws_stream", "agent", "ingest", "ws_packets"]
     reason: str = Field(max_length=128, description="e.g. missing:key.t_mono_ns, json_invalid.")
     ref_type: str | None = Field(
         default=None, max_length=32, description="The dropped message's type, if readable."
@@ -290,6 +297,14 @@ class AgentInput(Message):
     type: Literal["agent_input"] = "agent_input"
     t_capture_ns: int = Field(ge=0)
     events: list[InputEvent] = Field(min_length=1, max_length=64)
+    sensitive: bool = Field(
+        default=False,
+        description=(
+            "Credentials or other secrets: the input log keeps only the event count and timing, "
+            "never key identities. Refused unless every key/button it presses is released within "
+            "the same batch (nothing held could leak later through a synthetic release)."
+        ),
+    )
 
 
 class InputAck(Message):

@@ -11,10 +11,12 @@ from typing import Any, Protocol, TypeVar
 
 from poring_backend.clipboard import ClipboardService, PasteOutcome, SelectionIO
 from poring_backend.config import Settings
+from poring_backend.display import DisplayWatch, Region
 from poring_backend.drops import DropCounter
 from poring_backend.input_log import InputLog, InputLogRecord, wall_clock_iso
 from poring_backend.latency import InputRecord, LatencyRecorder
 from poring_backend.mux import Decision, InputMux, Routed, Source
+from poring_backend.packets import PacketHub
 from poring_backend.stream import CaptureHub, ChangeWatcher, Outbox, StreamTuning
 from poring_backend.transfer_log import TransferLog
 from poring_env.clock import monotonic_ns
@@ -24,6 +26,7 @@ from poring_env.protocol import (
     InputEvent,
     Key,
     Mode,
+    MouseButton,
     PasteResult,
     ReleaseAll,
     SetMode,
@@ -95,6 +98,19 @@ class Injector:
         self._executor.shutdown(wait=False, cancel_futures=True)
 
 
+def balanced(events: Sequence[InputEvent]) -> bool:
+    """True if every key/button pressed in ``events`` is released within them."""
+    held: set[str] = set()
+    for e in events:
+        if isinstance(e, ReleaseAll):
+            held.clear()
+        elif isinstance(e, Key):
+            (held.add if e.action == "down" else held.discard)(f"k:{e.code}")
+        elif isinstance(e, MouseButton):
+            (held.add if e.action == "down" else held.discard)(f"b:{e.button}")
+    return not held
+
+
 class AppState:
     def __init__(
         self,
@@ -128,12 +144,18 @@ class AppState:
             paint=settings.console_paint,
         )
         self.latency = LatencyRecorder()
+        self.display = DisplayWatch(
+            Region.parse(settings.game_region), hold_s=settings.black_hold_s
+        )
         self.hub = CaptureHub(
             capture_factory,
             tuning=self.tuning,
             damage_factory=damage_factory,
             on_frame=self.latency.frame_encoded,
+            on_grab=self.display.observe,
         )
+        # ADR-0007: the packet feed for the console (never the agent, never the mux).
+        self.packets = PacketHub()
         self.agents: set[Outbox] = set()
         self.rdp_window_present: bool | None = None
         self._status_task: asyncio.Task[None] | None = None
@@ -164,6 +186,15 @@ class AppState:
         period = 1.0 / self.settings.status_hz
         while True:
             self.rdp_window_present = await self.injector.rdp_window_present()
+            now = monotonic_ns()
+            self.display.rdp(self.rdp_window_present, now)
+            if self.display.needs_sample(now):
+                await self.hub.sample_once()  # no console watching: keep the detector fed
+            before = self.display.state
+            after = self.display.evaluate()
+            if after != before:
+                level = logging.WARNING if "black" in (before, after) else logging.INFO
+                log.log(level, "game display %s -> %s (%s)", before, after, self.display.snapshot())
             self.broadcast_status()
             await asyncio.sleep(period)
 
@@ -184,6 +215,7 @@ class AppState:
             transfer_enabled=self.settings.transfer_enabled,
             move_interval_ms=self.tuning.move_interval_ms,
             paint=self.tuning.paint,
+            game_black=self.display.black,
         )
 
     def refused_snapshot(self) -> dict[str, dict[str, int]]:
@@ -216,11 +248,18 @@ class AppState:
         *,
         synthetic_reason: str | None = None,
         records: Sequence[InputRecord] | None = None,
+        sensitive: bool = False,
     ) -> list[Decision]:
         """Run ``events`` through the mux and inject what it allows. ``synthetic_reason`` marks
         events the backend generated on the source's behalf (e.g. the Ctrl+V of a paste).
-        ``records`` (one per event) receive the decision and XTest-injection times (Phase 0)."""
+        ``records`` (one per event) receive the decision and XTest-injection times (Phase 0).
+        ``sensitive`` (credentials): one summary line in the input log, no key identities; the
+        batch is refused unless it releases everything it presses."""
         now = monotonic_ns()
+        if sensitive and not balanced(events):
+            self.refused[(source.value, "sensitive_unbalanced")] += len(events)
+            self._log_sensitive(source, events, 0, ["sensitive_unbalanced"], now)
+            return [Decision(False, "sensitive_unbalanced") for _ in events]
         lease_before = self.mux.lease_active(now)
         decisions: list[Decision] = []
         routed: list[Routed] = []
@@ -230,18 +269,22 @@ class AppState:
             # still in the input log, but it is not a dropped input worth counting.
             if not decision.accepted and not isinstance(event, ReleaseAll):
                 self.refused[(source.value, decision.reason)] += 1
-            self._log(
-                source,
-                event.model_dump(mode="json"),
-                event.frame_id,
-                decision.accepted,
-                synthetic_reason if decision.accepted and synthetic_reason else decision.reason,
-                now,
-                synthetic=synthetic_reason is not None,
-            )
-            self._log_synthetic(decision.inject, now)
+            if not sensitive:
+                self._log(
+                    source,
+                    event.model_dump(mode="json"),
+                    event.frame_id,
+                    decision.accepted,
+                    synthetic_reason if decision.accepted and synthetic_reason else decision.reason,
+                    now,
+                    synthetic=synthetic_reason is not None,
+                )
+                self._log_synthetic(decision.inject, now)
             decisions.append(decision)
             routed.extend(decision.inject)
+        if sensitive:
+            reasons = sorted({d.reason for d in decisions if not d.accepted})
+            self._log_sensitive(source, events, sum(d.accepted for d in decisions), reasons, now)
         if records is not None:
             for record, decision in zip(records, decisions, strict=True):
                 record.t_decided = now
@@ -352,6 +395,25 @@ class AppState:
                 event=event,
             )
         )
+
+    def _log_sensitive(
+        self,
+        source: Source,
+        events: Sequence[InputEvent],
+        accepted: int,
+        reasons: list[str],
+        now: int,
+    ) -> None:
+        """One line for a whole sensitive batch: count and timing only, never key identities."""
+        summary = {
+            "type": "sensitive_batch",
+            "events": len(events),
+            "accepted": accepted,
+            "t_first_ns": events[0].t_mono_ns,
+            "t_last_ns": events[-1].t_mono_ns,
+            "refused": reasons,
+        }
+        self._log(source, summary, events[0].frame_id, accepted > 0, "sensitive", now)
 
     def _log_synthetic(self, routed: Sequence[Routed], now: int) -> None:
         for r in routed:

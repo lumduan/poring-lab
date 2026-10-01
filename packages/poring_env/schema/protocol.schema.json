@@ -59,6 +59,11 @@
           "minimum": -1,
           "type": "integer"
         },
+        "sensitive": {
+          "default": false,
+          "description": "Credentials or other secrets: the input log keeps only the event count and timing, never key identities. Refused unless every key/button it presses is released within the same batch (nothing held could leak later through a synthetic release).",
+          "type": "boolean"
+        },
         "t_capture_ns": {
           "minimum": 0,
           "type": "integer"
@@ -79,7 +84,8 @@
         "frame_id",
         "type",
         "t_capture_ns",
-        "events"
+        "events",
+        "sensitive"
       ],
       "title": "AgentInput",
       "type": "object"
@@ -350,7 +356,9 @@
           "enum": [
             "ws_input",
             "ws_stream",
-            "agent"
+            "agent",
+            "ingest",
+            "ws_packets"
           ],
           "type": "string"
         },
@@ -924,6 +932,18 @@
           "minimum": -1,
           "type": "integer"
         },
+        "game_black": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The game region has been near-uniformly black for the hold time (a lost D3D device after an RDP reconnect); null = unknown (no recent grab)."
+        },
         "lease_until_ns": {
           "anyOf": [
             {
@@ -1007,7 +1027,8 @@
         "clipboard_enabled",
         "transfer_enabled",
         "move_interval_ms",
-        "paint"
+        "paint",
+        "game_black"
       ],
       "title": "Status",
       "type": "object"

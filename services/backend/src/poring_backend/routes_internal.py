@@ -47,7 +47,9 @@ async def ws_agent(ws: WebSocket) -> None:
                 case AgentHello():
                     log.info("agent %s (%s) connected", msg.agent_id, msg.version)
                 case AgentInput():
-                    decisions = await state.submit_many(Source.BOT, msg.events)
+                    decisions = await state.submit_many(
+                        Source.BOT, msg.events, sensitive=msg.sensitive
+                    )
                     accepted = sum(d.accepted for d in decisions)
                     ack = InputAck(
                         t_mono_ns=monotonic_ns(),

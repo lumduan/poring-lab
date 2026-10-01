@@ -194,6 +194,32 @@ def parse_event(text: str | bytes) -> PacketEvent:
     return _EVENT_ADAPTER.validate_json(text)
 
 
+FeedMessage = Annotated[
+    LoginAccepted
+    | CharSelected
+    | MapEnter
+    | MapChange
+    | TimeSync
+    | SelfMoveRequest
+    | SelfMove
+    | EntityAppear
+    | EntityVanish
+    | EntityStop
+    | StatChange
+    | Chat
+    | Unknown
+    | Desync
+    | PacketStats,
+    Field(discriminator="type"),
+]
+_FEED_ADAPTER: TypeAdapter[FeedMessage] = TypeAdapter(FeedMessage)
+
+
+def parse_feed(text: str | bytes) -> FeedMessage:
+    """One line of the sniffer -> backend feed: a packet event or a stats snapshot."""
+    return _FEED_ADAPTER.validate_json(text)
+
+
 class PacketDocument(BaseModel):
     """Root of the packet-event JSON Schema (packets.schema.json -> frontend packets.gen.ts)."""
 

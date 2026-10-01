@@ -129,6 +129,8 @@ async def health(request: Request) -> dict[str, Any]:
             "frames_dropped_slow_viewer": state.hub.frames_dropped_slow_viewer,
         },
         "latency": state.latency.summary(window_ns=30_000_000_000, now=monotonic_ns()),
+        "game_display": state.display.snapshot(),
+        "packets": state.packets.snapshot(),
     }
 
 

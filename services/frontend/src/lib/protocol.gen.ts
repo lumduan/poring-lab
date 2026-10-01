@@ -80,6 +80,10 @@ export interface AgentInput {
    * Frame this message refers to or was produced from; -1 means none.
    */
   frame_id: number;
+  /**
+   * Credentials or other secrets: the input log keeps only the event count and timing, never key identities. Refused unless every key/button it presses is released within the same batch (nothing held could leak later through a synthetic release).
+   */
+  sensitive: boolean;
   t_capture_ns: number;
   /**
    * Sender's monotonic clock, ns (see module docstring).
@@ -254,6 +258,10 @@ export interface Status {
    */
   frame_id: number;
   /**
+   * The game region has been near-uniformly black for the hold time (a lost D3D device after an RDP reconnect); null = unknown (no recent grab).
+   */
+  game_black: boolean | null;
+  /**
    * End of the ASSIST human lease (backend clock); null = none.
    */
   lease_until_ns: number | null;
@@ -328,7 +336,7 @@ export interface Pong {
  * via the `definition` "ErrorReply".
  */
 export interface ErrorReply {
-  channel: "ws_input" | "ws_stream" | "agent";
+  channel: "ws_input" | "ws_stream" | "agent" | "ingest" | "ws_packets";
   /**
    * Frame this message refers to or was produced from; -1 means none.
    */

@@ -18,6 +18,7 @@ from poring_backend.clipboard import SelectionIO
 from poring_backend.config import Settings
 from poring_backend.routes_debug import router as debug_router
 from poring_backend.routes_internal import router as internal_router
+from poring_backend.routes_packets import router as packets_router
 from poring_backend.routes_public import router as public_router
 from poring_backend.routes_transfer import router as transfer_router
 from poring_backend.routes_transfer import sweep_partials
@@ -77,6 +78,7 @@ def create_app(
     app = FastAPI(title="poring-lab backend", version="0.1.0", lifespan=lifespan)
     app.include_router(public_router)
     app.include_router(internal_router)
+    app.include_router(packets_router)
     app.include_router(transfer_router)
     app.include_router(debug_router)
     # The console (another origin: :3000) calls the /transfer HTTP routes with fetch/XHR. Only the

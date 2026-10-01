@@ -149,6 +149,7 @@ class CaptureHub:
         tuning: StreamTuning,
         damage_factory: Callable[[Callable[[int], None]], ChangeWatcher] | None = None,
         on_frame: Callable[[FrameMeta], None] | None = None,
+        on_grab: Callable[[Frame], None] | None = None,
     ) -> None:
         self._source_factory = source_factory
         self._source: FrameSource | None = None
@@ -158,6 +159,8 @@ class CaptureHub:
         self._damaged: asyncio.Event | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._on_frame = on_frame
+        # Runs on the capture thread with every grabbed frame (the black-screen detector).
+        self._on_grab = on_grab
         # mss connections are per-thread; one dedicated capture thread keeps a single one.
         self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="capture")
         self._viewers: set[Outbox] = set()
@@ -215,12 +218,37 @@ class CaptureHub:
         for outbox in self._viewers:
             outbox.offer_control(text)
 
-    def _grab_and_encode(self, quality: int) -> tuple[Frame, bytes, int]:
+    def _grab(self) -> Frame:
         if self._source is None:
             self._source = self._source_factory()
         frame = self._source.grab()
+        if self._on_grab is not None:
+            self._on_grab(frame)
+        return frame
+
+    def _grab_and_encode(self, quality: int) -> tuple[Frame, bytes, int]:
+        frame = self._grab()
         jpeg = encode_jpeg(frame, quality)
         return frame, jpeg, monotonic_ns()
+
+    @property
+    def running(self) -> bool:
+        return self._task is not None and not self._task.done()
+
+    async def sample_once(self) -> bool:
+        """One grab for ``on_grab`` while the stream is stopped (no viewers): the black-screen
+        detector must not go blind when nobody is watching. Same thread and X connection as the
+        stream. False if the stream is running (it samples already) or the grab failed."""
+        if self.running:
+            return False
+        loop = asyncio.get_running_loop()
+        try:
+            await loop.run_in_executor(self._executor, self._grab)
+        except Exception as exc:  # X down, display restarting, ...
+            log.debug("watch grab failed (%s)", exc)
+            await loop.run_in_executor(self._executor, self._reset_source)
+            return False
+        return True
 
     def _notify_damage(self, _t_ns: int) -> None:
         """Called on the damage thread."""

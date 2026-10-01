@@ -29,6 +29,9 @@ RUN uv python install 3.12
 WORKDIR /app
 COPY pyproject.toml uv.lock ./
 COPY packages/poring_env/pyproject.toml packages/poring_env/
+# Workspace discovery needs every member's pyproject.toml. poring_packets' SOURCE never enters this
+# image (ADR-0007: no packet data on the agent side; tests/test_guards.py).
+COPY packages/poring_packets/pyproject.toml packages/poring_packets/
 COPY services/backend/pyproject.toml services/backend/
 COPY services/vision/pyproject.toml services/vision/
 RUN --mount=type=cache,target=/root/.cache/uv \

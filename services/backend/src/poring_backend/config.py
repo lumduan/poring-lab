@@ -56,6 +56,21 @@ class Settings(BaseSettings):
     # Pause between xfreerdp announcing the text to Windows and the Ctrl+V (RDP format-list trip).
     clipboard_settle_s: float = 0.5
 
+    # --- ADR-0007: packet ground truth (sniffer -> backend -> console only) ----------------------
+    # The sniffer runs in rathena's network namespace, so its ingest connection comes from
+    # rathena's pinned compose address (compose.yaml networks.default.ipv4_address).
+    ingest_peer: str = "10.210.96.6"
+    # /ws/packets refuses peers on the lab network except the gateway (host scripts arrive
+    # through it); browsers arrive with their LAN addresses.
+    compose_subnet: str = "10.210.96.0/24"
+    compose_gateway: str = "10.210.96.1"
+
+    # --- Black-screen detector (display.py) ------------------------------------------------------
+    # GAME_REGION: the RO client area in desktop pixels, "x,y,w,h"; "" = the whole frame (only a
+    # fully black desktop would trip it). BLACK_HOLD_S: how long it must stay black.
+    game_region: str = ""
+    black_hold_s: float = 5.0
+
     @property
     def origins(self) -> frozenset[str]:
         return frozenset(

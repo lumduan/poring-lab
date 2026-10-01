@@ -225,3 +225,24 @@ def test_paste_rejects_empty_text_and_lone_surrogates() -> None:
         parse_browser_to_backend(
             '{"type":"clipboard_paste","t_mono_ns":1,"frame_id":-1,"request_id":0,"text":"a\\ud800"}'
         )
+
+
+# --- ADR-0007: packet ground truth never reaches the agent side --------------------------------
+
+
+@pytest.mark.parametrize("channel", ["agent_to_backend", "backend_to_agent", "input_event"])
+def test_agent_side_schema_cannot_reach_packet_events(channel: str) -> None:
+    schema = json_schema()
+    reachable = _reachable_defs(schema, schema["properties"][channel])
+    packetish = ("packet", "chat", "entity", "world", "sniff", "stat_change", "map_enter")
+    assert not any(any(word in name.lower() for word in packetish) for name in reachable), reachable
+
+
+def test_poring_env_never_imports_poring_packets() -> None:
+    src = Path(__file__).resolve().parents[1] / "src"
+    offenders = [
+        str(path.relative_to(src))
+        for path in src.rglob("*.py")
+        if "poring_packets" in path.read_text() or "packets" in path.stem
+    ]
+    assert offenders == []

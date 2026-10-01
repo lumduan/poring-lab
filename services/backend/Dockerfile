@@ -23,12 +23,15 @@ WORKDIR /app
 # Dependencies first (cached layer): every workspace member's pyproject must be present.
 COPY pyproject.toml uv.lock ./
 COPY packages/poring_env/pyproject.toml packages/poring_env/
+COPY packages/poring_packets/pyproject.toml packages/poring_packets/
 COPY services/backend/pyproject.toml services/backend/
 COPY services/vision/pyproject.toml services/vision/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-install-workspace --package poring-backend
 
 COPY packages/poring_env packages/poring_env
+# ADR-0007: the backend relays packet events to the console (models only; no length table).
+COPY packages/poring_packets packages/poring_packets
 COPY services/backend services/backend
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-editable --package poring-backend
