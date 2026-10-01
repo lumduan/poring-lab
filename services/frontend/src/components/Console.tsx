@@ -6,6 +6,7 @@ import Banner from "@/components/Banner";
 import FilesPanel from "@/components/FilesPanel";
 import ModeSwitch from "@/components/ModeSwitch";
 import OverlayCanvas from "@/components/OverlayCanvas";
+import PacketTimeline from "@/components/PacketTimeline";
 import PastePanel from "@/components/PastePanel";
 import StatsPanel, { EMPTY_STATS, type Links, type Stats } from "@/components/StatsPanel";
 import StreamCanvas from "@/components/StreamCanvas";
@@ -86,6 +87,17 @@ export default function Console({ backendUrl }: Props) {
       next.tone === "pending" ? null : setTimeout(() => setToast(null), 4000);
   }, []);
   const [dropped, setDropped] = useState<ErrorReply | null>(null);
+  // RDP reconnect notice: when rdp_window_present goes false -> true, remember the backend time
+  // (Status.t_mono_ns, its own clock) and show the notice for a minute of backend time.
+  const [rdpPrev, setRdpPrev] = useState<boolean | null | undefined>(undefined);
+  const [rdpBackAtNs, setRdpBackAtNs] = useState<number | null>(null);
+  const rdpNow = status?.rdp_window_present;
+  if (rdpNow !== rdpPrev) {
+    setRdpPrev(rdpNow);
+    if (rdpPrev === false && rdpNow === true && status) setRdpBackAtNs(status.t_mono_ns);
+  }
+  const rdpReconnected =
+    rdpBackAtNs !== null && status !== null && status.t_mono_ns - rdpBackAtNs < 60e9;
 
   useEffect(() => {
     const base = backendWsBase(backendUrl);
@@ -354,7 +366,7 @@ export default function Console({ backendUrl }: Props) {
           <ModeSwitch mode={status?.mode ?? null} onChange={setMode} disabled={!links.input} />
         </div>
       </header>
-      <Banner links={links} status={status} dropped={dropped} />
+      <Banner links={links} status={status} dropped={dropped} rdpReconnected={rdpReconnected} />
       <Toolbar
         disabled={!links.input}
         mode={viewMode}
@@ -408,6 +420,7 @@ export default function Console({ backendUrl }: Props) {
           </div>
         </details>
       </div>
+      <PacketTimeline backendUrl={backendUrl} />
       <StatsPanel stats={stats} status={status} links={links} />
       <p className="text-xs text-neutral-500">
         {focused

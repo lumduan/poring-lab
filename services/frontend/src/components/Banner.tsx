@@ -1,10 +1,16 @@
 import type { Links } from "@/components/StatsPanel";
 import type { ErrorReply, Status } from "@/lib/protocol";
 
-type Props = { links: Links; status: Status | null; dropped?: ErrorReply | null };
+type Props = {
+  links: Links;
+  status: Status | null;
+  dropped?: ErrorReply | null;
+  /** The RDP session came back within the last minute (the game can lose its D3D device). */
+  rdpReconnected?: boolean;
+};
 
 /** A clear notice when the picture or the controls can't be trusted. */
-export default function Banner({ links, status, dropped = null }: Props) {
+export default function Banner({ links, status, dropped = null, rdpReconnected = false }: Props) {
   const problems: string[] = [];
   if (!links.stream) problems.push("Stream disconnected: reconnecting to the backend…");
   if (!links.input) problems.push("Input channel disconnected: keys and clicks are not being sent.");
@@ -15,6 +21,16 @@ export default function Banner({ links, status, dropped = null }: Props) {
   }
   if (links.stream && status && status.rdp_window_present === null) {
     problems.push("The backend cannot reach the X display.");
+  }
+  if (links.stream && status?.game_black === true) {
+    problems.push(
+      "The game window has been black for several seconds (a lost Direct3D device after an RDP " +
+        "reconnect?). Nothing it shows can be trusted; recover with scripts/ro_agent.py recover.",
+    );
+  } else if (links.stream && rdpReconnected && status?.rdp_window_present) {
+    problems.push(
+      "The RDP session reconnected less than a minute ago: check the game window is still drawing.",
+    );
   }
   if (dropped) {
     // Never silent (ADR-0004): the backend refused one of this page's messages -- a console bug.
