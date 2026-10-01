@@ -221,9 +221,14 @@ def region_for(state: str) -> tuple[int, int, int, int]:
     """Desktop region of a state's signature: fixed for Windows UI, else a box relative to the
     client origin saved at calibration (a dialog, not the animated background)."""
     if state == "eng":
+        raw = env().get("RO_TRAY_LANG", "")  # the ENG/ไทย indicator moves with the tray's icons
+        if raw:
+            x, y, w, h = (int(v) for v in raw.split(","))
+            return x, y, w, h
         return TRAY_LANG
     if state in ("shortcut_icon", "shortcut_icon_sel"):
-        return SHORTCUT_BOX
+        x, y = shortcut_xy()
+        return x - 32, y - 34, SHORTCUT_BOX[2], SHORTCUT_BOX[3]
     meta = signature_path(state).with_suffix(".json")
     x, y, w, h = game_region()
     if meta.exists():
@@ -463,14 +468,15 @@ def centre_offset(dx: int, dy: int) -> tuple[int, int]:
 # --- an existing PowerShell console (never the Run dialog: Defender's ClickFix detection) -------
 
 
-def find_console(screen: Screen) -> tuple[int, int, float] | None:
+def find_console(screen: Screen, admin: bool = False) -> tuple[int, int, float] | None:
     """Locate an ACTIVE Windows PowerShell tab anywhere on screen by template (its icon + title),
     anchored on the icon's blue pixels. Returns (x, y, error) of the template origin, or None.
     A dark heuristic is not enough: the black wallpaper passed one (2026-10-01, Enter landed on
     the desktop and launched CPU-Z's UAC prompt -- declined)."""
-    path = STATE_DIR / "signatures" / "ps_tab_template.npy"
+    name = "ps_admin_tab_template.npy" if admin else "ps_tab_template.npy"
+    path = STATE_DIR / "signatures" / name
     if not path.exists():
-        raise Stop("no PowerShell tab template (data/ro_agent/signatures/ps_tab_template.npy)")
+        raise Stop(f"no PowerShell tab template (data/ro_agent/signatures/{name})")
     tmpl = np.load(path).astype(np.int16)  # RGB
     th, tw = tmpl.shape[:2]
     blue_t = np.argwhere((tmpl[..., 2] > 150) & (tmpl[..., 0] < 110))
@@ -490,20 +496,45 @@ def find_console(screen: Screen) -> tuple[int, int, float] | None:
     return best if best is not None and best[2] < 10 else None
 
 
-def console_type(agent: Agent, screen: Screen, command: str) -> None:
-    """Focus the PowerShell console by clicking its own tab, re-verify, then type (non-secret
-    commands only; never credentials)."""
-    found = find_console(screen)
+def focus_console(agent: Agent, screen: Screen, admin: bool = False) -> tuple[int, int]:
+    """Click the console's own tab and re-verify it is the active window; its tab origin."""
+    found = find_console(screen, admin)
     if found is None:
         to_png(screen.full(), SHOTS / "console_missing.png")
         raise Stop("no active PowerShell console on screen: nothing typed")
     ox, oy, _ = found
     agent.click(ox + 75, oy + 9)  # its tab: focuses that window
     time.sleep(0.4)
-    again = find_console(screen)
+    again = find_console(screen, admin)
     if again is None or abs(again[0] - ox) > 2 or abs(again[1] - oy) > 2:
         raise Stop("the console moved or lost focus after the click: nothing typed")
+    return ox, oy
+
+
+def console_type(agent: Agent, screen: Screen, command: str, admin: bool = False) -> None:
+    """Type a NON-secret command line into the verified console (it lands in PSReadLine history,
+    so never a credential: use console_secret for those)."""
+    focus_console(agent, screen, admin)
     agent.type_text(command + "\n")
+
+
+def console_secret(agent: Agent, screen: Screen, var: str, admin: bool = False) -> None:
+    """Answer a `Read-Host -AsSecureString` prompt with the .env value of ``var``: sensitive input
+    batches (the input log keeps counts only), the console re-verified every 4 characters. The
+    value goes to the SecureString, never to a command line or the PSReadLine history."""
+    value = env().get(var)
+    if not value:
+        raise Stop(f"{var} is not set in .env")
+    ox, oy = focus_console(agent, screen, admin)
+
+    def guard() -> None:
+        now = find_console(screen, admin)
+        if now is None or abs(now[0] - ox) > 2 or abs(now[1] - oy) > 2:
+            raise Stop("the console lost focus while typing a secret: stopped")
+
+    agent.type_secret(value, guard)
+    guard()
+    agent.keys("Enter")
 
 
 def require_eng(screen: Screen) -> None:
@@ -676,13 +707,18 @@ def account_chars(which: str) -> list[str]:
     return [r[0] for r in rows]
 
 
-def chat_line(agent: Agent, screen: Screen, text: str) -> None:
-    """Open the chat input if it is closed (Enter), type, send (Enter)."""
+def open_chat(agent: Agent, screen: Screen) -> None:
+    """Make sure the chat input is open (Enter opens it); verified by its signature."""
     if not is_state(screen, "chat_open"):
         agent.keys("Enter")
         time.sleep(1.0)
         if not is_state(screen, "chat_open"):
             raise Stop("the chat input did not open: nothing typed")
+
+
+def chat_line(agent: Agent, screen: Screen, text: str) -> None:
+    """Open the chat input if it is closed, type, send (Enter)."""
+    open_chat(agent, screen)
     agent.type_text(text + "\n")
 
 
@@ -706,6 +742,8 @@ def say(agent: Agent, screen: Screen, which: str, text: str, thai_keys: bool) ->
     _, _, char = account(which)
     if char not in online_chars(which):
         raise Stop(f"{which} is not online=1: nothing sent")
+    activate_client(agent, screen)
+    open_chat(agent, screen)  # typed while closed, the letters are hotkeys (2026-10-01)
     if thai_keys:
         require_eng(screen)
         agent.chord("MetaLeft", "Space")  # next input language (ENG -> Thai Kedmanee)
@@ -723,7 +761,17 @@ def say(agent: Agent, screen: Screen, which: str, text: str, thai_keys: bool) ->
     log(f"said ({'thai keys' if thai_keys else 'ascii'}) as {which}")
 
 
-SHORTCUT = (112, 140)  # the "Ragnarok Offline" desktop shortcut (C:\RO-rAthena\PoringLab.cmd)
+# The "Ragnarok Offline" desktop shortcut (C:\\RO-rAthena\\PoringLab.cmd); its icon position depends
+# on the Windows account's desktop layout: RO_SHORTCUT="x,y" in .env.
+SHORTCUT = (112, 140)
+
+
+def shortcut_xy() -> tuple[int, int]:
+    raw = env().get("RO_SHORTCUT", "")
+    if not raw:
+        return SHORTCUT
+    x, y = (int(v) for v in raw.split(","))
+    return x, y
 
 
 def close_client(agent: Agent, screen: Screen) -> None:  # noqa: ARG001
@@ -754,7 +802,7 @@ def launch_client(agent: Agent, screen: Screen) -> None:
     if not visible():
         to_png(screen.full(), SHOTS / "shortcut_not_visible.png")
         raise Stop("the desktop shortcut is not visible: no double-click")
-    x, y = SHORTCUT
+    x, y = shortcut_xy()
     agent.move(x, y)
     time.sleep(0.1)
     for action in ("down", "up", "down", "up"):
@@ -805,6 +853,7 @@ def main() -> None:
     ap.add_argument("cmd")
     ap.add_argument("args", nargs="*")
     ap.add_argument("--right", action="store_true")
+    ap.add_argument("--admin", action="store_true", help="console: the Administrator tab template")
     ap.add_argument("--abs", action="store_true", help="click: desktop pixels, not client-relative")
     ap.add_argument("--thai-keys", action="store_true")
     ap.add_argument("--as", dest="who", default="gm", choices=["player", "gm"])
@@ -848,8 +897,10 @@ def main() -> None:
             create_char(agent, screen, args[0])
         elif cmd == "enter-game":
             enter_game(agent, screen, args[0])
-        elif cmd == "console":  # console "<command>" [shot-name] [wait-s]
-            console_type(agent, screen, args[0])
+        elif cmd == "console-secret":  # console-secret VAR [--admin]
+            console_secret(agent, screen, args[0], a.admin)
+        elif cmd == "console":  # console "<command>" [shot-name] [wait-s] [--admin]
+            console_type(agent, screen, args[0], a.admin)
             time.sleep(float(args[2]) if len(args) > 2 else 2.0)
             if len(args) > 1 and args[1] != "-":
                 to_png(screen.full(), SHOTS / f"{args[1]}.png")
