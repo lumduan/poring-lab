@@ -293,7 +293,8 @@ offset 2, 4..32768; `map/clif.cpp:25757-25772`).
    it?
 2. **A GM test account** (group 99) for `@where` / `@mobsearch` / `@who` validation, with credentials
    in `.env` only.
-3. **When to build the slim sniffer image:** now with the tolerant guard, or after the disk split? The
+3. **When to build the slim sniffer image:** now with the tolerant guard, or after the disk split? ➡️ Decided:
+   dev-overlay sniffer; there is no disk split (Batt, 2026-10-01), so the slim image waits for a guarded build window. The
    dev-overlay path needs no build.
 4. **The map GAT files** for exact pathing (A*): read from the client's GRF (data only, local, never
    committed). Now or later?

@@ -156,9 +156,19 @@ ports, quickstart) and `docs/adr/`.
   - **verify the target is in front before typing**: client = active title-bar signature, console
     = tab template, secrets re-checked every 4 characters;
   - this client fails ("Failed to Connect to Server") unless the server is picked within ~1–2 s of
-    the list.
+    the list;
+  - the RDP session runs as the **standard** Windows account `poring-lab` (`WIN_LAB_*`). Anything
+    needing admin is the operator's: he opens the elevated console and answers UAC. The agent never
+    approves UAC, and .env never holds his Windows credentials;
+  - secrets on Windows go only through `Read-Host -AsSecureString` as a sensitive batch
+    (`ro_agent.py console-secret`), never a command line (PSReadLine history);
+  - the lab runs `RDP_GFX=progressive`: with the Windows AVC policies on, autodetect means AVC444,
+    which FreeRDP 3.15 decodes in software (fewer frames, worse latency; docs/h264-plan.md).
+- **Human pastes are scrubbed** (ADR-0004 amendment): after every paste, the backend re-owns CLIPBOARD
+  empty so Windows' copy is replaced. Released text otherwise stayed pasteable for over an hour.
+  Paste audits log a 12-hex digest prefix only.
 
-## Dev mode (in use until the disk split)
+## Dev mode (the default; there will be no disk split -- Batt, 2026-10-01)
 
 - `compose.dev.yaml` via `scripts/dev.sh`:
   - `backend` runs the host source (read-only mount on `PYTHONPATH`); `scripts/dev.sh restart backend`
@@ -168,7 +178,9 @@ ports, quickstart) and `docs/adr/`.
   and group 20 apply with a recreate, not a build.
 - `sniffer` runs the backend image with the host `poring_packets` source (`build: !reset`; it can
   never retag the stub over `poring-lab/backend:local`).
-- Do not "fix" this by building images. Builds wait for the weekend disk split (docs/ROADMAP.md).
+- Do not "fix" this by building images casually. An image build is a deliberate step: `scripts/guarded_build.py`
+  (tolerant guard) in an operator-chosen window. There will be **no disk split** (Batt, 2026-10-01): keep the guards
+  and the tar/tmpfs approach, and don't plan around a split.
   - Exception (Batt, 2026-09-30): rathena and db were built, pulled and started with the TOLERANT guard
     (`--sustain 30 --spike 25`) because quant capture gaps are backfilled at EOD. Other images still
     wait.

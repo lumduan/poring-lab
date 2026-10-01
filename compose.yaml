@@ -245,7 +245,7 @@ services:
   sniffer:
     <<: *lab
     profiles: [sniffer]
-    # ADR-0007. The slim image (services/sniffer) waits for the disk split; until then the dev
+    # ADR-0007. The slim image (services/sniffer) waits for a guarded build window; until then the dev
     # overlay runs it from the backend image with the host source (compose.dev.yaml).
     build: services/sniffer
     image: poring-lab/sniffer:local

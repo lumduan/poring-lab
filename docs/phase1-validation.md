@@ -32,6 +32,7 @@ Status: **GO for the first slice**, 2026-10-01. Scope: ADR-0007, as planned in
 | Entities | `@monster 1002 5` on prt_fild08, then `@mobsearch 1002` vs the packet world state at the search time | **count 5 = 5** in view (of 75 on the map); **5/5 within 1 cell** (4 exact) after walk interpolation; 5 distinct ids |
 | Tags | every validation-session event | `validation_account` on all of them; `gm_command` on each command and its replies (2 s window) |
 | Packet → frame delay | 40 click-to-walks; own 0x0087 capture time → first lab frame where >10 % of a scene band moved | **p50 150 / p95 585 / p99 999 ms** (39 matched, 1 unmatched); **p50 179** without the 6 implausible < 50 ms matches; click-sent → packet p50 171 ms (p95 177) |
+| ➡️ Delay method SUPERSEDED 2026-10-01 | the row above used a frame-to-frame >10 % change, which detects later at higher delivered fps | re-measured with the post-hoc reference method in [h264-plan.md](h264-plan.md) "Arm A results": progressive p50 195 ms (non-detections counted as >1.5 s); the Phase 1 figures stay as history |
 
 ## Method notes and caveats
 

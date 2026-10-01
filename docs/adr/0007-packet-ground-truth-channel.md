@@ -7,7 +7,7 @@ verdict_date: 2026-10-01
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: Implemented and validated (docs/phase1-validation.md). Slim sniffer image after the disk split; GAT in Phase 2.
+next_action: Implemented and validated (docs/phase1-validation.md). Slim sniffer image in a guarded build window (no disk split, 2026-10-01); GAT in Phase 2.
 ---
 
 # ADR-0007: Packet ground truth — a viewer-only channel and a separate captures volume

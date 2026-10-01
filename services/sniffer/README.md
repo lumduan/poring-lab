@@ -2,7 +2,7 @@
 
 **Implemented (ADR-0007, 2026-10-01). This directory's image is still the placeholder stub.** The
 real sniffer runs on the dev overlay (`compose.dev.yaml`): the backend image plus the host's
-`packages/poring_packets` source, with no build. A slim image replaces the stub after the disk split.
+`packages/poring_packets` source, with no build. A slim image replaces the stub in a guarded build in an operator-chosen window (no disk split: Batt, 2026-10-01).
 
     scripts/gen_packet_tables.py              # once: the build-time length table (never committed)
     scripts/dev.sh --profile sniffer up -d --no-build --no-deps sniffer

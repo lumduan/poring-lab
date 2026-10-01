@@ -84,7 +84,7 @@ humanization and LLM integration are clearly marked TODOs.
 
 ## Web console now (no image builds): `frontend-dev`
 
-Until the disk split lets images be built safely, the console runs as a dev server with **no image
+The console runs as a dev server with **no image
 builds and no disk-heavy writes** (`compose.dev.yaml`, driven by `scripts/dev.sh`):
 
 - `backend` runs its source straight from the host, mounted read-only and put first on `PYTHONPATH`.
@@ -221,10 +221,15 @@ them as **sensitive** input (the input log keeps counts only); see `docs/client/
 
 ### Windows host checklist (the RO client side)
 
-1. Enable Remote Desktop. Use a dedicated account in "Remote Desktop Users" and put it in `RDP_*`.
+1. Enable Remote Desktop. Use a dedicated **standard** account in "Remote Desktop Users" and put it in `RDP_*`.
+   This lab uses `poring-lab` (`WIN_LAB_USER`/`WIN_LAB_PASSWORD`, 2026-10-01): not an administrator,
+   Modify on `C:\RO-rAthena` only, plus Performance Monitor Users and Event Log Readers for the RDP
+   counters/events. Elevation is the operator's (UAC); see `docs/client/rathena-client.md` "Windows
+   account". The lab uses `RDP_GFX=progressive` (`docs/h264-plan.md`).
 2. Give the host a fixed IP (DHCP reservation) → `WIN_HOST`.
 3. Disable sleep, the screen lock and the screensaver. A locked session shows the lock screen to the agent.
-4. Run the RO client **inside the RDP session** at `XVFB_RESOLUTION` (default 1280x800; the 1024×740 client window plus the taskbar need the height).
+4. Run the RO client **inside the RDP session** at `XVFB_RESOLUTION` (default 1280x800). The game window is 800×664
+   (client area 784×625, above the taskbar); launch it from the "Ragnarok Offline" desktop shortcut.
 5. Use a **separate client copy for rAthena** (ADR-0006). **Leave the existing community-server
    client untouched:** never patch, repoint or reuse it in place.
    - The rAthena copy must match `PACKETVER` (its executable date) and point at `HOST_LAN_IP:6900`.

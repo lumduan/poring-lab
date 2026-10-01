@@ -7,7 +7,7 @@ verdict_date: 2026-09-30
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: RDP delivery ceiling is client decode (server skips 'insufficient client resources'); A/B AVC/H.264 hw encode + newer FreeRDP after the disk split, before dataset collection.
+next_action: RDP delivery is client decode; the lab runs RDP_GFX=progressive under the poring-lab account (2026-10-01). Next: FreeRDP 3.32.1 (docs/h264-plan.md Arm C) in a guarded build window.
 ---
 
 # The rAthena client on Windows (C:\RO-rAthena)
@@ -195,6 +195,11 @@ source exe (output to `_scratch\`):
 | Desktop shortcut "Ragnarok Offline" + `C:\RO-rAthena\PoringLab.cmd` (2026-10-01, Batt's request) | absent | the launcher (`__COMPAT_LAYER=RunAsInvoker`, then `start /D client PoringLab.exe`) and a shortcut to it | delete both |
 | PSReadLine history (2026-10-01 incident) | – | one line removed (a GM password the agent typed into a console by mistake; rotated) | – |
 
+| Windows account `poring-lab` (2026-10-01) | – | STANDARD local user; groups Users, Remote Desktop Users, Performance Monitor Users, Event Log Readers; the RDP session runs as it | `Remove-LocalUser poring-lab` (admin); restore the RDP creds in .env |
+| `C:\RO-rAthena` ACL (2026-10-01) | Batt/admins only | + `poring-lab:(OI)(CI)M` (Modify, inherited by all 72 dirs) | `icacls C:\RO-rAthena /remove poring-lab`; before-state in `_backup\2026-10-01-account\icacls_root_before.txt` |
+| HKLM `…\Policies\Microsoft\Windows NT\Terminal Services` (2026-10-01) | no values (subkey `Client` only) | `AVC444ModePreferred=1`, `AVCHardwareEncodePreferred=1` (one reboot, 17:48) | `reg import C:\RO-rAthena\_backup\2026-10-01-h264\ts_policies_before.reg` after deleting both values, then reboot |
+| batt's PSReadLine history | – | one line removed 2026-10-01 (a GM password typed into a console by mistake; rotated) | – |
+
 Backups taken before the window change: `C:\RO-rAthena\_backup\2026-10-01-window\` holds
 `OptionInfo.lua` (2,773 B), `dgVoodoo.conf` (21,967 B) and `gravity_hkcu.reg` (32,564 B; HKCU
 `Gravity Soft` still says 800×600, which the client ignores in favour of `OptionInfo.lua`).
@@ -216,6 +221,50 @@ The same thing from a PowerShell console:
 ```powershell
 $env:__COMPAT_LAYER="RunAsInvoker"; Start-Process C:\RO-rAthena\client\PoringLab.exe -WorkingDirectory C:\RO-rAthena\client
 ```
+
+## Windows account `poring-lab` (2026-10-01)
+
+The lab's RDP session no longer uses Batt's administrator account. `.env` holds `WIN_LAB_USER` /
+`WIN_LAB_PASSWORD`, and `RDP_USER` / `RDP_PASSWORD` point at them. Batt's own Windows credentials
+were removed from `.env`.
+
+- **Created** in an admin console Batt opened (UAC). The password was typed into
+  `Read-Host -AsSecureString` as sensitive input (`ro_agent.py console-secret WIN_LAB_PASSWORD
+  --admin`), so it never reached a command line or history.
+  - `New-LocalUser poring-lab -PasswordNeverExpires -AccountNeverExpires`.
+  - **Groups:** Users, Remote Desktop Users, Performance Monitor Users (typeperf), Event Log
+    Readers (RdpCoreTS events 162/170).
+  - **Not Administrators.**
+- **Files:** Modify on `C:\RO-rAthena` only (inherited). RagnarokClassic's folder and its HKLM key
+  are not writable by a standard user, which is intended. Re-compared after the switch: registry
+  hashes identical, listing unchanged.
+- **Per-user settings applied in its session:**
+  - Thai Kedmanee (`th`, `041E:0000041E`) next to en-US;
+  - clipboard history OFF and cloud clipboard OFF;
+  - Widgets OFF (Settings; the `TaskbarDa` registry write is blocked by UCPD);
+  - Windows Terminal `"experimental.rightClickContextMenu": true` (right-click no longer pastes;
+    backup `settings.json.bak-poringlab`);
+  - conhost QuickEdit OFF;
+  - HKCU `Gravity Soft\Ragnarok` + `RenewSetup` imported from
+    `_backup\2026-10-01-window\gravity_hkcu.reg`;
+  - the "Ragnarok Offline" shortcut on its desktop (`RO_SHORTCUT=37,548`).
+  - First-run prompts declined: privacy (Batt finished that screen), Edge location access ("No"),
+    OneDrive Windows Backup ("No thanks").
+- **Proven:**
+  - shortcut launch, non-elevated;
+  - agent player login as sensitive input;
+  - online=1 and drawing;
+  - a Thai line typed via Kedmanee: `chatlog` `CAC7D1CAB4D5` = "สวัสดี" (cp874), byte-exact;
+  - the GM account, and `@where` / `@warp` / `@hide`.
+- **Anything needing admin later** (policies, installs, account changes) is requested from Batt:
+  he opens the elevated console and enters credentials at UAC. The agent never approves UAC, and
+  its tooling refuses to.
+- **Revert:**
+  - in .env, set `RDP_USER`/`RDP_PASSWORD` back to Batt's account (Batt types them), then recreate
+    the desktop;
+  - in an admin console: `icacls C:\RO-rAthena /remove poring-lab`, then `Remove-LocalUser
+    poring-lab`;
+  - optionally delete `C:\Users\poring-lab`.
 
 ## Window 800×664, FPS cap 30 (2026-10-01)
 
@@ -257,6 +306,12 @@ $env:__COMPAT_LAYER="RunAsInvoker"; Start-Process C:\RO-rAthena\client\PoringLab
 - **A freshly launched window takes its first click as activation**, and the service-select OK may
   need a second click.
 - **Alt+F4 must be paced** (60 ms steps). Then it closes the client at once, with no prompt.
+- **Desktop layout differs per account and per session.** The shortcut position comes from
+  `RO_SHORTCUT`. The tray's ENG indicator moved (1086 → 1115 px) between two sessions of the same
+  account, so the ENG check slides a template along the tray. The wallpaper turns black after an
+  RDP reconnect, so recalibrate icon signatures after the first reconnect.
+- **First-run popups take focus** (Edge location, OneDrive backup): every GM/chat action
+  re-activates the client and verifies its active title first.
 - **No Run-dialog commands.** Run-dialog PowerShell one-liners tripped Microsoft Defender:
   - `Behavior:Win32/SuspClickFix.G3` and `VirTool:Script/AmsiSuspClickfix.B`, severity 5,
     2026-10-01 11:47 and 12:36;

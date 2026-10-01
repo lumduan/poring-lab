@@ -1,18 +1,77 @@
 ---
 doc_type: design
 hypothesis: null
-status: PROPOSED
+status: ACCUMULATING
 role: null
-verdict_date: null
+verdict_date: 2026-10-01
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: After the weekend disk split, Batt approves (1) the two Windows policies + one reboot and (2) one desktop image build with FreeRDP 3.32.1 from trixie-backports; then run the A/B below.
+next_action: Arm C -- FreeRDP 3.32.1 (trixie-backports) in one guarded desktop build in an operator-chosen window, then A/B progressive vs AVC420 vs AVC444 with measure_motion + measure_delay. Until then the lab runs RDP_GFX=progressive (the Windows AVC policies stay on).
 ---
 
-# H.264 for the RDP leg: plan (not implemented)
+# H.264 for the RDP leg: plan and Arm A result
 
-Status: PROPOSED, 2026-10-01. Plan only; nothing in this document has been applied.
+Status:
+- **Arm A done 2026-10-01**: the Windows policies are on, and one reboot happened. With FreeRDP 3.15's
+  software decode it brings **no delivery gain and a worse latency tail**.
+- The lab therefore runs **`RDP_GFX=progressive`** (client-side; AVC not offered).
+- Arm C (a newer FreeRDP) is next.
+- ➡️ There will be **no disk split** (Batt, 2026-10-01). Builds go through `scripts/guarded_build.py`
+  in an operator-chosen window. Every "after the split" below means that.
+
+## Arm A results (2026-10-01, `poring-lab` session, 800×664, dgVoodoo FPSLimit 30)
+
+The same scenes and tools as before:
+- `measure_motion.py rotate 60`: indoor `prt_church` 99,112; outdoor `new_4-1` 53,111;
+- `typeperf` over the RemoteFX Graphics counters (rotation windows only);
+- `measure_delay.py walks 40` (outdoor).
+
+| Arm | RDP codec (event 162) | Scene | Xvfb frames/s median (p10–p90) | Desktop cores | RDP input fps | RDP output fps | Skipped: client /s | Encode ms |
+|---|---|---|---|---|---|---|---|---|
+| A: before (autodetect, no policy) | profile 2 (mixed), AVC available 1 | indoor | 6 (3–9) | 6.92 | 29.99 | 7.54 | 22.13 | 7.5 |
+| A | " | outdoor | 5 (4–11) | 6.35 | 30.22 | 6.32 | 23.90 | 9.6 |
+| B: policies + autodetect | **AVC444, profile 2048; event 170: Intel Quick Sync encoder enabled** | indoor | 5 (3–6) | 6.05 | 6.10 | 6.10 | 0.00 | 19.1 |
+| B | " | outdoor | 6 (4–12)¹ | 5.88 | 7.43 | 7.43 | 0.00 | 18.6 |
+| **D: policies + `RDP_GFX=progressive`** (kept) | profile 2, AVC available **0** | indoor | **8 (3–17)** | 7.13 | – | – | – | – |
+| D | " | outdoor | **12 (7–22)**² | 7.17 | 29.94 | **12.75** | 17.19 | 11.3 |
+
+¹ This run was labelled "B_indoor2": a GM `@warp` was mangled into chat, and `@where` proved the
+scene was outdoor (new_4-1 69,137).
+² The idle lead-in was not zero (4,4,1,5), so there was some ambient motion.
+
+**Packet → frame delay**
+- Method: own `0x0087` → the first lab frame whose 8×8 thumbnail of the scene band differs by
+  >10 % from the last frame before the packet.
+- Non-detections within 1.5 s count as ">1.5 s".
+
+| Codec | Matched | p50 | p75 | p90 | p95 |
+|---|---|---|---|---|---|
+| AVC444 (policies, autodetect) | 29/40 | **740** | >1500 | >1500 | >1500 |
+| progressive (kept) | 35/40 | **195** | 981 | >1500 | >1500 |
+
+- Click sent → server walk reply: p50 ~180 ms throughout.
+- The earlier frame-to-frame metric (A 154 / B 200 ms, ≥50 ms rule) is **superseded**: it detects
+  later at higher frame rates and made the faster codec look slower (`measure_delay.py`).
+
+**Reading.**
+- **The policies work as designed.** Windows encodes full-screen AVC444 on Quick Sync at ~19 ms
+  per frame, and stops capturing frames the client can't take (input = output, 0 skips).
+- **xfreerdp 3.15 decodes AVC444 (two 4:2:0 streams) in software at ~6 cores and acknowledges
+  only 6–7 fps.** Delivery doesn't improve and the latency tail gets worse.
+- **Explicit `progressive` beats autodetect even without the policies.** In mixed mode, Windows
+  also pushed AVC regions that the client decoded in software. With AVC not offered, output
+  doubles outdoors (12.75 vs 6.32 fps).
+- **Kept:**
+  - `RDP_GFX=progressive` (.env, plus the RAM override until the next desktop recreate);
+  - the policies stay on for Arm C.
+  - Revert of the policies: `rathena-client.md` settings table.
+
+**Next (Arm C):**
+- FreeRDP 3.32.1, one guarded desktop build;
+- then progressive vs `/gfx:AVC444` vs AVC420, the latter only via autodetect-with-AVC420 (the
+  plain `/gfx:AVC420` flag disables RDP10 caps).
+- NVDEC remains last.
 
 ## Why: the client decode is the ceiling, and Windows chose the codec that costs the most
 
@@ -42,7 +101,7 @@ progressive RFX tiles. FreeRDP decodes those in software on the CPU (the 7 cores
 - output was 5.6–6.4 fps vs 5.5–6.0 at 1024×768;
 - the area is ~40 % smaller, but decode stays the bottleneck.
 
-## Windows side (needs Batt: two policies and one reboot)
+## Windows side (applied 2026-10-01: two policies and one reboot)
 
 Computer policies, under `HKLM\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services`:
 
@@ -66,7 +125,7 @@ Computer policies, under `HKLM\SOFTWARE\Policies\Microsoft\Windows NT\Terminal S
   2026-10-01 (see `client/rathena-client.md`). Use `gpedit.msc` or an elevated console Batt opens
   himself.
 
-## Lab side (one desktop image build, after the disk split)
+## Lab side (one guarded desktop image build, operator-chosen window)
 
 - **Today:** Debian trixie's `freerdp3` **3.15** can already decode H.264 in software via FFmpeg. So
   the Windows half alone may help, and it is worth trying first:
@@ -117,7 +176,7 @@ Windows `typeperf` runs over the three RemoteFX Graphics counters, typed into a 
 - The **expectation** is 25–30 fps delivered during camera motion, against 6–8 today. This is
   unmeasured until arm B runs.
 
-## Disk needs after the split (what this adds)
+## Disk needs (what this adds; no split -- guarded build on the shared disk)
 
 - **Desktop image:** FreeRDP 3.32.1 plus its FFmpeg-backed codecs. Expect on the order of 10–30 MB
   of extra layers, plus one rebuild of ~5 GB of build writes, through `scripts/guarded_build.py` in

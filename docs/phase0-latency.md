@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: The RDP delivery ceiling is client-side (FreeRDP decode; server skips 'insufficient client resources'). After the disk split, A/B AVC/H.264 hardware encode + a newer FreeRDP; then the console A/B (q70, paint=raf) and Batt's Windows App glass-to-glass.
+next_action: RDP delivery: the lab runs RDP_GFX=progressive (2026-10-01, ~2x outdoor delivery vs autodetect); Windows AVC policies applied (Arm A, no gain with FreeRDP 3.15). Next: FreeRDP 3.32.1 (Arm C) in a guarded build window -- docs/h264-plan.md.
 ---
 
 # Phase 0: web-console latency, measured and reduced
@@ -199,6 +199,8 @@ Not measured this run, with how to measure it:
 - There is no event 170 (no AVC hardware encoder) and no VideoEncode GPU engine use.
 - Transport is TCP only (event 135: "No UDP Packets Received").
 - The earlier outdoor run (17 fps) vs this indoor run (7 fps) shows the decode cost depends on content.
+- ➡️ UPDATED 2026-10-01: the H.264 Windows half was applied and measured (no gain with FreeRDP 3.15; the lab runs
+  `RDP_GFX=progressive`, which doubled outdoor delivery) -- see h264-plan.md "Arm A results". There is no disk split.
 - Next levers (Batt: deferred until after the disk split): H.264/AVC hardware encode on Windows plus
   AVC decode in a newer FreeRDP, or UDP transport.
 

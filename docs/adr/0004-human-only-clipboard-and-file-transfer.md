@@ -7,11 +7,14 @@ verdict_date: 2026-09-30
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: Batt's manual check from the MacBook (paste ASCII + Thai, upload and open from \\tsclient\transfer, create a file on Windows and download it); resolve ADR-0005 (vision's X access) before Phase 4.
+next_action: Live-verify the 2026-10-01 scrub (a dummy paste, then an empty Get-Clipboard on Windows); resolve ADR-0005 (vision's X access) before Phase 4.
 ---
 
 # ADR-0004: Clipboard and file transfer are human-only tools
 
+- ➡️ **AMENDED 2026-10-01** (see "Amendment 2026-10-01" at the end): release alone did NOT empty the
+  Windows clipboard; every paste is now followed by a **scrub**, and the audit logs only a 12-hex
+  digest prefix. E1b below is superseded by that evidence.
 - **Status:** accepted by Batt, 2026-09-30. T1 + F1 are implemented; F2 stays off; T2 is rejected.
   **Deployed 2026-09-30 11:34 ICT** (dev overlay; one combined desktop + backend recreate). Live-verified
   the same day, through the real feature path:
@@ -234,3 +237,52 @@ Until both are resolved, reverse text goes through a file in `\\tsclient\transfe
   `\\tsclient\transfer`.
 - **`navigator.clipboard`:** needs a secure context. `localhost` through an SSH tunnel would qualify,
   as an optional enhancement.
+
+## Amendment 2026-10-01: the Windows clipboard kept pasted text; scrub after every paste
+
+**Evidence.**
+- Batt's rAthena test password reached Windows through this feature: the console's ⌘V →
+  `ClipboardPaste` path. The input log's paste record (16 chars, sha256 equal to the .env value)
+  is at 12:10:57 ICT, followed by his login at 12:10:58.
+- It was still pasteable at **13:04 ICT**, when a camera right-drag over a Windows Terminal pasted
+  it onto a prompt. It was not executed.
+- At 15:17 ICT the Windows clipboard held his 14:37 paste: 4 characters, the same sha256 prefix as
+  the paste record.
+- Clipboard history and cloud clipboard were OFF (no `EnableClipboardHistory` /
+  `EnableCloudClipboard` values; no policy), so this was the live clipboard, not history.
+- **E1b ("a pixel-identical frame: nothing pasteable is left") does not hold** once a Windows
+  application has actually pasted. The application asked for the data, and Windows keeps the
+  rendered copy after we give up ownership.
+
+**Decision.**
+1. **Scrub.** After a paste is served and has lingered, the service releases CLIPBOARD and at once
+   re-owns it, offering **nothing**:
+   - xfreerdp asks TARGETS and announces a fresh, empty text format to Windows, which replaces its
+     copy;
+   - a data request during the scrub gets `b""`;
+   - then it releases.
+   - The paste's outcome is unchanged (`ok`).
+   - A scrub that cannot complete is counted in `/health` `clipboard.scrub_incomplete` and logged.
+     Never silent.
+2. **Stale `SelectionClear`.** On a real X server, the SelectionClear of our own release arrives
+   after a quick re-own. `OwnershipLost` is ignored while we still own CLIPBOARD. Before this fix it
+   could also abort a queued paste that started right after a release.
+3. **Audit digest.** Paste records (input log and transfer log) carry only a **12-hex sha256
+   prefix**. That is enough to match a paste against a known value, as done here, and too short
+   to brute-force a short paste offline. File transfers keep full digests: those are integrity
+   (`x-content-sha256`).
+4. **The lab's own Windows session** (`poring-lab`, a standard user) has clipboard history and
+   cloud clipboard OFF, Windows Terminal's right-click is a context menu (no paste), and conhost
+   QuickEdit is OFF ([rathena-client.md](../client/rathena-client.md), "Windows account").
+
+**Verification.**
+- `services/backend/tests/test_clipboard.py`:
+  - paste + scrub = two own/release rounds;
+  - an empty payload is served during the scrub;
+  - an incomplete scrub is counted;
+  - a stale SelectionClear is ignored.
+- `test_app.py`: no full digest anywhere on disk.
+- `scripts/clipboard_x11_check.py` against a real Xvfb: **PASS** (2 TARGETS rounds, scrub completed).
+- **Not yet verified live end to end:** a dummy paste followed by an empty `Get-Clipboard` on
+  Windows (the operator skipped the dummy paste on 2026-10-01). Do it at the next console session.
+
