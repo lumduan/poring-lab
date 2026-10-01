@@ -244,11 +244,36 @@ def calibrate(screen: Screen, state: str, box: list[int] | None = None) -> None:
         path.with_suffix(".json").write_text(json.dumps({"box": box}))
     _, img = screen.grab(*region_for(state))
     np.save(path, grey_thumb(img))
+    if state == "eng":  # full resolution, for the sliding tray search
+        np.save(STATE_DIR / "signatures" / "eng_full.npy", _grey(img))
     to_png(img, SHOTS / f"sig_{state}.png")
     log(f"signature {state} saved ({img.shape[1]}x{img.shape[0]})")
 
 
+TRAY_STRIP = (900, 764, 340, 22)  # where the ENG/ไทย indicator can sit (it moves with tray icons)
+
+
+def _grey(img: np.ndarray) -> np.ndarray:
+    px = img[:, :, :3].astype(np.float32)
+    return px[..., 0] * 0.114 + px[..., 1] * 0.587 + px[..., 2] * 0.299
+
+
+def eng_distance(screen: Screen) -> float:
+    """Best match of the full-resolution ENG template anywhere in the tray strip: the indicator's
+    x shifts as tray icons come and go (1086 vs 1115 on the same account, 2026-10-01)."""
+    tmpl = np.load(STATE_DIR / "signatures" / "eng_full.npy")
+    _, img = screen.grab(*TRAY_STRIP)
+    strip = _grey(img)
+    th, tw = tmpl.shape
+    best = float("inf")
+    for x in range(0, strip.shape[1] - tw + 1):
+        best = min(best, float(np.abs(strip[:th, x : x + tw] - tmpl).mean()))
+    return best
+
+
 def distance(screen: Screen, state: str) -> float:
+    if state == "eng" and (STATE_DIR / "signatures" / "eng_full.npy").exists():
+        return eng_distance(screen)
     path = signature_path(state)
     if not path.exists():
         raise Stop(f"no signature for {state!r}: run `ro_agent.py calibrate {state}` first")
@@ -550,12 +575,15 @@ def activate_client(agent: Agent, screen: Screen) -> None:
     right-clicks pasted the Windows clipboard onto its prompt (not executed; cleared)."""
     x, y, w, _ = game_region()
     agent.click(x + w // 2, y - 15)
-    time.sleep(0.4)
-    if signature_path("client_title_active").exists() and not is_state(
-        screen, "client_title_active"
-    ):
-        to_png(screen.full(), SHOTS / "client_not_front.png")
-        raise Stop("the client is not the foreground window after activation: stopped")
+    if not signature_path("client_title_active").exists():
+        time.sleep(0.4)
+        return
+    end = time.monotonic() + 2.0  # the title repaints a beat after focus returns
+    while not is_state(screen, "client_title_active"):
+        if time.monotonic() > end:
+            to_png(screen.full(), SHOTS / "client_not_front.png")
+            raise Stop("the client is not the foreground window after activation: stopped")
+        time.sleep(0.2)
 
 
 def login_guard(screen: Screen) -> Callable[[], None]:
@@ -685,6 +713,7 @@ LAYOUTS: dict[tuple[int, int], dict[str, tuple[int, int]]] = {
         "password": (349, 461),
         "login_button": (492, 463),
         "server_ok": (466, 495),
+        "chat_input": (300, 613),
     },
 }
 
@@ -708,12 +737,16 @@ def account_chars(which: str) -> list[str]:
 
 
 def open_chat(agent: Agent, screen: Screen) -> None:
-    """Make sure the chat input is open (Enter opens it); verified by its signature."""
+    """Make sure the chat input is open (Enter opens it), then click INTO it: an open but
+    unfocused input (e.g. after clicks on the world) drops the first keystrokes -- a `@warp ...`
+    went out as public chat without its `@warp ` (2026-10-01)."""
     if not is_state(screen, "chat_open"):
         agent.keys("Enter")
         time.sleep(1.0)
         if not is_state(screen, "chat_open"):
             raise Stop("the chat input did not open: nothing typed")
+    agent.click(*layout("chat_input"))
+    time.sleep(0.2)
 
 
 def chat_line(agent: Agent, screen: Screen, text: str) -> None:
@@ -734,6 +767,7 @@ def gm(agent: Agent, screen: Screen, command: str) -> None:
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     with (STATE_DIR / "gm.jsonl").open("a") as fh:
         fh.write(json.dumps(record) + "\n")
+    activate_client(agent, screen)  # a Windows popup can take focus at any time
     chat_line(agent, screen, command)
     log(f"gm: {command}")
 

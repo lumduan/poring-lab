@@ -11,39 +11,43 @@ rathena to the first lab frame that shows the character moving.
   `self_move` event), mapped onto CLOCK_MONOTONIC (ADR-0007), read back from /captures.
 * Frame time: inside the backend container (same X display, same clock) a scene band away from
   the cursor and the UI is grabbed continuously; the first grab after the packet where >10 % of the
-  sampled pixels moved by >24 levels (the camera follows the character, so the scene scrolls).
+  sampled pixels differ by >24 levels from a REFERENCE frame taken while the scene was still
+  (300 ms without change). Cumulative, not frame-to-frame: a frame-to-frame threshold detects
+  later at higher delivered fps (smaller steps), which made faster codecs look slower (2026-10-01).
 * Delay = frame time - packet time: client processing + render + RDP encode/transfer + xfreerdp
   decode + Xvfb + our grab. p50/p95/p99 over the matched trials; unmatched trials are reported.
 """
 
 import argparse
+import base64
+import bisect
 import gzip
 import io
 import json
 import statistics
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
+
+import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ro_agent as r  # noqa: E402
 
 WATCH = r"""
-import sys, time, mss, numpy as np
+import base64, sys, time, mss, numpy as np
 x, y, w, h, secs = (float(v) for v in sys.argv[1:6])
 reg = {"left": int(x), "top": int(y), "width": int(w), "height": int(h)}
-def arr(s):
-    a = np.frombuffer(s.raw, np.uint8).reshape(s.height, s.width, 4)
-    return a[::2, ::2, :3].astype(np.int16)
 with mss.MSS(display=":99") as s:
-    prev = arr(s.grab(reg)); end = time.monotonic() + secs
+    end = time.monotonic() + secs
     while time.monotonic() < end:
-        t = time.monotonic_ns(); cur = arr(s.grab(reg))
-        frac = float((np.abs(cur - prev).max(axis=2) > 24).mean())
-        if frac > 0.005:
-            print(f"{t},{frac:.4f}", flush=True)
-        prev = cur
+        t = time.monotonic_ns(); g = s.grab(reg)
+        a = np.frombuffer(g.raw, np.uint8).reshape(g.height, g.width, 4)[::8, ::8, :3]
+        thumb = a.max(axis=2).astype(np.uint8)  # brightest channel, 8x8 subsampled
+        print(f"{t},{base64.b64encode(thumb.tobytes()).decode()}", flush=True)
+        time.sleep(0.004)  # ~200 grabs/s is plenty for a ~5-30 fps stream
 """
 MOVED = 0.10
 
@@ -95,6 +99,12 @@ def main() -> None:
              *(str(v) for v in band), str(secs)],
             stdout=subprocess.PIPE, text=True,
         )  # fmt: skip
+        # Drain stdout continuously: an unread pipe fills at 64 KB and blocks the watcher, which
+        # then grabs nothing during the walks (0/40 matched, 2026-10-01).
+        lines: list[str] = []
+        assert watcher.stdout is not None
+        reader = threading.Thread(target=lambda: lines.extend(watcher.stdout), daemon=True)
+        reader.start()
         time.sleep(2)
         clicks: list[int] = []
         for i in range(a.n):
@@ -103,14 +113,32 @@ def main() -> None:
             agent.click(cx + dx, cy)
             clicks.append(t0)
             time.sleep(2.1)
-        out, _ = watcher.communicate(timeout=120)
-    frames = [(int(t), float(f)) for t, f in (ln.split(",") for ln in out.splitlines() if ln)]
+        watcher.wait(timeout=120)
+        reader.join(timeout=10)
+        out = "".join(lines)
+    grabs: list[tuple[int, np.ndarray]] = []
+    for ln in out.splitlines():
+        if ln:
+            t, b64 = ln.split(",", 1)
+            grabs.append((int(t), np.frombuffer(base64.b64decode(b64), np.uint8).astype(np.int16)))
+    times = [t for t, _ in grabs]
     moves = [m for m in self_moves(t_start) if isinstance(m["t_mono_ns"], int)]
     delays, unmatched = [], 0
     for m in moves:
         tp = int(str(m["t_mono_ns"]))
-        hit = next((t for t, f in frames if t >= tp and f >= MOVED), None)
-        if hit is None or hit - tp > 1_500_000_000:
+        i = bisect.bisect_left(times, tp)  # first grab at/after the packet
+        if i == 0 or i >= len(grabs):
+            unmatched += 1
+            continue
+        ref = grabs[i - 1][1]  # the scene as it was just before the packet
+        hit = None
+        for t, thumb in grabs[i:]:
+            if t - tp > 1_500_000_000:
+                break
+            if float((np.abs(thumb - ref) > 24).mean()) >= MOVED:
+                hit = t
+                break
+        if hit is None:
             unmatched += 1
             continue
         delays.append((hit - tp) / 1e6)
