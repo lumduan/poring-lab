@@ -39,6 +39,7 @@ LAB = [
     "poring-lab-frontend-dev-1",
     "poring-lab-rathena-1",
     "poring-lab-sniffer-1",
+    "poring-lab-db-1",
 ]
 CRON = "cron.service"
 

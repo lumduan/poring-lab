@@ -54,8 +54,11 @@ CONTAINERS = [
 EXTRA_CGROUPS = {"cron.service(capture-streaming-pro)": "/sys/fs/cgroup/system.slice/cron.service"}
 ALL = ["--profile", "core", "--profile", "remote", "--profile", "vision"]
 RUNTIME = ["--profile", "core", "--profile", "remote"]
-# Dev mode (compose.yaml + compose.dev.yaml, see scripts/dev.sh) plus the core profile.
-DEV = ["scripts/dev.sh", "--profile", "core"]
+# Dev mode (compose.yaml + compose.dev.yaml, see scripts/dev.sh) plus the core and sniffer profiles,
+# so `start:sniffer` is guarded too (an unguarded sniffer recreate right after a guarded db/rathena
+# start coincided with 67 % quant-postgres io_full for ~20 s, 2026-10-01). `up -d <services>` still
+# starts only the named services.
+DEV = ["scripts/dev.sh", "--profile", "core", "--profile", "sniffer"]
 SERVICE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 
 
