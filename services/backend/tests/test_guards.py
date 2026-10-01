@@ -1,4 +1,5 @@
-"""Structural guards for ADR-0004 (human-only clipboard + file transfer): what may touch it."""
+"""Structural guards: what may touch the human-only clipboard/transfer (ADR-0004) and the packet
+ground truth (ADR-0007)."""
 
 import re
 import subprocess
@@ -13,8 +14,25 @@ RDP_LOOP = ROOT / "services" / "desktop" / "bin" / "rdp-loop.sh"
 TRANSFER_SERVICES = {"desktop", "backend"}
 
 
+class _ComposeLoader(yaml.SafeLoader):
+    """SafeLoader + compose's merge tags (`!reset`, `!override`): their value as plain YAML."""
+
+
+for _tag in ("!reset", "!override"):
+    _ComposeLoader.add_constructor(
+        _tag,
+        lambda loader, node: (
+            loader.construct_mapping(node)
+            if isinstance(node, yaml.MappingNode)
+            else loader.construct_sequence(node)
+            if isinstance(node, yaml.SequenceNode)
+            else loader.construct_scalar(node)
+        ),
+    )
+
+
 def compose(name: str) -> dict[str, Any]:
-    data: dict[str, Any] = yaml.safe_load((ROOT / name).read_text())
+    data: dict[str, Any] = yaml.load((ROOT / name).read_text(), Loader=_ComposeLoader)
     return data
 
 
@@ -112,7 +130,9 @@ def test_x11vnc_never_relays_the_clipboard() -> None:
 # Clipboard / selection / transfer are human-only: the agent side must not even mention them.
 FORBIDDEN = re.compile(
     r"set_selection_owner|convert_selection|get_selection_owner|xfixes|CLIPBOARD|"
-    r"ClipboardPaste|clipboard_paste|PasteResult|/transfer|tsclient|poring_backend",
+    r"ClipboardPaste|clipboard_paste|PasteResult|/transfer|tsclient|poring_backend|"
+    # ADR-0007: packet ground truth is offline / human-console only.
+    r"poring_packets|/ws/packets|/ingest/packets|captures",
     re.IGNORECASE,
 )
 
@@ -131,6 +151,61 @@ def test_agent_side_code_has_no_clipboard_or_transfer_access() -> None:
         for match in FORBIDDEN.finditer(path.read_text())
     ]
     assert offenders == []
+
+
+# --- ADR-0007: packet captures stay offline ground truth -----------------------------------------
+CAPTURE_MOUNTS = {"sniffer": False, "backend": True}  # service -> must be read-only
+
+
+def mounts_of(service: dict[str, Any], volume: str) -> list[str]:
+    out = []
+    for vol in service.get("volumes", []):
+        if isinstance(vol, str) and vol.split(":", 1)[0] == volume:
+            out.append(vol)
+    return out
+
+
+@pytest.mark.parametrize("name", ["compose.yaml", "compose.dev.yaml"])
+def test_captures_volume_only_in_sniffer_rw_and_backend_ro(name: str) -> None:
+    services = compose(name)["services"]
+    for svc, spec in services.items():
+        mounts = mounts_of(spec or {}, "captures")
+        if svc not in CAPTURE_MOUNTS:
+            assert mounts == [], f"{name}: {svc} mounts captures"
+            continue
+        for mount in mounts:
+            read_only = mount.endswith(":ro")
+            assert read_only == CAPTURE_MOUNTS[svc], f"{name}: {svc} {mount}"
+
+
+def test_captures_volume_exists_and_sniffer_never_writes_the_data_dir() -> None:
+    base = compose("compose.yaml")
+    assert "captures" in base["volumes"]
+    sniffer = base["services"]["sniffer"]
+    assert mounts_of(sniffer, "captures") and not mounts_of(sniffer, "./data")
+    assert sniffer.get("network_mode") == "service:rathena"
+    assert sniffer["mem_limit"] == sniffer["memswap_limit"]
+
+
+def test_vision_never_gets_the_packet_package() -> None:
+    vision = (ROOT / "services" / "vision" / "pyproject.toml").read_text()
+    assert "poring-packets" not in vision and "poring_packets" not in vision
+    dockerfile = (ROOT / "services" / "vision" / "Dockerfile").read_text()
+    copies = [
+        line for line in dockerfile.splitlines() if "poring_packets" in line and "COPY" in line
+    ]
+    # Only the pyproject.toml (uv workspace discovery), never the source.
+    assert copies == ["COPY packages/poring_packets/pyproject.toml packages/poring_packets/"]
+    env = (ROOT / "packages" / "poring_env" / "pyproject.toml").read_text()
+    assert "poring-packets" not in env
+
+
+def test_rathena_ip_is_pinned_to_the_ingest_peer() -> None:
+    from poring_backend.config import Settings
+
+    rathena = compose("compose.yaml")["services"]["rathena"]
+    pinned = rathena["networks"]["default"]["ipv4_address"]
+    assert pinned == Settings().ingest_peer
 
 
 # --- Phase 0: the RDP A/B override file (docs/phase0-latency.md) ---------------------------------

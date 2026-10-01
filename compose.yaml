@@ -3,7 +3,8 @@
 # Profiles:  core    db + rathena (the game server)
 #            remote  desktop (Xvfb + the ONE RDP session) + backend + frontend
 #            vision  GPU agent (needs remote running to do anything useful)
-#            sniffer placeholder; shares rathena's network namespace (brings core up with it)
+#            sniffer packet ground truth (ADR-0007): shares rathena's network namespace, writes
+#                    the `captures` volume, feeds the backend's console timeline. OFFLINE only.
 #
 # Host protection (this host also runs 24/7 capture services): every lab container has a hard
 # memory cap with NO swap (memswap_limit == mem_limit) and oom_score_adj 500, so under memory
@@ -84,11 +85,22 @@ services:
       # Optional test player account, upserted at every start (credentials only in .env).
       RATHENA_TEST_USER: ${RATHENA_TEST_USER:-}
       RATHENA_TEST_PASSWORD: ${RATHENA_TEST_PASSWORD:-}
+      # The agent's accounts (upserted at every start): a player (group 0) and a validation GM
+      # (group 20, conf/import/groups.yml). Credentials only in .env, never printed or logged.
+      RATHENA_AGENT_USER: ${RATHENA_AGENT_USER:-}
+      RATHENA_AGENT_PASSWORD: ${RATHENA_AGENT_PASSWORD:-}
+      RATHENA_GM_USER: ${RATHENA_GM_USER:-}
+      RATHENA_GM_PASSWORD: ${RATHENA_GM_PASSWORD:-}
     # The runtime tree (binaries, conf, db, npc, sql-files) is extracted here from ONE tar in the
     # image at every start: ~1600 files never touch the shared host disk. tmpfs pages count against
     # mem_limit (the tree is ~70 MiB; exec: the servers run from it).
     tmpfs:
       - /opt/rathena:rw,exec,nosuid,nodev,size=192m,uid=1000,gid=1000,mode=0755
+    networks:
+      default:
+        # PINNED (ADR-0007): the sniffer shares this namespace, and the backend accepts
+        # /ingest/packets ONLY from this address (INGEST_PEER).
+        ipv4_address: 10.210.96.6
     ports:
       - "${HOST_LAN_IP:?}:6900:6900" # login
       - "${HOST_LAN_IP:?}:6121:6121" # char
@@ -161,9 +173,16 @@ services:
       RDP_CLIPBOARD: ${RDP_CLIPBOARD:-off}
       RDP_DRIVES: ${RDP_DRIVES:-}
       TRANSFER_DIR: /transfer
+      # ADR-0007: /ingest/packets accepts only rathena's pinned address (the sniffer's namespace).
+      INGEST_PEER: 10.210.96.6
+      # Black-screen detector: the RO client area "x,y,w,h" in desktop pixels ("" = whole frame).
+      GAME_REGION: ${GAME_REGION:-}
+      BLACK_HOLD_S: ${BLACK_HOLD_S:-5}
     volumes:
       - x11-unix:/tmp/.X11-unix:ro
       - ./data:/data
+      # Offline analysis tools only (read-only); never mounted in vision (tests/test_guards.py).
+      - captures:/captures:ro
       # Browser uploads are written here (charged to this container's 1 GiB: peak ~90 MiB + 512).
       - transfer:/transfer
     ports:
@@ -226,21 +245,40 @@ services:
   sniffer:
     <<: *lab
     profiles: [sniffer]
+    # ADR-0007. The slim image (services/sniffer) waits for the disk split; until then the dev
+    # overlay runs it from the backend image with the host source (compose.dev.yaml).
     build: services/sniffer
     image: poring-lab/sniffer:local
     network_mode: "service:rathena"
     depends_on:
       rathena:
         condition: service_started
+    # Root with every capability dropped except NET_RAW (AF_PACKET); it never sends a packet.
+    user: "0:0"
+    cap_drop: [ALL]
     cap_add: [NET_RAW]
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m
+    environment:
+      CAPTURE_IFACE: eth0
+      CAPTURE_DIR: /captures
+      INGEST_URL: ws://backend:8001/ingest/packets
+      # Login ids of the validation (GM) accounts: their sessions are tagged, never logged.
+      VALIDATION_USERIDS: ${RATHENA_GM_USER:-}
+      PYTHONDONTWRITEBYTECODE: "1"
+    # pcapng + events (hourly / 256 MB; 7 days or 20 GB). NEVER ./data: RO login packets carry
+    # credentials (the sniffer zeroes the password bytes, and captures still stay out of git).
     volumes:
-      - ./data:/data
+      - captures:/captures
     mem_limit: 256m
     memswap_limit: 256m
 
 volumes:
   db-data:
   x11-unix:
+  # ADR-0007 packet captures: sniffer (rw) and backend (ro) ONLY -- never vision (test_guards.py).
+  captures:
   # ADR-0004 file transfer: \\tsclient\transfer in Windows. RAM only (tmpfs, 512 MiB cap), never the
   # shared disk; emptied when both desktop and backend stop. Mounted in desktop + backend ONLY --
   # never vision, rathena or sniffer (tests/test_guards.py).

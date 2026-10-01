@@ -22,7 +22,13 @@ sed -i \
   -e "s|^RATHENA_SERVER_PASSWORD=$|RATHENA_SERVER_PASSWORD=$(secret | cut -c1-23)|" \
   -e "s|^RATHENA_TEST_USER=$|RATHENA_TEST_USER=lab_$(secret | cut -c1-8)|" \
   -e "s|^RATHENA_TEST_PASSWORD=$|RATHENA_TEST_PASSWORD=$(secret | cut -c1-16)|" \
+  -e "s|^RATHENA_AGENT_USER=$|RATHENA_AGENT_USER=agt_$(secret | cut -c1-8)|" \
+  -e "s|^RATHENA_AGENT_PASSWORD=$|RATHENA_AGENT_PASSWORD=$(secret | cut -c1-16)|" \
+  -e "s|^RATHENA_GM_USER=$|RATHENA_GM_USER=val_$(secret | cut -c1-8)|" \
+  -e "s|^RATHENA_GM_PASSWORD=$|RATHENA_GM_PASSWORD=$(secret | cut -c1-16)|" \
+  -e "s|^RATHENA_AGENT_CHAR=$|RATHENA_AGENT_CHAR=Agt$(secret | cut -c1-6)|" \
+  -e "s|^RATHENA_GM_CHAR=$|RATHENA_GM_CHAR=Val$(secret | cut -c1-6)|" \
   .env
 
-echo "wrote .env (mode 600): HOST_LAN_IP=${lan_ip:-192.168.1.13}, random DB, server and test-account secrets."
+echo "wrote .env (mode 600): HOST_LAN_IP=${lan_ip:-192.168.1.13}, random DB, server, test and agent account secrets."
 echo "RDP is disabled until you set WIN_HOST, RDP_USER and RDP_PASSWORD in .env."

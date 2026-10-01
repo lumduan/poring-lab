@@ -18,11 +18,29 @@ services:
   backend:
     environment:
       # Mounted source wins over the copy installed in the image's site-packages.
-      PYTHONPATH: /dev-src/poring_env:/dev-src/backend
+      PYTHONPATH: /dev-src/poring_env:/dev-src/poring_packets:/dev-src/backend
       PYTHONDONTWRITEBYTECODE: "1"
     volumes:
       - ./packages/poring_env/src:/dev-src/poring_env:ro
+      - ./packages/poring_packets/src:/dev-src/poring_packets:ro
       - ./services/backend/src:/dev-src/backend:ro
+
+  sniffer:
+    # ADR-0007 on the dev overlay: the backend image (Python 3.12, pydantic, websockets) runs the
+    # host source -- no build. `!reset`: never build services/sniffer under this image tag.
+    build: !reset null
+    image: poring-lab/backend:local
+    pull_policy: never
+    entrypoint: []
+    command: ["python", "-m", "poring_packets.sniffer"]
+    # The image's HEALTHCHECK probes the backend's :8000, which does not exist in this namespace.
+    healthcheck:
+      disable: true
+    environment:
+      PYTHONPATH: /dev-src/poring_packets
+    volumes:
+      # The generated length table (_generated/, gitignored) comes with the source mount.
+      - ./packages/poring_packets/src:/dev-src/poring_packets:ro
 
   frontend-dev:
     profiles: [dev]

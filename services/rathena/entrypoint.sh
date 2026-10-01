@@ -28,6 +28,7 @@ cd "${rt}"
 : "${RATHENA_SERVER_USER:?}" "${RATHENA_SERVER_PASSWORD:?}"
 : "${RATHENA_SERVER_NAME:=PoringLab}" "${RATHENA_NEW_ACCOUNT:=yes}" "${RATHENA_PINCODE:=no}"
 : "${RATHENA_WEB_SERVER:=false}" "${RATHENA_TEST_USER:=}" "${RATHENA_TEST_PASSWORD:=}"
+: "${RATHENA_AGENT_USER:=}" "${RATHENA_AGENT_PASSWORD:=}" "${RATHENA_GM_USER:=}" "${RATHENA_GM_PASSWORD:=}"
 
 # rAthena's conf parser takes everything after "key: " to end of line, and the server account is
 # also written into SQL below -- keep these to a safe charset instead of escaping them.
@@ -42,11 +43,15 @@ server_safe='^[A-Za-z0-9_.-]{4,23}$'
 [[ "${RATHENA_SERVER_NAME}" =~ ^[A-Za-z0-9_.\ -]{1,20}$ ]] || die "RATHENA_SERVER_NAME: 1-20 plain chars"
 [[ "${HOST_LAN_IP}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || die "HOST_LAN_IP must be an IPv4 address"
 [[ "${DB_NAME}" =~ ^[A-Za-z0-9_]{1,64}$ ]] || die "DB_NAME must match ^[A-Za-z0-9_]{1,64}$"
-# Optional test player account (login.userid is varchar(23), user_pass varchar(32)).
-if [[ -n "${RATHENA_TEST_USER}${RATHENA_TEST_PASSWORD}" ]]; then
-  [[ "${RATHENA_TEST_USER}" =~ ^[A-Za-z0-9_]{4,23}$ ]] || die "RATHENA_TEST_USER: 4-23 of [A-Za-z0-9_]"
-  [[ "${RATHENA_TEST_PASSWORD}" =~ ^[A-Za-z0-9]{8,32}$ ]] || die "RATHENA_TEST_PASSWORD: 8-32 of [A-Za-z0-9]"
-fi
+# Optional accounts (login.userid is varchar(23), user_pass varchar(32)): the operator's test
+# player, the agent's player (group 0) and the agent's validation GM (group 20, groups.yml).
+for acct in TEST AGENT GM; do
+  user_var="RATHENA_${acct}_USER" pass_var="RATHENA_${acct}_PASSWORD"
+  if [[ -n "${!user_var}${!pass_var}" ]]; then
+    [[ "${!user_var}" =~ ^[A-Za-z0-9_]{4,23}$ ]] || die "${user_var}: 4-23 of [A-Za-z0-9_]"
+    [[ "${!pass_var}" =~ ^[A-Za-z0-9]{8,32}$ ]] || die "${pass_var}: 8-32 of [A-Za-z0-9]"
+  fi
+done
 
 export HOST_LAN_IP DB_HOST DB_PORT DB_NAME DB_USER DB_PASSWORD RATHENA_SERVER_USER \
   RATHENA_SERVER_PASSWORD RATHENA_SERVER_NAME RATHENA_NEW_ACCOUNT RATHENA_PINCODE
@@ -58,6 +63,9 @@ for tmpl in /opt/rathena-conf-templates/*.txt.tmpl; do
   envsubst "${vars}" <"${tmpl}" >"${out}"
   log "rendered ${out}"
 done
+# Static (no variables): the Validation group for the agent's GM account.
+cp /opt/rathena-conf-templates/groups.yml conf/import/groups.yml
+log "installed conf/import/groups.yml"
 log "clients will be sent to char ${HOST_LAN_IP}:6121 and map ${HOST_LAN_IP}:5121 ($(tr '\n' ' ' <BUILD_INFO))"
 
 # DB credentials via an option file, never argv.
@@ -104,15 +112,33 @@ sql <<SQL
 UPDATE login SET userid='${RATHENA_SERVER_USER}', user_pass='${RATHENA_SERVER_PASSWORD}'
   WHERE account_id=1 AND sex='S';
 SQL
-if [[ -n "${RATHENA_TEST_USER}" ]]; then
+# ensure_account <user> <password> <group_id|keep>: create if missing, reset the password; with a
+# group id, also (re)assert the group at every start. Credentials go through stdin, never argv,
+# and are never logged.
+ensure_account() {
+  local group_sql=""
+  [[ "$3" == keep ]] || group_sql=", group_id=$3"
   sql <<SQL
 INSERT INTO login (userid, user_pass, sex, email, group_id)
-  SELECT '${RATHENA_TEST_USER}', '${RATHENA_TEST_PASSWORD}', 'M', 'a@a.com', 0 FROM DUAL
-  WHERE NOT EXISTS (SELECT 1 FROM login WHERE userid='${RATHENA_TEST_USER}');
-UPDATE login SET user_pass='${RATHENA_TEST_PASSWORD}'
-  WHERE userid='${RATHENA_TEST_USER}' AND sex <> 'S';
+  SELECT '$1', '$2', 'M', 'a@a.com', 0 FROM DUAL
+  WHERE NOT EXISTS (SELECT 1 FROM login WHERE userid='$1');
+UPDATE login SET user_pass='$2'${group_sql}
+  WHERE userid='$1' AND sex <> 'S';
 SQL
+}
+if [[ -n "${RATHENA_TEST_USER}" ]]; then
+  ensure_account "${RATHENA_TEST_USER}" "${RATHENA_TEST_PASSWORD}" keep
   log "test account ensured"
+fi
+# The agent's accounts (docs/rathena-client.md "Agent accounts"): a plain player, and the GM
+# account in the Validation group (20) -- only for Phase 1 ground-truth checks.
+if [[ -n "${RATHENA_AGENT_USER}" ]]; then
+  ensure_account "${RATHENA_AGENT_USER}" "${RATHENA_AGENT_PASSWORD}" 0
+  log "agent player account ensured (group 0)"
+fi
+if [[ -n "${RATHENA_GM_USER}" ]]; then
+  ensure_account "${RATHENA_GM_USER}" "${RATHENA_GM_PASSWORD}" 20
+  log "agent validation account ensured (group 20)"
 fi
 rm -f "${mycnf}"
 

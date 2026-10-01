@@ -1,0 +1,35 @@
+# poring-lab: copied verbatim into conf/import/groups.yml by entrypoint.sh at every start (no
+# variables). Merged on top of the stock conf/groups.yml by its Footer import.
+#
+# Group 20 "Validation" -- the agent's GM account (RATHENA_GM_USER), used ONLY for Phase 1
+# packet-ground-truth validation (docs/phase1-validation.md). It is the smallest set of commands the
+# checks need; no stock group fits, because @mobsearch alone is group 99 (admin) upstream:
+#   where            own position truth vs the packet-derived position
+#   who, whomap      players online / on the map (entity-count cross-check)
+#   mapmove          @warp to the test maps (indoor = the save map, outdoor = a field)
+#   mobsearch        monster positions on the map (entity cells cross-check)
+#   monster          spawn a known number of monsters for the count check
+#   killmonster2     remove them again afterwards (no drops)
+#   hide             invisible: monsters ignore the GM while it validates
+# LogCommands: every command lands in atcommandlog (offline audit). Inherits Player for the basics.
+# No permissions beyond Player's: no item/zeny/stat commands, no any_warp, no hide_session.
+Header:
+  Type: PLAYER_GROUP_DB
+  Version: 1
+
+Body:
+  - Id: 20
+    Name: Validation
+    Level: 1
+    Inherit:
+      Player: true
+    LogCommands: true
+    Commands:
+      where: true
+      who: true
+      whomap: true
+      mapmove: true
+      mobsearch: true
+      monster: true
+      killmonster2: true
+      hide: true
