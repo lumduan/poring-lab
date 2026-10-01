@@ -225,7 +225,8 @@ them as **sensitive** input (the input log keeps counts only); see `docs/client/
    This lab uses `poring-lab` (`WIN_LAB_USER`/`WIN_LAB_PASSWORD`, 2026-10-01): not an administrator,
    Modify on `C:\RO-rAthena` only, plus Performance Monitor Users and Event Log Readers for the RDP
    counters/events. Elevation is the operator's (UAC); see `docs/client/rathena-client.md` "Windows
-   account". The lab uses `RDP_GFX=progressive` (`docs/h264-plan.md`).
+   account". The lab uses `RDP_GFX=progressive` (`docs/h264-plan.md`; `AVCthin` and `AVC444` are measured
+   alternatives, both fewer frames on FreeRDP 3.15).
 2. Give the host a fixed IP (DHCP reservation) → `WIN_HOST`.
 3. Disable sleep, the screen lock and the screensaver. A locked session shows the lock screen to the agent.
 4. Run the RO client **inside the RDP session** at `XVFB_RESOLUTION` (default 1280x800). The game window is 800×664

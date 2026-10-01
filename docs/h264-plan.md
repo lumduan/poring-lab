@@ -7,7 +7,7 @@ verdict_date: 2026-10-01
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: Arm C -- FreeRDP 3.32.1 (trixie-backports) in one guarded desktop build in an operator-chosen window, then A/B progressive vs AVC420 vs AVC444 with measure_motion + measure_delay. Until then the lab runs RDP_GFX=progressive (the Windows AVC policies stay on).
+next_action: Arm C -- FreeRDP 3.32.1 in one guarded desktop build (python3 scripts/guarded_build.py --sustain 30 --spike 25 build:desktop, operator window), then the same progressive/AVCthin tables. The AVC420 experiment (2026-10-01) showed the ~6.5-core ceiling is codec-independent; progressive stays.
 ---
 
 # H.264 for the RDP leg: plan and Arm A result
@@ -67,11 +67,78 @@ scene was outdoor (new_4-1 69,137).
   - the policies stay on for Arm C.
   - Revert of the policies: `rathena-client.md` settings table.
 
-**Next (Arm C):**
-- FreeRDP 3.32.1, one guarded desktop build;
-- then progressive vs `/gfx:AVC444` vs AVC420, the latter only via autodetect-with-AVC420 (the
-  plain `/gfx:AVC420` flag disables RDP10 caps).
-- NVDEC remains last.
+➡️ **The "Next (Arm C)" list that stood here is SUPERSEDED by the AVC420 experiment below
+(2026-10-01 evening):** there is no client-side way to get plain AVC420 from Windows with
+FreeRDP 3.15.
+
+## AVC420 experiment (2026-10-01, 19:49–20:45 ICT, poring-lab session, policies ON, 800×664, FPSLimit 30)
+
+**How FreeRDP 3.15 asks for codecs** (source of `parse_gfx_options` and
+`rdpgfx_send_supported_caps` at the 3.15.0 tag):
+- Naming any codec in `/gfx:` sets `GfxH264` from `AVC420` only, and `GfxAVC444` from `AVC444` only.
+- The 10.x capability sets are sent only if `!GfxH264 || GfxAVC444`, and AVC is disabled in 10.x
+  unless `GfxAVC444` is set. So "AVC420, not AVC444" means **8.1 caps only**.
+- `thin-client` adds `AVC_THINCLIENT` to every 10.3+ set. `mask:` is a **filter** (bit set =
+  version NOT offered; bit order 8, 8.1, 10, 10.1, …, 10.6, 10.6err, 10.7).
+
+**What Windows chose** (RdpCoreTS event 162, read by `poring-lab`):
+
+| Client args | Caps Windows picked | AVC available | Initial profile |
+|---|---|---|---|
+| `/gfx:AVC420:on,AVC444:off,progressive:off,RFX:off` | 8.1 (0x80105) | 0 | 2 (progressive) |
+| `/gfx:AVC420` (bare) | 8.1 (0x80105) | 0 | 2 |
+| `/gfx:thin-client` | 10.7 | 0 | 2 |
+| `/gfx:AVC444` | 10.7 | 1 | 2048 (+ event 170: Quick Sync) |
+| **`/gfx:AVC444:on,thin-client:on,mask:2015`** = `RDP_GFX=AVCthin` | **10.3 (0xA0301)** | 1 | 2048 (+ event 170) |
+| `progressive` (kept) | 10.7 | 0 | 2 |
+
+**Windows 11 never uses AVC for an 8.1-only client.** AVC420 cannot be forced client-side.
+`AVCthin` gets full-screen AVC with the 10.3 thin-client flag. Neither the protocol semantics of
+that flag nor the per-frame codec (AVC420 vs AVC444) were verified; the client's debug logging
+for rdpgfx isn't compiled in.
+
+**Measured** (the same tools as Arm A; rotations 60 s; delay = 40 walks, post-hoc reference,
+non-detections counted as >1.5 s; delay runs alternate spots because a wandering NPC blocked
+new_4-1 53,111 later):
+
+| Arm | Scene | Xvfb frames/s median (p10–p90) | Desktop cores | RDP in | RDP out | Skips: client /s | Encode ms |
+|---|---|---|---|---|---|---|---|
+| progressive | indoor | 7 (3–14) | 6.70 | 30.11 | **12.01** | 17.64 | 9.6 |
+| progressive | outdoor | **9 (5–20)** | 6.80 | 29.93 | **10.15** | 19.75 | 11.4 |
+| AVCthin | indoor | 6 (3–9) | 6.47 | 7.20 | 7.20 | 0.00 | 18.7 |
+| AVCthin | outdoor | 6 (4–9); repeat 8 (5–16) | 6.39; 6.66 | 6.71 | 6.71 | 0.00 | 18.7 |
+
+| Codec | Spot | Matched | p50 | p75 | p90 | p95 |
+|---|---|---|---|---|---|---|
+| progressive | new_4-1 53,111 (18:31) | 35/40 | 195 | 981 | >1500 | >1500 |
+| progressive | new_4-1 53,111 (19:52) | 35/40 | 204 | 972 | >1500 | >1500 |
+| progressive | prt_fild08 170,375 (20:44; a human lease touched 2 trials) | 35/40 | 242 | 1007 | >1500 | >1500 |
+| AVCthin | new_4-1 53,111 (20:18) | 39/40 | 169 | 269 | 439 | 1370 |
+| AVCthin | prt_fild08 170,375 (20:41) | 35/40 | 195 | 778 | >1500 | >1500 |
+| AVC444 (10.7, Arm A) | new_4-1 53,111 (18:33) | 29/40 | 740 | >1500 | >1500 | >1500 |
+
+**Decision: keep `progressive`.**
+- It delivers ~50 % more frames (Windows output 10–12 vs 6–7 fps; Xvfb 7–9 vs 6–8), consistently.
+- AVCthin's fresher-frame advantage was dramatic once (p75 269 ms) and modest on the repeat
+  (778 vs 1007 ms). Not enough to give up a third of the frames.
+- `AVCthin` stays as a keyword for later A/Bs. Reverted client-side; event 162 confirmed 10.7,
+  AVC 0, profile 2.
+
+**What this says about Arm C.** Every codec lands at **~6.4–6.8 desktop cores** for 6–12 delivered
+fps of a 784×625 game: progressive, AVC444 and AVCthin alike.
+- A single-stream H.264 decode of this size costs a fraction of one core, so the ceiling is **not
+  the codec** but FreeRDP 3.15's surface/GDI path into Xvfb (the client also runs ~390 threads).
+- That is exactly what 3.32 reworked: the thread pool capped at 16, and YUV work in 512 tiles. So
+  **Arm C is still worth one guarded desktop build**, measured with the same two tables.
+- If 3.32 doesn't move the ~6.5-core ceiling, the next suspect is the X11 GDI path (`RDP_GDI=hw`
+  was tried in Phase 0) rather than any codec.
+
+**GPU decode, research only.**
+- The Debian 3.15 package is built `WITH_VAAPI=OFF` and has no CUDA/NVDEC path.
+- The desktop container has no GPU device: compose gives the RTX 5060 Ti only to vision.
+- GPU decode would therefore need a custom FreeRDP build (VAAPI, or an FFmpeg hwaccel), a render
+  device passed to the desktop container, and VRAM next to Frigate, Ollama and vision.
+- Not worth it before Arm C shows whether decode is even the limit.
 
 ## Why: the client decode is the ceiling, and Windows chose the codec that costs the most
 

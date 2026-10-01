@@ -178,6 +178,12 @@ ports, quickstart) and `docs/adr/`.
   and group 20 apply with a recreate, not a build.
 - `sniffer` runs the backend image with the host `poring_packets` source (`build: !reset`; it can
   never retag the stub over `poring-lab/backend:local`).
+- **Single-file bind mounts (rdp-loop.sh, entrypoint.sh, groups.yml…) follow the INODE.** `sed -i`
+  and most editors write a new file, so the container keeps the old one silently (three codec tests
+  ran a stale `rdp-loop.sh` on 2026-10-01). Edit in place (`open(..., "w")`), or re-bind with a guarded
+  `python3 scripts/guarded_build.py --sustain 30 --spike 25 recreate:<svc>@90`. A running
+  `rdp-loop.sh` keeps its parsed functions: restart it with `supervisorctl stop rdp`, wait for zero
+  xfreerdp3 processes (ADR-0001: never two sessions), then `supervisorctl start rdp`.
 - Do not "fix" this by building images casually. An image build is a deliberate step: `scripts/guarded_build.py`
   (tolerant guard) in an operator-chosen window. There will be **no disk split** (Batt, 2026-10-01): keep the guards
   and the tar/tmpfs approach, and don't plan around a split.
