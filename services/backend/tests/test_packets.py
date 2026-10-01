@@ -1,5 +1,6 @@
 """ADR-0007 routes (/ingest/packets, /ws/packets) and sensitive agent batches, end-to-end."""
 
+import ipaddress
 import json
 import time
 from collections.abc import Callable, Iterator
@@ -13,7 +14,7 @@ from starlette.websockets import WebSocketDisconnect
 from poring_backend.config import Settings
 from poring_backend.main import create_app
 from poring_backend.packets import PacketOutbox
-from poring_backend.routes_packets import compose_peer
+from poring_backend.routes_packets import viewer_refusal
 from poring_env.clock import FrameCounter, monotonic_ns
 from poring_env.frame import Frame
 from poring_env.protocol import AgentInput, InputEvent, Key, Mode, MouseButton, MouseMove, SetMode
@@ -21,6 +22,7 @@ from poring_packets.events import Chat, PacketStats
 
 ORIGIN = "http://lab.test:3000"
 T = 1_000
+LAN = ("192.168.110.55", 50000)  # a browser on the operator's LAN
 
 
 class GreyCapture:
@@ -66,10 +68,10 @@ def make_client(tmp_path: Path) -> Iterator[Factory]:
             data_dir=tmp_path,
             status_hz=20.0,
             frontend_origins=ORIGIN,
-            **{"public_port": 80, "internal_port": 80, "ingest_peer": "testclient", **overrides},
+            **{"public_port": 80, "internal_port": 80, "ingest_peer": LAN[0], **overrides},
         )
         app = create_app(settings, capture_factory=GreyCapture, input_factory=lambda: fake)
-        client = TestClient(app)
+        client = TestClient(app, client=LAN)
         client.__enter__()
         clients.append(client)
         return client, fake
@@ -161,7 +163,7 @@ def test_ingest_refuses_the_public_listener(make_client: Factory) -> None:
 
 
 def test_ingest_refuses_any_peer_but_rathena(make_client: Factory) -> None:
-    client, _ = make_client(ingest_peer="10.210.96.6")  # TestClient is "testclient"
+    client, _ = make_client(ingest_peer="10.210.96.6")  # the test client is a LAN browser
     refused(client, "/ingest/packets")
     assert health(client)["dropped_messages"]["ingest"] == {"wrong_peer": 1}
 
@@ -170,6 +172,7 @@ def test_ingest_refuses_any_peer_but_rathena(make_client: Factory) -> None:
     ("overrides", "headers", "reason"),
     [
         ({"public_port": 8000}, {"origin": ORIGIN}, "internal_listener"),
+        ({"viewer_networks": "192.168.1.0/24"}, {"origin": ORIGIN}, "not_a_lan_viewer"),
         ({}, {}, "origin_missing"),
         ({}, {"origin": "http://evil.test:3000"}, "origin_not_allowed"),
     ],
@@ -182,26 +185,33 @@ def test_ws_packets_refusals_are_counted(
     assert health(client)["dropped_messages"]["ws_packets"] == {reason: 1}
 
 
-def test_ws_packets_refuses_compose_peers(tmp_path: Path) -> None:
+def test_ws_packets_refuses_compose_peers_and_the_gateway(tmp_path: Path) -> None:
+    """vision directly, and any container proxied in through the gateway, even with an Origin."""
     settings = Settings(
         data_dir=tmp_path, frontend_origins=ORIGIN, public_port=80, internal_port=80
     )
     app = create_app(settings, capture_factory=GreyCapture, input_factory=RecordingInput)
-    with TestClient(app, client=("10.210.96.7", 40000)) as client:  # e.g. vision
-        refused(client, "/ws/packets", headers={"origin": ORIGIN})
-        assert health(client)["dropped_messages"]["ws_packets"] == {"compose_peer": 1}
-    gateway = TestClient(app, client=("10.210.96.1", 40000))  # host scripts arrive via the gateway
-    with gateway, gateway.websocket_connect("/ws/packets", headers={"origin": ORIGIN}):
+    for peer in ("10.210.96.7", "10.210.96.1"):  # each client is a fresh app lifespan
+        with TestClient(app, client=(peer, 40000)) as client:
+            refused(client, "/ws/packets", headers={"origin": ORIGIN})
+            assert health(client)["dropped_messages"]["ws_packets"] == {"compose_peer": 1}
+    with (
+        TestClient(app, client=LAN) as client,
+        client.websocket_connect("/ws/packets", headers={"origin": ORIGIN}),
+    ):
         pass
 
 
-def test_compose_peer_rule() -> None:
-    subnet, gw = "10.210.96.0/24", "10.210.96.1"
-    assert compose_peer("10.210.96.6", subnet, gw)
-    assert not compose_peer("10.210.96.1", subnet, gw)  # gateway: host scripts
-    assert not compose_peer("192.168.110.55", subnet, gw)  # a LAN browser
-    assert not compose_peer(None, subnet, gw)
-    assert not compose_peer("testclient", subnet, gw)
+def test_viewer_rule() -> None:
+    lan = (ipaddress.ip_network("192.168.0.0/16"),)
+    subnet = "10.210.96.0/24"
+    assert viewer_refusal("10.210.96.6", subnet, lan) == "compose_peer"
+    assert viewer_refusal("10.210.96.1", subnet, lan) == "compose_peer"  # gateway / hairpin
+    assert viewer_refusal("172.17.0.1", subnet, lan) == "not_a_lan_viewer"  # another bridge
+    assert viewer_refusal("testclient", subnet, lan) == "not_a_lan_viewer"
+    assert viewer_refusal(None, subnet, lan) == "not_a_lan_viewer"
+    assert viewer_refusal("192.168.110.55", subnet, lan) is None
+    assert viewer_refusal("192.168.1.169", subnet, lan) is None
 
 
 def test_ws_packets_is_receive_only(make_client: Factory) -> None:

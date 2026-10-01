@@ -1,5 +1,6 @@
 """Backend settings, read from the environment (names are case-insensitive)."""
 
+import ipaddress
 from pathlib import Path
 from typing import Literal
 
@@ -60,10 +61,13 @@ class Settings(BaseSettings):
     # The sniffer runs in rathena's network namespace, so its ingest connection comes from
     # rathena's pinned compose address (compose.yaml networks.default.ipv4_address).
     ingest_peer: str = "10.210.96.6"
-    # /ws/packets refuses peers on the lab network except the gateway (host scripts arrive
-    # through it); browsers arrive with their LAN addresses.
+    # /ws/packets: browsers arrive with their real LAN addresses (Docker's DNAT keeps them), so the
+    # viewer channel accepts ONLY these networks (comma-separated CIDRs). Everything else is
+    # refused and counted -- compose peers, and the lab gateway: a container that reaches the
+    # PUBLISHED port is proxied in from the gateway, indistinguishable from a host script, and can
+    # forge an Origin (live probe, 2026-10-01). Host scripts read /captures instead.
+    viewer_networks: str = "192.168.0.0/16"
     compose_subnet: str = "10.210.96.0/24"
-    compose_gateway: str = "10.210.96.1"
 
     # --- Black-screen detector (display.py) ------------------------------------------------------
     # GAME_REGION: the RO client area in desktop pixels, "x,y,w,h"; "" = the whole frame (only a
@@ -75,6 +79,12 @@ class Settings(BaseSettings):
     def origins(self) -> frozenset[str]:
         return frozenset(
             o.strip().rstrip("/") for o in self.frontend_origins.split(",") if o.strip()
+        )
+
+    @property
+    def viewer_nets(self) -> tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...]:
+        return tuple(
+            ipaddress.ip_network(n.strip()) for n in self.viewer_networks.split(",") if n.strip()
         )
 
     @property

@@ -4,10 +4,11 @@
 sniffer lives in rathena's network namespace) receives the sniffer's events and stats. It is
 one-way: drops are counted and logged, never answered.
 
-``/ws/packets`` (public listener :8000 only) fans them out to console tabs. It refuses compose
-peers (anything on the lab network except the gateway, through which host scripts arrive) and any
-connection without an allowlisted Origin, so the vision agent cannot read it. Every refusal is
-counted in ``/health`` ``dropped_messages.ws_packets``. The channel is receive-only.
+``/ws/packets`` (public listener :8000 only) fans them out to console tabs. It accepts only peers
+on the LAN viewer networks (VIEWER_NETWORKS) with an allowlisted Origin: compose peers -- vision,
+and the lab gateway through which a container reaching the published port is proxied -- are
+refused, so the vision agent cannot read it even with a forged Origin. Every refusal is counted in
+``/health`` ``dropped_messages.ws_packets``. The channel is receive-only.
 
 Nothing here touches the input mux or the agent channel (tests pin that): packets are offline
 ground truth and a human's view, never an input to a decision.
@@ -16,7 +17,7 @@ ground truth and a human's view, never an input to a decision.
 import asyncio
 import ipaddress
 import logging
-from typing import NoReturn
+from typing import Any, NoReturn
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
@@ -41,14 +42,25 @@ def receive_only(_raw: str | bytes) -> NoReturn:
     raise ValidationError.from_exception_data("ws_packets", [error])
 
 
-def compose_peer(host: str | None, subnet: str, gateway: str) -> bool:
-    """A container on the lab network (not the gateway, through which host scripts arrive)."""
-    if host is None or host == gateway:
+def in_networks(host: str | None, networks: tuple[Any, ...]) -> bool:
+    if host is None:
         return False
     try:
-        return ipaddress.ip_address(host) in ipaddress.ip_network(subnet)
+        address = ipaddress.ip_address(host)
     except ValueError:
         return False
+    return any(address in net for net in networks)
+
+
+def viewer_refusal(
+    host: str | None, compose_subnet: str, viewer_nets: tuple[Any, ...]
+) -> str | None:
+    """Why a /ws/packets peer is refused, or None: only LAN viewer networks are accepted."""
+    if in_networks(host, (ipaddress.ip_network(compose_subnet),)):
+        return "compose_peer"  # vision, the sniffer, the lab gateway (host scripts, hairpin)
+    if not in_networks(host, viewer_nets):
+        return "not_a_lan_viewer"
+    return None
 
 
 async def _no_reply(_text: str) -> None:
@@ -96,8 +108,8 @@ async def ws_packets(ws: WebSocket) -> None:
     reason = None
     if not server or server[1] != cfg.public_port:
         reason = "internal_listener"
-    elif compose_peer(peer, cfg.compose_subnet, cfg.compose_gateway):
-        reason = "compose_peer"
+    elif (refusal := viewer_refusal(peer, cfg.compose_subnet, cfg.viewer_nets)) is not None:
+        reason = refusal
     elif origin is None:
         reason = "origin_missing"
     elif origin.rstrip("/") not in cfg.origins:
