@@ -72,8 +72,10 @@ def test_start_uses_dev_overlay_and_stops_only_its_services(
     monkeypatch.setattr(gb, "watch", lambda seconds, guard, what, stop_cmd: ran.append(stop_cmd))
     gb.run_start(["db", "rathena"], 5, guard=None)
     up, stop = ran
-    assert up == ["scripts/dev.sh", "--profile", "core", "up", "-d", "--no-build", "db", "rathena"]
-    assert stop == ["scripts/dev.sh", "--profile", "core", "stop", "db", "rathena"]
+    # core + sniffer profiles: start:sniffer is guarded too
+    dev = ["scripts/dev.sh", "--profile", "core", "--profile", "sniffer"]
+    assert up == [*dev, "up", "-d", "--no-build", "db", "rathena"]
+    assert stop == [*dev, "stop", "db", "rathena"]
 
 
 def test_parse_target_step(gb: ModuleType) -> None:
