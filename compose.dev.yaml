@@ -15,6 +15,13 @@ services:
       - ./services/desktop/bin/rdp-loop.sh:/usr/local/bin/rdp-loop.sh:ro
       - ./services/desktop/bin/run-x11vnc.sh:/usr/local/bin/run-x11vnc.sh:ro
 
+  rathena:
+    volumes:
+      # Until the next rathena image build (after the disk split): the agent + validation GM
+      # accounts and the Validation group (group 20) without rebuilding the image.
+      - ./services/rathena/entrypoint.sh:/usr/local/bin/rathena-entrypoint:ro
+      - ./services/rathena/conf/import/groups.yml:/opt/rathena-conf-templates/groups.yml:ro
+
   backend:
     environment:
       # Mounted source wins over the copy installed in the image's site-packages.
