@@ -7,7 +7,7 @@ verdict_date: 2026-10-01
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: Phase 2 builds on these events (GAT for exact paths). Re-run the entity check after any decoder change; replay old pcapng after offset fixes.
+next_action: Phase 2 builds on these events (GAT for exact paths). After any decoder change, re-run the entity check and re-decode the banked pcapng (python -m poring_packets.replay).
 ---
 
 # Phase 1 validation: packet ground truth against the server's own truth
@@ -51,7 +51,10 @@ Status: **GO for the first slice**, 2026-10-01. Scope: ADR-0007, as planned in
   the **char_id** (0 for every monster). All five Porings collapsed into one.
   - Fixed in `42e2d4d`: the identity is now the block id (AID @5), the id ZC_NOTIFY_VANISH uses.
   - A regression test pins it.
-  - The raw pcapng from before the fix is intact, so offline replay can re-decode it.
+  - The raw pcapng from before the fix is intact, and `python -m poring_packets.replay` re-decodes
+    it. Replaying the day's captures through the fixed decoder gave 1,227 events: the 5 Porings of
+    the first run now have distinct ids (0 at gid 0), with 0 unknown and 0 desyncs. Validation
+    sessions are tagged by account id, because the pcapng's login payloads are redacted.
 - Comparing walk *destinations* matched 2/5. Interpolating each walk to the server tick at which
   `@mobsearch` ran gave 4 exact and 1 off by one.
   - The tick comes from the capture time, per the clock result.

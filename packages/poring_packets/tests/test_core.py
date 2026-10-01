@@ -227,3 +227,30 @@ def test_entity_identity_is_the_block_id_not_the_char_id() -> None:
     d = decode("map", "sc", 0x09FE, bytes(b))
     assert d is not None
     assert (d.fields["gid"], d.fields["char_id"], d.fields["job"]) == (110012345, 0, 1002)
+
+
+def test_replay_redecodes_a_banked_pcapng_with_aid_tagging(tmp_path: Path) -> None:
+    """pcapng (our writer's format) -> the same events, validation tagged by account id."""
+    from poring_packets.pcapng import PcapngWriter
+    from poring_packets.replay import replay
+
+    path = tmp_path / "capture.pcapng"
+    w = PcapngWriter(path)
+    w.clock_sample({"mono_ns": 5_000_000_000, "real_ns": 1_000_000_000_000, "read_ns": 10})
+    t = 1_000_000_000_000
+    for direction, seq, payload, flags in (
+        ("cs", 0, b"", 0x02),
+        ("sc", 0, b"", 0x12),
+        ("cs", 1, cz_enter2(2000002), 0x18),
+        ("sc", 1, struct.pack("<HI", 0x0087, 777) + wpos2(10, 20, 12, 20), 0x18),
+    ):
+        w.packet(seg(direction, 5121, seq, payload, flags=flags, cport=50002).frame, t)
+        t += 1_000_000
+    w.close()
+    s = Session(table(), "192.168.1.169", set())
+    s.validation_aids.add(2000002)
+    events = list(replay([path], s))
+    move = [e for e in events if e.type == "self_move"]
+    assert len(move) == 1
+    assert move[0].validation_account
+    assert move[0].t_mono_ns == 5_000_000_000 + 3_000_000  # realtime mapped onto monotonic
