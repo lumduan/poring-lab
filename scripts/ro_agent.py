@@ -504,17 +504,35 @@ def find_console(screen: Screen, admin: bool = False) -> tuple[int, int, float] 
         raise Stop(f"no PowerShell tab template (data/ro_agent/signatures/{name})")
     tmpl = np.load(path).astype(np.int16)  # RGB
     th, tw = tmpl.shape[:2]
-    blue_t = np.argwhere((tmpl[..., 2] > 150) & (tmpl[..., 0] < 110))
-    ay, ax = (int(v) for v in blue_t[0])
+    blue = (tmpl[..., 2] > 150) & (tmpl[..., 0] < 110)
+    # Anchor on an INTERIOR icon pixel (all 8 neighbours blue too): an edge pixel is anti-aliased
+    # and changes with the tab's sub-pixel position (missed a visible tab, 2026-10-01).
+    inner = blue.copy()
+    inner[1:-1, 1:-1] &= (
+        blue[:-2, 1:-1] & blue[2:, 1:-1] & blue[1:-1, :-2] & blue[1:-1, 2:]
+        & blue[:-2, :-2] & blue[:-2, 2:] & blue[2:, :-2] & blue[2:, 2:]
+    )  # fmt: skip
+    inner[[0, -1], :] = False
+    inner[:, [0, -1]] = False
+    pts = np.argwhere(inner) if inner.any() else np.argwhere(blue)
+    ay, ax = (int(v) for v in pts[len(pts) // 2])
     rgb = screen.full()[:, :, 2::-1].astype(np.int16)
     h, w = rgb.shape[:2]
     anchor = tmpl[ay, ax]
-    cand = np.argwhere(np.abs(rgb - anchor).max(axis=2) <= 12)
+    cand = np.argwhere(np.abs(rgb - anchor).max(axis=2) <= 24) - (ay, ax)
+    ok = (cand[:, 0] >= 0) & (cand[:, 1] >= 0) & (cand[:, 0] + th <= h) & (cand[:, 1] + tw <= w)
+    cand = cand[ok]
+    if len(cand) == 0:
+        return None
+    # Vectorised pre-filter on a sparse grid of template pixels, so blue game pixels matching the
+    # anchor (there were >5000 with water on screen, 2026-10-01) can't crowd the tab out.
+    gy, gx = np.mgrid[0:th:4, 0:tw:8]
+    gy, gx = gy.ravel(), gx.ravel()
+    sample = rgb[cand[:, 0, None] + gy, cand[:, 1, None] + gx]  # (n, k, 3)
+    coarse = np.abs(sample - tmpl[gy, gx]).mean(axis=(1, 2))
     best: tuple[int, int, float] | None = None
-    for y, x in cand[:5000]:
-        oy, ox = int(y) - ay, int(x) - ax
-        if oy < 0 or ox < 0 or oy + th > h or ox + tw > w:
-            continue
+    for i in np.argsort(coarse)[:20]:
+        oy, ox = int(cand[i, 0]), int(cand[i, 1])
         err = float(np.abs(rgb[oy : oy + th, ox : ox + tw] - tmpl).mean())
         if best is None or err < best[2]:
             best = (ox, oy, err)

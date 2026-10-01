@@ -74,7 +74,7 @@ drive_args() {
 # Phase 0 A/B of the RDP leg (docs/phase0-latency.md) without restarting the container: before each
 # connect, an optional override file (the desktop's own /dev/shm, RAM) may set these keywords. Only
 # KEY=VALUE lines with whitelisted keys and values are honoured; the file is never executed.
-#   RDP_GFX=""|off|progressive|AVC444|AVC420|AVC420only|RFX  RDP_NETWORK=auto|lan  RDP_FRAME_ACK=on|off
+#   RDP_GFX=""|off|progressive|AVC444|AVC420|AVCthin|RFX  RDP_NETWORK=auto|lan  RDP_FRAME_ACK=on|off
 #   RDP_GDI=sw|hw
 # A variant = write the file, then TERM xfreerdp3: the loop reconnects with it a few seconds later.
 load_overrides() {
@@ -92,7 +92,7 @@ load_overrides() {
     key="${BASH_REMATCH[1]}" value="${BASH_REMATCH[2]}"
     case "${key}=${value}" in
       RDP_GFX= | RDP_GFX=off | RDP_GFX=progressive | RDP_GFX=AVC444 | RDP_GFX=AVC420 | \
-        RDP_GFX=AVC420only | RDP_GFX=RFX)
+        RDP_GFX=AVCthin | RDP_GFX=RFX)
         RDP_GFX="${value}" ;;
       RDP_NETWORK=auto | RDP_NETWORK=lan) RDP_NETWORK="${value}" ;;
       RDP_FRAME_ACK=on | RDP_FRAME_ACK=off) RDP_FRAME_ACK="${value}" ;;
@@ -131,10 +131,12 @@ build_args() {
     "") [[ -n "${ack}" ]] && printf '%s\n' "/gfx:${ack}" ;;
     off) printf '%s\n' -gfx /bpp:32 ;;
     progressive | AVC444 | AVC420 | RFX) printf '%s\n' "/gfx:${RDP_GFX}${ack:+,${ack}}" ;;
-    # A single H.264 4:2:0 stream with GFX kept: each codec toggled explicitly (FreeRDP 3.15
-    # /gfx syntax). A bare /gfx:AVC420 was noted to drop the RDP10 caps (docs/h264-plan.md).
-    AVC420only)
-      printf '%s\n' "/gfx:AVC420:on,AVC444:off,progressive:off,RFX:off${ack:+,${ack}}" ;;
+    # AVCthin: AVC with the 10.3 AVC_THINCLIENT capability flag -- caps restricted to 10.3 (mask
+    # = every other version filtered), AVC444 on so AVC is not disabled, thin-client on. Windows
+    # answers with full-screen AVC (event 162: 0xA0301, profile 2048) and, unlike AVC444 on 10.7,
+    # a short latency tail (docs/h264-plan.md, 2026-10-01). FreeRDP 3.15 only sends 10.x caps
+    # while AVC444 is on, and a plain AVC420 request (8.1 caps) got "AVC available: 0".
+    AVCthin) printf '%s\n' "/gfx:AVC444:on,thin-client:on,mask:2015${ack:+,${ack}}" ;;
     *) log "unknown RDP_GFX='${RDP_GFX}', using autodetect" ;;
   esac
   [[ "${RDP_NETWORK:-auto}" == lan ]] && printf '%s\n' /network:lan

@@ -21,6 +21,10 @@ On a breach:
   start:<svc>[,<svc>...][@<seconds>]
                 scripts/dev.sh --profile core up -d --no-build <svcs>, watch seconds (default 180)
                 -> stops ONLY those services. The dev-mode way to bring up db/rathena.
+  recreate:<svc>[,<svc>...][@<seconds>]
+                the same with --force-recreate (re-binds single-file mounts, e.g. after a
+                bind-mounted script was replaced by a new inode). An unguarded force-recreate of
+                desktop on 2026-10-01 hit 30.8 % quant-postgres io_full for 10 s.
 
     python3 scripts/guarded_build.py build:desktop build:rathena pull:db up:180        # strict 10%
     python3 scripts/guarded_build.py --sustain 30 --spike 25 build:rathena             # tolerant
@@ -88,11 +92,11 @@ def parse_step(step: str) -> Step:
         return Step(kind, parts)
     if kind == "up":
         return Step(kind, [], float(arg or 180))
-    if kind == "start":
+    if kind in ("start", "recreate"):
         names, _, secs = arg.partition("@")
         services = names.split(",")
         if not all(SERVICE.match(s) for s in services):
-            raise ValueError(f"{step}: expected start:<svc>[,<svc>...][@<seconds>]")
+            raise ValueError(f"{step}: expected {kind}:<svc>[,<svc>...][@<seconds>]")
         return Step(kind, services, float(secs or 180))
     raise ValueError(f"unknown step {step}")
 
@@ -247,9 +251,10 @@ def run_up(seconds: float, guard: Guard) -> bool:
     return watch(seconds, guard, "the running stack", ["docker", "compose", *RUNTIME, "stop"])
 
 
-def run_start(services: list[str], seconds: float, guard: Guard) -> bool:
-    label = "start:" + ",".join(services)
-    if not run_process(label, [*DEV, "up", "-d", "--no-build", *services], guard):
+def run_start(services: list[str], seconds: float, guard: Guard, *, recreate: bool = False) -> bool:
+    label = ("recreate:" if recreate else "start:") + ",".join(services)
+    force = ["--force-recreate"] if recreate else []
+    if not run_process(label, [*DEV, "up", "-d", "--no-build", *force, *services], guard):
         return False
     return watch(seconds, guard, ", ".join(services), [*DEV, "stop", *services])
 
@@ -291,7 +296,9 @@ def main() -> int:
         elif step.kind == "up":
             ok = run_up(step.seconds or 180, guard)
         else:
-            ok = run_start(step.services, step.seconds or 180, guard)
+            ok = run_start(
+                step.services, step.seconds or 180, guard, recreate=step.kind == "recreate"
+            )
         if not ok:
             return 1
     print(f"[{ts()}] ALL STEPS OK ({guard.summary()})", flush=True)

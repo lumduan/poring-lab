@@ -253,9 +253,9 @@ def test_no_override_file_means_todays_arguments(tmp_path: Path) -> None:
     assert "/gfx:frame-ack:off" in args
 
 
-def test_avc420only_selects_a_single_h264_stream_and_keeps_gfx(tmp_path: Path) -> None:
-    args, log = rdp_override_args(tmp_path, "RDP_GFX=AVC420only\nRDP_FRAME_ACK=off\n")
-    assert "/gfx:AVC420:on,AVC444:off,progressive:off,RFX:off,frame-ack:off" in args
+def test_avcthin_requests_10_3_avc_thin_client_caps(tmp_path: Path) -> None:
+    args, log = rdp_override_args(tmp_path, "RDP_GFX=AVCthin\nRDP_FRAME_ACK=off\n")
+    assert "/gfx:AVC444:on,thin-client:on,mask:2015,frame-ack:off" in args
     assert "override ignored" not in log
 
 

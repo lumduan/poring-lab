@@ -86,3 +86,17 @@ def test_parse_target_step(gb: ModuleType) -> None:
     )
     with pytest.raises(ValueError):
         gb.parse_step("target:rathena:build:bad tag")
+
+
+def test_recreate_forces_and_still_stops_only_its_services(
+    gb: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ran: list[list[str]] = []
+    monkeypatch.setattr(gb, "run_process", lambda label, cmd, guard: ran.append(cmd) or True)
+    monkeypatch.setattr(gb, "watch", lambda seconds, guard, what, stop_cmd: ran.append(stop_cmd))
+    step = gb.parse_step("recreate:desktop@90")
+    assert (step.kind, step.services, step.seconds) == ("recreate", ["desktop"], 90.0)
+    gb.run_start(step.services, step.seconds, guard=None, recreate=True)
+    up, stop = ran
+    assert up[-3:] == ["--no-build", "--force-recreate", "desktop"]
+    assert stop[-2:] == ["stop", "desktop"]
