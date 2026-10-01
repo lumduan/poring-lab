@@ -167,7 +167,14 @@ export interface SelfMove {
  * via the `definition` "EntityAppear".
  */
 export interface EntityAppear {
+  /**
+   * Character id for players; 0 for anything else.
+   */
+  char_id: number;
   dir: "cs" | "sc";
+  /**
+   * Block id (rAthena bl.id): the id vanish/stop packets use.
+   */
   gid: number;
   gm_command: boolean;
   job: number;

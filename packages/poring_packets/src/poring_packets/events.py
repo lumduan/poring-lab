@@ -90,7 +90,8 @@ class EntityAppear(PacketEventBase):
 
     type: Literal["entity_appear"] = "entity_appear"
     kind: Literal["new", "stand", "move"]
-    gid: int
+    gid: int = Field(description="Block id (rAthena bl.id): the id vanish/stop packets use.")
+    char_id: int = Field(default=0, description="Character id for players; 0 for anything else.")
     objtype: int
     job: int
     speed: int

@@ -229,6 +229,11 @@
       "additionalProperties": false,
       "description": "ZC_NOTIFY_{NEW,STAND,MOVE}ENTRY11.",
       "properties": {
+        "char_id": {
+          "default": 0,
+          "description": "Character id for players; 0 for anything else.",
+          "type": "integer"
+        },
         "dir": {
           "enum": [
             "cs",
@@ -237,6 +242,7 @@
           "type": "string"
         },
         "gid": {
+          "description": "Block id (rAthena bl.id): the id vanish/stop packets use.",
           "type": "integer"
         },
         "gm_command": {
@@ -340,6 +346,7 @@
         "type",
         "kind",
         "gid",
+        "char_id",
         "objtype",
         "job",
         "speed",

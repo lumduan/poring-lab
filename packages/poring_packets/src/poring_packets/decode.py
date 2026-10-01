@@ -100,7 +100,11 @@ def decode(server: str, direction: str, pid: int, b: bytes) -> Decoded | None:
         if pid in (0x09FD, 0x09FE, 0x09FF):
             kind = {0x09FD: "move", 0x09FE: "new", 0x09FF: "stand"}[pid]
             name_off = {0x09FD: 90, 0x09FE: 83, 0x09FF: 84}[pid]
-            f: dict[str, Any] = {"kind": kind, "gid": _u32(b, 9), "objtype": b[4],
+            # AID @5 is the block id (rAthena bl.id): the identity ZC_NOTIFY_VANISH / STOPMOVE
+            # use. GID @9 is the char_id, 0 for every non-player (found live 2026-10-01: keyed
+            # by GID, all monsters collapsed into one entity).
+            f: dict[str, Any] = {"kind": kind, "gid": _u32(b, 5), "char_id": _u32(b, 9),
+                                 "objtype": b[4],
                                  "speed": _u16(b, 13), "job": _u16(b, 23),
                                  "name": text(b[name_off : name_off + 24])}  # fmt: skip
             if pid == 0x09FD:

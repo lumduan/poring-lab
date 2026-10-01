@@ -210,3 +210,20 @@ def test_session_tags_validation_accounts_and_gm_commands() -> None:
 def test_committed_packet_schema_matches_models() -> None:
     committed = ROOT / "packages" / "poring_packets" / "schema" / "packets.schema.json"
     assert json.loads(committed.read_text()) == json_schema(), "run scripts/gen_protocol.sh"
+
+
+def test_entity_identity_is_the_block_id_not_the_char_id() -> None:
+    """ZC_NOTIFY_NEWENTRY11 (0x09FE): AID @5 is the block id, GID @9 the char_id (0 for mobs)."""
+    from poring_packets.decode import decode
+
+    b = bytearray(107)
+    b[0:2] = (0x09FE).to_bytes(2, "little")
+    b[2:4] = (107).to_bytes(2, "little")
+    b[4] = 5  # objtype: monster
+    b[5:9] = (110012345).to_bytes(4, "little")  # block id
+    b[9:13] = (0).to_bytes(4, "little")  # char_id: none for a monster
+    b[23:25] = (1002).to_bytes(2, "little")  # job: Poring
+    b[83:89] = b"Poring"
+    d = decode("map", "sc", 0x09FE, bytes(b))
+    assert d is not None
+    assert (d.fields["gid"], d.fields["char_id"], d.fields["job"]) == (110012345, 0, 1002)
