@@ -7,7 +7,7 @@ verdict_date: 2026-09-30
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: Fix RDP delivery (only ~15-18 of the game's 60 fps reach Xvfb during motion; xfreerdp sw decode ~10+ cores) before dataset collection; decide the UI-text option (data-only English msgstringtable recommended).
+next_action: RDP delivery ceiling is client decode (server skips 'insufficient client resources'); A/B AVC/H.264 hw encode + newer FreeRDP after the disk split, before dataset collection.
 ---
 
 # The rAthena client on Windows (C:\RO-rAthena)
@@ -152,6 +152,32 @@ renders at 60 fps on the Intel GPU; the bottleneck is RDP *delivery* of those fr
   CA). Reputation (ISG) is per file hash, so every re-patched exe starts unknown. DLLs are evaluated
   at load too.
 
+## English UI text (applied 2026-10-01; data only, no new exe)
+
+- Source: llchrisll/ROenglishRE commit `8e6a3c85` (2022-01-25, "Default Client Date Update to
+  2021-11-03"). The Pre-Renewal tree has no msgstring files, so the Renewal ones are used.
+- Each file's git blob was verified against the commit tree.
+- Copied into the client's data folder, which wins over the GRF via DataFolderFirst. None of the names
+  existed before, so there was nothing to back up.
+
+| File (under `C:\RO-rAthena\client\`) | Bytes | git blob | SHA-256 |
+|---|---|---|---|
+| `data\msgstringtable.txt` | 132,571 | `1e996b63…` | `ede8a073…be59f5c5` |
+| `data\luafiles514\lua files\msgstring_kr.lub` | 23,149 | `8860ba8e…` | `17bfdebe…72b88bade` |
+| `data\luafiles514\lua files\msgstring_kr_s.lub` | 23,056 | `df3e1d3e…` | `633df944…8a80c3944` |
+
+**Line count check.** WARP 1.5.3's read-only "Extract msgstringtable" extension, run on the unpatched
+source exe (output to `_scratch\`):
+- The exe's built-in table has **3,970** entries; ROenglishRE has **3,970**, so the IDs line up.
+- 3,238 entries are identical, because the exe already embeds English text for most IDs.
+
+**Result, in frames:**
+- "NO MSG" is gone: "Basic Information", the job name, "Regular Chat" / "Battle Log", and the login
+  window's English labels.
+- Thai chat still works: `สวัสดี ทดสอบ` typed via Kedmanee renders in the chat log line and the bubble,
+  and `chatlog` row 2 is byte-identical to its cp874 encoding.
+- Revert: delete the three files.
+
 ## Windows settings changed (before → after, revert)
 
 | Setting | Before | After | Revert |
@@ -163,6 +189,7 @@ renders at 60 fps on the Intel GPU; the bottleneck is RDP *delivery* of those fr
 | 7-Zip 26.03 | not installed | installed | Apps → uninstall |
 | RDS policies, DWMFRAMEINTERVAL | absent | **unchanged** | – |
 | `C:\RO-rAthena\_downloads\RAG_SETUP_211105.exe` | 3,427,631,040 B | **deleted** (C: +3.19 GB) | re-download from `rofull.gnjoy.com` |
+| UI text files in `client\data\` | absent | 3 files (see "English UI text") | delete them |
 
 Tools added under `C:\RO-rAthena\_tools`: WARP, dgVoodoo2, Process Monitor, and PresentMon 2.6.0
 (980,320 B, SHA-256 `b2a706bc…188f1af`, signed Intel Corporation, valid).
