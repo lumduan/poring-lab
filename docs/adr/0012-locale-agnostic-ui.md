@@ -69,7 +69,7 @@ next_action: Code half landed 2026-10-02 (anchor map stores keys + label_key, N-
   `mob.<id>`. Their names come from the pack's ID tables.
 - **Curated aliases in code.** A readable name (`ui.ok`, `ui.basic_info.close`) points at a message
   key and never holds text (`ui_anchors.ALIASES`, validated). It stays empty until the kRO
-  reference is on the NAS; see Open.
+  reference is on the NAS. Committing the keys is allowed (Batt, 2026-10-02; see Open).
 
 ### 3. The anchor map stores keys (ADR-0011 amended)
 
@@ -164,6 +164,11 @@ next_action: Code half landed 2026-10-02 (anchor map stores keys + label_key, N-
 - **May one-way 8-hex message key ids be committed in `ALIASES`?** They hold no text and cannot
   reconstruct it, but they are derived from the kRO reference, a client asset. Until Batt answers,
   aliases stay empty in the repo and can live in a local, gitignored alias file.
+  ➡️ **DECIDED by Batt, 2026-10-02: ALLOWED.**
+  - Canonical keys (`msg.k<8hex>`, `ui.*`) may be committed: keys only, never text.
+  - The never-commit guard (`.gitignore` + `.githooks/pre-commit`, path rules and pack-string
+    fingerprints) still blocks any pack text.
+  - `ALIASES` is filled from the kRO reference once it is on the NAS.
 - **Pack licensing for sharing outside the lab:** out of scope. Packs never leave the lab.
 
 ## Not decided here

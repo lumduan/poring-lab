@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: ACCEPT after Batt applies docs/operations/nas-sink.md (TrueNAS datasets + the VM's NFS mounts) and the 30 s ship round-trip passes (record -> dataset_ship.py ship -> verified on the NAS -> local copy gone -> status shows it).
+next_action: ACCEPT after Batt approves docs/operations/nas-sink.md (the agent then applies it via midclt; Batt runs the VM sudo block) and the 30 s ship round-trip passes (record -> dataset_ship.py ship -> verified on the NAS -> local copy gone -> status shows it).
 ---
 
 # ADR-0010: Phase 2 dataset format -- WebDataset tar shards of lossless frames + packet ground truth
@@ -166,4 +166,4 @@ They cover:
 - `record_session` refuses before opening the screen when a cap is hit.
 
 **Not yet verified live:** the NAS does not exist yet. The 30 s round-trip in `nas-sink.md`
-section 5 is the ACCEPT gate.
+section 6 is the ACCEPT gate.

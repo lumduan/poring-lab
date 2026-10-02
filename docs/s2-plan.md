@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: Batt approves (or amends) this plan, ADR-0009's 2026-10-02 S2 amendment and ADR-0013. Nothing here is implemented. Step 1 is a throwaway spike in an operator-chosen build window.
+next_action: Batt approves (or amends) this plan, ADR-0009's 2026-10-02 amendments and ADR-0013. Then step 0 (a temporary Mac Moonlight pairing for SendInput acceptance + a VDD stream health check, reverted the same session), then step 1's spike in an operator-chosen build window. Nothing here is implemented.
 ---
 
 # S2: GameStream without Xvfb, one decode, a frame bus for the bot and the human
@@ -147,6 +147,19 @@ s2-client executes only what arrives on that socket.
 
 ## 5. Session lifecycle, and the display-revert lesson
 
+**Sunshine-side lessons from S1** ([ADR-0009](adr/0009-console-session-capture.md) "S1 PARKED"),
+binding for s2-client:
+1. Never end by killing the client. `/cancel` the app first: a dead client leaves the session
+   running, and the next connect resumes it.
+2. Display apply and revert need a console session: stream only on `console/steady`, and `/cancel`
+   before the session leaves the console.
+3. Sunshine rewrites its log at each start, so the client logs its own view of every session start
+   and end.
+4. Expect H.264 with 4 slices per frame, no reference-frame invalidation, encrypted RTSP, and audio
+   packets even with audio on the host (s2-client drains and discards them).
+
+
+
 - s2-client streams only on `console/steady`, like gamestream today.
 - **On `to-rdp` it ends the stream CLEANLY** while the session is still on the console:
   1. `LiStopConnection`;
@@ -212,6 +225,32 @@ streams, or decode-to-GPU feeding YOLO). Not now.
 
 ## 9. Order of implementation (each step ends in a report; nothing starts before approval)
 
+0. **Early validation, before any S2 code (recommended: a temporary second Moonlight pairing from
+   Batt's Mac).** No lab code and no build. It answers two questions at once.
+   - **Does RO accept Sunshine's SendInput?** Checks:
+     - keys (GM `@where`);
+     - clicks (a walk, seen as a `self_move` packet in the sniffer);
+     - right-drag (camera rotation);
+     - Thai Kedmanee (`say`, then the chatlog HEX);
+     - the Mouse Keys `Flags` before and after.
+   - **Is the VDD stream healthy?** If the Mac's GPU-backed Moonlight renders at once under the same
+     Sunshine config (VDD + `ensure_only_display`), S1's black first renderer is lab-side (ADR-0009
+     "S1 PARKED").
+   - **Cost** (Batt, ~30 min):
+     - a Windows Firewall exception for the Mac's IP (admin; Sunshine's rules admit only this host
+       today);
+     - pairing by PIN in Sunshine's web UI (pc-only);
+     - the lab's gamestream stopped through `guarded_build.py` for the duration (never two clients);
+     - a tscon handover;
+     - Batt tests by hand; I read the chatlog and the sniffer.
+   - **Revert, in the same session:**
+     - unpair the Mac (Sunshine lists exactly ONE client again: `poring-lab-gamestream`);
+     - remove the firewall exception;
+     - guarded start of gamestream;
+     - `to-rdp` (the clean quit).
+   - **This is an explicit, time-boxed exception to CLAUDE.md rule 2** ("Sunshine pairs ONLY the
+     lab's gamestream client"). It needs Batt's go, and the revert is checked, not assumed.
+   - **Fallback:** step 1's spike also sends input (LiSend*) but needs a build window.
 1. **Spike** (throwaway, `/dev/shm`, an operator window for any build):
    - moonlight-common-c `.so` + PyAV;
    - connect with the paired identity under a console handover;

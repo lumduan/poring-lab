@@ -35,8 +35,8 @@ keys into one language's text. This guide covers building a pack from **your own
 
 | Input | Where it comes from | Where it goes |
 |---|---|---|
-| Your client's data copy (GRF + loose `data/`, **no exe**) | your own install | the NAS drop share, `\\192.168.1.6\poring-thai-drop\<name>\` (lab), mounted **read-only** on the VM at `/mnt/poring-thai-src` |
-| The kRO reference table (Korean msgstringtable of the reference exe) | the WARP extract in `C:\RO-rAthena\_scratch\` (lab) | the drop share, `kro-reference\` |
+| Your client's data copy (GRF + loose `data/`, **no exe**) | your own install | the NAS dataset `thai-client-data`, written once through a **temporary** Dell-only SMB share (`poring-thai-drop`, deleted after the copy; [nas-sink.md](operations/nas-sink.md) §5), then `readonly=on`, mounted **read-only** on the VM at `/mnt/poring-thai-src` |
+| The kRO reference table (Korean msgstringtable of the reference exe) | the WARP extract in `C:\RO-rAthena\_scratch\` (lab) | the same temporary share, `kro-reference\` |
 | The English table the lab runs | ROenglishRE commit `8e6a3c85` | fetched by the builder for `en` |
 
 - **Never stage a large source on the VM's local disk**: the disk is shared with live capture. Read

@@ -7,14 +7,16 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: S1 OPEN (2026-10-02 handover 6) -- Windows side and the 1920x1200 canvas work; Moonlight's main thread stalls in a futex and the stream stays black. Next -- gdb in the gamestream image in an operator window, one diagnostic handover (GAMESTREAM_GDB_AFTER_S), then A4-A6. S1 numbers mix protocol and renderer; performance conclusions come from S2. RDP stays the default.
+next_action: S1 PARKED (Batt, 2026-10-02) at 'Windows side works, the Moonlight-qt main loop stalls'. No gdb. S2 (docs/s2-plan.md) is the path; its step 0 (a temporary Mac Moonlight pairing) also tells whether the stall is lab-side. to-rdp now ends the stream cleanly (Moonlight quit -> Sunshine /cancel) and checks Sunshine's revert.
 ---
 
 # ADR-0009: Console-session capture as a second display mode (Sunshine first, VNC fallback)
 
 - **Status:** PROPOSED (2026-10-01). ➡️ **2026-10-02: Batt approved the Sunshine install and the S1
   trial** ("Sunshine research gets the weight"); RDP stays the default until he decides otherwise.
-  - Sunshine v2026.914.233613 is installed on the Dell by Batt (UAC). The MSI was checked first:
+  - Sunshine v2026.914.233613 is installed on the Dell by Batt (UAC). ➡️ Note 2026-10-02: the running
+    binary logs "Sunshine version: 2025.924.154138 commit: 86188d47". That tag-vs-version mismatch
+    is unexplained; check the MSI's properties before quoting a version. The MSI was checked first:
     SHA-256 = GitHub's digest, Authenticode Valid, signer CN=David Lane = LizardByte's maintainer.
   - Revisions below (2026-10-02): the S1 client is **moonlight-qt**, not moonlight-embedded; the
     **capture-backend lock** replaces the proposed `RDP_MODE` override.
@@ -387,4 +389,69 @@ implemented before Batt approves it.
   - on detection: a `human_local` lease, so the bot pauses.
 - (c) **An audit of control episodes, never of keystrokes.**
 - Console/GameStream mode only.
+
+## S1 PARKED (Batt, 2026-10-02): lessons, and the display investigation
+
+**Decision.** S1 is parked at **"the Windows side works, the Moonlight-qt main loop stalls"**.
+- No gdb build. S2 is the path.
+- S1's functional questions (SendInput, Thai, Mouse Keys, display revert) move to S2's step 0.
+
+**Display investigation (logs only).**
+- **Hypothesis (Batt):** a display or resolution change at stream start (the VDD-only topology,
+  a mode change, or the session moving display) triggers a stream reconfiguration that
+  Moonlight-qt deadlocks on.
+- **Verdict: INCONCLUSIVE.** It is refuted for a reconfiguration that *Moonlight saw*, and
+  unresolvable on Sunshine's side.
+
+| Evidence | Source | Says |
+|---|---|---|
+| The 18:52 run (handover 6, complete log): `Video stream is 1440x900x30 (format 0x1)`, **one** `Reinit context to 1440x912`, no further reinit or resolution change, then silence until TERM | gamestream container log | Moonlight saw no mid-stream reconfiguration before the stall |
+| The same run: "Global video stats" **empty** at quit; "Quit event received" processed on TERM | same | decode units stopped reaching the decoder almost at once; the main loop was waiting (back-pressure from a renderer that never ran), not dead |
+| Handover 1 (15:24): `/launch`, Samsung 1920x1080 with "API is available: false" (**no** topology change, the session not on the console), window 1152x720 scaled: **rendered 21.4 fps** | transcript | the only run that rendered |
+| Every later Moonlight connect: `/resume`, `<resume>1</resume>` ×9 | transcript | each TERM left the app running on Sunshine, and the next connect resumed it |
+| 18:44 (after the 18:42 Sunshine restart, so a fresh launch): VDD + `ensure_only_display`: **black** | ADR-0009 handover 6 | launch vs resume alone does not explain it |
+| 17:52 (after the 17:45 Sunshine start, so a fresh launch, VDD + `ensure_only_display`): black, then **rendered after a post-flush resize** recreated the renderer | ADR-0009 handovers 2–5 | the stream content was fine under the topology change. The first renderer (created during the flush) produced nothing |
+| Sunshine's own log for 15:24–18:54 | `sunshine.log` | **gone**: Sunshine rewrites its log at each start (it now begins at 18:54:53). All of the day's Sunshine reads were screenshots |
+
+**Reading.**
+- The stream itself was decodable under the VDD topology change (17:52).
+- What fails is Moonlight-qt's first renderer on this Xvfb with no WM, after a topology change at
+  stream start, and nothing recovers it. Handover 1, with no topology change, rendered first time.
+- So a display change at stream start *correlates* with the black first renderer. The stall is
+  lab-side (Moonlight-qt / SDL on Xvfb), not a broken stream.
+- The cheap decisive test is S2's step 0: the same Sunshine config streamed to a real Moonlight on
+  Batt's Mac. If the Mac renders at once, the lab-side reading holds.
+
+**Sunshine-side lessons (S2 consumes the same stream).**
+1. **A TERM-killed client leaves the app session running.** The next connect is a `/resume` of a
+   stale session, possibly launched under another display topology.
+   - Always end with Moonlight's `quit` (Sunshine `/cancel`).
+   - to-rdp now does this; S2 will call `/cancel` itself.
+2. **Display apply and revert need a session on the console** ("API is available: false"
+   otherwise).
+   - Apply happens at stream start, so the stream starts only on `console/steady`.
+   - Revert happens at session end, so the session must end **before** the session leaves the
+     console.
+   - A missed revert retries every 5 s until the next console session, and meanwhile the Samsung
+     stays dark (left so on purpose by Batt, 2026-10-02).
+3. **Sunshine rewrites `sunshine.log` at every start**, including the helper restart when the session
+   moves (18:54:53). Evidence must be copied out during the handover.
+4. **Stream facts:**
+   - H.264 (format 0x1), 1440x900x30, coded 1440x912;
+   - "Reference frame invalidation is not supported by this host";
+   - the encoder is configured for 4 slices per frame;
+   - `rtspenc` (encrypted RTSP);
+   - audio streams even with `--audio-on-host`.
+
+**to-rdp (code, 2026-10-02).**
+1. Lock to console/switching.
+2. Moonlight `quit` on a private Xvfb `:51` in gamestream (the paired identity stays in its
+   volume).
+3. The streaming client's log must show the session end; TERM only as a reported fallback.
+4. 15 s while still on the console.
+5. RDP back.
+6. A read-only check of Sunshine's log, typed in poring-lab's console. It answers with a coloured
+   block, read from pixels: rc 3 plus the remedy if the revert is still pending.
+
+It runs at the next handover; it is not yet exercised live.
 

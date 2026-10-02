@@ -122,7 +122,7 @@ size or a new language changes calibration and data, never policy.
 |---|---|---|
 | D1 | The session area: capture and input over `SESSION_SIZE`, independent of the canvas | ✅ done 2026-10-02 |
 | D2 | Projection per resolution profile | plan |
-| D3 | Auto-calibration at session start from packet ground truth | plan; needs Batt's ruling |
+| D3 | Auto-calibration at session start: packet-assisted on rAthena (setup only) + a pixels-only path | plan; ruled 2026-10-02 (ADR-0007 amendment) |
 | D4 | Player-like UI management through the anchor map | plan; next |
 | D5 | A hotkey table verified live | plan; next, together with D4 |
 | D6 | Acceptance: the same keyed action at two languages and two sizes | after D2 + ADR-0012 packs |
@@ -155,7 +155,7 @@ size or a new language changes calibration and data, never policy.
 - **Mixing profiles inside one dataset is allowed,** because the labels are cells, not pixels.
   Training sets say which profiles they hold.
 
-### D3: auto-calibration at session start (needs Batt's ruling)
+### D3: auto-calibration at session start (ruled 2026-10-02, ADR-0007 amendment)
 
 - **The idea:** replace the 42-click grid with a short self-check at session start.
   - A handful of walk clicks, each paired with the client's own `self_move_request` target cell.
@@ -166,6 +166,11 @@ size or a new language changes calibration and data, never policy.
   geometry, not world state (ADR-0011's open point). But a calibration *at session start* moves
   that read closer to decision time. **Batt decides** whether it stays on the offline side of
   ADR-0007's line, or whether D3 must stay an operator step.
+  ➡️ **RULED 2026-10-02** ([ADR-0007 amendment](adr/0007-packet-ground-truth-channel.md)):
+  - packet-assisted calibration at session start is allowed on rAthena as a SETUP / ground-truth
+    tool: it outputs a profile, never a per-action input;
+  - the deployable bot must also have a **pixels-only** calibration path (for servers without
+    packet access), and D3 ships both.
 
 ### D4: manage the UI like a player, through the anchor map
 
@@ -219,7 +224,7 @@ The policy states the UI it needs; a small UI manager makes it so with keyed act
 - **One code path, no edits between the runs.**
 
 **Order:** D1 (done) → D4 + D5 (RDP mode, no new data) → ADR-0012 packs (blocked on the NAS) →
-D2 when a second resolution is wanted → D3 after Batt's ruling → D6.
+D2 when a second resolution is wanted → D3 (both paths) → D6.
 
 ## What is deliberately NOT here yet
 

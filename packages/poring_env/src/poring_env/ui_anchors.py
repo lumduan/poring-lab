@@ -344,9 +344,9 @@ CAPTURE_ORIGINS = {
 }
 
 
-# Curated aliases (ADR-0012): readable names in code -> message keys. Text never lives here; the
-# keys are filled in from the kRO reference once it is on the NAS (whether one-way 8-hex key ids
-# may be committed is Batt's call, ADR-0012 "Open").
+# Curated aliases (ADR-0012): readable names in code -> message keys. Text never lives here. The
+# keys are filled in from the kRO reference once it is on the NAS. Committing them is allowed
+# (Batt, 2026-10-02): keys only; the pre-commit guard still blocks pack text.
 ALIASES: dict[str, str] = {}
 
 validate_registry(WINDOWS, ELEMENTS)

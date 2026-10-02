@@ -101,3 +101,28 @@ time):
   only, and refuses a batch that leaves anything held. ro_agent types credentials this way.
   - This is not part of the packet channel, but it shipped with it.
 
+## Amendment (Batt, 2026-10-02): packet-assisted calibration at session start
+
+**Context.** [phase2-plan.md](../phase2-plan.md) D3 proposes replacing the 42-click camera grid
+with a short self-check at session start: a few walk clicks, each paired with the client's own
+`self_move_request` target cell from the packets, then a homography fit. That moves a packet read
+closer to decision time than this ADR's "offline ground truth only" line.
+
+**Ruling.**
+1. **Allowed, on our rAthena only, as a SETUP / ground-truth tool.**
+   - It may run at session start and calibrate the camera (geometry, not world state).
+   - Its output is a profile, the same artefact the operator grid produces.
+2. **Never a per-action decision input.**
+   - No packet value reaches the policy or the fast loop.
+   - The agent-path isolation in Decision 4 is unchanged: no `Packet*` model on agent schemas,
+     vision without `poring_packets`.
+   - The calibration runs on the backend/tool side and hands the agent a profile, never packets.
+3. **The deployable bot must also have a pixels-only calibration path,** for servers without packet
+   access (the community server, ADR-0006). D3 must ship both. The pixels-only path is the one
+   acceptance is judged on outside rAthena.
+
+**Consequences.** D3 moves from "needs Batt's ruling" to "planned". Its tests must show:
+- the agent never receives packet-derived values, only the profile;
+- the pixels-only path reaches the stored profile's residual on rAthena (validated against the
+  packet-assisted fit there).
+
