@@ -18,12 +18,13 @@ rdp-loop.sh connects only while it says ``rdp``; gamestream-loop.sh streams only
         can revert its display settings, then lock -> rdp/switching, exactly one xfreerdp, lock ->
         steady, and check Sunshine's log for a pending revert (rc 3 + the remedy if pending).
     capture_backend.py pair PIN          # one-time pairing (private display; ok in rdp)
-    capture_backend.py to-console [--yes-tscon]
+    capture_backend.py to-console [--yes-tscon] [--external]
         RDP -> console: preflight; with --yes-tscon (after Batt's OK): focus + verify poring-lab's
         own console (open and visible), THEN lock -> console/switching, type `schtasks /run` of
         the SYSTEM task that tscons poring-lab's session (delayed 10 s), TERM xfreerdp until none
         for 5 s, wait out the tscon, lock -> console/steady (only now may gamestream stream), and
-        wait for Moonlight's first decoded video packet.
+        wait for Moonlight's first decoded video packet. --external (S2 step 0): stop after tscon
+        with the lock at console/switching, so the lab client holds and an external one streams.
 
 Writes are atomic (rename) and read back on the host AND inside every running container before a
 step counts as done (CLAUDE.md: read back every write). Scratch never goes to host /tmp.
@@ -380,8 +381,11 @@ STREAM_END_RX = r"Connection terminated|Quit event received|Stopping input strea
 def quit_stream() -> str:
     """End the console stream through Sunshine, never by killing the client first.
     "clean" = Sunshine ended the session and the client left by itself; "client-killed" = the
-    session ended but the client needed a TERM; "unclean" = no sign Sunshine ended it (TERM)."""
+    session ended but the client needed a TERM; "unclean" = no sign Sunshine ended it (TERM);
+    "external" = no lab client was streaming (an external client's session, e.g. S2 step 0): the
+    /cancel is sent anyway, and only the revert check afterwards can tell."""
     since = utc_now()
+    lab_streaming = count(GAMESTREAM, STREAM_NAMES) > 0
     try:
         res = sh(
             "docker", "exec", GAMESTREAM, "sh", "-c", QUIT_STREAM.format(t=QUIT_TIMEOUT_S),
@@ -391,6 +395,9 @@ def quit_stream() -> str:
         say(f"moonlight quit: rc={res.returncode} {last[0][:120] if last else ''}".rstrip())
     except subprocess.TimeoutExpired:
         say(f"moonlight quit: no answer within {QUIT_TIMEOUT_S + 15} s")
+    if not lab_streaming:
+        say("no lab client was streaming: the cancel covers an external client's session")
+        return "external"
     try:
         line = wait_log(GAMESTREAM, STREAM_END_RX, since, STREAM_EXIT_S)
         say(f"Sunshine ended the session: {line.strip()[-100:]}")
@@ -519,7 +526,15 @@ def cmd_pair(pin: str) -> int:
     return 0
 
 
-def cmd_to_console(yes_tscon: bool) -> int:
+# S2 step 0 (Batt, 2026-10-02): an EXTERNAL Moonlight (Batt's Mac, temporarily paired) streams
+# the console. The session goes to the console exactly as usual, but the lock stays
+# console/SWITCHING (REASON to-console-external): rdp-loop holds, and the lab's gamestream holds too
+# (it streams only on console/steady), so exactly one client streams. to-rdp then ends whatever
+# stream runs through Sunshine (/cancel) and checks the revert, as for the lab's own stream.
+EXTERNAL_REASON = "to-console-external"
+
+
+def cmd_to_console(yes_tscon: bool, external: bool = False) -> int:
     backend, _, _ = read_host()
     if backend != "rdp":
         raise Stop(f"to-console starts from rdp (the lock is {backend})")
@@ -560,6 +575,13 @@ def cmd_to_console(yes_tscon: bool) -> int:
     # its display settings (VDD only, resolution) at stream start and needs a console session for
     # that. A stream started earlier captured an empty display (2026-10-02).
     time.sleep(max(0.0, TSCON_DELAY_S + 5 - (time.monotonic() - typed)))
+    if external:
+        verify_everywhere(write_lock("console", "switching", EXTERNAL_REASON))
+        say(
+            "EXTERNAL mode: the session is on the console; the lock stays console/switching so "
+            "the lab's Moonlight holds. Connect the external client now. End with: to-rdp"
+        )
+        return 0
     since = utc_now()
     body = write_lock("console", "steady", "to-console")
     verify_everywhere(body)
@@ -589,6 +611,10 @@ def main() -> int:
     to_rdp.add_argument("--recover", action="store_true")
     to_console = sub.add_parser("to-console")
     to_console.add_argument("--yes-tscon", action="store_true", help="after Batt's OK only")
+    to_console.add_argument(
+        "--external", action="store_true",
+        help="S2 step 0: an external client streams; the lab's Moonlight holds",
+    )  # fmt: skip
     pair = sub.add_parser("pair")
     pair.add_argument("pin")
     args = ap.parse_args()
@@ -602,7 +628,7 @@ def main() -> int:
         return cmd_to_rdp(args.recover)
     if args.cmd == "pair":
         return cmd_pair(args.pin)
-    return cmd_to_console(args.yes_tscon)
+    return cmd_to_console(args.yes_tscon, args.external)
 
 
 if __name__ == "__main__":

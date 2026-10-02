@@ -70,6 +70,8 @@ class World:
 
     def count(self, container: str, names: str) -> int:
         if container == self.cb.GAMESTREAM:
+            if ("quit",) not in self.events:
+                return 1  # the lab's Moonlight streams until the quit
             return 0 if self.client_leaves or ("term", container) in self.events else 1
         return 1  # exactly one xfreerdp
 
@@ -181,3 +183,26 @@ def test_marker_classifier(cb: ModuleType) -> None:
     f = _frame()
     f[::2, ::3] = green  # scattered green pixels (text, game) never make a run
     assert cb.classify_marker(f) is None
+
+
+def test_an_external_clients_session_is_cancelled_without_waiting_for_a_lab_client(
+    cb: ModuleType, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """S2 step 0: Batt's Mac streams; the lab's Moonlight never did. to-rdp still sends the cancel
+    and relies on the revert check, never on the lab client's log."""
+    w = World(cb)
+    w.install(monkeypatch)
+    monkeypatch.setattr(cb, "count", lambda c, n: 0 if c == cb.GAMESTREAM else 1)
+    assert cb.quit_stream() == "external"
+    assert ("quit",) in w.events and ("session-ended",) not in w.events
+    assert "external client's session" in capsys.readouterr().out
+
+
+def test_external_to_console_keeps_the_lab_client_holding(cb: ModuleType) -> None:
+    import inspect
+
+    src = inspect.getsource(cb.cmd_to_console)
+    ext = src.index("if external:")
+    assert src.index('write_lock("console", "switching", EXTERNAL_REASON)') > ext
+    # the external branch returns before console/steady (the lab client streams only on steady)
+    assert src.index("return 0", ext) < src.index('write_lock("console", "steady"')
