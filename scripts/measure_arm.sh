@@ -20,7 +20,7 @@ L="${1:?usage: scripts/measure_arm.sh LABEL}"
 [[ "${L}" =~ ^[A-Za-z0-9_.-]+$ ]] || { echo "bad label ${L}" >&2; exit 2; }
 cd "$(dirname "$0")/.."
 export PYTHONDONTWRITEBYTECODE=1
-SCRATCH="${SCRATCH:-/dev/shm/poring-lab-tmp}"
+export SCRATCH="${SCRATCH:-/dev/shm/poring-lab-tmp}"
 mkdir -p "${SCRATCH}"
 OUT="${SCRATCH}/arm_${L}.jsonl" M="${SCRATCH}/marks.txt"
 mark() { echo "${L} $1 $(date +%T)" >>"${M}"; }
@@ -40,4 +40,5 @@ warp "prt_fild08 170 375"
 mark "delay start"
 uv run python scripts/measure_delay.py walks 40 --as gm | tee -a "${OUT}"
 mark "delay end"
+# measure_delay writes $SCRATCH/delay_raw.json (exported SCRATCH): keep a per-arm copy
 cp "${SCRATCH}/delay_raw.json" "${SCRATCH}/delay_raw_${L}.json"

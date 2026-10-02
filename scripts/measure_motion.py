@@ -10,7 +10,8 @@ desktop CPU (docs/phase0-latency.md "before/after" tables).
 * Frames reaching Xvfb: inside the backend container (same X display, same clock), a region of the
   scene is grabbed continuously; a "frame" is a grab where >1 % of pixels moved by >24 levels from
   the previous grab (rejects the RDP codec's progressive-refinement nudges). Per-second counts.
-* Desktop CPU: cgroup cpu.stat usage of the desktop container (xfreerdp3 decode), cores.
+* Lab CPU: cgroup cpu.stat usage of the display-path containers (desktop: Xvfb + xfreerdp;
+  gamestream: Moonlight in console mode), cores, per container and in total.
 * Windows' RemoteFX Graphics counters (input / output fps, frames skipped for insufficient client
   resources) are taken with typeperf typed into an existing PowerShell console, minimised before the
   run (docs/phase0-latency.md) -- never through the Run dialog (Defender's ClickFix detection).
@@ -53,13 +54,39 @@ with mss.MSS(display=":99") as s:
 """
 
 
-def desktop_usage_us() -> int:
-    cid = subprocess.run(
-        ["docker", "inspect", "-f", "{{.Id}}", "poring-lab-desktop-1"],
-        capture_output=True, text=True, check=True,
-    ).stdout.strip()  # fmt: skip
+# The display path's containers (ADR-0009): desktop (Xvfb + xfreerdp) and, in console mode,
+# gamestream (Moonlight). Lab-side cost = their cgroup CPU together.
+DISPLAY_PATH = ("poring-lab-desktop-1", "poring-lab-gamestream-1")
+
+
+def container_usage_us(name: str) -> int | None:
+    """cgroup cpu.stat usage_usec of a running container; None if it is not running."""
+    res = subprocess.run(
+        ["docker", "inspect", "-f", "{{.Id}} {{.State.Running}}", name],
+        capture_output=True, text=True,
+    )  # fmt: skip
+    if res.returncode != 0 or not res.stdout.strip().endswith("true"):
+        return None
+    cid = res.stdout.split()[0]
     stat = Path(f"/sys/fs/cgroup/system.slice/docker-{cid}.scope/cpu.stat").read_text()
     return int(dict(line.split() for line in stat.splitlines())["usage_usec"])
+
+
+def usage_us(names: tuple[str, ...] = DISPLAY_PATH) -> dict[str, int]:
+    return {n: u for n in names if (u := container_usage_us(n)) is not None}
+
+
+def cores_between(
+    before: dict[str, int], after: dict[str, int], seconds: float
+) -> dict[str, float]:
+    per = {n: (after[n] - before[n]) / 1e6 / seconds for n in before if n in after}
+    return {**{n: round(v, 2) for n, v in per.items()}, "total": round(sum(per.values()), 2)}
+
+
+def desktop_usage_us() -> int:
+    usage = container_usage_us("poring-lab-desktop-1")
+    assert usage is not None, "the desktop container is not running"
+    return usage
 
 
 def rotate(agent: r.Agent, seconds: float, x0: int, y: int) -> None:
@@ -91,6 +118,49 @@ def rotate(agent: r.Agent, seconds: float, x0: int, y: int) -> None:
             button("up", x0)
 
 
+def regions() -> tuple[tuple[int, int, int, int], tuple[int, int]]:
+    """(scene band, drag point) from GAME_REGION: the middle band of the client, clear of the side
+    windows and the chat box; the drag on empty ground at 78 %/78 %."""
+    gx, gy, gw, gh = r.game_region()
+    region = (gx + gw // 4, gy + int(gh * 0.52), gw // 2, int(gh * 0.30))
+    return region, (gx + int(gw * 0.78), gy + int(gh * 0.78))
+
+
+def measure_rotation(
+    agent: r.Agent, screen: r.Screen, seconds: float, label: str = "run"
+) -> dict[str, object]:
+    """One rotation inside an open ro_agent session; returns the result dict (see module doc)."""
+    region, (drag_x, drag_y) = regions()
+    r.activate_client(agent, screen)
+    if r.find_console(screen) is not None:
+        raise r.Stop("a PowerShell console is in front: no rotation (right-click pastes)")
+    counter = subprocess.Popen(
+        ["docker", "exec", "-i", r.BACKEND, "python", "-u", "-c", COUNTER,
+         *(str(v) for v in region), str(seconds + 8)],
+        stdout=subprocess.PIPE, text=True,
+    )  # fmt: skip
+    time.sleep(4)  # idle baseline seconds first
+    cpu0, t0 = usage_us(), time.monotonic()
+    rotate(agent, seconds, drag_x, drag_y)
+    cpu1, t1 = usage_us(), time.monotonic()
+    out, _ = counter.communicate(timeout=60)
+    rows = [tuple(int(v) for v in line.split(",")) for line in out.splitlines() if line]
+    moving = [n for _, n, _ in rows[5:-4]]  # skip the idle lead-in and the tail
+    cores = cores_between(cpu0, cpu1, t1 - t0)
+    q = statistics.quantiles(moving, n=10) if len(moving) >= 10 else [float("nan")] * 9
+    return {
+        "label": label, "seconds": seconds, "region": region,
+        "frames_per_s_median": statistics.median(moving) if moving else None,
+        "frames_per_s_p10": q[0], "frames_per_s_p90": q[8],
+        "frames_per_s": moving,
+        "idle_lead_in": [n for _, n, _ in rows[:4]],
+        "grabs_per_s_median": statistics.median(g for _, _, g in rows) if rows else None,
+        "desktop_cores": cores.get("poring-lab-desktop-1"),
+        "lab_cores": cores,
+        "t_wall_end": time.strftime("%H:%M:%S"),
+    }  # fmt: skip
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     ap.add_argument("mode", choices=["rotate"])
@@ -99,37 +169,9 @@ def main() -> None:
     a = ap.parse_args()
     if r.any_online() < 1:
         raise r.Stop("no character online=1 on our rAthena: no in-game input sent")
-    gx, gy, gw, gh = r.game_region()
-    # Scene sample: the middle band of the client, clear of the side windows and the chat box.
-    region = (gx + gw // 4, gy + int(gh * 0.52), gw // 2, int(gh * 0.30))
-    drag_x, drag_y = gx + int(gw * 0.78), gy + int(gh * 0.78)
     with r.session("measure-motion") as (agent, screen):
-        r.activate_client(agent, screen)
-        if r.find_console(screen) is not None:
-            raise r.Stop("a PowerShell console is in front: no rotation (right-click pastes)")
-        counter = subprocess.Popen(
-            ["docker", "exec", "-i", r.BACKEND, "python", "-u", "-c", COUNTER,
-             *(str(v) for v in region), str(a.seconds + 8)],
-            stdout=subprocess.PIPE, text=True,
-        )  # fmt: skip
-        time.sleep(4)  # idle baseline seconds first
-        cpu0, t0 = desktop_usage_us(), time.monotonic()
-        rotate(agent, a.seconds, drag_x, drag_y)
-        cpu1, t1 = desktop_usage_us(), time.monotonic()
-        out, _ = counter.communicate(timeout=60)
-    rows = [tuple(int(v) for v in line.split(",")) for line in out.splitlines() if line]
-    moving = [n for _, n, _ in rows[5:-4]]  # skip the idle lead-in and the tail
-    cores = (cpu1 - cpu0) / 1e6 / (t1 - t0)
-    q = statistics.quantiles(moving, n=10) if len(moving) >= 10 else [float("nan")] * 9
-    result = {
-        "label": a.label, "seconds": a.seconds, "region": region,
-        "frames_per_s_median": statistics.median(moving) if moving else None,
-        "frames_per_s_p10": q[0], "frames_per_s_p90": q[8],
-        "idle_lead_in": [n for _, n, _ in rows[:4]],
-        "grabs_per_s_median": statistics.median(g for _, _, g in rows) if rows else None,
-        "desktop_cores": round(cores, 2),
-        "t_wall_end": time.strftime("%H:%M:%S"),
-    }  # fmt: skip
+        result = measure_rotation(agent, screen, a.seconds, a.label)
+    result.pop("frames_per_s")
     print(json.dumps(result))
 
 

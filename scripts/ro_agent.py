@@ -29,7 +29,6 @@ Rules it enforces (CLAUDE.md, ADR-0002/0006):
     ro_agent.py gm "@where"                     GM account only; logged to data/ro_agent/gm.jsonl
     ro_agent.py say [--thai-keys] TEXT          chat line (Thai: Kedmanee key positions)
     ro_agent.py close | launch | recover [player|gm]
-    ro_agent.py walk DX DY                      one click-to-walk at a cell offset from the centre
 
 Coordinates: GAME_REGION (.env, "x,y,w,h") is the client area; clicks are relative to its origin
 (the same region the backend's black-screen detector watches).
@@ -783,11 +782,15 @@ def open_chat(agent: Agent, screen: Screen) -> None:
     """Make sure the chat input is open (Enter opens it), then click INTO it: an open but
     unfocused input (e.g. after clicks on the world) drops the first keystrokes -- a `@warp ...`
     went out as public chat without its `@warp ` (2026-10-01)."""
-    if not is_state(screen, "chat_open"):
+    # Enter toggles an EMPTY input. The signature can miss an input that IS open (the blinking text
+    # cursor, 2026-10-02): then the first Enter closed it -- so toggle up to twice.
+    for _ in range(2):
+        if is_state(screen, "chat_open"):
+            break
         agent.keys("Enter")
         time.sleep(1.0)
-        if not is_state(screen, "chat_open"):
-            raise Stop("the chat input did not open: nothing typed")
+    if not is_state(screen, "chat_open"):
+        raise Stop("the chat input did not open: nothing typed")
     agent.click(*layout("chat_input"))
     time.sleep(0.2)
 
