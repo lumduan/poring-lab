@@ -270,6 +270,15 @@ services:
       DISPLAY: ":99"
       SESSION_SIZE: ${SESSION_SIZE:-1440x900} # the stream's size, moved 1:1 to the session area
       WIN_HOST: ${WIN_HOST:-} # Sunshine runs on the same Windows host as RDP
+      # Mesa llvmpipe (Moonlight's GL renderer here) starts one rasterizer thread per vCPU: 64 on
+      # this VM. Inside `cpus: 4` they spin on each other and burn the quota (50 % of periods
+      # throttled), and NOT ONE frame was presented: the black stream of 2026-10-02.
+      LP_NUM_THREADS: "2"
+      # Audio stays on the PC (--audio-on-host), yet Sunshine still sends packets. With no ALSA
+      # device here, SDL fell back to its `disk` driver, which can't write on this read-only rootfs.
+      SDL_AUDIODRIVER: dummy
+      # Diagnostics only (empty = off): Moonlight runs under gdb, thread stacks after N s (loop).
+      GAMESTREAM_GDB_AFTER_S: ${GAMESTREAM_GDB_AFTER_S:-}
       LAB_STATE_DIR: /lab-state
     # Nothing writes to the image layer (the shared disk): the AppImage unpacks into the /tmp tmpfs,
     # the pairing key lives in the gamestream-state volume. No RDP_* secrets, no transfer volume.

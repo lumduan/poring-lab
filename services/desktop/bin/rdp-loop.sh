@@ -184,6 +184,29 @@ override_mtime() {
   stat -c %Y "${RDP_OVERRIDE_FILE:-/dev/shm/rdp-override}" 2>/dev/null || echo none
 }
 
+# X keyboard focus back to PointerRoot, a fresh Xvfb's default: keys go to the window under the
+# pointer, which the backend keeps inside the session. SDL (Moonlight, console mode) focuses its own
+# window with RevertToNone, so after a stream the focus was None and every key vanished (2026-10-02).
+# /f took the focus itself on EnterNotify; the windowed /size mode expects a WM, and there is none.
+# python3 + ctypes: this image has libX11 (xfreerdp) but no xdotool or python-xlib.
+focus_pointer_root() {
+  python3 - <<'PY' || log "could not reset the X keyboard focus to PointerRoot"
+import ctypes, ctypes.util
+x11 = ctypes.CDLL(ctypes.util.find_library("X11") or "libX11.so.6")
+x11.XOpenDisplay.restype = ctypes.c_void_p
+x11.XOpenDisplay.argtypes = [ctypes.c_char_p]
+x11.XSetInputFocus.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_int, ctypes.c_ulong]
+x11.XSync.argtypes = [ctypes.c_void_p, ctypes.c_int]
+x11.XCloseDisplay.argtypes = [ctypes.c_void_p]
+dpy = x11.XOpenDisplay(None)
+if not dpy:
+    raise SystemExit(1)
+x11.XSetInputFocus(dpy, 1, 1, 0)  # PointerRoot, RevertToPointerRoot, CurrentTime
+x11.XSync(dpy, 0)
+x11.XCloseDisplay(dpy)
+PY
+}
+
 # One argument per line for /args-from:stdin (which stops at the first blank line). printf is a
 # bash builtin, so the password never appears in any process's argv.
 build_args() {
@@ -273,6 +296,7 @@ main() {
     log "connecting to ${WIN_HOST}:${RDP_PORT:-3389} as ${RDP_USER} (gfx=${RDP_GFX:-auto}" \
       "network=${RDP_NETWORK:-auto} frame-ack=${RDP_FRAME_ACK:-on} gdi=${RDP_GDI:-sw}" \
       "clipboard=${RDP_CLIPBOARD:-off} drives=${RDP_DRIVES:-none})"
+    focus_pointer_root
     env -u RDP_PASSWORD xfreerdp3 /args-from:stdin < <(build_args)
     rc=$?
     case "${rc}" in

@@ -200,9 +200,81 @@ the host's certificate.
    1440x900 on the console, or a VDD or dummy plug provides it.
 3. **The Moonlight window was 80 % of the screen** (1152x720 at 144,90) with `--display-mode
    windowed` and no window manager. It is now `borderless` (code; needs a guarded gamestream
-   rebuild).
+   rebuild). ➡️ **SUPERSEDED the same day:** borderless needs a WM, and a WM's resize left the
+   stream black. Replaced by the 1920x1200 canvas (see "Handovers 2–5" below).
 4. **`to-console` called the stream up on the "Starting…" window**, before tscon had even run. It
    now waits for Moonlight's "Received first video packet".
 5. **Sunshine logged "A mouse was not detected. Sunshine will enable Mouse Keys while streaming".**
    That is a Windows accessibility change, to check after each console session.
+
+## S1 handovers 2–5 (2026-10-02 16:50–18:10): Windows side solved, lab-side geometry fixed by a canvas
+
+**Windows side, solved in this order:**
+1. **VDD.**
+   - The driver: "VDD by MTT" 25.7.23 (a beta). SignPath-signed UMDF driver, hardware id `MttVDD`.
+     The signature was checked before Batt installed it with devcon (exit 1 = "reboot suggested";
+     the device was OK without one).
+   - Modes: 1440x900, 1280x800, 1600x900 and 1920x1080 at 60 Hz, set in
+     `C:\VirtualDisplayDriver\vdd_settings.xml`.
+   - Sunshine:
+     - `output_name` = the VDD's device id `{9acddf6d-43cc-576e-9aff-0c5fc80b4cc8}` (`\\.\DISPLAY4`;
+       the Samsung is `{2583f328-…}`, `\\.\DISPLAY1`);
+     - `dd_configuration_option = ensure_only_display`: only the VDD during a stream, reverted after;
+     - `dd_resolution_option = auto`: the client asks for the size.
+   - Backups: `sunshine.conf.bak-20261002*` next to the config.
+2. **A stream started before tscon captured an empty display.** Sunshine's display API reports
+   "API is available: false" until a user session is on the console.
+   - Now: `to-console` writes `console/steady` only after tscon, and gamestream streams only on
+     `console/steady`.
+   - `to-rdp` stops Moonlight first, then waits 8 s, so Sunshine reverts its display settings while
+     the session is still on the console.
+3. **tscon from poring-lab's own console: Error 5 (Access denied).** A standard user may not move
+   its own session to the console.
+   - Batt created a one-time SYSTEM scheduled task, `\PoringLab\PoringLab-ToConsole`. It runs
+     `C:\Program Files\PoringLab\to-console.ps1` (an admin-only folder), which finds poring-lab's
+     session and runs `tscon <id> /dest:console`.
+   - poring-lab may only read and run the task (0x1200a9). It logs to
+     `C:\ProgramData\PoringLab\to-console.log`.
+   - `to-console` types the run with a 10 s delay, so the line completes before RDP drops.
+   - Verified: tscon exit 0, and the console desktop was visible through the stream at 17:52.
+
+**Lab side: the Moonlight window.**
+- **What it does:** without a window manager, `--display-mode windowed` opens at the stream's own
+  size only if that is under 80 % of the screen in both directions (`Session::getWindowDimensions`).
+  On the 1440x900 Xvfb it opened 1152x720, centred.
+- **What it drops:** while it builds its renderer, Moonlight drops window events ("Dropping window
+  event during flush: 6 (1440 900)"). After a dropped resize the window stayed black. This happened
+  with every resize during start-up:
+  - an immediate one;
+  - after an 8 s settle;
+  - after the first packet + 3 s;
+  - by a kiosk WM (matchbox).
+- **The one success:** a two-step resize by hand, well after the flush, rendered once. Too fragile
+  to build on.
+
+**Decision (Batt, 2026-10-02 ~18:12): a bigger canvas.**
+- `XVFB_RESOLUTION=1920x1200x24` is the canvas. `SESSION_SIZE=1440x900` is the Windows session,
+  drawn 1:1 at the canvas' top-left, in both modes.
+- **rdp-loop:** `/size:1440x900 /window-position:0x0` instead of `/f`.
+- **gamestream:**
+  - windowed at the stream's size, which is under 80 % of 1920x1200, so it opens natively at
+    1440x900, centred at 240,150;
+  - `place_stream` (xdotool) **moves** it to 0,0 and never resizes it;
+  - no window manager in either mode.
+- **Everyone else:**
+  - the backend's stream and capture, vision, `ro_agent` and `latency_probe` crop to the session
+    and normalise input over it;
+  - so GAME_REGION (80,77,1280,720), every signature and the console view are unchanged;
+  - `/health` shows `session_size`.
+- **Guards** (`test_guards.py`, `test_capture_lock.py`):
+  - every display consumer gets the same `SESSION_SIZE`;
+  - the canvas satisfies the 80 % rule;
+  - the placer only moves.
+- **Deployed 18:30–18:34:** a guarded gamestream build, then recreates of desktop, backend and
+  gamestream. quant-postgres io_full stayed ≈4 % for the 5 min before and after each; the guard
+  never aborted.
+- **Verified in RDP mode:**
+  - Xvfb is 1920x1200;
+  - the FreeRDP window is `1440x900+0+0`;
+  - the agent's shots are the 1440x900 session.
 

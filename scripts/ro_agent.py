@@ -562,16 +562,38 @@ def centre_offset(dx: int, dy: int) -> tuple[int, int]:
 # --- an existing PowerShell console (never the Run dialog: Defender's ClickFix detection) -------
 
 
+# Templates per console kind: a Windows Terminal tab, and a classic console window's title bar
+# (Batt's elevated console opened as one on 2026-10-02 -- same icon + title, another background).
+CONSOLE_TEMPLATES = {
+    False: ("ps_tab_template.npy",),
+    True: ("ps_admin_tab_template.npy", "ps_admin_conhost_template.npy"),
+}
+
+
 def find_console(screen: Screen, admin: bool = False) -> tuple[int, int, float] | None:
-    """Locate an ACTIVE Windows PowerShell tab anywhere on screen by template (its icon + title),
-    anchored on the icon's blue pixels. Returns (x, y, error) of the template origin, or None.
-    A dark heuristic is not enough: the black wallpaper passed one (2026-10-01, Enter landed on
-    the desktop and launched CPU-Z's UAC prompt -- declined)."""
-    name = "ps_admin_tab_template.npy" if admin else "ps_tab_template.npy"
-    path = STATE_DIR / "signatures" / name
-    if not path.exists():
-        raise Stop(f"no PowerShell tab template (data/ro_agent/signatures/{name})")
-    tmpl = np.load(path).astype(np.int16)  # RGB
+    """Locate an ACTIVE Windows PowerShell tab or title bar anywhere on screen by template (its
+    icon + title), anchored on the icon's blue pixels. Returns (x, y, error) of the template origin
+    of the best match over the kind's templates, or None. A dark heuristic is not enough: the
+    black wallpaper passed one (2026-10-01, Enter landed on the desktop and launched CPU-Z's UAC
+    prompt -- declined)."""
+    rgb = screen.full()[:, :, 2::-1].astype(np.int16)
+    best: tuple[int, int, float] | None = None
+    for name in CONSOLE_TEMPLATES[admin]:
+        path = STATE_DIR / "signatures" / name
+        if not path.exists():
+            continue
+        found = _match_console(rgb, np.load(path).astype(np.int16))
+        if found is not None and (best is None or found[2] < best[2]):
+            best = found
+    if best is None and not any(
+        (STATE_DIR / "signatures" / n).exists() for n in CONSOLE_TEMPLATES[admin]
+    ):
+        raise Stop(f"no PowerShell console template ({', '.join(CONSOLE_TEMPLATES[admin])})")
+    return best
+
+
+def _match_console(rgb: np.ndarray, tmpl: np.ndarray) -> tuple[int, int, float] | None:
+    """One template (RGB int16) against the screen (RGB int16): (x, y, error) or None."""
     th, tw = tmpl.shape[:2]
     blue = (tmpl[..., 2] > 150) & (tmpl[..., 0] < 110)
     # Anchor on an INTERIOR icon pixel (all 8 neighbours blue too): an edge pixel is anti-aliased
@@ -585,7 +607,6 @@ def find_console(screen: Screen, admin: bool = False) -> tuple[int, int, float] 
     inner[:, [0, -1]] = False
     pts = np.argwhere(inner) if inner.any() else np.argwhere(blue)
     ay, ax = (int(v) for v in pts[len(pts) // 2])
-    rgb = screen.full()[:, :, 2::-1].astype(np.int16)
     h, w = rgb.shape[:2]
     anchor = tmpl[ay, ax]
     cand = np.argwhere(np.abs(rgb - anchor).max(axis=2) <= 24) - (ay, ax)

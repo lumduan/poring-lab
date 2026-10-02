@@ -124,7 +124,9 @@ place_stream() {
   local want wid x y w h seen=" "
   want="$(stream_size)"
   while sleep 0.2; do
-    for wid in $(xdotool search --onlyvisible --name '^Moonlight$' 2>/dev/null); do
+    # The stream window is titled "<host> - Moonlight" (class com.moonlight_stream.Moonlight);
+    # Moonlight's own Qt windows are skipped by size below anyway.
+    for wid in $(xdotool search --onlyvisible --class 'moonlight' 2>/dev/null); do
       read -r x y w h < <(window_geometry "${wid}") || continue
       if [[ "${seen}" != *" ${wid}:${w}x${h}+${x}+${y} "* ]]; then
         log "Moonlight window ${wid}: ${w}x${h}+${x}+${y} (stream ${want})"
@@ -135,6 +137,59 @@ place_stream() {
       fi
     done
   done
+}
+
+# X keyboard focus back to PointerRoot after a stream. SDL focuses Moonlight's window with
+# RevertToNone, so when it closed the focus became None and every key to the next RDP session
+# vanished (2026-10-02). A COPY of rdp-loop.sh's (tests/test_capture_lock.py keeps them equal).
+focus_pointer_root() {
+  python3 - <<'PY' || log "could not reset the X keyboard focus to PointerRoot"
+import ctypes, ctypes.util
+x11 = ctypes.CDLL(ctypes.util.find_library("X11") or "libX11.so.6")
+x11.XOpenDisplay.restype = ctypes.c_void_p
+x11.XOpenDisplay.argtypes = [ctypes.c_char_p]
+x11.XSetInputFocus.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_int, ctypes.c_ulong]
+x11.XSync.argtypes = [ctypes.c_void_p, ctypes.c_int]
+x11.XCloseDisplay.argtypes = [ctypes.c_void_p]
+dpy = x11.XOpenDisplay(None)
+if not dpy:
+    raise SystemExit(1)
+x11.XSetInputFocus(dpy, 1, 1, 0)  # PointerRoot, RevertToPointerRoot, CurrentTime
+x11.XSync(dpy, 0)
+x11.XCloseDisplay(dpy)
+PY
+}
+
+# The pid of a process by its comm name (no procps in this image).
+pid_of() {
+  local p
+  for p in /proc/[0-9]*; do
+    [[ "$(cat "${p}/comm" 2>/dev/null)" == "$1" ]] && { printf '%s\n' "${p#/proc/}"; return 0; }
+  done
+  return 1
+}
+
+# Moonlight, or -- diagnostics only, GAMESTREAM_GDB_AFTER_S=N -- Moonlight launched BY gdb (with
+# ptrace_scope 1 only a parent may trace), which dumps every thread's stack N s into the stream and
+# lets it run on. For the start-up stall of 2026-10-02: the main thread parked in a futex, nothing
+# presented, with either SDL renderer (opengl/llvmpipe and software).
+run_moonlight() {
+  local bin gdb
+  bin="$(readlink -f "${MOONLIGHT_DIR:-/tmp/moonlight}/AppRun")"
+  gdb="$(command -v gdb || command -v gdb-minimal)"
+  if [[ ! "${GAMESTREAM_GDB_AFTER_S:-}" =~ ^[0-9]+$ || -z "${gdb}" ]]; then
+    "${bin}" "$@"
+    return
+  fi
+  log "DIAGNOSTICS: Moonlight under gdb; thread stacks after ${GAMESTREAM_GDB_AFTER_S}s"
+  (
+    sleep "${GAMESTREAM_GDB_AFTER_S}"
+    pid="$(pid_of moonlight)" && kill -INT "${pid}"
+  ) &
+  "${gdb}" -q -batch -nx -ex 'set pagination off' -ex 'set print thread-events off' \
+    -ex 'handle SIGPIPE SIGUSR1 SIGUSR2 SIGTERM SIGCHLD SIGALRM nostop noprint pass' \
+    -ex run -ex 'info threads' -ex 'thread apply all bt 40' -ex continue \
+    --args "${bin}" "$@"
 }
 
 stream_args() {
@@ -188,10 +243,11 @@ main() {
     mapfile -t args < <(stream_args)
     place_stream &
     placer=$!
-    "${MOONLIGHT_DIR:-/tmp/moonlight}/AppRun" "${args[@]}"
+    run_moonlight "${args[@]}"
     rc=$?
     kill "${placer}" 2>/dev/null
     wait "${placer}" 2>/dev/null
+    focus_pointer_root
     if (($(date +%s) - started > 60)); then backoff=2; fi
     log "moonlight exited (rc=${rc}); next attempt in ${backoff}s (or when the lock changes)"
     nap "${backoff}"

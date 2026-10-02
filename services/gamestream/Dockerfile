@@ -8,6 +8,9 @@
 # X99 socket) nor xfreerdp. The AppImage stays ONE file in the image and is unpacked into tmpfs at
 # start (the rathena single-tar pattern: no thousands of files on the shared disk). xdotool MOVES the
 # stream window to the session area (gamestream-loop.sh place_stream); there is no window manager.
+# NO gdb here: installing it (33 packages; trixie's gdb-minimal is a transitional package for gdb)
+# spiked quant IO to 43 % / 49 % on 2026-10-02 and the guard aborted both builds. The loop's
+# GAMESTREAM_GDB_AFTER_S diagnostics stay inert until gdb is added in an operator-chosen window.
 FROM poring-lab/desktop:local
 
 USER root

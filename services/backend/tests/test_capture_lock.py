@@ -339,7 +339,8 @@ def test_the_stream_window_is_moved_to_the_session_origin_never_resized(
         "#!/bin/bash\n"
         f'echo "$*" >>"{calls}"\n'
         'case "$1" in\n'
-        "  search) printf '42\\n7\\n' ;;\n"
+        # the stream window's title is "<host> - Moonlight": only the class finds it
+        """  search) [[ "$*" == *"--class moonlight"* ]] && printf '42\\n7\\n' ;;\n"""
         "  getwindowgeometry)\n"
         f'    if [[ "$3" == 42 ]]; then read -r x y <"{geo}"; w=1440 h=900;\n'
         "    else x=320 y=300 w=1280 h=600; fi\n"

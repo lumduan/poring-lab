@@ -384,9 +384,36 @@ def test_gamestream_places_its_window_without_a_window_manager() -> None:
     code = "\n".join(line for line in loop.splitlines() if not line.lstrip().startswith("#"))
     assert "windowsize" not in code and "windowstate" not in code
     start = code.find("    place_stream &\n")
-    run = code.find('"${MOONLIGHT_DIR:-/tmp/moonlight}/AppRun" "${args[@]}"')
+    run = code.find('    run_moonlight "${args[@]}"')
     stop = code.find('    kill "${placer}"')
-    assert -1 < start < run < stop
+    refocus = code.find("    focus_pointer_root\n", stop)
+    assert -1 < start < run < stop < refocus
+
+
+def focus_function(path: Path) -> str:
+    text = path.read_text()
+    start = text.index("focus_pointer_root() {")
+    return text[start : text.index("\n}\n", start)]
+
+
+def test_both_display_paths_hand_back_the_keyboard_focus() -> None:
+    """SDL focuses Moonlight's window with RevertToNone: after a stream the X focus was None and
+    every key to the RDP session vanished (2026-10-02). rdp-loop resets it before every connect,
+    gamestream after every stream, with the same code."""
+    stream_loop = ROOT / "services" / "gamestream" / "bin" / "gamestream-loop.sh"
+    assert focus_function(RDP_LOOP) == focus_function(stream_loop)
+    assert "XSetInputFocus(dpy, 1, 1, 0)" in focus_function(RDP_LOOP)  # PointerRoot
+    rdp = RDP_LOOP.read_text()
+    connect = rdp.index("env -u RDP_PASSWORD xfreerdp3 /args-from:stdin")
+    loop_top = rdp.rfind("    while true; do", 0, connect)
+    assert rdp.rfind("    focus_pointer_root\n", 0, connect) > loop_top
+
+
+def test_gdb_diagnostics_are_opt_in() -> None:
+    services = compose("compose.yaml")["services"]
+    assert services["gamestream"]["environment"]["GAMESTREAM_GDB_AFTER_S"] == (
+        "${GAMESTREAM_GDB_AFTER_S:-}"
+    )
 
 
 def session_args(tmp_path: Path, **extra: str) -> list[str]:
