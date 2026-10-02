@@ -311,6 +311,8 @@ def test_console_lock_streams_once_with_absolute_mouse(stream_env: dict[str, str
     for flag in ("--absolute-mouse", "--game-optimization", "--audio-on-host"):
         assert flag in args
     assert args[args.index("--resolution") + 1] == "1440x900"
+    # windowed made the stream window 80 % of the screen without a WM (not 1:1, 2026-10-02)
+    assert args[args.index("--display-mode") + 1] == "borderless"
     assert args[args.index("--video-codec") + 1] == "H.264"
     assert "capture-backend console seq=4: streaming win.test" in log
 

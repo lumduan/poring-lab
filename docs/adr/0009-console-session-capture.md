@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: S1 trial -- paired 2026-10-02 (exactly one client, ours). Next the to-console handover (stop point before tscon), A4 functional checks, then bench.py run --backend console vs the RDP SPEC v2 baseline. RDP stays the default until Batt decides.
+next_action: S1 handover 1 (2026-10-02) stopped -- tscon from Batt's console failed (1326) and the console stayed 1920x1080. Before the next attempt -- rebuild gamestream (borderless window), make the console 1440x900 (Batt), tscon from poring-lab's own console. RDP stays the default.
 ---
 
 # ADR-0009: Console-session capture as a second display mode (Sunshine first, VNC fallback)
@@ -175,4 +175,34 @@ Six attempts to one pairing. Every step below is a trap the next pairing would h
 
 **Result:** Sunshine lists **exactly one** device, `poring-lab-gamestream`. Moonlight's config holds
 the host's certificate.
+
+## S1 handover 1 (2026-10-02 15:24–15:26): stopped, back to RDP
+
+**Worked:**
+- The lock and both interlocks: gamestream held while an xfreerdp window existed, then streamed;
+  rdp-loop held.
+- Sunshine: `Desktop` launched, encryption on, **`h264_qsv`** encoding at 29.97 fps capture and
+  ~15 Mbps (Quick Sync works on driver 27.20.100.9664).
+- Moonlight: 1440x900x30 negotiated; first video packet after 300 ms; 21.4 fps decoded (a static
+  lock screen), 0 % dropped, 0.53 ms queue.
+- `to-rdp` restored exactly one xfreerdp in 16 s; the RO client kept running.
+
+**Stopped on (an unexpected Windows state):**
+1. **tscon failed:** `Error [1326]: The user name or password is incorrect`. It was typed into
+   Batt's elevated console (user badso), but session 2 belongs to `poring-lab`, and connecting
+   another user's session needs that user's password. The session was left disconnected, and the
+   stream showed the lock screen. **tscon must run in the session owner's console** (poring-lab,
+   no password). The `--admin-console` route that sent it to Batt's console was removed.
+2. **The console is 1920x1080.** Sunshine scaled it into the 1440x900 stream, letterboxed, so
+   GAME_REGION would not match. It could not change the mode: "Trying to apply display device
+   settings. API is available: false", repeated every 5 s after the stream while RDP owned the
+   session. Possibly the API needs a user session on the console (untested). Otherwise Batt sets
+   1440x900 on the console, or a VDD or dummy plug provides it.
+3. **The Moonlight window was 80 % of the screen** (1152x720 at 144,90) with `--display-mode
+   windowed` and no window manager. It is now `borderless` (code; needs a guarded gamestream
+   rebuild).
+4. **`to-console` called the stream up on the "Starting…" window**, before tscon had even run. It
+   now waits for Moonlight's "Received first video packet".
+5. **Sunshine logged "A mouse was not detected. Sunshine will enable Mouse Keys while streaming".**
+   That is a Windows accessibility change, to check after each console session.
 

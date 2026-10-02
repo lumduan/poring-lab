@@ -196,13 +196,6 @@ def tray_strip() -> tuple[int, int, int, int]:
     return w - 380, h - 36, 340, 22
 
 
-def taskbar_xy(dx_from_centre: int) -> tuple[int, int]:
-    """A taskbar button: Windows 11 centres the buttons, so they are addressed from the screen's
-    centre line; the 48 px bar's middle row."""
-    w, h = desktop()
-    return w // 2 + dx_from_centre, h - 24
-
-
 class Screen:
     def __init__(self) -> None:
         self.proc = subprocess.Popen(

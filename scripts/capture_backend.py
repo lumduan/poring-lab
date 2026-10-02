@@ -16,9 +16,10 @@ rdp-loop.sh connects only while it says ``rdp``; gamestream-loop.sh streams only
         Moonlight client, revive rdp-loop if it idles, exactly one xfreerdp, lock -> steady.
     capture_backend.py pair PIN          # one-time pairing (private display; ok in rdp)
     capture_backend.py to-console [--yes-tscon]
-        RDP -> console: preflight; with --yes-tscon (after Batt's OK): lock -> console/switching,
-        type `tscon <own session> /dest:console` (delayed 10 s) into the poring-lab console, TERM
-        xfreerdp until none for 5 s, wait for gamestream's stream window, lock -> steady.
+        RDP -> console: preflight; with --yes-tscon (after Batt's OK): focus + verify poring-lab's
+        own console (open and visible; tscon of ANOTHER user's session fails, 1326), THEN lock ->
+        console/switching, type `tscon <own session> /dest:console` (delayed 10 s), TERM xfreerdp
+        until none for 5 s, wait for Moonlight's first decoded video packet, lock -> steady.
 
 Writes are atomic (rename) and read back on the host AND inside every running container before a
 step counts as done (CLAUDE.md: read back every write). Scratch never goes to host /tmp.
@@ -376,18 +377,25 @@ def cmd_to_console(yes_tscon: bool) -> int:
     sys.path.insert(0, str(REPO / "scripts"))
     import ro_agent as r
 
-    since = utc_now()
-    body = write_lock("console", "switching", "to-console")
-    verify_everywhere(body)
     with r.session("capture-backend", allow_handover=True) as (agent, screen):
-        agent.click(*r.taskbar_xy(288))  # the console's taskbar button; its tab is verified next
-        time.sleep(2)
+        # The console is focused and verified by its tab template BEFORE the lock moves: a missing
+        # or covered console stops here with the lock still rdp/steady. (A fixed taskbar offset
+        # clicked the RO client's button once the session grew to 1440x900, 2026-10-02.)
+        # It must be the SESSION OWNER's (poring-lab's) console: from Batt's elevated console tscon
+        # failed with 1326 "user name or password is incorrect" (another user's session).
+        r.focus_console(agent, screen)
+        since = utc_now()
+        body = write_lock("console", "switching", "to-console")
+        verify_everywhere(body)
         r.console_type(agent, screen, TSCON)
         say("tscon typed (runs in 10 s); disconnecting the RDP client now")
     term_until_zero(DESKTOP, RDP_NAMES)
     line = wait_log(DESKTOP, rf"capture-backend console seq={raw_seq(body)}: holding", since, 60)
     say(f"rdp-loop holds: {line.split('rdp-loop: ', 1)[-1]}")
     wait_log(GAMESTREAM, rf"capture-backend console seq={raw_seq(body)}: streaming", since, 90)
+    # A Moonlight window alone is not a stream: its "Starting..." window counted on 2026-10-02 while
+    # the console still showed the lock screen. Require decoded video.
+    wait_log(GAMESTREAM, r"Received first video packet", since, 60)
     deadline = time.monotonic() + 60
     while time.monotonic() < deadline:
         if health().get("stream_window_present") is True:

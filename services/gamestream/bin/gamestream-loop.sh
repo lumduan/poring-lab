@@ -5,7 +5,8 @@
 # It streams only while the capture-backend lock says `console` AND no xfreerdp window is on the
 # display (the second, independent interlock); otherwise it naps, waking when the lock changes. It
 # never exits (restart: unless-stopped would loop), never fights: every failure backs off.
-#   moonlight-qt flags: windowed 1440x900 at (0,0) of the 1440x900 Xvfb (no window manager),
+#   moonlight-qt flags: borderless = a frameless window the size of the 1440x900 Xvfb at (0,0), so a
+#   1440x900 stream is 1:1 ("windowed" made it 80 %: 1152x720 at 144,90 without a WM, 2026-10-02),
 #   --absolute-mouse (XTest positions -> LiSendMousePositionEvent), software H.264 decode,
 #   --game-optimization (lets Sunshine set the console to 1440x900), audio stays on the PC.
 #
@@ -103,7 +104,7 @@ stream_args() {
   printf '%s\n' stream "${WIN_HOST}" "${GAMESTREAM_APP:-Desktop}" \
     --resolution "${GAMESTREAM_RESOLUTION:-1440x900}" --fps "${GAMESTREAM_FPS:-30}" \
     --bitrate "${GAMESTREAM_BITRATE_KBPS:-20000}" --video-codec H.264 --video-decoder software \
-    --display-mode windowed --absolute-mouse --game-optimization --audio-on-host \
+    --display-mode borderless --absolute-mouse --game-optimization --audio-on-host \
     --no-vsync --no-frame-pacing --no-quit-after --capture-system-keys never \
     --no-performance-overlay
 }
