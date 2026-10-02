@@ -266,6 +266,11 @@ None of the linked projects is a Python GameStream client
 [moonlight-embedded](https://github.com/moonlight-stream/moonlight-embedded),
 [awesome-sunshine](https://github.com/LizardByte/awesome-sunshine)).
 
+➡️ **SUPERSEDED 2026-10-02: S1 uses moonlight-qt in its own `gamestream` service** (ADR-0009
+revision). moonlight-embedded's X11 mouse turned out relative-only, and it warps the pointer
+(`src/input/x11.c`); moonlight-qt takes X events via SDL with `--absolute-mouse`. The paragraph
+below is the original plan, kept as history.
+
 **S1: moonlight-embedded inside the desktop container, rendering into Xvfb `:99`.** This is the
 quickest way to a measurement.
 - moonlight-embedded **v2.7.1** (2025-11-30), GPL-3.0. CLI: `moonlight pair|stream|list|quit`,
@@ -499,7 +504,8 @@ checks the signature first with `Get-AuthenticodeSignature <file>`.
 | 4' | UltraVNC (alternative to 4) | https://uvnc.com/downloads/ultravnc/172-ultravnc-1-8-3-0.html | 1.8.3.0 | to read at download | **UNVERIFIED**; ships a binary-blob DLL | Only if 4 is unsuitable |
 
 **Lab side** (Linux, no Windows approval, but builds go through `guarded_build.py`):
-- moonlight-embedded v2.7.1 built from source into the desktop image (S1);
+- ~~moonlight-embedded v2.7.1 built from source into the desktop image (S1)~~ ➡️ moonlight-qt 6.1.0
+  AppImage in the `gamestream` image (sha256 pinned) (S1);
 - `libmoonlight-common` + `libgamestream` shared libraries and PyAV 19.0.0 in the backend (S2);
 - `tigervnc-viewer` from Debian (V1).
 
@@ -513,7 +519,8 @@ section 8.
 2. Batt installs Sunshine (item 1), sets the web UI credentials, applies the 3.2 configuration and
    the firewall restriction. The agent types only non-secret commands into his elevated console, and
    reads every setting back.
-3. Guarded desktop build with moonlight-embedded (S1); pairing with Batt's PIN; the
+3. ➡️ (2026-10-02: a guarded **gamestream** build with moonlight-qt, and the capture-backend lock
+   instead of the hold below) Guarded desktop build with moonlight-embedded (S1); pairing with Batt's PIN; the
    `RDP_MODE=console` hold.
 4. S1 measurement (section 5), **plus the SendInput test** (3.4).
 5. Decide: S2, V1, or stay on RDP. Record it in ADR-0009 (ACCEPTED or REJECTED).

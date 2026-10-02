@@ -7,12 +7,17 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: Batt approves or amends the install list and the CLAUDE.md rule-2 amendment (docs/console-capture-plan.md sections 9 and 7); then the console-switch test with nothing installed. Accept or reject this ADR on the S1 measurement gate.
+next_action: S1 trial (Batt approved Sunshine, 2026-10-02) -- firewall/config, pairing, the to-console handover (stop point before tscon), A4 functional checks, then bench.py run --backend console vs the RDP v1 baseline. RDP stays the default until Batt decides.
 ---
 
 # ADR-0009: Console-session capture as a second display mode (Sunshine first, VNC fallback)
 
-- **Status:** PROPOSED (2026-10-01). **Nothing is installed or configured.**
+- **Status:** PROPOSED (2026-10-01). ➡️ **2026-10-02: Batt approved the Sunshine install and the S1
+  trial** ("Sunshine research gets the weight"); RDP stays the default until he decides otherwise.
+  - Sunshine v2026.914.233613 is installed on the Dell by Batt (UAC). The MSI was checked first:
+    SHA-256 = GitHub's digest, Authenticode Valid, signer CN=David Lane = LizardByte's maintainer.
+  - Revisions below (2026-10-02): the S1 client is **moonlight-qt**, not moonlight-embedded; the
+    **capture-backend lock** replaces the proposed `RDP_MODE` override.
 - **Deciders:** Batt.
 - **Plan and evidence:** [console-capture-plan.md](../console-capture-plan.md). Every fact there
   carries its source URL, or is marked UNVERIFIED.
@@ -56,8 +61,12 @@ Three facts shape the decision:
 1. **Two display modes, never at once: RDP mode (today's default) and console mode.**
    - There is still exactly **one Windows session**: the same session ID, moved between RDP and the
      console.
-   - Entering console mode first puts the lab's RDP loop on hold (a new whitelisted
-     `RDP_MODE=console` override; `/health` reports the mode). Only then does tscon run.
+   - ➡️ **Implemented (2026-10-02) as the capture-backend lock**, not an `RDP_MODE` override:
+     `state/capture-backend` (`BACKEND=rdp|console`), mounted read-only in desktop, backend and
+     gamestream; its only writer is `scripts/capture_backend.py`, and `/health` reports it.
+     rdp-loop connects only under `rdp`, gamestream streams only under `console`, and each refuses
+     while the other's window is on the display. The handover writes the lock first; only then
+     does tscon run (`to-console --yes-tscon`).
    - Leaving console mode clears the hold, and RDP takes the session back.
    - Each switch is explicit and logged.
 2. **Sunshine is the console-mode server; VNC is the fallback.**
@@ -72,8 +81,12 @@ Three facts shape the decision:
    - The firewall admits only 192.168.1.13.
    - The agent never holds the Sunshine web-UI credentials; pairing PINs are Batt's.
 4. **The lab-side client comes in two stages:**
-   - **S1:** moonlight-embedded rendering into Xvfb `:99`, in place of xfreerdp. Nothing downstream
-     changes.
+   - **S1:** ➡️ **moonlight-qt** (6.1.0, the official AppImage) rendering into Xvfb `:99`, in the
+     `gamestream` service. Nothing downstream changes. Why not moonlight-embedded: its X11 mouse is
+     relative-only and warps the pointer to a fixed point on every move (`src/input/x11.c`), while
+     moonlight-qt takes X events through SDL and has `--absolute-mouse`
+     (`LiSendMousePositionEvent`), so the mux's XTest positions arrive as positions. The live proof
+     is the A4 input check.
    - **S2:** our own `poring_env` transport on moonlight-common-c (ctypes) and PyAV.
      - Frames come from a `FrameSource` stamped on the host `CLOCK_MONOTONIC`.
      - Input goes through an `XInput`-compatible sink behind the unchanged `Injector`/`InputMux`.
@@ -90,10 +103,12 @@ Three facts shape the decision:
 
 ## Gate: what ACCEPTED requires
 
-All of these, measured with the same scripts as the RDP arms (`scripts/measure_arm.sh`), plan
-section 5:
-- outdoor delivery ≥ 2× the best RDP arm;
-- packet → frame p75 ≤ the best RDP arm's;
+➡️ **Reworded 2026-10-02:** "2× the best RDP arm" can no longer hold -- FreeRDP 3.32.1 already
+delivers the game's full 30 fps outdoors (h264-plan.md, Arm C). The comparison is now the fixed
+benchmark (docs/benchmarks/SPEC.md v1) against the RDP v1 baseline:
+- delivery at the 30 fps cap, outdoor and indoor (no worse than RDP);
+- packet → frame p75 and key → paint p75 ≤ RDP's, or a lab-side CPU saving worth a small loss;
+- fidelity of the UI crops vs the lossless reference: no worse than RDP's;
 - the RO client accepts Sunshine's SendInput keyboard and mouse. This is **UNVERIFIED**, and is the
   first thing tested;
 - the console switch works with **no** second session ever appearing (`qwinsta` before and after).
