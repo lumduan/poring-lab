@@ -5,7 +5,7 @@
 // into /app so hot reload keeps working.
 import { spawn } from "node:child_process";
 import { watch } from "node:fs";
-import { cp, mkdir, rm, stat } from "node:fs/promises";
+import { cp, mkdir, readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
 const SRC = "/src";
@@ -72,6 +72,50 @@ watch(SRC, { recursive: true }, (_event, file) => {
   );
 });
 log("watching /src for changes");
+
+// fs.watch (recursive, Linux) follows file inodes: once a file is replaced by a new inode (a git
+// checkout, an atomic editor save) its later edits never arrive. Console.tsx stayed at its 09-30
+// copy for two days that way (2026-10-02). A cheap poll of size+mtime mirrors whatever the watcher
+// missed, deletions included. Metadata only: no file is read unless it changed.
+const seen = new Map();
+async function scan(dir, found) {
+  for (const entry of await readdir(path.join(SRC, dir), { withFileTypes: true })) {
+    const rel = path.join(dir, entry.name);
+    if (skipped(rel)) continue;
+    if (entry.isDirectory()) {
+      await scan(rel, found);
+    } else if (entry.isFile()) {
+      const st = await stat(path.join(SRC, rel));
+      found.set(rel, `${st.size}:${st.mtimeMs}`);
+    }
+  }
+}
+let scanning = false;
+async function reconcile(initial) {
+  if (scanning) return;
+  scanning = true;
+  try {
+    const found = new Map();
+    await scan("", found);
+    if (!initial) {
+      for (const [rel, sig] of found) {
+        if (seen.get(rel) !== sig) await mirror(rel);
+      }
+      for (const rel of seen.keys()) {
+        if (!found.has(rel)) await mirror(rel); // deleted on the host
+      }
+    }
+    seen.clear();
+    for (const [rel, sig] of found) seen.set(rel, sig);
+  } catch (err) {
+    log(`reconcile failed: ${err}`);
+  } finally {
+    scanning = false;
+  }
+}
+await reconcile(true);
+setInterval(() => reconcile(false), 2000);
+log("polling /src every 2 s as a backstop to the watcher");
 
 for (const signal of ["SIGTERM", "SIGINT"]) {
   process.on(signal, () => dev.kill(signal));
