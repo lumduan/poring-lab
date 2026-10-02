@@ -330,3 +330,61 @@ the host's certificate.
   - display revert after `ensure_only_display`.
 - Performance conclusions come from S2 (in-process decode, no Xvfb hop), planned after this report.
 
+## Amendment (Batt, 2026-10-02): S1 interpretation, the S2 architecture, shared viewing and control
+
+**Status of this amendment: PROPOSED.** The plan is [docs/s2-plan.md](../s2-plan.md). Nothing is
+implemented before Batt approves it.
+
+**1. S1 interpretation (correction).** "RDP vs S1 isolates the protocol" is withdrawn.
+- FreeRDP draws bitmaps into Xvfb through X11.
+- Moonlight presents through OpenGL, which in a GPU-less Xvfb container is llvmpipe (CPU-emulated).
+  That presentation cost, not the GameStream protocol, filled 4 cores (handover 6).
+- Every S1-vs-RDP number is therefore labelled **"protocol + renderer"**. A fairer S1 number forces
+  SDL's software 2D renderer (`SDL_RENDER_DRIVER=software`; verified honoured on 2026-10-02:
+  "SDL renderer backend: software") and is labelled separately.
+- **S1's value is functional:**
+  - SendInput acceptance by RO;
+  - Thai input;
+  - the Mouse Keys revert;
+  - the display revert after `ensure_only_display`.
+- Performance conclusions come from S2.
+
+**2. S2: a "bot view" separate from the "human view", with no Xvfb hop**
+(s2-plan.md §1–§7, §9).
+- **The client:**
+  - a GameStream client in the `gamestream` service (moonlight-common-c through ctypes);
+  - **decodes once** with PyAV;
+  - writes a shared-memory **frame bus** with per-consumer latest-wins reads.
+- **The consumers:**
+  - the bot reads every frame;
+  - the human view (JPEG to the console) is capped and never delays the bot;
+  - both views carry the same `frame_id` / `t_mono_ns`.
+- **Input:** the mux (every rule intact) sends to s2-client's GameStream input channel through a
+  socket only the backend writes. It is implemented as a `poring_env` `gamestream` backend, so the
+  policy code doesn't change.
+- **Lifecycle:** the stream ends cleanly (`/cancel`) before the lock returns to `rdp`, so Sunshine
+  reverts its display settings while the console session still exists (the pending revert of
+  2026-10-02).
+- **What does not change:** Xvfb stays for RDP mode and noVNC only. The capture-backend lock keeps
+  choosing the one session.
+- **Later, only if measurements need it:** NVDEC.
+
+**3. Shared viewing (future capability).**
+- Sunshine captures the console, which is what the physical monitor shows. A person at the Dell, the
+  bot and the web console can watch the same session at once, which RDP can't (it locks the
+  console).
+- Modes:
+  - **Lab**: VDD only, fixed 1440×900;
+  - **Shared viewing**: the physical display; the resolution follows the monitor, so it depends on
+    Part D's resolution-agnostic projection.
+- Watch-only (a HINT mode, no bot input) is simple. Shared control needs item 4.
+
+**4. Shared control (future capability; design only).**
+- (a) A **display-only Windows status indicator** (green/orange/blue): [ADR-0013](0013-windows-status-indicator.md).
+- (b) **Agentless human-presence detection** from pixels:
+  - the main signal: the RO cursor sprite against the mux's last commanded position, with a
+    tolerance for in-flight moves and the measured frame delay;
+  - on detection: a `human_local` lease, so the bot pauses.
+- (c) **An audit of control episodes, never of keystrokes.**
+- Console/GameStream mode only.
+

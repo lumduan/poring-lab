@@ -124,6 +124,23 @@ A script run **from inside the vision container** passes only if every one of th
 
 It goes in `scripts/` with the implementation, and is part of Phase 4's entry gate.
 
+## Note (2026-10-02): S2 implements option (a) for the GameStream path
+
+The proposed S2 architecture ([docs/s2-plan.md](../s2-plan.md), ADR-0009 2026-10-02 amendment)
+decodes the GameStream video once, into a shared-memory frame bus. vision maps the bus
+**read-only** and never touches X on that path. That is option (a), with these specifics:
+- a seqlock ring;
+- latest-wins reads;
+- per-consumer drop counters in `/health`;
+- one `frame_id` domain for the bot, the console and the logs.
+
+**What this closes, and what stays open:**
+- It closes the X-access gap **for the GameStream path only**.
+- RDP mode still renders into Xvfb. Options (c1)–(c3) are still needed for that path, unless vision
+  also reads a bus there (a backend-fed ring from its X capture: the same code, another writer).
+- The ADR's status is unchanged (PROPOSED) until Batt approves S2. This note records the intended
+  implementation route only.
+
 ## Tracking
 
 [lumduan/poring-lab#1](https://github.com/lumduan/poring-lab/issues/1), labelled `blocks-phase-4` and `security`.
