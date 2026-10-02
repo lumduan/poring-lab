@@ -33,6 +33,8 @@ ports, quickstart) and `docs/adr/`.
      tightest cap with no fps loss (docs/phase0-latency.md). 3.32.1 takes ~4.5 (progressive) or ~1 (AVCthin)
      at 30 fps (h264-plan.md, Arm C). Pinned by `test_guards.py`.
    - The rAthena build stays capped (`RATHENA_MAKE_JOBS`).
+   - gamestream (ADR-0009 console client) keeps `cpu_shares: 64`, `cpus: 4`, mem == memswap, a read-only
+     rootfs and its pairing-key volume mounted nowhere else (`test_guards.py`).
    - vision keeps its VRAM cap (`VISION_MAX_VRAM_FRACTION`).
    - Don't remove these to make something fit; raise the limit consciously instead.
    - **Heavy builds and pulls go through `scripts/guarded_build.py`**, one image at a time. It

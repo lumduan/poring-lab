@@ -55,6 +55,8 @@ humanization and LLM integration are clearly marked TODOs.
 | `vision` | vision | GPU agent loop skeleton (torch 2.14 cu130 + ultralytics), `scripts/check_gpu.py` |
 | `sniffer` | sniffer | ADR-0007 packet ground truth, offline/human-console only. Runs on the dev overlay (backend image + host `poring_packets` source; no build). Root with only `NET_RAW`, read-only rootfs. Writes pcapng (password bytes zeroed) + `events-*.jsonl.gz` to the `captures` volume (hourly / 256 MB; 7 days / 20 GB) and feeds `/ingest/packets`. Needs `scripts/gen_packet_tables.py` run once (the length table is build-time generated, never committed). |
 
+| `gamestream` | gamestream | ADR-0009 console mode: moonlight-qt shows the Sunshine stream of the Windows **console** session in the same Xvfb :99 (input from the mux's XTest, absolute mouse). Streams only while the capture-backend lock says `console`; idles under `rdp`. Read-only rootfs, AppImage unpacked into tmpfs, pairing key in the `gamestream-state` volume (mounted here only). |
+
 `sniffer` shares rathena's network namespace, so `--profile sniffer` brings `db` and `rathena` up with it.
 `vision` works on its own, but it has nothing to look at until `remote` runs.
 
@@ -250,6 +252,18 @@ them as **sensitive** input (the input log keeps counts only); see `docs/client/
    `RDP_CERT_SHA256=` line for `.env` (pre-auth handshake only; it never logs in). Unpinned means
    `/cert:ignore`.
 
+## Capture backends, benchmark and Phase 2 tools
+
+- **Who owns the Windows session:** `python3 scripts/capture_backend.py status` (host file, every
+  container, `/health`). `init`, `drill` (a live lock test), `pair PIN`, `to-console [--yes-tscon]`,
+  `to-rdp [--recover]`. The lock file is `state/capture-backend` (gitignored, mounted read-only).
+- **Benchmark:** `scripts/bench.py run --backend rdp|console --label NAME`, `reference`,
+  `validate-reference PNG`, `table` -- procedure in [docs/benchmarks/SPEC.md](docs/benchmarks/SPEC.md),
+  results in [docs/benchmarks/](docs/benchmarks/README.md).
+- **Phase 2 (offline):** `scripts/gen_mapcache.py` (pinned rAthena map caches),
+  `scripts/record_session.py`, `scripts/calibrate_projection.py`, `scripts/qa_export.py` + the console
+  page `/qa` (dev server only). See [docs/phase2-plan.md](docs/phase2-plan.md).
+
 ## Development
 
 ```bash
@@ -261,7 +275,8 @@ scripts/gen_protocol.sh               # after editing poring_env/protocol.py: sc
 (cd services/frontend && corepack pnpm install && corepack pnpm lint && corepack pnpm typecheck)
 ```
 
-- **Python:** 3.12, a uv workspace (`packages/poring_env`, `services/backend`, `services/vision`),
+- **Python:** 3.12, a uv workspace (`packages/poring_env`, `packages/poring_packets`,
+  `packages/poring_dataset`, `services/backend`, `services/vision`),
   ruff, and `mypy --strict`.
 - **Wire protocol:** the Pydantic models in `poring_env.protocol` are the source of truth. The JSON
   Schema and the TypeScript are generated from them and committed, and CI-style tests fail on drift.

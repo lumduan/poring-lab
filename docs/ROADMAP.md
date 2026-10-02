@@ -1,7 +1,7 @@
 ---
 doc_type: roadmap
 status: LIVING
-last_reviewed: 2026-10-01
+last_reviewed: 2026-10-02
 ---
 
 # poring-lab roadmap
@@ -21,8 +21,8 @@ flowchart TD
     P0["Phase 0 · stack up, capture FPS,<br/>end-to-end latency<br/>ACTIVE - console latency work"]
     P1["Phase 1 · packet decoder +<br/>world state, ground truth<br/>DONE first slice · validated"]
     H1["RDP delivery · Arm C FreeRDP 3.32.1<br/>30 fps outdoor, p95 157 ms<br/>DONE"]
-    C1["Console capture · Sunshine, VNC fallback<br/>ADR-0009 PROPOSED · plan only<br/>DECISION"]
-    P2["Phase 2 · isometric projection<br/>calibration + auto-labeling<br/>BLOCKED"]
+    C1["Console capture · Sunshine S1 trial<br/>capture-backend lock + bench SPEC v1<br/>ACTIVE"]
+    P2["Phase 2 · projection + auto-labeling<br/>offline foundation built<br/>ACTIVE"]
     P3["Phase 3 · YOLO training +<br/>evaluation vs ground truth<br/>BLOCKED"]
     P4["Phase 4 · fast loop, FSM,<br/>input through the mux<br/>BLOCKED"]
     P5["Phase 5 · humanizer +<br/>human-vs-bot detector<br/>BLOCKED"]
@@ -53,10 +53,10 @@ flowchart TD
     classDef goal     fill:#ede0fb,stroke:#8a5cd8,color:#4d2e8f
 
     class D1,S1,P1,N2,H1 done
-    class N1,P0 active
+    class N1,P0,C1,P2 active
     class N3 ready
-    class D2,D3,E1,C1 decision
-    class P2,P3,P4,P5,P6 blocked
+    class D2,D3,E1 decision
+    class P3,P4,P5,P6 blocked
 ```
 
 | Step | Status | What it is | Blocker |
@@ -72,8 +72,8 @@ flowchart TD
 | **Phase 0** | 🟡 ACTIVE (part) | Stack up; capture FPS; end-to-end (motion-to-photon) latency; RDP codec comparison (`RDP_GFX`). **Started 2026-09-30:** latency instrumentation, runtime knobs, and the probe ([phase0-latency.md](phase0-latency.md): method, results, ranked options, the Windows App A/B). **HP/SP text fidelity is now unblocked**: the RO client on rAthena works. | The agent-side grab rate needs the vision image |
 | **Phase 1** | ✅ FIRST SLICE DONE 2026-10-01 | Packet decoder + world state as **offline ground truth**, never agent input ([ADR-0007](adr/0007-packet-ground-truth-channel.md) ACCEPTED). `poring_packets` (build-time length tables from pinned rAthena + OpenKore), the sniffer on the dev overlay (no build), `/ingest/packets` → console "Packet timeline" (`/ws/packets`, LAN viewers only), the `captures` volume, agent player + validation GM accounts. **Validated live** ([phase1-validation.md](phase1-validation.md)): server tick = host CLOCK_MONOTONIC (406 samples, 0–1 ms); position, chat (ASCII + Thai, byte-exact), HP and entities (5/5 within 1 cell) against GM/DB truth; 0 unknown ids, 0 desyncs; packet→frame p50 150 / p95 585 ms. | Next slices (combat, items) as Phase 2 needs them; GAT paths in Phase 2; slim sniffer image in a guarded build window |
 | **RDP delivery (H.264)** | ✅ DONE 2026-10-01 | **Arm C: FreeRDP 3.32.1** (trixie-backports, one guarded desktop build) lifted the ceiling. `progressive` now delivers **30 fps outdoors** (was 9) and 17 indoors (was 7), Windows output 30 with **0 client skips** (was 17–20/s), 4.4–4.8 desktop cores (was 6.7–6.8), and packet→frame p50/p75/p90/p95 **119/139/151/157 ms** (was 242/1007/>1500/>1500). `AVCthin` matches the frames at ~1 core but is lossy; **progressive kept**. The client runs 26 threads, not 329. ⚠ 3.32 claims X CLIPBOARD (empty) on Windows copies, and the watchdog clears it (ADR-0004 amendment b). History: Arm A (AVC444 on 3.15, no gain); the AVC420 experiment. [h264-plan.md](h264-plan.md), "Arm C results". | Done. Open: Batt's live paste check on 3.32; optional FPSLimit 60 + DWMFRAMEINTERVAL now that delivery sits at the 30 fps cap |
-| **Console capture (Sunshine; VNC fallback)** | 🟥 DECISION | Batt wants it regardless (after Arm C). **Plan only**: [console-capture-plan.md](console-capture-plan.md) + [ADR-0009](adr/0009-console-session-capture.md) PROPOSED. One Windows session moved to the console (`tscon`), with the RDP loop held. Sunshine (QSV H.264), with exactly one paired client (ours, through the mux). S1 = moonlight-embedded into Xvfb; S2 = a `poring_env` transport. Read-only checks: the Samsung monitor stays present with its panel off; Smart App Control is ON. Nothing installed. | Batt approves the install list + the CLAUDE.md rule-2 amendment; the first test is the console switch with nothing installed |
-| **Phase 2** | ⬜ BLOCKED | Isometric projection calibration (world → screen for the client's camera) + auto-labeling (project the ground-truth world state into frames to make YOLO labels). | Needs BOTH Phase 0 (capture pipeline + chosen codec) AND Phase 1 (ground-truth positions) |
+| **Console capture (Sunshine; VNC fallback)** | 🟡 ACTIVE 2026-10-02 | **Batt approved Sunshine and the S1 trial** ("Sunshine research gets the weight"). Built: the **capture-backend lock** (`state/capture-backend`, `scripts/capture_backend.py`: rdp-loop and the new `gamestream` service each connect only under their backend; `/health` + console show it), the **benchmark SPEC v1** + `scripts/bench.py` (one fixed procedure for every backend), the `gamestream` service (moonlight-qt 6.1.0: absolute mouse via X events). Sunshine v2026.914.233613 installed by Batt after a signature check. [ADR-0009](adr/0009-console-session-capture.md) (revised), [benchmarks](benchmarks/README.md). | Firewall/config, pairing, the tscon handover (stop point), A4 input checks, then `bench.py run --backend console` vs the RDP v1 baseline. RDP stays the default |
+| **Phase 2** | 🟡 ACTIVE (offline foundation) 2026-10-02 | Backend-agnostic, offline: `packages/poring_dataset` -- rAthena map caches at the pinned SHA + the exact A* port (walk paths), `Timeline` (world at a frame's time, per-backend latency offset), homography projection, YOLO labels, WebDataset shards, IoU metrics; `record_session.py`, `calibrate_projection.py`, `qa_export.py` + the console `/qa` page. [phase2-plan.md](phase2-plan.md), [ADR-0010](adr/0010-dataset-format.md) PROPOSED. | The live calibration recording (RDP mode); the persistent dataset sink (ADR-0010, Batt); then Phase 0's remaining numbers |
 | **Phase 3** | ⬜ BLOCKED | YOLO training on the auto-labels + evaluation against ground truth on held-out sessions. | Phase 2 labels (and the vision image) |
 | **Phase 4** | ⬜ BLOCKED | Fast loop: an FSM acting only through `/internal/agent` and the mux (ASSIST first; interventions logged). | Needs ALL of Phase 3 (perception), ADR-0005 implemented (its acceptance test passing), AND the environment interlock (ADR-0006 rule 2) |
 | **Phase 5** | ⬜ BLOCKED | Humanizer (timing and trajectories of the bot's input) + a human-vs-bot detector trained on the human and bot input logs; target ROC-AUC toward 0.5. | Phase 4 bot traces |
@@ -91,6 +91,14 @@ environment interlock (ADR-0006).** The RDP delivery ceiling was removed on 2026
   exists (ADR-0006), however good perception gets.
 - Phase 6's social experiments also wait for the community server's permission evidence.
 - Phase 0's desktop-only measurements have no blocker at all.
+
+## Ideas / parked (kept, not scheduled -- Batt, 2026-10-02)
+
+| Idea | Design notes so far | Why parked |
+|---|---|---|
+| **Hyper-V + XKore / NetRedirect / OpenKore study track** | A Windows VM (Hyper-V) running the RO client with OpenKore attached via XKore (client-side packet hook) or NetRedirect, to study a mature bot's decision loop against our rAthena. It must stay inside the sanctioned environments (ADR-0006: rAthena only) and never touch the community server; it is a separate research track, never the agent's input path (CLAUDE.md rule 1: pixels in, input out). | Queued after the console-capture work; needs its own ADR before any install |
+| **FPSLimit 60 + DWMFRAMEINTERVAL 15** | Now actionable: FreeRDP 3.32.1 delivers the full 30 fps at FPSLimit 30 (h264-plan.md, Arm C). Raise dgVoodoo's FPSLimit to 60 and the DWM frame interval together, then re-run the benchmark (SPEC v1) per backend. | Kept for after the backend comparison, so one variable changes at a time |
+| **Low-latency remote control for a driving game / a real drone** | The same stack (capture backend + benchmark SPEC + mux) applied to a latency-critical target: the key->paint and packet->frame metrics become control-loop latency budgets. | An idea only; no design yet |
 
 ## Ordered plan
 
