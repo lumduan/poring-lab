@@ -69,3 +69,4 @@ out/
 
 # ---- generated at build time (scripts/gen_packet_tables.py; only the lock is committed) -----------
 packages/poring_packets/src/poring_packets/_generated/
+packages/poring_dataset/src/poring_dataset/_generated/

@@ -6,7 +6,7 @@ requires-python = ">=3.12,<3.13"
 authors = [{ name = "lumduan" }]
 # The virtual root installs what host-side dev/test needs. `poring-vision` is deliberately NOT here:
 # it pulls torch+CUDA (~3 GB) and only runs inside its GPU container (`uv sync --package poring-vision`).
-dependencies = ["poring-env[x11,remote]", "poring-backend"]
+dependencies = ["poring-env[x11,remote]", "poring-backend", "poring-dataset"]
 
 [tool.uv]
 package = false
@@ -19,11 +19,18 @@ environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
 exclude-dependencies = ["opencv-python"]
 
 [tool.uv.workspace]
-members = ["packages/poring_env", "packages/poring_packets", "services/backend", "services/vision"]
+members = [
+  "packages/poring_env",
+  "packages/poring_packets",
+  "packages/poring_dataset",
+  "services/backend",
+  "services/vision",
+]
 
 [tool.uv.sources]
 poring-env = { workspace = true }
 poring-packets = { workspace = true }
+poring-dataset = { workspace = true }
 poring-backend = { workspace = true }
 poring-vision = { workspace = true }
 torch = { index = "pytorch-cu130" }
@@ -56,14 +63,19 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 ignore = ["B008"] # FastAPI Depends() in defaults is idiomatic
 
 [tool.ruff.lint.isort]
-known-first-party = ["poring_env", "poring_packets", "poring_backend", "poring_vision"]
+known-first-party = ["poring_env", "poring_packets", "poring_dataset", "poring_backend", "poring_vision"]
 
 [tool.mypy]
 python_version = "3.12"
 strict = true
 # poring_env is the strict gate; backend is held to the same bar. vision is checked inside its
 # container only (torch/ultralytics are not installed in the host venv).
-files = ["packages/poring_env/src", "packages/poring_packets/src", "services/backend/src"]
+files = [
+  "packages/poring_env/src",
+  "packages/poring_packets/src",
+  "packages/poring_dataset/src",
+  "services/backend/src",
+]
 
 [[tool.mypy.overrides]]
 module = ["simplejpeg", "simplejpeg.*"] # ships .pyi but no py.typed marker
@@ -74,6 +86,7 @@ asyncio_mode = "auto"
 testpaths = [
   "packages/poring_env/tests",
   "packages/poring_packets/tests",
+  "packages/poring_dataset/tests",
   "services/backend/tests",
   "services/vision/tests",
 ]

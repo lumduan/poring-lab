@@ -1,0 +1,29 @@
+{
+ "files": {
+  "base": {
+   "bytes": 3056818,
+   "member": "db/map_cache.dat",
+   "name": "map_cache.base.dat",
+   "sha256": "00d277d00e70f476ceef9608f0b45a2a85bfc5ebf1fabf92f46e86f63648282e"
+  },
+  "import": {
+   "bytes": 8,
+   "member": "db/import-tmpl/map_cache.dat",
+   "name": "map_cache.import.dat",
+   "sha256": "6cc16abd70eefb90dc0ba0d14fb088630873b2c6ad943f7442356735984c35a3"
+  },
+  "pre-re": {
+   "bytes": 28082,
+   "member": "db/pre-re/map_cache.dat",
+   "name": "map_cache.pre-re.dat",
+   "sha256": "7a58a94bada98c5457fce3fc9bf950b4111fdf494d0488c54d716516707a8433"
+  },
+  "re": {
+   "bytes": 28232,
+   "member": "db/re/map_cache.dat",
+   "name": "map_cache.re.dat",
+   "sha256": "e871cb73bae86d4be6e32d35ed34cc0456920203f3ffa4687bdba8eedaf627fd"
+  }
+ },
+ "rathena_ref": "e985006171d2eb320ee512a653f4c83aea3d81b6"
+}

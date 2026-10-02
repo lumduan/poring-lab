@@ -131,8 +131,9 @@ def test_x11vnc_never_relays_the_clipboard() -> None:
 FORBIDDEN = re.compile(
     r"set_selection_owner|convert_selection|get_selection_owner|xfixes|CLIPBOARD|"
     r"ClipboardPaste|clipboard_paste|PasteResult|/transfer|tsclient|poring_backend|"
-    # ADR-0007: packet ground truth is offline / human-console only.
-    r"poring_packets|/ws/packets|/ingest/packets|captures",
+    # ADR-0007: packet ground truth is offline / human-console only -- and so are the Phase 2
+    # labels derived from it (ADR-0010).
+    r"poring_packets|poring_dataset|/ws/packets|/ingest/packets|captures",
     re.IGNORECASE,
 )
 
@@ -198,6 +199,21 @@ def test_vision_never_gets_the_packet_package() -> None:
     assert copies == ["COPY packages/poring_packets/pyproject.toml packages/poring_packets/"]
     env = (ROOT / "packages" / "poring_env" / "pyproject.toml").read_text()
     assert "poring-packets" not in env
+
+
+def test_vision_and_poring_env_never_get_the_dataset_package() -> None:
+    """ADR-0010: packet-derived labels are training data, never decision-time input."""
+    vision = (ROOT / "services" / "vision" / "pyproject.toml").read_text()
+    assert "poring-dataset" not in vision and "poring_dataset" not in vision
+    dockerfile = (ROOT / "services" / "vision" / "Dockerfile").read_text()
+    copies = [
+        line for line in dockerfile.splitlines() if "poring_dataset" in line and "COPY" in line
+    ]
+    assert copies == ["COPY packages/poring_dataset/pyproject.toml packages/poring_dataset/"]
+    env_root = ROOT / "packages" / "poring_env"
+    assert "poring-dataset" not in (env_root / "pyproject.toml").read_text()
+    for path in (env_root / "src").rglob("*.py"):
+        assert "poring_dataset" not in path.read_text(), f"{path} imports poring_dataset"
 
 
 def test_rathena_ip_is_pinned_to_the_ingest_peer() -> None:

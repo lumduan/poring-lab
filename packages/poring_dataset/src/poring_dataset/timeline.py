@@ -1,0 +1,130 @@
+"""World state at any frame time, from recorded packet events (B2, docs/phase2-plan.md).
+
+Clock: events carry the kernel receive time on the host's CLOCK_MONOTONIC (t_mono_ns) and the server
+tick IS that clock in ms mod 2^32 (docs/phase1-validation.md: 388/406 samples 0 ms, 18 at 1 ms). Lab
+frames carry t_capture_ns on the same clock, so no fitting is needed.
+
+What a frame SHOWS lags the server: a frame captured at t shows the world as it was at about
+t - offset, where offset is the backend's packet->frame delay (benchmark p50, docs/benchmarks/). The
+caller passes that offset per backend; this module only answers "where was everything at t".
+
+Walks are interpolated along the path the server and the client both walk (poring_dataset.paths,
+rAthena's A*, with the map cache's walkability), with rAthena's step timing (speed ms per cell,
+*14/10 diagonally). Without a map grid it falls back to poring_packets' diagonal-first path.
+"""
+
+import bisect
+import copy
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
+from functools import lru_cache
+from typing import Any
+
+from poring_dataset.mapcache import MapGrid
+from poring_dataset.paths import path_search
+from poring_packets.world import MOVE_COST, MOVE_DIAGONAL_COST, TICK_MOD, Walk, World, path_cells
+
+
+@dataclass(frozen=True, slots=True)
+class EntityState:
+    gid: int
+    objtype: int
+    job: int
+    name: str
+    x: float
+    y: float
+    moving: bool
+
+
+@dataclass(frozen=True, slots=True)
+class FrameWorld:
+    t_ns: int
+    map: str | None
+    aid: int | None
+    self_pos: tuple[float, float] | None
+    entities: tuple[EntityState, ...]
+
+
+def tick_of(t_ns: int) -> int:
+    return (t_ns // 1_000_000) % TICK_MOD
+
+
+class Timeline:
+    def __init__(
+        self,
+        events: Iterable[Mapping[str, Any]],
+        maps: Mapping[str, MapGrid] | None = None,
+        *,
+        snapshot_every: int = 256,
+    ) -> None:
+        self.events = sorted((dict(e) for e in events), key=lambda e: int(e["t_mono_ns"]))
+        self.times = [int(e["t_mono_ns"]) for e in self.events]
+        self.maps = dict(maps or {})
+        self._snapshots: list[tuple[int, World]] = [(0, World())]  # (events applied, state)
+        world = World()
+        for i, event in enumerate(self.events, 1):
+            self._apply(world, event)
+            if i % snapshot_every == 0:
+                self._snapshots.append((i, copy.deepcopy(world)))
+
+    @staticmethod
+    def _apply(world: World, event: Mapping[str, Any]) -> None:
+        etype = str(event["type"])
+        if etype == "login_accepted":
+            world.aid = int(event["aid"])
+        world.apply(etype, dict(event))
+
+    def world_at(self, t_ns: int) -> World:
+        """A copy of the world after every event with t_mono_ns <= t_ns."""
+        n = bisect.bisect_right(self.times, t_ns)
+        k = bisect.bisect_right([s[0] for s in self._snapshots], n) - 1
+        start, snap = self._snapshots[k]
+        world = copy.deepcopy(snap)
+        for event in self.events[start:n]:
+            self._apply(world, event)
+        return world
+
+    def frame_world(self, t_ns: int) -> FrameWorld:
+        world = self.world_at(t_ns)
+        tick = tick_of(t_ns)
+        grid = self.maps.get(world.map or "")
+        self_pos = None
+        if world.self_walk is not None:
+            self_pos = walk_position(world.self_walk, tick, grid)
+        elif world.self_x is not None and world.self_y is not None:
+            self_pos = (float(world.self_x), float(world.self_y))
+        entities = []
+        for ent in world.entities.values():
+            if ent.walk is not None:
+                x, y = walk_position(ent.walk, tick, grid)
+                moving = (x, y) != (float(ent.walk.x1), float(ent.walk.y1))
+            else:
+                x, y, moving = float(ent.x), float(ent.y), False
+            entities.append(EntityState(ent.gid, ent.objtype, ent.job, ent.name, x, y, moving))
+        return FrameWorld(t_ns, world.map, world.aid, self_pos, tuple(entities))
+
+
+@lru_cache(maxsize=65536)
+def _cells(grid: MapGrid | None, x0: int, y0: int, x1: int, y1: int) -> tuple[tuple[int, int], ...]:
+    if grid is not None:
+        path = path_search(grid, x0, y0, x1, y1)
+        if path is not None:
+            return tuple(path)
+    return tuple(path_cells(x0, y0, x1, y1))
+
+
+def walk_position(walk: Walk, tick: int, grid: MapGrid | None) -> tuple[float, float]:
+    """Walk.position_at, along the real path when the map grid is known."""
+    elapsed = (tick - walk.start_tick) % TICK_MOD
+    if elapsed > TICK_MOD // 2:  # before the walk started
+        return float(walk.x0), float(walk.y0)
+    x, y = float(walk.x0), float(walk.y0)
+    for cx, cy in _cells(grid, walk.x0, walk.y0, walk.x1, walk.y1):
+        diagonal = cx != x and cy != y
+        step = walk.speed * (MOVE_DIAGONAL_COST if diagonal else MOVE_COST) / MOVE_COST
+        if elapsed < step:
+            frac = elapsed / step
+            return x + (cx - x) * frac, y + (cy - y) * frac
+        elapsed -= int(step)
+        x, y = float(cx), float(cy)
+    return float(walk.x1), float(walk.y1)
