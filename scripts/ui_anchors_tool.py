@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Cut and check the UI anchor templates (ADR-0011) on the frozen 1280x720 layout.
 
-    ui_anchors_tool.py capture [--png SHOT] [--mask-png SHOT2] [--windows basic_info,hotbar,chat]
+    ui_anchors_tool.py capture [--png SHOT] [--mask-png SHOT2 ...]
+                               [--windows basic_info,hotbar,chat]
         Cut each window's template strip where it sits now (poring_env.ui_anchors.CAPTURE_ORIGINS)
         from the live client area, or from a PNG saved by `ro_agent.py shot` (full screen) or a
         client-area PNG, into data/ui_anchors/ (gitignored: cut from the lab's frames, like
-        ro_agent's signatures). --mask-png: the SAME UI over another scene; the pixels that agree
-        become the template's stable mask (RO windows are translucent; the chat almost entirely).
+        ro_agent's signatures). --mask-png (repeatable): the SAME UI over another scene, or in
+        another locale pack (ADR-0012); only the pixels that agree in EVERY variant become the
+        template's stable mask (RO windows are translucent; a title's text differs per locale).
     ui_anchors_tool.py check [--png SHOT]
         Locate every window that has a template, resolve every element, print both; an overlay
         of the boxes goes to /dev/shm (rule 7).
@@ -48,13 +50,13 @@ def client_frame(png: str | None) -> np.ndarray:
     return np.ascontiguousarray(img[:, :, :3])
 
 
-def cmd_capture(png: str | None, mask_png: str | None, names: list[str]) -> int:
+def cmd_capture(png: str | None, mask_pngs: list[str], names: list[str]) -> int:
     origins = {n: ua.CAPTURE_ORIGINS[n] for n in names}
     templates = ua.cut_templates(client_frame(png), origins, ua.WINDOWS)
     masks = {}
-    if mask_png:
-        others = ua.cut_templates(client_frame(mask_png), origins, ua.WINDOWS)
-        masks = ua.stable_masks(templates, others)
+    if mask_pngs:
+        variants = [ua.cut_templates(client_frame(m), origins, ua.WINDOWS) for m in mask_pngs]
+        masks = ua.stable_masks(templates, variants)
     ua.save_templates(TEMPLATES, templates, masks)
     stable = {n: round(float(m.mean()), 3) for n, m in masks.items()}
     summary = {n: {"shape": list(t.shape), "stable": stable.get(n)} for n, t in templates.items()}
@@ -105,7 +107,12 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     ap.add_argument("cmd", choices=["capture", "check"])
     ap.add_argument("--png", help="a full-screen PNG (`ro_agent.py shot`), not a live grab")
-    ap.add_argument("--mask-png", help="the same UI over another scene: stable-pixel masks")
+    ap.add_argument(
+        "--mask-png",
+        action="append",
+        default=[],
+        help="the same UI over another scene or in another locale (repeatable): stable masks",
+    )
     ap.add_argument("--windows", default="basic_info,hotbar,chat")
     a = ap.parse_args()
     if a.cmd == "capture":

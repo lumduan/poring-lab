@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: S1 handover 1 (2026-10-02) stopped -- tscon from Batt's console failed (1326) and the console stayed 1920x1080. Before the next attempt -- rebuild gamestream (borderless window), make the console 1440x900 (Batt), tscon from poring-lab's own console. RDP stays the default.
+next_action: S1 OPEN (2026-10-02 handover 6) -- Windows side and the 1920x1200 canvas work; Moonlight's main thread stalls in a futex and the stream stays black. Next -- gdb in the gamestream image in an operator window, one diagnostic handover (GAMESTREAM_GDB_AFTER_S), then A4-A6. S1 numbers mix protocol and renderer; performance conclusions come from S2. RDP stays the default.
 ---
 
 # ADR-0009: Console-session capture as a second display mode (Sunshine first, VNC fallback)
@@ -277,4 +277,56 @@ the host's certificate.
   - Xvfb is 1920x1200;
   - the FreeRDP window is `1440x900+0+0`;
   - the agent's shots are the 1440x900 session.
+
+## S1 handover 6 (2026-10-02 18:44–18:55): the canvas works; the stream stays black (OPEN)
+
+**Worked:**
+- The SYSTEM-task tscon, again.
+- Sunshine on the VDD (`ensure_only_display`), re-set from Batt's elevated console with a backup
+  (`sunshine.conf.bak-20261002-canvas`).
+- First video packet after 300 ms.
+- Moonlight opened its window at **native 1440x900** (+240,+150) on the 1920x1200 canvas, so the
+  80 % rule no longer applies.
+- `to-rdp` restored exactly one xfreerdp; the RO client and the GM (online=1) survived.
+- Mouse Keys `Flags` = 62 (off) before and after.
+
+**Found and fixed:**
+1. **The placer never matched:** the stream window is titled "<host> - Moonlight", class
+   `com.moonlight_stream.Moonlight`. It now searches by class. A hand move to 0,0 was accepted.
+2. **Keys vanished after `to-rdp`:** SDL focuses its window with RevertToNone, so when Moonlight
+   closed, the X focus was None. `/f` used to re-take the focus; windowed `/size` expects a WM.
+   - rdp-loop resets the focus to PointerRoot before every connect (live);
+   - gamestream does the same after every stream (in the image at the next build).
+3. **llvmpipe started 64 rasterizer threads** (one per vCPU) inside `cpus: 4`, and 50 % of periods
+   were throttled. `LP_NUM_THREADS=2` removed the throttling.
+
+**Not fixed (OPEN): nothing is presented.**
+- 8.9 Mbit/s of video arrives and FFmpeg decodes it, but XDamage stays frozen and every pixel of the
+  canvas is 0.
+- Moonlight's main thread is parked in `futex_wait_queue`, with no CPU time, and processes no
+  window events.
+- These made no difference:
+  - LP_NUM_THREADS=2;
+  - `SDL_RENDER_DRIVER=software` (no GL at all);
+  - `SDL_AUDIODRIVER=dummy` (the container has no ALSA device, so SDL had fallen back to its `disk`
+    driver on a read-only rootfs).
+- Handover 1 (no VDD, tscon failed, lock screen) DID render. The differences since then are the
+  console session being live and the display change.
+- The next step needs stacks. `GAMESTREAM_GDB_AFTER_S=N` runs Moonlight under gdb (with
+  ptrace_scope 1 only a parent may trace) and dumps every thread's stack.
+- gdb is not in the image: three guarded builds (19:06, 19:07, 19:09) each spiked quant IO 30–49 %
+  and were aborted. It needs an operator window.
+
+**How S1 results must be read (Batt, 2026-10-02):** RDP vs S1 does NOT isolate the protocol.
+- FreeRDP draws bitmaps into Xvfb through X11 (cheap).
+- Moonlight presents through OpenGL, which in this GPU-less container is llvmpipe (CPU-emulated).
+- So any S1-vs-RDP difference mixes protocol AND renderer. A fairer S1 number would force a software
+  2D path (`SDL_RENDER_DRIVER=software`, verified to be honoured: "SDL renderer backend: software")
+  and label both results.
+- S1's value is functional:
+  - does RO accept Sunshine's SendInput;
+  - Thai input;
+  - Mouse Keys revert;
+  - display revert after `ensure_only_display`.
+- Performance conclusions come from S2 (in-process decode, no Xvfb hop), planned after this report.
 

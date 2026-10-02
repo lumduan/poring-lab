@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+# Never-commit guard for client-derived text (ADR-0012, C7; CLAUDE.md rule 4). Batt enables it once:
+#
+#     git config core.hooksPath .githooks
+#
+# It refuses a commit when a STAGED path
+#   * is a locale pack or extracted client data: a path component locale-packs/, locales/,
+#     *.localepack/, ro_thai/, kro-reference/, grf-extract/, or a top-level thai*/ directory;
+#   * sits in a directory holding a locale-pack.json (working tree or index), or IS one;
+#   * is a client asset: *.grf, *.gpf, *.lub, msgstringtable*.txt;
+# or when a staged file carries a pack string: a line, a line minus its '#' terminator, or a quoted
+# literal whose fingerprint is in ~/.cache/poring-lab/pack-fingerprints.txt (or
+# $PORING_PACK_FINGERPRINTS), written by scripts/locale_pack.py build. The fingerprint rule below
+# REPEATS locale_pack.fingerprint() (tests/test_locale_guard.py keeps them equal): sha256 of
+# NFC(text, CRLF->LF, minus one trailing '#').strip(), only for >= 6 characters.
+#
+# Only paths and reasons are printed, never the matching text. The repo's own Thai in tests and
+# docs is unaffected: the list holds pack strings only.
+set -euo pipefail
+exec python3 -c '
+import fnmatch, hashlib, os, re, subprocess, sys, unicodedata
+from pathlib import Path, PurePosixPath
+
+def git(*args):
+    return subprocess.run(["git", *args], capture_output=True, check=True).stdout
+
+DIRS = {"locale-packs", "locales", "ro_thai", "kro-reference", "grf-extract"}
+FILES = ("*.grf", "*.gpf", "*.lub", "msgstringtable*.txt", "locale-pack.json")
+MAX_BYTES = 20 * 1024 * 1024
+QUOTED = re.compile(r"\"([^\"]{6,})\"|\x27([^\x27]{6,})\x27|`([^`]{6,})`")
+
+def normalise(text):
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    if text.endswith("#"):
+        text = text[:-1]
+    return unicodedata.normalize("NFC", text)
+
+def fingerprint(text):
+    norm = normalise(text).strip()
+    if len(norm) < 6:
+        return None
+    return hashlib.sha256(norm.encode("utf-8")).hexdigest()
+
+top = Path(git("rev-parse", "--show-toplevel").decode().strip())
+staged = [p.decode("utf-8", "surrogateescape") for p in
+          git("diff", "--cached", "--name-only", "--diff-filter=ACMR", "-z").split(b"\0") if p]
+indexed = {p.decode("utf-8", "surrogateescape") for p in git("ls-files", "--cached", "-z").split(b"\0") if p}
+
+def path_reason(path):
+    parts = PurePosixPath(path).parts
+    lower = [p.lower() for p in parts]
+    for i, part in enumerate(lower[:-1]):
+        if part in DIRS or part.endswith(".localepack") or (i == 0 and part.startswith("thai")):
+            return f"locale pack / extracted client data directory ({parts[i]}/)"
+    if any(fnmatch.fnmatch(lower[-1], pat) for pat in FILES):
+        return "client asset or locale pack file"
+    for depth in range(len(parts) - 1, -1, -1):
+        parent = PurePosixPath(*parts[:depth]) if depth else PurePosixPath(".")
+        marker = parent / "locale-pack.json"
+        if (top / marker).exists() or marker.as_posix() in indexed:
+            return f"inside a locale pack ({marker.as_posix()})"
+    return None
+
+fp_file = Path(os.environ.get("PORING_PACK_FINGERPRINTS")
+               or Path.home() / ".cache" / "poring-lab" / "pack-fingerprints.txt")
+fingerprints = set(fp_file.read_text().split()) if fp_file.is_file() else set()
+
+def content_reason(path):
+    if not fingerprints:
+        return None
+    blob = subprocess.run(["git", "show", f":{path}"], capture_output=True).stdout[:MAX_BYTES]
+    if b"\0" in blob[:8192]:
+        return None
+    texts = []
+    for enc in ("utf-8", "cp874", "cp949"):
+        try:
+            texts.append(blob.decode(enc))
+        except UnicodeDecodeError:
+            continue
+    for text in texts:
+        for n, line in enumerate(text.splitlines(), 1):
+            candidates = [line]
+            candidates += [next(g for g in m.groups() if g) for m in QUOTED.finditer(line)]
+            for cand in candidates:
+                if fingerprint(cand) in fingerprints:
+                    return f"line {n} carries a locale-pack string (fingerprint match)"
+    return None
+
+refused = 0
+for path in staged:
+    reason = path_reason(path) or content_reason(path)
+    if reason:
+        refused += 1
+        print(f"pre-commit: refused {path}: {reason}", file=sys.stderr)
+if refused:
+    print(f"pre-commit: {refused} path(s) refused: client-derived content is never committed "
+          "(ADR-0012, CLAUDE.md rule 4). Unstage them.", file=sys.stderr)
+    sys.exit(1)
+'

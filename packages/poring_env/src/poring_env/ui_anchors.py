@@ -22,9 +22,17 @@ different capture backend changes the anchors, never the policy.
 Pixels in only: this module reads frames (Env.grab()) and nothing else. Templates are cut from the
 lab's own frames and stored with the lab's data (gitignored, like ro_agent's signatures); the
 element geometry below is code.
+
+Locale-agnostic (ADR-0012): the map stores KEYS, never text. Window and element names are canonical
+identifiers; an element whose meaning is a piece of UI text carries a ``label_key`` -- a message key
+(``msg.k`` + 8 hex of sha1 of the normalised Korean source string) or a curated alias (``ui.*``) --
+and the text itself lives only in a locale pack outside the repo. Templates are made
+locale-invariant by masking: ``stable_masks`` keeps only the pixels that agree across every variant
+(other scenes AND other locales), so a title's text drops out of the mask.
 """
 
-from collections.abc import Mapping
+import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -32,6 +40,24 @@ import numpy as np
 import numpy.typing as npt
 
 Gray = npt.NDArray[np.float32]
+
+# Canonical identifiers (ADR-0012): ASCII snake_case, so a name can never be a locale's text.
+CANONICAL_NAME = re.compile(r"[a-z][a-z0-9_]*")
+# A message key: "msg.k" + the first 8 hex of sha1(normalised Korean source string). Stable across
+# client versions; a per-version key -> line map (in the locale pack) finds it in each table.
+MESSAGE_KEY = re.compile(r"msg\.k[0-9a-f]{8}")
+# A curated alias: a readable name in code that POINTS AT a message key and never holds text.
+ALIAS_KEY = re.compile(r"ui(\.[a-z][a-z0-9_]*)+")
+
+
+def is_label_key(value: str) -> bool:
+    """True for a message key or a curated alias; False for anything else (e.g. display text)."""
+    return bool(MESSAGE_KEY.fullmatch(value) or ALIAS_KEY.fullmatch(value))
+
+
+def _check_name(kind: str, name: str) -> None:
+    if not CANONICAL_NAME.fullmatch(name):
+        raise ValueError(f"{kind} name {name!r} is not a canonical identifier ([a-z][a-z0-9_]*)")
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,15 +70,32 @@ class WindowSpec:
     max_distance: float = 12.0  # mean abs grey difference accepted as a match
     template_size: tuple[int, int] | None = None  # (w, h) of the strip cut as the template
 
+    def __post_init__(self) -> None:
+        _check_name("window", self.name)
+
 
 @dataclass(frozen=True, slots=True)
 class ElementSpec:
-    """An element inside a window: a box at a fixed offset, or an icon found by template."""
+    """An element inside a window: a box at a fixed offset, or an icon found by template.
+
+    ``label_key``: when the element's meaning is a piece of UI text (a button caption, a field
+    label), the KEY of that text -- a message key or a curated alias, never the text itself. The
+    locale pack turns it into the string of the language on screen (OCR auto-labels, ADR-0012)."""
 
     name: str
     window: str
     box: tuple[int, int, int, int] | None = None  # (dx, dy, w, h) relative to the window origin
     icon: bool = False  # True: located by its own template inside the window (moves between slots)
+    label_key: str | None = None
+
+    def __post_init__(self) -> None:
+        _check_name("element", self.name)
+        _check_name("window", self.window)
+        if self.label_key is not None and not is_label_key(self.label_key):
+            raise ValueError(
+                f"{self.name}: label_key {self.label_key!r} is not a message key (msg.k + 8 hex) "
+                "or a curated alias (ui.*): the map stores keys, never text"
+            )
 
     def centre(self, origin: tuple[int, int]) -> tuple[int, int]:
         if self.box is None:
@@ -152,6 +195,46 @@ class UiAnchors:
         th, tw = template.shape
         return x0 + m.origin[0] + tw // 2, y0 + m.origin[1] + th // 2
 
+    def labelled_boxes(
+        self, origins: Mapping[str, tuple[int, int]]
+    ) -> dict[str, tuple[tuple[int, int, int, int], str]]:
+        """Every visible element that carries a ``label_key``: its box in client-area pixels and
+        the key. With a locale pack's key -> text table this labels an OCR crop exactly (ADR-0012,
+        docs/locale-packs.md); the text never enters this module."""
+        out: dict[str, tuple[tuple[int, int, int, int], str]] = {}
+        for name, spec in self.elements.items():
+            origin = origins.get(spec.window)
+            if spec.label_key is None or spec.box is None or origin is None:
+                continue
+            dx, dy, w, h = spec.box
+            out[name] = ((origin[0] + dx, origin[1] + dy, w, h), spec.label_key)
+        return out
+
+
+def validate_registry(
+    windows: Mapping[str, WindowSpec], elements: Mapping[str, ElementSpec]
+) -> None:
+    """Registry keys equal the specs' canonical names, and every element's window is registered."""
+    for key, w in windows.items():
+        if key != w.name:
+            raise ValueError(f"window registered as {key!r} but named {w.name!r}")
+    for key, e in elements.items():
+        if key != e.name:
+            raise ValueError(f"element registered as {key!r} but named {e.name!r}")
+        if e.window not in windows:
+            raise ValueError(f"element {key!r} sits in unregistered window {e.window!r}")
+
+
+def validate_aliases(aliases: Mapping[str, str]) -> None:
+    """Each curated alias is a ``ui.*`` name pointing at a message key -- never at text."""
+    for alias, key in aliases.items():
+        if not ALIAS_KEY.fullmatch(alias):
+            raise ValueError(f"alias {alias!r} is not ui.<name>[.<name>...]")
+        if not MESSAGE_KEY.fullmatch(key):
+            raise ValueError(
+                f"alias {alias!r} points at {key!r}, not a message key (msg.k + 8 hex)"
+            )
+
 
 def cut_templates(
     frame_bgr: npt.NDArray[np.uint8],
@@ -172,15 +255,26 @@ def cut_templates(
 
 
 def stable_masks(
-    templates: Mapping[str, Gray], others: Mapping[str, Gray], tolerance: float = 4.0
+    templates: Mapping[str, Gray],
+    others: Mapping[str, Gray] | Sequence[Mapping[str, Gray]],
+    tolerance: float = 4.0,
 ) -> dict[str, Gray]:
-    """Per template, the pixels that stay within ``tolerance`` grey levels when the SAME window is
-    cut over a different background (another scene): the opaque parts."""
-    return {
-        name: (np.abs(t - others[name]) < tolerance).astype(np.float32)
-        for name, t in templates.items()
-        if name in others and others[name].shape == t.shape
-    }
+    """Per template, the pixels that stay within ``tolerance`` grey levels in EVERY variant: the
+    same window cut over other scenes (the translucent parts drop out) and in other locales (the
+    title text drops out, ADR-0012). ``others`` is one variant (a mapping, the original two-frame
+    call) or a sequence of them. A variant whose strip has another shape is ignored for that name;
+    a name no variant covers gets no mask."""
+    variants = [others] if isinstance(others, Mapping) else list(others)
+    out: dict[str, Gray] = {}
+    for name, t in templates.items():
+        same = [v[name] for v in variants if name in v and v[name].shape == t.shape]
+        if not same:
+            continue
+        stable = np.ones(t.shape, dtype=bool)
+        for other in same:
+            stable &= np.abs(t - other) < tolerance
+        out[name] = stable.astype(np.float32)
+    return out
 
 
 def save_templates(
@@ -248,6 +342,15 @@ CAPTURE_ORIGINS = {
     "chat": (0, 531),
     "game_option": (505, 450),  # open only after Escape
 }
+
+
+# Curated aliases (ADR-0012): readable names in code -> message keys. Text never lives here; the
+# keys are filled in from the kRO reference once it is on the NAS (whether one-way 8-hex key ids
+# may be committed is Batt's call, ADR-0012 "Open").
+ALIASES: dict[str, str] = {}
+
+validate_registry(WINDOWS, ELEMENTS)
+validate_aliases(ALIASES)
 
 
 def default_registry(template_dir: Path | None = None) -> UiAnchors:

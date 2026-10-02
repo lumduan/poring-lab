@@ -125,3 +125,103 @@ def test_a_translucent_window_is_found_over_any_background_with_its_stable_mask(
     assert masked.distance <= accept  # chance-stable glass pixels keep it above 0, not above this
     plain = match_template(image, t1)
     assert plain is not None and plain.distance > accept  # unmasked, the glass makes it miss
+
+
+# --- ADR-0012: the map stores keys, never text ------------------------------------------------
+
+
+@pytest.mark.parametrize("key", ["msg.k0123abcd", "ui.ok", "ui.basic_info.close"])
+def test_label_keys_are_message_keys_or_curated_aliases(key: str) -> None:
+    assert ElementSpec("close", "w", box=(0, 0, 10, 10), label_key=key).label_key == key
+
+
+@pytest.mark.parametrize(
+    "text", ["Close", "close", "msg.k0123ABCD", "msg.k0123abc", "ui.", "ui.OK", "msg.0123abcd"]
+)
+def test_display_text_is_refused_as_a_label_key(text: str) -> None:
+    with pytest.raises(ValueError, match="never text"):
+        ElementSpec("close", "w", box=(0, 0, 10, 10), label_key=text)
+
+
+@pytest.mark.parametrize("name", ["Close", "close button", "hp-bar", "1st", ""])
+def test_window_and_element_names_are_canonical_identifiers(name: str) -> None:
+    with pytest.raises(ValueError, match="canonical identifier"):
+        WindowSpec(name, size=(10, 10))
+    with pytest.raises(ValueError, match="canonical identifier"):
+        ElementSpec(name, "w")
+
+
+def test_the_shipped_registry_is_canonical_and_aliases_point_at_keys() -> None:
+    from poring_env.ui_anchors import (
+        ALIASES,
+        ELEMENTS,
+        WINDOWS,
+        validate_aliases,
+        validate_registry,
+    )
+
+    validate_registry(WINDOWS, ELEMENTS)
+    validate_aliases(ALIASES)
+    validate_aliases({"ui.ok": "msg.k0123abcd"})
+    with pytest.raises(ValueError, match="not a message key"):
+        validate_aliases({"ui.ok": "OK"})
+    with pytest.raises(ValueError, match="unregistered window"):
+        validate_registry(WINDOWS, {"x": ElementSpec("x", "nowhere")})
+
+
+def test_labelled_boxes_follow_their_window_and_carry_only_keys() -> None:
+    anchors = UiAnchors(
+        {"w": WindowSpec("w", size=(120, 60))},
+        {
+            "ok": ElementSpec("ok", "w", box=(10, 40, 30, 12), label_key="msg.k0123abcd"),
+            "bar": ElementSpec("bar", "w", box=(10, 30, 100, 10)),  # no text meaning: no key
+        },
+    )
+    assert anchors.labelled_boxes({"w": (200, 100)}) == {
+        "ok": ((210, 140, 30, 12), "msg.k0123abcd")
+    }
+    assert anchors.labelled_boxes({}) == {}  # window not on screen
+
+
+def test_a_mask_cut_across_scenes_and_locales_drops_the_title_text() -> None:
+    """ADR-0012: the same title bar in two locale packs differs only where its text is; masking
+    across scenes AND locales leaves the chrome, so ONE template finds the window in both."""
+    from poring_env.ui_anchors import stable_masks
+
+    rng = np.random.default_rng(9)
+    chrome = rng.random((14, 120)).astype(np.float32) * 255  # opaque window chrome
+    text_cols = slice(30, 90)  # where the title's text is drawn
+
+    def title(locale_seed: int) -> np.ndarray:
+        strip = chrome.copy()
+        glyphs = np.random.default_rng(locale_seed).random((14, 60)) < 0.4
+        strip[:, text_cols] = np.where(glyphs, 15.0, chrome[:, text_cols])
+        return strip
+
+    en, th, en_other_scene = title(1), title(2), title(1)
+    two_way = stable_masks({"t": en}, {"t": en_other_scene})["t"]  # the original call
+    assert two_way.mean() == 1.0  # same locale: nothing to drop
+    n_way = stable_masks({"t": en}, [{"t": en_other_scene}, {"t": th}])["t"]
+    assert n_way[:, :30].all() and n_way[:, 90:].all()  # chrome stays
+    assert n_way[:, text_cols].mean() < 0.7  # the glyphs that differ between locales are gone
+
+    def frame_with(strip: np.ndarray, x: int, y: int) -> np.ndarray:
+        out = rng.random((200, 300)).astype(np.float32) * 255
+        out[y : y + 14, x : x + 120] = strip
+        return out
+
+    accept = WindowSpec("t", size=(120, 14)).max_distance
+    for strip in (en, th):
+        m = match_template(frame_with(strip, 100, 80), en, n_way)
+        # chrome pixels within the tolerance of the glyph value stay in the mask by chance: > 0
+        assert m is not None and m.origin == (100, 80) and m.distance < 1.0
+    plain = match_template(frame_with(th, 100, 80), en)
+    assert plain is not None and plain.distance > accept  # unmasked, the en text misses th
+
+
+def test_variants_with_another_shape_are_ignored_per_name() -> None:
+    from poring_env.ui_anchors import stable_masks
+
+    t = np.zeros((4, 6), np.float32)
+    masks = stable_masks({"a": t, "b": t}, [{"a": np.zeros((4, 5), np.float32)}, {"b": t + 10}])
+    assert set(masks) == {"b"} and masks["b"].sum() == 0

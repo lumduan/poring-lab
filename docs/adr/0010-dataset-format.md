@@ -7,13 +7,15 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: Batt picks the persistent sink (data-disk under the IO guard vs a TrueNAS share) before any recording longer than the calibration run; then ACCEPT after the first labelled session passes the QA check.
+next_action: ACCEPT after Batt applies docs/operations/nas-sink.md (TrueNAS datasets + the VM's NFS mounts) and the 30 s ship round-trip passes (record -> dataset_ship.py ship -> verified on the NAS -> local copy gone -> status shows it).
 ---
 
 # ADR-0010: Phase 2 dataset format -- WebDataset tar shards of lossless frames + packet ground truth
 
-- **Status:** PROPOSED (2026-10-02). The format is implemented in `packages/poring_dataset`. The
-  storage location is **open** (decision 4).
+- **Status:** PROPOSED (2026-10-02). The format is implemented in `packages/poring_dataset`.
+  ➡️ **The storage location (decision 4) was decided by Batt the same day:** record to the VM's
+  local disk, then ship to TrueNAS cold storage. It is implemented (see "Implementation" below).
+  ACCEPT waits only on the NAS being set up and the first ship round-trip.
 - **Related:**
   - [ADR-0007](0007-packet-ground-truth-channel.md): packets are offline ground truth only;
   - [ADR-0009](0009-console-session-capture.md): sessions are tagged with their capture backend;
@@ -63,8 +65,11 @@ Three constraints shape the format:
 3. **Labels are YOLO txt inside the shards.** Classes v0: player, monster, npc. Boxes hang from the
    projected foot point with per-class sizes refined on the hand-checked set. The GM's own hidden
    character and every GM-command window are excluded.
-4. **Storage: OPEN, Batt decides before any long recording.**
-   - **Now:** `/dev/shm/poring-lab-rec/` (RAM) for the calibration run only.
+4. **Storage: OPEN, Batt decides before any long recording.** ➡️ **DECIDED 2026-10-02 (Batt):**
+   local disk as a capped buffer, then TrueNAS cold storage -- option b with a local stage. See
+   "Implementation (2026-10-02)". The rest of this item is kept as the history of the choice.
+   - **Now:** `/dev/shm/poring-lab-rec/` (RAM) for the calibration run only. ➡️ No longer the
+     default: `record_session.py` now writes to `/home/batt/poring-lab-rec`.
    - **Candidates:**
 
      | Option | For | Against |
@@ -84,3 +89,81 @@ Three constraints shape the format:
   afterthoughts. The calibration run measures MB per minute.
 - Pseudonymisation is applied at recording time, so a shard can be shared without leaking other
   players' identities. Only the lab's own accounts stay named.
+
+## Implementation (2026-10-02)
+
+Batt's decision: record to the VM's local disk, then move to TrueNAS cold storage.
+
+```
+record_session.py ──► /home/batt/poring-lab-rec/<session>/ ──► dataset_ship.py ship ──► NAS
+ (local disk, capped buffer)                       sha256 → rsync → re-hash → manifest → INDEX → delete local
+```
+
+**Local root:** `/home/batt/poring-lab-rec`, `record_session.py`'s default `--out`.
+- It is on the disk shared with live capture, never `./data` (vision mounts it), never `/dev/shm`.
+- A **buffer, capped** (`dataset_ship.local_caps`). Recording **refuses to start**, and **stops
+  cleanly** mid-run (`stop_reason: local_cap: …`, re-checked every 5 s), when either:
+  - the filesystem has **< 140 GB free** (`--min-free-gb`);
+  - **> 20 GB** of sessions wait under the root, unshipped (`--max-unshipped-gb`). 20 GB is about
+    40 min at the measured 489 MB/min.
+- The quant IO guard, `ionice -c3` and the per-session size cap are unchanged.
+- During SET hours (09:30–17:00 Bangkok, weekdays) it warns, and the guard stays armed.
+- The manifest records the sink: `sink: {root, min_free, max_unshipped}`.
+
+**Ship** (`scripts/dataset_ship.py ship`). Only finished sessions (a `manifest.json`, which is
+written last) are shipped, one session at a time, in this order:
+
+1. sha256 of every file except the manifest → `checksums.sha256` (sha256sum format);
+2. `rsync -a --partial --timeout=60 --bwlimit=40000` (~40 MB/s) at `ionice -c3`. The quant IO guard
+   stops it on a breach, and a re-run resumes;
+3. **re-hash on the NAS**: every file must match, and the checksum file and manifest must arrive
+   byte-identical;
+4. the NAS manifest gets `storage: {nas_path, verified_at, files, bytes, checksums_sha256}`;
+5. one line is appended to `INDEX.jsonl` at the NAS root;
+6. **only then** is the local copy deleted.
+
+Any failure before step 6 keeps the local copy and leaves the NAS manifest without `storage`.
+
+**Refusals:**
+- during SET hours, unless `--force-market`;
+- when the NAS root is **not a mounted filesystem**: an NFS outage must never fill the empty
+  mount-point directory on the shared disk;
+- a second concurrent `ship` (a lock file).
+
+**Why the manifest is excluded from `checksums.sha256`:** step 4 rewrites it. Instead it is
+compared byte-for-byte in step 3, and `storage.checksums_sha256` chains it to the data files.
+
+**NAS layout:** `/mnt/poring-lab-datasets` = `tank-main/poring-lab/datasets`
+(`docs/operations/nas-sink.md`).
+- `<session_id>/`: the session as recorded, plus `checksums.sha256`, and an optional `pin`;
+- `INDEX.jsonl`: where each session lives. One JSON line per event, `shipped` / `pinned` /
+  `pruned`, with its time and path.
+- Host-side only: never bind-mounted into a container.
+
+**Retention:**
+- The NAS keeps sessions **365 days**, counted from the session id's timestamp.
+- `dataset_ship.py prune` is a **dry run** unless `--apply`.
+- **Pinned** sessions are kept indefinitely: benchmark evidence, hand-labelled sets. Pin with
+  `dataset_ship.py pin <id> --reason …`, which writes `pin`.
+- Optional: a daily TrueNAS snapshot of `datasets`, kept 14 days, guards against a mistaken prune.
+- The TrueNAS quota alert stays at its default 80 % of the 2 TiB quota.
+
+**`dataset_ship.py status`:** one line per session:
+- local: `unshipped` or `recording/incomplete`;
+- NAS: `verified <time>` or `UNVERIFIED`, with `pinned` shown.
+
+It ends with the local totals against both caps and whether the NAS is mounted.
+
+**Tests:** `services/backend/tests/test_dataset_ship.py`, using real rsync between two tmp dirs.
+They cover:
+- ship → verify → delete, in that order;
+- a corrupted NAS copy or a failed rsync keeps the local copy;
+- the SET-hours refusal and its boundaries;
+- an unmounted or missing NAS refuses;
+- an unfinished recording is never shipped;
+- prune is a dry run by default, honours pins and `--older-than`;
+- the caps;
+- `record_session` refuses before opening the screen when a cap is hit.
+
+**Not yet verified live:** the NAS does not exist yet. The 30 s round-trip in `nas-sink.md`
+section 5 is the ACCEPT gate.

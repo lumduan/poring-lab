@@ -7,12 +7,14 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: Templates + stable masks cut and element offsets measured at 1280x720 (2026-10-02); remaining for ACCEPT -- a live drag test (move a window, re-locate) and the console backend (S1).
+next_action: Templates + stable masks cut and element offsets measured at 1280x720 (2026-10-02); amended the same day by ADR-0012 (the map stores keys, label_key, locale-invariant N-way masks). Remaining for ACCEPT -- a live drag test (move a window, re-locate), the console backend (S1), and the en<->th acceptance test (ADR-0012).
 ---
 
 # ADR-0011: A UI anchor map and an action-resolution seam -- the policy never speaks pixels
 
 - **Status:** PROPOSED (2026-10-02). Batt's idea, from WRO mat-relative positioning.
+  ➡️ **Amended 2026-10-02 by [ADR-0012](0012-locale-agnostic-ui.md): the map stores KEYS, never
+  text** (see "Amendment" at the end).
 - **Code:** `packages/poring_env/src/poring_env/ui_anchors.py` (the registry, matching and
   `Resolver`), tested in `packages/poring_env/tests/test_ui_anchors.py`;
   `scripts/ui_anchors_tool.py capture|check` cuts and checks the templates.
@@ -97,4 +99,26 @@ window**, turned into a pixel by finding the window on the frame.
   - A closed `game_option` is rejected at 31–41.
 - The templates and masks live in `data/ui_anchors/` (gitignored, lab frames); the geometry above
   is code.
+
+## Amendment (2026-10-02): keys, never text ([ADR-0012](0012-locale-agnostic-ui.md))
+
+The map was already free of pixels at the policy side. Batt's language-agnostic amendment makes it
+free of **text** as well, so one map serves every locale pack.
+
+- **Canonical names.** Window and element names must be canonical identifiers
+  (`[a-z][a-z0-9_]*`), checked when a spec is built; `validate_registry` checks the shipped
+  registry at import.
+- **`ElementSpec.label_key`.** An element whose meaning is a piece of UI text carries its key:
+  - a message key, `msg.k` + 8 hex;
+  - or a curated alias, `ui.*`, listed in `ALIASES` and pointing at a message key.
+  Display text is refused. None of today's elements has one yet: the keys come from the kRO
+  reference once it is on the NAS.
+- **`UiAnchors.labelled_boxes(origins)`.** Each visible keyed element's client-pixel box and key.
+  With a locale pack this auto-labels OCR crops (docs/locale-packs.md §7).
+- **Locale-invariant templates.** `stable_masks(templates, others)` accepts one variant (the
+  original two-frame call, unchanged) or a list of variants: other scenes AND other locales. A pixel
+  stays in the mask only if it agrees in every variant, so title text drops out.
+  `ui_anchors_tool.py capture --mask-png` is repeatable.
+- **Unchanged:** the templates already saved in `data/ui_anchors/`, the measured geometry above,
+  and `Resolver`.
 

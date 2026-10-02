@@ -7,7 +7,8 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: Done at 1280x720 (2026-10-02) -- client switched, SPEC v2 baseline, camera calibrated, first session recorded and auto-labelled (40/40 frames boxed). Next -- Batt picks the persistent sink (ADR-0010; 489 MB/min lossless), then the hand-checked set for B6 (label IoU) and the v0 box-size/foot-offset refinement.
+next_action: Done at 1280x720 (2026-10-02) -- client switched, SPEC v2 baseline, camera calibrated, first session recorded and auto-labelled (40/40 frames boxed). Sink chosen (ADR-0010, TrueNAS) but waits for Batt's NAS recipe; then the hand-checked set for B6 (label IoU) and the v0 box-size/foot-offset refinement. Part D (presentation-agnostic policy) is a plan -- D1 done, D4/D5 next in RDP mode.
+last_reviewed: 2026-10-02
 ---
 
 # Phase 2 plan: projection calibration and auto-labeling (offline foundation)
@@ -46,7 +47,9 @@ Phase 2 turns recorded sessions into labelled frames.
   - OptionInfo `WIDTH`×`HEIGHT` 1296×759, the outer frame, gives a **1280×720 client area,
     rendered 1:1**. The client renders at its client-area size and is never scaled (measured).
   - The window sits at saved position 72/46 → `GAME_REGION=80,77,1280,720`.
-  - The session (`XVFB_RESOLUTION`) is **1440×900**.
+  - The session is **1440×900**. ➡️ Since 2026-10-02 evening that is `SESSION_SIZE`, drawn 1:1 at
+    the top-left of a 1920×1200 Xvfb canvas (`XVFB_RESOLUTION`; ADR-0009 amendment, Part D1 below).
+    Before that, the session was the whole `XVFB_RESOLUTION` screen. GAME_REGION is unchanged.
   - Evidence and the rejected borderless route: docs/client/rathena-client.md.
 
 ## UI anchor map ([ADR-0011](adr/0011-ui-anchor-map.md), built alongside projection)
@@ -108,6 +111,115 @@ Phase 2 turns recorded sessions into labelled frames.
    sprites' detected foot points → residual px.
 4. The recorder records the whole run (≤ 2 min, /dev/shm) to measure MB per minute and to feed the
    first `/qa` overlay.
+
+## Part D (plan only): the policy never depends on presentation
+
+**Resolution and language are one goal.** The policy speaks intents on keys. Pixels come from the
+anchor map and the projection (ADR-0011); text comes from a locale pack (ADR-0012). A new screen
+size or a new language changes calibration and data, never policy.
+
+| # | Step | Status |
+|---|---|---|
+| D1 | The session area: capture and input over `SESSION_SIZE`, independent of the canvas | ✅ done 2026-10-02 |
+| D2 | Projection per resolution profile | plan |
+| D3 | Auto-calibration at session start from packet ground truth | plan; needs Batt's ruling |
+| D4 | Player-like UI management through the anchor map | plan; next |
+| D5 | A hotkey table verified live | plan; next, together with D4 |
+| D6 | Acceptance: the same keyed action at two languages and two sizes | after D2 + ADR-0012 packs |
+
+### D1: the session area (first step toward resolution independence, DONE)
+
+- **The layout:** `SESSION_SIZE=1440x900` is the Windows session, drawn 1:1 at the top-left of a
+  `1920x1200` Xvfb canvas.
+- **Capture and input:** the backend's stream and capture, vision, `ro_agent` and the latency probe
+  crop to the session and normalise input over it. One variable for every consumer, guarded by
+  `test_guards.py`.
+- **What stayed put:** GAME_REGION, every signature and every agent coordinate.
+- **Why now:** Moonlight's console-mode window only opens at native size when the stream is under
+  80 % of the screen (ADR-0009, handovers 2–6). It does open at native size now.
+  - S1 itself is still open: Moonlight's main thread stalls at stream start.
+  - That stall is independent of this layout.
+- **What it leaves to D2:** the client area is still the one frozen profile (1280×720). D1 only
+  decoupled the session from the screen.
+
+### D2: projection per resolution profile
+
+- **A profile:** client-area size, plus its default-camera homography (B4), plus its anchor
+  templates (ADR-0011).
+- **Stored as data:** `camera_<w>x<h>.json` next to today's `camera_default.json`, and templates
+  per profile.
+- **Selection:** the agent picks the profile from the measured client area, never from config
+  alone.
+- **A new profile repeats B4's procedure once** (the click grid at a safe spot, the Poring
+  validation). Labels and datasets record their profile.
+- **Mixing profiles inside one dataset is allowed,** because the labels are cells, not pixels.
+  Training sets say which profiles they hold.
+
+### D3: auto-calibration at session start (needs Batt's ruling)
+
+- **The idea:** replace the 42-click grid with a short self-check at session start.
+  - A handful of walk clicks, each paired with the client's own `self_move_request` target cell.
+  - Fit the homography.
+  - Accept if the residual median is within the stored profile's.
+  - Otherwise keep the stored profile and flag it.
+- **The open question:** the pairing reads packets. That is fine offline, and the camera is
+  geometry, not world state (ADR-0011's open point). But a calibration *at session start* moves
+  that read closer to decision time. **Batt decides** whether it stays on the offline side of
+  ADR-0007's line, or whether D3 must stay an operator step.
+
+### D4: manage the UI like a player, through the anchor map
+
+The policy states the UI it needs; a small UI manager makes it so with keyed actions.
+- **Inventory:** `locate()` says which windows are open and where. Unknown overlaps count as "not
+  visible".
+- **Invariants the manager keeps:**
+  - Basic Info (HP/SP) is always visible and uncovered;
+  - the chat window is minimised until a chat intent needs it;
+  - windows the current task does not use are closed (keyed close buttons via `label_key`, or the
+    verified hotkey from D5).
+- **Small screens:** a per-profile layout rule says which windows fit and where they dock (relative
+  to the client edges). Positions are anchors, never absolute pixels.
+- **Intents:** `ensure_visible(window.basic_info)`, `ensure_closed(window.inventory)`,
+  `ensure_minimised(window.chat)`. Each is verified by the next `locate()`, not assumed.
+
+### D5: hotkey table, verified live
+
+- **Expected bindings:** classic RO conventions, **to verify on our client and per capture
+  backend.** Verified = the window appears or disappears in `locate()` within the packet→frame
+  delay.
+
+| Hotkey | Expected window | Verified |
+|---|---|---|
+| Escape | Game option (toggle) | ✅ RDP, 2026-10-02 (SPEC `key_to_paint_ms`) |
+| Alt+V | Basic Info (toggle / expand) | ❌ did not reach the game, 2026-10-02 |
+| Alt+E | Inventory | ❌ did not reach the game, 2026-10-02 |
+| Alt+Q | Equipment | to verify |
+| Alt+S | Skill list | to verify |
+| Alt+A | Status | to verify |
+| Alt+Z / Alt+G / Alt+H | Party / Guild / Friends | to verify |
+| F12 | Hotkey bar (toggle) | to verify |
+
+- **Why Alt+E / Alt+V did not reach the game: NOT established.** SPEC.md records only the fact.
+  Candidates, cheapest test first:
+  1. **Windows menu activation:** an Alt press and release on its own activates the window's menu
+     and eats the next key. Test: Alt down → letter down/up → Alt up, as one chord, with no gap.
+  2. **Hold length:** the client may sample keyboard state (DirectInput) more slowly than a 50 ms
+     XTest hold. Test: 100 / 200 ms holds.
+  3. **Chat focus:** the letter went into the chat input. Test: with the chat input unfocused,
+     checked by its anchor.
+  4. **Remote path:** xfreerdp's keyboard grab or the RDP scancode mapping for Alt combinations.
+     Test: the same chord in Notepad in the session.
+- **Per backend:** console mode (S1, Sunshine `SendInput`) gets the same table separately.
+
+### D6: acceptance
+
+- **ADR-0012's en ↔ th test:** the same keys resolve, and "open Basic Info, read HP, close it"
+  runs.
+- **The same scripted action at two client sizes** once D2 has a second profile.
+- **One code path, no edits between the runs.**
+
+**Order:** D1 (done) → D4 + D5 (RDP mode, no new data) → ADR-0012 packs (blocked on the NAS) →
+D2 when a second resolution is wanted → D3 after Batt's ruling → D6.
 
 ## What is deliberately NOT here yet
 

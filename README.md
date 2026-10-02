@@ -21,7 +21,7 @@ humanization and LLM integration are clearly marked TODOs.
 ```
  Windows host (OptiPlex 3080)                     Ubuntu Docker host (HOST_LAN_IP)
 ┌────────────────────────────────┐               ┌────────────────────────────────────────────────────────────────┐
-│ ONE interactive session        │   RDP :3389   │ desktop   xfreerdp3 /f (no WM) ──► Xvfb :99 1440x900           │
+│ ONE interactive session        │   RDP :3389   │ desktop   xfreerdp3 /size (no WM) ─► Xvfb :99 canvas 1920x1200 │
 │   └─ RO client                 │ ◄──────────── │           x11vnc (view-only) ──► noVNC :6080                   │
 │        │                       │  exactly one  │                                     │ /tmp/.X11-unix (volume)  │
 │        │ game traffic          │               │              ┌──────────────────────┴────┐                     │
@@ -238,9 +238,13 @@ them as **sensitive** input (the input log keeps counts only); see `docs/client/
    `AVCthin` is the measured alternative: the same frames at ~1/5 of the desktop CPU, but lossy.
 2. Give the host a fixed IP (DHCP reservation) → `WIN_HOST`.
 3. Disable sleep, the screen lock and the screensaver. A locked session shows the lock screen to the agent.
-4. Run the RO client **inside the RDP session** at `XVFB_RESOLUTION` (default 1440x900). The game window is 1296×759,
+4. Run the RO client **inside the RDP session** at `SESSION_SIZE` (default 1440x900). The game window is 1296×759,
    which is a 1:1 **1280×720 client area** at (80,77), above the taskbar; frozen for Phase 2. Launch it from the
    "Ragnarok Offline" desktop shortcut.
+   - The session is drawn 1:1 at the top-left of a larger Xvfb canvas (`XVFB_RESOLUTION`, default 1920x1200).
+   - The stream, the agent's frames and the input mapping all cover only the session.
+   - The canvas exists for the console mode: Moonlight opens its window at native size only below 80 % of the
+     screen (ADR-0009, 2026-10-02).
 5. Use a **separate client copy for rAthena** (ADR-0006). **Leave the existing community-server
    client untouched:** never patch, repoint or reuse it in place.
    - The rAthena copy must match `PACKETVER` (its executable date) and point at `HOST_LAN_IP:6900`.
@@ -298,6 +302,17 @@ the char server. Pick it at once (a human click at 1.3 s works; ro_agent clicks 
 - The char/map servers are advertising the wrong IP. `HOST_LAN_IP` must be this host's LAN address.
 - Check `docker compose logs rathena | grep "clients will be sent"`.
 - Never set rAthena's `bind_ip` to the LAN IP: it doesn't exist inside the container.
+
+**Keys and clicks show in the input log, but typing never reaches Windows (after console mode).**
+The X keyboard focus was left at None: SDL (Moonlight) focuses its window with RevertToNone, and
+there is no window manager to take the focus back.
+- `rdp-loop` resets the focus to PointerRoot before every connect, and gamestream does the same
+  after every stream.
+- By hand:
+
+      docker exec poring-lab-desktop-1 bash -c 'source /usr/local/bin/rdp-loop.sh; focus_pointer_root'
+
+- Check: the backend's `Xlib get_input_focus()` must report focus 1 (PointerRoot), not 0.
 
 **The RDP session keeps dropping or never connects.** Windows client editions allow **one**
 interactive session. `rdp-loop` reacts to xfreerdp3's exit code:

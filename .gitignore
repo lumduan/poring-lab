@@ -70,3 +70,17 @@ out/
 # ---- generated at build time (scripts/gen_packet_tables.py; only the lock is committed) -----------
 packages/poring_packets/src/poring_packets/_generated/
 packages/poring_dataset/src/poring_dataset/_generated/
+
+# ---- locale packs and extracted client text (ADR-0012): NEVER commit -----------------------------
+# Packs are built from a developer's own client data by scripts/locale_pack.py and live OUTSIDE the
+# repo (the NAS locale-packs/ share, /dev/shm). Only the builder and the schema are committed. The
+# .githooks/pre-commit hook refuses the same paths (and pack strings) even when force-added.
+locale-packs/
+locales/
+*.localepack/
+/thai*/
+**/ro_thai/
+**/kro-reference/
+**/grf-extract/
+locale-pack.json
+[mM][sS][gG][sS][tT][rR][iI][nN][gG][tT][aA][bB][lL][eE]*.[tT][xX][tT]
