@@ -14,14 +14,16 @@ next_action: Live-verify on FreeRDP 3.32.1 (Batt) a dummy paste + scrub, then an
 
 - ➡️ **AMENDED 2026-10-01** (see "Amendment 2026-10-01" at the end): release alone did NOT empty the
   Windows clipboard; every paste is now followed by a **scrub**, and the audit logs only a 12-hex
-  digest prefix. E1b below is superseded by that evidence.
+  digest prefix. E1b below is superseded by that evidence. (➡️ The 12-hex digest itself was
+  dropped on 2026-10-02: amendment c.)
 - ➡️ **AMENDED 2026-10-01 (b), FreeRDP 3.32.1** (see "Amendment 2026-10-01 (b)" at the end): a
   Windows-side copy now makes xfreerdp *claim* the X CLIPBOARD with **no data targets**. The
   watchdog clears it; content still cannot flow Windows → X. E1c's "owner stayed None" is
   3.15-only.
 - ➡️ **AMENDED 2026-10-02 (c), human secret typing** (see "Amendment 2026-10-02 (c)" at the end):
   a console toggle keeps human key identities and paste length/digest out of every log; older
-  human typing was purged. The 12-hex paste digest is NOT safe for passwords (open decision).
+  human typing was purged. ➡️ **Decided by Batt 2026-10-02: NO digest and no length for human
+  pastes**, only the event and its time.
 - **Status:** accepted by Batt, 2026-09-30. T1 + F1 are implemented; F2 stays off; T2 is rejected.
   **Deployed 2026-09-30 11:34 ICT** (dev overlay; one combined desktop + backend recreate). Live-verified
   the same day, through the real feature path:
@@ -278,6 +280,9 @@ Until both are resolved, reverse text goes through a file in `\\tsclient\transfe
    prefix**. That is enough to match a paste against a known value, as done here, and too short
    to brute-force a short paste offline. File transfers keep full digests: those are integrity
    (`x-content-sha256`).
+   ➡️ **SUPERSEDED 2026-10-02 (amendment c):** "too short to brute-force" is wrong for a
+   dictionary attack (48 bits confirm a guess). Human pastes now log no digest and no length;
+   file digests are unchanged.
 4. **The lab's own Windows session** (`poring-lab`, a standard user) has clipboard history and
    cloud clipboard OFF, Windows Terminal's right-click is a context menu (no paste), and conhost
    QuickEdit is OFF ([rathena-client.md](../client/rathena-client.md), "Windows account").
@@ -362,7 +367,16 @@ read back from disk. Pastes logged their length and a digest:
    - It runs safely against the live backend: appends take a shared `flock`, the purge an
      exclusive one, in place.
 
-**Open decision for Batt: the 12-hex digest on NORMAL pastes is a password verifier.**
+➡️ **DECIDED by Batt 2026-10-02: (i), DROP the digest. Implemented the same evening.**
+- A human paste logs `{"type": "clipboard_paste"}` (+ `"secret": true` with Secret typing) and its
+  timestamp, nothing else.
+- The transfer audit logs `size 0, sha256 null` for a paste.
+- Existing human paste digests were already purged (35 + 35 lines).
+- File uploads and downloads keep their sha256: a file's digest is not a secret.
+- The analysis that led there is kept below as history.
+
+**Open decision for Batt (SUPERSEDED, see above): the 12-hex digest on NORMAL pastes is a password
+verifier.**
 - Truncating a hash does not stop a dictionary attack: with 48 bits, a guessed password that
   matches is almost certainly right.
 - The amendment's "too short to brute-force" reasoning holds only for a long random paste.

@@ -2,7 +2,6 @@
 
 import asyncio
 import contextlib
-import hashlib
 import logging
 from collections import Counter
 from collections.abc import Callable, Sequence
@@ -35,7 +34,6 @@ from poring_env.protocol import (
 )
 
 log = logging.getLogger(__name__)
-PASTE_DIGEST_HEX = 12  # ADR-0004 amendment (2026-10-01)
 
 T = TypeVar("T")
 
@@ -357,10 +355,9 @@ class AppState:
 
     async def paste(self, msg: ClipboardPaste, *, browser: bool, client: str | None) -> PasteResult:
         """Human-only paste (ADR-0004). ``browser``: the connection presented an allowlisted
-        Origin. Only the length and a 12-hex sha256 PREFIX of the text are ever logged: enough to
-        match a paste against a known value, too short to brute-force a short paste offline."""
-        data = msg.text.encode("utf-8")
-        digest = hashlib.sha256(data).hexdigest()[:PASTE_DIGEST_HEX]
+        Origin. Logged: the event and its time only -- no text, no length, no digest. Even a 12-hex
+        sha256 prefix confirms a guessed password offline (ADR-0004 amendment c, decided by Batt
+        2026-10-02)."""
         refusal: str | None = None
         if self.clipboard is None:
             refusal = "clipboard_disabled"
@@ -373,14 +370,9 @@ class AppState:
         elif self.mux.mode is Mode.BOT:
             refusal = "mode_bot"
         now = monotonic_ns()
-        secret = self.human_secret
-        summary: dict[str, Any] = (
-            # Secret typing on: a password paste leaves no length and no digest anywhere -- even a
-            # 12-hex prefix confirms a guessed password offline (2026-10-02).
-            {"type": msg.type, "secret": True}
-            if secret
-            else {"type": msg.type, "chars": len(msg.text), "bytes": len(data), "sha256": digest}
-        )
+        summary: dict[str, Any] = {"type": msg.type}
+        if self.human_secret:
+            summary["secret"] = True
         self._log(Source.HUMAN, summary, msg.frame_id, refusal is None, refusal or "ok", now)
         if refusal is not None or self.clipboard is None:
             outcome = PasteOutcome(False, refusal or "clipboard_disabled")
@@ -391,8 +383,8 @@ class AppState:
         self.transfer_log.write(
             "paste",
             name=None,
-            size=0 if secret else len(data),
-            sha256=None if secret else digest,
+            size=0,  # no length for a paste (amendment c): the event and its time only
+            sha256=None,
             ok=outcome.ok,
             reason=outcome.reason,
             client=client,

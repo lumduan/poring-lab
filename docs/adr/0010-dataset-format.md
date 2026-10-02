@@ -1,21 +1,26 @@
 ---
 doc_type: decision
 hypothesis: null
-status: PROPOSED
+status: GO
 role: null
-verdict_date: null
+verdict_date: 2026-10-02
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: ACCEPT after Batt approves docs/operations/nas-sink.md (the agent then applies it via midclt; Batt runs the VM sudo block) and the 30 s ship round-trip passes (record -> dataset_ship.py ship -> verified on the NAS -> local copy gone -> status shows it).
+next_action: ACCEPTED 2026-10-02 (the 30 s ship round-trip passed on the NAS). Next -- record real sessions to the local root and ship them outside SET hours; keep benchmark/hand-labelled sessions pinned.
 ---
 
 # ADR-0010: Phase 2 dataset format -- WebDataset tar shards of lossless frames + packet ground truth
 
-- **Status:** PROPOSED (2026-10-02). The format is implemented in `packages/poring_dataset`.
-  ➡️ **The storage location (decision 4) was decided by Batt the same day:** record to the VM's
-  local disk, then ship to TrueNAS cold storage. It is implemented (see "Implementation" below).
-  ACCEPT waits only on the NAS being set up and the first ship round-trip.
+- **Status:** ➡️ **ACCEPTED 2026-10-02 21:06** (was PROPOSED the same day). The format is
+  implemented in `packages/poring_dataset`. The storage location (decision 4), decided by Batt the
+  same day: record to the VM's local disk, then ship to TrueNAS cold storage (see "Implementation").
+  **Acceptance evidence:**
+  - the NAS is set up per `docs/operations/nas-sink.md`;
+  - a 30 s recording (`20261002T210604-rdp-ship-test`: 204 frames, 140.7 MB, 2 files) was shipped
+    (sha256 → rsync → NAS re-hash → manifest `storage` → `INDEX.jsonl` → local copy deleted);
+  - a NAS-side `sha256sum -c` also passes;
+  - quant-postgres io_full 3.0 → 3.7 % (record) and 3.9 → 2.6 % (ship), 5 min before vs after.
 - **Related:**
   - [ADR-0007](0007-packet-ground-truth-channel.md): packets are offline ground truth only;
   - [ADR-0009](0009-console-session-capture.md): sessions are tagged with their capture backend;
@@ -165,5 +170,4 @@ They cover:
 - the caps;
 - `record_session` refuses before opening the screen when a cap is hit.
 
-**Not yet verified live:** the NAS does not exist yet. The 30 s round-trip in `nas-sink.md`
-section 6 is the ACCEPT gate.
+**Verified live 2026-10-02 21:06:** the 30 s round-trip in `nas-sink.md` section 6 passed (see Status).

@@ -318,7 +318,8 @@ def test_paste_goes_through_the_mux_and_never_logs_its_text(
 
     lines = log_lines(tmp_path)
     summary = next(r for r in lines if r["event"]["type"] == "clipboard_paste")
-    assert summary["event"]["chars"] == len(SECRET_TEXT) and "text" not in summary["event"]
+    # ADR-0004 amendment c: the event and its time only -- no text, no length, no digest.
+    assert summary["event"] == {"type": "clipboard_paste"}
     synthetic = [r for r in lines if r["synthetic"]]
     assert [(r["source"], r["reason"]) for r in synthetic] == [("human", "clipboard_paste")] * 4
     for path in tmp_path.rglob("*"):
@@ -327,12 +328,13 @@ def test_paste_goes_through_the_mux_and_never_logs_its_text(
     audit = (tmp_path / "transfer_log").glob("*.jsonl")
     record = json.loads(next(audit).read_text().splitlines()[-1])
     assert (record["action"], record["ok"], record["name"]) == ("paste", True, None)
-    # ADR-0004 amendment: only a 12-hex prefix of the digest is logged, nowhere the full digest.
+    assert (record["size"], record["sha256"]) == (0, None)
     full = hashlib.sha256(SECRET_TEXT.encode()).hexdigest()
-    assert summary["event"]["sha256"] == record["sha256"] == full[:12]
     for path in tmp_path.rglob("*"):
         if path.is_file():
-            assert full not in path.read_text(errors="replace"), path
+            assert full[:8] not in path.read_text(errors="replace"), (
+                path
+            )  # no digest, not even a prefix
     # ...and the paste is followed by a scrub: CLIPBOARD re-owned (empty) and released again.
     assert xfreerdp.history == ["own", "release", "own", "release"]
 

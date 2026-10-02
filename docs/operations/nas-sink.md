@@ -7,13 +7,25 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: APPROVED by Batt and sections 1-3 APPLIED on TrueNAS 2026-10-02 20:18-20:20 (read back, Frigate unchanged). Waiting for Batt's section 4 VM sudo block; then section 6 (checks + 30 s ship round-trip -> ADR-0010 ACCEPTED), then the section 5 Thai copy with Secret typing on.
+next_action: Sections 1-4 applied and section 6 PASSED 2026-10-02 21:06 (mounts, ro refusal, probes, 30 s ship round-trip; ADR-0010 ACCEPTED). Next -- section 5, the Thai copy, with Secret typing on, after the Sunshine replacement and S2 step 0.
 ---
 
 # poring-lab on TrueNAS: the dataset sink and the Thai copy
 
-**Status: APPROVED by Batt (2026-10-02). Sections 1–3 APPLIED on TrueNAS at 20:18–20:20.
-Section 4 (the VM) is waiting for Batt; section 5 (the Thai copy) waits for section 6.**
+**Status: APPROVED by Batt (2026-10-02).**
+- Sections 1–3 APPLIED on TrueNAS at 20:18–20:20.
+- Section 4 applied by Batt (fstab backed up to `/etc/fstab.bak-20261002-poring`).
+- **Section 6 PASSED at 21:06** (see the end).
+- Section 5 (the Thai copy) is next in the agreed order.
+
+**Section 4 as applied:**
+- fs type `nfs4` (§4 below says `nfs` + `nfsvers=4.2`);
+- no explicit `rw`;
+- a comment line.
+
+Option sets otherwise identical, functionally the same. Live:
+`soft,vers=4.2,timeo=150,retrans=3,noatime,rsize/wsize=1M`, datasets and locale-packs rw, Thai ro;
+three automount units with a 10 min idle timeout.
 
 **Applied, and read back the same minute:**
 
@@ -203,3 +215,16 @@ the 3.3 GB GRF is never copied to the VM.
 `sudo systemctl daemon-reload && sudo systemctl restart remote-fs.target`.
 
 **Windows:** `net use * /delete /y` in poring-lab's session (no credential was saved).
+
+## Section 6 results (2026-10-02 21:01–21:07)
+
+| Check | Result |
+|---|---|
+| Automounts | 3 units active; `findmnt -t nfs4` shows soft, v4.2, timeo 150, retrans 3, noatime; datasets/locale-packs rw, Thai ro |
+| Read-only refusal | `touch /mnt/poring-thai-src/probe` → `Read-only file system` |
+| Probes | write/read/delete OK in datasets and locale-packs, as uid 1000:1000; 0 probe files left on the NAS |
+| Round-trip | `20261002T210604-rdp-ship-test`: 204 frames, 140.7 MB → `ship` (2 files, NAS-verified 21:06:51) → local copy gone (only the empty `.ship.lock` remains) → `status` shows `nas verified`; NAS-side `sha256sum -c` OK for both files; manifest `storage` + `INDEX.jsonl` `shipped` line; `prune` dry run deletes nothing |
+| Quant | quant-postgres io_full 3.02 → 3.66 % (record), 3.89 → 2.63 % (ship); one 10 s bin at 17.4 % during the 30 s local PNG write |
+
+**Verdict: PASS. ADR-0010 is ACCEPTED.**
+

@@ -163,7 +163,7 @@ ports, quickstart) and `docs/adr/`.
   - The console's "Secret typing" toggle (`SecretInput`, `Status.human_secret`) logs human keys
     without codes, and a paste without length or digest.
   - Any password typed or pasted through the console needs it on.
-  - The normal-paste 12-hex digest is a password verifier (an open decision).
+  - Human pastes log no digest and no length, in either mode (decided 2026-10-02).
   - `scripts/purge_input_log.py` removes printable human typing from old logs. The input log
     appends under a shared `flock`.
 - **Driving Windows (ro_agent):**
@@ -197,7 +197,8 @@ ports, quickstart) and `docs/adr/`.
     X clipboard into Windows, +Q quits).
 - **Human pastes are scrubbed** (ADR-0004 amendment): after every paste, the backend re-owns CLIPBOARD
   empty so Windows' copy is replaced. Released text otherwise stayed pasteable for over an hour.
-  Paste audits log a 12-hex digest prefix only.
+  Paste audits log the event and its time only: no length, no digest (ADR-0004 amendment c,
+  Batt 2026-10-02; even a 12-hex prefix confirmed a guessed password).
   `/health clipboard.rdp_empty_claims` counts FreeRDP 3.32's own (empty) CLIPBOARD claims apart from
   `foreign_owner_clears`, which stays the alarm (ADR-0004 amendment b).
 
