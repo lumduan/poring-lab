@@ -16,7 +16,16 @@ next_action: S1 PARKED (Batt, 2026-10-02) at 'Windows side works, the Moonlight-
   trial** ("Sunshine research gets the weight"); RDP stays the default until he decides otherwise.
   - Sunshine v2026.914.233613 is installed on the Dell by Batt (UAC). ➡️ Note 2026-10-02: the running
     binary logs "Sunshine version: 2025.924.154138 commit: 86188d47". That tag-vs-version mismatch
-    is unexplained; check the MSI's properties before quoting a version. The MSI was checked first:
+    is unexplained; check the MSI's properties before quoting a version.
+    ➡️ **RESOLVED the same evening (read-only): the signature-checked v2026.914 MSI NEVER RAN.**
+    - The running Sunshine is the **April EXE install**.
+    - `C:\Program Files\Sunshine` and its `uninstall.exe` were created 2026-04-04 23:09, and the
+      uninstall key is a plain `Sunshine` (an EXE installer), not an MSI `{GUID}`.
+    - `sunshine.exe` is 2025.924.154138, built 2025-09-24, Authenticode **NotSigned**.
+    - The Application log covers 2025-12-31 onward and holds 212 MsiInstaller events since 09-28,
+      but **none mention Sunshine**.
+    - So the binary in use is unverified and unsigned. Replacing it with the verified MSI is Batt's
+      decision: uninstall the EXE first and keep `config\` (conf, apps, state = the pairing). The MSI was checked first:
     SHA-256 = GitHub's digest, Authenticode Valid, signer CN=David Lane = LizardByte's maintainer.
   - Revisions below (2026-10-02): the S1 client is **moonlight-qt**, not moonlight-embedded; the
     **capture-backend lock** replaces the proposed `RDP_MODE` override.

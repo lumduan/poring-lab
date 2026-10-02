@@ -1,18 +1,35 @@
 ---
 doc_type: design
 hypothesis: null
-status: PROPOSED
+status: ACCUMULATING
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: AWAITING BATT'S APPROVAL (2026-10-02). Nothing below has been applied. After approval, the agent applies sections 1-3 on TrueNAS through midclt, Batt runs the section 4 sudo block on the VM, and the agent runs section 6 (checks + the 30 s ship round-trip), then sets ADR-0010 to ACCEPTED.
+next_action: APPROVED by Batt and sections 1-3 APPLIED on TrueNAS 2026-10-02 20:18-20:20 (read back, Frigate unchanged). Waiting for Batt's section 4 VM sudo block; then section 6 (checks + 30 s ship round-trip -> ADR-0010 ACCEPTED), then the section 5 Thai copy with Secret typing on.
 ---
 
 # poring-lab on TrueNAS: the dataset sink and the Thai copy
 
-**Status: a plan awaiting Batt's approval (2026-10-02). Nothing here has been applied.**
+**Status: APPROVED by Batt (2026-10-02). Sections 1–3 APPLIED on TrueNAS at 20:18–20:20.
+Section 4 (the VM) is waiting for Batt; section 5 (the Thai copy) waits for section 6.**
+
+**Applied, and read back the same minute:**
+
+| Object | Id / value |
+|---|---|
+| Datasets | `tank-main/poring-lab` (2T, 1M, lz4, atime off, quota alarms 80/95), `…/datasets`, `…/thai-client-data` (20G), `…/locale-packs` (10G, 128K) |
+| Ownership | datasets and locale-packs `1000:1000 750`; thai-client-data `3000:1000 755` |
+| NFS exports | ids **7** (datasets, rw), **8** (locale-packs, rw), **9** (thai-client-data, ro). All `192.168.1.13` only, sec=sys, no maproot/mapall. `showmount -e` from the VM lists all three |
+| Snapshot task | id **14**: datasets, daily 03:15, 2 WEEK, `auto-%Y-%m-%d_%H-%M` |
+| Temporary SMB drop | **not created yet**: only at the copy, to keep its life to minutes |
+
+**Checks:**
+- Before and after: Frigate StartedAt 2026-09-23T01:35:17Z, restarts 0.
+- `tank-main` depth-1 datasets went 18 → 19; NFS shares 6 → 9; SMB unchanged at 7; snapshot tasks
+  10 → 11.
+- The midclt job flag on 25.04 is `-j` (`-job` is refused). The commands below use `-j`.
 
 ➡️ **This version supersedes the first recipe of 2026-10-02** (a new `poringlab` NAS user, Mapall,
 a standing SMB drop share, `hard` mounts). Batt chose that the agent configures TrueNAS itself, so
@@ -59,9 +76,9 @@ the plan now reuses the proven patterns on this NAS and keeps write paths tempor
 
 ## 2. Ownership and NFS exports (to the VM only)
 
-    midclt call -job filesystem.setperm '{"path":"/mnt/tank-main/poring-lab/datasets","mode":"750","uid":1000,"gid":1000}'
-    midclt call -job filesystem.setperm '{"path":"/mnt/tank-main/poring-lab/locale-packs","mode":"750","uid":1000,"gid":1000}'
-    midclt call -job filesystem.setperm '{"path":"/mnt/tank-main/poring-lab/thai-client-data","mode":"755","uid":3000,"gid":1000}'
+    midclt call -j filesystem.setperm '{"path":"/mnt/tank-main/poring-lab/datasets","mode":"750","uid":1000,"gid":1000}'
+    midclt call -j filesystem.setperm '{"path":"/mnt/tank-main/poring-lab/locale-packs","mode":"750","uid":1000,"gid":1000}'
+    midclt call -j filesystem.setperm '{"path":"/mnt/tank-main/poring-lab/thai-client-data","mode":"755","uid":3000,"gid":1000}'
     midclt call sharing.nfs.create '{"path":"/mnt/tank-main/poring-lab/datasets","hosts":["192.168.1.13"],"ro":false,"comment":"poring-lab dataset sink, VM 103 only"}'
     midclt call sharing.nfs.create '{"path":"/mnt/tank-main/poring-lab/locale-packs","hosts":["192.168.1.13"],"ro":false,"comment":"poring-lab locale packs, VM 103 only"}'
     midclt call sharing.nfs.create '{"path":"/mnt/tank-main/poring-lab/thai-client-data","hosts":["192.168.1.13"],"ro":true,"comment":"poring-lab Thai copy, READ-ONLY, VM 103 only"}'
