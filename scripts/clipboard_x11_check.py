@@ -141,6 +141,30 @@ async def check(name: str) -> list[str]:
         expect(service.foreign_owner_clears >= 1, "watchdog noticed a foreign owner")
         owner = int(getattr(observer.get_selection_owner(clipboard), "id", 0))
         expect(owner == 0, "watchdog cleared the foreign owner")
+        expect(service.rdp_empty_claims == 0, "an unclassed client is not counted as xfreerdp")
+
+        # FreeRDP 3.32: xfreerdp's cliprdr window (no WM_CLASS) claims CLIPBOARD on a Windows-side
+        # copy; its main window (same X client) is classed "xfreerdp" (ADR-0004 amendment b).
+        foreign_before = service.foreign_owner_clears
+        rdp = xdisplay.Display(name)
+        main_window = rdp.screen().root.create_window(0, 0, 8, 8, 0, X.CopyFromParent)
+        main_window.set_wm_class("xfreerdp", "xfreerdp")
+        helper = rdp.screen().root.create_window(0, 0, 1, 1, 0, X.CopyFromParent)
+        helper.set_selection_owner(clipboard, X.CurrentTime)
+        rdp.sync()
+        for _ in range(100):
+            if service.rdp_empty_claims >= 1:
+                break
+            await asyncio.sleep(0.02)
+        await asyncio.sleep(0.1)
+        expect(service.rdp_empty_claims == 1, "an xfreerdp claim is counted as rdp_empty_claims")
+        expect(
+            service.foreign_owner_clears == foreign_before,
+            "an xfreerdp claim does not raise foreign_owner_clears",
+        )
+        owner = int(getattr(observer.get_selection_owner(clipboard), "id", 0))
+        expect(owner == 0, "the xfreerdp claim was still cleared")
+        rdp.close()
     finally:
         await asyncio.to_thread(service.stop)
         standin.stop.set()

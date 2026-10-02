@@ -43,6 +43,8 @@ from Xlib.protocol import event as xevent
 from Xlib.protocol import request as xrequest
 
 log = logging.getLogger(__name__)
+# WM_CLASS class names of the RDP client (FreeRDP 3.x X11 client sets "xfreerdp").
+RDP_CLIENT_CLASSES = frozenset({"xfreerdp"})
 
 TEXT_TARGETS = ("UTF8_STRING", "text/plain;charset=utf-8")
 OFFERED_TARGETS = ("TARGETS", *TEXT_TARGETS)
@@ -96,6 +98,12 @@ class SelectionIO(Protocol):
 
     def owner(self) -> int: ...
 
+    def owner_class(self, window: int) -> str | None:
+        """WM_CLASS class of the X client that owns ``window``: the window's own WM_CLASS, else the
+        first top-level window of the same client (same XID resource base). None if unknown or
+        already gone. Never cached: a new client can reuse a departed client's base."""
+        ...
+
     def events(self) -> list[SelectionEvent]:
         """Every event pending right now (non-blocking)."""
         ...
@@ -111,6 +119,11 @@ class SelectionIO(Protocol):
 
 def _window_id(value: object) -> int:
     return value if isinstance(value, int) else int(getattr(value, "id", 0))
+
+
+def _wm_class(window: Any) -> str | None:
+    cls = window.get_wm_class()
+    return str(cls[1]) if cls else None
 
 
 class XSelectionIO:
@@ -156,6 +169,23 @@ class XSelectionIO:
 
     def owner(self) -> int:
         return _window_id(self._d.get_selection_owner(self._clipboard))
+
+    def owner_class(self, window: int) -> str | None:
+        mask = int(self._d.display.info.resource_id_mask)
+        base = window & ~mask
+        try:
+            found = _wm_class(self._d.create_resource_object("window", window))
+            if found is None:
+                # xfreerdp's cliprdr owns the selection through an unmapped helper window with no
+                # WM_CLASS; its main window (same client) carries the class.
+                for child in self._d.screen().root.query_tree().children:
+                    if int(child.id) & ~mask == base:
+                        found = _wm_class(child)
+                        if found is not None:
+                            break
+        except (xerror.BadWindow, xerror.BadDrawable, xerror.BadValue):
+            return None  # the owner (or a sibling) vanished mid-lookup
+        return found
 
     def own(self) -> bool:
         self._win.set_selection_owner(self._clipboard, X.CurrentTime)
@@ -292,6 +322,8 @@ class ClipboardService:
         self._scrub_incomplete = 0
         self._connected = False
         self._foreign_clears = 0
+        self._rdp_claims = 0
+        self._last_rdp_note: float | None = None
         self._last_foreign_warning: float | None = None
         self._suppressed_foreign = 0
         self._x_warned = False
@@ -304,7 +336,15 @@ class ClipboardService:
 
     @property
     def foreign_owner_clears(self) -> int:
+        """CLIPBOARD claims by any X client other than the backend and xfreerdp: the alarm."""
         return self._foreign_clears
+
+    @property
+    def rdp_empty_claims(self) -> int:
+        """CLIPBOARD claims by xfreerdp itself (FreeRDP 3.32+ claims it, with no data targets, on
+        every Windows-side copy even in text-to-remote mode; ADR-0004 amendment b). Cleared like
+        any other, but counted apart so ``foreign_owner_clears`` stays a clean alarm."""
+        return self._rdp_claims
 
     @property
     def scrub_incomplete(self) -> int:
@@ -493,6 +533,19 @@ class ClipboardService:
                     self._clear_foreign(io, owner)
 
     def _clear_foreign(self, io: SelectionIO, owner: int) -> None:
+        if (io.owner_class(owner) or "").lower() in RDP_CLIENT_CLASSES:
+            self._rdp_claims += 1
+            now = self._clock()
+            if self._last_rdp_note is None or now - self._last_rdp_note >= self._warn_interval:
+                self._last_rdp_note = now
+                log.info(
+                    "clipboard watchdog: xfreerdp claimed CLIPBOARD (a Windows-side copy; no data "
+                    "crosses to X in text-to-remote mode) -- clearing it (%d so far)",
+                    self._rdp_claims,
+                )
+            if io.own():
+                io.release()
+            return
         self._foreign_clears += 1
         now = self._clock()
         last = self._last_foreign_warning

@@ -293,3 +293,25 @@ async def test_a_stale_selection_clear_from_our_own_release_is_ignored(
     assert await service.paste(TEXT, inject) == PasteOutcome(True, "ok")
     assert service.scrub_incomplete == 0
     assert fake.history == ["own", "release", "own", "release"]
+
+
+async def test_xfreerdp_claims_are_cleared_but_counted_apart(
+    make: Make, make_xfreerdp: Callable[..., Any], caplog: pytest.LogCaptureFixture
+) -> None:
+    """FreeRDP 3.32 claims CLIPBOARD (no data targets) on every Windows-side copy (ADR-0004
+    amendment b). The watchdog still clears it, but foreign_owner_clears stays the alarm."""
+    fake = make_xfreerdp(listening=False)
+    service = make(fake)
+    with caplog.at_level(logging.INFO, logger="poring_backend.clipboard"):
+        for _ in range(3):
+            fake.take_by_foreign(fake.RDP_HELPER)
+            await eventually(lambda: fake.current_owner == 0)
+        await eventually(lambda: service.rdp_empty_claims == 3)
+        fake.take_by_foreign(0xBAD)  # an unknown client: that is the alarm
+        await eventually(lambda: service.foreign_owner_clears == 1)
+    assert service.rdp_empty_claims == 3
+    assert fake.history.count("own") == 4 and fake.history.count("release") == 4
+    notes = [r for r in caplog.records if "xfreerdp claimed CLIPBOARD" in r.getMessage()]
+    assert len(notes) == 1 and notes[0].levelno == logging.INFO  # rate-limited, not a warning
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 1 and "0xbad" in warnings[0].getMessage()

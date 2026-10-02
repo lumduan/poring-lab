@@ -15,6 +15,8 @@ class FakeXfreerdp:
     asks the new owner for TARGETS whenever ownership changes, and for UTF8_STRING on Ctrl+V."""
 
     WINDOW = 0x100
+    RDP_HELPER = 0xC00005  # xfreerdp's cliprdr window: no WM_CLASS of its own, same client base
+    CLASSES = {RDP_HELPER: "xfreerdp"}
 
     def __init__(self, *, listening: bool = True) -> None:
         self.listening = listening
@@ -61,6 +63,9 @@ class FakeXfreerdp:
 
     def owner(self) -> int:
         return self.current_owner
+
+    def owner_class(self, window: int) -> str | None:
+        return self.CLASSES.get(window)
 
     def events(self) -> list[SelectionEvent]:
         try:
