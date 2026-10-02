@@ -12,8 +12,11 @@ rdp-loop.sh connects only while it says ``rdp``; gamestream-loop.sh streams only
         Live lock test without Sunshine or tscon: lock -> console, TERM xfreerdp, prove that NO
         client reconnects for --hold-s, lock -> rdp, prove exactly one client comes back.
     capture_backend.py to-rdp [--recover]
-        Console -> RDP (or recover from any half-done handover): lock -> rdp/switching, TERM every
-        Moonlight client, revive rdp-loop if it idles, exactly one xfreerdp, lock -> steady.
+        Console -> RDP (or recover from any half-done handover). From console: lock ->
+        console/switching, END THE STREAM CLEANLY (Moonlight's `quit` -> Sunshine /cancel; TERM
+        only as a reported fallback), wait while the session is still on the console so Sunshine
+        can revert its display settings, then lock -> rdp/switching, exactly one xfreerdp, lock ->
+        steady, and check Sunshine's log for a pending revert (rc 3 + the remedy if pending).
     capture_backend.py pair PIN          # one-time pairing (private display; ok in rdp)
     capture_backend.py to-console [--yes-tscon]
         RDP -> console: preflight; with --yes-tscon (after Batt's OK): focus + verify poring-lab's
@@ -35,6 +38,11 @@ import sys
 import time
 import urllib.request
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import numpy as np
+    from numpy.typing import NDArray
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "services" / "backend" / "src"))
@@ -287,12 +295,18 @@ def cmd_to_rdp(recover: bool) -> int:
     if backend == "rdp" and not recover:
         say("already rdp (use --recover to re-run the handover steps anyway)")
         return 0
-    if backend == "console":
-        # Stop the stream while the session is still on the console, so Sunshine can revert its
+    from_console = backend == "console"
+    if from_console:
+        # End the stream while the session is still on the console, so Sunshine can revert its
         # display settings (it can't once RDP holds the session), THEN let rdp-loop connect.
         verify_everywhere(write_lock("console", "switching", "to-rdp"))
-        term_until_zero(GAMESTREAM, STREAM_NAMES, quiet_s=3)
-        say(f"stream stopped; {SUNSHINE_REVERT_S} s for Sunshine to revert its display settings")
+        end = quit_stream()
+        if end == "unclean":
+            say(
+                "UNCLEAN END: Sunshine showed no session end, so its display revert will probably "
+                "stay pending (the next console session reverts it)"
+            )
+        say(f"{SUNSHINE_REVERT_S} s for Sunshine to revert while the session is on the console")
         time.sleep(SUNSHINE_REVERT_S)
     since = utc_now()
     body = write_lock("rdp", "switching", "recover" if recover else "to-rdp")
@@ -306,7 +320,24 @@ def cmd_to_rdp(recover: bool) -> int:
         raise Stop(f"{clients} xfreerdp clients (expected exactly 1)")
     verify_everywhere(write_lock("rdp", "steady", "to-rdp-done"))
     say("RDP mode: exactly one xfreerdp client")
-    return 0
+    if not from_console:
+        return 0
+    verdict = verify_sunshine_revert()
+    if verdict == "OK":
+        say("Sunshine reverted its display settings (no pending retries in its log)")
+        return 0
+    say(
+        f"SUNSHINE REVERT {verdict}: "
+        + (
+            "Sunshine is still retrying ('API is available: false' every 5 s) -- the console "
+            "display topology is still the stream's (VDD only, the Samsung dark). The next console "
+            "session reverts it; or Batt logs in at the Dell."
+            if verdict == "PENDING"
+            else "could not read Sunshine's log through poring-lab's console (see above); check "
+            "it by hand: Get-Content 'C:\\Program Files\\Sunshine\\config\\sunshine.log' -Tail 5"
+        )
+    )
+    return 3
 
 
 SUNSHINE_PORTS = (47984, 47989, 48010)
@@ -318,10 +349,123 @@ TSCON_DELAY_S = 10  # the typed command waits so its line completes before RDP d
 # and tscons it; poring-lab may only RUN the task (read+execute ACE). docs/client/rathena-client.md.
 TOCONSOLE_TASK = r"\PoringLab\PoringLab-ToConsole"
 TSCON = f'Start-Sleep {TSCON_DELAY_S}; schtasks /run /tn "{TOCONSOLE_TASK}"'
-# After the stream stops, Sunshine reverts its display settings (the Samsung back on), but only
+# After the stream ends, Sunshine reverts its display settings (the Samsung back on), but only
 # while the session is still on the console: from RDP its display API is unavailable and it retries
-# every 5 s indefinitely (2026-10-02).
-SUNSHINE_REVERT_S = 8
+# every 5 s indefinitely (2026-10-02). 8 s after a TERM was not enough; 15 s after a clean quit is
+# the starting value, to be tuned from the first measured handover.
+SUNSHINE_REVERT_S = 15
+
+# Ending the stream CLEANLY (2026-10-02).
+# - A TERM-killed Moonlight leaves the app running on Sunshine, so every later connect RESUMED that
+#   stale session (<resume>1</resume>).
+# - Sunshine noticed the end only after the session had left the console, so its display revert
+#   stayed pending.
+# - Moonlight's own `quit` CLI asks Sunshine to /cancel the app. It runs on a PRIVATE Xvfb (:51)
+#   inside gamestream, like gamestream-pair (:50): the paired key never leaves the gamestream-state
+#   volume and nothing appears on the lab display.
+# - It is inline here so it works with the current image (no build). Like `pair`, it may linger on
+#   its dialog, so success is the streaming client's own log, not the exit code.
+QUIT_TIMEOUT_S = 30
+STREAM_EXIT_S = 20
+QUIT_STREAM = (
+    "set -u; gamestream-unpack >/dev/null; mkdir -p /tmp/.X11-unix; "
+    "Xvfb :51 -nolisten tcp -screen 0 800x600x24 >/tmp/xvfb51.log 2>&1 & x=$!; "
+    "for i in $(seq 1 50); do [ -S /tmp/.X11-unix/X51 ] && break; sleep 0.1; done; "
+    'DISPLAY=:51 timeout {t} /tmp/moonlight/AppRun quit "$WIN_HOST"; rc=$?; kill $x; exit $rc'
+)
+# What the STREAMING client logs once Sunshine ends the session (it sees no TERM before this).
+STREAM_END_RX = r"Connection terminated|Quit event received|Stopping input stream"
+
+
+def quit_stream() -> str:
+    """End the console stream through Sunshine, never by killing the client first.
+    "clean" = Sunshine ended the session and the client left by itself; "client-killed" = the
+    session ended but the client needed a TERM; "unclean" = no sign Sunshine ended it (TERM)."""
+    since = utc_now()
+    try:
+        res = sh(
+            "docker", "exec", GAMESTREAM, "sh", "-c", QUIT_STREAM.format(t=QUIT_TIMEOUT_S),
+            timeout=QUIT_TIMEOUT_S + 15,
+        )  # fmt: skip
+        last = (res.stdout + res.stderr).strip().splitlines()[-1:]
+        say(f"moonlight quit: rc={res.returncode} {last[0][:120] if last else ''}".rstrip())
+    except subprocess.TimeoutExpired:
+        say(f"moonlight quit: no answer within {QUIT_TIMEOUT_S + 15} s")
+    try:
+        line = wait_log(GAMESTREAM, STREAM_END_RX, since, STREAM_EXIT_S)
+        say(f"Sunshine ended the session: {line.strip()[-100:]}")
+        ended = True
+    except Stop:
+        ended = False
+    deadline = time.monotonic() + STREAM_EXIT_S
+    while count(GAMESTREAM, STREAM_NAMES) and time.monotonic() < deadline:
+        time.sleep(1)
+    if count(GAMESTREAM, STREAM_NAMES) == 0:
+        return "clean" if ended else "unclean"
+    say("the streaming client did not leave by itself: TERM (reported, not the normal path)")
+    term_until_zero(GAMESTREAM, STREAM_NAMES, quiet_s=3)
+    return "client-killed" if ended else "unclean"
+
+
+# The revert is checked AFTER the session is back on RDP: while it is on the console the only view
+# is the stream being ended. The check is read-only; its answer is a coloured block in poring-lab's
+# console (pixels in), red if Sunshine's newest revert line is a recent "API is available: false"
+# retry, green otherwise.
+SUNSHINE_LOG = r"C:\Program Files\Sunshine\config\sunshine.log"
+REVERT_CHECK = (
+    f"$l = Get-Content '{SUNSHINE_LOG}' -Tail 60 | Select-String 'revert applied display device' "
+    "| Select -Last 1; $p = $false; if ($l) { $t = [datetime]::ParseExact("
+    "$l.Line.Substring(1, 23), 'yyyy-MM-dd HH:mm:ss.fff', $null); "
+    "$p = ($l.Line -match 'available: false') -and "
+    "(((Get-Date) - $t).TotalSeconds -lt 20) }; if ($p) { Write-Host (' ' * 40) -BackgroundColor "
+    "DarkRed } else { Write-Host (' ' * 40) -BackgroundColor DarkGreen }"
+)
+MARKER_MIN_RUN = 150  # px: 40 cells of background colour; game pixels never reach the console area
+
+
+def classify_marker(rgb: "NDArray[np.uint8]") -> str | None:
+    """The bottom-most solid red or green run (>= MARKER_MIN_RUN px) in an RGB region:
+    "PENDING" (red), "OK" (green) or None (no marker yet)."""
+    import numpy as np
+
+    r, g, b = (rgb[..., i].astype(np.int16) for i in range(3))
+    masks = {
+        "PENDING": (r > 150) & (g < 70) & (b < 80),  # Campbell DarkRed (197,15,31)
+        "OK": (g > 120) & (r < 80) & (b < 80),  # Campbell DarkGreen (19,161,14)
+    }
+    best: tuple[int, str] | None = None
+    for verdict, mask in masks.items():
+        for y in range(mask.shape[0] - 1, -1, -1):
+            row = np.concatenate(([0], mask[y].astype(np.int8), [0]))
+            edges = np.flatnonzero(np.diff(row))
+            if len(edges) and (edges[1::2] - edges[::2]).max() >= MARKER_MIN_RUN:
+                if best is None or y > best[0]:
+                    best = (y, verdict)
+                break
+    return best[1] if best else None
+
+
+def verify_sunshine_revert(timeout: float = 15) -> str:
+    """Sunshine's revert state: OK, PENDING, or UNVERIFIED (no ASSIST, no console, no marker)."""
+    sys.path.insert(0, str(REPO / "scripts"))
+    import ro_agent as r
+
+    try:
+        with r.session("capture-backend") as (agent, screen):
+            ox, oy = r.focus_console(agent, screen)
+            r.console_type(agent, screen, "cls; " + REVERT_CHECK)
+            deadline = time.monotonic() + timeout
+            while time.monotonic() < deadline:
+                time.sleep(1)
+                frame = screen.full()
+                region = frame[oy + 20 : oy + 620, max(0, ox - 20) : ox + 1100, 2::-1]
+                verdict = classify_marker(region)
+                if verdict:
+                    return verdict
+            return "UNVERIFIED"
+    except (r.Stop, Stop) as exc:
+        say(f"revert check not run: {exc}")
+        return "UNVERIFIED"
 
 
 def win_host() -> str:
