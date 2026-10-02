@@ -94,7 +94,8 @@ rdp_client_present() {
 # pairing display :50 (scripts/capture_backend.py pair).
 setup_display() {
   [[ -e /x11 ]] || return 0 # not in the container (tests): nothing to link
-  mkdir -p /tmp/.X11-unix "${XDG_RUNTIME_DIR:-/tmp/xdg}" "${XDG_CACHE_HOME:-/tmp/cache}"
+  mkdir -p /tmp/.X11-unix "${XDG_CACHE_HOME:-/tmp/cache}"
+  install -d -m 0700 "${XDG_RUNTIME_DIR:-/tmp/xdg}"  # Qt wants 0700
   ln -sfn /x11/X99 /tmp/.X11-unix/X99
 }
 

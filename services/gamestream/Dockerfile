@@ -12,10 +12,17 @@ FROM poring-lab/desktop:local
 USER root
 RUN apt-get update \
  && apt-get install -y --no-install-recommends libegl1 squashfs-tools \
- && rm -rf /var/lib/apt/lists/*
+ && rm -rf /var/lib/apt/lists/* \
+ && install -d -m 0755 /opt/moonlight \
+ && install -d -o desk -g desk -m 0700 /home/desk/.config
 
 # moonlight-qt's official Linux build. GitHub publishes no digest for this release: the sha256 was
-# computed from the download on 2026-10-02 and is pinned here.
+# computed from the download on 2026-10-02 and is pinned here. The directory exists (0755) BEFORE
+# the ADD: an ADD that creates it applies --chmod=0644 to the directory too, and `desk` could not
+# traverse it ("could not unpack", 2026-10-02).
+# /home/desk/.config is the gamestream-state volume (Moonlight's identity + pairing). It exists in the
+# image owned by desk so a NEW named volume inherits that owner; a root-owned volume made Moonlight mint
+# a fresh identity on every run, so a pairing could never stick (2026-10-02).
 ARG MOONLIGHT_VERSION=6.1.0
 ARG MOONLIGHT_SHA256=0e855ffd22d407e18ab5fdb575fed5f01ca119a3f91993c5f0213f15ac80b400
 ADD --checksum=sha256:${MOONLIGHT_SHA256} --chmod=0644 \

@@ -324,8 +324,14 @@ def sunshine_reachable(host: str) -> bool:
     return True
 
 
+# A host Moonlight has PAIRED with stores the server's certificate ([hosts] N\srvcert). The
+# [General] `certificate` is Moonlight's OWN identity, written on first run whether or not anything
+# is paired -- the old check grepped that and could say "paired" with nothing paired (2026-10-02).
+PAIRED_HOST_RX = r"^[0-9]+\\srvcert=@ByteArray\(-----BEGIN CERTIFICATE"
+
+
 def paired() -> bool:
-    res = sh("docker", "exec", GAMESTREAM, "sh", "-c", f'grep -q "certificate" "{MOONLIGHT_CONF}"')
+    res = sh("docker", "exec", GAMESTREAM, "grep", "-q", "-E", PAIRED_HOST_RX, MOONLIGHT_CONF)
     return res.returncode == 0
 
 
@@ -342,9 +348,11 @@ def cmd_pair(pin: str) -> int:
     res = subprocess.run(
         ["docker", "exec", GAMESTREAM, "gamestream-pair", pin], text=True, timeout=240
     )
-    if res.returncode != 0 or not paired():
+    # The saved pairing is the truth, not the exit code: after a SUCCESS, moonlight's pair CLI stays
+    # on its "paired" dialog until gamestream-pair's timeout kills it (rc=124, 2026-10-02).
+    if not paired():
         raise Stop(f"pairing did not complete (rc={res.returncode})")
-    say("paired: the client key is in the gamestream-state volume")
+    say(f"paired: the client key is in the gamestream-state volume (pair CLI rc={res.returncode})")
     return 0
 
 

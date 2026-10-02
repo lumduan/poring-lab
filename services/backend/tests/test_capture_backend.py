@@ -62,3 +62,27 @@ def test_to_console_refuses_without_a_running_paired_gamestream(
 def test_pair_rejects_a_bad_pin(cb: ModuleType) -> None:
     with pytest.raises(SystemExit, match="4 digits"):
         cb.cmd_pair("12a4")
+
+
+@pytest.mark.parametrize(
+    ("hosts", "expected"),
+    [
+        ("1\\srvcert=@ByteArray(-----BEGIN CERTIFICATE-----\\nMIIB...)\n", True),
+        ("1\\srvcert=@ByteArray()\n", False),  # a known but unpaired host
+        ("", False),  # only Moonlight's own identity
+    ],
+)
+def test_paired_means_a_stored_server_certificate_not_our_identity(
+    cb: ModuleType, tmp_path: Path, hosts: str, expected: bool
+) -> None:
+    """[General] certificate is Moonlight's own identity, written on first run: it must not count
+    as paired (the old check did, 2026-10-02). Run through grep -E, as in the container."""
+    import subprocess
+
+    conf = tmp_path / "Moonlight.conf"
+    conf.write_text(
+        "[General]\ncertificate=@ByteArray(-----BEGIN CERTIFICATE-----\\nOWN)\nkey=@ByteArray(x)\n"
+        f"\n[hosts]\n{hosts}size=1\n"
+    )
+    res = subprocess.run(["grep", "-q", "-E", cb.PAIRED_HOST_RX, str(conf)], check=False)
+    assert (res.returncode == 0) is expected

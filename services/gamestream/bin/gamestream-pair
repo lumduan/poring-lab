@@ -8,7 +8,7 @@ pin="${1:?usage: gamestream-pair PIN}"
 [[ "${pin}" =~ ^[0-9]{4}$ ]] || { echo "PIN must be 4 digits" >&2; exit 2; }
 host="${WIN_HOST:?WIN_HOST is not set}"
 gamestream-unpack
-mkdir -p /tmp/.X11-unix "${XDG_RUNTIME_DIR}" "${XDG_CACHE_HOME}"
+mkdir -p /tmp/.X11-unix "${XDG_CACHE_HOME}" && install -d -m 0700 "${XDG_RUNTIME_DIR}"
 Xvfb :50 -nolisten tcp -screen 0 800x600x24 >/tmp/xvfb50.log 2>&1 &
 xvfb=$!
 trap 'kill "${xvfb}" 2>/dev/null' EXIT

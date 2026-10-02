@@ -353,3 +353,20 @@ def test_gamestream_image_never_runs_the_desktop_startup() -> None:
     assert 'CMD ["/usr/local/bin/gamestream-loop.sh"]' in dockerfile
     assert "HEALTHCHECK NONE" in dockerfile and "ENTRYPOINT []" in dockerfile
     assert "--checksum=sha256:" in dockerfile and "ARG MOONLIGHT_SHA256=" in dockerfile
+
+
+def test_gamestream_creates_the_appimage_dir_traversable_before_the_add() -> None:
+    """An ADD that creates /opt/moonlight applies its --chmod=0644 to the directory as well: the
+    `desk` user could not reach the AppImage and the stream never started (2026-10-02)."""
+    dockerfile = (ROOT / "services" / "gamestream" / "Dockerfile").read_text()
+    mkdir = dockerfile.find("install -d -m 0755 /opt/moonlight")
+    add = dockerfile.find("ADD --checksum")
+    assert mkdir != -1 and add != -1 and mkdir < add
+
+
+def test_gamestream_config_dir_is_owned_by_desk_in_the_image() -> None:
+    """The gamestream-state volume mounts on /home/desk/.config. Root-owned, Moonlight could not
+    save its identity, minted a new one per run, and no pairing could stick (2026-10-02)."""
+    dockerfile = (ROOT / "services" / "gamestream" / "Dockerfile").read_text()
+    assert "install -d -o desk -g desk -m 0700 /home/desk/.config" in dockerfile
+    assert dockerfile.find("/home/desk/.config") < dockerfile.find("USER desk")

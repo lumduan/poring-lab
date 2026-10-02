@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: S1 trial (Batt approved Sunshine, 2026-10-02) -- firewall/config, pairing, the to-console handover (stop point before tscon), A4 functional checks, then bench.py run --backend console vs the RDP v1 baseline. RDP stays the default until Batt decides.
+next_action: S1 trial -- paired 2026-10-02 (exactly one client, ours). Next the to-console handover (stop point before tscon), A4 functional checks, then bench.py run --backend console vs the RDP SPEC v2 baseline. RDP stays the default until Batt decides.
 ---
 
 # ADR-0009: Console-session capture as a second display mode (Sunshine first, VNC fallback)
@@ -80,6 +80,9 @@ Three facts shape the decision:
      forbidden, because it would be an input writer outside the mux.
    - The firewall admits only 192.168.1.13.
    - The agent never holds the Sunshine web-UI credentials; pairing PINs are Batt's.
+     ➡️ **Amended 2026-10-02 (Batt, in conversation):** the agent may perform the pairing itself:
+     the PIN entry and Send in Batt's logged-in web UI, for the lab's own gamestream client only.
+     The web-UI credentials stay Batt's.
 4. **The lab-side client comes in two stages:**
    - **S1:** ➡️ **moonlight-qt** (6.1.0, the official AppImage) rendering into Xvfb `:99`, in the
      `gamestream` service. Nothing downstream changes. Why not moonlight-embedded: its X11 mouse is
@@ -143,3 +146,33 @@ If S1 fails on input but passes on video, S2 is the next step. If video fails, V
 | Apollo (Sunshine fork) | Bidirectional clipboard sync (ADR-0004); divergence from upstream |
 | Parsec and other cloud-brokered tools | Account and cloud dependency; not open source |
 | Hyper-V VM | A separate, queued track (Batt, 2026-10-01) |
+
+## Pairing, as it actually went (2026-10-02)
+
+Six attempts to one pairing. Every step below is a trap the next pairing would hit again:
+
+1. **The login on the PC predated this install.** `sunshine_state.json` dated from an earlier Sunshine
+   (2026-04-04) and held an unknown login plus **one paired device**. Batt chose the reset: stop the
+   service, set the file aside (`sunshine_state.json.bak-20261002`), start it again. The first-run
+   page then created a new login in the browser, with no secret on any command line. That also
+   removed April's device.
+2. **The client asks first.** Sunshine only accepts a PIN for a pending `getservercert`, so a Send
+   with no request waiting fails.
+3. **Moonlight's identity must persist.** The `gamestream-state` volume (`/home/desk/.config`) was
+   root-owned, so Moonlight minted a new identity on every run. That had two effects:
+   - a stale pending session (Sunshine keys it by Moonlight's fixed uniqueid `0123456789ABCDEF` and
+     keeps its first client certificate) failed the next attempt at **stage 4**;
+   - a pairing could never have stuck, because the next stream would arrive as a stranger.
+
+   The fix: the image creates the directory owned by `desk` (`test_guards.py`), and the existing
+   volume was chowned. If a stage-4 failure ever recurs, restart `SunshineService` before retrying.
+4. **`paired()` checked the wrong field.** It grepped Moonlight's own identity `certificate`; now it
+   requires a stored server certificate (`[hosts] N\srvcert`, `test_capture_backend.py`).
+5. **Edge's autofill dropdown covers Send.** The agent dismisses it with Escape and re-verifies the
+   page before clicking.
+6. **Moonlight's pair CLI never exits after a success.** It waits on its dialog until the timeout
+   (rc 124), so success is read from the saved pairing, not from the exit code.
+
+**Result:** Sunshine lists **exactly one** device, `poring-lab-gamestream`. Moonlight's config holds
+the host's certificate.
+
