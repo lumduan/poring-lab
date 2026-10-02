@@ -109,7 +109,7 @@ def measure_walks(
     band = (gx + gw // 4, gy + int(gh * 0.12), gw // 2, int(gh * 0.18))  # above the character
     secs = n * 2.2 + 6
     r.activate_client(agent, screen)
-    if r.find_console(screen) is not None:
+    if r.any_console(screen):
         raise r.Stop("a PowerShell console is in front: no input")
     t_start = r.ns()
     watcher = subprocess.Popen(

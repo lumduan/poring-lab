@@ -97,6 +97,7 @@ def main() -> int:
     clicks: list[tuple[int, tuple[int, int]]] = []
     validation: list[dict[str, Any]] = []
     with r.session("calibrate") as (agent, screen):
+        r.minimize_consoles(agent, screen)
         bench.enter_scene(agent, screen, "outdoor")
         t_start = r.ns()
         for x, y in points:

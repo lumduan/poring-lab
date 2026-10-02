@@ -63,7 +63,7 @@ MOVED = 0.10
 # --- preflight and config -------------------------------------------------------------------------
 
 
-def preflight(agent: r.Agent, backend: str) -> dict[str, Any]:
+def preflight(agent: r.Agent, screen: r.Screen, backend: str) -> dict[str, Any]:
     host = read_lock(ROOT / "state")
     if host.backend != backend or host.phase != "steady":
         raise r.Stop(f"the lock says {host.backend}/{host.phase}, not {backend}/steady")
@@ -71,6 +71,7 @@ def preflight(agent: r.Agent, backend: str) -> dict[str, Any]:
         raise r.Stop(f"the backend reports {getattr(agent, 'backend', None)}, not {backend}")
     if not r.online_chars("gm"):
         raise r.Stop("the GM is not online=1 on our rAthena: no in-game input")
+    r.minimize_consoles(agent, screen)
     return {
         "lock_seq": host.seq,
         "viewers": agent.status.get("viewers"),
@@ -157,6 +158,10 @@ def fidelity(frame: np.ndarray, reference_dir: Path) -> dict[str, Any]:
             "psnr_db": round(benchlib.psnr(ref, crop), 2),
             "ssim": round(benchlib.ssim(ref, crop), 4),
         }
+        mask_path = reference_dir / f"{name}_static.npy"
+        if mask_path.exists():
+            mask = np.load(mask_path)
+            out[name]["psnr_static_db"] = round(benchlib.psnr(ref[mask], crop[mask]), 2)
     return out
 
 
@@ -166,6 +171,8 @@ def key_to_paint(agent: r.Agent, screen: r.Screen, trials: int) -> dict[str, Any
     x, y, w, h = KEY_REGION
     region = (gx + x, gy + y, w, h)
     r.activate_client(agent, screen)
+    if r.any_console(screen):
+        raise r.Stop("a PowerShell console is visible: no game keys (minimise it first)")
     close_chat(agent, screen)
     watcher = subprocess.Popen(
         ["docker", "exec", "-i", r.BACKEND, "python", "-u", "-c", WATCH,
@@ -225,7 +232,7 @@ def cmd_run(a: argparse.Namespace) -> int:
         "t_wall_start": time.strftime("%FT%T%z"),
     }
     with r.session("bench") as (agent, screen):
-        result["preflight"] = preflight(agent, a.backend)
+        result["preflight"] = preflight(agent, screen, a.backend)
         scenes: dict[str, Any] = {}
         for scene in ("outdoor", "indoor"):
             r.log(f"bench: scene {scene}")
@@ -288,19 +295,25 @@ def cmd_reference() -> int:
 
 def cmd_validate_reference(png: Path) -> int:
     """Compare Batt's hand-copied CopyFromScreen PNG (game client area) with the RDP-off crops."""
-    from PIL import Image
+    from poring_dataset.shards import decode_png
 
-    win = np.asarray(Image.open(png).convert("RGB"))[:, :, ::-1]  # -> BGR like our grabs
+    win = decode_png(png.read_bytes())[:, :, :3]  # BGR like our grabs (Windows saves 32-bit ARGB)
     ref = EVIDENCE / "reference"
     out = {}
     for name, (x, y, w, h) in CROPS.items():
         lab = np.load(ref / f"{name}.npy")
         crop = win[y : y + h, x : x + w]
         diff = np.abs(lab.astype(int) - crop.astype(int))
+        static = (diff == 0).all(axis=2)
+        # The static mask: pixels identical in the RDP-off reference AND Windows' own capture. Semi-
+        # transparent UI shows the animated scene through it; those pixels vary between any two
+        # captures, so fidelity is also reported over the static pixels only (SPEC 3).
+        np.save(ref / f"{name}_static.npy", static)
         out[name] = {
             "identical": bool((diff == 0).all()),
             "max_abs_diff": int(diff.max()),
             "psnr_db": benchlib.psnr(lab, crop),
+            "static_fraction": round(float(static.mean()), 4),
         }
     print(json.dumps(out, indent=1, default=str))
     return 0 if all(v["identical"] for v in out.values()) else 1

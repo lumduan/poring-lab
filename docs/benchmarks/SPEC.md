@@ -71,6 +71,17 @@ A result from an older version is history; it is never compared with a newer one
   2. `bench.py validate-reference PNG` proves that the RDP-off crops are bit-identical, or reports
      the residual.
   3. Until that has passed, fidelity numbers are marked "vs RDP-off (unvalidated)".
+- **Validated 2026-10-02:** Batt's CopyFromScreen PNG (10:48:05) vs the RDP-off capture (10:46):
+  `skill_bar` **bit-identical** (max diff 0). `hp_sp_panel` differs only in one block (the
+  Base/Job level box, by 1 level in one channel): it is semi-transparent over the animated scene.
+  `chat` shows the scene through it too. So the RDP-off path is lossless, and semi-transparent UI
+  varies between any two captures.
+- **Therefore each crop also has a static mask:** the pixels identical in both validation captures
+  (`data/bench/reference/<crop>_static.npy`). Fidelity reports `psnr_static_db` over those pixels,
+  which is the codec's loss alone, next to full-crop PSNR and SSIM.
+- Static fractions measured: `hp_sp_panel` 0.917, `skill_bar` 1.0, `chat` 0.011. The chat crop is
+  almost all scene-through-glass, so its fidelity numbers are indicative only; the codec verdict
+  rests on `skill_bar` and the static part of `hp_sp_panel`.
 - **Console runs** compare against the reference taken in RDP mode before the handover. The UI
   crops are screen-fixed and static, so they are identical across backends.
 

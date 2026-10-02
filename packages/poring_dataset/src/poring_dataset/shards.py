@@ -47,31 +47,64 @@ def encode_png(img: npt.NDArray[np.uint8], level: int = 1) -> bytes:
             + chunk(b"IDAT", zlib.compress(data, level)) + chunk(b"IEND", b""))  # fmt: skip
 
 
+def _unfilter(raw: bytes, h: int, stride: int, bpp: int) -> npt.NDArray[np.uint8]:
+    """PNG row filters 0-4 (None, Sub, Up, Average, Paeth) for 8-bit samples."""
+    out = np.zeros((h, stride), dtype=np.uint8)
+    prev = np.zeros(stride, dtype=np.int32)
+    pos = 0
+    for y in range(h):
+        kind = raw[pos]
+        line = np.frombuffer(raw, np.uint8, stride, pos + 1).astype(np.int32)
+        pos += 1 + stride
+        if kind == 0:
+            cur = line
+        elif kind == 2:
+            cur = (line + prev) & 0xFF
+        else:
+            cur = line.copy()
+            for x in range(stride):
+                a = int(cur[x - bpp]) if x >= bpp else 0
+                b = int(prev[x])
+                if kind == 1:
+                    pred = a
+                elif kind == 3:
+                    pred = (a + b) // 2
+                elif kind == 4:
+                    c = int(prev[x - bpp]) if x >= bpp else 0
+                    pa, pb, pc = abs(b - c), abs(a - c), abs(a + b - 2 * c)
+                    pred = a if pa <= pb and pa <= pc else (b if pb <= pc else c)
+                else:
+                    raise ValueError(f"bad PNG filter type {kind}")
+                cur[x] = (int(line[x]) + pred) & 0xFF
+        out[y] = cur
+        prev = cur
+    return out
+
+
 def decode_png(data: bytes) -> npt.NDArray[np.uint8]:
-    """Our own PNGs back to BGR(A)/grey (filter type 0 only -- what encode_png writes)."""
+    """8-bit, non-interlaced PNG (grey, RGB or RGBA; any row filter) -> BGR(A) or grey."""
     if data[:8] != b"\x89PNG\r\n\x1a\n":
         raise ValueError("not a PNG")
     pos, idat = 8, b""
-    w = h = color = 0
+    w = h = color = depth = interlace = 0
     while pos < len(data):
         (length,) = struct.unpack_from(">I", data, pos)
         kind = data[pos + 4 : pos + 8]
         body = data[pos + 8 : pos + 8 + length]
         if kind == b"IHDR":
-            w, h, _, color = struct.unpack_from(">IIBB", body)
+            w, h, depth, color, _, _, interlace = struct.unpack_from(">IIBBBBB", body)
         elif kind == b"IDAT":
             idat += body
         pos += 12 + length
+    if depth != 8 or interlace or color not in (0, 2, 6):
+        raise ValueError(f"unsupported PNG: depth {depth}, colour {color}, interlace {interlace}")
     channels = {0: 1, 2: 3, 6: 4}[color]
-    raw = np.frombuffer(zlib.decompress(idat), np.uint8).reshape(h, 1 + w * channels)
-    if raw[:, 0].any():
-        raise ValueError("only filter type 0 is supported")
-    px = raw[:, 1:].reshape(h, w, channels) if channels > 1 else raw[:, 1:].reshape(h, w)
-    if channels == 3:
-        return np.ascontiguousarray(px[:, :, ::-1])
-    if channels == 4:
-        return np.ascontiguousarray(px[:, :, [2, 1, 0, 3]])
-    return np.ascontiguousarray(px)
+    px = _unfilter(zlib.decompress(idat), h, w * channels, channels)
+    if channels == 1:
+        return px.reshape(h, w)
+    img = px.reshape(h, w, channels)
+    order = [2, 1, 0] if channels == 3 else [2, 1, 0, 3]
+    return np.ascontiguousarray(img[:, :, order])
 
 
 class ShardWriter:

@@ -575,6 +575,28 @@ def find_console(screen: Screen, admin: bool = False) -> tuple[int, int, float] 
     return best if best is not None and best[2] < 10 else None
 
 
+def any_console(screen: Screen) -> bool:
+    """A PowerShell console -- normal OR Administrator -- is visible. Never right-drag, click the
+    world or press game keys then: a right-click in a console pastes the clipboard."""
+    return find_console(screen) is not None or find_console(screen, admin=True) is not None
+
+
+def minimize_consoles(agent: Agent, screen: Screen) -> None:
+    """Minimise every visible PowerShell console (normal and Administrator): focus it by its tab,
+    then Win+Down (a second press when the first only restored a maximised window)."""
+    for admin in (False, True):
+        for _ in range(3):
+            found = find_console(screen, admin)
+            if found is None:
+                break
+            agent.click(found[0] + 40, found[1])  # the tab label: focuses, never pastes
+            time.sleep(0.5)
+            agent.chord("MetaLeft", "ArrowDown")
+            time.sleep(0.8)
+    if any_console(screen):
+        raise Stop("a PowerShell console stays visible after Win+Down: minimise it by hand")
+
+
 def focus_console(agent: Agent, screen: Screen, admin: bool = False) -> tuple[int, int]:
     """Click the console's own tab and re-verify it is the active window; its tab origin."""
     found = find_console(screen, admin)

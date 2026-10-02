@@ -132,7 +132,7 @@ def measure_rotation(
     """One rotation inside an open ro_agent session; returns the result dict (see module doc)."""
     region, (drag_x, drag_y) = regions()
     r.activate_client(agent, screen)
-    if r.find_console(screen) is not None:
+    if r.any_console(screen):
         raise r.Stop("a PowerShell console is in front: no rotation (right-click pastes)")
     counter = subprocess.Popen(
         ["docker", "exec", "-i", r.BACKEND, "python", "-u", "-c", COUNTER,

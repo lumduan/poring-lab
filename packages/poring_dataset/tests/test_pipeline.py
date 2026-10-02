@@ -156,3 +156,34 @@ def test_iou_and_greedy_matching() -> None:
     m = metrics.match(truth, pred)
     assert (m.tp, m.fp, m.fn) == (2, 1, 0)
     assert m.precision == pytest.approx(2 / 3) and m.recall == 1.0 and m.mean_iou > 0.8
+
+
+def test_decode_png_handles_every_row_filter() -> None:
+    """Windows' PNGs (CopyFromScreen) use filters 1-4; a hand-built PNG exercises each."""
+    import struct as st
+    import zlib as zl
+
+    rng = np.random.default_rng(9)
+    rgb = rng.integers(0, 256, (5, 4, 3), dtype=np.uint8)
+    rows, prev = [], np.zeros(12, dtype=np.int32)
+    for y, kind in enumerate([0, 1, 2, 3, 4]):
+        cur = rgb[y].reshape(-1).astype(np.int32)
+        enc = np.zeros(12, dtype=np.int32)
+        for x in range(12):
+            a = int(cur[x - 3]) if x >= 3 else 0
+            b = int(prev[x])
+            c = int(prev[x - 3]) if x >= 3 else 0
+            pa, pb, pc = abs(b - c), abs(a - c), abs(a + b - 2 * c)
+            pred = [0, a, b, (a + b) // 2, a if pa <= pb and pa <= pc else (b if pb <= pc else c)][
+                kind
+            ]
+            enc[x] = (int(cur[x]) - pred) & 0xFF
+        rows.append(bytes([kind]) + enc.astype(np.uint8).tobytes())
+        prev = cur
+
+    def chunk(k: bytes, body: bytes) -> bytes:
+        return st.pack(">I", len(body)) + k + body + st.pack(">I", zl.crc32(k + body))
+
+    png = (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", st.pack(">IIBBBBB", 4, 5, 8, 2, 0, 0, 0))
+           + chunk(b"IDAT", zl.compress(b"".join(rows))) + chunk(b"IEND", b""))  # fmt: skip
+    assert np.array_equal(shards.decode_png(png), rgb[:, :, ::-1])
