@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: Short calibration recording in RDP mode (click grid + GM-spawned Porings) -> projection residuals; then the first labelled session through the /qa overlay for Batt's visual check.
+next_action: Switch the client to a 1280x720 client area (frozen for Phase 2), re-run the benchmark there, then the calibration recording (click grid + GM-spawned Porings) AT 1280x720 -> projection residuals; capture the UI anchor templates on the same layout.
 ---
 
 # Phase 2 plan: projection calibration and auto-labeling (offline foundation)
@@ -29,6 +29,38 @@ Phase 2 turns recorded sessions into labelled frames.
 | B4 | `projection` | Normalised-DLT homography from cell offsets (player-relative) to pixels; residuals in px | done + tested; the live calibration fit is pending |
 | B5 | `labels`, `scripts/qa_export.py`, `/qa` | Boxes from projected foot points, per-class sizes v0, YOLO lines, GM exclusions; the QA overlay on the console's `OverlayCanvas` | labels done + tested; QA in progress |
 | B6 | `metrics` | IoU, greedy per-class matching at 0.5 → precision / recall / mean IoU (the benchmark's `label_iou`) | done + tested; the hand-checked set is pending |
+
+## Resolution: FROZEN at a 1280×720 client area (Batt, 2026-10-02)
+
+- **Why the window was small, and why that no longer holds.** It was cut to 800×664 when pixel
+  count looked like the fps cap. Arm C proved the cap was FreeRDP 3.15's client path; 3.32 delivers
+  30 fps.
+- **Why 1280×720 is better:**
+  - more play area;
+  - an uncramped UI (the OCR track);
+  - larger sprites (YOLO).
+- **Frozen for Phase 2.** Calibration, recordings and datasets happen ONLY at this geometry: the
+  cell→pixel mapping is resolution-specific. Nothing was calibrated at 800×664, so nothing needs
+  discarding; the benchmark's fidelity reference is re-captured.
+- **Exact numbers:** the session size, `GAME_REGION`, and whether the client is scaled. They are
+  recorded in docs/client/rathena-client.md once set.
+
+## UI anchor map ([ADR-0011](adr/0011-ui-anchor-map.md), built alongside projection)
+
+- **Two coordinate systems, one pixel space.**
+  - World entities: cell → pixel through the projection (B4).
+  - UI elements: window-relative → pixel through `poring_env.ui_anchors`.
+- **Layer 1, windows.** Found by title-bar template wherever they are dragged; RO windows are
+  fixed-size.
+- **Layer 2, elements.** Boxes relative to the window, or icon templates for things that move
+  between slots.
+- **The seam.** `Resolver` takes `ui("chat_input")` / `cell(dx, dy)` and returns a pixel. Policy
+  never holds a pixel, so resolution, window moves and capture backends never touch it.
+- **Scope now:** HP/SP bars and text, chat input, hotbar slots, the Game option window. The
+  templates and offsets are measured on the frozen 1280×720 layout; the geometry in code until then
+  is provisional.
+- **Not everything is a vector.** Predictable UI layout goes to the anchor map; anything moving
+  every frame goes to projection.
 
 ## Clock and alignment
 
