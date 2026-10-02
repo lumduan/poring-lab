@@ -4,7 +4,13 @@ import { useEffect, useRef } from "react";
 
 import type { Detections } from "@/lib/protocol";
 
-type Props = { detections: Detections | null; width: number; height: number };
+type Props = {
+  detections: Detections | null;
+  width: number;
+  height: number;
+  /** Wipe boxes this long after they arrive; null keeps them (the /qa label review). */
+  staleMs?: number | null;
+};
 
 // Boxes older than this are wiped: the agent stopped publishing, or disconnected.
 const STALE_MS = 1000;
@@ -12,7 +18,7 @@ const STALE_MS = 1000;
 /** Detection boxes from the vision agent, drawn on a separate canvas above the video. They come
  * from the agent's own grab (``frame_id`` in its numbering), usually within a frame or two of the
  * frame on screen. */
-export default function OverlayCanvas({ detections, width, height }: Props) {
+export default function OverlayCanvas({ detections, width, height, staleMs = STALE_MS }: Props) {
   const ref = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -35,9 +41,10 @@ export default function OverlayCanvas({ detections, width, height }: Props) {
       ctx.fillStyle = "#e0f2fe";
       ctx.fillText(label, x + 3, y - 1);
     }
-    const timer = setTimeout(() => ctx.clearRect(0, 0, width, height), STALE_MS);
+    if (staleMs === null) return;
+    const timer = setTimeout(() => ctx.clearRect(0, 0, width, height), staleMs);
     return () => clearTimeout(timer);
-  }, [detections, width, height]);
+  }, [detections, width, height, staleMs]);
 
   return (
     <canvas

@@ -6,3 +6,6 @@ next-env.d.ts
 .env*
 Dockerfile
 dev
+
+# Phase 2 label QA bundles (scripts/qa_export.py): lab frames, never committed or baked in
+.qa-local

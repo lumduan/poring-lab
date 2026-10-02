@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Phase 2 label QA bundles (scripts/qa_export.py): lab frames, never committed or baked in
+.qa-local
