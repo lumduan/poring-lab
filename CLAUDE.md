@@ -14,8 +14,13 @@ ports, quickstart) and `docs/adr/`.
    - The agent perceives only through `Env.grab()` and acts only through `Env.send_input()`.
    - No memory reading, no packet injection, and no packet data at decision time.
    - Packet capture (the `sniffer` service) is **offline ground truth only**.
-2. **One RDP session** (ADR-0001). Windows client editions allow a single interactive session.
-   - Never add a second RDP or VNC path into Windows.
+2. **One Windows session, one display path at a time** (ADR-0001; amended 2026-10-02 with Batt's OK,
+   ADR-0009). Windows client editions allow a single interactive session.
+   - The path is the RDP session, OR the console-mode stream (Sunshine -> the `gamestream` client)
+     under the capture-backend lock (`scripts/capture_backend.py`). Never both.
+   - Never a second client: Sunshine pairs ONLY the lab's gamestream client (its key never leaves
+     the `gamestream-state` volume); its firewall rules admit only this host; its web UI is `pc`-only.
+   - Never add any other RDP, VNC or streaming path into Windows.
    - Never make the loop retry fast on auth failure (account lockout).
    - Never make it fight a human: exit 5 backs off for 10 minutes.
 3. **One input writer** (ADR-0002). Only the backend's `Injector` uses XTest, and every input passes

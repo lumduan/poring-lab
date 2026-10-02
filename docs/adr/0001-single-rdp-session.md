@@ -13,6 +13,9 @@ next_action: Phase 0 - measure capture FPS, fidelity and end-to-end latency per 
 # ADR-0001: One RDP session serves the web UI and the agent
 
 - **Status:** accepted and implemented in the scaffold (2026-09-29)
+- ➡️ **AMENDED 2026-10-02 (Batt): "one RDP session" became "one Windows session, one display path at a
+  time"** -- RDP OR the console-mode stream of [ADR-0009](0009-console-session-capture.md), switched
+  only through the capture-backend lock; never both, never a second client (CLAUDE.md rule 2).
 - ➡️ **AMENDED 2026-10-01 (Arm C): the pin moved to FreeRDP 3.32.1** from trixie-backports.
   - Decision 6 and the CVE note below are updated.
   - The rollback image is `poring-lab/desktop:freerdp-3.15`.
