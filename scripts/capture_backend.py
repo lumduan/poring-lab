@@ -372,7 +372,7 @@ def cmd_to_console(yes_tscon: bool) -> int:
     body = write_lock("console", "switching", "to-console")
     verify_everywhere(body)
     with r.session("capture-backend", allow_handover=True) as (agent, screen):
-        agent.click(928, 776)  # the console's taskbar button (verified by its tab template next)
+        agent.click(*r.taskbar_xy(288))  # the console's taskbar button; its tab is verified next
         time.sleep(2)
         r.console_type(agent, screen, TSCON)
         say("tscon typed (runs in 10 s); disconnecting the RDP client now")

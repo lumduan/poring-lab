@@ -21,7 +21,7 @@ humanization and LLM integration are clearly marked TODOs.
 ```
  Windows host (OptiPlex 3080)                     Ubuntu Docker host (HOST_LAN_IP)
 ┌────────────────────────────────┐               ┌────────────────────────────────────────────────────────────────┐
-│ ONE interactive session        │   RDP :3389   │ desktop   xfreerdp3 /f (no WM) ──► Xvfb :99 1280x800           │
+│ ONE interactive session        │   RDP :3389   │ desktop   xfreerdp3 /f (no WM) ──► Xvfb :99 1440x900           │
 │   └─ RO client                 │ ◄──────────── │           x11vnc (view-only) ──► noVNC :6080                   │
 │        │                       │  exactly one  │                                     │ /tmp/.X11-unix (volume)  │
 │        │ game traffic          │               │              ┌──────────────────────┴────┐                     │
@@ -238,8 +238,9 @@ them as **sensitive** input (the input log keeps counts only); see `docs/client/
    `AVCthin` is the measured alternative: the same frames at ~1/5 of the desktop CPU, but lossy.
 2. Give the host a fixed IP (DHCP reservation) → `WIN_HOST`.
 3. Disable sleep, the screen lock and the screensaver. A locked session shows the lock screen to the agent.
-4. Run the RO client **inside the RDP session** at `XVFB_RESOLUTION` (default 1280x800). The game window is 800×664
-   (client area 784×625, above the taskbar); launch it from the "Ragnarok Offline" desktop shortcut.
+4. Run the RO client **inside the RDP session** at `XVFB_RESOLUTION` (default 1440x900). The game window is 1296×759,
+   which is a 1:1 **1280×720 client area** at (80,77), above the taskbar; frozen for Phase 2. Launch it from the
+   "Ragnarok Offline" desktop shortcut.
 5. Use a **separate client copy for rAthena** (ADR-0006). **Leave the existing community-server
    client untouched:** never patch, repoint or reuse it in place.
    - The rAthena copy must match `PACKETVER` (its executable date) and point at `HOST_LAN_IP:6900`.
@@ -263,6 +264,8 @@ them as **sensitive** input (the input log keeps counts only); see `docs/client/
 - **Phase 2 (offline):** `scripts/gen_mapcache.py` (pinned rAthena map caches),
   `scripts/record_session.py`, `scripts/calibrate_projection.py`, `scripts/qa_export.py` + the console
   page `/qa` (dev server only). See [docs/phase2-plan.md](docs/phase2-plan.md).
+- **UI anchors (ADR-0011):** `scripts/ui_anchors_tool.py capture [--mask-png]` cuts the window
+  templates into `data/ui_anchors/` (gitignored); `check` locates the windows on a live or saved frame.
 
 ## Development
 

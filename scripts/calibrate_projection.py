@@ -40,19 +40,25 @@ from poring_dataset.timeline import Timeline  # noqa: E402
 ROOT = Path(__file__).resolve().parents[1]
 SPOT = (170, 375)
 CAMERA = ROOT / "packages" / "poring_dataset" / "src" / "poring_dataset" / "camera_default.json"
-# Client-area rectangles that are UI, not world (x, y, w, h): never click there.
-UI = [(0, 0, 222, 245), (228, 0, 296, 68), (636, 12, 140, 150), (0, 535, 600, 90)]
+# Client-area rectangles that are UI, not world (x, y, w, h): never click there. Measured on the
+# frozen 1280x720 layout (2026-10-02): Basic Information (expanded), the 4-row hotkey bar, the small
+# top window, the chat window, the right-anchored notifier and minimap (outdoor maps).
+UI = [
+    (0, 0, 222, 325), (228, 0, 296, 135), (655, 0, 90, 40), (0, 528, 600, 98), (965, 560, 175, 36),
+    (1128, 8, 152, 152),
+]  # fmt: skip
 
 
 def grid(gw: int, gh: int) -> list[tuple[int, int]]:
-    """Client-area click points around the character's feet (the screen centre)."""
+    """Client-area click points around the character's feet (the screen centre), spread wide across
+    the 1280x720 view so the homography is constrained out to the edges."""
     cx, cy = gw // 2, int(gh * 0.53)
     points = []
-    for dy in (-150, -90, -30, 30, 90):
-        for dx in (-240, -160, -80, 0, 80, 160, 240):
+    for dy in (-200, -130, -60, 60, 130):
+        for dx in (-400, -300, -200, -100, 0, 100, 200, 300, 400):
             x, y = cx + dx, cy + dy
-            if (dx, dy) == (0, 30) or (abs(dx) < 40 and abs(dy) < 40):
-                continue  # on the character
+            if dx == 0 and dy < 0:
+                continue  # on the character (its body rises ~120 px above the feet)
             if any(ux <= x < ux + uw and uy <= y < uy + uh for ux, uy, uw, uh in UI):
                 continue
             points.append((x, y))

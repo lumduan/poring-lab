@@ -115,7 +115,7 @@ services:
     image: poring-lab/desktop:local
     environment:
       DISPLAY: ":99"
-      XVFB_RESOLUTION: ${XVFB_RESOLUTION:-1280x800x24}
+      XVFB_RESOLUTION: ${XVFB_RESOLUTION:-1440x900x24}
       # Empty WIN_HOST/RDP_* => no RDP connection is attempted (Xvfb-only mode).
       WIN_HOST: ${WIN_HOST:-}
       RDP_PORT: ${RDP_PORT:-3389}
@@ -272,7 +272,7 @@ services:
       - gamestream-state:/home/desk/.config
     tmpfs:
       - /tmp:size=640m,uid=1000,gid=1000,mode=1777,exec
-    # Software H.264 decode of one 1280x800@30 stream + SDL/GL (llvmpipe) presentation. Weight like
+    # Software H.264 decode of one 1440x900@30 stream + SDL/GL (llvmpipe) presentation. Weight like
     # desktop (12 vs the quant containers' 100); 640 MiB tmpfs is charged here (unpacked ~200 MiB).
     cpu_shares: 64
     cpus: 4

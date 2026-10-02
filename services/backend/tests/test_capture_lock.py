@@ -310,7 +310,7 @@ def test_console_lock_streams_once_with_absolute_mouse(stream_env: dict[str, str
     assert args[:3] == ["stream", "win.test", "Desktop"]
     for flag in ("--absolute-mouse", "--game-optimization", "--audio-on-host"):
         assert flag in args
-    assert args[args.index("--resolution") + 1] == "1280x800"
+    assert args[args.index("--resolution") + 1] == "1440x900"
     assert args[args.index("--video-codec") + 1] == "H.264"
     assert "capture-backend console seq=4: streaming win.test" in log
 

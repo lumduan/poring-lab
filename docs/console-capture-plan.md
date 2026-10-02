@@ -191,6 +191,9 @@ disappears, buy **A**. C stays the fallback when A's modes don't fit.
 - **There are no `fps` or `resolutions` keys.** The client asks for width, height and fps at launch,
   and `dd_resolution_option` decides whether Windows' mode changes.
 - **Our request:** 1280×800 at 30 fps, then 60.
+  ➡️ **SUPERSEDED 2026-10-02: 1440×900.** The lab session grew to hold the frozen 1280×720 client
+  area (docs/client/rathena-client.md). gamestream requests 1440×900, and the console desktop
+  must be 1440×900 so `GAME_REGION` stays 80,77,1280,720. The 1280×800 lines below are history.
   - That matches today's Xvfb desktop exactly, so `GAME_REGION`, the ro_agent signatures and the
     measurement tools carry over unchanged.
   - The game window itself (800×664) cannot be streamed alone: Sunshine captures an output, not a

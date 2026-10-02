@@ -5,9 +5,9 @@
 # It streams only while the capture-backend lock says `console` AND no xfreerdp window is on the
 # display (the second, independent interlock); otherwise it naps, waking when the lock changes. It
 # never exits (restart: unless-stopped would loop), never fights: every failure backs off.
-#   moonlight-qt flags: windowed 1280x800 at (0,0) of the 1280x800 Xvfb (no window manager),
+#   moonlight-qt flags: windowed 1440x900 at (0,0) of the 1440x900 Xvfb (no window manager),
 #   --absolute-mouse (XTest positions -> LiSendMousePositionEvent), software H.264 decode,
-#   --game-optimization (lets Sunshine set the console to 1280x800), audio stays on the PC.
+#   --game-optimization (lets Sunshine set the console to 1440x900), audio stays on the PC.
 #
 # The lock functions below are a COPY of rdp-loop.sh's (tests/test_capture_lock.py keeps them in
 # lock-step).
@@ -100,7 +100,7 @@ setup_display() {
 
 stream_args() {
   printf '%s\n' stream "${WIN_HOST}" "${GAMESTREAM_APP:-Desktop}" \
-    --resolution "${GAMESTREAM_RESOLUTION:-1280x800}" --fps "${GAMESTREAM_FPS:-30}" \
+    --resolution "${GAMESTREAM_RESOLUTION:-1440x900}" --fps "${GAMESTREAM_FPS:-30}" \
     --bitrate "${GAMESTREAM_BITRATE_KBPS:-20000}" --video-codec H.264 --video-decoder software \
     --display-mode windowed --absolute-mouse --game-optimization --audio-on-host \
     --no-vsync --no-frame-pacing --no-quit-after --capture-system-keys never \
@@ -138,7 +138,7 @@ main() {
     fi
     held="" rdp_noted=""
     log "capture-backend console seq=${LOCK_SEQ}: streaming ${WIN_HOST} at" \
-      "${GAMESTREAM_RESOLUTION:-1280x800}@${GAMESTREAM_FPS:-30}"
+      "${GAMESTREAM_RESOLUTION:-1440x900}@${GAMESTREAM_FPS:-30}"
     started=$(date +%s)
     mapfile -t args < <(stream_args)
     "${MOONLIGHT_DIR:-/tmp/moonlight}/AppRun" "${args[@]}"

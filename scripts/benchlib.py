@@ -17,7 +17,7 @@ from typing import Any
 import numpy as np
 import numpy.typing as npt
 
-SPEC_VERSION = 1
+SPEC_VERSION = 2  # v2 (2026-10-02): the 1280x720 client area in a 1440x900 session
 MISS = math.inf
 QUANTILES = (0.50, 0.75, 0.90, 0.95, 0.99)
 

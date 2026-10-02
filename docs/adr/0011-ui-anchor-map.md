@@ -7,14 +7,15 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: Capture the window templates and measure the element offsets on the frozen 1280x720 layout; then ACCEPT once the resolver finds them after a window move and across both capture backends.
+next_action: Templates + stable masks cut and element offsets measured at 1280x720 (2026-10-02); remaining for ACCEPT -- a live drag test (move a window, re-locate) and the console backend (S1).
 ---
 
 # ADR-0011: A UI anchor map and an action-resolution seam -- the policy never speaks pixels
 
 - **Status:** PROPOSED (2026-10-02). Batt's idea, from WRO mat-relative positioning.
 - **Code:** `packages/poring_env/src/poring_env/ui_anchors.py` (the registry, matching and
-  `Resolver`), tested in `packages/poring_env/tests/test_ui_anchors.py`.
+  `Resolver`), tested in `packages/poring_env/tests/test_ui_anchors.py`;
+  `scripts/ui_anchors_tool.py capture|check` cuts and checks the templates.
 - **Related:**
   - [ADR-0003](0003-env-abstraction.md): Env is pixels in, input out; this is the layer between
     policy and Env input;
@@ -73,3 +74,27 @@ window**, turned into a pixel by finding the window on the frame.
 - **The camera constant reaches the agent side.** It is derived offline from packets, but it is
   geometry, not world state; ADR-0007's line (no packet data at decision time) is kept.
   **Batt to confirm.**
+
+## Measured on the frozen layout (2026-10-02, 1:1 1280×720 client)
+
+| Window | Found by (strip, window-relative) | Size | Elements (window-relative box) |
+|---|---|---|---|
+| `basic_info` | title bar (0,0) 200×15 | 220×140 (+ the menu when expanded, to 327) | `hp_bar` (35,53,135,9), `sp_bar` (35,68,135,9), `hp_sp_text` (30,51,190,27) |
+| `hotbar` | the row-number column (0,30) 16×100 | 290×131 (4 rows) | `hotbar_slot_1..9` (15+29i, 3, 26, 26) |
+| `chat` | the tab strip (0,0) 240×15 | 597×93 | `chat_input` (80,72,400,14) |
+| `game_option` | title bar (0,0) 260×15 | 280×138 (open after Escape) | `game_option_close` (30,113,220,20) |
+
+- **RO windows are translucent, the chat window almost entirely.** Only 0.6 % of its pixels are
+  identical over two scenes. So each template carries a **stable mask**: the pixels within 4 grey
+  levels when the same strip is cut over another scene (`capture --mask-png`). Matching is masked
+  SSD, still FFT-only (`match_template(..., mask)`). Stable fractions: `basic_info` 0.98, `hotbar`
+  0.87, `chat` 0.17.
+- **Checked offline on saved frames:**
+  - Each window is found at distance 0.0 on its own frame and ≤ 1.65 on the other scene.
+  - On a third frame, from the old 1280×800 session, the UI sits 168,22 away; those windows are
+    found at their moved origin. `basic_info` scores 0.34, `hotbar` 1.84 and `chat` 8.37: the
+    thinnest margin under the acceptance of 12, so more scenes in the mask would tighten it.
+  - A closed `game_option` is rejected at 31–41.
+- The templates and masks live in `data/ui_anchors/` (gitignored, lab frames); the geometry above
+  is code.
+

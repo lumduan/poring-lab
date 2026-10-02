@@ -7,10 +7,10 @@ verdict_date: 2026-10-02
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: Run the RDP reference baseline under v1, then the Sunshine S1 run (ADR-0009). Any change to the procedure bumps the version and re-baselines.
+next_action: Re-run the RDP baseline under v2 (1280x720 client, 1440x900 session), then the Sunshine S1 run (ADR-0009). Any change to the procedure bumps the version and re-baselines.
 ---
 
-# Capture-backend benchmark: SPEC v1
+# Capture-backend benchmark: SPEC v2
 
 One fixed procedure for every capture backend: RDP today, Sunshine S1/S2 next, and later phases.
 It is versioned: **any change to a condition, a metric or a method bumps `SPEC_VERSION`** (in
@@ -26,11 +26,11 @@ A result from an older version is history; it is never compared with a newer one
 
 ## 1. Fixed conditions
 
-| Condition | v1 value | Why / verified |
+| Condition | v2 value | Why / verified |
 |---|---|---|
 | Scenes | **outdoor `prt_fild08 170 375`**, **indoor `prt_church 99 112`** | prt_fild08 170,375 is free of wandering NPCs, unlike new_4-1, where "Shion" blocks walks. The outdoor spot differs from the 2026-10-01 RDP arms (new_4-1), so **RDP is re-baselined under v1**. |
-| Game window | 800×664 (client area 784×625 at `GAME_REGION`), dgVoodoo **FPSLimit 30** | docs/client/rathena-client.md |
-| Display | 1280×800 for every backend (Xvfb; the console mode sets 1280×800 too) | Same `GAME_REGION`, signatures and crops |
+| Game window | **1296×759 window = a 1:1 1280×720 client area** at `GAME_REGION` 80,77,1280,720 (frozen for Phase 2), dgVoodoo **FPSLimit 30** | docs/client/rathena-client.md (the client renders at its client-area size; measured 2026-10-02) |
+| Display | **1440×900** for every backend (Xvfb; the console mode must be 1440×900 too) | Same `GAME_REGION`, signatures and crops |
 | Camera | **Reset before every scene by a map change**: `@warp` to the other scene's map, then to the scene | Verified 2026-10-02: after a rotation, a map change restores the scene band exactly (0.0 % pixels changed). A **same-map** `@warp` does not (96 % changed). Zoom is never touched. |
 | Chat | The 3 system lines every map change prints (feeding/call/homunculus) | Deterministic without typing; the chat crop is compared only right after a map change |
 | UI state | Chat input closed (an empty open input + Enter closes it); no NPC dialog; no console in front | Hotkeys don't reach the game while the chat input has focus (2026-10-02) |
@@ -46,8 +46,8 @@ A result from an older version is history; it is never compared with a newer one
 | `lab_cores_motion` {per container, total} | cgroup `cpu.stat usage_usec` of the display path (desktop: Xvfb + xfreerdp; gamestream: Moonlight) over the rotation | `measure_motion.cores_between` |
 | `idle_cores` | The same, 120 s, no input, game visible (idle animation only), right after a camera reset | `bench.idle_cost` |
 | `packet_to_frame_ms` {matched, trials, p50, p75, p90, p95, p99} | 40 click-to-walks, ±3 cells. The packet time is the sniffer's kernel time of our `self_move` (CLOCK_MONOTONIC). The frame time is the first grab whose scene band differs (>10 % of pixels by >24) from **the last grab before the packet** (the corrected method, 2026-10-01). | `measure_delay.measure_walks` |
-| `key_to_paint_ms` (same fields) | 40 presses of **Escape**, which toggles the client-local "Game option" window (verified 2026-10-02; Alt+E/Alt+V do not reach the game). The send time is the agent's monotonic time just before the key goes out; the paint is the first grab of that window's region differing from the last pre-press grab. An even count leaves the window closed, and **Enter is never sent while it is open** (its first button returns to character select). | `bench.key_to_paint` |
-| `fidelity` {crop: psnr_db, ssim} | Crops `hp_sp_panel` (2,19,216,110), `skill_bar` (230,1,290,65) and `chat` (4,549,580,46), client-relative. Compared with the **lossless reference** (below). SSIM is on luma, 11×11 Gaussian σ1.5. | `bench.fidelity`, `benchlib.psnr/ssim` |
+| `key_to_paint_ms` (same fields) | 40 presses of **Escape**, which toggles the client-local "Game option" window (client 505,450 280×138 at 1280×720; verified 2026-10-02; Alt+E/Alt+V do not reach the game). The watched region is `KEY_REGION` 518,459,250,120. The send time is the agent's monotonic time just before the key goes out; the paint is the first grab of that window's region differing from the last pre-press grab. An even count leaves the window closed, and **Enter is never sent while it is open** (its first button returns to character select). | `bench.key_to_paint` |
+| `fidelity` {crop: psnr_db, ssim} | Crops `hp_sp_panel` (2,19,216,110), `skill_bar` (230,1,290,65) and `chat` (4,549,580,46), client-relative (the in-game windows kept their client positions at 1280×720, so the boxes are v1's). Compared with the **lossless reference** (below). SSIM is on luma, 11×11 Gaussian σ1.5. | `bench.fidelity`, `benchlib.psnr/ssim` |
 | `windows_side` | Windows-side counters for the run's time windows (RDP: RemoteFX in/out fps, skips, encode ms; console: GPU VideoEncode %, Sunshine CPU). typeperf runs in the session's console and the summary is read from a screenshot. Annotated, not parsed. | manual for v1 |
 | `label_iou`, `ocr_cer` | Placeholders: Phase 2 label IoU vs a hand-checked set (docs/phase2-plan.md), and the OCR track's character error rate | `null` in v1 |
 
@@ -79,6 +79,14 @@ A result from an older version is history; it is never compared with a newer one
 - **Therefore each crop also has a static mask:** the pixels identical in both validation captures
   (`data/bench/reference/<crop>_static.npy`). Fidelity reports `psnr_static_db` over those pixels,
   which is the codec's loss alone, next to full-crop PSNR and SSIM.
+- **v2 static masks (2026-10-02):** the pixels identical in **RDP-off captures of the two scenes**
+  (`bench.py reference`): the same UI over a different background, so only opaque static UI survives.
+  Two captures 10 s apart at one scene were tried first. They were identical everywhere (static
+  fraction 1.0, chat included), because the ground behind the UI had not changed, so they cannot find
+  the glass. Batt's CopyFromScreen PNG was 784×625, so it can't serve the 1280×720 crops.
+  The lossless property it proved belongs to the codec path (planar/interleaved), not to the
+  resolution, so it carries over. `validate-reference PNG` still overwrites the masks if a new
+  1280×720 capture is hand-copied.
 - Static fractions measured: `hp_sp_panel` 0.917, `skill_bar` 1.0, `chat` 0.011. The chat crop is
   almost all scene-through-glass, so its fidelity numbers are indicative only; the codec verdict
   rests on `skill_bar` and the static part of `hp_sp_panel`.
@@ -102,3 +110,10 @@ Explain every difference by mechanism, never by a single number:
 - client decode: FreeRDP vs FFmpeg;
 - the Xvfb hop: S1 vs S2;
 - where the cursor is drawn: an X cursor vs composited into the video.
+
+## 6. Version history
+
+| Version | Date | Change | Baseline |
+|---|---|---|---|
+| v1 | 2026-10-02 | First fixed procedure: 800×664 window (client 784×625), session 1280×800 | [2026-10-02-rdp-682ee3131cb6-v1-baseline](2026-10-02-rdp-682ee3131cb6-v1-baseline.md) — history |
+| v2 | 2026-10-02 | 1296×759 window = 1:1 1280×720 client at 80,77; session 1440×900; `KEY_REGION` moved with the Game option window; static masks from RDP-off captures of both scenes | the next RDP run |

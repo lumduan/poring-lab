@@ -42,20 +42,21 @@ RESULTS = ROOT / "docs" / "benchmarks"
 EVIDENCE = ROOT / "data" / "bench"  # gitignored (data/)
 SCRATCH = Path(os.environ.get("SCRATCH", "/dev/shm/poring-lab-tmp"))
 
-# --- SPEC v1 constants (docs/benchmarks/SPEC.md) ------------------------------------------------
+# --- SPEC v2 constants (docs/benchmarks/SPEC.md) ------------------------------------------------
 SCENES = {"outdoor": ("prt_fild08", 170, 375), "indoor": ("prt_church", 99, 112)}
 # A map change resets the camera rotation; a same-map @warp does not (verified 2026-10-02).
 RESET_VIA = {"outdoor": "prt_church 99 112", "indoor": "prt_fild08 170 375"}
-# UI crops (client-relative x, y, w, h): static UI, identical in every backend's session.
+# UI crops (client-relative x, y, w, h): static UI, identical in every backend's session. The
+# in-game windows kept their client positions at 1280x720 (v2), so the boxes are v1's.
 CROPS = {
     "hp_sp_panel": (2, 19, 216, 110),  # the Basic Information window: name, HP/SP bars + text
     "skill_bar": (230, 1, 290, 65),  # the hotkey bar
     "chat": (4, 549, 580, 46),  # the 3 system lines every map change prints
 }
-# Key -> paint: Escape toggles the client-local "Game option" window (client 257,391 280x138).
-# Never Enter while it is open: its first button returns to character select.
-KEY_REGION = (270, 400, 250, 120)
-FPS_LIMIT = 30  # dgVoodoo FPSLimit, game window 800x664 (docs/client/rathena-client.md)
+# Key -> paint: Escape toggles the client-local "Game option" window (client 505,450 280x138 at
+# 1280x720; 257,391 in v1). Never Enter while it is open: its first button returns to char select.
+KEY_REGION = (518, 459, 250, 120)
+FPS_LIMIT = 30  # dgVoodoo FPSLimit; window 1296x759 = client 1280x720 (rathena-client.md)
 WATCH = measure_delay.WATCH
 MOVED = 0.10
 
@@ -102,7 +103,7 @@ def run_config(backend: str) -> dict[str, Any]:
         "spec": benchlib.SPEC_VERSION,
         "backend": backend,
         "client": client,
-        "xvfb": env.get("XVFB_RESOLUTION", "1280x800x24"),
+        "xvfb": env.get("XVFB_RESOLUTION", "1440x900x24"),
         "game_region": env.get("GAME_REGION"),
         "fps_limit": FPS_LIMIT,
         "scenes": {k: list(v) for k, v in SCENES.items()},
@@ -280,14 +281,27 @@ def cmd_reference() -> int:
             enter_scene(agent, screen, "outdoor")
             time.sleep(3)  # legacy bitmaps: let the static UI arrive in full
             frame = grab_client(screen)
-        for name, crop in crops_of(frame).items():
+            enter_scene(agent, screen, "indoor")  # the same UI over a different background
+            time.sleep(3)
+            again = grab_client(screen)
+            enter_scene(agent, screen, "outdoor")
+        static = {}
+        pairs = zip(crops_of(frame).items(), crops_of(again).values(), strict=True)
+        for (name, crop), other in pairs:
             np.save(ref / f"{name}.npy", crop)
+            # SPEC v2 static mask: pixels identical in lossless captures of the two scenes. The
+            # semi-transparent UI shows a different background through it, so those pixels differ.
+            mask = (crop == other).all(axis=2)
+            np.save(ref / f"{name}_static.npy", mask)
+            static[name] = round(float(mask.mean()), 4)
         r.to_png(np.dstack([frame, np.full(frame.shape[:2], 255, np.uint8)]), ref / "frame.png")
         (ref / "meta.json").write_text(json.dumps({
             "captured": time.strftime("%FT%T%z"), "via": "RDP_GFX=off (planar/interleaved)",
-            "crops": CROPS, "scene": "outdoor",
+            "crops": CROPS, "scene": "outdoor", "spec": benchlib.SPEC_VERSION,
+            "static_mask": "identical in RDP-off captures of the outdoor and the indoor scene",
+            "static_fraction": static,
         }, indent=1))  # fmt: skip
-        print(json.dumps({"reference": str(ref), "crops": list(CROPS)}))
+        print(json.dumps({"reference": str(ref), "static_fraction": static}))
     finally:
         subprocess.run([str(ROOT / "scripts" / "rdp_reconnect.sh"), "-"], check=True)
     return 0
@@ -375,19 +389,21 @@ def cmd_table() -> int:
         cores = (o.get("lab_cores_motion") or {}).get("total")
         idle = (o.get("idle_cores") or {}).get("total")
         rows.append([
-            f"[{res['run_id']}]({path.stem}.md)", res["config"]["backend"], fps_out, fps_in,
+            f"[{res['run_id']}]({path.stem}.md)", f"v{res['config']['spec']}",
+            res["config"]["backend"], fps_out, fps_in,
             cores, idle, p2f.get("p50"), p2f.get("p95"), k2p.get("p50"), k2p.get("p95"),
             hp.get("psnr_db"),
         ])  # fmt: skip
     table = benchlib.markdown_table(
-        ["run", "backend", "fps out", "fps in", "cores", "idle", "p→f p50", "p→f p95",
+        ["run", "spec", "backend", "fps out", "fps in", "cores", "idle", "p→f p50", "p→f p95",
          "k→p p50", "k→p p95", "HP/SP PSNR"], rows,
     )  # fmt: skip
     (RESULTS / "README.md").write_text(
         "# Capture-backend benchmark: running table\n\n"
         "Generated by `scripts/bench.py table` from the run JSONs in this directory; the procedure "
         "is [SPEC.md](SPEC.md). fps = delivered frames/s during full-scene motion (median); cores "
-        "= lab-side display-path cores; p→f = packet→frame ms; k→p = key→paint ms.\n\n"
+        "= lab-side display-path cores; p→f = packet→frame ms; k→p = key→paint ms. Rows of "
+        "different SPEC versions are never compared: an older version is history.\n\n"
         + table
         + "\n"
     )

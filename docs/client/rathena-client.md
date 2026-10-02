@@ -191,6 +191,8 @@ source exe (output to `_scratch\`):
 | `C:\RO-rAthena\_downloads\RAG_SETUP_211105.exe` | 3,427,631,040 B | **deleted** (C: +3.19 GB) | re-download from `rofull.gnjoy.com` |
 | UI text files in `client\data\` | absent | 3 files (see "English UI text") | delete them |
 | `client\savedata\OptionInfo.lua` `WIDTH`/`HEIGHT` (2026-10-01) | 1024 / 768 | **800 / 664** (`OLD_*` kept 1024/768) | restore from `C:\RO-rAthena\_backup\2026-10-01-window\` |
+| `client\savedata\OptionInfo.lua` (2026-10-02) | 800 / 664, `Window_XPos/YPos` 240 / 68 | **1296 / 759** (`OLD_*` too), **72 / 46** | restore from `C:\RO-rAthena\_backup\2026-10-02-1280x720\` |
+| `client\dgVoodoo.conf` (2026-10-02) | `ExtraEnumeratedResolutions = 800x664` | `= 1296x759` | restore from the same backup |
 | `client\dgVoodoo.conf` (2026-10-01) | `ExtraEnumeratedResolutions =` (empty), `FPSLimit = 0` | `ExtraEnumeratedResolutions = 800x664`, **`FPSLimit = 30`** | restore from the same backup |
 | Desktop shortcut "Ragnarok Offline" + `C:\RO-rAthena\PoringLab.cmd` (2026-10-01, Batt's request) | absent | the launcher (`__COMPAT_LAYER=RunAsInvoker`, then `start /D client PoringLab.exe`) and a shortcut to it | delete both |
 | PSReadLine history (2026-10-01 incident) | – | one line removed (a GM password the agent typed into a console by mistake; rotated) | – |
@@ -268,6 +270,9 @@ were removed from `.env`.
 
 ## Window 800×664, FPS cap 30 (2026-10-01)
 
+> ➡️ **SUPERSEDED 2026-10-02 by a 1296×759 window = a 1:1 1280×720 client area** (next section).
+> This section is kept as history; its "slightly scaled" line was never true (see the correction there).
+
 - **Where the resolution lives:** `savedata\OptionInfo.lua` (`WIDTH`, `HEIGHT`, `OLD_*`,
   `ISFULLSCREENMODE`). HKCU `Gravity Soft\Ragnarok` `WIDTH`/`HEIGHT` (800×600) is ignored.
   - 2019+ clients force 1024×768 when the height is below 664, so 800×600 needs a new exe, which
@@ -279,6 +284,8 @@ were removed from `.env`.
   - At 800×664 it is **784×625 at (248,99)**, entirely above the taskbar.
   - So the game is presented slightly scaled (0.98×0.94). UI text stays readable at native
     resolution (checked by reading crops of the Basic Information window, hotkey bar and chat).
+    ➡️ **WRONG, corrected 2026-10-02:** the client renders at its client-area size, 1:1. This
+    line was inferred from the window arithmetic, never measured (next section).
   - No OCR engine is installed on the host, so this was a visual check.
 - **Character select is laid out for ≥ 1024 px**: at 800 wide its left slot column and right info
   panel are clipped. Enter still starts the game, and the agent never needs the clipped parts.
@@ -290,6 +297,42 @@ were removed from `.env`.
 - **`FPSLimit = 30`** (dgVoodoo): outdoor A/B, output **8.5 vs 6.4 fps**, skips 21.3 vs 25.1/s,
   Xvfb p90 14 vs 10, same desktop CPU. **Kept.**
   - The minimum click hold with the cap: 20 ms and 50 ms both register 6/6. ro_agent holds 50 ms.
+
+## Window 1296×759 = a 1:1 1280×720 client area, session 1440×900 (2026-10-02)
+
+Batt's decision: a 1280×720 client area, **frozen for Phase 2** (docs/phase2-plan.md). Set via
+`OptionInfo.lua` as before; no exe change.
+
+- **The client renders at its CLIENT-AREA size, 1:1. Nothing is scaled** (measured 2026-10-02;
+  this corrects the 800×664 section above).
+  - The Select-Service dialog measures **280×198 px** at client 1264×681 and at 1280×720. A
+    1296×759 → 1280×720 scale would make it 276×188. It is 280 wide at 784×625 too.
+  - Text sharpness (mean |gradient| over the dialog's text) is equal within 2 % at both sizes.
+  - Windows' own numbers (`GetWindowRect` / `GetClientRect`, user32 through the poring-lab
+    console): window 1296×759, **client 1280×720 at (8,31)**, style `0x16C20000` (caption, no
+    resize frame).
+- **So `WIDTH`×`HEIGHT` = 1296×759** (the outer frame: client = outer − (16, 39)) gives exactly a
+  1280×720 client with the title bar kept. ro_agent's title-bar activation works unchanged.
+- **Placement:** the client reopens at its saved `Window_XPos`/`Window_YPos` (clamped to the screen)
+  and saves them on exit. Set to **72/46**, so in the 1440×900 session the client area is at
+  **(80,77)**: `GAME_REGION=80,77,1280,720`. The desktop icon column (x < 76) and the taskbar stay
+  clear. A drag moves the window and every screen-coordinate tool with it, which is what ADR-0011's
+  anchors are for.
+- **Session 1440×900** (`XVFB_RESOLUTION`): the 1296×759 window plus the 48-px taskbar need more than
+  800 px of height. It is 16:10 like 1280×800, so the console's fit mode letterboxes the same.
+- **dgVoodoo:** only `ExtraEnumeratedResolutions = 1296x759` changed, by analogy with 800×664.
+  Whether the client needs the mode enumerated was NOT tested. Everything else is as on 2026-10-01.
+- **Rejected: borderless.** dgVoodoo's `WindowedAttributes = borderless` applies only to apps it
+  FORCES windowed (its own conf comment: "attributes for forced windowed appearance"). Tried
+  2026-10-02 with `ISFULLSCREENMODE 1` + dgVoodoo `FullScreenMode false`:
+  - the window became a desktop-sized popup over the taskbar;
+  - it minimised itself on every focus loss;
+  - the 720-px render was stretched to 800;
+  - the mouse was not remapped (clicks landed ~10 % low).
+
+  It was reverted the same hour; the file diffs against the backup were read back.
+- **Backup:** `C:\RO-rAthena\_backup\2026-10-02-1280x720\` holds `OptionInfo.lua` (2,772 B) and
+  `dgVoodoo.conf` (21,975 B) as they were at 800×664.
 
 ## Agent automation (scripts/ro_agent.py) — what the client and Windows require
 

@@ -55,10 +55,8 @@ STATE_DIR = ROOT / "data" / "ro_agent"  # gitignored (rule 4): signatures + GM c
 SHOTS = Path("/dev/shm/poring-lab-tmp/shots")
 BACKEND = "poring-lab-backend-1"
 DB = "poring-lab-db-1"
-DESKTOP_W, DESKTOP_H = 1280, 800
 HOLD_S = 0.05  # 50 ms holds: 20 ms registers 6/6 in the client (docs/client/rathena-client.md)
 SHORTCUT_BOX = (80, 106, 64, 84)  # the "Ragnarok Offline" desktop icon + label
-TRAY_LANG = (1098, 764, 36, 22)  # the ENG / ไทย indicator, left of the clock (1280x800 desktop)
 CLIENT = r"C:\RO-rAthena\client"
 EXE = "PoringLab"  # the rAthena copy ONLY (ADR-0006: the community client is never touched)
 SIG_SCALE = 8
@@ -167,6 +165,44 @@ for line in sys.stdin:
 """
 
 
+_DESKTOP: tuple[int, int] | None = None
+
+
+def desktop() -> tuple[int, int]:
+    """The X screen's REAL size (w, h), queried once per process: the running Xvfb, never what .env
+    says (between an .env write and the desktop recreate the two differ). Clicks are normalised by
+    it, and the backend maps them back with the same size."""
+    global _DESKTOP
+    if _DESKTOP is None:
+        probe = "import mss; m = mss.MSS(display=':99').monitors[0]; print(m['width'], m['height'])"
+        out = subprocess.run(
+            ["docker", "exec", BACKEND, "python", "-c", probe],
+            capture_output=True, text=True, check=True,
+        ).stdout.split()  # fmt: skip
+        _DESKTOP = (int(out[0]), int(out[1]))
+    return _DESKTOP
+
+
+def tray_lang() -> tuple[int, int, int, int]:
+    """The ENG / ไทย indicator left of the clock: anchored to the bottom-right corner (1098,764 on
+    the 1280x800 desktop)."""
+    w, h = desktop()
+    return w - 182, h - 36, 36, 22
+
+
+def tray_strip() -> tuple[int, int, int, int]:
+    """Where the ENG/ไทย indicator can sit (it moves with the tray's icons)."""
+    w, h = desktop()
+    return w - 380, h - 36, 340, 22
+
+
+def taskbar_xy(dx_from_centre: int) -> tuple[int, int]:
+    """A taskbar button: Windows 11 centres the buttons, so they are addressed from the screen's
+    centre line; the 48 px bar's middle row."""
+    w, h = desktop()
+    return w // 2 + dx_from_centre, h - 24
+
+
 class Screen:
     def __init__(self) -> None:
         self.proc = subprocess.Popen(
@@ -183,7 +219,7 @@ class Screen:
         return t, np.frombuffer(raw, np.uint8).reshape(gh, gw, 4)
 
     def full(self) -> np.ndarray:
-        return self.grab(0, 0, DESKTOP_W, DESKTOP_H)[1]
+        return self.grab(0, 0, *desktop())[1]
 
     def close(self) -> None:
         with contextlib.suppress(Exception):
@@ -226,7 +262,7 @@ def region_for(state: str) -> tuple[int, int, int, int]:
         if raw:
             x, y, w, h = (int(v) for v in raw.split(","))
             return x, y, w, h
-        return TRAY_LANG
+        return tray_lang()
     if state in ("shortcut_icon", "shortcut_icon_sel"):
         x, y = shortcut_xy()
         return x - 32, y - 34, SHORTCUT_BOX[2], SHORTCUT_BOX[3]
@@ -251,9 +287,6 @@ def calibrate(screen: Screen, state: str, box: list[int] | None = None) -> None:
     log(f"signature {state} saved ({img.shape[1]}x{img.shape[0]})")
 
 
-TRAY_STRIP = (900, 764, 340, 22)  # where the ENG/ไทย indicator can sit (it moves with tray icons)
-
-
 def _grey(img: np.ndarray) -> np.ndarray:
     px = img[:, :, :3].astype(np.float32)
     return px[..., 0] * 0.114 + px[..., 1] * 0.587 + px[..., 2] * 0.299
@@ -263,7 +296,7 @@ def eng_distance(screen: Screen) -> float:
     """Best match of the full-resolution ENG template anywhere in the tray strip: the indicator's
     x shifts as tray icons come and go (1086 vs 1115 on the same account, 2026-10-01)."""
     tmpl = np.load(STATE_DIR / "signatures" / "eng_full.npy")
-    _, img = screen.grab(*TRAY_STRIP)
+    _, img = screen.grab(*tray_strip())
     strip = _grey(img)
     th, tw = tmpl.shape
     best = float("inf")
@@ -479,10 +512,11 @@ class Agent:
 
     def move(self, x: int, y: int) -> None:
         self.send([{"type": "mouse_move", "t_mono_ns": ns(), "frame_id": -1,
-                    "x": x / DESKTOP_W, "y": y / DESKTOP_H}])  # fmt: skip
+                    "x": x / desktop()[0], "y": y / desktop()[1]}])  # fmt: skip
 
     def click(self, x: int, y: int, button: str = "left") -> None:
-        nx, ny = x / DESKTOP_W, y / DESKTOP_H
+        w, h = desktop()
+        nx, ny = x / w, y / h
         self.move(x, y)
         time.sleep(HOLD_S)
         for action in ("down", "up"):
@@ -791,6 +825,17 @@ LAYOUTS: dict[tuple[int, int], dict[str, tuple[int, int]]] = {
         "server_ok": (466, 495),
         "chat_input": (300, 613),
     },
+    # 1296x759 window (2026-10-02, frozen for Phase 2): a 1:1 1280x720 client at (80,77) of the
+    # 1440x900 session. The login dialogs sit +248,+60 from the 784x625 layout (the old signature
+    # templates match there, distance ~2); the in-game windows keep their client positions.
+    (1280, 720): {
+        "service_ok": (714, 555),
+        "id": (597, 499),
+        "password": (597, 521),
+        "login_button": (740, 523),
+        "server_ok": (714, 555),
+        "chat_input": (300, 613),
+    },
 }
 
 
@@ -921,7 +966,7 @@ def launch_client(agent: Agent, screen: Screen) -> None:
     time.sleep(0.1)
     for action in ("down", "up", "down", "up"):
         agent.send([{"type": "mouse_button", "t_mono_ns": ns(), "frame_id": -1, "button": "left",
-                     "action": action, "x": x / DESKTOP_W, "y": y / DESKTOP_H}])  # fmt: skip
+                     "action": action, "x": x / desktop()[0], "y": y / desktop()[1]}])  # fmt: skip
         time.sleep(0.04)
     log("launch requested (desktop shortcut, non-elevated)")
     wait_state(screen, ["service_select", "login"], 90)

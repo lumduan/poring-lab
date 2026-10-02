@@ -42,8 +42,12 @@ Phase 2 turns recorded sessions into labelled frames.
 - **Frozen for Phase 2.** Calibration, recordings and datasets happen ONLY at this geometry: the
   cell→pixel mapping is resolution-specific. Nothing was calibrated at 800×664, so nothing needs
   discarding; the benchmark's fidelity reference is re-captured.
-- **Exact numbers:** the session size, `GAME_REGION`, and whether the client is scaled. They are
-  recorded in docs/client/rathena-client.md once set.
+- **Exact numbers (set 2026-10-02):**
+  - OptionInfo `WIDTH`×`HEIGHT` 1296×759, the outer frame, gives a **1280×720 client area,
+    rendered 1:1**. The client renders at its client-area size and is never scaled (measured).
+  - The window sits at saved position 72/46 → `GAME_REGION=80,77,1280,720`.
+  - The session (`XVFB_RESOLUTION`) is **1440×900**.
+  - Evidence and the rejected borderless route: docs/client/rathena-client.md.
 
 ## UI anchor map ([ADR-0011](adr/0011-ui-anchor-map.md), built alongside projection)
 
@@ -56,9 +60,10 @@ Phase 2 turns recorded sessions into labelled frames.
   between slots.
 - **The seam.** `Resolver` takes `ui("chat_input")` / `cell(dx, dy)` and returns a pixel. Policy
   never holds a pixel, so resolution, window moves and capture backends never touch it.
-- **Scope now:** HP/SP bars and text, chat input, hotbar slots, the Game option window. The
-  templates and offsets are measured on the frozen 1280×720 layout; the geometry in code until then
-  is provisional.
+- **Scope now:** HP/SP bars and text, chat input, hotbar slots, the Game option window.
+  - **Measured 2026-10-02** on the frozen 1280×720 layout (ADR-0011 table).
+  - The templates carry stable masks, because RO windows are translucent.
+  - `scripts/ui_anchors_tool.py check` locates the windows on a live or saved frame.
 - **Not everything is a vector.** Predictable UI layout goes to the anchor map; anything moving
   every frame goes to projection.
 

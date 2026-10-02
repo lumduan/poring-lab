@@ -63,7 +63,7 @@ COPY supervisord.conf /etc/supervisor/supervisord.conf
 COPY --chmod=0755 bin/ /usr/local/bin/
 
 ENV DISPLAY=:99 \
-    XVFB_RESOLUTION=1280x800x24 \
+    XVFB_RESOLUTION=1440x900x24 \
     NOVNC_VIEW_ONLY=true
 
 EXPOSE 6080

@@ -59,3 +59,20 @@ test("image edges count as inside", () => {
 test("an empty rect never reports inside", () => {
   assert.equal(normalizePoint(5, 5, { x: 0, y: 0, width: 0, height: 0 }).inside, false);
 });
+
+test("the lab's 1440x900 session: a game pixel round-trips in fit and native (2026-10-02)", () => {
+  // The RO client area is 1280x720 at (80,77) of the 1440x900 desktop; aim at its centre.
+  const DESK = { width: 1440, height: 900 };
+  const target = { x: 80 + 640, y: 77 + 360 };
+  for (const viewport of [{ width: 1180, height: 760 }, { width: 2560, height: 1300 }]) {
+    const r = drawRect(viewport, DESK, "fit");
+    const s = r.width / DESK.width;
+    const p = normalizePoint(r.x + target.x * s, r.y + target.y * s, r);
+    assert.equal(p.inside, true);
+    assert.ok(Math.abs(p.x * DESK.width - target.x) < 1e-9 && Math.abs(p.y * DESK.height - target.y) < 1e-9);
+  }
+  // native: 1:1, the viewport scrolled by (200, 150) -> the image's client rect starts at -200,-150
+  const scrolled = { x: -200, y: -150, width: 1440, height: 900 };
+  const q = normalizePoint(target.x - 200, target.y - 150, scrolled);
+  assert.deepEqual({ x: q.x * 1440, y: q.y * 900, inside: q.inside }, { ...target, inside: true });
+});

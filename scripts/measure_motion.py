@@ -91,8 +91,8 @@ def desktop_usage_us() -> int:
 
 def rotate(agent: r.Agent, seconds: float, x0: int, y: int) -> None:
     """Right-drag sweeps of +-150 px around x0 on row y; re-grip every 20 s."""
-    nx = 1 / r.DESKTOP_W
-    ny = 1 / r.DESKTOP_H
+    nx = 1 / r.desktop()[0]
+    ny = 1 / r.desktop()[1]
 
     def button(action: str, x: int) -> None:
         agent.send([{"type": "mouse_button", "t_mono_ns": r.ns(), "frame_id": -1,
