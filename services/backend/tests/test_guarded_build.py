@@ -14,6 +14,11 @@ import pytest
 SCRIPT = Path(__file__).resolve().parents[3] / "scripts" / "guarded_build.py"
 
 
+def record(ran: list[list[str]], cmd: list[str]) -> bool:
+    ran.append(cmd)
+    return True
+
+
 @pytest.fixture(scope="module")
 def gb() -> ModuleType:
     spec = importlib.util.spec_from_file_location("guarded_build", SCRIPT)
@@ -68,12 +73,12 @@ def test_start_uses_dev_overlay_and_stops_only_its_services(
     gb: ModuleType, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     ran: list[list[str]] = []
-    monkeypatch.setattr(gb, "run_process", lambda label, cmd, guard: ran.append(cmd) or True)
+    monkeypatch.setattr(gb, "run_process", lambda label, cmd, guard, env=None: record(ran, cmd))
     monkeypatch.setattr(gb, "watch", lambda seconds, guard, what, stop_cmd: ran.append(stop_cmd))
     gb.run_start(["db", "rathena"], 5, guard=None)
     up, stop = ran
-    # core + sniffer profiles: start:sniffer is guarded too
-    dev = ["scripts/dev.sh", "--profile", "core", "--profile", "sniffer"]
+    # core + sniffer + gamestream profiles: start:sniffer / start:gamestream are guarded too
+    dev = ["scripts/dev.sh", "--profile", "core", "--profile", "sniffer", "--profile", "gamestream"]
     assert up == [*dev, "up", "-d", "--no-build", "db", "rathena"]
     assert stop == [*dev, "stop", "db", "rathena"]
 
@@ -92,7 +97,7 @@ def test_recreate_forces_and_still_stops_only_its_services(
     gb: ModuleType, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     ran: list[list[str]] = []
-    monkeypatch.setattr(gb, "run_process", lambda label, cmd, guard: ran.append(cmd) or True)
+    monkeypatch.setattr(gb, "run_process", lambda label, cmd, guard, env=None: record(ran, cmd))
     monkeypatch.setattr(gb, "watch", lambda seconds, guard, what, stop_cmd: ran.append(stop_cmd))
     step = gb.parse_step("recreate:desktop@90")
     assert (step.kind, step.services, step.seconds) == ("recreate", ["desktop"], 90.0)
@@ -100,3 +105,29 @@ def test_recreate_forces_and_still_stops_only_its_services(
     up, stop = ran
     assert up[-3:] == ["--no-build", "--force-recreate", "desktop"]
     assert stop[-2:] == ["stop", "desktop"]
+
+
+def test_builds_use_the_lab_builder_without_touching_the_global_one(
+    gb: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[tuple[list[str], dict[str, str] | None]] = []
+    monkeypatch.setattr(gb, "cgroup_paths", lambda: [])
+    monkeypatch.setattr(
+        gb, "run_process", lambda label, cmd, guard, env=None: calls.append((cmd, env)) or True
+    )
+    monkeypatch.setattr(sys, "argv", ["guarded_build.py", "build:desktop", "pull:db"])
+    assert gb.main() == 0
+    (build, build_env), (pull, pull_env) = calls
+    assert build[:3] == ["docker", "compose", "--profile"] and "build" in build
+    assert build_env is not None and build_env["BUILDX_BUILDER"] == "default"
+    assert pull_env is None  # only builds pick a builder
+    assert not any("buildx" in c and "use" in c for c in build)  # never `docker buildx use`
+
+
+def test_lab_builder_can_be_overridden(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LAB_BUILDX_BUILDER", "armbuilder")
+    spec = importlib.util.spec_from_file_location("guarded_build_override", SCRIPT)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module.build_env()["BUILDX_BUILDER"] == "armbuilder"

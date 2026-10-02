@@ -59,13 +59,20 @@ CONTAINERS = [
     "frigate",
 ]
 EXTRA_CGROUPS = {"cron.service(capture-streaming-pro)": "/sys/fs/cgroup/system.slice/cron.service"}
-ALL = ["--profile", "core", "--profile", "remote", "--profile", "vision"]
+ALL = ["--profile", "core", "--profile", "remote", "--profile", "vision", "--profile", "gamestream"]
 RUNTIME = ["--profile", "core", "--profile", "remote"]
 # Dev mode (compose.yaml + compose.dev.yaml, see scripts/dev.sh) plus the core and sniffer profiles,
 # so `start:sniffer` is guarded too (an unguarded sniffer recreate right after a guarded db/rathena
 # start coincided with 67 % quant-postgres io_full for ~20 s, 2026-10-01). `up -d <services>` still
 # starts only the named services.
-DEV = ["scripts/dev.sh", "--profile", "core", "--profile", "sniffer"]
+# gamestream (the Sunshine/Moonlight console-mode client, ADR-0009) is guarded the same way.
+DEV = ["scripts/dev.sh", "--profile", "core", "--profile", "sniffer", "--profile", "gamestream"]
+# Lab image builds use dockerd's own BuildKit ("default"): it writes only the new layers. The global
+# builder on this host is Batt's arm64 `armbuilder` (docker-container driver), which re-loads every
+# finished image into dockerd as a full tarball -- a ~5 s, 66-100 % quant io_full burst on
+# 2026-10-01 -- and cannot resolve a local `FROM poring-lab/...:local` base. Only the build
+# subprocesses get this; the global builder (`docker buildx use`) is never touched.
+LAB_BUILDER = os.environ.get("LAB_BUILDX_BUILDER", "default")
 SERVICE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 
 
@@ -207,11 +214,20 @@ class Guard:
         )
 
 
-def run_process(label: str, cmd: list[str], guard: Guard) -> bool:
+def build_env() -> dict[str, str]:
+    """The environment of a build subprocess: the lab builder, nothing else changed."""
+    return {**os.environ, "BUILDX_BUILDER": LAB_BUILDER}
+
+
+def run_process(
+    label: str, cmd: list[str], guard: Guard, env: dict[str, str] | None = None
+) -> bool:
     log = LOGDIR / f"poring-guarded-{label.replace(':', '-')}.log"
-    print(f"[{ts()}] {label}: {' '.join(cmd)}  (log {log.name})", flush=True)
+    builder = env.get("BUILDX_BUILDER") if env else None
+    builder = f" [BUILDX_BUILDER={builder}]" if builder else ""
+    print(f"[{ts()}] {label}: {' '.join(cmd)}{builder}  (log {log.name})", flush=True)
     with log.open("w") as fh:
-        proc = subprocess.Popen(cmd, cwd=REPO, stdout=fh, stderr=subprocess.STDOUT)
+        proc = subprocess.Popen(cmd, cwd=REPO, stdout=fh, stderr=subprocess.STDOUT, env=env)
         while proc.poll() is None:
             hit = guard.breach()
             if hit:
@@ -297,11 +313,11 @@ def main() -> int:
     for step in steps:
         if step.kind == "build":
             cmd = ["docker", "compose", *ALL, "build", "--progress=plain", *step.services]
-            ok = run_process(step.label, cmd, guard)
+            ok = run_process(step.label, cmd, guard, env=build_env())
         elif step.kind == "pull":
             ok = run_process(step.label, ["docker", "compose", *ALL, "pull", *step.services], guard)
         elif step.kind == "target":
-            ok = run_process(step.label, target_build_cmd(*step.services), guard)
+            ok = run_process(step.label, target_build_cmd(*step.services), guard, env=build_env())
         elif step.kind == "up":
             ok = run_up(step.seconds or 180, guard)
         elif step.kind == "restart":
