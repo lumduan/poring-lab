@@ -248,6 +248,37 @@ services:
     mem_limit: 6g
     memswap_limit: 6g
 
+  # ADR-0009 console mode: moonlight-qt shows the Sunshine stream of the Windows CONSOLE session in
+  # the same Xvfb :99 and takes its input from the X server (the backend mux's XTest). It streams
+  # ONLY while the capture-backend lock says `console` and no xfreerdp window is on the display
+  # (gamestream-loop.sh); under `rdp` it idles. Handovers: scripts/capture_backend.py.
+  gamestream:
+    <<: *lab
+    profiles: [gamestream]
+    build:
+      context: services/gamestream
+    image: poring-lab/gamestream:local
+    # NO depends_on: a guarded `up -d gamestream` must never recreate desktop as a dependency.
+    environment:
+      DISPLAY: ":99"
+      WIN_HOST: ${WIN_HOST:-} # Sunshine runs on the same Windows host as RDP
+      LAB_STATE_DIR: /lab-state
+    # Nothing writes to the image layer (the shared disk): the AppImage unpacks into the /tmp tmpfs,
+    # the pairing key lives in the gamestream-state volume. No RDP_* secrets, no transfer volume.
+    read_only: true
+    volumes:
+      - x11-unix:/x11:ro
+      - ./state:/lab-state:ro
+      - gamestream-state:/home/desk/.config
+    tmpfs:
+      - /tmp:size=640m,uid=1000,gid=1000,mode=1777,exec
+    # Software H.264 decode of one 1280x800@30 stream + SDL/GL (llvmpipe) presentation. Weight like
+    # desktop (12 vs the quant containers' 100); 640 MiB tmpfs is charged here (unpacked ~200 MiB).
+    cpu_shares: 64
+    cpus: 4
+    mem_limit: 1536m
+    memswap_limit: 1536m
+
   sniffer:
     <<: *lab
     profiles: [sniffer]
@@ -288,6 +319,9 @@ volumes:
   # ADR-0004 file transfer: \\tsclient\transfer in Windows. RAM only (tmpfs, 512 MiB cap), never the
   # shared disk; emptied when both desktop and backend stop. Mounted in desktop + backend ONLY --
   # never vision, rathena or sniffer (tests/test_guards.py).
+  # ADR-0009: Moonlight's client key + paired hosts = an input credential into Windows that would
+  # bypass the mux if anything else could read it. Mounted in gamestream ONLY (tests/test_guards.py).
+  gamestream-state:
   transfer:
     driver: local
     driver_opts:

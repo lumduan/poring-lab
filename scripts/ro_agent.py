@@ -353,7 +353,8 @@ def char_events(c: str) -> list[dict[str, Any]]:
 class Agent:
     """One /internal/agent connection; every send checks ASSIST and waits out a human lease."""
 
-    def __init__(self, name: str = "ro_agent") -> None:
+    def __init__(self, name: str = "ro_agent", *, allow_handover: bool = False) -> None:
+        self.allow_handover = allow_handover  # only scripts/capture_backend.py, mid-handover
         self._conn = connect(backend_ws(), open_timeout=5, max_size=2**20)
         self.ws: ClientConnection = self._conn.__enter__()
         hello = {"type": "agent_hello", "t_mono_ns": ns(), "frame_id": -1, "agent_id": name,
@@ -377,7 +378,9 @@ class Agent:
         if lock.get("backend") == "hold" or host.backend == "hold":
             self.ws.close()
             raise Stop(f"capture-backend lock HOLD ({lock.get('reason') or host.reason}): no input")
-        if lock.get("phase") == "switching" or host.phase == "switching":
+        if (lock.get("phase") == "switching" or host.phase == "switching") and not (
+            self.allow_handover
+        ):
             self.ws.close()
             raise Stop("a capture-backend handover is in progress: no input sent")
         if (lock.get("backend"), lock.get("seq")) != (host.backend, host.seq):
@@ -387,6 +390,13 @@ class Agent:
                 f"{lock.get('backend')}/{lock.get('seq')} (scripts/capture_backend.py status)"
             )
         return str(lock["backend"])
+
+    def idle(self, seconds: float) -> None:
+        """Wait without sending input, reading the backend's messages so the connection stays
+        healthy (a session left unread for ~35 s failed its websocket keepalive, 2026-10-02)."""
+        end = time.monotonic() + seconds
+        while (left := end - time.monotonic()) > 0:
+            self._drain(min(1.0, left))
 
     def _drain(self, timeout: float, want: str | None = None) -> dict[str, Any] | None:
         end = time.monotonic() + timeout
@@ -486,10 +496,12 @@ class Agent:
 
 
 @contextlib.contextmanager
-def session(name: str = "ro_agent") -> Iterator[tuple[Agent, Screen]]:
+def session(
+    name: str = "ro_agent", *, allow_handover: bool = False
+) -> Iterator[tuple[Agent, Screen]]:
     screen = Screen()
     try:
-        agent = Agent(name)
+        agent = Agent(name, allow_handover=allow_handover)
     except BaseException:
         screen.close()
         raise

@@ -16,6 +16,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
 RDP_LOOP = ROOT / "services" / "desktop" / "bin" / "rdp-loop.sh"
+STREAM_LOOP = ROOT / "services" / "gamestream" / "bin" / "gamestream-loop.sh"
 
 
 def write_lock(state: Path, text: str) -> None:
@@ -230,3 +231,94 @@ def test_format_lock_round_trips_and_refuses_what_bash_would_reject(tmp_path: Pa
             format_lock(owner="t", since=1, reason="r", **bad)  # type: ignore[arg-type]
     with pytest.raises(ValueError):
         format_lock("rdp", 1, "steady", owner="t", since=1, reason="two words")
+
+
+# --- gamestream-loop.sh: the mirror image -------------------------------------------------------
+
+
+def lock_functions(script: Path) -> str:
+    text = script.read_text()
+    start = text.index("# --- capture-backend lock ---")
+    end = text.index("# The second interlock")
+    return text[start:end].strip()
+
+
+def test_both_loops_share_one_lock_reader() -> None:
+    """The gamestream copy of read_lock/lock_stamp/nap must stay byte-identical to rdp-loop's."""
+    assert lock_functions(STREAM_LOOP) == lock_functions(RDP_LOOP)
+
+
+@pytest.fixture
+def stream_env(tmp_path: Path) -> dict[str, str]:
+    bin_dir, state, moon = tmp_path / "bin", tmp_path / "state", tmp_path / "moonlight"
+    for d in (bin_dir, state, moon):
+        d.mkdir()
+    fakes = {
+        bin_dir / "xdpyinfo": "#!/bin/sh\nexit 0\n",
+        bin_dir / "xwininfo": '#!/bin/sh\ncat "$FAKE_XWININFO" 2>/dev/null\n',
+        bin_dir / "gamestream-unpack": "#!/bin/sh\nexit 0\n",
+        moon / "AppRun": '#!/bin/sh\necho "$*" >>"$FAKE_MARK"\nexec sleep 30\n',
+    }
+    for path, body in fakes.items():
+        path.write_text(body)
+        path.chmod(0o755)
+    return {
+        "PATH": f"{bin_dir}:/usr/bin:/bin",
+        "DISPLAY": ":99",
+        "WIN_HOST": "win.test",
+        "LAB_STATE_DIR": str(state),
+        "MOONLIGHT_DIR": str(moon),
+        "FAKE_XWININFO": str(tmp_path / "xwininfo.txt"),
+        "FAKE_MARK": str(tmp_path / "streams"),
+    }
+
+
+def run_stream(env: dict[str, str], seconds: float) -> tuple[list[str], str]:
+    proc = subprocess.Popen(
+        ["bash", str(STREAM_LOOP)],
+        env=env,
+        stderr=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        text=True,
+        start_new_session=True,
+    )
+    try:
+        time.sleep(seconds)
+    finally:
+        os.killpg(proc.pid, signal.SIGTERM)
+        _, err = proc.communicate(timeout=10)
+    mark = Path(env["FAKE_MARK"])
+    return (mark.read_text().splitlines() if mark.exists() else []), err
+
+
+def test_stream_only_under_a_console_lock(stream_env: dict[str, str]) -> None:
+    write_lock(Path(stream_env["LAB_STATE_DIR"]), "BACKEND=rdp\nSEQ=3\n")
+    streams, log = run_stream(stream_env, 2.0)
+    assert streams == [] and "capture-backend rdp seq=3: holding (no stream)" in log
+
+
+def test_no_lock_file_means_rdp_so_no_stream(stream_env: dict[str, str]) -> None:
+    streams, _ = run_stream(stream_env, 1.5)
+    assert streams == []
+
+
+def test_console_lock_streams_once_with_absolute_mouse(stream_env: dict[str, str]) -> None:
+    write_lock(Path(stream_env["LAB_STATE_DIR"]), "BACKEND=console\nSEQ=4\n")
+    streams, log = run_stream(stream_env, 2.0)
+    assert len(streams) == 1
+    args = streams[0].split()
+    assert args[:3] == ["stream", "win.test", "Desktop"]
+    for flag in ("--absolute-mouse", "--game-optimization", "--audio-on-host"):
+        assert flag in args
+    assert args[args.index("--resolution") + 1] == "1280x800"
+    assert args[args.index("--video-codec") + 1] == "H.264"
+    assert "capture-backend console seq=4: streaming win.test" in log
+
+
+def test_an_xfreerdp_window_blocks_the_stream(stream_env: dict[str, str]) -> None:
+    write_lock(Path(stream_env["LAB_STATE_DIR"]), "BACKEND=console\nSEQ=5\n")
+    Path(stream_env["FAKE_XWININFO"]).write_text(
+        '     0xc00002 "FreeRDP: 192.168.1.169": ("xfreerdp" "xfreerdp")  1280x800+0+0\n'
+    )
+    streams, log = run_stream(stream_env, 2.0)
+    assert streams == [] and "an xfreerdp window is on :99" in log

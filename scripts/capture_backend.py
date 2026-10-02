@@ -14,8 +14,11 @@ rdp-loop.sh connects only while it says ``rdp``; gamestream-loop.sh streams only
     capture_backend.py to-rdp [--recover]
         Console -> RDP (or recover from any half-done handover): lock -> rdp/switching, TERM every
         Moonlight client, revive rdp-loop if it idles, exactly one xfreerdp, lock -> steady.
-    capture_backend.py to-console        # needs gamestream + Sunshine (Part A, 2026-10-02)
-    capture_backend.py pair PIN          # likewise
+    capture_backend.py pair PIN          # one-time pairing (private display; ok in rdp)
+    capture_backend.py to-console [--yes-tscon]
+        RDP -> console: preflight; with --yes-tscon (after Batt's OK): lock -> console/switching,
+        type `tscon <own session> /dest:console` (delayed 10 s) into the poring-lab console, TERM
+        xfreerdp until none for 5 s, wait for gamestream's stream window, lock -> steady.
 
 Writes are atomic (rename) and read back on the host AND inside every running container before a
 step counts as done (CLAUDE.md: read back every write). Scratch never goes to host /tmp.
@@ -297,6 +300,98 @@ def cmd_to_rdp(recover: bool) -> int:
     return 0
 
 
+SUNSHINE_PORTS = (47984, 47989, 48010)
+MOONLIGHT_CONF = "/home/desk/.config/Moonlight Game Streaming Project/Moonlight.conf"
+TSCON = "Start-Sleep 10; tscon ((Get-Process -Id $PID).SessionId) /dest:console"
+
+
+def win_host() -> str:
+    for line in (REPO / ".env").read_text().splitlines():
+        if line.startswith("WIN_HOST="):
+            return line.split("=", 1)[1].strip()
+    raise Stop("WIN_HOST is not set in .env")
+
+
+def sunshine_reachable(host: str) -> bool:
+    import socket
+
+    for port in SUNSHINE_PORTS:
+        try:
+            with socket.create_connection((host, port), timeout=3):
+                pass
+        except OSError:
+            return False
+    return True
+
+
+def paired() -> bool:
+    res = sh("docker", "exec", GAMESTREAM, "sh", "-c", f'grep -q "certificate" "{MOONLIGHT_CONF}"')
+    return res.returncode == 0
+
+
+def cmd_pair(pin: str) -> int:
+    if not re.fullmatch(r"\d{4}", pin):
+        raise Stop("the PIN is 4 digits")
+    if not running(GAMESTREAM):
+        raise Stop("gamestream is not running (guarded start:gamestream first)")
+    if not sunshine_reachable(win_host()):
+        raise Stop(f"Sunshine is not reachable on {win_host()} {SUNSHINE_PORTS} (firewall?)")
+    say(
+        f"pairing on gamestream's private display :50 with PIN {pin}; enter it in Sunshine's web UI"
+    )
+    res = subprocess.run(
+        ["docker", "exec", GAMESTREAM, "gamestream-pair", pin], text=True, timeout=240
+    )
+    if res.returncode != 0 or not paired():
+        raise Stop(f"pairing did not complete (rc={res.returncode})")
+    say("paired: the client key is in the gamestream-state volume")
+    return 0
+
+
+def cmd_to_console(yes_tscon: bool) -> int:
+    backend, _, _ = read_host()
+    if backend != "rdp":
+        raise Stop(f"to-console starts from rdp (the lock is {backend})")
+    if count(DESKTOP, RDP_NAMES) != 1:
+        raise Stop("exactly one xfreerdp client must be connected (tscon is typed into it)")
+    if not running(GAMESTREAM) or not paired():
+        raise Stop("gamestream must be running and paired (capture_backend.py pair PIN)")
+    host = win_host()
+    if not sunshine_reachable(host):
+        raise Stop(f"Sunshine is not reachable on {host}")
+    if not yes_tscon:
+        say(
+            f"preflight OK. Next: lock -> console, type `{TSCON}` into the poring-lab console, "
+            "TERM xfreerdp. Re-run with --yes-tscon after Batt's OK (a stop point)."
+        )
+        return 0
+    sys.path.insert(0, str(REPO / "scripts"))
+    import ro_agent as r
+
+    since = utc_now()
+    body = write_lock("console", "switching", "to-console")
+    verify_everywhere(body)
+    with r.session("capture-backend", allow_handover=True) as (agent, screen):
+        agent.click(928, 776)  # the console's taskbar button (verified by its tab template next)
+        time.sleep(2)
+        r.console_type(agent, screen, TSCON)
+        say("tscon typed (runs in 10 s); disconnecting the RDP client now")
+    term_until_zero(DESKTOP, RDP_NAMES)
+    line = wait_log(DESKTOP, rf"capture-backend console seq={raw_seq(body)}: holding", since, 60)
+    say(f"rdp-loop holds: {line.split('rdp-loop: ', 1)[-1]}")
+    wait_log(GAMESTREAM, rf"capture-backend console seq={raw_seq(body)}: streaming", since, 90)
+    deadline = time.monotonic() + 60
+    while time.monotonic() < deadline:
+        if health().get("stream_window_present") is True:
+            break
+        time.sleep(2)
+    else:
+        raise Stop("no Moonlight window on the display within 60 s: run to-rdp --recover")
+    verify_everywhere(write_lock("console", "steady", "to-console-done"))
+    say("CONSOLE mode: the stream window is up. Verify one session (qwinsta) through the stream.")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -306,7 +401,8 @@ def main() -> int:
     drill.add_argument("--hold-s", type=float, default=20.0)
     to_rdp = sub.add_parser("to-rdp")
     to_rdp.add_argument("--recover", action="store_true")
-    sub.add_parser("to-console")
+    to_console = sub.add_parser("to-console")
+    to_console.add_argument("--yes-tscon", action="store_true", help="after Batt's OK only")
     pair = sub.add_parser("pair")
     pair.add_argument("pin")
     args = ap.parse_args()
@@ -318,7 +414,9 @@ def main() -> int:
         return cmd_drill(args.hold_s)
     if args.cmd == "to-rdp":
         return cmd_to_rdp(args.recover)
-    raise Stop(f"{args.cmd}: not available until gamestream + Sunshine exist (Part A)")
+    if args.cmd == "pair":
+        return cmd_pair(args.pin)
+    return cmd_to_console(args.yes_tscon)
 
 
 if __name__ == "__main__":

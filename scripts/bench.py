@@ -129,9 +129,9 @@ def enter_scene(agent: r.Agent, screen: r.Screen, scene: str) -> None:
     time.sleep(3)
 
 
-def idle_cost(seconds: float) -> dict[str, float]:
+def idle_cost(agent: r.Agent, seconds: float) -> dict[str, float]:
     before, t0 = measure_motion.usage_us(), time.monotonic()
-    time.sleep(seconds)
+    agent.idle(seconds)  # no input; keeps reading the agent socket
     after, t1 = measure_motion.usage_us(), time.monotonic()
     return measure_motion.cores_between(before, after, t1 - t0)
 
@@ -239,7 +239,7 @@ def cmd_run(a: argparse.Namespace) -> int:
             res["delivery_fps"] = benchlib.fps_summary(rot["frames_per_s"])  # type: ignore[arg-type]
             res["lab_cores_motion"] = rot["lab_cores"]
             enter_scene(agent, screen, scene)  # undo the rotation before anything else
-            res["idle_cores"] = idle_cost(a.idle)
+            res["idle_cores"] = idle_cost(agent, a.idle)
             if scene == "outdoor":
                 walks = measure_delay.measure_walks(agent, screen, a.walks)
                 res["packet_to_frame_ms"] = walks["packet_to_frame_ms"]

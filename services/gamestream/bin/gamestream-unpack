@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Unpack the moonlight-qt AppImage's squashfs payload into tmpfs (once per container start) without
+# running the AppImage runtime: the payload starts where the runtime ELF ends.
+set -euo pipefail
+dest="${MOONLIGHT_DIR:-/tmp/moonlight}"
+[[ -x "${dest}/AppRun" ]] && exit 0
+img=/opt/moonlight/Moonlight.AppImage
+offset="$(python3 -c '
+import struct, sys
+h = open(sys.argv[1], "rb").read(64)
+shoff = struct.unpack_from("<Q", h, 0x28)[0]
+size, num = struct.unpack_from("<HH", h, 0x3A)
+print(shoff + size * num)' "${img}")"
+rm -rf "${dest}.tmp"
+unsquashfs -q -n -d "${dest}.tmp" -o "${offset}" "${img}" >/dev/null
+mv "${dest}.tmp" "${dest}"

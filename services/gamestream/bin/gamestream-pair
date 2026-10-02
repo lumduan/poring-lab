@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# One-time pairing with Sunshine (ADR-0009): `moonlight pair` on a PRIVATE Xvfb (:50, this
+# container only) -- no stream, no input, nothing on the lab display -- so it is allowed in RDP
+# mode. Batt types the same 4-digit PIN into Sunshine's web UI (a single-use pairing code).
+# The resulting client key lives in the gamestream-state volume (mounted in this container only).
+set -euo pipefail
+pin="${1:?usage: gamestream-pair PIN}"
+[[ "${pin}" =~ ^[0-9]{4}$ ]] || { echo "PIN must be 4 digits" >&2; exit 2; }
+host="${WIN_HOST:?WIN_HOST is not set}"
+gamestream-unpack
+mkdir -p /tmp/.X11-unix "${XDG_RUNTIME_DIR}" "${XDG_CACHE_HOME}"
+Xvfb :50 -nolisten tcp -screen 0 800x600x24 >/tmp/xvfb50.log 2>&1 &
+xvfb=$!
+trap 'kill "${xvfb}" 2>/dev/null' EXIT
+for _ in $(seq 1 50); do [[ -S /tmp/.X11-unix/X50 ]] && break; sleep 0.1; done
+DISPLAY=:50 timeout 180 /tmp/moonlight/AppRun pair "${host}" --pin "${pin}"

@@ -49,9 +49,16 @@ def test_bad_words_never_reach_the_file(cb: ModuleType) -> None:
     assert cb.read_host() == ("rdp", 0, "")
 
 
-def test_console_and_pair_are_not_available_yet(
+def test_to_console_refuses_without_a_running_paired_gamestream(
     cb: ModuleType, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr("sys.argv", ["capture_backend.py", "to-console"])
-    with pytest.raises(SystemExit, match="not available until gamestream"):
-        cb.main()
+    monkeypatch.setattr(cb, "count", lambda container, names: 1)
+    monkeypatch.setattr(cb, "running", lambda container: False)
+    with pytest.raises(SystemExit, match="gamestream must be running and paired"):
+        cb.cmd_to_console(yes_tscon=True)
+    assert cb.read_host() == ("rdp", 0, "")  # refused before any lock write
+
+
+def test_pair_rejects_a_bad_pin(cb: ModuleType) -> None:
+    with pytest.raises(SystemExit, match="4 digits"):
+        cb.cmd_pair("12a4")

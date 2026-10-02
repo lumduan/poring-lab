@@ -302,3 +302,38 @@ def test_lock_directory_is_read_only_everywhere_and_never_in_vision(name: str) -
 
 def test_lock_directory_exists_in_git_so_docker_never_creates_it_as_root() -> None:
     assert (ROOT / "state" / ".gitignore").read_text().split() == ["*", "!.gitignore"]
+
+
+# --- gamestream (ADR-0009 console mode) ----------------------------------------------------------
+
+
+def test_gamestream_service_is_contained() -> None:
+    services = compose("compose.yaml")["services"]
+    gs = services["gamestream"]
+    assert gs["profiles"] == ["gamestream"]
+    assert "depends_on" not in gs  # a guarded `up` must never recreate desktop as a dependency
+    assert gs["mem_limit"] == gs["memswap_limit"] and gs["oom_score_adj"] == 500
+    assert 0 < gs["cpu_shares"] < 1024 and 0 < float(gs["cpus"]) <= 4
+    assert gs.get("read_only") is True
+    assert set(gs["volumes"]) == {
+        "x11-unix:/x11:ro",
+        "./state:/lab-state:ro",
+        "gamestream-state:/home/desk/.config",
+    }
+    env = gs.get("environment", {})
+    assert not any(k.startswith("RDP_") for k in env), "no RDP credentials in gamestream"
+
+
+@pytest.mark.parametrize("name", ["compose.yaml", "compose.dev.yaml"])
+def test_the_pairing_key_volume_is_mounted_in_gamestream_only(name: str) -> None:
+    for service_name, service in compose(name)["services"].items():
+        if "gamestream-state" in volume_sources(service):
+            assert service_name == "gamestream", f"{name}: {service_name} mounts the pairing key"
+
+
+def test_gamestream_image_never_runs_the_desktop_startup() -> None:
+    dockerfile = (ROOT / "services" / "gamestream" / "Dockerfile").read_text()
+    assert "FROM poring-lab/desktop:local" in dockerfile
+    assert 'CMD ["/usr/local/bin/gamestream-loop.sh"]' in dockerfile
+    assert "HEALTHCHECK NONE" in dockerfile and "ENTRYPOINT []" in dockerfile
+    assert "--checksum=sha256:" in dockerfile and "ARG MOONLIGHT_SHA256=" in dockerfile
