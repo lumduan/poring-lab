@@ -31,6 +31,8 @@ Three constraints shape the format:
 
 1. **The disk is shared with live capture** (CLAUDE.md rule 5).
    - A lossless 784×625 frame is ~0.7–1 MB as fast PNG.
+     ➡️ **Measured 2026-10-02 at the frozen 1280×720:** about 1.84 MB per frame. The calibration session
+     wrote **489 MB/min (~29 GB/h)** at an effective 4.4 fps. That number sizes decision 4 (the sink).
    - At 30 fps that is ~25–90 GB per hour of writes: the disk-IO pattern that has stalled quant
      capture before.
    - Thousands of small files are worse still (metadata IO).

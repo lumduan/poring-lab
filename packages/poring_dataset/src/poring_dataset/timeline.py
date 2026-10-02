@@ -128,3 +128,35 @@ def walk_position(walk: Walk, tick: int, grid: MapGrid | None) -> tuple[float, f
         elapsed -= int(step)
         x, y = float(cx), float(cy)
     return float(walk.x1), float(walk.y1)
+
+
+# The client's world resets on these: a session's packets must start at the last one before the
+# first frame, or the player's own position (and anything already on screen) is unknown.
+ANCHOR_EVENTS = ("map_change", "char_selected")
+
+
+def session_events(
+    events: Iterable[Mapping[str, Any]],
+    t0_ns: int,
+    t1_ns: int,
+    *,
+    margin_ns: int = 5_000_000_000,
+    lookback_ns: int = 30 * 60 * 1_000_000_000,
+) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+    """The events a recording [t0, t1] needs: from the LAST map change / character select before
+    t0 (at most ``lookback_ns`` earlier) through t1 + margin, so the timeline knows the map, the
+    player's position and every entity already present. Without an anchor in reach: [t0 - margin,
+    ...] and anchor None (labels then start at the next map change). Returns (events, anchor)."""
+    ordered = sorted((dict(e) for e in events), key=lambda e: int(e["t_mono_ns"]))
+    ordered = [e for e in ordered if int(e["t_mono_ns"]) <= t1_ns + margin_ns]
+    latest: int | None = None
+    anchor: dict[str, Any] | None = None
+    for e in ordered:
+        t = int(e["t_mono_ns"])
+        if t > t0_ns:
+            break
+        if e["type"] in ANCHOR_EVENTS and t0_ns - t <= lookback_ns:
+            latest = t  # the world resets at every anchor: only the last one counts
+            anchor = {"type": e["type"], "seconds_before_t0": round((t0_ns - t) / 1e9, 1)}
+    start_ns = t0_ns - margin_ns if latest is None else min(latest, t0_ns - margin_ns)
+    return [e for e in ordered if int(e["t_mono_ns"]) >= start_ns], anchor

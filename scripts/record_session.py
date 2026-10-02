@@ -40,10 +40,11 @@ import ro_agent as r  # noqa: E402
 
 from poring_backend.capture_lock import read_lock  # noqa: E402
 from poring_dataset.shards import ShardWriter, write_manifest  # noqa: E402
+from poring_dataset.timeline import session_events  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 SALT = ROOT / "data" / "dataset-pseudonym.salt"
-RECORDER_VERSION = 1
+RECORDER_VERSION = 2  # v2: packets start at the last map change before t0 (anchor)
 
 
 def load_guard() -> Any:
@@ -92,9 +93,24 @@ def pseudonymiser() -> Any:
     return event
 
 
+LOOKBACK_S = 30 * 60  # how far before t0 to look for the anchor (the last map change)
+
+
 def packets_for(t0_ns: int, t1_ns: int) -> list[dict[str, Any]]:
+    """The sniffer's events for [t0 - 5 s, t1 + 5 s] (the measurement window)."""
+    return _events_since(t0_ns, 5, t0_ns - 5_000_000_000, t1_ns)
+
+
+def session_packets(t0_ns: int, t1_ns: int) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+    """A recording's events: from the last map change before t0 (so the player's position and the
+    entities already on screen are known) through t1 + 5 s. See timeline.session_events."""
+    events = _events_since(t0_ns, LOOKBACK_S + 5, t0_ns - (LOOKBACK_S + 5) * 1_000_000_000, t1_ns)
+    return session_events(events, t0_ns, t1_ns, lookback_ns=LOOKBACK_S * 1_000_000_000)
+
+
+def _events_since(t0_ns: int, back_s: float, lo_ns: int, t1_ns: int) -> list[dict[str, Any]]:
     since_wall = time.time() - (r.ns() - t0_ns) / 1e9
-    files = measure_delay.events_files(since_wall - 5)
+    files = measure_delay.events_files(since_wall - back_s)
     if not files:
         return []
     raw = subprocess.run(
@@ -105,7 +121,7 @@ def packets_for(t0_ns: int, t1_ns: int) -> list[dict[str, Any]]:
         try:
             for line in fh:
                 e = json.loads(line)
-                if t0_ns - 5_000_000_000 <= int(e.get("t_mono_ns", 0)) <= t1_ns + 5_000_000_000:
+                if lo_ns <= int(e.get("t_mono_ns", 0)) <= t1_ns + 5_000_000_000:
                     out.append(e)
         except EOFError:
             pass
@@ -158,11 +174,7 @@ def record(a: argparse.Namespace) -> dict[str, Any]:
         writer.close()
         screen.close()
     t1 = r.ns()
-    events = packets_for(t0, t1)
-    pseudo = pseudonymiser()
-    with gzip.open(out / "packets.jsonl.gz", "wt") as fh:
-        for e in events:
-            fh.write(json.dumps(pseudo(e), sort_keys=True) + "\n")
+    events, anchor = write_packets(out, t0, t1)
     seconds = (t1 - t0) / 1e9
     manifest = {
         "session_id": session_id, "recorder_version": RECORDER_VERSION,
@@ -172,22 +184,51 @@ def record(a: argparse.Namespace) -> dict[str, Any]:
         "t0_mono_ns": t0, "t1_mono_ns": t1, "seconds": round(seconds, 1),
         "mb_per_min": round(writer.bytes / 1e6 / max(seconds / 60, 1e-9), 1),
         "stop_reason": stop_reason, "guard": guard.summary(), "packet_events": len(events),
-        "pseudonymised": True,
+        "packet_anchor": anchor, "pseudonymised": True,
     }  # fmt: skip
     write_manifest(out, manifest)
     keys = ("frames", "bytes", "mb_per_min", "stop_reason", "packet_events")
     return {"dir": str(out), **{k: manifest[k] for k in keys}}
 
 
+def write_packets(
+    out: Path, t0: int, t1: int
+) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+    events, anchor = session_packets(t0, t1)
+    pseudo = pseudonymiser()
+    with gzip.open(out / "packets.jsonl.gz", "wt") as fh:
+        for e in events:
+            fh.write(json.dumps(pseudo(e), sort_keys=True) + "\n")
+    return events, anchor
+
+
+def repack(session: Path) -> dict[str, Any]:
+    """Rebuild a session's packets.jsonl.gz from the sniffer's archive (kept 7 days) with the
+    current window rule, and update the manifest. Frames are untouched."""
+    manifest = json.loads((session / "manifest.json").read_text())
+    events, anchor = write_packets(session, manifest["t0_mono_ns"], manifest["t1_mono_ns"])
+    manifest.update(
+        packet_events=len(events), packet_anchor=anchor, recorder_version=RECORDER_VERSION
+    )
+    write_manifest(session, manifest)
+    return {"dir": str(session), "packet_events": len(events), "packet_anchor": anchor}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
-    ap.add_argument("--backend", required=True, choices=["rdp", "console"])
-    ap.add_argument("--label", required=True)
+    ap.add_argument("--repack", type=Path, help="rebuild an existing session's packets file")
+    ap.add_argument("--backend", choices=["rdp", "console"])
+    ap.add_argument("--label")
     ap.add_argument("--seconds", type=float, default=120.0)
     ap.add_argument("--fps", type=float, default=10.0)
     ap.add_argument("--out", type=Path, default=Path("/dev/shm/poring-lab-rec"))
     ap.add_argument("--max-bytes", type=parse_size, default=parse_size("2G"))
     a = ap.parse_args()
+    if a.repack:
+        print(json.dumps(repack(a.repack)))
+        return 0
+    if not a.backend or not a.label:
+        raise r.Stop("--backend and --label are required to record")
     if not re.fullmatch(r"[A-Za-z0-9_.-]+", a.label):
         raise r.Stop("label: letters, digits, _ . - only")
     if str(a.out.resolve()).startswith(str((ROOT / "data").resolve())):

@@ -187,3 +187,22 @@ def test_decode_png_handles_every_row_filter() -> None:
     png = (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", st.pack(">IIBBBBB", 4, 5, 8, 2, 0, 0, 0))
            + chunk(b"IDAT", zl.compress(b"".join(rows))) + chunk(b"IEND", b""))  # fmt: skip
     assert np.array_equal(shards.decode_png(png), rgb[:, :, ::-1])
+
+
+def test_session_events_start_at_the_last_map_change_before_the_first_frame() -> None:
+    from poring_dataset.timeline import session_events
+
+    s = 1_000_000_000
+    ev = [
+        {"type": "map_change", "t_mono_ns": 10 * s, "map": "a"},
+        {"type": "map_change", "t_mono_ns": 50 * s, "map": "b"},  # the anchor
+        {"type": "entity_appear", "t_mono_ns": 60 * s, "gid": 7},  # before t0, still on screen
+        {"type": "entity_stop", "t_mono_ns": 140 * s, "gid": 7},
+        {"type": "entity_stop", "t_mono_ns": 300 * s, "gid": 7},  # after t1 + margin
+    ]
+    kept, anchor = session_events(ev, 100 * s, 200 * s)
+    assert [e["t_mono_ns"] // s for e in kept] == [50, 60, 140]
+    assert anchor == {"type": "map_change", "seconds_before_t0": 50.0}
+    # out of the lookback: only the margin window, and no anchor
+    kept, anchor = session_events(ev, 100 * s, 200 * s, lookback_ns=20 * s)
+    assert [e["t_mono_ns"] // s for e in kept] == [140] and anchor is None
