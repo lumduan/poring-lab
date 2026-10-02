@@ -6,12 +6,13 @@
 # with scripts/guarded_build.py, which uses dockerd's own BuildKit for lab images). Its CMD and
 # HEALTHCHECK are REPLACED: this container must never run start-xvfb.sh (it would delete the shared
 # X99 socket) nor xfreerdp. The AppImage stays ONE file in the image and is unpacked into tmpfs at
-# start (the rathena single-tar pattern: no thousands of files on the shared disk).
+# start (the rathena single-tar pattern: no thousands of files on the shared disk). xdotool MOVES the
+# stream window to the session area (gamestream-loop.sh place_stream); there is no window manager.
 FROM poring-lab/desktop:local
 
 USER root
 RUN apt-get update \
- && apt-get install -y --no-install-recommends libegl1 squashfs-tools \
+ && apt-get install -y --no-install-recommends libegl1 squashfs-tools xdotool \
  && rm -rf /var/lib/apt/lists/* \
  && install -d -m 0755 /opt/moonlight \
  && install -d -o desk -g desk -m 0700 /home/desk/.config

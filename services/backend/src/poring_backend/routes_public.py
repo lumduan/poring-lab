@@ -105,6 +105,9 @@ async def health(request: Request) -> dict[str, Any]:
         "mode": state.mux.mode,
         "x11": pointer is not None,
         "pointer": pointer,
+        # The Windows session's area at the screen's top-left ("" = the whole screen): frames are
+        # cropped to it and input is normalised over it (ADR-0009 amendment, 2026-10-02).
+        "session_size": state.settings.session_size,
         "rdp_window_present": state.rdp_window_present,
         "stream_window_present": state.stream_window_present,
         # ADR-0009: who owns the ONE Windows session (scripts/capture_backend.py status).

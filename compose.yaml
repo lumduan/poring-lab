@@ -115,7 +115,11 @@ services:
     image: poring-lab/desktop:local
     environment:
       DISPLAY: ":99"
-      XVFB_RESOLUTION: ${XVFB_RESOLUTION:-1440x900x24}
+      # The canvas is larger than the Windows session: xfreerdp draws the session 1:1 at its top-left
+      # (SESSION_SIZE), and Moonlight's console-mode window only opens at native size when the stream
+      # is under 80 % of the screen in both directions (ADR-0009 amendment, 2026-10-02).
+      XVFB_RESOLUTION: ${XVFB_RESOLUTION:-1920x1200x24}
+      SESSION_SIZE: ${SESSION_SIZE:-1440x900}
       # Empty WIN_HOST/RDP_* => no RDP connection is attempted (Xvfb-only mode).
       WIN_HOST: ${WIN_HOST:-}
       RDP_PORT: ${RDP_PORT:-3389}
@@ -161,6 +165,8 @@ services:
         condition: service_healthy
     environment:
       DISPLAY: ":99"
+      # The stream and the agent's frames are cropped to the session; input is normalised over it.
+      SESSION_SIZE: ${SESSION_SIZE:-1440x900}
       DATA_DIR: /data
       # Browser WebSocket Origin allowlist (comma-separated); unknown origins are refused.
       FRONTEND_ORIGINS: ${FRONTEND_ORIGINS:-http://${HOST_LAN_IP:?}:3000}
@@ -230,6 +236,7 @@ services:
         required: false # lets `--profile vision` validate on its own
     environment:
       DISPLAY: ":99"
+      SESSION_SIZE: ${SESSION_SIZE:-1440x900} # grab exactly what the backend maps input over
       BACKEND_AGENT_URL: ws://backend:8001/internal/agent
       AGENT_HZ: ${AGENT_HZ:-10}
       # The GPU is shared with Frigate (NVR) and Ollama: hard-cap this process's VRAM.
@@ -261,6 +268,7 @@ services:
     # NO depends_on: a guarded `up -d gamestream` must never recreate desktop as a dependency.
     environment:
       DISPLAY: ":99"
+      SESSION_SIZE: ${SESSION_SIZE:-1440x900} # the stream's size, moved 1:1 to the session area
       WIN_HOST: ${WIN_HOST:-} # Sunshine runs on the same Windows host as RDP
       LAB_STATE_DIR: /lab-state
     # Nothing writes to the image layer (the shared disk): the AppImage unpacks into the /tmp tmpfs,

@@ -103,7 +103,9 @@ def run_config(backend: str) -> dict[str, Any]:
         "spec": benchlib.SPEC_VERSION,
         "backend": backend,
         "client": client,
-        "xvfb": env.get("XVFB_RESOLUTION", "1440x900x24"),
+        "xvfb": env.get("XVFB_RESOLUTION", "1920x1200x24"),
+        # the Windows session at the canvas' top-left: what is streamed, grabbed and clicked
+        "session": env.get("SESSION_SIZE", "1440x900"),
         "game_region": env.get("GAME_REGION"),
         "fps_limit": FPS_LIMIT,
         "scenes": {k: list(v) for k, v in SCENES.items()},

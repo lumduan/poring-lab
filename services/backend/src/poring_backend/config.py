@@ -1,9 +1,11 @@
 """Backend settings, read from the environment (names are case-insensitive)."""
 
 import ipaddress
+import re
 from pathlib import Path
 from typing import Literal
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,6 +13,10 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
 
     display: str = ":99"
+    # SESSION_SIZE "WxH": the Windows session's area at the X screen's top-left (ADR-0009
+    # amendment, 2026-10-02). The stream and the agent's frames are cropped to it and input is
+    # normalised over it; "" = the whole screen. The canvas (XVFB_RESOLUTION) may be larger.
+    session_size: str = ""
     data_dir: Path = Path("/data")
 
     bind_host: str = "0.0.0.0"
@@ -76,6 +82,15 @@ class Settings(BaseSettings):
     # fully black desktop would trip it). BLACK_HOLD_S: how long it must stay black.
     game_region: str = ""
     black_hold_s: float = 5.0
+
+    @field_validator("session_size")
+    @classmethod
+    def _session_size(cls, value: str) -> str:
+        # Refused at startup, not at the first grab: a typo must not reach the stream or the mux.
+        value = value.strip()
+        if value and not re.fullmatch(r"[1-9][0-9]*x[1-9][0-9]*", value):
+            raise ValueError(f"SESSION_SIZE must be WxH (e.g. 1440x900), got {value!r}")
+        return value
 
     @property
     def origins(self) -> frozenset[str]:

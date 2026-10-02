@@ -169,12 +169,18 @@ _DESKTOP: tuple[int, int] | None = None
 
 
 def desktop() -> tuple[int, int]:
-    """The X screen's REAL size (w, h), queried once per process: the running Xvfb, never what .env
-    says (between an .env write and the desktop recreate the two differ). Clicks are normalised by
-    it, and the backend maps them back with the same size."""
+    """The Windows session's REAL size (w, h) at the screen's top-left, queried once per process
+    inside the backend: its SESSION_SIZE clipped to the running Xvfb, never what .env says (between
+    an .env write and a recreate the two differ). Clicks are normalised by it, and the backend maps
+    them back over the same area (ADR-0009 amendment: the canvas may be larger than the session)."""
     global _DESKTOP
     if _DESKTOP is None:
-        probe = "import mss; m = mss.MSS(display=':99').monitors[0]; print(m['width'], m['height'])"
+        probe = (
+            "import os, mss; from poring_env.x11 import parse_session_size, session_extent; "
+            "m = mss.MSS(display=':99').monitors[0]; "
+            "s = parse_session_size(os.environ.get('SESSION_SIZE', '')); "
+            "print(*session_extent(s, m['width'], m['height']))"
+        )
         out = subprocess.run(
             ["docker", "exec", BACKEND, "python", "-c", probe],
             capture_output=True, text=True, check=True,

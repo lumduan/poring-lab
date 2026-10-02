@@ -81,6 +81,7 @@ def run(
 @dataclass(frozen=True, slots=True)
 class AgentConfig:
     display: str
+    session_size: str  # SESSION_SIZE: the same session area the backend maps input over
     backend_url: str
     hz: float
     max_vram_fraction: float
@@ -90,6 +91,7 @@ class AgentConfig:
     def from_env(cls) -> "AgentConfig":
         return cls(
             display=os.environ.get("DISPLAY", ":99"),
+            session_size=os.environ.get("SESSION_SIZE", ""),
             backend_url=os.environ.get("BACKEND_AGENT_URL", "ws://backend:8001/internal/agent"),
             hz=float(os.environ.get("AGENT_HZ", "10")),
             max_vram_fraction=float(os.environ.get("VISION_MAX_VRAM_FRACTION", "0.25")),
@@ -104,14 +106,16 @@ def main() -> None:
     cfg = AgentConfig.from_env()
 
     from poring_env.remote import BackendInputSink, MuxedEnv
-    from poring_env.x11 import X11Capture
+    from poring_env.x11 import X11Capture, parse_session_size
     from poring_vision.gpu import configure_gpu
 
     configure_gpu(cfg.max_vram_fraction)
     detector: Detector = DebugBoxDetector() if cfg.debug_box else NullDetector()
     sink = BackendInputSink(cfg.backend_url, agent_id="vision", version=__version__)
     log.info("agent loop at %.1f Hz, detector=%s", cfg.hz, type(detector).__name__)
-    with MuxedEnv(X11Capture(cfg.display), sink) as env:
+    # Grab exactly the area the backend normalises input over, or clicks would land off target.
+    capture = X11Capture(cfg.display, session=parse_session_size(cfg.session_size))
+    with MuxedEnv(capture, sink) as env:
         run(env, detector, IdlePolicy(), hz=cfg.hz)
 
 

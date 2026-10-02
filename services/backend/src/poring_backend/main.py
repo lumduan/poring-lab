@@ -38,14 +38,15 @@ def create_app(
     cfg = settings or Settings()
 
     def default_capture() -> FrameSource:
-        from poring_env.x11 import X11Capture
+        from poring_env.x11 import X11Capture, parse_session_size
 
-        return X11Capture(cfg.display, with_cursor=cfg.capture_with_cursor)
+        session = parse_session_size(cfg.session_size)
+        return X11Capture(cfg.display, with_cursor=cfg.capture_with_cursor, session=session)
 
     def default_input() -> XInput:
-        from poring_env.x11 import X11Input
+        from poring_env.x11 import X11Input, parse_session_size
 
-        return X11Input(cfg.display)
+        return X11Input(cfg.display, session=parse_session_size(cfg.session_size))
 
     def default_damage(on_damage: Callable[[int], None]) -> ChangeWatcher:
         from poring_backend.damage import DamageWatcher

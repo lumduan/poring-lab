@@ -26,6 +26,7 @@ key. It refuses to start if a browser tab sent input in the last 10 s, so it nev
 import argparse
 import hashlib
 import json
+import os
 import statistics
 import sys
 import threading
@@ -45,7 +46,7 @@ from Xlib.ext import damage as xdamage
 
 BACKEND = "http://127.0.0.1:8000"
 WS = "ws://127.0.0.1:8000"
-SCREEN_W, SCREEN_H = 1280, 720  # replaced by the real Xvfb size in main()
+SCREEN_W, SCREEN_H = 1280, 720  # set in main(): the session area on the real Xvfb
 AGENT_WS = "ws://127.0.0.1:8001/internal/agent"
 MS = 1e6
 
@@ -440,7 +441,7 @@ def jpeg_bench(args: argparse.Namespace) -> dict[str, Any]:
     frames = []
     with mss.MSS(display=":99") as sct:
         for _ in range(args.frames):
-            shot = sct.grab(sct.monitors[1])
+            shot = sct.grab({"left": 0, "top": 0, "width": SCREEN_W, "height": SCREEN_H})
             frames.append(np.frombuffer(shot.raw, np.uint8).reshape(shot.height, shot.width, 4))
             time.sleep(0.05)
     out: dict[str, Any] = {"mode": "jpeg-bench", "frames": len(frames),
@@ -459,8 +460,14 @@ def jpeg_bench(args: argparse.Namespace) -> dict[str, Any]:
 
 def main() -> int:
     global SCREEN_W, SCREEN_H
+    from poring_env.x11 import parse_session_size, session_extent
+
+    # The backend normalises input over the session area (SESSION_SIZE at the screen's top-left),
+    # not the whole canvas; this container's env is the backend's, so both use the same area.
     with mss.MSS(display=":99") as sct:  # the real screen: XVFB_RESOLUTION can change
-        SCREEN_W, SCREEN_H = sct.monitors[1]["width"], sct.monitors[1]["height"]
+        mon = sct.monitors[1]
+    session = parse_session_size(os.environ.get("SESSION_SIZE", ""))
+    SCREEN_W, SCREEN_H = session_extent(session, mon["width"], mon["height"])
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="mode", required=True)
     p = sub.add_parser("passive")

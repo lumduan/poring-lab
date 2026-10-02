@@ -5,7 +5,7 @@ import pytest
 
 from poring_env.clock import FrameCounter
 from poring_env.frame import Frame
-from poring_env.x11 import to_pixels
+from poring_env.x11 import parse_session_size, session_extent, to_pixels
 
 
 def test_frame_rejects_wrong_buffer_size() -> None:
@@ -41,6 +41,27 @@ def test_frame_counter_is_strictly_increasing() -> None:
 )
 def test_to_pixels(x: float, y: float, expected: tuple[int, int]) -> None:
     assert to_pixels(x, y, 1280, 720) == expected
+
+
+def test_session_size_parses_or_refuses() -> None:
+    assert parse_session_size("1440x900") == (1440, 900)
+    assert parse_session_size(" ") is None  # the whole screen
+    for bad in ("1440", "0x900", "1440x", "1440X900", "-1x900", "1440x900+0+0"):
+        with pytest.raises(ValueError, match="WxH"):
+            parse_session_size(bad)
+
+
+def test_session_extent_is_the_session_on_a_larger_canvas() -> None:
+    assert session_extent((1440, 900), 1920, 1200) == (1440, 900)
+    assert session_extent(None, 1920, 1200) == (1920, 1200)
+    # an .env written before the desktop was recreated: clipped, never off-screen
+    assert session_extent((1920, 1200), 1440, 900) == (1440, 900)
+
+
+def test_a_session_click_lands_at_the_same_pixel_on_any_canvas() -> None:
+    """Input is normalised over the session, not the canvas: (0.5, 0.5) is the session's centre."""
+    w, h = session_extent((1440, 900), 1920, 1200)
+    assert to_pixels(0.5, 0.5, w, h) == (720, 450)
 
 
 @pytest.mark.skipif(

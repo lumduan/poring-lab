@@ -303,7 +303,7 @@ def test_no_lock_file_means_rdp_so_no_stream(stream_env: dict[str, str]) -> None
 
 
 def test_console_lock_streams_once_with_absolute_mouse(stream_env: dict[str, str]) -> None:
-    write_lock(Path(stream_env["LAB_STATE_DIR"]), "BACKEND=console\nSEQ=4\n")
+    write_lock(Path(stream_env["LAB_STATE_DIR"]), "BACKEND=console\nSEQ=4\nPHASE=steady\n")
     streams, log = run_stream(stream_env, 2.0)
     assert len(streams) == 1
     args = streams[0].split()
@@ -311,14 +311,67 @@ def test_console_lock_streams_once_with_absolute_mouse(stream_env: dict[str, str
     for flag in ("--absolute-mouse", "--game-optimization", "--audio-on-host"):
         assert flag in args
     assert args[args.index("--resolution") + 1] == "1440x900"
-    # windowed made the stream window 80 % of the screen without a WM (not 1:1, 2026-10-02)
-    assert args[args.index("--display-mode") + 1] == "borderless"
+    # windowed at the stream's own size (the canvas is larger), then only MOVED to 0,0
+    assert args[args.index("--display-mode") + 1] == "windowed"
     assert args[args.index("--video-codec") + 1] == "H.264"
     assert "capture-backend console seq=4: streaming win.test" in log
 
 
+def test_the_stream_is_the_session_size(stream_env: dict[str, str]) -> None:
+    """1:1 means the stream IS the session area: it follows SESSION_SIZE (GAMESTREAM_RESOLUTION
+    overrides, for size experiments only)."""
+    write_lock(Path(stream_env["LAB_STATE_DIR"]), "BACKEND=console\nSEQ=4\nPHASE=steady\n")
+    streams, _ = run_stream({**stream_env, "SESSION_SIZE": "1600x900"}, 1.5)
+    args = streams[0].split()
+    assert args[args.index("--resolution") + 1] == "1600x900"
+
+
+def test_the_stream_window_is_moved_to_the_session_origin_never_resized(
+    stream_env: dict[str, str], tmp_path: Path
+) -> None:
+    """ADR-0009 amendment (2026-10-02): Moonlight opens its window at the stream's own size, centred
+    on the larger canvas, and the loop MOVES it to 0,0. A resize during Moonlight's renderer set-up
+    left it black, so the loop never resizes, and leaves other Moonlight windows where they are."""
+    calls, geo = tmp_path / "xdotool.calls", tmp_path / "geo"
+    geo.write_text("240 150\n")
+    fake = Path(stream_env["PATH"].split(":")[0]) / "xdotool"
+    fake.write_text(
+        "#!/bin/bash\n"
+        f'echo "$*" >>"{calls}"\n'
+        'case "$1" in\n'
+        "  search) printf '42\\n7\\n' ;;\n"
+        "  getwindowgeometry)\n"
+        f'    if [[ "$3" == 42 ]]; then read -r x y <"{geo}"; w=1440 h=900;\n'
+        "    else x=320 y=300 w=1280 h=600; fi\n"
+        "    printf 'WINDOW=%s\\nX=%s\\nY=%s\\nWIDTH=%s\\nHEIGHT=%s\\nSCREEN=0\\n' "
+        '"$3" "$x" "$y" "$w" "$h" ;;\n'
+        f'  windowmove) echo "$3 $4" >"{geo}" ;;\n'
+        "esac\n"
+    )
+    fake.chmod(0o755)
+    write_lock(Path(stream_env["LAB_STATE_DIR"]), "BACKEND=console\nSEQ=4\nPHASE=steady\n")
+    streams, log = run_stream(stream_env, 2.0)
+    assert len(streams) == 1
+    lines = calls.read_text().splitlines()
+    assert {line.split()[0] for line in lines} == {"search", "getwindowgeometry", "windowmove"}
+    assert [line for line in lines if line.startswith("windowmove")] == ["windowmove 42 0 0"]
+    assert "Moonlight window 42: 1440x900+240+150 (stream 1440x900)" in log
+    assert "moved the stream window 42 to 0,0" in log
+    assert "Moonlight window 42: 1440x900+0+0" in log
+    assert "Moonlight window 7: 1280x600+320+300" in log
+
+
+def test_console_switching_holds_the_stream(stream_env: dict[str, str]) -> None:
+    """The session isn't on the console yet during the switch: Sunshine couldn't apply its display
+    settings and captured an empty display when the stream started early (2026-10-02)."""
+    write_lock(Path(stream_env["LAB_STATE_DIR"]), "BACKEND=console\nSEQ=6\nPHASE=switching\n")
+    streams, log = run_stream(stream_env, 2.0)
+    assert streams == []
+    assert "seq=6: holding (no stream) -- phase switching: the session is not on the console" in log
+
+
 def test_an_xfreerdp_window_blocks_the_stream(stream_env: dict[str, str]) -> None:
-    write_lock(Path(stream_env["LAB_STATE_DIR"]), "BACKEND=console\nSEQ=5\n")
+    write_lock(Path(stream_env["LAB_STATE_DIR"]), "BACKEND=console\nSEQ=5\nPHASE=steady\n")
     Path(stream_env["FAKE_XWININFO"]).write_text(
         '     0xc00002 "FreeRDP: 192.168.1.169": ("xfreerdp" "xfreerdp")  1280x800+0+0\n'
     )

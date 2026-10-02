@@ -5,10 +5,10 @@
 # It streams only while the capture-backend lock says `console` AND no xfreerdp window is on the
 # display (the second, independent interlock); otherwise it naps, waking when the lock changes. It
 # never exits (restart: unless-stopped would loop), never fights: every failure backs off.
-#   moonlight-qt flags: borderless = a frameless window the size of the 1440x900 Xvfb at (0,0), so a
-#   1440x900 stream is 1:1 ("windowed" made it 80 %: 1152x720 at 144,90 without a WM, 2026-10-02),
-#   --absolute-mouse (XTest positions -> LiSendMousePositionEvent), software H.264 decode,
-#   --game-optimization (lets Sunshine set the console to 1440x900), audio stays on the PC.
+#   moonlight-qt flags: windowed at the stream's own size, then MOVED (never resized) to the session
+#   area at the canvas' top-left (place_stream, SESSION_SIZE), --absolute-mouse (XTest positions ->
+#   LiSendMousePositionEvent), software H.264 decode, --game-optimization (lets Sunshine set the
+#   console to the stream's size), audio stays on the PC.
 #
 # The lock functions below are a COPY of rdp-loop.sh's (tests/test_capture_lock.py keeps them in
 # lock-step).
@@ -100,11 +100,48 @@ setup_display() {
   ln -sfn /x11/X99 /tmp/.X11-unix/X99
 }
 
+# The stream window, 1:1 at the session area (ADR-0009 amendment, 2026-10-02). Without a window
+# manager Moonlight's windowed mode opens at the stream's own size only when that is under 80 % of
+# the screen in both directions, centred -- hence the 1920x1200 canvas around the 1440x900 session.
+# This MOVES that window to 0,0 and never resizes it: Moonlight drops resize events while it builds
+# its renderer, and a resize during start-up (by script, or by a kiosk WM) left it black
+# (2026-10-02). A move changes only where the window is drawn. Runs in the background for the
+# stream's lifetime (a re-created window is moved again) and logs each window geometry it sees once.
+stream_size() {
+  printf '%s\n' "${GAMESTREAM_RESOLUTION:-${SESSION_SIZE:-1440x900}}"
+}
+
+# "x y w h" of a window from `xdotool getwindowgeometry --shell` (parsed, never eval'd).
+window_geometry() {
+  local out re=$'(^|\n)X=(-?[0-9]+)\nY=(-?[0-9]+)\nWIDTH=([0-9]+)\nHEIGHT=([0-9]+)'
+  out="$(xdotool getwindowgeometry --shell "$1" 2>/dev/null)" || return 1
+  [[ "${out}" =~ ${re} ]] || return 1
+  printf '%s %s %s %s\n' "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}" "${BASH_REMATCH[4]}" \
+    "${BASH_REMATCH[5]}"
+}
+
+place_stream() {
+  local want wid x y w h seen=" "
+  want="$(stream_size)"
+  while sleep 0.2; do
+    for wid in $(xdotool search --onlyvisible --name '^Moonlight$' 2>/dev/null); do
+      read -r x y w h < <(window_geometry "${wid}") || continue
+      if [[ "${seen}" != *" ${wid}:${w}x${h}+${x}+${y} "* ]]; then
+        log "Moonlight window ${wid}: ${w}x${h}+${x}+${y} (stream ${want})"
+        seen+="${wid}:${w}x${h}+${x}+${y} "
+      fi
+      if [[ "${w}x${h}" == "${want}" && "${x}+${y}" != "0+0" ]]; then
+        xdotool windowmove "${wid}" 0 0 && log "moved the stream window ${wid} to 0,0"
+      fi
+    done
+  done
+}
+
 stream_args() {
   printf '%s\n' stream "${WIN_HOST}" "${GAMESTREAM_APP:-Desktop}" \
-    --resolution "${GAMESTREAM_RESOLUTION:-1440x900}" --fps "${GAMESTREAM_FPS:-30}" \
+    --resolution "$(stream_size)" --fps "${GAMESTREAM_FPS:-30}" \
     --bitrate "${GAMESTREAM_BITRATE_KBPS:-20000}" --video-codec H.264 --video-decoder software \
-    --display-mode borderless --absolute-mouse --game-optimization --audio-on-host \
+    --display-mode windowed --absolute-mouse --game-optimization --audio-on-host \
     --no-vsync --no-frame-pacing --no-quit-after --capture-system-keys never \
     --no-performance-overlay
 }
@@ -116,15 +153,21 @@ main() {
   fi
   setup_display
   gamestream-unpack || { log "could not unpack moonlight-qt: idling"; exec sleep infinity; }
-  local backoff=2 rc held="" rdp_noted="" started
+  local backoff=2 rc held="" rdp_noted="" started placer
   while true; do
     wait_for_x
     read_lock
-    if [[ "${LOCK_BACKEND}" != console ]]; then
-      if [[ "${held}" != "${LOCK_BACKEND}:${LOCK_SEQ}:${LOCK_WHY}" ]]; then
-        log "capture-backend ${LOCK_BACKEND} seq=${LOCK_SEQ}: holding (no stream)" \
-          "${LOCK_WHY:+-- ${LOCK_WHY}}"
-        held="${LOCK_BACKEND}:${LOCK_SEQ}:${LOCK_WHY}"
+    # Stream only on console/STEADY: during the switch the session is not on the console yet, and
+    # Sunshine can't apply its display settings (VDD only, resolution) without a console session --
+    # a stream started early captured an empty, black display (2026-10-02).
+    if [[ "${LOCK_BACKEND}" != console || "${LOCK_PHASE}" != steady ]]; then
+      local why="${LOCK_WHY}"
+      if [[ "${LOCK_BACKEND}" == console ]]; then
+        why="phase ${LOCK_PHASE:-unset}: the session is not on the console yet"
+      fi
+      if [[ "${held}" != "${LOCK_BACKEND}:${LOCK_SEQ}:${why}" ]]; then
+        log "capture-backend ${LOCK_BACKEND} seq=${LOCK_SEQ}: holding (no stream)" "${why:+-- ${why}}"
+        held="${LOCK_BACKEND}:${LOCK_SEQ}:${why}"
       fi
       nap 30
       continue
@@ -140,11 +183,15 @@ main() {
     fi
     held="" rdp_noted=""
     log "capture-backend console seq=${LOCK_SEQ}: streaming ${WIN_HOST} at" \
-      "${GAMESTREAM_RESOLUTION:-1440x900}@${GAMESTREAM_FPS:-30}"
+      "$(stream_size)@${GAMESTREAM_FPS:-30}"
     started=$(date +%s)
     mapfile -t args < <(stream_args)
+    place_stream &
+    placer=$!
     "${MOONLIGHT_DIR:-/tmp/moonlight}/AppRun" "${args[@]}"
     rc=$?
+    kill "${placer}" 2>/dev/null
+    wait "${placer}" 2>/dev/null
     if (($(date +%s) - started > 60)); then backoff=2; fi
     log "moonlight exited (rc=${rc}); next attempt in ${backoff}s (or when the lock changes)"
     nap "${backoff}"

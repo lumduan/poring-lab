@@ -17,9 +17,10 @@ rdp-loop.sh connects only while it says ``rdp``; gamestream-loop.sh streams only
     capture_backend.py pair PIN          # one-time pairing (private display; ok in rdp)
     capture_backend.py to-console [--yes-tscon]
         RDP -> console: preflight; with --yes-tscon (after Batt's OK): focus + verify poring-lab's
-        own console (open and visible; tscon of ANOTHER user's session fails, 1326), THEN lock ->
-        console/switching, type `tscon <own session> /dest:console` (delayed 10 s), TERM xfreerdp
-        until none for 5 s, wait for Moonlight's first decoded video packet, lock -> steady.
+        own console (open and visible), THEN lock -> console/switching, type `schtasks /run` of
+        the SYSTEM task that tscons poring-lab's session (delayed 10 s), TERM xfreerdp until none
+        for 5 s, wait out the tscon, lock -> console/steady (only now may gamestream stream), and
+        wait for Moonlight's first decoded video packet.
 
 Writes are atomic (rename) and read back on the host AND inside every running container before a
 step counts as done (CLAUDE.md: read back every write). Scratch never goes to host /tmp.
@@ -286,6 +287,13 @@ def cmd_to_rdp(recover: bool) -> int:
     if backend == "rdp" and not recover:
         say("already rdp (use --recover to re-run the handover steps anyway)")
         return 0
+    if backend == "console":
+        # Stop the stream while the session is still on the console, so Sunshine can revert its
+        # display settings (it can't once RDP holds the session), THEN let rdp-loop connect.
+        verify_everywhere(write_lock("console", "switching", "to-rdp"))
+        term_until_zero(GAMESTREAM, STREAM_NAMES, quiet_s=3)
+        say(f"stream stopped; {SUNSHINE_REVERT_S} s for Sunshine to revert its display settings")
+        time.sleep(SUNSHINE_REVERT_S)
     since = utc_now()
     body = write_lock("rdp", "switching", "recover" if recover else "to-rdp")
     verify_everywhere(body)
@@ -303,7 +311,17 @@ def cmd_to_rdp(recover: bool) -> int:
 
 SUNSHINE_PORTS = (47984, 47989, 48010)
 MOONLIGHT_CONF = "/home/desk/.config/Moonlight Game Streaming Project/Moonlight.conf"
-TSCON = "Start-Sleep 10; tscon ((Get-Process -Id $PID).SessionId) /dest:console"
+TSCON_DELAY_S = 10  # the typed command waits so its line completes before RDP drops
+# tscon needs privilege: from poring-lab's own console it is "Access is denied" (5), from Batt's
+# elevated one it wants poring-lab's password (1326) (2026-10-02). Batt's one-time SYSTEM task runs
+# `C:\Program Files\PoringLab\to-console.ps1` (admin-only folder), which finds poring-lab's session
+# and tscons it; poring-lab may only RUN the task (read+execute ACE). docs/client/rathena-client.md.
+TOCONSOLE_TASK = r"\PoringLab\PoringLab-ToConsole"
+TSCON = f'Start-Sleep {TSCON_DELAY_S}; schtasks /run /tn "{TOCONSOLE_TASK}"'
+# After the stream stops, Sunshine reverts its display settings (the Samsung back on), but only
+# while the session is still on the console: from RDP its display API is unavailable and it retries
+# every 5 s indefinitely (2026-10-02).
+SUNSHINE_REVERT_S = 8
 
 
 def win_host() -> str:
@@ -385,14 +403,23 @@ def cmd_to_console(yes_tscon: bool) -> int:
         # failed with 1326 "user name or password is incorrect" (another user's session).
         r.focus_console(agent, screen)
         since = utc_now()
+        # console/SWITCHING: rdp-loop holds, and gamestream holds too (it streams only on steady)
         body = write_lock("console", "switching", "to-console")
         verify_everywhere(body)
         r.console_type(agent, screen, TSCON)
-        say("tscon typed (runs in 10 s); disconnecting the RDP client now")
+        typed = time.monotonic()
+        say(f"tscon typed (runs in {TSCON_DELAY_S} s); disconnecting the RDP client now")
     term_until_zero(DESKTOP, RDP_NAMES)
     line = wait_log(DESKTOP, rf"capture-backend console seq={raw_seq(body)}: holding", since, 60)
     say(f"rdp-loop holds: {line.split('rdp-loop: ', 1)[-1]}")
-    wait_log(GAMESTREAM, rf"capture-backend console seq={raw_seq(body)}: streaming", since, 90)
+    # Only once tscon has put the session on the console may the stream start: Sunshine applies
+    # its display settings (VDD only, resolution) at stream start and needs a console session for
+    # that. A stream started earlier captured an empty display (2026-10-02).
+    time.sleep(max(0.0, TSCON_DELAY_S + 5 - (time.monotonic() - typed)))
+    since = utc_now()
+    body = write_lock("console", "steady", "to-console")
+    verify_everywhere(body)
+    wait_log(GAMESTREAM, rf"capture-backend console seq={raw_seq(body)}: streaming", since, 60)
     # A Moonlight window alone is not a stream: its "Starting..." window counted on 2026-10-02 while
     # the console still showed the lock screen. Require decoded video.
     wait_log(GAMESTREAM, r"Received first video packet", since, 60)
@@ -403,7 +430,6 @@ def cmd_to_console(yes_tscon: bool) -> int:
         time.sleep(2)
     else:
         raise Stop("no Moonlight window on the display within 60 s: run to-rdp --recover")
-    verify_everywhere(write_lock("console", "steady", "to-console-done"))
     say("CONSOLE mode: the stream window is up. Verify one session (qwinsta) through the stream.")
     return 0
 

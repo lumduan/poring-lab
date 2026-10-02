@@ -194,9 +194,16 @@ build_args() {
   else
     printf '%s\n' "/cert:ignore"
   fi
-  # /f: sized to the Xvfb screen at (0,0) -- works without a window manager.
+  # Geometry (no window manager either way). SESSION_SIZE set: the session is drawn 1:1 at the
+  # canvas' top-left, /size at 0,0 -- the canvas is larger so Moonlight's console-mode window can open
+  # at native size (ADR-0009 amendment, 2026-10-02). Unset: /f, sized to the whole Xvfb screen.
   # -toggle-fullscreen: Ctrl+Alt+Enter must not change the geometry the pipeline depends on.
-  printf '%s\n' /f -toggle-fullscreen /kbd:layout:0x409 /audio-mode:2 \
+  if [[ -n "${SESSION_SIZE:-}" ]]; then
+    printf '%s\n' "/size:${SESSION_SIZE}" /window-position:0x0 -decorations
+  else
+    printf '%s\n' /f
+  fi
+  printf '%s\n' -toggle-fullscreen /kbd:layout:0x409 /audio-mode:2 \
     /log-level:INFO +auto-reconnect /auto-reconnect-max-retries:20
   clipboard_args
   drive_args
@@ -225,6 +232,9 @@ build_args() {
 main() {
   if [[ -z "${WIN_HOST:-}" || -z "${RDP_USER:-}" || -z "${RDP_PASSWORD:-}" ]]; then
     idle_forever "WIN_HOST / RDP_USER / RDP_PASSWORD not set: RDP disabled, display runs Xvfb-only."
+  fi
+  if [[ -n "${SESSION_SIZE:-}" && ! "${SESSION_SIZE}" =~ ^[1-9][0-9]*x[1-9][0-9]*$ ]]; then
+    idle_forever "SESSION_SIZE='${SESSION_SIZE:0:20}' is not WxH: NOT connecting (fix .env, recreate)."
   fi
   if [[ -z "${RDP_CERT_SHA256:-}" ]]; then
     log "WARNING: RDP_CERT_SHA256 unset -> /cert:ignore (no server identity check). Pin it in .env."

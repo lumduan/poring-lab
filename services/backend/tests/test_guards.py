@@ -1,6 +1,7 @@
 """Structural guards: what may touch the human-only clipboard/transfer (ADR-0004) and the packet
 ground truth (ADR-0007)."""
 
+import math
 import re
 import subprocess
 from pathlib import Path
@@ -370,3 +371,101 @@ def test_gamestream_config_dir_is_owned_by_desk_in_the_image() -> None:
     dockerfile = (ROOT / "services" / "gamestream" / "Dockerfile").read_text()
     assert "install -d -o desk -g desk -m 0700 /home/desk/.config" in dockerfile
     assert dockerfile.find("/home/desk/.config") < dockerfile.find("USER desk")
+
+
+def test_gamestream_places_its_window_without_a_window_manager() -> None:
+    """ADR-0009 amendment (2026-10-02): no WM on :99 in either mode -- a kiosk WM resized
+    Moonlight's window during its renderer set-up and the stream stayed black. The placer runs only
+    around the stream, and only moves."""
+    loop = (ROOT / "services" / "gamestream" / "bin" / "gamestream-loop.sh").read_text()
+    dockerfile = (ROOT / "services" / "gamestream" / "Dockerfile").read_text()
+    assert "matchbox" not in loop and "matchbox" not in dockerfile
+    assert "xdotool" in dockerfile
+    code = "\n".join(line for line in loop.splitlines() if not line.lstrip().startswith("#"))
+    assert "windowsize" not in code and "windowstate" not in code
+    start = code.find("    place_stream &\n")
+    run = code.find('"${MOONLIGHT_DIR:-/tmp/moonlight}/AppRun" "${args[@]}"')
+    stop = code.find('    kill "${placer}"')
+    assert -1 < start < run < stop
+
+
+def session_args(tmp_path: Path, **extra: str) -> list[str]:
+    script = f'source "{RDP_LOOP}"; build_args'
+    env = {"PATH": "/usr/bin:/bin", "WIN_HOST": "w", "RDP_USER": "u", "RDP_PASSWORD": "p",
+           "RDP_CERT_SHA256": "ab", "RDP_OVERRIDE_FILE": str(tmp_path / "none")}  # fmt: skip
+    out = subprocess.run(
+        ["bash", "-c", script], env={**env, **extra}, capture_output=True, text=True, check=True
+    )
+    return out.stdout.split()
+
+
+def test_rdp_draws_the_session_at_the_canvas_top_left(tmp_path: Path) -> None:
+    args = session_args(tmp_path, SESSION_SIZE="1440x900")
+    assert "/size:1440x900" in args and "/window-position:0x0" in args and "/f" not in args
+    assert "-toggle-fullscreen" in args  # Ctrl+Alt+Enter can't change the geometry
+    args = session_args(tmp_path)  # unset: the whole screen, as before 2026-10-02
+    assert "/f" in args and not any(a.startswith(("/size", "/window-position")) for a in args)
+
+
+def test_rdp_loop_refuses_a_malformed_session_size() -> None:
+    script = (
+        f'source "{RDP_LOOP}"; idle_forever() {{ echo "IDLE: $*"; exit 0; }}; '
+        "xfreerdp3() { echo CONNECTED; }; main"
+    )
+    env = {"PATH": "/usr/bin:/bin", "WIN_HOST": "w", "RDP_USER": "u", "RDP_PASSWORD": "p",
+           "SESSION_SIZE": "1440x900;rm"}  # fmt: skip
+    out = subprocess.run(
+        ["bash", "-c", script], env=env, capture_output=True, text=True, timeout=10
+    )
+    assert "IDLE: SESSION_SIZE='1440x900;rm' is not WxH" in out.stdout
+    assert "CONNECTED" not in out.stdout
+
+
+def test_backend_refuses_a_malformed_session_size() -> None:
+    from pydantic import ValidationError
+
+    from poring_backend.config import Settings
+
+    assert Settings(session_size=" 1440x900 ").session_size == "1440x900"
+    assert Settings(session_size="").session_size == ""
+    for bad in ("1440", "1440x0", "x900", "1440X900", "1440x900+0+0"):
+        with pytest.raises(ValidationError):
+            Settings(session_size=bad)
+
+
+SESSION_SERVICES = ("desktop", "backend", "vision", "gamestream")
+
+
+def env_default(value: str) -> str:
+    match = re.fullmatch(r"\$\{[A-Z_]+:-([^}]*)\}", value)
+    assert match, value
+    return match.group(1)
+
+
+def test_every_display_consumer_uses_the_same_session_area() -> None:
+    """The backend maps input over SESSION_SIZE; a consumer grabbing another area would click off
+    target. Same variable, same default, in every service that touches the display."""
+    services = compose("compose.yaml")["services"]
+    values = {svc: services[svc]["environment"]["SESSION_SIZE"] for svc in SESSION_SERVICES}
+    assert set(values.values()) == {"${SESSION_SIZE:-1440x900}"}, values
+
+
+@pytest.mark.parametrize("source", ["compose.yaml", ".env.example"])
+def test_the_canvas_lets_moonlight_open_the_stream_at_native_size(source: str) -> None:
+    """Moonlight's windowed mode opens at the stream's size only if it is under 80 % of the screen
+    in BOTH directions (Session::getWindowDimensions); otherwise 80 %, scaled (1152x720 on a
+    1440x900 screen, 2026-10-02)."""
+    if source == "compose.yaml":
+        desktop = compose(source)["services"]["desktop"]["environment"]
+        canvas = env_default(desktop["XVFB_RESOLUTION"])
+        session = env_default(desktop["SESSION_SIZE"])
+    else:
+        env = dict(
+            line.split("=", 1) for line in (ROOT / source).read_text().splitlines()
+            if re.match(r"(XVFB_RESOLUTION|SESSION_SIZE)=", line)
+        )  # fmt: skip
+        canvas, session = env["XVFB_RESOLUTION"], env["SESSION_SIZE"]
+    cw, ch = (int(v) for v in canvas.split("x")[:2])
+    sw, sh = (int(v) for v in session.split("x"))
+    # Moonlight: dst = ceil(screen * 0.8) & ~1; native only if dst > stream in both directions.
+    assert (math.ceil(cw * 0.8) & ~1) > sw and (math.ceil(ch * 0.8) & ~1) > sh, (canvas, session)
