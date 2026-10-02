@@ -154,6 +154,18 @@ class FrameTiming(BaseModel):
     painted_ns: int = Field(ge=0)
 
 
+class SecretInput(Message):
+    """Human secret typing on/off (a password into Windows or the game), from the console's toggle.
+
+    While any console connection has it on, the backend still injects every key through the mux,
+    but the input log keeps no key identities for the human source (type, action and timing only),
+    a synthetic release of a human-held key is redacted the same way, and a paste logs neither its
+    length nor a digest. Browser channel only; never on the agent protocol."""
+
+    type: Literal["secret_input"] = "secret_input"
+    on: bool
+
+
 class ViewerTiming(Message):
     """Latency telemetry from a console tab, about once a second (Phase 0).
 
@@ -262,6 +274,13 @@ class Status(Message):
             "after an RDP reconnect); null = unknown (no recent grab)."
         ),
     )
+    human_secret: bool = Field(
+        default=False,
+        description=(
+            "Human secret typing is on (a console's SecretInput): the input log keeps no human key "
+            "identities until it is off."
+        ),
+    )
 
 
 class PasteResult(Message):
@@ -357,6 +376,7 @@ type BrowserToBackend = Annotated[
     | SetMode
     | Ping
     | ClipboardPaste
+    | SecretInput
     | ViewerTiming,
     Field(discriminator="type"),
 ]

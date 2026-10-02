@@ -24,6 +24,7 @@ from poring_env.protocol import (
     MouseButton,
     Ping,
     Pong,
+    SecretInput,
     SetMode,
     ViewerTiming,
     parse_browser_to_backend,
@@ -222,9 +223,14 @@ async def ws_input(ws: WebSocket) -> None:
                     if msg.offset_ns is not None:
                         offset_ns = msg.offset_ns
                     state.latency.viewer_timing(msg)
+                case SecretInput():
+                    state.set_human_secret(id(ws), msg.on)
                 case _:
+                    kind = input_kind(msg)
+                    if state.human_secret and isinstance(msg, Key):
+                        kind = f"key:secret:{msg.action}"  # the latency ring never keeps the code
                     record = state.latency.input_received(
-                        input_kind(msg), msg.t_mono_ns, monotonic_ns(), clock, offset_ns
+                        kind, msg.t_mono_ns, monotonic_ns(), clock, offset_ns
                     )
                     await state.submit_many(Source.HUMAN, [msg], records=[record])
     except WebSocketDisconnect:
@@ -233,3 +239,5 @@ async def ws_input(ws: WebSocket) -> None:
         for task in list(pastes):
             await stop_task(task)
         await state.release_source(Source.HUMAN)
+        # Only after the release: its synthetic key releases are still logged redacted.
+        state.set_human_secret(id(ws), False)

@@ -172,6 +172,9 @@ class AppState:
         self.capture = read_lock(settings.lab_state_dir)
         self._status_task: asyncio.Task[None] | None = None
         self._background: set[asyncio.Task[Any]] = set()
+        # Console connections with secret typing on (SecretInput). While any is on, human key
+        # identities never reach the input log (redact_human).
+        self._secret_connections: set[int] = set()
 
     # --- lifecycle --------------------------------------------------------------------------------
 
@@ -241,6 +244,7 @@ class AppState:
             move_interval_ms=self.tuning.move_interval_ms,
             paint=self.tuning.paint,
             game_black=self.display.black,
+            human_secret=self.human_secret,
         )
 
     def refused_snapshot(self) -> dict[str, dict[str, int]]:
@@ -249,6 +253,33 @@ class AppState:
         for (source, reason), count in sorted(self.refused.items()):
             out.setdefault(source, {})[reason] = count
         return out
+
+    @property
+    def human_secret(self) -> bool:
+        return bool(self._secret_connections)
+
+    def set_human_secret(self, connection: int, on: bool) -> None:
+        """A console's secret-typing toggle (SecretInput). Status shows it to every viewer."""
+        before = self.human_secret
+        if on:
+            self._secret_connections.add(connection)
+        else:
+            self._secret_connections.discard(connection)
+        if self.human_secret != before:
+            log.info("human secret typing %s", "ON" if self.human_secret else "off")
+            self.broadcast_status()
+
+    def redact_human(self, source: Source, event: dict[str, Any]) -> dict[str, Any]:
+        """A human key while secret typing is on: type, action and timing only, never the code."""
+        if source is not Source.HUMAN or not self.human_secret or event.get("type") != "key":
+            return event
+        return {
+            "type": "key",
+            "action": event.get("action"),
+            "t_mono_ns": event.get("t_mono_ns"),
+            "frame_id": event.get("frame_id"),
+            "secret": True,
+        }
 
     def broadcast_status(self) -> None:
         text = self.status().model_dump_json()
@@ -297,7 +328,7 @@ class AppState:
             if not sensitive:
                 self._log(
                     source,
-                    event.model_dump(mode="json"),
+                    self.redact_human(source, event.model_dump(mode="json")),
                     event.frame_id,
                     decision.accepted,
                     synthetic_reason if decision.accepted and synthetic_reason else decision.reason,
@@ -342,7 +373,14 @@ class AppState:
         elif self.mux.mode is Mode.BOT:
             refusal = "mode_bot"
         now = monotonic_ns()
-        summary = {"type": msg.type, "chars": len(msg.text), "bytes": len(data), "sha256": digest}
+        secret = self.human_secret
+        summary: dict[str, Any] = (
+            # Secret typing on: a password paste leaves no length and no digest anywhere -- even a
+            # 12-hex prefix confirms a guessed password offline (2026-10-02).
+            {"type": msg.type, "secret": True}
+            if secret
+            else {"type": msg.type, "chars": len(msg.text), "bytes": len(data), "sha256": digest}
+        )
         self._log(Source.HUMAN, summary, msg.frame_id, refusal is None, refusal or "ok", now)
         if refusal is not None or self.clipboard is None:
             outcome = PasteOutcome(False, refusal or "clipboard_disabled")
@@ -353,8 +391,8 @@ class AppState:
         self.transfer_log.write(
             "paste",
             name=None,
-            size=len(data),
-            sha256=digest,
+            size=0 if secret else len(data),
+            sha256=None if secret else digest,
             ok=outcome.ok,
             reason=outcome.reason,
             client=client,
@@ -450,7 +488,7 @@ class AppState:
             if r.synthetic:
                 self._log(
                     r.source,
-                    r.event.model_dump(mode="json"),
+                    self.redact_human(r.source, r.event.model_dump(mode="json")),
                     r.event.frame_id,
                     True,
                     r.reason,

@@ -24,6 +24,7 @@ from poring_env.protocol import (
     Ping,
     Pong,
     ReleaseAll,
+    SecretInput,
     SetMode,
     Status,
     Wheel,
@@ -48,6 +49,7 @@ BROWSER_TO_BACKEND: list[BaseModel] = [
     SetMode(t_mono_ns=T, mode=Mode.ASSIST),
     Ping(t_mono_ns=T),
     ClipboardPaste(t_mono_ns=T, request_id=1, text="hello สวัสดี\nline 2"),
+    SecretInput(t_mono_ns=T, on=True),
 ]
 BACKEND_TO_BROWSER: list[BaseModel] = [
     FrameMeta(
@@ -191,7 +193,7 @@ def test_agent_side_schema_cannot_reach_clipboard_or_transfer(channel: str) -> N
     schema = json_schema()
     reachable = _reachable_defs(schema, schema["properties"][channel])
     assert "AgentInput" in reachable or channel == "input_event"
-    assert not {"ClipboardPaste", "PasteResult"} & reachable, reachable
+    assert not {"ClipboardPaste", "PasteResult", "SecretInput"} & reachable, reachable
     assert not any("clip" in name.lower() or "transfer" in name.lower() for name in reachable)
 
 

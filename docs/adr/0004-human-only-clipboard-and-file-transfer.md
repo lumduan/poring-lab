@@ -19,6 +19,9 @@ next_action: Live-verify on FreeRDP 3.32.1 (Batt) a dummy paste + scrub, then an
   Windows-side copy now makes xfreerdp *claim* the X CLIPBOARD with **no data targets**. The
   watchdog clears it; content still cannot flow Windows → X. E1c's "owner stayed None" is
   3.15-only.
+- ➡️ **AMENDED 2026-10-02 (c), human secret typing** (see "Amendment 2026-10-02 (c)" at the end):
+  a console toggle keeps human key identities and paste length/digest out of every log; older
+  human typing was purged. The 12-hex paste digest is NOT safe for passwords (open decision).
 - **Status:** accepted by Batt, 2026-09-30. T1 + F1 are implemented; F2 stays off; T2 is rejected.
   **Deployed 2026-09-30 11:34 ICT** (dev overlay; one combined desktop + backend recreate). Live-verified
   the same day, through the real feature path:
@@ -330,4 +333,44 @@ Until both are resolved, reverse text goes through a file in `\\tsclient\transfe
    next_action).
 4. **Rolling back to 3.15** (`poring-lab/desktop:freerdp-3.15`) restores the old behaviour, at the
    cost of Arm C's delivery gain (30 → 9 fps outdoor).
+
+## Amendment 2026-10-02 (c): human secret typing, and the purge of older human typing
+
+**Problem (Batt, 2026-10-02).** Every key a human typed through the web console was logged with its
+code in `data/input_log`. A password typed there (a game login, a UAC prompt) could therefore be
+read back from disk. Pastes logged their length and a digest:
+- the full sha256 before the 2026-10-01 amendment;
+- a 12-hex prefix since.
+
+**Decision (Batt's request, implemented 2026-10-02).**
+1. **A "Secret typing" toggle in the console toolbar** sends the browser-only `SecretInput{on}`.
+   - While any console connection has it on (`Status.human_secret`, shown to every viewer), human
+     keys are still injected through the mux, but every human key line is written as
+     `{"type": "key", "action", "t_mono_ns", "frame_id", "secret": true}`: no code.
+   - A synthetic release of a human-held key is redacted the same way.
+   - The latency ring records `key:secret:<action>`.
+   - A paste logs `{"type": "clipboard_paste", "secret": true}`: no length and no digest, and the
+     transfer audit gets size 0 and sha256 null.
+   - A disconnect turns it off **after** the disconnect's releases, so those are redacted too.
+   - Counts and timing only, like `AgentInput.sensitive`.
+2. **The purge** (`scripts/purge_input_log.py`, applied 2026-10-02 20:43 under `ionice -c3`).
+   - Every human key line whose code types a character was DELETED: 1,691 lines.
+   - The log can't tell a password from other typing, so every printable human key went.
+   - Kept: 2,326 non-printing human keys, every mouse line, every bot line (bot credentials were
+     always sensitive batches).
+   - 35 human paste lines and 35 paste audits lost their length and digest.
+   - It runs safely against the live backend: appends take a shared `flock`, the purge an
+     exclusive one, in place.
+
+**Open decision for Batt: the 12-hex digest on NORMAL pastes is a password verifier.**
+- Truncating a hash does not stop a dictionary attack: with 48 bits, a guessed password that
+  matches is almost certainly right.
+- The amendment's "too short to brute-force" reasoning holds only for a long random paste.
+- Options:
+  - (i) drop the digest from normal pastes too (length only);
+  - (ii) shorten it to ~4 hex (16 bits): it still matches a known value among a handful, but a
+    dictionary yields thousands of false matches;
+  - (iii) keep it, and rely on Secret typing for every password.
+- Until Batt decides, **use Secret typing for any password paste**. The NAS-password paste of the
+  Thai copy must be made with it on.
 

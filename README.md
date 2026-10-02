@@ -138,6 +138,15 @@ screen changes (`STREAM_CAPTURE=damage`, at most `STREAM_MAX_FPS=60`); `fixed` r
 knobs live through the loopback-only `/debug/stream-tuning`: `capture`, `max_fps`, `jpeg_quality`,
 and the console's `paint` and `move_interval_ms`.
 
+## Typing a password through the console: "Secret typing" (ADR-0004 amendment c)
+
+The input log records every human key with its code, so **turn on "Secret typing" in the toolbar
+before typing or pasting a password**.
+- Keys still reach Windows; the log keeps type and timing only, and a paste no length or digest.
+- The button turns red for every viewer (`Status.human_secret`).
+- It turns off on click, or when that console tab disconnects.
+- Older human typing was purged on 2026-10-02 (`scripts/purge_input_log.py`; counts only).
+
 ## Clipboard and file transfer (human-only, ADR-0004)
 
 Both are **off by default**. For this lab `.env` sets:

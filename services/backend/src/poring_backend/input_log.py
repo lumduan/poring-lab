@@ -6,6 +6,7 @@ a mouse-heavy session writes on the order of 1 GB/day, so rotation/compression i
 it matters.
 """
 
+import fcntl
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, TextIO
@@ -34,7 +35,11 @@ def wall_clock_iso() -> str:
 
 
 class DailyJsonl:
-    """``<directory>/YYYY-MM-DD.jsonl``, one file per UTC day, line-buffered appends."""
+    """``<directory>/YYYY-MM-DD.jsonl``, one file per UTC day, line-buffered appends.
+
+    Each append holds a SHARED flock, so ``scripts/purge_input_log.py`` can rewrite a file the
+    backend still has open (an EXCLUSIVE flock, in place, same inode) without interleaving lines;
+    the O_APPEND writer then continues at the new end of file."""
 
     def __init__(self, directory: Path) -> None:
         self._dir = directory
@@ -52,7 +57,12 @@ class DailyJsonl:
             # Line-buffered: each record reaches the file as soon as it is written.
             self._fh = (self._dir / f"{day}.jsonl").open("a", encoding="utf-8", buffering=1)
             self._day = day
-        self._fh.write(line + "\n")
+        fcntl.flock(self._fh, fcntl.LOCK_SH)
+        try:
+            self._fh.write(line + "\n")
+            self._fh.flush()
+        finally:
+            fcntl.flock(self._fh, fcntl.LOCK_UN)
 
     def close(self) -> None:
         if self._fh is not None:

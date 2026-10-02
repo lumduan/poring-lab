@@ -6,9 +6,12 @@ import type { ViewMode } from "@/lib/view";
 type Props = {
   disabled: boolean;
   mode: ViewMode;
+  /** Secret typing, as the backend reports it (Status.human_secret): true while ANY console has it on. */
+  secret: boolean;
   onKeys: (steps: KeyStep[]) => void;
   onReleaseAll: () => void;
   onModeChange: (mode: ViewMode) => void;
+  onSecretChange: (on: boolean) => void;
 };
 
 const button =
@@ -16,7 +19,18 @@ const button =
 
 /** Keys a browser can't send itself (the local OS grabs them), plus view controls. Sequences are
  * defined in lib/keys.ts and never form one of the mux's reserved xfreerdp chords. */
-export default function Toolbar({ disabled, mode, onKeys, onReleaseAll, onModeChange }: Props) {
+const secretOn =
+  "rounded-md border border-red-500 bg-red-900/60 px-2.5 py-1 text-sm font-semibold text-red-100 hover:bg-red-900 disabled:opacity-40";
+
+export default function Toolbar({
+  disabled,
+  mode,
+  secret,
+  onKeys,
+  onReleaseAll,
+  onModeChange,
+  onSecretChange,
+}: Props) {
   return (
     <div className="flex flex-wrap items-center gap-2" role="toolbar" aria-label="Remote keys">
       {(Object.keys(TOOLBAR) as ToolbarKey[]).map((key) => (
@@ -39,6 +53,20 @@ export default function Toolbar({ disabled, mode, onKeys, onReleaseAll, onModeCh
         onClick={onReleaseAll}
       >
         Release keyboard
+      </button>
+      <button
+        type="button"
+        className={secret ? secretOn : button}
+        aria-pressed={secret}
+        title={
+          secret
+            ? "Secret typing is ON: keys still reach Windows, but the input log keeps no key identities (and a paste no length or digest). Click to turn it off."
+            : "Before typing a password: turn this on. Keys still reach Windows; the input log keeps type and timing only."
+        }
+        disabled={disabled}
+        onClick={() => onSecretChange(!secret)}
+      >
+        {secret ? "Secret typing ON" : "Secret typing"}
       </button>
       <span className="mx-1 h-5 w-px bg-neutral-700" aria-hidden />
       <button

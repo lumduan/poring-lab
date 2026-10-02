@@ -32,7 +32,7 @@ export type BackendToBrowser = FrameMeta | Status | Detections | Pong | PasteRes
  * via the `definition` "BrowserToBackend".
  */
 export type BrowserToBackend =
-  MouseMove | MouseButton | Wheel | Key | ReleaseAll | SetMode | Ping | ClipboardPaste | ViewerTiming;
+  MouseMove | MouseButton | Wheel | Key | ReleaseAll | SetMode | Ping | ClipboardPaste | SecretInput | ViewerTiming;
 
 /**
  * Schema root that pulls every channel into one document for json-schema-to-typescript.
@@ -266,6 +266,10 @@ export interface Status {
    */
   game_black: boolean | null;
   /**
+   * Human secret typing is on (a console's SecretInput): the input log keeps no human key identities until it is off.
+   */
+  human_secret: boolean;
+  /**
    * End of the ASSIST human lease (backend clock); null = none.
    */
   lease_until_ns: number | null;
@@ -485,6 +489,29 @@ export interface ClipboardPaste {
    */
   text: string;
   type: "clipboard_paste";
+}
+/**
+ * Human secret typing on/off (a password into Windows or the game), from the console's toggle.
+ *
+ * While any console connection has it on, the backend still injects every key through the mux,
+ * but the input log keeps no key identities for the human source (type, action and timing only),
+ * a synthetic release of a human-held key is redacted the same way, and a paste logs neither its
+ * length nor a digest. Browser channel only; never on the agent protocol.
+ *
+ * This interface was referenced by `PoringProtocol`'s JSON-Schema
+ * via the `definition` "SecretInput".
+ */
+export interface SecretInput {
+  /**
+   * Frame this message refers to or was produced from; -1 means none.
+   */
+  frame_id: number;
+  on: boolean;
+  /**
+   * Sender's monotonic clock, ns (see module docstring).
+   */
+  t_mono_ns: number;
+  type: "secret_input";
 }
 /**
  * Latency telemetry from a console tab, about once a second (Phase 0).

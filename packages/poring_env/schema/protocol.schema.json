@@ -228,6 +228,7 @@
           "mouse_move": "#/$defs/MouseMove",
           "ping": "#/$defs/Ping",
           "release_all": "#/$defs/ReleaseAll",
+          "secret_input": "#/$defs/SecretInput",
           "set_mode": "#/$defs/SetMode",
           "viewer_timing": "#/$defs/ViewerTiming",
           "wheel": "#/$defs/Wheel"
@@ -258,6 +259,9 @@
         },
         {
           "$ref": "#/$defs/ClipboardPaste"
+        },
+        {
+          "$ref": "#/$defs/SecretInput"
         },
         {
           "$ref": "#/$defs/ViewerTiming"
@@ -953,6 +957,39 @@
       "title": "ReleaseAll",
       "type": "object"
     },
+    "SecretInput": {
+      "additionalProperties": false,
+      "description": "Human secret typing on/off (a password into Windows or the game), from the console's toggle.\n\nWhile any console connection has it on, the backend still injects every key through the mux,\nbut the input log keeps no key identities for the human source (type, action and timing only),\na synthetic release of a human-held key is redacted the same way, and a paste logs neither its\nlength nor a digest. Browser channel only; never on the agent protocol.",
+      "properties": {
+        "frame_id": {
+          "default": -1,
+          "description": "Frame this message refers to or was produced from; -1 means none.",
+          "minimum": -1,
+          "type": "integer"
+        },
+        "on": {
+          "type": "boolean"
+        },
+        "t_mono_ns": {
+          "description": "Sender's monotonic clock, ns (see module docstring).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "secret_input",
+          "default": "secret_input",
+          "type": "string"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "frame_id",
+        "type",
+        "on"
+      ],
+      "title": "SecretInput",
+      "type": "object"
+    },
     "SetMode": {
       "additionalProperties": false,
       "description": "Switch the input mux (HUMAN / BOT / ASSIST).",
@@ -1031,6 +1068,11 @@
           ],
           "default": null,
           "description": "The game region has been near-uniformly black for the hold time (a lost D3D device after an RDP reconnect); null = unknown (no recent grab)."
+        },
+        "human_secret": {
+          "default": false,
+          "description": "Human secret typing is on (a console's SecretInput): the input log keeps no human key identities until it is off.",
+          "type": "boolean"
         },
         "lease_until_ns": {
           "anyOf": [
@@ -1130,7 +1172,8 @@
         "transfer_enabled",
         "move_interval_ms",
         "paint",
-        "game_black"
+        "game_black",
+        "human_secret"
       ],
       "title": "Status",
       "type": "object"

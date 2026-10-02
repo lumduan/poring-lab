@@ -159,6 +159,13 @@ ports, quickstart) and `docs/adr/`.
 - **Sensitive agent input:** `AgentInput.sensitive` gives one summary line in the input log (counts
   and timing). A batch that leaves a key or button held is refused (`sensitive_unbalanced`).
   Credentials are only ever typed that way.
+- **Human secret typing** (ADR-0004 amendment c):
+  - The console's "Secret typing" toggle (`SecretInput`, `Status.human_secret`) logs human keys
+    without codes, and a paste without length or digest.
+  - Any password typed or pasted through the console needs it on.
+  - The normal-paste 12-hex digest is a password verifier (an open decision).
+  - `scripts/purge_input_log.py` removes printable human typing from old logs. The input log
+    appends under a shared `flock`.
 - **Driving Windows (ro_agent):**
   - **never the Run dialog**: Defender's ClickFix detection;
   - launch via the "Ragnarok Offline" shortcut; close with paced Alt+F4;

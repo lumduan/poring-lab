@@ -300,6 +300,9 @@ export default function Console({ backendUrl }: Props) {
 
   const setMode = (mode: Mode) => send({ type: "set_mode", ...stamp(), mode });
 
+  // Secret typing (passwords): the backend keeps no human key identities in its logs while on.
+  const setSecret = (on: boolean) => send({ type: "secret_input", ...stamp(), on });
+
   const sendKeys = (steps: KeyStep[]) => {
     for (const step of steps) {
       if (held.apply(step)) send({ type: "key", ...stamp(), code: step.code, action: step.action });
@@ -370,9 +373,11 @@ export default function Console({ backendUrl }: Props) {
       <Toolbar
         disabled={!links.input}
         mode={viewMode}
+        secret={status?.human_secret ?? false}
         onKeys={sendKeys}
         onReleaseAll={releaseAll}
         onModeChange={setViewMode}
+        onSecretChange={setSecret}
       />
       <StreamCanvas
         videoRef={videoRef}
