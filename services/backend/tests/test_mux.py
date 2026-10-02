@@ -246,3 +246,34 @@ def test_bot_keeps_ordinary_keys_and_copy() -> None:
     assert mux.submit(BOT, key("ControlLeft"), 0).accepted
     assert mux.submit(BOT, key("KeyC"), 0).accepted  # Ctrl+C copies, it does not paste
     assert mux.submit(BOT, key("Insert"), 0).accepted  # Ctrl+Insert is copy, not paste
+
+
+@pytest.mark.parametrize(
+    "order",
+    [
+        ("ControlLeft", "AltLeft", "ShiftLeft", "KeyV"),  # paste-as-keystrokes in Moonlight
+        ("ShiftRight", "ControlRight", "KeyQ", "AltRight"),  # quit, modifiers in any order
+        ("AltLeft", "ShiftLeft", "ControlLeft"),  # the bare triple is refused too
+    ],
+)
+def test_bot_may_never_hold_ctrl_alt_shift(order: tuple[str, ...]) -> None:
+    mux = new_mux(Mode.BOT)
+    decisions = [mux.submit(BOT, key(code), 0) for code in order]
+    refused = [d for d in decisions if not d.accepted]
+    # (Ctrl+V after the refused Shift is still a paste chord: refused for that reason too.)
+    assert "stream_hotkey_bot" in [d.reason for d in refused]
+    keys, _ = mux.held(BOT)
+    assert not (
+        {"ControlLeft", "ControlRight"} & keys
+        and {"AltLeft", "AltRight"} & keys
+        and {"ShiftLeft", "ShiftRight"} & keys
+    )
+
+
+def test_bot_two_modifier_chords_and_the_human_are_unaffected() -> None:
+    mux = new_mux(Mode.ASSIST)
+    for code in ("ControlLeft", "ShiftLeft", "KeyE"):
+        assert mux.submit(BOT, key(code), 0).accepted
+    human = new_mux(Mode.HUMAN)
+    for code in ("ControlLeft", "AltLeft", "ShiftLeft", "KeyS"):
+        assert human.submit(HUMAN, key(code), 0).accepted

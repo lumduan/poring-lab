@@ -1,4 +1,5 @@
 import type { Links } from "@/components/StatsPanel";
+import { describeCapture } from "@/lib/capture";
 import type { ErrorReply, Status } from "@/lib/protocol";
 
 type Props = {
@@ -12,9 +13,11 @@ type Props = {
 /** A clear notice when the picture or the controls can't be trusted. */
 export default function Banner({ links, status, dropped = null, rdpReconnected = false }: Props) {
   const problems: string[] = [];
+  const capture = describeCapture(status);
   if (!links.stream) problems.push("Stream disconnected: reconnecting to the backend…");
   if (!links.input) problems.push("Input channel disconnected: keys and clicks are not being sent.");
-  if (links.stream && status?.rdp_window_present === false) {
+  if (links.stream) problems.push(...capture.notices);
+  if (links.stream && capture.expect === "rdp" && status?.rdp_window_present === false) {
     problems.push(
       "RDP session is down: the desktop container is reconnecting (docker compose logs desktop).",
     );
@@ -27,7 +30,7 @@ export default function Banner({ links, status, dropped = null, rdpReconnected =
       "The game window has been black for several seconds (a lost Direct3D device after an RDP " +
         "reconnect?). Nothing it shows can be trusted; recover with scripts/ro_agent.py recover.",
     );
-  } else if (links.stream && rdpReconnected && status?.rdp_window_present) {
+  } else if (links.stream && capture.expect === "rdp" && rdpReconnected && status?.rdp_window_present) {
     problems.push(
       "The RDP session reconnected less than a minute ago: check the game window is still drawing.",
     );

@@ -196,6 +196,23 @@ class FrameMeta(Message):
     nbytes: int = Field(gt=0)
 
 
+class CaptureBackend(BaseModel):
+    """Who owns the ONE Windows session (ADR-0009): the capture-backend lock, read by the backend.
+
+    ``hold`` = the lock is unreadable or not mounted (both clients refuse to connect)."""
+
+    model_config = _MODEL_CONFIG
+
+    backend: Literal["rdp", "console", "hold"]
+    seq: int = Field(default=0, ge=0, description="Lock generation; every handover increments it.")
+    phase: Literal["steady", "switching", ""] = Field(
+        default="", description="switching = a handover is in progress; '' when backend=hold."
+    )
+    since: int | None = Field(default=None, description="Unix time of the last lock write.")
+    owner: str | None = Field(default=None, description="Who wrote the lock (a tool name).")
+    reason: str | None = Field(default=None, description="Why: hold reason, or the handover.")
+
+
 class Status(Message):
     """Mux and pipeline state, pushed at ~1 Hz and on every change."""
 
@@ -208,10 +225,21 @@ class Status(Message):
     rdp_window_present: bool | None = Field(
         default=None, description="An xfreerdp window exists on the display; null = X unreachable."
     )
+    stream_window_present: bool | None = Field(
+        default=None,
+        description="A Moonlight (console-mode) window is on the display; null = X unreachable.",
+    )
+    capture_backend: CaptureBackend | None = Field(
+        default=None, description="The capture-backend lock (ADR-0009); null = not read yet."
+    )
     capture_fps: float = Field(ge=0.0)
     viewers: int = Field(ge=0)
     clipboard_enabled: bool = Field(
-        default=False, description="Clipboard paste to Windows is available (ADR-0004)."
+        default=False,
+        description=(
+            "Clipboard paste to Windows is available (ADR-0004): RDP mode only -- in console mode "
+            "a Ctrl+V would paste Windows' own clipboard."
+        ),
     )
     transfer_enabled: bool = Field(
         default=False, description="The \\\\tsclient\\transfer file area is available (ADR-0004)."

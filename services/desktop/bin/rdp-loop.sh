@@ -19,6 +19,10 @@
 #   anything else          connect / DNS / TLS / transport failure, target booting
 #                          -> exponential backoff 2 s -> 60 s
 #
+# The capture-backend lock (ADR-0009, scripts/capture_backend.py) decides who owns the ONE Windows
+# session: this loop connects only while it says `rdp`, and never while a Moonlight window is on the
+# display (a second, independent interlock). Every wait wakes early when the lock changes.
+#
 # Sourcing this file (tests) defines the functions without starting the loop.
 set -uo pipefail
 
@@ -33,6 +37,78 @@ idle_forever() {
 
 wait_for_x() {
   until xdpyinfo -display "${DISPLAY}" >/dev/null 2>&1; do sleep 0.5; done
+}
+
+# --- capture-backend lock ---------------------------------------------------------------------
+# ${LAB_STATE_DIR:-/lab-state}/capture-backend, written only by scripts/capture_backend.py on the host
+# (atomic rename; the directory is bind-mounted read-only). KEY=word lines:
+#   BACKEND=rdp|console  SEQ=<n>  PHASE=steady|switching  OWNER=..  SINCE=..  REASON=..
+# Sets LOCK_BACKEND (rdp | console | hold), LOCK_SEQ, LOCK_PHASE and LOCK_WHY. Fail-closed: no
+# mounted directory, a malformed line, an unknown key or backend -> `hold`. A mounted directory
+# without the file is the default, `rdp` (the lab before the lock existed).
+read_lock() {
+  local dir="${LAB_STATE_DIR:-/lab-state}" line key value backend="" seq="0" phase="steady"
+  LOCK_BACKEND=hold LOCK_SEQ=0 LOCK_PHASE="" LOCK_WHY=""
+  if [[ ! -d "${dir}" ]]; then
+    LOCK_WHY="lock directory ${dir} is not mounted"
+    return 0
+  fi
+  if [[ ! -e "${dir}/capture-backend" ]]; then
+    LOCK_BACKEND=rdp LOCK_PHASE=steady LOCK_WHY="no lock file: default rdp"
+    return 0
+  fi
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    [[ -z "${line}" || "${line}" == \#* ]] && continue
+    if [[ ! "${line}" =~ ^([A-Z_]+)=([A-Za-z0-9_.:-]*)$ ]]; then
+      LOCK_WHY="malformed lock line: ${line:0:60}"
+      return 0
+    fi
+    key="${BASH_REMATCH[1]}" value="${BASH_REMATCH[2]}"
+    case "${key}" in
+      BACKEND) backend="${value}" ;;
+      SEQ)
+        [[ "${value}" =~ ^[0-9]+$ ]] || { LOCK_WHY="SEQ='${value}' is not a number"; return 0; }
+        seq="${value}" ;;
+      PHASE)
+        [[ "${value}" == steady || "${value}" == switching ]] || {
+          LOCK_WHY="PHASE='${value}' is not steady|switching"
+          return 0
+        }
+        phase="${value}" ;;
+      OWNER | SINCE | REASON) ;;
+      *) LOCK_WHY="unknown lock key ${key}"; return 0 ;;
+    esac
+  done <"${dir}/capture-backend"
+  case "${backend}" in
+    rdp | console) LOCK_BACKEND="${backend}" LOCK_SEQ="${seq}" LOCK_PHASE="${phase}" ;;
+    *) LOCK_WHY="BACKEND='${backend}' is not rdp|console" ;;
+  esac
+  return 0
+}
+
+# Changes whenever the lock is rewritten (atomic rename = new inode) or appears/disappears.
+lock_stamp() {
+  stat -c '%i.%Y.%s' "${LAB_STATE_DIR:-/lab-state}/capture-backend" 2>/dev/null || echo none
+}
+
+# sleep N seconds, but return early (status 0) as soon as the lock changes.
+nap() {
+  local n="$1" stamp i
+  stamp="$(lock_stamp)"
+  for ((i = 0; i < n; i++)); do
+    sleep 1
+    if [[ "$(lock_stamp)" != "${stamp}" ]]; then
+      log "capture-backend lock changed: waking early"
+      return 0
+    fi
+  done
+  return 0
+}
+
+# The second interlock: a Moonlight (gamestream) window on this display means the console backend
+# is streaming, whatever the lock file says. (xwininfo -tree prints `("class" "Class")` per window.)
+stream_client_present() {
+  xwininfo -root -tree -display "${DISPLAY}" 2>/dev/null | grep -qiE '\("moonlight"'
 }
 
 # Clipboard (ADR-0004) by KEYWORD, never raw flags: a free-form value could re-enable
@@ -156,9 +232,32 @@ main() {
 
   BASE_RDP_GFX="${RDP_GFX:-}" BASE_RDP_NETWORK="${RDP_NETWORK:-auto}"
   BASE_RDP_FRAME_ACK="${RDP_FRAME_ACK:-on}" BASE_RDP_GDI="${RDP_GDI:-sw}"
-  local backoff=2 rc override_stamp
+  local backoff=2 rc override_stamp held="" stream_noted=""
   while true; do
     wait_for_x
+    read_lock
+    if [[ "${LOCK_BACKEND}" != rdp ]]; then
+      if [[ "${held}" != "${LOCK_BACKEND}:${LOCK_SEQ}:${LOCK_WHY}" ]]; then
+        log "capture-backend ${LOCK_BACKEND} seq=${LOCK_SEQ}: holding (no RDP connect)" \
+          "${LOCK_WHY:+-- ${LOCK_WHY}}"
+        held="${LOCK_BACKEND}:${LOCK_SEQ}:${LOCK_WHY}"
+      fi
+      nap 30
+      continue
+    fi
+    if stream_client_present; then
+      if [[ -z "${stream_noted}" ]]; then
+        log "a Moonlight window is on ${DISPLAY}: holding although the lock says rdp" \
+          "(second interlock; run scripts/capture_backend.py to-rdp --recover)"
+        stream_noted=1
+      fi
+      nap 10
+      continue
+    fi
+    if [[ -n "${held}" || -n "${stream_noted}" ]]; then
+      log "capture-backend rdp seq=${LOCK_SEQ}: resuming"
+      held="" stream_noted=""
+    fi
     load_overrides
     override_stamp="$(override_mtime)"
     log "connecting to ${WIN_HOST}:${RDP_PORT:-3389} as ${RDP_USER} (gfx=${RDP_GFX:-auto}" \
@@ -170,12 +269,13 @@ main() {
       0 | 1 | 2 | 3 | 4 | 11 | 12)
         log "session ended (exit ${rc}); reconnecting in 2s"
         backoff=2
-        sleep 2
+        nap 2
         ;;
       5)
         log "exit 5 DISCONNECTED_BY_OTHER_CONNECTION: someone else took the single session." \
-          "Backing off 600s. Stop this stack if you are using the Windows host yourself."
-        sleep 600
+          "Backing off 600s (or until the capture-backend lock changes). Stop this stack if you" \
+          "are using the Windows host yourself."
+        nap 600
         ;;
       132 | 134 | 135 | 14[89] | 15[0-9])
         idle_forever "exit ${rc}: authentication/account failure. NOT retrying (Windows account" \
@@ -191,11 +291,11 @@ main() {
           # failing target, so no backoff growth.
           log "exit ${rc} after an override change; reconnecting in 2s"
           backoff=2
-          sleep 2
+          nap 2
           continue
         fi
         log "exit ${rc}; retrying in ${backoff}s"
-        sleep "${backoff}"
+        nap "${backoff}"
         backoff=$((backoff * 2 > 60 ? 60 : backoff * 2))
         ;;
     esac

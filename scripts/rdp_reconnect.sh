@@ -13,6 +13,13 @@
 # and the process count; exits 1 if it isn't exactly 1.
 set -euo pipefail
 C=poring-lab-desktop-1
+# ADR-0009: only in RDP mode. In console mode the RDP client must stay down (scripts/capture_backend.py).
+LOCK="$(dirname "$0")/../state/capture-backend"
+if [[ -e "${LOCK}" ]] && ! grep -qx 'BACKEND=rdp' "${LOCK}"; then
+  echo "refused: the capture-backend lock is not rdp ($(grep -m1 '^BACKEND=' "${LOCK}" || echo unreadable))" \
+    "-- see scripts/capture_backend.py status" >&2
+  exit 3
+fi
 SUP=(supervisorctl -c /etc/supervisor/supervisord.conf)
 reload=false
 [[ "${1:-}" == --reload ]] && { reload=true; shift; }

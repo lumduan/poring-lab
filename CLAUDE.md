@@ -169,9 +169,23 @@ ports, quickstart) and `docs/adr/`.
     (docs/h264-plan.md, Arm C).
   - FreeRDP 3.32.1 claims X CLIPBOARD (empty) on every Windows-side copy, and the watchdog clears it.
     So `foreign_owner_clears` rising right after a Windows copy is expected (ADR-0004 amendment b).
+- **The capture-backend lock decides who owns the ONE Windows session** (ADR-0009): `state/capture-backend`
+  (KEY=word lines, `BACKEND=rdp|console`, `SEQ`, `PHASE`), a directory mounted read-only at `/lab-state`.
+  - Its ONLY writer is `scripts/capture_backend.py` (`status`, `init`, `drill`, `to-rdp [--recover]`,
+    later `to-console`/`pair`): atomic rename, then read back on the host and in every container.
+  - rdp-loop.sh connects only while it says `rdp`, and never while a Moonlight window is on the display;
+    every wait wakes when the lock changes. Fail closed: no mount / malformed -> `hold`; mounted dir
+    without the file -> `rdp`. The bash and Python readers are parity-tested (`test_capture_lock.py`).
+  - In console mode the backend refuses paste (`console_backend`) and reports paste/files unavailable;
+    `ro_agent` refuses on hold, during a handover, or when host file and `/health` disagree;
+    `rdp_reconnect.sh` refuses unless `rdp`.
+  - The bot may never hold Ctrl+Alt+Shift (`stream_hotkey_bot`): Moonlight's own hotkeys (+V types the
+    X clipboard into Windows, +Q quits).
 - **Human pastes are scrubbed** (ADR-0004 amendment): after every paste, the backend re-owns CLIPBOARD
   empty so Windows' copy is replaced. Released text otherwise stayed pasteable for over an hour.
   Paste audits log a 12-hex digest prefix only.
+  `/health clipboard.rdp_empty_claims` counts FreeRDP 3.32's own (empty) CLIPBOARD claims apart from
+  `foreign_owner_clears`, which stays the alarm (ADR-0004 amendment b).
 
 ## Dev mode (the default; there will be no disk split -- Batt, 2026-10-01)
 

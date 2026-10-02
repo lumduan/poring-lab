@@ -9,6 +9,7 @@ from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Protocol, TypeVar
 
+from poring_backend.capture_lock import read_lock
 from poring_backend.clipboard import ClipboardService, PasteOutcome, SelectionIO
 from poring_backend.config import Settings
 from poring_backend.display import DisplayWatch, Region
@@ -94,6 +95,13 @@ class Injector:
         except Exception:
             return None
 
+    async def stream_window_present(self) -> bool | None:
+        """A Moonlight (console-mode, ADR-0009) window on the display."""
+        try:
+            return await self._run(lambda sink: sink.has_window_class("moonlight"))
+        except Exception:
+            return None
+
     async def close(self) -> None:
         await asyncio.get_running_loop().run_in_executor(self._executor, self._reset)
         self._executor.shutdown(wait=False, cancel_futures=True)
@@ -159,6 +167,9 @@ class AppState:
         self.packets = PacketHub()
         self.agents: set[Outbox] = set()
         self.rdp_window_present: bool | None = None
+        self.stream_window_present: bool | None = None
+        # The capture-backend lock (ADR-0009), re-read every status tick.
+        self.capture = read_lock(settings.lab_state_dir)
         self._status_task: asyncio.Task[None] | None = None
         self._background: set[asyncio.Task[Any]] = set()
 
@@ -186,9 +197,14 @@ class AppState:
     async def _status_loop(self) -> None:
         period = 1.0 / self.settings.status_hz
         while True:
+            self.capture = read_lock(self.settings.lab_state_dir)
             self.rdp_window_present = await self.injector.rdp_window_present()
+            self.stream_window_present = await self.injector.stream_window_present()
             now = monotonic_ns()
-            self.display.rdp(self.rdp_window_present, now)
+            if self.capture.backend == "rdp":
+                # Only RDP mode feeds the reconnect detector: a handover to the console (no
+                # xfreerdp window, by design) must not read as an RDP reconnect.
+                self.display.rdp(self.rdp_window_present, now)
             if self.display.needs_sample(now):
                 await self.hub.sample_once()  # no console watching: keep the detector fed
             before = self.display.state
@@ -201,6 +217,11 @@ class AppState:
 
     # --- status -----------------------------------------------------------------------------------
 
+    @property
+    def rdp_mode(self) -> bool:
+        """The RDP client owns the Windows session (ADR-0009 lock says `rdp`)."""
+        return self.capture.backend == "rdp"
+
     def status(self) -> Status:
         now = monotonic_ns()
         return Status(
@@ -210,10 +231,13 @@ class AppState:
             lease_until_ns=self.mux.lease_until_ns(now),
             bot_connected=bool(self.agents),
             rdp_window_present=self.rdp_window_present,
+            stream_window_present=self.stream_window_present,
+            capture_backend=self.capture,
             capture_fps=round(self.hub.capture_fps, 2),
             viewers=self.hub.viewer_count,
-            clipboard_enabled=self.clipboard is not None,
-            transfer_enabled=self.settings.transfer_enabled,
+            # Paste and \\tsclient ride the RDP session's channels: RDP mode only (ADR-0009).
+            clipboard_enabled=self.clipboard is not None and self.rdp_mode,
+            transfer_enabled=self.settings.transfer_enabled and self.rdp_mode,
             move_interval_ms=self.tuning.move_interval_ms,
             paint=self.tuning.paint,
             game_black=self.display.black,
@@ -309,6 +333,10 @@ class AppState:
         refusal: str | None = None
         if self.clipboard is None:
             refusal = "clipboard_disabled"
+        elif not self.rdp_mode:
+            # Console mode (ADR-0009): the Ctrl+V would reach Windows through Moonlight and paste
+            # Windows' OWN clipboard, never this text. Hold: no session at all.
+            refusal = "console_backend" if self.capture.backend == "console" else "backend_hold"
         elif not browser:
             refusal = "origin_required"
         elif self.mux.mode is Mode.BOT:

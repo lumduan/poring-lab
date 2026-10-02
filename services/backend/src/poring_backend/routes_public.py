@@ -106,6 +106,9 @@ async def health(request: Request) -> dict[str, Any]:
         "x11": pointer is not None,
         "pointer": pointer,
         "rdp_window_present": state.rdp_window_present,
+        "stream_window_present": state.stream_window_present,
+        # ADR-0009: who owns the ONE Windows session (scripts/capture_backend.py status).
+        "capture_backend": state.capture.model_dump(),
         "viewers": state.hub.viewer_count,
         "bot_connected": bool(state.agents),
         "capture_fps": round(state.hub.capture_fps, 2),
@@ -116,11 +119,14 @@ async def health(request: Request) -> dict[str, Any]:
         "input_refused": state.refused_snapshot(),
         "clipboard": {
             "enabled": state.clipboard is not None,
+            # Paste needs the RDP session's clipboard channel: not in console mode (ADR-0009).
+            "paste_available": state.clipboard is not None and state.rdp_mode,
             "x_connected": state.clipboard.connected if state.clipboard else False,
             "foreign_owner_clears": state.clipboard.foreign_owner_clears if state.clipboard else 0,
+            "rdp_empty_claims": state.clipboard.rdp_empty_claims if state.clipboard else 0,
             "scrub_incomplete": state.clipboard.scrub_incomplete if state.clipboard else 0,
         },
-        "transfer_enabled": state.settings.transfer_enabled,
+        "transfer_enabled": state.settings.transfer_enabled and state.rdp_mode,
         "stream": {
             **asdict(state.tuning),
             "damage_active": state.hub.damage_active,

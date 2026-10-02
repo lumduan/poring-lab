@@ -53,6 +53,8 @@ class Settings(BaseSettings):
     rdp_drives: str = ""
     # The tmpfs volume redirected into Windows as \\tsclient\transfer (compose: size=512m).
     transfer_dir: Path = Path("/transfer")
+    # The capture-backend lock directory (ADR-0009), bind-mounted read-only (compose.yaml).
+    lab_state_dir: Path = Path("/lab-state")
     transfer_max_bytes: int = 512 * 1024 * 1024
     # Pause between xfreerdp announcing the text to Windows and the Ctrl+V (RDP format-list trip).
     clipboard_settle_s: float = 0.5

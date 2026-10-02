@@ -89,6 +89,9 @@ def make_client(tmp_path: Path) -> Iterator[Factory]:
         fake = FakeInput()
         if clipboard is not None:
             fake.on_ctrl_v = clipboard.ctrl_v
+        lab_state = tmp_path / "lab-state"  # mounted, no lock file: the default `rdp`
+        lab_state.mkdir(exist_ok=True)
+        overrides.setdefault("lab_state_dir", lab_state)
         settings = Settings(
             data_dir=tmp_path,
             stream_fps=100.0,
@@ -378,6 +381,7 @@ def test_status_advertises_the_clipboard(make_client: Factory, make_xfreerdp: An
         assert receive_text_until(ws, "status")["clipboard_enabled"] is True
     health = client.get("/health").json()["clipboard"]
     assert health["enabled"] is True and health["foreign_owner_clears"] == 0
+    assert health["rdp_empty_claims"] == 0
 
 
 # --- no silent drops ---------------------------------------------------------------------------
@@ -435,3 +439,50 @@ def test_mux_refusals_are_counted_in_health(make_client: Factory) -> None:
     with client.websocket_connect("/internal/agent") as ws:
         send_agent_key(ws, "KeyA")
     assert client.get("/health").json()["input_refused"] == {"bot": {"mode=HUMAN": 1}}
+
+
+# --- the capture-backend lock (ADR-0009) ---------------------------------------------------------
+
+
+def write_lock(directory: Path, backend: str, seq: int = 3) -> None:
+    directory.mkdir(exist_ok=True)
+    (directory / "capture-backend").write_text(f"BACKEND={backend}\nSEQ={seq}\nPHASE=steady\n")
+
+
+def test_health_reports_the_lock_default_rdp(make_client: Factory) -> None:
+    client, _ = make_client()
+    lock = client.get("/health").json()["capture_backend"]
+    assert (lock["backend"], lock["phase"]) == ("rdp", "steady")
+
+
+def test_console_mode_refuses_paste_and_hides_paste_and_files(
+    make_client: Factory, make_xfreerdp: Any, tmp_path: Path
+) -> None:
+    write_lock(tmp_path / "lab-state", "console", seq=12)
+    client, fake, _ = clipboard_client(make_client, make_xfreerdp)
+    with client.websocket_connect("/ws/stream", headers={"origin": ORIGIN}) as ws:
+        status = receive_text_until(ws, "status")
+    assert (
+        status["capture_backend"]["backend"] == "console" and status["capture_backend"]["seq"] == 12
+    )
+    assert (status["clipboard_enabled"], status["transfer_enabled"]) == (False, False)
+    with client.websocket_connect("/ws/input", headers={"origin": ORIGIN}) as ws:
+        result = paste(ws)
+    assert (result["ok"], result["reason"]) == (False, "console_backend")
+    assert keys(fake) == []  # no Ctrl+V reached the (Moonlight) display
+    health = client.get("/health").json()
+    assert health["clipboard"]["paste_available"] is False
+    assert health["input_refused"]["human"]["paste:console_backend"] == 1
+
+
+def test_an_unmounted_lock_holds_and_refuses_paste(
+    make_client: Factory, make_xfreerdp: Any, tmp_path: Path
+) -> None:
+    client, fake, _ = clipboard_client(
+        make_client, make_xfreerdp, lab_state_dir=tmp_path / "not-mounted"
+    )
+    assert client.get("/health").json()["capture_backend"]["backend"] == "hold"
+    with client.websocket_connect("/ws/input", headers={"origin": ORIGIN}) as ws:
+        result = paste(ws)
+    assert (result["ok"], result["reason"]) == (False, "backend_hold")
+    assert keys(fake) == []

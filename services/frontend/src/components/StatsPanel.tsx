@@ -1,3 +1,4 @@
+import { describeCapture } from "@/lib/capture";
 import type { Status } from "@/lib/protocol";
 
 export type Stats = {
@@ -40,6 +41,7 @@ export default function StatsPanel({ stats, status, links }: Props) {
   const rows: [string, string][] = [
     ["stream", links.stream ? "connected" : "down"],
     ["input", links.input ? "connected" : "down"],
+    ["backend", describeCapture(status).label],
     ["RDP", rdp],
     ["mode", status?.mode ?? "–"],
     ["frame", String(stats.frameId)],

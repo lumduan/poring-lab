@@ -282,3 +282,23 @@ def test_a_missing_override_key_means_the_default_not_the_previous_value(tmp_pat
     assert "/network:lan" not in second and "/gdi:hw" in second
     assert not any(a.startswith(("/gfx", "/network", "/gdi")) for a in second if a != "/gdi:hw")
     assert not any(a.startswith(("/gfx", "/network", "/gdi")) for a in third)
+
+
+# --- the capture-backend lock (ADR-0009) ---------------------------------------------------------
+
+
+@pytest.mark.parametrize("name", ["compose.yaml", "compose.dev.yaml"])
+def test_lock_directory_is_read_only_everywhere_and_never_in_vision(name: str) -> None:
+    for service_name, service in compose(name)["services"].items():
+        for vol in service.get("volumes", []):
+            if not isinstance(vol, str) or not vol.startswith("./state"):
+                continue
+            assert vol.endswith(":ro"), f"{name}: {service_name} mounts the lock writable: {vol}"
+            assert service_name != "vision", f"{name}: vision must not see the lock"
+    base = compose("compose.yaml")["services"]
+    for must in ("desktop", "backend"):
+        assert "./state:/lab-state:ro" in base[must]["volumes"], f"{must} must see the lock"
+
+
+def test_lock_directory_exists_in_git_so_docker_never_creates_it_as_root() -> None:
+    assert (ROOT / "state" / ".gitignore").read_text().split() == ["*", "!.gitignore"]

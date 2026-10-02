@@ -131,6 +131,10 @@ services:
     volumes:
       - x11-unix:/tmp/.X11-unix
       - transfer:/transfer
+      # The capture-backend lock (ADR-0009): rdp-loop connects only while it says `rdp`. A
+      # DIRECTORY mount (an atomic rename on the host stays visible); written only by
+      # scripts/capture_backend.py on the host, read-only everywhere (tests/test_guards.py).
+      - ./state:/lab-state:ro
     ports:
       - "${HOST_LAN_IP:?}:6080:6080" # noVNC -- NO AUTHENTICATION, LAN only
     # 1.5 GiB: the 512 MiB transfer tmpfs is charged to whichever container WRITES a file, and
@@ -185,6 +189,8 @@ services:
       - captures:/captures:ro
       # Browser uploads are written here (charged to this container's 1 GiB: peak ~90 MiB + 512).
       - transfer:/transfer
+      # The capture-backend lock (ADR-0009), shown in /health and the console status.
+      - ./state:/lab-state:ro
     ports:
       - "${HOST_LAN_IP:?}:8000:8000" # /health, /ws/stream, /ws/input
     # 8001 (/internal/agent) is deliberately NOT published: compose network only.

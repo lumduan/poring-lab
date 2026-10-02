@@ -22,6 +22,12 @@ Paste chords (ADR-0004)
   The clipboard is a human-only tool. The bot may never press Ctrl+V, Meta+V (Windows clipboard
   history) or Shift+Insert -- in either key order, because X autorepeats a held XTest key, so
   "hold V, then press Ctrl" pastes too. The human is unaffected.
+
+Stream-client hotkeys (ADR-0009, console mode)
+  Moonlight acts on Ctrl+Alt+Shift+<key> itself: +V TYPES the X clipboard into Windows (a paste
+  path, ADR-0004), +Q quits the stream, +Z/+M change mouse capture, +X/+D the window, +S overlays
+  stats on the very frames the agent reads. So the bot may never hold Ctrl, Alt and Shift at once
+  (any key, any order) -- in RDP mode too, where the game has no use for the combination.
 """
 
 from dataclasses import dataclass
@@ -140,6 +146,8 @@ class InputMux:
             return Decision(False, "reserved_chord")
         if source is Source.BOT and self._is_paste_chord(source, event):
             return Decision(False, "paste_chord_bot")
+        if source is Source.BOT and self._is_stream_hotkey(source, event):
+            return Decision(False, "stream_hotkey_bot")
 
         inject: list[Routed] = []
         if source is Source.HUMAN and self._mode is Mode.ASSIST:
@@ -173,6 +181,12 @@ class InputMux:
             return True
         # The other order: a modifier going down while the paste key is already held.
         return any(event.code in mods and key in keys for key, mods in PASTE_CHORDS.items())
+
+    def _is_stream_hotkey(self, source: Source, event: InputEvent) -> bool:
+        if not (isinstance(event, Key) and event.action == "down"):
+            return False
+        keys = self._keys[source] | {event.code}
+        return bool(keys & CONTROL_CODES) and bool(keys & ALT_CODES) and bool(keys & SHIFT_CODES)
 
     def _track(self, source: Source, event: InputEvent) -> None:
         if isinstance(event, Key):

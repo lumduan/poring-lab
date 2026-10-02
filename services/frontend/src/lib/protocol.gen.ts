@@ -248,9 +248,13 @@ export interface Ping {
  */
 export interface Status {
   bot_connected: boolean;
+  /**
+   * The capture-backend lock (ADR-0009); null = not read yet.
+   */
+  capture_backend: CaptureBackend | null;
   capture_fps: number;
   /**
-   * Clipboard paste to Windows is available (ADR-0004).
+   * Clipboard paste to Windows is available (ADR-0004): RDP mode only -- in console mode a Ctrl+V would paste Windows' own clipboard.
    */
   clipboard_enabled: boolean;
   /**
@@ -279,6 +283,10 @@ export interface Status {
    */
   rdp_window_present: boolean | null;
   /**
+   * A Moonlight (console-mode) window is on the display; null = X unreachable.
+   */
+  stream_window_present: boolean | null;
+  /**
    * Sender's monotonic clock, ns (see module docstring).
    */
   t_mono_ns: number;
@@ -288,6 +296,37 @@ export interface Status {
   transfer_enabled: boolean;
   type: "status";
   viewers: number;
+}
+/**
+ * Who owns the ONE Windows session (ADR-0009): the capture-backend lock, read by the backend.
+ *
+ * ``hold`` = the lock is unreadable or not mounted (both clients refuse to connect).
+ *
+ * This interface was referenced by `PoringProtocol`'s JSON-Schema
+ * via the `definition` "CaptureBackend".
+ */
+export interface CaptureBackend {
+  backend: "rdp" | "console" | "hold";
+  /**
+   * Who wrote the lock (a tool name).
+   */
+  owner: string | null;
+  /**
+   * switching = a handover is in progress; '' when backend=hold.
+   */
+  phase: "steady" | "switching" | "";
+  /**
+   * Why: hold reason, or the handover.
+   */
+  reason: string | null;
+  /**
+   * Lock generation; every handover increments it.
+   */
+  seq: number;
+  /**
+   * Unix time of the last lock write.
+   */
+  since: number | null;
 }
 /**
  * Mux verdict for one AgentInput batch.

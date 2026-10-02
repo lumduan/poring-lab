@@ -264,6 +264,82 @@
         }
       ]
     },
+    "CaptureBackend": {
+      "additionalProperties": false,
+      "description": "Who owns the ONE Windows session (ADR-0009): the capture-backend lock, read by the backend.\n\n``hold`` = the lock is unreadable or not mounted (both clients refuse to connect).",
+      "properties": {
+        "backend": {
+          "enum": [
+            "rdp",
+            "console",
+            "hold"
+          ],
+          "type": "string"
+        },
+        "owner": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Who wrote the lock (a tool name)."
+        },
+        "phase": {
+          "default": "",
+          "description": "switching = a handover is in progress; '' when backend=hold.",
+          "enum": [
+            "steady",
+            "switching",
+            ""
+          ],
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Why: hold reason, or the handover."
+        },
+        "seq": {
+          "default": 0,
+          "description": "Lock generation; every handover increments it.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "since": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Unix time of the last lock write."
+        }
+      },
+      "required": [
+        "backend",
+        "seq",
+        "phase",
+        "since",
+        "owner",
+        "reason"
+      ],
+      "title": "CaptureBackend",
+      "type": "object"
+    },
     "ClipboardPaste": {
       "additionalProperties": false,
       "description": "Paste this text into the focused Windows window (ADR-0004: human-only, browser channel only).\n\nThe backend owns the X CLIPBOARD for the duration of one paste, sends Ctrl+V through the mux and\nanswers with a ``PasteResult``. The text itself is never logged.",
@@ -917,13 +993,25 @@
         "bot_connected": {
           "type": "boolean"
         },
+        "capture_backend": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CaptureBackend"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The capture-backend lock (ADR-0009); null = not read yet."
+        },
         "capture_fps": {
           "minimum": 0.0,
           "type": "number"
         },
         "clipboard_enabled": {
           "default": false,
-          "description": "Clipboard paste to Windows is available (ADR-0004).",
+          "description": "Clipboard paste to Windows is available (ADR-0004): RDP mode only -- in console mode a Ctrl+V would paste Windows' own clipboard.",
           "type": "boolean"
         },
         "frame_id": {
@@ -994,6 +1082,18 @@
           "default": null,
           "description": "An xfreerdp window exists on the display; null = X unreachable."
         },
+        "stream_window_present": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A Moonlight (console-mode) window is on the display; null = X unreachable."
+        },
         "t_mono_ns": {
           "description": "Sender's monotonic clock, ns (see module docstring).",
           "minimum": 0,
@@ -1022,6 +1122,8 @@
         "lease_until_ns",
         "bot_connected",
         "rdp_window_present",
+        "stream_window_present",
+        "capture_backend",
         "capture_fps",
         "viewers",
         "clipboard_enabled",

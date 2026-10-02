@@ -49,6 +49,8 @@ from typing import Any
 import numpy as np
 from websockets.sync.client import ClientConnection, connect
 
+from poring_backend.capture_lock import read_lock
+
 ROOT = Path(__file__).resolve().parents[1]
 STATE_DIR = ROOT / "data" / "ro_agent"  # gitignored (rule 4): signatures + GM command log
 SHOTS = Path("/dev/shm/poring-lab-tmp/shots")
@@ -363,6 +365,29 @@ class Agent:
         if self.status.get("mode") != "ASSIST":
             self.ws.close()
             raise Stop(f"mux mode is {self.status.get('mode')}, not ASSIST: no input sent")
+        self.backend = self._check_capture_backend()
+
+    def _check_capture_backend(self) -> str:
+        """ADR-0009: input only while the capture-backend lock is steady, and the host file and the
+        backend agree on it (a backend created before the lock mount reports nothing)."""
+        lock = self.status.get("capture_backend")
+        host = read_lock(ROOT / "state")
+        if lock is None:
+            print("WARNING: the backend reports no capture_backend (predates the lock)", flush=True)
+            return host.backend
+        if lock.get("backend") == "hold" or host.backend == "hold":
+            self.ws.close()
+            raise Stop(f"capture-backend lock HOLD ({lock.get('reason') or host.reason}): no input")
+        if lock.get("phase") == "switching" or host.phase == "switching":
+            self.ws.close()
+            raise Stop("a capture-backend handover is in progress: no input sent")
+        if (lock.get("backend"), lock.get("seq")) != (host.backend, host.seq):
+            self.ws.close()
+            raise Stop(
+                f"capture-backend lock mismatch: host {host.backend}/{host.seq}, backend "
+                f"{lock.get('backend')}/{lock.get('seq')} (scripts/capture_backend.py status)"
+            )
+        return str(lock["backend"])
 
     def _drain(self, timeout: float, want: str | None = None) -> dict[str, Any] | None:
         end = time.monotonic() + timeout
