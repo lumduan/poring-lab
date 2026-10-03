@@ -105,7 +105,7 @@ def run_config(backend: str) -> dict[str, Any]:
         ) if (ROOT / "state" / "gamestream-variant").exists() else {}  # fmt: skip
         if variant.get("CLIENT") == "s2spike":
             version = "moonlight-common-c " + _exec(
-                "poring-lab-gamestream-1", "cat", "/opt/s2spike/MLCC_SHA"
+                "poring-lab-gamestream-1", "cat", "/opt/s2spike/lib/MLCC_SHA"
             )
             client = {"name": "s2spike", "version": version, "codec": "H.264",
                       "paint": variant.get("PAINT") or "x11"}  # fmt: skip

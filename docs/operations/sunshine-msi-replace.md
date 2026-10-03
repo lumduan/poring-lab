@@ -143,6 +143,11 @@ Batt closes the elevated console.
 
 ## Samsung display recovery (the pending revert was dropped, 2026-10-02)
 
+➡️ **SUPERSEDED 2026-10-03 (Batt):** the Samsung is NOT to be restored or preserved; the console is
+**VDD-only** by decision, and Option 2 below was tried in the V3b clean room and made the Samsung
+the MAIN display (windows out of the stream's sight). See
+[console-display.md](console-display.md) for the layout and the emergency path. Kept as history:
+
 **What happened.**
 - A console stream applies `ensure_only_display`: the VDD only, the Samsung disabled.
 - When the stream ended after the session had already left the console, Sunshine could not revert.

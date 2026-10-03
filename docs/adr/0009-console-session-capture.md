@@ -579,4 +579,64 @@ regression to examine in S2.
 - **The H.264 stream softens small text:** a second ENG tray template for the stream (not a looser
   threshold).
 - **During the stream only the VDD is in the topology.** The Samsung is present but inactive (Win+P
-  at the Dell, Batt).
+  at the Dell, Batt). ➡️ SUPERSEDED the same day: the console is VDD-only by decision (see "Clean
+  room 2" below and [console-display.md](../operations/console-display.md)).
+
+## Clean room 2 (2026-10-03 17:07–18:12): V3b, the S2 client on the frame bus
+
+s2-plan §9a, approved by Batt with push-and-wait points (ASSIST after the backend recreate;
+`dd_configuration_option = disabled` before the entry and `ensure_only_display` after the exit,
+both in his elevated console, both read back identical).
+
+**Before it:** the bench's watchers and ro_agent's screenshots grabbed X, which V3b never paints;
+they now share `poring_backend/grabsource.py` (the backend's own rule), every result records
+`frame_sources`, and `cleanroom.py checks` boxes the bench and the checks.
+
+**What happened, in order:**
+1. 17:06 the first `start` stopped before any lock write: it had merged into the previous room's
+   status and its watchdog exited at once (fixed: a new room archives the old status, d530fe4).
+2. 17:07 entered; V3b RELIABLE (first picture 2.3 s, restream 1.6 s, 19/19 steady; decode
+   p50/p95 5.0/8.7 ms; `/health.framebus` active=bus, writer 29.7 fps).
+3. **The console came up with the Samsung as the MAIN display** (dd disabled: no VDD-only
+   enforcement); every window was on it, the streamed VDD showed an empty desktop without tray
+   icons. Batt (not at the rack; the Samsung is not to be preserved) chose: fix it in the
+   console, deterministic VDD-only.
+4. 17:19 **the watchdog ended the room** ("runner heartbeat stale (10 min)": the agent waited on
+   Batt's answer without a heartbeat) and ran the clean to-rdp; nothing lost. Lesson: start a
+   heartbeat loop at the entry, not only for the checks.
+5. 17:27 re-entered (heartbeat loop on); V3b reliable again (5.7 s / 1.2 s, 19/19).
+6. 17:46 **VDD-only by device name** (`ChangeDisplaySettingsEx`: `\\.\DISPLAY4` primary at 0,0,
+   `\\.\DISPLAY1` detached, registry-persisted; a dead-man restored "extend" once because the
+   OK flag came too late, the second time it held). Read back in a fresh process: one display,
+   primary, 0,0, 1440×900; still so at 18:07.
+7. The RO window had grown to the full VDD: Alt+F4, relaunch, drag to the frozen spot (the same
+   +72,+46 and 1 px fix as V3); signatures and anchors match (basic_info 2.58, hotbar 1.96, HP bar
+   at the RDP pixels); GM login through the stream.
+8. 17:52–18:05 bench (all three watchers `frame_sources: bus`) and checks; 18:12 `end`: every exit
+   check true, no ring, `/health.framebus` back to x11.
+
+**SPEC v2, outdoor** (`docs/benchmarks/2026-10-03-console-26fa31049e16-cleanroom-v3b-framebus.json`):
+
+| Metric | V3b (bus) | V3 (X mirror) | RDP v2 |
+|---|---|---|---|
+| Delivery fps (median, p10) | 30 (26) | 33 (29) | 23 (20) |
+| Packet → frame p50 / p95 | 113.9 / 268.3 ms | 118.9 / 302.2 ms | 375.9 / 521.2 ms |
+| Key → paint p50 / p95 | **121.0 / 277.1 ms** | 137.6 / 350.3 ms | 101.1 / 114.1 ms |
+| Lab cores in motion / idle | **1.03 / 0.78** | 1.50 / 1.24 | 5.41 / 0.47 |
+| Indoor delivery fps | 16 | 5 | 13 |
+| HP panel SSIM | 0.996 | 0.996 | 1.000 |
+
+On the bus, a frame's time is its decode-complete time (the moment the lab can use it); on RDP it
+is an X grab. Removing the mirror took 17 ms off the key→paint median and 73 ms off its p95; the
+tail is still above RDP's and is the next thing to examine (Windows capture/encode pacing at 30 fps
+is the first suspect).
+
+**Functional checks on V3b** (input still via the input-only X window → LiSend*): the bench's 40
+walks (39 matched `self_move`), right-drag rotation, GM `@where` answered by rAthena, Thai
+Kedmanee byte-exact (chatlog 10 = `B7B4CACDBA20E4B7C2`), Mouse Keys `Flags=62`.
+
+**Gotchas found:** the stream ENG tray template drifted (a new speaker icon, 6.2 vs 6.0):
+recalibrated while the tray visibly said ENG; `Screen.AllScreens` is cached per process (read the
+layout in a child process); `open-terminal` reuses only a VISIBLE shell (a click on the taskbar
+thumbnail first avoids a new window).
+

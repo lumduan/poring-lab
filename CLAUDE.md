@@ -220,6 +220,12 @@ ports, quickstart) and `docs/adr/`.
     start; `hold` ends the stream (/cancel) and keeps the session there; streams are one-shot.
     `scripts/cleanroom.py` drives it, with a detached watchdog (`systemd-run --user`) that runs the
     clean to-rdp on a time box or the hard cap. After a host reboot mid-run: `to-rdp --recover` first.
+  - **The console's display layout is VDD-only** (Batt, 2026-10-03): Sunshine `ensure_only_display`
+    plus a registry-persisted VDD-only console layout. Symptom of a drift: the streamed VDD shows an
+    empty desktop and a taskbar WITHOUT tray icons (another display became main). Recovery and the
+    blind rack path: `docs/operations/console-display.md`. Keep the clean room's heartbeat alive
+    while waiting on a human (`cleanroom.py checks --box-min N` + a heartbeat loop): the watchdog
+    ends a room after 10 min without one (it did, 2026-10-03 17:19).
   - The console shows the clean room from `state/cleanroom` (VARIANT/BOX_UNTIL/HARD_CAP, display
     only, same writer: `to-console --cleanroom --hard-cap`, `stream --box-until`; to-rdp removes it).
     The backend honours it only while the lock's REASON is `cleanroom*`. The banner's D3D/"ro_agent

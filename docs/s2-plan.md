@@ -442,6 +442,17 @@ the exit, he restores `ensure_only_display`. Pushes at entry (with the hard cap)
   `frame_sources`. `cleanroom.py checks --box-min N` puts the bench and the checks in a watchdog
   box (a variant's box ends when it does).
 
+**➡️ RESULT (2026-10-03 17:07–18:12; ADR-0009 "Clean room 2"):** V3b is RELIABLE on the bus.
+SPEC v2 outdoor: key→paint p50/p95 **121 / 277 ms** (V3 138 / 350; RDP 101 / 114), packet→frame
+114 / 268 ms, 30 fps, **1.03 lab cores** (V3 1.5, RDP 5.4); every watcher read `frame_sources: bus`.
+Removing the mirror cut the key→paint tail by 73 ms; it is still above RDP's (next: Windows-side
+capture/encode pacing at 30 fps). The Samsung method did NOT go as written: with
+`dd_configuration_option = disabled` the console came up with the Samsung as the MAIN display and
+every window out of the stream's sight. Batt then decided the console is **VDD-only** (the Samsung
+is not preserved): set by device name in the console, `ensure_only_display` restored after the
+exit; layout and emergency path in [operations/console-display.md](operations/console-display.md).
+The watchdog also ended the first entry (a stale heartbeat while waiting on Batt); re-entered.
+
 ## 10. Shared viewing (future capability; designed now)
 
 Sunshine captures the **console**, which is what the physical monitor shows. Unlike RDP, which

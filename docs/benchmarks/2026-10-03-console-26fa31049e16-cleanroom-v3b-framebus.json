@@ -1,0 +1,200 @@
+{
+ "run_id": "2026-10-03-console-26fa31049e16-cleanroom-v3b-framebus",
+ "label": "cleanroom-v3b-framebus",
+ "config": {
+  "spec": 2,
+  "backend": "console",
+  "client": {
+   "name": "s2spike",
+   "version": "moonlight-common-c 8599b6042a4ba27749b0f94134dd614b4328a9bc",
+   "codec": "H.264",
+   "paint": "bus",
+   "version_recorded": "moonlight-common-c cat: /opt/s2spike/MLCC_SHA: No such file or directory",
+   "version_note": "corrected 2026-10-03 18:45: bench.run_config read /opt/s2spike/MLCC_SHA; the image keeps it at /opt/s2spike/lib/MLCC_SHA (fixed in bench.py). config_hash was computed over the recorded string and is kept as the run's identifier."
+  },
+  "xvfb": "1920x1200x24",
+  "session": "1440x900",
+  "game_region": "80,77,1280,720",
+  "fps_limit": 30,
+  "scenes": {
+   "outdoor": [
+    "prt_fild08",
+    170,
+    375
+   ],
+   "indoor": [
+    "prt_church",
+    99,
+    112
+   ]
+  }
+ },
+ "config_hash": "26fa31049e16",
+ "t_wall_start": "2026-10-03T17:52:50+0700",
+ "preflight": {
+  "lock_seq": 68,
+  "viewers": 0,
+  "mode": "ASSIST"
+ },
+ "scenes": {
+  "outdoor": {
+   "fidelity": {
+    "hp_sp_panel": {
+     "psnr_db": 37.85,
+     "ssim": 0.9961,
+     "psnr_static_db": 37.61
+    },
+    "skill_bar": {
+     "psnr_db": 38.36,
+     "ssim": 0.9893,
+     "psnr_static_db": 40.05
+    },
+    "chat": {
+     "psnr_db": 27.49,
+     "ssim": 0.9377,
+     "psnr_static_db": 27.62
+    }
+   },
+   "delivery_fps": {
+    "median": 30.0,
+    "p10": 26.0,
+    "p90": 30.0
+   },
+   "frame_sources": {
+    "rotation": [
+     "bus"
+    ],
+    "walks": [
+     "bus"
+    ],
+    "keys": [
+     "bus"
+    ]
+   },
+   "lab_cores_motion": {
+    "poring-lab-desktop-1": 0.04,
+    "poring-lab-gamestream-1": 0.98,
+    "total": 1.03
+   },
+   "idle_cores": {
+    "poring-lab-desktop-1": 0.04,
+    "poring-lab-gamestream-1": 0.74,
+    "total": 0.78
+   },
+   "packet_to_frame_ms": {
+    "matched": 39,
+    "trials": 40,
+    "p50": 113.9,
+    "p75": 131.5,
+    "p90": 214.4,
+    "p95": 268.3,
+    "p99": ">1500"
+   },
+   "click_sent_to_packet_ms_p50": 184.2,
+   "key_to_paint_ms": {
+    "key": "Escape",
+    "region": [
+     598,
+     536,
+     250,
+     120
+    ],
+    "matched": 40,
+    "trials": 40,
+    "p50": 121.0,
+    "p75": 132.6,
+    "p90": 257.4,
+    "p95": 277.1,
+    "p99": 304.6,
+    "frame_sources": [
+     "bus"
+    ],
+    "raw_ms": [
+     111.4,
+     302.1,
+     124.7,
+     277.1,
+     114.1,
+     100.9,
+     121.0,
+     241.1,
+     125.0,
+     117.7,
+     105.1,
+     139.8,
+     115.7,
+     111.9,
+     304.6,
+     126.1,
+     114.4,
+     109.2,
+     104.7,
+     136.9,
+     131.0,
+     107.7,
+     128.3,
+     121.3,
+     108.8,
+     141.8,
+     124.7,
+     257.4,
+     99.6,
+     132.1,
+     115.1,
+     109.4,
+     105.4,
+     199.1,
+     271.0,
+     121.0,
+     105.5,
+     132.6,
+     117.9,
+     112.7
+    ]
+   }
+  },
+  "indoor": {
+   "fidelity": {
+    "hp_sp_panel": {
+     "psnr_db": 37.89,
+     "ssim": 0.9963,
+     "psnr_static_db": 37.64
+    },
+    "skill_bar": {
+     "psnr_db": 35.62,
+     "ssim": 0.9889,
+     "psnr_static_db": 39.97
+    },
+    "chat": {
+     "psnr_db": 19.35,
+     "ssim": 0.5087,
+     "psnr_static_db": 27.14
+    }
+   },
+   "delivery_fps": {
+    "median": 16.0,
+    "p10": 11.0,
+    "p90": 19.0
+   },
+   "frame_sources": {
+    "rotation": [
+     "bus"
+    ]
+   },
+   "lab_cores_motion": {
+    "poring-lab-desktop-1": 0.04,
+    "poring-lab-gamestream-1": 0.93,
+    "total": 0.98
+   },
+   "idle_cores": {
+    "poring-lab-desktop-1": 0.04,
+    "poring-lab-gamestream-1": 0.72,
+    "total": 0.75
+   }
+  }
+ },
+ "t_wall_end": "2026-10-03T18:04:15+0700",
+ "label_iou": null,
+ "ocr_cer": null,
+ "windows_side": null
+}
