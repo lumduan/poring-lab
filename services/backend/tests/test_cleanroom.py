@@ -128,3 +128,14 @@ def test_checks_needs_a_running_room_and_sets_the_box(cr: ModuleType) -> None:
     cr.save_status(phase="checks")
     with pytest.raises(SystemExit, match="already running"):
         cr.cmd_start(180)  # never a second room on top
+
+
+def test_a_new_room_never_inherits_the_previous_rooms_entry(cr: ModuleType) -> None:
+    """2026-10-03 17:06: `start` merged into the earlier room's status.json, kept its entered_ts,
+    and the new watchdog exited at once on rdp/steady ("done")."""
+    cr.save_status(phase="ended", entered_ts=T - 9000, exit_checks={"lock rdp/steady": True})
+    st = cr.new_room_status(phase="starting", entry_ts=T, hard_cap_ts=T + 3 * 3600)
+    assert "entered_ts" not in st and "exit_checks" not in st
+    assert cr.decide(T + 5, st, ("rdp", "steady", "to-rdp-done"), False, 0) == "wait"
+    archived = list(cr.STATE.glob("status-*.json"))
+    assert len(archived) == 1 and "ended" in archived[0].read_text()

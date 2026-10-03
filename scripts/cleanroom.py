@@ -88,6 +88,16 @@ def save_status(**changes: Any) -> dict[str, Any]:
     return status
 
 
+def new_room_status(**fields: Any) -> dict[str, Any]:
+    """A NEW room's status: the previous room's file is archived, never merged. (2026-10-03 17:06:
+    a merge kept the earlier room's entered_ts, so the new watchdog read rdp/steady as "over" and
+    exited at once; `start` then stopped before any lock write.)"""
+    old = load_status()
+    if old:
+        STATUS.replace(STATE / f"status-{int(float(old.get('updated') or time.time()))}.json")
+    return save_status(**fields)
+
+
 def heartbeat() -> None:
     STATE.mkdir(parents=True, exist_ok=True)
     HEARTBEAT.write_text(f"{time.time()}\n")
@@ -376,8 +386,8 @@ def cmd_start(hard_cap_min: float) -> int:
         raise SystemExit("STOP: a clean room is already running (status.json)")
     now = time.time()
     heartbeat()
-    save_status(phase="starting", entry_ts=now, hard_cap_ts=now + hard_cap_min * 60,
-                runner_pid=os.getpid(), variant=None, box_until_ts=0, history=[])  # fmt: skip
+    new_room_status(phase="starting", entry_ts=now, hard_cap_ts=now + hard_cap_min * 60,
+                    runner_pid=os.getpid(), variant=None, box_until_ts=0, history=[])  # fmt: skip
     start_watchdog()
     cap_ts = str(int(now + hard_cap_min * 60))  # shown on the console (state/cleanroom)
     res = cb("to-console", "--yes-tscon", "--cleanroom", "--hard-cap", cap_ts, timeout=300)
