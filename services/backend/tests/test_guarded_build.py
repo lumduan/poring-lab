@@ -230,3 +230,16 @@ def test_a_restart_of_other_services_never_asks_the_backend(
     monkeypatch.setattr(gb, "backend_health", no_health)
     gb.run_restart(["desktop"], 30, guard=None)
     assert fake.events == ["restart marker=False", "watch marker=False"]
+
+
+def test_it_runs_on_the_hosts_bare_python3() -> None:
+    """guarded_build.py is run as `python3 scripts/guarded_build.py` (no venv, no pydantic). Its
+    mode_restore import once pulled in poring_env.protocol and crashed before any step."""
+    import subprocess
+
+    res = subprocess.run(
+        [sys.executable, "-S", str(SCRIPT), "frobnicate:db"],  # -S: no site-packages at all
+        capture_output=True, text=True, timeout=30, check=False,
+    )  # fmt: skip
+    assert res.returncode == 2, res.stderr
+    assert "Traceback" not in res.stderr

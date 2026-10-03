@@ -23,8 +23,10 @@ never writes or removes the marker itself.
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from poring_env.protocol import CaptureBackend
+if TYPE_CHECKING:  # stdlib only at run time: guarded_build.py imports this with the host's python3
+    from poring_env.protocol import CaptureBackend
 
 RESTORE_NAME = "mux-restore"
 KEYS = ("MODE", "SEQ", "WRITTEN", "OWNER")
@@ -40,7 +42,7 @@ class Verdict:
     why: str
 
 
-def judge(text: str | None, lock: CaptureBackend, now: float) -> Verdict:
+def judge(text: str | None, lock: "CaptureBackend", now: float) -> Verdict:
     if text is None:
         return Verdict(False, "no marker")
     values: dict[str, str] = {}
@@ -67,7 +69,7 @@ def judge(text: str | None, lock: CaptureBackend, now: float) -> Verdict:
     return Verdict(True, f"guarded restart {age:.0f} s ago, lock seq {lock.seq} unchanged")
 
 
-def read_verdict(directory: Path, lock: CaptureBackend, now: float) -> Verdict:
+def read_verdict(directory: Path, lock: "CaptureBackend", now: float) -> Verdict:
     try:
         text: str | None = (directory / RESTORE_NAME).read_text(encoding="ascii")
     except FileNotFoundError:
