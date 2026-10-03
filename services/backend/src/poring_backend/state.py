@@ -3,12 +3,13 @@
 import asyncio
 import contextlib
 import logging
+import time
 from collections import Counter
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Protocol, TypeVar
 
-from poring_backend.capture_lock import read_lock
+from poring_backend.capture_lock import read_cleanroom, read_lock
 from poring_backend.clipboard import ClipboardService, PasteOutcome, SelectionIO
 from poring_backend.config import Settings
 from poring_backend.display import DisplayWatch, Region
@@ -22,6 +23,7 @@ from poring_backend.transfer_log import TransferLog
 from poring_env.clock import monotonic_ns
 from poring_env.env import FrameSource
 from poring_env.protocol import (
+    CleanRoom,
     ClipboardPaste,
     InputEvent,
     Key,
@@ -166,8 +168,11 @@ class AppState:
         self.agents: set[Outbox] = set()
         self.rdp_window_present: bool | None = None
         self.stream_window_present: bool | None = None
-        # The capture-backend lock (ADR-0009), re-read every status tick.
+        # The capture-backend lock (ADR-0009) and the clean room's status, re-read every tick.
         self.capture = read_lock(settings.lab_state_dir)
+        self.cleanroom: CleanRoom | None = read_cleanroom(
+            settings.lab_state_dir, self.capture, time.time()
+        )
         self._status_task: asyncio.Task[None] | None = None
         self._background: set[asyncio.Task[Any]] = set()
         # Console connections with secret typing on (SecretInput). While any is on, human key
@@ -198,7 +203,7 @@ class AppState:
     async def _status_loop(self) -> None:
         period = 1.0 / self.settings.status_hz
         while True:
-            self.capture = read_lock(self.settings.lab_state_dir)
+            self._read_lab_state()
             self.rdp_window_present = await self.injector.rdp_window_present()
             self.stream_window_present = await self.injector.stream_window_present()
             now = monotonic_ns()
@@ -215,6 +220,12 @@ class AppState:
                 log.log(level, "game display %s -> %s (%s)", before, after, self.display.snapshot())
             self.broadcast_status()
             await asyncio.sleep(period)
+
+    def _read_lab_state(self) -> None:
+        directory = self.settings.lab_state_dir
+        self.capture = read_lock(directory)
+        # Display only (the console's clean-room line): wall clock, like the file's unix times.
+        self.cleanroom = read_cleanroom(directory, self.capture, time.time())
 
     # --- status -----------------------------------------------------------------------------------
 
@@ -234,6 +245,7 @@ class AppState:
             rdp_window_present=self.rdp_window_present,
             stream_window_present=self.stream_window_present,
             capture_backend=self.capture,
+            cleanroom=self.cleanroom,
             capture_fps=round(self.hub.capture_fps, 2),
             viewers=self.hub.viewer_count,
             # Paste and \\tsclient ride the RDP session's channels: RDP mode only (ADR-0009).

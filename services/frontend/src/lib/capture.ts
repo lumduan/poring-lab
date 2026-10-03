@@ -14,6 +14,9 @@ export function describeCapture(status: Status | null): CaptureView {
   const lock = status?.capture_backend;
   if (!status || !lock) return { label: "–", notices: [], expect: "rdp" };
   const switching = lock.phase === "switching";
+  // The clean room (ADR-0009) parks the lock at console/switching between variants on purpose;
+  // the banner's clean-room line says so (lib/banner.ts), so no "handover in progress" here.
+  const cleanroom = (lock.reason ?? "").startsWith("cleanroom");
   const label = `${lock.backend === "hold" ? "HOLD" : lock.backend}${switching ? " (switching)" : ""}`;
   const notices: string[] = [];
   if (lock.backend === "hold") {
@@ -23,7 +26,7 @@ export function describeCapture(status: Status | null): CaptureView {
     );
     return { label, notices, expect: null };
   }
-  if (switching) {
+  if (switching && !cleanroom) {
     notices.push(`Capture-backend handover to ${lock.backend} in progress (seq ${lock.seq}).`);
   }
   if (lock.backend === "console") {
@@ -31,7 +34,11 @@ export function describeCapture(status: Status | null): CaptureView {
       "Console mode (Sunshine/Moonlight, ADR-0009): paste and \\\\tsclient files are unavailable.",
     );
     if (!switching && status.stream_window_present === false) {
-      notices.push("The console stream window is missing: gamestream is (re)connecting.");
+      notices.push(
+        cleanroom
+          ? "No stream window on the display: the clean-room variant is starting, or it exited."
+          : "The console stream window is missing: gamestream is (re)connecting.",
+      );
     }
     return { label, notices, expect: "stream" };
   }

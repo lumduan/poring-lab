@@ -225,6 +225,27 @@ class CaptureBackend(BaseModel):
     reason: str | None = Field(default=None, description="Why: hold reason, or the handover.")
 
 
+class CleanRoom(BaseModel):
+    """A clean-room experiment in progress (ADR-0009): the session stays on the console, RDP holds,
+    and only the lab's stream client varies. Read from ``state/cleanroom`` (written only by
+    scripts/capture_backend.py) and honoured only while the lock's reason is ``cleanroom*``."""
+
+    model_config = _MODEL_CONFIG
+
+    variant: Literal["V1", "V1gdb", "V2", "V3"] | None = Field(
+        default=None, description="The stream client variant under test; null = none started yet."
+    )
+    streaming: bool = Field(
+        description="A variant is streaming now (lock console/steady); false between variants."
+    )
+    box_left_s: int | None = Field(
+        default=None, ge=0, description="Seconds left in the variant's time box; null = no box."
+    )
+    hard_cap_left_s: int | None = Field(
+        default=None, ge=0, description="Seconds until the room's hard cap ends it; null = none."
+    )
+
+
 class Status(Message):
     """Mux and pipeline state, pushed at ~1 Hz and on every change."""
 
@@ -243,6 +264,9 @@ class Status(Message):
     )
     capture_backend: CaptureBackend | None = Field(
         default=None, description="The capture-backend lock (ADR-0009); null = not read yet."
+    )
+    cleanroom: CleanRoom | None = Field(
+        default=None, description="The clean room in progress (ADR-0009); null = none."
     )
     capture_fps: float = Field(ge=0.0)
     viewers: int = Field(ge=0)
@@ -270,8 +294,9 @@ class Status(Message):
     game_black: bool | None = Field(
         default=None,
         description=(
-            "The game region has been near-uniformly black for the hold time (a lost D3D device "
-            "after an RDP reconnect); null = unknown (no recent grab)."
+            "The game region has been near-uniformly black for the hold time (in RDP mode, usually "
+            "a lost D3D device after a reconnect; in console mode, no game picture in the stream); "
+            "null = unknown (no recent grab)."
         ),
     )
     human_secret: bool = Field(

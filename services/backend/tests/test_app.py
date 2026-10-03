@@ -489,3 +489,28 @@ def test_an_unmounted_lock_holds_and_refuses_paste(
         result = paste(ws)
     assert (result["ok"], result["reason"]) == (False, "backend_hold")
     assert keys(fake) == []
+
+
+def test_health_and_status_show_the_clean_room_only_under_its_lock(
+    make_client: Factory, tmp_path: Path
+) -> None:
+    import time
+
+    lab_state = tmp_path / "lab-state"
+    lab_state.mkdir(exist_ok=True)
+    cap = int(time.time()) + 3600
+    (lab_state / "cleanroom").write_text(f"VARIANT=V3\nBOX_UNTIL=\nHARD_CAP={cap}\n")
+    write_lock(lab_state, "console", seq=20)  # REASON missing: not a clean room
+    client, _ = make_client()
+    assert client.get("/health").json()["cleanroom"] is None
+    (lab_state / "capture-backend").write_text(
+        "BACKEND=console\nSEQ=21\nPHASE=steady\nREASON=cleanroom\n"
+    )
+    deadline = time.monotonic() + 5
+    while (room := client.get("/health").json()["cleanroom"]) is None:
+        assert time.monotonic() < deadline, "the status loop never re-read the lab state"
+        time.sleep(0.05)
+    assert (room["variant"], room["streaming"], room["box_left_s"]) == ("V3", True, None)
+    assert 3500 < room["hard_cap_left_s"] <= 3600
+    with client.websocket_connect("/ws/stream", headers={"origin": ORIGIN}) as ws:
+        assert receive_text_until(ws, "status")["cleanroom"]["variant"] == "V3"

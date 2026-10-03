@@ -16,7 +16,8 @@ SCRIPTS = Path(__file__).resolve().parents[3] / "scripts"
 
 
 @pytest.fixture
-def cb() -> ModuleType:
+def cb(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ModuleType:
+    monkeypatch.setenv("LAB_STATE_HOST_DIR", str(tmp_path / "state"))  # never the real state/
     spec = importlib.util.spec_from_file_location("capture_backend", SCRIPTS / "capture_backend.py")
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
@@ -35,6 +36,7 @@ class World:
         self.client_leaves = True  # the streaming Moonlight exits by itself
         self.revert = "OK"
         self.quit_rc = 0
+        self.hard_cap: int | None = 1_790_010_800
 
     def install(self, monkeypatch: pytest.MonkeyPatch) -> None:
         cb = self.cb
@@ -49,6 +51,9 @@ class World:
         monkeypatch.setattr(cb, "verify_sunshine_revert", self.verify)
         monkeypatch.setattr(cb, "write_variant", lambda v: self.events.append(("variant", v)))
         monkeypatch.setattr(cb, "ensure_no_wm", lambda: self.events.append(("no-wm",)))
+        monkeypatch.setattr(cb, "write_cleanroom", lambda *a: self.events.append(("cleanroom", *a)))
+        monkeypatch.setattr(cb, "clear_cleanroom", lambda: self.events.append(("cleanroom-gone",)))
+        monkeypatch.setattr(cb, "cleanroom_field", lambda key: self.hard_cap)
         monkeypatch.setattr(cb, "STREAM_EXIT_S", 0.0)
         monkeypatch.setattr(cb.time, "sleep", lambda s: self.events.append(("sleep", s)))
 
@@ -222,6 +227,7 @@ def test_to_rdp_checks_for_a_window_manager_before_rdp_may_connect(
     assert cb.cmd_to_rdp(False) == 0
     assert w.index(("no-wm",)) < w.index(("lock", "rdp", "switching"))
     assert w.index(("lock", "rdp", "steady")) < w.index(("variant", "V1"))  # defaults restored
+    assert w.index(("lock", "rdp", "steady")) < w.index(("cleanroom-gone",))  # console status off
 
 
 class Room(World):
@@ -244,8 +250,10 @@ def test_stream_writes_the_variant_then_the_steady_lock(
 ) -> None:
     room = Room(cb, "switching", "cleanroom-hold")
     room.install(monkeypatch)
-    assert cb.cmd_stream("V2") == 0
-    assert room.index(("variant", "V2")) < room.index(("lock", "console", "steady"))
+    assert cb.cmd_stream("V2", 1_790_001_800) == 0
+    status = ("cleanroom", "V2", 1_790_001_800, room.hard_cap)  # the hard cap is kept
+    assert room.index(("variant", "V2")) < room.index(status)
+    assert room.index(status) < room.index(("lock", "console", "steady"))
 
 
 @pytest.mark.parametrize(
@@ -270,7 +278,7 @@ def test_stream_refuses_outside_the_clean_room_or_with_a_lab_client_running(
     room.install(monkeypatch)
     with pytest.raises(cb.Stop, match=why):
         cb.cmd_stream("V1")
-    assert not any(e[0] in ("lock", "variant") for e in room.events)
+    assert not any(e[0] in ("lock", "variant", "cleanroom") for e in room.events)
 
 
 def test_hold_moves_the_lock_before_the_cancel_and_resets_the_variant(

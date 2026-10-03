@@ -120,6 +120,7 @@ async def health(request: Request) -> dict[str, Any]:
         "stream_window_present": state.stream_window_present,
         # ADR-0009: who owns the ONE Windows session (scripts/capture_backend.py status).
         "capture_backend": state.capture.model_dump(),
+        "cleanroom": state.cleanroom.model_dump() if state.cleanroom else None,
         "viewers": state.hub.viewer_count,
         "bot_connected": bool(state.agents),
         "capture_fps": round(state.hub.capture_fps, 2),

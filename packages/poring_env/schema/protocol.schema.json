@@ -344,6 +344,68 @@
       "title": "CaptureBackend",
       "type": "object"
     },
+    "CleanRoom": {
+      "additionalProperties": false,
+      "description": "A clean-room experiment in progress (ADR-0009): the session stays on the console, RDP holds,\nand only the lab's stream client varies. Read from ``state/cleanroom`` (written only by\nscripts/capture_backend.py) and honoured only while the lock's reason is ``cleanroom*``.",
+      "properties": {
+        "box_left_s": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Seconds left in the variant's time box; null = no box."
+        },
+        "hard_cap_left_s": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Seconds until the room's hard cap ends it; null = none."
+        },
+        "streaming": {
+          "description": "A variant is streaming now (lock console/steady); false between variants.",
+          "type": "boolean"
+        },
+        "variant": {
+          "anyOf": [
+            {
+              "enum": [
+                "V1",
+                "V1gdb",
+                "V2",
+                "V3"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The stream client variant under test; null = none started yet."
+        }
+      },
+      "required": [
+        "variant",
+        "streaming",
+        "box_left_s",
+        "hard_cap_left_s"
+      ],
+      "title": "CleanRoom",
+      "type": "object"
+    },
     "ClipboardPaste": {
       "additionalProperties": false,
       "description": "Paste this text into the focused Windows window (ADR-0004: human-only, browser channel only).\n\nThe backend owns the X CLIPBOARD for the duration of one paste, sends Ctrl+V through the mux and\nanswers with a ``PasteResult``. The text itself is never logged.",
@@ -1046,6 +1108,18 @@
           "minimum": 0.0,
           "type": "number"
         },
+        "cleanroom": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CleanRoom"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The clean room in progress (ADR-0009); null = none."
+        },
         "clipboard_enabled": {
           "default": false,
           "description": "Clipboard paste to Windows is available (ADR-0004): RDP mode only -- in console mode a Ctrl+V would paste Windows' own clipboard.",
@@ -1067,7 +1141,7 @@
             }
           ],
           "default": null,
-          "description": "The game region has been near-uniformly black for the hold time (a lost D3D device after an RDP reconnect); null = unknown (no recent grab)."
+          "description": "The game region has been near-uniformly black for the hold time (in RDP mode, usually a lost D3D device after a reconnect; in console mode, no game picture in the stream); null = unknown (no recent grab)."
         },
         "human_secret": {
           "default": false,
@@ -1166,6 +1240,7 @@
         "rdp_window_present",
         "stream_window_present",
         "capture_backend",
+        "cleanroom",
         "capture_fps",
         "viewers",
         "clipboard_enabled",

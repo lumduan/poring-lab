@@ -359,7 +359,8 @@ def cmd_start(hard_cap_min: float) -> int:
     save_status(phase="starting", entry_ts=now, hard_cap_ts=now + hard_cap_min * 60,
                 runner_pid=os.getpid(), variant=None, box_until_ts=0, history=[])  # fmt: skip
     start_watchdog()
-    res = cb("to-console", "--yes-tscon", "--cleanroom", timeout=300)
+    cap_ts = str(int(now + hard_cap_min * 60))  # shown on the console (state/cleanroom)
+    res = cb("to-console", "--yes-tscon", "--cleanroom", "--hard-cap", cap_ts, timeout=300)
     if res.returncode != 0:
         say("to-console failed: the watchdog's next check (or to-rdp --recover) returns RDP")
         save_status(phase="enter-failed")
@@ -376,11 +377,12 @@ def cmd_variant(variant: str, box_min: float | None) -> int:
     heartbeat()
     status = save_status(phase="variant", variant=variant, box_until_ts=t0 + box,
                          runner_pid=os.getpid())  # fmt: skip
+    box_until = str(int(t0 + box))
     stop = {"flag": False}
     signal.signal(signal.SIGTERM, lambda *_: stop.update(flag=True))
     result: dict[str, Any] = {"variant": variant, "started": utc_now()}
     since = utc_now()
-    if cb("stream", "--variant", variant, timeout=120).returncode != 0:
+    if cb("stream", "--variant", variant, "--box-until", box_until, timeout=120).returncode != 0:
         result["verdict"] = "stream-refused"
         return finish(status, result)
     first = wait_picture(FIRST_PICTURE_S, stop)
@@ -399,7 +401,7 @@ def cmd_variant(variant: str, box_min: float | None) -> int:
         return finish(status, result)
     cb("hold", timeout=180)
     heartbeat()
-    if cb("stream", "--variant", variant, timeout=120).returncode != 0:
+    if cb("stream", "--variant", variant, "--box-until", box_until, timeout=120).returncode != 0:
         result["verdict"] = "restream-refused"
         return finish(status, result)
     again = wait_picture(FIRST_PICTURE_S, stop)

@@ -59,3 +59,9 @@ test("hold expects no client and explains why", () => {
 test("no status yet", () => {
   assert.deepEqual(describeCapture(null), { label: "–", notices: [], expect: "rdp" });
 });
+
+test("a clean room parks the lock at switching on purpose: no handover notice", () => {
+  const view = describeCapture(status({ backend: "console", phase: "switching", reason: "cleanroom-hold" }));
+  assert.equal(view.label, "console (switching)");
+  assert.ok(!view.notices.some((n) => /handover/.test(n)), view.notices.join("\n"));
+});

@@ -11,6 +11,7 @@ import subprocess
 import time
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -434,3 +435,66 @@ def test_outside_the_clean_room_a_crashed_client_is_retried(stream_env: dict[str
     write_lock(Path(stream_env["LAB_STATE_DIR"]), "BACKEND=console\nSEQ=9\nPHASE=steady\n")
     streams, _ = run_stream(stream_env, 4.5)
     assert len(streams) >= 2
+
+
+# --- the clean room's status (state/cleanroom; display only) ------------------------------------
+
+
+def _lock(phase: str = "steady", reason: str | None = "cleanroom", backend: str = "console") -> Any:
+    from poring_env.protocol import CaptureBackend
+
+    return CaptureBackend.model_validate(
+        {"backend": backend, "seq": 5, "phase": phase, "reason": reason}
+    )
+
+
+def test_clean_room_status_counts_down_from_the_files_unix_times() -> None:
+    from poring_backend.capture_lock import format_cleanroom, parse_cleanroom
+
+    body = format_cleanroom("V3", 1_000_600, 1_010_800)
+    room = parse_cleanroom(body, _lock(), now=1_000_000.4)
+    assert room is not None
+    assert (room.variant, room.streaming, room.box_left_s, room.hard_cap_left_s) == (
+        "V3", True, 599, 10_799,
+    )  # fmt: skip
+    between = parse_cleanroom(body, _lock("switching", "cleanroom-hold"), now=1_000_700)
+    assert between is not None and not between.streaming and between.box_left_s == 0  # box over
+    entered = parse_cleanroom(format_cleanroom("", None, 1_010_800), _lock("switching"), 1_000_000)
+    assert entered is not None and (entered.variant, entered.box_left_s) == (None, None)
+
+
+@pytest.mark.parametrize(
+    ("backend", "reason"),
+    [("console", "to-console"), ("console", None), ("rdp", "cleanroom"), ("hold", "cleanroom")],
+)
+def test_clean_room_status_is_ignored_outside_a_clean_room_lock(
+    backend: str, reason: str | None
+) -> None:
+    """to-rdp removes the file, but a stale one (a to-rdp that failed half way) must never show."""
+    from poring_backend.capture_lock import format_cleanroom, parse_cleanroom
+
+    lock = _lock(reason=reason, backend=backend, phase="" if backend == "hold" else "steady")
+    assert parse_cleanroom(format_cleanroom("V1", None, 2_000_000_000), lock, 1.0) is None
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "VARIANT=V9\nBOX_UNTIL=\nHARD_CAP=\n",
+        "VARIANT=V1\nPATH=/evil\n",
+        "VARIANT=V1 $(touch /tmp/x)\n",
+        "\n",
+    ],
+)
+def test_a_bad_clean_room_file_is_ignored(content: str, tmp_path: Path) -> None:
+    from poring_backend.capture_lock import parse_cleanroom, read_cleanroom
+
+    assert parse_cleanroom(content, _lock(), 1.0) is None
+    assert read_cleanroom(tmp_path, _lock(), 1.0) is None  # no file at all
+
+
+def test_format_cleanroom_refuses_a_variant_the_reader_would_drop() -> None:
+    from poring_backend.capture_lock import format_cleanroom
+
+    with pytest.raises(ValueError):
+        format_cleanroom("V3\nPATH=/x", None, None)

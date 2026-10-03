@@ -212,6 +212,10 @@ ports, quickstart) and `docs/adr/`.
     start; `hold` ends the stream (/cancel) and keeps the session there; streams are one-shot.
     `scripts/cleanroom.py` drives it, with a detached watchdog (`systemd-run --user`) that runs the
     clean to-rdp on a time box or the hard cap. After a host reboot mid-run: `to-rdp --recover` first.
+  - The console shows the clean room from `state/cleanroom` (VARIANT/BOX_UNTIL/HARD_CAP, display
+    only, same writer: `to-console --cleanroom --hard-cap`, `stream --box-until`; to-rdp removes it).
+    The backend honours it only while the lock's REASON is `cleanroom*`. The banner's D3D/"ro_agent
+    recover" advice is RDP-only (`services/frontend/src/lib/banner.ts`).
   - rdp-loop.sh connects only while it says `rdp`, and never while a Moonlight window is on the display;
     every wait wakes when the lock changes. Fail closed: no mount / malformed -> `hold`; mounted dir
     without the file -> `rdp`. The bash and Python readers are parity-tested (`test_capture_lock.py`).

@@ -15,7 +15,7 @@ Rules (fail closed):
 import re
 from pathlib import Path
 
-from poring_env.protocol import CaptureBackend
+from poring_env.protocol import CaptureBackend, CleanRoom
 
 LOCK_NAME = "capture-backend"
 KEYS = ("BACKEND", "SEQ", "PHASE", "OWNER", "SINCE", "REASON")
@@ -85,3 +85,57 @@ def format_lock(backend: str, seq: int, phase: str, *, owner: str, since: int, r
     )
     assert parse_lock(body).backend == backend
     return body
+
+
+# --- the clean room's status (ADR-0009; Batt, 2026-10-03) ----------------------------------------
+# ``<lab-state>/cleanroom``: VARIANT / BOX_UNTIL / HARD_CAP, written only by capture_backend.py
+# (to-console --cleanroom, stream --variant) and removed by its to-rdp. Shown to the console; it
+# never gates anything, so a bad file is simply ignored (None), unlike the lock.
+
+CLEANROOM_NAME = "cleanroom"
+CLEANROOM_KEYS = ("VARIANT", "BOX_UNTIL", "HARD_CAP")
+VARIANTS = ("V1", "V1gdb", "V2", "V3")
+
+
+def parse_cleanroom(text: str, lock: CaptureBackend, now: float) -> CleanRoom | None:
+    """The clean room's status, or None unless the lock is console + REASON cleanroom*."""
+    if lock.backend != "console" or not (lock.reason or "").startswith("cleanroom"):
+        return None
+    values: dict[str, str] = {}
+    for line in text.splitlines():
+        match = _LINE.match(line)
+        if match is None or match.group(1) not in CLEANROOM_KEYS:
+            return None
+        values[match.group(1)] = match.group(2)
+    variant = values.get("VARIANT", "")
+    if variant not in (*VARIANTS, ""):
+        return None
+
+    def left(key: str) -> int | None:
+        raw = values.get(key, "")
+        if not raw.isdigit():
+            return None
+        return max(0, int(int(raw) - now))
+
+    return CleanRoom(
+        variant=variant or None,  # type: ignore[arg-type]  # checked against VARIANTS above
+        streaming=lock.phase == "steady",
+        box_left_s=left("BOX_UNTIL"),
+        hard_cap_left_s=left("HARD_CAP"),
+    )
+
+
+def read_cleanroom(directory: Path, lock: CaptureBackend, now: float) -> CleanRoom | None:
+    try:
+        text = (directory / CLEANROOM_NAME).read_text(encoding="ascii")
+    except (OSError, UnicodeDecodeError):
+        return None
+    return parse_cleanroom(text, lock, now)
+
+
+def format_cleanroom(variant: str, box_until: int | None, hard_cap: int | None) -> str:
+    if variant not in (*VARIANTS, ""):
+        raise ValueError(f"bad clean-room variant {variant!r}")
+    box = "" if box_until is None else str(int(box_until))
+    cap = "" if hard_cap is None else str(int(hard_cap))
+    return f"VARIANT={variant}\nBOX_UNTIL={box}\nHARD_CAP={cap}\n"

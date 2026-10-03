@@ -254,6 +254,10 @@ export interface Status {
   capture_backend: CaptureBackend | null;
   capture_fps: number;
   /**
+   * The clean room in progress (ADR-0009); null = none.
+   */
+  cleanroom: CleanRoom | null;
+  /**
    * Clipboard paste to Windows is available (ADR-0004): RDP mode only -- in console mode a Ctrl+V would paste Windows' own clipboard.
    */
   clipboard_enabled: boolean;
@@ -262,7 +266,7 @@ export interface Status {
    */
   frame_id: number;
   /**
-   * The game region has been near-uniformly black for the hold time (a lost D3D device after an RDP reconnect); null = unknown (no recent grab).
+   * The game region has been near-uniformly black for the hold time (in RDP mode, usually a lost D3D device after a reconnect; in console mode, no game picture in the stream); null = unknown (no recent grab).
    */
   game_black: boolean | null;
   /**
@@ -331,6 +335,32 @@ export interface CaptureBackend {
    * Unix time of the last lock write.
    */
   since: number | null;
+}
+/**
+ * A clean-room experiment in progress (ADR-0009): the session stays on the console, RDP holds,
+ * and only the lab's stream client varies. Read from ``state/cleanroom`` (written only by
+ * scripts/capture_backend.py) and honoured only while the lock's reason is ``cleanroom*``.
+ *
+ * This interface was referenced by `PoringProtocol`'s JSON-Schema
+ * via the `definition` "CleanRoom".
+ */
+export interface CleanRoom {
+  /**
+   * Seconds left in the variant's time box; null = no box.
+   */
+  box_left_s: number | null;
+  /**
+   * Seconds until the room's hard cap ends it; null = none.
+   */
+  hard_cap_left_s: number | null;
+  /**
+   * A variant is streaming now (lock console/steady); false between variants.
+   */
+  streaming: boolean;
+  /**
+   * The stream client variant under test; null = none started yet.
+   */
+  variant: ("V1" | "V1gdb" | "V2" | "V3") | null;
 }
 /**
  * Mux verdict for one AgentInput batch.

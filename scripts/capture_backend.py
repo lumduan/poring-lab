@@ -27,10 +27,12 @@ rdp-loop.sh connects only while it says ``rdp``; gamestream-loop.sh streams only
         with the lock at console/switching, so the lab client holds and an external one streams.
         --cleanroom (Batt, 2026-10-03): the same stop, REASON `cleanroom`, for the clean-room
         experiment: the session stays on the console while lab-client variants take turns:
-    capture_backend.py stream --variant V1|V1gdb|V2|V3
+    capture_backend.py stream --variant V1|V1gdb|V2|V3 [--box-until UNIX]
         Clean room only (lock console + REASON cleanroom*, phase switching): refuses unless NO lab
         client runs in gamestream (one client at a time, enforced), writes the whitelisted variant
         file `state/gamestream-variant` (CLIENT/WM/GDB_AFTER_S), then console/steady.
+        The console shows the clean room from `state/cleanroom` (VARIANT/BOX_UNTIL/HARD_CAP):
+        to-console --cleanroom --hard-cap UNIX creates it, stream updates it, to-rdp removes it.
     capture_backend.py hold
         Clean room only: console/switching (REASON cleanroom-hold), then end the stream through
         Sunshine (/cancel, as to-rdp does) and reset the variant file. The session stays on the
@@ -63,7 +65,13 @@ if TYPE_CHECKING:
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "services" / "backend" / "src"))
 sys.path.insert(0, str(REPO / "packages" / "poring_env" / "src"))
-from poring_backend.capture_lock import LOCK_NAME, format_lock, parse_lock  # noqa: E402
+from poring_backend.capture_lock import (  # noqa: E402
+    CLEANROOM_NAME,
+    LOCK_NAME,
+    format_cleanroom,
+    format_lock,
+    parse_lock,
+)
 
 STATE = Path(os.environ.get("LAB_STATE_HOST_DIR", REPO / "state"))
 DESKTOP, BACKEND, GAMESTREAM = (
@@ -338,6 +346,7 @@ def cmd_to_rdp(recover: bool) -> int:
     verify_everywhere(write_lock("rdp", "steady", "to-rdp-done"))
     say("RDP mode: exactly one xfreerdp client")
     write_variant("V1")  # a later plain to-console streams moonlight-qt, no WM, no gdb
+    clear_cleanroom()
     if not from_console:
         return 0
     verdict = verify_sunshine_revert()
@@ -559,7 +568,9 @@ def cmd_pair(pin: str) -> int:
 EXTERNAL_REASON = "to-console-external"
 
 
-def cmd_to_console(yes_tscon: bool, external: bool = False, cleanroom: bool = False) -> int:
+def cmd_to_console(
+    yes_tscon: bool, external: bool = False, cleanroom: bool = False, hard_cap: int | None = None
+) -> int:
     backend, _, _ = read_host()
     if backend != "rdp":
         raise Stop(f"to-console starts from rdp (the lock is {backend})")
@@ -602,6 +613,7 @@ def cmd_to_console(yes_tscon: bool, external: bool = False, cleanroom: bool = Fa
     time.sleep(max(0.0, TSCON_DELAY_S + 5 - (time.monotonic() - typed)))
     if cleanroom:
         write_variant("V1")
+        write_cleanroom("", None, hard_cap)
         verify_everywhere(write_lock("console", "switching", CLEANROOM_REASON))
         say(
             "CLEAN ROOM: the session is on the console and stays there; RDP and the lab client "
@@ -682,6 +694,42 @@ def write_variant(variant: str) -> None:
     say(f"variant -> {variant}: " + " ".join(body.split()))
 
 
+def write_cleanroom(variant: str, box_until: int | None, hard_cap: int | None) -> None:
+    """The console's clean-room status (state/cleanroom): atomic, read back on the host and in the
+    backend (its only reader). Display only -- it never gates a client."""
+    body = format_cleanroom(variant, box_until, hard_cap)
+    STATE.mkdir(exist_ok=True)
+    tmp = STATE / f".{CLEANROOM_NAME}.tmp"
+    tmp.write_text(body, encoding="ascii")
+    tmp.replace(STATE / CLEANROOM_NAME)
+    if (STATE / CLEANROOM_NAME).read_text(encoding="ascii") != body:
+        raise Stop("clean-room status read-back on the host differs from what was written")
+    if running(BACKEND):
+        seen = sh("docker", "exec", BACKEND, "cat", f"/lab-state/{CLEANROOM_NAME}").stdout
+        if seen != body:
+            raise Stop(f"the backend sees a different clean-room status: {seen!r}")
+    say("clean-room status -> " + " ".join(body.split()))
+
+
+def cleanroom_field(key: str) -> int | None:
+    try:
+        text = (STATE / CLEANROOM_NAME).read_text(encoding="ascii")
+    except OSError:
+        return None
+    match = re.search(rf"^{key}=(\d+)$", text, re.M)
+    return int(match.group(1)) if match else None
+
+
+def clear_cleanroom() -> None:
+    path = STATE / CLEANROOM_NAME
+    if not path.exists():
+        return
+    path.unlink()
+    if path.exists():
+        raise Stop("state/cleanroom is still there after removing it")
+    say("clean-room status removed")
+
+
 def ensure_no_wm() -> None:
     """No window manager on :99 when RDP connects: openbox (V2) would decorate and place
     xfreerdp's /size window, and every click would land off target."""
@@ -708,7 +756,7 @@ def cleanroom_lock() -> tuple[str, str]:
     return lock_phase(text), reason
 
 
-def cmd_stream(variant: str) -> int:
+def cmd_stream(variant: str, box_until: int | None = None) -> int:
     phase, _ = cleanroom_lock()
     if phase != "switching":
         raise Stop("a stream is already on (console/steady): hold first")
@@ -718,6 +766,7 @@ def cmd_stream(variant: str) -> int:
     if lab_clients:
         raise Stop(f"{lab_clients} lab client process(es) still run: one client at a time")
     write_variant(variant)
+    write_cleanroom(variant, box_until, cleanroom_field("HARD_CAP"))
     since = utc_now()
     body = write_lock("console", "steady", CLEANROOM_REASON)
     verify_everywhere(body)
@@ -782,8 +831,10 @@ def main() -> int:
         "--cleanroom", action="store_true",
         help="the clean room: the session stays on the console; then stream/hold",
     )  # fmt: skip
+    to_console.add_argument("--hard-cap", type=int, help="clean room: unix time of the hard cap")
     stream = sub.add_parser("stream")
     stream.add_argument("--variant", required=True, choices=sorted(VARIANTS))
+    stream.add_argument("--box-until", type=int, help="unix time the variant's box ends")
     sub.add_parser("hold")
     pair = sub.add_parser("pair")
     pair.add_argument("pin")
@@ -800,12 +851,14 @@ def main() -> int:
         if args.cmd == "pair":
             return cmd_pair(args.pin)
         if args.cmd == "stream":
-            return cmd_stream(args.variant)
+            return cmd_stream(args.variant, args.box_until)
         if args.cmd == "hold":
             return cmd_hold()
         if args.external and args.cleanroom:
             raise Stop("--external and --cleanroom exclude each other")
-        return cmd_to_console(args.yes_tscon, args.external, args.cleanroom)
+        if args.hard_cap is not None and not args.cleanroom:
+            raise Stop("--hard-cap belongs to --cleanroom")
+        return cmd_to_console(args.yes_tscon, args.external, args.cleanroom, args.hard_cap)
 
 
 if __name__ == "__main__":

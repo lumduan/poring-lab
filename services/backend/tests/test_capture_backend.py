@@ -86,3 +86,20 @@ def test_paired_means_a_stored_server_certificate_not_our_identity(
     )
     res = subprocess.run(["grep", "-q", "-E", cb.PAIRED_HOST_RX, str(conf)], check=False)
     assert (res.returncode == 0) is expected
+
+
+def test_the_clean_room_status_file_is_written_read_back_and_removed(
+    cb: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(cb, "running", lambda container: False)  # no docker in tests
+    cb.write_cleanroom("", None, 1_790_010_800)
+    path = tmp_path / "state" / "cleanroom"
+    assert path.read_text() == "VARIANT=\nBOX_UNTIL=\nHARD_CAP=1790010800\n"
+    cb.write_cleanroom("V3", 1_790_003_600, cb.cleanroom_field("HARD_CAP"))  # stream keeps the cap
+    assert path.read_text() == "VARIANT=V3\nBOX_UNTIL=1790003600\nHARD_CAP=1790010800\n"
+    assert not list((tmp_path / "state").glob(".*.tmp"))
+    cb.clear_cleanroom()
+    assert not path.exists() and cb.cleanroom_field("HARD_CAP") is None
+    cb.clear_cleanroom()  # idempotent
+    with pytest.raises(ValueError):
+        cb.write_cleanroom("V9", None, None)
