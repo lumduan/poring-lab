@@ -155,7 +155,7 @@ def record(a: argparse.Namespace) -> dict[str, Any]:
     chash = bench.benchlib.config_hash(config)
     session_id = f"{time.strftime('%Y%m%dT%H%M%S')}-{a.backend}-{a.label}"
     out = a.out / session_id
-    writer = ShardWriter(out)
+    writer = ShardWriter(out, png_level=a.png_level)
     guard = load_guard()
     gx, gy, gw, gh = r.game_region()
     period = 1.0 / a.fps
@@ -215,7 +215,8 @@ def record(a: argparse.Namespace) -> dict[str, Any]:
     manifest = {
         "session_id": session_id, "recorder_version": RECORDER_VERSION,
         "backend": a.backend, "lock_seq": lock.seq, "config": config, "config_hash": chash,
-        "game_region": [gx, gy, gw, gh], "fps_cap": a.fps, "shards": writer.shards,
+        "game_region": [gx, gy, gw, gh], "fps_cap": a.fps, "png_level": a.png_level,
+        "shards": writer.shards,
         "frames": writer.frames, "unchanged_skipped": skipped, "bus_repeats": repeats,
         "frame_sources": sources, "bytes": writer.bytes,
         "t0_mono_ns": t0, "t1_mono_ns": t1, "seconds": round(seconds, 1),
@@ -259,6 +260,10 @@ def main() -> int:
     ap.add_argument("--label")
     ap.add_argument("--seconds", type=float, default=120.0)
     ap.add_argument("--fps", type=float, default=10.0)
+    ap.add_argument(
+        "--png-level", type=int, choices=range(0, 10), default=1,
+        help="zlib level of the lossless PNGs: 1 fast (default), 6 smaller and slower",
+    )  # fmt: skip
     ap.add_argument("--out", type=Path, default=dataset_ship.LOCAL_ROOT)
     ap.add_argument(
         "--max-bytes",

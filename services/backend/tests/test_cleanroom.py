@@ -139,3 +139,17 @@ def test_a_new_room_never_inherits_the_previous_rooms_entry(cr: ModuleType) -> N
     assert cr.decide(T + 5, st, ("rdp", "steady", "to-rdp-done"), False, 0) == "wait"
     archived = list(cr.STATE.glob("status-*.json"))
     assert len(archived) == 1 and "ended" in archived[0].read_text()
+
+
+def test_the_watchdog_outlives_the_room(cr: ModuleType) -> None:
+    """2026-10-04: RuntimeMaxSec=4h killed the watchdog of a 6 h room at 00:16:46."""
+    for cap_min in (90, 180, 360):
+        assert cr.watchdog_runtime_s(cap_min) >= cap_min * 60 + 30 * 60
+
+
+def test_no_heartbeat_without_a_watchdog_while_a_room_runs(cr: ModuleType) -> None:
+    cr.save_status(phase="checks", box_until_ts=T + 60)
+    assert cr.cmd_heartbeat(False) == 2
+    assert cr.cmd_heartbeat(True) == 0
+    cr.save_status(phase="ended")
+    assert cr.cmd_heartbeat(False) == 0  # no room: nothing to guard

@@ -302,11 +302,27 @@ def cmd_watchdog() -> int:
         time.sleep(15)
 
 
-def start_watchdog() -> None:
+WATCHDOG_MARGIN_S = 45 * 60  # beyond the hard cap: its own to-rdp + one --recover, with room
+
+
+def watchdog_runtime_s(hard_cap_min: float) -> int:
+    """The unit's RuntimeMaxSec: it must OUTLIVE the room. A fixed 4 h killed the watchdog at
+    00:16:46 on 2026-10-04 while a 6 h room ran on, its box and hard cap unenforced."""
+    return int(hard_cap_min * 60 + WATCHDOG_MARGIN_S)
+
+
+def watchdog_active() -> bool:
+    out = subprocess.run(["systemctl", "--user", "is-active", UNIT], capture_output=True,
+                         text=True, check=False).stdout.strip()  # fmt: skip
+    return out == "active"
+
+
+def start_watchdog(hard_cap_min: float) -> None:
     subprocess.run(["systemctl", "--user", "reset-failed", f"{UNIT}.service"], check=False,
                    capture_output=True)  # fmt: skip
     cmd = [
-        "systemd-run", "--user", "--unit", UNIT, "--collect", "-p", "RuntimeMaxSec=4h",
+        "systemd-run", "--user", "--unit", UNIT, "--collect",
+        "-p", f"RuntimeMaxSec={watchdog_runtime_s(hard_cap_min)}",
         "--setenv=TMPDIR=/dev/shm/poring-lab-tmp", "--setenv=PYTHONDONTWRITEBYTECODE=1",
         "--setenv=TZ=Asia/Bangkok",
         f"--setenv=CLEANROOM_DIR={STATE}", f"--working-directory={REPO}",
@@ -389,7 +405,7 @@ def cmd_start(hard_cap_min: float) -> int:
     heartbeat()
     new_room_status(phase="starting", entry_ts=now, hard_cap_ts=now + hard_cap_min * 60,
                     runner_pid=os.getpid(), variant=None, box_until_ts=0, history=[])  # fmt: skip
-    start_watchdog()
+    start_watchdog(hard_cap_min)
     cap_ts = str(int(now + hard_cap_min * 60))  # shown on the console (state/cleanroom)
     res = cb("to-console", "--yes-tscon", "--cleanroom", "--hard-cap", cap_ts, timeout=300)
     if res.returncode != 0:
@@ -567,6 +583,21 @@ def exit_checks() -> dict[str, bool]:
     }
 
 
+ROOM_ACTIVE = ("entered", "variant", "streaming", "checks")
+
+
+def cmd_heartbeat(watchdog_up: bool) -> int:
+    """A heartbeat only means something while a watchdog enforces the room: refuse (rc 2, loud) when
+    a room is active and the watchdog is down, so no loop keeps an unguarded room alive
+    (2026-10-04: one did, for 5 hours)."""
+    st = load_status()
+    if st.get("phase") in ROOM_ACTIVE and not watchdog_up:
+        say("WATCHDOG DOWN while a room is active: heartbeat REFUSED -- run `cleanroom.py end`")
+        return 2
+    save_status(box_until_ts=st.get("box_until_ts", 0))
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -598,8 +629,7 @@ def main() -> int:
     if args.cmd == "end":
         return cmd_end()
     if args.cmd == "heartbeat":
-        save_status(box_until_ts=load_status().get("box_until_ts", 0))
-        return 0
+        return cmd_heartbeat(watchdog_active())
     print(json.dumps(load_status(), indent=1))
     return 0
 
