@@ -91,5 +91,7 @@ def test_the_projector_uses_camera_and_gat_only_when_both_exist(tmp_path: Path) 
     proj, which = projector_for(json.loads(json.dumps({"h": h, "camera": block})), "map_a",
                                 tmp_path)  # fmt: skip
     assert which == "camera+gat:map_a"
+    _, which = projector_for({"h": h, "camera": block}, "map_a.gat", tmp_path)
+    assert which == "camera+gat:map_a"  # the packets name maps with their .gat suffix
     flat, hill = proj(np.array([[1.0, 0.0], [2.0, 0.0]]), (10, 10))
     assert hill[1] < flat[1]  # the raised cell is drawn higher

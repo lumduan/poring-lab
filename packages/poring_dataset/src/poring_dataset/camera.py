@@ -174,6 +174,8 @@ def projector_for(
     from poring_dataset.projection import project
 
     block = camera_json.get("camera")
+    if map_name and map_name.lower().endswith(".gat"):
+        map_name = map_name[:-4]  # the map-change packet names it "prt_fild08.gat"
     path = gat_dir / f"{map_name}.gat" if map_name else None
     if isinstance(block, dict) and path is not None and path.exists():
         cam = camera_from_json(block, int(block.get("height", 720)))

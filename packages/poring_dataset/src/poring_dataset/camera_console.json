@@ -1,0 +1,630 @@
+{
+ "stamp": "2026-10-03T21:47:58+0700",
+ "backend": "console",
+ "spot": [
+  "prt_fild08",
+  268,
+  107
+ ],
+ "game_region": [
+  80,
+  77,
+  1280,
+  720
+ ],
+ "h": [
+  [
+   33.31102154795021,
+   5.2133660003412725,
+   637.4129653886843
+  ],
+  [
+   -1.7790107842138085,
+   -21.63746256334643,
+   356.4064333149138
+  ],
+  [
+   -0.001601604485740106,
+   0.008183019664699153,
+   1.0
+  ]
+ ],
+ "click_residual_px": {
+  "median": 11.9,
+  "p95": 21.8
+ },
+ "validation": {
+  "n": 100,
+  "median_px": 50.4,
+  "p95_px": 87.6,
+  "samples": [
+   {
+    "gid": 110046526,
+    "projected": [
+     538.9,
+     242.5
+    ],
+    "seen": [
+     575.5,
+     311.0
+    ],
+    "err_px": 77.7,
+    "moving": false
+   },
+   {
+    "gid": 110046527,
+    "projected": [
+     775.6,
+     351.5
+    ],
+    "seen": [
+     780.0,
+     354.0
+    ],
+    "err_px": 5.0,
+    "moving": false
+   },
+   {
+    "gid": 110046528,
+    "projected": [
+     780.3,
+     453.6
+    ],
+    "seen": [
+     784.5,
+     463.0
+    ],
+    "err_px": 10.3,
+    "moving": false
+   },
+   {
+    "gid": 110046529,
+    "projected": [
+     773.4,
+     303.0
+    ],
+    "seen": [
+     780.0,
+     354.0
+    ],
+    "err_px": 51.4,
+    "moving": false
+   },
+   {
+    "gid": 110046530,
+    "projected": [
+     465.7,
+     387.0
+    ],
+    "seen": [
+     530.6,
+     418.0
+    ],
+    "err_px": 71.9,
+    "moving": false
+   },
+   {
+    "gid": 110046531,
+    "projected": [
+     570.1,
+     310.6
+    ],
+    "seen": [
+     631.0,
+     355.0
+    ],
+    "err_px": 75.4,
+    "moving": false
+   },
+   {
+    "gid": 110046532,
+    "projected": [
+     533.2,
+     409.8
+    ],
+    "seen": [
+     536.7,
+     418.0
+    ],
+    "err_px": 9.0,
+    "moving": false
+   },
+   {
+    "gid": 110046533,
+    "projected": [
+     705.2,
+     305.6
+    ],
+    "seen": [
+     652.2,
+     362.0
+    ],
+    "err_px": 77.4,
+    "moving": false
+   },
+   {
+    "gid": 110046534,
+    "projected": [
+     637.4,
+     238.5
+    ],
+    "seen": [
+     624.9,
+     307.0
+    ],
+    "err_px": 69.7,
+    "moving": false
+   },
+   {
+    "gid": 110046535,
+    "projected": [
+     473.7,
+     245.1
+    ],
+    "seen": [
+     495.6,
+     252.0
+    ],
+    "err_px": 23.0,
+    "moving": false
+   },
+   {
+    "gid": 110046526,
+    "projected": [
+     538.9,
+     242.5
+    ],
+    "seen": [
+     576.8,
+     311.0
+    ],
+    "err_px": 78.3,
+    "moving": false
+   },
+   {
+    "gid": 110046527,
+    "projected": [
+     775.6,
+     351.5
+    ],
+    "seen": [
+     780.3,
+     352.0
+    ],
+    "err_px": 4.7,
+    "moving": false
+   },
+   {
+    "gid": 110046528,
+    "projected": [
+     780.3,
+     453.6
+    ],
+    "seen": [
+     779.5,
+     462.0
+    ],
+    "err_px": 8.4,
+    "moving": false
+   },
+   {
+    "gid": 110046529,
+    "projected": [
+     773.4,
+     303.0
+    ],
+    "seen": [
+     780.3,
+     352.0
+    ],
+    "err_px": 49.5,
+    "moving": false
+   },
+   {
+    "gid": 110046530,
+    "projected": [
+     465.7,
+     387.0
+    ],
+    "seen": [
+     531.8,
+     416.0
+    ],
+    "err_px": 72.1,
+    "moving": false
+   },
+   {
+    "gid": 110046531,
+    "projected": [
+     570.1,
+     310.6
+    ],
+    "seen": [
+     631.0,
+     355.0
+    ],
+    "err_px": 75.4,
+    "moving": false
+   },
+   {
+    "gid": 110046532,
+    "projected": [
+     533.2,
+     409.8
+    ],
+    "seen": [
+     531.8,
+     416.0
+    ],
+    "err_px": 6.4,
+    "moving": false
+   },
+   {
+    "gid": 110046533,
+    "projected": [
+     705.2,
+     305.6
+    ],
+    "seen": [
+     652.2,
+     362.0
+    ],
+    "err_px": 77.4,
+    "moving": false
+   },
+   {
+    "gid": 110046534,
+    "projected": [
+     637.4,
+     238.5
+    ],
+    "seen": [
+     633.4,
+     307.0
+    ],
+    "err_px": 68.7,
+    "moving": false
+   },
+   {
+    "gid": 110046535,
+    "projected": [
+     473.7,
+     245.1
+    ],
+    "seen": [
+     492.1,
+     250.0
+    ],
+    "err_px": 19.0,
+    "moving": false
+   },
+   {
+    "gid": 110046526,
+    "projected": [
+     538.9,
+     242.5
+    ],
+    "seen": [
+     572.2,
+     311.0
+    ],
+    "err_px": 76.2,
+    "moving": false
+   },
+   {
+    "gid": 110046527,
+    "projected": [
+     775.6,
+     351.5
+    ],
+    "seen": [
+     778.3,
+     354.0
+    ],
+    "err_px": 3.7,
+    "moving": false
+   },
+   {
+    "gid": 110046528,
+    "projected": [
+     780.3,
+     453.6
+    ],
+    "seen": [
+     787.4,
+     462.0
+    ],
+    "err_px": 11.0,
+    "moving": false
+   },
+   {
+    "gid": 110046529,
+    "projected": [
+     773.4,
+     303.0
+    ],
+    "seen": [
+     778.3,
+     354.0
+    ],
+    "err_px": 51.2,
+    "moving": false
+   },
+   {
+    "gid": 110046530,
+    "projected": [
+     465.7,
+     387.0
+    ],
+    "seen": [
+     529.5,
+     416.0
+    ],
+    "err_px": 70.1,
+    "moving": false
+   },
+   {
+    "gid": 110046531,
+    "projected": [
+     570.1,
+     310.6
+    ],
+    "seen": [
+     631.0,
+     355.0
+    ],
+    "err_px": 75.4,
+    "moving": false
+   },
+   {
+    "gid": 110046532,
+    "projected": [
+     533.2,
+     409.8
+    ],
+    "seen": [
+     535.8,
+     416.0
+    ],
+    "err_px": 6.7,
+    "moving": false
+   },
+   {
+    "gid": 110046533,
+    "projected": [
+     705.2,
+     305.6
+    ],
+    "seen": [
+     652.2,
+     362.0
+    ],
+    "err_px": 77.4,
+    "moving": false
+   },
+   {
+    "gid": 110046534,
+    "projected": [
+     637.4,
+     238.5
+    ],
+    "seen": [
+     623.0,
+     307.0
+    ],
+    "err_px": 70.0,
+    "moving": false
+   },
+   {
+    "gid": 110046535,
+    "projected": [
+     473.7,
+     245.1
+    ],
+    "seen": [
+     501.6,
+     251.0
+    ],
+    "err_px": 28.5,
+    "moving": false
+   },
+   {
+    "gid": 110046526,
+    "projected": [
+     531.0,
+     248.1
+    ],
+    "seen": [
+     574.4,
+     315.0
+    ],
+    "err_px": 79.7,
+    "moving": true
+   },
+   {
+    "gid": 110046527,
+    "projected": [
+     775.6,
+     351.5
+    ],
+    "seen": [
+     784.6,
+     353.0
+    ],
+    "err_px": 9.1,
+    "moving": false
+   },
+   {
+    "gid": 110046528,
+    "projected": [
+     780.3,
+     453.6
+    ],
+    "seen": [
+     788.1,
+     462.0
+    ],
+    "err_px": 11.5,
+    "moving": false
+   },
+   {
+    "gid": 110046529,
+    "projected": [
+     773.4,
+     303.0
+    ],
+    "seen": [
+     784.6,
+     353.0
+    ],
+    "err_px": 51.2,
+    "moving": false
+   },
+   {
+    "gid": 110046530,
+    "projected": [
+     465.7,
+     387.0
+    ],
+    "seen": [
+     529.5,
+     416.0
+    ],
+    "err_px": 70.1,
+    "moving": false
+   },
+   {
+    "gid": 110046531,
+    "projected": [
+     583.8,
+     320.0
+    ],
+    "seen": [
+     651.0,
+     362.0
+    ],
+    "err_px": 79.3,
+    "moving": true
+   },
+   {
+    "gid": 110046532,
+    "projected": [
+     531.4,
+     408.4
+    ],
+    "seen": [
+     537.9,
+     416.0
+    ],
+    "err_px": 10.0,
+    "moving": true
+   },
+   {
+    "gid": 110046533,
+    "projected": [
+     732.0,
+     323.1
+    ],
+    "seen": [
+     784.6,
+     353.0
+    ],
+    "err_px": 60.5,
+    "moving": true
+   },
+   {
+    "gid": 110046534,
+    "projected": [
+     637.4,
+     238.5
+    ],
+    "seen": [
+     583.9,
+     307.0
+    ],
+    "err_px": 86.9,
+    "moving": false
+   },
+   {
+    "gid": 110046535,
+    "projected": [
+     449.8,
+     228.9
+    ],
+    "seen": [
+     452.2,
+     226.0
+    ],
+    "err_px": 3.7,
+    "moving": true
+   }
+  ]
+ },
+ "pairs": 42,
+ "camera": {
+  "yaw": 6.287504383518028,
+  "pitch": 0.7755659303877065,
+  "distance": 400.22947497892767,
+  "fov": 0.2617993877991494,
+  "cx": 640.0562990464664,
+  "cy": 362.359860848692,
+  "height": 720,
+  "model": "perspective + GAT altitude (poring_dataset.camera)",
+  "fitted_on": "20261003T214758.json",
+  "leave_one_out": {
+   "homography": {
+    "median_px": 13.2,
+    "p95_px": 23.5,
+    "n": 42
+   },
+   "camera_flat": {
+    "median_px": 11.2,
+    "p95_px": 29.3,
+    "n": 42
+   },
+   "camera_altitude": {
+    "median_px": 8.9,
+    "p95_px": 18.1,
+    "n": 42
+   }
+  },
+  "validation": {
+   "homography": {
+    "all": {
+     "median_px": 56.0,
+     "p95_px": 79.3,
+     "n": 40
+    },
+    "static": {
+     "median_px": 51.4,
+     "p95_px": 77.9,
+     "n": 35
+    }
+   },
+   "camera_flat": {
+    "all": {
+     "median_px": 53.4,
+     "p95_px": 80.1,
+     "n": 40
+    },
+    "static": {
+     "median_px": 48.9,
+     "p95_px": 79.6,
+     "n": 35
+    }
+   },
+   "camera_altitude": {
+    "all": {
+     "median_px": 53.9,
+     "p95_px": 73.8,
+     "n": 40
+    },
+    "static": {
+     "median_px": 50.6,
+     "p95_px": 73.4,
+     "n": 35
+    }
+   }
+  }
+ }
+}
