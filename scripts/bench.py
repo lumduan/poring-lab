@@ -7,6 +7,10 @@ backend, so RDP, Sunshine S1/S2 and later phases compare like with like.
     bench.py reference              # lossless UI crops over RDP_GFX=off (RDP mode only)
     bench.py validate-reference PNG # one-time: a CopyFromScreen PNG vs the RDP-off crops
     bench.py table                  # regenerate docs/benchmarks/README.md from the run JSONs
+    bench.py exp --label NAME [--keys 60] [--walks 30] [--rotate 30]
+        The key->paint tail experiments (S2, docs/benchmarks/s2-latency-experiments.md): outdoor
+        only; p50..p99 + n, packet->frame, delivery fps, cores, and each key->paint trial split
+        with the S2 client's per-frame timing (frames.csv). -> docs/benchmarks/experiments/
 
 Rules (scripts/ro_agent.py): input only through /internal/agent in ASSIST, waiting out a human
 lease; in-game input only while the GM is online=1; the capture-backend lock must say --backend,
@@ -38,6 +42,8 @@ from poring_backend.capture_lock import read_lock  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 RESULTS = ROOT / "docs" / "benchmarks"
+EXPERIMENTS = RESULTS / "experiments"
+GAMESTREAM = "poring-lab-gamestream-1"
 EVIDENCE = ROOT / "data" / "bench"  # gitignored (data/)
 SCRATCH = Path(os.environ.get("SCRATCH", "/dev/shm/poring-lab-tmp"))
 
@@ -205,6 +211,7 @@ def key_to_paint(agent: r.Agent, screen: r.Screen, trials: int) -> dict[str, Any
         sends.append(r.ns())
         agent.keys("Escape")
         time.sleep(1.5)
+    pairs: list[tuple[int, int]] = []  # (send ns, the painting frame's t ns)
     watcher.wait(timeout=120)
     reader.join(timeout=10)
     grabs, sources = measure_delay.parse_watch("".join(lines))
@@ -220,11 +227,135 @@ def key_to_paint(agent: r.Agent, screen: r.Screen, trials: int) -> dict[str, Any
                 break
             if float((np.abs(thumb - ref) > 24).mean()) >= MOVED:
                 delays.append((t - ts) / 1e6)
+                pairs.append((ts, t))
                 break
     if trials % 2:
         agent.keys("Escape")  # leave the Game option window closed
     return {"key": "Escape", "region": region, **benchlib.delay_summary(delays, trials=trials),
-            "frame_sources": sources, "raw_ms": [round(d, 1) for d in delays]}  # fmt: skip
+            "frame_sources": sources, "raw_ms": [round(d, 1) for d in delays],
+            "pairs_ns": pairs}  # fmt: skip
+
+
+# --- the key->paint tail experiments (S2) ---------------------------------------------------------
+FRAME_FIELDS = ("frame_id", "frame_number", "frame_type", "receive_ms", "enqueue_ms",
+                "host_latency_01ms", "t_dequeue_ns", "t_publish_ns", "decode_us")  # fmt: skip
+
+
+def parse_frames_csv(text: str) -> dict[int, dict[str, int]]:
+    """The S2 client's frames.csv -> {t_publish_ns: row}. A bus frame's t IS its t_publish_ns."""
+    rows: dict[int, dict[str, int]] = {}
+    for line in text.splitlines():
+        parts = line.split(",")
+        if len(parts) != len(FRAME_FIELDS) or not parts[0].lstrip("-").isdigit():
+            continue  # the header, or a torn line
+        row = dict(zip(FRAME_FIELDS, (int(v) for v in parts), strict=True))
+        rows[row["t_publish_ns"]] = row
+    return rows
+
+
+def _pct(values: list[float]) -> dict[str, Any]:
+    """Nearest rank, as every other bench number (benchlib)."""
+    if not values:
+        return {"p50": None, "p95": None, "n": 0}
+    pick = lambda q: round(benchlib.nearest_rank(values, q), 1)  # noqa: E731
+    return {"p50": pick(0.5), "p95": pick(0.95), "n": len(values)}
+
+
+def decompose(pairs: list[tuple[int, int]], rows: dict[int, dict[str, int]]) -> dict[str, Any]:
+    """Split each key->paint trial at the painting frame (all CLOCK_MONOTONIC; mlcc's ms clock is
+    PltGetMillis = CLOCK_MONOTONIC at the pinned commit):
+      to_receive   key sent -> the frame's first packet here (mux, socket, Sunshine input, Windows,
+                   the game's next frame, capture, encode, network; ms resolution)
+      host         Sunshine's own capture -> send for that frame (part of to_receive)
+      receive      first -> last packet (enqueue)
+      queue        enqueued -> the decode thread took it
+      decode       decode + BGRA conversion + bus publish (dequeue -> publish)"""
+    names = ("to_receive", "host", "receive", "queue", "decode")
+    parts: dict[str, list[float]] = {k: [] for k in names}
+    matched = 0
+    for send, t in pairs:
+        row = rows.get(t)
+        if row is None:
+            continue
+        matched += 1
+        parts["to_receive"].append(row["receive_ms"] - send / 1e6)
+        if row["host_latency_01ms"]:
+            parts["host"].append(row["host_latency_01ms"] / 10)
+        parts["receive"].append(float(row["enqueue_ms"] - row["receive_ms"]))
+        parts["queue"].append(row["t_dequeue_ns"] / 1e6 - row["enqueue_ms"])
+        parts["decode"].append((row["t_publish_ns"] - row["t_dequeue_ns"]) / 1e6)
+    return {"matched": matched, "of": len(pairs), **{k: _pct(v) for k, v in parts.items()}}
+
+
+def frame_stats(rows: dict[int, dict[str, int]], t0: int, t1: int) -> dict[str, Any]:
+    """Every frame published in [t0, t1]: the same split, frame-wide (not only painting frames)."""
+    sel = [row for t, row in rows.items() if t0 <= t <= t1]
+    return {
+        "frames": len(sel),
+        "receive": _pct([float(r_["enqueue_ms"] - r_["receive_ms"]) for r_ in sel]),
+        "queue": _pct([r_["t_dequeue_ns"] / 1e6 - r_["enqueue_ms"] for r_ in sel]),
+        "decode": _pct([(r_["t_publish_ns"] - r_["t_dequeue_ns"]) / 1e6 for r_ in sel]),
+        "host": _pct([r_["host_latency_01ms"] / 10 for r_ in sel if r_["host_latency_01ms"]]),
+    }
+
+
+def backend_health() -> dict[str, Any]:
+    ip = r.env().get("HOST_LAN_IP", "127.0.0.1")
+    import urllib.request
+
+    with urllib.request.urlopen(f"http://{ip}:8000/health", timeout=5) as resp:
+        return json.loads(resp.read())  # type: ignore[no-any-return]
+
+
+def cmd_exp(a: argparse.Namespace) -> int:
+    """One experiment run (outdoor). Pre-register it in s2-latency-experiments.md FIRST."""
+    config = run_config("console")
+    variant_file = ROOT / "state" / "gamestream-variant"
+    config["variant"] = variant_file.read_text().split() if variant_file.exists() else []
+    chash = benchlib.config_hash(config)
+    run_id = f"{time.strftime('%Y-%m-%dT%H%M')}-{chash}-{a.label}"
+    result: dict[str, Any] = {"run_id": run_id, "label": a.label, "config": config,
+                              "config_hash": chash,
+                              "t_wall_start": time.strftime("%FT%T%z")}  # fmt: skip
+    t_start = r.ns()
+    with r.session("bench-exp") as (agent, screen):
+        result["preflight"] = preflight(agent, screen, "console")
+        enter_scene(agent, screen, "outdoor")
+        before, t0 = measure_motion.usage_us(), time.monotonic()
+        rot = measure_motion.measure_rotation(agent, screen, a.rotate, f"{run_id}-outdoor")
+        result["delivery_fps"] = benchlib.fps_summary(rot["frames_per_s"])  # type: ignore[arg-type]
+        result["lab_cores_motion"] = rot["lab_cores"]
+        enter_scene(agent, screen, "outdoor")
+        walks = measure_delay.measure_walks(agent, screen, a.walks)
+        result["packet_to_frame_ms"] = walks["packet_to_frame_ms"]
+        enter_scene(agent, screen, "outdoor")
+        k2p = key_to_paint(agent, screen, a.keys)
+        result["cores_whole_run"] = measure_motion.cores_between(
+            before, measure_motion.usage_us(), time.monotonic() - t0
+        )
+        result["key_to_paint_ms"] = {k: v for k, v in k2p.items() if k != "pairs_ns"}
+        result["frame_sources"] = {"rotation": rot["frame_sources"],
+                                   "walks": walks["frame_sources"],
+                                   "keys": k2p["frame_sources"]}  # fmt: skip
+    t_end = r.ns()
+    rows = parse_frames_csv(_exec(GAMESTREAM, "cat", "/tmp/s2spike/frames.csv"))
+    result["key_to_paint_split_ms"] = decompose(k2p["pairs_ns"], rows)
+    result["frames_split_ms"] = frame_stats(rows, t_start, t_end)
+    try:
+        result["s2_stats"] = json.loads(_exec(GAMESTREAM, "cat", "/tmp/s2spike/v3-stats.json"))
+    except json.JSONDecodeError:
+        result["s2_stats"] = None
+    result["input_sink"] = backend_health().get("input_sink")
+    result["t_wall_end"] = time.strftime("%FT%T%z")
+    EXPERIMENTS.mkdir(parents=True, exist_ok=True)
+    out = EXPERIMENTS / f"{run_id}.json"
+    out.write_text(json.dumps(result, indent=1) + "\n")
+    k = result["key_to_paint_ms"]
+    print(json.dumps({"run_id": run_id, "written": str(out),
+                      "key_to_paint": {q: k.get(q) for q in ("p50", "p95", "p99", "matched",
+                                                               "trials")},
+                      "split": result["key_to_paint_split_ms"]}, indent=1))  # fmt: skip
+    return 0
 
 
 # --- commands -------------------------------------------------------------------------------------
@@ -438,11 +569,20 @@ def main() -> int:
     val = sub.add_parser("validate-reference")
     val.add_argument("png", type=Path)
     sub.add_parser("table")
+    exp = sub.add_parser("exp")
+    exp.add_argument("--label", required=True)
+    exp.add_argument("--keys", type=int, default=60)
+    exp.add_argument("--walks", type=int, default=30)
+    exp.add_argument("--rotate", type=float, default=30.0)
     a = ap.parse_args()
     if a.cmd == "run":
         if not re.fullmatch(r"[A-Za-z0-9_.-]+", a.label):
             raise r.Stop("label: letters, digits, _ . - only")
         return cmd_run(a)
+    if a.cmd == "exp":
+        if not re.fullmatch(r"[A-Za-z0-9_.-]+", a.label):
+            raise r.Stop("label: letters, digits, _ . - only")
+        return cmd_exp(a)
     if a.cmd == "reference":
         return cmd_reference()
     if a.cmd == "validate-reference":

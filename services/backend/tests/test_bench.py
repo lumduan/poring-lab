@@ -68,3 +68,53 @@ def test_config_hash_is_canonical(bl: ModuleType) -> None:
 def test_markdown_table(bl: ModuleType) -> None:
     md = bl.markdown_table(["a", "b"], [[1.5, None], ["x|y", math.inf]])
     assert md.splitlines() == ["| a | b |", "|---|---|", "| 1.5 | – |", "| x\\|y | inf |"]
+
+
+# --- bench.py exp: the key->paint split (S2, docs/benchmarks/s2-latency-experiments.md) -----------
+
+
+@pytest.fixture(scope="module")
+def bench() -> ModuleType:
+    import sys
+
+    sys.path.insert(0, str(SCRIPT.parent))
+    spec = importlib.util.spec_from_file_location("bench", SCRIPT.parent / "bench.py")
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_frames_csv_is_keyed_by_the_publish_time(bench: ModuleType) -> None:
+    text = (
+        "frame_id,frame_number,frame_type,receive_ms,enqueue_ms,host_latency_01ms,"
+        "t_dequeue_ns,t_publish_ns,decode_us\n"
+        "7,700,1,1000,1004,52,1005500000,1012000000,6100\n"
+        "8,701,1,1033\n"  # a torn last line (the flusher's write was in progress)
+    )
+    rows = bench.parse_frames_csv(text)
+    assert list(rows) == [1012000000] and rows[1012000000]["frame_id"] == 7
+
+
+def test_the_key_to_paint_split_adds_up(bench: ModuleType) -> None:
+    rows = bench.parse_frames_csv(
+        "7,700,1,1000,1004,52,1005500000,1012000000,6100\n"
+        "9,702,1,2100,2101,0,2101200000,2108000000,6000\n"
+    )
+    pairs = [(950_000_000, 1012000000), (2000_000_000, 2108000000), (3000_000_000, 3_100_000_000)]
+    out = bench.decompose(pairs, rows)
+    assert (out["matched"], out["of"]) == (2, 3)  # an X-sourced or unlogged frame: not split
+    assert out["to_receive"]["p50"] == 50.0 and out["to_receive"]["p95"] == 100.0
+    assert out["host"]["n"] == 1 and out["host"]["p50"] == 5.2  # 0 = not reported, skipped
+    assert out["receive"]["p50"] == 1.0 and out["queue"]["p50"] == 0.2
+    assert out["decode"]["p95"] == 6.8
+    # the parts of one trial add up to its key->paint delay
+    send, t = pairs[0]
+    row = rows[t]
+    total = (
+        (row["receive_ms"] - send / 1e6)
+        + (row["enqueue_ms"] - row["receive_ms"])
+        + (row["t_dequeue_ns"] / 1e6 - row["enqueue_ms"])
+        + (row["t_publish_ns"] - row["t_dequeue_ns"]) / 1e6
+    )
+    assert total == pytest.approx((t - send) / 1e6)
