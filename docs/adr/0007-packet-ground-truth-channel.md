@@ -7,7 +7,7 @@ verdict_date: 2026-10-01
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: Implemented and validated (docs/phase1-validation.md). Slim sniffer image in a guarded build window (no disk split, 2026-10-01); GAT in Phase 2.
+next_action: Implemented and validated (docs/phase1-validation.md). The slim sniffer image is LIVE since 2026-10-03 (71 MB, guarded build; live re-verified: ingest, validation tagging, password zeroing). GAT in Phase 2.
 ---
 
 # ADR-0007: Packet ground truth — a viewer-only channel and a separate captures volume
@@ -83,6 +83,12 @@ time):
      from the lock.
 2. **The sniffer runs on the dev overlay** (the backend image plus the host source; no build). A
    slim image comes after the disk split.
+   ➡️ SUPERSEDED: there is no disk split (Batt, 2026-10-01). The slim image (`services/sniffer`,
+   71 MB, the length table shipped in the wheel and checked at BUILD time) was built in a guarded
+   weekend window and replaced the overlay on 2026-10-03. Live re-check after the switch: ingest
+   connected, a GM relog captured (`login_accepted` → `map_enter`), 36 events tagged
+   `validation_account`, and the GM password and user found 0 times in the new pcapng (the GM
+   character name, the positive control, 7 times).
 3. **GAT later (Phase 2).** Until then, paths are rAthena's diagonal-first fallback. That is exact
    on open ground; around obstacles, the error is bounded by the detour.
 

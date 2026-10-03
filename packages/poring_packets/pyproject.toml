@@ -17,3 +17,9 @@ poring-packets-schema = "poring_packets.events:main"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.build]
+# _generated/ is gitignored -- generated from pinned sources, never committed (ADR-0007) -- and
+# hatch leaves ignored files out of a wheel. The slim sniffer image installs this package
+# non-editable, so the table must ship as an artifact (its build refuses a missing/drifted table).
+artifacts = ["src/poring_packets/_generated/*.json"]

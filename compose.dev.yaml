@@ -32,23 +32,6 @@ services:
       - ./packages/poring_packets/src:/dev-src/poring_packets:ro
       - ./services/backend/src:/dev-src/backend:ro
 
-  sniffer:
-    # ADR-0007 on the dev overlay: the backend image (Python 3.12, pydantic, websockets) runs the
-    # host source -- no build. `!reset`: never build services/sniffer under this image tag.
-    build: !reset null
-    image: poring-lab/backend:local
-    pull_policy: never
-    entrypoint: []
-    command: ["python", "-m", "poring_packets.sniffer"]
-    # The image's HEALTHCHECK probes the backend's :8000, which does not exist in this namespace.
-    healthcheck:
-      disable: true
-    environment:
-      PYTHONPATH: /dev-src/poring_packets
-    volumes:
-      # The generated length table (_generated/, gitignored) comes with the source mount.
-      - ./packages/poring_packets/src:/dev-src/poring_packets:ro
-
   gamestream:
     # The clean room (2026-10-03): the loop and the S2 spike run from the host source, read-only.
     # DIRECTORY binds (no single-file inode trap) and no rebuild per change; the image keeps its own

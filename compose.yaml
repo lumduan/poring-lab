@@ -303,9 +303,11 @@ services:
   sniffer:
     <<: *lab
     profiles: [sniffer]
-    # ADR-0007. The slim image (services/sniffer) waits for a guarded build window; until then the dev
-    # overlay runs it from the backend image with the host source (compose.dev.yaml).
-    build: services/sniffer
+    # ADR-0007. The slim image (2026-10-03): Python + pydantic + websockets + poring_packets, built
+    # from the repo root like the backend (uv workspace).
+    build:
+      context: .
+      dockerfile: services/sniffer/Dockerfile
     image: poring-lab/sniffer:local
     network_mode: "service:rathena"
     depends_on:

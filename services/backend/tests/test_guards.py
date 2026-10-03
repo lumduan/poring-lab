@@ -180,6 +180,13 @@ def test_captures_volume_only_in_sniffer_rw_and_backend_ro(name: str) -> None:
             assert read_only == CAPTURE_MOUNTS[svc], f"{name}: {svc} {mount}"
 
 
+def test_the_dev_overlay_runs_the_slim_sniffer_image() -> None:
+    """2026-10-03: the slim image replaced the dev overlay (backend image + host source)."""
+    assert "sniffer" not in compose("compose.dev.yaml")["services"]
+    build = compose("compose.yaml")["services"]["sniffer"]["build"]
+    assert build == {"context": ".", "dockerfile": "services/sniffer/Dockerfile"}
+
+
 def test_captures_volume_exists_and_sniffer_never_writes_the_data_dir() -> None:
     base = compose("compose.yaml")
     assert "captures" in base["volumes"]
