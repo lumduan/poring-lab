@@ -234,7 +234,9 @@ ports, quickstart) and `docs/adr/`.
     empty desktop and a taskbar WITHOUT tray icons (another display became main). Recovery and the
     blind rack path: `docs/operations/console-display.md`. Keep the clean room's heartbeat alive
     while waiting on a human (`cleanroom.py checks --box-min N` + a heartbeat loop): the watchdog
-    ends a room after 10 min without one (it did, 2026-10-03 17:19).
+    ends a room after 10 min without one (it did, 2026-10-03 17:19). The loop must STOP when
+    `heartbeat` fails: it refuses while a room runs without its watchdog. On 2026-10-04 a fixed 4 h
+    unit limit killed a 6 h room's watchdog, and a blind loop kept the room alive ~3 h past its cap.
   - The console shows the clean room from `state/cleanroom` (VARIANT/BOX_UNTIL/HARD_CAP, display
     only, same writer: `to-console --cleanroom --hard-cap`, `stream --box-until`; to-rdp removes it).
     The backend honours it only while the lock's REASON is `cleanroom*`. The banner's D3D/"ro_agent

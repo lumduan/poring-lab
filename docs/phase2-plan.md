@@ -28,8 +28,42 @@ Phase 2 turns recorded sessions into labelled frames.
 | B2 | `timeline` | `Timeline(events).frame_world(t)`: the world at a frame's time. Snapshots + replay; walks interpolated along the real path with rAthena's timing; per-backend latency offset passed in (benchmark p50) | done + tested |
 | B3 | `mapcache`, `paths`, `scripts/gen_mapcache.py` | rAthena map caches at the pinned SHA. The `import → pre-re → base` order is the lab's, `prere=yes`: **prt_fild08 / prt_church exist only in `db/pre-re`**. Walkability is CELL_CHKNOPASS: gat 1 and 5, last row and column. rAthena's A* is ported **exactly**, including the client-matching binary heap's tie order and the node-slot collision quirk | done + tested; hashes equal the running server's files |
 | B4 | `projection` | Normalised-DLT homography from cell offsets (player-relative) to pixels; residuals in px | **calibrated 2026-10-02 at 1280×720** (~~`camera_default.json`~~ ➡️ `camera_rdp.json` since 2026-10-03: one camera per backend): 42/42 clicks, residual median 13.3 / p95 23.8 px; standing Porings 6–10 px. ➡️ **2026-10-03: the perspective camera + the map's GAT altitude WINS on held-out points** (`camera.py`, `gat.py`, `camera_fit.py`). Pre-registered hypothesis: terrain height causes part of the residual; SUPPORTED. Leave-one-out over the 42 clicks: homography 14.7/26.6 px, flat camera 12.3/32.0, **camera + altitude 9.4/18.6**. GM-spawn feet: static 8.2/9.9 → **6.0/6.7** (all 28: 8.8/51.1 → 6.6/47.0; the moving ones' tail is timing). Fit: yaw 0.1°, pitch 44.8°, distance 400.7, centre (640.8, 361.9). Both are stored; the homography is the fallback without a GAT. Sources: THIRD_PARTY.md |
-| B5 | `labels`, `scripts/qa_export.py`, `/qa` | Boxes from projected foot points, per-class sizes v0, YOLO lines, GM exclusions; the QA overlay on the console's `OverlayCanvas` | first QA 2026-10-02: 40/40 sampled frames boxed, boxes on the Porings, ~8 px high (foot offset v0) |
+| B5 | `labels`, `scripts/qa_export.py`, `/qa` | Boxes from projected foot points, per-class sizes v0, YOLO lines, GM exclusions; the QA overlay on the console's `OverlayCanvas` | first QA 2026-10-02: 40/40 sampled frames boxed, boxes on the Porings, ~8 px high (foot offset v0). ➡️ **2026-10-04, the first S2 datasets** (section "S2 datasets" below): outdoor labels OK with camera + GAT; **indoor labels INVALID**: indoor maps use a different camera, and invisible NPCs get boxes |
 | B6 | `metrics` | IoU, greedy per-class matching at 0.5 → precision / recall / mean IoU (the benchmark's `label_iou`) | done + tested; the hand-checked set is pending |
+
+## S2 datasets (2026-10-03/04, the first through the bot's path, ADR-0014)
+
+All sessions were recorded from the S2 frame bus, every frame with its bus `frame_id`
+(recorder v3). Each was shipped to the NAS, re-hashed and verified, and its local copy deleted.
+
+| session | what | frames | size | rate | labels (qa_export, camera + GAT) |
+|---|---|---|---|---|---|
+| `20261003T215314-console-s2-outdoor` | outdoor, fps 10 target | 441 (1.7 min) | 0.92 GB | 526 MB/min | 40/40 frames boxed, on target |
+| `20261004T053620-console-s2-probe` | outdoor probe, fps 3, PNG level 6 | 360 (2 min) | 0.76 GB | 378 MB/min | not exported |
+| `20261004T054429-console-s2-outdoor` | outdoor 20 min, fps 1 | 1,200 | 2.59 GB | 129 MB/min (7.8 GB/h) | 18/19 sampled frames boxed, camera + GAT prt_fild08 |
+| `20261004T060842-console-s2-indoor` | indoor 20 min, fps 1 | 1,176 | 1.99 GB | 101 MB/min (6.0 GB/h) | **INVALID**: the outdoor camera on a diagonal indoor view |
+
+**Write rate and the quant IO guard.** The fps 10 run tripped the recorder's guard after 1.7 min:
+~9 MB/s of PNG, quant-postgres io_full 65.7 % in one 10 s bin (21:54:55 ICT).
+- A 1280×720 game frame is about 2.1 MB as PNG at zlib level 1 *and* at level 6: textured scenes
+  barely compress.
+- The fps 10 target only reached ~4.2 fps.
+- Batt chose fps 1 under the armed guard (2026-10-04). Both 20-min sessions then ran with the worst
+  stall at 8.2 % and no stall window.
+- 3 fps (6.3 MB/s) also kept the guard quiet in a 2-min probe, but it is above the budget Batt
+  approved.
+
+**Open, before these sessions feed Phase 3:**
+1. **An indoor camera.** prt_church is drawn on a diagonal: both reference clients hard-code an
+   indoor yaw of about −45° and a narrower zoom band (THIRD_PARTY.md sources), and both of our
+   calibrations are outdoor. Calibrate per map class (indoor/outdoor), and record the class in the
+   camera file.
+2. **Invisible NPCs.** objtype 6 entities with no sprite get boxes; the label filter must drop them.
+3. **The activity driver must not click entities.** Indoors its walk clicks hit Porings (attacks)
+   and NPCs (dialogs), and the GM was killed. Click only empty cells, using the walk graph and the
+   entities' projected cells.
+4. **The GM-spawn validation needs a detector that works on H.264 frames.** The pink-blob foot
+   detector matched neighbours' feet on S2 frames.
 
 ## Resolution: FROZEN at a 1280×720 client area (Batt, 2026-10-02)
 

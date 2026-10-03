@@ -27,6 +27,12 @@ next_action: ACCEPTED 2026-10-02 (the 30 s ship round-trip passed on the NAS). N
   - [ADR-0005](0005-vision-x-access.md): what vision may read;
   - the plan is [phase2-plan.md](../phase2-plan.md).
 
+> ➡️ **Note 2026-10-04 (Batt, recording rate on the shared disk):** S2 sessions at a 10 fps target
+> wrote ~9 MB/s of lossless PNG and tripped the recorder's quant IO guard within 2 min. A
+> 1280×720 frame is ~2.1 MB at any zlib level. Batt's decision: record at **fps 1** under the armed
+> guard (~2.1 MB/s, ~7 GB/h); anything faster is his call per window. The sink and format are
+> unchanged. Results: [phase2-plan.md](../phase2-plan.md) "S2 datasets".
+
 ## Context
 
 Phase 2 needs recorded sessions:

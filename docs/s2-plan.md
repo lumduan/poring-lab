@@ -491,6 +491,15 @@ The watchdog also ended the first entry (a stale heartbeat while waiting on Batt
    "Failed to decrypt RTSP response". 20 s later it worked; `restream.sh` waits 20 s.
 5. **The key→paint tail was the decode thread** (the evidence PNG). The split by frames.csv found it
    at once: [s2-latency-experiments.md](benchmarks/s2-latency-experiments.md).
+6. **A watchdog must outlive its room** (2026-10-04). The transient unit had a fixed
+   `RuntimeMaxSec=4h`, and a 6 h room lost its watchdog at 00:16:46. The heartbeat loop kept the
+   room looking alive until it was ended by hand at 05:30, about 3 h past its cap. Now
+   RuntimeMaxSec = hard cap + 45 min, and `heartbeat` refuses while a room runs without a watchdog.
+7. **The Dell's own network can drop.** At 06:28:27 Sunshine's control stream and the game's map
+   connection died together (rAthena timed the session out at 06:29:18). That was ~35 min after
+   Batt reset OPNsense; the cause is not verified. The S2 client exited cleanly and the recorder
+   stopped on the first non-bus frame. Dropped video frames also burst during the reset (12/min
+   against 1–2/min).
 
 ## 10. Shared viewing (future capability; designed now)
 
