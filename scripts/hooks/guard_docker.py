@@ -16,10 +16,12 @@ ALLOWS everything else -- ps, logs, exec, inspect, images, stats, tag, stop … 
 whose head is `scripts/guarded_build.py` (the guard's own docker calls are subprocesses and never
 reach this hook).
 
-SEES THROUGH: `;` `&&` `||` `|` `&` `( )`, newlines, leading VAR=… assignments, the wrappers sudo,
-env, nice, ionice, timeout, nohup, exec, command, time, stdbuf, `bash|sh -c "…"`, and a heredoc fed
-to a local shell. CANNOT SEE: commands built at run time ($VAR, $(…), eval, xargs) or run by a
-script/program (`python -c 'subprocess.run(["docker", "build", …])'`) -- the stated boundary.
+SEES THROUGH: `;` `&&` `||` `|` `&` `( )`, newlines, `# comments` (quote-aware: a comment never
+hides the next line), leading VAR=… assignments, the wrappers sudo, env, nice, ionice, timeout,
+nohup, exec, command, time, stdbuf, `bash|sh -c "…"`, and a heredoc fed to a local shell
+(the tokenizer is scripts/hooks/_shell.py, shared with guard_bigread.py). CANNOT SEE: commands
+built at run time ($VAR, $(…), eval, xargs) or run by a script/program
+(`python -c 'subprocess.run(["docker", "build", …])'`) -- the stated boundary.
 
 FAIL DIRECTION: unreadable hook input -> allow (a guard that blocks every Bash call is worse); a
 command the tokenizer can't parse -> a conservative regex still refuses the plain forms.
@@ -29,8 +31,13 @@ from __future__ import annotations
 
 import json
 import re
-import shlex
 import sys
+from pathlib import Path
+
+# The shared tokenizer sits next to this file. Put its dir on the path explicitly: an ImportError
+# would exit 1, which Claude Code treats as non-blocking -- the guard would fail open in silence.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _shell import SHELLS, segments, strip_heredocs, unwrap  # noqa: E402
 
 GUARDED = "python3 scripts/guarded_build.py --sustain 30 --spike 25 <step>"
 STEPS = "start:<svc>[@s] recreate:<svc>[@s] restart:<svc>[@s] build:<svc> pull:<svc>"
@@ -46,83 +53,10 @@ COMPOSE_OPTS_WITH_VALUE = frozenset(
     {"-f", "--file", "-p", "--project-name", "--profile", "--env-file", "--project-directory",
      "--ansi", "--progress", "--parallel"}
 )  # fmt: skip
-WRAPPERS = frozenset(
-    {"sudo", "env", "nice", "ionice", "timeout", "nohup", "exec", "command", "time", "stdbuf"}
-)
-WRAPPER_OPTS_WITH_VALUE = {
-    "sudo": frozenset({"-u", "-g", "-C", "-D", "-h", "-p", "-r", "-t", "-U", "-T"}),
-    "nice": frozenset({"-n", "--adjustment"}),
-    "ionice": frozenset({"-c", "-n", "-p", "--class", "--classdata"}),
-    "timeout": frozenset({"-s", "--signal", "-k", "--kill-after"}),
-    "stdbuf": frozenset({"-i", "-o", "-e"}),
-}
-SHELLS = frozenset({"bash", "sh", "dash", "zsh"})
-KEYWORDS = frozenset({"then", "do", "else", "elif", "if", "while", "until", "!", "{", "}", "time"})
-ASSIGN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
-HEREDOC = re.compile(r"(?<!<)<<(?!<)-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
 FALLBACK = re.compile(
     r"(?:^|[;&|\s(])(?:docker\s+(?:compose\s+)?|docker-compose\s+|scripts/dev\.sh\s+)"
     r"(?:\S+\s+)*?(build|buildx|pull|run|create|start|restart|up|down|--force-recreate)\b"
 )
-
-
-def _strip_heredocs(command: str) -> tuple[str, list[str]]:
-    """Remove heredoc bodies; return (command without bodies, bodies fed to a local shell)."""
-    lines = command.split("\n")
-    out: list[str] = []
-    shell_bodies: list[str] = []
-    i = 0
-    while i < len(lines):
-        line = lines[i]
-        out.append(line)
-        m = HEREDOC.search(line)
-        if m:
-            word = m.group(2)
-            body: list[str] = []
-            i += 1
-            while i < len(lines) and lines[i].strip() != word:
-                body.append(lines[i])
-                i += 1
-            head = line[: m.start()].split()
-            if head and head[-1] in SHELLS | {"-s"} or (head and head[0] in SHELLS):
-                shell_bodies.append("\n".join(body))
-        i += 1
-    return "\n".join(out), shell_bodies
-
-
-def _segments(command: str) -> list[list[str]]:
-    lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|()\n")
-    lexer.whitespace = " \t\r"  # newlines separate commands (quoted ones stay inside a word)
-    lexer.whitespace_split = True
-    lexer.commenters = "#"
-    segments: list[list[str]] = [[]]
-    for tok in lexer:
-        if tok and set(tok) <= set(";&|()\n"):
-            segments.append([])
-        else:
-            segments[-1].append(tok)
-    return [s for s in segments if s]
-
-
-def _unwrap(words: list[str]) -> list[str]:
-    i = 0
-    while i < len(words):
-        w = words[i]
-        if ASSIGN.match(w) or w in KEYWORDS:
-            i += 1
-        elif w in WRAPPERS:
-            opts = WRAPPER_OPTS_WITH_VALUE.get(w, frozenset())
-            i += 1
-            if w == "timeout":  # timeout [opts] DURATION cmd
-                while i < len(words) and words[i].startswith("-"):
-                    i += 2 if words[i] in opts else 1
-                i += 1
-                continue
-            while i < len(words) and (words[i].startswith("-") or ASSIGN.match(words[i])):
-                i += 2 if words[i] in opts else 1
-        else:
-            break
-    return words[i:]
 
 
 def _compose_reason(args: list[str], what: str) -> str | None:
@@ -152,7 +86,7 @@ def _compose_reason(args: list[str], what: str) -> str | None:
 
 def classify_words(words: list[str], depth: int = 0) -> str | None:
     """A refusal reason for one simple command, or None if it is allowed."""
-    words = _unwrap(words)
+    words = unwrap(words)
     if not words:
         return None
     head = words[0].rsplit("/", 1)[-1]
@@ -193,13 +127,13 @@ def classify_words(words: list[str], depth: int = 0) -> str | None:
 
 
 def classify(command: str, depth: int = 0) -> str | None:
-    stripped, shell_bodies = _strip_heredocs(command)
+    stripped, shell_bodies = strip_heredocs(command)
     try:
-        segments = _segments(stripped)
+        simple = segments(stripped)
     except ValueError:  # unbalanced quotes: the conservative regex
         m = FALLBACK.search(stripped)
         return f"`{m.group(0).strip()}` (unparsable command)" if m else None
-    for words in segments:
+    for words in simple:
         reason = classify_words(words, depth)
         if reason:
             return reason

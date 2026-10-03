@@ -46,6 +46,13 @@ ports, quickstart) and `docs/adr/`.
      aborts when capture IO stall exceeds 10%. The host has one shared virtual disk: on 2026-09-29
      an unguarded parallel build pushed capture IO stall from ≤4% to 82–88%. The torch vision
      image (~5 GB of writes) needs an operator-chosen window.
+   - **No whole-file reads of session transcripts or big local files** (a grep over the ~330 MB
+     transcript loaded the shared disk twice, 2026-10-02/03). The second hook,
+     `scripts/hooks/guard_bigread.py`, refuses grep/rg/cat/awk/sed/sort/… on any `*.jsonl` under
+     `~/.claude` and on any file over 50 MB on a disk-backed filesystem (`/dev/shm` and the NAS
+     are exempt). Read a byte range instead: `tail -c 5000000 <file> | LC_ALL=C grep -F …`
+     (`head -c`/`tail -c`/`dd count=`, ≤ 64 MB). `ionice` is no protection here: the disk's
+     scheduler is `none`, which ignores I/O priorities.
 
 6. **Never put a Docker network on a 192.168.x subnet on this host.** The LAN uses 192.168.1, 110, 111, 112
    and 120, and Docker can't see the segments behind the router. On 2026-09-29 an auto-assigned
@@ -215,7 +222,8 @@ ports, quickstart) and `docs/adr/`.
 - **Every create/start/restart/recreate/build/pull goes through `scripts/guarded_build.py`** — enforced:
   `scripts/dev.sh` refuses unless the guard is its parent, and the repo's `.claude/settings.json` hook
   (`scripts/hooks/guard_docker.py`) refuses raw `docker`/`docker compose` forms. Don't route around them
-  (python subprocess, `$(…)`); add a guarded step instead.
+  (python subprocess, `$(…)`); add a guarded step instead. Its sibling `guard_bigread.py` refuses
+  whole-file reads of transcripts and big files (rule 5); both share the tokenizer `_shell.py`.
 - After writing `.env` use `scripts/rotate_secrets.py set|rotate` (read-back built in); after editing a
   mounted file run `scripts/verify_mount.py` before claiming it took effect.
 - **Single-file bind mounts (rdp-loop.sh, entrypoint.sh, groups.yml…) follow the INODE.** `sed -i`

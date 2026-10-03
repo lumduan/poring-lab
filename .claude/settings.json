@@ -8,6 +8,11 @@
             "type": "command",
             "command": "f=\"$CLAUDE_PROJECT_DIR/scripts/hooks/guard_docker.py\"; [ ! -f \"$f\" ] || python3 \"$f\"",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "f=\"$CLAUDE_PROJECT_DIR/scripts/hooks/guard_bigread.py\"; [ ! -f \"$f\" ] || python3 \"$f\"",
+            "timeout": 10
           }
         ]
       }

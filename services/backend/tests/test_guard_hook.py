@@ -57,6 +57,12 @@ def hook() -> ModuleType:
         "FOO=1 docker build .",
         "bash <<'EOF'\ndocker compose up -d\nEOF",
         "echo start\ndocker build .",
+        # 2026-10-03: shlex's comment handling ate the newline, so these were ONE `echo` command
+        "echo hi # a note\ndocker build .",
+        "ls # it's a comment with a quote\ndocker compose up -d",
+        "echo '#'; docker build .",
+        'echo "#" ; docker pull x',
+        "echo $# ; docker pull x",
     ],
 )
 def test_refused(hook: ModuleType, command: str) -> None:
@@ -87,6 +93,9 @@ def test_refused(hook: ModuleType, command: str) -> None:
         "grep -n 'docker build' README.md",
         "echo 'docker compose up -d'",
         "git commit -m 'docs: docker build guard'",
+        "ls # docker build .",
+        "# docker compose up -d\nls",
+        "rg 'foo#bar' README.md",
     ],
 )
 def test_allowed(hook: ModuleType, command: str) -> None:

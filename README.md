@@ -195,6 +195,9 @@ down rm`, any `--force-recreate`, and an interpolated `config` unless `scripts/g
 parent process. For agent sessions, the repo's `.claude/settings.json` PreToolUse hook
 (`scripts/hooks/guard_docker.py`) also refuses the same verbs typed as raw `docker` / `docker compose`.
 Read-only commands (`ps logs exec inspect config --no-interpolate`) and `stop` stay allowed.
+A second hook (`scripts/hooks/guard_bigread.py`, 2026-10-03) refuses whole-file reads (grep, rg,
+cat, awk, sed, sort, …) of session transcripts (`~/.claude/**/*.jsonl`) and of files over 50 MB on
+the shared disk; a byte-bounded `head -c`/`tail -c`/`dd count=` (≤ 64 MB) passes.
 `scripts/verify_mount.py` checks that containers see the current single-file bind mounts.
 
 **On this host (dev mode, `scripts/dev.sh`):** `up:` is refused because it would recreate the dev
