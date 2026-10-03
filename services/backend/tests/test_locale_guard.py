@@ -103,6 +103,10 @@ def test_clean_file_passes(repo: Path, tmp_path: Path) -> None:
         ("tools/x.localepack/a.json", "locale pack / extracted client data directory"),
         ("data2/msgstringtable.txt", "client asset"),
         ("assets/ui.lub", "client asset"),
+        ("maps/prt_fild08.gat", "client asset"),  # map/sprite data (2026-10-03), even forced
+        ("maps/prt_fild08.gnd", "client asset"),
+        ("sprites/poring.spr", "client asset"),
+        ("sprites/poring.act", "client asset"),
     ],
 )
 def test_planted_pack_paths_are_refused(repo: Path, tmp_path: Path, rel: str, reason: str) -> None:

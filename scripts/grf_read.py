@@ -4,6 +4,7 @@
     grf_read.py info GRF                          version, entry counts, encrypted share (JSON)
     grf_read.py ls GRF [--grep REGEX] [--limit N] flags, sizes and names (CP949-decoded)
     grf_read.py extract GRF NAME [NAME...] --out DIR [--glob] [--max-bytes N] [--allow-out]
+                        [--decode-des]
 
 Rules (the data is a client asset, never committed, CLAUDE.md rule 4):
   * READ-ONLY: the archive is opened "rb" and only seek/read is used -- it is never copied. Read it
@@ -26,6 +27,10 @@ UNVERIFIED against a real archive: `info` reports the header; a failing table pa
 Encryption: DES/MIXCRYPT entries are listed and counted but NOT decoded ("encrypted:
 unsupported"). If the files that matter are encrypted, or the magic is unknown (a custom
 encryption scheme), that is the C8 stop condition: report it, do not work around it.
+EXCEPT, explicitly: --decode-des (Batt, 2026-10-03, Phase 2 GAT altitude: "own decoder from the
+public spec") decodes header-only DES entries (flag 0x04) with scripts/grf_des.py, our own code from
+the FIPS 46-3 tables; zlib's checksum and the table's size verify every decoded entry. MIXCRYPT
+(0x02) stays refused.
 """
 
 from __future__ import annotations
@@ -152,16 +157,30 @@ def iter_entries(f: BinaryIO, header: Header) -> Iterator[Entry]:
         yield Entry(raw_name, zsize, aligned, size, flags, HEADER_SIZE + offset)
 
 
-def read_entry(f: BinaryIO, entry: Entry) -> bytes:
+def decodable(entry: Entry, decode_des: bool) -> bool:
+    return not entry.encrypted or (
+        decode_des and entry.flags & FLAG_DES and not entry.flags & FLAG_MIXCRYPT
+    )
+
+
+def read_entry(f: BinaryIO, entry: Entry, *, decode_des: bool = False) -> bytes:
     if not entry.is_file:
         raise GrfError(f"{entry.name}: a directory entry")
-    if entry.encrypted:
+    if not decodable(entry, decode_des):
         raise GrfError(f"{entry.name}: encrypted: unsupported (flags 0x{entry.flags:02x}) -- C8")
     f.seek(entry.offset)
-    data = f.read(entry.zsize)
-    if len(data) != entry.zsize:
+    want = entry.zsize_aligned if entry.flags & FLAG_DES else entry.zsize
+    data = f.read(want)
+    if len(data) != want:
         raise GrfError(f"{entry.name}: data runs past the end of the archive")
-    out = data if entry.zsize == entry.size else zlib.decompress(data)
+    if entry.flags & FLAG_DES:
+        from grf_des import decode_header
+
+        data = decode_header(data)[: entry.zsize]
+    try:
+        out = data if entry.zsize == entry.size else zlib.decompress(data)
+    except zlib.error as exc:
+        raise GrfError(f"{entry.name}: does not inflate ({exc})") from None
     if len(out) != entry.size:
         raise GrfError(f"{entry.name}: inflated to {len(out)} bytes, table says {entry.size}")
     return out
@@ -228,7 +247,14 @@ def select(entries: list[Entry], names: list[str], glob: bool) -> list[Entry]:
 
 
 def extract(
-    path: Path, names: list[str], out: Path, *, glob: bool, max_bytes: int, allow_out: bool
+    path: Path,
+    names: list[str],
+    out: Path,
+    *,
+    glob: bool,
+    max_bytes: int,
+    allow_out: bool,
+    decode_des: bool = False,
 ) -> list[dict[str, object]]:
     out = safe_out_dir(out, allow_out)
     done: list[dict[str, object]] = []
@@ -240,14 +266,15 @@ def extract(
             raise GrfError(f"{len(chosen)} entries = {total} bytes > --max-bytes {max_bytes}")
         for entry in chosen:
             rel = safe_relpath(entry.name)
-            if entry.encrypted:
+            if not decodable(entry, decode_des):
                 done.append({"name": str(rel), "skipped": "encrypted: unsupported"})
                 continue
-            data = read_entry(f, entry)
+            data = read_entry(f, entry, decode_des=decode_des)
             dest = out / rel
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(data)
-            done.append({"name": str(rel), "bytes": len(data)})
+            done.append({"name": str(rel), "bytes": len(data),
+                         **({"des_decoded": True} if entry.flags & FLAG_DES else {})})  # fmt: skip
     return done
 
 
@@ -267,6 +294,9 @@ def main(argv: list[str] | None = None) -> int:
     p_ex.add_argument("--glob", action="store_true")
     p_ex.add_argument("--max-bytes", type=int, default=DEFAULT_MAX_BYTES)
     p_ex.add_argument("--allow-out", action="store_true", help="--out outside /dev/shm")
+    p_ex.add_argument(
+        "--decode-des", action="store_true", help="decode header-only DES (0x04); never MIXCRYPT"
+    )
     a = ap.parse_args(argv)
     try:
         if a.cmd == "info":
@@ -285,8 +315,9 @@ def main(argv: list[str] | None = None) -> int:
                         break
         else:
             done = extract(
-                a.grf, a.names, a.out, glob=a.glob, max_bytes=a.max_bytes, allow_out=a.allow_out
-            )
+                a.grf, a.names, a.out, glob=a.glob, max_bytes=a.max_bytes,
+                allow_out=a.allow_out, decode_des=a.decode_des,
+            )  # fmt: skip
             print(json.dumps({"out": str(a.out), "entries": done}, ensure_ascii=False, indent=1))
     except GrfError as exc:
         print(f"grf_read: {exc}", file=sys.stderr)

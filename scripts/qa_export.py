@@ -27,6 +27,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from poring_dataset import mapcache  # noqa: E402
+from poring_dataset.camera import projector_for  # noqa: E402
 from poring_dataset.labels import gm_windows, in_windows, labels_for  # noqa: E402
 from poring_dataset.projection import camera_file  # noqa: E402
 from poring_dataset.shards import encode_png, read_shard  # noqa: E402
@@ -89,7 +90,7 @@ def main() -> int:
         raise SystemExit(f"no calibrated camera for {backend}: run "
                          f"scripts/calibrate_projection.py --backend {backend} --save")  # fmt: skip
     camera = json.loads(camera_path.read_text())
-    h = np.array(camera["h"], dtype=float)
+    projectors: dict[str | None, tuple[Any, str]] = {}  # per map: camera + GAT, or homography
     offset_run = None
     if a.offset_ms == "auto":
         offset_ms, offset_run = auto_offset_ms(manifest["config"])
@@ -114,9 +115,12 @@ def main() -> int:
             if in_windows(t, windows):
                 continue
             world = timeline.frame_world(t - int(offset_ms * 1e6))
+            if world.map not in projectors:
+                projectors[world.map] = projector_for(camera, world.map)
+            projector, _ = projectors[world.map]
             boxes = [
                 {"x1": b.x0, "y1": b.y0, "x2": b.x1, "y2": b.y1, "cls": b.cls, "gid": b.gid}
-                for b in labels_for(world, h, size)
+                for b in labels_for(world, projector, size)
             ]
             name = f"{meta['frame_id']:09d}.png"
             (out_dir / name).write_bytes(encode_png(img))
@@ -127,6 +131,7 @@ def main() -> int:
     (out_dir / "labels.json").write_text(json.dumps({
         "session": manifest["session_id"], "size": list(size), "offset_ms": offset_ms,
         "offset_run": offset_run, "camera": camera_path.name,
+        "projection": sorted({which for _, which in projectors.values()}),
         "frames": frames_out,
     }))  # fmt: skip
     index_path = BUNDLES / "index.json"

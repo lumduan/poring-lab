@@ -7,7 +7,8 @@
 #   * is a locale pack or extracted client data: a path component locale-packs/, locales/,
 #     *.localepack/, ro_thai/, kro-reference/, grf-extract/, or a top-level thai*/ directory;
 #   * sits in a directory holding a locale-pack.json (working tree or index), or IS one;
-#   * is a client asset: *.grf, *.gpf, *.lub, msgstringtable*.txt;
+#   * is a client asset: *.grf, *.gpf, *.lub, msgstringtable*.txt, map/sprite files (*.gat,
+#     *.gnd, *.rsw, *.spr, *.act, *.rsm, *.str, *.imf, *.pal: Batt 2026-10-03, even with git add -f);
 # or when a staged file carries a pack string: a line, a line minus its '#' terminator, or a quoted
 # literal whose fingerprint is in ~/.cache/poring-lab/pack-fingerprints.txt (or
 # $PORING_PACK_FINGERPRINTS), written by scripts/locale_pack.py build. The fingerprint rule below
@@ -28,7 +29,8 @@ def git(*args):
     return subprocess.run(["git", *args], capture_output=True, check=True).stdout
 
 DIRS = {"locale-packs", "locales", "ro_thai", "kro-reference", "grf-extract"}
-FILES = ("*.grf", "*.gpf", "*.lub", "msgstringtable*.txt", "locale-pack.json")
+FILES = ("*.grf", "*.gpf", "*.lub", "msgstringtable*.txt", "locale-pack.json",
+         "*.gat", "*.gnd", "*.rsw", "*.spr", "*.act", "*.rsm", "*.rsm2", "*.str", "*.imf", "*.pal")
 MAX_BYTES = 20 * 1024 * 1024
 QUOTED = re.compile(r"\"([^\"]{6,})\"|\x27([^\x27]{6,})\x27|`([^`]{6,})`")
 

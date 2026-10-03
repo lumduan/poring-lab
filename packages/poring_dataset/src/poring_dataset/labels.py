@@ -7,7 +7,7 @@ Excluded: the validation (GM) account's own character -- it plays hidden -- and 
 a GM-command window (`gm_command` events), when spawns and warps make the scene non-natural.
 """
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -38,12 +38,14 @@ class Label:
 
 def labels_for(
     frame: FrameWorld,
-    h: np.ndarray,
+    h: np.ndarray | Callable[[np.ndarray, tuple[int, int]], np.ndarray],
     size: tuple[int, int],
     *,
     exclude_gids: Iterable[int] = (),
 ) -> list[Label]:
-    """Boxes for every visible entity, in pixels of the game region (width, height = size)."""
+    """Boxes for every visible entity, in pixels of the game region (width, height = size).
+    ``h``: a flat homography, or a projector (camera.projector_for: the perspective camera with the
+    map's altitude) called with the cell offsets and the player's cell."""
     if frame.self_pos is None:
         return []
     width, height = size
@@ -54,7 +56,11 @@ def labels_for(
         cls = OBJTYPE_CLASS.get(ent.objtype)
         if cls is None or ent.gid in skip:
             continue
-        ((u, v),) = project(h, np.array([[ent.x - sx, ent.y - sy]]))
+        offset = np.array([[ent.x - sx, ent.y - sy]])
+        if callable(h):
+            ((u, v),) = h(offset, (int(round(sx)), int(round(sy))))
+        else:
+            ((u, v),) = project(h, offset)
         w, bh = BOX_PX[cls]
         box = Label(cls, ent.gid, u - w / 2, v - bh, u + w / 2, v)
         clipped = Label(cls, ent.gid, max(box.x0, 0), max(box.y0, 0), min(box.x1, width),
