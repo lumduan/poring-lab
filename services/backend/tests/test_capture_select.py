@@ -75,3 +75,33 @@ def test_close_keeps_the_counters(world: dict[str, object]) -> None:
     sel.grab()
     sel.close()  # the hub closes and re-uses it after a capture error
     assert sel.grab().frame_id == 10_002
+
+
+def test_the_bus_is_self_paced_so_the_hub_stops_waiting_for_x_damage(
+    world: dict[str, object],
+) -> None:
+    """2026-10-03: on S2 nothing paints Xvfb, so damage mode only ever fired its 1 s keepalive and
+    the console showed ~1 fps of a 30 fps bus. A self-paced source turns damage waiting off."""
+    from poring_backend.stream import CaptureHub, StreamTuning
+
+    sel, state, ring = world["sel"], world["state"], world["ring"]
+    assert isinstance(sel, CaptureSelector) and isinstance(state, dict) and isinstance(ring, Path)
+
+    class Damage:
+        connected, events = True, 0
+
+        def start(self) -> None: ...
+
+        def stop(self) -> None: ...
+
+    hub = CaptureHub(lambda: sel, tuning=StreamTuning(capture="damage"),
+                     damage_factory=lambda _cb: Damage())  # type: ignore[arg-type,return-value]  # fmt: skip
+    hub._ensure_damage()
+    hub._source = sel
+    assert sel.self_paced is False and hub.damage_active is True  # X: damage-driven, as before
+    w = FrameBusWriter(ring, max_width=4, max_height=4)
+    w.publish(np.zeros((4, 4, 4), np.uint8), frame_id=1, t_mono_ns=1)
+    state["console"] = True
+    sel.grab()
+    assert sel.self_paced is True and hub.damage_active is False  # the bus paces the console
+    assert hub.target_fps == hub.tuning.fps

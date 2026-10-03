@@ -318,6 +318,8 @@ class AppState:
         # Console connections with secret typing on (SecretInput). While any is on, human key
         # identities never reach the input log (redact_human).
         self._secret_connections: set[int] = set()
+        self._inject_warned = 0.0
+        self._inject_failures = 0
 
     # --- lifecycle --------------------------------------------------------------------------------
 
@@ -615,7 +617,13 @@ class AppState:
         try:
             await self.injector.apply([r.event for r in routed])
         except Exception as exc:
-            log.warning("input injection failed (X unavailable?): %s", exc)
+            # Rate-limited (a dead sink fails every pointer move): the count is in /health.
+            now = time.monotonic()
+            self._inject_failures += 1
+            if now - self._inject_warned >= 5.0:
+                log.warning("input injection failed on the %s sink (%d since the last warning): %s",
+                            self.injector.active, self._inject_failures, exc)  # fmt: skip
+                self._inject_warned, self._inject_failures = now, 0
 
     def _log(
         self,

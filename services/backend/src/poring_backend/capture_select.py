@@ -80,6 +80,13 @@ class CaptureSelector:
             self._probe = None
         self._writer = None
 
+    @property
+    def self_paced(self) -> bool:
+        """The bus paces its own reads (a grab waits for a newer frame, capped at CONSOLE_FPS):
+        the hub must not wait for X DAMAGE then -- nothing paints Xvfb on the S2 path, so damage
+        mode fell back to its 1 s keepalive (the console's 1 fps, 2026-10-03)."""
+        return self.active == "bus"
+
     def grab(self) -> Frame:
         want = "bus" if self._bus_live() else "x11"
         if want != self.active:

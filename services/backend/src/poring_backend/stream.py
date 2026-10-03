@@ -178,9 +178,13 @@ class CaptureHub:
 
     @property
     def damage_active(self) -> bool:
-        # Falls back to fixed pacing while the damage watcher is not connected to X.
+        # Falls back to fixed pacing while the damage watcher is not connected to X, and while the
+        # source paces itself (the S2 frame bus: X DAMAGE never fires there).
         return (
-            self.tuning.capture == "damage" and self._damage is not None and self._damage.connected
+            self.tuning.capture == "damage"
+            and self._damage is not None
+            and self._damage.connected
+            and not bool(getattr(self._source, "self_paced", False))
         )
 
     @property
