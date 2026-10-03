@@ -92,6 +92,10 @@ def test_black_and_picture_frames(cr: ModuleType) -> None:
     assert not cr.is_picture(cr.classify_frame(cursor_only))
     desktop = np.random.default_rng(1).integers(0, 255, (900, 1440, 4), dtype=np.uint8)
     assert cr.is_picture(cr.classify_frame(desktop))
+    qt_warning = black.copy()  # Moonlight's own window, top-left, on an otherwise black session
+    qt_warning[:600, :1280, :3] = 51
+    qt_warning[250:300, 400:900, :3] = 230
+    assert not cr.is_picture(cr.classify_frame(qt_warning))  # the 2026-10-03 false positive
 
 
 def test_status_round_trip_and_heartbeat(cr: ModuleType) -> None:

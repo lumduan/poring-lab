@@ -280,6 +280,12 @@ def region_for(state: str) -> tuple[int, int, int, int]:
 
 
 def calibrate(screen: Screen, state: str, box: list[int] | None = None) -> None:
+    if state == "eng_stream":  # the console stream's ENG template (only that file)
+        _, img = screen.grab(*region_for("eng"))
+        np.save(STATE_DIR / "signatures" / "eng_full_stream.npy", _grey(img))
+        to_png(img, SHOTS / "sig_eng_stream.png")
+        log(f"stream ENG template saved ({img.shape[1]}x{img.shape[0]})")
+        return
     path = signature_path(state)
     path.parent.mkdir(parents=True, exist_ok=True)
     if box is not None:
@@ -297,16 +303,26 @@ def _grey(img: np.ndarray) -> np.ndarray:
     return px[..., 0] * 0.114 + px[..., 1] * 0.587 + px[..., 2] * 0.299
 
 
+# One ENG template per display path: the H.264 console stream softens the tray's small text, so
+# the RDP template measured 6.8 there against a 6.0 threshold (2026-10-03). Not a looser guard: a
+# second template, calibrated on the stream while the tray visibly said ENG.
+ENG_TEMPLATES = ("eng_full.npy", "eng_full_stream.npy")
+
+
 def eng_distance(screen: Screen) -> float:
-    """Best match of the full-resolution ENG template anywhere in the tray strip: the indicator's
+    """Best match of a full-resolution ENG template anywhere in the tray strip: the indicator's
     x shifts as tray icons come and go (1086 vs 1115 on the same account, 2026-10-01)."""
-    tmpl = np.load(STATE_DIR / "signatures" / "eng_full.npy")
     _, img = screen.grab(*tray_strip())
     strip = _grey(img)
-    th, tw = tmpl.shape
     best = float("inf")
-    for x in range(0, strip.shape[1] - tw + 1):
-        best = min(best, float(np.abs(strip[:th, x : x + tw] - tmpl).mean()))
+    for name in ENG_TEMPLATES:
+        path = STATE_DIR / "signatures" / name
+        if not path.exists():
+            continue
+        tmpl = np.load(path)
+        th, tw = tmpl.shape
+        for x in range(0, strip.shape[1] - tw + 1):
+            best = min(best, float(np.abs(strip[:th, x : x + tw] - tmpl).mean()))
     return best
 
 

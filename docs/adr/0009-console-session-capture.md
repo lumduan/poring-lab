@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: S1 PARKED (Batt, 2026-10-02) at 'Windows side works, the Moonlight-qt main loop stalls'. No gdb. S2 (docs/s2-plan.md) is the path; its step 0 (a temporary Mac Moonlight pairing) also tells whether the stall is lab-side. to-rdp now ends the stream cleanly (Moonlight quit -> Sunshine /cancel) and checks Sunshine's revert. S2 step 0 attempt 1 (2026-10-03) was reverted unanswered: the Mac app was started before the handover. The lab client's quit (/cancel) ended the Mac's app, so /cancel is host-wide.
+next_action: Clean room DONE 2026-10-03: V1/V2 black (Moonlight-qt's first SDL_RenderPresent hangs in Mesa llvmpipe GLX on Xvfb; lab-side), V3 (S2 spike) reliable with all functional checks passing through the mux and SPEC v2 better than RDP on fps/latency/CPU. Next: S2 step 2 (frame bus) and later steps; the X mirror is a spike-only shim.
 ---
 
 # ADR-0009: Console-session capture as a second display mode (Sunshine first, VNC fallback)
@@ -533,4 +533,50 @@ rdp-loop's interlock and /health see V3, and it forwards the mux's XTest input t
 stream start. The key reaches V3 only through a sealed memfd in its own non-dumpable process
 (cores off; CLAUDE.md rule 2 amended with Batt's OK).
 
-**Results:** pending (to be filled when the clean room runs).
+**Results (2026-10-03, entered 13:16, left 14:07; Windows untouched; watchdog active all along,
+never fired):**
+
+| Variant | Verdict | Evidence |
+|---|---|---|
+| V1 Moonlight-qt as-is | **BLACK** | First video packet after 400 ms, then nothing presented |
+| V1gdb (stacks, gdb as the parent) | black (by design) | **The streaming thread blocks in the FIRST `SDL_RenderPresent`** (`sdlvid.cpp:591`) → libGLX_mesa → libgallium (llvmpipe) → `pthread_cond_wait`. The decoder waits on an empty queue, `VideoRecv` in `recvfrom` (back-pressure). The Qt main thread's `QThread::wait` is NORMAL on X11 |
+| V2 + openbox | **BLACK** once its placer was off | Its first run "rendered" only while the placer moved the window ~5×/s (xdotool saw it at +1+1 inside openbox's frame). Reconfiguration unblocks the hung present; openbox alone does not |
+| **V3 S2 spike** | **RELIABLE** | First picture 4.7 s; first frame decoded 1.1 s into the connection (connected in 0.13 s); 60 s steady; second launch 3.4 s; 0 decode errors |
+
+**So S1's black stream is lab-side: glXSwapBuffers on llvmpipe under Xvfb never returns for
+Moonlight-qt's first frame.** Windows, Sunshine and the stream are healthy. S2 (no GL, no Xvfb) is
+confirmed as the path. The Mac step is no longer needed to separate the two.
+
+**Functional checks on V3, all through the mux** (XTest → the spike-only shim → LiSend* → Sunshine):
+- a guarded GM login with sensitive credentials;
+- keys (a chat command typed and answered by rAthena);
+- a walk click (sniffer `self_move` 75,114 → 81,113);
+- right-drag camera rotation;
+- a left-drag window move;
+- Thai Kedmanee, byte-exact (chatlog 7 = cp874 "ทดสอบ สตรีม");
+- Mouse Keys `Flags=62` before, during and after;
+- Sunshine revert OK after to-rdp.
+
+**SPEC v2 on V3 vs RDP v2** (outdoor; `docs/benchmarks/2026-10-03-console-…-cleanroom-v3-s2spike.json`):
+
+| Metric | V3 | RDP v2 |
+|---|---|---|
+| Delivery fps (median) | 33 | 23 |
+| Packet → frame p50 / p95 | 119 / 302 ms | 376 / 521 ms |
+| Key → paint p50 / p95 | 138 / 350 ms | 101 / 114 ms |
+| Lab cores in motion | 1.5 | ~4.5 |
+| HP/SP panel fidelity | PSNR 37.9 dB / SSIM 0.996 | |
+
+The figures include the spike's X-mirror hop that final S2 removes. The key→paint tail is the one
+regression to examine in S2.
+
+**Findings to carry into S2:**
+- **Picture detection must look at the Windows taskbar strip.** Moonlight-qt's Qt window (its "no
+  hardware decoder" warning) passed a whole-frame "not black" test.
+- **The RO window does not survive the move to the console.** It re-sized itself to fill the VDD
+  display. A relaunch opens at 0,0. Dragged back to its RDP placement (client at 80,77), every
+  calibrated signature matches.
+- **The H.264 stream softens small text:** a second ENG tray template for the stream (not a looser
+  threshold).
+- **During the stream only the VDD is in the topology.** The Samsung is present but inactive (Win+P
+  at the Dell, Batt).

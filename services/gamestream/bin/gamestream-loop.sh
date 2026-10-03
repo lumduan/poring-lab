@@ -323,8 +323,13 @@ main() {
     stamp="$(lock_stamp)"
     mapfile -t args < <(stream_args)
     start_wm
-    place_stream &
-    placer=$!
+    placer=""
+    # Under openbox (V2) the WM places the window at 0,0 (rc.xml). xdotool then reports it
+    # relative to openbox's frame, and the placer "moved" it several times a second, forever.
+    if [[ "${VARIANT_WM}" != openbox ]]; then
+      place_stream &
+      placer=$!
+    fi
     if [[ "${VARIANT_CLIENT}" == s2spike ]]; then
       run_s2spike
     else
@@ -332,8 +337,10 @@ main() {
         run_moonlight "${args[@]}"
     fi
     rc=$?
-    kill "${placer}" 2>/dev/null
-    wait "${placer}" 2>/dev/null
+    if [[ -n "${placer}" ]]; then
+      kill "${placer}" 2>/dev/null
+      wait "${placer}" 2>/dev/null
+    fi
     stop_wm
     focus_pointer_root
     if [[ "${LOCK_REASON}" == cleanroom* ]]; then

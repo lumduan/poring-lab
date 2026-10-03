@@ -1,0 +1,178 @@
+{
+ "run_id": "2026-10-03-console-5c7e5e8e1301-cleanroom-v3-s2spike",
+ "label": "cleanroom-v3-s2spike",
+ "config": {
+  "spec": 2,
+  "backend": "console",
+  "client": {
+   "name": "moonlight-qt",
+   "version": "moonlight-qt 6.1.0",
+   "codec": "H.264"
+  },
+  "xvfb": "1920x1200x24",
+  "session": "1440x900",
+  "game_region": "80,77,1280,720",
+  "fps_limit": 30,
+  "scenes": {
+   "outdoor": [
+    "prt_fild08",
+    170,
+    375
+   ],
+   "indoor": [
+    "prt_church",
+    99,
+    112
+   ]
+  }
+ },
+ "config_hash": "5c7e5e8e1301",
+ "t_wall_start": "2026-10-03T13:54:19+0700",
+ "preflight": {
+  "lock_seq": 51,
+  "viewers": 1,
+  "mode": "ASSIST"
+ },
+ "scenes": {
+  "outdoor": {
+   "fidelity": {
+    "hp_sp_panel": {
+     "psnr_db": 37.9,
+     "ssim": 0.9964,
+     "psnr_static_db": 37.67
+    },
+    "skill_bar": {
+     "psnr_db": 38.3,
+     "ssim": 0.9889,
+     "psnr_static_db": 39.99
+    },
+    "chat": {
+     "psnr_db": 27.5,
+     "ssim": 0.937,
+     "psnr_static_db": 27.71
+    }
+   },
+   "delivery_fps": {
+    "median": 33.0,
+    "p10": 29.0,
+    "p90": 39.0
+   },
+   "lab_cores_motion": {
+    "poring-lab-desktop-1": 0.33,
+    "poring-lab-gamestream-1": 1.18,
+    "total": 1.5
+   },
+   "idle_cores": {
+    "poring-lab-desktop-1": 0.29,
+    "poring-lab-gamestream-1": 0.95,
+    "total": 1.24
+   },
+   "packet_to_frame_ms": {
+    "matched": 39,
+    "trials": 40,
+    "p50": 118.9,
+    "p75": 157.2,
+    "p90": 259.3,
+    "p95": 302.2,
+    "p99": ">1500"
+   },
+   "click_sent_to_packet_ms_p50": 187.0,
+   "key_to_paint_ms": {
+    "key": "Escape",
+    "region": [
+     598,
+     536,
+     250,
+     120
+    ],
+    "matched": 40,
+    "trials": 40,
+    "p50": 137.6,
+    "p75": 166.9,
+    "p90": 307.8,
+    "p95": 350.3,
+    "p99": 435.7,
+    "raw_ms": [
+     116.4,
+     137.6,
+     134.5,
+     118.3,
+     166.9,
+     397.1,
+     132.7,
+     125.7,
+     140.6,
+     124.8,
+     140.6,
+     307.8,
+     121.7,
+     124.6,
+     120.7,
+     435.7,
+     167.0,
+     207.4,
+     333.1,
+     113.0,
+     130.4,
+     122.8,
+     136.1,
+     153.8,
+     273.8,
+     146.0,
+     155.6,
+     137.3,
+     142.4,
+     127.6,
+     115.7,
+     269.8,
+     154.4,
+     145.4,
+     136.5,
+     126.4,
+     121.5,
+     228.5,
+     350.3,
+     140.5
+    ]
+   }
+  },
+  "indoor": {
+   "fidelity": {
+    "hp_sp_panel": {
+     "psnr_db": 37.84,
+     "ssim": 0.9963,
+     "psnr_static_db": 37.6
+    },
+    "skill_bar": {
+     "psnr_db": 35.61,
+     "ssim": 0.9891,
+     "psnr_static_db": 39.93
+    },
+    "chat": {
+     "psnr_db": 19.34,
+     "ssim": 0.5081,
+     "psnr_static_db": 27.24
+    }
+   },
+   "delivery_fps": {
+    "median": 5.0,
+    "p10": 1.0,
+    "p90": 35.0
+   },
+   "lab_cores_motion": {
+    "poring-lab-desktop-1": 0.33,
+    "poring-lab-gamestream-1": 1.13,
+    "total": 1.46
+   },
+   "idle_cores": {
+    "poring-lab-desktop-1": 0.29,
+    "poring-lab-gamestream-1": 0.89,
+    "total": 1.19
+   }
+  }
+ },
+ "t_wall_end": "2026-10-03T14:05:42+0700",
+ "label_iou": null,
+ "ocr_cer": null,
+ "windows_side": null
+}

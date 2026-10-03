@@ -148,19 +148,29 @@ def frame_stats() -> dict[str, float]:
     return classify_frame(frame)
 
 
+TASKBAR_H = 48  # the Windows taskbar strip at the session's bottom
+
+
 def classify_frame(bgra: Any) -> dict[str, float]:
+    """The STREAM, not just "not black": Moonlight-qt's own Qt window (1280x600 at the top, its
+    "no hardware decoder" warning) passed a whole-frame test on 2026-10-03 and made V2 look
+    reliable before its stream had shown. Only the stream draws the Windows taskbar at the bottom
+    of the session, and the Qt window never reaches it."""
     import numpy as np
 
     gray = bgra[:, :, :3].astype(np.float32).mean(axis=2)
+    bar = gray[-TASKBAR_H:, :]
     return {
         "mean": round(float(gray.mean()), 2),
         "std": round(float(gray.std()), 2),
         "nonblack": round(float((gray > 24).mean()), 4),
+        "taskbar_nonblack": round(float((bar > 24).mean()), 4),
+        "taskbar_std": round(float(bar.std()), 2),
     }
 
 
 def is_picture(stats: dict[str, float]) -> bool:
-    return stats["nonblack"] > 0.05 and stats["std"] > 5.0
+    return stats["taskbar_nonblack"] > 0.30 and stats["taskbar_std"] > 4.0
 
 
 def shot(name: str) -> str:

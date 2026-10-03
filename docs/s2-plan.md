@@ -7,7 +7,7 @@ verdict_date: 2026-10-02
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: APPROVED by Batt 2026-10-02 (with ADR-0013 and step 0). Step 0 was ATTEMPTED 2026-10-03 and reverted with its questions unanswered (the Mac app started before the handover); re-run it in order (to-console --external FIRST, then the Mac) when Batt is at the Mac, or go to step 1's spike in an operator build window.
+next_action: APPROVED 2026-10-02. Step 1 (the spike) DONE 2026-10-03 as the clean room's V3: reliable, every functional check passes through the mux, SPEC v2 beats RDP on fps/latency/CPU (key->paint tail to examine). Next: step 2, the frame bus in poring_env (pure Python, no hardware), then step 3 s2-client. The X mirror is a spike-only shim.
 ---
 
 # S2: GameStream without Xvfb, one decode, a frame bus for the bot and the human
@@ -293,6 +293,16 @@ streams, or decode-to-GPU feeding YOLO). Not now.
      - PyAV 19.0.1 decodes synthetic 4-slice 1440x900 H.264 at a p50 of 2.9 ms per frame,
        including the BGRA conversion, on the host.
      - Its first live run is the clean room's V3, if V1 and V2 stay black.
+     - ➡️ **2026-10-03 13:38: V3 RAN LIVE and is RELIABLE** (ADR-0009 "Clean room"). Results:
+       - first picture 4.7 s; connected in 0.13 s; 0 decode errors;
+       - every functional check through the mux (the guarded GM login, keys, a walk, right-drag,
+         Thai Kedmanee byte-exact);
+       - SPEC v2: delivery 33 fps, packet→frame p50 119 ms, 1.5 lab cores, against RDP v2's
+         23 fps, 376 ms and ~4.5 cores;
+       - key→paint p50 / p95 138 / 350 ms (RDP 101 / 114): the tail to examine in S2.
+       V1/V2 (Moonlight-qt) stayed black: the first SDL_RenderPresent hangs in Mesa llvmpipe GLX on
+       Xvfb. **Step 1 is answered: S2 works, it costs less than RDP, and S1's stall was the lab
+       client's GL present.**
    - **What is NOT S2 (Batt, 2026-10-03):** `x11_mirror_shim.py` blits V3's frames into the lab
      Xvfb and forwards the X input that reaches its window (mux → XTest → window → LiSend*).
      It is a **spike-only compatibility shim**, in its own module so it can be dropped. It exists

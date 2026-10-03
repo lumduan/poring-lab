@@ -479,7 +479,12 @@ def verify_sunshine_revert(timeout: float = 15) -> str:
 
     try:
         with r.session("capture-backend") as (agent, screen):
-            ox, oy = r.focus_console(agent, screen)
+            # No console visible (the clean room closed it for the benchmark, 2026-10-03: rc 3,
+            # UNVERIFIED): the agent's own "poring-lab shell" (open_terminal verifies it).
+            if r.find_console(screen) is None:
+                ox, oy = r.open_terminal(agent, screen)
+            else:
+                ox, oy = r.focus_console(agent, screen)
             r.console_type(agent, screen, "cls; " + REVERT_CHECK)
             deadline = time.monotonic() + timeout
             while time.monotonic() < deadline:

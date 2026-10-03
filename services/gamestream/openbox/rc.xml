@@ -11,6 +11,10 @@
     <focusNew>yes</focusNew>
     <followMouse>no</followMouse>
   </focus>
+  <theme>
+    <!-- No border either: with one, the stream sat at +1+1 and lost its last row and column. -->
+    <keepBorder>no</keepBorder>
+  </theme>
   <placement>
     <policy>Smart</policy>
   </placement>

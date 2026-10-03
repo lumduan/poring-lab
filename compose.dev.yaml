@@ -44,6 +44,7 @@ services:
     volumes:
       - ./services/gamestream/bin:/opt/gamestream-bin:ro
       - ./services/gamestream/s2spike:/opt/s2spike-dev/s2spike:ro
+      - ./services/gamestream/openbox:/opt/openbox:ro
 
   frontend-dev:
     profiles: [dev]
