@@ -53,6 +53,7 @@ HUMAN_RECENT_S = 120
 FIRST_PICTURE_S = 90
 STEADY_S = 60
 TO_RDP_TIMEOUT_S = 15 * 60
+ENTRY_GRACE_S = 15 * 60
 
 
 def say(msg: str) -> None:
@@ -193,7 +194,12 @@ def decide(
     """'done' | 'wait' | 'defer:<why>' | 'exit:<why>'."""
     backend, phase, _ = lock
     if backend == "rdp" and phase == "steady":
-        return "done"
+        # Started BEFORE the entry (so a failed entry is covered): rdp/steady means "over" only
+        # once the room was entered, the entry failed, or nothing happened for 15 min.
+        entered = bool(status.get("entered_ts")) or status.get("phase") in ("enter-failed", "ended")
+        if entered or now - float(status.get("entry_ts") or 0) > ENTRY_GRACE_S:
+            return "done"
+        return "wait"
     hard_cap = float(status.get("hard_cap_ts") or 0)
     if hard_cap and now >= hard_cap:
         return "exit:hard cap"
@@ -273,6 +279,7 @@ def start_watchdog() -> None:
     cmd = [
         "systemd-run", "--user", "--unit", UNIT, "--collect", "-p", "RuntimeMaxSec=4h",
         "--setenv=TMPDIR=/dev/shm/poring-lab-tmp", "--setenv=PYTHONDONTWRITEBYTECODE=1",
+        "--setenv=TZ=Asia/Bangkok",
         f"--setenv=CLEANROOM_DIR={STATE}", f"--working-directory={REPO}",
         PY, str(REPO / "scripts" / "cleanroom.py"), "watchdog",
     ]  # fmt: skip

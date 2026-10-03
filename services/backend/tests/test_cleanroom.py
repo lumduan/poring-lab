@@ -27,8 +27,20 @@ def status(**kw: float | str) -> dict[str, float | str]:
     return {"hard_cap_ts": T + 3 * 3600, "box_until_ts": T + 20 * 60, "variant": "V1", **kw}
 
 
-def test_rdp_steady_means_done(cr: ModuleType) -> None:
-    assert cr.decide(T, status(), ("rdp", "steady", "to-rdp-done"), False, 0) == "done"
+def test_rdp_steady_means_done_once_entered(cr: ModuleType) -> None:
+    st = status(entry_ts=T - 60, entered_ts=T - 30)
+    assert cr.decide(T, st, ("rdp", "steady", "to-rdp-done"), False, 0) == "done"
+
+
+def test_before_the_entry_rdp_steady_is_not_done(cr: ModuleType) -> None:
+    """2026-10-03: the watchdog starts BEFORE to-console, saw rdp/steady, called it done and
+    exited -- the room would have run unguarded."""
+    starting = status(phase="starting", entry_ts=T)
+    assert cr.decide(T + 5, starting, ("rdp", "steady", "to-rdp-done"), False, 0) == "wait"
+    failed = status(phase="enter-failed", entry_ts=T)
+    assert cr.decide(T + 5, failed, ("rdp", "steady", "to-rdp-done"), False, 0) == "done"
+    stale = cr.decide(T + cr.ENTRY_GRACE_S + 1, starting, ("rdp", "steady", ""), False, 0)
+    assert stale == "done"  # a start that never entered does not keep a watchdog forever
 
 
 def test_a_half_done_to_rdp_is_not_done(cr: ModuleType) -> None:
