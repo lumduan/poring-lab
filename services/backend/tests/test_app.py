@@ -514,3 +514,41 @@ def test_health_and_status_show_the_clean_room_only_under_its_lock(
     assert 3500 < room["hard_cap_left_s"] <= 3600
     with client.websocket_connect("/ws/stream", headers={"origin": ORIGIN}) as ws:
         assert receive_text_until(ws, "status")["cleanroom"]["variant"] == "V3"
+
+
+def _restore_marker(lab_state: Path, seq: int, age_s: float) -> None:
+    from poring_backend.mode_restore import format_marker
+
+    lab_state.mkdir(exist_ok=True)
+    write_lock(lab_state, "rdp", seq=seq)
+    (lab_state / "mux-restore").write_text(format_marker(seq, int(time.time() - age_s)))
+
+
+def test_a_guarded_restart_restores_assist_logged_and_shown(
+    make_client: Factory, tmp_path: Path
+) -> None:
+    _restore_marker(tmp_path / "lab-state", seq=40, age_s=5)
+    client, _ = make_client()
+    body = client.get("/health").json()
+    assert (body["mode"], body["mode_restored"]) == ("ASSIST", True)
+    [record] = [r for r in log_lines(tmp_path) if r["reason"] == "mode_restore"]
+    assert (record["source"], record["synthetic"], record["mode"]) == ("backend", True, "ASSIST")
+    assert record["event"]["by"] == "guarded_build" and "seq 40 unchanged" in record["event"]["why"]
+    with client.websocket_connect("/ws/stream", headers={"origin": ORIGIN}) as ws:
+        assert receive_text_until(ws, "status")["mode_restored"] is True  # the console's notice
+    with client.websocket_connect("/ws/input", headers={"origin": ORIGIN}) as ws:
+        ws.send_text(SetMode(t_mono_ns=1, mode=Mode.ASSIST).model_dump_json())
+        sync(ws)
+    assert client.get("/health").json()["mode_restored"] is False  # a human chose it since
+
+
+@pytest.mark.parametrize(("seq_now", "age_s"), [(41, 5), (40, 300)])
+def test_a_stale_or_post_handover_marker_boots_human(
+    make_client: Factory, tmp_path: Path, seq_now: int, age_s: float
+) -> None:
+    _restore_marker(tmp_path / "lab-state", seq=40, age_s=age_s)
+    write_lock(tmp_path / "lab-state", "rdp", seq=seq_now)
+    client, _ = make_client()
+    body = client.get("/health").json()
+    assert (body["mode"], body["mode_restored"]) == ("HUMAN", False)
+    assert not [r for r in log_lines(tmp_path) if r["reason"] == "mode_restore"]

@@ -38,7 +38,8 @@ NormCoord = Annotated[float, Field(ge=0.0, le=1.0)]
 
 
 class Mode(StrEnum):
-    """Input-mux mode (ADR-0002). The backend always boots in HUMAN."""
+    """Input-mux mode (ADR-0002). The backend boots in HUMAN; only ASSIST can come back by itself,
+    after a GUARDED restart (scripts/guarded_build.py restart:backend; ADR-0002 amendment)."""
 
     HUMAN = "HUMAN"
     BOT = "BOT"
@@ -304,6 +305,13 @@ class Status(Message):
         description=(
             "Human secret typing is on (a console's SecretInput): the input log keeps no human key "
             "identities until it is off."
+        ),
+    )
+    mode_restored: bool = Field(
+        default=False,
+        description=(
+            "ASSIST was restored automatically after a guarded backend restart (ADR-0002 "
+            "amendment); false again once a human sets the mode."
         ),
     )
 

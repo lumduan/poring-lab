@@ -23,6 +23,13 @@ export function bannerProblems({
   const capture = describeCapture(status);
   if (!links.stream) problems.push("Stream disconnected: reconnecting to the backend…");
   if (!links.input) problems.push("Input channel disconnected: keys and clicks are not being sent.");
+  if (links.stream && status?.mode_restored) {
+    // ADR-0002 amendment (2026-10-03): only a guarded restart's marker can do this; never BOT.
+    problems.push(
+      "ASSIST restored automatically after a guarded restart (scripts/guarded_build.py " +
+        "restart:backend). Choosing a mode clears this notice.",
+    );
+  }
   if (links.stream && status?.cleanroom) problems.push(describeCleanRoom(status.cleanroom, nowMs));
   if (links.stream) problems.push(...capture.notices);
   if (links.stream && capture.expect === "rdp" && status?.rdp_window_present === false) {

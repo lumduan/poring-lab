@@ -16,6 +16,7 @@ from poring_backend.display import DisplayWatch, Region
 from poring_backend.drops import DropCounter
 from poring_backend.input_log import InputLog, InputLogRecord, wall_clock_iso
 from poring_backend.latency import InputRecord, LatencyRecorder
+from poring_backend.mode_restore import read_verdict
 from poring_backend.mux import Decision, InputMux, Routed, Source
 from poring_backend.packets import PacketHub
 from poring_backend.stream import CaptureHub, ChangeWatcher, Outbox, StreamTuning
@@ -131,7 +132,8 @@ class AppState:
         damage_factory: Callable[[Callable[[int], None]], ChangeWatcher] | None = None,
     ) -> None:
         self.settings = settings
-        self.mux = InputMux(lease_ns=settings.lease_ns)  # always boots in HUMAN
+        # Boots in HUMAN (ADR-0002); only a guarded restart's marker can restore ASSIST (below).
+        self.mux = InputMux(lease_ns=settings.lease_ns)
         self.input_log = InputLog(settings.data_dir)
         self.transfer_log = TransferLog(settings.data_dir)
         # Never silent (ADR-0004 decision 4): unreadable messages and mux refusals are counted.
@@ -173,6 +175,9 @@ class AppState:
         self.cleanroom: CleanRoom | None = read_cleanroom(
             settings.lab_state_dir, self.capture, time.time()
         )
+        # True from an automatic ASSIST restore until a human next sets the mode (Status).
+        self.mode_restored = False
+        self._restore_mode()
         self._status_task: asyncio.Task[None] | None = None
         self._background: set[asyncio.Task[Any]] = set()
         # Console connections with secret typing on (SecretInput). While any is on, human key
@@ -180,6 +185,36 @@ class AppState:
         self._secret_connections: set[int] = set()
 
     # --- lifecycle --------------------------------------------------------------------------------
+
+    def _restore_mode(self) -> None:
+        """ADR-0002 amendment (2026-10-03): ASSIST, and only ASSIST, survives a GUARDED restart
+        (scripts/guarded_build.py restart:backend wrote a fresh marker for an unchanged lock). Any
+        other boot -- a crash, a host reboot, a plain restart -- stays HUMAN."""
+        verdict = read_verdict(self.settings.lab_state_dir, self.capture, time.time())
+        if not verdict.restore:
+            if verdict.why != "no marker":
+                log.warning("mux restore marker ignored (%s): booting HUMAN", verdict.why)
+            return
+        now = monotonic_ns()
+        released = self.mux.set_mode(Mode.ASSIST, now)
+        assert not released  # at boot nothing is held
+        self.mode_restored = True
+        self.input_log.write(
+            InputLogRecord(
+                t_mono_ns=now,
+                t_wall=wall_clock_iso(),
+                source="backend",
+                mode=self.mux.mode,
+                accepted=True,
+                reason="mode_restore",
+                synthetic=True,
+                frame_id=-1,
+                event={"type": "mode_restore", "mode": "ASSIST", "by": "guarded_build",
+                       "why": verdict.why},
+            )
+        )  # fmt: skip
+        log.warning("mux mode ASSIST restored automatically after a guarded restart (%s)",
+                    verdict.why)  # fmt: skip
 
     async def start(self) -> None:
         if self.clipboard is not None:
@@ -255,6 +290,7 @@ class AppState:
             paint=self.tuning.paint,
             game_black=self.display.black,
             human_secret=self.human_secret,
+            mode_restored=self.mode_restored,
         )
 
     def refused_snapshot(self) -> dict[str, dict[str, int]]:
@@ -302,6 +338,7 @@ class AppState:
     async def set_mode(self, msg: SetMode) -> None:
         now = monotonic_ns()
         released = self.mux.set_mode(msg.mode, now)
+        self.mode_restored = False  # a human has chosen the mode since
         self._log(Source.HUMAN, msg.model_dump(mode="json"), msg.frame_id, True, "mode_change", now)
         self._log_synthetic(released, now)
         await self._inject(released)

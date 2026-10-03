@@ -1,7 +1,8 @@
 """Append-only JSONL log of every input decision: ``<data_dir>/input_log/YYYY-MM-DD.jsonl`` (UTC).
 
 One line per submitted event -- accepted or dropped -- plus one per synthetic release, each tagged
-``source=human|bot``. This is research data (human demonstrations, bot behaviour, mux arbitration);
+``source=human|bot`` (``backend`` for the one ``mode_restore`` line of an automatic ASSIST restore,
+ADR-0002 amendment). This is research data (human demonstrations, bot behaviour, mux arbitration);
 a mouse-heavy session writes on the order of 1 GB/day, so rotation/compression is a TODO for when
 it matters.
 """

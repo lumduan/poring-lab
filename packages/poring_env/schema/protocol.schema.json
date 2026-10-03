@@ -754,7 +754,7 @@
       "type": "object"
     },
     "Mode": {
-      "description": "Input-mux mode (ADR-0002). The backend always boots in HUMAN.",
+      "description": "Input-mux mode (ADR-0002). The backend boots in HUMAN; only ASSIST can come back by itself,\nafter a GUARDED restart (scripts/guarded_build.py restart:backend; ADR-0002 amendment).",
       "enum": [
         "HUMAN",
         "BOT",
@@ -1163,6 +1163,11 @@
         "mode": {
           "$ref": "#/$defs/Mode"
         },
+        "mode_restored": {
+          "default": false,
+          "description": "ASSIST was restored automatically after a guarded backend restart (ADR-0002 amendment); false again once a human sets the mode.",
+          "type": "boolean"
+        },
         "move_interval_ms": {
           "anyOf": [
             {
@@ -1248,7 +1253,8 @@
         "move_interval_ms",
         "paint",
         "game_black",
-        "human_secret"
+        "human_secret",
+        "mode_restored"
       ],
       "title": "Status",
       "type": "object"

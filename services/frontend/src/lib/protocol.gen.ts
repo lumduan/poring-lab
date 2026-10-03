@@ -16,7 +16,8 @@ export type InputEvent = MouseMove | MouseButton | Wheel | Key | ReleaseAll;
  */
 export type BackendToAgent = Status | InputAck | Pong | ErrorReply;
 /**
- * Input-mux mode (ADR-0002). The backend always boots in HUMAN.
+ * Input-mux mode (ADR-0002). The backend boots in HUMAN; only ASSIST can come back by itself,
+ * after a GUARDED restart (scripts/guarded_build.py restart:backend; ADR-0002 amendment).
  *
  * This interface was referenced by `PoringProtocol`'s JSON-Schema
  * via the `definition` "Mode".
@@ -278,6 +279,10 @@ export interface Status {
    */
   lease_until_ns: number | null;
   mode: Mode;
+  /**
+   * ASSIST was restored automatically after a guarded backend restart (ADR-0002 amendment); false again once a human sets the mode.
+   */
+  mode_restored: boolean;
   /**
    * Pointer-move send interval; null = one per animation frame (the original).
    */

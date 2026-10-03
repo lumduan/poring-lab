@@ -27,6 +27,7 @@ function status(lock: Partial<NonNullable<Status["capture_backend"]>>, extra: Pa
     paint: "decode",
     game_black: false,
     human_secret: false,
+    mode_restored: false,
     ...extra,
   } as Status;
 }
@@ -95,4 +96,10 @@ test("rdp reconnect notice stays rdp-only", () => {
   assert.match(rdp[0], /reconnected less than a minute ago/);
   const console = bannerProblems({ links: LINKS, status: status({ backend: "console" }), rdpReconnected: true });
   assert.ok(!console.some((p) => /reconnected/.test(p)));
+});
+
+test("an automatic ASSIST restore is announced until a human chooses a mode", () => {
+  const restored = bannerProblems({ links: LINKS, status: status({ backend: "rdp" }, { mode_restored: true }) });
+  assert.match(restored[0], /^ASSIST restored automatically after a guarded restart/);
+  assert.deepEqual(bannerProblems({ links: LINKS, status: status({ backend: "rdp" }) }), []);
 });

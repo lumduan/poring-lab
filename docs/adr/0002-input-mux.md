@@ -22,6 +22,19 @@ next_action: Keep the mux the single XTest writer as policies land; add input-lo
     orders);
   - human clipboard pastes arrive as a synthetic human Ctrl+V (`reason=clipboard_paste`);
   - refused inputs are also counted in `/health` (`input_refused`).
+- **Amended 2026-10-03 (Batt): ASSIST survives a GUARDED backend restart, nothing else does.**
+  - `scripts/guarded_build.py restart:backend` (the dev-mode way to apply backend code) reads
+    `/health` first. Only if the mode is `ASSIST`, it writes `state/mux-restore` (`MODE=ASSIST`,
+    the lock's `SEQ`, `WRITTEN`, `OWNER=guarded_build`). It removes the marker as soon as the new
+    backend answers `/health`, and in a `finally` on any failure.
+  - At boot the backend (`poring_backend/mode_restore.py`) restores ASSIST only if the marker is
+    exactly that, at most 120 s old, the lock's `SEQ` is unchanged (no handover since) and the lock
+    is not `hold`. `BOT` is never restored: the marker cannot express it.
+  - Every restore is one input-log line (`source=backend`, `reason=mode_restore`, synthetic, who and
+    why) plus a WARNING. `Status.mode_restored` / `/health mode_restored` stay true until a human
+    next sets the mode, and the console says "ASSIST restored automatically after a guarded restart".
+  - A crash, a host reboot, a plain `docker restart` or any other boot finds no fresh marker and
+    stays `HUMAN`. Decision 2 below holds for every one of those.
 - **Open gap: [ADR-0005](0005-vision-x-access.md).** The single-writer invariant (decision 1) is
   enforced by convention for the vision container, which can still reach XTEST directly. It must be
   resolved before Phase 4.
@@ -44,7 +57,8 @@ A human (browser) and a bot (vision agent) share one game session (ADR-0001). Th
      mux decided them.
    - The agent never injects directly: `MuxedEnv` sends to `/internal/agent`.
    - noVNC is view-only.
-2. **Modes.** The backend **always boots in `HUMAN`**, so a host reboot can never resume a bot on its own.
+2. **Modes.** The backend **boots in `HUMAN`**, so a host reboot can never resume a bot on its own.
+   (Sole exception, amendment 2026-10-03 above: `ASSIST`, never `BOT`, after a guarded restart.)
 
    | Mode | Human input | Bot input |
    |---|---|---|

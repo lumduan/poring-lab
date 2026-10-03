@@ -23,6 +23,11 @@ On a breach:
                 -> stops ONLY those services. The dev-mode way to bring up db/rathena.
   restart:<svc>[,<svc>...][@<seconds>]
                 scripts/dev.sh restart <svcs> (e.g. backend after a code change), then watch.
+                With backend: if the mux is in ASSIST, ASSIST comes back by itself (ADR-0002
+                amendment, 2026-10-03): state/mux-restore (MODE=ASSIST, the lock SEQ, WRITTEN,
+                OWNER) is written before the restart and REMOVED as soon as the new backend answers
+                /health, so a later crash or unplanned restart still boots HUMAN. BOT is never
+                restored; a handover in between (SEQ changed) or a marker over 120 s old -> HUMAN.
   recreate:<svc>[,<svc>...][@<seconds>]
                 the same with --force-recreate (re-binds single-file mounts, e.g. after a
                 bind-mounted script was replaced by a new inode). An unguarded force-recreate of
@@ -51,9 +56,17 @@ import shlex
 import subprocess
 import sys
 import time
+import urllib.request
 from pathlib import Path
+from typing import Any
 
 REPO = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO / "services" / "backend" / "src"))
+sys.path.insert(0, str(REPO / "packages" / "poring_env" / "src"))
+from poring_backend.mode_restore import RESTORE_NAME, format_marker  # noqa: E402
+
+STATE = Path(os.environ.get("LAB_STATE_HOST_DIR", REPO / "state"))
+BACKEND = "poring-lab-backend-1"
 LOGDIR = Path(os.environ.get("TMPDIR", "/dev/shm/poring-lab-tmp"))  # rule 7: never host /tmp
 LOGDIR.mkdir(parents=True, exist_ok=True)
 CONTAINERS = [
@@ -311,9 +324,74 @@ def run_up(seconds: float, guard: Guard) -> bool:
     return watch(seconds, guard, "the running stack", ["docker", "compose", *RUNTIME, "stop"])
 
 
+def backend_health(timeout: float = 3) -> dict[str, Any] | None:
+    ip = subprocess.run(
+        ["docker", "inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}",
+         BACKEND], capture_output=True, text=True, check=False,
+    ).stdout.strip()  # fmt: skip
+    if not ip:
+        return None
+    try:
+        with urllib.request.urlopen(f"http://{ip}:8000/health", timeout=timeout) as resp:
+            data: dict[str, Any] = json.loads(resp.read())
+    except (OSError, ValueError):
+        return None
+    return data
+
+
+def write_restore_marker() -> Path | None:
+    """Before a backend restart: the marker, ONLY if the mux is in ASSIST and the lock not hold."""
+    health = backend_health()
+    mode = health.get("mode") if health else None
+    lock = (health or {}).get("capture_backend") or {}
+    if mode != "ASSIST" or lock.get("backend") not in ("rdp", "console"):
+        why = "no /health" if health is None else f"mode {mode}, lock {lock.get('backend')}"
+        print(f"[{ts()}] mux restore: none ({why}) -> the backend boots HUMAN", flush=True)
+        return None
+    body = format_marker(int(lock.get("seq", 0)), int(time.time()))
+    path = STATE / RESTORE_NAME
+    tmp = STATE / f".{RESTORE_NAME}.tmp"
+    tmp.write_text(body, encoding="ascii")
+    tmp.replace(path)
+    if path.read_text(encoding="ascii") != body:
+        raise SystemExit("mux restore marker: read-back differs from what was written")
+    print(f"[{ts()}] mux restore: ASSIST marker written ({' '.join(body.split())})", flush=True)
+    return path
+
+
+def remove_restore_marker(path: Path) -> None:
+    path.unlink(missing_ok=True)
+    gone = not path.exists()
+    print(f"[{ts()}] mux restore: marker {'removed' if gone else 'STILL PRESENT'}", flush=True)
+    if not gone:
+        raise SystemExit(f"{path} is still there: remove it by hand before any other restart")
+
+
+def await_backend(timeout: float = 60) -> dict[str, Any] | None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        health = backend_health()
+        if health is not None:
+            return health
+        time.sleep(1)
+    return None
+
+
 def run_restart(services: list[str], seconds: float, guard: Guard) -> bool:
-    if not run_process("restart:" + ",".join(services), [*DEV, "restart", *services], guard):
-        return False
+    marker = write_restore_marker() if "backend" in services else None
+    try:
+        if not run_process("restart:" + ",".join(services), [*DEV, "restart", *services], guard):
+            return False
+        if marker is not None:
+            health = await_backend()
+            remove_restore_marker(marker)  # at once: a crash from here on must boot HUMAN
+            mode = health.get("mode") if health else "no /health within 60 s"
+            restored = bool(health and health.get("mode_restored"))
+            note = "restored automatically" if restored else "NOT restored: set it in the console"
+            print(f"[{ts()}] mux after the restart: {mode} ({note})", flush=True)
+    finally:
+        if marker is not None and marker.exists():
+            remove_restore_marker(marker)
     return watch(seconds, guard, ", ".join(services), [*DEV, "stop", *services])
 
 

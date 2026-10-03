@@ -153,3 +153,80 @@ def test_a_target_image_tag_never_becomes_a_log_directory(gb: ModuleType) -> Non
     label = gb.parse_step("target:gamestream:s2build:poring-lab/gamestream-s2build:local").label
     path = gb.log_path(label)
     assert path.parent == gb.LOGDIR and "/" not in path.name
+
+
+class Backend:
+    """A fake backend for restart:backend -- its /health before and after, and the call order."""
+
+    def __init__(self, gb: ModuleType, tmp_path: Path, mode: str, restored: bool = True) -> None:
+        self.gb, self.mode, self.restored = gb, mode, restored
+        self.events: list[str] = []
+        self.restarted = False
+        self.marker = tmp_path / "mux-restore"
+
+    def install(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, rc: bool = True) -> None:
+        gb = self.gb
+        monkeypatch.setattr(gb, "STATE", tmp_path)
+        monkeypatch.setattr(gb, "backend_health", self.health)
+
+        def run_process(label: str, cmd: list[str], guard: object, env: object = None) -> bool:
+            self.events.append(f"restart marker={self.marker.exists()}")
+            self.restarted = True
+            return rc
+
+        monkeypatch.setattr(gb, "run_process", run_process)
+        monkeypatch.setattr(
+            gb, "watch", lambda *a: self.events.append(f"watch marker={self.marker.exists()}")
+        )
+
+    def health(self, timeout: float = 3) -> dict[str, object]:
+        if not self.restarted:
+            return {"mode": self.mode, "capture_backend": {"backend": "rdp", "seq": 40}}
+        mode = self.mode if self.restored else "HUMAN"
+        return {"mode": mode, "mode_restored": self.restored, "capture_backend": {"seq": 40}}
+
+
+def test_restart_backend_in_assist_writes_the_marker_and_removes_it_once_up(
+    gb: ModuleType,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    fake = Backend(gb, tmp_path, "ASSIST")
+    fake.install(monkeypatch, tmp_path)
+    gb.run_restart(["backend"], 30, guard=None)
+    # present for the restart, gone BEFORE the watch (a crash during it must boot HUMAN)
+    assert fake.events == ["restart marker=True", "watch marker=False"]
+    out = capsys.readouterr().out
+    assert "MODE=ASSIST SEQ=40" in out and "OWNER=guarded_build" in out
+    assert "mux after the restart: ASSIST (restored automatically)" in out
+
+
+@pytest.mark.parametrize("mode", ["HUMAN", "BOT"])
+def test_restart_backend_outside_assist_writes_no_marker(
+    gb: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str
+) -> None:
+    fake = Backend(gb, tmp_path, mode)
+    fake.install(monkeypatch, tmp_path)
+    gb.run_restart(["backend"], 30, guard=None)
+    assert fake.events == ["restart marker=False", "watch marker=False"]
+
+
+def test_a_failed_restart_still_removes_the_marker(
+    gb: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = Backend(gb, tmp_path, "ASSIST")
+    fake.install(monkeypatch, tmp_path, rc=False)
+    assert gb.run_restart(["backend"], 30, guard=None) is False
+    assert not fake.marker.exists()
+
+
+def test_a_restart_of_other_services_never_asks_the_backend(
+    gb: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = Backend(gb, tmp_path, "ASSIST")
+    fake.install(monkeypatch, tmp_path)
+    no_health = lambda timeout=3: pytest.fail("not a backend restart")  # noqa: E731
+    monkeypatch.setattr(gb, "backend_health", no_health)
+    gb.run_restart(["desktop"], 30, guard=None)
+    assert fake.events == ["restart marker=False", "watch marker=False"]

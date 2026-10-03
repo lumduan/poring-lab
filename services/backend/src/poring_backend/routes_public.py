@@ -106,6 +106,8 @@ async def health(request: Request) -> dict[str, Any]:
     return {
         "status": "ok",
         "mode": state.mux.mode,
+        # ASSIST came back by itself after a guarded restart (ADR-0002 amendment, 2026-10-03).
+        "mode_restored": state.mode_restored,
         # Is a human at the console right now? (the clean-room watchdog defers to it, 2026-10-03)
         "lease_active": state.mux.lease_active(now),
         "last_human_input_age_s": (
