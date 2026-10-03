@@ -14,6 +14,12 @@
     pressure_sampler.py peaks OUT.csv FROM TO [--bin 10]
         Worst 10 s io_full bins for quant-postgres between two wall times (HH:MM:SS).
 
+    pressure_sampler.py window OUT.csv FROM TO --date YYYY-MM-DD [--threshold 25] [--bin 10]
+        The STALL WINDOW for the AWS backfill (Batt, 2026-10-03): every --bin second bin in which
+        quant-postgres or quant-orderbook-engine had io_full above --threshold %, with its start
+        in ICT and UTC and every quant cgroup above the threshold in that bin; then the window's
+        first and last such bin. The CSV's wall times are the host's local time (ICT).
+
 io_full is the number to watch: the share of time quant-postgres had all of its runnable tasks
 stalled on IO (the 2026-09-29 incident pushed it from <=4 % to 82-88 %).
 """
@@ -23,7 +29,9 @@ import csv
 import subprocess
 import sys
 import time
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 QUANT = [
     "quant-postgres",
@@ -166,6 +174,51 @@ def peaks(path: Path, start: str, end: str, bin_s: int) -> None:
         print(f"{at}  quant-postgres io_full {v:6.2f}% ({bin_s} s bin)")
 
 
+ICT = ZoneInfo("Asia/Bangkok")
+WINDOW_KEYS = ("quant-postgres", "quant-orderbook-engine")  # what defines the backfill window
+
+
+def stall_bins(
+    header: list[str], rows: list[list[str]], start: str, end: str, bin_s: int, threshold: float
+) -> list[tuple[str, dict[str, float]]]:
+    """(bin start HH:MM:SS, {cgroup: io_full %} over the threshold) for each bin where a
+    WINDOW_KEYS cgroup is over it."""
+    cols = {n: header.index(f"{n}.io_full") for n in QUANT if f"{n}.io_full" in header}
+    sel = window(rows, seconds_of(start), seconds_of(end))
+    out: list[tuple[str, dict[str, float]]] = []
+    for i in range(0, max(0, len(sel) - 1), bin_s):
+        chunk = sel[i : i + bin_s + 1]
+        over: dict[str, float] = {}
+        for name, col in cols.items():
+            v = rate(chunk, col, 1e-4)
+            if v is not None and v > threshold:
+                over[name] = round(v, 1)
+        if any(k in over for k in WINDOW_KEYS):
+            out.append((chunk[0][1], over))
+    return out
+
+
+def stamp(day: str, hms: str, plus_s: int = 0) -> str:
+    local = datetime.fromisoformat(f"{day}T{hms}").replace(tzinfo=ICT) + timedelta(seconds=plus_s)
+    return f"{local:%Y-%m-%d %H:%M:%S} ICT = {local.astimezone(UTC):%Y-%m-%d %H:%M:%S} UTC"
+
+
+def stall_window(path: Path, start: str, end: str, day: str, bin_s: int, threshold: float) -> None:
+    header, rows = load(path)
+    bins = stall_bins(header, rows, start, end, bin_s, threshold)
+    print(f"{path.name}: {start}-{end} ICT on {day}; bins of {bin_s} s; io_full > {threshold} % "
+          f"in {' or '.join(WINDOW_KEYS)}")  # fmt: skip
+    if not bins:
+        print("STALL WINDOW: none (no bin over the threshold)")
+        return
+    for at, over in bins:
+        cells = ", ".join(f"{n} {v:.1f}%" for n, v in sorted(over.items(), key=lambda kv: -kv[1]))
+        print(f"  {stamp(day, at)}  {cells}")
+    names = sorted({n for _, over in bins for n in over})
+    print(f"STALL WINDOW: {stamp(day, bins[0][0])} -> {stamp(day, bins[-1][0], bin_s)}")
+    print(f"  {len(bins)} bin(s) of {bin_s} s; containers over {threshold} %: {', '.join(names)}")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -181,6 +234,13 @@ def main() -> None:
     p.add_argument("start")
     p.add_argument("end")
     p.add_argument("--bin", type=int, default=10)
+    w = sub.add_parser("window")
+    w.add_argument("csv", type=Path)
+    w.add_argument("start")
+    w.add_argument("end")
+    w.add_argument("--date", required=True, help="the CSV's local (ICT) date, YYYY-MM-DD")
+    w.add_argument("--threshold", type=float, default=25.0)
+    w.add_argument("--bin", type=int, default=10)
     args = ap.parse_args()
     if args.cmd == "run":
         if not str(args.out).startswith("/dev/shm/"):
@@ -188,6 +248,8 @@ def main() -> None:
         run(args.out, args.seconds)
     elif args.cmd == "around":
         around(args.csv, args.at, args.window)
+    elif args.cmd == "window":
+        stall_window(args.csv, args.start, args.end, args.date, args.bin, args.threshold)
     else:
         peaks(args.csv, args.start, args.end, args.bin)
 
