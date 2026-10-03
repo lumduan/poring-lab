@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Clean-room variant V2 only (ADR-0009, 2026-10-03): openbox as a PLAIN window manager for
+     Moonlight-qt on :99, to test whether the black stream is "Xvfb with no WM". It must not change
+     the window's size (the 2026-10-02 matchbox lesson: a resize during renderer set-up left it
+     black), and it must not eat any key or click the bot sends to Windows: NO key or mouse
+     bindings at all (openbox's defaults bind Alt+F4, Alt+Tab, Alt+drag ...). Run by
+     gamestream-loop.sh with -config-file, XDG_CONFIG_HOME in /tmp: never touches ~/.config (the
+     pairing volume). Started right before the client, killed right after it. -->
+<openbox_config xmlns="http://openbox.org/3.4/rc">
+  <focus>
+    <focusNew>yes</focusNew>
+    <followMouse>no</followMouse>
+  </focus>
+  <placement>
+    <policy>Smart</policy>
+  </placement>
+  <desktops>
+    <number>1</number>
+  </desktops>
+  <keyboard/>
+  <mouse/>
+  <applications>
+    <application class="*">
+      <decor>no</decor>
+      <maximized>no</maximized>
+      <fullscreen>no</fullscreen>
+      <focus>yes</focus>
+      <position force="yes">
+        <x>0</x>
+        <y>0</y>
+      </position>
+    </application>
+  </applications>
+</openbox_config>

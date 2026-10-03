@@ -374,9 +374,11 @@ def test_gamestream_config_dir_is_owned_by_desk_in_the_image() -> None:
 
 
 def test_gamestream_places_its_window_without_a_window_manager() -> None:
-    """ADR-0009 amendment (2026-10-02): no WM on :99 in either mode -- a kiosk WM resized
+    """ADR-0009 amendment (2026-10-02): no WM on :99 by default -- a kiosk WM (matchbox) resized
     Moonlight's window during its renderer set-up and the stream stayed black. The placer runs only
-    around the stream, and only moves."""
+    around the stream, and only moves. The clean room's V2 (2026-10-03) is the one exception:
+    openbox, opt-in through the variant file only, around its own stream only, killed before the
+    focus goes back to PointerRoot (and to-rdp refuses to let RDP connect while one runs)."""
     loop = (ROOT / "services" / "gamestream" / "bin" / "gamestream-loop.sh").read_text()
     dockerfile = (ROOT / "services" / "gamestream" / "Dockerfile").read_text()
     assert "matchbox" not in loop and "matchbox" not in dockerfile
@@ -388,6 +390,31 @@ def test_gamestream_places_its_window_without_a_window_manager() -> None:
     stop = code.find('    kill "${placer}"')
     refocus = code.find("    focus_pointer_root\n", stop)
     assert -1 < start < run < stop < refocus
+    wm_start, wm_stop = code.find("    start_wm\n"), code.find("    stop_wm\n")
+    assert -1 < wm_start < start and stop < wm_stop < refocus
+    assert '[[ "${VARIANT_WM}" == openbox ]] || return 0' in code  # opt-in only
+    assert code.count("openbox --config-file") == 1
+
+
+def test_openbox_takes_no_input_and_never_touches_the_pairing_volume() -> None:
+    rc = (ROOT / "services" / "gamestream" / "openbox" / "rc.xml").read_text()
+    assert "<keyboard/>" in rc and "<mouse/>" in rc  # no binding can eat a bot's Alt+F4 or click
+    assert "<maximized>no</maximized>" in rc and "<decor>no</decor>" in rc
+    loop = (ROOT / "services" / "gamestream" / "bin" / "gamestream-loop.sh").read_text()
+    launch = loop[loop.index("XDG_CONFIG_HOME=/tmp/") : loop.index("openbox --config-file")]
+    assert "XDG_DATA_HOME=/tmp/" in launch  # not ~/.config (gamestream-state), not the rootfs
+
+
+def test_gamestream_never_writes_a_core_file() -> None:
+    """The S2 spike holds the pairing key in process memory (Batt, 2026-10-03)."""
+    gs = compose("compose.yaml")["services"]["gamestream"]
+    assert gs["ulimits"]["core"] == 0
+
+
+def test_the_gamestream_dev_overlay_binds_code_read_only_and_no_secrets() -> None:
+    dev = compose("compose.dev.yaml")["services"]["gamestream"]
+    assert all(str(v).endswith(":ro") for v in dev["volumes"])
+    assert "gamestream-state" not in str(dev) and ".config" not in str(dev["volumes"])
 
 
 def focus_function(path: Path) -> str:

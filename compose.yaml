@@ -295,6 +295,10 @@ services:
     cpus: 4
     mem_limit: 1536m
     memswap_limit: 1536m
+    # V3 (the S2 spike, clean room 2026-10-03) holds the pairing key in its process memory: never a
+    # core file (the host pipes cores to apport). The spike is also non-dumpable (PR_SET_DUMPABLE 0).
+    ulimits:
+      core: 0
 
   sniffer:
     <<: *lab

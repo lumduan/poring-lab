@@ -164,6 +164,7 @@ def test_health(make_client: Factory) -> None:
         True,
         [0, 0],
     )
+    assert body["lease_active"] is False and body["last_human_input_age_s"] is None
 
 
 def test_human_input_reaches_xtest_and_is_logged(make_client: Factory, tmp_path: Path) -> None:

@@ -25,12 +25,27 @@ rdp-loop.sh connects only while it says ``rdp``; gamestream-loop.sh streams only
         for 5 s, wait out the tscon, lock -> console/steady (only now may gamestream stream), and
         wait for Moonlight's first decoded video packet. --external (S2 step 0): stop after tscon
         with the lock at console/switching, so the lab client holds and an external one streams.
+        --cleanroom (Batt, 2026-10-03): the same stop, REASON `cleanroom`, for the clean-room
+        experiment: the session stays on the console while lab-client variants take turns:
+    capture_backend.py stream --variant V1|V1gdb|V2|V3
+        Clean room only (lock console + REASON cleanroom*, phase switching): refuses unless NO lab
+        client runs in gamestream (one client at a time, enforced), writes the whitelisted variant
+        file `state/gamestream-variant` (CLIENT/WM/GDB_AFTER_S), then console/steady.
+    capture_backend.py hold
+        Clean room only: console/switching (REASON cleanroom-hold), then end the stream through
+        Sunshine (/cancel, as to-rdp does) and reset the variant file. The session stays on the
+        console; to-rdp ends the clean room.
+
+Every command that writes holds an EXCLUSIVE flock (/dev/shm, never state/), so the clean-room
+runner and its watchdog can never write the lock at the same time (--wait-lock S, default 30).
 
 Writes are atomic (rename) and read back on the host AND inside every running container before a
 step counts as done (CLAUDE.md: read back every write). Scratch never goes to host /tmp.
 """
 
 import argparse
+import contextlib
+import fcntl
 import json
 import os
 import re
@@ -161,7 +176,7 @@ TERM = (
     'for p in /proc/[0-9]*; do case "$(cat $p/comm 2>/dev/null)" in {names}) '
     'kill -TERM "${{p#/proc/}}";; esac; done; true'
 )
-RDP_NAMES, STREAM_NAMES = "xfreerdp|xfreerdp3", "moonlight|Moonlight*|AppRun*"
+RDP_NAMES, STREAM_NAMES = "xfreerdp|xfreerdp3", "moonlight|Moonlight*|AppRun*|s2spike*"
 
 
 def count(container: str, names: str) -> int:
@@ -309,6 +324,7 @@ def cmd_to_rdp(recover: bool) -> int:
             )
         say(f"{SUNSHINE_REVERT_S} s for Sunshine to revert while the session is on the console")
         time.sleep(SUNSHINE_REVERT_S)
+    ensure_no_wm()  # BEFORE the lock says rdp: rdp-loop wakes within 1 s and has no WM check
     since = utc_now()
     body = write_lock("rdp", "switching", "recover" if recover else "to-rdp")
     verify_everywhere(body)
@@ -321,6 +337,7 @@ def cmd_to_rdp(recover: bool) -> int:
         raise Stop(f"{clients} xfreerdp clients (expected exactly 1)")
     verify_everywhere(write_lock("rdp", "steady", "to-rdp-done"))
     say("RDP mode: exactly one xfreerdp client")
+    write_variant("V1")  # a later plain to-console streams moonlight-qt, no WM, no gdb
     if not from_console:
         return 0
     verdict = verify_sunshine_revert()
@@ -396,7 +413,10 @@ def quit_stream() -> str:
     except subprocess.TimeoutExpired:
         say(f"moonlight quit: no answer within {QUIT_TIMEOUT_S + 15} s")
     if not lab_streaming:
-        say("no lab client was streaming: the cancel covers an external client's session")
+        say(
+            "no lab client was streaming (an external client, or the client had already exited): "
+            "the /cancel covers the host's session either way"
+        )
         return "external"
     try:
         line = wait_log(GAMESTREAM, STREAM_END_RX, since, STREAM_EXIT_S)
@@ -534,7 +554,7 @@ def cmd_pair(pin: str) -> int:
 EXTERNAL_REASON = "to-console-external"
 
 
-def cmd_to_console(yes_tscon: bool, external: bool = False) -> int:
+def cmd_to_console(yes_tscon: bool, external: bool = False, cleanroom: bool = False) -> int:
     backend, _, _ = read_host()
     if backend != "rdp":
         raise Stop(f"to-console starts from rdp (the lock is {backend})")
@@ -575,6 +595,14 @@ def cmd_to_console(yes_tscon: bool, external: bool = False) -> int:
     # its display settings (VDD only, resolution) at stream start and needs a console session for
     # that. A stream started earlier captured an empty display (2026-10-02).
     time.sleep(max(0.0, TSCON_DELAY_S + 5 - (time.monotonic() - typed)))
+    if cleanroom:
+        write_variant("V1")
+        verify_everywhere(write_lock("console", "switching", CLEANROOM_REASON))
+        say(
+            "CLEAN ROOM: the session is on the console and stays there; RDP and the lab client "
+            "hold. Next: stream --variant V1 (then hold, the next variant, ...). End with: to-rdp"
+        )
+        return 0
     if external:
         verify_everywhere(write_lock("console", "switching", EXTERNAL_REASON))
         say(
@@ -600,8 +628,138 @@ def cmd_to_console(yes_tscon: bool, external: bool = False) -> int:
     return 0
 
 
+# --- the clean room (Batt, 2026-10-03; ADR-0009) --------------------------------------------------
+# The session moves to the console ONCE and RDP holds for the whole experiment; only the lab client
+# varies (gamestream-loop.sh reads the variant file at each stream start; keyword values only).
+CLEANROOM_REASON, HOLD_REASON = "cleanroom", "cleanroom-hold"
+VARIANT_NAME = "gamestream-variant"
+VARIANTS = {
+    "V1": {"CLIENT": "moonlight-qt", "WM": "none", "GDB_AFTER_S": ""},
+    "V1gdb": {"CLIENT": "moonlight-qt", "WM": "none", "GDB_AFTER_S": "20"},
+    "V2": {"CLIENT": "moonlight-qt", "WM": "openbox", "GDB_AFTER_S": ""},
+    "V3": {"CLIENT": "s2spike", "WM": "none", "GDB_AFTER_S": ""},
+}
+WM_NAMES = "openbox"
+FLOCK = Path(
+    os.environ.get("CAPTURE_BACKEND_FLOCK", "/dev/shm/poring-lab-tmp/capture-backend.flock")
+)
+
+
+def lock_reason(text: str) -> str:
+    match = re.search(r"^REASON=(\S*)$", text, re.M)
+    return match.group(1) if match else ""
+
+
+def lock_phase(text: str) -> str:
+    match = re.search(r"^PHASE=(\S*)$", text, re.M)
+    return match.group(1) if match else ""
+
+
+def variant_body(variant: str) -> str:
+    if variant not in VARIANTS:
+        raise Stop(f"unknown variant {variant!r} (one of {', '.join(VARIANTS)})")
+    return "".join(f"{k}={v}\n" for k, v in VARIANTS[variant].items())
+
+
+def write_variant(variant: str) -> None:
+    """Atomic write + read-back on the host and in gamestream (the only reader)."""
+    body = variant_body(variant)
+    STATE.mkdir(exist_ok=True)
+    tmp = STATE / f".{VARIANT_NAME}.tmp"
+    tmp.write_text(body, encoding="ascii")
+    tmp.replace(STATE / VARIANT_NAME)
+    if (STATE / VARIANT_NAME).read_text(encoding="ascii") != body:
+        raise Stop("variant read-back on the host differs from what was written")
+    if running(GAMESTREAM):
+        seen = sh("docker", "exec", GAMESTREAM, "cat", f"/lab-state/{VARIANT_NAME}").stdout
+        if seen != body:
+            raise Stop(f"gamestream sees a different variant file (stale mount?): {seen!r}")
+    say(f"variant -> {variant}: " + " ".join(body.split()))
+
+
+def ensure_no_wm() -> None:
+    """No window manager on :99 when RDP connects: openbox (V2) would decorate and place
+    xfreerdp's /size window, and every click would land off target."""
+    if running(GAMESTREAM) and count(GAMESTREAM, WM_NAMES):
+        say("a window manager still runs in gamestream: TERM")
+        term_until_zero(GAMESTREAM, WM_NAMES, quiet_s=2, timeout=30)
+    if running(GAMESTREAM) and count(GAMESTREAM, WM_NAMES):
+        raise Stop("openbox would not exit: RDP must not connect under a window manager")
+    prop = sh("docker", "exec", DESKTOP, "xprop", "-root", "_NET_SUPPORTING_WM_CHECK").stdout
+    if "window id" in prop:
+        say("a stale _NET_SUPPORTING_WM_CHECK on the root window (dead WM): removing it")
+        sh("docker", "exec", DESKTOP, "xprop", "-root", "-remove", "_NET_SUPPORTING_WM_CHECK")
+        prop = sh("docker", "exec", DESKTOP, "xprop", "-root", "_NET_SUPPORTING_WM_CHECK").stdout
+        if "window id" in prop:
+            raise Stop("the root window still advertises a window manager")
+
+
+def cleanroom_lock() -> tuple[str, str]:
+    """(phase, reason) of the clean room's console lock, or Stop."""
+    backend, _, text = read_host()
+    reason = lock_reason(text)
+    if backend != "console" or not reason.startswith(CLEANROOM_REASON):
+        raise Stop(f"not in the clean room (lock {backend}, reason {reason or 'none'})")
+    return lock_phase(text), reason
+
+
+def cmd_stream(variant: str) -> int:
+    phase, _ = cleanroom_lock()
+    if phase != "switching":
+        raise Stop("a stream is already on (console/steady): hold first")
+    if not running(GAMESTREAM):
+        raise Stop("gamestream is not running")
+    lab_clients = count(GAMESTREAM, STREAM_NAMES)
+    if lab_clients:
+        raise Stop(f"{lab_clients} lab client process(es) still run: one client at a time")
+    write_variant(variant)
+    since = utc_now()
+    body = write_lock("console", "steady", CLEANROOM_REASON)
+    verify_everywhere(body)
+    wait_log(GAMESTREAM, rf"capture-backend console seq={raw_seq(body)}: streaming", since, 60)
+    say(f"CLEAN ROOM: {variant} is streaming")
+    return 0
+
+
+def cmd_hold() -> int:
+    cleanroom_lock()
+    verify_everywhere(write_lock("console", "switching", HOLD_REASON))
+    end = quit_stream()
+    write_variant("V1")
+    say(f"CLEAN ROOM hold: stream end {end}; the session stays on the console")
+    return 0
+
+
+@contextlib.contextmanager
+def mutation_lock(wait_s: float):  # type: ignore[no-untyped-def]
+    """One writer at a time across processes (the runner, the watchdog, a human)."""
+    FLOCK.parent.mkdir(parents=True, exist_ok=True)
+    with FLOCK.open("a+") as fh:
+        deadline = time.monotonic() + wait_s
+        while True:
+            try:
+                fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    fh.seek(0)
+                    holder = fh.read().strip()
+                    msg = f"another capture_backend command holds the lock: {holder}"
+                    raise Stop(msg) from None
+                time.sleep(0.5)
+        fh.seek(0)
+        fh.truncate()
+        fh.write(f"pid={os.getpid()} {' '.join(sys.argv[1:])[:120]}\n")
+        fh.flush()
+        try:
+            yield
+        finally:
+            fcntl.flock(fh, fcntl.LOCK_UN)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
+    ap.add_argument("--wait-lock", type=float, default=30.0, help="seconds to wait for the flock")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("status")
     sub.add_parser("init")
@@ -615,20 +773,34 @@ def main() -> int:
         "--external", action="store_true",
         help="S2 step 0: an external client streams; the lab's Moonlight holds",
     )  # fmt: skip
+    to_console.add_argument(
+        "--cleanroom", action="store_true",
+        help="the clean room: the session stays on the console; then stream/hold",
+    )  # fmt: skip
+    stream = sub.add_parser("stream")
+    stream.add_argument("--variant", required=True, choices=sorted(VARIANTS))
+    sub.add_parser("hold")
     pair = sub.add_parser("pair")
     pair.add_argument("pin")
     args = ap.parse_args()
     if args.cmd == "status":
         return cmd_status()
-    if args.cmd == "init":
-        return cmd_init()
-    if args.cmd == "drill":
-        return cmd_drill(args.hold_s)
-    if args.cmd == "to-rdp":
-        return cmd_to_rdp(args.recover)
-    if args.cmd == "pair":
-        return cmd_pair(args.pin)
-    return cmd_to_console(args.yes_tscon, args.external)
+    with mutation_lock(args.wait_lock):
+        if args.cmd == "init":
+            return cmd_init()
+        if args.cmd == "drill":
+            return cmd_drill(args.hold_s)
+        if args.cmd == "to-rdp":
+            return cmd_to_rdp(args.recover)
+        if args.cmd == "pair":
+            return cmd_pair(args.pin)
+        if args.cmd == "stream":
+            return cmd_stream(args.variant)
+        if args.cmd == "hold":
+            return cmd_hold()
+        if args.external and args.cleanroom:
+            raise Stop("--external and --cleanroom exclude each other")
+        return cmd_to_console(args.yes_tscon, args.external, args.cleanroom)
 
 
 if __name__ == "__main__":

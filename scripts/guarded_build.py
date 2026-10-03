@@ -27,11 +27,17 @@ On a breach:
                 the same with --force-recreate (re-binds single-file mounts, e.g. after a
                 bind-mounted script was replaced by a new inode). An unguarded force-recreate of
                 desktop on 2026-10-01 hit 30.8 % quant-postgres io_full for 10 s.
+  run:<svc>[@<seconds>]=<command>
+                docker compose --profile <svc> run --rm --no-deps <svc> <command>, killed after
+                <seconds> (default 600), its output's tail printed. ONLY `vision` (check_gpu.py):
+                a second gamestream would be a second lab client, a second desktop a second
+                xfreerdp (ADR-0001/0009). The hook and scripts/dev.sh refuse a raw `compose run`.
 
     python3 scripts/guarded_build.py build:desktop build:rathena pull:db up:180        # strict 10%
     python3 scripts/guarded_build.py --sustain 30 --spike 25 build:rathena             # tolerant
     python3 scripts/guarded_build.py --sustain 30 --spike 25 start:db@120 start:rathena@240
     python3 scripts/guarded_build.py build:vision   # ~5 GB of writes: run in an operator window
+    python3 scripts/guarded_build.py 'run:vision@600=python scripts/check_gpu.py'  # GPU check
 
 Logs go to $TMPDIR/poring-guarded-*.log. Exit 0 only if every step completed without a breach.
 """
@@ -41,6 +47,7 @@ import collections
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import time
@@ -59,7 +66,10 @@ CONTAINERS = [
     "frigate",
 ]
 EXTRA_CGROUPS = {"cron.service(capture-streaming-pro)": "/sys/fs/cgroup/system.slice/cron.service"}
-ALL = ["--profile", "core", "--profile", "remote", "--profile", "vision", "--profile", "gamestream"]
+ALL = [
+    "--profile", "core", "--profile", "remote", "--profile", "vision", "--profile", "gamestream",
+    "--profile", "sniffer",
+]  # fmt: skip
 RUNTIME = ["--profile", "core", "--profile", "remote"]
 # Dev mode (compose.yaml + compose.dev.yaml, see scripts/dev.sh) plus the core and sniffer profiles,
 # so `start:sniffer` is guarded too (an unguarded sniffer recreate right after a guarded db/rathena
@@ -74,13 +84,21 @@ DEV = ["scripts/dev.sh", "--profile", "core", "--profile", "sniffer", "--profile
 # subprocesses get this; the global builder (`docker buildx use`) is never touched.
 LAB_BUILDER = os.environ.get("LAB_BUILDX_BUILDER", "default")
 SERVICE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
+RUN_ALLOWED = frozenset({"vision"})  # see run: in the docstring
 
 
 class Step:
     """One parsed command-line step (see the module docstring)."""
 
-    def __init__(self, kind: str, services: list[str], seconds: float | None = None) -> None:
+    def __init__(
+        self,
+        kind: str,
+        services: list[str],
+        seconds: float | None = None,
+        command: list[str] | None = None,
+    ) -> None:
         self.kind, self.services, self.seconds = kind, services, seconds
+        self.command = command or []
 
     @property
     def label(self) -> str:
@@ -108,7 +126,30 @@ def parse_step(step: str) -> Step:
         if not all(SERVICE.match(s) for s in services):
             raise ValueError(f"{step}: expected {kind}:<svc>[,<svc>...][@<seconds>]")
         return Step(kind, services, float(secs or 180))
+    if kind == "run":
+        head, eq, command = arg.partition("=")
+        name, _, secs = head.partition("@")
+        argv = shlex.split(command)
+        if not eq or not argv or not SERVICE.match(name):
+            raise ValueError(f"{step}: expected run:<svc>[@<seconds>]=<command>")
+        if name not in RUN_ALLOWED:
+            raise ValueError(f"{step}: run: is allowed only for {', '.join(sorted(RUN_ALLOWED))}")
+        return Step(kind, [name], float(secs or 600), argv)
     raise ValueError(f"unknown step {step}")
+
+
+def run_cmd(step: Step) -> list[str]:
+    svc = step.services[0]
+    seconds = str(int(step.seconds or 600))
+    return [
+        "timeout", seconds, "docker", "compose", "--profile", svc, "run", "--rm", "--no-deps",
+        svc, *step.command,
+    ]  # fmt: skip
+
+
+def log_path(label: str) -> Path:
+    """$TMPDIR/poring-guarded-<label>.log; a target's image tag must not become a directory."""
+    return LOGDIR / f"poring-guarded-{re.sub(r'[^A-Za-z0-9_.,@-]', '-', label)}.log"
 
 
 def target_build_cmd(service: str, stage: str, image: str) -> list[str]:
@@ -222,7 +263,7 @@ def build_env() -> dict[str, str]:
 def run_process(
     label: str, cmd: list[str], guard: Guard, env: dict[str, str] | None = None
 ) -> bool:
-    log = LOGDIR / f"poring-guarded-{label.replace(':', '-')}.log"
+    log = log_path(label)
     builder = env.get("BUILDX_BUILDER") if env else None
     builder = f" [BUILDX_BUILDER={builder}]" if builder else ""
     print(f"[{ts()}] {label}: {' '.join(cmd)}{builder}  (log {log.name})", flush=True)
@@ -318,6 +359,10 @@ def main() -> int:
             ok = run_process(step.label, ["docker", "compose", *ALL, "pull", *step.services], guard)
         elif step.kind == "target":
             ok = run_process(step.label, target_build_cmd(*step.services), guard, env=build_env())
+        elif step.kind == "run":
+            ok = run_process(step.label, run_cmd(step), guard)
+            tail = log_path(step.label).read_text(errors="replace").splitlines()[-80:]
+            print("\n".join(f"  | {line}" for line in tail), flush=True)
         elif step.kind == "up":
             ok = run_up(step.seconds or 180, guard)
         elif step.kind == "restart":

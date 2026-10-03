@@ -131,3 +131,25 @@ def test_lab_builder_can_be_overridden(monkeypatch: pytest.MonkeyPatch) -> None:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     assert module.build_env()["BUILDX_BUILDER"] == "armbuilder"
+
+
+def test_run_step_is_vision_only_and_never_starts_dependencies(gb: ModuleType) -> None:
+    """check_gpu.py needs `compose run`; a second gamestream would be a second lab client and a
+    second desktop a second xfreerdp, so run: knows exactly one service (2026-10-03)."""
+    step = gb.parse_step("run:vision@600=python scripts/check_gpu.py")
+    assert (step.kind, step.services, step.seconds) == ("run", ["vision"], 600.0)
+    assert gb.run_cmd(step) == [
+        "timeout", "600", "docker", "compose", "--profile", "vision", "run", "--rm",
+        "--no-deps", "vision", "python", "scripts/check_gpu.py",
+    ]  # fmt: skip
+    for refused in ("run:gamestream=true", "run:desktop=true", "run:vision", "run:vision="):
+        with pytest.raises(ValueError):
+            gb.parse_step(refused)
+
+
+def test_a_target_image_tag_never_becomes_a_log_directory(gb: ModuleType) -> None:
+    """target:<svc>:<stage>:poring-lab/<x>:local put a `/` into the log name and the step crashed
+    before docker ran (2026-10-03)."""
+    label = gb.parse_step("target:gamestream:s2build:poring-lab/gamestream-s2build:local").label
+    path = gb.log_path(label)
+    assert path.parent == gb.LOGDIR and "/" not in path.name

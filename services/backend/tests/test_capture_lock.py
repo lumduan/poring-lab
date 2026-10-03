@@ -378,3 +378,59 @@ def test_an_xfreerdp_window_blocks_the_stream(stream_env: dict[str, str]) -> Non
     )
     streams, log = run_stream(stream_env, 2.0)
     assert streams == [] and "an xfreerdp window is on :99" in log
+
+
+# --- the clean room (Batt, 2026-10-03): variants and one-shot streams -----------------------------
+
+
+def variant_of(env: dict[str, str], body: str | None) -> str:
+    state = Path(env["LAB_STATE_DIR"])
+    if body is not None:
+        (state / "gamestream-variant").write_text(body)
+    out = subprocess.run(
+        ["bash", "-c", f'source "{STREAM_LOOP}"; read_variant; '
+         'echo "$VARIANT_CLIENT|$VARIANT_WM|$VARIANT_GDB|$VARIANT_WHY"'],
+        env=env, capture_output=True, text=True, check=True,
+    )  # fmt: skip
+    return out.stdout.strip()
+
+
+@pytest.mark.parametrize(
+    ("body", "expected"),
+    [
+        (None, "moonlight-qt|none||"),
+        ("CLIENT=s2spike\nWM=none\nGDB_AFTER_S=\n", "s2spike|none||"),
+        ("CLIENT=moonlight-qt\nWM=openbox\nGDB_AFTER_S=\n", "moonlight-qt|openbox||"),
+        ("CLIENT=moonlight-qt\nWM=none\nGDB_AFTER_S=20\n", "moonlight-qt|none|20|"),
+        ("CLIENT=matchbox\n", "moonlight-qt|none||invalid variant CLIENT=matchbox (defaults)"),
+        ("WM=openbox\nGDB_AFTER_S=$(id)\n", "moonlight-qt|none||malformed variant line"),
+        ("WM=openbox\nPATH=/tmp\n", "moonlight-qt|none||malformed variant line: PATH=/tmp"),
+        ("WM=openbox\nSHELL=bash\n", "moonlight-qt|none||invalid variant SHELL=bash (defaults)"),
+    ],
+)
+def test_variant_file_is_whitelisted(
+    stream_env: dict[str, str], body: str | None, expected: str
+) -> None:
+    got = variant_of(stream_env, body)
+    assert got.startswith(expected), got
+
+
+def test_a_clean_room_stream_is_one_shot(stream_env: dict[str, str]) -> None:
+    """Under a cleanroom REASON a client that exits is NOT relaunched until the lock changes: a
+    crashing client must never loop /launch on Sunshine while the session sits on the console."""
+    moon = Path(stream_env["MOONLIGHT_DIR"]) / "AppRun"
+    moon.write_text('#!/bin/sh\necho "$*" >>"$FAKE_MARK"\nexit 1\n')  # exits at once
+    lock = "BACKEND=console\nSEQ=9\nPHASE=steady\nREASON=cleanroom\n"
+    write_lock(Path(stream_env["LAB_STATE_DIR"]), lock)
+    streams, log = run_stream(stream_env, 4.5)  # the normal path would relaunch after 2 s
+    assert len(streams) == 1
+    assert "clean room: one-shot, waiting for a lock change" in log
+    assert "client=moonlight-qt wm=none gdb=off reason=cleanroom" in log
+
+
+def test_outside_the_clean_room_a_crashed_client_is_retried(stream_env: dict[str, str]) -> None:
+    moon = Path(stream_env["MOONLIGHT_DIR"]) / "AppRun"
+    moon.write_text('#!/bin/sh\necho "$*" >>"$FAKE_MARK"\nexit 1\n')
+    write_lock(Path(stream_env["LAB_STATE_DIR"]), "BACKEND=console\nSEQ=9\nPHASE=steady\n")
+    streams, _ = run_stream(stream_env, 4.5)
+    assert len(streams) >= 2

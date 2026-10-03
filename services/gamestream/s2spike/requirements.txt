@@ -1,0 +1,9 @@
+# S2 spike (V3) Python wheels for the gamestream image: Debian trixie's python3 3.13, x86_64.
+# Installed with `uv pip install --require-hashes --only-binary :all: --target …` in the image's
+# builder stage. Wheels, not apt: Debian's python3-av pulls libavdevice/libavfilter and a large
+# dependency set that could upgrade the libraries moonlight-qt uses (V1 must stay as-is). PyAV's
+# manylinux wheel bundles its own FFmpeg. Hashes: the exact files on PyPI (2026-10-03).
+av==19.0.1 \
+    --hash=sha256:1bea5b6134209305199bce7627ac3d33964de2cf2b09c77d08e7f67cf8bd4170
+numpy==2.5.3 \
+    --hash=sha256:a5fa86b80fd24bcd1aff83ad23be44ea323de3f787be8f8b15d4a65621e25321

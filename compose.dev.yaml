@@ -49,6 +49,19 @@ services:
       # The generated length table (_generated/, gitignored) comes with the source mount.
       - ./packages/poring_packets/src:/dev-src/poring_packets:ro
 
+  gamestream:
+    # The clean room (2026-10-03): the loop and the S2 spike run from the host source, read-only.
+    # DIRECTORY binds (no single-file inode trap) and no rebuild per change; the image keeps its own
+    # copies for a production start. The native parts (moonlight-common-c, the shim, the wheels,
+    # gdb, openbox) come only from the image.
+    command: ["/opt/gamestream-bin/gamestream-loop.sh"]
+    environment:
+      PATH: /opt/gamestream-bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      PYTHONPATH: /opt/s2spike-dev:/opt/s2spike/site
+    volumes:
+      - ./services/gamestream/bin:/opt/gamestream-bin:ro
+      - ./services/gamestream/s2spike:/opt/s2spike-dev/s2spike:ro
+
   frontend-dev:
     profiles: [dev]
     # Already on this host: no pull. (The production frontend image uses node:24.21.0-alpine.)

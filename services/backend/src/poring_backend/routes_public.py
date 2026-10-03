@@ -101,9 +101,16 @@ def offer(outbox_offer: Callable[[str], None]) -> Callable[[str], Awaitable[None
 async def health(request: Request) -> dict[str, Any]:
     state = get_state(request)
     pointer = await state.injector.pointer()
+    now = monotonic_ns()
+    last_human = state.mux.last_human_input_ns()
     return {
         "status": "ok",
         "mode": state.mux.mode,
+        # Is a human at the console right now? (the clean-room watchdog defers to it, 2026-10-03)
+        "lease_active": state.mux.lease_active(now),
+        "last_human_input_age_s": (
+            None if last_human is None else round((now - last_human) / 1e9, 1)
+        ),
         "x11": pointer is not None,
         "pointer": pointer,
         # The Windows session's area at the screen's top-left ("" = the whole screen): frames are

@@ -277,3 +277,16 @@ def test_bot_two_modifier_chords_and_the_human_are_unaffected() -> None:
     human = new_mux(Mode.HUMAN)
     for code in ("ControlLeft", "AltLeft", "ShiftLeft", "KeyS"):
         assert human.submit(HUMAN, key(code), 0).accepted
+
+
+def test_last_human_input_survives_a_mode_switch() -> None:
+    """/health's last_human_input_age_s (the clean-room watchdog defers to a human, 2026-10-03):
+    a mode switch ends the lease but not the record of when a human last acted."""
+    mux = new_mux(Mode.ASSIST)
+    assert mux.last_human_input_ns() is None
+    assert mux.submit(HUMAN, move(), 5 * S).accepted
+    mux.set_mode(Mode.HUMAN, 6 * S)
+    assert mux.lease_active(6 * S) is False
+    assert mux.last_human_input_ns() == 5 * S
+    assert not mux.submit(BOT, move(), 7 * S).accepted  # refused input is not "human activity"
+    assert mux.last_human_input_ns() == 5 * S

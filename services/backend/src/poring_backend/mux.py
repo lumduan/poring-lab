@@ -91,6 +91,9 @@ class InputMux:
         self._keys: dict[Source, set[str]] = {s: set() for s in Source}
         self._buttons: dict[Source, set[ButtonName]] = {s: set() for s in Source}
         self._last_human_ns: int | None = None
+        # Never reset by a mode switch: "is a human using the console right now?" (/health, the
+        # clean-room watchdog defers to it; 2026-10-03).
+        self._last_human_input_ns: int | None = None
 
     # --- queries ----------------------------------------------------------------------------------
 
@@ -111,6 +114,10 @@ class InputMux:
         if self.holds_anything(Source.HUMAN):
             return True
         return self._last_human_ns is not None and now_ns < self._last_human_ns + self._lease_ns
+
+    def last_human_input_ns(self) -> int | None:
+        """The last accepted human event, in any mode (None = none since boot)."""
+        return self._last_human_input_ns
 
     def lease_until_ns(self, now_ns: int) -> int | None:
         """When the ASSIST human lease ends if the human does nothing more; None = no lease."""
@@ -160,6 +167,7 @@ class InputMux:
             inject.append(Routed(source, event, synthetic=False, reason="ok"))
         if source is Source.HUMAN:
             self._last_human_ns = now_ns
+            self._last_human_input_ns = now_ns
         return Decision(True, "ok", tuple(inject))
 
     # --- internals --------------------------------------------------------------------------------

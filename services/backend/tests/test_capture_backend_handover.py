@@ -47,6 +47,8 @@ class World:
         monkeypatch.setattr(cb, "term_until_zero", self.term)
         monkeypatch.setattr(cb, "revive_rdp_loop_if_idle", lambda since: None)
         monkeypatch.setattr(cb, "verify_sunshine_revert", self.verify)
+        monkeypatch.setattr(cb, "write_variant", lambda v: self.events.append(("variant", v)))
+        monkeypatch.setattr(cb, "ensure_no_wm", lambda: self.events.append(("no-wm",)))
         monkeypatch.setattr(cb, "STREAM_EXIT_S", 0.0)
         monkeypatch.setattr(cb.time, "sleep", lambda s: self.events.append(("sleep", s)))
 
@@ -195,7 +197,7 @@ def test_an_external_clients_session_is_cancelled_without_waiting_for_a_lab_clie
     monkeypatch.setattr(cb, "count", lambda c, n: 0 if c == cb.GAMESTREAM else 1)
     assert cb.quit_stream() == "external"
     assert ("quit",) in w.events and ("session-ended",) not in w.events
-    assert "external client's session" in capsys.readouterr().out
+    assert "an external client" in capsys.readouterr().out
 
 
 def test_external_to_console_keeps_the_lab_client_holding(cb: ModuleType) -> None:
@@ -206,3 +208,100 @@ def test_external_to_console_keeps_the_lab_client_holding(cb: ModuleType) -> Non
     assert src.index('write_lock("console", "switching", EXTERNAL_REASON)') > ext
     # the external branch returns before console/steady (the lab client streams only on steady)
     assert src.index("return 0", ext) < src.index('write_lock("console", "steady"')
+
+
+# --- the clean room (Batt, 2026-10-03) -----------------------------------------------------------
+
+
+def test_to_rdp_checks_for_a_window_manager_before_rdp_may_connect(
+    cb: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """V2 runs openbox on :99; rdp-loop wakes within 1 s of the lock and has no WM check."""
+    w = World(cb)
+    w.install(monkeypatch)
+    assert cb.cmd_to_rdp(False) == 0
+    assert w.index(("no-wm",)) < w.index(("lock", "rdp", "switching"))
+    assert w.index(("lock", "rdp", "steady")) < w.index(("variant", "V1"))  # defaults restored
+
+
+class Room(World):
+    def __init__(self, cb: ModuleType, phase: str, reason: str = "cleanroom") -> None:
+        super().__init__(cb)
+        self.text = f"BACKEND=console\nSEQ=7\nPHASE={phase}\nREASON={reason}\n"
+        self.lab_clients = 0
+
+    def install(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        super().install(monkeypatch)
+        monkeypatch.setattr(self.cb, "read_host", lambda: ("console", 7, self.text))
+        monkeypatch.setattr(self.cb, "running", lambda c: True)
+        monkeypatch.setattr(
+            self.cb, "count", lambda c, n: self.lab_clients if c == self.cb.GAMESTREAM else 0
+        )
+
+
+def test_stream_writes_the_variant_then_the_steady_lock(
+    cb: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    room = Room(cb, "switching", "cleanroom-hold")
+    room.install(monkeypatch)
+    assert cb.cmd_stream("V2") == 0
+    assert room.index(("variant", "V2")) < room.index(("lock", "console", "steady"))
+
+
+@pytest.mark.parametrize(
+    ("phase", "reason", "lab_clients", "why"),
+    [
+        ("switching", "to-console-external", 0, "not in the clean room"),
+        ("switching", "to-console", 0, "not in the clean room"),
+        ("steady", "cleanroom", 0, "hold first"),
+        ("switching", "cleanroom", 1, "one client at a time"),
+    ],
+)
+def test_stream_refuses_outside_the_clean_room_or_with_a_lab_client_running(
+    cb: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    phase: str,
+    reason: str,
+    lab_clients: int,
+    why: str,
+) -> None:
+    room = Room(cb, phase, reason)
+    room.lab_clients = lab_clients
+    room.install(monkeypatch)
+    with pytest.raises(cb.Stop, match=why):
+        cb.cmd_stream("V1")
+    assert not any(e[0] in ("lock", "variant") for e in room.events)
+
+
+def test_hold_moves_the_lock_before_the_cancel_and_resets_the_variant(
+    cb: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    room = Room(cb, "steady")
+    room.lab_clients = 1
+    room.install(monkeypatch)
+    monkeypatch.setattr(cb, "quit_stream", lambda: room.events.append(("quit",)) or "clean")
+    assert cb.cmd_hold() == 0
+    lock = room.index(("lock", "console", "switching"))
+    assert lock < room.index(("quit",)) < room.index(("variant", "V1"))
+
+
+def test_variants_are_whitelisted(cb: ModuleType) -> None:
+    assert cb.variant_body("V3") == "CLIENT=s2spike\nWM=none\nGDB_AFTER_S=\n"
+    assert cb.variant_body("V2") == "CLIENT=moonlight-qt\nWM=openbox\nGDB_AFTER_S=\n"
+    with pytest.raises(cb.Stop):
+        cb.variant_body("V9; rm -rf /")
+
+
+def test_only_one_writer_at_a_time(
+    cb: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import fcntl
+
+    monkeypatch.setattr(cb, "FLOCK", tmp_path / "capture-backend.flock")
+    with (tmp_path / "capture-backend.flock").open("a+") as other:
+        fcntl.flock(other, fcntl.LOCK_EX)  # the runner (or the watchdog) holds it
+        with pytest.raises(cb.Stop, match="holds the lock"), cb.mutation_lock(0.2):
+            pass
+        fcntl.flock(other, fcntl.LOCK_UN)
+    with cb.mutation_lock(0.2):
+        pass  # free again

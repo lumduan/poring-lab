@@ -91,6 +91,82 @@ rdp_client_present() {
   xwininfo -root -tree -display "${DISPLAY}" 2>/dev/null | grep -qiE '\("xfreerdp"'
 }
 
+# --- clean-room variants (ADR-0009, Batt 2026-10-03) ---------------------------------------------
+# ${LAB_STATE_DIR}/gamestream-variant, written only by scripts/capture_backend.py `stream --variant`
+# (atomic rename; read-only here). KEY=word lines, every value WHITELISTED:
+#   CLIENT=moonlight-qt|s2spike   WM=none|openbox   GDB_AFTER_S=<seconds>|(empty)
+# Missing file or anything invalid -> the V1 defaults (moonlight-qt, no WM, no gdb), logged.
+read_variant() {
+  local file="${LAB_STATE_DIR:-/lab-state}/gamestream-variant" line key value
+  VARIANT_CLIENT=moonlight-qt VARIANT_WM=none VARIANT_GDB="" VARIANT_WHY=""
+  [[ -e "${file}" ]] || return 0
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    [[ -z "${line}" || "${line}" == \#* ]] && continue
+    if [[ ! "${line}" =~ ^([A-Z_]+)=([A-Za-z0-9_.-]*)$ ]]; then
+      VARIANT_CLIENT=moonlight-qt VARIANT_WM=none VARIANT_GDB=""
+      VARIANT_WHY="malformed variant line: ${line:0:60} (defaults)"
+      return 0
+    fi
+    key="${BASH_REMATCH[1]}" value="${BASH_REMATCH[2]}"
+    case "${key}=${value}" in
+      CLIENT=moonlight-qt | CLIENT=s2spike) VARIANT_CLIENT="${value}" ;;
+      WM=none | WM=openbox) VARIANT_WM="${value}" ;;
+      GDB_AFTER_S=) VARIANT_GDB="" ;;
+      *)
+        if [[ "${key}" == GDB_AFTER_S && "${value}" =~ ^[0-9]{1,4}$ ]]; then
+          VARIANT_GDB="${value}"
+        else
+          VARIANT_CLIENT=moonlight-qt VARIANT_WM=none VARIANT_GDB=""
+          VARIANT_WHY="invalid variant ${key}=${value:0:30} (defaults)"
+          return 0
+        fi
+        ;;
+    esac
+  done <"${file}"
+  return 0
+}
+
+# The lock's REASON (read_lock above must stay byte-identical to rdp-loop's, so this is separate).
+# A `cleanroom*` reason makes each stream ONE-SHOT: when the client exits, wait for the next lock
+# change instead of relaunching, so a crashing client can never loop /launch on Sunshine.
+lock_reason() {
+  local line
+  LOCK_REASON=""
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    [[ "${line}" =~ ^REASON=([A-Za-z0-9_.:-]*)$ ]] && LOCK_REASON="${BASH_REMATCH[1]}"
+  done 2>/dev/null <"${LAB_STATE_DIR:-/lab-state}/capture-backend"
+  return 0
+}
+
+# V2: openbox around the client only (rc.xml: no decorations, no resize, NO key/mouse bindings).
+# Its config and data live in /tmp, never in ~/.config (the pairing volume).
+start_wm() {
+  wm=""
+  [[ "${VARIANT_WM}" == openbox ]] || return 0
+  mkdir -p /tmp/xdg-openbox /tmp/xdg-data
+  XDG_CONFIG_HOME=/tmp/xdg-openbox XDG_DATA_HOME=/tmp/xdg-data \
+    openbox --config-file /opt/openbox/rc.xml --sm-disable >/tmp/openbox.log 2>&1 &
+  wm=$!
+  sleep 1
+  log "clean-room V2: openbox (pid ${wm}) manages ${DISPLAY} for this stream only"
+}
+
+stop_wm() {
+  [[ -n "${wm:-}" ]] || return 0
+  kill "${wm}" 2>/dev/null
+  wait "${wm}" 2>/dev/null
+  log "openbox stopped"
+  wm=""
+}
+
+# V3: the S2 spike (services/gamestream/s2spike), decoding in-process. Its X window is a spike-only
+# shim (x11_mirror_shim.py) so the console, rdp-loop's interlock and /health can see it.
+run_s2spike() {
+  python3 -m s2spike stream --host "${WIN_HOST}" --app "${GAMESTREAM_APP:-Desktop}" \
+    --size "$(stream_size)" --fps "${GAMESTREAM_FPS:-30}" \
+    --bitrate "${GAMESTREAM_BITRATE_KBPS:-20000}" --mirror-x
+}
+
 # The shared X socket is mounted at /x11 (read-only); a private /tmp/.X11-unix also hosts the
 # pairing display :50 (scripts/capture_backend.py pair).
 setup_display() {
@@ -208,7 +284,7 @@ main() {
   fi
   setup_display
   gamestream-unpack || { log "could not unpack moonlight-qt: idling"; exec sleep infinity; }
-  local backoff=2 rc held="" rdp_noted="" started placer
+  local backoff=2 rc held="" rdp_noted="" started placer stamp wm=""
   while true; do
     wait_for_x
     read_lock
@@ -237,17 +313,34 @@ main() {
       continue
     fi
     held="" rdp_noted=""
+    read_variant
+    lock_reason
+    [[ -n "${VARIANT_WHY}" ]] && log "${VARIANT_WHY}"
     log "capture-backend console seq=${LOCK_SEQ}: streaming ${WIN_HOST} at" \
-      "$(stream_size)@${GAMESTREAM_FPS:-30}"
+      "$(stream_size)@${GAMESTREAM_FPS:-30} (client=${VARIANT_CLIENT} wm=${VARIANT_WM}" \
+      "gdb=${VARIANT_GDB:-off} reason=${LOCK_REASON:-none})"
     started=$(date +%s)
+    stamp="$(lock_stamp)"
     mapfile -t args < <(stream_args)
+    start_wm
     place_stream &
     placer=$!
-    run_moonlight "${args[@]}"
+    if [[ "${VARIANT_CLIENT}" == s2spike ]]; then
+      run_s2spike
+    else
+      GAMESTREAM_GDB_AFTER_S="${VARIANT_GDB:-${GAMESTREAM_GDB_AFTER_S:-}}" \
+        run_moonlight "${args[@]}"
+    fi
     rc=$?
     kill "${placer}" 2>/dev/null
     wait "${placer}" 2>/dev/null
+    stop_wm
     focus_pointer_root
+    if [[ "${LOCK_REASON}" == cleanroom* ]]; then
+      log "${VARIANT_CLIENT} exited (rc=${rc}); clean room: one-shot, waiting for a lock change"
+      while [[ "$(lock_stamp)" == "${stamp}" ]]; do nap 30; done
+      continue
+    fi
     if (($(date +%s) - started > 60)); then backoff=2; fi
     log "moonlight exited (rc=${rc}); next attempt in ${backoff}s (or when the lock changes)"
     nap "${backoff}"

@@ -89,6 +89,7 @@ testpaths = [
   "packages/poring_dataset/tests",
   "services/backend/tests",
   "services/vision/tests",
+  "services/gamestream/tests",
 ]
 # vision's loop logic is tested without installing its GPU dependencies: its modules import
 # torch/ultralytics lazily, so the source tree is enough.
