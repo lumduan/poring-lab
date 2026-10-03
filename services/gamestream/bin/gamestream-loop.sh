@@ -94,16 +94,24 @@ rdp_client_present() {
 # --- clean-room variants (ADR-0009, Batt 2026-10-03) ---------------------------------------------
 # ${LAB_STATE_DIR}/gamestream-variant, written only by scripts/capture_backend.py `stream --variant`
 # (atomic rename; read-only here). KEY=word lines, every value WHITELISTED:
-#   CLIENT=moonlight-qt|s2spike   WM=none|openbox   GDB_AFTER_S=<seconds>|(empty)
+#   CLIENT=moonlight-qt|s2spike   WM=none|openbox   GDB_AFTER_S=<seconds>|(empty)   PAINT=x11|bus
+#   S2 (2026-10-03): INPUT=x11|socket, and the key->paint tail experiments' knobs (s2spike only):
+#   FPS=30|60   EVIDENCE=inline|thread   DECODE_THREADS=1|2|4
 # Missing file or anything invalid -> the V1 defaults (moonlight-qt, no WM, no gdb), logged.
+variant_defaults() {
+  VARIANT_CLIENT=moonlight-qt VARIANT_WM=none VARIANT_GDB="" VARIANT_PAINT=x11 VARIANT_INPUT=x11
+  VARIANT_FPS="" VARIANT_EVIDENCE=inline VARIANT_DECODE_THREADS=2
+}
+
 read_variant() {
   local file="${LAB_STATE_DIR:-/lab-state}/gamestream-variant" line key value
-  VARIANT_CLIENT=moonlight-qt VARIANT_WM=none VARIANT_GDB="" VARIANT_WHY="" VARIANT_PAINT=x11
+  variant_defaults
+  VARIANT_WHY=""
   [[ -e "${file}" ]] || return 0
   while IFS= read -r line || [[ -n "${line}" ]]; do
     [[ -z "${line}" || "${line}" == \#* ]] && continue
     if [[ ! "${line}" =~ ^([A-Z_]+)=([A-Za-z0-9_.-]*)$ ]]; then
-      VARIANT_CLIENT=moonlight-qt VARIANT_WM=none VARIANT_GDB="" VARIANT_PAINT=x11
+      variant_defaults
       VARIANT_WHY="malformed variant line: ${line:0:60} (defaults)"
       return 0
     fi
@@ -112,12 +120,16 @@ read_variant() {
       CLIENT=moonlight-qt | CLIENT=s2spike) VARIANT_CLIENT="${value}" ;;
       WM=none | WM=openbox) VARIANT_WM="${value}" ;;
       PAINT=x11 | PAINT=bus) VARIANT_PAINT="${value}" ;;
+      INPUT=x11 | INPUT=socket) VARIANT_INPUT="${value}" ;;
+      FPS=30 | FPS=60) VARIANT_FPS="${value}" ;;
+      EVIDENCE=inline | EVIDENCE=thread) VARIANT_EVIDENCE="${value}" ;;
+      DECODE_THREADS=1 | DECODE_THREADS=2 | DECODE_THREADS=4) VARIANT_DECODE_THREADS="${value}" ;;
       GDB_AFTER_S=) VARIANT_GDB="" ;;
       *)
         if [[ "${key}" == GDB_AFTER_S && "${value}" =~ ^[0-9]{1,4}$ ]]; then
           VARIANT_GDB="${value}"
         else
-          VARIANT_CLIENT=moonlight-qt VARIANT_WM=none VARIANT_GDB="" VARIANT_PAINT=x11
+          variant_defaults
           VARIANT_WHY="invalid variant ${key}=${value:0:30} (defaults)"
           return 0
         fi
@@ -162,14 +174,21 @@ stop_wm() {
 
 # V3: the S2 spike (services/gamestream/s2spike), decoding in-process. Its X window is a spike-only
 # shim (x11_mirror_shim.py) so the console, rdp-loop's interlock and /health can see it.
-# V3b (PAINT=bus, S2 step 3): decoded frames go to the frame bus, never into Xvfb; the window only
-# takes input.
+# V3b (PAINT=bus): decoded frames go to the frame bus, never into Xvfb; the window only takes input.
+# S2 (PAINT=bus INPUT=socket, step 3): input comes from the backend's mux over the s2-input socket;
+# no X window takes part (an unmapped presence marker keeps the interlocks).
 run_s2spike() {
   local view=(--mirror-x)
-  [[ "${VARIANT_PAINT:-x11}" == bus ]] && view=(--framebus "${FRAMEBUS_RING:-/framebus/ring}")
+  if [[ "${VARIANT_PAINT:-x11}" == bus ]]; then
+    view=(--framebus "${FRAMEBUS_RING:-/framebus/ring}")
+    if [[ "${VARIANT_INPUT:-x11}" == socket ]]; then
+      view+=(--input-socket "${S2_INPUT_SOCKET:-/s2-input/input.sock}")
+    fi
+  fi
   python3 -m s2spike stream --host "${WIN_HOST}" --app "${GAMESTREAM_APP:-Desktop}" \
-    --size "$(stream_size)" --fps "${GAMESTREAM_FPS:-30}" \
-    --bitrate "${GAMESTREAM_BITRATE_KBPS:-20000}" "${view[@]}"
+    --size "$(stream_size)" --fps "${VARIANT_FPS:-${GAMESTREAM_FPS:-30}}" \
+    --bitrate "${GAMESTREAM_BITRATE_KBPS:-20000}" --evidence "${VARIANT_EVIDENCE:-inline}" \
+    --decode-threads "${VARIANT_DECODE_THREADS:-2}" "${view[@]}"
 }
 
 # The shared X socket is mounted at /x11 (read-only); a private /tmp/.X11-unix also hosts the
@@ -323,7 +342,9 @@ main() {
     [[ -n "${VARIANT_WHY}" ]] && log "${VARIANT_WHY}"
     log "capture-backend console seq=${LOCK_SEQ}: streaming ${WIN_HOST} at" \
       "$(stream_size)@${GAMESTREAM_FPS:-30} (client=${VARIANT_CLIENT} wm=${VARIANT_WM}" \
-      "gdb=${VARIANT_GDB:-off} paint=${VARIANT_PAINT} reason=${LOCK_REASON:-none})"
+      "gdb=${VARIANT_GDB:-off} paint=${VARIANT_PAINT} input=${VARIANT_INPUT}" \
+      "fps=${VARIANT_FPS:-default} evidence=${VARIANT_EVIDENCE}" \
+      "decode_threads=${VARIANT_DECODE_THREADS} reason=${LOCK_REASON:-none})"
     started=$(date +%s)
     stamp="$(lock_stamp)"
     mapfile -t args < <(stream_args)

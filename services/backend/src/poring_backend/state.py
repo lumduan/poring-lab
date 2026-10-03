@@ -1,12 +1,14 @@
 """Process-wide backend state: the mux, the single XTest writer, the input log, the stream hub."""
 
 import asyncio
+import collections
 import contextlib
 import logging
 import time
 from collections import Counter
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from typing import Any, Protocol, TypeVar
 
 from poring_backend.capture_lock import read_cleanroom, read_lock
@@ -54,14 +56,46 @@ class XInput(Protocol):
     def close(self) -> None: ...
 
 
-class Injector:
-    """Owns the ONE XTest connection. Events are applied on a single thread, in exactly the order
-    the mux decided them; the connection is re-opened after any X error (display restart)."""
+class S2Sink(XInput, Protocol):
+    """What the injector needs from the S2 input socket's sink (poring_env.s2input)."""
 
-    def __init__(self, factory: Callable[[], XInput]) -> None:
+    leg_ns: "collections.deque[int]"
+    refused: int
+
+
+class Injector:
+    """Owns the ONE input writer (ADR-0002). Events are applied on a single thread, in exactly the
+    order the mux decided them; a sink is re-opened after any error (display restart, S2 client
+    restart).
+
+    Two sinks since S2 step 3 (ADR-0014): XTest on the lab display (RDP, Moonlight-qt, V3b) and the
+    S2 input socket (variant S2, no X window takes input). The rule, per batch: console mode AND
+    the S2 client's socket exists -> S2, else X. On a switch the old sink first gets a ReleaseAll,
+    so nothing stays held where nobody sends any more. Window polls and the pointer stay on X."""
+
+    def __init__(
+        self,
+        factory: Callable[[], XInput],
+        *,
+        s2_factory: Callable[[], S2Sink] | None = None,
+        s2_socket: Path | None = None,
+        console_mode: Callable[[], bool] = lambda: False,
+    ) -> None:
         self._factory = factory
         self._sink: XInput | None = None
-        self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="xtest")
+        self._s2_factory = s2_factory
+        self._s2: S2Sink | None = None
+        self._s2_socket = s2_socket
+        self._console_mode = console_mode
+        self.active = "x11"
+        self.switches = 0
+        self.s2_acks = 0
+        self.s2_errors = 0
+        self.s2_refused = 0
+        self._s2_leg_ns: collections.deque[int] = collections.deque(maxlen=512)
+        self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="injector")
+
+    # --- the X sink (input in RDP / Moonlight-qt / V3b, and every window poll) --------------------
 
     def _call(self, fn: Callable[[XInput], T]) -> T:
         try:
@@ -78,12 +112,69 @@ class Injector:
             with contextlib.suppress(Exception):
                 sink.close()
 
-    async def _run(self, fn: Callable[[XInput], T]) -> T:
+    # --- the S2 sink ------------------------------------------------------------------------------
+
+    def _reset_s2(self) -> None:
+        sink, self._s2 = self._s2, None
+        if sink is not None:
+            with contextlib.suppress(Exception):
+                sink.close()
+
+    def _want_s2(self) -> bool:
+        return (
+            self._s2_factory is not None
+            and self._s2_socket is not None
+            and self._console_mode()
+            and self._s2_socket.exists()
+        )
+
+    def _switch(self, to: str) -> None:
+        """Release everything on the sink being left (best effort: it may be gone already)."""
+        release: list[InputEvent] = [ReleaseAll(t_mono_ns=monotonic_ns())]
+        if self.active == "s2" and self._s2 is not None:
+            with contextlib.suppress(Exception):
+                self._s2.send_many(release)
+            self._reset_s2()  # the S2 client also releases what a closed peer held
+        elif self.active == "x11" and self._sink is not None:
+            with contextlib.suppress(Exception):
+                self._sink.send_many(release)
+        log.info("input sink %s -> %s", self.active, to)
+        self.active = to
+        self.switches += 1
+
+    def _send(self, events: list[InputEvent]) -> None:
+        want = "s2" if self._want_s2() else "x11"
+        if want != self.active:
+            self._switch(want)
+        if want == "x11":
+            self._call(lambda sink: sink.send_many(events))
+            return
+        assert self._s2_factory is not None
+        try:
+            if self._s2 is None:
+                self._s2 = self._s2_factory()
+            before = self._s2.refused
+            self._s2.send_many(events)
+        except Exception:
+            self.s2_errors += 1
+            self._reset_s2()
+            raise
+        self.s2_acks += 1
+        self.s2_refused += self._s2.refused - before
+        if self._s2.leg_ns:
+            self._s2_leg_ns.append(self._s2.leg_ns[-1])
+
+    # --- the async API ----------------------------------------------------------------------------
+
+    async def _job(self, fn: Callable[[], T]) -> T:
         # run_in_executor is called before the first await, so jobs queue in call order.
-        return await asyncio.get_running_loop().run_in_executor(self._executor, self._call, fn)
+        return await asyncio.get_running_loop().run_in_executor(self._executor, fn)
+
+    async def _run(self, fn: Callable[[XInput], T]) -> T:
+        return await self._job(lambda: self._call(fn))
 
     async def apply(self, events: list[InputEvent]) -> None:
-        await self._run(lambda sink: sink.send_many(events))
+        await self._job(lambda: self._send(events))
 
     async def pointer(self) -> tuple[int, int] | None:
         try:
@@ -98,14 +189,43 @@ class Injector:
             return None
 
     async def stream_window_present(self) -> bool | None:
-        """A Moonlight (console-mode, ADR-0009) window on the display."""
+        """A Moonlight (console-mode, ADR-0009) window on the display -- or the S2 client's
+        unmapped presence marker (same WM_CLASS)."""
         try:
             return await self._run(lambda sink: sink.has_window_class("moonlight"))
         except Exception:
             return None
 
+    def _snapshot(self) -> dict[str, Any]:
+        legs = sorted(self._s2_leg_ns)
+
+        def pct(p: float) -> float | None:
+            return round(legs[min(len(legs) - 1, int(p * len(legs)))] / 1e6, 2) if legs else None
+
+        return {
+            "active": self.active,
+            "switches": self.switches,
+            "s2_available": self._want_s2(),
+            "s2_connected": self._s2 is not None,
+            "s2_acks": self.s2_acks,
+            "s2_errors": self.s2_errors,
+            "s2_refused": self.s2_refused,
+            # sent -> the S2 client's LiSend* calls returned (the socket leg; same host clock)
+            "s2_leg_ms_p50": pct(0.5),
+            "s2_leg_ms_p95": pct(0.95),
+            "s2_leg_n": len(legs),
+        }
+
+    async def snapshot(self) -> dict[str, Any]:
+        """For /health, on the injector's thread: its deque is never read while written."""
+        return await self._job(self._snapshot)
+
     async def close(self) -> None:
-        await asyncio.get_running_loop().run_in_executor(self._executor, self._reset)
+        def shut() -> None:
+            self._reset()
+            self._reset_s2()
+
+        await asyncio.get_running_loop().run_in_executor(self._executor, shut)
         self._executor.shutdown(wait=False, cancel_futures=True)
 
 
@@ -129,6 +249,7 @@ class AppState:
         *,
         capture_factory: Callable[[], FrameSource],
         input_factory: Callable[[], XInput],
+        s2_input_factory: Callable[[], S2Sink] | None = None,
         clipboard_factory: Callable[[], SelectionIO] | None = None,
         damage_factory: Callable[[Callable[[int], None]], ChangeWatcher] | None = None,
     ) -> None:
@@ -145,7 +266,13 @@ class AppState:
             self.clipboard = ClipboardService(
                 clipboard_factory, settle_s=settings.clipboard_settle_s
             )
-        self.injector = Injector(input_factory)
+        # XTest, or the S2 input socket in console mode with a live S2 client (ADR-0014).
+        self.injector = Injector(
+            input_factory,
+            s2_factory=s2_input_factory,
+            s2_socket=settings.s2_input_socket,
+            console_mode=lambda: self.capture.backend == "console",
+        )
         # Phase 0: runtime-switchable stream/console tuning, and latency instrumentation (memory).
         self.tuning = StreamTuning(
             capture=settings.stream_capture,
@@ -402,7 +529,9 @@ class AppState:
                 record.accepted = decision.accepted
         await self._inject(routed)
         if records is not None and routed:
-            injected = monotonic_ns()  # X has processed the XTest requests (the injector syncs)
+            # X has processed the XTest requests (the injector syncs), or the S2 client's LiSend*
+            # calls returned (the injector waits for its ack).
+            injected = monotonic_ns()
             for record in records:
                 if record.accepted:
                     record.t_injected = injected

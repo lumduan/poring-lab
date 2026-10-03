@@ -27,10 +27,12 @@ rdp-loop.sh connects only while it says ``rdp``; gamestream-loop.sh streams only
         with the lock at console/switching, so the lab client holds and an external one streams.
         --cleanroom (Batt, 2026-10-03): the same stop, REASON `cleanroom`, for the clean-room
         experiment: the session stays on the console while lab-client variants take turns:
-    capture_backend.py stream --variant V1|V1gdb|V2|V3|V3b [--box-until UNIX]
+    capture_backend.py stream --variant V1|V1gdb|V2|V3|V3b|S2 [--knob K=V ...] [--box-until UNIX]
         Clean room only (lock console + REASON cleanroom*, phase switching): refuses unless NO lab
         client runs in gamestream (one client at a time, enforced), writes the whitelisted variant
-        file `state/gamestream-variant` (CLIENT/WM/GDB_AFTER_S), then console/steady.
+        file `state/gamestream-variant` (CLIENT/WM/GDB_AFTER_S/PAINT/INPUT + knobs), then
+        console/steady. --knob (S2 only; the key->paint tail experiments, one variable per run):
+        FPS=30|60, EVIDENCE=inline|thread, DECODE_THREADS=1|2|4.
         The console shows the clean room from `state/cleanroom` (VARIANT/BOX_UNTIL/HARD_CAP):
         to-console --cleanroom --hard-cap UNIX creates it, stream updates it, to-rdp removes it.
     capture_backend.py hold
@@ -655,9 +657,16 @@ VARIANTS = {
     "V1gdb": {"CLIENT": "moonlight-qt", "WM": "none", "GDB_AFTER_S": "20"},
     "V2": {"CLIENT": "moonlight-qt", "WM": "openbox", "GDB_AFTER_S": ""},
     "V3": {"CLIENT": "s2spike", "WM": "none", "GDB_AFTER_S": ""},
-    # S2 step 3: the same client, frames to the frame bus (never Xvfb); the window takes input only
+    # The same client, frames to the frame bus (never Xvfb); the X window takes input only
     "V3b": {"CLIENT": "s2spike", "WM": "none", "GDB_AFTER_S": "", "PAINT": "bus"},
+    # S2 step 3 (2026-10-03): frames to the bus, input from the mux over the s2-input socket; no X
+    # window takes part (an unmapped presence marker keeps the interlocks). ADR-0014.
+    "S2": {"CLIENT": "s2spike", "WM": "none", "GDB_AFTER_S": "", "PAINT": "bus", "INPUT": "socket"},
 }
+# The key->paint tail experiments' knobs (docs/benchmarks/s2-latency-experiments.md): S2 only, every
+# value whitelisted here AND in gamestream-loop.sh's read_variant.
+KNOBS = {"FPS": ("30", "60"), "EVIDENCE": ("inline", "thread"), "DECODE_THREADS": ("1", "2", "4")}
+KNOB_VARIANTS = ("S2",)
 WM_NAMES = "openbox"
 FLOCK = Path(
     os.environ.get("CAPTURE_BACKEND_FLOCK", "/dev/shm/poring-lab-tmp/capture-backend.flock")
@@ -674,15 +683,30 @@ def lock_phase(text: str) -> str:
     return match.group(1) if match else ""
 
 
-def variant_body(variant: str) -> str:
+def parse_knobs(knobs: list[str] | None, variant: str) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for knob in knobs or []:
+        key, _, value = knob.partition("=")
+        if key not in KNOBS or value not in KNOBS[key]:
+            raise Stop(f"knob {knob!r} is not whitelisted ({KNOBS})")
+        if key in out:
+            raise Stop(f"knob {key} given twice")
+        out[key] = value
+    if out and variant not in KNOB_VARIANTS:
+        raise Stop(f"knobs are for {', '.join(KNOB_VARIANTS)} only, not {variant}")
+    return out
+
+
+def variant_body(variant: str, knobs: dict[str, str] | None = None) -> str:
     if variant not in VARIANTS:
         raise Stop(f"unknown variant {variant!r} (one of {', '.join(VARIANTS)})")
-    return "".join(f"{k}={v}\n" for k, v in VARIANTS[variant].items())
+    lines = {**VARIANTS[variant], **(knobs or {})}
+    return "".join(f"{k}={v}\n" for k, v in lines.items())
 
 
-def write_variant(variant: str) -> None:
+def write_variant(variant: str, knobs: dict[str, str] | None = None) -> None:
     """Atomic write + read-back on the host and in gamestream (the only reader)."""
-    body = variant_body(variant)
+    body = variant_body(variant, knobs)
     STATE.mkdir(exist_ok=True)
     tmp = STATE / f".{VARIANT_NAME}.tmp"
     tmp.write_text(body, encoding="ascii")
@@ -758,7 +782,9 @@ def cleanroom_lock() -> tuple[str, str]:
     return lock_phase(text), reason
 
 
-def cmd_stream(variant: str, box_until: int | None = None) -> int:
+def cmd_stream(
+    variant: str, box_until: int | None = None, knobs: dict[str, str] | None = None
+) -> int:
     phase, _ = cleanroom_lock()
     if phase != "switching":
         raise Stop("a stream is already on (console/steady): hold first")
@@ -767,7 +793,7 @@ def cmd_stream(variant: str, box_until: int | None = None) -> int:
     lab_clients = count(GAMESTREAM, STREAM_NAMES)
     if lab_clients:
         raise Stop(f"{lab_clients} lab client process(es) still run: one client at a time")
-    write_variant(variant)
+    write_variant(variant, knobs)
     write_cleanroom(variant, box_until, cleanroom_field("HARD_CAP"))
     since = utc_now()
     body = write_lock("console", "steady", CLEANROOM_REASON)
@@ -837,6 +863,7 @@ def main() -> int:
     stream = sub.add_parser("stream")
     stream.add_argument("--variant", required=True, choices=sorted(VARIANTS))
     stream.add_argument("--box-until", type=int, help="unix time the variant's box ends")
+    stream.add_argument("--knob", action="append", help="S2 experiment knob K=V (whitelisted)")
     sub.add_parser("hold")
     pair = sub.add_parser("pair")
     pair.add_argument("pin")
@@ -853,7 +880,7 @@ def main() -> int:
         if args.cmd == "pair":
             return cmd_pair(args.pin)
         if args.cmd == "stream":
-            return cmd_stream(args.variant, args.box_until)
+            return cmd_stream(args.variant, args.box_until, parse_knobs(args.knob, args.variant))
         if args.cmd == "hold":
             return cmd_hold()
         if args.external and args.cleanroom:

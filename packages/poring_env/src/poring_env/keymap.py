@@ -120,6 +120,65 @@ EVDEV_BY_CODE: dict[str, int] = {
 
 EVDEV_TO_X11_OFFSET = 8
 
+# KeyboardEvent.code -> Windows virtual-key code, as Moonlight-qt 6.1.0 sends them (keyboard.cpp):
+# the S2 path's input socket (s2-plan section 4) sends VKs by PHYSICAL position; Sunshine turns
+# each back into a US-layout scancode, so Windows applies ITS layout (Thai Kedmanee included).
+# The source of truth: services/gamestream/s2spike/vk.py keeps a byte-equal copy (drift-tested;
+# that image has no poring_env).
+VK_BY_CODE: dict[str, int] = {
+    **{f"Key{c}": 0x41 + i for i, c in enumerate("ABCDEFGHIJKLMNOPQRSTUVWXYZ")},
+    **{f"Digit{d}": 0x30 + d for d in range(10)},
+    **{f"F{n}": 0x70 + n - 1 for n in range(1, 13)},
+    **{f"Numpad{d}": 0x60 + d for d in range(10)},
+    "Escape": 0x1B,
+    "Minus": 0xBD,
+    "Equal": 0xBB,
+    "Backspace": 0x08,
+    "Tab": 0x09,
+    "BracketLeft": 0xDB,
+    "BracketRight": 0xDD,
+    "Enter": 0x0D,
+    "NumpadEnter": 0x0D,  # Moonlight-qt sends VK_RETURN for both ("FIXME: Is this correct?")
+    "ControlLeft": 0xA2,
+    "ControlRight": 0xA3,
+    "Semicolon": 0xBA,
+    "Quote": 0xDE,
+    "Backquote": 0xC0,
+    "ShiftLeft": 0xA0,
+    "ShiftRight": 0xA1,
+    "Backslash": 0xDC,
+    "IntlBackslash": 0xE2,
+    "Comma": 0xBC,
+    "Period": 0xBE,
+    "Slash": 0xBF,
+    "NumpadMultiply": 0x6A,
+    "NumpadAdd": 0x6B,
+    "NumpadSubtract": 0x6D,
+    "NumpadDecimal": 0x6E,
+    "NumpadDivide": 0x6F,
+    "AltLeft": 0xA4,
+    "AltRight": 0xA5,
+    "Space": 0x20,
+    "CapsLock": 0x14,
+    "NumLock": 0x90,
+    "ScrollLock": 0x91,
+    "PrintScreen": 0x2C,
+    "Pause": 0x13,
+    "Home": 0x24,
+    "End": 0x23,
+    "PageUp": 0x21,
+    "PageDown": 0x22,
+    "Insert": 0x2D,
+    "Delete": 0x2E,
+    "ArrowLeft": 0x25,
+    "ArrowUp": 0x26,
+    "ArrowRight": 0x27,
+    "ArrowDown": 0x28,
+    "MetaLeft": 0x5B,
+    "MetaRight": 0x5C,
+    "ContextMenu": 0x5D,
+}
+
 CONTROL_CODES = frozenset({"ControlLeft", "ControlRight"})
 ALT_CODES = frozenset({"AltLeft", "AltRight"})
 SHIFT_CODES = frozenset({"ShiftLeft", "ShiftRight"})
@@ -132,6 +191,13 @@ class UnknownKeyCode(ValueError):
 
 def is_known(code: str) -> bool:
     return code in EVDEV_BY_CODE
+
+
+def windows_vk(code: str) -> int:
+    try:
+        return VK_BY_CODE[code]
+    except KeyError:
+        raise UnknownKeyCode(code) from None
 
 
 def x11_keycode(code: str) -> int:

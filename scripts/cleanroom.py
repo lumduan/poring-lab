@@ -9,7 +9,7 @@ runner, the watchdog and a human).
     cleanroom.py preflight                    lock rdp/steady, one xfreerdp, ASSIST, GM online,
                                               Sunshine paired (s2spike serverinfo), new image
     cleanroom.py start [--hard-cap-min 180]   the watchdog (detached), then to-console --cleanroom
-    cleanroom.py variant V1|V1gdb|V2|V3|V3b [--box-min N]
+    cleanroom.py variant V1|V1gdb|V2|V3|V3b|S2 [--box-min N] [--knob K=V ...]
                                               stream -> first picture <= 90 s -> 60 s steady ->
                                               hold -> stream again (reliable?) ; black: diagnostics
                                               -> hold. Leaves a RELIABLE variant streaming (for the
@@ -49,7 +49,8 @@ PY = str(REPO / ".venv" / "bin" / "python")
 CB = [PY, str(REPO / "scripts" / "capture_backend.py")]
 GAMESTREAM = "poring-lab-gamestream-1"
 UNIT = "poring-cleanroom-watchdog"
-BOXES_MIN = {"V1": 20, "V1gdb": 10, "V2": 30, "V3": 60, "V3b": 60, "checks": 45}
+BOXES_MIN = {"V1": 20, "V1gdb": 10, "V2": 30, "V3": 60, "V3b": 60, "S2": 60, "checks": 45}
+S2_CLIENTS = ("V3", "V3b", "S2")  # the s2spike variants (v3-stats.json, its diagnostics)
 WATCHDOG_GRACE_S = 5 * 60  # the runner's own hold-and-advance wins
 HEARTBEAT_STALE_S = 10 * 60
 HUMAN_RECENT_S = 120
@@ -401,7 +402,7 @@ def cmd_start(hard_cap_min: float) -> int:
     return 0
 
 
-def cmd_variant(variant: str, box_min: float | None) -> int:
+def cmd_variant(variant: str, box_min: float | None, knobs: list[str] | None = None) -> int:
     box = (box_min or BOXES_MIN[variant]) * 60
     t0 = time.time()
     heartbeat()
@@ -410,9 +411,11 @@ def cmd_variant(variant: str, box_min: float | None) -> int:
     box_until = str(int(t0 + box))
     stop = {"flag": False}
     signal.signal(signal.SIGTERM, lambda *_: stop.update(flag=True))
-    result: dict[str, Any] = {"variant": variant, "started": utc_now()}
+    result: dict[str, Any] = {"variant": variant, "knobs": knobs or [], "started": utc_now()}
     since = utc_now()
-    if cb("stream", "--variant", variant, "--box-until", box_until, timeout=120).returncode != 0:
+    knob_args = [a for k in knobs or [] for a in ("--knob", k)]
+    stream_args = ("stream", "--variant", variant, *knob_args, "--box-until", box_until)
+    if cb(*stream_args, timeout=120).returncode != 0:
         result["verdict"] = "stream-refused"
         return finish(status, result)
     first = wait_picture(FIRST_PICTURE_S, stop)
@@ -431,7 +434,7 @@ def cmd_variant(variant: str, box_min: float | None) -> int:
         return finish(status, result)
     cb("hold", timeout=180)
     heartbeat()
-    if cb("stream", "--variant", variant, "--box-until", box_until, timeout=120).returncode != 0:
+    if cb(*stream_args, timeout=120).returncode != 0:
         result["verdict"] = "restream-refused"
         return finish(status, result)
     again = wait_picture(FIRST_PICTURE_S, stop)
@@ -441,7 +444,7 @@ def cmd_variant(variant: str, box_min: float | None) -> int:
         cb("hold", timeout=180)
     else:
         result["frames"].append(shot(f"{variant}-second"))
-    result["v3_stats"] = v3_stats() if variant in ("V3", "V3b") else None
+    result["v3_stats"] = v3_stats() if variant in S2_CLIENTS else None
     return finish(status, result)
 
 
@@ -513,7 +516,7 @@ def diagnostics(variant: str, since: str) -> dict[str, Any]:
             capture_output=True, text=True, check=False, timeout=30,
         ).stdout  # fmt: skip
         out["threads"] = wchan.strip().splitlines()[:40]
-    if variant in ("V3", "V3b"):
+    if variant in S2_CLIENTS:
         out["v3_stats"] = v3_stats()
     return out
 
@@ -573,6 +576,7 @@ def main() -> int:
     va = sub.add_parser("variant")
     va.add_argument("variant", choices=sorted(BOXES_MIN.keys() - {"checks"}))
     va.add_argument("--box-min", type=float)
+    va.add_argument("--knob", action="append", help="S2 only: an experiment knob K=V")
     ch = sub.add_parser("checks")
     ch.add_argument("--box-min", type=float, default=BOXES_MIN["checks"])
     for name in ("hold", "heartbeat", "status", "end", "watchdog"):
@@ -586,7 +590,7 @@ def main() -> int:
     if args.cmd == "start":
         return cmd_start(args.hard_cap_min)
     if args.cmd == "variant":
-        return cmd_variant(args.variant, args.box_min)
+        return cmd_variant(args.variant, args.box_min, args.knob)
     if args.cmd == "checks":
         return cmd_checks(args.box_min)
     if args.cmd == "hold":

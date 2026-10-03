@@ -115,6 +115,8 @@ async def health(request: Request) -> dict[str, Any]:
         ),
         "x11": pointer is not None,
         "pointer": pointer,
+        # ADR-0014: where the mux's input goes -- XTest, or the S2 input socket (variant S2).
+        "input_sink": await state.injector.snapshot(),
         # The Windows session's area at the screen's top-left ("" = the whole screen): frames are
         # cropped to it and input is normalised over it (ADR-0009 amendment, 2026-10-02).
         "session_size": state.settings.session_size,

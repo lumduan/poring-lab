@@ -344,6 +344,7 @@ def test_gamestream_service_is_contained() -> None:
         "./state:/lab-state:ro",
         "gamestream-state:/home/desk/.config",
         "framebus:/framebus",
+        "s2-input:/s2-input",
     }
     env = gs.get("environment", {})
     assert not any(k.startswith("RDP_") for k in env), "no RDP credentials in gamestream"
@@ -556,3 +557,25 @@ def test_the_frame_bus_is_a_capped_tmpfs_charged_to_its_writer() -> None:
     assert size is not None and int(size.group(1)) <= 64
     gs = cfg["services"]["gamestream"]
     assert gs["mem_limit"] == gs["memswap_limit"] == "1600m"  # 1536m + the 64 MiB ring
+
+
+# --- S2 input socket (ADR-0014, S2 step 3) --------------------------------------------------------
+S2_INPUT_MOUNTS = {"gamestream": ["s2-input:/s2-input"], "backend": ["s2-input:/s2-input"]}
+
+
+@pytest.mark.parametrize("name", ["compose.yaml", "compose.dev.yaml"])
+def test_the_s2_input_socket_is_mounted_in_gamestream_and_backend_only(name: str) -> None:
+    """An input path into Windows: the listener (the S2 client) and the ONE input writer (the
+    backend's Injector) only. Never vision -- the bot reaches Windows only through the mux."""
+    for svc, spec in compose(name)["services"].items():
+        mounts = mounts_of(spec or {}, "s2-input")
+        if name == "compose.dev.yaml" and svc in S2_INPUT_MOUNTS:
+            assert mounts in ([], S2_INPUT_MOUNTS[svc]), f"{name}: {svc} {mounts}"  # base adds it
+            continue
+        assert mounts == S2_INPUT_MOUNTS.get(svc, []), f"{name}: {svc} {mounts}"
+
+
+def test_the_s2_input_volume_is_a_tiny_private_tmpfs() -> None:
+    opts = compose("compose.yaml")["volumes"]["s2-input"]["driver_opts"]
+    assert (opts["type"], opts["device"]) == ("tmpfs", "tmpfs")
+    assert "size=1m" in opts["o"] and "mode=0750" in opts["o"] and "uid=1000" in opts["o"]

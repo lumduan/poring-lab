@@ -10,6 +10,7 @@ import os
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Protocol
 
 from poring_env.frame import Frame
@@ -86,6 +87,8 @@ class AgentConfig:
     hz: float
     max_vram_fraction: float
     debug_box: bool
+    frame_source: str  # VISION_FRAME_SOURCE: auto | bus | x11 (ADR-0014)
+    framebus: str
 
     @classmethod
     def from_env(cls) -> "AgentConfig":
@@ -96,7 +99,31 @@ class AgentConfig:
             hz=float(os.environ.get("AGENT_HZ", "10")),
             max_vram_fraction=float(os.environ.get("VISION_MAX_VRAM_FRACTION", "0.25")),
             debug_box=os.environ.get("VISION_DEBUG_BOX", "false").lower() == "true",
+            frame_source=os.environ.get("VISION_FRAME_SOURCE", "auto"),
+            framebus=os.environ.get("FRAMEBUS_RING", "/framebus/ring"),
         )
+
+
+def pick_frame_source(choice: str, ring: str, *, stale_s: float = 2.0) -> str:
+    """``bus`` / ``x11`` as configured; ``auto`` = the S2 frame bus when its writer is live (a
+    heartbeat under ``stale_s``), else X. Decided once at start: a stream that starts later needs
+    a restart of the loop (the bus and X number frames differently)."""
+    if choice in ("bus", "x11"):
+        return choice
+    if choice != "auto":
+        raise ValueError(f"VISION_FRAME_SOURCE must be auto, bus or x11, not {choice!r}")
+    from poring_env.framebus import FrameBusError, FrameBusReader
+
+    try:
+        reader = FrameBusReader(Path(ring), "vision-probe")
+    except (FrameBusError, OSError):
+        return "x11"
+    try:
+        return "bus" if reader.writer().heartbeat_age_s < stale_s else "x11"
+    except FrameBusError:
+        return "x11"
+    finally:
+        reader.close()
 
 
 def main() -> None:
@@ -105,17 +132,26 @@ def main() -> None:
     )
     cfg = AgentConfig.from_env()
 
-    from poring_env.remote import BackendInputSink, MuxedEnv
-    from poring_env.x11 import X11Capture, parse_session_size
+    from poring_env.remote import make_env
     from poring_vision.gpu import configure_gpu
 
     configure_gpu(cfg.max_vram_fraction)
     detector: Detector = DebugBoxDetector() if cfg.debug_box else NullDetector()
-    sink = BackendInputSink(cfg.backend_url, agent_id="vision", version=__version__)
-    log.info("agent loop at %.1f Hz, detector=%s", cfg.hz, type(detector).__name__)
-    # Grab exactly the area the backend normalises input over, or clicks would land off target.
-    capture = X11Capture(cfg.display, session=parse_session_size(cfg.session_size))
-    with MuxedEnv(capture, sink) as env:
+    source = pick_frame_source(cfg.frame_source, cfg.framebus)
+    log.info("agent loop at %.1f Hz, detector=%s, frames from %s", cfg.hz,
+             type(detector).__name__, source)  # fmt: skip
+    if source == "bus":
+        # ADR-0014: the S2 frame bus (the stream's session-sized frames); no X at all.
+        env = make_env("gamestream", backend_url=cfg.backend_url, agent_id="vision",
+                       version=__version__, ring=cfg.framebus)  # fmt: skip
+    else:
+        from poring_env.x11 import parse_session_size
+
+        # Grab exactly the area the backend normalises input over, or clicks would land off target.
+        session = parse_session_size(cfg.session_size)
+        env = make_env("x11", backend_url=cfg.backend_url, agent_id="vision", version=__version__,
+                       display=cfg.display, session=session)  # fmt: skip
+    with env:
         run(env, detector, IdlePolicy(), hz=cfg.hz)
 
 

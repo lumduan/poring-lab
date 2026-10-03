@@ -64,6 +64,9 @@ class Settings(BaseSettings):
     # S2 frame bus (docs/s2-plan.md): in console mode with a live writer, the console stream reads
     # decoded frames from this ring instead of grabbing X. CONSOLE_FPS caps that human view.
     framebus_path: Path = Path("/framebus/ring")
+    # S2 input socket (ADR-0014): in console mode, while the S2 client listens here, the Injector
+    # sends the mux's events to it instead of XTest.
+    s2_input_socket: Path = Path("/s2-input/input.sock")
     console_fps: float = 15.0
     transfer_max_bytes: int = 512 * 1024 * 1024
     # Pause between xfreerdp announcing the text to Windows and the Ctrl+V (RDP format-list trip).

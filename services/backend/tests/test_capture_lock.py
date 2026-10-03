@@ -426,7 +426,8 @@ def test_a_clean_room_stream_is_one_shot(stream_env: dict[str, str]) -> None:
     streams, log = run_stream(stream_env, 4.5)  # the normal path would relaunch after 2 s
     assert len(streams) == 1
     assert "clean room: one-shot, waiting for a lock change" in log
-    assert "client=moonlight-qt wm=none gdb=off paint=x11 reason=cleanroom" in log
+    assert "client=moonlight-qt wm=none gdb=off paint=x11 input=x11" in log
+    assert "fps=default evidence=inline decode_threads=2 reason=cleanroom" in log
 
 
 def test_outside_the_clean_room_a_crashed_client_is_retried(stream_env: dict[str, str]) -> None:
@@ -522,3 +523,83 @@ def test_v3b_streams_to_the_frame_bus_never_into_xvfb(
     got_paint, command = out.stdout.strip().splitlines()
     assert got_paint == paint
     assert command.startswith("-m s2spike stream --host win.test") and command.endswith(args)
+
+
+S2_BODY = "CLIENT=s2spike\nWM=none\nGDB_AFTER_S=\nPAINT=bus\nINPUT=socket\n"
+
+
+@pytest.mark.parametrize(
+    ("extra", "expected"),
+    [
+        (
+            "",
+            "--fps 30 --bitrate 20000 --evidence inline --decode-threads 2 "
+            "--framebus /framebus/ring --input-socket /s2-input/input.sock",
+        ),
+        ("FPS=60\n", "--fps 60 "),
+        ("EVIDENCE=thread\n", "--evidence thread "),
+        ("DECODE_THREADS=4\n", "--decode-threads 4 "),
+        # off the whitelist -> the V1 defaults: moonlight-qt, never a half-applied S2
+        ("FPS=120\n", "DEFAULTS"),
+        ("DECODE_THREADS=3\n", "DEFAULTS"),
+        ("EVIDENCE=off\n", "DEFAULTS"),
+    ],
+)
+def test_s2_takes_input_from_the_socket_and_only_whitelisted_knobs(
+    stream_env: dict[str, str], extra: str, expected: str
+) -> None:
+    """S2 (ADR-0014): PAINT=bus + INPUT=socket -> --framebus and --input-socket; the experiment
+    knobs are keyword-whitelisted like every other variant key."""
+    state = Path(stream_env["LAB_STATE_DIR"])
+    (state / "gamestream-variant").write_text(S2_BODY + extra)
+    out = subprocess.run(
+        ["bash", "-c", f'source "{STREAM_LOOP}"; read_variant; echo "$VARIANT_CLIENT"; '
+         'python3() { echo "$*"; }; run_s2spike'],
+        env=stream_env, capture_output=True, text=True, check=True,
+    )  # fmt: skip
+    client, command = out.stdout.strip().splitlines()
+    if expected == "DEFAULTS":
+        assert client == "moonlight-qt" and "--input-socket" not in command
+    else:
+        assert client == "s2spike" and expected in command
+
+
+def test_input_socket_needs_the_bus(stream_env: dict[str, str]) -> None:
+    """INPUT=socket without PAINT=bus is the V3 X mirror: no socket flag (the client refuses it)."""
+    state = Path(stream_env["LAB_STATE_DIR"])
+    (state / "gamestream-variant").write_text("CLIENT=s2spike\nINPUT=socket\n")
+    out = subprocess.run(
+        ["bash", "-c", f'source "{STREAM_LOOP}"; read_variant; python3() {{ echo "$*"; }}; '
+         "run_s2spike"],
+        env=stream_env, capture_output=True, text=True, check=True,
+    )  # fmt: skip
+    assert out.stdout.strip().endswith("--mirror-x")
+
+
+def test_the_python_and_bash_variant_whitelists_agree() -> None:
+    """capture_backend.py writes only what gamestream-loop.sh accepts (all variants and knobs)."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "capture_backend_wl", ROOT / "scripts" / "capture_backend.py"
+    )
+    assert spec and spec.loader
+    cb = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cb)
+    loop = STREAM_LOOP.read_text()
+    for variant, keys in cb.VARIANTS.items():
+        for key, value in keys.items():
+            if key == "GDB_AFTER_S":
+                continue
+            assert f"{key}={value})" in loop or f"{key}={value} |" in loop, (variant, key, value)
+    for key, values in cb.KNOBS.items():
+        for value in values:
+            assert f"{key}={value}" in loop, (key, value)
+    knobs = cb.parse_knobs(["FPS=60", "EVIDENCE=thread"], "S2")
+    assert knobs == {"FPS": "60", "EVIDENCE": "thread"}
+    for bad, variant in ((["FPS=120"], "S2"), (["FPS=60"], "V3b"), (["FPS=60", "FPS=30"], "S2"),
+                         (["PATH=/x"], "S2")):  # fmt: skip
+        with pytest.raises(SystemExit):
+            cb.parse_knobs(bad, variant)
+    body = cb.variant_body("S2", {"FPS": "60"})
+    assert body.endswith("INPUT=socket\nFPS=60\n")

@@ -5,7 +5,8 @@ The lab's keys are physical positions end to end (poring_env/keymap.py: Keyboard
 (app/streaming/input/keyboard.cpp) and sends `0x8000 | VK`; Sunshine turns each VK back into a
 US-layout scancode, so Windows applies ITS layout (Thai Kedmanee included) -- the same path as V1.
 
-CODE_TO_VK is keyed by KeyboardEvent.code; EVDEV_TO_VK (what the X shim needs: keycode - 8) is
+CODE_TO_VK is keyed by KeyboardEvent.code (a byte-equal copy of poring_env.keymap.VK_BY_CODE, the
+source of truth, drift-tested); EVDEV_TO_VK (what the X shim needs: keycode - 8) is
 derived from a copy of keymap.py's evdev numbers that tests/test_s2spike.py keeps in lock-step
 (this package runs in the gamestream image, where poring_env is not installed).
 """

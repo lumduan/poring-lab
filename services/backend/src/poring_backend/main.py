@@ -22,7 +22,7 @@ from poring_backend.routes_packets import router as packets_router
 from poring_backend.routes_public import router as public_router
 from poring_backend.routes_transfer import router as transfer_router
 from poring_backend.routes_transfer import sweep_partials
-from poring_backend.state import AppState, XInput
+from poring_backend.state import AppState, S2Sink, XInput
 from poring_backend.stream import ChangeWatcher
 from poring_env.env import FrameSource
 
@@ -32,6 +32,7 @@ def create_app(
     *,
     capture_factory: Callable[[], FrameSource] | None = None,
     input_factory: Callable[[], XInput] | None = None,
+    s2_input_factory: Callable[[], S2Sink] | None = None,
     clipboard_factory: Callable[[], SelectionIO] | None = None,
     damage_factory: Callable[[Callable[[int], None]], ChangeWatcher] | None = None,
 ) -> FastAPI:
@@ -47,6 +48,13 @@ def create_app(
         from poring_env.x11 import X11Input, parse_session_size
 
         return X11Input(cfg.display, session=parse_session_size(cfg.session_size))
+
+    def default_s2_input() -> S2Sink:
+        from poring_env.s2input import GameStreamInput
+        from poring_env.x11 import parse_session_size
+
+        size = parse_session_size(cfg.session_size) or (1440, 900)
+        return GameStreamInput(cfg.s2_input_socket, size=size)
 
     def default_damage(on_damage: Callable[[int], None]) -> ChangeWatcher:
         from poring_backend.damage import DamageWatcher
@@ -64,6 +72,7 @@ def create_app(
             cfg,
             capture_factory=capture_factory or default_capture,
             input_factory=input_factory or default_input,
+            s2_input_factory=s2_input_factory or default_s2_input,
             clipboard_factory=clipboard_factory or default_clipboard,
             damage_factory=damage_factory or default_damage,
         )

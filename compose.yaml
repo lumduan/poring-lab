@@ -201,6 +201,9 @@ services:
       - ./state:/lab-state:ro
       # S2 frame bus (docs/s2-plan.md): decoded console frames, read-only here.
       - framebus:/framebus:ro
+      # S2 input socket (ADR-0014): the Injector -- the ONE input writer -- sends the mux's events
+      # to the S2 client here. Backend + gamestream only (tests/test_guards.py).
+      - s2-input:/s2-input
     ports:
       - "${HOST_LAN_IP:?}:8000:8000" # /health, /ws/stream, /ws/input
     # 8001 (/internal/agent) is deliberately NOT published: compose network only.
@@ -295,6 +298,8 @@ services:
       - gamestream-state:/home/desk/.config
       # S2 frame bus: the S2 client is its ONLY writer (backend and vision mount it read-only).
       - framebus:/framebus
+      # S2 input socket (ADR-0014): the S2 client listens, the backend's Injector sends.
+      - s2-input:/s2-input
     tmpfs:
       - /tmp:size=640m,uid=1000,gid=1000,mode=1777,exec
     # Software H.264 decode of one 1440x900@30 stream + SDL/GL (llvmpipe) presentation. Weight like
@@ -369,6 +374,15 @@ volumes:
       type: tmpfs
       device: tmpfs
       o: size=512m,uid=1000,gid=1000,mode=0770
+  # S2 input socket (ADR-0014, S2 step 3): one unix socket, RAM only. An input path into Windows:
+  # mounted in gamestream (the listener) and backend (the Injector) ONLY -- never vision, desktop or
+  # anything else (tests/test_guards.py). The bot reaches it only through the mux.
+  s2-input:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=1m,uid=1000,gid=1000,mode=0750
 
 networks:
   default:

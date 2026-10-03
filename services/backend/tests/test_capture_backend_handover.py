@@ -49,7 +49,9 @@ class World:
         monkeypatch.setattr(cb, "term_until_zero", self.term)
         monkeypatch.setattr(cb, "revive_rdp_loop_if_idle", lambda since: None)
         monkeypatch.setattr(cb, "verify_sunshine_revert", self.verify)
-        monkeypatch.setattr(cb, "write_variant", lambda v: self.events.append(("variant", v)))
+        monkeypatch.setattr(
+            cb, "write_variant", lambda v, knobs=None: self.events.append(("variant", v))
+        )
         monkeypatch.setattr(cb, "ensure_no_wm", lambda: self.events.append(("no-wm",)))
         monkeypatch.setattr(cb, "write_cleanroom", lambda *a: self.events.append(("cleanroom", *a)))
         monkeypatch.setattr(cb, "clear_cleanroom", lambda: self.events.append(("cleanroom-gone",)))

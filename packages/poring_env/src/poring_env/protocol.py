@@ -233,7 +233,7 @@ class CleanRoom(BaseModel):
 
     model_config = _MODEL_CONFIG
 
-    variant: Literal["V1", "V1gdb", "V2", "V3", "V3b"] | None = Field(
+    variant: Literal["V1", "V1gdb", "V2", "V3", "V3b", "S2"] | None = Field(
         default=None, description="The stream client variant under test; null = none started yet."
     )
     streaming: bool = Field(

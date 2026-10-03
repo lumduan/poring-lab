@@ -11,6 +11,8 @@ import time
 from collections import OrderedDict
 from collections.abc import Sequence
 from contextlib import ExitStack
+from pathlib import Path
+from typing import Literal
 
 from websockets.exceptions import ConnectionClosed, WebSocketException
 from websockets.sync.client import ClientConnection, connect
@@ -153,7 +155,8 @@ class BackendInputSink:
 
 
 class MuxedEnv(Env):
-    """What the vision agent uses: ``grab`` from X, ``send_input`` through the backend mux."""
+    """What the vision agent uses: ``grab`` from a FrameSource (X, or the S2 frame bus),
+    ``send_input`` through the backend mux."""
 
     def __init__(self, source: FrameSource, sink: BackendInputSink, *, history: int = 256) -> None:
         self._source = source
@@ -199,3 +202,38 @@ class MuxedEnv(Env):
             self.sink.close()
         finally:
             self._source.close()
+
+
+FrameSourceKind = Literal["x11", "gamestream"]
+
+
+def make_env(
+    kind: FrameSourceKind,
+    *,
+    backend_url: str,
+    agent_id: str,
+    version: str,
+    display: str = ":99",
+    session: tuple[int, int] | None = None,
+    ring: str | Path = "/framebus/ring",
+) -> MuxedEnv:
+    """The agent's Env. Input ALWAYS goes through the backend's mux (ADR-0002); only the pixels'
+    source differs:
+
+    - ``"x11"``: grabs of the lab display (RDP, Moonlight-qt);
+    - ``"gamestream"`` (ADR-0014, S2): the S2 frame bus -- every decoded frame, with the writer's
+      ``frame_id`` and decode-complete time; no X at all (the mux sends to the S2 input socket).
+    """
+    sink = BackendInputSink(backend_url, agent_id=agent_id, version=version)
+    source: FrameSource
+    if kind == "gamestream":
+        from poring_env.bus_source import BusFrameSource
+
+        source = BusFrameSource(ring, agent_id)
+    elif kind == "x11":
+        from poring_env.x11 import X11Capture  # the x11 extra, only when X is the source
+
+        source = X11Capture(display, session=session)
+    else:
+        raise ValueError(f"unknown env kind {kind!r}")
+    return MuxedEnv(source, sink)

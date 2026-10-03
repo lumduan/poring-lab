@@ -154,6 +154,9 @@ def test_vk_table_copies_the_lab_keymap() -> None:
 
     assert vk.EVDEV_BY_CODE == EVDEV_BY_CODE  # drift guard: the image has no poring_env
     assert set(vk.CODE_TO_VK) == set(EVDEV_BY_CODE)  # every key the mux can send has a VK
+    from poring_env.keymap import VK_BY_CODE
+
+    assert vk.CODE_TO_VK == VK_BY_CODE  # the shared table (S2 step 3): one source of truth
 
 
 @pytest.mark.parametrize(
