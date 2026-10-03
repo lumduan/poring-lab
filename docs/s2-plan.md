@@ -392,6 +392,15 @@ that number. V3b removes both: decode → bus → the console's JPEG and the bot
   `HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers\Configuration` / `Connectivity`.
   `Screen.AllScreens` in an RDP session shows only the RDP display, so the console's screens are
   read inside the console session at the entry.
+- ➡️ **Read 2026-10-03 15:22 (RDP, "poring-lab shell", standard account):**
+  - `Get-PnpDevice -Class Monitor`: present/OK = `VDD by MTT` (MTT1337), `Generic Monitor
+    (SAMSUNG)` (SAM07C0, UID249395) and a `Generic Monitor` (DEFAULT_MONITOR, UID256: the RDP
+    display); not present = the LG ULTRAWIDE, an older SAMSUNG instance and a second default
+    monitor. So the Samsung is connected and enumerated: inactive, not missing.
+  - `Screen.AllScreens`: only `\\.\DISPLAY577`, primary, 1440×900 (the RDP display, as expected).
+  - `WmiMonitorID`: Access denied; `HKLM\...\GraphicsDrivers\Configuration`: registry access not
+    allowed. The standard account cannot read the console's topology from RDP: it is read inside
+    the console session at the entry (`Screen.AllScreens`), or by Batt from an elevated console.
 - Why not Win+P in RDP: it changes the RDP session's projection, not the console's topology, and
   can blank or drop the RDP view. The console topology changes only from the console session.
 - Why it is VDD-only now: Sunshine's `dd_configuration_option = ensure_only_display` deactivates
