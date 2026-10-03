@@ -343,6 +343,7 @@ def test_gamestream_service_is_contained() -> None:
         "x11-unix:/x11:ro",
         "./state:/lab-state:ro",
         "gamestream-state:/home/desk/.config",
+        "framebus:/framebus",
     }
     env = gs.get("environment", {})
     assert not any(k.startswith("RDP_") for k in env), "no RDP credentials in gamestream"
@@ -530,3 +531,28 @@ def test_the_canvas_lets_moonlight_open_the_stream_at_native_size(source: str) -
     sw, sh = (int(v) for v in session.split("x"))
     # Moonlight: dst = ceil(screen * 0.8) & ~1; native only if dst > stream in both directions.
     assert (math.ceil(cw * 0.8) & ~1) > sw and (math.ceil(ch * 0.8) & ~1) > sh, (canvas, session)
+
+
+# --- S2 frame bus (docs/s2-plan.md) ---------------------------------------------------------------
+FRAMEBUS_MOUNTS = {"gamestream": False, "backend": True, "vision": True}  # service -> read-only
+
+
+@pytest.mark.parametrize("name", ["compose.yaml", "compose.dev.yaml"])
+def test_the_frame_bus_has_one_writer_and_read_only_readers(name: str) -> None:
+    for svc, spec in compose(name)["services"].items():
+        mounts = mounts_of(spec or {}, "framebus")
+        if svc not in FRAMEBUS_MOUNTS:
+            assert mounts == [], f"{name}: {svc} mounts the frame bus"
+            continue
+        for mount in mounts:
+            assert mount.endswith(":ro") == FRAMEBUS_MOUNTS[svc], f"{name}: {svc} {mount}"
+
+
+def test_the_frame_bus_is_a_capped_tmpfs_charged_to_its_writer() -> None:
+    cfg = compose("compose.yaml")
+    opts = cfg["volumes"]["framebus"]["driver_opts"]
+    assert (opts["type"], opts["device"]) == ("tmpfs", "tmpfs")
+    size = re.search(r"size=(\d+)m", opts["o"])
+    assert size is not None and int(size.group(1)) <= 64
+    gs = cfg["services"]["gamestream"]
+    assert gs["mem_limit"] == gs["memswap_limit"] == "1600m"  # 1536m + the 64 MiB ring

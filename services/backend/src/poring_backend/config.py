@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     transfer_dir: Path = Path("/transfer")
     # The capture-backend lock directory (ADR-0009), bind-mounted read-only (compose.yaml).
     lab_state_dir: Path = Path("/lab-state")
+    # S2 frame bus (docs/s2-plan.md): in console mode with a live writer, the console stream reads
+    # decoded frames from this ring instead of grabbing X. CONSOLE_FPS caps that human view.
+    framebus_path: Path = Path("/framebus/ring")
+    console_fps: float = 15.0
     transfer_max_bytes: int = 512 * 1024 * 1024
     # Pause between xfreerdp announcing the text to Windows and the Ctrl+V (RDP format-list trip).
     clipboard_settle_s: float = 0.5

@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Protocol, TypeVar
 
 from poring_backend.capture_lock import read_cleanroom, read_lock
+from poring_backend.capture_select import CaptureSelector
 from poring_backend.clipboard import ClipboardService, PasteOutcome, SelectionIO
 from poring_backend.config import Settings
 from poring_backend.display import DisplayWatch, Region
@@ -158,8 +159,15 @@ class AppState:
         self.display = DisplayWatch(
             Region.parse(settings.game_region), hold_s=settings.black_hold_s
         )
-        self.hub = CaptureHub(
+        # X11 grabs, or the S2 frame bus in console mode with a live writer (capture_select.py).
+        self.capture_source = CaptureSelector(
             capture_factory,
+            bus_path=settings.framebus_path,
+            console_mode=lambda: self.capture.backend == "console",
+            console_fps=settings.console_fps,
+        )
+        self.hub = CaptureHub(
+            lambda: self.capture_source,
             tuning=self.tuning,
             damage_factory=damage_factory,
             on_frame=self.latency.frame_encoded,

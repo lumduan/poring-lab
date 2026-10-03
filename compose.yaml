@@ -188,6 +188,8 @@ services:
       # Black-screen detector: the RO client area "x,y,w,h" in desktop pixels ("" = whole frame).
       GAME_REGION: ${GAME_REGION:-}
       BLACK_HOLD_S: ${BLACK_HOLD_S:-5}
+      # S2 frame bus: the console's JPEG rate while it reads decoded frames (the bot reads them all).
+      CONSOLE_FPS: ${CONSOLE_FPS:-15}
     volumes:
       - x11-unix:/tmp/.X11-unix:ro
       - ./data:/data
@@ -197,6 +199,8 @@ services:
       - transfer:/transfer
       # The capture-backend lock (ADR-0009), shown in /health and the console status.
       - ./state:/lab-state:ro
+      # S2 frame bus (docs/s2-plan.md): decoded console frames, read-only here.
+      - framebus:/framebus:ro
     ports:
       - "${HOST_LAN_IP:?}:8000:8000" # /health, /ws/stream, /ws/input
     # 8001 (/internal/agent) is deliberately NOT published: compose network only.
@@ -245,6 +249,8 @@ services:
     volumes:
       - x11-unix:/tmp/.X11-unix:ro
       - ./data:/data
+      # S2 frame bus: the same decoded frames the console shows (pixels only), read-only.
+      - framebus:/framebus:ro
     deploy:
       resources:
         reservations:
@@ -287,14 +293,18 @@ services:
       - x11-unix:/x11:ro
       - ./state:/lab-state:ro
       - gamestream-state:/home/desk/.config
+      # S2 frame bus: the S2 client is its ONLY writer (backend and vision mount it read-only).
+      - framebus:/framebus
     tmpfs:
       - /tmp:size=640m,uid=1000,gid=1000,mode=1777,exec
     # Software H.264 decode of one 1440x900@30 stream + SDL/GL (llvmpipe) presentation. Weight like
     # desktop (12 vs the quant containers' 100); 640 MiB tmpfs is charged here (unpacked ~200 MiB).
+    # +64 MiB (2026-10-03, consciously): the frame bus tmpfs (8 x 1440x900 BGRA = 42 MB) is charged
+    # to its writer.
     cpu_shares: 64
     cpus: 4
-    mem_limit: 1536m
-    memswap_limit: 1536m
+    mem_limit: 1600m
+    memswap_limit: 1600m
     # V3 (the S2 spike, clean room 2026-10-03) holds the pairing key in its process memory: never a
     # core file (the host pipes cores to apport). The spike is also non-dumpable (PR_SET_DUMPABLE 0).
     ulimits:
@@ -345,6 +355,14 @@ volumes:
   # ADR-0009: Moonlight's client key + paired hosts = an input credential into Windows that would
   # bypass the mux if anything else could read it. Mounted in gamestream ONLY (tests/test_guards.py).
   gamestream-state:
+  # S2 frame bus (docs/s2-plan.md): decoded console frames, RAM only. Written by gamestream ONLY,
+  # read-only in backend and vision; nowhere else (tests/test_guards.py).
+  framebus:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=64m,uid=1000,gid=1000,mode=0750
   transfer:
     driver: local
     driver_opts:

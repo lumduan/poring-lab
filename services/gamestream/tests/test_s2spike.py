@@ -317,3 +317,12 @@ def test_png_writer_round_trips(tmp_path: Path) -> None:
     assert len(raw) == 4 * (1 + 5 * 3) and raw[1 : 1 + 15] == img.tobytes()[:15]
     pngout.write_atomic(tmp_path / "f.png", data)
     assert (tmp_path / "f.png").read_bytes() == data and not list(tmp_path.glob("*.tmp"))
+
+
+def test_the_vendored_frame_bus_is_byte_identical() -> None:
+    """The gamestream image has no pydantic, so it cannot import poring_env: s2spike carries a copy
+    of poring_env/framebus.py. Edit the original and re-copy; never the copy alone."""
+    root = Path(__file__).resolve().parents[3]
+    original = root / "packages" / "poring_env" / "src" / "poring_env" / "framebus.py"
+    vendored = root / "services" / "gamestream" / "s2spike" / "framebus.py"
+    assert vendored.read_bytes() == original.read_bytes()

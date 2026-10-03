@@ -123,6 +123,8 @@ async def health(request: Request) -> dict[str, Any]:
         # ADR-0009: who owns the ONE Windows session (scripts/capture_backend.py status).
         "capture_backend": state.capture.model_dump(),
         "cleanroom": state.cleanroom.model_dump() if state.cleanroom else None,
+        # S2 frame bus (docs/s2-plan.md): the writer and this backend's consumer counters.
+        "framebus": state.capture_source.snapshot(),
         "viewers": state.hub.viewer_count,
         "bot_connected": bool(state.agents),
         "capture_fps": round(state.hub.capture_fps, 2),

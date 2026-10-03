@@ -552,3 +552,9 @@ def test_a_stale_or_post_handover_marker_boots_human(
     body = client.get("/health").json()
     assert (body["mode"], body["mode_restored"]) == ("HUMAN", False)
     assert not [r for r in log_lines(tmp_path) if r["reason"] == "mode_restore"]
+
+
+def test_health_reports_the_frame_bus_inert_without_a_ring(make_client: Factory) -> None:
+    client, _ = make_client()
+    bus = client.get("/health").json()["framebus"]
+    assert (bus["active"], bus["writer"], bus["path"]) == ("x11", None, "/framebus/ring")
