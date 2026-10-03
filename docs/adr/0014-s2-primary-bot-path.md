@@ -59,7 +59,12 @@ Runs: [RDP v2](../benchmarks/2026-10-02-rdp-d16fcc9cff64-v2-baseline.md),
   per-frame split) is part of the experiments below.
 - **S2 is lossy.** H.264 at 20 Mb/s gives about 38 dB on the HP/SP crop, against RDP's lossless
   progressive codec. Phase 2 re-baselines its templates and anchors on stream frames for that reason.
-- **The open gap is key→paint's tail** (p95 277 vs 114). V3b's distribution is bimodal: p75 133 ms,
+- ~~**The open gap is key→paint's tail** (p95 277 vs 114).~~ ➡️ **CLOSED 2026-10-03 (the S2
+  session):** the tail was the decode thread blocked by the evidence PNG (E1). At 60 fps (E3, kept),
+  S2 key→paint is p50/p95/p99 **110.6 / 127.1 / 133.8 ms** (pooled n = 120) vs RDP's 101.1 / 114.1.
+  The input socket's leg is 0.7 / 1.8 ms. The `S2` variant's defaults are the winners. Open:
+  upstream packet loss (one dropped frame per ~10 s → a freeze until an IDR). Original text:
+  **The open gap is key→paint's tail** (p95 277 vs 114). V3b's distribution is bimodal: p75 133 ms,
   p90 257 ms. The pre-registered experiments are in
   [s2-latency-experiments.md](../benchmarks/s2-latency-experiments.md); their results are appended
   there and summarised here when known.

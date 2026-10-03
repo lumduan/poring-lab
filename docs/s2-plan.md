@@ -472,6 +472,26 @@ is not preserved): set by device name in the console, `ensure_only_display` rest
 exit; layout and emergency path in [operations/console-display.md](operations/console-display.md).
 The watchdog also ended the first entry (a stale heartbeat while waiting on Batt); re-entered.
 
+## 9b. Lessons from the first S2 session (2026-10-03)
+
+1. **Damage-driven capture assumed X was the frame source; any self-paced source (the bus) must
+   bypass the damage wait** (Batt). The console's capture hub waited for X DAMAGE before each grab.
+   Nothing paints Xvfb on the S2 path, so only the 1 s keepalive fired, and the console showed
+   ~1 fps of a 30 fps bus. Fix: a source that paces itself (`CaptureSelector.self_paced` while it
+   reads the bus) turns damage waiting off. Capture fps went 0.97 → 14.7, the `CONSOLE_FPS` cap.
+2. **A ring must fit next to the one a reader still maps.** Readers keep the previous writer's
+   unlinked ring mapped until they re-open, so a re-stream briefly needs room for two rings. With
+   8 slots (41.5 MB) in the 64 MiB tmpfs, the second writer SIGBUSed at its 5th frame, and the
+   clean room's "reliable" verdict came from the dead writer's last frames. Now: 4 slots, pages
+   reserved with `posix_fallocate`, and the bus created before the launch.
+3. **A crashed client leaves a stale socket file.** The Injector chose S2 because the file existed,
+   and every pointer move failed with "connection refused" until the hold. The failures are
+   counted in `/health.input_sink`, and the warning is rate-limited and names the sink.
+4. **Settle Sunshine before a re-launch.** A launch 3 s after a hold's `/cancel` failed with
+   "Failed to decrypt RTSP response". 20 s later it worked; `restream.sh` waits 20 s.
+5. **The key→paint tail was the decode thread** (the evidence PNG). The split by frames.csv found it
+   at once: [s2-latency-experiments.md](benchmarks/s2-latency-experiments.md).
+
 ## 10. Shared viewing (future capability; designed now)
 
 Sunshine captures the **console**, which is what the physical monitor shows. Unlike RDP, which

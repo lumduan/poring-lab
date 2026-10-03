@@ -661,7 +661,17 @@ VARIANTS = {
     "V3b": {"CLIENT": "s2spike", "WM": "none", "GDB_AFTER_S": "", "PAINT": "bus"},
     # S2 step 3 (2026-10-03): frames to the bus, input from the mux over the s2-input socket; no X
     # window takes part (an unmapped presence marker keeps the interlocks). ADR-0014.
-    "S2": {"CLIENT": "s2spike", "WM": "none", "GDB_AFTER_S": "", "PAINT": "bus", "INPUT": "socket"},
+    # Its defaults are the key->paint experiments' winners (2026-10-03, s2-latency-experiments.md):
+    # evidence off the decode thread (E1) and a 60 fps stream (E3-confirm); --knob overrides them.
+    "S2": {
+        "CLIENT": "s2spike",
+        "WM": "none",
+        "GDB_AFTER_S": "",
+        "PAINT": "bus",
+        "INPUT": "socket",
+        "EVIDENCE": "thread",
+        "FPS": "60",
+    },
 }
 # The key->paint tail experiments' knobs (docs/benchmarks/s2-latency-experiments.md): S2 only, every
 # value whitelisted here AND in gamestream-loop.sh's read_variant.

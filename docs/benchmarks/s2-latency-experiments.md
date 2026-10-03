@@ -171,3 +171,29 @@ median (p10) during rotation. "gs cores" is gamestream in motion.
 - **Decision on the POOLED n = 120 per arm:** keep 60 fps if pooled key→paint p95 improves by more
   than the 2 × A/A threshold scaled to n = 120 (148 / √2 ≈ 105 ms) OR pooled p50 improves by more
   than 18.8 / √2 ≈ 13 ms, with fps (median) and cores not worse. Otherwise stay at 30.
+
+### E3-confirm results (21:26–21:38) and the end of the series
+| run | run_id | key→paint p50 / p95 / p99 | matched | to_receive | queue | fps (p10) | gs cores |
+|---|---|---|---|---|---|---|---|
+| E1b (30 fps) | `2026-10-03T2126-2a41c1450007-E1b` | 125.3 / >1500 / >1500 | 56/60 | 109.5 / 129.7 | 0.6 / 1.1 | 29 (26) | 1.03 |
+| E3b (60 fps) | `2026-10-03T2132-cceeee742be8-E3b` | 111.6 / 127.0 / >1500 | 59/60 | 96.7 / 112.6 | 0.7 / 1.1 | 30 (30) | 0.90 |
+
+- **Pooled, n = 120 per arm:**
+  - 30 fps (E1 + E1b): p50 125.0, p95 171.9, p99 >1500 (115/120).
+  - 60 fps (E3 + E3b): p50 110.6, p95 127.1, p99 133.8 (119/120).
+- **60 fps KEPT.** Δp50 −14.4 ms is beyond the 13 ms threshold, fps is not lower and cores are not
+  higher. Δp95 −44.8 ms is under the 105 ms threshold: the keep rests on p50, as the rule allows.
+- **E5 (software encoder) SKIPPED by the stop rule.** Sunshine's whole capture → send (`host`) is
+  7.4 ms p50, so a different encoder can win at most ~7 ms, inside the A/A band (9.4). No Sunshine
+  change was made.
+- **Unmatched trials** (recorded since E3): 4 of the 5 misses in E1b/E3b had 0–3 new frames within
+  1.5 s. Those are stream freezes, consistent with the network-drop → IDR waits. One had 45 frames
+  and no visible change: one key possibly lost (open).
+- **Final S2 configuration** (the `S2` variant's defaults since 2026-10-03): `EVIDENCE=thread
+  FPS=60 DECODE_THREADS=2`.
+- **Against RDP v2:** key→paint p50/p95 110.6/127.1 ms vs 101.1/114.1. The tail is gone (it was
+  277); the remaining ~10 ms sits Windows-side (`to_receive` ≈ 97 ms: the key, the game's next frame
+  at FPSLimit 30, DWM, capture, encode, network).
+- **Next levers, NOT pre-registered here:**
+  - dgVoodoo FPSLimit 60 (the game's own frame slot);
+  - the upstream packet loss (drops once per ~10 s, each a freeze until an IDR).

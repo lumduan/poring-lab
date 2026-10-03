@@ -601,5 +601,6 @@ def test_the_python_and_bash_variant_whitelists_agree() -> None:
                          (["PATH=/x"], "S2")):  # fmt: skip
         with pytest.raises(SystemExit):
             cb.parse_knobs(bad, variant)
-    body = cb.variant_body("S2", {"FPS": "60"})
-    assert body.endswith("INPUT=socket\nFPS=60\n")
+    assert cb.variant_body("S2").endswith("INPUT=socket\nEVIDENCE=thread\nFPS=60\n")  # winners
+    body = cb.variant_body("S2", {"FPS": "30", "EVIDENCE": "inline"})  # a knob overrides
+    assert body.endswith("INPUT=socket\nEVIDENCE=inline\nFPS=30\n")
