@@ -1,0 +1,93 @@
+"""scripts/cleanroom.py: the clean-room watchdog's decisions and the runner's picture test.
+Fakes only: no Docker, no Windows, no systemd."""
+
+import importlib.util
+from pathlib import Path
+from types import ModuleType
+
+import numpy as np
+import pytest
+
+SCRIPTS = Path(__file__).resolve().parents[3] / "scripts"
+CONSOLE = ("console", "steady", "cleanroom")
+T = 1_790_000_000.0
+
+
+@pytest.fixture
+def cr(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> ModuleType:
+    monkeypatch.setenv("CLEANROOM_DIR", str(tmp_path / "cleanroom"))
+    spec = importlib.util.spec_from_file_location("cleanroom", SCRIPTS / "cleanroom.py")
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def status(**kw: float | str) -> dict[str, float | str]:
+    return {"hard_cap_ts": T + 3 * 3600, "box_until_ts": T + 20 * 60, "variant": "V1", **kw}
+
+
+def test_rdp_steady_means_done(cr: ModuleType) -> None:
+    assert cr.decide(T, status(), ("rdp", "steady", "to-rdp-done"), False, 0) == "done"
+
+
+def test_a_half_done_to_rdp_is_not_done(cr: ModuleType) -> None:
+    """rdp/switching = a to-rdp that did not finish: the watchdog still acts on it (--recover)."""
+    late = T + 3 * 3600 + 1
+    assert cr.decide(late, status(), ("rdp", "switching", "to-rdp"), False, 0) == "exit:hard cap"
+
+
+def test_within_the_box_with_a_fresh_heartbeat_it_waits(cr: ModuleType) -> None:
+    assert cr.decide(T + 60, status(), CONSOLE, False, 30) == "wait"
+
+
+def test_the_runners_box_wins_by_five_minutes(cr: ModuleType) -> None:
+    box_end = T + 20 * 60
+    assert cr.decide(box_end + 299, status(), CONSOLE, False, 10) == "wait"
+    assert cr.decide(box_end + 300, status(), CONSOLE, False, 10).startswith("exit:V1's box")
+
+
+def test_a_stale_heartbeat_fires(cr: ModuleType) -> None:
+    v = cr.decide(T + 60, status(box_until_ts=0), CONSOLE, False, cr.HEARTBEAT_STALE_S)
+    assert v.startswith("exit:runner heartbeat stale")
+
+
+def test_a_human_at_the_console_defers_everything_but_the_hard_cap(cr: ModuleType) -> None:
+    late_box = T + 20 * 60 + 600
+    assert cr.decide(late_box, status(), CONSOLE, True, 10).startswith("defer:")
+    assert cr.decide(T + 60, status(), CONSOLE, True, 10**6).startswith("defer:")
+    assert cr.decide(T + 3 * 3600, status(), CONSOLE, True, 10) == "exit:hard cap"
+
+
+@pytest.mark.parametrize(
+    ("health", "active"),
+    [
+        ({"lease_active": True, "last_human_input_age_s": 500.0}, True),
+        ({"lease_active": False, "last_human_input_age_s": 30.0}, True),
+        ({"lease_active": False, "last_human_input_age_s": 500.0}, False),
+        ({"lease_active": False, "last_human_input_age_s": None}, False),
+    ],
+)
+def test_human_activity(cr: ModuleType, health: dict[str, object], active: bool) -> None:
+    assert cr.human_active(health) is active
+
+
+def test_black_and_picture_frames(cr: ModuleType) -> None:
+    black = np.zeros((900, 1440, 4), np.uint8)
+    assert not cr.is_picture(cr.classify_frame(black))
+    cursor_only = black.copy()
+    cursor_only[400:420, 700:712, :3] = 255  # the black S1 stream showed only a cursor
+    assert not cr.is_picture(cr.classify_frame(cursor_only))
+    desktop = np.random.default_rng(1).integers(0, 255, (900, 1440, 4), dtype=np.uint8)
+    assert cr.is_picture(cr.classify_frame(desktop))
+
+
+def test_status_round_trip_and_heartbeat(cr: ModuleType) -> None:
+    assert cr.load_status() == {}
+    cr.save_status(phase="entered", variant="V2")
+    cr.save_status(box_until_ts=5.0)
+    st = cr.load_status()
+    assert (st["phase"], st["variant"], st["box_until_ts"]) == ("entered", "V2", 5.0)
+    assert cr.heartbeat_age(T) == float("inf")
+    cr.heartbeat()
+    assert cr.heartbeat_age(cr.time.time()) < 5

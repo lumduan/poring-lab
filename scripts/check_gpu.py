@@ -1,21 +1,53 @@
 """GPU readiness check for the vision container. Exits non-zero on any failure; never fakes a pass.
 
-    docker compose --profile vision run --rm vision python scripts/check_gpu.py
+    python3 scripts/guarded_build.py --sustain 30 --spike 25 \
+        'run:vision@600=python scripts/check_gpu.py'
 
-Checks: torch sees the GPU; the build is CUDA 13.0 with sm_120 kernels (RTX 5060 Ti = compute
-capability 12.0 -- a cu126 wheel would fail with "no kernel image is available"); real kernels run
-(matmul + conv2d, fp32 and fp16); and an ultralytics YOLO model built from its YAML (no weight
-download) runs a forward pass on the GPU.
+(a raw `docker compose run` is refused by the repo's hook and scripts/dev.sh: it goes through the IO
+guard like any other container start.)
+
+Checks: torch sees the GPU; the VRAM cap the loop applies (VISION_MAX_VRAM_FRACTION, through
+poring_vision.gpu.configure_gpu -- the card is shared with Frigate and Ollama) is ENFORCED: an
+allocation over it is refused by torch's allocator before it reaches the driver, a small one is
+fine; the build is CUDA 13.0 with sm_120 kernels (RTX 5060 Ti = compute capability 12.0 -- a cu126
+wheel would fail with "no kernel image is available"); real kernels run (matmul + conv2d, fp32 and
+fp16); and an ultralytics YOLO model built from its YAML runs a forward pass on the GPU.
+No weights are baked into the image: an audit hook REPORTS (never fails on) any network fetch or new
+file a check causes -- e.g. ultralytics downloading something at run time (Batt, 2026-10-03).
 """
 
+import os
 import sys
 import time
 import traceback
 from collections.abc import Callable
+from pathlib import Path
 
 EXPECTED_CUDA = "13.0"
 EXPECTED_ARCH = "sm_120"
 results: list[tuple[str, bool, str]] = []
+NETWORK: list[str] = []  # every outbound connection / URL request, in order
+WATCHED = [Path(os.environ.get("YOLO_CONFIG_DIR", "/tmp/ultralytics")), Path.home() / ".cache",
+           Path.home() / ".config", Path("/tmp")]  # fmt: skip
+
+
+def _audit(event: str, args: tuple[object, ...]) -> None:
+    if event == "urllib.Request":
+        NETWORK.append(f"urllib {args[0]}")
+    elif event == "socket.connect" and len(args) > 1:
+        NETWORK.append(f"connect {args[1]}")
+    elif event == "socket.getaddrinfo" and args:
+        NETWORK.append(f"resolve {args[0]}")
+
+
+def files_under(roots: list[Path]) -> dict[str, int]:
+    out: dict[str, int] = {}
+    for root in roots:
+        if root.is_dir():
+            for path in root.rglob("*"):
+                if path.is_file():
+                    out[str(path)] = path.stat().st_size
+    return out
 
 
 def check(name: str) -> Callable[[Callable[[], str]], None]:
@@ -31,6 +63,8 @@ def check(name: str) -> Callable[[Callable[[], str]], None]:
 
 
 def main() -> int:
+    sys.addaudithook(_audit)
+    files_before = files_under(WATCHED)
     import torch
 
     @check("torch import / build")
@@ -43,6 +77,32 @@ def main() -> int:
     def _() -> str:
         assert torch.cuda.is_available(), "cudaGetDeviceCount == 0 (runtime/driver/passthrough?)"
         return f"{torch.cuda.device_count()} device(s): {torch.cuda.get_device_name(0)}"
+
+    @check("VRAM cap enforced (VISION_MAX_VRAM_FRACTION, the loop's own configure_gpu)")
+    def _() -> str:
+        from poring_vision.gpu import configure_gpu
+
+        fraction = float(os.environ.get("VISION_MAX_VRAM_FRACTION", "0.25"))
+        assert configure_gpu(fraction) == "cuda:0", "configure_gpu found no GPU"
+        total = torch.cuda.get_device_properties(0).total_memory
+        free, _ = torch.cuda.mem_get_info(0)
+        over = int((fraction + 0.05) * total)
+        try:
+            torch.empty(over, dtype=torch.uint8, device="cuda:0")
+        except torch.OutOfMemoryError:
+            pass  # refused by the caching allocator (the cap), before any cudaMalloc
+        else:
+            raise AssertionError(f"{over >> 20} MiB (over the cap) was allocated")
+        small = min(256 << 20, int(0.25 * free))  # never squeeze Frigate/Ollama to prove a point
+        probe = torch.empty(small, dtype=torch.uint8, device="cuda:0")
+        del probe
+        torch.cuda.empty_cache()
+        mib = 1 << 20
+        return (
+            f"cap {fraction:.0%} = {fraction * total / mib:.0f} of {total / mib:.0f} MiB; "
+            f"{over / mib:.0f} MiB refused; {small / mib:.0f} MiB ok; "
+            f"card free {free / mib:.0f} MiB"
+        )
 
     @check(f"{EXPECTED_ARCH} in torch.cuda.get_arch_list()")
     def _() -> str:
@@ -85,6 +145,12 @@ def main() -> int:
     if torch.cuda.is_available():
         used = torch.cuda.max_memory_allocated(0) / 2**20
         results.append(("peak VRAM (this process)", True, f"{used:.0f} MiB"))
+    # Reported, never a failure: what the checks fetched or wrote at run time.
+    new_files = {p: n for p, n in files_under(WATCHED).items() if files_before.get(p) != n}
+    fetched = sorted({line for line in NETWORK if not line.startswith("connect /")})
+    results.append(("runtime network fetches (report only)", True, "; ".join(fetched) or "none"))
+    shown = [f"{p} ({n / 2**20:.1f} MiB)" for p, n in sorted(new_files.items())][:12]
+    results.append(("runtime new files (report only)", True, "; ".join(shown) or "none"))
 
     width = max(len(name) for name, _, _ in results)
     print()

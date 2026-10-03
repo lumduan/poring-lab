@@ -218,8 +218,8 @@ does the same thing unguarded.
 - **Debug view:** `http://HOST_LAN_IP:6080` (noVNC, view-only).
 - **GPU check:**
   ```bash
-  docker compose --profile vision build
-  docker compose --profile vision run --rm vision python scripts/check_gpu.py
+  python3 scripts/guarded_build.py --sustain 30 --spike 25 build:vision   # ~5 GB of writes
+  python3 scripts/guarded_build.py --sustain 30 --spike 25 'run:vision@600=python scripts/check_gpu.py'
   ```
 - **Agent loop:**
   ```bash

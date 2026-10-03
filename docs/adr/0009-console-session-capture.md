@@ -483,3 +483,54 @@ was attempted on 2026-10-03 and is not done; nothing of S2 itself is implemented
 
 It runs at the next handover; it is not yet exercised live.
 
+
+
+## Clean room (Batt, 2026-10-03): one console move, the lab client varies
+
+**Why.** S1's black stream mixed two suspects: the Windows side (the handover, VDD, Sunshine) and
+the lab side (Moonlight-qt + SDL on Xvfb). Every RDP↔console switch between attempts also changed
+the Windows side. So the session moves to the console **once**, RDP holds for the whole experiment,
+and only the lab client varies:
+- **V1:** Moonlight-qt as-is (the image only adds the placer/focus fixes);
+- **V2:** Moonlight-qt + openbox (the stall correlated with "Xvfb with no WM");
+- **V3:** the S2 spike (`services/gamestream/s2spike`: moonlight-common-c + PyAV, no Moonlight-qt,
+  no SDL, no GL).
+
+The Mac is only the fallback.
+
+**Mechanics** (all through `capture_backend.py`, the only lock writer):
+- `to-console --cleanroom` (REASON `cleanroom`, console/switching);
+- `stream --variant` (refuses while any lab client runs) writes the whitelisted
+  `state/gamestream-variant`, then console/steady;
+- `hold` (/cancel, the session stays) between variants. Each variant gets a fresh launch, so the
+  topology cycles: ro_agent re-checks the client before any input;
+- `to-rdp` at the end. It now refuses to let RDP connect while a WM runs or a stale
+  `_NET_SUPPORTING_WM_CHECK` is set;
+- under a cleanroom REASON a stream is **one-shot** (a crashing client never loops `/launch`).
+
+`scripts/cleanroom.py` runs the variants with time boxes (V1 20 min, V2 30, V3 60, checks 45;
+first picture within 90 s; reliable = 60 s steady and a second launch). A detached watchdog
+(`systemd-run --user`) runs the clean to-rdp on a box (+5 min), a stale heartbeat or the 3 h hard
+cap. It defers to a human except at the hard cap, and never loops.
+
+**V2 vs the 2026-10-02 matchbox lesson.** The kiosk WM was removed because it RESIZED Moonlight's
+window during renderer set-up. openbox here:
+- has no decorations, no maximize and no resize;
+- has no key or mouse bindings (it can't eat the bot's Alt+F4 or clicks);
+- keeps its config in /tmp (never `~/.config`, the pairing volume);
+- runs only around its own stream, opt-in through the variant file only.
+
+**V3's X window is a spike-only shim** (`x11_mirror_shim.py`), not S2. It exists so the console,
+rdp-loop's interlock and /health see V3, and it forwards the mux's XTest input to LiSend*
+(rule 3 intact). Final S2 (docs/s2-plan.md):
+- frame bus;
+- numpy for the bot;
+- JPEG from the bus for humans;
+- no Xvfb in the GameStream path;
+- input mux → S2 client → Sunshine.
+
+**Identity.** V3 is the same paired client (one pairing). One client at a time is enforced at
+stream start. The key reaches V3 only through a sealed memfd in its own non-dumpable process
+(cores off; CLAUDE.md rule 2 amended with Batt's OK).
+
+**Results:** pending (to be filled when the clean room runs).

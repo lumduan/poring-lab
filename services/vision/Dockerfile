@@ -35,7 +35,11 @@ COPY packages/poring_packets/pyproject.toml packages/poring_packets/
 COPY packages/poring_dataset/pyproject.toml packages/poring_dataset/
 COPY services/backend/pyproject.toml services/backend/
 COPY services/vision/pyproject.toml services/vision/
+# ~5 GB of CUDA wheels: downloaded two at a time and installed one at a time, so the writes come as
+# a stream, not a burst. Unthrottled, this step spiked quant-postgres to a 27.9 % IO stall and the
+# guard aborted it (2026-10-03, 12:01).
 RUN --mount=type=cache,target=/root/.cache/uv \
+    UV_CONCURRENT_DOWNLOADS=2 UV_CONCURRENT_INSTALLS=1 \
     uv sync --frozen --no-dev --no-install-workspace --package poring-vision
 
 COPY packages/poring_env packages/poring_env

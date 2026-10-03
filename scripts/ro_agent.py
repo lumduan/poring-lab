@@ -21,6 +21,7 @@ Rules it enforces (CLAUDE.md, ADR-0002/0006):
     ro_agent.py calibrate STATE [DX DY W H]     save STATE's signature (box: client-relative)
     ro_agent.py where                           best-matching calibrated state
     ro_agent.py click DX DY [--right] [--abs]   client-area-relative click (GAME_REGION origin)
+    ro_agent.py drag X1 Y1 X2 Y2 [--right] [--abs]  paced press-move-release (RO camera: --right)
     ro_agent.py keys CODE...                    key taps (50 ms holds)
     ro_agent.py chord CODE...                   press in order, release in reverse
     ro_agent.py type TEXT                       US-layout ASCII into the focused field (+ \\n)
@@ -522,6 +523,26 @@ class Agent:
             self.send([{"type": "mouse_button", "t_mono_ns": ns(), "frame_id": -1,
                         "button": button, "action": action, "x": nx, "y": ny}])  # fmt: skip
             time.sleep(HOLD_S)
+
+    def drag(
+        self, x1: int, y1: int, x2: int, y2: int, button: str = "left", steps: int = 10
+    ) -> None:
+        """Press at (x1, y1), move to (x2, y2) in `steps` paced moves, release. RO's camera
+        (right-drag) reads motion spread over frames while the button is held, so the moves are
+        30 ms apart, never one batch; the button is released even if a move is refused."""
+        w, h = desktop()
+        self.move(x1, y1)
+        time.sleep(HOLD_S)
+        self.send([{"type": "mouse_button", "t_mono_ns": ns(), "frame_id": -1, "button": button,
+                    "action": "down", "x": x1 / w, "y": y1 / h}])  # fmt: skip
+        try:
+            for i in range(1, steps + 1):
+                time.sleep(0.03)
+                self.move(round(x1 + (x2 - x1) * i / steps), round(y1 + (y2 - y1) * i / steps))
+        finally:
+            time.sleep(HOLD_S)
+            self.send([{"type": "mouse_button", "t_mono_ns": ns(), "frame_id": -1,
+                        "button": button, "action": "up", "x": x2 / w, "y": y2 / h}])  # fmt: skip
 
     def close(self) -> None:
         with contextlib.suppress(Exception):
@@ -1062,6 +1083,10 @@ def main() -> None:
         if cmd == "click":
             xy = (int(args[0]), int(args[1]))
             agent.click(*(xy if a.abs else at(*xy)), "right" if a.right else "left")
+        elif cmd == "drag":
+            x1, y1, x2, y2 = (int(v) for v in args[:4])
+            p1, p2 = ((x1, y1), (x2, y2)) if a.abs else (at(x1, y1), at(x2, y2))
+            agent.drag(*p1, *p2, "right" if a.right else "left")
         elif cmd == "keys":
             agent.keys(*args)
         elif cmd == "chord":

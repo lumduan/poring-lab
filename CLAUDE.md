@@ -18,8 +18,12 @@ ports, quickstart) and `docs/adr/`.
    ADR-0009). Windows client editions allow a single interactive session.
    - The path is the RDP session, OR the console-mode stream (Sunshine -> the `gamestream` client)
      under the capture-backend lock (`scripts/capture_backend.py`). Never both.
-   - Never a second client: Sunshine pairs ONLY the lab's gamestream client (its key never leaves
-     the `gamestream-state` volume); its firewall rules admit only this host; its web UI is `pc`-only.
+   - Never a second client: Sunshine pairs ONLY the lab's gamestream client; its firewall rules admit
+     only this host; its web UI is `pc`-only. Its key never leaves the `gamestream-state` volume
+     EXCEPT into the lab client's own process memory: Moonlight-qt, or the S2 spike through a sealed
+     memfd, non-dumpable, cores off -- never a file (Batt, 2026-10-03).
+   - The spike shares that identity, so ONE lab client at a time is enforced at stream start
+     (`capture_backend.py stream` and the spike's own lock/process check), not just documented.
    - Never add any other RDP, VNC or streaming path into Windows.
    - Never make the loop retry fast on auth failure (account lockout).
    - Never make it fight a human: exit 5 backs off for 10 minutes.
@@ -193,7 +197,15 @@ ports, quickstart) and `docs/adr/`.
 - **The capture-backend lock decides who owns the ONE Windows session** (ADR-0009): `state/capture-backend`
   (KEY=word lines, `BACKEND=rdp|console`, `SEQ`, `PHASE`), a directory mounted read-only at `/lab-state`.
   - Its ONLY writer is `scripts/capture_backend.py` (`status`, `init`, `drill`, `to-rdp [--recover]`,
-    later `to-console`/`pair`): atomic rename, then read back on the host and in every container.
+    `to-console [--external|--cleanroom]`, `stream --variant`, `hold`, `pair`): atomic rename, then
+    read back on the host and in every container. Every writing command holds an exclusive flock
+    (`/dev/shm`), so the clean-room runner, its watchdog and a human never write at once.
+  - The clean room (2026-10-03, ADR-0009): `to-console --cleanroom` leaves the session on the
+    console (REASON `cleanroom`); `stream --variant V1|V1gdb|V2|V3` writes the whitelisted
+    `state/gamestream-variant` (CLIENT/WM/GDB_AFTER_S) that gamestream-loop.sh reads at each stream
+    start; `hold` ends the stream (/cancel) and keeps the session there; streams are one-shot.
+    `scripts/cleanroom.py` drives it, with a detached watchdog (`systemd-run --user`) that runs the
+    clean to-rdp on a time box or the hard cap. After a host reboot mid-run: `to-rdp --recover` first.
   - rdp-loop.sh connects only while it says `rdp`, and never while a Moonlight window is on the display;
     every wait wakes when the lock changes. Fail closed: no mount / malformed -> `hold`; mounted dir
     without the file -> `rdp`. The bash and Python readers are parity-tested (`test_capture_lock.py`).
@@ -256,7 +268,7 @@ scripts/gen_protocol.sh                   # protocol schema + TS types
 (cd services/frontend && node --test src/lib/*.test.ts)   # unit tests, no deps needed
 scripts/init_env.sh                       # first-time .env
 docker compose --profile core --profile remote up -d --build && scripts/smoke_test.sh
-docker compose --profile vision run --rm vision python scripts/check_gpu.py
+python3 scripts/guarded_build.py --sustain 30 --spike 25 'run:vision@600=python scripts/check_gpu.py'
 for p in core remote vision sniffer '*'; do docker compose --profile "$p" config -q; done
 ```
 

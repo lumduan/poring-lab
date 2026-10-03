@@ -285,6 +285,29 @@ streams, or decode-to-GPU feeding YOLO). Not now.
    - decode 30 s into `/dev/shm`;
    - measure decode CPU and `/cancel`→revert time.
    - Answers: does S2 work, what does it cost, and was S1's stall Moonlight's?
+   - ➡️ **2026-10-03: built as the clean room's V3** (`services/gamestream/s2spike`, kept as S2's
+     first piece, not thrown away; ADR-0009 "Clean room"). Pre-entry results:
+     - moonlight-common-c at `8599b60`, the commit moonlight-qt 6.1.0 ships, so V1 and V3 speak
+       the same protocol; the ctypes layout is checked against the pinned headers;
+     - in the container, `selftest` OK; `serverinfo` PairStatus=1 with the lab certificate;
+     - PyAV 19.0.1 decodes synthetic 4-slice 1440x900 H.264 at a p50 of 2.9 ms per frame,
+       including the BGRA conversion, on the host.
+     - Its first live run is the clean room's V3, if V1 and V2 stay black.
+   - **What is NOT S2 (Batt, 2026-10-03):** `x11_mirror_shim.py` blits V3's frames into the lab
+     Xvfb and forwards the X input that reaches its window (mux → XTest → window → LiSend*).
+     It is a **spike-only compatibility shim**, in its own module so it can be dropped. It exists
+     only so the web console, rdp-loop's interlock and /health see V3 during the experiment.
+   - **The final S2 stays as designed above:**
+     - decode ONCE into the frame bus (§2);
+     - the bot reads numpy frames from memory;
+     - humans get JPEG from the same bus through the console's WebSocket (§3);
+     - **no Xvfb anywhere in the GameStream path** (Xvfb optional, for noVNC debugging only);
+     - input goes **mux → S2 client → Sunshine** (rule 3), once XTest is no longer the path (§4).
+   - **V3 uses the lab client's identity** (one pairing). One client at a time is ENFORCED at
+     stream start (`capture_backend.py stream` refuses while any lab client runs; the spike
+     refuses unless the lock is console/steady, no xfreerdp window exists and no Moonlight-qt
+     runs). The key is loaded through a sealed memfd and never written to a file (CLAUDE.md
+     rule 2, amended).
 2. The **frame bus** in `poring_env` (pure Python, fully tested without hardware).
 3. **s2-client** in the `gamestream` image (writer + input socket + clean lifecycle). Moonlight-qt
    is removed.
