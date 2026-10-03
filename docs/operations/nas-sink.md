@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: Sections 1-4 applied and section 6 PASSED 2026-10-02 21:06 (mounts, ro refusal, probes, 30 s ship round-trip; ADR-0010 ACCEPTED). Next -- section 5, the Thai copy, with Secret typing on, after the Sunshine replacement and S2 step 0.
+next_action: Sections 1-6 applied. The Thai copy (section 5) was DONE 2026-10-03 (434 files hash-verified, revoked at once, @pristine-20261003). Next: Part C (C1-C5, docs/locale-packs.md); the kRO reference table must still be sourced (no _scratch extract exists).
 ---
 
 # poring-lab on TrueNAS: the dataset sink and the Thai copy
@@ -158,6 +158,21 @@ The copy uses Batt's EXISTING NAS account, for one named IP, for minutes:
        midclt call zfs.snapshot.create '{"dataset":"tank-main/poring-lab/thai-client-data","name":"pristine-<yyyymmdd>"}'
 
    Then, in poring-lab's console, `net use * /delete /y` to drop the session's cached connection.
+   **As applied, 2026-10-03 12:27–13:03** (quant ±5 min; Frigate unchanged):
+   - **What was copied:** the source folder turned out to be a FULL client install (an exe, 35
+     DLLs, `savedata\`, `PatchClient\`). Only the data documented in locale-packs.md §1 went: the
+     two GRFs (`data.grf` 3,303,242,041 B, `event.grf`), `System\` (18 files) and `skin\`
+     (414 files), with `/XF *.exe *.dll *.asi *.m3d`. `savedata\` (personal) and `PatchClient\`
+     (a program) were NOT copied.
+   - **Integrity:** 434 files, 3.09 GB at ~6 MB/s (the Dell side was the limit). The Windows source
+     hashes were written to the share (`_windows-ro_thai.sha256`) and compared with `sha256sum`
+     on the NAS: 434 = 434, 0 mismatches.
+   - **Revoked at once:** share id 19 deleted (0 sessions); `readonly=ON` (a write probe gets
+     "Read-only file system"); `@pristine-20261003` (2.71 GB); `net use … /delete`; 0 saved
+     credentials (`cmdkey`).
+   - **Not copied: the kRO reference table.** `C:\RO-rAthena\_scratch\` does not exist (the WARP
+     output was never kept). The Korean table lives only in the never-run kRO exe, so it is a
+     Part C decision.
 5. **The locale-pack install (C5) uses the same pattern:** a temporary **read-only** share on
    `locale-packs/th`, Dell-only, deleted right after the install.
 

@@ -179,6 +179,12 @@ ports, quickstart) and `docs/adr/`.
     appends under a shared `flock`.
 - **Driving Windows (ro_agent):**
   - **never the Run dialog**: Defender's ClickFix detection;
+  - **the agent's own terminal is the "poring-lab shell" desktop shortcut** (Batt, 2026-10-03):
+    `ro_agent.py open-terminal` reuses or opens it. The shortcut is `wt.exe -w new new-tab --title
+    "poring-lab shell" --suppressApplicationTitle -d C:\RO-rAthena powershell.exe -NoLogo`, NOT
+    "Run as administrator". It types only after that exact tab template is in front AND a
+    pixel-checked marker says not elevated; any mismatch stops. Elevated consoles stay Batt's
+    (UAC);
   - launch via the "Ragnarok Offline" shortcut; close with paced Alt+F4;
   - **verify the target is in front before typing**: client = active title-bar signature, console
     = tab template, secrets re-checked every 4 characters;

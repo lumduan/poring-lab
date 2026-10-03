@@ -22,6 +22,8 @@ Rules it enforces (CLAUDE.md, ADR-0002/0006):
     ro_agent.py where                           best-matching calibrated state
     ro_agent.py click DX DY [--right] [--abs]   client-area-relative click (GAME_REGION origin)
     ro_agent.py drag X1 Y1 X2 Y2 [--right] [--abs]  paced press-move-release (RO camera: --right)
+    ro_agent.py open-terminal                   the agent's own NON-elevated "poring-lab shell"
+    ro_agent.py calibrate-shell                 once: its tab template + the shortcut's signature
     ro_agent.py keys CODE...                    key taps (50 ms holds)
     ro_agent.py chord CODE...                   press in order, release in reverse
     ro_agent.py type TEXT                       US-layout ASCII into the focused field (+ \\n)
@@ -265,6 +267,9 @@ def region_for(state: str) -> tuple[int, int, int, int]:
         return tray_lang()
     if state in ("shortcut_icon", "shortcut_icon_sel"):
         x, y = shortcut_xy()
+        return x - 32, y - 34, SHORTCUT_BOX[2], SHORTCUT_BOX[3]
+    if state in ("shell_shortcut_icon", "shell_shortcut_icon_sel"):
+        x, y = shell_shortcut_xy()
         return x - 32, y - 34, SHORTCUT_BOX[2], SHORTCUT_BOX[3]
     meta = signature_path(state).with_suffix(".json")
     x, y, w, h = game_region()
@@ -585,8 +590,11 @@ def centre_offset(dx: int, dy: int) -> tuple[int, int]:
 
 # Templates per console kind: a Windows Terminal tab, and a classic console window's title bar
 # (Batt's elevated console opened as one on 2026-10-02 -- same icon + title, another background).
+# "poring-lab shell" is the agent's OWN terminal (open_terminal, Batt 2026-10-03); a plain
+# "Windows PowerShell" tab is one Batt opened.
+SHELL_TEMPLATE = "shell_tab_template.npy"
 CONSOLE_TEMPLATES = {
-    False: ("ps_tab_template.npy",),
+    False: (SHELL_TEMPLATE, "ps_tab_template.npy"),
     True: ("ps_admin_tab_template.npy", "ps_admin_conhost_template.npy"),
 }
 
@@ -1013,6 +1021,125 @@ def launch_client(agent: Agent, screen: Screen) -> None:
     wait_state(screen, ["service_select", "login"], 90)
 
 
+# The agent's own terminal (Batt, 2026-10-03): a desktop shortcut "poring-lab shell" ->
+# `wt.exe -w new new-tab --title "poring-lab shell" --suppressApplicationTitle -d C:\RO-rAthena
+# powershell.exe -NoLogo`, NOT "Run as administrator" (checked in the .lnk at creation). The Run
+# dialog stays forbidden (Defender ClickFix); elevated consoles stay Batt's (UAC).
+# SHELL_SHORTCUT="x,y" in .env.
+SHELL_SHORTCUT = (37, 645)
+ELEVATION_CHECK = (
+    "cls; if (([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::"
+    "GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) "
+    "{ Write-Host (' ' * 40) -BackgroundColor DarkRed } "
+    "else { Write-Host (' ' * 40) -BackgroundColor DarkGreen }"
+)
+MARKER_RED, MARKER_GREEN = (197, 15, 31), (19, 161, 14)  # Campbell DarkRed / DarkGreen
+
+
+def shell_shortcut_xy() -> tuple[int, int]:
+    raw = env().get("SHELL_SHORTCUT", "")
+    if not raw:
+        return SHELL_SHORTCUT
+    x, y = (int(v) for v in raw.split(","))
+    return x, y
+
+
+def find_shell(screen: Screen) -> tuple[int, int, float] | None:
+    """The ACTIVE "poring-lab shell" tab (its own template only), or None."""
+    path = STATE_DIR / "signatures" / SHELL_TEMPLATE
+    if not path.exists():
+        raise Stop("no poring-lab shell template: run `ro_agent.py calibrate-shell` once")
+    rgb = screen.full()[:, :, 2::-1].astype(np.int16)
+    return _match_console(rgb, np.load(path).astype(np.int16))
+
+
+def marker_colour(bgra: np.ndarray, min_run: int = 150) -> str | None:
+    """'red' / 'green' if a horizontal run of >= min_run marker pixels is on screen (the newest,
+    bottom-most wins), else None."""
+    rgb = bgra[:, :, 2::-1].astype(np.int16)
+    found: tuple[int, str] | None = None
+    for name, colour in (("red", MARKER_RED), ("green", MARKER_GREEN)):
+        hit = np.abs(rgb - np.array(colour)).max(axis=2) <= 30
+        for y in np.nonzero(hit.sum(axis=1) >= min_run)[0]:
+            row = np.concatenate(([0], hit[y].astype(np.int8), [0]))
+            edges = np.flatnonzero(np.diff(row))
+            if (edges[1::2] - edges[::2]).max(initial=0) >= min_run and (
+                found is None or y > found[0]
+            ):
+                found = (int(y), name)
+    return found[1] if found else None
+
+
+def open_terminal(agent: Agent, screen: Screen) -> tuple[int, int]:
+    """The agent's own NON-elevated terminal, in front: reuse a visible "poring-lab shell" tab, or
+    double-click the shortcut and wait for one. Any mismatch stops (Batt: stop and ask)."""
+    found = find_shell(screen)
+    if found is None:
+
+        def visible() -> bool:
+            return is_state(screen, "shell_shortcut_icon") or (
+                signature_path("shell_shortcut_icon_sel").exists()
+                and is_state(screen, "shell_shortcut_icon_sel")
+            )
+
+        if not visible():
+            to_png(screen.full(), SHOTS / "shell_shortcut_not_visible.png")
+            raise Stop("the 'poring-lab shell' shortcut is not visible: nothing clicked")
+        x, y = shell_shortcut_xy()
+        agent.move(x, y)
+        time.sleep(0.1)
+        for action in ("down", "up", "down", "up"):
+            agent.send([{"type": "mouse_button", "t_mono_ns": ns(), "frame_id": -1,
+                         "button": "left", "action": action, "x": x / desktop()[0],
+                         "y": y / desktop()[1]}])  # fmt: skip
+            time.sleep(0.04)
+        deadline = time.monotonic() + 20
+        while found is None and time.monotonic() < deadline:
+            time.sleep(1)
+            found = find_shell(screen)
+        if found is None:
+            to_png(screen.full(), SHOTS / "shell_not_found.png")
+            raise Stop("no window titled 'poring-lab shell' within 20 s: nothing typed")
+        log("opened 'poring-lab shell' (desktop shortcut)")
+    ox, oy, _ = found
+    agent.click(ox + 75, oy + 9)  # its tab: focuses that window
+    time.sleep(0.4)
+    again = find_shell(screen)
+    if again is None or abs(again[0] - ox) > 2 or abs(again[1] - oy) > 2:
+        raise Stop("'poring-lab shell' moved or lost focus after the click: nothing typed")
+    agent.type_text(ELEVATION_CHECK + "\n")
+    deadline = time.monotonic() + 10
+    colour = None
+    while colour is None and time.monotonic() < deadline:
+        time.sleep(0.8)
+        colour = marker_colour(screen.full())
+    if colour != "green":
+        to_png(screen.full(), SHOTS / "shell_elevation_check.png")
+        raise Stop(f"'poring-lab shell' is not verified non-elevated (marker {colour}): stop")
+    log("'poring-lab shell' is in front and NOT elevated")
+    return ox, oy
+
+
+def calibrate_shell(screen: Screen) -> None:
+    """Once, with a fresh 'poring-lab shell' window ACTIVE and its shortcut visible: save its tab
+    template (located by the PowerShell tab icon) and the shortcut icon's signature."""
+    rgb = screen.full()[:, :, 2::-1]
+    ps = np.load(STATE_DIR / "signatures" / "ps_tab_template.npy")
+    icon_only = ps[:, :24].astype(np.int16)  # the PowerShell icon (columns 3-18), no title text
+    found = _match_console(rgb.astype(np.int16), icon_only)
+    if found is None:
+        raise Stop("no active PowerShell tab icon on screen: open 'poring-lab shell' first")
+    ox, oy, _ = found
+    h, w = ps.shape[:2]
+    crop = np.ascontiguousarray(rgb[oy : oy + h, ox : ox + w]).astype(np.uint8)
+    np.save(STATE_DIR / "signatures" / SHELL_TEMPLATE, crop)
+    to_png(np.dstack([crop[..., ::-1], np.full(crop.shape[:2], 255, np.uint8)]),
+           SHOTS / "sig_shell_tab.png")  # fmt: skip
+    for state in ("shell_shortcut_icon_sel",):
+        calibrate(screen, state)
+    log(f"shell tab template saved at ({ox},{oy}); icon signature saved")
+
+
 def recover(which: str, retries: int = 2) -> None:
     for attempt in range(1, retries + 2):
         try:
@@ -1083,6 +1210,10 @@ def main() -> None:
         if cmd == "click":
             xy = (int(args[0]), int(args[1]))
             agent.click(*(xy if a.abs else at(*xy)), "right" if a.right else "left")
+        elif cmd == "open-terminal":
+            open_terminal(agent, screen)
+        elif cmd == "calibrate-shell":
+            calibrate_shell(screen)
         elif cmd == "drag":
             x1, y1, x2, y2 = (int(v) for v in args[:4])
             p1, p2 = ((x1, y1), (x2, y2)) if a.abs else (at(x1, y1), at(x2, y2))
