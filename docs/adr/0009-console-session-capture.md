@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: S1 PARKED (Batt, 2026-10-02) at 'Windows side works, the Moonlight-qt main loop stalls'. No gdb. S2 (docs/s2-plan.md) is the path; its step 0 (a temporary Mac Moonlight pairing) also tells whether the stall is lab-side. to-rdp now ends the stream cleanly (Moonlight quit -> Sunshine /cancel) and checks Sunshine's revert.
+next_action: S1 PARKED (Batt, 2026-10-02) at 'Windows side works, the Moonlight-qt main loop stalls'. No gdb. S2 (docs/s2-plan.md) is the path; its step 0 (a temporary Mac Moonlight pairing) also tells whether the stall is lab-side. to-rdp now ends the stream cleanly (Moonlight quit -> Sunshine /cancel) and checks Sunshine's revert. S2 step 0 attempt 1 (2026-10-03) was reverted unanswered: the Mac app was started before the handover. The lab client's quit (/cancel) ended the Mac's app, so /cancel is host-wide.
 ---
 
 # ADR-0009: Console-session capture as a second display mode (Sunshine first, VNC fallback)
@@ -350,8 +350,9 @@ the host's certificate.
 
 ## Amendment (Batt, 2026-10-02): S1 interpretation, the S2 architecture, shared viewing and control
 
-**Status of this amendment: PROPOSED.** The plan is [docs/s2-plan.md](../s2-plan.md). Nothing is
-implemented before Batt approves it.
+**Status of this amendment: APPROVED** (Batt, 2026-10-02: "the S2 plan + ADR-0013, including step
+0"; this amendment is that plan's ADR record). The plan is [docs/s2-plan.md](../s2-plan.md). Step 0
+was attempted on 2026-10-03 and is not done; nothing of S2 itself is implemented yet.
 
 **1. S1 interpretation (correction).** "RDP vs S1 isolates the protocol" is withdrawn.
 - FreeRDP draws bitmaps into Xvfb through X11.
@@ -437,19 +438,30 @@ implemented before Batt approves it.
   lab-side (Moonlight-qt / SDL on Xvfb), not a broken stream.
 - The cheap decisive test is S2's step 0: the same Sunshine config streamed to a real Moonlight on
   Batt's Mac. If the Mac renders at once, the lab-side reading holds.
+  ➡️ **2026-10-03: attempt 1 did NOT answer it.** The Mac app was started while the session was still
+  on RDP, so it showed black for the known reason (lesson 2), not as evidence about the stall. It
+  was reverted ([s2-plan.md](../s2-plan.md) §9, step 0, "Attempt 1"). The question stays open.
 
 **Sunshine-side lessons (S2 consumes the same stream).**
 1. **A TERM-killed client leaves the app session running.** The next connect is a `/resume` of a
    stale session, possibly launched under another display topology.
    - Always end with Moonlight's `quit` (Sunshine `/cancel`).
    - to-rdp now does this; S2 will call `/cancel` itself.
+   - **`/cancel` is host-wide, not per-client** (seen live 2026-10-03, S2 step 0 attempt 1). The
+     lab client's `quit` ended the app session the Mac had started (`<cancel>1</cancel>`, and
+     Sunshine's apply retries stopped at once). A client that just disconnects (the Mac, like
+     a TERM-killed one) leaves the app running.
 2. **Display apply and revert need a session on the console** ("API is available: false"
    otherwise).
    - Apply happens at stream start, so the stream starts only on `console/steady`.
    - Revert happens at session end, so the session must end **before** the session leaves the
      console.
    - A missed revert retries every 5 s until the next console session, and meanwhile the Samsung
-     stays dark (left so on purpose by Batt, 2026-10-02).
+     stays dark (left so on purpose by Batt, 2026-10-02). ➡️ SUPERSEDED 22:15 the same day: the new
+     Sunshine dropped the pending revert at its first start, so a console session will NOT restore
+     the Samsung. Batt will use Win+P at the Dell (the runbook's "Samsung display recovery").
+   - An app started while the session is NOT on the console (2026-10-03, the Mac) streams black and
+     retries the apply every 5 s until it is cancelled.
 3. **Sunshine rewrites `sunshine.log` at every start**, including the helper restart when the session
    moves (18:54:53). Evidence must be copied out during the handover.
 4. **Stream facts:**

@@ -1,18 +1,19 @@
 ---
 doc_type: decision
 hypothesis: null
-status: PROPOSED
+status: GO
 role: null
-verdict_date: null
+verdict_date: 2026-10-02
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: Batt approves or amends the scope. Then it is built only after S2 is working and shared control is approved (docs/s2-plan.md §11). Nothing is implemented.
+next_action: ACCEPTED by Batt 2026-10-02 (with the S2 plan). It is built only after S2 is working and shared control is approved (docs/s2-plan.md §11). Nothing is implemented.
 ---
 
 # ADR-0013: A Windows-side status indicator, display-only
 
-- **Status:** PROPOSED (2026-10-02, from Batt's capture-direction note).
+- **Status:** ACCEPTED (Batt, 2026-10-02, with the S2 plan). Proposed the same day from Batt's
+  capture-direction note. Build later: only after S2 works and shared control is approved.
 - **Related:**
   - [ADR-0009](0009-console-session-capture.md): the console mode and its 2026-10-02 amendment;
   - [docs/s2-plan.md](../s2-plan.md) §11: shared control;

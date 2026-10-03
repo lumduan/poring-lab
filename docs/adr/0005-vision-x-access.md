@@ -126,7 +126,7 @@ It goes in `scripts/` with the implementation, and is part of Phase 4's entry ga
 
 ## Note (2026-10-02): S2 implements option (a) for the GameStream path
 
-The proposed S2 architecture ([docs/s2-plan.md](../s2-plan.md), ADR-0009 2026-10-02 amendment)
+The S2 architecture (approved by Batt 2026-10-02; [docs/s2-plan.md](../s2-plan.md), ADR-0009 2026-10-02 amendment)
 decodes the GameStream video once, into a shared-memory frame bus. vision maps the bus
 **read-only** and never touches X on that path. That is option (a), with these specifics:
 - a seqlock ring;

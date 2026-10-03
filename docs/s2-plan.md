@@ -1,18 +1,19 @@
 ---
 doc_type: design
 hypothesis: null
-status: PROPOSED
+status: GO
 role: null
-verdict_date: null
+verdict_date: 2026-10-02
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: Batt approves (or amends) this plan, ADR-0009's 2026-10-02 amendments and ADR-0013. Then step 0 (a temporary Mac Moonlight pairing for SendInput acceptance + a VDD stream health check, reverted the same session), then step 1's spike in an operator-chosen build window. Nothing here is implemented.
+next_action: APPROVED by Batt 2026-10-02 (with ADR-0013 and step 0). Step 0 was ATTEMPTED 2026-10-03 and reverted with its questions unanswered (the Mac app started before the handover); re-run it in order (to-console --external FIRST, then the Mac) when Batt is at the Mac, or go to step 1's spike in an operator build window.
 ---
 
 # S2: GameStream without Xvfb, one decode, a frame bus for the bot and the human
 
-**Status:** PLAN, awaiting Batt's approval (2026-10-02). It changes the architecture: it removes the
+**Status:** APPROVED by Batt (2026-10-02), together with ADR-0013 and step 0. Step 0 was
+attempted on 2026-10-03 and is NOT done (§9, step 0, "Attempt 1"). It changes the architecture: it removes the
 Xvfb hop for GameStream and adds a Windows-side helper (that helper is ADR-0013, built later).
 
 **Sources:**
@@ -240,17 +241,44 @@ streams, or decode-to-GPU feeding YOLO). Not now.
      - a Windows Firewall exception for the Mac's IP (admin; Sunshine's rules admit only this host
        today);
      - pairing by PIN in Sunshine's web UI (pc-only);
-     - the lab's gamestream stopped through `guarded_build.py` for the duration (never two clients);
-     - a tscon handover;
+     - ~~the lab's gamestream stopped through `guarded_build.py` for the duration~~ ➡️ SUPERSEDED
+       (2026-10-02, before attempt 1): `capture_backend.py to-console --yes-tscon --external` leaves
+       the lock at console/switching (REASON `to-console-external`), so the lab's Moonlight HOLDS
+       while the external one streams. No container stop/start; still never two streaming clients;
+     - a tscon handover, **and only after it reports done does Batt start Desktop on the Mac**
+       (attempt 1 lesson: started on RDP, the stream is black and the app keeps running);
      - Batt tests by hand; I read the chatlog and the sniffer.
    - **Revert, in the same session:**
-     - unpair the Mac (Sunshine lists exactly ONE client again: `poring-lab-gamestream`);
-     - remove the firewall exception;
-     - guarded start of gamestream;
-     - `to-rdp` (the clean quit).
+     - `to-rdp`: the lab's `quit` (/cancel) also ends the EXTERNAL client's app (seen live in
+       attempt 1), then the revert check;
+     - unpair the Mac (Sunshine lists exactly ONE client again: `poring-lab-gamestream`; web UI,
+       Troubleshooting → Unpair Devices → that row's own delete button, NEVER "Unpair All");
+     - remove the firewall exception (exact program path, read back);
+     - the lab's `moonlight list` still works (its pairing is intact).
    - **This is an explicit, time-boxed exception to CLAUDE.md rule 2** ("Sunshine pairs ONLY the
      lab's gamestream client"). It needs Batt's go, and the revert is checked, not assumed.
    - **Fallback:** step 1's spike also sends input (LiSend*) but needs a build window.
+   - **Attempt 1, 2026-10-03 — NOT DONE; reverted, and none of its questions is answered.**
+     - Done: the firewall exception (both enabled "Sunshine" rules → `192.168.1.13,192.168.110.55`,
+       exact program path, read back); the Mac paired by PIN (state written 10:01:45; 2 clients,
+       `sunshine_state.json` still SYSTEM + Administrators only).
+     - What happened: Desktop was started on the Mac while the session was still on RDP (lock
+       rdp/steady, no tscon). The Mac showed black with a cursor, as expected: Sunshine has no
+       console session and logged "Trying to apply display device settings. API is available:
+       false" every 5 s. Batt then left the Mac, and the app kept running (the retries continued),
+       the same "an unquit client leaves the app running" lesson as S1's TERM.
+     - 10:14: the lab's Moonlight `quit` (`capture_backend.QUIT_STREAM`) → `200 <cancel>1</cancel>`
+       (rc 124, the CLI lingers). The retries stopped at 10:14:14: **one paired client's /cancel
+       ends another client's app**, which is what to-rdp's "external" branch relies on.
+     - Revert (Batt: "delete dell 3090 out"): the Mac was unpaired at 10:19:27 (read back after a
+       page reload AND in the state file: 1 client, `poring-lab-gamestream`); the firewall was back to
+       `192.168.1.13` on both rules at ~10:24 (read back); the lab's `moonlight list` returned rc 0
+       (Desktop, Steam Big Picture).
+     - NOT tested: SendInput (keys, clicks, right-drag), Thai Kedmanee, Mouse Keys, VDD stream
+       health, and to-rdp's clean quit live (the session never left RDP). Mouse Keys (62) and the
+       chatlog (max id 6) were not re-read: there was no console session and no in-game input, so
+       nothing could have changed them.
+     - Re-running it costs the same again (firewall exception + PIN), with Batt at the Mac.
 1. **Spike** (throwaway, `/dev/shm`, an operator window for any build):
    - moonlight-common-c `.so` + PyAV;
    - connect with the paired identity under a console handover;
