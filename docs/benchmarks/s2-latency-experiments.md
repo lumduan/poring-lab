@@ -120,3 +120,54 @@ A Sunshine restart ends the stream: `hold` → push Batt → re-stream.
 ## Results
 
 (appended after each run; never edited)
+
+### 2026-10-03 20:32–21:18, the S2 session (variant S2: bus + input socket)
+Key→paint is p50 / p95 / p99 in ms. A p99 of `>1500` means at least one trial had no painting
+frame within 1.5 s. The split columns are p50 / p95 ms at each trial's painting frame. fps is the
+median (p10) during rotation. "gs cores" is gamestream in motion.
+
+| run | run_id | key→paint | matched | to_receive | host | queue | decode | packet→frame | fps | gs cores |
+|---|---|---|---|---|---|---|---|---|---|---|
+| C0a | `2026-10-03T2032-45d162f8b03f-C0a` | 123.2 / 293.5 / >1500 | 59/60 | 105.9 / 142.1 | 5.7 | 0.7 / 157.4 | 8.9 / 12.8 | 120.0 / >1500 (22/30) | 30 (26) | 0.93 |
+| C0b | `2026-10-03T2037-45d162f8b03f-C0b` | 132.6 / 367.7 / >1500 | 57/60 | 110.5 / 150.9 | 5.7 | 0.9 / 168.9 | 9.3 / 13.4 | 115.6 / 256.7 (29/30) | 28 (23) | 0.93 |
+| E1 | `2026-10-03T2044-2a41c1450007-E1-evidence-thread` | 123.1 / 169.6 / >1500 | 59/60 | 110.3 / 154.6 | 5.7 | 0.7 / 1.1 | 9.5 / 12.7 | 102.2 / >1500 (28/30) | 30 (28) | 1.0 |
+| E2 dt=1 | `2026-10-03T2050-6b4d63df5173-E2-dt1` | 135.8 / 160.3 / >1500 | 59/60 | 117.9 / 136.7 | 6.2 | 0.7 / 1.1 | 11.3 / 19.7 | 116.9 / 208.5 (30/30) | 30 (28) | 0.94 |
+| E2 dt=4 | `2026-10-03T2056-2348dcbbbf52-E2-dt4` | 129.2 / >1500 / >1500 | 54/60 | 115.4 / 142.5 | 5.7 | 0.5 / 1.2 | 6.4 / 9.3 | 97.2 / >1500 (27/30) | 30 (28) | 0.97 |
+| E3 fps=60 | `2026-10-03T2112-cceeee742be8-E3-fps60` | 110.4 / 127.1 / 133.8 | 60/60 | 96.8 / 112.0 | 7.4 | 0.8 / 1.1 | 9.1 / 11.4 | 98.0 / 109.9 (30/30) | 30 (5) | 0.9 |
+
+- **A/A band** (C0a vs C0b): |Δp50| 9.4 ms, |Δp95| 74.2 ms. The 2× thresholds are 18.8 / 148 ms
+  (n = 60 per run, so p95 is noisy, as pre-registered).
+- **E1 KEPT.** The bimodal tail WAS the decode thread blocked by the evidence PNG encode:
+  - queue p95 fell from 157–169 ms to 1.1 ms;
+  - key→paint p95 fell from 293–368 ms (mean ≈ 330) to 169.6 ms (Δ ≈ −160, beyond 148);
+  - p50 is unchanged (123).
+
+  Pre-registered prediction: CONFIRMED.
+- **E2 (decoder threads):** decode p50/p95 is 11.3/19.7 ms with 1 thread, 9.5/12.7 with 2 (E1),
+  and 6.4/9.3 with 4. Key→paint moves within the band, so **threads stay at 2**, as the rule says.
+  Bus publishing: included in `decode` (dequeue → publish), well under 2 ms beyond the decode itself.
+- **E3 (60 fps): NOT decided by the rule yet.**
+  - Key→paint 110.4 / 127.1 / 133.8 with 60/60 matched, against E1's 123.1 / 169.6.
+  - Δp50 −12.7 and Δp95 −42.5 are both under the 2× thresholds.
+  - The split shows the mechanism: `to_receive` 96.8/112.0 against E1's 110.3/154.6, beyond
+    to_receive's own A/A band (±4.6 / ±8.8).
+  - Gamestream cores are unchanged (0.90).
+  - **fps p10 fell to 5**, but see "network drops" below: this is not 60 fps-specific.
+- **E4 (capture = wgc): DROPPED before running.** Sunshine's docs say wgc "is not compatible with
+  the Sunshine service", and the Dell runs Sunshine as `SunshineService`. Testing it would mean
+  running Sunshine as a user app: a different deployment, Batt's decision, not a one-key change.
+- **Finding, network drops:** the S2 client logs "Network dropped 1 frame … Waiting for IDR frame"
+  25–77 times per stream at 30 fps too, roughly once per 10 s. The host has no reference-frame
+  invalidation, so each drop freezes the picture until a full IDR.
+  - The container's UDP sockets dropped nothing: `RcvbufErrors` 0, per-socket drops 0.
+  - `enp6s18` (virtio) RX drops +1 in a 60 s window with 0 client drops in that window.
+  - So the loss is upstream of the VM, or Sunshine's send pacing. Open, and the likely source of
+    the stray 1–6 unmatched key presses per run (the bench records them per run from E3 on).
+
+### E3-confirm (pre-registered 2026-10-03 21:25, BEFORE the runs)
+- **Why:** E3's effect sits between the quantile rule (not met) and the split (met).
+- **Runs:** one more E1 (`EVIDENCE=thread`, 30 fps) and one more E3 (`EVIDENCE=thread`, 60 fps),
+  in that order. That gives the order A, B, A, B together with the first pair.
+- **Decision on the POOLED n = 120 per arm:** keep 60 fps if pooled key→paint p95 improves by more
+  than the 2 × A/A threshold scaled to n = 120 (148 / √2 ≈ 105 ms) OR pooled p50 improves by more
+  than 18.8 / √2 ≈ 13 ms, with fps (median) and cores not worse. Otherwise stay at 30.

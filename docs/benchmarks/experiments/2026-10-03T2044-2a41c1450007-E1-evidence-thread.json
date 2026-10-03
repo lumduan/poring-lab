@@ -1,0 +1,279 @@
+{
+ "run_id": "2026-10-03T2044-2a41c1450007-E1-evidence-thread",
+ "label": "E1-evidence-thread",
+ "config": {
+  "spec": 2,
+  "backend": "console",
+  "client": {
+   "name": "s2spike",
+   "version": "moonlight-common-c 8599b6042a4ba27749b0f94134dd614b4328a9bc",
+   "codec": "H.264",
+   "paint": "bus"
+  },
+  "xvfb": "1920x1200x24",
+  "session": "1440x900",
+  "game_region": "80,77,1280,720",
+  "fps_limit": 30,
+  "scenes": {
+   "outdoor": [
+    "prt_fild08",
+    170,
+    375
+   ],
+   "indoor": [
+    "prt_church",
+    99,
+    112
+   ]
+  },
+  "variant": [
+   "CLIENT=s2spike",
+   "WM=none",
+   "GDB_AFTER_S=",
+   "PAINT=bus",
+   "INPUT=socket",
+   "EVIDENCE=thread"
+  ]
+ },
+ "config_hash": "2a41c1450007",
+ "t_wall_start": "2026-10-03T20:44:10+0700",
+ "preflight": {
+  "lock_seq": 85,
+  "viewers": 1,
+  "mode": "ASSIST"
+ },
+ "delivery_fps": {
+  "median": 30.0,
+  "p10": 28.0,
+  "p90": 30.0
+ },
+ "lab_cores_motion": {
+  "poring-lab-desktop-1": 0.04,
+  "poring-lab-gamestream-1": 1.0,
+  "total": 1.03
+ },
+ "packet_to_frame_ms": {
+  "matched": 28,
+  "trials": 30,
+  "p50": 102.2,
+  "p75": 137.8,
+  "p90": 147.6,
+  "p95": ">1500",
+  "p99": ">1500"
+ },
+ "cores_whole_run": {
+  "poring-lab-desktop-1": 0.04,
+  "poring-lab-gamestream-1": 0.78,
+  "total": 0.82
+ },
+ "key_to_paint_ms": {
+  "key": "Escape",
+  "region": [
+   598,
+   536,
+   250,
+   120
+  ],
+  "matched": 59,
+  "trials": 60,
+  "p50": 123.1,
+  "p75": 136.7,
+  "p90": 159.9,
+  "p95": 169.6,
+  "p99": ">1500",
+  "frame_sources": [
+   "bus"
+  ],
+  "raw_ms": [
+   136.1,
+   129.4,
+   117.7,
+   137.2,
+   124.1,
+   112.6,
+   98.4,
+   125.4,
+   111.0,
+   105.0,
+   123.1,
+   116.7,
+   101.6,
+   126.9,
+   113.5,
+   109.2,
+   127.6,
+   120.6,
+   108.2,
+   134.8,
+   119.8,
+   111.6,
+   97.3,
+   123.0,
+   111.7,
+   106.1,
+   126.7,
+   118.6,
+   105.4,
+   99.5,
+   116.8,
+   108.9,
+   95.1,
+   122.8,
+   130.7,
+   154.8,
+   140.5,
+   136.5,
+   124.6,
+   116.5,
+   136.7,
+   131.6,
+   118.1,
+   145.6,
+   128.5,
+   121.9,
+   141.0,
+   134.9,
+   120.9,
+   114.1,
+   169.6,
+   162.9,
+   149.1,
+   177.4,
+   163.8,
+   159.9,
+   144.7,
+   171.9,
+   153.4
+  ]
+ },
+ "frame_sources": {
+  "rotation": [
+   "bus"
+  ],
+  "walks": [
+   "bus"
+  ],
+  "keys": [
+   "bus"
+  ]
+ },
+ "key_to_paint_split_ms": {
+  "matched": 59,
+  "of": 59,
+  "to_receive": {
+   "p50": 110.3,
+   "p95": 154.6,
+   "n": 59
+  },
+  "host": {
+   "p50": 5.7,
+   "p95": 7.4,
+   "n": 59
+  },
+  "receive": {
+   "p50": 4.0,
+   "p95": 5.0,
+   "n": 59
+  },
+  "queue": {
+   "p50": 0.7,
+   "p95": 1.1,
+   "n": 59
+  },
+  "decode": {
+   "p50": 9.5,
+   "p95": 12.7,
+   "n": 59
+  }
+ },
+ "frames_split_ms": {
+  "frames": 9014,
+  "receive": {
+   "p50": 2.0,
+   "p95": 5.0,
+   "n": 9014
+  },
+  "queue": {
+   "p50": 0.7,
+   "p95": 1.1,
+   "n": 9014
+  },
+  "decode": {
+   "p50": 8.5,
+   "p95": 17.6,
+   "n": 9014
+  },
+  "host": {
+   "p50": 5.5,
+   "p95": 7.2,
+   "n": 8974
+  }
+ },
+ "s2_stats": {
+  "first_frame_s": 0.205,
+  "frames": 9103,
+  "decode_units": 9103,
+  "decode_errors": 0,
+  "size": "1440x900",
+  "fps_recent": 30.04,
+  "decode_ms_p50": 7.02,
+  "decode_ms_p95": 12.66,
+  "decode_cpu_s": 71.17,
+  "stages": [
+   "starting platform initialization",
+   "complete platform initialization",
+   "starting name resolution",
+   "complete name resolution",
+   "starting audio stream initialization",
+   "complete audio stream initialization",
+   "starting RTSP handshake",
+   "complete RTSP handshake",
+   "starting control stream initialization",
+   "complete control stream initialization",
+   "starting video stream initialization",
+   "complete video stream initialization",
+   "starting input stream initialization",
+   "complete input stream initialization",
+   "starting control stream establishment",
+   "complete control stream establishment",
+   "starting video stream establishment",
+   "complete video stream establishment",
+   "starting audio stream establishment",
+   "complete audio stream establishment",
+   "starting input stream establishment",
+   "complete input stream establishment"
+  ],
+  "error": 0,
+  "t": 1791035358.413737,
+  "evidence": "thread",
+  "decode_threads": 2,
+  "fps_requested": 30,
+  "input": {
+   "batches": 843,
+   "keys": 450,
+   "buttons": 101,
+   "moves": 563,
+   "wheel": 0,
+   "release_all": 0,
+   "refused": 0,
+   "peers": 1
+  },
+  "timing_dropped": 0,
+  "framebus": {
+   "frames_published": 9103
+  }
+ },
+ "input_sink": {
+  "active": "s2",
+  "switches": 1,
+  "s2_available": true,
+  "s2_connected": true,
+  "s2_acks": 2647,
+  "s2_errors": 46,
+  "s2_refused": 0,
+  "s2_leg_ms_p50": 0.69,
+  "s2_leg_ms_p95": 1.59,
+  "s2_leg_n": 512
+ },
+ "t_wall_end": "2026-10-03T20:49:20+0700"
+}
