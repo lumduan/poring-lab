@@ -212,6 +212,7 @@ def key_to_paint(agent: r.Agent, screen: r.Screen, trials: int) -> dict[str, Any
         agent.keys("Escape")
         time.sleep(1.5)
     pairs: list[tuple[int, int]] = []  # (send ns, the painting frame's t ns)
+    unmatched: list[int] = []  # send ns of the trials no frame answered (diagnostics)
     watcher.wait(timeout=120)
     reader.join(timeout=10)
     grabs, sources = measure_delay.parse_watch("".join(lines))
@@ -220,20 +221,27 @@ def key_to_paint(agent: r.Agent, screen: r.Screen, trials: int) -> dict[str, Any
     for ts in sends:
         i = bisect.bisect_left(times, ts)
         if i == 0 or i >= len(grabs):
+            unmatched.append(ts)
             continue
         ref = grabs[i - 1][1]
+        hit = None
         for t, thumb in grabs[i:]:
             if t - ts > 1_500_000_000:
                 break
             if float((np.abs(thumb - ref) > 24).mean()) >= MOVED:
-                delays.append((t - ts) / 1e6)
-                pairs.append((ts, t))
+                hit = t
                 break
+        if hit is None:
+            unmatched.append(ts)
+        else:
+            delays.append((hit - ts) / 1e6)
+            pairs.append((ts, hit))
     if trials % 2:
         agent.keys("Escape")  # leave the Game option window closed
     return {"key": "Escape", "region": region, **benchlib.delay_summary(delays, trials=trials),
             "frame_sources": sources, "raw_ms": [round(d, 1) for d in delays],
-            "pairs_ns": pairs}  # fmt: skip
+            "pairs_ns": pairs, "unmatched_sends_ns": unmatched,
+            "grab_times_ns": [t for t, _ in grabs]}  # fmt: skip
 
 
 # --- the key->paint tail experiments (S2) ---------------------------------------------------------
@@ -333,7 +341,13 @@ def cmd_exp(a: argparse.Namespace) -> int:
         result["cores_whole_run"] = measure_motion.cores_between(
             before, measure_motion.usage_us(), time.monotonic() - t0
         )
-        result["key_to_paint_ms"] = {k: v for k, v in k2p.items() if k != "pairs_ns"}
+        result["key_to_paint_ms"] = {k: v for k, v in k2p.items()
+                                     if k not in ("pairs_ns", "grab_times_ns")}  # fmt: skip
+        result["key_to_paint_ms"]["unmatched_detail"] = [
+            {"send_ns": ts, "grabs_within_1500ms": sum(1 for g in k2p["grab_times_ns"]
+                                                       if 0 <= g - ts <= 1_500_000_000)}
+            for ts in k2p["unmatched_sends_ns"]
+        ]  # fmt: skip
         result["frame_sources"] = {"rotation": rot["frame_sources"],
                                    "walks": walks["frame_sources"],
                                    "keys": k2p["frame_sources"]}  # fmt: skip
