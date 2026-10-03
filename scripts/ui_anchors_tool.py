@@ -9,6 +9,11 @@
         ro_agent's signatures). --mask-png (repeatable): the SAME UI over another scene, or in
         another locale pack (ADR-0012); only the pixels that agree in EVERY variant become the
         template's stable mask (RO windows are translucent; a title's text differs per locale).
+    ui_anchors_tool.py variant --png SHOT [--windows basic_info,...]
+        ADD a variant to the stored templates without re-cutting them: each window's strip in SHOT
+        (the same UI in another locale pack, or over another scene) narrows the stored stable
+        mask to the pixels that also agree there (2026-10-03, the Thai pack). The template and
+        every earlier variant's verdict are kept: the mask only ever shrinks.
     ui_anchors_tool.py check [--png SHOT]
         Locate every window that has a template, resolve every element, print both; an overlay
         of the boxes goes to /dev/shm (rule 7).
@@ -64,6 +69,36 @@ def cmd_capture(png: str | None, mask_pngs: list[str], names: list[str]) -> int:
     return 0
 
 
+def add_variant(
+    templates: dict[str, np.ndarray], masks: dict[str, np.ndarray], variant: dict[str, np.ndarray]
+) -> dict[str, np.ndarray]:
+    """The stored masks narrowed by one more variant (a window without a mask starts all-ones)."""
+    out = {}
+    for name, tmpl in templates.items():
+        if name not in variant or variant[name].shape != tmpl.shape:
+            continue
+        stable = ua.stable_masks({name: tmpl}, {name: variant[name]})[name]
+        old = masks.get(name, np.ones(tmpl.shape, dtype=np.float32))
+        out[name] = (old * stable).astype(np.float32)
+    return out
+
+
+def cmd_variant(png: str, names: list[str]) -> int:
+    templates = {n: t for n, t in ua.load_templates(TEMPLATES, ua.WINDOWS).items() if n in names}
+    masks = ua.load_masks(TEMPLATES, ua.WINDOWS)
+    origins = {n: ua.CAPTURE_ORIGINS[n] for n in templates}
+    variant = ua.cut_templates(client_frame(png), origins, ua.WINDOWS)
+    new = add_variant(templates, masks, variant)
+    ua.save_templates(TEMPLATES, {}, new)
+    summary = {
+        n: {"stable_before": round(float(masks[n].mean()), 3) if n in masks else None,
+            "stable_after": round(float(m.mean()), 3)}
+        for n, m in new.items()
+    }  # fmt: skip
+    print(json.dumps(summary))
+    return 0
+
+
 def cmd_check(png: str | None) -> int:
     frame = client_frame(png)
     anchors = ua.default_registry(TEMPLATES)
@@ -105,7 +140,7 @@ def cmd_check(png: str | None) -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
-    ap.add_argument("cmd", choices=["capture", "check"])
+    ap.add_argument("cmd", choices=["capture", "variant", "check"])
     ap.add_argument("--png", help="a full-screen PNG (`ro_agent.py shot`), not a live grab")
     ap.add_argument(
         "--mask-png",
@@ -115,8 +150,13 @@ def main() -> int:
     )
     ap.add_argument("--windows", default="basic_info,hotbar,chat")
     a = ap.parse_args()
+    names = [n for n in a.windows.split(",") if n]
     if a.cmd == "capture":
-        return cmd_capture(a.png, a.mask_png, [n for n in a.windows.split(",") if n])
+        return cmd_capture(a.png, a.mask_png, names)
+    if a.cmd == "variant":
+        if not a.png:
+            ap.error("variant needs --png (the frame in the other locale)")
+        return cmd_variant(a.png, names)
     return cmd_check(a.png)
 
 

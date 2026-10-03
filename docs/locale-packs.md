@@ -161,6 +161,40 @@ Validation rules (`check`):
     sessions; NAS permissions never changed; Frigate unchanged). **The install route is Batt's
     decision** (an authenticated read-only share as in nas-sink.md §5, or a one-off through
     `\\tsclient\transfer`); weakening Windows' SMB policy is not proposed.
+    ➡️ **Batt chose the one-off through `\\tsclient\transfer`; C5 DONE 2026-10-03 15:46–16:07.**
+
+**C5 as run (2026-10-03).**
+- Backup `C:\RO-rAthena\_backup\20261003-locale-th\msgstringtable.txt` = sha256 `EDE8A073…E59F5C5`
+  (the live ROenglishRE table); installed `A640B2E7…ACFF2B0`, 126,968 B = the manifest. The file
+  went through `/transfer` once and was deleted (ADR-0004 "Exceptions log").
+- **Thai, in frames** (the frames stay in `/dev/shm`; pack text is never quoted here): the
+  service-select title, the Basic Info title, the chat's system lines, the game-option menu's title. Unchanged (not in
+  msgstringtable): the login dialog's labels, the chat TABS (`msgstring_kr.lub`, still the English
+  one), HP/SP/Lv/Weight labels, the menu's buttons (Korean images).
+- **ro_agent under Thai:** `service_select` needed a locale variant (`service_select@th`, the
+  English signature kept); `login` and `char_select` matched as they are. The ENG tray template
+  had drifted (8.3–11.0 vs 6.0, a half-pixel re-render, unrelated to the pack) and was
+  recalibrated while the tray visibly said ENG (the old one kept as `.bak`).
+- **Acceptance on the registered windows (ADR-0011 anchors), th then en:**
+
+      element                      th                          en
+      basic_info located           0.39 accepted               0.39 accepted
+      hp_bar / sp_bar / hp_sp_text resolved (102,57)…          resolved, the same pixels
+      hotbar + 9 slots             1.00 accepted, 9/9          0.81 accepted, 9/9
+      chat                         12.79 NOT accepted          12.78 NOT accepted
+      open/close Basic Info (Alt+V) start, closed, opened, closed, restored: all true in both
+      HP read (bar pixels)         93.3 % blue columns = full; DB 40/40 in both
+      Thai chat -> chatlog HEX     B7B4CACDBA20E4B7C2 (row 8)  B7B4CACDBA20E4B7C2 (row 9)
+
+  - `basic_info` failed in Thai (39.76) until its stable mask took the Thai frame as a variant
+    (`ui_anchors_tool.py variant`, add-only: the template is kept and the mask only shrinks;
+    0.982 -> 0.816 stable). `chat` fails in BOTH languages: its mask is 17 % text edges, and the
+    tab row now renders ~half a pixel differently (12.78 vs a 12.0 limit). That is a stale template,
+    not the pack: re-cut it (`capture --windows chat` over 2+ scenes, then `variant` with a Thai
+    frame). `game_option` (not in the acceptance list) is English-only and opened elsewhere.
+- **End state: English restored** (`EDE8A073…`), the client relaunched, the GM in game.
+- **Follow-ups (recorded, not done):** login / OK-Cancel / NPC-dialog anchors; the chat template
+  re-cut; the `game_option` locale variant; a Thai `msgstring_kr.lub` for the chat tabs.
 - **The steps:**
   1. Back up the files to be replaced into `C:\RO-rAthena\_backup\<date>-locale-<lang>\`.
   2. Copy `install\` over the client with a hash read-back.

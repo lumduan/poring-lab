@@ -315,6 +315,26 @@ def region_for(state: str) -> tuple[int, int, int, int]:
     return x, y, w, h
 
 
+# Locale variants (ADR-0012; 2026-10-03, the Thai pack): signatures/<state>@<locale>.npy is the SAME
+# box in another locale pack's text. A state matches if ANY of its variants does; the English
+# signature is never overwritten, so switching packs back needs no recalibration.
+LOCALE_SEP = "@"
+
+
+def base_state(state: str) -> str:
+    return state.split(LOCALE_SEP, 1)[0]
+
+
+def signature_variants(state: str) -> list[Path]:
+    """The signature files that stand for ``state``: itself (if calibrated) and, for a base
+    state, every ``state@locale`` variant. An explicit ``state@locale`` is just that file."""
+    path = signature_path(state)
+    found = [path] if path.exists() else []
+    if LOCALE_SEP not in state:
+        found += sorted(path.parent.glob(f"{state}{LOCALE_SEP}*.npy"))
+    return found
+
+
 def calibrate(screen: Screen, state: str, box: list[int] | None = None) -> None:
     if state == "eng_stream":  # the console stream's ENG template (only that file)
         _, img = screen.grab(*region_for("eng"))
@@ -326,7 +346,7 @@ def calibrate(screen: Screen, state: str, box: list[int] | None = None) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if box is not None:
         path.with_suffix(".json").write_text(json.dumps({"box": box}))
-    _, img = screen.grab(*region_for(state))
+    _, img = screen.grab(*region_for(state if box is not None else base_state(state)))
     np.save(path, grey_thumb(img))
     if state == "eng":  # full resolution, for the sliding tray search
         np.save(STATE_DIR / "signatures" / "eng_full.npy", _grey(img))
@@ -365,15 +385,17 @@ def eng_distance(screen: Screen) -> float:
 def distance(screen: Screen, state: str) -> float:
     if state == "eng" and (STATE_DIR / "signatures" / "eng_full.npy").exists():
         return eng_distance(screen)
-    path = signature_path(state)
-    if not path.exists():
+    paths = signature_variants(state)
+    if not paths:
         raise Stop(f"no signature for {state!r}: run `ro_agent.py calibrate {state}` first")
-    ref = np.load(path)
-    _, img = screen.grab(*region_for(state))
+    _, img = screen.grab(*region_for(base_state(state)))
     cur = grey_thumb(img)
-    if cur.shape != ref.shape:
-        return float("inf")
-    return float(np.abs(cur - ref).mean())
+    best = float("inf")
+    for path in paths:
+        ref = np.load(path)
+        if cur.shape == ref.shape:
+            best = min(best, float(np.abs(cur - ref).mean()))
+    return best
 
 
 def is_state(screen: Screen, state: str) -> bool:
@@ -381,14 +403,14 @@ def is_state(screen: Screen, state: str) -> bool:
 
 
 def wait_state(screen: Screen, states: list[str], timeout: float) -> str:
-    if not any(signature_path(st).exists() for st in states):  # first run: calibrating
+    if not any(signature_variants(st) for st in states):  # first run: calibrating
         log(f"no signature yet for {states}: waiting {min(timeout, 25):.0f} s instead")
         time.sleep(min(timeout, 25))
         return "uncalibrated"
     end = time.monotonic() + timeout
     while time.monotonic() < end:
         for st in states:
-            if signature_path(st).exists() and is_state(screen, st):
+            if signature_variants(st) and is_state(screen, st):
                 return st
         time.sleep(0.5)
     to_png(screen.full(), SHOTS / f"timeout_{'_'.join(states)}.png")

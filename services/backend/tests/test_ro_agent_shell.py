@@ -76,3 +76,30 @@ def test_the_screen_helper_reads_the_frame_bus_only_in_console_mode_with_a_live_
     assert (t, w, h) == (777, 4, 3)  # the writer's decode time, not a grab time
     got = np.frombuffer(helper.stdout[16:], np.uint8).reshape(3, 4, 4)
     assert np.array_equal(got, pixels[1:4, 2:6])
+
+
+def test_a_locale_variant_matches_without_replacing_the_english_signature(
+    ro: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """2026-10-03: the Thai pack retitles the login dialogs; `<state>@th` is a second template of
+    the SAME box, so the English one still matches after switching back."""
+    monkeypatch.setattr(ro, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(ro, "region_for", lambda state: (0, 0, 64, 32))
+    english = np.full((32, 64, 4), 40, np.uint8)
+    thai = english.copy()
+    thai[4:12, 8:56, :3] = 220  # the dialog's title text, in another script
+
+    class FakeScreen:
+        def __init__(self, img: np.ndarray) -> None:
+            self.img = img
+
+        def grab(self, x: int, y: int, w: int, h: int) -> tuple[int, np.ndarray]:
+            return 0, self.img
+
+    ro.calibrate(FakeScreen(english), "login")
+    assert ro.distance(FakeScreen(thai), "login") > ro.SIG_MATCH  # English template only
+    ro.calibrate(FakeScreen(thai), "login@th")
+    assert ro.is_state(FakeScreen(thai), "login") and ro.is_state(FakeScreen(english), "login")
+    assert ro.distance(FakeScreen(english), "login@th") > ro.SIG_MATCH  # explicit = that file
+    names = sorted(p.name for p in (tmp_path / "signatures").glob("*.npy"))
+    assert names == ["login.npy", "login@th.npy"]

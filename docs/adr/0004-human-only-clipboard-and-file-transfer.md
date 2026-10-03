@@ -404,3 +404,8 @@ verifier.**
     (no shares, no exports; hashes re-read there; `readonly=on`; `@pristine-20261003`), then all
     three were deleted from `/transfer` and the listing read back. Batt's own
     `ref_client_20261002.png` was left untouched. Nothing was executed.
+- **2026-10-03 15:46 ICT, Part C (C5), Batt chose "One-off via transfer" after Windows refused
+  the approved guest SMB share.** The agent WROTE one file into `/transfer`
+  (`msgstringtable-th.txt`, 126,968 B, sha256 `a640b2e7…acff2b0` = the th pack's manifest), the
+  poring-lab shell copied it into the client (`Get-FileHash` read back equal), and it was deleted
+  from `/transfer` at once (listing read back: only Batt's PNG). Nothing else was written.
