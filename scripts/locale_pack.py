@@ -10,7 +10,7 @@ contents (client strings, aligned tables, install files) NEVER are (CLAUDE.md ru
         The canonical key index of a msgstringtable: key -> message ids. Keys are hashes, so the
         index holds no client text.
     locale_pack.py build --lang th --source SRC --reference KOR --en EN [--source-en EN_SRC]
-                         [--source-ref SRC_REF] [--reindex]
+                         [--source-ref SRC_REF] [--reindex] [--source-untranslated TEXT ...]
                          --out DIR [--client-version V] [--font F] [--source-desc TEXT]
                          [--install DIR] [--table NAME=JSON ...] [--fingerprints FILE]
         Align a language's table to the canonical keys and write the pack to DIR, which must be
@@ -42,7 +42,9 @@ Alignment of the SOURCE language (e.g. Thai) to the reference ids, per reference
                    Korean one's.
   unmatched        otherwise (also when --source-en contradicts the same id).
 Ambiguous English matches (several different source texts) prefer the same id, else stay
-unmatched and are counted as ambiguous.
+unmatched and are counted as ambiguous. --source-untranslated TEXT (repeatable): source lines that
+are only TEXT (case-insensitive, e.g. the Thai table's "no msg" placeholder for an untranslated
+id) count as empty, so the reference's English is kept there instead.
 
 Pack layout (schema 1):
   locale-pack.json  manifest: language, client version, source description, font, encoding,
@@ -291,6 +293,9 @@ def build(a: argparse.Namespace) -> dict[str, Any]:
     reference_ko = read_table(a.reference, a.reference_encoding)
     reference_en = read_table(a.en, a.en_encoding)
     source = read_table(source_table, src_enc)
+    blanks = {t.strip().lower() for t in a.source_untranslated or []}
+    untranslated = sum(1 for line in source if line and line.strip().lower() in blanks)
+    source = ["" if line.strip().lower() in blanks else line for line in source]
     source_en = read_table(a.source_en, a.en_encoding) if a.source_en else None
     ref_enc = a.source_ref_encoding or a.reference_encoding
     source_ref = read_table(a.source_ref, ref_enc) if a.source_ref else None
@@ -350,6 +355,7 @@ def build(a: argparse.Namespace) -> dict[str, Any]:
         "ambiguous": result.ambiguous,
         "conflicts": result.conflicts,
         "source_lines": len(source),
+        "source_untranslated": untranslated,
         "source_ref_lines": len(source_ref) if source_ref is not None else None,
         "reindexed": reindex_counts,
     }
@@ -480,6 +486,10 @@ def main(argv: list[str] | None = None) -> int:
         help="the SOURCE build's own table in the reference's language (e.g. its exe's)",
     )  # fmt: skip
     b.add_argument("--source-ref-encoding", help="default: --reference-encoding")
+    b.add_argument(
+        "--source-untranslated", action="append", metavar="TEXT",
+        help="a source line that is only TEXT is untranslated (repeatable; e.g. 'no msg')",
+    )  # fmt: skip
     b.add_argument(
         "--reindex", action="store_true",
         help="install/ msgstringtable in the reference's id order (aligned text, else English)",

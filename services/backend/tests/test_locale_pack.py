@@ -186,3 +186,26 @@ def test_reindex_writes_the_reference_id_order_with_english_fallback(
         "%d หน่วยทดสอบ#".encode("cp874"),
     ]
     assert lp.check(out) == []
+
+
+def test_untranslated_placeholders_keep_our_english(
+    lp: ModuleType, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The Thai table writes "no msg" for an untranslated id (2026-10-03: 769 of 3,970): it must
+    never reach the client as text, and the reference's English stays at that id."""
+    ref = write_table(tmp_path / "kor.txt", REF_KO, "cp949")
+    en = write_table(tmp_path / "en.txt", REF_EN, "cp1252")
+    src = ["กขคง", "No Msg", "%s ข้อความทดสอบสี่", "", "no msg", "%d หน่วยทดสอบ"]
+    src_file = write_table(tmp_path / "th.txt", src, "cp874")
+    out = tmp_path / "packs" / "th"
+    argv = [
+        "build", "--lang", "th", "--source", str(src_file), "--reference", str(ref),
+        "--en", str(en), "--out", str(out), "--reindex", "--source-untranslated", "no msg",
+        "--fingerprints", str(tmp_path / "fp.txt"),
+    ]  # fmt: skip
+    assert lp.main(argv) == 0
+    coverage = json.loads(capsys.readouterr().out)["coverage"]
+    assert coverage["source_untranslated"] == 2 and coverage["index_signature"] == 3
+    lines = (out / "install" / "data" / "msgstringtable.txt").read_bytes().split(b"\r\n")
+    assert lines[1] == b"Cancel#" and lines[4] == b"Inventory#"  # never "no msg"
+    assert b"no msg" not in (out / "msg.json").read_bytes().lower()

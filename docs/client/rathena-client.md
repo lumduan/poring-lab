@@ -169,7 +169,13 @@ renders at 60 fps on the Intel GPU; the bottleneck is RDP *delivery* of those fr
 **Line count check.** WARP 1.5.3's read-only "Extract msgstringtable" extension, run on the unpatched
 source exe (output to `_scratch\`):
 - The exe's built-in table has **3,970** entries; ROenglishRE has **3,970**, so the IDs line up.
-- 3,238 entries are identical, because the exe already embeds English text for most IDs.
+- ~~3,238 entries are identical, because the exe already embeds English text for most IDs.~~
+  ➡️ **SUPERSEDED 2026-10-03 by a byte-level extract of the same exe** (`scripts/msgtable_extract.py`,
+  sha256 `3f11ce85…1c3baa35`): the built-in table is the **KOREAN original** (3,521 of 3,970 lines
+  carry cp949 Korean, all decode; 449 are ASCII). Only **354** lines equal ROenglishRE at the same
+  id. The ids DO line up: 3,571 of the 3,616 differing lines have the same `%`-placeholder
+  signature as the English line at that id, and decoded spot-checks are translation pairs. Where
+  the 3,238 came from is unknown (the WARP output was never kept).
 
 **Result, in frames:**
 - "NO MSG" is gone: "Basic Information", the job name, "Regular Chat" / "Battle Log", and the login

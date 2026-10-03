@@ -175,6 +175,24 @@ The copy uses Batt's EXISTING NAS account, for one named IP, for minutes:
      Part C decision.
 5. **The locale-pack install (C5) uses the same pattern:** a temporary **read-only** share on
    `locale-packs/th`, Dell-only, deleted right after the install.
+   ➡️ **2026-10-03, as a GUEST share (Batt's approval): created and deleted, unusable.** Share
+   id 20 `poring-locale-th` (ro, guestok, not browsable, hostsallow 192.168.1.169, hostsdeny
+   ALL; 15:40, read back) was refused by Windows itself: insecure guest logons are blocked
+   (error 1272). Deleted at 15:44 (read back: no poring SMB share; no sessions); Frigate unchanged
+   before/after. See [locale-packs.md](../locale-packs.md) §6 for the open decision.
+
+## 5b. `kro-reference` (2026-10-03): the two client exes, bytes only
+
+    midclt call pool.dataset.create '{"name":"tank-main/poring-lab/kro-reference","type":"FILESYSTEM",
+      "quota":1073741824,"comments":"poring-lab: the lab kRO exe + the Thai client exe, BYTES ONLY for
+      offline msgtable parsing (never executed); readonly; no shares/exports; never committed"}'
+
+- Filled from the human-only transfer area on Batt's instruction (ADR-0004 "Exceptions log"):
+  `docker exec … cat /transfer/<exe> | ssh root@nas 'umask 0377; cat > …'`, mode 0444, root-owned.
+- `lab-2021-11-03_Ragexe_1635926200.exe` sha256 `3f11ce85…1c3baa35`;
+  `thai-ro_thai-Ragexe.exe` sha256 `6f1b3451…7f4ab8f2`; `SHA256SUMS` beside them (both OK).
+- Then `readonly=ON` (a write probe: "Read-only file system") and `@pristine-20261003`. No SMB
+  share, no NFS export: the VM reads it only through root ssh, into `/dev/shm`.
 
 ## 6. The agent's checks, after section 4
 

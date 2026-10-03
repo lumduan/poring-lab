@@ -36,8 +36,8 @@ keys into one language's text. This guide covers building a pack from **your own
 | Input | Where it comes from | Where it goes |
 |---|---|---|
 | Your client's data copy (GRF + loose `data/`, **no exe**) | your own install | the NAS dataset `thai-client-data`, written once through a **temporary** Dell-only SMB share (`poring-thai-drop`, deleted after the copy; [nas-sink.md](operations/nas-sink.md) §5), then `readonly=on`, mounted **read-only** on the VM at `/mnt/poring-thai-src` |
-| The reference table: the table the LAB client's exe embeds (3,970 lines; mostly English in this build) | extracted **offline** from the exe's bytes by `scripts/msgtable_extract.py` (the exe is never run; WARP only as a cross-check if the parse is ambiguous). The exe itself is kept on the NAS dataset `poring-lab/kro-reference` (readonly, no share) | `/dev/shm` (derived text, never the repo) |
-| The source client's own embedded table (e.g. the Thai client's exe) | the same offline extract of THAT exe | `--source-ref`: lines the two id spaces up by equal text |
+| The reference table: the table the LAB client's exe embeds (3,970 lines: the KOREAN original, cp949; corrected 2026-10-03 after the extract) | extracted **offline** from the exe's bytes by `scripts/msgtable_extract.py` (the exe is never run; WARP only as a cross-check if the parse is ambiguous). The exe itself is kept on the NAS dataset `poring-lab/kro-reference` (readonly, no share) | `/dev/shm` (derived text, never the repo) |
+| The source client's own embedded table (e.g. the Thai client's exe) | the same offline extract of THAT exe | `--source-ref`: lines the two id spaces up by equal text. ➡️ 2026-10-03: **not possible for the Thai `Ragexe.exe`**: it is packed by a commercial protector (sections `.vm_sec`, `.winlice`, `.boot`, blank names; no `msgStringTable.txt` string), so its data is encrypted until run. Not unpacked, not run |
 | The English table the lab runs | ROenglishRE commit `8e6a3c85` | fetched by the builder for `en` |
 
 - **Never stage a large source on the VM's local disk**: the disk is shared with live capture. Read
@@ -103,6 +103,28 @@ keys into one language's text. This guide covers building a pack from **your own
     source's own ids.
 - **`check`:** validates the schema and the file hashes (it does not print coverage; `build`
   does).
+- `--source-untranslated TEXT` (repeatable): a source line that is only TEXT counts as empty, so
+  our English stays at that id. The Thai table writes `no msg` for untranslated ids.
+
+**As run for `th`, 2026-10-03 (C4).** The Thai exe could not be parsed (packed), so there is no
+`--source-ref`. The ids were checked instead: the Thai table translates the English line at the
+SAME id across 0–3969 (decoded spot-checks, including ids 2500–2511 and 3603 where placeholder
+agreement is lowest, because of `no msg` and reworded placeholders), and ROenglishRE's 2021 and
+2023 tables keep the same ids (append-only). So `index_signature` (same id + equal `%`
+conversions) is the method:
+
+    locale_pack.py keys --source lab-ref.txt --version kro-20211103 --out keys.json   # 3,785 keys
+    locale_pack.py build --lang th --source <thai msgstringtable.txt> --reference lab-ref.txt \
+        --reference-version kro-20211103 --en <ROenglishRE 8e6a3c85> --source-untranslated "no msg" \
+        --reindex --client-version th-ro_thai-4733 --font Tahoma --out /mnt/poring-locale-packs/th
+
+- Coverage: 3,055 of 3,785 keys (80.7 %), all `index_signature` (3,179 ids); 786 unmatched; 56
+  conflicts (one Korean text translated two ways; the first kept); 1,495 `no msg` lines dropped.
+- The reindexed install table: 3,970 lines = 3,223 Thai + 742 English fallback + 5 empty; 7
+  English lines (ids 3597–3602, 3647, already garbled in ROenglishRE) lost characters cp874 lacks.
+- Printf safety, checked separately: every Thai line has the Korean original's `%` conversions in
+  order; 5 differ only in width/precision (`%.1f`→`%.3f`, `%d`→`%02d`), which take the same
+  arguments. `check`: valid.
 
 ## 5. Pack schema (`<lang>/`)
 
@@ -131,6 +153,14 @@ Validation rules (`check`):
   read-only, `hostsallow` the Dell (192.168.1.169) only, not browsable, scoped to
   `locale-packs/<lang>`. Created right before the install and deleted right after, both read back
   ([nas-sink.md](operations/nas-sink.md)), with Frigate checked before and after.
+  - ➡️ **2026-10-03 15:40–15:44: WINDOWS REFUSES IT.** Share id 20 (`poring-locale-th`) was
+    created as approved; from the Dell, `[IO.Directory]::GetFiles(...)` failed with "You can't
+    access this shared folder because your organization's security policies block
+    unauthenticated guest access" (error 1272; Windows 11 24H2+ blocks insecure guest logons and
+    requires SMB signing by default). The share was deleted at once (read back: none left; no
+    sessions; NAS permissions never changed; Frigate unchanged). **The install route is Batt's
+    decision** (an authenticated read-only share as in nas-sink.md §5, or a one-off through
+    `\\tsclient\transfer`); weakening Windows' SMB policy is not proposed.
 - **The steps:**
   1. Back up the files to be replaced into `C:\RO-rAthena\_backup\<date>-locale-<lang>\`.
   2. Copy `install\` over the client with a hash read-back.

@@ -20,6 +20,8 @@ next_action: Live-verify on FreeRDP 3.32.1 (Batt) a dummy paste + scrub, then an
   Windows-side copy now makes xfreerdp *claim* the X CLIPBOARD with **no data targets**. The
   watchdog clears it; content still cannot flow Windows → X. E1c's "owner stayed None" is
   3.15-only.
+- ➡️ **2026-10-03: ONE-OFF agent pickup from `/transfer`, on Batt's explicit instruction** (see
+  "Exceptions log" at the end). Not a precedent: the transfer area stays human-only.
 - ➡️ **AMENDED 2026-10-02 (c), human secret typing** (see "Amendment 2026-10-02 (c)" at the end):
   a console toggle keeps human key identities and paste length/digest out of every log; older
   human typing was purged. ➡️ **Decided by Batt 2026-10-02: NO digest and no length for human
@@ -388,3 +390,17 @@ verifier.**
 - Until Batt decides, **use Secret typing for any password paste**. The NAS-password paste of the
   Thai copy must be made with it on.
 
+## Exceptions log (each one explicit, by Batt, in the conversation)
+
+- **2026-10-03 15:31 ICT, Part C (C4), Batt: "The exe is in \\tsclient\transfer now. Proceed with
+  section 2 (sha256, place it on the NAS read-only, delete it from the transfer tmpfs, then the
+  offline parser)."** The agent read three files from `/transfer` through `docker exec` into the
+  backend container: this bypasses the routes' Origin gate and the transfer audit log, which is why
+  it is recorded here.
+  - `2021-11-03_Ragexe_1635926200.exe` 12,903,960 B, sha256 `3f11ce85…1c3baa35` (the lab exe);
+    `Ragexe.exe` 9,875,976 B, sha256 `6f1b3451…7f4ab8f2` (the Thai client's); `Ragnarok.exe`
+    458,808 B, sha256 `a8494f05…429ed` (the kRO launcher, dropped first by mistake; not kept).
+  - The two Ragexe files were streamed to the NAS dataset `tank-main/poring-lab/kro-reference`
+    (no shares, no exports; hashes re-read there; `readonly=on`; `@pristine-20261003`), then all
+    three were deleted from `/transfer` and the listing read back. Batt's own
+    `ref_client_20261002.png` was left untouched. Nothing was executed.
