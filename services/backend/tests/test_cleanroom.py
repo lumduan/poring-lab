@@ -107,3 +107,24 @@ def test_status_round_trip_and_heartbeat(cr: ModuleType) -> None:
     assert cr.heartbeat_age(T) == float("inf")
     cr.heartbeat()
     assert cr.heartbeat_age(cr.time.time()) < 5
+
+
+def test_the_checks_box_is_enforced_like_a_variants(cr: ModuleType) -> None:
+    """After a reliable variant the bench and the functional checks run in their own box
+    (cleanroom.py checks); before it existed only the heartbeat and the hard cap bounded them."""
+    st = status(phase="checks", box_until_ts=T + 45 * 60)
+    assert cr.decide(T + 45 * 60 + 299, st, CONSOLE, False, 10) == "wait"
+    verdict = cr.decide(T + 45 * 60 + 300, st, CONSOLE, False, 10)
+    assert verdict == "exit:the checks box expired"
+
+
+def test_checks_needs_a_running_room_and_sets_the_box(cr: ModuleType) -> None:
+    with pytest.raises(SystemExit, match="no clean room"):
+        cr.cmd_checks(45)
+    cr.save_status(phase="streaming", variant="V3b", box_until_ts=0)
+    assert cr.cmd_checks(60) == 0
+    st = cr.load_status()
+    assert st["phase"] == "checks" and st["box_until_ts"] > cr.time.time() + 59 * 60
+    cr.save_status(phase="checks")
+    with pytest.raises(SystemExit, match="already running"):
+        cr.cmd_start(180)  # never a second room on top

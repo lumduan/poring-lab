@@ -24,6 +24,10 @@ Rules it enforces (CLAUDE.md, ADR-0002/0006):
     ro_agent.py drag X1 Y1 X2 Y2 [--right] [--abs]  paced press-move-release (RO camera: --right)
     ro_agent.py open-terminal                   the agent's own NON-elevated "poring-lab shell"
     ro_agent.py calibrate-shell                 once: its tab template + the shortcut's signature
+    ro_agent.py calibrate-shell --stream        the same tab, cut from the console stream's frames
+    ro_agent.py close-extra-shells              ONE "poring-lab shell" window (others get WM_CLOSE)
+    ro_agent.py file-check "C:\\path"           BEFORE asking Batt for a file drop: size, time and
+                                                sha256 on Windows + his ready Copy-Item line
     ro_agent.py keys CODE...                    key taps (50 ms holds)
     ro_agent.py chord CODE...                   press in order, release in reverse
     ro_agent.py type TEXT                       US-layout ASCII into the focused field (+ \\n)
@@ -156,50 +160,18 @@ def any_online() -> int:
 
 # Console mode with a LIVE S2 writer (V3b): the frame bus, not X -- the same decoded frames the
 # console and the bot see, stamped with the writer's decode time; X would show the never-painted
-# input window (black). Anything else: X, as always.
+# input window (black). Anything else: X, as always. ONE rule: poring_backend.grabsource.
 _HELPER = r"""
-import os, struct, sys, time
-from pathlib import Path
-LAB_STATE = Path(os.environ.get("RO_AGENT_LAB_STATE", "/lab-state"))
-RING = os.environ.get("RO_AGENT_FRAMEBUS", "/framebus/ring")
+import struct, sys
+import numpy as np
+from poring_backend.grabsource import GrabSource
+src = GrabSource()
 out = sys.stdout.buffer
-sct = bus = None
-
-def bus_frame():
-    global bus
-    try:
-        from poring_backend.capture_lock import read_lock
-        from poring_env.framebus import FrameBusError, FrameBusReader
-    except ImportError:
-        return None
-    if read_lock(LAB_STATE).backend != "console" or not os.path.exists(RING):
-        return None
-    try:
-        if bus is None:
-            bus = FrameBusReader(RING, "ro_agent")
-        else:
-            bus.reopen_if_replaced()
-        if bus.writer().heartbeat_age_s > 2.0:
-            return None
-        return bus.read()
-    except FrameBusError:
-        bus = None
-        return None
-
 for line in sys.stdin:
     x, y, w, h = map(int, line.split())
-    f = bus_frame()
-    if f is not None and x + w <= f.width and y + h <= f.height:
-        out.write(struct.pack("<qII", f.t_mono_ns, w, h))
-        out.write(f.to_numpy()[y : y + h, x : x + w].tobytes())
-    else:
-        if sct is None:
-            import mss
-            sct = mss.MSS(display=":99")
-        t = time.monotonic_ns()
-        img = sct.grab({"left": x, "top": y, "width": w, "height": h})
-        out.write(struct.pack("<qII", t, img.width, img.height))
-        out.write(img.raw)
+    t, img, _ = src.grab((x, y, w, h))
+    out.write(struct.pack("<qII", t, img.shape[1], img.shape[0]))
+    out.write(np.ascontiguousarray(img).tobytes())
     out.flush()
 """
 
@@ -667,6 +639,15 @@ def centre_offset(dx: int, dy: int) -> tuple[int, int]:
 # "poring-lab shell" is the agent's OWN terminal (open_terminal, Batt 2026-10-03); a plain
 # "Windows PowerShell" tab is one Batt opened.
 SHELL_TEMPLATE = "shell_tab_template.npy"
+# One copy per display path, like ENG_TEMPLATES: the console stream's H.264 softens a tab's small
+# text, so a template cut on RDP frames may miss it there (2026-10-03: `calibrate-shell --stream`).
+STREAM_SUFFIX = "_stream.npy"
+
+
+def template_names(name: str) -> tuple[str, str]:
+    return name, name.removesuffix(".npy") + STREAM_SUFFIX
+
+
 CONSOLE_TEMPLATES = {
     False: (SHELL_TEMPLATE, "ps_tab_template.npy"),
     True: ("ps_admin_tab_template.npy", "ps_admin_conhost_template.npy"),
@@ -681,7 +662,7 @@ def find_console(screen: Screen, admin: bool = False) -> tuple[int, int, float] 
     prompt -- declined)."""
     rgb = screen.full()[:, :, 2::-1].astype(np.int16)
     best: tuple[int, int, float] | None = None
-    for name in CONSOLE_TEMPLATES[admin]:
+    for name in (n for base in CONSOLE_TEMPLATES[admin] for n in template_names(base)):
         path = STATE_DIR / "signatures" / name
         if not path.exists():
             continue
@@ -1119,12 +1100,19 @@ def shell_shortcut_xy() -> tuple[int, int]:
 
 
 def find_shell(screen: Screen) -> tuple[int, int, float] | None:
-    """The ACTIVE "poring-lab shell" tab (its own template only), or None."""
-    path = STATE_DIR / "signatures" / SHELL_TEMPLATE
-    if not path.exists():
+    """The ACTIVE "poring-lab shell" tab (its own templates only: RDP and stream), or None."""
+    paths = [
+        p for n in template_names(SHELL_TEMPLATE) if (p := STATE_DIR / "signatures" / n).exists()
+    ]
+    if not paths:
         raise Stop("no poring-lab shell template: run `ro_agent.py calibrate-shell` once")
     rgb = screen.full()[:, :, 2::-1].astype(np.int16)
-    return _match_console(rgb, np.load(path).astype(np.int16))
+    best: tuple[int, int, float] | None = None
+    for path in paths:
+        found = _match_console(rgb, np.load(path).astype(np.int16))
+        if found is not None and (best is None or found[2] < best[2]):
+            best = found
+    return best
 
 
 def marker_colour(bgra: np.ndarray, min_run: int = 150) -> str | None:
@@ -1175,6 +1163,9 @@ def open_terminal(agent: Agent, screen: Screen) -> tuple[int, int]:
             to_png(screen.full(), SHOTS / "shell_not_found.png")
             raise Stop("no window titled 'poring-lab shell' within 20 s: nothing typed")
         log("opened 'poring-lab shell' (desktop shortcut)")
+        opened_new = True
+    else:
+        opened_new = False
     ox, oy, _ = found
     agent.click(ox + 75, oy + 9)  # its tab: focuses that window
     time.sleep(0.4)
@@ -1191,12 +1182,56 @@ def open_terminal(agent: Agent, screen: Screen) -> tuple[int, int]:
         to_png(screen.full(), SHOTS / "shell_elevation_check.png")
         raise Stop(f"'poring-lab shell' is not verified non-elevated (marker {colour}): stop")
     log("'poring-lab shell' is in front and NOT elevated")
+    if opened_new:  # an older one was minimised or hidden: keep exactly one (Batt, 2026-10-03)
+        agent.type_text(CLOSE_EXTRA_SHELLS + "\n")
+        time.sleep(3)
+        log("closed any other 'poring-lab shell' window (see the shell for the count)")
     return ox, oy
 
 
-def calibrate_shell(screen: Screen) -> None:
+# Exactly one agent terminal (Batt, 2026-10-03): open_terminal opens a NEW window whenever the old
+# one is minimised. Typed into the verified front shell: every OTHER top-level window titled
+# exactly "poring-lab shell" gets WM_CLOSE (a one-tab Windows Terminal window closes); Batt's own
+# consoles have other titles and the foreground window is never touched. Then the count.
+CLOSE_EXTRA_SHELLS = (
+    "cls; Add-Type -TypeDefinition 'using System;using System.Text;using System.Runtime."
+    "InteropServices;public class PlShells{public delegate bool P(IntPtr h,IntPtr l);"
+    '[DllImport("user32.dll")]public static extern bool EnumWindows(P p,IntPtr l);'
+    '[DllImport("user32.dll")]public static extern int GetWindowText(IntPtr h,StringBuilder s,'
+    'int n);[DllImport("user32.dll")]public static extern IntPtr GetForegroundWindow();'
+    '[DllImport("user32.dll")]public static extern bool PostMessage(IntPtr h,uint m,IntPtr w,'
+    "IntPtr l);}' -ErrorAction SilentlyContinue; "
+    "function Get-PlShells { $hs = New-Object System.Collections.ArrayList; "
+    "[void][PlShells]::EnumWindows({ param($h, $l) $sb = New-Object System.Text.StringBuilder 256; "
+    "[void][PlShells]::GetWindowText($h, $sb, 256); "
+    "if ($sb.ToString() -ceq 'poring-lab shell') { [void]$hs.Add($h) }; $true }, [IntPtr]::Zero); "
+    "$hs }; $fg = [PlShells]::GetForegroundWindow(); $before = @(Get-PlShells); "
+    "$before | Where-Object { $_ -ne $fg } | ForEach-Object { "
+    "[void][PlShells]::PostMessage($_, 0x10, [IntPtr]::Zero, [IntPtr]::Zero) }; "
+    "Start-Sleep 2; 'poring-lab shell windows: ' + $before.Count + ' -> ' + @(Get-PlShells).Count"
+)
+
+
+def file_check_command(path: str) -> str:
+    """The read-only check typed before Batt is asked to drop a file (Batt, 2026-10-03)."""
+    if "'" in path:
+        raise Stop("a path with a single quote: check it by hand")
+    return (
+        f"cls; $p = '{path}'; $i = Get-Item -LiteralPath $p -ErrorAction Stop; "
+        "'{0}  {1:N0} B  {2}  sha256 {3}' -f $i.FullName, $i.Length, $i.LastWriteTime, "
+        "(Get-FileHash -LiteralPath $p).Hash"
+    )
+
+
+def copy_item_line(path: str) -> str:
+    """The ready line Batt pastes into HIS console to drop the file (never the agent's)."""
+    return f"Copy-Item -LiteralPath '{path}' -Destination " + r"'\\tsclient\transfer\'"
+
+
+def calibrate_shell(screen: Screen, stream: bool = False) -> None:
     """Once, with a fresh 'poring-lab shell' window ACTIVE and its shortcut visible: save its tab
-    template (located by the PowerShell tab icon) and the shortcut icon's signature."""
+    template (located by the PowerShell tab icon) and the shortcut icon's signature. ``stream``:
+    the console stream's copy of the tab template only (cut while streaming)."""
     rgb = screen.full()[:, :, 2::-1]
     ps = np.load(STATE_DIR / "signatures" / "ps_tab_template.npy")
     icon_only = ps[:, :24].astype(np.int16)  # the PowerShell icon (columns 3-18), no title text
@@ -1206,7 +1241,11 @@ def calibrate_shell(screen: Screen) -> None:
     ox, oy, _ = found
     h, w = ps.shape[:2]
     crop = np.ascontiguousarray(rgb[oy : oy + h, ox : ox + w]).astype(np.uint8)
-    np.save(STATE_DIR / "signatures" / SHELL_TEMPLATE, crop)
+    name = template_names(SHELL_TEMPLATE)[1 if stream else 0]
+    np.save(STATE_DIR / "signatures" / name, crop)
+    if stream:
+        log(f"stream shell tab template saved at ({ox},{oy}) as {name}")
+        return
     to_png(np.dstack([crop[..., ::-1], np.full(crop.shape[:2], 255, np.uint8)]),
            SHOTS / "sig_shell_tab.png")  # fmt: skip
     for state in ("shell_shortcut_icon_sel",):
@@ -1257,6 +1296,7 @@ def main() -> None:
     ap.add_argument("--admin", action="store_true", help="console: the Administrator tab template")
     ap.add_argument("--abs", action="store_true", help="click: desktop pixels, not client-relative")
     ap.add_argument("--thai-keys", action="store_true")
+    ap.add_argument("--stream", action="store_true", help="calibrate-shell: the stream's copy")
     ap.add_argument("--as", dest="who", default="gm", choices=["player", "gm"])
     a = ap.parse_args()
     cmd, args = a.cmd, a.args
@@ -1287,7 +1327,18 @@ def main() -> None:
         elif cmd == "open-terminal":
             open_terminal(agent, screen)
         elif cmd == "calibrate-shell":
-            calibrate_shell(screen)
+            calibrate_shell(screen, stream=a.stream)
+        elif cmd == "close-extra-shells":
+            open_terminal(agent, screen)
+            console_type(agent, screen, CLOSE_EXTRA_SHELLS)
+            time.sleep(4)
+            print(to_png(screen.full(), SHOTS / "close_extra_shells.png"))
+        elif cmd == "file-check":  # file-check "<windows path>": BEFORE asking Batt for a drop
+            open_terminal(agent, screen)
+            console_type(agent, screen, file_check_command(args[0]))
+            time.sleep(4)
+            print(to_png(screen.full(), SHOTS / "file_check.png"))
+            print("for Batt's console: " + copy_item_line(args[0]))
         elif cmd == "drag":
             x1, y1, x2, y2 = (int(v) for v in args[:4])
             p1, p2 = ((x1, y1), (x2, y2)) if a.abs else (at(x1, y1), at(x2, y2))

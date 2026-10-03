@@ -431,7 +431,16 @@ that number. V3b removes both: decode → bus → the console's JPEG and the bot
   `ensure_only_display` is active still deactivates the Samsung for the stream's duration (by
   design); the revert brings it back.
 
-**STOP: none of this runs before Batt approves this section.**
+**STOP: none of this runs before Batt approves this section.** ➡️ **APPROVED by Batt 2026-10-03**,
+with push-and-wait points: (a) before entry, his elevated console sets
+`dd_configuration_option = disabled`; (b) after the backend recreate, he sets ASSIST; (c) after
+the exit, he restores `ensure_only_display`. Pushes at entry (with the hard cap) and at exit too.
+- **Found while preparing it, and fixed first:** the bench's watchers (packet→frame, key→paint,
+  delivery fps) and ro_agent's screenshots grabbed X, which V3b never paints. They now share
+  `poring_backend/grabsource.py`, the backend's own rule (console + a live writer → the bus,
+  else X). On the bus every new frame is used once, at its decode time, and each result records
+  `frame_sources`. `cleanroom.py checks --box-min N` puts the bench and the checks in a watchdog
+  box (a variant's box ends when it does).
 
 ## 10. Shared viewing (future capability; designed now)
 

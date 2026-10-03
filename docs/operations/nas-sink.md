@@ -181,6 +181,14 @@ The copy uses Batt's EXISTING NAS account, for one named IP, for minutes:
    (error 1272). Deleted at 15:44 (read back: no poring SMB share; no sessions); Frigate unchanged
    before/after. See [locale-packs.md](../locale-packs.md) §6 for the open decision.
 
+**From 2026-10-03 the share steps above are one command each way: `scripts/nas_drop.py`**
+(Batt approved). `open NAME --dataset … [--subdir P] --host 192.168.1.169 [--rw [--unlock]]`
+creates an AUTHENTICATED share (never guest), Dell-only, not browsable, tagged `TEMPORARY
+poring-lab nas_drop`, and reads it back; `--unlock` snapshots `pre-drop-<stamp>` BEFORE lifting
+readonly. `close NAME [--lock]` deletes only a tagged share, reads back that it is gone, lists
+sessions still on it and, with `--lock`, sets readonly + `@pristine-<stamp>`. Both take a Frigate
+reading before and after. `status` lists open drops.
+
 ## 5b. `kro-reference` (2026-10-03): the two client exes, bytes only
 
     midclt call pool.dataset.create '{"name":"tank-main/poring-lab/kro-reference","type":"FILESYSTEM",

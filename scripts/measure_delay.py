@@ -9,12 +9,13 @@ rathena to the first lab frame that shows the character moving.
   in-game input only while the account is online=1 on our rAthena).
 * Packet time: the sniffer's kernel receive time of our own ZC_NOTIFY_PLAYERMOVE (0x0087, the
   `self_move` event), mapped onto CLOCK_MONOTONIC (ADR-0007), read back from /captures.
-* Frame time: inside the backend container (same X display, same clock) a scene band away from
-  the cursor and the UI is grabbed continuously; the first grab after the packet where >10 % of the
-  sampled pixels differ by >24 levels from the REFERENCE = the last grab before the packet (the
-  scene as it was when the server answered). Cumulative, not frame-to-frame: a frame-to-frame
-  threshold detects later at higher delivered fps (smaller steps), which made faster codecs look
-  slower (2026-10-01).
+* Frame time: inside the backend container (same clock) a scene band away from the cursor and the
+  UI is grabbed continuously -- from X, or in console mode with a live S2 writer from the frame bus
+  (poring_backend.grabsource: every new decoded frame, at its decode time; V3b never paints X).
+  The first grab after the packet where >10 % of the sampled pixels differ by >24 levels from the
+  REFERENCE = the last grab before the packet (the scene as it was when the server answered).
+  Cumulative, not frame-to-frame: a frame-to-frame threshold detects later at higher delivered fps
+  (smaller steps), which made faster codecs look slower (2026-10-01).
 * Delay = frame time - packet time: client processing + render + encode/transfer + client decode +
   Xvfb + our grab. Percentiles the SPEC way (docs/benchmarks/SPEC.md, scripts/benchlib.py):
   nearest rank over ALL trials, a trial with no frame within 1.5 s counting as a miss (">1500").
@@ -45,18 +46,34 @@ import ro_agent as r  # noqa: E402
 SCRATCH = Path(os.environ.get("SCRATCH", "/dev/shm/poring-lab-tmp"))
 
 WATCH = r"""
-import base64, sys, time, mss, numpy as np
+import base64, sys
+from poring_backend.grabsource import GrabSource
 x, y, w, h, secs = (float(v) for v in sys.argv[1:6])
-reg = {"left": int(x), "top": int(y), "width": int(w), "height": int(h)}
-with mss.MSS(display=":99") as s:
-    end = time.monotonic() + secs
-    while time.monotonic() < end:
-        t = time.monotonic_ns(); g = s.grab(reg)
-        a = np.frombuffer(g.raw, np.uint8).reshape(g.height, g.width, 4)[::8, ::8, :3]
-        thumb = a.max(axis=2).astype(np.uint8)  # brightest channel, 8x8 subsampled
-        print(f"{t},{base64.b64encode(thumb.tobytes()).decode()}", flush=True)
-        time.sleep(0.004)  # ~200 grabs/s is plenty for a ~5-30 fps stream
+last = None
+for t, a, source in GrabSource().frames((int(x), int(y), int(w), int(h)), secs):
+    if source != last:
+        print(f"#source={source}", flush=True)
+        last = source
+    if a is None:
+        continue  # a bus tick: no new frame
+    thumb = a[::8, ::8, :3].max(axis=2).astype("uint8")  # brightest channel, 8x8 subsampled
+    print(f"{t},{base64.b64encode(thumb.tobytes()).decode()}", flush=True)
 """
+
+
+def parse_watch(text: str) -> tuple[list[tuple[int, np.ndarray]], list[str]]:
+    """WATCH output -> (grabs, the frame sources in order of appearance)."""
+    grabs: list[tuple[int, np.ndarray]] = []
+    sources: list[str] = []
+    for ln in text.splitlines():
+        if ln.startswith("#source="):
+            sources.append(ln.split("=", 1)[1])
+        elif ln:
+            t, b64 = ln.split(",", 1)
+            grabs.append((int(t), np.frombuffer(base64.b64decode(b64), np.uint8).astype(np.int16)))
+    return grabs, sources
+
+
 MOVED = 0.10
 
 
@@ -133,12 +150,7 @@ def measure_walks(
         time.sleep(2.1)
     watcher.wait(timeout=120)
     reader.join(timeout=10)
-    out = "".join(lines)
-    grabs: list[tuple[int, np.ndarray]] = []
-    for ln in out.splitlines():
-        if ln:
-            t, b64 = ln.split(",", 1)
-            grabs.append((int(t), np.frombuffer(base64.b64decode(b64), np.uint8).astype(np.int16)))
+    grabs, sources = parse_watch("".join(lines))
     times = [t for t, _ in grabs]
     moves = [m for m in self_moves(t_start) if isinstance(m["t_mono_ns"], int)]
     delays, unmatched = [], 0
@@ -172,7 +184,8 @@ def measure_walks(
         "click_sent_to_packet_ms_p50": (
             round(statistics.median(click_to_packet), 1) if click_to_packet else None
         ),
-        "band": band, "threshold": MOVED, "t_wall_end": time.strftime("%H:%M:%S"),
+        "band": band, "threshold": MOVED, "frame_sources": sources,
+        "t_wall_end": time.strftime("%H:%M:%S"),
         "raw": {"delays_ms": delays, "click_to_packet_ms": click_to_packet},
     }  # fmt: skip
 

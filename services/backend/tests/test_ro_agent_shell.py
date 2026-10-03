@@ -67,7 +67,7 @@ def test_the_screen_helper_reads_the_frame_bus_only_in_console_mode_with_a_live_
     writer = FrameBusWriter(ring, max_width=8, max_height=6)
     pixels = np.arange(8 * 6 * 4, dtype=np.uint8).reshape(6, 8, 4)
     writer.publish(pixels, frame_id=3, t_mono_ns=777)
-    env = {**os.environ, "RO_AGENT_LAB_STATE": str(lab_state), "RO_AGENT_FRAMEBUS": str(ring)}
+    env = {**os.environ, "GRAB_LAB_STATE": str(lab_state), "GRAB_FRAMEBUS": str(ring)}
     helper = subprocess.run(
         [sys.executable, "-c", ro._HELPER], input=b"2 1 4 3\n", capture_output=True, env=env,
         timeout=30, check=True,
@@ -103,3 +103,49 @@ def test_a_locale_variant_matches_without_replacing_the_english_signature(
     assert ro.distance(FakeScreen(english), "login@th") > ro.SIG_MATCH  # explicit = that file
     names = sorted(p.name for p in (tmp_path / "signatures").glob("*.npy"))
     assert names == ["login.npy", "login@th.npy"]
+
+
+def test_close_extra_shells_closes_only_other_exact_title_windows(ro: ModuleType) -> None:
+    cmd = ro.CLOSE_EXTRA_SHELLS
+    assert "-ceq 'poring-lab shell'" in cmd  # exact, case-sensitive: never Batt's consoles
+    assert "Where-Object { $_ -ne $fg }" in cmd  # never the foreground (this) window
+    assert "PostMessage($_, 0x10," in cmd and "Stop-Process" not in cmd  # WM_CLOSE only
+    assert cmd.endswith("@(Get-PlShells).Count")  # the count is read back
+
+
+def test_file_check_and_the_copy_line(ro: ModuleType) -> None:
+    path = r"C:\RO-rAthena\client\2021-11-03_Ragexe_1635926200.exe"
+    check = ro.file_check_command(path)
+    assert f"$p = '{path}'" in check and "Get-FileHash -LiteralPath $p" in check
+    assert ro.copy_item_line(path) == (
+        f"Copy-Item -LiteralPath '{path}' -Destination '\\\\tsclient\\transfer\\'"
+    )
+    with pytest.raises(ro.Stop):
+        ro.file_check_command("C:\\it's.exe")
+
+
+def test_a_stream_copy_of_the_shell_template_is_tried_too(
+    ro: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(ro, "STATE_DIR", tmp_path)
+    (tmp_path / "signatures").mkdir()
+    seen: list[int] = []
+
+    def match(rgb: np.ndarray, tmpl: np.ndarray) -> tuple[int, int, float] | None:
+        seen.append(int(tmpl[0, 0, 0]))
+        return (10, 20, 3.0) if int(tmpl[0, 0, 0]) == 2 else None  # only the stream one matches
+
+    monkeypatch.setattr(ro, "_match_console", match)
+    np.save(tmp_path / "signatures" / "shell_tab_template.npy", np.full((4, 4, 3), 1, np.uint8))
+    np.save(
+        tmp_path / "signatures" / "shell_tab_template_stream.npy", np.full((4, 4, 3), 2, np.uint8)
+    )
+
+    class FakeScreen:
+        def full(self) -> np.ndarray:
+            return np.zeros((10, 10, 4), np.uint8)
+
+    assert ro.find_shell(FakeScreen()) == (10, 20, 3.0) and seen == [1, 2]
+    assert ro.template_names("ps_tab_template.npy") == (
+        "ps_tab_template.npy", "ps_tab_template_stream.npy",
+    )  # fmt: skip

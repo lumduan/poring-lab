@@ -187,7 +187,12 @@ ports, quickstart) and `docs/adr/`.
     "poring-lab shell" --suppressApplicationTitle -d C:\RO-rAthena powershell.exe -NoLogo`, NOT
     "Run as administrator". It types only after that exact tab template is in front AND a
     pixel-checked marker says not elevated; any mismatch stops. Elevated consoles stay Batt's
-    (UAC);
+    (UAC). ONE such window: when open-terminal has to open a new one (the old one minimised), it
+    closes the others (`close-extra-shells`: WM_CLOSE to exact-title windows, never the front);
+  - **before asking Batt for a file drop**, run `ro_agent.py file-check "<path>"` (size, time,
+    sha256 on Windows) and give him the printed `Copy-Item … '\\tsclient\transfer\'` line
+    (Batt, 2026-10-03). Agent reads/writes in `/transfer` are ADR-0004 exceptions: rare, each one
+    in its "Exceptions log";
   - launch via the "Ragnarok Offline" shortcut; close with paced Alt+F4;
   - **verify the target is in front before typing**: client = active title-bar signature, console
     = tab template, secrets re-checked every 4 characters;
@@ -282,6 +287,8 @@ scripts/gen_protocol.sh                   # protocol schema + TS types
 scripts/init_env.sh                       # first-time .env
 docker compose --profile core --profile remote up -d --build && scripts/smoke_test.sh
 python3 scripts/guarded_build.py --sustain 30 --spike 25 'run:vision@600=python scripts/check_gpu.py'
+python3 scripts/nas_drop.py open poring-<x> --dataset tank-main/poring-lab/<ds> --host 192.168.1.169
+python3 scripts/nas_drop.py close poring-<x> [--lock]   # temporary Dell-only SMB drop, read back
 for p in core remote vision sniffer '*'; do docker compose --profile "$p" config -q; done
 ```
 

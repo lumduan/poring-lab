@@ -15,7 +15,6 @@ steady, and the host file must agree with /health (ADR-0009). Scratch and raw ev
 """
 
 import argparse
-import base64
 import bisect
 import json
 import os
@@ -97,8 +96,22 @@ def run_config(backend: str) -> dict[str, Any]:
         codec = re.search(r"gfx=(\S+)", lines[-1]).group(1) if lines else "unknown"  # type: ignore[union-attr]
         client = {"name": "xfreerdp", "version": version, "codec": codec}
     else:
-        version = _exec("poring-lab-gamestream-1", "gamestream-version")
-        client = {"name": "moonlight-qt", "version": version, "codec": "H.264"}
+        # The lab client the variant file names (ADR-0009 clean room): Moonlight-qt, or the S2
+        # client (s2spike) painting X (V3) or writing the frame bus (V3b, PAINT=bus).
+        variant = dict(
+            line.split("=", 1)
+            for line in (ROOT / "state" / "gamestream-variant").read_text().splitlines()
+            if "=" in line
+        ) if (ROOT / "state" / "gamestream-variant").exists() else {}  # fmt: skip
+        if variant.get("CLIENT") == "s2spike":
+            version = "moonlight-common-c " + _exec(
+                "poring-lab-gamestream-1", "cat", "/opt/s2spike/MLCC_SHA"
+            )
+            client = {"name": "s2spike", "version": version, "codec": "H.264",
+                      "paint": variant.get("PAINT") or "x11"}  # fmt: skip
+        else:
+            version = _exec("poring-lab-gamestream-1", "gamestream-version")
+            client = {"name": "moonlight-qt", "version": version, "codec": "H.264"}
     return {
         "spec": benchlib.SPEC_VERSION,
         "backend": backend,
@@ -194,11 +207,7 @@ def key_to_paint(agent: r.Agent, screen: r.Screen, trials: int) -> dict[str, Any
         time.sleep(1.5)
     watcher.wait(timeout=120)
     reader.join(timeout=10)
-    grabs = []
-    for ln in "".join(lines).splitlines():
-        if ln:
-            t, b64 = ln.split(",", 1)
-            grabs.append((int(t), np.frombuffer(base64.b64decode(b64), np.uint8).astype(np.int16)))
+    grabs, sources = measure_delay.parse_watch("".join(lines))
     times = [t for t, _ in grabs]
     delays: list[float] = []
     for ts in sends:
@@ -215,7 +224,7 @@ def key_to_paint(agent: r.Agent, screen: r.Screen, trials: int) -> dict[str, Any
     if trials % 2:
         agent.keys("Escape")  # leave the Game option window closed
     return {"key": "Escape", "region": region, **benchlib.delay_summary(delays, trials=trials),
-            "raw_ms": [round(d, 1) for d in delays]}  # fmt: skip
+            "frame_sources": sources, "raw_ms": [round(d, 1) for d in delays]}  # fmt: skip
 
 
 # --- commands -------------------------------------------------------------------------------------
@@ -247,6 +256,7 @@ def cmd_run(a: argparse.Namespace) -> int:
             res["fidelity"] = fidelity(frame, EVIDENCE / "reference")
             rot = measure_motion.measure_rotation(agent, screen, a.rotate, f"{run_id}-{scene}")
             res["delivery_fps"] = benchlib.fps_summary(rot["frames_per_s"])  # type: ignore[arg-type]
+            res["frame_sources"] = {"rotation": rot["frame_sources"]}
             res["lab_cores_motion"] = rot["lab_cores"]
             enter_scene(agent, screen, scene)  # undo the rotation before anything else
             res["idle_cores"] = idle_cost(agent, a.idle)
@@ -254,9 +264,11 @@ def cmd_run(a: argparse.Namespace) -> int:
                 walks = measure_delay.measure_walks(agent, screen, a.walks)
                 res["packet_to_frame_ms"] = walks["packet_to_frame_ms"]
                 res["click_sent_to_packet_ms_p50"] = walks["click_sent_to_packet_ms_p50"]
+                res["frame_sources"]["walks"] = walks["frame_sources"]
                 (evidence / "walks_raw.json").write_text(json.dumps(walks["raw"]))
                 enter_scene(agent, screen, scene)
                 res["key_to_paint_ms"] = key_to_paint(agent, screen, a.keys)
+                res["frame_sources"]["keys"] = res["key_to_paint_ms"]["frame_sources"]
             scenes[scene] = res
         result["scenes"] = scenes
     result["t_wall_end"] = time.strftime("%FT%T%z")

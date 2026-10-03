@@ -7,9 +7,11 @@ desktop CPU (docs/phase0-latency.md "before/after" tables).
 * Motion: a bot camera rotation (right-drag sweeps across empty ground, never a click on the world)
   through /internal/agent (scripts/ro_agent.py: ASSIST only, waits for a human lease, stops on
   any refusal). The character never moves.
-* Frames reaching Xvfb: inside the backend container (same X display, same clock), a region of the
-  scene is grabbed continuously; a "frame" is a grab where >1 % of pixels moved by >24 levels from
-  the previous grab (rejects the RDP codec's progressive-refinement nudges). Per-second counts.
+* Frames reaching the lab: inside the backend container (same clock), a region of the scene is
+  grabbed continuously -- from X, or in console mode with a live S2 writer from the frame bus
+  (poring_backend.grabsource; V3b never paints X). A "frame" is a grab where >1 % of pixels moved
+  by >24 levels from the previous one (rejects the RDP codec's progressive-refinement nudges).
+  Per-second counts.
 * Lab CPU: cgroup cpu.stat usage of the display-path containers (desktop: Xvfb + xfreerdp;
   gamestream: Moonlight in console mode), cores, per container and in total.
 * Windows' RemoteFX Graphics counters (input / output fps, frames skipped for insufficient client
@@ -32,25 +34,25 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ro_agent as r  # noqa: E402
 
 COUNTER = r"""
-import sys, time, mss, numpy as np
+import sys, time
+import numpy as np
+from poring_backend.grabsource import GrabSource
 x, y, w, h, secs = (float(v) for v in sys.argv[1:6])
-reg = {"left": int(x), "top": int(y), "width": int(w), "height": int(h)}
-def arr(s):
-    a = np.frombuffer(s.raw, np.uint8).reshape(s.height, s.width, 4)
-    return a[::2, ::2, :3].astype(np.int16)
-with mss.MSS(display=":99") as s:
-    prev = arr(s.grab(reg)); end = time.monotonic() + secs
-    sec = int(time.monotonic()); n = grabs = 0
-    while time.monotonic() < end:
-        cur = arr(s.grab(reg)); grabs += 1
-        if (np.abs(cur - prev).max(axis=2) > 24).mean() > 0.01:
+prev = last = None
+sec = int(time.monotonic()); n = grabs = 0
+for t, a, source in GrabSource().frames((int(x), int(y), int(w), int(h)), secs, x_period_s=0.003):
+    if source != last:
+        print(f"#source={source}", flush=True)
+        last = source
+    if a is not None:  # None = a bus tick (no new frame): the second still ends on time
+        cur = a[::2, ::2, :3].astype(np.int16); grabs += 1
+        if prev is not None and (np.abs(cur - prev).max(axis=2) > 24).mean() > 0.01:
             n += 1
         prev = cur
-        now = int(time.monotonic())
-        if now != sec:
-            print(f"{now},{n},{grabs}", flush=True)
-            sec, n, grabs = now, 0, 0
-        time.sleep(0.003)
+    now = int(time.monotonic())
+    if now != sec:
+        print(f"{now},{n},{grabs}", flush=True)
+        sec, n, grabs = now, 0, 0
 """
 
 
@@ -144,7 +146,12 @@ def measure_rotation(
     rotate(agent, seconds, drag_x, drag_y)
     cpu1, t1 = usage_us(), time.monotonic()
     out, _ = counter.communicate(timeout=60)
-    rows = [tuple(int(v) for v in line.split(",")) for line in out.splitlines() if line]
+    sources = [ln.split("=", 1)[1] for ln in out.splitlines() if ln.startswith("#source=")]
+    rows = [
+        tuple(int(v) for v in line.split(","))
+        for line in out.splitlines()
+        if line and not line.startswith("#")
+    ]
     moving = [n for _, n, _ in rows[5:-4]]  # skip the idle lead-in and the tail
     cores = cores_between(cpu0, cpu1, t1 - t0)
     q = statistics.quantiles(moving, n=10) if len(moving) >= 10 else [float("nan")] * 9
@@ -155,6 +162,7 @@ def measure_rotation(
         "frames_per_s": moving,
         "idle_lead_in": [n for _, n, _ in rows[:4]],
         "grabs_per_s_median": statistics.median(g for _, _, g in rows) if rows else None,
+        "frame_sources": sources,
         "desktop_cores": cores.get("poring-lab-desktop-1"),
         "lab_cores": cores,
         "t_wall_end": time.strftime("%H:%M:%S"),

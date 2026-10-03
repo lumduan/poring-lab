@@ -14,6 +14,9 @@ runner, the watchdog and a human).
                                               hold -> stream again (reliable?) ; black: diagnostics
                                               -> hold. Leaves a RELIABLE variant streaming (for the
                                               functional checks); prints a JSON verdict
+    cleanroom.py checks [--box-min 45]        after a reliable variant: a time box for the bench and
+                                              the functional checks (the watchdog enforces it; keep
+                                              `heartbeat` fresh meanwhile)
     cleanroom.py hold | heartbeat | status
     cleanroom.py end                          hold, to-rdp, the exit checks, stop the watchdog
     cleanroom.py watchdog                     (systemd-run --user; never by hand)
@@ -216,7 +219,12 @@ def decide(
     why = ""
     box_until = float(status.get("box_until_ts") or 0)
     if box_until and now >= box_until + WATCHDOG_GRACE_S:
-        why = f"{status.get('variant', 'a variant')}'s box expired"
+        variant = status.get("variant", "a variant")
+        why = (
+            "the checks box expired"
+            if status.get("phase") == "checks"
+            else f"{variant}'s box expired"
+        )
     elif hb_age >= HEARTBEAT_STALE_S:
         why = f"runner heartbeat stale ({hb_age / 60:.0f} min)"
     if not why:
@@ -338,6 +346,18 @@ def cmd_preflight() -> int:
         problems.append("s2spike serverinfo: the lab certificate is not paired (PairStatus != 1)")
     if "currentgame = 0" not in info.stderr + info.stdout:
         problems.append("Sunshine already runs an app (currentgame != 0): cancel it first")
+    # V3b (PAINT=bus) needs the frame bus: gamestream writes it, the backend reads it (compose).
+    mounts = {
+        GAMESTREAM: "test -d /framebus && test -w /framebus",
+        "poring-lab-backend-1": "test -d /framebus && ! test -w /framebus",
+    }
+    for container, test in mounts.items():
+        res = subprocess.run(["docker", "exec", container, "sh", "-c", test],
+                             capture_output=True, check=False)  # fmt: skip
+        if res.returncode != 0:
+            problems.append(f"{container}: /framebus missing or wrongly writable (recreate it)")
+    if "framebus" not in h:
+        problems.append("the backend lacks /health framebus (restart it after the code change)")
     selftest = subprocess.run(
         ["docker", "exec", GAMESTREAM, "sh", "-c", "cd /tmp && python3 -m s2spike selftest"],
         capture_output=True, text=True, check=False, timeout=60,
@@ -352,7 +372,7 @@ def cmd_preflight() -> int:
 
 
 def cmd_start(hard_cap_min: float) -> int:
-    if load_status().get("phase") in ("entered", "variant"):
+    if load_status().get("phase") in ("entered", "variant", "streaming", "checks"):
         raise SystemExit("STOP: a clean room is already running (status.json)")
     now = time.time()
     heartbeat()
@@ -413,6 +433,19 @@ def cmd_variant(variant: str, box_min: float | None) -> int:
         result["frames"].append(shot(f"{variant}-second"))
     result["v3_stats"] = v3_stats() if variant in ("V3", "V3b") else None
     return finish(status, result)
+
+
+def cmd_checks(box_min: float) -> int:
+    """A box for the work after a reliable variant (bench, functional checks): the watchdog runs
+    the clean to-rdp at its end + 5 min, like a variant's."""
+    status = load_status()
+    if status.get("phase") not in ("streaming", "entered", "checks"):
+        raise SystemExit(f"STOP: no clean room to check in (phase {status.get('phase')})")
+    until = time.time() + box_min * 60
+    heartbeat()
+    save_status(phase="checks", box_until_ts=until)
+    say(f"checks box until {time.strftime('%H:%M', time.localtime(until))}")
+    return 0
 
 
 def finish(status: dict[str, Any], result: dict[str, Any]) -> int:
@@ -530,6 +563,8 @@ def main() -> int:
     va = sub.add_parser("variant")
     va.add_argument("variant", choices=sorted(BOXES_MIN.keys() - {"checks"}))
     va.add_argument("--box-min", type=float)
+    ch = sub.add_parser("checks")
+    ch.add_argument("--box-min", type=float, default=BOXES_MIN["checks"])
     for name in ("hold", "heartbeat", "status", "end", "watchdog"):
         sub.add_parser(name)
     args = ap.parse_args()
@@ -542,6 +577,8 @@ def main() -> int:
         return cmd_start(args.hard_cap_min)
     if args.cmd == "variant":
         return cmd_variant(args.variant, args.box_min)
+    if args.cmd == "checks":
+        return cmd_checks(args.box_min)
     if args.cmd == "hold":
         return cb("hold", timeout=180).returncode
     if args.cmd == "end":
