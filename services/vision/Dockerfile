@@ -51,6 +51,14 @@ COPY scripts/check_gpu.py scripts/check_gpu.py
 # The ubuntu24.04 base ships a default `ubuntu` user at uid 1000 (the host user owning ./data).
 RUN (userdel --remove ubuntu 2>/dev/null || true) \
  && useradd --uid 1000 --create-home --shell /usr/sbin/nologin agent
+
+# No CUDA forward-compatibility libs. The base image installs cuda-compat-13-0, whose libcuda is
+# NEWER than the host's R580 driver (580.95.05), so nvidia-container-toolkit 1.20's compat hook
+# loads it -- and a GeForce cannot use forward compatibility: every CUDA call failed with error 804
+# (first full build, 2026-10-03). The driver's own libcuda, mounted by the toolkit, is the right one.
+# Last layer on purpose: a tiny whiteout, nothing above it rebuilds (tests/test_guards.py pins it).
+RUN rm -rf /usr/local/cuda-13.0/compat \
+ && ldconfig
 USER agent
 
 ENV PATH=/opt/venv/bin:$PATH \

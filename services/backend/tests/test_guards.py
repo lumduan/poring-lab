@@ -579,3 +579,11 @@ def test_the_s2_input_volume_is_a_tiny_private_tmpfs() -> None:
     opts = compose("compose.yaml")["volumes"]["s2-input"]["driver_opts"]
     assert (opts["type"], opts["device"]) == ("tmpfs", "tmpfs")
     assert "size=1m" in opts["o"] and "mode=0750" in opts["o"] and "uid=1000" in opts["o"]
+
+
+def test_vision_never_ships_cuda_forward_compat_libs() -> None:
+    """Error 804 on the GeForce (2026-10-03): the base image's cuda-compat libcuda is newer than the
+    R580 driver, nvidia-container-toolkit loads it, and consumer GPUs refuse forward compat."""
+    dockerfile = (ROOT / "services" / "vision" / "Dockerfile").read_text()
+    assert "rm -rf /usr/local/cuda-13.0/compat" in dockerfile
+    assert dockerfile.index("rm -rf /usr/local/cuda-13.0/compat") > dockerfile.index("uv sync")
