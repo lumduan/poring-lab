@@ -29,6 +29,26 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import bench  # noqa: E402
 import ro_agent as r  # noqa: E402
 
+
+def safe_gm(agent: "r.Agent", screen: "r.Screen", command: str, counts: dict[str, int]) -> bool:
+    """A GM line, retried once when the chat input simply did not open (a frozen stream frame
+    after a dropped packet, 2026-10-04 05:58). If the input is left OPEN (a stale half-line in it),
+    GM commands stop for the rest of the run: never send a line that was not this one."""
+    for attempt in (1, 2):
+        try:
+            r.gm(agent, screen, command)
+            bench.close_chat(agent, screen)
+            return True
+        except r.Stop as exc:
+            counts["gm_failures"] += 1
+            r.log(f"activity: {command!r} failed ({exc}); attempt {attempt}")
+            if r.is_state(screen, "chat_open"):
+                counts["gm_disabled"] = 1
+                return False
+            time.sleep(3)
+    return False
+
+
 CELL_PX = 33  # ~px per cell at the default camera (camera_rdp.json fit: distance 400, FOV 15)
 DRIFT_CELLS = 12
 
@@ -43,7 +63,7 @@ def main() -> int:
     rng = random.Random(a.seed)
     stop = {"flag": False}
     signal.signal(signal.SIGTERM, lambda *_: stop.update(flag=True))
-    counts = {"walks": 0, "spawns": 0, "returns": 0}
+    counts = {"walks": 0, "spawns": 0, "returns": 0, "gm_failures": 0, "gm_disabled": 0}
     mapname, sx, sy = bench.SCENES[a.scene]
     gx, gy, gw, gh = r.game_region()
     cx, cy = gx + gw // 2, gy + int(gh * 0.53)  # the character's feet (measure_delay's centre)
@@ -54,16 +74,17 @@ def main() -> int:
         next_spawn = time.monotonic() + 10
         try:
             while time.monotonic() < t_end and not stop["flag"]:
-                if time.monotonic() >= next_spawn:
-                    r.gm(agent, screen, "@monster poring 3")
-                    counts["spawns"] += 1
+                if time.monotonic() >= next_spawn and not counts["gm_disabled"]:
+                    if safe_gm(agent, screen, "@monster poring 3", counts):
+                        counts["spawns"] += 1
                     next_spawn += a.spawn_every
-                    bench.close_chat(agent, screen)
-                if abs(drift[0]) > DRIFT_CELLS or abs(drift[1]) > DRIFT_CELLS:
-                    r.gm(agent, screen, f"@warp {mapname} {sx} {sy}")  # same map: camera stays
+                if (abs(drift[0]) > DRIFT_CELLS or abs(drift[1]) > DRIFT_CELLS) and not counts[
+                    "gm_disabled"
+                ]:
+                    # same map: the camera stays
+                    if safe_gm(agent, screen, f"@warp {mapname} {sx} {sy}", counts):
+                        counts["returns"] += 1
                     drift = [0, 0]
-                    counts["returns"] += 1
-                    bench.close_chat(agent, screen)
                     time.sleep(3)
                     continue
                 dx = rng.choice([-1, 1]) * rng.randint(2, 6)
@@ -77,8 +98,8 @@ def main() -> int:
                 counts["walks"] += 1
                 agent.idle(rng.uniform(4.0, 9.0))
         finally:
-            r.gm(agent, screen, "@killmonster2")
-            bench.close_chat(agent, screen)
+            if not counts["gm_disabled"]:
+                safe_gm(agent, screen, "@killmonster2", counts)  # the runner also does it after
     print(json.dumps({"scene": a.scene, "seconds": a.seconds, **counts}))
     return 0
 
