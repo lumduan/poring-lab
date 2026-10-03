@@ -30,7 +30,7 @@ def qa(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     camera = tmp_path / "camera.json"
     h = [[30.0, 0, 392.0], [0, -30.0, 330.0], [0, 0, 1.0]]
     camera.write_text(json.dumps({"h": h}))
-    monkeypatch.setattr(module, "CAMERA", camera)
+    monkeypatch.setattr(module, "camera_file", lambda backend: camera)
     monkeypatch.setattr(module, "BUNDLES", tmp_path / "bundles")
     return module
 
@@ -76,3 +76,45 @@ def test_bundle_has_frames_labels_and_index(
     assert index["sessions"] == [{"id": "s1", "title": "s1 (rdp)", "frames": 3}]
     assert sheet.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
     assert json.loads(capsys.readouterr().out)["with_boxes"] == 3
+
+
+def run_json(path: Path, run_id: str, started: str, backend: str, client: str, paint: str | None,
+             p50: float) -> None:  # fmt: skip
+    cfg = {"backend": backend, "client": {"name": client, **({"paint": paint} if paint else {})}}
+    path.joinpath(f"{run_id}.json").write_text(json.dumps({
+        "run_id": run_id, "t_wall_start": started, "config": cfg,
+        "scenes": {"outdoor": {"packet_to_frame_ms": {"p50": p50}}},
+    }))  # fmt: skip
+
+
+def test_auto_offset_matches_backend_client_and_paint_by_start_time(
+    qa: ModuleType, tmp_path: Path
+) -> None:
+    """2026-10-03: the file-name sort picked V3's X-painted run for a V3b (bus) session."""
+    runs = tmp_path / "runs"
+    runs.mkdir()
+    run_json(runs, "2026-10-03-console-5c7e-v3", "2026-10-03T13:00:00+0700", "console", "s2spike",
+             "x11", 118.9)  # fmt: skip
+    run_json(runs, "2026-10-03-console-26fa-v3b", "2026-10-03T17:00:00+0700", "console", "s2spike",
+             "bus", 113.9)  # fmt: skip
+    run_json(runs, "2026-10-03-console-0000-v3b-old", "2026-10-03T09:00:00+0700", "console",
+             "s2spike", "bus", 150.0)  # fmt: skip
+    run_json(runs, "2026-10-02-rdp-d16f-v2", "2026-10-02T12:00:00+0700", "rdp", "xfreerdp", None,
+             375.9)  # fmt: skip
+    bus = {"backend": "console", "client": {"name": "s2spike", "paint": "bus"}}
+    assert qa.auto_offset_ms(bus, runs) == (113.9, "2026-10-03-console-26fa-v3b")
+    x11 = {"backend": "console", "client": {"name": "s2spike", "paint": "x11"}}
+    assert qa.auto_offset_ms(x11, runs) == (118.9, "2026-10-03-console-5c7e-v3")
+    assert qa.auto_offset_ms({"backend": "rdp", "client": {"name": "xfreerdp"}}, runs)[0] == 375.9
+    with pytest.raises(SystemExit):
+        qa.auto_offset_ms({"backend": "console", "client": {"name": "moonlight-qt"}}, runs)
+
+
+def test_each_backend_has_its_own_camera_file() -> None:
+    from poring_dataset.projection import camera_file
+
+    assert camera_file("rdp").name == "camera_rdp.json" and camera_file("rdp").exists()
+    assert json.loads(camera_file("rdp").read_text())["backend"] == "rdp"
+    assert camera_file("console").name == "camera_console.json"
+    with pytest.raises(ValueError):
+        camera_file("vnc")

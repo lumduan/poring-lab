@@ -53,6 +53,7 @@ class GrabSource:
         self._bus: FrameBusReader | None = None
         self._live = False
         self._checked = 0.0
+        self.last_frame_id = -1  # the bus writer's frame_id of the last grab; -1 = an X grab
 
     # --- the decision -----------------------------------------------------------------------------
 
@@ -105,8 +106,10 @@ class GrabSource:
             got = bus.read()
             crop = self._crop(got.to_numpy(), region) if got is not None else None
             if got is not None and crop is not None:
+                self.last_frame_id = got.frame_id
                 return got.t_mono_ns, crop, "bus"
         t, img = self._x(region)
+        self.last_frame_id = -1
         return t, img, "x11"
 
     def frames(

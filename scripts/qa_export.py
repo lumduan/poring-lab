@@ -4,10 +4,12 @@
     qa_export.py SESSION_DIR [--every 5] [--max 40] [--offset-ms auto|MS] [--sheet OUT.png]
 
 * Labels: Timeline(packets) at (frame time - the backend's packet->frame offset), projected with the
-  calibrated default camera (poring_dataset/camera_default.json), per-class v0 boxes; frames inside
-  a GM-command window are skipped.
-* Offset `auto`: the newest benchmark run of the session's backend (docs/benchmarks/*.json,
-  outdoor packet_to_frame p50). A frame shows the world as it was that long ago.
+  session backend's calibrated default camera (poring_dataset/camera_<backend>.json), per-class v0
+  boxes; frames inside a GM-command window are skipped.
+* Offset `auto`: the newest benchmark run (by its start time, never its file name) of the SAME
+  backend and the same client + paint path as the session (docs/benchmarks/*.json, outdoor
+  packet_to_frame p50): an S2 session (bus) never takes V3's X-painted number. A frame shows the
+  world as it was that long ago.
 * Bundle: services/frontend/.qa-local/<session>/ (gitignored, .dockerignore'd, dev route only) --
   frames as lossless PNG + labels.json; index.json lists the sessions.
 * --sheet: also an offline contact sheet with the boxes drawn (for reports), e.g. in /dev/shm.
@@ -26,24 +28,35 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from poring_dataset import mapcache  # noqa: E402
 from poring_dataset.labels import gm_windows, in_windows, labels_for  # noqa: E402
+from poring_dataset.projection import camera_file  # noqa: E402
 from poring_dataset.shards import encode_png, read_shard  # noqa: E402
 from poring_dataset.timeline import Timeline  # noqa: E402
 
-CAMERA = ROOT / "packages" / "poring_dataset" / "src" / "poring_dataset" / "camera_default.json"
 BUNDLES = ROOT / "services" / "frontend" / ".qa-local"
 COLOURS = {"player": (255, 200, 60), "monster": (60, 220, 255), "npc": (120, 255, 120)}  # BGR
 
 
-def auto_offset_ms(backend: str) -> float:
-    runs = sorted((ROOT / "docs" / "benchmarks").glob("*.json"))
-    for path in reversed(runs):
+def client_key(config: dict[str, Any]) -> tuple[str, str, str]:
+    """(backend, client name, paint path) -- what decides when a frame shows the world."""
+    client = config.get("client") or {}
+    return (str(config.get("backend")), str(client.get("name")), str(client.get("paint") or "x11"))
+
+
+def auto_offset_ms(config: dict[str, Any], runs_dir: Path | None = None) -> tuple[float, str]:
+    """(packet->frame p50 of the newest matching run, its run_id)."""
+    want = client_key(config)
+    best: tuple[str, float, str] | None = None
+    for path in (runs_dir or ROOT / "docs" / "benchmarks").glob("*.json"):
         res = json.loads(path.read_text())
-        if res.get("config", {}).get("backend") != backend:
+        if "scenes" not in res or client_key(res.get("config", {})) != want:
             continue
         p50 = res["scenes"].get("outdoor", {}).get("packet_to_frame_ms", {}).get("p50")
-        if isinstance(p50, int | float):
-            return float(p50)
-    raise SystemExit(f"no benchmark run for backend {backend}: pass --offset-ms")
+        started = str(res.get("t_wall_start", ""))
+        if isinstance(p50, int | float) and (best is None or started > best[0]):
+            best = (started, float(p50), str(res.get("run_id", path.stem)))
+    if best is None:
+        raise SystemExit(f"no benchmark run for {want}: pass --offset-ms")
+    return best[1], best[2]
 
 
 def draw(img: np.ndarray, boxes: list[dict[str, Any]]) -> np.ndarray:
@@ -70,11 +83,18 @@ def main() -> int:
     ap.add_argument("--sheet", type=Path)
     a = ap.parse_args()
     manifest = json.loads((a.session / "manifest.json").read_text())
-    if not CAMERA.exists():
-        raise SystemExit("no calibrated camera: run scripts/calibrate_projection.py --save first")
-    camera = json.loads(CAMERA.read_text())
+    camera_path = camera_file(manifest["backend"])
+    if not camera_path.exists():
+        backend = manifest["backend"]
+        raise SystemExit(f"no calibrated camera for {backend}: run "
+                         f"scripts/calibrate_projection.py --backend {backend} --save")  # fmt: skip
+    camera = json.loads(camera_path.read_text())
     h = np.array(camera["h"], dtype=float)
-    offset_ms = auto_offset_ms(manifest["backend"]) if a.offset_ms == "auto" else float(a.offset_ms)
+    offset_run = None
+    if a.offset_ms == "auto":
+        offset_ms, offset_run = auto_offset_ms(manifest["config"])
+    else:
+        offset_ms = float(a.offset_ms)
     with gzip.open(a.session / "packets.jsonl.gz", "rt") as fh:
         events = [json.loads(line) for line in fh]
     timeline = Timeline(events, mapcache.load(prere=True))
@@ -106,6 +126,7 @@ def main() -> int:
                 sheet.append(draw(img, boxes))
     (out_dir / "labels.json").write_text(json.dumps({
         "session": manifest["session_id"], "size": list(size), "offset_ms": offset_ms,
+        "offset_run": offset_run, "camera": camera_path.name,
         "frames": frames_out,
     }))  # fmt: skip
     index_path = BUNDLES / "index.json"
@@ -125,7 +146,7 @@ def main() -> int:
         a.sheet.write_bytes(encode_png(np.vstack(rows)))
     labelled = sum(1 for f in frames_out if f["boxes"])
     print(json.dumps({"bundle": str(out_dir), "frames": len(frames_out), "with_boxes": labelled,
-                      "offset_ms": offset_ms}))  # fmt: skip
+                      "offset_ms": offset_ms, "offset_run": offset_run}))  # fmt: skip
     return 0
 
 

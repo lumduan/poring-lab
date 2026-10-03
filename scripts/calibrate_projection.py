@@ -15,7 +15,8 @@
    Then @killmonster2 removes them (no drops).
 
 Writes data/bench/calibration/<stamp>.json (evidence) and, with --save, the fitted camera to
-packages/poring_dataset/src/poring_dataset/camera_default.json (committed: a lab constant).
+packages/poring_dataset/src/poring_dataset/camera_<backend>.json (committed: a lab constant; one
+per backend -- a --save never touches another backend's file).
 Input only through /internal/agent in ASSIST (ro_agent rules); lock must say --backend.
 """
 
@@ -43,7 +44,6 @@ ROOT = Path(__file__).resolve().parents[1]
 # has 2 open cells and lies 24 cells from the Prontera gate warp: a wide click grid walked the
 # GM into it (2026-10-02).
 SPOT = (268, 107)
-CAMERA = ROOT / "packages" / "poring_dataset" / "src" / "poring_dataset" / "camera_default.json"
 # Client-area rectangles that are UI, not world (x, y, w, h): never click there. Measured on the
 # frozen 1280x720 layout (2026-10-02): Basic Information (expanded), the 4-row hotkey bar, the small
 # top window, the chat window, the right-anchored notifier and minimap (outdoor maps).
@@ -179,7 +179,10 @@ def main() -> int:
     out.mkdir(parents=True, exist_ok=True)
     (out / f"{time.strftime('%Y%m%dT%H%M%S')}.json").write_text(json.dumps(result, indent=1))
     if a.save:
-        CAMERA.write_text(json.dumps({k: result[k] for k in (
+        camera = projection.camera_file(a.backend)
+        if camera.exists() and json.loads(camera.read_text()).get("backend") != a.backend:
+            raise r.Stop(f"{camera.name} holds another backend's camera: refusing to overwrite")
+        camera.write_text(json.dumps({k: result[k] for k in (
             "stamp", "backend", "spot", "game_region", "h", "click_residual_px", "validation"
         )} | {"pairs": result["pairs"]}, indent=1) + "\n")  # fmt: skip
     print(

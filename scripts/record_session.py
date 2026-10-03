@@ -4,9 +4,13 @@
     record_session.py --backend rdp --label calib --seconds 120 [--fps 10] [--out DIR]
                       [--max-bytes 2G]
 
-* Frames: GAME_REGION grabbed inside the backend container (ro_agent.Screen: same X display, same
-  CLOCK_MONOTONIC as the packets), at most --fps, and only when the picture changed (a still scene
-  costs nothing). Lossless PNG in WebDataset-style tar shards (poring_dataset.shards).
+* Frames: GAME_REGION grabbed inside the backend container (ro_agent.Screen: same CLOCK_MONOTONIC
+  as the packets), at most --fps, and only when the picture changed (a still scene costs nothing).
+  Lossless PNG in WebDataset-style tar shards (poring_dataset.shards).
+  In console mode (S2, ADR-0014) the frames come from the S2 frame bus: each record carries the
+  bus writer's `bus_frame_id`, `source` and the decode-complete time as `t_mono_ns`, and the
+  recording STOPS on the first non-bus frame (an X grab there is a black or foreign picture).
+  RDP mode grabs X (`source` x11, `bus_frame_id` -1).
 * Packets: after the run, the sniffer's events for [t0 - 5 s, t1 + 5 s], with every name and chat
   line of anyone but the lab's own accounts replaced by an HMAC pseudonym (CLAUDE.md rule 9; the
   salt lives in data/dataset-pseudonym.salt, gitignored, never in a shard).
@@ -48,7 +52,7 @@ from poring_dataset.timeline import session_events  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 SALT = ROOT / "data" / "dataset-pseudonym.salt"
-RECORDER_VERSION = 2  # v2: packets start at the last map change before t0 (anchor)
+RECORDER_VERSION = 3  # v3: bus frame ids + source per frame (S2); v2: the packet anchor
 CAP_CHECK_S = 5.0  # how often the local caps are re-checked while recording
 
 
@@ -160,21 +164,31 @@ def record(a: argparse.Namespace) -> dict[str, Any]:
     t0 = r.ns()
     t_end = time.monotonic() + a.seconds
     prev: np.ndarray | None = None
-    frame_id = skipped = 0
+    frame_id = skipped = repeats = 0
+    last_bus_id = -1
+    sources: dict[str, int] = {}
     next_cap_check = time.monotonic() + CAP_CHECK_S
     try:
         with subprocess.Popen(["ionice", "-c3", "-p", str(os.getpid())]) as p:
             p.wait()
         next_t = time.monotonic()
         while time.monotonic() < t_end:
-            t_cap, img = screen.grab(gx, gy, gw, gh)
+            t_cap, img, bus_id, source = screen.grab_meta(gx, gy, gw, gh)
+            sources[source] = sources.get(source, 0) + 1
+            if a.backend == "console" and source != "bus":
+                stop_reason = "non_bus_frame: the S2 frame bus went away (console mode)"
+                break
             bgr = img[:, :, :3].copy()
-            if prev is not None and np.array_equal(bgr, prev):
+            if source == "bus" and bus_id == last_bus_id:
+                repeats += 1  # no new decoded frame since the last grab
+            elif prev is not None and np.array_equal(bgr, prev):
                 skipped += 1
             else:
-                writer.add(frame_id, t_cap, bgr, t_wall=time.strftime("%FT%T%z"))
+                writer.add(frame_id, t_cap, bgr, t_wall=time.strftime("%FT%T%z"),
+                           bus_frame_id=bus_id, source=source)  # fmt: skip
                 frame_id += 1
                 prev = bgr
+            last_bus_id = bus_id
             if writer.bytes > a.max_bytes:
                 stop_reason = "size_cap"
                 break
@@ -202,7 +216,8 @@ def record(a: argparse.Namespace) -> dict[str, Any]:
         "session_id": session_id, "recorder_version": RECORDER_VERSION,
         "backend": a.backend, "lock_seq": lock.seq, "config": config, "config_hash": chash,
         "game_region": [gx, gy, gw, gh], "fps_cap": a.fps, "shards": writer.shards,
-        "frames": writer.frames, "unchanged_skipped": skipped, "bytes": writer.bytes,
+        "frames": writer.frames, "unchanged_skipped": skipped, "bus_repeats": repeats,
+        "frame_sources": sources, "bytes": writer.bytes,
         "t0_mono_ns": t0, "t1_mono_ns": t1, "seconds": round(seconds, 1),
         "mb_per_min": round(writer.bytes / 1e6 / max(seconds / 60, 1e-9), 1),
         "stop_reason": stop_reason, "guard": guard.summary(), "packet_events": len(events),
@@ -245,7 +260,12 @@ def main() -> int:
     ap.add_argument("--seconds", type=float, default=120.0)
     ap.add_argument("--fps", type=float, default=10.0)
     ap.add_argument("--out", type=Path, default=dataset_ship.LOCAL_ROOT)
-    ap.add_argument("--max-bytes", type=parse_size, default=parse_size("2G"))
+    ap.add_argument(
+        "--max-bytes",
+        type=parse_size,
+        required=True,
+        help="hard size cap for this session, e.g. 12G (explicit: no default)",
+    )
     ap.add_argument(
         "--min-free-gb",
         type=float,

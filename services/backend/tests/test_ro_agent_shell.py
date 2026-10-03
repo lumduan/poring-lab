@@ -72,9 +72,11 @@ def test_the_screen_helper_reads_the_frame_bus_only_in_console_mode_with_a_live_
         [sys.executable, "-c", ro._HELPER], input=b"2 1 4 3\n", capture_output=True, env=env,
         timeout=30, check=True,
     )  # fmt: skip
-    t, w, h = struct.unpack("<qII", helper.stdout[:16])
+    size = struct.calcsize(ro.HELPER_HEADER)
+    t, w, h, frame_id, bus = struct.unpack(ro.HELPER_HEADER, helper.stdout[:size])
     assert (t, w, h) == (777, 4, 3)  # the writer's decode time, not a grab time
-    got = np.frombuffer(helper.stdout[16:], np.uint8).reshape(3, 4, 4)
+    assert (frame_id, bus) == (3, 1)  # the writer's frame_id, from the bus (the recorder keeps it)
+    got = np.frombuffer(helper.stdout[size:], np.uint8).reshape(3, 4, 4)
     assert np.array_equal(got, pixels[1:4, 2:6])
 
 

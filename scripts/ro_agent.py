@@ -169,11 +169,13 @@ src = GrabSource()
 out = sys.stdout.buffer
 for line in sys.stdin:
     x, y, w, h = map(int, line.split())
-    t, img, _ = src.grab((x, y, w, h))
-    out.write(struct.pack("<qII", t, img.shape[1], img.shape[0]))
+    t, img, source = src.grab((x, y, w, h))
+    out.write(struct.pack("<qIIqB", t, img.shape[1], img.shape[0], src.last_frame_id,
+                          1 if source == "bus" else 0))
     out.write(np.ascontiguousarray(img).tobytes())
     out.flush()
 """
+HELPER_HEADER = "<qIIqB"  # t_mono_ns, w, h, bus frame_id (-1 = X), source (1 = bus)
 
 
 _DESKTOP: tuple[int, int] | None = None
@@ -221,12 +223,20 @@ class Screen:
         )  # fmt: skip
 
     def grab(self, x: int, y: int, w: int, h: int) -> tuple[int, np.ndarray]:
+        t, img, _, _ = self.grab_meta(x, y, w, h)
+        return t, img
+
+    def grab_meta(self, x: int, y: int, w: int, h: int) -> tuple[int, np.ndarray, int, str]:
+        """(t_mono_ns, BGRA, the bus writer's frame_id or -1, "bus" | "x11"). A bus frame's t is
+        its decode-complete time; an X grab's is the moment of the grab."""
         assert self.proc.stdin is not None and self.proc.stdout is not None
         self.proc.stdin.write(f"{x} {y} {w} {h}\n".encode())
         self.proc.stdin.flush()
-        t, gw, gh = struct.unpack("<qII", self.proc.stdout.read(16))
+        size = struct.calcsize(HELPER_HEADER)
+        t, gw, gh, frame_id, bus = struct.unpack(HELPER_HEADER, self.proc.stdout.read(size))
         raw = self.proc.stdout.read(gw * gh * 4)
-        return t, np.frombuffer(raw, np.uint8).reshape(gh, gw, 4)
+        img = np.frombuffer(raw, np.uint8).reshape(gh, gw, 4)
+        return t, img, frame_id, "bus" if bus else "x11"
 
     def full(self) -> np.ndarray:
         return self.grab(0, 0, *desktop())[1]

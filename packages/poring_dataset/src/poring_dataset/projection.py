@@ -15,11 +15,22 @@ What breaks it -- and how a session detects it:
 """
 
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 import numpy.typing as npt
 
 Array = npt.NDArray[np.float64]
+BACKENDS = ("rdp", "console")
+
+
+def camera_file(backend: str) -> Path:
+    """The calibrated default camera of a capture backend: ``camera_<backend>.json`` next to this
+    module (committed lab constants). One per backend (2026-10-03): the S2 stream (console) and
+    RDP deliver different pictures, so neither may silently use the other's fit."""
+    if backend not in BACKENDS:
+        raise ValueError(f"unknown backend {backend!r}")
+    return Path(__file__).with_name(f"camera_{backend}.json")
 
 
 def _normaliser(points: Array) -> Array:
