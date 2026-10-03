@@ -12,6 +12,11 @@ next_action: Clean room DONE 2026-10-03: V1/V2 black (Moonlight-qt's first SDL_R
 
 # ADR-0009: Console-session capture as a second display mode (Sunshine first, VNC fallback)
 
+> ➡️ **2026-10-03 (Batt): S2 is the bot's primary capture + input path.** See
+> [ADR-0014](0014-s2-primary-bot-path.md) for the evidence, the roles (S2 = perception, datasets,
+> the fast loop; RDP = the human's admin path), the proposed resting state and the routine S2
+> session. The lock, the clean room and the one-session rule below are unchanged.
+
 - **Status:** PROPOSED (2026-10-01). ➡️ **2026-10-02: Batt approved the Sunshine install and the S1
   trial** ("Sunshine research gets the weight"); RDP stays the default until he decides otherwise.
   - Sunshine v2026.914.233613 is installed on the Dell by Batt (UAC). ➡️ Note 2026-10-02: the running

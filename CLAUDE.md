@@ -16,8 +16,10 @@ ports, quickstart) and `docs/adr/`.
    - Packet capture (the `sniffer` service) is **offline ground truth only**.
 2. **One Windows session, one display path at a time** (ADR-0001; amended 2026-10-02 with Batt's OK,
    ADR-0009). Windows client editions allow a single interactive session.
-   - The path is the RDP session, OR the console-mode stream (Sunshine -> the `gamestream` client)
-     under the capture-backend lock (`scripts/capture_backend.py`). Never both.
+   - The path is the RDP session, OR the console-mode stream (Sunshine -> the `gamestream` client:
+     the S2 client, or Moonlight-qt) under the capture-backend lock (`scripts/capture_backend.py`).
+     Never both. **S2 is the bot's primary path** (ADR-0014, Batt 2026-10-03): frames from the frame
+     bus, input from the mux over the `s2-input` socket. RDP is the human's admin path.
    - Never a second client: Sunshine pairs ONLY the lab's gamestream client; its firewall rules admit
      only this host; its web UI is `pc`-only. Its key never leaves the `gamestream-state` volume
      EXCEPT into the lab client's own process memory: Moonlight-qt, or the S2 spike through a sealed
@@ -27,14 +29,21 @@ ports, quickstart) and `docs/adr/`.
    - Never add any other RDP, VNC or streaming path into Windows.
    - Never make the loop retry fast on auth failure (account lockout).
    - Never make it fight a human: exit 5 backs off for 10 minutes.
-3. **One input writer** (ADR-0002). Only the backend's `Injector` uses XTest, and every input passes
-   `InputMux`.
+3. **One input writer** (ADR-0002). Only the backend's `Injector` sends input: XTest, or the S2
+   input socket in console mode (`s2-input`, mounted ONLY in backend + gamestream; ADR-0014). Every
+   input passes `InputMux`.
    - The agent sends to `/internal/agent`.
    - noVNC stays view-only by default.
    - New input paths go **through** the mux, never around it.
 4. **Never commit game-client assets** (`*.grf`, `*.gpf`, client exe/dll, a client's `data/` folder),
    `.env`, anything under `data/`, model weights, or packet captures (RO login packets carry
    credentials). `.gitignore` enforces this; don't weaken it.
+   - Client-derived data (GAT, sprites, anything read from a GRF) and knowledge-base data derived
+     from rAthena (GPL) are generated locally at run time (`/dev/shm`, `data/`) and never committed
+     (Batt, 2026-10-03). The pre-commit hook refuses map and sprite files even with `git add -f`.
+   - Reusing open-source RO work: a permissive license means port with attribution; copyleft or
+     unclear means ideas only, write our own. Read the LICENSE at the exact commit first and record
+     it in `THIRD_PARTY.md`. Never open cheat or memory-patching repos.
 5. **This host is shared with live 24/7 capture services, Frigate (NVR) and Ollama.**
    - Every lab container keeps `mem_limit` equal to `memswap_limit` (no swap) and `oom_score_adj: 500`.
    - CPU: desktop keeps `cpu_shares: 64` (cgroup v2 weight 12 vs the quant containers' 100) and `cpus: 8`,

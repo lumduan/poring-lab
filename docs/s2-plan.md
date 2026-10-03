@@ -135,6 +135,17 @@ It never waits for a reader.
 
 ## 4. Input path (no XTest on this path)
 
+➡️ **BUILT 2026-10-03 (8820b3c), live verification pending; S2 is the bot's primary path
+([ADR-0014](adr/0014-s2-primary-bot-path.md)).** As built:
+- `s2spike/input_socket.py`, one peer, 0660, on the `s2-input` tmpfs;
+- `poring_env/s2input.py` `GameStreamInput`, which waits for the S2 client's ack;
+- the Injector's two sinks (console + a live socket → S2, else XTest; ReleaseAll on a switch);
+- `poring_env.keymap.VK_BY_CODE`, with vk.py drift-tested;
+- the wheel sends `LiSendHighResScrollEvent(±120)` per notch, as the V3b X path did;
+- **no X window takes input**: an unmapped presence marker keeps the interlocks (Batt's choice).
+
+The numbered text below is the plan as approved.
+
 1. The backend's mux decides exactly as today. Then its `InputSink` for `console` mode
    (`GameStreamInput`) writes each event to a **unix socket** in a small tmpfs volume `s2-input`.
    Only backend and gamestream mount it, and only the backend can write: the one-writer rule of
@@ -346,13 +357,20 @@ streams, or decode-to-GPU feeding YOLO). Not now.
          with the writer's decode time;
        - compose: the 64 MiB `framebus` tmpfs (gamestream rw, backend + vision ro, guarded),
          gamestream 1536m → 1600m.
-     - Still to do in step 3: the input socket (V3b still receives the mux's XTest through its
-       input-only window). Step 6: vision's grab on the bus.
+     - ~~Still to do in step 3: the input socket (V3b still receives the mux's XTest through its
+       input-only window). Step 6: vision's grab on the bus.~~ ➡️ **2026-10-03 evening: both BUILT**
+       (§4 above; vision `VISION_FRAME_SOURCE=auto|bus|x11`, `poring_env.remote.make_env
+       ("gamestream")`). Live verification in the S2 session (A4 through the socket).
 3. **s2-client** in the `gamestream` image (writer + input socket + clean lifecycle). Moonlight-qt
    is removed.
 4. **Backend** console mode: bus FrameSource, capped JPEG human view, `/health.framebus`.
-5. **`GameStreamInput`** + the VK table; the live A4 functional checks.
-6. **vision on the bus** (ADR-0005 (a)); the acceptance rows 3 and 4.
+5. **`GameStreamInput`** + the VK table; the live A4 functional checks. ➡️ BUILT 2026-10-03;
+   A4 live pending.
+6. **vision on the bus** (ADR-0005 (a)); the acceptance rows 3 and 4. ➡️ BUILT 2026-10-03 (the
+   vision image built and `check_gpu` passed the same evening); rows 3–4 are verified with a live
+   loop later. Full ADR-0005 closure is PROPOSED in ADR-0014.
+   - Phase 3 note (Batt, 2026-10-03): RagLite's ACT/SPR decoding (Apache-2.0 option) is a later
+     path to synthetic training data, i.e. sprites with exact labels (THIRD_PARTY.md).
 7. **Benchmark** SPEC v2: S2 vs RDP (and S1 if it renders).
 8. **Later**, each separately approved:
    - shared viewing (§10);

@@ -141,6 +141,17 @@ decodes the GameStream video once, into a shared-memory frame bus. vision maps t
 - The ADR's status is unchanged (PROPOSED) until Batt approves S2. This note records the intended
   implementation route only.
 
+## Note (2026-10-03): ADR-0014, the S2 path is the bot's path
+
+- **Built:** the input socket (S2 step 3) and vision's bus source (`VISION_FRAME_SOURCE=bus`).
+  vision no longer NEEDS X on the S2 path: frames come from the bus (option a), and input goes
+  through `/internal/agent` → mux → the backend's socket.
+- **PROPOSED for full closure (Batt decides):**
+  - "vision S2-only": remove vision's `x11-unix` mount, so it cannot connect to X at all (acceptance
+    row 1);
+  - option (c2), the internal agent network (rows 2–3).
+- This ADR stays PROPOSED and Phase 4 stays gated on it until then.
+
 ## Tracking
 
 [lumduan/poring-lab#1](https://github.com/lumduan/poring-lab/issues/1), labelled `blocks-phase-4` and `security`.
