@@ -14,6 +14,9 @@
 # REPEATS locale_pack.fingerprint() (tests/test_locale_guard.py keeps them equal): sha256 of
 # NFC(text, CRLF->LF, minus one trailing '#').strip(), only for >= 6 characters.
 #
+# The repo's own class names that collide with a pack string (.githooks/own-identifiers.txt; only
+# class names the repo defines, tests/test_locale_guard.py) are skipped by EXACT match, nothing else.
+#
 # Only paths and reasons are printed, never the matching text. The repo's own Thai in tests and
 # docs is unaffected: the list holds pack strings only.
 set -euo pipefail
@@ -64,6 +67,13 @@ def path_reason(path):
 fp_file = Path(os.environ.get("PORING_PACK_FINGERPRINTS")
                or Path.home() / ".cache" / "poring-lab" / "pack-fingerprints.txt")
 fingerprints = set(fp_file.read_text().split()) if fp_file.is_file() else set()
+own_file = top / ".githooks" / "own-identifiers.txt"
+own = set()
+if own_file.is_file():
+    for raw in own_file.read_text().splitlines():
+        words = raw.split("#", 1)[0].split()
+        if words:
+            own.add(words[0])
 
 def content_reason(path):
     if not fingerprints:
@@ -82,6 +92,8 @@ def content_reason(path):
             candidates = [line]
             candidates += [next(g for g in m.groups() if g) for m in QUOTED.finditer(line)]
             for cand in candidates:
+                if normalise(cand).strip() in own:  # the same text the fingerprint hashes
+                    continue
                 if fingerprint(cand) in fingerprints:
                     return f"line {n} carries a locale-pack string (fingerprint match)"
     return None

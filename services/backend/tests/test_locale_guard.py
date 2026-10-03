@@ -142,3 +142,49 @@ def test_hook_repeats_the_builders_fingerprint_rule(lp: ModuleType) -> None:
     assert "if len(norm) < 6:" in hook and lp.FINGERPRINT_MIN == 6
     assert 'unicodedata.normalize("NFC", text)' in hook
     assert 'hashlib.sha256(norm.encode("utf-8")).hexdigest()' in hook
+
+
+OWN = ROOT / ".githooks" / "own-identifiers.txt"
+
+
+def own_identifiers() -> list[str]:
+    words = []
+    for raw in OWN.read_text().splitlines():
+        parts = raw.split("#", 1)[0].split()
+        if parts:
+            words.append(parts[0])
+    return words
+
+
+def test_the_own_identifier_exemptions_are_only_the_repos_own_class_names() -> None:
+    """The exemption can never carry pack text: each word must be a class the repo defines."""
+    import re
+
+    sources = "\n".join(
+        p.read_text(errors="replace")
+        for base in ("packages", "services")
+        for p in (ROOT / base).rglob("*.py")
+        if "node_modules" not in p.parts
+    )
+    words = own_identifiers()
+    assert words, "empty list: delete the file instead"
+    for word in words:
+        assert re.fullmatch(r"[A-Z][A-Za-z0-9]{5,40}", word), word
+        assert re.search(rf"^class {word}\(", sources, re.M), f"{word} is not a class of ours"
+
+
+def test_an_own_identifier_passes_and_other_pack_strings_still_fail(
+    lp: ModuleType, repo: Path, tmp_path: Path
+) -> None:
+    shutil.copy2(OWN, repo / ".githooks" / "own-identifiers.txt")
+    pack_string = "ข้อความสังเคราะห์สำหรับทดสอบ"  # synthetic, made up for this test
+    fps = tmp_path / "fp.txt"
+    lp.write_fingerprints(fps, ["Status#", pack_string + "#"])
+    stage(repo, "schema/protocol.schema.json", '{"Status": {"title": "Status"}}\n')
+    assert commit(repo, fps).returncode == 0
+    stage(repo, "src/strings.py", f'OK = "Status"\nLABEL = "{pack_string}"\n')
+    result = commit(repo, fps)
+    assert result.returncode != 0 and "line 2 carries a locale-pack string" in result.stderr
+    stage(repo, "src/strings.py", 'LABEL = "Status bar"\n')  # only the EXACT word is exempt
+    lp.write_fingerprints(fps, ["Status bar#"])
+    assert commit(repo, fps).returncode != 0

@@ -1,0 +1,5 @@
+# The repo's OWN identifiers that collide with a fingerprinted locale-pack string (ADR-0012).
+# .githooks/pre-commit skips a candidate EXACTLY equal to a word listed here, and nothing else:
+# every other pack string stays refused. Only a class name that the repo's own Python defines may
+# be listed (tests/test_locale_guard.py enforces it). One word per line; '#' starts a comment.
+Status  # class Status(Message), packages/poring_env/src/poring_env/protocol.py, 738f4ee 2026-09-29
