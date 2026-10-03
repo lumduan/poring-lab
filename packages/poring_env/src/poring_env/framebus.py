@@ -85,7 +85,7 @@ class FrameBusWriter:
     of a previous writer notice and re-open)."""
 
     def __init__(
-        self, path: str | Path, *, max_width: int, max_height: int, slots: int = 8
+        self, path: str | Path, *, max_width: int, max_height: int, slots: int = 4
     ) -> None:
         if slots < 2 or max_width <= 0 or max_height <= 0:
             raise ValueError(f"bad ring: {slots=} {max_width=} {max_height=}")
@@ -98,9 +98,24 @@ class FrameBusWriter:
         fd = os.open(tmp, os.O_RDWR | os.O_CREAT | os.O_TRUNC, 0o640)
         try:
             os.ftruncate(fd, size)
+            # Reserve every page NOW (2026-10-03): a sparse ring on a full tmpfs SIGBUSes the writer
+            # at the first page it cannot get -- mid-stream. The tmpfs fills when a reader still
+            # maps the previous writer's (unlinked) ring; it frees once every reader re-opens.
+            try:
+                os.posix_fallocate(fd, 0, size)
+            except OSError as exc:
+                free = os.statvfs(self.path.parent)
+                os.close(fd)
+                fd = -1
+                tmp.unlink(missing_ok=True)
+                raise FrameBusError(
+                    f"no room for a {size >> 20} MiB ring ({free.f_bavail * free.f_frsize >> 20} "
+                    f"MiB free in {self.path.parent}): an earlier ring is still mapped ({exc})"
+                ) from None
             self._mm = mmap.mmap(fd, size, mmap.MAP_SHARED, mmap.PROT_READ | mmap.PROT_WRITE)
         finally:
-            os.close(fd)
+            if fd >= 0:
+                os.close(fd)
         # Everything but the magic first: a reader that opens the file early refuses it.
         _GLOBAL.pack_into(self._mm, 0, b"\0\0\0\0", VERSION, slots, SLOT_HEADER_BYTES,
                           self.slot_bytes, -1, os.getpid(), _mono_ns(), 0, 0, 0)  # fmt: skip

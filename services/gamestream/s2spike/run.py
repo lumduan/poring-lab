@@ -211,6 +211,19 @@ class Stream:
         if self.args.app not in apps:
             log(f"REFUSED: no app {self.args.app!r} on the host ({sorted(apps)})")
             return 3
+        if self.args.framebus:
+            # BEFORE the launch: a ring that cannot be created must never leave Sunshine's app
+            # running (2026-10-03: the second stream of a room SIGBUSed on a full tmpfs).
+            from .framebus import FrameBusError, FrameBusWriter
+
+            try:
+                self.bus = FrameBusWriter(
+                    self.args.framebus, max_width=self.width, max_height=self.height
+                )
+            except FrameBusError as exc:
+                log(f"REFUSED: frame bus: {exc}")
+                return 3
+            log(f"frame bus: {self.args.framebus} ({self.bus.slots} slots, reserved)")
         c = self.const
         cfg = ll.STREAM_CONFIGURATION()
         self.lib.LiInitializeStreamConfiguration(ctypes.byref(cfg))
@@ -233,6 +246,7 @@ class Stream:
         rtsp = nv.launch(params, li_params, resume=resume)
         if not rtsp:
             log("REFUSED: the host returned no sessionUrl0")
+            self._close()  # the reserved ring goes too
             return 3
         si = ll.SERVER_INFORMATION()
         self.lib.LiInitializeServerInformation(ctypes.byref(si))
@@ -256,13 +270,6 @@ class Stream:
         cl.logMessage = self.lib.log_message_ptr
         self.lib.shim.s2_set_log_sink(self._cbs["log"])
 
-        if self.args.framebus:
-            from .framebus import FrameBusWriter
-
-            self.bus = FrameBusWriter(
-                self.args.framebus, max_width=self.width, max_height=self.height
-            )
-            log(f"frame bus: {self.args.framebus} ({self.bus.slots} slots)")
         if self.args.input_socket:
             from .presence import Presence
 

@@ -210,3 +210,31 @@ def test_a_slow_reader_never_slows_the_writer(tmp_path: Path) -> None:
     with_reader = rate()
     slow.communicate(timeout=30)
     assert with_reader > 0.5 * alone, (alone, with_reader)  # no waiting on a reader, ever
+
+
+def test_a_ring_that_cannot_be_reserved_fails_at_once_not_mid_stream(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """2026-10-03: a reader still mapped the previous writer's ring, the 64 MiB tmpfs had no room
+    for a second one, and the new writer SIGBUSed at its 5th frame. The pages are reserved up front
+    now, so a full tmpfs is a clear error at creation (before Sunshine's app is launched)."""
+    import errno
+    import os as _os
+
+    from poring_env.framebus import FrameBusError
+
+    def full(fd: int, offset: int, length: int) -> None:
+        raise OSError(errno.ENOSPC, "No space left on device")
+
+    monkeypatch.setattr(_os, "posix_fallocate", full)
+    with pytest.raises(FrameBusError, match="still mapped"):
+        FrameBusWriter(tmp_path / "ring", max_width=64, max_height=32)
+    assert list(tmp_path.iterdir()) == []  # no half-made temp file left behind
+
+
+def test_the_default_ring_and_an_old_one_fit_the_tmpfs() -> None:
+    """Two 1440x900 rings (a reader's old one + the new) must fit the 64 MiB framebus volume."""
+    from poring_env.framebus import ring_size, slot_stride  # noqa: F401
+
+    one = ring_size(4, 1440 * 900 * 4)
+    assert 2 * one < 64 * 1024 * 1024 - 4 * 1024 * 1024  # with headroom

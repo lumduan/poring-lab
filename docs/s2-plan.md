@@ -98,6 +98,7 @@ It never waits for a reader.
    skips frames and never delays the writer or the bot.
 
 **Sizing.** N = 8 slots × 5.2 MB = 42 MB of RAM, charged to the writer container (its
+  ➡️ **2026-10-03 (the S2 session): N = 4 slots (20.7 MB), the pages RESERVED at creation (`posix_fallocate`).** With 8 slots, a reader still mapping the previous writer's unlinked ring left too little of the 64 MiB tmpfs for a new one, and the re-stream's writer SIGBUSed at its 5th frame. 4 slots let an old and a new ring coexist, and a full tmpfs is now a clear error before Sunshine's app is launched.
 `mem_limit` == `memswap_limit` rises by that, consciously; CLAUDE.md rule 5).
 
 **Format.** BGRA first: it is the existing `Frame` format, so every consumer works unchanged.
