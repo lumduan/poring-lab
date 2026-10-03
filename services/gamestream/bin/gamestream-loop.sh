@@ -98,12 +98,12 @@ rdp_client_present() {
 # Missing file or anything invalid -> the V1 defaults (moonlight-qt, no WM, no gdb), logged.
 read_variant() {
   local file="${LAB_STATE_DIR:-/lab-state}/gamestream-variant" line key value
-  VARIANT_CLIENT=moonlight-qt VARIANT_WM=none VARIANT_GDB="" VARIANT_WHY=""
+  VARIANT_CLIENT=moonlight-qt VARIANT_WM=none VARIANT_GDB="" VARIANT_WHY="" VARIANT_PAINT=x11
   [[ -e "${file}" ]] || return 0
   while IFS= read -r line || [[ -n "${line}" ]]; do
     [[ -z "${line}" || "${line}" == \#* ]] && continue
     if [[ ! "${line}" =~ ^([A-Z_]+)=([A-Za-z0-9_.-]*)$ ]]; then
-      VARIANT_CLIENT=moonlight-qt VARIANT_WM=none VARIANT_GDB=""
+      VARIANT_CLIENT=moonlight-qt VARIANT_WM=none VARIANT_GDB="" VARIANT_PAINT=x11
       VARIANT_WHY="malformed variant line: ${line:0:60} (defaults)"
       return 0
     fi
@@ -111,12 +111,13 @@ read_variant() {
     case "${key}=${value}" in
       CLIENT=moonlight-qt | CLIENT=s2spike) VARIANT_CLIENT="${value}" ;;
       WM=none | WM=openbox) VARIANT_WM="${value}" ;;
+      PAINT=x11 | PAINT=bus) VARIANT_PAINT="${value}" ;;
       GDB_AFTER_S=) VARIANT_GDB="" ;;
       *)
         if [[ "${key}" == GDB_AFTER_S && "${value}" =~ ^[0-9]{1,4}$ ]]; then
           VARIANT_GDB="${value}"
         else
-          VARIANT_CLIENT=moonlight-qt VARIANT_WM=none VARIANT_GDB=""
+          VARIANT_CLIENT=moonlight-qt VARIANT_WM=none VARIANT_GDB="" VARIANT_PAINT=x11
           VARIANT_WHY="invalid variant ${key}=${value:0:30} (defaults)"
           return 0
         fi
@@ -161,10 +162,14 @@ stop_wm() {
 
 # V3: the S2 spike (services/gamestream/s2spike), decoding in-process. Its X window is a spike-only
 # shim (x11_mirror_shim.py) so the console, rdp-loop's interlock and /health can see it.
+# V3b (PAINT=bus, S2 step 3): decoded frames go to the frame bus, never into Xvfb; the window only
+# takes input.
 run_s2spike() {
+  local view=(--mirror-x)
+  [[ "${VARIANT_PAINT:-x11}" == bus ]] && view=(--framebus "${FRAMEBUS_RING:-/framebus/ring}")
   python3 -m s2spike stream --host "${WIN_HOST}" --app "${GAMESTREAM_APP:-Desktop}" \
     --size "$(stream_size)" --fps "${GAMESTREAM_FPS:-30}" \
-    --bitrate "${GAMESTREAM_BITRATE_KBPS:-20000}" --mirror-x
+    --bitrate "${GAMESTREAM_BITRATE_KBPS:-20000}" "${view[@]}"
 }
 
 # The shared X socket is mounted at /x11 (read-only); a private /tmp/.X11-unix also hosts the
@@ -318,7 +323,7 @@ main() {
     [[ -n "${VARIANT_WHY}" ]] && log "${VARIANT_WHY}"
     log "capture-backend console seq=${LOCK_SEQ}: streaming ${WIN_HOST} at" \
       "$(stream_size)@${GAMESTREAM_FPS:-30} (client=${VARIANT_CLIENT} wm=${VARIANT_WM}" \
-      "gdb=${VARIANT_GDB:-off} reason=${LOCK_REASON:-none})"
+      "gdb=${VARIANT_GDB:-off} paint=${VARIANT_PAINT} reason=${LOCK_REASON:-none})"
     started=$(date +%s)
     stamp="$(lock_stamp)"
     mapfile -t args < <(stream_args)

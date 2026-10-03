@@ -326,3 +326,28 @@ def test_the_vendored_frame_bus_is_byte_identical() -> None:
     original = root / "packages" / "poring_env" / "src" / "poring_env" / "framebus.py"
     vendored = root / "services" / "gamestream" / "s2spike" / "framebus.py"
     assert vendored.read_bytes() == original.read_bytes()
+
+
+def test_v3b_decodes_once_into_one_view() -> None:
+    """--mirror-x (the spike's X shim) and --framebus (V3b) never run together."""
+    from s2spike import run
+
+    with pytest.raises(SystemExit) as exc:
+        run.main(["stream", "--host", "win.test", "--mirror-x", "--framebus", "/framebus/ring"])
+    assert exc.value.code == 2
+
+
+def test_the_v3b_writer_publishes_numbered_frames_and_removes_its_ring(tmp_path: Path) -> None:
+    """The decode loop's bus calls, without a connection: ids from 1, the ring removed at close so
+    the backend falls back to X at once."""
+    import numpy as np
+    from s2spike.framebus import FrameBusReader, FrameBusWriter
+
+    ring = tmp_path / "ring"
+    writer = FrameBusWriter(ring, max_width=16, max_height=8)
+    for frame_id in (1, 2):
+        writer.publish(np.zeros((8, 16, 4), np.uint8), frame_id, frame_id * 1000)
+    got = FrameBusReader(ring, "test").read()
+    assert got is not None and got.frame_id == 2
+    writer.close(unlink=True)
+    assert not ring.exists()

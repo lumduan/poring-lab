@@ -94,7 +94,7 @@ def format_lock(backend: str, seq: int, phase: str, *, owner: str, since: int, r
 
 CLEANROOM_NAME = "cleanroom"
 CLEANROOM_KEYS = ("VARIANT", "BOX_UNTIL", "HARD_CAP")
-VARIANTS = ("V1", "V1gdb", "V2", "V3")
+VARIANTS = ("V1", "V1gdb", "V2", "V3", "V3b")
 
 
 def parse_cleanroom(text: str, lock: CaptureBackend, now: float) -> CleanRoom | None:

@@ -10,6 +10,8 @@ experiment, the existing tooling can see and drive V3 without new paths:
     /health.stream_window_present see a stream window, so RDP can't connect over it;
   - it forwards the X input that reaches it -- the mux's XTest events, the ONLY input path (rule 3)
     -- to LiSend* (absolute mouse, buttons, wheel, keys as Windows VK by physical position).
+With ``paint=False`` (V3b, S2 step 3) the window only receives input and keeps the interlocks; the
+picture goes to the frame bus instead and nothing is ever blitted into Xvfb.
 It logs counts only, never which keys were pressed (secret typing must stay secret).
 """
 
@@ -93,8 +95,17 @@ class Mirror:
     """One window, two X connections: frames drawn from the decode thread, input read on its own
     thread (python-xlib style rules: never share a Display between threads; XInitThreads anyway)."""
 
-    def __init__(self, width: int, height: int, sender: Any, log: Callable[[str], None]) -> None:
+    def __init__(
+        self,
+        width: int,
+        height: int,
+        sender: Any,
+        log: Callable[[str], None],
+        *,
+        paint: bool = True,
+    ) -> None:
         self.w, self.h, self.sender, self.log = width, height, sender, log
+        self.paint = paint
         x11 = ctypes.CDLL(ctypes.util.find_library("X11") or "libX11.so.6")
         self.x11 = x11
         x11.XInitThreads()
@@ -139,21 +150,23 @@ class Mirror:
         self.win = x11.XCreateSimpleWindow(self.draw_dpy, root, 0, 0, width, height, 0, 0, 0)
         hint = XClassHint(b"moonlight", b"S2spike")
         x11.XSetClassHint(self.draw_dpy, self.win, ctypes.byref(hint))
-        x11.XStoreName(self.draw_dpy, self.win, b"S2 spike (V3, clean room) - Moonlight")
+        title = b"S2 spike (V3, clean room) - Moonlight" if paint else b"S2 (V3b, bus) - Moonlight"
+        x11.XStoreName(self.draw_dpy, self.win, title)
         x11.XSync(self.draw_dpy, 0)
         x11.XSelectInput(self.event_dpy, self.win, MASKS)
         x11.XSync(self.event_dpy, 0)
         x11.XMapRaised(self.draw_dpy, self.win)
         x11.XMoveWindow(self.draw_dpy, self.win, 0, 0)
         x11.XSync(self.draw_dpy, 0)
-        self._buf = ctypes.create_string_buffer(width * height * 4)
-        visual = x11.XDefaultVisual(self.draw_dpy, 0)
-        depth = x11.XDefaultDepth(self.draw_dpy, 0)
-        data = ctypes.cast(self._buf, c_void_p)
-        self._image = x11.XCreateImage(
-            self.draw_dpy, visual, depth, ZPIXMAP, 0, data, width, height, 32, 0
-        )
-        self._gc = x11.XDefaultGC(self.draw_dpy, 0)
+        if paint:  # an input-only window (V3b) needs no image buffer
+            self._buf = ctypes.create_string_buffer(width * height * 4)
+            visual = x11.XDefaultVisual(self.draw_dpy, 0)
+            depth = x11.XDefaultDepth(self.draw_dpy, 0)
+            data = ctypes.cast(self._buf, c_void_p)
+            self._image = x11.XCreateImage(
+                self.draw_dpy, visual, depth, ZPIXMAP, 0, data, width, height, 32, 0
+            )
+            self._gc = x11.XDefaultGC(self.draw_dpy, 0)
         self.counts = {"frames_shown": 0, "keys": 0, "buttons": 0, "moves": 0, "wheel": 0,
                        "keys_unmapped": 0}  # fmt: skip
         self._stop = threading.Event()
@@ -161,8 +174,9 @@ class Mirror:
         self._thread.start()
 
     def show(self, bgra: Any) -> None:
-        """Blit one decoded BGRA frame (h, w, 4) uint8; frames of another size are skipped."""
-        if bgra.shape[0] != self.h or bgra.shape[1] != self.w:
+        """Blit one decoded BGRA frame (h, w, 4) uint8; frames of another size are skipped. A
+        no-op for an input-only window (paint=False)."""
+        if not self.paint or bgra.shape[0] != self.h or bgra.shape[1] != self.w:
             return
         ctypes.memmove(self._buf, bgra.ctypes.data, self.w * self.h * 4)
         self.x11.XPutImage(self.draw_dpy, self.win, self._gc, self._image, 0, 0, 0, 0,

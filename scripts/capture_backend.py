@@ -27,7 +27,7 @@ rdp-loop.sh connects only while it says ``rdp``; gamestream-loop.sh streams only
         with the lock at console/switching, so the lab client holds and an external one streams.
         --cleanroom (Batt, 2026-10-03): the same stop, REASON `cleanroom`, for the clean-room
         experiment: the session stays on the console while lab-client variants take turns:
-    capture_backend.py stream --variant V1|V1gdb|V2|V3 [--box-until UNIX]
+    capture_backend.py stream --variant V1|V1gdb|V2|V3|V3b [--box-until UNIX]
         Clean room only (lock console + REASON cleanroom*, phase switching): refuses unless NO lab
         client runs in gamestream (one client at a time, enforced), writes the whitelisted variant
         file `state/gamestream-variant` (CLIENT/WM/GDB_AFTER_S), then console/steady.
@@ -655,6 +655,8 @@ VARIANTS = {
     "V1gdb": {"CLIENT": "moonlight-qt", "WM": "none", "GDB_AFTER_S": "20"},
     "V2": {"CLIENT": "moonlight-qt", "WM": "openbox", "GDB_AFTER_S": ""},
     "V3": {"CLIENT": "s2spike", "WM": "none", "GDB_AFTER_S": ""},
+    # S2 step 3: the same client, frames to the frame bus (never Xvfb); the window takes input only
+    "V3b": {"CLIENT": "s2spike", "WM": "none", "GDB_AFTER_S": "", "PAINT": "bus"},
 }
 WM_NAMES = "openbox"
 FLOCK = Path(

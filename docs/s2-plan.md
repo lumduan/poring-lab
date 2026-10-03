@@ -7,7 +7,7 @@ verdict_date: 2026-10-02
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: APPROVED 2026-10-02. Step 1 (the spike) DONE 2026-10-03 as the clean room's V3: reliable, every functional check passes through the mux, SPEC v2 beats RDP on fps/latency/CPU (key->paint tail to examine). Next: step 2, the frame bus in poring_env (pure Python, no hardware), then step 3 s2-client. The X mirror is a spike-only shim.
+next_action: Step 1 DONE (V3 reliable, beats RDP). Step 2 (the frame bus) BUILT and tested offline 2026-10-03, with step-3/4 wiring (V3b, backend bus source, /health.framebus) committed but NOT deployed. Next, after Batt's approval only, the V3b clean-room run in section 9a (key->paint without the X mirror, + the Samsung display step).
 ---
 
 # S2: GameStream without Xvfb, one decode, a frame bus for the bot and the human
@@ -122,6 +122,16 @@ It never waits for a reader.
 | bot (vision / ro_agent grabs) | every frame | lossless copy of the decoded frame | lowest latency; reads straight from the ring |
 | human (web console) | capped: `CONSOLE_FPS`, default 15 | `JPEG_QUALITY` knob (default 80) | encoded by the backend from the newest slot; never holds a slot |
 | recorder (`record_session.py`) | every frame | lossless (PNG shards, ADR-0010) | a third reader, same rules |
+
+## 3a. Datasets and calibration come from the deployment path (Batt, 2026-10-03)
+
+- **Training datasets are recorded through the deployment path:** S2 (H.264 → decode → frame
+  bus), never RDP frames or X grabs, once S2 is the path the bot plays through. A model trained
+  on one codec's artefacts and tested on another's is measuring the domain shift, not the policy.
+- **UI templates and calibration are re-done on stream frames.** Evidence from the clean room
+  alone: the ENG tray template needed a stream-specific copy (`eng_full_stream.npy`, 6.8 > 6.0 on
+  RDP's), the RO window landed 1 px off after tscon, and the picture test had to move to the
+  taskbar strip. Anything matched by pixels is calibrated on the frames it will run on.
 
 ## 4. Input path (no XTest on this path)
 
@@ -319,6 +329,25 @@ streams, or decode-to-GPU feeding YOLO). Not now.
      runs). The key is loaded through a sealed memfd and never written to a file (CLAUDE.md
      rule 2, amended).
 2. The **frame bus** in `poring_env` (pure Python, fully tested without hardware).
+   - ➡️ **2026-10-03: BUILT, tested offline, committed; not deployed.**
+     - `poring_env/framebus.py` (stdlib + numpy; the layout and seqlock of §2; the writer also
+       publishes its decode p50/p95 and a heartbeat; a new writer = a new inode, readers re-open);
+       `poring_env/bus_source.py` `BusFrameSource` (grab waits for a strictly newer id).
+     - A cross-process torture test (2 slots, ~12,000 frames/s, three reader processes): thousands
+       of retries and overruns, **0 torn frames**. A slow reader does not slow the writer.
+     - Ahead of their steps, also committed and inert until §9a is approved:
+       - step 3's writer: s2spike `--framebus` (variant **V3b**, `PAINT=bus`): every decoded frame
+         to the bus, the X window input-only and never painted, a 0.5 s heartbeat thread, the ring
+         removed at exit; `framebus.py` vendored byte-identical (drift test);
+       - step 4: the backend's `capture_select.py` reads the bus only in console mode with a live
+         writer (else X11), `CONSOLE_FPS` (15) caps the JPEG view, `/health.framebus` carries the
+         writer (fps, decode ms p50/p95, heartbeat) and the consumer counters;
+       - ro_agent's screen helper reads the bus in that state too (V3b never paints X), stamped
+         with the writer's decode time;
+       - compose: the 64 MiB `framebus` tmpfs (gamestream rw, backend + vision ro, guarded),
+         gamestream 1536m → 1600m.
+     - Still to do in step 3: the input socket (V3b still receives the mux's XTest through its
+       input-only window). Step 6: vision's grab on the bus.
 3. **s2-client** in the `gamestream` image (writer + input socket + clean lifecycle). Moonlight-qt
    is removed.
 4. **Backend** console mode: bus FrameSource, capped JPEG human view, `/health.framebus`.
@@ -329,6 +358,71 @@ streams, or decode-to-GPU feeding YOLO). Not now.
    - shared viewing (§10);
    - the status indicator (ADR-0013);
    - human-presence detection and the audit (§11).
+
+## 9a. The next clean-room run: V3b, key→paint without the X mirror (PROPOSED — STOP for approval)
+
+Nothing below has run. It needs Batt's go, then a guarded deploy window.
+
+**Why.** V3's key→paint p95 was 350 ms against RDP's 114 ms. V3 painted each frame into Xvfb
+(XPutImage of 5 MB) and the console then grabbed X again, so the mirror's two copies sit inside
+that number. V3b removes both: decode → bus → the console's JPEG and the bot's numpy.
+
+**Deploy (guarded, ~1 min, before the entry).**
+1. `guarded_build.py recreate:gamestream@60`: mounts the `framebus` volume and the 1600m limit.
+   No image build: the dev overlay already binds `s2spike/` and `bin/`.
+2. `guarded_build.py recreate:backend@30`: a restart cannot add the new mount. A recreate boots
+   HUMAN (the automatic ASSIST restore covers `restart:backend` only, as decided), so Batt sets
+   ASSIST again. Read back `/health.framebus` = `active x11, writer null`.
+
+**Run** (the clean-room tooling as before, watchdog boxes V3b 60 min, checks 45, hard cap 3 h):
+1. `cleanroom.py preflight` → `start` → `variant V3b`: first picture through the BUS
+   (`/health.framebus.active == "bus"`, writer fps ≈ 30, decode p95), steady, one-shot restream.
+2. SPEC v2 bench, as V3's: delivery fps, packet→frame and **key→paint p50/p95** (target: under
+   V3's 138 / 350 ms, at or near RDP's 101 / 114 ms), lab cores, HP-panel PSNR/SSIM. Same frames
+   for the bot and the console: `frame_id` equal in the overlay and the agent log.
+3. Functional re-check through the mux (V3b still takes input via XTest on its input-only window):
+   GM `@where`, a walk, right-drag, Thai `say` + chatlog HEX.
+4. The Samsung display step (below), if Batt approves it as part of this entry.
+5. `cleanroom.py end`: to-rdp, Sunshine revert check, exit checks (the ring gone, `/health.framebus`
+   back to x11).
+
+**The Samsung display (Batt switched it on; restore it WITHOUT Win+P through RDP).**
+- Read-only first (from RDP, in a "poring-lab shell"): `Get-PnpDevice -Class Monitor`,
+  `WmiMonitorID`, and the persisted console topology under
+  `HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers\Configuration` / `Connectivity`.
+  `Screen.AllScreens` in an RDP session shows only the RDP display, so the console's screens are
+  read inside the console session at the entry.
+- Why not Win+P in RDP: it changes the RDP session's projection, not the console's topology, and
+  can blank or drop the RDP view. The console topology changes only from the console session.
+- Why it is VDD-only now: Sunshine's `dd_configuration_option = ensure_only_display` deactivates
+  every other display at each stream start, and its revert at the end restores the topology that
+  was active BEFORE the stream. The last revert (verified OK) restored a VDD-only topology, so the
+  Samsung stays off until the console's topology itself changes.
+- **Proposed method, during the V3b entry:**
+  1. Batt, before the entry, in his elevated console: back up
+     `C:\Program Files\Sunshine\config\sunshine.conf`, set `dd_configuration_option = disabled`,
+     `Restart-Service SunshineService`, read the line back. (The agent never edits Sunshine's
+     config: elevated, Batt's.)
+  2. Enter and stream V3b. With the option disabled, Sunshine leaves the topology alone: the
+     stream captures the VDD as it is (the only active display, primary, 1440×900).
+  3. In the console session, through the stream, in a "poring-lab shell": `DisplaySwitch.exe
+     /extend`. The VDD stays primary at 0,0 because it is the active display when /extend runs;
+     the Samsung joins as a secondary. Verify with
+     `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Screen]::AllScreens`
+     (two screens, the VDD primary at 0,0, 1440×900), and that GAME_REGION's signatures still
+     match (the RO window does not move).
+  4. If the Samsung became PRIMARY (the taskbar or the RO window moved): `cleanroom.py end`, and
+     Batt fixes it at the Dell (Win+P there, or Display settings → "Make this my main display" on
+     the VDD).
+  5. After the exit, Batt restores `ensure_only_display` + restarts Sunshine. From then on each
+     stream applies VDD-only and its revert restores VDD + Samsung (the topology active before
+     it), which is the behaviour wanted.
+- **Effects to check:** GAME_REGION and the 1:1 RO window are defined on the VDD at 0,0, so an
+  extended Samsung to the right or left of it changes nothing the lab sees. A stream started while
+  `ensure_only_display` is active still deactivates the Samsung for the stream's duration (by
+  design); the revert brings it back.
+
+**STOP: none of this runs before Batt approves this section.**
 
 ## 10. Shared viewing (future capability; designed now)
 

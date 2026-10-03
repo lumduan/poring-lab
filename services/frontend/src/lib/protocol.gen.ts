@@ -365,7 +365,7 @@ export interface CleanRoom {
   /**
    * The stream client variant under test; null = none started yet.
    */
-  variant: ("V1" | "V1gdb" | "V2" | "V3") | null;
+  variant: ("V1" | "V1gdb" | "V2" | "V3" | "V3b") | null;
 }
 /**
  * Mux verdict for one AgentInput batch.

@@ -9,7 +9,7 @@ runner, the watchdog and a human).
     cleanroom.py preflight                    lock rdp/steady, one xfreerdp, ASSIST, GM online,
                                               Sunshine paired (s2spike serverinfo), new image
     cleanroom.py start [--hard-cap-min 180]   the watchdog (detached), then to-console --cleanroom
-    cleanroom.py variant V1|V1gdb|V2|V3 [--box-min N]
+    cleanroom.py variant V1|V1gdb|V2|V3|V3b [--box-min N]
                                               stream -> first picture <= 90 s -> 60 s steady ->
                                               hold -> stream again (reliable?) ; black: diagnostics
                                               -> hold. Leaves a RELIABLE variant streaming (for the
@@ -46,7 +46,7 @@ PY = str(REPO / ".venv" / "bin" / "python")
 CB = [PY, str(REPO / "scripts" / "capture_backend.py")]
 GAMESTREAM = "poring-lab-gamestream-1"
 UNIT = "poring-cleanroom-watchdog"
-BOXES_MIN = {"V1": 20, "V1gdb": 10, "V2": 30, "V3": 60, "checks": 45}
+BOXES_MIN = {"V1": 20, "V1gdb": 10, "V2": 30, "V3": 60, "V3b": 60, "checks": 45}
 WATCHDOG_GRACE_S = 5 * 60  # the runner's own hold-and-advance wins
 HEARTBEAT_STALE_S = 10 * 60
 HUMAN_RECENT_S = 120
@@ -411,7 +411,7 @@ def cmd_variant(variant: str, box_min: float | None) -> int:
         cb("hold", timeout=180)
     else:
         result["frames"].append(shot(f"{variant}-second"))
-    result["v3_stats"] = v3_stats() if variant == "V3" else None
+    result["v3_stats"] = v3_stats() if variant in ("V3", "V3b") else None
     return finish(status, result)
 
 
@@ -470,7 +470,7 @@ def diagnostics(variant: str, since: str) -> dict[str, Any]:
             capture_output=True, text=True, check=False, timeout=30,
         ).stdout  # fmt: skip
         out["threads"] = wchan.strip().splitlines()[:40]
-    if variant == "V3":
+    if variant in ("V3", "V3b"):
         out["v3_stats"] = v3_stats()
     return out
 

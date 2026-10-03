@@ -5,6 +5,9 @@
     python3 -m s2spike stream ...   ONLY on console/steady, no RDP window, no other lab client:
                                     launch/resume -> receive -> decode once -> evidence PNG +
                                     stats every 2 s (/tmp/s2spike) [+ --mirror-x: the X shim]
+                                    [--framebus PATH: V3b, S2 step 3 -- every decoded frame goes
+                                    to the frame bus (the backend and the bot read it); the X
+                                    window only receives input and is never painted]
 
 `stream` never relaunches and never sends /cancel: the capture backend's `hold` / `to-rdp` end the
 session (Moonlight-qt's `quit` = Sunshine /cancel, host-wide). It exits when Sunshine ends the
@@ -95,6 +98,8 @@ class Stream:
         self.started = threading.Event()
         self.error = 0
         self.mirror: Any = None
+        self.bus: Any = None  # framebus.FrameBusWriter (V3b)
+        self.frame_id = 0
         self.stats: dict[str, Any] = {"stages": []}
         # Keep every ctypes callback object alive for the connection's lifetime.
         self._cbs = {
@@ -188,10 +193,19 @@ class Stream:
         cl.logMessage = self.lib.log_message_ptr
         self.lib.shim.s2_set_log_sink(self._cbs["log"])
 
-        if self.args.mirror_x:
+        if self.args.framebus:
+            from .framebus import FrameBusWriter
+
+            self.bus = FrameBusWriter(
+                self.args.framebus, max_width=self.width, max_height=self.height
+            )
+            log(f"frame bus: {self.args.framebus} ({self.bus.slots} slots)")
+        if self.args.mirror_x or self.bus is not None:
             from .x11_mirror_shim import Mirror
 
-            self.mirror = Mirror(self.width, self.height, self, log)
+            # V3b: the window stays (rdp-loop's interlock and /health see a stream client, and it
+            # receives the mux's XTest input) but is never painted: humans and the bot read the bus.
+            self.mirror = Mirror(self.width, self.height, self, log, paint=self.args.mirror_x)
         t0 = time.monotonic()
         err = self.lib.LiStartConnection(
             ctypes.byref(si), ctypes.byref(cfg), ctypes.byref(cl), ctypes.byref(dr),
@@ -204,6 +218,11 @@ class Stream:
         log(f"connected in {time.monotonic() - t0:.2f} s")
         decoder_thread = threading.Thread(target=self._decode_loop, name="s2spike-decode")
         decoder_thread.start()
+        if self.bus is not None:
+            # Alive while connected, frames or not (a static desktop may send none): readers then
+            # repeat the last frame instead of falling back to X.
+            threading.Thread(target=self._heartbeat, name="s2spike-bus-heartbeat",
+                             daemon=True).start()  # fmt: skip
         signal.signal(signal.SIGTERM, lambda *_: self.terminated.set())
         signal.signal(signal.SIGINT, lambda *_: self.terminated.set())
         self.terminated.wait()
@@ -239,6 +258,9 @@ class Stream:
             for frame in frames:
                 if dec.stats.frames == 1:
                     log(f"FIRST FRAME decoded: {frame.shape[1]}x{frame.shape[0]}")
+                if self.bus is not None:
+                    self.frame_id += 1
+                    self.bus.publish(frame, self.frame_id, time.monotonic_ns())
                 if self.mirror is not None:
                     self.mirror.show(frame)
                 now = time.monotonic()
@@ -246,11 +268,21 @@ class Stream:
                     last_evidence = now
                     self._evidence(frame, dec)
 
+    def _heartbeat(self) -> None:
+        while not self.terminated.wait(0.5):
+            if self.bus is not None:
+                self.bus.heartbeat()
+
     def _evidence(self, frame: Any, dec: Any) -> None:
         snap = {**dec.stats.snapshot(), "stages": self.stats["stages"][-24:],
                 "error": self.error, "t": time.time()}  # fmt: skip
         if self.mirror is not None:
             snap["mirror"] = dict(self.mirror.counts)
+        if self.bus is not None:
+            p50, p95 = snap.get("decode_ms_p50"), snap.get("decode_ms_p95")
+            if p50 is not None and p95 is not None:
+                self.bus.set_decode_stats(int(p50 * 1000), int(p95 * 1000))
+            snap["framebus"] = {"frames_published": self.frame_id}
         pngout.write_atomic(OUT / "v3-latest.png", pngout.png_bytes(frame[:, :, 2::-1]))
         pngout.write_atomic(OUT / "v3-stats.json", json.dumps(snap, indent=1).encode())
 
@@ -259,6 +291,11 @@ class Stream:
             log(f"x11 shim counts: {self.mirror.counts}")
             self.mirror.close()
             self.mirror = None
+        if self.bus is not None:
+            log(f"frame bus: {self.frame_id} frames published")
+            # Removed, not left stale: the backend falls back to X at once (no window = black).
+            self.bus.close(unlink=True)
+            self.bus = None
 
 
 def stream(args: argparse.Namespace) -> int:
@@ -285,7 +322,10 @@ def main(argv: list[str] | None = None) -> int:
     st.add_argument("--fps", type=int, default=30)
     st.add_argument("--bitrate", type=int, default=20000)
     st.add_argument("--mirror-x", action="store_true", help="the spike-only X shim")
+    st.add_argument("--framebus", help="V3b: publish decoded frames to this frame bus ring")
     args = ap.parse_args(argv)
+    if args.cmd == "stream" and args.mirror_x and args.framebus:
+        ap.error("--mirror-x and --framebus exclude each other (decode once, one view)")
     if args.cmd == "selftest":
         return selftest()
     if not args.host:

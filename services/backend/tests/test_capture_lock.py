@@ -426,7 +426,7 @@ def test_a_clean_room_stream_is_one_shot(stream_env: dict[str, str]) -> None:
     streams, log = run_stream(stream_env, 4.5)  # the normal path would relaunch after 2 s
     assert len(streams) == 1
     assert "clean room: one-shot, waiting for a lock change" in log
-    assert "client=moonlight-qt wm=none gdb=off reason=cleanroom" in log
+    assert "client=moonlight-qt wm=none gdb=off paint=x11 reason=cleanroom" in log
 
 
 def test_outside_the_clean_room_a_crashed_client_is_retried(stream_env: dict[str, str]) -> None:
@@ -498,3 +498,27 @@ def test_format_cleanroom_refuses_a_variant_the_reader_would_drop() -> None:
 
     with pytest.raises(ValueError):
         format_cleanroom("V3\nPATH=/x", None, None)
+
+
+@pytest.mark.parametrize(
+    ("body", "paint", "args"),
+    [
+        ("CLIENT=s2spike\nWM=none\nGDB_AFTER_S=\n", "x11", "--mirror-x"),
+        ("CLIENT=s2spike\nWM=none\nGDB_AFTER_S=\nPAINT=bus\n", "bus", "--framebus /framebus/ring"),
+        ("CLIENT=s2spike\nPAINT=xvfb\n", "x11", "--mirror-x"),  # not whitelisted -> defaults
+    ],
+)
+def test_v3b_streams_to_the_frame_bus_never_into_xvfb(
+    stream_env: dict[str, str], body: str, paint: str, args: str
+) -> None:
+    """PAINT=bus (V3b, S2 step 3): s2spike gets --framebus instead of the X mirror."""
+    state = Path(stream_env["LAB_STATE_DIR"])
+    (state / "gamestream-variant").write_text(body)
+    out = subprocess.run(
+        ["bash", "-c", f'source "{STREAM_LOOP}"; read_variant; echo "$VARIANT_PAINT"; '
+         'python3() { echo "$*"; }; run_s2spike'],
+        env=stream_env, capture_output=True, text=True, check=True,
+    )  # fmt: skip
+    got_paint, command = out.stdout.strip().splitlines()
+    assert got_paint == paint
+    assert command.startswith("-m s2spike stream --host win.test") and command.endswith(args)

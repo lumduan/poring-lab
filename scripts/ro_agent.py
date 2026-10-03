@@ -154,16 +154,52 @@ def any_online() -> int:
 
 # --- screen (a persistent grab helper inside the backend container: same X, same clock) -----------
 
+# Console mode with a LIVE S2 writer (V3b): the frame bus, not X -- the same decoded frames the
+# console and the bot see, stamped with the writer's decode time; X would show the never-painted
+# input window (black). Anything else: X, as always.
 _HELPER = r"""
-import struct, sys, time, mss
-s = mss.MSS(display=":99")
+import os, struct, sys, time
+from pathlib import Path
+LAB_STATE = Path(os.environ.get("RO_AGENT_LAB_STATE", "/lab-state"))
+RING = os.environ.get("RO_AGENT_FRAMEBUS", "/framebus/ring")
 out = sys.stdout.buffer
+sct = bus = None
+
+def bus_frame():
+    global bus
+    try:
+        from poring_backend.capture_lock import read_lock
+        from poring_env.framebus import FrameBusError, FrameBusReader
+    except ImportError:
+        return None
+    if read_lock(LAB_STATE).backend != "console" or not os.path.exists(RING):
+        return None
+    try:
+        if bus is None:
+            bus = FrameBusReader(RING, "ro_agent")
+        else:
+            bus.reopen_if_replaced()
+        if bus.writer().heartbeat_age_s > 2.0:
+            return None
+        return bus.read()
+    except FrameBusError:
+        bus = None
+        return None
+
 for line in sys.stdin:
     x, y, w, h = map(int, line.split())
-    t = time.monotonic_ns()
-    img = s.grab({"left": x, "top": y, "width": w, "height": h})
-    out.write(struct.pack("<qII", t, img.width, img.height))
-    out.write(img.raw)
+    f = bus_frame()
+    if f is not None and x + w <= f.width and y + h <= f.height:
+        out.write(struct.pack("<qII", f.t_mono_ns, w, h))
+        out.write(f.to_numpy()[y : y + h, x : x + w].tobytes())
+    else:
+        if sct is None:
+            import mss
+            sct = mss.MSS(display=":99")
+        t = time.monotonic_ns()
+        img = sct.grab({"left": x, "top": y, "width": w, "height": h})
+        out.write(struct.pack("<qII", t, img.width, img.height))
+        out.write(img.raw)
     out.flush()
 """
 
