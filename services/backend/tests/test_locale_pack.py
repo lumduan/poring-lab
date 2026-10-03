@@ -143,3 +143,46 @@ def test_keys_command_prints_hashes_only(
     out = capsys.readouterr().out
     doc = json.loads(out)
     assert len(doc["keys"]) == 5 and "확인" not in out
+
+
+# --source-ref (2026-10-03): the source build's OWN table in the reference's language -- e.g. the
+# table the Thai client's exe embeds -- lines the two id spaces up by equal text.
+SRC_REF = ["확인", "(source-only)", "취소", "%s 님이 접속했습니다", "", "다른 가방", "%d 제니"]
+
+
+def test_exact_ref_lines_up_shifted_ids_by_equal_reference_text(lp: ModuleType) -> None:
+    norm = [lp.normalise(x) for x in REF_KO]
+    ref = [lp.normalise(x) for x in SRC_REF]
+    result = lp.align(norm, REF_EN, SRC_TH, None, ref)
+    texts = {k: v["text"] for k, v in result.messages.items()}
+    assert texts[lp.message_key("취소")] == "ทดสอบสองสาม"  # ref id 1 -> source id 2
+    assert result.messages[lp.message_key("%d 제니")]["source_ids"] == [6]
+    assert result.messages[lp.message_key("확인")]["confidence"] == "exact_ref"
+    # 가방 (id 4): the source's own table says id 4 is something else -> no same-id guess
+    assert lp.message_key("가방") not in texts
+    assert (result.exact_ref, result.exact_en, result.index_signature) == (4, 0, 0)
+    assert result.unmatched == 1
+
+
+def test_reindex_writes_the_reference_id_order_with_english_fallback(
+    lp: ModuleType, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    out = tmp_path / "packs" / "th"
+    args = build_args(lp, tmp_path, out)
+    src_ref = write_table(tmp_path / "src_ref.txt", SRC_REF, "cp949")
+    assert lp.main([*args, "--source-ref", str(src_ref), "--reindex"]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["coverage"]["reindexed"] == {
+        "lines": 6, "translated": 4, "english": 1, "empty": 1, "unencodable": 0,
+    }  # fmt: skip
+    assert report["coverage"]["exact_ref"] == 4 and report["coverage"]["source_ref_lines"] == 7
+    lines = (out / "install" / "data" / "msgstringtable.txt").read_bytes().split(b"\r\n")
+    assert lines[:6] == [
+        "กขคง#".encode("cp874"),
+        "ทดสอบสองสาม#".encode("cp874"),  # the source's id 2, now at the reference's id 1
+        "%s ข้อความทดสอบสี่#".encode("cp874"),
+        b"#",
+        b"Inventory#",  # not aligned: the client keeps our English at its own id
+        "%d หน่วยทดสอบ#".encode("cp874"),
+    ]
+    assert lp.check(out) == []

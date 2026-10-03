@@ -10,6 +10,7 @@ contents (client strings, aligned tables, install files) NEVER are (CLAUDE.md ru
         The canonical key index of a msgstringtable: key -> message ids. Keys are hashes, so the
         index holds no client text.
     locale_pack.py build --lang th --source SRC --reference KOR --en EN [--source-en EN_SRC]
+                         [--source-ref SRC_REF] [--reindex]
                          --out DIR [--client-version V] [--font F] [--source-desc TEXT]
                          [--install DIR] [--table NAME=JSON ...] [--fingerprints FILE]
         Align a language's table to the canonical keys and write the pack to DIR, which must be
@@ -30,10 +31,15 @@ different strings with the same 8 hex digits stop the build (no silent renaming:
 stable).
 
 Alignment of the SOURCE language (e.g. Thai) to the reference ids, per reference message:
+  exact_ref        the source build's own table in the REFERENCE's language (--source-ref, e.g.
+                   the table the Thai client's exe embeds, extracted by msgtable_extract.py) has
+                   the SAME text as the reference at source id i  ->  the source text at i. Both
+                   tables come from Gravity's own builds, so equal text is the same message.
   exact_en         the source build's English table (--source-en) has the SAME English text as
                    ours at source id i  ->  the source text at i. Highest confidence.
-  index_signature  no evidence against the same id (no --source-en, or it has no line there) AND
-                   the %-placeholder signature of the source line equals the Korean one's.
+  index_signature  no evidence against the same id (neither --source-en nor --source-ref says
+                   otherwise there) AND the %-placeholder signature of the source line equals the
+                   Korean one's.
   unmatched        otherwise (also when --source-en contradicts the same id).
 Ambiguous English matches (several different source texts) prefer the same id, else stay
 unmatched and are counted as ambiguous.
@@ -44,7 +50,10 @@ Pack layout (schema 1):
   msg.json          {"messages": {key: {text, confidence, source_ids}},
                      "index": {<reference version>: {key: [ids]}, <client version>: {key: [ids]}}}
   tables/NAME.json  optional {id: text} tables (items, skills) keyed by their own numeric ids
-  install/...       files to place in the client (the source msgstringtable as data/..., --install)
+  install/...       files to place in the client: the source msgstringtable as data/... (bytes
+                    unchanged), or with --reindex a msgstringtable in the REFERENCE's id order
+                    (the client the pack installs into): the aligned text where one was found,
+                    else the reference's English line, in the source encoding; and --install
 Fingerprints: sha256 of every pack string of >= 6 characters (fingerprint()) is appended to
 ~/.cache/poring-lab/pack-fingerprints.txt (or $PORING_PACK_FINGERPRINTS), which the pre-commit
 hook uses to refuse a commit that carries one.
@@ -70,7 +79,7 @@ SCHEMA = 1
 KEY_PREFIX = "msg.k"
 KEY_HEX = 8
 KEY_RE = re.compile(r"^msg\.k[0-9a-f]{8}$")
-CONFIDENCE = ("exact_en", "index_signature")
+CONFIDENCE = ("exact_ref", "exact_en", "index_signature")
 DEFAULT_ENCODING = {"th": "cp874", "en": "cp1252", "ko": "cp949"}
 FINGERPRINT_MIN = 6
 REPO = Path(__file__).resolve().parents[1]
@@ -160,6 +169,7 @@ def outside_repo(path: Path, what: str) -> Path:
 @dataclass
 class Alignment:
     messages: dict[str, dict[str, Any]] = field(default_factory=dict)
+    exact_ref: int = 0
     exact_en: int = 0
     index_signature: int = 0
     unmatched: int = 0
@@ -167,26 +177,42 @@ class Alignment:
     conflicts: int = 0
 
 
+def _by_text(table: list[str] | None) -> dict[str, list[int]]:
+    out: dict[str, list[int]] = {}
+    for i, text in enumerate(table or []):
+        if text:
+            out.setdefault(text, []).append(i)
+    return out
+
+
 def align(
     reference_ko: list[str],
     reference_en: list[str],
     source: list[str],
     source_en: list[str] | None,
+    source_ref: list[str] | None = None,
 ) -> Alignment:
     """Per reference message id: the source text and how it was found (module doc)."""
-    by_en: dict[str, list[int]] = {}
-    for i, text in enumerate(source_en or []):
-        if text:
-            by_en.setdefault(text, []).append(i)
+    by_en = _by_text(source_en)
+    by_ref = _by_text(source_ref)
     result = Alignment()
     for j, korean in enumerate(reference_ko):
         key = message_key(korean)
         if key is None:
             continue
         found: tuple[str, int, str] | None = None  # (text, source id, confidence)
+        same = [i for i in by_ref.get(korean, []) if i < len(source) and source[i]]
+        if same:
+            texts = {source[i] for i in same}
+            if len(texts) == 1:
+                found = (source[same[0]], same[0], "exact_ref")
+            elif j in same:
+                found = (source[j], j, "exact_ref")
+            else:
+                result.ambiguous += 1
         english = reference_en[j] if j < len(reference_en) else ""
         candidates = [i for i in by_en.get(english, []) if i < len(source) and source[i]]
-        if english and candidates:
+        if found is None and english and candidates:
             texts = {source[i] for i in candidates}
             if len(texts) == 1:
                 found = (source[candidates[0]], candidates[0], "exact_en")
@@ -198,6 +224,9 @@ def align(
             contradicted = (
                 source_en is not None and j < len(source_en) and source_en[j] != ""
                 and source_en[j] != english
+            ) or (
+                source_ref is not None and j < len(source_ref) and source_ref[j] != ""
+                and source_ref[j] != korean
             )  # fmt: skip
             if (
                 not contradicted
@@ -263,13 +292,21 @@ def build(a: argparse.Namespace) -> dict[str, Any]:
     reference_en = read_table(a.en, a.en_encoding)
     source = read_table(source_table, src_enc)
     source_en = read_table(a.source_en, a.en_encoding) if a.source_en else None
+    ref_enc = a.source_ref_encoding or a.reference_encoding
+    source_ref = read_table(a.source_ref, ref_enc) if a.source_ref else None
     ref_index = key_index(reference_ko)
-    result = align(reference_ko, reference_en, source, source_en)
+    result = align(reference_ko, reference_en, source, source_en, source_ref)
 
     out.mkdir(parents=True, exist_ok=True)
     install = out / "install"
     (install / "data").mkdir(parents=True)
-    shutil.copyfile(source_table, install / "data" / "msgstringtable.txt")  # bytes unchanged
+    reindex_counts: dict[str, int] | None = None
+    if a.reindex:
+        newline = b"\r\n" if b"\r\n" in source_table.read_bytes() else b"\n"
+        body, reindex_counts = reindexed(reference_ko, reference_en, result, src_enc, newline)
+        (install / "data" / "msgstringtable.txt").write_bytes(body)
+    else:
+        shutil.copyfile(source_table, install / "data" / "msgstringtable.txt")  # bytes unchanged
     if a.install:
         shutil.copytree(a.install, install, dirs_exist_ok=True)
     tables: dict[str, str] = {}
@@ -306,12 +343,15 @@ def build(a: argparse.Namespace) -> dict[str, Any]:
         "reference_keys": keys,
         "covered_keys": len(result.messages),
         "covered_share": round(len(result.messages) / keys, 4) if keys else 0.0,
+        "exact_ref": result.exact_ref,
         "exact_en": result.exact_en,
         "index_signature": result.index_signature,
         "unmatched": result.unmatched,
         "ambiguous": result.ambiguous,
         "conflicts": result.conflicts,
         "source_lines": len(source),
+        "source_ref_lines": len(source_ref) if source_ref is not None else None,
+        "reindexed": reindex_counts,
     }
     files = {str(p.relative_to(out)): sha256_file(p) for p in sorted(out.rglob("*")) if p.is_file()}
     manifest = {
@@ -336,6 +376,36 @@ def build(a: argparse.Namespace) -> dict[str, Any]:
     texts = [e["text"] for e in result.messages.values()] + source + table_texts
     added = write_fingerprints(fingerprint_file(a.fingerprints), texts)
     return {"out": str(out), "coverage": coverage, "fingerprints_added": added}
+
+
+def reindexed(
+    reference: list[str],
+    reference_en: list[str],
+    result: Alignment,
+    encoding: str,
+    newline: bytes,
+) -> tuple[bytes, dict[str, int]]:
+    """A msgstringtable in the REFERENCE's id order (the client the pack installs into): the
+    aligned text where one was found, else the reference's English line. Counts only out."""
+    counts = {"lines": 0, "translated": 0, "english": 0, "empty": 0, "unencodable": 0}
+    lines: list[bytes] = []
+    for j, text in enumerate(reference):
+        key = message_key(text)
+        entry = result.messages.get(key) if key else None
+        if entry is not None:
+            line, kind = entry["text"], "translated"
+        else:
+            line = reference_en[j] if j < len(reference_en) else ""
+            kind = "english" if line else "empty"
+        try:
+            raw = line.encode(encoding)
+        except UnicodeEncodeError:
+            raw = line.encode(encoding, errors="replace")
+            counts["unencodable"] += 1
+        counts[kind] += 1
+        counts["lines"] += 1
+        lines.append(raw + b"#" + newline)
+    return b"".join(lines), counts
 
 
 def check(pack: Path) -> list[str]:
@@ -405,6 +475,15 @@ def main(argv: list[str] | None = None) -> int:
     b.add_argument("--reference-version", default="reference")
     b.add_argument("--en", type=Path, required=True, help="English table of the reference build")
     b.add_argument("--source-en", type=Path, help="English table of the SOURCE build")
+    b.add_argument(
+        "--source-ref", type=Path,
+        help="the SOURCE build's own table in the reference's language (e.g. its exe's)",
+    )  # fmt: skip
+    b.add_argument("--source-ref-encoding", help="default: --reference-encoding")
+    b.add_argument(
+        "--reindex", action="store_true",
+        help="install/ msgstringtable in the reference's id order (aligned text, else English)",
+    )  # fmt: skip
     b.add_argument("--en-encoding", default="cp1252")
     b.add_argument("--out", type=Path, required=True)
     b.add_argument("--client-version", default="unknown")

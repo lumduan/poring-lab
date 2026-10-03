@@ -36,7 +36,8 @@ keys into one language's text. This guide covers building a pack from **your own
 | Input | Where it comes from | Where it goes |
 |---|---|---|
 | Your client's data copy (GRF + loose `data/`, **no exe**) | your own install | the NAS dataset `thai-client-data`, written once through a **temporary** Dell-only SMB share (`poring-thai-drop`, deleted after the copy; [nas-sink.md](operations/nas-sink.md) §5), then `readonly=on`, mounted **read-only** on the VM at `/mnt/poring-thai-src` |
-| The kRO reference table (Korean msgstringtable of the reference exe) | the WARP extract in `C:\RO-rAthena\_scratch\` (lab) | the same temporary share, `kro-reference\` |
+| The reference table: the table the LAB client's exe embeds (3,970 lines; mostly English in this build) | extracted **offline** from the exe's bytes by `scripts/msgtable_extract.py` (the exe is never run; WARP only as a cross-check if the parse is ambiguous). The exe itself is kept on the NAS dataset `poring-lab/kro-reference` (readonly, no share) | `/dev/shm` (derived text, never the repo) |
+| The source client's own embedded table (e.g. the Thai client's exe) | the same offline extract of THAT exe | `--source-ref`: lines the two id spaces up by equal text |
 | The English table the lab runs | ROenglishRE commit `8e6a3c85` | fetched by the builder for `en` |
 
 - **Never stage a large source on the VM's local disk**: the disk is shared with live capture. Read
@@ -69,43 +70,67 @@ keys into one language's text. This guide covers building a pack from **your own
 
 ## 4. Keys, then the pack
 
-    uv run python scripts/locale_pack.py keys  --kro /mnt/poring-thai-src/kro-reference/<table> --out /dev/shm/locale/keys.json
-    uv run python scripts/locale_pack.py build --lang th --source /mnt/poring-thai-src/<name> --keys /dev/shm/locale/keys.json --out /mnt/poring-locale-packs/th
+*(Rewritten 2026-10-03 to match the code: the earlier `--kro` / `--keys` flags never existed.)*
+
+    python3 scripts/msgtable_extract.py <lab exe> --out /dev/shm/locale/lab-ref.txt
+    python3 scripts/msgtable_extract.py <thai exe> --out /dev/shm/locale/th-ref.txt
+    uv run python scripts/locale_pack.py keys --source /dev/shm/locale/lab-ref.txt --out /dev/shm/locale/keys.json
+    uv run python scripts/locale_pack.py build --lang th --source <thai msgstringtable> \
+        --source-ref /dev/shm/locale/th-ref.txt --reference /dev/shm/locale/lab-ref.txt \
+        --en <ROenglishRE msgstringtable> --reindex --out /mnt/poring-locale-packs/th
     uv run python scripts/locale_pack.py check /mnt/poring-locale-packs/th
 
-- **`keys`:** one canonical key per Korean source line. The key is `msg.k` + the first 8 hex of
-  sha1 of the line: decoded from CP949, the trailing `#` and surrounding whitespace stripped, NFC.
+- **`msgtable_extract.py`:** parses the PE and finds the longest run of `(index, string pointer)`
+  records with index 0, 1, 2, … (the layout WARP's ExtractMsgStrings walks). It refuses to guess:
+  no `msgStringTable.txt` string, no run of at least 500 records, or a second run longer than half
+  the first -> exit 3 and a report. Output: WARP's format, original bytes, `\r`/`\n` escaped.
+  It prints counts and offsets only.
+- **`keys`:** one canonical key per reference line. The key is `msg.k` + the first 8 hex of sha1
+  of the line: CRLF/CR -> LF, ONE trailing `#` removed, NFC. **Nothing else** (spaces are part of
+  the message; the earlier text here said whitespace was stripped, which the code never did).
   - Duplicated lines share a key.
   - A collision of two different strings on one key stops the build.
-- **`build`:** aligns the language's table to the keys.
-  - (a) Its own client build's English table, matched text-equal to ours.
-  - (b) A same-index fallback, checked by `%`-placeholder signatures and tagged with a confidence.
-  - The output is the pack, plus fingerprints appended to the guard's list.
-- **`check`:** validates the schema and prints coverage (counts and key ids only, no text):
-  - how many of the 3,970 keys resolved;
-  - by which method;
-  - the gaps.
-- **`en`** is built the same way from ROenglishRE `8e6a3c85`.
+- **`build`:** aligns the language's table to the reference ids, per message:
+  - (a) `exact_ref`: the source client's own embedded table (`--source-ref`) has the SAME text as
+    the reference at source id i -> the source text at i;
+  - (b) `exact_en`: the source build's English table (`--source-en`), text-equal to ours;
+  - (c) `index_signature`: the same id, only when neither table contradicts it and the
+    `%`-placeholder signatures match.
+  - It prints the coverage (counts only, never text) and appends fingerprints to the guard's list.
+  - `--reindex` writes `install/data/msgstringtable.txt` in the REFERENCE's id order (the lab's
+    3,970 lines): the aligned text where one was found, else our English line, in the source
+    encoding. Without it the source table is copied unchanged, which only fits a client with the
+    source's own ids.
+- **`check`:** validates the schema and the file hashes (it does not print coverage; `build`
+  does).
 
 ## 5. Pack schema (`<lang>/`)
 
 | File | Content |
 |---|---|
-| `locale-pack.json` | `schema` (int), `language` (BCP-47, e.g. `th`), `client_version` (build id), `source` (a description, never a path to publish), `coverage` (`resolved`, `by_method`, `total`), `font` (face + size used by the client) |
-| `msg.json` | `messages`: key → text; `lines`: key → [line indices] for this client version |
-| `items.json`, `skills.json`, `mobs.json` | ID → name (only the tables the pack has) |
-| `install/` | the client files this pack replaces: the message table, the message lubs, textures |
+*(Rewritten 2026-10-03 to match `locale_pack.py` schema 1.)*
 
-Validation rules:
-- every key matches `msg\.k[0-9a-f]{8}`;
-- every line index is within the table;
-- coverage adds up;
-- no file outside the listed set.
+| File | Content |
+|---|---|
+| `locale-pack.json` | `schema` (1), `kind`, `language`, `client_version`, `reference_version`, `source` (a description, never a path to publish), `font`, `encoding`, `key_rule`, `built_at`, `builder`, `coverage` (`reference_lines`, `reference_keys`, `covered_keys`, `covered_share`, `exact_ref`, `exact_en`, `index_signature`, `unmatched`, `ambiguous`, `conflicts`, `source_lines`, `source_ref_lines`, `reindexed`), `tables`, `files` (sha256 of every file) |
+| `msg.json` | `schema`, `lang`, `messages`: key → {`text`, `confidence`, `source_ids`}; `index`: version → {key: [ids]} for the reference and for this client version |
+| `tables/NAME.json` | optional numeric id → text tables (`--table NAME=FILE.json`) |
+| `install/` | files to place in the client: `data/msgstringtable.txt` (reindexed, or the source's unchanged), plus `--install` |
+
+Validation rules (`check`):
+- the manifest fields and types above, `schema == 1`, `msg.json` `lang` == `language`;
+- every key matches `msg\.k[0-9a-f]{8}`, every confidence is one of the three methods;
+- `index` maps version -> {key: [ids]};
+- every listed file exists with its sha256;
+- `coverage.covered_keys` == the number of messages.
 
 ## 6. Install a pack into the client (lab, Windows)
 
 - **The route:** the VM writes the pack to the NAS (`/mnt/poring-locale-packs/<lang>`). Windows
-  reads it from the **read-only** share `\\192.168.1.6\poring-locale-packs\<lang>`.
+  reads it through a **temporary guest SMB share** (Batt, 2026-10-03, for the install only):
+  read-only, `hostsallow` the Dell (192.168.1.169) only, not browsable, scoped to
+  `locale-packs/<lang>`. Created right before the install and deleted right after, both read back
+  ([nas-sink.md](operations/nas-sink.md)), with Frigate checked before and after.
 - **The steps:**
   1. Back up the files to be replaced into `C:\RO-rAthena\_backup\<date>-locale-<lang>\`.
   2. Copy `install\` over the client with a hash read-back.
