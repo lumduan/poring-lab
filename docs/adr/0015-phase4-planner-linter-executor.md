@@ -78,6 +78,28 @@ mux (/internal/agent, source=bot; lease, log, ADR-0016 interlock) → the one se
 - **On the community server** the KB is a **prior** only: its data may differ from ours, and the
   pixels decide.
 
+### PROPOSED ruling (Batt's note, 2026-10-04; NOT YET CONFIRMED): static game data at RUNTIME, for perception
+- **Proposal.** Static game data may also be used **at runtime by perception**, not only at plan
+  time. That covers:
+  - monster walk speed and the engine's movement rules (random-walk timing, chase);
+  - map walkability (GAT);
+  - spawn areas;
+  - portal and NPC positions.
+
+  The user is the tracker's motion model ([phase3-plan.md](../phase3-plan.md) §6b): units are
+  predicted through occlusion and off-screen instead of re-detected.
+- **Unchanged.** Live server state stays forbidden at decision time (CLAUDE.md rule 1, ADR-0007):
+  packets, positions, HP, who is online.
+  - Packets remain offline ground truth.
+  - They **evaluate** the tracker and tune the parameters the rules leave open; they never feed it.
+- **Licensing unchanged.**
+  - The KB is generated locally from rAthena (GPL) and never committed.
+  - The movement rules are re-implemented from their documented behaviour, never copied (the
+    `walk.py` discipline).
+- **On the community server:** a prior only; the pixels decide, as above.
+- **Status:** awaiting Batt's confirmation. Until he confirms, the deployable tracker (phase3-plan.md
+  T3) does not run.
+
 ## The linter: layers, cheapest first
 | Layer | Checks | On failure |
 |---|---|---|

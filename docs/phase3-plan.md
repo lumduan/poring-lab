@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: PLAN ONLY -- waiting for Batt's approval (§9). Nothing in it is built. On approval, M0-M3 (all offline, no session) start first; M4 needs one S2 session (validation spawns).
+next_action: PLAN ONLY -- waiting for Batt's approval (§9, incl. the ADR-0015 runtime ruling for the tracker, §6b). Nothing in it is built. On approval, M0-M3 and T0 (all offline, no session) start first; M4 needs one S2 session (validation spawns).
 last_reviewed: 2026-10-04
 ---
 
@@ -67,7 +67,15 @@ flowchart TD
     D1["Batt · GPU window, data path,<br/>weights licence, the bar"] --> M9
     M9["M9 · train under the 25 pct VRAM cap"] --> M10
     G["Batt · B6 hand-check<br/>the gold set"] --> M10
-    M10["M10 · evaluate<br/>held-out sessions + gold + OOD"]
+    M10["M10 · evaluate detector + tracker<br/>held-out sessions + gold + OOD"]
+    M0 --> T1
+    T1["T1 · motion model<br/>engine rules + mob_db + GAT<br/>READY after M0"] --> T2
+    M5 --> T2
+    T2["T2 · tracker on labels v1<br/>simulated 5 Hz detections"] --> T3
+    T0["T0 · self-localisation<br/>from pixels<br/>READY - offline"] --> T3
+    M9 --> T3
+    R["Batt · ADR-0015 ruling<br/>static game data at runtime"] --> T3
+    T3["T3 · tracker on the detector<br/>detect 5 Hz, predict at stream rate"] --> M10
 
     classDef done     fill:#d4f4dd,stroke:#2d8a4e,color:#1a5c33
     classDef active   fill:#fff3cd,stroke:#cc9a06,color:#7a5c04
@@ -76,9 +84,9 @@ flowchart TD
     classDef decision fill:#fde0e0,stroke:#d05555,color:#8f2e2e
     classDef goal     fill:#ede0fb,stroke:#8a5cd8,color:#4d2e8f
 
-    class M0,M1,M3 ready
-    class M2,M4,M5,M6,M7,M8,M9 blocked
-    class D1,G decision
+    class M0,M1,M3,T0 ready
+    class M2,M4,M5,M6,M7,M8,M9,T1,T2,T3 blocked
+    class D1,G,R decision
     class M10 goal
 ```
 
@@ -94,12 +102,17 @@ flowchart TD
 | **M7** collection | ⬜ BLOCKED | GM sessions only for what math cannot make | M5 (coverage tracking) |
 | **M8** dataset | ⬜ BLOCKED | frame cache in one sequential pass per session; split by session; the gold set held out | M5 + M6 + M7 |
 | **M9** train | ⬜ BLOCKED | YOLO11n at 1280 under 3,962 MiB | M8 + Batt's decisions (§9) |
-| **M10** evaluate | 🟪 GOAL | held-out sessions, Batt's gold set, the Roboflow set (OOD) | M9 + the B6 hand-check |
+| **T0** self-localisation | 🔵 READY | our own cell from pixels (§6b): the projection of our walk clicks + registration of the ground, with absolute fixes; packets only to evaluate it | plan approval |
+| **T1** motion model | ⬜ BLOCKED | the engine's movement rules (§6b) + mob_db speeds + GAT walkability, as a predictor | M0 |
+| **T2** tracker, simulated | ⬜ BLOCKED | predict → associate → update in WORLD cells, fed labels v1 thinned to 5 Hz with drops and noise | T1 + M5 |
+| **T3** tracker, real | ⬜ BLOCKED | the same on the detector's output; YOLO ~5 Hz, prediction at stream rate | T2 + M9 + T0 + the ADR-0015 ruling |
+| **M10** evaluate | 🟪 GOAL | detector: held-out sessions, Batt's gold set, the Roboflow set (OOD). Tracker: against packets (§6b) | M9 + T3 + the B6 hand-check |
 
 **The real bottlenecks:**
 - **M4**, the one S2 session that proves or refutes the render rule. Every label, the label check
   and the synthetic data depend on it.
-- **Batt's decisions** (§9).
+- **Batt's decisions** (§9), including the ADR-0015 ruling that lets perception use static game data
+  at runtime (the tracker's motion model needs it).
 
 M0, M1 and M3 are offline and independent, so they run in parallel the moment the plan is approved.
 
@@ -178,16 +191,21 @@ its anchor):
 The same monster therefore spans **0.79× to 1.49×** across what we already record, a 1.9× range that
 the v0 constant box ignores. Indoor/outdoor at the centre is 400.2/273 = **1.466×**.
 
-**The spawn tables** (rAthena @e985006, `npc/re/mobs/`; read for facts, never committed):
+**The spawn tables.** The lab server is **pre-renewal** (`RATHENA_PRERE=yes`; ADR-0015's KB reads
+`db/pre-re` and `npc/pre-re/mobs`). These are from rAthena @e985006, `npc/pre-re/mobs/`, read for
+facts and never committed:
 
 | Map | Species (spawn slots) |
 |---|---|
-| prt_fild08 | Poring 1002 (87), Fabre 1007 (87), Lunatic 1063 (67), Pupa 1008 (20), Little Poring 2398 (20) |
-| iz_dun00 (Byalan F1) | Plankton 1161 (88), Marina 1141 (61), Hydra 1068 (20), Kukre 1070 (20), Vadon 1066 (20), Black Mushroom 1084 (6) |
+| prt_fild08 | Poring 1002 (70), Lunatic 1063 (40), Pupa 1008 (20), Drops 1113 (10) |
+| iz_dun00 (Byalan F1) | Plankton 1161 (65), Marina 1141 (45), Hydra 1068 (15), Kukre 1070 (15), Vadon 1066 (15), Black Mushroom 1084 (5) |
 | iz_dun01 (Byalan F2) | Vadon 1066 (60), Kukre 1070 (50), Hydra 1068 (30), Cornutus 1067 (15), Marina 1141 (15), Black Mushroom 1084 (10), Plankton 1161 (10) |
 
-Drops and Creamy, seen in our sessions, are not prt_fild08 spawns. Their source (an earlier GM test)
-is checked in M0.
+This matches what our sessions saw on prt_fild08 (Poring, Lunatic, Pupa, Drops). Creamy 1018, also
+seen, is in no prt_fild08 spawn line; its source (a GM test, a neighbouring map) is checked in M0.
+
+*(The first draft of this table, 2026-10-04, quoted `npc/re/mobs/`: Fabre and Little Poring, which
+this server never spawns.)*
 
 **Reading H.264 offline** ([h264-vs-png.md](benchmarks/h264-vs-png.md), 2026-10-04):
 - random single-frame access is expensive on this loaded host (decode ~12.6 ms per AU with 2 threads,
@@ -240,7 +258,7 @@ port.
 
 | Class | Labels from | Why it is a class |
 |---|---|---|
-| one class per prt_fild08 species: `poring`, `fabre`, `lunatic`, `pupa`, `little_poring` | M5 (math) + M6 (synthetic, unlimited per species) | The bot needs to know WHAT it targets. Synthetic data removes the rarity problem that forced `monster_other` in the earlier draft. |
+| one class per prt_fild08 species: `poring`, `lunatic`, `pupa`, `drops` | M5 (math) + M6 (synthetic, unlimited per species) | The bot needs to know WHAT it targets. Synthetic data removes the rarity problem that forced `monster_other` in the earlier draft. |
 | `dying` (any species, during its die animation) | M3: vanish reason = died, then the die action's duration | **Never target corpses** (Batt). Species does not matter here; "not a target" does. |
 | `npc` | M5: NPC position (rAthena script, static) + its sprite | Static, but the detector should still see and avoid it. |
 | `portal` | job 45 at its cell; a ground effect with its own geometry | |
@@ -273,7 +291,7 @@ The B5 rules (hidden NPCs, UI cover, GM windows) apply unchanged.
 **Conditions:**
 - outdoor top third, outdoor bottom third, indoor top third, indoor bottom third;
 - at least 5 distinct spawns and at least 20 standing frames per condition;
-- Poring, plus one larger species (Fabre or Lunatic) outdoor.
+- Poring, plus one other prt_fild08 species (Lunatic or Drops) outdoor.
 
 **Pre-registered expectations:**
 
@@ -336,6 +354,95 @@ All of it is H.264 (the new default) with M5 labels.
 by real frames, by synthetic frames, or both, reported separately. Collection stops when every cell
 has its target (proposed: ≥ 200 real or ≥ 1,000 synthetic + 50 real).
 
+## 6b. Tracking with the game's own motion rules (Batt, 2026-10-04)
+
+**Principle.** Like H.264 motion vectors: units do not appear from nowhere; they come from where they
+were.
+- A few monsters can teleport; NPCs mostly stand still.
+- **Occlusion and off-screen are handled by PREDICTION, not by training.** The detector finds what is
+  visible; the tracker carries everything else.
+
+**Tracks live in WORLD cells, not on the screen.**
+- Each frame, our own cell (T0) and the fitted camera project every track onto the screen.
+- NPCs and off-screen units persist in a world map (object permanence). A monster that walked off
+  the edge is still there when the camera comes back.
+
+**The motion model (T1) is the engine's rules, not a learned one.** We read rAthena @e985006 for
+mechanics only: no GPL code goes into the deployable path, the same discipline as `walk.py`.
+1. **Step timing.** A straight step takes `speed` ms; a diagonal takes `speed × 14 / 10`
+   (`src/map/path.hpp`, `MOVE_COST 10` / `MOVE_DIAGONAL_COST 14`; `unit.cpp` walk timer). Our
+   `Walk.position_at` (Phase 2, `poring_packets/world.py`) already interpolates this way.
+2. **Paths.** 8-neighbour, no corner cutting, on the GAT's walkability (`walk.py`).
+   - The pinned server's walk-path buffer is `MAX_WALKPATH 32` (`path.hpp`).
+   - ⚠️ `walk.py` says 128 is "the server's path buffer". That disagrees with the pinned source and is
+     to be reconciled in T1 (recorded, not changed here).
+3. **The random walk** (`mob.cpp` `mob_randomwalk`):
+   - a target drawn uniformly within ±7 cells (a 15×15 box), passable and reachable;
+   - the next walk is due **4.0–5.0 s after the previous walk ENDS**
+     (`MIN_RANDOMWALKTIME 4000 + rnd()%1000 + the path time`).
+
+   So a wandering monster walks a short straight/diagonal path, stands at least 4 s, then walks
+   again. The stand phase is where a detector-free prediction is nearly exact.
+4. **Away from players** (`mob_ai_sub_lazy`): a monster moves only if it was "spotted", and then at a
+   configured rate (`mob_nopc_move_rate`). Off-screen tracks therefore mostly **stand still**, which
+   makes object permanence cheap.
+5. **Chase.** A provoked or aggressive monster walks toward its target (here, us) and re-paths as we
+   move. Within its attack range it stands and attacks: predict toward self.
+6. **Per-mob speed:**
+   - the prior is mob_db `Speed` (ms per cell);
+   - status effects (Increase/Decrease Agi, Quagmire) change it, so each track estimates its own
+     speed starting from that prior;
+   - knockback is an instant displacement along a line, a track jump with a known direction.
+7. **Teleport** (mobs with a teleport skill in the skill table): a **track break**. The track ends
+   after `T_lost`, and a birth elsewhere is allowed for that species.
+8. **Hidden or burrowed** (Hide-type skills): a known invisible state. The track stays predicted with
+   growing uncertainty, and no detection is expected.
+9. **NPCs and portals:** static, at their script positions.
+10. **The client's interpolation** (how sprites move between cells at that timing) is cross-checked in
+    the license-checked clients at T1. Files are named, and THIRD_PARTY entries added, only if
+    anything is ported.
+
+**The tracker (T2, T3):** predict → associate detections → update.
+
+| Part | Rule |
+|---|---|
+| Track state | cell (sub-cell while walking), path phase, speed estimate, species, state (idle/walk/attack/hurt/dying), facing, last seen, uncertainty |
+| Predict | the T1 motion model at stream rate (the frame bus, up to 60 fps) |
+| Associate | each track projected to a screen box (`predict_sprite`), matched to detections on box IoU + class + appearance; one-to-one |
+| Uncertainty | grows while unseen, following the motion model: a standing monster stays tight, a walking one spreads along its likely paths |
+| Birth | expected only at the screen edges (entering view), in spawn areas after a death (static spawn tables), at portals, and after a teleport or hide. **A detection that appears from nowhere is flagged for re-check** (a second look at a higher threshold), which doubles as a false-positive filter |
+| Death | the `dying` state, then the die animation, then the track ends. Corpses are never targets |
+| Detector rate | YOLO at ~5 Hz; the tracker fills the frames between detections |
+
+**Self-localisation (T0) is pixels too.** The tracker needs our own cell, and packets are forbidden
+at runtime. Candidates:
+- our own walk commands (we know where we clicked, and `walk.py` gives the path);
+- ground registration between frames against the camera model;
+- an absolute fix from the client's own display (the minimap, or the `/where` chat line).
+
+Packets measure T0's error offline.
+
+**Packets are the ground truth for EVALUATING the tracker** (offline, ADR-0007), never its input:
+- position error against the true cells, as a function of the time since the last detection;
+- identity switches and fragmentations (IDF1, HOTA);
+- occlusion recovery, and off-screen re-entry with the same identity;
+- tuning the motion model's parameters (speed priors, the stand-time distribution) where the rules
+  leave a number open.
+
+**Proposed targets for Batt** (not yet pre-registered; they become pre-registrations once the
+evaluation set is fixed):
+- random-walking monsters: median position error ≤ 0.5 cell 1 s after the last detection, and
+  ≤ 1 cell at 3 s;
+- IDF1 ≥ 0.90 on held-out sessions;
+- ≥ 95 % of occluded tracks re-associated with the same identity.
+
+**The deployable tracker uses pixels + static game data only:**
+- mob speed, walkability and the AI movement rules are static game data;
+- **live server state stays forbidden.**
+
+That needs a ruling in ADR-0015, **proposed** there (§9, item 9) for Batt to confirm. Until he does,
+T3 does not run on the deployable path.
+
 ## 7. M8–M10: dataset, model, evaluation
 
 **M8, dataset.**
@@ -389,6 +496,8 @@ has its target (proposed: ≥ 200 real or ≥ 1,000 synthetic + 50 real).
 | The hover ground marker in frames | it is part of the scene, so the label check and the B5 rules treat it as non-entity |
 | SPR/ACT in `data.grf` encrypted beyond header-DES | `grf_read.py` refuses MIXCRYPT: that is a STOP and a report (C8), not a workaround |
 | Disk | H.264 ~2.5 GB/h; the 140 GB floor stays; ship after each session |
+| **The GM dies** (2026-10-04: a level-1 GM, max HP 40, killed twice by Porings its own walk clicks provoked, in p3-outdoor-b and p3-indoor-b; then it lay dead behind the restart menu) | the driver now re-enters its scene after 3 empty picks (a warp brought it back standing); M4/M7 need a GM that survives fights: §9 item 8 |
+| **The walk leaves the scene** (p3-outdoor-b walked into prt_fild08's gate to prontera) | outdoor targets stay south of the start row (2026-10-04); M0's warp list makes this general later |
 
 ## 9. What needs Batt
 
@@ -403,6 +512,13 @@ has its target (proposed: ≥ 200 real or ≥ 1,000 synthetic + 50 real).
    Approve the pretrained-weights download plus a THIRD_PARTY entry, or train from scratch.
 6. **The bar** (§7, M10).
 7. **The Roboflow RO set download** (CC BY 4.0, test only).
+8. **A GM that survives M4/M7.** Today the lab GM (group 20, level 1, 40 HP) died twice from
+   provoked Porings. Options: add `alive` and `heal` to group 20 in `groups.yml` (a server
+   permission change: a guarded rathena recreate), use `@hide` during fights (the GM sprite then
+   disappears from the frames), or raise the GM character's level once.
+9. **The ADR-0015 ruling** (proposed there, 2026-10-04): static game data (mob speed,
+   walkability, AI movement rules) may be used **at runtime by perception**; live server state
+   stays forbidden. The tracker (§6b) depends on it.
 
 **Not in this plan:** the Phase 4 planner and executor (ADR-0015), and any change to the live capture
 path.
