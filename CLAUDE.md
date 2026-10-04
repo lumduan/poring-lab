@@ -293,6 +293,11 @@ ports, quickstart) and `docs/adr/`.
   it has NO dev overlay (`test_guards.py`). So a `poring_packets` change (e.g. the B4 heading,
   the ADR-0016 attestation) is live in the sniffer only after a guarded `build:sniffer` +
   `recreate:sniffer`. After a sniffer restart the interlock says `no_session` until the next login.
+  - guarded_build then re-logs the GM in BY ITSELF (Batt, 2026-10-04): `recover gm --retries 0
+    --agent-id auto_recover`.
+  - It runs only in ASSIST, on a steady rdp/console lock, with the interlock config ok and not
+    already green.
+  - One attempt: a failure is rc 1 and a report, never a retry loop.
 - **Every create/start/restart/recreate/build/pull goes through `scripts/guarded_build.py`** — enforced:
   `scripts/dev.sh` refuses unless the guard is its parent, and the repo's `.claude/settings.json` hook
   (`scripts/hooks/guard_docker.py`) refuses raw `docker`/`docker compose` forms. Don't route around them

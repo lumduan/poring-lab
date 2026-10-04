@@ -1178,6 +1178,13 @@
           },
           "type": "array"
         },
+        "bot_agents": {
+          "description": "The connected agents' AgentHello ids (e.g. auto_recover: guarded_build's GM re-login after a sniffer restart, 2026-10-04).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "bot_connected": {
           "type": "boolean"
         },
@@ -1357,7 +1364,8 @@
         "game_black",
         "human_secret",
         "mode_restored",
-        "environment"
+        "environment",
+        "bot_agents"
       ],
       "title": "Status",
       "type": "object"

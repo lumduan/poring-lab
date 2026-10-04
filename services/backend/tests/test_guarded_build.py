@@ -8,6 +8,7 @@ import importlib.util
 import sys
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 import pytest
 
@@ -285,3 +286,100 @@ def test_it_runs_on_the_hosts_bare_python3() -> None:
     )  # fmt: skip
     assert res.returncode == 2, res.stderr
     assert "Traceback" not in res.stderr
+
+
+# --- the auto GM recover after a sniffer restart (Batt, 2026-10-04) -------------------------------
+
+
+def health(mode: str = "ASSIST", backend: str = "rdp", phase: str = "steady",
+           state: str = "red", config: str = "ok") -> dict:  # fmt: skip
+    return {"mode": mode, "capture_backend": {"backend": backend, "phase": phase, "seq": 9},
+            "environment": {"state": state, "config": config}}  # fmt: skip
+
+
+@pytest.mark.parametrize(
+    ("h", "why"),
+    [
+        (None, "no /health"),
+        (health(mode="BOT"), "never BOT"),
+        (health(mode="HUMAN"), "ASSIST only"),
+        (health(backend="hold", phase=""), "steady only"),
+        (health(phase="switching"), "steady only"),
+        (health(config="config_missing"), "config"),
+        (health(state="green"), "already green"),
+    ],
+)  # fmt: skip
+def test_the_auto_recover_runs_only_under_batts_conditions(
+    gb: ModuleType, h: Any, why: str
+) -> None:
+    assert why in (gb.recover_gate(h) or "")
+
+
+def test_the_gate_opens_for_assist_on_a_steady_lock_rdp_or_console(gb: ModuleType) -> None:
+    assert gb.recover_gate(health()) is None
+    assert gb.recover_gate(health(backend="console")) is None
+    assert gb.recover_gate(health(state="window")) is None  # a login window open: still not green
+
+
+class Done:
+    def __init__(self, rc: int) -> None:
+        self.returncode = rc
+
+
+def test_one_attempt_then_green(
+    gb: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: Any
+) -> None:
+    states = iter([health(), health(state="red"), health(state="green")])
+    monkeypatch.setattr(gb, "backend_health", lambda: next(states))
+    monkeypatch.setattr(gb, "LOGDIR", tmp_path)
+    calls: list[list[str]] = []
+    assert gb.auto_recover_gm(run=lambda cmd, **kw: calls.append(cmd) or Done(0),
+                              sleep=lambda s: None)  # fmt: skip
+    assert len(calls) == 1
+    assert calls[0][-6:] == ["recover", "gm", "--retries", "0", "--agent-id", "auto_recover"]
+    assert calls[0][0].endswith(".venv/bin/python")
+    out = capsys.readouterr().out
+    assert "reason=auto_recover" in out and "auto GM recover OK" in out
+
+
+def test_a_failure_is_reported_never_retried(
+    gb: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: Any
+) -> None:
+    monkeypatch.setattr(gb, "backend_health", lambda: health())
+    monkeypatch.setattr(gb, "LOGDIR", tmp_path)
+    calls: list[list[str]] = []
+    assert not gb.auto_recover_gm(run=lambda cmd, **kw: calls.append(cmd) or Done(3),
+                                  sleep=lambda s: None)  # fmt: skip
+    assert len(calls) == 1  # one attempt
+    assert "FAILED (rc 3): stop and report" in capsys.readouterr().out
+    # logged in, but never green: also a failure
+    assert not gb.auto_recover_gm(run=lambda cmd, **kw: Done(0), sleep=lambda s: None)
+
+
+def test_skipped_is_not_a_failure(gb: ModuleType, monkeypatch: pytest.MonkeyPatch,
+                                  capsys: pytest.CaptureFixture[str]) -> None:  # fmt: skip
+    monkeypatch.setattr(gb, "backend_health", lambda: health(mode="BOT"))
+    ran: list[Any] = []
+    assert gb.auto_recover_gm(run=lambda cmd, **kw: ran.append(cmd), sleep=lambda s: None)
+    assert ran == [] and "SKIPPED: mux BOT" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(("step", "expected"), [
+    ("restart:sniffer", True), ("recreate:sniffer", True), ("restart:backend", False),
+    ("start:sniffer", False), ("recreate:desktop", False),
+])  # fmt: skip
+def test_only_a_sniffer_restart_or_recreate_triggers_it(
+    gb: ModuleType, monkeypatch: pytest.MonkeyPatch, step: str, expected: bool
+) -> None:
+    monkeypatch.setattr(gb, "run_process", lambda *a, **k: True)
+    monkeypatch.setattr(gb, "watch", lambda *a, **k: True)
+    monkeypatch.setattr(gb, "write_restore_marker", lambda: None)
+    monkeypatch.setattr(gb, "backend_health", lambda: None)
+    called: list[int] = []
+    monkeypatch.setattr(gb, "auto_recover_gm", lambda: called.append(1) or True)
+    s = gb.parse_step(step)
+    if s.kind == "restart":
+        gb.run_restart(s.services, 1, None)
+    else:
+        gb.run_start(s.services, 1, None, recreate=s.kind == "recreate")
+    assert bool(called) is expected

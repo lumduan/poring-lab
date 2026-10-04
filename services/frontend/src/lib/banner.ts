@@ -57,6 +57,10 @@ export function bannerProblems({
         "restart:backend or recreate:backend). Choosing a mode clears this notice.",
     );
   }
+  if (links.stream && status?.bot_agents?.includes("auto_recover")) {
+    // Batt 2026-10-04: guarded_build re-logs the GM in by itself after a sniffer restart.
+    problems.push("GM auto-recover running (after a sniffer restart): the bot re-logs the GM in, one attempt.");
+  }
   if (links.stream && status?.cleanroom) problems.push(describeCleanRoom(status.cleanroom, nowMs));
   const interlock = links.stream ? describeEnvironment(status) : null;
   if (interlock) problems.push(interlock);

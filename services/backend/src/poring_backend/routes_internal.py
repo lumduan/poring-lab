@@ -46,6 +46,7 @@ async def ws_agent(ws: WebSocket) -> None:
                     continue
                 case AgentHello():
                     log.info("agent %s (%s) connected", msg.agent_id, msg.version)
+                    state.agent_hello(outbox, msg)
                 case AgentInput():
                     decisions = await state.submit_many(
                         Source.BOT, msg.events, sensitive=msg.sensitive

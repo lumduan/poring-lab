@@ -252,6 +252,10 @@ export interface Status {
    * Safety alarms the console shows RED (2026-10-04), e.g. watchdog_down: a clean-room session runs without its watchdog.
    */
   alarms: string[];
+  /**
+   * The connected agents' AgentHello ids (e.g. auto_recover: guarded_build's GM re-login after a sniffer restart, 2026-10-04).
+   */
+  bot_agents: string[];
   bot_connected: boolean;
   /**
    * The capture-backend lock (ADR-0009); null = not read yet.

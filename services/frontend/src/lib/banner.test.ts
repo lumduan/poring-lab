@@ -132,3 +132,11 @@ test("the interlock shows a window or a refusal while the bot could act, and not
   assert.ok(!at("BOT", env("green")).some((p) => p.startsWith("Interlock")));
   assert.ok(!at("HUMAN", env("red")).some((p) => p.startsWith("Interlock"))); // the human is never gated
 });
+
+test("the console says when the GM is being re-logged in automatically after a sniffer restart", () => {
+  const base = status({ backend: "rdp", seq: 1, phase: "steady" });
+  const on = bannerProblems({ links: { stream: true, input: true }, status: { ...base, bot_agents: ["auto_recover"] } });
+  assert.ok(on.some((p) => p.startsWith("GM auto-recover running")));
+  const off = bannerProblems({ links: { stream: true, input: true }, status: { ...base, bot_agents: ["ro_agent"] } });
+  assert.ok(!off.some((p) => p.startsWith("GM auto-recover")));
+});

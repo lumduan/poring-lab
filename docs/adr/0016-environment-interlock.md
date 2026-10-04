@@ -121,6 +121,25 @@ Before a map session exists (close, launch, login, character select, entering th
 **After a sniffer restart** the account binding is lost until the next login (CZ_ENTER), so the
 interlock says `no_session` (fail closed). `ro_agent recover` or a re-login restores it.
 
+➡️ **Automated (Batt, 2026-10-04).** After a guarded `restart:sniffer` or `recreate:sniffer`,
+`guarded_build.py` re-logs the GM in by itself with `ro_agent.py recover gm --retries 0
+--agent-id auto_recover`.
+- **It runs ONLY when all of these hold:**
+  - the mux is ASSIST (never BOT);
+  - the capture lock is rdp/steady or console/steady;
+  - the interlock config is ok;
+  - the interlock is not already green.
+- **The login goes through the usual login windows**: ASSIST only, opened by ro_agent through the
+  host tool. The credentials go as a sensitive batch.
+- **One attempt.** A failure, or no green within 20 s, stops guarded_build with rc 1 and a report;
+  nothing retries.
+- **Logged and visible:**
+  - guarded_build's output says `reason=auto_recover`;
+  - the backend's input log records the `agent_hello` of `auto_recover` before its events;
+  - the console shows "GM auto-recover running" while it is connected (`Status.bot_agents`).
+- Tests: `test_guarded_build.py` (the gate, one attempt, which steps trigger it), `test_app.py`,
+  `banner.test.ts`.
+
 ## Tests (issue #2's five, plus the ones Batt asked for)
 `services/backend/tests/test_interlock.py`, `test_ro_agent_shell.py`, `packages/poring_packets/tests/test_core.py`:
 1. **Every failure in the table** → red, in BOT and in ASSIST (no window). An attested lab session

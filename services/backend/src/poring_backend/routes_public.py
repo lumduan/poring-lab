@@ -131,6 +131,7 @@ async def health(request: Request) -> dict[str, Any]:
         "agent_network_refused": AgentNetworkGuard.refused,
         # ADR-0016: the environment interlock (bot presses pass only when not "red")
         "environment": state.interlock.snapshot(state.verdict),
+        "bot_agents": state.bot_agents,
         "cleanroom": state.cleanroom.model_dump() if state.cleanroom else None,
         # S2 frame bus (docs/s2-plan.md): the writer and this backend's consumer counters.
         "framebus": {**state.capture_source.snapshot(), "stalls": state.stalls.snapshot()},

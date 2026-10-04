@@ -48,6 +48,7 @@ class Outbox:
         self._frame: tuple[FrameMeta, bytes] | None = None
         self._wake = asyncio.Event()
         self.frames_skipped = 0
+        self.agent_id: str | None = None  # an agent connection's AgentHello id (the console notice)
 
     def offer_control(self, text: str) -> None:
         self._control.append(text)

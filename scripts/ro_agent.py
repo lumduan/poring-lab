@@ -35,7 +35,9 @@ Rules it enforces (CLAUDE.md, ADR-0002/0006):
     ro_agent.py create-char player|gm           on an empty char-select slot (name from .env)
     ro_agent.py gm "@where"                     GM account only; logged to data/ro_agent/gm.jsonl
     ro_agent.py say [--thai-keys] TEXT          chat line (Thai: Kedmanee key positions)
-    ro_agent.py close | launch | recover [player|gm]
+    ro_agent.py close | launch | recover [player|gm] [--retries N] [--agent-id ID]
+                                                (guarded_build runs `recover gm --retries 0
+                                                --agent-id auto_recover` after a sniffer restart)
 
 Coordinates: GAME_REGION (.env, "x,y,w,h") is the client area; clicks are relative to its origin
 (the same region the backend's black-screen detector watches).
@@ -44,6 +46,7 @@ Coordinates: GAME_REGION (.env, "x,y,w,h") is the client area; clicks are relati
 import argparse
 import contextlib
 import json
+import re
 import struct
 import subprocess
 import sys
@@ -1352,10 +1355,13 @@ def calibrate_shell(screen: Screen, stream: bool = False) -> None:
     log(f"shell tab template saved at ({ox},{oy}); icon signature saved")
 
 
-def recover(which: str, retries: int = 2) -> None:
+def recover(which: str, retries: int = 2, agent_id: str = "ro_agent-recover") -> None:
+    """Close, relaunch and log in ``which``. ``retries``: further attempts after a failure (the
+    auto recover after a sniffer restart passes 0: one attempt, no loop). ``agent_id`` names the
+    connection in the backend's input log (agent_hello) and on the console."""
     for attempt in range(1, retries + 2):
         try:
-            with session("ro_agent-recover") as (agent, screen):
+            with session(agent_id) as (agent, screen):
                 agent.wait_for_human()
                 log(f"recover attempt {attempt}: closing the client")
                 close_client(agent, screen)
@@ -1397,6 +1403,12 @@ def main() -> None:
     ap.add_argument("--thai-keys", action="store_true")
     ap.add_argument("--stream", action="store_true", help="calibrate-shell: the stream's copy")
     ap.add_argument("--as", dest="who", default="gm", choices=["player", "gm"])
+    ap.add_argument("--retries", type=int, default=2, help="recover: attempts after a failure")
+    ap.add_argument(
+        "--agent-id",
+        default="ro_agent-recover",
+        help="recover: the agent id the backend logs (auto_recover: guarded_build)",
+    )
     a = ap.parse_args()
     cmd, args = a.cmd, a.args
     if cmd == "status":
@@ -1418,7 +1430,9 @@ def main() -> None:
             screen.close()
         return None
     if cmd == "recover":
-        return recover(args[0] if args else "player")
+        if a.retries < 0 or not re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", a.agent_id):
+            raise Stop("recover: --retries >= 0, --agent-id letters/digits/_.- (<= 64)")
+        return recover(args[0] if args else "player", a.retries, a.agent_id)
     with session() as (agent, screen):
         if cmd == "click":
             xy = (int(args[0]), int(args[1]))

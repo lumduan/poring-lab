@@ -344,6 +344,11 @@ class Status(Message):
         default=None,
         description="The environment interlock (ADR-0016); null in an agent's copy of Status.",
     )
+    bot_agents: list[str] = Field(
+        default_factory=list,
+        description="The connected agents' AgentHello ids (e.g. auto_recover: guarded_build's GM "
+        "re-login after a sniffer restart, 2026-10-04).",
+    )
 
 
 class PasteResult(Message):

@@ -29,6 +29,7 @@ from poring_backend.transfer_log import TransferLog
 from poring_env.clock import monotonic_ns
 from poring_env.env import FrameSource
 from poring_env.protocol import (
+    AgentHello,
     CleanRoom,
     ClipboardPaste,
     InputEvent,
@@ -417,6 +418,20 @@ class AppState:
         window = None if raw is None else Window(raw[0], raw[1], raw[2], raw[3])
         return self.interlock.verdict(self.mux.mode, lock, window, now_ns)
 
+    def agent_hello(self, outbox: Outbox, msg: AgentHello) -> None:
+        """Name the connection (Status.bot_agents, the console notice) and put WHO acts as the bot
+        into the input log: the bot's events carry only source=bot (2026-10-04, the auto GM
+        recover after a sniffer restart logs as agent `auto_recover`)."""
+        outbox.agent_id = msg.agent_id
+        now = monotonic_ns()
+        event = {"type": "agent_hello", "agent_id": msg.agent_id, "version": msg.version}
+        self._log(Source.BOT, event, msg.frame_id, True, "agent_hello", now)
+        self.broadcast_status()
+
+    @property
+    def bot_agents(self) -> list[str]:
+        return sorted({o.agent_id for o in self.agents if o.agent_id})
+
     async def _interlock_tick(self, now_ns: int) -> None:
         """Re-read the allowlist when it changed; when bot presses stop being allowed, the bot
         lets go of everything it holds (the set_mode pattern)."""
@@ -469,6 +484,7 @@ class AppState:
             human_secret=self.human_secret,
             mode_restored=self.mode_restored,
             environment=self.verdict.status(),
+            bot_agents=self.bot_agents,
         )
 
     def refused_snapshot(self) -> dict[str, dict[str, int]]:

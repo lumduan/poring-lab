@@ -201,3 +201,30 @@ def test_ensure_window_opens_one_only_when_needed(
 
 def test_an_interlock_refusal_is_its_own_stop(ro: ModuleType) -> None:
     assert issubclass(ro.Unattested, ro.Stop)
+
+
+def test_recover_with_no_retries_is_one_attempt(
+    ro: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """guarded_build's auto recover after a sniffer restart: `recover gm --retries 0` -- one try."""
+    names: list[str] = []
+
+    class Boom:
+        def __init__(self, name: str) -> None:
+            names.append(name)
+
+        def __enter__(self) -> None:
+            raise ro.Stop("the client did not launch")
+
+        def __exit__(self, *a: object) -> None:
+            return None
+
+    monkeypatch.setattr(ro, "session", lambda name: Boom(name))
+    monkeypatch.setattr(ro.time, "sleep", lambda s: None)
+    with pytest.raises(ro.Stop):
+        ro.recover("gm", retries=0, agent_id="auto_recover")
+    assert names == ["auto_recover"]
+    names.clear()
+    with pytest.raises(ro.Stop):
+        ro.recover("gm")  # the default keeps its two retries
+    assert names == ["ro_agent-recover"] * 3

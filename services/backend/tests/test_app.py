@@ -610,3 +610,25 @@ def test_the_agent_network_still_reaches_the_internal_listener(tmp_path: Path) -
     app = create_app(settings, capture_factory=FakeCapture, input_factory=FakeInput)
     with TestClient(app, client=("10.210.97.7", 40000)) as agent:
         assert agent.get("/health").status_code == 200  # the internal listener is never guarded
+
+
+def test_an_agent_hello_is_logged_and_named_on_the_console(
+    make_client: Factory, tmp_path: Path
+) -> None:
+    """2026-10-04: the auto GM recover after a sniffer restart connects as `auto_recover`. Its id is
+    in the input log (the bot's events carry source=bot only) and in Status.bot_agents."""
+    client, _ = make_client(internal_port=80)
+    with client.websocket_connect("/internal/agent") as ws:
+        ws.send_text(
+            AgentHello(t_mono_ns=1, agent_id="auto_recover", version="1").model_dump_json()
+        )
+        ws.send_text(Ping(t_mono_ns=1).model_dump_json())
+        receive_until(ws, "pong")
+        assert client.get("/health").json()["bot_agents"] == ["auto_recover"]
+        with client.websocket_connect("/ws/stream", headers={"origin": ORIGIN}) as viewer:
+            assert receive_text_until(viewer, "status")["bot_agents"] == ["auto_recover"]
+    assert client.get("/health").json()["bot_agents"] == []  # gone with its connection
+    client.__exit__(None, None, None)
+    hello = [r for r in log_lines(tmp_path) if r["reason"] == "agent_hello"]
+    assert len(hello) == 1
+    assert (hello[0]["source"], hello[0]["event"]["agent_id"]) == ("bot", "auto_recover")

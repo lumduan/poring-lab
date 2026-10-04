@@ -34,6 +34,13 @@ On a breach:
                 by itself, on the same marker conditions as restart (Batt, 2026-10-04). An
                 unguarded force-recreate of desktop on 2026-10-01 hit 30.8 % quant-postgres
                 io_full for 10 s.
+                With sniffer (restart or recreate; Batt, 2026-10-04): a sniffer restart loses the
+                account binding, so the environment interlock says no_session until the GM logs in
+                again. After the step settles, the GM is re-logged in BY ITSELF
+                (`ro_agent.py recover gm --retries 0 --agent-id auto_recover`, reason
+                auto_recover) ONLY when the mux is ASSIST (never BOT), the capture lock is
+                rdp/steady or console/steady, the interlock config is ok and it is not already
+                green. One attempt: a failure stops here (rc 1) and is reported, never retried.
   run:<svc>[@<seconds>]=<command>
                 docker compose --profile <svc> run --rm --no-deps <svc> <command>, killed after
                 <seconds> (default 600), its output's tail printed. ONLY `vision` (check_gpu.py):
@@ -381,6 +388,65 @@ def await_backend(timeout: float = 60) -> dict[str, Any] | None:
     return None
 
 
+# --- the auto GM recover after a sniffer restart (Batt, 2026-10-04) ------------------------------
+AUTO_RECOVER_AGENT = "auto_recover"
+RECOVER_TIMEOUT_S = 300
+GREEN_WAIT_S = 20
+
+
+def recover_gate(health: dict[str, Any] | None) -> str | None:
+    """Why the auto GM recover must NOT run now, or None: Batt's conditions, all of them."""
+    if health is None:
+        return "no /health"
+    mode = health.get("mode")
+    if mode != "ASSIST":
+        return f"mux {mode} (ASSIST only; never BOT)"
+    lock = health.get("capture_backend") or {}
+    if lock.get("backend") not in ("rdp", "console") or lock.get("phase") != "steady":
+        return f"lock {lock.get('backend')}/{lock.get('phase')} (rdp or console, steady only)"
+    env = health.get("environment") or {}
+    if env.get("config") != "ok":
+        return f"interlock config {env.get('config')!r}"
+    if env.get("state") == "green":
+        return "the interlock is already green: nothing to recover"
+    return None
+
+
+def auto_recover_gm(*, run: Any = subprocess.run, sleep: Any = time.sleep) -> bool:
+    """The GM's re-login after a sniffer restart: ONE attempt, as a plain subprocess (never under
+    run_process: an IO-guard SIGINT must not land mid-login). False = it ran and failed."""
+    why = recover_gate(backend_health())
+    if why is not None:
+        print(f"[{ts()}] auto GM recover SKIPPED: {why}", flush=True)
+        return True
+    log = log_path("auto-recover-gm")
+    cmd = [str(REPO / ".venv" / "bin" / "python"), str(REPO / "scripts" / "ro_agent.py"),
+           "recover", "gm", "--retries", "0", "--agent-id", AUTO_RECOVER_AGENT]  # fmt: skip
+    print(f"[{ts()}] auto GM recover: reason=auto_recover, one attempt (log {log})", flush=True)
+    env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "TMPDIR": str(LOGDIR)}
+    with log.open("w") as fh:
+        try:
+            rc: int | str = run(cmd, stdout=fh, stderr=subprocess.STDOUT, env=env, check=False,
+                                timeout=RECOVER_TIMEOUT_S).returncode  # fmt: skip
+        except subprocess.TimeoutExpired:
+            rc = f"timeout after {RECOVER_TIMEOUT_S} s"
+    if rc != 0:
+        tail = log.read_text(errors="replace").strip().splitlines()[-6:]
+        print(f"[{ts()}] auto GM recover FAILED (rc {rc}): stop and report. Log tail:", flush=True)
+        for line in tail:
+            print(f"  | {line}", flush=True)
+        return False
+    for _ in range(GREEN_WAIT_S):
+        state = ((backend_health() or {}).get("environment") or {}).get("state")
+        if state == "green":
+            print(f"[{ts()}] auto GM recover OK: the interlock is green again", flush=True)
+            return True
+        sleep(1)
+    print(f"[{ts()}] auto GM recover FAILED: logged in, but the interlock is not green after "
+          f"{GREEN_WAIT_S} s (state {state}): stop and report", flush=True)  # fmt: skip
+    return False
+
+
 def run_with_restore(
     label: str, cmd: list[str], services: list[str], guard: Guard, *, what: str
 ) -> bool:
@@ -407,7 +473,9 @@ def run_restart(services: list[str], seconds: float, guard: Guard) -> bool:
     label = "restart:" + ",".join(services)
     if not run_with_restore(label, [*DEV, "restart", *services], services, guard, what="restart"):
         return False
-    return watch(seconds, guard, ", ".join(services), [*DEV, "stop", *services])
+    if not watch(seconds, guard, ", ".join(services), [*DEV, "stop", *services]):
+        return False
+    return auto_recover_gm() if "sniffer" in services else True
 
 
 def run_start(services: list[str], seconds: float, guard: Guard, *, recreate: bool = False) -> bool:
@@ -422,7 +490,9 @@ def run_start(services: list[str], seconds: float, guard: Guard, *, recreate: bo
         ok = run_process(label, cmd, guard)
     if not ok:
         return False
-    return watch(seconds, guard, ", ".join(services), [*DEV, "stop", *services])
+    if not watch(seconds, guard, ", ".join(services), [*DEV, "stop", *services]):
+        return False
+    return auto_recover_gm() if recreate and "sniffer" in services else True
 
 
 def main() -> int:
