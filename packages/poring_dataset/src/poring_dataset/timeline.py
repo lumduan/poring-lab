@@ -13,27 +13,49 @@ textbook A*; since 2026-10-04 it replaces the GPL port of rAthena's search: on 2
 it found every one, matched the port's cells on 2534 and every arrival exactly --
 scripts/walk_check.py), with rAthena's step timing (speed ms per cell, *14/10 diagonally). Without a
 map grid it falls back to poring_packets' diagonal-first path.
+
+Actor state (Phase 3 M3, docs/phase3-plan.md section 3): `Timeline.state(gid, t)` says what a unit
+SHOWS at t -- idle, walk, attacking, hurt or dying (sit: players only) -- and which way it faces,
+from the walks above plus the ZC_NOTIFY_ACT, ZC_CHANGE_DIRECTION and vanish events
+(poring_packets.world keeps them). The swing's state is "attacking": the pre-commit guard
+(ADR-0012) refuses the shorter literal. The packets time an attack (the source's attack motion) and
+a flinch (the target's damage motion); a die animation's length is in no packet, so it comes from
+the caller's per-class table (the sprite catalog, M1) with a placeholder default. Two client-side
+timings are NOT modelled here and belong to the render rule (M2), per rAthena's own notes on the
+client (clif.cpp:5246-5254):
+  * the client plays an attack at its ACT speed unless `src_speed` < 432, which speeds it up --
+    the `attacking` state lasts the server's attack motion, not the animation;
+  * the target flinches at the attacker's damage frame, not when the attack starts -- `hurt` starts
+    at the attack's tick.
 """
 
 import bisect
 import copy
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import lru_cache
-from typing import Any
+from typing import Any, Literal
 
 from poring_dataset.mapcache import MapGrid
 from poring_dataset.walk import walk_path
 from poring_packets.world import (
+    DEAD_KEEP_MS,
     HIDDEN_OPTIONS,
     MOVE_COST,
     MOVE_DIAGONAL_COST,
     TICK_MOD,
+    Motion,
     Walk,
     World,
     heading_of,
     path_cells,
+    ticks_since,
 )
+
+State = Literal["idle", "walk", "attacking", "hurt", "dying", "sit"]
+# The die animation's length when the caller's table has no entry for a class. A PLACEHOLDER: the
+# sprite catalog (M1) gives each class its die action's length, and M4 checks it on frames.
+DEFAULT_DIE_MS = 2_000
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,6 +69,29 @@ class EntityState:
     moving: bool
     heading: int | None = None  # RO heading (0 = north, ccw): the step walked, else as appeared
     hidden: bool = False  # sent with an option the client draws as nothing (HIDDEN_OPTIONS)
+
+
+@dataclass(frozen=True, slots=True)
+class ActorState:
+    """What one unit shows at `t_ns` (M3)."""
+
+    gid: int
+    t_ns: int
+    state: State
+    facing: int | None  # RO heading 0..7 (0 = north, counter-clockwise); None: never seen
+    facing_from: str | None  # appear | turn | target | walk | stop: what set the facing
+    x: float
+    y: float
+    job: int | None  # None for our own character
+    since_ns: int | None  # when this state began (host clock, ms resolution); None: not seen
+    duration_ms: int | None = None  # a timed state's length (attack, hurt, dying)
+    other: int | None = None  # attack: the target's gid; hurt: the attacker's
+
+    @property
+    def elapsed_ms(self) -> float | None:
+        """How far into its state the unit is at `t_ns` (an animation's phase); None when the
+        state's start is unknown."""
+        return None if self.since_ns is None else (self.t_ns - self.since_ns) / 1e6
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,12 +115,20 @@ class Timeline:
         maps: Mapping[str, MapGrid] | None = None,
         *,
         snapshot_every: int = 256,
+        die_ms: Mapping[int, int] | None = None,
+        default_die_ms: int = DEFAULT_DIE_MS,
     ) -> None:
+        """`die_ms`: the die animation's length (ms) per class (job); `default_die_ms` for the
+        others."""
         self.events = sorted((dict(e) for e in events), key=lambda e: int(e["t_mono_ns"]))
         self.times = [int(e["t_mono_ns"]) for e in self.events]
         self.maps = dict(maps or {})
-        self._snapshots: list[tuple[int, World]] = [(0, World())]  # (events applied, state)
-        world = World()
+        self.die_ms = dict(die_ms or {})
+        self.default_die_ms = default_die_ms
+        # the world keeps a dead unit at least as long as its die animation can last
+        keep = max(DEAD_KEEP_MS, default_die_ms, *self.die_ms.values())
+        self._snapshots: list[tuple[int, World]] = [(0, World(dead_keep_ms=keep))]
+        world = World(dead_keep_ms=keep)
         for i, event in enumerate(self.events, 1):
             self._apply(world, event)
             if i % snapshot_every == 0:
@@ -123,6 +176,107 @@ class Timeline:
             )
         return FrameWorld(t_ns, world.map, world.aid, self_pos, tuple(entities), self_heading)
 
+    def state(self, gid: int, t_ns: int) -> ActorState | None:
+        """What unit `gid` (our own account id included) shows at `t_ns`; None when it is not in
+        sight then (nor dying)."""
+        return self._state(self.world_at(t_ns), gid, t_ns)
+
+    def states(self, t_ns: int) -> tuple[ActorState, ...]:
+        """Every unit's state at `t_ns`: our own character first, then the entities in sight,
+        then the ones playing their die animation."""
+        world = self.world_at(t_ns)
+        gids = [*([] if world.aid is None else [world.aid]), *world.entities, *world.dead]
+        found = (self._state(world, gid, t_ns) for gid in gids)
+        return tuple(s for s in found if s is not None)
+
+    def die_ms_of(self, job: int) -> int:
+        return self.die_ms.get(job, self.default_die_ms)
+
+    def _state(self, world: World, gid: int, t_ns: int) -> ActorState | None:
+        grid = self.maps.get(world.map or "")
+        if gid == world.aid:
+            if world.self_x is None or world.self_y is None:
+                return None
+            return actor_state(gid, None, (world.self_x, world.self_y), world.self_walk,
+                               world.self_motion, t_ns, grid)  # fmt: skip
+        ent = world.entities.get(gid)
+        if ent is not None:
+            return actor_state(gid, ent.job, (ent.x, ent.y), ent.walk, ent.motion, t_ns, grid)
+        ent = world.dead.get(gid)
+        if ent is None or ent.died_tick is None:
+            return None
+        died_ms = ticks_since(tick_of(t_ns), ent.died_tick)
+        duration = self.die_ms_of(ent.job)
+        if not 0 <= died_ms < duration:
+            return None
+        died_ns = t_ns - died_ms * 1_000_000
+        # where it fell and the way it faced: its state at the moment it died
+        last = actor_state(gid, ent.job, (ent.x, ent.y), ent.walk, ent.motion, died_ns, grid)
+        return replace(last, t_ns=t_ns, state="dying", since_ns=died_ns, duration_ms=duration,
+                       other=None)  # fmt: skip
+
+
+def actor_state(
+    gid: int,
+    job: int | None,
+    cell: tuple[int, int],
+    walk: Walk | None,
+    motion: Motion,
+    t_ns: int,
+    grid: MapGrid | None,
+) -> ActorState:
+    """One unit's state at `t_ns`: a running action (attack, hurt) first, then walking, sitting,
+    idle. The facing is the NEWEST of its turns (appear heading, ZC_CHANGE_DIRECTION, toward an
+    attack's target), the step it walks (while walking; after arriving: its last step) and the
+    step an entity_stop cut short."""
+    tick = tick_of(t_ns)
+
+    def ns_of(k: int) -> int:
+        return t_ns - ticks_since(tick, k) * 1_000_000
+
+    facings: list[tuple[int | None, int, str]] = []  # (tick it was set, heading, source)
+    if motion.turn is not None:
+        facings.append((motion.turn.tick, motion.turn.heading, motion.turn.source))
+    if motion.cut is not None:
+        cut_walk, cut_tick = motion.cut
+        _, _, cut_step = walk_state(cut_walk, cut_tick, grid)
+        if cut_step is not None:
+            facings.append((cut_tick, cut_step, "stop"))
+    x, y = float(cell[0]), float(cell[1])
+    walking, arrived = False, None
+    if walk is not None:
+        x, y, step = walk_state(walk, tick, grid)
+        if ticks_since(tick, walk.start_tick) >= 0:
+            walking = (x, y) != (float(walk.x1), float(walk.y1))
+            if not walking:
+                arrived = (walk.start_tick + walk_ms(walk, grid)) % TICK_MOD
+            if step is not None:
+                facings.append((tick if arrived is None else arrived, step, "walk"))
+    facing, facing_from, best = None, None, TICK_MOD + 1
+    for set_at, heading, source in facings:  # the newest wins; a tie goes to the later source
+        age = TICK_MOD if set_at is None else ticks_since(tick, set_at)
+        if 0 <= age <= best:
+            facing, facing_from, best = heading, source, age
+
+    def shown(state: State, since: int | None, duration: int | None = None,
+              other: int | None = None) -> ActorState:  # fmt: skip
+        return ActorState(gid, t_ns, state, facing, facing_from, x, y, job, since, duration, other)
+
+    action = motion.action
+    if action is not None and action.active(tick):
+        kind: State = "attacking" if action.kind == "attacking" else "hurt"
+        return shown(kind, ns_of(action.start_tick), action.duration_ms, action.other)
+    if walking and walk is not None:
+        return shown("walk", ns_of(walk.start_tick))
+    if motion.sitting:
+        return shown("sit", None)
+    # idle since the latest end we know of: an action's, a walk's arrival, a stop
+    ends = [arrived, None if motion.cut is None else motion.cut[1]]
+    if action is not None:
+        ends.append((action.start_tick + action.duration_ms) % TICK_MOD)
+    ages = [a for a in (ticks_since(tick, k) for k in ends if k is not None) if a >= 0]
+    return shown("idle", t_ns - min(ages) * 1_000_000 if ages else None)
+
 
 @lru_cache(maxsize=65536)
 def _cells(grid: MapGrid | None, x0: int, y0: int, x1: int, y1: int) -> tuple[tuple[int, int], ...]:
@@ -151,6 +305,16 @@ def walk_state(walk: Walk, tick: int, grid: MapGrid | None) -> tuple[float, floa
         elapsed -= int(step)
         x, y = float(cx), float(cy)
     return float(walk.x1), float(walk.y1), heading
+
+
+def walk_ms(walk: Walk, grid: MapGrid | None) -> int:
+    """How long a walk takes (ms), on walk_state's path and step timing."""
+    total, x, y = 0, walk.x0, walk.y0
+    for cx, cy in _cells(grid, walk.x0, walk.y0, walk.x1, walk.y1):
+        diagonal = cx != x and cy != y
+        total += int(walk.speed * (MOVE_DIAGONAL_COST if diagonal else MOVE_COST) / MOVE_COST)
+        x, y = cx, cy
+    return total
 
 
 def walk_position(walk: Walk, tick: int, grid: MapGrid | None) -> tuple[float, float]:
