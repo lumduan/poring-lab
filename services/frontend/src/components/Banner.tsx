@@ -1,5 +1,5 @@
 import type { Links } from "@/components/StatsPanel";
-import { bannerAlarms, bannerProblems } from "@/lib/banner";
+import { ALARM_BOX_CLASS, bannerAlarms, bannerProblems } from "@/lib/banner";
 import type { ErrorReply, Status } from "@/lib/protocol";
 
 type Props = {
@@ -18,7 +18,7 @@ export default function Banner({ links, status, dropped = null, rdpReconnected =
   return (
     <div className="flex flex-col gap-2">
       {alarms.length > 0 && (
-        <div role="alert" className="rounded-md border border-red-600 bg-red-950 px-3 py-2 text-sm font-semibold text-red-100">
+        <div role="alert" aria-live="assertive" className={ALARM_BOX_CLASS}>
           {alarms.map((a) => (
             <p key={a}>{a}</p>
           ))}

@@ -829,12 +829,15 @@ def minimize_consoles(agent: Agent, screen: Screen) -> None:
 def focus_console(agent: Agent, screen: Screen, admin: bool = False) -> tuple[int, int]:
     """Click the console's own tab and re-verify it is the active window; its tab origin."""
     ensure_window("desktop", "console")
+    log("focus_console: window ok; looking for the console")
     found = find_console(screen, admin)
+    log(f"focus_console: found {found is not None}")
     if found is None:
         to_png(screen.full(), SHOTS / "console_missing.png")
         raise Stop("no active PowerShell console on screen: nothing typed")
     ox, oy, _ = found
     agent.click(ox + 75, oy + 9)  # its tab: focuses that window
+    log("focus_console: clicked its tab")
     time.sleep(0.4)
     again = find_console(screen, admin)
     if again is None or abs(again[0] - ox) > 2 or abs(again[1] - oy) > 2:

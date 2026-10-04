@@ -19,6 +19,13 @@ const ALARM_TEXT: Record<string, string> = {
     "cap are NOT enforced. End it now (scripts/cleanroom.py end).",
 };
 
+/** The alarm box (2026-10-04): Batt missed the first one -- a DARK maroon box (bg-red-950) the
+ * shape of the amber notices below it, up ~66 s. Now unmistakable: bright red, white bold text,
+ * and sticky at the top so it stays in view while the page is scrolled. */
+export const ALARM_BOX_CLASS =
+  "sticky top-0 z-50 rounded-md border-2 border-red-200 bg-red-600 px-4 py-3 text-base " +
+  "font-bold text-white shadow-lg";
+
 export function bannerAlarms(status: Status | null): string[] {
   return (status?.alarms ?? []).map((a) => ALARM_TEXT[a] ?? `Safety alarm: ${a}`);
 }

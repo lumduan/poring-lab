@@ -115,6 +115,14 @@ test("a safety alarm is shown RED, apart from the amber notices", async () => {
   assert.ok(!bannerProblems({ links: LINKS, status: s }).some((p) => /WATCHDOG/.test(p)));
 });
 
+test("the alarm box is bright red, bold and sticky (Batt missed the dark one, 2026-10-04)", async () => {
+  const { ALARM_BOX_CLASS } = await import("./banner.ts");
+  for (const cls of ["bg-red-600", "text-white", "font-bold", "sticky", "top-0", "z-50"]) {
+    assert.ok(ALARM_BOX_CLASS.split(" ").includes(cls), cls);
+  }
+  assert.ok(!ALARM_BOX_CLASS.includes("bg-red-950"));
+});
+
 test("the interlock shows a window or a refusal while the bot could act, and nothing when green", () => {
   const env = (state: "green" | "window" | "red", extra: object = {}) => ({
     state,

@@ -571,6 +571,10 @@ def test_a_safety_alarm_reaches_health_and_status(make_client: Factory, tmp_path
     (lab_state / "cleanroom-alarm").write_text("ALARM=watchdog_down\nSINCE=1791000000\n")
     client, _ = make_client(lab_state_dir=lab_state)
     assert client.get("/health").json()["alarms"] == ["watchdog_down"]
+    # ...and in the Status the console renders (the RED box): the name says "and Status", but
+    # until 2026-10-04 only /health was asserted (the alarm re-test found the gap).
+    with client.websocket_connect("/ws/stream", headers={"origin": ORIGIN}) as viewer:
+        assert receive_text_until(viewer, "status")["alarms"] == ["watchdog_down"]
 
 
 # --- ADR-0005 option c2 (2026-10-04): the agent network reaches only the internal listener -------
