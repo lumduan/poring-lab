@@ -24,7 +24,7 @@ flowchart TD
     C1["Console capture · Sunshine S1 trial<br/>cause found 2026-10-03: GL present on Xvfb<br/>DONE - superseded by S2"]
     S2["S2 · the bot's primary path, ADR-0014<br/>R1 now, R2 designed · H.264 datasets measured<br/>ACTIVE - C4 and R2 are Batt's"]
     P2["Phase 2 · projection + auto-labeling<br/>1280x720 frozen · sink + locale tooling built<br/>ACTIVE - sink live, ADR-0010 accepted"]
-    P3["Phase 3 · YOLO training +<br/>evaluation vs ground truth<br/>BLOCKED"]
+    P3["Phase 3 · perception: math first,<br/>learn the rest<br/>PLAN PROPOSED - awaiting Batt"]
     P4["Phase 4 · plan, lint, approve, execute<br/>ADR-0015 ACCEPTED<br/>BLOCKED - perception"]
     P5["Phase 5 · humanizer +<br/>human-vs-bot detector<br/>BLOCKED"]
     P6["Phase 6 · Typhoon slow loop<br/>community server + rAthena<br/>BLOCKED"]
@@ -105,13 +105,13 @@ flowchart TD
 - Batt set fps 1 after the 10 fps run tripped the IO guard ([phase2-plan.md](phase2-plan.md) "S2 datasets").
 - ~~**Open:** an indoor camera; a hidden-NPC filter; an activity driver that never clicks entities~~ ➡️ **DONE 2026-10-04** (Post-S2 round Part B, live in the S2 session): the indoor camera is the client's own rule + a measurement (yaw +45.96°, distance 273; held-out spawns 11.5/21.7 px), hidden NPCs by class AND by invisibility option, an activity driver that clicks only empty walkable cells (GAT + the client's ground marker), facing labels, UI-occluded boxes dropped, the GPL `paths.py` replaced by a clean A* (walk.py: 2540/2540 recorded walks), a hand-check editor + `label_iou.py` (B6). The old indoor set is marked INVALID on the NAS; a new indoor set (B6′) exists. Raw H.264 datasets: C3 measured (h264-vs-png.md); ➡️ the DEFAULT since 2026-10-04 (Batt, C4).
 - **Open:** Batt's hand-check of a set (`/qa` editor) → `label_iou`; the login / OK-Cancel / NPC-dialog anchors (not started) |
-| **Phase 3** | ⬜ BLOCKED | YOLO training on the auto-labels + evaluation against ground truth on held-out sessions. | Phase 2 labels (and the vision image) |
+| **Phase 3** | ⬜ BLOCKED (plan PROPOSED 2026-10-04) | ~~YOLO training on the auto-labels + evaluation against ground truth on held-out sessions.~~ ➡️ **[phase3-plan.md](phase3-plan.md) PROPOSED 2026-10-04** (Batt's correction: on-screen scale is game mechanics). Compute everything deterministic (the billboard rule ported from nostalro/korangar → `predict_sprite`: box, facing, action/frame from packet state), PROVE it with pre-registered GM spawns (M4), then learn only occlusion, H.264 artefacts, effects and other players: exact labels v1 + an automatic label check, synthetic frames through a real H.264 encode, targeted GM collection, a frame cache split by session, YOLO11n under the 25 % VRAM cap, evaluation incl. Batt's gold set. | Batt's approval of the plan; then one S2 session (M4) and a GPU window |
 | **Phase 4** | ⬜ BLOCKED | ➡️ **[ADR-0015](adr/0015-phase4-planner-linter-executor.md) ACCEPTED 2026-10-04 (Batt):** plan → lint → approve → execute. An LLM planner with read-only knowledge-base tools (static server data is game knowledge at PLAN time; live state stays forbidden as decision input), a layered linter (schema, semantics, simulation on the walk graph, the owner's approval, runtime stops, the interlock), and a deterministic **behavior-tree** executor acting only through `/internal/agent` and the mux (ASSIST first; interventions logged). ~~fast loop: an FSM~~ (superseded). | Needs Phase 3 (perception). ADR-0005 ✅ and the environment interlock ✅ are done (2026-10-04) |
 | **Phase 5** | ⬜ BLOCKED | Humanizer (timing and trajectories of the bot's input) + a human-vs-bot detector trained on the human and bot input logs; target ROC-AUC toward 0.5. | Phase 4 bot traces |
 | **Phase 6** | ⬜ BLOCKED | ➡️ ADR-0015 (ACCEPTED 2026-10-04) moves the LLM planner into Phase 4; Phase 6 keeps the social and chat research. ~~Until then:~~ Typhoon slow loop (addressee detection and multi-party chat on the community server; deterministic tests on rAthena). The LLM emits **intents only**, consumed by the FSM; never in the fast loop. Any chat it writes goes through the mux as `source=bot`. | Phase 4 (independent of Phase 5); community-server experiments also need the permission evidence |
 
 **The real bottlenecks are now PERCEPTION (Phase 2 → 3: hand-checked labels, then training) and
-OPERATOR DECISIONS (the H.264 dataset switch, R2).** ADR-0005 and the environment interlock, the two
+OPERATOR DECISIONS (~~the H.264 dataset switch~~ ➡️ decided 2026-10-04; now the Phase 3 plan's approval and its §9 decisions; R2).** Within Phase 3 the one gating measurement is M4, the GM spawns that prove the render rule. ADR-0005 and the environment interlock, the two
 structural Phase 4 gates, were closed on 2026-10-04. (Earlier: ADR-0005, build windows and ADR-0009's
 install list; the RDP delivery ceiling was removed on 2026-10-01, Arm C.)
 - ~~S2's next step needs **Batt's presence** … or a **build window**~~ ➡️ 2026-10-03: the spike ran (V3
@@ -127,7 +127,7 @@ install list; the RDP delivery ceiling was removed on 2026-10-01, Arm C.)
   firewall in the lab (a logic interlock, built); `paths.py` replaced (walk.py).
 - **Open for Batt (2026-10-04):** ~~the H.264 dataset switch (C4)~~ ➡️ decided (H.264 at IDR 1 s);
   the R2 review (ADR-0017) and the WebRTC/UDP plan (human-view-webrtc.md) are his reading; the
-  B6 hand-check of indoor-v2 in `/qa`; the Phase 3 plan (phase3-plan.md, once written).
+  B6 hand-check of indoor-v2 in `/qa`; ~~the Phase 3 plan (phase3-plan.md, once written)~~ ➡️ written 2026-10-04, [phase3-plan.md](phase3-plan.md) PROPOSED: his approval + the decisions in its §9.
 - There is no disk split (Batt, 2026-10-01): image builds are deliberate, guarded steps in an operator-chosen
   window. Phase 1 needed none (dev-overlay sniffer).
 - ~~**Dataset collection (Phase 2) waits for the RDP delivery ceiling**~~ ➡️ RESOLVED 2026-10-01 (Arm C):
