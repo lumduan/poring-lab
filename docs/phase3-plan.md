@@ -7,8 +7,8 @@ verdict_date: 2026-10-04
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: APPROVED 2026-10-04 (Batt). M0 done, M2 built, M1 partial (every monster SPR in the Thai GRF is MIXCRYPT -- Batt decides a/b/c), M3 and T0 in progress; then the M4 session (tonight, without Batt) and the alarm re-test (when Batt watches).
-last_reviewed: 2026-10-04
+next_action: "2026-10-05: M4 RECORDED but NOT PASSED (§5a: quad boxes, species mix, occlusion, no far spawns). Batt decides MIXCRYPT a/b/c (opaque boxes re-score the recording) and redoes the B6 hand-check (/qa?session=...indoor-v2); then the M4 re-run, M5, and the alarm re-test when Batt watches."
+last_reviewed: 2026-10-05
 ---
 
 # Phase 3: perception. Compute what is deterministic, learn only the rest
@@ -62,28 +62,28 @@ Hard rules that bind every step below:
 
 ```mermaid
 flowchart TD
-    M0["M0 · knowledge base<br/>mob_db + spawn files<br/>READY - offline"] --> M5
-    M1["M1 · sprite catalog<br/>SPR/ACT from data.grf<br/>READY - offline"] --> M2
-    M2["M2 · render rule port<br/>predict_sprite<br/>READY after M1"] --> M4
-    M3["M3 · packet states<br/>attack, hurt, dying, facing<br/>READY - offline"] --> M4
-    M4["M4 · PROVE the formulas<br/>GM validation spawns<br/>needs one S2 session"] --> M5
+    M0["M0 · knowledge base<br/>mob_db + spawn files<br/>DONE"] --> M5
+    M1["M1 · sprite catalog<br/>ACT done, SPR MIXCRYPT<br/>Batt decides a/b/c"] --> M2
+    M2["M2 · render rule port<br/>predict_sprite<br/>BUILT - quad boxes"] --> M4
+    M3["M3 · packet states<br/>attack, hurt, dying, facing<br/>LIVE"] --> M4
+    M4["M4 · PROVE the formulas<br/>RECORDED - not passed<br/>re-run designed"] --> M5
     M4 --> M6
     M5["M5 · labels v1<br/>exact boxes + state + auto check"] --> M7
     M5 --> M8
     M6["M6 · synthetic frames<br/>game geometry + real H.264 encode"] --> M8
-    M7["M7 · targeted GM collection<br/>occlusion, crowds, effects"] --> M8
-    M8["M8 · dataset build<br/>frame cache, split by session"] --> M9
-    D1["Batt · GPU window, data path,<br/>weights licence, the bar"] --> M9
-    M9["M9 · train under the 25 pct VRAM cap"] --> M10
-    G["Batt · B6 hand-check<br/>the gold set"] --> M10
+    M7["M7 · targeted GM collection<br/>first crowd block recorded"] --> M8
+    M8["M8 · dataset build<br/>v0 cache BUILT"] --> M9
+    D1["Batt · GPU window, data path,<br/>weights licence, the bar<br/>DECIDED"] --> M9
+    M9["M9 · train under the 25 pct VRAM cap<br/>v0 BASELINE running"] --> M10
+    G["Batt · B6 hand-check<br/>NOT SAVED - redo"] --> M10
     M10["M10 · evaluate detector + tracker<br/>held-out sessions + gold + OOD"]
     M0 --> T1
-    T1["T1 · motion model<br/>engine rules + mob_db + GAT<br/>READY after M0"] --> T2
+    T1["T1 · motion model<br/>engine rules + mob_db + GAT<br/>READY"] --> T2
     M5 --> T2
     T2["T2 · tracker on labels v1<br/>simulated 5 Hz detections"] --> T3
-    T0["T0 · self-localisation<br/>from pixels<br/>READY - offline"] --> T3
+    T0["T0 · self-localisation<br/>from pixels<br/>PASS"] --> T3
     M9 --> T3
-    R["Batt · ADR-0015 ruling<br/>static game data at runtime"] --> T3
+    R["Batt · ADR-0015 ruling<br/>static game data at runtime<br/>ACCEPTED"] --> T3
     T3["T3 · tracker on the detector<br/>detect 5 Hz, predict at stream rate"] --> M10
 
     classDef done     fill:#d4f4dd,stroke:#2d8a4e,color:#1a5c33
@@ -93,9 +93,11 @@ flowchart TD
     classDef decision fill:#fde0e0,stroke:#d05555,color:#8f2e2e
     classDef goal     fill:#ede0fb,stroke:#8a5cd8,color:#4d2e8f
 
-    class M0,M1,M3,T0 ready
-    class M2,M4,M5,M6,M7,M8,M9,T1,T2,T3 blocked
-    class D1,G,R decision
+    class M0,M2,M3,T0,D1,R done
+    class M7,M8,M9 active
+    class T1 ready
+    class M4,M5,M6,T2,T3 blocked
+    class M1,G decision
     class M10 goal
 ```
 
@@ -105,10 +107,10 @@ flowchart TD
 | **M1** sprite catalog | 🟡 PARTIAL 2026-10-04 | SPR/ACT parsers ported from nostalro (`sprites.py`), `scripts/sprite_catalog.py` → `data/kb/sprite_catalog.json`. **ACTs only:** every monster SPR in the Thai `data.grf` is **MIXCRYPT** (refused, the C8 stop). The ACT 2.5 species (Poring, Drops, Lunatic) have quad sizes (Poring idle 37×36 native); the ACT 2.4 ones have frames and delays only | **Batt:** (a) a MIXCRYPT decoder from the public spec, (b) another GRF (the lab's kRO one is on Windows only), or (c) quad boxes only |
 | **M2** render rule | ✅ BUILT 2026-10-04 | `render.py` `predict_sprite`: f/z × k billboard, the ACT quad/opaque boxes, direction, the frame by time or distance. `box_kind` quad (ACT 2.5) or opaque (SPR); it raises rather than guess when sizes are missing | opaque boxes wait for M1's SPR pixels |
 | **M3** packet states | ✅ BUILT + LIVE 2026-10-04 | `poring_packets` decodes the ZC_NOTIFY_ACT family (0x008A/0x02E1/0x08C8) and ZC_CHANGE_DIRECTION (0x009C); `world.py` keeps the vanish reason (died → `dying`), swings and flinches; `Timeline.state(gid, t)` = idle/walk/**attacking**/hurt/dying/sit + facing. The value is `attacking`, not `attack`: the locale guard (ADR-0012) refuses the bare word. The sniffer was rebuilt and recreated at 21:09 (live). `DEFAULT_DIE_MS` 2000 is a placeholder until M1 gives per-class die durations. ➡️ **All 20 NAS sessions were re-decoded the same night** (`scripts/replay_states.py`: the banked captures replayed in the sniffer, windowed and pseudonymised like the recorder) into a verified sidecar `packets.states.jsonl.gz` (0 original entities missing; 251 act events). **Real-data check:** a Poring's swing carries src_speed 672 and a Poring hit by the GM dmotion 480 -- mob_db's AttackMotion/DamageMotion exactly | the client-side attack facing is an assumption that M4 checks |
-| **M4** prove it | ⬜ BLOCKED 2026-10-04 22:00 | GM spawns near/far, indoor/outdoor, judged against pre-registered thresholds (§5). The driver is built (`scripts/m4_spawns.py`). The session did NOT run: `to-console` failed 3 times (a ~30 s stall before its second focus click ➡️ **cause found and fixed 2026-10-04 23:00**, see the bottleneck below: a lab-side race, not Windows), and on the 4th the console showed the **Windows sign-in screen** instead of the poring-lab session. Nothing was typed into it; the 1-min recording that captured it was deleted, never shipped | ~~**Batt:** the Windows console / tscon side~~ ➡️ both causes were lab-side and are fixed (23:16); the S2 session runs tonight |
-| **M5** labels v1 | ⬜ BLOCKED | predicted boxes + state + facing, and the automatic label check | M0 + M4 passed |
+| **M4** prove it | 🟥 RECORDED, NOT PASSED 2026-10-05 00:03 | GM spawns near/far, indoor/outdoor, judged against pre-registered thresholds (§5). ~~BLOCKED 22:00 (to-console)~~ ➡️ both causes were lab-side and fixed (§ bottlenecks). **The session ran without Batt** (`20261004T233309-console-p3-m4`, 56,060 frames, 30/30 spawns, 0 GM failures; shipped + `dataset_check`). `m4_validate`: 1,893 standing frames, all QUAD boxes (SPR MIXCRYPT), so IoU/edges and k are NOT COMPARABLE; outdoor top third NOT EVALUABLE (`@monster` spawns around the GM: no top-third spawn); indoor top/bottom 1.395 and indoor/outdoor 0.878: FAIL. **The A/A disagrees by 5.7 %, more than the 3 % tolerance**, so the results section (§5) explains the failures: species mix, occlusion, a merged component. Thresholds unchanged | Batt: MIXCRYPT a/b/c (opaque boxes re-score THIS recording); a fresh session with per-species groups, far spawns and an occluder-free indoor scene |
+| **M5** labels v1 | ⬜ BLOCKED | predicted boxes + state + facing, and the automatic label check | M0 + M4 passed ➡️ M4 did not pass (2026-10-05) |
 | **M6** synthetic | ⬜ BLOCKED | sprites rendered with the game's geometry onto real backgrounds, then a real H.264 encode | M4 passed |
-| **M7** collection | ⬜ BLOCKED | GM sessions only for what math cannot make | M5 (coverage tracking) |
+| **M7** collection | 🟡 FIRST CROWD BLOCK 2026-10-05 | GM sessions only for what math cannot make. ➡️ In the M4 room's spare time: `20261005T000655-console-p3-m7-crowd` (18,703 frames; outdoor + indoor, 8 × `@monster <species> 8`, Poring + Lunatic, 0 GM failures): occlusion/crowd frames. M4's 30 `@killmonster2` kills are also 30 dying-animation windows | M5 (coverage tracking) |
 | **M8** dataset | 🟡 v0 BUILT 2026-10-04 | `scripts/build_frame_cache.py` → tar shards on the NAS (`.framecache/`), one sequential pass per session, split by session, the gold set test only. v1 waits for M5 | M5 + M6 + M7 for v1 |
 | **M9** train | 🟡 PIPELINE PROVEN 2026-10-04 | `poring_vision.train` reads the shards in place (vision mounts the NAS read-only); `rundev:vision` iterates without an image rebuild. Smoke (v0, 400/100 frames, 3 epochs): mAP50 0.795, peak VRAM 2,216 / 3,962 MiB, Frigate inference +5 ms mean during. Tonight: a v0 BASELINE, because v1 is blocked (M4) | v1 labels (M5) |
 | **T0** self-localisation | ✅ PASS 2026-10-04 | the minimap's coordinate readout (`poring_env.selfpos`, anchor `minimap_xy`), digit templates cut from frames (local, gitignored). Held-out, pre-registered: standing 99.36 % exact (2,320/2,335), walking 99.70 % within 1 cell, 0 wrong reads; A/A both halves pass. outdoor-c alone is 98.70 %: loading screens past the 3 s exclusion, not moved. **No minimap indoors** (prt_church): there T0 needs a fallback (walk commands, ground registration). `walk.py`'s path limit is now 32 (the pinned server's buffer; walk_check: 9,636/9,636 walks found, the longest 14 steps) | — |
@@ -345,6 +347,42 @@ The B5 rules (hidden NPCs, UI cover, GM windows) apply unchanged.
 
 **A failure is a finding:** record it, explain it, and re-run on a fresh set, one variable at a time.
 The thresholds are never moved after the data is seen.
+
+### 5a. Results, 2026-10-05 (the pre-registration above is unchanged)
+
+Session `20261004T233309-console-p3-m4` (S2, H.264, without Batt), events
+`/dev/shm/.../m4/events.jsonl` (copied into the bench JSON's folder, `data/bench/m4/`, local only).
+`m4_validate.py` measured 1,893 standing frames (every 5th frame; deterministic: a re-run gave the
+identical summary).
+
+| Check | Result | Verdict |
+|---|---|---|
+| `k` | not fittable from QUAD boxes (transparent margins) | NOT EVALUABLE until opaque boxes |
+| IoU / edges | outdoor centre 0.821 / p10 0.73, edges 1.18 / 4.43 px; other groups worse | NOT COMPARABLE (quad) |
+| Outdoor top vs bottom | no spawn landed in the top third | NOT EVALUABLE |
+| Indoor top vs bottom | ratio of ratios 1.395 | FAIL |
+| Indoor vs outdoor (centre) | 0.878 | FAIL |
+| A/A (outdoor-1 vs outdoor-2) | ratio_h 0.881 vs 0.931: 5.7 % apart | the instrument does not resolve 3 % |
+
+**Diagnosis (one variable at a time; not a re-scoring):**
+1. **Species mix.** A quad's transparent margin differs per species. ratio_h outdoors is 0.854 for
+   Poring and 0.969 for Lunatic, and a group's median depends on its species mix. outdoor-2 had more
+   Lunatic frames. Per species the A/A agrees: Poring bottom 0.8502 vs 0.8533 (0.4 %), Lunatic
+   centre 0.9961 vs 0.9839 (1.2 %). The "constant margin cancels" assumption holds only within one
+   species, so every ratio test must be per species.
+2. **Occlusion indoors.** prt_church's pews cover sprites. Indoor bottom is 45 Poring frames at
+   ratio_h 0.63, IoU 0.52, edge median 9 px. Background differencing assumes no occluder.
+3. **A merged component.** outdoor-2 bottom Poring has ratio_w 2.94 at IoU 0.31: the observed
+   component joined something wider. These frames need an exclusion rule.
+4. **No far spawns.** `@monster` spawns around the GM, so the top third never fills.
+
+**Re-run design (Batt decides; nothing re-run yet):**
+- (a) the MIXCRYPT decision → opaque boxes re-score THIS recording for IoU/edges/k;
+- (b) a fresh session with:
+  - per-species groups;
+  - far spawns (the GM moves away after spawning, or spawns at range);
+  - an occluder-free indoor scene;
+  - the exclusion rule for merged components, written BEFORE the data is seen.
 
 ## 6. M5–M7: using the rule
 
