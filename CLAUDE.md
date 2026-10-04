@@ -227,6 +227,9 @@ ports, quickstart) and `docs/adr/`.
     sha256 on Windows) and give him the printed `Copy-Item … '\\tsclient\transfer\'` line
     (Batt, 2026-10-03). Agent reads/writes in `/transfer` are ADR-0004 exceptions: rare, each one
     in its "Exceptions log";
+  - **every console line goes through `ro_agent.type_line`** (2026-10-04): Escape first (a
+    cut-off line had left a `>>` prompt that swallowed tscon), then `cls` + a proof bar of a
+    fresh width it waits for. A marker of a fixed width proves nothing (a stale one passed);
   - launch via the "Ragnarok Offline" shortcut; close with paced Alt+F4;
   - **verify the target is in front before typing**: client = active title-bar signature, console
     = tab template, secrets re-checked every 4 characters;
