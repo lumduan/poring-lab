@@ -68,3 +68,25 @@ def test_run_survives_failures_and_paces() -> None:
     assert done == 3
     assert sleeps[:2] == [1.0, 1.0]  # back-off after each failure
     assert all(0.0 <= s <= 0.1 for s in sleeps[2:])  # then paced at <= 1/hz
+
+
+def test_a_stale_frame_skips_the_tick_without_the_error_backoff() -> None:
+    """The frame-age guard (2026-10-04): MuxedEnv.act raises StaleFrame on a frozen stream. The loop
+    skips that tick at once -- no 1 s back-off -- and acts again on the next fresh frame."""
+    from poring_env.freshness import StaleFrame
+
+    class Freezing(FakeEnv):
+        def __init__(self) -> None:
+            super().__init__()
+            self.stale = 2
+
+        def act(self, frame: Frame, events: Sequence[InputEvent]) -> bool:
+            if self.stale:
+                self.stale -= 1
+                raise StaleFrame("the stream is frozen")
+            return super().act(frame, events)
+
+    env = Freezing()
+    sleeps: list[float] = []
+    done = run(env, NullDetector(), PressA(), hz=10, iterations=4, sleep=sleeps.append)
+    assert done == 2 and 1.0 not in sleeps and len(env.acted) == 2

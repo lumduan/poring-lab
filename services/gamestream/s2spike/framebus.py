@@ -251,6 +251,23 @@ class FrameBusReader:
             last = _SLOT.unpack_from(self._mm, PAGE + latest * self._stride)[1]
         return WriterStatus(pid, (_mono_ns() - heartbeat) / 1e9, written, last, p50, p95)
 
+    def latest_stamp(self) -> tuple[int, int] | None:
+        """(frame_id, t_mono_ns) of the newest complete frame, from its slot HEADER only (no pixel
+        copy, no stats): the stream-age probe of the frame-age guard (2026-10-04). The same
+        seqlock check as read(); None when there is no frame yet or two reads were torn."""
+        mm = self._mm
+        assert mm is not None
+        for _ in range(2):
+            latest = _I64.unpack_from(mm, _OFF_LATEST)[0]
+            if not 0 <= latest < self.slots:
+                return None
+            off = PAGE + latest * self._stride
+            seq, frame_id, t_mono = _SLOT.unpack_from(mm, off)[:3]
+            if seq % 2 or _U64.unpack_from(mm, off)[0] != seq:
+                continue
+            return frame_id, t_mono
+        return None
+
     def read(self, after: int = -1) -> BusFrame | None:
         """The newest complete frame with ``frame_id > after``, or None (nothing newer, or lost to
         two overruns in a row)."""

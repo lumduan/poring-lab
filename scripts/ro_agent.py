@@ -364,13 +364,39 @@ def eng_distance(screen: Screen) -> float:
     return best
 
 
-def distance(screen: Screen, state: str) -> float:
+class FrozenStream(Stop):
+    """No frame decoded AFTER an action arrived in time: the stream is frozen (a dropped frame
+    waiting for an IDR), so the action's effect is UNKNOWN -- never decide on the older picture
+    (the frame-age guard, 2026-10-04: a frozen frame made the chat look closed at 05:58)."""
+
+
+FRESH_WAIT_S = 1.5  # the longest measured freeze was 239 ms; a static screen sends no frames
+
+
+def grab_after(
+    screen: Screen, region: tuple[int, int, int, int], after_ns: int | None
+) -> np.ndarray:
+    """``region`` from a frame decoded after ``after_ns`` (bus) -- an X grab is always "now".
+    Without ``after_ns`` it is a plain grab, exactly as before."""
+    if after_ns is None:
+        return screen.grab(*region)[1]
+    end = time.monotonic() + FRESH_WAIT_S
+    while True:
+        t, img, _, source = screen.grab_meta(*region)
+        if source != "bus" or t > after_ns:
+            return img
+        if time.monotonic() > end:
+            raise FrozenStream(f"no frame newer than the action within {FRESH_WAIT_S} s")
+        time.sleep(0.02)
+
+
+def distance(screen: Screen, state: str, after_ns: int | None = None) -> float:
     if state == "eng" and (STATE_DIR / "signatures" / "eng_full.npy").exists():
         return eng_distance(screen)
     paths = signature_variants(state)
     if not paths:
         raise Stop(f"no signature for {state!r}: run `ro_agent.py calibrate {state}` first")
-    _, img = screen.grab(*region_for(base_state(state)))
+    img = grab_after(screen, region_for(base_state(state)), after_ns)
     cur = grey_thumb(img)
     best = float("inf")
     for path in paths:
@@ -380,8 +406,9 @@ def distance(screen: Screen, state: str) -> float:
     return best
 
 
-def is_state(screen: Screen, state: str) -> bool:
-    return distance(screen, state) <= SIG_MATCH
+def is_state(screen: Screen, state: str, after_ns: int | None = None) -> bool:
+    """``after_ns``: judge only a frame decoded after this time (the effect of an action)."""
+    return distance(screen, state, after_ns) <= SIG_MATCH
 
 
 def wait_state(screen: Screen, states: list[str], timeout: float) -> str:
@@ -802,12 +829,13 @@ def activate_client(agent: Agent, screen: Screen) -> None:
     2026-10-01 a console did, the click focused the console, and a camera rotation's
     right-clicks pasted the Windows clipboard onto its prompt (not executed; cleared)."""
     x, y, w, _ = game_region()
+    clicked = ns()
     agent.click(x + w // 2, y - 15)
     if not signature_path("client_title_active").exists():
         time.sleep(0.4)
         return
     end = time.monotonic() + 2.0  # the title repaints a beat after focus returns
-    while not is_state(screen, "client_title_active"):
+    while not is_state(screen, "client_title_active", after_ns=clicked):
         if time.monotonic() > end:
             to_png(screen.full(), SHOTS / "client_not_front.png")
             raise Stop("the client is not the foreground window after activation: stopped")
@@ -981,12 +1009,15 @@ def open_chat(agent: Agent, screen: Screen) -> None:
     went out as public chat without its `@warp ` (2026-10-01)."""
     # Enter toggles an EMPTY input. The signature can miss an input that IS open (the blinking text
     # cursor, 2026-10-02): then the first Enter closed it -- so toggle up to twice.
+    pressed: int | None = None
     for _ in range(2):
-        if is_state(screen, "chat_open"):
+        if is_state(screen, "chat_open", after_ns=pressed):
             break
+        pressed = ns()
         agent.keys("Enter")
         time.sleep(1.0)
-    if not is_state(screen, "chat_open"):
+    # judged on a frame decoded AFTER the last Enter: a frozen frame is FrozenStream, not "closed"
+    if not is_state(screen, "chat_open", after_ns=pressed):
         raise Stop("the chat input did not open: nothing typed")
     agent.click(*layout("chat_input"))
     time.sleep(0.2)

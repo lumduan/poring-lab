@@ -17,6 +17,7 @@ from poring_backend.clipboard import ClipboardService, PasteOutcome, SelectionIO
 from poring_backend.config import Settings
 from poring_backend.display import DisplayWatch, Region
 from poring_backend.drops import DropCounter
+from poring_backend.freshness_monitor import StallMonitor
 from poring_backend.input_log import InputLog, InputLogRecord, wall_clock_iso
 from poring_backend.latency import InputRecord, LatencyRecorder
 from poring_backend.mode_restore import read_verdict
@@ -300,6 +301,10 @@ class AppState:
             on_frame=self.latency.frame_encoded,
             on_grab=self.display.observe,
         )
+        # The frame-age guard's /health side: stalls of the S2 bus (2026-10-04).
+        self.stalls = StallMonitor(
+            settings.framebus_path, console_mode=lambda: self.capture.backend == "console"
+        )
         # ADR-0007: the packet feed for the console (never the agent, never the mux).
         self.packets = PacketHub()
         self.agents: set[Outbox] = set()
@@ -354,6 +359,7 @@ class AppState:
                     verdict.why)  # fmt: skip
 
     async def start(self) -> None:
+        self.stalls.start()
         if self.clipboard is not None:
             self.clipboard.start()
         self._status_task = asyncio.create_task(self._status_loop(), name="status-loop")
@@ -366,6 +372,7 @@ class AppState:
         if self._background:
             await asyncio.wait(self._background, timeout=2.0)
         await self.hub.stop()
+        await asyncio.to_thread(self.stalls.stop)
         await self.injector.close()
         if self.clipboard is not None:
             await asyncio.to_thread(self.clipboard.stop)

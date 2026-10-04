@@ -20,6 +20,13 @@ from websockets.sync.client import ClientConnection, connect
 from poring_env.clock import monotonic_ns
 from poring_env.env import Env, FrameSource
 from poring_env.frame import Frame
+from poring_env.freshness import (
+    CITED_MAX_AGE_MS,
+    STREAM_MAX_AGE_MS,
+    StaleFrame,
+    age_ms,
+    presses,
+)
 from poring_env.protocol import (
     AgentHello,
     AgentInput,
@@ -163,6 +170,7 @@ class MuxedEnv(Env):
         self.sink = sink
         self._history = history
         self._captured: OrderedDict[int, int] = OrderedDict()  # frame_id -> t_capture_ns
+        self.stale_refused = 0  # presses refused by the frame-age guard
 
     def grab(self) -> Frame:
         frame = self._source.grab()
@@ -171,15 +179,34 @@ class MuxedEnv(Env):
             self._captured.popitem(last=False)
         return frame
 
+    def _check_fresh(self, events: Sequence[InputEvent], cited_t_ns: int | None) -> None:
+        """The frame-age guard (poring_env.freshness): presses are refused on a frozen stream or a
+        stale cited frame; releases always pass."""
+        if not presses(events):
+            return
+        stream_age = getattr(self._source, "stream_age_ms", None)
+        if callable(stream_age):
+            age = stream_age()
+            if age is not None and age > STREAM_MAX_AGE_MS:
+                self.stale_refused += 1
+                raise StaleFrame(f"the stream is frozen ({age:.0f} ms > {STREAM_MAX_AGE_MS:.0f})")
+        if cited_t_ns:
+            cited = age_ms(cited_t_ns)
+            if cited > CITED_MAX_AGE_MS:
+                self.stale_refused += 1
+                raise StaleFrame(
+                    f"the cited frame is {cited:.0f} ms old (> {CITED_MAX_AGE_MS:.0f})"
+                )
+
     def send_input(self, event: InputEvent) -> None:
-        self.sink.send_batch(
-            [event],
-            frame_id=event.frame_id,
-            t_capture_ns=self._captured.get(event.frame_id, 0),
-        )
+        cited = self._captured.get(event.frame_id, 0)
+        self._check_fresh([event], cited or None)
+        self.sink.send_batch([event], frame_id=event.frame_id, t_capture_ns=cited)
 
     def act(self, frame: Frame, events: Sequence[InputEvent]) -> bool:
-        """Send a whole decision as one batch, attributed to ``frame``."""
+        """Send a whole decision as one batch, attributed to ``frame``. Raises StaleFrame (sending
+        nothing) when the stream is frozen or ``frame`` is too old."""
+        self._check_fresh(events, frame.t_capture_ns)
         return self.sink.send_batch(
             events, frame_id=frame.frame_id, t_capture_ns=frame.t_capture_ns
         )

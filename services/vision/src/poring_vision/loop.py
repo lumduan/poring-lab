@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Protocol
 
 from poring_env.frame import Frame
+from poring_env.freshness import StaleFrame
 from poring_env.protocol import Box, InputEvent, Status
 from poring_vision import __version__
 from poring_vision.detector import DebugBoxDetector, Detector, NullDetector
@@ -64,12 +65,18 @@ def run(
     """Run at most ``hz`` steps per second and survive X/backend hiccups. ``iterations`` bounds the
     attempts (tests); returns how many steps completed."""
     period = 1.0 / hz
-    attempts = done = 0
+    attempts = done = stale_skips = 0
     while iterations is None or attempts < iterations:
         attempts += 1
         started = clock()
         try:
             step(env, detector, policy)
+        except StaleFrame as exc:
+            # A frozen stream or a stale frame (poring_env.freshness): skip this tick, no sleep --
+            # the next grab waits for a newer frame anyway.
+            stale_skips += 1
+            log.debug("step skipped: %s", exc)
+            continue
         except Exception as exc:
             log.warning("step failed (%s); retrying in 1s", exc)
             sleep(1.0)

@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from poring_env.clock import monotonic_ns
 from poring_env.frame import Frame
 from poring_env.framebus import BusFrame, FrameBusError, FrameBusReader
 
@@ -78,6 +79,11 @@ class BusFrameSource:
             f"{self.path}: no frame after {after} in {self.timeout_s:.1f} s "
             f"(writer pid {status.pid}, heartbeat {status.heartbeat_age_s:.1f} s ago)"
         )
+
+    def stream_age_ms(self) -> float | None:
+        """now - the newest bus frame's decode time; None before the first frame."""
+        stamp = self.reader.latest_stamp()
+        return None if stamp is None else (monotonic_ns() - stamp[1]) / 1e6
 
     def snapshot(self) -> dict[str, Any]:
         if self._reader is None:

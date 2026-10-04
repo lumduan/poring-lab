@@ -210,6 +210,7 @@ def record(a: argparse.Namespace) -> dict[str, Any]:
         writer.close()
         screen.close()
     t1 = r.ns()
+    freezes = freeze_report(t0, t1)
     events, anchor = write_packets(out, t0, t1)
     seconds = (t1 - t0) / 1e9
     manifest = {
@@ -222,12 +223,37 @@ def record(a: argparse.Namespace) -> dict[str, Any]:
         "t0_mono_ns": t0, "t1_mono_ns": t1, "seconds": round(seconds, 1),
         "mb_per_min": round(writer.bytes / 1e6 / max(seconds / 60, 1e-9), 1),
         "stop_reason": stop_reason, "guard": guard.summary(), "packet_events": len(events),
-        "packet_anchor": anchor, "pseudonymised": True,
+        "packet_anchor": anchor, "pseudonymised": True, "freezes": freezes,
         "sink": {"root": str(a.out), **caps},
     }  # fmt: skip
     write_manifest(out, manifest)
     keys = ("frames", "bytes", "mb_per_min", "stop_reason", "packet_events")
     return {"dir": str(out), **{k: manifest[k] for k in keys}}
+
+
+def freeze_report(t0: int, t1: int) -> dict[str, Any] | None:
+    """Freeze spans of the S2 stream over [t0, t1] (the frame-age guard, 2026-10-04): gaps above
+    FREEZE_MS between consecutive decoded frames, from the S2 client's per-frame log. None in RDP
+    mode or when the log is unavailable (stated, never guessed)."""
+    from poring_env.freshness import FREEZE_MS, freeze_spans
+
+    cmd = ["docker", "exec", "poring-lab-gamestream-1", "cat", "/tmp/s2spike/frames.csv"]
+    res = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if res.returncode != 0:
+        return None
+    times = []
+    for line in res.stdout.splitlines()[1:]:
+        parts = line.split(",")
+        if len(parts) == 9 and parts[7].isdigit() and t0 <= int(parts[7]) <= t1:
+            times.append(int(parts[7]))
+    if len(times) < 2:
+        return None
+    spans = freeze_spans(times, FREEZE_MS)
+    return {
+        "threshold_ms": FREEZE_MS, "frames": len(times), "count": len(spans),
+        "max_ms": round(max(((b - a) / 1e6 for a, b in spans), default=0.0), 1),
+        "spans_ns": [[a, b] for a, b in spans],
+    }  # fmt: skip
 
 
 def write_packets(

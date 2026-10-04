@@ -151,3 +151,21 @@ def test_a_stream_copy_of_the_shell_template_is_tried_too(
     assert ro.template_names("ps_tab_template.npy") == (
         "ps_tab_template.npy", "ps_tab_template_stream.npy",
     )  # fmt: skip
+
+
+def test_an_actions_effect_is_judged_only_on_a_later_frame(ro: ModuleType) -> None:
+    """2026-10-04 05:58: a frozen frame (a dropped frame waiting for an IDR) made the chat look
+    closed right after Enter. grab_after waits for a frame decoded after the action, and a stream
+    that stays frozen is FrozenStream -- unknown, never "closed"."""
+    frames = [(100, "old"), (100, "old"), (250, "new")]
+
+    class FakeScreen:
+        def grab_meta(self, x: int, y: int, w: int, h: int):  # type: ignore[no-untyped-def]
+            t, tag = frames.pop(0) if len(frames) > 1 else frames[0]
+            return t, tag, 1, "bus"
+
+    assert ro.grab_after(FakeScreen(), (0, 0, 1, 1), after_ns=200) == "new"
+    frames[:] = [(100, "old")]
+    with pytest.raises(ro.FrozenStream):
+        ro.grab_after(FakeScreen(), (0, 0, 1, 1), after_ns=200)
+    assert issubclass(ro.FrozenStream, ro.Stop)  # callers that retry on Stop retry on it too
