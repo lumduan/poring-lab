@@ -2,6 +2,7 @@
 "poring-lab shell" tab, and used only after a pixel-verified NON-elevated check. No Windows here."""
 
 import importlib.util
+import re
 import time
 from pathlib import Path
 from types import ModuleType
@@ -46,9 +47,74 @@ def test_marker_colour(ro: ModuleType) -> None:
 
 
 def test_the_elevation_check_is_red_for_an_administrator(ro: ModuleType) -> None:
-    check = ro.ELEVATION_CHECK
+    check = ro.elevation_check(33)
     assert "IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)" in check
     assert check.index("DarkRed") < check.index("else") < check.index("DarkGreen")
+    assert check.count("(' ' * 33)") == 2
+
+
+def test_a_marker_counts_only_at_the_width_this_check_asked_for(ro: ModuleType) -> None:
+    """2026-10-04: a green bar left by an earlier check passed three checks that never ran."""
+    stale = screen_with(ro.MARKER_GREEN, 40 * ro.CELL_W)
+    assert ro.marker_colour(stale) == "green"  # any width: the old reading, fooled
+    assert ro.marker_colour(stale, cells=40) == "green"
+    assert ro.marker_colour(stale, cells=33) is None
+    fresh = stale.copy()
+    fresh[400:418, 100 : 100 + 33 * ro.CELL_W, :3] = ro.MARKER_GREEN[::-1]
+    assert ro.marker_colour(fresh, cells=33) == "green"
+
+
+def test_a_fresh_width_is_never_one_already_on_screen(ro: ModuleType) -> None:
+    import random
+
+    screen = screen_with(ro.MARKER_GREEN, 40 * ro.CELL_W)
+    screen[500:518, 100 : 100 + 50 * ro.CELL_W, :3] = ro.MARKER_RED[::-1]
+    rng = random.Random(7)
+    picks = {ro.fresh_cells(screen, (ro.MARKER_RED, ro.MARKER_GREEN), rng) for _ in range(300)}
+    assert picks and not picks & {39, 40, 41, 49, 50, 51}
+    assert picks <= set(ro.MARKER_CELLS)
+    assert ro.fresh_cells(screen, (ro.MARKER_PROOF,), random.Random(1)) in ro.MARKER_CELLS
+
+
+def test_a_proven_line_keeps_its_proof_bar(ro: ModuleType) -> None:
+    line = ro.proven_line("cls; Get-Date", 30)
+    assert line == "cls; Write-Host (' ' * 30) -BackgroundColor DarkMagenta; Get-Date"
+    assert line.count("cls") == 1  # the command's own cls would wipe the bar
+
+
+class FakeConsole:
+    """A console that draws the proof bar only if the typed line reached it whole."""
+
+    def __init__(self, ro: ModuleType, runs: bool) -> None:
+        self.ro, self.runs, self.sent = ro, runs, []
+        self.frame = np.full((900, 1440, 4), 12, np.uint8)
+
+    def keys(self, *codes: str) -> None:
+        self.sent.append(("keys", codes))
+
+    def type_text(self, text: str) -> None:
+        self.sent.append(("text", text))
+        cells = int(re.search(r"\(' ' \* (\d+)\)", text).group(1))  # type: ignore[union-attr]
+        if self.runs:
+            self.frame[130:148, 86 : 86 + cells * self.ro.CELL_W, :3] = self.ro.MARKER_PROOF[::-1]
+
+    def full(self) -> np.ndarray:
+        return self.frame
+
+
+def test_type_line_reverts_pending_input_then_proves_the_line_ran(
+    ro: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(ro, "SHOTS", tmp_path)
+    monkeypatch.setattr(ro, "PROOF_TIMEOUT_S", 1.0)
+    ok = FakeConsole(ro, runs=True)
+    ro.type_line(ok, ok, "Start-Sleep 10; schtasks /run /tn x")
+    assert ok.sent[0] == ("keys", ("Escape",))  # before anything is typed
+    assert ok.sent[1][1].endswith("Start-Sleep 10; schtasks /run /tn x\n")
+    stuck = FakeConsole(ro, runs=False)  # a `>>` prompt: the line never runs
+    stuck.frame[130:148, 86 : 86 + 40 * ro.CELL_W, :3] = ro.MARKER_PROOF[::-1]  # an OLD proof
+    with pytest.raises(ro.Stop, match="did not run"):
+        ro.type_line(stuck, stuck, "Get-Date")
 
 
 def test_the_agents_shell_is_preferred_over_any_powershell_tab(ro: ModuleType) -> None:

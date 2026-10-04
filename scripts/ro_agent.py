@@ -46,6 +46,7 @@ Coordinates: GAME_REGION (.env, "x,y,w,h") is the client area; clicks are relati
 import argparse
 import contextlib
 import json
+import random
 import re
 import struct
 import subprocess
@@ -860,11 +861,49 @@ def focus_console(agent: Agent, screen: Screen, admin: bool = False) -> tuple[in
     return ox, oy
 
 
-def console_type(agent: Agent, screen: Screen, command: str, admin: bool = False) -> None:
+def console_type(
+    agent: Agent, screen: Screen, command: str, admin: bool = False, *, prove: bool = True
+) -> None:
     """Type a NON-secret command line into the verified console (it lands in PSReadLine history,
-    so never a credential: use console_secret for those)."""
+    so never a credential: use console_secret for those), and (prove) return only once it RAN."""
     focus_console(agent, screen, admin)
-    agent.type_text(command + "\n")
+    type_line(agent, screen, command, prove=prove)
+
+
+PROOF_TIMEOUT_S = 6.0
+
+
+def proven_line(command: str, cells: int) -> str:
+    """`cls`, the proof bar, then the command (its own leading `cls; ` dropped: it would wipe the
+    bar the moment it is drawn)."""
+    body = command.removeprefix("cls; ")
+    return f"cls; Write-Host (' ' * {cells}) -BackgroundColor DarkMagenta; {body}"
+
+
+def type_line(agent: Agent, screen: Screen, command: str, *, prove: bool = True) -> None:
+    """One command line into the console ALREADY verified in front.
+
+    Escape first: PSReadLine's RevertLine drops any half-typed input, even a multi-line `>>` one,
+    and never touches a running command. On 2026-10-04 a long line cut off mid-typing left an
+    unclosed `{`, and every later line was appended to it at a `>>` prompt and never ran -- tscon
+    included, so the console showed the Windows sign-in screen.
+
+    prove: the line starts with `cls` + a DarkMagenta bar of a width no bar on screen has now, and
+    this returns only once that bar shows (a Stop otherwise): the line ran, not an older one."""
+    agent.keys("Escape")
+    time.sleep(0.2)
+    if not prove:
+        agent.type_text(command + "\n")
+        return
+    cells = fresh_cells(screen.full(), (MARKER_PROOF,))
+    agent.type_text(proven_line(command, cells) + "\n")
+    deadline = time.monotonic() + PROOF_TIMEOUT_S
+    while time.monotonic() < deadline:
+        time.sleep(0.4)
+        if any(cells_match(n, cells) for _, n in marker_runs(screen.full(), MARKER_PROOF)):
+            return
+    to_png(screen.full(), SHOTS / "console_line_not_run.png")
+    raise Stop("the console did not run the typed line (no fresh proof bar): stopped")
 
 
 def console_secret(agent: Agent, screen: Screen, var: str, admin: bool = False) -> None:
@@ -1212,13 +1251,24 @@ def launch_client(agent: Agent, screen: Screen) -> None:
 # dialog stays forbidden (Defender ClickFix); elevated consoles stay Batt's (UAC).
 # SHELL_SHORTCUT="x,y" in .env.
 SHELL_SHORTCUT = (37, 645)
-ELEVATION_CHECK = (
-    "cls; if (([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::"
-    "GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) "
-    "{ Write-Host (' ' * 40) -BackgroundColor DarkRed } "
-    "else { Write-Host (' ' * 40) -BackgroundColor DarkGreen }"
-)
+
+
+def elevation_check(cells: int) -> str:
+    """The check line; its marker is ``cells`` wide, a width no bar on screen has (fresh_cells),
+    so a marker left by an earlier check can never pass for this one (2026-10-04: a stale green
+    bar passed three checks typed into a `>>` prompt that never ran them)."""
+    return (
+        "cls; if (([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::"
+        "GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) "
+        f"{{ Write-Host (' ' * {cells}) -BackgroundColor DarkRed }} "
+        f"else {{ Write-Host (' ' * {cells}) -BackgroundColor DarkGreen }}"
+    )
+
+
 MARKER_RED, MARKER_GREEN = (197, 15, 31), (19, 161, 14)  # Campbell DarkRed / DarkGreen
+MARKER_PROOF = (136, 23, 152)  # Campbell DarkMagenta: type_line's proof bar, never a verdict colour
+CELL_W = 9  # px per cell in the agent's shell: its 40-cell marker measured 360 px (2026-10-04)
+MARKER_CELLS = range(24, 61)  # proof/marker widths: >= 150 px, and inside the console window
 
 
 def shell_shortcut_xy() -> tuple[int, int]:
@@ -1245,20 +1295,47 @@ def find_shell(screen: Screen) -> tuple[int, int, float] | None:
     return best
 
 
-def marker_colour(bgra: np.ndarray, min_run: int = 150) -> str | None:
+def marker_runs(
+    bgra: np.ndarray, colour: tuple[int, int, int], min_run: int = 150
+) -> list[tuple[int, int]]:
+    """(row, px) of the longest solid run of ``colour`` in every row that has one >= min_run."""
+    hit = np.abs(bgra[:, :, 2::-1].astype(np.int16) - np.array(colour)).max(axis=2) <= 30
+    out: list[tuple[int, int]] = []
+    for y in np.nonzero(hit.sum(axis=1) >= min_run)[0]:
+        row = np.concatenate(([0], hit[y].astype(np.int8), [0]))
+        edges = np.flatnonzero(np.diff(row))
+        longest = int((edges[1::2] - edges[::2]).max(initial=0))
+        if longest >= min_run:
+            out.append((int(y), longest))
+    return out
+
+
+def cells_match(px: int, cells: int) -> bool:
+    return abs(px - cells * CELL_W) <= CELL_W // 2
+
+
+def fresh_cells(
+    bgra: np.ndarray, colours: tuple[tuple[int, int, int], ...], rng: random.Random | None = None
+) -> int:
+    """A marker width (cells) within 1 cell of no bar of ``colours`` now on screen: a bar of this
+    width can only come from the line about to be typed."""
+    taken = {round(px / CELL_W) for c in colours for _, px in marker_runs(bgra, c)}
+    free = [n for n in MARKER_CELLS if all(abs(n - t) > 1 for t in taken)]
+    if not free:
+        raise Stop("no free marker width (the console is full of bars): stopped")
+    return (rng or random).choice(free)
+
+
+def marker_colour(bgra: np.ndarray, min_run: int = 150, cells: int | None = None) -> str | None:
     """'red' / 'green' if a horizontal run of >= min_run marker pixels is on screen (the newest,
-    bottom-most wins), else None."""
-    rgb = bgra[:, :, 2::-1].astype(np.int16)
+    bottom-most wins), else None. ``cells``: only a run of exactly that width counts."""
     found: tuple[int, str] | None = None
     for name, colour in (("red", MARKER_RED), ("green", MARKER_GREEN)):
-        hit = np.abs(rgb - np.array(colour)).max(axis=2) <= 30
-        for y in np.nonzero(hit.sum(axis=1) >= min_run)[0]:
-            row = np.concatenate(([0], hit[y].astype(np.int8), [0]))
-            edges = np.flatnonzero(np.diff(row))
-            if (edges[1::2] - edges[::2]).max(initial=0) >= min_run and (
-                found is None or y > found[0]
-            ):
-                found = (int(y), name)
+        for y, px in marker_runs(bgra, colour, min_run):
+            if cells is not None and not cells_match(px, cells):
+                continue
+            if found is None or y > found[0]:
+                found = (y, name)
     return found[1] if found else None
 
 
@@ -1303,18 +1380,21 @@ def open_terminal(agent: Agent, screen: Screen) -> tuple[int, int]:
     again = find_shell(screen)
     if again is None or abs(again[0] - ox) > 2 or abs(again[1] - oy) > 2:
         raise Stop("'poring-lab shell' moved or lost focus after the click: nothing typed")
-    agent.type_text(ELEVATION_CHECK + "\n")
+    agent.keys("Escape")  # drop any half-typed input first (type_line's docstring)
+    time.sleep(0.2)
+    cells = fresh_cells(screen.full(), (MARKER_RED, MARKER_GREEN))
+    agent.type_text(elevation_check(cells) + "\n")
     deadline = time.monotonic() + 10
     colour = None
     while colour is None and time.monotonic() < deadline:
         time.sleep(0.8)
-        colour = marker_colour(screen.full())
+        colour = marker_colour(screen.full(), cells=cells)
     if colour != "green":
         to_png(screen.full(), SHOTS / "shell_elevation_check.png")
         raise Stop(f"'poring-lab shell' is not verified non-elevated (marker {colour}): stop")
     log("'poring-lab shell' is in front and NOT elevated")
     if opened_new:  # an older one was minimised or hidden: keep exactly one (Batt, 2026-10-03)
-        agent.type_text(CLOSE_EXTRA_SHELLS + "\n")
+        type_line(agent, screen, CLOSE_EXTRA_SHELLS)
         time.sleep(3)
         log("closed any other 'poring-lab shell' window (see the shell for the count)")
     return ox, oy
