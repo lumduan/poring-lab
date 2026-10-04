@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import OverlayCanvas from "@/components/OverlayCanvas";
 import QaEditor from "@/components/QaEditor";
-import { type QaIndex, type QaSession, toDetections } from "@/lib/qa";
+import { initialSession, type QaIndex, type QaSession, toDetections } from "@/lib/qa";
 import {
   classForKey,
   type Cls,
@@ -46,13 +46,15 @@ export default function QaViewer({ backendUrl }: Props) {
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`index: ${r.status}`))))
       .then((data: QaIndex) => {
         setIndex(data);
-        if (data.sessions.length) setSessionId(data.sessions[data.sessions.length - 1].id);
+        setSessionId(initialSession(data, window.location.search));
       })
       .catch((e: Error) => setError(e.message));
   }, []);
 
   useEffect(() => {
     if (!sessionId) return;
+    // The address bar names the session on screen, so a link always opens what was being checked.
+    window.history.replaceState(null, "", `?session=${encodeURIComponent(sessionId)}`);
     fetch(`/api/qa/${sessionId}/labels.json`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`labels: ${r.status}`))))
       .then((data: QaSession) => {

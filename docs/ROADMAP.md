@@ -128,7 +128,9 @@ install list; the RDP delivery ceiling was removed on 2026-10-01, Arm C.)
   firewall in the lab (a logic interlock, built); `paths.py` replaced (walk.py).
 - **Open for Batt (2026-10-04):** ~~the H.264 dataset switch (C4)~~ ➡️ decided (H.264 at IDR 1 s);
   the R2 review (ADR-0017) and the WebRTC/UDP plan (human-view-webrtc.md) are his reading; the
-  B6 hand-check of indoor-v2 in `/qa`; ~~the Phase 3 plan (phase3-plan.md, once written)~~ ➡️ written 2026-10-04, [phase3-plan.md](phase3-plan.md) PROPOSED: his approval + the decisions in its §9.
+  B6 hand-check of indoor-v2 in `/qa` ➡️ **2026-10-04 22:55: NOT SAVED** -- `/qa` opened on the
+  newest session (p3-indoor-c) and indoor-v2's frames were never fetched; nothing was PUT. The
+  page now takes `/qa?session=<id>`; the redo link is in phase3-plan.md M10. ~~the Phase 3 plan (phase3-plan.md, once written)~~ ➡️ written 2026-10-04, [phase3-plan.md](phase3-plan.md) PROPOSED: his approval + the decisions in its §9.
 - There is no disk split (Batt, 2026-10-01): image builds are deliberate, guarded steps in an operator-chosen
   window. Phase 1 needed none (dev-overlay sniffer).
 - ~~**Dataset collection (Phase 2) waits for the RDP delivery ceiling**~~ ➡️ RESOLVED 2026-10-01 (Arm C):

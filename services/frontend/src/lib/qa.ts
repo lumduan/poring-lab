@@ -6,6 +6,15 @@ export type QaFrame = { file: string; frame_id: number; t_mono_ns: number; boxes
 export type QaSession = { session: string; size: [number, number]; offset_ms: number; frames: QaFrame[] };
 export type QaIndex = { sessions: { id: string; title: string; frames: number }[] };
 
+/** The session /qa opens on: the one named by `?session=` when the index has it, else the newest.
+ * (2026-10-04: the gold set was never opened because /qa always started on the newest session, a
+ * different indoor run, and a link could not name the right one.) */
+export function initialSession(index: QaIndex, search: string): string | null {
+  const wanted = new URLSearchParams(search).get("session");
+  if (wanted && index.sessions.some((s) => s.id === wanted)) return wanted;
+  return index.sessions.length ? index.sessions[index.sessions.length - 1].id : null;
+}
+
 /** Pixel boxes of a frame -> the Detections shape OverlayCanvas draws (normalized, conf 1). */
 export function toDetections(frame: QaFrame, size: [number, number]): Detections {
   const [w, h] = size;

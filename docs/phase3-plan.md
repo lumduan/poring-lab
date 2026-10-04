@@ -115,7 +115,7 @@ flowchart TD
 | **T1** motion model | ⬜ BLOCKED | the engine's movement rules (§6b) + mob_db speeds + GAT walkability, as a predictor | M0 |
 | **T2** tracker, simulated | ⬜ BLOCKED | predict → associate → update in WORLD cells, fed labels v1 thinned to 5 Hz with drops and noise | T1 + M5 |
 | **T3** tracker, real | ⬜ BLOCKED | the same on the detector's output; YOLO ~5 Hz, prediction at stream rate | T2 + M9 + T0 + the ADR-0015 ruling |
-| **M10** evaluate | 🟪 GOAL | detector: held-out sessions, Batt's gold set, the Roboflow set (OOD). Tracker: against packets (§6b) | M9 + T3 + the B6 hand-check |
+| **M10** evaluate | 🟪 GOAL | detector: held-out sessions, Batt's gold set, the Roboflow set (OOD). Tracker: against packets (§6b) | M9 + T3 + the B6 hand-check ➡️ **NOT SAVED (2026-10-04 22:55):** `/qa` opened on the newest session, p3-indoor-c, so the review covered that run; indoor-v2's frames were never fetched and no hand-check file exists. Redo: `http://192.168.1.13:3000/qa?session=20261004T103815-console-s2-indoor-v2`, **A** on each of 27 frames (→ saves) |
 
 **The real bottlenecks:**
 - ➡️ **2026-10-04 22:00: the Windows console.** M4's session could not start: `to-console` stalls
