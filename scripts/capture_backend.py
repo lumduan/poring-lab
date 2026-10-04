@@ -163,11 +163,12 @@ def verify_everywhere(body: str) -> None:
 
 
 def backend_ip() -> str:
-    res = sh(
-        "docker", "inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}",
-        BACKEND,
-    )  # fmt: skip
-    return res.stdout.strip() or "127.0.0.1"
+    here = str(Path(__file__).resolve().parent)
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    from backend_addr import backend_ip as by_name  # the DEFAULT network's (two networks since c2)
+
+    return by_name(BACKEND) or "127.0.0.1"
 
 
 def health() -> dict[str, object]:

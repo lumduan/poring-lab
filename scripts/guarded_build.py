@@ -325,10 +325,12 @@ def run_up(seconds: float, guard: Guard) -> bool:
 
 
 def backend_health(timeout: float = 3) -> dict[str, Any] | None:
-    ip = subprocess.run(
-        ["docker", "inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}",
-         BACKEND], capture_output=True, text=True, check=False,
-    ).stdout.strip()  # fmt: skip
+    here = str(Path(__file__).resolve().parent)
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    from backend_addr import backend_ip  # the DEFAULT network's address (two networks since c2)
+
+    ip = backend_ip(BACKEND)
     if not ip:
         return None
     try:

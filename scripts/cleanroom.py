@@ -126,10 +126,12 @@ def cb(*args: str, timeout: float = 600) -> subprocess.CompletedProcess[str]:
 
 
 def health() -> dict[str, Any]:
-    ip = subprocess.run(
-        ["docker", "inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}",
-         "poring-lab-backend-1"], capture_output=True, text=True, check=False,
-    ).stdout.strip() or "127.0.0.1"  # fmt: skip
+    here = str(Path(__file__).resolve().parent)
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    from backend_addr import backend_ip  # the DEFAULT network's address (two networks since c2)
+
+    ip = backend_ip() or "127.0.0.1"
     with urllib.request.urlopen(f"http://{ip}:8000/health", timeout=5) as resp:
         data: dict[str, Any] = json.loads(resp.read())
     return data

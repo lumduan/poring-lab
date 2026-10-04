@@ -410,10 +410,14 @@ def black(screen: Screen) -> bool:
 
 
 def backend_ws() -> str:
-    ip = subprocess.run(
-        ["docker", "inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}",
-         BACKEND], capture_output=True, text=True, check=True,
-    ).stdout.strip()  # fmt: skip
+    here = str(Path(__file__).resolve().parent)
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    from backend_addr import backend_ip  # the DEFAULT network's address (two networks since c2)
+
+    ip = backend_ip(BACKEND)
+    if not ip:
+        raise Stop(f"{BACKEND} has no address on the default network (not running?)")
     return f"ws://{ip}:8001/internal/agent"
 
 
