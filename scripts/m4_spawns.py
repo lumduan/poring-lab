@@ -4,6 +4,12 @@
 
     m4_spawns.py --out EVENTS.jsonl [--blocks outdoor-1 outdoor-2 indoor-1]
                  [--species poring lunatic] [--per-species 5] [--hold 40] [--background 5]
+    m4_spawns.py --check-client      rc 0 only if the RO client's title bar is on screen
+
+--check-client runs BEFORE the recorder starts: no input, no screenshot, just the title bar's
+signature distance (active <= 6, inactive ~30). On 2026-10-04 a console stream showed the Windows
+sign-in screen (tscon never ran) and a minute of it was recorded before anyone saw it; it was
+deleted, never shipped. Now nothing is recorded unless the client is what the stream shows.
 
 Per block (a scene, entered via the other map: a camera reset):
   1. `@killmonster2`, then a --background clip with no monster (the reference for differencing);
@@ -34,8 +40,28 @@ import dataset_activity as act  # noqa: E402
 import gm_vitals as gv  # noqa: E402
 import ro_agent as r  # noqa: E402
 
+CLIENT_TITLE_MAX = 40.0  # client_title_active distance: active <= 6, inactive ~30 (2026-10-04)
+
+
+def client_on_screen(screen: r.Screen) -> tuple[bool, float]:
+    """Is the RO client's title bar where the game region says (active or not)? No input."""
+    d = r.distance(screen, "client_title_active", after_ns=r.ns())
+    return d <= CLIENT_TITLE_MAX, d
+
+
+def check_client() -> int:
+    screen = r.Screen()
+    try:
+        ok, d = client_on_screen(screen)
+    finally:
+        screen.close()
+    print(json.dumps({"client_on_screen": ok, "title_distance": round(d, 1)}), flush=True)
+    return 0 if ok else 1
+
 
 def main() -> int:
+    if "--check-client" in sys.argv[1:]:
+        return check_client()
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--blocks", nargs="+", default=["outdoor-1", "outdoor-2", "indoor-1"])
