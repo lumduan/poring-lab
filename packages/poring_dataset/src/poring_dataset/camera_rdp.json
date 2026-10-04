@@ -470,5 +470,11 @@
     }
    }
   }
+ },
+ "indoor": {
+  "yaw_deg": -45.0,
+  "source": "nmeylan/nostalro-client@15b3029 (Apache-2.0): map_loader.rs:85-90 (indoorrswtable.txt), camera.rs:189-209 (indoor yaw 45 degrees off the default; pitch/FOV/distance unchanged)",
+  "validated": null,
+  "note": "ported default; scripts/camera_validate.py (B2) measures the sign in our yaw convention and records the residuals here"
  }
 }

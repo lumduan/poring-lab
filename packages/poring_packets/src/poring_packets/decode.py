@@ -111,8 +111,9 @@ def decode(server: str, direction: str, pid: int, b: bytes) -> Decoded | None:
                 x0, y0, x1, y1 = pos2(b, 67)
                 f.update(x=x0, y=y0, x1=x1, y1=y1, move_start_tick=_u32(b, 37))
             else:
-                x, y, _ = pos(b, 63)
-                f.update(x=x, y=y)
+                x, y, heading = pos(b, 63)
+                # RO heading 0..7 (0 = north, counter-clockwise); a 4-bit field, so guard it
+                f.update(x=x, y=y, heading=heading if heading < 8 else None)
             return Decoded("entity_appear", f)
         if pid == 0x0080:
             return Decoded("entity_vanish", {"gid": _u32(b, 2), "reason": b[6]})

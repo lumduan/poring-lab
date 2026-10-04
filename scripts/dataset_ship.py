@@ -5,6 +5,7 @@
     dataset_ship.py status [--root DIR] [--dest DIR]
     dataset_ship.py prune [--older-than 365d] [--apply] [--dest DIR]
     dataset_ship.py pin SESSION_ID --reason TEXT [--dest DIR]
+    dataset_ship.py mark-invalid SESSION_ID --reason TEXT [--dest DIR]
 
 Where things live:
 * Local root (record_session.py's default --out): /home/batt/poring-lab-rec. It is on the disk
@@ -31,6 +32,11 @@ means never pruned; `pin` writes one with its reason.
 
 The manifest is excluded from checksums.sha256 because step 4 rewrites it; its integrity is
 checked byte-for-byte in step 3 instead, and storage.checksums_sha256 chains to the data files.
+
+mark-invalid (Post-S2 round B6', 2026-10-04): a shipped session whose LABELS are known wrong (the
+indoor set fitted with the outdoor camera) is marked in its NAS manifest -- "validity": {status
+INVALID, reason, marked_at} -- and in INDEX.jsonl. It is KEPT (Batt: keep it): the data files and
+their checksums are untouched; qa_export refuses it unless told otherwise.
 """
 
 import argparse
@@ -423,6 +429,23 @@ def cmd_pin(a: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_mark_invalid(a: argparse.Namespace) -> int:
+    check_dest(a.dest, a.dest_is_dir_for_tests)
+    session = a.dest / a.session
+    if not (session / MANIFEST).is_file():
+        raise Refused(f"no shipped session {a.session!r} on the NAS")
+    stamp = now().isoformat(timespec="seconds")
+    manifest = read_manifest(session)
+    manifest["validity"] = {"status": "INVALID", "reason": a.reason, "marked_at": stamp}
+    write_manifest(session, manifest)
+    if read_manifest(session).get("validity", {}).get("status") != "INVALID":
+        raise Refused(f"{a.session}: the manifest did not read back INVALID")
+    append_index(a.dest, {"event": "invalidated", "session_id": a.session, "reason": a.reason,
+                          "marked_at": stamp})  # fmt: skip
+    print(f"marked INVALID {a.session} (kept; data files untouched)")
+    return 0
+
+
 def parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -445,6 +468,9 @@ def parser() -> argparse.ArgumentParser:
     pin = sub.add_parser("pin", parents=[common])
     pin.add_argument("session")
     pin.add_argument("--reason", required=True)
+    invalid = sub.add_parser("mark-invalid", parents=[common])
+    invalid.add_argument("session")
+    invalid.add_argument("--reason", required=True)
     return ap
 
 
@@ -457,6 +483,8 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_status(a)
         if a.cmd == "prune":
             return cmd_prune(a)
+        if a.cmd == "mark-invalid":
+            return cmd_mark_invalid(a)
         return cmd_pin(a)
     except Refused as exc:
         print(f"REFUSED: {exc}", file=sys.stderr)

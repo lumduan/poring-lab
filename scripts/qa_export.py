@@ -13,6 +13,12 @@
 * Bundle: services/frontend/.qa-local/<session>/ (gitignored, .dockerignore'd, dev route only) --
   frames as lossless PNG + labels.json; index.json lists the sessions.
 * --sheet: also an offline contact sheet with the boxes drawn (for reports), e.g. in /dev/shm.
+* Indoor maps (Post-S2 round B1): the camera rotated by the client's own rule (camera.py); the
+  client's indoorrswtable.txt must be extracted into the GAT dir, else the export refuses (fail
+  closed: an outdoor camera on an indoor map gave the invalid 2026-10-04 indoor labels). Hidden NPC
+  classes and warp portals are not labelled; each box carries its sprite `facing`.
+* A session marked INVALID (dataset_ship.py mark-invalid: the manifest's "validity") is refused
+  unless --allow-invalid.
 """
 
 import argparse
@@ -27,7 +33,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from poring_dataset import mapcache  # noqa: E402
-from poring_dataset.camera import projector_for  # noqa: E402
+from poring_dataset.camera import load_indoor_table, map_camera, projector_for  # noqa: E402
 from poring_dataset.labels import gm_windows, in_windows, labels_for  # noqa: E402
 from poring_dataset.projection import camera_file  # noqa: E402
 from poring_dataset.shards import encode_png, read_shard  # noqa: E402
@@ -75,6 +81,52 @@ def draw(img: np.ndarray, boxes: list[dict[str, Any]]) -> np.ndarray:
     return out
 
 
+class Labeler:
+    """A session's auto-labels at any frame time (qa_export and label_iou.py share it)."""
+
+    def __init__(self, session: Path, offset_ms: str = "auto", *, allow_invalid: bool = False):
+        self.manifest = json.loads((session / "manifest.json").read_text())
+        validity = self.manifest.get("validity") or {}
+        if validity.get("status") == "INVALID" and not allow_invalid:
+            raise SystemExit(f"{session.name} is marked INVALID ({validity.get('reason')}): "
+                             "--allow-invalid")  # fmt: skip
+        self.camera_path = camera_file(self.manifest["backend"])
+        if not self.camera_path.exists():
+            be = self.manifest["backend"]
+            raise SystemExit(f"no calibrated camera for {be}: run "
+                             f"scripts/calibrate_projection.py --backend {be} --save")  # fmt: skip
+        self.camera = json.loads(self.camera_path.read_text())
+        self.indoor = load_indoor_table()  # fail closed: indoor maps need the client's table
+        self.projectors: dict[str | None, tuple[Any, str, float | None]] = {}
+        self.offset_run = None
+        if offset_ms == "auto":
+            self.offset_ms, self.offset_run = auto_offset_ms(self.manifest["config"])
+        else:
+            self.offset_ms = float(offset_ms)
+        with gzip.open(session / "packets.jsonl.gz", "rt") as fh:
+            events = [json.loads(line) for line in fh]
+        self.timeline = Timeline(events, mapcache.load(prere=True))
+        self.windows = gm_windows(events)
+        region = self.manifest["game_region"]
+        self.size = (region[2], region[3])
+
+    def boxes(self, t: int) -> list[dict[str, Any]] | None:
+        """The boxes of a frame captured at ``t`` (None inside a GM-command window)."""
+        if in_windows(t, self.windows):
+            return None
+        world = self.timeline.frame_world(t - int(self.offset_ms * 1e6))
+        if world.map not in self.projectors:
+            projector, which = projector_for(self.camera, world.map, indoor_table=self.indoor)
+            cam = map_camera(self.camera, world.map, self.indoor)
+            self.projectors[world.map] = (projector, which, None if cam is None else cam.yaw)
+        projector, _, yaw = self.projectors[world.map]
+        return [
+            {"x1": b.x0, "y1": b.y0, "x2": b.x1, "y2": b.y1, "cls": b.cls, "gid": b.gid,
+             "facing": b.facing}
+            for b in labels_for(world, projector, self.size, camera_yaw=yaw)
+        ]  # fmt: skip
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     ap.add_argument("session", type=Path)
@@ -82,25 +134,10 @@ def main() -> int:
     ap.add_argument("--max", type=int, default=40)
     ap.add_argument("--offset-ms", default="auto")
     ap.add_argument("--sheet", type=Path)
+    ap.add_argument("--allow-invalid", action="store_true")
     a = ap.parse_args()
-    manifest = json.loads((a.session / "manifest.json").read_text())
-    camera_path = camera_file(manifest["backend"])
-    if not camera_path.exists():
-        backend = manifest["backend"]
-        raise SystemExit(f"no calibrated camera for {backend}: run "
-                         f"scripts/calibrate_projection.py --backend {backend} --save")  # fmt: skip
-    camera = json.loads(camera_path.read_text())
-    projectors: dict[str | None, tuple[Any, str]] = {}  # per map: camera + GAT, or homography
-    offset_run = None
-    if a.offset_ms == "auto":
-        offset_ms, offset_run = auto_offset_ms(manifest["config"])
-    else:
-        offset_ms = float(a.offset_ms)
-    with gzip.open(a.session / "packets.jsonl.gz", "rt") as fh:
-        events = [json.loads(line) for line in fh]
-    timeline = Timeline(events, mapcache.load(prere=True))
-    windows = gm_windows(events)
-    size = (manifest["game_region"][2], manifest["game_region"][3])
+    lab = Labeler(a.session, a.offset_ms, allow_invalid=a.allow_invalid)
+    manifest, size = lab.manifest, lab.size
     out_dir = BUNDLES / manifest["session_id"]
     out_dir.mkdir(parents=True, exist_ok=True)
     frames_out: list[dict[str, Any]] = []
@@ -112,16 +149,9 @@ def main() -> int:
             if (n - 1) % a.every or len(frames_out) >= a.max:
                 continue
             t = int(meta["t_mono_ns"])
-            if in_windows(t, windows):
+            boxes = lab.boxes(t)
+            if boxes is None:
                 continue
-            world = timeline.frame_world(t - int(offset_ms * 1e6))
-            if world.map not in projectors:
-                projectors[world.map] = projector_for(camera, world.map)
-            projector, _ = projectors[world.map]
-            boxes = [
-                {"x1": b.x0, "y1": b.y0, "x2": b.x1, "y2": b.y1, "cls": b.cls, "gid": b.gid}
-                for b in labels_for(world, projector, size)
-            ]
             name = f"{meta['frame_id']:09d}.png"
             (out_dir / name).write_bytes(encode_png(img))
             frames_out.append({"file": name, "frame_id": meta["frame_id"], "t_mono_ns": t,
@@ -129,9 +159,9 @@ def main() -> int:
             if a.sheet and len(sheet) < 12:
                 sheet.append(draw(img, boxes))
     (out_dir / "labels.json").write_text(json.dumps({
-        "session": manifest["session_id"], "size": list(size), "offset_ms": offset_ms,
-        "offset_run": offset_run, "camera": camera_path.name,
-        "projection": sorted({which for _, which in projectors.values()}),
+        "session": manifest["session_id"], "size": list(size), "offset_ms": lab.offset_ms,
+        "offset_run": lab.offset_run, "camera": lab.camera_path.name,
+        "projection": sorted({which for _, which, _ in lab.projectors.values()}),
         "frames": frames_out,
     }))  # fmt: skip
     index_path = BUNDLES / "index.json"
@@ -151,7 +181,7 @@ def main() -> int:
         a.sheet.write_bytes(encode_png(np.vstack(rows)))
     labelled = sum(1 for f in frames_out if f["boxes"])
     print(json.dumps({"bundle": str(out_dir), "frames": len(frames_out), "with_boxes": labelled,
-                      "offset_ms": offset_ms, "offset_run": offset_run}))  # fmt: skip
+                      "offset_ms": lab.offset_ms, "offset_run": lab.offset_run}))  # fmt: skip
     return 0
 
 

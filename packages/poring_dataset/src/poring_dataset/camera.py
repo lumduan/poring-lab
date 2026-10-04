@@ -18,6 +18,19 @@ yaw 0 the eye is south of and above the target, looking north; screen v grows do
 Why it can beat a homography: a homography maps ONE plane. The camera is a 3-D projection, so a
 cell's ALTITUDE (from the map's GAT) moves its pixel the way the client draws it -- the flat-ground
 assumption is the first suspect for the projection's residual tail (phase2-plan B4).
+
+INDOOR maps (Post-S2 round B1, 2026-10-04): the client draws them with the camera ROTATED. PORTED
+(the rule, re-expressed; no code copied) from nostalro-client @ 15b3029 (Apache-2.0,
+THIRD_PARTY.md): a map is indoor iff "<map>.rsw" is listed in the client's
+data/indoorrswtable.txt (map_loader.rs:85-90), and an indoor map forces the yaw 45 degrees off the
+outdoor default (camera.rs:189-209); pitch, FOV and the default distance are unchanged. The table is
+CLIENT data, read from the GRF into /dev/shm at run time (grf_read.py extract), never committed.
+The sign in OUR yaw convention is measured (B2, scripts/camera_validate.py) and recorded in
+camera_<backend>.json ("indoor"); INDOOR_YAW_DEG is the default until then.
+
+Billboard FACING (B4): the sprite direction a client draws = nostalro act.rs:568-570,
+(camera_dir + 12 - heading) % 8, where camera_dir is the camera's look direction as an RO heading
+(0 = north, counter-clockwise) -- displayed_direction() below.
 """
 
 import json
@@ -35,6 +48,14 @@ Projector = Callable[[Array, tuple[int, int]], Array]
 GAT_DIR = Path(os.environ.get("PORING_GAT_DIR", "/dev/shm/poring-lab-tmp/gat/data"))
 CELL = 5.0  # world units per GAT cell
 NAMES = ("yaw", "pitch", "distance", "fov", "cx", "cy")
+INDOOR_TABLE = "indoorrswtable.txt"  # the client's data/indoorrswtable.txt, extracted into GAT_DIR
+INDOOR_YAW_DEG = -45.0  # nostalro camera.rs:189-209; the sign in our convention is B2's to confirm
+INDOOR_SOURCE = (
+    "nmeylan/nostalro-client@15b3029 (Apache-2.0): map_loader.rs:85-90 (indoorrswtable.txt), "
+    "camera.rs:189-209 (indoor yaw 45 degrees off the default; pitch/FOV/distance unchanged)"
+)
+# The sprite (ACT) directions, as drawn on screen: 0 = facing the viewer ... 4 = the back.
+SPRITE_DIRECTIONS = ("S", "SW", "W", "NW", "N", "NE", "E", "SE")
 
 
 @dataclass(frozen=True)
@@ -164,29 +185,142 @@ def camera_from_json(block: dict[str, float], height: int = 720) -> Camera:
     return Camera.from_vector(np.array([float(block[n]) for n in NAMES]), height)
 
 
+class IndoorTableMissing(FileNotFoundError):
+    """The client's indoor-map table is not extracted: indoor maps cannot be told from outdoor
+    ones, and an outdoor camera on an indoor map gives wrong labels (the 2026-10-04 indoor set)."""
+
+
+def map_key(map_name: str) -> str:
+    """'prt_church.gat' / 'PRT_CHURCH.rsw' / 'prt_church' -> 'prt_church'."""
+    name = map_name.strip().lower()
+    for ext in (".gat", ".rsw"):
+        if name.endswith(ext):
+            name = name[: -len(ext)]
+    return name
+
+
+def parse_indoor_table(text: str) -> frozenset[str]:
+    """One "<map>.rsw" per line (a trailing '#' is the client's terminator), '//' comments."""
+    names = set()
+    for raw in text.splitlines():
+        line = raw.split("//", 1)[0].strip().rstrip("#").strip()
+        if line:
+            names.add(map_key(line))
+    return frozenset(names)
+
+
+def load_indoor_table(gat_dir: Path = GAT_DIR) -> frozenset[str]:
+    """The client's indoor maps. Raises IndoorTableMissing (fail closed) when it is not extracted:
+    ``grf_read.py extract <data.grf> data/indoorrswtable.txt`` into the GAT dir."""
+    path = gat_dir / INDOOR_TABLE
+    if not path.exists():
+        raise IndoorTableMissing(
+            f"{path} is missing: extract data/indoorrswtable.txt from the client's GRF into "
+            f"{gat_dir} (scripts/grf_read.py extract) -- client data, never committed"
+        )
+    return parse_indoor_table(path.read_bytes().decode("latin-1"))
+
+
+def is_indoor(map_name: str | None, table: frozenset[str]) -> bool:
+    return bool(map_name) and map_key(str(map_name)) in table
+
+
+def indoor_yaw_deg(camera_json: dict[str, object]) -> float:
+    """The measured indoor offset when B2 recorded one (camera_<backend>.json "indoor"), else the
+    ported default."""
+    block = camera_json.get("indoor")
+    if isinstance(block, dict) and isinstance(block.get("yaw_deg"), int | float):
+        return float(block["yaw_deg"])
+    return INDOOR_YAW_DEG
+
+
+def camera_for_map(fitted: Camera, indoor: bool, yaw_offset_deg: float = INDOOR_YAW_DEG) -> Camera:
+    """The camera the client uses on a map: the fitted (outdoor) default, rotated on indoor maps."""
+    return replace(fitted, yaw=fitted.yaw + np.radians(yaw_offset_deg)) if indoor else fitted
+
+
 def projector_for(
-    camera_json: dict[str, object], map_name: str | None, gat_dir: Path = GAT_DIR
+    camera_json: dict[str, object],
+    map_name: str | None,
+    gat_dir: Path = GAT_DIR,
+    *,
+    indoor_table: frozenset[str] | None = None,
 ) -> tuple[Projector, str]:
     """(projector, which): the perspective camera + the map's GAT altitude when both exist (the
     held-out winner, 2026-10-03), else the flat homography ``h``. The GAT is client data that
-    lives only in /dev/shm (grf_read.py extract --decode-des), never in the repository."""
+    lives only in /dev/shm (grf_read.py extract --decode-des), never in the repository.
+
+    Indoor maps (B1) ALWAYS use the rotated camera -- flat when the GAT is missing -- never the
+    homography, which was fitted on the outdoor default. ``indoor_table``: the client's indoor maps
+    (default: load_indoor_table(gat_dir), which fails closed when it is not extracted)."""
     from poring_dataset import gat as gatmod
     from poring_dataset.projection import project
 
+    table = load_indoor_table(gat_dir) if indoor_table is None else indoor_table
     block = camera_json.get("camera")
-    if map_name and map_name.lower().endswith(".gat"):
-        map_name = map_name[:-4]  # the map-change packet names it "prt_fild08.gat"
+    if map_name:
+        map_name = map_key(map_name)  # the map-change packet names it "prt_fild08.gat"
+    indoor = is_indoor(map_name, table)
     path = gat_dir / f"{map_name}.gat" if map_name else None
-    if isinstance(block, dict) and path is not None and path.exists():
-        cam = camera_from_json(block, int(block.get("height", 720)))
+    if indoor and not isinstance(block, dict):
+        raise ValueError(f"{map_name} is indoor and the camera json has no fitted camera")
+    if isinstance(block, dict) and (indoor or (path is not None and path.exists())):
+        fitted = camera_from_json(block, int(block.get("height", 720)))
+        cam = camera_for_map(fitted, indoor, indoor_yaw_deg(camera_json))
+        tag = f"{'indoor ' if indoor else ''}{map_name}"
+        if path is None or not path.exists():
+            return (lambda offsets, _origin: cam.project(offsets)), f"camera(flat):{tag}"
         grid = gatmod.parse(path.read_bytes())
 
         def perspective(offsets: Array, origin: tuple[int, int]) -> Array:
             return cam.project(offsets, grid.relative_altitude(origin, offsets))
 
-        return perspective, f"camera+gat:{map_name}"
+        return perspective, f"camera+gat:{tag}"
     h = np.asarray(camera_json["h"], dtype=float)
     return (lambda offsets, _origin: project(h, offsets)), "homography"
+
+
+def map_camera(
+    camera_json: dict[str, object], map_name: str | None, indoor_table: frozenset[str]
+) -> Camera | None:
+    """The camera the client uses on ``map_name`` (rotated when indoor), or None without a fit."""
+    block = camera_json.get("camera")
+    if not isinstance(block, dict):
+        return None
+    fitted = camera_from_json(block, int(block.get("height", 720)))
+    return camera_for_map(fitted, is_indoor(map_name, indoor_table), indoor_yaw_deg(camera_json))
+
+
+# --- movement and facing under a rotated camera (B3, B4) ------------------------------------------
+
+
+def screen_vector(cam: Camera, dxdy: tuple[float, float]) -> Array:
+    """The on-screen pixel displacement of a flat world step (dx east, dy north, cells) away from
+    the player: what "walk 3 cells north" looks like through this camera."""
+    pts = cam.project(np.array([[0.0, 0.0], [float(dxdy[0]), float(dxdy[1])]]))
+    return np.asarray(pts[1] - pts[0], dtype=float)
+
+
+def click_for_cell(
+    projector: Projector, offset: tuple[int, int], origin: tuple[int, int]
+) -> tuple[float, float]:
+    """Client-area pixel to click to walk to the cell ``offset`` (cells) away from the player at
+    ``origin`` -- through the map's own projector, so rotated (indoor) maps walk where meant."""
+    ((u, v),) = projector(np.array([[float(offset[0]), float(offset[1])]]), origin)
+    return float(u), float(v)
+
+
+def look_heading(yaw: float) -> int:
+    """The camera's look direction as an RO heading: 0 = north, counter-clockwise in 45 degree
+    steps (2 = west, 4 = south, 6 = east). Our yaw 0 looks north; +90 degrees looks east."""
+    return int(round(float(-np.degrees(yaw)) / 45.0)) % 8
+
+
+def displayed_direction(heading: int, yaw: float) -> int:
+    """The sprite direction a billboard shows (SPRITE_DIRECTIONS index: 0 = facing the viewer,
+    4 = its back) for an entity with RO ``heading`` under a camera at ``yaw``. Ported from
+    nostalro act.rs:568-570: (camera_dir + 12 - heading) % 8, camera_dir = look_heading(yaw)."""
+    return (look_heading(yaw) + 12 - int(heading)) % 8
 
 
 def load_camera_json(path: Path) -> dict[str, object]:

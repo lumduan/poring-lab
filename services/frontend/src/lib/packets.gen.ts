@@ -17,7 +17,7 @@ export interface PoringPackets {
     | EntityStop
     | StatChange
     | Chat
-    | Unknown
+    | UnknownPacket
     | Desync;
   stats: PacketStats;
   [k: string]: unknown;
@@ -177,6 +177,10 @@ export interface EntityAppear {
    */
   gid: number;
   gm_command: boolean;
+  /**
+   * Heading 0..7 (0 = north, counter-clockwise) for new/stand entries; a walking entity faces its step (derived downstream).
+   */
+  heading: number | null;
   job: number;
   kind: "new" | "stand" | "move";
   move_start_tick: number | null;
@@ -279,9 +283,9 @@ export interface Chat {
  * A packet id the length table does not know; its stream is resynchronised (counted).
  *
  * This interface was referenced by `PoringPackets`'s JSON-Schema
- * via the `definition` "Unknown".
+ * via the `definition` "UnknownPacket".
  */
-export interface Unknown {
+export interface UnknownPacket {
   count: number;
   dir: "cs" | "sc";
   gm_command: boolean;

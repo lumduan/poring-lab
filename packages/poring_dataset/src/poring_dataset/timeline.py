@@ -22,7 +22,15 @@ from typing import Any
 
 from poring_dataset.mapcache import MapGrid
 from poring_dataset.paths import path_search
-from poring_packets.world import MOVE_COST, MOVE_DIAGONAL_COST, TICK_MOD, Walk, World, path_cells
+from poring_packets.world import (
+    MOVE_COST,
+    MOVE_DIAGONAL_COST,
+    TICK_MOD,
+    Walk,
+    World,
+    heading_of,
+    path_cells,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +42,7 @@ class EntityState:
     x: float
     y: float
     moving: bool
+    heading: int | None = None  # RO heading (0 = north, ccw): the step walked, else as appeared
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,6 +52,7 @@ class FrameWorld:
     aid: int | None
     self_pos: tuple[float, float] | None
     entities: tuple[EntityState, ...]
+    self_heading: int | None = None
 
 
 def tick_of(t_ns: int) -> int:
@@ -88,20 +98,25 @@ class Timeline:
         world = self.world_at(t_ns)
         tick = tick_of(t_ns)
         grid = self.maps.get(world.map or "")
-        self_pos = None
+        self_pos, self_heading = None, None
         if world.self_walk is not None:
-            self_pos = walk_position(world.self_walk, tick, grid)
+            *xy, self_heading = walk_state(world.self_walk, tick, grid)
+            self_pos = (xy[0], xy[1])
         elif world.self_x is not None and world.self_y is not None:
             self_pos = (float(world.self_x), float(world.self_y))
         entities = []
         for ent in world.entities.values():
+            heading = ent.dir
             if ent.walk is not None:
-                x, y = walk_position(ent.walk, tick, grid)
+                x, y, step = walk_state(ent.walk, tick, grid)
                 moving = (x, y) != (float(ent.walk.x1), float(ent.walk.y1))
+                heading = step if step is not None else heading
             else:
                 x, y, moving = float(ent.x), float(ent.y), False
-            entities.append(EntityState(ent.gid, ent.objtype, ent.job, ent.name, x, y, moving))
-        return FrameWorld(t_ns, world.map, world.aid, self_pos, tuple(entities))
+            entities.append(
+                EntityState(ent.gid, ent.objtype, ent.job, ent.name, x, y, moving, heading)
+            )
+        return FrameWorld(t_ns, world.map, world.aid, self_pos, tuple(entities), self_heading)
 
 
 @lru_cache(maxsize=65536)
@@ -113,21 +128,30 @@ def _cells(grid: MapGrid | None, x0: int, y0: int, x1: int, y1: int) -> tuple[tu
     return tuple(path_cells(x0, y0, x1, y1))
 
 
-def walk_position(walk: Walk, tick: int, grid: MapGrid | None) -> tuple[float, float]:
-    """Walk.position_at, along the real path when the map grid is known."""
+def walk_state(walk: Walk, tick: int, grid: MapGrid | None) -> tuple[float, float, int | None]:
+    """(x, y, heading): Walk.position_at along the real path when the map grid is known, and the
+    heading of the step being walked (after arrival: of the last step; before it starts: None)."""
     elapsed = (tick - walk.start_tick) % TICK_MOD
     if elapsed > TICK_MOD // 2:  # before the walk started
-        return float(walk.x0), float(walk.y0)
+        return float(walk.x0), float(walk.y0), None
     x, y = float(walk.x0), float(walk.y0)
+    heading = None
     for cx, cy in _cells(grid, walk.x0, walk.y0, walk.x1, walk.y1):
+        heading = heading_of(cx - x, cy - y)
         diagonal = cx != x and cy != y
         step = walk.speed * (MOVE_DIAGONAL_COST if diagonal else MOVE_COST) / MOVE_COST
         if elapsed < step:
             frac = elapsed / step
-            return x + (cx - x) * frac, y + (cy - y) * frac
+            return x + (cx - x) * frac, y + (cy - y) * frac, heading
         elapsed -= int(step)
         x, y = float(cx), float(cy)
-    return float(walk.x1), float(walk.y1)
+    return float(walk.x1), float(walk.y1), heading
+
+
+def walk_position(walk: Walk, tick: int, grid: MapGrid | None) -> tuple[float, float]:
+    """Walk.position_at, along the real path when the map grid is known."""
+    x, y, _ = walk_state(walk, tick, grid)
+    return x, y
 
 
 # The client's world resets on these: a session's packets must start at the last one before the

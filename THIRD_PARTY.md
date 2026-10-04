@@ -27,6 +27,23 @@
 | [nmeylan/nostalro-client](https://github.com/nmeylan/nostalro-client) | `15b3029059c04cf1d54d734f7233e5db3c108a9c` | Apache-2.0 (`LICENSE.md`) | `lib/renderer/src/camera.rs` |
 | [vE5li/korangar](https://github.com/vE5li/korangar) | `e14d3203ad63f35962f6492d8a6b348eb8f47d47` | MIT, © 2023 Lucas Pütz (`LICENSE.md`) | `korangar/src/world/cameras/player.rs`, `mod.rs` |
 
+### The indoor camera rule and the billboard facing (2026-10-04, Post-S2 round B1/B4)
+- **Ported to:** `packages/poring_dataset/src/poring_dataset/camera.py` (`load_indoor_table`,
+  `is_indoor`, `camera_for_map`, `look_heading`, `displayed_direction`).
+- **What:** two rules, re-expressed (no code copied verbatim):
+  - a map is INDOOR iff `<map>.rsw` is listed in the client's `data/indoorrswtable.txt`, and the
+    client then draws it with the yaw 45° off the default (pitch, FOV and distance unchanged; only
+    the zoom/pitch clamp bands narrow). The sign in our yaw convention is measured, not assumed
+    (`scripts/camera_validate.py`, recorded in `camera_<backend>.json` "indoor");
+  - the sprite direction a billboard shows = `(camera_dir + 12 − heading) % 8`, with `camera_dir`
+    the camera's look direction as an RO heading.
+- The table itself is CLIENT data: extracted from the GRF into `/dev/shm` at run time, never
+  committed.
+
+| Source | Commit | License | File read |
+|---|---|---|---|
+| [nmeylan/nostalro-client](https://github.com/nmeylan/nostalro-client) | `15b3029059c04cf1d54d734f7233e5db3c108a9c` | Apache-2.0 (`LICENSE.md`) | `lib/renderer/src/map_loader.rs` (L85-90), `lib/renderer/src/camera.rs` (L189-209), `lib/renderer/src/act.rs` (L568-570) |
+
 ### The GAT file layout
 - **Ported to:** `packages/poring_dataset/src/poring_dataset/gat.py`.
 - **What:** the layout (header, 20-byte tiles with four corner altitudes and a terrain type),

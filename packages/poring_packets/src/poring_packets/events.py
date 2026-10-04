@@ -101,6 +101,11 @@ class EntityAppear(PacketEventBase):
     x1: int | None = None  # move entries: destination
     y1: int | None = None
     move_start_tick: int | None = None
+    heading: int | None = Field(
+        default=None, ge=0, le=7,
+        description="Heading 0..7 (0 = north, counter-clockwise) for new/stand entries; a walking "
+        "entity faces its step (derived downstream).",
+    )  # fmt: skip
 
 
 class EntityVanish(PacketEventBase):
@@ -136,7 +141,7 @@ class Chat(PacketEventBase):
     raw_hex: str
 
 
-class Unknown(PacketEventBase):
+class UnknownPacket(PacketEventBase):
     """A packet id the length table does not know; its stream is resynchronised (counted)."""
 
     type: Literal["unknown"] = "unknown"
@@ -161,7 +166,7 @@ PacketEvent = Annotated[
     | EntityStop
     | StatChange
     | Chat
-    | Unknown
+    | UnknownPacket
     | Desync,
     Field(discriminator="type"),
 ]
@@ -208,7 +213,7 @@ FeedMessage = Annotated[
     | EntityStop
     | StatChange
     | Chat
-    | Unknown
+    | UnknownPacket
     | Desync
     | PacketStats,
     Field(discriminator="type"),

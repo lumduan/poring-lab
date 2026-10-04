@@ -274,3 +274,21 @@ def test_record_session_refuses_before_touching_x_when_the_caps_are_hit(
     with pytest.raises(rs.r.Stop, match="not recording: only 100 GB free"):
         rs.record(args)
     assert not (tmp_path / "rec").exists()
+
+
+def test_mark_invalid_keeps_the_session_and_its_hashes(
+    ds: ModuleType, dirs: SimpleNamespace
+) -> None:
+    """Post-S2 round B6': the indoor set labelled with the outdoor camera is marked, not deleted."""
+    sid = "20261004T061500-console-indoor"
+    session = make_session(dirs.dest, sid)
+    shard = (session / "shard-000000.tar").read_bytes()
+    argv = ["mark-invalid", sid, "--reason", "outdoor camera on an indoor map", "--dest",
+            str(dirs.dest), "--dest-is-dir-for-tests"]  # fmt: skip
+    assert ds.main(argv) == 0
+    manifest = json.loads((session / "manifest.json").read_text())
+    assert manifest["validity"]["status"] == "INVALID"
+    assert manifest["validity"]["reason"] == "outdoor camera on an indoor map"
+    assert (session / "shard-000000.tar").read_bytes() == shard  # data untouched
+    assert [(e["event"], e["session_id"]) for e in index_lines(dirs.dest)] == [("invalidated", sid)]
+    assert ds.main([*argv[:1], "nope", *argv[2:]]) == 2  # no such session: refused

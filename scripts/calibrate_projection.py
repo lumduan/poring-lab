@@ -182,9 +182,13 @@ def main() -> int:
         camera = projection.camera_file(a.backend)
         if camera.exists() and json.loads(camera.read_text()).get("backend") != a.backend:
             raise r.Stop(f"{camera.name} holds another backend's camera: refusing to overwrite")
+        # the indoor rotation is a CLIENT constant (camera_validate.py measures its sign), so a
+        # recalibration keeps it; the fitted camera itself must be refitted (camera_fit.py)
+        keep = {k: v for k, v in json.loads(camera.read_text()).items() if k == "indoor"} \
+            if camera.exists() else {}  # fmt: skip
         camera.write_text(json.dumps({k: result[k] for k in (
             "stamp", "backend", "spot", "game_region", "h", "click_residual_px", "validation"
-        )} | {"pairs": result["pairs"]}, indent=1) + "\n")  # fmt: skip
+        )} | {"pairs": result["pairs"]} | keep, indent=1) + "\n")  # fmt: skip
     print(
         json.dumps(
             {k: result[k] for k in ("pairs", "click_residual_px", "validation")}, default=str

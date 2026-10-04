@@ -15,6 +15,17 @@ DEFAULT_SPEED = 150
 TICK_MOD = 1 << 32
 
 
+# RO headings: 0 = north, counter-clockwise in 45 degree steps (rAthena dirx/diry, map.hpp).
+HEADING_OF_STEP = {(0, 1): 0, (-1, 1): 1, (-1, 0): 2, (-1, -1): 3,
+                   (0, -1): 4, (1, -1): 5, (1, 0): 6, (1, 1): 7}  # fmt: skip
+
+
+def heading_of(dx: float, dy: float) -> int | None:
+    """The heading of a step (signs only); None for no step."""
+    key = ((dx > 0) - (dx < 0), (dy > 0) - (dy < 0))
+    return HEADING_OF_STEP.get(key)
+
+
 def path_cells(x0: int, y0: int, x1: int, y1: int) -> list[tuple[int, int]]:
     """Cells after the start, diagonal steps first, then straight."""
     cells: list[tuple[int, int]] = []
@@ -63,6 +74,7 @@ class Entity:
     y: int
     speed: int = DEFAULT_SPEED
     walk: Walk | None = None
+    dir: int | None = None  # heading 0..7 from the appear packet (0 = north, counter-clockwise)
 
 
 @dataclass
@@ -100,7 +112,9 @@ class World:
             gid = int(str(f["gid"]))
             objtype, job, x, y = (int(str(f[k])) for k in ("objtype", "job", "x", "y"))
             speed = int(str(f["speed"])) or DEFAULT_SPEED
-            ent = Entity(gid, objtype, job, str(f["name"]), x, y, speed)
+            heading = f.get("heading")
+            ent = Entity(gid, objtype, job, str(f["name"]), x, y, speed,
+                         dir=None if heading is None else int(str(heading)))  # fmt: skip
             if f.get("x1") is not None:
                 ent.walk = Walk(ent.x, ent.y, int(str(f["x1"])), int(str(f["y1"])),
                                 int(str(f["move_start_tick"])), ent.speed)  # fmt: skip

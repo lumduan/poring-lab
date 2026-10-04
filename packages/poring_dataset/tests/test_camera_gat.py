@@ -11,6 +11,8 @@ import pytest
 from poring_dataset import gat as gatmod
 from poring_dataset.camera import Camera, fit_camera, projector_for
 
+NONE: frozenset[str] = frozenset()  # no indoor maps (the indoor rule: test_indoor_facing.py)
+
 
 def synthetic_gat(width: int, height: int, alt: np.ndarray, types: np.ndarray) -> bytes:
     """A GAT 1.2 with every corner at -alt (RO's negative-up axis)."""
@@ -81,17 +83,17 @@ def test_the_projector_uses_camera_and_gat_only_when_both_exist(tmp_path: Path) 
     h = [[30.0, 0, 640.0], [0, -30.0, 360.0], [0, 0, 1.0]]
     block = {"yaw": 0.0, "pitch": float(np.radians(45)), "distance": 400.0,
              "fov": float(np.radians(15)), "cx": 640.0, "cy": 360.0, "height": 720}  # fmt: skip
-    _, which = projector_for({"h": h}, "map_a", tmp_path)
+    _, which = projector_for({"h": h}, "map_a", tmp_path, indoor_table=NONE)
     assert which == "homography"
-    _, which = projector_for({"h": h, "camera": block}, "map_a", tmp_path)
+    _, which = projector_for({"h": h, "camera": block}, "map_a", tmp_path, indoor_table=NONE)
     assert which == "homography"  # no GAT at hand: the flat fallback
     alt = np.zeros((20, 20))
     alt[10, 12] = 8.0
     (tmp_path / "map_a.gat").write_bytes(synthetic_gat(20, 20, alt, np.zeros((20, 20), np.uint16)))
     proj, which = projector_for(json.loads(json.dumps({"h": h, "camera": block})), "map_a",
-                                tmp_path)  # fmt: skip
+                                tmp_path, indoor_table=NONE)  # fmt: skip
     assert which == "camera+gat:map_a"
-    _, which = projector_for({"h": h, "camera": block}, "map_a.gat", tmp_path)
+    _, which = projector_for({"h": h, "camera": block}, "map_a.gat", tmp_path, indoor_table=NONE)
     assert which == "camera+gat:map_a"  # the packets name maps with their .gat suffix
     flat, hill = proj(np.array([[1.0, 0.0], [2.0, 0.0]]), (10, 10))
     assert hill[1] < flat[1]  # the raised cell is drawn higher

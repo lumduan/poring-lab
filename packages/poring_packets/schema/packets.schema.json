@@ -249,6 +249,20 @@
           "default": false,
           "type": "boolean"
         },
+        "heading": {
+          "anyOf": [
+            {
+              "maximum": 7,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Heading 0..7 (0 = north, counter-clockwise) for new/stand entries; a walking entity faces its step (derived downstream)."
+        },
         "job": {
           "type": "integer"
         },
@@ -355,7 +369,8 @@
         "y",
         "x1",
         "y1",
-        "move_start_tick"
+        "move_start_tick",
+        "heading"
       ],
       "title": "EntityAppear",
       "type": "object"
@@ -1080,7 +1095,7 @@
       "title": "TimeSync",
       "type": "object"
     },
-    "Unknown": {
+    "UnknownPacket": {
       "additionalProperties": false,
       "description": "A packet id the length table does not know; its stream is resynchronised (counted).",
       "properties": {
@@ -1136,7 +1151,7 @@
         "type",
         "count"
       ],
-      "title": "Unknown",
+      "title": "UnknownPacket",
       "type": "object"
     }
   },
@@ -1158,7 +1173,7 @@
           "self_move_request": "#/$defs/SelfMoveRequest",
           "stat_change": "#/$defs/StatChange",
           "time_sync": "#/$defs/TimeSync",
-          "unknown": "#/$defs/Unknown"
+          "unknown": "#/$defs/UnknownPacket"
         },
         "propertyName": "type"
       },
@@ -1200,7 +1215,7 @@
           "$ref": "#/$defs/Chat"
         },
         {
-          "$ref": "#/$defs/Unknown"
+          "$ref": "#/$defs/UnknownPacket"
         },
         {
           "$ref": "#/$defs/Desync"
