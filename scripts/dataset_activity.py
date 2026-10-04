@@ -17,6 +17,10 @@ Porings appear, the camera stays at its default so EVERY frame is auto-labelable
   tracked from its own clicks (approximate; the warp back resets it).
 - Every --spawn-every s: GM `@monster poring 3` (labels for the monster class).
 - End (and on Ctrl-C/SIGTERM): `@killmonster2`, so no spawn outlives the recording.
+- Never a monster (Batt, 2026-10-04): a target is clicked only when a SECOND fresh frame still
+  shows the ground marker and little moved there (gm_vitals.motion_fraction). After each walk the
+  GM's vitals are read from PIXELS: low HP -> @heal; the death dialog -> @alive, @heal, the scene
+  again (gm_vitals.py).
 - No camera rotation or zoom: those make frames `camera_dirty` until the next map change, and these
   sessions exist for the default-camera auto-labels.
 
@@ -35,6 +39,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import bench  # noqa: E402
 import empty_cell as ec  # noqa: E402
+import gm_vitals as gv  # noqa: E402
 import ro_agent as r  # noqa: E402
 
 from poring_dataset import camera as cm  # noqa: E402
@@ -43,6 +48,7 @@ from poring_dataset.projection import camera_file  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 SETTLE_S = 0.35  # input -> a decoded frame showing it (p95 key->pixel 157-277 ms)
+CONFIRM_S = 0.15  # the click-time re-check: a second fresh frame this much later
 
 
 def safe_gm(agent: "r.Agent", screen: "r.Screen", command: str, counts: dict[str, int]) -> bool:
@@ -112,10 +118,13 @@ def main() -> int:
         "no_cell": 0,
         "hover_rejects": 0,
         "reentries": 0,
+        "click_rejects": 0,
+        "heals": 0,
+        "revives": 0,
     }
     info: dict[str, str] = {}
     mapname, sx, sy = bench.SCENES[a.scene]
-    gx, gy, _gw, _gh = r.game_region()
+    gx, gy, gw, gh = r.game_region()
     indoor = cm.load_indoor_table()  # fail closed: the projector must know the map's camera
     gat_path = cm.GAT_DIR / f"{mapname}.gat"
     walkable = gatmod.parse(gat_path.read_bytes()).walkable() if gat_path.exists() else None
@@ -147,13 +156,49 @@ def main() -> int:
         info["projection"] = which
         info["hover_check"] = a.hover_check
 
+        last: dict[str, ec.Img] = {}
+
         def occupied(u: int, v: int) -> bool:
             if a.hover_check == "off":
                 return False
-            if ec.is_empty_walk_cell(hover_crop(agent, screen, gx + u, gy + v)):
+            crop = hover_crop(agent, screen, gx + u, gy + v)
+            if ec.is_empty_walk_cell(crop):
+                last["crop"] = crop
                 return False
             counts["hover_rejects"] += 1
             return True
+
+        def still_empty(x: int, y: int) -> bool:
+            """Click-time re-check (Batt 2026-10-04: never click a monster): a SECOND fresh frame
+            still shows the ground marker at the target, and little moved in the crop meanwhile
+            (a monster walking in hides the marker or moves pixels). The hover-to-click gap was
+            ~0.4 s with no re-check: Porings stepped in and got hit."""
+            if a.hover_check == "off" or "crop" not in last:
+                return True
+            t = r.ns()
+            time.sleep(CONFIRM_S)
+            again = r.grab_after(screen, ec.crop_region(x, y), t + int(CONFIRM_S * 1e9))
+            moved = gv.motion_fraction(last.pop("crop"), again)
+            return ec.is_empty_walk_cell(again) and moved <= gv.MOTION_MAX
+
+        def look_after_the_gm() -> None:
+            """Pixels only: the death dialog -> @alive, @heal, the scene again; low HP -> @heal."""
+            if counts["gm_disabled"]:
+                return
+            dead = r.is_state(screen, gv.DEAD_STATE)
+            frame = r.grab_after(screen, (gx, gy, gw, gh), r.ns())
+            action = gv.vitals_action(gv.hp_fraction(frame), dead)
+            if action == "heal" and safe_gm(agent, screen, "@heal", counts):
+                counts["heals"] += 1
+            elif action == "revive":
+                r.log("activity: the GM is dead (death dialog): @alive, @heal, re-enter")
+                safe_gm(agent, screen, "@alive", counts)
+                safe_gm(agent, screen, "@heal", counts)
+                time.sleep(1.0)
+                if r.is_state(screen, gv.DEAD_STATE):  # still up: its "return to game" button
+                    agent.click(gx + gv.RETURN_TO_GAME[0], gy + gv.RETURN_TO_GAME[1])
+                counts["revives"] += 1
+                reenter(agent, screen, a.scene, counts)
 
         t_end = time.monotonic() + a.seconds
         next_spawn = time.monotonic() + 10
@@ -188,10 +233,15 @@ def main() -> int:
                 else:
                     stuck = 0
                     dx, dy, u, v = pick
-                    agent.click(gx + int(round(u)), gy + int(round(v)))
-                    pos = (pos[0] + dx, pos[1] + dy)
-                    counts["walks"] += 1
+                    x, y = gx + int(round(u)), gy + int(round(v))
+                    if still_empty(x, y):
+                        agent.click(x, y)
+                        pos = (pos[0] + dx, pos[1] + dy)
+                        counts["walks"] += 1
+                    else:
+                        counts["click_rejects"] += 1
                 agent.idle(rng.uniform(4.0, 9.0))
+                look_after_the_gm()
         finally:
             if not counts["gm_disabled"]:
                 safe_gm(agent, screen, "@killmonster2", counts)  # the runner also does it after
