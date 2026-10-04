@@ -19,6 +19,9 @@ labelled by packet truth (offline ground truth, ADR-0007 -- it labels, it never 
   168 372, the Timeline 168 371). It is inferred -- the one player-range block id (rAthena:
   accounts from 2000000, NPCs/mobs from 110000000) that stops but never appears to us -- and
   given to the Timeline as a login_accepted at the session's first event.
+  Map names: the Timeline looks the walkability grid up by the packet's map name ("x.gat"), the
+  map cache keys it bare, so walks were interpolated along the straight fallback path; the
+  truth passes the cache under both names (with_packet_names).
 * Which maps show the readout: the minimap window found by its zoom buttons (seeded by the
   magnifier icon); per map the share of frames that show it. The client draws no minimap on
   indoor maps (prt_church). The window's template and stable mask go to
@@ -108,6 +111,15 @@ def walk_ms(walk: Any, grid: Any) -> float:
     return total
 
 
+def with_packet_names(maps: Mapping[str, Any]) -> dict[str, Any]:
+    """The map cache under the names the map-change packets use too ("prt_fild08.gat"). The
+    Timeline looks a map up by the packet's name while mapcache.load keys it bare
+    ("prt_fild08"), so without the alias every walk falls back to the straight diagonal-first
+    path instead of the walkable one (the readout showed 165 370 on a walk the Timeline put at
+    165.2 372.2). Fixed here for the T0 truth only; the Timeline itself is the parent's call."""
+    return {**maps, **{f"{k}.gat": v for k, v in maps.items() if not k.endswith(".gat")}}
+
+
 def infer_self_aid(events: Iterable[Mapping[str, Any]]) -> int | None:
     """Our own block id when the events do not carry login_accepted: the one player-range id
     that stops or vanishes but never appears (every other unit enters our view by appearing).
@@ -169,7 +181,10 @@ class SessionTruth:
         offset_ms: str = "auto",
         guard_ms: float = 300.0,
         load_ms: float = 3000.0,
+        packet_names: bool = True,
     ) -> None:
+        if packet_names:
+            maps = with_packet_names(maps)
         self.manifest = json.loads((session / "manifest.json").read_text())
         if offset_ms == "auto":
             self.offset_ms, self.offset_run = qa_export.auto_offset_ms(self.manifest["config"])

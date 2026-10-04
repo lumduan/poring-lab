@@ -8,6 +8,7 @@ import gzip
 import importlib.util
 import json
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
 
@@ -81,6 +82,36 @@ def test_a_walk_cut_short_by_our_own_stop_ends_where_the_server_stopped_us(
     assert later.kind == "standing" and later.pos == (11.0, 10.0)  # not the planned (14, 10)
     during = truth.at(T0 + 200_000_000)
     assert during.kind == "walking" and during.walk_dt_ms == 0
+
+
+@dataclass(frozen=True)
+class Grid:
+    """A tiny walkability grid (the shape poring_dataset.walk needs), hashable for its cache."""
+
+    xs: int
+    ys: int
+    walls: frozenset[tuple[int, int]]
+
+    def nopass(self, x: int, y: int) -> bool:
+        return (x, y) in self.walls
+
+
+def test_walks_follow_the_walkable_path_although_packets_name_the_map_x_gat(
+    cal: ModuleType, tmp_path: Path
+) -> None:
+    """The map cache keys a map bare ("test"), the map-change packet names it "test.gat": the
+    truth must still find the grid, or the walk cuts straight through the wall."""
+    events = [ev(0, "map_change", map="test.gat", x=0, y=0), walk(100, 0, 0, 2, 0)]
+    (tmp_path / "manifest.json").write_text(json.dumps({"config": {}}))
+    with gzip.open(tmp_path / "packets.jsonl.gz", "wt") as fh:
+        fh.writelines(json.dumps(e) + "\n" for e in events)
+    maps = {"test": Grid(5, 5, frozenset({(1, 0)}))}  # a wall between start and target
+    mid = T0 + 200_000_000  # 100 ms into the first step
+    fixed = cal.SessionTruth(tmp_path, maps, offset_ms="0", load_ms=0).at(mid)
+    assert fixed.pos is not None and fixed.pos[1] > 0  # around the wall, via (1, 1)
+    legacy = cal.SessionTruth(tmp_path, maps, offset_ms="0", load_ms=0, packet_names=False)
+    straight = legacy.at(mid).pos
+    assert straight is not None and straight[1] == 0  # the fallback walks through it
 
 
 def test_cells_round_half_up(cal: ModuleType) -> None:

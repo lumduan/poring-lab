@@ -3,6 +3,7 @@
 
     selfpos_eval.py [SESSION ...] [--per-session 1500] [--mapcache DIR] [--cache DIR]
                     [--templates data/ui_anchors/minimap_digits.npz] [--out OUT.json]
+                    [--reads EARLIER.jsonl] [--legacy-map-lookup]
 
 * Sessions: default outdoor-c, outdoor-d and indoor-c, never used for calibration; a session the
   templates were calibrated on is refused (their meta lists them).
@@ -19,6 +20,10 @@
   >= 99 % exact on standing frames AND >= 97 % within one cell on walking frames.
 * Error modes: every wrong read (truth, read, digit diffs, time to the nearest walk), abstain
   reasons per class. Per-frame records go to OUT.jsonl next to OUT.json (/dev/shm, rule 7).
+* --reads: re-score an earlier run's reads (its OUT.jsonl) against the truth, decoding nothing:
+  for a TRUTH fix only -- the reads, the reader and its thresholds stay what they were.
+  --legacy-map-lookup reproduces the truth of the first registered run (2026-10-04), whose walks
+  followed the straight fallback path (see selfpos_calibrate.with_packet_names).
 
 Offline only: the packets label, they never reach the reader. Runs at nice 10.
 """
@@ -61,16 +66,12 @@ def error(read: tuple[int, int], pos: tuple[float, float]) -> int:
     return max(abs(read[0] - ex), abs(read[1] - ey))
 
 
-def evaluate_session(
-    session: Path, n: int, templates: selfpos.DigitTemplates, maps: Any, cache: Path | None
-) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+def read_session(
+    session: Path, n: int, templates: selfpos.DigitTemplates, cache: Path | None
+) -> list[dict[str, Any]]:
+    """The reader over ``n`` frames spread over the session: one record per frame, no truth."""
     from poring_dataset.h264 import H264Session
 
-    meta = templates.meta
-    truth = cal.SessionTruth(session, maps, offset_ms="auto", guard_ms=meta["guard_ms"],
-                             load_ms=meta["load_ms"])  # fmt: skip
-    info = {"offset_ms": truth.offset_ms, "offset_run": truth.offset_run,
-            "aid_source": truth.aid_source, "aid_found": truth.aid is not None}  # fmt: skip
     stream = H264Session(session)
     ids = stream.sample(n)
     index = {fid: i for i, fid in enumerate(ids)}
@@ -78,29 +79,15 @@ def evaluate_session(
     records, strips = [], []
     t0 = time.monotonic()
     for fmeta, img in stream.frames(ids, verify=False, crop=True):
-        t = int(fmeta["t_mono_ns"])
-        tr = truth.at(t)
         reading = selfpos.read_minimap(img, templates)
         strips.append(img[ry : ry + rh, rx : rx + rw].copy())
-        rec: dict[str, Any] = {
+        records.append({
             "session": session.name, "i": index[fmeta["frame_id"]], "frame_id": fmeta["frame_id"],
-            "t_mono_ns": t, "cls": frame_class(tr, meta), "map": tr.map,
-            "truth": None if tr.pos is None else [round(tr.pos[0], 3), round(tr.pos[1], 3)],
-            "walk_dt_ms": tr.walk_dt_ms, "read": None if reading.xy is None else list(reading.xy),
-            "reason": reading.reason,
+            "t_mono_ns": int(fmeta["t_mono_ns"]),
+            "read": None if reading.xy is None else list(reading.xy), "reason": reading.reason,
             "glyphs": [[g.x, g.digit, round(g.score, 3), round(g.margin, 3)]
                        for g in reading.glyphs],
-        }  # fmt: skip
-        if rec["cls"] in ("standing", "walking"):
-            if reading.xy is None:
-                rec["outcome"] = "abstain"
-            else:
-                err = error(reading.xy, tr.pos)  # type: ignore[arg-type]
-                ok = err == 0 if rec["cls"] == "standing" else err <= 1
-                rec["outcome"], rec["err"] = ("ok" if ok else "wrong"), err
-        elif rec["cls"] == "no_readout_map":
-            rec["outcome"] = "abstain" if reading.xy is None else "wrong"
-        records.append(rec)
+        })  # fmt: skip
     print(f"  {session.name}: {len(records)} frames in {time.monotonic() - t0:.0f} s",
           file=sys.stderr)  # fmt: skip
     if cache is not None and strips:
@@ -109,7 +96,33 @@ def evaluate_session(
         t_arr = np.array([r["t_mono_ns"] for r in records])
         path = cache / f"{session.name}-n{n}-roi.npz"
         np.savez(path, frame_ids=ids_arr, t_ns=t_arr, strips=np.stack(strips))
-    return records, info
+    return records
+
+
+def score_session(
+    records: list[dict[str, Any]], truth: cal.SessionTruth, meta: dict[str, Any]
+) -> None:
+    """Truth, class and outcome of every read record of one session (in place)."""
+    for rec in records:
+        tr = truth.at(int(rec["t_mono_ns"]))
+        rec.update(
+            cls=frame_class(tr, meta),
+            map=tr.map,
+            walk_dt_ms=tr.walk_dt_ms,
+            truth=None if tr.pos is None else [round(tr.pos[0], 3), round(tr.pos[1], 3)],
+        )
+        rec.pop("outcome", None)
+        rec.pop("err", None)
+        read = rec["read"]
+        if rec["cls"] in ("standing", "walking"):
+            if read is None:
+                rec["outcome"] = "abstain"
+            else:
+                err = error((read[0], read[1]), tr.pos)  # type: ignore[arg-type]
+                ok = err == 0 if rec["cls"] == "standing" else err <= 1
+                rec["outcome"], rec["err"] = ("ok" if ok else "wrong"), err
+        elif rec["cls"] == "no_readout_map":
+            rec["outcome"] = "abstain" if read is None else "wrong"
 
 
 def summarise(records: list[dict[str, Any]]) -> dict[str, Any]:
@@ -187,6 +200,16 @@ def main() -> int:
     ap.add_argument("--mapcache", type=Path, default=mapcache.GENERATED)
     ap.add_argument("--cache", type=Path, default=cal.SCRATCH / "selfpos-cache")
     ap.add_argument("--out", type=Path, default=cal.SCRATCH / "selfpos_eval.json")
+    ap.add_argument(
+        "--reads",
+        type=Path,
+        help="re-score the reads of an earlier run (its OUT.jsonl) without decoding",
+    )
+    ap.add_argument(
+        "--legacy-map-lookup",
+        action="store_true",
+        help="the truth as first registered: walks on the straight fallback path",
+    )
     a = ap.parse_args()
     templates = selfpos.load_digit_templates(a.templates)
     trained = set(templates.meta.get("training_sessions", []))
@@ -195,13 +218,27 @@ def main() -> int:
     if leaked:
         raise SystemExit(f"these sessions were used for calibration: {leaked}")
     maps = mapcache.load(a.mapcache, prere=True)
+    earlier: list[dict[str, Any]] = []
+    if a.reads is not None:
+        earlier = [json.loads(line) for line in a.reads.read_text().splitlines() if line]
+        if a.reads.resolve() == a.out.with_suffix(".jsonl").resolve():
+            raise SystemExit("--reads would be overwritten: give another --out")
 
     records: list[dict[str, Any]] = []
     truth_info = {}
     for session in sessions:
-        recs, truth_info[session.name] = evaluate_session(
-            session, a.per_session, templates, maps, a.cache
-        )
+        if a.reads is None:
+            recs = read_session(session, a.per_session, templates, a.cache)
+        else:
+            recs = [r for r in earlier if r["session"] == session.name]
+        truth = cal.SessionTruth(session, maps, offset_ms="auto",
+                                 guard_ms=templates.meta["guard_ms"],
+                                 load_ms=templates.meta["load_ms"],
+                                 packet_names=not a.legacy_map_lookup)  # fmt: skip
+        truth_info[session.name] = {"offset_ms": truth.offset_ms, "offset_run": truth.offset_run,
+                                    "aid_source": truth.aid_source,
+                                    "aid_found": truth.aid is not None}  # fmt: skip
+        score_session(recs, truth, templates.meta)
         records += recs
 
     groups = {s.name.split("-p3-")[-1]: summarise([r for r in records if r["session"] == s.name])
@@ -217,6 +254,8 @@ def main() -> int:
         "per_session": a.per_session,
         "templates": str(a.templates),
         "training_sessions": sorted(trained),
+        "reads_from": None if a.reads is None else str(a.reads),
+        "map_lookup": "legacy (straight fallback path)" if a.legacy_map_lookup else "walkable path",
         "truth": truth_info,
         "groups": groups,
         "errors": error_modes(records),
