@@ -122,8 +122,12 @@ def row4_grab_bus(seconds: float = 5.0) -> tuple[str, str]:
 
 
 def row5_closed_network() -> tuple[str, str]:
-    targets = [("10.210.97.1", 22), ("10.210.97.1", 11434), ("10.210.97.1", 8000),
-               ("192.168.1.13", 8000), ("192.168.1.1", 53), ("1.1.1.1", 443)]  # fmt: skip
+    # With gateway_mode_ipv4=isolated the host takes NO address on the agent bridge (10.210.97.1 is
+    # a container -- the backend). So probe the host where it does live: its LAN address, the
+    # default compose bridge's host side, docker0 -- and the outside world.
+    targets = [("192.168.1.13", 22), ("192.168.1.13", 8000), ("192.168.1.13", 11434),
+               ("10.210.96.1", 22), ("172.17.0.1", 22), ("192.168.1.1", 53),
+               ("1.1.1.1", 443)]  # fmt: skip
     reached = []
     for host, port in targets:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
