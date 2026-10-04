@@ -20,6 +20,10 @@ runner, the watchdog and a human).
     cleanroom.py hold | heartbeat | status
     cleanroom.py end                          hold, to-rdp, the exit checks, stop the watchdog
     cleanroom.py watchdog                     (systemd-run --user; never by hand)
+    cleanroom.py guard                        (a systemd --user TIMER, every 60 s while a room runs;
+                                              never by hand): a room active + its watchdog unit not
+                                              running -> `capture_backend.py alarm --set
+                                              watchdog_down` (RED on the console, /health.alarms)
 
 The WATCHDOG survives this session: on a variant's box (+5 min), a stale heartbeat (10 min) or the
 hard cap it SIGTERMs the runner and runs the clean to-rdp. It defers to a human at the console
@@ -346,6 +350,53 @@ def stop_watchdog() -> None:
     say("watchdog stopped")
 
 
+# --- the watchdog is watched (2026-10-04) -------------------------------------------------------
+# A transient systemd TIMER runs `cleanroom.py guard` every 60 s while a room runs. A timer is no
+# long-running process, so no RuntimeMaxSec can kill it the way it killed the watchdog at 00:16:46.
+GUARD_UNIT = "poring-cleanroom-guard"
+
+
+def guard_alarm(phase: object, watchdog_up: bool) -> bool:
+    """The alarm condition: a room is active and its watchdog unit is not running."""
+    return phase in ROOM_ACTIVE and not watchdog_up
+
+
+def cmd_guard() -> int:
+    want = guard_alarm(load_status().get("phase"), watchdog_active())
+    have = (REPO / "state" / "cleanroom-alarm").exists()
+    if want and not have:
+        say("GUARD: a room is active and its watchdog is DOWN -> alarm")
+        return cb("alarm", "--set", "watchdog_down", timeout=60).returncode
+    if have and not want:
+        return cb("alarm", "--clear", timeout=60).returncode
+    return 0
+
+
+def start_guard() -> None:
+    subprocess.run(["systemctl", "--user", "stop", f"{GUARD_UNIT}.timer"], check=False,
+                   capture_output=True)  # fmt: skip
+    subprocess.run(["systemctl", "--user", "reset-failed", f"{GUARD_UNIT}.service"], check=False,
+                   capture_output=True)  # fmt: skip
+    cmd = [
+        "systemd-run", "--user", "--unit", GUARD_UNIT, "--on-active=60", "--on-unit-active=60",
+        "--setenv=TMPDIR=/dev/shm/poring-lab-tmp", "--setenv=PYTHONDONTWRITEBYTECODE=1",
+        "--setenv=TZ=Asia/Bangkok", f"--setenv=CLEANROOM_DIR={STATE}",
+        f"--working-directory={REPO}", PY, str(REPO / "scripts" / "cleanroom.py"), "guard",
+    ]  # fmt: skip
+    res = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if res.returncode != 0:
+        raise SystemExit(f"STOP: the guard timer did not start: {res.stderr.strip()}")
+    say(f"guard timer {GUARD_UNIT}.timer: checks the watchdog every 60 s")
+
+
+def stop_guard() -> None:
+    subprocess.run(["systemctl", "--user", "stop", f"{GUARD_UNIT}.timer"], check=False,
+                   capture_output=True)  # fmt: skip
+    if (REPO / "state" / "cleanroom-alarm").exists():
+        cb("alarm", "--clear", timeout=60)
+    say("guard timer stopped")
+
+
 # --- runner commands ----------------------------------------------------------------------------
 
 
@@ -408,6 +459,7 @@ def cmd_start(hard_cap_min: float) -> int:
     new_room_status(phase="starting", entry_ts=now, hard_cap_ts=now + hard_cap_min * 60,
                     runner_pid=os.getpid(), variant=None, box_until_ts=0, history=[])  # fmt: skip
     start_watchdog(hard_cap_min)
+    start_guard()
     cap_ts = str(int(now + hard_cap_min * 60))  # shown on the console (state/cleanroom)
     res = cb("to-console", "--yes-tscon", "--cleanroom", "--hard-cap", cap_ts, timeout=300)
     if res.returncode != 0:
@@ -554,6 +606,7 @@ def cmd_end() -> int:
     res = cb("to-rdp", timeout=TO_RDP_TIMEOUT_S)
     checks = exit_checks()
     stop_watchdog()
+    stop_guard()
     save_status(phase="ended", exit_checks=checks, to_rdp_rc=res.returncode)
     print(json.dumps(checks, indent=1))
     return 0 if res.returncode == 0 and all(checks.values()) else 1
@@ -612,11 +665,13 @@ def main() -> int:
     va.add_argument("--knob", action="append", help="S2 only: an experiment knob K=V")
     ch = sub.add_parser("checks")
     ch.add_argument("--box-min", type=float, default=BOXES_MIN["checks"])
-    for name in ("hold", "heartbeat", "status", "end", "watchdog"):
+    for name in ("hold", "heartbeat", "status", "end", "watchdog", "guard"):
         sub.add_parser(name)
     args = ap.parse_args()
     if args.cmd == "watchdog":
         return cmd_watchdog()
+    if args.cmd == "guard":
+        return cmd_guard()
     heartbeat()
     if args.cmd == "preflight":
         return cmd_preflight()

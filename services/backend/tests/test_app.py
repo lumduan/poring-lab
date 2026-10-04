@@ -558,3 +558,12 @@ def test_health_reports_the_frame_bus_inert_without_a_ring(make_client: Factory)
     client, _ = make_client()
     bus = client.get("/health").json()["framebus"]
     assert (bus["active"], bus["writer"], bus["path"]) == ("x11", None, "/framebus/ring")
+
+
+def test_a_safety_alarm_reaches_health_and_status(make_client: Factory, tmp_path: Path) -> None:
+    """2026-10-04: state/cleanroom-alarm (capture_backend.py alarm) -> /health.alarms + Status."""
+    lab_state = tmp_path / "lab-state"
+    lab_state.mkdir(exist_ok=True)
+    (lab_state / "cleanroom-alarm").write_text("ALARM=watchdog_down\nSINCE=1791000000\n")
+    client, _ = make_client(lab_state_dir=lab_state)
+    assert client.get("/health").json()["alarms"] == ["watchdog_down"]

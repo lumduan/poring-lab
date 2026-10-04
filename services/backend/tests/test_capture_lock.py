@@ -604,3 +604,31 @@ def test_the_python_and_bash_variant_whitelists_agree() -> None:
     assert cb.variant_body("S2").endswith("INPUT=socket\nEVIDENCE=thread\nFPS=60\n")  # winners
     body = cb.variant_body("S2", {"FPS": "30", "EVIDENCE": "inline"})  # a knob overrides
     assert body.endswith("INPUT=socket\nEVIDENCE=inline\nFPS=30\n")
+
+
+# --- alarms (2026-10-04): the watchdog is watched ------------------------------------------------
+
+
+def test_the_alarm_file_is_whitelisted(tmp_path: Path) -> None:
+    from poring_backend.capture_lock import format_alarm, parse_alarms, read_alarms
+
+    assert parse_alarms(format_alarm("watchdog_down", 1_791_000_000)) == ["watchdog_down"]
+    assert parse_alarms("ALARM=rm_rf\nSINCE=1\n") == []  # off the whitelist: ignored
+    assert parse_alarms("ALARM=watchdog_down $(id)\n") == []  # malformed: ignored
+    assert read_alarms(tmp_path) == []  # no file, no alarm
+    with pytest.raises(ValueError):
+        format_alarm("anything", 1)
+
+
+def test_the_guard_raises_the_alarm_only_for_a_running_room_without_its_watchdog() -> None:
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("cleanroom_g", ROOT / "scripts" / "cleanroom.py")
+    assert spec and spec.loader
+    cr = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cr)
+    for phase in ("entered", "variant", "streaming", "checks"):
+        assert cr.guard_alarm(phase, watchdog_up=False) is True
+        assert cr.guard_alarm(phase, watchdog_up=True) is False
+    for phase in ("ended", "starting", None, "enter-failed"):
+        assert cr.guard_alarm(phase, watchdog_up=False) is False

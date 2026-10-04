@@ -1091,6 +1091,13 @@
       "additionalProperties": false,
       "description": "Mux and pipeline state, pushed at ~1 Hz and on every change.",
       "properties": {
+        "alarms": {
+          "description": "Safety alarms the console shows RED (2026-10-04), e.g. watchdog_down: a clean-room session runs without its watchdog.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "bot_connected": {
           "type": "boolean"
         },
@@ -1247,6 +1254,7 @@
         "rdp_window_present",
         "stream_window_present",
         "capture_backend",
+        "alarms",
         "cleanroom",
         "capture_fps",
         "viewers",

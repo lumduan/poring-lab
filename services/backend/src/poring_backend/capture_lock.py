@@ -87,6 +87,38 @@ def format_lock(backend: str, seq: int, phase: str, *, owner: str, since: int, r
     return body
 
 
+# --- alarms (2026-10-04): the watchdog is watched -------------------------------------------------
+# ``<lab-state>/cleanroom-alarm``: ALARM / SINCE, written only by capture_backend.py `alarm` (called
+# by cleanroom.py's guard timer) and removed by `alarm --clear`. The console shows it RED.
+ALARM_NAME = "cleanroom-alarm"
+ALARMS = ("watchdog_down",)  # the whitelist: anything else in the file is ignored
+
+
+def format_alarm(name: str, since: int) -> str:
+    if name not in ALARMS:
+        raise ValueError(f"unknown alarm {name!r} (one of {ALARMS})")
+    return f"ALARM={name}\nSINCE={int(since)}\n"
+
+
+def parse_alarms(text: str) -> list[str]:
+    values: dict[str, str] = {}
+    for line in text.splitlines():
+        match = _LINE.match(line)
+        if match is None:
+            return []
+        values[match.group(1)] = match.group(2)
+    name = values.get("ALARM", "")
+    return [name] if name in ALARMS else []
+
+
+def read_alarms(directory: Path) -> list[str]:
+    try:
+        text = (directory / ALARM_NAME).read_text(encoding="ascii")
+    except (OSError, UnicodeDecodeError):
+        return []
+    return parse_alarms(text)
+
+
 # --- the clean room's status (ADR-0009; Batt, 2026-10-03) ----------------------------------------
 # ``<lab-state>/cleanroom``: VARIANT / BOX_UNTIL / HARD_CAP, written only by capture_backend.py
 # (to-console --cleanroom, stream --variant) and removed by its to-rdp. Shown to the console; it

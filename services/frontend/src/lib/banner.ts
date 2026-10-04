@@ -12,6 +12,17 @@ export type BannerInput = {
   nowMs?: number;
 };
 
+/** Safety alarms (2026-10-04): shown RED, above every other notice. */
+const ALARM_TEXT: Record<string, string> = {
+  watchdog_down:
+    "WATCHDOG DOWN: a clean-room session is running without its watchdog, so its box and hard " +
+    "cap are NOT enforced. End it now (scripts/cleanroom.py end).",
+};
+
+export function bannerAlarms(status: Status | null): string[] {
+  return (status?.alarms ?? []).map((a) => ALARM_TEXT[a] ?? `Safety alarm: ${a}`);
+}
+
 export function bannerProblems({
   links,
   status,

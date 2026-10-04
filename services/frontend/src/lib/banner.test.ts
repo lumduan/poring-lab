@@ -28,6 +28,7 @@ function status(lock: Partial<NonNullable<Status["capture_backend"]>>, extra: Pa
     game_black: false,
     human_secret: false,
     mode_restored: false,
+    alarms: [],
     ...extra,
   } as Status;
 }
@@ -102,4 +103,14 @@ test("an automatic ASSIST restore is announced until a human chooses a mode", ()
   const restored = bannerProblems({ links: LINKS, status: status({ backend: "rdp" }, { mode_restored: true }) });
   assert.match(restored[0], /^ASSIST restored automatically after a guarded restart/);
   assert.deepEqual(bannerProblems({ links: LINKS, status: status({ backend: "rdp" }) }), []);
+});
+
+test("a safety alarm is shown RED, apart from the amber notices", async () => {
+  const { bannerAlarms } = await import("./banner.ts");
+  const s = status({ backend: "console", reason: "cleanroom" }, { alarms: ["watchdog_down"] });
+  const alarms = bannerAlarms(s);
+  assert.equal(alarms.length, 1);
+  assert.match(alarms[0], /^WATCHDOG DOWN/);
+  assert.deepEqual(bannerAlarms(status({ backend: "rdp" })), []);
+  assert.ok(!bannerProblems({ links: LINKS, status: s }).some((p) => /WATCHDOG/.test(p)));
 });

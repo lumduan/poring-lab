@@ -266,6 +266,13 @@ class Status(Message):
     capture_backend: CaptureBackend | None = Field(
         default=None, description="The capture-backend lock (ADR-0009); null = not read yet."
     )
+    alarms: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Safety alarms the console shows RED (2026-10-04), e.g. watchdog_down: a clean-room "
+            "session runs without its watchdog."
+        ),
+    )
     cleanroom: CleanRoom | None = Field(
         default=None, description="The clean room in progress (ADR-0009); null = none."
     )

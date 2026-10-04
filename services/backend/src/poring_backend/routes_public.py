@@ -124,6 +124,8 @@ async def health(request: Request) -> dict[str, Any]:
         "stream_window_present": state.stream_window_present,
         # ADR-0009: who owns the ONE Windows session (scripts/capture_backend.py status).
         "capture_backend": state.capture.model_dump(),
+        # Safety alarms (2026-10-04): e.g. watchdog_down -- a clean room without its watchdog.
+        "alarms": state.alarms,
         "cleanroom": state.cleanroom.model_dump() if state.cleanroom else None,
         # S2 frame bus (docs/s2-plan.md): the writer and this backend's consumer counters.
         "framebus": {**state.capture_source.snapshot(), "stalls": state.stalls.snapshot()},

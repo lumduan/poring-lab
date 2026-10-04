@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Protocol, TypeVar
 
-from poring_backend.capture_lock import read_cleanroom, read_lock
+from poring_backend.capture_lock import read_alarms, read_cleanroom, read_lock
 from poring_backend.capture_select import CaptureSelector
 from poring_backend.clipboard import ClipboardService, PasteOutcome, SelectionIO
 from poring_backend.config import Settings
@@ -312,6 +312,7 @@ class AppState:
         self.stream_window_present: bool | None = None
         # The capture-backend lock (ADR-0009) and the clean room's status, re-read every tick.
         self.capture = read_lock(settings.lab_state_dir)
+        self.alarms: list[str] = read_alarms(settings.lab_state_dir)
         self.cleanroom: CleanRoom | None = read_cleanroom(
             settings.lab_state_dir, self.capture, time.time()
         )
@@ -403,6 +404,7 @@ class AppState:
     def _read_lab_state(self) -> None:
         directory = self.settings.lab_state_dir
         self.capture = read_lock(directory)
+        self.alarms = read_alarms(directory)
         # Display only (the console's clean-room line): wall clock, like the file's unix times.
         self.cleanroom = read_cleanroom(directory, self.capture, time.time())
 
@@ -424,6 +426,7 @@ class AppState:
             rdp_window_present=self.rdp_window_present,
             stream_window_present=self.stream_window_present,
             capture_backend=self.capture,
+            alarms=self.alarms,
             cleanroom=self.cleanroom,
             capture_fps=round(self.hub.capture_fps, 2),
             viewers=self.hub.viewer_count,

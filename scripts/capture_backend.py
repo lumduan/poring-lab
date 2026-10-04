@@ -68,8 +68,10 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "services" / "backend" / "src"))
 sys.path.insert(0, str(REPO / "packages" / "poring_env" / "src"))
 from poring_backend.capture_lock import (  # noqa: E402
+    ALARM_NAME,
     CLEANROOM_NAME,
     LOCK_NAME,
+    format_alarm,
     format_cleanroom,
     format_lock,
     parse_lock,
@@ -748,6 +750,37 @@ def write_cleanroom(variant: str, box_until: int | None, hard_cap: int | None) -
     say("clean-room status -> " + " ".join(body.split()))
 
 
+def cmd_alarm(name: str | None, clear: bool) -> int:
+    """`alarm --set NAME` / `alarm --clear` (2026-10-04, the watchdog is watched): the file
+    state/cleanroom-alarm, atomic, read back on the host and in the backend. Shown RED."""
+    path = STATE / ALARM_NAME
+    if clear:
+        path.unlink(missing_ok=True)
+        if path.exists():
+            raise Stop("the alarm file is still present after --clear")
+        if running(BACKEND):
+            probe = f"test -e /lab-state/{ALARM_NAME} && echo present || true"
+            seen = sh("docker", "exec", BACKEND, "sh", "-c", probe).stdout
+            if seen.strip():
+                raise Stop("the backend still sees the alarm file (stale mount?)")
+        say("alarm cleared")
+        return 0
+    assert name is not None
+    body = format_alarm(name, int(time.time()))
+    STATE.mkdir(exist_ok=True)
+    tmp = STATE / f".{ALARM_NAME}.tmp"
+    tmp.write_text(body, encoding="ascii")
+    tmp.replace(path)
+    if path.read_text(encoding="ascii") != body:
+        raise Stop("alarm read-back on the host differs from what was written")
+    if running(BACKEND):
+        seen = sh("docker", "exec", BACKEND, "cat", f"/lab-state/{ALARM_NAME}").stdout
+        if seen != body:
+            raise Stop(f"the backend sees a different alarm file: {seen!r}")
+    say("ALARM -> " + " ".join(body.split()))
+    return 0
+
+
 def cleanroom_field(key: str) -> int | None:
     try:
         text = (STATE / CLEANROOM_NAME).read_text(encoding="ascii")
@@ -876,6 +909,10 @@ def main() -> int:
     stream.add_argument("--box-until", type=int, help="unix time the variant's box ends")
     stream.add_argument("--knob", action="append", help="S2 experiment knob K=V (whitelisted)")
     sub.add_parser("hold")
+    alarm = sub.add_parser("alarm")
+    alarm_what = alarm.add_mutually_exclusive_group(required=True)
+    alarm_what.add_argument("--set", dest="alarm_name", choices=["watchdog_down"])
+    alarm_what.add_argument("--clear", action="store_true")
     pair = sub.add_parser("pair")
     pair.add_argument("pin")
     args = ap.parse_args()
@@ -894,6 +931,8 @@ def main() -> int:
             return cmd_stream(args.variant, args.box_until, parse_knobs(args.knob, args.variant))
         if args.cmd == "hold":
             return cmd_hold()
+        if args.cmd == "alarm":
+            return cmd_alarm(args.alarm_name, args.clear)
         if args.external and args.cleanroom:
             raise Stop("--external and --cleanroom exclude each other")
         if args.hard_cap is not None and not args.cleanroom:
