@@ -64,3 +64,11 @@ def test_the_split_is_by_session(tmp_path: Path) -> None:
     assert names == {0: "player", 1: "monster", 2: "npc"}
     capped, _ = load_split(cache, "train", limit_per_session=2)
     assert len(capped) == 4
+
+
+def test_an_evaluation_can_take_some_sessions_of_a_split(tmp_path: Path) -> None:
+    cache = make_cache(tmp_path)
+    one, _ = load_split(cache, "train", sessions=["s-b"])
+    assert {s.session for s in one} == {"s-b"} and len(one) == 3
+    with pytest.raises(ValueError):
+        load_split(cache, "train", sessions=["s-c"])  # a val session is not in train

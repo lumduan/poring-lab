@@ -2,6 +2,8 @@
 
     python -m poring_vision.train --cache /datasets/.framecache/<id> [--smoke] [--epochs N]
         [--batch B] [--imgsz 1280] [--workers W] [--name RUN] [--resume]
+    python -m poring_vision.train --cache ... --eval /data/train/<run>/weights/best.pt
+        [--split test] [--sessions S [S ...]]      (evaluate only: a held-out split or sessions)
 
 ADR-0018: this module imports ultralytics (AGPL-3.0), so it belongs to the AGPL vision component.
 It runs inside the vision container only (guarded_build `run:`/`rundev:`), never on the host.
@@ -64,6 +66,9 @@ def main() -> int:  # noqa: PLR0915
     ap.add_argument("--resume", action="store_true")
     ap.add_argument("--smoke", action="store_true", help="200 frames/train session, 100/val, 3 ep")
     ap.add_argument("--seed", type=int, default=20261004)
+    ap.add_argument("--eval", type=Path, default=None, help="evaluate these weights only")
+    ap.add_argument("--split", default="test", help="--eval: the split to evaluate")
+    ap.add_argument("--sessions", nargs="*", default=None, help="--eval: only these sessions")
     a = ap.parse_args()
     t0 = time.monotonic()
 
@@ -85,9 +90,13 @@ def main() -> int:  # noqa: PLR0915
     limit = {"train": 200, "val": 100} if a.smoke else {"train": None, "val": None}
     splits: dict[str, list[Sample]] = {}
     names: dict[int, str] = {}
-    for part in ("train", "val"):
-        splits[part], names = load_split(a.cache, part, limit_per_session=limit[part])
-        if not splits[part]:
+    if a.eval is not None:  # evaluation only: ONE split (or some of its sessions) as "eval"
+        splits["eval"], names = load_split(a.cache, a.split, sessions=a.sessions)
+    else:
+        for part in ("train", "val"):
+            splits[part], names = load_split(a.cache, part, limit_per_session=limit[part])
+    for part, samples in splits.items():
+        if not samples:
             raise SystemExit(f"the {part} split is empty in {a.cache}")
     registry: dict[str, Sample] = {}
     for part, samples in splits.items():
@@ -118,6 +127,8 @@ def main() -> int:  # noqa: PLR0915
             return labels
 
     data = {"train": "train", "val": "val", "names": names, "nc": len(names), "channels": 3}
+    if a.eval is not None:
+        data["val"] = "eval"
 
     class ShardTrainer(DetectionTrainer):  # type: ignore[misc]
         def get_dataset(self) -> dict[str, Any]:
@@ -135,6 +146,9 @@ def main() -> int:  # noqa: PLR0915
                 prefix=colorstr(f"{mode}: "), task="detect", classes=self.args.classes,
                 data=self.data, fraction=1.0,
             )  # fmt: skip
+
+    if a.eval is not None:
+        return evaluate(a, splits, names, data, ShardDataset, t0, fraction)
 
     name = a.name or ("smoke" if a.smoke else a.cache.name)
     run_dir = a.project / name
@@ -177,6 +191,58 @@ def main() -> int:  # noqa: PLR0915
         "epochs": overrides["epochs"], "imgsz": a.imgsz, "batch": a.batch, "workers": a.workers,
         "metrics": {k: round(float(v), 4) for k, v in (trainer.metrics or {}).items()},
         "ap50_per_class": per_class,
+        "peak_vram_mib": round(torch.cuda.max_memory_reserved() / 2**20, 1),
+        "cap_mib": round(torch.cuda.get_device_properties(0).total_memory * fraction / 2**20, 1),
+        "seconds": round(time.monotonic() - t0, 1),
+    }  # fmt: skip
+    print(json.dumps(summary), flush=True)
+    return 0
+
+
+def evaluate(
+    a: argparse.Namespace,
+    splits: dict[str, list[Sample]],
+    names: dict[int, str],
+    data: dict[str, Any],
+    shard_dataset_cls: type,
+    t0: float,
+    fraction: float,
+) -> int:
+    """Validate saved weights on one split (or some of its sessions) through ultralytics' own
+    validator: its dataset is our ShardDataset, its data dict ours (no files, nothing written)."""
+    import torch
+    import ultralytics.engine.validator as ul_validator
+    from ultralytics import YOLO
+    from ultralytics.models.yolo.detect import DetectionValidator
+    from ultralytics.utils import colorstr
+
+    ul_validator.check_det_dataset = lambda dataset, *args, **kw: dict(data)
+
+    def build_dataset(self: Any, img_path: str, mode: str = "val", batch: int | None = None) -> Any:
+        stride = 32  # YOLO11's largest stride: the rect batches' padding unit
+        cls = type(f"ShardDataset_{img_path}", (shard_dataset_cls,), {"part": img_path})
+        return cls(
+            img_path=img_path, imgsz=self.args.imgsz, batch_size=batch, augment=False,
+            hyp=self.args, rect=True, cache=None, single_cls=False, stride=stride, pad=0.5,
+            prefix=colorstr("eval: "), task="detect", classes=self.args.classes, data=data,
+            fraction=1.0,
+        )  # fmt: skip
+
+    DetectionValidator.build_dataset = build_dataset
+    model = YOLO(str(a.eval))
+    metrics = model.val(data="shards", imgsz=a.imgsz, batch=a.batch, workers=a.workers,
+                        device=0, plots=False, split="val", verbose=False,
+                        project=str(a.project), name="eval", exist_ok=True)  # fmt: skip
+    box = metrics.box
+    per_class = {names.get(int(c), str(c)): {"ap50": round(float(box.ap50[j]), 4),
+                                             "ap": round(float(box.ap[j]), 4)}
+                 for j, c in enumerate(metrics.ap_class_index)}  # fmt: skip
+    summary = {
+        "eval": str(a.eval), "cache": str(a.cache), "split": a.split, "sessions": a.sessions,
+        "frames": len(splits["eval"]), "mAP50": round(float(box.map50), 4),
+        "mAP50-95": round(float(box.map), 4), "precision": round(float(box.mp), 4),
+        "recall": round(float(box.mr), 4), "per_class": per_class,
+        "inference_ms_per_image": round(float(metrics.speed.get("inference", 0.0)), 2),
         "peak_vram_mib": round(torch.cuda.max_memory_reserved() / 2**20, 1),
         "cap_mib": round(torch.cuda.get_device_properties(0).total_memory * fraction / 2**20, 1),
         "seconds": round(time.monotonic() - t0, 1),

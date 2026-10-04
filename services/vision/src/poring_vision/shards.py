@@ -78,11 +78,21 @@ def read_jpeg(sample: Sample) -> bytes:
 
 
 def load_split(
-    cache: Path, split: str, *, limit_per_session: int | None = None
+    cache: Path,
+    split: str,
+    *,
+    limit_per_session: int | None = None,
+    sessions: list[str] | None = None,
 ) -> tuple[list[Sample], dict[int, str]]:
-    """The samples of one split (in shard order) and the class names."""
+    """The samples of one split (in shard order) and the class names; ``sessions`` narrows the
+    split to those sessions (an evaluation per session, e.g. the gold set alone)."""
     manifest = json.loads((cache / "manifest.json").read_text())
     wanted = set(json.loads((cache / "split.json").read_text())[split])
+    if sessions is not None:
+        unknown = set(sessions) - wanted
+        if unknown:
+            raise ValueError(f"not in the {split} split: {sorted(unknown)}")
+        wanted = set(sessions)
     names = {int(k): str(v) for k, v in manifest["names"].items()}
     shards = sorted({s for sid in wanted for s in manifest["sessions"][sid]["shards"]})
     out: list[Sample] = []
