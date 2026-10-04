@@ -343,7 +343,7 @@ ELEMENTS = {
     # Our own cell as "x y" (no label_key: digits, not UI text). Strokes on window rows 130-138
     # (y 148-156 on the frame), first digit cell at dx 22, 7 px per digit; the box keeps 2 rows
     # above and below the 11-row digit cell for the reader's baseline search, and stops where the
-    # zoom buttons start (dx 72). poring_vision.selfpos reads it (T0).
+    # zoom buttons start (dx 72). poring_env.selfpos reads it (T0).
     "minimap_xy": ElementSpec("minimap_xy", "minimap", box=(16, 127, 56, 15)),
 }
 

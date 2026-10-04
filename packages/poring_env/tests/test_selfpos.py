@@ -1,4 +1,4 @@
-"""poring_vision.selfpos: our own cell from the minimap readout -- read, or None, never a guess.
+"""poring_env.selfpos: our own cell from the minimap readout -- read, or None, never a guess.
 
 Every glyph here is synthesised by the test (a made-up 6x9 bitmap font with a drop shadow on its
 left, like the client's): no client-derived pixels in the repo."""
@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from poring_vision import selfpos
+from poring_env import selfpos
 
 FONT = {
     0: [".####.", "#....#", "#...##", "#..#.#", "#.#..#", "##...#", "#....#", "#....#", ".####."],

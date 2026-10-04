@@ -109,9 +109,11 @@ def test_walks_follow_the_walkable_path_although_packets_name_the_map_x_gat(
     mid = T0 + 200_000_000  # 100 ms into the first step
     fixed = cal.SessionTruth(tmp_path, maps, offset_ms="0", load_ms=0).at(mid)
     assert fixed.pos is not None and fixed.pos[1] > 0  # around the wall, via (1, 1)
-    legacy = cal.SessionTruth(tmp_path, maps, offset_ms="0", load_ms=0, packet_names=False)
-    straight = legacy.at(mid).pos
-    assert straight is not None and straight[1] == 0  # the fallback walks through it
+    # Without the alias too: the Timeline itself now strips ".gat" (9c4dbdd, 2026-10-04). Before
+    # that fix this walk fell back to the straight path, straight through the wall.
+    plain = cal.SessionTruth(tmp_path, maps, offset_ms="0", load_ms=0, packet_names=False)
+    around = plain.at(mid).pos
+    assert around is not None and around[1] > 0
 
 
 def test_cells_round_half_up(cal: ModuleType) -> None:

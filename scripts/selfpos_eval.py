@@ -8,7 +8,7 @@
 * Sessions: default outdoor-c, outdoor-d and indoor-c, never used for calibration; a session the
   templates were calibrated on is refused (their meta lists them).
 * Frames: --per-session spread evenly over each session (poring_dataset.h264, freeze spans out),
-  read with poring_vision.selfpos.read_minimap on the full game region -- the runtime path.
+  read with poring_env.selfpos.read_minimap on the full game region -- the runtime path.
 * Truth and classes: the calibration's own rules, read from the templates' meta (the packet->frame
   offset rule, --guard-ms, --load-ms): STANDING (no walk of our own within the guard) or WALKING.
   Left out: GM-command windows, map loading, frames without a position, maps the calibration never
@@ -41,11 +41,10 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
-sys.path.insert(0, str(ROOT / "services" / "vision" / "src"))
 import selfpos_calibrate as cal  # noqa: E402
 
 from poring_dataset import mapcache  # noqa: E402
-from poring_vision import selfpos  # noqa: E402
+from poring_env import selfpos  # noqa: E402
 
 STANDING_EXACT_MIN = 0.99  # pre-registered
 WALKING_WITHIN1_MIN = 0.97  # pre-registered

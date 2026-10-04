@@ -28,8 +28,8 @@ labelled by packet truth (offline ground truth, ADR-0007 -- it labels, it never 
   data/ui_anchors/minimap{,_mask}.npy (ADR-0011 locate()).
 * Glyphs: standing frames of readout maps, at most --per-position frames per session x cell (one
   long stand must not outvote every other scene). The label "x y" places every digit on the
-  measured cell grid (poring_vision.selfpos.Layout: the first cell at x=1158, 7 px a digit, 8 px
-  between the numbers, rows 147-157); poring_vision.selfpos.fit_templates turns them into
+  measured cell grid (poring_env.selfpos.Layout: the first cell at x=1158, 7 px a digit, 8 px
+  between the numbers, rows 147-157); poring_env.selfpos.fit_templates turns them into
   templates and thresholds by fixed rules (its docstring), from these TRAINING frames only.
 * In-sample check: the reader over every training frame (a sanity check, not the evaluation).
 
@@ -56,16 +56,15 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
-sys.path.insert(0, str(ROOT / "services" / "vision" / "src"))  # the reader itself (pure numpy)
 import qa_export  # noqa: E402
 
 from poring_dataset import mapcache  # noqa: E402
 from poring_dataset.labels import gm_windows, in_windows  # noqa: E402
 from poring_dataset.timeline import Timeline, tick_of  # noqa: E402
 from poring_dataset.timeline import _cells as walk_cells  # noqa: E402  (the Timeline's own path)
+from poring_env import selfpos  # noqa: E402
 from poring_env import ui_anchors as ua  # noqa: E402
 from poring_packets.world import MOVE_COST, MOVE_DIAGONAL_COST, TICK_MOD, World  # noqa: E402
-from poring_vision import selfpos  # noqa: E402
 
 DATASETS = Path(os.environ.get("PORING_DATASETS", "/mnt/poring-lab-datasets"))
 SCRATCH = Path(os.environ.get("SCRATCH", "/dev/shm/poring-lab-tmp"))
@@ -116,7 +115,8 @@ def with_packet_names(maps: Mapping[str, Any]) -> dict[str, Any]:
     Timeline looks a map up by the packet's name while mapcache.load keys it bare
     ("prt_fild08"), so without the alias every walk falls back to the straight diagonal-first
     path instead of the walkable one (the readout showed 165 370 on a walk the Timeline put at
-    165.2 372.2). Fixed here for the T0 truth only; the Timeline itself is the parent's call."""
+    165.2 372.2). Since 9c4dbdd (2026-10-04) the Timeline strips ".gat" itself, so the alias is
+    redundant; kept so --legacy-map-lookup can still reproduce the registered T0 table."""
     return {**maps, **{f"{k}.gat": v for k, v in maps.items() if not k.endswith(".gat")}}
 
 
