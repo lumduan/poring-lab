@@ -248,6 +248,18 @@ does the same thing unguarded.
   python3 scripts/guarded_build.py --sustain 30 --spike 25 build:vision   # ~5 GB of writes
   python3 scripts/guarded_build.py --sustain 30 --spike 25 'run:vision@600=python scripts/check_gpu.py'
   ```
+- **Training (Phase 3, AGPL vision component, ADR-0018):**
+  - vision reads the NAS datasets **read-only** (`datasets-nas` → `/datasets`, soft NFS, vision only);
+  - frames come as tar shards built on the host by `scripts/build_frame_cache.py` (one sequential pass
+    per session, split by session) under `/mnt/poring-lab-datasets/.framecache/<id>/`;
+  - `rundev:` mounts the host's vision source read-only, so no image rebuild is needed.
+  - Heavy runs only 20:00–05:00 ICT (Batt):
+  ```bash
+  python3 scripts/guarded_build.py --sustain 30 --spike 25 \
+    'rundev:vision@3600=python -m poring_vision.train --cache /datasets/.framecache/<id> --smoke'
+  python3 scripts/guarded_build.py --sustain 30 --spike 25 \
+    'rundev:vision@900=python -m poring_vision.train --cache /datasets/.framecache/<id> --eval /data/train/<run>/weights/best.pt --split test'
+  ```
 - **Agent loop:**
   ```bash
   docker compose --profile remote --profile vision up -d
