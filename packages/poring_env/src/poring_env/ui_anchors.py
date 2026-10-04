@@ -318,6 +318,14 @@ WINDOWS = {
     ),
     "chat": WindowSpec("chat", size=(597, 93), template_size=(240, 15)),
     "game_option": WindowSpec("game_option", size=(280, 138), template_size=(260, 15)),
+    # The minimap (Phase 3 T0, measured 2026-10-04 on the S2 console frames): right-anchored, not
+    # draggable. Its dark frame is 128 px wide from the top border at y=18; under the map, a 12 px
+    # row holds the magnifier icon, the coordinate readout and the zoom buttons. Found by those
+    # buttons (static icons over the translucent row: they need a stable mask). The client draws
+    # no minimap on indoor maps (prt_church), so the window -- and our cell -- is absent there.
+    "minimap": WindowSpec(
+        "minimap", size=(128, 142), template_offset=(72, 127), template_size=(54, 12)
+    ),
 }
 
 ELEMENTS = {
@@ -332,6 +340,11 @@ ELEMENTS = {
         for i in range(9)
     },
     "game_option_close": ElementSpec("game_option_close", "game_option", box=(30, 113, 220, 20)),
+    # Our own cell as "x y" (no label_key: digits, not UI text). Strokes on window rows 130-138
+    # (y 148-156 on the frame), first digit cell at dx 22, 7 px per digit; the box keeps 2 rows
+    # above and below the 11-row digit cell for the reader's baseline search, and stops where the
+    # zoom buttons start (dx 72). poring_vision.selfpos reads it (T0).
+    "minimap_xy": ElementSpec("minimap_xy", "minimap", box=(16, 127, 56, 15)),
 }
 
 # Where the windows sat when the templates were cut (client-area pixels, 1280x720, 2026-10-02).
@@ -341,6 +354,7 @@ CAPTURE_ORIGINS = {
     "hotbar": (230, 0),
     "chat": (0, 531),
     "game_option": (505, 450),  # open only after Escape
+    "minimap": (1136, 18),  # right-anchored; outdoor maps only (measured 2026-10-04, S2 console)
 }
 
 

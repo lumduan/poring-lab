@@ -169,6 +169,29 @@ def test_the_shipped_registry_is_canonical_and_aliases_point_at_keys() -> None:
         validate_registry(WINDOWS, {"x": ElementSpec("x", "nowhere")})
 
 
+def test_the_minimap_readout_sits_inside_its_window_left_of_the_zoom_buttons() -> None:
+    """Phase 3 T0: our own cell is read from ``minimap_xy``; the window is found by its zoom
+    buttons, which the readout's box must never reach (a digit would then move the match)."""
+    from poring_env.ui_anchors import CAPTURE_ORIGINS, ELEMENTS, WINDOWS
+
+    window, element = WINDOWS["minimap"], ELEMENTS["minimap_xy"]
+    assert element.window == "minimap" and element.label_key is None and not element.icon
+    assert element.box is not None and window.template_size is not None
+    dx, dy, w, h = element.box
+    ww, wh = window.size
+    assert dx >= 0 and dy >= 0 and dx + w <= ww and dy + h <= wh
+    tx, ty = window.template_offset
+    tw, th = window.template_size
+    assert tx + tw <= ww and ty + th <= wh
+    assert dx + w <= tx  # the readout stops where the buttons start
+    ox, oy = CAPTURE_ORIGINS["minimap"]
+    assert ox + ww <= 1280 and oy + wh <= 720  # right-anchored inside the 1280x720 game region
+    # measured on the frozen layout (2026-10-04): the rect the reader parses, game-region pixels
+    assert (ox + dx, oy + dy, w, h) == (1152, 145, 56, 15)
+    anchors = UiAnchors(WINDOWS, ELEMENTS)
+    assert anchors.resolve("minimap_xy", {"minimap": (ox, oy)}) == (1152 + 28, 145 + 7)
+
+
 def test_labelled_boxes_follow_their_window_and_carry_only_keys() -> None:
     anchors = UiAnchors(
         {"w": WindowSpec("w", size=(120, 60))},
