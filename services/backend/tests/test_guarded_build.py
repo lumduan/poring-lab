@@ -148,6 +148,21 @@ def test_run_step_is_vision_only_and_never_starts_dependencies(gb: ModuleType) -
             gb.parse_step(refused)
 
 
+def test_rundev_adds_only_the_vision_dev_overlay(gb: ModuleType) -> None:
+    """Training iterates on the host's vision source (compose.vision-dev.yaml, read-only) without a
+    ~5 GB image rebuild; still vision only, still never its dependencies (2026-10-04)."""
+    step = gb.parse_step("rundev:vision@3600=python -m poring_vision.train --smoke")
+    assert (step.kind, step.services, step.seconds) == ("rundev", ["vision"], 3600.0)
+    assert gb.run_cmd(step) == [
+        "timeout", "3600", "docker", "compose", "-f", "compose.yaml", "-f",
+        "compose.vision-dev.yaml", "--profile", "vision", "run", "--rm", "--no-deps", "vision",
+        "python", "-m", "poring_vision.train", "--smoke",
+    ]  # fmt: skip
+    for refused in ("rundev:gamestream=true", "rundev:vision", "rundev:backend=true"):
+        with pytest.raises(ValueError):
+            gb.parse_step(refused)
+
+
 def test_a_target_image_tag_never_becomes_a_log_directory(gb: ModuleType) -> None:
     """target:<svc>:<stage>:poring-lab/<x>:local put a `/` into the log name and the step crashed
     before docker ran (2026-10-03)."""

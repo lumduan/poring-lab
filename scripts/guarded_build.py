@@ -46,12 +46,18 @@ On a breach:
                 <seconds> (default 600), its output's tail printed. ONLY `vision` (check_gpu.py):
                 a second gamestream would be a second lab client, a second desktop a second
                 xfreerdp (ADR-0001/0009). The hook and scripts/dev.sh refuse a raw `compose run`.
+  rundev:<svc>[@<seconds>]=<command>
+                the same with `-f compose.yaml -f compose.vision-dev.yaml`: the host's vision
+                source read-only, first on PYTHONPATH (training runs iterate without rebuilding the
+                ~5 GB torch image; the overlay adds nothing else, test_guards). ONLY `vision`.
 
     python3 scripts/guarded_build.py build:desktop build:rathena pull:db up:180        # strict 10%
     python3 scripts/guarded_build.py --sustain 30 --spike 25 build:rathena             # tolerant
     python3 scripts/guarded_build.py --sustain 30 --spike 25 start:db@120 start:rathena@240
     python3 scripts/guarded_build.py build:vision   # ~5 GB of writes: run in an operator window
     python3 scripts/guarded_build.py 'run:vision@600=python scripts/check_gpu.py'  # GPU check
+    python3 scripts/guarded_build.py --sustain 30 --spike 25 \
+        'rundev:vision@3600=python -m poring_vision.train --cache /datasets/.framecache/ID --smoke'
 
 Logs go to $TMPDIR/poring-guarded-*.log. Exit 0 only if every step completed without a breach.
 """
@@ -148,24 +154,28 @@ def parse_step(step: str) -> Step:
         if not all(SERVICE.match(s) for s in services):
             raise ValueError(f"{step}: expected {kind}:<svc>[,<svc>...][@<seconds>]")
         return Step(kind, services, float(secs or 180))
-    if kind == "run":
+    if kind in ("run", "rundev"):
         head, eq, command = arg.partition("=")
         name, _, secs = head.partition("@")
         argv = shlex.split(command)
         if not eq or not argv or not SERVICE.match(name):
-            raise ValueError(f"{step}: expected run:<svc>[@<seconds>]=<command>")
+            raise ValueError(f"{step}: expected {kind}:<svc>[@<seconds>]=<command>")
         if name not in RUN_ALLOWED:
             raise ValueError(f"{step}: run: is allowed only for {', '.join(sorted(RUN_ALLOWED))}")
         return Step(kind, [name], float(secs or 600), argv)
     raise ValueError(f"unknown step {step}")
 
 
+VISION_DEV = ["-f", "compose.yaml", "-f", "compose.vision-dev.yaml"]  # rundev: the overlay
+
+
 def run_cmd(step: Step) -> list[str]:
     svc = step.services[0]
     seconds = str(int(step.seconds or 600))
+    files = VISION_DEV if step.kind == "rundev" else []
     return [
-        "timeout", seconds, "docker", "compose", "--profile", svc, "run", "--rm", "--no-deps",
-        svc, *step.command,
+        "timeout", seconds, "docker", "compose", *files, "--profile", svc, "run", "--rm",
+        "--no-deps", svc, *step.command,
     ]  # fmt: skip
 
 
@@ -529,7 +539,7 @@ def main() -> int:
             ok = run_process(step.label, ["docker", "compose", *ALL, "pull", *step.services], guard)
         elif step.kind == "target":
             ok = run_process(step.label, target_build_cmd(*step.services), guard, env=build_env())
-        elif step.kind == "run":
+        elif step.kind in ("run", "rundev"):
             ok = run_process(step.label, run_cmd(step), guard)
             tail = log_path(step.label).read_text(errors="replace").splitlines()[-80:]
             print("\n".join(f"  | {line}" for line in tail), flush=True)

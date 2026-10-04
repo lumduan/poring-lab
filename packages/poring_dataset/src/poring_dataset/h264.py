@@ -203,6 +203,35 @@ class H264Session:
                     raise DeterminismError(f"frame {u.frame_id}: the unit decoded to nothing")
                 yield self._emit(u, out[0], verify=verify, crop=crop)
 
+    def iter_every(
+        self, n: int, *, verify: bool = False, crop: bool = True, limit: int | None = None
+    ) -> Iterator[tuple[dict[str, Any], npt.NDArray[np.uint8]]]:
+        """Every ``n``-th usable frame in ONE sequential pass: a single decoder from the first IDR
+        to the end, no seeking (random access costs a GOP prefix per frame on this host; the
+        offline seek re-measure, 2026-10-04). How the training frame cache is built. ``verify``
+        defaults off because dataset_check.py verified every frame once; ``limit`` stops early."""
+        import av
+
+        if not self._idrs:
+            return
+        usable = set(self.usable())
+        data = self._bytes()
+        ctx = new_decoder(self.threads)
+        seen = emitted = 0
+        for u in self.units[self._idrs[0] :]:
+            out = list(ctx.decode(av.Packet(data[u.offset : u.offset + u.length])))
+            if u.frame_id not in usable:
+                continue
+            seen += 1
+            if (seen - 1) % n:
+                continue
+            if not out:
+                raise DeterminismError(f"frame {u.frame_id}: the unit decoded to nothing")
+            yield self._emit(u, out[0], verify=verify, crop=crop)
+            emitted += 1
+            if limit is not None and emitted >= limit:
+                return
+
     def clip(self, start_frame_id: int, n: int, **kw: Any) -> list[tuple[dict[str, Any], Any]]:
         """``n`` consecutive frames from ``start_frame_id`` (how training reads)."""
         i = self._pos[start_frame_id]

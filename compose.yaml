@@ -267,6 +267,9 @@ services:
       - framebus:/framebus:ro
       # ADR-0005's acceptance test (read-only; run with guarded `run:vision`).
       - ./services/vision/acceptance:/opt/acceptance:ro
+      # Batt 2026-10-04: training reads the NAS datasets READ-ONLY (the frame cache's tar shards,
+      # scripts/build_frame_cache.py). vision ONLY; soft, so a NAS outage errors instead of hanging.
+      - datasets-nas:/datasets:ro
     # ADR-0005 option c2: ONLY the internal agent network -- vision reaches the backend's
     # /internal/agent and nothing else (the backend refuses this subnet on its public listener).
     networks: [agent]
@@ -279,6 +282,9 @@ services:
               capabilities: [gpu]
     mem_limit: 6g
     memswap_limit: 6g
+    # PyTorch DataLoader workers pass batches through /dev/shm (Docker's default 64 MB is too small
+    # for 1280-px batches). Counted inside mem_limit.
+    shm_size: 1g
 
   # ADR-0009 console mode: moonlight-qt shows the Sunshine stream of the Windows CONSOLE session in
   # the same Xvfb :99 and takes its input from the X server (the backend mux's XTest). It streams
@@ -390,6 +396,15 @@ volumes:
       type: tmpfs
       device: tmpfs
       o: size=512m,uid=1000,gid=1000,mode=0770
+  # The NAS datasets export (docs/operations/nas-sink.md), mounted by dockerd from the host (the
+  # export admits only this VM), READ-ONLY and soft. Batt 2026-10-04: mounted in vision ONLY, for
+  # training (tests/test_guards.py); the host's own mount stays the only writer.
+  datasets-nas:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: addr=192.168.1.6,nfsvers=4.2,ro,soft,timeo=150,retrans=3,noatime
+      device: ":/mnt/tank-main/poring-lab/datasets"
   # S2 input socket (ADR-0014, S2 step 3): one unix socket, RAM only. An input path into Windows:
   # mounted in gamestream (the listener) and backend (the Injector) ONLY -- never vision, desktop or
   # anything else (tests/test_guards.py). The bot reaches it only through the mux.

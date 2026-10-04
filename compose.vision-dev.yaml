@@ -1,0 +1,9 @@
+# Dev overlay for training runs (guarded_build.py `rundev:vision@S=CMD`): the HOST's vision source,
+# read-only, first on PYTHONPATH -- iterate without rebuilding the ~5 GB torch image. Adds nothing
+# else: no mount, network or variable beyond these two (tests/test_guards.py).
+services:
+  vision:
+    volumes:
+      - ./services/vision/src:/opt/vision-src:ro
+    environment:
+      PYTHONPATH: /opt/vision-src

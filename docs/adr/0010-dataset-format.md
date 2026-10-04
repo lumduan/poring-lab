@@ -60,6 +60,20 @@ next_action: H.264 (IDR 1 s) is the default since 2026-10-04 (Batt). Record cons
 > **Reading.** `poring_dataset.h264.H264Session` decodes by GOP, verifies each frame and skips
 > freeze spans. Random access costs ~200–300 ms per frame on this host (offline seek, h264-vs-png),
 > so training reads a frame cache built in one pass per session (Phase 3 plan).
+>
+> ➡️ **Note 2026-10-04, evening (Batt, Phase 3 decision 4): the TRAINING FRAME CACHE.**
+> - Vision reads the NAS **read-only**, and a frame cache is **sharded** (large files), never one
+>   file per frame on the shared disk.
+> - `scripts/build_frame_cache.py` (host) decodes each session in ONE sequential pass
+>   (`H264Session.iter_every`) and keeps every 15th usable frame (~2 fps).
+> - It writes ~512 MB tar shards (`<key>.jpg` q95 + `<key>.txt` YOLO + `<key>.json`) to
+>   `/mnt/poring-lab-datasets/.framecache/<cache_id>/`, with `manifest.json` (shard sha256s, read
+>   back from the NAS) and `split.json`, split BY SESSION; the hand-checked gold session is test
+>   only.
+> - The dot-directory is invisible to `dataset_ship` (sessions/status/prune skip it).
+> - Vision mounts the export through a soft, read-only NFS volume (`compose.yaml` `datasets-nas` →
+>   `/datasets:ro`, vision only, test_guards) and reads the shards in place
+>   (`poring_vision.shards`).
 
 ## Context
 

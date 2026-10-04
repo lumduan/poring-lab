@@ -52,6 +52,7 @@ dev = [
   "pytest-asyncio>=1.4.0",
   "httpx2>=2.13",            # Starlette TestClient (successor of httpx)
   "types-python-xlib>=0.33",
+  "pillow>=12.3",            # host tools: JPEG for the training frame cache (build_frame_cache.py)
 ]
 
 [tool.ruff]

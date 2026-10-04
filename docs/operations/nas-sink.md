@@ -129,7 +129,12 @@ through a hard NFS mount. With these options:
 - `dataset_ship.py` re-hashes every file ON the NAS before it deletes the local copy;
 - recordings are written to local disk, never to NFS.
 
-**These mounts are never bind-mounted into a container.**
+**These mounts are never bind-mounted into a container**, with ONE exception (Batt, 2026-10-04):
+- the **vision** container reads the datasets export **read-only** for training, through its own
+  NFS volume (`compose.yaml` `datasets-nas`: `ro,soft`, mounted by dockerd from this VM, vision only,
+  `tests/test_guards.py`);
+- the host mount stays the only writer: the frame cache's shards under `.framecache/` are written by
+  `scripts/build_frame_cache.py` on the host and read back (ADR-0010 note).
 
 ## 5. The Thai copy (a temporary, least-privilege write path)
 

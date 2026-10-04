@@ -103,6 +103,19 @@ def test_frames_decode_by_gop_crop_and_verify(tmp_path: Path) -> None:
     assert np.array_equal(full[8:56, 8:72, :3], img)  # the crop is the GAME_REGION
 
 
+def test_one_sequential_pass_takes_every_nth_usable_frame(tmp_path: Path) -> None:
+    span = [T0 + 20 * DT, T0 + 21 * DT]  # a stall: frames 20 and 21 are not usable
+    s = h264.H264Session(make_session(tmp_path, freezes=[span]))
+    usable = s.usable()
+    got = list(s.iter_every(5, verify=True))
+    assert [m["frame_id"] for m, _ in got] == usable[::5]
+    assert all(m["crc_ok"] for m, _ in got)
+    per_gop = {m["frame_id"]: img for m, img in s.frames(usable[::5])}
+    for meta, img in got:  # the same pixels as the per-GOP decode
+        assert np.array_equal(img, per_gop[meta["frame_id"]])
+    assert [m["frame_id"] for m, _ in s.iter_every(5, limit=3)] == usable[::5][:3]
+
+
 def test_a_clip_is_consecutive_frames(tmp_path: Path) -> None:
     s = h264.H264Session(make_session(tmp_path))
     clip = s.clip(s.frame_ids[7], 6)  # crosses the IDR at index 10

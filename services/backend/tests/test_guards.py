@@ -652,6 +652,32 @@ def test_vision_never_ships_cuda_forward_compat_libs() -> None:
 # --- ADR-0005 closed for S2 (Batt, 2026-10-04): vision S2-only + option c2 -----------------------
 
 
+@pytest.mark.parametrize("name", ["compose.yaml", "compose.dev.yaml", "compose.vision-dev.yaml"])
+def test_the_nas_datasets_are_mounted_read_only_in_vision_only(name: str) -> None:
+    """Batt 2026-10-04: training reads the NAS datasets READ-ONLY; nothing else mounts them (the
+    host's own mount stays the only writer, nas-sink.md)."""
+    for svc, spec in compose(name)["services"].items():
+        mounts = mounts_of(spec or {}, "datasets-nas")
+        if svc == "vision" and name == "compose.yaml":
+            assert mounts == ["datasets-nas:/datasets:ro"]
+        else:
+            assert mounts == [], f"{name}: {svc} mounts the NAS datasets"
+    if name == "compose.yaml":
+        opts = compose(name)["volumes"]["datasets-nas"]["driver_opts"]
+        assert opts["type"] == "nfs" and opts["device"] == ":/mnt/tank-main/poring-lab/datasets"
+        assert {"ro", "soft"} <= set(opts["o"].split(","))
+
+
+def test_the_vision_dev_overlay_adds_only_the_source() -> None:
+    """`rundev:vision`: the host's vision source read-only on PYTHONPATH, and nothing else."""
+    services = compose("compose.vision-dev.yaml")["services"]
+    assert list(services) == ["vision"]
+    vision = services["vision"]
+    assert set(vision) == {"volumes", "environment"}
+    assert vision["volumes"] == ["./services/vision/src:/opt/vision-src:ro"]
+    assert vision["environment"] == {"PYTHONPATH": "/opt/vision-src"}
+
+
 def test_vision_has_no_x_and_reads_only_the_bus() -> None:
     vision = compose("compose.yaml")["services"]["vision"]
     assert mounts_of(vision, "x11-unix") == [], "vision must never reach X (ADR-0005 row 1)"
