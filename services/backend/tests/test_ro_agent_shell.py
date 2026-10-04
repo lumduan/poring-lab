@@ -86,6 +86,8 @@ def test_a_locale_variant_matches_without_replacing_the_english_signature(
     """2026-10-03: the Thai pack retitles the login dialogs; `<state>@th` is a second template of
     the SAME box, so the English one still matches after switching back."""
     monkeypatch.setattr(ro, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(ro, "SHOTS", tmp_path / "shots")  # never the lab's real screenshot dir
+    (tmp_path / "shots").mkdir()
     monkeypatch.setattr(ro, "region_for", lambda state: (0, 0, 64, 32))
     english = np.full((32, 64, 4), 40, np.uint8)
     thai = english.copy()
