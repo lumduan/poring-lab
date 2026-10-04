@@ -58,11 +58,12 @@ from typing import Any
 import numpy as np
 from websockets.sync.client import ClientConnection, connect
 
-from poring_backend.capture_lock import read_lock
+from poring_backend.capture_lock import read_lock, read_window
 
 ROOT = Path(__file__).resolve().parents[1]
 STATE_DIR = ROOT / "data" / "ro_agent"  # gitignored (rule 4): signatures + GM command log
 SHOTS = Path("/dev/shm/poring-lab-tmp/shots")
+LAB_STATE = ROOT / "state"  # the capture-backend lock + the interlock window, read FRESH
 BACKEND = "poring-lab-backend-1"
 DB = "poring-lab-db-1"
 HOLD_S = 0.05  # 50 ms holds: 20 ms registers 6/6 in the client (docs/client/rathena-client.md)
@@ -479,13 +480,18 @@ def ensure_window(kind: str, phase: str, seconds: int = 90) -> None:
     """Login and desktop phases happen before (or outside) an attested in-game session: open a
     bounded operator window through the HOST tool (capture_backend.py window; never the agent
     channel). Skipped while the interlock is green, or a window of this kind is open long enough
-    (capture_backend opens its own before its ro_agent steps, holding the mutation lock)."""
+    (capture_backend opens its own before its ro_agent steps, holding the mutation lock).
+
+    The window is read FRESH from the host's state/ with the backend's own parser: /health reports
+    the interlock as of its last 1 Hz tick. Right after capture_backend re-opened its window for the
+    new SEQ, that stale view said "no window", so the child `window` command waited 30 s for the
+    flock its own parent held and to-console failed (21:18, 21:26 and 21:43 on 2026-10-04; the one
+    run whose check landed after a tick went through)."""
+    open_now = read_window(LAB_STATE, read_lock(LAB_STATE), time.time())
+    if open_now is not None and open_now[0] == kind and open_now[2] >= WINDOW_MIN_LEFT_S:
+        return
     env_status = backend_health().get("environment") or {}
     if env_status.get("state") == "green":
-        return
-    if env_status.get("window") == kind and (env_status.get("window_left_s") or 0) >= (
-        WINDOW_MIN_LEFT_S
-    ):
         return
     cmd = [sys.executable, str(ROOT / "scripts" / "capture_backend.py"), "window", kind,
            "--seconds", str(seconds), "--reason", phase]  # fmt: skip
@@ -522,12 +528,21 @@ def char_events(c: str) -> list[dict[str, Any]]:
     raise Stop("cannot type that character (US-layout ASCII only)")  # never echo the character
 
 
+# max_queue=None: no receive-side flow control. With the library's default (16 frames) its reader
+# thread STOPS reading the socket once 16 unread messages queue up -- ~16 s of the backend's 1 Hz
+# status -- so pings go unanswered and the connection dies 20-40 s later, and a close then waits
+# its 10 s timeout ("sent 1000 (OK); no close frame received", to-console 2026-10-04). Callers do
+# host work between sends (docker exec read-backs, subprocesses); the backlog is ~1 KB/s of status,
+# read through by the next _drain. test_ro_agent_ws.py reproduces both behaviours.
+AGENT_WS: dict[str, Any] = {"open_timeout": 5, "max_size": 2**20, "max_queue": None}
+
+
 class Agent:
     """One /internal/agent connection; every send checks ASSIST and waits out a human lease."""
 
     def __init__(self, name: str = "ro_agent", *, allow_handover: bool = False) -> None:
         self.allow_handover = allow_handover  # only scripts/capture_backend.py, mid-handover
-        self._conn = connect(backend_ws(), open_timeout=5, max_size=2**20)
+        self._conn = connect(backend_ws(), **AGENT_WS)
         self.ws: ClientConnection = self._conn.__enter__()
         hello = {"type": "agent_hello", "t_mono_ns": ns(), "frame_id": -1, "agent_id": name,
                  "version": "1"}  # fmt: skip
@@ -543,7 +558,7 @@ class Agent:
         """ADR-0009: input only while the capture-backend lock is steady, and the host file and the
         backend agree on it (a backend created before the lock mount reports nothing)."""
         lock = self.status.get("capture_backend")
-        host = read_lock(ROOT / "state")
+        host = read_lock(LAB_STATE)
         if lock is None:
             print("WARNING: the backend reports no capture_backend (predates the lock)", flush=True)
             return host.backend

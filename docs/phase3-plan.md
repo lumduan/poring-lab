@@ -105,7 +105,7 @@ flowchart TD
 | **M1** sprite catalog | 🟡 PARTIAL 2026-10-04 | SPR/ACT parsers ported from nostalro (`sprites.py`), `scripts/sprite_catalog.py` → `data/kb/sprite_catalog.json`. **ACTs only:** every monster SPR in the Thai `data.grf` is **MIXCRYPT** (refused, the C8 stop). The ACT 2.5 species (Poring, Drops, Lunatic) have quad sizes (Poring idle 37×36 native); the ACT 2.4 ones have frames and delays only | **Batt:** (a) a MIXCRYPT decoder from the public spec, (b) another GRF (the lab's kRO one is on Windows only), or (c) quad boxes only |
 | **M2** render rule | ✅ BUILT 2026-10-04 | `render.py` `predict_sprite`: f/z × k billboard, the ACT quad/opaque boxes, direction, the frame by time or distance. `box_kind` quad (ACT 2.5) or opaque (SPR); it raises rather than guess when sizes are missing | opaque boxes wait for M1's SPR pixels |
 | **M3** packet states | ✅ BUILT + LIVE 2026-10-04 | `poring_packets` decodes the ZC_NOTIFY_ACT family (0x008A/0x02E1/0x08C8) and ZC_CHANGE_DIRECTION (0x009C); `world.py` keeps the vanish reason (died → `dying`), swings and flinches; `Timeline.state(gid, t)` = idle/walk/**attacking**/hurt/dying/sit + facing. The value is `attacking`, not `attack`: the locale guard (ADR-0012) refuses the bare word. The sniffer was rebuilt and recreated at 21:09 (live). `DEFAULT_DIE_MS` 2000 is a placeholder until M1 gives per-class die durations. ➡️ **All 20 NAS sessions were re-decoded the same night** (`scripts/replay_states.py`: the banked captures replayed in the sniffer, windowed and pseudonymised like the recorder) into a verified sidecar `packets.states.jsonl.gz` (0 original entities missing; 251 act events). **Real-data check:** a Poring's swing carries src_speed 672 and a Poring hit by the GM dmotion 480 -- mob_db's AttackMotion/DamageMotion exactly | the client-side attack facing is an assumption that M4 checks |
-| **M4** prove it | ⬜ BLOCKED 2026-10-04 22:00 | GM spawns near/far, indoor/outdoor, judged against pre-registered thresholds (§5). The driver is built (`scripts/m4_spawns.py`). The session did NOT run: `to-console` failed 3 times (a ~30 s stall before its second focus click, under investigation), and on the 4th the console showed the **Windows sign-in screen** instead of the poring-lab session. Nothing was typed into it; the 1-min recording that captured it was deleted, never shipped | **Batt:** the Windows console / tscon side; then one S2 session |
+| **M4** prove it | ⬜ BLOCKED 2026-10-04 22:00 | GM spawns near/far, indoor/outdoor, judged against pre-registered thresholds (§5). The driver is built (`scripts/m4_spawns.py`). The session did NOT run: `to-console` failed 3 times (a ~30 s stall before its second focus click ➡️ **cause found and fixed 2026-10-04 23:20**, see the bottleneck below: a lab-side race, not Windows), and on the 4th the console showed the **Windows sign-in screen** instead of the poring-lab session. Nothing was typed into it; the 1-min recording that captured it was deleted, never shipped | **Batt:** the Windows console / tscon side; then one S2 session |
 | **M5** labels v1 | ⬜ BLOCKED | predicted boxes + state + facing, and the automatic label check | M0 + M4 passed |
 | **M6** synthetic | ⬜ BLOCKED | sprites rendered with the game's geometry onto real backgrounds, then a real H.264 encode | M4 passed |
 | **M7** collection | ⬜ BLOCKED | GM sessions only for what math cannot make | M5 (coverage tracking) |
@@ -120,7 +120,17 @@ flowchart TD
 **The real bottlenecks:**
 - ➡️ **2026-10-04 22:00: the Windows console.** M4's session could not start: `to-console` stalls
   intermittently, and once through, the console showed the Windows sign-in screen, not the
-  poring-lab session. Batt's side (the console session / tscon); no retry loop.
+  poring-lab session. ~~Batt's side (the console session / tscon)~~ ➡️ SPLIT 23:20:
+  - **the stall was LAB-SIDE and is FIXED** (`ro_agent.ensure_window` + `AGENT_WS`): right after
+    capture_backend re-opened its desktop window for the new lock SEQ, `ro_agent` asked `/health`,
+    which reports the interlock as of its last 1 Hz tick and still said "no window". It ran
+    `capture_backend.py window`, which waited its 30 s `--wait-lock` for the flock its own parent
+    held, then failed; the agent socket, unread for that long, then hung its 10 s close (the
+    library's receive flow control stops reading after 16 queued messages). 30 + 10 + ~2 s = the
+    observed 42 s (21:42:52 → 21:43:34). It hit 3 of 4 runs: it depends on where the tick falls.
+    Now the window is read fresh from the host file with the backend's own parser, and the socket
+    has no receive flow control (tests reproduce both, control arm included);
+  - **the sign-in screen stays Batt's side** (the console session / tscon); no retry loop.
 - ➡️ **Label truth, found by T0:** (1) FIXED: the Timeline looked maps up as `x.gat`, so walks
   fell back to a straight path; (2) ~~OPEN: our own block id (AID) is unknown in recorded sessions
   (no login_accepted after the last map change), so our own entity_stop is ignored.~~ ➡️ FIXED the

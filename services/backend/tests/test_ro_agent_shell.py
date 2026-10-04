@@ -2,11 +2,19 @@
 "poring-lab shell" tab, and used only after a pixel-verified NON-elevated check. No Windows here."""
 
 import importlib.util
+import time
 from pathlib import Path
 from types import ModuleType
 
 import numpy as np
 import pytest
+
+from poring_backend.capture_lock import (
+    LOCK_NAME,
+    WINDOW_NAME,
+    format_lock,
+    format_window,
+)
 
 SCRIPTS = Path(__file__).resolve().parents[3] / "scripts"
 
@@ -174,31 +182,64 @@ def test_an_actions_effect_is_judged_only_on_a_later_frame(ro: ModuleType) -> No
 
 
 def test_ensure_window_opens_one_only_when_needed(
-    ro: ModuleType, monkeypatch: pytest.MonkeyPatch
+    ro: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """ADR-0016: login/desktop phases open a bounded operator window through the HOST tool, and
-    never when the interlock is already green or a long-enough window of that kind is open."""
+    never when the interlock is already green or a long-enough window of that kind is open. The
+    window is read from the host's state/ files (fresh), never from /health (a tick behind)."""
     calls: list[list[str]] = []
 
     class Done:
         returncode, stderr = 0, ""
 
+    now = int(time.time())
+    (tmp_path / LOCK_NAME).write_text(
+        format_lock("rdp", 7, "steady", owner="t", since=now - 60, reason="t"))  # fmt: skip
+    monkeypatch.setattr(ro, "LAB_STATE", tmp_path)
     monkeypatch.setattr(ro.subprocess, "run", lambda cmd, **kw: calls.append(cmd) or Done())
-    for health, opens in [
-        ({"environment": {"state": "green"}}, False),
-        ({"environment": {"state": "window", "window": "login", "window_left_s": 80}}, False),
-        ({"environment": {"state": "window", "window": "login", "window_left_s": 10}}, True),
-        ({"environment": {"state": "window", "window": "desktop", "window_left_s": 80}}, True),
-        ({"environment": {"state": "red"}}, True),
-        ({}, True),  # backend unreachable: try, and let the backend decide
+    for window, health, opens in [
+        (None, {"environment": {"state": "green"}}, False),
+        (("login", 80, 7), {"environment": {"state": "red"}}, False),
+        (("login", 10, 7), {"environment": {"state": "red"}}, True),  # too short
+        (("desktop", 80, 7), {"environment": {"state": "red"}}, True),  # the other kind
+        (("login", 80, 6), {"environment": {"state": "red"}}, True),  # an older SEQ's window
+        (None, {"environment": {"state": "red"}}, True),
+        (None, {}, True),  # backend unreachable: try, and let the backend decide
     ]:
         calls.clear()
+        path = tmp_path / WINDOW_NAME
+        path.unlink(missing_ok=True)
+        if window:
+            kind, left, seq = window
+            path.write_text(format_window(kind, now - 5, now + left, seq, "t"))
         monkeypatch.setattr(ro, "backend_health", lambda h=health: h)
         ro.ensure_window("login", "login")
-        assert bool(calls) is opens, health
+        assert bool(calls) is opens, (window, health)
         if opens:
             assert calls[0][-6:] == ["window", "login", "--seconds", "90", "--reason", "login"]
             assert calls[0][1].endswith("scripts/capture_backend.py")
+
+
+def test_a_window_just_opened_counts_although_health_is_a_tick_behind(
+    ro: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """2026-10-04, to-console failed 3 of 4 times: capture_backend moved the lock to switching
+    (SEQ+1), re-opened its desktop window for the new SEQ, and typed tscon. /health still showed
+    the previous tick (the SEQ+0 window, now void), so ro_agent ran `capture_backend.py window`,
+    which waited 30 s for the flock its own parent held, then failed."""
+    now = int(time.time())
+    lock = format_lock("console", 8, "switching", owner="t", since=now, reason="to-console")
+    (tmp_path / LOCK_NAME).write_text(lock)
+    (tmp_path / WINDOW_NAME).write_text(format_window("desktop", now, now + 60, 8, "tscon"))
+    stale = {"environment": {"state": "window", "window": "desktop", "window_left_s": 0.4}}
+    monkeypatch.setattr(ro, "LAB_STATE", tmp_path)
+    monkeypatch.setattr(ro, "backend_health", lambda: stale)
+
+    def no_child(cmd: list[str], **kw: object) -> None:
+        raise AssertionError(f"no window command may run here: {cmd}")
+
+    monkeypatch.setattr(ro.subprocess, "run", no_child)
+    ro.ensure_window("desktop", "console")
 
 
 def test_an_interlock_refusal_is_its_own_stop(ro: ModuleType) -> None:
