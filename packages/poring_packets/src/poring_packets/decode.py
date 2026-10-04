@@ -1,13 +1,16 @@
 """Decoders for the Phase 1 first slice (docs/phase1-plan.md section 4), PACKETVER 20211103 RE.
 
-Every offset below was printed by the compiler (`offsetof`/`sizeof` against the pinned rAthena
-headers, 2026-10-01), not counted by hand. Chat text is the client's raw bytes (cp874 in this
-lab); servers NUL-terminate their strings, the client does not, so trailing NULs are stripped.
+Every offset of the first slice was printed by the compiler (`offsetof`/`sizeof` against the pinned
+rAthena headers, 2026-10-01), not counted by hand. The Phase 3 M3 additions (the ZC_NOTIFY_ACT
+family, ZC_CHANGE_DIRECTION) were read off the packed structs and cross-checked against OpenKore's
+unpack strings and the generated table's sizes (29/33/34 and 9 bytes). Chat text is the client's
+raw bytes (cp874 in this lab); servers NUL-terminate their strings, the client does not, so
+trailing NULs are stripped.
 """
 
 import struct
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, NamedTuple
 
 CODEPAGE = "cp874"
 
@@ -17,6 +20,34 @@ STAT_NAMES = {
     20: "zeny", 1: "base_exp", 2: "job_exp", 11: "base_level", 55: "job_level",
 }  # fmt: skip
 VANISH_REASONS = {0: "out_of_sight", 1: "died", 2: "logged_out", 3: "teleport", 4: "trickdead"}
+# rAthena clif.hpp:691-707 (enum e_damage_type): the action type of ZC_NOTIFY_ACT. Names follow
+# the enum; 5, 6, 7 and 12 are skill-side types the enum itself marks as uncertain.
+ACT_KINDS = {
+    0: "normal", 1: "pickup", 2: "sit", 3: "stand", 4: "endure", 5: "splash", 6: "single",
+    7: "repeat", 8: "multi_hit", 9: "multi_hit_endure", 10: "critical", 11: "lucky_dodge",
+    12: "touch", 13: "multi_hit_critical", 14: "splash_endure",
+}  # fmt: skip
+
+
+class _ActTail(NamedTuple):
+    """Where the ZC_NOTIFY_ACT variants differ, after the common head."""
+
+    num: str  # damage @22 and damage2: int16 (0x008A) or int32
+    sp: int | None  # IsSPDamage, 0x08C8 only
+    div: int
+    action: int
+    damage2: int
+
+
+# The ZC_NOTIFY_ACT family (rAthena map/packets.hpp:1412-1455, one struct per PACKETVER range;
+# OpenKore Receive/ServerType0.pm '008A' / '02E1' / '08C8' agree). Common head: src id @2, target id
+# @6, server tick @10, src speed @14, damage motion @18, 4 bytes each. This lab (20211103) gets
+# 0x08C8; the older two are decoded too, so a replay of another client's capture still reads.
+ACT_LAYOUTS = {
+    0x008A: _ActTail("<h", None, 24, 26, 27),  # 29 bytes
+    0x02E1: _ActTail("<i", None, 26, 28, 29),  # 33 bytes
+    0x08C8: _ActTail("<i", 26, 27, 29, 30),  # 34 bytes
+}
 
 
 @dataclass(frozen=True)
@@ -69,6 +100,21 @@ def _i32(b: bytes, o: int) -> int:
     return int(struct.unpack_from("<i", b, o)[0])
 
 
+def _act(lay: _ActTail, b: bytes) -> Decoded:
+    """ZC_NOTIFY_ACT: `src_gid` acts on `target_gid` (rAthena clif_damage / clif_takeitem /
+    clif_sitting / clif_standing, clif.cpp:5217-5360). Sit, stand and pickup leave the tick, the
+    speeds and the damage at 0."""
+    action = b[lay.action]
+    return Decoded("act", {
+        "src_gid": _u32(b, 2), "target_gid": _u32(b, 6), "server_tick": _u32(b, 10),
+        "src_speed": _i32(b, 14), "dmotion": _i32(b, 18),
+        "damage": int(struct.unpack_from(lay.num, b, 22)[0]),
+        "damage2": int(struct.unpack_from(lay.num, b, lay.damage2)[0]),
+        "div": _u16(b, lay.div), "action": action, "kind": ACT_KINDS.get(action, f"type{action}"),
+        "sp_damage": None if lay.sp is None else bool(b[lay.sp]),
+    })  # fmt: skip
+
+
 def _chat(kind: str, raw: bytes, gid: int | None = None, speaker: str | None = None) -> Decoded:
     body = raw_text(raw)
     msg = body.decode(CODEPAGE, errors="replace")
@@ -119,6 +165,13 @@ def decode(server: str, direction: str, pid: int, b: bytes) -> Decoded | None:
             return Decoded("entity_appear", f)
         if pid == 0x0080:
             return Decoded("entity_vanish", {"gid": _u32(b, 2), "reason": b[6]})
+        if pid in ACT_LAYOUTS:
+            return _act(ACT_LAYOUTS[pid], b)
+        if pid == 0x009C:
+            # ZC_CHANGE_DIRECTION (packets.hpp:688-694): id @2, head dir u16 @6, body dir u8 @8
+            body = b[8]
+            return Decoded("entity_turn", {"gid": _u32(b, 2), "head_dir": _u16(b, 6),
+                                           "heading": body if body < 8 else None})  # fmt: skip
         if pid == 0x0088:
             return Decoded("entity_stop", {"gid": _u32(b, 2), "x": _u16(b, 6), "y": _u16(b, 8)})
         if pid in (0x0091, 0x0AC7):

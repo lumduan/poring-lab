@@ -24,6 +24,8 @@ export function kindOf(e: PacketEvent): Kind {
     case "entity_appear":
     case "entity_vanish":
     case "entity_stop":
+    case "entity_turn":
+    case "act":
       return "entity";
     case "stat_change":
       return "stat";
@@ -102,6 +104,10 @@ export function describe(e: PacketEvent): string {
       return `gone #${e.gid} (${VANISH[e.reason] ?? e.reason})`;
     case "entity_stop":
       return `stop #${e.gid} ${cell(e.x, e.y)}`;
+    case "entity_turn":
+      return `turn #${e.gid} → ${e.heading ?? "?"}`;
+    case "act":
+      return describeAct(e);
     case "stat_change":
       return `${e.name} = ${e.value}`;
     case "login_accepted":
@@ -115,6 +121,16 @@ export function describe(e: PacketEvent): string {
     case "desync":
       return `stream desync: ${e.skipped_bytes} bytes skipped`;
   }
+}
+
+/** ZC_NOTIFY_ACT: sit / stand / pickup, or a hit (0 damage is a miss). */
+function describeAct(e: Extract<PacketEvent, { type: "act" }>): string {
+  if (e.kind === "sit" || e.kind === "stand") return `#${e.src_gid} ${e.kind}s`;
+  if (e.kind === "pickup") return `#${e.src_gid} picks up #${e.target_gid}`;
+  const total = e.damage + e.damage2;
+  const hits = e.div > 1 ? ` ×${e.div}` : "";
+  const what = total === 0 ? "miss" : `${total}${hits}`;
+  return `#${e.src_gid} → #${e.target_gid} ${e.kind} ${what} (${e.src_speed}/${e.dmotion} ms)`;
 }
 
 const VANISH: Record<number, string> = {

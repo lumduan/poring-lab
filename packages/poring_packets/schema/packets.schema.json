@@ -1,5 +1,124 @@
 {
   "$defs": {
+    "Act": {
+      "additionalProperties": false,
+      "description": "ZC_NOTIFY_ACT (0x08C8 at this PACKETVER; 0x008A / 0x02E1 on older clients): `src_gid` acts\non `target_gid` -- a hit or a miss, an item pickup, sitting down or standing up.",
+      "properties": {
+        "action": {
+          "description": "rAthena e_damage_type (clif.hpp:691).",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "damage": {
+          "description": "0 is a miss; -1 is a hidden amount (a disguised source).",
+          "type": "integer"
+        },
+        "damage2": {
+          "description": "The second hand's damage (dual wield).",
+          "type": "integer"
+        },
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "div": {
+          "description": "The number of hits.",
+          "type": "integer"
+        },
+        "dmotion": {
+          "description": "The target's damage motion, ms: how long a hit stuns it.",
+          "type": "integer"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "kind": {
+          "description": "The action's name: normal, pickup, sit, stand, endure, splash, single, repeat, multi_hit, multi_hit_endure, critical, lucky_dodge, touch, multi_hit_critical, splash_endure, or typeN for an unknown one.",
+          "type": "string"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "server_tick": {
+          "description": "gettick() of the action, mod 2^32 (0 for sit, stand and pickup).",
+          "type": "integer"
+        },
+        "sp_damage": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The damage hits SP (blue digits); 0x08C8 only."
+        },
+        "src_gid": {
+          "type": "integer"
+        },
+        "src_speed": {
+          "description": "The source's attack motion, ms (rAthena amotion).",
+          "type": "integer"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "target_gid": {
+          "description": "The target's block id; the floor item's id for a pickup; 0 for sit/stand.",
+          "type": "integer"
+        },
+        "type": {
+          "const": "act",
+          "default": "act",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "type",
+        "src_gid",
+        "target_gid",
+        "server_tick",
+        "src_speed",
+        "dmotion",
+        "damage",
+        "damage2",
+        "div",
+        "action",
+        "kind",
+        "sp_damage"
+      ],
+      "title": "Act",
+      "type": "object"
+    },
     "CharSelected": {
       "additionalProperties": false,
       "properties": {
@@ -453,6 +572,85 @@
         "y"
       ],
       "title": "EntityStop",
+      "type": "object"
+    },
+    "EntityTurn": {
+      "additionalProperties": false,
+      "description": "ZC_CHANGE_DIRECTION (0x009C): a unit now faces `heading`.",
+      "properties": {
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gid": {
+          "type": "integer"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "head_dir": {
+          "description": "Players' head relative to the body: 0 straight, 1 turned clockwise, 2 counter-clockwise (0 for anything else).",
+          "type": "integer"
+        },
+        "heading": {
+          "anyOf": [
+            {
+              "maximum": 7,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Body direction 0..7 (0 = north, counter-clockwise); None if the byte is out of range."
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "entity_turn",
+          "default": "entity_turn",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "type",
+        "gid",
+        "heading",
+        "head_dir"
+      ],
+      "title": "EntityTurn",
       "type": "object"
     },
     "EntityVanish": {
@@ -1174,11 +1372,13 @@
     "event": {
       "discriminator": {
         "mapping": {
+          "act": "#/$defs/Act",
           "char_selected": "#/$defs/CharSelected",
           "chat": "#/$defs/Chat",
           "desync": "#/$defs/Desync",
           "entity_appear": "#/$defs/EntityAppear",
           "entity_stop": "#/$defs/EntityStop",
+          "entity_turn": "#/$defs/EntityTurn",
           "entity_vanish": "#/$defs/EntityVanish",
           "login_accepted": "#/$defs/LoginAccepted",
           "map_change": "#/$defs/MapChange",
@@ -1221,6 +1421,12 @@
         },
         {
           "$ref": "#/$defs/EntityStop"
+        },
+        {
+          "$ref": "#/$defs/EntityTurn"
+        },
+        {
+          "$ref": "#/$defs/Act"
         },
         {
           "$ref": "#/$defs/StatChange"

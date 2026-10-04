@@ -15,6 +15,8 @@ export interface PoringPackets {
     | EntityAppear
     | EntityVanish
     | EntityStop
+    | EntityTurn
+    | Act
     | StatChange
     | Chat
     | UnknownPacket
@@ -240,6 +242,93 @@ export interface EntityStop {
   validation_account: boolean;
   x: number;
   y: number;
+}
+/**
+ * ZC_CHANGE_DIRECTION (0x009C): a unit now faces `heading`.
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "EntityTurn".
+ */
+export interface EntityTurn {
+  dir: "cs" | "sc";
+  gid: number;
+  gm_command: boolean;
+  /**
+   * Players' head relative to the body: 0 straight, 1 turned clockwise, 2 counter-clockwise (0 for anything else).
+   */
+  head_dir: number;
+  /**
+   * Body direction 0..7 (0 = north, counter-clockwise); None if the byte is out of range.
+   */
+  heading: number | null;
+  packet_id: number;
+  server: "login" | "char" | "map";
+  /**
+   * Kernel receive time mapped onto CLOCK_MONOTONIC.
+   */
+  t_mono_ns: number;
+  type: "entity_turn";
+  validation_account: boolean;
+}
+/**
+ * ZC_NOTIFY_ACT (0x08C8 at this PACKETVER; 0x008A / 0x02E1 on older clients): `src_gid` acts
+ * on `target_gid` -- a hit or a miss, an item pickup, sitting down or standing up.
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "Act".
+ */
+export interface Act {
+  /**
+   * rAthena e_damage_type (clif.hpp:691).
+   */
+  action: number;
+  /**
+   * 0 is a miss; -1 is a hidden amount (a disguised source).
+   */
+  damage: number;
+  /**
+   * The second hand's damage (dual wield).
+   */
+  damage2: number;
+  dir: "cs" | "sc";
+  /**
+   * The number of hits.
+   */
+  div: number;
+  /**
+   * The target's damage motion, ms: how long a hit stuns it.
+   */
+  dmotion: number;
+  gm_command: boolean;
+  /**
+   * The action's name: normal, pickup, sit, stand, endure, splash, single, repeat, multi_hit, multi_hit_endure, critical, lucky_dodge, touch, multi_hit_critical, splash_endure, or typeN for an unknown one.
+   */
+  kind: string;
+  packet_id: number;
+  server: "login" | "char" | "map";
+  /**
+   * gettick() of the action, mod 2^32 (0 for sit, stand and pickup).
+   */
+  server_tick: number;
+  /**
+   * The damage hits SP (blue digits); 0x08C8 only.
+   */
+  sp_damage: boolean | null;
+  src_gid: number;
+  /**
+   * The source's attack motion, ms (rAthena amotion).
+   */
+  src_speed: number;
+  /**
+   * Kernel receive time mapped onto CLOCK_MONOTONIC.
+   */
+  t_mono_ns: number;
+  /**
+   * The target's block id; the floor item's id for a pickup; 0 for sit/stand.
+   */
+  target_gid: number;
+  type: "act";
+  validation_account: boolean;
 }
 /**
  * This interface was referenced by `PoringPackets`'s JSON-Schema

@@ -43,6 +43,23 @@ def var(pid: int, body: bytes) -> bytes:
     return struct.pack("<HH", pid, 4 + len(body)) + body
 
 
+def zc_notify_act(src: int, dst: int, tick: int, src_speed: int, dmotion: int, damage: int,
+                  action: int, *, div: int = 1, damage2: int = 0, sp: int = 0,
+                  pid: int = 0x08C8) -> bytes:  # fmt: skip
+    """PACKET_ZC_NOTIFY_ACT in its three PACKETVER layouts (rAthena map/packets.hpp:1412-1455)."""
+    head = struct.pack("<HIIIii", pid, src, dst, tick, src_speed, dmotion)
+    if pid == 0x08C8:
+        return head + struct.pack("<iBHBi", damage, sp, div, action, damage2)  # 34 bytes
+    if pid == 0x02E1:
+        return head + struct.pack("<iHBi", damage, div, action, damage2)  # 33 bytes
+    return head + struct.pack("<hHBh", damage, div, action, damage2)  # 0x008A, 29 bytes
+
+
+def zc_change_direction(gid: int, heading: int, head_dir: int = 0) -> bytes:
+    """PACKET_ZC_CHANGE_DIRECTION (packets.hpp:688-694), 9 bytes."""
+    return struct.pack("<HIHB", 0x009C, gid, head_dir, heading)
+
+
 def ca_login(user: bytes, password: bytes) -> bytes:
     return (
         struct.pack("<HI", 0x0064, 20211103)

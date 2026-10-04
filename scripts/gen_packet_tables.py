@@ -54,12 +54,14 @@ OUT = PKG / "src" / "poring_packets" / "_generated" / "lengths.json"
 IMAGE = "poring-lab/rathena-build:local"
 WORK = Path(os.environ.get("POR_GEN_DIR", "/dev/shm/poring-lab-pktgen"))
 
-# Ids the decoder interprets (docs/phase1-plan.md section 4): any disagreement here is fatal.
+# Ids the decoder interprets (docs/phase1-plan.md section 4; the last row: Phase 3 M3, the
+# ZC_NOTIFY_ACT family + ZC_CHANGE_DIRECTION): any disagreement here is fatal.
 DECODED = {
     0x0064, 0x0AC4, 0x083E, 0x0065, 0x082D, 0x006B, 0x0B72, 0x0066, 0x0AC5, 0x0436, 0x0283, 0x02EB,
     0x007D, 0x0360, 0x007F, 0x035F, 0x0087, 0x0088, 0x09FD, 0x09FE, 0x09FF, 0x0080, 0x0091, 0x0AC7,
     0x00B0, 0x00B1, 0x0ACB, 0x080E, 0x00F3, 0x008D, 0x008E, 0x0096, 0x09DE, 0x09DF, 0x009A, 0x01C3,
     0x0108, 0x0109, 0x017E, 0x017F, 0x02C1,
+    0x008A, 0x02E1, 0x08C8, 0x009C,
 }  # fmt: skip
 CS_PREFIXES = {"CA": "login", "CH": "char", "CZ": "map"}
 SC_PREFIXES = {"AC": "login", "HC": "char", "ZC": "map"}

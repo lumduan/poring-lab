@@ -116,7 +116,8 @@ class EntityAppear(PacketEventBase):
 class EntityVanish(PacketEventBase):
     type: Literal["entity_vanish"] = "entity_vanish"
     gid: int
-    reason: int  # 0 out of sight, 1 died, 2 logged out, 3 teleport, 4 trickdead
+    reason: int  # 0 out of sight, 1 died (the client plays its die action), 2 logged out,
+    # 3 teleport, 4 trickdead
 
 
 class EntityStop(PacketEventBase):
@@ -124,6 +125,50 @@ class EntityStop(PacketEventBase):
     gid: int
     x: int
     y: int
+
+
+class EntityTurn(PacketEventBase):
+    """ZC_CHANGE_DIRECTION (0x009C): a unit now faces `heading`."""
+
+    type: Literal["entity_turn"] = "entity_turn"
+    gid: int
+    heading: int | None = Field(
+        default=None, ge=0, le=7,
+        description="Body direction 0..7 (0 = north, counter-clockwise); None if the byte is out "
+        "of range.",
+    )  # fmt: skip
+    head_dir: int = Field(
+        description="Players' head relative to the body: 0 straight, 1 turned clockwise, 2 "
+        "counter-clockwise (0 for anything else)."
+    )
+
+
+class Act(PacketEventBase):
+    """ZC_NOTIFY_ACT (0x08C8 at this PACKETVER; 0x008A / 0x02E1 on older clients): `src_gid` acts
+    on `target_gid` -- a hit or a miss, an item pickup, sitting down or standing up."""
+
+    type: Literal["act"] = "act"
+    src_gid: int
+    target_gid: int = Field(
+        description="The target's block id; the floor item's id for a pickup; 0 for sit/stand."
+    )
+    server_tick: int = Field(
+        description="gettick() of the action, mod 2^32 (0 for sit, stand and pickup)."
+    )
+    src_speed: int = Field(description="The source's attack motion, ms (rAthena amotion).")
+    dmotion: int = Field(description="The target's damage motion, ms: how long a hit stuns it.")
+    damage: int = Field(description="0 is a miss; -1 is a hidden amount (a disguised source).")
+    damage2: int = Field(description="The second hand's damage (dual wield).")
+    div: int = Field(description="The number of hits.")
+    action: int = Field(ge=0, le=255, description="rAthena e_damage_type (clif.hpp:691).")
+    kind: str = Field(
+        description="The action's name: normal, pickup, sit, stand, endure, splash, single, "
+        "repeat, multi_hit, multi_hit_endure, critical, lucky_dodge, touch, multi_hit_critical, "
+        "splash_endure, or typeN for an unknown one."
+    )
+    sp_damage: bool | None = Field(
+        default=None, description="The damage hits SP (blue digits); 0x08C8 only."
+    )
 
 
 class StatChange(PacketEventBase):
@@ -169,6 +214,8 @@ PacketEvent = Annotated[
     | EntityAppear
     | EntityVanish
     | EntityStop
+    | EntityTurn
+    | Act
     | StatChange
     | Chat
     | UnknownPacket
@@ -232,6 +279,8 @@ FeedMessage = Annotated[
     | EntityAppear
     | EntityVanish
     | EntityStop
+    | EntityTurn
+    | Act
     | StatChange
     | Chat
     | UnknownPacket

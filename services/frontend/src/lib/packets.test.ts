@@ -75,3 +75,21 @@ test("the stats summary names every decode problem (never silent)", () => {
   assert.match(counters, /2 unknown · 1 desyncs \(40 B skipped\) · 3 dropped before the backend/);
   assert.deepEqual(summarize(null), ["no stats from the sniffer yet"]);
 });
+
+test("actions and turns are entity events with a readable line (M3)", () => {
+  const act = (kind: string, damage: number, extra: object = {}) =>
+    ({
+      ...base, t_mono_ns: 1, packet_id: 0x8c8, type: "act", src_gid: 7, target_gid: 2000001,
+      server_tick: 5, src_speed: 672, dmotion: 480, damage, damage2: 0, div: 1, action: 0, kind,
+      sp_damage: false, ...extra,
+    }) as PacketEvent;
+  assert.equal(kindOf(act("normal", 12)), "entity");
+  assert.equal(describe(act("normal", 12)), "#7 → #2000001 normal 12 (672/480 ms)");
+  assert.equal(describe(act("normal", 0)), "#7 → #2000001 normal miss (672/480 ms)");
+  assert.equal(describe(act("multi_hit", 30, { div: 2 })), "#7 → #2000001 multi_hit 30 ×2 (672/480 ms)");
+  assert.equal(describe(act("sit", 0, { target_gid: 0 })), "#7 sits");
+  const turn = { ...base, t_mono_ns: 1, packet_id: 0x9c, type: "entity_turn", gid: 7, heading: 6,
+    head_dir: 0 } as PacketEvent;
+  assert.equal(kindOf(turn), "entity");
+  assert.equal(describe(turn), "turn #7 → 6");
+});
