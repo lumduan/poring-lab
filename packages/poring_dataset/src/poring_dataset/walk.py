@@ -4,13 +4,16 @@ for this lab from the algorithm's published definition (Post-S2 round E1, 2026-1
 It replaces paths.py, a literal port of rAthena's GPL path.cpp (removed; THIRD_PARTY.md).
 CLEAN-ROOM SCOPE, stated plainly: this file was written without the GPL source open and copies none
 of its structure (no fixed node table, no client heap order, no Manhattan heuristic). Its author
-HAD read that source before, so it is not a strict clean-room implementation.
+HAD read that source before, so it is not a strict clean-room implementation. One number was later
+taken from the pinned source as a FACT, with no code (Phase 3 T0, 2026-10-04): the path limit
+MAX_LEN, cited where it is defined.
 
 The model (the game's documented movement rules, not anyone's code):
   * 8-neighbour steps; a straight step costs 10, a diagonal 14 -- the server's step timing (a
     diagonal step takes speed * 14 / 10 ms, poring_packets.world);
   * no corner cutting: a diagonal step needs both orthogonal neighbours walkable;
-  * walks longer than ``max_len`` steps (default 128, the server's path buffer) do not exist;
+  * walks longer than ``max_len`` steps (default 32, the server's path buffer: MAX_LEN) do not
+    exist;
   * the start cell is where the unit stands (never re-checked); the target must be walkable.
 
 The search: octile distance as the heuristic (admissible and consistent for 10/14 costs, so the
@@ -30,7 +33,12 @@ from typing import Protocol
 
 STRAIGHT = 10
 DIAGONAL = 14
-MAX_LEN = 128
+# The pinned server (rAthena e985006) keeps a walk in a 32-step buffer and refuses a longer path:
+# path.hpp:14 MAX_WALKPATH 32, path.hpp:29-32 `path[MAX_WALKPATH]` of the one-byte `directions`
+# (path.hpp:16), path.cpp:415 `len > sizeof(wpd->path)` fails the search; its straight walk stops
+# at the same 32 (path.cpp:303). A fact read from the source, not code. 9,636 recorded walks were
+# all found within it, the longest 14 steps (scripts/walk_check.py, 2026-10-04).
+MAX_LEN = 32
 STEPS = ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1))
 
 

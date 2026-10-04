@@ -157,12 +157,42 @@ def test_the_walk_is_a_shortest_one_around_a_wall() -> None:
 def test_the_walk_is_deterministic_and_bounded() -> None:
     assert walk_path(OPEN, 1, 1, 9, 6) == walk_path(OPEN, 1, 1, 9, 6)
     assert octile(5, 2) == 2 * 14 + 3 * 10
-    wide = Ascii(["." * 300] * 3)
+    wide = Ascii(["." * 40] * 3)
     assert walk_path(wide, 0, 0, MAX_LEN, 0) is not None
     assert walk_path(wide, 0, 0, MAX_LEN + 1, 0) is None  # beyond the server's path buffer
     # a detour that would need more than max_len steps does not exist either
     assert walk_path(OPEN, 1, 1, 9, 1, max_len=7) is None
     assert walk_path(OPEN, 1, 1, 9, 1, max_len=8) is not None
+
+
+@dataclass
+class Corridor:
+    """Only `cells` are walkable."""
+
+    cells: frozenset[tuple[int, int]]
+    xs: int = 8
+    ys: int = 40
+
+    def nopass(self, x: int, y: int) -> bool:
+        return (x, y) not in self.cells
+
+
+def u_corridor(top: int, goal_y: int) -> Corridor:
+    """A one-cell-wide U: up x=1 from y=1 to `top`, across to x=3, down x=3 to `goal_y`."""
+    left = {(1, y) for y in range(1, top + 1)}
+    right = {(3, y) for y in range(goal_y, top + 1)}
+    return Corridor(frozenset(left | right | {(2, top)}))
+
+
+def test_the_path_limit_is_the_servers_32_step_buffer() -> None:
+    """rAthena e985006 path.hpp:14 MAX_WALKPATH 32; path.cpp:415 refuses a longer path. The goal
+    is 2 cells away, but the only way there is round the U (no corner cutting)."""
+    assert MAX_LEN == 32
+    exact = walk_path(u_corridor(16, 1), 1, 1, 3, 1)  # 15 up, 2 across, 15 down
+    assert exact is not None and len(exact) == 32 and exact[-1] == (3, 1)
+    assert walk_path(u_corridor(16, 0), 1, 1, 3, 0) is None  # its only path is 33 steps
+    longer = walk_path(u_corridor(16, 0), 1, 1, 3, 0, max_len=33)
+    assert longer is not None and len(longer) == 33
 
 
 def test_the_optional_altitude_cost_prefers_flat_ground() -> None:

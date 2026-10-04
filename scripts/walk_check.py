@@ -2,11 +2,13 @@
 """Evidence for the clean walk search (Post-S2 round E1, 2026-10-04): replay the walks recorded in
 the NAS datasets' packets and check poring_dataset.walk against what the server actually did.
 
-    walk_check.py [--datasets /mnt/poring-lab-datasets] [--compare-port]
+    walk_check.py [--datasets /mnt/poring-lab-datasets] [--compare-port] [--max-len N]
 
 Packets give each walk's start, end and start tick, never the cells in between, so the checks are:
   * found: the share of recorded walks (self_move + entities' move entries) the search finds a path
-    for (the server walked them, so a path must exist);
+    for (the server walked them, so a path must exist), under ``--max-len`` (default: walk.MAX_LEN,
+    the server's 32-step path buffer); `steps_max` / `steps_over_32` / `longest` say how long the
+    found paths are, so a limit can be checked against what the server actually walked;
   * timing: where the walk was CUT -- an entity_stop, or the next self_move of the same unit --
     the cell the server reports vs the cell our path + rAthena's step timing predicts for that tick
     (Chebyshev cells; 0 = exact). Arrivals (a stop at the target) are counted separately;
@@ -27,7 +29,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from poring_dataset import mapcache  # noqa: E402
-from poring_dataset.walk import walk_path  # noqa: E402
+from poring_dataset.walk import MAX_LEN, walk_path  # noqa: E402
 from poring_packets.world import MOVE_COST, MOVE_DIAGONAL_COST, TICK_MOD  # noqa: E402
 
 
@@ -86,6 +88,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     ap.add_argument("--datasets", type=Path, default=Path("/mnt/poring-lab-datasets"))
     ap.add_argument("--compare-port", action="store_true")
+    ap.add_argument("--max-len", type=int, default=MAX_LEN, help="path limit in steps")
     a = ap.parse_args()
     grids = mapcache.load(prere=True)
     port = None
@@ -99,7 +102,8 @@ def main() -> int:
         found = walks(events)
         sessions.append({"session": packets.parent.name, "walks": len(found)})
         all_walks += found
-    stats = {"walks": 0, "no_map": 0, "found": 0, "not_found": [], "cut": 0, "cut_exact": 0,
+    stats = {"max_len": a.max_len, "walks": 0, "no_map": 0, "found": 0, "not_found": [],
+             "steps_max": 0, "steps_over_32": 0, "longest": None, "cut": 0, "cut_exact": 0,
              "cut_err_cells": [], "arrivals": 0, "arrival_exact": 0, "port_compared": 0,
              "port_equal": 0, "port_same_length": 0, "port_only_one_found": 0}  # fmt: skip
     for w in all_walks:
@@ -108,12 +112,18 @@ def main() -> int:
             stats["no_map"] += 1
             continue
         stats["walks"] += 1
-        path = walk_path(grid, w["x0"], w["y0"], w["x1"], w["y1"])
+        path = walk_path(grid, w["x0"], w["y0"], w["x1"], w["y1"], max_len=a.max_len)
         if path is None:
             if len(stats["not_found"]) < 10:
                 stats["not_found"].append({k: w[k] for k in ("map", "x0", "y0", "x1", "y1")})
             continue
         stats["found"] += 1
+        stats["steps_over_32"] += int(len(path) > 32)
+        if len(path) > stats["steps_max"]:
+            stats["steps_max"] = len(path)
+            unit = "self" if w["unit"] == "self" else "entity"
+            stats["longest"] = {"steps": len(path), "unit": unit,
+                                **{k: w[k] for k in ("map", "x0", "y0", "x1", "y1")}}  # fmt: skip
         if port is not None:
             old = port(grid, w["x0"], w["y0"], w["x1"], w["y1"])
             if old is None:
