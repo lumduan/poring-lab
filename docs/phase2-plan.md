@@ -123,6 +123,44 @@ indoor session is marked INVALID on the NAS (`dataset_ship.py mark-invalid`) and
 note): every frame is kept at ~2.5 GB/h, and each is verified on the host after shipping
 (`dataset_check.py`). `qa_export` and `label_iou` read both formats.
 
+**The first H.264 datasets: the Phase 3 S2 session, 2026-10-04 13:01–15:34 ICT (06:01–08:34 UTC).**
+- Seven sessions, IDR 1 s; all shipped to the NAS and verified (15:40–15:43). The local copy was
+  deleted, leaving 164.5 GB free.
+- Totals: 225,786 frames, 4.97 GB, 119.4 min.
+  - 40.8–42.7 MB/min against the pre-registered ~41.
+  - 8 freezes (0.067/min against ~0.1).
+  - 0 queue overflows, 0 gaps, 0 decode errors.
+- Host determinism (`dataset_check.py`, every frame vs the live checksum): RUNNING at the time of
+  writing; the result follows in the next update.
+- Each session's usable content differs, because the activity driver failed three ways during the
+  session (each fixed and committed the same day):
+
+| Session | Min | On scene | GM activity | Note |
+|---|---|---|---|---|
+| p3-outdoor-a | 20.0 | 20.0 | idle: the driver stopped at start | the `poring-lab shell` covered the client's title bar → `minimize_consoles` first |
+| p3-indoor-a | 9.4 | 9.4 | 152 walks | stopped by the IO guard (Frigate 27.8 %); quant was fine |
+| p3-outdoor-b | 20.0 | 4.0 | 24 walks | walked into the gate to prontera at 240 s, then died there (provoked Porings) and lay dead behind the restart menu |
+| p3-indoor-b | 20.0 | 20.0 | 73 walks | the GM died at ~585 s (provoked Porings) and stayed dead to the end |
+| p3-outdoor-c | 20.0 | 17.5 | 94 walks, 6 re-entries | four gate exits, each recovered by the new re-entry |
+| p3-outdoor-d | 20.0 | 20.0 | 123 walks | clean: targets kept south of the gate |
+| p3-indoor-c | 10.0 | 10.0 | 76 walks | clean |
+
+- The first indoor-a attempt, with no scene entry (walking prt_fild08 through the prt_church
+  projector), was discarded (34 s).
+- **Driver fixes** (`dataset_activity.py`):
+  - minimise consoles, then enter the scene, before the walk;
+  - re-enter after 3 consecutive empty picks;
+  - outdoor targets kept south of the start row.
+- The GM itself is level 1 (40 HP). Making it survive fights is a Batt decision
+  ([phase3-plan.md](phase3-plan.md) §9).
+- **The auto-label check** (`qa_export --max 24 --sheet`):
+  - outdoor-d: 24/24 frames boxed;
+  - indoor-c: 23/24 frames boxed;
+  - by eye, boxes sit on the Porings and NPCs on both maps, and hidden NPCs are not boxed.
+  - The v0 limits are visible: empty boxes under tree canopies (occlusion), offsets on walking
+    Porings (timing), and indoor boxes tighter than the ~1.34× larger indoor sprites. `predict_sprite`
+    (phase3-plan.md M2) addresses the last.
+
 ## Resolution: FROZEN at a 1280×720 client area (Batt, 2026-10-02)
 
 - **Why the window was small, and why that no longer holds.** It was cut to 800×664 when pixel
