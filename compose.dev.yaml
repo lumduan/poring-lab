@@ -41,10 +41,16 @@ services:
     environment:
       PATH: /opt/gamestream-bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       PYTHONPATH: /opt/s2spike-dev:/opt/s2spike/site
+      # Experiment C1 (Post-S2 round, 2026-10-04): the S2 client's raw H.264 recorder, driven by
+      # /s2-rec/control (record_session.py --format h264). Idle unless a recording is started.
+      S2_REC: /s2-rec
     volumes:
       - ./services/gamestream/bin:/opt/gamestream-bin:ro
       - ./services/gamestream/s2spike:/opt/s2spike-dev/s2spike:ro
       - ./services/gamestream/openbox:/opt/openbox:ro
+      # The ONE writable bind in gamestream: recordings only (a host dir on the local recording
+      # root, dot-named; never the pairing key, never the state dir). test_guards pins it.
+      - ${S2_REC_DIR:-/home/batt/poring-lab-rec/.s2-h264}:/s2-rec
 
   frontend-dev:
     profiles: [dev]

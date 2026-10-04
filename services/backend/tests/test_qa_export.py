@@ -32,6 +32,8 @@ def qa(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     camera.write_text(json.dumps({"h": h}))
     monkeypatch.setattr(module, "camera_file", lambda backend: camera)
     monkeypatch.setattr(module, "BUNDLES", tmp_path / "bundles")
+    # the client's indoor table is client data (/dev/shm on the lab host only): pin it here
+    monkeypatch.setattr(module, "load_indoor_table", lambda: frozenset({"prt_church"}))
     return module
 
 

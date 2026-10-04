@@ -14,6 +14,8 @@
                                     [--evidence thread, --decode-threads N, --fps 60: the
                                     key->paint tail experiments (docs/benchmarks/
                                     s2-latency-experiments.md); frames.csv = per-frame timing]
+                                    [--h264-rec DIR (env S2_REC): the raw H.264 recorder,
+                                    driven by DIR/control (h264rec.py; experiment C1)]
 
 `stream` never relaunches and never sends /cancel: the capture backend's `hold` / `to-rdp` end the
 session (Moonlight-qt's `quit` = Sunshine /cancel, host-wide). It exits when Sunshine ends the
@@ -158,6 +160,7 @@ class Stream:
         self.presence: Any = None  # presence.Presence (S2: the unmapped marker window)
         self.input_server: Any = None  # input_socket.InputServer (S2)
         self.timing: TimingLog | None = None
+        self.recorder: Any = None  # h264rec.Recorder (experiment C1)
         # --evidence thread: the decode thread hands (frame, snapshot) over, latest only
         self._ev_lock = threading.Lock()
         self._ev_item: tuple[Any, dict[str, Any]] | None = None
@@ -299,6 +302,16 @@ class Stream:
             mapper = InputMapper(self.lib, self.const, self.width, self.height)
             self.input_server = InputServer(Path(self.args.input_socket), mapper, log)
         self.timing = TimingLog(OUT / "frames.csv")
+        if self.args.h264_rec and self.bus is not None:
+            from .decode import versions
+            from .h264rec import Recorder
+
+            try:
+                self.recorder = Recorder(Path(self.args.h264_rec), self.lib.LiRequestIdrFrame,
+                                         log, versions())  # fmt: skip
+                log(f"h264 recorder: watching {self.args.h264_rec}/control")
+            except OSError as exc:  # loud, but the stream itself goes on
+                log(f"REFUSED h264 recorder: {exc}")
         log(f"experiment knobs: fps={self.args.fps} evidence={self.args.evidence} "
             f"decode_threads={self.args.decode_threads}")  # fmt: skip
         if self.args.evidence == "thread":
@@ -335,6 +348,7 @@ class Stream:
             unit = du.contents
             timing = (unit.frameNumber, unit.frameType, unit.receiveTimeMs, unit.enqueueTimeMs,
                       unit.frameHostProcessingLatency)  # fmt: skip
+            pts_ms = unit.presentationTimeMs  # the unit is freed by LiCompleteVideoFrame below
             chunks: list[bytes] = []
             entry = unit.bufferList
             while entry:
@@ -342,12 +356,15 @@ class Stream:
                 entry = entry.contents.next
             self.lib.LiCompleteVideoFrame(handle, self.const["DR_OK"])
             t_decode = time.monotonic_ns()
+            access_unit = b"".join(chunks)
             try:
-                frames = dec.decode(b"".join(chunks))
+                frames = dec.decode(access_unit)
             except Exception:  # noqa: BLE001 -- counted in stats; resync on the next IDR
                 self.lib.LiRequestIdrFrame()
+                self._record(access_unit, timing, pts_ms, [], [], time.monotonic_ns())
                 continue
             decode_us = (time.monotonic_ns() - t_decode) // 1000
+            published: list[int] = []
             for frame in frames:
                 if dec.stats.frames == 1:
                     log(f"FIRST FRAME decoded: {frame.shape[1]}x{frame.shape[0]}")
@@ -355,6 +372,7 @@ class Stream:
                 if self.bus is not None:
                     self.frame_id += 1
                     self.bus.publish(frame, self.frame_id, t_publish)
+                    published.append(self.frame_id)
                 if self.mirror is not None:
                     self.mirror.show(frame)
                 if self.timing is not None:
@@ -368,6 +386,18 @@ class Stream:
                         self._ev_wake.set()
                     else:
                         self._evidence(frame, self._snapshot(dec))
+            self._record(access_unit, timing, pts_ms, published, frames, time.monotonic_ns())
+
+    def _record(self, au: bytes, timing: tuple[int, ...], pts_ms: int, frame_ids: list[int],
+                frames: list[Any], t_publish: int) -> None:  # fmt: skip
+        """Hand an access unit to the H.264 recorder (a no-op unless a recording runs). ``timing``
+        is the decode loop's copy of the unit (frameNumber, frameType, receiveTimeMs, ...)."""
+        if self.recorder is None or self.recorder.active is None:
+            return
+        from .h264rec import Unit
+
+        self.recorder.offer(Unit(au, frame_ids, timing[0], timing[1], pts_ms, timing[2],
+                                 t_publish), frames)  # fmt: skip
 
     def _heartbeat(self) -> None:
         while not self.terminated.wait(0.5):
@@ -419,6 +449,9 @@ class Stream:
         if self.timing is not None:
             self.timing.close()
             self.timing = None
+        if self.recorder is not None:
+            self.recorder.close()
+            self.recorder = None
         if self.mirror is not None:
             log(f"x11 shim counts: {self.mirror.counts}")
             self.mirror.close()
@@ -463,6 +496,11 @@ def main(argv: list[str] | None = None) -> int:
         help="evidence PNG + stats every 2 s: on the decode thread or its own",
     )
     st.add_argument("--decode-threads", type=int, choices=(1, 2, 4), default=2)
+    st.add_argument(
+        "--h264-rec",
+        default=os.environ.get("S2_REC") or None,
+        help="C1: the recorder's dir (control file + recordings); bus mode only",
+    )
     args = ap.parse_args(argv)
     if args.cmd == "stream" and args.mirror_x and args.framebus:
         ap.error("--mirror-x and --framebus exclude each other (decode once, one view)")

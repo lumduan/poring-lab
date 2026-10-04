@@ -3,6 +3,16 @@
 
     record_session.py --backend rdp --label calib --seconds 120 [--fps 10] [--out DIR]
                       [--max-bytes 2G]
+    record_session.py --backend console --format h264 --idr-every 2 --label c3-h264-idr2 ...
+
+* --format h264 (EXPERIMENT C1, Post-S2 round 2026-10-04; PNG stays the default until Batt
+  decides): no frames are grabbed here. The S2 client writes the bitstream it decodes into its
+  recording dir (S2_REC_DIR, a host bind mount: .s2-h264 under the local root, dot-named so
+  dataset_ship never lists it), driven by a control file this script writes and re-touches (the
+  client's dead-man switch). At the end the client's files move into the session as stream.h264,
+  stream.idx.csv (one row per access unit), stream.hash.csv (a hash per decoded frame) and
+  stream.done.json; --check (default) first re-decodes them in the gamestream container
+  (s2spike.h264check: determinism, random access, decode throughput) -> stream.check.json.
 
 * Frames: GAME_REGION grabbed inside the backend container (ro_agent.Screen: same CLOCK_MONOTONIC
   as the packets), at most --fps, and only when the picture changed (a still scene costs nothing).
@@ -52,8 +62,51 @@ from poring_dataset.timeline import session_events  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 SALT = ROOT / "data" / "dataset-pseudonym.salt"
-RECORDER_VERSION = 3  # v3: bus frame ids + source per frame (S2); v2: the packet anchor
+RECORDER_VERSION = 4  # v4: --format h264 + cpu; v3: bus frame ids + source per frame (S2)
 CAP_CHECK_S = 5.0  # how often the local caps are re-checked while recording
+GAMESTREAM = "poring-lab-gamestream-1"
+BACKEND = "poring-lab-backend-1"
+H264_ID = re.compile(r"^[0-9]{8}T[0-9]{6}-[a-z0-9][a-z0-9-]{0,47}$")  # s2spike.h264rec.ID_RE
+TOUCH_S = 3.0  # the control file's dead-man touch (the client stops it after 15 s)
+
+
+def rec_dir(out: Path) -> Path:
+    """The S2 client's recording dir on the host (compose.dev.yaml mounts it at /s2-rec)."""
+    return Path(os.environ.get("S2_REC_DIR") or out / ".s2-h264")
+
+
+def container_cpu_usec(name: str) -> int | None:
+    cid = subprocess.run(["docker", "inspect", "-f", "{{.Id}}", name], capture_output=True,
+                         text=True, check=False).stdout.strip()  # fmt: skip
+    stat = Path(f"/sys/fs/cgroup/system.slice/docker-{cid}.scope/cpu.stat")
+    if not cid or not stat.exists():
+        return None
+    for line in stat.read_text().splitlines():
+        if line.startswith("usage_usec "):
+            return int(line.split()[1])
+    return None
+
+
+class CpuMeter:
+    """Average cores of the lab containers and of this process over the recording (C3)."""
+
+    def __init__(self) -> None:
+        self.t0 = time.monotonic()
+        self.c0 = {n: container_cpu_usec(n) for n in (GAMESTREAM, BACKEND)}
+        self.self0 = os.times()
+
+    def cores(self) -> dict[str, float | None]:
+        wall = time.monotonic() - self.t0
+        out: dict[str, float | None] = {}
+        for name, before in self.c0.items():
+            after = container_cpu_usec(name)
+            short = name.removeprefix("poring-lab-").removesuffix("-1")
+            out[short] = (None if before is None or after is None or wall <= 0
+                          else round((after - before) / 1e6 / wall, 3))  # fmt: skip
+        t = os.times()
+        used = (t.user - self.self0.user) + (t.system - self.self0.system)
+        out["recorder_process"] = round(used / wall, 3) if wall > 0 else None
+        return out
 
 
 def load_guard() -> Any:
@@ -155,7 +208,10 @@ def record(a: argparse.Namespace) -> dict[str, Any]:
     chash = bench.benchlib.config_hash(config)
     session_id = f"{time.strftime('%Y%m%dT%H%M%S')}-{a.backend}-{a.label}"
     out = a.out / session_id
+    if a.format == "h264":
+        return record_h264(a, lock, config, chash, session_id, out, caps, unshipped)
     writer = ShardWriter(out, png_level=a.png_level)
+    cpu = CpuMeter()
     guard = load_guard()
     gx, gy, gw, gh = r.game_region()
     period = 1.0 / a.fps
@@ -210,6 +266,7 @@ def record(a: argparse.Namespace) -> dict[str, Any]:
         writer.close()
         screen.close()
     t1 = r.ns()
+    cpu_cores = cpu.cores()
     freezes = freeze_report(t0, t1)
     events, anchor = write_packets(out, t0, t1)
     seconds = (t1 - t0) / 1e9
@@ -224,11 +281,131 @@ def record(a: argparse.Namespace) -> dict[str, Any]:
         "mb_per_min": round(writer.bytes / 1e6 / max(seconds / 60, 1e-9), 1),
         "stop_reason": stop_reason, "guard": guard.summary(), "packet_events": len(events),
         "packet_anchor": anchor, "pseudonymised": True, "freezes": freezes,
-        "sink": {"root": str(a.out), **caps},
+        "sink": {"root": str(a.out), **caps}, "format": "png", "cpu_cores": cpu_cores,
     }  # fmt: skip
     write_manifest(out, manifest)
-    keys = ("frames", "bytes", "mb_per_min", "stop_reason", "packet_events")
+    keys = ("frames", "bytes", "mb_per_min", "stop_reason", "packet_events", "cpu_cores")
     return {"dir": str(out), **{k: manifest[k] for k in keys}}
+
+
+def write_control(directory: Path, text: str) -> None:
+    tmp = directory / ".control.tmp"
+    tmp.write_text(text + "\n")
+    tmp.replace(directory / "control")
+    if (directory / "control").read_text().strip() != text:
+        raise r.Stop("the S2 recorder's control file did not read back")
+
+
+def h264_freezes(idx: Path) -> dict[str, Any] | None:
+    """Freeze spans from the recording's own index (the decode-complete time of every frame)."""
+    from poring_env.freshness import FREEZE_MS, freeze_spans
+
+    times = []
+    with idx.open() as f:
+        next(f)
+        for line in f:
+            parts = line.rstrip("\n").split(",")
+            if len(parts) == 10 and int(parts[1]) >= 0:
+                times.append(int(parts[9]))
+    if len(times) < 2:
+        return None
+    spans = freeze_spans(times, FREEZE_MS)
+    return {"threshold_ms": FREEZE_MS, "frames": len(times), "count": len(spans),
+            "max_ms": round(max(((b - c) / 1e6 for c, b in spans), default=0.0), 1),
+            "spans_ns": [[c, b] for c, b in spans]}  # fmt: skip
+
+
+def record_h264(
+    a: argparse.Namespace, lock: Any, config: dict[str, Any], chash: str, session_id: str,
+    out: Path, caps: dict[str, int], unshipped: int,
+) -> dict[str, Any]:  # fmt: skip
+    if a.backend != "console":
+        raise r.Stop("--format h264 records the S2 client's bitstream: console mode only")
+    if not H264_ID.match(session_id):
+        raise r.Stop("--format h264: the label must be lowercase letters, digits and '-'")
+    rec = rec_dir(a.out)
+    if not rec.is_dir():
+        raise r.Stop(f"{rec} does not exist (the S2 recording dir; compose.dev.yaml S2_REC_DIR)")
+    for stale in rec.glob(f"*{session_id}*"):
+        raise r.Stop(f"{stale} already exists")
+    guard = load_guard()
+    gx, gy, gw, gh = r.game_region()
+    max_mb = a.max_bytes / 1e6
+    part = rec / f".{session_id}.h264"
+    cpu = CpuMeter()
+    stop_reason = "duration"
+    t0 = r.ns()
+    write_control(rec, f"start {session_id} {a.idr_every:g} {a.seconds + 30:.0f} {max_mb:.0f}")
+    try:
+        deadline = time.monotonic() + 5
+        while not part.exists():
+            if time.monotonic() > deadline:
+                raise r.Stop("the S2 client did not start the recording in 5 s (is it streaming "
+                             "with --h264-rec? docker logs poring-lab-gamestream-1)")  # fmt: skip
+            time.sleep(0.2)
+        t_end = time.monotonic() + a.seconds
+        next_touch = next_cap = time.monotonic()
+        while time.monotonic() < t_end:
+            now = time.monotonic()
+            if now >= next_touch:
+                os.utime(rec / "control")  # the dead-man touch
+                next_touch = now + TOUCH_S
+            if not part.exists():
+                stop_reason = "the client ended the recording (stream end or cap)"
+                break
+            hit = guard.breach()
+            if hit:
+                stop_reason = f"io_guard: {hit[0]} {hit[1]:.1f}% ({hit[2]})"
+                break
+            if now >= next_cap:
+                next_cap = now + CAP_CHECK_S
+                full = dataset_ship.local_caps(a.out, unshipped=unshipped,
+                                               extra=part.stat().st_size, **caps)  # fmt: skip
+                if full:
+                    stop_reason = f"local_cap: {full}"
+                    break
+            time.sleep(0.5)
+    finally:
+        write_control(rec, "stop")
+    done = rec / f"{session_id}.done.json"
+    deadline = time.monotonic() + 60
+    while not done.exists():
+        if time.monotonic() > deadline:
+            raise r.Stop(f"the S2 client did not finish {session_id} in 60 s")
+        time.sleep(0.5)
+    t1 = r.ns()
+    cpu_cores = cpu.cores()
+    summary = json.loads(done.read_text())
+    check = None
+    if a.check:
+        cmd = ["docker", "exec", GAMESTREAM, "python3", "-m", "s2spike.h264check",
+               f"/s2-rec/{session_id}"]  # fmt: skip
+        res = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        lines = res.stdout.strip().splitlines()
+        check = json.loads(lines[-1]) if lines else {"error": res.stderr[-400:]}
+        check["exit"] = res.returncode
+    out.mkdir(parents=True)
+    for kind in ("h264", "idx.csv", "hash.csv", "check.json", "done.json"):
+        src = rec / f"{session_id}.{kind}"
+        if src.exists():
+            src.rename(out / f"stream.{kind}")  # same filesystem: a rename, no copy
+    events, anchor = write_packets(out, t0, t1)
+    seconds = (t1 - t0) / 1e9
+    size = (out / "stream.h264").stat().st_size
+    manifest = {
+        "session_id": session_id, "recorder_version": RECORDER_VERSION, "format": "h264",
+        "backend": a.backend, "lock_seq": lock.seq, "config": config, "config_hash": chash,
+        "game_region": [gx, gy, gw, gh], "idr_every_s": a.idr_every, "shards": [],
+        "frames": summary.get("frames"), "bytes": size, "t0_mono_ns": t0, "t1_mono_ns": t1,
+        "seconds": round(seconds, 1), "mb_per_min": round(size / 1e6 / max(seconds / 60, 1e-9), 1),
+        "stop_reason": stop_reason, "guard": guard.summary(), "packet_events": len(events),
+        "packet_anchor": anchor, "pseudonymised": True,
+        "freezes": h264_freezes(out / "stream.idx.csv"), "stream": summary, "check": check,
+        "cpu_cores": cpu_cores, "sink": {"root": str(a.out), **caps},
+    }  # fmt: skip
+    write_manifest(out, manifest)
+    keys = ("frames", "bytes", "mb_per_min", "stop_reason", "packet_events", "cpu_cores")
+    return {"dir": str(out), **{k: manifest[k] for k in keys}, "check": check}
 
 
 def freeze_report(t0: int, t1: int) -> dict[str, Any] | None:
@@ -286,6 +463,24 @@ def main() -> int:
     ap.add_argument("--label")
     ap.add_argument("--seconds", type=float, default=120.0)
     ap.add_argument("--fps", type=float, default=10.0)
+    ap.add_argument(
+        "--format",
+        choices=["png", "h264"],
+        default="png",
+        help="h264: the S2 client's own bitstream (experiment C1; console only)",
+    )
+    ap.add_argument(
+        "--idr-every",
+        type=float,
+        default=0.0,
+        help="h264: ask for an IDR every N s (0 = never; random-access cost)",
+    )
+    ap.add_argument(
+        "--no-check",
+        dest="check",
+        action="store_false",
+        help="h264: skip the offline determinism/seek/throughput check",
+    )
     ap.add_argument(
         "--png-level", type=int, choices=range(0, 10), default=1,
         help="zlib level of the lossless PNGs: 1 fast (default), 6 smaller and slower",

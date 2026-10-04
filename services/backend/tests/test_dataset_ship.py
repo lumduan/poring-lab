@@ -292,3 +292,36 @@ def test_mark_invalid_keeps_the_session_and_its_hashes(
     assert (session / "shard-000000.tar").read_bytes() == shard  # data untouched
     assert [(e["event"], e["session_id"]) for e in index_lines(dirs.dest)] == [("invalidated", sid)]
     assert ds.main([*argv[:1], "nope", *argv[2:]]) == 2  # no such session: refused
+
+
+def test_record_session_h264_helpers(tmp_path: Path) -> None:
+    """Experiment C1: the control file reads back; freeze spans come from the stream's own index."""
+    rs = load("record_session")
+    rs.write_control(tmp_path, "start 20261004T120000-console-c3-h0 0 210 2000")
+    assert (tmp_path / "control").read_text() == "start 20261004T120000-console-c3-h0 0 210 2000\n"
+    assert rs.H264_ID.match("20261004T120000-console-c3-h0")
+    assert not rs.H264_ID.match("20261004T120000-console-C3_h0")  # the client's id grammar
+    idx = tmp_path / "stream.idx.csv"
+    ms = 1_000_000
+    rows = [f"{i},{i + 1},{i},0,{int(i == 0)},{i * 33},0,10,{i},{t}"
+            for i, t in enumerate([0, 33 * ms, 66 * ms, 300 * ms, 333 * ms])]  # fmt: skip
+    rows.insert(2, f"-1,-1,99,0,0,0,0,0,0,{50 * ms}")  # a gap row is not a frame
+    idx.write_text("au,frame_id,frame_number,frame_type,idr,pts_ms,offset,length,receive_ms,"
+                   "t_publish_ns\n" + "\n".join(rows) + "\n")  # fmt: skip
+    fr = rs.h264_freezes(idx)
+    assert fr is not None and (fr["frames"], fr["count"]) == (5, 1)
+    assert fr["max_ms"] == 234.0
+
+
+def test_record_session_h264_refuses_rdp_and_bad_labels(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    rs = load("record_session")
+    args = SimpleNamespace(backend="rdp", out=tmp_path)
+    with pytest.raises(rs.r.Stop, match="console mode only"):
+        rs.record_h264(args, None, {}, "", "20261004T120000-rdp-x", tmp_path / "s", {}, 0)
+    args = SimpleNamespace(backend="console", out=tmp_path)
+    with pytest.raises(rs.r.Stop, match="lowercase"):
+        rs.record_h264(args, None, {}, "", "20261004T120000-console-X_1", tmp_path / "s", {}, 0)
+    with pytest.raises(rs.r.Stop, match="does not exist"):
+        rs.record_h264(args, None, {}, "", "20261004T120000-console-x", tmp_path / "s", {}, 0)

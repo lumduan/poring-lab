@@ -55,6 +55,19 @@ class DecodeStats:
         }
 
 
+def versions() -> dict[str, str]:
+    """PyAV + libavcodec/libswscale versions: a recorded bitstream's determinism is only claimed for
+    the same decoder build (h264check.py records the same)."""
+    import av
+
+    libs = getattr(av, "library_versions", {}) or {}
+    out = {"pyav": str(av.__version__)}
+    for name in ("libavcodec", "libswscale", "libavutil"):
+        if name in libs:
+            out[name] = ".".join(str(v) for v in libs[name])
+    return out
+
+
 class Decoder:
     def __init__(self, threads: int = 2) -> None:
         import av  # lazy: an image-only dependency
