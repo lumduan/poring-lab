@@ -8,6 +8,11 @@ environments ([ADR-0006](docs/adr/0006-sanctioned-test-environments.md)):
 
 Official and other public servers are forbidden.
 
+**Licence** ([ADR-0018](docs/adr/0018-component-licensing.md)):
+- Apache-2.0 (`LICENSE`) for everything except `services/vision`;
+- AGPL-3.0-only (`services/vision/LICENSE`) for `services/vision`, which imports ultralytics.
+- The repository is private for now. Third-party work and its terms are listed in [THIRD_PARTY.md](THIRD_PARTY.md).
+
 > **Core principle.** The agent perceives the game **only through pixels** and acts **only through
 > mouse and keyboard**. There is no memory reading and no packet injection. Packet sniffing is allowed
 > later, and only as **offline** ground truth for evaluating perception.

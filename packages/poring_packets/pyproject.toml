@@ -1,6 +1,7 @@
 [project]
 name = "poring-packets"
 version = "0.1.0"
+license = "Apache-2.0"  # ADR-0018
 description = "poring-lab Phase 1: passive rAthena packet capture and decoding -- OFFLINE GROUND TRUTH ONLY (ADR-0007), never agent input."
 requires-python = ">=3.12"
 # Pure Python + pydantic: the dev-overlay sniffer runs on the backend image without installing it.

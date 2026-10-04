@@ -90,6 +90,34 @@
   - the 10 walks cut mid-way: 6 on the exact cell, all ≤ 1 cell off.
 - The port stays in git history only (2a0404a..the removal commit); nothing imports it.
 
+## Runtime dependencies with licence obligations (2026-10-04, ADR-0018)
+Batt's decision (2026-10-04): the lab trains and runs YOLO with ultralytics, which is AGPL-3.0. The
+consequences are recorded in [ADR-0018](docs/adr/0018-component-licensing.md):
+- `services/vision` is AGPL-3.0;
+- everything that does not import ultralytics stays Apache-2.0.
+
+| Dependency | Version / source | License | Where |
+|---|---|---|---|
+| [ultralytics](https://github.com/ultralytics/ultralytics) | 8.4.165, PyPI wheel `ultralytics-8.4.165-py3-none-any.whl`, sha256 `1eab69f73fdec8f23475510dde086aacfd3536c33c10980a57d75a644eb4ab1e` (`uv.lock`) | AGPL-3.0 (PyPI metadata) | `services/vision` only |
+| ultralytics-thop | 2.2.1 (a dependency of ultralytics) | AGPL-3.0 (PyPI metadata) | `services/vision` only |
+| ultralytics-platform | 0.1.70 (a dependency of ultralytics) | AGPL-3.0-only (PyPI `license_expression`) | `services/vision` only |
+| [torch](https://github.com/pytorch/pytorch) / torchvision | 2.14.0+cu130 / 0.29.0+cu130 (`pytorch-cu130` index) | Apache-2.0 AND BSD-2/3-Clause AND MIT AND BSL-1.0 (PyPI `license_expression`) | `services/vision` only |
+
+**Pretrained weights** (a download, never committed: `.gitignore` refuses `*.pt` and `data/`):
+
+| File | Source | Size / sha256 | License | Stored |
+|---|---|---|---|---|
+| `yolo11n.pt` | [ultralytics/assets release v8.3.0](https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11n.pt) (downloaded 2026-10-04 on the host; vision has no internet) | 5,613,764 B, sha256 `0ebbc80d4a7680d14987a577cd21342b65ecfd94632bd9a8da63ae6417644ee1` | AGPL-3.0 (the `ultralytics/assets` repository licence) | `data/weights/` → `/data/weights` in vision |
+
+Models trained from these weights or with ultralytics are treated as AGPL-3.0, following
+Ultralytics' stated terms (ADR-0018). They live in `data/` and are never committed.
+
+**Test data** (approved by Batt 2026-10-04, not downloaded yet):
+- The public Roboflow Ragnarok Online set, CC BY 4.0.
+- It is used **test-only** (out of distribution, never trained on).
+- The exact URL, version and the attribution line required by CC BY 4.0 are recorded here when it
+  is downloaded, under `data/` and never committed.
+
 ## Noted for later (not used yet)
 - **RagLite ACT/SPR decoding** (same commit and license as above) is a path to synthetic training
   data: sprites with exact labels (s2-plan / Phase 3). Its license would be re-read at the commit

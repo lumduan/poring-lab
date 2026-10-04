@@ -1,6 +1,7 @@
 [project]
 name = "poring-backend"
 version = "0.1.0"
+license = "Apache-2.0"  # ADR-0018
 description = "poring-lab backend: screen stream, input mux (the single XTest writer), internal agent API."
 requires-python = ">=3.12"
 dependencies = [

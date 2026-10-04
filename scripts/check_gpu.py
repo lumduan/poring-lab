@@ -1,5 +1,8 @@
 """GPU readiness check for the vision container. Exits non-zero on any failure; never fakes a pass.
 
+Part of the AGPL-3.0 vision component (ADR-0018): it imports ultralytics and runs only inside the
+vision image.
+
     python3 scripts/guarded_build.py --sustain 30 --spike 25 \
         'run:vision@600=python scripts/check_gpu.py'
 

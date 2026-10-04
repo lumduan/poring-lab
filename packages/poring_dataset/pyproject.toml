@@ -1,6 +1,7 @@
 [project]
 name = "poring-dataset"
 version = "0.1.0"
+license = "Apache-2.0"  # ADR-0018
 description = "poring-lab Phase 2: recordings, packet-to-frame alignment, walkability, projection and auto-labels -- OFFLINE ONLY (ADR-0010); never imported by poring_env or vision at decision time."
 requires-python = ">=3.12"
 # Built on the offline packet ground truth (ADR-0007) and numpy; nothing GPU, nothing live.

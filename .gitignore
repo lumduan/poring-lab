@@ -84,3 +84,6 @@ locales/
 **/grf-extract/
 locale-pack.json
 [mM][sS][gG][sS][tT][rR][iI][nN][gG][tT][aA][bB][lL][eE]*.[tT][xX][tT]
+
+# Claude Code agent worktrees (temporary checkouts of this repo)
+/.claude/worktrees/

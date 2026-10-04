@@ -155,6 +155,62 @@ def test_agent_side_code_has_no_clipboard_or_transfer_access() -> None:
     assert offenders == []
 
 
+# --- ADR-0018: the AGPL-3.0 boundary -------------------------------------------------------------
+# ultralytics (AGPL-3.0) is imported only inside services/vision, the one AGPL component; nothing
+# else imports poring_vision. Everything outside it stays Apache-2.0.
+AGPL_IMPORT = re.compile(r"^\s*(?:import|from)\s+(ultralytics|poring_vision)\b", re.MULTILINE)
+NOT_SOURCE = {
+    ".venv",
+    "node_modules",
+    ".git",
+    ".next",
+    "__pycache__",
+    ".claude",
+}  # .claude: worktrees
+# Part of the vision component although it lives in scripts/: COPYed into the vision image only and
+# run there (`run:vision@600=python scripts/check_gpu.py`). Its header says so (ADR-0018).
+VISION_COMPONENT_SCRIPTS = {Path("scripts/check_gpu.py")}
+
+
+def python_sources_outside_vision() -> list[Path]:
+    vision = ROOT / "services" / "vision"
+    return [
+        p
+        for p in ROOT.rglob("*.py")
+        if not NOT_SOURCE.intersection(p.relative_to(ROOT).parts)
+        and vision not in p.parents
+        and p.relative_to(ROOT) not in VISION_COMPONENT_SCRIPTS
+    ]
+
+
+def test_the_vision_component_scripts_say_so() -> None:
+    for rel in VISION_COMPONENT_SCRIPTS:
+        assert "AGPL-3.0 vision component (ADR-0018)" in (ROOT / rel).read_text(), rel
+
+
+def test_ultralytics_and_poring_vision_are_imported_only_inside_vision() -> None:
+    sources = python_sources_outside_vision()
+    assert len(sources) > 50
+    offenders = [
+        f"{path.relative_to(ROOT)}: {m.group(0).strip()}"
+        for path in sources
+        for m in AGPL_IMPORT.finditer(path.read_text(errors="replace"))
+    ]
+    assert offenders == []
+
+
+def test_the_licences_are_declared_per_component() -> None:
+    assert (ROOT / "LICENSE").read_text().lstrip().startswith("Apache License")
+    agpl = (ROOT / "services" / "vision" / "LICENSE").read_text()
+    assert agpl.lstrip().startswith("GNU AFFERO GENERAL PUBLIC LICENSE")
+    vision = (ROOT / "services" / "vision" / "pyproject.toml").read_text()
+    assert 'license = "AGPL-3.0-only"' in vision
+    for rel in ("pyproject.toml", "packages/poring_env/pyproject.toml",
+                "packages/poring_packets/pyproject.toml", "packages/poring_dataset/pyproject.toml",
+                "services/backend/pyproject.toml"):  # fmt: skip
+        assert 'license = "Apache-2.0"' in (ROOT / rel).read_text(), rel
+
+
 # --- ADR-0007: packet captures stay offline ground truth -----------------------------------------
 CAPTURE_MOUNTS = {"sniffer": False, "backend": True}  # service -> must be read-only
 
