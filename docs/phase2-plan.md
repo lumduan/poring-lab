@@ -130,8 +130,12 @@ note): every frame is kept at ~2.5 GB/h, and each is verified on the host after 
   - 40.8–42.7 MB/min against the pre-registered ~41.
   - 8 freezes (0.067/min against ~0.1).
   - 0 queue overflows, 0 gaps, 0 decode errors.
-- Host determinism (`dataset_check.py`, every frame vs the live checksum): RUNNING at the time of
-  writing; the result follows in the next update.
+- **Host determinism** (`dataset_check.py`, every frame vs the live checksum), 15:44–17:04 ICT:
+  - **225,786 / 225,786 frames identical** in all 7 sessions: 0 mismatched, 0 missing hashes,
+    0 undecodable;
+  - the decoder build matches the recording's (PyAV 19.0.1, libavcodec 63.1.102);
+  - 45–53 frames/s at `nice 10`;
+  - results in `data/bench/h264/<session>.check.json`.
 - Each session's usable content differs, because the activity driver failed three ways during the
   session (each fixed and committed the same day):
 
