@@ -60,7 +60,12 @@ import qa_export  # noqa: E402
 
 from poring_dataset import mapcache  # noqa: E402
 from poring_dataset.labels import gm_windows, in_windows  # noqa: E402
-from poring_dataset.timeline import Timeline, tick_of  # noqa: E402
+from poring_dataset.timeline import (  # noqa: E402, F401
+    PLAYER_IDS,
+    Timeline,
+    infer_self_aid,
+    tick_of,
+)
 from poring_dataset.timeline import _cells as walk_cells  # noqa: E402  (the Timeline's own path)
 from poring_env import selfpos  # noqa: E402
 from poring_env import ui_anchors as ua  # noqa: E402
@@ -88,7 +93,6 @@ MAGNIFIER = (1136, 145, 12, 12)  # the magnifier icon left of the readout (x, y,
 _RECT = selfpos.default_rect()
 LAYOUT = selfpos.Layout(text_left=CELL_ORIGIN[0] - _RECT[0], top=CELL_ORIGIN[1] - _RECT[1],
                         number_gap=SPACE)  # fmt: skip
-PLAYER_IDS = range(2_000_000, 110_000_000)  # rAthena: START_ACCOUNT_NUM .. START_NPC_NUM
 
 
 # --- packet truth -------------------------------------------------------------------------------
@@ -118,20 +122,6 @@ def with_packet_names(maps: Mapping[str, Any]) -> dict[str, Any]:
     165.2 372.2). Since 9c4dbdd (2026-10-04) the Timeline strips ".gat" itself, so the alias is
     redundant; kept so --legacy-map-lookup can still reproduce the registered T0 table."""
     return {**maps, **{f"{k}.gat": v for k, v in maps.items() if not k.endswith(".gat")}}
-
-
-def infer_self_aid(events: Iterable[Mapping[str, Any]]) -> int | None:
-    """Our own block id when the events do not carry login_accepted: the one player-range id
-    that stops or vanishes but never appears (every other unit enters our view by appearing).
-    None when it is not exactly one."""
-    seen, appeared = set(), set()
-    for e in events:
-        if e["type"] in ("entity_stop", "entity_vanish") and int(e["gid"]) in PLAYER_IDS:
-            seen.add(int(e["gid"]))
-        elif e["type"] == "entity_appear":
-            appeared.add(int(e["gid"]))
-    candidates = seen - appeared
-    return candidates.pop() if len(candidates) == 1 else None
 
 
 def self_walk_spans(

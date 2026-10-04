@@ -56,6 +56,7 @@ State = Literal["idle", "walk", "attacking", "hurt", "dying", "sit"]
 # The die animation's length when the caller's table has no entry for a class. A PLACEHOLDER: the
 # sprite catalog (M1) gives each class its die action's length, and M4 checks it on frames.
 DEFAULT_DIE_MS = 2_000
+PLAYER_IDS = range(2_000_000, 110_000_000)  # rAthena: START_ACCOUNT_NUM .. START_NPC_NUM
 
 
 @dataclass(frozen=True, slots=True)
@@ -127,8 +128,16 @@ class Timeline:
         self.default_die_ms = default_die_ms
         # the world keeps a dead unit at least as long as its die animation can last
         keep = max(DEAD_KEEP_MS, default_die_ms, *self.die_ms.values())
-        self._snapshots: list[tuple[int, World]] = [(0, World(dead_keep_ms=keep))]
-        world = World(dead_keep_ms=keep)
+        # A recorded session starts at its last map change, so login_accepted (which names our own
+        # block id) is usually not in it, and our own entity_stop was ignored: a walk cut short kept
+        # its planned end, and every box of those frames was projected from the wrong cell (found
+        # by the T0 evaluation, 2026-10-04). Infer the id instead.
+        logged_in = any(e.get("type") == "login_accepted" for e in self.events)
+        self.inferred_aid = None if logged_in else infer_self_aid(self.events)
+        first = World(dead_keep_ms=keep)
+        first.aid = self.inferred_aid
+        self._snapshots: list[tuple[int, World]] = [(0, first)]
+        world = copy.deepcopy(first)
         for i, event in enumerate(self.events, 1):
             self._apply(world, event)
             if i % snapshot_every == 0:
@@ -292,6 +301,22 @@ def _cells(grid: MapGrid | None, x0: int, y0: int, x1: int, y1: int) -> tuple[tu
         if path is not None:
             return tuple(path)
     return tuple(path_cells(x0, y0, x1, y1))
+
+
+def infer_self_aid(events: Iterable[Mapping[str, Any]]) -> int | None:
+    """Our own block id when the events do not carry login_accepted: the one player-range id that
+    stops or vanishes but never appears (every other unit enters our view by appearing). None when
+    it is not exactly one. (From scripts/selfpos_calibrate.py, T0, 2026-10-04.)"""
+    seen: set[int] = set()
+    appeared: set[int] = set()
+    for e in events:
+        kind = e.get("type")
+        if kind in ("entity_stop", "entity_vanish") and int(e["gid"]) in PLAYER_IDS:
+            seen.add(int(e["gid"]))
+        elif kind == "entity_appear":
+            appeared.add(int(e["gid"]))
+    candidates = seen - appeared
+    return candidates.pop() if len(candidates) == 1 else None
 
 
 def walk_state(walk: Walk, tick: int, grid: MapGrid | None) -> tuple[float, float, int | None]:

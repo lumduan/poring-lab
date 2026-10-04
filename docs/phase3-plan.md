@@ -122,9 +122,12 @@ flowchart TD
   intermittently, and once through, the console showed the Windows sign-in screen, not the
   poring-lab session. Batt's side (the console session / tscon); no retry loop.
 - ➡️ **Label truth, found by T0:** (1) FIXED: the Timeline looked maps up as `x.gat`, so walks
-  fell back to a straight path; (2) OPEN: our own block id (AID) is unknown in recorded sessions
-  (no login_accepted after the last map change), so our own entity_stop is ignored. T0's truth
-  infers it (`selfpos_calibrate.infer_self_aid`); the recorder could store it.
+  fell back to a straight path; (2) ~~OPEN: our own block id (AID) is unknown in recorded sessions
+  (no login_accepted after the last map change), so our own entity_stop is ignored.~~ ➡️ FIXED the
+  same night: the Timeline infers it (`timeline.infer_self_aid`, from T0's truth). Measured on the
+  baseline's sessions: 2-7 of our own stops per session had been ignored (of 9-121 walks), each
+  shifting every box until our next walk, so roughly 1-3 % of those frames. The **v0 baseline cache
+  (v0-baseline-20261004b) predates this fix** and carries that error; v1 will not.
 - ➡️ **2026-10-04: the SPR pixels.** Every monster SPR in the Thai GRF is MIXCRYPT (M1). Exact
   opaque boxes (k in M4), the label check (M5) and synthetic frames (M6) need them; Batt decides how
   to get them. M4's spawns are recorded regardless, and re-analysed when pixels exist.

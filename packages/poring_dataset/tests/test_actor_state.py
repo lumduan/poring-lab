@@ -171,3 +171,24 @@ def test_packet_map_names_find_the_map_cache_grid() -> None:
     assert tl.grid("prt_fild08.gat") is grid
     assert tl.grid("prt_fild08") is grid
     assert tl.grid(None) is None and tl.grid("") is None and tl.grid("nowhere.gat") is None
+
+
+def test_our_own_id_is_inferred_when_the_session_starts_after_the_login() -> None:
+    """A recording starts at its last map change, so login_accepted is not in it. Our own
+    entity_stop must still cut our walk, or every box is projected from the planned end (T0)."""
+    from poring_dataset.timeline import infer_self_aid
+
+    evs = [
+        ev(1, "map_change", map="lab", x=50, y=50),
+        ev(2, "map_enter", server_tick=TICK0 + 2, x=50, y=50, facing=6),
+        appear(10, 110000001, 53, 50, heading=4),  # a monster: it appears, so it is not us
+        ev(100, "self_move", server_tick=TICK0 + 100, x0=50, y0=50, x1=56, y1=50),
+        ev(400, "entity_stop", gid=2000002, x=52, y=50),  # our walk, cut short at (52, 50)
+    ]
+    assert infer_self_aid(evs) == 2000002
+    tl = Timeline(evs)
+    assert tl.inferred_aid == 2000002
+    late = tl.frame_world(T0 + 5_000 * MS).self_pos
+    assert late is not None and (round(late[0]), round(late[1])) == (52, 50)  # not (56, 50)
+    with_login = Timeline([ev(0, "login_accepted", aid=AID, sex=0), *evs])
+    assert with_login.inferred_aid is None  # the login names the id; nothing is inferred
