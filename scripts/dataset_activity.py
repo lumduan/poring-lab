@@ -67,6 +67,21 @@ def safe_gm(agent: "r.Agent", screen: "r.Screen", command: str, counts: dict[str
 
 
 DRIFT_CELLS = 12
+STUCK_NO_CELL = 3  # consecutive picks with no free cell: off the scene map, or a dialog covers it
+
+
+def reenter(agent: "r.Agent", screen: "r.Screen", scene: str, counts: dict[str, int]) -> bool:
+    """Back to the scene's start cell via the other map (a camera reset; a warp also closed the
+    NPC menu that was left open, 2026-10-04)."""
+    try:
+        bench.enter_scene(agent, screen, scene)
+        return True
+    except r.Unattested:
+        raise  # ADR-0016: the interlock refused -- never a screen glitch to retry
+    except r.Stop as exc:
+        counts["gm_failures"] += 1
+        r.log(f"activity: re-entering {scene} failed ({exc})")
+        return False
 
 
 def hover_crop(agent: "r.Agent", screen: "r.Screen", x: int, y: int) -> "ec.Img":
@@ -96,6 +111,7 @@ def main() -> int:
         "gm_disabled": 0,
         "no_cell": 0,
         "hover_rejects": 0,
+        "reentries": 0,
     }
     info: dict[str, str] = {}
     mapname, sx, sy = bench.SCENES[a.scene]
@@ -106,6 +122,7 @@ def main() -> int:
     if walkable is None and cm.is_indoor(mapname, indoor):
         raise SystemExit(f"{gat_path} is missing: an indoor walk needs the map's walkability")
     pos = (sx, sy)  # the character's cell, tracked from our own clicks (approximate)
+    stuck = 0  # consecutive no_cell
     with r.session("dataset-activity") as (agent, screen):
         # like bench.preflight: a console left open (open-terminal before to-console) covers the
         # client's title bar, so activation fails closed and the run records an idle GM
@@ -149,7 +166,17 @@ def main() -> int:
                 pick = ec.pick_cell(rng, pos, walkable, projector, reject=occupied, tries=12)
                 if pick is None:
                     counts["no_cell"] += 1
+                    stuck += 1
+                    if stuck >= STUCK_NO_CELL and not counts["gm_disabled"]:
+                        # p3-outdoor-b (2026-10-04): the GM walked into a portal and landed on
+                        # another map behind an NPC menu; the walk tracks its own clicks only, so
+                        # it never saw the map change and every later pick failed. Re-enter.
+                        if reenter(agent, screen, a.scene, counts):
+                            counts["reentries"] += 1
+                        pos, stuck = (sx, sy), 0
+                        continue
                 else:
+                    stuck = 0
                     dx, dy, u, v = pick
                     agent.click(gx + int(round(u)), gy + int(round(v)))
                     pos = (pos[0] + dx, pos[1] + dy)
