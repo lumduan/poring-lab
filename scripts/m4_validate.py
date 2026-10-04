@@ -3,6 +3,7 @@
 (docs/phase3-plan.md §5; the session is recorded by scripts/m4_spawns.py + record_session.py.)
 
     m4_validate.py SESSION EVENTS.jsonl [--datasets DIR] [--every 5] [--out data/bench/m4/...]
+                   [--rows ROWS.jsonl]   every measured frame (for diagnosis; local data/ only)
 
 Per standing monster frame (the spawned species' block id from the packets, its Timeline state
 `idle` for >= 1 s, no other actor within 120 px of it):
@@ -175,7 +176,9 @@ def windows(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
-def measure(session: Path, events_path: Path, every: int) -> dict[str, Any]:  # noqa: PLR0915
+def measure(  # noqa: PLR0915
+    session: Path, events_path: Path, every: int, rows_out: Path | None = None
+) -> dict[str, Any]:
     manifest = json.loads((session / "manifest.json").read_text())
     pk = session / ("packets.states.jsonl.gz" if (session / "packets.states.jsonl.gz").exists()
                     else "packets.jsonl.gz")  # fmt: skip
@@ -237,6 +240,9 @@ def measure(session: Path, events_path: Path, every: int) -> dict[str, Any]:  # 
                 "ratio_w": (obs[2] - obs[0]) / max(1e-6, p[2] - p[0]),
                 "scale": pred.scale,
             })  # fmt: skip
+    if rows_out is not None:
+        rows_out.parent.mkdir(parents=True, exist_ok=True)
+        rows_out.write_text("".join(json.dumps(r) + "\n" for r in rows))
     return summarise(rows)
 
 
@@ -291,8 +297,9 @@ def main() -> int:
     ap.add_argument("--datasets", type=Path, default=NAS)
     ap.add_argument("--every", type=int, default=5)
     ap.add_argument("--out", type=Path, default=None)
+    ap.add_argument("--rows", type=Path, default=None)
     a = ap.parse_args()
-    result = measure(a.datasets / a.session, a.events, a.every)
+    result = measure(a.datasets / a.session, a.events, a.every, a.rows)
     text = json.dumps(result, indent=1)
     if a.out:
         a.out.parent.mkdir(parents=True, exist_ok=True)
