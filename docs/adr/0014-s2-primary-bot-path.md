@@ -7,7 +7,7 @@ verdict_date: 2026-10-03
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: The live S2 session verifies the input socket (A4 through it) and runs the key->paint tail experiments; Batt decides the resting state (R1 recommended) and whether vision becomes S2-only (ADR-0005).
+next_action: R1 is the resting state (Batt, 2026-10-04); R2 is the long-term target, designed in ADR-0017 (PROPOSED) -- its open verifications run in later S2 sessions before any switch.
 ---
 
 # ADR-0014: S2 is the bot's primary capture and input path
@@ -78,7 +78,21 @@ Runs: [RDP v2](../benchmarks/2026-10-02-rdp-d16fcc9cff64-v2-baseline.md),
 The capture-backend lock still decides which path owns the one session (ADR-0009). The two never
 run at once.
 
-## Resting state (PROPOSED: Batt decides)
+## Resting state — DECIDED (Batt, 2026-10-04): R1 now, R2 the long-term target
+- **R1 is the resting state now:** RDP at rest, S2 sessions on demand.
+- **R2 is the LONG-TERM TARGET, defined exactly:**
+  - the Windows session lives on the console, with the lab's S2 client continuously connected
+    (lock `console/steady`, REASON `s2-rest`);
+  - RDP is used only by an explicit, logged handover (`capture_backend.py to-rdp`) for the human's
+    admin work, and the session returns to the console afterwards;
+  - one session, one path, one lab client, as today. The mux still boots HUMAN, and BOT still
+    needs the environment interlock (ADR-0016).
+- R2 is designed, NOT switched: [ADR-0017](0017-r2-s2-at-rest.md) covers paste via
+  `LiSendUtf8TextEvent`, files without RDP, UAC/the secure desktop, the unlocked console's
+  security, a supervisor replacing rooms, CPU at rest, migration and rollback. Its verifications
+  come before any switch.
+
+The original comparison (2026-10-03), kept as the basis of the decision:
 | | R1: RDP at rest, S2 sessions on demand | R2: S2 at rest |
 |---|---|---|
 | Idle cost | 0.47 lab cores (RDP v2) | ~0.78 lab cores (V3b), and Windows encodes continuously |
@@ -86,8 +100,8 @@ run at once.
 | Bot readiness | one handover (~1 min) before a session | immediate |
 | Risk surface | the known, long-run path | the S2 client running for days is not yet measured |
 
-**Recommendation: R1** until the routine S2 session (below) has a few clean runs, then reconsider
-R2.
+**Recommendation (2026-10-03): R1** until the routine S2 session (below) has a few clean runs,
+then reconsider R2. ➡️ Taken on 2026-10-04: R1 now, R2 the target (above).
 
 ## Routine "S2 session" (PROPOSED: follows the resting-state decision)
 This replaces the ad-hoc clean room for normal work. A planned `scripts/s2session.py
@@ -116,6 +130,13 @@ R1 or R2.
     - "vision S2-only": drop vision's `x11-unix` mount, so it cannot reach X at all;
     - option (c2), the internal agent network, for rows 2–3 of ADR-0005's acceptance test.
   - Batt decides. Until then ADR-0005 stays PROPOSED and Phase 4 stays gated on it.
+  - ➡️ **DECIDED 2026-10-04 (Batt): vision S2-only + option c2, APPROVED and built.**
+    - vision has no X mount and reads the bus only;
+    - it lives on the internal `agent` network (10.210.97.0/24, gateway isolated);
+    - the backend refuses that network on every listener but `:8001`.
+
+    ADR-0005's acceptance test is `services/vision/acceptance/adr0005.py`; its closure is recorded
+    in ADR-0005.
 - **ADR-0002 is unchanged in substance.** One writer: the Injector picks a sink (XTest or the S2
   socket); it never adds a second writer. A switch first sends ReleaseAll to the sink being left.
 - **CLAUDE.md rule 2** now reads: the path is the RDP session, OR the console-mode stream (Sunshine

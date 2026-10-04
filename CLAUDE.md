@@ -83,18 +83,37 @@ ports, quickstart) and `docs/adr/`.
    - never mount the `transfer` volume anywhere but desktop and backend;
    - never log paste text or file contents.
    - The mux refuses a bot Ctrl+V / Meta+V / Shift+Insert.
-   - Vision's direct X access is the open gap, [ADR-0005](docs/adr/0005-vision-x-access.md). It
-     blocks Phase 4.
+   - Vision has NO X access (ADR-0005 closed on the S2 path, Batt 2026-10-04: vision S2-only +
+     option c2):
+     - no `x11-unix` mount; it reads the frame bus only;
+     - it lives ONLY on the internal `agent` network (10.210.97.0/24, `gateway_mode_ipv4:
+       isolated`);
+     - the backend refuses that network on every listener but `:8001` (`AgentNetworkGuard`).
+
+     Keep all three (`test_guards.py`). The acceptance test is
+     `services/vision/acceptance/adr0005.py`. Host scripts take the backend's address by the
+     DEFAULT network's name (`scripts/backend_addr.py`).
 
 9. **Environment allowlist** (ADR-0006). Automation (BOT/ASSIST) may act only on the sanctioned
    environments in ADR-0006, verified by an interlock signal, not by judgment. Other players' chat
-   data stays local and pseudonymized. Concretely:
+   data stays local and pseudonymized.
+   - **The interlock is built** (ADR-0016 ACCEPTED 2026-10-04): a LOGIC interlock driven by
+     `config/environments.yaml` (backend only, read-only). BOT presses pass only while:
+     - an `allowed` environment is attested: the lock is steady, `WIN_HOST` matches, and the
+       sniffer's attestation is ≤ 10 s old for a live lab-account session;
+     - or, in ASSIST only, a bounded operator window is open (`capture_backend.py window
+       login|desktop`, ≤ 120 s, tied to the lock SEQ).
+
+     Releases always pass; green → red releases what the bot holds. Adding a server = config + an
+     ADR-0006 entry, never code. No firewall rule in the lab (production option only).
+     ro_agent opens per-phase windows itself.
+   - Concretely:
    - **Official servers and any other public server: forbidden** for every component, in every mode.
    - **The community server:**
      - it counts as forbidden while its permission evidence is pending
        (`docs/environments/community-server.md`);
-     - even with evidence, **no agent automation runs there until the interlock exists** (the
-       [issue #2](https://github.com/lumduan/poring-lab/issues/2), `blocks-phase-4`);
+     - even with evidence, **no agent automation runs there**: its config entry is `pending` with no
+       signals (packet capture is not allowed there), so it can never be green;
      - Batt may play there manually, as the human;
      - pixels and input only; no packet capture unless its rules allow it.
    - **Client profiles:** the existing community-server client on Windows stays **untouched**. rAthena
@@ -172,6 +191,11 @@ ports, quickstart) and `docs/adr/`.
 - **torch is `2.14.0+cu130`** from the explicit `pytorch-cu130` index declared in the **root**
   `pyproject.toml`. cu126 has no sm_120 kernels; cu132 images refuse to start on this R580 driver.
 
+- **The frame-age guard** (2026-10-04, `poring_env/freshness.py`): never act on a stale picture.
+  - Presses are refused (`StaleFrame`) when the S2 stream is older than `STREAM_MAX_AGE_MS` (150),
+    or the cited frame is older than `CITED_MAX_AGE_MS` (400). Releases always pass.
+  - ro_agent judges an action only on a frame decoded after it (`grab_after`).
+  - `/health.framebus.stalls` counts freezes.
 - **Packet ground truth (ADR-0007) never reaches the agent.**
   - `/ingest/packets` takes only the internal port and rathena's pinned `10.210.96.6`.
   - `/ws/packets` takes only `VIEWER_NETWORKS` (LAN browsers): the compose subnet, *gateway
@@ -265,8 +289,10 @@ ports, quickstart) and `docs/adr/`.
   - `frontend-dev` runs `next dev` with all writes on tmpfs.
 - `rathena` gets `entrypoint.sh` + `conf/import/groups.yml` bind-mounted, so the agent and GM accounts
   and group 20 apply with a recreate, not a build.
-- `sniffer` runs the backend image with the host `poring_packets` source (`build: !reset`; it can
-  never retag the stub over `poring-lab/backend:local`).
+- `sniffer` runs its own SLIM image (`poring-lab/sniffer:local`, f8c1531, ADR-0007 decision 2);
+  it has NO dev overlay (`test_guards.py`). So a `poring_packets` change (e.g. the B4 heading,
+  the ADR-0016 attestation) is live in the sniffer only after a guarded `build:sniffer` +
+  `recreate:sniffer`. After a sniffer restart the interlock says `no_session` until the next login.
 - **Every create/start/restart/recreate/build/pull goes through `scripts/guarded_build.py`** — enforced:
   `scripts/dev.sh` refuses unless the guard is its parent, and the repo's `.claude/settings.json` hook
   (`scripts/hooks/guard_docker.py`) refuses raw `docker`/`docker compose` forms. Don't route around them

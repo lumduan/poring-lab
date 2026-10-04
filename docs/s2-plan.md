@@ -500,6 +500,28 @@ The watchdog also ended the first entry (a stale heartbeat while waiting on Batt
    Batt reset OPNsense; the cause is not verified. The S2 client exited cleanly and the recorder
    stopped on the first non-bus frame. Dropped video frames also burst during the reset (12/min
    against 1–2/min).
+   ➡️ **EXPLAINED (Batt, 2026-10-04): Batt's planned switch/AP maintenance (the Sunday hardware
+   window).** No action. The paragraph above is kept as the record of what the lab saw.
+8. **Never act on a stale picture: the frame-age guard** (Batt, 2026-10-04: mitigate the packet
+   loss's effect, don't chase the network). About 1 frame in 10 s is lost upstream, and the stream
+   then freezes until the next IDR.
+   - **Measured** on the last stream (52.6 min, 30.3 new frames/s):
+     - frame gap p50 33, p99 49, p99.9 88 ms;
+     - gaps > 150 ms: 0.23/min, all 186–239 ms;
+     - max 239 ms.
+   - **The guard:**
+     - the STREAM age (now − the newest bus frame) must be ≤ 150 ms. That is above the p99.9 normal
+       gap and below every observed freeze;
+     - a decision's CITED frame must be ≤ 400 ms old (inference on a shared GPU);
+     - only presses are refused (`StaleFrame`); releases always pass.
+   - **Where it applies:**
+     - the vision loop skips the tick and counts it;
+     - ro_agent judges an action only on a frame decoded AFTER it (`grab_after`; `FrozenStream`
+       after 1.5 s);
+     - recordings mark freeze spans in their manifest;
+     - `/health.framebus.stalls` counts stalls live (`StallMonitor`, 20 Hz, header only).
+   - **Knobs:** `STREAM_MAX_AGE_MS`, `CITED_MAX_AGE_MS`, `FREEZE_MS`
+     (`poring_env/freshness.py`). The session report re-measures them.
 
 ## 10. Shared viewing (future capability; designed now)
 

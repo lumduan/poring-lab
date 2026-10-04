@@ -1,18 +1,22 @@
 ---
 doc_type: decision
 hypothesis: null
-status: PROPOSED
+status: GO
 role: null
-verdict_date: null
+verdict_date: 2026-10-04
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: Batt rules on the KB (static server data at plan time) and on behavior trees as the executor; then the KB generator (local, never committed) and the plan schema + linter come first, before any LLM.
+next_action: Build in order once Phase 2-3 perception and ADR-0005/0016 allow: the KB generator (local, never committed), the plan schema + linter, then the behavior-tree executor, before any LLM.
 ---
 
 # ADR-0015: Phase 4 is plan → lint → approve → execute (an LLM planner, a deterministic executor)
 
-- **Status:** PROPOSED (2026-10-03, Batt's item 5). Nothing is built.
+- **Status:** ACCEPTED (Batt, 2026-10-04). Proposed on 2026-10-03 (Batt's item 5). Nothing is
+  built yet. Batt's ruling, as accepted:
+  - static server data (mob_db, spawns, the element table, maps) is game knowledge at PLAN time;
+  - live state stays forbidden as decision input (ADR-0007);
+  - behavior trees for the executor.
 - **Gates (unchanged):** Phase 4 still needs Phase 2–3 perception, ADR-0005 implemented, and the
   environment interlock ([ADR-0016](0016-environment-interlock.md)).
 - **Roadmap rows this would supersede** ([ROADMAP](../ROADMAP.md)):
@@ -20,7 +24,8 @@ next_action: Batt rules on the KB (static server data at plan time) and on behav
   - Phase 6 "the LLM emits intents only, consumed by the FSM": the LLM becomes Phase 4's planner.
   - Phase 6 keeps the social and chat research.
 
-  The rows are pointed at this ADR now. They are rewritten only if it is accepted.
+  The rows are pointed at this ADR now. They are rewritten only if it is accepted. ➡️ Accepted
+  2026-10-04: the ROADMAP rows are rewritten in the same change.
 
 ## The flow
 ```
@@ -65,7 +70,7 @@ mux (/internal/agent, source=bot; lease, log, ADR-0016 interlock) → the one se
   builds the KB **locally at run time** (`data/kb/`, gitignored). Client data (GAT) is read from the
   GRF into `/dev/shm`. Neither is ever committed (THIRD_PARTY.md; Batt 2026-10-03).
 
-### Ruling (PROPOSED for Batt): static server data is game knowledge at PLAN time
+### Ruling (ACCEPTED, Batt 2026-10-04): static server data is game knowledge at PLAN time
 - **Allowed at plan time:** static data files (monster stats, spawn tables, the element table, map
   geometry). A human player knows these from wikis. They describe the game, not its live state.
 - **Still forbidden at decision time** (CLAUDE.md rule 1, ADR-0007): packets and live server state
@@ -87,7 +92,7 @@ Errors are short, human-readable sentences: the owner reads the same text the pl
 
 ## The executor
 - **Option A:** a plan interpreter. Each step type is deterministic code.
-- **Option B (recommended): behavior trees.** Sequence, selector and condition nodes with action
+- **Option B: behavior trees — CHOSEN (Batt, 2026-10-04).** Sequence, selector and condition nodes with action
   leaves are a natural fit for "hunt X until Y unless Z". They are easy to show as blocks in the
   approval view and easy to test offline against recorded sessions.
   - **Inspiration, ideas only:** [maxmx03/YggAI](https://github.com/maxmx03/YggAI) (GPL-3.0); no
