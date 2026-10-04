@@ -124,8 +124,13 @@ def cb(*args: str, timeout: float = 600) -> subprocess.CompletedProcess[str]:
     res = subprocess.run(
         [*CB, *args], capture_output=True, text=True, timeout=timeout, cwd=REPO, check=False
     )
-    tail = (res.stdout + res.stderr).strip().splitlines()[-6:]
-    say(f"capture_backend {' '.join(args)}: rc={res.returncode}")
+    text = (res.stdout + res.stderr).strip()
+    tail = text.splitlines()[-6:]
+    # the whole output too (the log keeps 6 lines; a 2026-10-04 to-console failure needed more)
+    full = STATE / f"cb-{args[0] if args else 'none'}.log"
+    with contextlib.suppress(OSError):
+        full.write_text(text + "\n")
+    say(f"capture_backend {' '.join(args)}: rc={res.returncode} (full output: {full})")
     for line in tail:
         say(f"  | {line}")
     return res

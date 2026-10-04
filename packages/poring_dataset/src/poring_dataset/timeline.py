@@ -151,10 +151,17 @@ class Timeline:
             self._apply(world, event)
         return world
 
+    def grid(self, map_name: str | None) -> MapGrid | None:
+        """The map cache's grid for a packet map name. Packets say "prt_fild08.gat", the cache
+        keys "prt_fild08": without this every walk fell back to the straight diagonal-first
+        path instead of A* (found by the T0 evaluation, 2026-10-04)."""
+        name = (map_name or "").removesuffix(".gat")
+        return self.maps.get(name) if name else None
+
     def frame_world(self, t_ns: int) -> FrameWorld:
         world = self.world_at(t_ns)
         tick = tick_of(t_ns)
-        grid = self.maps.get(world.map or "")
+        grid = self.grid(world.map)
         self_pos, self_heading = None, None
         if world.self_walk is not None:
             *xy, self_heading = walk_state(world.self_walk, tick, grid)
@@ -193,7 +200,7 @@ class Timeline:
         return self.die_ms.get(job, self.default_die_ms)
 
     def _state(self, world: World, gid: int, t_ns: int) -> ActorState | None:
-        grid = self.maps.get(world.map or "")
+        grid = self.grid(world.map)
         if gid == world.aid:
             if world.self_x is None or world.self_y is None:
                 return None

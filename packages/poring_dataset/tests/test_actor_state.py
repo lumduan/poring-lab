@@ -159,3 +159,15 @@ def test_labels_still_come_from_frame_world_unchanged(tl: Timeline) -> None:
     frame = tl.frame_world(at(1300))  # mid-attack
     out = lb.labels_for(frame, h, (784, 625), exclude_gids=[AID])
     assert [(b.gid, b.cls) for b in out] == [(7, "monster")]  # 8, 10 cells north, is off screen
+
+
+def test_packet_map_names_find_the_map_cache_grid() -> None:
+    """Packets name maps "prt_fild08.gat"; the map cache keys "prt_fild08". The lookup must strip
+    the suffix, or every walk falls back to the straight path (T0 evaluation, 2026-10-04)."""
+    from poring_dataset.mapcache import MapGrid
+
+    grid = MapGrid("prt_fild08", 4, 4, bytes(16))
+    tl = Timeline([], {"prt_fild08": grid})
+    assert tl.grid("prt_fild08.gat") is grid
+    assert tl.grid("prt_fild08") is grid
+    assert tl.grid(None) is None and tl.grid("") is None and tl.grid("nowhere.gat") is None
