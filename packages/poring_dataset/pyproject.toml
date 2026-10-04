@@ -4,7 +4,11 @@ version = "0.1.0"
 description = "poring-lab Phase 2: recordings, packet-to-frame alignment, walkability, projection and auto-labels -- OFFLINE ONLY (ADR-0010); never imported by poring_env or vision at decision time."
 requires-python = ">=3.12"
 # Built on the offline packet ground truth (ADR-0007) and numpy; nothing GPU, nothing live.
-dependencies = ["poring-packets", "numpy>=2.3"]
+# av: the H.264 dataset reader (Batt 2026-10-04: H.264 is the default dataset format). PINNED to the
+# gamestream image's version (services/gamestream/s2spike/requirements.txt): the same abi3 wheel,
+# so the same bundled FFmpeg -- the per-frame checksums are only comparable for one decoder build.
+# Host only: vision never installs poring-dataset (test_guards).
+dependencies = ["poring-packets", "numpy>=2.3", "av==19.0.1"]
 
 [build-system]
 requires = ["hatchling"]

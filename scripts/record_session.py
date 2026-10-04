@@ -1,18 +1,23 @@
 #!/usr/bin/env python3
 """Record a session for Phase 2 (ADR-0010): lossless GAME_REGION frames + the packet events.
 
-    record_session.py --backend rdp --label calib --seconds 120 [--fps 10] [--out DIR]
-                      [--max-bytes 2G]
-    record_session.py --backend console --format h264 --idr-every 2 --label c3-h264-idr2 ...
+    record_session.py --backend console --label outdoor-a --seconds 1200 --max-bytes 3G
+    record_session.py --backend rdp --label calib --seconds 120 [--fps 1] [--out DIR] --max-bytes 2G
+    record_session.py --backend console --format png --fps 1 ...        (PNG, still selectable)
 
-* --format h264 (EXPERIMENT C1, Post-S2 round 2026-10-04; PNG stays the default until Batt
-  decides): no frames are grabbed here. The S2 client writes the bitstream it decodes into its
+* THE DEFAULT FORMAT (Batt, 2026-10-04, C4): console -> raw H.264 with an IDR every 1 s; rdp -> PNG
+  (h264 is the S2 client's own bitstream, console only). ADR-0010's 2026-10-04 note has the rates.
+* --format h264: no frames are grabbed here. The S2 client writes the bitstream it decodes into its
   recording dir (S2_REC_DIR, a host bind mount: .s2-h264 under the local root, dot-named so
   dataset_ship never lists it), driven by a control file this script writes and re-touches (the
   client's dead-man switch). At the end the client's files move into the session as stream.h264,
   stream.idx.csv (one row per access unit), stream.hash.csv (a hash per decoded frame) and
-  stream.done.json; --check (default) first re-decodes them in the gamestream container
-  (s2spike.h264check: determinism, random access, decode throughput) -> stream.check.json.
+  stream.done.json. The determinism check runs OFFLINE on the host after shipping
+  (scripts/dataset_check.py: every frame against the live checksum); --check additionally runs
+  s2spike.h264check in the gamestream container at the end (it contends with the live stream: a
+  20-min session's check took ~12 min, so it is off by default).
+* Limits the S2 client enforces (s2spike.h264rec.parse_control), checked here up front: at most
+  H264_MAX_SECONDS per recording and an 8192 MB cap.
 
 * Frames: GAME_REGION grabbed inside the backend container (ro_agent.Screen: same CLOCK_MONOTONIC
   as the packets), at most --fps, and only when the picture changed (a still scene costs nothing).
@@ -62,7 +67,9 @@ from poring_dataset.timeline import session_events  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 SALT = ROOT / "data" / "dataset-pseudonym.salt"
-RECORDER_VERSION = 4  # v4: --format h264 + cpu; v3: bus frame ids + source per frame (S2)
+RECORDER_VERSION = 5  # v5: h264 by default on console; v4: --format h264 + cpu; v3: bus ids (S2)
+H264_MAX_SECONDS = 3570  # the client's time cap is 3600 s; we ask for seconds + 30
+H264_MAX_MB = 8192  # the client's size cap
 CAP_CHECK_S = 5.0  # how often the local caps are re-checked while recording
 GAMESTREAM = "poring-lab-gamestream-1"
 BACKEND = "poring-lab-backend-1"
@@ -462,24 +469,24 @@ def main() -> int:
     ap.add_argument("--backend", choices=["rdp", "console"])
     ap.add_argument("--label")
     ap.add_argument("--seconds", type=float, default=120.0)
-    ap.add_argument("--fps", type=float, default=10.0)
+    ap.add_argument("--fps", type=float, default=1.0, help="png: the frame rate cap (Batt: 1)")
     ap.add_argument(
         "--format",
         choices=["png", "h264"],
-        default="png",
-        help="h264: the S2 client's own bitstream (experiment C1; console only)",
+        default=None,
+        help="default: h264 on console (Batt 2026-10-04), png on rdp",
     )
     ap.add_argument(
         "--idr-every",
         type=float,
-        default=0.0,
-        help="h264: ask for an IDR every N s (0 = never; random-access cost)",
+        default=1.0,
+        help="h264: ask for an IDR every N s (default 1; 0 = never)",
     )
     ap.add_argument(
-        "--no-check",
+        "--check",
         dest="check",
-        action="store_false",
-        help="h264: skip the offline determinism/seek/throughput check",
+        action="store_true",
+        help="h264: also run s2spike.h264check in gamestream at the end (contends with the stream)",
     )
     ap.add_argument(
         "--png-level", type=int, choices=range(0, 10), default=1,
@@ -514,8 +521,24 @@ def main() -> int:
         raise r.Stop("label: letters, digits, _ . - only")
     if str(a.out.resolve()).startswith(str((ROOT / "data").resolve())):
         raise r.Stop("never under ./data: vision mounts it (ADR-0010)")
+    resolve_format(a)
     print(json.dumps(record(a)))
     return 0
+
+
+def resolve_format(a: argparse.Namespace) -> None:
+    """The default format per backend (Batt 2026-10-04: h264 on console, png on rdp), and the
+    S2 client's own limits checked up front (it silently ignores an out-of-range start)."""
+    if a.format is None:
+        a.format = "h264" if a.backend == "console" else "png"
+    if a.format != "h264":
+        return
+    if a.seconds > H264_MAX_SECONDS:
+        raise r.Stop(f"--format h264: at most {H264_MAX_SECONDS} s per recording")
+    if a.max_bytes / 1e6 > H264_MAX_MB:
+        raise r.Stop(f"--format h264: --max-bytes at most {H264_MAX_MB} MB (the client's cap)")
+    if not 0 <= a.idr_every <= 60:
+        raise r.Stop("--idr-every: 0..60 s")
 
 
 if __name__ == "__main__":

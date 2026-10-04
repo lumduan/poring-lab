@@ -50,6 +50,11 @@ humanization and LLM integration are clearly marked TODOs.
     isolated), shared with the backend alone;
   - the backend refuses that subnet on every listener but `:8001`. So the bot's one way in is
     `/internal/agent` → the mux, and it can reach neither the LAN, the host nor the internet.
+- **Datasets** (ADR-0010): `scripts/record_session.py` records H.264 by default on console (the S2
+  client's own bitstream, an IDR every 1 s, ~2.5 GB/h; Batt 2026-10-04) and PNG on rdp
+  (`--format png --fps 1` is still selectable on console). `scripts/dataset_ship.py ship` moves
+  sessions to the NAS; `scripts/dataset_check.py` then verifies every H.264 frame on the host;
+  `poring_dataset.h264` reads them; `scripts/qa_export.py` reads either format.
 - **The environment interlock** (ADR-0016) gates the mux's BOT presses:
   - the allowlist is `config/environments.yaml`;
   - the sniffer's attestation must say a lab account's session is live;

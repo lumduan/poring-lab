@@ -7,7 +7,7 @@ verdict_date: 2026-10-02
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: ACCEPTED 2026-10-02 (the 30 s ship round-trip passed on the NAS). Next -- record real sessions to the local root and ship them outside SET hours; keep benchmark/hand-labelled sessions pinned.
+next_action: H.264 (IDR 1 s) is the default since 2026-10-04 (Batt). Record console sessions as H.264, ship them, run scripts/dataset_check.py on the NAS copy; keep benchmark/hand-labelled sessions pinned.
 ---
 
 # ADR-0010: Phase 2 dataset format -- WebDataset tar shards of lossless frames + packet ground truth
@@ -32,6 +32,34 @@ next_action: ACCEPTED 2026-10-02 (the 30 s ship round-trip passed on the NAS). N
 > 1280×720 frame is ~2.1 MB at any zlib level. Batt's decision: record at **fps 1** under the armed
 > guard (~2.1 MB/s, ~7 GB/h); anything faster is his call per window. The sink and format are
 > unchanged. Results: [phase2-plan.md](../phase2-plan.md) "S2 datasets".
+
+> ➡️ **Note 2026-10-04, later (Batt, C4): the DEFAULT FORMAT is now raw H.264 with an IDR every
+> 1 s.** On console, `record_session.py` keeps the S2 client's own bitstream instead of PNG frames.
+> PNG shards (above) stay selectable (`--format png --fps 1`) and remain the format on rdp.
+>
+> **Layout.** A session dir holds `stream.h264` (the Annex-B access units as the live client
+> decoded them), `stream.idx.csv` (one row per access unit: bus frame_id, IDR flag, offset,
+> length, decode-complete time) and `stream.hash.csv` (a crc32+adler32 per decoded frame), plus
+> `stream.done.json` (the recorder's summary, incl. the decoder build), `packets.jsonl.gz` and
+> `manifest.json` (`format: h264`, `idr_every_s`, freeze spans).
+>
+> **Rates** (C3, [h264-vs-png.md](../benchmarks/h264-vs-png.md)): 32–48 MB/min keeping EVERY
+> frame (~30/s). At IDR 1 s that is 40.7 MB/min ≈ **2.5 GB/h**, against PNG fps 1 at
+> 124 MB/min ≈ 7.5 GB/h for 1 frame/s. The worst case is the bitrate cap, 20 Mb/s = 150 MB/min.
+>
+> **Headroom.** The free-space floor stays 140 GB (Batt): with 152 GB free that is 12 GB, about
+> **5 h of H.264 per session before shipping**. The 20 GB unshipped cap alone would allow ~8 h.
+>
+> **Determinism.** The bitstream is the dataset only while decoding is bit-identical.
+> - `scripts/dataset_check.py` decodes every frame on the HOST after shipping and compares each
+>   checksum with the live client's.
+> - The host's PyAV is the gamestream image's exact wheel (19.0.1, libavcodec 63.1.102).
+> - The 5 C3 sessions gave 27,910 / 27,910 identical frames.
+> - The reader refuses another decoder build.
+>
+> **Reading.** `poring_dataset.h264.H264Session` decodes by GOP, verifies each frame and skips
+> freeze spans. Random access costs ~200–300 ms per frame on this host (offline seek, h264-vs-png),
+> so training reads a frame cache built in one pass per session (Phase 3 plan).
 
 ## Context
 

@@ -119,6 +119,10 @@ indoor session is marked INVALID on the NAS (`dataset_ship.py mark-invalid`) and
   (`label_iou.py score` once saved).
 - The old indoor set is marked INVALID and kept.
 
+**From 2026-10-04 (Batt, C4) new console sessions are H.264 with an IDR every 1 s** (ADR-0010
+note): every frame is kept at ~2.5 GB/h, and each is verified on the host after shipping
+(`dataset_check.py`). `qa_export` and `label_iou` read both formats.
+
 ## Resolution: FROZEN at a 1280×720 client area (Batt, 2026-10-02)
 
 - **Why the window was small, and why that no longer holds.** It was cut to 800×664 when pixel

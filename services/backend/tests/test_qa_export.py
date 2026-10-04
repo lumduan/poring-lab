@@ -120,3 +120,67 @@ def test_each_backend_has_its_own_camera_file() -> None:
     assert camera_file("console").name == "camera_console.json"
     with pytest.raises(ValueError):
         camera_file("vnc")
+
+
+def h264_session(tmp_path: Path) -> Path:
+    """A tiny H.264 session as record_session --format h264 leaves it (Batt 2026-10-04: the
+    default format): the stream, its index, the live decoder's checksums, packets, manifest."""
+    import csv
+    from fractions import Fraction
+
+    av = pytest.importorskip("av")
+    from poring_dataset import h264
+
+    out = tmp_path / "h264sess"
+    out.mkdir()
+    enc = av.CodecContext.create("libx264", "w")
+    enc.width, enc.height, enc.pix_fmt = 128, 96, "yuv420p"
+    enc.time_base = Fraction(1, 30)
+    enc.options = {"preset": "ultrafast", "tune": "zerolatency",
+                   "x264-params": "keyint=10:min-keyint=10:repeat-headers=1:annexb=1"}  # fmt: skip
+    aus = []
+    for i in range(30):
+        f = av.VideoFrame.from_ndarray(np.full((96, 128, 3), 40 + i * 5, np.uint8), format="rgb24")
+        f.pts = i
+        aus += [bytes(p) for p in enc.encode(f)]
+    aus += [bytes(p) for p in enc.encode(None)]
+    live = h264.new_decoder()
+    with (out / "stream.idx.csv").open("w", newline="") as idx, \
+            (out / "stream.hash.csv").open("w", newline="") as hsh:  # fmt: skip
+        wi, wh = csv.writer(idx), csv.writer(hsh)
+        wi.writerow(["au", "frame_id", "frame_number", "frame_type", "idr", "pts_ms", "offset",
+                     "length", "receive_ms", "t_publish_ns"])  # fmt: skip
+        wh.writerow(["frame_id", "crc32_adler32"])
+        offset = 0
+        for k, au in enumerate(aus):
+            frame = list(live.decode(av.Packet(au)))[0]
+            wi.writerow([k, 5000 + k, k, 0, int(k % 10 == 0), k * 33, offset, len(au), k,
+                         T0 + k * 33_000_000])  # fmt: skip
+            wh.writerow([5000 + k, h264.frame_digest(
+                np.ascontiguousarray(frame.to_ndarray(format="bgra")))])  # fmt: skip
+            offset += len(au)
+    (out / "stream.h264").write_bytes(b"".join(aus))
+    (out / "stream.done.json").write_text(json.dumps({"versions": h264.decoder_versions()}))
+    with gzip.open(out / "packets.jsonl.gz", "wt") as fh:
+        fh.write(json.dumps({"t_mono_ns": T0 - 1_000_000_000, "type": "map_change",
+                             "map": "prt_fild08", "x": 170, "y": 375}) + "\n")  # fmt: skip
+    write_manifest(out, {"session_id": "s264", "backend": "console", "format": "h264",
+                         "game_region": [8, 8, 64, 48], "shards": [],
+                         "freezes": {"spans_ns": []}})  # fmt: skip
+    return out
+
+
+def test_an_h264_session_exports_like_a_png_one(
+    qa: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["qa_export.py", str(h264_session(tmp_path)), "--max", "4",
+                                      "--offset-ms", "120"])  # fmt: skip
+    assert qa.main() == 0
+    bundle = tmp_path / "bundles" / "s264"
+    labels = json.loads((bundle / "labels.json").read_text())
+    ids = [f["frame_id"] for f in labels["frames"]]
+    assert len(ids) == 4 and ids == sorted(ids) and all(5000 <= i < 5030 for i in ids)
+    from poring_dataset.shards import decode_png
+
+    img = decode_png((bundle / labels["frames"][0]["file"]).read_bytes())
+    assert img.shape[:2] == (48, 64)  # the GAME_REGION crop, as PNG sessions export

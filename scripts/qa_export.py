@@ -13,6 +13,9 @@
 * Bundle: services/frontend/.qa-local/<session>/ (gitignored, .dockerignore'd, dev route only) --
   frames as lossless PNG + labels.json; index.json lists the sessions.
 * --sheet: also an offline contact sheet with the boxes drawn (for reports), e.g. in /dev/shm.
+* Either format: PNG shards, or an H.264 session (Batt 2026-10-04: the default) read through
+  poring_dataset.h264 -- evenly spread frames, freeze spans excluded, each frame verified against
+  the live decode. The bundle itself is always PNG, so /qa does not change.
 * Indoor maps (Post-S2 round B1): the camera rotated by the client's own rule (camera.py); the
   client's indoorrswtable.txt must be extracted into the GAT dir, else the export refuses (fail
   closed: an outdoor camera on an indoor map gave the invalid 2026-10-04 indoor labels). Hidden NPC
@@ -25,6 +28,7 @@ import argparse
 import gzip
 import json
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -127,6 +131,28 @@ class Labeler:
         ]  # fmt: skip
 
 
+def session_frames(
+    session: Path, manifest: dict[str, Any], *, every: int, limit: int
+) -> Iterator[tuple[dict[str, Any], np.ndarray]]:
+    """A session's frames as (meta{frame_id, t_mono_ns}, BGR GAME_REGION image), either format.
+    PNG: every ``every``-th shard frame. H.264 (Batt 2026-10-04: the default): ``limit`` x 2
+    frames spread evenly over the session, freeze spans excluded, each GOP decoded once and every
+    frame checked against the live decode (poring_dataset.h264) -- GM windows thin them later."""
+    if (manifest.get("format") or "png") == "h264":
+        from poring_dataset.h264 import H264Session
+
+        stream = H264Session(session)
+        yield from stream.frames(stream.sample(limit * 2))
+        return
+    n = 0
+    for shard in manifest["shards"]:
+        for meta, img in read_shard(session / shard):
+            n += 1
+            if (n - 1) % every:
+                continue
+            yield meta, img
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     ap.add_argument("session", type=Path)
@@ -142,22 +168,19 @@ def main() -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     frames_out: list[dict[str, Any]] = []
     sheet: list[np.ndarray] = []
-    n = 0
-    for shard in manifest["shards"]:
-        for meta, img in read_shard(a.session / shard):
-            n += 1
-            if (n - 1) % a.every or len(frames_out) >= a.max:
-                continue
-            t = int(meta["t_mono_ns"])
-            boxes = lab.boxes(t)
-            if boxes is None:
-                continue
-            name = f"{meta['frame_id']:09d}.png"
-            (out_dir / name).write_bytes(encode_png(img))
-            frames_out.append({"file": name, "frame_id": meta["frame_id"], "t_mono_ns": t,
-                               "boxes": boxes})  # fmt: skip
-            if a.sheet and len(sheet) < 12:
-                sheet.append(draw(img, boxes))
+    for meta, img in session_frames(a.session, manifest, every=a.every, limit=a.max):
+        if len(frames_out) >= a.max:
+            break
+        t = int(meta["t_mono_ns"])
+        boxes = lab.boxes(t)
+        if boxes is None:
+            continue
+        name = f"{meta['frame_id']:09d}.png"
+        (out_dir / name).write_bytes(encode_png(img))
+        frames_out.append({"file": name, "frame_id": meta["frame_id"], "t_mono_ns": t,
+                           "boxes": boxes})  # fmt: skip
+        if a.sheet and len(sheet) < 12:
+            sheet.append(draw(img, boxes))
     (out_dir / "labels.json").write_text(json.dumps({
         "session": manifest["session_id"], "size": list(size), "offset_ms": lab.offset_ms,
         "offset_run": lab.offset_run, "camera": lab.camera_path.name,

@@ -536,7 +536,12 @@ The watchdog also ended the first entry (a stale heartbeat while waiting on Batt
    - the rule failed on seek latency (p95 314 ms at an IDR per second) and on a stall comparison
      within noise.
 
-   PNG stays the default until Batt decides.
+   ~~PNG stays the default until Batt decides.~~ ➡️ **DECIDED 2026-10-04 (Batt): H.264 with an IDR
+   every 1 s is the default dataset format** (ADR-0010 note). PNG stays selectable.
+   - The determinism check moved to the host after shipping (`dataset_check.py`; 27,910 / 27,910 on
+     C3).
+   - The offline seek re-measure: H1 single frame p50 / p95 197 / 305 ms, 16-frame clip p50 734 ms.
+     So training reads a per-session frame cache.
 
 ## 10. Shared viewing (future capability; designed now)
 

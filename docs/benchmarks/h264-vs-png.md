@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: C4 -- Batt decides. By the pre-registered rule PNG stays (two conditions failed, see Results); the proposal is H.264 at IDR 1 s once the seek is re-measured on an idle decoder.
+next_action: DECIDED 2026-10-04 -- Batt switched the default to H.264 at IDR 1 s (an override of the pre-registered rule, his reasons below). Training reads a per-session frame cache, not random access (offline seek, below).
 ---
 
 # Raw H.264 vs PNG datasets: pre-registered (2026-10-04, Post-S2 round Part C)
@@ -193,4 +193,84 @@ the seek on an IDLE decoder, not gamestream mid-stream.
   2. a frame reader in `poring_dataset` (PyAV in the host env or a decode service);
   3. `qa_export` reading `stream.h264`;
   4. then the switch of `record_session.py`'s default.
+
+### Offline seek re-measure (pre-registered 2026-10-04 12:4x ICT, BEFORE the run)
+**Why:** Batt's C4 decision (2026-10-04) noted that C3's seek was measured on a CONTENDED decoder
+(`h264check` in gamestream while the stream ran).
+
+**Conditions:**
+- the host, R1 at rest (no stream running), normal priority;
+- the stream file held in memory (no IO in the timing);
+- the reader that training and QA use (`poring_dataset.h264`): the live decoder's configuration
+  (LOW_DELAY, 2 slice threads), a fresh decoder per GOP, BGRA conversion of the returned frames
+  only, and every returned frame checked against the live checksum.
+
+**Arms:** sessions H1, H2 and H5 (IDR every 1, 2, 5 s). Per session:
+- N = 200 random single frames (from the preceding IDR to the target);
+- N = 200 random 16-frame clips;
+- seed 20261004.
+
+**Reported:** p50 / p95 / p99 ms, ms per useful frame, AUs decoded, the host's load average.
+
+**Expected** (from the dry run's ~6 ms per access unit uncontended):
+- H1 single-frame p50 ≤ 100 ms, p95 ≤ 200 ms;
+- H1 16-frame clip p50 ≤ 250 ms (≤ 16 ms per frame);
+- H2 ≈ 2× and H5 ≈ 5× H1's from-IDR distance.
+
+A caveat already known before the run: the host determinism pass ran at `nice 10` and reached only
+44–50 frames/s (decode + conversion + checksum). The host is shared with Frigate and the quant
+stack, so "uncontended" here means no stream, not an idle machine.
+
+#### Results (2026-10-04 12:34–12:51 ICT = 05:34–05:51 UTC; host: 64 cores, load average 9–16)
+The stream was not running (R1). The HOST was not idle: Frigate, the quant stack and Ollama ran as
+usual (load 9–16).
+
+| Arm | Session | Single frame p50 / p95 / p99 ms | AUs decoded (p50) | 16-frame clip p50 / p95 / p99 ms | ms per clip frame |
+|---|---|---|---|---|---|
+| live config (2 threads), verify | H1 (IDR 1 s) | **196.8 / 304.7 / 353.0** | 17 | **733.6 / 948.6 / 1090.5** | 45.9 |
+| live config, verify | H2 (IDR 2 s) | 319.8 / 567.9 / 683.7 | 31 | 909.3 / 1298.0 / 1411.1 | 56.8 |
+| live config, verify | H5 (IDR 5 s) | 652.7 / 1235.2 / 1346.0 | 80 | 1157.6 / 1791.2 / 2144.5 | 72.3 |
+| 4 slice threads, verify (N = 100) | H1 | 171.2 / 254.9 / 306.6 | – | 720.2 / 857.7 / 1030.7 | 45.0 |
+| 4 slice threads, no per-read verify (N = 100) | H1 | 152.6 / 243.1 / 260.7 | – | 537.2 / 637.9 / 771.0 | 33.6 |
+
+**Where a frame's time goes** (H1, the same host):
+
+| Step | Cost |
+|---|---|
+| decode | 12.6 ms per access unit (2 slice threads) / 6.0 ms (4 threads; Sunshine sends 4 slices) |
+| BGRA conversion | 2.5 ms per frame |
+| the checksum | 9.0 ms per frame |
+
+4 threads kept every checksum identical: the output stays bit-exact.
+
+**Against the pre-registration: all FAIL.** H1 single p50 197 vs ≤ 100 ms, p95 305 vs ≤ 200; clip
+p50 734 vs ≤ 250. H2 and H5 scale as expected with the IDR distance.
+- **The pre-registration's basis was wrong.** It extrapolated from the synthetic libx264 dry run;
+  Sunshine's real stream costs ~2× more per access unit, on a loaded host.
+- **The C3 numbers were not "the contended decoder" either.** The in-gamestream check (H1 p50/p95
+  145/314) was about as fast as this offline host run.
+
+**Consequence (for the Phase 3 plan):** random access is NOT how training should read H.264.
+- One sequential pass per session (~6–13 ms per access unit decode-only, converting only the
+  sampled frames) builds a frame cache, and training reads the cache.
+- The full checksum pass (`dataset_check.py`) runs once per session; per-read verification is then
+  optional.
+
+### C4: DECIDED by Batt (2026-10-04): H.264 with an IDR every 1 s is the default
+Batt overrode the pre-registered rule. In his words, the failed criteria measured the wrong thing:
+- the seek was measured on a contended decoder;
+- the cores criterion counted gamestream only;
+- the stall comparison sat within background noise.
+
+**Implemented:**
+- `record_session.py`:
+  - h264 by default on console (IDR 1 s), png on rdp;
+  - `--format png --fps 1` stays selectable;
+  - the S2 client's limits are checked up front;
+  - recorder v5.
+- The reader `poring_dataset.h264`: GOP decoding, clips, freeze spans, the per-frame checksum,
+  the decoder-build check.
+- `scripts/dataset_check.py`: a full determinism pass on the HOST after shipping. On the 5 C3
+  sessions it found **27,910 / 27,910 frames identical**: the host build equals the live client's.
+- `qa_export.py` reads either format.
 

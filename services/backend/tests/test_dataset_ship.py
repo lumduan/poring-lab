@@ -325,3 +325,31 @@ def test_record_session_h264_refuses_rdp_and_bad_labels(
         rs.record_h264(args, None, {}, "", "20261004T120000-console-X_1", tmp_path / "s", {}, 0)
     with pytest.raises(rs.r.Stop, match="does not exist"):
         rs.record_h264(args, None, {}, "", "20261004T120000-console-x", tmp_path / "s", {}, 0)
+
+
+def test_the_default_format_is_h264_on_console_and_png_on_rdp() -> None:
+    """Batt 2026-10-04 (C4): H.264 with an IDR every 1 s is the default dataset format; PNG stays
+    selectable; the S2 client's own limits are checked before anything starts."""
+    rs = load("record_session")
+
+    def args(**kw: object) -> SimpleNamespace:
+        base: dict[str, object] = {"backend": "console", "format": None, "seconds": 1200.0,
+                                   "max_bytes": 3 * 10**9, "idr_every": 1.0}  # fmt: skip
+        return SimpleNamespace(**(base | kw))
+
+    a = args()
+    rs.resolve_format(a)
+    assert (a.format, a.idr_every) == ("h264", 1.0)
+    a = args(backend="rdp")
+    rs.resolve_format(a)
+    assert a.format == "png"
+    a = args(format="png")
+    rs.resolve_format(a)
+    assert a.format == "png"  # still selectable on console
+    with pytest.raises(rs.r.Stop, match="at most 3570 s"):
+        rs.resolve_format(args(seconds=3600.0))
+    with pytest.raises(rs.r.Stop, match="8192 MB"):
+        rs.resolve_format(args(max_bytes=9 * 10**9))
+    with pytest.raises(rs.r.Stop, match="0..60"):
+        rs.resolve_format(args(idr_every=90.0))
+    assert rs.RECORDER_VERSION == 5
