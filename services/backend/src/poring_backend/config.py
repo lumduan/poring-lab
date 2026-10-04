@@ -87,6 +87,13 @@ class Settings(BaseSettings):
     # listener but the internal one (agent_net.AgentNetworkGuard). Pinned like the compose subnet.
     agent_networks: str = "10.210.97.0/24"
 
+    # --- ADR-0016: the environment interlock (a LOGIC interlock, rewritten 2026-10-04) ----------
+    # The allowlist, mounted read-only from ./config (compose.yaml). Missing => every bot press is
+    # refused. WIN_HOST: the Windows host this lab drives (the same .env value desktop and
+    # gamestream connect to); the allowlist's windows_host must equal it.
+    environments_file: Path = Path("/lab-config/environments.yaml")
+    win_host: str = ""
+
     # --- Black-screen detector (display.py) ------------------------------------------------------
     # GAME_REGION: the RO client area in desktop pixels, "x,y,w,h"; "" = the whole frame (only a
     # fully black desktop would trip it). BLACK_HOLD_S: how long it must stay black.

@@ -190,6 +190,8 @@ services:
       BLACK_HOLD_S: ${BLACK_HOLD_S:-5}
       # S2 frame bus: the console's JPEG rate while it reads decoded frames (the bot reads them all).
       CONSOLE_FPS: ${CONSOLE_FPS:-15}
+      # ADR-0016: the Windows host this lab drives; config/environments.yaml must name the same.
+      WIN_HOST: ${WIN_HOST:-}
     volumes:
       - x11-unix:/tmp/.X11-unix:ro
       - ./data:/data
@@ -199,6 +201,8 @@ services:
       - transfer:/transfer
       # The capture-backend lock (ADR-0009), shown in /health and the console status.
       - ./state:/lab-state:ro
+      # ADR-0016: the environment allowlist (read-only; backend only -- tests/test_guards.py).
+      - ./config:/lab-config:ro
       # S2 frame bus (docs/s2-plan.md): decoded console frames, read-only here.
       - framebus:/framebus:ro
       # S2 input socket (ADR-0014): the Injector -- the ONE input writer -- sends the mux's events

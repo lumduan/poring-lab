@@ -23,6 +23,13 @@ Paste chords (ADR-0004)
   history) or Shift+Insert -- in either key order, because X autorepeats a held XTest key, so
   "hold V, then press Ctrl" pastes too. The human is unaffected.
 
+Environment interlock (ADR-0016, rewritten 2026-10-04)
+  ``submit(..., bot_allowed=False)`` refuses every BOT PRESS (a key or button down, a move, a
+  wheel step) with ``environment_unattested``; releases always pass -- a button release loses its
+  coordinates, so a refused bot never moves the pointer. The caller (AppState) decides
+  ``bot_allowed`` from the allowlist, the attestation and the operator window; when it turns false
+  ``release_bot`` lets go of whatever the bot still holds. Human input is never gated.
+
 Stream-client hotkeys (ADR-0009, console mode)
   Moonlight acts on Ctrl+Alt+Shift+<key> itself: +V TYPES the X clipboard into Windows (a paste
   path, ADR-0004), +Q quits the stream, +Z/+M change mouse capture, +X/+D the window, +S overlays
@@ -41,7 +48,9 @@ from poring_env.protocol import (
     Key,
     Mode,
     MouseButton,
+    MouseMove,
     ReleaseAll,
+    Wheel,
 )
 
 RESERVED_CHORD_KEYS = frozenset({"KeyD", "Enter", "NumpadEnter"})
@@ -53,6 +62,13 @@ PASTE_CHORDS: dict[str, frozenset[str]] = {
 }
 
 ButtonName = Literal["left", "middle", "right"]
+
+
+def is_press(event: InputEvent) -> bool:
+    """Input that DOES something (the interlock gates it); releases only undo."""
+    if isinstance(event, Key | MouseButton):
+        return event.action == "down"
+    return isinstance(event, MouseMove | Wheel)
 
 
 class Source(StrEnum):
@@ -142,13 +158,24 @@ class InputMux:
         self._last_human_ns = None  # a new mode starts without a lease
         return tuple(released)
 
-    def submit(self, source: Source, event: InputEvent, now_ns: int) -> Decision:
+    def release_bot(self, now_ns: int, *, reason: str = "interlock_release") -> tuple[Routed, ...]:
+        """Let go of everything the bot holds (the interlock turned red)."""
+        return tuple(self._release(Source.BOT, now_ns, reason=reason))
+
+    def submit(
+        self, source: Source, event: InputEvent, now_ns: int, *, bot_allowed: bool = True
+    ) -> Decision:
         if isinstance(event, Key) and not is_known(event.code):
             return Decision(False, "unknown_key_code")
         if source not in _ALLOWED[self._mode]:
             return Decision(False, f"mode={self._mode}")
         if source is Source.BOT and self.lease_active(now_ns):
             return Decision(False, "human_lease")
+        if source is Source.BOT and not bot_allowed:
+            if is_press(event):
+                return Decision(False, "environment_unattested")
+            if isinstance(event, MouseButton) and (event.x is not None or event.y is not None):
+                event = event.model_copy(update={"x": None, "y": None})  # release in place
         if self._is_reserved_chord(source, event):
             return Decision(False, "reserved_chord")
         if source is Source.BOT and self._is_paste_chord(source, event):

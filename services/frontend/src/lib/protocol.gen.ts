@@ -267,6 +267,10 @@ export interface Status {
    */
   clipboard_enabled: boolean;
   /**
+   * The environment interlock (ADR-0016); null in an agent's copy of Status.
+   */
+  environment: EnvironmentStatus | null;
+  /**
    * Frame this message refers to or was produced from; -1 means none.
    */
   frame_id: number;
@@ -370,6 +374,33 @@ export interface CleanRoom {
    * The stream client variant under test; null = none started yet.
    */
   variant: ("V1" | "V1gdb" | "V2" | "V3" | "V3b" | "S2") | null;
+}
+/**
+ * The environment interlock's verdict (ADR-0016, rewritten 2026-10-04), for the console and
+ * /health. Only humans see it: the copy of Status sent to an agent carries null here.
+ *
+ * This interface was referenced by `PoringProtocol`'s JSON-Schema
+ * via the `definition` "EnvironmentStatus".
+ */
+export interface EnvironmentStatus {
+  /**
+   * Seconds since the sniffer's last attestation; null = none yet.
+   */
+  attest_age_s: number | null;
+  /**
+   * The attested environment's id.
+   */
+  env_id: string | null;
+  /**
+   * "ok", "window:<kind>", or why bot presses are refused.
+   */
+  reason: string;
+  /**
+   * green: an allowed environment is attested; window: an operator window lets ASSIST's bot side through; red: every bot press is refused.
+   */
+  state: "green" | "window" | "red";
+  window: ("login" | "desktop") | null;
+  window_left_s: number | null;
 }
 /**
  * Mux verdict for one AgentInput batch.

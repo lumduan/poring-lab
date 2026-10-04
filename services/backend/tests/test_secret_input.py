@@ -141,13 +141,15 @@ def test_status_shows_secret_typing_and_a_disconnect_clears_it(
                     break
             else:
                 raise AssertionError("status never showed human_secret")
-    # the input connection closed: secret typing is off again
+    # the input connection closed: secret typing is off again (the disconnect's cleanup is a task
+    # of its own, so the very first status may still predate it: wait for it, bounded)
     with client.websocket_connect("/ws/stream", headers={"origin": ORIGIN}) as viewer:
         for _ in range(200):
             msg = json.loads(viewer.receive_text())
-            if msg.get("type") == "status":
-                assert msg["human_secret"] is False
+            if msg.get("type") == "status" and msg["human_secret"] is False:
                 break
+        else:
+            raise AssertionError("secret typing stayed on after the disconnect")
 
 
 def test_a_held_key_released_at_disconnect_stays_redacted(

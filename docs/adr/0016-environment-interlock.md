@@ -1,97 +1,172 @@
 ---
 doc_type: decision
 hypothesis: null
-status: PROPOSED
+status: GO
 role: null
-verdict_date: null
+verdict_date: 2026-10-04
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: Batt OKs (or edits) the outbound firewall rule for PoringLab.exe and the signal set; then build the mux gate + the sniffer attestation with the tests below. Closes issue #2 when built.
+next_action: Live check in the S2 session (GM in game -> green; a login window; expiry -> red + releases). The community server stays pending until its own signal set and evidence exist.
 ---
 
-# ADR-0016: The environment interlock (fail closed, defence in depth)
+# ADR-0016: The environment interlock (a LOGIC interlock, config-driven, fail closed)
 
-- **Status:** PROPOSED (2026-10-03). Design only; **nothing is built**.
-- **Implements:** [ADR-0006](0006-sanctioned-test-environments.md) rule 2, and closes
-  [issue #2](https://github.com/lumduan/poring-lab/issues/2) when built.
-- **Blocks:** Phase 4, together with ADR-0005.
+- **Status:** ACCEPTED (2026-10-04). It is built, and its tests pass (`test_interlock.py`, the
+  sniffer and ro_agent tests). The live check is in the S2 session report.
+- **History:** PROPOSED on 2026-10-03 with an outbound Windows Firewall rule as signal (iv).
+  Batt decided on 2026-10-04 that **the firewall rule is NOT applied in the lab**. The lab must stay
+  flexible: future non-rAthena servers and clients. So the interlock is LOGIC checks driven by a
+  config allowlist, and OS-level locks belong to production and teaching distributions only (the
+  "Production option" section). This document is the accepted rewrite; the original proposal is in
+  git history (`git log -- docs/adr/0016-environment-interlock.md`).
+- **Implements:** [ADR-0006](0006-sanctioned-test-environments.md) rule 2. Closes
+  [issue #2](https://github.com/lumduan/poring-lab/issues/2) for the lab's rAthena; the community
+  server stays forbidden for automation (below).
 
 ## Rule
-The mux accepts BOT input, and the bot side of ASSIST, **only while a verifiable signal says the
-session is on the lab's rAthena**. Everything else is refused with reason
-`environment_unattested`, counted and logged.
+The mux accepts a **BOT press** only while the interlock says so; everything else gets
+`environment_unattested`.
+- **What counts as a press:** a key or button down, a pointer move, a wheel step.
+- **When it passes:**
+  - BOT mode: only while an `allowed` environment's signals are all green;
+  - ASSIST: also while a bounded operator window is open.
+- **What is never gated:**
+  - releases: key ups, button ups and ReleaseAll always pass. A gated button-up loses its
+    coordinates, so a refused bot never moves the pointer;
+  - human input.
+- **Fail closed:** missing, stale, ambiguous or contradictory signals mean NO, and so does a
+  missing or invalid config.
+- **Counting:** refusals are counted in `/health` (`refused.bot.environment_unattested`) and shown
+  on the console.
+- **Green → red:** the backend releases whatever the bot still holds (`interlock_release`, the
+  `set_mode` pattern).
 
-- Human input is never affected.
-- The agent cannot set, claim or see the attestation, only the refusals.
-- Missing, stale, ambiguous or contradictory signals all mean NO.
+## The allowlist: `config/environments.yaml`
+The file is committed and holds no secrets. It is mounted read-only at `/lab-config` in the
+backend only (`test_guards`). Per environment it holds:
+- `id`;
+- `status` (`allowed` | `pending` | `forbidden`);
+- `adr`;
+- `server` (host, ports);
+- `windows_host`;
+- the `client` profile (exe, shortcut, server-select entry);
+- `accounts` (rAthena `login.account_id`s);
+- the required `signals`.
 
-## Signals
-| # | Signal | Source | Strength | Fakeable by |
-|---|---|---|---|---|
-| i | The target is the lab Dell | The capture-backend lock + the paired Sunshine host / RDP host (`WIN_HOST`). The session the mux drives is the Dell's. | structural | nothing in the agent's reach |
-| ii | **Session attestation** | The sniffer (ADR-0007) sees a **live map-server connection** from the Dell (`CLIENT_IP`) to OUR rathena (`:5121`) for the lab agent's **account id**, refreshed in the last N s (default 10 s). It sends the backend an internal-only field: `{server: "lab-rathena", aid, age_s}`. | strong | no one: it is our own server's traffic, seen on our host |
-| iii | Login-phase evidence | The client was launched from the PoringLab profile (the "Ragnarok Offline" shortcut → `C:\RO-rAthena\client\PoringLab.exe`). The backend's OWN grab matches the server-select template "PoringLab LAN (rAthena)". | medium | a look-alike screen (hence iv) |
-| iv | **Outbound firewall rule** | Windows Firewall lets `PoringLab.exe` reach only `192.168.1.13` TCP 6900/6121/5121. | structural | an admin on the Dell (Batt) |
+**Adding a server or a client is a config entry plus an ADR-0006 entry, never code.** The file
+is re-read when it changes.
 
-**ADR-0007 ruling for (ii):**
-- The sniffer contributes a yes/no plus the aid and freshness. That is **attestation, never world
-  data**.
-- No position, HP or entity data goes with it, and it reaches the mux only. It is never sent to an
-  agent (`poring_packets` stays out of vision; test_guards).
+Today it holds two environments:
+- `lab-rathena`: `allowed`, accounts 2000001 (agent) and 2000002 (validation GM), signals
+  `[lab_host, session]`;
+- `community-bot-testing`: `pending`, no signals. Packet capture is not allowed there, so it can
+  never be green.
 
-## The login problem (chicken and egg)
-Typing the login happens BEFORE any map connection exists, so (ii) cannot yet be green.
+## Signals (what each name means is fixed in `poring_backend/interlock.py`)
+| Signal | Holds when | Source | The agent can reach it? |
+|---|---|---|---|
+| `lab_host` | the capture-backend lock is `steady` on `rdp`/`console`, and the backend's `WIN_HOST` is the environment's `windows_host` | `state/capture-backend` (its only writer is `capture_backend.py`), compose env | no |
+| `session` | the sniffer's **attestation** is fresh (≤ `attestation_max_age_s` = 10 s) and says: a map session from `windows_host`, open (no FIN/RST) and recent (≤ 60 s since its last packet), for one of `accounts` | `/ingest/packets`: the internal port and rathena's pinned 10.210.96.6 only (ADR-0007) | no |
 
-**The login phase** is a narrow, time-boxed window. It is allowed only when ALL of these hold:
-- (i) holds;
-- (iii) holds, re-checked by the backend's grab right before each batch;
-- (iv) was read back at session start;
-- the batch is one of the login step types: a `sensitive` credential batch, the server-select
-  click, character select, Enter.
+**The attestation is attestation, never world data** (ADR-0007 ruling).
+- It carries `client_ip`, `session_live`, `aid`, `last_packet_age_ms` and `map_conns`. Nothing
+  else: a test pins the field set.
+- The backend hands it to the interlock only. It is never published to a viewer or an agent.
 
-The window closes at map entry. **From then on (ii) must turn green within 20 s**, or the mux fails
-closed and releases everything.
+**The client profile** (exe path, launch shortcut, server-select entry):
+- ro_agent launches only through the profile's shortcut and checks the login screens by their
+  templates before it types. That is the login-phase check.
+- The backend's gate does not re-verify the exe, because it cannot see Windows processes. See the
+  residual risks.
 
-The lab's credentials are worthless on any other server, and (iv) makes the lab exe physically
-unable to reach one.
-
-The community server is **out of scope here**. ADR-0006 forbids packet capture there, so (ii) does
-not exist for it. It stays forbidden for automation until its own signal set is designed and Batt
-records the permission evidence.
+## Operator windows (the login problem, and desktop work)
+Before a map session exists (close, launch, login, character select, entering the game) the
+`session` signal cannot be green. The agent's own shell work happens outside the game. For both:
+- **`scripts/capture_backend.py window login|desktop --seconds N`** is a HOST tool; the agent
+  channel can never open one.
+  - It writes `state/interlock-window`: `WINDOW`, `OPENED`, `UNTIL`, `SEQ`, `REASON`. The write is
+    atomic and read back on the host and in the backend.
+  - `N` ≤ 120 s, and the config's `window_max_s` bounds it again.
+- **The backend honours a window only:**
+  - in **ASSIST**, never in BOT mode;
+  - while it has not expired;
+  - for the lock `SEQ` it was opened under (any handover ends it);
+  - while the lock is steady. The one exception is a `desktop` window during capture_backend's own
+    `switching` handover, because it types `tscon` into its shell after moving the lock and
+    re-opens the window for the new SEQ.
+- **ro_agent opens windows per phase** (`ensure_window`): close, launch, login, character make,
+  entering the game, console focus, open-terminal, minimize-consoles.
+  - It skips the window when the interlock is already green, or when one of that kind has
+    ≥ 25 s left.
+- capture_backend opens its own windows before its ro_agent steps, because it holds the mutation
+  lock that `window` needs.
+- A window is logged by both tools and shown on the console banner, with its seconds left.
 
 ## Behaviour per failure
-| Situation | BOT | ASSIST, bot side | HUMAN | Visible |
-|---|---|---|---|---|
-| no attestation (fresh boot, sniffer down, not logged in) | refused | refused | allowed | `/health.environment`, Status, a console banner |
-| attestation older than N s | refused | refused | allowed | same; the age is shown |
-| another account id on the map connection | refused | refused | allowed | `aid_mismatch` |
-| map connection to anything but our rathena (nothing seen by the sniffer) | refused | refused | allowed | `no_session` |
-| login phase: template (iii) not matched | login batch refused | refused | allowed | `login_unverified` |
-| firewall rule (iv) not read back at session start | login phase refused | refused | allowed | `firewall_unverified` |
-| ASSIST auto-restore after a guarded restart | ASSIST returns, but its bot side stays refused until attested | — | — | `mode_restored` + the banner |
+| Situation | Reason | BOT | ASSIST bot side | HUMAN | Visible |
+|---|---|---|---|---|---|
+| no or invalid config file | `config_missing` / `config_invalid` | refused | refused (a window still opens ASSIST) | allowed | `/health.environment`, banner |
+| lock hold / switching | `lock_not_steady` | refused | refused unless a window | allowed | same |
+| `WIN_HOST` ≠ `windows_host` | `host_mismatch` | refused | refused unless a window | allowed | same |
+| no attestation since boot (sniffer down) | `no_attestation` | refused | refused unless a window | allowed | same |
+| attestation older than 10 s | `attestation_stale` (+ the bot's held keys released) | refused | refused unless a window | allowed | age shown |
+| attestation from another host | `client_ip_mismatch` | refused | refused unless a window | allowed | same |
+| no live map session (not logged in; sniffer restarted since login) | `no_session` | refused | refused unless a window | allowed | same |
+| another account in the session | `account_not_lab` | refused | refused unless a window | allowed | the aid is shown |
+| only pending/forbidden environments | `env_pending` / `env_forbidden` | refused | refused unless a window | allowed | same |
+| an operator window, ASSIST | `window:<kind>` | refused (never in BOT mode) | **allowed** | allowed | window + seconds left |
+| ASSIST auto-restore after a guarded restart/recreate | as attested | as attested | as attested | — | `mode_restored` + the banner |
 
-## Tests (issue #2's five, plus three)
-1. No signal → every BOT event refused, in BOT and in ASSIST; human input passes.
-2. Attested rAthena → accepted; the attestation **expires** after N s without a refresh, and the
-   mux fails closed again.
-3. Profile mismatch (another aid / another server) → refused.
-4. `/health`, Status and the banner show the state.
-5. Unit tests in `test_mux.py` / `test_app.py`.
-6. **The agent cannot claim it:** no `AgentToBackend` message, field or route carries an environment
-   (a guard test like the clipboard one).
-7. **Only the internal ingest sets it:** `/ingest/packets` already admits only the internal port and
-   rathena's pinned `10.210.96.6` (ADR-0007). A forged attestation from anywhere else is refused
-   and counted.
-8. **Login phase:** a non-login step type during the login phase → refused; the phase times out
-   → refused; map entry without (ii) within 20 s → fail closed + ReleaseAll.
+**After a sniffer restart** the account binding is lost until the next login (CZ_ENTER), so the
+interlock says `no_session` (fail closed). `ro_agent recover` or a re-login restores it.
 
-## The firewall rule (iv): PROPOSED for Batt, to be applied only on his OK
-Windows Firewall's default outbound policy is Allow, and **block rules win over allow rules**. So
-the rule is three BLOCKs on the program, and the only outbound traffic left for `PoringLab.exe` is
-TCP to `192.168.1.13:6900/6121/5121`. `RagnarokClassic` (the community client) is untouched.
+## Tests (issue #2's five, plus the ones Batt asked for)
+`services/backend/tests/test_interlock.py`, `test_ro_agent_shell.py`, `packages/poring_packets/tests/test_core.py`:
+1. **Every failure in the table** → red, in BOT and in ASSIST (no window). An attested lab session
+   → green for both lab accounts. Pending/forbidden environments are never green.
+2. **Expiry:** 9.9 s green, 10.1 s `attestation_stale`. Live in the app: the bot holds W, the
+   attestation ages past 10 s, and the status loop releases W (`interlock_release`). The next press
+   is refused.
+3. **Windows:** ASSIST passes and BOT mode does not. The window file is checked for:
+   - expiry;
+   - another SEQ;
+   - a lock that is switching (a login window) or on hold;
+   - > 120 s, or more than the config's bound;
+   - an unknown kind;
+   - malformed content.
+4. **The mux:** each press type is refused; releases pass; a button-up loses x/y; `release_bot`
+   releases everything; the human is never gated.
+5. **The agent cannot claim green:**
+   - no AgentToBackend message carries an attestation or an environment;
+   - an attestation sent on `/internal/agent` is dropped;
+   - `/ingest/packets` refuses any peer but the sniffer's pinned address;
+   - the agent's copy of Status has `environment: null`, while a human's shows it.
+6. **No config file** fails closed. **The committed `config/environments.yaml` validates**, and
+   its lab accounts and the pending community entry are pinned.
+7. **The sniffer's attestation:** live after CZ_ENTER, with the account and age; ended by silence
+   (> 60 s) or a FIN/RST. Its field set is pinned (no world data).
+8. **ro_agent** opens a window only when needed. An `environment_unattested` refusal raises
+   `Unattested`, which `dataset_activity.safe_gm` never retries.
 
-Batt runs this in **his elevated console**; the agent never does (UAC):
+## Residual risks (stated, not hidden)
+- **The window in front is not proven to be the attested client.**
+  - The interlock proves that a lab-account session from the Dell to our rathena is live. It does
+    not prove that the window the bot clicks belongs to it.
+  - If Batt ran the community client by hand on the same Windows session while the mux is in
+    BOT/ASSIST, the bot could act on it.
+  - **Mitigations:**
+    - procedural: Batt plays the community server only with the mux in HUMAN;
+    - ro_agent verifies the client by its active title bar before typing;
+    - the production firewall option below.
+- **Windows are trusted to the host operator.** Anyone with a shell on this host can open one.
+  That is the same trust boundary as `state/` and `.env`.
+
+## Production option (NOT applied in the lab): the outbound firewall rule
+For a production or teaching distribution, an OS-level lock adds an independent layer: Windows
+Firewall lets the lab exe reach only the lab server. Block rules win over the default Allow, so it
+is three BLOCKs on the program. The **operator** runs this in an elevated console; the agent never
+does (UAC):
 
 ```powershell
 $exe = 'C:\RO-rAthena\client\PoringLab.exe'
@@ -104,17 +179,11 @@ New-NetFirewallRule -Group $g -DisplayName 'poring-lab: PoringLab.exe, lab host:
   -RemotePort '1-5120','5122-6120','6122-6899','6901-65535'
 New-NetFirewallRule -Group $g -DisplayName 'poring-lab: PoringLab.exe, no UDP' `
   -Direction Outbound -Program $exe -Action Block -Protocol UDP
-# read back
-Get-NetFirewallRule -Group $g | ForEach-Object {
-  $_ | Select-Object DisplayName, Enabled, Direction, Action
-  $_ | Get-NetFirewallApplicationFilter | Select-Object Program
-  $_ | Get-NetFirewallAddressFilter | Select-Object RemoteAddress
-  $_ | Get-NetFirewallPortFilter | Select-Object Protocol, RemotePort }
+Get-NetFirewallRule -Group $g | Format-Table DisplayName, Enabled, Direction, Action   # read back
 ```
 
-**Undo:** `Remove-NetFirewallRule -Group 'poring-lab interlock'`.
+**Undo:** `Remove-NetFirewallRule -Group 'poring-lab interlock'`. A distribution that applies it
+would add a third signal (its read-back at session start) to its environment entry.
 
-**Verification after applying:**
-1. Login, char select and map entry still work (the normal login).
-2. The lab can read the rule set back without admin (`Get-NetFirewallRule`) at session start:
-   that read-back is signal (iv).
+## Live verification
+*(appended after the S2 session, below this line)*

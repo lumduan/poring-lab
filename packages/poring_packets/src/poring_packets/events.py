@@ -196,6 +196,22 @@ class PacketStats(BaseModel):
     ingest_dropped: int = 0
 
 
+class Attestation(BaseModel):
+    """The environment interlock's session signal (ADR-0016, rewritten 2026-10-04): the sniffer
+    attests that a map-server session from the lab Dell to THIS rathena is live, and for which
+    account. ATTESTATION, NEVER WORLD DATA: no position, map, HP or entity rides with it, and the
+    backend hands it to the mux only (never to a viewer or an agent)."""
+
+    model_config = _MODEL_CONFIG
+    type: Literal["attest"] = "attest"
+    t_mono_ns: int = Field(ge=0)
+    client_ip: str = Field(description="The Windows host whose sessions the sniffer watches.")
+    session_live: bool = Field(description="A map connection is open (no FIN/RST) and recent.")
+    aid: int | None = Field(default=None, description="The live session's account id.")
+    last_packet_age_ms: int | None = Field(default=None, ge=0)
+    map_conns: int = Field(default=0, ge=0, description="Open map connections from the host.")
+
+
 def parse_event(text: str | bytes) -> PacketEvent:
     return _EVENT_ADAPTER.validate_json(text)
 
@@ -215,14 +231,16 @@ FeedMessage = Annotated[
     | Chat
     | UnknownPacket
     | Desync
-    | PacketStats,
+    | PacketStats
+    | Attestation,
     Field(discriminator="type"),
 ]
 _FEED_ADAPTER: TypeAdapter[FeedMessage] = TypeAdapter(FeedMessage)
 
 
 def parse_feed(text: str | bytes) -> FeedMessage:
-    """One line of the sniffer -> backend feed: a packet event or a stats snapshot."""
+    """One line of the sniffer -> backend feed: a packet event, a stats snapshot or the
+    session attestation."""
     return _FEED_ADAPTER.validate_json(text)
 
 

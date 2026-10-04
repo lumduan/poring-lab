@@ -103,3 +103,34 @@ def make_xfreerdp() -> Callable[..., Any]:
         return fake
 
     return factory
+
+
+LAB_HOST = "192.168.1.169"
+LAB_AID = 2000001
+
+
+def make_green(state: Any, *, aid: int = LAB_AID, window_max_s: float = 120) -> None:
+    """ADR-0016 in tests: the lab allowlist plus a fresh attestation, so BOT presses may pass.
+    (Without it the interlock fails closed: no config file in a test's tmp dirs.)"""
+    from poring_backend.interlock import EnvironmentsConfig
+    from poring_env.clock import monotonic_ns
+    from poring_packets.events import Attestation
+
+    state.interlock.config = EnvironmentsConfig.model_validate({
+        "version": 1, "attestation_max_age_s": 10, "window_max_s": window_max_s,
+        "environments": [{"id": "lab-rathena", "status": "allowed", "adr": "ADR-0006",
+                          "windows_host": LAB_HOST, "accounts": [LAB_AID, 2000002],
+                          "signals": ["lab_host", "session"]}],
+    })  # fmt: skip
+    state.interlock.config_error = ""
+    state.interlock.win_host = LAB_HOST
+    state.interlock.attested(
+        Attestation(t_mono_ns=monotonic_ns(), client_ip=LAB_HOST, session_live=True, aid=aid,
+                    last_packet_age_ms=100, map_conns=1),
+        monotonic_ns(),
+    )  # fmt: skip
+
+
+@pytest.fixture
+def green_interlock() -> Callable[..., None]:
+    return make_green

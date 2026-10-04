@@ -57,6 +57,8 @@ def safe_gm(agent: "r.Agent", screen: "r.Screen", command: str, counts: dict[str
             r.gm(agent, screen, command)
             bench.close_chat(agent, screen)
             return True
+        except r.Unattested:
+            raise  # ADR-0016: the interlock refused -- never a screen glitch to retry
         except r.Stop as exc:
             counts["gm_failures"] += 1
             r.log(f"activity: {command!r} failed ({exc}); attempt {attempt}")

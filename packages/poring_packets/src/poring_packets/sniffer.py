@@ -7,6 +7,9 @@ Environment:
     CAPTURE_DIR       /captures            (the `captures` volume; never ./data)
     INGEST_URL        ws://backend:8001/ingest/packets ("" = no live feed)
     VALIDATION_USERIDS comma-separated login ids of validation (GM) accounts -- never logged
+Every second it also sends the backend an ATTESTATION (ADR-0016): is a map session from the Dell
+live, for which account id, how old is its last packet -- the interlock's session signal, never
+world data.
 Rotation: pcapng and events every hour or 256 MB. Retention: 7 days or 20 GB, oldest first.
 """
 
@@ -27,7 +30,7 @@ from pydantic import TypeAdapter
 from poring_packets.capture import PORT_SERVER, Capture, TcpSegment, parse_frame
 from poring_packets.clock import ClockMap, take_sample
 from poring_packets.decode import Decoded, decode, is_gm_command, text
-from poring_packets.events import GM_WINDOW_NS, PacketEvent, PacketStats
+from poring_packets.events import GM_WINDOW_NS, Attestation, PacketEvent, PacketStats
 from poring_packets.framing import RoFramer, TcpReassembler
 from poring_packets.pcapng import PcapngWriter, redact
 from poring_packets.tables import LengthTable
@@ -40,6 +43,10 @@ ROTATE_S = 3600
 ROTATE_BYTES = 256 << 20
 RETAIN_S = 7 * 86400
 RETAIN_BYTES = 20 << 30
+# A map connection counts as live while it is open and its last packet is this recent. The client
+# talks to the map server at least every ~10-12 s even when idle (its time sync), so 60 s is a
+# generous bound for "still connected", and the TCP FIN/RST is the fast signal.
+SESSION_LIVE_S = 60
 
 
 @dataclass
@@ -52,6 +59,8 @@ class Conn:
     gm_until_ns: int = 0
     last_unknown: dict[int, int] = field(default_factory=dict)
     last_skipped: int = 0
+    last_seen_ns: int = 0  # monotonic time of the last segment either way (the attestation)
+    closed: bool = False  # a FIN or RST was seen
 
 
 class Session:
@@ -99,6 +108,9 @@ class Session:
         self.tcp_gaps = sum(r.gaps for c in self.conns.values() for r in c.reasm.values())
         framer = conn.framers[direction]
         t_mono = self.clock.to_mono(seg.t_real_ns) if self.clock.samples else 0
+        conn.last_seen_ns = max(conn.last_seen_ns, t_mono)
+        if seg.fin_or_rst:
+            conn.closed = True
         out: list[PacketEvent] = []
         for pkt in framer.feed(data, seg.t_real_ns):
             self._identify(conn, direction, pkt.packet_id, pkt.data)
@@ -163,6 +175,22 @@ class Session:
             }))  # fmt: skip
             conn.last_skipped = stats.skipped_bytes
         return out
+
+    def attestation(self, t_mono: int) -> Attestation:
+        """The interlock's session signal: the most recent open map connection from the Dell."""
+        live = [c for c in self.conns.values()
+                if c.server == "map" and not c.closed and c.last_seen_ns
+                and t_mono - c.last_seen_ns <= SESSION_LIVE_S * 1_000_000_000]  # fmt: skip
+        newest = max(live, key=lambda c: c.last_seen_ns, default=None)
+        return Attestation(
+            t_mono_ns=t_mono,
+            client_ip=self.client_ip,
+            session_live=newest is not None and newest.aid is not None,
+            aid=None if newest is None else newest.aid,
+            last_packet_age_ms=(None if newest is None
+                                else max(0, (t_mono - newest.last_seen_ns) // 1_000_000)),
+            map_conns=len(live),
+        )  # fmt: skip
 
     def stats(self, t_mono: int) -> PacketStats:
         framers = [f for c in self.conns.values() for f in c.framers.values()]
@@ -298,6 +326,7 @@ def run() -> None:
                 if ingest:
                     stats = stats.model_copy(update={"ingest_dropped": ingest.dropped})
                     ingest.put(stats.model_dump_json())
+                    ingest.put(session.attestation(time.monotonic_ns()).model_dump_json())
                 pcap.flush()
                 events.flush()
                 next_tick = now + 1.0

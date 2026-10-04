@@ -628,3 +628,21 @@ def test_only_vision_and_backend_are_on_the_agent_network() -> None:
             nets = (spec or {}).get("networks") or []
             if "agent" in nets:
                 assert svc in ("vision", "backend"), f"{name}: {svc} joined the agent network"
+
+
+@pytest.mark.parametrize("name", ["compose.yaml", "compose.dev.yaml"])
+def test_the_environment_allowlist_is_mounted_read_only_in_the_backend_only(name: str) -> None:
+    """ADR-0016 (2026-10-04): the interlock's config is the backend's, read-only; nothing the
+    agent runs in (vision) or that streams (gamestream) can see or change it."""
+    for service_name, service in compose(name)["services"].items():
+        mounts = [str(v) for v in service.get("volumes", [])]
+        if any(":/lab-config" in v or v.startswith("./config") for v in mounts):
+            assert service_name == "backend", f"{name}: {service_name} mounts the allowlist"
+            assert "./config:/lab-config:ro" in mounts
+    if name == "compose.yaml":
+        backend = compose(name)["services"]["backend"]
+        assert "./config:/lab-config:ro" in backend["volumes"]
+        assert backend["environment"]["WIN_HOST"] == "${WIN_HOST:-}"
+        from poring_backend.config import Settings
+
+        assert Settings().environments_file == Path("/lab-config/environments.yaml")

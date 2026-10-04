@@ -114,3 +114,21 @@ test("a safety alarm is shown RED, apart from the amber notices", async () => {
   assert.deepEqual(bannerAlarms(status({ backend: "rdp" })), []);
   assert.ok(!bannerProblems({ links: LINKS, status: s }).some((p) => /WATCHDOG/.test(p)));
 });
+
+test("the interlock shows a window or a refusal while the bot could act, and nothing when green", () => {
+  const env = (state: "green" | "window" | "red", extra: object = {}) => ({
+    state,
+    reason: state === "red" ? "attestation_stale" : state === "window" ? "window:login" : "ok",
+    env_id: null,
+    window: state === "window" ? ("login" as const) : null,
+    window_left_s: state === "window" ? 87.4 : null,
+    attest_age_s: null,
+    ...extra,
+  });
+  const at = (mode: "HUMAN" | "BOT" | "ASSIST", e: ReturnType<typeof env>) =>
+    bannerProblems({ links: { stream: true, input: true }, status: status({ backend: "rdp", seq: 1, phase: "steady" }, { mode, environment: e }) });
+  assert.ok(at("BOT", env("red")).some((p) => p.includes("REFUSED (attestation_stale)")));
+  assert.ok(at("ASSIST", env("window")).some((p) => p.includes("operator window open (login, 87 s left)")));
+  assert.ok(!at("BOT", env("green")).some((p) => p.startsWith("Interlock")));
+  assert.ok(!at("HUMAN", env("red")).some((p) => p.startsWith("Interlock"))); // the human is never gated
+});

@@ -82,10 +82,12 @@ Factory = Callable[..., tuple[TestClient, FakeInput]]
 
 
 @pytest.fixture
-def make_client(tmp_path: Path) -> Iterator[Factory]:
+def make_client(tmp_path: Path, green_interlock: Any) -> Iterator[Factory]:
     clients: list[TestClient] = []
 
-    def factory(*, clipboard: Any = None, **overrides: Any) -> tuple[TestClient, FakeInput]:
+    def factory(
+        *, clipboard: Any = None, green: bool = True, **overrides: Any
+    ) -> tuple[TestClient, FakeInput]:
         fake = FakeInput()
         if clipboard is not None:
             fake.on_ctrl_v = clipboard.ctrl_v
@@ -108,6 +110,8 @@ def make_client(tmp_path: Path) -> Iterator[Factory]:
         client = TestClient(app)
         client.__enter__()
         clients.append(client)
+        if green:  # ADR-0016: an attested lab session (tests of the gate itself pass green=False)
+            green_interlock(client.app.state.poring)
         return client, fake
 
     yield factory

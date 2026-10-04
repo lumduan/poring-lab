@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Protocol, TypeVar
 
-from poring_backend.capture_lock import read_alarms, read_cleanroom, read_lock
+from poring_backend.capture_lock import read_alarms, read_cleanroom, read_lock, read_window
 from poring_backend.capture_select import CaptureSelector
 from poring_backend.clipboard import ClipboardService, PasteOutcome, SelectionIO
 from poring_backend.config import Settings
@@ -19,6 +19,7 @@ from poring_backend.display import DisplayWatch, Region
 from poring_backend.drops import DropCounter
 from poring_backend.freshness_monitor import StallMonitor
 from poring_backend.input_log import InputLog, InputLogRecord, wall_clock_iso
+from poring_backend.interlock import Interlock, Verdict, Window
 from poring_backend.latency import InputRecord, LatencyRecorder
 from poring_backend.mode_restore import read_verdict
 from poring_backend.mux import Decision, InputMux, Routed, Source
@@ -318,7 +319,10 @@ class AppState:
         )
         # True from an automatic ASSIST restore until a human next sets the mode (Status).
         self.mode_restored = False
+        # ADR-0016: the environment interlock (allowlist + attestation + operator window).
+        self.interlock = Interlock(settings.environments_file, settings.win_host)
         self._restore_mode()
+        self.verdict: Verdict = self.env_verdict(monotonic_ns())
         self._status_task: asyncio.Task[None] | None = None
         self._background: set[asyncio.Task[Any]] = set()
         # Console connections with secret typing on (SecretInput). While any is on, human key
@@ -398,8 +402,34 @@ class AppState:
             if after != before:
                 level = logging.WARNING if "black" in (before, after) else logging.INFO
                 log.log(level, "game display %s -> %s (%s)", before, after, self.display.snapshot())
+            await self._interlock_tick(now)
             self.broadcast_status()
             await asyncio.sleep(period)
+
+    def env_verdict(self, now_ns: int) -> Verdict:
+        """The interlock, read FRESH (the lock and the window file, not the last tick's copy): the
+        mux must never act on a stale green."""
+        directory = self.settings.lab_state_dir
+        lock = read_lock(directory)
+        cfg = self.interlock.config
+        max_s = cfg.window_max_s if cfg is not None else 0.0
+        raw = read_window(directory, lock, time.time(), max_s) if max_s else None
+        window = None if raw is None else Window(raw[0], raw[1], raw[2], raw[3])
+        return self.interlock.verdict(self.mux.mode, lock, window, now_ns)
+
+    async def _interlock_tick(self, now_ns: int) -> None:
+        """Re-read the allowlist when it changed; when bot presses stop being allowed, the bot
+        lets go of everything it holds (the set_mode pattern)."""
+        self.interlock.reload()
+        before, after = self.verdict, self.env_verdict(now_ns)
+        self.verdict = after
+        if before.status().state != after.status().state or before.reason != after.reason:
+            log.info("interlock: %s (%s) -> %s (%s)", before.status().state, before.reason,
+                     after.status().state, after.reason)  # fmt: skip
+        if not after.bot_allowed and self.mux.holds_anything(Source.BOT):
+            released = self.mux.release_bot(now_ns)
+            self._log_synthetic(released, now_ns)
+            await self._inject(released)
 
     def _read_lab_state(self) -> None:
         directory = self.settings.lab_state_dir
@@ -438,6 +468,7 @@ class AppState:
             game_black=self.display.black,
             human_secret=self.human_secret,
             mode_restored=self.mode_restored,
+            environment=self.verdict.status(),
         )
 
     def refused_snapshot(self) -> dict[str, dict[str, int]]:
@@ -475,10 +506,13 @@ class AppState:
         }
 
     def broadcast_status(self) -> None:
-        text = self.status().model_dump_json()
-        self.hub.broadcast_control(text)
-        for outbox in self.agents:
-            outbox.offer_control(text)
+        status = self.status()
+        self.hub.broadcast_control(status.model_dump_json())
+        if self.agents:
+            # ADR-0016: the agent sees only its refusals, never the interlock's state.
+            agent_text = status.model_copy(update={"environment": None}).model_dump_json()
+            for outbox in self.agents:
+                outbox.offer_control(agent_text)
 
     # --- input ------------------------------------------------------------------------------------
 
@@ -510,11 +544,20 @@ class AppState:
             self.refused[(source.value, "sensitive_unbalanced")] += len(events)
             self._log_sensitive(source, events, 0, ["sensitive_unbalanced"], now)
             return [Decision(False, "sensitive_unbalanced") for _ in events]
+        # ADR-0016: decided ONCE per batch, fresh; human input is never gated.
+        bot_allowed = True
+        if source is Source.BOT:
+            self.verdict = self.env_verdict(now)
+            bot_allowed = self.verdict.bot_allowed
+        if sensitive and not bot_allowed and not self.mux.lease_active(now):
+            self.refused[(source.value, "environment_unattested")] += len(events)
+            self._log_sensitive(source, events, 0, ["environment_unattested"], now)
+            return [Decision(False, "environment_unattested") for _ in events]
         lease_before = self.mux.lease_active(now)
         decisions: list[Decision] = []
         routed: list[Routed] = []
         for event in events:
-            decision = self.mux.submit(source, event, now)
+            decision = self.mux.submit(source, event, now, bot_allowed=bot_allowed)
             # Refused housekeeping (a disconnect's ReleaseAll for a source without control) is
             # still in the input log, but it is not a dropped input worth counting.
             if not decision.accepted and not isinstance(event, ReleaseAll):

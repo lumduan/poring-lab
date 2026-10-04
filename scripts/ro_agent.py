@@ -448,6 +448,50 @@ def backend_ws() -> str:
     return f"ws://{ip}:8001/internal/agent"
 
 
+def backend_health() -> dict[str, Any]:
+    """The backend's /health (public port, the default network's address), or {}."""
+    import urllib.request
+
+    url = backend_ws().replace("ws://", "http://").replace(":8001/internal/agent", ":8000/health")
+    try:
+        with urllib.request.urlopen(url, timeout=3) as resp:
+            data: dict[str, Any] = json.loads(resp.read())
+            return data
+    except OSError:
+        return {}
+
+
+# --- the environment interlock (ADR-0016, rewritten 2026-10-04) -----------------------------------
+
+
+class Unattested(Stop):
+    """The mux refused bot input: no attested lab session and no operator window (ADR-0016).
+    Never retried as if the screen were at fault (dataset_activity.safe_gm re-raises it)."""
+
+
+WINDOW_MIN_LEFT_S = 25
+
+
+def ensure_window(kind: str, phase: str, seconds: int = 90) -> None:
+    """Login and desktop phases happen before (or outside) an attested in-game session: open a
+    bounded operator window through the HOST tool (capture_backend.py window; never the agent
+    channel). Skipped while the interlock is green, or a window of this kind is open long enough
+    (capture_backend opens its own before its ro_agent steps, holding the mutation lock)."""
+    env_status = backend_health().get("environment") or {}
+    if env_status.get("state") == "green":
+        return
+    if env_status.get("window") == kind and (env_status.get("window_left_s") or 0) >= (
+        WINDOW_MIN_LEFT_S
+    ):
+        return
+    cmd = [sys.executable, str(ROOT / "scripts" / "capture_backend.py"), "window", kind,
+           "--seconds", str(seconds), "--reason", phase]  # fmt: skip
+    res = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if res.returncode != 0:
+        raise Stop(f"could not open the {kind} window for {phase}: {res.stderr.strip()[-300:]}")
+    log(f"interlock: {kind} window for {phase} ({seconds} s)")
+
+
 def key(code: str, action: str) -> dict[str, Any]:
     return {"type": "key", "t_mono_ns": ns(), "frame_id": -1, "code": code, "action": action}
 
@@ -564,9 +608,10 @@ class Agent:
             if ack is None:
                 raise Stop("no input_ack within 3 s")
             if ack["dropped"]:
-                raise Stop(
-                    f"mux refused {ack['dropped']}/{len(chunk)} ({ack['reasons']}): stopping"
-                )
+                why = f"mux refused {ack['dropped']}/{len(chunk)} ({ack['reasons']}): stopping"
+                if "environment_unattested" in ack["reasons"]:
+                    raise Unattested(why)
+                raise Stop(why)
 
     def keys(self, *codes: str) -> None:
         for c in codes:
@@ -763,6 +808,8 @@ def any_console(screen: Screen) -> bool:
 def minimize_consoles(agent: Agent, screen: Screen) -> None:
     """Minimise every visible PowerShell console (normal and Administrator): focus it by its tab,
     then Win+Down (a second press when the first only restored a maximised window)."""
+    if any_console(screen):
+        ensure_window("desktop", "minimize-consoles")
     for admin in (False, True):
         for _ in range(3):
             found = find_console(screen, admin)
@@ -778,6 +825,7 @@ def minimize_consoles(agent: Agent, screen: Screen) -> None:
 
 def focus_console(agent: Agent, screen: Screen, admin: bool = False) -> tuple[int, int]:
     """Click the console's own tab and re-verify it is the active window; its tab origin."""
+    ensure_window("desktop", "console")
     found = find_console(screen, admin)
     if found is None:
         to_png(screen.full(), SHOTS / "console_missing.png")
@@ -856,6 +904,7 @@ def login_guard(screen: Screen) -> Callable[[], None]:
 
 def to_char_select(agent: Agent, screen: Screen, which: str) -> None:
     """Service select or login screen -> character select, credentials typed as sensitive."""
+    ensure_window("login", "login")
     user, pw, _ = account(which)
     st = wait_state(screen, ["service_select", "login"], 10)
     if st == "service_select":
@@ -900,6 +949,7 @@ def enter_game(agent: Agent, screen: Screen, which: str) -> None:
     _, _, char = account(which)
     if char not in account_chars(which):
         raise Stop(f"{which}: no character {char!r} yet: run `ro_agent.py create-char {which}`")
+    ensure_window("login", "enter-game")  # covers the gap until the session is attested
     agent.keys("Enter")
     end = time.monotonic() + 40
     while time.monotonic() < end:
@@ -923,6 +973,7 @@ def create_char(agent: Agent, screen: Screen, which: str) -> None:
     if char in account_chars(which):
         log(f"{which}: {char!r} already exists")
         return
+    ensure_window("login", "char-make")
     if not is_state(screen, "char_make"):
         wait_state(screen, ["char_select"], 10)
         agent.click(*layout("slot1"))
@@ -1086,6 +1137,7 @@ def close_client(agent: Agent, screen: Screen) -> None:  # noqa: ARG001
     """Alt+F4 on the client itself (a lost-D3D client still takes window messages); confirm the
     quit prompt if it shows. No PowerShell: Run-dialog PowerShell trips Defender's ClickFix
     detection (2026-10-01, severity 5, the processes were killed)."""
+    ensure_window("login", "close")  # the session may already be gone (a lost-D3D client)
     activate_client(agent, screen)
     # Paced: an Alt+F4 injected as one instantaneous chord is ignored; 60 ms steps close it at once.
     for code, action in (("AltLeft", "down"), ("F4", "down"), ("F4", "up"), ("AltLeft", "up")):
@@ -1104,6 +1156,7 @@ def launch_client(agent: Agent, screen: Screen) -> None:
             signature_path("shortcut_icon_sel").exists() and is_state(screen, "shortcut_icon_sel")
         )
 
+    ensure_window("login", "launch")
     if not visible():
         agent.chord("MetaLeft", "KeyD")  # show the desktop: windows may cover the icon
         time.sleep(1.5)
@@ -1180,6 +1233,7 @@ def marker_colour(bgra: np.ndarray, min_run: int = 150) -> str | None:
 def open_terminal(agent: Agent, screen: Screen) -> tuple[int, int]:
     """The agent's own NON-elevated terminal, in front: reuse a visible "poring-lab shell" tab, or
     double-click the shortcut and wait for one. Any mismatch stops (Batt: stop and ask)."""
+    ensure_window("desktop", "open-terminal")
     found = find_shell(screen)
     if found is None:
 

@@ -1,0 +1,37 @@
+# The environment interlock's ALLOWLIST (ADR-0016, rewritten 2026-10-04; ADR-0006).
+#
+# A LOGIC interlock (Batt, 2026-10-04): the lab stays flexible -- adding a server or a client is an
+# entry HERE plus an ADR-0006 entry, never code. OS-level locks (the outbound firewall rule) belong
+# to production / teaching distributions only (ADR-0016 "Production option").
+#
+# The backend reads this file (mounted read-only at /lab-config) and gates the mux: BOT presses
+# pass only while an `allowed` environment's signals are ALL green; in ASSIST, a bounded operator
+# window (scripts/capture_backend.py window, <= 120 s) also lets them through. Missing, unreadable
+# or invalid file => every bot press is refused (fail closed). Human input is never gated.
+#
+# Signals (what each name means is fixed in poring_backend/interlock.py):
+#   lab_host  the capture-backend lock is steady on rdp|console, and the backend's WIN_HOST and
+#             the sniffer's client_ip are this environment's windows_host;
+#   session   the sniffer's attestation: fresh (<= attestation_max_age_s), a live map session to
+#             THIS server, from windows_host, for one of `accounts` (rAthena login.account_id).
+# No secrets here: account ids are numbers the server assigns; login ids stay in .env.
+version: 1
+attestation_max_age_s: 10
+window_max_s: 120
+environments:
+  - id: lab-rathena
+    status: allowed            # allowed | pending | forbidden
+    adr: "ADR-0006 environment 1 (the self-hosted rAthena)"
+    server: {host: 192.168.1.13, ports: [6900, 6121, 5121]}
+    windows_host: 192.168.1.169
+    client:                    # the lab profile ro_agent launches and verifies (login phase)
+      exe: 'C:\RO-rAthena\client\PoringLab.exe'
+      shortcut: "Ragnarok Offline"
+      server_select: "PoringLab LAN (rAthena)"
+    accounts: [2000001, 2000002]   # the agent (group 0) and the validation GM (group 20)
+    signals: [lab_host, session]
+  - id: community-bot-testing
+    status: pending            # forbidden until its permission evidence AND its own signal set exist
+    adr: "ADR-0006 environment 2; issue #2; docs/environments/community-server.md"
+    signals: []                # none designed: packet capture is not allowed there
+    note: "Batt may play there manually, as the human. No automation."

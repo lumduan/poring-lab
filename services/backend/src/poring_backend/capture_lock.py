@@ -119,6 +119,65 @@ def read_alarms(directory: Path) -> list[str]:
     return parse_alarms(text)
 
 
+# --- the environment interlock's operator window (ADR-0016, 2026-10-04) ---------------------------
+# ``<lab-state>/interlock-window``: WINDOW (login|desktop) / OPENED / UNTIL / SEQ / REASON, written
+# only by capture_backend.py window (a host tool; the agent channel cannot reach state/). Honoured
+# only while it is younger than UNTIL, at most WINDOW_MAX_S long, and for the lock SEQ it was
+# opened under -- any handover ends it. Anything malformed is no window (fail closed).
+
+WINDOW_NAME = "interlock-window"
+WINDOW_KINDS = ("login", "desktop")
+WINDOW_MAX_S = 120
+
+
+def format_window(kind: str, opened: int, until: int, seq: int, reason: str) -> str:
+    if kind not in WINDOW_KINDS:
+        raise ValueError(f"unknown window {kind!r} (one of {WINDOW_KINDS})")
+    if not 0 < until - opened <= WINDOW_MAX_S:
+        raise ValueError(f"a window lasts 1..{WINDOW_MAX_S} s")
+    if not _WORD.match(reason) or not reason:
+        raise ValueError("reason: one word")
+    return f"WINDOW={kind}\nOPENED={opened}\nUNTIL={until}\nSEQ={seq}\nREASON={reason}\n"
+
+
+def parse_window(
+    text: str, lock: CaptureBackend, now: float, max_s: float = WINDOW_MAX_S
+) -> tuple[str, float, float, str] | None:
+    """(kind, until, seconds left, reason) of a window that is open NOW, else None."""
+    values: dict[str, str] = {}
+    for line in text.splitlines():
+        match = _LINE.match(line)
+        if match is None:
+            return None
+        values[match.group(1)] = match.group(2)
+    kind = values.get("WINDOW", "")
+    try:
+        opened, until, seq = int(values["OPENED"]), int(values["UNTIL"]), int(values["SEQ"])
+    except (KeyError, ValueError):
+        return None
+    if kind not in WINDOW_KINDS or not 0 < until - opened <= min(max_s, WINDOW_MAX_S):
+        return None
+    if seq != lock.seq or lock.backend not in ("rdp", "console"):
+        return None
+    # A desktop window may span capture_backend's OWN handover (it types tscon into its shell
+    # after moving the lock to switching, and re-opens the window for the new SEQ); nothing else.
+    if lock.phase != "steady" and not (kind == "desktop" and lock.phase == "switching"):
+        return None
+    if not opened - 5 <= now < until:  # (a little slack for the two clocks' read order)
+        return None
+    return kind, float(until), until - now, values.get("REASON", "")
+
+
+def read_window(
+    directory: Path, lock: CaptureBackend, now: float, max_s: float = WINDOW_MAX_S
+) -> tuple[str, float, float, str] | None:
+    try:
+        text = (directory / WINDOW_NAME).read_text(encoding="ascii")
+    except (OSError, UnicodeDecodeError):
+        return None
+    return parse_window(text, lock, now, max_s)
+
+
 # --- the clean room's status (ADR-0009; Batt, 2026-10-03) ----------------------------------------
 # ``<lab-state>/cleanroom``: VARIANT / BOX_UNTIL / HARD_CAP, written only by capture_backend.py
 # (to-console --cleanroom, stream --variant) and removed by its to-rdp. Shown to the console; it

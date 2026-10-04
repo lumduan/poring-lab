@@ -10,6 +10,7 @@ dependencies = [
   "uvicorn[standard]>=0.54",
   "pydantic-settings>=2.10",
   "simplejpeg>=1.9",
+  "pyyaml>=6",  # the ADR-0016 allowlist (already in the image through uvicorn[standard])
 ]
 
 [project.scripts]

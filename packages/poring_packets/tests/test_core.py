@@ -10,6 +10,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent))
 from helpers import (  # noqa: E402
+    CLIENT,
     ac_accept_login,
     ca_login,
     cz_enter2,
@@ -257,3 +258,34 @@ def test_replay_redecodes_a_banked_pcapng_with_aid_tagging(tmp_path: Path) -> No
     assert len(move) == 1
     assert move[0].validation_account
     assert move[0].t_mono_ns == 5_000_000_000 + 3_000_000  # realtime mapped onto monotonic
+
+
+def test_the_attestation_says_live_lab_session_and_nothing_else() -> None:
+    """ADR-0016: the sniffer's attestation -- a live map session from the Dell, its account id and
+    the last packet's age; FIN/RST or silence ends it. Never world data."""
+    from poring_packets.events import Attestation
+    from poring_packets.sniffer import SESSION_LIVE_S, Session
+
+    s = Session(table(), CLIENT, set())
+    s.clock.add(Sample(mono_ns=0, real_ns=0, read_ns=1))  # mono == real: the segment's time
+    t = 1_000_000_000_000  # helpers.seg's t_real_ns
+    assert not s.attestation(t).session_live  # nothing seen yet
+    s.feed(seg("cs", 5121, 1, cz_enter2(2000001), cport=50100))
+    now = t + 300_000_000
+    a = s.attestation(now)
+    assert (a.session_live, a.aid, a.map_conns, a.client_ip) == (True, 2000001, 1, CLIENT)
+    assert a.last_packet_age_ms == 300
+    assert set(Attestation.model_fields) == {
+        "type",
+        "t_mono_ns",
+        "client_ip",
+        "session_live",
+        "aid",
+        "last_packet_age_ms",
+        "map_conns",
+    }  # no position, map, HP or entity: attestation only
+    later = now + (SESSION_LIVE_S + 1) * 1_000_000_000
+    assert not s.attestation(later).session_live  # silence ends it
+    conn = next(iter(s.conns.values()))
+    conn.closed = True
+    assert not s.attestation(now).session_live  # a FIN/RST ends it at once

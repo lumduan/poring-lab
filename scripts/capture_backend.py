@@ -39,6 +39,13 @@ rdp-loop.sh connects only while it says ``rdp``; gamestream-loop.sh streams only
         Clean room only: console/switching (REASON cleanroom-hold), then end the stream through
         Sunshine (/cancel, as to-rdp does) and reset the variant file. The session stays on the
         console; to-rdp ends the clean room.
+    capture_backend.py window login|desktop --seconds N [--reason WORD] | window --close
+        ADR-0016 (rewritten 2026-10-04): a bounded OPERATOR WINDOW for the environment interlock
+        -- N <= 120 s, tied to the lock's SEQ, honoured by the backend in ASSIST only (never in
+        BOT mode). For the phases before a server session exists (login: close/launch/login/char
+        select/enter game) and for desktop work (the agent's own shell). Host tool only: the
+        agent channel can never open one. ro_agent opens them per phase; this script opens its
+        own before its ro_agent steps (it holds the mutation lock). Logged + shown on the console.
 
 Every command that writes holds an EXCLUSIVE flock (/dev/shm, never state/), so the clean-room
 runner and its watchdog can never write the lock at the same time (--wait-lock S, default 30).
@@ -71,9 +78,13 @@ from poring_backend.capture_lock import (  # noqa: E402
     ALARM_NAME,
     CLEANROOM_NAME,
     LOCK_NAME,
+    WINDOW_KINDS,
+    WINDOW_MAX_S,
+    WINDOW_NAME,
     format_alarm,
     format_cleanroom,
     format_lock,
+    format_window,
     parse_lock,
 )
 
@@ -492,6 +503,7 @@ def verify_sunshine_revert(timeout: float = 15) -> str:
     import ro_agent as r
 
     try:
+        open_window("desktop", 90, "revert-check")  # ADR-0016: its own shell work
         with r.session("capture-backend") as (agent, screen):
             # No console visible (the clean room closed it for the benchmark, 2026-10-03: rc 3,
             # UNVERIFIED): the agent's own "poring-lab shell" (open_terminal verifies it).
@@ -595,6 +607,7 @@ def cmd_to_console(
     sys.path.insert(0, str(REPO / "scripts"))
     import ro_agent as r
 
+    open_window("desktop", 90, "to-console")  # ADR-0016: its own shell work, before ro_agent
     with r.session("capture-backend", allow_handover=True) as (agent, screen):
         # The console is focused and verified by its tab template BEFORE the lock moves: a missing
         # or covered console stops here with the lock still rdp/steady. (A fixed taskbar offset
@@ -606,6 +619,7 @@ def cmd_to_console(
         # console/SWITCHING: rdp-loop holds, and gamestream holds too (it streams only on steady)
         body = write_lock("console", "switching", "to-console")
         verify_everywhere(body)
+        open_window("desktop", 60, "to-console-tscon")  # the new SEQ (a desktop window may span it)
         r.console_type(agent, screen, TSCON)
         typed = time.monotonic()
         say(f"tscon typed (runs in {TSCON_DELAY_S} s); disconnecting the RDP client now")
@@ -781,6 +795,46 @@ def cmd_alarm(name: str | None, clear: bool) -> int:
     return 0
 
 
+def open_window(kind: str, seconds: int, reason: str) -> str:
+    """Write state/interlock-window for the CURRENT lock SEQ (atomic, read back on the host and
+    in the backend). The caller holds the mutation lock (main() for `window`; to-console and the
+    revert check open their own before their ro_agent steps)."""
+    _, seq, _ = read_host()
+    now = int(time.time())
+    body = format_window(kind, now, now + int(seconds), seq, reason)
+    STATE.mkdir(exist_ok=True)
+    tmp = STATE / f".{WINDOW_NAME}.tmp"
+    tmp.write_text(body, encoding="ascii")
+    tmp.replace(STATE / WINDOW_NAME)
+    if (STATE / WINDOW_NAME).read_text(encoding="ascii") != body:
+        raise Stop("window read-back on the host differs from what was written")
+    if running(BACKEND):
+        seen = sh("docker", "exec", BACKEND, "cat", f"/lab-state/{WINDOW_NAME}").stdout
+        if seen != body:
+            raise Stop(f"the backend sees a different window file: {seen!r}")
+    say(f"interlock window -> {kind} for {seconds} s (seq {seq}, {reason})")
+    return body
+
+
+def close_window() -> None:
+    path = STATE / WINDOW_NAME
+    path.unlink(missing_ok=True)
+    if path.exists():
+        raise Stop("the window file is still present after --close")
+    say("interlock window closed")
+
+
+def cmd_window(kind: str | None, seconds: int, reason: str, close: bool) -> int:
+    if close:
+        close_window()
+        return 0
+    assert kind is not None
+    if not 0 < seconds <= WINDOW_MAX_S:
+        raise Stop(f"a window lasts 1..{WINDOW_MAX_S} s")
+    open_window(kind, seconds, reason)
+    return 0
+
+
 def cleanroom_field(key: str) -> int | None:
     try:
         text = (STATE / CLEANROOM_NAME).read_text(encoding="ascii")
@@ -913,6 +967,11 @@ def main() -> int:
     alarm_what = alarm.add_mutually_exclusive_group(required=True)
     alarm_what.add_argument("--set", dest="alarm_name", choices=["watchdog_down"])
     alarm_what.add_argument("--clear", action="store_true")
+    window = sub.add_parser("window")
+    window.add_argument("kind", nargs="?", choices=list(WINDOW_KINDS))
+    window.add_argument("--seconds", type=int, default=90)
+    window.add_argument("--reason", default="operator")
+    window.add_argument("--close", action="store_true")
     pair = sub.add_parser("pair")
     pair.add_argument("pin")
     args = ap.parse_args()
@@ -933,6 +992,10 @@ def main() -> int:
             return cmd_hold()
         if args.cmd == "alarm":
             return cmd_alarm(args.alarm_name, args.clear)
+        if args.cmd == "window":
+            if not args.close and args.kind is None:
+                raise Stop("window: login|desktop, or --close")
+            return cmd_window(args.kind, args.seconds, args.reason, args.close)
         if args.external and args.cleanroom:
             raise Stop("--external and --cleanroom exclude each other")
         if args.hard_cap is not None and not args.cleanroom:

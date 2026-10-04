@@ -23,6 +23,21 @@ export function bannerAlarms(status: Status | null): string[] {
   return (status?.alarms ?? []).map((a) => ALARM_TEXT[a] ?? `Safety alarm: ${a}`);
 }
 
+/** ADR-0016 (rewritten 2026-10-04): the environment interlock, while the bot could act (BOT or
+ * ASSIST). Green says nothing; an operator window and a refusal are shown with their reason. */
+export function describeEnvironment(status: Status | null): string | null {
+  const env = status?.environment;
+  if (!env || !status || status.mode === "HUMAN") return null;
+  if (env.state === "window") {
+    const left = env.window_left_s === null || env.window_left_s === undefined ? "" : `, ${Math.round(env.window_left_s)} s left`;
+    return `Interlock: operator window open (${env.window}${left}) -- bot input allowed in ASSIST only.`;
+  }
+  if (env.state === "red") {
+    return `Interlock: bot input REFUSED (${env.reason}) -- no attested lab session (config/environments.yaml).`;
+  }
+  return null;
+}
+
 export function bannerProblems({
   links,
   status,
@@ -43,6 +58,8 @@ export function bannerProblems({
     );
   }
   if (links.stream && status?.cleanroom) problems.push(describeCleanRoom(status.cleanroom, nowMs));
+  const interlock = links.stream ? describeEnvironment(status) : null;
+  if (interlock) problems.push(interlock);
   if (links.stream) problems.push(...capture.notices);
   if (links.stream && capture.expect === "rdp" && status?.rdp_window_present === false) {
     problems.push(

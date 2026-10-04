@@ -169,3 +169,35 @@ def test_an_actions_effect_is_judged_only_on_a_later_frame(ro: ModuleType) -> No
     with pytest.raises(ro.FrozenStream):
         ro.grab_after(FakeScreen(), (0, 0, 1, 1), after_ns=200)
     assert issubclass(ro.FrozenStream, ro.Stop)  # callers that retry on Stop retry on it too
+
+
+def test_ensure_window_opens_one_only_when_needed(
+    ro: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ADR-0016: login/desktop phases open a bounded operator window through the HOST tool, and
+    never when the interlock is already green or a long-enough window of that kind is open."""
+    calls: list[list[str]] = []
+
+    class Done:
+        returncode, stderr = 0, ""
+
+    monkeypatch.setattr(ro.subprocess, "run", lambda cmd, **kw: calls.append(cmd) or Done())
+    for health, opens in [
+        ({"environment": {"state": "green"}}, False),
+        ({"environment": {"state": "window", "window": "login", "window_left_s": 80}}, False),
+        ({"environment": {"state": "window", "window": "login", "window_left_s": 10}}, True),
+        ({"environment": {"state": "window", "window": "desktop", "window_left_s": 80}}, True),
+        ({"environment": {"state": "red"}}, True),
+        ({}, True),  # backend unreachable: try, and let the backend decide
+    ]:
+        calls.clear()
+        monkeypatch.setattr(ro, "backend_health", lambda h=health: h)
+        ro.ensure_window("login", "login")
+        assert bool(calls) is opens, health
+        if opens:
+            assert calls[0][-6:] == ["window", "login", "--seconds", "90", "--reason", "login"]
+            assert calls[0][1].endswith("scripts/capture_backend.py")
+
+
+def test_an_interlock_refusal_is_its_own_stop(ro: ModuleType) -> None:
+    assert issubclass(ro.Unattested, ro.Stop)

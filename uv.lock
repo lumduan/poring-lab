@@ -686,6 +686,7 @@ dependencies = [
     { name = "poring-env", extra = ["x11"] },
     { name = "poring-packets" },
     { name = "pydantic-settings" },
+    { name = "pyyaml" },
     { name = "simplejpeg" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -696,6 +697,7 @@ requires-dist = [
     { name = "poring-env", extras = ["x11"], editable = "packages/poring_env" },
     { name = "poring-packets", editable = "packages/poring_packets" },
     { name = "pydantic-settings", specifier = ">=2.10" },
+    { name = "pyyaml", specifier = ">=6" },
     { name = "simplejpeg", specifier = ">=1.9" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.54" },
 ]

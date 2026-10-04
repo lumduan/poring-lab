@@ -26,7 +26,8 @@ from pydantic_core import InitErrorDetails, PydanticCustomError
 from poring_backend.drops import ReplyThrottle
 from poring_backend.packets import pump_packets
 from poring_backend.routes_public import get_state, offer, read_message, stop_task
-from poring_packets.events import parse_feed
+from poring_env.clock import monotonic_ns
+from poring_packets.events import Attestation, parse_feed
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -89,7 +90,10 @@ async def ingest_packets(ws: WebSocket) -> None:
     try:
         while True:
             msg = await read_message(ws, parse_feed, "ingest", state, throttle, _no_reply)
-            if msg is not None:
+            if isinstance(msg, Attestation):
+                # ADR-0016: to the interlock ONLY -- never to a viewer, never to an agent.
+                state.interlock.attested(msg, monotonic_ns())
+            elif msg is not None:
                 hub.publish(msg)
     except WebSocketDisconnect:
         pass

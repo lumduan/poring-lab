@@ -247,6 +247,25 @@ class CleanRoom(BaseModel):
     )
 
 
+class EnvironmentStatus(BaseModel):
+    """The environment interlock's verdict (ADR-0016, rewritten 2026-10-04), for the console and
+    /health. Only humans see it: the copy of Status sent to an agent carries null here."""
+
+    model_config = _MODEL_CONFIG
+
+    state: Literal["green", "window", "red"] = Field(
+        description="green: an allowed environment is attested; window: an operator window lets "
+        "ASSIST's bot side through; red: every bot press is refused."
+    )
+    reason: str = Field(description='"ok", "window:<kind>", or why bot presses are refused.')
+    env_id: str | None = Field(default=None, description="The attested environment's id.")
+    window: Literal["login", "desktop"] | None = None
+    window_left_s: float | None = Field(default=None, ge=0)
+    attest_age_s: float | None = Field(
+        default=None, description="Seconds since the sniffer's last attestation; null = none yet."
+    )
+
+
 class Status(Message):
     """Mux and pipeline state, pushed at ~1 Hz and on every change."""
 
@@ -320,6 +339,10 @@ class Status(Message):
             "ASSIST was restored automatically after a guarded backend restart (ADR-0002 "
             "amendment); false again once a human sets the mode."
         ),
+    )
+    environment: EnvironmentStatus | None = Field(
+        default=None,
+        description="The environment interlock (ADR-0016); null in an agent's copy of Status.",
     )
 
 

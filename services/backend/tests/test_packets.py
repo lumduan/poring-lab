@@ -59,11 +59,14 @@ Factory = Callable[..., tuple[TestClient, RecordingInput]]
 
 
 @pytest.fixture
-def make_client(tmp_path: Path) -> Iterator[Factory]:
+def make_client(tmp_path: Path, green_interlock: Any) -> Iterator[Factory]:
     clients: list[TestClient] = []
 
-    def factory(**overrides: Any) -> tuple[TestClient, RecordingInput]:
+    def factory(*, green: bool = True, **overrides: Any) -> tuple[TestClient, RecordingInput]:
         fake = RecordingInput()
+        lab_state = tmp_path / "lab-state"  # mounted, no lock file: the default `rdp`
+        lab_state.mkdir(exist_ok=True)
+        overrides.setdefault("lab_state_dir", lab_state)
         settings = Settings(
             data_dir=tmp_path,
             status_hz=20.0,
@@ -74,6 +77,8 @@ def make_client(tmp_path: Path) -> Iterator[Factory]:
         client = TestClient(app, client=LAN)
         client.__enter__()
         clients.append(client)
+        if green:  # ADR-0016: an attested lab session
+            green_interlock(client.app.state.poring)
         return client, fake
 
     yield factory
