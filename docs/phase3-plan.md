@@ -1,20 +1,29 @@
 ---
 doc_type: design
 hypothesis: null
-status: PROPOSED
+status: GO
 role: null
-verdict_date: null
+verdict_date: 2026-10-04
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: PLAN ONLY -- waiting for Batt's approval (§9, incl. the ADR-0015 runtime ruling for the tracker, §6b). Nothing in it is built. On approval, M0-M3 and T0 (all offline, no session) start first; M4 needs one S2 session (validation spawns).
+next_action: APPROVED 2026-10-04 (Batt). M0 done, M2 built, M1 partial (every monster SPR in the Thai GRF is MIXCRYPT -- Batt decides a/b/c), M3 and T0 in progress; then the M4 session (tonight, without Batt) and the alarm re-test (when Batt watches).
 last_reviewed: 2026-10-04
 ---
 
 # Phase 3: perception. Compute what is deterministic, learn only the rest
 
-**Status:** PROPOSED 2026-10-04. This is a **plan only**: nothing in it is built, and Phase 3 does not start
-until Batt approves it (§9).
+**Status:** ~~PROPOSED 2026-10-04. This is a **plan only**: nothing in it is built, and Phase 3 does not start
+until Batt approves it (§9).~~ ➡️ **APPROVED 2026-10-04 (Batt), with his §9 decisions:**
+1. the plan, the order and the classes (per-species + dying; self computed);
+2. one ~60 min S2 session for M4;
+3. light GPU work now, heavy training 20:00–05:00 ICT, under the 25 % cap;
+4. vision reads the NAS read-only, and the frame cache is sharded;
+5. ultralytics is used (ADR-0018: vision is AGPL-3.0);
+6. the bar as proposed;
+7. the Roboflow set, test-only;
+8. the GM gets `@alive`/`@heal`, and the driver never clicks a monster;
+9. the ADR-0015 runtime ruling is ACCEPTED.
 
 **Sources:**
 - Batt's Phase 3 items (2026-10-04):
@@ -92,9 +101,9 @@ flowchart TD
 
 | Step | Status | What it is | Blocker |
 |---|---|---|---|
-| **M0** knowledge base | 🔵 READY | mob_db + spawn files at the pinned rAthena SHA, giving species per map and the class list (§4) | plan approval |
-| **M1** sprite catalog | 🔵 READY | each candidate monster's SPR/ACT from the lab client's `data.grf`: actions, 8 directions, frames, native size | plan approval |
-| **M2** render rule | ⬜ BLOCKED | port the billboard rule (nostalro + korangar) into `predict_sprite(actor, map, t)` | M1 (needs ACT frames) |
+| **M0** knowledge base | ✅ DONE 2026-10-04 | `scripts/kb_build.py` → `data/kb/` (gitignored): pre-re mobs, mob skills, spawns, warps, classes. prt_fild08 = Poring 70, Lunatic 40, Pupa 20, Drops 10 + **Creamy = Pupa's NPC_METAMORPHOSIS** (val1 1018; the packets show the same gid). Walk speeds: Poring 400, Lunatic 200, Drops 400, Creamy 150 ms/cell. The gate to prontera: (170,378) span 3×2 | — |
+| **M1** sprite catalog | 🟡 PARTIAL 2026-10-04 | SPR/ACT parsers ported from nostalro (`sprites.py`), `scripts/sprite_catalog.py` → `data/kb/sprite_catalog.json`. **ACTs only:** every monster SPR in the Thai `data.grf` is **MIXCRYPT** (refused, the C8 stop). The ACT 2.5 species (Poring, Drops, Lunatic) have quad sizes (Poring idle 37×36 native); the ACT 2.4 ones have frames and delays only | **Batt:** (a) a MIXCRYPT decoder from the public spec, (b) another GRF (the lab's kRO one is on Windows only), or (c) quad boxes only |
+| **M2** render rule | ✅ BUILT 2026-10-04 | `render.py` `predict_sprite`: f/z × k billboard, the ACT quad/opaque boxes, direction, the frame by time or distance. `box_kind` quad (ACT 2.5) or opaque (SPR); it raises rather than guess when sizes are missing | opaque boxes wait for M1's SPR pixels |
 | **M3** packet states | 🔵 READY | decode the action/damage and direction packets; an offline per-actor state timeline | plan approval |
 | **M4** prove it | ⬜ BLOCKED | GM spawns near/far, indoor/outdoor, judged against pre-registered thresholds (§5) | M2 + M3 + one S2 session |
 | **M5** labels v1 | ⬜ BLOCKED | predicted boxes + state + facing, and the automatic label check | M0 + M4 passed |
@@ -109,6 +118,9 @@ flowchart TD
 | **M10** evaluate | 🟪 GOAL | detector: held-out sessions, Batt's gold set, the Roboflow set (OOD). Tracker: against packets (§6b) | M9 + T3 + the B6 hand-check |
 
 **The real bottlenecks:**
+- ➡️ **2026-10-04: the SPR pixels.** Every monster SPR in the Thai GRF is MIXCRYPT (M1). Exact
+  opaque boxes (k in M4), the label check (M5) and synthetic frames (M6) need them; Batt decides how
+  to get them. M4's spawns are recorded regardless, and re-analysed when pixels exist.
 - **M4**, the one S2 session that proves or refutes the render rule. Every label, the label check
   and the synthetic data depend on it.
 - **Batt's decisions** (§9), including the ADR-0015 ruling that lets perception use static game data
@@ -440,8 +452,8 @@ evaluation set is fixed):
 - mob speed, walkability and the AI movement rules are static game data;
 - **live server state stays forbidden.**
 
-That needs a ruling in ADR-0015, **proposed** there (§9, item 9) for Batt to confirm. Until he does,
-T3 does not run on the deployable path.
+That needs a ruling in ADR-0015. ~~**Proposed** there (§9, item 9) for Batt to confirm. Until he does,
+T3 does not run on the deployable path.~~ ➡️ **ACCEPTED 2026-10-04 (Batt, decision 9): T3 may run.**
 
 ## 7. M8–M10: dataset, model, evaluation
 

@@ -44,7 +44,7 @@
 
 | Source | Commit | License | File read |
 |---|---|---|---|
-| [nmeylan/nostalro-client](https://github.com/nmeylan/nostalro-client) | `15b3029059c04cf1d54d734f7233e5db3c108a9c` | Apache-2.0 (`LICENSE.md`) | `lib/renderer/src/map_loader.rs` (L85-90), `lib/renderer/src/camera.rs` (L189-209), `lib/renderer/src/act.rs` (L568-570) |
+| [nmeylan/nostalro-client](https://github.com/nmeylan/nostalro-client) | `15b3029059c04cf1d54d734f7233e5db3c108a9c` | Apache-2.0 (`LICENSE.md`) | `lib/renderer/src/map_loader.rs` (L85-90), `lib/renderer/src/camera.rs` (L189-209), `lib/formats/src/act.rs` (L568-570) |
 
 ### The GAT file layout
 - **Ported to:** `packages/poring_dataset/src/poring_dataset/gat.py`.
@@ -55,6 +55,35 @@
 | Source | Commit | License | File read |
 |---|---|---|---|
 | [RagnarokResearchLab/RagLite](https://github.com/RagnarokResearchLab/RagLite) | `d1ce2b1e2136c46b1409d5c6701f64d7c3cddaf9` | Unlicense **or** Apache-2.0; used under Apache-2.0 (`LICENSE`) | `Core/FileFormats/RagnarokGAT.lua` |
+
+### The sprite formats (SPR/ACT) and the sprite render rule (2026-10-04, Phase 3 M1/M2)
+- **Ported to:**
+  - `packages/poring_dataset/src/poring_dataset/sprites.py`: `parse_spr`, `parse_act`, `layer_quad`,
+    `compose_frame`, `quad_extent`, `opaque_bbox`;
+  - `packages/poring_dataset/src/poring_dataset/render.py`: `predict_sprite`, `motion_at`,
+    `anchor_and_depth`, `K_NOSTALRO`, `MonsterAction`.
+- **What:** re-expressed in Python/numpy, with no code copied verbatim:
+  - the SPR 1.0–2.1 layout: 2.1 zero-run RLE; ABGR bottom-up RGBA images; the palette at the end;
+    index 0 and the magenta key transparent;
+  - the ACT 2.0–2.5 layout;
+  - the layer quad: centred at anchor + offset, with zoom, angle, mirror and tint;
+  - the billboard scale: perspective px per world unit × GND zoom / 75;
+  - the action index;
+  - the frame timing: 24 ms units; the walk frame by distance (delay/24/7.4 cells); one-shots that
+    hold their last frame;
+  - the monster action groups: idle 0, walk 1, attack 2, hurt 3, die 4.
+- korangar was read to CROSS-CHECK only (k = 1.4/10, its billboard, its action groups); nothing was
+  ported from it. Where the two differ (k by 5 %, frame timing, walk frames by distance vs time,
+  the layer-centring half pixel) is recorded in phase3-plan.md M2.
+- **The client data is NOT ours to ship:** SPR/ACT are read from the client GRF into `/dev/shm`
+  only, and the catalog (`data/kb/sprite_catalog.json`) is gitignored.
+  - 2026-10-04: every monster SPR in the Thai `data.grf` is MIXCRYPT, and was refused (C8 stop).
+  - Only the ACTs (header-only DES) are read.
+
+| Source | Commit | License | File read |
+|---|---|---|---|
+| [nmeylan/nostalro-client](https://github.com/nmeylan/nostalro-client) | `15b3029059c04cf1d54d734f7233e5db3c108a9c` | Apache-2.0 (`LICENSE.md`) | `lib/formats/src/spr.rs`, `lib/formats/src/act.rs` (L7-13, 568-571, 620-634, 641-679), `lib/formats/src/lib.rs` (`read_string`, `version_at_least`), `lib/formats/src/map_coordinates.rs`, `lib/renderer/src/sprite.rs` (L842-956), `lib/renderer/src/sprite_projection.rs` (L154-178), `lib/renderer/src/camera.rs` (L425-439), `lib/game/src/entity.rs` (L1170-1178); read without porting: `client/src/game_updates/animation.rs`, `lib/game/src/shadow.rs`, `lib/game/src/sprite_loader.rs` |
+| [vE5li/korangar](https://github.com/vE5li/korangar) | `e14d3203ad63f35962f6492d8a6b348eb8f47d47` | MIT, © 2023 Lucas Pütz (`LICENSE.md`) | `korangar/src/world/animation/mod.rs` (L15-16, 40-68, 256-303), `korangar/src/world/cameras/mod.rs` (L47-67), `korangar/src/loaders/animation/mod.rs`, `korangar/src/loaders/map/mod.rs` (L31-32): cross-check only |
 
 ## Our own code from public standards
 - **What:** `scripts/grf_des.py`, the GRF archive's header-only "DES" (flag 0x04).
@@ -119,9 +148,10 @@ Ultralytics' stated terms (ADR-0018). They live in `data/` and are never committ
   is downloaded, under `data/` and never committed.
 
 ## Noted for later (not used yet)
-- **RagLite ACT/SPR decoding** (same commit and license as above) is a path to synthetic training
+- ~~**RagLite ACT/SPR decoding** (same commit and license as above) is a path to synthetic training
   data: sprites with exact labels (s2-plan / Phase 3). Its license would be re-read at the commit
-  actually used.
+  actually used.~~ ➡️ Superseded 2026-10-04: the SPR/ACT parsers were ported from nostalro-client
+  instead (see "The sprite formats" above); RagLite's ACT/SPR code was not read.
 
 ## Never opened
 - Cheat or memory-patching repositories (e.g. ragnarok-maya-purple).

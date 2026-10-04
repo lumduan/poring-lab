@@ -78,7 +78,7 @@ mux (/internal/agent, source=bot; lease, log, ADR-0016 interlock) → the one se
 - **On the community server** the KB is a **prior** only: its data may differ from ours, and the
   pixels decide.
 
-### PROPOSED ruling (Batt's note, 2026-10-04; NOT YET CONFIRMED): static game data at RUNTIME, for perception
+### Ruling (ACCEPTED, Batt 2026-10-04 evening; proposed the same afternoon): static game data at RUNTIME, for perception
 - **Proposal.** Static game data may also be used **at runtime by perception**, not only at plan
   time. That covers:
   - monster walk speed and the engine's movement rules (random-walk timing, chase);
@@ -97,8 +97,8 @@ mux (/internal/agent, source=bot; lease, log, ADR-0016 interlock) → the one se
   - The movement rules are re-implemented from their documented behaviour, never copied (the
     `walk.py` discipline).
 - **On the community server:** a prior only; the pixels decide, as above.
-- **Status:** awaiting Batt's confirmation. Until he confirms, the deployable tracker (phase3-plan.md
-  T3) does not run.
+- **Status:** ~~awaiting Batt's confirmation. Until he confirms, the deployable tracker (phase3-plan.md
+  T3) does not run.~~ ➡️ **ACCEPTED by Batt on 2026-10-04 (Phase 3 decision 9): T3 may run.**
 
 ## The linter: layers, cheapest first
 | Layer | Checks | On failure |
