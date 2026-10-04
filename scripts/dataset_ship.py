@@ -11,8 +11,10 @@ Where things live:
 * Local root (record_session.py's default --out): /home/batt/poring-lab-rec. It is on the disk
   shared with live capture, so it is a BUFFER, capped: recording refuses / stops when the
   filesystem has < 140 GB free or > 20 GB of sessions are still unshipped (local_caps()).
-* NAS root: /mnt/poring-lab-datasets (NFS, docs/operations/nas-sink.md). Host-side only: never
-  bind-mounted into a container (an NFS hang must not freeze a lab service).
+* NAS root: /mnt/poring-lab-datasets (NFS, docs/operations/nas-sink.md). Written host-side only.
+  It was never mounted into a container (an NFS hang must not freeze a lab service) until Batt's
+  decision 4 (2026-10-04): vision alone mounts it READ-ONLY, soft (compose `datasets-nas`), for
+  training; no lab service writes through it.
 
 ship, per session (one with a manifest.json: a finished recording), in this order:
   1. sha256 of every file except the manifest -> checksums.sha256 (sha256sum format);
