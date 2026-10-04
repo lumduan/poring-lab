@@ -587,3 +587,40 @@ def test_vision_never_ships_cuda_forward_compat_libs() -> None:
     dockerfile = (ROOT / "services" / "vision" / "Dockerfile").read_text()
     assert "rm -rf /usr/local/cuda-13.0/compat" in dockerfile
     assert dockerfile.index("rm -rf /usr/local/cuda-13.0/compat") > dockerfile.index("uv sync")
+
+
+# --- ADR-0005 closed for S2 (Batt, 2026-10-04): vision S2-only + option c2 -----------------------
+
+
+def test_vision_has_no_x_and_reads_only_the_bus() -> None:
+    vision = compose("compose.yaml")["services"]["vision"]
+    assert mounts_of(vision, "x11-unix") == [], "vision must never reach X (ADR-0005 row 1)"
+    assert "DISPLAY" not in vision.get("environment", {})
+    assert vision["environment"]["VISION_FRAME_SOURCE"] == "bus"
+    assert vision["environment"]["YOLO_OFFLINE"] == "1"
+
+
+def test_vision_lives_on_the_internal_agent_network_only() -> None:
+    cfg = compose("compose.yaml")
+    assert cfg["services"]["vision"]["networks"] == ["agent"]
+    assert set(cfg["services"]["backend"]["networks"]) == {"default", "agent"}
+    agent = cfg["networks"]["agent"]
+    assert agent["internal"] is True
+    assert agent["driver_opts"]["com.docker.network.bridge.gateway_mode_ipv4"] == "isolated"
+    subnet = agent["ipam"]["config"][0]["subnet"]
+    assert subnet == "10.210.97.0/24" and not subnet.startswith("192.168.")  # CLAUDE.md rule 6
+
+
+def test_the_backend_refuses_exactly_the_agent_subnet() -> None:
+    from poring_backend.config import Settings
+
+    subnet = compose("compose.yaml")["networks"]["agent"]["ipam"]["config"][0]["subnet"]
+    assert Settings().agent_networks == subnet
+
+
+def test_only_vision_and_backend_are_on_the_agent_network() -> None:
+    for name in ("compose.yaml", "compose.dev.yaml"):
+        for svc, spec in compose(name)["services"].items():
+            nets = (spec or {}).get("networks") or []
+            if "agent" in nets:
+                assert svc in ("vision", "backend"), f"{name}: {svc} joined the agent network"

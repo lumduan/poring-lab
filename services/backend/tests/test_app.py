@@ -567,3 +567,42 @@ def test_a_safety_alarm_reaches_health_and_status(make_client: Factory, tmp_path
     (lab_state / "cleanroom-alarm").write_text("ALARM=watchdog_down\nSINCE=1791000000\n")
     client, _ = make_client(lab_state_dir=lab_state)
     assert client.get("/health").json()["alarms"] == ["watchdog_down"]
+
+
+# --- ADR-0005 option c2 (2026-10-04): the agent network reaches only the internal listener -------
+
+
+def test_the_agent_network_is_refused_on_the_public_listener(tmp_path: Path) -> None:
+    from starlette.testclient import TestClient
+
+    from poring_backend.agent_net import AgentNetworkGuard
+
+    lab_state = tmp_path / "lab-state"
+    lab_state.mkdir()
+    settings = Settings(data_dir=tmp_path, lab_state_dir=lab_state, frontend_origins=ORIGIN)
+    app = create_app(settings, capture_factory=FakeCapture, input_factory=FakeInput)
+    before = AgentNetworkGuard.refused
+    with TestClient(app, client=("10.210.97.7", 40000)) as agent:
+        assert agent.get("/health").status_code == 403
+        assert agent.get("/transfer/files", headers={"origin": ORIGIN}).status_code == 403
+        # closed before accept: a forged Origin changes nothing
+        with (
+            pytest.raises(WebSocketDisconnect),
+            agent.websocket_connect("/ws/input", headers={"origin": ORIGIN}),
+        ):
+            pass
+    with TestClient(app, client=("192.168.1.20", 40000)) as lan:
+        assert lan.get("/health").status_code == 200  # LAN viewers unchanged
+    assert AgentNetworkGuard.refused >= before + 3
+
+
+def test_the_agent_network_still_reaches_the_internal_listener(tmp_path: Path) -> None:
+    from starlette.testclient import TestClient
+
+    lab_state = tmp_path / "lab-state"
+    lab_state.mkdir()
+    settings = Settings(data_dir=tmp_path, lab_state_dir=lab_state, frontend_origins=ORIGIN,
+                        internal_port=80)  # TestClient arrives on port 80  # fmt: skip
+    app = create_app(settings, capture_factory=FakeCapture, input_factory=FakeInput)
+    with TestClient(app, client=("10.210.97.7", 40000)) as agent:
+        assert agent.get("/health").status_code == 200  # the internal listener is never guarded

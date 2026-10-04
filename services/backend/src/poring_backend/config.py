@@ -83,6 +83,9 @@ class Settings(BaseSettings):
     # forge an Origin (live probe, 2026-10-01). Host scripts read /captures instead.
     viewer_networks: str = "192.168.0.0/16"
     compose_subnet: str = "10.210.96.0/24"
+    # ADR-0005 option c2 (2026-10-04): the internal agent network (vision). Refused on every
+    # listener but the internal one (agent_net.AgentNetworkGuard). Pinned like the compose subnet.
+    agent_networks: str = "10.210.97.0/24"
 
     # --- Black-screen detector (display.py) ------------------------------------------------------
     # GAME_REGION: the RO client area in desktop pixels, "x,y,w,h"; "" = the whole frame (only a
@@ -103,6 +106,12 @@ class Settings(BaseSettings):
     def origins(self) -> frozenset[str]:
         return frozenset(
             o.strip().rstrip("/") for o in self.frontend_origins.split(",") if o.strip()
+        )
+
+    @property
+    def agent_nets(self) -> tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...]:
+        return tuple(
+            ipaddress.ip_network(n.strip()) for n in self.agent_networks.split(",") if n.strip()
         )
 
     @property

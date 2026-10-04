@@ -14,6 +14,7 @@ import uvicorn
 from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
 
+from poring_backend.agent_net import AgentNetworkGuard
 from poring_backend.clipboard import SelectionIO
 from poring_backend.config import Settings
 from poring_backend.routes_debug import router as debug_router
@@ -102,6 +103,9 @@ def create_app(
         expose_headers=["content-disposition", "x-content-sha256"],
         max_age=600,
     )
+    # ADR-0005 c2: added last, so it is the OUTERMOST layer -- the agent network is refused before
+    # any route, CORS or WebSocket accept runs.
+    app.add_middleware(AgentNetworkGuard, nets=cfg.agent_nets, internal_port=cfg.internal_port)
     return app
 
 

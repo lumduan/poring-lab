@@ -11,6 +11,7 @@ from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 from pydantic import ValidationError
 from starlette.requests import HTTPConnection
 
+from poring_backend.agent_net import AgentNetworkGuard
 from poring_backend.drops import Channel, ReplyThrottle, drop_reason, message_type
 from poring_backend.mux import Source
 from poring_backend.state import AppState
@@ -126,6 +127,8 @@ async def health(request: Request) -> dict[str, Any]:
         "capture_backend": state.capture.model_dump(),
         # Safety alarms (2026-10-04): e.g. watchdog_down -- a clean room without its watchdog.
         "alarms": state.alarms,
+        # ADR-0005 c2: connections from the agent network refused on the public listener.
+        "agent_network_refused": AgentNetworkGuard.refused,
         "cleanroom": state.cleanroom.model_dump() if state.cleanroom else None,
         # S2 frame bus (docs/s2-plan.md): the writer and this backend's consumer counters.
         "framebus": {**state.capture_source.snapshot(), "stalls": state.stalls.snapshot()},

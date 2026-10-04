@@ -208,6 +208,9 @@ services:
       - "${HOST_LAN_IP:?}:8000:8000" # /health, /ws/stream, /ws/input
     # 8001 (/internal/agent) is deliberately NOT published: compose network only.
     expose: ["8001"]
+    # default (LAN publishing, the other services) + agent (vision only; ADR-0005 option c2). Host
+    # scripts must index the DEFAULT network's address by name (scripts/backend_addr.py).
+    networks: [default, agent]
     mem_limit: 1g
     memswap_limit: 1g
     # ~1 core during full-scene motion (JPEG encode of the stream): a lower weight than the quant
@@ -242,18 +245,27 @@ services:
         condition: service_healthy
         required: false # lets `--profile vision` validate on its own
     environment:
-      DISPLAY: ":99"
       SESSION_SIZE: ${SESSION_SIZE:-1440x900} # grab exactly what the backend maps input over
       BACKEND_AGENT_URL: ws://backend:8001/internal/agent
       AGENT_HZ: ${AGENT_HZ:-10}
       # The GPU is shared with Frigate (NVR) and Ollama: hard-cap this process's VRAM.
       VISION_MAX_VRAM_FRACTION: ${VISION_MAX_VRAM_FRACTION:-0.25}
       VISION_DEBUG_BOX: ${VISION_DEBUG_BOX:-false}
+      # ADR-0005 CLOSED for S2 (Batt, 2026-10-04): vision reads ONLY the S2 frame bus -- it has no X
+      # socket at all -- and acts only through the mux (/internal/agent).
+      VISION_FRAME_SOURCE: bus
+      # Its network is internal (no internet): never fetch or auto-install at run time.
+      YOLO_OFFLINE: "1"
+      HF_HUB_OFFLINE: "1"
     volumes:
-      - x11-unix:/tmp/.X11-unix:ro
       - ./data:/data
       # S2 frame bus: the same decoded frames the console shows (pixels only), read-only.
       - framebus:/framebus:ro
+      # ADR-0005's acceptance test (read-only; run with guarded `run:vision`).
+      - ./services/vision/acceptance:/opt/acceptance:ro
+    # ADR-0005 option c2: ONLY the internal agent network -- vision reaches the backend's
+    # /internal/agent and nothing else (the backend refuses this subnet on its public listener).
+    networks: [agent]
     deploy:
       resources:
         reservations:
@@ -385,6 +397,15 @@ volumes:
       o: size=1m,uid=1000,gid=1000,mode=0750
 
 networks:
+  # ADR-0005 option c2 (Batt, 2026-10-04): backend + vision only. internal: no route out; the
+  # gateway isolated so vision cannot reach host services through it. PINNED 10.x, never 192.168.x.
+  agent:
+    internal: true
+    driver_opts:
+      com.docker.network.bridge.gateway_mode_ipv4: isolated
+    ipam:
+      config:
+        - subnet: 10.210.97.0/24
   default:
     # PINNED -- never let Docker pick this subnet. The daemon's fallback pools hand out 192.168.x.0/20
     # blocks, and on 2026-09-29 it gave this network 192.168.96.0/20, which overlaps the operator's LAN
