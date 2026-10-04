@@ -416,6 +416,43 @@ def cmd_prune(a: argparse.Namespace) -> int:
     return 0
 
 
+SIDECAR_NAME = re.compile(r"^packets\.[a-z0-9_]+\.jsonl\.gz$")
+
+
+def add_sidecar(session: Path, src: Path) -> dict[str, Any]:
+    """Add a re-derived file (e.g. packets.states.jsonl.gz, scripts/replay_states.py) to a SHIPPED
+    session: copied in under a temporary name, re-hashed ON the NAS, renamed, then its line joins
+    checksums.sha256 and INDEX.jsonl gets an event. Never replaces a file that is there already:
+    the shipped data stays exactly what was verified (2026-10-04, Phase 3 M3)."""
+    if not SIDECAR_NAME.match(src.name):
+        raise Refused(f"{src.name}: a sidecar is packets.<kind>.jsonl.gz")
+    if not (session / CHECKSUMS).is_file():
+        raise Refused(f"{session.name} has no {CHECKSUMS}: not a shipped session")
+    dest = session / src.name
+    if dest.exists():
+        raise Refused(f"{dest} exists: a sidecar is never replaced")
+    want = sha256_file(src)
+    tmp = session / f".{src.name}.part"
+    shutil.copyfile(src, tmp)
+    if sha256_file(tmp) != want:  # read back from the NAS
+        tmp.unlink()
+        raise Refused(f"{src.name}: the NAS copy hashes differently")
+    tmp.replace(dest)
+    sums = read_checksums(session / CHECKSUMS)
+    sums[src.name] = want
+    text = "".join(f"{digest}  {rel}\n" for rel, digest in sums.items())
+    part = session / f".{CHECKSUMS}.tmp"
+    part.write_text(text)
+    part.replace(session / CHECKSUMS)
+    if read_checksums(session / CHECKSUMS).get(src.name) != want:
+        raise Refused("checksums.sha256 did not read back")
+    record = {"event": "sidecar", "session_id": session.name, "file": src.name,
+              "sha256": want, "bytes": dest.stat().st_size,
+              "added_at": now().isoformat(timespec="seconds")}  # fmt: skip
+    append_index(session.parent, record)
+    return record
+
+
 def cmd_pin(a: argparse.Namespace) -> int:
     check_dest(a.dest, a.dest_is_dir_for_tests)
     session = a.dest / a.session

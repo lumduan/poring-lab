@@ -74,6 +74,16 @@ next_action: H.264 (IDR 1 s) is the default since 2026-10-04 (Batt). Record cons
 > - Vision mounts the export through a soft, read-only NFS volume (`compose.yaml` `datasets-nas` →
 >   `/datasets:ro`, vision only, test_guards) and reads the shards in place
 >   (`poring_vision.shards`).
+>
+> ➡️ **Note 2026-10-04, night: SIDECARS.** A shipped session may gain a re-derived file without
+> touching what was verified. `dataset_ship.add_sidecar`:
+> - only `packets.<kind>.jsonl.gz`;
+> - copied as `.part`, re-hashed on the NAS, renamed;
+> - its line joins `checksums.sha256`, and INDEX.jsonl gets a `sidecar` event;
+> - never replaced.
+>
+> The first is `packets.states.jsonl.gz` (Phase 3 M3: the act/turn decoders, replayed from the
+> banked captures by `scripts/replay_states.py`).
 
 ## Context
 

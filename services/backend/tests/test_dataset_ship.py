@@ -353,3 +353,28 @@ def test_the_default_format_is_h264_on_console_and_png_on_rdp() -> None:
     with pytest.raises(rs.r.Stop, match="0..60"):
         rs.resolve_format(args(idr_every=90.0))
     assert rs.RECORDER_VERSION == 5
+
+
+def test_a_sidecar_joins_a_shipped_session_and_is_never_replaced(
+    ds: ModuleType, dirs: SimpleNamespace, tmp_path: Path
+) -> None:
+    """replay_states.py (Phase 3 M3): re-decoded packets join a shipped session as a sidecar;
+    the shipped files stay exactly what was verified."""
+    make_session(dirs.root, SID)
+    assert ds.main(ship_argv(dirs)) == 0
+    remote = dirs.dest / SID
+    before = ds.read_checksums(remote / "checksums.sha256")
+    src = tmp_path / "packets.states.jsonl.gz"
+    src.write_bytes(b"\x1f\x8b states")
+    record = ds.add_sidecar(remote, src)
+    sums = ds.read_checksums(remote / "checksums.sha256")
+    assert sums == {**before, "packets.states.jsonl.gz": ds.sha256_file(src)}
+    assert (remote / "packets.states.jsonl.gz").read_bytes() == b"\x1f\x8b states"
+    assert record["event"] == "sidecar" and index_lines(dirs.dest)[-1]["file"] == src.name
+    with pytest.raises(ds.Refused):
+        ds.add_sidecar(remote, src)  # never replaced
+    bad = tmp_path / "manifest.json"
+    bad.write_text("{}")
+    with pytest.raises(ds.Refused):
+        ds.add_sidecar(remote, bad)  # only packets.<kind>.jsonl.gz
+    assert not list(remote.glob(".*.part"))
