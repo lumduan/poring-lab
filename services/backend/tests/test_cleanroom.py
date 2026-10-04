@@ -153,3 +153,23 @@ def test_no_heartbeat_without_a_watchdog_while_a_room_runs(cr: ModuleType) -> No
     assert cr.cmd_heartbeat(True) == 0
     cr.save_status(phase="ended")
     assert cr.cmd_heartbeat(False) == 0  # no room: nothing to guard
+
+
+def test_rearm_restarts_a_stopped_watchdog_for_the_time_left(
+    cr: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """2026-10-04, the announced red-alarm test: stop the watchdog, see the alarm, re-arm it. The
+    hard cap stays absolute (the watchdog reads hard_cap_ts); only the unit is restarted."""
+    assert cr.rearm_minutes({"phase": "checks", "hard_cap_ts": T + 3600}, T) == pytest.approx(60)
+    assert cr.rearm_minutes({"phase": "checks", "hard_cap_ts": T - 1}, T) is None  # cap passed
+    assert cr.rearm_minutes({"phase": "done", "hard_cap_ts": T + 3600}, T) is None  # no room
+    started: list[float] = []
+    monkeypatch.setattr(cr, "start_watchdog", lambda minutes: started.append(minutes))
+    monkeypatch.setattr(cr.time, "time", lambda: T)
+    monkeypatch.setattr(cr, "load_status", lambda: {"phase": "checks", "hard_cap_ts": T + 1800})
+    monkeypatch.setattr(cr, "watchdog_active", lambda: True)
+    assert cr.cmd_rearm() == 2 and started == []  # already up: nothing to do
+    monkeypatch.setattr(cr, "watchdog_active", lambda: False)
+    assert cr.cmd_rearm() == 0 and started == [pytest.approx(30)]
+    monkeypatch.setattr(cr, "load_status", lambda: {"phase": "entered", "hard_cap_ts": T - 5})
+    assert cr.cmd_rearm() == 2  # the cap has passed: refused

@@ -18,6 +18,8 @@ runner, the watchdog and a human).
                                               the functional checks (the watchdog enforces it; keep
                                               `heartbeat` fresh meanwhile)
     cleanroom.py hold | heartbeat | status
+    cleanroom.py rearm                        restart a STOPPED watchdog for the active room, for
+                                              the time left to its (absolute) hard cap
     cleanroom.py end                          hold, to-rdp, the exit checks, stop the watchdog
     cleanroom.py watchdog                     (systemd-run --user; never by hand)
     cleanroom.py guard                        (a systemd --user TIMER, every 60 s while a room runs;
@@ -345,6 +347,31 @@ def start_watchdog(hard_cap_min: float) -> None:
     say(f"watchdog running as the transient unit {UNIT} (survives this session)")
 
 
+def rearm_minutes(status: dict[str, Any], now: float) -> float | None:
+    """The minutes left to an ACTIVE room's hard cap, or None (no room, or the cap has passed)."""
+    if status.get("phase") not in ROOM_ACTIVE:
+        return None
+    left = float(status.get("hard_cap_ts") or 0) - now
+    return left / 60 if left > 0 else None
+
+
+def cmd_rearm() -> int:
+    """Restart the watchdog of the active room (2026-10-04: the announced red-alarm test stops it
+    and restores it). The hard cap stays ABSOLUTE: the watchdog reads hard_cap_ts from the room's
+    status; the unit's RuntimeMaxSec covers the time left plus the margin. The guard timer then
+    clears the alarm by itself."""
+    if watchdog_active():
+        say("the watchdog is already up: nothing to re-arm")
+        return 2
+    minutes = rearm_minutes(load_status(), time.time())
+    if minutes is None:
+        say("REFUSED: no active room, or its hard cap has passed")
+        return 2
+    start_watchdog(minutes)
+    say(f"watchdog RE-ARMED for the {minutes:.0f} min left to the hard cap")
+    return 0
+
+
 def stop_watchdog() -> None:
     subprocess.run(["systemctl", "--user", "stop", UNIT], check=False, capture_output=True)
     say("watchdog stopped")
@@ -665,7 +692,7 @@ def main() -> int:
     va.add_argument("--knob", action="append", help="S2 only: an experiment knob K=V")
     ch = sub.add_parser("checks")
     ch.add_argument("--box-min", type=float, default=BOXES_MIN["checks"])
-    for name in ("hold", "heartbeat", "status", "end", "watchdog", "guard"):
+    for name in ("hold", "heartbeat", "status", "end", "watchdog", "guard", "rearm"):
         sub.add_parser(name)
     args = ap.parse_args()
     if args.cmd == "watchdog":
@@ -685,6 +712,8 @@ def main() -> int:
         return cb("hold", timeout=180).returncode
     if args.cmd == "end":
         return cmd_end()
+    if args.cmd == "rearm":
+        return cmd_rearm()
     if args.cmd == "heartbeat":
         return cmd_heartbeat(watchdog_active())
     print(json.dumps(load_status(), indent=1))
