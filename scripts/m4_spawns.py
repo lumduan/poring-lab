@@ -4,6 +4,7 @@
 
     m4_spawns.py --out EVENTS.jsonl [--blocks outdoor-1 outdoor-2 indoor-1]
                  [--species poring lunatic] [--per-species 5] [--hold 40] [--background 5]
+                 [--count 1]
     m4_spawns.py --check-client      rc 0 only if the RO client's title bar is on screen
 
 --check-client runs BEFORE the recorder starts: no input, no screenshot, just the title bar's
@@ -16,6 +17,8 @@ Per block (a scene, entered via the other map: a camera reset):
   2. per species, --per-species times: `@monster <species> 1`, hold --hold seconds while it
      wanders and stands (rAthena: a random walk, then >= 4 s standing), `@killmonster2`, and
      another background gap.
+--count N spawns N per command (`@monster <species> N`): Phase 3 M7's CROWD blocks (occlusion),
+recorded under their own label; M4 itself is --count 1 (m4_validate measures single monsters).
 The GM never clicks and never moves, so nothing is provoked; its vitals are still checked between
 spawns (gm_vitals: @heal / @alive). `outdoor-1` and `outdoor-2` are the A/A pair: the same
 condition measured on disjoint spawn sets.
@@ -67,6 +70,7 @@ def main() -> int:
     ap.add_argument("--blocks", nargs="+", default=["outdoor-1", "outdoor-2", "indoor-1"])
     ap.add_argument("--species", nargs="+", default=["poring", "lunatic"])
     ap.add_argument("--per-species", type=int, default=5)
+    ap.add_argument("--count", type=int, default=1, choices=range(1, 21), metavar="1..20")
     ap.add_argument("--hold", type=float, default=40.0)
     ap.add_argument("--background", type=float, default=5.0)
     a = ap.parse_args()
@@ -78,7 +82,8 @@ def main() -> int:
     with a.out.open("a") as log, r.session("m4-spawns") as (agent, screen):
 
         def note(block: str, scene: str, event: str, species: str | None = None) -> None:
-            rec = {"t_mono_ns": r.ns(), "t_wall": time.strftime("%H:%M:%S"), "block": block,
+            rec = {"t_mono_ns": r.ns(), "t_wall": time.strftime("%H:%M:%S"), "count": a.count,
+                   "block": block,
                    "scene": scene, "species": species, "event": event}  # fmt: skip
             log.write(json.dumps(rec) + "\n")
             log.flush()
@@ -111,7 +116,7 @@ def main() -> int:
                     for _ in range(a.per_species):
                         if stop["flag"] or counts["gm_disabled"]:
                             raise KeyboardInterrupt
-                        if act.safe_gm(agent, screen, f"@monster {species} 1", counts):
+                        if act.safe_gm(agent, screen, f"@monster {species} {a.count}", counts):
                             counts["spawns"] += 1
                             note(block, scene, "spawned", species)
                         agent.idle(a.hold)
