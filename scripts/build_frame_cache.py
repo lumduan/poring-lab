@@ -55,18 +55,18 @@ GOLD = "20261004T103815-console-s2-indoor-v2"
 
 
 def session_frames(
-    session: Path, manifest: dict[str, Any], every: int
+    session: Path, manifest: dict[str, Any], every: int, every_png: int
 ) -> Iterator[tuple[Any, Any]]:
     if (manifest.get("format") or "png") == "h264":
         from poring_dataset.h264 import H264Session
 
         yield from H264Session(session).iter_every(every)
         return
-    n = 0
+    n = 0  # PNG sessions were recorded at ~1 fps (Batt 2026-10-04): their own, smaller step
     for shard in manifest["shards"]:
         for meta, img in read_shard(session / shard):
             n += 1
-            if not (n - 1) % every:
+            if not (n - 1) % every_png:
                 yield meta, img
 
 
@@ -138,7 +138,8 @@ def main() -> int:
     ap.add_argument("--test", nargs="*", default=[])
     ap.add_argument("--cache-id", default=None)
     ap.add_argument("--labels", choices=("v0",), default="v0")
-    ap.add_argument("--every", type=int, default=15)
+    ap.add_argument("--every", type=int, default=15)  # H.264 (~32 fps): ~2 fps kept
+    ap.add_argument("--every-png", type=int, default=1)  # PNG sessions (~1 fps): every frame
     ap.add_argument("--max-per-session", type=int, default=None)
     ap.add_argument("--datasets", type=Path, default=NAS)
     ap.add_argument("--out", type=Path, default=OUT)
@@ -167,7 +168,7 @@ def main() -> int:
             w, h = labeler.size
             row = {"split": part, "format": manifest.get("format") or "png", "kept": 0,
                    "gm_window": 0, "off_scene": 0, "boxes": 0, "shards": []}  # fmt: skip
-            for meta, img in session_frames(path, manifest, a.every):
+            for meta, img in session_frames(path, manifest, a.every, a.every_png):
                 t = int(meta["t_mono_ns"])
                 world = labeler.timeline.frame_world(t - int(labeler.offset_ms * 1e6))
                 world_map = (world.map or "").removesuffix(".gat")  # packets say prt_fild08.gat
@@ -194,7 +195,8 @@ def main() -> int:
             print(json.dumps({sid: row}), flush=True)
     sink.close()
     manifest = {
-        "cache_id": cache_id, "labels": a.labels, "every": a.every, "quality": a.quality,
+        "cache_id": cache_id, "labels": a.labels, "every": a.every, "every_png": a.every_png,
+        "quality": a.quality,
         "names": {v: k for k, v in sorted(CLASSES.items(), key=lambda kv: kv[1])},
         "split": split, "sessions": sessions, "shards": sink.done, "gold": GOLD,
         "built_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),

@@ -146,6 +146,23 @@ def main() -> int:  # noqa: PLR0915
     }  # fmt: skip
     if a.resume:
         overrides["resume"] = str(run_dir / "weights" / "last.pt")
+    # ultralytics' AMP self-check downloads yolo26n.pt; vision is offline (and its cwd read-only),
+    # so it dies with PermissionError (2026-10-04 smoke run). fp16 on this card is verified by
+    # scripts/check_gpu.py (matmul + conv2d in fp16), so the check is skipped, not faked.
+    import ultralytics.engine.trainer as ul_trainer
+
+    ul_trainer.check_amp = lambda model: True
+    # The final evaluation of best.pt runs the validator standalone: it already holds our val
+    # dataloader (the trainer's test_loader) but re-resolves `data` by name through
+    # check_det_dataset, which knows no "shards" (2026-10-04 smoke run). Answer that one name.
+    import ultralytics.engine.validator as ul_validator
+
+    check_det = ul_validator.check_det_dataset
+
+    def shard_dataset(dataset: Any, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        return dict(data) if dataset == "shards" else check_det(dataset, *args, **kwargs)
+
+    ul_validator.check_det_dataset = shard_dataset
     trainer = ShardTrainer(overrides=overrides)
     trainer.train()
 
