@@ -107,6 +107,14 @@ def main() -> int:
         raise SystemExit(f"{gat_path} is missing: an indoor walk needs the map's walkability")
     pos = (sx, sy)  # the character's cell, tracked from our own clicks (approximate)
     with r.session("dataset-activity") as (agent, screen):
+        # like bench.preflight: a console left open (open-terminal before to-console) covers the
+        # client's title bar, so activation fails closed and the run records an idle GM
+        # (p3-outdoor-a, 2026-10-04 13:05)
+        r.minimize_consoles(agent, screen)
+        # Enter the scene first (via the other map: a camera reset). The walk below assumes the
+        # character starts at (sx, sy) on mapname; without this an "indoor" run recorded
+        # prt_fild08 through the prt_church projector (p3-indoor-a, 2026-10-04 13:32, discarded).
+        bench.enter_scene(agent, screen, a.scene)
         camera = cm.load_camera_json(camera_file(agent.backend))
         projector, which = cm.projector_for(camera, mapname, indoor_table=indoor)
         info["projection"] = which
