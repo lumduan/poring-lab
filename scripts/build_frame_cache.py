@@ -169,7 +169,8 @@ def main() -> int:
                    "gm_window": 0, "off_scene": 0, "boxes": 0, "shards": []}  # fmt: skip
             for meta, img in session_frames(path, manifest, a.every):
                 t = int(meta["t_mono_ns"])
-                world_map = labeler.timeline.frame_world(t - int(labeler.offset_ms * 1e6)).map
+                world = labeler.timeline.frame_world(t - int(labeler.offset_ms * 1e6))
+                world_map = (world.map or "").removesuffix(".gat")  # packets say prt_fild08.gat
                 if world_map not in SCENE_MAPS:
                     row["off_scene"] += 1
                     continue
