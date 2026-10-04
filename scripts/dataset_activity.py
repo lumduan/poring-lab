@@ -121,6 +121,16 @@ def main() -> int:
     walkable = gatmod.parse(gat_path.read_bytes()).walkable() if gat_path.exists() else None
     if walkable is None and cm.is_indoor(mapname, indoor):
         raise SystemExit(f"{gat_path} is missing: an indoor walk needs the map's walkability")
+    if a.scene == "outdoor":
+        # The outdoor start is a few cells SOUTH of prt_fild08's gate portal to prontera (+y is
+        # north): p3-outdoor-b walked into it at 240 s (map_change prontera, not a GM command) and
+        # p3-outdoor-c stood on it (2026-10-04). Targets stay south of the start row, so the
+        # client's path to them never crosses the gate.
+        if walkable is None:
+            raise SystemExit(f"{gat_path} is missing: the outdoor walk must keep off the gate")
+        walkable = walkable.copy()
+        walkable[sy:, :] = False
+        info["avoid"] = f"y >= {sy} (the gate north of the start)"
     pos = (sx, sy)  # the character's cell, tracked from our own clicks (approximate)
     stuck = 0  # consecutive no_cell
     with r.session("dataset-activity") as (agent, screen):
