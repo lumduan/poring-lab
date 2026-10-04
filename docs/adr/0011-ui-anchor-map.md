@@ -84,6 +84,7 @@ window**, turned into a pixel by finding the window on the frame.
 | `basic_info` | title bar (0,0) 200×15 | 220×140 (+ the menu when expanded, to 327) | `hp_bar` (35,53,135,9), `sp_bar` (35,68,135,9), `hp_sp_text` (30,51,190,27) |
 | `hotbar` | the row-number column (0,30) 16×100 | 290×131 (4 rows) | `hotbar_slot_1..9` (15+29i, 3, 26, 26) |
 | `chat` | the tab strip (0,0) 240×15 | 597×93 | `chat_input` (80,72,400,14) |
+| `minimap` (added 2026-10-04, Phase 3 T0; measured on S2 console frames) | the zoom buttons (72,127) 54×12, the window at game-region (1136,18), right-anchored | 128×142 | `minimap_xy` (16,127,56,15): the player's cell readout (white digits, black shadow on the left; first cell x=1158, pitch 7, an 8 px gap between the numbers). No `label_key` (digits, not UI text). The client draws NO minimap on indoor maps (prt_church). Read by `poring_env.selfpos` |
 | `game_option` | title bar (0,0) 260×15 | 280×138 (open after Escape) | `game_option_close` (30,113,220,20) |
 
 - **RO windows are translucent, the chat window almost entirely.** Only 0.6 % of its pixels are

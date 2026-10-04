@@ -104,20 +104,27 @@ flowchart TD
 | **M0** knowledge base | ✅ DONE 2026-10-04 | `scripts/kb_build.py` → `data/kb/` (gitignored): pre-re mobs, mob skills, spawns, warps, classes. prt_fild08 = Poring 70, Lunatic 40, Pupa 20, Drops 10 + **Creamy = Pupa's NPC_METAMORPHOSIS** (val1 1018; the packets show the same gid). Walk speeds: Poring 400, Lunatic 200, Drops 400, Creamy 150 ms/cell. The gate to prontera: (170,378) span 3×2 | — |
 | **M1** sprite catalog | 🟡 PARTIAL 2026-10-04 | SPR/ACT parsers ported from nostalro (`sprites.py`), `scripts/sprite_catalog.py` → `data/kb/sprite_catalog.json`. **ACTs only:** every monster SPR in the Thai `data.grf` is **MIXCRYPT** (refused, the C8 stop). The ACT 2.5 species (Poring, Drops, Lunatic) have quad sizes (Poring idle 37×36 native); the ACT 2.4 ones have frames and delays only | **Batt:** (a) a MIXCRYPT decoder from the public spec, (b) another GRF (the lab's kRO one is on Windows only), or (c) quad boxes only |
 | **M2** render rule | ✅ BUILT 2026-10-04 | `render.py` `predict_sprite`: f/z × k billboard, the ACT quad/opaque boxes, direction, the frame by time or distance. `box_kind` quad (ACT 2.5) or opaque (SPR); it raises rather than guess when sizes are missing | opaque boxes wait for M1's SPR pixels |
-| **M3** packet states | 🔵 READY | decode the action/damage and direction packets; an offline per-actor state timeline | plan approval |
-| **M4** prove it | ⬜ BLOCKED | GM spawns near/far, indoor/outdoor, judged against pre-registered thresholds (§5) | M2 + M3 + one S2 session |
+| **M3** packet states | ✅ BUILT + LIVE 2026-10-04 | `poring_packets` decodes the ZC_NOTIFY_ACT family (0x008A/0x02E1/0x08C8) and ZC_CHANGE_DIRECTION (0x009C); `world.py` keeps the vanish reason (died → `dying`), swings and flinches; `Timeline.state(gid, t)` = idle/walk/**attacking**/hurt/dying/sit + facing. The value is `attacking`, not `attack`: the locale guard (ADR-0012) refuses the bare word. The sniffer was rebuilt and recreated at 21:09 (live). `DEFAULT_DIE_MS` 2000 is a placeholder until M1 gives per-class die durations. Today's sessions can be re-decoded from the captures volume until ~10-11 | the client-side attack facing is an assumption that M4 checks |
+| **M4** prove it | ⬜ BLOCKED 2026-10-04 22:00 | GM spawns near/far, indoor/outdoor, judged against pre-registered thresholds (§5). The driver is built (`scripts/m4_spawns.py`). The session did NOT run: `to-console` failed 3 times (a ~30 s stall before its second focus click, under investigation), and on the 4th the console showed the **Windows sign-in screen** instead of the poring-lab session. Nothing was typed into it; the 1-min recording that captured it was deleted, never shipped | **Batt:** the Windows console / tscon side; then one S2 session |
 | **M5** labels v1 | ⬜ BLOCKED | predicted boxes + state + facing, and the automatic label check | M0 + M4 passed |
 | **M6** synthetic | ⬜ BLOCKED | sprites rendered with the game's geometry onto real backgrounds, then a real H.264 encode | M4 passed |
 | **M7** collection | ⬜ BLOCKED | GM sessions only for what math cannot make | M5 (coverage tracking) |
-| **M8** dataset | ⬜ BLOCKED | frame cache in one sequential pass per session; split by session; the gold set held out | M5 + M6 + M7 |
-| **M9** train | ⬜ BLOCKED | YOLO11n at 1280 under 3,962 MiB | M8 + Batt's decisions (§9) |
-| **T0** self-localisation | 🔵 READY | our own cell from pixels (§6b): the projection of our walk clicks + registration of the ground, with absolute fixes; packets only to evaluate it | plan approval |
+| **M8** dataset | 🟡 v0 BUILT 2026-10-04 | `scripts/build_frame_cache.py` → tar shards on the NAS (`.framecache/`), one sequential pass per session, split by session, the gold set test only. v1 waits for M5 | M5 + M6 + M7 for v1 |
+| **M9** train | 🟡 PIPELINE PROVEN 2026-10-04 | `poring_vision.train` reads the shards in place (vision mounts the NAS read-only); `rundev:vision` iterates without an image rebuild. Smoke (v0, 400/100 frames, 3 epochs): mAP50 0.795, peak VRAM 2,216 / 3,962 MiB, Frigate inference +5 ms mean during. Tonight: a v0 BASELINE, because v1 is blocked (M4) | v1 labels (M5) |
+| **T0** self-localisation | ✅ PASS 2026-10-04 | the minimap's coordinate readout (`poring_env.selfpos`, anchor `minimap_xy`), digit templates cut from frames (local, gitignored). Held-out, pre-registered: standing 99.36 % exact (2,320/2,335), walking 99.70 % within 1 cell, 0 wrong reads; A/A both halves pass. outdoor-c alone is 98.70 %: loading screens past the 3 s exclusion, not moved. **No minimap indoors** (prt_church): there T0 needs a fallback (walk commands, ground registration). `walk.py`'s path limit is now 32 (the pinned server's buffer; walk_check: 9,636/9,636 walks found, the longest 14 steps) | — |
 | **T1** motion model | ⬜ BLOCKED | the engine's movement rules (§6b) + mob_db speeds + GAT walkability, as a predictor | M0 |
 | **T2** tracker, simulated | ⬜ BLOCKED | predict → associate → update in WORLD cells, fed labels v1 thinned to 5 Hz with drops and noise | T1 + M5 |
 | **T3** tracker, real | ⬜ BLOCKED | the same on the detector's output; YOLO ~5 Hz, prediction at stream rate | T2 + M9 + T0 + the ADR-0015 ruling |
 | **M10** evaluate | 🟪 GOAL | detector: held-out sessions, Batt's gold set, the Roboflow set (OOD). Tracker: against packets (§6b) | M9 + T3 + the B6 hand-check |
 
 **The real bottlenecks:**
+- ➡️ **2026-10-04 22:00: the Windows console.** M4's session could not start: `to-console` stalls
+  intermittently, and once through, the console showed the Windows sign-in screen, not the
+  poring-lab session. Batt's side (the console session / tscon); no retry loop.
+- ➡️ **Label truth, found by T0:** (1) FIXED: the Timeline looked maps up as `x.gat`, so walks
+  fell back to a straight path; (2) OPEN: our own block id (AID) is unknown in recorded sessions
+  (no login_accepted after the last map change), so our own entity_stop is ignored. T0's truth
+  infers it (`selfpos_calibrate.infer_self_aid`); the recorder could store it.
 - ➡️ **2026-10-04: the SPR pixels.** Every monster SPR in the Thai GRF is MIXCRYPT (M1). Exact
   opaque boxes (k in M4), the label check (M5) and synthetic frames (M6) need them; Batt decides how
   to get them. M4's spawns are recorded regardless, and re-analysed when pixels exist.
@@ -386,8 +393,9 @@ mechanics only: no GPL code goes into the deployable path, the same discipline a
    `Walk.position_at` (Phase 2, `poring_packets/world.py`) already interpolates this way.
 2. **Paths.** 8-neighbour, no corner cutting, on the GAT's walkability (`walk.py`).
    - The pinned server's walk-path buffer is `MAX_WALKPATH 32` (`path.hpp`).
-   - ⚠️ `walk.py` says 128 is "the server's path buffer". That disagrees with the pinned source and is
-     to be reconciled in T1 (recorded, not changed here).
+   - ~~⚠️ `walk.py` says 128 is "the server's path buffer". That disagrees with the pinned source and is
+     to be reconciled in T1 (recorded, not changed here).~~ ➡️ Resolved 2026-10-04: `walk.py`'s
+     `MAX_LEN` is 32 (path.cpp refuses `len > sizeof(wpd->path)`); no recorded walk exceeds 14 steps.
 3. **The random walk** (`mob.cpp` `mob_randomwalk`):
    - a target drawn uniformly within ±7 cells (a 15×15 box), passable and reachable;
    - the next walk is due **4.0–5.0 s after the previous walk ENDS**
@@ -512,6 +520,11 @@ T3 does not run on the deployable path.~~ ➡️ **ACCEPTED 2026-10-04 (Batt, de
 | **The walk leaves the scene** (p3-outdoor-b walked into prt_fild08's gate to prontera) | outdoor targets stay south of the start row (2026-10-04); M0's warp list makes this general later |
 
 ## 9. What needs Batt
+
+➡️ **All nine were decided by Batt on 2026-10-04** (the Status at the top of this plan). Item 8 is
+DONE the same evening: group 20 has `alive` and `heal` (read back live), and the activity driver
+re-checks the target in a second fresh frame and recovers the GM from pixels (`gm_vitals.py`).
+The items below are kept as the record of what was asked.
 
 1. **Approve this plan**, the order M0–M10, and the class list in §4. Specifically:
    - per-species classes plus `dying`;
