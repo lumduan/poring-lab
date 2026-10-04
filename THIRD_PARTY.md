@@ -34,7 +34,9 @@
   - a map is INDOOR iff `<map>.rsw` is listed in the client's `data/indoorrswtable.txt`, and the
     client then draws it with the yaw 45° off the default (pitch, FOV and distance unchanged; only
     the zoom/pitch clamp bands narrow). The sign in our yaw convention is measured, not assumed
-    (`scripts/camera_validate.py`, recorded in `camera_<backend>.json` "indoor");
+    (`scripts/camera_validate.py`, recorded in `camera_<backend>.json` "indoor"). Measured
+    2026-10-04: +45.96° in our convention, and the camera is CLOSER (distance 273 vs 400): that
+    distance is OUR measurement (the narrower clamp band pulls the default in), not a ported value;
   - the sprite direction a billboard shows = `(camera_dir + 12 − heading) % 8`, with `camera_dir`
     the camera's look direction as an RO heading.
 - The table itself is CLIENT data: extracted from the GRF into `/dev/shm` at run time, never

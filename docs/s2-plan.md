@@ -521,7 +521,22 @@ The watchdog also ended the first entry (a stale heartbeat while waiting on Batt
      - recordings mark freeze spans in their manifest;
      - `/health.framebus.stalls` counts stalls live (`StallMonitor`, 20 Hz, header only).
    - **Knobs:** `STREAM_MAX_AGE_MS`, `CITED_MAX_AGE_MS`, `FREEZE_MS`
-     (`poring_env/freshness.py`). The session report re-measures them.
+     (`poring_env/freshness.py`).
+   - **Re-measured 2026-10-04** (the S2 session's whole stream: 78.4 min, 142,933 frames, 30.4 fps):
+     - gap p50 33.2, p99 47.7, p99.9 71.7 ms, max 257 ms;
+     - > 100 ms: 0.5/min; > 150 ms: 0.08/min (6, all 161–257 ms);
+     - the live `StallMonitor` counted 4 (max 257 ms; at 20 Hz it can miss the shortest).
+
+     The 150 ms threshold stays above p99.9 and below every freeze, so it is unchanged.
+9. **Raw H.264 datasets (C1–C3, 2026-10-04):** the S2 client records the bitstream it decodes
+   (`s2spike/h264rec.py`), and an offline re-decode is bit-identical on all 27,910 frames checked.
+   Results and the pre-registered C4 rule are in
+   [benchmarks/h264-vs-png.md](benchmarks/h264-vs-png.md):
+   - 32–48 MB/min keeping every frame, vs PNG fps 1 at 124 MB/min keeping 1 in 30;
+   - the rule failed on seek latency (p95 314 ms at an IDR per second) and on a stall comparison
+     within noise.
+
+   PNG stays the default until Batt decides.
 
 ## 10. Shared viewing (future capability; designed now)
 

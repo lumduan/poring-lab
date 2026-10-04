@@ -38,10 +38,24 @@ humanization and LLM integration are clearly marked TODOs.
 └────────────────────────────────┘               └────────────────────────────────────────────────────────────────┘
 ```
 
-- Pixels flow Windows → RDP → `xfreerdp3` → Xvfb framebuffer. From there, `backend` grabs them for
-  the browser stream and `vision` grabs them for inference, both from the shared X socket.
-- Input flows browser/agent → **backend mux** → XTest → Xvfb → `xfreerdp3` → RDP → Windows. The mux is
-  the only writer (ADR-0002).
+- Pixels flow Windows → RDP → `xfreerdp3` → Xvfb framebuffer, and `backend` grabs them for the
+  browser stream. Input flows browser/agent → **backend mux** → XTest → Xvfb → `xfreerdp3` → RDP →
+  Windows. The mux is the only writer (ADR-0002).
+- **The bot's path is S2** (ADR-0014; the diagram above predates it): Sunshine on the Windows
+  console → the `gamestream` S2 client decodes once → the shared-memory **frame bus** → backend
+  (human view) and **vision** (the bot). The mux's input goes to the S2 client over a unix socket.
+- **vision has no X at all** (ADR-0005 closed, option c2, 2026-10-04):
+  - no `x11-unix` mount; it reads the bus only;
+  - it lives ONLY on the internal `agent` network (`10.210.97.0/24`, `internal: true`, gateway
+    isolated), shared with the backend alone;
+  - the backend refuses that subnet on every listener but `:8001`. So the bot's one way in is
+    `/internal/agent` → the mux, and it can reach neither the LAN, the host nor the internet.
+- **The environment interlock** (ADR-0016) gates the mux's BOT presses:
+  - the allowlist is `config/environments.yaml`;
+  - the sniffer's attestation must say a lab account's session is live;
+  - or, in ASSIST only, a bounded operator window is open (`scripts/capture_backend.py window`).
+
+  `/health.environment` shows its state.
 
 ## Services and profiles
 
@@ -53,7 +67,7 @@ humanization and LLM integration are clearly marked TODOs.
 | `backend` | remote | FastAPI: screen stream, input mux, JSONL input log, internal agent API |
 | `frontend` | remote | Next.js console: video canvas, overlay canvas, mode switch, FPS/latency |
 | `vision` | vision | GPU agent loop skeleton (torch 2.14 cu130 + ultralytics), `scripts/check_gpu.py` |
-| `sniffer` | sniffer | ADR-0007 packet ground truth, offline/human-console only. Runs on the dev overlay (backend image + host `poring_packets` source; no build). Root with only `NET_RAW`, read-only rootfs. Writes pcapng (password bytes zeroed) + `events-*.jsonl.gz` to the `captures` volume (hourly / 256 MB; 7 days / 20 GB) and feeds `/ingest/packets`. Needs `scripts/gen_packet_tables.py` run once (the length table is build-time generated, never committed). |
+| `sniffer` | sniffer | ADR-0007 packet ground truth, offline/human-console only, plus the ADR-0016 session ATTESTATION (yes/no + account id + age, never world data). Its own slim image (`poring-lab/sniffer:local`): a `poring_packets` change needs a guarded `build:sniffer` + `recreate:sniffer`. Root with only `NET_RAW`, read-only rootfs. Writes pcapng (password bytes zeroed) + `events-*.jsonl.gz` to the `captures` volume (hourly / 256 MB; 7 days / 20 GB) and feeds `/ingest/packets`. Needs `scripts/gen_packet_tables.py` run once (the length table is build-time generated, never committed). |
 
 | `gamestream` | gamestream | ADR-0009 console mode: moonlight-qt shows the Sunshine stream of the Windows **console** session in the same Xvfb :99 (input from the mux's XTest, absolute mouse). Streams only while the capture-backend lock says `console`; idles under `rdp`. Read-only rootfs, AppImage unpacked into tmpfs, pairing key in the `gamestream-state` volume (mounted here only). |
 
@@ -70,7 +84,7 @@ humanization and LLM integration are clearly marked TODOs.
 | `HOST_LAN_IP:3000` | frontend **or** frontend-dev | web console (run one of them) | LAN |
 | `HOST_LAN_IP:8000` | backend | `/health`, `/ws/stream`, `/ws/input`, `/transfer/*` (ADR-0004), `/ws/packets` (ADR-0007: LAN viewers only, `VIEWER_NETWORKS`; receive-only) | LAN |
 | `HOST_LAN_IP:6080` | desktop | noVNC — **no authentication** | LAN |
-| — (`:8001`) | backend | `/internal/agent`; `/ingest/packets` (only from rathena's pinned `10.210.96.6`, the sniffer's namespace) | compose network only |
+| — (`:8001`) | backend | `/internal/agent`; `/ingest/packets` (only from rathena's pinned `10.210.96.6`, the sniffer's namespace) | compose networks only (`default` + the internal `agent` network) |
 | — (`:3306`) | db | MariaDB | compose network only |
 | — (`:5900`) | desktop | x11vnc | inside the container only |
 | outbound → `WIN_HOST:3389` | desktop | the single RDP session | LAN |
@@ -81,7 +95,10 @@ humanization and LLM integration are clearly marked TODOs.
 - The backend's browser WebSockets require an `Origin` listed in `FRONTEND_ORIGINS`. The `/transfer`
   routes and clipboard paste additionally require one to be *present*, so scripts and the agent can't
   use them.
-- The agent API is not published at all.
+- The agent API is not published at all. The agent's own network (`agent`, internal) reaches only
+  the backend, and the backend refuses it on `:8000` (`/health.agent_network_refused`).
+- Host scripts address the backend by its DEFAULT-network IP (`scripts/backend_addr.py`): with two
+  networks, a `{{range .Networks}}` template concatenates both addresses.
 - Keep all of this on a trusted LAN.
 
 ## Web console now (no image builds): `frontend-dev`

@@ -65,6 +65,60 @@ All sessions were recorded from the S2 frame bus, every frame with its bus `fram
 4. **The GM-spawn validation needs a detector that works on H.264 frames.** The pink-blob foot
    detector matched neighbours' feet on S2 frames.
 
+➡️ **2026-10-04 (Post-S2 round Part B, live in the S2 session): items 1–4 are DONE.** The old
+indoor session is marked INVALID on the NAS (`dataset_ship.py mark-invalid`) and kept.
+1. **The indoor camera, by the client's own rule + one measurement** (`camera.py`; nostalro's rule,
+   THIRD_PARTY.md). A map is indoor iff it is in the client's `indoorrswtable.txt` (extracted to
+   /dev/shm, never committed). B2 (`scripts/camera_validate.py`, prt_church) measured the model:
+   - **The yaw is +45° in our convention** (fitted 45.96°): the sign was the open question.
+   - **The camera is also closer: distance 273 vs 400 outdoors.** The narrower indoor clamp band
+     pulls the default in.
+   - **Rotation alone was not enough:** clicks median 78 px; Poring spawns 40/88 px.
+   - **Rotation + distance:** clicks median 11.3 / p95 18.6 px (the fit); on the HELD-OUT
+     single-Poring spawns 11.5 / 21.7 px (20 frames, 5 spawns). The outdoor fit's own level is
+     8.9 / 18.1.
+   - **The other models on the same spawns:** yaw 0 gave 84.5 / 149.4 px, and −45° gave
+     136.7 / 251.7.
+   - Both are recorded in `camera_<backend>.json` "indoor". RDP carries the console values over,
+     marked NOT measured.
+2. **Invisible NPCs, two paths:**
+   - classes 111/139/32767 and 45 portals (rAthena's facts);
+   - AND any unit sent with an invisibility option (effectState HIDE/CLOAK/INVISIBLE). The
+     church's six "Single Army" event NPCs have ordinary sprite classes, and the B6′ sheet showed
+     them as a staircase of empty boxes.
+
+   The option needs the sniffer's decoder: a guarded sniffer rebuild, or the session's packets
+   replayed from pcapng.
+3. **The activity driver clicks only empty walkable cells.** Two checks, both at decision time:
+   - the map's GAT walkability (static data);
+   - a pixel check: hovered, a walkable empty cell shows the client's GROUND MARKER (mint
+     chevrons, 180–314 px in a 90×90 crop). An entity shows none (Porings: 0).
+
+   The first idea, a template of the walk cursor, failed: RO's cursor is animated (it spins). The
+   clicks go through the map's projector (`click_for_cell`), so a rotated camera walks where it
+   means to. B6′: 35 walks, 25 hover rejections, 0 GM failures, nobody killed.
+4. **The spawn detector:** one Poring at a time, new pink pixels against a background frame,
+   outside the client's UI windows and the chat. The GM command's own pink chat text was the first
+   run's false match.
+5. **Facing (billboards):** labels carry the sprite direction the client draws:
+   `displayed_direction`, nostalro's formula, with the heading from the packets (PosDir) or the
+   step walked. A rotated camera therefore needs no rotated-sprite training: the facing label
+   accounts for it.
+6. **Boxes behind the client's UI windows are dropped** (`ui_layout.UI_RECTS`, the frozen layout:
+   ≥ 50 % covered). The B6′ sheet showed labels under the hotkey bar and the Basic Information
+   window.
+
+**B6′ (the new indoor set):** `20261004T103815-console-s2-indoor-v2`, 5 min at fps 1, 300 frames,
+110.8 MB/min.
+- Its sheet showed boxes on the Porings and the church NPCs. The two problems above (event NPCs,
+  UI occlusion) were found on it and fixed after it.
+- Its packets were then REPLAYED from the banked pcapng through the effectState decoder (the
+  manifest's `packets_source` says so), and the sheet re-checked: the staircase is gone, and so are
+  the boxes under the UI.
+- Shipped to the NAS and verified. The `/qa` bundle is exported for Batt's hand-check
+  (`label_iou.py score` once saved).
+- The old indoor set is marked INVALID and kept.
+
 ## Resolution: FROZEN at a 1280×720 client area (Batt, 2026-10-02)
 
 - **Why the window was small, and why that no longer holds.** It was cut to 800×664 when pixel

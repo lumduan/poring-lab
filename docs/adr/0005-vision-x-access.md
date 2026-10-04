@@ -1,18 +1,28 @@
 ---
 doc_type: decision
 hypothesis: null
-status: PROPOSED
+status: GO
 role: null
-verdict_date: null
+verdict_date: 2026-10-04
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: Batt picks the option set (recommended a + c1 + c2 + c3); implement it with the acceptance test below BEFORE roadmap Phase 4 (fast loop with input through the mux).
+next_action: CLOSED for the S2 path (vision S2-only + c2, acceptance 5/5 PASS 2026-10-04). Re-run services/vision/acceptance/adr0005.py after any change to vision's mounts, networks or the backend's listeners; RDP-mode vision stays unsupported.
 ---
 
 # ADR-0005: The vision container must not have full X access
 
-- **Status:** PROPOSED (2026-09-30). **Blocks roadmap Phase 4.** Nothing is implemented yet.
+- **Status:** CLOSED for the S2 path (2026-10-04; Batt approved "vision S2-only + option c2").
+  Its acceptance test passes 5/5, run inside vision while S2 streamed (below). Proposed 2026-09-30.
+  vision is no longer a Phase 4 blocker; it runs on the S2 path only, and an RDP-mode vision is
+  not supported (it would need (c1)/(c3) and a new acceptance run).
+- **Option (c2) in three lines** (for the record):
+  - an internal Docker network (`agent`, 10.210.97.0/24, gateway isolated) holds only the backend
+    and vision;
+  - vision leaves the default network, so it can reach nothing else (the host, the LAN, the
+    internet);
+  - the backend refuses that subnet on every listener but `:8001`, so the bot's one way in is
+    `/internal/agent` through the mux.
 - **Tracked in:** [issue #1](https://github.com/lumduan/poring-lab/issues/1) (`blocks-phase-4`, `security`).
 - **Related:**
   - [ADR-0002 input mux](0002-input-mux.md): "single input owner".
@@ -151,6 +161,32 @@ decodes the GameStream video once, into a shared-memory frame bus. vision maps t
     row 1);
   - option (c2), the internal agent network (rows 2–3).
 - This ADR stays PROPOSED and Phase 4 stays gated on it until then.
+
+## Closure (2026-10-04): vision S2-only + option (c2), built and accepted
+**Built:**
+- `compose.yaml`: vision has no `x11-unix` mount and no DISPLAY. It reads the frame bus only
+  (`VISION_FRAME_SOURCE=bus`), with `YOLO_OFFLINE`/`HF_HUB_OFFLINE`, and sits on the `agent`
+  network ONLY.
+  - `networks.agent`: `internal: true`, `gateway_mode_ipv4: isolated` (the host has no address
+    on it), 10.210.97.0/24.
+  - The backend is on `default` + `agent`.
+- **The backend:** `AgentNetworkGuard`, the outermost ASGI middleware, refuses the agent subnet on
+  every listener but the internal `:8001` (HTTP 403 / WebSocket 1008, counted in
+  `/health.agent_network_refused`).
+- **Host scripts** take the backend's address by the default network's NAME
+  (`scripts/backend_addr.py`): two networks made the old template concatenate both addresses.
+- `test_guards.py` pins all of it.
+
+**The acceptance test**, `services/vision/acceptance/adr0005.py`, run with `guarded_build.py
+'run:vision@120=python /opt/acceptance/adr0005.py'` (it gained a 5th row for c2):
+
+| # | Row | 2026-10-04 09:4x (S2 not streaming) | 2026-10-04 10:15 ICT (S2 streaming, the session) |
+|---|---|---|---|
+| 1 | no X socket | PASS | PASS |
+| 2 | `/ws/input`, `/transfer/files`, `/health` on :8000, with and without a forged Origin | PASS (all 403) | PASS (all 403) |
+| 3 | `/internal/agent` works | PASS | PASS (first message `status`) |
+| 4 | `Env.grab()` on the bus, rising frame ids at ≥ AGENT_HZ | SKIP (no writer) | **PASS: 156 frames in 5 s (31.2/s), rising** |
+| 5 | network closed: the host's LAN/bridge/docker0 ports, the router, 1.1.1.1:443, external DNS | PASS | PASS |
 
 ## Tracking
 

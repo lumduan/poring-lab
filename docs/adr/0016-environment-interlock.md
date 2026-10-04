@@ -187,3 +187,18 @@ would add a third signal (its read-back at session start) to its environment ent
 
 ## Live verification
 *(appended after the S2 session, below this line)*
+
+**2026-10-04, ICT (UTC = ICT − 7 h):**
+
+| Time | Path | What happened | Interlock |
+|---|---|---|---|
+| 09:58 | RDP | the backend recreated with the allowlist and `WIN_HOST` | red `no_attestation` (the old sniffer sent none: fail closed) |
+| 10:06 | RDP | the sniffer rebuilt with the attestation | red `no_session`: 1 map connection seen, no account bound (restart) |
+| 10:07 | RDP | `ro_agent recover gm`: close/launch/login through **login windows** | `window:login` → **green** `lab-rathena`, aid 2000002, within ~10 s of map entry |
+| 10:08–10:12 | RDP → console | `cleanroom start`: capture_backend's own **desktop window** across its handover (tscon typed while the lock was `switching`, the window re-opened for the new SEQ) | rc 0 |
+| 10:14 → 11:32 | console (S2) | the GM's map session survived tscon; every in-game tool (B2, B6′, C3) ran green; no `environment_unattested` refusal | **green** throughout (attestation age 0.3–1.0 s) |
+| 10:55:58 | console | a 15 s desktop window opened by hand | `/health` showed `window: desktop, 12.6 s left`; at 10:56:16 it was gone (expired; the file stays, ignored) |
+| 11:40 | RDP | the sniffer rebuilt again (effectState) | red `no_session` (as designed) → `ro_agent recover gm` → **green** at 11:41 |
+
+Not exercised live: a refusal in BOT mode with the vision loop running. It is covered by the
+tests, and BOT mode was never entered this round.
