@@ -1,8 +1,10 @@
-"""ASSIST across a GUARDED backend restart (ADR-0002 amendment, Batt 2026-10-03).
+"""ASSIST across a GUARDED backend restart or recreate (ADR-0002 amendment, Batt 2026-10-03; the
+recreate since 2026-10-04).
 
 The mux boots in HUMAN (ADR-0002 decision 2). One narrow exception: ``scripts/guarded_build.py
-restart:backend`` (the dev-mode way to apply backend code) reads ``/health`` first and, ONLY if the
-mode is ASSIST, writes ``<lab-state>/mux-restore``:
+restart:backend`` (the dev-mode way to apply backend code) or ``recreate:backend`` (new mounts or
+networks) reads ``/health`` first and, ONLY if the mode is ASSIST, writes
+``<lab-state>/mux-restore``:
 
     MODE=ASSIST
     SEQ=<the capture-backend lock's SEQ>

@@ -23,6 +23,8 @@ next_action: Keep the mux the single XTest writer as policies land; add input-lo
   - human clipboard pastes arrive as a synthetic human Ctrl+V (`reason=clipboard_paste`);
   - refused inputs are also counted in `/health` (`input_refused`).
 - **Amended 2026-10-03 (Batt): ASSIST survives a GUARDED backend restart, nothing else does.**
+  ➡️ **Extended 2026-10-04 (Batt): a guarded `recreate:backend` too**, on exactly the same marker
+  conditions (`guarded_build.run_with_restore` serves both; tests in `test_guarded_build.py`).
   - `scripts/guarded_build.py restart:backend` (the dev-mode way to apply backend code) reads
     `/health` first. Only if the mode is `ASSIST`, it writes `state/mux-restore` (`MODE=ASSIST`,
     the lock's `SEQ`, `WRITTEN`, `OWNER=guarded_build`). It removes the marker as soon as the new

@@ -24,10 +24,11 @@ export function bannerProblems({
   if (!links.stream) problems.push("Stream disconnected: reconnecting to the backend…");
   if (!links.input) problems.push("Input channel disconnected: keys and clicks are not being sent.");
   if (links.stream && status?.mode_restored) {
-    // ADR-0002 amendment (2026-10-03): only a guarded restart's marker can do this; never BOT.
+    // ADR-0002 amendment (2026-10-03; recreate 2026-10-04): only a guarded restart's or recreate's
+    // marker can do this; never BOT.
     problems.push(
       "ASSIST restored automatically after a guarded restart (scripts/guarded_build.py " +
-        "restart:backend). Choosing a mode clears this notice.",
+        "restart:backend or recreate:backend). Choosing a mode clears this notice.",
     );
   }
   if (links.stream && status?.cleanroom) problems.push(describeCleanRoom(status.cleanroom, nowMs));

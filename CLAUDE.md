@@ -140,9 +140,10 @@ ports, quickstart) and `docs/adr/`.
   forwards physical Meta. `scripts/gen_protocol.sh` also regenerates the frontend's `keycodes.gen.ts`
   (drift-tested).
 - **The mux boots in `HUMAN`**, and a handoff always releases what the losing source holds.
-  Sole exception (ADR-0002 amendment, 2026-10-03): `guarded_build.py restart:backend` in ASSIST
-  writes `state/mux-restore` and removes it once the backend is up; only ASSIST, only within 120 s,
-  only with the same lock SEQ. Never BOT; any other boot stays HUMAN. Nothing else writes that file.
+  Sole exception (ADR-0002 amendment, 2026-10-03; recreate added 2026-10-04): `guarded_build.py
+  restart:backend` or `recreate:backend` in ASSIST writes `state/mux-restore` and removes it once
+  the backend is up; only ASSIST, only within 120 s, only with the same lock SEQ. Never BOT; any
+  other boot stays HUMAN. Nothing else writes that file.
   Disconnect cleanup runs as a shielded task (`AppState.release_source`), because handlers can be
   cancelled mid-cleanup.
 - **`/internal/agent` accepts only connections that arrived on the internal listener `:8001`**

@@ -30,8 +30,10 @@ On a breach:
                 restored; a handover in between (SEQ changed) or a marker over 120 s old -> HUMAN.
   recreate:<svc>[,<svc>...][@<seconds>]
                 the same with --force-recreate (re-binds single-file mounts, e.g. after a
-                bind-mounted script was replaced by a new inode). An unguarded force-recreate of
-                desktop on 2026-10-01 hit 30.8 % quant-postgres io_full for 10 s.
+                bind-mounted script was replaced by a new inode). With backend: ASSIST comes back
+                by itself, on the same marker conditions as restart (Batt, 2026-10-04). An
+                unguarded force-recreate of desktop on 2026-10-01 hit 30.8 % quant-postgres
+                io_full for 10 s.
   run:<svc>[@<seconds>]=<command>
                 docker compose --profile <svc> run --rm --no-deps <svc> <command>, killed after
                 <seconds> (default 600), its output's tail printed. ONLY `vision` (check_gpu.py):
@@ -379,10 +381,14 @@ def await_backend(timeout: float = 60) -> dict[str, Any] | None:
     return None
 
 
-def run_restart(services: list[str], seconds: float, guard: Guard) -> bool:
+def run_with_restore(
+    label: str, cmd: list[str], services: list[str], guard: Guard, *, what: str
+) -> bool:
+    """Run a backend-replacing step with the ASSIST restore marker (ADR-0002 amendment): written
+    before, removed as soon as the new backend answers /health, and in any case on the way out."""
     marker = write_restore_marker() if "backend" in services else None
     try:
-        if not run_process("restart:" + ",".join(services), [*DEV, "restart", *services], guard):
+        if not run_process(label, cmd, guard):
             return False
         if marker is not None:
             health = await_backend()
@@ -390,17 +396,31 @@ def run_restart(services: list[str], seconds: float, guard: Guard) -> bool:
             mode = health.get("mode") if health else "no /health within 60 s"
             restored = bool(health and health.get("mode_restored"))
             note = "restored automatically" if restored else "NOT restored: set it in the console"
-            print(f"[{ts()}] mux after the restart: {mode} ({note})", flush=True)
+            print(f"[{ts()}] mux after the {what}: {mode} ({note})", flush=True)
     finally:
         if marker is not None and marker.exists():
             remove_restore_marker(marker)
+    return True
+
+
+def run_restart(services: list[str], seconds: float, guard: Guard) -> bool:
+    label = "restart:" + ",".join(services)
+    if not run_with_restore(label, [*DEV, "restart", *services], services, guard, what="restart"):
+        return False
     return watch(seconds, guard, ", ".join(services), [*DEV, "stop", *services])
 
 
 def run_start(services: list[str], seconds: float, guard: Guard, *, recreate: bool = False) -> bool:
     label = ("recreate:" if recreate else "start:") + ",".join(services)
     force = ["--force-recreate"] if recreate else []
-    if not run_process(label, [*DEV, "up", "-d", "--no-build", *force, *services], guard):
+    cmd = [*DEV, "up", "-d", "--no-build", *force, *services]
+    if recreate:
+        # Batt, 2026-10-04: ASSIST survives a guarded RECREATE too, on the same marker conditions
+        # as a restart (ASSIST only, never BOT; same lock SEQ; <= 120 s).
+        ok = run_with_restore(label, cmd, services, guard, what="recreate")
+    else:
+        ok = run_process(label, cmd, guard)
+    if not ok:
         return False
     return watch(seconds, guard, ", ".join(services), [*DEV, "stop", *services])
 

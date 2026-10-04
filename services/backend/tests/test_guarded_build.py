@@ -232,6 +232,48 @@ def test_a_restart_of_other_services_never_asks_the_backend(
     assert fake.events == ["restart marker=False", "watch marker=False"]
 
 
+def test_a_recreate_of_the_backend_in_assist_restores_like_a_restart(
+    gb: ModuleType,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Batt, 2026-10-04: a guarded recreate:backend keeps ASSIST on the same marker conditions."""
+    fake = Backend(gb, tmp_path, "ASSIST")
+    fake.install(monkeypatch, tmp_path)
+    gb.run_start(["backend"], 30, guard=None, recreate=True)
+    assert fake.events == ["restart marker=True", "watch marker=False"]
+    assert "mux after the recreate: ASSIST (restored automatically)" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("mode", ["HUMAN", "BOT"])
+def test_a_recreate_outside_assist_writes_no_marker(
+    gb: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str
+) -> None:
+    fake = Backend(gb, tmp_path, mode)
+    fake.install(monkeypatch, tmp_path)
+    gb.run_start(["backend"], 30, guard=None, recreate=True)
+    assert fake.events == ["restart marker=False", "watch marker=False"]
+
+
+def test_a_plain_start_never_writes_the_marker(
+    gb: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = Backend(gb, tmp_path, "ASSIST")
+    fake.install(monkeypatch, tmp_path)
+    gb.run_start(["backend"], 30, guard=None)
+    assert fake.events == ["restart marker=False", "watch marker=False"]
+
+
+def test_a_failed_recreate_still_removes_the_marker(
+    gb: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = Backend(gb, tmp_path, "ASSIST")
+    fake.install(monkeypatch, tmp_path, rc=False)
+    assert gb.run_start(["backend"], 30, guard=None, recreate=True) is False
+    assert not fake.marker.exists()
+
+
 def test_it_runs_on_the_hosts_bare_python3() -> None:
     """guarded_build.py is run as `python3 scripts/guarded_build.py` (no venv, no pydantic). Its
     mode_restore import once pulled in poring_env.protocol and crashed before any step."""

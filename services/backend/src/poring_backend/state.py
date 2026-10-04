@@ -350,7 +350,7 @@ class AppState:
                        "why": verdict.why},
             )
         )  # fmt: skip
-        log.warning("mux mode ASSIST restored automatically after a guarded restart (%s)",
+        log.warning("mux mode ASSIST restored automatically after a guarded restart/recreate (%s)",
                     verdict.why)  # fmt: skip
 
     async def start(self) -> None:
