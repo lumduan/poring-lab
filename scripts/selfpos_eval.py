@@ -136,9 +136,17 @@ def summarise(records: list[dict[str, Any]]) -> dict[str, Any]:
                        for k in ("ok", "abstain", "wrong")}}  # fmt: skip
     out["excluded"] = dict(Counter(r["cls"] for r in records if r["cls"].startswith("excluded")))
     st, wk = out["standing"]["ok_rate"], out["walking"]["ok_rate"]
-    out["pass"] = bool(st is not None and wk is not None and st >= STANDING_EXACT_MIN
-                       and wk >= WALKING_WITHIN1_MIN)  # fmt: skip
+    # no frame where the readout is shown (an indoor session): the thresholds do not apply
+    out["pass"] = (
+        None
+        if st is None or wk is None
+        else bool(st >= STANDING_EXACT_MIN and wk >= WALKING_WITHIN1_MIN)
+    )
     return out
+
+
+def verdict(passed: bool | None) -> str:
+    return "n/a" if passed is None else ("PASS" if passed else "FAIL")
 
 
 def pct(v: float | None) -> str:
@@ -157,7 +165,7 @@ def table(groups: dict[str, dict[str, Any]]) -> str:
             f"{name:<22}{st['n']:>8}{pct(st['ok_rate']):>8}{pct(st['abstain_rate']):>8}"
             f"{pct(st['wrong_rate']):>8}{wk['n']:>8}{pct(wk['ok_rate']):>8}"
             f"{pct(wk['abstain_rate']):>8}{pct(wk['wrong_rate']):>8}{nm['n']:>8}"
-            f"{pct(nm['abstain_rate']):>8}  {'PASS' if s['pass'] else 'FAIL'}"
+            f"{pct(nm['abstain_rate']):>8}  {verdict(s['pass'])}"
         )
     return "\n".join(lines)
 
@@ -249,7 +257,7 @@ def main() -> int:
     report = {
         "pre_registered": {"standing_exact_min": STANDING_EXACT_MIN,
                            "walking_within1_min": WALKING_WITHIN1_MIN},
-        "verdict": "PASS" if groups["POOLED"]["pass"] else "FAIL",
+        "verdict": verdict(groups["POOLED"]["pass"]),
         "sessions": [s.name for s in sessions],
         "per_session": a.per_session,
         "templates": str(a.templates),
