@@ -11,6 +11,8 @@
 #   monster          spawn a known number of monsters for the count check
 #   killmonster2     remove them again afterwards (no drops)
 #   hide             invisible: monsters ignore the GM while it validates
+#   alive, heal      lab only (Batt, 2026-10-04): the level-1 GM was killed twice by Porings during
+#                    dataset collection; it revives / refills itself instead of lying dead
 # LogCommands: every command lands in atcommandlog (offline audit). Inherits Player for the basics.
 # No permissions beyond Player's: no item/zeny/stat commands, no any_warp, no hide_session.
 Header:
@@ -33,3 +35,5 @@ Body:
       monster: true
       killmonster2: true
       hide: true
+      alive: true
+      heal: true

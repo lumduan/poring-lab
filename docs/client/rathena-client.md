@@ -389,3 +389,19 @@ Batt's decision: a 1280×720 client area, **frozen for Phase 2** (docs/phase2-pl
 - tis620 end to end: the db server charset, `*_codepage`, and `chatlog.message VARBINARY(300)`.
 - Thai names: `char_name_option 2`, plus `services/rathena/patches/0001-thai-trim-chars.patch`.
 - Chat ground truth: `SELECT HEX(message) FROM chatlog`, decoded as cp874.
+- **The GM group (group 20 "Validation", `services/rathena/conf/import/groups.yml`):**
+  - `where`, `who`, `whomap`, `mapmove` (`@warp`), `mobsearch`, `monster`, `killmonster2`,
+    `hide`;
+  - **`alive` and `heal`, added 2026-10-04 (Batt; lab server only).** The level-1 GM (40 HP)
+    was killed twice by Porings during dataset collection and lay dead behind the restart
+    menu.
+  - Applied by editing the file IN PLACE, then a guarded `recreate:rathena,sniffer` (the
+    sniffer shares rathena's network namespace). The auto GM recover re-logged the GM in
+    38 s.
+  - Read back 20:23 ICT:
+    - the server's `conf/import/groups.yml` sha256 equals the repo's (`68102fc4…2405`);
+    - `@heal` ran ("HP and SP have already been recovered.", logged in `atcommandlog`);
+    - `@alive` ran and declined ("You're not dead." / "@alive failed."). A refused
+      command would have gone out as normal chat instead.
+    - rAthena logs only commands that succeed, so a failed `@alive` leaves no row.
+  - Every successful command lands in `atcommandlog` (`LogCommands: true`).

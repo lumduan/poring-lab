@@ -104,7 +104,8 @@ not in group 20) is left for Phase 2's combat slice.
 ## Accounts used (variable names only)
 
 - **`RATHENA_AGENT_USER` / `_PASSWORD` / `_CHAR`:** player, group 0. Recovery and measurement moves.
-- **`RATHENA_GM_USER` / `_PASSWORD` / `_CHAR`:** group 20 "Validation" (`conf/import/groups.yml`).
+- **`RATHENA_GM_USER` / `_PASSWORD` / `_CHAR`:** group 20 "Validation" (`conf/import/groups.yml`;
+  `alive` and `heal` added 2026-10-04 for Phase 3 collection, see `docs/client/rathena-client.md`).
   Every command is logged in `atcommandlog`, and every session is tagged `validation_account` by
   the sniffer.
 - Batt's own test account (`RATHENA_TEST_*`) was not used by the agent.
