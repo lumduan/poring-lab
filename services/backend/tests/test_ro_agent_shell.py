@@ -203,6 +203,34 @@ def test_an_interlock_refusal_is_its_own_stop(ro: ModuleType) -> None:
     assert issubclass(ro.Unattested, ro.Stop)
 
 
+def test_recover_launches_without_closing_when_no_client_is_open(
+    ro: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """2026-10-04: the auto recover's Alt+F4 closed the client, its launch failed (a drifted
+    shortcut signature), and a later recover then failed at closing a client that was gone."""
+    calls: list[str] = []
+
+    class Session:
+        def __enter__(self) -> tuple[object, object]:
+            agent = type("A", (), {"wait_for_human": lambda self: None})()
+            return agent, object()
+
+        def __exit__(self, *a: object) -> None:
+            return None
+
+    monkeypatch.setattr(ro, "session", lambda name: Session())
+    monkeypatch.setattr(ro, "close_client", lambda a, s: calls.append("close"))
+    monkeypatch.setattr(ro, "launch_client", lambda a, s: calls.append("launch"))
+    monkeypatch.setattr(ro, "login", lambda a, s, w: calls.append(f"login {w}"))
+    monkeypatch.setattr(ro, "client_absent", lambda s: True)
+    ro.recover("gm", retries=0)
+    assert calls == ["launch", "login gm"]
+    calls.clear()
+    monkeypatch.setattr(ro, "client_absent", lambda s: False)
+    ro.recover("gm", retries=0)
+    assert calls == ["close", "launch", "login gm"]
+
+
 def test_recover_with_no_retries_is_one_attempt(
     ro: ModuleType, monkeypatch: pytest.MonkeyPatch
 ) -> None:

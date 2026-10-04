@@ -1150,6 +1150,17 @@ def close_client(agent: Agent, screen: Screen) -> None:  # noqa: ARG001
     log("close requested (Alt+F4)")
 
 
+def client_absent(screen: Screen) -> bool:
+    """No client window at all: the strip its title bar would occupy (above the game region) is
+    the bare black desktop. A lost-D3D client renders a black GAME region but still draws its
+    title bar, so this never mistakes it for a closed one (that would launch a second client)."""
+    x, y, w, _ = game_region()
+    _, img = screen.grab(x, y - 30, w, 26)
+    px = img[::2, ::4, :3].astype(np.uint16)
+    luma = (px[..., 0] * 29 + px[..., 1] * 150 + px[..., 2] * 77) >> 8
+    return bool((luma < 10).mean() >= 0.98)
+
+
 def launch_client(agent: Agent, screen: Screen) -> None:
     """Double-click the desktop shortcut (a plain user action; it starts PoringLab.exe with
     __COMPAT_LAYER=RunAsInvoker, i.e. non-elevated)."""
@@ -1363,8 +1374,11 @@ def recover(which: str, retries: int = 2, agent_id: str = "ro_agent-recover") ->
         try:
             with session(agent_id) as (agent, screen):
                 agent.wait_for_human()
-                log(f"recover attempt {attempt}: closing the client")
-                close_client(agent, screen)
+                if client_absent(screen):  # 2026-10-04: a previous attempt had closed it already
+                    log(f"recover attempt {attempt}: no client window: launching")
+                else:
+                    log(f"recover attempt {attempt}: closing the client")
+                    close_client(agent, screen)
                 launch_client(agent, screen)
                 login(agent, screen, which)
                 return
