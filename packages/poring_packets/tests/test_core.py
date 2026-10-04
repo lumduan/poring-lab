@@ -226,11 +226,13 @@ def test_entity_identity_is_the_block_id_not_the_char_id() -> None:
     b[23:25] = (1002).to_bytes(2, "little")  # job: Poring
     b[83:89] = b"Poring"
     b[63:66] = wpos(150, 200, 6)  # PosDir: standing at (150, 200), facing east
+    b[19:23] = (0x40).to_bytes(4, "little")  # effectState: OPTION_INVISIBLE
     d = decode("map", "sc", 0x09FE, bytes(b))
     assert d is not None
     assert (d.fields["gid"], d.fields["char_id"], d.fields["job"]) == (110012345, 0, 1002)
     # the heading is kept (Post-S2 round B4: billboard facing for the labels)
     assert (d.fields["x"], d.fields["y"], d.fields["heading"]) == (150, 200, 6)
+    assert d.fields["effect_state"] == 0x40  # drawn as nothing (labels skip it)
 
 
 def test_replay_redecodes_a_banked_pcapng_with_aid_tagging(tmp_path: Path) -> None:

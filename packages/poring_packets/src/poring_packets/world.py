@@ -15,6 +15,9 @@ DEFAULT_SPEED = 150
 TICK_MOD = 1 << 32
 
 
+# rAthena's option bits (status.hpp OPTION_*) that make the client draw a unit as nothing.
+HIDDEN_OPTIONS = 0x2 | 0x4 | 0x40  # HIDE, CLOAK, INVISIBLE
+
 # RO headings: 0 = north, counter-clockwise in 45 degree steps (rAthena dirx/diry, map.hpp).
 HEADING_OF_STEP = {(0, 1): 0, (-1, 1): 1, (-1, 0): 2, (-1, -1): 3,
                    (0, -1): 4, (1, -1): 5, (1, 0): 6, (1, 1): 7}  # fmt: skip
@@ -75,6 +78,7 @@ class Entity:
     speed: int = DEFAULT_SPEED
     walk: Walk | None = None
     dir: int | None = None  # heading 0..7 from the appear packet (0 = north, counter-clockwise)
+    effect_state: int = 0  # option bits from the appear packet (HIDDEN_OPTIONS: not drawn)
 
 
 @dataclass
@@ -114,7 +118,8 @@ class World:
             speed = int(str(f["speed"])) or DEFAULT_SPEED
             heading = f.get("heading")
             ent = Entity(gid, objtype, job, str(f["name"]), x, y, speed,
-                         dir=None if heading is None else int(str(heading)))  # fmt: skip
+                         dir=None if heading is None else int(str(heading)),
+                         effect_state=int(str(f.get("effect_state") or 0)))  # fmt: skip
             if f.get("x1") is not None:
                 ent.walk = Walk(ent.x, ent.y, int(str(f["x1"])), int(str(f["y1"])),
                                 int(str(f["move_start_tick"])), ent.speed)  # fmt: skip

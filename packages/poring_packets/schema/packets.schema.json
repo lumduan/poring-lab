@@ -241,6 +241,19 @@
           ],
           "type": "string"
         },
+        "effect_state": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The unit's option bits (rAthena sc.option): HIDE 0x2, CLOAK 0x4 and INVISIBLE 0x40 mean the client draws nothing."
+        },
         "gid": {
           "description": "Block id (rAthena bl.id): the id vanish/stop packets use.",
           "type": "integer"
@@ -370,6 +383,7 @@
         "x1",
         "y1",
         "move_start_tick",
+        "effect_state",
         "heading"
       ],
       "title": "EntityAppear",

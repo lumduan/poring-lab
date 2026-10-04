@@ -173,6 +173,10 @@ export interface EntityAppear {
   char_id: number;
   dir: "cs" | "sc";
   /**
+   * The unit's option bits (rAthena sc.option): HIDE 0x2, CLOAK 0x4 and INVISIBLE 0x40 mean the client draws nothing.
+   */
+  effect_state: number | null;
+  /**
    * Block id (rAthena bl.id): the id vanish/stop packets use.
    */
   gid: number;

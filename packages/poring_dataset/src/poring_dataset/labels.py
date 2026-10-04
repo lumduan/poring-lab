@@ -7,7 +7,12 @@ Excluded: the validation (GM) account's own character -- it plays hidden -- and 
 a GM-command window (`gm_command` events), when spawns and warps make the scene non-natural. Also
 NPCs the client draws as NOTHING (Post-S2 round B5, 2026-10-04; rAthena's class facts): 111
 HIDDEN_NPC and 139 HIDDEN_WARP_NPC are sent but invisible, 32767 INVISIBLE is never meant to show
-(-1 FAKENPC is never sent), and 45 WARPNPC is a portal EFFECT, not an NPC sprite.
+(-1 FAKENPC is never sent), and 45 WARPNPC is a portal EFFECT, not an NPC sprite. And any unit
+sent with an invisibility OPTION (HIDE/CLOAK/INVISIBLE in its effectState; 2026-10-04: the
+church's six "Single Army" event NPCs, ordinary sprite classes the client did not draw).
+
+Boxes mostly behind the client's fixed UI windows (ui_layout.UI_RECTS: the frozen 1280x720 layout)
+are dropped too: the entity is not visible there (the 2026-10-04 indoor sheet).
 
 Each box carries the entity's FACING (B4): the sprite direction the client draws for its heading
 under the map's camera (camera.displayed_direction) -- metadata for the dataset, so a rotated
@@ -22,11 +27,13 @@ import numpy as np
 from poring_dataset.camera import displayed_direction
 from poring_dataset.projection import project
 from poring_dataset.timeline import FrameWorld
+from poring_dataset.ui_layout import UI_RECTS, covered_fraction
 
 # objtype (rAthena bl type as sent in 0x09FD/FE/FF): 0 = player, 5 = monster, 6 = NPC.
 CLASSES = {"player": 0, "monster": 1, "npc": 2}
 OBJTYPE_CLASS = {0: "player", 5: "monster", 6: "npc"}
 BOX_PX = {"player": (34, 74), "monster": (44, 40), "npc": (34, 74)}  # (w, h), v0 constants
+MAX_UI_COVER = 0.5  # a box at least this much under the client's UI windows is not a visible entity
 HIDDEN_NPC_CLASSES = frozenset({111, 139, 32767})  # sent (or never meant to be), drawn as nothing
 WARP_PORTAL_CLASS = 45  # a portal effect on the ground, not an NPC sprite
 
@@ -60,6 +67,7 @@ def labels_for(
     *,
     exclude_gids: Iterable[int] = (),
     camera_yaw: float | None = None,
+    ui_rects: tuple[tuple[int, int, int, int], ...] = UI_RECTS,
 ) -> list[Label]:
     """Boxes for every visible entity, in pixels of the game region (width, height = size).
     ``h``: a flat homography, or a projector (camera.projector_for: the perspective camera with the
@@ -73,7 +81,7 @@ def labels_for(
     sx, sy = frame.self_pos
     for ent in frame.entities:
         cls = OBJTYPE_CLASS.get(ent.objtype)
-        if cls is None or ent.gid in skip or not drawn(ent.objtype, ent.job):
+        if cls is None or ent.gid in skip or ent.hidden or not drawn(ent.objtype, ent.job):
             continue
         offset = np.array([[ent.x - sx, ent.y - sy]])
         if callable(h):
@@ -87,8 +95,10 @@ def labels_for(
         box = Label(cls, ent.gid, u - w / 2, v - bh, u + w / 2, v)
         clipped = Label(cls, ent.gid, max(box.x0, 0), max(box.y0, 0), min(box.x1, width),
                         min(box.y1, height), facing)  # fmt: skip
-        if clipped.x1 - clipped.x0 >= w / 2 and clipped.y1 - clipped.y0 >= bh / 2:
-            out.append(clipped)  # at least half the box on screen
+        on_screen = clipped.x1 - clipped.x0 >= w / 2 and clipped.y1 - clipped.y0 >= bh / 2
+        hidden_by_ui = covered_fraction((box.x0, box.y0, box.x1, box.y1), ui_rects) >= MAX_UI_COVER
+        if on_screen and not hidden_by_ui:
+            out.append(clipped)  # at least half the box on screen, and not behind the UI
     return out
 
 

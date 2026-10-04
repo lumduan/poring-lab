@@ -37,6 +37,7 @@ import ro_agent as r  # noqa: E402
 from poring_backend.capture_lock import read_lock  # noqa: E402
 from poring_dataset import mapcache, projection  # noqa: E402
 from poring_dataset.timeline import Timeline  # noqa: E402
+from poring_dataset.ui_layout import UI_RECTS  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 # Calibration spot: the most open ground on prt_fild08 by the map cache (walkable 37 cells in every
@@ -47,10 +48,7 @@ SPOT = (268, 107)
 # Client-area rectangles that are UI, not world (x, y, w, h): never click there. Measured on the
 # frozen 1280x720 layout (2026-10-02): Basic Information (expanded), the 4-row hotkey bar, the small
 # top window, the chat window, the right-anchored notifier and minimap (outdoor maps).
-UI = [
-    (0, 0, 222, 325), (228, 0, 296, 135), (655, 0, 90, 40), (0, 528, 600, 98), (965, 560, 175, 36),
-    (1128, 8, 152, 152),
-]  # fmt: skip
+UI = list(UI_RECTS)  # one source: poring_dataset.ui_layout (labels drop boxes under them too)
 
 
 def grid(gw: int, gh: int) -> list[tuple[int, int]]:

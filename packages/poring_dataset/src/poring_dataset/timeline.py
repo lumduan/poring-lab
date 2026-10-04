@@ -25,6 +25,7 @@ from typing import Any
 from poring_dataset.mapcache import MapGrid
 from poring_dataset.walk import walk_path
 from poring_packets.world import (
+    HIDDEN_OPTIONS,
     MOVE_COST,
     MOVE_DIAGONAL_COST,
     TICK_MOD,
@@ -45,6 +46,7 @@ class EntityState:
     y: float
     moving: bool
     heading: int | None = None  # RO heading (0 = north, ccw): the step walked, else as appeared
+    hidden: bool = False  # sent with an option the client draws as nothing (HIDDEN_OPTIONS)
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,8 +117,9 @@ class Timeline:
                 heading = step if step is not None else heading
             else:
                 x, y, moving = float(ent.x), float(ent.y), False
+            hidden = bool(ent.effect_state & HIDDEN_OPTIONS)
             entities.append(
-                EntityState(ent.gid, ent.objtype, ent.job, ent.name, x, y, moving, heading)
+                EntityState(ent.gid, ent.objtype, ent.job, ent.name, x, y, moving, heading, hidden)
             )
         return FrameWorld(t_ns, world.map, world.aid, self_pos, tuple(entities), self_heading)
 

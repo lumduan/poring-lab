@@ -23,10 +23,12 @@ INDOOR maps (Post-S2 round B1, 2026-10-04): the client draws them with the camer
 (the rule, re-expressed; no code copied) from nostalro-client @ 15b3029 (Apache-2.0,
 THIRD_PARTY.md): a map is indoor iff "<map>.rsw" is listed in the client's
 data/indoorrswtable.txt (map_loader.rs:85-90), and an indoor map forces the yaw 45 degrees off the
-outdoor default (camera.rs:189-209); pitch, FOV and the default distance are unchanged. The table is
+outdoor default (camera.rs:189-209); only the zoom/pitch clamp bands narrow. The table is
 CLIENT data, read from the GRF into /dev/shm at run time (grf_read.py extract), never committed.
-The sign in OUR yaw convention is measured (B2, scripts/camera_validate.py) and recorded in
-camera_<backend>.json ("indoor"); INDOOR_YAW_DEG is the default until then.
+MEASURED (B2, 2026-10-04, scripts/camera_validate.py; recorded in camera_<backend>.json "indoor"):
+the sign in our convention is +45, and the indoor camera is also CLOSER (distance ~274 vs 400):
+the narrower clamp band pulls the default distance in. Rotation alone left 78 px; rotation plus
+the fitted distance gives clicks at median 11 / p95 19 px, the outdoor fit's own level.
 
 Billboard FACING (B4): the sprite direction a client draws = nostalro act.rs:568-570,
 (camera_dir + 12 - heading) % 8, where camera_dir is the camera's look direction as an RO heading
@@ -49,7 +51,7 @@ GAT_DIR = Path(os.environ.get("PORING_GAT_DIR", "/dev/shm/poring-lab-tmp/gat/dat
 CELL = 5.0  # world units per GAT cell
 NAMES = ("yaw", "pitch", "distance", "fov", "cx", "cy")
 INDOOR_TABLE = "indoorrswtable.txt"  # the client's data/indoorrswtable.txt, extracted into GAT_DIR
-INDOOR_YAW_DEG = -45.0  # nostalro camera.rs:189-209; the sign in our convention is B2's to confirm
+INDOOR_YAW_DEG = 45.0  # nostalro camera.rs:189-209; +45 in OUR convention (B2, measured 45.96)
 INDOOR_SOURCE = (
     "nmeylan/nostalro-client@15b3029 (Apache-2.0): map_loader.rs:85-90 (indoorrswtable.txt), "
     "camera.rs:189-209 (indoor yaw 45 degrees off the default; pitch/FOV/distance unchanged)"
@@ -234,9 +236,27 @@ def indoor_yaw_deg(camera_json: dict[str, object]) -> float:
     return INDOOR_YAW_DEG
 
 
-def camera_for_map(fitted: Camera, indoor: bool, yaw_offset_deg: float = INDOOR_YAW_DEG) -> Camera:
-    """The camera the client uses on a map: the fitted (outdoor) default, rotated on indoor maps."""
-    return replace(fitted, yaw=fitted.yaw + np.radians(yaw_offset_deg)) if indoor else fitted
+def indoor_distance(camera_json: dict[str, object]) -> float | None:
+    """The measured indoor camera distance (B2, 2026-10-04: the indoor clamp band pulls the default
+    in -- ~274 vs 400 outdoors), or None = the fitted outdoor distance."""
+    block = camera_json.get("indoor")
+    if isinstance(block, dict) and isinstance(block.get("distance"), int | float):
+        return float(block["distance"])
+    return None
+
+
+def camera_for_map(
+    fitted: Camera,
+    indoor: bool,
+    yaw_offset_deg: float = INDOOR_YAW_DEG,
+    distance: float | None = None,
+) -> Camera:
+    """The camera the client uses on a map: the fitted (outdoor) default, rotated -- and, when
+    measured, moved closer -- on indoor maps."""
+    if not indoor:
+        return fitted
+    cam = replace(fitted, yaw=fitted.yaw + np.radians(yaw_offset_deg))
+    return cam if distance is None else replace(cam, distance=distance)
 
 
 def projector_for(
@@ -266,7 +286,8 @@ def projector_for(
         raise ValueError(f"{map_name} is indoor and the camera json has no fitted camera")
     if isinstance(block, dict) and (indoor or (path is not None and path.exists())):
         fitted = camera_from_json(block, int(block.get("height", 720)))
-        cam = camera_for_map(fitted, indoor, indoor_yaw_deg(camera_json))
+        cam = camera_for_map(fitted, indoor, indoor_yaw_deg(camera_json),
+                             indoor_distance(camera_json))  # fmt: skip
         tag = f"{'indoor ' if indoor else ''}{map_name}"
         if path is None or not path.exists():
             return (lambda offsets, _origin: cam.project(offsets)), f"camera(flat):{tag}"
@@ -288,7 +309,8 @@ def map_camera(
     if not isinstance(block, dict):
         return None
     fitted = camera_from_json(block, int(block.get("height", 720)))
-    return camera_for_map(fitted, is_indoor(map_name, indoor_table), indoor_yaw_deg(camera_json))
+    return camera_for_map(fitted, is_indoor(map_name, indoor_table), indoor_yaw_deg(camera_json),
+                          indoor_distance(camera_json))  # fmt: skip
 
 
 # --- movement and facing under a rotated camera (B3, B4) ------------------------------------------

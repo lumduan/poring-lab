@@ -103,8 +103,10 @@ def decode(server: str, direction: str, pid: int, b: bytes) -> Decoded | None:
             # AID @5 is the block id (rAthena bl.id): the identity ZC_NOTIFY_VANISH / STOPMOVE
             # use. GID @9 is the char_id, 0 for every non-player (found live 2026-10-01: keyed
             # by GID, all monsters collapsed into one entity).
+            # effectState @19 (rAthena's sc.option): an NPC sent with OPTION_INVISIBLE/HIDE/CLOAK
+            # is drawn as NOTHING (found 2026-10-04: prt_church's six "Single Army" event NPCs)
             f: dict[str, Any] = {"kind": kind, "gid": _u32(b, 5), "char_id": _u32(b, 9),
-                                 "objtype": b[4],
+                                 "objtype": b[4], "effect_state": _u32(b, 19),
                                  "speed": _u16(b, 13), "job": _u16(b, 23),
                                  "name": text(b[name_off : name_off + 24])}  # fmt: skip
             if pid == 0x09FD:

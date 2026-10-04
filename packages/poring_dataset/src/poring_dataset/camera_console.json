@@ -628,9 +628,65 @@
   }
  },
  "indoor": {
-  "yaw_deg": -45.0,
+  "yaw_deg": 45.96,
+  "distance": 273.0,
   "source": "nmeylan/nostalro-client@15b3029 (Apache-2.0): map_loader.rs:85-90 (indoorrswtable.txt), camera.rs:189-209 (indoor yaw 45 degrees off the default; pitch/FOV/distance unchanged)",
-  "validated": null,
-  "note": "ported default; scripts/camera_validate.py (B2) measures the sign in our yaw convention and records the residuals here"
+  "validated": {
+   "evidence": "20261004T103712-indoor-validate.json",
+   "map": "prt_church",
+   "fitted_on": "10 click pairs (yaw + distance free, start +45)",
+   "held_out": "20 frames of 5 single-Poring spawns",
+   "residuals_px": {
+    "outdoor_yaw0": {
+     "clicks": {
+      "n": 10,
+      "median_px": 171.5,
+      "p95_px": 239.6
+     },
+     "spawns": {
+      "n": 20,
+      "median_px": 84.5,
+      "p95_px": 149.4
+     }
+    },
+    "indoor_minus45": {
+     "clicks": {
+      "n": 10,
+      "median_px": 285.3,
+      "p95_px": 430.7
+     },
+     "spawns": {
+      "n": 20,
+      "median_px": 136.7,
+      "p95_px": 251.7
+     }
+    },
+    "indoor_plus45": {
+     "clicks": {
+      "n": 10,
+      "median_px": 77.9,
+      "p95_px": 129.3
+     },
+     "spawns": {
+      "n": 20,
+      "median_px": 40.5,
+      "p95_px": 88.2
+     }
+    },
+    "indoor_fit": {
+     "clicks": {
+      "n": 10,
+      "median_px": 11.3,
+      "p95_px": 18.6
+     },
+     "spawns": {
+      "n": 20,
+      "median_px": 11.5,
+      "p95_px": 21.7
+     }
+    }
+   },
+   "note": "B2 (2026-10-04, the S2 session): +45 in OUR yaw convention, and closer (273 vs 400): rotation alone left 40/88 px on the spawns, the fit 11.5/21.7"
+  }
  }
 }

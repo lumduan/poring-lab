@@ -2,6 +2,7 @@
 (Post-S2 round B1/B3/B4/B5, 2026-10-04)."""
 
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
@@ -43,8 +44,11 @@ def test_indoor_maps_rotate_the_fitted_camera_and_nothing_else() -> None:
     assert (indoor.pitch, indoor.distance, indoor.fov, indoor.cx, indoor.cy) == (
         FIT.pitch, FIT.distance, FIT.fov, FIT.cx, FIT.cy)  # fmt: skip
     assert cm.camera_for_map(FIT, False) is FIT
-    measured = CAMERA_JSON | {"indoor": {"yaw_deg": 45.0}}  # B2 records the measured sign
-    assert cm.indoor_yaw_deg(measured) == 45.0 and cm.indoor_yaw_deg(CAMERA_JSON) == -45.0
+    measured = CAMERA_JSON | {"indoor": {"yaw_deg": 45.96, "distance": 273.0}}  # B2's record
+    assert cm.indoor_yaw_deg(measured) == 45.96 and cm.indoor_yaw_deg(CAMERA_JSON) == 45.0
+    assert cm.indoor_distance(measured) == 273.0 and cm.indoor_distance(CAMERA_JSON) is None
+    closer = cm.camera_for_map(FIT, True, 45.96, 273.0)
+    assert closer.distance == 273.0 and cm.camera_for_map(FIT, False, 45.96, 273.0) is FIT
 
 
 def test_indoor_maps_never_fall_back_to_the_outdoor_homography(tmp_path: Path) -> None:
@@ -168,3 +172,50 @@ def test_labels_skip_invisible_npcs_and_carry_the_facing() -> None:
                                                camera_yaw=np.radians(-45))}  # fmt: skip
     assert rotated[5].facing == cm.SPRITE_DIRECTIONS.index("SW")
     assert all(b.facing is None for b in lb.labels_for(frame, proj, (1280, 720)))
+
+
+def test_units_sent_with_an_invisibility_option_get_no_label() -> None:
+    """2026-10-04 (B6'): event NPCs with ordinary sprite classes, sent with OPTION_INVISIBLE."""
+
+    def ent(gid: int, hidden: bool) -> EntityState:
+        return EntityState(gid, 6, 705, "Single Army", 51.0, 50.0, False, 4, hidden)
+
+    frame = FrameWorld(0, "prt_church", None, (50.0, 50.0), (ent(1, True), ent(2, False)))
+
+    def proj(offsets: np.ndarray, _origin: tuple[int, int]) -> np.ndarray:
+        return FIT.project(offsets)
+
+    assert [b.gid for b in lb.labels_for(frame, proj, (1280, 720))] == [2]
+    t0 = 10_000_000_000
+    events = [
+        {"t_mono_ns": t0 - 1, "type": "char_selected", "map": "prt_church"},
+        {"t_mono_ns": t0, "type": "map_enter", "x": 50, "y": 50},
+        _appear(t0 + 1, 7, x=51, y=50, objtype=6, job=705) | {"effect_state": 0x40},
+        _appear(t0 + 2, 8, x=52, y=50, objtype=6, job=705) | {"effect_state": 0},
+    ]
+    tl = Timeline(events)
+    hidden = {e.gid: e.hidden for e in tl.frame_world(t0 + 10).entities}
+    assert hidden == {7: True, 8: False}
+
+
+def test_boxes_behind_the_client_ui_get_no_label() -> None:
+    from poring_dataset.ui_layout import UI_RECTS, covered_fraction
+
+    assert covered_fraction((10, 10, 50, 80)) == 1.0  # inside Basic Information
+    assert covered_fraction((600, 300, 660, 380)) == 0.0  # the open field
+    assert covered_fraction((200, 300, 240, 340), ((0, 0, 220, 325),)) == pytest.approx(
+        0.5 * 25 / 40
+    )
+    entities = (
+        EntityState(1, 5, 1002, "p", 0.0, 0.0, False),
+        EntityState(2, 5, 1002, "p", 0.0, 0.0, False),
+    )
+    frame = FrameWorld(0, "prt_fild08", None, (50.0, 50.0), entities)
+
+    def at(px: tuple[float, float]) -> Any:
+        return lambda offsets, _o: np.array([px] * len(offsets))
+
+    assert lb.labels_for(frame, at((100.0, 200.0)), (1280, 720)) == []  # under the UI
+    assert len(lb.labels_for(frame, at((640.0, 400.0)), (1280, 720))) == 2
+    assert len(lb.labels_for(frame, at((100.0, 200.0)), (1280, 720), ui_rects=())) == 2
+    assert UI_RECTS[0] == (0, 0, 222, 325)

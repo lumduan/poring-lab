@@ -12,11 +12,13 @@ being measured) -- each with the map's GAT altitude when the GAT is extracted:
 1. Clicks (no sprite detection): the GM is warped back to the spot (same map: the camera stays),
    the agent clicks a grid pixel, and the client's OWN pick -- its self_move_request cell -- pairs
    the pixel with a cell. Residual = |model(cell) - click|. A click lands anywhere inside its cell,
-   so the floor is about a quarter cell. Grid pixels whose cursor is not the walk cursor (an NPC
-   under it; empty_cell.py's template, when calibrated) are skipped: no dialog is ever opened.
+   so the floor is about a quarter cell. Grid pixels without the client's ground marker under the
+   hovered cursor (an NPC or a wall there; empty_cell.py) are skipped: no dialog is ever opened.
 2. Single-Poring spawns, ONE at a time (so the detector cannot take a neighbour's feet): a frame
-   before the spawn is the background; the pink pixels that appear are the Poring; their bottom
-   centre vs model(its packet cell). @killmonster2 after each.
+   before the spawn is the background; the pink pixels that appear (outside the UI windows) are the
+   Poring; their bottom centre vs model(its packet cell). @killmonster2 after each.
+3. A fourth model, `indoor_fit`: yaw AND distance fitted on THIS run's clicks (the first run,
+   2026-10-04, showed the indoor camera is also closer). The spawns are its HELD-OUT check.
 
 PRE-REGISTERED (docs/s2-plan.md, before the run): the better rotated model is within ~2x the
 outdoor in-sample residual (~10-20 px median); the yaw-0 model is far worse.
@@ -52,6 +54,7 @@ from poring_dataset.timeline import Timeline  # noqa: E402
 ROOT = Path(__file__).resolve().parents[1]
 MODELS = {"outdoor_yaw0": None, "indoor_minus45": -45.0, "indoor_plus45": 45.0}
 PINK_GROWTH_MIN = 30  # new pink pixels that make "a Poring appeared"
+FIELD_BOTTOM = 520  # client-area y: the game field ends above the chat window (cp.UI)
 
 
 def models(camera_json: dict[str, Any]) -> dict[str, cm.Camera]:
@@ -76,8 +79,13 @@ def pink_mask(img: np.ndarray) -> np.ndarray:
 
 
 def new_pink_feet(before: np.ndarray, after: np.ndarray) -> tuple[float, float] | None:
-    """Bottom centre of the pink pixels present in ``after`` but not in ``before`` (BGR frames)."""
+    """Bottom centre of the pink pixels present in ``after`` but not in ``before`` (BGR frames),
+    outside the client's UI windows (the chat window's GM text showed up as "new pink" at
+    y ~715 on the first run, 2026-10-04)."""
     mask = pink_mask(after) & ~pink_mask(before)
+    for ux, uy, uw, uh in cp.UI:
+        mask[uy : uy + uh, ux : ux + uw] = False
+    mask[FIELD_BOTTOM:, :] = False  # below the chat window: more UI (a pink line at y ~715)
     ys, xs = np.nonzero(mask)
     if len(xs) < PINK_GROWTH_MIN:
         return None
@@ -116,8 +124,6 @@ def main() -> int:  # noqa: PLR0915 -- one linear procedure, like calibrate_proj
     gx, gy, gw, gh = r.game_region()
     points = cp.grid(gw, gh)
     points = points[:: max(1, len(points) // max(1, a.clicks))][: a.clicks]
-    tpl_path = ROOT / "data" / "bench" / "cursor" / f"walk_cursor_{a.backend}.npz"
-    template = ec.CursorTemplate.load(tpl_path) if tpl_path.exists() else None
     clicks: list[tuple[int, tuple[int, int]]] = []
     skipped_hover = 0
     spawn_frames: list[tuple[int, np.ndarray, np.ndarray]] = []  # (t, before, after) BGR
@@ -130,14 +136,13 @@ def main() -> int:  # noqa: PLR0915 -- one linear procedure, like calibrate_proj
             r.gm(agent, screen, warp)
             time.sleep(2.5)
             bench.close_chat(agent, screen)
-            if template is not None:
-                agent.move(gx + x, gy + y)
-                t = r.ns()
-                time.sleep(0.35)
-                crop = r.grab_after(screen, ec.crop_region(gx + x, gy + y), t + 350_000_000)
-                if not template.is_walk_cursor(crop):
-                    skipped_hover += 1  # an NPC (or the GM itself) under the cursor
-                    continue
+            agent.move(gx + x, gy + y)
+            t = r.ns()
+            time.sleep(0.35)
+            crop = r.grab_after(screen, ec.crop_region(gx + x, gy + y), t + 350_000_000)
+            if not ec.is_empty_walk_cell(crop):
+                skipped_hover += 1  # an NPC, the GM itself or a wall under the cursor
+                continue
             t = r.ns()
             agent.click(gx + x, gy + y)
             clicks.append((t, (x, y)))
@@ -159,14 +164,22 @@ def main() -> int:  # noqa: PLR0915 -- one linear procedure, like calibrate_proj
             time.sleep(1.0)
         t_end = r.ns()
     events = sorted(record_session.packets_for(t_start, t_end), key=lambda e: e["t_mono_ns"])
-    click_errs: dict[str, list[float]] = {m: [] for m in cams}
-    pairs = []
+    found = []
     for t, (x, y) in clicks:
         req = cp.first_after(events, "self_move_request", t, 1_000_000_000)
-        if req is None:
-            continue
-        cell = (float(req["x"]), float(req["y"]))
-        row: dict[str, Any] = {"cell": [req["x"], req["y"]], "px": [x, y]}
+        if req is not None:
+            found.append(((float(req["x"]), float(req["y"])), (x, y)))
+    if len(found) >= 4:
+        offsets = np.array([[c[0] - spot[0], c[1] - spot[1]] for c, _ in found])
+        px = np.array([p for _, p in found], dtype=float)
+        alt = None if grid is None else grid.relative_altitude(spot, offsets)
+        fit = cm.fit_camera(offsets, px, altitude=alt, start=cams["indoor_plus45"],
+                            free=("yaw", "distance"))  # fmt: skip
+        cams["indoor_fit"] = fit.camera
+    click_errs: dict[str, list[float]] = {m: [] for m in cams}
+    pairs = []
+    for cell, (x, y) in found:
+        row: dict[str, Any] = {"cell": [int(cell[0]), int(cell[1])], "px": [x, y]}
         for name, cam in cams.items():
             u, v = predict(cam, grid, spot, cell)
             click_errs[name].append(float(np.hypot(u - x, v - y)))
@@ -201,14 +214,19 @@ def main() -> int:  # noqa: PLR0915 -- one linear procedure, like calibrate_proj
                "spawns_static": summarise(static_errs[name])}
         for name in cams
     }  # fmt: skip
-    scored = {n: np.median(click_errs[n] + static_errs[n]) for n in cams
-              if click_errs[n] + static_errs[n]}  # fmt: skip
+    # the winner is judged on the HELD-OUT spawns (indoor_fit saw the clicks)
+    scored = {n: np.median(static_errs[n]) for n in cams if static_errs[n]}
     winner = min(scored, key=lambda n: scored[n]) if scored else None
+    fitted = cams.get("indoor_fit")
+    outdoor = cams["outdoor_yaw0"]
     result = {
         "stamp": time.strftime("%FT%T%z"), "backend": a.backend, "map": a.map, "spot": list(spot),
         "gat": grid is not None, "clicks": len(clicks), "skipped_hover": skipped_hover,
-        "hover_check": template is not None, "pairs": len(pairs), "spawn_frames": len(spawn_frames),
+        "hover_check": "ground-marker", "pairs": len(pairs), "spawn_frames": len(spawn_frames),
         "residuals": table_out, "winner": winner,
+        "indoor_fit": None if fitted is None else {
+            "yaw_offset_deg": round(float(np.degrees(fitted.yaw - outdoor.yaw)), 2),
+            "distance": round(float(fitted.distance), 1)},
         "outdoor_in_sample_median_px": (camera_json["camera"].get("leave_one_out", {})
                                         .get("camera_altitude", {}).get("median_px")),
         "pairs_detail": pairs, "spawn_samples": samples,
@@ -217,15 +235,21 @@ def main() -> int:  # noqa: PLR0915 -- one linear procedure, like calibrate_proj
     out.mkdir(parents=True, exist_ok=True)
     path = out / f"{time.strftime('%Y%m%dT%H%M%S')}-indoor-validate.json"
     path.write_text(json.dumps(result, indent=1))
-    if a.save and winner in ("indoor_minus45", "indoor_plus45"):
+    if a.save and winner in ("indoor_minus45", "indoor_plus45", "indoor_fit"):
         cam_path = camera_file(a.backend)
         current = json.loads(cam_path.read_text())
-        current["indoor"] = {
-            "yaw_deg": MODELS[winner], "source": cm.INDOOR_SOURCE,
-            "validated": {"evidence": path.name, "map": a.map, "residuals": table_out},
+        if winner == "indoor_fit" and fitted is not None:
+            yaw_deg = round(float(np.degrees(fitted.yaw - outdoor.yaw)), 2)
+            block = {"yaw_deg": yaw_deg, "distance": round(float(fitted.distance), 1)}
+        else:
+            block = {"yaw_deg": MODELS[winner]}
+        current["indoor"] = block | {
+            "source": cm.INDOOR_SOURCE,
+            "validated": {"evidence": path.name, "map": a.map, "winner": winner,
+                          "residuals": table_out},
         }  # fmt: skip
         cam_path.write_text(json.dumps(current, indent=1) + "\n")
-        if json.loads(cam_path.read_text())["indoor"]["yaw_deg"] != MODELS[winner]:
+        if json.loads(cam_path.read_text())["indoor"]["yaw_deg"] != block["yaw_deg"]:
             raise r.Stop(f"{cam_path.name}: the indoor block did not read back")
     print(json.dumps({"evidence": str(path), "winner": winner, "residuals": table_out,
                       "pairs": len(pairs), "skipped_hover": skipped_hover}))  # fmt: skip

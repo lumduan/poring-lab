@@ -101,6 +101,11 @@ class EntityAppear(PacketEventBase):
     x1: int | None = None  # move entries: destination
     y1: int | None = None
     move_start_tick: int | None = None
+    effect_state: int | None = Field(
+        default=None, ge=0,
+        description="The unit's option bits (rAthena sc.option): HIDE 0x2, CLOAK 0x4 and "
+        "INVISIBLE 0x40 mean the client draws nothing.",
+    )  # fmt: skip
     heading: int | None = Field(
         default=None, ge=0, le=7,
         description="Heading 0..7 (0 = north, counter-clockwise) for new/stand entries; a walking "
