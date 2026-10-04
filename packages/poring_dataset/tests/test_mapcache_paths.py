@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import pytest
 
 from poring_dataset import mapcache
-from poring_dataset.paths import path_search
+from poring_dataset.walk import MAX_LEN, octile, straight_path, walk_path
 
 
 def cache_bytes(maps: dict[str, tuple[int, int, bytes]]) -> bytes:
@@ -78,7 +78,7 @@ OPEN = Ascii(["." * 12] * 12)
 
 
 def test_open_ground_is_the_shortest_octile_path() -> None:
-    path = path_search(OPEN, 1, 1, 6, 3)
+    path = walk_path(OPEN, 1, 1, 6, 3)
     assert path is not None and path[-1] == (6, 3)
     assert len(path) == 5  # 2 diagonal + 3 straight
     steps = list(zip([(1, 1), *path], path, strict=False))
@@ -98,7 +98,7 @@ def test_walls_force_a_detour_and_corners_are_never_cut() -> None:
             "..........",
         ]
     )
-    path = path_search(grid, 2, 4, 7, 4)
+    path = walk_path(grid, 2, 4, 7, 4)
     assert path is not None and path[-1] == (7, 4)
     assert all(not grid.nopass(x, y) for x, y in path)
     full = [(2, 4), *path]
@@ -109,12 +109,69 @@ def test_walls_force_a_detour_and_corners_are_never_cut() -> None:
 
 def test_unreachable_and_bad_targets() -> None:
     boxed = Ascii(["......", ".###..", ".#.#..", ".###..", "......", "......"])
-    assert path_search(boxed, 0, 0, 2, 3) is None  # inside a closed box
-    assert path_search(OPEN, 1, 1, 11, 1) is None  # the last column is never passable
-    assert path_search(OPEN, 1, 1, 1, 1) == []  # already there
+    assert walk_path(boxed, 0, 0, 2, 3) is None  # inside a closed box
+    assert walk_path(OPEN, 1, 1, 11, 1) is None  # the last column is never passable
+    assert walk_path(OPEN, 1, 1, 1, 1) == []  # already there
 
 
 def test_easy_path_is_diagonal_then_straight_and_stops_at_obstacles() -> None:
-    assert path_search(OPEN, 1, 1, 4, 2, easy=True) == [(2, 2), (3, 2), (4, 2)]
+    assert straight_path(OPEN, 1, 1, 4, 2) == [(2, 2), (3, 2), (4, 2)]
     wall = Ascii(["......", "......", "......", "..#...", "......", "......"])
-    assert path_search(wall, 1, 1, 4, 4, easy=True) is None  # (2,2) is the wall
+    assert straight_path(wall, 1, 1, 4, 4) is None  # (2,2) is the wall
+
+
+def path_cost(start: tuple[int, int], path: list[tuple[int, int]]) -> int:
+    full = [start, *path]
+    return sum(14 if (a[0] != b[0] and a[1] != b[1]) else 10
+               for a, b in zip(full, full[1:], strict=False))  # fmt: skip
+
+
+def test_the_walk_is_a_shortest_one_around_a_wall() -> None:
+    """A shortest walk: its cost equals a brute-force breadth-first optimum on the same grid."""
+    grid = Ascii(["..........", "..######..", "..#.......", "..#.####..", "..#....#..",
+                  "..#####...", "..........", ".........."])  # fmt: skip
+    path = walk_path(grid, 3, 3, 8, 1)
+    assert path is not None and path[-1] == (8, 1)
+    # Dijkstra by hand: the optimum cost
+    import heapq
+
+    best = {(3, 3): 0}
+    todo = [(0, (3, 3))]
+    while todo:
+        c, (x, y) = heapq.heappop(todo)
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                nx, ny = x + dx, y + dy
+                if (
+                    (dx or dy)
+                    and not grid.nopass(nx, ny)
+                    and not (dx and dy and (grid.nopass(x + dx, y) or grid.nopass(x, y + dy)))
+                ):
+                    nc = c + (14 if dx and dy else 10)
+                    if nc < best.get((nx, ny), 1 << 30):
+                        best[(nx, ny)] = nc
+                        heapq.heappush(todo, (nc, (nx, ny)))
+    assert path_cost((3, 3), path) == best[(8, 1)]
+
+
+def test_the_walk_is_deterministic_and_bounded() -> None:
+    assert walk_path(OPEN, 1, 1, 9, 6) == walk_path(OPEN, 1, 1, 9, 6)
+    assert octile(5, 2) == 2 * 14 + 3 * 10
+    wide = Ascii(["." * 300] * 3)
+    assert walk_path(wide, 0, 0, MAX_LEN, 0) is not None
+    assert walk_path(wide, 0, 0, MAX_LEN + 1, 0) is None  # beyond the server's path buffer
+    # a detour that would need more than max_len steps does not exist either
+    assert walk_path(OPEN, 1, 1, 9, 1, max_len=7) is None
+    assert walk_path(OPEN, 1, 1, 9, 1, max_len=8) is not None
+
+
+def test_the_optional_altitude_cost_prefers_flat_ground() -> None:
+    hill = {(x, 2) for x in range(3, 7)}
+
+    def alt(x: int, y: int) -> float:
+        return 20.0 if (x, y) in hill else 0.0
+
+    flat = walk_path(OPEN, 1, 2, 8, 2)
+    assert flat is not None and any(c in hill for c in flat)  # the server ignores height
+    around = walk_path(OPEN, 1, 2, 8, 2, altitude=alt, climb=5.0)
+    assert around is not None and not any(c in hill for c in around)

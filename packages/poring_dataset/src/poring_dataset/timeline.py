@@ -8,9 +8,11 @@ What a frame SHOWS lags the server: a frame captured at t shows the world as it 
 t - offset, where offset is the backend's packet->frame delay (benchmark p50, docs/benchmarks/). The
 caller passes that offset per backend; this module only answers "where was everything at t".
 
-Walks are interpolated along the path the server and the client both walk (poring_dataset.paths,
-rAthena's A*, with the map cache's walkability), with rAthena's step timing (speed ms per cell,
-*14/10 diagonally). Without a map grid it falls back to poring_packets' diagonal-first path.
+Walks are interpolated along a shortest walk on the map cache's walkability (poring_dataset.walk, a
+textbook A*; since 2026-10-04 it replaces the GPL port of rAthena's search: on 2540 recorded walks
+it found every one, matched the port's cells on 2534 and every arrival exactly --
+scripts/walk_check.py), with rAthena's step timing (speed ms per cell, *14/10 diagonally). Without a
+map grid it falls back to poring_packets' diagonal-first path.
 """
 
 import bisect
@@ -21,7 +23,7 @@ from functools import lru_cache
 from typing import Any
 
 from poring_dataset.mapcache import MapGrid
-from poring_dataset.paths import path_search
+from poring_dataset.walk import walk_path
 from poring_packets.world import (
     MOVE_COST,
     MOVE_DIAGONAL_COST,
@@ -122,7 +124,7 @@ class Timeline:
 @lru_cache(maxsize=65536)
 def _cells(grid: MapGrid | None, x0: int, y0: int, x1: int, y1: int) -> tuple[tuple[int, int], ...]:
     if grid is not None:
-        path = path_search(grid, x0, y0, x1, y1)
+        path = walk_path(grid, x0, y0, x1, y1)
         if path is not None:
             return tuple(path)
     return tuple(path_cells(x0, y0, x1, y1))

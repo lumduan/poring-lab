@@ -78,7 +78,7 @@ mux (/internal/agent, source=bot; lease, log, ADR-0016 interlock) → the one se
 |---|---|---|
 | 1 · schema | Pydantic plan models: known step types, typed arguments, bounded counts and durations | "step 3: `hunt.count` must be 1..500" |
 | 2 · semantics | Map exists; the target mob spawns on that map (KB spawns); the skill is owned and SP-affordable; the item exists; the warp exists | "Poring does not spawn on prt_church" |
-| 3 · simulation | Walk the plan on the GAT/warp graph (`paths.py`, rAthena's A*, for legs ≤ 128 steps; waypoints beyond). Estimate time; check reachability, element matchups (attr_fix) and the stop conditions | "prt_fild08 (12,345) is unreachable from the spawn point" |
+| 3 · simulation | Walk the plan on the GAT/warp graph (`walk.py`, a clean textbook A* that replaced the GPL `paths.py` port on 2026-10-04, for legs ≤ 128 steps; waypoints beyond). Estimate time; check reachability, element matchups (attr_fix) and the stop conditions | "prt_fild08 (12,345) is unreachable from the spawn point" |
 | 4 · approval | The owner sees the plan as blocks: route, targets, stop conditions, time | the owner edits or rejects |
 | 5 · runtime | The executor's stop conditions: HP floor, unknown screen, the human lease, a step timeout, perception confidence | stop, release everything, report |
 | 6 · interlock | ADR-0016: the environment is attested | the mux refuses (`environment_unattested`) |
@@ -93,7 +93,7 @@ Errors are short, human-readable sentences: the owner reads the same text the pl
   - **Inspiration, ideas only:** [maxmx03/YggAI](https://github.com/maxmx03/YggAI) (GPL-3.0); no
     code is read for porting (THIRD_PARTY.md).
   - Our trees are written from scratch.
-- **Path planning:** the GAT walk graph plus rAthena's exact A* (`paths.py`) inside 128 steps; a
+- **Path planning:** the GAT walk graph plus a shortest-walk A* (`walk.py`; it matched the old rAthena port on 2534/2540 recorded walks) inside 128 steps; a
   waypoint and warp graph across longer routes.
 
 ## Consequences

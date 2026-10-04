@@ -70,16 +70,23 @@
 | [RagnarokResearchLab/ragnarokresearchlab.github.io](https://github.com/RagnarokResearchLab/ragnarokresearchlab.github.io) | `00ae60fbf53713081c36f77b35962dcf022c92e6` | none found at that commit (unclear) | file-format facts only; no text or code copied |
 | rAthena (pinned in `services/rathena`) | the pinned ref | GPL-3.0 | the server we run. Its db is read at run time for the Phase 4 KB (ADR-0015), never committed. |
 
-## ⚠️ Open: a copyleft port made BEFORE this rule
-- **What:** `packages/poring_dataset/src/poring_dataset/paths.py` (2a0404a, 2026-10-02) is a
-  *literal* port of rAthena's `src/map/path.cpp` A* (GPL-3.0) at the pinned ref. That is
-  deliberate: the client and the server walk exactly these cells, so tie-breaking must match.
-- **Why it is open:** under the 2026-10-03 rule a copyleft source is "ideas only". This file
-  predates the rule.
-- **Batt decides one of:**
-  - keep it (the repository is private, so GPL obligations apply only on distribution; record the
-    exception here);
-  - re-implement it clean-room from the documented behaviour, keeping the equivalence tests.
+## ✅ Closed: the copyleft port made BEFORE this rule was REMOVED (2026-10-04)
+- **What it was:** `packages/poring_dataset/src/poring_dataset/paths.py` (2a0404a, 2026-10-02), a
+  *literal* port of rAthena's `src/map/path.cpp` A* (GPL-3.0) at the pinned ref. Under the
+  2026-10-03 rule a copyleft source is "ideas only"; this file predated the rule.
+- **Batt's decision (2026-10-04):** replace it with a clean implementation.
+- **Done:** `packages/poring_dataset/src/poring_dataset/walk.py`, a textbook A* (Hart, Nilsson &
+  Raphael 1968): octile heuristic, 10/14 costs, no corner cutting, deterministic ties, 128-step cap.
+  `paths.py` and its import are deleted in the same commit; the property tests moved to `walk.py`.
+  **Scope, stated plainly:** written without the GPL source open and copying none of its structure,
+  but by an author who had read it, so NOT a strict clean-room implementation.
+- **Evidence** (`scripts/walk_check.py --compare-port`, run against the old port before its
+  deletion, on the 5 NAS datasets' packets):
+  - 2540/2540 recorded walks found;
+  - the cells equal the port's on 2534 (99.8 %), the same length on 2539;
+  - every arrival on the exact cell (120/120);
+  - the 10 walks cut mid-way: 6 on the exact cell, all ≤ 1 cell off.
+- The port stays in git history only (2a0404a..the removal commit); nothing imports it.
 
 ## Noted for later (not used yet)
 - **RagLite ACT/SPR decoding** (same commit and license as above) is a path to synthetic training
