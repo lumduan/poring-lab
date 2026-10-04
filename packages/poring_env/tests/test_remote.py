@@ -4,7 +4,7 @@ from collections.abc import Iterator
 import pytest
 from websockets.sync.server import Server, ServerConnection, serve
 
-from poring_env.clock import FrameCounter
+from poring_env.clock import FrameCounter, monotonic_ns
 from poring_env.frame import Frame
 from poring_env.protocol import (
     AgentHello,
@@ -27,7 +27,9 @@ class FakeSource:
 
     def grab(self) -> Frame:
         fid = self.counter.next()
-        return Frame(frame_id=fid, t_capture_ns=1000 + fid, width=2, height=1, bgra=b"\x00" * 8)
+        # a FRESH frame: the frame-age guard refuses presses that cite a stale one
+        return Frame(frame_id=fid, t_capture_ns=monotonic_ns(), width=2, height=1,
+                     bgra=b"\x00" * 8)  # fmt: skip
 
     def close(self) -> None:
         pass
