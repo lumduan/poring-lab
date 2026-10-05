@@ -518,7 +518,9 @@ class Unattested(Stop):
 WINDOW_MIN_LEFT_S = 25
 
 
-def ensure_window(kind: str, phase: str, seconds: int = 90) -> None:
+def ensure_window(
+    kind: str, phase: str, seconds: int = 90, min_left: float = WINDOW_MIN_LEFT_S
+) -> None:
     """Login and desktop phases happen before (or outside) an attested in-game session: open a
     bounded operator window through the HOST tool (capture_backend.py window; never the agent
     channel). Skipped while the interlock is green, or a window of this kind is open long enough
@@ -530,7 +532,7 @@ def ensure_window(kind: str, phase: str, seconds: int = 90) -> None:
     flock its own parent held and to-console failed (21:18, 21:26 and 21:43 on 2026-10-04; the one
     run whose check landed after a tick went through)."""
     open_now = read_window(LAB_STATE, read_lock(LAB_STATE), time.time())
-    if open_now is not None and open_now[0] == kind and open_now[2] >= WINDOW_MIN_LEFT_S:
+    if open_now is not None and open_now[0] == kind and open_now[2] >= min_left:
         return
     env_status = backend_health().get("environment") or {}
     if env_status.get("state") == "green":
@@ -931,6 +933,9 @@ def type_line(agent: Agent, screen: Screen, command: str, *, prove: bool = True)
 
     prove: the line starts with `cls` + a DarkMagenta bar of a width no bar on screen has now, and
     this returns only once that bar shows (a Stop otherwise): the line ran, not an older one."""
+    # A window long enough for THIS line (~9 characters/s, 2026-10-05: a 30 s window expired
+    # mid-line and the mux refused the rest) -- skipped while the interlock is green.
+    ensure_window("desktop", "console-line", 120, min(110.0, 15 + len(command) / 7))
     agent.keys("Escape")
     time.sleep(0.2)
     if not prove:

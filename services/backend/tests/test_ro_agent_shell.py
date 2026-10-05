@@ -107,9 +107,14 @@ def test_type_line_reverts_pending_input_then_proves_the_line_ran(
 ) -> None:
     monkeypatch.setattr(ro, "SHOTS", tmp_path)
     monkeypatch.setattr(ro, "PROOF_TIMEOUT_S", 1.0)
+    windows: list[float] = []  # never the real host tool from a test
+    monkeypatch.setattr(
+        ro, "ensure_window", lambda kind, phase, s=90, min_left=25: windows.append(min_left)
+    )
     ok = FakeConsole(ro, runs=True)
     ro.type_line(ok, ok, "Start-Sleep 10; schtasks /run /tn x")
     assert ok.sent[0] == ("keys", ("Escape",))  # before anything is typed
+    assert windows and windows[0] > 15  # a window sized for the line comes first
     assert ok.sent[1][1].endswith("Start-Sleep 10; schtasks /run /tn x\n")
     stuck = FakeConsole(ro, runs=False)  # a `>>` prompt: the line never runs
     stuck.frame[130:148, 86 : 86 + 40 * ro.CELL_W, :3] = ro.MARKER_PROOF[::-1]  # an OLD proof
