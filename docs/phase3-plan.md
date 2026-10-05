@@ -490,11 +490,24 @@ Anything else is a FINDING: name the missing term; never tune.
   - Lunatic 1.07-1.09.
 - Widths agree (k from widths lands on korangar), and the perspective tests pass. So f/z and the
   camera are right; what differs is each species' vertical extent.
-- Candidates, untested:
-  1. the measurement: background differencing at > 24 misses a sprite's low-contrast parts (Poring)
-     or adds its shadow decal (Lunatic);
-  2. the prediction: the idle envelope vs the frame actually drawn, or an ACT layer's vertical
-     scale/offset that the composer handles differently from the client.
+- **Located (21:50-22:05, diagnostic, no verdict change):** in both species the BOTTOM edge
+  matches (Poring +0.8 px, Lunatic 0.0 px median), so the anchor and the projection are right. The
+  whole miss is at the TOP:
+  - Poring: the observed top is 5.0 px lower outdoors and 10.1 px lower indoors.
+  - Lunatic: the observed top is 2.3 px higher.
+- **Two different terms, seen on crops** (`/dev/shm/poring-lab-tmp/m4-rerun2/crops/`, local):
+  1. **Poring: a MEASUREMENT artefact.** The predicted box includes the Poring's thin tuft on top,
+     which the client draws. The observed box stops below it: the 1-px morphological opening
+     deletes 1-2 px wide protrusions. Its idle frames are 33-39 native px tall; the observed median
+     is 33.3, near the shortest frame, and p10 30.3 is below every frame.
+  2. **Lunatic: a PREDICTION term.** The observed top includes the ears, drawn 2.5-4 native px
+     higher than ANY frame our composer produces (frames 22-27 px; observed median 29.4, p90
+     30.9). It points at a layer offset, or the frame/direction choice in `compose_frame`.
+- **The next run, one variable at a time:**
+  - first the measurement: keep thin structures, e.g. open only the low-contrast noise, or measure
+    on the unopened mask with a minimum component size, decided before any re-score;
+  - then the Lunatic composition (compare the ACT layer offsets with the drawn crop).
+  - k is judged only after both are settled. The thresholds stay.
 - Indoors, the edges are worse (p95 13-24 px), consistent with the indoor camera's larger fit error
   (spawn validation 11.5 / 21.7 px).
 - tau (the label-check threshold) was measured: 0.092 (p5 of NCC over the clean rows; median
