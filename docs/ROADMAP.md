@@ -91,7 +91,9 @@ flowchart TD
     The re-measurement: > 150 ms gaps 0.08/min, max 257 ms. The 06:28 drop was Batt's planned
     switch/AP maintenance.
   - **The watchdog is watched:** a guard timer raises RED `watchdog_down` (live: 51–61 s after the
-    unit stopped).
+    unit stopped). ➡️ **E2 re-test 2026-10-05 PASSED:** the box appeared by 11:41:50 and cleared on
+    its own after the re-arm, with no refresh (Batt). The console's stale-status guard and its
+    auto-reconnect stay.
   - **The one S2 session ran 10:11–11:38 ICT** (hard cap 13:11 untouched): ADR-0005 5/5, B2, B6′,
     C3, A3, and the interlock green throughout.
   - **Raw H.264 (C3):** 32–48 MB/min keeping every frame, bit-identical. The pre-registered rule

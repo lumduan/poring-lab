@@ -7,7 +7,7 @@ verdict_date: 2026-10-04
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: "2026-10-05: M1 COMPLETE (MIXCRYPT study decoder, host-local); E2 alarm re-test run (Batt confirmed the red box). B6 hand-check DONE 13:38 (gold set pinned; v0 monster P 0.644 / R 0.580). Thai-data experiment run: Thai GRF in front crashes the 2021 exe; Thai last works; all 12 KB species' sprites are byte-identical to kRO, so the M4 mismatches are not the art. Batt decides the setup; the M4 re-run (design §5a), M5 and v1 follow on it."
+next_action: "2026-10-05: M1 COMPLETE (MIXCRYPT study decoder, host-local); E2 alarm re-test PASSED (the red box appeared by 11:41:50 and cleared ON ITS OWN, no refresh, on Batt's screen; the stale-status guard and auto-reconnect stay). B6 hand-check DONE 13:38 (gold set pinned; v0 monster P 0.644 / R 0.580). Thai-data experiment run: Thai GRF in front crashes the 2021 exe; Thai last works; all 12 KB species' sprites are byte-identical to kRO, so the M4 mismatches are not the art. Batt decides the setup; the M4 re-run (design §5a), M5 and v1 follow on it."
 last_reviewed: 2026-10-05
 ---
 

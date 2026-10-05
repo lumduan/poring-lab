@@ -101,3 +101,32 @@ So it takes a small program that runs on Windows.
   outside the game, and it pollutes server-side data.
 - **No indicator; rely on the web console.** **Rejected for shared control:** the person at the Dell
   doesn't watch the console.
+
+## Amendment 2026-10-05: the lab-client watcher (Batt)
+
+This widens the Windows-side helpers by one more piece, which is what the "re-review" clause
+above asks for. Batt asked for it on 2026-10-05, after the th client's watcher caught the 2021
+exe calling Gravity's `kro-assit.ragnarok.co.kr:3000` at character select (ADR-0016).
+
+- **What:** a scheduled task, `poring-lab watch`. It runs as the STANDARD user `poring-lab`,
+  needs no admin, and is registered from the agent's own shell. Its script is
+  `%USERPROFILE%\poring-lab-watch\labwatch.ps1`, typed in and read back by sha256.
+- **What it does:** every 500 ms it lists the TCP connections of the lab clients' exes: processes
+  whose path is under `C:\RO-rAthena\client\` or `C:\RO-rAthena-th\client\`.
+  - Any remote other than 192.168.1.13 or loopback means the process is killed and a `KILLED`
+    line is logged.
+  - An `alive` line is written every ~60 s.
+  - It never touches any other process. The community client is outside both folders.
+- **Why a task:** the first watchers were `Start-Job`s in the agent's shell, and they died when
+  that window was closed (it happened at ~16:05).
+  - The task is triggered at logon and every 5 min, with "ignore new" if one is already running,
+    so a killed watcher comes back within 5 min.
+  - It has no time limit and restarts up to 3 times.
+  - Proven 2026-10-05: the agent's shell was closed at 19:30:49, and the same pid kept logging.
+- **Read-only to the lab:** it reads nothing of ours and sends nothing. The morning check is
+  `ro_agent.py watch-status`: the task state, the log tail and the KILLED count, as a screenshot.
+- **Visible:** Windows 11 hosts its console in Terminal despite `-WindowStyle Hidden`. A
+  "C:\Windows\System32\Wi…" Terminal window appears in the taskbar group. Closing it stops the
+  watcher until the next 5-minute trigger.
+- `-ExecutionPolicy Bypass` applies to that one process. The machine's policy (Restricted, all
+  scopes Undefined) is not changed.

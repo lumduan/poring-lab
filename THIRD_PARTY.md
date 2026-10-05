@@ -94,6 +94,9 @@
   repo (see the korangar row above); this file still holds no MIXCRYPT code.
 - **Verified:** the classic DES test vector, and a real DES-flagged GAT that inflates with zlib to
   its exact size.
+- **KEPT in the repo (Batt, 2026-10-05).** It is standard FIPS DES, and the lab needs it for map
+  data (DES-flagged GATs/RSWs). The private, never-committed rule covers MIXCRYPT only. Revisit
+  this only before a public release (8980613 is in the history either way).
 
 ## Ideas only (copyleft or unclear: no code read for porting)
 
