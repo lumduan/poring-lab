@@ -17,6 +17,12 @@ Per block (a scene, entered via the other map: a camera reset):
   2. per species, --per-species times: `@monster <species> 1`, hold --hold seconds while it
      wanders and stands (rAthena: a random walk, then >= 4 s standing), `@killmonster2`, and
      another background gap.
+FAR blocks (the M4 re-run, phase3-plan §5b): a block named `<scene>-<top|centre|bottom>[-...]`
+with --cells (scripts/m4_cells.py's output, cells chosen BEFORE the session) spawns each monster at
+a pre-chosen cell of that screen third: a same-map `@warp` there (the camera rotation is kept),
+`@monster <species> 1`, a `@warp` back to the scene spot, and only THEN the `spawned` event, so no
+measured frame is seen from the far viewpoint. --spot SCENE=X,Y moves a scene's GM spot (the other
+scene's camera-reset warp follows it); it must match the spot the cells were chosen for.
 --count N spawns N per command (`@monster <species> N`): Phase 3 M7's CROWD blocks (occlusion),
 recorded under their own label; M4 itself is --count 1 (m4_validate measures single monsters).
 The GM never clicks and never moves, so nothing is provoked; its vitals are still checked between
@@ -44,6 +50,37 @@ import gm_vitals as gv  # noqa: E402
 import ro_agent as r  # noqa: E402
 
 CLIENT_TITLE_MAX = 40.0  # client_title_active distance: active <= 6, inactive ~30 (2026-10-04)
+FAR_SETTLE_S = 2.5  # after a same-map @warp: the map redraws around the new cell
+THIRDS = ("top", "centre", "bottom")
+
+
+def apply_spot(spec: str) -> None:
+    """--spot SCENE=X,Y: move a scene's GM spot (same map); the OTHER scene's camera-reset warp
+    goes to the new spot too (bench.enter_scene resets via the other scene's map)."""
+    scene, _, xy = spec.partition("=")
+    if scene not in bench.SCENES or xy.count(",") != 1:
+        raise SystemExit(f"--spot {spec!r}: SCENE=X,Y with SCENE in {sorted(bench.SCENES)}")
+    x, y = (int(v) for v in xy.split(","))
+    mapname = bench.SCENES[scene][0]
+    bench.SCENES[scene] = (mapname, x, y)
+    for other in bench.RESET_VIA:
+        if other != scene:
+            bench.RESET_VIA[other] = f"{mapname} {x} {y}"
+
+
+def far_cell(cells: dict | None, block: str, scene: str, used: dict[str, int]) -> list[int] | None:
+    """The next pre-chosen cell for a far block (`<scene>-<third>...`), spread over the candidate
+    list (every len/8-th, nearest first); None for a near block or without --cells."""
+    parts = block.split("-")
+    if cells is None or len(parts) < 2 or parts[1] not in THIRDS:
+        return None
+    cands = cells["scenes"][scene][parts[1]]
+    if not cands:
+        raise SystemExit(f"{block}: no candidate cell for {scene}/{parts[1]}")
+    i = used.get(block, 0)
+    used[block] = i + 1
+    step = max(1, len(cands) // 8)
+    return list(cands[(i * step) % len(cands)]["cell"])
 
 
 def client_on_screen(screen: r.Screen) -> tuple[bool, float]:
@@ -73,7 +110,19 @@ def main() -> int:
     ap.add_argument("--count", type=int, default=1, choices=range(1, 21), metavar="1..20")
     ap.add_argument("--hold", type=float, default=40.0)
     ap.add_argument("--background", type=float, default=5.0)
+    ap.add_argument("--spot", action="append", default=[], metavar="SCENE=X,Y")
+    ap.add_argument("--cells", type=Path, default=None, help="m4_cells.py output (far blocks)")
     a = ap.parse_args()
+    for spec in a.spot:
+        apply_spot(spec)
+    cells = json.loads(a.cells.read_text()) if a.cells else None
+    if cells is not None:
+        for scene, (mapname, x, y) in bench.SCENES.items():
+            want = cells["spots"].get(scene)
+            if want is not None and list(want) != [mapname, x, y]:
+                raise SystemExit(f"{scene}: the cells were chosen at {want}, the spot is {mapname} "
+                                 f"{x},{y}: pass the same --spot")  # fmt: skip
+    far_used: dict[str, int] = {}
     stop = {"flag": False}
     signal.signal(signal.SIGTERM, lambda *_: stop.update(flag=True))
     counts = {"gm_failures": 0, "gm_disabled": 0, "spawns": 0, "heals": 0, "revives": 0}
@@ -81,10 +130,13 @@ def main() -> int:
 
     with a.out.open("a") as log, r.session("m4-spawns") as (agent, screen):
 
-        def note(block: str, scene: str, event: str, species: str | None = None) -> None:
+        def note(block: str, scene: str, event: str, species: str | None = None,
+                 cell: list[int] | None = None) -> None:  # fmt: skip
             rec = {"t_mono_ns": r.ns(), "t_wall": time.strftime("%H:%M:%S"), "count": a.count,
                    "block": block,
                    "scene": scene, "species": species, "event": event}  # fmt: skip
+            if cell is not None:
+                rec["cell"] = cell
             log.write(json.dumps(rec) + "\n")
             log.flush()
 
@@ -116,9 +168,24 @@ def main() -> int:
                     for _ in range(a.per_species):
                         if stop["flag"] or counts["gm_disabled"]:
                             raise KeyboardInterrupt
-                        if act.safe_gm(agent, screen, f"@monster {species} {a.count}", counts):
-                            counts["spawns"] += 1
-                            note(block, scene, "spawned", species)
+                        cell = far_cell(cells, block, scene, far_used)
+                        if cell is None:
+                            if act.safe_gm(agent, screen, f"@monster {species} {a.count}", counts):
+                                counts["spawns"] += 1
+                                note(block, scene, "spawned", species)
+                        else:
+                            mapname, sx, sy = bench.SCENES[scene]
+                            note(block, scene, "far_warp", species, cell)
+                            far = f"@warp {mapname} {cell[0]} {cell[1]}"
+                            act.safe_gm(agent, screen, far, counts)
+                            time.sleep(FAR_SETTLE_S)
+                            spawned = act.safe_gm(agent, screen, f"@monster {species} {a.count}",
+                                                  counts)  # fmt: skip
+                            act.safe_gm(agent, screen, f"@warp {mapname} {sx} {sy}", counts)
+                            time.sleep(FAR_SETTLE_S)
+                            if spawned:
+                                counts["spawns"] += 1
+                                note(block, scene, "spawned", species, cell)
                         agent.idle(a.hold)
                         act.safe_gm(agent, screen, "@killmonster2", counts)
                         note(block, scene, "killed", species)

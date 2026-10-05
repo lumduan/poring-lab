@@ -94,3 +94,66 @@ def test_a_png_session_offers_the_h264_interface_measure_uses(
     assert s.usable() == [7, 9]
     ((meta, img),) = list(s.frames([9]))
     assert meta["frame_id"] == 9 and int(img.max()) == 1
+
+
+# --- the re-run (phase3-plan §5b), pre-registered before its session ------------------------
+
+
+def test_the_local_background_is_the_last_gap_before_the_spawn() -> None:
+    ev = [
+        {"t_mono_ns": 1, "block": "outdoor-top", "scene": "outdoor", "species": None,
+         "event": "background_start"},
+        {"t_mono_ns": 5, "block": "outdoor-top", "scene": "outdoor", "species": None,
+         "event": "background_end"},
+        {"t_mono_ns": 10, "block": "outdoor-top", "scene": "outdoor", "species": "poring",
+         "event": "spawned", "cell": [261, 114]},
+        {"t_mono_ns": 50, "block": "outdoor-top", "scene": "outdoor", "species": "poring",
+         "event": "killed"},
+        {"t_mono_ns": 55, "block": "outdoor-top", "scene": "outdoor", "species": "poring",
+         "event": "background_end"},
+        {"t_mono_ns": 60, "block": "outdoor-top", "scene": "outdoor", "species": "poring",
+         "event": "spawned", "cell": [262, 114]},
+        {"t_mono_ns": 90, "block": "outdoor-top", "scene": "outdoor", "species": "poring",
+         "event": "killed"},
+    ]  # fmt: skip
+    first, second = m4.windows(ev)
+    assert first["background_local"] == [(1, 5)] and second["background_local"] == [(50, 55)]
+    assert (first["spawn_index"], second["spawn_index"]) == (0, 1)  # the A/A halves: even / odd
+    assert second["cell"] == [262, 114]
+
+
+def test_the_pre_registered_exclusions() -> None:
+    roi = (500.0, 400.0, 700.0, 600.0)
+    pred = (580.0, 460.0, 620.0, 500.0)
+    keep = (582.0, 462.0, 619.0, 499.0)
+    assert m4.exclusion(keep, pred, roi, False) is None
+    assert m4.exclusion((500.0, 462.0, 619.0, 499.0), pred, roi, False) == "roi_edge"
+    assert m4.exclusion((560.0, 440.0, 640.0, 520.0), pred, roi, False) == "merged_area"  # 4x
+    assert m4.exclusion(keep, pred, roi, True) == "occluder"
+    ui_roi = (0.0, 0.0, 300.0, 400.0)  # under the Basic Information window (0,0,222,325)
+    assert m4.exclusion((100.0, 100.0, 140.0, 140.0), (100.0, 100.0, 140.0, 140.0), ui_roi,
+                        False) == "ui"  # fmt: skip
+    edge_roi = (-10.0, 600.0, 200.0, 800.0)
+    assert m4.exclusion((0.0, 650.0, 40.0, 690.0), (0.0, 650.0, 40.0, 690.0), edge_roi,
+                        False) == "screen_edge"  # fmt: skip
+
+
+def test_the_rerun_summary_is_per_species_with_aa_halves_counts_and_k() -> None:
+    rows = []
+    for species, k in (("poring", 0.1333), ("lunatic", 0.1335)):
+        for third in ("top", "bottom"):
+            for spawn in range(6):
+                for _ in range(4):
+                    rows.append({"block": f"outdoor-{third}", "scene": "outdoor", "third": third,
+                                 "species": species, "spawn": spawn, "box_kind": "opaque",
+                                 "iou": 0.9, "edges": [1, 1, 1, 1], "ratio_h": 0.95,
+                                 "ratio_w": 1.0, "scale": 1.0, "k_h": k, "k_w": k})  # fmt: skip
+    out = m4.summarise(rows, per_species=True)
+    cond = out["conditions"]["outdoor/top/poring"]
+    assert cond["enough"] and cond["spawns"] == 6 and cond["n"] == 24 and cond["aa"]["pass"]
+    assert out["outdoor_top_vs_bottom/poring"]["pass"]
+    assert out["k"]["within_2pct_of"] == ["nostalro"] and out["k"]["pass"]
+    few = m4.summarise(rows[:12], per_species=True)  # 3 spawns: below the pre-registered minimum
+    assert not few["conditions"]["outdoor/top/poring"]["enough"]
+    off = m4.summarise([{**r, "k_h": 0.15} for r in rows], per_species=True)
+    assert not off["k"]["pass"]  # within neither prior: a finding, never a fit

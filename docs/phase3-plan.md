@@ -391,6 +391,76 @@ than any one frame. Outdoor centre passes the edge test (1.24 / 3.64 px) and mis
   - an occluder-free indoor scene;
   - the exclusion rule for merged components, written BEFORE the data is seen.
 
+### 5b. The re-run, pre-registered 2026-10-05 ~19:30 ICT, BEFORE its session
+
+Batt approved the §5a design on 2026-10-05: the kRO client, the main rathena, one fresh session.
+It changes several variables at once. The §5 thresholds are unchanged. Tooling:
+`scripts/m4_cells.py` (the cells), `scripts/m4_spawns.py --spot/--cells` (far spawns) and
+`scripts/m4_validate.py --opaque --rerun` (the analysis), all committed before the recording.
+
+**Scenes.**
+- Outdoor: `prt_fild08 268,107`, the open spot where the console camera was fitted (37 open cells
+  each way). bench.py's 170,375 has no room north for a top-third spawn.
+- Indoor: `prt_church 104,122`. Of 210 walkable GM spots scanned, it has the most occluder-free
+  cells in both the top and the bottom third (22 and 9). At 99,112 the pews leave 2 top and 0
+  bottom.
+
+**Cells.** `m4_cells.py`, written to `data/bench/m4/cells.json`, uses the console camera and the
+OPAQUE Poring idle envelope. A cell qualifies when:
+- the predicted box is fully inside 1280x720 and covers no UI window;
+- the anchor row lies in the condition's third (top < 240 <= centre < 480 <= bottom);
+- the same holds for every walkable neighbour within 1 cell (spawn jitter, the random walk);
+- indoor only: no non-walkable cell (pew or wall) lies IN FRONT of it, within 3 cells and
+  overlapping the sprite's columns.
+
+Candidates:
+- outdoor: 160 top, 206 centre, 51 bottom;
+- indoor: 24 top, 5 centre, 9 bottom.
+
+**Blocks.** Each block is one scene and one third; inside a block the species run one after another
+(`@killmonster2` between spawns).
+- Outdoor: `outdoor-top`, `outdoor-centre`, `outdoor-bottom`, each 5 Poring + 5 Lunatic.
+- Indoor: `indoor-top`, `indoor-centre`, `indoor-bottom`, each 5 Poring.
+- Each spawn is FAR, at a pre-chosen cell of that third:
+  1. `@warp` there (the same map, so the camera rotation is kept);
+  2. `@monster <species> 1`;
+  3. `@warp` back to the spot;
+  4. then the measured window starts.
+- `--hold 40`, `--background 5`. The GM never clicks a monster; `@heal`/`@alive` keep it alive.
+
+**Analysis rules (`--rerun`):**
+1. **Local background.** The background is the last background gap before the spawn. A frame counts
+   only if the GM stands on the same cell as in that gap.
+2. **Exclusions (frames are dropped and counted):**
+   - the observed component touches the ROI border (±40 px) or the screen edge;
+   - it covers a UI window;
+   - its area is over 1.5x the predicted envelope's;
+   - indoor: the monster's standing cell fails the occluder proxy above.
+
+   These are on top of §5's: one entity of the species in view, idle for at least 1 s, no other
+   actor's anchor within 120 px.
+3. **Conditions** are scene / third / species. Each needs at least 5 spawns and at least 20 clean
+   frames; otherwise it is NOT EVALUABLE, which is not a pass.
+4. **Ratio tests run per species:**
+   - top vs bottom, per scene;
+   - indoor vs outdoor at the centre, for Poring;
+   - each within 3 %.
+5. **A/A.** Within each condition, the odd vs the even spawns: the median ratio_h within 3 %.
+6. **k.** Per frame: the observed height divided by f/z, divided by the median native height of
+   the species' idle frames in that direction (the unknown idle phase cancels in the medians). The
+   median over all clean frames is the ONE scalar. It passes within 2 % of 0.1333 (nostalro) or
+   0.140 (korangar); the one it lands on is the k used by M5. The width version is reported beside
+   it, not gated.
+7. IoU and edges per condition, as in §5.
+
+**Verdict.** M4 PASSES only if every one of these holds:
+- every condition is evaluable;
+- IoU, edges and A/A pass in every condition;
+- every ratio test passes;
+- k passes.
+
+Anything else is a FINDING: name the missing term; never tune.
+
 ## 6. M5–M7: using the rule
 
 **M5, labels v1.** Every auto-label gets:

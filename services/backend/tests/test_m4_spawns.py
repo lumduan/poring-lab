@@ -53,3 +53,32 @@ def test_the_gate_sends_no_input_and_saves_no_screenshot(
     monkeypatch.setattr(m4.r, "Agent", forbidden)
     assert m4.check_client() == 1
     assert FakeScreen.closed
+
+
+def test_far_blocks_take_pre_chosen_cells_spread_over_the_list(m4: ModuleType) -> None:
+    cells = {"scenes": {"outdoor": {"top": [{"cell": [i, 100]} for i in range(16)],
+                                    "centre": [], "bottom": []}}}  # fmt: skip
+    used: dict[str, int] = {}
+    assert m4.far_cell(cells, "outdoor-1", "outdoor", used) is None  # a near block
+    assert m4.far_cell(None, "outdoor-top", "outdoor", used) is None  # no --cells
+    picks = [m4.far_cell(cells, "outdoor-top", "outdoor", used) for _ in range(4)]
+    assert picks == [[0, 100], [2, 100], [4, 100], [6, 100]]  # every len/8-th, nearest first
+    with pytest.raises(SystemExit, match="no candidate"):
+        m4.far_cell(cells, "outdoor-centre", "outdoor", used)
+
+
+def test_a_spot_moves_the_scene_and_the_other_scenes_reset(m4: ModuleType) -> None:
+    import bench
+
+    saved = (dict(bench.SCENES), dict(bench.RESET_VIA))
+    try:
+        m4.apply_spot("indoor=104,122")
+        assert bench.SCENES["indoor"] == ("prt_church", 104, 122)
+        assert bench.RESET_VIA["outdoor"] == "prt_church 104 122"
+        with pytest.raises(SystemExit):
+            m4.apply_spot("nowhere=1,2")
+    finally:
+        bench.SCENES.clear()
+        bench.SCENES.update(saved[0])
+        bench.RESET_VIA.clear()
+        bench.RESET_VIA.update(saved[1])
