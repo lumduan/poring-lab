@@ -27,6 +27,7 @@ Rules it enforces (CLAUDE.md, ADR-0002/0006):
     ro_agent.py calibrate-shell --stream        the same tab, cut from the console stream's frames
     ro_agent.py close-extra-shells              ONE "poring-lab shell" window (others get WM_CLOSE)
     ro_agent.py minimize-consoles               Win+Down each visible console (before the client)
+    ro_agent.py watch-status                    the lab-client watcher task: state + log tail (crop)
     ro_agent.py file-check "C:\\path"           BEFORE asking Batt for a file drop: size, time and
                                                 sha256 on Windows + his ready Copy-Item line
     ro_agent.py keys CODE...                    key taps (50 ms holds)
@@ -1309,6 +1310,18 @@ def launch_client(agent: Agent, screen: Screen) -> None:
     wait_state(screen, ["service_select", "login"], 90)
 
 
+# The durable lab-client watcher (Batt, 2026-10-05): a scheduled task as the standard user runs
+# %USERPROFILE%\poring-lab-watch\labwatch.ps1 (every 500 ms: a lab-client exe with a non-lab TCP
+# connection is killed and logged; an `alive` line every ~60 s). Read-only status line:
+WATCH_STATUS = (
+    "$i = Get-ScheduledTaskInfo -TaskName 'poring-lab watch'; "
+    "'task ' + (Get-ScheduledTask -TaskName 'poring-lab watch').State + ' last=' + $i.LastRunTime"
+    " + ' result=' + $i.LastTaskResult; "
+    "Get-Content (Join-Path $env:USERPROFILE 'poring-lab-watch\\watch.log') -Tail 3; "
+    "'KILLED lines: ' + @(Select-String -Path (Join-Path $env:USERPROFILE "
+    "'poring-lab-watch\\watch.log') -Pattern 'KILLED').Count; 'now ' + (Get-Date -f s)"
+)
+
 # The agent's own terminal (Batt, 2026-10-03): a desktop shortcut "poring-lab shell" ->
 # `wt.exe -w new new-tab --title "poring-lab shell" --suppressApplicationTitle -d C:\RO-rAthena
 # powershell.exe -NoLogo`, NOT "Run as administrator" (checked in the .lnk at creation). The Run
@@ -1629,6 +1642,11 @@ def main() -> None:
             print(to_png(screen.full(), SHOTS / "close_extra_shells.png"))
         elif cmd == "minimize-consoles":
             minimize_consoles(agent, screen)
+        elif cmd == "watch-status":  # the durable watcher (scheduled task; Batt 2026-10-05)
+            open_terminal(agent, screen)
+            console_type(agent, screen, WATCH_STATUS)
+            time.sleep(3)
+            print(to_png(screen.full(), SHOTS / "watch_status.png"))
         elif cmd == "file-check":  # file-check "<windows path>": BEFORE asking Batt for a drop
             open_terminal(agent, screen)
             console_type(agent, screen, file_check_command(args[0]))

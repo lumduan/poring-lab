@@ -48,6 +48,7 @@ import json
 import os
 import re
 import secrets
+import signal
 import subprocess
 import sys
 import time
@@ -76,6 +77,13 @@ GAMESTREAM = "poring-lab-gamestream-1"
 BACKEND = "poring-lab-backend-1"
 H264_ID = re.compile(r"^[0-9]{8}T[0-9]{6}-[a-z0-9][a-z0-9-]{0,47}$")  # s2spike.h264rec.ID_RE
 TOUCH_S = 3.0  # the control file's dead-man touch (the client stops it after 15 s)
+# SIGINT/SIGTERM end a recording CLEANLY (2026-10-05, the M4 re-run stops it when its spawns are
+# done): the loop ends as on its duration, so the shards and the manifest are finalised.
+STOP: dict[str, bool] = {"flag": False}
+
+
+def request_stop(*_: object) -> None:
+    STOP["flag"] = True
 
 
 def rec_dir(out: Path) -> Path:
@@ -236,7 +244,7 @@ def record(a: argparse.Namespace) -> dict[str, Any]:
         with subprocess.Popen(["ionice", "-c3", "-p", str(os.getpid())]) as p:
             p.wait()
         next_t = time.monotonic()
-        while time.monotonic() < t_end:
+        while time.monotonic() < t_end and not STOP["flag"]:
             t_cap, img, bus_id, source = screen.grab_meta(gx, gy, gw, gh)
             sources[source] = sources.get(source, 0) + 1
             if a.backend == "console" and source != "bus":
@@ -272,6 +280,8 @@ def record(a: argparse.Namespace) -> dict[str, Any]:
             time.sleep(max(0.0, next_t - time.monotonic()))
     finally:
         writer.close()
+    if STOP["flag"] and stop_reason == "duration":
+        stop_reason = "stopped by signal"
         screen.close()
     t1 = r.ns()
     cpu_cores = cpu.cores()
@@ -354,7 +364,7 @@ def record_h264(
             time.sleep(0.2)
         t_end = time.monotonic() + a.seconds
         next_touch = next_cap = time.monotonic()
-        while time.monotonic() < t_end:
+        while time.monotonic() < t_end and not STOP["flag"]:
             now = time.monotonic()
             if now >= next_touch:
                 os.utime(rec / "control")  # the dead-man touch
@@ -376,6 +386,8 @@ def record_h264(
             time.sleep(0.5)
     finally:
         write_control(rec, "stop")
+    if STOP["flag"] and stop_reason == "duration":
+        stop_reason = "stopped by signal"
     done = rec / f"{session_id}.done.json"
     deadline = time.monotonic() + 60
     while not done.exists():
@@ -467,6 +479,8 @@ def repack(session: Path) -> dict[str, Any]:
 
 
 def main() -> int:
+    signal.signal(signal.SIGINT, request_stop)
+    signal.signal(signal.SIGTERM, request_stop)
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     ap.add_argument("--repack", type=Path, help="rebuild an existing session's packets file")
     ap.add_argument("--backend", choices=["rdp", "console"])
