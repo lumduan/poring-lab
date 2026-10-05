@@ -36,6 +36,8 @@ environments:
     # The Thai-data experiment (Batt, 2026-10-05): the same rAthena code with a map cache made
     # from the Thai client's GRF, its own database (db-th), and a separate client copy. Runs ONE AT
     # A TIME with lab-rathena (same address and ports); sniffer-th attests server=lab-rathena-th.
+    # Batt, 2026-10-05: NOT adopted; kept as a documented, STOPPED option (db-th stopped, volume
+    # kept). Allowed stays true: it is still our own lab server if ever started again.
     status: allowed
     adr: "ADR-0006 environment 1b (the self-hosted rAthena, Thai-data experiment)"
     server: {host: 192.168.1.13, ports: [6900, 6121, 5121]}

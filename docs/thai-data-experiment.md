@@ -1,16 +1,32 @@
 ---
 doc_type: design
 hypothesis: null
-status: ACCUMULATING
+status: KILLED
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: "Batt decides whether to switch. Measured 2026-10-05: the Thai data adds nothing for the lab's sprites (all 12 KB species byte-identical to kRO) or the four lab maps, and its GRF cannot sit in front of the 2021 exe; rathena-th works end to end."
+next_action: "DECIDED 2026-10-05 (Batt): do NOT switch. The lab stays on the kRO data + the main rathena; rathena-th stays documented and stopped (db-th stopped, its volume kept). Revisit only if a future need appears that the kRO data cannot meet."
 ---
 
 # The Thai-data experiment: a separate client AND a separate rAthena
+
+> ➡️ **DECIDED 2026-10-05 (Batt): do NOT switch.** The lab stays on the kRO data and the main
+> rathena. The measurements below are why:
+> - every KB species' sprites are byte-identical to kRO;
+> - the four lab maps are identical;
+> - the Thai GRF cannot sit in front of the 2021 exe.
+>
+> rathena-th and the th client stay as a documented, STOPPED option: db-th is stopped
+> (`scripts/dev.sh --profile th stop db-th`) with its volume kept.
+>
+> What the experiment left that stays in use:
+> - the server identity in the interlock (ADR-0016);
+> - the AssistAddr override on both clients;
+> - the exe-scoped layer-1 allowlist (replacing the IP blocklist below);
+> - the durable watcher (ADR-0013 amendment);
+> - the Equip-texture placeholders.
 
 Batt, 2026-10-05: GO as an experiment, with BOTH the client and rAthena separated from the
 current setup. Nothing of today's setup is modified; the rollback is today's setup. M4's re-run,
