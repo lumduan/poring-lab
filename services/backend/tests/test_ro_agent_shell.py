@@ -365,3 +365,27 @@ def test_recover_with_no_retries_is_one_attempt(
     with pytest.raises(ro.Stop):
         ro.recover("gm")  # the default keeps its two retries
     assert names == ["ro_agent-recover"] * 3
+
+
+def test_the_th_profile_switches_client_accounts_shortcut_and_database(
+    ro: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """2026-10-05, the Thai-data experiment: kro stays the default; th is the separate client copy,
+    its RATHENA_TH_* accounts, its own shortcut position and db-th."""
+    monkeypatch.delenv("RO_PROFILE", raising=False)
+    env = {"RATHENA_TH_GM_USER": "thv_x", "RATHENA_TH_GM_PASSWORD": "p", "RATHENA_TH_GM_CHAR": "c",
+           "RO_SHORTCUT": "37,543", "RO_SHORTCUT_TH": "37,450"}  # fmt: skip
+    monkeypatch.setattr(ro, "env", lambda: env)
+    try:
+        assert ro.use_profile(None).name == "kro" and ro.DB == "poring-lab-db-1"
+        assert ro.shortcut_xy() == (37, 543)
+        with pytest.raises(ro.Stop):
+            ro.account("gm")  # kro's RATHENA_GM_* are absent here
+        th = ro.use_profile("th")
+        assert th.client == r"C:\RO-rAthena-th\client" and ro.DB == "poring-lab-db-th-1"
+        assert ro.account("gm") == ("thv_x", "p", "c")
+        assert ro.shortcut_xy() == (37, 450)
+        with pytest.raises(ro.Stop, match="unknown client profile"):
+            ro.use_profile("official")
+    finally:
+        ro.use_profile("kro")

@@ -46,6 +46,7 @@ Coordinates: GAME_REGION (.env, "x,y,w,h") is the client area; clicks are relati
 import argparse
 import contextlib
 import json
+import os
 import random
 import re
 import struct
@@ -53,6 +54,7 @@ import subprocess
 import sys
 import time
 from collections.abc import Callable, Iterator
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -71,6 +73,42 @@ HOLD_S = 0.05  # 50 ms holds: 20 ms registers 6/6 in the client (docs/client/rat
 SHORTCUT_BOX = (80, 106, 64, 84)  # the "Ragnarok Offline" desktop icon + label
 CLIENT = r"C:\RO-rAthena\client"
 EXE = "PoringLab"  # the rAthena copy ONLY (ADR-0006: the community client is never touched)
+
+
+# Client PROFILES (2026-10-05, the Thai-data experiment): which client copy, desktop shortcut,
+# accounts and database. `kro` is the lab client and its rathena (everything as before); `th` is
+# C:\RO-rAthena-th (the same exe + the Thai data.grf) and rathena-th/db-th, ONE AT A TIME with
+# rathena. Picked by --profile or $RO_PROFILE. Signatures cut on the th client are `@thdata`
+# variants of the same states (a state matches if any of its variants does).
+@dataclass(frozen=True)
+class Profile:
+    name: str
+    client: str
+    db: str
+    account_prefix: str  # <prefix>_AGENT_USER / _GM_USER / ... in .env
+    shortcut_env: str  # "x,y" of the profile's desktop shortcut in .env
+    variant: str | None  # the signature variant cut on this client
+
+
+PROFILES = {
+    "kro": Profile("kro", CLIENT, "poring-lab-db-1", "RATHENA", "RO_SHORTCUT", None),
+    "th": Profile("th", r"C:\RO-rAthena-th\client", "poring-lab-db-th-1", "RATHENA_TH",
+                  "RO_SHORTCUT_TH", "thdata"),
+}  # fmt: skip
+PROFILE = PROFILES["kro"]
+
+
+def use_profile(name: str | None) -> Profile:
+    """Select the client profile for this process (default: $RO_PROFILE, else kro)."""
+    global PROFILE, DB
+    key = name or os.environ.get("RO_PROFILE") or "kro"
+    if key not in PROFILES:
+        raise Stop(f"unknown client profile {key!r} (known: {', '.join(sorted(PROFILES))})")
+    PROFILE = PROFILES[key]
+    DB = PROFILE.db
+    return PROFILE
+
+
 SIG_SCALE = 8
 SIG_MATCH = 6.0  # mean abs grey difference (0-255): true matches 0-2, near-misses ~10
 
@@ -113,7 +151,7 @@ def env() -> dict[str, str]:
 
 def account(which: str) -> tuple[str, str, str]:
     e = env()
-    prefix = {"player": "RATHENA_AGENT", "gm": "RATHENA_GM"}[which]
+    prefix = f"{PROFILE.account_prefix}_" + {"player": "AGENT", "gm": "GM"}[which]
     user, pw, char = e.get(f"{prefix}_USER"), e.get(f"{prefix}_PASSWORD"), e.get(f"{prefix}_CHAR")
     if not (user and pw and char):
         raise Stop(f"{prefix}_USER/_PASSWORD/_CHAR missing in .env")
@@ -1186,7 +1224,7 @@ SHORTCUT = (112, 140)
 
 
 def shortcut_xy() -> tuple[int, int]:
-    raw = env().get("RO_SHORTCUT", "")
+    raw = env().get(PROFILE.shortcut_env, "")
     if not raw:
         return SHORTCUT
     x, y = (int(v) for v in raw.split(","))
@@ -1521,7 +1559,12 @@ def main() -> None:
         default="ro_agent-recover",
         help="recover: the agent id the backend logs (auto_recover: guarded_build)",
     )
+    ap.add_argument(
+        "--profile", choices=sorted(PROFILES), default=None,
+        help="client profile: kro (default) or th (C:\\RO-rAthena-th + rathena-th)",
+    )  # fmt: skip
     a = ap.parse_args()
+    use_profile(a.profile)
     cmd, args = a.cmd, a.args
     if cmd == "status":
         return status()
