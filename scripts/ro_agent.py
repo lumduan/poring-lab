@@ -71,6 +71,9 @@ LAB_STATE = ROOT / "state"  # the capture-backend lock + the interlock window, r
 BACKEND = "poring-lab-backend-1"
 DB = "poring-lab-db-1"
 HOLD_S = 0.05  # 50 ms holds: 20 ms registers 6/6 in the client (docs/client/rathena-client.md)
+# A chord's steps, paced: one instantaneous batch (down,down,up,up) is ignored by the client --
+# Alt+F4 first (2026-10-01), then Alt+E/Q/S in game (2026-10-05, Batt). 60 ms closed it at once.
+CHORD_STEP_S = 0.06
 SHORTCUT_BOX = (80, 106, 64, 84)  # the "Ragnarok Offline" desktop icon + label
 CLIENT = r"C:\RO-rAthena\client"
 EXE = "PoringLab"  # the rAthena copy ONLY (ADR-0006: the community client is never touched)
@@ -693,7 +696,20 @@ class Agent:
             time.sleep(0.03)
 
     def chord(self, *codes: str) -> None:
-        self.send([key(c, "down") for c in codes] + [key(c, "up") for c in reversed(codes)])
+        """Press in order, release in reverse, each step its own batch CHORD_STEP_S apart (the
+        modifier is held while the key goes down and up). Whatever was pressed is released even
+        when a later step is refused: a stuck Alt would turn every later click into Alt+click."""
+        pressed: list[str] = []
+        try:
+            for c in codes:
+                self.send([key(c, "down")])
+                pressed.append(c)
+                time.sleep(CHORD_STEP_S)
+        finally:
+            for c in reversed(pressed):
+                with contextlib.suppress(Stop):  # releases always pass the mux; keep the cause
+                    self.send([key(c, "up")])
+                time.sleep(CHORD_STEP_S)
 
     def type_text(self, text: str, *, sensitive: bool = False) -> None:
         for c in text:  # one balanced batch per character, paced
@@ -1250,10 +1266,7 @@ def close_client(agent: Agent, screen: Screen) -> None:  # noqa: ARG001
     detection (2026-10-01, severity 5, the processes were killed)."""
     ensure_window("login", "close")  # the session may already be gone (a lost-D3D client)
     activate_client(agent, screen)
-    # Paced: an Alt+F4 injected as one instantaneous chord is ignored; 60 ms steps close it at once.
-    for code, action in (("AltLeft", "down"), ("F4", "down"), ("F4", "up"), ("AltLeft", "up")):
-        agent.send([key(code, action)])
-        time.sleep(0.06)
+    agent.chord("AltLeft", "F4")  # paced (CHORD_STEP_S): one instantaneous batch is ignored
     time.sleep(3)
     log("close requested (Alt+F4)")
 
