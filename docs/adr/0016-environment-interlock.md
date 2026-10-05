@@ -80,6 +80,20 @@ Today it holds two environments:
   is again a config entry + an ADR-0006 entry (+ a sniffer that names it).
 - The backend hands it to the interlock only. It is never published to a viewer or an agent.
 
+**Known-forbidden endpoints (Batt, 2026-10-05).** The Thai client data's own clientinfo points at
+the official Thai RO login, `thro-acc3.gnjoy.in.th:50001` (49.229.28.13 when resolved on
+2026-10-05), and the family `*.gnjoy.in.th` (also `roc.gnjoy.in.th`, the registration site). They
+are recorded in `config/environments.yaml` as `official-ro-thai`, `forbidden`, with no signals:
+never green. For the th client, the defence is scoped to that client's EXE, **never OS-wide**: a
+future user may play official Thai RO normally on the Dell, and an OS-wide block would break that
+silently.
+1. An outbound Windows Firewall rule bound to `C:\RO-rAthena-th\client\PoringLab.exe` only (Batt
+   creates it: it needs admin). A firewall blocks IPs, so a DNS name is only as good as its
+   resolution at rule time: this is layer 1 only.
+2. A live, read-only watch of that exe's TCP connections (by PID and path): any non-lab remote
+   address kills the client at once, and it is reported.
+3. The sniffer's attestation: the session belongs to `lab-rathena-th`.
+
 **The client profile** (exe path, launch shortcut, server-select entry):
 - ro_agent launches only through the profile's shortcut and checks the login screens by their
   templates before it types. That is the login-phase check.

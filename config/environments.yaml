@@ -46,6 +46,19 @@ environments:
       server_select: "PoringLab-TH"
     accounts: []   # filled after db-th's first start (read back from its login table); empty = never green
     signals: [lab_host, session]
+  - id: official-ro-thai
+    # KNOWN-FORBIDDEN (Batt, 2026-10-05): the official Thai RO servers the Thai client data points
+    # at (its GRF's own data\clientinfo.xml). Never green: forbidden, no signals. Our th client
+    # overrides that file with a loose one pointing at rathena-th; defence in depth on the Dell is
+    # scoped to the th client EXE only, never OS-wide (a future user may play official Thai RO
+    # normally on that PC): (1) an outbound Windows Firewall block bound to
+    # C:\RO-rAthena-th\client\PoringLab.exe; (2) a live watch of that exe's TCP connections (any
+    # non-lab address kills it); (3) the sniffer's attestation (server=lab-rathena-th).
+    status: forbidden
+    adr: "ADR-0006 (official servers: forbidden); ADR-0016 known-forbidden endpoints"
+    server: {host: thro-acc3.gnjoy.in.th, ports: [50001]}   # 49.229.28.13 on 2026-10-05; *.gnjoy.in.th
+    signals: []
+    note: "Also roc.gnjoy.in.th (registration web). Record only: never connect, never test against."
   - id: community-bot-testing
     status: pending            # forbidden until its permission evidence AND its own signal set exist
     adr: "ADR-0006 environment 2; issue #2; docs/environments/community-server.md"

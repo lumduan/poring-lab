@@ -289,6 +289,10 @@ def test_no_config_file_fails_closed_and_the_committed_one_is_valid(app_client: 
     assert lab["lab-rathena"].status == "allowed" and lab["lab-rathena"].windows_host == HOST
     assert set(lab["lab-rathena"].accounts) == {AGENT, GM}
     assert lab["community-bot-testing"].status == "pending"
+    # Known-forbidden (Batt, 2026-10-05): the official Thai RO login the Thai data points at.
+    official = lab["official-ro-thai"]
+    assert official.status == "forbidden" and official.signals == [] and not official.accounts
+    assert official.server is not None and official.server.host.endswith(".gnjoy.in.th")
 
 
 def test_attested_green_then_expiry_releases_what_the_bot_holds(
