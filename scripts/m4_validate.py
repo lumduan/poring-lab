@@ -290,7 +290,45 @@ def measure(  # noqa: PLR0915
     use_spr: bool = False,
     rerun: bool = False,
     ncc: bool = False,
+    also: list[tuple[Path, Path]] | None = None,
 ) -> dict[str, Any]:
+    """Every measured row of ``session`` (+ each ``also`` (session, events) pair: one analysis over
+    several recordings of the SAME protocol; blocks are prefixed by the session so spawn counts and
+    the A/A halves stay distinct), written to ``rows_out``, then summarised."""
+    rows: list[dict[str, Any]] = []
+    skipped: dict[str, int] = {}
+    pairs = [(session, events_path)] + list(also or [])
+    for sess, ev in pairs:
+        part, sk = measure_rows(sess, ev, every, use_spr, rerun, ncc)
+        if len(pairs) > 1:
+            for r in part:
+                r["block"] = f"{sess.name[:15]}:{r['block']}"
+                r["session"] = sess.name
+        rows += part
+        for key, n in sk.items():
+            skipped[key] = skipped.get(key, 0) + n
+    if rows_out is not None:
+        rows_out.parent.mkdir(parents=True, exist_ok=True)
+        rows_out.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    result = summarise([r for r in rows if not r.get("excluded")], per_species=rerun)
+    if rerun:
+        reasons: dict[str, int] = dict(skipped)
+        for r in rows:
+            if r.get("excluded"):
+                reasons[r["excluded"]] = reasons.get(r["excluded"], 0) + 1
+        result["excluded"] = reasons
+        result["sessions"] = [str(sess.name) for sess, _ in pairs]
+    return result
+
+
+def measure_rows(  # noqa: PLR0915
+    session: Path,
+    events_path: Path,
+    every: int,
+    use_spr: bool = False,
+    rerun: bool = False,
+    ncc: bool = False,
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
     manifest = json.loads((session / "manifest.json").read_text())
     pk = session / ("packets.states.jsonl.gz" if (session / "packets.states.jsonl.gz").exists()
                     else "packets.jsonl.gz")  # fmt: skip
@@ -378,17 +416,7 @@ def measure(  # noqa: PLR0915
             if ncc and pred.box_kind == "opaque":
                 row["ncc"] = label_check.score(frame, sheets[species], pred)
             rows.append(row)
-    if rows_out is not None:
-        rows_out.parent.mkdir(parents=True, exist_ok=True)
-        rows_out.write_text("".join(json.dumps(r) + "\n" for r in rows))
-    result = summarise([r for r in rows if not r.get("excluded")], per_species=rerun)
-    if rerun:
-        reasons: dict[str, int] = dict(skipped)
-        for r in rows:
-            if r.get("excluded"):
-                reasons[r["excluded"]] = reasons.get(r["excluded"], 0) + 1
-        result["excluded"] = reasons
-    return result
+    return rows, skipped
 
 
 def group_stats(rs: list[dict[str, Any]], opaque: bool) -> dict[str, Any]:
@@ -506,8 +534,17 @@ def main() -> int:
         action="store_true",
         help="score each clean row with label_check (M5's tau: the 5th percentile)",
     )
+    ap.add_argument(
+        "--also",
+        nargs=2,
+        action="append",
+        metavar=("SESSION", "EVENTS"),
+        help="another recording of the same protocol, analysed together",
+    )
     a = ap.parse_args()
-    result = measure(a.datasets / a.session, a.events, a.every, a.rows, a.opaque, a.rerun, a.ncc)
+    also = [(a.datasets / sess, Path(ev)) for sess, ev in (a.also or [])]
+    result = measure(a.datasets / a.session, a.events, a.every, a.rows, a.opaque, a.rerun, a.ncc,
+                     also)  # fmt: skip
     text = json.dumps(result, indent=1)
     if a.out:
         a.out.parent.mkdir(parents=True, exist_ok=True)
