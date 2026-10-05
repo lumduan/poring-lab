@@ -231,6 +231,15 @@ ports, quickstart) and `docs/adr/`.
     cut-off line had left a `>>` prompt that swallowed tscon), then `cls` + a proof bar of a
     fresh width it waits for. A marker of a fixed width proves nothing (a stale one passed);
   - launch via the "Ragnarok Offline" shortcut; close with paced Alt+F4;
+  - **every lab client copy carries the AssistAddr override BEFORE its first login** (2026-10-05):
+    the 2021 exe opens the kRO data's `AssistAddr` at character select (Gravity's
+    `kro-assit.ragnarok.co.kr:3000`). Four loose `data\luafiles514\lua files\service_korea\
+    externalsettings_kr*.lub` set it to `127.0.0.1:3000` (client config, never an exe patch; rAthena's
+    web auth stays off). Both `C:\RO-rAthena` and `C:\RO-rAthena-th` have them
+    (docs/thai-data-experiment.md section 4; ADR-0016 known-forbidden endpoints);
+  - avoid the Equip window (Alt+Q / its button): the lab's kRO data lacks its button textures, so
+    modal "Resource File Loading fail" boxes stop the game loop, and the session times out at 60 s;
+  - chords are paced (`CHORD_STEP_S`, 60 ms): one instantaneous batch is ignored by the client;
   - **verify the target is in front before typing**: client = active title-bar signature, console
     = tab template, secrets re-checked every 4 characters;
   - this client fails ("Failed to Connect to Server") unless the server is picked within ~1–2 s of

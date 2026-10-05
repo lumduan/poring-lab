@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: "Batt decides how Thai assets get in front of kRO without crashing the 2021 exe (a selective overlay?) and whether the main client gets the AssistAddr override; then 3d sprite fidelity and 3e adoption cost."
+next_action: "Batt decides whether to switch. Measured 2026-10-05: the Thai data adds nothing for the lab's sprites (all 12 KB species byte-identical to kRO) or the four lab maps, and its GRF cannot sit in front of the 2021 exe; rathena-th works end to end."
 ---
 
 # The Thai-data experiment: a separate client AND a separate rAthena
@@ -177,3 +177,74 @@ Offline facts about the Thai GRF (our reader):
 - 84,450 entries lie past 2 GiB, but the kRO `data.grf` is 2.97 GB and works, so that is not the
   cause;
 - 245 directory entries carry flag 0x02.
+
+### 3d. Sprite fidelity: the sprites are IDENTICAL (measured 2026-10-05 16:25-17:05)
+
+**The Thai data is not needed for sprites.** For every species in the KB (poring, lunatic, pupa,
+drops, creamy, plankton, marina, hydra, kukre, vadon, black_mushroom, cornutus), the SPR and ACT
+files in the lab client's kRO `data.grf` and in the Thai GRF decode to the same bytes. That is 24
+of 24 files.
+
+How it was proven, with no file moved and the study decoder kept on the host:
+1. **Declared sizes.** In both GRFs, every file has the same compressed, aligned and uncompressed
+   sizes and the same flags (`.spr` 0x03 MIXCRYPT, `.act` 0x05 header-DES). The kRO copies live in
+   `data.grf` (plus copies under `npc\`); `rdata.grf` has none.
+2. **Raw diff on the Dell.** Both GRFs are on the Dell: `thdata.grf` is the Thai one. PowerShell
+   compared the stored (encrypted) bytes:
+   - poring, hydra.act, vadon.act and cornutus: 0 differing bytes;
+   - every other file differs ONLY at or past `zsize`, which is the 8-byte alignment padding;
+   - the one exception is `kukre.spr`, below.
+3. **Padding invariance on the host.** Decoding the Thai blob with its padding replaced (zeros,
+   0xFF, random) gives the same output for 23 files, so their kRO twins decode to the same bytes.
+4. **`kukre.spr`.** Its last block is DES-encrypted, so the padding changes all 8 bytes of that
+   block.
+   - Its kRO bytes were read off the Dell's screen (16 hex digits).
+   - The Thai bytes were read the same way and matched the host read.
+   - With the kRO bytes spliced into the Thai blob, it decodes to the same 18,998 bytes.
+
+The M4 render mismatches (phase3-plan.md §5a) therefore do not come from different art. The
+on-screen comparison planned for 3d is moot for these species.
+
+### 3e. Adoption cost (preliminary)
+
+| Item | Thai LAST (works today) | Selective overlay (sprites only, proposed) |
+|---|---|---|
+| Login and UI signatures | unchanged: the kRO UI; every login step matched the existing signatures (`service_select` 5.2 matches either list text, so the line is read by eye) | the same as Thai LAST |
+| Map geometry, camera fits, map cache | prt_fild08, prt_church, iz_dun00/01 identical (0 cells); prontera 46 flips; izlude a different map (avoid on rathena-th) | the same |
+| Sprites, KB, datasets, v0 labels | the kRO art, so nothing changes, and nothing is gained | **no change: the 12 KB species are byte-identical**, so an overlay buys nothing for them |
+| Server | rathena-th works end to end (accounts, characters, interlock, idle, walk, spawns) | the same |
+| Safety | the AssistAddr override is required on any client copy | the same |
+| Rollback | today's setup (`rm:sniffer-th,rathena-th`, `start:rathena`, `start:sniffer`); nothing deleted | the same, plus removing one overlay file |
+
+**Verdict input for Batt:**
+- For vision, the Thai data changes nothing measurable today: the 12 species' sprites and the
+  four lab maps are identical.
+- Its GRF cannot sit in front of the 2021 exe (it crashes at start).
+- What the experiment did produce, and what remains useful either way:
+  - a working separate server (rathena-th);
+  - the server identity in the interlock;
+  - the assist-call discovery and its config-only fix;
+  - the Equip-window texture finding below.
+
+### Found on the way (2026-10-05)
+
+- **Both lab clients now carry the AssistAddr override.**
+  - The main client (`C:\RO-rAthena`) got the same four loose files at 16:23, hashes equal to the
+    th copy (Batt: override first; no unprotected login to "prove" the call).
+  - Existing traces cannot show past calls: the DNS cache was empty, the DNS-Client operational
+    log is off, and firewall logging is off on all profiles.
+  - The watched main-client login (16:47) reached in game with the interlock green as
+    `lab-rathena` and `mainwatch` silent.
+  - A path-scoped `mainwatch` job like `thwatch` (log `C:\RO-rAthena-th\watch-main.log`) runs in
+    the agent's shell.
+- **The T3 "freeze" was the Equip window.** Reproduced on the MAIN client at 16:48.
+  - Alt+Q (or the Equip button) raises modal "Resource File Loading fail" boxes for
+    `texture\유저인터페이스\basic_interface\btn_e_change_a/b.bmp` (later ones, such as
+    `btn_e_off_c.bmp`, go to chat).
+  - The lab's kRO data lacks these textures. While a box is open the game loop stops. Past 60 s
+    the map session times out ("Disconnected from Server"), and the interlock goes red as it
+    should.
+  - It is not caused by the Thai data. Avoid the Equip window until the textures are supplied.
+- **Chords are paced now** (`ro_agent` d55d149). One instantaneous batch was ignored.
+  - Live check on the main client: Alt+E opened the inventory, Alt+Q opened Equip (with the
+    errors above), and Alt+F4 closed the client at once.

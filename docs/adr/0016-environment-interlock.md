@@ -117,9 +117,14 @@ What the layers did on 2026-10-05:
 - The th client now carries loose overrides with `AssistAddr = 127.0.0.1:3000`. This is client
   config only (Batt: never patch the exe; rAthena's web auth stays off). With them, login reaches
   in game and the watcher stays silent (`docs/thai-data-experiment.md` section 4).
-- The MAIN lab client (`C:\RO-rAthena`) runs the same exe on the same kRO data with no override.
-  So it very likely makes the same character-select call. It has neither layer 1 nor layer 2.
-  Applying the override there is Batt's decision.
+- The MAIN lab client (`C:\RO-rAthena`) runs the same exe on the same kRO data. So it very likely
+  made this call at every character select, though no trace remains to prove it: the DNS-Client
+  log and firewall logging are off. Batt: override first, never a new attempt to prove it.
+  - It got the same four loose files at 16:23; a watched login at 16:47 made no outbound
+    connection.
+  - It has no layer 1 rule. A path-scoped watcher (`mainwatch`) like layer 2 runs while the
+    agent's shell lives.
+  - **Any new client copy needs the override before its first login.**
 
 **The client profile** (exe path, launch shortcut, server-select entry):
 - ro_agent launches only through the profile's shortcut and checks the login screens by their
