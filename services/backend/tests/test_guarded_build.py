@@ -401,7 +401,6 @@ def test_only_a_sniffer_restart_or_recreate_triggers_it(
     assert bool(called) is expected
 
 
-
 def test_rm_step_stops_and_removes_only_its_containers(
     gb: ModuleType, monkeypatch: pytest.MonkeyPatch
 ) -> None:
