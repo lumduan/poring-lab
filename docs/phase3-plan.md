@@ -376,6 +376,14 @@ identical summary).
    component joined something wider. These frames need an exclusion rule.
 4. **No far spawns.** `@monster` spawns around the GM, so the top third never fills.
 
+**Re-scored 2026-10-05 with OPAQUE boxes** (`m4_validate.py --opaque`: the Thai SPRs decoded by
+the MIXCRYPT study decoder; the same recording, the kRO client; diagnostic, no verdict: the re-run
+waits for the Thai-data decision). Lunatic: the Thai sprite matches the kRO render (outdoor centre
+IoU 0.82, edges 1.1-1.2 px, size ratio 1.06 h / 0.97 w). Poring: widths match (1.00-1.07),
+heights 0.85: the predicted box is the ENVELOPE of the bouncing idle loop (phase unknown), taller
+than any one frame. Outdoor centre passes the edge test (1.24 / 3.64 px) and misses IoU narrowly
+(0.819 vs 0.85). The confounds above are unchanged (indoor bottom 0.52; the merged component).
+
 **Re-run design (Batt decides; nothing re-run yet):**
 - (a) the MIXCRYPT decision → opaque boxes re-score THIS recording for IoU/edges/k;
 - (b) a fresh session with:

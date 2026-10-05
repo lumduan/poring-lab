@@ -50,7 +50,7 @@ from poring_dataset.render import (  # noqa: E402
     load_scene,
     predict_sprite,
 )
-from poring_dataset.sprites import parse_act  # noqa: E402
+from poring_dataset.sprites import parse_act, parse_spr  # noqa: E402
 from poring_dataset.timeline import Timeline  # noqa: E402
 
 NAS = Path("/mnt/poring-lab-datasets")
@@ -176,8 +176,23 @@ def windows(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+def sprite_sheet(species: str, use_spr: bool) -> SpriteSheet:
+    """The species' ACT, plus its decoded SPR when asked and present (2026-10-05: the MIXCRYPT
+    study decoder made them; sprite_catalog.py --decode-mixcrypt writes them to ACT_DIR): OPAQUE
+    boxes instead of the ACT's quad boxes."""
+    act = parse_act((ACT_DIR / f"{species}.act").read_bytes())
+    spr_path = ACT_DIR / f"{species}.spr"
+    if use_spr and spr_path.exists():
+        return SpriteSheet(act, parse_spr(spr_path.read_bytes()))
+    return SpriteSheet(act)
+
+
 def measure(  # noqa: PLR0915
-    session: Path, events_path: Path, every: int, rows_out: Path | None = None
+    session: Path,
+    events_path: Path,
+    every: int,
+    rows_out: Path | None = None,
+    use_spr: bool = False,
 ) -> dict[str, Any]:
     manifest = json.loads((session / "manifest.json").read_text())
     pk = session / ("packets.states.jsonl.gz" if (session / "packets.states.jsonl.gz").exists()
@@ -196,7 +211,7 @@ def measure(  # noqa: PLR0915
     for w in windows(events):
         species = str(w["species"])
         if species not in sheets:
-            sheets[species] = SpriteSheet(parse_act((ACT_DIR / f"{species}.act").read_bytes()))
+            sheets[species] = sprite_sheet(species, use_spr)
         bg_ids = [
             f for t, f in by_t if any(a <= t <= b for a, b in w["background"]) and f in usable
         ]
@@ -298,8 +313,12 @@ def main() -> int:
     ap.add_argument("--every", type=int, default=5)
     ap.add_argument("--out", type=Path, default=None)
     ap.add_argument("--rows", type=Path, default=None)
+    ap.add_argument(
+        "--opaque", action="store_true",
+        help="use the decoded SPRs (OPAQUE boxes) where present; default: the ACT's quad boxes",
+    )  # fmt: skip
     a = ap.parse_args()
-    result = measure(a.datasets / a.session, a.events, a.every, a.rows)
+    result = measure(a.datasets / a.session, a.events, a.every, a.rows, a.opaque)
     text = json.dumps(result, indent=1)
     if a.out:
         a.out.parent.mkdir(parents=True, exist_ok=True)
