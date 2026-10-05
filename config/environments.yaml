@@ -1,8 +1,9 @@
 # The environment interlock's ALLOWLIST (ADR-0016, rewritten 2026-10-04; ADR-0006).
 #
 # A LOGIC interlock (Batt, 2026-10-04): the lab stays flexible -- adding a server or a client is an
-# entry HERE plus an ADR-0006 entry, never code. OS-level locks (the outbound firewall rule) belong
-# to production / teaching distributions only (ADR-0016 "Production option").
+# entry HERE plus an ADR-0006 entry, never code. The interlock adds no OS-level lock. Since
+# 2026-10-05 (Batt), the lab client EXEs get an exe-scoped outbound allowlist (lab host + loopback
+# only; never OS-wide, never the community client) and a durable watcher task: ADR-0016, ADR-0013.
 #
 # The backend reads this file (mounted read-only at /lab-config) and gates the mux: BOT presses
 # pass only while an `allowed` environment's signals are ALL green; in ASSIST, a bounded operator

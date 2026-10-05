@@ -85,6 +85,12 @@ play official Thai RO normally on the Dell):
 2. a live watch of that exe's TCP connections (any non-lab address kills it);
 3. the sniffer attestation (`server=lab-rathena-th`).
 
+➡️ **SUPERSEDED 2026-10-05 evening (Batt).** Layer 1 becomes an exe-scoped ALLOWLIST for BOTH lab
+clients: one Block rule per exe, for everything except 192.168.1.13 and loopback; 12 exes. The
+lines are prepared; they are applied from Batt's elevated console in the morning. It replaces the
+IP-blocklist rule above. Layer 2 is now the durable `poring-lab watch` scheduled task (ADR-0013
+amendment), which replaced the shell-bound `thwatch`/`mainwatch` jobs.
+
 Our th `clientinfo.xml` keeps the Thai values (version 24, langtype 5, servicetype thai) and
 points only at `192.168.1.13:6900`. Before the first online launch: the loose files are in place
 and name the lab address only; the three defences are up; the service-select screen must read

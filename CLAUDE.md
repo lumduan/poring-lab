@@ -105,7 +105,11 @@ ports, quickstart) and `docs/adr/`.
        login|desktop`, ≤ 120 s, tied to the lock SEQ).
 
      Releases always pass; green → red releases what the bot holds. Adding a server = config + an
-     ADR-0006 entry, never code. No firewall rule in the lab (production option only).
+     ADR-0006 entry, never code. The interlock itself adds no OS lock. Since 2026-10-05 (Batt) the
+     lab clients get an EXE-SCOPED layer-1 allowlist: one Block rule per lab exe, for every remote
+     address except 192.168.1.13 and loopback; never OS-wide, never the community client. It is
+     applied from Batt's elevated console (prepared, pending; ADR-0016). Layer 2 is the durable
+     `poring-lab watch` task (ADR-0013 amendment).
      ro_agent opens per-phase windows itself.
    - Concretely:
    - **Official servers and any other public server: forbidden** for every component, in every mode.

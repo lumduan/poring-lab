@@ -233,6 +233,39 @@ interlock says `no_session` (fail closed). `ro_agent recover` or a re-login rest
 - **Windows are trusted to the host operator.** Anyone with a shell on this host can open one.
   That is the same trust boundary as `state/` and `.env`.
 
+## Layer 1 in the lab: the exe-scoped allowlist (Batt, 2026-10-05 evening)
+
+Batt replaced the th client's IP blocklist with an exe-scoped ALLOWLIST for both lab clients. It is
+never OS-wide, and never the community client (`RagnarokClassic\Ragnarok.exe`).
+
+**Why Block rules.** Windows Firewall's Block rules win over Allow, and the default outbound
+policy is Allow. So "allow only the lab host and loopback" is ONE Block rule per exe, whose
+RemoteAddress is everything else:
+- `0.0.0.0-126.255.255.255`
+- `128.0.0.0-192.168.1.12`
+- `192.168.1.14-255.255.255.255`
+- `::2-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff`
+
+An Allow rule would be inert, so none is added.
+
+**The exes:** 12, the same six in each client folder (`C:\RO-rAthena\client`,
+`C:\RO-rAthena-th\client`):
+- `2021-11-03_Ragexe_1635926200.exe`
+- `PoringLab.exe`
+- `PoringLab_s0.exe` ... `PoringLab_s3.exe`
+
+They are listed with sha256 on 2026-10-05.
+
+**Group and rollout:**
+- The group is `poring-lab lab-only`.
+- Batt runs three agreed lines in an elevated console: create, read back, then remove the old
+  `PoringLab TH: block official RO (th exe only)` rule.
+- **Status:** prepared on 2026-10-05; applying it is parked to the next morning (Batt).
+- **Undo:** `Remove-NetFirewallRule -Group 'poring-lab lab-only'`.
+
+This differs from the Production-option template below: that template's IPv4 range also covered
+127.0.0.0/8, and its `::/0` blocked ::1.
+
 ## Production option (NOT applied in the lab): the outbound firewall rule
 For a production or teaching distribution, an OS-level lock adds an independent layer: Windows
 Firewall lets the lab exe reach only the lab server. Block rules win over the default Allow, so it
