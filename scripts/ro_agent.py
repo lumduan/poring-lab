@@ -26,6 +26,7 @@ Rules it enforces (CLAUDE.md, ADR-0002/0006):
     ro_agent.py calibrate-shell                 once: its tab template + the shortcut's signature
     ro_agent.py calibrate-shell --stream        the same tab, cut from the console stream's frames
     ro_agent.py close-extra-shells              ONE "poring-lab shell" window (others get WM_CLOSE)
+    ro_agent.py minimize-consoles               Win+Down each visible console (before the client)
     ro_agent.py file-check "C:\\path"           BEFORE asking Batt for a file drop: size, time and
                                                 sha256 on Windows + his ready Copy-Item line
     ro_agent.py keys CODE...                    key taps (50 ms holds)
@@ -1138,6 +1139,10 @@ LAYOUTS: dict[tuple[int, int], dict[str, tuple[int, int]]] = {
         "login_button": (740, 523),
         "server_ok": (714, 555),
         "chat_input": (300, 613),
+        # character select / make (2026-10-05, the th client: the same kRO UI as the main one)
+        "slot1": (231, 156),
+        "char_name": (742, 354),
+        "char_create": (934, 472),
     },
 }
 
@@ -1609,6 +1614,8 @@ def main() -> None:
             console_type(agent, screen, CLOSE_EXTRA_SHELLS)
             time.sleep(4)
             print(to_png(screen.full(), SHOTS / "close_extra_shells.png"))
+        elif cmd == "minimize-consoles":
+            minimize_consoles(agent, screen)
         elif cmd == "file-check":  # file-check "<windows path>": BEFORE asking Batt for a drop
             open_terminal(agent, screen)
             console_type(agent, screen, file_check_command(args[0]))

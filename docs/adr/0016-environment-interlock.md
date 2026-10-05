@@ -94,6 +94,33 @@ silently.
    address kills the client at once, and it is reported.
 3. The sniffer's attestation: the session belongs to `lab-rathena-th`.
 
+What the layers did on 2026-10-05:
+- Layer 1 was created 14:20 ICT by Batt and read back:
+  - program `C:\RO-rAthena-th\client\PoringLab.exe` only;
+  - remote addresses: the five resolved official Thai IPs;
+  - it is the only active rule that names any RO exe.
+- Layer 2 FIRED at 14:58:33. At CHARACTER SELECT the 2021 exe opened `kro-assit.ragnarok.co.kr:3000`:
+  - that is Gravity's kRO service (Cloudflare 104.18.20.108 / .21.108), which layer 1 did not list;
+  - the watcher killed the client.
+- The address is DATA, not code: `AssistAddr` in the client's
+  `lua files\service_<svc>\externalsettings_<svc>.lub`. The known values are:
+
+  | Service | AssistAddr |
+  |---|---|
+  | kRO (`_kr`) | `kro-assit.ragnarok.co.kr:3000` |
+  | kRO (`_kr_sak`) | `kro-assit-s.ragnarok.co.kr:3000` |
+  | kRO (`_qm`) | `kro-qm-1a.ragnarok.co.kr:3000` |
+  | Thai | `thro-acc3.gnjoy.in.th:3000` |
+  | Thai (stage) | `49.229.28.99:3000` |
+
+  All are recorded as known-forbidden (`official-ro-korea`, `official-ro-thai`).
+- The th client now carries loose overrides with `AssistAddr = 127.0.0.1:3000`. This is client
+  config only (Batt: never patch the exe; rAthena's web auth stays off). With them, login reaches
+  in game and the watcher stays silent (`docs/thai-data-experiment.md` section 4).
+- The MAIN lab client (`C:\RO-rAthena`) runs the same exe on the same kRO data with no override.
+  So it very likely makes the same character-select call. It has neither layer 1 nor layer 2.
+  Applying the override there is Batt's decision.
+
 **The client profile** (exe path, launch shortcut, server-select entry):
 - ro_agent launches only through the profile's shortcut and checks the login screens by their
   templates before it types. That is the login-phase check.

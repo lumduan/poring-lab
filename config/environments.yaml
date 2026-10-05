@@ -43,7 +43,7 @@ environments:
     client:
       exe: 'C:\RO-rAthena-th\client\PoringLab.exe'
       shortcut: "Ragnarok Offline TH"
-      server_select: "PoringLab-TH"
+      server_select: "PoringLab LAN (rathena-th)"   # the service-select line, read 2026-10-05
     accounts: [2000000, 2000001]   # db-th's agent (group 0) and GM (group 20), read back 2026-10-05 13:51.
     # NOTE: 2000001 is ALSO lab-rathena's agent: only the attested `server` tells them apart.
     signals: [lab_host, session]
@@ -57,9 +57,23 @@ environments:
     # non-lab address kills it); (3) the sniffer's attestation (server=lab-rathena-th).
     status: forbidden
     adr: "ADR-0006 (official servers: forbidden); ADR-0016 known-forbidden endpoints"
-    server: {host: thro-acc3.gnjoy.in.th, ports: [50001]}   # 49.229.28.13 on 2026-10-05; *.gnjoy.in.th
+    # Port 3000 too: the Thai data's own AssistAddr (lua files\service_thailand\externalsettings_th.lub
+    # = thro-acc3.gnjoy.in.th:3000; its _stage twin = 49.229.28.99:3000), read at character select.
+    server: {host: thro-acc3.gnjoy.in.th, ports: [50001, 3000]}   # 49.229.28.13 on 2026-10-05; *.gnjoy.in.th
     signals: []
-    note: "Also roc.gnjoy.in.th (registration web). Record only: never connect, never test against."
+    note: "Also roc.gnjoy.in.th (registration web) and 49.229.28.99:3000 (stage assist). Record only: never connect, never test against."
+  - id: official-ro-korea
+    # KNOWN-FORBIDDEN (found 2026-10-05 14:58 by the th client's watcher, which killed the client):
+    # the 2021 exe at CHARACTER SELECT opens AssistAddr from the kRO data's
+    # lua files\service_korea\externalsettings_kr*.lub (in data.grf / rdata.grf, servicetype korea):
+    # kro-assit.ragnarok.co.kr:3000 (Cloudflare: 104.18.20.108, 104.18.21.108 on 2026-10-05).
+    # The th client overrides it with loose files (AssistAddr = 127.0.0.1:3000, client config only;
+    # docs/thai-data-experiment.md section 4). The MAIN lab client has no override yet (Batt decides).
+    status: forbidden
+    adr: "ADR-0006 (official servers: forbidden); ADR-0016 known-forbidden endpoints"
+    server: {host: kro-assit.ragnarok.co.kr, ports: [3000]}
+    signals: []
+    note: "Also kro-assit-s.ragnarok.co.kr:3000 (_sak) and kro-qm-1a.ragnarok.co.kr:3000 (_qm, _sak_qm). Record only: never connect, never test against."
   - id: community-bot-testing
     status: pending            # forbidden until its permission evidence AND its own signal set exist
     adr: "ADR-0006 environment 2; issue #2; docs/environments/community-server.md"
