@@ -129,6 +129,9 @@ class Stop(SystemExit):
     """A refusal, a wrong screen or a failed check: stop, report, never retry against a human."""
 
 
+use_profile(None)  # $RO_PROFILE also applies when another script imports this module
+
+
 def ns() -> int:
     return time.monotonic_ns()
 
