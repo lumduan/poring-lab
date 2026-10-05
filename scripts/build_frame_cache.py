@@ -133,8 +133,8 @@ class ShardSink:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
-    ap.add_argument("--train", nargs="+", required=True)
-    ap.add_argument("--val", nargs="+", required=True)
+    ap.add_argument("--train", nargs="*", default=[])
+    ap.add_argument("--val", nargs="*", default=[])
     ap.add_argument("--test", nargs="*", default=[])
     ap.add_argument("--cache-id", default=None)
     ap.add_argument("--labels", choices=("v0", "v1"), default="v0")
@@ -149,6 +149,8 @@ def main() -> int:
     a = ap.parse_args()
     split = {"train": a.train, "val": a.val, "test": a.test}
     seen = [s for ss in split.values() for s in ss]
+    if not seen:
+        raise SystemExit("no session: give --train/--val/--test (a test-only cache is for eval)")
     if len(seen) != len(set(seen)):
         raise SystemExit("a session is in two splits: the split is BY SESSION")
     if GOLD in a.train or GOLD in a.val:
