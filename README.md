@@ -81,7 +81,16 @@ humanization and LLM integration are clearly marked TODOs.
 
 | `gamestream` | gamestream | ADR-0009 console mode: moonlight-qt shows the Sunshine stream of the Windows **console** session in the same Xvfb :99 (input from the mux's XTest, absolute mouse). Streams only while the capture-backend lock says `console`; idles under `rdp`. Read-only rootfs, AppImage unpacked into tmpfs, pairing key in the `gamestream-state` volume (mounted here only). |
 
+| `db-th`, `rathena-th`, `sniffer-th` | th | **The Thai-data experiment (Batt, 2026-10-05; ADR-0006 environment 1b):** a SEPARATE rAthena with the same image, SHA and pre-renewal mode; its own database (`db-th-data`) and captures (`captures-th`); a map cache generated from the Thai client's GRF by rAthena's own tool (`scripts/gen_mapcache_th.py` → `data/mapcache-th/`, never committed), installed as `db/import/map_cache.dat`. **One at a time with `rathena`:** the same pinned IP and LAN ports, so Docker refuses to start both. Its sniffer attests `server=lab-rathena-th` (ADR-0016 amendment). Its client is the separate copy `C:\RO-rAthena-th\` (`ro_agent.py --profile th`). |
+
 `sniffer` shares rathena's network namespace, so `--profile sniffer` brings `db` and `rathena` up with it.
+To switch to the Thai-data server and back (stop needs no guard; start does):
+
+    scripts/dev.sh --profile sniffer stop sniffer rathena
+    python3 scripts/guarded_build.py --sustain 30 --spike 25 start:db-th,rathena-th,sniffer-th@240
+    # ... and back:
+    scripts/dev.sh --profile th stop sniffer-th rathena-th
+    python3 scripts/guarded_build.py --sustain 30 --spike 25 start:rathena,sniffer@240
 `vision` works on its own, but it has nothing to look at until `remote` runs.
 
 ## Ports

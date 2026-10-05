@@ -365,6 +365,7 @@ pnpm, ruff and mypy are not installed on the host. Use `corepack pnpm` (the vers
 | `packages/poring_dataset/src/poring_dataset/{h264,sprites,render,timeline}.py` | Phase 3: the H.264 reader (`iter_every`: one pass), SPR/ACT (nostalro port), `predict_sprite`, `Timeline.state` |
 | `services/vision/src/poring_vision/{train,shards}.py` | Phase 3 training (AGPL, ADR-0018): YOLO from NAS tar shards, read-only; run via `guarded_build.py rundev:vision` |
 | `scripts/{kb_build,sprite_catalog,build_frame_cache,m4_spawns,gm_vitals}.py`, `poring_env/selfpos.py` | Phase 3: the KB (data/kb), the sprite catalog, the frame cache, the M4 protocol, the GM's vitals from pixels, T0 |
+| `scripts/{gen_mapcache_th,mapcache_diff,lab_servers}.py`, compose profile `th` | the Thai-data experiment (2026-10-05): rathena-th/db-th/sniffer-th, ONE AT A TIME with rathena; attestations name their `server` (ADR-0016 amendment); `ro_agent.py --profile th` |
 | `scripts/gen_packet_tables.py` | build-time length tables from pinned rAthena + OpenKore (never committed) |
 | `services/backend/src/poring_backend/{routes_packets,packets,display}.py` | ingest + viewer channel; black-screen detector |
 | `scripts/ro_agent.py`, `measure_motion.py`, `measure_delay.py`, `pressure_sampler.py` | agent login/recovery/GM checks; motion and packet→frame benchmarks; quant pressure ±5 min |
