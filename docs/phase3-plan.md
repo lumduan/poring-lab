@@ -7,7 +7,7 @@ verdict_date: 2026-10-04
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: "2026-10-05: M1 COMPLETE (MIXCRYPT study decoder, host-local); E2 alarm re-test run (Batt confirmed the red box). Open: the B6 hand-check redo (/qa opens on the gold set), the Thai-data experiment (separate client + rathena-th), then Batt decides the setup; the M4 re-run, M5 and v1 follow on it."
+next_action: "2026-10-05: M1 COMPLETE (MIXCRYPT study decoder, host-local); E2 alarm re-test run (Batt confirmed the red box). B6 hand-check DONE 13:38 (gold set pinned; v0 monster P 0.644 / R 0.580). Open: the Thai-data experiment (separate client + rathena-th), then Batt decides the setup; the M4 re-run, M5 and v1 follow on it."
 last_reviewed: 2026-10-05
 ---
 
@@ -75,7 +75,7 @@ flowchart TD
     M8["M8 · dataset build<br/>v0 cache BUILT"] --> M9
     D1["Batt · GPU window, data path,<br/>weights licence, the bar<br/>DECIDED"] --> M9
     M9["M9 · train under the 25 pct VRAM cap<br/>v0 BASELINE done"] --> M10
-    G["Batt · B6 hand-check<br/>NOT SAVED - redo"] --> M10
+    G["Batt · B6 hand-check<br/>DONE - gold set pinned"] --> M10
     M10["M10 · evaluate detector + tracker<br/>held-out sessions + gold + OOD"]
     M0 --> T1
     T1["T1 · motion model<br/>engine rules + mob_db + GAT<br/>READY"] --> T2
@@ -93,11 +93,10 @@ flowchart TD
     classDef decision fill:#fde0e0,stroke:#d05555,color:#8f2e2e
     classDef goal     fill:#ede0fb,stroke:#8a5cd8,color:#4d2e8f
 
-    class M0,M1,M2,M3,T0,D1,R done
+    class M0,M1,M2,M3,T0,D1,R,G done
     class M7,M8,M9 active
     class T1 ready
     class M4,M5,M6,T2,T3 blocked
-    class G decision
     class M10 goal
 ```
 
@@ -117,7 +116,7 @@ flowchart TD
 | **T1** motion model | ⬜ BLOCKED | the engine's movement rules (§6b) + mob_db speeds + GAT walkability, as a predictor | M0 |
 | **T2** tracker, simulated | ⬜ BLOCKED | predict → associate → update in WORLD cells, fed labels v1 thinned to 5 Hz with drops and noise | T1 + M5 |
 | **T3** tracker, real | ⬜ BLOCKED | the same on the detector's output; YOLO ~5 Hz, prediction at stream rate | T2 + M9 + T0 + the ADR-0015 ruling |
-| **M10** evaluate | 🟪 GOAL | detector: held-out sessions, Batt's gold set, the Roboflow set (OOD). Tracker: against packets (§6b) | M9 + T3 + the B6 hand-check ➡️ **NOT SAVED (2026-10-04 22:55):** `/qa` opened on the newest session, p3-indoor-c, so the review covered that run; indoor-v2's frames were never fetched and no hand-check file exists. Redo: `http://192.168.1.13:3000/qa?session=20261004T103815-console-s2-indoor-v2`, **A** on each of 27 frames (→ saves) |
+| **M10** evaluate | 🟪 GOAL | detector: held-out sessions, Batt's gold set, the Roboflow set (OOD). Tracker: against packets (§6b) | M9 + T3 + the B6 hand-check ➡️ ~~**NOT SAVED (2026-10-04 22:55):** `/qa` opened on the newest session, p3-indoor-c, so the review covered that run; indoor-v2's frames were never fetched and no hand-check file exists. Redo: `http://192.168.1.13:3000/qa?session=20261004T103815-console-s2-indoor-v2`, **A** on each of 27 frames (→ saves)~~ ➡️ **DONE 2026-10-05 13:32-13:38** (27/27 frames, 154 boxes; sha256 `e3e68082…6aa0`, pinned on the NAS). v0 auto-labels vs it, IoU 0.5: monster P 0.644 / R 0.580 / mean IoU 0.901; npc P 0.833 / R 0.833 / 0.979; overall P 0.715 / R 0.669 / 0.935: the v0 baseline labels v1 must beat |
 
 **The real bottlenecks:**
 - ➡️ **2026-10-04 22:00: the Windows console.** M4's session could not start: `to-console` stalls

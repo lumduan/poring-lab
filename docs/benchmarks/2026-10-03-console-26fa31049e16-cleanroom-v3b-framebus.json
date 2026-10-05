@@ -194,7 +194,37 @@
   }
  },
  "t_wall_end": "2026-10-03T18:04:15+0700",
- "label_iou": null,
+ "label_iou": {
+  "mean_iou": 0.935,
+  "session": "20261004T103815-console-s2-indoor-v2",
+  "per_class": {
+   "player": {
+    "tp": 0,
+    "fp": 0,
+    "fn": 0,
+    "precision": null,
+    "recall": null,
+    "mean_iou": null
+   },
+   "monster": {
+    "tp": 58,
+    "fp": 32,
+    "fn": 42,
+    "precision": 0.644,
+    "recall": 0.58,
+    "mean_iou": 0.901
+   },
+   "npc": {
+    "tp": 45,
+    "fp": 9,
+    "fn": 9,
+    "precision": 0.833,
+    "recall": 0.833,
+    "mean_iou": 0.979
+   }
+  },
+  "frames": 27
+ },
  "ocr_cer": null,
  "windows_side": null
 }
