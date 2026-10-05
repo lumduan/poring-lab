@@ -140,3 +140,14 @@ def test_close_deletes_only_a_marked_share_and_can_relock(
     assert not any(s["name"] == "poring-drop" for s in fake.shares)
     assert fake.readonly == "ON" and out["locked"].startswith(DS + "@pristine-")
     assert nd.main(["close", "poring-drop"]) == 0  # idempotent: already closed
+
+
+def test_midclt_accepts_a_bare_python_literal(
+    nd: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """2026-10-05: sharing.smb.delete printed `True`; the close crashed after the delete, before
+    its read-backs. JSON stays JSON; a bare literal is mapped; anything else comes back as text."""
+    for out, want in (('[{"id": 1}]', [{"id": 1}]), ("True", True), ("None", None), ("", None),
+                      ("weird", "weird")):  # fmt: skip
+        monkeypatch.setattr(nd, "nas", lambda cmd, o=out: o + "\n")
+        assert nd.midclt("x") == want

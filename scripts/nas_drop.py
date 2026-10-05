@@ -52,7 +52,14 @@ def nas(cmd: str) -> str:
 
 def midclt(method: str, *args: Any) -> Any:
     out = nas(" ".join(["midclt", "call", method, *(shlex.quote(json.dumps(a)) for a in args)]))
-    return json.loads(out) if out.strip() else None
+    text = out.strip()
+    if not text:
+        return None
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        # some methods print a bare Python literal (sharing.smb.delete: True), 2026-10-05
+        return {"True": True, "False": False, "None": None}.get(text, text)
 
 
 def frigate() -> str:
