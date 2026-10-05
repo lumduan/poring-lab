@@ -127,16 +127,18 @@ def cmd_score(a: argparse.Namespace) -> int:
         raise SystemExit(f"no hand-check saved for {a.session} ({path})")
     hand = json.loads(path.read_text())
     session = find_session(a.session, a.datasets, a.root)
-    lab = qa_export.Labeler(session, a.offset_ms)
+    lab = qa_export.Labeler(session, a.offset_ms, labels=a.labels,
+                            **({"k": a.k} if a.k is not None else {}))  # fmt: skip
     result = {"session": a.session, "handcheck_sha256": sha256(path),
               "camera": lab.camera_path.name, "offset_ms": lab.offset_ms,
-              **score(hand, lab.boxes)}  # fmt: skip
+              "labels": a.labels, "k": lab.k, **score(hand, lab.boxes)}  # fmt: skip
     if a.update_bench:
         run = newest_run(lab.manifest["config"])
         if run is None:
             raise SystemExit("no benchmark run of this backend + client + paint path")
         res = json.loads(run.read_text())
-        res["label_iou"] = {
+        # v0 keeps its key (the baseline); v1 gets its own, never overwriting v0's
+        res["label_iou" if a.labels == "v0" else f"label_iou_{a.labels}"] = {
             "mean_iou": result["overall"]["mean_iou"], "session": a.session,
             "per_class": result["per_class"], "frames": result["frames"],
         }  # fmt: skip
@@ -160,6 +162,8 @@ def main(argv: list[str] | None = None) -> int:
         if name == "score":
             p.add_argument("--offset-ms", default="auto")
             p.add_argument("--update-bench", action="store_true")
+            p.add_argument("--labels", choices=("v0", "v1"), default="v0")
+            p.add_argument("--k", type=float, default=None, help="v1: M4's k (default nostalro)")
     a = ap.parse_args(argv)
     return cmd_pin(a) if a.cmd == "pin" else cmd_score(a)
 

@@ -137,7 +137,8 @@ def main() -> int:
     ap.add_argument("--val", nargs="+", required=True)
     ap.add_argument("--test", nargs="*", default=[])
     ap.add_argument("--cache-id", default=None)
-    ap.add_argument("--labels", choices=("v0",), default="v0")
+    ap.add_argument("--labels", choices=("v0", "v1"), default="v0")
+    ap.add_argument("--k", type=float, default=None, help="v1: M4's k (default: nostalro)")
     ap.add_argument("--every", type=int, default=15)  # H.264 (~32 fps): ~2 fps kept
     ap.add_argument("--every-png", type=int, default=1)  # PNG sessions (~1 fps): every frame
     ap.add_argument("--max-per-session", type=int, default=None)
@@ -164,7 +165,8 @@ def main() -> int:
         for sid in ids:
             path = a.datasets / sid
             manifest = json.loads((path / "manifest.json").read_text())
-            labeler = qa_export.Labeler(path)
+            labeler = qa_export.Labeler(path, labels=a.labels,
+                                        **({"k": a.k} if a.k is not None else {}))  # fmt: skip
             w, h = labeler.size
             row = {"split": part, "format": manifest.get("format") or "png", "kept": 0,
                    "gm_window": 0, "off_scene": 0, "boxes": 0, "shards": []}  # fmt: skip
@@ -195,7 +197,8 @@ def main() -> int:
             print(json.dumps({sid: row}), flush=True)
     sink.close()
     manifest = {
-        "cache_id": cache_id, "labels": a.labels, "every": a.every, "every_png": a.every_png,
+        "cache_id": cache_id, "labels": a.labels, "k": a.k, "every": a.every,
+        "every_png": a.every_png,
         "quality": a.quality,
         "names": {v: k for k, v in sorted(CLASSES.items(), key=lambda kv: kv[1])},
         "split": split, "sessions": sessions, "shards": sink.done, "gold": GOLD,

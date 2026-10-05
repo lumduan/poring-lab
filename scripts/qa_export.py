@@ -39,10 +39,41 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from poring_dataset import mapcache  # noqa: E402
 from poring_dataset.camera import load_indoor_table, map_camera, projector_for  # noqa: E402
-from poring_dataset.labels import gm_windows, in_windows, labels_for  # noqa: E402
+from poring_dataset.labels import gm_windows, in_windows, labels_for, labels_for_v1  # noqa: E402
 from poring_dataset.projection import camera_file  # noqa: E402
+from poring_dataset.render import K_NOSTALRO, SpriteSheet, load_scene  # noqa: E402
 from poring_dataset.shards import encode_png, read_shard  # noqa: E402
+from poring_dataset.sprites import parse_act, parse_spr  # noqa: E402
 from poring_dataset.timeline import Timeline  # noqa: E402
+
+# v1 (M5): the decoded monster sprites (sprite_catalog.py --decode-mixcrypt; RAM, study only) and
+# the KB's job table (kb_build.py). Both are local, never committed.
+SPRITE_DIR = Path("/dev/shm/poring-lab-tmp/sprites/data/sprite/몬스터")  # sprite_catalog.py --work
+KB_CLASSES = ROOT / "data" / "kb" / "classes.json"
+
+
+def job_aegis() -> dict[int, str]:
+    """job id -> aegis name, over every map in the KB's class table."""
+    table = json.loads(KB_CLASSES.read_text())
+    return {int(job): row["aegis"] for rows in table.values() for job, row in rows.items()}
+
+
+class Sheets:
+    """job -> the species' OPAQUE SpriteSheet (None: not catalogued or no decoded SPR)."""
+
+    def __init__(self, directory: Path = SPRITE_DIR) -> None:
+        self.directory, self.aegis, self.cache = directory, job_aegis(), {}
+
+    def __call__(self, job: int | None) -> SpriteSheet | None:
+        if job is None or job not in self.aegis:
+            return None
+        if job not in self.cache:
+            name = self.aegis[job].lower()
+            act, spr = self.directory / f"{name}.act", self.directory / f"{name}.spr"
+            self.cache[job] = (SpriteSheet(parse_act(act.read_bytes()), parse_spr(spr.read_bytes()))
+                               if act.exists() and spr.exists() else None)  # fmt: skip
+        return self.cache[job]
+
 
 BUNDLES = ROOT / "services" / "frontend" / ".qa-local"
 COLOURS = {"player": (255, 200, 60), "monster": (60, 220, 255), "npc": (120, 255, 120)}  # BGR
@@ -89,7 +120,12 @@ def draw(img: np.ndarray, boxes: list[dict[str, Any]]) -> np.ndarray:
 class Labeler:
     """A session's auto-labels at any frame time (qa_export and label_iou.py share it)."""
 
-    def __init__(self, session: Path, offset_ms: str = "auto", *, allow_invalid: bool = False):
+    def __init__(self, session: Path, offset_ms: str = "auto", *, allow_invalid: bool = False,
+                 labels: str = "v0", k: float = K_NOSTALRO):  # fmt: skip
+        if labels not in ("v0", "v1"):
+            raise SystemExit(f"unknown labels {labels!r}")
+        self.labels, self.k = labels, k
+        self.sheets = Sheets() if labels == "v1" else None
         self.manifest = json.loads((session / "manifest.json").read_text())
         validity = self.manifest.get("validity") or {}
         if validity.get("status") == "INVALID" and not allow_invalid:
@@ -108,7 +144,9 @@ class Labeler:
             self.offset_ms, self.offset_run = auto_offset_ms(self.manifest["config"])
         else:
             self.offset_ms = float(offset_ms)
-        with gzip.open(session / "packets.jsonl.gz", "rt") as fh:
+        packets = session / "packets.jsonl.gz"
+        states = session / "packets.states.jsonl.gz"  # v1: headings + effect states (M3 sidecar)
+        with gzip.open(states if labels == "v1" and states.exists() else packets, "rt") as fh:
             events = [json.loads(line) for line in fh]
         self.timeline = Timeline(events, mapcache.load(prere=True))
         self.windows = gm_windows(events)
@@ -125,10 +163,19 @@ class Labeler:
             cam = map_camera(self.camera, world.map, self.indoor)
             self.projectors[world.map] = (projector, which, None if cam is None else cam.yaw)
         projector, _, yaw = self.projectors[world.map]
+        if self.labels == "v1" and world.self_pos is not None and world.map is not None:
+            tw = t - int(self.offset_ms * 1e6)
+            scene = load_scene(self.camera, world.map, world.self_pos, indoor_table=self.indoor)
+            assert self.sheets is not None
+            boxes = labels_for_v1(world, projector, self.size, scene=scene,
+                                  state=lambda gid: self.timeline.state(gid, tw),
+                                  sheet=self.sheets, k=self.k, camera_yaw=yaw)  # fmt: skip
+        else:
+            boxes = labels_for(world, projector, self.size, camera_yaw=yaw)
         return [
             {"x1": b.x0, "y1": b.y0, "x2": b.x1, "y2": b.y1, "cls": b.cls, "gid": b.gid,
-             "facing": b.facing}
-            for b in labels_for(world, projector, self.size, camera_yaw=yaw)
+             "facing": b.facing, "kind": b.kind, "state": b.state, "phase_known": b.phase_known}
+            for b in boxes
         ]  # fmt: skip
 
 

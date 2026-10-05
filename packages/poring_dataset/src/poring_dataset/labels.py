@@ -26,7 +26,8 @@ import numpy as np
 
 from poring_dataset.camera import displayed_direction
 from poring_dataset.projection import project
-from poring_dataset.timeline import FrameWorld
+from poring_dataset.render import Actor, MonsterAction, Scene, SpriteSheet, predict_sprite
+from poring_dataset.timeline import ActorState, FrameWorld
 from poring_dataset.ui_layout import UI_RECTS, covered_fraction
 
 # objtype (rAthena bl type as sent in 0x09FD/FE/FF): 0 = player, 5 = monster, 6 = NPC.
@@ -53,6 +54,9 @@ class Label:
     x1: float
     y1: float
     facing: int | None = None  # camera.SPRITE_DIRECTIONS index; None when the heading is unknown
+    kind: str = "v0"  # the box: "v0" (a class constant) or predict_sprite's "opaque"/"quad"
+    state: str | None = None  # v1: the Timeline state the box was drawn for
+    phase_known: bool | None = None  # v1: False = the action's envelope (idle/walk phase unknown)
 
     def yolo(self, width: int, height: int) -> str:
         cx, cy = (self.x0 + self.x1) / 2 / width, (self.y0 + self.y1) / 2 / height
@@ -68,8 +72,11 @@ def labels_for(
     exclude_gids: Iterable[int] = (),
     camera_yaw: float | None = None,
     ui_rects: tuple[tuple[int, int, int, int], ...] = UI_RECTS,
+    keep_all: bool = False,
 ) -> list[Label]:
     """Boxes for every visible entity, in pixels of the game region (width, height = size).
+    ``keep_all`` (v1's use): also return the entities whose v0 box fails the on-screen/UI rules,
+    marked kind="dropped", so v1 can judge its own box instead.
     ``h``: a flat homography, or a projector (camera.projector_for: the perspective camera with the
     map's altitude) called with the cell offsets and the player's cell. ``camera_yaw``: the map's
     camera yaw (camera.map_camera), for each box's facing."""
@@ -99,6 +106,70 @@ def labels_for(
         hidden_by_ui = covered_fraction((box.x0, box.y0, box.x1, box.y1), ui_rects) >= MAX_UI_COVER
         if on_screen and not hidden_by_ui:
             out.append(clipped)  # at least half the box on screen, and not behind the UI
+        elif keep_all:
+            out.append(Label(cls, ent.gid, clipped.x0, clipped.y0, clipped.x1, clipped.y1, facing,
+                             kind="dropped"))  # fmt: skip
+    return out
+
+
+# v1 (Phase 3 M5): the Timeline state -> the monster's ACT action group. Attack, hurt and die play
+# once from the state's start (their phase is the time since); idle and walk use the envelope.
+STATE_ACTION = {"idle": MonsterAction.IDLE, "sit": MonsterAction.IDLE, "walk": MonsterAction.WALK,
+                "attacking": MonsterAction.ATTACK, "hurt": MonsterAction.HURT,
+                "dying": MonsterAction.DIE}  # fmt: skip
+ONE_SHOT = frozenset({MonsterAction.ATTACK, MonsterAction.HURT, MonsterAction.DIE})
+
+
+def labels_for_v1(
+    frame: FrameWorld,
+    h: np.ndarray | Callable[[np.ndarray, tuple[int, int]], np.ndarray],
+    size: tuple[int, int],
+    *,
+    scene: Scene,
+    state: Callable[[int], ActorState | None],
+    sheet: Callable[[int], SpriteSheet | None],
+    k: float,
+    exclude_gids: Iterable[int] = (),
+    camera_yaw: float | None = None,
+    ui_rects: tuple[tuple[int, int, int, int], ...] = UI_RECTS,
+) -> list[Label]:
+    """v1 labels: v0's filters and its player/NPC boxes, but every monster of a catalogued species
+    gets predict_sprite's box (its sprite, at its projected anchor, scaled by the camera and ``k``)
+    for the action its Timeline state shows. A monster the client draws nothing for gets no box; an
+    uncatalogued species keeps the v0 box (kind "v0")."""
+    if frame.self_pos is None:
+        return []
+    width, height = size
+    v0 = {lab.gid: lab for lab in labels_for(frame, h, size, exclude_gids=exclude_gids,
+                                             camera_yaw=camera_yaw, ui_rects=ui_rects,
+                                             keep_all=True)}  # fmt: skip
+    out: list[Label] = []
+    for ent in frame.entities:
+        base = v0.get(ent.gid)
+        if base is None:
+            continue  # filtered by v0's rules (class, own GM, hidden, never drawn)
+        sh = sheet(ent.job) if base.cls == "monster" else None
+        st = state(ent.gid) if sh is not None else None
+        if sh is None or st is None:
+            if base.kind != "dropped":
+                out.append(base)
+            continue
+        action = STATE_ACTION.get(st.state, MonsterAction.IDLE)
+        elapsed = st.elapsed_ms if action in ONE_SHOT else None
+        heading = st.facing if st.facing is not None else (ent.heading or 0)
+        pred = predict_sprite(Actor((float(ent.x), float(ent.y)), int(heading), action,
+                                    elapsed_ms=elapsed, duration_ms=st.duration_ms),
+                              sh, scene, k)  # fmt: skip
+        if pred is None:
+            continue  # the client draws nothing for it now
+        x0, y0, x1, y1 = pred.box
+        bw, bh = x1 - x0, y1 - y0
+        clipped = (max(x0, 0), max(y0, 0), min(x1, width), min(y1, height))
+        on_screen = clipped[2] - clipped[0] >= bw / 2 and clipped[3] - clipped[1] >= bh / 2
+        if not on_screen or covered_fraction(pred.box, ui_rects) >= MAX_UI_COVER:
+            continue
+        out.append(Label("monster", ent.gid, *clipped, facing=base.facing, kind=pred.box_kind,
+                         state=st.state, phase_known=pred.phase_known))  # fmt: skip
     return out
 
 
