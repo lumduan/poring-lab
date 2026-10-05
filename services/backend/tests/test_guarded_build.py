@@ -399,3 +399,33 @@ def test_only_a_sniffer_restart_or_recreate_triggers_it(
     else:
         gb.run_start(s.services, 1, None, recreate=s.kind == "recreate")
     assert bool(called) is expected
+
+
+
+def test_rm_step_stops_and_removes_only_its_containers(
+    gb: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """2026-10-05: a clean switch between rathena and rathena-th. Containers only: never volumes
+    (no -v) or images."""
+    step = gb.parse_step("rm:sniffer,rathena")
+    assert (step.kind, step.services) == ("rm", ["sniffer", "rathena"])
+    with pytest.raises(ValueError):
+        gb.parse_step("rm:bad name")
+    ran: list[list[str]] = []
+    monkeypatch.setattr(gb, "run_process", lambda label, cmd, guard, env=None: record(ran, cmd))
+    monkeypatch.setattr(gb, "cgroup_paths", lambda: {})
+    monkeypatch.setattr(gb.sys, "argv", ["guarded_build.py", "rm:sniffer,rathena"])
+    monkeypatch.setattr(gb, "Guard", lambda *a, **k: _FakeGuard())
+    assert gb.main() == 0
+    assert ran == [[*gb.DEV, "rm", "-s", "-f", "sniffer", "rathena"]]
+    assert "-v" not in ran[0]
+
+
+class _FakeGuard:
+    paths: dict[str, str] = {}
+
+    def describe(self) -> str:
+        return "test"
+
+    def summary(self) -> str:
+        return "test"

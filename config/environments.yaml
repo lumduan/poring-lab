@@ -44,7 +44,8 @@ environments:
       exe: 'C:\RO-rAthena-th\client\PoringLab.exe'
       shortcut: "Ragnarok Offline TH"
       server_select: "PoringLab-TH"
-    accounts: []   # filled after db-th's first start (read back from its login table); empty = never green
+    accounts: [2000000, 2000001]   # db-th's agent (group 0) and GM (group 20), read back 2026-10-05 13:51.
+    # NOTE: 2000001 is ALSO lab-rathena's agent: only the attested `server` tells them apart.
     signals: [lab_host, session]
   - id: official-ro-thai
     # KNOWN-FORBIDDEN (Batt, 2026-10-05): the official Thai RO servers the Thai client data points

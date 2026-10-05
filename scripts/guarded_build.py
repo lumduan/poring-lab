@@ -41,6 +41,10 @@ On a breach:
                 auto_recover) ONLY when the mux is ASSIST (never BOT), the capture lock is
                 rdp/steady or console/steady, the interlock config is ok and it is not already
                 green. One attempt: a failure stops here (rc 1) and is reported, never retried.
+  rm:<svc>[,<svc>...]
+                scripts/dev.sh rm -s -f <svcs>: stop and REMOVE those containers (never volumes or
+                images); the next start recreates them identically from compose. For a clean
+                switch between rathena and rathena-th (2026-10-05).
   run:<svc>[@<seconds>]=<command>
                 docker compose --profile <svc> run --rm --no-deps <svc> <command>, killed after
                 <seconds> (default 600), its output's tail printed. ONLY `vision` (check_gpu.py):
@@ -162,6 +166,11 @@ def parse_step(step: str) -> Step:
         if not all(SERVICE.match(s) for s in services):
             raise ValueError(f"{step}: expected {kind}:<svc>[,<svc>...][@<seconds>]")
         return Step(kind, services, float(secs or 180))
+    if kind == "rm":
+        services = arg.split(",")
+        if not all(SERVICE.match(s) for s in services):
+            raise ValueError(f"{step}: expected rm:<svc>[,<svc>...]")
+        return Step(kind, services)
     if kind in ("run", "rundev"):
         head, eq, command = arg.partition("=")
         name, _, secs = head.partition("@")
@@ -555,6 +564,8 @@ def main() -> int:
             ok = run_up(step.seconds or 180, guard)
         elif step.kind == "restart":
             ok = run_restart(step.services, step.seconds or 180, guard)
+        elif step.kind == "rm":
+            ok = run_process(step.label, [*DEV, "rm", "-s", "-f", *step.services], guard)
         else:
             ok = run_start(
                 step.services, step.seconds or 180, guard, recreate=step.kind == "recreate"

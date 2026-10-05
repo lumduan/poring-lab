@@ -762,6 +762,9 @@ def test_rathena_th_runs_one_at_a_time_with_rathena() -> None:
     ip = th["networks"]["default"]["ipv4_address"]
     assert ip == rathena["networks"]["default"]["ipv4_address"] == Settings().ingest_peer
     assert lan_ports(th) == lan_ports(rathena) == ["6900:6900", "6121:6121", "5121:5121"]
+    # db-th is pinned HIGH: unpinned, it took rathena's .6 while rathena was down (2026-10-05)
+    db_th_ip = services["db-th"]["networks"]["default"]["ipv4_address"]
+    assert int(db_th_ip.rsplit(".", 1)[1]) >= 200 and db_th_ip != ip
 
 
 def test_the_current_rathena_and_its_db_are_untouched_by_the_experiment() -> None:

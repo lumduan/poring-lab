@@ -394,6 +394,12 @@ services:
       MARIADB_PASSWORD: ${DB_TH_PASSWORD:-}
       MARIADB_ROOT_PASSWORD: ${DB_TH_ROOT_PASSWORD:-}
     command: ["--character-set-server=tis620", "--collation-server=tis620_bin"]
+    networks:
+      default:
+        # PINNED high (2026-10-05): the default network has no ip_range, so a container created
+        # while rathena is down got the lowest free address -- rathena's 10.210.96.6 -- and
+        # rathena-th then failed with "Address already in use".
+        ipv4_address: 10.210.96.250
     volumes:
       - db-th-data:/var/lib/mysql
     healthcheck:

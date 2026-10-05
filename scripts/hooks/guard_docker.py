@@ -41,8 +41,8 @@ from _shell import SHELLS, segments, strip_heredocs, unwrap  # noqa: E402
 
 GUARDED = "python3 scripts/guarded_build.py --sustain 30 --spike 25 <step>"
 STEPS = (
-    "start:<svc>[@s] recreate:<svc>[@s] restart:<svc>[@s] build:<svc> pull:<svc> run:vision "
-    "rundev:vision"
+    "start:<svc>[@s] recreate:<svc>[@s] restart:<svc>[@s] rm:<svc> build:<svc> pull:<svc> "
+    "run:vision rundev:vision"
 )
 DOCKER_BLOCK = frozenset({"build", "buildx", "pull", "run", "create", "start", "restart"})
 COMPOSE_BLOCK = frozenset(
