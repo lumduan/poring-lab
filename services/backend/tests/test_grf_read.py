@@ -153,3 +153,30 @@ def test_cli_info_and_ls(
     assert grf.main(["ls", str(archive), "--grep", r"secret"]) == 0
     lines = capsys.readouterr().out.splitlines()
     assert len(lines) == 1 and lines[0].startswith("E 0x05")
+
+
+def test_mixcrypt_needs_the_host_local_decoder_and_never_a_repo_one(
+    grf: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Batt, 2026-10-05: MIXCRYPT study only. The decoder lives OUTSIDE the repo; without it the
+    reader refuses (C8), and it never loads a decoder from inside the repo or a writable dir."""
+    entry = grf.Entry(b"data\\x.spr", 8, 8, 8, 0x03, 46)
+    assert not grf.decodable(entry, decode_des=True)
+    assert grf.decodable(entry, decode_des=True, decode_mixcrypt=True)
+    missing = tmp_path / "nothing-here"
+    missing.mkdir(mode=0o700)
+    with pytest.raises(grf.GrfError, match="no study decoder"):
+        grf.load_mixcrypt(missing)
+    with pytest.raises(grf.GrfError, match="inside the repo"):
+        grf.load_mixcrypt(grf.REPO / "scripts")
+    loose = tmp_path / "loose"
+    loose.mkdir(mode=0o700)
+    (loose / grf.PRIVATE_MODULE).write_text("def decode(d, z, des):\n    return d\n")
+    loose.chmod(0o777)
+    with pytest.raises(grf.GrfError, match="writable"):
+        grf.load_mixcrypt(loose)
+    loose.chmod(0o700)
+    (loose / grf.PRIVATE_MODULE).chmod(0o600)
+    assert grf.load_mixcrypt(loose).decode(b"x", 1, None) == b"x"
+    monkeypatch.setenv(grf.PRIVATE_ENV, str(loose))
+    assert grf.private_dir() == loose.resolve()

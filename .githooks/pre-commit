@@ -9,6 +9,11 @@
 #   * sits in a directory holding a locale-pack.json (working tree or index), or IS one;
 #   * is a client asset: *.grf, *.gpf, *.lub, msgstringtable*.txt, map/sprite files (*.gat,
 #     *.gnd, *.rsw, *.spr, *.act, *.rsm, *.str, *.imf, *.pal: Batt 2026-10-03, even with git add -f);
+# or when a staged file is the host-local MIXCRYPT study decoder or its kin (Batt, 2026-10-05: NEVER
+# committed): a *mixcrypt* name, a poring-lab-private/ path, a file whose sha256 is in
+# ~/.cache/poring-lab/private-fingerprints.txt (or $PORING_PRIVATE_FINGERPRINTS; written by the
+# private dir's fingerprint.sh), or text carrying the never-commit marker (built below in two
+# pieces, so this hook never matches itself); a map_cache*.dat is client-derived map data;
 # or when a staged file carries a pack string: a line, a line minus its '#' terminator, or a quoted
 # literal whose fingerprint is in ~/.cache/poring-lab/pack-fingerprints.txt (or
 # $PORING_PACK_FINGERPRINTS), written by scripts/locale_pack.py build. The fingerprint rule below
@@ -28,9 +33,11 @@ from pathlib import Path, PurePosixPath
 def git(*args):
     return subprocess.run(["git", *args], capture_output=True, check=True).stdout
 
-DIRS = {"locale-packs", "locales", "ro_thai", "kro-reference", "grf-extract"}
+DIRS = {"locale-packs", "locales", "ro_thai", "kro-reference", "grf-extract", "poring-lab-private"}
 FILES = ("*.grf", "*.gpf", "*.lub", "msgstringtable*.txt", "locale-pack.json",
-         "*.gat", "*.gnd", "*.rsw", "*.spr", "*.act", "*.rsm", "*.rsm2", "*.str", "*.imf", "*.pal")
+         "*.gat", "*.gnd", "*.rsw", "*.spr", "*.act", "*.rsm", "*.rsm2", "*.str", "*.imf", "*.pal",
+         "*mixcrypt*", "map_cache*.dat")
+MARKER = ("PORING-" + "PRIVATE").encode()
 MAX_BYTES = 20 * 1024 * 1024
 QUOTED = re.compile(r"\"([^\"]{6,})\"|\x27([^\x27]{6,})\x27|`([^`]{6,})`")
 
@@ -77,6 +84,18 @@ if own_file.is_file():
         if words:
             own.add(words[0])
 
+pfp_file = Path(os.environ.get("PORING_PRIVATE_FINGERPRINTS")
+                or Path.home() / ".cache" / "poring-lab" / "private-fingerprints.txt")
+private_fps = set(pfp_file.read_text().split()) if pfp_file.is_file() else set()
+
+def private_reason(path):
+    blob = subprocess.run(["git", "show", f":{path}"], capture_output=True).stdout
+    if hashlib.sha256(blob).hexdigest() in private_fps:
+        return "a host-local private file (fingerprint match): never committed"
+    if MARKER in blob[:MAX_BYTES]:
+        return "carries the never-commit marker of the host-local private files"
+    return None
+
 def content_reason(path):
     if not fingerprints:
         return None
@@ -102,7 +121,7 @@ def content_reason(path):
 
 refused = 0
 for path in staged:
-    reason = path_reason(path) or content_reason(path)
+    reason = path_reason(path) or private_reason(path) or content_reason(path)
     if reason:
         refused += 1
         print(f"pre-commit: refused {path}: {reason}", file=sys.stderr)

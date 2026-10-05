@@ -1,6 +1,7 @@
 """The never-commit guard (ADR-0012, C7): .gitignore rules and .githooks/pre-commit, exercised on
 a throwaway git repository with SYNTHETIC pack content."""
 
+import hashlib
 import importlib.util
 import os
 import shutil
@@ -192,3 +193,50 @@ def test_an_own_identifier_passes_and_other_pack_strings_still_fail(
     stage(repo, "src/strings.py", 'LABEL = "Status bar"\n')  # only the EXACT word is exempt
     lp.write_fingerprints(fps, ["Status bar#"])
     assert commit(repo, fps).returncode != 0
+
+
+# --- the host-local MIXCRYPT study decoder (Batt, 2026-10-05: never committed) -----------------
+
+MARKER = "PORING-" + "PRIVATE"  # never written joined in a tracked file
+
+
+@pytest.mark.parametrize(
+    ("rel", "reason"),
+    [
+        ("scripts/grf_mixcrypt.py", "client asset"),
+        ("tools/MixCrypt_study.txt", "client asset"),
+        ("poring-lab-private/notes.md", "extracted client data directory"),
+        ("data2/map_cache.dat", "client asset"),
+    ],
+)
+def test_private_decoder_names_are_refused(
+    repo: Path, tmp_path: Path, rel: str, reason: str
+) -> None:
+    stage(repo, rel, "synthetic\n", force=True)
+    result = commit(repo, tmp_path / "none.txt")
+    assert result.returncode != 0
+    assert f"refused {rel}: " in result.stderr and reason in result.stderr
+
+
+def test_the_marker_and_the_fingerprints_refuse_a_renamed_copy(repo: Path, tmp_path: Path) -> None:
+    stage(repo, "scripts/innocent.py", f"# {MARKER}: never commit\nx = 1\n")
+    result = commit(repo, tmp_path / "none.txt")
+    assert result.returncode != 0 and "never-commit marker" in result.stderr
+    subprocess.run(["git", "rm", "-q", "--cached", "scripts/innocent.py"], cwd=repo, check=True)
+    body = "x = 2  # a renamed copy without the marker\n"
+    fps = tmp_path / "private.txt"
+    fps.write_text(hashlib.sha256(body.encode()).hexdigest() + "\n")
+    stage(repo, "lib/other.py", body)
+    env = {**os.environ, "PORING_PACK_FINGERPRINTS": str(tmp_path / "none.txt"),
+           "PORING_PRIVATE_FINGERPRINTS": str(fps)}  # fmt: skip
+    result = subprocess.run(["git", "commit", "-q", "-m", "t"], cwd=repo, env=env,
+                            capture_output=True, text=True)  # fmt: skip
+    assert result.returncode != 0 and "fingerprint match" in result.stderr
+
+
+def test_the_hook_does_not_match_itself_or_the_repo() -> None:
+    joined = MARKER.encode()
+    assert joined not in HOOK.read_bytes()
+    tracked = subprocess.run(["git", "grep", "-l", "-F", MARKER], cwd=ROOT, capture_output=True,
+                             text=True)  # fmt: skip
+    assert tracked.stdout == "", tracked.stdout

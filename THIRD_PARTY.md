@@ -83,13 +83,15 @@
 | Source | Commit | License | File read |
 |---|---|---|---|
 | [nmeylan/nostalro-client](https://github.com/nmeylan/nostalro-client) | `15b3029059c04cf1d54d734f7233e5db3c108a9c` | Apache-2.0 (`LICENSE.md`) | `lib/formats/src/spr.rs`, `lib/formats/src/act.rs` (L7-13, 568-571, 620-634, 641-679), `lib/formats/src/lib.rs` (`read_string`, `version_at_least`), `lib/formats/src/map_coordinates.rs`, `lib/renderer/src/sprite.rs` (L842-956), `lib/renderer/src/sprite_projection.rs` (L154-178), `lib/renderer/src/camera.rs` (L425-439), `lib/game/src/entity.rs` (L1170-1178); read without porting: `client/src/game_updates/animation.rs`, `lib/game/src/shadow.rs`, `lib/game/src/sprite_loader.rs` |
-| [vE5li/korangar](https://github.com/vE5li/korangar) | `e14d3203ad63f35962f6492d8a6b348eb8f47d47` | MIT, © 2023 Lucas Pütz (`LICENSE.md`) | `korangar/src/world/animation/mod.rs` (L15-16, 40-68, 256-303), `korangar/src/world/cameras/mod.rs` (L47-67), `korangar/src/loaders/animation/mod.rs`, `korangar/src/loaders/map/mod.rs` (L31-32): cross-check only |
+| [vE5li/korangar](https://github.com/vE5li/korangar) | `e14d3203ad63f35962f6492d8a6b348eb8f47d47` | MIT, © 2023 Lucas Pütz (`LICENSE.md`) | `korangar/src/world/animation/mod.rs` (L15-16, 40-68, 256-303), `korangar/src/world/cameras/mod.rs` (L47-67), `korangar/src/loaders/animation/mod.rs`, `korangar/src/loaders/map/mod.rs` (L31-32): cross-check only. ➡️ **2026-10-05:** `korangar/src/loaders/archive/native/mixcrypt.rs` (sha256 `6a682441…227b`) was read and ported into a **host-local study decoder that is never committed** (Batt: MIXCRYPT option (a), study only; loaded by `scripts/grf_read.py --decode-mixcrypt` from outside the repo; the pre-commit hook refuses it by name and fingerprint). Its DES helpers (a copy of RustCrypto `des`, Apache-2.0) were not ported: the DES block is our own `scripts/grf_des.py`, which reproduces korangar's test vector |
 
 ## Our own code from public standards
 - **What:** `scripts/grf_des.py`, the GRF archive's header-only "DES" (flag 0x04).
 - **Sources:** the DES tables are FIPS PUB 46-3. The GRF construction is the publicly described one:
   the first 20 blocks pass through IP, one zero-key round and FP.
 - **No copyleft code was read for it.** rAthena's GPL implementation was deliberately not used.
+- **2026-10-05:** MIXCRYPT (flag 0x02) is decoded only by a host-local study module outside this
+  repo (see the korangar row above); this file still holds no MIXCRYPT code.
 - **Verified:** the classic DES test vector, and a real DES-flagged GAT that inflates with zlib to
   its exact size.
 

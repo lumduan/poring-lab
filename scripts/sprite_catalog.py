@@ -78,23 +78,28 @@ def _size(b: Box | None) -> list[float] | None:
     return None if b is None else [_r(b[2] - b[0]), _r(b[3] - b[1])]
 
 
-def _read(f: BinaryIO, entry: Entry, work: Path | None) -> tuple[bytes | None, dict[str, Any]]:
+def _read(
+    f: BinaryIO, entry: Entry, work: Path | None, mixcrypt: bool = False
+) -> tuple[bytes | None, dict[str, Any]]:
     """An entry's bytes (None when refused) and its record. Writes it under ``work`` if given."""
     info: dict[str, Any] = {
         "name": entry.name,
         "bytes": entry.size,
         "flags": f"0x{entry.flags:02x}",
     }
-    if not decodable(entry, decode_des=True):
+    if not decodable(entry, decode_des=True, decode_mixcrypt=mixcrypt):
         kind = "MIXCRYPT" if entry.flags & FLAG_MIXCRYPT else "encrypted"
         info["status"] = f"refused: {kind} (grf_read C8 stop; not worked around)"
         return None, info
     try:
-        data = read_entry(f, entry, decode_des=True)
+        data = read_entry(f, entry, decode_des=True, decode_mixcrypt=mixcrypt)
     except GrfError as exc:
         info["status"] = f"unreadable: {exc}"
         return None, info
-    info["status"] = "ok" + (" (DES header decoded)" if entry.flags & FLAG_DES else "")
+    info["status"] = "ok" + (
+        " (MIXCRYPT decoded: study only)" if entry.flags & FLAG_MIXCRYPT
+        else " (DES header decoded)" if entry.flags & FLAG_DES else ""
+    )  # fmt: skip
     info["sha256"] = hashlib.sha256(data).hexdigest()
     if work is not None:
         dest = work / safe_relpath(entry.name)
@@ -150,7 +155,9 @@ def describe(act: Act, spr: Spr | None) -> dict[str, Any]:
     }  # fmt: skip
 
 
-def catalog(grf: Path, aegis: list[str], work: Path | None) -> dict[str, Any]:
+def catalog(
+    grf: Path, aegis: list[str], work: Path | None, mixcrypt: bool = False
+) -> dict[str, Any]:
     """The whole catalog: one record per species (``work`` None: extract nothing to disk)."""
     if work is not None:
         work = safe_out_dir(work, allow_out=False)  # /dev/shm only, never the repository
@@ -168,7 +175,7 @@ def catalog(grf: Path, aegis: list[str], work: Path | None) -> dict[str, Any]:
                     rec["files"][ext] = {"status": "missing"}
                     data[ext] = None
                     continue
-                data[ext], rec["files"][ext] = _read(f, entry, work)
+                data[ext], rec["files"][ext] = _read(f, entry, work, mixcrypt)
             if data["act"] is None and data["spr"] is None:
                 needle = f"/{name.lower()}."
                 rec["candidates"] = sorted(e.name for e in entries if needle in norm_name(e.name))
@@ -234,9 +241,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--work", type=Path, default=DEFAULT_WORK, help="extract here (/dev/shm only)")
     ap.add_argument("--no-extract", action="store_true", help="read in memory, write no SPR/ACT")
     ap.add_argument("--out", type=Path, default=DEFAULT_OUT)
+    ap.add_argument(
+        "--decode-mixcrypt", action="store_true",
+        help="STUDY ONLY (Batt 2026-10-05): MIXCRYPT SPRs via the host-local decoder (grf_read)",
+    )  # fmt: skip
     a = ap.parse_args(argv)
     try:
-        cat = catalog(a.grf, a.aegis, None if a.no_extract else a.work)
+        cat = catalog(a.grf, a.aegis, None if a.no_extract else a.work, a.decode_mixcrypt)
     except GrfError as exc:
         print(f"sprite_catalog: {exc}", file=sys.stderr)
         return 2

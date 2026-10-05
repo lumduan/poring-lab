@@ -30,14 +30,20 @@ encryption scheme), that is the C8 stop condition: report it, do not work around
 EXCEPT, explicitly: --decode-des (Batt, 2026-10-03, Phase 2 GAT altitude: "own decoder from the
 public spec") decodes header-only DES entries (flag 0x04) with scripts/grf_des.py, our own code from
 the FIPS 46-3 tables; zlib's checksum and the table's size verify every decoded entry. MIXCRYPT
-(0x02) stays refused.
+(0x02) stays refused, EXCEPT with --decode-mixcrypt (Batt, 2026-10-05, option (a): STUDY ONLY): a
+host-local decoder that is NEVER in this repo is loaded from $PORING_PRIVATE_DIR (default
+~/poring-lab-private/grf_mixcrypt.py). This reader refuses a private dir inside the repo or one that
+is group/world-writable; without the decoder it is the same C8 refusal as before. Never used with
+any server: offline files only. The pre-commit hook refuses the decoder by name and fingerprint.
 """
 
 from __future__ import annotations
 
 import argparse
 import fnmatch
+import importlib.util
 import json
+import os
 import re
 import struct
 import sys
@@ -45,6 +51,7 @@ import zlib
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from types import ModuleType
 from typing import BinaryIO
 
 MAGIC = b"Master of Magic\x00"
@@ -53,6 +60,8 @@ FLAG_FILE, FLAG_MIXCRYPT, FLAG_DES = 0x01, 0x02, 0x04
 SCRATCH_ROOT = Path("/dev/shm")
 REPO = Path(__file__).resolve().parents[1]
 DEFAULT_MAX_BYTES = 512 * 1024 * 1024
+PRIVATE_ENV = "PORING_PRIVATE_DIR"
+PRIVATE_MODULE = "grf_mixcrypt.py"
 
 
 class GrfError(Exception):
@@ -157,23 +166,52 @@ def iter_entries(f: BinaryIO, header: Header) -> Iterator[Entry]:
         yield Entry(raw_name, zsize, aligned, size, flags, HEADER_SIZE + offset)
 
 
-def decodable(entry: Entry, decode_des: bool) -> bool:
-    return not entry.encrypted or (
-        decode_des and entry.flags & FLAG_DES and not entry.flags & FLAG_MIXCRYPT
-    )
+def decodable(entry: Entry, decode_des: bool, decode_mixcrypt: bool = False) -> bool:
+    if entry.flags & FLAG_MIXCRYPT:
+        return decode_mixcrypt
+    return not entry.encrypted or bool(decode_des and entry.flags & FLAG_DES)
 
 
-def read_entry(f: BinaryIO, entry: Entry, *, decode_des: bool = False) -> bytes:
+def private_dir() -> Path:
+    return Path(os.environ.get(PRIVATE_ENV) or Path.home() / "poring-lab-private").resolve()
+
+
+def load_mixcrypt(directory: Path | None = None) -> ModuleType:
+    """The host-local study decoder (never in this repo), or a C8 refusal."""
+    d = (directory or private_dir()).resolve()
+    if d == REPO or REPO in d.parents:
+        raise GrfError(f"MIXCRYPT: the private dir {d} is inside the repo: refused -- C8")
+    path = d / PRIVATE_MODULE
+    if not path.is_file():
+        raise GrfError(f"MIXCRYPT: no study decoder at {path} (host-local, never committed) -- C8")
+    for p in (d, path):
+        if p.stat().st_mode & 0o022:
+            raise GrfError(f"MIXCRYPT: {p} is group/world-writable: refused -- C8")
+    spec = importlib.util.spec_from_file_location("grf_mixcrypt", path)
+    if spec is None or spec.loader is None:
+        raise GrfError(f"MIXCRYPT: cannot load {path} -- C8")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def read_entry(
+    f: BinaryIO, entry: Entry, *, decode_des: bool = False, decode_mixcrypt: bool = False
+) -> bytes:
     if not entry.is_file:
         raise GrfError(f"{entry.name}: a directory entry")
-    if not decodable(entry, decode_des):
+    if not decodable(entry, decode_des, decode_mixcrypt):
         raise GrfError(f"{entry.name}: encrypted: unsupported (flags 0x{entry.flags:02x}) -- C8")
     f.seek(entry.offset)
-    want = entry.zsize_aligned if entry.flags & FLAG_DES else entry.zsize
+    want = entry.zsize_aligned if entry.encrypted else entry.zsize
     data = f.read(want)
     if len(data) != want:
         raise GrfError(f"{entry.name}: data runs past the end of the archive")
-    if entry.flags & FLAG_DES:
+    if entry.flags & FLAG_MIXCRYPT:
+        from grf_des import grf_block
+
+        data = load_mixcrypt().decode(data, entry.zsize, grf_block)[: entry.zsize]
+    elif entry.flags & FLAG_DES:
         from grf_des import decode_header
 
         data = decode_header(data)[: entry.zsize]
@@ -255,6 +293,7 @@ def extract(
     max_bytes: int,
     allow_out: bool,
     decode_des: bool = False,
+    decode_mixcrypt: bool = False,
 ) -> list[dict[str, object]]:
     out = safe_out_dir(out, allow_out)
     done: list[dict[str, object]] = []
@@ -266,15 +305,19 @@ def extract(
             raise GrfError(f"{len(chosen)} entries = {total} bytes > --max-bytes {max_bytes}")
         for entry in chosen:
             rel = safe_relpath(entry.name)
-            if not decodable(entry, decode_des):
+            if not decodable(entry, decode_des, decode_mixcrypt):
                 done.append({"name": str(rel), "skipped": "encrypted: unsupported"})
                 continue
-            data = read_entry(f, entry, decode_des=decode_des)
+            data = read_entry(f, entry, decode_des=decode_des, decode_mixcrypt=decode_mixcrypt)
             dest = out / rel
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(data)
-            done.append({"name": str(rel), "bytes": len(data),
-                         **({"des_decoded": True} if entry.flags & FLAG_DES else {})})  # fmt: skip
+            row: dict[str, object] = {"name": str(rel), "bytes": len(data)}
+            if entry.flags & FLAG_DES:
+                row["des_decoded"] = True
+            if entry.flags & FLAG_MIXCRYPT:
+                row["mixcrypt_decoded"] = True
+            done.append(row)
     return done
 
 
@@ -297,6 +340,10 @@ def main(argv: list[str] | None = None) -> int:
     p_ex.add_argument(
         "--decode-des", action="store_true", help="decode header-only DES (0x04); never MIXCRYPT"
     )
+    p_ex.add_argument(
+        "--decode-mixcrypt", action="store_true",
+        help="STUDY ONLY (Batt 2026-10-05): MIXCRYPT (0x02) via the host-local decoder",
+    )  # fmt: skip
     a = ap.parse_args(argv)
     try:
         if a.cmd == "info":
@@ -317,6 +364,7 @@ def main(argv: list[str] | None = None) -> int:
             done = extract(
                 a.grf, a.names, a.out, glob=a.glob, max_bytes=a.max_bytes,
                 allow_out=a.allow_out, decode_des=a.decode_des,
+                decode_mixcrypt=a.decode_mixcrypt,
             )  # fmt: skip
             print(json.dumps({"out": str(a.out), "entries": done}, ensure_ascii=False, indent=1))
     except GrfError as exc:
