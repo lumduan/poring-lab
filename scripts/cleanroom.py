@@ -360,11 +360,14 @@ def rearm_minutes(status: dict[str, Any], now: float) -> float | None:
     return left / 60 if left > 0 else None
 
 
+REARM_WAIT_S = 5.0
+
+
 def cmd_rearm() -> int:
     """Restart the watchdog of the active room (2026-10-04: the announced red-alarm test stops it
     and restores it). The hard cap stays ABSOLUTE: the watchdog reads hard_cap_ts from the room's
     status; the unit's RuntimeMaxSec covers the time left plus the margin. The guard timer then
-    clears the alarm by itself."""
+    clears the alarm by itself; rearm also runs that rule at once."""
     if watchdog_active():
         say("the watchdog is already up: nothing to re-arm")
         return 2
@@ -374,6 +377,16 @@ def cmd_rearm() -> int:
         return 2
     start_watchdog(minutes)
     say(f"watchdog RE-ARMED for the {minutes:.0f} min left to the hard cap")
+    # Clear the alarm now, not at the guard's next tick (up to 60 s; Batt 2026-10-05: "cleared
+    # within seconds of the re-arm"). The guard's own rule decides: it clears only once the
+    # re-armed unit is really active.
+    deadline = time.monotonic() + REARM_WAIT_S
+    while not watchdog_active() and time.monotonic() < deadline:
+        time.sleep(0.25)
+    if watchdog_active():
+        cmd_guard()
+    else:
+        say("the re-armed watchdog is not active yet: the guard clears the alarm on its next tick")
     return 0
 
 

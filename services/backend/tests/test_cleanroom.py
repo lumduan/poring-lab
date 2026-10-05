@@ -169,7 +169,12 @@ def test_rearm_restarts_a_stopped_watchdog_for_the_time_left(
     monkeypatch.setattr(cr, "load_status", lambda: {"phase": "checks", "hard_cap_ts": T + 1800})
     monkeypatch.setattr(cr, "watchdog_active", lambda: True)
     assert cr.cmd_rearm() == 2 and started == []  # already up: nothing to do
-    monkeypatch.setattr(cr, "watchdog_active", lambda: False)
+    active = {"up": False}
+    guarded: list[bool] = []
+    monkeypatch.setattr(cr, "watchdog_active", lambda: active["up"])
+    monkeypatch.setattr(cr, "start_watchdog", lambda m: started.append(m) or active.update(up=True))
+    monkeypatch.setattr(cr, "cmd_guard", lambda: guarded.append(True) or 0)
     assert cr.cmd_rearm() == 0 and started == [pytest.approx(30)]
+    assert guarded == [True]  # the alarm clears at once, not at the guard's next tick
     monkeypatch.setattr(cr, "load_status", lambda: {"phase": "entered", "hard_cap_ts": T - 5})
     assert cr.cmd_rearm() == 2  # the cap has passed: refused
