@@ -7,7 +7,7 @@ verdict_date: 2026-10-04
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: "2026-10-05: M4 RECORDED but NOT PASSED (§5a: quad boxes, species mix, occlusion, no far spawns). Batt decides MIXCRYPT a/b/c (opaque boxes re-score the recording) and redoes the B6 hand-check (/qa?session=...indoor-v2); then the M4 re-run, M5, and the alarm re-test when Batt watches."
+next_action: "2026-10-05: M1 COMPLETE (MIXCRYPT study decoder, host-local); E2 alarm re-test run (Batt confirmed the red box). Open: the B6 hand-check redo (/qa opens on the gold set), the Thai-data experiment (separate client + rathena-th), then Batt decides the setup; the M4 re-run, M5 and v1 follow on it."
 last_reviewed: 2026-10-05
 ---
 
@@ -63,7 +63,7 @@ Hard rules that bind every step below:
 ```mermaid
 flowchart TD
     M0["M0 · knowledge base<br/>mob_db + spawn files<br/>DONE"] --> M5
-    M1["M1 · sprite catalog<br/>ACT done, SPR MIXCRYPT<br/>Batt decides a/b/c"] --> M2
+    M1["M1 · sprite catalog<br/>COMPLETE - opaque extents<br/>study decoder"] --> M2
     M2["M2 · render rule port<br/>predict_sprite<br/>BUILT - quad boxes"] --> M4
     M3["M3 · packet states<br/>attack, hurt, dying, facing<br/>LIVE"] --> M4
     M4["M4 · PROVE the formulas<br/>RECORDED - not passed<br/>re-run designed"] --> M5
@@ -93,21 +93,21 @@ flowchart TD
     classDef decision fill:#fde0e0,stroke:#d05555,color:#8f2e2e
     classDef goal     fill:#ede0fb,stroke:#8a5cd8,color:#4d2e8f
 
-    class M0,M2,M3,T0,D1,R done
+    class M0,M1,M2,M3,T0,D1,R done
     class M7,M8,M9 active
     class T1 ready
     class M4,M5,M6,T2,T3 blocked
-    class M1,G decision
+    class G decision
     class M10 goal
 ```
 
 | Step | Status | What it is | Blocker |
 |---|---|---|---|
 | **M0** knowledge base | ✅ DONE 2026-10-04 | `scripts/kb_build.py` → `data/kb/` (gitignored): pre-re mobs, mob skills, spawns, warps, classes. prt_fild08 = Poring 70, Lunatic 40, Pupa 20, Drops 10 + **Creamy = Pupa's NPC_METAMORPHOSIS** (val1 1018; the packets show the same gid). Walk speeds: Poring 400, Lunatic 200, Drops 400, Creamy 150 ms/cell. The gate to prontera: (170,378) span 3×2 | — |
-| **M1** sprite catalog | 🟡 PARTIAL 2026-10-04 | SPR/ACT parsers ported from nostalro (`sprites.py`), `scripts/sprite_catalog.py` → `data/kb/sprite_catalog.json`. **ACTs only:** every monster SPR in the Thai `data.grf` is **MIXCRYPT** (refused, the C8 stop). The ACT 2.5 species (Poring, Drops, Lunatic) have quad sizes (Poring idle 37×36 native); the ACT 2.4 ones have frames and delays only ➡️ **2026-10-05: COMPLETE (study decoder, Batt's option (a)).** All 12 species: ACT + SPR 2.1 decoded, OPAQUE extents per action × direction × frame (`data/kb/sprite_catalog.json`, local). Verified three ways: every decoded entry inflates to the table's size with the right magic; the SPRs parse; 2,336 + 1,572 + 2,336 ACT 2.5 layer sizes equal the SPR image sizes (0 mismatches). The decoder is host-local, never committed (THIRD_PARTY.md, korangar row) | **Batt:** (a) a MIXCRYPT decoder from the public spec, (b) another GRF (the lab's kRO one is on Windows only), or (c) quad boxes only |
+| **M1** sprite catalog | ✅ COMPLETE 2026-10-05 (study decoder; ~~PARTIAL 2026-10-04~~) | SPR/ACT parsers ported from nostalro (`sprites.py`), `scripts/sprite_catalog.py` → `data/kb/sprite_catalog.json`. **ACTs only:** every monster SPR in the Thai `data.grf` is **MIXCRYPT** (refused, the C8 stop). The ACT 2.5 species (Poring, Drops, Lunatic) have quad sizes (Poring idle 37×36 native); the ACT 2.4 ones have frames and delays only ➡️ **2026-10-05: COMPLETE (study decoder, Batt's option (a)).** All 12 species: ACT + SPR 2.1 decoded, OPAQUE extents per action × direction × frame (`data/kb/sprite_catalog.json`, local). Verified three ways: every decoded entry inflates to the table's size with the right magic; the SPRs parse; 2,336 + 1,572 + 2,336 ACT 2.5 layer sizes equal the SPR image sizes (0 mismatches). The decoder is host-local, never committed (THIRD_PARTY.md, korangar row) | **Batt:** (a) a MIXCRYPT decoder from the public spec, (b) another GRF (the lab's kRO one is on Windows only), or (c) quad boxes only |
 | **M2** render rule | ✅ BUILT 2026-10-04 | `render.py` `predict_sprite`: f/z × k billboard, the ACT quad/opaque boxes, direction, the frame by time or distance. `box_kind` quad (ACT 2.5) or opaque (SPR); it raises rather than guess when sizes are missing | opaque boxes wait for M1's SPR pixels |
 | **M3** packet states | ✅ BUILT + LIVE 2026-10-04 | `poring_packets` decodes the ZC_NOTIFY_ACT family (0x008A/0x02E1/0x08C8) and ZC_CHANGE_DIRECTION (0x009C); `world.py` keeps the vanish reason (died → `dying`), swings and flinches; `Timeline.state(gid, t)` = idle/walk/**attacking**/hurt/dying/sit + facing. The value is `attacking`, not `attack`: the locale guard (ADR-0012) refuses the bare word. The sniffer was rebuilt and recreated at 21:09 (live). `DEFAULT_DIE_MS` 2000 is a placeholder until M1 gives per-class die durations. ➡️ **All 20 NAS sessions were re-decoded the same night** (`scripts/replay_states.py`: the banked captures replayed in the sniffer, windowed and pseudonymised like the recorder) into a verified sidecar `packets.states.jsonl.gz` (0 original entities missing; 251 act events). **Real-data check:** a Poring's swing carries src_speed 672 and a Poring hit by the GM dmotion 480 -- mob_db's AttackMotion/DamageMotion exactly | the client-side attack facing is an assumption that M4 checks |
-| **M4** prove it | 🟥 RECORDED, NOT PASSED 2026-10-05 00:03 | GM spawns near/far, indoor/outdoor, judged against pre-registered thresholds (§5). ~~BLOCKED 22:00 (to-console)~~ ➡️ both causes were lab-side and fixed (§ bottlenecks). **The session ran without Batt** (`20261004T233309-console-p3-m4`, 56,060 frames, 30/30 spawns, 0 GM failures; shipped + `dataset_check`). `m4_validate`: 1,893 standing frames, all QUAD boxes (SPR MIXCRYPT), so IoU/edges and k are NOT COMPARABLE; outdoor top third NOT EVALUABLE (`@monster` spawns around the GM: no top-third spawn); indoor top/bottom 1.395 and indoor/outdoor 0.878: FAIL. **The A/A disagrees by 5.7 %, more than the 3 % tolerance**, so the results section (§5) explains the failures: species mix, occlusion, a merged component. Thresholds unchanged | Batt: MIXCRYPT a/b/c (opaque boxes re-score THIS recording); a fresh session with per-species groups, far spawns and an occluder-free indoor scene |
+| **M4** prove it | 🟥 RECORDED, NOT PASSED 2026-10-05 00:03 | GM spawns near/far, indoor/outdoor, judged against pre-registered thresholds (§5). ~~BLOCKED 22:00 (to-console)~~ ➡️ both causes were lab-side and fixed (§ bottlenecks). **The session ran without Batt** (`20261004T233309-console-p3-m4`, 56,060 frames, 30/30 spawns, 0 GM failures; shipped + `dataset_check`). `m4_validate`: 1,893 standing frames, all QUAD boxes (SPR MIXCRYPT), so IoU/edges and k are NOT COMPARABLE; outdoor top third NOT EVALUABLE (`@monster` spawns around the GM: no top-third spawn); indoor top/bottom 1.395 and indoor/outdoor 0.878: FAIL. **The A/A disagrees by 5.7 %, more than the 3 % tolerance**, so the results section (§5) explains the failures: species mix, occlusion, a merged component. Thresholds unchanged | ~~Batt: MIXCRYPT a/b/c~~ ➡️ decided (a), study only, 2026-10-05: opaque boxes exist (M1). Re-scoring THIS recording needs the Thai-vs-kRO sprite check first (the Thai-data experiment, 3d); a fresh session with per-species groups, far spawns and an occluder-free indoor scene |
 | **M5** labels v1 | ⬜ BLOCKED | predicted boxes + state + facing, and the automatic label check | M0 + M4 passed ➡️ M4 did not pass (2026-10-05) |
 | **M6** synthetic | ⬜ BLOCKED | sprites rendered with the game's geometry onto real backgrounds, then a real H.264 encode | M4 passed |
 | **M7** collection | 🟡 FIRST CROWD BLOCK 2026-10-05 | GM sessions only for what math cannot make. ➡️ In the M4 room's spare time: `20261005T000655-console-p3-m7-crowd` (18,703 frames; outdoor + indoor, 8 × `@monster <species> 8`, Poring + Lunatic, 0 GM failures): occlusion/crowd frames. M4's 30 `@killmonster2` kills are also 30 dying-animation windows | M5 (coverage tracking) |
