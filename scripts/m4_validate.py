@@ -50,6 +50,7 @@ import numpy as np
 import numpy.typing as npt
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import label_check  # noqa: E402
 import m4_cells  # noqa: E402
 import qa_export  # noqa: E402
 
@@ -288,6 +289,7 @@ def measure(  # noqa: PLR0915
     rows_out: Path | None = None,
     use_spr: bool = False,
     rerun: bool = False,
+    ncc: bool = False,
 ) -> dict[str, Any]:
     manifest = json.loads((session / "manifest.json").read_text())
     pk = session / ("packets.states.jsonl.gz" if (session / "packets.states.jsonl.gz").exists()
@@ -373,6 +375,8 @@ def measure(  # noqa: PLR0915
             if ref is not None:
                 row["k_h"] = (obs[3] - obs[1]) / f_over_z / ref[0]
                 row["k_w"] = (obs[2] - obs[0]) / f_over_z / ref[1]
+            if ncc and pred.box_kind == "opaque":
+                row["ncc"] = label_check.score(frame, sheets[species], pred)
             rows.append(row)
     if rows_out is not None:
         rows_out.parent.mkdir(parents=True, exist_ok=True)
@@ -473,6 +477,10 @@ def summarise(rows: list[dict[str, Any]], per_species: bool = False) -> dict[str
         if t:
             out[f"indoor_vs_outdoor/{sp}"] = t
     out["k"] = k_verdict(rows)
+    scores = [r["ncc"] for r in rows if r.get("ncc") is not None]
+    if scores:  # M5's label-check threshold, fixed HERE (before M5): the 5th percentile
+        out["label_check_tau"] = {"tau": round(pct(scores, 0.05), 4), "n": len(scores),
+                                  "median": round(statistics.median(scores), 4)}  # fmt: skip
     return out
 
 
@@ -493,8 +501,13 @@ def main() -> int:
         help="the §5b pre-registered rules: local background, same viewpoint, exclusions, per "
              "species, A/A halves, k",
     )  # fmt: skip
+    ap.add_argument(
+        "--ncc",
+        action="store_true",
+        help="score each clean row with label_check (M5's tau: the 5th percentile)",
+    )
     a = ap.parse_args()
-    result = measure(a.datasets / a.session, a.events, a.every, a.rows, a.opaque, a.rerun)
+    result = measure(a.datasets / a.session, a.events, a.every, a.rows, a.opaque, a.rerun, a.ncc)
     text = json.dumps(result, indent=1)
     if a.out:
         a.out.parent.mkdir(parents=True, exist_ok=True)
