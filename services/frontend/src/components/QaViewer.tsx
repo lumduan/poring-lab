@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import OverlayCanvas from "@/components/OverlayCanvas";
 import QaEditor from "@/components/QaEditor";
-import { initialSession, type QaIndex, type QaSession, toDetections } from "@/lib/qa";
+import { handcheckProgress, initialSession, type QaIndex, type QaSession, toDetections } from "@/lib/qa";
 import {
   classForKey,
   type Cls,
@@ -40,6 +40,8 @@ export default function QaViewer({ backendUrl }: Props) {
   const [newClass, setNewClass] = useState<Cls>("monster");
   const [dirty, setDirty] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string>("");
+  // Frames the backend HOLDS for this session (not merely looked at): shown in large type.
+  const [savedCount, setSavedCount] = useState(0);
 
   useEffect(() => {
     fetch("/api/qa/index.json")
@@ -68,6 +70,7 @@ export default function QaViewer({ backendUrl }: Props) {
       .then((r) => (r.ok ? r.json() : r.status === 404 ? null : Promise.reject(new Error(`${r.status}`))))
       .then((doc: HandCheckDoc | null) => {
         setEdits(fromHandCheck(doc));
+        setSavedCount(doc ? doc.frames.length : 0);
         setSaveMsg(doc ? `loaded ${doc.frames.length} checked frames` : "no hand-check yet");
       })
       .catch((e: Error) => setSaveMsg(`hand-check unavailable: ${e.message}`));
@@ -101,6 +104,7 @@ export default function QaViewer({ backendUrl }: Props) {
       const body = await r.json();
       if (!r.ok) throw new Error(`${r.status} ${body?.detail?.reason ?? ""}`);
       setDirty(false);
+      setSavedCount(body.frames);
       setSaveMsg(`saved ${body.frames} frames (${body.edited} edited)`);
     } catch (e) {
       setSaveMsg(`NOT saved: ${(e as Error).message}`);
@@ -143,8 +147,22 @@ export default function QaViewer({ backendUrl }: Props) {
   const [w, h] = session.size;
   const checked = Object.keys(edits).length;
   const status: string = edits[frame.frame_id]?.status ?? "unchecked";
+  const progress = handcheckProgress(savedCount, session.frames.length, dirty);
   return (
     <main className="flex flex-col gap-3 p-4 text-sm text-neutral-200">
+      <div className="flex flex-wrap items-baseline gap-3">
+        <h1 className="text-xl font-bold text-white">{session.session}</h1>
+        {index.sessions.find((s) => s.id === session.session)?.gold && (
+          <span className="rounded bg-yellow-500 px-2 py-0.5 text-xs font-bold text-black">GOLD SET</span>
+        )}
+        <span
+          className={`rounded px-2 py-0.5 text-base font-bold ${
+            progress.done ? "bg-emerald-700 text-white" : "bg-red-600 text-white"
+          }`}
+        >
+          {progress.text}
+        </span>
+      </div>
       <div className="flex flex-wrap items-center gap-3">
         <select
           className="rounded bg-neutral-800 px-2 py-1"

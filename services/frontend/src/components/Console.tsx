@@ -11,6 +11,7 @@ import PastePanel from "@/components/PastePanel";
 import StatsPanel, { EMPTY_STATS, type Links, type Stats } from "@/components/StatsPanel";
 import StreamCanvas from "@/components/StreamCanvas";
 import Toolbar from "@/components/Toolbar";
+import { statusWatch } from "@/lib/banner";
 import { HeldKeys, type KeyStep } from "@/lib/keys";
 import {
   browserNowNs,
@@ -63,6 +64,9 @@ export default function Console({ backendUrl }: Props) {
   const frameIdRef = useRef<number>(NO_FRAME);
   const [held] = useState(() => new HeldKeys());
   const [status, setStatus] = useState<Status | null>(null);
+  // When the last Status arrived (performance.now(), this tab's clock): the banner's staleness.
+  const lastStatusMsRef = useRef<number | null>(null);
+  const [statusAgeS, setStatusAgeS] = useState<number | null>(null);
   const [detections, setDetections] = useState<Detections | null>(null);
   const [stats, setStats] = useState<Stats>(EMPTY_STATS);
   const [links, setLinks] = useState<Links>({ stream: false, input: false });
@@ -196,6 +200,7 @@ export default function Console({ backendUrl }: Props) {
         if (msg?.type === "frame") pendingMeta = msg;
         else if (msg?.type === "status") {
           paintModeRef.current = msg.paint ?? "decode";
+          lastStatusMsRef.current = performance.now();
           setStatus(msg);
         }
         else if (msg?.type === "detections") setDetections(msg);
@@ -280,7 +285,19 @@ export default function Console({ backendUrl }: Props) {
       windowStart = now;
     }, 500);
 
+    // A Status every second, or the banner says it may be stale and the stream reconnects.
+    let kicked = false;
+    const statusTimer = setInterval(() => {
+      const last = lastStatusMsRef.current;
+      if (last === null) return;
+      const tick = statusWatch((performance.now() - last) / 1000, kicked);
+      kicked = tick.kicked;
+      setStatusAgeS((prev) => (prev === tick.shownAgeS ? prev : tick.shownAgeS));
+      if (tick.kick) stream.kick();
+    }, 1000);
+
     return () => {
+      clearInterval(statusTimer);
       clearInterval(pinger);
       clearInterval(statsTimer);
       if (droppedTimer) clearTimeout(droppedTimer);
@@ -369,7 +386,13 @@ export default function Console({ backendUrl }: Props) {
           <ModeSwitch mode={status?.mode ?? null} onChange={setMode} disabled={!links.input} />
         </div>
       </header>
-      <Banner links={links} status={status} dropped={dropped} rdpReconnected={rdpReconnected} />
+      <Banner
+        links={links}
+        status={status}
+        dropped={dropped}
+        rdpReconnected={rdpReconnected}
+        statusAgeS={statusAgeS}
+      />
       <Toolbar
         disabled={!links.input}
         mode={viewMode}

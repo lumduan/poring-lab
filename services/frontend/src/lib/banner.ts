@@ -10,7 +10,32 @@ export type BannerInput = {
   rdpReconnected?: boolean;
   /** Browser wall clock, for the hard cap's time of day (tests pass a fixed one). */
   nowMs?: number;
+  /** Seconds since the last Status arrived (browser clock), or null while it is fresh. */
+  statusAgeS?: number | null;
 };
+
+/** The backend pushes Status every second. Without one for STATUS_STALE_S the page no longer
+ * knows the truth: an alarm on screen may already be over (2026-10-05: the WATCHDOG DOWN box
+ * outlived its clear while /health and the push had dropped it within ~2 s; the Safari tab was
+ * painting nothing). After STATUS_RECONNECT_S the stream socket reconnects by itself. */
+export const STATUS_STALE_S = 3;
+export const STATUS_RECONNECT_S = 5;
+
+export function statusStale(ageS: number | null | undefined): boolean {
+  return ageS !== null && ageS !== undefined && ageS > STATUS_STALE_S;
+}
+
+/** One tick of the console's 1 s status watch: what to show, and whether to reconnect now
+ * (once per stale spell; a fresh Status re-arms it). */
+export function statusWatch(ageS: number, kicked: boolean): {
+  shownAgeS: number | null;
+  kick: boolean;
+  kicked: boolean;
+} {
+  if (!statusStale(ageS)) return { shownAgeS: null, kick: false, kicked: false };
+  const kick = ageS > STATUS_RECONNECT_S && !kicked;
+  return { shownAgeS: Math.round(ageS), kick, kicked: kicked || kick };
+}
 
 /** Safety alarms (2026-10-04): shown RED, above every other notice. */
 const ALARM_TEXT: Record<string, string> = {
@@ -26,8 +51,10 @@ export const ALARM_BOX_CLASS =
   "sticky top-0 z-50 rounded-md border-2 border-red-200 bg-red-600 px-4 py-3 text-base " +
   "font-bold text-white shadow-lg";
 
-export function bannerAlarms(status: Status | null): string[] {
-  return (status?.alarms ?? []).map((a) => ALARM_TEXT[a] ?? `Safety alarm: ${a}`);
+export function bannerAlarms(status: Status | null, statusAgeS: number | null = null): string[] {
+  const texts = (status?.alarms ?? []).map((a) => ALARM_TEXT[a] ?? `Safety alarm: ${a}`);
+  if (!statusStale(statusAgeS)) return texts;
+  return texts.map((t) => `[no status for ${Math.round(statusAgeS ?? 0)} s: this may be stale] ${t}`);
 }
 
 /** ADR-0016 (rewritten 2026-10-04): the environment interlock, while the bot could act (BOT or
@@ -51,8 +78,15 @@ export function bannerProblems({
   dropped = null,
   rdpReconnected = false,
   nowMs = Date.now(),
+  statusAgeS = null,
 }: BannerInput): string[] {
   const problems: string[] = [];
+  if (links.stream && statusStale(statusAgeS)) {
+    problems.push(
+      `No status from the backend for ${Math.round(statusAgeS ?? 0)} s: this page may be stale ` +
+        "(a hidden or throttled tab?). Reconnecting the stream…",
+    );
+  }
   const capture = describeCapture(status);
   if (!links.stream) problems.push("Stream disconnected: reconnecting to the backend…");
   if (!links.input) problems.push("Input channel disconnected: keys and clicks are not being sent.");

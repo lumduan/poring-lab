@@ -75,7 +75,7 @@ def test_bundle_has_frames_labels_and_index(
     assert box["cls"] == "monster" and box["gid"] == 7
     assert (box["x1"] + box["x2"]) / 2 == pytest.approx(392 + 60)  # 2 cells right at 30 px/cell
     index = json.loads((tmp_path / "bundles" / "index.json").read_text())
-    assert index["sessions"] == [{"id": "s1", "title": "s1 (rdp)", "frames": 3}]
+    assert index["sessions"] == [{"id": "s1", "title": "s1 (rdp)", "frames": 3, "gold": False}]
     assert sheet.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
     assert json.loads(capsys.readouterr().out)["with_boxes"] == 3
 
@@ -184,3 +184,16 @@ def test_an_h264_session_exports_like_a_png_one(
 
     img = decode_png((bundle / labels["frames"][0]["file"]).read_bytes())
     assert img.shape[:2] == (48, 64)  # the GAME_REGION crop, as PNG sessions export
+
+
+def test_mark_gold_marks_exactly_one_exported_session(qa: ModuleType, tmp_path: Path) -> None:
+    """2026-10-04 and 10-05: the B6 hand-check was twice done on the wrong session, because /qa
+    opened on the newest one. The gold mark makes /qa open on the gold set."""
+    index = tmp_path / "index.json"
+    sessions = [{"id": "a", "title": "a", "frames": 1}, {"id": "b", "title": "b", "frames": 1}]
+    index.write_text(json.dumps({"sessions": sessions}))
+    qa.mark_gold(index, "a")
+    got = json.loads(index.read_text())["sessions"]
+    assert [(s["id"], s["gold"]) for s in got] == [("a", True), ("b", False)]
+    with pytest.raises(SystemExit, match="not exported"):
+        qa.mark_gold(index, "zzz")

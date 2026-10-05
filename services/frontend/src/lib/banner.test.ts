@@ -148,3 +148,24 @@ test("the console says when the GM is being re-logged in automatically after a s
   const off = bannerProblems({ links: { stream: true, input: true }, status: { ...base, bot_agents: ["ro_agent"] } });
   assert.ok(!off.some((p) => p.startsWith("GM auto-recover")));
 });
+
+test("a stale page says so: alarms are marked and the stream reconnects once per stale spell", async () => {
+  const { bannerAlarms, statusWatch, STATUS_RECONNECT_S } = await import("./banner.ts");
+  const alarmed = { alarms: ["watchdog_down"] } as unknown as Parameters<typeof bannerAlarms>[0];
+  assert.match(bannerAlarms(alarmed, null)[0], /^WATCHDOG DOWN/); // fresh: as before
+  assert.match(bannerAlarms(alarmed, 7.4)[0], /^\[no status for 7 s: this may be stale\] WATCHDOG/);
+  assert.deepEqual(statusWatch(1.2, false), { shownAgeS: null, kick: false, kicked: false });
+  assert.deepEqual(statusWatch(4.0, false), { shownAgeS: 4, kick: false, kicked: false });
+  const first = statusWatch(STATUS_RECONNECT_S + 0.5, false);
+  assert.equal(first.kick, true);
+  assert.equal(statusWatch(9, first.kicked).kick, false); // not again in the same spell
+  assert.equal(statusWatch(0.5, true).kicked, false); // a fresh Status re-arms it
+});
+
+test("the problems list says the page may be stale while the link looks up", () => {
+  const status = { mode: "ASSIST" } as unknown as Parameters<typeof bannerProblems>[0]["status"];
+  const stale = bannerProblems({ links: { stream: true, input: true }, status, statusAgeS: 6 });
+  assert.ok(stale.some((p) => p.startsWith("No status from the backend for 6 s")));
+  const fresh = bannerProblems({ links: { stream: true, input: true }, status, statusAgeS: null });
+  assert.ok(!fresh.some((p) => p.startsWith("No status")));
+});

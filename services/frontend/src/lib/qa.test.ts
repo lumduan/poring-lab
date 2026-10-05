@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { initialSession, toDetections } from "./qa.ts";
+import { handcheckProgress, initialSession, toDetections } from "./qa.ts";
 
 test("pixel boxes become normalized, clamped detections for the overlay", () => {
   const det = toDetections(
@@ -18,4 +18,23 @@ test("/qa opens on the session a link names, else the newest; an unknown name is
   assert.equal(initialSession(index, ""), "b");
   assert.equal(initialSession(index, "?session=nope"), "b");
   assert.equal(initialSession({ sessions: [] }, "?session=a"), null);
+});
+
+test("/qa opens on the gold set unless a link names another session", () => {
+  const index = {
+    sessions: [
+      { id: "gold", title: "g", frames: 27, gold: true },
+      { id: "newest", title: "n", frames: 24 },
+    ],
+  };
+  assert.equal(initialSession(index, ""), "gold");
+  assert.equal(initialSession(index, "?session=newest"), "newest");
+});
+
+test("the hand-check progress counts SAVED frames and flags unsaved edits", () => {
+  assert.deepEqual(handcheckProgress(0, 27, false), { text: "hand-check saved: 0 / 27 frames", done: false });
+  assert.equal(handcheckProgress(27, 27, false).done, true);
+  const dirty = handcheckProgress(27, 27, true);
+  assert.equal(dirty.done, false);
+  assert.match(dirty.text, /UNSAVED/);
 });

@@ -49,6 +49,12 @@ export class ReconnectingSocket {
     return true;
   }
 
+  /** Drop the current socket and reconnect (the usual backoff): for a link that stays "open" but
+   * delivers nothing, e.g. a tab Safari throttled (2026-10-05). */
+  kick(): void {
+    this.ws?.close();
+  }
+
   close(): void {
     this.closed = true;
     if (this.timer) clearTimeout(this.timer);

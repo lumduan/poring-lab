@@ -12,6 +12,7 @@
   world as it was that long ago.
 * Bundle: services/frontend/.qa-local/<session>/ (gitignored, .dockerignore'd, dev route only) --
   frames as lossless PNG + labels.json; index.json lists the sessions.
+* --mark-gold SESSION_ID (alone): mark that exported session as the gold set; /qa opens on it.
 * --sheet: also an offline contact sheet with the boxes drawn (for reports), e.g. in /dev/shm.
 * Either format: PNG shards, or an H.264 session (Batt 2026-10-04: the default) read through
   poring_dataset.h264 -- evenly spread frames, freeze spans excluded, each frame verified against
@@ -153,7 +154,24 @@ def session_frames(
             yield meta, img
 
 
+def mark_gold(index_path: Path, session_id: str) -> None:
+    """Mark ONE exported session as the gold set (/qa opens on it unless a link names another):
+    the B6 hand-check was twice done on the wrong session, 2026-10-04 and 10-05."""
+    index = json.loads(index_path.read_text())
+    if not any(s["id"] == session_id for s in index["sessions"]):
+        raise SystemExit(f"{session_id} is not exported (no entry in {index_path})")
+    for s in index["sessions"]:
+        s["gold"] = s["id"] == session_id
+    index_path.write_text(json.dumps(index, indent=1))
+    if json.loads(index_path.read_text()) != index:
+        raise SystemExit("index read-back differs")
+
+
 def main() -> int:
+    if len(sys.argv) == 3 and sys.argv[1] == "--mark-gold":  # qa_export.py --mark-gold SESSION_ID
+        mark_gold(BUNDLES / "index.json", sys.argv[2])
+        print(f"gold set: {sys.argv[2]}")
+        return 0
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     ap.add_argument("session", type=Path)
     ap.add_argument("--every", type=int, default=5)
@@ -189,10 +207,11 @@ def main() -> int:
     }))  # fmt: skip
     index_path = BUNDLES / "index.json"
     index = json.loads(index_path.read_text()) if index_path.exists() else {"sessions": []}
+    was_gold = any(s.get("gold") for s in index["sessions"] if s["id"] == manifest["session_id"])
     index["sessions"] = [s for s in index["sessions"] if s["id"] != manifest["session_id"]]
     index["sessions"].append({"id": manifest["session_id"],
                               "title": f"{manifest['session_id']} ({manifest['backend']})",
-                              "frames": len(frames_out)})  # fmt: skip
+                              "frames": len(frames_out), "gold": was_gold})  # fmt: skip
     index_path.write_text(json.dumps(index, indent=1))
     if a.sheet and sheet:
         cols = 3
