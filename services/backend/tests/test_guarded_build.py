@@ -78,8 +78,9 @@ def test_start_uses_dev_overlay_and_stops_only_its_services(
     monkeypatch.setattr(gb, "watch", lambda seconds, guard, what, stop_cmd: ran.append(stop_cmd))
     gb.run_start(["db", "rathena"], 5, guard=None)
     up, stop = ran
-    # core + sniffer + gamestream profiles: start:sniffer / start:gamestream are guarded too
-    dev = ["scripts/dev.sh", "--profile", "core", "--profile", "sniffer", "--profile", "gamestream"]
+    # core + sniffer + gamestream + th profiles: start:sniffer / gamestream / rathena-th guarded too
+    dev = ["scripts/dev.sh", "--profile", "core", "--profile", "sniffer", "--profile", "gamestream",
+           "--profile", "th"]  # fmt: skip
     assert up == [*dev, "up", "-d", "--no-build", "db", "rathena"]
     assert stop == [*dev, "stop", "db", "rathena"]
 

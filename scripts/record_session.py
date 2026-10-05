@@ -58,6 +58,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import dataset_ship  # noqa: E402
+import lab_servers  # noqa: E402
 import measure_delay  # noqa: E402
 import ro_agent as r  # noqa: E402
 
@@ -183,7 +184,7 @@ def _events_since(t0_ns: int, back_s: float, lo_ns: int, t1_ns: int) -> list[dic
     if not files:
         return []
     raw = subprocess.run(
-        ["docker", "exec", "poring-lab-sniffer-1", "cat", *files], capture_output=True, check=True
+        ["docker", "exec", lab_servers.sniffer(), "cat", *files], capture_output=True, check=True
     ).stdout
     out: list[dict[str, Any]] = []
     with gzip.GzipFile(fileobj=io.BytesIO(raw)) as fh:
@@ -279,7 +280,8 @@ def record(a: argparse.Namespace) -> dict[str, Any]:
     seconds = (t1 - t0) / 1e9
     manifest = {
         "session_id": session_id, "recorder_version": RECORDER_VERSION,
-        "backend": a.backend, "lock_seq": lock.seq, "config": config, "config_hash": chash,
+        "backend": a.backend, "server": lab_servers.server(), "lock_seq": lock.seq,
+        "config": config, "config_hash": chash,
         "game_region": [gx, gy, gw, gh], "fps_cap": a.fps, "png_level": a.png_level,
         "shards": writer.shards,
         "frames": writer.frames, "unchanged_skipped": skipped, "bus_repeats": repeats,
@@ -401,7 +403,8 @@ def record_h264(
     size = (out / "stream.h264").stat().st_size
     manifest = {
         "session_id": session_id, "recorder_version": RECORDER_VERSION, "format": "h264",
-        "backend": a.backend, "lock_seq": lock.seq, "config": config, "config_hash": chash,
+        "backend": a.backend, "server": lab_servers.server(), "lock_seq": lock.seq,
+        "config": config, "config_hash": chash,
         "game_region": [gx, gy, gw, gh], "idr_every_s": a.idr_every, "shards": [],
         "frames": summary.get("frames"), "bytes": size, "t0_mono_ns": t0, "t1_mono_ns": t1,
         "seconds": round(seconds, 1), "mb_per_min": round(size / 1e6 / max(seconds / 60, 1e-9), 1),
@@ -467,6 +470,10 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     ap.add_argument("--repack", type=Path, help="rebuild an existing session's packets file")
     ap.add_argument("--backend", choices=["rdp", "console"])
+    ap.add_argument(
+        "--server", choices=sorted(lab_servers.SNIFFERS), default=None,
+        help="which server's sniffer holds the packets (default: $PORING_SERVER or lab-rathena)",
+    )  # fmt: skip
     ap.add_argument("--label")
     ap.add_argument("--seconds", type=float, default=120.0)
     ap.add_argument("--fps", type=float, default=1.0, help="png: the frame rate cap (Batt: 1)")
@@ -512,6 +519,7 @@ def main() -> int:
         help="refuse / stop above this much unshipped data under --out",
     )
     a = ap.parse_args()
+    lab_servers.select(a.server)  # every packet read below uses this server's sniffer
     if a.repack:
         print(json.dumps(repack(a.repack)))
         return 0

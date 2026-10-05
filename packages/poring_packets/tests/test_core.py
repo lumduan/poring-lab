@@ -285,9 +285,26 @@ def test_the_attestation_says_live_lab_session_and_nothing_else() -> None:
         "aid",
         "last_packet_age_ms",
         "map_conns",
-    }  # no position, map, HP or entity: attestation only
+        "server",
+    }  # no position, map, HP or entity: attestation only (+ WHICH server, 2026-10-05)
     later = now + (SESSION_LIVE_S + 1) * 1_000_000_000
     assert not s.attestation(later).session_live  # silence ends it
     conn = next(iter(s.conns.values()))
     conn.closed = True
     assert not s.attestation(now).session_live  # a FIN/RST ends it at once
+
+
+def test_the_attestation_names_its_server_and_the_sniffer_needs_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """2026-10-05 (Batt): one sniffer per rathena; the interlock requires the attested server to be
+    the environment's id, so a sniffer without SNIFFER_SERVER_ID refuses to start."""
+    s = Session(table(), CLIENT, set(), "lab-rathena-th")
+    assert s.attestation(1).server == "lab-rathena-th"
+    assert Session(table(), CLIENT, set()).attestation(1).server is None  # unnamed: never green
+    from poring_packets import sniffer
+
+    for bad in ("", "Lab Rathena", "x" * 65):
+        monkeypatch.setenv("SNIFFER_SERVER_ID", bad)
+        with pytest.raises(SystemExit, match="SNIFFER_SERVER_ID"):
+            sniffer.run()

@@ -41,6 +41,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import benchlib  # noqa: E402
+import lab_servers  # noqa: E402
 import ro_agent as r  # noqa: E402
 
 SCRATCH = Path(os.environ.get("SCRATCH", "/dev/shm/poring-lab-tmp"))
@@ -82,7 +83,7 @@ def events_files(since_wall: float) -> list[str]:
     shard is named by its UTC open time and rotates hourly, so anything opened more than ~1 h
     before the run cannot contain it (the volume keeps up to 7 days)."""
     names = subprocess.run(
-        ["docker", "exec", "poring-lab-sniffer-1", "ls", "/captures"],
+        ["docker", "exec", lab_servers.sniffer(), "ls", "/captures"],
         capture_output=True, text=True, check=True,
     ).stdout.split()  # fmt: skip
     keep = []
@@ -102,7 +103,7 @@ def self_moves(since_ns: int) -> list[dict[str, object]]:
     if not files:
         return []
     raw = subprocess.run(
-        ["docker", "exec", "poring-lab-sniffer-1", "cat", *files], capture_output=True, check=True
+        ["docker", "exec", lab_servers.sniffer(), "cat", *files], capture_output=True, check=True
     ).stdout
     out: list[dict[str, object]] = []
     # Concatenated gzip members; the newest is still open (flushed, not closed).

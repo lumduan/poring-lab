@@ -96,3 +96,10 @@ def load(directory: Path = GENERATED, *, prere: bool = True) -> dict[str, MapGri
             raise MapCacheError(f"{path}: sha256 differs from mapcache.lock.json")
         caches.append(parse(data))
     return merge(caches)
+
+
+def load_with_import(import_cache: Path, *, prere: bool = True) -> dict[str, MapGrid]:
+    """rathena-th's maps (2026-10-05): its import cache (generated from the Thai client's GRF by
+    rAthena's mapcache tool; client-derived, NOT in the lock) ahead of the lock-verified stock
+    caches -- the map-server's own order, so any map it lacks falls back to the stock one."""
+    return merge([parse(import_cache.read_bytes()), load(prere=prere)])

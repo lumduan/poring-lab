@@ -39,12 +39,12 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import dataset_ship  # noqa: E402
+import lab_servers  # noqa: E402
 import record_session  # noqa: E402
 import ro_agent as r  # noqa: E402
 
 from poring_dataset.timeline import session_events  # noqa: E402
 
-SNIFFER = "poring-lab-sniffer-1"
 SIDECAR = "packets.states.jsonl.gz"
 VALIDATION_AIDS = (2000001, 2000002)  # config/environments.yaml: the agent and the validation GM
 NAME = re.compile(r"capture-(\d{8}T\d{6})Z\.pcapng$")
@@ -52,8 +52,8 @@ NAME = re.compile(r"capture-(\d{8}T\d{6})Z\.pcapng$")
 
 def captures() -> list[tuple[float, str]]:
     """(UTC start epoch, path) of every banked pcapng, oldest first."""
-    out = subprocess.run(["docker", "exec", SNIFFER, "ls", "/captures"], capture_output=True,
-                         text=True, check=True).stdout.split()  # fmt: skip
+    cmd = ["docker", "exec", lab_servers.sniffer(), "ls", "/captures"]
+    out = subprocess.run(cmd, capture_output=True, text=True, check=True).stdout.split()
     files = []
     for name in out:
         m = NAME.match(name)
@@ -74,7 +74,7 @@ def covering(files: list[tuple[float, str]], lo_wall: float, hi_wall: float) -> 
 
 
 def replay(paths: list[str]) -> list[dict[str, Any]]:
-    cmd = ["docker", "exec", SNIFFER, "python", "-m", "poring_packets.replay", *paths]
+    cmd = ["docker", "exec", lab_servers.sniffer(), "python", "-m", "poring_packets.replay", *paths]
     for aid in VALIDATION_AIDS:
         cmd += ["--validation-aid", str(aid)]
     res = subprocess.run(cmd, capture_output=True, text=True, check=False)
@@ -136,7 +136,9 @@ def main() -> int:
     ap.add_argument("sessions", nargs="+")
     ap.add_argument("--datasets", type=Path, default=dataset_ship.NAS_ROOT)
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--server", choices=sorted(lab_servers.SNIFFERS), default=None)
     a = ap.parse_args()
+    lab_servers.select(a.server)
     files = captures()
     rc = 0
     for sid in a.sessions:

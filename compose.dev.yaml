@@ -22,6 +22,13 @@ services:
       - ./services/rathena/entrypoint.sh:/usr/local/bin/rathena-entrypoint:ro
       - ./services/rathena/conf/import/groups.yml:/opt/rathena-conf-templates/groups.yml:ro
 
+  rathena-th:
+    volumes:
+      # The same host files as rathena (read-only): the GM's group 20 (@heal/@alive) and the
+      # entrypoint that installs rathena-th's import map cache (RATHENA_IMPORT_MAPCACHE).
+      - ./services/rathena/entrypoint.sh:/usr/local/bin/rathena-entrypoint:ro
+      - ./services/rathena/conf/import/groups.yml:/opt/rathena-conf-templates/groups.yml:ro
+
   backend:
     environment:
       # Mounted source wins over the copy installed in the image's site-packages.

@@ -22,6 +22,17 @@ tar -C "${rt}" -xf /opt/rathena-runtime.tar
 log "runtime extracted into ${rt}: $(du -sm "${rt}" | cut -f1) MiB in ${SECONDS}s"
 cd "${rt}"
 
+# rathena-th ONLY (2026-10-05, the Thai-data experiment): its map cache, made from the Thai
+# client's GRF by rAthena's own mapcache tool (scripts/gen_mapcache_th.py; client-derived, never
+# committed), becomes db/import/map_cache.dat. map-server reads db/import FIRST, so its maps
+# override the stock caches and any map it lacks falls back to them. `rathena` never sets
+# RATHENA_IMPORT_MAPCACHE (test_guards.py): for it nothing here runs.
+if [ -n "${RATHENA_IMPORT_MAPCACHE:-}" ]; then
+  [ -s "${RATHENA_IMPORT_MAPCACHE}" ] || die "RATHENA_IMPORT_MAPCACHE=${RATHENA_IMPORT_MAPCACHE} is missing or empty"
+  cp "${RATHENA_IMPORT_MAPCACHE}" db/import/map_cache.dat
+  log "import map cache installed: $(stat -c %s db/import/map_cache.dat) bytes, sha256 $(sha256sum db/import/map_cache.dat | cut -c1-16)"
+fi
+
 : "${HOST_LAN_IP:?HOST_LAN_IP must be the Docker host LAN IP that game clients connect to}"
 : "${DB_HOST:=db}" "${DB_PORT:=3306}"
 : "${DB_NAME:?}" "${DB_USER:?}" "${DB_PASSWORD:?}"

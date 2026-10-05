@@ -363,6 +363,9 @@ services:
       INGEST_URL: ws://backend:8001/ingest/packets
       # Login ids of the validation (GM) accounts: their sessions are tagged, never logged.
       VALIDATION_USERIDS: ${RATHENA_GM_USER:-}
+      # WHICH server this sniffer watches (2026-10-05): the interlock requires the attested
+      # server to equal the environment id (config/environments.yaml). Required at start.
+      SNIFFER_SERVER_ID: lab-rathena
       PYTHONDONTWRITEBYTECODE: "1"
     # pcapng + events (hourly / 256 MB; 7 days or 20 GB). NEVER ./data: RO login packets carry
     # credentials (the sniffer zeroes the password bytes, and captures still stay out of git).
@@ -371,8 +374,113 @@ services:
     mem_limit: 256m
     memswap_limit: 256m
 
+  # --- The Thai-data experiment (Batt, 2026-10-05): a SEPARATE rAthena, "rathena-th" -------------
+  # Same image, SHA and pre-renewal mode as `rathena`; its own database (db-th) and a map cache made
+  # from the Thai client's GRF by rAthena's own mapcache tool (scripts/gen_mapcache_th.py,
+  # data/mapcache-th/, never committed). The current rathena, its db and its map cache are untouched.
+  # ONE AT A TIME with rathena, by construction: the same pinned IP (10.210.96.6, the backend's
+  # only ingest peer) and the same LAN ports, so Docker refuses to start one while the other runs.
+  # Switch with guarded steps (stop:sniffer,rathena then start:rathena-th,sniffer-th, and back).
+  # TH variables use ':-' (never ':?'): compose interpolates every service before it filters
+  # profiles, so a required TH variable would break every compose command until .env has it.
+  db-th:
+    <<: *lab
+    profiles: [th]
+    image: mariadb:11.8.9
+    pull_policy: never
+    environment:
+      MARIADB_DATABASE: ${DB_TH_NAME:-ragnarok}
+      MARIADB_USER: ${DB_TH_USER:-ragnarok}
+      MARIADB_PASSWORD: ${DB_TH_PASSWORD:-}
+      MARIADB_ROOT_PASSWORD: ${DB_TH_ROOT_PASSWORD:-}
+    command: ["--character-set-server=tis620", "--collation-server=tis620_bin"]
+    volumes:
+      - db-th-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    mem_limit: 512m
+    memswap_limit: 512m
+
+  rathena-th:
+    <<: *lab
+    profiles: [th]
+    image: poring-lab/rathena:pv${PACKETVER:-20211103}-prere-${RATHENA_PRERE:-no}
+    pull_policy: never
+    depends_on:
+      db-th:
+        condition: service_healthy
+    environment:
+      HOST_LAN_IP: ${HOST_LAN_IP:-}
+      DB_HOST: db-th
+      DB_PORT: "3306"
+      DB_NAME: ${DB_TH_NAME:-ragnarok}
+      DB_USER: ${DB_TH_USER:-ragnarok}
+      DB_PASSWORD: ${DB_TH_PASSWORD:-}
+      RATHENA_SERVER_USER: ${RATHENA_TH_SERVER_USER:-}
+      RATHENA_SERVER_PASSWORD: ${RATHENA_TH_SERVER_PASSWORD:-}
+      RATHENA_SERVER_NAME: ${RATHENA_TH_SERVER_NAME:-PoringLab-TH}
+      RATHENA_NEW_ACCOUNT: ${RATHENA_NEW_ACCOUNT:-yes}
+      RATHENA_PINCODE: ${RATHENA_PINCODE:-no}
+      RATHENA_WEB_SERVER: ${RATHENA_WEB_SERVER:-false}
+      RATHENA_TEST_USER: ${RATHENA_TH_TEST_USER:-}
+      RATHENA_TEST_PASSWORD: ${RATHENA_TH_TEST_PASSWORD:-}
+      RATHENA_AGENT_USER: ${RATHENA_TH_AGENT_USER:-}
+      RATHENA_AGENT_PASSWORD: ${RATHENA_TH_AGENT_PASSWORD:-}
+      RATHENA_GM_USER: ${RATHENA_TH_GM_USER:-}
+      RATHENA_GM_PASSWORD: ${RATHENA_TH_GM_PASSWORD:-}
+      # entrypoint.sh installs it as db/import/map_cache.dat (read first; absent maps fall back).
+      RATHENA_IMPORT_MAPCACHE: /opt/rathena-mapcache/map_cache.dat
+    tmpfs:
+      - /opt/rathena:rw,exec,nosuid,nodev,size=192m,uid=1000,gid=1000,mode=0755
+    volumes:
+      - ./data/mapcache-th:/opt/rathena-mapcache:ro
+    networks:
+      default:
+        ipv4_address: 10.210.96.6 # = rathena's: the backend's only ingest peer, and the exclusion
+    ports:
+      - "${HOST_LAN_IP:-}:6900:6900" # login
+      - "${HOST_LAN_IP:-}:6121:6121" # char
+      - "${HOST_LAN_IP:-}:5121:5121" # map
+    mem_limit: 1536m
+    memswap_limit: 1536m
+
+  sniffer-th:
+    <<: *lab
+    profiles: [th]
+    image: poring-lab/sniffer:local
+    pull_policy: never
+    network_mode: "service:rathena-th"
+    depends_on:
+      rathena-th:
+        condition: service_started
+    user: "0:0"
+    cap_drop: [ALL]
+    cap_add: [NET_RAW]
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m
+    environment:
+      CAPTURE_IFACE: eth0
+      CAPTURE_DIR: /captures
+      INGEST_URL: ws://backend:8001/ingest/packets
+      VALIDATION_USERIDS: ${RATHENA_TH_GM_USER:-}
+      SNIFFER_SERVER_ID: lab-rathena-th
+      PYTHONDONTWRITEBYTECODE: "1"
+    # Its own captures (own retention: a shared directory would let one sniffer delete the other's
+    # files). Never ./data, never vision (test_guards.py).
+    volumes:
+      - captures-th:/captures
+    mem_limit: 256m
+    memswap_limit: 256m
+
 volumes:
   db-data:
+  db-th-data:
+  captures-th:
   x11-unix:
   # ADR-0007 packet captures: sniffer (rw) and backend (ro) ONLY -- never vision (test_guards.py).
   captures:

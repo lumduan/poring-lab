@@ -48,6 +48,10 @@ LAB = [
     "poring-lab-rathena-1",
     "poring-lab-sniffer-1",
     "poring-lab-db-1",
+    # the Thai-data experiment (2026-10-05): one at a time with rathena; absent = empty cells
+    "poring-lab-rathena-th-1",
+    "poring-lab-sniffer-th-1",
+    "poring-lab-db-th-1",
 ]
 CRON = "cron.service"
 

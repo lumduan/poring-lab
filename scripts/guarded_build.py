@@ -96,15 +96,23 @@ CONTAINERS = [
 EXTRA_CGROUPS = {"cron.service(capture-streaming-pro)": "/sys/fs/cgroup/system.slice/cron.service"}
 ALL = [
     "--profile", "core", "--profile", "remote", "--profile", "vision", "--profile", "gamestream",
-    "--profile", "sniffer",
+    "--profile", "sniffer", "--profile", "th",
 ]  # fmt: skip
 RUNTIME = ["--profile", "core", "--profile", "remote"]
 # Dev mode (compose.yaml + compose.dev.yaml, see scripts/dev.sh) plus the core and sniffer profiles,
 # so `start:sniffer` is guarded too (an unguarded sniffer recreate right after a guarded db/rathena
 # start coincided with 67 % quant-postgres io_full for ~20 s, 2026-10-01). `up -d <services>` still
 # starts only the named services.
-# gamestream (the Sunshine/Moonlight console-mode client, ADR-0009) is guarded the same way.
-DEV = ["scripts/dev.sh", "--profile", "core", "--profile", "sniffer", "--profile", "gamestream"]
+# gamestream (the Sunshine/Moonlight console-mode client, ADR-0009) is guarded the same way, and
+# so is `th` (2026-10-05): db-th, rathena-th, sniffer-th. rathena-th runs ONE AT A TIME with
+# rathena (same pinned IP and ports: Docker refuses the second); switch with
+#   scripts/dev.sh --profile sniffer stop sniffer rathena      (stop needs no guard)
+#   python3 scripts/guarded_build.py --sustain 30 --spike 25 start:rathena-th,sniffer-th@240
+# and back. The auto GM recover stays `sniffer`-only: the -th client logs in by itself or by hand.
+DEV = [
+    "scripts/dev.sh", "--profile", "core", "--profile", "sniffer", "--profile", "gamestream",
+    "--profile", "th",
+]  # fmt: skip
 # Lab image builds use dockerd's own BuildKit ("default"): it writes only the new layers. The global
 # builder on this host is Batt's arm64 `armbuilder` (docker-container driver), which re-loads every
 # finished image into dockerd as a full tarball -- a ~5 s, 66-100 % quant io_full burst on

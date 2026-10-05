@@ -69,6 +69,18 @@ Rules that apply on the community server:
 - Roadmap Phase 6 (Typhoon slow loop) targets the community server for social experiments and
   rAthena for deterministic tests.
 
+## Environment 1b (added 2026-10-05, Batt): rAthena with Thai client data, an experiment
+- **What:** `lab-rathena-th`, the same self-hosted rAthena (same SHA, pre-renewal) on the LAN,
+  with its own database and a map cache generated from the Thai client's GRF by rAthena's own
+  tool, plus a SEPARATE client copy (`C:\RO-rAthena-th\`: the same 2021-11-03 exe and WARP
+  patches, the Thai `data.grf` first in DATA.INI). It is environment 1 for every rule above.
+- **Never** the Thai client's own exe (protected, GameGuard), never a Thai or official server:
+  only the Thai DATA, against our own server.
+- **One at a time** with environment 1 (the same address and ports). The current client, its
+  shortcut, `rathena`, its database and its map cache are not modified (ADR-0006 consequence 2).
+- Interlock: `config/environments.yaml` entry `lab-rathena-th`; its sniffer attests
+  `server=lab-rathena-th` (ADR-0016 amendment 2026-10-05).
+
 ## Implementation notes (added 2026-09-30, not part of the decision text above)
 
 **Evidence status: PENDING, so the community server is currently treated as forbidden** for any

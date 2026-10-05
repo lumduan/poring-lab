@@ -13,7 +13,9 @@
 #   lab_host  the capture-backend lock is steady on rdp|console, and the backend's WIN_HOST and
 #             the sniffer's client_ip are this environment's windows_host;
 #   session   the sniffer's attestation: fresh (<= attestation_max_age_s), a live map session to
-#             THIS server, from windows_host, for one of `accounts` (rAthena login.account_id).
+#             THIS server (the attested `server` == this entry's id: one sniffer per rathena, each
+#             naming its server, 2026-10-05), from windows_host, for one of `accounts`
+#             (rAthena login.account_id).
 # No secrets here: account ids are numbers the server assigns; login ids stay in .env.
 version: 1
 attestation_max_age_s: 10
@@ -29,6 +31,20 @@ environments:
       shortcut: "Ragnarok Offline"
       server_select: "PoringLab LAN (rAthena)"
     accounts: [2000001, 2000002]   # the agent (group 0) and the validation GM (group 20)
+    signals: [lab_host, session]
+  - id: lab-rathena-th
+    # The Thai-data experiment (Batt, 2026-10-05): the same rAthena code with a map cache made
+    # from the Thai client's GRF, its own database (db-th), and a separate client copy. Runs ONE AT
+    # A TIME with lab-rathena (same address and ports); sniffer-th attests server=lab-rathena-th.
+    status: allowed
+    adr: "ADR-0006 environment 1b (the self-hosted rAthena, Thai-data experiment)"
+    server: {host: 192.168.1.13, ports: [6900, 6121, 5121]}
+    windows_host: 192.168.1.169
+    client:
+      exe: 'C:\RO-rAthena-th\client\PoringLab.exe'
+      shortcut: "Ragnarok Offline TH"
+      server_select: "PoringLab-TH"
+    accounts: []   # filled after db-th's first start (read back from its login table); empty = never green
     signals: [lab_host, session]
   - id: community-bot-testing
     status: pending            # forbidden until its permission evidence AND its own signal set exist

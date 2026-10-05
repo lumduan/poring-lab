@@ -49,7 +49,8 @@ CFG = EnvironmentsConfig.model_validate({
 
 def attest(**over: Any) -> Attestation:
     base: dict[str, Any] = {"t_mono_ns": 1, "client_ip": HOST, "session_live": True, "aid": AGENT,
-                            "last_packet_age_ms": 200, "map_conns": 1}  # fmt: skip
+                            "last_packet_age_ms": 200, "map_conns": 1,
+                            "server": "lab-rathena"}  # fmt: skip
     return Attestation(**(base | over))
 
 
@@ -77,6 +78,8 @@ def verdict(cfg: EnvironmentsConfig | None = CFG, *, mode: Mode = Mode.BOT, lock
         ({"att": attest(client_ip="192.168.1.50")}, "client_ip_mismatch"),
         ({"att": attest(session_live=False, aid=None)}, "no_session"),
         ({"att": attest(aid=1234567)}, "account_not_lab"),
+        ({"att": attest(server="lab-rathena-th")}, "server_mismatch"),  # another server's sniffer
+        ({"att": attest(server=None)}, "server_mismatch"),  # an unnamed sniffer: never green
     ],
 )  # fmt: skip
 def test_every_failure_is_red_for_the_bot(kwargs: dict[str, Any], reason: str) -> None:

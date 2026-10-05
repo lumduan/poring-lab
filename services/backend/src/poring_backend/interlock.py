@@ -137,6 +137,10 @@ def _env_signals(
             return "attestation_stale"
         if attest.client_ip != env.windows_host:
             return "client_ip_mismatch"
+        # WHICH server (2026-10-05, Batt): the attesting sniffer names its rathena; a session on
+        # another server (or an unnamed one) never makes this environment green.
+        if attest.server != env.id:
+            return "server_mismatch"
         if not attest.session_live:
             return "no_session"
         if attest.aid not in env.accounts:
@@ -224,4 +228,5 @@ class Interlock:
             "session_live": None if a is None else a.session_live,
             "aid": None if a is None else a.aid,
             "map_conns": None if a is None else a.map_conns,
+            "server": None if a is None else a.server,
         }

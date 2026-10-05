@@ -728,3 +728,76 @@ def test_the_environment_allowlist_is_mounted_read_only_in_the_backend_only(name
         from poring_backend.config import Settings
 
         assert Settings().environments_file == Path("/lab-config/environments.yaml")
+
+
+# --- The Thai-data experiment (Batt, 2026-10-05): db-th, rathena-th, sniffer-th ----------------
+TH_SERVICES = ("db-th", "rathena-th", "sniffer-th")
+
+
+def lan_ports(spec: dict[str, Any]) -> list[str]:
+    return [re.sub(r"^\$\{HOST_LAN_IP:[?-]\}:", "", p.split("#")[0].strip()) for p in spec["ports"]]
+
+
+def test_the_th_services_are_separate_limited_and_never_built() -> None:
+    services = compose("compose.yaml")["services"]
+    for name in TH_SERVICES:
+        spec = services[name]
+        assert spec["profiles"] == ["th"], f"{name}: profile th only (never core: up/smoke)"
+        assert spec["mem_limit"] == spec["memswap_limit"], f"{name}: no swap"
+        assert spec["oom_score_adj"] == 500, name
+        assert "build" not in spec and spec["pull_policy"] == "never", f"{name}: no build, no pull"
+    th, rathena = services["rathena-th"], services["rathena"]
+    assert th["image"] == rathena["image"]  # the same SHA and pre-renewal mode
+    assert services["db-th"]["image"] == services["db"]["image"]
+
+
+def test_rathena_th_runs_one_at_a_time_with_rathena() -> None:
+    """The same pinned IP (the backend's only ingest peer) and the same LAN ports: Docker refuses
+    to start one while the other runs. Concurrent instances would need a second LAN IP or new
+    ports (the sniffer's compiled BPF, the image HEALTHCHECK and smoke_test all use these)."""
+    from poring_backend.config import Settings
+
+    services = compose("compose.yaml")["services"]
+    th, rathena = services["rathena-th"], services["rathena"]
+    ip = th["networks"]["default"]["ipv4_address"]
+    assert ip == rathena["networks"]["default"]["ipv4_address"] == Settings().ingest_peer
+    assert lan_ports(th) == lan_ports(rathena) == ["6900:6900", "6121:6121", "5121:5121"]
+
+
+def test_the_current_rathena_and_its_db_are_untouched_by_the_experiment() -> None:
+    services = compose("compose.yaml")["services"]
+    rathena, th = services["rathena"], services["rathena-th"]
+    assert "RATHENA_IMPORT_MAPCACHE" not in rathena["environment"]
+    for name in ("compose.yaml", "compose.dev.yaml"):
+        spec = compose(name)["services"].get("rathena") or {}
+        assert not any("mapcache" in str(v) for v in spec.get("volumes", [])), name
+    assert rathena["environment"]["DB_HOST"] == "db" and th["environment"]["DB_HOST"] == "db-th"
+    assert "./data/mapcache-th:/opt/rathena-mapcache:ro" in th["volumes"]
+    assert th["environment"]["RATHENA_IMPORT_MAPCACHE"] == "/opt/rathena-mapcache/map_cache.dat"
+    assert "db-th-data" in compose("compose.yaml")["volumes"]
+    assert "db-th-data" not in volume_sources(services["db"])
+
+
+def test_each_sniffer_names_its_server_and_keeps_its_own_captures() -> None:
+    base = compose("compose.yaml")
+    services = base["services"]
+    sn = services["sniffer-th"]
+    assert sn["network_mode"] == "service:rathena-th"
+    assert services["sniffer"]["environment"]["SNIFFER_SERVER_ID"] == "lab-rathena"
+    assert sn["environment"]["SNIFFER_SERVER_ID"] == "lab-rathena-th"
+    envs = yaml.safe_load((ROOT / "config" / "environments.yaml").read_text())["environments"]
+    assert {"lab-rathena", "lab-rathena-th"} <= {e["id"] for e in envs}
+    assert mounts_of(sn, "captures-th") and not mounts_of(sn, "captures")
+    assert not mounts_of(sn, "./data") and "captures-th" in base["volumes"]
+    for name in ("compose.yaml", "compose.dev.yaml"):
+        for svc, spec in compose(name)["services"].items():
+            if svc != "sniffer-th":
+                assert not mounts_of(spec or {}, "captures-th"), f"{name}: {svc}"
+    assert "sniffer-th" not in compose("compose.dev.yaml")["services"]
+
+
+def test_no_th_variable_is_required_at_interpolation() -> None:
+    """Compose interpolates every service before it filters profiles: a required (':?') TH
+    variable would break every compose command until .env has it."""
+    text = (ROOT / "compose.yaml").read_text()
+    assert not re.search(r"\$\{(?:RATHENA_TH|DB_TH)_[A-Z_]+:\?", text)

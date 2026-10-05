@@ -3,6 +3,7 @@
 import struct
 import zlib
 from dataclasses import dataclass
+from pathlib import Path
 
 import pytest
 
@@ -205,3 +206,18 @@ def test_the_optional_altitude_cost_prefers_flat_ground() -> None:
     assert flat is not None and any(c in hill for c in flat)  # the server ignores height
     around = walk_path(OPEN, 1, 2, 8, 2, altitude=alt, climb=5.0)
     assert around is not None and not any(c in hill for c in around)
+
+
+def test_an_import_cache_overrides_its_maps_and_falls_back_for_the_rest(tmp_path: Path) -> None:
+    """rathena-th (2026-10-05): its Thai-GRF cache goes first, every other map is the stock one."""
+    cells = bytes([1]) * 6
+    body = zlib.compress(cells)
+    entry = struct.pack("<12shhi", b"prt_fild08", 3, 2, len(body)) + body
+    data = struct.pack("<IH", 8 + len(entry), 1) + b"\0\0" + entry
+    (tmp_path / "th.dat").write_bytes(data)
+    stock = mapcache.load(prere=True)
+    merged = mapcache.load_with_import(tmp_path / "th.dat")
+    assert (merged["prt_fild08"].xs, merged["prt_fild08"].cells) == (3, cells)  # the import wins
+    assert (
+        merged["prt_church"] is stock["prt_church"] or merged["prt_church"] == stock["prt_church"]
+    )

@@ -14,6 +14,11 @@ Known variables and their generators:
     RATHENA_TEST_PASSWORD           16 alphanumerics (rathena's entrypoint rule).
     WIN_LAB_PASSWORD                20 alphanumerics, at least one upper, lower and digit
                                     (Windows complexity).
+    The Thai-data experiment's rathena-th + db-th (2026-10-05), FIRST-TIME ONLY (refused once its
+    db-th container exists: rotating a live database's password is not implemented for it):
+    DB_TH_PASSWORD, DB_TH_ROOT_PASSWORD hex32; RATHENA_TH_SERVER_USER srv_+hex8,
+    RATHENA_TH_SERVER_PASSWORD hex23; RATHENA_TH_AGENT_USER tha_+hex8, RATHENA_TH_GM_USER
+    thv_+hex8 (login ids live in .env only), RATHENA_TH_{AGENT,GM}_PASSWORD 16 alphanumerics.
 
 .env is rewritten atomically (temp file + rename, mode 600); only variable NAMES are printed.
 After rotating DB_* or RATHENA_*: recreate db + rathena (+ the sniffer, which shares rathena's
@@ -58,7 +63,23 @@ GENERATORS: dict[str, Callable[[], str]] = {
     "RATHENA_SERVER_PASSWORD": lambda: secrets.token_hex(16)[:23],
     "RATHENA_TEST_PASSWORD": lambda: _alnum(16),
     "WIN_LAB_PASSWORD": lambda: _complex(20),
+    # rathena-th / db-th (first-time only, see TH_FIRST_TIME)
+    "DB_TH_PASSWORD": lambda: secrets.token_hex(16),
+    "DB_TH_ROOT_PASSWORD": lambda: secrets.token_hex(16),
+    "RATHENA_TH_SERVER_USER": lambda: "srv_" + secrets.token_hex(4),
+    "RATHENA_TH_SERVER_PASSWORD": lambda: secrets.token_hex(16)[:23],
+    "RATHENA_TH_AGENT_USER": lambda: "tha_" + secrets.token_hex(4),
+    "RATHENA_TH_AGENT_PASSWORD": lambda: _alnum(16),
+    "RATHENA_TH_GM_USER": lambda: "thv_" + secrets.token_hex(4),
+    "RATHENA_TH_GM_PASSWORD": lambda: _alnum(16),
 }
+TH_FIRST_TIME = frozenset(n for n in GENERATORS if n.startswith(("DB_TH_", "RATHENA_TH_")))
+DB_TH = "poring-lab-db-th-1"
+
+
+def container_exists(name: str) -> bool:
+    r = subprocess.run(["docker", "container", "inspect", name], capture_output=True)
+    return r.returncode == 0
 
 
 def parse_env(text: str) -> dict[str, str]:
@@ -160,6 +181,9 @@ def rotate(names: list[str], env_path: Path = ENV) -> list[str]:
     unknown = [n for n in names if n not in GENERATORS]
     if unknown:
         sys.exit(f"no generator for {unknown}; known: {sorted(GENERATORS)}")
+    if TH_FIRST_TIME & set(names) and container_exists(DB_TH):
+        sys.exit(f"{DB_TH} exists: the TH secrets are first-time only (its database already holds "
+                 "them); .env unchanged")  # fmt: skip
     new = {n: GENERATORS[n]() for n in names}
     if {"DB_PASSWORD", "DB_ROOT_PASSWORD"} & new.keys():
         alter_db({k: v for k, v in new.items() if k.startswith("DB_")})

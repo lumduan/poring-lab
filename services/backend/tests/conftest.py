@@ -126,7 +126,7 @@ def make_green(state: Any, *, aid: int = LAB_AID, window_max_s: float = 120) -> 
     state.interlock.win_host = LAB_HOST
     state.interlock.attested(
         Attestation(t_mono_ns=monotonic_ns(), client_ip=LAB_HOST, session_live=True, aid=aid,
-                    last_packet_age_ms=100, map_conns=1),
+                    last_packet_age_ms=100, map_conns=1, server="lab-rathena"),
         monotonic_ns(),
     )  # fmt: skip
 

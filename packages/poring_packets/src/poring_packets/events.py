@@ -262,6 +262,12 @@ class Attestation(BaseModel):
     aid: int | None = Field(default=None, description="The live session's account id.")
     last_packet_age_ms: int | None = Field(default=None, ge=0)
     map_conns: int = Field(default=0, ge=0, description="Open map connections from the host.")
+    server: str | None = Field(
+        default=None,
+        description="WHICH server the session belongs to: the sniffer's SNIFFER_SERVER_ID, an "
+        "environment id in config/environments.yaml (2026-10-05, Batt: one sniffer per rathena; "
+        "the interlock requires it to equal the environment's id).",
+    )
 
 
 def parse_event(text: str | bytes) -> PacketEvent:

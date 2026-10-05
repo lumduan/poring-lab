@@ -18,6 +18,7 @@ import json
 import logging
 import os
 import queue
+import re
 import signal
 import threading
 import time
@@ -66,8 +67,15 @@ class Conn:
 class Session:
     """Pure decoding state: TCP segments in, packet events out (no IO; unit-tested)."""
 
-    def __init__(self, table: LengthTable, client_ip: str, validation_userids: set[str]) -> None:
+    def __init__(
+        self,
+        table: LengthTable,
+        client_ip: str,
+        validation_userids: set[str],
+        server_id: str | None = None,
+    ) -> None:
         self.table, self.client_ip = table, client_ip
+        self.server_id = server_id or None  # the attestation's `server` (SNIFFER_SERVER_ID)
         self.validation_userids = validation_userids
         self.validation_aids: set[int] = set()
         self.conns: dict[tuple[str, int, int], Conn] = {}
@@ -190,6 +198,7 @@ class Session:
             last_packet_age_ms=(None if newest is None
                                 else max(0, (t_mono - newest.last_seen_ns) // 1_000_000)),
             map_conns=len(live),
+            server=self.server_id,
         )  # fmt: skip
 
     def stats(self, t_mono: int) -> PacketStats:
@@ -301,8 +310,13 @@ def run() -> None:
     root = Path(os.environ.get("CAPTURE_DIR", "/captures"))
     url = os.environ.get("INGEST_URL", "ws://backend:8001/ingest/packets")
     userids = {u for u in os.environ.get("VALIDATION_USERIDS", "").split(",") if u}
+    # WHICH server this sniffer watches (its rathena's netns): the interlock requires the
+    # environment id to match (2026-10-05). No id, no start: an unnamed session never goes green.
+    server_id = os.environ.get("SNIFFER_SERVER_ID", "").strip()
+    if not re.fullmatch(r"[a-z0-9-]{1,64}", server_id):
+        raise SystemExit("SNIFFER_SERVER_ID must name this sniffer's server (an environment id)")
     table = load_table()
-    session = Session(table, os.environ.get("CLIENT_IP", "192.168.1.169"), userids)
+    session = Session(table, os.environ.get("CLIENT_IP", "192.168.1.169"), userids, server_id)
     cap = Capture(iface)
     out = Rotating(root)
     ingest = Ingest(url) if url else None

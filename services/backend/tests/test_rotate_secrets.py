@@ -36,6 +36,12 @@ def test_rewrite_replaces_in_place_keeps_comments_and_appends_missing(rs: Module
         ("RATHENA_SERVER_PASSWORD", r"[0-9a-f]{23}"),  # <= 23: char/map 24-byte buffers
         ("RATHENA_TEST_PASSWORD", r"[A-Za-z0-9]{16}"),  # entrypoint: 8-32 of [A-Za-z0-9]
         ("WIN_LAB_PASSWORD", r"(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[A-Za-z0-9]{20}"),
+        ("DB_TH_PASSWORD", r"[0-9a-f]{32}"),
+        ("RATHENA_TH_SERVER_USER", r"srv_[0-9a-f]{8}"),  # entrypoint: 4-23 characters
+        ("RATHENA_TH_SERVER_PASSWORD", r"[0-9a-f]{23}"),
+        ("RATHENA_TH_AGENT_USER", r"tha_[0-9a-f]{8}"),
+        ("RATHENA_TH_GM_USER", r"thv_[0-9a-f]{8}"),
+        ("RATHENA_TH_GM_PASSWORD", r"[A-Za-z0-9]{16}"),
     ],
 )
 def test_generators_match_their_consumers_rules(rs: ModuleType, name: str, pattern: str) -> None:
@@ -86,3 +92,20 @@ def test_set_refuses_secret_looking_names(rs: ModuleType, tmp_path: Path, pair: 
     with pytest.raises(SystemExit):
         rs.set_values([pair], env_path=env)
     assert env.read_text() == "A=1\n"
+
+
+def test_th_secrets_are_first_time_only(
+    rs: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """db-th already initialised holds its passwords: rotating them in .env alone would break it."""
+    env = tmp_path / ".env"
+    env.write_text("DB_TH_PASSWORD=\n")
+    monkeypatch.setattr(rs, "container_exists", lambda name: True)
+    with pytest.raises(SystemExit, match="first-time only"):
+        rs.rotate(["DB_TH_PASSWORD"], env)
+    assert env.read_text() == "DB_TH_PASSWORD=\n"
+    monkeypatch.setattr(rs, "container_exists", lambda name: False)
+    assert rs.rotate(["DB_TH_PASSWORD", "RATHENA_TH_GM_USER"], env) == [
+        "DB_TH_PASSWORD", "RATHENA_TH_GM_USER"]  # fmt: skip
+    back = rs.parse_env(env.read_text())
+    assert len(back["DB_TH_PASSWORD"]) == 32 and back["RATHENA_TH_GM_USER"].startswith("thv_")

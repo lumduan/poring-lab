@@ -71,7 +71,13 @@ Today it holds two environments:
 
 **The attestation is attestation, never world data** (ADR-0007 ruling).
 - It carries `client_ip`, `session_live`, `aid`, `last_packet_age_ms` and `map_conns`. Nothing
-  else: a test pins the field set.
+  else: a test pins the field set. ➡️ **Amended 2026-10-05 (Batt, "server id + interlock check"):**
+  plus `server`, the attesting sniffer's `SNIFFER_SERVER_ID` (required at its start). The
+  `session` signal now also requires `server == the environment's id` (else `server_mismatch`;
+  an unnamed sniffer never goes green). Why: the Thai-data experiment runs a second rAthena
+  (`lab-rathena-th`) whose fresh database gives its accounts the SAME ids as today's, so the
+  account list could not tell the servers apart. This was a one-time code change; adding a server
+  is again a config entry + an ADR-0006 entry (+ a sniffer that names it).
 - The backend hands it to the interlock only. It is never published to a viewer or an agent.
 
 **The client profile** (exe path, launch shortcut, server-select entry):
