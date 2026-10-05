@@ -7,7 +7,7 @@ verdict_date: 2026-10-04
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: "2026-10-05: M1 COMPLETE (MIXCRYPT study decoder, host-local); E2 alarm re-test run (Batt confirmed the red box). B6 hand-check DONE 13:38 (gold set pinned; v0 monster P 0.644 / R 0.580). Open: the Thai-data experiment (separate client + rathena-th), then Batt decides the setup; the M4 re-run, M5 and v1 follow on it."
+next_action: "2026-10-05: M1 COMPLETE (MIXCRYPT study decoder, host-local); E2 alarm re-test run (Batt confirmed the red box). B6 hand-check DONE 13:38 (gold set pinned; v0 monster P 0.644 / R 0.580). Thai-data experiment 3b/3c run (Thai GRF in front crashes the 2021 exe; Thai last works but shows kRO art): Batt decides a selective overlay for 3d, then the setup; the M4 re-run, M5 and v1 follow on it."
 last_reviewed: 2026-10-05
 ---
 

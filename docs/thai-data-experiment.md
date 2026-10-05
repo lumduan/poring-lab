@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: "After 17:00 ICT: the separate client (3b), the compatibility test (3c), sprite fidelity (3d), then the adoption cost (3e) and Batt's decision whether to switch."
+next_action: "Batt decides how Thai assets get in front of kRO without crashing the 2021 exe (a selective overlay?) and whether the main client gets the AssistAddr override; then 3d sprite fidelity and 3e adoption cost."
 ---
 
 # The Thai-data experiment: a separate client AND a separate rAthena
@@ -86,4 +86,94 @@ today's `korea`; if login fails, `korea` is the measured fallback.
 
 ## 4. The separate client, compatibility, sprite fidelity, adoption cost
 
-To be filled after 17:00 ICT (3b–3e).
+Run on 2026-10-05 from 14:19 ICT (Batt moved it ahead of 17:00 while he was available).
+
+### 3b. The client copy and its defences
+
+- **The copy:** `C:\RO-rAthena-th` holds 936 files (3,808,348,146 B, verified) from `C:\RO-rAthena`;
+  the original is untouched.
+  - `client\thdata.grf` came through the temporary NAS drop (sha256 `a3718c74…f537`).
+  - DATA.INI started as `0=thdata.grf, 1=rdata.grf, 2=data.grf`.
+- **The shortcut:** "Ragnarok Offline TH" at desktop (37,747) runs `C:\RO-rAthena-th\PoringLab.cmd`.
+  - In .env: `RO_SHORTCUT_TH`; signature `shortcut_icon@thdata`.
+  - `ro_agent.py --profile th` drives it.
+- **Our clientinfo** (`data\clientinfo.xml`, `data\sclientinfo.xml`):
+  - display "PoringLab LAN (rathena-th)", `192.168.1.13:6900`, version 24, langtype 5;
+  - servicetype `thai` at first, `korea` since T1 (table below).
+  - The service-select list shows ONLY that line, so the loose file wins over the Thai GRF's
+    official one.
+  - The kRO `service_select` signature also matches this list (5.2), so the line was read by eye.
+- **Layer 1, the firewall:** Batt opened the elevated console; the agent typed only the agreed rule.
+  - Read back from the agent's shell: Outbound Block, Enabled, Profile Any.
+  - Program: exactly `C:\RO-rAthena-th\client\PoringLab.exe`.
+  - RemoteAddress: the five resolved official Thai IPs.
+  - It is the only active rule naming any RO exe: the main lab client and the community client
+    have none.
+- **Layer 2, `thwatch`:** a `Start-Job` in the agent's own shell.
+  - Every 500 ms it lists the TCP connections of `PoringLab.exe` processes whose PATH is the th
+    exe. Any remote other than 192.168.1.13, loopback or unbound means Stop-Process plus a
+    `KILLED` line in `C:\RO-rAthena-th\watch.log`. An `alive` line is written each ~60 s.
+  - It lives in that shell window. `ro_agent.py open-terminal` opens a new shell when none is
+    visible and then closes the others, so before typing, restore the minimised shell from the
+    taskbar instead.
+  - It polls, so a sub-500 ms failed attempt could escape it.
+- **Layer 3:** sniffer-th's attestation (`server=lab-rathena-th`).
+
+### 3c. Compatibility (RDP mode, rathena-th running, main rathena stopped)
+
+| Run (ICT) | DATA.INI | servicetype | Result |
+|---|---|---|---|
+| T0 14:38 | Thai first | thai | **Crash at start**, ~5 s after launch, before any window or connection: `ucrtbase.dll` access violation `0xc0000005` at `0x61cc6` (event 1000) |
+| T1 14:51 | Thai first | korea | The same crash: servicetype is not the cause |
+| T2 14:55 | **Thai last** | korea | Starts. The GM logs in (account 2000001). At CHARACTER SELECT the exe opened `kro-assit.ragnarok.co.kr:3000`: **killed by layer 2** at 14:58:33 |
+| T3 15:19 | Thai last | korea + AssistAddr override | Holds at character select (no PIN or web step). ThGm01 created (db-th char 150000). In game on `new_4-1`; interlock GREEN as `lab-rathena-th`. `@warp prt_fild08 170 375` and the four `@monster` spawns work. **Froze** ~5 s after clicking the Basic-Info menu buttons (Equip/Item/Skill): game loop stopped, window still responding, map session timed out at 60 s, no crash event, no outbound connection; stopped by PID |
+| T4 15:37 | the same | the same | In game. **10 min idle with no input: PASS**: 11 samples from 15:38:19 to 15:48:50, all green as `lab-rathena-th`, session live, 0 map timeouts; the picture stays live (10 % of game-area bytes change in 2 s). **Walking: PASS** (minimap 170,375 → 179,361). A clean Alt+F4 logs off. `thwatch` silent |
+| T5 15:52 | the same | the same | The agent account (2000000, group 0) logs in; ThAgent01 created (db-th char 150001); closed at character select. `thwatch` silent |
+
+**Where the character-select call comes from.** It is data, not code:
+- `AssistAddr` in `data\luafiles514\lua files\service_<svc>\externalsettings_<svc>.lub`;
+- kRO `data.grf`/`rdata.grf` hold `_kr`, `_kr_qm`, `_kr_sak`, `_kr_sak_qm`;
+- the Thai GRF holds `service_thailand\externalsettings_th(_stage).lub`.
+
+The values are all official (ADR-0016's known-forbidden list). The string is not in the exe.
+
+**The fix, client config only** (Batt: never patch the exe; rAthena's web auth stays off):
+- the four kRO files are extracted from the th copy's own GRFs on the Dell;
+- only the `AssistAddr` constant is changed, to `127.0.0.1:3000`;
+- they are placed as loose files in `C:\RO-rAthena-th\client\data\luafiles514\lua files\service_korea\`
+  and read back.
+
+Nothing listens on the Dell's port 3000. After the fix:
+- `thwatch` stays silent;
+- the client's only TCP is `192.168.1.13:5121`;
+- the DNS cache holds no ragnarok, gnjoy or gravity name.
+
+The main lab client has no such override (Batt decides).
+
+**What it means for the experiment:**
+- With the Thai GRF in FRONT, the 2021 exe crashes at start. The exe can index the Thai GRF
+  (with it last, it starts), so the crash comes from a Thai file read at startup that replaces a
+  kRO one.
+- With the Thai GRF LAST, the client is the kRO client plus the files only Thai has. The sprite
+  question (3d) cannot be answered in that configuration.
+- The open option is a selective overlay: only the Thai sprites/textures/maps in front, kRO tables
+  and Lua behind. It is Batt's decision.
+
+Sizes for a selective overlay, from our reader over the Thai GRF:
+
+| Overlay | Entries | Bytes |
+|---|---|---|
+| the four M4 species (`.spr` 0x03 MIXCRYPT, `.act` 0x05 DES) | 8 | ~73 KB |
+| all monster sprites (`data\sprite\몬스터\`) | 2,476 | 108.5 MB |
+| all other sprites | 124,057 | 900 MB |
+| textures | 40,514 | 1.44 GB |
+| maps (gat/gnd/rsw) | 2,436 | 655 MB |
+
+A raw copy keeps each entry's encryption, so an overlay needs no decryption. Which overlay, and
+how it reaches the Dell, is Batt's decision.
+
+Offline facts about the Thai GRF (our reader):
+- 185,765 entries; the longest name is 126 bytes;
+- 84,450 entries lie past 2 GiB, but the kRO `data.grf` is 2.97 GB and works, so that is not the
+  cause;
+- 245 directory entries carry flag 0x02.
