@@ -9,6 +9,7 @@ from pathlib import Path
 from types import ModuleType
 
 import numpy as np
+import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -79,3 +80,17 @@ def test_windows_pair_spawns_with_their_background() -> None:
     ]  # fmt: skip
     (w,) = m4.windows(ev)
     assert (w["t0"], w["t1"], w["species"], w["background"]) == (10, 50, "poring", [(1, 5)])
+
+
+def test_a_png_session_offers_the_h264_interface_measure_uses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """2026-10-05: RDP-mode recordings are PNG shards; m4_validate reads them like H.264 ones."""
+    frames = [({"frame_id": 7, "t_mono_ns": 100}, np.zeros((2, 2, 3), np.uint8)),
+              ({"frame_id": 9, "t_mono_ns": 300}, np.ones((2, 2, 3), np.uint8))]  # fmt: skip
+    monkeypatch.setattr(m4, "read_shard", lambda path: iter(frames))
+    s = m4.PngSession(tmp_path, {"shards": ["shard-000000.tar"]})
+    assert [(u.t_ns, u.frame_id) for u in s.units] == [(100, 7), (300, 9)]
+    assert s.usable() == [7, 9]
+    ((meta, img),) = list(s.frames([9]))
+    assert meta["frame_id"] == 9 and int(img.max()) == 1

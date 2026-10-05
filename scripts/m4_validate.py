@@ -29,6 +29,8 @@ import json
 import statistics
 import sys
 from collections import deque
+from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -50,6 +52,7 @@ from poring_dataset.render import (  # noqa: E402
     load_scene,
     predict_sprite,
 )
+from poring_dataset.shards import read_shard  # noqa: E402
 from poring_dataset.sprites import parse_act, parse_spr  # noqa: E402
 from poring_dataset.timeline import Timeline  # noqa: E402
 
@@ -176,6 +179,35 @@ def windows(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+class PngSession:
+    """A PNG-shard session (RDP mode records PNG, 1 fps) with the slice of H264Session's interface
+    measure() uses (2026-10-05: the Thai-data experiment's sprite fidelity runs in RDP mode)."""
+
+    def __init__(self, session: Path, manifest: dict[str, Any]) -> None:
+        self._frames: dict[int, tuple[dict[str, Any], npt.NDArray[np.uint8]]] = {}
+        self.units: list[Any] = []
+        for shard in manifest["shards"]:
+            for meta, img in read_shard(session / shard):
+                fid = int(meta["frame_id"])
+                self._frames[fid] = (meta, img)
+                self.units.append(_Unit(int(meta["t_mono_ns"]), fid))
+
+    def usable(self) -> list[int]:
+        return [u.frame_id for u in self.units]
+
+    def frames(
+        self, ids: list[int], verify: bool = False
+    ) -> Iterator[tuple[dict[str, Any], npt.NDArray[np.uint8]]]:
+        for fid in ids:
+            yield self._frames[fid]
+
+
+@dataclass(frozen=True)
+class _Unit:
+    t_ns: int
+    frame_id: int
+
+
 def sprite_sheet(species: str, use_spr: bool) -> SpriteSheet:
     """The species' ACT, plus its decoded SPR when asked and present (2026-10-05: the MIXCRYPT
     study decoder made them; sprite_catalog.py --decode-mixcrypt writes them to ACT_DIR): OPAQUE
@@ -202,7 +234,8 @@ def measure(  # noqa: PLR0915
     offset_ms, _ = qa_export.auto_offset_ms(manifest["config"])
     off = int(offset_ms * 1e6)
     camera = json.loads(camera_file(manifest["backend"]).read_text())
-    stream = H264Session(session)
+    stream: Any = (H264Session(session) if (manifest.get("format") or "png") == "h264"
+                   else PngSession(session, manifest))  # fmt: skip
     by_t = [(u.t_ns, u.frame_id) for u in stream.units]
     usable = set(stream.usable())
     events = [json.loads(line) for line in events_path.read_text().splitlines() if line.strip()]
