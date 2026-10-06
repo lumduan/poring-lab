@@ -384,6 +384,30 @@ def test_lock_directory_exists_in_git_so_docker_never_creates_it_as_root() -> No
     assert (ROOT / "state" / ".gitignore").read_text().split() == ["*", "!.gitignore"]
 
 
+# --- the human-only settings store (2026-10-06) --------------------------------------------------
+
+
+@pytest.mark.parametrize("name", ["compose.yaml", "compose.dev.yaml"])
+def test_the_settings_store_is_writable_by_the_backend_only(name: str) -> None:
+    """The server allowlist decides when the interlock may turn green, and the foreground gate's
+    templates decide when bot typing passes: only the backend (whose one writer is the Settings
+    page's human-only PUT) may mount them. vision can write ./data, so it must never see them."""
+    for service_name, service in compose(name)["services"].items():
+        mounts = [str(v) for v in service.get("volumes", [])]
+        if any(":/lab-settings" in v or v.startswith("./settings") for v in mounts):
+            assert service_name == "backend", f"{name}: {service_name} mounts the settings store"
+    if name == "compose.yaml":
+        backend = compose(name)["services"]["backend"]
+        assert "./settings:/lab-settings" in backend["volumes"]
+        from poring_backend.config import Settings
+
+        assert Settings().settings_dir == Path("/lab-settings")
+
+
+def test_settings_directory_exists_in_git_and_its_contents_never_do() -> None:
+    assert (ROOT / "settings" / ".gitignore").read_text().split() == ["*", "!.gitignore"]
+
+
 # --- gamestream (ADR-0009 console mode) ----------------------------------------------------------
 
 

@@ -93,6 +93,12 @@ class Settings(BaseSettings):
     # gamestream connect to); the allowlist's windows_host must equal it.
     environments_file: Path = Path("/lab-config/environments.yaml")
     win_host: str = ""
+    # The human-only settings store (2026-10-06): the server allowlist + its audit log, and the
+    # foreground gate's templates. Mounted read-write into the BACKEND ONLY (compose.yaml
+    # ./settings:/lab-settings; test_guards). vision can write ./data, so nothing here lives there.
+    settings_dir: Path = Path("/lab-settings")
+    # How often DNS names on the allowlist are re-resolved (the resolved IPs are shown and matched).
+    allowlist_resolve_s: float = 300.0
 
     # --- Black-screen detector (display.py) ------------------------------------------------------
     # GAME_REGION: the RO client area in desktop pixels, "x,y,w,h"; "" = the whole frame (only a

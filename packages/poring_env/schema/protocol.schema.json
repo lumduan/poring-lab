@@ -632,6 +632,104 @@
       "title": "ErrorReply",
       "type": "object"
     },
+    "ForegroundStatus": {
+      "additionalProperties": false,
+      "description": "The TYPING-ONLY foreground gate (2026-10-06): the last check before a bot typing batch.\nOnly humans see it: the copy of Status sent to an agent carries null here.",
+      "properties": {
+        "age_ms": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Age of the frame that was judged."
+        },
+        "distance": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Signature distance (match <= 6)."
+        },
+        "path": {
+          "anyOf": [
+            {
+              "enum": [
+                "x11",
+                "bus"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Where it was seen."
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "ok, or why the typing was refused."
+        },
+        "refused": {
+          "default": 0,
+          "description": "Refused typing batches since boot.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "since_s": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Seconds since that check."
+        },
+        "state": {
+          "description": "ok: the client's active title bar was seen on a fresh frame; refused: the batch's keys were refused and held bot keys released; exempt: a desktop operator window (the agent's own console); unchecked: no bot typing since boot.",
+          "enum": [
+            "ok",
+            "refused",
+            "exempt",
+            "unchecked"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "state",
+        "reason",
+        "distance",
+        "age_ms",
+        "path",
+        "since_s",
+        "refused"
+      ],
+      "title": "ForegroundStatus",
+      "type": "object"
+    },
     "FrameMeta": {
       "additionalProperties": false,
       "description": "Sent immediately before exactly one binary WebSocket message holding this frame's JPEG.",
@@ -1233,6 +1331,18 @@
           "default": null,
           "description": "The environment interlock (ADR-0016); null in an agent's copy of Status."
         },
+        "foreground": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ForegroundStatus"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The typing-only foreground gate (2026-10-06); null in an agent's copy."
+        },
         "frame_id": {
           "default": -1,
           "description": "Frame this message refers to or was produced from; -1 means none.",
@@ -1365,6 +1475,7 @@
         "human_secret",
         "mode_restored",
         "environment",
+        "foreground",
         "bot_agents"
       ],
       "title": "Status",

@@ -275,6 +275,10 @@ export interface Status {
    */
   environment: EnvironmentStatus | null;
   /**
+   * The typing-only foreground gate (2026-10-06); null in an agent's copy.
+   */
+  foreground: ForegroundStatus | null;
+  /**
    * Frame this message refers to or was produced from; -1 means none.
    */
   frame_id: number;
@@ -405,6 +409,43 @@ export interface EnvironmentStatus {
   state: "green" | "window" | "red";
   window: ("login" | "desktop") | null;
   window_left_s: number | null;
+}
+/**
+ * The TYPING-ONLY foreground gate (2026-10-06): the last check before a bot typing batch.
+ * Only humans see it: the copy of Status sent to an agent carries null here.
+ *
+ * This interface was referenced by `PoringProtocol`'s JSON-Schema
+ * via the `definition` "ForegroundStatus".
+ */
+export interface ForegroundStatus {
+  /**
+   * Age of the frame that was judged.
+   */
+  age_ms: number | null;
+  /**
+   * Signature distance (match <= 6).
+   */
+  distance: number | null;
+  /**
+   * Where it was seen.
+   */
+  path: ("x11" | "bus") | null;
+  /**
+   * ok, or why the typing was refused.
+   */
+  reason: string | null;
+  /**
+   * Refused typing batches since boot.
+   */
+  refused: number;
+  /**
+   * Seconds since that check.
+   */
+  since_s: number | null;
+  /**
+   * ok: the client's active title bar was seen on a fresh frame; refused: the batch's keys were refused and held bot keys released; exempt: a desktop operator window (the agent's own console); unchecked: no bot typing since boot.
+   */
+  state: "ok" | "refused" | "exempt" | "unchecked";
 }
 /**
  * Mux verdict for one AgentInput batch.

@@ -22,6 +22,7 @@ from poring_backend.routes_internal import router as internal_router
 from poring_backend.routes_packets import router as packets_router
 from poring_backend.routes_public import router as public_router
 from poring_backend.routes_qa import router as qa_router
+from poring_backend.routes_settings import router as settings_router
 from poring_backend.routes_transfer import router as transfer_router
 from poring_backend.routes_transfer import sweep_partials
 from poring_backend.state import AppState, S2Sink, XInput
@@ -93,6 +94,7 @@ def create_app(
     app.include_router(packets_router)
     app.include_router(transfer_router)
     app.include_router(qa_router)
+    app.include_router(settings_router)
     app.include_router(debug_router)
     # The console (another origin: :3000) calls the /transfer HTTP routes with fetch/XHR. Only the
     # allowlisted console origins may read the responses; the routes also refuse any request

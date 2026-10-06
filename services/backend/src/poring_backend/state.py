@@ -11,13 +11,16 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Protocol, TypeVar
 
+from poring_backend import allowlist
 from poring_backend.capture_lock import read_alarms, read_cleanroom, read_lock, read_window
 from poring_backend.capture_select import CaptureSelector
 from poring_backend.clipboard import ClipboardService, PasteOutcome, SelectionIO
 from poring_backend.config import Settings
 from poring_backend.display import DisplayWatch, Region
 from poring_backend.drops import DropCounter
+from poring_backend.foreground import ForegroundGate
 from poring_backend.freshness_monitor import StallMonitor
+from poring_backend.grabsource import GrabSource
 from poring_backend.input_log import InputLog, InputLogRecord, wall_clock_iso
 from poring_backend.interlock import Interlock, Verdict, Window
 from poring_backend.latency import InputRecord, LatencyRecorder
@@ -32,6 +35,7 @@ from poring_env.protocol import (
     AgentHello,
     CleanRoom,
     ClipboardPaste,
+    ForegroundStatus,
     InputEvent,
     Key,
     Mode,
@@ -322,6 +326,21 @@ class AppState:
         self.mode_restored = False
         # ADR-0016: the environment interlock (allowlist + attestation + operator window).
         self.interlock = Interlock(settings.environments_file, settings.win_host)
+        # The server allowlist (Settings page, human-only writes; routes_settings).
+        self.allowlist_audit = allowlist.AuditLog(settings.settings_dir)
+        self.allowlist_lock = asyncio.Lock()
+        self.allowlist_resolved: dict[str, list[str]] = {}
+        self.allowlist_resolved_at_ns: int | None = None
+        # The typing-only foreground gate (2026-10-06): bot TYPING needs the client in front.
+        self.foreground = ForegroundGate(
+            settings.settings_dir,
+            Region.parse(settings.game_region),
+            lambda: (
+                GrabSource(
+                    settings.display, lab_state=settings.lab_state_dir, ring=settings.framebus_path
+                ).grab
+            ),
+        )
         self._restore_mode()
         self.verdict: Verdict = self.env_verdict(monotonic_ns())
         self._status_task: asyncio.Task[None] | None = None
@@ -384,6 +403,8 @@ class AppState:
             await asyncio.to_thread(self.clipboard.stop)
         self.input_log.close()
         self.transfer_log.close()
+        self.allowlist_audit.close()
+        self.foreground.close()
 
     async def _status_loop(self) -> None:
         period = 1.0 / self.settings.status_hz
@@ -404,8 +425,53 @@ class AppState:
                 level = logging.WARNING if "black" in (before, after) else logging.INFO
                 log.log(level, "game display %s -> %s (%s)", before, after, self.display.snapshot())
             await self._interlock_tick(now)
+            self._maybe_resolve(now)
             self.broadcast_status()
             await asyncio.sleep(period)
+
+    # --- the server allowlist (Settings page) ----------------------------------------------------
+
+    def allowlist_store(self) -> tuple[allowlist.Store | None, str]:
+        """(store, "") or (None, why): a missing mount or a corrupt file refuses every write."""
+        directory = self.settings.settings_dir
+        if not directory.is_dir():
+            return None, "settings_store_missing"
+        try:
+            return allowlist.load(directory), ""
+        except (OSError, ValueError):
+            return None, "settings_store_corrupt"
+
+    def _maybe_resolve(self, now_ns: int) -> None:
+        """Re-resolve the allowlist's DNS names every ALLOWLIST_RESOLVE_S, in the background."""
+        last = self.allowlist_resolved_at_ns
+        if last is not None and now_ns - last < self.settings.allowlist_resolve_s * 1e9:
+            return
+        self.allowlist_resolved_at_ns = now_ns
+        task = asyncio.create_task(self.resolve_allowlist(), name="allowlist-resolve")
+        self._background.add(task)
+        task.add_done_callback(self._background.discard)
+
+    async def resolve_allowlist(self) -> None:
+        from poring_backend.routes_settings import resolve
+
+        store, _ = self.allowlist_store()
+        if store is None:
+            return
+        names = {e.host for es in store.environments.values() for e in es
+                 if not e.host.replace(".", "").isdigit()}  # fmt: skip
+        for name in sorted(names):
+            self.allowlist_resolved[name] = await resolve(name)
+
+    def allowlist_snapshot(self) -> dict[str, Any]:
+        """/health: the store's state, revision and entry counts (no addresses)."""
+        store, error = self.allowlist_store()
+        last = self.allowlist_resolved_at_ns
+        return {
+            "store": error or "ok",
+            "revision": store.revision if store is not None else None,
+            "entries": {k: len(v) for k, v in store.environments.items()} if store else {},
+            "resolved_age_s": None if last is None else round((monotonic_ns() - last) / 1e9, 1),
+        }
 
     def env_verdict(self, now_ns: int) -> Verdict:
         """The interlock, read FRESH (the lock and the window file, not the last tick's copy): the
@@ -484,8 +550,17 @@ class AppState:
             human_secret=self.human_secret,
             mode_restored=self.mode_restored,
             environment=self.verdict.status(),
+            foreground=self.foreground_status(),
             bot_agents=self.bot_agents,
         )
+
+    def foreground_status(self) -> ForegroundStatus:
+        snap = self.foreground.snapshot()
+        return ForegroundStatus(
+            state=snap["state"], reason=snap["reason"], distance=snap["distance"],
+            age_ms=snap["age_ms"], path=snap["path"], since_s=snap["since_s"],
+            refused=sum(snap["refused"].values()),
+        )  # fmt: skip
 
     def refused_snapshot(self) -> dict[str, dict[str, int]]:
         """``{source: {reason: count}}`` of mux refusals, for /health."""
@@ -526,7 +601,9 @@ class AppState:
         self.hub.broadcast_control(status.model_dump_json())
         if self.agents:
             # ADR-0016: the agent sees only its refusals, never the interlock's state.
-            agent_text = status.model_copy(update={"environment": None}).model_dump_json()
+            agent_text = status.model_copy(
+                update={"environment": None, "foreground": None}
+            ).model_dump_json()
             for outbox in self.agents:
                 outbox.offer_control(agent_text)
 
@@ -569,11 +646,28 @@ class AppState:
             self.refused[(source.value, "environment_unattested")] += len(events)
             self._log_sensitive(source, events, 0, ["environment_unattested"], now)
             return [Decision(False, "environment_unattested") for _ in events]
+        # The TYPING-ONLY foreground gate (2026-10-06): a bot batch that presses a key needs the
+        # client in front on a fresh frame. Clicks, moves, the wheel and releases never ask.
+        gate = await self._foreground_gate(source, events, bot_allowed, now)
+        if gate is not None and sensitive:
+            self.refused[(source.value, gate)] += len(events)
+            self._log_sensitive(source, events, 0, [gate], now)
+            released = self.mux.release_bot_keys(now)
+            self._log_synthetic(released, now)
+            await self._inject(released)
+            return [Decision(False, gate) for _ in events]
         lease_before = self.mux.lease_active(now)
         decisions: list[Decision] = []
         routed: list[Routed] = []
+        if gate is not None:  # let go of the keys the bot already holds, before anything else
+            released = self.mux.release_bot_keys(now)
+            self._log_synthetic(released, now)
+            routed.extend(released)
         for event in events:
-            decision = self.mux.submit(source, event, now, bot_allowed=bot_allowed)
+            if gate is not None and isinstance(event, Key):
+                decision = Decision(False, gate)
+            else:
+                decision = self.mux.submit(source, event, now, bot_allowed=bot_allowed)
             # Refused housekeeping (a disconnect's ReleaseAll for a source without control) is
             # still in the input log, but it is not a dropped input worth counting.
             if not decision.accepted and not isinstance(event, ReleaseAll):
@@ -609,6 +703,29 @@ class AppState:
         if self.mux.lease_active(now) != lease_before:
             self.broadcast_status()
         return decisions
+
+    async def _foreground_gate(
+        self, source: Source, events: Sequence[InputEvent], bot_allowed: bool, now: int
+    ) -> str | None:
+        """None: the batch may type (or does not type); else the refusal reason for its keys.
+        Looked at only when the interlock lets the batch through anyway."""
+        if source is not Source.BOT or not bot_allowed or self.mux.mode is Mode.HUMAN:
+            return None  # the mux refuses this batch anyway (mode, interlock): nothing to look at
+        if not any(isinstance(e, Key) and e.action == "down" for e in events):
+            return None
+        window = self.verdict.window
+        if window is not None and window.kind == "desktop" and self.mux.mode is Mode.ASSIST:
+            # Batt's answer 1: the agent's own console (ro_agent lines, capture_backend's TSCON).
+            self.foreground.note_exempt()
+            self._log(Source.BOT, {"type": "foreground", "result": "exempt", "window": "desktop"},
+                      -1, True, "foreground_exempt_desktop_window", now)  # fmt: skip
+            return None
+        check = await self.foreground.check_async()
+        if check.ok:
+            return None
+        log.warning("bot typing refused: %s (distance %s, frame %s ms, %s)", check.reason,
+                    check.distance, check.age_ms, check.path)  # fmt: skip
+        return check.reason
 
     async def paste(self, msg: ClipboardPaste, *, browser: bool, client: str | None) -> PasteResult:
         """Human-only paste (ADR-0004). ``browser``: the connection presented an allowlisted

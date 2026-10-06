@@ -58,6 +58,10 @@ class Environment(BaseModel):
     client: ClientProfile | None = None
     accounts: list[int] = Field(default_factory=list)
     signals: list[Literal["lab_host", "session"]] = Field(default_factory=list)
+    # Known-forbidden endpoints beyond ``server`` (forbidden environments only): "host",
+    # "host:port", or ".domain" for a whole domain. The Settings page refuses every one of them as
+    # an allowed server (allowlist.forbidden_of; 2026-10-06).
+    forbidden_endpoints: list[str] = Field(default_factory=list)
     note: str | None = None
 
 

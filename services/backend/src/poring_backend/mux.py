@@ -162,6 +162,19 @@ class InputMux:
         """Let go of everything the bot holds (the interlock turned red)."""
         return tuple(self._release(Source.BOT, now_ns, reason=reason))
 
+    def release_bot_keys(
+        self, now_ns: int, *, reason: str = "foreground_release"
+    ) -> tuple[Routed, ...]:
+        """Let go of the KEYS the bot holds, never its mouse buttons: the typing-only foreground
+        gate refused (2026-10-06, Batt: clicks are not gated, so a held drag survives)."""
+        routed = tuple(
+            Routed(Source.BOT, Key(t_mono_ns=now_ns, frame_id=NO_FRAME, code=code, action="up"),
+                   synthetic=True, reason=reason)
+            for code in sorted(self._keys[Source.BOT])
+        )  # fmt: skip
+        self._keys[Source.BOT].clear()
+        return routed
+
     def submit(
         self, source: Source, event: InputEvent, now_ns: int, *, bot_allowed: bool = True
     ) -> Decision:

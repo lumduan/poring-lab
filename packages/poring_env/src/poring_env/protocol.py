@@ -266,6 +266,25 @@ class EnvironmentStatus(BaseModel):
     )
 
 
+class ForegroundStatus(BaseModel):
+    """The TYPING-ONLY foreground gate (2026-10-06): the last check before a bot typing batch.
+    Only humans see it: the copy of Status sent to an agent carries null here."""
+
+    model_config = _MODEL_CONFIG
+
+    state: Literal["ok", "refused", "exempt", "unchecked"] = Field(
+        description="ok: the client's active title bar was seen on a fresh frame; refused: the "
+        "batch's keys were refused and held bot keys released; exempt: a desktop operator window "
+        "(the agent's own console); unchecked: no bot typing since boot."
+    )
+    reason: str | None = Field(default=None, description="ok, or why the typing was refused.")
+    distance: float | None = Field(default=None, description="Signature distance (match <= 6).")
+    age_ms: float | None = Field(default=None, description="Age of the frame that was judged.")
+    path: Literal["x11", "bus"] | None = Field(default=None, description="Where it was seen.")
+    since_s: float | None = Field(default=None, ge=0, description="Seconds since that check.")
+    refused: int = Field(default=0, ge=0, description="Refused typing batches since boot.")
+
+
 class Status(Message):
     """Mux and pipeline state, pushed at ~1 Hz and on every change."""
 
@@ -343,6 +362,10 @@ class Status(Message):
     environment: EnvironmentStatus | None = Field(
         default=None,
         description="The environment interlock (ADR-0016); null in an agent's copy of Status.",
+    )
+    foreground: ForegroundStatus | None = Field(
+        default=None,
+        description="The typing-only foreground gate (2026-10-06); null in an agent's copy.",
     )
     bot_agents: list[str] = Field(
         default_factory=list,

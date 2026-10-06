@@ -64,6 +64,7 @@ import numpy as np
 from websockets.sync.client import ClientConnection, connect
 
 from poring_backend.capture_lock import read_lock, read_window
+from poring_backend.signature import SIG_MATCH, grey_thumb
 
 ROOT = Path(__file__).resolve().parents[1]
 STATE_DIR = ROOT / "data" / "ro_agent"  # gitignored (rule 4): signatures + GM command log
@@ -114,8 +115,8 @@ def use_profile(name: str | None) -> Profile:
     return PROFILE
 
 
-SIG_SCALE = 8
-SIG_MATCH = 6.0  # mean abs grey difference (0-255): true matches 0-2, near-misses ~10
+# One matcher for this tool and the backend's typing-only foreground gate (2026-10-06):
+# poring_backend.signature (SIG_SCALE 8; SIG_MATCH 6.0 -- true matches 0-2, near misses ~10).
 
 SHIFTED = {
     "!": "Digit1", "@": "Digit2", "#": "Digit3", "$": "Digit4", "%": "Digit5", "^": "Digit6",
@@ -314,11 +315,6 @@ def to_png(bgra: np.ndarray, path: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(png)
     return path
-
-
-def grey_thumb(bgra: np.ndarray) -> np.ndarray:
-    small = bgra[::SIG_SCALE, ::SIG_SCALE, :3].astype(np.float32)
-    return small[..., 0] * 0.114 + small[..., 1] * 0.587 + small[..., 2] * 0.299
 
 
 def signature_path(state: str) -> Path:

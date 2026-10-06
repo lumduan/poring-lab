@@ -203,6 +203,10 @@ services:
       - ./state:/lab-state:ro
       # ADR-0016: the environment allowlist (read-only; backend only -- tests/test_guards.py).
       - ./config:/lab-config:ro
+      # The HUMAN-ONLY settings store (2026-10-06): the server allowlist + its audit log, the
+      # foreground gate's templates. Read-write in the backend ONLY (never vision, which can
+      # write ./data); the one writer is the Settings page's PUT (tests/test_guards.py).
+      - ./settings:/lab-settings
       # S2 frame bus (docs/s2-plan.md): decoded console frames, read-only here.
       - framebus:/framebus:ro
       # S2 input socket (ADR-0014): the Injector -- the ONE input writer -- sends the mux's events

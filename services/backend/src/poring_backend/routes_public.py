@@ -131,6 +131,10 @@ async def health(request: Request) -> dict[str, Any]:
         "agent_network_refused": AgentNetworkGuard.refused,
         # ADR-0016: the environment interlock (bot presses pass only when not "red")
         "environment": state.interlock.snapshot(state.verdict),
+        # The server allowlist (Settings page; human-only writes, 2026-10-06).
+        "allowlist": state.allowlist_snapshot(),
+        # The typing-only foreground gate (2026-10-06).
+        "foreground": state.foreground.snapshot(),
         "bot_agents": state.bot_agents,
         "cleanroom": state.cleanroom.model_dump() if state.cleanroom else None,
         # S2 frame bus (docs/s2-plan.md): the writer and this backend's consumer counters.

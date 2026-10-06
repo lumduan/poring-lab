@@ -134,3 +134,21 @@ def make_green(state: Any, *, aid: int = LAB_AID, window_max_s: float = 120) -> 
 @pytest.fixture
 def green_interlock() -> Callable[..., None]:
     return make_green
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line(
+        "markers", "real_foreground: run the typing-only foreground gate for real (no stand-in)"
+    )
+
+
+@pytest.fixture(autouse=True)
+def foreground_in_front(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The typing-only foreground gate (2026-10-06) looks at the client's title bar; the fakes'
+    64x36 frames have none. Tests that are not ABOUT the gate get the client in front;
+    tests/test_foreground.py (marker ``real_foreground``) runs the real gate."""
+    if request.node.get_closest_marker("real_foreground"):
+        return
+    from poring_backend.foreground import Check, ForegroundGate
+
+    monkeypatch.setattr(ForegroundGate, "check", lambda self: Check(True, "ok", 0.0, 0.0, "x11"))
