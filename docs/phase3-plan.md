@@ -863,6 +863,82 @@ it is ALREADY IN THE MODEL, so it cannot be the term.**
 - **The next M4 candidate needs a NEW hypothesis.** It is parked for Batt (2026-10-07 morning
   report) rather than invented overnight.
 
+### 5d-iv. M4 step 2c: H-C "the composer differs from the client" (Batt + architect, 2026-10-07), written BEFORE any frame is scored
+
+**Why M4 is the top priority (Batt, 2026-10-07).** On the gold set the v0 models sit exactly at
+their own labels' precision/recall (benchmarks/v0-png-vs-jpeg.md), so the labels are the ceiling.
+v1 labels are the lever, and they need M4 to pass.
+
+**H-C.** The Lunatic is drawn taller than EVERY frame we compose, so the client draws something we
+don't. The Poring is drawn shorter than predicted, so we may include something the client doesn't.
+
+**Offline checks on the sprite FILES, done before this was written (2026-10-07 ~06:10):** all
+three of Batt's suspects are CLEAN for both species, so H-C cannot come from them.
+- **(a) skipped image types or layers:**
+  - both SPRs are 2.1 with palette images only (Poring 49, Lunatic 56; no RGBA/truecolour image);
+  - every idle and walk layer is `sprite_type 0`;
+  - no layer's image index is out of range, so nothing is silently skipped by `Spr.image_index`.
+- **(b) transparent layers or pixels:**
+  - no layer has tint alpha 0, and none has a partial tint alpha;
+  - the composed idle frames have NO partially transparent pixel (alpha is 0 or 255), so
+    "alpha > 0" and "alpha ≥ 128" give the same box.
+- **(c) palette index 0 / magenta:**
+  - palette index 0 is (255, 0, 0) in both files, always transparent;
+  - the Poring's only magenta-keyed entry (249) is used by 0 pixels; the Lunatic has none;
+  - the most-used colours are the expected ones: Poring pinks (232,125,125), (250,151,142);
+    Lunatic whites (255,255,255), (237,237,255).
+
+**So H-C is tested where it would show: a PIXEL-LEVEL diff, not boxes.**
+
+**Measurement** (ODD spawns only, to choose; the three §5b recordings; the frozen step-1 rule
+`--measure reconstruct`; the frozen current facing mapping; `--every 5`; clean standing frames
+only, with step 1's exclusions):
+
+1. **Observed pixels** `O`: exactly m4_validate's mask (`changed_mask`, DIFF 24, then
+   `reconstruct`) in the ROI (the predicted box ± ROI_PAD 40), restricted to the 8-connected
+   component that `component_box` picks (the most pixels on the anchor column).
+2. **Predicted pixels** `P`: our composed IDLE sprite (`label_check.rendered`), placed as §5d does:
+   - the best masked grey NCC over the 4 views, the view's frames, and an anchor shift of ±2 px;
+   - at the predicted anchor and scale (k = nostalro; k is NOT judged here).
+3. **Visibility:**
+   - a predicted pixel counts as EXTRA only where it would be VISIBLE if drawn:
+     |rendered grey − background grey| > 24;
+   - so a sprite pixel that matches the background is never called extra.
+4. **Per pixel:**
+   - BOTH = P_visible ∧ O;
+   - EXTRA = P_visible ∧ ¬O ("we draw something the client doesn't");
+   - MISSING = O ∧ ¬P ("the client draws something we don't").
+5. **Mapped into SPRITE coordinates:** native px around the anchor, ((x + ½ − ax)/scale,
+   (y + ½ − ay)/scale), in 1-px bins.
+   - Accumulated per species and per view. Maps and crops stay in /dev/shm (client-derived, never
+     committed).
+6. **Reported per species:**
+   - EXTRA / |P_visible| and MISSING / |O|;
+   - both broken down by vertical band of the idle envelope (top / middle / bottom third);
+   - the row profile;
+   - the mismatch M = (EXTRA + MISSING) / |P_visible ∪ O|.
+   - The bottom band holds the shadow decal, which we do not render; it is reported, not
+     excluded.
+
+**Decision on the ODD spawns.** A composer rule is adopted only if ALL hold:
+1. **It is GROUNDED:**
+   - a named, cited rule of the formats or a reference renderer (nostalro, korangar, the ACT/SPR
+     layout), or a bug in our code, with the pixel map only pointing at WHERE;
+   - never a fitted offset or scale;
+   - it is written down (and committed) before it is re-scored.
+2. Re-scored on ODD, the targeted species' mismatch M drops by ≥ 25 %, and the other species' M
+   rises by no more than 5 %.
+3. As in 2b:
+   - the Lunatic/Poring split's distance to 1 shrinks by ≥ 50 %;
+   - neither species' outdoor height ratio moves away from 1.
+
+**If the map points somewhere but no grounded rule explains it:** report the map and adopt nothing
+(Batt decides the next step).
+
+**Then:** freeze, and score the EVEN spawns ONCE. CONFIRMED if 2 and 3 hold on EVEN. Report odd and
+even side by side. §5's thresholds, step 1's exclusions, the facing mapping and k are all
+unchanged.
+
 ## 6. M5–M7: using the rule
 
 **M5, labels v1.** Every auto-label gets:

@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [phase3-plan.md, h264-vs-png.md]
-next_action: "Reported to Batt 2026-10-07 morning. In-domain: a tie. Domain shift (054429): PNG +0.22 mAP50, confounded by batch 2 vs 4 and one run each. A matched-batch rerun would attribute it (Batt's call). v1 labels, not the image format, are the in-domain lever: both models sit at the v0 auto labels' own P/R on the gold set."
+next_action: "Batt 2026-10-07: (1) a matched-batch rerun TONIGHT (v0-JPEG at batch 2 / workers 1, same seed/split/epochs, a JPEG cache rebuilt with today's labels) so the format is the only variable; it decides whether PNG's ~5x storage is worth it. (2) TAKEAWAY: the v0 models sit exactly at their labels' P/R on the gold set, so labels are the ceiling and v1 labels (M4 must pass) are the lever; M4 is the top priority. Reported 2026-10-07 morning. In-domain: a tie. Domain shift (054429): PNG +0.22 mAP50, confounded by batch 2 vs 4 and one run each. A matched-batch rerun would attribute it (Batt's call). v1 labels, not the image format, are the in-domain lever: both models sit at the v0 auto labels' own P/R on the gold set."
 ---
 
 # v0-PNG vs v0-JPEG: the same frames, the same labels, a different image format
