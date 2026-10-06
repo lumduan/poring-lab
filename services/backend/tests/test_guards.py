@@ -399,6 +399,9 @@ def test_the_settings_store_is_writable_by_the_backend_only(name: str) -> None:
     if name == "compose.yaml":
         backend = compose(name)["services"]["backend"]
         assert "./settings:/lab-settings" in backend["volumes"]
+        # writes are refused from the lab host itself and from the bot's Windows host
+        assert backend["environment"]["HOST_LAN_IP"] == "${HOST_LAN_IP:?}"
+        assert backend["environment"]["WIN_HOST"] == "${WIN_HOST:-}"
         from poring_backend.config import Settings
 
         assert Settings().settings_dir == Path("/lab-settings")

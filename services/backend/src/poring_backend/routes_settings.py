@@ -7,12 +7,15 @@
 Who may READ: the console browser (public listener, a LAN viewer, an allowlisted Origin), and the
 agent on its own listener :8001 (GET /settings/servers only).
 
-Who may WRITE (the human-only rule; the qa/transfer pattern, ADR-0004):
+Who may WRITE (the human-only rule; the qa/transfer pattern, ADR-0004, tightened):
   * the PUBLIC listener (:8000) only -- the agent's :8001 never (refused, counted and audited);
     the agent network is refused on :8000 before any route by AgentNetworkGuard (ADR-0005 c2);
   * a LAN VIEWER (VIEWER_NETWORKS; the compose subnet and its gateway refused: host scripts and
     containers that dial the published port arrive from there);
-  * an allowlisted Origin (browsers send it; the agent and scripts do not).
+  * an allowlisted Origin (browsers send it; the agent and scripts do not);
+  * NOT the lab host itself (HOST_LAN_IP: a host process can forge the Origin -- found live,
+    2026-10-06: the host reaches the published port as 192.168.1.13, a LAN viewer) and NOT the
+    Windows host (WIN_HOST: the bot drives that desktop, so a Save there could be the bot's).
 
 Every refused write is counted in /health (``dropped_messages.settings_http``) AND written to the
 audit log with its reason. A save is reported only after the file was read back.
@@ -125,8 +128,16 @@ def browser_gate(request: Request) -> AppState:
 
 
 def write_gate(request: Request) -> AppState:
-    """HUMAN-ONLY: a console browser on the LAN. Every refusal is audited."""
+    """HUMAN-ONLY: a console browser on the LAN, but never on the lab host itself (any process
+    there can forge the Origin) nor on the Windows host the bot drives. Every refusal is audited."""
     refusal = _browser_refusal(request)
+    if refusal is None:
+        settings = get_state(request).settings
+        peer = request.client.host if request.client else None
+        if peer and peer == settings.host_lan_ip:
+            refusal = (403, "lab_host_peer")
+        elif peer and peer == settings.win_host:
+            refusal = (403, "windows_host_peer")
     if refusal is not None:
         raise _refuse(request, refusal[0], refusal[1], audit=True)
     return get_state(request)

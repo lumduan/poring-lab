@@ -192,6 +192,9 @@ services:
       CONSOLE_FPS: ${CONSOLE_FPS:-15}
       # ADR-0016: the Windows host this lab drives; config/environments.yaml must name the same.
       WIN_HOST: ${WIN_HOST:-}
+      # The lab host's own LAN address: the Settings page refuses WRITES from it (host scripts
+      # can forge an Origin) and from WIN_HOST (the machine the bot drives) -- 2026-10-06.
+      HOST_LAN_IP: ${HOST_LAN_IP:?}
     volumes:
       - x11-unix:/tmp/.X11-unix:ro
       - ./data:/data

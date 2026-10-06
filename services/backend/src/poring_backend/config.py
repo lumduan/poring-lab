@@ -97,6 +97,11 @@ class Settings(BaseSettings):
     # foreground gate's templates. Mounted read-write into the BACKEND ONLY (compose.yaml
     # ./settings:/lab-settings; test_guards). vision can write ./data, so nothing here lives there.
     settings_dir: Path = Path("/lab-settings")
+    # HOST_LAN_IP: the lab host's own LAN address. Settings WRITES are refused from it and from
+    # WIN_HOST even with the console's Origin: any process on the lab host can forge that header
+    # (host-side automation included), and the Windows host is the machine the bot itself drives,
+    # so a "browser" Save there could be the bot's click. Batt's own machines are other addresses.
+    host_lan_ip: str = ""
     # How often DNS names on the allowlist are re-resolved (the resolved IPs are shown and matched).
     allowlist_resolve_s: float = 300.0
 

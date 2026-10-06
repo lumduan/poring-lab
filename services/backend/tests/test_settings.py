@@ -193,6 +193,23 @@ def test_only_a_console_browser_may_write(
     assert drops[reason] == 1
 
 
+@pytest.mark.parametrize(
+    ("peer", "reason"),
+    [(("192.168.1.13", 1), "lab_host_peer"), (("192.168.1.169", 1), "windows_host_peer")],
+)
+def test_the_lab_host_and_the_bots_windows_host_never_write(
+    make: Make, tmp_path: Path, peer: tuple[str, int], reason: str
+) -> None:
+    """Both are LAN addresses with the console's Origin -- but a host process can forge that header,
+    and the Windows desktop is the one the bot drives (a Save there could be the bot's click)."""
+    client = make(peer=peer, host_lan_ip="192.168.1.13", win_host="192.168.1.169")
+    assert client.get("/settings/servers", headers=H).status_code == 200  # reading is fine
+    r = put(client, [{"host": "192.168.1.13", "port": 6900}])
+    assert r.status_code == 403 and r.json()["detail"]["reason"] == reason
+    assert not (tmp_path / "settings" / "allowlist.json").exists()
+    assert audit(tmp_path)[-1]["reason"] == reason
+
+
 def test_the_agent_listener_can_read_but_never_write(make: Make, tmp_path: Path) -> None:
     """:8001 (here: requests arrive on 80 while the PUBLIC port is 8000) -- the agent's listener."""
     client = make(public_port=8000, internal_port=80)
