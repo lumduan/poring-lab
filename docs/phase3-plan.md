@@ -518,6 +518,26 @@ Anything else is a FINDING: name the missing term; never tune.
 - an indoor camera re-fit at 104,122;
 - the thresholds stay.
 
+### 5c. M4 re-run step 1: the measurement (Batt, 2026-10-06), written BEFORE any data is seen
+
+Batt approved the order: measurement, then the Lunatic composition, then k, then an indoor camera
+re-fit, one variable at a time. Safeguard: the rule is chosen on the ODD spawns only, frozen, then
+scored once on the EVEN spawns; both are reported. The §5 thresholds are unchanged. The data is
+the three §5b recordings.
+
+- **The candidate.** `m4_validate.py --measure reconstruct`, opening BY RECONSTRUCTION:
+  - the 1-px opening still removes isolated noise;
+  - everything in the original mask connected to the surviving body is grown back, so thin
+    attached parts (the Poring's tuft) are kept.
+  - The alternative is §5's `open`.
+- **Decision rule, on the ODD spawns:** adopt `reconstruct` only if BOTH hold:
+  - (a) its exclusions for noise/merging (roi_edge + merged_area + ui) stay within +20 % of
+    `open`'s;
+  - (b) the Poring median top-edge offset (observed top - predicted top) moves closer to 0.
+  - Otherwise keep `open` and report it.
+- **Then:** freeze the chosen rule (the commit records it), and score the EVEN spawns once with
+  it, with every §5b check. Report odd and even side by side. The verdict is the even half's.
+
 ## 6. M5–M7: using the rule
 
 **M5, labels v1.** Every auto-label gets:

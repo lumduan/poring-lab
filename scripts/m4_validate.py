@@ -116,6 +116,27 @@ def opened(mask: npt.NDArray[np.bool_]) -> npt.NDArray[np.bool_]:
     return out
 
 
+def reconstructed(mask: npt.NDArray[np.bool_]) -> npt.NDArray[np.bool_]:
+    """Opening BY RECONSTRUCTION: the 1-px opening removes isolated noise as before, then every
+    part of the original mask CONNECTED (8-neighbour) to what survived is grown back, so a thin
+    structure attached to the body (the Poring's tuft, 1-2 px wide) is kept. M4 re-run step 1
+    (Batt, 2026-10-06): chosen on the ODD spawns, frozen, confirmed on the EVEN ones."""
+    marker = opened(mask)
+    while True:
+        p = np.pad(marker, 1, constant_values=False)
+        grown = marker.copy()
+        for dy in (-1, 0, 1):
+            for dx in (-1, 0, 1):
+                grown |= p[1 + dy : p.shape[0] - 1 + dy, 1 + dx : p.shape[1] - 1 + dx]
+        grown &= mask
+        if np.array_equal(grown, marker):
+            return marker
+        marker = grown
+
+
+MEASURES = {"open": opened, "reconstruct": reconstructed}
+
+
 def component_box(mask: npt.NDArray[np.bool_], seed_x: int) -> tuple[int, int, int, int] | None:
     """The tight box (x0, y0, x1, y1, exclusive ends) of the connected component (8-neighbour)
     that crosses column ``seed_x`` with the most pixels; None when that column is empty."""
@@ -145,13 +166,14 @@ def component_box(mask: npt.NDArray[np.bool_], seed_x: int) -> tuple[int, int, i
     return None if best is None else best[1]
 
 
-def observed_box(frame: Img, background: Img, predicted: Box, anchor_x: float) -> Box | None:
+def observed_box(frame: Img, background: Img, predicted: Box, anchor_x: float,
+                 measure: str = "open") -> Box | None:  # fmt: skip
     h, w = frame.shape[:2]
     x0 = max(0, int(predicted[0]) - ROI_PAD)
     y0 = max(0, int(predicted[1]) - ROI_PAD)
     x1 = min(w, int(predicted[2]) + ROI_PAD + 1)
     y1 = min(h, int(predicted[3]) + ROI_PAD + 1)
-    mask = opened(changed_mask(frame[y0:y1, x0:x1], background[y0:y1, x0:x1]))
+    mask = MEASURES[measure](changed_mask(frame[y0:y1, x0:x1], background[y0:y1, x0:x1]))
     box = component_box(mask, int(round(anchor_x)) - x0)
     if box is None:
         return None
@@ -291,6 +313,8 @@ def measure(  # noqa: PLR0915
     rerun: bool = False,
     ncc: bool = False,
     also: list[tuple[Path, Path]] | None = None,
+    measure_rule: str = "open",
+    spawns: str = "all",
 ) -> dict[str, Any]:
     """Every measured row of ``session`` (+ each ``also`` (session, events) pair: one analysis over
     several recordings of the SAME protocol; blocks are prefixed by the session so spawn counts and
@@ -299,7 +323,7 @@ def measure(  # noqa: PLR0915
     skipped: dict[str, int] = {}
     pairs = [(session, events_path)] + list(also or [])
     for sess, ev in pairs:
-        part, sk = measure_rows(sess, ev, every, use_spr, rerun, ncc)
+        part, sk = measure_rows(sess, ev, every, use_spr, rerun, ncc, measure_rule, spawns)
         if len(pairs) > 1:
             for r in part:
                 r["block"] = f"{sess.name[:15]}:{r['block']}"
@@ -318,6 +342,7 @@ def measure(  # noqa: PLR0915
                 reasons[r["excluded"]] = reasons.get(r["excluded"], 0) + 1
         result["excluded"] = reasons
         result["sessions"] = [str(sess.name) for sess, _ in pairs]
+        result["measure"], result["spawns"] = measure_rule, spawns
     return result
 
 
@@ -328,6 +353,8 @@ def measure_rows(  # noqa: PLR0915
     use_spr: bool = False,
     rerun: bool = False,
     ncc: bool = False,
+    measure_rule: str = "open",
+    spawns: str = "all",
 ) -> tuple[list[dict[str, Any]], dict[str, int]]:
     manifest = json.loads((session / "manifest.json").read_text())
     pk = session / ("packets.states.jsonl.gz" if (session / "packets.states.jsonl.gz").exists()
@@ -346,7 +373,10 @@ def measure_rows(  # noqa: PLR0915
     sheets: dict[str, SpriteSheet] = {}
     rows: list[dict[str, Any]] = []
     skipped: dict[str, int] = {}
+    parity = {"odd": 1, "even": 0}.get(spawns)
     for w in windows(events):
+        if parity is not None and w["spawn_index"] % 2 != parity:
+            continue  # the odd/even safeguard: a rule is chosen on one half, confirmed on the other
         species = str(w["species"])
         if species not in sheets:
             sheets[species] = sprite_sheet(species, use_spr)
@@ -386,7 +416,7 @@ def measure_rows(  # noqa: PLR0915
                     near |= abs(ox - ax) < CLEAR_PX and abs(oy - ay) < CLEAR_PX
             if near:
                 continue
-            obs = observed_box(frame, background, pred.box, ax)
+            obs = observed_box(frame, background, pred.box, ax, measure_rule)
             if obs is None:
                 continue
             p = pred.box
@@ -541,10 +571,22 @@ def main() -> int:
         metavar=("SESSION", "EVENTS"),
         help="another recording of the same protocol, analysed together",
     )
+    ap.add_argument(
+        "--measure",
+        choices=sorted(MEASURES),
+        default="open",
+        help="the observed-mask rule: open (§5, pre-registered) or reconstruct",
+    )
+    ap.add_argument(
+        "--spawns",
+        choices=("all", "odd", "even"),
+        default="all",
+        help="only the odd / even spawns of each condition (choose on one, confirm on the other)",
+    )
     a = ap.parse_args()
     also = [(a.datasets / sess, Path(ev)) for sess, ev in (a.also or [])]
     result = measure(a.datasets / a.session, a.events, a.every, a.rows, a.opaque, a.rerun, a.ncc,
-                     also)  # fmt: skip
+                     also, a.measure, a.spawns)  # fmt: skip
     text = json.dumps(result, indent=1)
     if a.out:
         a.out.parent.mkdir(parents=True, exist_ok=True)

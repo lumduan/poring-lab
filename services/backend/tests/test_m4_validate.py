@@ -157,3 +157,23 @@ def test_the_rerun_summary_is_per_species_with_aa_halves_counts_and_k() -> None:
     assert not few["conditions"]["outdoor/top/poring"]["enough"]
     off = m4.summarise([{**r, "k_h": 0.15} for r in rows], per_species=True)
     assert not off["k"]["pass"]  # within neither prior: a finding, never a fit
+
+
+def test_reconstruction_keeps_a_thin_attached_tuft_and_drops_noise() -> None:
+    """M4 re-run step 1 (2026-10-06): the 1-px opening deleted the Poring's tuft (1-2 px wide), so
+    the observed box stopped below the top the client draws. Opening by reconstruction grows back
+    what is connected to the surviving body; isolated specks still go."""
+    mask = np.zeros((40, 40), bool)
+    mask[20:35, 10:30] = True  # the body
+    mask[12:20, 19] = True  # a 1-px-wide tuft attached to its top
+    mask[3, 3] = True  # an isolated speck
+    opened, rec = m4.opened(mask), m4.reconstructed(mask)
+    assert not opened[12:20, 19].any() and rec[12:20, 19].all()  # the tuft: lost vs kept
+    assert not opened[3, 3] and not rec[3, 3]  # the speck: gone in both
+    assert rec[20:35, 10:30].all()
+    frame = np.zeros((60, 60, 3), np.uint8)
+    frame[mask[:40, :40].nonzero()] = 200
+    bg = np.zeros_like(frame)
+    pred = (10.0, 15.0, 30.0, 35.0)
+    assert m4.observed_box(frame, bg, pred, 20.0, "open")[1] == 20  # top at the body
+    assert m4.observed_box(frame, bg, pred, 20.0, "reconstruct")[1] == 12  # top at the tuft
