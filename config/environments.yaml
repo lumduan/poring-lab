@@ -65,7 +65,10 @@ environments:
     # = thro-acc3.gnjoy.in.th:3000; its _stage twin = 49.229.28.99:3000), read at character select.
     server: {host: thro-acc3.gnjoy.in.th, ports: [50001, 3000]}   # 49.229.28.13 on 2026-10-05; *.gnjoy.in.th
     signals: []
-    note: "Also roc.gnjoy.in.th (registration web) and 49.229.28.99:3000 (stage assist). Record only: never connect, never test against."
+    # Machine-readable since 2026-10-06 (the Settings page refuses them as allowed servers): the
+    # whole official domain, the registration web, the stage assist, and the login's address.
+    forbidden_endpoints: [.gnjoy.in.th, roc.gnjoy.in.th, "49.229.28.99:3000", 49.229.28.13]
+    note: "Record only: never connect, never test against."
   - id: official-ro-korea
     # KNOWN-FORBIDDEN (found 2026-10-05 14:58 by the th client's watcher, which killed the client):
     # the 2021 exe at CHARACTER SELECT opens AssistAddr from the kRO data's
@@ -77,7 +80,10 @@ environments:
     adr: "ADR-0006 (official servers: forbidden); ADR-0016 known-forbidden endpoints"
     server: {host: kro-assit.ragnarok.co.kr, ports: [3000]}
     signals: []
-    note: "Also kro-assit-s.ragnarok.co.kr:3000 (_sak) and kro-qm-1a.ragnarok.co.kr:3000 (_qm, _sak_qm). Record only: never connect, never test against."
+    # Machine-readable since 2026-10-06: the whole official domain and the _sak / _qm assist hosts.
+    # Its Cloudflare addresses are NOT listed: shared CDN IPs would forbid unrelated servers.
+    forbidden_endpoints: [.ragnarok.co.kr, "kro-assit-s.ragnarok.co.kr:3000", "kro-qm-1a.ragnarok.co.kr:3000"]
+    note: "Record only: never connect, never test against."
   - id: community-bot-testing
     status: pending            # forbidden until its permission evidence AND its own signal set exist
     adr: "ADR-0006 environment 2; issue #2; docs/environments/community-server.md"
