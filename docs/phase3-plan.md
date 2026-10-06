@@ -851,6 +851,18 @@ REPLICATES. Step 2b's verdict: W is NOT the per-species term.**
 - Next, as pre-registered: the per-species vertical OFFSET from the ACT (the layer's y and the
   anchor). It will be written before it is scored.
 
+**Facts checked before writing that candidate (2026-10-07 ~00:25, sprite FILES only, no frames):
+it is ALREADY IN THE MODEL, so it cannot be the term.**
+- `poring.act` and `lunatic.act` are both ACT 2.5.
+- Every idle and walk layer sets the ACT 2.5 width/height, and it EQUALS its SPR image's size:
+  Poring 32/32 idle and 80/80 walk; Lunatic 96/96 idle and 120/120 walk. So nostalro's rule (the ACT
+  size) and korangar's (the image size) cannot differ here.
+- No layer has a non-unit zoom.
+- The layer x/y offsets around the anchor are already applied by `sprites.layer_quad`, which
+  follows nostalro's `build_clip_quad`.
+- **The next M4 candidate needs a NEW hypothesis.** It is parked for Batt (2026-10-07 morning
+  report) rather than invented overnight.
+
 ## 6. M5–M7: using the rule
 
 **M5, labels v1.** Every auto-label gets:
