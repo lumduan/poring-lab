@@ -18,6 +18,7 @@ The verdict is pure (``evaluate``): tests drive it with explicit times. Reasons 
 """
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -53,6 +54,10 @@ class Environment(BaseModel):
     id: str = Field(pattern=r"^[a-z0-9-]+$")
     status: Literal["allowed", "pending", "forbidden"]
     adr: str
+    # Plain words for the Settings page (2026-10-06): a display name, and ONE sentence saying what
+    # this environment is -- for a pending one, what is still missing. The ADR stays a "why?" link.
+    title: str | None = None
+    summary: str | None = None
     server: Server | None = None
     windows_host: str | None = None
     client: ClientProfile | None = None
@@ -62,6 +67,10 @@ class Environment(BaseModel):
     # "host:port", or ".domain" for a whole domain. The Settings page refuses every one of them as
     # an allowed server (allowlist.forbidden_of; 2026-10-06).
     forbidden_endpoints: list[str] = Field(default_factory=list)
+    # The environment's servers ("host:port"; for a forbidden one also "host" / ".domain"), from
+    # the user-managed store (envstore.py, 2026-10-06). An ALLOWED environment without servers is
+    # never green: "allowed" means the client is connected to one of its servers.
+    servers: list[str] = Field(default_factory=list)
     note: str | None = None
 
 
@@ -129,6 +138,8 @@ def _env_signals(
         return f"env_{env.status}"
     if not env.signals:
         return "no_signals_configured"
+    if not env.servers:
+        return "no_servers"  # confirm the environment's servers on the Settings page
     if "lab_host" in env.signals:
         if lock.backend not in ("rdp", "console") or lock.phase != "steady":
             return "lock_not_steady"
@@ -179,12 +190,18 @@ def evaluate(
     return Verdict(False, False, reason, None, window, attest_age_s)
 
 
-class Interlock:
-    """The backend's live copy: the config (re-read when the file changes), the last attestation
-    and when it arrived (monotonic)."""
+# (change key, config or None, error) -- the user-managed store's reader (state.py, envstore.py)
+Source = Callable[[], tuple[Any, "EnvironmentsConfig | None", str]]
 
-    def __init__(self, path: Path, win_host: str) -> None:
-        self.path, self.win_host = path, win_host
+
+class Interlock:
+    """The backend's live copy: the config (re-read when it changes), the last attestation and
+    when it arrived (monotonic). The config comes from ``source`` -- the USER-MANAGED environment
+    set (2026-10-06; fail closed when it is missing or invalid) -- or, without one, from ``path``
+    (the YAML file; tests)."""
+
+    def __init__(self, path: Path, win_host: str, source: Source | None = None) -> None:
+        self.path, self.win_host, self.source = path, win_host, source
         self.attest: Attestation | None = None
         self.attest_at_ns: int | None = None
         self.attestations = 0
@@ -194,15 +211,22 @@ class Interlock:
         self.reload()
 
     def reload(self) -> None:
-        """Re-read the allowlist when its mtime changed (None = absent)."""
-        try:
-            mtime: float | None = self.path.stat().st_mtime
-        except OSError:
-            mtime = None
-        if mtime == self._mtime:
-            return
-        self._mtime = mtime
-        self.config, self.config_error = load_config(self.path)
+        """Re-read the config when it changed (the source's key, or the YAML file's mtime)."""
+        if self.source is not None:
+            key, cfg, error = self.source()
+            if key == self._mtime:
+                return
+            self._mtime = key
+            self.config, self.config_error = cfg, error
+        else:
+            try:
+                mtime: float | None = self.path.stat().st_mtime
+            except OSError:
+                mtime = None
+            if mtime == self._mtime:
+                return
+            self._mtime = mtime
+            self.config, self.config_error = load_config(self.path)
         if self.config is None:
             log.warning("interlock: %s (%s): every bot press is refused", self.path,
                         self.config_error)  # fmt: skip

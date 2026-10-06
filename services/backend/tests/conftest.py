@@ -120,7 +120,8 @@ def make_green(state: Any, *, aid: int = LAB_AID, window_max_s: float = 120) -> 
         "version": 1, "attestation_max_age_s": 10, "window_max_s": window_max_s,
         "environments": [{"id": "lab-rathena", "status": "allowed", "adr": "ADR-0006",
                           "windows_host": LAB_HOST, "accounts": [LAB_AID, 2000002],
-                          "signals": ["lab_host", "session"]}],
+                          "signals": ["lab_host", "session"],
+                          "servers": ["192.168.1.13:6900", "192.168.1.13:5121"]}],
     })  # fmt: skip
     state.interlock.config_error = ""
     state.interlock.win_host = LAB_HOST

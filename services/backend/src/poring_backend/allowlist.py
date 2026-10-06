@@ -1,33 +1,25 @@
-"""The SERVER ALLOWLIST (zero-config, Batt 2026-10-06; ADR-0016): the servers (host:port) each
-environment's game client may talk to. It decides when the interlock's client-side provider can
-turn green, so WRITES ARE HUMAN-ONLY.
+"""Endpoint rules and the settings audit log (Batt, 2026-10-06; ADR-0016).
 
-How the rule is enforced:
-  * the store lives in its own directory, mounted read-write into the BACKEND ONLY
-    (compose.yaml ``./settings:/lab-settings``; test_guards pins it). vision, which can write
-    ``./data``, never sees it;
-  * the one writer is routes_settings' PUT, which serves only a LAN browser on the public listener
-    with an allowlisted Origin. The agent's :8001 gets a read-only GET; every refused write is
-    counted and written to the audit log.
-
-Files under the settings directory:
-  * ``allowlist.json``: ``{version, revision, environments: {env_id: [entry, ...]}}``. It is
-    written atomically (temp + rename) and read back before a save is reported.
-  * ``allowlist_audit/YYYY-MM-DD.jsonl`` (UTC day): one line per add, remove or refused attempt,
-    with who (peer, Origin, listener), the revisions and the list before and after.
-
-Entries: an IPv4 address or a DNS name, plus a port. No wildcards, no unspecified, loopback,
-link-local or multicast address, and nothing on the known-forbidden list (environments.yaml:
-each forbidden environment's ``server.host`` and ``forbidden_endpoints``; a leading "." there
-forbids a whole domain). Forbidden names are matched as names and NEVER resolved: their IPs are
-shared CDN addresses, and "never connect, never test against" covers DNS too.
+The environments themselves -- their types and server lists -- are the USER-MANAGED environment
+set (envstore.py), edited on the console's Settings page through the human-only write gate
+(routes_settings.py). This module holds what both need:
+  * what an endpoint may be: an allowed server is an IPv4 address or a DNS name plus a port (no
+    wildcard, unspecified, loopback, link-local or multicast address); a forbidden entry is "host",
+    "host:port" or ".domain" (the domain and every name under it);
+  * matching against the forbidden list: names, IP literals, and the IPs the forbidden NAMES
+    currently resolve to -- unless an IP lies in a CDN range (Cloudflare's published list): such
+    addresses are shared, so they are matched by NAME only and shown with a firewall warning
+    (Batt, 2026-10-06: re-resolve periodically; this supersedes "forbidden names are never
+    resolved");
+  * the audit log ``allowlist_audit/YYYY-MM-DD.jsonl`` (UTC day): every change and every refused
+    attempt, with who (peer, Origin, listener), the change's rule (easy/normal/hard), the revision
+    before and after, and the typed reason of a hard change.
 """
 
 from __future__ import annotations
 
 import ipaddress
 import json
-import os
 import re
 import time
 from collections.abc import Iterable
@@ -35,44 +27,26 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 from poring_backend.input_log import DailyJsonl, wall_clock_iso
-from poring_backend.interlock import EnvironmentsConfig
 
-STORE_NAME = "allowlist.json"
 AUDIT_DIR = "allowlist_audit"
 MAX_ENTRIES = 32
 _LABEL = r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
 DNS_NAME = re.compile(rf"^(?=.{{1,253}}$){_LABEL}(?:\.{_LABEL})*$")
 
 
-class Entry(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-    host: str = Field(min_length=1, max_length=253)
-    port: int = Field(ge=1, le=65535)
-    source: Literal["manual", "discovered"] = "manual"
-    added_at: str = ""
-    added_by: str = ""
-
-    @property
-    def key(self) -> str:
-        return f"{self.host}:{self.port}"
-
-
-class Store(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    version: Literal[1] = 1
-    revision: int = Field(default=0, ge=0)
-    environments: dict[str, list[Entry]] = Field(default_factory=dict)
-
-
 class AuditRecord(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     t_wall: str
-    action: Literal["add", "remove", "refused"]
+    action: Literal[
+        "refused", "seed", "env_create", "env_delete", "env_rename", "env_type", "env_text",
+        "server_add", "server_remove",
+    ]  # fmt: skip
+    kind: Literal["easy", "normal", "hard"] | None = None  # the asymmetric rule that applied
     env_id: str | None
-    entry: str | None  # "host:port"
+    entry: str | None  # the subject: "host:port", "host", ".domain", or an environment's name
     revision_before: int | None
     revision_after: int | None
     before: list[str] | None
@@ -82,11 +56,89 @@ class AuditRecord(BaseModel):
     client: str | None  # the browser's peer address
     origin: str | None
     listener: int | None  # the port the request arrived on
+    note: str | None = None  # a hard change: the typed reason; else the change in plain words
+
+
+# Cloudflare's published IPv4 ranges (https://www.cloudflare.com/ips-v4, unchanged since 2021). A
+# forbidden name resolving here shares its address with unrelated sites.
+CDN_RANGES: dict[str, tuple[ipaddress.IPv4Network, ...]] = {
+    "cloudflare": tuple(ipaddress.IPv4Network(n) for n in (
+        "173.245.48.0/20", "103.21.244.0/22", "103.22.200.0/22", "103.31.4.0/22",
+        "141.101.64.0/18", "108.162.192.0/18", "190.93.240.0/20", "188.114.96.0/20",
+        "197.234.240.0/22", "198.41.128.0/17", "162.158.0.0/15", "104.16.0.0/13",
+        "104.24.0.0/14", "172.64.0.0/13", "131.0.72.0/22",
+    )),
+}  # fmt: skip
+
+
+def cdn_of(ip: str) -> str | None:
+    """The CDN whose shared range holds ``ip`` (None: not a known CDN address)."""
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return None
+    for name, nets in CDN_RANGES.items():
+        if any(addr in net for net in nets):
+            return name
+    return None
+
+
+def parse_forbidden(raw: str) -> tuple[str, int | None] | None:
+    """("host" | ".domain", port or None) from "host", "host:port" or ".domain"; None when it is
+    not one (wildcards, empty, a bad name or port)."""
+    item = raw.strip().lower().rstrip(".")
+    if not item or "*" in item or "?" in item or " " in item:
+        return None
+    if item.startswith("."):
+        return (item, None) if DNS_NAME.match(item[1:]) else None
+    host, port = item, None
+    if ":" in item:
+        host, _, port_text = item.rpartition(":")
+        if not port_text.isdigit() or not 1 <= int(port_text) <= 65535:
+            return None
+        port = int(port_text)
+    try:
+        ipaddress.IPv4Address(host)
+    except ValueError:
+        if not DNS_NAME.match(host) or host.replace(".", "").isdigit():
+            return None
+    return host, port
+
+
+def entry_key(host: str, port: int | None) -> str:
+    return host if port is None else f"{host}:{port}"
+
+
+@dataclass(frozen=True)
+class Blocked:
+    """One effective forbidden entry, for matching and for the page."""
+
+    env_id: str
+    host: str  # a name, an IP, or ".domain"
+    port: int | None  # None: every port
+    source: Literal["lab_config", "added"]
+    ports_known: tuple[int, ...] = ()  # the YAML server block's ports (shown, not matched)
+    note: str = ""
+    added_at: str = ""
+    added_by: str = ""
+
+    @property
+    def key(self) -> str:
+        return entry_key(self.host, self.port)
+
+    @property
+    def is_domain(self) -> bool:
+        return self.host.startswith(".")
+
+    @property
+    def is_name(self) -> bool:
+        return not self.is_domain and not self.host.replace(".", "").isdigit()
 
 
 @dataclass(frozen=True)
 class Forbidden:
-    """The known-forbidden endpoints, as names (never resolved) and literal IPs."""
+    """The effective forbidden list for matching: names, IP literals, the non-CDN IPs the
+    forbidden names resolve to, and whole domains."""
 
     hosts: frozenset[tuple[str, int | None]]  # (name or IP, port or any)
     domains: frozenset[str]  # ".ragnarok.co.kr": the domain and every name under it
@@ -99,21 +151,19 @@ class Forbidden:
         return any(host == d[1:] or host.endswith(d) for d in self.domains)
 
 
-def forbidden_of(cfg: EnvironmentsConfig | None) -> Forbidden:
+def forbidden_from(blocked: Iterable[Blocked],
+                   resolved: dict[str, list[str]] | None = None) -> Forbidden:  # fmt: skip
     hosts: set[tuple[str, int | None]] = set()
     domains: set[str] = set()
-    for env in cfg.environments if cfg is not None else ():
-        if env.status != "forbidden":
+    for b in blocked:
+        if b.is_domain:
+            domains.add(b.host)
             continue
-        if env.server is not None:
-            hosts.add((env.server.host.lower(), None))
-        for raw in env.forbidden_endpoints:
-            item = raw.strip().lower()
-            if item.startswith("."):
-                domains.add(item)
-                continue
-            host, _, port = item.rpartition(":") if ":" in item else (item, "", "")
-            hosts.add((host, int(port) if port else None))
+        hosts.add((b.host, b.port))
+        if b.is_name:
+            for ip in (resolved or {}).get(b.host, []):
+                if cdn_of(ip) is None:  # a shared CDN address is matched by NAME only
+                    hosts.add((ip, b.port))
     return Forbidden(frozenset(hosts), frozenset(domains))
 
 
@@ -148,42 +198,6 @@ def host_refusal(host: str) -> str | None:
     if not DNS_NAME.match(host) or host.replace(".", "").isdigit():
         return "bad_host"
     return None
-
-
-def validate(host: str, port: int, forbidden: Forbidden) -> tuple[str, str | None]:
-    """(normalised host, refusal reason or None)."""
-    norm = normalise_host(host)
-    why = host_refusal(norm)
-    if why is None and not 1 <= port <= 65535:
-        why = "bad_port"
-    if why is None and forbidden.hit(norm, port):
-        why = "forbidden_endpoint"
-    return norm, why
-
-
-def load(directory: Path) -> Store:
-    """The stored allowlist; an absent file is an empty store (revision 0). A corrupt file raises:
-    the caller refuses writes rather than overwrite what a human saved."""
-    path = directory / STORE_NAME
-    if not path.exists():
-        return Store()
-    return Store.model_validate_json(path.read_text())
-
-
-def save(directory: Path, store: Store) -> Store:
-    """Atomic write (temp + rename), then read back; raises if the file does not hold ``store``."""
-    directory.mkdir(parents=True, exist_ok=True)
-    tmp = directory / f".{STORE_NAME}.tmp"
-    tmp.write_text(store.model_dump_json(indent=1) + "\n")
-    os.replace(tmp, directory / STORE_NAME)
-    back = load(directory)
-    if back != store:
-        raise OSError("allowlist read-back differs from what was written")
-    return back
-
-
-def keys(entries: Iterable[Entry]) -> list[str]:
-    return [e.key for e in entries]
 
 
 class AuditLog(DailyJsonl):

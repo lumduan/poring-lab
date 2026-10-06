@@ -24,6 +24,8 @@ attestation_max_age_s: 10
 window_max_s: 120
 environments:
   - id: lab-rathena
+    title: "Lab rAthena (this lab's server)"
+    summary: "The lab's own rAthena server on this network; the bot may act here once its servers are confirmed."
     status: allowed            # allowed | pending | forbidden
     adr: "ADR-0006 environment 1 (the self-hosted rAthena)"
     server: {host: 192.168.1.13, ports: [6900, 6121, 5121]}
@@ -35,6 +37,8 @@ environments:
     accounts: [2000001, 2000002]   # the agent (group 0) and the validation GM (group 20)
     signals: [lab_host, session]
   - id: lab-rathena-th
+    title: "Lab rAthena, Thai data (stopped)"
+    summary: "A second lab server with the Thai client data; normally stopped."
     # The Thai-data experiment (Batt, 2026-10-05): the same rAthena code with a map cache made
     # from the Thai client's GRF, its own database (db-th), and a separate client copy. Runs ONE AT
     # A TIME with lab-rathena (same address and ports); sniffer-th attests server=lab-rathena-th.
@@ -52,6 +56,8 @@ environments:
     # NOTE: 2000001 is ALSO lab-rathena's agent: only the attested `server` tells them apart.
     signals: [lab_host, session]
   - id: official-ro-thai
+    title: "Official Thai RO"
+    summary: "The official Thai Ragnarok servers; the bot never acts here."
     # KNOWN-FORBIDDEN (Batt, 2026-10-05): the official Thai RO servers the Thai client data points
     # at (its GRF's own data\clientinfo.xml). Never green: forbidden, no signals. Our th client
     # overrides that file with a loose one pointing at rathena-th; defence in depth on the Dell is
@@ -70,6 +76,8 @@ environments:
     forbidden_endpoints: [.gnjoy.in.th, roc.gnjoy.in.th, "49.229.28.99:3000", 49.229.28.13]
     note: "Record only: never connect, never test against."
   - id: official-ro-korea
+    title: "Official Korean RO (kRO)"
+    summary: "Gravity's official Korean Ragnarok services; the bot never acts here."
     # KNOWN-FORBIDDEN (found 2026-10-05 14:58 by the th client's watcher, which killed the client):
     # the 2021 exe at CHARACTER SELECT opens AssistAddr from the kRO data's
     # lua files\service_korea\externalsettings_kr*.lub (in data.grf / rdata.grf, servicetype korea):
@@ -85,6 +93,8 @@ environments:
     forbidden_endpoints: [.ragnarok.co.kr, "kro-assit-s.ragnarok.co.kr:3000", "kro-qm-1a.ragnarok.co.kr:3000"]
     note: "Record only: never connect, never test against."
   - id: community-bot-testing
+    title: "Community bot-testing server"
+    summary: "Not approved yet: the server owner's written permission is still pending, and the lab cannot verify a session there (packet capture is not allowed on that server); you may still play there yourself."
     status: pending            # forbidden until its permission evidence AND its own signal set exist
     adr: "ADR-0006 environment 2; issue #2; docs/environments/community-server.md"
     signals: []                # none designed: packet capture is not allowed there

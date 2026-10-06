@@ -2,49 +2,68 @@
 // decides; this file only mirrors its checks so a typo is caught before Save, and turns its refusal
 // reasons into plain words.
 
-export interface EntryView {
-  host: string;
-  port: number;
-  source: "manual" | "discovered";
+export type EnvType = "allowed" | "forbidden" | "pending";
+
+export interface ResolvedIp {
+  ip: string;
+  cdn: string | null;
+}
+
+export interface ServerView {
+  host: string; // a name, an IPv4 address, or ".domain" (forbidden/pending lists)
+  port: number | null; // null: every port
+  key: string;
+  note: string;
+  source: "default" | "manual" | "discovered" | "import";
   added_at: string;
   added_by: string;
-  resolved: string[];
+  resolved: ResolvedIp[];
+  forbidden: boolean; // an allowed server now on a forbidden list: shown, and ignored by the bot
 }
 
 export interface Suggestion {
   host: string;
   port: number;
-  from: string;
 }
 
 export interface EnvView {
   id: string;
-  status: "allowed" | "pending" | "forbidden";
-  adr: string;
-  editable: boolean;
-  entries: EntryView[];
-  discovered: Suggestion[];
+  name: string;
+  type: EnvType;
+  summary: string;
+  why: string;
+  servers: ServerView[];
+  suggestions: Suggestion[];
+  ready: boolean;
+  signals: string[];
 }
 
 export interface SettingsView {
   revision: number | null;
   store: string;
+  seeded_from: string | null;
   config: string;
   environments: EnvView[];
   forbidden: string[];
   saved?: boolean;
   read_back?: boolean;
+  changes?: { kind: "easy" | "normal" | "hard"; text: string }[];
 }
 
-export interface Draft {
-  host: string;
-  port: number;
-  source: "manual" | "discovered";
+/** One environment as the PUT body carries it (user fields only). */
+export interface EnvInput {
+  id: string | null;
+  name: string;
+  type: EnvType;
+  summary: string;
+  why: string;
+  servers: { host: string; port: number | null; note: string; source?: string }[];
 }
 
 export interface AuditRecord {
   t_wall: string;
-  action: "add" | "remove" | "refused";
+  action: string;
+  kind?: "easy" | "normal" | "hard" | null;
   env_id: string | null;
   entry: string | null;
   revision_before: number | null;
@@ -52,6 +71,7 @@ export interface AuditRecord {
   ok: boolean;
   reason: string;
   client: string | null;
+  note?: string | null;
 }
 
 const LABEL = "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?";
@@ -89,6 +109,19 @@ export const REASON_TEXT: Record<string, string> = {
   config_invalid: "The lab's environment list is invalid on the backend.",
   invalid: "The request was not understood.",
   too_large: "Too many servers in one save.",
+  reason_required: "This loosens a forbidden list: give a reason (at least 10 characters).",
+  port_required: "A server the bot may use needs a port (for example 6900).",
+  domain_not_allowed_here: "A whole domain can only be blocked, never allowed: name one server.",
+  duplicate_name: "Another environment already has that name.",
+  duplicate_environment: "That environment appears twice.",
+  one_hard_change_at_a_time: "Loosen one forbidden thing at a time (each needs its own reason).",
+  environments_store_missing: "The saved environments are missing on the backend: the bot is blocked until this is fixed.",
+  environments_store_invalid: "The saved environments are damaged on the backend: the bot is blocked until this is fixed.",
+  environments_store_unseeded: "The environments have not been set up yet on the backend.",
+  confirm_mismatch: "Type the blocked server exactly as shown to confirm.",
+  bad_forbidden_entry: "Write a server (name or IP), optionally with :port, or .domain for a whole domain.",
+  not_blocked: "That server is not on the blocked list.",
+  not_a_forbidden_environment: "Blocked servers belong to the forbidden (official) environments.",
 };
 
 export function reasonText(reason: string): string {
@@ -146,8 +179,8 @@ export function validateEntry(
   return { host, port, error };
 }
 
-export function keyOf(e: { host: string; port: number }): string {
-  return `${e.host}:${e.port}`;
+export function keyOf(e: { host: string; port: number | null }): string {
+  return e.port === null ? e.host : `${e.host}:${e.port}`;
 }
 
 /** What Save would change, in the list's order. */
@@ -160,11 +193,115 @@ export function diff(before: { host: string; port: number }[], after: { host: st
   };
 }
 
+const ACTION_TEXT: Record<string, string> = {
+  seed: "Started from the shipped settings",
+  env_create: "Created",
+  env_delete: "Deleted",
+  env_rename: "Renamed",
+  env_type: "Changed type",
+  env_text: "Edited description",
+  server_add: "Added",
+  server_remove: "Removed",
+};
+
 export function auditText(r: AuditRecord): string {
-  const who = r.client ?? "unknown";
+  const who = r.client ? ` [from ${r.client}]` : "";
   if (r.action === "refused") {
-    return `Refused${r.entry ? ` ${r.entry}` : ""}${r.env_id ? ` (${r.env_id})` : ""}: ${reasonText(r.reason)} [from ${who}]`;
+    return `Refused${r.entry ? ` ${r.entry}` : ""}: ${reasonText(r.reason)}${who}`;
   }
-  const verb = r.action === "add" ? "Allowed" : "Removed";
-  return `${verb} ${r.entry} in ${r.env_id} (revision ${r.revision_before} → ${r.revision_after}) [from ${who}]`;
+  if (r.action === "seed") return `${ACTION_TEXT.seed} (${r.note ?? ""})`;
+  const tag = r.kind === "hard" ? "LOOSENED a forbidden list — " : "";
+  const what = r.kind === "hard" ? (r.note ? `reason: "${r.note}"` : "") : (r.note ?? "");
+  const rev = `(revision ${r.revision_before} → ${r.revision_after})`;
+  return `${tag}${ACTION_TEXT[r.action] ?? r.action}: ${r.entry ?? ""}${what ? ` — ${what}` : ""} ${rev}${who}`;
+}
+
+/** "Allowed · 3 servers", "Forbidden · 4 blocked", "Pending · 0 servers". */
+export function badgeText(env: Pick<EnvView, "type" | "servers">): string {
+  const n = env.servers.length;
+  const type = env.type.charAt(0).toUpperCase() + env.type.slice(1);
+  if (env.type === "forbidden") return `${type} · ${n} blocked`;
+  return `${type} · ${n} server${n === 1 ? "" : "s"}`;
+}
+
+/** Why the bot cannot act in an allowed environment yet, in one sentence (null: it can). */
+export function notReadyText(env: Pick<EnvView, "type" | "servers" | "signals">): string | null {
+  if (env.type !== "allowed") return null;
+  const usable = env.servers.filter((s) => !s.forbidden);
+  if (env.servers.length === 0) return "The bot cannot act here yet: confirm at least one server below.";
+  if (usable.length === 0) return "Every server here is on a forbidden list, so the bot ignores them.";
+  if (env.signals.length === 0) {
+    return "The bot cannot act here yet: the lab has no way to check a game session on these servers.";
+  }
+  return null;
+}
+
+/** Suggestions grouped by server address, for "Confirm all". */
+export function groupSuggestions(list: Suggestion[]): { host: string; ports: number[] }[] {
+  const by = new Map<string, number[]>();
+  for (const s of list) by.set(s.host, [...(by.get(s.host) ?? []), s.port]);
+  return [...by].map(([host, ports]) => ({ host, ports }));
+}
+
+/** The whole set as the PUT body carries it. */
+export function toInputs(view: Pick<SettingsView, "environments">): EnvInput[] {
+  return view.environments.map((e) => ({
+    id: e.id,
+    name: e.name,
+    type: e.type,
+    summary: e.summary,
+    why: e.why,
+    servers: e.servers.map((s) => ({ host: s.host, port: s.port, note: s.note })),
+  }));
+}
+
+/** A server in plain words: "thro-acc3.gnjoy.in.th : every port", "gnjoy.in.th and every name
+ * under it", "192.168.1.13 : 6900". */
+export function describeServer(s: { host: string; port: number | null }): string {
+  if (s.host.startsWith(".")) return `${s.host.slice(1)} and every name under it`;
+  return s.port === null ? `${s.host} : every port` : `${s.host} : ${s.port}`;
+}
+
+// --- the forbidden list (Batt, 2026-10-06): asymmetric -- blocking is easy, unblocking is not ---
+
+export const MIN_UNBLOCK_REASON = 10;
+
+/** The firewall-layer warning: a name that resolves into a CDN's shared range. */
+export function cdnWarning(b: { resolved: ResolvedIp[] }): string | null {
+  const cdns = [...new Set(b.resolved.map((r) => r.cdn).filter((c): c is string => !!c))];
+  if (!cdns.length) return null;
+  const name = cdns.map((c) => c.charAt(0).toUpperCase() + c.slice(1)).join(", ");
+  return (
+    `Resolves to ${name} (shared addresses): blocking these IPs in a firewall could also block ` +
+    "unrelated websites. The lab matches this server by its name instead."
+  );
+}
+
+const IPV4_FULL = /^(\d{1,3}\.){3}\d{1,3}$/;
+
+/** The backend's parse_forbidden: "host", "host:port" or ".domain"; null when it is not one. */
+export function parseForbidden(text: string): string | null {
+  const item = text.trim().toLowerCase().replace(/\.$/, "");
+  if (!item || /[*? ]/.test(item)) return null;
+  if (item.startsWith(".")) return DNS_NAME.test(item.slice(1)) ? item : null;
+  let host = item;
+  let port: number | null = null;
+  const colon = item.lastIndexOf(":");
+  if (colon >= 0) {
+    host = item.slice(0, colon);
+    const p = item.slice(colon + 1);
+    if (!/^\d+$/.test(p) || Number(p) < 1 || Number(p) > 65535) return null;
+    port = Number(p);
+  }
+  if (IPV4_FULL.test(host)) {
+    if (host.split(".").some((o) => Number(o) > 255)) return null;
+  } else if (!DNS_NAME.test(host) || /^[\d.]+$/.test(host)) {
+    return null;
+  }
+  return port === null ? host : `${host}:${port}`;
+}
+
+/** Unblocking is ready only with a real reason AND the entry typed again exactly. */
+export function unblockReady(entry: string, reason: string, confirm: string): boolean {
+  return reason.trim().length >= MIN_UNBLOCK_REASON && confirm.trim().toLowerCase() === entry;
 }

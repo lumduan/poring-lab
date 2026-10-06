@@ -41,7 +41,8 @@ CFG = EnvironmentsConfig.model_validate({
     "version": 1, "attestation_max_age_s": 10, "window_max_s": 120,
     "environments": [
         {"id": "lab-rathena", "status": "allowed", "adr": "ADR-0006", "windows_host": HOST,
-         "accounts": [AGENT, GM], "signals": ["lab_host", "session"]},
+         "accounts": [AGENT, GM], "signals": ["lab_host", "session"],
+         "servers": ["192.168.1.13:6900", "192.168.1.13:6121", "192.168.1.13:5121"]},
         {"id": "community", "status": "pending", "adr": "ADR-0006", "signals": []},
     ],
 })  # fmt: skip
@@ -80,6 +81,9 @@ def verdict(cfg: EnvironmentsConfig | None = CFG, *, mode: Mode = Mode.BOT, lock
         ({"att": attest(aid=1234567)}, "account_not_lab"),
         ({"att": attest(server="lab-rathena-th")}, "server_mismatch"),  # another server's sniffer
         ({"att": attest(server=None)}, "server_mismatch"),  # an unnamed sniffer: never green
+        # "allowed" means connected to one of ITS servers: none confirmed yet -> red (2026-10-06)
+        ({"cfg": CFG.model_copy(update={"environments": [CFG.environments[0].model_copy(
+            update={"servers": []})]})}, "no_servers"),
     ],
 )  # fmt: skip
 def test_every_failure_is_red_for_the_bot(kwargs: dict[str, Any], reason: str) -> None:
@@ -223,9 +227,11 @@ def app_client(tmp_path: Path) -> Iterator[Callable[..., TestClient]]:
     def factory(**overrides: Any) -> TestClient:
         lab = tmp_path / "lab-state"
         lab.mkdir(exist_ok=True)
+        (tmp_path / "settings").mkdir(exist_ok=True)
         fields: dict[str, Any] = {"data_dir": tmp_path, "status_hz": 20.0, "lab_state_dir": lab,
                                   "internal_port": 80, "public_port": 80,
                                   "environments_file": tmp_path / "environments.yaml",
+                                  "settings_dir": tmp_path / "settings",
                                   "win_host": HOST, "ingest_peer": "testclient"}  # fmt: skip
         settings = Settings(**(fields | overrides))
         fake = FakeInput()
@@ -242,9 +248,22 @@ def app_client(tmp_path: Path) -> Iterator[Callable[..., TestClient]]:
 
 
 def write_config(path: Path, cfg: EnvironmentsConfig = CFG) -> None:
+    """The shipped defaults AND the user-managed set the interlock reads (2026-10-06): seeded from
+    them, with the allowed environments' servers as a person confirmed them on the Settings page."""
     import yaml
 
+    from poring_backend import envstore
+
     path.write_text(yaml.safe_dump(cfg.model_dump(mode="json", exclude_none=True)))
+    es = envstore.from_defaults(cfg, "test")
+    for env, src in zip(es.environments, cfg.environments, strict=True):
+        if env.type == "allowed":
+            pairs = [k.rsplit(":", 1) for k in src.servers]
+            env.servers = [envstore.ServerEntry(host=h, port=int(p)) for h, p in pairs]
+    settings = path.parent / "settings"
+    settings.mkdir(exist_ok=True)
+    envstore.save(settings, es)
+    (settings / envstore.MARKER_NAME).write_text("{}")
 
 
 def state(client: TestClient) -> Any:

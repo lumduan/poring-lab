@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Protocol, TypeVar
 
-from poring_backend import allowlist
+from poring_backend import allowlist, envstore
 from poring_backend.capture_lock import read_alarms, read_cleanroom, read_lock, read_window
 from poring_backend.capture_select import CaptureSelector
 from poring_backend.clipboard import ClipboardService, PasteOutcome, SelectionIO
@@ -22,7 +22,7 @@ from poring_backend.foreground import ForegroundGate
 from poring_backend.freshness_monitor import StallMonitor
 from poring_backend.grabsource import GrabSource
 from poring_backend.input_log import InputLog, InputLogRecord, wall_clock_iso
-from poring_backend.interlock import Interlock, Verdict, Window
+from poring_backend.interlock import Interlock, Verdict, Window, load_config
 from poring_backend.latency import InputRecord, LatencyRecorder
 from poring_backend.mode_restore import read_verdict
 from poring_backend.mux import Decision, InputMux, Routed, Source
@@ -324,13 +324,17 @@ class AppState:
         )
         # True from an automatic ASSIST restore until a human next sets the mode (Status).
         self.mode_restored = False
-        # ADR-0016: the environment interlock (allowlist + attestation + operator window).
-        self.interlock = Interlock(settings.environments_file, settings.win_host)
-        # The server allowlist (Settings page, human-only writes; routes_settings).
+        # The USER-MANAGED environment set (Settings page; human-only writes; envstore.py). Its
+        # audit log is opened first: the interlock's first read may seed the store (audited).
         self.allowlist_audit = allowlist.AuditLog(settings.settings_dir)
-        self.allowlist_lock = asyncio.Lock()
-        self.allowlist_resolved: dict[str, list[str]] = {}
+        self.envset_lock = asyncio.Lock()
+        self.allowlist_resolved: dict[str, list[str]] = {}  # allowed names -> current IPs
+        self.forbidden_resolved: dict[str, list[str]] = {}  # forbidden NAMES -> current IPs
         self.allowlist_resolved_at_ns: int | None = None
+        self._env_cache: tuple[Any, Any] | None = None  # (store key, its interlock config)
+        # ADR-0016: the environment interlock (the user-managed set + attestation + window).
+        self.interlock = Interlock(settings.environments_file, settings.win_host,
+                                   source=self._envset_source)  # fmt: skip
         # The typing-only foreground gate (2026-10-06): bot TYPING needs the client in front.
         self.foreground = ForegroundGate(
             settings.settings_dir,
@@ -431,18 +435,55 @@ class AppState:
 
     # --- the server allowlist (Settings page) ----------------------------------------------------
 
-    def allowlist_store(self) -> tuple[allowlist.Store | None, str]:
-        """(store, "") or (None, why): a missing mount or a corrupt file refuses every write."""
+    STORE_ERRORS = {
+        "no_dir": "settings_store_missing",
+        "missing": "environments_store_missing",
+        "invalid": "environments_store_invalid",
+    }
+
+    def _envset_source(self) -> tuple[Any, Any, str]:
+        """The interlock's config: the user-managed set ONLY. An empty store is seeded ONCE from
+        the shipped defaults (audited); after that a missing or invalid store fails closed."""
         directory = self.settings.settings_dir
-        if not directory.is_dir():
-            return None, "settings_store_missing"
-        try:
-            return allowlist.load(directory), ""
-        except (OSError, ValueError):
-            return None, "settings_store_corrupt"
+        state = envstore.state_of(directory)
+        if state == "unseeded":
+            defaults, error = load_config(self.settings.environments_file)
+            if defaults is None:
+                return ("no_defaults", error), None, error or "config_missing"
+            sha = envstore.file_sha(self.settings.environments_file)
+            es = envstore.seed(directory, defaults, sha)
+            self.allowlist_audit.write(
+                action="seed", kind=None, env_id=None, entry=None, revision_before=None,
+                revision_after=es.revision, before=None, after=[e.id for e in es.environments],
+                ok=True, reason="seeded", client=None, origin=None, listener=None,
+                note=f"the shipped defaults (environments.yaml sha256 {sha[:12]})",
+            )  # fmt: skip
+            log.warning("environment set seeded from the shipped defaults (sha256 %s)", sha[:12])
+            state = "ok"
+        if state != "ok":
+            return (state,), None, self.STORE_ERRORS[state]
+        path = directory / envstore.STORE_NAME
+        st = path.stat()
+        key = ("ok", st.st_mtime_ns, st.st_size)
+        if self._env_cache is None or self._env_cache[0] != key:
+            self._env_cache = (key, envstore.to_config(envstore.load(directory)))
+        return key, self._env_cache[1], ""
+
+    def envset(self) -> tuple[envstore.EnvSet | None, str]:
+        """(the set, "") or (None, why): a missing or invalid store refuses every change."""
+        state = envstore.state_of(self.settings.settings_dir)
+        if state != "ok":
+            return None, self.STORE_ERRORS.get(state, "environments_store_unseeded")
+        return envstore.load(self.settings.settings_dir), ""
+
+    def forbidden(self) -> allowlist.Forbidden:
+        es, _ = self.envset()
+        if es is None:
+            return allowlist.Forbidden(frozenset(), frozenset())
+        return envstore.forbidden(es, self.forbidden_resolved)
 
     def _maybe_resolve(self, now_ns: int) -> None:
-        """Re-resolve the allowlist's DNS names every ALLOWLIST_RESOLVE_S, in the background."""
+        """Re-resolve the set's DNS names every ALLOWLIST_RESOLVE_S, in the background."""
         last = self.allowlist_resolved_at_ns
         if last is not None and now_ns - last < self.settings.allowlist_resolve_s * 1e9:
             return
@@ -452,24 +493,31 @@ class AppState:
         task.add_done_callback(self._background.discard)
 
     async def resolve_allowlist(self) -> None:
+        """Re-resolve the allowed DNS names AND the forbidden names (Batt, 2026-10-06: the page
+        shows their current IPs and warns when a forbidden one sits in a CDN range)."""
         from poring_backend.routes_settings import resolve
 
-        store, _ = self.allowlist_store()
-        if store is None:
+        es, _ = self.envset()
+        if es is None:
             return
-        names = {e.host for es in store.environments.values() for e in es
-                 if not e.host.replace(".", "").isdigit()}  # fmt: skip
-        for name in sorted(names):
-            self.allowlist_resolved[name] = await resolve(name)
+        for env in es.environments:
+            for s in env.servers:
+                if s.host.startswith(".") or s.host.replace(".", "").isdigit():
+                    continue
+                forbidden = env.type == "forbidden"
+                cache = self.forbidden_resolved if forbidden else self.allowlist_resolved
+                cache[s.host] = await resolve(s.host)
 
     def allowlist_snapshot(self) -> dict[str, Any]:
-        """/health: the store's state, revision and entry counts (no addresses)."""
-        store, error = self.allowlist_store()
+        """/health: the user-managed set's state, revision and counts (no addresses)."""
+        es, error = self.envset()
         last = self.allowlist_resolved_at_ns
         return {
             "store": error or "ok",
-            "revision": store.revision if store is not None else None,
-            "entries": {k: len(v) for k, v in store.environments.items()} if store else {},
+            "revision": es.revision if es is not None else None,
+            "environments": {e.id: f"{e.type}:{len(e.servers)}" for e in es.environments}
+            if es is not None
+            else {},
             "resolved_age_s": None if last is None else round((monotonic_ns() - last) / 1e9, 1),
         }
 
