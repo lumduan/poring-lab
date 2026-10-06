@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: Batt reviews ADR-0009 and the install list (section 9). Nothing is installed on Windows until he approves; the first step after approval is the console-switch test (section 2) with nothing streamed yet.
+next_action: "➡️ DONE and superseded: approved and installed 2026-10-02/03 (Sunshine MSI, VDD, the tscon task; ADR-0009). What is on Windows now, and the rule for anything more: ADR-0019 (Windows stays clean, live audit 2026-10-06)."
 ---
 
 # Console-session capture: plan (Sunshine primary, VNC fallback)

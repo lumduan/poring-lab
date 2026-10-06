@@ -170,7 +170,8 @@ Nothing listens on the Dell's port 3000. After the fix:
 - the client's only TCP is `192.168.1.13:5121`;
 - the DNS cache holds no ragnarok, gnjoy or gravity name.
 
-The main lab client has no such override (Batt decides).
+The main lab client has no such override (Batt decides). ➡️ SUPERSEDED the same day: the main
+client got the same four files at 16:23 (below); both clients have it (ADR-0019 audit).
 
 **What it means for the experiment:**
 - With the Thai GRF in FRONT, the 2021 exe crashes at start. The exe can index the Thai GRF
@@ -267,6 +268,8 @@ on-screen comparison planned for 3d is moot for these species.
     the map session times out ("Disconnected from Server"), and the interlock goes red as it
     should.
   - It is not caused by the Thai data. Avoid the Equip window until the textures are supplied.
+    ➡️ SUPPLIED 2026-10-05 evening: neutral placeholder BMPs in both clients; Equip opens with no
+    modal box (ADR-0019 audit).
 - **Chords are paced now** (`ro_agent` d55d149). One instantaneous batch was ignored.
   - Live check on the main client: Alt+E opened the inventory, Alt+Q opened Equip (with the
     errors above), and Alt+F4 closed the client at once.

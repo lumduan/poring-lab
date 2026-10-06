@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: APPLIED 2026-10-02 21:41-22:15 (A-D, plus Batt's additions b and c). Remaining -- (c) the portable copy's removal in Batt's console, then S2 step 0.
+next_action: "APPLIED 2026-10-02 21:41-22:15 (A-D, plus Batt's additions b and c; (c) done, see the table). Live read-back 2026-10-06 (ADR-0019): SunshineService Running/Automatic; two inbound 'Sunshine' rules, remote 192.168.1.13, profile Any. Cleanup candidates for Batt: the MSI in Downloads, the admin-only backup (holds the OLD cakey.pem)."
 ---
 
 # Replacing the unsigned April Sunshine with the signature-verified v2026.914 MSI

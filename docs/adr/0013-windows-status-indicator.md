@@ -7,13 +7,18 @@ verdict_date: 2026-10-02
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: "ACCEPTED 2026-10-02 (indicator not built). The lab-client watcher amendment (2026-10-05) is live. The 2026-10-06 amendment (the watcher reports clientinfo + TCP evidence to the backend) is PROPOSED and awaits Batt's approval before anything changes on Windows."
+next_action: "➡️ ADR-0019 (Batt 2026-10-06): WINDOWS STAYS CLEAN. The 2026-10-06 amendment (Part B) is DEFERRED and may never be built; the indicator (ACCEPTED 2026-10-02, never built) is not built under that principle either. The 2026-10-05 watcher is LAB-ONLY and has retirement criteria in ADR-0019."
 ---
 
 # ADR-0013: A Windows-side status indicator, display-only
 
 - **Status:** ACCEPTED (Batt, 2026-10-02, with the S2 plan). Proposed the same day from Batt's
   capture-direction note. Build later: only after S2 works and shared control is approved.
+- ➡️ **2026-10-06: [ADR-0019](0019-windows-stays-clean.md), "Windows stays clean", governs this
+  ADR.** No poring-lab services, keys or reporting channels on Windows. So:
+  - the indicator below is NOT built (its server-side candidates are in ADR-0019);
+  - the 2026-10-06 amendment (Part B) is DEFERRED;
+  - the 2026-10-05 watcher is lab-only, with retirement criteria.
 - **Related:**
   - [ADR-0009](0009-console-session-capture.md): the console mode and its 2026-10-02 amendment;
   - [docs/s2-plan.md](../s2-plan.md) §11: shared control;
@@ -23,7 +28,9 @@ next_action: "ACCEPTED 2026-10-02 (indicator not built). The lab-client watcher 
 
 ## Context
 
-**The lab has been agentless on Windows.** Nothing of ours runs there except:
+**The lab has been agentless on Windows.** *(As of 2026-10-02. The 2026-10-05 watcher widened
+it; ADR-0019 sets the end state and lists what is there, from a live read-back on 2026-10-06.)*
+Nothing of ours runs there except:
 - Sunshine (a third-party service);
 - Batt's one-time SYSTEM task for tscon.
 
@@ -104,6 +111,10 @@ So it takes a small program that runs on Windows.
 
 ## Amendment 2026-10-05: the lab-client watcher (Batt)
 
+➡️ **LAB-ONLY (ADR-0019, 2026-10-06).** The watcher is not part of any user setup. It stays while
+we run client and data experiments, and it is retired when ADR-0019's criteria hold (Batt's
+call). Live 2026-10-06 16:42: Running, KILLED 0 since 2026-10-05 19:29.
+
 This widens the Windows-side helpers by one more piece, which is what the "re-review" clause
 above asks for. Batt asked for it on 2026-10-05, after the th client's watcher caught the 2021
 exe calling Gravity's `kro-assit.ragnarok.co.kr:3000` at character select (ADR-0016).
@@ -136,9 +147,17 @@ exe calling Gravity's `kro-assit.ragnarok.co.kr:3000` at character select (ADR-0
 - `-ExecutionPolicy Bypass` applies to that one process. The machine's policy (Restricted, all
   scopes Undefined) is not changed.
 
-## Amendment 2026-10-06 (PROPOSED, awaiting Batt): the watcher reports to the backend
+## Amendment 2026-10-06 (DEFERRED by ADR-0019; was PROPOSED): the watcher reports to the backend
 
-**Status: PROPOSED. Nothing is built or deployed on Windows.** Batt asked for the design first
+➡️ **DEFERRED, 2026-10-06 (Batt, [ADR-0019](0019-windows-stays-clean.md)): Windows stays clean.**
+- Under that principle this channel may never be built: no reporting channel and no key on
+  Windows.
+- Its two purposes go server-side:
+  - discovery: drag a game file onto the Settings page (ADR-0016's finder);
+  - remote attestation: the server-side candidates in ADR-0019.
+- The design below is kept as history. Nothing was ever built: no code, test or `.env` variable.
+
+**Status (as written): PROPOSED. Nothing is built or deployed on Windows.** Batt asked for the design first
 (zero-config server allowlist, Part B). It widens the helper above from "sends nothing" to "sends
 evidence", which is what this ADR's re-review clause covers.
 

@@ -78,7 +78,8 @@ kept. WARP output is deterministic: same session, same hash.
     Pro already renders RDP sessions on the hardware GPU by default.
 - **Windows (Batt, 2026-09-30):** system locale th-TH (ANSI code page 874), the Thai Kedmanee
   keyboard, time zone (UTC+07:00) Bangkok.
-- **Smart App Control is On** (`VerifiedAndReputablePolicyState=1`, build 26200.9457). It blocks new
+- **Smart App Control is On** (`VerifiedAndReputablePolicyState=1`, build 26200.9457; read back
+  2026-10-06: still On, build 26300.9457, 26H2, ADR-0019). It blocks new
   unsigned exes: WARP variants other than the first `PoringLab.exe` were refused (Code Integrity
   3033). ➡️ SUPERSEDED 2026-09-30: turning SAC off is **no longer** irreversible on this build. See
   "UI text and Smart App Control" below.

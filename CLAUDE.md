@@ -98,22 +98,24 @@ ports, quickstart) and `docs/adr/`.
    environments in ADR-0006, verified by an interlock signal, not by judgment. Other players' chat
    data stays local and pseudonymized.
    - **The interlock is built** (ADR-0016 ACCEPTED 2026-10-04): a LOGIC interlock driven by
-     `config/environments.yaml` (backend only, read-only). BOT presses pass only while:
+     the USER-MANAGED environment set (`settings/environments.json`, seeded once from
+     `config/environments.yaml`; since 2026-10-06). BOT presses pass only while:
      - an `allowed` environment is attested: the lock is steady, `WIN_HOST` matches, and the
        sniffer's attestation is ≤ 10 s old for a live lab-account session;
      - or, in ASSIST only, a bounded operator window is open (`capture_backend.py window
        login|desktop`, ≤ 120 s, tied to the lock SEQ).
 
-     Releases always pass; green → red releases what the bot holds. Adding a server = config + an
-     ADR-0006 entry, never code. The interlock itself adds no OS lock. Since 2026-10-05 (Batt) the
+     Releases always pass; green → red releases what the bot holds. Adding a server = a person on the
+     Settings page (+ an ADR-0006 entry for this lab), never code. The interlock itself adds no OS lock. Since 2026-10-05 (Batt) the
      lab clients get an EXE-SCOPED layer-1 allowlist: one Block rule per lab exe, for every remote
      address except 192.168.1.13 and loopback; never OS-wide, never the community client. It is
      applied from Batt's elevated console (APPLIED 2026-10-06, read back; group
      `poring-lab lab-only`, 12 rules; ADR-0016). Layer 2 is the durable `poring-lab watch` task
-     (ADR-0013 amendment; re-triggers every 1 min since 2026-10-06).
+     (ADR-0013 amendment; re-triggers every 1 min since 2026-10-06). It is LAB-ONLY, not part of
+     any user setup, and has retirement criteria in ADR-0019.
      The SERVER allowlist (host:port per environment) is confirmed by a person on the console's
-     Settings page (2026-10-06; human-only writes, below). Its client-side provider waits for
-     Batt's approval of ADR-0013's 2026-10-06 reporting-channel amendment.
+     Settings page (2026-10-06; human-only writes, below). Its client-side provider and the
+     Windows reporting channel are DEFERRED (ADR-0019, rule 10).
      ro_agent opens per-phase windows itself.
    - Concretely:
    - **Official servers and any other public server: forbidden** for every component, in every mode.
@@ -128,6 +130,19 @@ ports, quickstart) and `docs/adr/`.
      gets a **separate client copy**. Never modify one to serve the other.
    - **Other players' chat, names and screenshots** stay local (gitignored `data/` or scratch),
      pseudonymized in any dataset, never pushed.
+
+10. **Windows stays clean** ([ADR-0019](docs/adr/0019-windows-stays-clean.md), Batt 2026-10-06).
+    - The Windows PC's only job is to run the game and stream it.
+    - No poring-lab services, keys or reporting channels on Windows. All intelligence and safety
+      logic live on the bot server.
+    - The user setup is the game client with its one-time config, plus Sunshine
+      (`docs/windows-setup.md`).
+    - Official endpoints are updated by dragging a game file onto the Settings page.
+    - **Any new need looks for a server-side solution FIRST** (the server, the network, the
+      pixels). A Windows-side piece needs a NEW ADR showing why each server-side option fails, and
+      Batt's approval. Part B / Part C and ADR-0013's indicator are deferred under this rule.
+    - Lab-only exceptions, each with an exit: the `poring-lab watch` task, the agent's shell, and
+      the tscon SYSTEM task.
 
 ## Invariants worth knowing before you edit
 
@@ -284,8 +299,10 @@ ports, quickstart) and `docs/adr/`.
     externalsettings_kr*.lub` set it to `127.0.0.1:3000` (client config, never an exe patch; rAthena's
     web auth stays off). Both `C:\RO-rAthena` and `C:\RO-rAthena-th` have them
     (docs/thai-data-experiment.md section 4; ADR-0016 known-forbidden endpoints);
-  - avoid the Equip window (Alt+Q / its button): the lab's kRO data lacks its button textures, so
-    modal "Resource File Loading fail" boxes stop the game loop, and the session times out at 60 s;
+  - the Equip window (Alt+Q / its button) needs button textures the lab's kRO data lacks.
+    Without them, modal "Resource File Loading fail" boxes stop the game loop, and the session
+    times out at 60 s. Placeholder BMPs were installed in BOTH clients on 2026-10-05 (verified;
+    listed in ADR-0019's audit). Any new client copy needs them too;
   - chords are paced (`CHORD_STEP_S`, 60 ms): one instantaneous batch is ignored by the client;
   - **verify the target is in front before typing**: client = active title-bar signature, console
     = tab template, secrets re-checked every 4 characters;

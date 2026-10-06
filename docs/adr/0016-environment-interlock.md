@@ -7,7 +7,7 @@ verdict_date: 2026-10-04
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: "2026-10-06: user-managed environments (Settings page, asymmetric rules, CSRF + rate limit), the game-file finder (in-browser, hostile-file controls, strict CSP) and the typing-only foreground gate are BUILT and live. The lab's Allowed environment is red no_servers until Batt confirms its servers from his own computer; the S2 @stream template is cut at the next S2 session. The client-side provider waits for Batt's approval of ADR-0013's 2026-10-06 reporting-channel amendment. The community server stays pending."
+next_action: "2026-10-06: user-managed environments (Settings page, asymmetric rules, CSRF + rate limit), the game-file finder (in-browser, hostile-file controls, strict CSP) and the typing-only foreground gate are BUILT and live. The lab's Allowed environment is red no_servers until Batt confirms its servers from his own computer; the S2 @stream template is cut at the next S2 session. ➡️ ADR-0019 (Batt, 2026-10-06): Windows stays clean, so the client-side provider (Part C) and its reporting channel (ADR-0013 Part B) are DEFERRED, and may never be built. The community server stays pending."
 ---
 
 # ADR-0016: The environment interlock (a LOGIC interlock, config-driven, fail closed)
@@ -123,7 +123,9 @@ What the layers did on 2026-10-05:
   - It got the same four loose files at 16:23; a watched login at 16:47 made no outbound
     connection.
   - It has no layer 1 rule. A path-scoped watcher (`mainwatch`) like layer 2 runs while the
-    agent's shell lives.
+    agent's shell lives. ➡️ SUPERSEDED: since 2026-10-06 the main client is in the exe-scoped
+    layer-1 group, and `mainwatch` was replaced by the durable `poring-lab watch` task (both
+    below; ADR-0019 audit, live).
   - **Any new client copy needs the override before its first login.**
 
 **The client profile** (exe path, launch shortcut, server-select entry):
@@ -271,6 +273,11 @@ They are listed with sha256 on 2026-10-05.
     client's only TCP remote 192.168.1.13:5121, the watcher's KILLED count 0.
   - (Prepared 2026-10-05; parked overnight by Batt.)
 - **Undo:** `Remove-NetFirewallRule -Group 'poring-lab lab-only'`.
+- ➡️ **2026-10-06 ([ADR-0019](0019-windows-stays-clean.md)):** layer 1 is one-time OS config
+  with nothing running, so it fits "Windows stays clean" and is the recommended layer for any
+  user setup ([docs/windows-setup.md](../windows-setup.md)). The layer-2 watch task is LAB-ONLY;
+  it is retired when ADR-0019's criteria hold. Live 2026-10-06 16:40: all 12 rules present and
+  enabled.
 
 This differs from the Production-option template below: that template's IPv4 range also covered
 127.0.0.0/8, and its `::/0` blocked ::1.
@@ -474,7 +481,12 @@ a camera LED), key releases, and ReleaseAll.
 - the client's service-select screen in front: Shift passed, distance 0.87;
 - the paced Alt+F4 passed.
 
-## The client-side evidence provider (PROPOSED, Part C; after ADR-0013's 2026-10-06 amendment)
+## The client-side evidence provider (DEFERRED by ADR-0019; was PROPOSED, Part C)
+
+➡️ **DEFERRED, 2026-10-06 ([ADR-0019](0019-windows-stays-clean.md), "Windows stays clean").** It
+needs the Windows-side reporting channel (ADR-0013 Part B), which that principle rules out. A
+remote server without a sniffer must first be attested server-side; ADR-0019 lists the
+candidates: pixels, the network, or signed attestations from a server we host. Kept as history:
 
 - A new signal `client_endpoint`: green when a fresh (≤ 10 s) watcher report shows the
   environment's client exe with an ESTABLISHED remote in that environment's allowlist (DNS names

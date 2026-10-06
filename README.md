@@ -24,7 +24,7 @@ humanization and LLM integration are clearly marked TODOs.
 ## Topology
 
 ```
- Windows host (OptiPlex 3080)                     Ubuntu Docker host (HOST_LAN_IP)
+ Windows host (OptiPlex 3090)                     Ubuntu Docker host (HOST_LAN_IP)
 ┌────────────────────────────────┐               ┌────────────────────────────────────────────────────────────────┐
 │ ONE interactive session        │   RDP :3389   │ desktop   xfreerdp3 /size (no WM) ─► Xvfb :99 canvas 1920x1200 │
 │   └─ RO client                 │ ◄──────────── │           x11vnc (view-only) ──► noVNC :6080                   │
@@ -61,7 +61,8 @@ humanization and LLM integration are clearly marked TODOs.
   sessions to the NAS; `scripts/dataset_check.py` then verifies every H.264 frame on the host;
   `poring_dataset.h264` reads them; `scripts/qa_export.py` reads either format.
 - **The environment interlock** (ADR-0016) gates the mux's BOT presses:
-  - the allowlist is `config/environments.yaml`;
+  - the environments are user-managed on the Settings page (seeded once from
+    `config/environments.yaml`);
   - the sniffer's attestation must say a lab account's session is live;
   - or, in ASSIST only, a bounded operator window is open (`scripts/capture_backend.py window`).
 
@@ -329,9 +330,19 @@ them as **sensitive** input (the input log keeps counts only); see `docs/client/
 
 ### Windows host checklist (the RO client side)
 
+**Windows stays clean** ([ADR-0019](docs/adr/0019-windows-stays-clean.md), Batt 2026-10-06):
+- The Windows PC runs the game and streams it. Nothing of poring-lab runs there, and no key of
+  ours is stored there.
+- The user-facing setup is the **game client with its one-time config, plus Sunshine**. It is in
+  [docs/windows-setup.md](docs/windows-setup.md), the course notes.
+- The checklist below is THIS LAB's setup, which adds RDP as the human's admin path.
+- The lab-only pieces (the `poring-lab watch` task, the agent's shell, the tscon task) and a live
+  audit of everything on the Dell are in ADR-0019.
+
 1. Enable Remote Desktop. Use a dedicated **standard** account in "Remote Desktop Users" and put it in `RDP_*`.
    This lab uses `poring-lab` (`WIN_LAB_USER`/`WIN_LAB_PASSWORD`, 2026-10-01): not an administrator,
-   Modify on `C:\RO-rAthena` only, plus Performance Monitor Users and Event Log Readers for the RDP
+   Modify on `C:\RO-rAthena` only (the stopped `C:\RO-rAthena-th` copy is writable through C:\'s inherited
+   Authenticated Users: Modify; ADR-0019), plus Performance Monitor Users and Event Log Readers for the RDP
    counters/events. Elevation is the operator's (UAC); see `docs/client/rathena-client.md` "Windows
    account". The lab uses `RDP_GFX=progressive` (`docs/h264-plan.md`). On FreeRDP 3.32.1 it delivers 30 fps outdoors;
    `AVCthin` is the measured alternative: the same frames at ~1/5 of the desktop CPU, but lossy.

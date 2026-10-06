@@ -73,7 +73,8 @@ Rules that apply on the community server:
 - **What:** `lab-rathena-th`, the same self-hosted rAthena (same SHA, pre-renewal) on the LAN,
   with its own database and a map cache generated from the Thai client's GRF by rAthena's own
   tool, plus a SEPARATE client copy (`C:\RO-rAthena-th\`: the same 2021-11-03 exe and WARP
-  patches, the Thai `data.grf` first in DATA.INI). It is environment 1 for every rule above.
+  patches, the Thai `data.grf` first in DATA.INI). ➡️ Measured 2026-10-05: with the Thai GRF
+  first the 2021 exe crashes at start; the working order is Thai LAST (docs/thai-data-experiment.md). It is environment 1 for every rule above.
 - **Never** the Thai client's own exe (protected, GameGuard), never a Thai or official server:
   only the Thai DATA, against our own server.
 - **One at a time** with environment 1 (the same address and ports). The current client, its
