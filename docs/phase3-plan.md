@@ -939,6 +939,48 @@ only, with step 1's exclusions):
 even side by side. §5's thresholds, step 1's exclusions, the facing mapping and k are all
 unchanged.
 
+**ODD result (2026-10-07 06:28), FROZEN: NO RULE ADOPTED.** The map points somewhere, but no
+grounded rule explains it, so Batt decides the next step.
+- 1,327 rows, 1,150 clean with a placement. Pixel classes, as pre-registered:
+
+| ODD | EXTRA / P_visible | MISSING / O | M | above our envelope (extra / missing) |
+|---|---|---|---|---|
+| Lunatic (outdoor) | 0.016 | 0.271 | 0.313 | 0.09 / 0.81 |
+| Poring, outdoor | 0.015 | 0.227 | 0.330 | rare |
+| Poring, indoor | 0.227 | 0.191 | 0.387 | rare |
+
+- **Outdoors, almost every pixel we draw is drawn (EXTRA ~1.5 %), and the client draws 22–27 %
+  MORE.**
+  - The overlays (`/dev/shm/poring-lab-tmp/m4-step2c/overlay/`, local) show where: a thin RIM of
+    1–2 screen px all round the outline, heaviest at the top and bottom.
+  - The Lunatic's extra rows run up to ~2–4 native px above our composed top in all 4 views.
+  - Indoors, the Poring's pink lies within 24 grey levels of the floor, so EXTRA there is mostly
+    the measurement (cf. step 1's split spawn).
+- **Exploratory, ODD only (outdoor centre, medians, native px).** The box ratios reproduce step 1
+  exactly:
+
+| | observed / chosen frame (height) | chosen frame / idle envelope | observed / predicted box | width, observed / frame |
+|---|---|---|---|---|
+| Poring (n 179) | 0.950 (34.9 vs 37.0) | 0.949 | 0.897 | 1.117 (43.4 vs 39.0) |
+| Lunatic (n 113) | **1.200** (30.9 vs 26.0) | 0.945 | 1.126 | 1.083 (36.9 vs 33.0) |
+
+- What this rules out and what it leaves:
+  - **The envelope effect is the SAME for both species (~5 %)**, so it is not the split.
+  - The split is at the FRAME level: the Lunatic is drawn 20 % taller than the best-matching frame
+    we compose, the Poring 5 % shorter.
+  - Both are drawn ~8–12 % WIDER. That is a common factor: the rim (soft, filtered edges and the
+    stream's blur), the shadow decal we do not render, or k.
+  - A rim cannot produce +20 % for one species and −5 % for the other.
+- **No grounded rule explains the species split, so NOTHING IS ADOPTED** (the pre-registered
+  outcome). The next hypothesis is Batt's.
+- Candidates seen, NOT pre-registered:
+  - a filtered (bilinear) sprite sampler in the client: a common rim; it would bias k, not the
+    split;
+  - the shadow decal: widths, bottoms;
+  - a Lunatic-specific difference at the TOP: the client's own `lunatic.act/.spr`. Is the data it
+    actually loads the same bytes we compose?
+- The EVEN half is scored ONCE with the same measurement, as the replication of the map.
+
 ## 6. M5–M7: using the rule
 
 **M5, labels v1.** Every auto-label gets:
