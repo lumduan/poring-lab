@@ -672,6 +672,48 @@ spawns, on CPU at nice 19. The data is the three §5b recordings.
   `facing.py`/`facing_score.py` sit beside it).
 - The even half is scored ONCE with the frozen (current) mapping after this commit.
 
+**EVEN result (2026-10-06 ~13:15), the frozen current mapping: NOT CONFIRMED.**
+- 1,564 clean frames; 1,001 identifiable.
+- View agreement 0.667, under the 0.80 bar.
+- The current mapping is the best of the 16 on the even half: indoor 0.883 (d - 1: 0.894),
+  outdoor Poring 0.621, outdoor Lunatic 0.620.
+- The odd half's indoor gain for `d - 1` (0.80 → 0.98) did NOT replicate. The safeguard kept a
+  noise-driven change out.
+- The remaining error is outdoors, in the heading input.
+
+Exploratory, ODD only (an input to 2a-ii, not a decision). Every identifiable facing was set by a
+WALK (`facing_from = walk`; 31 frames had none). View agreement by heading rule:
+
+| odd | last A* step (now) | overall vector, signs | overall vector, 1:3 rule |
+|---|---|---|---|
+| indoor Poring (150) | 0.800 | 0.800 | 0.800 |
+| outdoor Lunatic (279) | 0.394 | 0.789 | 0.649 |
+| outdoor Poring (357) | 0.566 | 0.613 | 0.706 |
+
+### 5d-ii. M4 step 2a-ii: the heading after a walk (2026-10-06), written BEFORE it is scored
+
+**The candidate comes from the format, not from the table above.**
+- The Timeline places a walk on `walk.walk_path`, a clean-room A*. Its own docstring warns: "among
+  EQUALLY short paths ... the game may pick another".
+- On open ground almost every walk has such ties (dx = 3, dy = 1 can end on a straight or a
+  diagonal step). The last step sets the facing, and a 45° error flips the VIEW about half the
+  time. Indoor walks along the aisle are mostly straight lines.
+- `walk.straight_path` already models the client's first try: diagonal steps first, then
+  straight, used when every cell is walkable.
+- CANDIDATE: the facing after arriving is the last step of `straight_path` when it exists, else
+  of the A* path (as now).
+- Frames whose facing was not set by a walk keep their current heading.
+
+**Measurement:** the §5d drawn views, already computed per frame, on the same identifiable frames
+(no new video pass). The mapping stays the frozen current one.
+
+**Decision on the ODD spawns:** adopt the candidate only if:
+- its pooled view agreement beats the current heading by ≥ 10 points;
+- AND it loses no more than 5 points in either scene.
+
+**Then:** freeze, score the EVEN spawns once. It is CONFIRMED if the even view agreement is
+≥ 0.80 and ≥ the current heading's + 10 points. Report both halves.
+
 ## 6. M5–M7: using the rule
 
 **M5, labels v1.** Every auto-label gets:
