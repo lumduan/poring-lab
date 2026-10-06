@@ -111,6 +111,9 @@ ports, quickstart) and `docs/adr/`.
      applied from Batt's elevated console (APPLIED 2026-10-06, read back; group
      `poring-lab lab-only`, 12 rules; ADR-0016). Layer 2 is the durable `poring-lab watch` task
      (ADR-0013 amendment; re-triggers every 1 min since 2026-10-06).
+     The SERVER allowlist (host:port per environment) is confirmed by a person on the console's
+     Settings page (2026-10-06; human-only writes, below). Its client-side provider waits for
+     Batt's approval of ADR-0013's 2026-10-06 reporting-channel amendment.
      ro_agent opens per-phase windows itself.
    - Concretely:
    - **Official servers and any other public server: forbidden** for every component, in every mode.
@@ -196,6 +199,28 @@ ports, quickstart) and `docs/adr/`.
 - **torch is `2.14.0+cu130`** from the explicit `pytorch-cu130` index declared in the **root**
   `pyproject.toml`. cu126 has no sm_120 kernels; cu132 images refuse to start on this R580 driver.
 
+- **The human-only settings store** (2026-10-06): `./settings/` (gitignored) is mounted read-write
+  into the BACKEND ONLY (`/lab-settings`; `test_guards.py`). It holds the server allowlist + its
+  audit log and the foreground gate's templates. vision can write `./data`, so nothing that decides
+  safety may live there.
+  - Settings writes (`PUT /settings/servers/{env}`) only from a LAN browser with the console's
+    Origin, never `:8001`, never the lab host itself (`lab_host_peer`: host processes can forge the
+    Origin), never `WIN_HOST` (`windows_host_peer`). Every refusal is audited.
+  - **The agent never confirms allowlist entries, by any route**: the first confirmation is a
+    person's act.
+  - `environments.yaml` `forbidden_endpoints` is the machine-readable known-forbidden list. A new
+    YAML key needs the backend running the new schema FIRST (`extra="forbid"`: an early edit fails
+    closed with `config_invalid`).
+- **The typing-only foreground gate** (2026-10-06, `poring_backend/foreground.py`):
+  - A bot batch with a key DOWN needs the client's active title bar on a ≤ 400 ms frame of the
+    path in use. Its keys are refused otherwise, and held bot keys are released.
+  - Clicks, moves, the wheel and releases never ask.
+  - A `desktop` operator window (ASSIST) exempts the agent's own console steps. So any ro_agent
+    step that types outside the client must open a desktop window first (`ensure_window("desktop",
+    ...)`).
+  - Templates: `scripts/foreground_template.py install rdp|stream`. The S2 `@stream` template is
+    cut at the next S2 session; until then S2 typing is refused (`foreground_uncalibrated`).
+  - Tests that send bot keys get the client in front (conftest); `real_foreground` opts out.
 - **The frame-age guard** (2026-10-04, `poring_env/freshness.py`): never act on a stale picture.
   - Presses are refused (`StaleFrame`) when the S2 stream is older than `STREAM_MAX_AGE_MS` (150),
     or the cited frame is older than `CITED_MAX_AGE_MS` (400). Releases always pass.

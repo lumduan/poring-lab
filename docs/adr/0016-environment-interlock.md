@@ -7,7 +7,7 @@ verdict_date: 2026-10-04
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: Live check in the S2 session (GM in game -> green; a login window; expiry -> red + releases). The community server stays pending until its own signal set and evidence exist.
+next_action: "2026-10-06: the server allowlist (Settings page, human-only writes) and the typing-only foreground gate are BUILT and live (the store is empty until Batt confirms the lab's servers; the S2 @stream template is cut at the next S2 session). The client-side provider waits for Batt's approval of ADR-0013's 2026-10-06 reporting-channel amendment. The community server stays pending."
 ---
 
 # ADR-0016: The environment interlock (a LOGIC interlock, config-driven, fail closed)
@@ -315,3 +315,105 @@ would add a third signal (its read-back at session start) to its environment ent
 
 Not exercised live: a refusal in BOT mode with the vision loop running. It is covered by the
 tests, and BOT mode was never entered this round.
+
+## The server allowlist: zero-config, confirmed in the web console (Batt, 2026-10-06; BUILT)
+
+**Why:** other people must be able to use the lab without CLI config. The servers the bot may act
+on are SUGGESTED by the lab (today from `environments.yaml`'s `server` blocks; after ADR-0013's
+2026-10-06 amendment, from the running client's own clientinfo). A person confirms them ONCE on
+the console's **Settings** page.
+
+**Store (human-only by construction):**
+- The store is `./settings/` (gitignored), mounted read-write into the BACKEND ONLY
+  (`/lab-settings`; `test_guards.py`). vision can write `./data`, so nothing that decides safety
+  lives there.
+- `allowlist.json` is versioned (`revision`), written atomically and read back before a save is
+  reported.
+- `allowlist_audit/YYYY-MM-DD.jsonl` is append-only: action (add/remove/refused), entry, the
+  revisions and lists before and after, and who (peer, Origin, listener).
+
+**The write rule (human-only), enforced in `routes_settings.py` and tested in `test_settings.py`:**
+- `PUT /settings/servers/{env}` only on the public listener (`:8001` gets 404
+  `not_public_listener`), from a LAN viewer (compose peers and the gateway refused), with the
+  console's allowlisted Origin.
+- **Never from the lab host itself** (`lab_host_peer`): found live on 2026-10-06. The host reaches
+  its own published port as 192.168.1.13, a LAN viewer, so any host process (ro_agent included)
+  could forge the Origin.
+- **Never from `WIN_HOST`** (`windows_host_peer`): the bot drives that desktop, so a "browser"
+  Save there could be the bot's click.
+- The agent network is refused before any route (AgentNetworkGuard).
+- Every refused write is counted (`dropped_messages.settings_http`) AND audited.
+- The agent may READ (`GET /settings/servers` on `:8001`), never write.
+- Live proof 2026-10-06 14:28: a forged-Origin PUT from the host got 403 `lab_host_peer`, with the
+  audit line written and no store created.
+
+**Validation:**
+- host:port only. Refused: wildcards, empty, `0.0.0.0`, loopback, link-local, multicast, IPv6.
+- Nothing on the **known-forbidden list**: each forbidden environment's `server.host` plus its new
+  `forbidden_endpoints` ("host", "host:port", or ".domain" for a whole official domain).
+- Forbidden names are matched as names and never resolved: their CDN addresses are shared, and
+  "never connect, never test against" covers DNS.
+- An allowed DNS name is re-resolved every 5 min. Its IPs are shown, and checked against the
+  forbidden IP literals at save time.
+
+**State:** the live store is EMPTY until Batt confirms the lab's servers (the first confirmation is
+a person's act; the agent never does it). Today's green/red is unchanged: the home lab is still
+attested by the sniffer. The store is consumed by the client-side provider below.
+
+## The typing-only foreground gate (Batt, 2026-10-06; BUILT)
+
+Before a BOT batch TYPES (any key down: keys, chords, chat, hotkeys), the lab client must be the
+foreground window.
+
+**Evidence:**
+- The client's ACTIVE title-bar signature (ro_agent's matcher, now `poring_backend/signature.py`).
+- It is taken on a frame captured ≤ 400 ms ago (`CITED_MAX_AGE_MS`, judged by capture time), on
+  the path the bot sees: the S2 bus in console mode, else X.
+- Each path has its own template in the human-only store: `settings/foreground/`, installed by
+  `scripts/foreground_template.py` with an sha256 read-back.
+- No template for the path → `foreground_uncalibrated`, fail closed. The S2 path stays refused
+  until its `@stream` template is cut at the start of the next S2 session (Batt's answer 2).
+
+**On refusal:**
+- Only the batch's KEY events are refused (`client_not_foreground`, `foreground_stale_frame`,
+  `foreground_uncalibrated`).
+- The bot's held keys are released (`InputMux.release_bot_keys`); its held mouse buttons are not.
+- The refusal is logged, counted, shown on the console banner, and reported in `Status.foreground`
+  (null in the agent's copy) and `/health.foreground`.
+
+**Never gated:** clicks, moves and the wheel (Batt: the console shows the mode badge instead, like
+a camera LED), key releases, and ReleaseAll.
+
+**Exemption (Batt's answer 1):**
+- While a `desktop` operator window is open (ASSIST only, ≤ 120 s, tied to the lock SEQ). These are
+  the agent's own console steps: ro_agent console lines, capture_backend's TSCON, launch's Win+D.
+- Logged as `foreground_exempt_desktop_window`.
+
+**Live, RDP, 2026-10-06 14:18-14:20:**
+- the desktop in front: Shift refused, distance 189.27 (threshold 6.0);
+- the client's service-select screen in front: Shift passed, distance 0.87;
+- the paced Alt+F4 passed.
+
+## The client-side evidence provider (PROPOSED, Part C; after ADR-0013's 2026-10-06 amendment)
+
+- A new signal `client_endpoint`: green when a fresh (≤ 10 s) watcher report shows the
+  environment's client exe with an ESTABLISHED remote in that environment's allowlist (DNS names
+  through their resolved IPs).
+- Each environment declares its providers in `environments.yaml`. The home lab keeps
+  `[lab_host, session]` (the LAN sniffer is stronger) and may add `client_endpoint`. External
+  servers use `client_endpoint`.
+- Fail closed: no report, stale, not listed, or the provider missing means red.
+
+## Remote deployment notes (design only, later; Batt 2026-10-06)
+
+- **Remote monitoring through Cloudflare Access.**
+  - Only the console (`:3000`) and the public listener (`:8000`) are exposed, through an Access
+    application. `:8001` is NEVER exposed.
+  - The backend VALIDATES the `Cf-Access-Jwt-Assertion` JWT itself (the team's JWKS, the
+    application's `aud`, expiry). The Access identity (email) then becomes the audit log's "who".
+  - Settings writes require an identity on a backend-side allowlist of operator emails. A missing
+    or invalid JWT is refused, as today's missing Origin is.
+- **A remote server we host (signed attestations).** The sniffer there signs each attestation
+  (Ed25519, with a key generated on that host). The backend pins the public key per environment
+  in `environments.yaml` and refuses unsigned or stale attestations. The LAN-only ingest peer pin
+  then becomes key-based.

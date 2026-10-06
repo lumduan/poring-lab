@@ -7,7 +7,7 @@ verdict_date: 2026-10-02
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: ACCEPTED by Batt 2026-10-02 (with the S2 plan). It is built only after S2 is working and shared control is approved (docs/s2-plan.md §11). Nothing is implemented.
+next_action: "ACCEPTED 2026-10-02 (indicator not built). The lab-client watcher amendment (2026-10-05) is live. The 2026-10-06 amendment (the watcher reports clientinfo + TCP evidence to the backend) is PROPOSED and awaits Batt's approval before anything changes on Windows."
 ---
 
 # ADR-0013: A Windows-side status indicator, display-only
@@ -135,3 +135,81 @@ exe calling Gravity's `kro-assit.ragnarok.co.kr:3000` at character select (ADR-0
   needed nothing new, so it was the one applied.
 - `-ExecutionPolicy Bypass` applies to that one process. The machine's policy (Restricted, all
   scopes Undefined) is not changed.
+
+## Amendment 2026-10-06 (PROPOSED, awaiting Batt): the watcher reports to the backend
+
+**Status: PROPOSED. Nothing is built or deployed on Windows.** Batt asked for the design first
+(zero-config server allowlist, Part B). It widens the helper above from "sends nothing" to "sends
+evidence", which is what this ADR's re-review clause covers.
+
+**What it is for:**
+1. **Zero-config discovery.** The servers the lab client is set up for are read from its own
+   `data\clientinfo.xml` / `sclientinfo.xml`, next to the RUNNING exe. They become
+   **suggestions** on the console's Settings page, never allowed entries: a person confirms them
+   once (ADR-0016, the allowlist).
+2. **A client-side interlock provider** (ADR-0016, Part C, behind config): the client PID's
+   ESTABLISHED TCP remotes, so an environment without the LAN sniffer can still be attested.
+
+**Transport:** `labwatch.ps1` POSTs JSON to `http://192.168.1.13:8000/ingest/client-evidence`.
+- It posts every 2 s and on any change.
+- It uses the PUBLIC port, because `:8001` is never published.
+- The layer-1 firewall rules do not apply: they are scoped to the 12 lab exes, and the watcher runs
+  in `powershell.exe`.
+- Rejected alternatives:
+  - a pull from the backend, which would need an inbound listener on Windows: a new attack surface
+    and against the agentless rule;
+  - a file drop via `\\tsclient`, which is human-only (ADR-0004).
+
+**Authentication (all four required):**
+1. **The peer** must be `WIN_HOST` (192.168.1.169). Anything else gets 403, counted and audited.
+2. **An HMAC-SHA256 tag** over `ts|seq|sha256(body)`, with a 32-byte key.
+   - The key is `CLIENT_EVIDENCE_KEY` in `.env`, made by `rotate_secrets.py` and read only by the
+     backend.
+   - It reaches Windows ONCE: `ro_agent.py console-secret` types it into `Read-Host
+     -AsSecureString`, then `ConvertFrom-SecureString`. That gives a DPAPI CurrentUser blob in
+     `%USERPROFILE%\poring-lab-watch\key.dpapi`, which only the `poring-lab` user on that PC can
+     decrypt.
+   - It is never on a command line or in PSReadLine history.
+3. **Replay protection:** `seq` strictly increasing per boot, and `ts` within ±30 s of the host's
+   wall clock (both NTP-synced).
+4. **A size cap** (16 KiB) and a strict schema (`extra=forbid`).
+
+**Payload** (no world data; clientinfo holds no secrets):
+
+    {"v": 1, "seq": 42, "ts": "2026-10-06T07:30:00Z",
+     "procs": [{"pid": 1234, "exe": "C:\\RO-rAthena\\client\\PoringLab.exe",
+                "started": "2026-10-06T07:20:11Z",
+                "clientinfo": [{"file": "data\\clientinfo.xml", "address": "192.168.1.13", "port": 6900},
+                               {"file": "data\\sclientinfo.xml", "address": "192.168.1.13", "port": 6900}],
+                "remotes": ["192.168.1.13:5121"]}],
+     "watcher": {"alive": true, "killed_total": 0}}
+
+- Which of the two clientinfo files the 2021 exe reads is not documented, so both are reported
+  and marked.
+- `remotes` lists ESTABLISHED TCP only, the same data the watcher already reads for its kill
+  rule.
+
+**In the backend:**
+- A new route on the public listener, with its own guard (the browser guards need an Origin; this
+  peer has none).
+- The latest report is held in memory only and NEVER forwarded to the agent (as attestations,
+  ADR-0016).
+- clientinfo addresses feed the Settings page's "Found by the lab" list.
+- Refusals are counted in `/health` and in the allowlist audit log.
+- Freshness is judged by the backend's receive time (≤ 10 s for the provider).
+
+**Unchanged on Windows:**
+- The kill rule stays.
+- A failed POST never touches it: it is logged in `watch.log`, with a back-off of 10 s after 3
+  failures.
+- The task stays standard-user, with no new listener and no admin.
+- The extra script lines are typed and read back by sha256, as before.
+
+**Approval needed from Batt:**
+- the channel (push to `:8000/ingest/client-evidence`);
+- the auth (peer + HMAC + replay window);
+- delivering the key via `console-secret` → DPAPI;
+- this ADR's widening.
+
+Until then the Settings page's suggestions come only from `environments.yaml` (labelled "from the
+lab config").

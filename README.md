@@ -146,7 +146,11 @@ Open **http://192.168.1.13:3000** (`HOST_LAN_IP`). What it gives you:
   everything held.
 - **Toolbar:** Ctrl+Alt+Del (sent as Ctrl+Alt+End, RDP's secure-attention mapping), Win, Alt+Tab, Esc,
   Release keyboard.
-- **Header:** mode switch and ASSIST lease. **Panel:** stats. A banner shows if the stream or RDP is down.
+- **Top bar (every page):** Console / Settings / Label QA, and the **mode badge**, always visible:
+  **BOT** red and pulsing ("BOT in control"), **ASSIST** amber, **HUMAN** blue, grey = no status.
+- **Header:** mode switch (the same colours) and ASSIST lease. **Panel:** stats. A banner shows if
+  the stream or RDP is down, and when bot typing was just refused because the game window was not
+  in front.
 
 **Workstation alternative:** run the console on your own machine against this backend.
 1. Add your browser's origin to the backend allowlist in `.env`:
@@ -217,6 +221,26 @@ Applying a change reconnects the RDP session once, because desktop and backend a
 - The bot can use neither. The mux refuses a bot Ctrl+V / Meta+V / Shift+Insert, the agent protocol
   has no such messages, and a watchdog clears any foreign X clipboard owner. The remaining gap (vision
   can still reach X directly) is [ADR-0005](docs/adr/0005-vision-x-access.md), which blocks Phase 4.
+
+## Settings: the game servers the bot may use
+
+Open **Settings** in the console's top bar (`http://<host>:3000/settings`).
+- **Found by the lab:** servers your game client is set up for. They are suggestions until you
+  press **Confirm** and **Save**. Save is checked by reading the file back ("Saved and checked ✓").
+- **Add / Remove:** an IPv4 address or a name, plus a port. Official game servers, wildcards,
+  `0.0.0.0` and localhost are refused.
+- **Change history:** every save and every refused attempt, with the browser's address.
+- **Who can change it:** only a person in a browser on your network, on another computer. The bot
+  can read the list but never change it. The lab computer itself and the game PC the bot drives
+  are refused too.
+- The list lives in `./settings/` (gitignored, mounted into the backend only); see ADR-0016.
+
+**Bot typing needs the game window in front.** Before the bot types anything, the backend checks
+the game client's title bar on a fresh frame; clicks are never blocked.
+- The reference picture is installed with
+  `uv run python scripts/foreground_template.py install rdp|stream`.
+- The console (S2) view needs its own picture, cut at the start of an S2 session. Until then, bot
+  typing on that view is refused.
 
 ## Quickstart
 

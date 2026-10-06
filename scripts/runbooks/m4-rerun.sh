@@ -20,6 +20,17 @@ log "start"
 if ! $PY scripts/m4_spawns.py --check-client 2>&1 | tee -a "$D/runs.log"; then
   log "GATE: the RO client is not on the stream -- nothing recorded"; exit 3
 fi
+# The typing-only foreground gate (2026-10-06): every GM command typed below needs the client's
+# title bar matched on THIS path. Without the S2 template, every one of them would be refused
+# (foreground_uncalibrated), so stop here rather than record a session that cannot spawn anything.
+# Calibrate first, with the client ACTIVE in front on the stream (pre-registered: active <= 6,
+# inactive >= 15 against the cut template, else stop and report):
+#   .venv/bin/python scripts/ro_agent.py calibrate client_title_active@stream
+#   .venv/bin/python scripts/foreground_template.py install stream
+if $PY scripts/foreground_template.py status | grep -q "client_title_active@stream.npy *MISSING"; then
+  log "GATE: no S2 foreground template (scripts/foreground_template.py install stream) -- nothing recorded"
+  exit 4
+fi
 $PY scripts/record_session.py --backend console --label p3-m4-rerun --seconds 3500 --max-bytes 5G \
   >"$D/record.json" 2>"$D/record.log" &
 rpid=$!
