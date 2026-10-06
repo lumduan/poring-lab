@@ -1290,6 +1290,9 @@ def launch_client(agent: Agent, screen: Screen) -> None:
 
     ensure_window("login", "launch")
     if not visible():
+        # Win+D is typing outside the client: the typing-only foreground gate (2026-10-06) lets
+        # it through only in a DESKTOP window (Batt's exemption for the agent's own desktop work)
+        ensure_window("desktop", "show-desktop")
         agent.chord("MetaLeft", "KeyD")  # show the desktop: windows may cover the icon
         time.sleep(1.5)
     if not visible():
