@@ -46,7 +46,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import qa_export  # noqa: E402
 
 from poring_dataset.labels import CLASSES  # noqa: E402
-from poring_dataset.shards import read_shard  # noqa: E402
+from poring_dataset.shards import encode_png, read_shard  # noqa: E402
 
 NAS = Path("/mnt/poring-lab-datasets")
 OUT = NAS / ".framecache"
@@ -145,7 +145,13 @@ def main() -> int:
     ap.add_argument("--datasets", type=Path, default=NAS)
     ap.add_argument("--out", type=Path, default=OUT)
     ap.add_argument("--shard-mb", type=int, default=512)
-    ap.add_argument("--quality", type=int, default=95)
+    ap.add_argument(
+        "--image",
+        choices=("png", "jpeg"),
+        default="png",
+        help="png: lossless (Batt's decision for every cache after v0); jpeg: q95 (v0)",
+    )
+    ap.add_argument("--quality", type=int, default=95, help="jpeg only")
     a = ap.parse_args()
     split = {"train": a.train, "val": a.val, "test": a.test}
     seen = [s for ss in split.values() for s in ss]
@@ -186,7 +192,9 @@ def main() -> int:
                 key = f"{sid}.{int(meta['frame_id']):09d}"
                 info = {"session": sid, "frame_id": int(meta["frame_id"]), "t_mono_ns": t,
                         "map": world_map, "labels": a.labels}  # fmt: skip
-                shard = sink.add(key, {"jpg": jpeg(img, a.quality),
+                image = ({"png": encode_png(np.ascontiguousarray(img[:, :, :3]))}
+                         if a.image == "png" else {"jpg": jpeg(img, a.quality)})  # fmt: skip
+                shard = sink.add(key, {**image,
                                        "txt": yolo_lines(boxes, w, h).encode(),
                                        "json": json.dumps(info).encode()})  # fmt: skip
                 if shard not in row["shards"]:
@@ -201,7 +209,7 @@ def main() -> int:
     manifest = {
         "cache_id": cache_id, "labels": a.labels, "k": a.k, "every": a.every,
         "every_png": a.every_png,
-        "quality": a.quality,
+        "image": a.image, "quality": a.quality if a.image == "jpeg" else None,
         "names": {v: k for k, v in sorted(CLASSES.items(), key=lambda kv: kv[1])},
         "split": split, "sessions": sessions, "shards": sink.done, "gold": GOLD,
         "built_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),

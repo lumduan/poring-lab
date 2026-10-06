@@ -3,11 +3,13 @@
 The host writes it (scripts/build_frame_cache.py); vision only reads it. A cache directory holds:
     manifest.json        cache_id, names (class id -> name), split, per-session rows, shard sha256s
     split.json           {"train": [session ids], "val": [...], "test": [...]} -- BY SESSION
-    shard-NNNNNN.tar     per frame: <key>.jpg (JPEG q95, the 1280x720 game region),
-                         <key>.txt (YOLO lines: cls cx cy w h, normalised), <key>.json (meta)
+    shard-NNNNNN.tar     per frame: <key>.png (lossless, the 1280x720 game region; Batt's
+                         decision for every cache after v0) or <key>.jpg (JPEG q95: the v0
+                         caches), <key>.txt (YOLO lines: cls cx cy w h, normalised), <key>.json
 
 Pure tarfile + numpy (host-testable without torch). A sample keeps the JPEG's byte offset inside
-its shard, so a read is one seek; the labels are parsed up front (they are small).
+its shard, so a read is one seek; the labels are parsed up front (they are small). The decoder
+(cv2.imdecode) reads either format.
 """
 
 from __future__ import annotations
@@ -25,13 +27,14 @@ import numpy.typing as npt
 class Sample:
     key: str
     shard: Path
-    offset: int  # the JPEG's first byte inside the shard
+    offset: int  # the image's first byte inside the shard (PNG or JPEG)
     size: int
     labels: npt.NDArray[np.float32]  # (n, 5): cls cx cy w h, normalised
     session: str
 
 
 EMPTY = np.zeros((0, 5), np.float32)
+IMAGE_EXTS = ("png", "jpg")  # lossless PNG (every cache after v0) or the v0 caches' JPEG
 
 
 def parse_yolo(text: str) -> npt.NDArray[np.float32]:
@@ -45,14 +48,14 @@ def parse_yolo(text: str) -> npt.NDArray[np.float32]:
 
 
 def index_shard(path: Path) -> list[Sample]:
-    """Every frame in a shard: the JPEG's offset/size and the parsed labels (in member order)."""
+    """Every frame in a shard: the image's offset/size and the parsed labels (in member order)."""
     jpgs: dict[str, tuple[int, int]] = {}
     labels: dict[str, npt.NDArray[np.float32]] = {}
     sessions: dict[str, str] = {}
     with tarfile.open(path, "r") as tar:
         for m in tar:
             key, _, ext = m.name.rpartition(".")
-            if ext == "jpg":
+            if ext in IMAGE_EXTS:
                 jpgs[key] = (m.offset_data, m.size)
             elif ext in ("txt", "json"):
                 fh = tar.extractfile(m)
@@ -68,13 +71,17 @@ def index_shard(path: Path) -> list[Sample]:
     ]
 
 
-def read_jpeg(sample: Sample) -> bytes:
+def read_image(sample: Sample) -> bytes:
+    """The frame's encoded bytes (PNG or JPEG), one seek + one read."""
     with sample.shard.open("rb") as fh:
         fh.seek(sample.offset)
         data = fh.read(sample.size)
     if len(data) != sample.size:
         raise OSError(f"{sample.shard.name}: short read for {sample.key}")
     return data
+
+
+read_jpeg = read_image  # the v0-era name
 
 
 def load_split(

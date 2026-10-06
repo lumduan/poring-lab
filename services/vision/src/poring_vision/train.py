@@ -35,7 +35,7 @@ from typing import Any
 
 import numpy as np
 
-from poring_vision.shards import Sample, load_split, read_jpeg
+from poring_vision.shards import Sample, load_split, read_image
 
 VIRTUAL = "/shard/"
 
@@ -109,7 +109,7 @@ def main() -> int:  # noqa: PLR0915
         sample = registry.get(str(filename))
         if sample is None:
             return original_imread(filename, flags)
-        buf = np.frombuffer(read_jpeg(sample), np.uint8)
+        buf = np.frombuffer(read_image(sample), np.uint8)
         return cv2.imdecode(buf, flags)
 
     ul_base.imread = shard_imread  # the dataset module's own reference (base.py imports it)

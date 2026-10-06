@@ -72,3 +72,17 @@ def test_an_evaluation_can_take_some_sessions_of_a_split(tmp_path: Path) -> None
     assert {s.session for s in one} == {"s-b"} and len(one) == 3
     with pytest.raises(ValueError):
         load_split(cache, "train", sessions=["s-c"])  # a val session is not in train
+
+
+def test_a_lossless_png_cache_reads_like_a_jpeg_one(tmp_path: Path) -> None:
+    """Batt: every cache after v0 is lossless (PNG in the shards); the reader takes either."""
+    from poring_vision.shards import read_image
+
+    shard = tmp_path / "shard-000000.tar"
+    with tarfile.open(shard, "w") as tar:
+        add(tar, "s-p.000000001.png", b"\x89PNG-frame")
+        add(tar, "s-p.000000001.txt", b"1 0.5 0.5 0.1 0.2\n")
+        add(tar, "s-p.000000001.json", json.dumps({"session": "s-p"}).encode())
+    (s,) = index_shard(shard)
+    assert read_image(s) == b"\x89PNG-frame" and s.labels.shape == (1, 5)
+    assert read_jpeg is read_image  # the v0-era name still works
