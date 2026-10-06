@@ -979,6 +979,13 @@ grounded rule explains it, so Batt decides the next step.
   - the shadow decal: widths, bottoms;
   - a Lunatic-specific difference at the TOP: the client's own `lunatic.act/.spr`. Is the data it
     actually loads the same bytes we compose?
+- **Ruled out the same morning: a data mismatch.** Both checks are facts, no frames:
+  - the client's kRO `data.grf` holds the same decoded bytes as our catalog (24/24 files, proven
+    2026-10-05, thai-data-experiment §4);
+  - the client has NO loose `.spr`/`.act` under `client\data` (read back 2026-10-07 06:45: 0
+    files; only `luafiles514` and `texture`), so DataFolderFirst overrides nothing for sprites.
+  - So the client draws the very bytes we compose. The difference is in HOW it draws them (sampler,
+    scale or composition), not in what it loads.
 - The EVEN half is scored ONCE with the same measurement, as the replication of the map.
 
 ## 6. M5–M7: using the rule
