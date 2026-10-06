@@ -260,8 +260,12 @@ ports, quickstart) and `docs/adr/`.
   - A `desktop` operator window (ASSIST) exempts the agent's own console steps. So any ro_agent
     step that types outside the client must open a desktop window first (`ensure_window("desktop",
     ...)`).
-  - Templates: `scripts/foreground_template.py install rdp|stream`. The S2 `@stream` template is
-    cut at the next S2 session; until then S2 typing is refused (`foreground_uncalibrated`).
+  - Templates: `scripts/foreground_template.py install rdp|stream`. BOTH are installed.
+    - The S2 `@stream` template was cut 2026-10-07 00:40 in an unattended clean room and measured
+      against the pre-registered limits: active 0.0 / 0.4 (≤ 6); visible but unfocused 29.5
+      (≥ 15); covered 163.7.
+    - It was verified live on the bus: unfocused → refused `client_not_foreground`, active → ok.
+    - Re-cut it if the client window or its title moves.
   - Tests that send bot keys get the client in front (conftest); `real_foreground` opts out.
 - **The frame-age guard** (2026-10-04, `poring_env/freshness.py`): never act on a stale picture.
   - Presses are refused (`StaleFrame`) when the S2 stream is older than `STREAM_MAX_AGE_MS` (150),

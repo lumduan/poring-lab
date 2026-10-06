@@ -7,7 +7,7 @@ verdict_date: 2026-10-04
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: "2026-10-06: user-managed environments (Settings page, asymmetric rules, CSRF + rate limit), the game-file finder (in-browser, hostile-file controls, strict CSP) and the typing-only foreground gate are BUILT and live. The lab's Allowed environment is red no_servers until Batt confirms its servers from his own computer; the S2 @stream template is cut at the next S2 session. ➡️ ADR-0019 (Batt, 2026-10-06): Windows stays clean, so the client-side provider (Part C) and its reporting channel (ADR-0013 Part B) are DEFERRED, and may never be built. The community server stays pending."
+next_action: "2026-10-06: user-managed environments (Settings page, asymmetric rules, CSRF + rate limit), the game-file finder (in-browser, hostile-file controls, strict CSP) and the typing-only foreground gate are BUILT and live. The lab's Allowed environment is red no_servers until Batt confirms its servers from his own computer; the S2 @stream template was cut and verified 2026-10-07 00:45. ➡️ ADR-0019 (Batt, 2026-10-06): Windows stays clean, so the client-side provider (Part C) and its reporting channel (ADR-0013 Part B) are DEFERRED, and may never be built. The community server stays pending."
 ---
 
 # ADR-0016: The environment interlock (a LOGIC interlock, config-driven, fail closed)
@@ -460,8 +460,14 @@ foreground window.
   the path the bot sees: the S2 bus in console mode, else X.
 - Each path has its own template in the human-only store: `settings/foreground/`, installed by
   `scripts/foreground_template.py` with an sha256 read-back.
-- No template for the path → `foreground_uncalibrated`, fail closed. The S2 path stays refused
-  until its `@stream` template is cut at the start of the next S2 session (Batt's answer 2).
+- No template for the path → `foreground_uncalibrated`, fail closed. The S2 path stayed refused
+  until its `@stream` template was cut (Batt's answer 2).
+  - ➡️ **Cut and installed 2026-10-07 00:40–00:45**, in the unattended clean room after training
+    (sha256 `5d488da8…`).
+  - Pre-registered limits: active ≤ 6 (measured 0.0 three times, then 0.4 after re-activation);
+    inactive ≥ 15 (visible but unfocused 29.5; covered by the shell 163.7).
+  - Live on the frame bus with no operator window: unfocused → refused `client_not_foreground`
+    (29.52, frame 31 ms); active → ok (0.4, 16.5 ms).
 
 **On refusal:**
 - Only the batch's KEY events are refused (`client_not_foreground`, `foreground_stale_frame`,

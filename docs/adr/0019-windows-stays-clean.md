@@ -229,6 +229,10 @@ first rows on 2026-10-06 at 17:31. The table is the audit as found.
   - NOT verifiable from the RDP session: the console layout (VDD-only). `Screen.AllScreens` in
     RDP shows the RDP display, and the standard account cannot read the GraphicsDrivers topology.
     It is checked at the next console handover (the S2 session that cuts the `@stream` template).
+    - ➡️ **Checked 2026-10-07 00:38, in the clean room after training: VDD-only.**
+    - The stream showed the desktop and taskbar WITH tray icons.
+    - A fresh process's `Screen.AllScreens` listed ONE display: `\\.\DISPLAY4`, primary, at 0,0,
+      1440×900.
   - Found and fixed: ro_agent skipped its DESKTOP window while green, so the typing-only foreground
     gate refused its own console lines (`client_not_foreground`). It opens a desktop window even
     while green now (tested); it was worked around live with `capture_backend.py window desktop`.

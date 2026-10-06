@@ -254,8 +254,9 @@ Open **Settings** in the console's top bar (`http://<host>:3000/settings`).
 the game client's title bar on a fresh frame; clicks are never blocked.
 - The reference picture is installed with
   `uv run python scripts/foreground_template.py install rdp|stream`.
-- The console (S2) view needs its own picture, cut at the start of an S2 session. Until then, bot
-  typing on that view is refused.
+- The console (S2) view has its own picture, cut on the stream (2026-10-07). Re-cut it with
+  `ro_agent.py calibrate client_title_active@stream` + `foreground_template.py install stream`
+  if the client window moves.
 
 ## Quickstart
 
