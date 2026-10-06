@@ -225,15 +225,29 @@ Applying a change reconnects the RDP session once, because desktop and backend a
 ## Settings: the game servers the bot may use
 
 Open **Settings** in the console's top bar (`http://<host>:3000/settings`).
+- **Environments** are game services you manage yourself: **Allowed** (the bot may act while the
+  game is connected to one of its servers), **Forbidden** (never; its servers can never be allowed
+  anywhere) or **Pending** (not approved). Create, rename and delete them, and edit their server
+  lists, on the page. The shipped ones (official Thai, official Korean, the community server, the
+  lab's rAthena) are only a starting set.
 - **Found by the lab:** servers your game client is set up for. They are suggestions until you
-  press **Confirm** and **Save**. Save is checked by reading the file back ("Saved and checked ✓").
-- **Add / Remove:** an IPv4 address or a name, plus a port. Official game servers, wildcards,
-  `0.0.0.0` and localhost are refused.
+  press **Confirm** (or **Confirm all** for one server's ports). Every save is checked by reading
+  the file back ("Saved and checked ✓").
+- **Blocking is easy; unblocking is hard.** Removing a forbidden server, deleting a Forbidden
+  environment, or making it Allowed needs a written reason and the name typed again, one change at
+  a time.
+- **Find servers from a game file:** drop a `data.grf`, `clientinfo.xml` / `sclientinfo.xml`, an
+  `externalsettings` .lub or the game's .exe on the page.
+  - It is read in your browser only, and never uploaded. Encrypted parts are skipped, not
+    decrypted. A protected exe says so: drop its `data.grf` instead.
+  - You pick what to do with each server found. The default is to **block** it; allowing is a
+    separate, deliberate choice with a warning for anything outside your network.
+- **Share a setup:** export the whole set as one file, and import it elsewhere (same rules).
 - **Change history:** every save and every refused attempt, with the browser's address.
 - **Who can change it:** only a person in a browser on your network, on another computer. The bot
   can read the list but never change it. The lab computer itself and the game PC the bot drives
-  are refused too.
-- The list lives in `./settings/` (gitignored, mounted into the backend only); see ADR-0016.
+  are refused too; every save carries a CSRF token and is rate limited.
+- The set lives in `./settings/` (gitignored, mounted into the backend only); see ADR-0016.
 
 **Bot typing needs the game window in front.** Before the bot types anything, the backend checks
 the game client's title bar on a fresh frame; clicks are never blocked.

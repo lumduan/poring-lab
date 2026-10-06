@@ -98,6 +98,14 @@
   data (DES-flagged GATs/RSWs). The private, never-committed rule covers MIXCRYPT only. Revisit
   this only before a public release (8980613 is in the history either way).
 
+- **What:** `services/frontend/src/lib/gamefile/` (2026-10-06), the Settings page's game-file
+  finder: the GRF 0x200 header/table layout, clientinfo.xml tags, PE section headers.
+- **Sources:** the publicly described GRF layout (the same facts as `scripts/grf_des.py` above);
+  Microsoft's PE/COFF specification. **No copyleft code was read for it.**
+- **No inflate library:** it uses the browser's own `DecompressionStream("deflate")`, so there is
+  nothing third-party to license-check or pin. Encrypted entries are never decrypted (no DES or
+  MIXCRYPT code in the frontend).
+
 ## Ideas only (copyleft or unclear: no code read for porting)
 
 | Source | Commit | License | Used for |

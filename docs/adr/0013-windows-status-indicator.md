@@ -211,5 +211,6 @@ evidence", which is what this ADR's re-review clause covers.
 - delivering the key via `console-secret` → DPAPI;
 - this ADR's widening.
 
-Until then the Settings page's suggestions come only from `environments.yaml` (labelled "from the
-lab config").
+Until then the Settings page's suggestions come from the shipped set (`environments.yaml`, seeded
+once into the user-managed store) and from game files a person drops on the page, parsed in their
+browser (ADR-0016, "Find servers from a game file").

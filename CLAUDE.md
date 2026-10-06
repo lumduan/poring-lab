@@ -200,17 +200,34 @@ ports, quickstart) and `docs/adr/`.
   `pyproject.toml`. cu126 has no sm_120 kernels; cu132 images refuse to start on this R580 driver.
 
 - **The human-only settings store** (2026-10-06): `./settings/` (gitignored) is mounted read-write
-  into the BACKEND ONLY (`/lab-settings`; `test_guards.py`). It holds the server allowlist + its
-  audit log and the foreground gate's templates. vision can write `./data`, so nothing that decides
-  safety may live there.
-  - Settings writes (`PUT /settings/servers/{env}`) only from a LAN browser with the console's
-    Origin, never `:8001`, never the lab host itself (`lab_host_peer`: host processes can forge the
+  into the BACKEND ONLY (`/lab-settings`; `test_guards.py`). It holds the USER-MANAGED environment
+  set (`environments.json`, `envstore.py`) + its audit log and the foreground gate's templates.
+  vision can write `./data`, so nothing that decides safety may live there.
+  - The set is seeded ONCE from `config/environments.yaml` (Allowed servers become suggestions);
+    after that the store wins and the interlock reads ONLY it (fail closed: missing/invalid -> red).
+  - Asymmetric rules (`envstore.classify`): tightening easy; loosening Allowed normal; loosening
+    Forbidden HARD (typed reason + subject retyped, one per save, audited).
+  - Settings writes (`PUT /settings/environments`) only from a LAN browser with the console's
+    Origin AND the CSRF token (`GET /settings/csrf`, header `X-CSRF-Token`), at most 20/min per
+    client. Never `:8001`, never the lab host itself (`lab_host_peer`: host processes can forge the
     Origin), never `WIN_HOST` (`windows_host_peer`). Every refusal is audited.
-  - **The agent never confirms allowlist entries, by any route**: the first confirmation is a
+  - **The agent never confirms environment entries, by any route**: the first confirmation is a
     person's act.
-  - `environments.yaml` `forbidden_endpoints` is the machine-readable known-forbidden list. A new
-    YAML key needs the backend running the new schema FIRST (`extra="forbid"`: an early edit fails
-    closed with `config_invalid`).
+  - A new YAML key in `environments.yaml` needs the backend running the new schema FIRST
+    (`extra="forbid"`: an early edit fails closed with `config_invalid`).
+- **The game-file finder** (2026-10-06, `services/frontend/src/lib/gamefile/`, ADR-0016): every
+  dropped file is HOSTILE.
+  - It is parsed in a Web Worker in the browser, by slices, with a 20 s kill and hard caps
+    (`scan.ts` `LIMITS`). It is never uploaded. A GRF gives only its header, its table and the
+    clientinfo / externalsettings entries.
+  - Encrypted entries are never decrypted. All scanning is linear, with no regex on file text.
+  - Extracted values are rendered as TEXT only. Never add `innerHTML` / `dangerouslySetInnerHTML`
+    or a link built from them (`gamefile.test.ts` scans `src/`).
+  - The default target is BLOCK. Allowed means nothing pre-ticked, a checkbox, and an
+    outside-LAN warning.
+  - Every page has a nonce CSP (`src/proxy.ts`, `src/lib/csp.ts`). A new script source,
+    `eval`, or an inline script breaks it -- keep `csp.test.ts` green and check the pages for
+    violations.
 - **The typing-only foreground gate** (2026-10-06, `poring_backend/foreground.py`):
   - A bot batch with a key DOWN needs the client's active title bar on a ≤ 400 ms frame of the
     path in use. Its keys are refused otherwise, and held bot keys are released.

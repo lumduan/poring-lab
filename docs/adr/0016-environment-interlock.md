@@ -7,7 +7,7 @@ verdict_date: 2026-10-04
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: "2026-10-06: the server allowlist (Settings page, human-only writes) and the typing-only foreground gate are BUILT and live (the store is empty until Batt confirms the lab's servers; the S2 @stream template is cut at the next S2 session). The client-side provider waits for Batt's approval of ADR-0013's 2026-10-06 reporting-channel amendment. The community server stays pending."
+next_action: "2026-10-06: user-managed environments (Settings page, asymmetric rules, CSRF + rate limit), the game-file finder (in-browser, hostile-file controls, strict CSP) and the typing-only foreground gate are BUILT and live. The lab's Allowed environment is red no_servers until Batt confirms its servers from his own computer; the S2 @stream template is cut at the next S2 session. The client-side provider waits for Batt's approval of ADR-0013's 2026-10-06 reporting-channel amendment. The community server stays pending."
 ---
 
 # ADR-0016: The environment interlock (a LOGIC interlock, config-driven, fail closed)
@@ -316,49 +316,129 @@ would add a third signal (its read-back at session start) to its environment ent
 Not exercised live: a refusal in BOT mode with the vision loop running. It is covered by the
 tests, and BOT mode was never entered this round.
 
-## The server allowlist: zero-config, confirmed in the web console (Batt, 2026-10-06; BUILT)
+## The environments: user-managed on the web console's Settings page (Batt, 2026-10-06; BUILT)
 
-**Why:** other people must be able to use the lab without CLI config. The servers the bot may act
-on are SUGGESTED by the lab (today from `environments.yaml`'s `server` blocks; after ADR-0013's
-2026-10-06 amendment, from the running client's own clientinfo). A person confirms them ONCE on
-the console's **Settings** page.
+**History (same day).** The first version kept a per-environment `allowlist.json` written by
+`PUT /settings/servers/{env}`, while the environments themselves stayed fixed in
+`config/environments.yaml`. Batt's feedback #2 replaced it the same afternoon with the
+user-managed set below. That first version is in git history only; nothing reads `allowlist.json`.
 
-**Store (human-only by construction):**
-- The store is `./settings/` (gitignored), mounted read-write into the BACKEND ONLY
+**Why:** other people must be able to use the lab without CLI config, and official servers open
+and close over time (the old Asiasoft-era Thai server). So people add, rename and delete
+environments themselves, and list each one's servers, from the page.
+
+**One type per environment:**
+- **Allowed:** the bot may act while the client is connected to one of its servers.
+- **Forbidden:** the bot never acts; its endpoints can never be added to any Allowed environment.
+- **Pending:** not approved; the bot never acts.
+
+**The store (human-only by construction):**
+- `./settings/environments.json`, gitignored, mounted read-write into the BACKEND ONLY
   (`/lab-settings`; `test_guards.py`). vision can write `./data`, so nothing that decides safety
   lives there.
-- `allowlist.json` is versioned (`revision`), written atomically and read back before a save is
-  reported.
-- `allowlist_audit/YYYY-MM-DD.jsonl` is append-only: action (add/remove/refused), entry, the
-  revisions and lists before and after, and who (peer, Origin, listener).
+- It is seeded ONCE from the shipped `config/environments.yaml` (marker `.environments-seeded`).
+  The shipped set is only a STARTING SET. Allowed environments are seeded WITHOUT servers: their
+  shipped servers become suggestions that a person confirms. Forbidden endpoints are seeded as they
+  are.
+- From then on the store wins. **The interlock reads only the store and fails closed** when it is
+  missing or invalid after the seed (`test_settings.py`). An Allowed environment with no confirmed
+  server is red `no_servers`.
+- Every write is versioned (`revision`, 409 on a stale base), atomic, and read back before
+  "Saved and checked ✓".
+- `allowlist_audit/YYYY-MM-DD.jsonl` is append-only. It records each change (environment
+  create/delete/rename/type/text, server add/remove, seed), which rule applied (easy, normal or
+  hard), the revisions, who (peer, Origin, listener), and every refusal.
+- Export/import of the whole set is one file (`poring-lab-environments/1`), for sharing a setup
+  (the course). It never carries the technical fields (Windows host, accounts, signals, client).
+  An import obeys the same rules as editing.
+
+**Asymmetric rules (`envstore.classify`):**
+- **Easy (tightening):** create a Forbidden environment, add to a Forbidden list, delete an Allowed
+  environment, remove an Allowed server.
+- **Normal (loosening an Allowed list):** create or add Allowed. A person confirms it from their own
+  browser.
+- **Hard (loosening a Forbidden list):** delete a Forbidden environment, remove a Forbidden
+  endpoint, or change Forbidden to Allowed/Pending. It needs a typed reason (at least 10
+  characters), the subject typed again, and only one hard change per save. It is audited with the
+  reason.
+
+**Forbidden matching:**
+- Forbidden entries are names, IP literals, and `.domain` (a whole official domain).
+- Forbidden names are also re-resolved every 5 min, and their IPs block too, EXCEPT addresses in a
+  CDN range (Cloudflare's list, `allowlist.CDN_RANGES`). Those are shared, so the page warns
+  instead.
+- A NEW allowed server that matches is refused. An existing allowed server that becomes forbidden
+  later is flagged on the page and left out of the interlock config (`usable()`).
 
 **The write rule (human-only), enforced in `routes_settings.py` and tested in `test_settings.py`:**
-- `PUT /settings/servers/{env}` only on the public listener (`:8001` gets 404
-  `not_public_listener`), from a LAN viewer (compose peers and the gateway refused), with the
-  console's allowlisted Origin.
-- **Never from the lab host itself** (`lab_host_peer`): found live on 2026-10-06. The host reaches
-  its own published port as 192.168.1.13, a LAN viewer, so any host process (ro_agent included)
-  could forge the Origin.
-- **Never from `WIN_HOST`** (`windows_host_peer`): the bot drives that desktop, so a "browser"
-  Save there could be the bot's click.
+- `PUT /settings/environments` is served only on the public listener; `:8001` gets 404
+  `not_public_listener`.
+- It must come from a LAN viewer (compose peers and the gateway are refused), with the console's
+  allowlisted Origin.
+- **Never from the lab host itself** (`lab_host_peer`). Found live on 2026-10-06: the host reaches
+  its own published port as 192.168.1.13, a LAN viewer, so any host process could forge the Origin.
+- **Never from `WIN_HOST`** (`windows_host_peer`): the bot drives that desktop.
+- **A CSRF token** (added with the finder; Batt's requirement 5):
+  - `GET /settings/csrf` returns an HMAC token: a per-process secret, valid 1 h.
+  - Only the console's origin can read it (CORS).
+  - Every write must send it in `X-CSRF-Token`; otherwise 403 `csrf_invalid`.
+  - A backend restart invalidates it; the page fetches a fresh one and retries once.
+- **A rate limit:** 20 writes per minute per client; otherwise 429 `rate_limited`.
+- **A strict body:**
+  - Pydantic models with `extra=forbid` and length limits;
+  - a 64 KiB body cap (a malformed `Content-Length` is refused, not a crash);
+  - `ServerIn.source` limited to `manual|discovered|file`.
+- **Control characters** are stripped from every user string before it is stored or logged (no log
+  injection).
+- Values are only ever serialised as structured JSON: no shell, path, SQL or YAML is built from
+  them.
 - The agent network is refused before any route (AgentNetworkGuard).
 - Every refused write is counted (`dropped_messages.settings_http`) AND audited.
-- The agent may READ (`GET /settings/servers` on `:8001`), never write.
-- Live proof 2026-10-06 14:28: a forged-Origin PUT from the host got 403 `lab_host_peer`, with the
-  audit line written and no store created.
+- The agent may READ (`GET /settings/environments` on `:8001`), never write.
 
-**Validation:**
-- host:port only. Refused: wildcards, empty, `0.0.0.0`, loopback, link-local, multicast, IPv6.
-- Nothing on the **known-forbidden list**: each forbidden environment's `server.host` plus its new
-  `forbidden_endpoints` ("host", "host:port", or ".domain" for a whole official domain).
-- Forbidden names are matched as names and never resolved: their CDN addresses are shared, and
-  "never connect, never test against" covers DNS.
-- An allowed DNS name is re-resolved every 5 min. Its IPs are shown, and checked against the
-  forbidden IP literals at save time.
+**State:** the lab's Allowed environment is red `no_servers` until Batt confirms the lab's servers
+("Confirm all" on Lab rAthena) from his own computer. The first confirmation is a person's act; the
+agent never does it, by any route.
 
-**State:** the live store is EMPTY until Batt confirms the lab's servers (the first confirmation is
-a person's act; the agent never does it). Today's green/red is unchanged: the home lab is still
-attested by the sniffer. The store is consumed by the client-side provider below.
+## "Find servers from a game file" (Batt, 2026-10-06; BUILT)
+
+**What:** the person drops a game file onto the Settings page and gets the servers it names, so
+nobody has to reverse-engineer a client again. Accepted files:
+- a `data.grf` (any GRF);
+- `clientinfo.xml` / `sclientinfo.xml`;
+- an `externalsettings` `.lub`;
+- the game's `.exe`.
+
+**Parsed in the browser, never uploaded** (`services/frontend/src/lib/gamefile/`):
+- The file is read by slices through the File API, inside a Web Worker (no DOM, no page state).
+- For a GRF (0x200), only these are read:
+  - the 46-byte header and the file table;
+  - then only `data\clientinfo.xml`, `data\sclientinfo.xml` and
+    `data\luafiles514\lua files\service_*\externalsettings_*.lub`.
+- Other entries are never read: a test proves the decoy entry's bytes are never touched.
+- **Encrypted entries (flags 0x02/0x04) are NOT decrypted.** MIXCRYPT stays study-only and private.
+  They are reported as "encrypted, can't read", and the scan continues.
+- **Exe:** visible strings only (ASCII and UTF-16LE), `host:port` only. A protected exe is reported
+  plainly as "This exe is protected … Drop its data.grf instead.". Protected means a packer
+  section name (`.themida`, `.winlice`, `.vmp*`, `UPX*`, …), blank section names (Themida-style),
+  or an executable section with entropy ≥ 7.2 bits/byte.
+- Only the endpoints the person ticks are sent, through the same `PUT /settings/environments`
+  (source `file`, note "found in <file>: <entry>"). Nothing is stored in the browser.
+
+**Every dropped file is HOSTILE.** The threat model and its controls (`gamefile.test.ts`,
+`csp.test.ts`, `test_settings.py`):
+
+| Threat | Control |
+|---|---|
+| 1. Script injection: a "hostname" of `<script>` or `javascript:` on the page that edits the allowlist | Extracted values are rendered as TEXT only: no `innerHTML` / `dangerouslySetInnerHTML`, never a link (a static test scans `src/`). Display names are cut at the first character outside `[A-Za-z0-9 ._-()]`. A strict CSP on every page (`src/proxy.ts`): a per-request nonce + `'strict-dynamic'` for scripts, no inline script, no eval in production (`next dev` needs `'unsafe-eval'`), `object-src 'none'`, `base-uri 'self'`, `frame-ancestors 'none'`, `worker-src 'self' blob:`, `connect-src` = self + the backend. Styles keep `'unsafe-inline'` (two style attributes; CSS cannot run script). Verified live: zero violations on `/`, `/qa`, `/settings`. |
+| 2. Parser denial of service | A Web Worker, terminated after 20 s. Caps: file size; table ≤ 64 MB compressed / 128 MB inflated; ≤ 2 000 000 entries; names ≤ 256 bytes; ≤ 64 settings entries; ≤ 1 MB per entry and 8 MB in total inflated; text files ≤ 1 MB; exe ≤ 128 MB; tokens ≤ 260 characters (an overlong token or string run is dropped whole, never cut into a fragment). Inflate stops one chunk past its cap, and past the size the entry declares (the bomb test). All scanning is a linear character loop: no regex on file text. |
+| 3. Injection into the backend | A strict grammar on BOTH sides: IPv4, IPv6 or an RFC 1123 hostname; port 1–65535; length limits. The worker's reply is re-validated on the page; the backend validates again. The backend controls are listed under "The write rule" above. |
+| 4. Social engineering: a crafted file that makes the person allow an attacker's server | The DEFAULT action blocks: "create a new Forbidden environment", which is the first option, with usable endpoints pre-ticked. Allowed targets come last and are marked "the bot may act there". Choosing one UNTICKS everything and needs an "I run this server, or its owner allows bots" checkbox. Endpoints outside the LAN get an "outside your network" tag and a confirm: "… is OUTSIDE your network. The bot will act on these servers …". Nothing is ever added without the person's button press. |
+| 5. Settings writes | The CSRF token and the rate limit above, on top of the existing origin/host rules. |
+| 6. The inflate library | None: the platform's own `DecompressionStream("deflate")`, so nothing to license-check or pin (`THIRD_PARTY.md`). |
+
+IPv6 endpoints are recognised but cannot be allowed or blocked: the lab's checks are IPv4. The
+page says so.
 
 ## The typing-only foreground gate (Batt, 2026-10-06; BUILT)
 
