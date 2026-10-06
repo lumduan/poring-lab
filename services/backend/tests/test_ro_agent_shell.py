@@ -256,7 +256,8 @@ def test_ensure_window_opens_one_only_when_needed(
     ro: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """ADR-0016: login/desktop phases open a bounded operator window through the HOST tool, and
-    never when the interlock is already green or a long-enough window of that kind is open. The
+    never when a long-enough window of that kind is open; LOGIN also not while green (a desktop
+    window still opens then: test below). The
     window is read from the host's state/ files (fresh), never from /health (a tick behind)."""
     calls: list[list[str]] = []
 
@@ -289,6 +290,35 @@ def test_ensure_window_opens_one_only_when_needed(
         if opens:
             assert calls[0][-6:] == ["window", "login", "--seconds", "90", "--reason", "login"]
             assert calls[0][1].endswith("scripts/capture_backend.py")
+
+
+def test_a_desktop_window_is_opened_even_while_green(
+    ro: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """2026-10-06 19:54, after the post-reboot GM login: green let presses through, but the
+    typing-only foreground gate exempts the agent's own console only under a DESKTOP window, so
+    skipping it while green refused open-terminal and minimize-consoles (client_not_foreground).
+    LOGIN stays skipped while green (the session is already attested)."""
+    calls: list[list[str]] = []
+
+    class Done:
+        returncode, stderr = 0, ""
+
+    now = int(time.time())
+    (tmp_path / LOCK_NAME).write_text(
+        format_lock("rdp", 7, "steady", owner="t", since=now - 60, reason="t"))  # fmt: skip
+    monkeypatch.setattr(ro, "LAB_STATE", tmp_path)
+    monkeypatch.setattr(ro.subprocess, "run", lambda cmd, **kw: calls.append(cmd) or Done())
+    monkeypatch.setattr(ro, "backend_health", lambda: {"environment": {"state": "green"}})
+    ro.ensure_window("desktop", "console-line", 120)
+    assert calls and calls[0][-6:] == ["window", "desktop", "--seconds", "120", "--reason",
+                                       "console-line"]  # fmt: skip
+    calls.clear()
+    ro.ensure_window("login", "login")
+    assert calls == []
+    (tmp_path / WINDOW_NAME).write_text(format_window("desktop", now - 5, now + 80, 7, "t"))
+    ro.ensure_window("desktop", "console-line")  # a long-enough one is open: nothing to do
+    assert calls == []
 
 
 def test_a_window_just_opened_counts_although_health_is_a_tick_behind(

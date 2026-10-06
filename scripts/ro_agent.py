@@ -534,8 +534,9 @@ def ensure_window(
 ) -> None:
     """Login and desktop phases happen before (or outside) an attested in-game session: open a
     bounded operator window through the HOST tool (capture_backend.py window; never the agent
-    channel). Skipped while the interlock is green, or a window of this kind is open long enough
-    (capture_backend opens its own before its ro_agent steps, holding the mutation lock).
+    channel). Skipped when a window of this kind is open long enough (capture_backend opens its
+    own before its ro_agent steps, holding the mutation lock), and for LOGIN while the interlock
+    is green. A DESKTOP window is opened even while green: the foreground gate needs it.
 
     The window is read FRESH from the host's state/ with the backend's own parser: /health reports
     the interlock as of its last 1 Hz tick. Right after capture_backend re-opened its window for the
@@ -546,7 +547,11 @@ def ensure_window(
     if open_now is not None and open_now[0] == kind and open_now[2] >= min_left:
         return
     env_status = backend_health().get("environment") or {}
-    if env_status.get("state") == "green":
+    if env_status.get("state") == "green" and kind != "desktop":
+        # Green lets presses through the interlock, but NOT typing outside the client: the
+        # typing-only foreground gate exempts the agent's own console steps only under a DESKTOP
+        # window (Batt's answer 1, 2026-10-06). Skipping it while green refused every console
+        # line and minimize-consoles after the post-reboot GM login (2026-10-06 19:54).
         return
     cmd = [sys.executable, str(ROOT / "scripts" / "capture_backend.py"), "window", kind,
            "--seconds", str(seconds), "--reason", phase]  # fmt: skip

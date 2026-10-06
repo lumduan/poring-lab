@@ -202,7 +202,36 @@ first rows on 2026-10-06 at 17:31. The table is the audit as found.
   - nothing running from them;
   - `C:\RO-rAthena-th` is 955 files, 6.62 GB (it gained `thdata.grf`);
   - the TH shortcut is on poring-lab's Desktop.
-- **AVC policies:** revert at the next reboot that happens anyway, never a reboot just for this.
+- **AVC policies + reboot DONE 2026-10-06 (Batt: "reboot now rather than waiting").**
+  - R1 and R2 ran 19:30–19:31 in Batt's elevated console. It was a Terminal tab this time, so the
+    proof bar worked. R2 printed nothing; the agent's standard shell then read back
+    `AVC values: 0`.
+  - `Restart-Computer` from the agent's standard shell at 19:44:36 (the account holds
+    SeShutdownPrivilege). Boot at 19:45:13; RDP reconnected by itself at 19:45:33, with two
+    connect failures while down and no auth error.
+- **Post-reboot verification (read-only):**
+  - Host side: the lock stayed rdp/steady at SEQ 182, with one xfreerdp; `/health` ok; the mode
+    is still ASSIST.
+  - Windows services: `SunshineService` Running and Automatic; the VDD OK; the tscon task Ready.
+  - The watch task:
+    - it was running again 7 s after the RDP logon (start at 19:45:40);
+    - its principal is `poring-lab, Interactive, Limited`, so it NEEDS the logon: it cannot run
+      between boot and logon;
+    - KILLED 0.
+  - Firewall: 2 rules, both enabled Block. `AVC values: 0`. Caps Lock off.
+  - The AssistAddr lubs and the Equip BMPs hash identical to the pre-reboot baseline
+    (`externalsettings_kr*.lub` 477C1E90…, 301EA6CB…, 4B62906C…, 954EB544…; 9 × FA104C1C…).
+  - A watched GM login (`recover gm --retries 0`):
+    - the interlock was GREEN `lab-rathena`;
+    - the client's only remote was `192.168.1.13:5121`;
+    - KILLED 0, and no ragnarok/gnjoy/gravity name in the DNS cache;
+    - then a logout (Alt+F4): online 0.
+  - NOT verifiable from the RDP session: the console layout (VDD-only). `Screen.AllScreens` in
+    RDP shows the RDP display, and the standard account cannot read the GraphicsDrivers topology.
+    It is checked at the next console handover (the S2 session that cuts the `@stream` template).
+  - Found and fixed: ro_agent skipped its DESKTOP window while green, so the typing-only foreground
+    gate refused its own console lines (`client_not_foreground`). It opens a desktop window even
+    while green now (tested); it was worked around live with `capture_backend.py window desktop`.
   Run this in an elevated console just before that reboot, then read it back:
   `Remove-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name AVC444ModePreferred,AVCHardwareEncodePreferred`
 - **KEEP for now, and review again on 2026-11-05 (after 30 stable days):**
