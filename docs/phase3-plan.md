@@ -834,6 +834,23 @@ Otherwise keep the idle envelope, and report the shares and ratios.
 - The next candidate stays as pre-registered: a per-species vertical OFFSET from the ACT (the
   layer's y and the anchor), written before it is scored.
 
+**EVEN result (2026-10-07 00:10), scored ONCE with the frozen choice: the not-walk finding
+REPLICATES. Step 2b's verdict: W is NOT the per-species term.**
+
+| EVEN (1,851 rows, 1,564 clean) | Poring | Lunatic | needed |
+|---|---|---|---|
+| `a* = walk` share | 0.323 (n 745; outdoor 0.290, indoor 0.380) | 0.132 (n 174) | ≥ 0.60: FAIL |
+| height ratio, idle → walk envelope | 0.901 → 0.836 (n 393) | 1.124 → 0.687 (n 151) | not away from 1: FAIL |
+| split Lunatic/Poring | 1.247 → 0.823 | | −50 %: FAIL (−28 %) |
+
+- The idle ratios match step 1's EVEN values (0.901, 1.126): the measurement is aligned.
+- The Lunatic is drawn IDLE in both halves (83 % and 87 % of identifiable frames).
+- The Poring's outdoor/indoor walk shares SWAPPED between halves: 0.508 / 0.128 on ODD, 0.290 /
+  0.380 on EVEN. Its two loops are too alike for the action to be read reliably, so no claim is
+  made either way for the Poring.
+- Next, as pre-registered: the per-species vertical OFFSET from the ACT (the layer's y and the
+  anchor). It will be written before it is scored.
+
 ## 6. M5–M7: using the rule
 
 **M5, labels v1.** Every auto-label gets:
