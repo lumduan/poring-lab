@@ -14,7 +14,7 @@ export interface ServerView {
   port: number | null; // null: every port
   key: string;
   note: string;
-  source: "default" | "manual" | "discovered" | "import";
+  source: "default" | "manual" | "discovered" | "import" | "file";
   added_at: string;
   added_by: string;
   resolved: ResolvedIp[];

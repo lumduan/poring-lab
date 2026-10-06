@@ -71,7 +71,7 @@ class ServerIn(BaseModel):
     host: str = Field(max_length=253)  # empty/bad hosts get their own reasons (envstore.validate)
     port: int | None = None
     note: str = Field(default="", max_length=300)
-    source: str = "manual"
+    source: Literal["manual", "discovered", "file"] = "manual"  # anything else: 422
 
 
 class EnvIn(BaseModel):
@@ -339,12 +339,8 @@ def _build(body: PutBody, current: envstore.EnvSet, who: Who) -> envstore.EnvSet
                 continue
             if not host:
                 return "empty_host", ""
-            source: Literal["manual", "discovered", "import"] = (
-                "import"
-                if body.source == "import"
-                else "discovered"
-                if srv.source == "discovered"
-                else "manual"
+            source: Literal["manual", "discovered", "import", "file"] = (
+                "import" if body.source == "import" else srv.source
             )
             servers.append(envstore.ServerEntry(
                 host=host, port=srv.port, note=clean(srv.note).strip(), source=source, added_at=now,
@@ -360,7 +356,7 @@ def _build(body: PutBody, current: envstore.EnvSet, who: Who) -> envstore.EnvSet
 async def put_environments(request: Request,
                            state: AppState = Depends(write_gate)) -> dict[str, Any]:  # fmt: skip
     length = request.headers.get("content-length")
-    if length is not None and int(length) > MAX_BODY:
+    if length is not None and (not length.isdigit() or int(length) > MAX_BODY):
         raise _refuse(request, 413, "too_large", audit=True)
     raw = await request.body()
     if len(raw) > MAX_BODY:

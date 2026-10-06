@@ -570,3 +570,43 @@ def test_control_characters_never_reach_the_store_or_the_log(
     assert (created["name"], created["summary"]) == ("Evil[31mname", "ab")
     assert not any("\x1b" in rec.getMessage() or "\n" in rec.getMessage()
                    for rec in caplog.records)  # fmt: skip
+
+
+def test_endpoints_from_a_game_file_keep_their_source_and_nothing_else_passes(
+    make: Make, tmp_path: Path
+) -> None:
+    """The finder sends only the endpoints a person ticked, marked source "file", through the
+    same PUT: same grammar, same rules. A made-up source, or a hostile host, is refused."""
+    client = make()
+
+    def block(envs: list[dict[str, Any]]) -> None:
+        envs.append({"name": "Found in data.grf", "type": "forbidden", "servers": [
+            {"host": "203.0.113.7", "port": 6900, "note": "found in data.grf: data\\clientinfo.xml",
+             "source": "file"}]})  # fmt: skip
+
+    r = edit(client, block)
+    assert r.status_code == 200, r.text
+    made = next(e for e in r.json()["environments"] if e["name"] == "Found in data.grf")
+    assert made["type"] == "forbidden"
+    assert [(s["host"], s["port"], s["source"]) for s in made["servers"]] == [
+        ("203.0.113.7", 6900, "file")]  # fmt: skip
+    assert any(a["action"] == "env_create" and a["ok"] for a in audit(tmp_path))
+
+    def made_up(envs: list[dict[str, Any]]) -> None:
+        find(envs, "lab-rathena")["servers"].append(
+            {"host": "192.168.1.13", "port": 6900, "source": "trusted-by-file"}
+        )
+
+    assert edit(client, made_up).status_code == 422
+    for host in ("<script>alert(1)</script>", "javascript:alert(1)", "evil.example.com/x"):
+        r = edit(client, lambda envs, h=host: find(envs, "lab-rathena")["servers"].append(
+            {"host": h, "port": 6900, "source": "file"}))  # fmt: skip
+        assert r.status_code == 422 and r.json()["detail"]["reason"] == "bad_host", (host, r.text)
+
+
+def test_a_malformed_content_length_is_refused_not_a_crash(make: Make) -> None:
+    client = make()
+    hdr = {**H, "x-csrf-token": token(client), "content-length": "12abc",
+           "content-type": "application/json"}  # fmt: skip
+    r = client.put("/settings/environments", headers=hdr, content=b"{}" + b" " * 10)
+    assert r.status_code == 413

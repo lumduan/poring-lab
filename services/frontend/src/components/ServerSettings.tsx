@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import GameFileFinder from "@/components/GameFileFinder";
 import {
   type AuditRecord,
   auditText,
@@ -227,7 +228,7 @@ function EnvCard({ env, view, save }: { env: EnvView; view: SettingsView; save: 
                     <span className="text-xs text-neutral-400">= {s.resolved.map((r) => r.ip).join(", ")}</span>
                   )}
                   <span className="text-xs text-neutral-500">
-                    {s.source === "default" ? "from the shipped settings" : s.added_by ? `added ${s.added_at.slice(0, 10)} from ${s.added_by}` : ""}
+                    {s.source === "default" ? "from the shipped settings" : s.added_by ? `added ${s.added_at.slice(0, 10)} from ${s.added_by}${s.source === "file" && s.note ? ` (${s.note})` : ""}` : ""}
                   </span>
                   <button
                     type="button"
@@ -529,6 +530,7 @@ export default function ServerSettings({ backendUrl }: { backendUrl: string | nu
         <EnvCard key={`${env.id}@${view.revision}`} env={env} view={view} save={save} />
       ))}
       {view && view.store === "ok" && <NewEnvironment key={`new@${view.revision}`} view={view} save={save} />}
+      {view && view.store === "ok" && <GameFileFinder key={`finder@${view.revision}`} view={view} save={save} />}
       {view && view.store === "ok" && <ImportExport save={save} backendUrl={backendUrl} />}
       <section className="rounded-lg border border-neutral-800 p-4">
         <h2 className="mb-2 text-sm font-semibold">Change history (last 30 days)</h2>

@@ -61,7 +61,8 @@ class ServerEntry(BaseModel):
     host: str = Field(min_length=1, max_length=253)  # a name, an IPv4 address, or ".domain"
     port: int | None = Field(default=None, ge=1, le=65535)  # None: every port (forbidden only)
     note: str = Field(default="", max_length=300)
-    source: Literal["default", "manual", "discovered", "import"] = "manual"
+    # "file": found by the Settings page's game-file finder (parsed in the browser), then picked
+    source: Literal["default", "manual", "discovered", "import", "file"] = "manual"
     added_at: str = ""
     added_by: str = ""
 
