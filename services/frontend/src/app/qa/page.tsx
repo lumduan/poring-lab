@@ -1,5 +1,6 @@
 import { connection } from "next/server";
 
+import NavBar from "@/components/NavBar";
 import QaViewer from "@/components/QaViewer";
 
 /** Phase 2 label QA (docs/phase2-plan.md): recorded frames with their auto-labels, for a human
@@ -8,5 +9,11 @@ import QaViewer from "@/components/QaViewer";
 export default async function Page() {
   // Dynamic rendering, as the console: BACKEND_PUBLIC_URL is read at request time.
   await connection();
-  return <QaViewer backendUrl={process.env.BACKEND_PUBLIC_URL ?? null} />;
+  const backendUrl = process.env.BACKEND_PUBLIC_URL ?? null;
+  return (
+    <>
+      <NavBar backendUrl={backendUrl} />
+      <QaViewer backendUrl={backendUrl} />
+    </>
+  );
 }

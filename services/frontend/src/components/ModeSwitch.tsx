@@ -1,5 +1,6 @@
 "use client";
 
+import { MODE_ACTIVE_CLASS } from "@/lib/mode";
 import type { Mode } from "@/lib/protocol";
 
 const MODES: { mode: Mode; hint: string }[] = [
@@ -28,7 +29,7 @@ export default function ModeSwitch({ mode, onChange, disabled }: Props) {
           onClick={() => onChange(option)}
           className={`px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-40 ${
             mode === option
-              ? "bg-sky-600 text-white"
+              ? MODE_ACTIVE_CLASS[option]
               : "bg-neutral-900 text-neutral-300 hover:bg-neutral-800"
           }`}
         >

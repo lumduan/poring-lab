@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { bannerProblems, describeCleanRoom } from "./banner.ts";
+import { bannerProblems, describeCleanRoom, describeForeground } from "./banner.ts";
 import type { CleanRoom, Status } from "./protocol.ts";
 
 const LINKS = { stream: true, input: true };
@@ -168,4 +168,17 @@ test("the problems list says the page may be stale while the link looks up", () 
   assert.ok(stale.some((p) => p.startsWith("No status from the backend for 6 s")));
   const fresh = bannerProblems({ links: { stream: true, input: true }, status, statusAgeS: null });
   assert.ok(!fresh.some((p) => p.startsWith("No status")));
+});
+
+test("a recent foreground refusal is explained while the bot could act", () => {
+  const fg = { state: "refused", reason: "client_not_foreground", distance: 31, age_ms: 12,
+    path: "x11", since_s: 4, refused: 1 } as Status["foreground"];
+  const st = status({ backend: "rdp" }, { mode: "BOT", foreground: fg });
+  assert.match(describeForeground(st) ?? "", /Bot typing stopped 4 s ago: the game window was not in front/);
+  assert.ok(bannerProblems({ links: LINKS, status: st }).some((p) => p.startsWith("Bot typing stopped")));
+  assert.equal(describeForeground(status({ backend: "rdp" }, { mode: "HUMAN", foreground: fg })), null);
+  const old = { ...fg, since_s: 120 } as Status["foreground"];
+  assert.equal(describeForeground(status({ backend: "rdp" }, { mode: "BOT", foreground: old })), null);
+  const ok = { ...fg, state: "ok" } as Status["foreground"];
+  assert.equal(describeForeground(status({ backend: "rdp" }, { mode: "BOT", foreground: ok })), null);
 });

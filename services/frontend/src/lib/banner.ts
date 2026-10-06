@@ -72,6 +72,25 @@ export function describeEnvironment(status: Status | null): string | null {
   return null;
 }
 
+/** The typing-only foreground gate (2026-10-06): a recent refusal, while the bot could act. */
+const FOREGROUND_TEXT: Record<string, string> = {
+  client_not_foreground:
+    "the game window was not in front (another window was). Clicks still work; bring the game " +
+    "window to the front.",
+  foreground_stale_frame: "the picture was frozen, so the game window could not be checked.",
+  foreground_uncalibrated:
+    "the game window's title bar is not calibrated for this view (scripts/foreground_template.py).",
+  foreground_check_failed: "the game window could not be checked.",
+};
+
+export function describeForeground(status: Status | null, recentS = 30): string | null {
+  const fg = status?.foreground;
+  if (!fg || !status || status.mode === "HUMAN" || fg.state !== "refused") return null;
+  if (fg.since_s === null || fg.since_s === undefined || fg.since_s > recentS) return null;
+  const why = FOREGROUND_TEXT[fg.reason ?? ""] ?? `refused (${fg.reason}).`;
+  return `Bot typing stopped ${Math.round(fg.since_s)} s ago: ${why}`;
+}
+
 export function bannerProblems({
   links,
   status,
@@ -105,6 +124,8 @@ export function bannerProblems({
   if (links.stream && status?.cleanroom) problems.push(describeCleanRoom(status.cleanroom, nowMs));
   const interlock = links.stream ? describeEnvironment(status) : null;
   if (interlock) problems.push(interlock);
+  const foreground = links.stream ? describeForeground(status) : null;
+  if (foreground) problems.push(foreground);
   if (links.stream) problems.push(...capture.notices);
   if (links.stream && capture.expect === "rdp" && status?.rdp_window_present === false) {
     problems.push(
