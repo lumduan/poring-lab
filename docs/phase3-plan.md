@@ -732,6 +732,16 @@ WALK (`facing_from = walk`; 31 frames had none). View agreement by heading rule:
   - a client-side idle turn;
   - the walk/step timing at arrival.
 - Script: `/dev/shm/poring-lab-tmp/m4-step2/heading_score.py` (scratch).
+- **Exploratory, ODD only (input to the next facing hypothesis): the TIMING is right, the VALUE is
+  off.**
+  - Per spawn, the drawn view changes exactly where our predicted view changes: every run
+    boundary lines up, so the Timeline sees each walk and stop.
+  - Within a run the drawn view is constant, but offset from ours by 0, -1 or -2 directions,
+    varying per walk.
+  - So the heading kept after a walk is computed differently by the client. A candidate is the
+    walk's ANGLE (the overall or projected vector, quantised to 8) rather than the grid step;
+    the exploratory overall-vector rows above point the same way.
+  - To be pre-registered before it is scored.
 
 ## 6. M5–M7: using the rule
 
