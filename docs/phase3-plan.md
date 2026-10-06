@@ -609,6 +609,48 @@ the three §5b recordings.
   the format, not a fit: the frame/phase the client actually draws, the direction mapping, and a
   vertical offset of the drawn sprite.
 
+### 5d. M4 step 2a: the facing mapping (Batt, 2026-10-06), written BEFORE it is scored
+
+Batt: the facing mapping goes first, chosen on the ODD spawns, frozen, confirmed on the EVEN
+spawns, on CPU at nice 19. The data is the three §5b recordings.
+
+**What is tested.** `camera.displayed_direction`:
+- `d = (look_heading(yaw) + 12 - heading) % 8`, ported from nostalro act.rs:568-570;
+- it turns the packet heading and the camera yaw into the sprite direction drawn.
+
+**Facts found before scoring (sprite files only):**
+- Poring's and Lunatic's idle ACTs have only FOUR distinct views. The pairs {0,1}, {2,3}, {4,5}
+  and {6,7} render pixel-identically. So the mapping is judged per VIEW, `v = d // 2`.
+- For the Lunatic the views also differ in height (0/1 and 6/7: 22-26 px; 2-5: 26-27 px). The
+  predicted idle envelope moves by at most 0.5 native px between views.
+- So this step can fix labels and the label check, but it cannot explain the ~10 % per-species
+  height term. That is expected and reported, not a reason to skip the step.
+
+**Measurement (per clean standing frame, frozen step-1 rule, `--every 5`):**
+- For each of the 4 views: the masked grey NCC (label_check's) of the rendered sprite, best over
+  the view's idle frames and an anchor shift of ±2 px, at the predicted anchor and scale.
+- The drawn view `v*` is the argmax.
+- A frame counts as IDENTIFIABLE only if:
+  - the best NCC is ≥ 0.30;
+  - it beats the best NCC of the other views by ≥ 0.05.
+
+**Candidates:** the 16 relabellings `d' = (s·d + c) % 8`, with s ∈ {+1, −1} and c ∈ {0..7}.
+- They are scored by the share of identifiable frames where `d' // 2 == v*`.
+- The current mapping is s = +1, c = 0.
+
+**Decision rule, on the ODD spawns (both species pooled; per scene and per species reported):**
+- adopt the best candidate only if its agreement beats the current mapping's by ≥ 10 points;
+- otherwise keep the current mapping;
+- if the best candidate differs between outdoor and indoor, that is a yaw-term finding: reported,
+  no candidate is adopted.
+
+**Then:**
+- freeze it (the commit records it);
+- score the EVEN spawns once;
+- it is CONFIRMED if the frozen mapping's view agreement on EVEN is ≥ 0.80 (and, if changed, ≥ the
+  current mapping's + 10 points);
+- report odd and even side by side.
+
 ## 6. M5–M7: using the rule
 
 **M5, labels v1.** Every auto-label gets:
