@@ -651,6 +651,27 @@ spawns, on CPU at nice 19. The data is the three §5b recordings.
   current mapping's + 10 points);
 - report odd and even side by side.
 
+**Decided on the ODD spawns (2026-10-06 12:20), FROZEN: KEEP the current mapping (s = +1, c = 0).**
+- 1,150 clean frames; 786 identifiable.
+- Pooled agreement: current 0.550; best candidate (s = +1, c = 7, i.e. `d - 1`) 0.623. That is
+  +7.3 points, under the +10 required.
+- Both scenes prefer the same candidate, so there is no yaw-term split. But they differ sharply
+  (reported, not acted on):
+
+| subset (odd) | n | current | (+1, 7) |
+|---|---|---|---|
+| indoor (Poring) | 150 | 0.800 | **0.980** |
+| outdoor Poring | 357 | **0.566** (best) | 0.487 |
+| outdoor Lunatic | 279 | 0.394 | **0.606** |
+
+- Outdoors, no relabelling explains the drawn view (best 0.54). The Poring's errors are mostly
+  left/right swaps within the same front/back class, at roughly half the frames, which no constant
+  relabelling can fix. That points at the HEADING INPUT outdoors (e.g. the facing kept after a
+  walk), not at the formula. The next sub-step is pre-registered before it is scored.
+- Outputs: `/dev/shm/poring-lab-tmp/m4-step2/facing-odd.jsonl` (scratch; the scripts
+  `facing.py`/`facing_score.py` sit beside it).
+- The even half is scored ONCE with the frozen (current) mapping after this commit.
+
 ## 6. M5–M7: using the rule
 
 **M5, labels v1.** Every auto-label gets:
