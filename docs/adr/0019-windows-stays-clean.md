@@ -7,7 +7,7 @@ verdict_date: 2026-10-06
 verdict_ticket: null
 supersedes: null
 related: [ADR-0013, ADR-0016, ADR-0009, ADR-0014, ADR-0006, ADR-0004]
-next_action: "Principle in force (Batt, 2026-10-06). Part B and Part C DEFERRED (may never be built); the ADR-0013 indicator: server-side alternatives only (Batt agreed). Watch retirement criteria ACCEPTED. Cleanup DECIDED (section 'Batt's cleanup decisions'): the removal lines await Batt's OK and his elevated console; AVC policies revert at the next reboot that happens anyway; revert material reviewed again on 2026-11-05."
+next_action: "Principle in force (Batt, 2026-10-06). Part B and Part C DEFERRED (may never be built); the ADR-0013 indicator: server-side alternatives only. Watch retirement criteria ACCEPTED. Cleanup Part 1 DONE 17:31 (read back clean); Part 2 (Sunshine backup + 10 firewall rules) waits for Batt's elevated console; AVC policies revert at the next reboot that happens anyway; 2026-11-05 review: archive the needed _kro_exes_NEVER_RUN originals to the NAS with sha256, delete that folder, and re-decide the other revert material."
 ---
 
 # ADR-0019: Windows stays clean
@@ -136,6 +136,9 @@ and they are the streaming job itself.
 
 ### (5) Leftovers: cleanup CANDIDATES for Batt (nothing was removed)
 
+➡️ **DECIDED the same day:** see "Batt's cleanup decisions" below. Part 1 removed the
+first rows on 2026-10-06 at 17:31. The table is the audit as found.
+
 | Item | Evidence | Note |
 |---|---|---|
 | `C:\Users\poring-lab\Downloads\Sunshine-Windows-AMD64-installer.msi` (33,710,080 B) | **LIVE** | the installer; the product is installed |
@@ -164,7 +167,15 @@ and they are the streaming job itself.
 - **The exact lines** were shown to Batt before anything ran:
   - the standard-shell part runs from the agent's own shell;
   - the admin part runs from Batt's elevated console, with only the agreed lines typed.
-  - The outcome is recorded here when they run.
+- **Part 1 DONE 2026-10-06 17:28–17:31**, from the agent's own standard shell (Batt: "run Part 1",
+  and add the 7-Zip installer `C:\RO-rAthena\_downloads\7z2603-x64.exe` to S1). S1–S3 ran with
+  no error. The S4 read-back:
+  - `left: 0` -- the Sunshine MSI, `pl-vdd-ok`, the 7-Zip installer, `C:\RO-rAthena-th` (with its
+    old watcher logs and its `PoringLab_s0..s3`) and the TH shortcut are all gone;
+  - `client exes: 2021-11-03_Ragexe_1635926200.exe, PoringLab.exe`;
+  - poring-lab's desktop: Edge, poring-lab shell, Ragnarok Offline.
+- **Part 2** (A1 the Sunshine backup; A2–A3 the 10 firewall rules for the removed exes; A4 the
+  read-back) waits for Batt's elevated console.
 - **Prechecks (2026-10-06 17:05–17:08, read-only):**
   - 0 reparse points under either client folder;
   - nothing running from them;
@@ -176,10 +187,14 @@ and they are the streaming job itself.
 - **KEEP for now, and review again on 2026-11-05 (after 30 stable days):**
   - `sunshine.conf.bak-*`;
   - `_backup\`, `_baseline\`, `_kro_exes_NEVER_RUN\` (revert material).
-- **Found by the precheck, NOT decided** (raised to Batt):
-  - `C:\RO-rAthena\_downloads\7z2603-x64.exe`, the 7-Zip installer (7-Zip is installed);
-  - the 9 Gravity exes in `_kro_exes_NEVER_RUN\`. They are outside `client\`, so the firewall
-    group does not cover them; they are never run.
+- **Found by the precheck, then decided by Batt:**
+  - `C:\RO-rAthena\_downloads\7z2603-x64.exe`, the 7-Zip installer: REMOVED with Part 1.
+  - The 9 Gravity exes in `_kro_exes_NEVER_RUN\` get **NO new firewall rules** (Batt): more rules
+    to maintain, against this ADR. They are never run, SAC is on, and the account is standard.
+- **At the 2026-11-05 review** (Batt), for `_kro_exes_NEVER_RUN\`:
+  1. Archive the originals we may need to the NAS, each with its sha256. Example: the unpatched
+     2021 Ragexe, for future re-patching.
+  2. Then delete the folder from the Dell.
 
 **Not ours (seen LIVE, no lab record):**
 - CPU-Z;

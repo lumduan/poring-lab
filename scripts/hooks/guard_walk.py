@@ -26,7 +26,8 @@ filesystems; and every non-walking command (ls, stat, findmnt, df, git ls-files 
 SEES THROUGH what the other hooks see through (scripts/hooks/_shell.py: ; && | ( ) $( ),
 wrappers like sudo/nice/timeout, `bash -c`, heredocs fed to a shell). CANNOT SEE: walks by a
 program (`python -c 'os.walk("/")'`), `xargs` feeding paths, tar/rsync/cp -r -- the stated
-boundary; don't route around it.
+boundary; don't route around it. Batt accepted this boundary (2026-10-06): extend it only if a
+miss happens through one of those.
 
 FAIL DIRECTION: unreadable hook input or an unparsable command -> allow (a guard that blocks
 every Bash call is worse; guard_docker.py keeps its own regex fallback).
