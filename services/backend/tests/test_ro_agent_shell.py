@@ -372,11 +372,12 @@ def test_recover_with_no_retries_is_one_attempt(
     assert names == ["ro_agent-recover"] * 3
 
 
-def test_the_th_profile_switches_client_accounts_shortcut_and_database(
+def test_kro_is_the_profile_and_the_removed_th_profile_is_refused(
     ro: ModuleType, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """2026-10-05, the Thai-data experiment: kro stays the default; th is the separate client copy,
-    its RATHENA_TH_* accounts, its own shortcut position and db-th."""
+    """kro is the default. The th profile (2026-10-05, the Thai-data experiment) is kept as data
+    but REFUSED since its client copy and shortcut were removed from the Dell (2026-10-06,
+    ADR-0019): its shortcut position would click whatever icon is there now."""
     monkeypatch.delenv("RO_PROFILE", raising=False)
     env = {"RATHENA_TH_GM_USER": "thv_x", "RATHENA_TH_GM_PASSWORD": "p", "RATHENA_TH_GM_CHAR": "c",
            "RO_SHORTCUT": "37,543", "RO_SHORTCUT_TH": "37,450"}  # fmt: skip
@@ -386,11 +387,16 @@ def test_the_th_profile_switches_client_accounts_shortcut_and_database(
         assert ro.shortcut_xy() == (37, 543)
         with pytest.raises(ro.Stop):
             ro.account("gm")  # kro's RATHENA_GM_* are absent here
-        th = ro.use_profile("th")
-        assert th.client == r"C:\RO-rAthena-th\client" and ro.DB == "poring-lab-db-th-1"
-        assert ro.account("gm") == ("thv_x", "p", "c")
-        assert ro.shortcut_xy() == (37, 450)
+        th = ro.PROFILES["th"]
+        assert th.client == r"C:\RO-rAthena-th\client" and th.db == "poring-lab-db-th-1"
+        with pytest.raises(ro.Stop, match="REMOVED from the Dell on 2026-10-06"):
+            ro.use_profile("th")
+        assert ro.PROFILE.name == "kro"  # a refused switch leaves the current profile alone
+        monkeypatch.setenv("RO_PROFILE", "th")
+        with pytest.raises(ro.Stop, match="ADR-0019"):
+            ro.use_profile(None)
         with pytest.raises(ro.Stop, match="unknown client profile"):
             ro.use_profile("official")
     finally:
+        monkeypatch.delenv("RO_PROFILE", raising=False)
         ro.use_profile("kro")

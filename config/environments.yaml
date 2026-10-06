@@ -63,7 +63,8 @@ environments:
     # overrides that file with a loose one pointing at rathena-th; defence in depth on the Dell is
     # scoped to the lab client EXEs only, never OS-wide (a future user may play official Thai RO
     # normally on that PC): (1) since 2026-10-06 the exe-scoped allowlist group `poring-lab
-    # lab-only` (12 Block rules, both lab clients; it replaced the 2026-10-05 th-exe block rule);
+    # lab-only` (it replaced the 2026-10-05 th-exe block rule; 2 rules since 2026-10-06, when the
+    # th client copy was removed from the Dell -- ADR-0019; rathena-th has NO client copy now);
     # (2) the LAB-ONLY `poring-lab watch` task (any non-lab address kills the exe; retirement
     # criteria in ADR-0019); (3) the sniffer's attestation (server=lab-rathena-th).
     status: forbidden

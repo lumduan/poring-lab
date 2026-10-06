@@ -123,7 +123,8 @@ exe calling Gravity's `kro-assit.ragnarok.co.kr:3000` at character select (ADR-0
   needs no admin, and is registered from the agent's own shell. Its script is
   `%USERPROFILE%\poring-lab-watch\labwatch.ps1`, typed in and read back by sha256.
 - **What it does:** every 500 ms it lists the TCP connections of the lab clients' exes: processes
-  whose path is under `C:\RO-rAthena\client\` or `C:\RO-rAthena-th\client\`.
+  whose path is under `C:\RO-rAthena\client\` or `C:\RO-rAthena-th\client\`. (➡️ The th copy was
+  removed 2026-10-06, ADR-0019; that filter entry is intentionally inert.)
   - Any remote other than 192.168.1.13 or loopback means the process is killed and a `KILLED`
     line is logged.
   - An `alive` line is written every ~60 s.

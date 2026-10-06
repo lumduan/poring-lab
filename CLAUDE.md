@@ -119,7 +119,8 @@ ports, quickstart) and `docs/adr/`.
      lab clients get an EXE-SCOPED layer-1 allowlist: one Block rule per lab exe, for every remote
      address except 192.168.1.13 and loopback; never OS-wide, never the community client. It is
      applied from Batt's elevated console (APPLIED 2026-10-06, read back; group
-     `poring-lab lab-only`, 12 rules; ADR-0016). Layer 2 is the durable `poring-lab watch` task
+     `poring-lab lab-only`; 12 rules at first, 2 since 2026-10-06 18:55, one per exe actually
+     present, after ADR-0019's cleanup; ADR-0016). Layer 2 is the durable `poring-lab watch` task
      (ADR-0013 amendment; re-triggers every 1 min since 2026-10-06). It is LAB-ONLY, not part of
      any user setup, and has retirement criteria in ADR-0019.
      The SERVER allowlist (host:port per environment) is confirmed by a person on the console's

@@ -7,7 +7,7 @@ verdict_date: 2026-10-06
 verdict_ticket: null
 supersedes: null
 related: [ADR-0013, ADR-0016, ADR-0009, ADR-0014, ADR-0006, ADR-0004]
-next_action: "Principle in force (Batt, 2026-10-06). Part B and Part C DEFERRED (may never be built); the ADR-0013 indicator: server-side alternatives only. Watch retirement criteria ACCEPTED. Cleanup Part 1 DONE 17:31 (read back clean); Part 2 (Sunshine backup + 10 firewall rules) waits for Batt's elevated console; AVC policies revert at the next reboot that happens anyway; 2026-11-05 review: archive the needed _kro_exes_NEVER_RUN originals to the NAS with sha256, delete that folder, and re-decide the other revert material."
+next_action: "Principle in force (Batt, 2026-10-06). Part B and Part C DEFERRED (may never be built); the ADR-0013 indicator: server-side alternatives only. Watch retirement criteria ACCEPTED. Cleanup DONE 2026-10-06 (Part 1 17:31, Part 2 18:55; read back: 2 firewall rules = the 2 exes present, Sunshine backup gone). Pending: AVC policies revert at the next reboot that happens anyway; 2026-11-05 review (archive the needed _kro_exes_NEVER_RUN originals to the NAS with sha256, delete that folder, re-decide the other revert material); fix ro_agent's proof bar for the conhost admin console before the next elevated step."
 ---
 
 # ADR-0019: Windows stays clean
@@ -111,7 +111,7 @@ The PC is an **OptiPlex 3090**, Windows 11 26H2 build 26300.9457, with Smart App
 | `C:\RO-rAthena\` client: WARP-patched `PoringLab.exe`, dgVoodoo2, `DATA.INI`, `clientinfo.xml`/`sclientinfo.xml` → 192.168.1.13:6900, English UI text, `OptionInfo.lua`, HKCU Gravity keys | **LIVE** folder present; recipe in [rathena-client.md](../client/rathena-client.md) |
 | AssistAddr override: four `externalsettings_kr*.lub` per client → `127.0.0.1:3000` | record (ADR-0016; thai-data-experiment.md) |
 | Equip-window placeholders: 16×16 BMPs `btn_e_change/off/on _a/b/c` in `data\texture\<ACP name>\basic_interface\`, both clients | record (memory only until now; installed 2026-10-05 evening, verified) |
-| Firewall group `poring-lab lab-only`: 12 outbound Block rules, one per lab exe in both client folders | **LIVE** all 12 present and enabled |
+| Firewall group `poring-lab lab-only`: 12 outbound Block rules, one per lab exe in both client folders | **LIVE** all 12 present and enabled. ➡️ 2 since 18:55 (cleanup Part 2, below) |
 | "Ragnarok Offline" shortcut → `C:\RO-rAthena\PoringLab.cmd` | **LIVE** |
 | Standard account `poring-lab` (Users, Remote Desktop Users, Performance Monitor Users, Event Log Readers); Modify on `C:\RO-rAthena` | **LIVE** the ACE `dell-3090\poring-lab: Modify` |
 | System locale th-TH, time zone UTC+7, Thai keyboard; per-user settings (clipboard history off, …); 7-Zip | record ([rathena-client.md](../client/rathena-client.md) "Windows settings changed") |
@@ -174,8 +174,29 @@ first rows on 2026-10-06 at 17:31. The table is the audit as found.
     old watcher logs and its `PoringLab_s0..s3`) and the TH shortcut are all gone;
   - `client exes: 2021-11-03_Ragexe_1635926200.exe, PoringLab.exe`;
   - poring-lab's desktop: Edge, poring-lab shell, Ragnarok Offline.
-- **Part 2** (A1 the Sunshine backup; A2–A3 the 10 firewall rules for the removed exes; A4 the
-  read-back) waits for Batt's elevated console.
+- **Part 2 DONE 2026-10-06 18:52–18:55**, in Batt's elevated console. He opened it and stayed
+  hands-off; the agent typed A1–A4 only. A4's read-back:
+
+      rules: 2
+      C:\RO-rAthena\client\2021-11-03_Ragexe_1635926200.exe exists=True enabled=True Block
+      C:\RO-rAthena\client\PoringLab.exe exists=True enabled=True Block
+      exes: C:\RO-rAthena\client\2021-11-03_Ragexe_1635926200.exe, C:\RO-rAthena\client\PoringLab.exe
+      backup left: False
+
+  So the Sunshine backup with the OLD `cakey.pem` is gone, and the group's rule list equals the
+  `*.exe` present.
+  - A tooling gap found here: ro_agent's proof bar (`cls` + a bar of a fresh width) cannot prove a
+    line ran in the classic conhost "Administrator: Windows PowerShell" window. It measures cells
+    at the Terminal's width, so it reported "no fresh proof bar" for every line, and A2 and A3
+    drew bars of the SAME pixel width. Each line was confirmed by screenshot instead, and A4's
+    read-back proved A1–A3 had all run.
+  - Fix before the next elevated step: measure the bar in that window's own cell width, or open
+    the elevated console as a Terminal tab.
+- **Code still naming the removed copy (DECISION → CODE):**
+  - ro_agent's `th` profile is kept as data but now REFUSES with the reason: its shortcut position
+    would click whatever icon is there now (`removed=`, tested).
+  - `labwatch.ps1` on the Dell still lists `C:\RO-rAthena-th\client` in its path filter. That
+    entry is intentionally inert: nothing is there, and the watch retires on its own criteria.
 - **Prechecks (2026-10-06 17:05–17:08, read-only):**
   - 0 reparse points under either client folder;
   - nothing running from them;

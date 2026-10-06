@@ -94,12 +94,20 @@ class Profile:
     account_prefix: str  # <prefix>_AGENT_USER / _GM_USER / ... in .env
     shortcut_env: str  # "x,y" of the profile's desktop shortcut in .env
     variant: str | None  # the signature variant cut on this client
+    removed: str | None = None  # why this profile's client copy no longer exists (refused)
 
 
 PROFILES = {
     "kro": Profile("kro", CLIENT, "poring-lab-db-1", "RATHENA", "RO_SHORTCUT", None),
+    # INTENTIONALLY INERT since 2026-10-06 (ADR-0019, Batt: "the Thai-data decision is final"):
+    # the copy and its shortcut were removed from the Dell, so its shortcut position now points
+    # at nothing (or at whatever icon moves there). rathena-th stays a stopped server-side option.
     "th": Profile("th", r"C:\RO-rAthena-th\client", "poring-lab-db-th-1", "RATHENA_TH",
-                  "RO_SHORTCUT_TH", "thdata"),
+                  "RO_SHORTCUT_TH", "thdata",
+                  removed="its client copy C:\\RO-rAthena-th and its desktop shortcut were "
+                          "REMOVED from the Dell on 2026-10-06 (ADR-0019; the Thai-data decision "
+                          "is final). Recreate the copy, its AssistAddr override, its firewall "
+                          "rule and its shortcut, then clear `removed`, before using --profile th"),
 }  # fmt: skip
 PROFILE = PROFILES["kro"]
 
@@ -110,6 +118,8 @@ def use_profile(name: str | None) -> Profile:
     key = name or os.environ.get("RO_PROFILE") or "kro"
     if key not in PROFILES:
         raise Stop(f"unknown client profile {key!r} (known: {', '.join(sorted(PROFILES))})")
+    if PROFILES[key].removed:
+        raise Stop(f"client profile {key!r} is unavailable: {PROFILES[key].removed}")
     PROFILE = PROFILES[key]
     DB = PROFILE.db
     return PROFILE

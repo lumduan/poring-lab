@@ -277,7 +277,9 @@ They are listed with sha256 on 2026-10-05.
   with nothing running, so it fits "Windows stays clean" and is the recommended layer for any
   user setup ([docs/windows-setup.md](../windows-setup.md)). The layer-2 watch task is LAB-ONLY;
   it is retired when ADR-0019's criteria hold. Live 2026-10-06 16:40: all 12 rules present and
-  enabled.
+  enabled. ➡️ **Since 2026-10-06 18:55: 2 rules**, one per exe actually present in
+  `C:\RO-rAthena\client` (the 2021 Ragexe and `PoringLab.exe`). ADR-0019's cleanup removed the th
+  copy and the `PoringLab_s0..s3` variants, then their 10 rules, and read back `rules: 2`.
 
 This differs from the Production-option template below: that template's IPv4 range also covered
 127.0.0.0/8, and its `::/0` blocked ::1.
