@@ -118,6 +118,8 @@ export const REASON_TEXT: Record<string, string> = {
   environments_store_missing: "The saved environments are missing on the backend: the bot is blocked until this is fixed.",
   environments_store_invalid: "The saved environments are damaged on the backend: the bot is blocked until this is fixed.",
   environments_store_unseeded: "The environments have not been set up yet on the backend.",
+  csrf_invalid: "The page's security token expired: reload the page and try again.",
+  rate_limited: "Too many changes in a minute: wait a moment and try again.",
   confirm_mismatch: "Type the blocked server exactly as shown to confirm.",
   bad_forbidden_entry: "Write a server (name or IP), optionally with :port, or .domain for a whole domain.",
   not_blocked: "That server is not on the blocked list.",

@@ -4,6 +4,7 @@ import asyncio
 import collections
 import contextlib
 import logging
+import os
 import time
 from collections import Counter
 from collections.abc import Callable, Sequence
@@ -249,6 +250,23 @@ def balanced(events: Sequence[InputEvent]) -> bool:
     return not held
 
 
+class RateLimit:
+    """At most ``limit`` events per client in a sliding ``window_s`` (Settings writes)."""
+
+    def __init__(self, *, limit: int, window_s: float) -> None:
+        self.limit, self.window_s = limit, window_s
+        self._seen: dict[str, collections.deque[float]] = {}
+
+    def allow(self, client: str, now: float) -> bool:
+        q = self._seen.setdefault(client, collections.deque())
+        while q and now - q[0] > self.window_s:
+            q.popleft()
+        if len(q) >= self.limit:
+            return False
+        q.append(now)
+        return True
+
+
 class AppState:
     def __init__(
         self,
@@ -332,6 +350,9 @@ class AppState:
         self.forbidden_resolved: dict[str, list[str]] = {}  # forbidden NAMES -> current IPs
         self.allowlist_resolved_at_ns: int | None = None
         self._env_cache: tuple[Any, Any] | None = None  # (store key, its interlock config)
+        # Settings writes: a per-process CSRF secret and a per-client rate limit (2026-10-06).
+        self.csrf_secret = os.urandom(32)
+        self.settings_rate = RateLimit(limit=20, window_s=60.0)
         # ADR-0016: the environment interlock (the user-managed set + attestation + window).
         self.interlock = Interlock(settings.environments_file, settings.win_host,
                                    source=self._envset_source)  # fmt: skip

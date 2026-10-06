@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   type AuditRecord,
@@ -461,18 +461,36 @@ export default function ServerSettings({ backendUrl }: { backendUrl: string | nu
     void fetchView(backendHttpBase(backendUrl)).then(apply);
   }, [backendUrl, apply]);
 
+  const csrf = useRef<string | null>(null);
+
   const save: Save = useCallback(
     async (envs, extra = {}) => {
       const base = backendHttpBase(backendUrl);
-      try {
-        const r = await fetch(`${base}/settings/environments`, {
+      // Every write carries the CSRF token only this page can read (CORS); a backend restart
+      // invalidates it, so one refusal fetches a fresh token and tries once more.
+      const put = async (): Promise<Response> => {
+        if (!csrf.current) {
+          const t = await fetch(`${base}/settings/csrf`, { cache: "no-store" });
+          csrf.current = t.ok ? ((await t.json()) as { token: string }).token : "";
+        }
+        return fetch(`${base}/settings/environments`, {
           method: "PUT",
-          headers: { "content-type": "application/json" },
+          headers: { "content-type": "application/json", "x-csrf-token": csrf.current ?? "" },
           body: JSON.stringify({
             base_revision: view?.revision ?? 0, environments: envs, reason: extra.reason ?? "",
             confirm: extra.confirm ?? "", source: extra.source ?? "page",
           }),
         });
+      };
+      try {
+        let r = await put();
+        if (r.status === 403) {
+          const peek = await r.clone().json().catch(() => null);
+          if (peek?.detail?.reason === "csrf_invalid") {
+            csrf.current = null;
+            r = await put();
+          }
+        }
         const body = await r.json().catch(() => null);
         if (!r.ok) {
           const d = body?.detail ?? {};

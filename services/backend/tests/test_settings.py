@@ -142,9 +142,15 @@ def as_input(view: dict[str, Any]) -> list[dict[str, Any]]:
             for e in view["environments"]]  # fmt: skip
 
 
+def token(client: TestClient) -> str:
+    return routes_settings.csrf_token(client.app.state.poring)  # type: ignore[attr-defined]
+
+
 def put(client: TestClient, envs: list[dict[str, Any]], rev: int, headers: dict[str, str] = H,
-        **extra: Any) -> Any:  # fmt: skip
+        csrf: bool = True, **extra: Any) -> Any:  # fmt: skip
     body = {"base_revision": rev, "environments": envs, **extra}
+    if csrf:
+        headers = {**headers, "x-csrf-token": token(client)}
     return client.put("/settings/environments", headers=headers, json=body)
 
 
@@ -502,10 +508,11 @@ def test_export_and_import_share_a_setup_under_the_same_rules(make: Make, tmp_pa
 
 def test_extra_fields_and_huge_bodies_are_refused(make: Make) -> None:
     client = make()
-    r = client.put("/settings/environments", headers=H,
+    hdr = {**H, "x-csrf-token": token(client)}
+    r = client.put("/settings/environments", headers=hdr,
                    json={"base_revision": 0, "environments": [], "allow_all": True})  # fmt: skip
     assert r.status_code == 422 and r.json()["detail"]["reason"] == "invalid"
-    r = client.put("/settings/environments", headers=H, content=b"x" * (64 * 1024 + 1))
+    r = client.put("/settings/environments", headers=hdr, content=b"x" * (64 * 1024 + 1))
     assert r.status_code == 413
 
 
@@ -514,3 +521,52 @@ def test_the_audit_page_lists_newest_first(make: Make) -> None:
     confirm_lab(client)
     records = client.get("/settings/audit", headers=H).json()["records"]
     assert records[-1]["action"] == "seed" and records[0]["action"] == "server_add"
+
+
+# --- CSRF, rate limit, control characters (Batt's hostile-input controls, 2026-10-06) -------------
+
+
+def test_a_write_without_the_csrf_token_is_refused(make: Make, tmp_path: Path) -> None:
+    client = make()
+    view = get(client)
+    r = put(client, as_input(view), 0, csrf=False)
+    assert r.status_code == 403 and r.json()["detail"]["reason"] == "csrf_invalid"
+    forged = {**H, "x-csrf-token": "9999999999." + "0" * 64}
+    r = client.put("/settings/environments", headers=forged,
+                   json={"base_revision": 0, "environments": as_input(view)})  # fmt: skip
+    assert r.json()["detail"]["reason"] == "csrf_invalid"
+    expired = routes_settings.csrf_token(client.app.state.poring, now=0)  # type: ignore[attr-defined]
+    r = client.put("/settings/environments", headers={**H, "x-csrf-token": expired},
+                   json={"base_revision": 0, "environments": as_input(view)})  # fmt: skip
+    assert r.json()["detail"]["reason"] == "csrf_invalid"
+    assert [a["reason"] for a in audit(tmp_path)[-3:]] == ["csrf_invalid"] * 3
+
+
+def test_only_the_console_browser_gets_a_token(make: Make) -> None:
+    client = make()
+    r = client.get("/settings/csrf", headers=H)
+    assert r.status_code == 200
+    state = client.app.state.poring  # type: ignore[attr-defined]
+    assert routes_settings.csrf_valid(state, r.json()["token"])
+    assert client.get("/settings/csrf").json()["detail"]["reason"] == "origin_required"
+    assert make(public_port=8000, internal_port=80).get("/settings/csrf").status_code == 404
+
+
+def test_settings_writes_are_rate_limited(make: Make, tmp_path: Path) -> None:
+    client = make()
+    view = get(client)
+    statuses = [put(client, as_input(view), 0).status_code for _ in range(21)]
+    assert statuses[:20] == [200] * 20 and statuses[20] == 429
+    assert audit(tmp_path)[-1]["reason"] == "rate_limited"
+
+
+def test_control_characters_never_reach_the_store_or_the_log(
+    make: Make, caplog: pytest.LogCaptureFixture
+) -> None:
+    client = make()
+    r = edit(client, lambda envs: envs.append(
+        {"name": "Evil\x1b[31m\nname", "type": "forbidden", "summary": "a\rb"}))  # fmt: skip
+    created = next(e for e in r.json()["environments"] if e["name"].startswith("Evil"))
+    assert (created["name"], created["summary"]) == ("Evil[31mname", "ab")
+    assert not any("\x1b" in rec.getMessage() or "\n" in rec.getMessage()
+                   for rec in caplog.records)  # fmt: skip

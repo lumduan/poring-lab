@@ -103,7 +103,7 @@ def create_app(
         CORSMiddleware,
         allow_origins=sorted(cfg.origins),
         allow_methods=["GET", "PUT", "DELETE"],
-        allow_headers=["content-type"],
+        allow_headers=["content-type", "x-csrf-token"],
         expose_headers=["content-disposition", "x-content-sha256"],
         max_age=600,
     )

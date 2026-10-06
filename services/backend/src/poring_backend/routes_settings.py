@@ -34,9 +34,13 @@ audit log with its reason. A save is reported only after the file was read back.
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
 import json
 import logging
+import re
 import socket
+import time
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -112,7 +116,8 @@ def _refuse(request: Request, status: int, reason: str, *, audit: bool,
             )  # fmt: skip
         except OSError as exc:  # the refusal stands; the missing store is its own alarm
             log.error("settings audit not written (%s): %s", reason, exc)
-        log.warning("settings write refused: %s (%s)", reason, _who(request).model_dump())
+        log.warning("settings write refused: %s (%s)", reason,
+                    clean(json.dumps(_who(request).model_dump())))  # fmt: skip
     return HTTPException(status, {"reason": reason, **(extra or {})})
 
 
@@ -164,9 +169,53 @@ def write_gate(request: Request) -> AppState:
             refusal = (403, "lab_host_peer")
         elif peer and peer == settings.win_host:
             refusal = (403, "windows_host_peer")
+    state = get_state(request)
+    if refusal is None and not csrf_valid(state, request.headers.get("x-csrf-token", "")):
+        refusal = (403, "csrf_invalid")
+    if refusal is None and not state.settings_rate.allow(request.client.host if request.client
+                                                         else "", time.monotonic()):  # fmt: skip
+        refusal = (429, "rate_limited")
     if refusal is not None:
         raise _refuse(request, refusal[0], refusal[1], audit=True)
-    return get_state(request)
+    return state
+
+
+# --- CSRF (Batt, 2026-10-06): on top of the Origin and peer rules ---------------------------------
+# A synchronizer token: only a page whose Origin may READ the backend's responses (CORS) can get
+# one, from GET /settings/csrf; every write must carry it in the X-CSRF-Token header (a custom
+# header also forces the browser's CORS preflight). Valid for CSRF_TTL_S, signed with a per-process
+# secret (a backend restart invalidates every token; the page fetches a new one).
+CSRF_TTL_S = 3600
+
+
+def csrf_token(state: AppState, now: float | None = None) -> str:
+    exp = int((time.time() if now is None else now) + CSRF_TTL_S)
+    mac = hmac.new(state.csrf_secret, str(exp).encode(), hashlib.sha256).hexdigest()
+    return f"{exp}.{mac}"
+
+
+def csrf_valid(state: AppState, token: str, now: float | None = None) -> bool:
+    exp_text, _, mac = token.partition(".")
+    if not exp_text.isdigit() or len(mac) != 64:
+        return False
+    if int(exp_text) < (time.time() if now is None else now):
+        return False
+    good = hmac.new(state.csrf_secret, exp_text.encode(), hashlib.sha256).hexdigest()
+    return hmac.compare_digest(good, mac)
+
+
+@router.get("/csrf")
+def get_csrf(state: AppState = Depends(browser_gate)) -> dict[str, Any]:
+    return {"token": csrf_token(state), "ttl_s": CSRF_TTL_S}
+
+
+_CONTROL = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def clean(text: str) -> str:
+    """Control characters removed: stored names and log lines stay one honest line each (no log
+    injection from a name or a note)."""
+    return _CONTROL.sub("", text)
 
 
 async def resolve(host: str) -> list[str]:
@@ -286,7 +335,7 @@ def _build(body: PutBody, current: envstore.EnvSet, who: Who) -> envstore.EnvSet
             key = allowlist.entry_key(host, srv.port)
             prev = known.get(key)
             if prev is not None:
-                servers.append(prev.model_copy(update={"note": srv.note.strip()}))
+                servers.append(prev.model_copy(update={"note": clean(srv.note).strip()}))
                 continue
             if not host:
                 return "empty_host", ""
@@ -298,11 +347,11 @@ def _build(body: PutBody, current: envstore.EnvSet, who: Who) -> envstore.EnvSet
                 else "manual"
             )
             servers.append(envstore.ServerEntry(
-                host=host, port=srv.port, note=srv.note.strip(), source=source, added_at=now,
+                host=host, port=srv.port, note=clean(srv.note).strip(), source=source, added_at=now,
                 added_by=who.client or ""))  # fmt: skip
         technical = {k: getattr(base, k) for k in envstore.TECHNICAL} if base else {}
-        envs.append(envstore.EnvEntry(id=env_id, name=e.name.strip(), type=e.type,
-                                      summary=e.summary.strip(), why=e.why.strip(),
+        envs.append(envstore.EnvEntry(id=env_id, name=clean(e.name).strip(), type=e.type,
+                                      summary=clean(e.summary).strip(), why=clean(e.why).strip(),
                                       servers=servers, **technical))  # fmt: skip
     return current.model_copy(update={"environments": envs})
 
@@ -381,10 +430,12 @@ async def put_environments(request: Request,
                 action=c.action, kind=c.kind, env_id=c.env_id, entry=c.subject,
                 revision_before=rev_before, revision_after=saved.revision, before=names_before,
                 after=names_after, ok=True, reason=body.source,
-                note=body.reason.strip() if c.kind == "hard" else c.text, **who.model_dump(),
+                note=clean(body.reason).strip() if c.kind == "hard" else c.text,
+                **who.model_dump(),
             )  # fmt: skip
-        log.warning("environment set revision %d by %s (%s): %s", saved.revision, who.client,
-                    body.source, "; ".join(f"[{c.kind}] {c.text}" for c in changes))  # fmt: skip
+        summary = clean("; ".join(f"[{c.kind}] {c.text}" for c in changes))
+        log.warning("environment set revision %d by %s (%s): %s", saved.revision,
+                    clean(str(who.client)), body.source, summary)  # fmt: skip
     state.interlock.reload()  # the interlock reads the new set at once
     task = asyncio.create_task(state.resolve_allowlist(), name="envset-resolve")
     await asyncio.wait({task}, timeout=RESOLVE_TIMEOUT_S + 1)
