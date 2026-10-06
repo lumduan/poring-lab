@@ -1,4 +1,5 @@
-"""The shell tokenizer shared by the PreToolUse hooks (guard_docker.py, guard_bigread.py).
+"""The shell tokenizer shared by the PreToolUse hooks (guard_docker.py, guard_bigread.py,
+guard_walk.py).
 
 Standard library only: a hook runs under the host's bare `python3`, with no venv.
 

@@ -19,7 +19,8 @@ REFUSES (exit 2, reason on stderr)
   - head/tail/dd on a target WITHOUT a byte bound of at most BOUND_BYTES (64 MB): `head -c N`,
     `tail -c N` and `dd … bs=X count=Y` pass; `-n` (a JSONL line can be megabytes), `tail -c +K`,
     `head -c -K` and dd without count= are refused.
-ALLOWS ls / stat / du / file on anything, every read of a small file, and e.g.
+ALLOWS ls / stat / file on anything (du and other WALKS are guard_walk.py's: repo and RAM only),
+every read of a small file, and e.g.
     tail -c 5000000 <transcript> | LC_ALL=C grep -F needle
 `ionice -c3` is accepted but not required: this host's disk scheduler is `none`, which ignores
 I/O priorities, so only a byte bound actually protects the disk (Batt, 2026-10-03).

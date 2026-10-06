@@ -7,7 +7,7 @@ verdict_date: 2026-10-06
 verdict_ticket: null
 supersedes: null
 related: [ADR-0013, ADR-0016, ADR-0009, ADR-0014, ADR-0006, ADR-0004]
-next_action: "Principle in force (Batt, 2026-10-06). Part B (ADR-0013's 2026-10-06 amendment) and the client-side provider (ADR-0016 Part C) are DEFERRED and may never be built. The `poring-lab watch` task is lab-only; retire it when the criteria below hold (Batt's call). The leftovers in the audit are cleanup CANDIDATES for Batt; nothing was removed."
+next_action: "Principle in force (Batt, 2026-10-06). Part B and Part C DEFERRED (may never be built); the ADR-0013 indicator: server-side alternatives only (Batt agreed). Watch retirement criteria ACCEPTED. Cleanup DECIDED (section 'Batt's cleanup decisions'): the removal lines await Batt's OK and his elevated console; AVC policies revert at the next reboot that happens anyway; revert material reviewed again on 2026-11-05."
 ---
 
 # ADR-0019: Windows stays clean
@@ -75,9 +75,8 @@ the places to look:
 - **The client-side provider is DEFERRED with it** (ADR-0016 Part C, the `client_endpoint`
   signal).
 - **ADR-0013's display-only indicator** (ACCEPTED 2026-10-02, never built) is a Windows-side
-  helper, so it is NOT built under this principle. If shared control needs it, start from the
-  server-side candidates above. *(Applied here by the principle's wording; Batt can say
-  otherwise.)*
+  helper, so it is NOT built under this principle. **Batt agreed (2026-10-06): server-side
+  alternatives only** (the candidates above).
 - **ADR-0013's "agentless" context was widened twice:** by Sunshine plus the tscon task, then by
   the 2026-10-05 watcher. This ADR sets the end state: the game, its config and Sunshine.
 - **The SERVER keeps all the safety logic:**
@@ -149,6 +148,39 @@ and they are the streaming job itself.
 | `sunshine.conf.bak-*` next to the config | record | backups from 2026-10-02/03 |
 | `C:\RO-rAthena\_backup\`, `_baseline\`, `_kro_exes_NEVER_RUN\` | record | revert material; the kRO launchers were never run |
 
+### Batt's cleanup decisions (2026-10-06)
+
+- **REMOVE:**
+  - the Sunshine installer in Downloads;
+  - `%TEMP%\pl-vdd-ok`;
+  - the old watcher logs;
+  - the admin-only Sunshine backup (it holds the OLD `cakey.pem`, a private key no longer used);
+  - `PoringLab_s0..s3.exe` in both clients;
+  - `C:\RO-rAthena-th` and its shortcut (the Thai-data decision is final; rathena-th stays a
+    stopped SERVER-side option).
+- **Then:** the firewall group's rule list must equal the `*.exe` actually present in the client
+  folder, read back. After the removals that is the 2 main-client exes, so the 10 rules for
+  `PoringLab_s0..s3` and the th copy go.
+- **The exact lines** were shown to Batt before anything ran:
+  - the standard-shell part runs from the agent's own shell;
+  - the admin part runs from Batt's elevated console, with only the agreed lines typed.
+  - The outcome is recorded here when they run.
+- **Prechecks (2026-10-06 17:05–17:08, read-only):**
+  - 0 reparse points under either client folder;
+  - nothing running from them;
+  - `C:\RO-rAthena-th` is 955 files, 6.62 GB (it gained `thdata.grf`);
+  - the TH shortcut is on poring-lab's Desktop.
+- **AVC policies:** revert at the next reboot that happens anyway, never a reboot just for this.
+  Run this in an elevated console just before that reboot, then read it back:
+  `Remove-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name AVC444ModePreferred,AVCHardwareEncodePreferred`
+- **KEEP for now, and review again on 2026-11-05 (after 30 stable days):**
+  - `sunshine.conf.bak-*`;
+  - `_backup\`, `_baseline\`, `_kro_exes_NEVER_RUN\` (revert material).
+- **Found by the precheck, NOT decided** (raised to Batt):
+  - `C:\RO-rAthena\_downloads\7z2603-x64.exe`, the 7-Zip installer (7-Zip is installed);
+  - the 9 Gravity exes in `_kro_exes_NEVER_RUN\`. They are outside `client\`, so the firewall
+    group does not cover them; they are never run.
+
 **Not ours (seen LIVE, no lab record):**
 - CPU-Z;
 - "RO Dev Serv" → `RagnarokClassic\Ragnarok.exe`, the community-server client. It is Batt's and is
@@ -169,7 +201,7 @@ and they are the streaming job itself.
 | environments.yaml `official-ro-thai` comment: the th-exe block rule as layer 1 | that rule was removed 2026-10-06 (the exe-scoped group replaced it); comment updated |
 | Smart App Control "irreversible" vs "re-enabling supported" (two docs) | not resolved: SAC is ON (LIVE), and nobody plans to switch it |
 
-## The `poring-lab watch` task: lab-only, and its retirement criteria (PROPOSED)
+## The `poring-lab watch` task: lab-only, and its retirement criteria (ACCEPTED, Batt 2026-10-06)
 
 **Why it exists:** the th client caught the 2021 exe calling Gravity's
 `kro-assit.ragnarok.co.kr:3000` (2026-10-05). The watch kills any lab exe that reaches anything

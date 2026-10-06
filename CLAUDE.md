@@ -66,6 +66,15 @@ ports, quickstart) and `docs/adr/`.
      are exempt). Read a byte range instead: `tail -c 5000000 <file> | LC_ALL=C grep -F …`
      (`head -c`/`tail -c`/`dd count=`, ≤ 64 MB). `ionice` is no protection here: the disk's
      scheduler is `none`, which ignores I/O priorities.
+   - **No filesystem WALKS outside the repo** (Batt, 2026-10-06, after a `find /` ran for the THIRD
+     time). The third hook, `scripts/hooks/guard_walk.py`, refuses find, du, rg, ag, fd, tree,
+     `ls -R` and recursive grep in these cases:
+     - rooted at `/` or under `/mnt` (the NAS automounts);
+     - on any network or automount filesystem;
+     - on any disk-backed filesystem (the root LV, Docker's overlays, the other local disk),
+       unless inside the repo.
+     RAM filesystems (`/dev/shm`) are fine. Roots built at run time (`$VAR`, `$(…)`) are refused.
+     Use a specific path, `ls`, `stat`, `findmnt`, `df` or `git ls-files`.
 
 6. **Never put a Docker network on a 192.168.x subnet on this host.** The LAN uses 192.168.1, 110, 111, 112
    and 120, and Docker can't see the segments behind the router. On 2026-09-29 an auto-assigned
@@ -377,8 +386,9 @@ ports, quickstart) and `docs/adr/`.
 - **Every create/start/restart/recreate/build/pull goes through `scripts/guarded_build.py`** — enforced:
   `scripts/dev.sh` refuses unless the guard is its parent, and the repo's `.claude/settings.json` hook
   (`scripts/hooks/guard_docker.py`) refuses raw `docker`/`docker compose` forms. Don't route around them
-  (python subprocess, `$(…)`); add a guarded step instead. Its sibling `guard_bigread.py` refuses
-  whole-file reads of transcripts and big files (rule 5); both share the tokenizer `_shell.py`.
+  (python subprocess, `$(…)`); add a guarded step instead. Its siblings `guard_bigread.py` and `guard_walk.py` refuse
+  whole-file reads of transcripts and big files, and filesystem walks outside the repo (rule 5); all
+  three share the tokenizer `_shell.py`.
 - After writing `.env` use `scripts/rotate_secrets.py set|rotate` (read-back built in); after editing a
   mounted file run `scripts/verify_mount.py` before claiming it took effect.
 - **Single-file bind mounts (rdp-loop.sh, entrypoint.sh, groups.yml…) follow the INODE.** `sed -i`
