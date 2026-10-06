@@ -164,6 +164,23 @@ def test_rundev_adds_only_the_vision_dev_overlay(gb: ModuleType) -> None:
             gb.parse_step(refused)
 
 
+def test_cache_runs_only_the_host_frame_cache_builder(gb: ModuleType) -> None:
+    """Daytime caches (Batt, 2026-10-06) run under the same IO guard: niced, the builder only,
+    its arguments never a shell or another program."""
+    step = gb.parse_step("cache@3600=--train S1 S2 --test S3 --cache-id v0png-1 --resume")
+    assert (step.kind, step.seconds, step.label) == ("cache", 3600.0, "cache")
+    assert gb.cache_cmd(step) == [
+        "timeout", "3600", "nice", "-n", "19", str(gb.CACHE_PY), "scripts/build_frame_cache.py",
+        "--train", "S1", "S2", "--test", "S3", "--cache-id", "v0png-1", "--resume",
+    ]  # fmt: skip
+    assert gb.parse_step("cache=--test S3").seconds == 7200.0
+    for refused in ("cache", "cache=", "cache@60", "cache@60=--test S; rm -rf /",
+                    "cache=--test $(id)", "cache:x=--test S", "cachex=--test S"):  # fmt: skip
+        with pytest.raises(ValueError):
+            gb.parse_step(refused)
+    assert gb.cache_env()["PYTHONDONTWRITEBYTECODE"] == "1"
+
+
 def test_a_target_image_tag_never_becomes_a_log_directory(gb: ModuleType) -> None:
     """target:<svc>:<stage>:poring-lab/<x>:local put a `/` into the log name and the step crashed
     before docker ran (2026-10-03)."""

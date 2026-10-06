@@ -15,10 +15,16 @@ files), never one file per frame on the shared disk. So:
 - labels come from qa_export's Labeler (the same as /qa and label_iou: the backend's camera, the
   packet->frame offset, GM-command windows skipped). Frames on any map other than the session's
   scene maps (prt_fild08, prt_church) are skipped (p3-outdoor-b's stray minutes in prontera);
-- frames are written as JPEG q95 + YOLO txt + json into ~512 MB tar shards under
-  ``<out>/<cache_id>/``. That is a dot-directory on the NAS root: dataset_ship's
-  sessions/status/prune skip it by design. Each shard is written as ``.part``, renamed, then
-  re-hashed from the NAS (read back);
+- frames are written as PNG (lossless, the default since 2026-10-06; ``--image jpeg`` gives v0's
+  JPEG q95) + YOLO txt + json into ~512 MB tar shards under ``<out>/<cache_id>/``. That is a
+  dot-directory on the NAS root: dataset_ship's sessions/status/prune skip it by design. Each shard
+  is written as ``.part``, renamed, then re-hashed from the NAS (read back). Each session closes
+  its own shards, so a session is either complete or absent;
+- RESUMABLE (Batt, 2026-10-06: daytime caches pause when the IO guard trips, then resume):
+  ``progress.json`` is rewritten after every finished session (its arguments, sessions and shard
+  hashes). ``--resume`` refuses different arguments, checks every recorded shard's size on the
+  NAS, deletes the interrupted session's leftovers (``.part`` and unrecorded shards), and goes on
+  with the next session. A SIGINT (the guard's) just stops; nothing recorded is touched;
 - the split is BY SESSION (adjacent frames leak). The gold hand-checked session goes to ``test``
   only.
 
@@ -91,10 +97,11 @@ def jpeg(img_bgr: np.ndarray, quality: int) -> bytes:
 class ShardSink:
     """Rotating tar shards, each written as .part, renamed, and re-hashed from the NAS."""
 
-    def __init__(self, directory: Path, max_bytes: int) -> None:
+    def __init__(self, directory: Path, max_bytes: int, start: int = 0,
+                 done: dict[str, dict[str, Any]] | None = None) -> None:  # fmt: skip
         self.dir, self.max_bytes = directory, max_bytes
-        self.n, self.tar, self.path, self.size = 0, None, None, 0
-        self.done: dict[str, dict[str, Any]] = {}
+        self.n, self.tar, self.path, self.size = start, None, None, 0
+        self.done: dict[str, dict[str, Any]] = dict(done or {})
         self.members = 0
 
     def _open(self) -> None:
@@ -131,6 +138,39 @@ class ShardSink:
         self.tar, self.path = None, None
 
 
+RESUME_KEYS = ("labels", "k", "every", "every_png", "max_per_session", "shard_mb", "image",
+               "quality", "split")  # fmt: skip
+
+
+def write_json(directory: Path, name: str, doc: Any) -> None:
+    """Atomic (.part, rename) and read back."""
+    tmp = directory / f".{name}.part"
+    tmp.write_text(json.dumps(doc, indent=1) + "\n")
+    tmp.replace(directory / name)
+    json.loads((directory / name).read_text())
+
+
+def resume_state(directory: Path, args: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """(sessions done, shards done) of an interrupted build; refuses another build's arguments and
+    a recorded shard whose size differs on the NAS; removes the interrupted session's leftovers."""
+    prog_path = directory / "progress.json"
+    if not prog_path.exists():
+        raise SystemExit(f"{directory}: no progress.json to resume from")
+    prog = json.loads(prog_path.read_text())
+    diff = [k for k in RESUME_KEYS if prog["args"].get(k) != args.get(k)]
+    if diff:
+        raise SystemExit(f"--resume refused: arguments differ from the interrupted build: {diff}")
+    for name, info in prog["shards"].items():
+        size = (directory / name).stat().st_size if (directory / name).exists() else -1
+        if size != info["bytes"]:
+            raise SystemExit(f"--resume refused: {name} is {size} B on the NAS, {info['bytes']} "
+                             "recorded")  # fmt: skip
+    for leftover in sorted(directory.glob("shard-*.tar*")):
+        if leftover.name not in prog["shards"]:
+            leftover.unlink()  # the interrupted session's partial shards
+    return prog["sessions"], prog["shards"]
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     ap.add_argument("--train", nargs="*", default=[])
@@ -152,6 +192,11 @@ def main() -> int:
         help="png: lossless (Batt's decision for every cache after v0); jpeg: q95 (v0)",
     )
     ap.add_argument("--quality", type=int, default=95, help="jpeg only")
+    ap.add_argument(
+        "--resume",
+        action="store_true",
+        help="continue an interrupted build of the same --cache-id (same arguments)",
+    )
     a = ap.parse_args()
     split = {"train": a.train, "val": a.val, "test": a.test}
     seen = [s for ss in split.values() for s in ss]
@@ -163,14 +208,27 @@ def main() -> int:
         raise SystemExit(f"{GOLD} is the hand-checked gold set: test only")
     cache_id = a.cache_id or f"{a.labels}-{time.strftime('%Y%m%dT%H%M%S')}"
     directory = a.out / cache_id
-    if directory.exists():
-        raise SystemExit(f"{directory} exists: pick another --cache-id")
-    directory.mkdir(parents=True)
-    sink = ShardSink(directory, a.shard_mb << 20)
+    args = {"labels": a.labels, "k": a.k, "every": a.every, "every_png": a.every_png,
+            "max_per_session": a.max_per_session, "shard_mb": a.shard_mb, "image": a.image,
+            "quality": a.quality if a.image == "jpeg" else None, "split": split}  # fmt: skip
     sessions: dict[str, Any] = {}
+    shards: dict[str, Any] = {}
+    if a.resume:
+        if not a.cache_id:
+            raise SystemExit("--resume needs the --cache-id of the interrupted build")
+        sessions, shards = resume_state(directory, args)
+        print(json.dumps({"resume": cache_id, "sessions_done": list(sessions)}), flush=True)
+    elif directory.exists():
+        raise SystemExit(f"{directory} exists: pick another --cache-id (or --resume it)")
+    else:
+        directory.mkdir(parents=True)
+    start = 1 + max((int(n[6:12]) for n in shards), default=-1)
+    sink = ShardSink(directory, a.shard_mb << 20, start, shards)
     t0 = time.monotonic()
     for part, ids in split.items():
         for sid in ids:
+            if sid in sessions:
+                continue  # done before the interruption (its shards were checked)
             path = a.datasets / sid
             manifest = json.loads((path / "manifest.json").read_text())
             labeler = qa_export.Labeler(path, labels=a.labels,
@@ -203,7 +261,10 @@ def main() -> int:
                 row["boxes"] += len(boxes)
                 if a.max_per_session and row["kept"] >= a.max_per_session:
                     break
+            sink.close()  # a session owns its shards: complete, or absent after a resume
             sessions[sid] = row
+            write_json(directory, "progress.json",
+                       {"args": args, "sessions": sessions, "shards": sink.done})  # fmt: skip
             print(json.dumps({sid: row}), flush=True)
     sink.close()
     manifest = {
@@ -216,10 +277,7 @@ def main() -> int:
         "seconds": round(time.monotonic() - t0, 1),
     }  # fmt: skip
     for name, doc in (("manifest.json", manifest), ("split.json", split)):
-        tmp = directory / f".{name}.part"
-        tmp.write_text(json.dumps(doc, indent=1) + "\n")
-        tmp.replace(directory / name)
-        json.loads((directory / name).read_text())  # read back
+        write_json(directory, name, doc)
     print(json.dumps({"cache": str(directory), "frames": sum(r["kept"] for r in sessions.values()),
                       "shards": len(sink.done), "seconds": manifest["seconds"]}))  # fmt: skip
     return 0

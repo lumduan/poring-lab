@@ -54,6 +54,12 @@ On a breach:
                 the same with `-f compose.yaml -f compose.vision-dev.yaml`: the host's vision
                 source read-only, first on PYTHONPATH (training runs iterate without rebuilding the
                 ~5 GB torch image; the overlay adds nothing else, test_guards). ONLY `vision`.
+  cache[@<seconds>]=<args>
+                the HOST frame-cache builder, `nice -n 19 .venv/bin/python
+                scripts/build_frame_cache.py <args>` (it reads sessions from the NAS and writes tar
+                shards to it; nothing on the root disk), killed after <seconds> (default 7200).
+                Nothing else runs through it. A breach sends SIGINT: re-run with `--resume` later
+                (Batt, 2026-10-06: daytime caches pause on a trip and resume, never retry fast).
 
     python3 scripts/guarded_build.py build:desktop build:rathena pull:db up:180        # strict 10%
     python3 scripts/guarded_build.py --sustain 30 --spike 25 build:rathena             # tolerant
@@ -62,6 +68,8 @@ On a breach:
     python3 scripts/guarded_build.py 'run:vision@600=python scripts/check_gpu.py'  # GPU check
     python3 scripts/guarded_build.py --sustain 30 --spike 25 \
         'rundev:vision@3600=python -m poring_vision.train --cache /datasets/.framecache/ID --smoke'
+    python3 scripts/guarded_build.py --sustain 30 --spike 25 \
+        'cache@7200=--train S1 S2 --val S3 --test S4 --cache-id ID --labels v0 --resume'
 
 Logs go to $TMPDIR/poring-guarded-*.log. Exit 0 only if every step completed without a breach.
 """
@@ -180,6 +188,15 @@ def parse_step(step: str) -> Step:
         if name not in RUN_ALLOWED:
             raise ValueError(f"{step}: run: is allowed only for {', '.join(sorted(RUN_ALLOWED))}")
         return Step(kind, [name], float(secs or 600), argv)
+    if kind == "cache" or step.startswith("cache@") or step.startswith("cache="):
+        head, eq, command = step.partition("=")
+        _, _, secs = head.partition("@")
+        argv = shlex.split(command)
+        if head not in ("cache", f"cache@{secs}") or not eq or not argv:
+            raise ValueError(f"{step}: expected cache[@<seconds>]=<build_frame_cache args>")
+        if any(not a.startswith("-") and not CACHE_ARG.match(a) for a in argv):
+            raise ValueError(f"{step}: cache: takes build_frame_cache options and session ids")
+        return Step("cache", [], float(secs or 7200), argv)
     raise ValueError(f"unknown step {step}")
 
 
@@ -194,6 +211,24 @@ def run_cmd(step: Step) -> list[str]:
         "timeout", seconds, "docker", "compose", *files, "--profile", svc, "run", "--rm",
         "--no-deps", svc, *step.command,
     ]  # fmt: skip
+
+
+CACHE_ARG = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")  # session ids, ids, numbers, paths
+CACHE_PY = REPO / ".venv" / "bin" / "python"
+
+
+def cache_cmd(step: Step) -> list[str]:
+    """The host frame-cache builder, niced; never a shell, never another script (cache: step)."""
+    return [
+        "timeout", str(int(step.seconds or 7200)), "nice", "-n", "19", str(CACHE_PY),
+        "scripts/build_frame_cache.py", *step.command,
+    ]  # fmt: skip
+
+
+def cache_env() -> dict[str, str]:
+    """Rule 7: no bytecode, no temp files on the root disk."""
+    return {**os.environ, "PYTHONDONTWRITEBYTECODE": "1",
+            "TMPDIR": os.environ.get("TMPDIR", "/dev/shm/poring-lab-tmp")}  # fmt: skip
 
 
 def log_path(label: str) -> Path:
@@ -559,6 +594,10 @@ def main() -> int:
         elif step.kind in ("run", "rundev"):
             ok = run_process(step.label, run_cmd(step), guard)
             tail = log_path(step.label).read_text(errors="replace").splitlines()[-80:]
+            print("\n".join(f"  | {line}" for line in tail), flush=True)
+        elif step.kind == "cache":
+            ok = run_process(step.label, cache_cmd(step), guard, env=cache_env())
+            tail = log_path(step.label).read_text(errors="replace").splitlines()[-20:]
             print("\n".join(f"  | {line}" for line in tail), flush=True)
         elif step.kind == "up":
             ok = run_up(step.seconds or 180, guard)
