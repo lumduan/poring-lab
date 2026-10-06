@@ -743,6 +743,70 @@ WALK (`facing_from = walk`; 31 frames had none). View agreement by heading rule:
     the exploratory overall-vector rows above point the same way.
   - To be pre-registered before it is scored.
 
+### 5d-iii. M4 step 2b: the per-species vertical term, the WALK-FRAME hypothesis (2026-10-06), written BEFORE it is scored
+
+**Where it comes from (stated, because it was not blind).**
+- Step 1's per-species split is the reason step 2 exists. The Poring is observed ~10 % shorter
+  than predicted and the Lunatic ~12 % taller. The split is 1.245–1.256, and it is
+  k-independent: both species share k.
+- While looking at the sprite FILES after step 1, a lead appeared. It was parked, unscored, on
+  2026-10-06:
+  - the Poring's WALK frames are shorter than its idle frames (median 31 vs 36.5 native px,
+    ratio 0.85);
+  - the Lunatic's WALK frames are taller (29 vs 26, ratio 1.12).
+- The signs match both observed errors, and the magnitudes are close. The thresholds below are
+  fixed now, before any frame is re-scored with it.
+- This is §5c's "the frame/phase the client actually draws" candidate. The other two (the
+  direction mapping, a vertical offset) are 2a's and later ones.
+
+**Hypothesis W.** For frames the Timeline calls STANDING (§5's clean standing frames), the client
+draws the monster's WALK action frames (same view), not its IDLE action frames.
+- The predictor (`predict_sprite`) therefore uses the wrong action's envelope.
+- No mechanism is assumed here (e.g. the client keeps the walk loop between short random walks,
+  or the action index is off by one block). If W holds, a follow-up finds the mechanism.
+
+**Measurement** (CPU, nice 19; the three §5b recordings; the FROZEN step-1 rule
+`--measure reconstruct`; the FROZEN current facing mapping; `--every 5` as in §5d):
+- For each clean standing frame:
+  - compute the masked grey NCC (label_check's) of the rendered sprite against the crop;
+  - take the best over BOTH actions (idle, walk) × all 4 views × each action's frames × an anchor
+    shift of ±2 px, at the predicted anchor and scale.
+- Every view is tried, so 2a's open outdoor facing error cannot decide the action.
+- A frame is ACTION-IDENTIFIABLE only if:
+  - its best NCC is ≥ 0.30;
+  - and the best frame of that action beats the best frame of the other action by ≥ 0.05.
+- Its drawn action `a*` is that action.
+- The height check:
+  - re-run `m4_validate`'s per-species height ratio (observed/predicted, outdoor centre, clean
+    frames) with the WALK envelope in place of the idle envelope;
+  - report the Lunatic/Poring split and both ratios at nostalro's k (k itself is NOT judged
+    here, §5b order).
+
+**Decision on the ODD spawns.** Adopt W only if ALL hold:
+1. on ODD, `a* = walk` in ≥ 60 % of action-identifiable frames, for EACH species separately (pooled
+   over scenes; per scene reported);
+2. with the walk envelope, the split's distance to 1 shrinks by ≥ 50 % (from ~0.25 to ≤ 0.125);
+3. neither species' outdoor height ratio moves AWAY from 1.
+
+Otherwise keep the idle envelope, and report the shares and ratios.
+
+**Then:**
+- freeze, and score the EVEN spawns ONCE;
+- W is CONFIRMED if, on EVEN, conditions 1 and 2 hold again;
+- report odd and even side by side.
+- Unchanged:
+  - §5's thresholds (IoU, edges, top vs bottom, indoor vs outdoor) are reported again with the
+    frozen choice and are NOT relaxed;
+  - the step-1 exclusions stay as they were (the "split spawn" stays in, as in step 1);
+  - one variable at a time: no facing or k change in this step.
+
+**If W is adopted:**
+- the mechanism (when the client draws walk frames) is the next pre-registration;
+- M5's labels use the drawn action only after it is confirmed.
+
+**If it is not adopted:** the next candidate is a per-species vertical OFFSET read from the ACT
+(the layer's y and the anchor), pre-registered the same way.
+
 ## 6. M5–M7: using the rule
 
 **M5, labels v1.** Every auto-label gets:
