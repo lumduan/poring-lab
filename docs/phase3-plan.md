@@ -807,6 +807,33 @@ Otherwise keep the idle envelope, and report the shares and ratios.
 **If it is not adopted:** the next candidate is a per-species vertical OFFSET read from the ACT
 (the layer's y and the anchor), pre-registered the same way.
 
+**Decided on the ODD spawns (2026-10-06 21:50), FROZEN: W NOT ADOPTED; the idle envelope is kept.**
+- 1,327 rows, 1,150 clean. The run is aligned with step 1: its idle ratios reproduce step 1's ODD
+  `reconstruct` values exactly (Poring 0.897, Lunatic 1.126, split 1.255).
+- All three conditions fail:
+
+| ODD | Poring | Lunatic | needed |
+|---|---|---|---|
+| 1. `a* = walk`, share of action-identifiable frames | 0.319 (n 518; outdoor 0.508, indoor 0.128) | 0.168 (n 125) | ≥ 0.60 each: **FAIL** |
+| height ratio, outdoor centre: idle → walk envelope | 0.897 → 0.849 (n 179) | 1.126 → 0.701 (n 113) | 3. neither away from 1: **FAIL** (Lunatic 0.13 → 0.30) |
+| split Lunatic/Poring | 1.255 → 0.825 | | 2. distance −50 %: **FAIL** (0.255 → 0.175, −31 %) |
+
+- The client draws the IDLE action for standing Lunatics, clearly (83 % of identifiable frames).
+  Indoor Porings too (87 %).
+- Outdoor Porings split about evenly. The Poring's idle and walk loops are both bounces, close in
+  shape, so that half-and-half says more about how separable the two actions are than about which
+  one is drawn.
+- The walk ENVELOPE (the union of all walk frames) is much taller than any single walk frame. So
+  using it overshoots the Lunatic (0.70) rather than explaining it. The per-species vertical term
+  is NOT the action.
+- Scripts: `/dev/shm/poring-lab-tmp/m4-step2b/walk_score.py`, `walk_eval.py` (scratch); rows in
+  `walk-odd.jsonl`.
+- **Then (Batt, 2026-10-06: ODD → freeze → EVEN once):** the EVEN half is scored ONCE with the
+  frozen choice (idle kept), with the same measurement. It is reported as the replication of the
+  not-walk finding: W can only be confirmed on EVEN if it had been adopted on ODD.
+- The next candidate stays as pre-registered: a per-species vertical OFFSET from the ACT (the
+  layer's y and the anchor), written before it is scored.
+
 ## 6. M5–M7: using the rule
 
 **M5, labels v1.** Every auto-label gets:
