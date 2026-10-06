@@ -7,8 +7,8 @@ verdict_date: 2026-10-04
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: "2026-10-05: M1 COMPLETE (MIXCRYPT study decoder, host-local); E2 alarm re-test PASSED (the red box appeared by 11:41:50 and cleared ON ITS OWN, no refresh, on Batt's screen; the stale-status guard and auto-reconnect stay). B6 hand-check DONE 13:38 (gold set pinned; v0 monster P 0.644 / R 0.580). Thai-data experiment run: Thai GRF in front crashes the 2021 exe; Thai last works; all 12 KB species' sprites are byte-identical to kRO, so the M4 mismatches are not the art. M4 RE-RUN 2026-10-05 21:45: NOT PASSED (§5b results: k height 0.1237 within neither prior, k width 0.1421 = korangar; per-species vertical miss Poring 0.85 / Lunatic 1.08; perspective tests pass). No v1. Next: find the vertical term (crops), indoor camera re-fit; Batt decides."
-last_reviewed: 2026-10-05
+next_action: "2026-10-06: M4 step 1 (§5c): measurement `reconstruct` chosen on the ODD spawns and frozen (9e5cf96); the EVEN half is NOT PASSED (k 0.1290 within neither prior; IoU/edges fail; outdoor top/bottom pass for both species; indoor/outdoor 0.943 fail; A/A 8/9). The per-species vertical split (Poring ~0.90, Lunatic ~1.12) does not move with the measurement rule, so it is not a measurement artefact. Next: step 2, the per-species vertical term, pre-registered first; then k; then the indoor camera re-fit. 054429 = domain-shift test set; caches lossless PNG. No v1."
+last_reviewed: 2026-10-06
 ---
 
 # Phase 3: perception. Compute what is deterministic, learn only the rest
@@ -106,7 +106,7 @@ flowchart TD
 | **M1** sprite catalog | ✅ COMPLETE 2026-10-05 (study decoder; ~~PARTIAL 2026-10-04~~) | SPR/ACT parsers ported from nostalro (`sprites.py`), `scripts/sprite_catalog.py` → `data/kb/sprite_catalog.json`. **ACTs only:** every monster SPR in the Thai `data.grf` is **MIXCRYPT** (refused, the C8 stop). The ACT 2.5 species (Poring, Drops, Lunatic) have quad sizes (Poring idle 37×36 native); the ACT 2.4 ones have frames and delays only ➡️ **2026-10-05: COMPLETE (study decoder, Batt's option (a)).** All 12 species: ACT + SPR 2.1 decoded, OPAQUE extents per action × direction × frame (`data/kb/sprite_catalog.json`, local). Verified three ways: every decoded entry inflates to the table's size with the right magic; the SPRs parse; 2,336 + 1,572 + 2,336 ACT 2.5 layer sizes equal the SPR image sizes (0 mismatches). The decoder is host-local, never committed (THIRD_PARTY.md, korangar row) | **Batt:** (a) a MIXCRYPT decoder from the public spec, (b) another GRF (the lab's kRO one is on Windows only), or (c) quad boxes only |
 | **M2** render rule | ✅ BUILT 2026-10-04 | `render.py` `predict_sprite`: f/z × k billboard, the ACT quad/opaque boxes, direction, the frame by time or distance. `box_kind` quad (ACT 2.5) or opaque (SPR); it raises rather than guess when sizes are missing | opaque boxes wait for M1's SPR pixels |
 | **M3** packet states | ✅ BUILT + LIVE 2026-10-04 | `poring_packets` decodes the ZC_NOTIFY_ACT family (0x008A/0x02E1/0x08C8) and ZC_CHANGE_DIRECTION (0x009C); `world.py` keeps the vanish reason (died → `dying`), swings and flinches; `Timeline.state(gid, t)` = idle/walk/**attacking**/hurt/dying/sit + facing. The value is `attacking`, not `attack`: the locale guard (ADR-0012) refuses the bare word. The sniffer was rebuilt and recreated at 21:09 (live). `DEFAULT_DIE_MS` 2000 is a placeholder until M1 gives per-class die durations. ➡️ **All 20 NAS sessions were re-decoded the same night** (`scripts/replay_states.py`: the banked captures replayed in the sniffer, windowed and pseudonymised like the recorder) into a verified sidecar `packets.states.jsonl.gz` (0 original entities missing; 251 act events). **Real-data check:** a Poring's swing carries src_speed 672 and a Poring hit by the GM dmotion 480 -- mob_db's AttackMotion/DamageMotion exactly | the client-side attack facing is an assumption that M4 checks |
-| **M4** prove it | 🟥 RECORDED, NOT PASSED 2026-10-05 00:03 ➡️ **RE-RUN 2026-10-05 21:45 (§5b): NOT PASSED** -- perspective right, a per-species vertical term missing | GM spawns near/far, indoor/outdoor, judged against pre-registered thresholds (§5). ~~BLOCKED 22:00 (to-console)~~ ➡️ both causes were lab-side and fixed (§ bottlenecks). **The session ran without Batt** (`20261004T233309-console-p3-m4`, 56,060 frames, 30/30 spawns, 0 GM failures; shipped + `dataset_check`). `m4_validate`: 1,893 standing frames, all QUAD boxes (SPR MIXCRYPT), so IoU/edges and k are NOT COMPARABLE; outdoor top third NOT EVALUABLE (`@monster` spawns around the GM: no top-third spawn); indoor top/bottom 1.395 and indoor/outdoor 0.878: FAIL. **The A/A disagrees by 5.7 %, more than the 3 % tolerance**, so the results section (§5) explains the failures: species mix, occlusion, a merged component. Thresholds unchanged | ~~Batt: MIXCRYPT a/b/c~~ ➡️ decided (a), study only, 2026-10-05: opaque boxes exist (M1). Re-scoring THIS recording needs the Thai-vs-kRO sprite check first (the Thai-data experiment, 3d) ➡️ **done 2026-10-05: the 12 KB species' SPR+ACT are byte-identical to kRO, so the opaque boxes from the Thai decode ARE the kRO client's sprites**; a fresh session with per-species groups, far spawns and an occluder-free indoor scene |
+| **M4** prove it | 🟥 RECORDED, NOT PASSED 2026-10-05 00:03 ➡️ **RE-RUN 2026-10-05 21:45 (§5b): NOT PASSED** -- perspective right, a per-species vertical term missing ➡️ **STEP 1 (§5c, 2026-10-06): measurement `reconstruct` chosen on the odd spawns, frozen; EVEN half NOT PASSED. The per-species term is not the measurement** | GM spawns near/far, indoor/outdoor, judged against pre-registered thresholds (§5). ~~BLOCKED 22:00 (to-console)~~ ➡️ both causes were lab-side and fixed (§ bottlenecks). **The session ran without Batt** (`20261004T233309-console-p3-m4`, 56,060 frames, 30/30 spawns, 0 GM failures; shipped + `dataset_check`). `m4_validate`: 1,893 standing frames, all QUAD boxes (SPR MIXCRYPT), so IoU/edges and k are NOT COMPARABLE; outdoor top third NOT EVALUABLE (`@monster` spawns around the GM: no top-third spawn); indoor top/bottom 1.395 and indoor/outdoor 0.878: FAIL. **The A/A disagrees by 5.7 %, more than the 3 % tolerance**, so the results section (§5) explains the failures: species mix, occlusion, a merged component. Thresholds unchanged | ~~Batt: MIXCRYPT a/b/c~~ ➡️ decided (a), study only, 2026-10-05: opaque boxes exist (M1). Re-scoring THIS recording needs the Thai-vs-kRO sprite check first (the Thai-data experiment, 3d) ➡️ **done 2026-10-05: the 12 KB species' SPR+ACT are byte-identical to kRO, so the opaque boxes from the Thai decode ARE the kRO client's sprites**; a fresh session with per-species groups, far spawns and an occluder-free indoor scene |
 | **M5** labels v1 | ⬜ BLOCKED | predicted boxes + state + facing, and the automatic label check | M0 + M4 passed ➡️ M4 did not pass (2026-10-05) |
 | **M6** synthetic | ⬜ BLOCKED | sprites rendered with the game's geometry onto real backgrounds, then a real H.264 encode | M4 passed |
 | **M7** collection | 🟡 FIRST CROWD BLOCK 2026-10-05 | GM sessions only for what math cannot make. ➡️ In the M4 room's spare time: `20261005T000655-console-p3-m7-crowd` (18,703 frames; outdoor + indoor, 8 × `@monster <species> 8`, Poring + Lunatic, 0 GM failures): occlusion/crowd frames. M4's 30 `@killmonster2` kills are also 30 dying-animation windows | M5 (coverage tracking) |
@@ -496,7 +496,9 @@ Anything else is a FINDING: name the missing term; never tune.
   - Poring: the observed top is 5.0 px lower outdoors and 10.1 px lower indoors.
   - Lunatic: the observed top is 2.3 px higher.
 - **Two different terms, seen on crops** (`/dev/shm/poring-lab-tmp/m4-rerun2/crops/`, local):
-  1. **Poring: a MEASUREMENT artefact.** The predicted box includes the Poring's thin tuft on top,
+  1. **Poring: a MEASUREMENT artefact.** ➡️ **WITHDRAWN as the main cause on 2026-10-06 (§5c,
+     step 1):** keeping thin parts moved the top by ~1 px, and the per-species split did not move.
+     The predicted box includes the Poring's thin tuft on top,
      which the client draws. The observed box stops below it: the 1-px morphological opening
      deletes 1-2 px wide protrusions. Its idle frames are 33-39 native px tall; the observed median
      is 33.3, near the shortest frame, and p10 30.3 is below every frame.
@@ -547,6 +549,65 @@ the three §5b recordings.
   - The even half is scored ONCE, with this rule only, after this commit:
     `m4_validate.py <the three §5b sessions> --opaque --rerun --spawns even --measure reconstruct`
     → `data/bench/m4/step1-even-rec.{json,rows.jsonl}`.
+
+**Step 1 results (2026-10-06 09:40). Verdict, from the EVEN half: NOT PASSED.** The thresholds are
+§5's, unchanged. "Evaluable" means ≥ 5 spawns and ≥ 20 frames.
+
+| Check (pre-registered) | ODD, `open` | ODD, `reconstruct` (chosen) | EVEN, `reconstruct` (verdict) |
+|---|---|---|---|
+| frames (clean) | 1,163 | 1,150 | 1,564 |
+| k, ONE scalar (height) | 0.1250 (neither) | 0.1307 (nostalro -1.98 %: pass) | **0.1290: within neither** (nostalro -3.2 %, korangar -7.8 %). FAIL |
+| k from widths (reported) | 0.1410 | 0.1457 | 0.1471 (korangar +5.1 %) |
+| IoU median ≥ 0.85, p10 ≥ 0.70 | fail everywhere | fail everywhere | **FAIL everywhere**; best outdoor/centre/poring 0.797 / 0.716 |
+| edges median ≤ 2, p95 ≤ 4 px | fail everywhere | fail everywhere | **FAIL everywhere**; closest outdoor/bottom/lunatic 1.92 / 4.36 |
+| top vs bottom, outdoor Poring | 1.0094 pass | 0.9967 pass | 1.0141 **PASS** |
+| top vs bottom, outdoor Lunatic | 1.0490 fail | 1.0434 fail | 1.0044 **PASS** |
+| top vs bottom, indoor Poring | 1.0204 pass | 1.0015 pass | 0.4506 **FAIL** (one split spawn, below) |
+| indoor vs outdoor, Poring | 0.965 fail | 0.943 fail | 0.9433 **FAIL** |
+| A/A of the frozen rule (odd vs even, 3 %) | | | **8 of 9 pass**; fails indoor/top/poring (the split spawn, in BOTH halves) |
+| evaluable conditions | 2 of 9 | 2 of 9 | 4 of 9 |
+
+- **Exclusions:** odd `open` ui 139, roi_edge 23, merged 2; odd `reconstruct` ui 145, roi_edge
+  31, merged 1; even `reconstruct` ui 198, roi_edge 85, merged 4.
+- **Per-species height ratio (observed/predicted, outdoor centre):**
+  - Poring 0.869 → 0.896 (odd) and 0.901 (even);
+  - Lunatic 1.082 → 1.125 (odd) and 1.126 (even).
+  - The Lunatic/Poring split is **1.245 with `open` and 1.250-1.256 with `reconstruct`**: the
+    measurement rule does not move it.
+
+**What step 1 settled:**
+1. **The per-species vertical term is NOT a measurement artefact.**
+   - `reconstruct` moved the Poring's top by about 1 px only: outdoor median offset +4.2 → +3.1
+     (odd), +4.3 (even).
+   - The idle envelope explains ~1 px of the rest: the Poring has 4 idle frames, whose tops lie
+     within 0.75 native px of the envelope top at the median.
+   - At either prior k, the Lunatic is observed TALLER than every one of its 12 idle frames, in
+     every view:
+     - back views, ears up: 26-27 px;
+     - side/front views: 22-26 px.
+   - The 2026-10-05 "tuft" explanation (§5b) is therefore withdrawn as the main cause.
+2. **The sprite files are not the cause.** The client's `data.ini` reads `rdata.grf` first, then
+   `data.grf`. `rdata.grf` holds none of these sprites (thai-data-experiment §4), so the client
+   draws the bytes the catalog decodes.
+3. **A new measurement failure, not excluded post hoc: the "split spawn".**
+   - It hit prt_church cells with y = 126: odd (109,126) gave 0.30, even (112,126) gave 0.32.
+   - The Poring stands in front of the organ. Its pale body over the white keys differs from the
+     background by less than 24 levels, so the mask splits along the keys. Only the part below
+     them stays connected to the anchor's column.
+   - The pre-registered exclusions do not cover this, so it stays in the data. A future
+     pre-registration can exclude cells whose background has a band within the threshold of the
+     sprite's colours, decided before the data is seen.
+4. **k is not judged here.** By §5b's order it waits for the per-species term. The odd half's
+   pass (−1.98 %) did not replicate on the even half (−3.2 %).
+
+**Next, per Batt's order: step 2, the per-species vertical term.**
+- The observed boxes match at the bottom (≤ 1.5 px) and differ at the top in opposite directions:
+  - Poring about 10 % shorter;
+  - Lunatic about 12 % taller.
+  - Both figures are at k = nostalro. At korangar's k they become 14 % and 7 %.
+- It is pre-registered like step 1 before any re-score. The candidates come from the crops and
+  the format, not a fit: the frame/phase the client actually draws, the direction mapping, and a
+  vertical offset of the drawn sprite.
 
 ## 6. M5–M7: using the rule
 
