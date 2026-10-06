@@ -537,6 +537,16 @@ the three §5b recordings.
   - Otherwise keep `open` and report it.
 - **Then:** freeze the chosen rule (the commit records it), and score the EVEN spawns once with
   it, with every §5b check. Report odd and even side by side. The verdict is the even half's.
+- **Decided on the ODD spawns (2026-10-06 09:3x), FROZEN: `--measure reconstruct`.** Both
+  conditions hold:
+  - (a) roi_edge + merged_area + ui exclusions: `open` 23 + 2 + 139 = 164, `reconstruct`
+    31 + 1 + 145 = 177, i.e. +7.9 % (limit +20 %);
+  - (b) Poring median top-edge offset, clean frames: `open` +6.30 px (n 830), `reconstruct`
+    +5.50 px (n 823), closer to 0.
+  - Outputs: `data/bench/m4/step1-odd-{open,rec}.{json,rows.jsonl}` (local, not committed).
+  - The even half is scored ONCE, with this rule only, after this commit:
+    `m4_validate.py <the three §5b sessions> --opaque --rerun --spawns even --measure reconstruct`
+    → `data/bench/m4/step1-even-rec.{json,rows.jsonl}`.
 
 ## 6. M5–M7: using the rule
 
