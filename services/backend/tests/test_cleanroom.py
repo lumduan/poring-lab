@@ -152,7 +152,38 @@ def test_no_heartbeat_without_a_watchdog_while_a_room_runs(cr: ModuleType) -> No
     assert cr.cmd_heartbeat(False) == 2
     assert cr.cmd_heartbeat(True) == 0
     cr.save_status(phase="ended")
-    assert cr.cmd_heartbeat(False) == 0  # no room: nothing to guard
+    assert cr.cmd_heartbeat(False) == 3  # no room: the loop stops (it ran 11 h after an end)
+
+
+def test_an_ending_room_alarms_only_if_its_end_failed(cr: ModuleType) -> None:
+    """2026-10-05 20:46:48: `end`'s to-rdp flipped the lock to rdp/steady, the watchdog exited
+    ("done"), and the guard saw "room active + watchdog down" until the room state was removed."""
+    assert cr.guard_alarm(cr.ENDING, watchdog_up=False, rdp_steady=True) is False  # the race
+    assert cr.guard_alarm(cr.ENDING, watchdog_up=False, rdp_steady=False) is True  # end failed
+    assert cr.guard_alarm(cr.ENDING, watchdog_up=True, rdp_steady=False) is False
+    assert cr.guard_alarm("checks", watchdog_up=False, rdp_steady=True) is True  # unchanged
+    cr.save_status(phase=cr.ENDING)
+    assert cr.cmd_heartbeat(False) == 3
+
+
+def test_end_marks_the_room_ending_before_to_rdp(
+    cr: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: list[object] = []
+
+    def fake_cb(*args: str, timeout: float = 0) -> object:
+        seen.append((args[0], cr.load_status().get("phase")))
+        return type("R", (), {"returncode": 0, "stdout": ""})()
+
+    cr.save_status(phase="checks")
+    monkeypatch.setattr(cr, "cb", fake_cb)
+    monkeypatch.setattr(cr, "lock_state", lambda: ("console", "steady", "cleanroom"))
+    monkeypatch.setattr(cr, "exit_checks", lambda: {"ok": True})
+    monkeypatch.setattr(cr, "stop_watchdog", lambda: None)
+    monkeypatch.setattr(cr, "stop_guard", lambda: None)
+    assert cr.cmd_end() == 0
+    assert seen == [("hold", cr.ENDING), ("to-rdp", cr.ENDING)]
+    assert cr.load_status()["phase"] == "ended"
 
 
 def test_rearm_restarts_a_stopped_watchdog_for_the_time_left(

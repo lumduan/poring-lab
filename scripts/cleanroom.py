@@ -401,13 +401,21 @@ def stop_watchdog() -> None:
 GUARD_UNIT = "poring-cleanroom-guard"
 
 
-def guard_alarm(phase: object, watchdog_up: bool) -> bool:
-    """The alarm condition: a room is active and its watchdog unit is not running."""
+def guard_alarm(phase: object, watchdog_up: bool, rdp_steady: bool = False) -> bool:
+    """The alarm condition: a room is active and its watchdog unit is not running. A room that is
+    ENDING alarms only if its watchdog is down AND the lock is not back on rdp/steady: during a
+    normal `end`, to-rdp flips the lock first and the watchdog exits on it ("done"), before the
+    room state is removed (2026-10-05 20:46:48 and 20:48:03: two false WATCHDOG DOWN alarms, whose
+    writes failed only because to-rdp held the lock)."""
+    if phase == ENDING:
+        return not watchdog_up and not rdp_steady
     return phase in ROOM_ACTIVE and not watchdog_up
 
 
 def cmd_guard() -> int:
-    want = guard_alarm(load_status().get("phase"), watchdog_active())
+    backend, phase, _ = lock_state()
+    want = guard_alarm(load_status().get("phase"), watchdog_active(),
+                       rdp_steady=(backend, phase) == ("rdp", "steady"))  # fmt: skip
     have = (REPO / "state" / "cleanroom-alarm").exists()
     if want and not have:
         say("GUARD: a room is active and its watchdog is DOWN -> alarm")
@@ -645,6 +653,7 @@ def v3_stats() -> Any:
 
 
 def cmd_end() -> int:
+    save_status(phase=ENDING)  # first: the guard and the heartbeat stop treating it as active
     backend, phase, reason = lock_state()
     if backend == "console" and phase == "steady":
         cb("hold", timeout=180)
@@ -684,6 +693,7 @@ def exit_checks() -> dict[str, bool]:
 
 
 ROOM_ACTIVE = ("entered", "variant", "streaming", "checks")
+ENDING = "ending"  # cmd_end is running: hold + to-rdp, then "ended"
 
 
 def cmd_heartbeat(watchdog_up: bool) -> int:
@@ -694,6 +704,8 @@ def cmd_heartbeat(watchdog_up: bool) -> int:
     if st.get("phase") in ROOM_ACTIVE and not watchdog_up:
         say("WATCHDOG DOWN while a room is active: heartbeat REFUSED -- run `cleanroom.py end`")
         return 2
+    if st.get("phase") not in ROOM_ACTIVE:
+        return 3  # no active room (ending/ended): a heartbeat loop stops here, quietly
     save_status(box_until_ts=st.get("box_until_ts", 0))
     return 0
 
