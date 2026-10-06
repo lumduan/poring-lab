@@ -714,6 +714,25 @@ WALK (`facing_from = walk`; 31 frames had none). View agreement by heading rule:
 **Then:** freeze, score the EVEN spawns once. It is CONFIRMED if the even view agreement is
 ≥ 0.80 and ≥ the current heading's + 10 points. Report both halves.
 
+**ODD result (2026-10-06 13:20): NOT ADOPTED. The candidate is IDENTICAL to the current heading.**
+- In all 755 walk-set facings, `straight_path` gives the same last step as the A* path:
+  - 706 walks used the straight path; 49 fell back to A*;
+  - 0 headings differ;
+  - every row's heading matched the Timeline's facing, 786 of 786.
+- The A* tie-break (lowest h first) already goes diagonal-first on open ground. So path
+  tie-breaking is NOT the outdoor facing error.
+- Agreement is unchanged: 0.550 (indoor 0.800, outdoor Poring 0.566, outdoor Lunatic 0.394).
+  There is nothing to confirm on the even half.
+- **The outdoor facing stays OPEN.**
+  - It is ~0.62 view agreement on the even half, against ~0.88 indoors.
+  - It moves the predicted box by ≤ 0.5 native px, so it does not hold M4's height test.
+  - It does matter for v1's facing labels and for the label check (a wrong view lowers the NCC).
+- Next candidates need a new hypothesis about the input, written before scoring:
+  - turns the sniffer does not decode;
+  - a client-side idle turn;
+  - the walk/step timing at arrival.
+- Script: `/dev/shm/poring-lab-tmp/m4-step2/heading_score.py` (scratch).
+
 ## 6. M5–M7: using the rule
 
 **M5, labels v1.** Every auto-label gets:
