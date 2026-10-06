@@ -86,8 +86,8 @@ play official Thai RO normally on the Dell):
 3. the sniffer attestation (`server=lab-rathena-th`).
 
 ➡️ **SUPERSEDED 2026-10-05 evening (Batt).** Layer 1 becomes an exe-scoped ALLOWLIST for BOTH lab
-clients: one Block rule per exe, for everything except 192.168.1.13 and loopback; 12 exes. The
-lines are prepared; they are applied from Batt's elevated console in the morning. It replaces the
+clients: one Block rule per exe, for everything except 192.168.1.13 and loopback; 12 exes.
+APPLIED 2026-10-06 from Batt's elevated console and read back (ADR-0016, layer 1). It replaces the
 IP-blocklist rule above. Layer 2 is now the durable `poring-lab watch` scheduled task (ADR-0013
 amendment), which replaced the shell-bound `thwatch`/`mainwatch` jobs.
 

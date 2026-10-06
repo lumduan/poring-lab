@@ -119,14 +119,19 @@ exe calling Gravity's `kro-assit.ragnarok.co.kr:3000` at character select (ADR-0
   - It never touches any other process. The community client is outside both folders.
 - **Why a task:** the first watchers were `Start-Job`s in the agent's shell, and they died when
   that window was closed (it happened at ~16:05).
-  - The task is triggered at logon and every 5 min, with "ignore new" if one is already running,
-    so a killed watcher comes back within 5 min.
+  - The task is triggered at logon and every 1 min, with "ignore new" if one is already running,
+    so a killed watcher comes back within a minute. (It was every 5 min until 2026-10-06; Batt
+    asked for 1 min or a truly hidden window. The 1-min trigger was applied from the agent's
+    shell, standard user. Proven 2026-10-06: watcher pid 19072 was stopped on purpose at
+    09:25:30, and a new pid 1872 logged `alive` at 09:26:20, KILLED 0.)
   - It has no time limit and restarts up to 3 times.
   - Proven 2026-10-05: the agent's shell was closed at 19:30:49, and the same pid kept logging.
 - **Read-only to the lab:** it reads nothing of ours and sends nothing. The morning check is
   `ro_agent.py watch-status`: the task state, the log tail and the KILLED count, as a screenshot.
 - **Visible:** Windows 11 hosts its console in Terminal despite `-WindowStyle Hidden`. A
   "C:\Windows\System32\Wi…" Terminal window appears in the taskbar group. Closing it stops the
-  watcher until the next 5-minute trigger.
+  watcher until the next 1-minute trigger (5-minute before 2026-10-06). A truly hidden window
+  would need a conhost/VBS wrapper, which is one more Windows-side piece; the shorter trigger
+  needed nothing new, so it was the one applied.
 - `-ExecutionPolicy Bypass` applies to that one process. The machine's policy (Restricted, all
   scopes Undefined) is not changed.

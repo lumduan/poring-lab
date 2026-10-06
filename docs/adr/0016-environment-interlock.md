@@ -260,7 +260,16 @@ They are listed with sha256 on 2026-10-05.
 - The group is `poring-lab lab-only`.
 - Batt runs three agreed lines in an elevated console: create, read back, then remove the old
   `PoringLab TH: block official RO (th exe only)` rule.
-- **Status:** prepared on 2026-10-05; applying it is parked to the next morning (Batt).
+- **Status: APPLIED 2026-10-06 ~08:45-08:48** from Batt's elevated console; the agent typed only
+  the three agreed lines:
+  - line 1 printed `created 12`; line 2 read back 12 rules: enabled, outbound, Block, the 4
+    ranges; line 3 printed `old rule left: 0`. Batt then closed the console.
+  - Read back again from the agent's NON-elevated shell: 12 rules, 12 distinct exact lab-exe
+    paths, ONE address set (the 4 ranges); no rule names the community client; the old th rule
+    is gone.
+  - Watched main-client login after it: the interlock green `lab-rathena` (aid 2000002), the
+    client's only TCP remote 192.168.1.13:5121, the watcher's KILLED count 0.
+  - (Prepared 2026-10-05; parked overnight by Batt.)
 - **Undo:** `Remove-NetFirewallRule -Group 'poring-lab lab-only'`.
 
 This differs from the Production-option template below: that template's IPv4 range also covered

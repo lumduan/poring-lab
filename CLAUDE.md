@@ -108,8 +108,9 @@ ports, quickstart) and `docs/adr/`.
      ADR-0006 entry, never code. The interlock itself adds no OS lock. Since 2026-10-05 (Batt) the
      lab clients get an EXE-SCOPED layer-1 allowlist: one Block rule per lab exe, for every remote
      address except 192.168.1.13 and loopback; never OS-wide, never the community client. It is
-     applied from Batt's elevated console (prepared, pending; ADR-0016). Layer 2 is the durable
-     `poring-lab watch` task (ADR-0013 amendment).
+     applied from Batt's elevated console (APPLIED 2026-10-06, read back; group
+     `poring-lab lab-only`, 12 rules; ADR-0016). Layer 2 is the durable `poring-lab watch` task
+     (ADR-0013 amendment; re-triggers every 1 min since 2026-10-06).
      ro_agent opens per-phase windows itself.
    - Concretely:
    - **Official servers and any other public server: forbidden** for every component, in every mode.
