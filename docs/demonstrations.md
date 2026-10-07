@@ -920,6 +920,58 @@ finding was fixed before this pre-registration:
 - fixes (trigger; correct / WRONG vs the packets);
 - declines by cause; route time.
 
+### 3.16 walk@9 — TUNING (indoor/outdoor × CLEAN/CROWD), then the HELD-OUT set once (pre-registered 2026-10-08 ~00:25, BEFORE any scored run; iteration 2 of Batt's at most 3)
+**The rule:** `scripts/walk9.py` at the commit of this pre-registration = **walk@8 (3.14) unchanged**
+plus four fixes. Each fix comes from walk@8's indoor-CLEAN failures (42 / 50).
+1. **Static green is not the marker.** Chevron pixels already green in the PARKED frame are
+   scenery. In walk@8, from (112,111), the same 43 px of scenery "confirmed" two targets, and the
+   clicks did not walk (3 routes).
+2. **The scene must SHIFT after a click.**
+   - The camera follows the character, so a walk changes most of the scene band (x 200–1080,
+     y 140–560).
+   - Measured: still scene 0.2–0.7 % changed; real walks ≥ 36.4 % (24 pilot clicks). The threshold
+     is **15 %**.
+   - No shift = doubt → a `/where` fix. If the fix shows we are still where the click started, that
+     target cell is blocked for the route and the route is re-planned around it. walk@8 had 9 clicks
+     that sent no move request at all.
+3. **An all-unconfirmed round asks `/where`.** Every candidate showed the walk cursor and none was
+   named. The unnamed-after-fix rule then applies. In walk@8, a lone unconfirmed goal declined one
+   cell short.
+4. **Animated scenery is out of the cursor mask.** There are two parked frames 0.25 s apart; pixels
+   that changed between them (summed |Δ| > 60) are ignored in |A − B|. In walk@8, the altar end read
+   UNKNOWN at every hover.
+- Everything else is walk@8's:
+  - plan once; only the click point probed; units never refuse a route;
+  - patience and substitutes only for units;
+  - where@2 at the route start and on doubt (with the `/ex` separator);
+  - the warp shape only for an intended portal click;
+  - the click time logged; the route preview on.
+
+**The design pilot** (`walk9-cal`, prt_church CLEAN, seed 14, NOT scored): **6 / 6 routes, 24 / 24
+clicks** verified by the packets.
+- Two fixes, both correct: one for a named neighbour, one for an unconfirmed round.
+- 0 attack / NPC requests.
+
+**TUNING runs**, each with its own bar:
+- **Conditions:** as 3.14 (CLEAN: `@killmonster2` before every route; CROWD: 4 Porings at every 5th
+  route's warp).
+- **FRESH seeds:** indoor clean **20261031**, indoor crowd **20261032**, outdoor clean **20261033**,
+  outdoor crowd **20261034**.
+- 56 routes each; the first 50 not interrupted are scored.
+
+**HELD-OUT runs**, ONCE, scored separately, never used to tune, **only if all 4 tuning runs PASS**:
+- guild (alberta_in) **20261035**; town (prontera) **20261036**; dungeon (iz_dun00) **20261037**;
+  portal (prt_fild08 → prontera) **20261038**.
+- All CLEAN, `@heal` after each warp. 56 each, the first 50 scored.
+
+**Verifiers and the bar:** exactly 3.14's.
+- ≥ **48 / 50** per run **AND** zero attack / NPC / pickup requests. Any one is a HARD FAIL.
+
+**Reported:**
+- clicks correct; dead clicks caught by the shift check (and confirmed by the fix);
+- static-green pixels excluded; fixes (trigger; correct / WRONG);
+- waits; substitutes (justified or not); declines by cause; route time.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
