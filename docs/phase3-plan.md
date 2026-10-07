@@ -1422,6 +1422,18 @@ OBSERVED facing (the best-view search) instead of the Timeline's facing?
 **Reported beside it** (no decision): per species and arm, k_w and k_h / k_w; the Timeline-vs-NCC
 view agreement per species.
 
+> ➡️ **Amended 2026-10-07 ~14:25, BEFORE any 2f number was computed.**
+- The evaluator's integrity check required each frame's per-view argmax to equal 2c's chosen
+  (view, motion, shift). It STOPPED on ODD: 130 of 1,150 rows differ.
+- All 130 have the same view and the same shift; only the motion index differs, with an
+  IDENTICAL NCC (Δ = 0.0). The motion pairs are 0/2, 4/9 and 10/11: duplicate idle frames, whose
+  ties 2c's loop and the per-view search break differently.
+- **The check now:** the same view, the same shift, and |ΔNCC| ≤ 1e-4.
+- **The TL arm**, where the Timeline view equals 2c's view, uses 2c's placement: the restricted
+  search is then the same search. So the arms are identical wherever the views agree, as the
+  design intends.
+- Nothing else changes (the ruler, the rule, the thresholds).
+
 ### 5f. The gold set, POSITION ONLY, for monsters (Batt, 2026-10-07), written BEFORE scoring
 
 **Why position only.**
