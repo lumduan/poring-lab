@@ -1667,11 +1667,12 @@ interrupted. Scored: the first 50.
 **The results:**
 - **End to end: 39 / 50** (needed 48) → **FAIL** (walk@8 42, walk@7 31, walk@6 23).
 - **SAFETY:** 0 `attack_request`, 0 `npc_contact`, 0 pickup.
-- **The belief fixes (where@2): 23 of 23 CORRECT, 0 WRONG** against the packets. Triggers:
-  unconfirmed 15, neighbour 3, all-unconfirmed round 3, no-shift 2.
+- **The belief fixes (where@2, the scored 50): 23 of 23 CORRECT, 0 WRONG** against the packets.
+  Triggers: unconfirmed 15, neighbour 3, all-unconfirmed round 3, no-shift 2.
 - **walk@9's own fixes worked:** dead clicks 9 → 3 (the static-green exclusion); 2 of them caught by
   the shift check and blocked after the fix confirmed them.
-- **Clicks:** 221 / 243 verified. **19 walked ONE CELL SHORT** (walk@8: 6); 3 sent no move request.
+- **Clicks (all 56 routes):** 221 / 243 verified. **19 walked ONE CELL SHORT** (walk@8: 6); 3 sent
+  no move request.
 - Waits 0 s; substitutes 0.
 
 **The 11 failures:**
@@ -1706,4 +1707,31 @@ iteration, and the client time went to walk@10. The chain's driver was stopped b
 
 **→ walk@10 (3.17):** click points from the picking model, with a pixel margin; one fix trusts
 several shifted clicks; 4 fixes per route.
+
+### walk@10 (3.17), indoor CLEAN, RDP: **FAIL, 42 / 50** — but **0 routes ended on a wrong cell**; every failure was a safe decline; SAFETY held; every fix correct (2026-10-08 01:50:46–02:30:43 ICT / 18:50:46–19:30:43 UTC)
+**Session:** `20261008T015047-demo-walk10-alone-clean-indoor` (seed 20261039); 56 routes, none
+interrupted. Scored: the first 50.
+
+**The results:**
+- **End to end: 42 / 50** (needed 48) → **FAIL** (walk@9 39, walk@8 42, walk@7 31, walk@6 23).
+- **SAFETY:** 0 `attack_request`, 0 `npc_contact`, 0 pickup.
+- **The picking fix worked:** clicks (all 56 routes) **225 / 227** verified, **0 walked one cell
+  off** (walk@9: 19). By tier: A named 200 / 201, A unnamed after a fix 10 / 11, **B named 15 / 15**. The 2 misses
+  sent no move request (dead clicks); both were caught by the shift check and blocked after the fix.
+- **Routes that ended on a wrong cell: 0** (walk@9: 8).
+- **Fixes (where@2, the scored 50): 16 / 16 correct.** Triggers: unconfirmed 9, all-unconfirmed round 5, no-shift 1,
+  neighbour 1. The disputed-cell rule blocked 1 cell; no goal was disputed.
+- Waits 0 s; substitutes 0.
+
+**The 8 failures (all declines; the rule never clicked a wrong cell):**
+
+| cause | n | what the logs show |
+|---|---|---|
+| `no_click_point` | 5 | the cursor read **UNKNOWN** at every pick-safe point: the altar end (103,71) and the south-east corner (111,127) |
+| `relocalise_limit` | 3 | a goal in the thin strip behind a kneeler row (tier B): the walk cursor showed, the marker could not be NAMED, and tier B never clicks unnamed. Each fix confirmed the belief, and the round repeated until the limit |
+
+**The cursor UNKNOWN reads, all walk@8–10 indoor logs:** 75 % of hovers at the altar end, 56 % on
+the east side, 13 % in the middle, 0 % on the west. Most east ones MATCH the shape (IoU ≥ 0.6) and
+fail the COLOUR check (≥ 85 % of overlap pixels within 40). `scripts/cursor_diag.py` (d2ed07a)
+saves what the classifier saw, hover-only, for the next design.
 
