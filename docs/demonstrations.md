@@ -1796,8 +1796,10 @@ interrupted. Scored: the first 50. Scored with the amended instrument (the serve
   attack), so the 4 are most likely the scorer's artefact, not misreads. They are reported, not
   hidden.
 - Failures: 3 `relocalise_limit` (the dead unnamed clicks, `no_move` fixes), 2 `no_click_point`
-  (cursor UNKNOWN at points where the marker DID name the cell (129–169 px): likely walk@9's
-  animated-pixel mask cutting the cursor over swaying grass; to verify).
+  (cursor UNKNOWN at points where the marker DID name the cell (129–169 px)). Outdoor UNKNOWN
+  hovers: walk@7 5.2 % (230), walk@10 9.5 % (200). That is consistent with walk@9's animated-pixel
+  mask cutting the cursor over swaying grass, but not proof (different seeds; walk@7 also had 11
+  such reads).
 
 ### 🔴 CORRECTION (2026-10-08 ~03:15): the walk SAFETY counts were BLIND to attack requests — the server's act packets show GM attacks in four scored walk runs
 - **What was wrong:** every walk score counted `attack_request` / `npc_contact` events in the
