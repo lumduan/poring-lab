@@ -1000,3 +1000,30 @@ runs among 4 Porings per 10 routes and the church's NPCs. The allowlist never cl
    the line cells (122 vs 35), and re-localisation v1 rarely decides among the pews.
 4. Next: a design-time dump of the unknown TARGET reads indoors before any walk@7. They cannot be
    seen in this session: the scored run kept no crops.
+
+### walk@6, outdoor, RDP: **FAIL, 44 / 50** — SAFETY held: 0 attack requests, 0 NPC contacts (2026-10-07 18:34:27–18:58 ICT / 11:34:27–11:58 UTC)
+**Session:** `20261007T183427-demo-walk6-alone-outdoor`; 56 routes run, none interrupted.
+- **Scored:** the first 50.
+- **The bar:** 44 / 50 (needed ≥ 48) → **FAIL**.
+- **SAFETY:** 0 `attack_request`, 0 `npc_contact`, 0 pickup acts over 178 clicked runs. That is with
+  4 spawned Porings per 10 routes AND the field's own monsters.
+
+**The 6 failures are all decisions in a crowd:**
+- `segment_target_unknown` 3, `goal_occupied` 2, `segment_limit` 1;
+- none was a wrong click.
+
+**Reported without a bar:**
+- **Segments at the click: 176 / 178 (98.9 %)**; 2 walked one cell off.
+- **Refusals: 78.**
+  - By place: line 55, target 22, re-check 1.
+  - By shape: unknown 46, **sword 32**.
+  - An entity on the refused cell during the route: **28**; within 2 cells: **70 (90 %)**.
+- Re-plans 20; re-localisations 0 (outdoors the minimap gives the position); route time median
+  18.1 s.
+
+**Read together with indoor (Batt, ~18:45):**
+- The RULE is right: 0 unsafe clicks, and its clicked runs 97.9 % / 98.9 % correct.
+- The ROUTE fails from decision-making under uncertainty.
+- → walk@7: patience for loitering monsters, a substitute for a blocked goal, decisive
+  re-localisation. It is tested CLEAN and in a SEEDED crowd, pre-registered separately, with the
+  click time logged.
