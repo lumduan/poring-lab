@@ -751,3 +751,34 @@ Event → fields (cs = our request, sc = the server):
 - So `nav.walk_to` stays UNVERIFIED as a concept (the pre-registered bar is per scene, both
   scenes).
 
+### Exploratory: click-and-hold walking (Batt, 2026-10-07 ~16:05; RDP, the GM; NOT a rule)
+- **Sessions:** `20261007T160543-demo-hold-walk`, `20261007T160937-demo-hold-cross`.
+- **Every hold went through one guard:** the release in `finally`, a 5 s cap, the client's title bar
+  checked each step; a mux refusal raises and so releases too.
+- **Mux tests:** a held LEFT button comes back up on interlock red, human takeover, mode HUMAN,
+  ReleaseAll and an agent disconnect (`test_mux.py`, `test_foreground.py`).
+  - The typing-only foreground gate still keeps held buttons, by the 2026-10-06 design. **Batt
+    16:15: keep it so.** The agent-side release stays mandatory for any hold.
+
+| question | what the packets show |
+|---|---|
+| does holding walk? | **Yes.** While held, the client sends a walk request every **~0.60–0.63 s (≈ 1.6 Hz)** to the cell under the cursor. The camera follows the character, so a fixed cursor keeps the target 3–4 cells ahead: 19 cells in 3.6 s (T1) |
+| does it steer? | **Yes.** The requested cells follow the cursor: east → north → west (T2) |
+| does release stop it? | **No.** Requests stop, but the last accepted walk completes: 6 cells after a 0.4 s hold (T3) |
+| hold, then the cursor onto a Poring | It keeps WALKING: requests to the cells under the cursor, no attack |
+| press ON a Poring and hold | An approach request, then attacks at 0.7 / 2.0 / 3.3 s, **continuing after the release** |
+| hold, then the cursor onto an NPC | It keeps walking; no dialog |
+| press ON the NPC | Its dialog opens (a shop: "select a deal type"); it was closed with its cancel button |
+
+**Reading** (Batt 16:15: any hold-based mode must budget the overshoot):
+- The danger of hold-to-walk is where the press STARTS, not what the cursor crosses: a press on
+  an entity attacks or talks.
+- A steering mode could be: press only on a probed plain walk cell; steer; release as soon as the
+  cursor shape is not the plain walk cursor, or when the remaining distance is within one request
+  interval of walking (~0.6 s, 3–4 cells). The character then finishes the last accepted walk.
+- **Compared with the 2–3-cell hop rule:**
+  - hold-to-walk is smoother, with fewer probes per distance;
+  - but its stop point is only as good as the overshoot budget, and every re-target is a server
+    walk toward a cell the cursor merely PASSES.
+- **Not adopted.** It needs its own pre-registered alone-test.
+
