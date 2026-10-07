@@ -460,6 +460,39 @@ too, the client draws a consistent marker and the rule clicks; only the packets 
 
 10 identical route declines in a row stop a run.
 
+> ➡️ **3.8 SUPERSEDED before scoring (Batt's refinement, ~15:55).** The blocklist run
+> (`20261007T154939-demo-walk5-alone-indoor`) was STOPPED after 14 routes and is NOT scored.
+> - Batt's refinement:
+>   - an ALLOWLIST: every cell on the straight line must show the plain WALK cursor, and the
+>     target the chevrons;
+>   - any other shape → no click (attack sword, talk bubble, no-entry, pickup hand, vending shop,
+>     unknown);
+>   - segments of 2–3 cells indoors and in crowded places, longer only in open areas when every
+>     cell passes;
+>   - the target re-checked right before the click;
+>   - templates per cursor shape on RDP and S2 separately;
+>   - tested with obstacles (GM-spawned monsters, an NPC, a vending shop if possible).
+> - It becomes **walk@6**, pre-registered when its shape calibration is complete.
+
+**walk@6 cursor-shape calibration, so far (RDP; scratch `walk5-cal/shapes-*`).**
+- **The method:** sweep-hover the cells around a known cell; the cursor sprite is |crop with the
+  cursor − crop with the cursor parked away|, minus the chevrons; then clustered by mask IoU.
+- **The shapes found:**
+  - WALK: the arrow, ANIMATED (a rotating arrow seen edge-on as a thin line, and a white
+    "card"); 281 of 294 outdoor hovers;
+  - ATTACK: a sword over Porings, also animated;
+  - TALK: a speech bubble over the static NPC (20 hovers);
+  - NO-ENTRY: the ring and slash.
+- **Not yet:**
+  - PICKUP: no item was hovered; it needs deliberate drops;
+  - VENDING SHOP: it needs a second lab character with a Merchant's Vending, which the one
+    client cannot provide now;
+  - **S2: nothing yet.**
+- **The allowlist makes the missing shapes safe:** only a positively matched WALK frame passes,
+  so anything uncalibrated is "unknown" → no click.
+- **Open design points:** the walk family's frames must be matched per frame (the animation);
+  and the parked-cursor difference costs ~0.2 s per probe.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
