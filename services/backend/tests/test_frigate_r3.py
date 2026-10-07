@@ -360,3 +360,74 @@ def test_r2_exempts_only_the_jobs_own_ollama_model(fr: ModuleType) -> None:
     plain = fr.PairedR3(short=False, fetch=fetch, now=0.0)
     plain.poll(1.0)
     assert plain.breach(1.0) is not None  # no exemption unless named
+
+
+# --- the frame-drop resume gate (Batt, 2026-10-07 ~15:40) ---------------------------------------
+def upd(i: int, skip: float = 0.0) -> dict[str, Any]:
+    return {"updated": i, "inference": 30.0, "detection_fps": 40.0,
+            "cameras": {"a": (5.0, skip), "b": (5.0, 0.0)}}  # fmt: skip
+
+
+def test_the_quiet_gate_needs_15_observed_minutes_without_any_skip(fr: ModuleType) -> None:
+    g = fr.QuietGate(15, now=0.0)
+    for k, t in enumerate(range(0, 900, 15)):
+        g.update(float(t), upd(k))
+    assert not g.ready(885.0)
+    g.update(900.0, upd(100))
+    assert g.ready(900.0)
+    g.update(905.0, upd(101, skip=1.5))  # a skip anywhere restarts the clock
+    assert not g.ready(905.0) and g.drops == 1
+    for k, t in enumerate(range(920, 1805, 15)):
+        g.update(float(t), upd(200 + k))
+    assert g.ready(1805.0)
+
+
+def test_unobserved_time_never_counts_as_quiet(fr: ModuleType) -> None:
+    g = fr.QuietGate(15, now=0.0)
+    g.update(10.0, upd(1))
+    g.update(400.0, None)  # Frigate silent for 390 s
+    g.update(410.0, upd(2))
+    for k, t in enumerate(range(420, 1300, 15)):
+        g.update(float(t), upd(3 + k))
+    assert not g.ready(1300.0)  # only 890 s observed since the gap
+    g.update(1325.0, upd(999))
+    assert g.ready(1325.0)
+
+
+def test_the_quiet_command_returns_0_when_quiet_and_2_on_timeout(fr: ModuleType) -> None:
+    clock = {"t": 0.0}
+
+    def tick() -> float:
+        clock["t"] += 15.0
+        return clock["t"]
+
+    k = {"i": 0}
+
+    def fetch(url: str) -> dict[str, Any]:
+        k["i"] += 1
+        return stats(k["i"], cams={"a": (5.0, 0.0)})
+
+    assert fr.quiet(15, 120, fetch=fetch, clock=tick, sleep=lambda s: None) == 0
+    clock["t"] = 0.0
+
+    def dropping(url: str) -> dict[str, Any]:
+        k["i"] += 1
+        return stats(k["i"], cams={"a": (5.0, 2.0)})
+
+    assert fr.quiet(15, 30, fetch=dropping, clock=tick, sleep=lambda s: None) == 2
+
+
+def test_a_frame_drop_abort_names_the_fleet_load(fr: ModuleType) -> None:
+    holder: dict[str, Any] = {}
+    sim = Sim(fr, lambda: holder["g"].phase, 28.0)
+    sim.cams = {"a": (5.0, 0.3)}
+    g = fr.PairedR3(short=False, fetch=sim, now=0.0)
+    holder["g"] = g
+    hit = None
+    while hit is None and sim.t < 120:
+        sim.t += 5
+        g.tick(sim.t)
+        g.poll(sim.t)
+        hit = g.breach(sim.t)
+    assert hit is not None and hit[2] is True
+    assert "fleet 30.0 detections/s" in hit[1] and "skipping now: a" in hit[1]

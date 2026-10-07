@@ -28,6 +28,9 @@ Standard library only: scripts/guarded_build.py imports this module and runs und
         the live stats, printing every breach (ICT + UTC). With --sigint, a breach SIGINTs our
         running vision container(s) (`docker kill --signal INT`; a SIGINT to the compose client
         alone does not stop the container). It was the interim guard before guarded_build had R3.
+    frigate_r3.py quiet [--minutes 15] [--max-wait-min 120]
+        The resume gate after a frame-drop (R3-HARD) abort: exits 0 once no camera has skipped a
+        frame for --minutes continuous minutes of observed updates, 2 on timeout (train-day.sh).
     frigate_r3.py check [--baseline PATH]
         The pre-start checks guarded_build runs for every vision step (R2, Frigate answering; no
         baseline file since the paired R3); prints the verdict. --baseline also demands that file
@@ -569,7 +572,8 @@ class PairedR3:
             if n >= DROP_MIN_UPDATES and now - since >= DROP_S:
                 fps, sk = self.last["cameras"][cam] if self.last else (0.0, 0.0)
                 return ("drops", f"camera {cam} dropping frames for {now - since:.0f} s "
-                        f"(skipped_fps {sk}, camera_fps {fps})", True)  # fmt: skip
+                        f"(skipped_fps {sk}, camera_fps {fps}); {fleet_load(self.last)}",
+                        True)  # fmt: skip
         if now - self.last_fresh > UNREACHABLE_S:
             quiet = now - self.last_fresh
             return ("frigate_unreachable", f"no fresh Frigate stats for {quiet:.0f} s", False)
@@ -591,6 +595,71 @@ class PairedR3:
             return ("inconclusive", f"only {n} kept pairs after {cycles} cycles: Frigate load too "
                     "variable to measure (fail closed)", False)  # fmt: skip
         return None
+
+
+def fleet_load(last: dict[str, Any] | None) -> str:
+    """Frigate's load at an abort (Batt, 2026-10-07: log each frame-drop abort with it)."""
+    if not last:
+        return "fleet load unknown (no Frigate update)"
+    skipping = sorted(c for c, (_, sk) in last["cameras"].items() if sk > 0)
+    return (f"fleet {last['detection_fps']:.1f} detections/s, detectors {last['inference']:.1f} "
+            f"ms, skipping now: {', '.join(skipping) or 'none'}")  # fmt: skip
+
+
+class QuietGate:
+    """The resume gate after a frame-drop abort (Batt, 2026-10-07): ready once NO camera has
+    skipped a frame for ``minutes`` continuous minutes of OBSERVED distinct Frigate updates. A
+    skip anywhere restarts the clock; a gap in the stats (Frigate unreachable > 60 s) restarts it
+    too, since nothing was observed then (fail closed)."""
+
+    def __init__(self, minutes: float, now: float) -> None:
+        self.window = minutes * 60.0
+        self.since = now  # the start of the current clean stretch
+        self.last_seen = now
+        self.seen: Any = None
+        self.drops = 0
+
+    def update(self, now: float, p: dict[str, Any] | None) -> None:
+        if p is None or p["updated"] == self.seen:
+            if now - self.last_seen > UNREACHABLE_S:
+                self.since = now  # unobserved time never counts as quiet
+            return
+        if now - self.last_seen > UNREACHABLE_S:
+            self.since = now
+        self.seen, self.last_seen = p["updated"], now
+        if any(sk > 0 for _, sk in p["cameras"].values()):
+            self.since, self.drops = now, self.drops + 1
+
+    def ready(self, now: float) -> bool:
+        return now - self.since >= self.window and now - self.last_seen <= UNREACHABLE_S
+
+
+def quiet(minutes: float, max_wait_min: float, fetch: Fetch = fetch_json,
+          clock: Callable[[], float] = time.time, sleep: Callable[[float], None] = time.sleep,
+          poll_s: float = 5.0) -> int:  # fmt: skip
+    """Wait for QuietGate: 0 when ready, 2 when max_wait_min passes first (never ready = stay
+    stopped). Prints each restart of the clock."""
+    t0 = clock()
+    gate = QuietGate(minutes, t0)
+    print(f"[{stamp()}] QUIET: waiting for {minutes:g} min with no dropped frames on any camera",
+          flush=True)  # fmt: skip
+    drops = 0
+    while True:
+        now = clock()
+        s = fetch(FRIGATE_STATS)
+        gate.update(now, parse_stats(s) if s else None)
+        if gate.drops != drops:
+            drops = gate.drops
+            print(f"[{stamp()}] QUIET: a camera dropped frames; the clock restarts "
+                  f"({fleet_load(parse_stats(s) if s else None)})", flush=True)  # fmt: skip
+        if gate.ready(now):
+            print(f"[{stamp()}] QUIET OK: {minutes:g} min without dropped frames", flush=True)
+            return 0
+        if now - t0 >= max_wait_min * 60.0:
+            print(f"[{stamp()}] QUIET TIMEOUT: no {minutes:g} quiet min within {max_wait_min:g} "
+                  "min", flush=True)  # fmt: skip
+            return 2
+        sleep(poll_s)
 
 
 def vision_containers(run: Any = subprocess.run) -> list[str]:
@@ -703,6 +772,9 @@ def main() -> int:
     w.add_argument("--sigint", action="store_true")
     c = sub.add_parser("check")
     c.add_argument("--baseline", type=Path, default=None)
+    q = sub.add_parser("quiet")
+    q.add_argument("--minutes", type=float, default=15.0)
+    q.add_argument("--max-wait-min", type=float, default=120.0)
     a = ap.parse_args()
     for path in (getattr(a, "csv", None), getattr(a, "out", None)):
         if path is not None and not str(path).startswith("/dev/shm/"):
@@ -711,6 +783,8 @@ def main() -> int:
         return baseline(a.out, a.minutes)
     if a.cmd == "sample":
         return run_loop(a.csv, None, False)
+    if a.cmd == "quiet":
+        return quiet(a.minutes, a.max_wait_min)
     if a.cmd == "check":
         why = prestart(a.baseline)
         print(f"[{stamp()}] {'REFUSED: ' + why if why else 'OK: R2 + R3 pre-start checks pass'}")

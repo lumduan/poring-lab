@@ -111,6 +111,20 @@ under the same load", the infra rule).
 - Reported per level: the kept and dropped pairs (each with its ON/OFF latency and load), the
   median delta, and the verdict.
 
+## Frame-drop aborts: an automatic resume (Batt, 2026-10-07 ~15:40)
+- **The abort stays IMMEDIATE and unconditional** (the infra rule). Its message now carries the
+  fleet load: detections/s, the detectors' ms, and which cameras are skipping (`fleet_load`).
+- **`train-day.sh` resumes on its own** only after 15 continuous minutes in which no camera
+  skipped a frame (`frigate_r3.py quiet`: observed distinct updates only; a Frigate silence over
+  60 s restarts the clock).
+  - It resumes at the SAME ladder level. The resumed step's paired R3 measures again, so a latency
+    trip still moves up the ladder.
+- **At most 3 frame-drop aborts per rolling 2 hours.** The 3rd STOPS and waits for Batt, and so
+  does a gate that finds no quiet 15 minutes within 2 h.
+  - The aborts are kept in `<run dir>/drop-aborts.log`.
+- **Tests:** `test_frigate_r3.py` (the gate and the fleet-load line) and `test_train_day.py`
+  (the real script against stub guard and gate commands).
+
 ## Results: the ladder re-run, 2026-10-07 (v0-JPEG matched run, `train-day.sh`)
 Each pair: delta = ON − OFF latency (ms); kept only if the loads agree within ±20 %.
 

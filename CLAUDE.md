@@ -68,7 +68,11 @@ ports, quickstart) and `docs/adr/`.
          load (±20 % detections/s) count.
        - The trip is the median paired delta > 5 ms over ≥ 4 pairs.
        - Long runs are monitored at 27 min ON / 3 min OFF.
-       - Stop HARD if any camera drops frames (`skipped_fps`) for 30 s: ABSOLUTE, no baseline.
+       - Stop HARD if any camera drops frames (`skipped_fps`) for 30 s: ABSOLUTE, no baseline,
+         IMMEDIATE. The abort logs the fleet detection load. `train-day.sh` resumes on its own
+         only after 15 continuous minutes with no camera dropping frames (`frigate_r3.py
+         quiet`), at the same ladder level, with the paired check measuring again. The 3rd
+         frame-drop abort within 2 h stops and waits for Batt (2026-10-07).
      - `scripts/frigate_r3.py` (`PairedR3`) implements them, and `guarded_build.py` enforces them on
        every `run:`/`rundev:` vision step (pre-start refusal + pause/unpause + in-run abort).
      - Every abort unpauses the container and VERIFIES the stop: container gone, no process of ours

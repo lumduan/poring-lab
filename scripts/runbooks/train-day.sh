@@ -11,7 +11,12 @@
 #   (SLEEP_LADDER, ms after every batch: duty cycle only, never the maths) after 30 s; at the top
 #   level the run STOPS and the setting is Batt's. "R3 inconclusive" (load too variable) STOPS.
 # - Other trips (IO, Frigate unreachable, R2) PAUSE 15 min, then --resume from last.pt; at most 3.
-# - R3-HARD (a camera dropping frames for 30 s) STOPS: no resume.
+# - R3-HARD (a camera dropping frames for 30 s): the abort is IMMEDIATE and unconditional (infra
+#   rule); the guard logs the fleet detection load with it. Then (Batt 2026-10-07 ~15:40) an
+#   automatic resume: only after 15 continuous minutes with no camera dropping frames
+#   (`frigate_r3.py quiet`), at the SAME ladder level; the resumed step's paired R3 measures again
+#   (a latency trip still moves up the ladder). At most 3 frame-drop aborts per 2 hours: the 3rd
+#   STOPS and waits for Batt. The aborts are kept in $D/drop-aborts.log (epoch + the ABORT line).
 # - Every guard stop is VERIFIED by guarded_build (container gone, no process of ours on the GPU,
 #   escalation to docker kill if not); STOP-UNVERIFIED STOPS here: a person must look.
 # - Never alongside an S2 session: it waits while the lock says console or a clean room is set.
@@ -25,6 +30,9 @@ cd "$(dirname "$0")/../.."
 RUN=${1:?RUN_NAME}; CACHE=/datasets/.framecache/${2:?CACHE_ID}; EPOCHS=${3:?EPOCHS}; D=${4:?OUT_DIR}
 BATCH=${5:-2}; WORKERS=${6:-1}
 read -r -a LADDER <<< "${SLEEP_LADDER:-0 100 200 400}"
+GUARD=${GUARD:-python3 scripts/guarded_build.py}  # overridable for tests only
+QUIET=${QUIET:-python3 -S scripts/frigate_r3.py quiet --minutes 15 --max-wait-min 120}
+DROP_WINDOW_S=7200; DROP_MAX=3
 level=${SLEEP_LEVEL:-0}
 mkdir -p "$D"
 log() { echo "$(TZ=Asia/Bangkok date '+%F %T') ICT / $(date -u '+%T') UTC $*" | tee -a "$D/train.log"; }
@@ -36,7 +44,7 @@ while :; do
   ms=${LADDER[$level]}
   log "attempt $attempt batch $BATCH workers $WORKERS step-sleep ${ms} ms (ladder level $level) $extra"
   out="$D/train-guarded-$attempt.out"
-  python3 scripts/guarded_build.py --sustain 30 --spike 25 \
+  $GUARD --sustain 30 --spike 25 \
     "rundev:vision@43200=python -m poring_vision.train --cache $CACHE --epochs $EPOCHS --batch $BATCH --workers $WORKERS --name $RUN --step-sleep-ms $ms $extra" \
     > "$out" 2>&1
   rc=$?
@@ -44,7 +52,22 @@ while :; do
   attempt=$((attempt + 1))
   if [ "$rc" -eq 0 ]; then log "TRAIN DONE (step-sleep ${ms} ms)"; break; fi
   if grep -q "STOP-UNVERIFIED" "$out"; then log "TRAIN STOPPED: the guard could NOT verify the stop ($(grep STOP-UNVERIFIED "$out" | tail -1 | cut -c1-160)): a person must look"; break; fi
-  if grep -q "R3-HARD" "$out"; then log "TRAIN STOPPED: R3-HARD (a camera dropped frames for 30 s): no resume"; break; fi
+  if grep -q "R3-HARD" "$out"; then
+    now=$(date +%s)
+    echo "$now $(grep -a 'ABORT' "$out" | tail -1 | cut -c1-400)" >> "$D/drop-aborts.log"
+    recent=$(awk -v n="$now" -v w="$DROP_WINDOW_S" 'n - $1 <= w' "$D/drop-aborts.log" | wc -l)
+    log "R3-HARD frame-drop abort ($recent in the last 2 h): $(grep -a 'ABORT' "$out" | tail -1 | cut -c1-300)"
+    if [ "$recent" -ge "$DROP_MAX" ]; then
+      log "TRAIN STOPPED: $recent frame-drop aborts within 2 h: waiting for Batt (resume by hand: RESUME=1 SLEEP_LEVEL=$level)"; break
+    fi
+    log "waiting for 15 quiet minutes (no camera dropping frames) before resuming at step-sleep ${LADDER[$level]} ms"
+    if ! $QUIET >> "$D/quiet.log" 2>&1; then
+      log "TRAIN STOPPED: no 15 quiet minutes within 2 h (see $D/quiet.log): waiting for Batt"; break
+    fi
+    log "15 quiet minutes: resuming (the paired R3 measures again)"
+    [ -e "data/train/$RUN/weights/last.pt" ] && extra="--resume"
+    continue
+  fi
   pause=900
   if grep -q "R3 inconclusive" "$out"; then
     log "TRAIN STOPPED: R3 could not measure our effect (Frigate load too variable): fail closed"; break
