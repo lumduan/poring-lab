@@ -1065,6 +1065,48 @@ m4_validate's own code. Per ODD spawn (to choose; EVEN once to confirm):
    conditions hold on EVEN. Report odd and even side by side. k, the facing mapping and step 1's
    exclusions are unchanged.
 
+**ODD result (2026-10-07 ~08:20), FROZEN.** Real: 1,150 clean frames. Synthetic: 18 spawns
+(every ODD spawn with a clean frame: 7 Poring outdoor, 6 Poring indoor, 5 Lunatic), 324 measured
+frames.
+- An implementation bug was found and fixed BEFORE the decision: the synthetic spawn key lacked the
+  species, so Porings shadowed same-numbered Lunatic spawns (13 Poring-only spawns). Only the
+  synthetic pass was re-run; the procedure is unchanged.
+- The evaluator fixed one choice before any result: the synthetic split uses the OUTDOOR synthetic
+  spawns, all thirds.
+
+| ruler | REAL obs/box, Poring | REAL obs/box, Lunatic | REAL split | SYNTH obs/TRUE, Poring out / in | SYNTH obs/TRUE, Lunatic | SYNTH split |
+|---|---|---|---|---|---|---|
+| DIFF 12 | 1.083 | 1.351 | 1.248 | 0.848 / 0.816 | 1.125 | 1.326 |
+| DIFF 16 | 0.978 | 1.220 | 1.247 | 0.833 / 0.813 | 1.083 | 1.300 |
+| **DIFF 24** | 0.897 | 1.126 | **1.255** | **0.833 / 0.794** | **1.043** | **1.252** |
+| DIFF 32 | 0.881 | 1.098 | 1.246 | 0.806 / 0.776 | 1.042 | 1.293 |
+| DIFF 48 | 0.855 | 1.057 | 1.237 | 0.800 / 0.776 | 1.000 | 1.250 |
+| half-max | 0.881 | 1.000 | 1.135 | 0.806 / 0.778 | 0.958 | 1.190 |
+
+Synthetic widths: 1.00–1.07.
+
+- **DECISION 1: the bias is IN THE MEASUREMENT.**
+  - Sprites of KNOWN size give a synthetic split of 1.252 at DIFF 24, vs the real 1.255 (≥ 50 %
+    needed; it reproduces ~100 %).
+  - The renderer is cleared of the per-species split.
+  - The ruler shrinks the low-contrast Poring by ~17 % at EVERY threshold (0.85 → 0.80, so it is
+    structural, not a halo: a band of its height is lost) and grows the high-contrast Lunatic by
+    ~4 % (a halo that vanishes at DIFF 48).
+- **DECISION 2: the half-max ruler is NOT adopted.**
+  - Synthetic error: Poring 0.204 (DIFF 24: 0.200), Lunatic 0.042.
+  - It neither recovers the truth within 3 % nor beats DIFF 24 for both species.
+  - A ruler that fixes the Poring's lost band is still to be found.
+- **Exploratory, NOT a decision** (k is not judged in 2d): divide the real 2c obs/frame ratios
+  (ODD) by the synthetic bias at DIFF 24.
+  - Height: Poring 0.950 / 0.833 = 1.14, Lunatic 1.200 / 1.043 = 1.15.
+  - Width: Poring 1.117 / 1.029 = 1.09, Lunatic 1.083 / 1.032 = 1.05.
+  - BOTH SPECIES AGREE once the ruler's bias is removed: a COMMON scale factor (k), with heights
+    ~5–9 % above widths.
+  - So the "per-species vertical term" looks like a measurement artefact plus one global scale,
+    for Batt's next step.
+- **Then (pre-registered):** decision 2 adopted nothing, so EVEN is scored ONCE as the replication
+  of decision 1 (real + synthetic, the same scripts).
+
 ### 5e. The pragmatic v1 track: v1 labels at k = 0.140 on the GOLD set (Batt, 2026-10-07), written BEFORE scoring
 
 **Why.** M4 proves the render rule against a ruler that is itself in question (§5d-v). The real
