@@ -6,8 +6,13 @@ The GPU is shared with Frigate (NVR: 16 cameras, 3 ONNX detectors) and Ollama (q
   R1  Ollama + vision VRAM <= 9 GiB combined (VISION_MAX_VRAM_FRACTION keeps vision under it).
   R2  One model at a time: refuse to start while Ollama has a model loaded (/api/ps); yield if one
       loads during our job.
-  R3  Stop if the Frigate detector is > 5 ms slower than its baseline, measured close in time with
-      nothing of ours running; stop HARD if any camera drops frames for 30 s.
+  R3  PAIRED (docs/operations/r3-paired.md, Batt 2026-10-07 ~12:35): our job is paused / resumed
+      in alternating windows and stopped when the median load-matched ON-OFF detector delta is
+      > 5 ms (PairedR3; guarded_build and vlm_flag). Stop HARD if any camera drops frames for 30 s
+      (absolute).
+      The FIRST R3 rule (a 60 s median vs a baseline measured minutes earlier) is RETIRED: camera
+      activity moved Frigate's load during the job and confounded it. R3Guard and `watch` below
+      still implement it, as a LEGACY manual tool only; their latency verdict is not R3.
 
 Standard library only: scripts/guarded_build.py imports this module and runs under `python3 -S`.
 
@@ -19,20 +24,23 @@ Standard library only: scripts/guarded_build.py imports this module and runs und
         detector inference, fleet detection_fps, every camera's camera_fps / skipped_fps, GPU util
         and memory, Ollama's loaded models. OUT stays on /dev/shm (rule 7).
     frigate_r3.py watch [--csv OUT.csv] [--sigint]
-        The R3Guard over the live stats, printing every breach (ICT + UTC). With --sigint, a breach
-        SIGINTs our running vision container(s) (`docker kill --signal INT`; a SIGINT to the
-        compose client alone does not stop the container). The interim guard before
-        guarded_build had R3.
-    frigate_r3.py check
-        The pre-start checks guarded_build runs for every vision step; prints the verdict.
+        LEGACY (the retired first R3 rule; no production caller since 2026-10-07). The R3Guard over
+        the live stats, printing every breach (ICT + UTC). With --sigint, a breach SIGINTs our
+        running vision container(s) (`docker kill --signal INT`; a SIGINT to the compose client
+        alone does not stop the container). It was the interim guard before guarded_build had R3.
+    frigate_r3.py check [--baseline PATH]
+        The pre-start checks guarded_build runs for every vision step (R2, Frigate answering; no
+        baseline file since the paired R3); prints the verdict. --baseline also demands that file
+        (the legacy rule).
 
 Frigate 0.17 facts (verified 2026-10-07):
 - There is no "dropped" field. A camera's dropped frames show as skipped_fps (the detector queue
   was full); camera_fps ~= process_fps + skipped_fps.
 - Stats refresh about every 15 s, so dedupe on service.last_updated.
-- inference_speed depends on the load regime (idle ~28 ms, saturated ~12 ms). That is why the
-  baseline is measured close in time, re-measured every <= 3 h, and re-measured when the fleet's
-  detection rate moves out of [0.5x, 2x] of the baseline's.
+- inference_speed depends on the load regime (idle ~28 ms, saturated ~12 ms; +0.16 ms per
+  detection/s measured unloaded). That is why the first R3 rule re-measured its baseline every
+  <= 3 h and on activity changes; ➡️ the paired design replaced that: it compares adjacent
+  windows and keeps only pairs whose detection load agrees within 20 %.
 """
 
 from __future__ import annotations
@@ -273,7 +281,11 @@ def prestart_for_baseline(fetch: Fetch = fetch_json, check_frigate: bool = True)
 
 
 class R3Guard:
-    """R2 + R3 over the live stats. `poll(now)` then `breach(now)` -> None | (kind, detail, hard).
+    """LEGACY: the RETIRED first R3 rule (a 60 s median vs a baseline file). No production caller
+    since 2026-10-07: guarded_build and vlm_flag run PairedR3. Kept for `watch` (manual) and its
+    tests; its latency verdict is NOT R3 (docs/operations/r3-paired.md says why).
+
+    R2 + R3 over the live stats. `poll(now)` then `breach(now)` -> None | (kind, detail, hard).
 
     kinds: latency (pause), drops (HARD: no resume), frigate_unreachable (pause, fail closed),
     r2_ollama_loaded (pause: yield the GPU), rebaseline_due (a planned pause, only right after a
@@ -690,7 +702,7 @@ def main() -> int:
     w.add_argument("--results-csv", type=Path)
     w.add_argument("--sigint", action="store_true")
     c = sub.add_parser("check")
-    c.add_argument("--baseline", type=Path, default=BASELINE)
+    c.add_argument("--baseline", type=Path, default=None)
     a = ap.parse_args()
     for path in (getattr(a, "csv", None), getattr(a, "out", None)):
         if path is not None and not str(path).startswith("/dev/shm/"):
