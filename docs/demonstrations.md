@@ -472,7 +472,7 @@ too, the client draws a consistent marker and the rule clicks; only the packets 
 >   - the target re-checked right before the click;
 >   - templates per cursor shape on RDP and S2 separately;
 >   - tested with obstacles (GM-spawned monsters, an NPC, a vending shop if possible).
-> - It becomes **walk@6**, pre-registered when its shape calibration is complete.
+> - It becomes **walk@6**, pre-registered when its shape calibration is complete. ➡️ **Pre-registered as 3.9 below** (2026-10-07 ~18:05).
 
 **walk@6 cursor-shape calibration, so far (RDP; scratch `walk5-cal/shapes-*`).**
 - **The method:** sweep-hover the cells around a known cell; the cursor sprite is |crop with the
@@ -492,6 +492,105 @@ too, the client draws a consistent marker and the rule clicks; only the packets 
   so anything uncalibrated is "unknown" → no click.
 - **Open design points:** the walk family's frames must be matched per frame (the animation);
   and the parked-cursor difference costs ~0.2 s per probe.
+
+### 3.9 walk@6 (pre-registered 2026-10-07 ~18:05, BEFORE its run; Batt's allowlist refinement, ~15:55)
+**The rule is an ALLOWLIST** (`scripts/walk6.py`): only a positively recognised WALK cursor passes.
+Anything else (attack sword, talk bubble, no-entry, warp door, pickup hand, vending shop, unknown)
+means no click.
+
+**Design-time calibration (RDP; client pixels in `/dev/shm` and `data/walk6/`, never committed).**
+- **The references:** 564 hovers (`walk5-cal/shapes-*`, 3 sweeps per scene), labelled per cluster by
+  eye, plus 3 per-sample corrections. The corrections were plain arrows that the clustering had put
+  with the no-entry signs.
+  - Totals: walk 491, sword (the attack cursor) 26, talk 20, no-entry 15, **warp 12**.
+  - The WARP cursor (a door ringed by green arrows) is a shape the earlier notes had missed. It was
+    found indoors at prt_church 108–109,121–123. A click there would leave the map; the allowlist
+    refuses it like any other shape.
+  - Frozen as `data/walk6/cursor_refs_rdp.npz`.
+- **A one-sided score was REJECTED.** It asked whether the reference's pixels were present, and a
+  no-entry hover scored **0.987** against a WALK reference, because the sign is drawn OVER the arrow.
+  An uncalibrated shape built the same way could pass as the arrow.
+- **The classifier is TWO-SIDED:**
+  - the hover's own cursor mask is |A − B|, minus the chevrons, the component on the hotspot;
+  - B is ONE parked frame per segment;
+  - the best reference must have mask IoU ≥ **0.6**, then a colour match ≥ **0.85** on the overlap
+    (|Δ| < 40).
+  - **Leave-one-out:** WALK recognised 483 / 491 per single grab (8 → unknown). **0 / 73 non-walk
+    hovers → WALK** (their best WALK IoU: 0.0).
+- **The design pilots** (6 sessions, `walk6-cal`, 17:33–17:50, not scored) found two machinery faults.
+  Both were fixed before this pre-registration:
+  1. **The client draws its cursor only where a SECOND motion leaves it,** ~0.41–0.82 s later; one
+     motion never moved it (measured 17:46). The one-motion park left the cursor on the very cells
+     about to be probed, so |A − B| lost it, and plain floor read as unknown.
+     - The park now uses two motions, alternates two park points, and is accepted only once the
+       frame shows the cursor AT the park.
+     - The hover settle is **0.55 s** (walk@4/5 used 0.4).
+  2. A refused target that is the GOAL is waited for, never blocked: blocking it left no plan.
+- After the fixes:
+  - outdoors: 4 / 4 routes reached the believed goal, with 1 unknown;
+  - indoors: 3 / 4. Every refusal had an entity under the cursor: the NPC's talk bubble, Porings.
+    One route ran out of segment attempts around the NPC.
+  - All 6 pilots: **0 attack requests, 0 NPC contacts** in the packets.
+- **Not calibrated, so UNKNOWN, so never a click:**
+  - **PICKUP:** the GM's group has only `@killmonster2` (no drops). The level-1 GM died trying to
+    kill spawned Porings itself (17:57; revived with `@alive`, the dialog closed).
+  - **VENDING SHOP:** not possible with one client.
+  - **S2:** a separate calibration.
+
+**The rule, alone, per ROUTE** (believed start → goal):
+1. **PLAN** as walk@5: A* on the GAT, at most 48 steps, split into straight or diagonal runs.
+   - The run length depends on the context: **3 indoors, 5 in the open.**
+   - After any probe in the route shows something other than the walk cursor, runs are **3** for
+     the rest of the route.
+2. **PROBE EVERY CELL of the run**, start excluded: park once, then hover each cell (two motions,
+   0.55 s) and classify.
+   - Up to 3 grabs (0.1 s apart) while the shape is unknown.
+   - Every line cell must be WALK.
+3. **The TARGET** must be WALK and show the chevrons naming it. As walk@5: one correction for a
+   neighbour, then in-cell alternates, at most 5 hovers.
+4. **RE-CHECK right before the click:** a fresh grab with no motion must still be WALK with the
+   chevrons naming the target. Then click.
+5. **When a run is refused:**
+   - wait 1.0 s and probe it once more;
+   - still refused → the cell is blocked for this route, and the route is re-planned (at most 3
+     re-plans);
+   - the GOAL itself is waited for (at most 3 times), never blocked;
+   - a no-entry sign on a GAT-walkable cell means the belief is wrong: re-localise (walk@5's v1,
+     at most 2), then re-plan.
+6. **Limits and arrival:** at most 16 segment attempts per route. Arrival is dead reckoning; the
+   minimap is read outdoors before each run.
+
+**The harness:**
+- As walk@5, with seed **20261014**: a seeded `@warp` every 5th route; goals 8–20 A* steps from the
+  believed cell.
+- **OBSTACLES:** at every 10th route, `@killmonster2` and then `@monster poring 4` around the GM.
+  - Porings are passive unless attacked, and the rule never attacks.
+  - Indoors, the static NPCs next to the GM spot are the NPC obstacle.
+  - A vending shop is not possible.
+- **56 routes per scene; the first 50 NOT interrupted by a human are scored.** Indoor first, then
+  outdoor.
+
+**Verifiers (verify@2):**
+- Segments: each clicked run by `verify_walk` against its absolute end.
+- Routes: end to end, where the packets put us 0.5 s after the route ended, against the goal.
+
+**The bar, per scene:**
+- end to end ≥ **48 / 50** routes; **AND**
+- **SAFETY: zero `attack_request` and zero `npc_contact`** in the session's packets. The rule never
+  intends either, so any one FAILS the scene, whatever the rate.
+- Pickups are not decoded as a client request. The server's `act` with action pickup from our gid
+  is checked instead.
+
+**Reported without a bar:**
+- segment success;
+- refusals by shape and by place (line / target / re-check);
+- **true vs false refusals:** whether the packets put an entity on the refused cell at that moment
+  (offline);
+- re-check catches, re-plans, goal waits, relocalisations (catches / false alarms / misses, as 3.8),
+  stale parks;
+- time per route.
+
+10 identical route declines in a row stop a run.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
