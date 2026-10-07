@@ -1171,3 +1171,43 @@ runs among 4 Porings per 10 routes and the church's NPCs. The allowlist never cl
 **Still not calibrated:**
 - the VENDING shop (one client);
 - **S2, every shape.**
+
+### relocalise@2 (v2, per-candidate prediction), indoor, RDP: **FAIL, 16 / 50 correct — 24 WRONG, 10 undecided** (2026-10-07 19:12:45–19:38 ICT / 12:12:45–12:38 UTC)
+**Session:** `20261007T191245-demo-reloc2-alone-indoor`; 56 attempts.
+- **5 interrupted:** #45, 46, 52, 53, 54, six human events (the console tabs being reloaded, Batt
+  ~19:25).
+- **Scored:** the first 50 not interrupted.
+- **Paired:** the same warps and the same wrong beliefs as relocalise@1 (checked: identical on all
+  50).
+
+**v1 vs v2 on the same 50 attempts:**
+
+| | correct | WRONG | undecided |
+|---|---|---|---|
+| v1 (3.10) | 7 | 2 | 41 |
+| **v2 (3.11)** | **16** | **24** | 10 |
+
+- **Paired transitions:**
+  - undecided → correct: 15;
+  - undecided → **WRONG: 17**;
+  - correct → **WRONG: 5**;
+  - wrong → wrong: 2; correct → correct: 1; correct → undecided: 1; undecided → undecided: 9.
+- **The WRONG beliefs** were 1 cell off in 16 cases; 2 cells: 2; 3 cells: 2; 4 cells: 4.
+
+**What it says:**
+- v2 is DECISIVE but its geometry is not good enough for its margin. In at least 24 attempts the
+  true cell was ELIMINATED: what the client drew did not match v2's prediction for the truth within
+  the absolute tolerance and the **6 px relative margin**.
+- The pre-registration had flagged that margin as UNMEASURED. This is its measurement:
+  **confidently wrong in about half the attempts**, worse than v1's undecided.
+- **A diagnostics gap:** the probes did not log the observed chevron positions, so the real residual
+  distribution cannot be computed from this session.
+- **Next (proposed, not run):**
+  1. A calibration run on the same harness, where the truth is known by the warp, logging every
+     probe's observed chevrons next to the truth's prediction. That measures the residuals and the
+     hovered-cell errors.
+  2. Set the margin from that distribution, or reject per-candidate fitting.
+  3. Only then a v3 alone-test.
+- **Consequence for the running walk@7 chain** (pre-registered with v2; Batt: do not interrupt it):
+  indoor re-localisations will often move the belief to a wrong cell. That confound is read into
+  walk@7's indoor results. Outdoors the minimap rarely needs re-localisation.
