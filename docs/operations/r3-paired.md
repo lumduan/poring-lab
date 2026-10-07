@@ -44,6 +44,15 @@ under the same load", the infra rule).
 - A paused container cannot handle SIGINT, so every abort UNPAUSES it first. Then comes the
   verified stop (container gone, GPU free, else escalation).
 
+**When the schedule starts:**
+- When the step's own process first holds ≥ 500 MiB on the GPU (the model is loaded), or 120 s
+  after its container starts, whichever comes first.
+- Before that, its start-up (CUDA initialisation, dataset indexing) is little GPU load. Counting
+  it as ON would bias the first pair toward passing.
+- The absolute rules below apply from the first second.
+
+> ➡️ **AMENDED 2026-10-07 ~12:50, before any run.**
+
 **Windows:**
 - Training steps (timeout > 20 min), MEASUREMENT phase: 180 s ON, 180 s OFF, alternating, starting
   ON. The first 30 s after each switch are discarded (settle; Frigate's stats refresh about every
