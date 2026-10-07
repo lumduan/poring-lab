@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [demonstrations.md, knowledge/README.md, adr/0011-ui-anchor-map.md, adr/0012-locale-agnostic-ui.md, adr/0015-phase4-planner-linter-executor.md, phase2-plan.md]
-next_action: "walk@3 indoor (outdoor PASSED 49/50); open_window@1 (pre-registered, demonstrations 3.6) outdoor then indoor; then S2 re-tests in an evening S2 session; NPC/shop decoders for wave 3."
+next_action: "Batt decides walk@11 (demonstrations.md walk@10 verdict: the click-instant entity check for safety, cursor UNKNOWN by cursor_diag, outdoor unnamed clicks, tier-B goals); the sniffer rebuild so attack_request / npc_contact are live; S2 re-tests (where@2, walk outdoor); NPC/shop decoders for wave 3."
 ---
 
 # Phase 4 UI: the example workflow's windows, shortcuts and NPCs
@@ -104,7 +104,7 @@ as the `npc` class.
 | L1 concept | L2 | L3 | alone-test |
 |---|---|---|---|
 | session.login | signatures + offsets (ro_agent) | the server's address (settings store) | login@1 RDP **PASS 50/50**; S2 to do |
-| nav.walk_to | the RDP / console cameras, the walk-marker cue (RDP only; two-motion hover) | GAT walkability | walk@1 FAIL, walk@2 FAIL 0/18 (one-motion hover); **walk@3 outdoor PASS 49/50, walk@4 outdoor PASS 50/50**; indoor FAIL (walk@3 32/49, walk@4 26/46: dead reckoning without re-anchor, mispicks near pews) -- the indoor design is parked for Batt |
+| nav.walk_to | the RDP / console cameras, the walk-marker cue (RDP only; two-motion hover), the cursor allowlist, the client's PICKING model (`poring_dataset.picking`: the first raised GAT top under the mouse), `/where` fixes | GAT walkability | ~~walk@1–4~~ (history: walk@3/4 outdoor PASS) ➡️ **2026-10-08 (demonstrations.md walk@6–10):** outdoor walk@7 **PASS 49/50 clean + crowd** (no GM attack); walk@10 (picking) **0 / 4 tuning runs PASS**: indoor clean 42/50, indoor crowd 48/50 and outdoor crowd 48/50 HARD FAIL on SAFETY (a walk click became an attack), outdoor clean 45/50. Wrong-cell walks solved; open: click-instant entity check, cursor UNKNOWN (colour), tier-B goals. The 'SAFETY 0' of walk@6–10 was BLIND (live sniffer: no attack_request) — see the CORRECTION there. S2 to do |
 | ui.open_window | shortcuts demonstrated; anchors CUT for status / skills / inventory / equipment (RDP, title text 60x13, max_distance 6); other windows still fail closed | – | **open_window@1 RDP PASS 50/50 outdoor and 50/50 indoor**; S2 re-test next |
-| nav.read_position | the minimap readout (T0 templates restored) | – | read_position@1 |
+| nav.read_position | the minimap readout (T0 templates restored); indoors and anywhere: the client's `/where` (where_fix v2) | – | read_position@1 (minimap) to do; **where@2 RDP PASS 48/50 indoor, 50/50 outdoor, 0 WRONG** (2026-10-07); S2 to do |
 | vitals.read | the basic-info bars (anchor map) | – | – |
