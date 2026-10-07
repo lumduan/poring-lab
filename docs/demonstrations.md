@@ -1392,3 +1392,29 @@ first 50 (after the 3.13 amendment).
 - **Next (where@2, to be pre-registered):** keep the crops; the number must follow the colon's space;
   nearest-template matching with a margin; and two consecutive `/where` reads must agree before a
   fix is accepted.
+
+### where@2 (3.15), RDP: **PASS in both scenes — indoor 48 / 50, outdoor 50 / 50, ZERO WRONG** (2026-10-07 22:33:45–23:16 ICT / 15:33–16:16 UTC)
+
+| scene | session | correct | **WRONG** | no fix | gate rejections |
+|---|---|---|---|---|---|
+| indoor (prt_church, seed 20261021) | `20261007T223345-demo-where2-alone-indoor` | **48 / 50** | **0** | 2 | implausible 2, stale 4 |
+| outdoor (prt_fild08, seed 20261022) | `20261007T225522-demo-where2-alone-outdoor` | **50 / 50** | **0** | 0 | none |
+
+**The 2 indoor no-fixes were the gates doing their job.**
+- In #24 and #42 the packets put the GM at (168,106): **not prt_church**. The harness's blind click
+  had walked it through the church's exit portal.
+- `/where` printed the other map's cell, the plausibility gate refused it (more than 6 cells from the
+  belief), and the next reads were stale (no new line). So no fix: the right answer when the belief
+  is on another map.
+
+**Compared, same harness family:**
+
+| rule | correct | WRONG | no fix |
+|---|---|---|---|
+| relocalise v1 (3.10) | 6 | 2 | 42 |
+| relocalise v2 (3.11) | 16 | 24 | 10 |
+| where@1 (3.13) | 38 | 1 | 11 |
+| **where@2 indoor / outdoor** | **48 / 50** | **0 / 0** | 2 / 0 |
+
+→ where@2 is walk@8's belief fix (3.14).
+- **Still open:** the same check on a normal (non-GM) account.
