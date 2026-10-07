@@ -1635,6 +1635,11 @@ first 50 (after the 3.13 amendment).
 | **where@2 indoor / outdoor** | **48 / 50** | **0 / 0** | 2 / 0 |
 
 → where@2 is walk@8's belief fix (3.14).
+- **Found 2026-10-08 (the act re-check):** in the OUTDOOR session the GM attacked field monsters
+  (24 hits, the server's act packets). where@2 itself only types `/where`; the hits come from the
+  HARNESS's blind walk click (3–8 cells, no cursor check). The bar here has no safety criterion and
+  the fixes are unaffected, but a harness must not click blind among monsters: use the walk rule's
+  cursor check for any future harness click.
 - **The normal account: DONE** (2026-10-07 evening, unscored, as pre-registered): `/where` printed
   the same yellow line for account 2000001 on new_4-1 (61, 114). No packet appears around it, so it
   reads as a client-side command.
