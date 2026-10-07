@@ -1848,6 +1848,27 @@ interrupted. Scored: the first 50, with the amended instrument.
   the client would not walk (12 / 13 dead).
 - **#4: tier-B goals that are never named** (thin strip behind a kneeler row): safe declines.
 
+### Calibration: the TALK cursor, RDP (2026-10-08 03:50:53–03:55:09 ICT / 20:50–20:55 UTC; hover-only, for a LATER rule)
+**Why:** the stored talk references (20) have HOLLOW masks (the bubble's outline only), while the
+live talk cursor over this floor gives a FILLED mask. A ring against a filled blob stays under the
+IoU 0.6 floor, so talk read UNKNOWN (walk@10's indoor declines; the cursor_diag finding above).
+
+**The setup:** `scripts/cursor_diag.py --npcs ...` warped the GM near each of 11 visible church
+NPCs (their cells from walk@10's packets; design-time input only) and hovered 8 points over each
+sprite. It only hovered: no click, no key.
+
+**The shape:** the speech bubble, **animated** (zero, one or two dots).
+- 80 hovers: **72 talk by eye, all 72 read UNKNOWN under v2** (71 best-matched the pickup hand); 8
+  walk arrows over the floor, read walk.
+
+**The references:** the 72 bubbles, as `talk`, go into a NEW set,
+`data/walk6/cursor_refs_rdp_v3.npz` (645 = 573 + 72).
+- Leave-one-out among the new bubbles: **65 / 72 talk, 7 unknown, 0 any other shape.**
+- Every v2 reference's leave-one-out result under v3: **0 changes** (no walk became talk).
+- The first diagnostic's crops: 3 of the east bubbles now read talk; the 33 walk reads stay walk.
+- walk@10 keeps v2 (3.17). v3 is for walk@11: talk = a UNIT at the click point (never clicked),
+  so the patience / next-point / substitute rules apply instead of a decline.
+
 ### 🔴 CORRECTION (2026-10-08 ~03:15): the walk SAFETY counts were BLIND to attack requests — the server's act packets show GM attacks in four scored walk runs
 - **What was wrong:** every walk score counted `attack_request` / `npc_contact` events in the
   session's packets. The LIVE sniffer never emits them: those decoders are offline-only (bc1a2e6,
