@@ -1341,6 +1341,48 @@ nothing).** 25 spawns, 450 frames.
   - fixing the ruler at DIFF 48 for that session (it validated exactly on ODD, and missed only by
     the outdoor Poring's top row on EVEN) is a decision to make BEFORE it runs.
 
+### 5d-vii. The fresh full M4 session: the DECISIVE test of k (PLAN, Batt 2026-10-07; needs his OK to run)
+
+**Why.** 2e is provisional on both halves:
+- ODD was scored under the old criterion;
+- EVEN's synthetic validation was seen before the amendment;
+- the ruler choice moves k by ~4 % (DIFF 24 0.1531 vs DIFF 48 0.1467 on EVEN).
+
+Batt: k stays OPEN until a fresh session is measured with the amended ruler and criterion
+unchanged.
+
+**The session (recorded like §5b's re-run: `scripts/runbooks/m4-rerun.sh` in a clean room on S2):**
+- **All spawns:** every outdoor (prt_fild08) and indoor (prt_church) spot and cell group of the
+  §5b protocol, Poring and Lunatic.
+- **"Full power":** enough per group to meet §5b's minimums (≥ 5 spawns and ≥ 20 frames per scene ×
+  third × species) on EACH half, so the analysis can still split ODD/EVEN for an A/A check.
+  - Read here as statistical power. If Batt meant something else (e.g. the GM's power / a
+    non-dying GM), it is corrected before the session.
+- **Excluded by pre-registration, BEFORE the data:** the prt_church cells with y = 126, the
+  "split spawn" in front of the organ's keys (§5c point 3). They are not spawned at; any frame at
+  them is excluded and counted.
+- **Weekday:** S2 after 17:00. Training is PAUSED first, by SIGINT to the host-side training step
+  (train-day.sh stops), and resumed after with RESUME=1 and SLEEP_LEVEL at its ladder level.
+- **The foreground gate's @stream template is installed** (2026-10-07). m4-rerun.sh checks it.
+
+**The analysis (fixed now; nothing else changes):**
+1. **The synthetic validation** on THIS session's spawns: 2d's procedure (each spawn's own
+   background, the 2c-chosen frame painted at its anchor and scale, the libx264 stream-like
+   encode). Then the amended criterion (§5d-vi-a): the per-species median |obs_h − MP_h| ≤ 1 px,
+   and the pooled-pixel split within 1 ± 0.03.
+2. **The ruler:** the amended order (DIFF 24 first, DIFF 48 only if DIFF 24 fails), UNLESS Batt
+   fixes DIFF 48 before the session.
+   - 1a showed DIFF 24 passes the 1 px tolerance WITH its known halo (k biased up ~1.5–4 %).
+   - Choosing the ruler is a decision to record HERE before the recording.
+3. **k:** the 2e rule on all clean frames.
+   - The k_h species split within 1 ± 0.05.
+   - One scalar within ±2 % of a prior (nostalro 0.1333, korangar 0.140) → that prior. Otherwise
+     "neither", and the measured value is reported as the candidate k.
+   - k_w and k_h / k_w are reported; no h/w scales are fitted.
+4. **The decision:** this session's verdict IS the answer for k.
+   - If it is "neither", adopting the measured value (vs a prior) for labels v2 is Batt's call.
+   - Then v1's PROVISIONAL k = 0.140 is either kept or rebuilt.
+
 ### 5d-viii. M4 step 2f: the species WIDTH split against the FACING error (Batt, 2026-10-07), written BEFORE any scoring
 
 **Why.** 2e ODD found that the two species' widths disagree: k_w Lunatic 0.1333 vs Poring ~0.145, a

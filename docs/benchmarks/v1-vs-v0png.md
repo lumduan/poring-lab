@@ -57,5 +57,25 @@ This file is written and committed BEFORE any v1 model exists. It is scored once
   - NPC numbers (v1 changes no NPC box).
   - Per-epoch validation curves (each on its own labels: confounded, for shape only).
 
+## The run (plan; R1–R3 decide when, day or night)
+1. **The cache**, after the v0-JPEG matched-batch run and its evals (not concurrently, so the
+   Frigate deltas stay attributable):
+
+       scripts/runbooks/cache-day.sh /dev/shm/poring-lab-tmp/v1-cache v1png-<date> \
+         --train <v0png's 5> --val <its 2> --test <its 3> --labels v1 --k 0.140
+
+   - The size is measured from v0png: the same frames and format, so ~22 GB / 47 shards on the NAS.
+   - Reported: frames, boxes per session, shards, bytes, the manifest + shard sha256.
+2. **Training:**
+
+       SLEEP_LEVEL=<the 0.3 level> scripts/runbooks/train-day.sh v1png-<date> v1png-<date> 30 <dir> 2 1
+
+   It starts on a fresh baseline with R2 clear, through guarded_build (IO + R1–R3).
+3. **Evals:** the same chain as v0-JPEG's:
+   - last.pt on the PNG test frames;
+   - `predict_dir` on the gold frames;
+   - `gold_eval.py score --metric position` (primary) and the IoU score (reported);
+   - plus the 2 × 2 mAP (both models × both test-label sets).
+
 ## Results
 Not yet: no v1 model exists.
