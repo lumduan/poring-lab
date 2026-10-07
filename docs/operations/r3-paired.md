@@ -157,3 +157,22 @@ Each pair: delta = ON − OFF latency (ms); kept only if the loads agree within 
   - It was NOT the operator's console use, which happened at 15:14–15:15 and takes only the
     game-input lease.
   - The absolute rule stopped the run as designed. The training is parked for Batt.
+
+### The resume rule's first afternoon (2026-10-07): STOPPED for Batt at the 3rd frame-drop abort
+| abort | ICT / UTC | camera that tripped | fleet load at the abort | what followed |
+|---|---|---|---|---|
+| 1 | 15:24:20 / 08:24:20 | cam-1-01-font-s | 77.4 det/s, detectors 39.1 ms | the quiet gate: drops again 15:30–15:37 with NO job of ours; quiet 15:37→15:52; resumed 15:52:33 |
+| 2 | 16:01:39 / 09:01:39 | cam-1-06-back-n | 77.0 det/s, 39.2 ms, 4 cameras skipping | quiet 16:01→16:16; resumed 16:16:46 |
+| 3 | 16:18:34 / 09:18:34 | cam-1-02-font-n | 77.6 det/s, 38.5 ms, 7 cameras skipping | **STOPPED: 3 within 2 h, waiting for Batt** (stop verified in 2 s) |
+
+- **All three aborts sat at the same ceiling.** With our job ON, the 3 ONNX detectors run at
+  ~38.5–39 ms, which caps Frigate at ~77 detections/s (3 / 0.039 s). Without us they run at
+  ~33 ms, ~90/s. This afternoon's camera activity kept reaching 80–90/s.
+- So at level 1 (100 ms) the job fits Frigate's latency budget (~+3–4 ms), but not its CAPACITY
+  during busy periods.
+- **Options for Batt:**
+  - level 2 / 3 (200 / 400 ms) or training at night: zero risk, slower;
+  - more detector capacity: needs his judgement.
+- **Progress:** the run reached epoch 2 / 30 (3 %); `last.pt` holds epoch 1. Resume by hand:
+
+      RESUME=1 SLEEP_LEVEL=1 scripts/runbooks/train-day.sh v0jpg-20261007 v0jpg-20261007 30 <dir> 2 1
