@@ -348,7 +348,7 @@ def run_window(scene: str, n: int, seed: int, label: str) -> int:
         frame = r.grab_after(screen, region, r.ns())[:, :, :3]
         return set(reg.locate(frame)) & set(WINDOWS4)
 
-    def harness_close(agent: r.Agent, screen: r.Screen, which: set[str]) -> None:
+    def close_windows(agent: r.Agent, screen: r.Screen, which: set[str]) -> None:
         for w in sorted(which):
             t = r.ns()
             agent.chord(*window_keys(w))
@@ -367,7 +367,7 @@ def run_window(scene: str, n: int, seed: int, label: str) -> int:
         bench.close_chat(agent, screen)
         for i, w in enumerate(order):
             r.activate_client(agent, screen)
-            harness_close(agent, screen, open_now(screen))
+            close_windows(agent, screen, open_now(screen))
             keys = window_keys(w)
             pre = snap(log, screen, f"{i:03d}-{w}-before", after_ns=r.ns())
             t0 = r.ns()
@@ -388,7 +388,7 @@ def run_window(scene: str, n: int, seed: int, label: str) -> int:
             unseen.append(str(did.get("rule_decline", "not_open")) if w not in now_open else None)
             print(json.dumps({"attempt": i, "window": w, "open_after": sorted(now_open), **did}),
                   flush=True)  # fmt: skip
-            harness_close(agent, screen, now_open)
+            close_windows(agent, screen, now_open)
             cause = systematic_decline(unseen)
             if cause is not None:
                 print(json.dumps({"stop": f"systematic: {SYSTEMATIC_K} x {cause} in a row"}),
