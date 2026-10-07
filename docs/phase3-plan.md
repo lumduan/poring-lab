@@ -1436,6 +1436,47 @@ predicted box and compare it with the observed crop: a masked normalised cross-c
 - **Pre-registered:** `bad_label` < 2 % of standing labels on the M4 session, and reported per session
   after.
 
+**Labels v1 now (Batt, 2026-10-07): k = 0.140, PROVISIONAL.**
+- v1 is built at k = 0.140: korangar's client-derived constant; M4 2e's measured k_w 0.1387 is
+  within 1 % of it.
+- It is PROVISIONAL: M4 2e left k open (ODD k_h 0.1467 matched neither prior), and the fresh full
+  M4 session decides. A later k change = a rebuild + retrain, not a redesign.
+- The cache is `v1png-<date>`: the same sessions, split and PNG format as `v0png-20261006`, built
+  with `--labels v1 --k 0.140` (always explicit: without `--k` the manifest would record null).
+- The v1-vs-v0-PNG comparison is pre-registered in `docs/benchmarks/v1-vs-v0png.md`. Its primary
+  measure is the gold set, position only.
+
+**LABEL-QA: qwen3-vl as a second-opinion FLAGGER (Batt, 2026-10-07), pre-registered BEFORE any call.**
+- **Role:** a FLAGGER, never ground truth. Packets and the hand-checked gold set stay the
+  references. A disagreement between qwen3-vl and a label goes to HUMAN review; it never edits a
+  label.
+- **Questions per labelled box:**
+  - is there a monster in this box?
+  - which species?
+  - is it occluded, under UI, or dead?
+- **Model:** `qwen3-vl:4b`.
+  - Digest `1343d82e…`; Apache-2.0 (THIRD_PARTY.md).
+  - Called by HOST scripts only, on `127.0.0.1:11434`. No poring-lab container joins Ollama's
+    network (ADR-0005).
+  - temperature 0, `think: false`, `keep_alive` 30 s, then an explicit unload.
+  - The prompt text and the model digest are recorded with every result.
+- **GPU rules:** R1–R3 apply (`scripts/frigate_r3.py`). It never runs during training or eval
+  (one model at a time). It needs a fresh Frigate baseline, and it aborts on an R3 breach.
+- **Measured first, on the gold set (frames already extracted under `data/train/eval/gold/`):**
+  - Monster crops: every hand-checked monster box. The species comes from the position-matched v1
+    label (packets); a box with no match is "unknown species" and is left out of species
+    accuracy.
+  - Empty crops: the same count and the same sizes, placed at random (seeded) in the same frames,
+    touching no hand-checked box.
+  - Two crop sizes: the tight box, and the box with +50 % context on each side.
+- **The pre-registered bar** for "useful as a flagger", per crop size:
+  - **monster-present recall ≥ 0.90** on the monster crops;
+  - **AND false-"monster" rate ≤ 0.10** on the empty crops.
+  - Reported, with no bar: species accuracy per species, the occluded / under-UI / dead answers,
+    and seconds per crop.
+  - If neither crop size passes, qwen3-vl is NOT used as a flagger. That is reported, not tuned
+    (no prompt changes after the run).
+
 **M6, synthetic frames (Batt's (c), a major training source).**
 1. **Backgrounds:** real frames from our recordings with no actor predicted in the area (after a
    `@killmonster2`, or regions M5 marks empty).
