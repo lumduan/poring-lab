@@ -41,6 +41,7 @@ import walk5 as w5  # noqa: E402
 from poring_env.demo import Action, DemoLog, DemoRecord, Intended, new_session_id  # noqa: E402
 
 RULES = {"v1": "relocalise@1", "v2": "relocalise@2"}
+GM_AID = 2000002
 RELOC_RULE = RULES["v1"]
 HOVER_S = 0.55
 OFFSETS = [(dx, dy) for dy in range(-2, 3) for dx in range(-2, 3) if (dx, dy) != (0, 0)]
@@ -55,17 +56,13 @@ def score(session: Path) -> dict[str, Any]:
     recs = [json.loads(x) for x in (session / "demo.jsonl").read_text().splitlines()]
     with gzip.open(session / "packets.jsonl.gz", "rt") as fh:
         events = [json.loads(x) for x in fh]
-    aid = next((int(e["aid"]) for e in events if e.get("type") == "login_accepted"), None)
-    if aid is None:
-        from poring_dataset.timeline import infer_self_aid
-
-        aid = infer_self_aid(events)
+    aid = GM_AID  # demo_verify's --aid-gm (the session starts after the login: no login_accepted)
     rows = []
     for rec in recs:
         if rec.get("rule") not in RULES.values():
             continue
         ev = rec["outcome"]["evidence"]
-        true = V.position_before(events, rec["t_mono_ns"], aid) if aid is not None else None
+        true = V.position_before(events, rec["t_mono_ns"], aid)
         got = ev.get("to")
         if true is None:
             status = "ambiguous"

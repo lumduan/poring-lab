@@ -1126,3 +1126,24 @@ runs among 4 Porings per 10 routes and the church's NPCs. The allowlist never cl
 - → walk@7: patience for loitering monsters, a substitute for a blocked goal, decisive
   re-localisation. It is tested CLEAN and in a SEEDED crowd, pre-registered separately, with the
   click time logged.
+
+### relocalise@1 (v1, the structure probes), indoor, RDP: **FAIL, 6 / 50 correct — 2 WRONG, 42 undecided** (2026-10-07 18:56:56–19:07 ICT / 11:56:56–12:07 UTC)
+**Session:** `20261007T185656-demo-reloc-alone-indoor`; 56 attempts, none interrupted.
+- **The harness held:** in all 50 the packets put the GM exactly on the warp cell.
+- **Scoring note:** the first scoring read every attempt as ambiguous. The scorer inferred the
+  account id instead of using the GM's (2000002, as `demo_verify` does). It was fixed, re-scored,
+  and committed with this result.
+
+**The outcomes:**
+
+| outcome | n | |
+|---|---|---|
+| correct | 6 | after 4–7 probes |
+| **WRONG** | **2** | #3: true (109,126), chose (109,127), 8 probes; #13: true (107,121), chose (107,123), 3 probes. Both moved the belief along the pew rows. |
+| undecided | 42 | **31 with ZERO probes**: no offset is flat for every candidate among the pews. The other 11 ran out of splitting probes (1–8). |
+
+**What it says:**
+- The flatness requirement makes v1 inert indoors.
+- When it does decide, it can be confidently wrong (2 of 8 decisions).
+- → v2 (3.11) predicts per candidate, with the altitude as evidence, and must beat this attempt by
+  attempt on the same seed.
