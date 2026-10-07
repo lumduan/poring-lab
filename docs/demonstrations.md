@@ -658,3 +658,16 @@ Event → fields (cs = our request, sc = the server):
     (which corner each one is) could do it; the position alone cannot when only 2 show.
 - `nav.walk_to` stays UNVERIFIED.
 
+### walk@4, outdoor, RDP: **PASS, 50 / 50 verified** (2026-10-07 15:16:19–15:21:21 ICT / 08:16:19–08:21:21 UTC)
+- **Session:** `20261007T151619-demo-walk4-alone-outdoor`, seed 20261012.
+- **The setup:** the minimap position, GAT altitude, ABSOLUTE targets 2–6 cells away, the
+  corner-anchor confirmation.
+- **The result:** every attempt confirmed on its FIRST hover; no correction, no decline, no
+  interruption. verify@2: 50 / 50, each accepted exactly on the target.
+- **Outdoors the walk rule now has two independent passes:** walk@3 49 / 50 (relative targets)
+  and walk@4 50 / 50 (absolute targets).
+- **Indoors fails:** walk@3 32 / 49 and walk@4 26 / 46. The open problems are the self-position
+  (no minimap) and the client's picking around models.
+- So `nav.walk_to` stays UNVERIFIED as a concept (the pre-registered bar is per scene, both
+  scenes).
+
