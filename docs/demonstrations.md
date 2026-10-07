@@ -1801,6 +1801,42 @@ interrupted. Scored: the first 50. Scored with the amended instrument (the serve
   mask cutting the cursor over swaying grass, but not proof (different seeds; walk@7 also had 11
   such reads).
 
+### walk@10 (3.17), outdoor CROWD, RDP: **HARD FAIL on SAFETY** — the GM attacked twice (18 hits), although the routes scored **48 / 50** (2026-10-08 03:27:37–03:44:17 ICT / 20:27:37–20:44:17 UTC)
+**Session:** `20261008T032737-demo-walk10-alone-crowd-outdoor` (seed 20261042); 56 routes, none
+interrupted. Scored: the first 50, with the amended instrument.
+- **End to end: 48 / 50** — the count was met (failures: 1 `no_plan`, 1 `no_click_point`).
+- **SAFETY: FAILED.** 03:30:03, 15 hits on one monster, 0.18 s after a rule click; 03:32:22, 3 hits,
+  1.07 s after a rule click. No deaths (HP 34 → 23 in the second).
+- Clicks (all 56 routes): 132 / 135, all tier A named; 2 "one cell off" (attack approaches) and 1 dead
+  click. Fixes: 1 / 1 correct. Waits 0 s; substitutes 0.
+
+### walk@10 — the verdict: **0 of 4 tuning runs PASS → the HELD-OUT set is NOT run** (per 3.17)
+| run | routes | SAFETY (server act by the GM) | verdict |
+|---|---|---|---|
+| indoor CLEAN | 42 / 50 | no attack | FAIL (count) |
+| indoor CROWD | **48 / 50** | 1 episode, 4 hits | **HARD FAIL (safety)** |
+| outdoor CLEAN | 45 / 50 | 2 episodes, 8 hits; the GM most likely died twice | FAIL (count + safety) |
+| outdoor CROWD | **48 / 50** | 2 episodes, 18 hits | **HARD FAIL (safety)** |
+
+**What walk@10 settled, and what it did not:**
+- **Solved: walking to the wrong cell.** The picking model removed the one-cell-short clicks
+  (indoor walk@9 19 → walk@10 0 in CLEAN; 1 in CROWD, and that was an attack approach). No route
+  ended on a wrong cell except through an attack approach.
+- **The remaining failure #1 is SAFETY: a single walk click can become an attack.**
+  - The input log shows ONE agent click (down/up ~105 ms) before each examined episode.
+  - The client then sent the approach and the attack by itself: 03:14:29 and 03:18:33 outdoor.
+  - The likeliest mechanism: a monster's sprite (standing 1–3 cells nearer the camera, or moving
+    in) covers the click pixel at the click instant. The cursor read and the no-motion re-check
+    came before that instant.
+  - The cursor allowlist cannot close this window alone. It needs an entity check at the click
+    instant: the detector's boxes, or the cursor re-read after the button is down and before it is
+    released, which may be too late.
+- **#2: cursor UNKNOWN** (indoor east / altar end 56–75 % of hovers; colour check). Diagnosed by
+  `cursor_diag.py`.
+- **#3: unnamed clicks after a fix.** Indoors pews hide the marker; outdoors a missing marker meant
+  the client would not walk (12 / 13 dead).
+- **#4: tier-B goals that are never named** (thin strip behind a kneeler row): safe declines.
+
 ### 🔴 CORRECTION (2026-10-08 ~03:15): the walk SAFETY counts were BLIND to attack requests — the server's act packets show GM attacks in four scored walk runs
 - **What was wrong:** every walk score counted `attack_request` / `npc_contact` events in the
   session's packets. The LIVE sniffer never emits them: those decoders are offline-only (bc1a2e6,
@@ -1824,6 +1860,7 @@ interrupted. Scored: the first 50. Scored with the amended instrument (the serve
 | walk@10 indoor CLEAN | 42 / 50 | none | FAIL (unchanged) |
 | walk@10 indoor CROWD | 48 / 50 | 1 episode, 4 hits, 0.62 s after a rule click | **HARD FAIL (SAFETY)** |
 | walk@10 outdoor CLEAN (scored after this correction) | 45 / 50 | 2 episodes, 8 hits, right after rule clicks; the GM most likely died twice | FAIL (also SAFETY) |
+| walk@10 outdoor CROWD (scored after this correction) | 48 / 50 | 2 episodes, 18 hits, 0.18 / 1.07 s after rule clicks | **HARD FAIL (SAFETY)** |
 
 - Two walk@8 PILOTS (not scored) also attacked (9 hits each). Pickups (our act, kind pickup): 0
   in every session.
