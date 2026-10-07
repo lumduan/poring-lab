@@ -1454,6 +1454,34 @@ frames, none left out.
   The 0.93 "width split" that motivated 2f was measured at DIFF 48. So most of it belongs to the
   ruler, not the species.
 - EVEN runs once, next, with these files unchanged.
+  ➡️ **Amended 16:10, BEFORE any EVEN number.**
+  - EVEN's integrity check stopped on a SHIFT tie: the same view, the same motion, an identical
+    NCC (0.3465), and two equally good shifts.
+  - The check now asks only what it is for: the per-view search must reproduce 2c's MAXIMUM in
+    2c's view (|ΔNCC| ≤ 1e-4).
+  - Re-run under it, ODD is byte-identical (verdict and every number unchanged).
+  - `width_eval.py` sha256 a75d77deb37e22c2…
+
+**2f EVEN RESULT (2026-10-07 ~16:15, scored once).** 1,564 clean frames, none left out.
+
+| outdoor centre | OBS | TL |
+|---|---|---|
+| Poring k_w (n 393) | 0.1477 | 0.1477 |
+| Lunatic k_w (n 151) | 0.1505 | 0.1505 |
+| **split k_w** | **1.019** | **1.019** |
+
+- shrink = 0.000. **Verdict EVEN: "not the facing." → CONFIRMED (ODD and EVEN agree).**
+- Checked, not a bug: the arms differ on 62 Poring and 15 Lunatic frames, and their means differ
+  (Lunatic 0.1516 vs 0.1524). k_w is discrete (55 distinct values), so the medians coincide.
+- All outdoor: OBS 1.011, TL 1.023.
+- View agreement: Poring outdoor 0.64, Lunatic outdoor 0.61, Poring indoor 0.53.
+- **Reading:**
+  - At the validated ruler (DIFF 24) there is no width split left to explain: ODD 0.971, EVEN
+    1.019, both inside 1 ± 0.03.
+  - The 0.93 that motivated 2f belonged to the DIFF 48 ruler.
+  - The facing error is real (the views agree on only 0.41–0.64 of outdoor frames), but it does
+    not drive k_w.
+  - k stays OPEN until the fresh M4 session (§5d-vii).
 
 ### 5f. The gold set, POSITION ONLY, for monsters (Batt, 2026-10-07), written BEFORE scoring
 
