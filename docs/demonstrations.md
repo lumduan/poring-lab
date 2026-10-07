@@ -401,4 +401,21 @@ scripts, static data per ADR-0015) are pre-registered here before their tests.
   - A fit on this session would be design time. The next indoor alone-test (walk@4) must then use
     NEW situations: a new seed, and pre-registered before it runs.
 - `nav.walk_to` stays UNVERIFIED: no `verified_on` entry until both scenes pass.
+- **Diagnosis (design time, after scoring; scratch `indoor-fit/fit.py`). It is NOT the camera rig.**
+  - Scored by cell agreement (the clicked pixel's nearest projected cell == the accepted cell),
+    the current block gets 33 / 41.
+  - No change does better: distance 220–340, pitch ±6°, yaw ±1°, or a screen-centre offset of
+    ±16 / ±24 px.
+  - **Every one of the 8 misses crosses a floor step.** prt_church's GAT has two floor levels
+    (altitude 0 and 5), and each miss has its start and its accepted cell on different levels. A
+    flat floor cannot express that.
+  - With the GAT altitude (from the packet start cell, a diagnostic only), 3 of the 8 come right
+    (36 / 41). The other 5 stay wrong in the same direction: the client's own picking (likely its
+    ground mesh) sees the step as larger than the coarse GAT says.
+- **The design question for walk@4 indoor:** the rule has no position fix indoors (no minimap),
+  so it cannot look the altitude up.
+  - But the walk marker is drawn where the CLIENT picked. Its centroid relative to the projected
+    target is a pixel-only correction signal: hover, measure, move by the difference once, hover
+    again.
+  - A candidate, to be calibrated at design time and pre-registered before walk@4 runs.
 
