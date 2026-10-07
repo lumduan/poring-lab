@@ -1181,6 +1181,51 @@ frame: the decoded, ruler-measured box vs MP of the painted sprite.
 **Then:** freeze, and score the EVEN spawns ONCE (synthetic validation + real k). CONFIRMED if the
 validation holds on EVEN AND the k verdict is the same as ODD's (or both "neither", within 2 %).
 
+**ODD result (2026-10-07 ~09:05), FROZEN.** Evaluator `mp_eval.py` (scratch, sha256 877d8400439264df…).
+Before any result, it fixed these choices:
+- each synthetic spawn's painted sprite is re-derived as 2d chose it, and its opaque bbox must equal
+  the recorded TRUE box (it did, for all 18 spawns);
+- the k_h species split is taken on outdoor centre (step 1's and 2d's convention), with all thirds
+  reported beside it;
+- k uses K_NOSTALRO = 10/75 exactly.
+
+Real data: 1,150 clean frames, none left out (every frame has a 2c view and an MP).
+
+**Validation on 18 synthetic spawns** (obs/MP, median; MP/TRUE beside it):
+
+| ruler | Poring outdoor h (w) | Lunatic outdoor h (w) | split | Poring indoor h | MP/TRUE h, Poring out / in / Lunatic |
+|---|---|---|---|---|---|
+| DIFF 24 | 1.000 (1.029) | **1.044** (1.032) | **1.044** | 1.026 | 0.806 / 0.776 / 1.000 |
+| **DIFF 48** | **1.000** (1.000) | **1.000** (1.000) | **1.000** | 1.000 | the same |
+
+- **DIFF 24 is NOT validated:** the Lunatic's ~4 % halo stays (outside ±3 %).
+- **DIFF 48 VALIDATES:** like is measured with like, exactly.
+- MP/TRUE shows why: the ruler drops the Poring's detached tuft from the PREDICTION too (0.81×),
+  so the bias cancels.
+
+**k on the real ODD frames, at DIFF 48:**
+
+| group | n (spawns) | k_h | k_w | k_h / k_w |
+|---|---|---|---|---|
+| Poring, outdoor centre | 179 (5) | 0.1481 | 0.1436 | 1.031 |
+| Lunatic, outdoor centre | 113 (4) | 0.1493 | 0.1333 | 1.120 |
+| Poring, outdoor all | 463 (7) | 0.1476 | 0.1455 | 1.014 |
+| Lunatic, outdoor all | 327 (5) | 0.1500 | 0.1333 | 1.125 |
+| Poring, indoor | 360 (6) | 0.1433 | 0.1387 | 1.033 |
+| **all clean frames** | 1,150 | **0.1467** | 0.1387 | 1.058 |
+
+- **One k:** the k_h species split is 1.008 on outdoor centre (1.016 on all outdoor), within
+  1 ± 0.05. With like measured with like, the per-species height split is GONE.
+- **The scalar: "NEITHER".** k_h = 0.1467 is +10.0 % from nostalro (0.1333) and +4.8 % from
+  korangar (0.140); the tolerance is ±2 %.
+- **Reported, not fitted:**
+  - pooled k_w = 0.1387 (−0.9 % from korangar);
+  - k_h / k_w is 1.058 pooled, but it is not one number: Poring ~1.01–1.03, Lunatic ~1.12;
+  - the widths do not agree across species: Lunatic k_w 0.1333 vs Poring 0.144–0.146, a 0.93 split.
+  - The vertical-only search found no source for a height excess. Any reading of the width split
+    needs its own pre-registration.
+- **Next, as pre-registered:** EVEN once, with the same script.
+
 ### 5f. The gold set, POSITION ONLY, for monsters (Batt, 2026-10-07), written BEFORE scoring
 
 **Why position only.**
