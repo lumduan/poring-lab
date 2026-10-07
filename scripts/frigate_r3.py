@@ -45,7 +45,7 @@ import subprocess
 import sys
 import time
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -170,9 +170,10 @@ def frigate_answers(
     return False
 
 
-def prestart(path: Path = BASELINE, fetch: Fetch = fetch_json,
+def prestart(path: Path | None = BASELINE, fetch: Fetch = fetch_json,
              apps: list[tuple[str, int]] | None = None) -> str | None:  # fmt: skip
-    """The checks before ANY GPU job of ours: the refusal reason, or None to go."""
+    """The checks before ANY GPU job of ours: the refusal reason, or None to go. ``path`` None:
+    no baseline file needed (the paired design measures its own OFF windows)."""
     models = ollama_models(fetch)
     if models:
         names = ", ".join(str(m["name"]) for m in models)
@@ -184,10 +185,18 @@ def prestart(path: Path = BASELINE, fetch: Fetch = fetch_json,
         return f"R2: another job of ours is on the GPU ({'; '.join(jobs)})"
     if not frigate_answers(fetch):
         return "R3: Frigate stats unreachable (3 tries; fail closed)"
-    b, why = load_baseline(path)
-    if b is None:
-        return f"R3: {why}"
+    if path is not None:
+        b, why = load_baseline(path)
+        if b is None:
+            return f"R3: {why}"
     return None
+
+
+def camera_reference(fetch: Fetch = fetch_json) -> dict[str, float]:
+    """Each camera's camera_fps right now: the drop rule's reference before the first OFF window."""
+    s = fetch(FRIGATE_STATS)
+    p = parse_stats(s) if s else None
+    return {c: fps for c, (fps, _) in p["cameras"].items()} if p else {}
 
 
 def summarise(samples: list[dict[str, Any]]) -> dict[str, Any]:
@@ -361,6 +370,210 @@ class R3Guard:
             if ref > 0 and not lo * ref <= cur <= hi * ref:
                 return (f"camera activity changed: detection_fps 10 min median {cur:.1f} vs "
                         f"baseline {ref:.1f}")  # fmt: skip
+        return None
+
+
+# --- the PAIRED ON/OFF measurement (docs/operations/r3-paired.md, pre-registered 8c7f8ed) -------
+
+PAIR_LOAD_TOL = 0.20  # a pair is kept only when Frigate's load is within 20 % between ON and OFF
+PAIR_MIN = 4  # kept pairs before a verdict
+PAIR_MAX_CYCLES = 10  # inconclusive after this many ON/OFF cycles
+MONITOR_ON_S, MONITOR_OFF_S = 27 * 60, 180.0
+TRAIN_WIN = (180.0, 30.0, 6)  # window s, settle s, min updates (training steps)
+SHORT_WIN = (60.0, 20.0, 3)  # eval / predict steps (timeout <= 20 min)
+
+
+def window_value(
+    samples: Sequence[tuple[float, float, float]],
+    start: float,
+    settle: float,
+    min_updates: int,
+    end: float | None = None,
+) -> tuple[float, float, int] | None:
+    """(latency median, load median, n) of a window's distinct updates after its settle (and before
+    ``end`` when given); None with fewer than ``min_updates``."""
+    vals = [(i, d) for t, i, d in samples if t >= start + settle and (end is None or t <= end)]
+    if len(vals) < min_updates:
+        return None
+    return (statistics.median(i for i, _ in vals), statistics.median(d for _, d in vals), len(vals))
+
+
+def make_pairs(windows: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Each ON window with the OFF window(s) adjacent to it (before and after): OFF = their mean.
+    ``kept`` when the loads agree within PAIR_LOAD_TOL. Windows without a value are skipped."""
+    out = []
+    for k, w in enumerate(windows):
+        if w["phase"] != "on" or w.get("value") is None:
+            continue
+        near = [j for j in (k - 1, k + 1) if 0 <= j < len(windows)]
+        offs = [
+            windows[j]["value"]
+            for j in near
+            if windows[j]["phase"] == "off" and windows[j].get("value")
+        ]
+        if not offs:
+            continue
+        lat_off = statistics.mean(v[0] for v in offs)
+        load_off = statistics.mean(v[1] for v in offs)
+        lat_on, load_on, _ = w["value"]
+        kept = load_off > 0 and abs(load_on - load_off) <= PAIR_LOAD_TOL * load_off
+        out.append({
+            "on": k, "offs": len(offs), "lat_on": round(lat_on, 2), "lat_off": round(lat_off, 2),
+            "load_on": round(load_on, 1), "load_off": round(load_off, 1), "kept": bool(kept),
+            "delta": round(lat_on - lat_off, 2),
+        })  # fmt: skip
+    return out
+
+
+def verdict(
+    pairs: Sequence[dict[str, Any]], last: int | None = None
+) -> tuple[str, float | None, int]:
+    """("trip" | "pass" | "pending", median delta of the kept pairs, kept count); ``last``: only
+    the most recent ``last`` kept pairs (MONITORING)."""
+    kept = [p["delta"] for p in pairs if p["kept"]]
+    if last is not None:
+        kept = kept[-last:]
+    if len(kept) < PAIR_MIN:
+        return "pending", (statistics.median(kept) if kept else None), len(kept)
+    med = statistics.median(kept)
+    return ("trip" if med > DELTA_MS else "pass"), med, len(kept)
+
+
+class PairedR3:
+    """R2 + R3 for one GPU step, measured like with like.
+
+    tick(now) -> "pause" | "unpause" | None: the schedule (the caller pauses/unpauses the
+    step's container). poll(now): read Frigate (distinct updates) into the open window. breach(now)
+    -> None | (kind, detail, hard): drops (HARD, absolute), frigate_unreachable, r2_ollama_loaded,
+    latency (paired median delta > 5 ms), inconclusive."""
+
+    def __init__(
+        self,
+        short: bool,
+        fetch: Fetch = fetch_json,
+        now: float | None = None,
+        cam_ref: dict[str, float] | None = None,
+        started: bool = True,
+    ) -> None:
+        now = time.time() if now is None else now
+        self.started = started
+        self.fetch = fetch
+        self.win_s, self.settle_s, self.min_updates = SHORT_WIN if short else TRAIN_WIN
+        self.short = short
+        self.mode = "measure"
+        self.windows: list[dict[str, Any]] = [{"phase": "on" if started else "pre", "t0": now,
+                                               "samples": []}]  # fmt: skip
+        self.seen: Any = None
+        self.last_fresh = now
+        self.bad_since: dict[str, tuple[float, int]] = {}
+        self.cam_ref = dict(cam_ref or {})
+        self.off_fps: dict[str, list[float]] = {}
+        self.last_ollama = -1e18
+        self.models: list[dict[str, Any]] = []
+        self.last: dict[str, Any] | None = None
+        self.result: tuple[str, float | None, int] = ("pending", None, 0)
+
+    @property
+    def phase(self) -> str:
+        return str(self.windows[-1]["phase"])
+
+    def _close(self, now: float, nxt: str) -> None:
+        w = self.windows[-1]
+        w["t1"] = now
+        if self.mode == "monitor" and w["phase"] == "on":
+            w["value"] = window_value(w["samples"], now - TRAIN_WIN[0], TRAIN_WIN[1],
+                                      self.min_updates, end=now)  # fmt: skip
+        else:
+            w["value"] = window_value(w["samples"], w["t0"], self.settle_s, self.min_updates)
+        self.windows.append({"phase": nxt, "t0": now, "samples": []})
+
+    def start(self, now: float | None = None) -> None:
+        """Begin the ON/OFF schedule (the step's process has loaded the GPU): the first ON window
+        opens now; what came before ("pre") is never paired."""
+        now = time.time() if now is None else now
+        if not self.started:
+            self.windows[-1]["t1"] = now
+            self.windows.append({"phase": "on", "t0": now, "samples": []})
+            self.started = True
+
+    def summary(self) -> dict[str, Any]:
+        state, med, n = self.result
+        return {"mode": self.mode, "verdict": state, "median_delta_ms": med, "kept_pairs": n,
+                "pairs": self.pairs()}  # fmt: skip
+
+    def tick(self, now: float | None = None) -> str | None:
+        now = time.time() if now is None else now
+        if not self.started:
+            return None
+        w = self.windows[-1]
+        if self.mode == "monitor":
+            length = MONITOR_ON_S if w["phase"] == "on" else MONITOR_OFF_S
+        else:
+            length = self.win_s
+        if now - w["t0"] < length:
+            return None
+        nxt = "off" if w["phase"] == "on" else "on"
+        self._close(now, nxt)
+        if w["phase"] == "off":  # an OFF just closed: the ON before it is now paired
+            pairs = make_pairs(self.windows[:-1])
+            self.result = verdict(pairs, last=PAIR_MIN if self.mode == "monitor" else None)
+            if self.mode == "measure" and self.result[0] == "pass" and not self.short:
+                self.mode = "monitor"
+        return "pause" if nxt == "off" else "unpause"
+
+    def poll(self, now: float | None = None) -> None:
+        now = time.time() if now is None else now
+        s = self.fetch(FRIGATE_STATS)
+        p = parse_stats(s) if s else None
+        if p is not None and p["updated"] != self.seen:
+            self.seen = p["updated"]
+            self.last_fresh = now
+            self.last = p
+            self.windows[-1]["samples"].append((now, p["inference"], p["detection_fps"]))
+            for cam, (fps, skipped) in p["cameras"].items():
+                if self.phase == "off":
+                    self.off_fps.setdefault(cam, []).append(fps)
+                ref = (statistics.median(self.off_fps[cam]) if self.off_fps.get(cam)
+                       else self.cam_ref.get(cam, 0.0))  # fmt: skip
+                bad = skipped > 0 or (ref > 0 and fps < CAM_FPS_FLOOR * ref)
+                if bad:
+                    since, n = self.bad_since.get(cam, (now, 0))
+                    self.bad_since[cam] = (since, n + 1)
+                else:
+                    self.bad_since.pop(cam, None)
+        if now - self.last_ollama >= OLLAMA_POLL_S:
+            self.last_ollama = now
+            self.models = ollama_models(self.fetch) or []
+
+    def pairs(self) -> list[dict[str, Any]]:
+        return make_pairs([w for w in self.windows if "t1" in w])
+
+    def breach(self, now: float | None = None) -> tuple[str, str, bool] | None:
+        now = time.time() if now is None else now
+        for cam, (since, n) in sorted(self.bad_since.items()):
+            if n >= DROP_MIN_UPDATES and now - since >= DROP_S:
+                fps, sk = self.last["cameras"][cam] if self.last else (0.0, 0.0)
+                return ("drops", f"camera {cam} dropping frames for {now - since:.0f} s "
+                        f"(skipped_fps {sk}, camera_fps {fps})", True)  # fmt: skip
+        if now - self.last_fresh > UNREACHABLE_S:
+            quiet = now - self.last_fresh
+            return ("frigate_unreachable", f"no fresh Frigate stats for {quiet:.0f} s", False)
+        if self.models:
+            names = ", ".join(str(x["name"]) for x in self.models)
+            return ("r2_ollama_loaded", f"Ollama loaded {names}", False)
+        state, med, n = self.result
+        if state == "trip":
+            return ("latency", f"paired median ON-OFF delta {med:+.2f} ms over {n} kept pairs "
+                    f"(> +{DELTA_MS:g}; {self.mode})", False)  # fmt: skip
+        cycles = sum(1 for w in self.windows if w["phase"] == "off" and "t1" in w)
+        if (
+            self.mode == "measure"
+            and not self.short
+            and cycles >= PAIR_MAX_CYCLES
+            and state == "pending"
+        ):
+            return ("inconclusive", f"only {n} kept pairs after {cycles} cycles: Frigate load too "
+                    "variable to measure (fail closed)", False)  # fmt: skip
         return None
 
 

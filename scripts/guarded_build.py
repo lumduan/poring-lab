@@ -489,6 +489,8 @@ def abort(
 ) -> bool:
     """SIGINT the step, then VERIFY it stopped (verify_stop); True only when verified."""
     t0 = time.monotonic()
+    if container is not None:  # a PAUSED container (an R3 OFF window) cannot handle SIGINT
+        subprocess.run(["docker", "unpause", container], capture_output=True, check=False)
     proc.send_signal(2)
     try:
         proc.wait(timeout=STOP_VERIFY_S)
@@ -503,7 +505,7 @@ def run_process(
     cmd: list[str],
     guard: Guard,
     env: dict[str, str] | None = None,
-    r3: "frigate_r3.R3Guard | None" = None,
+    r3: "frigate_r3.PairedR3 | None" = None,
     container: str | None = None,
     gpu: bool = False,
     host: bytes | None = None,
@@ -514,6 +516,7 @@ def run_process(
     print(f"[{ts()}] {label}: {' '.join(cmd)}{builder}  (log {log.name})", flush=True)
     with log.open("w") as fh:
         proc = subprocess.Popen(cmd, cwd=REPO, stdout=fh, stderr=subprocess.STDOUT, env=env)
+        t_up: float | None = None
         while proc.poll() is None:
             hit = guard.breach()
             if hit:
@@ -525,6 +528,18 @@ def run_process(
                 return False
             if r3 is not None:
                 r3.poll()
+                if not r3.started and container is not None and container_running(container):
+                    t_up = t_up or time.monotonic()
+                    if (
+                        our_gpu_mib() >= R3_START_MIB
+                        or time.monotonic() - t_up >= R3_START_FALLBACK_S
+                    ):
+                        r3.start()
+                        print(f"[{ts()}] R3 schedule started [{frigate_r3.stamp()}]", flush=True)
+                act = r3.tick() if container is not None else None
+                if act:
+                    subprocess.run(["docker", act, container], capture_output=True, check=False)
+                    print(f"[{ts()}] R3 {act} {container} [{frigate_r3.stamp()}]", flush=True)
                 r3hit = r3.breach()
                 if r3hit:
                     kind, detail, hard = r3hit
@@ -532,10 +547,13 @@ def run_process(
                         f"R3-HARD {kind}: {detail} (no resume)" if hard else f"R3 {kind}: {detail}"
                     )
                     print(f"[{ts()}] ABORT {label}: {tag} [{frigate_r3.stamp()}]", flush=True)
+                    print(f"[{ts()}] R3 summary: {json.dumps(r3.summary())}", flush=True)
                     abort(proc, label, container, gpu, host)
                     return False
             time.sleep(2)
     ok = proc.returncode == 0
+    if r3 is not None:
+        print(f"[{ts()}] R3 summary: {json.dumps(r3.summary())}", flush=True)
     print(
         f"[{ts()}] {label}: {'OK' if ok else f'FAILED rc={proc.returncode}'} ({guard.summary()})",
         flush=True,
@@ -739,20 +757,42 @@ def results_csv(step: Step) -> Path | None:
     return REPO / "data" / "train" / argv[i + 1] / "results.csv" if i + 1 < len(argv) else None
 
 
-def gpu_rules(step: Step, baseline: Path) -> "frigate_r3.R3Guard | None":
-    """R2 + R3 before a GPU step (frigate_r3.py): the R3 guard to run beside the IO guard, or None
-    after printing why the step is REFUSED."""
-    why = frigate_r3.prestart(baseline)
+SHORT_STEP_S = 1200  # eval / predict: 60 s windows (docs/operations/r3-paired.md)
+R3_START_MIB = 500  # the schedule starts once the step holds this much on the GPU (model loaded)
+R3_START_FALLBACK_S = 120.0
+
+
+def gpu_rules(step: Step, baseline: Path) -> "frigate_r3.PairedR3 | None":  # noqa: ARG001
+    """R2 + R3 before a GPU step: the PAIRED ON/OFF measurement to run beside the IO guard
+    (docs/operations/r3-paired.md), or None after printing why the step is REFUSED. Its ON/OFF
+    schedule starts once the step loads the GPU (run_process)."""
+    why = frigate_r3.prestart(None)
     if why:
         print(f"[{ts()}] REFUSED {step.label}: {why} [{frigate_r3.stamp()}]", flush=True)
         return None
-    base, _ = frigate_r3.load_baseline(baseline)
-    assert base is not None
-    print(f"[{ts()}] R3: Frigate detector baseline {base['inference_median']} ms "
-          f"(measured {base['end']}); abort above +{frigate_r3.DELTA_MS:g} ms (60 s median), "
-          f"on a camera dropping frames for {frigate_r3.DROP_S:g} s, or Ollama loading a model",
-          flush=True)  # fmt: skip
-    return frigate_r3.R3Guard(base, results_csv=results_csv(step))
+    short = (step.seconds or 600) <= SHORT_STEP_S
+    win, settle, _ = frigate_r3.SHORT_WIN if short else frigate_r3.TRAIN_WIN
+    print(f"[{ts()}] R3 (paired): {win:g} s ON / {win:g} s OFF windows ({settle:g} s settle) by "
+          f"docker pause; abort if the median ON-OFF detector delta > +{frigate_r3.DELTA_MS:g} ms "
+          f"over >= {frigate_r3.PAIR_MIN} load-matched pairs; any camera dropping frames for "
+          f"{frigate_r3.DROP_S:g} s; Ollama loading a model", flush=True)  # fmt: skip
+    return frigate_r3.PairedR3(short=short, cam_ref=frigate_r3.camera_reference(), started=False)
+
+
+def our_gpu_mib() -> int:
+    """MiB on the GPU held by OUR processes (uid + poring_vision in the command line)."""
+    try:
+        query = [
+            "nvidia-smi",
+            "--query-compute-apps=pid,used_memory",
+            "--format=csv,noheader,nounits",
+        ]
+        out = subprocess.run(query, capture_output=True, text=True, timeout=15, check=True).stdout
+    except (OSError, subprocess.SubprocessError):
+        return 0
+    rows = [line.split(",") for line in out.splitlines() if "," in line]
+    mib = {int(p): int(m) for p, m in rows if p.strip().isdigit() and m.strip().isdigit()}
+    return sum(mib[p] for p in own_pids(b"poring_vision", list(mib)))
 
 
 def main() -> int:

@@ -237,3 +237,103 @@ def test_one_slow_stats_request_is_not_unreachable(fr: ModuleType) -> None:
     answers = iter([None, stats(5)])
     assert fr.frigate_answers(lambda url: next(answers), sleep=lambda s: None) is True
     assert fr.frigate_answers(lambda url: None, sleep=lambda s: None) is False
+
+
+# --- the PAIRED ON/OFF measurement (docs/operations/r3-paired.md, pre-registered 8c7f8ed) ---------
+
+
+class Sim:
+    """A Frigate whose stats refresh every 15 s; the ON effect and the load follow the phase."""
+
+    def __init__(self, fr: ModuleType, g_phase: Any, on_ms: float, off_ms: float = 28.0,
+                 load_on: float = 30.0, load_off: float = 30.0) -> None:  # fmt: skip
+        self.fr, self.g_phase = fr, g_phase
+        self.on_ms, self.off_ms, self.load_on, self.load_off = on_ms, off_ms, load_on, load_off
+        self.t = 0.0
+        self.cams: dict[str, tuple[float, float]] = {"a": (5.0, 0.0)}
+
+    def __call__(self, url: str) -> dict[str, Any] | None:
+        if url.endswith("/api/ps"):
+            return {"models": []}
+        on = self.g_phase() == "on"
+        return stats(int(self.t // 15), inf=self.on_ms if on else self.off_ms,
+                     det_fps=self.load_on if on else self.load_off, cams=self.cams)  # fmt: skip
+
+
+def run(fr: ModuleType, short: bool, on_ms: float, seconds: float, **kw: Any) -> tuple[Any, list]:
+    holder: dict[str, Any] = {}
+    sim = Sim(fr, lambda: holder["g"].phase, on_ms, **kw)
+    g = fr.PairedR3(short=short, fetch=sim, now=0.0)
+    holder["g"] = g
+    actions, hit = [], None
+    while sim.t < seconds and hit is None:
+        sim.t += 5
+        a = g.tick(sim.t)
+        if a:
+            actions.append((sim.t, a))
+        g.poll(sim.t)
+        hit = g.breach(sim.t)
+    return (g, hit), actions
+
+
+def test_window_value_drops_the_settle_and_needs_enough_updates(fr: ModuleType) -> None:
+    s = [(t, 30.0 + (t > 40) * 5, 20.0) for t in range(0, 180, 15)]
+    assert fr.window_value(s, 0.0, 30.0, 6) == (35.0, 20.0, 10)
+    assert fr.window_value(s, 0.0, 30.0, 11) is None
+
+
+def test_pairs_use_the_adjacent_off_windows_and_similar_load(fr: ModuleType) -> None:
+    ws = [{"phase": "off", "value": (28.0, 30.0, 9)}, {"phase": "on", "value": (35.0, 31.0, 9)},
+          {"phase": "off", "value": (30.0, 32.0, 9)}, {"phase": "on", "value": (34.0, 45.0, 9)},
+          {"phase": "off", "value": (29.0, 30.0, 9)}]  # fmt: skip
+    p = fr.make_pairs(ws)
+    assert [x["delta"] for x in p] == [6.0, 4.5] and [x["kept"] for x in p] == [True, False]
+    assert p[0]["lat_off"] == 29.0 and p[1]["load_off"] == 31.0
+    assert fr.verdict(p) == ("pending", 6.0, 1)
+    four = [{"kept": True, "delta": d} for d in (6.0, 5.5, 4.0, 7.0)]
+    assert fr.verdict(four)[0] == "trip"
+    assert fr.verdict([{"kept": True, "delta": d} for d in (3.0, 5.0, 4.0, 7.0)])[0] == "pass"
+
+
+def test_the_schedule_alternates_starting_on_and_a_real_effect_trips(fr: ModuleType) -> None:
+    (g, hit), actions = run(fr, short=False, on_ms=34.5, seconds=4000)
+    assert actions[:3] == [(180.0, "pause"), (360.0, "unpause"), (540.0, "pause")]
+    assert hit is not None and hit[0] == "latency" and hit[2] is False and "+6.50 ms" in hit[1]
+    assert sum(1 for p in g.pairs() if p["kept"]) >= 4
+
+
+def test_a_small_effect_passes_into_monitoring(fr: ModuleType) -> None:
+    (g, hit), actions = run(fr, short=False, on_ms=31.0, seconds=3600)
+    assert hit is None and g.mode == "monitor"
+    gaps = [b[0] - a[0] for a, b in zip(actions, actions[1:], strict=False)]
+    assert MONITOR_ON in gaps  # 27 min ON once monitoring
+
+
+MONITOR_ON = 27 * 60.0
+
+
+def test_a_load_mismatch_is_never_a_verdict_and_ends_inconclusive(fr: ModuleType) -> None:
+    """Frigate busier only while we run: no pair is like with like, so no trip -- and no pass."""
+    (g, hit), _ = run(fr, short=False, on_ms=40.0, seconds=8000, load_on=45.0, load_off=25.0)
+    assert hit is not None and hit[0] == "inconclusive"
+    assert not any(p["kept"] for p in g.pairs())
+
+
+def test_short_steps_use_one_minute_windows(fr: ModuleType) -> None:
+    (g, hit), actions = run(fr, short=True, on_ms=31.0, seconds=900)
+    assert actions[0] == (60.0, "pause") and hit is None and g.mode == "measure"
+
+
+def test_drops_are_absolute_without_any_baseline(fr: ModuleType) -> None:
+    holder: dict[str, Any] = {}
+    sim = Sim(fr, lambda: holder["g"].phase, 28.0)
+    sim.cams = {"a": (5.0, 0.3)}  # skipping, and no baseline floor any more
+    g = fr.PairedR3(short=False, fetch=sim, now=0.0)
+    holder["g"] = g
+    hit = None
+    while hit is None and sim.t < 120:
+        sim.t += 5
+        g.tick(sim.t)
+        g.poll(sim.t)
+        hit = g.breach(sim.t)
+    assert hit is not None and hit[0] == "drops" and hit[2] is True

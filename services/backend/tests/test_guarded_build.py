@@ -458,11 +458,19 @@ class _QuietGuard(_FakeGuard):
 
 
 class _R3Hit:
+    started = True
+
     def __init__(self, hit: tuple[str, str, bool]) -> None:
         self.hit = hit
 
     def poll(self) -> None:
         pass
+
+    def tick(self) -> None:
+        return None
+
+    def summary(self) -> dict:
+        return {"verdict": "trip"}
 
     def breach(self) -> tuple[str, str, bool]:
         return self.hit
@@ -624,3 +632,77 @@ def test_both_guards_verify_their_stops(
     assert gb.run_process("rundev:vision", ["sleep", "30"], guard, r3=r3, container="c1",
                           gpu=True) is False  # fmt: skip
     assert calls == [("rundev:vision", "c1", True, None)]
+
+
+class _Schedule:
+    """A PairedR3 stand-in: starts when told, then asks for pause, unpause, then a latency trip."""
+
+    def __init__(self) -> None:
+        self.started, self.ticks = False, 0
+
+    def poll(self) -> None:
+        pass
+
+    def start(self) -> None:
+        self.started = True
+
+    def tick(self) -> str | None:
+        self.ticks += 1
+        return {1: "pause", 2: "unpause"}.get(self.ticks)
+
+    def summary(self) -> dict:
+        return {"verdict": "trip", "pairs": []}
+
+    def breach(self) -> tuple[str, str, bool] | None:
+        return (
+            ("latency", "paired median ON-OFF delta +6.00 ms", False) if self.ticks >= 3 else None
+        )
+
+
+def test_the_paired_schedule_pauses_and_unpauses_the_steps_container(
+    gb: ModuleType, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """docs/operations/r3-paired.md: OFF = docker pause of the step's own container; the schedule
+    starts once the step holds >= 500 MiB on the GPU; an abort UNPAUSES before its SIGINT."""
+    docker: list[list[str]] = []
+    real_run = gb.subprocess.run
+
+    def run(cmd: list[str], **kw: object) -> object:
+        if cmd[0] == "docker":
+            docker.append(cmd)
+            return None
+        return real_run(cmd, **kw)
+
+    monkeypatch.setattr(gb.subprocess, "run", run)
+    monkeypatch.setattr(gb, "container_running", lambda name: True)
+    monkeypatch.setattr(gb, "our_gpu_mib", lambda: 1400)
+    monkeypatch.setattr(gb, "verify_stop", lambda *a, **k: True)
+    monkeypatch.setattr(gb.time, "sleep", lambda s: None)
+    r3 = _Schedule()
+    ok = gb.run_process("rundev:vision", ["sleep", "30"], _QuietGuard(), r3=r3, container="c1",
+                        gpu=True)  # fmt: skip
+    out = capsys.readouterr().out
+    assert ok is False and r3.started
+    assert docker == [
+        ["docker", "pause", "c1"],
+        ["docker", "unpause", "c1"],
+        ["docker", "unpause", "c1"],
+    ]
+    assert "R3 schedule started" in out and "ABORT rundev:vision: R3 latency: paired" in out
+    assert 'R3 summary: {"verdict": "trip"' in out
+
+
+def test_vision_steps_get_the_paired_measurement_without_a_baseline_file(
+    gb: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: list[object] = []
+    monkeypatch.setattr(gb.frigate_r3, "prestart", lambda path: seen.append(path))
+    monkeypatch.setattr(gb.frigate_r3, "camera_reference", lambda: {"a": 5.0})
+    train = gb.gpu_rules(
+        gb.parse_step("rundev:vision@43200=python -m poring_vision.train --x"), Path("x")
+    )
+    short = gb.gpu_rules(
+        gb.parse_step("rundev:vision@900=python -m poring_vision.train --eval w"), Path("x")
+    )
+    assert seen == [None, None]  # no baseline file needed
+    assert (train.short, short.short, train.started) == (False, True, False)

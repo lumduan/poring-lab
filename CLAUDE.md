@@ -60,13 +60,19 @@ ports, quickstart) and `docs/adr/`.
      - **R1:** Ollama + vision VRAM ≤ 9 GiB combined.
      - **R2:** one model at a time. Never run qwen3-vl alongside training or eval; refuse to start
        while Ollama's `/api/ps` shows a loaded model.
-     - **R3:** stop if the Frigate detector is > 5 ms slower than a baseline measured close in time
-       with nothing of ours running (a 60 s median); stop HARD if any camera drops frames
-       (`skipped_fps`) for 30 s.
-     - `scripts/frigate_r3.py` implements them, and `guarded_build.py` enforces them on every
-       `run:`/`rundev:` vision step (pre-start refusal + an in-run guard).
-     - Baselines: `frigate_r3.py baseline`, at most 3 h old, re-measured when camera activity
-       changes; `train-day.sh` re-measures on every pause.
+     - **R3:** stop if our job slows the Frigate detector by > 5 ms, measured like with like
+       (Batt 2026-10-07, `docs/operations/r3-paired.md`).
+       - The step's container is paused and unpaused in 3-min OFF/ON windows (60 s for short
+         steps).
+       - Each ON window is paired with its adjacent OFF windows; only pairs under similar Frigate
+         load (±20 % detections/s) count.
+       - The trip is the median paired delta > 5 ms over ≥ 4 pairs.
+       - Long runs are monitored at 27 min ON / 3 min OFF.
+       - Stop HARD if any camera drops frames (`skipped_fps`) for 30 s: ABSOLUTE, no baseline.
+     - `scripts/frigate_r3.py` (`PairedR3`) implements them, and `guarded_build.py` enforces them on
+       every `run:`/`rundev:` vision step (pre-start refusal + pause/unpause + in-run abort).
+     - Every abort unpauses the container and VERIFIES the stop: container gone, no process of ours
+       on the GPU, else escalation.
      - Ollama is called from HOST scripts only, never by joining a poring-lab container to its
        network (ADR-0005 isolation stays).
    - Don't remove these to make something fit; raise the limit consciously instead.

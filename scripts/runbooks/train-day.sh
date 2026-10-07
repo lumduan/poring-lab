@@ -3,15 +3,14 @@
 # 2026-10-07). The 20:00-05:00 window is RETIRED: R1-R3 decide, day or night. The IO guard stays.
 # Defaults: batch 2 / workers 1, the 25 % VRAM cap (train.py), checkpoints every epoch.
 # - Every attempt goes through guarded_build.py rundev:, which REFUSES to start while Ollama holds
-#   a model (R2) or without a Frigate baseline <= 3 h old, and aborts (SIGINT) on an IO stall, a
-#   +5 ms Frigate detector slowdown, Frigate unreachable, Ollama loading a model, or, right after
-#   an epoch, a baseline due for re-measurement.
-# - A trip PAUSES: the pause IS a fresh 15 min Frigate baseline (nothing of ours running), then
-#   --resume from last.pt. At most 3 resumes for IO/unreachable/R2 trips; planned re-baselines do
-#   not count. Never a retry loop.
-# - R3 latency trips walk the step-sleep ladder (SLEEP_LADDER, ms after every batch: duty cycle
-#   only, never the maths): each one resumes one level up. A latency trip at the top level counts
-#   as a trip.
+#   a model or another job of ours is on the GPU (R2) or Frigate does not answer, and aborts on an
+#   IO stall, an R3 trip (below), Frigate unreachable for 60 s, or Ollama loading a model.
+# - R3 is the PAIRED ON/OFF measurement (docs/operations/r3-paired.md): guarded_build pauses and
+#   unpauses the step's container in 3-min windows and trips on the median load-matched ON-OFF
+#   detector delta > 5 ms. A paired latency trip moves one level up the step-sleep ladder
+#   (SLEEP_LADDER, ms after every batch: duty cycle only, never the maths) after 30 s; at the top
+#   level the run STOPS and the setting is Batt's. "R3 inconclusive" (load too variable) STOPS.
+# - Other trips (IO, Frigate unreachable, R2) PAUSE 15 min, then --resume from last.pt; at most 3.
 # - R3-HARD (a camera dropping frames for 30 s) STOPS: no resume.
 # - Every guard stop is VERIFIED by guarded_build (container gone, no process of ours on the GPU,
 #   escalation to docker kill if not); STOP-UNVERIFIED STOPS here: a person must look.
@@ -30,21 +29,6 @@ level=${SLEEP_LEVEL:-0}
 mkdir -p "$D"
 log() { echo "$(TZ=Asia/Bangkok date '+%F %T') ICT / $(date -u '+%T') UTC $*" | tee -a "$D/train.log"; }
 s2_active() { grep -q '^BACKEND=console' state/capture-backend 2>/dev/null || [ -e state/cleanroom ]; }
-rebaseline() {  # the pause: a fresh baseline, nothing of ours running; R2 refusals wait (bounded)
-  local i
-  for i in $(seq 24); do  # the stopped step's container leaves the GPU within seconds: wait <= 2 min
-    nvidia-smi --query-compute-apps=process_name --format=csv,noheader 2>/dev/null | grep -q python || break
-    sleep 5
-  done
-  for i in 1 2 3 4 5 6; do
-    if python3 -S scripts/frigate_r3.py baseline --minutes 15 >> "$D/baseline.log" 2>&1; then
-      log "  baseline: $(tail -1 "$D/baseline.log" | cut -c1-200)"; return 0
-    fi
-    log "  baseline refused/failed ($(tail -1 "$D/baseline.log" | cut -c1-160)); waiting 5 min"
-    sleep 300
-  done
-  return 1
-}
 extra=""; [ "${RESUME:-0}" = 1 ] && extra="--resume"
 trips=0; attempt=0
 while :; do
@@ -61,19 +45,23 @@ while :; do
   if [ "$rc" -eq 0 ]; then log "TRAIN DONE (step-sleep ${ms} ms)"; break; fi
   if grep -q "STOP-UNVERIFIED" "$out"; then log "TRAIN STOPPED: the guard could NOT verify the stop ($(grep STOP-UNVERIFIED "$out" | tail -1 | cut -c1-160)): a person must look"; break; fi
   if grep -q "R3-HARD" "$out"; then log "TRAIN STOPPED: R3-HARD (a camera dropped frames for 30 s): no resume"; break; fi
-  if grep -q "REFUSED rundev" "$out"; then
+  pause=900
+  if grep -q "R3 inconclusive" "$out"; then
+    log "TRAIN STOPPED: R3 could not measure our effect (Frigate load too variable): fail closed"; break
+  elif grep -q "REFUSED rundev" "$out"; then
     trips=$((trips + 1))
   elif ! grep -q "ABORT rundev" "$out"; then
     log "TRAIN STOPPED: not a guard trip (see $out)"; break
-  elif grep -q "R3 rebaseline_due" "$out"; then
-    log "planned re-baseline (does not count)"
   elif grep -q "R3 latency" "$out" && [ "$level" -lt $((${#LADDER[@]} - 1)) ]; then
-    level=$((level + 1)); log "R3 latency: next resume at step-sleep ${LADDER[$level]} ms"
+    level=$((level + 1)); pause=30
+    log "R3 paired latency trip: the next attempt runs at step-sleep ${LADDER[$level]} ms"
+  elif grep -q "R3 latency" "$out"; then
+    log "TRAIN STOPPED: R3 paired latency trip at the top of the ladder (${LADDER[$level]} ms): setting parked for Batt"; break
   else
     trips=$((trips + 1))
   fi
   if [ "$trips" -gt 3 ]; then log "TRAIN PAUSED: 3 resumes used, resume by hand later (SLEEP_LEVEL=$level)"; break; fi
   [ -e "data/train/$RUN/weights/last.pt" ] && extra="--resume"
-  log "pausing: re-measuring the Frigate baseline (15 min) before resuming"
-  if ! rebaseline; then log "TRAIN PAUSED: no valid baseline after 6 tries (SLEEP_LEVEL=$level)"; break; fi
+  log "pausing ${pause} s before the next attempt"
+  sleep "$pause"
 done
