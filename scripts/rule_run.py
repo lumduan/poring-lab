@@ -206,7 +206,29 @@ def walk_rule(agent: r.Agent, screen: r.Screen, proj: object, outdoor: bool,
     return {"points": [(u, v)], "marker_px": marker, "origin": origin}
 
 
-def run_walk(scene: str, n: int, seed: int, label: str) -> int:
+def rerun_records(session_dir: Path, attempts: list[int], scene: str) -> list[DemoRecord]:
+    """The rule records (harness records excluded, in order) at ``attempts`` of an earlier session:
+    their situations are replayed exactly (Batt, 2026-10-07: interrupted attempts are re-run)."""
+    from poring_env.demo import read
+
+    rule = [x for x in read(session_dir / "demo.jsonl") if not x.actor.startswith("rule:harness@")]
+    picked = [rule[i] for i in attempts]
+    bad = [x.scene for x in picked if not (x.scene or "").startswith(f"{scene}:")]
+    if bad:
+        raise SystemExit(f"--scene {scene} does not match the original attempts' scenes {bad}")
+    return picked
+
+
+def harness_spot(rec: DemoRecord) -> tuple[int, int]:
+    """The walk harness's spot, as logged in the record's note ("harness spot X,Y")."""
+    note = rec.action.intended.note or ""
+    x, y = note.removeprefix("harness spot ").split(",")
+    return int(x), int(y)
+
+
+def run_walk(
+    scene: str, n: int, seed: int, label: str, rerun: list[DemoRecord] | None = None
+) -> int:
     import random
 
     import bench
@@ -225,8 +247,11 @@ def run_walk(scene: str, n: int, seed: int, label: str) -> int:
     sid = new_session_id(f"{label}-{scene}")
     log = DemoLog(sid)
     lock = record_session.read_lock(r.ROOT / "state")
+    if rerun is not None:
+        n = len(rerun)
     log.start(backend=str(lock.backend), lock_seq=lock.seq, server="lab-rathena", rule=WALK_RULE,
-              n=n, scene=scene, seed=seed, account="gm")  # fmt: skip
+              n=n, scene=scene, seed=seed, account="gm",
+              rerun_of=[x.record_id for x in rerun] if rerun else None)  # fmt: skip
     print(json.dumps({"session": sid, "dir": str(log.dir), "rule": WALK_RULE, "scene": scene}),
           flush=True)  # fmt: skip
     t_first = r.ns()
@@ -242,13 +267,20 @@ def run_walk(scene: str, n: int, seed: int, label: str) -> int:
                 r.gm(agent, screen, "@killmonster2")
                 bench.close_chat(agent, screen)
             # the HARNESS: a seeded walkable spot near the scene's GM spot, then a seeded target
-            r8 = SPOT_RADIUS
-            spots = [(sx0 + rng.randint(-r8, r8), sy0 + rng.randint(-r8, r8)) for _ in range(200)]
-            sx, sy = next(((x, y) for x, y in spots if walkable[y, x]), (sx0, sy0))
-            pick = ec.pick_cell(rng, (sx, sy), walkable, harness_proj)  # type: ignore[arg-type]
-            if pick is None:
-                continue
-            dx, dy, _, _ = pick
+            if rerun is not None:  # the interrupted attempt's own situation, replayed
+                sx, sy = harness_spot(rerun[i])
+                cell = rerun[i].action.intended.cell
+                assert cell is not None
+                dx, dy = cell
+            else:
+                r8 = SPOT_RADIUS
+                spots = [(sx0 + rng.randint(-r8, r8), sy0 + rng.randint(-r8, r8))
+                         for _ in range(200)]  # fmt: skip
+                sx, sy = next(((x, y) for x, y in spots if walkable[y, x]), (sx0, sy0))
+                pick = ec.pick_cell(rng, (sx, sy), walkable, harness_proj)  # type: ignore[arg-type]
+                if pick is None:
+                    continue
+                dx, dy, _, _ = pick
             r.gm(agent, screen, f"@warp {mapname} {sx} {sy}")
             time.sleep(WARP_SETTLE_S)
             # the calibration's UI state. (An open chat does NOT suppress the marker: probe
@@ -323,7 +355,9 @@ def window_rule(agent: r.Agent, keys: list[str]) -> dict[str, object]:
     return {}
 
 
-def run_window(scene: str, n: int, seed: int, label: str) -> int:
+def run_window(
+    scene: str, n: int, seed: int, label: str, rerun: list[DemoRecord] | None = None
+) -> int:
     import bench
 
     from poring_env import ui_anchors as ua
@@ -337,12 +371,15 @@ def run_window(scene: str, n: int, seed: int, label: str) -> int:
     sid = new_session_id(f"{label}-{scene}")
     log = DemoLog(sid)
     lock = record_session.read_lock(r.ROOT / "state")
+    if rerun is not None:
+        n = len(rerun)
     log.start(backend=str(lock.backend), lock_seq=lock.seq, server="lab-rathena", rule=WINDOW_RULE,
-              n=n, scene=scene, seed=seed, account="gm")  # fmt: skip
+              n=n, scene=scene, seed=seed, account="gm",
+              rerun_of=[x.record_id for x in rerun] if rerun else None)  # fmt: skip
     print(json.dumps({"session": sid, "dir": str(log.dir), "rule": WINDOW_RULE, "scene": scene}),
           flush=True)  # fmt: skip
     t_first = r.ns()
-    order = window_order(n, seed)
+    order = [str(x.action.intended.window) for x in rerun] if rerun else window_order(n, seed)
 
     def open_now(screen: r.Screen) -> set[str]:
         frame = r.grab_after(screen, region, r.ns())[:, :, :3]
@@ -402,6 +439,15 @@ def run_window(scene: str, n: int, seed: int, label: str) -> int:
     return 0
 
 
+def rerun_arg(a: argparse.Namespace) -> list[DemoRecord] | None:
+    if a.rerun_of is None:
+        return None
+    idx = [int(x) for x in a.attempts.split(",") if x.strip()]
+    if not idx:
+        raise SystemExit("--rerun-of needs --attempts")
+    return rerun_records(a.rerun_of, idx, a.scene)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -420,13 +466,16 @@ def main() -> int:
     ow.add_argument("--n", type=int, default=50)
     ow.add_argument("--seed", type=int, default=20261010)
     ow.add_argument("--label", default="window-alone")
+    for sp in (wk, ow):  # replay interrupted attempts exactly (demo_interruptions.py marks them)
+        sp.add_argument("--rerun-of", type=Path, help="the session whose attempts are re-run")
+        sp.add_argument("--attempts", default="", help="comma-separated attempt indices")
     a = ap.parse_args()
     if a.rule == "login":
         return run_login(a.n, a.label)
     if a.rule == "walk":
-        return run_walk(a.scene, a.n, a.seed, a.label)
+        return run_walk(a.scene, a.n, a.seed, a.label, rerun_arg(a))
     if a.rule == "open_window":
-        return run_window(a.scene, a.n, a.seed, a.label)
+        return run_window(a.scene, a.n, a.seed, a.label, rerun_arg(a))
     return 2
 
 

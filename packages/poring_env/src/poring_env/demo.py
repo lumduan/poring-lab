@@ -47,7 +47,9 @@ ActionType = Literal[
     "npc_talk", "npc_choice", "npc_input", "shop_buy", "shop_sell",
     "stat_up", "skill_up", "item_use", "chat", "gm", "other",
 ]  # fmt: skip
-Status = Literal["pending", "success", "fail", "ambiguous"]
+# interrupted: a human took the lease during the attempt (Batt, 2026-10-07): neither pass nor
+# fail; the attempt is re-run (scripts/demo_interruptions.py marks it, from the input log)
+Status = Literal["pending", "success", "fail", "ambiguous", "interrupted"]
 _CONFIG = ConfigDict(extra="forbid", frozen=True)
 
 

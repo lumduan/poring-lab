@@ -29,7 +29,7 @@ def dv() -> ModuleType:
 
 
 def attempt(log: DemoLog, t0: int, actor: str = "rule:login@1") -> None:
-    log.append(DemoRecord(session=SID, actor=actor, t_mono_ns=t0, t_done_ns=t0 + 30 * 10**9,
+    log.append(DemoRecord(session=log.session, actor=actor, t_mono_ns=t0, t_done_ns=t0 + 30 * 10**9,
                           rule="login@1" if actor != "rule:harness@1" else None,
                           action=Action(type="login" if actor != "rule:harness@1" else "logout",
                                         intended=Intended(kind="login", note="gm")),
@@ -148,3 +148,63 @@ def test_a_window_shortcut_is_judged_on_its_snapshots(
         update={"action": Action(type="menu_shortcut", keys=["AltLeft+KeyZ"], intended=party)}
     )
     assert dv.judge(other, [], {}, None, tmp_path).cause == "no cut anchor for party"
+
+
+def test_interrupted_attempts_are_neither_pass_nor_fail_and_reruns_merge(
+    dv: ModuleType,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    dirs = []
+    for k, (sid, n, missing) in enumerate(
+        [(SID, 20, {7}), ("20261007T150000-demo-login-rerun", 2, set())]
+    ):
+        log = DemoLog(sid, root=tmp_path)
+        events = []
+        recs = []
+        for i in range(n):
+            t0 = T + (k * 1000 + i) * 60 * 10**9
+            attempt(log, t0)
+            recs.append(read_last(log))
+            if i not in missing:
+                events += [
+                    {
+                        "t_mono_ns": t0 + s * 10**9,
+                        "type": e,
+                        "aid": 2000002,
+                        "map": "m.gat",
+                        "x": 1,
+                        "y": 1,
+                    }
+                    for s, e in ((4, "login_accepted"), (5, "char_selected"), (6, "map_enter"))
+                ]
+        with gzip.open(log.dir / "packets.jsonl.gz", "wt") as fh:
+            fh.writelines(json.dumps(e) + "\n" for e in events)
+        if k == 0:  # attempt 7 failed, but a human interrupted it (and attempt 8)
+            (log.dir / "interrupted.json").write_text(
+                json.dumps(
+                    {recs[7].record_id: "human release_all", recs[8].record_id: "human release_all"}
+                )
+            )
+        dirs.append(str(log.dir))
+    monkeypatch.setattr(sys, "argv", ["demo_verify.py", *dirs])
+    assert dv.main() == 0
+    out = json.loads(capsys.readouterr().out)["rules"]["login@1"]
+    assert (out["attempts"], out["interrupted"], out["verified_success"], out["fail"]) == (
+        20,
+        2,
+        20,
+        0,
+    )
+    assert out["verdict"] == "PASS"
+    verified = [
+        json.loads(x) for x in (Path(dirs[0]) / "demo.verified.jsonl").read_text().splitlines()
+    ]
+    assert sum(v["outcome"]["status"] == "interrupted" for v in verified) == 2
+
+
+def read_last(log: DemoLog) -> DemoRecord:
+    from poring_env.demo import read
+
+    return read(log.path)[-1]

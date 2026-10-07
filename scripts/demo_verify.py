@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """Judge a demo session's actions from its packets (docs/demonstrations.md §2), offline.
 
-    demo_verify.py SESSION_DIR [--aid-gm 2000002] [--aid-player 2000001]
+    demo_verify.py SESSION_DIR [SESSION_DIR ...] [--aid-gm 2000002] [--aid-player 2000001]
 
 - Reads `demo.jsonl` and the session's `packets.jsonl.gz`.
 - Fills each record's outcome with poring_dataset.verify (VERIFIER_VERSION) and writes
   `demo.verified.jsonl` beside them. The actor's stated cue is never consulted.
 - Client-side windows (menu shortcuts) are judged on the session's snapshots by the anchor map
   (§2): the window absent before, present 1 s after.
+- `interrupted.json` in a session (scripts/demo_interruptions.py: a human took the lease) makes
+  those records `interrupted`: neither success nor fail, left out of the rate. Their re-runs are
+  separate sessions (rule_run.py --rerun-of); give them all to score the rule as one set.
 - Prints, per rule: attempts, verified successes, failures by cause, ambiguous by cause, and
   the time per attempt p50/p95. The bar (pre-registered) is >= 95 % of the non-ambiguous
   attempts, with at most 10 % ambiguous.
@@ -115,7 +118,8 @@ def summarise(rows: list[tuple[DemoRecord, V.Verdict]]) -> dict[str, Any]:
     by_rule: dict[str, list[tuple[DemoRecord, V.Verdict]]] = {}
     for rec, v in rows:
         by_rule.setdefault(rec.rule or rec.actor, []).append((rec, v))
-    for rule, rs in by_rule.items():
+    for rule, all_rs in by_rule.items():
+        rs = [(rec, v) for rec, v in all_rs if v.status != "interrupted"]
         status = Counter(v.status for _, v in rs)
         n_amb = status["ambiguous"]
         scored = len(rs) - n_amb
@@ -123,7 +127,8 @@ def summarise(rows: list[tuple[DemoRecord, V.Verdict]]) -> dict[str, Any]:
         q = sorted(secs)
         rate = status["success"] / scored if scored else 0.0
         out[rule] = {
-            "attempts": len(rs), "verified_success": status["success"], "fail": status["fail"],
+            "attempts": len(rs), "interrupted": len(all_rs) - len(rs),
+            "verified_success": status["success"], "fail": status["fail"],
             "ambiguous": n_amb, "success_rate": round(rate, 4),
             "fail_causes": dict(Counter(v.cause for _, v in rs if v.status == "fail")),
             "ambiguous_causes": dict(Counter(v.cause for _, v in rs if v.status == "ambiguous")),
@@ -140,35 +145,44 @@ def main() -> int:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    ap.add_argument("session_dir", type=Path)
+    ap.add_argument("session_dirs", type=Path, nargs="+")
     ap.add_argument("--aid-gm", type=int, default=2000002)
     ap.add_argument("--aid-player", type=int, default=2000001)
     a = ap.parse_args()
-    records = read(a.session_dir / "demo.jsonl")
-    events = load_events(a.session_dir)
     aids = {"gm": a.aid_gm, "player": a.aid_player}
     rows: list[tuple[DemoRecord, V.Verdict]] = []
-    out_lines = []
-    starts = sorted(r.t_mono_ns for r in records)
-    for rec in records:
-        later = [t for t in starts if t > rec.t_mono_ns]
-        v = judge(rec, events, aids, later[0] if later else None, a.session_dir)
-        if v is None:
-            out_lines.append(rec.model_dump_json())
-            continue
-        rows.append((rec, v))
-        evidence = {**rec.outcome.evidence, **v.evidence}
-        outcome = Outcome(
-            status=v.status,
-            verifier=v.verifier,
-            cause=v.cause,  # type: ignore[arg-type]
-            evidence=evidence,
-        )
-        done = rec.model_copy(update={"outcome": outcome})
-        out_lines.append(done.model_dump_json())
-    (a.session_dir / "demo.verified.jsonl").write_text("".join(x + "\n" for x in out_lines))
-    print(json.dumps({"session": a.session_dir.name, "verifier": f"verify@{V.VERIFIER_VERSION}",
-                      "events": len(events), "rules": summarise(rows)}, indent=1))  # fmt: skip
+    n_events = 0
+    for session_dir in a.session_dirs:
+        records = read(session_dir / "demo.jsonl")
+        events = load_events(session_dir)
+        n_events += len(events)
+        marks_path = session_dir / "interrupted.json"
+        marks: dict[str, str] = json.loads(marks_path.read_text()) if marks_path.exists() else {}
+        out_lines = []
+        starts = sorted(r.t_mono_ns for r in records)
+        for rec in records:
+            later = [t for t in starts if t > rec.t_mono_ns]
+            if rec.record_id in marks:
+                v: V.Verdict | None = V.Verdict("interrupted", marks[rec.record_id][:200])
+            else:
+                v = judge(rec, events, aids, later[0] if later else None, session_dir)
+            if v is None:
+                out_lines.append(rec.model_dump_json())
+                continue
+            rows.append((rec, v))
+            evidence = {**rec.outcome.evidence, **v.evidence}
+            outcome = Outcome(
+                status=v.status,  # type: ignore[arg-type]
+                verifier=v.verifier,
+                cause=v.cause,
+                evidence=evidence,
+            )
+            done = rec.model_copy(update={"outcome": outcome})
+            out_lines.append(done.model_dump_json())
+        (session_dir / "demo.verified.jsonl").write_text("".join(x + "\n" for x in out_lines))
+    sessions = [d.name for d in a.session_dirs]
+    print(json.dumps({"sessions": sessions, "verifier": f"verify@{V.VERIFIER_VERSION}",
+                      "events": n_events, "rules": summarise(rows)}, indent=1))  # fmt: skip
     return 0
 
 

@@ -110,3 +110,10 @@ def test_session_ids_and_records_for_another_session(tmp_path: Path) -> None:
         DemoLog("../../etc", root=tmp_path)
     with pytest.raises(ValueError):
         DemoLog(SESSION, root=tmp_path).append(rec(session=sid))
+
+
+def test_an_interrupted_outcome_is_its_own_status() -> None:
+    """Batt, 2026-10-07: a human took the lease mid-attempt -> neither pass nor fail."""
+    from poring_env.demo import Outcome
+
+    assert Outcome(status="interrupted", cause="human release_all").status == "interrupted"

@@ -103,3 +103,45 @@ def test_open_window_chords_come_from_l2_and_a_refusal_is_a_decline(rr: ModuleTy
     agent = Pressing()
     assert rr.window_rule(agent, ["AltLeft", "KeyS"]) == {}
     assert agent.chords == [("AltLeft", "KeyS")]
+
+
+def test_a_rerun_replays_the_interrupted_attempts_situations(
+    rr: ModuleType, tmp_path: Path
+) -> None:
+    from poring_env.demo import Action, DemoLog, DemoRecord, Intended
+
+    sid = "20261007T131457-demo-walk-alone-outdoor"
+    log = DemoLog(sid, root=tmp_path)
+    for i in range(4):
+        log.append(
+            DemoRecord(
+                session=sid,
+                actor="rule:harness@1",
+                t_mono_ns=i * 10 + 1,
+                cue="h",
+                action=Action(type="gm", intended=Intended(kind="other")),
+            )
+        )
+        log.append(
+            DemoRecord(
+                session=sid,
+                actor="rule:walk@3",
+                t_mono_ns=i * 10 + 2,
+                cue="w",
+                scene="outdoor:prt_fild08",
+                action=Action(
+                    type="walk",
+                    intended=Intended(
+                        kind="cell",
+                        cell=(i, -i),
+                        relative=True,
+                        note=f"harness spot {260 + i},{100 + i}",
+                    ),
+                ),
+            )
+        )
+    picked = rr.rerun_records(log.dir, [1, 3], "outdoor")
+    assert [p.action.intended.cell for p in picked] == [(1, -1), (3, -3)]
+    assert [rr.harness_spot(p) for p in picked] == [(261, 101), (263, 103)]
+    with pytest.raises(SystemExit, match="does not match"):
+        rr.rerun_records(log.dir, [1], "indoor")
