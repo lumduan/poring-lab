@@ -20,8 +20,9 @@ Standard library only: scripts/guarded_build.py imports this module and runs und
         and memory, Ollama's loaded models. OUT stays on /dev/shm (rule 7).
     frigate_r3.py watch [--csv OUT.csv] [--sigint]
         The R3Guard over the live stats, printing every breach (ICT + UTC). With --sigint, a breach
-        SIGINTs our running training step (the host-side `timeout ... poring_vision.train` process,
-        found by PID), as guarded_build would. The interim guard before guarded_build had R3.
+        SIGINTs our running vision container(s) (`docker kill --signal INT`; a SIGINT to the
+        compose client alone does not stop the container). The interim guard before
+        guarded_build had R3.
     frigate_r3.py check
         The pre-start checks guarded_build runs for every vision step; prints the verdict.
 
@@ -39,7 +40,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import signal
 import statistics
 import subprocess
 import sys
@@ -352,17 +352,13 @@ class R3Guard:
         return None
 
 
-def train_pids() -> list[int]:
-    """Host-side PIDs of our running training steps: guarded_build's `timeout ... docker compose
-    ... run ... vision python -m poring_vision.train --cache ...` (SIGINT there is how
-    guarded_build stops a step). Read from ps, never matched with pkill -f."""
-    out = subprocess.run(["ps", "-eo", "pid=,args="], capture_output=True, text=True).stdout
-    pids = []
-    for line in out.splitlines():
-        pid, _, args = line.strip().partition(" ")
-        if args.startswith("timeout ") and "poring_vision.train" in args and "--cache" in args:
-            pids.append(int(pid))
-    return pids
+def vision_containers(run: Any = subprocess.run) -> list[str]:
+    """Our running vision containers (compose service `vision`). 2026-10-07: a SIGINT to the
+    host-side `timeout ... docker compose run` stopped only the compose client and the training
+    container ran on, so a stop must signal the CONTAINER."""
+    out = run(["docker", "ps", "-q", "--filter", "label=com.docker.compose.service=vision"],
+              capture_output=True, text=True, check=False).stdout  # fmt: skip
+    return [c for c in out.split() if c]
 
 
 def csv_header(cams: list[str], dets: list[str]) -> str:
@@ -421,10 +417,11 @@ def run_loop(csv_out: Path | None, guard: R3Guard | None, sigint: bool, every: f
                 tag = "R3-HARD" if hard else "R3"
                 print(f"[{stamp(now)}] BREACH {tag} {kind}: {detail}", flush=True)
                 if sigint:
-                    pids = train_pids()
-                    for pid in pids:
-                        os.kill(pid, signal.SIGINT)
-                    print(f"[{stamp()}] SIGINT sent to training step pid(s) {pids or 'none'}",
+                    ids = vision_containers()
+                    for cid in ids:
+                        subprocess.run(["docker", "kill", "--signal", "INT", cid],
+                                       capture_output=True, check=False)  # fmt: skip
+                    print(f"[{stamp()}] SIGINT sent to vision container(s) {ids or 'none'}",
                           flush=True)  # fmt: skip
                     return 2
             elif now - last_status >= 900:

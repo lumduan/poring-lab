@@ -217,17 +217,16 @@ def test_the_baseline_summary_keeps_each_cameras_floor(fr: ModuleType) -> None:
     assert s["cameras"]["b"]["skipped_nonzero_fraction"] == 0.05
 
 
-def test_train_pids_finds_only_the_host_side_training_step(
-    fr: ModuleType, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    ps = (" 101 timeout 43200 docker compose -f compose.yaml --profile vision run --rm --no-deps "
-          "vision python -m poring_vision.train --cache /datasets/.framecache/x --epochs 30\n"
-          " 102 python -m poring_vision.train --cache /datasets/.framecache/x\n"
-          " 103 timeout 900 docker compose run vision python -m poring_vision.train --eval w\n"
-          " 104 bash -c grep poring_vision.train --cache\n")  # fmt: skip
+def test_the_watcher_stops_vision_containers_not_the_compose_client(fr: ModuleType) -> None:
+    """2026-10-07: SIGINT to `timeout ... docker compose run` left the container training."""
+    seen: list[list[str]] = []
 
     class R:
-        stdout = ps
+        stdout = "abc123\ndef456\n"
 
-    monkeypatch.setattr(fr.subprocess, "run", lambda *a, **k: R())
-    assert fr.train_pids() == [101]
+    def run(cmd: list[str], **kw: object) -> R:
+        seen.append(cmd)
+        return R()
+
+    assert fr.vision_containers(run) == ["abc123", "def456"]
+    assert seen == [["docker", "ps", "-q", "--filter", "label=com.docker.compose.service=vision"]]

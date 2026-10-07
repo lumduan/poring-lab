@@ -143,7 +143,7 @@ def test_run_step_is_vision_only_and_never_starts_dependencies(gb: ModuleType) -
     assert (step.kind, step.services, step.seconds) == ("run", ["vision"], 600.0)
     assert gb.run_cmd(step) == [
         "timeout", "600", "docker", "compose", "--profile", "vision", "run", "--rm",
-        "--no-deps", "vision", "python", "scripts/check_gpu.py",
+        "--name", gb.container_name(step), "--no-deps", "vision", "python", "scripts/check_gpu.py",
     ]  # fmt: skip
     for refused in ("run:gamestream=true", "run:desktop=true", "run:vision", "run:vision="):
         with pytest.raises(ValueError):
@@ -157,7 +157,8 @@ def test_rundev_adds_only_the_vision_dev_overlay(gb: ModuleType) -> None:
     assert (step.kind, step.services, step.seconds) == ("rundev", ["vision"], 3600.0)
     assert gb.run_cmd(step) == [
         "timeout", "3600", "docker", "compose", "-f", "compose.yaml", "-f",
-        "compose.vision-dev.yaml", "--profile", "vision", "run", "--rm", "--no-deps", "vision",
+        "compose.vision-dev.yaml", "--profile", "vision", "run", "--rm",
+        "--name", gb.container_name(step), "--no-deps", "vision",
         "python", "-m", "poring_vision.train", "--smoke",
     ]  # fmt: skip
     for refused in ("rundev:gamestream=true", "rundev:vision", "rundev:backend=true"):
@@ -505,3 +506,35 @@ def test_only_a_training_step_waits_for_an_epoch_to_rebaseline(gb: ModuleType) -
     assert gb.results_csv(ev) is None
     pred = gb.parse_step("rundev:vision@60=python -m poring_vision.predict_dir --weights w")
     assert gb.results_csv(pred) is None
+
+
+def test_an_abort_also_stops_the_container_itself(
+    gb: ModuleType, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """2026-10-07 11:06: the R3 abort's SIGINT stopped only the `docker compose run` client; the
+    training container ran on for 10.5 min. Every abort of a container step now stops the
+    container and checks it is gone."""
+    stopped: list[str] = []
+    monkeypatch.setattr(gb, "stop_container", lambda name: stopped.append(name) or True)
+    hit = ("latency", "detector +6 ms", False)
+    assert gb.run_process("rundev:vision", ["sleep", "30"], _QuietGuard(), r3=_R3Hit(hit),
+                          container="poring-lab-vision-rundev-1") is False  # fmt: skip
+    assert stopped == ["poring-lab-vision-rundev-1"]
+
+
+@pytest.mark.parametrize(("states", "calls", "gone"), [
+    ([False], [], True),                                    # already gone: nothing sent
+    ([True, True, False, False], [["kill", "--signal", "INT"]], True),   # SIGINT stops it
+    ([True] * 32 + [False], [["kill", "--signal", "INT"], ["stop", "-t", "20"]], True),
+    ([True] * 80, [["kill", "--signal", "INT"], ["stop", "-t", "20"]], False),
+])  # fmt: skip
+def test_stop_container_sigint_then_docker_stop(
+    gb: ModuleType, monkeypatch: pytest.MonkeyPatch,
+    states: list[bool], calls: list[list[str]], gone: bool,
+) -> None:  # fmt: skip
+    seq = iter(states)
+    monkeypatch.setattr(gb, "container_running", lambda name: next(seq, states[-1]))
+    ran: list[list[str]] = []
+    monkeypatch.setattr(gb.subprocess, "run", lambda cmd, **k: ran.append(cmd[1:4]))
+    assert gb.stop_container("c1", grace=60, sleep=lambda s: None) is gone
+    assert ran == calls

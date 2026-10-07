@@ -216,14 +216,48 @@ def parse_step(step: str) -> Step:
 VISION_DEV = ["-f", "compose.yaml", "-f", "compose.vision-dev.yaml"]  # rundev: the overlay
 
 
+def container_name(step: Step) -> str:
+    """The run:/rundev: step's container, NAMED so an abort can stop the container itself."""
+    return f"poring-lab-{step.services[0]}-{step.kind}-{os.getpid()}"
+
+
 def run_cmd(step: Step) -> list[str]:
     svc = step.services[0]
     seconds = str(int(step.seconds or 600))
     files = VISION_DEV if step.kind == "rundev" else []
     return [
         "timeout", seconds, "docker", "compose", *files, "--profile", svc, "run", "--rm",
-        "--no-deps", svc, *step.command,
+        "--name", container_name(step), "--no-deps", svc, *step.command,
     ]  # fmt: skip
+
+
+def container_running(name: str) -> bool:
+    out = subprocess.run(["docker", "ps", "-q", "--filter", f"name=^/{name}$"],
+                         capture_output=True, text=True, check=False).stdout  # fmt: skip
+    return bool(out.strip())
+
+
+def stop_container(name: str, *, grace: float = 60, sleep: Any = time.sleep) -> bool:
+    """Make sure an aborted step's container is GONE (2026-10-07: a SIGINT to `timeout ... docker
+    compose run` stopped only the compose client, and the training container ran on for 10.5 min
+    after an R3 abort). SIGINT the container itself (its init forwards it: ultralytics stops and
+    keeps last.pt), then `docker stop` after ``grace`` s; True once it is gone."""
+    if not container_running(name):
+        return True
+    print(f"[{ts()}] {name} still running after the abort: SIGINT to the container", flush=True)
+    subprocess.run(["docker", "kill", "--signal", "INT", name], capture_output=True, check=False)
+    waited = 0.0
+    while waited < grace and container_running(name):
+        sleep(2)
+        waited += 2
+    if container_running(name):
+        print(f"[{ts()}] {name} ignored SIGINT for {grace:.0f}s: docker stop", flush=True)
+        subprocess.run(["docker", "stop", "-t", "20", name], capture_output=True, check=False)
+    gone = not container_running(name)
+    print(
+        f"[{ts()}] {name}: {'stopped' if gone else 'STILL RUNNING -- stop it by hand'}", flush=True
+    )
+    return gone
 
 
 CACHE_ARG = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")  # session ids, ids, numbers, paths
@@ -357,12 +391,25 @@ def build_env() -> dict[str, str]:
     return {**os.environ, "BUILDX_BUILDER": LAB_BUILDER}
 
 
+def abort(proc: "subprocess.Popen[bytes]", container: str | None) -> None:
+    """SIGINT the step; for a container step, also make sure the CONTAINER stops."""
+    proc.send_signal(2)
+    try:
+        proc.wait(timeout=120)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait(timeout=30)
+    if container is not None:
+        stop_container(container)
+
+
 def run_process(
     label: str,
     cmd: list[str],
     guard: Guard,
     env: dict[str, str] | None = None,
     r3: "frigate_r3.R3Guard | None" = None,
+    container: str | None = None,
 ) -> bool:
     log = log_path(label)
     builder = env.get("BUILDX_BUILDER") if env else None
@@ -377,8 +424,7 @@ def run_process(
                     f"[{ts()}] ABORT {label}: {hit[0]} full IO stall {hit[1]:.1f}% ({hit[2]})",
                     flush=True,
                 )
-                proc.send_signal(2)
-                proc.wait(timeout=120)
+                abort(proc, container)
                 return False
             if r3 is not None:
                 r3.poll()
@@ -389,8 +435,7 @@ def run_process(
                         f"R3-HARD {kind}: {detail} (no resume)" if hard else f"R3 {kind}: {detail}"
                     )
                     print(f"[{ts()}] ABORT {label}: {tag} [{frigate_r3.stamp()}]", flush=True)
-                    proc.send_signal(2)
-                    proc.wait(timeout=120)
+                    abort(proc, container)
                     return False
             time.sleep(2)
     ok = proc.returncode == 0
@@ -655,7 +700,9 @@ def main() -> int:
             r3 = gpu_rules(step, args.frigate_baseline)
             if r3 is None:
                 return 3
-            ok = run_process(step.label, run_cmd(step), guard, r3=r3)
+            ok = run_process(
+                step.label, run_cmd(step), guard, r3=r3, container=container_name(step)
+            )
             tail = log_path(step.label).read_text(errors="replace").splitlines()[-80:]
             print("\n".join(f"  | {line}" for line in tail), flush=True)
         elif step.kind == "cache":
