@@ -151,8 +151,8 @@ def click_step(pr: w6.Prober, w: w5.World, end: tuple[int, int],
         k = named8(w, rel, p)
         target.append({"at": [round(u, 1), round(v, 1)], "shape": p["shape"], "iou": p["iou"],
                        "cell": k, "marker_px": p["marker_px"]})  # fmt: skip
-        if p["shape"] != WALK:  # a unit (or anything unknown) covers the click point
-            return {"clicked": False, "outcome": f"covered_{p['shape']}", "target": target}
+        if p["shape"] != WALK:  # never clicked here; another in-cell point may show the walk cursor
+            continue
         if k is None and accept_unnamed:
             # the belief was just CONFIRMED by /where: the chevrons' job (projection and belief
             # agree) is done, and pews hide the marker (17-27 px, the 23:35 pilot). The walk
@@ -186,6 +186,10 @@ def click_step(pr: w6.Prober, w: w5.World, end: tuple[int, int],
             corrected = True
         elif k is not None:
             return {"clicked": False, "outcome": "neighbour", "target": target}
+    others = [t["shape"] for t in target if t["shape"] != WALK]
+    if others and len(others) == len(target):  # no point of the cell shows the walk cursor
+        first = next((x for x in others if x in UNIT_SHAPES), others[0])
+        return {"clicked": False, "outcome": f"covered_{first}", "target": target}
     return {"clicked": False, "outcome": "unconfirmed", "target": target}
 
 
@@ -317,8 +321,10 @@ def walk_route(pr: w6.Prober, w: w5.World, goal: tuple[int, int], band: tuple[in
                fixed_at_start: bool = False) -> dict[str, Any]:  # fmt: skip
     """walk@8, ALONE, one route: plan ONCE, probe only the click point, fix the belief only when in
     doubt. ``expect_goal="warp"``: the goal is a PORTAL (the warp cursor at the click point).
-    Patience ONLY for a UNIT at the click point; a substitute ONLY for a UNIT on the goal
-    (walk@7 waited on unknown reads and substituted goals nobody had taken: 7 / 8)."""
+    Patience ONLY for a UNIT at the click points; a substitute ONLY when a UNIT is seen on the goal
+    or a click point next to it (a monster ON the goal often reads unknown: its moving sprite merges
+    into the cursor mask; the packets' judge still decides whether it was justified). walk@7 waited
+    on unknown reads and substituted goals nobody had taken (7 / 8)."""
     events: list[dict[str, Any]] = []
     relocs = clicks = covered = 0
     streak, streak_from = 0, None
@@ -437,7 +443,8 @@ def walk_route(pr: w6.Prober, w: w5.World, goal: tuple[int, int], band: tuple[in
             time.sleep(0.5)  # a UNIT covers the click points: its idle pause ends within ~5 s
             waited += clock() - now
             continue
-        if target in unit_at and substitute is None and expect_goal == WALK:
+        near_goal = [c for c in unit_at if max(abs(c[0] - target[0]), abs(c[1] - target[1])) <= 1]
+        if near_goal and substitute is None and expect_goal == WALK:
             sub = substitute_goal(w, goal, {goal})
             if sub is None:
                 return done(decline="goal_occupied")
