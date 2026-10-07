@@ -27,8 +27,12 @@ It runs inside the vision container only (guarded_build `run:`/`rundev:`), never
 - **The adaptive duty cycle (Batt, 2026-10-07 ~16:25):** `--duty-file /lab-duty/duty.json`
   makes the sleep LIVE. The host's guarded_build writes the level it derives from Frigate's
   fleet load into a READ-ONLY mount, and it is re-read after every batch. A missing, stale
-  (> 120 s) or garbled file means the slowest level (2 s): fail slow, never fast. Batches and
-  seconds per level are printed as `duty_stats` lines.
+  (> 120 s) or garbled file means the slowest level (2 s): fail slow, never fast. Batches, running
+  seconds and PAUSED seconds per level are printed as `duty_stats` lines: each batch's real wall
+  time (compute + the sleep as slept), and a batch longer than PAUSE_GAP_S counts as paused (an R3
+  OFF window froze it), never as throughput. Until 2026-10-07 18:20 the NOMINAL sleep was added
+  and a frozen batch counted as compute, so the per-level rates of the first v0-JPEG resume mix
+  in R3's pauses.
 - **The final line** is a JSON summary: per-class AP50, mAP50, mAP50-95, peak VRAM, seconds.
 """
 
@@ -52,6 +56,7 @@ VIRTUAL = "/shard/"
 DUTY_FALLBACK_MS = 2000  # the slowest level: an unknown duty never speeds us up
 DUTY_FILE_STALE_S = 120.0
 DUTY_REPORT_EVERY = 500
+PAUSE_GAP_S = 30.0  # a batch longer than this was frozen by an R3 OFF window (docker pause)
 
 
 def read_duty(path: Path, now: float) -> int:
@@ -70,23 +75,29 @@ def step_sleeper(ms: int, duty_file: Path | None = None, report_every: int = DUT
                  out: Any = None) -> Any:  # fmt: skip
     """The R3 duty-cycle knob: an ultralytics `on_train_batch_end` callback that sleeps ``ms``,
     or the live level in ``duty_file``. Accounts each batch's compute + sleep to its level."""
-    stats: dict[int, list[float]] = {}
+    stats: dict[int, list[float]] = {}  # level ms -> [batches, running s, paused batches, paused s]
     state = {"t": time.monotonic(), "n": 0}
 
     def report() -> None:
         line = {f"{k}ms": {"batches": int(v[0]), "seconds": round(v[1], 1),
-                           "batches_per_s": round(v[0] / v[1], 2) if v[1] else None}
+                           "batches_per_s": round((v[0] - v[2]) / v[1], 2) if v[1] else None,
+                           "paused_batches": int(v[2]), "paused_s": round(v[3], 1)}
                 for k, v in sorted(stats.items())}  # fmt: skip
         print(json.dumps({"duty_stats": line}), file=out or sys.stdout, flush=True)
 
     def sleep(trainer: Any) -> None:
         cur = read_duty(duty_file, time.time()) if duty_file is not None else ms
-        compute = time.monotonic() - state["t"]
         time.sleep(cur / 1000.0)
-        s = stats.setdefault(cur, [0, 0.0])
+        now = time.monotonic()
+        took = now - state["t"]  # this batch's real wall time: compute + the sleep AS SLEPT
+        s = stats.setdefault(cur, [0, 0.0, 0, 0.0])
         s[0] += 1
-        s[1] += compute + cur / 1000.0
-        state["t"] = time.monotonic()
+        if took > PAUSE_GAP_S:
+            s[2] += 1
+            s[3] += took
+        else:
+            s[1] += took
+        state["t"] = now
         state["n"] += 1
         if report_every and state["n"] % report_every == 0:
             report()

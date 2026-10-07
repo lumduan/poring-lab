@@ -43,13 +43,20 @@ def test_the_sleeper_accounts_batches_and_seconds_per_level(tmp_path, monkeypatc
 
     from poring_vision import train
 
-    monkeypatch.setattr(train.time, "sleep", lambda s: None)
+    clock = [1000.0]
+    monkeypatch.setattr(train.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(train.time, "sleep", lambda s: clock.__setitem__(0, clock[0] + s))
     f = tmp_path / "duty.json"
     out = io.StringIO()
-    cb = train.step_sleeper(0, f, report_every=3, out=out)
-    for ms in (100, 100, 400):
+    cb = train.step_sleeper(0, f, report_every=4, out=out)
+    # 0.3 s of compute per batch; the 3rd batch is frozen 180 s by an R3 OFF window
+    for ms, frozen in ((100, 0.0), (100, 0.0), (100, 180.0), (400, 0.0)):
         f.write_text(json.dumps({"level": 0, "sleep_ms": ms, "t_epoch": time.time()}))
+        clock[0] += 0.3 + frozen
         cb(object())
     stats = json.loads(out.getvalue().strip().splitlines()[-1])["duty_stats"]
-    assert stats["100ms"]["batches"] == 2 and stats["400ms"]["batches"] == 1
-    assert stats["100ms"]["seconds"] >= 0.2 and stats["400ms"]["seconds"] >= 0.4
+    fast, slow = stats["100ms"], stats["400ms"]
+    assert (fast["batches"], fast["paused_batches"]) == (3, 1)
+    assert fast["seconds"] == 0.8 and fast["paused_s"] == 180.4  # the pause is never throughput
+    assert fast["batches_per_s"] == 2.5  # 2 running batches in 0.8 s
+    assert (slow["batches"], slow["seconds"], slow["paused_s"]) == (1, 0.7, 0.0)
