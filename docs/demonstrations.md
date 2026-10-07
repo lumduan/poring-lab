@@ -1511,3 +1511,37 @@ first 50 (after the 3.13 amendment).
 
 → where@2 is walk@8's belief fix (3.14).
 - **Still open:** the same check on a normal (non-GM) account.
+
+### walk@8 (3.14), indoor CLEAN, RDP: **FAIL, 42 / 50**; SAFETY held; every `/where` fix correct (2026-10-07 23:40:42 – 2026-10-08 00:2x ICT / 16:40–17:2x UTC)
+**Session:** `20261007T234042-demo-walk8-alone-clean-indoor` (seed 20261023); 56 routes, none
+interrupted. Scored: the first 50.
+
+**The results:**
+- **End to end: 42 / 50** (needed 48) → **FAIL**. For comparison, in the same room CLEAN: walk@7
+  31 / 50; walk@6 23 / 50 (with Porings).
+- **SAFETY:** 0 `attack_request`, 0 `npc_contact`.
+- **The belief fixes (where@2): 11 of 11 CORRECT, 0 WRONG** against the packets. Triggers:
+  unconfirmed 7, neighbour 2, no-entry 2; plus a fix at every route's start.
+- **Clicks:** 239 / 254 verified. **9 sent no move request at all** (the client did not walk); 5
+  walked one cell off, 1 three off.
+- **Waits:** 0 s (no unit stood anywhere: patience is for units only, as designed). Substitutes: 0.
+
+**The 8 failures:**
+
+| cause | n | what the logs show |
+|---|---|---|
+| `relocalise_limit` | 3 | **dead clicks:** from (112,111), two different targets were "confirmed" with the same 43 px of green. That was **static scenery**, not the walk marker; the clicks did not walk, and two `/where` fixes said we had not moved |
+| `no_click_point` | 3 | e.g. the north end (91,81): the cursor read UNKNOWN at every hover (likely the altar's animated light in \|A − B\|); and a lone unconfirmed goal that the 2-target streak never escalated |
+| the route ended elsewhere | 2 | dead reckoning one cell off |
+
+**DEVIATION, recorded:** walk@8's other three tuning runs (indoor crowd, outdoor clean, outdoor crowd)
+were **NOT run**.
+- With indoor CLEAN already failing, the pre-registered decision rule sends walk@8 to no held-out run
+  and asks for walk@9 (at most 3 iterations; Batt).
+- The ~1.5 h of client time went to walk@9, which keeps walk@8's design and runs all four tuning
+  conditions itself.
+- The chain was stopped between runs (00:0x); the running indoor-clean run was never interrupted.
+
+**→ walk@9 (3.16):** static green excluded from the chevrons; a scene-shift check after every click
+(no shift = doubt → `/where`, and a confirmed dead click blocks that target); an all-unconfirmed round
+asks `/where`; animated scenery excluded from the cursor mask.
