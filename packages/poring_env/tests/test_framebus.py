@@ -186,7 +186,10 @@ def test_torture_readers_in_other_processes_never_see_a_torn_frame(tmp_path: Pat
         w.publish(frame(frame_id, 320, 200), frame_id, frame_id)
     results = [json.loads(p.communicate(timeout=30)[0]) for p in readers]
     assert all(r["torn"] == 0 for r in results), results
-    assert all(r["read"] > 50 for r in results), results
+    # Not vacuous: every reader really raced the writer. Counted as ATTEMPTS (frames read + laps
+    # it lost), not frames read: on the shared host a starved reader read 22 frames and lost
+    # 2593 laps (2026-10-07, 1 run in ~40), and "read > 50" failed on scheduling, never on a tear.
+    assert all(r["read"] + r["overruns"] > 50 for r in results), results
     print(f"writer {frame_id} frames in 1.7 s; readers {results}")
 
 
