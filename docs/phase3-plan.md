@@ -1011,6 +1011,84 @@ species split is real at the frame level, and its cause is open.**
   2. a filtered (bilinear) sprite sampler in the client: a common rim, so a bias in k;
   3. the shadow decal we do not render: widths, bottoms.
 
+### 5d-v. M4 step 2d: is the RULER contrast-dependent? (Batt, 2026-10-07), written BEFORE any scoring
+
+**Hypothesis (the halo).** The 24-level difference threshold is a contrast-dependent ruler:
+- a high-contrast sprite (the white Lunatic on dark grass) keeps its blurred edge halo (stream
+  encode + render) above the threshold further out, so it is measured BIGGER;
+- a low-contrast one (the pink Poring on sand) loses edge pixels, so it is measured SMALLER.
+
+If so, step 1's per-species split (and 2c's frame-level 1.19x / 0.95x) is in the MEASUREMENT, not
+the renderer.
+
+**(b) "Measure the ruler": the decisive part.** Synthetic sprites of KNOWN extent, measured by
+m4_validate's own code. Per ODD spawn (to choose; EVEN once to confirm):
+1. **Canvas:** that spawn's own background, the median of its local background gap, exactly as
+   `measure_rows` builds it (grass, sand, church floor as the spawns fall).
+2. **Sprite:** our composed idle sprite (`label_check.rendered`, nearest sampling), painted at that
+   spawn's REAL predicted anchor and scale (k = nostalro), in the view and frame 2c's NCC chose for
+   its first clean frame.
+   - Its TRUE extent is the painted opaque pixels' bbox, known exactly.
+3. **Encode, stream-like:** a 4 s clip at 1280×720 / 60 fps (2 s background only, then 2 s with
+   the sprite standing still), libx264 high profile, no B-frames, 4 slices, an IDR every 60 frames
+   (1 s), CBR 3.9 Mbit/s (the stream's measured ~5.5 Mbit/s scaled to the game region's area).
+   - Then decode (PyAV).
+   - Sunshine encodes with QuickSync, so the encoder differs: a stated gap (M10), not hidden.
+4. **Measure:**
+   - background = the median of the decoded background-only frames (1.0–2.0 s);
+   - every 5th decoded sprite frame from 2.5 s is measured with `observed_box` (`reconstruct`,
+     DIFF 24), seeded at the anchor;
+   - result: per species and per scene, observed / TRUE height and width.
+
+**(a) The threshold sweep and a contrast-INDEPENDENT ruler, on real AND synthetic frames:**
+- Absolute thresholds DIFF ∈ {12, 16, 24, 32, 48}.
+- The half-max ruler:
+  - per frame, C = the median |frame − background| (max channel) over the observed sprite
+    component's pixels at DIFF 24;
+  - threshold = max(8, C / 2), then the same `reconstruct` + component rule.
+- Reported per species, at each ruler:
+  - observed / box (real);
+  - observed / chosen frame (real, as in 2c);
+  - observed / TRUE (synthetic).
+
+**Decisions, on the ODD spawns:**
+1. **Where the bias is.** It is "IN THE MEASUREMENT" if the synthetic split (Lunatic obs/true height
+   ÷ Poring obs/true height, at DIFF 24) points the same way as the real split and reproduces ≥ 50 %
+   of its excess (real ODD 1.255, so synthetic ≥ 1.128). Otherwise the measurement is CLEARED of the
+   split.
+2. **The half-max ruler is ADOPTED** (it replaces DIFF 24 in M4's measurement from then on) only if:
+   - on the synthetic spawns it recovers the TRUE height within ±3 % (median) for BOTH species;
+   - and its synthetic error is smaller than DIFF 24's for both species.
+   - The real split under it is then reported as the new step-1 numbers (all §5 checks re-run,
+     thresholds unchanged).
+3. **Then:** freeze; score the EVEN spawns ONCE (real + synthetic). CONFIRMED if decision 2's
+   conditions hold on EVEN. Report odd and even side by side. k, the facing mapping and step 1's
+   exclusions are unchanged.
+
+### 5e. The pragmatic v1 track: v1 labels at k = 0.140 on the GOLD set (Batt, 2026-10-07), written BEFORE scoring
+
+**Why.** M4 proves the render rule against a ruler that is itself in question (§5d-v). The real
+goal is better labels. Batt's hand-checked gold set is a reference that does not depend on that
+ruler. This does NOT replace M4; it says whether v1 is already useful.
+
+**What is scored, ONCE:**
+- `label_iou.py score 20261004T103815-console-s2-indoor-v2 --labels v1 --k 0.140`:
+  - v1 = `labels_for_v1`: `predict_sprite` boxes, the current facing mapping, the exact frame when
+    the phase is known and the idle envelope otherwise;
+  - k = 0.140, korangar's prior, fixed BEFORE scoring: M4 step 1's width-based k (0.141–0.147) was
+    within ~1.5 % of it.
+- The B6 hand-check: 27 frames, 154 boxes, IoU ≥ 0.5 (`label_iou`'s greedy per-class match). No
+  `--update-bench`.
+- The gold set is never used to choose anything: no other k, and no other variant, is scored on it.
+
+**Gate (monsters, against v0's B6 numbers):**
+- precision > 0.644 AND recall > 0.580;
+- AND mean IoU ≥ 0.901.
+- NPC and overall numbers are reported beside it.
+
+**PASS:** v1 is already better than v0 on the gold set. Building a v1 cache and training on it is
+Batt's next call. **FAIL:** reported as it is; v1 waits for M4.
+
 ## 6. M5–M7: using the rule
 
 **M5, labels v1.** Every auto-label gets:
