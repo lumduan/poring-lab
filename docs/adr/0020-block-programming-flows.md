@@ -103,30 +103,93 @@ The hard lines of ADR-0015 hold without change:
 
 ```python
 CFG = ConfigDict(extra="forbid", frozen=True)
-NAME = r"^[A-Za-z][A-Za-z0-9_]{0,47}$"          # ASCII only (see 7.2: identifier normalisation)
+NAME = r"^[A-Za-z][A-Za-z0-9_]{0,47}$"  # ASCII only (see 7.2: identifier normalisation)
+
 
 # --- typed references: keys and ids, never display text (ADR-0012) --------------------------
-class MapRef(BaseModel):    model_config = CFG; kind: Literal["map"];    map: str        # map id
-class CellRef(BaseModel):   model_config = CFG; kind: Literal["cell"];   map: str; x: int; y: int
-class NpcRef(BaseModel):    model_config = CFG; kind: Literal["npc"];    key: str        # L3 key
-class OptionRef(BaseModel): model_config = CFG; kind: Literal["option"]; key: str        # L3/L4 key
-class ItemRef(BaseModel):   model_config = CFG; kind: Literal["item"];   id: int         # item.<id>
-class MobRef(BaseModel):    model_config = CFG; kind: Literal["mob"];    id: int         # mob.<id>
-class SkillRef(BaseModel):  model_config = CFG; kind: Literal["skill"];  id: int; level: int | None = None
-class WindowRef(BaseModel): model_config = CFG; kind: Literal["window"]; name: str       # ADR-0011 name
-Ref = Annotated[MapRef | CellRef | NpcRef | OptionRef | ItemRef | MobRef | SkillRef | WindowRef,
-                Field(discriminator="kind")]
+class MapRef(BaseModel):
+    model_config = CFG
+    kind: Literal["map"]
+    map: str  # map id
+
+
+class CellRef(BaseModel):
+    model_config = CFG
+    kind: Literal["cell"]
+    map: str
+    x: int
+    y: int
+
+
+class NpcRef(BaseModel):
+    model_config = CFG
+    kind: Literal["npc"]
+    key: str  # L3 key
+
+
+class OptionRef(BaseModel):
+    model_config = CFG
+    kind: Literal["option"]
+    key: str  # L3/L4 key
+
+
+class ItemRef(BaseModel):
+    model_config = CFG
+    kind: Literal["item"]
+    id: int  # item.<id>
+
+
+class MobRef(BaseModel):
+    model_config = CFG
+    kind: Literal["mob"]
+    id: int  # mob.<id>
+
+
+class SkillRef(BaseModel):
+    model_config = CFG
+    kind: Literal["skill"]
+    id: int
+    level: int | None = None
+
+
+class WindowRef(BaseModel):
+    model_config = CFG
+    kind: Literal["window"]
+    name: str  # ADR-0011 name
+
+
+Ref = Annotated[
+    MapRef | CellRef | NpcRef | OptionRef | ItemRef | MobRef | SkillRef | WindowRef,
+    Field(discriminator="kind"),
+]
+
 
 # --- expressions (every model below also sets model_config = CFG) --------------------------
-class Lit(BaseModel):   kind: Literal["lit"];   value: int | float | bool | str | Ref | list[Ref]
-class Var(BaseModel):   kind: Literal["var"];   name: str = Field(pattern=NAME)
-class Logic(BaseModel): kind: Literal["and", "or"]; terms: list["Expr"] = Field(min_length=2)
-class Not_(BaseModel):  kind: Literal["not"];   term: "Expr"
+class Lit(BaseModel):
+    kind: Literal["lit"]
+    value: int | float | bool | str | Ref | list[Ref]
+
+
+class Var(BaseModel):
+    kind: Literal["var"]
+    name: str = Field(pattern=NAME)
+
+
+class Logic(BaseModel):
+    kind: Literal["and", "or"]
+    terms: list["Expr"] = Field(min_length=2)
+
+
+class Not_(BaseModel):
+    kind: Literal["not"]
+    term: "Expr"
+
 
 class Sense(BaseModel):
     kind: Literal["sense"]
-    sensor: str                                   # a catalogue sensor, e.g. hp_percent
+    sensor: str  # a catalogue sensor, e.g. hp_percent
     args: dict[str, "Expr"] = {}
+
 
 class Cmp(BaseModel):
     kind: Literal["cmp"]
@@ -134,30 +197,35 @@ class Cmp(BaseModel):
     left: "Expr"
     right: "Expr"
 
+
 class Arith(BaseModel):
     kind: Literal["arith"]
     op: Literal["+", "-", "*", "//", "%"]
     left: "Expr"
     right: "Expr"
 
+
 Expr = Annotated[Lit | Var | Sense | Cmp | Logic | Not_ | Arith, Field(discriminator="kind")]
+
 
 # --- statements ----------------------------------------------------------------------------
 class Action(BaseModel):
     kind: Literal["action"]
-    block: str                                    # catalogue name, e.g. walk_to
-    concept: str = Field(pattern=CONCEPT_ID)      # its L1 concept, e.g. nav.walk_to
+    block: str  # catalogue name, e.g. walk_to
+    concept: str = Field(pattern=CONCEPT_ID)  # its L1 concept, e.g. nav.walk_to
     params: dict[str, Expr]
     timeout_s: float = Field(gt=0, le=600)
     on_fail: Literal["stop", "continue"] = "stop"
-    outcome_to: str | None = None                 # a variable receiving the outcome (section 2.2)
+    outcome_to: str | None = None  # a variable receiving the outcome (section 2.2)
     note: str | None = Field(default=None, max_length=200)
+
 
 class If(BaseModel):
     kind: Literal["if"]
     cond: Expr
     then: list["Stmt"]
     orelse: list["Stmt"] = []
+
 
 class While(BaseModel):
     kind: Literal["while"]
@@ -166,42 +234,78 @@ class While(BaseModel):
     max_iter: int | None = Field(default=None, ge=1, le=100_000)
     max_s: float | None = Field(default=None, gt=0)
 
+
 class WaitUntil(BaseModel):
     kind: Literal["wait_until"]
     cond: Expr
-    timeout_s: float = Field(gt=0, le=3600)       # mandatory
+    timeout_s: float = Field(gt=0, le=3600)  # mandatory
     outcome_to: str | None = None
 
-class Repeat(BaseModel):    kind: Literal["repeat"]; times: Expr; body: list["Stmt"]
-class ForEach(BaseModel):   kind: Literal["for"];    var: str; items: Lit | Var; body: list["Stmt"]
-class SetVar(BaseModel):    kind: Literal["set"];    var: str; value: Expr
-class CallProc(BaseModel):  kind: Literal["call"];   proc: str
-class Stop(BaseModel):      kind: Literal["stop"];   reason: str = Field(pattern=r"^[a-z_]{1,40}$")
-class Break_(BaseModel):    kind: Literal["break"]
-class Continue_(BaseModel): kind: Literal["continue"]
 
-Stmt = Annotated[Action | If | While | WaitUntil | Repeat | ForEach | SetVar | CallProc | Stop
-                 | Break_ | Continue_, Field(discriminator="kind")]
+class Repeat(BaseModel):
+    kind: Literal["repeat"]
+    times: Expr
+    body: list["Stmt"]
+
+
+class ForEach(BaseModel):
+    kind: Literal["for"]
+    var: str
+    items: Lit | Var
+    body: list["Stmt"]
+
+
+class SetVar(BaseModel):
+    kind: Literal["set"]
+    var: str
+    value: Expr
+
+
+class CallProc(BaseModel):
+    kind: Literal["call"]
+    proc: str
+
+
+class Stop(BaseModel):
+    kind: Literal["stop"]
+    reason: str = Field(pattern=r"^[a-z_]{1,40}$")
+
+
+class Break_(BaseModel):
+    kind: Literal["break"]
+
+
+class Continue_(BaseModel):
+    kind: Literal["continue"]
+
+
+Stmt = Annotated[
+    Action | If | While | WaitUntil | Repeat | ForEach | SetVar | CallProc | Stop | Break_ | Continue_,
+    Field(discriminator="kind"),
+]  # fmt: skip
+
 
 # --- event handlers (section 2.5) -------------------------------------------------------------
 class Handler(BaseModel):
     model_config = CFG
     name: str = Field(pattern=NAME)
-    when: Expr                                     # passive sensors only (linter)
+    when: Expr  # passive sensors only (linter)
     priority: Literal["critical", "survival", "upkeep"]
-    rearm: Expr | None = None                      # hysteresis: armed again only when this is true
+    rearm: Expr | None = None  # hysteresis: armed again only when this is true
     cooldown_s: float = Field(default=0, ge=0, le=3600)
     max_fires_per_10min: int = Field(default=10, ge=1, le=100)
     then: Literal["resume", "skip_block", "restart_flow", "stop"] = "resume"
     body: list[Stmt] = Field(min_length=1)
 
+
 # --- the flow ---------------------------------------------------------------------------------
 class Target(BaseModel):
     model_config = CFG
-    client: str                                   # the L2 build, e.g. kro-20211103-prere
-    server: str                                   # the environment id, e.g. lab-rathena
-    locale: str                                   # the L4 pack, e.g. en
-    path: Literal["s2", "rdp"] = "s2"             # ADR-0014: S2 is the bot's primary path
+    client: str  # the L2 build, e.g. kro-20211103-prere
+    server: str  # the environment id, e.g. lab-rathena
+    locale: str  # the L4 pack, e.g. en
+    path: Literal["s2", "rdp"] = "s2"  # ADR-0014: S2 is the bot's primary path
+
 
 class Flow(BaseModel):
     model_config = CFG
@@ -209,11 +313,11 @@ class Flow(BaseModel):
     name: str = Field(pattern=r"^[a-z][a-z0-9_]{0,47}$")
     description: str = Field(default="", max_length=500)
     target: Target
-    assumes: list[Expr] = []                      # character facts, checked by sensors before any input
-    max_runtime_s: int = Field(ge=1, le=MAX_RUNTIME_S)   # mandatory; the bound is an open question
+    assumes: list[Expr] = []  # character facts, checked by sensors before any input
+    max_runtime_s: int = Field(ge=1, le=MAX_RUNTIME_S)  # mandatory; the bound is an open question
     stop_when: Expr | None = None
-    variables: dict[str, Lit] = {}                # every variable with its initial value (and type)
-    procedures: dict[str, list[Stmt]] = {}        # named sub-flows, no parameters in IR 1
+    variables: dict[str, Lit] = {}  # every variable with its initial value (and type)
+    procedures: dict[str, list[Stmt]] = {}  # named sub-flows, no parameters in IR 1
     handlers: list[Handler] = []
     main: list[Stmt] = Field(min_length=1)
 ```
@@ -590,16 +694,22 @@ question.)
 **An example in the Python view** (ids, keys and the cell are illustrative):
 
 ```python
-flow(ir=1, name="visit_and_choose", max_runtime_s=1800,
-     target=target(client="kro-20211103-prere", server="lab-rathena", locale="en", path=S2))
+flow(
+    ir=1,
+    name="visit_and_choose",
+    max_runtime_s=1800,
+    target=target(client="kro-20211103-prere", server="lab-rathena", locale="en", path=S2),
+)
 
 GOAL = cell("prt_fild08", 170, 210)
-CLERK = npc("n_3f2a")          # an L3 key from data/kb/bindings/<env>.json; the editor shows the name
+CLERK = npc("n_3f2a")  # an L3 key from data/kb/bindings/<env>.json; the editor shows the name
 ANSWER = option("o_91c0aa2e")  # a menu-option key; the editor shows its text
+
 
 @on(hp_percent() < 35, priority=SURVIVAL, rearm=hp_percent() > 60, then=RESUME)
 def drink():
     use_item(item(9001))
+
 
 walk_to(GOAL)
 talk_npc(CLERK)
