@@ -99,25 +99,59 @@ def test_a_covered_click_point_moves_along_the_polyline_at_once(fake: Any) -> No
     assert (13, 18) not in ends
 
 
-def test_a_misaligned_belief_is_caught_by_the_structure_and_relocalised(fake: Any) -> None:
-    """Believed one cell east of the truth beside a wall: the check expects a no-entry sign (or
-    chevrons) where the truth shows the other, and re-localises before the first click."""
+def test_a_wrong_belief_is_caught_by_direct_evidence_and_fixed(fake: Any) -> None:
+    """walk@8 (overnight): the structure-probe alignment is OFF (reloc2's geometry failed
+    relocalise@2); a no-entry sign on a PLANNED (GAT-walkable) cell is the evidence instead, and
+    the belief is fixed (/where in the runs) before going on."""
     w8, _, _ = fake
-    s = sim(fake, (10, 18))
-    s.walk[:, 13] = False  # a wall three cells east of the truth
-    s.walk[19:, 11:13] = False
-    s.w.position = (11, 18)
+    s = sim(fake, (11, 18))
+    s.walk[18, 12:17] = False  # the truth's own row is blocked ahead of it ...
+    s.w.position = (11, 19)  # ... but we believe we stand one row south, on an open row
     calls: list[tuple[int, int]] = []
 
-    def reloc(agent: Any, screen: Any, w: Any, mask: Any, band: Any) -> dict[str, Any]:
+    def fix(agent: Any, screen: Any, w: Any, mask: Any, band: Any) -> dict[str, Any]:
         calls.append(w.position)
         w.position = s.client.true
         return {"ok": True, "to": list(s.client.true)}
 
-    did = w8.walk_route(s.pr, s.w, (10, 12), BAND, 3, lambda *a: None, ring(), relocalise=reloc)
-    first = [e for e in did["events"] if "align" in e][0]["align"]
-    assert first["aligned"] is False and calls == [(11, 18)], first
-    assert did.get("arrived_belief") and s.client.true == (10, 12), did
+    did = w8.walk_route(s.pr, s.w, (16, 19), BAND, 3, lambda *a: None, ring(), relocalise=fix)
+    assert calls and calls[0] == (11, 19), did
+    assert [e["why"] for e in did["events"] if "relocalise" in e][0] == "noentry"
+    assert did.get("arrived_belief") and s.client.true == (16, 19), did
+
+
+def test_an_unknown_shape_never_waits_and_never_substitutes(fake: Any) -> None:
+    """walk@7 waited on unknown reads in CLEAN rooms and substituted goals nobody had taken."""
+    w8, f, _ = fake
+    s = sim(fake, (10, 18))
+    f.SPRITES["blob"] = [([(dx, dy) for dy in range(-3, 9) for dx in range(-3, 9)], (40, 200, 240))]
+    base = s.client.shape_at
+    s.client.shape_at = lambda c: "blob" if c[0] >= 12 else base(c)  # unknown from x = 12 on
+    did = w8.walk_route(s.pr, s.w, (13, 18), BAND, 3, lambda *a: None, ring(),
+                        relocalise=lambda *a: {"ok": True}, clock=t7_clock())  # fmt: skip
+    assert did["decline"] == "no_click_point" and did["waited_s"] == 0, did
+    assert did["substitute"] is None
+
+
+def test_a_unit_that_stays_on_the_goal_gets_a_substitute_after_its_patience(fake: Any) -> None:
+    w8, _, _ = fake
+    s = sim(fake, (10, 18), monsters={(13, 18)})  # never leaves
+    did = w8.walk_route(s.pr, s.w, (13, 18), BAND, 3, lambda *a: None, ring(),
+                        relocalise=lambda *a: {"ok": True}, clock=t7_clock())  # fmt: skip
+    assert did.get("arrived_belief") and did["waited_s"] > 0, did
+    sub = tuple(did["substitute"])
+    assert max(abs(sub[0] - 13), abs(sub[1] - 18)) == 1 and s.client.true == sub
+    assert s.client.attacked == []
+
+
+def t7_clock() -> Any:
+    t = [0.0]
+
+    def clock() -> float:
+        t[0] += 0.5
+        return t[0]
+
+    return clock
 
 
 def test_the_planned_route_is_previewed_for_the_human(fake: Any) -> None:

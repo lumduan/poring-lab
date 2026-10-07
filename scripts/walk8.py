@@ -43,6 +43,7 @@ import ro_agent as r  # noqa: E402
 import rule_run as rr  # noqa: E402
 import walk5 as w5  # noqa: E402
 import walk6 as w6  # noqa: E402
+import where_fix as wf  # noqa: E402
 
 from poring_env.demo import Action, DemoLog, DemoRecord, Intended, new_session_id  # noqa: E402
 
@@ -63,8 +64,14 @@ PORTAL_LOAD_S = 4.0
 CURSOR_REFS_V2 = r.ROOT / "data/walk6/cursor_refs_rdp_v2.npz"  # + the pickup hand (19:13)
 SEG_INDOOR, SEG_OPEN = 3, 5  # click distance along the polyline (walk@6/7's lengths, unchanged)
 CLICK_ALTERNATES = 4  # other click points tried when a unit covers the chosen one
-ALIGN_EVERY = 4  # clicks between belief checks
+ALIGN_EVERY = 4  # clicks between belief checks (only with ALIGN on)
 ALIGN_PROBES = 2
+ALIGN = False  # the structure-probe alignment uses reloc2's geometry, which failed relocalise@2
+#                (24 / 50 WRONG): OFF in walk@8; doubt comes from direct evidence (below) instead
+UNIT_SHAPES = frozenset({"sword", "talk", "pickup"})  # shapes that ARE a unit at the click point
+PATIENCE_S = 6.0  # a unit's idle pause <= 5.0 s (rAthena e985006 mob.cpp:1766) + margin
+WAIT_BUDGET_S = 24.0
+SUBSTITUTE_RINGS = (1, 2)
 UNCONFIRMED_STREAK = 2
 RELOCS = 2
 CLICK_ATTEMPTS = 30
@@ -218,6 +225,22 @@ def align(pr: w6.Prober, w: w5.World, band: tuple[int, int, int, int],
     return {"aligned": True if checks else None, "checks": checks}
 
 
+def where_relocalise(templates: dict[str, Any]) -> Callable[..., dict[str, Any]]:
+    """The belief fix by the client's /where (where@2, 3.15): two agreeing fresh reads, inside the
+    map, walkable, within 6 cells of the dead-reckoned belief; relocalise's interface. No fix ->
+    not ok (never a guess)."""
+
+    def relocalise(agent: Any, screen: Any, w: w5.World, mask: Any, band: Any) -> dict[str, Any]:
+        got = wf.fix_v2(agent, screen, templates, w.position, w.walkable)
+        if got["xy"] is None:
+            return {"ok": False, "left": None, "rejects": got["rejects"], "method": "where"}
+        old, w.position = w.position, tuple(got["xy"])
+        return {"ok": True, "from": list(old), "to": list(w.position), "method": "where",
+                "rejects": got["rejects"]}  # fmt: skip
+
+    return relocalise
+
+
 def preview(agent: Any, w: w5.World, start: tuple[int, int], wps: Sequence[tuple[int, int]],
             click: tuple[int, int] | None, label: str) -> None:  # fmt: skip
     """The RoutePreview for the console (display only; poring_env.protocol.RoutePreview). Sent on
@@ -238,28 +261,56 @@ def preview(agent: Any, w: w5.World, start: tuple[int, int], wps: Sequence[tuple
         pass
 
 
+def substitute_goal(w: w5.World, goal: tuple[int, int],
+                    blocked: set[tuple[int, int]]) -> tuple[int, int] | None:  # fmt: skip
+    """The nearest free cell around a goal a UNIT occupies: ring 1, then 2; shortest plan first."""
+    for ring in SUBSTITUTE_RINGS:
+        best: tuple[int, tuple[int, int]] | None = None
+        for dy in range(-ring, ring + 1):
+            for dx in range(-ring, ring + 1):
+                c = (goal[0] + dx, goal[1] + dy)
+                if max(abs(dx), abs(dy)) != ring or c in blocked:
+                    continue
+                if not (0 <= c[1] < w.walkable.shape[0] and 0 <= c[0] < w.walkable.shape[1]):
+                    continue
+                if not w.walkable[c[1], c[0]]:
+                    continue
+                path = w6.plan(w, c, blocked)
+                if path is not None and (best is None or len(path) < best[0]):
+                    best = (len(path), c)
+        if best is not None:
+            return best[1]
+    return None
+
+
 def walk_route(pr: w6.Prober, w: w5.World, goal: tuple[int, int], band: tuple[int, int, int, int],
                seg_max: int, log_seg: Any, noentry_mask: Any, read_position: Any = None,
                relocalise: Callable[..., dict[str, Any]] = reloc2.relocalise,
-               label: str = "walk@8", expect_goal: str = WALK) -> dict[str, Any]:  # fmt: skip
-    """walk@8, ALONE, one route: plan ONCE, check the belief, probe only the click point.
-    ``expect_goal="warp"``: the goal is a PORTAL, taken by a click on the warp cursor; the route
-    then ends on the other map (the caller knows the arrival cell from the L3 warp data)."""
+               label: str = "walk@8", expect_goal: str = WALK,
+               clock: Callable[[], float] = time.monotonic) -> dict[str, Any]:  # fmt: skip
+    """walk@8, ALONE, one route: plan ONCE, probe only the click point, fix the belief only when in
+    doubt. ``expect_goal="warp"``: the goal is a PORTAL (the warp cursor at the click point).
+    Patience ONLY for a UNIT at the click point; a substitute ONLY for a UNIT on the goal
+    (walk@7 waited on unknown reads and substituted goals nobody had taken: 7 / 8)."""
     events: list[dict[str, Any]] = []
     relocs = clicks = covered = 0
     streak, streak_from = 0, None
+    target, substitute = goal, None
+    waited = 0.0
+    unit_since: float | None = None
 
     def done(**kw: Any) -> dict[str, Any]:
-        return {"events": events, "relocs": relocs, "clicks": clicks, "covered": covered, **kw}
+        return {"events": events, "relocs": relocs, "clicks": clicks, "covered": covered,
+                "substitute": substitute, "waited_s": round(waited, 1), **kw}  # fmt: skip
 
     def plan_once() -> list[tuple[int, int]] | None:
-        path = w6.plan(w, goal, set())
+        path = w6.plan(w, target, {goal} if substitute else set())
         if path is not None:
             events.append({"plan": [list(c) for c in waypoints(w.position, path)], "t": r.ns()})
         return path
 
     def relocate(why: str) -> str | None:
-        """Re-localise (v2) and re-plan; a decline, or None to go on."""
+        """Fix the belief and re-plan; a decline, or None to go on."""
         nonlocal relocs, path
         if relocs >= RELOCS:
             return "relocalise_limit"
@@ -274,11 +325,11 @@ def walk_route(pr: w6.Prober, w: w5.World, goal: tuple[int, int], band: tuple[in
     path = plan_once()  # static structure only: units never block movement in RO
     if path is None:
         return done(decline="no_plan")
-    chk = align(pr, w, band, noentry_mask)
-    events.append({"align": chk, "t": r.ns()})
-    if chk["aligned"] is False and (d := relocate("align")):
-        return done(decline=d)
-    since_align = 0
+    if ALIGN:
+        chk = align(pr, w, band, noentry_mask)
+        events.append({"align": chk, "t": r.ns()})
+        if chk["aligned"] is False and (d := relocate("align")):
+            return done(decline=d)
     pending: str | None = None
     for _ in range(CLICK_ATTEMPTS):
         if read_position is not None:
@@ -292,21 +343,15 @@ def walk_route(pr: w6.Prober, w: w5.World, goal: tuple[int, int], band: tuple[in
             why, pending = pending, None
             if d := relocate(why):
                 return done(decline=d)
-            since_align = 0
-        elif since_align >= ALIGN_EVERY:
-            chk = align(pr, w, band, noentry_mask)
-            events.append({"align": chk, "t": r.ns()})
-            since_align = 0
-            if chk["aligned"] is False and (d := relocate("align")):
-                return done(decline=d)
-        if w.position == goal:
-            preview(pr.agent, w, w.position, [goal], None, label)
+        if w.position == target:
+            preview(pr.agent, w, w.position, [target], None, label)
             return done(arrived_belief=True)
         assert path is not None
         cands = click_candidates(w, path, seg_max, band)
         if not cands:
             return done(decline="out_of_band")
         clicked = False
+        unit_at: list[tuple[int, int]] = []
         for end in cands:
             preview(pr.agent, w, w.position, waypoints(w.position, path), end, label)
             expect = expect_goal if end == goal else WALK
@@ -323,13 +368,19 @@ def walk_route(pr: w6.Prober, w: w5.World, goal: tuple[int, int], band: tuple[in
                 w.position = end  # dead reckoning
                 path = path[path.index(end) + 1 :]  # the rest of the ONE plan
                 clicks += 1
-                since_align += 1
                 streak, streak_from = 0, None
+                unit_since = None
                 time.sleep(n * w5.STEP_S + w5.ARRIVE_S)
                 clicked = True
                 break
+            shape = step["target"][-1]["shape"] if step["target"] else None
+            if shape == "noentry" and w.walkable[end[1], end[0]]:
+                pending = "noentry"  # a planned (GAT-walkable) cell refused: the belief is wrong
+                break
             if step["outcome"].startswith(("covered_", "recheck_")):
-                covered += 1  # a unit covers it: the next point on the polyline, at once
+                covered += 1  # not clickable: the next point on the polyline, at once
+                if shape in UNIT_SHAPES:
+                    unit_at.append(end)
                 continue
             if step["outcome"] == "unconfirmed":
                 streak = streak + 1 if streak_from == w.position else 1
@@ -341,12 +392,33 @@ def walk_route(pr: w6.Prober, w: w5.World, goal: tuple[int, int], band: tuple[in
             if step["outcome"] == "neighbour":
                 pending = "neighbour"
                 break
-        if not clicked and pending is None:
-            return done(decline="no_click_point")
+        if clicked or pending is not None:
+            continue
+        if not unit_at:
+            return done(decline="no_click_point")  # nothing clickable, and no unit to wait for
+        now = clock()
+        unit_since = now if unit_since is None else unit_since
+        if now - unit_since < PATIENCE_S and waited < WAIT_BUDGET_S:
+            time.sleep(0.5)  # a UNIT covers the click points: its idle pause ends within ~5 s
+            waited += clock() - now
+            continue
+        if target in unit_at and substitute is None and expect_goal == WALK:
+            sub = substitute_goal(w, goal, {goal})
+            if sub is None:
+                return done(decline="goal_occupied")
+            substitute, target = sub, sub
+            events.append({"substitute": list(sub), "for": list(goal), "t": r.ns()})
+            unit_since = None
+            path = plan_once()
+            if path is None:
+                return done(decline="no_plan")
+            continue
+        return done(decline="unit_stays")
     return done(decline="click_limit")
 
 
-def run(scene: str, condition: str, n: int, seed: int, label: str, crowd: int) -> int:
+def run(scene: str, condition: str, n: int, seed: int, label: str, crowd: int,
+        fix: str = "where") -> int:  # fmt: skip
     import random
 
     import bench
@@ -357,6 +429,8 @@ def run(scene: str, condition: str, n: int, seed: int, label: str, crowd: int) -
 
     refs = w6.CursorRefs.load(CURSOR_REFS_V2)
     noentry_mask = np.load(w5.NOENTRY_MASK)
+    relocalise = (where_relocalise(wf.load_templates(wf.TEMPLATES_V2)) if fix == "where"
+                  else reloc2.relocalise)  # fmt: skip
     mapname, sx0, sy0, heldout = SCENES8[scene]
     portal = scene == "portal"
     gat = gatmod.parse((cam.GAT_DIR / f"{mapname}.gat").read_bytes())
@@ -377,7 +451,7 @@ def run(scene: str, condition: str, n: int, seed: int, label: str, crowd: int) -
     log.start(backend=str(lock.backend), lock_seq=lock.seq, server="lab-rathena", rule=WALK8_RULE,
               n=n, scene=scene, map=mapname, heldout=heldout, indoor_camera=indoor,
               condition=condition, crowd=crowd if condition == "crowd" else 0, seed=seed,
-              account="gm", seg_max=seg_max, refs=len(refs.cls))  # fmt: skip
+              account="gm", seg_max=seg_max, refs=len(refs.cls), fix=fix)  # fmt: skip
     print(json.dumps({"session": sid, "rule": WALK8_RULE, "scene": scene, "map": mapname,
                       "heldout": heldout, "condition": condition}), flush=True)  # fmt: skip
     t_first = r.ns()
@@ -435,8 +509,11 @@ def run(scene: str, condition: str, n: int, seed: int, label: str, crowd: int) -
                 bench.close_chat(agent, screen)
             r.activate_client(agent, screen)
             pos = read_position()
+            start_fix: dict[str, Any] | None = None
             if pos is not None:
                 w.position = pos
+            elif fix == "where":  # no minimap readout here: an absolute fix at the route's start
+                start_fix = relocalise(agent, screen, w, noentry_mask, band)
             if portal:
                 goal: tuple[int, int] | None = PORTAL["cell"]  # type: ignore[assignment]
             else:
@@ -476,10 +553,14 @@ def run(scene: str, condition: str, n: int, seed: int, label: str, crowd: int) -
                                        "clicks": 0, "covered": 0}  # fmt: skip
             else:
                 did = walk_route(pr, w, goal, band, seg_max, log_seg, noentry_mask, read_position,
-                                 label=f"walk@8 {scene} route {i}",
+                                 relocalise=relocalise, label=f"walk@8 {scene} route {i}",
                                  expect_goal="warp" if portal else WALK)  # fmt: skip
             judged = PORTAL["to"] if portal else goal  # a portal route ends on the OTHER map
-            extra = {"to_map": PORTAL["to_map"], "portal": list(PORTAL["cell"])} if portal else {}
+            extra: dict[str, Any] = (
+                {"to_map": PORTAL["to_map"], "portal": list(PORTAL["cell"])} if portal else {}
+            )
+            if start_fix is not None:
+                extra["start_fix"] = start_fix
             log.append(DemoRecord(
                 session=sid, actor=f"rule:{WALK8_RULE}", t_mono_ns=t_route, t_done_ns=r.ns(),
                 frame=pre, rule=WALK8_RULE, scene=f"{scene}:{mapname}",
@@ -517,11 +598,17 @@ def main() -> int:
     ap.add_argument("--seed", type=int, default=20261018)
     ap.add_argument("--label", default="walk8-alone")
     ap.add_argument("--crowd", type=int, default=4)
+    ap.add_argument(
+        "--fix",
+        choices=("where", "v2"),
+        default="where",
+        help="the belief fix: /where (where@1) or re-localisation v2",
+    )
     a = ap.parse_args()
     for p in (CURSOR_REFS_V2, w5.NOENTRY_MASK):
         if not p.exists():
             raise SystemExit(f"{p} missing: run the cursor calibrations (design time)")
-    return run(a.scene, a.condition, a.n, a.seed, a.label, a.crowd)
+    return run(a.scene, a.condition, a.n, a.seed, a.label, a.crowd, a.fix)
 
 
 if __name__ == "__main__":
