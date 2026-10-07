@@ -304,6 +304,40 @@ hovered, clicked, and the server-accepted cell was read offline from packets:
   where OUR model expects the target's marker. A misregistration of our whole projection, by
   exactly a cell, would confirm falsely. The packets judge every attempt anyway.
 
+> ➡️ **AMENDED 2026-10-07 ~16:05, BEFORE any scored run. The centroid-bias confirmation above
+> and below is SUPERSEDED by the corner-anchor rule in this box** (Batt, 15:20: "prefer a grounded
+> fix … a fitted per-altitude offset only if no grounded term exists").
+> - **The camera model's altitude term is grounded and CORRECT.** World Y = the GAT altitude at
+>   5 world units per cell, the rig ported from nostalro-client 15b3029 / korangar e14d320
+>   (THIRD_PARTY.md). Scaling it by s: outdoors 13 cells at nonzero altitude fit best at s = +1
+>   (0.9 px vs 5.7 px with no altitude); a look-at height above the feet only hurts.
+> - **The "per-altitude bias" was OCCLUSION, not projection.**
+>   - The raised indoor cells are PEWS: flat +5 strips, one cell wide.
+>   - On them the bench model hides the marker's front chevrons, so the centroid of what is
+>     visible moved by ~(−16, −9) px.
+>   - The two visible chevrons sit exactly at the target's own back corners. The cursor was on
+>     the right cell; the client picked the target in every such trial.
+> - **The grounded rule: the marker's geometry.**
+>   - The marker is four chevrons at the cell's CORNERS, inset to ~0.4 cell. Measured in cell
+>     units on full markers, the two scenes agree; pooled: (−0.42, −0.30), (0.40, −0.30),
+>     (0.40, 0.45), (−0.42, 0.45).
+>   - Confirmation: green_v2 ≥ 60 px in ≥ 2 chevrons (8-connected components ≥ 6 px). The 3 × 3
+>     cell whose projected corners, at THAT cell's own GAT altitude, best explain the visible
+>     chevrons is the one the client picked. The mean chevron-to-corner distance must be
+>     ≤ 0.35 cell spacing, else "unrecognised" → the next alternate.
+>   - The same check against packet truth on the calibration hovers, re-run through the shipped
+>     `rule_run.identify_cell`: **outdoor 30 / 30, indoor 33 / 34** (anchor fit p50 0.03 / 0.09,
+>     max 0.17 cell). No fitted offset.
+>   - The one miss is a stated failure source: only 2 chevrons showed, and the client had picked
+>     the DIAGONAL neighbour, whose corners nearly coincide with the target's.
+>   - `CENTROID_BIAS` is removed. L2 `cue.walk_marker.rdp.corner_anchors` replaces
+>     `centroid_bias` (drift-tested).
+> - **The run started at 15:01 with the centroid model** (`20261007T150101-demo-walk4-alone-indoor`)
+>   was STOPPED after 5 attempts on Batt's instruction. It is NOT scored and does not count.
+> - **The seed becomes 20261012:** that stopped run had seen seed 20261011's first situations.
+>   Everything else in this section stands: dead reckoning, the hovers, the correction, the
+>   harness, absolute targets, n, the bar, and the order (indoor, then outdoor).
+
 **The rule, alone** (`rule_run.py walk4`, `walk4_rule`):
 - **Position:** outdoors the minimap readout; indoors the dead-reckoned cell.
 - **Projection:** the RDP camera (the indoor block indoors) plus the GAT altitude relative to the

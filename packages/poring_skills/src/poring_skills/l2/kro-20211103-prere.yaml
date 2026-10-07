@@ -65,9 +65,8 @@ cue:
       filter: green_v2
       min_marker_px: 60
       crop_px: 90
-      # walk@4 (2026-10-07, design time): marker centroid - projected centre = b0 + beta * the
-      # cell's relative GAT altitude (px); calibrated on sessions 144121 (outdoor) and 144755 (indoor)
-      centroid_bias:
-        outdoor: {b0: [-1.2, -2.7], beta_per_alt: [-0.14, 0.2]}
-        indoor: {b0: [-2.3, -4.7], beta_per_alt: [-2.8, -0.77]}
+      # walk@4 (2026-10-07): the marker = four chevrons at the cell's CORNERS, inset ~0.4 cell
+      # (cell units, measured on full markers in both scenes, pooled). Matching the visible
+      # chevrons to these anchors names the picked cell even when a model hides some of them.
+      corner_anchors: [[-0.42, -0.3], [0.4, -0.3], [0.4, 0.45], [-0.42, 0.45]]
     status: unverified

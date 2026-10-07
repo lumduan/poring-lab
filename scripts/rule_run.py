@@ -320,36 +320,82 @@ def run_walk(
     return 0
 
 
-WALK4_RULE = "walk@4"  # docs/demonstrations.md 3.7 (Batt's design, 2026-10-07 ~14:15)
-# Marker centroid - projected cell centre = b0 + beta * (the cell's GAT altitude relative to our
-# cell), px. Design time, RDP: walk4-cal sessions 20261007T144121 (outdoor, 30/30 identified) and
-# 20261007T144755 (indoor, 33/34; raised cells drawn ~(-16, -9) px off). Mirrored in L2.
-CENTROID_BIAS = {
-    "outdoor": ((-1.2, -2.7), (-0.14, 0.20)),
-    "indoor": ((-2.3, -4.7), (-2.8, -0.77)),
-}
+WALK4_RULE = (
+    "walk@4"  # docs/demonstrations.md 3.7 (Batt's design, 2026-10-07 ~14:15; amended 15:55)
+)
+# The walk marker's GEOMETRY (grounded; Batt 15:20 asked for a grounded term before any fitted one):
+# the client draws four chevrons at the hovered cell's CORNERS, inset to ~0.4 cell. Measured in
+# cell units on fully visible markers (walk4-cal sessions 20261007T144121 outdoor and 144755
+# indoor; both scenes agree), pooled. A model in front (a pew) hides some of them, which is what
+# shifted the marker's CENTROID; matching each visible chevron to the corners does not shift.
+MARKER_ANCHORS = ((-0.42, -0.30), (0.40, -0.30), (0.40, 0.45), (-0.42, 0.45))
 NB9 = [(dx, dy) for dy in (-1, 0, 1) for dx in (-1, 0, 1)]  # index 4 = the target itself
 MAX_HOVERS = 5
 ALT_STEP = 0.3  # in-cell alternates: +-0.3 cell along each grid axis
 DR_WARP_EVERY = 5  # the harness warps every 5th attempt: the others start dead-reckoned
-MIN_MARKER_PX = 60  # empty_cell.MIN_MARKER_PX_V2 (green_v2)
+MIN_MARKER_PX = 60  # empty_cell.MIN_MARKER_PX_V2 (green_v2), the whole marker
+MIN_CHEVRON_PX = 6  # one chevron (a connected component)
+MIN_CHEVRONS = 2  # fewer cannot name a cell
+MAX_ANCHOR_FRAC = 0.35  # the best cell's mean chevron-to-corner distance, in cell spacings
 
 
-def expected_centroids(projected: Any, alt: Any, mode: str) -> Any:
-    """(9, 2): where the client draws each 3x3 cell's marker centroid: the projected centres plus
-    the calibrated bias(altitude)."""
+def green_components(crop: Any) -> list[tuple[float, float, int]]:
+    """(x, y, pixels) of each 8-connected green_v2 component >= MIN_CHEVRON_PX (crop px)."""
+    from collections import deque
+
     import numpy as np
 
-    b0, beta = CENTROID_BIAS[mode]
-    return np.asarray(projected) + np.asarray(b0) + np.outer(np.asarray(alt), np.asarray(beta))
+    b, g, r_ = (crop[..., i].astype(int) for i in range(3))
+    mask = (g - r_ > 50) & (g - b > 35) & (r_ > 60) & (b > 60) & (g > 150)
+    h, w = mask.shape
+    seen = np.zeros_like(mask, dtype=bool)
+    out: list[tuple[float, float, int]] = []
+    for y0, x0 in zip(*np.nonzero(mask), strict=True):
+        if seen[y0, x0]:
+            continue
+        queue, pts = deque([(int(y0), int(x0))]), []
+        seen[y0, x0] = True
+        while queue:
+            y, x = queue.popleft()
+            pts.append((y, x))
+            for yy in (y - 1, y, y + 1):
+                for xx in (x - 1, x, x + 1):
+                    if 0 <= yy < h and 0 <= xx < w and mask[yy, xx] and not seen[yy, xx]:
+                        seen[yy, xx] = True
+                        queue.append((yy, xx))
+        if len(pts) >= MIN_CHEVRON_PX:
+            a = np.asarray(pts, dtype=float)
+            out.append((float(a[:, 1].mean()), float(a[:, 0].mean()), len(pts)))
+    return out
 
 
-def identify(expected: Any, centroid: tuple[float, float]) -> tuple[int, int]:
-    """The 3x3 cell (relative to the target) whose expected centroid is nearest the marker's."""
+def identify_cell(camera: Any, grid: Any, position: tuple[int, int], rel: tuple[int, int],
+                  chevrons: Any) -> tuple[tuple[int, int] | None, float]:  # fmt: skip
+    """The 3x3 cell (relative to the target) whose projected corner anchors (at that cell's own
+    GAT altitude) best explain the visible chevrons (client px), and its mean distance in cell
+    spacings; (None, d) when nothing fits within MAX_ANCHOR_FRAC."""
     import numpy as np
 
-    k = int(np.argmin(np.linalg.norm(np.asarray(expected) - np.asarray(centroid), axis=1)))
-    return NB9[k]
+    pts = np.asarray(chevrons, dtype=float)
+    best: tuple[float, tuple[int, int]] | None = None
+    spacing = 1.0
+    for k in NB9:
+        cell = np.array([rel[0] + k[0], rel[1] + k[1]], dtype=float)
+        corners = cell + np.asarray(MARKER_ANCHORS)
+        alt = grid.relative_altitude(position, np.repeat(cell[None, :], 4, axis=0))
+        anchors = camera.project(corners, alt)
+        if k == (0, 0):
+            centre = camera.project(cell[None, :], alt[:1])[0]
+            right = camera.project((cell + [1.0, 0.0])[None, :], alt[:1])[0]
+            spacing = float(np.linalg.norm(right - centre)) or 1.0
+        d = float(
+            np.mean(np.linalg.norm(pts[:, None, :] - anchors[None, :, :], axis=2).min(axis=1))
+        )
+        if best is None or d < best[0]:
+            best = (d, k)
+    assert best is not None
+    frac = best[0] / spacing
+    return (best[1] if frac <= MAX_ANCHOR_FRAC else None), frac
 
 
 def in_cell_points(projected: Any) -> list[tuple[float, float]]:
@@ -365,32 +411,17 @@ def in_cell_points(projected: Any) -> list[tuple[float, float]]:
     return [(float(x), float(y)) for x, y in pts]
 
 
-def marker_centroid(crop: Any, ox: int, oy: int) -> tuple[int, tuple[float, float] | None]:
-    """green_v2 pixel count and centroid (client px; ``ox``/``oy`` = the crop's client origin)."""
-    import numpy as np
-
-    b, g, r_ = (crop[..., i].astype(int) for i in range(3))
-    m = (g - r_ > 50) & (g - b > 35) & (r_ > 60) & (b > 60) & (g > 150)
-    n = int(m.sum())
-    if n < MIN_MARKER_PX:
-        return n, None
-    ys, xs = np.nonzero(m)
-    return n, (float(xs.mean() + ox), float(ys.mean() + oy))
-
-
 def walk4_rule(agent: r.Agent, screen: r.Screen, camera: Any, grid: Any, position: tuple[int, int],
-               target: tuple[int, int], mode: str) -> dict[str, object]:  # fmt: skip
-    """walk@4, ALONE: project the 3x3 around the ABSOLUTE target from our believed position (GAT
-    altitude), hover (two motions) up to MAX_HOVERS points, click only when the marker's centroid
-    confirms the target; a neighbour's centroid moves the cursor by the projected difference."""
+               target: tuple[int, int]) -> dict[str, object]:  # fmt: skip
+    """walk@4, ALONE: project the target from our believed position (GAT altitude), hover (two
+    motions) up to MAX_HOVERS points, click only when the visible chevrons name the target; a
+    neighbour's chevrons move the cursor by the projected difference."""
     import numpy as np
 
     gx, gy, _, _ = r.game_region()
     rel = (target[0] - position[0], target[1] - position[1])
     cells = np.array([(rel[0] + dx, rel[1] + dy) for dx, dy in NB9], dtype=float)
-    alt = grid.relative_altitude(position, cells)
-    proj = camera.project(cells, alt)
-    exp = expected_centroids(proj, alt, mode)
+    proj = camera.project(cells, grid.relative_altitude(position, cells))
     queue = in_cell_points(proj)
     hovers: list[dict[str, object]] = []
     while queue and len(hovers) < MAX_HOVERS:
@@ -400,10 +431,16 @@ def walk4_rule(agent: r.Agent, screen: r.Screen, camera: Any, grid: Any, positio
         time.sleep(HOVER_APPROACH_S)
         agent.move(px, py)
         time.sleep(HOVER_S)
-        n, cen = marker_centroid(screen.grab(px - 60, py - 60, 120, 120)[1], px - 60 - gx,
-                                 py - 60 - gy)  # fmt: skip
-        k = identify(exp, cen) if cen is not None else None
-        hovers.append({"at": [round(u, 1), round(v, 1)], "marker_px": n, "cell": k})
+        comps = green_components(screen.grab(px - 60, py - 60, 120, 120)[1])
+        total = sum(n for *_, n in comps)
+        k: tuple[int, int] | None = None
+        frac = None
+        if total >= MIN_MARKER_PX and len(comps) >= MIN_CHEVRONS:
+            chev = [(x + px - 60 - gx, y + py - 60 - gy) for x, y, _ in comps]
+            k, frac = identify_cell(camera, grid, position, rel, chev)
+        hovers.append({"at": [round(u, 1), round(v, 1)], "marker_px": total,
+                       "chevrons": len(comps), "cell": k,
+                       "fit": None if frac is None else round(frac, 3)})  # fmt: skip
         if k == (0, 0):
             agent.click(px, py)
             return {"points": [(u, v)], "hovers": hovers, "rel": list(rel)}
@@ -490,8 +527,7 @@ def run_walk4(scene: str, n: int, seed: int, label: str) -> int:
             elif not indoor and read is None:
                 did = {"decline": "no_selfpos"}
             else:
-                did = walk4_rule(agent, screen, camera, grid, position, target,
-                                 "indoor" if indoor else "outdoor")  # fmt: skip
+                did = walk4_rule(agent, screen, camera, grid, position, target)
             post = snap(log, screen, f"{i:03d}-walk-after", after_ns=t0)
             pts = [tuple(p) for p in did.get("points", [])]  # type: ignore[attr-defined]
             evidence = {k: v for k, v in did.items() if k != "points"}
@@ -500,7 +536,7 @@ def run_walk4(scene: str, n: int, seed: int, label: str) -> int:
                 session=sid, actor=f"rule:{WALK4_RULE}", t_mono_ns=t0, t_done_ns=r.ns(),
                 frame=pre, frame_after=post, rule=WALK4_RULE, scene=f"{scene}:{mapname}",
                 cue="walk@4: position (minimap / dead reckoning) + GAT altitude -> hover up to 5 "
-                    "points; click when the marker centroid confirms the target",
+                    "points; click when the visible chevrons name the target (corner anchors)",
                 action=Action(type="walk", points=pts,  # type: ignore[arg-type]
                               intended=Intended(kind="cell", cell=target, relative=False,
                                                 note=f"believed {position[0]},{position[1]}")),
@@ -678,7 +714,7 @@ def main() -> int:
     w4 = sub.add_parser("walk4")
     w4.add_argument("--scene", choices=sorted(SCENES), required=True)
     w4.add_argument("--n", type=int, default=50)
-    w4.add_argument("--seed", type=int, default=20261011)
+    w4.add_argument("--seed", type=int, default=20261012)
     w4.add_argument("--label", default="walk4-alone")
     ow = sub.add_parser("open_window")
     ow.add_argument("--scene", choices=sorted(SCENES), required=True)

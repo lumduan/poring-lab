@@ -162,19 +162,24 @@ class FlatGrid:
 
 
 class MarkerScreen:
-    """Draws a 9x9 green_v2 marker centred on the next programmed centroid (client px), or none."""
+    """Draws the walk marker's chevrons (6x6 green_v2 blocks) at the projected corner anchors of a
+    programmed cell (relative to the target), optionally only some corners; None = no marker."""
 
-    def __init__(self, rr: ModuleType, centroids: list[tuple[float, float] | None]) -> None:
-        self.rr, self.centroids, self.grabs = rr, list(centroids), 0
+    def __init__(self, rr: ModuleType, rel: tuple[int, int],
+                 shows: list[tuple[tuple[int, int], tuple[int, ...]] | None]) -> None:  # fmt: skip
+        self.rr, self.rel, self.shows = rr, rel, list(shows)
 
     def grab(self, x: int, y: int, w: int, h: int) -> tuple[int, np.ndarray]:
-        self.grabs += 1
         img = np.zeros((h, w, 4), np.uint8)
-        c = self.centroids.pop(0) if self.centroids else None
-        if c is not None:
+        show = self.shows.pop(0) if self.shows else None
+        if show is not None:
+            k, corners = show
             gx, gy, _, _ = self.rr.r.game_region()
-            cx, cy = round(c[0] + gx - x), round(c[1] + gy - y)
-            img[cy - 4 : cy + 5, cx - 4 : cx + 5, :3] = (110, 200, 110)  # BGR, green_v2
+            cell = np.array([self.rel[0] + k[0], self.rel[1] + k[1]], dtype=float)
+            pts = LinearCamera().project(cell + np.asarray(self.rr.MARKER_ANCHORS))
+            for c in corners:
+                cx, cy = round(pts[c][0] + gx - x), round(pts[c][1] + gy - y)
+                img[cy - 3 : cy + 3, cx - 3 : cx + 3, :3] = (110, 200, 110)  # BGR, green_v2
         return 0, img
 
 
@@ -194,49 +199,48 @@ class ClickAgent:
 def w4(rr: ModuleType, monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     monkeypatch.setattr(rr.time, "sleep", lambda s: None)
     monkeypatch.setattr(rr.r, "game_region", lambda: (80, 77, 1280, 720))
-    monkeypatch.setattr(rr, "MIN_MARKER_PX", 60)
     return rr
 
 
-def expected(rr: ModuleType, rel: tuple[int, int], k: tuple[int, int]) -> tuple[float, float]:
-    cells = np.array([(rel[0] + dx, rel[1] + dy) for dx, dy in rr.NB9], dtype=float)
-    e = rr.expected_centroids(LinearCamera().project(cells), np.zeros(9), "indoor")
-    return float(e[rr.NB9.index(k)][0]), float(e[rr.NB9.index(k)][1])
+ALL = (0, 1, 2, 3)
+REL, POS, TGT = (3, -2), (100, 100), (103, 98)
+CENTRE = (80 + 640 + 90, 77 + 360 - 40)
 
 
-def test_walk4_clicks_when_the_marker_confirms_the_target(w4: ModuleType) -> None:
-    rel = (3, -2)
-    screen = MarkerScreen(w4, [expected(w4, rel, (0, 0))])
+def run4(w4: ModuleType, shows: list) -> tuple[dict, ClickAgent]:
     agent = ClickAgent()
-    did = w4.walk4_rule(agent, screen, LinearCamera(), FlatGrid(), (100, 100), (103, 98), "indoor")
-    assert "decline" not in did and len(agent.clicks) == 1
-    assert agent.clicks[0] == (80 + 640 + 90, 77 + 360 - 40)  # the target's projected centre
+    did = w4.walk4_rule(agent, MarkerScreen(w4, REL, shows), LinearCamera(), FlatGrid(), POS, TGT)
+    return did, agent
 
 
-def test_walk4_corrects_once_when_the_marker_shows_a_neighbour(w4: ModuleType) -> None:
-    rel = (3, -2)
-    screen = MarkerScreen(w4, [expected(w4, rel, (1, 0)), expected(w4, rel, (0, 0))])
-    agent = ClickAgent()
-    did = w4.walk4_rule(agent, screen, LinearCamera(), FlatGrid(), (100, 100), (103, 98), "indoor")
+def test_walk4_clicks_when_the_chevrons_name_the_target(w4: ModuleType) -> None:
+    did, agent = run4(w4, [((0, 0), ALL)])
+    assert "decline" not in did and agent.clicks == [CENTRE]
+
+
+def test_walk4_names_the_target_from_two_visible_chevrons(w4: ModuleType) -> None:
+    """A pew hides the front corners (2026-10-07 calibration): the back two still name the cell."""
+    did, agent = run4(w4, [((0, 0), (2, 3))])
+    assert agent.clicks == [CENTRE] and did["hovers"][0]["chevrons"] == 2
+
+
+def test_walk4_corrects_once_when_the_chevrons_name_a_neighbour(w4: ModuleType) -> None:
+    did, agent = run4(w4, [((1, 0), ALL), ((0, 0), ALL)])
     assert [h["cell"] for h in did["hovers"]] == [(1, 0), (0, 0)]
-    assert agent.clicks == [(80 + 640 + 90 - 30, 77 + 360 - 40)]  # moved by P_T - P_(1,0)
+    assert agent.clicks == [(CENTRE[0] - 30, CENTRE[1])]  # moved by P_T - P_(1,0)
 
 
 def test_walk4_tries_in_cell_alternates_then_declines(w4: ModuleType) -> None:
-    rel = (3, -2)
-    screen = MarkerScreen(w4, [None, None, expected(w4, rel, (0, 0))])
-    agent = ClickAgent()
-    did = w4.walk4_rule(agent, screen, LinearCamera(), FlatGrid(), (100, 100), (103, 98), "indoor")
-    assert len(did["hovers"]) == 3 and len(agent.clicks) == 1
-    assert agent.clicks[0] == (80 + 640 + 90 - 9, 77 + 360 - 40)  # 3rd hover: -0.3 cell along x
-    none = MarkerScreen(w4, [None] * 9)
-    agent2 = ClickAgent()
-    did2 = w4.walk4_rule(agent2, none, LinearCamera(), FlatGrid(), (100, 100), (103, 98), "indoor")
+    did, agent = run4(w4, [None, None, ((0, 0), ALL)])
+    assert len(did["hovers"]) == 3 and agent.clicks == [(CENTRE[0] - 9, CENTRE[1])]
+    did2, agent2 = run4(w4, [None] * 9)
     assert did2["decline"] == "no_confirmation" and len(did2["hovers"]) == w4.MAX_HOVERS
     assert agent2.clicks == []
+    did3, agent3 = run4(w4, [((0, 0), (1,))] * 9)  # one chevron cannot name a cell
+    assert did3["decline"] == "no_confirmation" and agent3.clicks == []
 
 
-def test_walk4_bias_matches_the_l2_binding(rr: ModuleType) -> None:
-    cue = load_l2("kro-20211103-prere")["cue"]["walk_marker"]["rdp"]["centroid_bias"]
-    for mode, (b0, beta) in rr.CENTROID_BIAS.items():
-        assert (tuple(cue[mode]["b0"]), tuple(cue[mode]["beta_per_alt"])) == (b0, beta)
+def test_walk4_anchors_match_the_l2_binding(rr: ModuleType) -> None:
+    cue = load_l2("kro-20211103-prere")["cue"]["walk_marker"]["rdp"]
+    assert [tuple(a) for a in cue["corner_anchors"]] == list(rr.MARKER_ANCHORS)
+    assert "centroid_bias" not in cue  # superseded by the grounded geometry (Batt, 15:20)
