@@ -155,6 +155,21 @@ def load_baseline(
     return b, "ok"
 
 
+def frigate_answers(
+    fetch: Fetch, tries: int = 3, gap: float = 2.0, sleep: Any = time.sleep
+) -> bool:
+    """Frigate's stats parse, allowing for a slow request: up to ``tries`` attempts ``gap`` s
+    apart (2026-10-07 11:21:44: ONE slow GET refused a baseline while Frigate was updating
+    normally every ~16 s). A start check, not the in-run guard (that one allows 60 s)."""
+    for i in range(tries):
+        s = fetch(FRIGATE_STATS)
+        if s is not None and parse_stats(s) is not None:
+            return True
+        if i + 1 < tries:
+            sleep(gap)
+    return False
+
+
 def prestart(path: Path = BASELINE, fetch: Fetch = fetch_json,
              apps: list[tuple[str, int]] | None = None) -> str | None:  # fmt: skip
     """The checks before ANY GPU job of ours: the refusal reason, or None to go."""
@@ -167,9 +182,8 @@ def prestart(path: Path = BASELINE, fetch: Fetch = fetch_json,
     jobs = our_gpu_jobs(apps)
     if jobs:
         return f"R2: another job of ours is on the GPU ({'; '.join(jobs)})"
-    s = fetch(FRIGATE_STATS)
-    if s is None or parse_stats(s) is None:
-        return "R3: Frigate stats unreachable (fail closed)"
+    if not frigate_answers(fetch):
+        return "R3: Frigate stats unreachable (3 tries; fail closed)"
     b, why = load_baseline(path)
     if b is None:
         return f"R3: {why}"
@@ -244,10 +258,8 @@ def prestart_for_baseline(fetch: Fetch = fetch_json, check_frigate: bool = True)
     jobs = our_gpu_jobs(gpu_state()[2])
     if jobs:
         return f"a job of ours is on the GPU ({'; '.join(jobs)})"
-    if check_frigate:
-        s = fetch(FRIGATE_STATS)
-        if s is None or parse_stats(s) is None:
-            return "Frigate stats unreachable"
+    if check_frigate and not frigate_answers(fetch):
+        return "Frigate stats unreachable (3 tries)"
     return None
 
 

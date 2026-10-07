@@ -230,3 +230,10 @@ def test_the_watcher_stops_vision_containers_not_the_compose_client(fr: ModuleTy
 
     assert fr.vision_containers(run) == ["abc123", "def456"]
     assert seen == [["docker", "ps", "-q", "--filter", "label=com.docker.compose.service=vision"]]
+
+
+def test_one_slow_stats_request_is_not_unreachable(fr: ModuleType) -> None:
+    """2026-10-07 11:21:44: one slow GET refused a baseline while Frigate was updating normally."""
+    answers = iter([None, stats(5)])
+    assert fr.frigate_answers(lambda url: next(answers), sleep=lambda s: None) is True
+    assert fr.frigate_answers(lambda url: None, sleep=lambda s: None) is False
