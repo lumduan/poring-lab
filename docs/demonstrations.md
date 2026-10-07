@@ -1147,3 +1147,27 @@ runs among 4 Porings per 10 routes and the church's NPCs. The allowlist never cl
 - When it does decide, it can be confidently wrong (2 of 8 decisions).
 - → v2 (3.11) predicts per candidate, with the altitude as evidence, and must beat this attempt by
   attempt on the same seed.
+
+### Calibration: the PICKUP cursor, RDP (2026-10-07 19:10–19:13 ICT; Batt ~18:45: "@item ..., then drop it on the floor")
+**The setup:**
+- Group 20 got `item` (`groups.yml`, edited in place; guarded `restart:rathena` 19:07; GM re-logged
+  19:09:40; interlock green).
+- `@killmonster2`, the outdoor spot, then `@item 1201 3`: three of one equipment item, which drops
+  without a quantity dialog.
+- The inventory (Alt+E) → its Eqp tab (client 10,220) → each icon dragged from slot 1 (57,157) onto
+  open ground. They land within ~2 cells of the character; the client asks nothing.
+- Within the floor items' ~60 s: one park, then 25 hovers (the first item and the 5 × 5 around us).
+
+**The shape:** a white GLOVED HAND, often with the item-name label.
+- **9 hovers** showed it: the first item, and the cells over the three items.
+- Every one had read **unknown, never WALK**, under walk@6/7's references. The allowlist had
+  already refused them.
+
+**The references:** the 9 hands, as `pickup`, go into a NEW set,
+`data/walk6/cursor_refs_rdp_v2.npz` (573 = 564 + 9).
+- Leave-one-out among the hands: **9 / 9 pickup** (IoU 0.90–0.97).
+- walk@6 and walk@7 keep the frozen 564-hover set (3.9, 3.12); v2 is for a later rule.
+
+**Still not calibrated:**
+- the VENDING shop (one client);
+- **S2, every shape.**
