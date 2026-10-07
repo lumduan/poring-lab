@@ -1,0 +1,12 @@
+[project]
+name = "poring-skills"
+version = "0.1.0"
+license = "Apache-2.0"  # ADR-0018
+description = "poring-lab Phase 4: layered RO knowledge (L1 concepts, L2 client / L3 server / L4 locale bindings) and the action library that runs on it. L1 is our own words; GPL-derived L3 data is generated locally, never shipped here."
+requires-python = ">=3.12"
+# poring-env only (never the offline-only poring-dataset): vision imports this package too.
+dependencies = ["poring-env", "pydantic>=2.13", "pyyaml>=6"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

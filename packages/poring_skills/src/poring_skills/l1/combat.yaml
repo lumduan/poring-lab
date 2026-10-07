@@ -1,0 +1,45 @@
+domain: combat
+concepts:
+  - id: combat.attack_target
+    purpose: Attack a chosen monster with a normal attack.
+    params: [target]
+    steps:
+      - Locate the monster on screen (the world detector) and click its body; the client walks into range and swings.
+      - Keep the attack going (hold or repeat the click) until the monster dies or the plan changes.
+    preconditions:
+      - Weight below the limit that forbids attacking; the target is reachable.
+    failure_modes:
+      - The click misses the sprite and becomes a walk.
+      - Another monster or player stands on the click point.
+      - The target dies or walks away first.
+    game_rules:
+      - A miss still shows that the right target was swung at; damage and critical hits show numbers.
+      - At or above 90 % weight a character cannot attack.
+    outcome:
+      runtime:
+        kind: screen
+        signal: damage or a miss shown above the target; our swing animation
+      offline:
+        kind: packets
+        signal: an act from our id on the intended monster id within the window
+        verifier: poring_dataset.verify.verify_attack
+    bindings_needed: [L2.input.attack_click, L3.mob.stats]
+    workflow_wave: 2
+  - id: combat.use_skill
+    purpose: Use a skill on a target, a cell or ourselves.
+    params: [skill, target]
+    steps:
+      - Press the skill's hotkey (or pick it in the skill window), then click the target or cell when the skill needs one.
+    preconditions:
+      - The skill is learned; enough SP; the target is in range; not silenced.
+    failure_modes:
+      - Not enough SP; the cast is interrupted; the target is out of range.
+    outcome:
+      runtime:
+        kind: screen
+        signal: the skill effect and the SP bar dropping
+      offline:
+        kind: packets
+        signal: the skill-use packets from our id (decoder needed)
+    bindings_needed: [L2.shortcut.hotbar, L2.window.skills, L3.skill.table]
+    workflow_wave: 3

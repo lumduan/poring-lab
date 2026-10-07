@@ -1,0 +1,42 @@
+domain: trade
+concepts:
+  - id: trade.buy
+    purpose: Buy items from an NPC shop.
+    params: [shop, items]
+    steps:
+      - Talk to the shop NPC, choose to buy, put the wanted items and counts in the cart list, confirm.
+    preconditions:
+      - Enough zeny and weight; the shop sells them.
+    failure_modes:
+      - Not enough zeny or weight; the shop's list differs from the expected one.
+    game_rules:
+      - Merchants with the Discount skill pay less at NPC shops (a percentage that grows with its level).
+    outcome:
+      runtime:
+        kind: screen
+        signal: the zeny readout drops by the price and the items appear in the inventory
+      offline:
+        kind: packets
+        signal: the purchase result is a success and the zeny falls by the price (decoder needed)
+    bindings_needed: [L3.npc.shop, L3.shop.items, L2.window.shop_buy]
+    workflow_wave: 3
+  - id: trade.sell
+    purpose: Sell items to an NPC shop.
+    params: [items, policy]
+    steps:
+      - Talk to the shop NPC, choose to sell, put the items and counts in the sell list, confirm.
+    preconditions:
+      - The items are not worn and are sellable.
+    failure_modes:
+      - Selling an item the policy wanted to keep (the policy decides what may go).
+    game_rules:
+      - Merchants with the Overcharge skill get more from NPC shops (a percentage that grows with its level).
+    outcome:
+      runtime:
+        kind: screen
+        signal: the zeny readout rises and the items leave the inventory
+      offline:
+        kind: packets
+        signal: the sell result and the zeny change (decoder needed)
+    bindings_needed: [L3.npc.shop, L2.window.shop_sell]
+    workflow_wave: 3

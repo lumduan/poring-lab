@@ -1,0 +1,25 @@
+domain: loot
+concepts:
+  - id: loot.pick_up
+    purpose: Pick up an item lying on the ground.
+    params: [item]
+    steps:
+      - Click the item on the ground; the character walks to it and picks it up.
+    preconditions:
+      - Enough free weight and inventory slots; the item is not reserved for another player.
+    failure_modes:
+      - The click hits the ground next to the item and becomes a walk.
+      - Over the weight limit; the item belongs to someone else for a few seconds.
+    game_rules:
+      - Drops may be reserved for the killer for a short time.
+    outcome:
+      runtime:
+        kind: screen
+        signal: the item vanishes from the ground and its count rises in the inventory
+      offline:
+        kind: packets
+        signal: our pickup act on the floor item, its vanish, and the item added to our inventory
+    exceptions:
+      - Ground items have no world-detector class yet; their runtime cue is designed before this is bound.
+    bindings_needed: [L2.cue.ground_item, L2.window.inventory]
+    workflow_wave: 2

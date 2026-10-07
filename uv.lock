@@ -15,6 +15,7 @@ members = [
     "poring-env",
     "poring-lab",
     "poring-packets",
+    "poring-skills",
     "poring-vision",
 ]
 excludes = ["opencv-python"]
@@ -765,6 +766,7 @@ dependencies = [
     { name = "poring-backend" },
     { name = "poring-dataset" },
     { name = "poring-env", extra = ["remote", "x11"] },
+    { name = "poring-skills" },
 ]
 
 [package.dev-dependencies]
@@ -783,6 +785,7 @@ requires-dist = [
     { name = "poring-backend", editable = "services/backend" },
     { name = "poring-dataset", editable = "packages/poring_dataset" },
     { name = "poring-env", extras = ["x11", "remote"], editable = "packages/poring_env" },
+    { name = "poring-skills", editable = "packages/poring_skills" },
 ]
 
 [package.metadata.requires-dev]
@@ -815,6 +818,23 @@ requires-dist = [
     { name = "websockets", marker = "extra == 'sniffer'", specifier = ">=17.1" },
 ]
 provides-extras = ["sniffer"]
+
+[[package]]
+name = "poring-skills"
+version = "0.1.0"
+source = { editable = "packages/poring_skills" }
+dependencies = [
+    { name = "poring-env" },
+    { name = "pydantic" },
+    { name = "pyyaml" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "poring-env", editable = "packages/poring_env" },
+    { name = "pydantic", specifier = ">=2.13" },
+    { name = "pyyaml", specifier = ">=6" },
+]
 
 [[package]]
 name = "poring-vision"

@@ -1,0 +1,19 @@
+domain: vitals
+concepts:
+  - id: vitals.read
+    purpose: Know our HP, SP, weight and zeny from the screen.
+    steps:
+      - Read the bars and readouts on the basic info window (HP and SP bars, weight, zeny).
+    failure_modes:
+      - The basic info window is minimised or covered.
+    game_rules:
+      - At or above half the weight limit natural regeneration stops; at or above 90 % attacking and skills stop.
+    outcome:
+      runtime:
+        kind: screen
+        signal: values parsed from the bars and readouts
+      offline:
+        kind: packets
+        signal: the values equal the latest stat changes at that frame
+    bindings_needed: [L2.window.basic_info, L2.element.hp_bar, L2.element.sp_bar]
+    workflow_wave: 1

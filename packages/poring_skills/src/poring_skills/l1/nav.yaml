@@ -1,0 +1,96 @@
+domain: nav
+concepts:
+  - id: nav.read_position
+    purpose: Know our current map and cell from the screen.
+    steps:
+      - Read the coordinate readout under the minimap (map name and cell), where the client shows it.
+    failure_modes:
+      - Indoor maps show no minimap, so there is no readout.
+      - Some servers hide the coordinates; a window covers the readout.
+    outcome:
+      runtime:
+        kind: screen
+        signal: a readout parsed as map plus x y
+      offline:
+        kind: packets
+        signal: the readout equals our cell from the position packets at that frame
+    exceptions:
+      - No readout indoors in this client; servers may hide it altogether.
+    bindings_needed: [L2.window.minimap, L2.element.minimap_xy]
+    workflow_wave: 1
+  - id: nav.walk_to
+    purpose: Walk to a cell.
+    params: [cell]
+    steps:
+      - Project the target cell to the screen (camera plus terrain height) and click it; the client paths there.
+      - For a far cell, walk in legs that stay on screen.
+    preconditions:
+      - The target is walkable; nothing clickable (a monster, an NPC, an item) sits on the target pixel.
+    failure_modes:
+      - The click lands on a monster or NPC (an attack or a dialog instead of a walk).
+      - The projection is off by a cell; the path is blocked and the walk stops short.
+    game_rules:
+      - A diagonal step costs about 1.4 times a straight step; walk speed is a character stat.
+    outcome:
+      runtime:
+        kind: screen
+        signal: the walk marker under the cursor before the click; the readout reaches the cell
+      offline:
+        kind: packets
+        signal: the server-accepted destination equals the cell and nothing re-routes us
+        verifier: poring_dataset.verify.verify_walk
+    bindings_needed: [L2.camera.projection, L2.cue.walk_marker, L3.map.walkability]
+    workflow_wave: 1
+  - id: nav.take_warp
+    purpose: Change map through a warp portal or by walking across a map edge.
+    params: [destination]
+    steps:
+      - Walk onto the portal's cells (or the edge cells that link to the next map).
+      - Wait for the map to load.
+    failure_modes:
+      - The walk stops one cell short of the portal; a monster blocks the path.
+    outcome:
+      runtime:
+        kind: screen
+        signal: a loading screen then a new map name in the readout
+      offline:
+        kind: packets
+        signal: a map change to the destination
+    bindings_needed: [L3.warp.cells, L2.camera.projection]
+    workflow_wave: 3
+  - id: nav.kafra_teleport
+    purpose: Use a Kafra employee's paid teleport service.
+    params: [destination]
+    steps:
+      - Talk to a Kafra employee, choose the teleport service, choose the destination, confirm the fee.
+    preconditions:
+      - Enough zeny for the fee; the destination is offered by this Kafra.
+    failure_modes:
+      - Not enough zeny; the menu order differs from the expected one.
+    game_rules:
+      - The destinations and fees depend on the Kafra's town (server script).
+    outcome:
+      runtime:
+        kind: screen
+        signal: a new map; the zeny readout drops by the fee
+      offline:
+        kind: packets
+        signal: a map change to the destination and a zeny change by the fee
+    bindings_needed: [L3.npc.kafra, L3.kafra.destinations, L4.text.menu_option]
+    workflow_wave: 3
+  - id: nav.take_transport
+    purpose: Travel by a transport NPC or vehicle (for example an airship between towns).
+    params: [destination]
+    steps:
+      - Reach the departure point, talk to its staff, choose the route, then wait for or ride to arrival.
+    failure_modes:
+      - The service needs a ticket or fee we lack; the departure is timed and missed.
+    outcome:
+      runtime:
+        kind: screen
+        signal: a map change to the route's arrival point
+      offline:
+        kind: packets
+        signal: a map change to the arrival map
+    bindings_needed: [L3.npc.transport, L4.text.menu_option]
+    workflow_wave: 4

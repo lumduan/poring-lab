@@ -1,0 +1,59 @@
+domain: session
+concepts:
+  - id: session.login
+    purpose: Enter the game world with a given account and character.
+    params: [account, character]
+    steps:
+      - Start the client and reach the account login dialog (some builds first ask which service to use).
+      - Enter the account id and password and submit them.
+      - Pick a server from the list the login server returns, promptly (clients give up when no server is picked within a second or two).
+      - On the character select screen, choose the character slot and enter the world.
+    preconditions:
+      - The client is installed for this server and its keyboard layout is the one the secrets are typed in.
+      - The account is not already online.
+    failure_modes:
+      - Wrong credentials, or an account locked after repeated failures (never retry fast).
+      - The server pick comes too late and the client reports it could not connect.
+      - The character select screen shows but entering the world times out.
+    game_rules:
+      - Repeated failed logins can lock an account on many servers.
+    outcome:
+      runtime:
+        kind: screen
+        signal: the world is drawn (game region not black) after the character select screen
+      offline:
+        kind: packets
+        signal: our login acceptance then the zone server hand-off then the map entry, in order
+        verifier: poring_dataset.verify.verify_login
+    bindings_needed: [L2.window.service_select, L2.window.login, L2.window.server_select, L2.window.char_select, L2.element.login_fields, L3.server.address]
+    workflow_wave: 1
+  - id: session.select_char
+    purpose: Choose a character on the character select screen and enter the world.
+    params: [slot]
+    steps:
+      - Select the slot holding the character.
+      - Confirm (double click or the start button, or Enter).
+    failure_modes:
+      - The slot is empty, or the confirmation is not registered.
+    outcome:
+      runtime:
+        kind: screen
+        signal: the character select screen is replaced by the world
+      offline:
+        kind: packets
+        signal: the zone server hand-off then the map entry
+    bindings_needed: [L2.window.char_select]
+    workflow_wave: 1
+  - id: session.logout
+    purpose: Leave the world (back to character select or quit the client).
+    steps:
+      - Open the in-game system menu and choose to return to character select, or close the client.
+    outcome:
+      runtime:
+        kind: screen
+        signal: the character select screen, or no client window
+      offline:
+        kind: packets
+        signal: our character leaves the map (no further map packets on this connection)
+    bindings_needed: [L2.shortcut.system_menu, L2.window.game_option]
+    workflow_wave: 1

@@ -1,0 +1,114 @@
+domain: char
+concepts:
+  - id: char.allocate_stat
+    purpose: Spend status points to raise a base stat.
+    params: [stat, points]
+    steps:
+      - Open the status window and press the raise button next to the stat once per point.
+    preconditions:
+      - Enough unspent status points for the next raise.
+    failure_modes:
+      - The button of the neighbouring stat is pressed; the points run out.
+    game_rules:
+      - A raise costs more points the higher the stat already is.
+    outcome:
+      runtime:
+        kind: screen
+        signal: the stat value in the status window rises and the remaining points drop
+      offline:
+        kind: packets
+        signal: the stat-change acknowledgement for that stat (decoder needed)
+    bindings_needed: [L2.shortcut.window, L2.window.status, L2.element.stat_buttons]
+    workflow_wave: 1
+  - id: char.learn_skill
+    purpose: Spend skill points to raise a skill level.
+    params: [skill, levels]
+    steps:
+      - Open the skill window, find the skill, press its raise control once per level, apply where the build asks.
+    preconditions:
+      - Unspent skill points; the skill's prerequisites are met.
+    failure_modes:
+      - The prerequisite is missing; the wrong row is raised.
+    game_rules:
+      - One skill point per job level; a novice's basic skill gates sitting, storage and the job change.
+      - Second-job changes usually require every skill point to be spent.
+    outcome:
+      runtime:
+        kind: screen
+        signal: the skill's level in the skill window rises and the points drop
+      offline:
+        kind: packets
+        signal: the skill update for that skill (decoder needed)
+    bindings_needed: [L2.shortcut.window, L2.window.skills, L3.skill.tree]
+    workflow_wave: 1
+  - id: char.sit
+    purpose: Sit down to regenerate faster.
+    steps:
+      - Press the sit key (or type the sit command in some builds).
+    preconditions:
+      - Basic Skill high enough to sit.
+    failure_modes:
+      - Not allowed while moving or attacking.
+    game_rules:
+      - Sitting speeds up natural HP and SP regeneration; weight at or above half the limit stops natural regeneration.
+    outcome:
+      runtime:
+        kind: screen
+        signal: the character sprite shows the sitting pose
+      offline:
+        kind: packets
+        signal: an act of kind sit from our id
+    bindings_needed: [L2.shortcut.sit]
+    workflow_wave: 1
+  - id: char.stand
+    purpose: Stand up after sitting.
+    steps:
+      - Press the sit key again.
+    outcome:
+      runtime:
+        kind: screen
+        signal: the standing pose
+      offline:
+        kind: packets
+        signal: an act of kind stand from our id
+    bindings_needed: [L2.shortcut.sit]
+    workflow_wave: 1
+  - id: char.respawn
+    purpose: Return to the save point after dying.
+    steps:
+      - On death the client offers a dialog; choose to return to the save point.
+    failure_modes:
+      - The dialog is covered by another window; a resurrection is pending instead.
+    game_rules:
+      - Dying usually costs a share of the experience to the next level (the server sets it; novices may be exempt).
+    outcome:
+      runtime:
+        kind: screen
+        signal: the death dialog closes and the save point map is drawn
+      offline:
+        kind: packets
+        signal: a map change to the save point
+    bindings_needed: [L2.window.death_dialog, L2.element.return_button]
+    workflow_wave: 1
+  - id: char.change_job
+    purpose: Change to a new job through the job's NPC process.
+    params: [job]
+    steps:
+      - Reach the job's guild NPC, meet its requirements (levels, spent skill points, items, fees, tests), follow its dialog to the end.
+    preconditions:
+      - The job level and skill point requirements of the server's job-change script.
+    failure_modes:
+      - A requirement is missing; a test answer is wrong; the process has random branches (destinations, item lists).
+    game_rules:
+      - The process is a server script, so its steps, tests and randomness are server data (L3).
+    outcome:
+      runtime:
+        kind: screen
+        signal: the character's job name and sprite change
+      offline:
+        kind: packets
+        signal: the job change visible in the character's appearance and stats
+    exceptions:
+      - Every server version scripts job changes differently; only the concept is shared.
+    bindings_needed: [L3.job_change.script, L3.npc.positions, L4.text.menu_option]
+    workflow_wave: 3

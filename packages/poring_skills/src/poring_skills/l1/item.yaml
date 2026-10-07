@@ -1,0 +1,92 @@
+domain: item
+concepts:
+  - id: item.use
+    purpose: Use a consumable (a potion, a teleport item, food).
+    params: [item]
+    steps:
+      - Double click the item in the inventory, or press the hotbar slot it is on.
+    preconditions:
+      - The item is in the inventory; no cooldown blocks it.
+    failure_modes:
+      - The wrong slot is pressed; the inventory tab shows another item category.
+    outcome:
+      runtime:
+        kind: screen
+        signal: the effect (the HP or SP bar rises) and the item count drops
+      offline:
+        kind: packets
+        signal: the item count change and the stat change
+    bindings_needed: [L2.window.inventory, L2.shortcut.hotbar]
+    workflow_wave: 3
+  - id: item.equip
+    purpose: Wear a weapon or armour piece.
+    params: [item]
+    steps:
+      - Open the inventory, then double click the item (or drag it onto the equipment window).
+    preconditions:
+      - Our job and level may wear it.
+    failure_modes:
+      - The job cannot wear it; the item is unidentified in some builds.
+    outcome:
+      runtime:
+        kind: screen
+        signal: the item appears in its slot in the equipment window
+      offline:
+        kind: packets
+        signal: the equip acknowledgement for that item (decoder needed)
+    bindings_needed: [L2.window.inventory, L2.window.equipment]
+    workflow_wave: 3
+  - id: item.unequip
+    purpose: Take off a worn item.
+    params: [item]
+    steps:
+      - Open the equipment window and double click the worn item.
+    outcome:
+      runtime:
+        kind: screen
+        signal: the slot is empty and the item is back in the inventory
+      offline:
+        kind: packets
+        signal: the take-off acknowledgement (decoder needed)
+    bindings_needed: [L2.window.equipment]
+    workflow_wave: 3
+  - id: item.insert_card
+    purpose: Put a card into a free slot of an equipment item.
+    params: [card, item]
+    steps:
+      - Double click the card in the inventory; the client lists the items it fits; choose the item and confirm.
+    preconditions:
+      - The item has a free slot that accepts this card type; the item is not worn in some builds.
+    failure_modes:
+      - No compatible item; the wrong item is chosen (a card cannot be taken out again).
+    game_rules:
+      - Inserting is permanent.
+    outcome:
+      runtime:
+        kind: screen
+        signal: the card leaves the inventory and the item shows it in its description
+      offline:
+        kind: packets
+        signal: the card-insert acknowledgement (decoder needed)
+    bindings_needed: [L2.window.inventory, L2.window.card_list]
+  - id: item.refine
+    purpose: Raise an equipment item's refine level.
+    params: [item]
+    steps:
+      - Bring the item and the matching ore plus the fee to a refiner; choose the item and confirm.
+    preconditions:
+      - The ore matching the item kind and weapon level; enough zeny.
+    failure_modes:
+      - A failure above the safe limit destroys the item.
+    game_rules:
+      - Each weapon level and armour has a safe limit; beyond it a failure breaks the item.
+    outcome:
+      runtime:
+        kind: screen
+        signal: the item name shows the new level, or the item is gone
+      offline:
+        kind: packets
+        signal: the refine result for that item (decoder needed)
+    exceptions:
+      - Older clients refine through an NPC dialog; newer clients have a refine window.
+    bindings_needed: [L3.npc.refiner, L4.text.menu_option]

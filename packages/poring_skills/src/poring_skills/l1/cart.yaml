@@ -1,0 +1,29 @@
+domain: cart
+concepts:
+  - id: cart.rent
+    purpose: Get a pushcart (merchant classes).
+    steps:
+      - Learn the cart skill, then rent a cart from a Kafra employee (a fee).
+    preconditions:
+      - A merchant class with the cart skill.
+    outcome:
+      runtime:
+        kind: screen
+        signal: the cart appears behind the character and the cart window opens
+      offline:
+        kind: packets
+        signal: the cart is attached to our character (decoder needed)
+    bindings_needed: [L3.npc.kafra, L4.text.menu_option]
+  - id: cart.transfer
+    purpose: Move items between the inventory and the cart.
+    params: [items, direction]
+    steps:
+      - Open the cart window and drag items between it and the inventory.
+    outcome:
+      runtime:
+        kind: screen
+        signal: the item moves between the two windows
+      offline:
+        kind: packets
+        signal: the cart add and inventory removal, or the reverse (decoder needed)
+    bindings_needed: [L2.window.cart, L2.window.inventory]

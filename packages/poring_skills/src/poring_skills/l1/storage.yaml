@@ -1,0 +1,34 @@
+domain: storage
+concepts:
+  - id: storage.deposit
+    purpose: Move items from the inventory into the account storage (via a Kafra employee).
+    params: [items]
+    steps:
+      - Talk to a Kafra employee, open the storage service (a fee), then move each item from the inventory into the storage window.
+    preconditions:
+      - Basic Skill high enough to use storage (a novice needs several levels); enough zeny for the fee.
+    failure_modes:
+      - The storage is full; the fee cannot be paid.
+    outcome:
+      runtime:
+        kind: screen
+        signal: the item leaves the inventory window and appears in the storage window
+      offline:
+        kind: packets
+        signal: the inventory removal and the storage addition for that item (decoder needed)
+    bindings_needed: [L3.npc.kafra, L3.kafra.storage_fee, L2.window.storage, L4.text.menu_option]
+  - id: storage.withdraw
+    purpose: Take items out of the account storage.
+    params: [items]
+    steps:
+      - Open the storage as above and move the items from the storage window into the inventory.
+    failure_modes:
+      - Over the weight limit.
+    outcome:
+      runtime:
+        kind: screen
+        signal: the item leaves the storage window and appears in the inventory
+      offline:
+        kind: packets
+        signal: the storage removal and the inventory addition (decoder needed)
+    bindings_needed: [L3.npc.kafra, L2.window.storage, L4.text.menu_option]

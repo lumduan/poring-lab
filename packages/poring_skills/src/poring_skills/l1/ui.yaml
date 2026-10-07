@@ -1,0 +1,58 @@
+domain: ui
+concepts:
+  - id: ui.open_window
+    purpose: Open a client window (character status, skill list, items, equipment, world map, options, basic info, cart).
+    params: [window]
+    steps:
+      - Press the window's keyboard shortcut (a modifier chord in most builds), or click its button on the basic info window.
+    preconditions:
+      - The client is in front and accepts keys; the window is closed (most shortcuts toggle).
+    failure_modes:
+      - The chord is sent too fast and the client ignores it.
+      - The shortcut toggles an already open window closed.
+      - The client lacks textures for the window and shows a modal error instead.
+    outcome:
+      runtime:
+        kind: screen
+        signal: the window's anchor is absent before and present after
+      offline:
+        kind: none
+        signal: client-side only (no packet)
+    exceptions:
+      - Builds differ in which shortcuts exist and in whether a window is a separate window or a tab.
+    bindings_needed: [L2.shortcut.window, L2.window.anchor]
+    workflow_wave: 1
+  - id: ui.close_window
+    purpose: Close a client window.
+    params: [window]
+    steps:
+      - Press the same shortcut again, or click the window's close button, or Escape when it has focus.
+    failure_modes:
+      - Escape opens the system menu instead when no window has focus.
+    outcome:
+      runtime:
+        kind: screen
+        signal: the window's anchor is present before and absent after
+      offline:
+        kind: none
+        signal: client-side only
+    bindings_needed: [L2.shortcut.window, L2.window.anchor, L2.element.close_button]
+    workflow_wave: 1
+  - id: ui.press_button
+    purpose: Press a button inside a window (OK, a stat raise button, a tab).
+    params: [window, button]
+    steps:
+      - Locate the window by its anchor, then click the button at its offset inside the window.
+    preconditions:
+      - The window is open and not covered by another window.
+    failure_modes:
+      - The window moved or is covered, so the offset hits something else.
+    outcome:
+      runtime:
+        kind: screen
+        signal: the state change the button is for (per button)
+      offline:
+        kind: packets
+        signal: per button (some buttons send a request, others are client-side)
+    bindings_needed: [L2.window.anchor, L2.element.button]
+    workflow_wave: 1
