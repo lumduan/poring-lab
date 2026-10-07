@@ -40,6 +40,7 @@ from poring_env.demo import Action, DemoLog, DemoRecord, Intended, new_session_i
 WHERE_RULE = "where@1"
 GM_AID = 2000002
 WALK_WAIT_S = 3.0
+SAFE = (300, 200, 980, 520)  # client px (x0, y0, x1, y1): the harness's blind walk click
 
 
 def score(session: Path) -> dict[str, Any]:
@@ -87,7 +88,6 @@ def run(n: int, seed: int, label: str) -> int:
                     .read_text())  # fmt: skip
     base = cam.camera_from_json(cj["camera"])
     camera = cam.camera_for_map(base, True, cj["indoor"]["yaw_deg"], cj["indoor"]["distance"])
-    x0, y0, x1, y1 = rr.ec_band()
     rng = random.Random(seed)
     sid = new_session_id(f"{label}-indoor")
     log = DemoLog(sid)
@@ -107,13 +107,18 @@ def run(n: int, seed: int, label: str) -> int:
             time.sleep(rr.WARP_SETTLE_S)
             bench.close_chat(agent, screen)
             r.activate_client(agent, screen)
-            for _ in range(200):  # ... then a seeded click 3-8 cells away: where we stop is unknown
+            for _ in range(400):  # ... then a seeded click 3-8 cells away: where we stop is unknown
                 d = (rng.randint(-8, 8), rng.randint(-8, 8))
-                if 3 <= max(abs(d[0]), abs(d[1])) <= 8:
-                    rel = np.array([d], dtype=float)
-                    u, v = camera.project(rel, gat.relative_altitude((sx, sy), rel))[0]
-                    if x0 <= u <= x1 and y0 <= v <= y1:
-                        break
+                if not 3 <= max(abs(d[0]), abs(d[1])) <= 8:
+                    continue
+                if not walk[sy + d[1], sx + d[0]]:
+                    continue
+                rel = np.array([d], dtype=float)
+                u, v = camera.project(rel, gat.relative_altitude((sx, sy), rel))[0]
+                # a SAFE box clear of every UI panel: the first run's blind click hit the left menu
+                # icons and opened the shortcut help (22:02, amended in 3.13 before scoring)
+                if SAFE[0] <= u <= SAFE[2] and SAFE[1] <= v <= SAFE[3]:
+                    break
             gx, gy, _, _ = r.game_region()
             agent.move(gx + round(u) - 3, gy + round(v) - 3)
             time.sleep(0.05)
@@ -130,7 +135,8 @@ def run(n: int, seed: int, label: str) -> int:
                     note=f"attempt {i}: the fix read")),
                 outcome={"status": "pending", "evidence": {  # type: ignore[arg-type]
                     "attempt": i, "warp_cell": [sx, sy], "click_rel": list(d),
-                    "xy": list(got["xy"]) if got["xy"] else None, "t_read": got["t"]}},
+                    "xy": list(got["xy"]) if got["xy"] else None, "why": got.get("why"),
+                    "t_read": got["t"]}},
             ))  # fmt: skip
             print(json.dumps({"attempt": i, "warp": [sx, sy], "click_rel": list(d),
                               "read": got["xy"]}), flush=True)  # fmt: skip

@@ -768,6 +768,21 @@ input.
 - **If it passes**, it is walk@8's indoor fix: at the start of an indoor route and whenever the
   belief is in doubt, not every step (Batt).
 
+> ➡️ **Amended 2026-10-07 ~22:15, BEFORE any scored run completed.** The first run stopped at
+> attempt 10 with "the chat input did not open".
+> - **The cause was the HARNESS.** Its blind walk click can land on the expanded Basic Information
+>   window's menu icons; one opened the client's Shortcut Description panel, which then blocked the
+>   chat. The panel was closed with its X at (1099,119).
+> - That partial session is **not scored**; no packets were written.
+> - **The changes:**
+>   1. The harness clicks only GAT-walkable cells projecting into a SAFE box (x 300–980,
+>      y 200–520), clear of every UI panel.
+>   2. **The rule gets a STALE-READ GUARD.** The chat area must CHANGE after typing, or there is no
+>      fix. Without it, a `/where` that did not print would leave the PREVIOUS answer as the newest
+>      line, read as a confidently wrong fix. Tested.
+>   3. A chat input that will not open is a no-fix for that attempt, not a crash.
+> - The seed, n and the bar are unchanged.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.

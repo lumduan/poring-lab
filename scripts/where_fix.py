@@ -117,12 +117,22 @@ def stable_area(screen: Any) -> Any:
 
 
 def fix(agent: Any, screen: Any, templates: dict[str, Any]) -> dict[str, Any]:
-    """Type /where, read the answer: {"xy": (x, y) | None, "t": the read time}."""
+    """Type /where, read the answer: {"xy": (x, y) | None, "why": ..., "t": the read time}.
+    STALE GUARD (2026-10-07 22:10): the chat area must CHANGE after typing -- if the /where line
+    did not appear, the newest yellow line is the PREVIOUS answer, and reading it would be a
+    confidently wrong fix. A chat input that will not open is no fix, never a crash."""
     r.activate_client(agent, screen)
-    r.chat_line(agent, screen, "/where")
+    before = text_mask(stable_area(screen))
+    try:
+        r.chat_line(agent, screen, "/where")
+    except r.Stop as exc:
+        return {"xy": None, "why": f"chat: {exc}", "t": r.ns()}
     time.sleep(SETTLE_S)
     area = stable_area(screen)
-    return {"xy": parse(area, templates), "t": r.ns()}
+    if bool((text_mask(area) == before).all()):
+        return {"xy": None, "why": "no new chat line", "t": r.ns()}
+    xy = parse(area, templates)
+    return {"xy": xy, "why": None if xy else "unparsed", "t": r.ns()}
 
 
 def cut(labels: Path) -> int:

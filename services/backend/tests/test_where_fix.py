@@ -61,3 +61,27 @@ def test_an_unknown_glyph_inside_the_number_is_no_fix_never_a_guess(wf: ModuleTy
     t2 = dict(t)
     del t2["2"]
     assert wf.parse(render("(x) : 104, 122", g, wf), t2) is None
+
+
+def test_a_missing_answer_is_no_fix_never_the_previous_line(
+    wf: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """If /where did not print, the newest yellow line is the PREVIOUS answer: reading it would be a
+    confidently wrong fix (the 22:02 stop). The chat area must change after typing."""
+    g = glyph_set()
+    t = {k: v for k, v in g.items() if k in "0123456789,"}
+    old = render("(x) : 104, 122", g, wf)
+    monkeypatch.setattr(wf.time, "sleep", lambda s: None)
+    monkeypatch.setattr(wf.r, "activate_client", lambda a, s: None)
+    monkeypatch.setattr(wf.r, "ns", lambda: 0)
+    monkeypatch.setattr(wf, "stable_area", lambda screen: old)  # nothing new ever appears
+    monkeypatch.setattr(wf.r, "chat_line", lambda a, s, text: None)
+    got = wf.fix(None, None, t)
+    assert got["xy"] is None and got["why"] == "no new chat line"
+
+    def refuse(a: object, s: object, text: str) -> None:
+        raise wf.r.Stop("the chat input did not open: nothing typed")
+
+    monkeypatch.setattr(wf.r, "chat_line", refuse)
+    got = wf.fix(None, None, t)
+    assert got["xy"] is None and got["why"].startswith("chat:")
