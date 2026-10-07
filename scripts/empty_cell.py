@@ -52,6 +52,18 @@ def marker_px(crop: Img) -> int:
     return int(mint.sum())
 
 
+# walk@2 (docs/demonstrations.md §3.4, 2026-10-07): over RDP the marker renders ~RGB (105-112,
+# 196-203, 112-120) -- blue barely above red -- so the mint filter above counts 2-12 px of it. This
+# filter was calibrated on RDP hovers (scripts/walk_marker_calibrate.py): a drawn marker gives
+# 129-403 px, no marker ~0; the HP bar's pure green fails r > 60.
+MIN_MARKER_PX_V2 = 60
+
+
+def marker_px_v2(crop: Img) -> int:
+    b, g, r = (crop[..., i].astype(int) for i in range(3))
+    return int(((g - r > 50) & (g - b > 35) & (r > 60) & (b > 60) & (g > 150)).sum())
+
+
 def is_empty_walk_cell(crop: Img) -> bool:
     return marker_px(crop) >= MIN_MARKER_PX
 

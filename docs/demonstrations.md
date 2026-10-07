@@ -165,6 +165,32 @@ Common rules:
     GM is level 1).
 - **n = 50 per scene.** Pass: ≥ 48/50 per scene.
 
+### 3.4 walk@2 (pre-registered 2026-10-07 ~13:00, BEFORE its run; replaces walk@1 after §Results)
+**What changes from walk@1:**
+- **The HARNESS closes the chat after every GM command** (an open chat input suppresses the walk
+  marker), then brings the client to the front.
+- **The seed is 20261008**, so the situations are new.
+- **The rule's hover cue is re-calibrated for RDP** (`scripts/walk_marker_calibrate.py`, design
+  time, chat closed):
+  - **Filter `green_v2`:** marker pixels are those with g − r > 50, g − b > 35, r > 60, b > 60,
+    g > 150. The HP bar's pure green fails r > 60.
+  - **Outdoor calibration:** 30 / 30 walkable hovers gave 129–403 px. No non-walkable cell lay
+    in the band around the spot.
+  - **Indoor calibration:** 20 / 30 walkable hovers gave > 100 px and the other 10 gave 0;
+    2 / 30 non-walkable hovers gave > 100 px.
+  - The marker is BIMODAL (≈ 0, or > 100), so the threshold **≥ 60 px** means "a marker is
+    drawn". It does not separate walkable from non-walkable indoors; that is the projection's
+    job.
+- **Unchanged:** the projection. Outdoors it is the minimap origin + GAT altitude; indoors the
+  flat floor with the RDP camera's indoor block.
+  - That indoor block was carried over from the console fit and is NOT validated on RDP.
+  - The indoor calibration's misses (10 / 30 walkable hovers without a marker) are therefore an
+    EXPECTED failure source, stated in advance, not a reason to change anything after the run.
+- **Unchanged:** the verifier, the bar (≥ 48 / 50 per scene), n = 50 per scene, and the rule
+  that a decline is a FAIL.
+- **A run is INVALID** (re-run once the cause is removed) only on a harness defect found
+  afterwards. A rule failure is reported as is.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.

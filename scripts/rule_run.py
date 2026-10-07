@@ -2,7 +2,7 @@
 """Run ONE rule ALONE and log every attempt (docs/demonstrations.md §3, pre-registered).
 
     rule_run.py login [--n 50] [--label login-alone]
-    rule_run.py walk --scene outdoor|indoor [--n 50] [--seed 20261007] [--label walk-alone]
+    rule_run.py walk --scene outdoor|indoor [--n 50] [--seed 20261008] [--label walk-alone]
 
 Batt, 2026-10-07: a rule is adopted only if it passes its bar ALONE.
 - No agent reasoning and no manual help: this script runs the rule's code only.
@@ -127,7 +127,7 @@ def run_login(n: int, label: str) -> int:
     return 0
 
 
-WALK_RULE = "walk@1"
+WALK_RULE = "walk@2"  # docs/demonstrations.md 3.4 (walk@1: §Results, retired)
 SCENES = {"outdoor": ("prt_fild08", 268, 107), "indoor": ("prt_church", 104, 122)}  # GM spots
 SPOT_RADIUS = 8
 WARP_SETTLE_S = 2.5
@@ -173,8 +173,8 @@ def walk_rule(agent: r.Agent, screen: r.Screen, proj: object, outdoor: bool,
     agent.move(gx + round(u), gy + round(v))
     time.sleep(HOVER_S)
     crop = screen.grab(*ec.crop_region(gx + round(u), gy + round(v)))[1]
-    marker = ec.marker_px(crop)
-    if marker < ec.MIN_MARKER_PX:
+    marker = ec.marker_px_v2(crop)
+    if marker < ec.MIN_MARKER_PX_V2:
         return {"decline": "no_marker", "points": [(u, v)], "marker_px": marker, "origin": origin}
     agent.click(gx + round(u), gy + round(v))
     return {"points": [(u, v)], "marker_px": marker, "origin": origin}
@@ -183,6 +183,7 @@ def walk_rule(agent: r.Agent, screen: r.Screen, proj: object, outdoor: bool,
 def run_walk(scene: str, n: int, seed: int, label: str) -> int:
     import random
 
+    import bench
     import empty_cell as ec
 
     from poring_dataset import gat as gatmod
@@ -208,6 +209,7 @@ def run_walk(scene: str, n: int, seed: int, label: str) -> int:
         while i < n:
             if i % 10 == 0:
                 r.gm(agent, screen, "@killmonster2")
+                bench.close_chat(agent, screen)
             # the HARNESS: a seeded walkable spot near the scene's GM spot, then a seeded target
             r8 = SPOT_RADIUS
             spots = [(sx0 + rng.randint(-r8, r8), sy0 + rng.randint(-r8, r8)) for _ in range(200)]
@@ -218,6 +220,8 @@ def run_walk(scene: str, n: int, seed: int, label: str) -> int:
             dx, dy, _, _ = pick
             r.gm(agent, screen, f"@warp {mapname} {sx} {sy}")
             time.sleep(WARP_SETTLE_S)
+            bench.close_chat(agent, screen)  # an open chat input suppresses the walk marker
+            r.activate_client(agent, screen)
             t0 = r.ns()
             pre = snap(log, screen, f"{i:03d}-walk-before")
             did = walk_rule(agent, screen, proj, outdoor, (dx, dy), templates)
@@ -227,8 +231,8 @@ def run_walk(scene: str, n: int, seed: int, label: str) -> int:
             log.append(DemoRecord(
                 session=sid, actor=f"rule:{WALK_RULE}", t_mono_ns=t0, t_done_ns=r.ns(), frame=pre,
                 frame_after=post, rule=WALK_RULE, scene=f"{scene}:{mapname}",
-                cue="walk@1: minimap origin (outdoor) or flat floor (indoor) -> click_for_cell -> "
-                    "hover walk marker -> click",
+                cue="walk@2: minimap origin (outdoor) or flat floor (indoor) -> click_for_cell -> "
+                    "hover walk marker (green_v2 >= 60 px) -> click",
                 action=Action(type="walk", points=pts,  # type: ignore[arg-type]
                               intended=Intended(kind="cell", cell=(dx, dy), relative=True,
                                                 note=f"harness spot {sx},{sy}")),
@@ -255,7 +259,7 @@ def main() -> int:
     wk = sub.add_parser("walk")
     wk.add_argument("--scene", choices=sorted(SCENES), required=True)
     wk.add_argument("--n", type=int, default=50)
-    wk.add_argument("--seed", type=int, default=20261007)
+    wk.add_argument("--seed", type=int, default=20261008)
     wk.add_argument("--label", default="walk-alone")
     a = ap.parse_args()
     if a.rule == "login":
