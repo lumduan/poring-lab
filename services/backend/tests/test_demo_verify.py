@@ -340,3 +340,19 @@ def test_a_walk8_portal_route_must_end_on_the_other_map(dv: ModuleType) -> None:
     assert dv.judge(rec, [field, town], aids, None).status == "success"
     stayed = dv.judge(rec, [field], aids, None)
     assert (stayed.status, stayed.cause) == ("fail", "the portal was not taken")
+
+
+def test_safety_counts_what_the_server_says_we_did_not_the_blind_requests(dv: ModuleType) -> None:
+    """2026-10-08: the live sniffer emits no attack_request; the server's act from us is the
+    record."""
+    gm, mob = 2000002, 110020397
+    events = [
+        {"type": "act", "kind": "normal", "src_gid": gm, "target_gid": mob, "t_mono_ns": 1},
+        {"type": "act", "kind": "normal", "src_gid": mob, "target_gid": gm, "t_mono_ns": 2},
+        {"type": "act", "kind": "stand", "src_gid": gm, "target_gid": 0, "t_mono_ns": 3},
+        {"type": "act", "kind": "pickup", "src_gid": gm, "target_gid": 7, "t_mono_ns": 4},
+    ]
+    s = dv.safety(events, gm)
+    assert s["unsafe_acts"] == 2 and s["our_acts"] == {"normal": 1, "stand": 1, "pickup": 1}
+    assert s["requests_seen"] == {} and "proves nothing" in s["requests_note"]
+    assert dv.safety(events, 2000001)["unsafe_acts"] == 0

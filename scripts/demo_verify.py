@@ -214,6 +214,24 @@ def judge(
     return V.Verdict("ambiguous", f"no verifier for {kind} yet")
 
 
+UNSAFE_ACTS = ("normal", "pickup")  # our act kinds no walk may cause: a hit (or miss), a pickup
+REQUESTS_NOTE = (
+    "attack_request / npc_contact come from OFFLINE-only decoders (bc1a2e6): the live sniffer "
+    "never emits them, so 0 here proves nothing; our_acts is the live record (2026-10-08)"
+)
+
+
+def safety(events: list[dict[str, Any]], aid: int) -> dict[str, Any]:
+    """What the SERVER says we did: ZC_NOTIFY_ACT with src_gid = us (decoded live). In 2026-10-07/08
+    the walk scores counted only request events, which the live sniffer never emits, and reported
+    "SAFETY held" over runs where the GM attacked (demonstrations.md, the 03:15 correction)."""
+    acts = Counter(str(e.get("kind")) for e in events
+                   if e.get("type") == "act" and int(e.get("src_gid", -1)) == aid)  # fmt: skip
+    requests = Counter(str(e["type"]) for e in events if e.get("type") in V.ATTACK_REQUESTS)
+    return {"our_acts": dict(acts), "unsafe_acts": sum(acts[k] for k in UNSAFE_ACTS),
+            "requests_seen": dict(requests), "requests_note": REQUESTS_NOTE}  # fmt: skip
+
+
 def summarise(rows: list[tuple[DemoRecord, V.Verdict]]) -> dict[str, Any]:
     out: dict[str, Any] = {}
     by_rule: dict[str, list[tuple[DemoRecord, V.Verdict]]] = {}
@@ -261,10 +279,14 @@ def main() -> int:
     aids = {"gm": a.aid_gm, "player": a.aid_player}
     rows: list[tuple[DemoRecord, V.Verdict]] = []
     n_events = 0
+    safety_by_session: dict[str, Any] = {}
     for session_dir in a.session_dirs:
         records = read(session_dir / "demo.jsonl")
         events = load_events(session_dir)
         n_events += len(events)
+        safety_by_session[session_dir.name] = {
+            who: safety(events, aid) for who, aid in aids.items()
+        }
         marks_path = session_dir / "interrupted.json"
         marks: dict[str, str] = json.loads(marks_path.read_text()) if marks_path.exists() else {}
         out_lines = []
@@ -291,7 +313,8 @@ def main() -> int:
         (session_dir / "demo.verified.jsonl").write_text("".join(x + "\n" for x in out_lines))
     sessions = [d.name for d in a.session_dirs]
     print(json.dumps({"sessions": sessions, "verifier": f"verify@{V.VERIFIER_VERSION}",
-                      "events": n_events, "rules": summarise(rows)}, indent=1))  # fmt: skip
+                      "events": n_events, "rules": summarise(rows),
+                      "safety": safety_by_session}, indent=1))  # fmt: skip
     return 0
 
 
