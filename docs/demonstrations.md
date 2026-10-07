@@ -89,11 +89,20 @@ Common rules:
   - login dialog: anchor `login`. Click the id field, clear it, type the id (sensitive, the guard
     re-checked every 4 characters); the same for the password; click the login button (never
     Enter);
-  - **server list: wait for its anchor (`server_select`) at most 1.5 s, then click OK at its
-    offset.** This is the ONE behavioural change from the demonstrated sequence, which slept a
-    blind 0.8 s;
+  - **server list: click OK at its offset 0.8 s after the login button**, the demonstrated
+    fixed delay. The server list's own anchor is NOT waited for. Over RDP the list is first drawn
+    at reduced quality, so its signature can lag by seconds, and the client gives up if no server
+    is picked within ~1–2 s (2026-10-01: waiting 2–19 s failed 8/8).
+    - Its anchor (`server_select`) is only recorded, on the pre-click snapshot.
+    - A gated pick is a later candidate (login@2, on the S2 bus).
+
+  > ➡️ **AMENDED 2026-10-07 ~12:20, BEFORE any run:** the first version (41d8c14) waited for the
+  > server-list anchor (≤ 1.5 s). That would have tested a known RDP failure mode instead of the
+  > demonstrated rule. The amendment makes login@1 exactly the demonstrated sequence, expressed
+  > as anchors + offsets.
   - char select: anchor `char_select`, then Enter;
   - the existing guards stay: the ENG layout, the client in front, the operator login window.
+  - So login@1 = `ro_agent login gm` as it stands, run alone by the runner.
 - **An attempt:**
   - starts with no client running;
   - ends when the rule returns or stops;
