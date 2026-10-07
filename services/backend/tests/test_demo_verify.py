@@ -292,3 +292,35 @@ def test_an_attack_click_without_a_frame_box_is_ambiguous(dv: ModuleType) -> Non
     )
     gm = dv.judge_attack(rec, [], 2000002, None, (StubBoxes(None, {}), 0.0, None))
     assert (gm.status, gm.cause) == ("ambiguous", "the frame is inside a GM-command window")
+
+
+def test_a_walk7_substitute_counts_only_when_the_goal_was_taken(dv: ModuleType) -> None:
+    """3.12 (b): the route may end on its logged substitute only if another unit stood within one
+    cell of the goal when the rule gave the goal up (the packets)."""
+    s = 10**9
+
+    def route(t_sub: int) -> DemoRecord:
+        return DemoRecord(
+            session=SID, actor="rule:walk@7", t_mono_ns=T, t_done_ns=T + 9 * s, rule="walk@7",
+            cue="route", action=Action(type="walk", intended=Intended(kind="route",
+                                                                      cell=(110, 120))),
+            outcome={"status": "pending", "evidence": {  # type: ignore[arg-type]
+                "substitute": [109, 120],
+                "events": [{"substitute": [109, 120], "for": [110, 120], "t": t_sub}]}},
+        )  # fmt: skip
+
+    base = [
+        {"t_mono_ns": T - s, "type": "map_change", "map": "m.gat", "x": 100, "y": 120},
+        {"t_mono_ns": T + 2 * s, "type": "self_move", "x0": 100, "y0": 120, "x1": 109, "y1": 120,
+         "server_tick": (T + 2 * s) // 10**6 % 2**32},
+    ]  # fmt: skip
+    poring = {"t_mono_ns": T + s, "type": "entity_appear", "gid": 77, "objtype": 5, "job": 1002,
+              "x": 110, "y": 121, "x1": None, "y1": None, "dir": "s", "heading": 0,
+              "kind": "stand", "speed": 400, "effect_state": 0, "char_id": 0, "name": "x",
+              "move_start_tick": None, "server": "map"}  # fmt: skip
+    aids = {"gm": 2000002, "player": 2000001}
+    taken = dv.judge(route(T + 4 * s), [*base, poring], aids, None)
+    want = ("success", "substitute: the goal was taken", [77])
+    assert (taken.status, taken.cause, taken.evidence["taken_by"]) == want
+    free = dv.judge(route(T + 4 * s), base, aids, None)
+    assert (free.status, free.cause) == ("fail", "substituted a goal nobody had taken")

@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """relocalise@1 (docs/demonstrations.md 3.10): the indoor landmark v1 ALONE -- the structure probes.
 
-    reloc_run.py [--n 56] [--seed 20261015] [--label reloc-alone]
+    reloc_run.py [--n 56] [--seed 20261015] [--label reloc-alone] [--method v1|v2]
+
+relocalise@2 (3.11) is the SAME harness and seed with --method v2 (scripts/reloc2.py): the same
+warps and the same wrong beliefs, so v1 and v2 are compared attempt by attempt.
 
 walk@5/6 re-localise when a no-entry sign appears on a cell the GAT calls walkable, but that path
 fires rarely, so the method has never been measured on its own. Here the HARNESS makes the belief
@@ -37,7 +40,8 @@ import walk5 as w5  # noqa: E402
 
 from poring_env.demo import Action, DemoLog, DemoRecord, Intended, new_session_id  # noqa: E402
 
-RELOC_RULE = "relocalise@1"
+RULES = {"v1": "relocalise@1", "v2": "relocalise@2"}
+RELOC_RULE = RULES["v1"]
 HOVER_S = 0.55
 OFFSETS = [(dx, dy) for dy in range(-2, 3) for dx in range(-2, 3) if (dx, dy) != (0, 0)]
 
@@ -58,7 +62,7 @@ def score(session: Path) -> dict[str, Any]:
         aid = infer_self_aid(events)
     rows = []
     for rec in recs:
-        if rec.get("rule") != RELOC_RULE:
+        if rec.get("rule") not in RULES.values():
             continue
         ev = rec["outcome"]["evidence"]
         true = V.position_before(events, rec["t_mono_ns"], aid) if aid is not None else None
@@ -78,8 +82,12 @@ def score(session: Path) -> dict[str, Any]:
             "rows": rows}  # fmt: skip
 
 
-def run(n: int, seed: int, label: str) -> int:
+def run(n: int, seed: int, label: str, method: str = "v1") -> int:
     import bench
+    import reloc2
+
+    rule = RULES[method]
+    relocalise = w5.relocalise if method == "v1" else reloc2.relocalise
 
     from poring_dataset import camera as cam
     from poring_dataset import gat as gatmod
@@ -100,12 +108,13 @@ def run(n: int, seed: int, label: str) -> int:
     sid = new_session_id(f"{label}-indoor")
     log = DemoLog(sid)
     lock = record_session.read_lock(r.ROOT / "state")
-    log.start(backend=str(lock.backend), lock_seq=lock.seq, server="lab-rathena", rule=RELOC_RULE,
-              n=n, scene="indoor", seed=seed, account="gm",
-              reloc_radius=w5.RELOC_RADIUS, reloc_probes=w5.RELOC_PROBES)  # fmt: skip
-    print(json.dumps({"session": sid, "rule": RELOC_RULE}), flush=True)
+    log.start(backend=str(lock.backend), lock_seq=lock.seq, server="lab-rathena", rule=rule,
+              n=n, scene="indoor", seed=seed, account="gm", method=method,
+              reloc_radius=w5.RELOC_RADIUS if method == "v1" else reloc2.RADIUS,
+              reloc_probes=w5.RELOC_PROBES if method == "v1" else reloc2.PROBES)  # fmt: skip
+    print(json.dumps({"session": sid, "rule": rule}), flush=True)
     t_first = r.ns()
-    with r.session(f"rule:{RELOC_RULE}") as (agent, screen):
+    with r.session(f"rule:{rule}") as (agent, screen):
         r.gm(agent, screen, "@killmonster2")
         for i in range(n):
             for _ in range(200):  # the HARNESS: a seeded known cell, and a seeded wrong belief
@@ -123,11 +132,11 @@ def run(n: int, seed: int, label: str) -> int:
             w.position = belief
             t0 = r.ns()
             pre = rr.snap(log, screen, f"{i:03d}-before")
-            rl = w5.relocalise(agent, screen, w, mask, band)
+            rl = relocalise(agent, screen, w, mask, band)
             log.append(DemoRecord(
-                session=sid, actor=f"rule:{RELOC_RULE}", t_mono_ns=t0, t_done_ns=r.ns(),
-                frame=pre, rule=RELOC_RULE, scene=f"indoor:{mapname}",
-                cue="relocalise v1: the structure probes (walk5.relocalise, unchanged)",
+                session=sid, actor=f"rule:{rule}", t_mono_ns=t0, t_done_ns=r.ns(),
+                frame=pre, rule=rule, scene=f"indoor:{mapname}",
+                cue=f"relocalise {method}: the structure probes",
                 action=Action(type="other", intended=Intended(
                     kind="cell", cell=belief, relative=False,
                     note=f"attempt {i}: the belief handed to the rule")),
@@ -151,6 +160,7 @@ def main() -> int:
     ap.add_argument("--n", type=int, default=56)
     ap.add_argument("--seed", type=int, default=20261015)
     ap.add_argument("--label", default="reloc-alone")
+    ap.add_argument("--method", choices=sorted(RULES), default="v1")
     ap.add_argument("--score", type=Path, help="score a finished session instead of running")
     a = ap.parse_args()
     if a.score is not None:
@@ -158,7 +168,7 @@ def main() -> int:
         return 0
     if not w5.NOENTRY_MASK.exists():
         raise SystemExit(f"{w5.NOENTRY_MASK} missing: run the walk5 cursor calibration")
-    return run(a.n, a.seed, a.label)
+    return run(a.n, a.seed, a.label, a.method)
 
 
 if __name__ == "__main__":

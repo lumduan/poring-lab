@@ -301,9 +301,10 @@ def segment_step(pr: Prober, w: w5.World, end: tuple[int, int]) -> dict[str, Any
                 return {"clicked": False, "outcome": f"recheck_{again['shape']}", "line": line,
                         "target": target, "blocker": end}  # fmt: skip
             gx, gy, _, _ = r.game_region()
+            t_click = r.ns()  # walk@7 logs the click time (walk@6's segment record did not)
             pr.agent.click(gx + round(u), gy + round(v))
             return {"clicked": True, "outcome": "confirmed", "line": line, "target": target,
-                    "at": (u, v), "blocker": None}  # fmt: skip
+                    "at": (u, v), "blocker": None, "t_click": t_click}  # fmt: skip
         if k is not None and not corrected:
             i = rr.NB9.index(k)
             du, dv = float(proj[4][0] - proj[i][0]), float(proj[4][1] - proj[i][1])

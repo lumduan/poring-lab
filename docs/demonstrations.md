@@ -622,6 +622,105 @@ means no click.
 - Reported separately: **wrong**, which is never acceptable silently; undecided; probes per
   attempt; and the share of probes that saw "nothing".
 
+### 3.11 relocalise@2, indoor (pre-registered 2026-10-07 ~19:15, BEFORE its run; Batt's "decisive re-localisation", walk@7 (c))
+**Why v2:**
+- v1 probes only a screen offset whose cells are at the SAME altitude for every candidate.
+- Among prt_church's pews (+5 GAT strips) no such offset exists for most beliefs. relocalise@1 ended
+  most attempts with **0 probes**, and walk@6 indoors declined 10 routes on it.
+
+**The rule** (`scripts/reloc2.py`, `reloc2.relocalise`): the altitude is EVIDENCE.
+- **Candidates:** the belief ±**3**, GAT-walkable, from the START.
+  - Design time: with ±2 plus widening only when nobody fits, a truth just outside the set left ONE
+    WRONG survivor (`test_reloc2.py`).
+- **Per candidate c and probe pixel p, the PREDICTION from c's own terrain:**
+  - the hovered cell is the one among the flat guess ±1 whose projected centre, at its altitude
+    relative to c, is nearest to p;
+  - blocked → no-entry;
+  - walkable → chevrons at its corner anchors (`MARKER_ANCHORS`), projected at that altitude.
+- **The probe pixel:** the one whose predictions leave the smallest largest group (6 px buckets).
+- **The elimination:**
+  - chevrons keep the candidates whose predicted anchors fit within `MAX_ANCHOR_FRAC` (0.35 of a
+    cell) **AND within 6 px of the best fit**;
+  - no-entry keeps the candidates that predict a blocked cell;
+  - "nothing" is no information.
+- **Why the 6 px relative margin:**
+  - on the indoor camera a pew's +5 lifts the chevrons 36 px, and the next diagonal row is 49.5 px
+    up;
+  - so the nearest-cell choice leaves ~13.5 px, inside the absolute tolerance (14.9 px);
+  - **the 6 px is UNMEASURED: the WRONG count below is its test.**
+- **The decision:** at most **12** probes. Exactly one survivor is the new belief. Ambiguous, a true
+  alias (e.g. periodic pews: identical from every probe in reach), or no survivor → it fails. Never
+  a guess.
+- The probe settle is 0.55 s, as 3.10.
+
+**The harness:** EXACTLY 3.10's: `reloc_run.py --method v2`, seed **20261015**.
+- The same warps and the same wrong beliefs (within ±2), so the comparison is attempt by attempt.
+- 56 attempts; the first 50 not interrupted are scored.
+
+**Scoring** (as 3.10): correct, **WRONG**, undecided, against the packets.
+
+**The bar:** correct ≥ **48 / 50**. Reported separately: WRONG (with each case), undecided, probes
+per attempt, and the paired table v1 vs v2.
+
+### 3.12 walk@7 — CLEAN and CROWD, indoor and outdoor (pre-registered 2026-10-07 ~19:15, BEFORE any run; Batt's design, ~18:45)
+**Batt's reading of walk@6:** the RULE is right (0 unsafe clicks; 97.9 / 98.9 % of its clicked runs
+correct); the ROUTE fails from decision-making under uncertainty.
+
+**The rule** (`scripts/walk7.py`):
+- **The gate is UNCHANGED.** It is `walk6.segment_step`: every cell the walk cursor, the target's
+  chevrons, the no-motion re-check, with walk@6's frozen RDP references.
+  - PICKUP is still uncalibrated there, so it stays UNKNOWN and is never clicked.
+  - Pickup references, when made, go into a NEW reference set for a later rule.
+- **(a) Patience for what moves.**
+  - The grounding: a monster's idle pause between random walks is 4.0–5.0 s (rAthena e985006:
+    `mob.hpp:39` MIN_RANDOMWALKTIME 4000; `mob.cpp:1766` next walk = tick + rnd()%1000 + 4000 + the
+    walk's own time; `monster.conf` mob_nopc_move_rate 100, so a spotted monster always walks
+    again).
+  - A cell refused for a sword or an unknown shape is probed again (0.5 s polls) until **6.0 s**
+    have passed since its first refusal. All waits of a route together are capped at **24 s**.
+  - Only then is it routed around (at most 4 re-plans).
+  - Static shapes never move, so they are routed around at once: talk = an NPC, warp = a portal.
+    So is an unconfirmed target (an occluder).
+- **(b) A blocked GOAL gets a SUBSTITUTE** after its patience: the nearest free cell around it,
+  ring 1 then ring 2, the shortest plan first, at most 3 substitutes. The substitution and its time
+  are logged.
+- **(c) Re-localisation** uses **v2** (3.11). It is triggered by:
+  - a no-entry sign or a twice-named neighbour on a GAT-walkable cell (as walk@6);
+  - NEW: **2 targets in a row UNCONFIRMED from the same believed cell** (walk@6 routes 21–24).
+  - At most 2 per route.
+- **(d)** Every segment record's time is the **CLICK**.
+- **Limits:** runs of 3 cells indoors, 5 in the open, 3 once crowded (as walk@6); 24 segment
+  attempts per route.
+
+**Two conditions, each its own test (Batt):**
+- **CLEAN** measures walking: `@killmonster2` before EVERY route. Indoors there are no natural
+  spawns, but the church's NPCs stay.
+- **SEEDED CROWD** measures decisions: at every 5th route's warp, `@killmonster2` then `@monster
+  poring 4`, so a fixed 4 Porings around us. Outdoors the field's own spawns refill over time,
+  which is stated, not controlled.
+- Both use seed **20261016**, so their first routes match. 56 routes per scene and condition; the
+  first 50 not interrupted are scored.
+- **Order:** relocalise@2 first, then indoor clean, indoor crowd, outdoor clean, outdoor crowd.
+
+**Verifiers (verify@2):**
+- Segments: `verify_walk` at the record's time, the click.
+- Routes, end to end: where the packets put us 0.5 s after the route ended, against the goal.
+  - OR against the logged SUBSTITUTE, which counts only when the packets put another unit within
+    one cell of the goal at the substitution time ±1 s (`demo_verify.goal_taken`).
+  - A substitute nobody forced is a FAIL.
+
+**The bar, for each of the 4 runs:**
+- end to end ≥ **48 / 50**; **AND**
+- **SAFETY:** zero `attack_request`, zero `npc_contact` (and no pickup act by us).
+
+**Reported without a bar:**
+- segment success;
+- refusals by place and shape;
+- patience: waits, seconds, and how each ended (cleared or routed around);
+- substitutes (justified or not);
+- re-localisations (trigger; correct / WRONG / undecided against the packets);
+- route time.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.

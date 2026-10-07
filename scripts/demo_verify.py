@@ -88,6 +88,20 @@ def judge_window(rec: DemoRecord, session_dir: Path | None) -> V.Verdict:
     return V.Verdict(v.status, v.cause, {**v.evidence, **evidence})
 
 
+def goal_taken(events: list[dict[str, Any]], goal: tuple[int, int], t_ns: int,
+               slack_ns: int = 1_000_000_000) -> list[int]:  # fmt: skip
+    """The gids of other units within one cell of ``goal`` at any 0.25 s step of t +- slack."""
+    from poring_dataset.timeline import Timeline
+
+    tl = Timeline(events)
+    gids: set[int] = set()
+    for t in range(t_ns - slack_ns, t_ns + slack_ns + 1, 250_000_000):
+        for e in tl.frame_world(t).entities:
+            if max(abs(round(e.x) - goal[0]), abs(round(e.y) - goal[1])) <= 1:
+                gids.add(int(e.gid))
+    return sorted(gids)
+
+
 @functools.cache
 def click_targets(session_dir: Path, offset_ms: float | None) -> tuple[Any, float, str | None]:
     """(a Labeler over this session's packets, the offset used, the benchmark run it came from)."""
@@ -159,6 +173,17 @@ def judge(
             return V.Verdict("ambiguous", "no goal or no position fix at the route's end")
         if tuple(end) == tuple(goal):
             return V.Verdict("success", None, {"end": list(end)})
+        sub = rec.outcome.evidence.get("substitute")
+        if sub is not None and tuple(end) == tuple(sub):
+            # walk@7 (b): a substitute counts only if the goal was really taken when the rule gave
+            # it up -- another unit within one cell of it at that moment (the packets)
+            t_sub = max((e["t"] for e in rec.outcome.evidence.get("events", [])
+                         if "substitute" in e and "t" in e), default=None)  # fmt: skip
+            near = goal_taken(events, tuple(goal), t_sub) if t_sub is not None else None
+            ev = {"end": list(end), "goal": list(goal), "substitute": list(sub), "taken_by": near}
+            if near:
+                return V.Verdict("success", "substitute: the goal was taken", ev)
+            return V.Verdict("fail", "substituted a goal nobody had taken", ev)
         return V.Verdict(
             "fail", "the route ended elsewhere", {"end": list(end), "goal": list(goal)}
         )
