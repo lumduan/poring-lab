@@ -259,6 +259,86 @@ scene**, on RDP.
 - a window opening somewhere its template does not match. Templates match anywhere, but a window
   could overlap another one.
 
+### 3.7 walk@4 (pre-registered 2026-10-07 ~15:15, BEFORE its run; Batt's design, ~14:15)
+**Batt's decision:** use BOTH position sources, with clear roles.
+1. **The primary position source indoors is DEAD RECKONING.**
+   - The arrival cell after a warp is known (L3 warp data). Here the harness's `@warp` cell stands
+     in for it.
+   - Each confirmed walk then moves the believed cell to its target.
+   - The GAT altitude around the believed cell goes into the projection.
+2. **The client's drawn walk marker is the pixel-only CONFIRMATION** (and the correction when
+   the two disagree), because the game already renders the true 3D cell. S2 is tested
+   separately.
+
+**The colour cue was already fixed:** walk@2 replaced the mint filter (2–12 px) with `green_v2`
+≥ 60 px, calibrated on RDP; walk@3 outdoor's clicks counted 111–217 px.
+
+**What was new to calibrate is the marker's POSITION.** Design time, scratch, RDP; each trial
+hovered, clicked, and the server-accepted cell was read offline from packets:
+
+| session | trials | client picked the target | identified by the bias-corrected centroid |
+|---|---|---|---|
+| `20261007T144121-demo-walk4-cal-outdoor` | 30 | 30 | 30 / 30 (residual p50 1.0 px, p95 4.8) |
+| `20261007T144755-demo-walk4-cal-indoor` | 40 (6 no marker) | 32 / 34 | 33 / 34 (residual p50 3.9 px, p95 12.1; the cell spacing ~42 px) |
+
+- **The model:** marker centroid = projected centre + b0 + β × the cell's relative GAT
+  altitude.
+  - outdoor: b0 (−1.2, −2.7) px, β (−0.14, 0.20) px per unit;
+  - indoor: b0 (−2.3, −4.7), β (−2.8, −0.77).
+  - Raised indoor cells (+5) are drawn ~(−16, −9) px off the plain projection; that is why
+    walk@3's flat-floor misses happened.
+  - The values are in `rule_run.CENTROID_BIAS` and L2 `cue.walk_marker.rdp.centroid_bias`
+    (drift-tested). They are IN-SAMPLE: this run is their test.
+- **The 6 indoor hovers without a marker** were all legitimate:
+  - a model hides part of the marker (31 and 43 px);
+  - a wall stands in front of the target (the client shows its "cannot walk" cursor);
+  - an NPC stands on the target pixel.
+- **Stated in advance, a limit of the confirmation:** the centroid checks that the marker is drawn
+  where OUR model expects the target's marker. A misregistration of our whole projection, by
+  exactly a cell, would confirm falsely. The packets judge every attempt anyway.
+
+**The rule, alone** (`rule_run.py walk4`, `walk4_rule`):
+- **Position:** outdoors the minimap readout; indoors the dead-reckoned cell.
+- **Projection:** the RDP camera (the indoor block indoors) plus the GAT altitude relative to the
+  position, for the target's 3 × 3 neighbourhood.
+- **Hovering:** two motion events per hover, at most 5 hovers per attempt.
+  - The order: the target's projected centre, then 4 in-cell alternates (±0.3 cell along each
+    grid axis).
+  - Each hover: `green_v2` ≥ 60 px in a 120 px crop gives a centroid. The nearest expected
+    centroid of the 3 × 3 names the cell the client would pick.
+  - **The target → CLICK** at that hover point.
+  - **A neighbour K → CORRECTION:** the next hover is moved by the projected difference
+    P_target − P_K.
+  - **No marker →** the next alternate.
+  - **Nothing confirmed after 5 hovers → DECLINE** (a FAIL).
+- **Dead reckoning:** after a click, the believed cell becomes the target. After a decline it
+  stays.
+
+**The harness** (never part of the rule):
+- It enters the scene once.
+- Every 5th attempt: a seeded `@warp` to a walkable cell near the scene's spot. The believed cell
+  is set to it, so 4 of every 5 attempts start purely dead-reckoned indoors.
+- Outdoors: `@killmonster2` every 10 attempts.
+- Before each attempt: the chat closed and the client in front.
+- The target: an ABSOLUTE walkable cell 2–6 cells (Chebyshev) from the BELIEVED position, inside
+  the click band under the rule's own projection.
+- After a click, it waits for the walk (0.2 s per cell + 1.2 s).
+- **Seed 20261011** (new situations).
+
+**The verifier:** verify@1, with the ABSOLUTE target (`relative=False`). A dead-reckoning error
+therefore shows up as "walked to a different cell", a FAIL, as it should.
+
+**Scenes:** indoor prt_church first (the case this design is for), then outdoor prt_fild08 (one
+rule version, both scenes). **n = 50 per scene; pass ≥ 48 / 50 per scene**, RDP.
+- 10 identical declines in a row stop a run.
+- Interrupted attempts (a human lease, `demo_interruptions.py`) are re-run exactly.
+
+**Expected failure sources, stated in advance:**
+- targets behind walls (no pixel of the cell is clickable);
+- NPCs on the target;
+- the in-sample bias model;
+- dead-reckoning drift after a walk the server shortened or re-routed.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.

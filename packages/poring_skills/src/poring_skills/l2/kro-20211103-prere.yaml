@@ -61,5 +61,13 @@ cue:
   # is absent and resolving it fails closed. Mirrored in scripts/rule_run.py (drift-tested).
   walk_marker:
     hover: {approach_px: 3, approach_s: 0.05, settle_s: 0.4}
-    rdp: {filter: green_v2, min_marker_px: 60, crop_px: 90}
+    rdp:
+      filter: green_v2
+      min_marker_px: 60
+      crop_px: 90
+      # walk@4 (2026-10-07, design time): marker centroid - projected centre = b0 + beta * the
+      # cell's relative GAT altitude (px); calibrated on sessions 144121 (outdoor) and 144755 (indoor)
+      centroid_bias:
+        outdoor: {b0: [-1.2, -2.7], beta_per_alt: [-0.14, 0.2]}
+        indoor: {b0: [-2.3, -4.7], beta_per_alt: [-2.8, -0.77]}
     status: unverified

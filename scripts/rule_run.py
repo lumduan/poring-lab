@@ -30,6 +30,7 @@ import json
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import record_session  # noqa: E402
@@ -319,6 +320,219 @@ def run_walk(
     return 0
 
 
+WALK4_RULE = "walk@4"  # docs/demonstrations.md 3.7 (Batt's design, 2026-10-07 ~14:15)
+# Marker centroid - projected cell centre = b0 + beta * (the cell's GAT altitude relative to our
+# cell), px. Design time, RDP: walk4-cal sessions 20261007T144121 (outdoor, 30/30 identified) and
+# 20261007T144755 (indoor, 33/34; raised cells drawn ~(-16, -9) px off). Mirrored in L2.
+CENTROID_BIAS = {
+    "outdoor": ((-1.2, -2.7), (-0.14, 0.20)),
+    "indoor": ((-2.3, -4.7), (-2.8, -0.77)),
+}
+NB9 = [(dx, dy) for dy in (-1, 0, 1) for dx in (-1, 0, 1)]  # index 4 = the target itself
+MAX_HOVERS = 5
+ALT_STEP = 0.3  # in-cell alternates: +-0.3 cell along each grid axis
+DR_WARP_EVERY = 5  # the harness warps every 5th attempt: the others start dead-reckoned
+MIN_MARKER_PX = 60  # empty_cell.MIN_MARKER_PX_V2 (green_v2)
+
+
+def expected_centroids(projected: Any, alt: Any, mode: str) -> Any:
+    """(9, 2): where the client draws each 3x3 cell's marker centroid: the projected centres plus
+    the calibrated bias(altitude)."""
+    import numpy as np
+
+    b0, beta = CENTROID_BIAS[mode]
+    return np.asarray(projected) + np.asarray(b0) + np.outer(np.asarray(alt), np.asarray(beta))
+
+
+def identify(expected: Any, centroid: tuple[float, float]) -> tuple[int, int]:
+    """The 3x3 cell (relative to the target) whose expected centroid is nearest the marker's."""
+    import numpy as np
+
+    k = int(np.argmin(np.linalg.norm(np.asarray(expected) - np.asarray(centroid), axis=1)))
+    return NB9[k]
+
+
+def in_cell_points(projected: Any) -> list[tuple[float, float]]:
+    """The target's projected centre, then 4 alternates inside the cell (+-ALT_STEP of a cell
+    along each grid axis): another visible pixel when a model or an NPC covers the centre."""
+    import numpy as np
+
+    pr = np.asarray(projected, dtype=float)
+    centre = pr[4]
+    ax, ay = (pr[5] - pr[3]) / 2.0, (pr[7] - pr[1]) / 2.0  # one cell along +x, +y
+    pts = [centre, centre + ALT_STEP * ax, centre - ALT_STEP * ax, centre + ALT_STEP * ay,
+           centre - ALT_STEP * ay]  # fmt: skip
+    return [(float(x), float(y)) for x, y in pts]
+
+
+def marker_centroid(crop: Any, ox: int, oy: int) -> tuple[int, tuple[float, float] | None]:
+    """green_v2 pixel count and centroid (client px; ``ox``/``oy`` = the crop's client origin)."""
+    import numpy as np
+
+    b, g, r_ = (crop[..., i].astype(int) for i in range(3))
+    m = (g - r_ > 50) & (g - b > 35) & (r_ > 60) & (b > 60) & (g > 150)
+    n = int(m.sum())
+    if n < MIN_MARKER_PX:
+        return n, None
+    ys, xs = np.nonzero(m)
+    return n, (float(xs.mean() + ox), float(ys.mean() + oy))
+
+
+def walk4_rule(agent: r.Agent, screen: r.Screen, camera: Any, grid: Any, position: tuple[int, int],
+               target: tuple[int, int], mode: str) -> dict[str, object]:  # fmt: skip
+    """walk@4, ALONE: project the 3x3 around the ABSOLUTE target from our believed position (GAT
+    altitude), hover (two motions) up to MAX_HOVERS points, click only when the marker's centroid
+    confirms the target; a neighbour's centroid moves the cursor by the projected difference."""
+    import numpy as np
+
+    gx, gy, _, _ = r.game_region()
+    rel = (target[0] - position[0], target[1] - position[1])
+    cells = np.array([(rel[0] + dx, rel[1] + dy) for dx, dy in NB9], dtype=float)
+    alt = grid.relative_altitude(position, cells)
+    proj = camera.project(cells, alt)
+    exp = expected_centroids(proj, alt, mode)
+    queue = in_cell_points(proj)
+    hovers: list[dict[str, object]] = []
+    while queue and len(hovers) < MAX_HOVERS:
+        u, v = queue.pop(0)
+        px, py = gx + round(u), gy + round(v)
+        agent.move(px - HOVER_APPROACH_PX, py - HOVER_APPROACH_PX)
+        time.sleep(HOVER_APPROACH_S)
+        agent.move(px, py)
+        time.sleep(HOVER_S)
+        n, cen = marker_centroid(screen.grab(px - 60, py - 60, 120, 120)[1], px - 60 - gx,
+                                 py - 60 - gy)  # fmt: skip
+        k = identify(exp, cen) if cen is not None else None
+        hovers.append({"at": [round(u, 1), round(v, 1)], "marker_px": n, "cell": k})
+        if k == (0, 0):
+            agent.click(px, py)
+            return {"points": [(u, v)], "hovers": hovers, "rel": list(rel)}
+        if k is not None:  # the client would pick neighbour k: shift by the projected difference
+            i = NB9.index(k)
+            du, dv = float(proj[4][0] - proj[i][0]), float(proj[4][1] - proj[i][1])
+            queue.insert(0, (u + du, v + dv))
+    return {"decline": "no_confirmation", "hovers": hovers, "rel": list(rel)}
+
+
+def run_walk4(scene: str, n: int, seed: int, label: str) -> int:
+    import random
+
+    import bench
+    import numpy as np
+
+    from poring_dataset import camera as cam
+    from poring_dataset import gat as gatmod
+    from poring_env import selfpos
+
+    mapname, sx0, sy0 = SCENES[scene]
+    grid = gatmod.parse((cam.GAT_DIR / f"{mapname}.gat").read_bytes())
+    walkable = grid.walkable()
+    cj = json.loads((r.ROOT / "packages/poring_dataset/src/poring_dataset/"
+                     "camera_rdp.json").read_text())  # fmt: skip
+    base = cam.camera_from_json(cj["camera"])
+    indoor = scene == "indoor"
+    camera = (cam.camera_for_map(base, True, cj["indoor"]["yaw_deg"], cj["indoor"]["distance"])
+              if indoor else base)  # fmt: skip
+    templates = None if indoor else selfpos.load_digit_templates()
+    rng = random.Random(seed)
+    x0, y0, x1, y1 = ec_band()
+    sid = new_session_id(f"{label}-{scene}")
+    log = DemoLog(sid)
+    lock = record_session.read_lock(r.ROOT / "state")
+    log.start(backend=str(lock.backend), lock_seq=lock.seq, server="lab-rathena", rule=WALK4_RULE,
+              n=n, scene=scene, seed=seed, account="gm")  # fmt: skip
+    print(json.dumps({"session": sid, "dir": str(log.dir), "rule": WALK4_RULE, "scene": scene}),
+          flush=True)  # fmt: skip
+    t_first = r.ns()
+    declines: list[str | None] = []
+    position = (sx0, sy0)
+    with r.session(f"rule:{WALK4_RULE}") as (agent, screen):
+        r.gm(agent, screen, f"@warp {mapname} {sx0} {sy0}")  # the harness enters the scene once
+        time.sleep(SCENE_ENTRY_S)
+        bench.close_chat(agent, screen)
+        i = 0
+        while i < n:
+            if i % DR_WARP_EVERY == 0:  # the HARNESS: a seeded warp (the rule's known start)
+                if i % 10 == 0 and not indoor:
+                    r.gm(agent, screen, "@killmonster2")
+                for _ in range(200):
+                    sx, sy = sx0 + rng.randint(-8, 8), sy0 + rng.randint(-8, 8)
+                    if walkable[sy, sx]:
+                        break
+                r.gm(agent, screen, f"@warp {mapname} {sx} {sy}")
+                time.sleep(WARP_SETTLE_S)
+                bench.close_chat(agent, screen)
+                position = (sx, sy)  # dead reckoning starts at the arrival cell
+            r.activate_client(agent, screen)
+            read: tuple[int, int] | None = None
+            if not indoor:  # outdoors the minimap readout is the position source
+                read = selfpos.read_minimap_xy(screen.grab(*r.game_region())[1][:, :, :3],
+                                               templates)  # type: ignore[arg-type]  # fmt: skip
+                if read is not None:
+                    position = (int(read[0]), int(read[1]))
+            # the HARNESS picks an absolute walkable target 2-6 cells from the BELIEVED position,
+            # inside the click band under the rule's own projection
+            target = position
+            for _ in range(300):
+                tx, ty = position[0] + rng.randint(-6, 6), position[1] + rng.randint(-5, 5)
+                if max(abs(tx - position[0]), abs(ty - position[1])) < 2 or not walkable[ty, tx]:
+                    continue
+                rel = np.array([(tx - position[0], ty - position[1])], dtype=float)
+                u, v = camera.project(rel, grid.relative_altitude(position, rel))[0]
+                if x0 <= u <= x1 and y0 <= v <= y1:
+                    target = (tx, ty)
+                    break
+            t0 = r.ns()
+            pre = snap(log, screen, f"{i:03d}-walk-before")
+            did: dict[str, object]
+            if target == position:
+                did = {"decline": "no_target"}
+            elif not indoor and read is None:
+                did = {"decline": "no_selfpos"}
+            else:
+                did = walk4_rule(agent, screen, camera, grid, position, target,
+                                 "indoor" if indoor else "outdoor")  # fmt: skip
+            post = snap(log, screen, f"{i:03d}-walk-after", after_ns=t0)
+            pts = [tuple(p) for p in did.get("points", [])]  # type: ignore[attr-defined]
+            evidence = {k: v for k, v in did.items() if k != "points"}
+            evidence["believed_position"] = list(position)
+            log.append(DemoRecord(
+                session=sid, actor=f"rule:{WALK4_RULE}", t_mono_ns=t0, t_done_ns=r.ns(),
+                frame=pre, frame_after=post, rule=WALK4_RULE, scene=f"{scene}:{mapname}",
+                cue="walk@4: position (minimap / dead reckoning) + GAT altitude -> hover up to 5 "
+                    "points; click when the marker centroid confirms the target",
+                action=Action(type="walk", points=pts,  # type: ignore[arg-type]
+                              intended=Intended(kind="cell", cell=target, relative=False,
+                                                note=f"believed {position[0]},{position[1]}")),
+                outcome={"status": "pending", "evidence": evidence},  # type: ignore[arg-type]
+            ))  # fmt: skip
+            print(json.dumps({"attempt": i, "position": list(position), "target": list(target),
+                              **evidence}), flush=True)  # fmt: skip
+            if "decline" not in did:
+                steps = max(abs(target[0] - position[0]), abs(target[1] - position[1]))
+                position = target  # dead reckoning: the confirmed target is where we will be
+                time.sleep(steps * 0.2 + 1.2)
+            else:
+                time.sleep(0.5)
+            i += 1
+            declines.append(str(did["decline"]) if "decline" in did else None)
+            cause = systematic_decline(declines)
+            if cause is not None:
+                print(json.dumps({"stop": f"systematic: {SYSTEMATIC_K} x {cause} in a row"}),
+                      flush=True)  # fmt: skip
+                break
+    events, anchor = record_session.write_packets(log.dir, t_first, r.ns())
+    log.finish(packet_events=len(events), packet_anchor=anchor, attempts=i)
+    print(json.dumps({"session": sid, "packet_events": len(events), "attempts": i}), flush=True)
+    return 0
+
+
+def ec_band() -> tuple[int, int, int, int]:
+    import empty_cell as ec
+
+    return tuple(ec.CLICK_BAND)  # type: ignore[return-value]
+
+
 WINDOW_RULE = "open_window@1"  # docs/demonstrations.md 3.6
 WINDOW_CLIENT = "kro-20211103-prere"  # the lab client's L2 build
 WINDOWS4 = ("status", "skills", "inventory", "equipment")  # the windows with cut anchors
@@ -461,6 +675,11 @@ def main() -> int:
     wk.add_argument("--n", type=int, default=50)
     wk.add_argument("--seed", type=int, default=20261009)
     wk.add_argument("--label", default="walk-alone")
+    w4 = sub.add_parser("walk4")
+    w4.add_argument("--scene", choices=sorted(SCENES), required=True)
+    w4.add_argument("--n", type=int, default=50)
+    w4.add_argument("--seed", type=int, default=20261011)
+    w4.add_argument("--label", default="walk4-alone")
     ow = sub.add_parser("open_window")
     ow.add_argument("--scene", choices=sorted(SCENES), required=True)
     ow.add_argument("--n", type=int, default=50)
@@ -474,6 +693,8 @@ def main() -> int:
         return run_login(a.n, a.label)
     if a.rule == "walk":
         return run_walk(a.scene, a.n, a.seed, a.label, rerun_arg(a))
+    if a.rule == "walk4":
+        return run_walk4(a.scene, a.n, a.seed, a.label)
     if a.rule == "open_window":
         return run_window(a.scene, a.n, a.seed, a.label, rerun_arg(a))
     return 2
