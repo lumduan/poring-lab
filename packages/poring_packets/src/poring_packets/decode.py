@@ -6,19 +6,37 @@ family, ZC_CHANGE_DIRECTION) were read off the packed structs and cross-checked 
 unpack strings and the generated table's sizes (29/33/34 and 9 bytes). Chat text is the client's
 raw bytes (cp874 in this lab); servers NUL-terminate their strings, the client does not, so
 trailing NULs are stripped.
+
+The 2026-10-07 additions (NPC dialogs, shops, stat/skill points, equipment, item use and the
+action request; `MAP_SC` / `MAP_CS` below) are for OFFLINE REPLAY (ADR-0007): the running sniffer
+image is not rebuilt for them. Each layout was read off the pinned rAthena struct or packet_db
+entry FOR PACKETVER 20211103 (an RE client by config/packets.hpp: PACKETVER_RE_NUM = 20211103,
+PACKETVER_MAIN_NUM undefined), its id and size checked against the generated length table, and
+cross-checked against OpenKore's RagexeRE_2021_11_03 send/receive chain. These decoders never
+raise on a short or garbled packet: a fixed packet shorter than its size, or a variable one whose
+u16 length disagrees with its bytes, or whose entries do not divide evenly, decodes to None.
 """
 
 import struct
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, NamedTuple
 
+from poring_packets.tables import VARIABLE
+
 CODEPAGE = "cp874"
 
-# rAthena map.hpp:499-502 (SP_*): the stat vars of ZC_PAR_CHANGE / ZC_LONGPAR_CHANGE we name.
+# rAthena map.hpp:499-502 (SP_*): the stat vars of ZC_PAR_CHANGE / ZC_LONGPAR_CHANGE we name, and
+# the status ids (SP_STR..SP_LUK, 13-18) of CZ_STATUS_CHANGE / ZC_STATUS_CHANGE_ACK. The point
+# pools (9, 12) arrive as ZC_PAR_CHANGE after a raise.
 STAT_NAMES = {
     0: "speed", 5: "hp", 6: "max_hp", 7: "sp", 8: "max_sp", 24: "weight", 25: "max_weight",
     20: "zeny", 1: "base_exp", 2: "job_exp", 11: "base_level", 55: "job_level",
+    9: "status_point", 12: "skill_point",
+    13: "str", 14: "agi", 15: "vit", 16: "int", 17: "dex", 18: "luk",
 }  # fmt: skip
+# rAthena clif.cpp:12256-12259 (CZ_ACK_SELECT_DEALTYPE): the shop's buy/sell choice.
+DEAL_KINDS = {0: "buy", 1: "sell"}
 VANISH_REASONS = {0: "out_of_sight", 1: "died", 2: "logged_out", 3: "teleport", 4: "trickdead"}
 # rAthena clif.hpp:691-707 (enum e_damage_type): the action type of ZC_NOTIFY_ACT. Names follow
 # the enum; 5, 6, 7 and 12 are skill-side types the enum itself marks as uncertain.
@@ -100,6 +118,10 @@ def _i32(b: bytes, o: int) -> int:
     return int(struct.unpack_from("<i", b, o)[0])
 
 
+def _i16(b: bytes, o: int) -> int:
+    return int(struct.unpack_from("<h", b, o)[0])
+
+
 def _act(lay: _ActTail, b: bytes) -> Decoded:
     """ZC_NOTIFY_ACT: `src_gid` acts on `target_gid` (rAthena clif_damage / clif_takeitem /
     clif_sitting / clif_standing, clif.cpp:5217-5360). Sit, stand and pickup leave the tick, the
@@ -124,8 +146,284 @@ def _chat(kind: str, raw: bytes, gid: int | None = None, speaker: str | None = N
                             "raw_hex": body.hex().upper()})  # fmt: skip
 
 
+# --- 2026-10-07: NPC dialogs, shops, stat/skill points, equipment, items, the action request -----
+class _Layout(NamedTuple):
+    """A map-server packet: its fixed size, or VARIABLE (a u16 length @2) with a fixed `head`
+    before its entries."""
+
+    size: int
+    fn: Callable[[bytes], Decoded | None]
+    head: int = 4
+
+
+def _fits(lay: _Layout, b: bytes) -> bool:
+    """Complete and self-consistent: the framer hands over whole packets, so a short fixed packet or
+    a length field that disagrees with the bytes means a truncated or garbled one."""
+    if lay.size != VARIABLE:
+        return len(b) >= lay.size
+    return len(b) >= lay.head and _u16(b, 2) == len(b)
+
+
+def _entries(b: bytes, head: int, size: int) -> range | None:
+    """The offsets of a list's fixed-size entries after `head`; None unless they divide evenly."""
+    return None if (len(b) - head) % size else range(head, len(b), size)
+
+
+def _text_fields(raw: bytes) -> dict[str, str]:
+    body = raw_text(raw)
+    return {"text": body.decode(CODEPAGE, errors="replace"), "raw_hex": body.hex().upper()}
+
+
+def _npc_id(etype: str) -> Callable[[bytes], Decoded]:
+    """The dialog packets that carry only the NPC's block id (u32 @2)."""
+    return lambda b: Decoded(etype, {"npc_gid": _u32(b, 2)})
+
+
+def _u16_event(etype: str, field: str) -> Callable[[bytes], Decoded]:
+    """The requests that carry one u16 @2."""
+    return lambda b: Decoded(etype, {field: _u16(b, 2)})
+
+
+def _npc_say(b: bytes) -> Decoded:
+    # ZC_SAY_DIALOG (packets_struct.hpp:5486-5492): len @2, npc id @4, NUL-terminated text @8.
+    # 0x0972 (ZC_SAY_DIALOG2 with a type byte) is PACKETVER_MAIN_NUM >= 20220504 only.
+    return Decoded("npc_say", {"npc_gid": _u32(b, 4), **_text_fields(b[8:])})
+
+
+def _npc_menu(b: bytes) -> Decoded:
+    # ZC_MENU_LIST (packets.hpp:761-767): len @2, npc id @4, options @8 joined by ':' (script.cpp
+    # buildin_select). Empty options are kept: CZ_CHOOSE_MENU's 1-based choice counts them.
+    # cp874 is single-byte, so splitting the raw bytes on 0x3A is safe.
+    body = raw_text(b[8:])
+    options = [o.decode(CODEPAGE, errors="replace") for o in body.split(b":")]
+    return Decoded("npc_menu", {"npc_gid": _u32(b, 4), "options": options,
+                                "raw_hex": body.hex().upper()})  # fmt: skip
+
+
+def _npc_contact(b: bytes) -> Decoded:
+    # CZ_CONTACTNPC (packets_struct.hpp:5412-5417): block id @2, type u8 @6 (1 = click). The server
+    # treats a monster's or player's id as a continuous attack (clif.cpp:12228-12232).
+    return Decoded("npc_contact", {"npc_gid": _u32(b, 2), "contact_type": b[6]})
+
+
+def _npc_choose(b: bytes) -> Decoded:
+    # CZ_CHOOSE_MENU (packet_db 0x00B8, 7 bytes, pos 2,6): npc id @2, choice u8 @6; 1-254 is the
+    # 1-based option, 255 is cancel (clif.cpp:13312-13318).
+    choice = b[6]
+    return Decoded("npc_choose", {"npc_gid": _u32(b, 2), "choice": choice,
+                                  "cancelled": choice == 255})  # fmt: skip
+
+
+def _npc_number_input(b: bytes) -> Decoded:
+    # CZ_INPUT_EDITDLG (packets.hpp:1837-1842): npc id @2, value int32 @6.
+    return Decoded("npc_number_input", {"npc_gid": _u32(b, 2), "value": _i32(b, 6)})
+
+
+def _npc_text_input(b: bytes) -> Decoded:
+    # CZ_INPUT_EDITDLGSTR (packets.hpp:1844-1850): len @2, npc id @4, text @8 (the client does not
+    # NUL-terminate it at PACKETVER >= 20151001, clif.cpp:13390-13392).
+    return Decoded("npc_text_input", {"npc_gid": _u32(b, 4), **_text_fields(b[8:])})
+
+
+def _shop_deal_choice(b: bytes) -> Decoded:
+    # CZ_ACK_SELECT_DEALTYPE (packets.hpp:1519-1524): npc id @2, type u8 @6.
+    deal = b[6]
+    return Decoded("shop_deal_choice", {"npc_gid": _u32(b, 2), "deal": deal,
+                                        "kind": DEAL_KINDS.get(deal, f"type{deal}")})  # fmt: skip
+
+
+def _shop_buy_list(b: bytes) -> Decoded | None:
+    # ZC_PC_PURCHASE_ITEMLIST 0x0B77 (packets_struct.hpp:3045-3063, PACKETVER_RE_NUM >= 20211103;
+    # 0x00C6 before): 19-byte entries @4 -- item id u32 @0, price u32 @4, discount price u32 @8,
+    # item type u8 @12, view sprite u16 @13, location u32 @15.
+    offs = _entries(b, 4, 19)
+    if offs is None:
+        return None
+    return Decoded("shop_buy_list", {"items": [
+        {"item_id": _u32(b, o), "price": _u32(b, o + 4), "discount_price": _u32(b, o + 8),
+         "item_type": b[o + 12]} for o in offs]})  # fmt: skip
+
+
+def _shop_buy_request(b: bytes) -> Decoded | None:
+    # CZ_PC_PURCHASE_ITEMLIST 0x00C8 (packets_struct.hpp:3083-3096): 6-byte entries @4 -- amount
+    # u16 @0, item id u32 @2 (u32 at PACKETVER_RE_NUM >= 20180704).
+    offs = _entries(b, 4, 6)
+    if offs is None:
+        return None
+    return Decoded("shop_buy_request", {"items": [
+        {"item_id": _u32(b, o + 2), "amount": _u16(b, o)} for o in offs]})  # fmt: skip
+
+
+def _shop_sell_list(b: bytes) -> Decoded | None:
+    # ZC_PC_SELL_ITEMLIST 0x00C7 (packets.hpp:742-753): 10-byte entries @4 -- inventory index u16
+    # @0, price u32 @2, overcharge price u32 @6.
+    offs = _entries(b, 4, 10)
+    if offs is None:
+        return None
+    return Decoded("shop_sell_list", {"items": [
+        {"index": _u16(b, o), "price": _u32(b, o + 2), "overcharge": _u32(b, o + 6)}
+        for o in offs]})  # fmt: skip
+
+
+def _shop_sell_request(b: bytes) -> Decoded | None:
+    # CZ_PC_SELL_ITEMLIST 0x00C9 (packets.hpp:301-311): 4-byte entries @4 -- inventory index u16
+    # @0, amount u16 @2.
+    offs = _entries(b, 4, 4)
+    if offs is None:
+        return None
+    return Decoded("shop_sell_request", {"items": [
+        {"index": _u16(b, o), "amount": _u16(b, o + 2)} for o in offs]})  # fmt: skip
+
+
+def _result(etype: str) -> Callable[[bytes], Decoded]:
+    """ZC_PC_PURCHASE_RESULT (packets.hpp:41-45) / ZC_PC_SELL_RESULT (clif.cpp:12329-12342): one
+    result byte @2, 0 = the deal completed."""
+    return lambda b: Decoded(etype, {"result": b[2], "ok": b[2] == 0})
+
+
+def _stat_raise_request(b: bytes) -> Decoded:
+    # CZ_STATUS_CHANGE (packet_db 0x00BB, 5 bytes, pos 2,4): status id u16 @2, amount u8 @4
+    # (clif.cpp:12716-12732).
+    stat = _u16(b, 2)
+    return Decoded("stat_raise_request", {"stat": stat, "name": STAT_NAMES.get(stat, f"var{stat}"),
+                                          "amount": b[4]})  # fmt: skip
+
+
+def _stat_raise_result(b: bytes) -> Decoded:
+    # ZC_STATUS_CHANGE_ACK (packets_struct.hpp:4219-4225): status id u16 @2, ok u8 @4, the new
+    # value u8 @5 (capped at 255, clif.cpp:4291-4300).
+    stat = _u16(b, 2)
+    return Decoded("stat_raise_result", {"stat": stat, "name": STAT_NAMES.get(stat, f"var{stat}"),
+                                         "ok": bool(b[4]), "value": b[5]})  # fmt: skip
+
+
+def _skill_update(b: bytes) -> Decoded:
+    # ZC_SKILLINFO_UPDATE (packets.hpp:489-497): skill id u16 @2, level u16 @4, sp u16 @6, range
+    # u16 @8, upgradable u8 @10. pc_skillup sends it after a level-up (pc.cpp:9166-9169).
+    return Decoded("skill_update", {"skill_id": _u16(b, 2), "level": _u16(b, 4), "sp": _u16(b, 6),
+                                    "range": _u16(b, 8), "upgradable": bool(b[10])})  # fmt: skip
+
+
+def _skill_list(b: bytes) -> Decoded | None:
+    # ZC_SKILLINFO_LIST 0x0B32 (packets_struct.hpp:4238-4280, PACKETVER_RE_NUM >= 20190807; 0x010F
+    # before): 15-byte SKILLDATA entries @4 -- id u16 @0, inf i32 @2, level u16 @6, sp u16 @8,
+    # range u16 @10, upgradable u8 @12, level2 u16 @13.
+    offs = _entries(b, 4, 15)
+    if offs is None:
+        return None
+    return Decoded("skill_list", {"skills": [
+        {"skill_id": _u16(b, o), "level": _u16(b, o + 6), "sp": _u16(b, o + 8),
+         "range": _u16(b, o + 10), "upgradable": bool(b[o + 12])} for o in offs]})  # fmt: skip
+
+
+def _equip_request(b: bytes) -> Decoded:
+    # CZ_REQ_WEAR_EQUIP 0x0998 (packets.hpp:1502-1509, PACKETVER >= 20120925): inventory index u16
+    # @2, location u32 @4.
+    return Decoded("equip_request", {"index": _u16(b, 2), "location": _u32(b, 4)})
+
+
+def _equip_result(b: bytes) -> Decoded:
+    # ZC_REQ_WEAR_EQUIP_ACK 0x0999 (packets_struct.hpp:1268-1276, PACKETVER_RE_NUM >= 20121107):
+    # index u16 @2, location u32 @4, view sprite u16 @8, result u8 @10. At this PACKETVER 0 = ok,
+    # 1 = level too low, 2 = failure (clif.hpp:523-528).
+    result = b[10]
+    return Decoded("equip_result", {"index": _u16(b, 2), "location": _u32(b, 4),
+                                    "view_sprite": _u16(b, 8), "result": result,
+                                    "ok": result == 0})  # fmt: skip
+
+
+def _unequip_result(b: bytes) -> Decoded:
+    # ZC_REQ_TAKEOFF_EQUIP_ACK 0x099A (packets.hpp:1006-1013, PACKETVER >= 20130000): index u16
+    # @2, location u32 @4, flag u8 @8 -- inverted at PACKETVER >= 20110824: 0 = ok
+    # (clif.cpp:4338-4351).
+    result = b[8]
+    return Decoded("unequip_result", {"index": _u16(b, 2), "location": _u32(b, 4),
+                                      "result": result, "ok": result == 0})  # fmt: skip
+
+
+def _use_item_request(b: bytes) -> Decoded:
+    # CZ_USE_ITEM2 (packet_db 0x0439, 8 bytes, pos 2,4; the client's item_use since 2008):
+    # inventory index u16 @2, account id u32 @4 (clif.cpp:12076-12101).
+    return Decoded("use_item_request", {"index": _u16(b, 2), "aid": _u32(b, 4)})
+
+
+def _use_item_result(b: bytes) -> Decoded:
+    # ZC_USE_ITEM_ACK2 0x01C8 (packets_struct.hpp:2577-2589 + useItemAckType, 311-315): index
+    # i16 @2, item id u32 @4, user's id u32 @8, amount left i16 @12, ok u8 @14. A success goes to
+    # the AREA, so other players' uses arrive too (clif.cpp:4468-4497).
+    return Decoded("use_item_result", {"index": _i16(b, 2), "item_id": _u32(b, 4),
+                                       "aid": _u32(b, 8), "amount": _i16(b, 12),
+                                       "ok": bool(b[14])})  # fmt: skip
+
+
+def _attack_request(b: bytes) -> Decoded:
+    # CZ_REQUEST_ACT2 (packet_db 0x0437, 7 bytes, pos 2,6: the clif_shuffle.hpp:4749 block for
+    # PACKETVER > 20180307; 0x0089 is CZ_REQUEST_ACT's id only on older clients). Target id u32 @2,
+    # action u8 @6: 0 = attack once, 7 = keep attacking, 2 = sit, 3 = stand (clif.cpp:11807-11831).
+    action = b[6]
+    return Decoded("attack_request", {"target_gid": _u32(b, 2), "action": action,
+                                      "kind": ACT_KINDS.get(action, f"type{action}"),
+                                      "is_attack": action in (0, 7)})  # fmt: skip
+
+
+# server -> client. Ids and sizes match the generated length table (rAthena struct sizes; 0x00CB
+# and 0x01C8 come from OpenKore's client table: no rAthena HEADER_ pair). The id-only dialog
+# packets: ZC_WAIT_DIALOG (the 'next' button, packets_struct.hpp:5513), ZC_CLOSE_DIALOG (the
+# 'close' button, packets.hpp:755), ZC_OPEN_EDITDLG / ZC_OPEN_EDITDLGSTR (number / text input
+# boxes, packets.hpp:769-779) and ZC_SELECT_DEALTYPE (the shop's buy/sell box, packets.hpp:736):
+# npc id u32 @2, 6 bytes.
+MAP_SC: dict[int, _Layout] = {
+    0x00B4: _Layout(VARIABLE, _npc_say, head=8),  # ZC_SAY_DIALOG
+    0x00B5: _Layout(6, _npc_id("npc_wait")),  # ZC_WAIT_DIALOG
+    0x00B6: _Layout(6, _npc_id("npc_close")),  # ZC_CLOSE_DIALOG
+    0x00B7: _Layout(VARIABLE, _npc_menu, head=8),  # ZC_MENU_LIST
+    0x0142: _Layout(6, _npc_id("npc_number_prompt")),  # ZC_OPEN_EDITDLG
+    0x01D4: _Layout(6, _npc_id("npc_text_prompt")),  # ZC_OPEN_EDITDLGSTR
+    0x00C4: _Layout(6, _npc_id("shop_deal_prompt")),  # ZC_SELECT_DEALTYPE
+    0x0B77: _Layout(VARIABLE, _shop_buy_list),  # ZC_PC_PURCHASE_ITEMLIST
+    0x00CA: _Layout(3, _result("shop_buy_result")),  # ZC_PC_PURCHASE_RESULT
+    0x00C7: _Layout(VARIABLE, _shop_sell_list),  # ZC_PC_SELL_ITEMLIST
+    0x00CB: _Layout(3, _result("shop_sell_result")),  # ZC_PC_SELL_RESULT
+    0x00BC: _Layout(6, _stat_raise_result),  # ZC_STATUS_CHANGE_ACK
+    0x010E: _Layout(11, _skill_update),  # ZC_SKILLINFO_UPDATE
+    0x0B32: _Layout(VARIABLE, _skill_list),  # ZC_SKILLINFO_LIST
+    0x0999: _Layout(11, _equip_result),  # ZC_REQ_WEAR_EQUIP_ACK (V5)
+    0x099A: _Layout(9, _unequip_result),  # ZC_REQ_TAKEOFF_EQUIP_ACK (V5)
+    0x01C8: _Layout(15, _use_item_result),  # ZC_USE_ITEM_ACK2
+}  # fmt: skip
+# client -> server: the map server's packet_db at PACKETVER 20211103 (clif_packetdb.hpp +
+# clif_shuffle.hpp, last write wins), where each id maps to the clif_parse_* handler named.
+# CZ_REQ_NEXT_SCRIPT / CZ_CLOSE_DIALOG (rAthena's name for CZ_REQ_CLOSE_SCRIPT, packets.hpp:1852):
+# npc id u32 @2, 6 bytes (clif.cpp:13346-13421). CZ_UPGRADE_SKILLLEVEL: skill id u16 @2
+# (clif.cpp:12755-12760). CZ_REQ_TAKEOFF_EQUIP: inventory index u16 @2 (clif.cpp:12164-12183).
+# Inventory indexes are the client's (the server's index + 2), as on the wire.
+MAP_CS: dict[int, _Layout] = {
+    0x0090: _Layout(7, _npc_contact),  # CZ_CONTACTNPC -> NpcClicked
+    0x00B8: _Layout(7, _npc_choose),  # CZ_CHOOSE_MENU -> NpcSelectMenu
+    0x00B9: _Layout(6, _npc_id("npc_next_click")),  # CZ_REQ_NEXT_SCRIPT -> NpcNextClicked
+    0x0146: _Layout(6, _npc_id("npc_close_click")),  # CZ_CLOSE_DIALOG -> NpcCloseClicked
+    0x0143: _Layout(10, _npc_number_input),  # CZ_INPUT_EDITDLG -> NpcAmountInput
+    0x01D5: _Layout(VARIABLE, _npc_text_input, head=8),  # CZ_INPUT_EDITDLGSTR -> NpcStringInput
+    0x00C5: _Layout(7, _shop_deal_choice),  # CZ_ACK_SELECT_DEALTYPE -> NpcBuySellSelected
+    0x00C8: _Layout(VARIABLE, _shop_buy_request),  # CZ_PC_PURCHASE_ITEMLIST -> NpcBuyListSend
+    0x00C9: _Layout(VARIABLE, _shop_sell_request),  # CZ_PC_SELL_ITEMLIST -> NpcSellListSend
+    0x00BB: _Layout(5, _stat_raise_request),  # CZ_STATUS_CHANGE -> StatusUp
+    0x0112: _Layout(4, _u16_event("skill_up_request", "skill_id")),  # CZ_UPGRADE_SKILLLEVEL
+    0x0998: _Layout(8, _equip_request),  # CZ_REQ_WEAR_EQUIP (V5) -> EquipItem
+    0x00AB: _Layout(4, _u16_event("unequip_request", "index")),  # CZ_REQ_TAKEOFF_EQUIP
+    0x0439: _Layout(8, _use_item_request),  # CZ_USE_ITEM2 -> UseItem
+    0x0437: _Layout(7, _attack_request),  # CZ_REQUEST_ACT2 -> ActionRequest
+}  # fmt: skip
+
+
+def _decode_map(table: dict[int, _Layout], pid: int, b: bytes) -> Decoded | None:
+    lay = table.get(pid)
+    return lay.fn(b) if lay is not None and _fits(lay, b) else None
+
+
 def decode(server: str, direction: str, pid: int, b: bytes) -> Decoded | None:
-    """One RO packet -> Decoded, or None for packets outside the first slice (counted elsewhere)."""
+    """One RO packet -> Decoded, or None for a packet we do not decode (counted elsewhere) or, for
+    the 2026-10-07 map packets, a truncated or garbled one."""
     if direction == "sc":
         if server == "login" and pid == 0x0AC4:
             return Decoded("login_accepted", {"aid": _u32(b, 8), "sex": b[46]})
@@ -202,8 +500,8 @@ def decode(server: str, direction: str, pid: int, b: bytes) -> Decoded | None:
             return _chat("broadcast", b[16:])
         if pid == 0x02C1:
             return _chat("npc", b[12:], gid=_u32(b, 4))
-        return None
-    # client -> server (map only in the first slice)
+        return _decode_map(MAP_SC, pid, b)
+    # client -> server (map only)
     if server != "map":
         return None
     if pid == 0x035F:
@@ -217,7 +515,7 @@ def decode(server: str, direction: str, pid: int, b: bytes) -> Decoded | None:
         return _chat("guild", b[4:])
     if pid == 0x0096:
         return _chat("whisper_out", b[28:], speaker=text(b[4:28]))
-    return None
+    return _decode_map(MAP_CS, pid, b)
 
 
 def is_gm_command(d: Decoded) -> bool:

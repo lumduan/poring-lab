@@ -27,13 +27,33 @@ export function kindOf(e: PacketEvent): Kind {
     case "entity_turn":
     case "act":
       return "entity";
+    // our own requests (2026-10-07 decoders; replay only until the sniffer image is rebuilt)
+    case "attack_request":
+    case "npc_contact":
+    case "npc_choose":
+    case "npc_next_click":
+    case "npc_close_click":
+    case "npc_number_input":
+    case "npc_text_input":
+    case "shop_deal_choice":
+    case "shop_buy_request":
+    case "shop_sell_request":
+    case "stat_raise_request":
+    case "skill_up_request":
+    case "equip_request":
+    case "unequip_request":
+    case "use_item_request":
+      return "self";
     case "stat_change":
+    case "stat_raise_result":
+    case "skill_update":
+    case "skill_list":
       return "stat";
     case "unknown":
     case "desync":
       return "error";
     default:
-      return "session"; // login_accepted, char_selected, time_sync
+      return "session"; // login, char select, time sync, NPC dialogs, shop lists, item results
   }
 }
 
@@ -120,8 +140,94 @@ export function describe(e: PacketEvent): string {
       return `unknown packet 0x${e.packet_id.toString(16).padStart(4, "0")} ×${e.count}`;
     case "desync":
       return `stream desync: ${e.skipped_bytes} bytes skipped`;
+    default:
+      return describeInteraction(e);
   }
 }
+
+/** The 2026-10-07 events: NPC dialogs, shops, stat/skill points, equipment, items, attack clicks.
+ * Exhaustive: a new event type without a line here fails the typecheck. */
+function describeInteraction(e: Interaction): string {
+  const npc = "npc_gid" in e ? `NPC #${e.npc_gid}` : "";
+  switch (e.type) {
+    case "npc_contact":
+      return `click ${npc} (type ${e.contact_type})`;
+    case "npc_say":
+      return `${npc} says: ${e.text}`;
+    case "npc_wait":
+      return `${npc} shows next`;
+    case "npc_close":
+      return `${npc} shows close`;
+    case "npc_menu":
+      return `${npc} menu: ${e.options.map((o, i) => `${i + 1}) ${o}`).join(" · ")}`;
+    case "npc_choose":
+      return e.cancelled ? `${npc} menu cancelled` : `${npc} option ${e.choice}`;
+    case "npc_next_click":
+      return `${npc} next clicked`;
+    case "npc_close_click":
+      return `${npc} close clicked`;
+    case "npc_number_prompt":
+      return `${npc} asks for a number`;
+    case "npc_number_input":
+      return `${npc} ← number ${e.value}`;
+    case "npc_text_prompt":
+      return `${npc} asks for a text`;
+    case "npc_text_input":
+      return `${npc} ← text ${e.text}`;
+    case "shop_deal_prompt":
+      return `${npc} shop: buy or sell?`;
+    case "shop_deal_choice":
+      return `${npc} shop: ${e.kind}`;
+    case "shop_buy_list":
+      return `shop list: ${e.items.length} items for sale`;
+    case "shop_buy_request":
+      return `buy ${e.items.map((i) => `${i.amount}× item ${i.item_id}`).join(", ")}`;
+    case "shop_buy_result":
+      return e.ok ? "bought: deal done" : `buy result ${e.result}: no deal`;
+    case "shop_sell_list":
+      return `shop list: ${e.items.length} of ours it buys`;
+    case "shop_sell_request":
+      return `sell ${e.items.map((i) => `${i.amount}× slot ${i.index}`).join(", ")}`;
+    case "shop_sell_result":
+      return e.ok ? "sold: deal done" : `sell result ${e.result}: no deal`;
+    case "stat_raise_request":
+      return `raise ${e.name} +${e.amount}`;
+    case "stat_raise_result":
+      return e.ok ? `${e.name} raised to ${e.value}` : `${e.name} not raised (${e.value})`;
+    case "skill_up_request":
+      return `raise skill ${e.skill_id}`;
+    case "skill_update":
+      return `skill ${e.skill_id} at level ${e.level}`;
+    case "skill_list":
+      return `skill tree: ${e.skills.length} skills`;
+    case "equip_request":
+      return `wear slot ${e.index} at ${e.location}`;
+    case "equip_result":
+      return e.ok ? `wearing slot ${e.index}` : `slot ${e.index} not worn (${e.result})`;
+    case "unequip_request":
+      return `take off slot ${e.index}`;
+    case "unequip_result":
+      return e.ok ? `took off slot ${e.index}` : `slot ${e.index} not taken off`;
+    case "use_item_request":
+      return `use slot ${e.index}`;
+    case "use_item_result":
+      return `#${e.aid} used item ${e.item_id}: ${e.ok ? `${e.amount} left` : "not used"}`;
+    case "attack_request":
+      return e.is_attack
+        ? `attack click #${e.target_gid}${e.action === 7 ? " (keep attacking)" : ""}`
+        : `action request ${e.kind}`;
+  }
+}
+
+type Interaction = Exclude<
+  PacketEvent,
+  {
+    type:
+      | "chat" | "self_move" | "self_move_request" | "map_enter" | "map_change" | "entity_appear"
+      | "entity_vanish" | "entity_stop" | "entity_turn" | "act" | "stat_change"
+      | "login_accepted" | "char_selected" | "time_sync" | "unknown" | "desync";
+  }
+>;
 
 /** ZC_NOTIFY_ACT: sit / stand / pickup, or a hit (0 damage is a miss). */
 function describeAct(e: Extract<PacketEvent, { type: "act" }>): string {

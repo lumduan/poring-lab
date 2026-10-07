@@ -119,6 +119,83 @@
       "title": "Act",
       "type": "object"
     },
+    "AttackRequest": {
+      "additionalProperties": false,
+      "description": "CZ_REQUEST_ACT2 (0x0437): an action on a unit -- an attack click (action 0 once, 7 keep\nattacking), or sit (2) / stand (3) with no target. A walk click is a self_move_request.",
+      "properties": {
+        "action": {
+          "description": "rAthena e_damage_type, as ZC_NOTIFY_ACT.",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "is_attack": {
+          "description": "action is 0 or 7.",
+          "type": "boolean"
+        },
+        "kind": {
+          "description": "The action's name (decode.ACT_KINDS): normal, repeat, sit, ...",
+          "type": "string"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "target_gid": {
+          "description": "The target's block id (0 for sit/stand).",
+          "type": "integer"
+        },
+        "type": {
+          "const": "attack_request",
+          "default": "attack_request",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "type",
+        "target_gid",
+        "action",
+        "kind",
+        "is_attack"
+      ],
+      "title": "AttackRequest",
+      "type": "object"
+    },
     "CharSelected": {
       "additionalProperties": false,
       "properties": {
@@ -715,6 +792,148 @@
       "title": "EntityVanish",
       "type": "object"
     },
+    "EquipRequest": {
+      "additionalProperties": false,
+      "description": "CZ_REQ_WEAR_EQUIP (0x0998): wear an item at `location` (rAthena EQP_* bits).",
+      "properties": {
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "index": {
+          "description": "The client's inventory index.",
+          "type": "integer"
+        },
+        "location": {
+          "type": "integer"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "equip_request",
+          "default": "equip_request",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "type",
+        "index",
+        "location"
+      ],
+      "title": "EquipRequest",
+      "type": "object"
+    },
+    "EquipResult": {
+      "additionalProperties": false,
+      "description": "ZC_REQ_WEAR_EQUIP_ACK (0x0999): 0 = worn, 1 = level too low, 2 = failed.",
+      "properties": {
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "index": {
+          "description": "The client's inventory index.",
+          "type": "integer"
+        },
+        "location": {
+          "type": "integer"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "result": {
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "equip_result",
+          "default": "equip_result",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        },
+        "view_sprite": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "type",
+        "index",
+        "location",
+        "view_sprite",
+        "result",
+        "ok"
+      ],
+      "title": "EquipResult",
+      "type": "object"
+    },
     "LoginAccepted": {
       "additionalProperties": false,
       "properties": {
@@ -912,6 +1131,774 @@
         "facing"
       ],
       "title": "MapEnter",
+      "type": "object"
+    },
+    "NpcChoose": {
+      "additionalProperties": false,
+      "description": "CZ_CHOOSE_MENU (0x00B8): our menu answer.",
+      "properties": {
+        "cancelled": {
+          "type": "boolean"
+        },
+        "choice": {
+          "description": "1-based option; 255 = cancel.",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "npc_gid": {
+          "description": "The NPC's block id (the id entity_appear reports).",
+          "type": "integer"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "npc_choose",
+          "default": "npc_choose",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "npc_gid",
+        "type",
+        "choice",
+        "cancelled"
+      ],
+      "title": "NpcChoose",
+      "type": "object"
+    },
+    "NpcClose": {
+      "additionalProperties": false,
+      "description": "ZC_CLOSE_DIALOG (0x00B6): the dialog shows its 'close' button (the script is ending).",
+      "properties": {
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "npc_gid": {
+          "description": "The NPC's block id (the id entity_appear reports).",
+          "type": "integer"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "npc_close",
+          "default": "npc_close",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "npc_gid",
+        "type"
+      ],
+      "title": "NpcClose",
+      "type": "object"
+    },
+    "NpcCloseClick": {
+      "additionalProperties": false,
+      "description": "CZ_CLOSE_DIALOG / CZ_REQ_CLOSE_SCRIPT (0x0146): we clicked 'close'.",
+      "properties": {
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "npc_gid": {
+          "description": "The NPC's block id (the id entity_appear reports).",
+          "type": "integer"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "npc_close_click",
+          "default": "npc_close_click",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "npc_gid",
+        "type"
+      ],
+      "title": "NpcCloseClick",
+      "type": "object"
+    },
+    "NpcContact": {
+      "additionalProperties": false,
+      "description": "CZ_CONTACTNPC (0x0090): we clicked a unit. The server starts the NPC's script, or, for a\nmonster's or player's id, a continuous attack on it.",
+      "properties": {
+        "contact_type": {
+          "description": "1 = a click.",
+          "type": "integer"
+        },
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "npc_gid": {
+          "description": "The NPC's block id (the id entity_appear reports).",
+          "type": "integer"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "npc_contact",
+          "default": "npc_contact",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "npc_gid",
+        "type",
+        "contact_type"
+      ],
+      "title": "NpcContact",
+      "type": "object"
+    },
+    "NpcMenu": {
+      "additionalProperties": false,
+      "description": "ZC_MENU_LIST (0x00B7): a menu; `options` is the ':'-split list, empty entries kept.",
+      "properties": {
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "npc_gid": {
+          "description": "The NPC's block id (the id entity_appear reports).",
+          "type": "integer"
+        },
+        "options": {
+          "description": "Option N (1-based, what npc_choose sends) is options[N-1]; an empty string is an option the client hides but still counts.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "raw_hex": {
+          "type": "string"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "npc_menu",
+          "default": "npc_menu",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "npc_gid",
+        "type",
+        "options",
+        "raw_hex"
+      ],
+      "title": "NpcMenu",
+      "type": "object"
+    },
+    "NpcNextClick": {
+      "additionalProperties": false,
+      "description": "CZ_REQ_NEXT_SCRIPT (0x00B9): we clicked 'next'.",
+      "properties": {
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "npc_gid": {
+          "description": "The NPC's block id (the id entity_appear reports).",
+          "type": "integer"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "npc_next_click",
+          "default": "npc_next_click",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "npc_gid",
+        "type"
+      ],
+      "title": "NpcNextClick",
+      "type": "object"
+    },
+    "NpcNumberInput": {
+      "additionalProperties": false,
+      "description": "CZ_INPUT_EDITDLG (0x0143): the number we entered.",
+      "properties": {
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "npc_gid": {
+          "description": "The NPC's block id (the id entity_appear reports).",
+          "type": "integer"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "npc_number_input",
+          "default": "npc_number_input",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        },
+        "value": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "npc_gid",
+        "type",
+        "value"
+      ],
+      "title": "NpcNumberInput",
+      "type": "object"
+    },
+    "NpcNumberPrompt": {
+      "additionalProperties": false,
+      "description": "ZC_OPEN_EDITDLG (0x0142): the NPC asks for a number.",
+      "properties": {
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "npc_gid": {
+          "description": "The NPC's block id (the id entity_appear reports).",
+          "type": "integer"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "npc_number_prompt",
+          "default": "npc_number_prompt",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "npc_gid",
+        "type"
+      ],
+      "title": "NpcNumberPrompt",
+      "type": "object"
+    },
+    "NpcSay": {
+      "additionalProperties": false,
+      "description": "ZC_SAY_DIALOG (0x00B4): one line of the NPC's dialog, cp874; `raw_hex` keeps the bytes.",
+      "properties": {
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "npc_gid": {
+          "description": "The NPC's block id (the id entity_appear reports).",
+          "type": "integer"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "raw_hex": {
+          "type": "string"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "text": {
+          "type": "string"
+        },
+        "type": {
+          "const": "npc_say",
+          "default": "npc_say",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "npc_gid",
+        "type",
+        "text",
+        "raw_hex"
+      ],
+      "title": "NpcSay",
+      "type": "object"
+    },
+    "NpcTextInput": {
+      "additionalProperties": false,
+      "description": "CZ_INPUT_EDITDLGSTR (0x01D5): the text we entered, cp874; `raw_hex` keeps the bytes.",
+      "properties": {
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "npc_gid": {
+          "description": "The NPC's block id (the id entity_appear reports).",
+          "type": "integer"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "raw_hex": {
+          "type": "string"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "text": {
+          "type": "string"
+        },
+        "type": {
+          "const": "npc_text_input",
+          "default": "npc_text_input",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "npc_gid",
+        "type",
+        "text",
+        "raw_hex"
+      ],
+      "title": "NpcTextInput",
+      "type": "object"
+    },
+    "NpcTextPrompt": {
+      "additionalProperties": false,
+      "description": "ZC_OPEN_EDITDLGSTR (0x01D4): the NPC asks for a text.",
+      "properties": {
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "npc_gid": {
+          "description": "The NPC's block id (the id entity_appear reports).",
+          "type": "integer"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "npc_text_prompt",
+          "default": "npc_text_prompt",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "npc_gid",
+        "type"
+      ],
+      "title": "NpcTextPrompt",
+      "type": "object"
+    },
+    "NpcWait": {
+      "additionalProperties": false,
+      "description": "ZC_WAIT_DIALOG (0x00B5): the dialog shows its 'next' button.",
+      "properties": {
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "npc_gid": {
+          "description": "The NPC's block id (the id entity_appear reports).",
+          "type": "integer"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "npc_wait",
+          "default": "npc_wait",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "npc_gid",
+        "type"
+      ],
+      "title": "NpcWait",
       "type": "object"
     },
     "PacketStats": {
@@ -1182,6 +2169,825 @@
       "title": "SelfMoveRequest",
       "type": "object"
     },
+    "ShopBuyList": {
+      "additionalProperties": false,
+      "description": "ZC_PC_PURCHASE_ITEMLIST (0x0B77 at this PACKETVER): what the shop sells, with prices.",
+      "properties": {
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/ShopBuyListItem"
+          },
+          "type": "array"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "shop_buy_list",
+          "default": "shop_buy_list",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "type",
+        "items"
+      ],
+      "title": "ShopBuyList",
+      "type": "object"
+    },
+    "ShopBuyListItem": {
+      "additionalProperties": false,
+      "properties": {
+        "discount_price": {
+          "type": "integer"
+        },
+        "item_id": {
+          "type": "integer"
+        },
+        "item_type": {
+          "type": "integer"
+        },
+        "price": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "item_id",
+        "price",
+        "discount_price",
+        "item_type"
+      ],
+      "title": "ShopBuyListItem",
+      "type": "object"
+    },
+    "ShopBuyRequest": {
+      "additionalProperties": false,
+      "description": "CZ_PC_PURCHASE_ITEMLIST (0x00C8): what we buy.",
+      "properties": {
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/ShopBuyRequestItem"
+          },
+          "type": "array"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "shop_buy_request",
+          "default": "shop_buy_request",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "type",
+        "items"
+      ],
+      "title": "ShopBuyRequest",
+      "type": "object"
+    },
+    "ShopBuyRequestItem": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "type": "integer"
+        },
+        "item_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "item_id",
+        "amount"
+      ],
+      "title": "ShopBuyRequestItem",
+      "type": "object"
+    },
+    "ShopBuyResult": {
+      "additionalProperties": false,
+      "description": "ZC_PC_PURCHASE_RESULT (0x00CA): 0 = the deal completed; 1 = not enough zeny, 2 = over the\nweight limit, 3 = too many items (rAthena e_purchase_result). Zeny itself arrives as a\nstat_change (var 20).",
+      "properties": {
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "result": {
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "shop_buy_result",
+          "default": "shop_buy_result",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "type",
+        "result",
+        "ok"
+      ],
+      "title": "ShopBuyResult",
+      "type": "object"
+    },
+    "ShopDealChoice": {
+      "additionalProperties": false,
+      "description": "CZ_ACK_SELECT_DEALTYPE (0x00C5): our buy/sell answer.",
+      "properties": {
+        "deal": {
+          "description": "0 = buy, 1 = sell.",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "kind": {
+          "description": "buy, sell, or typeN for an unknown one.",
+          "type": "string"
+        },
+        "npc_gid": {
+          "description": "The NPC's block id (the id entity_appear reports).",
+          "type": "integer"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "shop_deal_choice",
+          "default": "shop_deal_choice",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "npc_gid",
+        "type",
+        "deal",
+        "kind"
+      ],
+      "title": "ShopDealChoice",
+      "type": "object"
+    },
+    "ShopDealPrompt": {
+      "additionalProperties": false,
+      "description": "ZC_SELECT_DEALTYPE (0x00C4): a shop NPC asks buy or sell.",
+      "properties": {
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "npc_gid": {
+          "description": "The NPC's block id (the id entity_appear reports).",
+          "type": "integer"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "shop_deal_prompt",
+          "default": "shop_deal_prompt",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "npc_gid",
+        "type"
+      ],
+      "title": "ShopDealPrompt",
+      "type": "object"
+    },
+    "ShopSellList": {
+      "additionalProperties": false,
+      "description": "ZC_PC_SELL_ITEMLIST (0x00C7): what of ours the shop would buy.",
+      "properties": {
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/ShopSellListItem"
+          },
+          "type": "array"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "shop_sell_list",
+          "default": "shop_sell_list",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "type",
+        "items"
+      ],
+      "title": "ShopSellList",
+      "type": "object"
+    },
+    "ShopSellListItem": {
+      "additionalProperties": false,
+      "properties": {
+        "index": {
+          "description": "The client's inventory index.",
+          "type": "integer"
+        },
+        "overcharge": {
+          "description": "The price after our Overcharge skill.",
+          "type": "integer"
+        },
+        "price": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "index",
+        "price",
+        "overcharge"
+      ],
+      "title": "ShopSellListItem",
+      "type": "object"
+    },
+    "ShopSellRequest": {
+      "additionalProperties": false,
+      "description": "CZ_PC_SELL_ITEMLIST (0x00C9): what we sell.",
+      "properties": {
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/ShopSellRequestItem"
+          },
+          "type": "array"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "shop_sell_request",
+          "default": "shop_sell_request",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "type",
+        "items"
+      ],
+      "title": "ShopSellRequest",
+      "type": "object"
+    },
+    "ShopSellRequestItem": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "type": "integer"
+        },
+        "index": {
+          "description": "The client's inventory index.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "index",
+        "amount"
+      ],
+      "title": "ShopSellRequestItem",
+      "type": "object"
+    },
+    "ShopSellResult": {
+      "additionalProperties": false,
+      "description": "ZC_PC_SELL_RESULT (0x00CB): 0 = the deal completed, 1 = it failed.",
+      "properties": {
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "result": {
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "shop_sell_result",
+          "default": "shop_sell_result",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "type",
+        "result",
+        "ok"
+      ],
+      "title": "ShopSellResult",
+      "type": "object"
+    },
+    "SkillEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "level": {
+          "type": "integer"
+        },
+        "range": {
+          "type": "integer"
+        },
+        "skill_id": {
+          "type": "integer"
+        },
+        "sp": {
+          "type": "integer"
+        },
+        "upgradable": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "skill_id",
+        "level",
+        "sp",
+        "range",
+        "upgradable"
+      ],
+      "title": "SkillEntry",
+      "type": "object"
+    },
+    "SkillList": {
+      "additionalProperties": false,
+      "description": "ZC_SKILLINFO_LIST (0x0B32 at this PACKETVER): the whole skill tree.",
+      "properties": {
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "skills": {
+          "items": {
+            "$ref": "#/$defs/SkillEntry"
+          },
+          "type": "array"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "skill_list",
+          "default": "skill_list",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "type",
+        "skills"
+      ],
+      "title": "SkillList",
+      "type": "object"
+    },
+    "SkillUpRequest": {
+      "additionalProperties": false,
+      "description": "CZ_UPGRADE_SKILLLEVEL (0x0112): raise a skill's level.",
+      "properties": {
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "skill_id": {
+          "type": "integer"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "skill_up_request",
+          "default": "skill_up_request",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "type",
+        "skill_id"
+      ],
+      "title": "SkillUpRequest",
+      "type": "object"
+    },
+    "SkillUpdate": {
+      "additionalProperties": false,
+      "description": "ZC_SKILLINFO_UPDATE (0x010E): a skill's new level (sent after a raise; the skill points\nleft arrive as a stat_change, var 12).",
+      "properties": {
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "level": {
+          "type": "integer"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "range": {
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "skill_id": {
+          "type": "integer"
+        },
+        "sp": {
+          "description": "Its SP cost at this level.",
+          "type": "integer"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "skill_update",
+          "default": "skill_update",
+          "type": "string"
+        },
+        "upgradable": {
+          "type": "boolean"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "type",
+        "skill_id",
+        "level",
+        "sp",
+        "range",
+        "upgradable"
+      ],
+      "title": "SkillUpdate",
+      "type": "object"
+    },
     "StatChange": {
       "additionalProperties": false,
       "properties": {
@@ -1248,6 +3054,148 @@
       "title": "StatChange",
       "type": "object"
     },
+    "StatRaiseRequest": {
+      "additionalProperties": false,
+      "description": "CZ_STATUS_CHANGE (0x00BB): raise a base stat (13-18 = str, agi, vit, int, dex, luk).",
+      "properties": {
+        "amount": {
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "stat": {
+          "type": "integer"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "stat_raise_request",
+          "default": "stat_raise_request",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "type",
+        "stat",
+        "name",
+        "amount"
+      ],
+      "title": "StatRaiseRequest",
+      "type": "object"
+    },
+    "StatRaiseResult": {
+      "additionalProperties": false,
+      "description": "ZC_STATUS_CHANGE_ACK (0x00BC): the raise's outcome and the stat's new value (capped at\n255). The status points left arrive as a stat_change (var 9).",
+      "properties": {
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "stat": {
+          "type": "integer"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "stat_raise_result",
+          "default": "stat_raise_result",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        },
+        "value": {
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "type",
+        "stat",
+        "name",
+        "ok",
+        "value"
+      ],
+      "title": "StatRaiseResult",
+      "type": "object"
+    },
     "TimeSync": {
       "additionalProperties": false,
       "description": "ZC_NOTIFY_TIME: rAthena gettick() (CLOCK_MONOTONIC ms, mod 2^32) at send.",
@@ -1305,6 +3253,140 @@
         "server_tick"
       ],
       "title": "TimeSync",
+      "type": "object"
+    },
+    "UnequipRequest": {
+      "additionalProperties": false,
+      "description": "CZ_REQ_TAKEOFF_EQUIP (0x00AB): take an item off.",
+      "properties": {
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "index": {
+          "description": "The client's inventory index.",
+          "type": "integer"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "unequip_request",
+          "default": "unequip_request",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "type",
+        "index"
+      ],
+      "title": "UnequipRequest",
+      "type": "object"
+    },
+    "UnequipResult": {
+      "additionalProperties": false,
+      "description": "ZC_REQ_TAKEOFF_EQUIP_ACK (0x099A): 0 = taken off (inverted at this PACKETVER).",
+      "properties": {
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "index": {
+          "description": "The client's inventory index.",
+          "type": "integer"
+        },
+        "location": {
+          "type": "integer"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "result": {
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "unequip_result",
+          "default": "unequip_result",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "type",
+        "index",
+        "location",
+        "result",
+        "ok"
+      ],
+      "title": "UnequipResult",
       "type": "object"
     },
     "UnknownPacket": {
@@ -1365,6 +3447,148 @@
       ],
       "title": "UnknownPacket",
       "type": "object"
+    },
+    "UseItemRequest": {
+      "additionalProperties": false,
+      "description": "CZ_USE_ITEM2 (0x0439): use an item.",
+      "properties": {
+        "aid": {
+          "description": "The account id the client sends with it (its own).",
+          "type": "integer"
+        },
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "index": {
+          "description": "The client's inventory index.",
+          "type": "integer"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "use_item_request",
+          "default": "use_item_request",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "type",
+        "index",
+        "aid"
+      ],
+      "title": "UseItemRequest",
+      "type": "object"
+    },
+    "UseItemResult": {
+      "additionalProperties": false,
+      "description": "ZC_USE_ITEM_ACK2 (0x01C8): an item use's outcome. A success is sent to the whole area,\nso `aid` says whose it was.",
+      "properties": {
+        "aid": {
+          "type": "integer"
+        },
+        "amount": {
+          "description": "How many are left.",
+          "type": "integer"
+        },
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "index": {
+          "description": "The client's inventory index.",
+          "type": "integer"
+        },
+        "item_id": {
+          "type": "integer"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "use_item_result",
+          "default": "use_item_result",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "type",
+        "index",
+        "item_id",
+        "aid",
+        "amount",
+        "ok"
+      ],
+      "title": "UseItemResult",
+      "type": "object"
     }
   },
   "description": "Root of the packet-event JSON Schema (packets.schema.json -> frontend packets.gen.ts).",
@@ -1373,6 +3597,7 @@
       "discriminator": {
         "mapping": {
           "act": "#/$defs/Act",
+          "attack_request": "#/$defs/AttackRequest",
           "char_selected": "#/$defs/CharSelected",
           "chat": "#/$defs/Chat",
           "desync": "#/$defs/Desync",
@@ -1380,14 +3605,45 @@
           "entity_stop": "#/$defs/EntityStop",
           "entity_turn": "#/$defs/EntityTurn",
           "entity_vanish": "#/$defs/EntityVanish",
+          "equip_request": "#/$defs/EquipRequest",
+          "equip_result": "#/$defs/EquipResult",
           "login_accepted": "#/$defs/LoginAccepted",
           "map_change": "#/$defs/MapChange",
           "map_enter": "#/$defs/MapEnter",
+          "npc_choose": "#/$defs/NpcChoose",
+          "npc_close": "#/$defs/NpcClose",
+          "npc_close_click": "#/$defs/NpcCloseClick",
+          "npc_contact": "#/$defs/NpcContact",
+          "npc_menu": "#/$defs/NpcMenu",
+          "npc_next_click": "#/$defs/NpcNextClick",
+          "npc_number_input": "#/$defs/NpcNumberInput",
+          "npc_number_prompt": "#/$defs/NpcNumberPrompt",
+          "npc_say": "#/$defs/NpcSay",
+          "npc_text_input": "#/$defs/NpcTextInput",
+          "npc_text_prompt": "#/$defs/NpcTextPrompt",
+          "npc_wait": "#/$defs/NpcWait",
           "self_move": "#/$defs/SelfMove",
           "self_move_request": "#/$defs/SelfMoveRequest",
+          "shop_buy_list": "#/$defs/ShopBuyList",
+          "shop_buy_request": "#/$defs/ShopBuyRequest",
+          "shop_buy_result": "#/$defs/ShopBuyResult",
+          "shop_deal_choice": "#/$defs/ShopDealChoice",
+          "shop_deal_prompt": "#/$defs/ShopDealPrompt",
+          "shop_sell_list": "#/$defs/ShopSellList",
+          "shop_sell_request": "#/$defs/ShopSellRequest",
+          "shop_sell_result": "#/$defs/ShopSellResult",
+          "skill_list": "#/$defs/SkillList",
+          "skill_up_request": "#/$defs/SkillUpRequest",
+          "skill_update": "#/$defs/SkillUpdate",
           "stat_change": "#/$defs/StatChange",
+          "stat_raise_request": "#/$defs/StatRaiseRequest",
+          "stat_raise_result": "#/$defs/StatRaiseResult",
           "time_sync": "#/$defs/TimeSync",
-          "unknown": "#/$defs/UnknownPacket"
+          "unequip_request": "#/$defs/UnequipRequest",
+          "unequip_result": "#/$defs/UnequipResult",
+          "unknown": "#/$defs/UnknownPacket",
+          "use_item_request": "#/$defs/UseItemRequest",
+          "use_item_result": "#/$defs/UseItemResult"
         },
         "propertyName": "type"
       },
@@ -1433,6 +3689,102 @@
         },
         {
           "$ref": "#/$defs/Chat"
+        },
+        {
+          "$ref": "#/$defs/NpcContact"
+        },
+        {
+          "$ref": "#/$defs/NpcSay"
+        },
+        {
+          "$ref": "#/$defs/NpcWait"
+        },
+        {
+          "$ref": "#/$defs/NpcClose"
+        },
+        {
+          "$ref": "#/$defs/NpcMenu"
+        },
+        {
+          "$ref": "#/$defs/NpcChoose"
+        },
+        {
+          "$ref": "#/$defs/NpcNextClick"
+        },
+        {
+          "$ref": "#/$defs/NpcCloseClick"
+        },
+        {
+          "$ref": "#/$defs/NpcNumberPrompt"
+        },
+        {
+          "$ref": "#/$defs/NpcNumberInput"
+        },
+        {
+          "$ref": "#/$defs/NpcTextPrompt"
+        },
+        {
+          "$ref": "#/$defs/NpcTextInput"
+        },
+        {
+          "$ref": "#/$defs/ShopDealPrompt"
+        },
+        {
+          "$ref": "#/$defs/ShopDealChoice"
+        },
+        {
+          "$ref": "#/$defs/ShopBuyList"
+        },
+        {
+          "$ref": "#/$defs/ShopBuyRequest"
+        },
+        {
+          "$ref": "#/$defs/ShopBuyResult"
+        },
+        {
+          "$ref": "#/$defs/ShopSellList"
+        },
+        {
+          "$ref": "#/$defs/ShopSellRequest"
+        },
+        {
+          "$ref": "#/$defs/ShopSellResult"
+        },
+        {
+          "$ref": "#/$defs/StatRaiseRequest"
+        },
+        {
+          "$ref": "#/$defs/StatRaiseResult"
+        },
+        {
+          "$ref": "#/$defs/SkillUpRequest"
+        },
+        {
+          "$ref": "#/$defs/SkillUpdate"
+        },
+        {
+          "$ref": "#/$defs/SkillList"
+        },
+        {
+          "$ref": "#/$defs/EquipRequest"
+        },
+        {
+          "$ref": "#/$defs/EquipResult"
+        },
+        {
+          "$ref": "#/$defs/UnequipRequest"
+        },
+        {
+          "$ref": "#/$defs/UnequipResult"
+        },
+        {
+          "$ref": "#/$defs/UseItemRequest"
+        },
+        {
+          "$ref": "#/$defs/UseItemResult"
+        },
+        {
+          "$ref": "#/$defs/AttackRequest"
         },
         {
           "$ref": "#/$defs/UnknownPacket"

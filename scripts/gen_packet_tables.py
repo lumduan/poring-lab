@@ -54,14 +54,21 @@ OUT = PKG / "src" / "poring_packets" / "_generated" / "lengths.json"
 IMAGE = "poring-lab/rathena-build:local"
 WORK = Path(os.environ.get("POR_GEN_DIR", "/dev/shm/poring-lab-pktgen"))
 
-# Ids the decoder interprets (docs/phase1-plan.md section 4; the last row: Phase 3 M3, the
-# ZC_NOTIFY_ACT family + ZC_CHANGE_DIRECTION): any disagreement here is fatal.
+# Ids the decoder interprets (docs/phase1-plan.md section 4; then Phase 3 M3, the ZC_NOTIFY_ACT
+# family + ZC_CHANGE_DIRECTION; then 2026-10-07, decode.MAP_SC / MAP_CS: NPC dialogs, shops,
+# stat/skill points, equipment, item use, CZ_REQUEST_ACT2): any disagreement here is fatal.
+# None of the 2026-10-07 ids is in the lock's disagreement list (checked 2026-10-07), so adding
+# them changes neither the output nor the lock.
 DECODED = {
     0x0064, 0x0AC4, 0x083E, 0x0065, 0x082D, 0x006B, 0x0B72, 0x0066, 0x0AC5, 0x0436, 0x0283, 0x02EB,
     0x007D, 0x0360, 0x007F, 0x035F, 0x0087, 0x0088, 0x09FD, 0x09FE, 0x09FF, 0x0080, 0x0091, 0x0AC7,
     0x00B0, 0x00B1, 0x0ACB, 0x080E, 0x00F3, 0x008D, 0x008E, 0x0096, 0x09DE, 0x09DF, 0x009A, 0x01C3,
     0x0108, 0x0109, 0x017E, 0x017F, 0x02C1,
     0x008A, 0x02E1, 0x08C8, 0x009C,
+    0x00B4, 0x00B5, 0x00B6, 0x00B7, 0x0142, 0x01D4, 0x00C4, 0x0B77, 0x00CA, 0x00C7, 0x00CB, 0x00BC,
+    0x010E, 0x0B32, 0x0999, 0x099A, 0x01C8,
+    0x0090, 0x00B8, 0x00B9, 0x0146, 0x0143, 0x01D5, 0x00C5, 0x00C8, 0x00C9, 0x00BB, 0x0112, 0x0998,
+    0x00AB, 0x0439, 0x0437,
 }  # fmt: skip
 CS_PREFIXES = {"CA": "login", "CH": "char", "CZ": "map"}
 SC_PREFIXES = {"AC": "login", "HC": "char", "ZC": "map"}

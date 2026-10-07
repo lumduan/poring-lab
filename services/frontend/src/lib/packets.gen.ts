@@ -19,6 +19,38 @@ export interface PoringPackets {
     | Act
     | StatChange
     | Chat
+    | NpcContact
+    | NpcSay
+    | NpcWait
+    | NpcClose
+    | NpcMenu
+    | NpcChoose
+    | NpcNextClick
+    | NpcCloseClick
+    | NpcNumberPrompt
+    | NpcNumberInput
+    | NpcTextPrompt
+    | NpcTextInput
+    | ShopDealPrompt
+    | ShopDealChoice
+    | ShopBuyList
+    | ShopBuyRequest
+    | ShopBuyResult
+    | ShopSellList
+    | ShopSellRequest
+    | ShopSellResult
+    | StatRaiseRequest
+    | StatRaiseResult
+    | SkillUpRequest
+    | SkillUpdate
+    | SkillList
+    | EquipRequest
+    | EquipResult
+    | UnequipRequest
+    | UnequipResult
+    | UseItemRequest
+    | UseItemResult
+    | AttackRequest
     | UnknownPacket
     | Desync;
   stats: PacketStats;
@@ -370,6 +402,811 @@ export interface Chat {
   t_mono_ns: number;
   text: string;
   type: "chat";
+  validation_account: boolean;
+}
+/**
+ * CZ_CONTACTNPC (0x0090): we clicked a unit. The server starts the NPC's script, or, for a
+ * monster's or player's id, a continuous attack on it.
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "NpcContact".
+ */
+export interface NpcContact {
+  /**
+   * 1 = a click.
+   */
+  contact_type: number;
+  dir: "cs" | "sc";
+  gm_command: boolean;
+  /**
+   * The NPC's block id (the id entity_appear reports).
+   */
+  npc_gid: number;
+  packet_id: number;
+  server: "login" | "char" | "map";
+  /**
+   * Kernel receive time mapped onto CLOCK_MONOTONIC.
+   */
+  t_mono_ns: number;
+  type: "npc_contact";
+  validation_account: boolean;
+}
+/**
+ * ZC_SAY_DIALOG (0x00B4): one line of the NPC's dialog, cp874; `raw_hex` keeps the bytes.
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "NpcSay".
+ */
+export interface NpcSay {
+  dir: "cs" | "sc";
+  gm_command: boolean;
+  /**
+   * The NPC's block id (the id entity_appear reports).
+   */
+  npc_gid: number;
+  packet_id: number;
+  raw_hex: string;
+  server: "login" | "char" | "map";
+  /**
+   * Kernel receive time mapped onto CLOCK_MONOTONIC.
+   */
+  t_mono_ns: number;
+  text: string;
+  type: "npc_say";
+  validation_account: boolean;
+}
+/**
+ * ZC_WAIT_DIALOG (0x00B5): the dialog shows its 'next' button.
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "NpcWait".
+ */
+export interface NpcWait {
+  dir: "cs" | "sc";
+  gm_command: boolean;
+  /**
+   * The NPC's block id (the id entity_appear reports).
+   */
+  npc_gid: number;
+  packet_id: number;
+  server: "login" | "char" | "map";
+  /**
+   * Kernel receive time mapped onto CLOCK_MONOTONIC.
+   */
+  t_mono_ns: number;
+  type: "npc_wait";
+  validation_account: boolean;
+}
+/**
+ * ZC_CLOSE_DIALOG (0x00B6): the dialog shows its 'close' button (the script is ending).
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "NpcClose".
+ */
+export interface NpcClose {
+  dir: "cs" | "sc";
+  gm_command: boolean;
+  /**
+   * The NPC's block id (the id entity_appear reports).
+   */
+  npc_gid: number;
+  packet_id: number;
+  server: "login" | "char" | "map";
+  /**
+   * Kernel receive time mapped onto CLOCK_MONOTONIC.
+   */
+  t_mono_ns: number;
+  type: "npc_close";
+  validation_account: boolean;
+}
+/**
+ * ZC_MENU_LIST (0x00B7): a menu; `options` is the ':'-split list, empty entries kept.
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "NpcMenu".
+ */
+export interface NpcMenu {
+  dir: "cs" | "sc";
+  gm_command: boolean;
+  /**
+   * The NPC's block id (the id entity_appear reports).
+   */
+  npc_gid: number;
+  /**
+   * Option N (1-based, what npc_choose sends) is options[N-1]; an empty string is an option the client hides but still counts.
+   */
+  options: string[];
+  packet_id: number;
+  raw_hex: string;
+  server: "login" | "char" | "map";
+  /**
+   * Kernel receive time mapped onto CLOCK_MONOTONIC.
+   */
+  t_mono_ns: number;
+  type: "npc_menu";
+  validation_account: boolean;
+}
+/**
+ * CZ_CHOOSE_MENU (0x00B8): our menu answer.
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "NpcChoose".
+ */
+export interface NpcChoose {
+  cancelled: boolean;
+  /**
+   * 1-based option; 255 = cancel.
+   */
+  choice: number;
+  dir: "cs" | "sc";
+  gm_command: boolean;
+  /**
+   * The NPC's block id (the id entity_appear reports).
+   */
+  npc_gid: number;
+  packet_id: number;
+  server: "login" | "char" | "map";
+  /**
+   * Kernel receive time mapped onto CLOCK_MONOTONIC.
+   */
+  t_mono_ns: number;
+  type: "npc_choose";
+  validation_account: boolean;
+}
+/**
+ * CZ_REQ_NEXT_SCRIPT (0x00B9): we clicked 'next'.
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "NpcNextClick".
+ */
+export interface NpcNextClick {
+  dir: "cs" | "sc";
+  gm_command: boolean;
+  /**
+   * The NPC's block id (the id entity_appear reports).
+   */
+  npc_gid: number;
+  packet_id: number;
+  server: "login" | "char" | "map";
+  /**
+   * Kernel receive time mapped onto CLOCK_MONOTONIC.
+   */
+  t_mono_ns: number;
+  type: "npc_next_click";
+  validation_account: boolean;
+}
+/**
+ * CZ_CLOSE_DIALOG / CZ_REQ_CLOSE_SCRIPT (0x0146): we clicked 'close'.
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "NpcCloseClick".
+ */
+export interface NpcCloseClick {
+  dir: "cs" | "sc";
+  gm_command: boolean;
+  /**
+   * The NPC's block id (the id entity_appear reports).
+   */
+  npc_gid: number;
+  packet_id: number;
+  server: "login" | "char" | "map";
+  /**
+   * Kernel receive time mapped onto CLOCK_MONOTONIC.
+   */
+  t_mono_ns: number;
+  type: "npc_close_click";
+  validation_account: boolean;
+}
+/**
+ * ZC_OPEN_EDITDLG (0x0142): the NPC asks for a number.
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "NpcNumberPrompt".
+ */
+export interface NpcNumberPrompt {
+  dir: "cs" | "sc";
+  gm_command: boolean;
+  /**
+   * The NPC's block id (the id entity_appear reports).
+   */
+  npc_gid: number;
+  packet_id: number;
+  server: "login" | "char" | "map";
+  /**
+   * Kernel receive time mapped onto CLOCK_MONOTONIC.
+   */
+  t_mono_ns: number;
+  type: "npc_number_prompt";
+  validation_account: boolean;
+}
+/**
+ * CZ_INPUT_EDITDLG (0x0143): the number we entered.
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "NpcNumberInput".
+ */
+export interface NpcNumberInput {
+  dir: "cs" | "sc";
+  gm_command: boolean;
+  /**
+   * The NPC's block id (the id entity_appear reports).
+   */
+  npc_gid: number;
+  packet_id: number;
+  server: "login" | "char" | "map";
+  /**
+   * Kernel receive time mapped onto CLOCK_MONOTONIC.
+   */
+  t_mono_ns: number;
+  type: "npc_number_input";
+  validation_account: boolean;
+  value: number;
+}
+/**
+ * ZC_OPEN_EDITDLGSTR (0x01D4): the NPC asks for a text.
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "NpcTextPrompt".
+ */
+export interface NpcTextPrompt {
+  dir: "cs" | "sc";
+  gm_command: boolean;
+  /**
+   * The NPC's block id (the id entity_appear reports).
+   */
+  npc_gid: number;
+  packet_id: number;
+  server: "login" | "char" | "map";
+  /**
+   * Kernel receive time mapped onto CLOCK_MONOTONIC.
+   */
+  t_mono_ns: number;
+  type: "npc_text_prompt";
+  validation_account: boolean;
+}
+/**
+ * CZ_INPUT_EDITDLGSTR (0x01D5): the text we entered, cp874; `raw_hex` keeps the bytes.
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "NpcTextInput".
+ */
+export interface NpcTextInput {
+  dir: "cs" | "sc";
+  gm_command: boolean;
+  /**
+   * The NPC's block id (the id entity_appear reports).
+   */
+  npc_gid: number;
+  packet_id: number;
+  raw_hex: string;
+  server: "login" | "char" | "map";
+  /**
+   * Kernel receive time mapped onto CLOCK_MONOTONIC.
+   */
+  t_mono_ns: number;
+  text: string;
+  type: "npc_text_input";
+  validation_account: boolean;
+}
+/**
+ * ZC_SELECT_DEALTYPE (0x00C4): a shop NPC asks buy or sell.
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "ShopDealPrompt".
+ */
+export interface ShopDealPrompt {
+  dir: "cs" | "sc";
+  gm_command: boolean;
+  /**
+   * The NPC's block id (the id entity_appear reports).
+   */
+  npc_gid: number;
+  packet_id: number;
+  server: "login" | "char" | "map";
+  /**
+   * Kernel receive time mapped onto CLOCK_MONOTONIC.
+   */
+  t_mono_ns: number;
+  type: "shop_deal_prompt";
+  validation_account: boolean;
+}
+/**
+ * CZ_ACK_SELECT_DEALTYPE (0x00C5): our buy/sell answer.
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "ShopDealChoice".
+ */
+export interface ShopDealChoice {
+  /**
+   * 0 = buy, 1 = sell.
+   */
+  deal: number;
+  dir: "cs" | "sc";
+  gm_command: boolean;
+  /**
+   * buy, sell, or typeN for an unknown one.
+   */
+  kind: string;
+  /**
+   * The NPC's block id (the id entity_appear reports).
+   */
+  npc_gid: number;
+  packet_id: number;
+  server: "login" | "char" | "map";
+  /**
+   * Kernel receive time mapped onto CLOCK_MONOTONIC.
+   */
+  t_mono_ns: number;
+  type: "shop_deal_choice";
+  validation_account: boolean;
+}
+/**
+ * ZC_PC_PURCHASE_ITEMLIST (0x0B77 at this PACKETVER): what the shop sells, with prices.
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "ShopBuyList".
+ */
+export interface ShopBuyList {
+  dir: "cs" | "sc";
+  gm_command: boolean;
+  items: ShopBuyListItem[];
+  packet_id: number;
+  server: "login" | "char" | "map";
+  /**
+   * Kernel receive time mapped onto CLOCK_MONOTONIC.
+   */
+  t_mono_ns: number;
+  type: "shop_buy_list";
+  validation_account: boolean;
+}
+/**
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "ShopBuyListItem".
+ */
+export interface ShopBuyListItem {
+  discount_price: number;
+  item_id: number;
+  item_type: number;
+  price: number;
+}
+/**
+ * CZ_PC_PURCHASE_ITEMLIST (0x00C8): what we buy.
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "ShopBuyRequest".
+ */
+export interface ShopBuyRequest {
+  dir: "cs" | "sc";
+  gm_command: boolean;
+  items: ShopBuyRequestItem[];
+  packet_id: number;
+  server: "login" | "char" | "map";
+  /**
+   * Kernel receive time mapped onto CLOCK_MONOTONIC.
+   */
+  t_mono_ns: number;
+  type: "shop_buy_request";
+  validation_account: boolean;
+}
+/**
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "ShopBuyRequestItem".
+ */
+export interface ShopBuyRequestItem {
+  amount: number;
+  item_id: number;
+}
+/**
+ * ZC_PC_PURCHASE_RESULT (0x00CA): 0 = the deal completed; 1 = not enough zeny, 2 = over the
+ * weight limit, 3 = too many items (rAthena e_purchase_result). Zeny itself arrives as a
+ * stat_change (var 20).
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "ShopBuyResult".
+ */
+export interface ShopBuyResult {
+  dir: "cs" | "sc";
+  gm_command: boolean;
+  ok: boolean;
+  packet_id: number;
+  result: number;
+  server: "login" | "char" | "map";
+  /**
+   * Kernel receive time mapped onto CLOCK_MONOTONIC.
+   */
+  t_mono_ns: number;
+  type: "shop_buy_result";
+  validation_account: boolean;
+}
+/**
+ * ZC_PC_SELL_ITEMLIST (0x00C7): what of ours the shop would buy.
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "ShopSellList".
+ */
+export interface ShopSellList {
+  dir: "cs" | "sc";
+  gm_command: boolean;
+  items: ShopSellListItem[];
+  packet_id: number;
+  server: "login" | "char" | "map";
+  /**
+   * Kernel receive time mapped onto CLOCK_MONOTONIC.
+   */
+  t_mono_ns: number;
+  type: "shop_sell_list";
+  validation_account: boolean;
+}
+/**
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "ShopSellListItem".
+ */
+export interface ShopSellListItem {
+  /**
+   * The client's inventory index.
+   */
+  index: number;
+  /**
+   * The price after our Overcharge skill.
+   */
+  overcharge: number;
+  price: number;
+}
+/**
+ * CZ_PC_SELL_ITEMLIST (0x00C9): what we sell.
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "ShopSellRequest".
+ */
+export interface ShopSellRequest {
+  dir: "cs" | "sc";
+  gm_command: boolean;
+  items: ShopSellRequestItem[];
+  packet_id: number;
+  server: "login" | "char" | "map";
+  /**
+   * Kernel receive time mapped onto CLOCK_MONOTONIC.
+   */
+  t_mono_ns: number;
+  type: "shop_sell_request";
+  validation_account: boolean;
+}
+/**
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "ShopSellRequestItem".
+ */
+export interface ShopSellRequestItem {
+  amount: number;
+  /**
+   * The client's inventory index.
+   */
+  index: number;
+}
+/**
+ * ZC_PC_SELL_RESULT (0x00CB): 0 = the deal completed, 1 = it failed.
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "ShopSellResult".
+ */
+export interface ShopSellResult {
+  dir: "cs" | "sc";
+  gm_command: boolean;
+  ok: boolean;
+  packet_id: number;
+  result: number;
+  server: "login" | "char" | "map";
+  /**
+   * Kernel receive time mapped onto CLOCK_MONOTONIC.
+   */
+  t_mono_ns: number;
+  type: "shop_sell_result";
+  validation_account: boolean;
+}
+/**
+ * CZ_STATUS_CHANGE (0x00BB): raise a base stat (13-18 = str, agi, vit, int, dex, luk).
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "StatRaiseRequest".
+ */
+export interface StatRaiseRequest {
+  amount: number;
+  dir: "cs" | "sc";
+  gm_command: boolean;
+  name: string;
+  packet_id: number;
+  server: "login" | "char" | "map";
+  stat: number;
+  /**
+   * Kernel receive time mapped onto CLOCK_MONOTONIC.
+   */
+  t_mono_ns: number;
+  type: "stat_raise_request";
+  validation_account: boolean;
+}
+/**
+ * ZC_STATUS_CHANGE_ACK (0x00BC): the raise's outcome and the stat's new value (capped at
+ * 255). The status points left arrive as a stat_change (var 9).
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "StatRaiseResult".
+ */
+export interface StatRaiseResult {
+  dir: "cs" | "sc";
+  gm_command: boolean;
+  name: string;
+  ok: boolean;
+  packet_id: number;
+  server: "login" | "char" | "map";
+  stat: number;
+  /**
+   * Kernel receive time mapped onto CLOCK_MONOTONIC.
+   */
+  t_mono_ns: number;
+  type: "stat_raise_result";
+  validation_account: boolean;
+  value: number;
+}
+/**
+ * CZ_UPGRADE_SKILLLEVEL (0x0112): raise a skill's level.
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "SkillUpRequest".
+ */
+export interface SkillUpRequest {
+  dir: "cs" | "sc";
+  gm_command: boolean;
+  packet_id: number;
+  server: "login" | "char" | "map";
+  skill_id: number;
+  /**
+   * Kernel receive time mapped onto CLOCK_MONOTONIC.
+   */
+  t_mono_ns: number;
+  type: "skill_up_request";
+  validation_account: boolean;
+}
+/**
+ * ZC_SKILLINFO_UPDATE (0x010E): a skill's new level (sent after a raise; the skill points
+ * left arrive as a stat_change, var 12).
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "SkillUpdate".
+ */
+export interface SkillUpdate {
+  dir: "cs" | "sc";
+  gm_command: boolean;
+  level: number;
+  packet_id: number;
+  range: number;
+  server: "login" | "char" | "map";
+  skill_id: number;
+  /**
+   * Its SP cost at this level.
+   */
+  sp: number;
+  /**
+   * Kernel receive time mapped onto CLOCK_MONOTONIC.
+   */
+  t_mono_ns: number;
+  type: "skill_update";
+  upgradable: boolean;
+  validation_account: boolean;
+}
+/**
+ * ZC_SKILLINFO_LIST (0x0B32 at this PACKETVER): the whole skill tree.
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "SkillList".
+ */
+export interface SkillList {
+  dir: "cs" | "sc";
+  gm_command: boolean;
+  packet_id: number;
+  server: "login" | "char" | "map";
+  skills: SkillEntry[];
+  /**
+   * Kernel receive time mapped onto CLOCK_MONOTONIC.
+   */
+  t_mono_ns: number;
+  type: "skill_list";
+  validation_account: boolean;
+}
+/**
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "SkillEntry".
+ */
+export interface SkillEntry {
+  level: number;
+  range: number;
+  skill_id: number;
+  sp: number;
+  upgradable: boolean;
+}
+/**
+ * CZ_REQ_WEAR_EQUIP (0x0998): wear an item at `location` (rAthena EQP_* bits).
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "EquipRequest".
+ */
+export interface EquipRequest {
+  dir: "cs" | "sc";
+  gm_command: boolean;
+  /**
+   * The client's inventory index.
+   */
+  index: number;
+  location: number;
+  packet_id: number;
+  server: "login" | "char" | "map";
+  /**
+   * Kernel receive time mapped onto CLOCK_MONOTONIC.
+   */
+  t_mono_ns: number;
+  type: "equip_request";
+  validation_account: boolean;
+}
+/**
+ * ZC_REQ_WEAR_EQUIP_ACK (0x0999): 0 = worn, 1 = level too low, 2 = failed.
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "EquipResult".
+ */
+export interface EquipResult {
+  dir: "cs" | "sc";
+  gm_command: boolean;
+  /**
+   * The client's inventory index.
+   */
+  index: number;
+  location: number;
+  ok: boolean;
+  packet_id: number;
+  result: number;
+  server: "login" | "char" | "map";
+  /**
+   * Kernel receive time mapped onto CLOCK_MONOTONIC.
+   */
+  t_mono_ns: number;
+  type: "equip_result";
+  validation_account: boolean;
+  view_sprite: number;
+}
+/**
+ * CZ_REQ_TAKEOFF_EQUIP (0x00AB): take an item off.
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "UnequipRequest".
+ */
+export interface UnequipRequest {
+  dir: "cs" | "sc";
+  gm_command: boolean;
+  /**
+   * The client's inventory index.
+   */
+  index: number;
+  packet_id: number;
+  server: "login" | "char" | "map";
+  /**
+   * Kernel receive time mapped onto CLOCK_MONOTONIC.
+   */
+  t_mono_ns: number;
+  type: "unequip_request";
+  validation_account: boolean;
+}
+/**
+ * ZC_REQ_TAKEOFF_EQUIP_ACK (0x099A): 0 = taken off (inverted at this PACKETVER).
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "UnequipResult".
+ */
+export interface UnequipResult {
+  dir: "cs" | "sc";
+  gm_command: boolean;
+  /**
+   * The client's inventory index.
+   */
+  index: number;
+  location: number;
+  ok: boolean;
+  packet_id: number;
+  result: number;
+  server: "login" | "char" | "map";
+  /**
+   * Kernel receive time mapped onto CLOCK_MONOTONIC.
+   */
+  t_mono_ns: number;
+  type: "unequip_result";
+  validation_account: boolean;
+}
+/**
+ * CZ_USE_ITEM2 (0x0439): use an item.
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "UseItemRequest".
+ */
+export interface UseItemRequest {
+  /**
+   * The account id the client sends with it (its own).
+   */
+  aid: number;
+  dir: "cs" | "sc";
+  gm_command: boolean;
+  /**
+   * The client's inventory index.
+   */
+  index: number;
+  packet_id: number;
+  server: "login" | "char" | "map";
+  /**
+   * Kernel receive time mapped onto CLOCK_MONOTONIC.
+   */
+  t_mono_ns: number;
+  type: "use_item_request";
+  validation_account: boolean;
+}
+/**
+ * ZC_USE_ITEM_ACK2 (0x01C8): an item use's outcome. A success is sent to the whole area,
+ * so `aid` says whose it was.
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "UseItemResult".
+ */
+export interface UseItemResult {
+  aid: number;
+  /**
+   * How many are left.
+   */
+  amount: number;
+  dir: "cs" | "sc";
+  gm_command: boolean;
+  /**
+   * The client's inventory index.
+   */
+  index: number;
+  item_id: number;
+  ok: boolean;
+  packet_id: number;
+  server: "login" | "char" | "map";
+  /**
+   * Kernel receive time mapped onto CLOCK_MONOTONIC.
+   */
+  t_mono_ns: number;
+  type: "use_item_result";
+  validation_account: boolean;
+}
+/**
+ * CZ_REQUEST_ACT2 (0x0437): an action on a unit -- an attack click (action 0 once, 7 keep
+ * attacking), or sit (2) / stand (3) with no target. A walk click is a self_move_request.
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "AttackRequest".
+ */
+export interface AttackRequest {
+  /**
+   * rAthena e_damage_type, as ZC_NOTIFY_ACT.
+   */
+  action: number;
+  dir: "cs" | "sc";
+  gm_command: boolean;
+  /**
+   * action is 0 or 7.
+   */
+  is_attack: boolean;
+  /**
+   * The action's name (decode.ACT_KINDS): normal, repeat, sit, ...
+   */
+  kind: string;
+  packet_id: number;
+  server: "login" | "char" | "map";
+  /**
+   * Kernel receive time mapped onto CLOCK_MONOTONIC.
+   */
+  t_mono_ns: number;
+  /**
+   * The target's block id (0 for sit/stand).
+   */
+  target_gid: number;
+  type: "attack_request";
   validation_account: boolean;
 }
 /**

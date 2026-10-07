@@ -93,3 +93,25 @@ test("actions and turns are entity events with a readable line (M3)", () => {
   assert.equal(kindOf(turn), "entity");
   assert.equal(describe(turn), "turn #7 → 6");
 });
+
+test("NPC, shop, stat and attack-click events get a kind and a line (2026-10-07, replay only)", () => {
+  const ev = (type: string, fields: object, dir: "cs" | "sc" = "sc") =>
+    ({ ...base, dir, t_mono_ns: 1, packet_id: 1, type, ...fields }) as PacketEvent;
+  const menu = ev("npc_menu", { npc_gid: 9, options: ["a", "", "c"], raw_hex: "" });
+  assert.equal(kindOf(menu), "session");
+  assert.equal(describe(menu), "NPC #9 menu: 1) a · 2)  · 3) c");
+  const choose = ev("npc_choose", { npc_gid: 9, choice: 255, cancelled: true }, "cs");
+  assert.equal(kindOf(choose), "self");
+  assert.equal(describe(choose), "NPC #9 menu cancelled");
+  const click = ev("attack_request", { target_gid: 7, action: 7, kind: "repeat", is_attack: true }, "cs");
+  assert.equal(kindOf(click), "self");
+  assert.equal(describe(click), "attack click #7 (keep attacking)");
+  const sit = ev("attack_request", { target_gid: 0, action: 2, kind: "sit", is_attack: false }, "cs");
+  assert.equal(describe(sit), "action request sit");
+  assert.equal(describe(ev("shop_buy_result", { result: 1, ok: false })), "buy result 1: no deal");
+  const raised = ev("stat_raise_result", { stat: 13, name: "str", ok: true, value: 2 });
+  assert.equal(kindOf(raised), "stat");
+  assert.equal(describe(raised), "str raised to 2");
+  const buy = ev("shop_buy_request", { items: [{ item_id: 9001, amount: 3 }] }, "cs");
+  assert.equal(describe(buy), "buy 3× item 9001");
+});
