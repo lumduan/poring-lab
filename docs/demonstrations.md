@@ -783,6 +783,50 @@ input.
 >   3. A chat input that will not open is a no-fix for that attempt, not a crash.
 > - The seed, n and the bar are unchanged.
 
+### 3.15 where@2, indoor AND outdoor (pre-registered 2026-10-07 ~22:35, BEFORE its runs; Batt's overnight plan, step 1)
+**What changed from where@1, and why** (design time, from where@1's result and 20 kept diagnosis
+crops):
+1. **Colour.** Over a bright scene behind the semi-transparent chat window, the codec shifts glyph
+   pixels to e.g. (255,255,68) or (240,249,65), outside where@1's strict window. Whole rows went
+   missing: the 11 unparsed.
+   - The line is now LOCATED by the strict colour (clean of background: its rows, and where the
+     text ends).
+   - It is READ with a YELLOWISH mask (R > 170, G > 170, B < R − 70).
+   - The yellowish mask alone merged background into a 55-row "line"; that was seen and fixed at
+     design time.
+2. **Glyphs.** Each glyph is cropped to its own ink box, so vertical position never matters.
+   - It is matched to the NEAREST template: at most 4 px different, and at least 4 px clearer than
+     the second nearest.
+   - The templates are the per-pixel MAJORITY of 8 stable design lines.
+3. **Structure.** The number must follow the colon's SPACE (≥ 3 empty columns): digits, ONE comma,
+   digits. A glyph that fails can never shorten a number; that was where@1's one WRONG, 109 read
+   as 9.
+4. **Out-of-sample check** (the 20 diagnosis crops, never used to cut): **20 / 20 correct, 0 wrong.**
+   where@1's reader got 18 of the same 20.
+5. **The plausibility gates** (Batt), in `where_fix.fix_v2`:
+   - **two consecutive fresh reads** that **agree** (each with the stale guard);
+   - inside the map; on a GAT-**walkable** cell;
+   - within **6 cells** of the rule's own dead-reckoned belief;
+   - up to **3** tries; otherwise no fix, never a guess.
+   - Every rejection is logged by its gate.
+
+**The harness** (`where_run.py --version 2`), per attempt:
+1. `@killmonster2`;
+2. a seeded `@warp` within ±8 of the scene's spot;
+3. a seeded click on a GAT-walkable cell 3–8 cells away, inside the UI-free box;
+4. **the belief = the warp cell + the click offset** (the rule's own dead reckoning);
+5. the fix.
+- **Indoor:** prt_church, seed **20261021**. **Outdoor:** prt_fild08, seed **20261022**.
+- 56 attempts each; the first 50 not interrupted are scored.
+
+**Scoring:** against the packets' position at the read time: correct, **WRONG** (the dangerous
+class, reported apart), no fix (unresolved).
+
+**The bar, per scene:** correct ≥ **48 / 50** AND **WRONG = 0**.
+- Reported: gate rejections by gate, time per fix, and where@1 / relocalise@2 for comparison.
+- **The normal account** (2000001): a separate, unscored confirmation that `/where` prints the same
+  line for a non-GM character.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.

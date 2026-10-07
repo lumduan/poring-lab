@@ -26,7 +26,8 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ro_agent as r  # noqa: E402
 
-TEMPLATES = r.ROOT / "data/where/chat_glyphs_rdp.npz"
+TEMPLATES = r.ROOT / "data/where/chat_glyphs_rdp.npz"  # where@1 (strict colour, exact match)
+TEMPLATES_V2 = r.ROOT / "data/where/chat_glyphs_rdp_v2.npz"  # where@2 (yellowish, majority)
 CHAT_AREA = (0, 545, 640, 600)  # client px (x0, y0, x1, y1): the message area, frozen layout
 YELLOW = np.array([104, 252, 255])  # BGR
 COLOUR_TOL = 24
@@ -37,6 +38,16 @@ STABLE_POLL_S, STABLE_MAX_S = 0.25, 4.0  # RDP progressive refines over frames: 
 
 def text_mask(area_bgr: Any) -> Any:
     return np.abs(np.asarray(area_bgr)[..., :3].astype(int) - YELLOW).max(-1) <= COLOUR_TOL
+
+
+def text_mask_v2(area_bgr: Any) -> Any:
+    """where@2: YELLOWISH, not one colour. Over a bright scene behind the semi-transparent chat
+    window the codec shifts the text to e.g. (255,255,68) or (240,249,65) -- whole rows of glyph
+    pixels fell outside the strict window (where@1's 11 unparsed) -- while the darkened background
+    stays near (151,127,110) (diagnosis, 2026-10-07 22:30)."""
+    a = np.asarray(area_bgr)[..., :3].astype(int)
+    b, g, red = a[..., 0], a[..., 1], a[..., 2]
+    return (red > 170) & (g > 170) & (b < red - 70)
 
 
 def newest_line(mask: Any) -> Any | None:
@@ -88,6 +99,164 @@ def parse(area_bgr: Any, templates: dict[str, Any]) -> tuple[int, int] | None:
     if not (a.isdigit() and b.isdigit() and 0 < len(a) <= 3 and 0 < len(b) <= 3):
         return None
     return int(a), int(b)
+
+
+MATCH_MAX_D, MATCH_MARGIN = 4, 4  # where@2: nearest template, at most 4 px off, 4 px clear
+SPACE_COLS = 3  # the space between ':' and X: at least this many empty columns
+PLAUSIBLE_CELLS = 6  # a fix farther than this from the dead-reckoned belief is rejected
+FIX_TRIES = 3  # pairs of /where reads before giving up (no fix, never a guess)
+
+
+def newest_line_v2(area_bgr: Any) -> Any | None:
+    """The newest line for where@2: LOCATED by the strict colour (clean of background: its rows and
+    where the text ends), READ with the yellowish mask (which restores the glyph pixels a bright
+    scene behind the chat window shifted). The yellowish mask alone let scattered background
+    pixels merge every row into one 55-row "line" and put a blob after the text (22:40)."""
+    strict = text_mask(area_bgr)
+    rows = np.nonzero(strict.sum(1))[0]
+    if len(rows) == 0:
+        return None
+    bottom = int(rows[-1])
+    top = max(0, bottom - LINE_PITCH + 2)
+    cols = np.nonzero(strict[top : bottom + 1].any(0))[0]
+    band = text_mask_v2(area_bgr)[max(0, top - 1) : bottom + 2]
+    out = np.zeros_like(band)
+    out[:, : int(cols[-1]) + 2] = band[:, : int(cols[-1]) + 2]
+    return out
+
+
+def ink_box(g: Any) -> Any:
+    """A glyph cropped to its own ink rows: vertical position never matters."""
+    rows = np.nonzero(g.any(1))[0]
+    return g[rows[0] : rows[-1] + 1] if len(rows) else g
+
+
+def runs(line: Any) -> list[tuple[int, int]]:
+    """(start, end) column runs of ink, specks under 3 px dropped."""
+    cols = line.any(0)
+    out, start = [], None
+    for x, on in enumerate([*cols, False]):
+        if on and start is None:
+            start = x
+        elif not on and start is not None:
+            if int(line[:, start:x].sum()) >= 3:
+                out.append((start, x))
+            start = None
+    return out
+
+
+def match_v2(g: Any, templates: dict[str, Any]) -> str | None:
+    """The nearest template by Hamming distance (both padded to the wider), if it is within
+    MATCH_MAX_D and at least MATCH_MARGIN closer than the second nearest."""
+    g = ink_box(g)
+    ds = []
+    for ch, t in templates.items():
+        h, w = max(t.shape[0], g.shape[0]), max(t.shape[1], g.shape[1])
+        a = np.zeros((h, w), bool)
+        b = np.zeros((h, w), bool)
+        a[: g.shape[0], : g.shape[1]] = g
+        b[: t.shape[0], : t.shape[1]] = t
+        ds.append((int((a != b).sum()), ch))
+    ds.sort()
+    if ds[0][0] <= MATCH_MAX_D and (len(ds) < 2 or ds[1][0] - ds[0][0] >= MATCH_MARGIN):
+        return ds[0][1]
+    return None
+
+
+def parse_v2(area_bgr: Any, templates: dict[str, Any]) -> tuple[int, int] | None:
+    """(X, Y) from the newest line: from the right, digits, ONE comma, digits, and then a SPACE
+    (>= SPACE_COLS empty columns) before X -- a glyph that fails to match can never shorten a
+    number (where@1's 109 -> 9)."""
+    line = newest_line_v2(area_bgr)
+    if line is None:
+        return None
+    rs = runs(line)
+    text: list[str] = []
+    for k in range(len(rs) - 1, -1, -1):
+        ch = match_v2(line[:, rs[k][0] : rs[k][1]], templates)
+        if ch is None:
+            return None  # an unreadable glyph inside "X, Y" (or right after it): no fix
+        text.append(ch)
+        s = "".join(reversed(text))
+        if s.count(",") == 1 and s[0] != "," and k > 0 and rs[k][0] - rs[k - 1][1] >= SPACE_COLS:
+            a, b = s.split(",")
+            if a.isdigit() and b.isdigit() and 0 < len(a) <= 3 and 0 < len(b) <= 3:
+                return int(a), int(b)
+            return None
+        if len(text) > 8:
+            return None
+    return None
+
+
+def fix_v2(agent: Any, screen: Any, templates: dict[str, Any], belief: tuple[int, int],
+           walkable: Any) -> dict[str, Any]:  # fmt: skip
+    """where@2: TWO consecutive /where reads that agree, each fresh (the stale guard), inside the
+    map, on a GAT-walkable cell, within PLAUSIBLE_CELLS of the dead-reckoned belief. Up to
+    FIX_TRIES pairs; otherwise no fix. Every rejection is logged by its gate."""
+    rejects: list[str] = []
+    for _ in range(FIX_TRIES):
+        reads = []
+        for _ in range(2):
+            r.activate_client(agent, screen)
+            before = text_mask_v2(stable_area(screen))
+            try:
+                r.chat_line(agent, screen, "/where")
+            except r.Stop as exc:
+                rejects.append(f"chat: {exc}")
+                break
+            time.sleep(SETTLE_S)
+            area = stable_area(screen)
+            if bool((text_mask_v2(area) == before).all()):
+                rejects.append("stale")
+                break
+            reads.append(parse_v2(area, templates))
+        if len(reads) < 2:
+            continue
+        a, b = reads
+        if a is None or b is None:
+            rejects.append("unparsed")
+            continue
+        if a != b:
+            rejects.append("disagree")
+            continue
+        x, y = a
+        if not (0 <= y < walkable.shape[0] and 0 <= x < walkable.shape[1]):
+            rejects.append("off_map")
+            continue
+        if not walkable[y, x]:
+            rejects.append("not_walkable")
+            continue
+        if max(abs(x - belief[0]), abs(y - belief[1])) > PLAUSIBLE_CELLS:
+            rejects.append("implausible")
+            continue
+        return {"xy": (x, y), "rejects": rejects, "t": r.ns()}
+    return {"xy": None, "rejects": rejects, "t": r.ns()}
+
+
+def cut_v2(labels: Path) -> int:
+    """Design time: where@2 templates under the yellowish mask, the per-pixel MAJORITY of every
+    instance of each glyph (labels.json as for cut)."""
+    inst: dict[str, list[Any]] = {}
+    for row in json.loads(labels.read_text()):
+        line = newest_line_v2(np.load(row["npy"]))
+        assert line is not None, row
+        rs = runs(line)
+        text = f"{row['x']},{row['y']}"
+        for ch, (a, b) in zip(text, rs[-len(text) :], strict=True):
+            inst.setdefault(ch, []).append(ink_box(line[:, a:b]))
+    out = {}
+    for ch, gs in inst.items():
+        h, w = max(g.shape[0] for g in gs), max(g.shape[1] for g in gs)
+        stack = np.zeros((len(gs), h, w), bool)
+        for i, g in enumerate(gs):
+            stack[i, : g.shape[0], : g.shape[1]] = g
+        maj = stack.mean(0) >= 0.5
+        out[ch] = ink_box(maj)[:, : int(np.nonzero(maj.any(0))[0][-1]) + 1].astype(np.uint8)
+    TEMPLATES_V2.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(TEMPLATES_V2, **out)
+    print(json.dumps({"templates": sorted(out), "instances": {k: len(v) for k, v in inst.items()},
+                      "out": str(TEMPLATES_V2)}))  # fmt: skip
+    return 0
 
 
 def load_templates(path: Path = TEMPLATES) -> dict[str, Any]:
@@ -158,4 +327,6 @@ def cut(labels: Path) -> int:
 if __name__ == "__main__":
     if len(sys.argv) == 3 and sys.argv[1] == "cut":
         sys.exit(cut(Path(sys.argv[2])))
+    if len(sys.argv) == 3 and sys.argv[1] == "cut-v2":
+        sys.exit(cut_v2(Path(sys.argv[2])))
     raise SystemExit(__doc__)

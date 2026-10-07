@@ -85,3 +85,67 @@ def test_a_missing_answer_is_no_fix_never_the_previous_line(
     monkeypatch.setattr(wf.r, "chat_line", refuse)
     got = wf.fix(None, None, t)
     assert got["xy"] is None and got["why"].startswith("chat:")
+
+
+# --- where@2 ------------------------------------------------------------------------------------
+
+
+def v2_templates(wf: ModuleType) -> dict[str, np.ndarray]:
+    g = glyph_set()
+    return {k: wf.ink_box(v) for k, v in g.items() if k in "0123456789,"}
+
+
+def test_v2_reads_the_number_after_the_colon_s_space(wf: ModuleType) -> None:
+    assert wf.parse_v2(render("(x) : 104, 122", glyph_set(), wf), v2_templates(wf)) == (104, 122)
+
+
+def test_v2_never_shortens_a_number_when_a_digit_fails(wf: ModuleType) -> None:
+    """where@1's WRONG: 109 read as 9 -- the leading digits failed and the parser kept the rest."""
+    t = v2_templates(wf)
+    del t["1"]  # the leading 1 of 104 (and of 122) cannot be read
+    assert wf.parse_v2(render("(x) : 104, 122", glyph_set(), wf), t) is None
+
+
+@pytest.mark.parametrize(
+    ("reads", "belief", "why"),
+    [
+        ([(10, 12), (10, 13)] * 3, (10, 12), "disagree"),
+        ([(30, 30), (30, 30)] * 3, (10, 12), "implausible"),
+        ([(10, 11), (10, 11)] * 3, (10, 12), "not_walkable"),
+        ([None, None] * 3, (10, 12), "unparsed"),
+    ],
+)
+def test_v2_gates_reject_and_never_guess(
+    wf: ModuleType, monkeypatch: pytest.MonkeyPatch, reads: list, belief: tuple, why: str
+) -> None:
+    walk = np.ones((40, 40), dtype=bool)
+    walk[11, 10] = False
+    it = iter(reads)
+    frames = iter(range(1000))
+    monkeypatch.setattr(wf.time, "sleep", lambda s: None)
+    monkeypatch.setattr(wf.r, "activate_client", lambda a, s: None)
+    monkeypatch.setattr(wf.r, "ns", lambda: 0)
+    monkeypatch.setattr(wf.r, "chat_line", lambda a, s, text: None)
+    monkeypatch.setattr(wf, "stable_area", lambda screen: np.full((55, 640, 3), next(frames) % 255,
+                                                                   np.uint8))  # fmt: skip
+    monkeypatch.setattr(wf, "text_mask_v2", lambda a: a[..., 0] % 2 == 1)  # every grab is "new"
+    monkeypatch.setattr(wf, "parse_v2", lambda a, t: next(it))
+    got = wf.fix_v2(None, None, {}, belief, walk)
+    assert got["xy"] is None and why in got["rejects"], got
+
+
+def test_v2_accepts_two_agreeing_plausible_reads(
+    wf: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    walk = np.ones((40, 40), dtype=bool)
+    it = iter([(11, 13), (11, 13)])
+    frames = iter(range(1000))
+    monkeypatch.setattr(wf.time, "sleep", lambda s: None)
+    monkeypatch.setattr(wf.r, "activate_client", lambda a, s: None)
+    monkeypatch.setattr(wf.r, "ns", lambda: 0)
+    monkeypatch.setattr(wf.r, "chat_line", lambda a, s, text: None)
+    monkeypatch.setattr(wf, "stable_area", lambda screen: np.full((55, 640, 3), next(frames) % 255,
+                                                                   np.uint8))  # fmt: skip
+    monkeypatch.setattr(wf, "text_mask_v2", lambda a: a[..., 0] % 2 == 1)
+    monkeypatch.setattr(wf, "parse_v2", lambda a, t: next(it))
+    assert wf.fix_v2(None, None, {}, (10, 12), walk)["xy"] == (11, 13)

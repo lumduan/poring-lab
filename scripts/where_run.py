@@ -2,6 +2,7 @@
 """where@1 (docs/demonstrations.md 3.13): the /where position fix ALONE, against the packets.
 
     where_run.py [--n 56] [--seed 20261020] [--label where-alone]
+    where_run.py --version 2 --scene indoor|outdoor --seed S [--n 56]     (where@2, 3.15)
     where_run.py --score SESSION_DIR
 
 Per attempt (prt_church, the indoor map every re-localisation test used):
@@ -38,6 +39,8 @@ import where_fix as wf  # noqa: E402
 from poring_env.demo import Action, DemoLog, DemoRecord, Intended, new_session_id  # noqa: E402
 
 WHERE_RULE = "where@1"
+RULES = {1: "where@1", 2: "where@2"}
+SCENES = {"indoor": ("prt_church", 104, 122, True), "outdoor": ("prt_fild08", 268, 107, False)}
 GM_AID = 2000002
 WALK_WAIT_S = 3.0
 SAFE = (300, 200, 980, 520)  # client px (x0, y0, x1, y1): the harness's blind walk click
@@ -53,7 +56,7 @@ def score(session: Path) -> dict[str, Any]:
     marks = json.loads(marks_path.read_text()) if marks_path.exists() else {}
     rows = []
     for rec in recs:
-        if rec.get("rule") != WHERE_RULE:
+        if rec.get("rule") not in RULES.values():
             continue
         ev = rec["outcome"]["evidence"]
         true = V.position_before(events, ev["t_read"], GM_AID)
@@ -67,38 +70,44 @@ def score(session: Path) -> dict[str, Any]:
         else:
             status = "correct" if tuple(got) == tuple(true) else "wrong"
         rows.append({"i": ev["attempt"], "status": status, "true": true, "read": got,
-                     "warp": ev["warp_cell"]})  # fmt: skip
+                     "warp": ev["warp_cell"], "rejects": ev.get("rejects", [])})  # fmt: skip
     scored = [x for x in rows if x["status"] != "interrupted"][:50]
+    gates = Counter(g.split(":")[0] for x in scored for g in x["rejects"])
     return {"attempts": len(rows), "scored": dict(Counter(x["status"] for x in scored)),
             "interrupted": sum(x["status"] == "interrupted" for x in rows),
+            "gate_rejections": dict(gates),
             "wrong": [x for x in scored if x["status"] == "wrong"], "rows": rows}  # fmt: skip
 
 
-def run(n: int, seed: int, label: str) -> int:
+def run(n: int, seed: int, label: str, version: int = 1, scene: str = "indoor") -> int:
     import bench
 
     from poring_dataset import camera as cam
     from poring_dataset import gat as gatmod
 
-    templates = wf.load_templates()
-    mapname, sx0, sy0 = rr.SCENES["indoor"]
+    rule = RULES[version]
+    templates = wf.load_templates(wf.TEMPLATES if version == 1 else wf.TEMPLATES_V2)
+    mapname, sx0, sy0, indoor = SCENES[scene]
     gat = gatmod.parse((cam.GAT_DIR / f"{mapname}.gat").read_bytes())
     walk = gat.walkable()
     cj = json.loads((r.ROOT / "packages/poring_dataset/src/poring_dataset/camera_rdp.json")
                     .read_text())  # fmt: skip
     base = cam.camera_from_json(cj["camera"])
-    camera = cam.camera_for_map(base, True, cj["indoor"]["yaw_deg"], cj["indoor"]["distance"])
+    camera = (cam.camera_for_map(base, True, cj["indoor"]["yaw_deg"], cj["indoor"]["distance"])
+              if indoor else base)  # fmt: skip
     rng = random.Random(seed)
-    sid = new_session_id(f"{label}-indoor")
+    sid = new_session_id(f"{label}-{scene}")
     log = DemoLog(sid)
     lock = record_session.read_lock(r.ROOT / "state")
-    log.start(backend=str(lock.backend), lock_seq=lock.seq, server="lab-rathena", rule=WHERE_RULE,
-              n=n, scene="indoor", seed=seed, account="gm")  # fmt: skip
-    print(json.dumps({"session": sid, "rule": WHERE_RULE}), flush=True)
+    log.start(backend=str(lock.backend), lock_seq=lock.seq, server="lab-rathena", rule=rule,
+              n=n, scene=scene, seed=seed, account="gm", version=version)  # fmt: skip
+    print(json.dumps({"session": sid, "rule": rule}), flush=True)
     t_first = r.ns()
-    with r.session(f"rule:{WHERE_RULE}") as (agent, screen):
+    with r.session(f"rule:{rule}") as (agent, screen):
         r.gm(agent, screen, "@killmonster2")
         for i in range(n):
+            if version == 2:
+                r.gm(agent, screen, "@killmonster2")  # the field's own monsters, every attempt
             for _ in range(200):  # the HARNESS: a seeded known cell ...
                 sx, sy = sx0 + rng.randint(-8, 8), sy0 + rng.randint(-8, 8)
                 if walk[sy, sx]:
@@ -125,17 +134,20 @@ def run(n: int, seed: int, label: str) -> int:
             agent.click(gx + round(u), gy + round(v))
             time.sleep(WALK_WAIT_S)
             t0 = r.ns()
-            got = wf.fix(agent, screen, templates)  # the RULE
+            belief = (sx + d[0], sy + d[1])  # the rule's own dead reckoning: where it clicked to go
+            got = (wf.fix(agent, screen, templates) if version == 1
+                   else wf.fix_v2(agent, screen, templates, belief, walk))  # the RULE  # fmt: skip
             log.append(DemoRecord(
-                session=sid, actor=f"rule:{WHERE_RULE}", t_mono_ns=t0, t_done_ns=r.ns(),
-                rule=WHERE_RULE, scene=f"indoor:{mapname}",
-                cue="where@1: /where, the stable newest chat line, the chat-font templates",
+                session=sid, actor=f"rule:{rule}", t_mono_ns=t0, t_done_ns=r.ns(),
+                rule=rule, scene=f"{scene}:{mapname}",
+                cue=f"{rule}: /where, the stable newest chat line, the chat-font templates",
                 action=Action(type="other", intended=Intended(
                     kind="cell", cell=got["xy"] or (sx, sy), relative=False,
                     note=f"attempt {i}: the fix read")),
                 outcome={"status": "pending", "evidence": {  # type: ignore[arg-type]
                     "attempt": i, "warp_cell": [sx, sy], "click_rel": list(d),
                     "xy": list(got["xy"]) if got["xy"] else None, "why": got.get("why"),
+                    "rejects": got.get("rejects", []), "belief": list(belief),
                     "t_read": got["t"]}},
             ))  # fmt: skip
             print(json.dumps({"attempt": i, "warp": [sx, sy], "click_rel": list(d),
@@ -156,13 +168,16 @@ def main() -> int:
     ap.add_argument("--seed", type=int, default=20261020)
     ap.add_argument("--label", default="where-alone")
     ap.add_argument("--score", type=Path)
+    ap.add_argument("--version", type=int, choices=(1, 2), default=1)
+    ap.add_argument("--scene", choices=sorted(SCENES), default="indoor")
     a = ap.parse_args()
     if a.score is not None:
         print(json.dumps(score(a.score), indent=1))
         return 0
-    if not wf.TEMPLATES.exists():
-        raise SystemExit(f"{wf.TEMPLATES} missing: where_fix.py cut (design time)")
-    return run(a.n, a.seed, a.label)
+    need = wf.TEMPLATES if a.version == 1 else wf.TEMPLATES_V2
+    if not need.exists():
+        raise SystemExit(f"{need} missing: where_fix.py cut / cut-v2 (design time)")
+    return run(a.n, a.seed, a.label, a.version, a.scene)
 
 
 if __name__ == "__main__":
