@@ -10,16 +10,29 @@ build:
   renewal: false
   locales: [en]
 shortcut:
+  # status: unverified -> demonstrated (a logged demonstration, the window seen on its snapshots:
+  # 20261007T124649-demo-shortcuts, record #NN) -> verified (open_window@1's alone-test passes).
   window:
     # paced chords (ro_agent CHORD_STEP_S, 60 ms); one instantaneous batch is ignored by the client
-    status: {keys: [AltLeft, KeyA], status: unverified}
-    skills: {keys: [AltLeft, KeyS], status: unverified}
-    inventory: {keys: [AltLeft, KeyE], status: unverified}
-    equipment: {keys: [AltLeft, KeyQ], status: unverified}
-    basic_info: {keys: [AltLeft, KeyV], status: unverified}
-  system_menu: {keys: [Escape], status: unverified}
-  sit: {keys: [Insert], status: unverified}
+    status: {keys: [AltLeft, KeyA], status: demonstrated, evidence: shortcuts#00}
+    skills: {keys: [AltLeft, KeyS], status: demonstrated, evidence: shortcuts#01}
+    inventory: {keys: [AltLeft, KeyE], status: demonstrated, evidence: shortcuts#02}
+    equipment: {keys: [AltLeft, KeyQ], status: demonstrated, evidence: shortcuts#03, also: [AltLeft, KeyX]}
+    basic_info: {keys: [AltLeft, KeyV], status: demonstrated, evidence: shortcuts#04, note: toggles compact and full}
+    party: {keys: [AltLeft, KeyZ], status: demonstrated, evidence: shortcuts#06, also: [AltLeft, KeyH]}
+    guild: {keys: [AltLeft, KeyG], status: demonstrated, evidence: shortcuts#07}
+    quest: {keys: [AltLeft, KeyU], status: demonstrated, evidence: shortcuts#13}
+    chat_macros: {keys: [AltLeft, KeyM], status: demonstrated, evidence: shortcuts#14}
+    emotions: {keys: [AltLeft, KeyL], status: demonstrated, evidence: shortcuts#15}
+    command_list: {keys: [AltLeft, KeyY], status: demonstrated, evidence: shortcuts#17}
+    chat_room: {keys: [AltLeft, KeyC], status: demonstrated, evidence: shortcuts#22}
+    tipbox: {keys: [AltLeft, KeyD], status: demonstrated, evidence: shortcuts#24}
+  system_menu: {keys: [Escape], status: demonstrated, evidence: shortcuts#27}
+  sit: {keys: [Insert], status: demonstrated, evidence: shortcuts#26}
+  hotbar_toggle: {keys: [F12], status: demonstrated, evidence: shortcuts#28}
   hotbar: {keys: [F1, F2, F3, F4, F5, F6, F7, F8, F9], status: unverified}
+  # no window seen for these on the GM (a level-1 novice): AltLeft + KeyW (cart: none yet), KeyJ
+  # (pet), KeyR (homunculus), KeyI, KeyO, KeyT, KeyP, KeyB, KeyK, KeyN, KeyF -- not bound
 window:
   # names in poring_env.ui_anchors (ADR-0011 anchor map); a window without a cut template there
   # resolves as unsupported

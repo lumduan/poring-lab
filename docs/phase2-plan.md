@@ -258,7 +258,7 @@ size or a new language changes calibration and data, never policy.
 | D2 | Projection per resolution profile | plan |
 | D3 | Auto-calibration at session start: packet-assisted on rAthena (setup only) + a pixels-only path | plan; ruled 2026-10-02 (ADR-0007 amendment) |
 | D4 | Player-like UI management through the anchor map | plan; next |
-| D5 | A hotkey table verified live | plan; next, together with D4 |
+| D5 | A hotkey table verified live | plan; next, together with D4 ➡️ SUPERSEDED 2026-10-07: demonstrated live in `docs/phase4-ui.md` (L2 file `packages/poring_skills/l2/kro-20211103-prere.yaml`) |
 | D6 | Acceptance: the same keyed action at two languages and two sizes | after D2 + ADR-0012 packs |
 
 ### D1: the session area (first step toward resolution independence, DONE)
