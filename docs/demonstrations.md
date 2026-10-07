@@ -592,6 +592,36 @@ means no click.
 
 10 identical route declines in a row stop a run.
 
+### 3.10 relocalise@1, indoor (pre-registered 2026-10-07 ~18:20, BEFORE its run; Batt's "indoor landmark v1")
+**What it tests:** re-localisation **v1, the structure probes**, ALONE.
+- walk@5 and walk@6 call it only when a no-entry sign lands on a GAT-walkable cell. That is rare, so
+  the method has never been measured on its own.
+- Here the harness makes the belief wrong on purpose (`scripts/reloc_run.py`).
+
+**The rule:** `walk5.relocalise`, UNCHANGED.
+- The candidates are the belief ±2 cells, GAT-walkable.
+- Each probe hovers the screen offset whose walkability best splits the candidates, on cells flat for
+  all of them, so one pixel serves every candidate.
+  - Chevrons → walkable; the no-entry sign → blocked; nothing → no information.
+- A unique survivor becomes the new belief. At most 8 probes.
+- **One stated change from walk@5/6:** the probe's settle is **0.55 s** (walk@6's measured lag), not
+  0.4. The client draws its cursor ~0.41–0.82 s after the second motion.
+
+**The harness, per attempt** (prt_church; seed **20261015**):
+1. A seeded `@warp prt_church X Y` puts us on a walkable cell within ±8 of the GM spot.
+2. The rule is handed belief = that cell + a seeded offset from the 24 non-zero offsets in the ±2
+   square. The belief cell is GAT-walkable: a real dead-reckoning-sized error.
+- **56 attempts; the first 50 NOT interrupted by a human are scored.**
+
+**Scoring** (`reloc_run.py --score`, offline, against where the packets put us before the attempt):
+- **correct:** the survivor is the true cell;
+- **WRONG:** a survivor elsewhere. This is the dangerous outcome, confidently wrong;
+- **undecided:** no unique survivor within 8 probes.
+
+**The bar:** correct ≥ **48 / 50**.
+- Reported separately: **wrong**, which is never acceptable silently; undecided; probes per
+  attempt; and the share of probes that saw "nothing".
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
