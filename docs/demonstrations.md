@@ -827,6 +827,99 @@ class, reported apart), no fix (unresolved).
 - **The normal account** (2000001): a separate, unscored confirmation that `/where` prints the same
   line for a non-GM character.
 
+### 3.14 walk@8 — TUNING maps (indoor/outdoor × CLEAN/CROWD) + a HELD-OUT set run once (pre-registered 2026-10-08 ~00:00, BEFORE any scored run; Batt's design ~19:25 + the overnight plan)
+**The rule** (`scripts/walk8.py` at the commit of this pre-registration, `--fix where`): walk@6/7 mixed two questions,
+and walk@8 separates them.
+- **Is the route passable?** Only static structure decides: the GAT.
+  - The route is planned **ONCE** (A*) as a waypoint polyline; after each click the rest of that one
+    plan is kept.
+  - It is re-planned only after a belief fix or the minimap's correction.
+  - Units never block movement in RO, so a unit on an intermediate cell refuses nothing.
+- **Will this click walk?** Only the click point decides: the walk cursor (walk@6's two-sided
+  classifier, references v2 incl. the pickup hand) plus the chevrons naming the cell, re-checked
+  with no motion, then the click.
+  - A covered click point moves to the next point on the polyline AT ONCE. Unknown is no click.
+- **The portal** (held-out): the click whose intent is the portal expects the WARP shape. It is the
+  only place that shape is allowed.
+
+**The overnight fixes, each from a walk@7 misfire:**
+1. **Patience ONLY for a UNIT** (sword / talk / pickup) at the click points: ≤ 6 s since it was first
+   seen (a monster's idle pause ≤ 5.0 s, rAthena e985006), ≤ 24 s per route.
+   - An unknown read never waits. walk@7 waited 23–94 s per run on unknown reads in CLEAN rooms.
+2. **A substitute ONLY when a UNIT stays on the GOAL** after its patience (ring 1, then 2). walk@7
+   substituted for any refusal: 7 of 8 goals nobody had taken.
+3. **The belief is fixed by where@2** (3.15; indoor PASSED 48 / 50, 0 WRONG), never by v2:
+   - at the START of each route on maps without a minimap readout;
+   - **when in doubt**: a no-entry sign on a planned (GAT-walkable) cell, 2 targets unconfirmed from
+     one belief, or a named neighbour;
+   - never every step; at most 2 fixes per route; no fix = decline.
+   - Outdoors the minimap is read before each click.
+4. **The structure-probe alignment is OFF:** its geometry is v2's, which failed relocalise@2
+   (24 / 50 WRONG).
+5. The click time is the record's time. The route preview is on (display only).
+- **Lengths:** 3 indoors, 5 in the open (walk@6/7's). At most 30 click attempts per route.
+
+
+**Design-time pilots** (prt_church / prt_fild08, sessions `walk8-cal`, 23:19–23:58, NOT scored). Each
+finding was fixed before this pre-registration:
+1. **The client refuses "the same word/phrase more than 3 times".** A 4th `/where` in a row was not
+   printed.
+   - Every `/where` is now preceded by the read-only **`/ex`** ("There is no block list.").
+   - A read counts only if the NEWEST line of all is the yellow one, with no red, cyan or green line
+     below it.
+   - That check accepts 28 / 28 good frames and refuses a cyan-newest one.
+   - where@2's alone-test ran without the separator; walk@8 reports every fix against the packets.
+2. **A stale park dropped the last click point.** The same point is now retried (2×).
+3. **Pews hide part of the marker** (50–54 px on clear cells). walk@8 names a cell from ≥ 30 px, still
+   with ≥ 2 chevrons and the corner-geometry fit.
+4. **On a belief `/where` had just CONFIRMED,** pews hid the marker almost entirely (17–27 px).
+   - Right after a fix (at the route start, or on doubt), a click point whose walk cursor holds on a
+     no-motion re-check may be clicked without readable chevrons, **until the next click**.
+   - Unknown or any other shape is still no click.
+5. **One unknown in-cell alternate no longer condemns a cell.** A cell counts as covered only if no
+   point of it shows the walk cursor.
+6. **A moving monster ON the goal often reads unknown** (its sprite merges into the cursor mask).
+   - A substitute now needs a UNIT shape seen on the goal **or on a click point next to it** in that
+     round, after the patience.
+   - The packets' judge still fails a substitute nobody forced.
+- **The last pilot, after all fixes:** 7 / 7 routes, 22 / 22 clicks verified by the packets, 0
+  attack / NPC requests.
+
+**TUNING runs** (prt_church, prt_fild08), each with its own bar:
+- **Conditions:**
+  - CLEAN: `@killmonster2` before every route;
+  - CROWD: `@killmonster2` + `@monster poring 4` at every 5th route's warp.
+- **Fresh seeds:** indoor clean **20261023**, indoor crowd **20261024**, outdoor clean
+  **20261025**, outdoor crowd **20261026**.
+- 56 routes each; the first 50 not interrupted are scored.
+
+**HELD-OUT runs, ONCE, scored separately, never used to tune**, only if all 4 tuning runs PASS:
+- **guild** = alberta_in (60,40), the Merchant Guild room: seed **20261027**;
+- **town** = prontera (156,180): seed **20261028**;
+- **dungeon** = iz_dun00 (168,168): seed **20261029**;
+- **portal** = prt_fild08 → its north portal (170,378) → prontera (156,26): seed **20261030**.
+- All CLEAN (`@killmonster2` before every route; `@heal` after each warp; the maps' NPCs stay). 56
+  each, the first 50 scored.
+- **If a tuning run FAILS:** no held-out run. Diagnose from the packets offline, walk@9, at most 3
+  iterations tonight (Batt).
+
+**Verifiers (verify@2):**
+- Clicks: `verify_walk` at the click.
+- Routes, end to end: the packets' position 0.5 s after the route ended.
+  - It must be the goal; or the logged substitute only when another unit stood within 1 cell of the
+    goal then; or, for the portal, the other map (`to_map`) at the arrival cell.
+
+**The bar, for every run:**
+- ≥ **48 / 50** routes; **AND**
+- **SAFETY:** zero `attack_request`, zero `npc_contact`, no pickup act by us. Any one is a HARD FAIL
+  of that run.
+
+**Reported:**
+- clicks correct;
+- covered-and-moved, waits (seconds), substitutes (justified or not);
+- fixes (trigger; correct / WRONG vs the packets);
+- declines by cause; route time.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
