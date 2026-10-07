@@ -1137,6 +1137,74 @@ Lunatic), 450 frames.
     known truth.
   - k is then judged on the corrected ratios (the residual above suggests one common scale).
 
+### 5d-vi. M4 step 2e: measure the PREDICTION with the same ruler, then judge k (Batt, 2026-10-07), written BEFORE any scoring
+
+**Why.** 2d showed the ruler is biased per species:
+- it drops the Poring's detached tuft island;
+- it adds a ~4 % halo to the high-contrast Lunatic.
+
+Comparing an observed box (ruler-measured) with a raw predicted box (not ruler-measured) is
+therefore unlike with unlike.
+
+**The measurable predicted box (MP):**
+- Our predicted sprite as a binary mask: the 2c-chosen idle frame (view, frame and ±2 px shift by
+  NCC), rendered (`label_check.rendered`, nearest) at the predicted anchor and scale (k =
+  nostalro). The NCC choice uses the observation to pick WHICH frame, never its size.
+- Then put through the IDENTICAL rule: `reconstructed(mask)`, then `component_box` seeded at the
+  anchor column. No threshold applies: the mask is already binary.
+
+**Validation FIRST, on the synthetic known-truth spawns of 2d** (no new encode). Per synthetic
+frame: the decoded, ruler-measured box vs MP of the painted sprite.
+- VALIDATED at DIFF 24 if, on the ODD synthetic spawns:
+  - median obs/MP height is within ±3 % for BOTH species (outdoor; the indoor Poring is reported);
+  - and the synthetic split is within 1 ± 0.03.
+- If DIFF 24 fails, the pre-registered alternative DIFF 48 is checked with the same criteria (2d
+  already showed the Lunatic's halo vanishes at DIFF 48; stated, not hidden).
+- If neither validates: report, and stop. k is not judged.
+
+**Then k, on the REAL ODD frames, with the validated threshold:**
+- per clean frame: k_h = 0.1333 × obs_h / MP_h and k_w = 0.1333 × obs_w / MP_w;
+- per-species medians; the k_h split (Lunatic / Poring) must be within 1 ± 0.05, otherwise "no
+  single k" and stop;
+- then ONE scalar: k_h = the median over all clean frames (step 1's rule), within ±2 % (K_TOL) of a
+  prior (nostalro 0.1333, korangar 0.140) → that prior; else "neither", and the value is reported;
+- k_w and k_h / k_w are REPORTED, not fitted.
+- **The vertical-only search, done before this was written:** NO vertical-only sprite factor exists
+  in either license-checked client.
+  - nostalro (15b3029) draws sprites in screen space with ONE uniform `sprite_scale = ppu × zoom /
+    75` (`lib/renderer/src/sprite_projection.rs`, `project_entity_screen`).
+  - korangar (e14d320) draws a camera-facing billboard (`world/cameras/mod.rs:47-67`) whose size
+    is `frame.size × 1.4/10 × scale`, uniform in x and y (`world/animation/mod.rs:290-302`). Its
+    "curvature" and "depth_offset" change fragment DEPTH only (`shaders/passes/forward/entity.slang:59-70`).
+  - So any height-over-width excess is reported as a finding with no source, and NOT fitted.
+
+**Then:** freeze, and score the EVEN spawns ONCE (synthetic validation + real k). CONFIRMED if the
+validation holds on EVEN AND the k verdict is the same as ODD's (or both "neither", within 2 %).
+
+### 5f. The gold set, POSITION ONLY, for monsters (Batt, 2026-10-07), written BEFORE scoring
+
+**Why position only.**
+- B6's hand-check procedure (A = accept) KEPT v0's 44 × 40 boxes for 82 % of the monsters (82 /
+  100 are exactly `labels.BOX_PX`), so the gold set encodes v0's SIZE convention.
+- Box SIZE is judged by M4's synthetic ruler (§5d-v/vi), not by the gold set.
+- A size-aware gold set needs, FIRST, a written tight-box convention (halo in or out); then Batt
+  re-checks the 100 boxes.
+
+**The metric** ("does each label point at the right monster"), per frame and per class:
+- a pair (label l, hand box h) is a candidate if the classes match AND the CENTRE of l lies inside
+  h;
+- matched one-to-one, greedily by ascending centre distance |c(l) − c(h)|;
+- TP = matched pairs, FP = unmatched labels, FN = unmatched hand boxes;
+- precision, recall, and the median / p90 centre distance (px) of the matches;
+- monsters are primary; NPCs are reported.
+- Implemented as `label_iou.py score --metric position` (tested).
+
+**Scored ONCE each, nothing else on the gold set:**
+- v0 labels;
+- v1 labels at k = 0.140 (the 5e variant).
+- Reading: v1 "points at least as well as v0" if its monster precision AND recall are both ≥
+  v0's; the centre distances are reported beside them.
+
 ### 5e. The pragmatic v1 track: v1 labels at k = 0.140 on the GOLD set (Batt, 2026-10-07), written BEFORE scoring
 
 **Why.** M4 proves the render rule against a ruler that is itself in question (§5d-v). The real
