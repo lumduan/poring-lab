@@ -110,3 +110,36 @@ under the same load", the infra rule).
   are unchanged.
 - Reported per level: the kept and dropped pairs (each with its ON/OFF latency and load), the
   median delta, and the verdict.
+
+## Results: the ladder re-run, 2026-10-07 (v0-JPEG matched run, `train-day.sh`)
+Each pair: delta = ON − OFF latency (ms); kept only if the loads agree within ±20 %.
+
+| level | step sleep | attempt | pairs (delta ms, kept ✓ / dropped ✗) | median of the kept | verdict |
+|---|---|---|---|---|---|
+| 0 | 0 ms | 0 (12:40–13:16) | +6.47✗ +6.37✓ +5.51✓ +6.41✓ +7.94✗ +7.82✓ | **+6.39** (4) | **TRIP** → level 1 (stop verified in 5 s) |
+| 1 | 100 ms | 1 (13:17–14:24) | +6.28✗ +4.95✓ +2.97✓ +5.19✗ +9.12✗ +3.59✓ +1.64✗ +6.52✗ +3.49✗ +4.21✓ | +3.90 (4; the sampler's reconstruction) | none issued: the IO guard aborted at 14:24:11 (quant-postgres stall 29.3 %) before the guard's own 4th kept pair; stop verified in 5 s |
+| 1 | 100 ms | 2 (14:39–15:24, `--resume`) | +3.75✗ +3.50✗ +4.60✓ +4.43✗ +3.42✓ +2.69✓ +6.00✗ | +3.42 (3) | pending: **R3-HARD at 15:24:20** (below), no resume |
+| 2, 3 | 200, 400 ms | – | – | – | not reached |
+
+- **What the ladder says:**
+  - At 0 ms our training slows Frigate's detector by ~+6.4 ms at matched load (a TRIP).
+  - At 100 ms it sits at ~+3.4 to +3.9 ms: under 5, but never formally passed. The guard's
+    4th kept pair was cut off twice.
+  - Load-matching drops about half the pairs. Frigate's load moved ±20 % between 3-min windows
+    most of the afternoon.
+- **The R3-HARD stop (15:24:20), attributed** (Frigate's collector, `stats-20261007.jsonl`):
+  - At 15:23:53 EVERY camera, indoors and out, jumped to the same ~6.2 detections/s at once.
+  - All three detectors saturated: duty cycle 1.0, the fleet capped at ~77 detections/s (=
+    3 detectors at 39 ms). `cam-1-01-font-s` skipped frames for 32 s.
+  - Frigate did not restart (uptime continuous), no camera process restarted, and the input fps
+    did not change.
+  - The drops CONTINUED ~25 s after our container was gone (skips 2.1 and 0.9 at 15:24:34 /
+    15:24:54).
+  - **Reading:** the trigger was fleet-wide: identical rates on a dozen cameras indoors and out
+    cannot be one person moving. It looks like a scene-wide change or a simultaneous stream
+    glitch; the recordings around 15:23:50 ICT would show which.
+  - Our ON window (+3–4 ms per detection) lowered the ceiling, so it likely made the drops start
+    sooner, but the burst alone kept them going.
+  - It was NOT the operator's console use, which happened at 15:14–15:15 and takes only the
+    game-input lease.
+  - The absolute rule stopped the run as designed. The training is parked for Batt.
