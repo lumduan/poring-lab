@@ -47,8 +47,15 @@ class Verdict:
         return f"verify@{VERIFIER_VERSION}"
 
 
-def _window(events: Iterable[Event], t0: int, seconds: float) -> list[Event]:
+def _window(
+    events: Iterable[Event], t0: int, seconds: float, t_end: int | None = None
+) -> list[Event]:
+    """Events in [t0, t0 + seconds], cut at ``t_end`` (the NEXT action's start): a window never
+    lends one attempt's packets to another (2026-10-07: 60 s login windows overlapped the next
+    attempt, 33 s later)."""
     t1 = t0 + int(seconds * 1e9)
+    if t_end is not None:
+        t1 = min(t1, t_end)
     return sorted((e for e in events if t0 <= int(e.get("t_mono_ns", 0)) <= t1),
                   key=lambda e: int(e["t_mono_ns"]))  # fmt: skip
 
@@ -57,10 +64,10 @@ def _ms(t0: int, e: Event) -> int:
     return (int(e["t_mono_ns"]) - t0) // 1_000_000
 
 
-def verify_login(events: Iterable[Event], t0: int, aid: int) -> Verdict:
+def verify_login(events: Iterable[Event], t0: int, aid: int, t_end: int | None = None) -> Verdict:
     seq = ("login_accepted", "char_selected", "map_enter")
     got: dict[str, Event] = {}
-    for e in _window(events, t0, LOGIN_WINDOW_S):
+    for e in _window(events, t0, LOGIN_WINDOW_S, t_end):
         kind = e.get("type")
         if kind == "login_accepted" and int(e.get("aid", -1)) != aid:
             continue  # another account (never ours to judge)
@@ -81,9 +88,14 @@ def path_seconds(a: tuple[int, int], b: tuple[int, int], speed_ms: float) -> flo
 
 
 def verify_walk(
-    events: Iterable[Event], t0: int, aid: int, target: tuple[int, int], speed_ms: float = 150.0
+    events: Iterable[Event],
+    t0: int,
+    aid: int,
+    target: tuple[int, int],
+    speed_ms: float = 150.0,
+    t_end: int | None = None,
 ) -> Verdict:
-    evs = _window(events, t0, WALK_REQUEST_S + 30.0)
+    evs = _window(events, t0, WALK_REQUEST_S + 30.0, t_end)
     first = next((e for e in evs if e.get("type") in ("self_move_request", "self_move")), None)
     if first is None or (int(first["t_mono_ns"]) - t0) > WALK_REQUEST_S * 1e9:
         return Verdict("fail", f"no move request within {WALK_REQUEST_S:g} s (click not a walk)")
@@ -149,10 +161,15 @@ def speed_before(events: Iterable[Event], t: int, default: float = 150.0) -> flo
 
 
 def verify_attack(
-    events: Iterable[Event], t0: int, aid: int, target_gid: int, walk_s: float = 0.0
+    events: Iterable[Event],
+    t0: int,
+    aid: int,
+    target_gid: int,
+    walk_s: float = 0.0,
+    t_end: int | None = None,
 ) -> Verdict:
     window = min(ATTACK_WINDOW_S, walk_s + ATTACK_SWING_S)
-    evs = _window(events, t0, ATTACK_WINDOW_S + 4.0)
+    evs = _window(events, t0, ATTACK_WINDOW_S + 4.0, t_end)
     t_end = t0 + int(window * 1e9)
     others: list[int] = []
     for e in evs:

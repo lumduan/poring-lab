@@ -42,7 +42,10 @@ def test_every_l1_file_loads_and_ids_are_unique() -> None:
         "item.refine",
         "char.respawn",
     } <= set(concepts)
-    assert all(c.status == "unverified" and not c.verified_on for c in concepts.values())
+    # a pass on ONE path is recorded but never flips the status (rdp AND s2 needed)
+    for c in concepts.values():
+        paths = {v.path for v in c.verified_on}
+        assert c.status == ("verified" if paths == {"rdp", "s2"} else "unverified"), c.id
 
 
 def test_every_workflow_wave_is_covered() -> None:

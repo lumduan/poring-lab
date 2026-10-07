@@ -170,3 +170,12 @@ def test_position_before_uses_the_last_fix_and_finished_walks() -> None:
     assert position_before(evs, T0 + int(3000e6), AID) == (103, 100)  # long finished
     assert position_before([], T0, AID) is None
     assert speed_before(evs, T0 + int(7000e6)) == 120.0 and speed_before(evs, T0) == 150.0
+
+
+def test_a_window_never_lends_the_next_attempts_packets() -> None:
+    """A failed login whose 60 s window reaches the NEXT attempt (33 s later) must not pass."""
+    nxt = [ev(37_000, "login_accepted", aid=AID), ev(38_000, "char_selected"),
+           ev(39_000, "map_enter", x=1, y=1)]  # fmt: skip
+    assert verify_login(nxt, T0, AID).status == "success"  # unbounded: the old, wrong answer
+    v = verify_login(nxt, T0, AID, t_end=T0 + 33 * 10**9)
+    assert v.status == "fail" and v.cause == "no login_accepted within 60 s"

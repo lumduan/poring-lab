@@ -475,7 +475,7 @@ Start talking to an NPC.
 Enter the game world with a given account and character.
 
 - **Parameters:** account, character
-- **Status:** unverified
+- **Status:** unverified (1 alone-test pass(es))
 - **Steps:**
   1. Start the client and reach the account login dialog (some builds first ask which service to use).
   2. Enter the account id and password and submit them.
@@ -493,6 +493,7 @@ Enter the game world with a given account and character.
 - **Outcome, runtime (screen):** the world is drawn (game region not black) after the character select screen
 - **Outcome, offline (packets):** our login acceptance then the zone server hand-off then the map entry, in order (`poring_dataset.verify.verify_login`)
 - **Bindings needed:** `L2.window.service_select`, `L2.window.login`, `L2.window.server_select`, `L2.window.char_select`, `L2.element.login_fields`, `L3.server.address`
+- **Verified on:** kro-20211103-prere / lab-rathena / en / rdp, login@1, session 20261007T121323-demo-login-alone, 2026-10-07
 
 ## `session.logout`
 

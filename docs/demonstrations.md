@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [phase3-plan.md, phase4-ui.md, adr/0007-packet-ground-truth-channel.md, adr/0011-ui-anchor-map.md, adr/0015-phase4-planner-linter-executor.md]
-next_action: "Live, RDP: login demonstrations + anchors -> login@1 alone-test (n=50); walk@1 alone-test both scenes (n=50 each). attack@1 after the v0-JPEG run (GPU, R1-R3). Score each ONCE as written here."
+next_action: "login@1 PASSED on RDP (50/50, 2026-10-07); S2 re-test in an evening S2 session. Next: walk@1 alone-test both scenes (n=50 each); attack@1 after the v0-JPEG run (GPU, R1-R3). Score each ONCE as written here."
 ---
 
 # Outcome-verified demonstrations -> rules -> labels
@@ -185,4 +185,19 @@ decoders, not by redeploying the sniffer. Their rules (the expected options from
 scripts, static data per ADR-0015) are pre-registered here before their tests.
 
 ## Results
-None yet: nothing has run.
+
+### login@1, RDP: **PASS, 50 / 50 verified** (2026-10-07 12:13–12:45 ICT / 05:13–05:45 UTC)
+- **Session:** `20261007T121323-demo-login-alone`, on the NAS sink once shipped (never committed).
+- **The run:** 50 attempts by `rule_run.py login`, run alone. Each started with no client
+  running, and the harness closed the client between attempts. There were 0 rule stops.
+- **The verdict comes from packets only** (`verify@1`, `demo_verify.py`): our `login_accepted`
+  (aid 2000002) → `char_selected` → `map_enter`, in order, in each attempt's own window.
+  - Verified successes: 50. Failures: 0. Ambiguous: 0. The bar was ≥ 48 / 50.
+  - Time per attempt, launch included: p50 28.0 s, p95 29.0 s.
+  - Login accepted at p50 25.0 s (max 26.6), char selected 27.1 s, map entered 27.2 s
+    (max 30.0).
+- **Caught before reporting, and fixed:** a 60 s verification window overlapped the NEXT attempt
+  (33 s later). A failed attempt could have been "verified" by its successor's packets. Every
+  window now ends where the next record starts (tested). The re-score is unchanged: 50 / 50.
+- **The L1 entry** `session.login` records this RDP pass in `verified_on`. Its status stays
+  UNVERIFIED until the S2 re-test passes.

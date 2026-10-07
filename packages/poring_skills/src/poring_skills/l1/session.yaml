@@ -27,6 +27,14 @@ concepts:
         verifier: poring_dataset.verify.verify_login
     bindings_needed: [L2.window.service_select, L2.window.login, L2.window.server_select, L2.window.char_select, L2.element.login_fields, L3.server.address]
     workflow_wave: 1
+    verified_on:
+      - client: kro-20211103-prere
+        server: lab-rathena
+        locale: en
+        path: rdp
+        session: 20261007T121323-demo-login-alone
+        rule: login@1
+        date: "2026-10-07"
   - id: session.select_char
     purpose: Choose a character on the character select screen and enter the world.
     params: [slot]

@@ -40,7 +40,10 @@ def load_events(session_dir: Path) -> list[dict[str, Any]]:
         return [json.loads(line) for line in fh if line.strip()]
 
 
-def judge(rec: DemoRecord, events: list[dict[str, Any]], aids: dict[str, int]) -> V.Verdict | None:
+def judge(
+    rec: DemoRecord, events: list[dict[str, Any]], aids: dict[str, int], t_end: int | None = None
+) -> V.Verdict | None:
+    """``t_end``: the next record's start; no window reaches into the next action."""
     """None = not a scored action (the harness's own records)."""
     if rec.actor.startswith("rule:harness@"):
         return None
@@ -49,7 +52,7 @@ def judge(rec: DemoRecord, events: list[dict[str, Any]], aids: dict[str, int]) -
     if decline:
         return V.Verdict("fail", f"declined:{decline}")  # pre-registered: a decline is a FAIL
     if kind == "login":
-        return V.verify_login(events, rec.t_mono_ns, aids[rec.action.intended.note or "gm"])
+        return V.verify_login(events, rec.t_mono_ns, aids[rec.action.intended.note or "gm"], t_end)
     if kind == "walk":
         aid = aids["gm"]
         start = V.position_before(events, rec.t_mono_ns, aid)
@@ -102,8 +105,10 @@ def main() -> int:
     aids = {"gm": a.aid_gm, "player": a.aid_player}
     rows: list[tuple[DemoRecord, V.Verdict]] = []
     out_lines = []
+    starts = sorted(r.t_mono_ns for r in records)
     for rec in records:
-        v = judge(rec, events, aids)
+        later = [t for t in starts if t > rec.t_mono_ns]
+        v = judge(rec, events, aids, later[0] if later else None)
         if v is None:
             out_lines.append(rec.model_dump_json())
             continue
