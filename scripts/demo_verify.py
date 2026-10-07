@@ -99,6 +99,17 @@ def judge(
         return V.Verdict("fail", f"declined:{decline}")  # pre-registered: a decline is a FAIL
     if kind == "login":
         return V.verify_login(events, rec.t_mono_ns, aids[rec.action.intended.note or "gm"], t_end)
+    if kind == "walk" and rec.action.intended.kind == "route":
+        # walk@5: end to end -- where the packets put us when the route ended (+0.5 s)
+        goal = rec.action.intended.cell
+        end = V.position_before(events, (rec.t_done_ns or rec.t_mono_ns) + 500_000_000, aids["gm"])
+        if goal is None or end is None:
+            return V.Verdict("ambiguous", "no goal or no position fix at the route's end")
+        if tuple(end) == tuple(goal):
+            return V.Verdict("success", None, {"end": list(end)})
+        return V.Verdict(
+            "fail", "the route ended elsewhere", {"end": list(end), "goal": list(goal)}
+        )
     if kind == "walk":
         aid = aids["gm"]
         start = V.position_before(events, rec.t_mono_ns, aid)

@@ -208,3 +208,25 @@ def read_last(log: DemoLog) -> DemoRecord:
     from poring_env.demo import read
 
     return read(log.path)[-1]
+
+
+def test_a_walk5_route_is_judged_by_where_the_packets_put_us_at_its_end(dv: ModuleType) -> None:
+    s = 10**9
+    route = DemoRecord(
+        session=SID, actor="rule:walk@5", t_mono_ns=T, t_done_ns=T + 9 * s, rule="walk@5",
+        cue="route", action=Action(type="walk", intended=Intended(kind="route", cell=(110, 120))),
+    )  # fmt: skip
+    events = [
+        {"t_mono_ns": T - s, "type": "map_change", "map": "m.gat", "x": 100, "y": 120},
+        {"t_mono_ns": T + 2 * s, "type": "self_move", "x0": 100, "y0": 120, "x1": 105, "y1": 120},
+        {"t_mono_ns": T + 5 * s, "type": "self_move", "x0": 105, "y0": 120, "x1": 110, "y1": 120},
+    ]
+    aids = {"gm": 2000002, "player": 2000001}
+    assert dv.judge(route, events, aids, None).status == "success"
+    short = events[:2]
+    v = dv.judge(route, short, aids, None)
+    assert (v.status, v.cause, v.evidence["end"]) == (
+        "fail",
+        "the route ended elsewhere",
+        [105, 120],
+    )

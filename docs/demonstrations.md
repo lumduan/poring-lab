@@ -380,6 +380,86 @@ rule version, both scenes). **n = 50 per scene; pass ≥ 48 / 50 per scene**, RD
 - the in-sample bias model;
 - dead-reckoning drift after a walk the server shortened or re-routed.
 
+### 3.8 walk@5 (pre-registered 2026-10-07 ~16:20, BEFORE its run; Batt's design, ~15:30)
+**Batt's diagnosis of the indoor failures:**
+- Long clicks across pews and walls fail: the server's path limit is 32 steps (MAX_WALKPATH),
+  and an unwalkable target does not move the character.
+- The cursor turns into a red NO-ENTRY sign over an unwalkable cell.
+- So: **walk like the monsters**, in short straight segments, then turn.
+
+**Design-time calibration (RDP; scratch `walk5-cal/`; client pixels stay in /dev/shm):**
+- **Three probe outcomes, not two:**
+  - green **chevrons** (walkable; their corners name the cell, walk@4's anchors);
+  - the **no-entry sign**;
+  - **nothing**: a plain arrow, e.g. over a wall top, off the floor, an occluder or an NPC.
+    Indoors 6 of 20 GAT-blocked hovers showed that.
+- **The no-entry sign** is recognised by SHAPE, not colour: the fraction of a ring mask (220 px,
+  from the sign crops, red in ≥ 80 % of them) that is red, in a 64 × 64 crop on the hotspot.
+  - Indoors (leave-one-out): walkable hovers ≤ 0.07; sign hovers 0.66–1.0.
+  - The two walkable hovers with red pixels were the GM's own red HAIR, which is why a plain
+    red count is not used.
+  - Outdoors: 16 walkable hovers at 0.0. There is no blocked cell in the band around the spot.
+  - **Threshold 0.4.**
+- **S2 is NOT calibrated:** the cursor is drawn by the client, but the console path's encode and
+  scale may change it. It gets its own calibration in an S2 session.
+
+**The rule, alone** (`scripts/walk5.py`), per ROUTE (believed start → goal):
+1. **PLAN** with A* on the GAT (`poring_dataset.walk.walk_path`, ≤ 48 steps).
+   - Split the path into **segments**: runs of one step direction, at most **5 cells** each. That
+     is far under the server's 32, inside the band where walk@3 and walk@4 were reliable.
+   - A segment end outside the click band is shortened along the path.
+2. **PROBE every segment end** before clicking: two motions, at most 5 hovers (the centre, then
+   4 in-cell alternates at ±0.3 cell).
+   - Chevrons naming the target → **click**.
+   - Chevrons naming a neighbour → one correction (move by the projected difference); a second
+     neighbour counts as a mismatch.
+   - No-entry → **never click**.
+   - Nothing → the next alternate.
+3. **A no-entry sign (or a second neighbour) on a cell the GAT calls walkable = the belief is
+   wrong:** stop, RE-LOCALISE, re-plan, continue.
+   - Re-localisation **v1 uses the map's STRUCTURE as the landmark.** The camera follows the TRUE
+     player, so hovering a screen offset o reports walkable(true + o).
+   - The candidates are the believed cell ± 2. Each probe is the offset that best splits them,
+     on cells flat for every candidate (so one pixel serves all). At most 8 probes; a unique
+     survivor becomes the belief.
+   - At most 2 re-localisations and 12 segment attempts per route.
+   - ⚠️ **Batt asked for a landmark fix from a STATIC NPC "as proposed".** No such proposal was
+     found in the repo. That version needs NPC placements and NPC sprites (the sprite catalog
+     covers monsters only); it is **v2**, not built. v1 is what runs.
+4. **Arrival:** dead reckoning after each click (wait 0.21 s per cell + 0.8 s); outdoors the
+   minimap position is read before each segment.
+
+**Stated in advance, a limit (tested in `test_walk5.py`):** a wrong belief is CAUGHT only when
+the probed cell, seen from the TRUE position, is blocked or names a neighbour. If it is walkable
+too, the client draws a consistent marker and the rule clicks; only the packets show the miss.
+
+**The harness:**
+- It enters the scene once.
+- Every 5th route: a seeded `@warp`; the believed cell = the warp cell (the stand-in for L3 warp
+  arrival data).
+- Goals: seeded walkable cells with an A* path of **8–20 steps** from the BELIEVED position.
+  Routes chain on dead reckoning between warps.
+- **Seed 20261013.** Indoor prt_church first, then outdoor prt_fild08.
+- **56 routes are run per scene; the first 50 NOT interrupted by a human are scored** (Batt:
+  interrupted attempts are re-run; a route cannot be replayed exactly, so the spares stand in).
+
+**Verifiers (verify@2):**
+- **Segments:** each CLICKED segment by `verify_walk` against its ABSOLUTE end.
+- **Routes:** end to end, where the packets put us 0.5 s after the route ended, against the goal.
+
+**The bar:** end to end ≥ 48 / 50 routes per scene.
+
+**Reported without a bar:**
+- the segment success rate;
+- **how often the probe caught a wrong belief:**
+  - re-localisations triggered while the belief WAS wrong (packets) = catches;
+  - triggered while it was right = false alarms;
+  - wrong beliefs that clicked anyway = misses;
+- re-localisation accuracy (its result vs the packets' cell);
+- route declines by cause.
+
+10 identical route declines in a row stop a run.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
