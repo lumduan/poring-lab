@@ -413,5 +413,12 @@ def test_a_console_tab_that_closes_holding_a_key_still_releases_it(lab: Any) -> 
             time.sleep(0.01)
     client.portal.call(state.release_source, Source.HUMAN)
     assert state.mux.held(Source.HUMAN) == (frozenset(), frozenset())
-    ups = [e for e in client.fake.events if isinstance(e, Key) and e.code == "KeyA"]
-    assert [e.action for e in ups][-1] == "up"
+    # the disconnect's own (shielded) cleanup may have cleared the mux first, so the call above
+    # returned early while the injector was still sending that release: wait for it, bounded
+    end = time.monotonic() + 3
+    while True:
+        ups = [e for e in client.fake.events if isinstance(e, Key) and e.code == "KeyA"]
+        if ups and ups[-1].action == "up":
+            break
+        assert time.monotonic() < end, [e.action for e in ups]
+        time.sleep(0.01)
