@@ -30,6 +30,10 @@ log() { echo "$(TZ=Asia/Bangkok date '+%F %T') ICT / $(date -u '+%T') UTC $*" | 
 s2_active() { grep -q '^BACKEND=console' state/capture-backend 2>/dev/null || [ -e state/cleanroom ]; }
 rebaseline() {  # the pause: a fresh baseline, nothing of ours running; R2 refusals wait (bounded)
   local i
+  for i in $(seq 24); do  # the stopped step's container leaves the GPU within seconds: wait <= 2 min
+    nvidia-smi --query-compute-apps=process_name --format=csv,noheader 2>/dev/null | grep -q python || break
+    sleep 5
+  done
   for i in 1 2 3 4 5 6; do
     if python3 -S scripts/frigate_r3.py baseline --minutes 15 >> "$D/baseline.log" 2>&1; then
       log "  baseline: $(tail -1 "$D/baseline.log" | cut -c1-200)"; return 0
