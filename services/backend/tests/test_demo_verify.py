@@ -324,3 +324,19 @@ def test_a_walk7_substitute_counts_only_when_the_goal_was_taken(dv: ModuleType) 
     assert (taken.status, taken.cause, taken.evidence["taken_by"]) == want
     free = dv.judge(route(T + 4 * s), base, aids, None)
     assert (free.status, free.cause) == ("fail", "substituted a goal nobody had taken")
+
+
+def test_a_walk8_portal_route_must_end_on_the_other_map(dv: ModuleType) -> None:
+    s = 10**9
+    rec = DemoRecord(
+        session=SID, actor="rule:walk@8", t_mono_ns=T, t_done_ns=T + 9 * s, rule="walk@8",
+        cue="route", action=Action(type="walk", intended=Intended(kind="route", cell=(156, 26))),
+        outcome={"status": "pending",  # type: ignore[arg-type]
+                 "evidence": {"to_map": "prontera", "portal": [170, 378]}},
+    )  # fmt: skip
+    field = {"t_mono_ns": T - s, "type": "map_change", "map": "prt_fild08.gat", "x": 170, "y": 368}
+    town = {"t_mono_ns": T + 5 * s, "type": "map_change", "map": "prontera.gat", "x": 156, "y": 26}
+    aids = {"gm": 2000002, "player": 2000001}
+    assert dv.judge(rec, [field, town], aids, None).status == "success"
+    stayed = dv.judge(rec, [field], aids, None)
+    assert (stayed.status, stayed.cause) == ("fail", "the portal was not taken")

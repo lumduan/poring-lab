@@ -168,9 +168,18 @@ def judge(
     if kind == "walk" and rec.action.intended.kind == "route":
         # walk@5: end to end -- where the packets put us when the route ended (+0.5 s)
         goal = rec.action.intended.cell
-        end = V.position_before(events, (rec.t_done_ns or rec.t_mono_ns) + 500_000_000, aids["gm"])
+        t_end_route = (rec.t_done_ns or rec.t_mono_ns) + 500_000_000
+        end = V.position_before(events, t_end_route, aids["gm"])
         if goal is None or end is None:
             return V.Verdict("ambiguous", "no goal or no position fix at the route's end")
+        to_map = rec.outcome.evidence.get("to_map")
+        if to_map is not None:  # walk@8's portal walk: the route must end on the OTHER map
+            maps = [str(e.get("map", "")).removesuffix(".gat") for e in events
+                    if e.get("type") == "map_change"
+                    and rec.t_mono_ns <= e["t_mono_ns"] <= t_end_route]  # fmt: skip
+            if not maps or maps[-1] != to_map:
+                return V.Verdict("fail", "the portal was not taken",
+                                 {"end": list(end), "maps": maps, "to_map": to_map})  # fmt: skip
         if tuple(end) == tuple(goal):
             return V.Verdict("success", None, {"end": list(end)})
         sub = rec.outcome.evidence.get("substitute")

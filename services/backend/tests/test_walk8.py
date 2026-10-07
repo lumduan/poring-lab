@@ -130,3 +130,25 @@ def test_the_planned_route_is_previewed_for_the_human(fake: Any) -> None:
     kinds = [p["kind"] for p in sent[0]["points"]]
     assert kinds[0] == "start" and "goal" in kinds and kinds[-1] == "click"
     assert all(0.0 <= p["x"] <= 1.0 and 0.0 <= p["y"] <= 1.0 for m in sent for p in m["points"])
+
+
+def door() -> list[tuple[int, int]]:  # the warp cursor: a door (a rectangle) over the hotspot
+    return [(dx, dy) for dy in range(-6, 12) for dx in range(-4, 6)]
+
+
+def test_a_portal_is_taken_by_a_click_on_the_warp_cursor(fake: Any) -> None:
+    """The cross-map walk (Batt, ~20:00): the click whose intent is the portal expects the WARP
+    shape -- every other click still expects the walk cursor."""
+    w8, f, _ = fake
+    f.SPRITES["warp"] = [(door(), (225, 225, 235))]
+    s = sim(fake, (10, 18))
+    portal = (14, 18)
+    base = s.client.shape_at
+    s.client.shape_at = lambda c: "warp" if c == portal else base(c)
+    s.pr.refs = f.refs_for(w8.w6, ["walk", "sword", "noentry", "talk", "warp"])
+    did = w8.walk_route(s.pr, s.w, portal, BAND, 3, lambda *a: None, ring(),
+                        relocalise=lambda *a: {"ok": True}, expect_goal="warp")  # fmt: skip
+    assert did.get("arrived_belief") and did.get("portal"), did
+    last = [e for e in did["events"] if e.get("clicked")][-1]
+    assert tuple(last["end"]) == portal and last["outcome"] == "portal"
+    assert s.client.attacked == []
