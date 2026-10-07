@@ -6,6 +6,8 @@
 - Reads `demo.jsonl` and the session's `packets.jsonl.gz`.
 - Fills each record's outcome with poring_dataset.verify (VERIFIER_VERSION) and writes
   `demo.verified.jsonl` beside them. The actor's stated cue is never consulted.
+- Client-side windows (menu shortcuts) are judged on the session's snapshots by the anchor map
+  (§2): the window absent before, present 1 s after.
 - Prints, per rule: attempts, verified successes, failures by cause, ambiguous by cause, and
   the time per attempt p50/p95. The bar (pre-registered) is >= 95 % of the non-ambiguous
   attempts, with at most 10 % ambiguous.
@@ -17,6 +19,7 @@ that acts.
 from __future__ import annotations
 
 import argparse
+import functools
 import gzip
 import json
 import statistics
@@ -40,8 +43,48 @@ def load_events(session_dir: Path) -> list[dict[str, Any]]:
         return [json.loads(line) for line in fh if line.strip()]
 
 
+ANCHORS = Path(__file__).resolve().parents[1] / "data" / "ui_anchors"
+
+
+@functools.cache
+def window_registry() -> Any:
+    """The ADR-0011 anchor map with the cut templates (the menu verifier's screen check)."""
+    from poring_env import ui_anchors as ua
+
+    return ua.default_registry(ANCHORS)
+
+
+def windows_on(session_dir: Path, ref: str | None) -> set[str] | None:
+    """The windows whose anchors are found on a snapshot of this session, or None (no frame)."""
+    if not ref or ref.startswith("session:"):
+        return None
+    from poring_dataset.shards import decode_png
+
+    return set(window_registry().locate(decode_png((session_dir / ref).read_bytes())[:, :, :3]))
+
+
+def judge_window(rec: DemoRecord, session_dir: Path | None) -> V.Verdict:
+    """§2 menu shortcut: the window's anchor absent before, present 1 s after (the snapshots)."""
+    w = rec.action.intended.window
+    if w is None or session_dir is None:
+        return V.Verdict("ambiguous", "no window or no session to judge on")
+    if w not in window_registry().templates:
+        return V.Verdict("ambiguous", f"no cut anchor for {w}")
+    before = windows_on(session_dir, rec.frame.ref)
+    after = windows_on(session_dir, rec.frame_after.ref if rec.frame_after else None)
+    if before is None or after is None:
+        return V.Verdict("ambiguous", "a snapshot is missing")
+    v = V.verify_menu(w in before, w in after)
+    evidence = {"before": sorted(before), "after": sorted(after)}
+    return V.Verdict(v.status, v.cause, {**v.evidence, **evidence})
+
+
 def judge(
-    rec: DemoRecord, events: list[dict[str, Any]], aids: dict[str, int], t_end: int | None = None
+    rec: DemoRecord,
+    events: list[dict[str, Any]],
+    aids: dict[str, int],
+    t_end: int | None = None,
+    session_dir: Path | None = None,
 ) -> V.Verdict | None:
     """``t_end``: the next record's start; no window reaches into the next action."""
     """None = not a scored action (the harness's own records)."""
@@ -62,6 +105,8 @@ def judge(
         target = (start[0] + cell[0], start[1] + cell[1]) if rec.action.intended.relative else cell
         speed = V.speed_before(events, rec.t_mono_ns)
         return V.verify_walk(events, rec.t_mono_ns, aid, target, speed, t_end)
+    if kind == "menu_shortcut":
+        return judge_window(rec, session_dir)
     return V.Verdict("ambiguous", f"no verifier for {kind} yet")
 
 
@@ -107,7 +152,7 @@ def main() -> int:
     starts = sorted(r.t_mono_ns for r in records)
     for rec in records:
         later = [t for t in starts if t > rec.t_mono_ns]
-        v = judge(rec, events, aids, later[0] if later else None)
+        v = judge(rec, events, aids, later[0] if later else None, a.session_dir)
         if v is None:
             out_lines.append(rec.model_dump_json())
             continue

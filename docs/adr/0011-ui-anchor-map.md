@@ -123,3 +123,36 @@ free of **text** as well, so one map serves every locale pack.
 - **Unchanged:** the templates already saved in `data/ui_anchors/`, the measured geometry above,
   and `Resolver`.
 
+
+## Amendment (2026-10-07): four shortcut windows, a channel-order fix, and a locale tension
+
+**New windows** (`status`, `skills`, `inventory`, `equipment`), cut from the shortcut
+demonstrations (`docs/phase4-ui.md`) on RDP:
+- **The template is the title TEXT only:** 60×13 at dx 14, `max_distance` 6.
+  - They share basic_info's title-bar style. A whole 200×15 title strip cross-matched status,
+    inventory and equipment at 8.8–13.1, under the default 12.
+  - Measured with the text strip: each window's own match 0.00 indoors and outdoors (the title
+    bar is opaque); the nearest other window 16.6; no window open ≥ 20.2; 24 / 24 correct locates.
+  - Not measured on S2.
+- **⚠️ Tension with ADR-0012** (an open question, not decided here). For these windows the title
+  text IS the identity, so a locale variant would mask out exactly what tells them apart.
+  - A locale-invariant anchor needs a structural feature instead: the status window's stat rows,
+    the inventory's side tabs, the equipment window's tab row, the skill tree's tab strip.
+  - Until then these four anchors are bound for ONE build + locale (L2
+    `kro-20211103-prere`, en) and fail closed elsewhere.
+
+**Fixed: `ui_anchors_tool.client_frame` flipped `decode_png`'s BGR a second time.**
+- Every template cut from a PNG (rather than a live grab) had its red and blue weights swapped
+  in grey. `check --png` carried the same flip, so it agreed with such templates.
+- **basic_info was affected:** it matched live frames at ~9.3 of 12, against 0.4–1.1 on swapped
+  frames. It was re-cut from a correct frame.
+  - Its 2026-10-04 mask, which includes the Thai-pack variant, was KEPT and ANDed with the new
+    two-scene mask (0.611 → 0.575).
+  - It now matches at 0.00 / 0.42.
+  - The old files are kept in `data/ui_anchors/_pre-bgrfix-20261007/`.
+- chat, hotbar and minimap are grey enough that the order barely moves them (≤ 0.2).
+- Regression test: `test_ui_anchors_variant.py`.
+
+**Open (found the same day):** the hotbar template does not match the outdoor frame of
+`20261007T132642-demo-shortcuts-outdoor` (best 12.35 at another place, vs 0.99 indoors). Not
+investigated yet.

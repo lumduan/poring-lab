@@ -40,13 +40,18 @@ SCRATCH = Path("/dev/shm/poring-lab-tmp")
 
 
 def client_frame(png: str | None) -> np.ndarray:
-    """The client area as BGR: from a full-screen PNG (stored RGB) or a live grab (BGRA)."""
+    """The client area as BGR: from a full-screen PNG or a live grab (BGRA).
+
+    decode_png already returns BGR (a PNG stores RGB; ro_agent.to_png and shards.encode_png both
+    write true RGB). Until 2026-10-07 this flipped it once more, so every template cut from a PNG
+    had its red and blue weights swapped in grey: basic_info matched live frames at ~9.3 of 12
+    instead of ~1. `check --png` had the same flip and so agreed with such templates."""
     gx, gy, gw, gh = r.game_region()
     if png:
-        rgb = decode_png(Path(png).read_bytes())
-        if rgb.shape[:2] != (gh, gw):  # a full-screen shot: cut the client area out
-            rgb = rgb[gy : gy + gh, gx : gx + gw]
-        return np.ascontiguousarray(rgb[:, :, ::-1])
+        bgr = decode_png(Path(png).read_bytes())[:, :, :3]
+        if bgr.shape[:2] != (gh, gw):  # a full-screen shot: cut the client area out
+            bgr = bgr[gy : gy + gh, gx : gx + gw]
+        return np.ascontiguousarray(bgr)
     screen = r.Screen()
     try:
         _, img = screen.grab(gx, gy, gw, gh)

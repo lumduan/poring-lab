@@ -326,6 +326,33 @@ WINDOWS = {
     "minimap": WindowSpec(
         "minimap", size=(128, 142), template_offset=(72, 127), template_size=(54, 12)
     ),
+    # The windows of the demonstrated shortcuts (measured 2026-10-07 on RDP, docs/phase4-ui.md):
+    # the same title-bar style as basic_info, so a whole 200x15 title strip cross-matched status /
+    # inventory / equipment at 8.8-13.1 (under the default 12). The strip is the title TEXT only
+    # (60x13 at dx 14). Over RDP: its own window 0.00 indoors and outdoors (the title bar is
+    # opaque), the nearest wrong window 16.6 (equipment over inventory), nothing open >= 20.2 --
+    # hence max_distance 6. Not measured on S2 (lossy): re-check there before relying on it.
+    # skills: the origin is the title bar's frame; its tab strip hangs 17 px left of it.
+    "status": WindowSpec(
+        "status", size=(280, 141), template_offset=(14, 1), template_size=(60, 13), max_distance=6.0
+    ),
+    "skills": WindowSpec(
+        "skills", size=(542, 400), template_offset=(14, 1), template_size=(60, 13), max_distance=6.0
+    ),
+    "inventory": WindowSpec(
+        "inventory",
+        size=(280, 255),
+        template_offset=(14, 1),
+        template_size=(60, 13),
+        max_distance=6.0,
+    ),
+    "equipment": WindowSpec(
+        "equipment",
+        size=(280, 187),
+        template_offset=(14, 1),
+        template_size=(60, 13),
+        max_distance=6.0,
+    ),
 }
 
 ELEMENTS = {
@@ -355,6 +382,11 @@ CAPTURE_ORIGINS = {
     "chat": (0, 531),
     "game_option": (505, 450),  # open only after Escape
     "minimap": (1136, 18),  # right-anchored; outdoor maps only (measured 2026-10-04, S2 console)
+    # where the shortcuts opened them (2026-10-07, RDP; the client reopens a window where it was)
+    "status": (185, 300),
+    "skills": (378, 200),
+    "inventory": (0, 120),
+    "equipment": (185, 300),
 }
 
 

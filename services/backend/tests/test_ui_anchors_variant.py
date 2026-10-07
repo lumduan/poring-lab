@@ -36,3 +36,23 @@ def test_a_locale_variant_drops_the_title_text_and_keeps_old_drops(tool: ModuleT
     assert mask[3:12, 95:120].sum() == 0  # where the two titles differ: dropped
     assert mask[0, 0] == 1 and mask[14, 150] == 1  # the frame around it: kept
     assert tool.add_variant({"x": tmpl}, {}, {"x": tmpl[:, :10]}) == {}  # wrong shape: ignored
+
+
+def test_a_png_frame_comes_back_in_the_live_grabs_channel_order(
+    tool: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """2026-10-07: client_frame flipped decode_png's BGR once more, so templates cut from a PNG
+    did not match live (BGRA) frames: a red window must stay red."""
+    from poring_dataset.shards import encode_png
+
+    monkeypatch.setattr(tool.r, "game_region", lambda: (80, 77, 8, 4))
+    bgr = np.zeros((4, 8, 3), np.uint8)
+    bgr[..., 2] = 200  # pure red, in BGR order like a live grab
+    bgr[0, 0] = (10, 20, 30)
+    png = tmp_path / "client.png"
+    png.write_bytes(encode_png(bgr))
+    assert np.array_equal(tool.client_frame(str(png)), bgr)
+    full = np.zeros((90, 100, 3), np.uint8)
+    full[77:81, 80:88] = bgr  # a full-screen shot: the client area is cut out
+    png.write_bytes(encode_png(full))
+    assert np.array_equal(tool.client_frame(str(png)), bgr)

@@ -74,3 +74,32 @@ def test_the_hover_constants_match_the_l2_binding(rr: ModuleType) -> None:
     assert cue["rdp"]["min_marker_px"] == ec.MIN_MARKER_PX_V2
     assert cue["rdp"]["crop_px"] == ec.CROP[2] == ec.CROP[3]
     assert "s2" not in cue  # not calibrated on the console path: resolution fails closed
+
+
+def test_open_window_order_is_seeded_and_balanced(rr: ModuleType) -> None:
+    order = rr.window_order(50, 20261010)
+    assert order == rr.window_order(50, 20261010) and order != rr.window_order(50, 1)
+    counts = {w: order.count(w) for w in rr.WINDOWS4}
+    assert sorted(counts.values()) == [12, 12, 13, 13]
+
+
+def test_open_window_chords_come_from_l2_and_a_refusal_is_a_decline(rr: ModuleType) -> None:
+    assert rr.window_keys("status") == ["AltLeft", "KeyA"]
+    assert rr.window_keys("equipment") == ["AltLeft", "KeyQ"]
+
+    class Refusing:
+        def chord(self, *codes: str) -> None:
+            raise rr.r.Stop("bot keys refused: client_not_foreground")
+
+    class Pressing:
+        def __init__(self) -> None:
+            self.chords: list[tuple[str, ...]] = []
+
+        def chord(self, *codes: str) -> None:
+            self.chords.append(codes)
+
+    did = rr.window_rule(Refusing(), ["AltLeft", "KeyA"])
+    assert did["rule_decline"].startswith("refused: bot keys refused")
+    agent = Pressing()
+    assert rr.window_rule(agent, ["AltLeft", "KeyS"]) == {}
+    assert agent.chords == [("AltLeft", "KeyS")]

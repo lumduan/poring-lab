@@ -3,8 +3,9 @@
 Batt, 2026-10-07 (docs/demonstrations.md): the OUTCOME judges, never the explanation.
 - When an agent (Claude), a rule or the bot acts in the lab, one record is appended: what it did,
   what it meant to hit, and the cue it says it used.
-- An offline verifier fills the outcome later from the packet ground truth (poring_dataset.verify;
-  ADR-0007: packets are never decision input), or from the screen for client-side menus.
+- An offline verifier fills the outcome later from the packet ground truth (the dataset package's
+  verify module; ADR-0007: packets are never decision input), or from the screen for client-side
+  menus.
 - A stated cue is only a HYPOTHESIS. It becomes a rule, the rule is tested ALONE on new situations,
   and it is adopted only if it passes a pre-registered bar.
 
@@ -13,8 +14,8 @@ The schema is shared by every actor, so the bot's own actions feed the same veri
 - ``rule:<name>@<version>``: a rule running alone;
 - ``bot:<policy>@<version>``: the bot.
 
-It lives in poring_env (not the offline-only poring_dataset) because the vision container writes
-it too, when the attack rule runs there.
+It lives in poring_env (not the offline-only dataset package, which poring_env never names:
+test_guards) because the vision container writes it too, when the attack rule runs there.
 
 A demo session is a directory (RAM first, /dev/shm; shipped to the NAS; NEVER committed: client
 frames and packet data):
@@ -42,8 +43,9 @@ ACTOR = re.compile(r"^(claude-demo|human|(rule|bot):[A-Za-z0-9_.-]+@[A-Za-z0-9_.
 SESSION = re.compile(r"^\d{8}T\d{6}-demo-[a-z0-9-]+$")
 
 ActionType = Literal[
-    "login", "logout", "walk", "attack_target", "menu_shortcut", "npc_talk", "npc_choice", "npc_input",
-    "shop_buy", "shop_sell", "stat_up", "skill_up", "item_use", "chat", "gm", "other",
+    "login", "logout", "walk", "attack_target", "menu_shortcut",
+    "npc_talk", "npc_choice", "npc_input", "shop_buy", "shop_sell",
+    "stat_up", "skill_up", "item_use", "chat", "gm", "other",
 ]  # fmt: skip
 Status = Literal["pending", "success", "fail", "ambiguous"]
 _CONFIG = ConfigDict(extra="forbid", frozen=True)

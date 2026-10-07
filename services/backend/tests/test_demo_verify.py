@@ -8,6 +8,7 @@ import json
 import sys
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 import pytest
 
@@ -99,3 +100,51 @@ def test_a_walk_window_ends_where_the_next_attempt_starts(dv: ModuleType) -> Non
     assert dv.judge(rec, events, aids, T + 2 * s).status == "success"
     leaked = dv.judge(rec, events, aids, None)
     assert (leaked.status, leaked.cause) == ("ambiguous", "map_change during the walk")
+
+
+class FakeAnchors:
+    """status is 'on screen' when the snapshot's first pixel is white."""
+
+    templates = {"status": object()}
+
+    def locate(self, frame: Any) -> dict[str, tuple[int, int]]:
+        return {"status": (185, 300)} if int(frame[0, 0, 0]) == 255 else {}
+
+
+@pytest.mark.parametrize(
+    ("before", "after", "status", "cause"),
+    [
+        (0, 255, "success", None),
+        (0, 0, "fail", "the window did not appear"),
+        (255, 255, "ambiguous", "the window was already open before the shortcut"),
+    ],
+)
+def test_a_window_shortcut_is_judged_on_its_snapshots(
+    dv: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    before: int, after: int, status: str, cause: str | None,
+) -> None:  # fmt: skip
+    import numpy as np
+
+    from poring_dataset.shards import encode_png
+    from poring_env.demo import FrameRef
+
+    monkeypatch.setattr(dv, "window_registry", lambda: FakeAnchors())
+    (tmp_path / "snapshots").mkdir()
+    for name, value in (("b", before), ("a", after)):
+        (tmp_path / "snapshots" / f"{name}.png").write_bytes(
+            encode_png(np.full((4, 4, 3), value, np.uint8))
+        )
+    rec = DemoRecord(
+        session=SID, actor="rule:open_window@1", t_mono_ns=T, rule="open_window@1", cue="t",
+        frame=FrameRef(source="x11", ref="snapshots/b.png"),
+        frame_after=FrameRef(source="x11", ref="snapshots/a.png"),
+        action=Action(type="menu_shortcut", keys=["AltLeft+KeyA"],
+                      intended=Intended(kind="window", window="status")),
+    )  # fmt: skip
+    v = dv.judge(rec, [], {"gm": 1, "player": 2}, None, tmp_path)
+    assert (v.status, v.cause) == (status, cause)
+    party = Intended(kind="window", window="party")
+    other = rec.model_copy(
+        update={"action": Action(type="menu_shortcut", keys=["AltLeft+KeyZ"], intended=party)}
+    )
+    assert dv.judge(other, [], {}, None, tmp_path).cause == "no cut anchor for party"

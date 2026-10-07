@@ -40,6 +40,12 @@ window:
   game_option: {anchor: game_option, status: unverified}
   minimap: {anchor: minimap, status: unverified}
   chat: {anchor: chat, status: unverified}
+  # cut 2026-10-07 from the shortcut demonstrations (title text, 60x13; RDP: own 0.00 in both
+  # scenes, nearest other window 16.6, max_distance 6). Not measured on S2.
+  status: {anchor: status, status: unverified, measured_on: [rdp]}
+  skills: {anchor: skills, status: unverified, measured_on: [rdp]}
+  inventory: {anchor: inventory, status: unverified, measured_on: [rdp]}
+  equipment: {anchor: equipment, status: unverified, measured_on: [rdp]}
 element:
   hp_bar: {anchor_element: hp_bar, status: unverified}
   sp_bar: {anchor_element: sp_bar, status: unverified}

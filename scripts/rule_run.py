@@ -3,6 +3,7 @@
 
     rule_run.py login [--n 50] [--label login-alone]
     rule_run.py walk --scene outdoor|indoor [--n 50] [--seed 20261009] [--label walk-alone]
+    rule_run.py open_window --scene outdoor|indoor [--n 50] [--seed 20261010]
 
 Batt, 2026-10-07: a rule is adopted only if it passes its bar ALONE.
 - No agent reasoning and no manual help: this script runs the rule's code only.
@@ -286,6 +287,121 @@ def run_walk(scene: str, n: int, seed: int, label: str) -> int:
     return 0
 
 
+WINDOW_RULE = "open_window@1"  # docs/demonstrations.md 3.6
+WINDOW_CLIENT = "kro-20211103-prere"  # the lab client's L2 build
+WINDOWS4 = ("status", "skills", "inventory", "equipment")  # the windows with cut anchors
+AFTER_S = 1.0  # the menu verifier's window (§2): the after-frame is decoded 1 s after the chord
+CLOSE_SETTLE_S = 0.6
+
+
+def window_keys(window: str) -> list[str]:
+    """The window's chord from the L2 binding (never a literal here)."""
+    from poring_skills.resolve import load_l2
+
+    return list(load_l2(WINDOW_CLIENT)["shortcut"]["window"][window]["keys"])
+
+
+def window_order(n: int, seed: int) -> list[str]:
+    """A seeded shuffle of the four windows, repeated: 12 or 13 attempts each for n = 50."""
+    import random
+
+    rng = random.Random(seed)
+    out: list[str] = []
+    while len(out) < n:
+        block = list(WINDOWS4)
+        rng.shuffle(block)
+        out += block
+    return out[:n]
+
+
+def window_rule(agent: r.Agent, keys: list[str]) -> dict[str, object]:
+    """open_window@1, ALONE: the L2 chord, paced. It never looks at the screen."""
+    try:
+        agent.chord(*keys)
+    except r.Stop as exc:  # a foreground-gate refusal or a guard: a decline (= FAIL)
+        return {"rule_decline": f"refused: {str(exc)[:120]}"}
+    return {}
+
+
+def run_window(scene: str, n: int, seed: int, label: str) -> int:
+    import bench
+
+    from poring_env import ui_anchors as ua
+
+    reg = ua.default_registry(r.ROOT / "data" / "ui_anchors")
+    missing = [w for w in WINDOWS4 if w not in reg.templates]
+    if missing:
+        raise SystemExit(f"no cut anchor for {missing} (data/ui_anchors): the verifier needs them")
+    region = r.game_region()
+    mapname, sx, sy = SCENES[scene]
+    sid = new_session_id(f"{label}-{scene}")
+    log = DemoLog(sid)
+    lock = record_session.read_lock(r.ROOT / "state")
+    log.start(backend=str(lock.backend), lock_seq=lock.seq, server="lab-rathena", rule=WINDOW_RULE,
+              n=n, scene=scene, seed=seed, account="gm")  # fmt: skip
+    print(json.dumps({"session": sid, "dir": str(log.dir), "rule": WINDOW_RULE, "scene": scene}),
+          flush=True)  # fmt: skip
+    t_first = r.ns()
+    order = window_order(n, seed)
+
+    def open_now(screen: r.Screen) -> set[str]:
+        frame = r.grab_after(screen, region, r.ns())[:, :, :3]
+        return set(reg.locate(frame)) & set(WINDOWS4)
+
+    def harness_close(agent: r.Agent, screen: r.Screen, which: set[str]) -> None:
+        for w in sorted(which):
+            t = r.ns()
+            agent.chord(*window_keys(w))
+            log.append(DemoRecord(
+                session=sid, actor="rule:harness@1", t_mono_ns=t, t_done_ns=r.ns(),
+                cue="harness: close an open window with its own chord",
+                action=Action(type="menu_shortcut", keys=["+".join(window_keys(w))],
+                              intended=Intended(kind="window", window=w)),
+            ))  # fmt: skip
+            time.sleep(CLOSE_SETTLE_S)
+
+    unseen: list[str | None] = []
+    with r.session(f"rule:{WINDOW_RULE}") as (agent, screen):
+        r.gm(agent, screen, f"@warp {mapname} {sx} {sy}")  # the harness enters the scene once
+        time.sleep(SCENE_ENTRY_S)
+        bench.close_chat(agent, screen)
+        for i, w in enumerate(order):
+            r.activate_client(agent, screen)
+            harness_close(agent, screen, open_now(screen))
+            keys = window_keys(w)
+            pre = snap(log, screen, f"{i:03d}-{w}-before", after_ns=r.ns())
+            t0 = r.ns()
+            did = window_rule(agent, keys)
+            t_done = r.ns()
+            time.sleep(AFTER_S)
+            post = snap(log, screen, f"{i:03d}-{w}-after", after_ns=t_done + int(AFTER_S * 1e9))
+            log.append(DemoRecord(
+                session=sid, actor=f"rule:{WINDOW_RULE}", t_mono_ns=t0, t_done_ns=t_done,
+                frame=pre, frame_after=post, rule=WINDOW_RULE, scene=f"{scene}:{mapname}",
+                cue="open_window@1: the window's L2 chord, paced; the screen is not consulted",
+                action=Action(type="menu_shortcut", keys=["+".join(keys)],
+                              intended=Intended(kind="window", window=w)),
+                outcome={"status": "pending", "evidence": did},  # type: ignore[arg-type]
+            ))  # fmt: skip
+            # the HARNESS (not the rule): what is open now, for its closing and the systematic stop
+            now_open = open_now(screen)
+            unseen.append(str(did.get("rule_decline", "not_open")) if w not in now_open else None)
+            print(json.dumps({"attempt": i, "window": w, "open_after": sorted(now_open), **did}),
+                  flush=True)  # fmt: skip
+            harness_close(agent, screen, now_open)
+            cause = systematic_decline(unseen)
+            if cause is not None:
+                print(json.dumps({"stop": f"systematic: {SYSTEMATIC_K} x {cause} in a row"}),
+                      flush=True)  # fmt: skip
+                break
+    attempts = len(unseen)
+    events, anchor = record_session.write_packets(log.dir, t_first, r.ns())
+    log.finish(packet_events=len(events), packet_anchor=anchor, attempts=attempts)
+    print(json.dumps({"session": sid, "packet_events": len(events), "attempts": attempts}),
+          flush=True)  # fmt: skip
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -299,11 +415,18 @@ def main() -> int:
     wk.add_argument("--n", type=int, default=50)
     wk.add_argument("--seed", type=int, default=20261009)
     wk.add_argument("--label", default="walk-alone")
+    ow = sub.add_parser("open_window")
+    ow.add_argument("--scene", choices=sorted(SCENES), required=True)
+    ow.add_argument("--n", type=int, default=50)
+    ow.add_argument("--seed", type=int, default=20261010)
+    ow.add_argument("--label", default="window-alone")
     a = ap.parse_args()
     if a.rule == "login":
         return run_login(a.n, a.label)
     if a.rule == "walk":
         return run_walk(a.scene, a.n, a.seed, a.label)
+    if a.rule == "open_window":
+        return run_window(a.scene, a.n, a.seed, a.label)
     return 2
 
 

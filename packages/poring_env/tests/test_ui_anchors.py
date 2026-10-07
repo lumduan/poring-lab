@@ -248,3 +248,19 @@ def test_variants_with_another_shape_are_ignored_per_name() -> None:
     t = np.zeros((4, 6), np.float32)
     masks = stable_masks({"a": t, "b": t}, [{"a": np.zeros((4, 5), np.float32)}, {"b": t + 10}])
     assert set(masks) == {"b"} and masks["b"].sum() == 0
+
+
+def test_the_shortcut_windows_are_found_by_their_title_text_only() -> None:
+    """2026-10-07: these windows share basic_info's title-bar style; a whole 200x15 title strip
+    cross-matched status / inventory / equipment at 8.8-13.1. Their strips are the title TEXT
+    (60x13 at dx 14) with a tighter max_distance (own 0.00, nearest other window 16.6, RDP)."""
+    from poring_env import ui_anchors as ua
+
+    for name in ("status", "skills", "inventory", "equipment"):
+        spec = ua.WINDOWS[name]
+        assert (spec.template_offset, spec.template_size, spec.max_distance) == (
+            (14, 1),
+            (60, 13),
+            6.0,
+        )
+        assert name in ua.CAPTURE_ORIGINS

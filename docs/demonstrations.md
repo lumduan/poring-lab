@@ -219,6 +219,45 @@ Common rules:
 **Design-time evidence, for the record (not a test):** the probes' 30 hovers were all outdoors on
 prt_fild08. Nothing was probed indoors.
 
+### 3.6 open_window@1 (pre-registered 2026-10-07 ~13:40, BEFORE its run)
+**The rule, alone:** press the L2 chord for window W (`kro-20211103-prere.yaml`
+`shortcut.window.W`), paced (ro_agent `CHORD_STEP_S`). Nothing else: the rule never looks at the
+screen.
+- **W** is one of status, skills, inventory, equipment: the four windows with cut anchors.
+- **The order** is a seeded shuffle (seed 20261010) of the four, repeated: 12 or 13 attempts each
+  per scene.
+
+**The verifier** is the pre-registered menu verifier (§2), offline, from the session's snapshots:
+- W's anchor (`poring_env.ui_anchors`, the 2026-10-07 templates) must be ABSENT on a frame
+  decoded before the chord, and PRESENT on a frame decoded 1 s after the chord ends.
+- Already open before → ambiguous.
+- The other three windows' anchors are recorded too. Another of them appearing is a finding, not a
+  pass.
+
+**The anchors' own calibration** (design time, RDP, recorded before the run):
+- 24 / 24 correct locates over the two shortcut-demonstration sessions (indoor
+  `20261007T124649`, outdoor `20261007T132642`; before / after / toggled frames).
+- Each window matched itself at 0.00, the nearest other window at 16.6, and `max_distance` is 6.
+- The templates are cut from the indoor session. The run uses NEW frames.
+
+**The harness** (logged as `rule:harness@1`, never part of the rule):
+- It enters the scene once (a warp, 7 s, chat closed).
+- Before each attempt: the client in front (`activate_client`); any of the four windows found
+  open is closed with its own chord.
+- After each attempt: W is closed with its chord when its anchor is found.
+
+**Scenes:** outdoor prt_fild08, then indoor prt_church. **n = 50 per scene. Pass: ≥ 48 / 50 per
+scene**, on RDP.
+- A foreground-gate refusal or a guard Stop is a FAIL.
+- 10 identical failure causes in a row stop the run, which is scored as it stands.
+- A run is INVALID only on a harness defect found afterwards.
+
+**Expected failure sources, stated in advance:**
+- a chord the client ignores;
+- the client not in front;
+- a window opening somewhere its template does not match. Templates match anywhere, but a window
+  could overlap another one.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
@@ -324,3 +363,21 @@ scripts, static data per ADR-0015) are pre-registered here before their tests.
 - **The indoor walk@2 run was not run.** The rule's hover is the same in both scenes. walk@3
   (3.5) replaces walk@2 in both.
 - **Next:** walk@3, pre-registered in 3.5 before it runs.
+
+### walk@3, outdoor, RDP: **PASS, 49 / 50 verified** (2026-10-07 13:14:57–13:25:26 ICT / 06:14:57–06:25:26 UTC)
+- **Session:** `20261007T131457-demo-walk-alone-outdoor`, seed 20261009.
+- **Verified by packets** (verify@1). The walk window now ends at the next attempt (078d121,
+  fixed before this run was scored).
+- **49 verified successes.** Each time the server accepted a walk to exactly the target cell
+  (0 cells off), and nothing re-routed or stopped us.
+  - Accepted at p50 1,025 ms and p95 1,060 ms after the attempt began. The two-motion hover takes
+    ~0.45 s of that.
+  - The targets were 2–6 cells away.
+  - The hovers that clicked counted 111–217 marker px (threshold 60).
+- **1 failure:** attempt 17 declined `no_marker`. A Poring stood just above the target cell, so
+  the cursor was on the monster: the client draws its attack cursor there, not the walk marker.
+  The rule declined rather than click a monster, which is L1 `nav.walk_to`'s precondition
+  (nothing clickable on the target pixel). It counts as a FAIL, as pre-registered.
+- **Next:** walk@3 indoor (n = 50). L1 `nav.walk_to` gets its RDP `verified_on` entry only once
+  both scenes pass.
+

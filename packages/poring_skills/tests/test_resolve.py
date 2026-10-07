@@ -26,7 +26,10 @@ def test_a_window_shortcut_resolves_by_its_parameter() -> None:
         resolve("ui.open_window", LAB, {"window": "world_map"})
     # a bound shortcut whose window has no anchor-map entry yet is still unsupported
     with pytest.raises(Unsupported, match="L2.window"):
-        resolve("ui.open_window", LAB, {"window": "status"})
+        resolve("ui.open_window", LAB, {"window": "party"})
+    got = resolve("ui.open_window", LAB, {"window": "status"})  # anchors cut 2026-10-07
+    assert got["L2.shortcut.window"]["keys"] == ["AltLeft", "KeyA"]
+    assert got["L2.window"]["anchor"] == "status"
     got = resolve("ui.open_window", LAB, {"window": "basic_info"})
     assert got["L2.shortcut.window"]["keys"] == ["AltLeft", "KeyV"]
     assert got["L2.window"]["anchor"] == "basic_info"
