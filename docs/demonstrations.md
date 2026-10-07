@@ -201,3 +201,28 @@ scripts, static data per ADR-0015) are pre-registered here before their tests.
   window now ends where the next record starts (tested). The re-score is unchanged: 50 / 50.
 - **The L1 entry** `session.login` records this RDP pass in `verified_on`. Its status stays
   UNVERIFIED until the S2 re-test passes.
+
+### walk@1, outdoor, RDP: **STOPPED at 5 / 50; the run is INVALID (a harness defect), plus a rule finding** (2026-10-07 12:51–12:53 ICT)
+- **Session:** `20261007T125146-demo-walk-alone-outdoor`.
+- **All 5 attempts declined:**
+  - attempt 0: `no_selfpos`. It came right after the first map change (prt_church → prt_fild08),
+    before the minimap was drawn.
+  - attempts 1–4: `no_marker`, with marker_px 0 every time. The minimap readout was CORRECT
+    each time (it equalled the harness's warp spot).
+- **The run was stopped once the verdict could no longer change:** 4 failures cap it at 46 / 50,
+  under the 48 bar.
+- **Cause 1, a HARNESS defect:** the harness's GM `@warp` opens the chat to type, and it never
+  closed it again. With the chat input open, the client draws NO walk marker under the cursor
+  (checked by hand: chat open → 0 marker px; chat closed → the chevrons are drawn). The tested
+  situations were therefore not valid ones; the harness must close the chat after every GM
+  command (as `bench.enter_scene` does).
+- **Cause 2, a RULE finding:** with the chat closed, the marker IS drawn, but its colour on RDP
+  is ≈ RGB (105–112, 196–203, 112–120), blue only ~7 above red.
+  - `empty_cell.marker_px`'s mint filter (blue − red > 10, tuned on another path) counts just
+    2–12 px, against the 40 px threshold.
+  - So the demonstrated hover cue does not transfer to RDP as written.
+- **Next (pre-registered before it runs):** walk@2.
+  - The harness closes the chat after every GM command.
+  - The marker cue is RE-CALIBRATED per path at design time: walkable vs non-walkable hovers,
+    both scenes, a threshold chosen only if the two separate.
+  - Then n = 50 per scene, alone.
