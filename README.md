@@ -157,6 +157,10 @@ Open **http://192.168.1.13:3000** (`HOST_LAN_IP`). What it gives you:
   - An amber WATCH ONLY chip shows on the screen and in the header.
 - **Top bar (every page):** Console / Settings / Label QA, and the **mode badge**, always visible:
   **BOT** red and pulsing ("BOT in control"), **ASSIST** amber, **HUMAN** blue, grey = no status.
+- **Route preview** (walk@8, 2026-10-07): when a walking rule plans a route, its waypoint polyline
+  (amber, dashed), the goal (a ring) and the next click point (a crosshair) are drawn over the
+  stream. It is display only (a `RoutePreview` the backend relays like detections, never to the mux),
+  and fades after a few seconds.
 - **Header:** mode switch (the same colours) and ASSIST lease. **Panel:** stats. A banner shows if
   the stream or RDP is down, and when bot typing was just refused because the game window was not
   in front.
