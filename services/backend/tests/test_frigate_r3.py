@@ -337,3 +337,26 @@ def test_drops_are_absolute_without_any_baseline(fr: ModuleType) -> None:
         g.poll(sim.t)
         hit = g.breach(sim.t)
     assert hit is not None and hit[0] == "drops" and hit[2] is True
+
+
+def test_r2_exempts_only_the_jobs_own_ollama_model(fr: ModuleType) -> None:
+    """vlm_flag's own qwen3-vl is loaded by design; any OTHER model still yields (R2)."""
+    loaded: list[dict[str, Any]] = [{"name": "qwen3-vl:4b"}]
+
+    def fetch(url: str) -> dict[str, Any] | None:
+        if url.endswith("/api/ps"):
+            return {"models": loaded}
+        return stats(0, inf=28.0, det_fps=30.0, cams={"a": (5.0, 0.0)})
+
+    g = fr.PairedR3(short=False, fetch=fetch, now=0.0, allow_models=["qwen3-vl:4b"])
+    g.poll(1.0)
+    assert g.breach(1.0) is None
+    loaded.append({"name": "llama3:8b"})
+    g.last_ollama = -1e18
+    g.poll(2.0)
+    hit = g.breach(2.0)
+    assert hit is not None and hit[0] == "r2_ollama_loaded" and "llama3:8b" in hit[1]
+    assert "qwen3-vl" not in hit[1]
+    plain = fr.PairedR3(short=False, fetch=fetch, now=0.0)
+    plain.poll(1.0)
+    assert plain.breach(1.0) is not None  # no exemption unless named

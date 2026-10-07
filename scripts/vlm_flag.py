@@ -16,10 +16,15 @@ hand-checked set stay the references, and a disagreement only sends a label to h
 
 HOST script only: Ollama listens on 127.0.0.1:11434 and no poring-lab container joins its network
 (ADR-0005). The GPU sharing rules apply (scripts/frigate_r3.py):
-- R2: refused while another model is loaded or any job of ours is on the GPU;
-- R3: refused without a fresh Frigate baseline, and the run stops on a breach.
-temperature 0, think false, keep_alive 30 s, and an explicit unload at the end. The gold frames are
-client-derived pixels: crops stay in RAM, and nothing is written but the answers (OUT on /dev/shm).
+- R2: refused while another model is loaded or any job of ours is on the GPU; a model other
+  than ours loading mid-run stops it;
+- R3, PAIRED (docs/operations/r3-paired.md): from the first answer (the model is loaded), ON
+  windows send requests and OFF windows send none, 180 s each; the run stops on the paired
+  median delta > 5 ms, INCONCLUSIVE, Frigate unreachable, or (hard) a camera dropping frames.
+temperature 0, think false, keep_alive 10 min (the model stays loaded across an OFF window, so
+an ON window never measures a reload; ~4.7 GB, R1-safe alone), and an explicit unload at the end.
+The gold frames are client-derived pixels: crops stay in RAM, and nothing is written but the
+answers (OUT on /dev/shm).
 """
 
 from __future__ import annotations
@@ -64,6 +69,7 @@ SCHEMA = {
                    "dead": {"type": "boolean"}},
     "required": ["monster", "species", "occluded", "under_ui", "dead"],
 }  # fmt: skip
+KEEP_ALIVE = "10m"  # longer than an OFF window (180 s): no reload inside an ON window
 PROMPT_SHA = hashlib.sha256((PROMPT + json.dumps(SCHEMA, sort_keys=True)).encode()).hexdigest()
 
 
@@ -78,7 +84,7 @@ def ask(png: bytes) -> tuple[dict[str, Any], float]:
     t0 = time.monotonic()
     res = post("/api/generate", {
         "model": MODEL, "prompt": PROMPT, "images": [base64.b64encode(png).decode()],
-        "format": SCHEMA, "stream": False, "think": False, "keep_alive": "30s",
+        "format": SCHEMA, "stream": False, "think": False, "keep_alive": KEEP_ALIVE,
         "options": {"temperature": 0, "seed": 0},
     })  # fmt: skip
     return json.loads(res["response"]), time.monotonic() - t0
@@ -122,8 +128,23 @@ def species_of(lab: qa_export.Labeler, t: int, box: dict[str, Any]) -> str:
     return qa_export.job_aegis().get(int(job), "unknown").lower() if job is not None else "unknown"
 
 
+def r3_wait(r3: Any, sleep: Any = time.sleep) -> tuple[str, str, bool] | None:
+    """Poll Frigate, advance the paired schedule, and idle through an OFF window (no requests).
+    Returns a breach, or None when a request may go out (ON, or the schedule not started)."""
+    while True:
+        r3.poll()
+        act = r3.tick()
+        if act:
+            state = "OFF: no requests" if act == "pause" else "ON: requests"
+            print(f"[{frigate_r3.stamp()}] R3 {state}", flush=True)
+        hit: tuple[str, str, bool] | None = r3.breach()
+        if hit or r3.phase != "off":
+            return hit
+        sleep(2.0)
+
+
 def gate() -> str | None:
-    why = frigate_r3.prestart()
+    why = frigate_r3.prestart(None)
     if why:
         return why
     tags = frigate_r3.fetch_json(f"{frigate_r3.OLLAMA}/api/tags") or {}
@@ -140,9 +161,8 @@ def measure(session: str, out: Path, limit: int | None) -> int:
     if why:
         print(f"[{frigate_r3.stamp()}] REFUSED: {why}", flush=True)
         return 3
-    base, _ = frigate_r3.load_baseline(frigate_r3.BASELINE)
-    assert base is not None
-    guard = frigate_r3.R3Guard(base)
+    r3 = frigate_r3.PairedR3(short=False, cam_ref=frigate_r3.camera_reference(), started=False,
+                             allow_models=[MODEL])  # fmt: skip
     hand = json.loads((label_iou.HANDCHECK / f"{session}.json").read_text())
     index = {
         int(t): fid for fid, t in json.loads((GOLD / session / "index.json").read_text()).items()
@@ -180,15 +200,18 @@ def measure(session: str, out: Path, limit: int | None) -> int:
             for i, j in enumerate(jobs):
                 img = Image.open(GOLD / session / "frames" / f"{j['fid']}.png").convert("RGB")
                 for size, ctx in CONTEXT.items():
-                    guard.poll()
-                    hit = guard.breach()
+                    hit = r3_wait(r3)
                     if hit:
+                        hard = " (R3-HARD)" if hit[2] else ""
                         print(
-                            f"[{frigate_r3.stamp()}] ABORT vlm_flag: R3 {hit[0]}: {hit[1]}",
+                            f"[{frigate_r3.stamp()}] ABORT vlm_flag: R3 {hit[0]}: {hit[1]}{hard}",
                             flush=True,
                         )
                         return 1
                     answer, secs = ask(crop_png(img, tuple(j["box"]), ctx))
+                    if not r3.started:
+                        r3.start()  # the model is loaded: the first ON window opens now
+                        print(f"[{frigate_r3.stamp()}] R3 schedule started", flush=True)
                     fh.write(
                         json.dumps(
                             {
@@ -208,6 +231,7 @@ def measure(session: str, out: Path, limit: int | None) -> int:
                     print(f"[{frigate_r3.stamp()}] {i + 1}/{len(jobs)}", flush=True)
         finally:
             unload()
+            print(f"[{frigate_r3.stamp()}] R3 summary: {json.dumps(r3.summary())}", flush=True)
     return 0
 
 

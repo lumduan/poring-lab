@@ -62,3 +62,41 @@ def test_crops_stay_inside_the_frame_and_grow_by_the_context(vf: ModuleType) -> 
     wide = Image.open(__import__("io").BytesIO(vf.crop_png(img, (10, 10, 30, 20), 0.5)))
     edge = Image.open(__import__("io").BytesIO(vf.crop_png(img, (0, 0, 20, 10), 0.5)))
     assert tight.size == (20, 10) and wide.size == (40, 20) and edge.size == (30, 15)
+
+
+class FakeR3:
+    """Two OFF polls, then ON; records how often the caller slept."""
+
+    def __init__(self, phases: list[str], hit: tuple[str, str, bool] | None = None) -> None:
+        self.phases, self.hit, self.polls = phases, hit, 0
+
+    @property
+    def phase(self) -> str:
+        return self.phases[min(self.polls - 1, len(self.phases) - 1)]
+
+    def poll(self) -> None:
+        self.polls += 1
+
+    def tick(self) -> str | None:
+        return None
+
+    def breach(self) -> tuple[str, str, bool] | None:
+        return self.hit
+
+
+def test_no_request_goes_out_in_an_off_window(vf: ModuleType) -> None:
+    slept: list[float] = []
+    r3 = FakeR3(["off", "off", "on"])
+    assert vf.r3_wait(r3, sleep=slept.append) is None
+    assert r3.polls == 3 and slept == [2.0, 2.0]
+
+
+def test_a_breach_stops_even_inside_an_off_window(vf: ModuleType) -> None:
+    hit = ("drops", "camera a dropping frames for 30 s", True)
+    assert vf.r3_wait(FakeR3(["off"], hit), sleep=lambda s: None) == hit
+
+
+def test_the_gate_needs_no_baseline_file(vf: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[object] = []
+    monkeypatch.setattr(vf.frigate_r3, "prestart", lambda *a, **k: seen.append(a) or "stop")
+    assert vf.gate() == "stop" and seen == [(None,)]

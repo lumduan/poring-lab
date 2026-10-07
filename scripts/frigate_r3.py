@@ -454,9 +454,12 @@ class PairedR3:
         now: float | None = None,
         cam_ref: dict[str, float] | None = None,
         started: bool = True,
+        allow_models: Sequence[str] = (),
     ) -> None:
         now = time.time() if now is None else now
         self.started = started
+        # R2 exempts only the job's OWN Ollama model (vlm_flag); any other loaded model yields
+        self.allow_models = frozenset(allow_models)
         self.fetch = fetch
         self.win_s, self.settle_s, self.min_updates = SHORT_WIN if short else TRAIN_WIN
         self.short = short
@@ -558,8 +561,9 @@ class PairedR3:
         if now - self.last_fresh > UNREACHABLE_S:
             quiet = now - self.last_fresh
             return ("frigate_unreachable", f"no fresh Frigate stats for {quiet:.0f} s", False)
-        if self.models:
-            names = ", ".join(str(x["name"]) for x in self.models)
+        others = [x for x in self.models if x.get("name") not in self.allow_models]
+        if others:
+            names = ", ".join(str(x["name"]) for x in others)
             return ("r2_ollama_loaded", f"Ollama loaded {names}", False)
         state, med, n = self.result
         if state == "trip":

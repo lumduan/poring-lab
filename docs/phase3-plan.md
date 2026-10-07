@@ -1549,10 +1549,17 @@ predicted box and compare it with the observed crop: a masked normalised cross-c
   - Digest `1343d82e…`; Apache-2.0 (THIRD_PARTY.md).
   - Called by HOST scripts only, on `127.0.0.1:11434`. No poring-lab container joins Ollama's
     network (ADR-0005).
-  - temperature 0, `think: false`, `keep_alive` 30 s, then an explicit unload.
+  - temperature 0, `think: false`, `keep_alive` ~~30 s~~ 10 min, then an explicit unload.
+    ➡️ **Amended 2026-10-07 ~13:30, before any run:** 10 min outlives an R3 OFF window, so an ON
+    window never measures a model reload. Residency only: the answers are unchanged (temperature
+    0, seed 0).
   - The prompt text and the model digest are recorded with every result.
 - **GPU rules:** R1–R3 apply (`scripts/frigate_r3.py`). It never runs during training or eval
-  (one model at a time). It needs a fresh Frigate baseline, and it aborts on an R3 breach.
+  (one model at a time). ~~It needs a fresh Frigate baseline, and it aborts on an R3 breach.~~
+  ➡️ **Amended 2026-10-07 ~13:30, before any run:** R3 is the PAIRED measurement
+  (`docs/operations/r3-paired.md`). From the first answer, ON windows send requests and OFF
+  windows send none (180 s each). Any other Ollama model loading yields (R2); camera drops stay
+  absolute. No baseline file.
 - **Measured first, on the gold set (frames already extracted under `data/train/eval/gold/`):**
   - Monster crops: every hand-checked monster box. The species comes from the position-matched v1
     label (packets); a box with no match is "unknown species" and is left out of species
