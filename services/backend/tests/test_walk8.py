@@ -186,3 +186,28 @@ def test_a_portal_is_taken_by_a_click_on_the_warp_cursor(fake: Any) -> None:
     last = [e for e in did["events"] if e.get("clicked")][-1]
     assert tuple(last["end"]) == portal and last["outcome"] == "portal"
     assert s.client.attacked == []
+
+
+def test_after_a_fix_an_unnamed_walk_cursor_may_be_clicked(fake: Any) -> None:
+    """The 23:35 pilot: pews hid the marker (17-27 px) on cells whose belief /where had just
+    confirmed twice; with the belief CONFIRMED, the walk cursor (re-checked) is enough."""
+    w8, _, _ = fake
+    s = sim(fake, (10, 18), hidden={(12, 18), (13, 18), (11, 18)})
+    fixes: list[tuple[int, int]] = []
+
+    def fix(agent: Any, screen: Any, w: Any, mask: Any, band: Any) -> dict[str, Any]:
+        fixes.append(w.position)
+        return {"ok": True, "to": list(w.position)}
+
+    did = w8.walk_route(s.pr, s.w, (13, 18), BAND, 3, lambda *a: None, ring(), relocalise=fix)
+    assert did.get("arrived_belief") and s.client.true == (13, 18), did
+    assert fixes and any(e.get("outcome") == "unnamed_after_fix" for e in did["events"])
+    assert s.client.attacked == []
+
+
+def test_without_a_fix_an_unnamed_walk_cursor_is_not_clicked(fake: Any) -> None:
+    w8, _, _ = fake
+    s = sim(fake, (10, 18), hidden={(12, 18), (13, 18), (11, 18)})
+    did = w8.walk_route(s.pr, s.w, (13, 18), BAND, 3, lambda *a: None, ring(),
+                        relocalise=lambda *a: {"ok": False})  # fmt: skip
+    assert not did.get("arrived_belief") and s.client.clicks == [], did

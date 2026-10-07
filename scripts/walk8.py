@@ -129,7 +129,7 @@ def named8(w: w5.World, rel: tuple[int, int], p: dict[str, Any]) -> tuple[int, i
 
 
 def click_step(pr: w6.Prober, w: w5.World, end: tuple[int, int],
-               expect: str = WALK) -> dict[str, Any]:  # fmt: skip
+               expect: str = WALK, accept_unnamed: bool = False) -> dict[str, Any]:  # fmt: skip
     """Probe ONLY the click point (walk@6's target logic: WALK + the chevrons naming the cell, one
     correction for a neighbour, the in-cell alternates; the no-motion re-check), then click.
     ``expect="warp"``: the click whose intent is to TAKE a portal -- the allowed shape is the warp
@@ -153,6 +153,20 @@ def click_step(pr: w6.Prober, w: w5.World, end: tuple[int, int],
                        "cell": k, "marker_px": p["marker_px"]})  # fmt: skip
         if p["shape"] != WALK:  # a unit (or anything unknown) covers the click point
             return {"clicked": False, "outcome": f"covered_{p['shape']}", "target": target}
+        if k is None and accept_unnamed:
+            # the belief was just CONFIRMED by /where: the chevrons' job (projection and belief
+            # agree) is done, and pews hide the marker (17-27 px, the 23:35 pilot). The walk
+            # cursor, re-checked with no motion, is enough -- unknown is still no click.
+            again = pr.read(u, v)
+            target[-1]["recheck"] = {"shape": again["shape"], "cell": None}
+            if again["shape"] != WALK:
+                return {"clicked": False, "outcome": f"recheck_{again['shape']}",
+                        "target": target}  # fmt: skip
+            gx, gy, _, _ = r.game_region()
+            t_click = r.ns()
+            pr.agent.click(gx + round(u), gy + round(v))
+            return {"clicked": True, "outcome": "unnamed_after_fix", "target": target,
+                    "at": (u, v), "t_click": t_click}  # fmt: skip
         if k == (0, 0):
             again = pr.read(u, v)  # the RE-CHECK: a fresh grab, no motion
             k2 = named8(w, rel, again)
@@ -299,7 +313,8 @@ def walk_route(pr: w6.Prober, w: w5.World, goal: tuple[int, int], band: tuple[in
                seg_max: int, log_seg: Any, noentry_mask: Any, read_position: Any = None,
                relocalise: Callable[..., dict[str, Any]] = reloc2.relocalise,
                label: str = "walk@8", expect_goal: str = WALK,
-               clock: Callable[[], float] = time.monotonic) -> dict[str, Any]:  # fmt: skip
+               clock: Callable[[], float] = time.monotonic,
+               fixed_at_start: bool = False) -> dict[str, Any]:  # fmt: skip
     """walk@8, ALONE, one route: plan ONCE, probe only the click point, fix the belief only when in
     doubt. ``expect_goal="warp"``: the goal is a PORTAL (the warp cursor at the click point).
     Patience ONLY for a UNIT at the click point; a substitute ONLY for a UNIT on the goal
@@ -310,6 +325,7 @@ def walk_route(pr: w6.Prober, w: w5.World, goal: tuple[int, int], band: tuple[in
     target, substitute = goal, None
     waited = 0.0
     unit_since: float | None = None
+    fixed = fixed_at_start  # a /where fix confirmed the belief since the last click
 
     def done(**kw: Any) -> dict[str, Any]:
         return {"events": events, "relocs": relocs, "clicks": clicks, "covered": covered,
@@ -326,11 +342,13 @@ def walk_route(pr: w6.Prober, w: w5.World, goal: tuple[int, int], band: tuple[in
         nonlocal relocs, path
         if relocs >= RELOCS:
             return "relocalise_limit"
+        nonlocal fixed
         rl = relocalise(pr.agent, pr.screen, w, noentry_mask, band)
         relocs += 1
         events.append({"relocalise": rl, "why": why, "t": r.ns()})
         if not rl["ok"]:
             return "relocalise_failed"
+        fixed = True
         path = plan_once()
         return None if path is not None else "no_plan"
 
@@ -367,11 +385,11 @@ def walk_route(pr: w6.Prober, w: w5.World, goal: tuple[int, int], band: tuple[in
         for end in cands:
             preview(pr.agent, w, w.position, waypoints(w.position, path), end, label)
             expect = expect_goal if end == goal else WALK
-            step = click_step(pr, w, end, expect)
+            step = click_step(pr, w, end, expect, accept_unnamed=fixed)
             for _ in range(STALE_RETRIES):  # the park never went fresh: the same point again
                 if step["outcome"] != "stale_background":
                     break
-                step = click_step(pr, w, end, expect)
+                step = click_step(pr, w, end, expect, accept_unnamed=fixed)
             kept = {k: v for k, v in step.items() if k != "at"}
             events.append({"from": list(w.position), "end": list(end), "t": r.ns(), **kept})
             log_seg(step.get("t_click", r.ns()), w.position, end, step)
@@ -386,6 +404,7 @@ def walk_route(pr: w6.Prober, w: w5.World, goal: tuple[int, int], band: tuple[in
                 clicks += 1
                 streak, streak_from = 0, None
                 unit_since = None
+                fixed = False
                 time.sleep(n * w5.STEP_S + w5.ARRIVE_S)
                 clicked = True
                 break
@@ -570,7 +589,8 @@ def run(scene: str, condition: str, n: int, seed: int, label: str, crowd: int,
             else:
                 did = walk_route(pr, w, goal, band, seg_max, log_seg, noentry_mask, read_position,
                                  relocalise=relocalise, label=f"walk@8 {scene} route {i}",
-                                 expect_goal="warp" if portal else WALK)  # fmt: skip
+                                 expect_goal="warp" if portal else WALK,
+                                 fixed_at_start=bool(start_fix and start_fix["ok"]))  # fmt: skip
             judged = PORTAL["to"] if portal else goal  # a portal route ends on the OTHER map
             extra: dict[str, Any] = (
                 {"to_map": PORTAL["to_map"], "portal": list(PORTAL["cell"])} if portal else {}
