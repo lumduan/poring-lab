@@ -87,7 +87,7 @@ as the `npc` class.
 | Alt+D | Tip box |
 | Escape | Game option (character select, settings, shortcut settings, exit, return) |
 | Insert | Sit / stand (the pose) |
-| F12 | Hides / shows the hotkey bar |
+| F12 | ~~Hides / shows the hotkey bar~~ ➡️ CYCLES the hotkey bar's rows: 1 → 2 → 3 → 4 rows (seen press by press, `20261007T135459-demo-f12-cycle`), then 4 → hidden → 1 (fits the demonstration's two presses, which left 1 row). Not a toggle: pressing it twice does NOT restore the bar. The hotbar anchor is cut for 4 rows |
 
 - **No window seen on a level-1 Novice:** Alt+W (cart: none yet), Alt+J, Alt+R, Alt+I, Alt+O,
   Alt+T, Alt+P, Alt+B, Alt+K, Alt+N, Alt+F. They stay unbound. Alt+W is re-tried with a cart.
@@ -95,6 +95,10 @@ as the `npc` class.
   option menu, the chat-room dialog). That matters for the L4 work: titles are matched by
   anchors, never by reading text.
 - **Never sent:** Alt+F4 (quits), Alt+Enter, Alt+Tab, Alt+Space.
+- **A demonstration that "presses again to restore" assumes a toggle.** F12 is a cycle, so the
+  shortcut demonstration left the hotbar at 1 row, and the hotbar anchor (cut for 4 rows) stopped
+  matching (found 2026-10-07 13:50; restored by three presses). Cycling shortcuts need their own
+  restore.
 
 ## Bindings status (wave 1)
 | L1 concept | L2 | L3 | alone-test |

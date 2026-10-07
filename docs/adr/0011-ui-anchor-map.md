@@ -153,6 +153,9 @@ demonstrations (`docs/phase4-ui.md`) on RDP:
 - chat, hotbar and minimap are grey enough that the order barely moves them (≤ 0.2).
 - Regression test: `test_ui_anchors_variant.py`.
 
-**Open (found the same day):** the hotbar template does not match the outdoor frame of
-`20261007T132642-demo-shortcuts-outdoor` (best 12.35 at another place, vs 0.99 indoors). Not
-investigated yet.
+**Open (found the same day):** ➡️ **RESOLVED 13:56, not a template fault.**
+- The shortcut demonstration had left the hotbar at 1 row: F12 CYCLES its rows
+  (`docs/phase4-ui.md`), and the template is cut for 4 rows. Three F12 presses restored it
+  (distance 1.03).
+- As first written: the hotbar template does not match the outdoor frame of
+  `20261007T132642-demo-shortcuts-outdoor` (best 12.35 at another place, vs 0.99 indoors).

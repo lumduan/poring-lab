@@ -29,7 +29,9 @@ shortcut:
     tipbox: {keys: [AltLeft, KeyD], status: demonstrated, evidence: shortcuts#24}
   system_menu: {keys: [Escape], status: demonstrated, evidence: shortcuts#27}
   sit: {keys: [Insert], status: demonstrated, evidence: shortcuts#26}
-  hotbar_toggle: {keys: [F12], status: demonstrated, evidence: shortcuts#28}
+  # F12 CYCLES the bar's rows 1 -> 2 -> 3 -> 4 -> hidden -> 1 (f12-cycle demo, 2026-10-07): not
+  # a toggle. The hotbar anchor is cut for 4 rows.
+  hotbar_toggle: {keys: [F12], status: demonstrated, evidence: shortcuts#28, cycle: [1, 2, 3, 4, hidden]}
   hotbar: {keys: [F1, F2, F3, F4, F5, F6, F7, F8, F9], status: unverified}
   # no window seen for these on the GM (a level-1 novice): AltLeft + KeyW (cart: none yet), KeyJ
   # (pet), KeyR (homunculus), KeyI, KeyO, KeyT, KeyP, KeyB, KeyK, KeyN, KeyF -- not bound
