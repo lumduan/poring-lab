@@ -62,7 +62,8 @@ decision input (ADR-0007). The screen is used only for client-side menus.
   - the click's distance to that sprite is recorded.
 - **Our aid** comes from `login_accepted`, else `infer_self_aid`, else the lab accounts
   (`config/environments.yaml`).
-- **Later verifiers** (NPC talk/choice, shop, stat/skill) need decoders not yet built (§5).
+- **Later verifiers** (NPC talk/choice, shop, stat/skill): their decoders were built 2026-10-07,
+  for offline replay only; the verifiers themselves are not built yet (§5).
 
 ## 3. Pre-registered alone-tests (written before any run)
 Common rules:
@@ -278,9 +279,62 @@ scene**, on RDP.
   zeny change.
 - **Stat / skill:** STATUS_CHANGE_ACK, SKILLINFO_UPDATE.
 
-These need new decoders. They are verified by an offline replay of the banked pcapng with the new
-decoders, not by redeploying the sniffer. Their rules (the expected options from rAthena's NPC
-scripts, static data per ADR-0015) are pre-registered here before their tests.
+They are verified by an offline replay of the banked pcapng with the new decoders, not by
+redeploying the sniffer. Their rules (the expected options from rAthena's NPC scripts, static data
+per ADR-0015) are pre-registered here before their tests.
+
+**Decoders built 2026-10-07, replay only; the sniffer image is NOT rebuilt.**
+- They run in `python -m poring_packets.replay` over banked captures. The live sniffer still emits
+  only the older events.
+- Layouts are rAthena's at the pinned ref, for PACKETVER 20211103 (an RE client), with citations in
+  `decode.py` (`MAP_SC` / `MAP_CS`). Every id and size matches the generated length table.
+- A short or garbled packet decodes to nothing; it never raises.
+- `npc_gid` is the NPC's block id, the id `entity_appear` reports.
+- Inventory `index` is the client's: the server's index + 2, as on the wire.
+
+Event → fields (cs = our request, sc = the server):
+- NPC dialog:
+  - `npc_contact` (cs): `npc_gid`, `contact_type`. A monster's or player's id here starts a
+    continuous attack on the server.
+  - `npc_say` (sc): `npc_gid`, `text` (cp874), `raw_hex`.
+  - `npc_wait` / `npc_close` (sc): `npc_gid`. The dialog shows its next / close button.
+  - `npc_menu` (sc): `npc_gid`, `options` (the ':'-split list, empty entries kept), `raw_hex`.
+  - `npc_choose` (cs): `npc_gid`, `choice` (1-based; 255 = cancel), `cancelled`.
+  - `npc_next_click` / `npc_close_click` (cs): `npc_gid`.
+  - `npc_number_prompt` / `npc_text_prompt` (sc): `npc_gid`.
+  - `npc_number_input` (cs): `npc_gid`, `value`.
+  - `npc_text_input` (cs): `npc_gid`, `text`, `raw_hex`.
+- Shop:
+  - `shop_deal_prompt` (sc): `npc_gid`.
+  - `shop_deal_choice` (cs): `npc_gid`, `deal` (0 buy, 1 sell), `kind`.
+  - `shop_buy_list` (sc): `items[]` = `item_id`, `price`, `discount_price`, `item_type`.
+  - `shop_buy_request` (cs): `items[]` = `item_id`, `amount`.
+  - `shop_buy_result` (sc): `result`, `ok` (result 0).
+  - `shop_sell_list` (sc): `items[]` = `index`, `price`, `overcharge`.
+  - `shop_sell_request` (cs): `items[]` = `index`, `amount`.
+  - `shop_sell_result` (sc): `result`, `ok`.
+  - Zeny is the existing `stat_change` with `name` zeny (var 20).
+- Stats and skills:
+  - `stat_raise_request` (cs): `stat` (13–18), `name` (str … luk), `amount`.
+  - `stat_raise_result` (sc): `stat`, `name`, `ok`, `value` (the new value, capped at 255).
+  - `skill_up_request` (cs): `skill_id`.
+  - `skill_update` (sc): `skill_id`, `level`, `sp`, `range`, `upgradable`.
+  - `skill_list` (sc): `skills[]` = `skill_id`, `level`, `sp`, `range`, `upgradable`.
+  - The points left arrive as `stat_change`: `status_point` (var 9), `skill_point` (var 12).
+- Equipment and items:
+  - `equip_request` (cs): `index`, `location`.
+  - `equip_result` (sc): `index`, `location`, `view_sprite`, `result`, `ok`. Result 0 = worn,
+    1 = level too low, 2 = failed.
+  - `unequip_request` (cs): `index`.
+  - `unequip_result` (sc): `index`, `location`, `result`, `ok` (0 = taken off).
+  - `use_item_request` (cs): `index`, `aid`.
+  - `use_item_result` (sc): `index`, `item_id`, `aid` (whose use: a success goes to the whole
+    area), `amount` (left), `ok`.
+- The attack click:
+  - `attack_request` (cs, CZ_REQUEST_ACT2 0x0437): `target_gid`, `action`, `kind`, `is_attack`.
+  - Action 0 = attack once, 7 = keep attacking (both `is_attack`); 2 / 3 = sit / stand.
+  - A walk click stays a `self_move_request`. That difference is what tells an attack click from
+    a walk.
 
 ## Results
 
