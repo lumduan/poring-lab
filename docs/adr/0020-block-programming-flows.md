@@ -874,6 +874,13 @@ Marked FIRST: needed before F1 or F2.
 13. **JavaScript import**: never, or later with a parser whose licence is checked first.
 14. **Blockly's CSP fit** (section 9): only measurable on the pinned version; the fallback is our
     own editor.
+15. **FIRST · Where the linter runs** (added at review, 2026-10-07). Layer 3 uses the walk graph
+    (`poring_dataset/walk.py`), and section 5 re-runs the linter at run start. `vision` may never
+    get the dataset package (ADR-0010; `test_guards.py`
+    `test_vision_and_poring_env_never_get_the_dataset_package`). So either the linter runs host- or
+    backend-side and hands `vision` an approved, re-linted IR, or the walk graph moves to a package
+    `vision` may import (it is our own clean A*, but it lives beside the label code). Decide before
+    F1.
 
 ## Consequences
 
