@@ -1434,6 +1434,27 @@ view agreement per species.
   design intends.
 - Nothing else changes (the ruler, the rule, the thresholds).
 
+**2f ODD RESULT (2026-10-07 ~14:30, scored once). FROZEN before EVEN:** `views.py` sha256
+798b960dac159ba6…, `width_eval.py` baffffeca5524a73…, ruler DIFF 24 (1a-validated). 1,150 clean
+frames, none left out.
+
+| outdoor centre | OBS (observed view) | TL (Timeline view) |
+|---|---|---|
+| Poring k_w (n 179) | 0.1495 | 0.1486 |
+| Lunatic k_w (n 113) | 0.1451 | 0.1471 |
+| **split k_w** | **0.9706** | **0.9899** |
+
+- shrink = |split_TL − 1| − |split_OBS − 1| = −0.019 (the rule needs ≥ +0.02). **Verdict ODD: "not
+  the facing."** The Timeline arm is CLOSER to 1 than the observed one.
+- All outdoor frames: OBS 0.971, TL 1.008.
+- k_h / k_w: Lunatic 1.10 (OBS) vs 1.06 (TL); Poring 1.05 / 1.06.
+- View agreement (Timeline vs NCC): Poring outdoor 0.52, Lunatic outdoor 0.41, Poring indoor
+  0.71.
+- **Stated, not hidden:** at the validated ruler the OBS split is already 0.971, inside 1 ± 0.03.
+  The 0.93 "width split" that motivated 2f was measured at DIFF 48. So most of it belongs to the
+  ruler, not the species.
+- EVEN runs once, next, with these files unchanged.
+
 ### 5f. The gold set, POSITION ONLY, for monsters (Batt, 2026-10-07), written BEFORE scoring
 
 **Why position only.**
