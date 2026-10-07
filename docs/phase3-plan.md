@@ -1205,6 +1205,20 @@ validation holds on EVEN AND the k verdict is the same as ODD's (or both "neithe
 - Reading: v1 "points at least as well as v0" if its monster precision AND recall are both ≥
   v0's; the centre distances are reported beside them.
 
+**RESULT (2026-10-07 ~09:00, scored ONCE each): YES, v1 points at least as well as v0.**
+
+| gold set, position only | monster P | monster R | TP / FP / FN | centre px, median / p90 | NPC P / R |
+|---|---|---|---|---|---|
+| v0 | 0.889 | 0.800 | 80 / 10 / 20 | 0.07 / 16.8 | 0.926 / 0.926 |
+| **v1, k = 0.140** | **0.902** | **0.830** | 83 / 9 / 17 | 6.1 / 16.2 | 0.926 / 0.926 |
+
+- The reference LEANS TOWARD v0: 82 % of its monster boxes ARE v0's boxes. So v0's ~0 px median
+  centre distance echoes its own accepted boxes, and the distance column cannot compare the two
+  fairly.
+- Even so, v1 has more TP and fewer FP and FN: v1's labels point at the right monsters at least as
+  well as v0's.
+- Box size is not judged here (§5d-v/vi).
+
 ### 5e. The pragmatic v1 track: v1 labels at k = 0.140 on the GOLD set (Batt, 2026-10-07), written BEFORE scoring
 
 **Why.** M4 proves the render rule against a ruler that is itself in question (§5d-v). The real
