@@ -721,6 +721,53 @@ correct); the ROUTE fails from decision-making under uncertainty.
 - re-localisations (trigger; correct / WRONG / undecided against the packets);
 - route time.
 
+### 3.13 where@1, indoor (pre-registered 2026-10-07 ~22:10, BEFORE its run; Batt's idea, ~19:50)
+**The fix:** the client's own **`/where`**: an ABSOLUTE position from pixels, with no packets as
+input.
+
+**Design-time facts** (RDP; client pixels in `/dev/shm` and `data/where/`, never committed):
+- At 3 known cells (prt_church ×2, prt_fild08), `/where` printed `<display name>(<map>) : X, Y` in
+  the chat window: **exactly the warp cell** every time.
+  - The display name is Korean text, shown garbled through the Thai codepage; the internal map name
+    and the numbers are ASCII.
+  - The two lines before it on a map change are the client's own map-load notices.
+- **No packet event** (decoded or unknown-id) in any `/where` window, so it reads as a client-side
+  command.
+  - Stated limit: a known but undecoded packet id would not show in this check.
+  - Not yet tried on a non-GM account.
+- **The font:** one flat colour (RGB 255,252,104), no anti-aliasing, a 14 px line pitch.
+  - BUT the first samples lost pixels: the RDP progressive codec sends a coarse picture first and
+    refines it, so a grab ~1 s after the text appears read some glyphs short.
+  - So the reader takes a **STABLE** line only: grabs every 0.25 s until two consecutive newest
+    lines are identical, at most 4 s.
+- **The templates:** `0`–`9` and the comma, cut from 8 stable lines covering every digit.
+  - All 8 parse back, but in-sample: this test is the real one.
+
+**The rule** (`scripts/where_fix.py`, `fix()`):
+1. Type `/where` through the chat path (the foreground gate applies).
+2. Take the stable newest yellow line in the chat area.
+3. Cut glyphs on empty columns (specks under 3 px dropped).
+4. Read the trailing `X, Y`: each glyph equal to a template within 1 pixel. Anything that does not
+   parse exactly is no fix, never a guess.
+
+**The harness** (`scripts/where_run.py`, prt_church, seed **20261020**), per attempt:
+- a seeded `@warp` to a walkable cell within ±8 of the GM spot;
+- then a seeded click 3–8 cells away, so where we stop is known only to the packets (the "belief in
+  doubt" case);
+- then the fix.
+- 56 attempts; the first 50 NOT interrupted are scored.
+
+**Scoring** (`where_run.py --score`): against the packets' position at the read time.
+- correct;
+- **WRONG** (another cell: a misread absolute fix, the dangerous outcome);
+- no fix.
+
+**The bar:** correct ≥ **48 / 50** AND **WRONG = 0**.
+- Reported: no-fix cases, read time (typing + stable wait), and the comparison with relocalise@2
+  (16 correct, 24 WRONG / 50) and relocalise@1 (6 correct, 2 WRONG).
+- **If it passes**, it is walk@8's indoor fix: at the start of an indoor route and whenever the
+  belief is in doubt, not every step (Batt).
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.

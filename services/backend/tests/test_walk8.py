@@ -1,4 +1,4 @@
-"""scripts/walk8.py (walk@8, demonstrations 3.13): the route is planned once from the structure;
+"""scripts/walk8.py (walk@8, demonstrations 3.14): the route is planned once from the structure;
 only the click point is probed; a covered click point moves along the polyline at once; the belief
 is checked against the structure -- against walk@6/7's fake client (test_walk6/7.py)."""
 

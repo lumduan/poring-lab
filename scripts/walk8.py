@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""walk@8 (docs/demonstrations.md 3.13; Batt's insight, 2026-10-07 ~19:25).
+"""walk@8 (docs/demonstrations.md 3.14; Batt's insight, 2026-10-07 ~19:25).
 
     walk8.py --scene indoor|outdoor --condition clean|crowd [--n 56] [--seed 20261018]
              [--label walk8-alone] [--crowd 4]
