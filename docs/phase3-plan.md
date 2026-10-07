@@ -1292,6 +1292,45 @@ resolution, EVEN can still confirm it blind.
 - **The DECISIVE confirmation is NEW data:** the fresh full M4 session (§5d-vii, planned), with this
   ruler and criterion UNCHANGED. **k stays OPEN until then.**
 
+### 5d-viii. M4 step 2f: the species WIDTH split against the FACING error (Batt, 2026-10-07), written BEFORE any scoring
+
+**Why.** 2e ODD found that the two species' widths disagree: k_w Lunatic 0.1333 vs Poring ~0.145, a
+0.93 split. The known outdoor facing error is still OPEN: the Timeline view agrees with the drawn
+view on only ~0.4–0.6 of outdoor frames (§5d, §5d-ii). A Lunatic's width depends strongly on its
+view (side vs front, ears and body); a Poring's barely does.
+
+**The question (Batt):** does the Lunatic width split shrink when the frame's view comes from the
+OBSERVED facing (the best-view search) instead of the Timeline's facing?
+
+**Arms, per clean real frame** (the same frames, ruler and component rule as 2e):
+- **OBS:** 2e's MP. The 2c NCC best view, motion and ±2 px shift over all 4 views.
+- **TL:** MP with the TIMELINE view.
+  - The view is `pred_dir // 2` from step 2a's rows (`facing-{odd,even}.jsonl`, joined on
+    session, block and frame_id).
+  - Its motion and shift come from the same NCC placement, RESTRICTED to that one view (2c's
+    `best_placement` logic over the view's motions × ±2 px).
+- **Both arms** go through the ruler validated in §5d-vi-a (1a). If 1a validates no ruler, 2f uses
+  DIFF 48 and says so.
+  - They use the same `reconstructed` + `component_box` rule, seeded at the observation's column.
+
+**Statistic:** the k_w species split, Lunatic / Poring medians:
+- per arm;
+- the decision is on OUTDOOR CENTRE frames (step 1's convention);
+- all outdoor frames are reported beside it.
+
+**Rule** (on ODD; then freeze; then EVEN once, AFTER 1a's EVEN k):
+- **"the facing error explains the width split":** |split_TL − 1| − |split_OBS − 1| ≥ 0.02 AND
+  split_OBS is within 1 ± 0.03;
+- **"partly":** it shrinks by ≥ 0.02 but OBS stays outside 1 ± 0.03;
+- **otherwise "not the facing".**
+- CONFIRMED if EVEN gives the same verdict.
+- **Stated, not hidden:** the OBS arm's ODD split is already known (2e ODD: 0.93 at DIFF 48, outdoor
+  centre). Unless the ruler 1a validates changes it, the ODD verdict can only be "partly" or "not the
+  facing". The TL arm and all of EVEN are unseen.
+
+**Reported beside it** (no decision): per species and arm, k_w and k_h / k_w; the Timeline-vs-NCC
+view agreement per species.
+
 ### 5f. The gold set, POSITION ONLY, for monsters (Batt, 2026-10-07), written BEFORE scoring
 
 **Why position only.**

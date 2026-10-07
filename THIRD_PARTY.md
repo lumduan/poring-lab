@@ -154,6 +154,13 @@ consequences are recorded in [ADR-0018](docs/adr/0018-component-licensing.md):
 Models trained from these weights or with ultralytics are treated as AGPL-3.0, following
 Ultralytics' stated terms (ADR-0018). They live in `data/` and are never committed.
 
+**A local model used by HOST scripts only** (Batt 2026-10-07: qwen3-vl as a label-QA FLAGGER, never
+ground truth; phase3-plan §6 LABEL-QA):
+
+| Model | Source / version | License | Where |
+|---|---|---|---|
+| `qwen3-vl:4b` | Ollama library tag, digest `1343d82ebee38e26a4dd6b0180b915eb91550184e67c505dea97509571c8f683` (3,295,636,135 B, gguf Q4_K_M, 4.4 B params, family `qwen3vl`, capabilities completion / vision / tools / thinking), pulled 2026-09-18 by the infra side; served by Ollama 0.34.2 | Apache-2.0: the licence text in the Ollama manifest (`/api/show`), the Ollama library page, and the upstream model cards. The tag reports a `thinking` capability, and the library page does not say which variant it is built from; both [Qwen/Qwen3-VL-4B-Instruct](https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct) and [Qwen/Qwen3-VL-4B-Thinking](https://huggingface.co/Qwen/Qwen3-VL-4B-Thinking) are `apache-2.0`. Checked 2026-10-07 | the infra side's `ollama` container, `127.0.0.1:11434`. ONLY host scripts call it; no poring-lab container joins Ollama's network (ADR-0005 isolation). R1-R3 apply (`scripts/frigate_r3.py`) |
+
 **Test data** (approved by Batt 2026-10-04, not downloaded yet):
 - The public Roboflow Ragnarok Online set, CC BY 4.0.
 - It is used **test-only** (out of distribution, never trained on).
