@@ -22,6 +22,21 @@ concepts:
       - Builds differ in which shortcuts exist and in whether a window is a separate window or a tab.
     bindings_needed: [L2.shortcut.window, L2.window]
     workflow_wave: 1
+    verified_on:  # both scenes (outdoor + indoor), 50/50 each; interrupted attempts re-run
+      - client: kro-20211103-prere
+        server: lab-rathena
+        locale: en
+        path: rdp
+        session: 20261007T135624-demo-window-alone-outdoor
+        rule: open_window@1
+        date: "2026-10-07"
+      - client: kro-20211103-prere
+        server: lab-rathena
+        locale: en
+        path: rdp
+        session: 20261007T140603-demo-window-alone-indoor
+        rule: open_window@1
+        date: "2026-10-07"
   - id: ui.close_window
     purpose: Close a client window.
     params: [window]

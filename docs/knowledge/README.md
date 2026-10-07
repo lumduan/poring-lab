@@ -606,7 +606,7 @@ Close a client window.
 Open a client window (character status, skill list, items, equipment, world map, options, basic info, cart).
 
 - **Parameters:** window
-- **Status:** unverified
+- **Status:** unverified (2 alone-test pass(es))
 - **Steps:**
   1. Press the window's keyboard shortcut (a modifier chord in most builds), or click its button on the basic info window.
 - **Preconditions:**
@@ -620,6 +620,8 @@ Open a client window (character status, skill list, items, equipment, world map,
 - **Outcome, runtime (screen):** the window's anchor is absent before and present after
 - **Outcome, offline (none):** client-side only (no packet)
 - **Bindings needed:** `L2.shortcut.window`, `L2.window`
+- **Verified on:** kro-20211103-prere / lab-rathena / en / rdp, open_window@1, session 20261007T135624-demo-window-alone-outdoor, 2026-10-07
+- **Verified on:** kro-20211103-prere / lab-rathena / en / rdp, open_window@1, session 20261007T140603-demo-window-alone-indoor, 2026-10-07
 
 ## `ui.press_button`
 

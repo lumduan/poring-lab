@@ -105,6 +105,6 @@ as the `npc` class.
 |---|---|---|---|
 | session.login | signatures + offsets (ro_agent) | the server's address (settings store) | login@1 RDP **PASS 50/50**; S2 to do |
 | nav.walk_to | the RDP / console cameras, the walk-marker cue (RDP only; two-motion hover) | GAT walkability | walk@1 FAIL, walk@2 FAIL 0/18 (one-motion hover); **walk@3 outdoor PASS 49/50**, indoor FAIL 32/49 (the RDP indoor camera is off in depth: a fit from those walks, then walk@4 indoor) |
-| ui.open_window | shortcuts demonstrated; anchors CUT for status / skills / inventory / equipment (RDP, title text 60x13, max_distance 6); other windows still fail closed | – | open_window@1 pre-registered (demonstrations 3.6), next |
+| ui.open_window | shortcuts demonstrated; anchors CUT for status / skills / inventory / equipment (RDP, title text 60x13, max_distance 6); other windows still fail closed | – | **open_window@1 RDP PASS 50/50 outdoor and 50/50 indoor**; S2 re-test next |
 | nav.read_position | the minimap readout (T0 templates restored) | – | read_position@1 |
 | vitals.read | the basic-info bars (anchor map) | – | – |

@@ -419,3 +419,34 @@ scripts, static data per ADR-0015) are pre-registered here before their tests.
     again.
   - A candidate, to be calibrated at design time and pre-registered before walk@4 runs.
 
+### Interrupted attempts (Batt, 2026-10-07 ~14:15): marked, never scored, re-run exactly
+- **Batt's ruling:** a human using the console during an alone-test is fine. The affected
+  attempts are marked INTERRUPTED (not pass, not fail) and re-run.
+- **Found:** the backend's input log holds 10 human events this afternoon, all `release_all` (the
+  console's release-everything message, sent e.g. when its tab gains or loses focus). Each one
+  takes the mux lease in ASSIST. Three runs were touched; each event marks the attempt it lands in
+  AND the next one (conservative). All eight marked attempts had SUCCEEDED, and all eight re-runs
+  succeeded too: no verdict moved.
+
+| run | marked (attempt #) | re-run session |
+|---|---|---|
+| walk@3 outdoor | 37, 38 | `20261007T142347-demo-walk-rerun-outdoor` (2 / 2) |
+| walk@3 indoor | 23, 24, 47, 48 | `20261007T142508-demo-walk-rerun-indoor` (verdict already decided) |
+| open_window@1 indoor | 12, 13 | `20261007T142435-demo-window-rerun-indoor` (2 / 2) |
+
+- **Tools:** `scripts/demo_interruptions.py` (from the input log, read from its end; times, sources
+  and types only); `demo_verify.py` scores a run and its re-runs as one set;
+  `rule_run.py --rerun-of S --attempts i,j` replays the exact situations.
+- **The final sets:** walk@3 outdoor **PASS 49 / 50**, indoor FAIL 32 / 49; open_window@1 outdoor
+  **PASS 50 / 50**, indoor **PASS 50 / 50**.
+
+### open_window@1, RDP: **PASS in both scenes, 50 / 50 each** (2026-10-07 13:56–14:15 ICT / 06:56–07:15 UTC)
+- **Sessions:** outdoor `20261007T135624-demo-window-alone-outdoor` (13:56:24–14:03:42); indoor
+  `20261007T140603-demo-window-alone-indoor` plus its re-run.
+- **Every attempt:** the window's anchor was absent before the chord and present 1 s after.
+  - On every after-frame the ONLY one of the four windows found was the intended one, beside the
+    always-present HUD (basic info, chat, hotbar, minimap outdoors).
+  - 12–13 attempts per window per scene; the chord took p50 0.5 s.
+- **L1 `ui.open_window`** records both RDP passes in `verified_on`. It stays UNVERIFIED until the
+  S2 re-test.
+
