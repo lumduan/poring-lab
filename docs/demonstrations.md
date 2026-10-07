@@ -1625,7 +1625,9 @@ first 50 (after the 3.13 amendment).
 | **where@2 indoor / outdoor** | **48 / 50** | **0 / 0** | 2 / 0 |
 
 → where@2 is walk@8's belief fix (3.14).
-- **Still open:** the same check on a normal (non-GM) account.
+- **The normal account: DONE** (2026-10-07 evening, unscored, as pre-registered): `/where` printed
+  the same yellow line for account 2000001 on new_4-1 (61, 114). No packet appears around it, so it
+  reads as a client-side command.
 
 ### walk@8 (3.14), indoor CLEAN, RDP: **FAIL, 42 / 50**; SAFETY held; every `/where` fix correct (2026-10-07 23:40:42 – 2026-10-08 00:16 ICT / 16:40–17:16 UTC)
 **Session:** `20261007T234042-demo-walk8-alone-clean-indoor` (seed 20261023); 56 routes, none
