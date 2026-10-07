@@ -13,6 +13,11 @@ judges.
           lucky dodge all count (the right target was hit at). Our act on another gid is a FAIL
           (wrong target), and so is our walk with no act (the click became a walk). The target
           vanishing first, or only OTHER attackers acting on it, is AMBIGUOUS.
+          verify@2 (2026-10-07, Batt, before attack@1 ran): the click's REQUEST is read too:
+          CZ_REQUEST_ACT2 0x0437 (`attack_request`; 0x0089 is a tick at PACKETVER 20211103) or
+          CZ_CONTACTNPC on the gid (`npc_contact`: the server attacks a monster clicked so).
+          The OUTCOME still judges; the request names the failure: a request on another gid,
+          the right request with no act, a walk request, or no request at all.
   menu    a client-side window: its anchor absent before and present after (screen, not packets)
 
 The windows are pre-registered (docs/demonstrations.md) and part of VERIFIER_VERSION.
@@ -25,12 +30,15 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-VERIFIER_VERSION = "1"
+VERIFIER_VERSION = "2"  # 2: the attack request (login / walk / menu unchanged since 1)
 LOGIN_WINDOW_S = 60.0
 WALK_REQUEST_S = 2.0  # the click must produce our move request within this
 WALK_SLACK_S = 1.5  # added to the walk's own duration
 ATTACK_WINDOW_S = 8.0  # cap: walk-in + swing
 ATTACK_SWING_S = 2.0  # after the estimated walk-in
+# verify@2: the client's attack request at PACKETVER 20211103 (CZ_REQUEST_ACT2 0x0437), and
+# CZ_CONTACTNPC 0x0090 on a monster's id (the server starts an attack: clif.cpp:12228-12232)
+ATTACK_REQUESTS = ("attack_request", "npc_contact")
 DIAGONAL = math.sqrt(2.0)  # rAthena: a diagonal step takes walk_speed * 14 / 10
 
 Event = Mapping[str, Any]
@@ -193,13 +201,23 @@ def verify_attack(
             others.append(src)
     # A walk CLICK sends our move request (CZ_REQUEST_MOVE2); an attack click sends an attack
     # request instead, and the server's own approach walk (self_move) proves nothing either way.
+    req = next((e for e in evs if e.get("type") in ATTACK_REQUESTS
+                and int(e["t_mono_ns"]) - t0 <= WALK_REQUEST_S * 1e9), None)  # fmt: skip
+    req_gid = None if req is None else int(req.get("target_gid", req.get("npc_gid", -1)))
+    evidence: dict[str, Any] = {} if req is None else {
+        "request": req.get("type"), "request_gid": req_gid, "request_ms": _ms(t0, req)}  # fmt: skip
     walked = any(e.get("type") == "self_move_request" and int(e["t_mono_ns"]) <= t_end
                  for e in evs)  # fmt: skip
     if others:
-        return Verdict("ambiguous", "only other attackers acted on the target", {"others": others})
+        return Verdict("ambiguous", "only other attackers acted on the target",
+                       {"others": others, **evidence})  # fmt: skip
+    if req is not None and req_gid != target_gid:
+        return Verdict("fail", "requested a different target", evidence)
+    if req is not None:
+        return Verdict("fail", "requested the target, no act within the window", evidence)
     if walked:
         return Verdict("fail", "the click became a walk (no act on the target)")
-    return Verdict("fail", "no act and no walk (click ignored)")
+    return Verdict("fail", "no request at all (click ignored)")
 
 
 def resolve_click(

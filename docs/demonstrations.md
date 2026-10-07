@@ -53,6 +53,7 @@ decision input (ADR-0007). The screen is used only for client-side menus.
 | login | our `login_accepted` (aid) → `char_selected` → `map_enter`, in that order | 60 s from the attempt's first input | the first missing step names the cause |
 | walk | the server accepts a walk whose DESTINATION is the target cell (`self_move`), and nothing moves us elsewhere before the walk's own duration + 1.5 s | the move request must come within 2 s | no request = not a walk; destination off by n cells; stopped short; re-routed → fail. Map change, or we vanish → ambiguous |
 | attack | an `act` FROM our aid ON the intended gid. Damage, MISS, critical and lucky dodge all count: the right target was swung at | walk-in time + 2 s, capped at 8 s | our act on another gid = wrong target; our move REQUEST with no act = the click became a walk; nothing = ignored → fail. The target vanished first, only other attackers acted on it, or our act came late → ambiguous |
+| ➡️ attack, **verify@2** (amended 2026-10-07 ~15:45, Batt, BEFORE attack@1 ran) | unchanged: our `act` on the intended gid in the window | the click's REQUEST is read too: `attack_request` = CZ_REQUEST_ACT2 0x0437 (0x0089 is a tick at PACKETVER 20211103), or `npc_contact` (CZ_CONTACTNPC 0x0090) on the gid, within 2 s | a request on another gid → "requested a different target"; the right request but no act → "requested the target, no act within the window"; a walk request → walk; no request → "no request at all (click ignored)". Ambiguous cases unchanged. Login / walk / menu are unchanged since verify@1 |
 | menu shortcut | the window's anchor is absent before and present after | 1 s | already open → ambiguous |
 
 - **The intended gid of an attack click** is resolved at verification:
@@ -165,6 +166,12 @@ Common rules:
   - `@heal` when the HP bar is below 0.6 (`gm_vitals`); `@alive` + return-to-game on death (the
     GM is level 1).
 - **n = 50 per scene.** Pass: ≥ 48/50 per scene.
+- ➡️ **Amended 2026-10-07 ~15:45 (Batt), before it runs:**
+  - The verifier is **verify@2**: the attack request CZ_REQUEST_ACT2 0x0437 names the failure;
+    the act still judges (§2).
+  - **Still to build before the run:** `demo_verify`'s `attack_target` branch. It resolves the
+    intended gid from the click and `predict_sprite`'s boxes at the frame's time
+    (`verify.resolve_click` exists; the session's Timeline does not yet).
 
 ### 3.4 walk@2 (pre-registered 2026-10-07 ~13:00, BEFORE its run; replaces walk@1 after §Results)
 **What changes from walk@1:**

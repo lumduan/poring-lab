@@ -139,7 +139,35 @@ def test_sit_and_stand_are_not_attacks_on_another_target() -> None:
 
 
 def test_nothing_at_all_is_an_ignored_click() -> None:
-    assert verify_attack([], T0, AID, MOB).cause == "no act and no walk (click ignored)"
+    assert verify_attack([], T0, AID, MOB).cause == "no request at all (click ignored)"
+
+
+# verify@2 (Batt, 2026-10-07): the client's attack REQUEST names the failure; the act judges
+def req(ms: float, gid: int, kind: str = "attack_request") -> dict[str, Any]:
+    field = "target_gid" if kind == "attack_request" else "npc_gid"
+    return ev(ms, kind, **{field: gid, "action": 7})
+
+
+def test_the_attack_request_names_the_failure_and_the_act_still_judges() -> None:
+    ok = verify_attack([req(80, MOB), act(600, AID, MOB)], T0, AID, MOB)
+    assert ok.status == "success"
+    wrong = verify_attack([req(80, MOB2)], T0, AID, MOB)
+    assert (wrong.status, wrong.cause) == ("fail", "requested a different target")
+    assert wrong.evidence["request_gid"] == MOB2 and wrong.evidence["request_ms"] == 80
+    silent = verify_attack([req(80, MOB)], T0, AID, MOB)
+    assert silent.cause == "requested the target, no act within the window"
+    contact = verify_attack([req(80, MOB2, kind="npc_contact")], T0, AID, MOB)
+    assert contact.cause == "requested a different target"
+    late = verify_attack([req(2500, MOB2)], T0, AID, MOB)  # outside the 2 s request window
+    assert late.cause == "no request at all (click ignored)"
+    walk = verify_attack([ev(100, "self_move_request", x=1, y=1)], T0, AID, MOB)
+    assert walk.cause == "the click became a walk (no act on the target)"
+
+
+def test_the_verifier_version_names_the_attack_request() -> None:
+    from poring_dataset.verify import VERIFIER_VERSION, Verdict
+
+    assert VERIFIER_VERSION == "2" and Verdict("success").verifier == "verify@2"
 
 
 # --- click resolution and menus ----------------------------------------------------------------
