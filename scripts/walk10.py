@@ -1,13 +1,28 @@
 #!/usr/bin/env python3
-"""walk@10 (docs/demonstrations.md 3.17): walk@9 + two changes from walk@9's indoor tuning failures.
+"""walk@10 (docs/demonstrations.md 3.17): walk@9 + three changes from walk@9's indoor failures.
 
-walk@9 (3.16) indoors (2026-10-08 ~00:45): along the pew corridors the marker is hidden (~20 px) on
-cell after cell, so EVERY step needed its own /where fix (walk@9 allows one unnamed click per fix)
-and the 2-fix limit ended routes (route 13, route 25), although every fix was correct.
-1. A /where fix keeps the belief TRUSTED for up to TRUST_CLICKS clicks, not one: unnamed walk-cursor
-   clicks are allowed while each click visibly SHIFTS the scene (walk@9's check). A click with no
-   shift, or any doubt, ends the trust at once.
-2. RELOCS 2 -> 4 fixes per route (each ~10 s; 11 / 11 and 3 / 3 correct so far).
+walk@9 (3.16) indoors CLEAN 39 / 50 (2026-10-08 00:22-01:02). Its logs, joined to the packets
+offline (01:10-01:50):
+1. 19 clicks walked ONE CELL SHORT, always to the camera's side ((-1,-1), (0,-1), (-1,0) with the
+   indoor yaw), 8 of the 11 failed routes. Every time, that neighbour was a RAISED walkable block
+   (a pew's kneeler: all four corners one cell = 5 units up). The character was standing (every
+   click >= 6x the walk time after the last move) and the belief was right for 14 of them, so it
+   was neither motion nor localisation: the client PICKS the first top surface the camera ray
+   comes down through, and a kneeler's top covers the centre of the cell behind it on screen. The
+   projected centre that walk@6-9 clicked (and named by the chevrons) was the kneeler.
+   -> click points come from that PICKING model (poring_dataset.picking; offline it names the
+   server's cell for 480 / 485 logged indoor clicks vs the centre's 467, and 383 / 383 outdoor):
+   tier A = every pixel within 6 px picks the target; tier B (3 px) only where no tier-A pixel
+   exists (the thin strip behind a kneeler row), and a tier-B click needs the chevrons naming it.
+   A neighbour named at a pick-safe point no longer hops to the neighbour's pixel: it is doubt;
+   named AGAIN right after a fix (model and marker disagree; pilot route 3 spent all 4 fixes on
+   one such cell), the cell is blocked for the route and re-planned around (a goal declines).
+2. Along the pew corridors the marker is hidden (~20 px) on cell after cell, so every step needed
+   its own /where fix (walk@9 allows one unnamed click per fix) and the 2-fix limit ended routes
+   (routes 13 and 25), although every fix was correct. -> a /where fix keeps the belief TRUSTED for
+   up to TRUST_CLICKS tier-A clicks while each one visibly SHIFTS the scene; no shift or any doubt
+   ends the trust at once.
+3. RELOCS 2 -> 4 fixes per route (each ~10 s; 34 / 34 correct in walk@8/9).
 Everything else is walk@9 unchanged (its docstring follows).
 
 walk@9 (docs/demonstrations.md 3.16): walk@8 + four fixes from walk@8's indoor tuning failures.
@@ -51,6 +66,7 @@ import walk5 as w5  # noqa: E402
 import walk6 as w6  # noqa: E402
 import where_fix as wf  # noqa: E402
 
+from poring_dataset import picking  # noqa: E402
 from poring_env.demo import Action, DemoLog, DemoRecord, Intended, new_session_id  # noqa: E402
 
 WALK8_RULE = "walk@10"
@@ -81,6 +97,10 @@ SUBSTITUTE_RINGS = (1, 2)
 UNCONFIRMED_STREAK = 2
 RELOCS = 4  # walk@10 (walk@8/9: 2)
 TRUST_CLICKS = 3  # walk@10: clicks a /where fix keeps the belief trusted (each must shift)
+MARGIN_PX = 6.0  # walk@10 tier A: every pixel within 6 px picks the target (the model's 5 misses in
+#                  485 logged clicks lay 1-5 px from its boundary); unnamed-after-fix allowed here
+MARGIN_NAMED_PX = 3.0  # tier B, only when no tier-A pixel exists (the ~8 px strip behind a raised
+#                        kneeler row): the chevrons must NAME the cell; never an unnamed click
 CLICK_ATTEMPTS = 30
 WALK = w6.WALK
 MIN_MARKER_PX8 = 30  # walk@8 names a cell from >= 30 px of chevrons (rule_run: 60): pews occlude
@@ -192,69 +212,80 @@ def named8(w: w5.World, rel: tuple[int, int], p: dict[str, Any]) -> tuple[int, i
     return k
 
 
+def pick_points(w: w5.World, end: tuple[int, int]) -> tuple[list[tuple[float, float]], str]:
+    """walk@10: the click points for ``end`` from the client's PICKING (poring_dataset.picking: the
+    camera ray against the GAT's top surfaces), most interior first, and their tier: "A" (6 px
+    margin), "B" (3 px, named clicks only) or "none" (no pixel picks the cell from here)."""
+    rel = (end[0] - w.position[0], end[1] - w.position[1])
+    pts = picking.safe_points(w.camera, w.gat, w.position, rel, margin=MARGIN_PX)
+    if pts:
+        return pts, "A"
+    pts = picking.safe_points(w.camera, w.gat, w.position, rel, margin=MARGIN_NAMED_PX, grid=1.0)
+    return pts, ("B" if pts else "none")
+
+
 def click_step(pr: w6.Prober, w: w5.World, end: tuple[int, int],
                expect: str = WALK, accept_unnamed: bool = False) -> dict[str, Any]:  # fmt: skip
-    """Probe ONLY the click point (walk@6's target logic: WALK + the chevrons naming the cell, one
-    correction for a neighbour, the in-cell alternates; the no-motion re-check), then click.
-    ``expect="warp"``: the click whose intent is to TAKE a portal -- the allowed shape is the warp
-    cursor instead (re-checked the same way); no chevrons are required on a portal cell."""
+    """Probe ONLY the click point, then click. walk@10: the points come from the picking model
+    (pick_points), not the projected centre -- walk@8/9 indoors clicked a centre that a raised
+    kneeler's top covers on screen and walked one cell short 25 times. A point must show the WALK
+    cursor and (tier B always; tier A unless the belief was just fixed) the chevrons naming the
+    cell, re-checked with no motion. A neighbour named at a pick-safe point means the belief (or
+    the naming) is off: no hop to the neighbour's pixel, the next point; then doubt.
+    ``expect="warp"``: the click whose intent is to TAKE a portal (portal_step)."""
     if expect == "warp":
         return portal_step(pr, w, end)
+    queue, tier = pick_points(w, end)
+    if not queue:
+        return {"clicked": False, "outcome": "no_safe_point", "target": [], "tier": tier}
     if not pr.park():
-        return {"clicked": False, "outcome": "stale_background", "target": []}
+        return {"clicked": False, "outcome": "stale_background", "target": [], "tier": tier}
     rel = (end[0] - w.position[0], end[1] - w.position[1])
-    nb = np.array([(end[0] + dx, end[1] + dy) for dx, dy in rr.NB9], dtype=float)
-    proj = w.project(nb)
-    queue = rr.in_cell_points(proj)
     target: list[dict[str, Any]] = []
-    corrected = False
-    while queue and len(target) < rr.MAX_HOVERS:
-        u, v = queue.pop(0)
+    neighbour = False
+    for u, v in queue[: rr.MAX_HOVERS]:
         pr.hover(u, v)
         p = pr.read(u, v)
         k = named8(w, rel, p)
         target.append({"at": [round(u, 1), round(v, 1)], "shape": p["shape"], "iou": p["iou"],
-                       "cell": k, "marker_px": p["marker_px"]})  # fmt: skip
-        if p["shape"] != WALK:  # never clicked here; another in-cell point may show the walk cursor
+                       "cell": k, "marker_px": p["marker_px"], "tier": tier})  # fmt: skip
+        if p["shape"] != WALK:  # never clicked here; another point may show the walk cursor
             continue
-        if k is None and accept_unnamed:
-            # the belief was just CONFIRMED by /where: the chevrons' job (projection and belief
-            # agree) is done, and pews hide the marker (17-27 px, the 23:35 pilot). The walk
-            # cursor, re-checked with no motion, is enough -- unknown is still no click.
+        if k is None and accept_unnamed and tier == "A":
+            # the belief was just CONFIRMED by /where and the picking model puts every pixel
+            # within 6 px in the cell: the walk cursor, re-checked with no motion, is enough --
+            # unknown is still no click
             again = pr.read(u, v)
             target[-1]["recheck"] = {"shape": again["shape"], "cell": None}
             if again["shape"] != WALK:
                 return {"clicked": False, "outcome": f"recheck_{again['shape']}",
-                        "target": target}  # fmt: skip
+                        "target": target, "tier": tier}  # fmt: skip
             gx, gy, _, _ = r.game_region()
             t_click = r.ns()
             pr.agent.click(gx + round(u), gy + round(v))
             return {"clicked": True, "outcome": "unnamed_after_fix", "target": target,
-                    "at": (u, v), "t_click": t_click}  # fmt: skip
+                    "at": (u, v), "t_click": t_click, "tier": tier}  # fmt: skip
         if k == (0, 0):
             again = pr.read(u, v)  # the RE-CHECK: a fresh grab, no motion
             k2 = named8(w, rel, again)
             target[-1]["recheck"] = {"shape": again["shape"], "cell": k2}
             if again["shape"] != WALK or k2 != (0, 0):
                 return {"clicked": False, "outcome": f"recheck_{again['shape']}",
-                        "target": target}  # fmt: skip
+                        "target": target, "tier": tier}  # fmt: skip
             gx, gy, _, _ = r.game_region()
             t_click = r.ns()
             pr.agent.click(gx + round(u), gy + round(v))
             return {"clicked": True, "outcome": "confirmed", "target": target, "at": (u, v),
-                    "t_click": t_click}  # fmt: skip
-        if k is not None and not corrected:
-            i = rr.NB9.index(k)
-            du, dv = float(proj[4][0] - proj[i][0]), float(proj[4][1] - proj[i][1])
-            queue.insert(0, (u + du, v + dv))
-            corrected = True
-        elif k is not None:
-            return {"clicked": False, "outcome": "neighbour", "target": target}
+                    "t_click": t_click, "tier": tier}  # fmt: skip
+        if k is not None:
+            neighbour = True
+    if neighbour:
+        return {"clicked": False, "outcome": "neighbour", "target": target, "tier": tier}
     others = [t["shape"] for t in target if t["shape"] != WALK]
     if others and len(others) == len(target):  # no point of the cell shows the walk cursor
         first = next((x for x in others if x in UNIT_SHAPES), others[0])
-        return {"clicked": False, "outcome": f"covered_{first}", "target": target}
-    return {"clicked": False, "outcome": "unconfirmed", "target": target}
+        return {"clicked": False, "outcome": f"covered_{first}", "target": target, "tier": tier}
+    return {"clicked": False, "outcome": "unconfirmed", "target": target, "tier": tier}
 
 
 def portal_step(pr: w6.Prober, w: w5.World, end: tuple[int, int]) -> dict[str, Any]:
@@ -398,6 +429,7 @@ def walk_route(pr: w6.Prober, w: w5.World, goal: tuple[int, int], band: tuple[in
     fixed = fixed_at_start  # a /where fix confirmed the belief (walk@10: for TRUST_CLICKS clicks)
     trust_left = TRUST_CLICKS if fixed_at_start else 0
     blocked: set[tuple[int, int]] = set()  # walk@9: targets a click did not walk to
+    fix_fresh = fixed_at_start  # walk@10: a fix confirmed the belief, nothing clicked since
     no_move: tuple[tuple[int, int], tuple[int, int]] | None = None  # (from, end) of a dead click
 
     def done(**kw: Any) -> dict[str, Any]:
@@ -415,13 +447,13 @@ def walk_route(pr: w6.Prober, w: w5.World, goal: tuple[int, int], band: tuple[in
         nonlocal relocs, path
         if relocs >= RELOCS:
             return "relocalise_limit"
-        nonlocal fixed, no_move, trust_left
+        nonlocal fixed, no_move, trust_left, fix_fresh
         rl = relocalise(pr.agent, pr.screen, w, noentry_mask, band)
         relocs += 1
         events.append({"relocalise": rl, "why": why, "t": r.ns()})
         if not rl["ok"]:
             return "relocalise_failed"
-        fixed = True
+        fixed = fix_fresh = True
         if no_move is not None and w.position == no_move[0]:
             blocked.add(no_move[1])  # the fix confirms it: clicking there does not walk
             events.append({"blocked": list(no_move[1]), "t": r.ns()})
@@ -458,7 +490,7 @@ def walk_route(pr: w6.Prober, w: w5.World, goal: tuple[int, int], band: tuple[in
         cands = click_candidates(w, path, seg_max, band)
         if not cands:
             return done(decline="out_of_band")
-        clicked = False
+        clicked = replanned = False
         unit_at: list[tuple[int, int]] = []
         for end in cands:
             preview(pr.agent, w, w.position, waypoints(w.position, path), end, label)
@@ -484,6 +516,7 @@ def walk_route(pr: w6.Prober, w: w5.World, goal: tuple[int, int], band: tuple[in
                 streak, streak_from = 0, None
                 unit_since = None
                 trust_left -= 1
+                fix_fresh = False
                 fixed = trust_left > 0  # walk@10: the trust lasts TRUST_CLICKS shifted clicks
                 time.sleep(n * w5.STEP_S + w5.ARRIVE_S)
                 clicked = True
@@ -498,6 +531,8 @@ def walk_route(pr: w6.Prober, w: w5.World, goal: tuple[int, int], band: tuple[in
             if shape == "noentry" and w.walkable[end[1], end[0]]:
                 pending = "noentry"  # a planned (GAT-walkable) cell refused: the belief is wrong
                 break
+            if step["outcome"] == "no_safe_point":
+                continue  # walk@10: no pixel picks this cell from here: the next point at once
             if step["outcome"].startswith(("covered_", "recheck_")):
                 covered += 1  # not clickable: the next point on the polyline, at once
                 if shape in UNIT_SHAPES:
@@ -510,13 +545,27 @@ def walk_route(pr: w6.Prober, w: w5.World, goal: tuple[int, int], band: tuple[in
                     pending = "unconfirmed"
                     break
                 continue
+            if step["outcome"] == "neighbour" and fix_fresh:
+                # walk@10 pilot (route 3): the marker named the SAME neighbour at every pick-safe
+                # point while four fixes confirmed the belief -- the model and the marker disagree
+                # about this cell. Never click it; block it for the route and re-plan around it.
+                if end == target:
+                    return done(decline="goal_disputed")
+                blocked.add(end)
+                events.append({"blocked": list(end), "why": "neighbour_after_fix", "t": r.ns()})
+                path = plan_once()
+                if path is None:
+                    return done(decline="no_plan")
+                replanned = True
+                break
             if step["outcome"] == "neighbour":
                 pending = "neighbour"
                 break
-        if clicked or pending is not None:
+        if clicked or replanned or pending is not None:
             continue
         outcomes = [e.get("outcome") for e in events[-len(cands) :]]
-        if not unit_at and outcomes and all(o == "unconfirmed" for o in outcomes):
+        unconfirmed = [o for o in outcomes if o != "no_safe_point"]
+        if not unit_at and unconfirmed and all(o == "unconfirmed" for o in unconfirmed):
             pending = "unconfirmed_round"  # walk@9: every point shows the walk cursor, none named
             continue
         if not unit_at:

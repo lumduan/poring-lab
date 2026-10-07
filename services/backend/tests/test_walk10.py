@@ -1,6 +1,8 @@
-"""scripts/walk10.py (walk@10, demonstrations 3.17): walk@8 + the four fixes from walk@8's indoor
-failures -- the scene must shift after a click, static green is not the marker, an all-unconfirmed
-round asks /where, a dead click is blocked once the fix confirms it."""
+"""scripts/walk10.py (walk@10, demonstrations 3.17): walk@9 (its tests, kept) + click points from
+the client's PICKING (tier A / B / none), one fix trusting several shifted clicks, 4 fixes a
+route.
+The picking model itself is tested on synthetic GATs in poring_dataset's test_picking.py; here the
+fake camera's cell centres stand in for it (``TIERS`` sets a cell's tier)."""
 
 from __future__ import annotations
 
@@ -46,7 +48,20 @@ def fake(mods: Any, monkeypatch: pytest.MonkeyPatch) -> Any:
     monkeypatch.setattr(w9.r, "desktop", lambda: (1440, 900))
     monkeypatch.setattr(w9.r, "ns", lambda: 0)
     monkeypatch.setattr(w9, "moved", lambda a, b: (True, 1.0))  # the fake floor does not scroll
+    TIERS.clear()
+
+    def points(w: Any, end: tuple[int, int]) -> tuple[list[tuple[float, float]], str]:
+        tier = TIERS.get(end, "A")
+        if tier == "none":
+            return [], "none"
+        nb = np.array([(end[0] + dx, end[1] + dy) for dx, dy in w9.rr.NB9], dtype=float)
+        return w9.rr.in_cell_points(w.project(nb)), tier
+
+    monkeypatch.setattr(w9, "pick_points", points)
     return w9, f, t7
+
+
+TIERS: dict[tuple[int, int], str] = {}
 
 
 class Ws:
@@ -168,3 +183,89 @@ def test_one_fix_trusts_the_belief_for_several_shifted_clicks(fake: Any) -> None
     assert did.get("arrived_belief") and s.client.true == (19, 18), did
     assert len(fixes) == 1, fixes  # 3 runs of 3 cells: one fix covers them all
     assert sum(e.get("outcome") == "unnamed_after_fix" for e in did["events"]) == 3
+
+
+def fix_to_truth(s: Any, fixes: list[Any]) -> Any:
+    def fix(agent: Any, screen: Any, w: Any, mask: Any, band: Any) -> dict[str, Any]:
+        fixes.append(w.position)
+        w.position = s.client.true
+        return {"ok": True, "to": list(s.client.true)}
+
+    return fix
+
+
+def test_a_tier_b_point_is_never_clicked_unnamed_even_after_a_fix(fake: Any) -> None:
+    """The strip behind a kneeler row (tier B): only the chevrons naming the cell may click it."""
+    w10, _, _ = fake
+    s = sim(fake, (10, 18), hidden={(11, 18)})
+    TIERS[(11, 18)] = "B"
+    fixes: list[Any] = []
+    did = w10.walk_route(s.pr, s.w, (11, 18), BAND, 3, lambda *a: None, ring(),
+                         relocalise=fix_to_truth(s, fixes), fixed_at_start=True)  # fmt: skip
+    assert s.client.true == (10, 18) and not did.get("arrived_belief"), did
+    assert not any(e.get("outcome") == "unnamed_after_fix" for e in did["events"])
+    assert did.get("decline") in ("relocalise_limit", "click_limit"), did
+
+
+def test_a_cell_no_pixel_picks_is_skipped_for_the_next_point(fake: Any) -> None:
+    w10, _, _ = fake
+    s = sim(fake, (10, 18))
+    TIERS[(13, 18)] = "none"
+    did = w10.walk_route(s.pr, s.w, (15, 18), BAND, 3, lambda *a: None, ring(),
+                         relocalise=fix_to_truth(s, []))  # fmt: skip
+    assert did.get("arrived_belief") and s.client.true == (15, 18), did
+    assert [e["outcome"] for e in did["events"] if e.get("end") == [13, 18]] == ["no_safe_point"]
+    assert all(e.get("end") != [13, 18] or not e.get("clicked") for e in did["events"])
+
+
+def test_a_named_neighbour_at_a_pick_safe_point_is_doubt_not_a_hop(
+    fake: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """walk@6-9 hopped to the neighbour's pixel; at a point the picking model puts in the cell, a
+    neighbour name means the belief (or the naming) is off: ask /where, never hop."""
+    w10, _, _ = fake
+    s = sim(fake, (10, 18))
+    real = w10.named8
+    wrong = iter([(1, 0)] * 5)  # the first round's reads name the east neighbour
+
+    def named(w: Any, rel: Any, p: Any) -> Any:
+        return next(wrong, None) or real(w, rel, p)
+
+    monkeypatch.setattr(w10, "named8", named)
+    fixes: list[Any] = []
+    did = w10.walk_route(s.pr, s.w, (13, 18), BAND, 3, lambda *a: None, ring(),
+                         relocalise=fix_to_truth(s, fixes))  # fmt: skip
+    first_click = next(i for i, e in enumerate(did["events"]) if e.get("clicked"))
+    first_fix = next(i for i, e in enumerate(did["events"]) if "relocalise" in e)
+    assert did["events"][first_fix]["why"] == "neighbour" and first_fix < first_click
+    assert did.get("arrived_belief") and s.client.true == (13, 18), did
+
+
+def test_a_neighbour_named_again_right_after_a_fix_blocks_that_cell_never_clicks_it(
+    fake: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """walk@10 pilot route 3: every pick-safe point of (87,111) named the same neighbour while four
+    correct fixes confirmed the belief. The model and the marker disagree about that cell: it is
+    blocked for the route (re-planned around), and a disputed GOAL declines -- never a click."""
+    w10, _, _ = fake
+    s = sim(fake, (10, 18))
+    real = w10.named8
+    disputed = {(12, 18)}
+
+    def named(w: Any, rel: Any, p: Any) -> Any:
+        end = (w.position[0] + rel[0], w.position[1] + rel[1])
+        return (1, 0) if end in disputed else real(w, rel, p)
+
+    monkeypatch.setattr(w10, "named8", named)
+    fixes: list[Any] = []
+    did = w10.walk_route(s.pr, s.w, (14, 18), BAND, 2, lambda *a: None, ring(),
+                         relocalise=fix_to_truth(s, fixes))  # fmt: skip
+    assert [e["blocked"] for e in did["events"] if "blocked" in e] == [[12, 18]]
+    assert all(not (e.get("end") == [12, 18] and e.get("clicked")) for e in did["events"])
+    assert len(fixes) == 1 and did.get("arrived_belief") and s.client.true == (14, 18), did
+    s2 = sim(fake, (10, 18))
+    disputed.clear()
+    disputed.add((12, 18))
+    did2 = w10.walk_route(s2.pr, s2.w, (12, 18), BAND, 3, lambda *a: None, ring(),
+                          relocalise=fix_to_truth(s2, []))  # fmt: skip
+    assert did2.get("decline") == "goal_disputed" and s2.client.true == (10, 18), did2

@@ -972,6 +972,69 @@ clicks** verified by the packets.
 - static-green pixels excluded; fixes (trigger; correct / WRONG);
 - waits; substitutes (justified or not); declines by cause; route time.
 
+### 3.17 walk@10 — TUNING (indoor/outdoor × CLEAN/CROWD), then the HELD-OUT set once (pre-registered 2026-10-08 ~01:49 ICT, BEFORE any scored run; iteration 3 of Batt's at most 3)
+**The rule:** `scripts/walk10.py` at the commit of this pre-registration = **walk@9 (3.16)
+unchanged** plus three changes, each from walk@9's indoor-CLEAN failures (39 / 50; the analysis is in
+walk@9's results below).
+1. **Click points from the client's PICKING** (`poring_dataset.picking`), not the projected centre.
+   - The model: the camera ray against the GAT's TOP surfaces (side walls are passed through).
+     Checked offline against the packets on the tuning maps: **480 / 485** indoor clicks (the
+     centre: 467), **383 / 383** outdoor.
+   - **Tier A:** every pixel within **6 px** picks the target (the model's 5 misses lay 1–5 px from
+     its boundary). The usual rule applies: the walk cursor + the chevrons naming the cell, or,
+     right after a fix, the walk cursor alone (re-checked with no motion).
+   - **Tier B:** only when no tier-A pixel exists (the ~8 px strip behind a kneeler row): a
+     **3 px** margin, and the chevrons MUST name the cell; never an unnamed click.
+   - **No pixel picks the cell from here:** the next point on the polyline, at once.
+   - A neighbour named at a pick-safe point no longer hops to the neighbour's pixel: it is doubt
+     (a `/where` fix).
+   - **Named again right after a fix** (the model and the marker disagree about that cell; the
+     first pilot's route 3 spent all four fixes on one such cell, every fix correct): the cell is
+     never clicked; it is blocked for the route and the route re-planned around it. A disputed
+     GOAL declines (`goal_disputed`).
+2. **One fix trusts the belief for up to 3 clicks** (TRUST_CLICKS), tier A only, while each click
+   visibly SHIFTS the scene. No shift, or any doubt, ends the trust at once. In walk@9 the marker
+   was hidden cell after cell along a pew corridor, so every step needed its own fix.
+3. **4 fixes per route** (RELOCS; walk@8/9: 2). Each fix takes ~10 s; 34 / 34 were correct in
+   walk@8/9.
+- Everything else is walk@9's (and walk@8's): plan once; only the click point probed; units never
+  refuse a route; patience and substitutes only for units; where@2 at the route start and on doubt;
+  the scene-shift check; static green and animated pixels out of the cursor mask; the warp shape
+  only for an intended portal click; the click time logged; the route preview on.
+
+**The design pilot** (`walk10-cal`, prt_church CLEAN, seed 15, NOT scored): two pilots on prt_church CLEAN, seeds 15 and 16, NOT scored; 0 attack / NPC /
+pickup requests.
+- `20261008T013535-demo-walk10-cal-clean-indoor` (8 routes): **7 / 8; 34 / 34 clicks verified** by
+  the packets (30 named, 4 unnamed after a fix; all tier A; none one cell short). Route 3 declined
+  `relocalise_limit`: four fixes, all correct, spent on ONE cell whose every pick-safe point the
+  marker named as its east neighbour. → the disputed-cell rule (above).
+- `20261008T014420-demo-walk10-cal-clean-indoor` (6 routes, with that rule): **5 / 6; 28 / 28
+  clicks verified** (27 named, 1 unnamed). Route 1 declined `no_click_point` one cell short of
+  (114,120), a goal against the east wall: the cursor read UNKNOWN at every point (the marker named
+  the cell). Unknown = no click stays; this is not changed.
+
+**TUNING runs**, each with its own bar:
+- **Conditions:** as 3.14 (CLEAN: `@killmonster2` before every route; CROWD: 4 Porings at every 5th
+  route's warp).
+- **FRESH seeds:** indoor clean **20261039**, indoor crowd **20261040**, outdoor clean **20261041**,
+  outdoor crowd **20261042**.
+- 56 routes each; the first 50 not interrupted are scored. **All four are run, in this order,
+  whatever the first one scores** (walk@8 and walk@9 stopped after indoor CLEAN failed; this is the
+  last iteration tonight, so every condition is measured).
+
+**HELD-OUT runs**, ONCE, scored separately, never used to tune, **only if all 4 tuning runs PASS**:
+- guild (alberta_in) **20261043**; town (prontera) **20261044**; dungeon (iz_dun00) **20261045**;
+  portal (prt_fild08 → prontera) **20261046**.
+- All CLEAN, `@heal` after each warp. 56 each, the first 50 scored.
+
+**Verifiers and the bar:** exactly 3.14's.
+- ≥ **48 / 50** per run **AND** zero attack / NPC / pickup requests. Any one is a HARD FAIL.
+
+**Reported:**
+- clicks correct, by tier and named / unnamed; clicks one cell off (and to which side);
+- dead clicks caught by the shift check; fixes (trigger; correct / WRONG);
+- waits; substitutes (justified or not); declines by cause (incl. no pick-safe point); route time.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
@@ -1597,3 +1660,50 @@ were **NOT run**.
 **→ walk@9 (3.16):** static green excluded from the chevrons; a scene-shift check after every click
 (no shift = doubt → `/where`, and a confirmed dead click blocks that target); an all-unconfirmed round
 asks `/where`; animated scenery excluded from the cursor mask.
+### walk@9 (3.16), indoor CLEAN, RDP: **FAIL, 39 / 50**; SAFETY held; every `/where` fix correct (2026-10-08 00:22:29–01:02 ICT / 17:22–18:02 UTC)
+**Session:** `20261008T002229-demo-walk9-alone-clean-indoor` (seed 20261031); 56 routes, none
+interrupted. Scored: the first 50.
+
+**The results:**
+- **End to end: 39 / 50** (needed 48) → **FAIL** (walk@8 42, walk@7 31, walk@6 23).
+- **SAFETY:** 0 `attack_request`, 0 `npc_contact`, 0 pickup.
+- **The belief fixes (where@2): 23 of 23 CORRECT, 0 WRONG** against the packets. Triggers:
+  unconfirmed 15, neighbour 3, all-unconfirmed round 3, no-shift 2.
+- **walk@9's own fixes worked:** dead clicks 9 → 3 (the static-green exclusion); 2 of them caught by
+  the shift check and blocked after the fix confirmed them.
+- **Clicks:** 221 / 243 verified. **19 walked ONE CELL SHORT** (walk@8: 6); 3 sent no move request.
+- Waits 0 s; substitutes 0.
+
+**The 11 failures:**
+
+| cause | n | what the logs show |
+|---|---|---|
+| the route ended elsewhere | 8 | the last click walked one cell short, to the camera's side |
+| `relocalise_limit` | 2 | the marker hidden cell after cell along a pew corridor: a fix per click, 2 allowed |
+| `no_click_point` | 1 | (92,97): nothing clickable |
+
+**Why the clicks walked one cell short (offline, 01:10–01:50; packets as ground truth only):**
+- All 25 one-short clicks of walk@8 + walk@9 erred **towards the camera** ((−1,−1), (0,−1),
+  (−1,0) with the indoor yaw; never +1). The target rows were 107 / 111 / 115 / 119.
+- The character was standing for every one (≥ 6× the walk time after the last move), and the
+  belief was right for 14 of walk@9's 19. So it was neither motion nor localisation.
+- **Every time, the cell the server got was a RAISED walkable block:** a pew's kneeler (rows 106 /
+  110 / 114 / 118 inside the pew columns), all four GAT corners one cell (5 units) up.
+- **The client picks the first TOP surface the camera ray comes down through.** A kneeler's top
+  covers the centre of the cell behind it on screen. The projected centre that walk@6–9 clicked,
+  and that the chevrons "named", was the kneeler.
+- **The model, checked against the packets** (`poring_dataset.picking`; design time, the tuning
+  maps only): it names the server's cell for **480 / 485** logged indoor clicks (the flat centre
+  projection: 467; a march that also counted side walls: 467) and **383 / 383** outdoor. The 5
+  misses lie 1–5 px from the model's cell boundary.
+- A 2-parameter search of the indoor yaw / distance (never measured on RDP) gave at most 482 / 485,
+  at the grid's edge. The carried-over camera stays.
+
+**DEVIATION, recorded:** walk@9's other three tuning runs (indoor crowd, outdoor clean, outdoor
+crowd) were **NOT run**, as for walk@8: indoor CLEAN failed, the decision rule asks for the next
+iteration, and the client time went to walk@10. The chain's driver was stopped between runs
+(01:03); the indoor-clean run was never interrupted.
+
+**→ walk@10 (3.17):** click points from the picking model, with a pixel margin; one fix trusts
+several shifted clicks; 4 fixes per route.
+
