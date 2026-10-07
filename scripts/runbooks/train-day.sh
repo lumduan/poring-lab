@@ -13,6 +13,8 @@
 #   only, never the maths): each one resumes one level up. A latency trip at the top level counts
 #   as a trip.
 # - R3-HARD (a camera dropping frames for 30 s) STOPS: no resume.
+# - Every guard stop is VERIFIED by guarded_build (container gone, no process of ours on the GPU,
+#   escalation to docker kill if not); STOP-UNVERIFIED STOPS here: a person must look.
 # - Never alongside an S2 session: it waits while the lock says console or a clean room is set.
 #   To pause for a session started later, SIGINT the host-side `timeout ... poring_vision.train`
 #   process by PID (`ps -eo pid,args | grep 'timeout .*poring_vision.train --cache'`); this script
@@ -57,6 +59,7 @@ while :; do
   log "attempt $attempt rc=$rc: $(grep -E 'ABORT|REFUSED' "$out" | tail -1 | cut -c1-200)"
   attempt=$((attempt + 1))
   if [ "$rc" -eq 0 ]; then log "TRAIN DONE (step-sleep ${ms} ms)"; break; fi
+  if grep -q "STOP-UNVERIFIED" "$out"; then log "TRAIN STOPPED: the guard could NOT verify the stop ($(grep STOP-UNVERIFIED "$out" | tail -1 | cut -c1-160)): a person must look"; break; fi
   if grep -q "R3-HARD" "$out"; then log "TRAIN STOPPED: R3-HARD (a camera dropped frames for 30 s): no resume"; break; fi
   if grep -q "REFUSED rundev" "$out"; then
     trips=$((trips + 1))

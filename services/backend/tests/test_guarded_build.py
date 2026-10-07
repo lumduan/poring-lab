@@ -508,33 +508,119 @@ def test_only_a_training_step_waits_for_an_epoch_to_rebaseline(gb: ModuleType) -
     assert gb.results_csv(pred) is None
 
 
-def test_an_abort_also_stops_the_container_itself(
+class _Clock:
+    def __init__(self) -> None:
+        self.t = 0.0
+
+    def __call__(self) -> float:
+        return self.t
+
+    def sleep(self, dt: float) -> None:
+        self.t += dt
+
+
+def _fake_world(
+    gb: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    container_until: float,
+    gpu_until: float,
+    clock: _Clock,
+    nvidia_ok: bool = True,
+) -> list[list[str]]:
+    """A container that exits at ``container_until`` and a GPU process of ours that exits at
+    ``gpu_until`` (seconds on the fake clock; inf = never, until killed)."""
+    state = {"c": container_until, "g": gpu_until}
+    sent: list[list[str]] = []
+
+    def run(cmd: list[str], **kw: object) -> None:
+        sent.append(cmd)
+        if cmd[:2] == ["docker", "kill"] and "--signal" not in cmd:
+            state["c"] = clock.t  # SIGKILL: gone at once
+            state["g"] = clock.t
+
+    monkeypatch.setattr(gb, "container_running", lambda name: clock.t < state["c"])
+    monkeypatch.setattr(gb, "gpu_pids", lambda: [4242] if nvidia_ok else None)
+    monkeypatch.setattr(gb, "own_pids",
+                        lambda pat, pids=None: [4242] if clock.t < state["g"] else [])  # fmt: skip
+    monkeypatch.setattr(gb.subprocess, "run", run)
+    monkeypatch.setattr(gb.os, "kill", lambda pid, sig: state.update(g=clock.t))
+    return sent
+
+
+def test_a_clean_stop_is_verified_without_escalation(
     gb: ModuleType, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """2026-10-07 11:06: the R3 abort's SIGINT stopped only the `docker compose run` client; the
-    training container ran on for 10.5 min. Every abort of a container step now stops the
-    container and checks it is gone."""
-    stopped: list[str] = []
-    monkeypatch.setattr(gb, "stop_container", lambda name: stopped.append(name) or True)
-    hit = ("latency", "detector +6 ms", False)
-    assert gb.run_process("rundev:vision", ["sleep", "30"], _QuietGuard(), r3=_R3Hit(hit),
-                          container="poring-lab-vision-rundev-1") is False  # fmt: skip
-    assert stopped == ["poring-lab-vision-rundev-1"]
+    clock = _Clock()
+    sent = _fake_world(gb, monkeypatch, container_until=6, gpu_until=6, clock=clock)
+    assert gb.verify_stop("rundev:vision", "c1", True, t0=0.0, sleep=clock.sleep, clock=clock)
+    out = capsys.readouterr().out
+    assert "STOP VERIFIED rundev:vision after 6s" in out and "ESCALAT" not in out
+    assert sent == [["docker", "kill", "--signal", "INT", "c1"]]  # the container got its own SIGINT
 
 
-@pytest.mark.parametrize(("states", "calls", "gone"), [
-    ([False], [], True),                                    # already gone: nothing sent
-    ([True, True, False, False], [["kill", "--signal", "INT"]], True),   # SIGINT stops it
-    ([True] * 32 + [False], [["kill", "--signal", "INT"], ["stop", "-t", "20"]], True),
-    ([True] * 80, [["kill", "--signal", "INT"], ["stop", "-t", "20"]], False),
-])  # fmt: skip
-def test_stop_container_sigint_then_docker_stop(
-    gb: ModuleType, monkeypatch: pytest.MonkeyPatch,
-    states: list[bool], calls: list[list[str]], gone: bool,
-) -> None:  # fmt: skip
-    seq = iter(states)
-    monkeypatch.setattr(gb, "container_running", lambda name: next(seq, states[-1]))
-    ran: list[list[str]] = []
-    monkeypatch.setattr(gb.subprocess, "run", lambda cmd, **k: ran.append(cmd[1:4]))
-    assert gb.stop_container("c1", grace=60, sleep=lambda s: None) is gone
-    assert ran == calls
+def test_the_2026_10_07_orphan_is_escalated_and_verified(
+    gb: ModuleType, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """11:06:40: the compose client exited and the container trained on. It ignores SIGINT here:
+    after STOP_VERIFY_S the guard escalates to `docker kill` and confirms the GPU is free."""
+    clock = _Clock()
+    sent = _fake_world(gb, monkeypatch, container_until=float("inf"), gpu_until=float("inf"),
+                       clock=clock)  # fmt: skip
+    assert gb.verify_stop("rundev:vision", "c1", True, t0=0.0, sleep=clock.sleep, clock=clock)
+    out = capsys.readouterr().out
+    assert "STOP NOT VERIFIED rundev:vision after 30s" in out
+    assert (
+        "ESCALATED: docker kill c1" in out and "STOP VERIFIED rundev:vision after escalation" in out
+    )
+    assert ["docker", "kill", "c1"] in sent
+
+
+def test_a_gpu_process_of_ours_outliving_its_container_is_killed(
+    gb: ModuleType, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    clock = _Clock()
+    _fake_world(gb, monkeypatch, container_until=2, gpu_until=float("inf"), clock=clock)
+    assert gb.verify_stop("rundev:vision", "c1", True, t0=0.0, sleep=clock.sleep, clock=clock)
+    out = capsys.readouterr().out
+    assert "our GPU processes [4242]" in out and "ESCALATED: kill -9 4242" in out
+
+
+def test_an_unverifiable_gpu_is_never_called_verified(
+    gb: ModuleType, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """nvidia-smi not answering is not evidence of a free GPU: fail closed, STOP-UNVERIFIED."""
+    clock = _Clock()
+    _fake_world(gb, monkeypatch, 2, 2, clock, nvidia_ok=False)
+    assert not gb.verify_stop("rundev:vision", "c1", True, t0=0.0, sleep=clock.sleep, clock=clock)
+    assert "STOP-UNVERIFIED rundev:vision: GPU unverifiable" in capsys.readouterr().out
+
+
+def test_a_host_step_is_verified_by_its_processes(
+    gb: ModuleType, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The IO guard's cache: step (a host builder: no container, no GPU): the builder must go."""
+    clock = _Clock()
+    _fake_world(gb, monkeypatch, 0, 4, clock)
+    assert gb.verify_stop("cache", None, False, b"scripts/build_frame_cache.py", t0=0.0,
+                          sleep=clock.sleep, clock=clock)  # fmt: skip
+    assert "STOP VERIFIED cache after 4s" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("trip", ["io", "r3"])
+def test_both_guards_verify_their_stops(
+    gb: ModuleType, monkeypatch: pytest.MonkeyPatch, trip: str
+) -> None:
+    """The IO guard and R3 alike: an abort goes through verify_stop with the step's container,
+    the GPU check and its host pattern."""
+    calls: list[tuple] = []
+    monkeypatch.setattr(gb, "verify_stop", lambda *a, **k: calls.append(a) or True)
+
+    class IoHit(_QuietGuard):
+        def breach(self) -> tuple[str, float, str]:  # type: ignore[override]
+            return ("quant-postgres", 29.8, "spike above 25.0%")
+
+    guard = IoHit() if trip == "io" else _QuietGuard()
+    r3 = _R3Hit(("latency", "+6 ms", False)) if trip == "r3" else None
+    assert gb.run_process("rundev:vision", ["sleep", "30"], guard, r3=r3, container="c1",
+                          gpu=True) is False  # fmt: skip
+    assert calls == [("rundev:vision", "c1", True, None)]

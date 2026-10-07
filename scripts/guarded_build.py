@@ -237,27 +237,116 @@ def container_running(name: str) -> bool:
     return bool(out.strip())
 
 
-def stop_container(name: str, *, grace: float = 60, sleep: Any = time.sleep) -> bool:
-    """Make sure an aborted step's container is GONE (2026-10-07: a SIGINT to `timeout ... docker
-    compose run` stopped only the compose client, and the training container ran on for 10.5 min
-    after an R3 abort). SIGINT the container itself (its init forwards it: ultralytics stops and
-    keeps last.pt), then `docker stop` after ``grace`` s; True once it is gone."""
-    if not container_running(name):
-        return True
-    print(f"[{ts()}] {name} still running after the abort: SIGINT to the container", flush=True)
-    subprocess.run(["docker", "kill", "--signal", "INT", name], capture_output=True, check=False)
-    waited = 0.0
-    while waited < grace and container_running(name):
+STOP_VERIFY_S = 30.0  # a guard stop must be CONFIRMED within this many seconds of the SIGINT ...
+ESCALATED_VERIFY_S = 15.0  # ... else escalate (docker kill / kill -9) and confirm within this
+
+
+def own_pids(pattern: bytes, pids: list[int] | None = None) -> list[int]:
+    """Our (same uid) processes whose command line contains ``pattern``; ``pids`` limits the search
+    (e.g. to the GPU's compute processes). Never this process itself."""
+    me, uid = os.getpid(), os.getuid()
+    out = []
+    for pid in pids if pids is not None else [int(p) for p in os.listdir("/proc") if p.isdigit()]:
+        try:
+            if pid == me or os.stat(f"/proc/{pid}").st_uid != uid:
+                continue
+            if pattern in Path(f"/proc/{pid}/cmdline").read_bytes():
+                out.append(pid)
+        except OSError:
+            continue
+    return out
+
+
+def gpu_pids() -> list[int] | None:
+    """Every compute process on the GPU (nvidia-smi), or None when nvidia-smi does not answer."""
+    try:
+        query = ["nvidia-smi", "--query-compute-apps=pid", "--format=csv,noheader"]
+        out = subprocess.run(query, capture_output=True, text=True, timeout=15, check=True).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return [int(x) for x in out.split() if x.strip().isdigit()]
+
+
+def leftovers(container: str | None, gpu: bool, host: bytes | None) -> list[str]:
+    """What of an aborted step is still alive: its container, OUR processes on the GPU (command
+    line naming poring_vision), its host-side processes. Empty = the stop is verified."""
+    left = []
+    if container is not None and container_running(container):
+        left.append(f"container {container}")
+    if gpu:
+        pids = gpu_pids()
+        if pids is None:
+            left.append("GPU unverifiable (nvidia-smi failed)")
+        else:
+            ours = own_pids(b"poring_vision", pids)
+            if ours:
+                left.append(f"our GPU processes {ours}")
+    if host is not None:
+        procs = own_pids(host)
+        if procs:
+            left.append(f"host processes {procs} ({host.decode()})")
+    return left
+
+
+def verify_stop(
+    label: str,
+    container: str | None,
+    gpu: bool,
+    host: bytes | None = None,
+    *,
+    t0: float | None = None,
+    sleep: Any = time.sleep,
+    clock: Any = time.monotonic,
+) -> bool:
+    """Every guard stop is VERIFIED, never assumed (Batt, 2026-10-07): within STOP_VERIFY_S of the
+    SIGINT the step's container must be gone, no process of ours on the GPU, no host process of
+    the step left. A container still up gets its own SIGINT (the compose client may not forward
+    it: 2026-10-07 11:06, the training ran on for 10.5 min). Past the deadline: ESCALATE (`docker
+    kill`, `kill -9` of our leftover processes), logged, and confirm again within
+    ESCALATED_VERIFY_S. False = still not stopped: STOP-UNVERIFIED, a person must look."""
+    t0 = clock() if t0 is None else t0
+    nudged = False
+    left = leftovers(container, gpu, host)
+    while left and clock() - t0 < STOP_VERIFY_S:
+        if not nudged and container is not None and any(x.startswith("container") for x in left):
+            subprocess.run(["docker", "kill", "--signal", "INT", container],
+                           capture_output=True, check=False)  # fmt: skip
+            print(f"[{ts()}] {label}: container still up after the SIGINT: SIGINT to {container}",
+                  flush=True)  # fmt: skip
+            nudged = True
         sleep(2)
-        waited += 2
-    if container_running(name):
-        print(f"[{ts()}] {name} ignored SIGINT for {grace:.0f}s: docker stop", flush=True)
-        subprocess.run(["docker", "stop", "-t", "20", name], capture_output=True, check=False)
-    gone = not container_running(name)
-    print(
-        f"[{ts()}] {name}: {'stopped' if gone else 'STILL RUNNING -- stop it by hand'}", flush=True
+        left = leftovers(container, gpu, host)
+    if not left:
+        print(f"[{ts()}] STOP VERIFIED {label} after {clock() - t0:.0f}s: container gone, no "
+              f"process of ours on the GPU or left on the host [{frigate_r3.stamp()}]",
+              flush=True)  # fmt: skip
+        return True
+    print(f"[{ts()}] STOP NOT VERIFIED {label} after {STOP_VERIFY_S:.0f}s ({'; '.join(left)}): "
+          f"ESCALATING [{frigate_r3.stamp()}]", flush=True)  # fmt: skip
+    if container is not None and container_running(container):
+        subprocess.run(["docker", "kill", container], capture_output=True, check=False)
+        print(f"[{ts()}] ESCALATED: docker kill {container}", flush=True)
+    pids = (own_pids(b"poring_vision", gpu_pids() or []) if gpu else []) + (
+        own_pids(host) if host is not None else []
     )
-    return gone
+    for pid in pids:
+        try:
+            os.kill(pid, 9)
+            print(f"[{ts()}] ESCALATED: kill -9 {pid}", flush=True)
+        except OSError as exc:
+            print(f"[{ts()}] ESCALATED: kill -9 {pid} failed ({exc})", flush=True)
+    t1 = clock()
+    left = leftovers(container, gpu, host)
+    while left and clock() - t1 < ESCALATED_VERIFY_S:
+        sleep(2)
+        left = leftovers(container, gpu, host)
+    if not left:
+        print(f"[{ts()}] STOP VERIFIED {label} after escalation ({clock() - t0:.0f}s) "
+              f"[{frigate_r3.stamp()}]", flush=True)  # fmt: skip
+        return True
+    print(f"[{ts()}] STOP-UNVERIFIED {label}: {'; '.join(left)} STILL PRESENT after escalation -- "
+          f"stop it by hand [{frigate_r3.stamp()}]", flush=True)  # fmt: skip
+    return False
 
 
 CACHE_ARG = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")  # session ids, ids, numbers, paths
@@ -391,16 +480,22 @@ def build_env() -> dict[str, str]:
     return {**os.environ, "BUILDX_BUILDER": LAB_BUILDER}
 
 
-def abort(proc: "subprocess.Popen[bytes]", container: str | None) -> None:
-    """SIGINT the step; for a container step, also make sure the CONTAINER stops."""
+def abort(
+    proc: "subprocess.Popen[bytes]",
+    label: str,
+    container: str | None = None,
+    gpu: bool = False,
+    host: bytes | None = None,
+) -> bool:
+    """SIGINT the step, then VERIFY it stopped (verify_stop); True only when verified."""
+    t0 = time.monotonic()
     proc.send_signal(2)
     try:
-        proc.wait(timeout=120)
+        proc.wait(timeout=STOP_VERIFY_S)
     except subprocess.TimeoutExpired:
         proc.kill()
         proc.wait(timeout=30)
-    if container is not None:
-        stop_container(container)
+    return verify_stop(label, container, gpu, host, t0=t0)
 
 
 def run_process(
@@ -410,6 +505,8 @@ def run_process(
     env: dict[str, str] | None = None,
     r3: "frigate_r3.R3Guard | None" = None,
     container: str | None = None,
+    gpu: bool = False,
+    host: bytes | None = None,
 ) -> bool:
     log = log_path(label)
     builder = env.get("BUILDX_BUILDER") if env else None
@@ -424,7 +521,7 @@ def run_process(
                     f"[{ts()}] ABORT {label}: {hit[0]} full IO stall {hit[1]:.1f}% ({hit[2]})",
                     flush=True,
                 )
-                abort(proc, container)
+                abort(proc, label, container, gpu, host)
                 return False
             if r3 is not None:
                 r3.poll()
@@ -435,7 +532,7 @@ def run_process(
                         f"R3-HARD {kind}: {detail} (no resume)" if hard else f"R3 {kind}: {detail}"
                     )
                     print(f"[{ts()}] ABORT {label}: {tag} [{frigate_r3.stamp()}]", flush=True)
-                    abort(proc, container)
+                    abort(proc, label, container, gpu, host)
                     return False
             time.sleep(2)
     ok = proc.returncode == 0
@@ -701,12 +798,13 @@ def main() -> int:
             if r3 is None:
                 return 3
             ok = run_process(
-                step.label, run_cmd(step), guard, r3=r3, container=container_name(step)
+                step.label, run_cmd(step), guard, r3=r3, container=container_name(step), gpu=True
             )
             tail = log_path(step.label).read_text(errors="replace").splitlines()[-80:]
             print("\n".join(f"  | {line}" for line in tail), flush=True)
         elif step.kind == "cache":
-            ok = run_process(step.label, cache_cmd(step), guard, env=cache_env())
+            ok = run_process(step.label, cache_cmd(step), guard, env=cache_env(),
+                             host=b"scripts/build_frame_cache.py")  # fmt: skip
             tail = log_path(step.label).read_text(errors="replace").splitlines()[-20:]
             print("\n".join(f"  | {line}" for line in tail), flush=True)
         elif step.kind == "up":

@@ -423,7 +423,19 @@ def run_loop(csv_out: Path | None, guard: R3Guard | None, sigint: bool, every: f
                                        capture_output=True, check=False)  # fmt: skip
                     print(f"[{stamp()}] SIGINT sent to vision container(s) {ids or 'none'}",
                           flush=True)  # fmt: skip
-                    return 2
+                    t0 = time.monotonic()  # verified, never assumed (Batt 2026-10-07)
+                    while vision_containers() and time.monotonic() - t0 < 30:
+                        time.sleep(2)
+                    left = vision_containers()
+                    for cid in left:
+                        subprocess.run(["docker", "kill", cid], capture_output=True, check=False)
+                    time.sleep(5 if left else 0)
+                    still = vision_containers()
+                    verdict = ("STOP VERIFIED" if not still else f"STOP-UNVERIFIED {still}") + (
+                        f" (escalated: docker kill {left})" if left else ""
+                    )
+                    print(f"[{stamp()}] {verdict}", flush=True)
+                    return 2 if not still else 4
             elif now - last_status >= 900:
                 last_status = now
                 m = guard.latency_median()
