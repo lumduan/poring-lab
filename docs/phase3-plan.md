@@ -1089,6 +1089,30 @@ ruler. This does NOT replace M4; it says whether v1 is already useful.
 **PASS:** v1 is already better than v0 on the gold set. Building a v1 cache and training on it is
 Batt's next call. **FAIL:** reported as it is; v1 waits for M4.
 
+**RESULT (2026-10-07 ~07:55, scored ONCE): GATE FAILED.**
+
+| gold set, IoU ≥ 0.5 | monster P | monster R | monster mean IoU | NPC P / R / IoU | overall P / R / IoU |
+|---|---|---|---|---|---|
+| v0 (the gate) | 0.644 | 0.580 | 0.901 | 0.833 / 0.833 / 0.979 | 0.715 / 0.669 / 0.935 |
+| **v1, k = 0.140** | **0.446** | **0.410** | **0.587** | 0.833 / 0.833 / 0.979 | 0.589 / 0.558 / 0.792 |
+
+Monster TP / FP / FN: 41 / 51 / 59.
+
+**A reference caveat, found right after scoring (a fact, not a re-score):**
+- **82 of the gold set's 100 monster boxes are EXACTLY 44 × 40**, v0's built-in monster box
+  (`labels.BOX_PX`).
+- All 27 frames are `edited`, but the monster boxes mostly kept v0's default size.
+- So for monsters the gold set encodes v0's box CONVENTION. A correctly tight sprite box is scored
+  against a 44 × 40 reference, which caps its IoU (e.g. a ~37 × 29 px Lunatic box fully inside a
+  44 × 40 one gives IoU ≈ 0.61 at best). The matched-pair IoU of 0.587 sits right there.
+- Consequences:
+  - the gate cannot certify a tight v1 box;
+  - last night's takeaway still holds as measured, but with the same caveat: v0 models, v0 labels
+    and the gold set share v0's box size.
+  - A size-neutral reference needs Batt's call: re-hand-check the 100 monster boxes tightly, or a
+    pre-registered position-only metric.
+  - No variant was scored on the gold set (pre-registered).
+
 ## 6. M5–M7: using the rule
 
 **M5, labels v1.** Every auto-label gets:
