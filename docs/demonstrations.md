@@ -625,3 +625,36 @@ Event → fields (cs = our request, sc = the server):
 - **L1 `ui.open_window`** records both RDP passes in `verified_on`. It stays UNVERIFIED until the
   S2 re-test.
 
+### walk@4, indoor, RDP: **FAIL, 26 / 46 verified** (4 interrupted) (2026-10-07 15:10:28–15:15:32 ICT / 08:10:28–08:15:32 UTC)
+- **Session:** `20261007T151028-demo-walk4-alone-indoor`, seed 20261012, the amended rule
+  (corner anchors), ABSOLUTE targets.
+- **verify@2:** 26 verified successes; 20 failures; 0 ambiguous.
+  - `declined:no_confirmation` 10; "walked to a different cell (1 off)" 9; no move request 1.
+- **4 attempts interrupted** (#34, 35, 44, 45): human `release_all` at 15:14 and 15:15, i.e. Batt
+  at the console. ⚠️ **They were NOT re-run, a deviation from Batt's 14:15 ruling.** The verdict is
+  decided either way (20 failures against at most 2), and replaying a dead-reckoning chain
+  attempt also needs its believed-position state, which `--rerun-of` does not restore yet.
+- **The decomposition** (believed position vs the packets' true start):
+
+| dead reckoning at the attempt | attempts | verified | failures |
+|---|---|---|---|
+| exact | 36 | **25 (69 %)** | 6 no confirmation, 5 one-cell misses |
+| off by a cell | 10 | 1 | 4 one-cell misses, 4 no confirmation, 1 no move request |
+
+- **What it says:**
+  1. **The confirmation lets mispicks through out of sample.** 5 of the 30 clicks it confirmed
+     with exact dead reckoning went to a neighbour (the calibration predicted 1 in 34). With
+     exact dead reckoning the rule hits 69 %, no better than walk@3's flat floor (65 %): the
+     altitude-aware projection did not move the indoor rate.
+  2. **Dead reckoning has no correction.** Every one of the 10 "off" attempts follows a one-cell
+     miss earlier in the same chain (#16 → 17–19, #28 → 29, #36 → 37–39, #40 → 41–44). One
+     mispick corrupts the believed cell, and the chain fails until the next warp.
+  3. **The chevron check cannot see a whole-cell misregistration** (stated in advance). With the
+     believed cell wrong, the projection moves with it and the chevrons look consistent: #18,
+     #19, #38 and #39 confirmed on the first hover and missed.
+- **For Batt** (a design decision; parked):
+  - Dead reckoning needs a re-anchor after each walk, from pixels, or its errors chain.
+  - The confirmation needs to tell a diagonal neighbour from the target. The chevron SHAPE
+    (which corner each one is) could do it; the position alone cannot when only 2 show.
+- `nav.walk_to` stays UNVERIFIED.
+
