@@ -381,3 +381,24 @@ scripts, static data per ADR-0015) are pre-registered here before their tests.
 - **Next:** walk@3 indoor (n = 50). L1 `nav.walk_to` gets its RDP `verified_on` entry only once
   both scenes pass.
 
+### walk@3, indoor, RDP: **FAIL, 32 / 49 verified** (+1 ambiguous) (2026-10-07 13:43:21–13:53:54 ICT / 06:43:21–06:53:54 UTC)
+- **Session:** `20261007T134321-demo-walk-alone-indoor`, seed 20261009, prt_church, flat floor
+  with the RDP camera's indoor block.
+- **verify@1:** 32 verified successes; 17 failures; 1 ambiguous.
+  - The 17 failures: `declined:no_marker` 9, and "walked to a different cell (1 off)" 8.
+  - The ambiguous one: a map change inside the arrival window, almost surely the next attempt's
+    harness `@warp`; the walk itself was accepted on its target.
+- **This was the failure source stated in advance** (3.4 / 3.5: the indoor block was carried over
+  from the console fit and never validated on RDP). Reported as is.
+- **What the misses say:**
+  - All 8 one-cell misses lie on the world (1, 1) diagonal: 6 at (−1, −1), 2 at (+1, +1).
+  - With prt_church's diagonal camera (yaw ≈ +46°) that axis is screen DEPTH. So the RDP indoor
+    projection is off in depth (pitch / distance / vertical offset), not at random.
+  - Declines lean the same way: 8 of the 9 were targets toward the camera (dy > 0, 34 attempts),
+    1 of 16 away from it.
+- **The data for the fix exists already:** 41 accepted walks, each a clicked pixel paired with the
+  server-accepted destination cell, are ground truth for an RDP indoor camera fit.
+  - A fit on this session would be design time. The next indoor alone-test (walk@4) must then use
+    NEW situations: a new seed, and pre-registered before it runs.
+- `nav.walk_to` stays UNVERIFIED: no `verified_on` entry until both scenes pass.
+
