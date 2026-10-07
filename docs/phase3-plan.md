@@ -7,7 +7,7 @@ verdict_date: 2026-10-04
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: "2026-10-06: M4 step 1 (§5c): measurement `reconstruct` chosen on the ODD spawns and frozen (9e5cf96); the EVEN half is NOT PASSED (k 0.1290 within neither prior; IoU/edges fail; outdoor top/bottom pass for both species; indoor/outdoor 0.943 fail; A/A 8/9). The per-species vertical split (Poring ~0.90, Lunatic ~1.12) does not move with the measurement rule, so it is not a measurement artefact. Next: step 2, the per-species vertical term, pre-registered first; then k; then the indoor camera re-fit. 054429 = domain-shift test set; caches lossless PNG. No v1."
+next_action: "2026-10-07: M4 is THE priority (Batt: on the gold set the v0 models sit at their labels' own P/R, so labels are the ceiling and v1 labels are the lever). Step 2 so far: 2a facing kept (outdoor heading open); 2b walk frames REJECTED (ODD+EVEN); the ACT-offset candidate already in the model; 2c H-C (composer vs client): files clean, data identical, the pixel map replicates (Lunatic drawn ~1.19x the best-matching frame's height, Poring ~0.95x; both ~1.1x wider), NO grounded rule -> the next hypothesis is Batt's (candidates in 5d-iv, e.g. a contrast-dependent halo in the measurement). v0-JPEG matched-batch rerun tonight (batch 2, a JPEG cache with identical labels) for the PNG-vs-JPEG attribution.""
 last_reviewed: 2026-10-06
 ---
 
