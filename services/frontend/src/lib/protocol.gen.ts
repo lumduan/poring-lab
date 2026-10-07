@@ -4,7 +4,7 @@
  * This interface was referenced by `PoringProtocol`'s JSON-Schema
  * via the `definition` "AgentToBackend".
  */
-export type AgentToBackend = AgentHello | AgentInput | Detections | Ping;
+export type AgentToBackend = AgentHello | AgentInput | Detections | RoutePreview | Ping;
 /**
  * This interface was referenced by `PoringProtocol`'s JSON-Schema
  * via the `definition` "InputEvent".
@@ -27,7 +27,7 @@ export type Mode = "HUMAN" | "BOT" | "ASSIST";
  * This interface was referenced by `PoringProtocol`'s JSON-Schema
  * via the `definition` "BackendToBrowser".
  */
-export type BackendToBrowser = FrameMeta | Status | Detections | Pong | PasteResult | ErrorReply;
+export type BackendToBrowser = FrameMeta | Status | Detections | RoutePreview | Pong | PasteResult | ErrorReply;
 /**
  * This interface was referenced by `PoringProtocol`'s JSON-Schema
  * via the `definition` "BrowserToBackend".
@@ -223,6 +223,42 @@ export interface Box {
   x2: number;
   y1: number;
   y2: number;
+}
+/**
+ * The agent's PLANNED route, drawn for the human over the stream (walk@8, Batt 2026-10-07):
+ * the waypoint polyline it will follow and the point it will click next. Display only -- it
+ * moves nothing and never reaches the mux. An empty list clears it; it fades after ttl_ms.
+ *
+ * This interface was referenced by `PoringProtocol`'s JSON-Schema
+ * via the `definition` "RoutePreview".
+ */
+export interface RoutePreview {
+  /**
+   * Frame this message refers to or was produced from; -1 means none.
+   */
+  frame_id: number;
+  label: string;
+  /**
+   * @maxItems 64
+   */
+  points: RoutePoint[];
+  /**
+   * Sender's monotonic clock, ns (see module docstring).
+   */
+  t_mono_ns: number;
+  ttl_ms: number;
+  type: "route_preview";
+}
+/**
+ * One point of a planned route, normalized to [0, 1] like a detection box.
+ *
+ * This interface was referenced by `PoringProtocol`'s JSON-Schema
+ * via the `definition` "RoutePoint".
+ */
+export interface RoutePoint {
+  kind: "start" | "waypoint" | "goal" | "click";
+  x: number;
+  y: number;
 }
 /**
  * Round-trip probe; its ``t_mono_ns`` comes back verbatim as ``Pong.echo_t_mono_ns``.

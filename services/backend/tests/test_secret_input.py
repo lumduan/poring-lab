@@ -215,3 +215,30 @@ def test_bot_keys_are_never_redacted_by_a_human_toggle(
     records = lines(tmp_path)
     bot = [r["event"] for r in records if r["source"] == "bot" and r["event"]["type"] == "key"]
     assert [k["code"] for k in bot] == ["KeyW", "KeyW"]
+
+
+def test_an_agent_route_preview_reaches_viewers_and_never_the_mux(
+    lab: tuple[TestClient, RecordingInput],
+) -> None:
+    """walk@8's route preview (Batt, 2026-10-07): display only, relayed like detections."""
+    from poring_env.protocol import AgentHello, RoutePoint, RoutePreview
+
+    client, fake = lab
+    points = [RoutePoint(x=0.5, y=0.5, kind="start"), RoutePoint(x=0.6, y=0.4, kind="goal")]
+    preview = RoutePreview(t_mono_ns=T, label="walk@8 route 0", ttl_ms=4000, points=points)
+    hello = AgentHello(t_mono_ns=T, agent_id="t", version="0")
+    with (
+        client.websocket_connect("/ws/stream", headers={"origin": ORIGIN}) as viewer,
+        client.websocket_connect("/internal/agent") as ws,
+    ):
+        ws.send_text(hello.model_dump_json())
+        ws.send_text(preview.model_dump_json())
+        for _ in range(400):
+            raw = viewer.receive()  # the stream also carries binary video frames
+            msg = json.loads(raw["text"]) if raw.get("text") else {}
+            if msg.get("type") == "route_preview":
+                break
+        else:
+            raise AssertionError("the viewer never got the route preview")
+    assert msg["points"][1] == {"x": 0.6, "y": 0.4, "kind": "goal"} and msg["ttl_ms"] == 4000
+    assert fake.events == []  # nothing reached the injector

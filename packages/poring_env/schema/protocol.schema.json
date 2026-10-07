@@ -96,7 +96,8 @@
           "agent_hello": "#/$defs/AgentHello",
           "agent_input": "#/$defs/AgentInput",
           "detections": "#/$defs/Detections",
-          "ping": "#/$defs/Ping"
+          "ping": "#/$defs/Ping",
+          "route_preview": "#/$defs/RoutePreview"
         },
         "propertyName": "type"
       },
@@ -109,6 +110,9 @@
         },
         {
           "$ref": "#/$defs/Detections"
+        },
+        {
+          "$ref": "#/$defs/RoutePreview"
         },
         {
           "$ref": "#/$defs/Ping"
@@ -148,6 +152,7 @@
           "frame": "#/$defs/FrameMeta",
           "paste_result": "#/$defs/PasteResult",
           "pong": "#/$defs/Pong",
+          "route_preview": "#/$defs/RoutePreview",
           "status": "#/$defs/Status"
         },
         "propertyName": "type"
@@ -161,6 +166,9 @@
         },
         {
           "$ref": "#/$defs/Detections"
+        },
+        {
+          "$ref": "#/$defs/RoutePreview"
         },
         {
           "$ref": "#/$defs/Pong"
@@ -1197,6 +1205,89 @@
         "type"
       ],
       "title": "ReleaseAll",
+      "type": "object"
+    },
+    "RoutePoint": {
+      "additionalProperties": false,
+      "description": "One point of a planned route, normalized to [0, 1] like a detection box.",
+      "properties": {
+        "kind": {
+          "default": "waypoint",
+          "enum": [
+            "start",
+            "waypoint",
+            "goal",
+            "click"
+          ],
+          "type": "string"
+        },
+        "x": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "y": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "kind"
+      ],
+      "title": "RoutePoint",
+      "type": "object"
+    },
+    "RoutePreview": {
+      "additionalProperties": false,
+      "description": "The agent's PLANNED route, drawn for the human over the stream (walk@8, Batt 2026-10-07):\nthe waypoint polyline it will follow and the point it will click next. Display only -- it\nmoves nothing and never reaches the mux. An empty list clears it; it fades after ttl_ms.",
+      "properties": {
+        "frame_id": {
+          "default": -1,
+          "description": "Frame this message refers to or was produced from; -1 means none.",
+          "minimum": -1,
+          "type": "integer"
+        },
+        "label": {
+          "default": "",
+          "maxLength": 64,
+          "type": "string"
+        },
+        "points": {
+          "items": {
+            "$ref": "#/$defs/RoutePoint"
+          },
+          "maxItems": 64,
+          "type": "array"
+        },
+        "t_mono_ns": {
+          "description": "Sender's monotonic clock, ns (see module docstring).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "ttl_ms": {
+          "default": 5000,
+          "maximum": 60000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "route_preview",
+          "default": "route_preview",
+          "type": "string"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "frame_id",
+        "type",
+        "points",
+        "label",
+        "ttl_ms"
+      ],
+      "title": "RoutePreview",
       "type": "object"
     },
     "SecretInput": {

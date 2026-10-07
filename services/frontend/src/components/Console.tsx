@@ -8,6 +8,7 @@ import ModeSwitch from "@/components/ModeSwitch";
 import OverlayCanvas from "@/components/OverlayCanvas";
 import PacketTimeline from "@/components/PacketTimeline";
 import PastePanel from "@/components/PastePanel";
+import RouteCanvas from "@/components/RouteCanvas";
 import StatsPanel, { EMPTY_STATS, type Links, type Stats } from "@/components/StatsPanel";
 import StreamCanvas from "@/components/StreamCanvas";
 import Toolbar from "@/components/Toolbar";
@@ -24,6 +25,7 @@ import {
   type FrameTiming,
   type Mode,
   type PasteResult,
+  type RoutePreview,
   type Status,
 } from "@/lib/protocol";
 import type { Size, ViewMode } from "@/lib/view";
@@ -69,6 +71,7 @@ export default function Console({ backendUrl }: Props) {
   const lastStatusMsRef = useRef<number | null>(null);
   const [statusAgeS, setStatusAgeS] = useState<number | null>(null);
   const [detections, setDetections] = useState<Detections | null>(null);
+  const [route, setRoute] = useState<RoutePreview | null>(null);
   const [stats, setStats] = useState<Stats>(EMPTY_STATS);
   const [links, setLinks] = useState<Links>({ stream: false, input: false });
   const [frameSize, setFrameSize] = useState<Size>({ width: 1280, height: 800 });
@@ -209,6 +212,7 @@ export default function Console({ backendUrl }: Props) {
           setStatus(msg);
         }
         else if (msg?.type === "detections") setDetections(msg);
+        else if (msg?.type === "route_preview") setRoute(msg);
         else if (msg?.type === "error") showDropped(msg);
       },
       onBinary: (blob) => {
@@ -449,6 +453,7 @@ export default function Console({ backendUrl }: Props) {
         }
       >
         <OverlayCanvas detections={detections} width={frameSize.width} height={frameSize.height} />
+        <RouteCanvas route={route} width={frameSize.width} height={frameSize.height} />
       </StreamCanvas>
       <div className="grid gap-3 lg:grid-cols-2">
         <details className="rounded-md border border-neutral-800 p-3" open>

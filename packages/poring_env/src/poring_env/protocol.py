@@ -418,6 +418,27 @@ class Detections(Message):
     boxes: list[Box] = Field(default_factory=list, max_length=512)
 
 
+class RoutePoint(BaseModel):
+    """One point of a planned route, normalized to [0, 1] like a detection box."""
+
+    model_config = _MODEL_CONFIG
+
+    x: NormCoord
+    y: NormCoord
+    kind: Literal["start", "waypoint", "goal", "click"] = "waypoint"
+
+
+class RoutePreview(Message):
+    """The agent's PLANNED route, drawn for the human over the stream (walk@8, Batt 2026-10-07):
+    the waypoint polyline it will follow and the point it will click next. Display only -- it
+    moves nothing and never reaches the mux. An empty list clears it; it fades after ttl_ms."""
+
+    type: Literal["route_preview"] = "route_preview"
+    points: list[RoutePoint] = Field(default_factory=list, max_length=64)
+    label: str = Field(default="", max_length=64)
+    ttl_ms: int = Field(default=5000, ge=0, le=60_000)
+
+
 # --- agent <-> backend ----------------------------------------------------------------------------
 
 
@@ -472,11 +493,11 @@ type BrowserToBackend = Annotated[
     Field(discriminator="type"),
 ]
 type BackendToBrowser = Annotated[
-    FrameMeta | Status | Detections | Pong | PasteResult | ErrorReply,
+    FrameMeta | Status | Detections | RoutePreview | Pong | PasteResult | ErrorReply,
     Field(discriminator="type"),
 ]
 type AgentToBackend = Annotated[
-    AgentHello | AgentInput | Detections | Ping, Field(discriminator="type")
+    AgentHello | AgentInput | Detections | RoutePreview | Ping, Field(discriminator="type")
 ]
 type BackendToAgent = Annotated[Status | InputAck | Pong | ErrorReply, Field(discriminator="type")]
 
