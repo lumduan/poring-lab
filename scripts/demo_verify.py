@@ -60,9 +60,8 @@ def judge(
         if start is None or cell is None:
             return V.Verdict("ambiguous", "no position fix before the click")
         target = (start[0] + cell[0], start[1] + cell[1]) if rec.action.intended.relative else cell
-        return V.verify_walk(
-            events, rec.t_mono_ns, aid, target, V.speed_before(events, rec.t_mono_ns)
-        )
+        speed = V.speed_before(events, rec.t_mono_ns)
+        return V.verify_walk(events, rec.t_mono_ns, aid, target, speed, t_end)
     return V.Verdict("ambiguous", f"no verifier for {kind} yet")
 
 

@@ -64,3 +64,38 @@ def test_a_session_is_judged_and_summarised(
     assert {v["outcome"]["status"] for v in verified if v["actor"] == "rule:harness@1"} == {
         "pending"
     }
+
+
+def walk(t0: int) -> DemoRecord:
+    action = Action(
+        type="walk",
+        points=[(640.0, 300.0)],
+        intended=Intended(kind="cell", cell=(6, 0), relative=True),
+    )
+    return DemoRecord(
+        session="20261007T131457-demo-walk-alone-outdoor",
+        actor="rule:walk@3",
+        t_mono_ns=t0,
+        t_done_ns=t0 + 10**9,
+        rule="walk@3",
+        cue="walk@3",
+        action=action,
+    )
+
+
+def test_a_walk_window_ends_where_the_next_attempt_starts(dv: ModuleType) -> None:
+    """2026-10-07, before walk@3 was scored: the walk branch did not pass t_end, so the NEXT
+    attempt's @warp (a map change) could land inside this walk's arrival window."""
+    s = 10**9
+    events = [
+        {"t_mono_ns": T - s, "type": "map_change", "map": "m.gat", "x": 100, "y": 100},
+        {"t_mono_ns": T + s // 3, "type": "self_move_request", "x": 106, "y": 100},
+        {"t_mono_ns": T + 4 * s // 10, "type": "self_move", "x0": 100, "y0": 100, "x1": 106,
+         "y1": 100},
+        {"t_mono_ns": T + 25 * s // 10, "type": "map_change", "map": "m.gat", "x": 90, "y": 90},
+    ]  # fmt: skip
+    aids = {"gm": 2000002, "player": 2000001}
+    rec = walk(T)
+    assert dv.judge(rec, events, aids, T + 2 * s).status == "success"
+    leaked = dv.judge(rec, events, aids, None)
+    assert (leaked.status, leaked.cause) == ("ambiguous", "map_change during the walk")
