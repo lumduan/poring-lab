@@ -7,8 +7,8 @@ verdict_date: 2026-10-04
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: "2026-10-07: M4 is THE priority. 2d (measure the ruler) DONE on both halves: synthetic sprites of known size reproduce the per-species split (ODD 1.252 vs real 1.255; EVEN 1.287 vs 1.247), so the split is IN THE MEASUREMENT (the Poring's detached tuft island is dropped by the opening; the Lunatic gains a ~4 % halo); once the ruler's bias is removed both species share one residual (~1.14 height, ~1.08 width): a common scale. Next (Batt): pre-register 'measure the prediction with the same ruler' and then judge k. 5e: the v1 gold gate FAILED, but the gold set's monster boxes are 82 % v0's fixed 44x40 (not size-neutral). Tonight: the v0-JPEG matched-batch rerun.""
-last_reviewed: 2026-10-06
+next_action: "2026-10-07: M4 is THE priority. 2e (measure the PREDICTION with the same ruler) scored: ODD frozen (4dfdddb) -- DIFF 24 fails on the Lunatic halo, DIFF 48 validates exactly (obs/MP 1.000), one k (k_h species split 1.008), scalar k_h 0.1467 = NEITHER prior (+10.0 % nostalro, +4.8 % korangar), k_w 0.1387 (korangar -0.9 %), species widths differ (Lunatic 0.1333 vs Poring ~0.145); EVEN NOT CONFIRMED: DIFF 48 misses by ONE PIXEL (outdoor Poring loses its top row in 102/180 frames, median 0.968; ±3 % is < 1 px at 25-31 px), so k was NOT judged on EVEN and its real k is left UNSEEN for a blind confirmation. Batt to decide: a pixel-resolution validation criterion (e.g. median |obs_h - MP_h| <= 1 px), then EVEN once. No vertical-only sprite factor in nostalro or korangar (uniform scale; korangar curvature is depth-only). 5f DONE: v1@0.140 points at least as well as v0 (monster P 0.902 R 0.830 vs 0.889/0.800). 5e: the v1 IoU gate FAILED but the gold set encodes v0's 44x40 (82 %), so size is M4's. Tonight 20:00: the v0-JPEG matched-batch rerun (chain.sh), evals on the same PNG test frames + gold."
+last_reviewed: 2026-10-07
 ---
 
 # Phase 3: perception. Compute what is deterministic, learn only the rest
@@ -1225,6 +1225,41 @@ Real data: 1,150 clean frames, none left out (every frame has a 2c view and an M
   - The vertical-only search found no source for a height excess. Any reading of the width split
     needs its own pre-registration.
 - **Next, as pre-registered:** EVEN once, with the same script.
+
+**EVEN (2026-10-07 ~09:10, scored ONCE, same script, same sha256): NOT CONFIRMED. NEITHER ruler
+validates, so as pre-registered k is NOT judged on EVEN.** Synthetic: 25 spawns, 450 frames.
+
+| ruler | Poring outdoor h (w) | Lunatic outdoor h (w) | split | Poring indoor h | validated |
+|---|---|---|---|---|---|
+| DIFF 24 | 1.032 (1.026) | 1.044 (1.035) | 1.011 | 1.021 | no: both species outside ±3 % |
+| DIFF 48 | **0.968** (1.000) | 1.000 (1.000) | **1.033** | 1.000 | **no, by one pixel:** Poring −3.2 %, split 1.033 |
+
+**Why DIFF 48 missed (exploratory, synthetic only, not a decision):**
+- Per spawn, in pixels, the decoded outdoor Poring at DIFF 48 often loses its TOP row. Its bottom
+  always matches MP, and the indoor Poring is exact (162/162 frames).
+- obs_h − MP_h, outdoor Poring:
+
+  | half | −1 px | 0 px | mean |
+  |---|---|---|---|
+  | ODD | 49 | 77 | −0.39 px |
+  | EVEN | 102 | 78 | −0.57 px |
+
+- Lunatic: EVEN 18 / 69 / 21 at −1 / 0 / +1 px (mean +0.03); ODD +0.33.
+- So the median flipped from 0 px (ODD) to −1 px (EVEN).
+- **±3 % is LESS THAN ONE PIXEL at these sizes** (MP_h 25–31 px outdoors). The criterion as
+  written needs a pixel-exact median: a resolution limit of the criterion, stated, not changed.
+- The direction of that residual: a top row lost makes obs SHORTER, so it biases k_h DOWN (~2 % for
+  outdoor Porings). Correcting it would move ODD's 0.1467 further from both priors, not toward one.
+
+**Left UNSEEN on purpose: the real EVEN k.** If Batt amends the validation criterion to the pixel
+resolution, EVEN can still confirm it blind.
+
+**2e's standing (ODD only, NOT confirmed):**
+- like measured with like removes the per-species height split (ODD 1.008);
+- the single k_h is "neither" (0.1467);
+- k_w = 0.1387 sits beside korangar (−0.9 %);
+- the two species' widths differ (Lunatic 0.1333 vs Poring ~0.145).
+- Batt's call: amend the criterion (e.g. the median |obs_h − MP_h| ≤ 1 px), then score EVEN once.
 
 ### 5f. The gold set, POSITION ONLY, for monsters (Batt, 2026-10-07), written BEFORE scoring
 
