@@ -96,6 +96,12 @@ ports, quickstart) and `docs/adr/`.
        unless inside the repo.
      RAM filesystems (`/dev/shm`) are fine. Roots built at run time (`$VAR`, `$(…)`) are refused.
      Use a specific path, `ls`, `stat`, `findmnt`, `df` or `git ls-files`.
+   - **Subagents inherit all of this** (Batt, 2026-10-07). Paste the block in
+     `docs/operations/subagent-brief.md` into every subagent brief:
+     - no `.venv`, `node_modules`, builds or many-small-file trees on the shared disk: a worktree's
+       uv env goes to `/dev/shm` via `UV_PROJECT_ENVIRONMENT` and `UV_LINK_MODE=copy`;
+     - guarded steps only; the docker, bigread and walk hooks apply;
+     - remove its worktree and its `/dev/shm` leftovers after the merge.
 
 6. **Never put a Docker network on a 192.168.x subnet on this host.** The LAN uses 192.168.1, 110, 111, 112
    and 120, and Docker can't see the segments behind the router. On 2026-09-29 an auto-assigned
