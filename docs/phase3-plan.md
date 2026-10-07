@@ -1292,6 +1292,55 @@ resolution, EVEN can still confirm it blind.
 - **The DECISIVE confirmation is NEW data:** the fresh full M4 session (§5d-vii, planned), with this
   ruler and criterion UNCHANGED. **k stays OPEN until then.**
 
+**1a RESULT (2026-10-07 11:05, scored ONCE, `mp_eval_amended.py` sha256 ffe7ee1f77328a02 =
+`mp_eval.py` with only the validation criterion swapped):**
+
+**(1a-i) EVEN synthetic validation, re-read under the amendment (ALREADY SEEN, so it confirms
+nothing).** 25 spawns, 450 frames.
+
+| ruler | species | median abs dh | mean dh | pooled obs/MP |
+|---|---|---|---|---|
+| DIFF 24 | Poring, outdoor | 1 px | +0.43 px | 1.015 |
+| DIFF 24 | Lunatic, outdoor | 1 px | +1.00 px | 1.043 |
+| DIFF 24 | Poring, indoor | 1 px | +0.75 px | 1.018 |
+
+- The pooled split is 1.027, within 1 ± 0.03.
+- So **DIFF 24 VALIDATES** under the amendment, and by the pre-registered order DIFF 48 is not
+  consulted.
+- ⚠️ **Stated, not hidden:** the 1 px tolerance ADMITS DIFF 24's known halo:
+  - the Lunatic is +1 px (+4.3 % pooled), the Poring +1.5 %;
+  - so a k measured at DIFF 24 carries a known UPWARD bias of ~1.5–4 %.
+
+**(1a-ii) EVEN's real k at DIFF 24, PROVISIONAL.** 1,564 clean frames, none left out.
+
+| group | n | k_h | k_w | k_h / k_w |
+|---|---|---|---|---|
+| Poring, outdoor centre | 393 | 0.1563 | 0.1477 | 1.058 |
+| Lunatic, outdoor centre | 151 | 0.1600 | 0.1505 | 1.063 |
+| Poring, indoor | 510 | 0.1441 | 0.1452 | 0.992 |
+| **all clean frames** | 1,564 | **0.1531** | 0.1474 | 1.039 |
+
+- One k: the k_h species split is 1.024.
+- The scalar is **"NEITHER"**: +14.8 % from nostalro, +9.4 % from korangar.
+
+**Exploratory, NOT a verdict: EVEN's real k at DIFF 48** (the ruler ODD used), for comparability.
+- **k_h = 0.1467, identical to ODD's 0.1467.** k_w 0.1417 (ODD 0.1387), k_h / k_w 1.035.
+- The k_h species split is 0.982.
+- The width split is 0.975 (Lunatic 0.1378 vs Poring 0.1414; ODD 0.93).
+
+**Reading (provisional):**
+- Both halves, and both rulers, say k is NOT either prior.
+- With the halo-free ruler (DIFF 48) the two halves agree to 4 decimals on k_h ≈ 0.147. DIFF 24's
+  higher value is about its known halo bias.
+- Heights run ~4–6 % above widths outdoors, but ≈ 1.0 indoors (Poring 0.99).
+- No h/w scales are fitted (no vertical-only factor exists in either client).
+- **k stays OPEN until the fresh full M4 session.**
+- **For Batt:**
+  - under this amendment the fresh session would again pick DIFF 24 if it validates, carrying the
+    halo bias;
+  - fixing the ruler at DIFF 48 for that session (it validated exactly on ODD, and missed only by
+    the outdoor Poring's top row on EVEN) is a decision to make BEFORE it runs.
+
 ### 5d-viii. M4 step 2f: the species WIDTH split against the FACING error (Batt, 2026-10-07), written BEFORE any scoring
 
 **Why.** 2e ODD found that the two species' widths disagree: k_w Lunatic 0.1333 vs Poring ~0.145, a
