@@ -111,7 +111,71 @@ under the same load", the infra rule).
 - Reported per level: the kept and dropped pairs (each with its ON/OFF latency and load), the
   median delta, and the verdict.
 
+## The ADAPTIVE DUTY CYCLE (Batt, 2026-10-07 ~16:25; pre-registered ~16:55, BEFORE its first run)
+**Batt:** keep training RUNNING and adapt to the cameras: slow down, don't stop. Never a full
+pause because of load alone. The frame-drop rule is the infra side's and stays. The IO guard and
+R1 / R2 are unchanged.
+
+**The levels:** the step sleep after every training batch is one of **100 / 200 / 400 / 800 /
+2000 ms** (L0 … L4; L4 = the floor). It changes LIVE.
+- `guarded_build`'s `DutyController` writes it to `state/train-duty/duty.json`, read-only in the
+  container at `/lab-duty`. It writes on every change and as a 30 s heartbeat.
+- The container re-reads it after every batch.
+- A missing, stale (> 120 s) or garbled file means L4: fail slow, never fast.
+- Vision cannot write the file. That is the one read-only mount added to the dev overlay
+  (`test_guards.py`).
+
+**The thresholds, from 2026-10-07's 1,235 distinct Frigate updates (11:04–16:42):**
+- **The data:** fleet detections/s p50 29, p90 43, p95 50, p99 82; 92 % of updates < 45.
+  - Skips began at 70–77/s WITH our job (detectors ~39 ms; a ceiling ~77/s) and at ~90/s without
+    it (~33 ms; ~90/s).
+  - 11 skip episodes; 6 of them had no job of ours running.
+  - Half the bursts had a precursor above ~55/s 10–15 s before the skips; the others jumped in
+    one update (e.g. 26 → 70).
+- **Up, at once, any number of levels, on every distinct update:**
+
+  | fleet load (detections/s) | level |
+  |---|---|
+  | < 40 | L0 (100 ms) |
+  | 40–50 | L1 (200 ms) |
+  | 50–55 | L2 (400 ms) |
+  | 55–65 | L3 (800 ms) |
+  | ≥ 65, or ANY camera skipping | L4 (2 s) |
+
+- **Down, ONE level at a time:** only after 3 consecutive updates asking for less (~30–45 s), and
+  ≥ 60 s since the last change (≥ 180 s after a frame-drop abort: the walk back up is slower).
+- **No fresh Frigate update for 30 s → L4.** (After 60 s the R3 guard aborts: fail closed,
+  unchanged.)
+
+**The infra rules around it:**
+- **A camera dropping frames for 30 s** → an IMMEDIATE, verified abort, logged with the fleet
+  load. Then a wait for 15 quiet minutes (the gate re-arms until it passes; never a stop). Then a
+  resume at L4, walking back up slowly.
+- **The 3rd frame-drop abort within a rolling 2 h** → a CAP at ≥ L3 (800 ms) for the next 60 min,
+  plus a `NOTIFY:` line (the session pushes it to Batt). It keeps running. *(This replaces the
+  15:40 rule "3 aborts in 2 h → stop and wait".)*
+- **A paired R3 latency trip, or "R3 inconclusive"** → the FLOOR rises one level (`DUTY_MIN`), and
+  training resumes in 30 s. At L4 it keeps running there.
+- **The IO guard and R2:** unchanged (15-min pauses, at most 3).
+- **The paired measurement's own 3-min OFF windows remain.** They are a measurement, not a load
+  response.
+
+**Reported:**
+- **throughput per level:** the container's `duty_stats` lines, batches and seconds per level →
+  batches/s;
+- **time per level:** guarded_build's `DUTY summary`;
+- every level change with its load;
+- every abort with its load.
+
+**Tests:** `test_frigate_r3.py` (the target bands, up/down, the floor, the cap, a silent Frigate,
+the accounting, the atomic file), `test_train_r3.py` (the container's reader: an untrusted file is
+the slowest level; the per-level accounting), `test_train_day.py` (the real script against stubs:
+resume at L4 after a drop, the cap + NOTIFY without a stop, a re-armed gate, a latency trip raising
+the floor).
+
 ## Frame-drop aborts: an automatic resume (Batt, 2026-10-07 ~15:40)
+> ➡️ **AMENDED ~16:25:** "the 3rd abort within 2 h stops" is replaced by the cap + notify above.
+> The resume now starts at L4.
 - **The abort stays IMMEDIATE and unconditional** (the infra rule). Its message now carries the
   fleet load: detections/s, the detectors' ms, and which cameras are skipping (`fleet_load`).
 - **`train-day.sh` resumes on its own** only after 15 continuous minutes in which no camera

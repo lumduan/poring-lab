@@ -23,8 +23,13 @@ It runs inside the vision container only (guarded_build `run:`/`rundev:`), never
 - **R3 (Batt, 2026-10-07):** `--step-sleep-ms N` sleeps N ms after every training batch. That
   lowers our GPU/CPU duty cycle, so the Frigate detector stays within +5 ms of its baseline.
   It changes wall time only, never the maths (batch, seed, data order), and may change at a
-  `--resume`. The final line is a JSON summary: per-class AP50, mAP50, mAP50-95, peak
-  VRAM, seconds.
+  `--resume`.
+- **The adaptive duty cycle (Batt, 2026-10-07 ~16:25):** `--duty-file /lab-duty/duty.json`
+  makes the sleep LIVE. The host's guarded_build writes the level it derives from Frigate's
+  fleet load into a READ-ONLY mount, and it is re-read after every batch. A missing, stale
+  (> 120 s) or garbled file means the slowest level (2 s): fail slow, never fast. Batches and
+  seconds per level are printed as `duty_stats` lines.
+- **The final line** is a JSON summary: per-class AP50, mAP50, mAP50-95, peak VRAM, seconds.
 """
 
 from __future__ import annotations
@@ -44,12 +49,50 @@ from poring_vision.shards import Sample, load_split, read_image
 VIRTUAL = "/shard/"
 
 
-def step_sleeper(ms: int) -> Any:
-    """The R3 duty-cycle knob: an ultralytics `on_train_batch_end` callback that sleeps ``ms``."""
+DUTY_FALLBACK_MS = 2000  # the slowest level: an unknown duty never speeds us up
+DUTY_FILE_STALE_S = 120.0
+DUTY_REPORT_EVERY = 500
+
+
+def read_duty(path: Path, now: float) -> int:
+    """The step sleep (ms) the host asks for, or the slowest level when it cannot be trusted."""
+    try:
+        d = json.loads(path.read_text())
+        ms = int(d["sleep_ms"])
+        if now - float(d["t_epoch"]) > DUTY_FILE_STALE_S or not 0 <= ms <= 10_000:
+            return DUTY_FALLBACK_MS
+        return ms
+    except (OSError, ValueError, KeyError, TypeError):
+        return DUTY_FALLBACK_MS
+
+
+def step_sleeper(ms: int, duty_file: Path | None = None, report_every: int = DUTY_REPORT_EVERY,
+                 out: Any = None) -> Any:  # fmt: skip
+    """The R3 duty-cycle knob: an ultralytics `on_train_batch_end` callback that sleeps ``ms``,
+    or the live level in ``duty_file``. Accounts each batch's compute + sleep to its level."""
+    stats: dict[int, list[float]] = {}
+    state = {"t": time.monotonic(), "n": 0}
+
+    def report() -> None:
+        line = {f"{k}ms": {"batches": int(v[0]), "seconds": round(v[1], 1),
+                           "batches_per_s": round(v[0] / v[1], 2) if v[1] else None}
+                for k, v in sorted(stats.items())}  # fmt: skip
+        print(json.dumps({"duty_stats": line}), file=out or sys.stdout, flush=True)
 
     def sleep(trainer: Any) -> None:
-        time.sleep(ms / 1000.0)
+        cur = read_duty(duty_file, time.time()) if duty_file is not None else ms
+        compute = time.monotonic() - state["t"]
+        time.sleep(cur / 1000.0)
+        s = stats.setdefault(cur, [0, 0.0])
+        s[0] += 1
+        s[1] += compute + cur / 1000.0
+        state["t"] = time.monotonic()
+        state["n"] += 1
+        if report_every and state["n"] % report_every == 0:
+            report()
 
+    sleep.report = report  # type: ignore[attr-defined]
+    sleep.stats = stats  # type: ignore[attr-defined]
     return sleep
 
 
@@ -84,6 +127,8 @@ def main() -> int:  # noqa: PLR0915
     ap.add_argument("--sessions", nargs="*", default=None, help="--eval: only these sessions")
     ap.add_argument("--step-sleep-ms", type=int, default=0,
                     help="R3: sleep after every training batch (duty cycle only)")  # fmt: skip
+    ap.add_argument("--duty-file", type=Path, default=None,
+                    help="the host's live duty level (read-only)")  # fmt: skip
     a = ap.parse_args()
     t0 = time.monotonic()
 
@@ -193,10 +238,15 @@ def main() -> int:  # noqa: PLR0915
 
     ul_validator.check_det_dataset = shard_dataset
     trainer = ShardTrainer(overrides=overrides)
-    if a.step_sleep_ms > 0:
-        trainer.add_callback("on_train_batch_end", step_sleeper(a.step_sleep_ms))
-    print(json.dumps({"step_sleep_ms": a.step_sleep_ms, "resume": a.resume}), flush=True)
+    sleeper = None
+    if a.step_sleep_ms > 0 or a.duty_file is not None:
+        sleeper = step_sleeper(a.step_sleep_ms, a.duty_file)
+        trainer.add_callback("on_train_batch_end", sleeper)
+    print(json.dumps({"step_sleep_ms": a.step_sleep_ms, "duty_file": str(a.duty_file),
+                      "resume": a.resume}), flush=True)  # fmt: skip
     trainer.train()
+    if sleeper is not None:
+        sleeper.report()
 
     metrics = getattr(trainer.validator, "metrics", None)
     per_class: dict[str, float] = {}

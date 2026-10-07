@@ -509,8 +509,18 @@ def run_process(
     container: str | None = None,
     gpu: bool = False,
     host: bytes | None = None,
+    duty: "frigate_r3.DutyController | None" = None,
 ) -> bool:
     log = log_path(label)
+    seen: Any = None
+    beat = 0.0
+    if duty is not None:  # the container must find a level before its first batch
+        frigate_r3.write_duty(DUTY_FILE, duty.level, -1.0)
+        beat = time.time()
+        ms = frigate_r3.DUTY_LEVELS_MS[duty.level]
+        print(
+            f"[{ts()}] DUTY start level {duty.level} ({ms} ms) [{frigate_r3.stamp()}]", flush=True
+        )
     builder = env.get("BUILDX_BUILDER") if env else None
     builder = f" [BUILDX_BUILDER={builder}]" if builder else ""
     print(f"[{ts()}] {label}: {' '.join(cmd)}{builder}  (log {log.name})", flush=True)
@@ -524,10 +534,33 @@ def run_process(
                     f"[{ts()}] ABORT {label}: {hit[0]} full IO stall {hit[1]:.1f}% ({hit[2]})",
                     flush=True,
                 )
+                if duty is not None:
+                    print(f"[{ts()}] DUTY summary: {json.dumps(duty.summary())}", flush=True)
                 abort(proc, label, container, gpu, host)
                 return False
             if r3 is not None:
                 r3.poll()
+                if duty is not None:
+                    now, before = time.time(), duty.level
+                    last = r3.last
+                    if last is not None and last["updated"] != seen:
+                        seen = last["updated"]
+                        skipping = any(sk > 0 for _, sk in last["cameras"].values())
+                        duty.update(now, float(last["detection_fps"]), skipping)
+                        load = float(last["detection_fps"])
+                    else:
+                        duty.tick(now)
+                        load = -1.0
+                    if duty.level != before or now - beat >= frigate_r3.DUTY_HEARTBEAT_S:
+                        frigate_r3.write_duty(DUTY_FILE, duty.level, load, now)
+                        beat = now
+                    if duty.level != before:
+                        ms = frigate_r3.DUTY_LEVELS_MS[duty.level]
+                        print(
+                            f"[{ts()}] DUTY level {before} -> {duty.level} ({ms} ms step sleep); "
+                            f"fleet {load:.1f} detections/s [{frigate_r3.stamp()}]",
+                            flush=True,
+                        )
                 if not r3.started and container is not None and container_running(container):
                     t_up = t_up or time.monotonic()
                     if (
@@ -548,12 +581,16 @@ def run_process(
                     )
                     print(f"[{ts()}] ABORT {label}: {tag} [{frigate_r3.stamp()}]", flush=True)
                     print(f"[{ts()}] R3 summary: {json.dumps(r3.summary())}", flush=True)
+                    if duty is not None:
+                        print(f"[{ts()}] DUTY summary: {json.dumps(duty.summary())}", flush=True)
                     abort(proc, label, container, gpu, host)
                     return False
             time.sleep(2)
     ok = proc.returncode == 0
     if r3 is not None:
         print(f"[{ts()}] R3 summary: {json.dumps(r3.summary())}", flush=True)
+    if duty is not None:
+        print(f"[{ts()}] DUTY summary: {json.dumps(duty.summary())}", flush=True)
     print(
         f"[{ts()}] {label}: {'OK' if ok else f'FAILED rc={proc.returncode}'} ({guard.summary()})",
         flush=True,
@@ -762,6 +799,26 @@ R3_START_MIB = 500  # the schedule starts once the step holds this much on the G
 R3_START_FALLBACK_S = 120.0
 
 
+DUTY_FILE = REPO / "state" / "train-duty" / "duty.json"  # read-only in the container: /lab-duty
+
+
+def duty_for(step: Step, env: dict[str, str] | None = None) -> "frigate_r3.DutyController | None":
+    """The adaptive duty cycle for a training step that reads the duty file (`--duty-file`); its
+    start / floor / cap come from train-day.sh (DUTY_START, DUTY_MIN, DUTY_CAP_LEVEL,
+    DUTY_CAP_UNTIL, DUTY_AFTER_ABORT)."""
+    if "--duty-file" not in step.command:
+        return None
+    e = os.environ if env is None else env
+    return frigate_r3.DutyController(
+        time.time(),
+        start=int(e.get("DUTY_START", frigate_r3.DUTY_FLOOR)),
+        minimum=int(e.get("DUTY_MIN", 0)),
+        cap_level=int(e.get("DUTY_CAP_LEVEL", 0)),
+        cap_until=float(e.get("DUTY_CAP_UNTIL", 0)),
+        after_abort=e.get("DUTY_AFTER_ABORT") == "1",
+    )
+
+
 def gpu_rules(step: Step, baseline: Path) -> "frigate_r3.PairedR3 | None":  # noqa: ARG001
     """R2 + R3 before a GPU step: the PAIRED ON/OFF measurement to run beside the IO guard
     (docs/operations/r3-paired.md), or None after printing why the step is REFUSED. Its ON/OFF
@@ -838,7 +895,13 @@ def main() -> int:
             if r3 is None:
                 return 3
             ok = run_process(
-                step.label, run_cmd(step), guard, r3=r3, container=container_name(step), gpu=True
+                step.label,
+                run_cmd(step),
+                guard,
+                r3=r3,
+                container=container_name(step),
+                gpu=True,
+                duty=duty_for(step),
             )
             tail = log_path(step.label).read_text(errors="replace").splitlines()[-80:]
             print("\n".join(f"  | {line}" for line in tail), flush=True)

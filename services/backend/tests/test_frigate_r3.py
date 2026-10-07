@@ -431,3 +431,73 @@ def test_a_frame_drop_abort_names_the_fleet_load(fr: ModuleType) -> None:
         hit = g.breach(sim.t)
     assert hit is not None and hit[2] is True
     assert "fleet 30.0 detections/s" in hit[1] and "skipping now: a" in hit[1]
+
+
+# --- the adaptive duty cycle (Batt, 2026-10-07 ~16:25) ------------------------------------------
+def feed(c: Any, t0: float, loads: list[float], dt: float = 15.0, skip: bool = False) -> list[int]:
+    out = []
+    for i, load in enumerate(loads):
+        out.append(c.update(t0 + i * dt, load, skip))
+    return out
+
+
+def test_the_duty_target_follows_the_load_and_a_skip_is_the_floor(fr: ModuleType) -> None:
+    assert [fr.duty_target(x, False) for x in (20, 40, 50, 55, 65, 90)] == [0, 1, 2, 3, 4, 4]
+    assert fr.duty_target(10, True) == fr.DUTY_FLOOR
+
+
+def test_up_is_immediate_and_down_is_one_level_after_three_updates_and_a_dwell(
+    fr: ModuleType,
+) -> None:
+    c = fr.DutyController(0.0, start=0)
+    assert c.update(15.0, 70.0, False) == 4  # a burst: straight to the floor
+    levels = feed(c, 30.0, [20.0] * 12)
+    assert levels[:2] == [4, 4]  # 3 lower updates AND >= 60 s since the change
+    assert max(levels) == 4 and min(levels) >= 1
+    steps = [b - a for a, b in zip(levels, levels[1:], strict=False) if b != a]
+    assert all(s == -1 for s in steps)  # never more than one level at a time
+    assert feed(c, 30.0 + 12 * 15.0, [20.0] * 30)[-1] == 0
+
+
+def test_after_an_abort_the_walk_back_is_slower(fr: ModuleType) -> None:
+    fast = fr.DutyController(0.0, start=4)
+    slow = fr.DutyController(0.0, start=4, after_abort=True)
+    lf, ls = feed(fast, 15.0, [20.0] * 20), feed(slow, 15.0, [20.0] * 20)
+    assert lf[-1] < ls[-1]  # 180 s dwell vs 60 s
+
+
+def test_the_latency_floor_and_the_three_abort_cap_bind(fr: ModuleType) -> None:
+    c = fr.DutyController(0.0, start=0, minimum=2)
+    assert feed(c, 15.0, [10.0] * 20)[-1] == 2  # never faster than the latency floor
+    capped2 = fr.DutyController(0.0, start=4, cap_level=3, cap_until=3600.0)
+    levels = feed(capped2, 15.0, [10.0] * 230)  # 15 .. 3450 s: still capped
+    assert min(levels) == 3
+    after = feed(capped2, 3600.0, [10.0] * 40)  # the cap lifts: down one level at a time
+    assert after[-1] == 0
+
+
+def test_a_silent_frigate_is_the_floor(fr: ModuleType) -> None:
+    c = fr.DutyController(0.0, start=0)
+    c.update(10.0, 20.0, False)
+    assert c.tick(35.0) == 0
+    assert c.tick(41.0) == fr.DUTY_FLOOR  # > 30 s without a fresh update
+
+
+def test_time_per_level_is_accounted_and_the_duty_file_is_atomic(
+    fr: ModuleType, tmp_path: Path
+) -> None:
+    c = fr.DutyController(0.0, start=0)
+    c.update(100.0, 20.0, False)
+    c.update(160.0, 70.0, False)  # -> the floor at t=160
+    c.tick(200.0)
+    s = c.summary()["seconds_per_level"]
+    assert s["100ms"] == 160 and s["2000ms"] == 40
+    f = tmp_path / "train-duty" / "duty.json"
+    fr.write_duty(f, 2, 51.5, now=123.0)
+    assert json.loads(f.read_text()) == {
+        "level": 2,
+        "sleep_ms": 400,
+        "load": 51.5,
+        "t_epoch": 123.0,
+    }
+    assert not list(f.parent.glob("*.tmp"))

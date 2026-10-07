@@ -5,35 +5,38 @@
 # - Every attempt goes through guarded_build.py rundev:, which REFUSES to start while Ollama holds
 #   a model or another job of ours is on the GPU (R2) or Frigate does not answer, and aborts on an
 #   IO stall, an R3 trip (below), Frigate unreachable for 60 s, or Ollama loading a model.
-# - R3 is the PAIRED ON/OFF measurement (docs/operations/r3-paired.md): guarded_build pauses and
-#   unpauses the step's container in 3-min windows and trips on the median load-matched ON-OFF
-#   detector delta > 5 ms. A paired latency trip moves one level up the step-sleep ladder
-#   (SLEEP_LADDER, ms after every batch: duty cycle only, never the maths) after 30 s; at the top
-#   level the run STOPS and the setting is Batt's. "R3 inconclusive" (load too variable) STOPS.
-# - Other trips (IO, Frigate unreachable, R2) PAUSE 15 min, then --resume from last.pt; at most 3.
-# - R3-HARD (a camera dropping frames for 30 s): the abort is IMMEDIATE and unconditional (infra
-#   rule); the guard logs the fleet detection load with it. Then (Batt 2026-10-07 ~15:40) an
-#   automatic resume: only after 15 continuous minutes with no camera dropping frames
-#   (`frigate_r3.py quiet`), at the SAME ladder level; the resumed step's paired R3 measures again
-#   (a latency trip still moves up the ladder). At most 3 frame-drop aborts per 2 hours: the 3rd
-#   STOPS and waits for Batt. The aborts are kept in $D/drop-aborts.log (epoch + the ABORT line).
+# - THE ADAPTIVE DUTY CYCLE (Batt 2026-10-07 ~16:25; docs/operations/r3-paired.md): the training
+#   NEVER pauses or stops because of load; it slows down. guarded_build's DutyController sets the
+#   step sleep after every batch (100 / 200 / 400 / 800 / 2000 ms) from Frigate's live fleet load and
+#   writes it to state/train-duty/duty.json, read-only in the container (`--duty-file`).
+# - R3 is the PAIRED ON/OFF measurement: a paired latency trip (or "R3 inconclusive") raises the
+#   duty FLOOR one level (DUTY_MIN) and resumes after 30 s; at the floor it keeps running there.
+# - R3-HARD (a camera dropping frames for 30 s): the infra rule, so the abort stays IMMEDIATE and
+#   verified; the guard logs the fleet load with it ($D/drop-aborts.log). Then: wait for 15 quiet
+#   minutes (`frigate_r3.py quiet`, re-armed until it passes: never a stop), resume at the SLOWEST
+#   level and walk back up slowly (DUTY_AFTER_ABORT). The 3rd abort within a rolling 2 h CAPS the
+#   speed at >= 800 ms for the next hour and prints a `NOTIFY:` line (Batt is pushed); no stop.
+# - Other trips (IO, Frigate unreachable, R2): PAUSE 15 min, then --resume from last.pt; at most 3
+#   (unchanged).
 # - Every guard stop is VERIFIED by guarded_build (container gone, no process of ours on the GPU,
 #   escalation to docker kill if not); STOP-UNVERIFIED STOPS here: a person must look.
 # - Never alongside an S2 session: it waits while the lock says console or a clean room is set.
 #   To pause for a session started later, SIGINT the host-side `timeout ... poring_vision.train`
 #   process by PID (`ps -eo pid,args | grep 'timeout .*poring_vision.train --cache'`); this script
-#   then stops. Re-run with RESUME=1 (and SLEEP_LEVEL=<index> to keep the ladder level) afterwards.
-#   [RESUME=1] [SLEEP_LEVEL=0] [SLEEP_LADDER="0 100 200 400"] \
+#   then stops. Re-run with RESUME=1 afterwards.
+#   [RESUME=1] [DUTY_START=4] [DUTY_MIN=0] \
 #     scripts/runbooks/train-day.sh RUN_NAME CACHE_ID EPOCHS OUT_DIR [BATCH=2] [WORKERS=1]
 set -u
 cd "$(dirname "$0")/../.."
 RUN=${1:?RUN_NAME}; CACHE=/datasets/.framecache/${2:?CACHE_ID}; EPOCHS=${3:?EPOCHS}; D=${4:?OUT_DIR}
 BATCH=${5:-2}; WORKERS=${6:-1}
-read -r -a LADDER <<< "${SLEEP_LADDER:-0 100 200 400}"
 GUARD=${GUARD:-python3 scripts/guarded_build.py}  # overridable for tests only
 QUIET=${QUIET:-python3 -S scripts/frigate_r3.py quiet --minutes 15 --max-wait-min 120}
-DROP_WINDOW_S=7200; DROP_MAX=3
-level=${SLEEP_LEVEL:-0}
+DROP_WINDOW_S=7200; DROP_MAX=3; CAP_LEVEL=3; CAP_S=3600; FLOOR=4
+IO_PAUSE_S=${IO_PAUSE_S:-900}; R3_PAUSE_S=${R3_PAUSE_S:-30}  # overridable for tests only
+export DUTY_START=${DUTY_START:-$FLOOR} DUTY_MIN=${DUTY_MIN:-0}
+export DUTY_CAP_LEVEL=${DUTY_CAP_LEVEL:-0} DUTY_CAP_UNTIL=${DUTY_CAP_UNTIL:-0}
+export DUTY_AFTER_ABORT=${DUTY_AFTER_ABORT:-0}
 mkdir -p "$D"
 log() { echo "$(TZ=Asia/Bangkok date '+%F %T') ICT / $(date -u '+%T') UTC $*" | tee -a "$D/train.log"; }
 s2_active() { grep -q '^BACKEND=console' state/capture-backend 2>/dev/null || [ -e state/cleanroom ]; }
@@ -41,50 +44,48 @@ extra=""; [ "${RESUME:-0}" = 1 ] && extra="--resume"
 trips=0; attempt=0
 while :; do
   while s2_active; do log "S2 session/clean room active: waiting 5 min"; sleep 300; done
-  ms=${LADDER[$level]}
-  log "attempt $attempt batch $BATCH workers $WORKERS step-sleep ${ms} ms (ladder level $level) $extra"
+  log "attempt $attempt batch $BATCH workers $WORKERS duty start $DUTY_START min $DUTY_MIN cap $DUTY_CAP_LEVEL until $DUTY_CAP_UNTIL after-abort $DUTY_AFTER_ABORT $extra"
   out="$D/train-guarded-$attempt.out"
   $GUARD --sustain 30 --spike 25 \
-    "rundev:vision@43200=python -m poring_vision.train --cache $CACHE --epochs $EPOCHS --batch $BATCH --workers $WORKERS --name $RUN --step-sleep-ms $ms $extra" \
+    "rundev:vision@43200=python -m poring_vision.train --cache $CACHE --epochs $EPOCHS --batch $BATCH --workers $WORKERS --name $RUN --step-sleep-ms 2000 --duty-file /lab-duty/duty.json $extra" \
     > "$out" 2>&1
   rc=$?
   log "attempt $attempt rc=$rc: $(grep -E 'ABORT|REFUSED' "$out" | tail -1 | cut -c1-200)"
+  log "  $(grep -a 'DUTY summary' "$out" | tail -1 | cut -c1-300)"
   attempt=$((attempt + 1))
-  if [ "$rc" -eq 0 ]; then log "TRAIN DONE (step-sleep ${ms} ms)"; break; fi
+  if [ "$rc" -eq 0 ]; then log "TRAIN DONE"; break; fi
   if grep -q "STOP-UNVERIFIED" "$out"; then log "TRAIN STOPPED: the guard could NOT verify the stop ($(grep STOP-UNVERIFIED "$out" | tail -1 | cut -c1-160)): a person must look"; break; fi
+  [ -e "data/train/$RUN/weights/last.pt" ] && extra="--resume"
   if grep -q "R3-HARD" "$out"; then
     now=$(date +%s)
     echo "$now $(grep -a 'ABORT' "$out" | tail -1 | cut -c1-400)" >> "$D/drop-aborts.log"
     recent=$(awk -v n="$now" -v w="$DROP_WINDOW_S" 'n - $1 <= w' "$D/drop-aborts.log" | wc -l)
     log "R3-HARD frame-drop abort ($recent in the last 2 h): $(grep -a 'ABORT' "$out" | tail -1 | cut -c1-300)"
     if [ "$recent" -ge "$DROP_MAX" ]; then
-      log "TRAIN STOPPED: $recent frame-drop aborts within 2 h: waiting for Batt (resume by hand: RESUME=1 SLEEP_LEVEL=$level)"; break
+      export DUTY_CAP_LEVEL=$CAP_LEVEL DUTY_CAP_UNTIL=$((now + CAP_S))
+      log "NOTIFY: $recent frame-drop aborts within 2 h: training CAPPED at >= 800 ms per step for the next hour (until $(TZ=Asia/Bangkok date -d "@$DUTY_CAP_UNTIL" '+%H:%M') ICT); it keeps running"
     fi
-    log "waiting for 15 quiet minutes (no camera dropping frames) before resuming at step-sleep ${LADDER[$level]} ms"
-    if ! $QUIET >> "$D/quiet.log" 2>&1; then
-      log "TRAIN STOPPED: no 15 quiet minutes within 2 h (see $D/quiet.log): waiting for Batt"; break
-    fi
-    log "15 quiet minutes: resuming (the paired R3 measures again)"
-    [ -e "data/train/$RUN/weights/last.pt" ] && extra="--resume"
+    log "waiting for 15 quiet minutes (no camera dropping frames); then the slowest level"
+    until $QUIET >> "$D/quiet.log" 2>&1; do
+      log "no 15 quiet minutes within the gate's 2 h: re-arming the gate (never a stop)"
+    done
+    export DUTY_START=$FLOOR DUTY_AFTER_ABORT=1
+    log "15 quiet minutes: resuming at the slowest level (walking back up slowly)"
     continue
   fi
-  pause=900
-  if grep -q "R3 inconclusive" "$out"; then
-    log "TRAIN STOPPED: R3 could not measure our effect (Frigate load too variable): fail closed"; break
+  pause=$IO_PAUSE_S
+  if grep -q "R3 inconclusive\|R3 latency" "$out"; then
+    export DUTY_MIN=$(( DUTY_MIN < FLOOR ? DUTY_MIN + 1 : FLOOR )) DUTY_START=$FLOOR DUTY_AFTER_ABORT=0
+    log "R3 $(grep -o 'R3 inconclusive\|R3 latency' "$out" | tail -1): the duty floor is now level $DUTY_MIN; resuming in 30 s"
+    pause=$R3_PAUSE_S
   elif grep -q "REFUSED rundev" "$out"; then
     trips=$((trips + 1))
   elif ! grep -q "ABORT rundev" "$out"; then
     log "TRAIN STOPPED: not a guard trip (see $out)"; break
-  elif grep -q "R3 latency" "$out" && [ "$level" -lt $((${#LADDER[@]} - 1)) ]; then
-    level=$((level + 1)); pause=30
-    log "R3 paired latency trip: the next attempt runs at step-sleep ${LADDER[$level]} ms"
-  elif grep -q "R3 latency" "$out"; then
-    log "TRAIN STOPPED: R3 paired latency trip at the top of the ladder (${LADDER[$level]} ms): setting parked for Batt"; break
   else
     trips=$((trips + 1))
   fi
-  if [ "$trips" -gt 3 ]; then log "TRAIN PAUSED: 3 resumes used, resume by hand later (SLEEP_LEVEL=$level)"; break; fi
-  [ -e "data/train/$RUN/weights/last.pt" ] && extra="--resume"
+  if [ "$trips" -gt 3 ]; then log "TRAIN PAUSED: 3 IO/R2 resumes used, resume by hand later (RESUME=1 DUTY_MIN=$DUTY_MIN)"; break; fi
   log "pausing ${pause} s before the next attempt"
   sleep "$pause"
 done

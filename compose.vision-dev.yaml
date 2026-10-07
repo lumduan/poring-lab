@@ -1,9 +1,12 @@
 # Dev overlay for training runs (guarded_build.py `rundev:vision@S=CMD`): the HOST's vision source,
-# read-only, first on PYTHONPATH -- iterate without rebuilding the ~5 GB torch image. Adds nothing
-# else: no mount, network or variable beyond these two (tests/test_guards.py).
+# read-only, first on PYTHONPATH -- iterate without rebuilding the ~5 GB torch image. Plus ONE
+# read-only directory: the host's adaptive duty level (state/train-duty/duty.json, written by
+# guarded_build from Frigate's live load; Batt 2026-10-07). Read-only, because vision may never
+# write anything that decides its own GPU duty. Nothing else (tests/test_guards.py).
 services:
   vision:
     volumes:
       - ./services/vision/src:/opt/vision-src:ro
+      - ./state/train-duty:/lab-duty:ro
     environment:
       PYTHONPATH: /opt/vision-src

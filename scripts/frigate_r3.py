@@ -662,6 +662,105 @@ def quiet(minutes: float, max_wait_min: float, fetch: Fetch = fetch_json,
         sleep(poll_s)
 
 
+# --- the ADAPTIVE DUTY CYCLE (Batt, 2026-10-07 ~16:25; docs/operations/r3-paired.md) -----------
+# Training never pauses because of load: it slows down. The step sleep after every training batch
+# follows Frigate's live fleet load (detections/s) against its ceiling WITH us (~77/s: 3 detectors
+# at ~39 ms; ~90/s without us at ~33 ms). Thresholds from 2026-10-07's 1,235 distinct updates:
+# p50 29, p90 43, p95 50; skips began at 70-77/s with us, ~90/s without; half the bursts had a
+# precursor above ~55/s 10-15 s ahead.
+DUTY_LEVELS_MS = (100, 200, 400, 800, 2000)
+DUTY_FLOOR = len(DUTY_LEVELS_MS) - 1  # the slowest level
+DUTY_UP = ((65.0, 4), (55.0, 3), (50.0, 2), (40.0, 1))  # load >= x -> at least that level
+DUTY_DOWN_UPDATES = 3  # consecutive lower targets before stepping ONE level down
+DUTY_DOWN_MIN_S = 60.0  # dwell before a step down
+DUTY_DOWN_MIN_S_AFTER_ABORT = 180.0  # the walk back up after a frame-drop abort is slower
+DUTY_STALE_S = 30.0  # no fresh Frigate update for this long -> the floor
+DUTY_HEARTBEAT_S = 30.0
+DUTY_FILE_STALE_S = 120.0  # the container treats an older file as unknown -> the floor
+
+
+def duty_target(load: float, skipping: bool) -> int:
+    """The level a fleet load asks for (0 = fastest): a skipping camera is the floor at once."""
+    if skipping:
+        return DUTY_FLOOR
+    for threshold, level in DUTY_UP:
+        if load >= threshold:
+            return level
+    return 0
+
+
+class DutyController:
+    """Up at once (to the target, any number of levels), down one level at a time after
+    DUTY_DOWN_UPDATES consecutive lower targets and a dwell. ``minimum``: a floor raised by R3
+    latency trips; ``cap_level``/``cap_until``: after 3 frame-drop aborts in 2 h, at least that
+    slow until then. Unknown load (Frigate silent) -> the floor. Never a pause."""
+
+    def __init__(self, now: float, start: int = DUTY_FLOOR, minimum: int = 0,
+                 cap_level: int = 0, cap_until: float = 0.0,
+                 after_abort: bool = False) -> None:  # fmt: skip
+        self.minimum, self.cap_level, self.cap_until = minimum, cap_level, cap_until
+        self.dwell = DUTY_DOWN_MIN_S_AFTER_ABORT if after_abort else DUTY_DOWN_MIN_S
+        self.level = self._bounded(start, now)
+        self.changed_at = now
+        self.lower = 0
+        self.last_update = now
+        self.last_tick = now
+        self.seconds = [0.0] * len(DUTY_LEVELS_MS)
+        self.changes: list[tuple[float, int, int, float]] = []  # (t, from, to, load)
+
+    def _bounded(self, level: int, now: float) -> int:
+        floor = max(self.minimum, self.cap_level if now < self.cap_until else 0)
+        return min(DUTY_FLOOR, max(level, floor))
+
+    def _set(self, now: float, level: int, load: float) -> None:
+        if level != self.level:
+            self.changes.append((now, self.level, level, load))
+            self.level, self.changed_at, self.lower = level, now, 0
+
+    def _account(self, now: float) -> None:
+        self.seconds[self.level] += max(0.0, now - self.last_tick)
+        self.last_tick = now
+
+    def update(self, now: float, load: float, skipping: bool) -> int:
+        """One DISTINCT Frigate update."""
+        self._account(now)
+        self.last_update = now
+        target = self._bounded(duty_target(load, skipping), now)
+        if target > self.level:
+            self._set(now, target, load)
+        elif target < self.level:
+            self.lower += 1
+            if self.lower >= DUTY_DOWN_UPDATES and now - self.changed_at >= self.dwell:
+                self._set(now, self.level - 1, load)
+        else:
+            self.lower = 0
+        return self.level
+
+    def tick(self, now: float) -> int:
+        """Between updates: the cap/minimum still bind; a silent Frigate -> the floor."""
+        self._account(now)
+        level = self._bounded(self.level, now)
+        if now - self.last_update > DUTY_STALE_S:
+            level = DUTY_FLOOR
+        self._set(now, level, -1.0)
+        return self.level
+
+    def summary(self) -> dict[str, Any]:
+        return {"seconds_per_level": {f"{ms}ms": round(t) for ms, t in
+                                      zip(DUTY_LEVELS_MS, self.seconds, strict=True)},
+                "changes": len(self.changes), "level": self.level}  # fmt: skip
+
+
+def write_duty(path: Path, level: int, load: float, now: float | None = None) -> None:
+    """The duty file the training container reads (read-only mount /lab-duty), atomically."""
+    now = time.time() if now is None else now
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps({"level": level, "sleep_ms": DUTY_LEVELS_MS[level],
+                               "load": round(load, 1), "t_epoch": now}))  # fmt: skip
+    os.replace(tmp, path)
+
+
 def vision_containers(run: Any = subprocess.run) -> list[str]:
     """Our running vision containers (compose service `vision`). 2026-10-07: a SIGINT to the
     host-side `timeout ... docker compose run` stopped only the compose client and the training

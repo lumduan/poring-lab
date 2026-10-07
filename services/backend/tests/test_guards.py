@@ -696,12 +696,16 @@ def test_the_nas_datasets_are_mounted_read_only_in_vision_only(name: str) -> Non
 
 
 def test_the_vision_dev_overlay_adds_only_the_source() -> None:
-    """`rundev:vision`: the host's vision source read-only on PYTHONPATH, and nothing else."""
+    """`rundev:vision`: the host's vision source read-only on PYTHONPATH, the host's duty level
+    read-only (Batt 2026-10-07: the adaptive duty cycle), and nothing else."""
     services = compose("compose.vision-dev.yaml")["services"]
     assert list(services) == ["vision"]
     vision = services["vision"]
     assert set(vision) == {"volumes", "environment"}
-    assert vision["volumes"] == ["./services/vision/src:/opt/vision-src:ro"]
+    assert vision["volumes"] == [
+        "./services/vision/src:/opt/vision-src:ro",
+        "./state/train-duty:/lab-duty:ro",
+    ]
     assert vision["environment"] == {"PYTHONPATH": "/opt/vision-src"}
 
 

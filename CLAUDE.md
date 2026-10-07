@@ -69,10 +69,12 @@ ports, quickstart) and `docs/adr/`.
        - The trip is the median paired delta > 5 ms over ≥ 4 pairs.
        - Long runs are monitored at 27 min ON / 3 min OFF.
        - Stop HARD if any camera drops frames (`skipped_fps`) for 30 s: ABSOLUTE, no baseline,
-         IMMEDIATE. The abort logs the fleet detection load. `train-day.sh` resumes on its own
-         only after 15 continuous minutes with no camera dropping frames (`frigate_r3.py
-         quiet`), at the same ladder level, with the paired check measuring again. The 3rd
-         frame-drop abort within 2 h stops and waits for Batt (2026-10-07).
+         IMMEDIATE. The abort logs the fleet detection load.
+       - Training never stops for load (Batt, 2026-10-07): the ADAPTIVE DUTY CYCLE sets the step
+         sleep from Frigate's live load (100 ms … 2 s; a read-only `state/train-duty` mount).
+         After a frame-drop abort it resumes at the slowest level once 15 quiet minutes pass.
+         The 3rd abort within 2 h caps it at ≥ 800 ms for an hour and NOTIFIES Batt.
+         `docs/operations/r3-paired.md`.
      - `scripts/frigate_r3.py` (`PairedR3`) implements them, and `guarded_build.py` enforces them on
        every `run:`/`rundev:` vision step (pre-start refusal + pause/unpause + in-run abort).
      - Every abort unpauses the container and VERIFIES the stop: container gone, no process of ours
