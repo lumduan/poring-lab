@@ -76,6 +76,10 @@ UNCONFIRMED_STREAK = 2
 RELOCS = 2
 CLICK_ATTEMPTS = 30
 WALK = w6.WALK
+MIN_MARKER_PX8 = 30  # walk@8 names a cell from >= 30 px of chevrons (rule_run: 60): pews occlude
+#                      the marker (walk@4), and the 23:19 pilot read 50-54 px on clear walk cells;
+#                      >= 2 chevrons and identify_cell's corner-geometry fit are still required
+STALE_RETRIES = 2  # a parked frame that never went fresh: probe the same point again
 
 
 def waypoints(start: tuple[int, int], path: Sequence[tuple[int, int]]) -> list[tuple[int, int]]:
@@ -116,6 +120,14 @@ def click_candidates(w: w5.World, path: Sequence[tuple[int, int]], seg_max: int,
     return seen[: CLICK_ALTERNATES + 1]
 
 
+def named8(w: w5.World, rel: tuple[int, int], p: dict[str, Any]) -> tuple[int, int] | None:
+    """walk6.named with walk@8's marker threshold (MIN_MARKER_PX8)."""
+    if p["marker_px"] < MIN_MARKER_PX8 or len(p["comps"]) < rr.MIN_CHEVRONS:
+        return None
+    k: tuple[int, int] | None = rr.identify_cell(w.camera, w.gat, w.position, rel, p["comps"])[0]
+    return k
+
+
 def click_step(pr: w6.Prober, w: w5.World, end: tuple[int, int],
                expect: str = WALK) -> dict[str, Any]:  # fmt: skip
     """Probe ONLY the click point (walk@6's target logic: WALK + the chevrons naming the cell, one
@@ -136,14 +148,14 @@ def click_step(pr: w6.Prober, w: w5.World, end: tuple[int, int],
         u, v = queue.pop(0)
         pr.hover(u, v)
         p = pr.read(u, v)
-        k = w6.named(w, rel, p)
+        k = named8(w, rel, p)
         target.append({"at": [round(u, 1), round(v, 1)], "shape": p["shape"], "iou": p["iou"],
                        "cell": k, "marker_px": p["marker_px"]})  # fmt: skip
         if p["shape"] != WALK:  # a unit (or anything unknown) covers the click point
             return {"clicked": False, "outcome": f"covered_{p['shape']}", "target": target}
         if k == (0, 0):
             again = pr.read(u, v)  # the RE-CHECK: a fresh grab, no motion
-            k2 = w6.named(w, rel, again)
+            k2 = named8(w, rel, again)
             target[-1]["recheck"] = {"shape": again["shape"], "cell": k2}
             if again["shape"] != WALK or k2 != (0, 0):
                 return {"clicked": False, "outcome": f"recheck_{again['shape']}",
@@ -356,6 +368,10 @@ def walk_route(pr: w6.Prober, w: w5.World, goal: tuple[int, int], band: tuple[in
             preview(pr.agent, w, w.position, waypoints(w.position, path), end, label)
             expect = expect_goal if end == goal else WALK
             step = click_step(pr, w, end, expect)
+            for _ in range(STALE_RETRIES):  # the park never went fresh: the same point again
+                if step["outcome"] != "stale_background":
+                    break
+                step = click_step(pr, w, end, expect)
             kept = {k: v for k, v in step.items() if k != "at"}
             events.append({"from": list(w.position), "end": list(end), "t": r.ns(), **kept})
             log_seg(step.get("t_click", r.ns()), w.position, end, step)

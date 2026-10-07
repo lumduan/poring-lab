@@ -130,6 +130,7 @@ def test_v2_gates_reject_and_never_guess(
                                                                    np.uint8))  # fmt: skip
     monkeypatch.setattr(wf, "text_mask_v2", lambda a: a[..., 0] % 2 == 1)  # every grab is "new"
     monkeypatch.setattr(wf, "parse_v2", lambda a, t: next(it))
+    monkeypatch.setattr(wf, "newest_is_yellow", lambda a: True)
     got = wf.fix_v2(None, None, {}, belief, walk)
     assert got["xy"] is None and why in got["rejects"], got
 
@@ -148,4 +149,18 @@ def test_v2_accepts_two_agreeing_plausible_reads(
                                                                    np.uint8))  # fmt: skip
     monkeypatch.setattr(wf, "text_mask_v2", lambda a: a[..., 0] % 2 == 1)
     monkeypatch.setattr(wf, "parse_v2", lambda a, t: next(it))
+    monkeypatch.setattr(wf, "newest_is_yellow", lambda a: True)
+    typed: list[str] = []
+    monkeypatch.setattr(wf.r, "chat_line", lambda a, s, text: typed.append(text))
     assert wf.fix_v2(None, None, {}, (10, 12), walk)["xy"] == (11, 13)
+    assert typed == [wf.SEPARATOR, "/where", wf.SEPARATOR, "/where"]  # never 2 /where in a row
+
+
+def test_an_old_where_line_under_a_newer_message_is_never_read(wf: ModuleType) -> None:
+    """The client refused a 4th /where in a row (red) and /ex answers in cyan: the newest YELLOW
+    line is then an OLD answer, and the newest line of all is not yellow."""
+    g = glyph_set()
+    area = render("(x) : 104, 122", g, wf)
+    assert wf.newest_is_yellow(area)
+    area[53:55, 10:60] = (255, 230, 0)  # a cyan line below it (BGR)
+    assert not wf.newest_is_yellow(area)

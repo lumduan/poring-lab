@@ -105,6 +105,33 @@ MATCH_MAX_D, MATCH_MARGIN = 4, 4  # where@2: nearest template, at most 4 px off,
 SPACE_COLS = 3  # the space between ':' and X: at least this many empty columns
 PLAUSIBLE_CELLS = 6  # a fix farther than this from the dead-reckoned belief is rejected
 FIX_TRIES = 3  # pairs of /where reads before giving up (no fix, never a guess)
+# The client refuses "the same word/phrase more than 3 times" (red line, 23:25 design pilot): a
+# 4th /where in a row is NOT printed. A read-only command between them breaks the repetition:
+# /ex lists the whisper block list ("There is no block list.", cyan) and changes nothing.
+SEPARATOR = "/ex"
+
+
+def text_other(area_bgr: Any) -> Any:
+    """The chat's OTHER message colours: pure red (the client's refusals), cyan (/ex), green
+    (notices such as "Warped."). One dominant channel, which the darkened scene behind the window
+    does not produce -- a generic "bright and colourful" mask also caught the scene (16 / 20 good
+    reads refused, 23:30)."""
+    a = np.asarray(area_bgr)[..., :3].astype(int)
+    b, g, red = a[..., 0], a[..., 1], a[..., 2]
+    is_red = (red > 200) & (g < 90) & (b < 90)
+    is_cyan = (g > 200) & (b > 200) & (red < 90)
+    is_green = (g > 200) & (red < 90) & (b < 90)
+    return is_red | is_cyan | is_green
+
+
+def newest_is_yellow(area_bgr: Any) -> bool:
+    """The NEWEST line is the yellow one: no red / cyan / green line below it. Otherwise the newest
+    yellow line is an OLD /where (a refused or missed one) -- never read it."""
+    strict = np.nonzero(text_mask(area_bgr).sum(1))[0]
+    if len(strict) == 0:
+        return False
+    other = np.nonzero(text_other(area_bgr).sum(1) >= 3)[0]
+    return len(other) == 0 or int(other[-1]) <= int(strict[-1])
 
 
 def newest_line_v2(area_bgr: Any) -> Any | None:
@@ -198,8 +225,10 @@ def fix_v2(agent: Any, screen: Any, templates: dict[str, Any], belief: tuple[int
         reads = []
         for _ in range(2):
             r.activate_client(agent, screen)
-            before = text_mask_v2(stable_area(screen))
             try:
+                r.chat_line(agent, screen, SEPARATOR)  # breaks the client's repetition refusal
+                time.sleep(SETTLE_S)
+                before = text_mask_v2(stable_area(screen))
                 r.chat_line(agent, screen, "/where")
             except r.Stop as exc:
                 rejects.append(f"chat: {exc}")
@@ -208,6 +237,9 @@ def fix_v2(agent: Any, screen: Any, templates: dict[str, Any], belief: tuple[int
             area = stable_area(screen)
             if bool((text_mask_v2(area) == before).all()):
                 rejects.append("stale")
+                break
+            if not newest_is_yellow(area):
+                rejects.append("not_newest")
                 break
             reads.append(parse_v2(area, templates))
         if len(reads) < 2:
