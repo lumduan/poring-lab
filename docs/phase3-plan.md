@@ -7,7 +7,7 @@ verdict_date: 2026-10-04
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: "2026-10-07: M4 is THE priority (Batt: on the gold set the v0 models sit at their labels' own P/R, so labels are the ceiling and v1 labels are the lever). Step 2 so far: 2a facing kept (outdoor heading open); 2b walk frames REJECTED (ODD+EVEN); the ACT-offset candidate already in the model; 2c H-C (composer vs client): files clean, data identical, the pixel map replicates (Lunatic drawn ~1.19x the best-matching frame's height, Poring ~0.95x; both ~1.1x wider), NO grounded rule -> the next hypothesis is Batt's (candidates in 5d-iv, e.g. a contrast-dependent halo in the measurement). v0-JPEG matched-batch rerun tonight (batch 2, a JPEG cache with identical labels) for the PNG-vs-JPEG attribution.""
+next_action: "2026-10-07: M4 is THE priority. 2d (measure the ruler) DONE on both halves: synthetic sprites of known size reproduce the per-species split (ODD 1.252 vs real 1.255; EVEN 1.287 vs 1.247), so the split is IN THE MEASUREMENT (the Poring's detached tuft island is dropped by the opening; the Lunatic gains a ~4 % halo); once the ruler's bias is removed both species share one residual (~1.14 height, ~1.08 width): a common scale. Next (Batt): pre-register 'measure the prediction with the same ruler' and then judge k. 5e: the v1 gold gate FAILED, but the gold set's monster boxes are 82 % v0's fixed 44x40 (not size-neutral). Tonight: the v0-JPEG matched-batch rerun.""
 last_reviewed: 2026-10-06
 ---
 
@@ -1106,6 +1106,36 @@ Synthetic widths: 1.00–1.07.
     for Batt's next step.
 - **Then (pre-registered):** decision 2 adopted nothing, so EVEN is scored ONCE as the replication
   of decision 1 (real + synthetic, the same scripts).
+
+**EVEN (2026-10-07 08:19, scored ONCE): DECISION 1 REPLICATES; the half-max ruler is again NOT
+adopted.** Real: 1,564 clean frames. Synthetic: 25 spawns (10 Poring outdoor, 9 indoor, 6
+Lunatic), 450 frames.
+
+| ruler | REAL obs/box, Poring / Lunatic | REAL split | SYNTH obs/TRUE, Poring out / in | SYNTH obs/TRUE, Lunatic | SYNTH split |
+|---|---|---|---|---|---|
+| DIFF 24 | 0.901 / 1.124 | **1.247** | 0.811 / 0.849 | 1.043 | **1.287** |
+| DIFF 48 | 0.847 / 1.042 | 1.230 | 0.781 / 0.849 | 1.000 | 1.281 |
+| half-max | 0.874 / 0.996 | 1.139 | 0.784 / 0.849 | 1.000 | 1.276 |
+
+- **Step 2d's verdict: the per-species split is in the MEASUREMENT, on both halves.** The renderer
+  is cleared of it.
+- The common residual replicates: height Poring 0.940 / 0.811 = 1.16, Lunatic 1.182 / 1.043 =
+  1.13; width 1.08 / 1.09.
+- **Mechanism, found on an ODD synthetic Poring (exploratory, local image only):**
+  - the Poring's tuft is a DETACHED ISLAND on screen;
+  - in the frame looked at (scale ~0.92 screen px per native px), three empty rows separate the
+    2–3 px tuft from the body;
+  - the 1-px opening removes the island and `reconstruct` cannot regrow it (nothing of it
+    survives), so the component rule keeps the body: measured top 294 vs true 287, −7 of 34 px;
+  - this also explains why step 1's `reconstruct` barely moved the Poring: it regrows ATTACHED
+    parts only.
+- **Candidate for Batt's next pre-registration (not scored):** "measure the prediction with the
+  same ruler".
+  - Apply the identical `reconstruct` + component rule to our predicted (rendered) sprite mask;
+  - compare the observed box with that MEASURABLE predicted box;
+  - like with like, so the structural bias cancels, and the synthetic test validates it against
+    known truth.
+  - k is then judged on the corrected ratios (the residual above suggests one common scale).
 
 ### 5e. The pragmatic v1 track: v1 labels at k = 0.140 on the GOLD set (Batt, 2026-10-07), written BEFORE scoring
 
