@@ -54,6 +54,16 @@ On a breach:
                 the same with `-f compose.yaml -f compose.vision-dev.yaml`: the host's vision
                 source read-only, first on PYTHONPATH (training runs iterate without rebuilding the
                 ~5 GB torch image; the overlay adds nothing else, test_guards). ONLY `vision`.
+                Both are GPU jobs, so the GPU sharing rules apply (scripts/frigate_r3.py; infra
+                side, Batt 2026-10-07; the 20:00-05:00 window is retired, these decide):
+                  before: REFUSED (rc 3) while Ollama has a model loaded or another job of ours
+                  is on the GPU (R2), without a Frigate baseline <= 3 h old, or with Frigate's
+                  stats unreachable (R3, fail closed);
+                  during: beside the IO guard, `ABORT <label>: R3 <kind>` + SIGINT on a +5 ms
+                  detector slowdown (60 s median), Frigate unreachable for 60 s, Ollama loading a
+                  model, or (training only, right after an epoch ends) a baseline due for
+                  re-measurement; `ABORT <label>: R3-HARD drops ... (no resume)` when a camera
+                  drops frames for 30 s. --frigate-baseline PATH overrides the baseline file.
   cache[@<seconds>]=<args>
                 the HOST frame-cache builder, `nice -n 19 .venv/bin/python
                 scripts/build_frame_cache.py <args>` (it reads sessions from the NAS and writes tar
@@ -91,6 +101,9 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "services" / "backend" / "src"))
 sys.path.insert(0, str(REPO / "packages" / "poring_env" / "src"))
 from poring_backend.mode_restore import RESTORE_NAME, format_marker  # noqa: E402
+
+sys.path.insert(0, str(REPO / "scripts"))
+import frigate_r3  # noqa: E402
 
 STATE = Path(os.environ.get("LAB_STATE_HOST_DIR", REPO / "state"))
 BACKEND = "poring-lab-backend-1"
@@ -345,7 +358,11 @@ def build_env() -> dict[str, str]:
 
 
 def run_process(
-    label: str, cmd: list[str], guard: Guard, env: dict[str, str] | None = None
+    label: str,
+    cmd: list[str],
+    guard: Guard,
+    env: dict[str, str] | None = None,
+    r3: "frigate_r3.R3Guard | None" = None,
 ) -> bool:
     log = log_path(label)
     builder = env.get("BUILDX_BUILDER") if env else None
@@ -363,6 +380,18 @@ def run_process(
                 proc.send_signal(2)
                 proc.wait(timeout=120)
                 return False
+            if r3 is not None:
+                r3.poll()
+                r3hit = r3.breach()
+                if r3hit:
+                    kind, detail, hard = r3hit
+                    tag = (
+                        f"R3-HARD {kind}: {detail} (no resume)" if hard else f"R3 {kind}: {detail}"
+                    )
+                    print(f"[{ts()}] ABORT {label}: {tag} [{frigate_r3.stamp()}]", flush=True)
+                    proc.send_signal(2)
+                    proc.wait(timeout=120)
+                    return False
             time.sleep(2)
     ok = proc.returncode == 0
     print(
@@ -557,6 +586,33 @@ def run_start(services: list[str], seconds: float, guard: Guard, *, recreate: bo
     return auto_recover_gm() if recreate and "sniffer" in services else True
 
 
+def results_csv(step: Step) -> Path | None:
+    """A training step's per-epoch results.csv (ultralytics, under the shared ./data mount): R3's
+    re-baseline waits for a new row there, so a planned stop loses no epoch. None for non-training
+    steps (eval, predict): they never stop for a re-baseline."""
+    argv = step.command
+    if "poring_vision.train" not in argv or "--eval" in argv or "--name" not in argv:
+        return None
+    i = argv.index("--name")
+    return REPO / "data" / "train" / argv[i + 1] / "results.csv" if i + 1 < len(argv) else None
+
+
+def gpu_rules(step: Step, baseline: Path) -> "frigate_r3.R3Guard | None":
+    """R2 + R3 before a GPU step (frigate_r3.py): the R3 guard to run beside the IO guard, or None
+    after printing why the step is REFUSED."""
+    why = frigate_r3.prestart(baseline)
+    if why:
+        print(f"[{ts()}] REFUSED {step.label}: {why} [{frigate_r3.stamp()}]", flush=True)
+        return None
+    base, _ = frigate_r3.load_baseline(baseline)
+    assert base is not None
+    print(f"[{ts()}] R3: Frigate detector baseline {base['inference_median']} ms "
+          f"(measured {base['end']}); abort above +{frigate_r3.DELTA_MS:g} ms (60 s median), "
+          f"on a camera dropping frames for {frigate_r3.DROP_S:g} s, or Ollama loading a model",
+          flush=True)  # fmt: skip
+    return frigate_r3.R3Guard(base, results_csv=results_csv(step))
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("steps", nargs="+")
@@ -564,6 +620,10 @@ def main() -> int:
     ap.add_argument("--window", type=float, default=10.0)
     ap.add_argument("--sustain", type=float, default=0.0, help="seconds above --threshold")
     ap.add_argument("--spike", type=float, default=None, help="abort at once above this %%")
+    ap.add_argument(
+        "--frigate-baseline", type=Path, default=frigate_r3.BASELINE,
+        help="R3: the Frigate baseline (frigate_r3.py baseline) for vision steps",
+    )  # fmt: skip
     args = ap.parse_args()
     try:
         steps = [parse_step(s) for s in args.steps]
@@ -592,7 +652,10 @@ def main() -> int:
         elif step.kind == "target":
             ok = run_process(step.label, target_build_cmd(*step.services), guard, env=build_env())
         elif step.kind in ("run", "rundev"):
-            ok = run_process(step.label, run_cmd(step), guard)
+            r3 = gpu_rules(step, args.frigate_baseline)
+            if r3 is None:
+                return 3
+            ok = run_process(step.label, run_cmd(step), guard, r3=r3)
             tail = log_path(step.label).read_text(errors="replace").splitlines()[-80:]
             print("\n".join(f"  | {line}" for line in tail), flush=True)
         elif step.kind == "cache":

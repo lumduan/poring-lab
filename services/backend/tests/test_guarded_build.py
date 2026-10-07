@@ -6,6 +6,7 @@ production frontend, so dev-mode services come up through `start:` instead.
 
 import importlib.util
 import sys
+import time
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -445,3 +446,62 @@ class _FakeGuard:
 
     def summary(self) -> str:
         return "test"
+
+
+# --- R2 + R3: the GPU sharing rules for vision steps (infra side, Batt 2026-10-07) ----------------
+
+
+class _QuietGuard(_FakeGuard):
+    def breach(self) -> None:
+        return None
+
+
+class _R3Hit:
+    def __init__(self, hit: tuple[str, str, bool]) -> None:
+        self.hit = hit
+
+    def poll(self) -> None:
+        pass
+
+    def breach(self) -> tuple[str, str, bool]:
+        return self.hit
+
+
+def test_a_vision_step_is_refused_before_it_starts_when_r2_or_r3_fail(
+    gb: ModuleType, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    ran: list[list[str]] = []
+    monkeypatch.setattr(gb, "run_process", lambda *a, **k: record(ran, a[1]))
+    monkeypatch.setattr(gb, "cgroup_paths", lambda: {})
+    monkeypatch.setattr(gb, "Guard", lambda *a, **k: _FakeGuard())
+    monkeypatch.setattr(gb.frigate_r3, "prestart", lambda path: "R2: Ollama has a model loaded (x)")
+    step = "rundev:vision@60=python -m poring_vision.train --smoke"
+    monkeypatch.setattr(gb.sys, "argv", ["guarded_build.py", step])
+    assert gb.main() == 3
+    assert ran == []
+    assert "REFUSED rundev:vision: R2: Ollama" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(("hit", "expected"), [
+    (("latency", "detector 60 s median 34.0 ms vs baseline 28.0 ms", False),
+     "ABORT rundev:vision: R3 latency: detector 60 s median 34.0"),
+    (("drops", "camera a dropping frames for 30 s", True),
+     "ABORT rundev:vision: R3-HARD drops: camera a dropping frames for 30 s (no resume)"),
+])  # fmt: skip
+def test_an_r3_trip_aborts_the_step_like_an_io_trip(
+    gb: ModuleType, capsys: pytest.CaptureFixture[str], hit: tuple[str, str, bool], expected: str
+) -> None:
+    """train-day.sh pauses on `ABORT rundev` and stops on `R3-HARD`."""
+    t0 = time.monotonic()
+    ok = gb.run_process("rundev:vision", ["sleep", "30"], _QuietGuard(), r3=_R3Hit(hit))
+    assert ok is False and time.monotonic() - t0 < 10
+    assert expected in capsys.readouterr().out
+
+
+def test_only_a_training_step_waits_for_an_epoch_to_rebaseline(gb: ModuleType) -> None:
+    train = gb.parse_step("rundev:vision@60=python -m poring_vision.train --cache c --name run1")
+    assert gb.results_csv(train) == gb.REPO / "data" / "train" / "run1" / "results.csv"
+    ev = gb.parse_step("rundev:vision@60=python -m poring_vision.train --cache c --eval w --name x")
+    assert gb.results_csv(ev) is None
+    pred = gb.parse_step("rundev:vision@60=python -m poring_vision.predict_dir --weights w")
+    assert gb.results_csv(pred) is None

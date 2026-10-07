@@ -54,6 +54,21 @@ ports, quickstart) and `docs/adr/`.
    - gamestream (ADR-0009 console client) keeps `cpu_shares: 64`, `cpus: 4`, mem == memswap, a read-only
      rootfs and its pairing-key volume mounted nowhere else (`test_guards.py`).
    - vision keeps its VRAM cap (`VISION_MAX_VRAM_FRACTION`).
+   - **GPU sharing rules R1–R3** (infra side, adopted by Batt 2026-10-07). They are HARD limits for any
+     GPU work of ours, and they replace the retired 20:00–05:00 GPU window: R1–R3 decide, not the
+     clock.
+     - **R1:** Ollama + vision VRAM ≤ 9 GiB combined.
+     - **R2:** one model at a time. Never run qwen3-vl alongside training or eval; refuse to start
+       while Ollama's `/api/ps` shows a loaded model.
+     - **R3:** stop if the Frigate detector is > 5 ms slower than a baseline measured close in time
+       with nothing of ours running (a 60 s median); stop HARD if any camera drops frames
+       (`skipped_fps`) for 30 s.
+     - `scripts/frigate_r3.py` implements them, and `guarded_build.py` enforces them on every
+       `run:`/`rundev:` vision step (pre-start refusal + an in-run guard).
+     - Baselines: `frigate_r3.py baseline`, at most 3 h old, re-measured when camera activity
+       changes; `train-day.sh` re-measures on every pause.
+     - Ollama is called from HOST scripts only, never by joining a poring-lab container to its
+       network (ADR-0005 isolation stays).
    - Don't remove these to make something fit; raise the limit consciously instead.
    - **Heavy builds and pulls go through `scripts/guarded_build.py`**, one image at a time. It
      aborts when capture IO stall exceeds 10%. The host has one shared virtual disk: on 2026-09-29

@@ -17,7 +17,7 @@ last_reviewed: 2026-10-07
 until Batt approves it (§9).~~ ➡️ **APPROVED 2026-10-04 (Batt), with his §9 decisions:**
 1. the plan, the order and the classes (per-species + dying; self computed);
 2. one ~60 min S2 session for M4;
-3. light GPU work now, heavy training 20:00–05:00 ICT, under the 25 % cap;
+3. light GPU work now, heavy training 20:00–05:00 ICT, under the 25 % cap; ➡️ SUPERSEDED 2026-10-07 (Batt): the window is RETIRED. The GPU sharing rules R1–R3 decide, day or night (CLAUDE.md rule 5, `scripts/frigate_r3.py`);
 4. vision reads the NAS read-only, and the frame cache is sharded;
 5. ultralytics is used (ADR-0018: vision is AGPL-3.0);
 6. the bar as proposed;

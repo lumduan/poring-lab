@@ -18,8 +18,12 @@ It runs inside the vision container only (guarded_build `run:`/`rundev:`), never
   card, not the cap.
 - **Offline:** vision has no internet (`YOLO_OFFLINE=1`). Weights come from /data/weights (fetched
   on the host, sha256 in THIRD_PARTY.md); plots are off (they would fetch a font).
-- **Output:** /data/train/<run>/ (checkpoints every epoch). After an IO-guard SIGINT, `--resume`
-  continues from last.pt. The final line is a JSON summary: per-class AP50, mAP50, mAP50-95, peak
+- **Output:** /data/train/<run>/ (checkpoints every epoch). After an IO- or R3-guard SIGINT,
+  `--resume` continues from last.pt.
+- **R3 (Batt, 2026-10-07):** `--step-sleep-ms N` sleeps N ms after every training batch. That
+  lowers our GPU/CPU duty cycle, so the Frigate detector stays within +5 ms of its baseline.
+  It changes wall time only, never the maths (batch, seed, data order), and may change at a
+  `--resume`. The final line is a JSON summary: per-class AP50, mAP50, mAP50-95, peak
   VRAM, seconds.
 """
 
@@ -38,6 +42,15 @@ import numpy as np
 from poring_vision.shards import Sample, load_split, read_image
 
 VIRTUAL = "/shard/"
+
+
+def step_sleeper(ms: int) -> Any:
+    """The R3 duty-cycle knob: an ultralytics `on_train_batch_end` callback that sleeps ``ms``."""
+
+    def sleep(trainer: Any) -> None:
+        time.sleep(ms / 1000.0)
+
+    return sleep
 
 
 def label_dicts(samples: list[Sample], h: int = 720, w: int = 1280) -> list[dict[str, Any]]:
@@ -69,6 +82,8 @@ def main() -> int:  # noqa: PLR0915
     ap.add_argument("--eval", type=Path, default=None, help="evaluate these weights only")
     ap.add_argument("--split", default="test", help="--eval: the split to evaluate")
     ap.add_argument("--sessions", nargs="*", default=None, help="--eval: only these sessions")
+    ap.add_argument("--step-sleep-ms", type=int, default=0,
+                    help="R3: sleep after every training batch (duty cycle only)")  # fmt: skip
     a = ap.parse_args()
     t0 = time.monotonic()
 
@@ -178,6 +193,9 @@ def main() -> int:  # noqa: PLR0915
 
     ul_validator.check_det_dataset = shard_dataset
     trainer = ShardTrainer(overrides=overrides)
+    if a.step_sleep_ms > 0:
+        trainer.add_callback("on_train_batch_end", step_sleeper(a.step_sleep_ms))
+    print(json.dumps({"step_sleep_ms": a.step_sleep_ms, "resume": a.resume}), flush=True)
     trainer.train()
 
     metrics = getattr(trainer.validator, "metrics", None)
@@ -189,6 +207,7 @@ def main() -> int:  # noqa: PLR0915
         "run": str(run_dir), "cache": str(a.cache), "smoke": a.smoke,
         "train_frames": len(splits["train"]), "val_frames": len(splits["val"]),
         "epochs": overrides["epochs"], "imgsz": a.imgsz, "batch": a.batch, "workers": a.workers,
+        "step_sleep_ms": a.step_sleep_ms,
         "metrics": {k: round(float(v), 4) for k, v in (trainer.metrics or {}).items()},
         "ap50_per_class": per_class,
         "peak_vram_mib": round(torch.cuda.max_memory_reserved() / 2**20, 1),

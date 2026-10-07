@@ -6,6 +6,8 @@ auto-vs-hand (scripts/label_iou.py: the same per-class greedy match at IoU >= 0.
                                               SESSION/frames/<frame_id>.png (+ index.json:
                                               frame_id -> t_mono_ns); vision sees /data/...
     gold_eval.py score SESSION PRED.json ...  per run: per class + overall TP/FP/FN, P, R, mean IoU
+        [--metric position]                   POSITION only (phase3-plan §5f): centre in the hand
+                                              box, same class, one-to-one by centre distance
 
 PRED.json comes from `python -m poring_vision.predict_dir` in the vision container (GPU, guarded).
 The frames are client-derived pixels: they stay in data/ (gitignored), never committed.
@@ -60,7 +62,7 @@ def extract(session: str, datasets: Path) -> int:
     return 1 if missing else 0
 
 
-def score(session: str, preds: list[Path]) -> int:
+def score(session: str, preds: list[Path], metric: str = "iou") -> int:
     hand = hand_of(session)
     index = json.loads((OUT / session / "index.json").read_text())
     by_t = {int(t): fid for fid, t in index.items()}
@@ -68,7 +70,8 @@ def score(session: str, preds: list[Path]) -> int:
     for path in preds:
         p = json.loads(path.read_text())
         frames = p["frames"]
-        result = label_iou.score(hand, lambda t, f=frames: f.get(by_t.get(t, ""), None))
+        scorer = label_iou.score_position if metric == "position" else label_iou.score
+        result = scorer(hand, lambda t, f=frames: f.get(by_t.get(t, ""), None))
         out[p["weights"]] = {"conf": p["conf"], "imgsz": p["imgsz"], **result}
     print(json.dumps(out, indent=1))
     return 0
@@ -83,10 +86,11 @@ def main() -> int:
     sc = sub.add_parser("score")
     sc.add_argument("session")
     sc.add_argument("preds", type=Path, nargs="+")
+    sc.add_argument("--metric", choices=("iou", "position"), default="iou")
     a = ap.parse_args()
     if a.cmd == "extract":
         return extract(a.session, a.datasets)
-    return score(a.session, a.preds)
+    return score(a.session, a.preds, a.metric)
 
 
 if __name__ == "__main__":

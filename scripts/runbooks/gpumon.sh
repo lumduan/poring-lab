@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # GPU + Frigate sampler for training runs (read-only): every 5 s, one CSV line.
+# SUPERSEDED 2026-10-07 by `python3 -S scripts/frigate_r3.py sample OUT.csv` (distinct Frigate
+# updates, every detector and camera, Ollama's loaded models); kept for the older CSVs' format.
 #   scripts/runbooks/gpumon.sh OUT_CSV
 # t_ict, gpu_util%, mem_used_MiB, ollama_MiB, frigate_det_MiB(sum), python_MiB(sum, ours), frigate_inference_ms(mean of detectors)
 OUT=${1:?OUT_CSV}
