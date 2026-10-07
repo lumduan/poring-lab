@@ -429,7 +429,7 @@ End a dialog.
   1. Press the dialog's close button when it is offered.
 - **Outcome, runtime (screen):** the dialog window anchor disappears
 - **Outcome, offline (packets):** our close request (decoders needed)
-- **Bindings needed:** `L2.window.dialog`, `L2.element.close_button`
+- **Bindings needed:** `L2.window.dialog`, `L2.element`
 
 ## `npc.input`
 
@@ -598,7 +598,7 @@ Close a client window.
   - Escape opens the system menu instead when no window has focus.
 - **Outcome, runtime (screen):** the window's anchor is present before and absent after
 - **Outcome, offline (none):** client-side only
-- **Bindings needed:** `L2.shortcut.window`, `L2.window.anchor`, `L2.element.close_button`
+- **Bindings needed:** `L2.shortcut.window`, `L2.window`, `L2.element`
 
 ## `ui.open_window`
 
@@ -618,7 +618,7 @@ Open a client window (character status, skill list, items, equipment, world map,
   - Builds differ in which shortcuts exist and in whether a window is a separate window or a tab.
 - **Outcome, runtime (screen):** the window's anchor is absent before and present after
 - **Outcome, offline (none):** client-side only (no packet)
-- **Bindings needed:** `L2.shortcut.window`, `L2.window.anchor`
+- **Bindings needed:** `L2.shortcut.window`, `L2.window`
 
 ## `ui.press_button`
 
@@ -634,7 +634,7 @@ Press a button inside a window (OK, a stat raise button, a tab).
   - The window moved or is covered, so the offset hits something else.
 - **Outcome, runtime (screen):** the state change the button is for (per button)
 - **Outcome, offline (packets):** per button (some buttons send a request, others are client-side)
-- **Bindings needed:** `L2.window.anchor`, `L2.element.button`
+- **Bindings needed:** `L2.window`, `L2.element`
 
 ## `vitals.read`
 

@@ -74,5 +74,5 @@ concepts:
       offline:
         kind: packets
         signal: our close request (decoders needed)
-    bindings_needed: [L2.window.dialog, L2.element.close_button]
+    bindings_needed: [L2.window.dialog, L2.element]
     workflow_wave: 3

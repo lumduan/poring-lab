@@ -20,7 +20,7 @@ concepts:
         signal: client-side only (no packet)
     exceptions:
       - Builds differ in which shortcuts exist and in whether a window is a separate window or a tab.
-    bindings_needed: [L2.shortcut.window, L2.window.anchor]
+    bindings_needed: [L2.shortcut.window, L2.window]
     workflow_wave: 1
   - id: ui.close_window
     purpose: Close a client window.
@@ -36,7 +36,7 @@ concepts:
       offline:
         kind: none
         signal: client-side only
-    bindings_needed: [L2.shortcut.window, L2.window.anchor, L2.element.close_button]
+    bindings_needed: [L2.shortcut.window, L2.window, L2.element]
     workflow_wave: 1
   - id: ui.press_button
     purpose: Press a button inside a window (OK, a stat raise button, a tab).
@@ -54,5 +54,5 @@ concepts:
       offline:
         kind: packets
         signal: per button (some buttons send a request, others are client-side)
-    bindings_needed: [L2.window.anchor, L2.element.button]
+    bindings_needed: [L2.window, L2.element]
     workflow_wave: 1

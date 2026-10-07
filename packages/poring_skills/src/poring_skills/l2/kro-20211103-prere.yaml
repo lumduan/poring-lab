@@ -1,0 +1,37 @@
+# L2 bindings for ONE client build: how it does each L1 concept on screen (Batt, 2026-10-07).
+# Numbers and names only: template PIXELS stay in data/ (gitignored), cut from the lab's frames.
+# Every entry is unverified until a logged demonstration (shortcuts: the window appears) and then
+# the concept's alone-test confirm it (docs/demonstrations.md).
+client: kro-20211103-prere
+profiles: [kro]  # ro_agent client profiles that run this build
+build:
+  exe_date: 2021-11-03
+  packetver: 20211103
+  renewal: false
+  locales: [en]
+shortcut:
+  window:
+    # paced chords (ro_agent CHORD_STEP_S, 60 ms); one instantaneous batch is ignored by the client
+    status: {keys: [AltLeft, KeyA], status: unverified}
+    skills: {keys: [AltLeft, KeyS], status: unverified}
+    inventory: {keys: [AltLeft, KeyE], status: unverified}
+    equipment: {keys: [AltLeft, KeyQ], status: unverified}
+    basic_info: {keys: [AltLeft, KeyV], status: unverified}
+  system_menu: {keys: [Escape], status: unverified}
+  sit: {keys: [Insert], status: unverified}
+  hotbar: {keys: [F1, F2, F3, F4, F5, F6, F7, F8, F9], status: unverified}
+window:
+  # names in poring_env.ui_anchors (ADR-0011 anchor map); a window without a cut template there
+  # resolves as unsupported
+  basic_info: {anchor: basic_info, status: unverified}
+  game_option: {anchor: game_option, status: unverified}
+  minimap: {anchor: minimap, status: unverified}
+  chat: {anchor: chat, status: unverified}
+element:
+  hp_bar: {anchor_element: hp_bar, status: unverified}
+  sp_bar: {anchor_element: sp_bar, status: unverified}
+  minimap_xy: {anchor_element: minimap_xy, status: unverified}
+camera:
+  projection: {rdp: camera_rdp.json, s2: camera_console.json, status: unverified}
+cue:
+  walk_marker: {min_marker_px: 40, crop_px: 90, settle_s: 0.35, status: unverified}
