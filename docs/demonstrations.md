@@ -226,6 +226,11 @@ prt_fild08. Nothing was probed indoors.
 - They are written to `data/labels/demo/*.jsonl` (gitignored) with `source=demo` (weak), kept
   apart from auto-labels v1.
 - Their value is measured before any mixing: a separate pre-registration, one variable at a time.
+- **Built 2026-10-07:** `scripts/demo_labels.py SESSION_DIR` reads `demo.verified.jsonl`
+  (it refuses an unverified session) and writes `data/labels/demo/<session>.jsonl`.
+  - One label per verified success with a click, on the frame the actor decided on.
+  - `box` stays null until `predict_sprite` attaches it over the session's Timeline.
+  - The bot's own actions use the same schema (`test_demo_labels.py`).
 
 ## 5. Next verifiers (planned)
 - **NPC talk / choice:** CZ_CONTACTNPC → ZC_SAY_DIALOG / ZC_MENU_LIST from that npc; CZ_CHOOSE_MENU
