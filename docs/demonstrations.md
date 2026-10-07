@@ -1211,3 +1211,44 @@ runs among 4 Porings per 10 routes and the church's NPCs. The allowlist never cl
 - **Consequence for the running walk@7 chain** (pre-registered with v2; Batt: do not interrupt it):
   indoor re-localisations will often move the belief to a wrong cell. That confound is read into
   walk@7's indoor results. Outdoors the minimap rarely needs re-localisation.
+
+### walk@7 (3.12), RDP — **outdoor PASS in both conditions (49 / 50, 49 / 50); indoor FAIL (31 / 50 clean, 34 / 50 crowd)**; SAFETY held in all four (2026-10-07 19:34–21:48 ICT / 12:34–14:48 UTC)
+
+| run | session | scored | end to end | SAFETY | segments (at the click) | re-localisations (v2) | substitutes | patience |
+|---|---|---|---|---|---|---|---|---|
+| indoor CLEAN | `20261007T193431-…-clean-indoor` | first 50 (2 interrupted) | **31 / 50 FAIL** | 0 / 0 | 243 / 269 (25 one cell off) | 1 correct, **3 WRONG**, 5 undecided | 1 justified, **3 not** | 31 routes, 81.5 s |
+| indoor CROWD | `20261007T201618-…-crowd-indoor` | first 50 | **34 / 50 FAIL** | 0 / 0 | 257 / 270 (12 one cell off) | 2 correct, **2 WRONG**, 6 undecided | **2 not** | 37 routes, 93.5 s |
+| outdoor CLEAN | `20261007T205645-…-clean-outdoor` | first 50 | **49 / 50 PASS** | 0 / 0 | **184 / 184** | none needed | **1 not** (the one failure) | 15 routes, 23.0 s |
+| outdoor CROWD | `20261007T212227-…-crowd-outdoor` | first 50 | **49 / 50 PASS** | 0 / 0 | **199 / 199** | none needed | **1 not** (the one failure) | 22 routes, 29.5 s |
+
+**The indoor failures:**
+
+| cause | clean | crowd |
+|---|---|---|
+| `relocalise_failed` | 5 | 6 |
+| `segment_limit` | 6 | 5 |
+| unjustified substitute | 3 | 2 |
+| ended elsewhere | 4 | — |
+| `no_plan` | — | 2 |
+| `segment_unconfirmed` | 1 | — |
+| `segment_target_unknown` | — | 1 |
+
+**What it says:**
+1. **Outdoors walk@7 meets the bar in a crowd too.** walk@6 outdoors with Porings scored 44 / 50;
+   walk@7 crowd scores 49 / 50. Patience plus the substitute fixed the crowd decisions, and every
+   clicked run went where it meant (383 / 383).
+2. **Indoors the crowd is not what fails (crowd 34 ≥ clean 31).** Re-localisation does:
+   - v2's WRONG beliefs (5 across the two runs) and undecided ones (11);
+   - the one-cell-off clicks that follow a wrong belief.
+   This is relocalise@2's failure (24 / 50 WRONG) carried into walking. The confound was stated
+   when the chain was kept running (Batt).
+3. **(b) as built substitutes for ANY refused goal** (unconfirmed, static, unknown), not only for a
+   unit.
+   - The packets show nobody on the goal in **7 of 8** substitutions (1 in each outdoor run, 5
+     indoors). Each is a pre-registered FAIL, and the only failure in each outdoor run.
+   - A substitute should be taken only when the refusal names a UNIT (sword, talk, pickup) at the
+     goal.
+4. **Patience waited in CLEAN rooms too** (15–31 routes, 23–82 s), on "unknown" reads where no unit
+   stood. It costs time, not routes.
+
+**The click-time logging works:** segments are now judged at the click, with no re-scoring.
