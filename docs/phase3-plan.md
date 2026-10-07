@@ -988,6 +988,29 @@ grounded rule explains it, so Batt decides the next step.
     scale or composition), not in what it loads.
 - The EVEN half is scored ONCE with the same measurement, as the replication of the map.
 
+**EVEN (2026-10-07 07:15, scored ONCE): the map and the frame-level split REPLICATE. Step 2c's
+verdict: H-C's file-level mechanisms are ruled out, and no grounded composer rule exists. The
+species split is real at the frame level, and its cause is open.**
+
+| EVEN, outdoor centre | obs / frame (height) | frame / envelope | obs / box | width obs / frame | EXTRA | MISSING |
+|---|---|---|---|---|---|---|
+| Poring (n 393) | 0.940 (ODD 0.950) | 1.000 (ODD 0.949) | 0.901 | 1.109 | 0.014 | 0.223 |
+| Lunatic (n 151) | 1.182 (ODD 1.200) | 0.945 | 1.124 | 1.128 | 0.017 | 0.278 |
+
+- The Lunatic's pixels above our envelope are again MISSING in 81 %.
+- The Poring's frame / envelope moved from 0.949 to 1.000: the envelope term depends on which bounce
+  frames are chosen, so it is not a stable explanation for either species.
+- For Batt's next pre-registration, candidates seen in the overlays, NONE scored:
+  1. a CONTRAST-DEPENDENT HALO in the measurement:
+     - the white Lunatic on dark grass keeps its blurred edge halo (stream + a filtered render)
+       above the 24-level threshold 1–2 px further out, so it is measured bigger;
+     - the pink Poring on sand (low contrast; its interior falls below the threshold) loses edge
+       pixels, so it is measured smaller;
+     - this predicts opposite height errors per species from ONE cause, and is testable by
+       re-measuring at several thresholds or with an edge-profile fit;
+  2. a filtered (bilinear) sprite sampler in the client: a common rim, so a bias in k;
+  3. the shadow decal we do not render: widths, bottoms.
+
 ## 6. M5–M7: using the rule
 
 **M5, labels v1.** Every auto-label gets:
