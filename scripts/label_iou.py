@@ -121,6 +121,71 @@ def newest_run(config: dict[str, Any]) -> Path | None:
     return None if best is None else best[1]
 
 
+def match_position(truth: list[Box], predicted: list[Box]) -> tuple[int, int, int, list[float]]:
+    """POSITION-ONLY match (phase3-plan §5f): a pair is a candidate when the classes match and the
+    predicted box's CENTRE lies inside the truth box; one-to-one, greedily by ascending centre
+    distance. Returns (tp, fp, fn, the matched centre distances in px)."""
+
+    def centre(b: Box) -> tuple[float, float]:
+        return (b[1] + b[3]) / 2.0, (b[2] + b[4]) / 2.0
+
+    pairs = []
+    for i, t in enumerate(truth):
+        for j, p in enumerate(predicted):
+            cx, cy = centre(p)
+            if t[0] == p[0] and t[1] <= cx <= t[3] and t[2] <= cy <= t[4]:
+                tx, ty = centre(t)
+                pairs.append((((cx - tx) ** 2 + (cy - ty) ** 2) ** 0.5, i, j))
+    used_t: set[int] = set()
+    used_p: set[int] = set()
+    dists: list[float] = []
+    for dist, i, j in sorted(pairs):
+        if i in used_t or j in used_p:
+            continue
+        used_t.add(i)
+        used_p.add(j)
+        dists.append(dist)
+    return len(dists), len(predicted) - len(dists), len(truth) - len(dists), dists
+
+
+def score_position(hand: dict[str, Any], auto_for: Any) -> dict[str, Any]:
+    """Per class and overall: TP/FP/FN, precision, recall, and the matched centre distances
+    (median, p90) of the POSITION-ONLY match (§5f); frames inside a GM window are skipped."""
+    per: dict[str, dict[str, Any]] = {c: {"tp": 0, "fp": 0, "fn": 0, "d": []} for c in CLASSES}
+    frames = skipped = 0
+    for f in hand["frames"]:
+        auto = auto_for(int(f["t_mono_ns"]))
+        if auto is None:
+            skipped += 1
+            continue
+        frames += 1
+        truth, pred = boxes_of(f["boxes"]), boxes_of(auto)
+        for c in CLASSES:
+            tp, fp, fn, d = match_position([b for b in truth if b[0] == c],
+                                           [b for b in pred if b[0] == c])  # fmt: skip
+            per[c]["tp"] += tp
+            per[c]["fp"] += fp
+            per[c]["fn"] += fn
+            per[c]["d"] += d
+
+    def summary(d: dict[str, Any]) -> dict[str, Any]:
+        tp, fp, fn, dist = d["tp"], d["fp"], d["fn"], sorted(d["d"])
+        return {"tp": tp, "fp": fp, "fn": fn,
+                "precision": round(tp / (tp + fp), 3) if tp + fp else None,
+                "recall": round(tp / (tp + fn), 3) if tp + fn else None,
+                "centre_px_median": round(dist[len(dist) // 2], 2) if dist else None,
+                "centre_px_p90": round(dist[min(len(dist) - 1, int(0.9 * len(dist)))], 2)
+                if dist else None}  # fmt: skip
+
+    overall = {"tp": 0, "fp": 0, "fn": 0, "d": []}
+    for d in per.values():
+        for k in ("tp", "fp", "fn", "d"):
+            overall[k] += d[k]
+    return {"frames": frames, "skipped_gm_window": skipped, "metric": "position",
+            "per_class": {c: summary(d) for c, d in per.items()},
+            "overall": summary(overall)}  # fmt: skip
+
+
 def cmd_score(a: argparse.Namespace) -> int:
     path = HANDCHECK / f"{a.session}.json"
     if not path.exists():
@@ -131,7 +196,11 @@ def cmd_score(a: argparse.Namespace) -> int:
                             **({"k": a.k} if a.k is not None else {}))  # fmt: skip
     result = {"session": a.session, "handcheck_sha256": sha256(path),
               "camera": lab.camera_path.name, "offset_ms": lab.offset_ms,
-              "labels": a.labels, "k": lab.k, **score(hand, lab.boxes)}  # fmt: skip
+              "labels": a.labels, "k": lab.k,
+              **(score_position(hand, lab.boxes) if a.metric == "position"
+                 else score(hand, lab.boxes))}  # fmt: skip
+    if a.update_bench and a.metric == "position":
+        raise SystemExit("--update-bench records the IoU metric only")
     if a.update_bench:
         run = newest_run(lab.manifest["config"])
         if run is None:
@@ -164,6 +233,12 @@ def main(argv: list[str] | None = None) -> int:
             p.add_argument("--update-bench", action="store_true")
             p.add_argument("--labels", choices=("v0", "v1"), default="v0")
             p.add_argument("--k", type=float, default=None, help="v1: M4's k (default nostalro)")
+            p.add_argument(
+                "--metric",
+                choices=("iou", "position"),
+                default="iou",
+                help="position: centre-in-box, one-to-one by distance (§5f)",
+            )
     a = ap.parse_args(argv)
     return cmd_pin(a) if a.cmd == "pin" else cmd_score(a)
 

@@ -46,3 +46,27 @@ def test_per_class_precision_recall_and_iou(li: ModuleType) -> None:
     assert (npc["tp"], npc["fp"], npc["fn"]) == (0, 1, 1) and npc["mean_iou"] is None
     assert (ply["tp"], ply["precision"], ply["recall"], ply["mean_iou"]) == (1, 1.0, 1.0, 1.0)
     assert r["overall"]["tp"] == 2 and r["overall"]["fp"] == 2 and r["overall"]["fn"] == 1
+
+
+def test_position_metric_centre_in_box_one_to_one(li: ModuleType) -> None:
+    """§5f: a label counts when its CENTRE lies in a same-class hand box; one-to-one by distance;
+    box size is ignored (the gold set keeps v0's 44x40 for 82 % of monsters)."""
+    hand = {"frames": [
+        {"t_mono_ns": 1, "boxes": [b("monster", 0, 0, 44, 40), b("monster", 100, 0, 144, 40),
+                                   b("npc", 200, 0, 234, 74)]},
+    ]}  # fmt: skip
+    auto = {1: [
+        b("monster", 15, 12, 31, 30),    # tight, centre (23, 21) inside the first: TP
+        b("monster", 18, 10, 30, 28),    # also inside the first, farther: one-to-one -> FP
+        b("monster", 140, 30, 200, 60),  # centre (170, 45) outside the second: FP
+        b("npc", 210, 10, 220, 60),      # centre inside the npc box: TP
+    ]}  # fmt: skip
+    r = li.score_position(hand, auto.get)
+    mon, npc = r["per_class"]["monster"], r["per_class"]["npc"]
+    assert (mon["tp"], mon["fp"], mon["fn"]) == (1, 2, 1)
+    assert (npc["tp"], npc["fp"], npc["fn"]) == (1, 0, 0)
+    assert mon["centre_px_median"] == 1.41  # |(23, 21) - (22, 20)|
+    assert r["metric"] == "position"
+    # a class mismatch never matches, even with the centre inside
+    tp, fp, fn, _ = li.match_position([("npc", 0, 0, 10, 10)], [("monster", 2, 2, 8, 8)])
+    assert (tp, fp, fn) == (0, 1, 1)
