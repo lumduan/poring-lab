@@ -1314,3 +1314,37 @@ runs among 4 Porings per 10 routes and the church's NPCs. The allowlist never cl
    stood. It costs time, not routes.
 
 **The click-time logging works:** segments are now judged at the click, with no re-scoring.
+
+### where@1, indoor, RDP: **FAIL, 38 / 50 correct — 1 WRONG, 11 no fix** (2026-10-07 22:05:23–22:18 ICT / 15:05–15:18 UTC)
+**Session:** `20261007T220523-demo-where-alone-indoor`; 56 attempts, none interrupted. Scored: the
+first 50 (after the 3.13 amendment).
+
+**The outcomes:**
+- **correct 38**;
+- **WRONG 1** (#29): the truth was (109,127) and the reader returned **(9,127)**:
+  - the leading `1` and `0` of `109` did not match a template;
+  - the parser read the trailing digits only until the first unmatched glyph, and accepted the
+    shorter number;
+  - **a parser flaw**: a number must start right after the space that follows the colon, never
+    after a failed glyph;
+- **no fix 11** (#0, 4, 18, 20, 21, 23, 26, 31, 32, 44, 48, 51, 53, among the first 50): all
+  "unparsed". A new line appeared, but a glyph differed from its template by more than 1 pixel, even
+  on the "stable" read.
+
+**vs the re-localisations, on the same map:**
+
+| method | correct | WRONG | undecided / no fix |
+|---|---|---|---|
+| v1 (3.10) | 6 | 2 | 42 |
+| v2 (3.11) | 16 | 24 | 10 |
+| **where@1 (3.13)** | **38** | 1 | 11 |
+
+**What it says:**
+- The `/where` line is a far better signal than the structure probes (38 vs 16 / 6 correct). It is
+  absolute, so it cannot drift.
+- The READER is what failed:
+  1. one structural parser flaw, which gave the one WRONG;
+  2. an exact-template match too strict for RDP's not-quite-lossless glyphs.
+- **Next (where@2, to be pre-registered):** keep the crops; the number must follow the colon's space;
+  nearest-template matching with a margin; and two consecutive `/where` reads must agree before a
+  fix is accepted.
