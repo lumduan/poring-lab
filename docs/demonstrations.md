@@ -944,3 +944,59 @@ Event → fields (cs = our request, sc = the server):
     walk toward a cell the cursor merely PASSES.
 - **Not adopted.** It needs its own pre-registered alone-test.
 
+
+### walk@6, indoor, RDP: **FAIL, 23 / 50** (1 interrupted) — SAFETY held: 0 attack requests, 0 NPC contacts (2026-10-07 18:00:21–18:34:27 ICT / 11:00:21–11:34:27 UTC)
+**Session:** `20261007T180021-demo-walk6-alone-indoor`; 56 routes run.
+- Route 34 was interrupted: a human `release_all` at 18:20:50 ICT / 11:20:50 UTC, marked by `demo_interruptions`.
+  - It was the session's ONLY human event, and it came after console fix A (0ab7521, live
+    17:12): a page loaded since then never sends a release with nothing held.
+  - Most likely a console tab still running the old script blurred; reloading open console tabs
+    applies the fix.
+- **Scored:** the first 50 not interrupted, as pre-registered (3.9).
+
+**The bar:** end to end **23 / 50** (needed ≥ 48) → **FAIL**.
+
+**SAFETY:** **0** `attack_request`, **0** `npc_contact`, **0** pickup acts by us, over 235 clicked
+runs among 4 Porings per 10 routes and the church's NPCs. The allowlist never clicked an entity.
+
+**Why the routes failed** (27):
+
+| decline / cause | routes | what it means |
+|---|---|---|
+| `relocalise_failed` | 10 | re-localisation v1 left > 1 candidate: no probe offset split them on cells flat for all, among the pews |
+| `goal_occupied` | 6 | a refused GOAL, waited for 3 × 1 s; loitering Porings outlast that |
+| `segment_unconfirmed` | 4 | no chevrons naming the target, at every alternate |
+| `segment_limit` | 4 | 16 segment attempts used up by refusals, waits and re-plans |
+| `segment_target_unknown`, `segment_line_unknown` | 1 + 1 | the second refusal of a run, after its re-plans |
+| the route ended elsewhere | 1 | dead reckoning one cell off |
+
+- **A design gap** (routes 21–24, one belief): every target came back `unconfirmed`, and that never
+  triggers re-localisation; only a no-entry sign or a named neighbour does. The rule stayed stuck
+  until the harness's next warp. A belief error that only ever shows "no chevrons" goes uncaught.
+
+**Reported without a bar:**
+- **Segments: 229 / 234 verified (97.9 %)**, re-scored AT THE CLICK. The pre-registered segment
+  check scored 45 / 234, a MEASUREMENT artefact:
+  - the segment record's `t_mono_ns` is the START of the probe step (park + line + target +
+    re-check, 1.7–3.7 s), and `verify_walk` looks for the move request within 2 s after it;
+  - the request is at the click, 0.12–0.16 s before the record's `t_done_ns`;
+  - re-scored at `t_done_ns` − 0.5 s, a span holding only the no-motion re-check
+    (`/dev/shm/poring-lab-tmp/walk6-cal/seg_rescore.py`);
+  - the 5 misses: 4 walked one cell off, 1 click was not a walk;
+  - the route bar was always judged end to end and is unaffected. walk@7 must log the click time.
+- **Refusals: 222.**
+  - By place: target 122, line 35, unconfirmed 45, stale park 17, re-check 3.
+  - By shape: unknown 138, no-entry 11, sword 11.
+  - **True vs false (coarse):** an entity from the packets stood on the refused cell at some time
+    in that route for **47**, and within 2 cells for **151**. 71 had none within 2 cells.
+  - The refusal carries no time in the frozen code, so this is an upper bound on "true".
+- Re-plans 61; re-localisations 11, of which 10 failed to decide (see relocalise@1, 3.10);
+  stale parks 17; route time median 30.4 s.
+
+**What it says:**
+1. The allowlist is SAFE: nothing was ever clicked through.
+2. Every run it did click went where it meant to (97.9 %).
+3. Indoors it is too strict and too impatient for the bar. The target reads "unknown" far more than
+   the line cells (122 vs 35), and re-localisation v1 rarely decides among the pews.
+4. Next: a design-time dump of the unknown TARGET reads indoors before any walk@7. They cannot be
+   seen in this session: the scored run kept no crops.
