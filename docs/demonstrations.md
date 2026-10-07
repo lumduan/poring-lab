@@ -1831,8 +1831,19 @@ interrupted. Scored: the first 50, with the amended instrument.
   - The cursor allowlist cannot close this window alone. It needs an entity check at the click
     instant: the detector's boxes, or the cursor re-read after the button is down and before it is
     released, which may be too late.
-- **#2: cursor UNKNOWN** (indoor east / altar end 56–75 % of hovers; colour check). Diagnosed by
-  `cursor_diag.py`.
+- **#2: cursor UNKNOWN** (indoor east / altar end 56–75 % of hovers). **Diagnosed 03:46–03:55** by
+  `cursor_diag.py`: 38 hovers, hover-only, no clicks, crops in /dev/shm.
+  - The east UNKNOWNs are the **TALK cursor** (a speech bubble) over the church's **NPCs**: Nun#prt
+    (108,124) in the crops. Its mask (~490 px) matched no stored talk reference; the best was the
+    pickup hand at IoU 0.64, colour 0.57.
+  - The packets place NPCs exactly where the declines were: Henson#pront ON the altar-end goal
+    (103,71) of indoor CLEAN route 3, Garnet#pront (103,76), Sister Linus (111,112), the Bishop
+    (100,128), and others.
+  - So the rule declined (safe: unknown = no click) instead of seeing a UNIT and substituting an
+    adjacent goal, as walk@8 designed.
+  - **Fix for walk@11:** recalibrate the talk references (this bubble variant). The safety rule
+    (never click talk) stays.
+  - One west UNKNOWN was the arrow over our own character's sprite (a cell next to us): expected.
 - **#3: unnamed clicks after a fix.** Indoors pews hide the marker; outdoors a missing marker meant
   the client would not walk (12 / 13 dead).
 - **#4: tier-B goals that are never named** (thin strip behind a kneeler row): safe declines.
