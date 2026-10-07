@@ -1261,6 +1261,37 @@ resolution, EVEN can still confirm it blind.
 - the two species' widths differ (Lunatic 0.1333 vs Poring ~0.145).
 - Batt's call: amend the criterion (e.g. the median |obs_h − MP_h| ≤ 1 px), then score EVEN once.
 
+#### 5d-vi-a. AMENDMENT (Batt, 2026-10-07 ~10:40), committed BEFORE any further scoring
+
+**Why (the reason is the measurement's RESOLUTION, not the EVEN result):**
+- obs_h and MP_h are whole pixels.
+- At the outdoor sizes (MP_h 25–31 px), one pixel is 3–4 %. So "median obs/MP within ±3 %"
+  demands a pixel-exact median, which no measurement at this resolution can be held to.
+
+**The amended validation** (replaces the ±3 % median rule; everything else in §5d-vi stands):
+1. **Per species** (outdoor Poring, outdoor Lunatic; the indoor Poring is reported):
+   median |obs_h − MP_h| ≤ **1 px** over that species' synthetic frames.
+2. **The species split within 1 ± 0.03, as a POOLED PIXEL RATIO** (Batt's choice):
+   - split = (Σ obs_h / Σ MP_h)_Lunatic ÷ (Σ obs_h / Σ MP_h)_Poring, over the OUTDOOR synthetic
+     frames, all thirds (2d's convention);
+   - pooling gives sub-pixel resolution, so ±0.03 means what it says.
+3. **The same ruler order:** DIFF 24 first; DIFF 48 (the pre-registered alternative) only if
+   DIFF 24 fails.
+4. k is judged as before, with the validated ruler:
+   - k_h = K_NOSTALRO × obs_h / MP_h per frame;
+   - the species split of the k_h medians (outdoor centre) within 1 ± 0.05;
+   - one scalar (median over all clean frames) within ±2 % of a prior, else "neither";
+   - k_h, k_w and k_h / k_w are REPORTED.
+   - NO separate h/w scales are fitted: neither license-checked client has a vertical-only factor.
+
+**How it is scored, in this order:**
+- **(1a-i) EVEN's synthetic validation, re-read under the amended criterion.** It is ALREADY SEEN
+  (§5d-vi EVEN), so it is labelled as such and cannot confirm anything.
+- **(1a-ii) EVEN's still-UNSEEN real k, scored ONCE** with the ruler (1a-i) validates, labelled
+  **PROVISIONAL**.
+- **The DECISIVE confirmation is NEW data:** the fresh full M4 session (§5d-vii, planned), with this
+  ruler and criterion UNCHANGED. **k stays OPEN until then.**
+
 ### 5f. The gold set, POSITION ONLY, for monsters (Batt, 2026-10-07), written BEFORE scoring
 
 **Why position only.**
