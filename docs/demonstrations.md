@@ -1775,6 +1775,30 @@ interrupted. Scored: the first 50.
 - Failures: 1 `no_click_point` ((104,125), the cursor UNKNOWN), 1 route that ended elsewhere (the
   attack approach).
 
+### walk@10 (3.17), outdoor CLEAN, RDP: **FAIL, 45 / 50, and HARD FAIL on SAFETY** — the GM attacked field monsters twice and was most likely killed both times (2026-10-08 03:05:04–03:27:36 ICT / 20:05:04–20:27:36 UTC)
+**Session:** `20261008T030504-demo-walk10-alone-clean-outdoor` (seed 20261041); 56 routes, none
+interrupted. Scored: the first 50. Scored with the amended instrument (the server's act by the GM).
+
+**The results:**
+- **End to end: 45 / 50** (needed 48) → **FAIL** (walk@7 outdoor CLEAN: 49 / 50).
+- **SAFETY: FAILED.** Two attack episodes on the field's own monsters (`@killmonster2` clears only
+  spawned ones): 03:14:30 (3 hits on 110020728) and 03:18:33 (5 hits on 110020732), each right
+  after a rule click. Both times the monster most likely killed the level-1 GM (HP 30 → 5 and
+  35 → 1, then no regeneration ticks until a "stand" act at the next harness warp, 03:16:00 and
+  03:21:33).
+- **Clicks (all 56 routes): 125 / 139.** A named 124 / 126, **A unnamed after a fix 1 / 13**: 12 sent
+  **no move request**. Outdoors the trusted unnamed clicks showed NO marker at all (0 px). Indoors
+  a missing marker meant pews hiding it; outdoors it seems to mean the client will not walk
+  there. walk@7 required the marker, which filtered these.
+- **Fixes (scored 50): 9 correct, 4 "WRONG" by the packet model.** All 4 fall at 03:15:10–03:15:49,
+  while the GM was being hit (and most likely dead): two agreeing reads of (273,115) each time. The
+  packet model assumes a started walk completes ((275,113) → (273,117), begun 03:14:33.8 under
+  attack), so the 4 are most likely the scorer's artefact, not misreads. They are reported, not
+  hidden.
+- Failures: 3 `relocalise_limit` (the dead unnamed clicks, `no_move` fixes), 2 `no_click_point`
+  (cursor UNKNOWN at points where the marker DID name the cell (129–169 px): likely walk@9's
+  animated-pixel mask cutting the cursor over swaying grass; to verify).
+
 ### 🔴 CORRECTION (2026-10-08 ~03:15): the walk SAFETY counts were BLIND to attack requests — the server's act packets show GM attacks in four scored walk runs
 - **What was wrong:** every walk score counted `attack_request` / `npc_contact` events in the
   session's packets. The LIVE sniffer never emits them: those decoders are offline-only (bc1a2e6,
@@ -1797,6 +1821,7 @@ interrupted. Scored: the first 50.
 | walk@9 indoor CLEAN | 39 / 50 | none | FAIL (unchanged) |
 | walk@10 indoor CLEAN | 42 / 50 | none | FAIL (unchanged) |
 | walk@10 indoor CROWD | 48 / 50 | 1 episode, 4 hits, 0.62 s after a rule click | **HARD FAIL (SAFETY)** |
+| walk@10 outdoor CLEAN (scored after this correction) | 45 / 50 | 2 episodes, 8 hits, right after rule clicks; the GM most likely died twice | FAIL (also SAFETY) |
 
 - Two walk@8 PILOTS (not scored) also attacked (9 hits each). Pickups (our act, kind pickup): 0
   in every session.
