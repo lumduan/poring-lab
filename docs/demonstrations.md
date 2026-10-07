@@ -1512,7 +1512,7 @@ first 50 (after the 3.13 amendment).
 → where@2 is walk@8's belief fix (3.14).
 - **Still open:** the same check on a normal (non-GM) account.
 
-### walk@8 (3.14), indoor CLEAN, RDP: **FAIL, 42 / 50**; SAFETY held; every `/where` fix correct (2026-10-07 23:40:42 – 2026-10-08 00:2x ICT / 16:40–17:2x UTC)
+### walk@8 (3.14), indoor CLEAN, RDP: **FAIL, 42 / 50**; SAFETY held; every `/where` fix correct (2026-10-07 23:40:42 – 2026-10-08 00:16 ICT / 16:40–17:16 UTC)
 **Session:** `20261007T234042-demo-walk8-alone-clean-indoor` (seed 20261023); 56 routes, none
 interrupted. Scored: the first 50.
 
@@ -1540,7 +1540,7 @@ were **NOT run**.
   and asks for walk@9 (at most 3 iterations; Batt).
 - The ~1.5 h of client time went to walk@9, which keeps walk@8's design and runs all four tuning
   conditions itself.
-- The chain was stopped between runs (00:0x); the running indoor-clean run was never interrupted.
+- The chain was stopped between runs (its driver, 23:57); the running indoor-clean run was never interrupted.
 
 **→ walk@9 (3.16):** static green excluded from the chevrons; a scene-shift check after every click
 (no shift = doubt → `/where`, and a confirmed dead click blocks that target); an all-unconfirmed round
