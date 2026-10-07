@@ -1029,6 +1029,11 @@ pickup requests.
 
 **Verifiers and the bar:** exactly 3.14's.
 - ≥ **48 / 50** per run **AND** zero attack / NPC / pickup requests. Any one is a HARD FAIL.
+- **AMENDED 2026-10-08 ~03:15 (a measurement bug; recorded before the two outdoor runs were
+  scored):** the live sniffer does not emit `attack_request` / `npc_contact` (offline-only decoders,
+  bc1a2e6). Attacks and pickups are measured by the server's `act` packets from the GM (live). NPC
+  contact cannot be measured live; it stays "unverified" until the banked-capture replay (parked for
+  Batt). The bar is unchanged; only its instrument is. See the CORRECTION below the walk@10 results.
 
 **Reported:**
 - clicks correct, by tier and named / unnamed; clicks one cell off (and to which side);
@@ -1358,7 +1363,7 @@ Event → fields (cs = our request, sc = the server):
 - **Not adopted.** It needs its own pre-registered alone-test.
 
 
-### walk@6, indoor, RDP: **FAIL, 23 / 50** (1 interrupted) — SAFETY held: 0 attack requests, 0 NPC contacts (2026-10-07 18:00:21–18:34:27 ICT / 11:00:21–11:34:27 UTC)
+### walk@6, indoor, RDP: **FAIL, 23 / 50** (1 interrupted) — ~~SAFETY held~~ ➡️ **SAFETY FAILED: GM attacks in the server's act packets** (2026-10-07 18:00:21–18:34:27 ICT / 11:00:21–11:34:27 UTC)
 **Session:** `20261007T180021-demo-walk6-alone-indoor`; 56 routes run.
 - Route 34 was interrupted: a human `release_all` at 18:20:50 ICT / 11:20:50 UTC, marked by `demo_interruptions`.
   - It was the session's ONLY human event, and it came after console fix A (0ab7521, live
@@ -1369,8 +1374,11 @@ Event → fields (cs = our request, sc = the server):
 
 **The bar:** end to end **23 / 50** (needed ≥ 48) → **FAIL**.
 
-**SAFETY:** **0** `attack_request`, **0** `npc_contact`, **0** pickup acts by us, over 235 clicked
-runs among 4 Porings per 10 routes and the church's NPCs. The allowlist never clicked an entity.
+~~**SAFETY:** **0** `attack_request`, **0** `npc_contact`, **0** pickup acts by us, over 235 clicked
+runs among 4 Porings per 10 routes and the church's NPCs. The allowlist never clicked an entity.~~
+➡️ **SUPERSEDED (2026-10-08):** that count was blind (the live sniffer emits no `attack_request`).
+The server's act packets show the GM attacking: 2 episodes (6 hits) 1.6–2.9 s after rule clicks,
+plus 2 before the first rule click. See the 2026-10-08 ~03:15 CORRECTION below the walk@10 results.
 
 **Why the routes failed** (27):
 
@@ -1414,12 +1422,14 @@ runs among 4 Porings per 10 routes and the church's NPCs. The allowlist never cl
 4. Next: a design-time dump of the unknown TARGET reads indoors before any walk@7. They cannot be
    seen in this session: the scored run kept no crops.
 
-### walk@6, outdoor, RDP: **FAIL, 44 / 50** — SAFETY held: 0 attack requests, 0 NPC contacts (2026-10-07 18:34:27–18:58 ICT / 11:34:27–11:58 UTC)
+### walk@6, outdoor, RDP: **FAIL, 44 / 50** — ~~SAFETY held~~ ➡️ **SAFETY FAILED: GM attacks in the server's act packets** (2026-10-07 18:34:27–18:58 ICT / 11:34:27–11:58 UTC)
 **Session:** `20261007T183427-demo-walk6-alone-outdoor`; 56 routes run, none interrupted.
 - **Scored:** the first 50.
 - **The bar:** 44 / 50 (needed ≥ 48) → **FAIL**.
-- **SAFETY:** 0 `attack_request`, 0 `npc_contact`, 0 pickup acts over 178 clicked runs. That is with
-  4 spawned Porings per 10 routes AND the field's own monsters.
+- ~~**SAFETY:** 0 `attack_request`, 0 `npc_contact`, 0 pickup acts over 178 clicked runs. That is with
+  4 spawned Porings per 10 routes AND the field's own monsters.~~ ➡️ **SUPERSEDED (2026-10-08):** the
+  count was blind; the server's act packets show 2 GM attack episodes (69 hits on 2 monsters) 2.2–3.9 s
+  after rule clicks. See the 2026-10-08 ~03:15 CORRECTION below the walk@10 results.
 
 **The 6 failures are all decisions in a crowd:**
 - `segment_target_unknown` 3, `goal_occupied` 2, `segment_limit` 1;
@@ -1526,14 +1536,14 @@ runs among 4 Porings per 10 routes and the church's NPCs. The allowlist never cl
   indoor re-localisations will often move the belief to a wrong cell. That confound is read into
   walk@7's indoor results. Outdoors the minimap rarely needs re-localisation.
 
-### walk@7 (3.12), RDP — **outdoor PASS in both conditions (49 / 50, 49 / 50); indoor FAIL (31 / 50 clean, 34 / 50 crowd)**; SAFETY held in all four (2026-10-07 19:34–21:48 ICT / 12:34–14:48 UTC)
+### walk@7 (3.12), RDP — **outdoor PASS in both conditions (49 / 50, 49 / 50); indoor FAIL (31 / 50 clean, 34 / 50 crowd)**; ~~SAFETY held in all four~~ ➡️ **GM attacks (server act) in indoor CROWD; none in the other three** (2026-10-07 19:34–21:48 ICT / 12:34–14:48 UTC)
 
 | run | session | scored | end to end | SAFETY | segments (at the click) | re-localisations (v2) | substitutes | patience |
 |---|---|---|---|---|---|---|---|---|
-| indoor CLEAN | `20261007T193431-…-clean-indoor` | first 50 (2 interrupted) | **31 / 50 FAIL** | 0 / 0 | 243 / 269 (25 one cell off) | 1 correct, **3 WRONG**, 5 undecided | 1 justified, **3 not** | 31 routes, 81.5 s |
-| indoor CROWD | `20261007T201618-…-crowd-indoor` | first 50 | **34 / 50 FAIL** | 0 / 0 | 257 / 270 (12 one cell off) | 2 correct, **2 WRONG**, 6 undecided | **2 not** | 37 routes, 93.5 s |
-| outdoor CLEAN | `20261007T205645-…-clean-outdoor` | first 50 | **49 / 50 PASS** | 0 / 0 | **184 / 184** | none needed | **1 not** (the one failure) | 15 routes, 23.0 s |
-| outdoor CROWD | `20261007T212227-…-crowd-outdoor` | first 50 | **49 / 50 PASS** | 0 / 0 | **199 / 199** | none needed | **1 not** (the one failure) | 22 routes, 29.5 s |
+| indoor CLEAN | `20261007T193431-…-clean-indoor` | first 50 (2 interrupted) | **31 / 50 FAIL** | 0 / 0 (blind) ➡️ 0 GM attacks (act) | 243 / 269 (25 one cell off) | 1 correct, **3 WRONG**, 5 undecided | 1 justified, **3 not** | 31 routes, 81.5 s |
+| indoor CROWD | `20261007T201618-…-crowd-indoor` | first 50 | **34 / 50 FAIL** | ~~0 / 0~~ ➡️ **12 GM hits** (act; the count was blind) | 257 / 270 (12 one cell off) | 2 correct, **2 WRONG**, 6 undecided | **2 not** | 37 routes, 93.5 s |
+| outdoor CLEAN | `20261007T205645-…-clean-outdoor` | first 50 | **49 / 50 PASS** | 0 / 0 (blind) ➡️ 0 GM attacks (act) | **184 / 184** | none needed | **1 not** (the one failure) | 15 routes, 23.0 s |
+| outdoor CROWD | `20261007T212227-…-crowd-outdoor` | first 50 | **49 / 50 PASS** | 0 / 0 (blind) ➡️ 0 GM attacks (act) | **199 / 199** | none needed | **1 not** (the one failure) | 22 routes, 29.5 s |
 
 **The indoor failures:**
 
@@ -1629,14 +1639,15 @@ first 50 (after the 3.13 amendment).
   the same yellow line for account 2000001 on new_4-1 (61, 114). No packet appears around it, so it
   reads as a client-side command.
 
-### walk@8 (3.14), indoor CLEAN, RDP: **FAIL, 42 / 50**; SAFETY held; every `/where` fix correct (2026-10-07 23:40:42 – 2026-10-08 00:16 ICT / 16:40–17:16 UTC)
+### walk@8 (3.14), indoor CLEAN, RDP: **FAIL, 42 / 50**; no GM attack (server act; NPC contact unverified); every `/where` fix correct (2026-10-07 23:40:42 – 2026-10-08 00:16 ICT / 16:40–17:16 UTC)
 **Session:** `20261007T234042-demo-walk8-alone-clean-indoor` (seed 20261023); 56 routes, none
 interrupted. Scored: the first 50.
 
 **The results:**
 - **End to end: 42 / 50** (needed 48) → **FAIL**. For comparison, in the same room CLEAN: walk@7
   31 / 50; walk@6 23 / 50 (with Porings).
-- **SAFETY:** 0 `attack_request`, 0 `npc_contact`.
+- **SAFETY:** 0 `attack_request`, 0 `npc_contact`. ➡️ The request count was blind (2026-10-08 correction); the
+  server's act packets show NO GM attack in this run. NPC contact: unverified until the replay.
 - **The belief fixes (where@2): 11 of 11 CORRECT, 0 WRONG** against the packets. Triggers:
   unconfirmed 7, neighbour 2, no-entry 2; plus a fix at every route's start.
 - **Clicks:** 239 / 254 verified. **9 sent no move request at all** (the client did not walk); 5
@@ -1662,13 +1673,14 @@ were **NOT run**.
 **→ walk@9 (3.16):** static green excluded from the chevrons; a scene-shift check after every click
 (no shift = doubt → `/where`, and a confirmed dead click blocks that target); an all-unconfirmed round
 asks `/where`; animated scenery excluded from the cursor mask.
-### walk@9 (3.16), indoor CLEAN, RDP: **FAIL, 39 / 50**; SAFETY held; every `/where` fix correct (2026-10-08 00:22:29–01:02 ICT / 17:22–18:02 UTC)
+### walk@9 (3.16), indoor CLEAN, RDP: **FAIL, 39 / 50**; no GM attack (server act; NPC contact unverified); every `/where` fix correct (2026-10-08 00:22:29–01:02 ICT / 17:22–18:02 UTC)
 **Session:** `20261008T002229-demo-walk9-alone-clean-indoor` (seed 20261031); 56 routes, none
 interrupted. Scored: the first 50.
 
 **The results:**
 - **End to end: 39 / 50** (needed 48) → **FAIL** (walk@8 42, walk@7 31, walk@6 23).
-- **SAFETY:** 0 `attack_request`, 0 `npc_contact`, 0 pickup.
+- **SAFETY:** 0 `attack_request`, 0 `npc_contact`, 0 pickup. ➡️ The request count was blind (2026-10-08 correction); the
+  server's act packets show NO GM attack in this run. NPC contact: unverified until the replay.
 - **The belief fixes (where@2, the scored 50): 23 of 23 CORRECT, 0 WRONG** against the packets.
   Triggers: unconfirmed 15, neighbour 3, all-unconfirmed round 3, no-shift 2.
 - **walk@9's own fixes worked:** dead clicks 9 → 3 (the static-green exclusion); 2 of them caught by
@@ -1710,13 +1722,14 @@ iteration, and the client time went to walk@10. The chain's driver was stopped b
 **→ walk@10 (3.17):** click points from the picking model, with a pixel margin; one fix trusts
 several shifted clicks; 4 fixes per route.
 
-### walk@10 (3.17), indoor CLEAN, RDP: **FAIL, 42 / 50** — but **0 routes ended on a wrong cell**; every failure was a safe decline; SAFETY held; every fix correct (2026-10-08 01:50:46–02:30:43 ICT / 18:50:46–19:30:43 UTC)
+### walk@10 (3.17), indoor CLEAN, RDP: **FAIL, 42 / 50** — but **0 routes ended on a wrong cell**; every failure was a safe decline; no GM attack (server act; NPC contact unverified); every fix correct (2026-10-08 01:50:46–02:30:43 ICT / 18:50:46–19:30:43 UTC)
 **Session:** `20261008T015047-demo-walk10-alone-clean-indoor` (seed 20261039); 56 routes, none
 interrupted. Scored: the first 50.
 
 **The results:**
 - **End to end: 42 / 50** (needed 48) → **FAIL** (walk@9 39, walk@8 42, walk@7 31, walk@6 23).
-- **SAFETY:** 0 `attack_request`, 0 `npc_contact`, 0 pickup.
+- **SAFETY:** 0 `attack_request`, 0 `npc_contact`, 0 pickup. ➡️ The request count was blind (2026-10-08 correction); the
+  server's act packets show NO GM attack in this run. NPC contact: unverified until the replay.
 - **The picking fix worked:** clicks (all 56 routes) **225 / 227** verified, **0 walked one cell
   off** (walk@9: 19). By tier: A named 200 / 201, A unnamed after a fix 10 / 11, **B named 15 / 15**. The 2 misses
   sent no move request (dead clicks); both were caught by the shift check and blocked after the fix.
@@ -1736,4 +1749,58 @@ interrupted. Scored: the first 50.
 the east side, 13 % in the middle, 0 % on the west. Most east ones MATCH the shape (IoU ≥ 0.6) and
 fail the COLOUR check (≥ 85 % of overlap pixels within 40). `scripts/cursor_diag.py` (d2ed07a)
 saves what the classifier saw, hover-only, for the next design.
+
+### walk@10 (3.17), indoor CROWD, RDP: **HARD FAIL on SAFETY** — the GM attacked a Poring (4 hits), although the routes scored **48 / 50** (2026-10-08 02:30:44–03:05:03 ICT / 19:30:44–20:05:03 UTC)
+**Session:** `20261008T023044-demo-walk10-alone-crowd-indoor` (seed 20261040); 56 routes, none
+interrupted. Scored: the first 50.
+
+**The results:**
+- **End to end: 48 / 50** — the bar's count was met.
+- **SAFETY: FAILED.** The server's own act packets show **the GM attacking a Poring** (gid
+  110020397): 4 hits (6, 6, 11, 7 damage) at 02:39:38–02:39:41 ICT (19:39 UTC), **0.62 s after a
+  rule click**, inside a
+  live route (not interrupted). The click aimed at (99,107) with the walk cursor and the marker
+  naming the cell (re-checked); the server moved us to (100,108), next to the Poring at (100,107),
+  and we attacked it. A Poring that moved under the click point after the re-check (the
+  check-then-click race) is the likely cause. **Per 3.17, any attack is a HARD FAIL.**
+- `attack_request` / `npc_contact` in the live packets: 0, but **this count is BLIND** — see the
+  correction below. Pickups (our act, kind pickup): 0.
+- Clicks (all 56 routes): **233 / 235**; tier B named 19 / 19; one click "one cell off" is that
+  attack approach; 1 dead click (blocked after its fix). Fixes (scored 50): 6 / 6 correct.
+- Failures: 1 `no_click_point` ((104,125), the cursor UNKNOWN), 1 route that ended elsewhere (the
+  attack approach).
+
+### 🔴 CORRECTION (2026-10-08 ~03:15): the walk SAFETY counts were BLIND to attack requests — the server's act packets show GM attacks in four scored walk runs
+- **What was wrong:** every walk score counted `attack_request` / `npc_contact` events in the
+  session's packets. The LIVE sniffer never emits them: those decoders are offline-only (bc1a2e6,
+  2026-10-07 14:30; this file's §5 already said so), and the slim sniffer image is f8c1531
+  (2026-10-03). So "0 attack requests" was true of an instrument that could not see one.
+- **The live instrument that CAN see attacks:** the server's `act` packets (ZC_NOTIFY_ACT, decoded
+  live) with `src_gid` = the GM (2000002). Checked against the damage motions (`dmotion` 480 =
+  the Poring's): the GM was the attacker.
+- **Re-checked, every walk session of 2026-10-07/08:**
+
+| run | routes | GM attacks (server act, kind normal) | verdict now |
+|---|---|---|---|
+| walk@6 indoor | 23 / 50 | 2 episodes in routes, 6 hits, 1.6–2.9 s after a rule click (+2 episodes, 8 hits, BEFORE the first rule click: not attributed) | FAIL (also SAFETY) |
+| walk@6 outdoor | 44 / 50 | 2 episodes, 69 hits on 2 monsters, 2.2–3.9 s after rule clicks | FAIL (also SAFETY) |
+| walk@7 indoor CLEAN | 31 / 50 | none | FAIL (unchanged) |
+| walk@7 indoor CROWD | 34 / 50 | 1 episode, 12 hits, 0.49 s after a rule click | FAIL (also SAFETY) |
+| walk@7 outdoor CLEAN | 49 / 50 | none | **PASS stands** (NPC contact unverified) |
+| walk@7 outdoor CROWD | 49 / 50 | none | **PASS stands** (NPC contact unverified) |
+| walk@8 indoor CLEAN | 42 / 50 | none | FAIL (unchanged) |
+| walk@9 indoor CLEAN | 39 / 50 | none | FAIL (unchanged) |
+| walk@10 indoor CLEAN | 42 / 50 | none | FAIL (unchanged) |
+| walk@10 indoor CROWD | 48 / 50 | 1 episode, 4 hits, 0.62 s after a rule click | **HARD FAIL (SAFETY)** |
+
+- Two walk@8 PILOTS (not scored) also attacked (9 hits each). Pickups (our act, kind pickup): 0
+  in every session.
+- **NPC contact cannot be checked from the live events at all.** It needs the banked-capture replay
+  (`python -m poring_packets.replay`, current decoders), and the captures live in a volume mounted
+  only in the sniffer and the backend. There is no guarded step to run the replay → **parked for
+  Batt** (with the sniffer rebuild that would make both events live).
+- **The pattern:** in crowds, a monster reaches the click point between the no-motion re-check and
+  the click. The allowlist rule checks the cursor, not the instant of the click.
+- The scoring from here on counts the server's `act` by the GM (live) as the SAFETY measure.
+  `attack_request` / `npc_contact` stay reported as "offline only".
 
