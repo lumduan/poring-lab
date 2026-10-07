@@ -230,3 +230,65 @@ def test_a_walk5_route_is_judged_by_where_the_packets_put_us_at_its_end(dv: Modu
         "the route ended elsewhere",
         [105, 120],
     )
+
+
+class StubBoxes:
+    """click_targets()'s Labeler: fixed boxes and one monster at a cell (what predict_sprite and
+    the session's Timeline would give)."""
+
+    def __init__(self, boxes: list[dict[str, Any]] | None, cells: dict[int, tuple[int, int]]):
+        self._boxes, self.cells = boxes, cells
+
+    def boxes(self, t: int) -> list[dict[str, Any]] | None:
+        return self._boxes
+
+    @property
+    def timeline(self) -> Any:
+        cells = self.cells
+
+        class W:
+            entities = [type("E", (), {"gid": g, "x": float(x), "y": float(y)})()
+                        for g, (x, y) in cells.items()]  # fmt: skip
+
+        return type("TL", (), {"frame_world": staticmethod(lambda t: W)})()
+
+
+def test_an_attack_click_is_resolved_to_the_box_it_hit_then_judged_by_the_act(
+    dv: ModuleType,
+) -> None:
+    """3.3 (amended): the gid comes from the boxes on the actor's frame, never from the actor."""
+    s = 10**9
+    rec = DemoRecord(
+        session=SID, actor="rule:attack@1", t_mono_ns=T, t_done_ns=T + 3 * s, rule="attack@1",
+        cue="nearest monster box",
+        action=Action(type="attack_target", points=[(700.0, 380.0)],
+                      intended=Intended(kind="entity", note="nearest")),
+    )  # fmt: skip
+    boxes = [{"gid": 7, "cls": "monster", "x1": 680, "y1": 350, "x2": 720, "y2": 390},
+             {"gid": 8, "cls": "monster", "x1": 500, "y1": 350, "x2": 540, "y2": 390},
+             {"gid": 9, "cls": "npc", "x1": 690, "y1": 360, "x2": 710, "y2": 400}]  # fmt: skip
+    targets = (StubBoxes(boxes, {7: (103, 120)}), 142.3, "run-x")
+    base = [{"t_mono_ns": T - s, "type": "map_change", "map": "m.gat", "x": 100, "y": 120}]
+    act = {"t_mono_ns": T + s, "type": "act", "src_gid": 2000002, "target_gid": 7,
+           "kind": "normal", "damage": 9}  # fmt: skip
+    v = dv.judge_attack(rec, base + [act], 2000002, None, targets)
+    assert v.status == "success", v
+    assert (v.evidence["target_gid"], v.evidence["click_to_sprite_px"]) == (7, 0.0)
+    assert v.evidence["walk_in_s"] == pytest.approx(2 * 150 / 1000)  # 3 cells away, minus one
+    assert v.evidence["offset_ms"] == 142.3
+    wrong = {"t_mono_ns": T + s // 2, "type": "attack_request", "target_gid": 8}
+    v = dv.judge_attack(rec, [*base, wrong], 2000002, None, targets)
+    assert (v.status, v.cause) == ("fail", "requested a different target")
+
+
+def test_an_attack_click_without_a_frame_box_is_ambiguous(dv: ModuleType) -> None:
+    rec = DemoRecord(
+        session=SID, actor="rule:attack@1", t_mono_ns=T, rule="attack@1", cue="x",
+        action=Action(type="attack_target", points=[(10.0, 10.0)],
+                      intended=Intended(kind="entity")),
+    )  # fmt: skip
+    assert dv.judge_attack(rec, [], 2000002, None, (StubBoxes([], {}), 0.0, None)).status == (
+        "ambiguous"
+    )
+    gm = dv.judge_attack(rec, [], 2000002, None, (StubBoxes(None, {}), 0.0, None))
+    assert (gm.status, gm.cause) == ("ambiguous", "the frame is inside a GM-command window")

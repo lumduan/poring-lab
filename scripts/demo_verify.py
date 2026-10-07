@@ -6,6 +6,10 @@
 - Reads `demo.jsonl` and the session's `packets.jsonl.gz`.
 - Fills each record's outcome with poring_dataset.verify (VERIFIER_VERSION) and writes
   `demo.verified.jsonl` beside them. The actor's stated cue is never consulted.
+- An attack click (`attack_target`, 3.3) is resolved to the gid it meant: predict_sprite's monster
+  boxes (qa_export.Labeler, v1) on the frame the actor looked at, shifted by the backend's
+  packet->frame offset (--offset-ms, default: the newest matching benchmark run); then
+  verify_attack (verify@2) with the walk-in time from the cell distance.
 - Client-side windows (menu shortcuts) are judged on the session's snapshots by the anchor map
   (§2): the window absent before, present 1 s after.
 - `interrupted.json` in a session (scripts/demo_interruptions.py: a human took the lease) makes
@@ -36,6 +40,8 @@ from poring_env.demo import DemoRecord, Outcome, read
 
 BAR = 0.95
 MAX_AMBIGUOUS = 0.10
+ROOT = Path(__file__).resolve().parents[1]
+OFFSET_MS: float | None = None  # --offset-ms; None = auto (qa_export.auto_offset_ms)
 
 
 def load_events(session_dir: Path) -> list[dict[str, Any]]:
@@ -82,6 +88,52 @@ def judge_window(rec: DemoRecord, session_dir: Path | None) -> V.Verdict:
     return V.Verdict(v.status, v.cause, {**v.evidence, **evidence})
 
 
+@functools.cache
+def click_targets(session_dir: Path, offset_ms: float | None) -> tuple[Any, float, str | None]:
+    """(a Labeler over this session's packets, the offset used, the benchmark run it came from)."""
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import qa_export
+
+    backend = str(json.loads((session_dir / "manifest.json").read_text())["backend"])
+    run = None
+    if offset_ms is None:
+        config = {"backend": backend, "client": {"name": "xfreerdp" if backend == "rdp" else None}}
+        offset_ms, run = qa_export.auto_offset_ms(config)
+    labeler = qa_export.Labeler.from_events(load_events(session_dir), backend, (1280, 720),
+                                            offset_ms)  # fmt: skip
+    return labeler, offset_ms, run
+
+
+def judge_attack(rec: DemoRecord, events: list[dict[str, Any]], aid: int, t_end: int | None,
+                 targets: Any) -> V.Verdict:  # fmt: skip
+    """§2 / 3.3: which gid the click meant (V.resolve_click on predict_sprite's monster boxes, at
+    the time of the frame the actor looked at), then verify_attack. ``targets``: click_targets()."""
+    if not rec.action.points:
+        return V.Verdict("ambiguous", "no click point")
+    labeler, offset_ms, run = targets
+    t_frame = rec.frame.t_capture_ns or rec.t_mono_ns
+    boxes = labeler.boxes(t_frame)
+    if boxes is None:
+        return V.Verdict("ambiguous", "the frame is inside a GM-command window")
+    monsters = {b["gid"]: (b["x1"], b["y1"], b["x2"], b["y2"]) for b in boxes
+                if b["cls"] == "monster"}  # fmt: skip
+    point = rec.action.points[0]
+    gid, dist = V.resolve_click((float(point[0]), float(point[1])), monsters)
+    if gid is None:
+        return V.Verdict("ambiguous", "no monster box on the actor's frame")
+    walk_s = 0.0
+    start = V.position_before(events, rec.t_mono_ns, aid)
+    ent = next((e for e in labeler.timeline.frame_world(rec.t_mono_ns).entities if e.gid == gid),
+               None)  # fmt: skip
+    if start is not None and ent is not None:
+        cells = max(abs(round(ent.x) - start[0]), abs(round(ent.y) - start[1]))
+        walk_s = max(0, cells - 1) * V.speed_before(events, rec.t_mono_ns) / 1000.0
+    v = V.verify_attack(events, rec.t_mono_ns, aid, gid, walk_s, t_end)
+    evidence = {"target_gid": gid, "click_to_sprite_px": dist, "walk_in_s": round(walk_s, 2),
+                "offset_ms": offset_ms, "offset_run": run}  # fmt: skip
+    return V.Verdict(v.status, v.cause, {**v.evidence, **evidence})
+
+
 def judge(
     rec: DemoRecord,
     events: list[dict[str, Any]],
@@ -121,6 +173,10 @@ def judge(
         return V.verify_walk(events, rec.t_mono_ns, aid, target, speed, t_end)
     if kind == "menu_shortcut":
         return judge_window(rec, session_dir)
+    if kind == "attack_target":
+        if session_dir is None:
+            return V.Verdict("ambiguous", "no session to resolve the click on")
+        return judge_attack(rec, events, aids["gm"], t_end, click_targets(session_dir, OFFSET_MS))
     return V.Verdict("ambiguous", f"no verifier for {kind} yet")
 
 
@@ -159,7 +215,15 @@ def main() -> int:
     ap.add_argument("session_dirs", type=Path, nargs="+")
     ap.add_argument("--aid-gm", type=int, default=2000002)
     ap.add_argument("--aid-player", type=int, default=2000001)
+    ap.add_argument(
+        "--offset-ms",
+        type=float,
+        default=None,
+        help="packet->frame offset for attack clicks (default: newest benchmark)",
+    )
     a = ap.parse_args()
+    global OFFSET_MS
+    OFFSET_MS = a.offset_ms
     aids = {"gm": a.aid_gm, "player": a.aid_player}
     rows: list[tuple[DemoRecord, V.Verdict]] = []
     n_events = 0

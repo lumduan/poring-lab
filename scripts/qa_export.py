@@ -153,6 +153,28 @@ class Labeler:
         region = self.manifest["game_region"]
         self.size = (region[2], region[3])
 
+    @classmethod
+    def from_events(cls, events: list[dict[str, Any]], backend: str, size: tuple[int, int],
+                    offset_ms: float, *, labels: str = "v1",
+                    k: float = K_NOSTALRO) -> "Labeler":  # fmt: skip
+        """The same boxes for packets already in memory: a DEMO session has no recording manifest
+        (demo_verify's attack branch, docs/demonstrations.md 3.3)."""
+        self = cls.__new__(cls)
+        self.labels, self.k = labels, k
+        self.sheets = Sheets() if labels == "v1" else None
+        self.manifest = {"backend": backend}
+        self.camera_path = camera_file(backend)
+        if not self.camera_path.exists():
+            raise SystemExit(f"no calibrated camera for {backend}")
+        self.camera = json.loads(self.camera_path.read_text())
+        self.indoor = load_indoor_table()
+        self.projectors = {}
+        self.offset_run, self.offset_ms = None, float(offset_ms)
+        self.timeline = Timeline(events, mapcache.load(prere=True))
+        self.windows = gm_windows(events)
+        self.size = size
+        return self
+
     def boxes(self, t: int) -> list[dict[str, Any]] | None:
         """The boxes of a frame captured at ``t`` (None inside a GM-command window)."""
         if in_windows(t, self.windows):
