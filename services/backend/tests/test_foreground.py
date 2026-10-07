@@ -359,3 +359,24 @@ def test_the_console_sees_the_gate_and_the_agent_does_not(lab: Any, tmp_path: Pa
             if msg["type"] == "status":
                 assert msg["foreground"] is None and msg["environment"] is None
                 break
+
+
+def test_an_agent_that_disconnects_holding_the_left_button_releases_it(
+    lab: Any, tmp_path: Path
+) -> None:
+    """Hold-to-walk (Batt, 2026-10-07): the agent's connection dropping mid-hold must let go."""
+    import time as _time
+
+    client, _screen = lab()
+    install(tmp_path / "settings")
+    set_mode(client, Mode.BOT)
+    with client.websocket_connect("/internal/agent") as ws:
+        ws.send_text(AgentHello(t_mono_ns=1, agent_id="t", version="0").model_dump_json())
+        hold = MouseButton(t_mono_ns=1, button="left", action="down", x=0.5, y=0.5)
+        assert send(ws, hold)["accepted"] == 1
+        assert poring(client).mux.held(Source.BOT)[1] == frozenset({"left"})
+    for _ in range(200):  # the shielded disconnect cleanup
+        if not poring(client).mux.holds_anything(Source.BOT):
+            break
+        _time.sleep(0.01)
+    assert poring(client).mux.held(Source.BOT) == (frozenset(), frozenset())

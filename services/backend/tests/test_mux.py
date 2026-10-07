@@ -290,3 +290,24 @@ def test_last_human_input_survives_a_mode_switch() -> None:
     assert mux.last_human_input_ns() == 5 * S
     assert not mux.submit(BOT, move(), 7 * S).accepted  # refused input is not "human activity"
     assert mux.last_human_input_ns() == 5 * S
+
+
+# --- hold-to-walk (Batt, 2026-10-07 ~16:10): a held LEFT button always comes back up ----------
+@pytest.mark.parametrize("path", ["interlock_red", "human_takeover", "mode_human", "release_all"])
+def test_a_held_left_button_is_released_on_every_path(path: str) -> None:
+    from poring_env.protocol import ReleaseAll
+
+    mux = InputMux(lease_ns=10**9, mode=Mode.ASSIST)
+    assert mux.submit(BOT, button("left", "down"), 0).accepted
+    if path == "interlock_red":
+        out = list(mux.release_bot(1))
+    elif path == "human_takeover":
+        out = list(mux.submit(HUMAN, Key(t_mono_ns=1, code="KeyA", action="down"), 1).inject)
+    elif path == "mode_human":
+        out = list(mux.set_mode(Mode.HUMAN, 1))
+    else:
+        out = list(mux.submit(BOT, ReleaseAll(t_mono_ns=1), 1).inject)
+    ups = [r for r in out if isinstance(getattr(r, "event", r), MouseButton)]
+    events = [getattr(r, "event", r) for r in ups]
+    assert any(e.button == "left" and e.action == "up" for e in events)
+    assert not mux.holds_anything(BOT)
