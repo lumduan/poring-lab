@@ -47,7 +47,10 @@ SEG_MAX = 5  # cells per click: a straight run, far under the server's 32 (path.
 PLAN_MAX = 48  # the A* plan's own step limit (it is split into clicks)
 NOENTRY_MIN = 0.4  # fraction of the calibrated ring mask that is red (RDP: walkable <= 0.07,
 #                    no-entry 0.66-1.0; walk5 cursor calibration 2026-10-07, 40 + 16 hovers)
-NOENTRY_MASK = Path("/dev/shm/poring-lab-tmp/walk5-cal/noentry_mask_rdp.npy")  # client pixels
+# client pixels: data/ (gitignored) survives a reboot; the design-time copy stays in /dev/shm
+_MASK_DATA = Path(__file__).resolve().parents[1] / "data/walk6/noentry_mask_rdp.npy"
+_MASK_SHM = Path("/dev/shm/poring-lab-tmp/walk5-cal/noentry_mask_rdp.npy")
+NOENTRY_MASK = _MASK_DATA if _MASK_DATA.exists() else _MASK_SHM
 RELOC_RADIUS = 2  # candidate cells: the belief +-2
 RELOC_PROBES = 8
 STEP_S, ARRIVE_S = 0.21, 0.8  # wait per cell (diagonal-safe at speed 150) + margin
