@@ -45,8 +45,21 @@ def judge(rec: DemoRecord, events: list[dict[str, Any]], aids: dict[str, int]) -
     if rec.actor.startswith("rule:harness@"):
         return None
     kind = rec.action.type
+    decline = rec.outcome.evidence.get("decline") or rec.outcome.evidence.get("rule_decline")
+    if decline:
+        return V.Verdict("fail", f"declined:{decline}")  # pre-registered: a decline is a FAIL
     if kind == "login":
         return V.verify_login(events, rec.t_mono_ns, aids[rec.action.intended.note or "gm"])
+    if kind == "walk":
+        aid = aids["gm"]
+        start = V.position_before(events, rec.t_mono_ns, aid)
+        cell = rec.action.intended.cell
+        if start is None or cell is None:
+            return V.Verdict("ambiguous", "no position fix before the click")
+        target = (start[0] + cell[0], start[1] + cell[1]) if rec.action.intended.relative else cell
+        return V.verify_walk(
+            events, rec.t_mono_ns, aid, target, V.speed_before(events, rec.t_mono_ns)
+        )
     return V.Verdict("ambiguous", f"no verifier for {kind} yet")
 
 

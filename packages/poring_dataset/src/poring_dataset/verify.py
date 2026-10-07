@@ -120,6 +120,34 @@ def verify_walk(
     return Verdict("success", None, {**evidence, "arrive_ms": (arrive - t0) // 1_000_000})
 
 
+def position_before(events: Iterable[Event], t: int, aid: int) -> tuple[int, int] | None:
+    """Our cell just before ``t``: the last warp / map entry / own stop, or a walk that has had
+    time to finish (its destination), else that walk's start."""
+    pos: tuple[int, int] | None = None
+    for e in sorted(events, key=lambda e: int(e.get("t_mono_ns", 0))):
+        te = int(e.get("t_mono_ns", 0))
+        if te >= t:
+            break
+        kind = e.get("type")
+        warped = kind in ("map_change", "map_enter") and "x" in e
+        stopped = kind == "entity_stop" and int(e.get("gid", -1)) == aid
+        if warped or stopped:
+            pos = (int(e["x"]), int(e["y"]))
+        elif kind == "self_move":
+            a, b = (int(e["x0"]), int(e["y0"])), (int(e["x1"]), int(e["y1"]))
+            pos = b if t - te >= path_seconds(a, b, 150.0) * 1e9 else a
+    return pos
+
+
+def speed_before(events: Iterable[Event], t: int, default: float = 150.0) -> float:
+    """Our walk speed (ms per cell) from the last `speed` stat change before ``t``."""
+    speed = default
+    for e in events:
+        if e.get("type") == "stat_change" and e.get("name") == "speed" and int(e["t_mono_ns"]) < t:
+            speed = float(e["value"])
+    return speed
+
+
 def verify_attack(
     events: Iterable[Event], t0: int, aid: int, target_gid: int, walk_s: float = 0.0
 ) -> Verdict:

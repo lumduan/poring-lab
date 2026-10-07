@@ -2,6 +2,7 @@
 """Run ONE rule ALONE and log every attempt (docs/demonstrations.md §3, pre-registered).
 
     rule_run.py login [--n 50] [--label login-alone]
+    rule_run.py walk --scene outdoor|indoor [--n 50] [--seed 20261007] [--label walk-alone]
 
 Batt, 2026-10-07: a rule is adopted only if it passes its bar ALONE.
 - No agent reasoning and no manual help: this script runs the rule's code only.
@@ -126,6 +127,123 @@ def run_login(n: int, label: str) -> int:
     return 0
 
 
+WALK_RULE = "walk@1"
+SCENES = {"outdoor": ("prt_fild08", 268, 107), "indoor": ("prt_church", 104, 122)}  # GM spots
+SPOT_RADIUS = 8
+WARP_SETTLE_S = 2.5
+HOVER_S = 0.35  # empty_cell's settle: the client draws the walk marker under a hovered cell
+
+
+def walk_projector(scene: str) -> tuple[object, bool]:
+    """(projector, outdoor): the RDP camera; GAT altitude outdoors, a FLAT floor indoors (the
+    pre-registered simplification: no minimap indoors, so no origin to take altitude from)."""
+    from poring_dataset import camera as cam
+
+    camera_json = json.loads((r.ROOT / "packages/poring_dataset/src/poring_dataset/"
+                              "camera_rdp.json").read_text())  # fmt: skip
+    table = cam.load_indoor_table(cam.GAT_DIR)
+    mapname = SCENES[scene][0]
+    if scene == "outdoor":
+        proj, which = cam.projector_for(camera_json, mapname, indoor_table=table)
+    else:
+        proj, which = cam.projector_for(camera_json, mapname, gat_dir=Path("/nonexistent-flat"),
+                                        indoor_table=table)  # fmt: skip
+    print(json.dumps({"projector": which}), flush=True)
+    return proj, scene == "outdoor"
+
+
+def walk_rule(agent: r.Agent, screen: r.Screen, proj: object, outdoor: bool,
+              offset: tuple[int, int], templates: object) -> dict[str, object]:  # fmt: skip
+    """walk@1, ALONE: our cell from the minimap (outdoors), the offset's pixel, the hover marker,
+    the click. Returns what it did (points / decline) -- never a verdict."""
+    import empty_cell as ec
+
+    from poring_dataset.camera import click_for_cell
+    from poring_env import selfpos
+
+    gx, gy, _, _ = r.game_region()
+    origin = (0, 0)
+    if outdoor:
+        frame = screen.grab(*r.game_region())[1][:, :, :3]
+        xy = selfpos.read_minimap_xy(frame, templates)  # type: ignore[arg-type]
+        if xy is None:
+            return {"decline": "no_selfpos"}
+        origin = xy
+    u, v = click_for_cell(proj, offset, origin)  # type: ignore[arg-type]
+    agent.move(gx + round(u), gy + round(v))
+    time.sleep(HOVER_S)
+    crop = screen.grab(*ec.crop_region(gx + round(u), gy + round(v)))[1]
+    marker = ec.marker_px(crop)
+    if marker < ec.MIN_MARKER_PX:
+        return {"decline": "no_marker", "points": [(u, v)], "marker_px": marker, "origin": origin}
+    agent.click(gx + round(u), gy + round(v))
+    return {"points": [(u, v)], "marker_px": marker, "origin": origin}
+
+
+def run_walk(scene: str, n: int, seed: int, label: str) -> int:
+    import random
+
+    import empty_cell as ec
+
+    from poring_dataset import gat as gatmod
+    from poring_dataset.camera import GAT_DIR
+    from poring_env import selfpos
+
+    mapname, sx0, sy0 = SCENES[scene]
+    walkable = gatmod.parse((GAT_DIR / f"{mapname}.gat").read_bytes()).walkable()
+    proj, outdoor = walk_projector(scene)
+    harness_proj = walk_projector("outdoor")[0] if outdoor else proj  # the harness's band check
+    templates = selfpos.load_digit_templates() if outdoor else None
+    rng = random.Random(seed)
+    sid = new_session_id(f"{label}-{scene}")
+    log = DemoLog(sid)
+    lock = record_session.read_lock(r.ROOT / "state")
+    log.start(backend=str(lock.backend), lock_seq=lock.seq, server="lab-rathena", rule=WALK_RULE,
+              n=n, scene=scene, seed=seed, account="gm")  # fmt: skip
+    print(json.dumps({"session": sid, "dir": str(log.dir), "rule": WALK_RULE, "scene": scene}),
+          flush=True)  # fmt: skip
+    t_first = r.ns()
+    with r.session(f"rule:{WALK_RULE}") as (agent, screen):
+        i = 0
+        while i < n:
+            if i % 10 == 0:
+                r.gm(agent, screen, "@killmonster2")
+            # the HARNESS: a seeded walkable spot near the scene's GM spot, then a seeded target
+            r8 = SPOT_RADIUS
+            spots = [(sx0 + rng.randint(-r8, r8), sy0 + rng.randint(-r8, r8)) for _ in range(200)]
+            sx, sy = next(((x, y) for x, y in spots if walkable[y, x]), (sx0, sy0))
+            pick = ec.pick_cell(rng, (sx, sy), walkable, harness_proj)  # type: ignore[arg-type]
+            if pick is None:
+                continue
+            dx, dy, _, _ = pick
+            r.gm(agent, screen, f"@warp {mapname} {sx} {sy}")
+            time.sleep(WARP_SETTLE_S)
+            t0 = r.ns()
+            pre = snap(log, screen, f"{i:03d}-walk-before")
+            did = walk_rule(agent, screen, proj, outdoor, (dx, dy), templates)
+            post = snap(log, screen, f"{i:03d}-walk-after", after_ns=t0)
+            pts = [tuple(p) for p in did.get("points", [])]  # type: ignore[attr-defined]
+            evidence = {k: v for k, v in did.items() if k != "points"}
+            log.append(DemoRecord(
+                session=sid, actor=f"rule:{WALK_RULE}", t_mono_ns=t0, t_done_ns=r.ns(), frame=pre,
+                frame_after=post, rule=WALK_RULE, scene=f"{scene}:{mapname}",
+                cue="walk@1: minimap origin (outdoor) or flat floor (indoor) -> click_for_cell -> "
+                    "hover walk marker -> click",
+                action=Action(type="walk", points=pts,  # type: ignore[arg-type]
+                              intended=Intended(kind="cell", cell=(dx, dy), relative=True,
+                                                note=f"harness spot {sx},{sy}")),
+                outcome={"status": "pending", "evidence": evidence},  # type: ignore[arg-type]
+            ))  # fmt: skip
+            print(json.dumps({"attempt": i, "spot": [sx, sy], "offset": [dx, dy], **evidence}),
+                  flush=True)  # fmt: skip
+            time.sleep(max(abs(dx), abs(dy)) * 0.2 + 1.0)
+            i += 1
+    events, anchor = record_session.write_packets(log.dir, t_first, r.ns())
+    log.finish(packet_events=len(events), packet_anchor=anchor, attempts=n)
+    print(json.dumps({"session": sid, "packet_events": len(events), "attempts": n}), flush=True)
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -134,9 +252,16 @@ def main() -> int:
     lg = sub.add_parser("login")
     lg.add_argument("--n", type=int, default=50)
     lg.add_argument("--label", default="login-alone")
+    wk = sub.add_parser("walk")
+    wk.add_argument("--scene", choices=sorted(SCENES), required=True)
+    wk.add_argument("--n", type=int, default=50)
+    wk.add_argument("--seed", type=int, default=20261007)
+    wk.add_argument("--label", default="walk-alone")
     a = ap.parse_args()
     if a.rule == "login":
         return run_login(a.n, a.label)
+    if a.rule == "walk":
+        return run_walk(a.scene, a.n, a.seed, a.label)
     return 2
 
 

@@ -156,3 +156,17 @@ def test_menu_verdicts() -> None:
     assert verify_menu(False, True).status == "success"
     assert verify_menu(False, False).status == "fail"
     assert verify_menu(True, True).status == "ambiguous"
+
+
+def test_position_before_uses_the_last_fix_and_finished_walks() -> None:
+    from poring_dataset.verify import position_before, speed_before
+
+    evs = [ev(0, "map_change", map="prt_fild08.gat", x=100, y=100),
+           ev(1000, "self_move", x0=100, y0=100, x1=103, y1=100),
+           ev(5000, "entity_stop", gid=MOB, x=1, y=1),
+           ev(6000, "stat_change", name="speed", value=120)]  # fmt: skip
+    assert position_before(evs, T0 + int(500e6), AID) == (100, 100)
+    assert position_before(evs, T0 + int(1200e6), AID) == (100, 100)  # still walking
+    assert position_before(evs, T0 + int(3000e6), AID) == (103, 100)  # long finished
+    assert position_before([], T0, AID) is None
+    assert speed_before(evs, T0 + int(7000e6)) == 120.0 and speed_before(evs, T0) == 150.0
