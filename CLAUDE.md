@@ -220,6 +220,14 @@ ports, quickstart) and `docs/adr/`.
     the paste event becomes a `ClipboardPaste`;
   - local: left to the viewer's OS.
   - Don't move key capture back to a non-editable element, or ⌘V stops working.
+- **Human releases with nothing held are not sent** (Batt, 2026-10-07): in ASSIST a human
+  `release_all` takes the lease and makes the bot let go.
+  - The console sends one on blur, hidden tab or paste ONLY while it holds something
+    (`lib/watch.ts` `releaseNeeded`).
+  - `AppState.release_source` submits nothing for a source that holds nothing.
+  - "Watch only" (per tab, off on load) forwards no input at all; `mayForward` is the backstop in
+    `Console.send`. A new `BrowserToBackend` type must be classified in `watch.ts` (typecheck
+    fails otherwise).
 - **Keys are `KeyboardEvent.code`**, mapped to the evdev code and then the X keycode (+8) in
   `poring_env/keymap.py`. Meta is mapped only for the console toolbar's Win button; the browser never
   forwards physical Meta. `scripts/gen_protocol.sh` also regenerates the frontend's `keycodes.gen.ts`

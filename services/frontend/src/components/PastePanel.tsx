@@ -8,6 +8,8 @@ import { checkPaste, describePaste, formatBytes, PASTE_MAX_BYTES } from "@/lib/t
 type Props = {
   enabled: boolean; // the backend offers clipboard paste (Status.clipboard_enabled)
   connected: boolean;
+  /** Watch only is on in this tab: nothing is sent (Batt, 2026-10-07). */
+  watchOnly?: boolean;
   mode: Mode | null;
   pending: boolean;
   result: PasteResult | null;
@@ -22,7 +24,15 @@ const button =
  * Clipboard API is unavailable -- but a real paste into a focused textarea works everywhere: the
  * user presses Cmd+V here, checks the text, and sends it. The backend then pastes it into
  * whichever Windows window has focus (click the target field in the remote screen first). */
-export default function PastePanel({ enabled, connected, mode, pending, result, onSend }: Props) {
+export default function PastePanel({
+  enabled,
+  connected,
+  watchOnly = false,
+  mode,
+  pending,
+  result,
+  onSend,
+}: Props) {
   const [text, setText] = useState("");
   const [sentText, setSentText] = useState<string | null>(null);
   const check = checkPaste(text);
@@ -37,7 +47,9 @@ export default function PastePanel({ enabled, connected, mode, pending, result, 
     ? "Clipboard paste is off on the backend (RDP_CLIPBOARD=text-to-remote)."
     : !connected
       ? "Input channel disconnected."
-      : mode === "BOT"
+      : watchOnly
+        ? "Watch only is on: nothing is sent. Turn it off to paste."
+        : mode === "BOT"
         ? "The mux is in BOT mode: switch to HUMAN or ASSIST to paste."
         : null;
 

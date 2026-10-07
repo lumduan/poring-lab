@@ -29,6 +29,7 @@ import {
 import type { Size, ViewMode } from "@/lib/view";
 import { LatestSlot, OffsetEstimator } from "@/lib/timing";
 import { checkPaste, describePaste } from "@/lib/transfer";
+import { mayForward } from "@/lib/watch";
 import { backendWsBase, ReconnectingSocket } from "@/lib/ws";
 
 type Props = { backendUrl: string | null };
@@ -73,6 +74,10 @@ export default function Console({ backendUrl }: Props) {
   const [frameSize, setFrameSize] = useState<Size>({ width: 1280, height: 800 });
   const [viewMode, setViewMode] = useState<ViewMode>("fit");
   const [focused, setFocused] = useState(false);
+  // Watch only (Batt, 2026-10-07): this tab forwards no input; per tab, off on every load, so a
+  // reload always brings instant takeover back.
+  const [watchOnly, setWatchOnlyState] = useState(false);
+  const watchOnlyRef = useRef(false);
   const pasteIdRef = useRef(0);
   // Phase 0 console knob, pushed by the backend in Status (docs/phase0-latency.md).
   const paintModeRef = useRef<"decode" | "raf">("decode");
@@ -309,9 +314,16 @@ export default function Console({ backendUrl }: Props) {
     };
   }, [backendUrl, showToast]);
 
+  // The backstop under every handler: in watch-only mode no input leaves the tab (lib/watch.ts).
   const send = useCallback((message: BrowserToBackend) => {
+    if (!mayForward(message.type, watchOnlyRef.current)) return;
     inputRef.current?.send(message);
   }, []);
+
+  const setWatchOnly = (on: boolean) => {
+    watchOnlyRef.current = on; // StreamCanvas lets go of what it holds first (release_all passes)
+    setWatchOnlyState(on);
+  };
 
   const stamp = () => ({ t_mono_ns: browserNowNs(), frame_id: frameIdRef.current });
 
@@ -321,18 +333,21 @@ export default function Console({ backendUrl }: Props) {
   const setSecret = (on: boolean) => send({ type: "secret_input", ...stamp(), on });
 
   const sendKeys = (steps: KeyStep[]) => {
+    if (watchOnlyRef.current) return;
     for (const step of steps) {
       if (held.apply(step)) send({ type: "key", ...stamp(), code: step.code, action: step.action });
     }
   };
 
   const releaseAll = () => {
+    if (watchOnlyRef.current) return;
     held.clear();
     send({ type: "release_all", ...stamp() });
   };
 
   /** ADR-0004: the backend pastes ``text`` into the focused Windows window (human-only). */
   const sendPaste = useCallback((text: string, source: PasteSource): boolean => {
+    if (watchOnlyRef.current) return false;
     pasteIdRef.current += 1;
     pasteSourceRef.current = source;
     setPasteSource(source);
@@ -353,7 +368,9 @@ export default function Console({ backendUrl }: Props) {
   const pasteFromScreen = useCallback(
     (text: string) => {
       const check = checkPaste(text);
-      if (text.length === 0) {
+      if (watchOnlyRef.current) {
+        showToast({ tone: "error", text: "Watch only is on: nothing was pasted." });
+      } else if (text.length === 0) {
         showToast({ tone: "error", text: "The clipboard holds no text to paste." });
       } else if (!check.ok) {
         showToast({ tone: "error", text: check.message ?? "Cannot paste this." });
@@ -376,6 +393,11 @@ export default function Console({ backendUrl }: Props) {
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-lg font-semibold tracking-tight">poring-lab console</h1>
         <div className="flex items-center gap-3">
+          {watchOnly && (
+            <span className="rounded-md bg-amber-500 px-2 py-0.5 text-xs font-semibold text-neutral-950">
+              WATCH ONLY
+            </span>
+          )}
           <span className="font-mono text-xs text-neutral-400">
             {status?.mode === "ASSIST"
               ? lease == null
@@ -397,6 +419,8 @@ export default function Console({ backendUrl }: Props) {
         disabled={!links.input}
         mode={viewMode}
         secret={status?.human_secret ?? false}
+        watchOnly={watchOnly}
+        onWatchOnlyChange={setWatchOnly}
         onKeys={sendKeys}
         onReleaseAll={releaseAll}
         onModeChange={setViewMode}
@@ -412,6 +436,7 @@ export default function Console({ backendUrl }: Props) {
         onFocusChange={setFocused}
         onPaste={pasteFromScreen}
         moveIntervalMs={status?.move_interval_ms ?? null}
+        watchOnly={watchOnly}
         overlay={
           toast && (
             <div
@@ -432,6 +457,7 @@ export default function Console({ backendUrl }: Props) {
             <PastePanel
               enabled={status?.clipboard_enabled === true}
               connected={links.input}
+              watchOnly={watchOnly}
               mode={status?.mode ?? null}
               pending={pastePending && pasteSource === "panel"}
               result={pasteSource === "panel" ? pasteResult : null}
@@ -451,7 +477,9 @@ export default function Console({ backendUrl }: Props) {
       <PacketTimeline backendUrl={backendUrl} />
       <StatsPanel stats={stats} status={status} links={links} />
       <p className="text-xs text-neutral-500">
-        {focused
+        {watchOnly
+          ? "Watch only: nothing you do on the screen is sent, so the bot keeps control in ASSIST. Switching to HUMAN still works. Turn Watch only off to take over instantly."
+          : focused
           ? "Keyboard and mouse go to the remote desktop (through the backend's input mux). ⌘V pastes your clipboard into the focused Windows field. Click outside the screen to release."
           : "Click the screen to control it. Leaving it (blur or hiding the tab) releases anything held."}
       </p>

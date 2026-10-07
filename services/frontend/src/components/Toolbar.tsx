@@ -2,12 +2,16 @@
 
 import { TOOLBAR, type KeyStep, type ToolbarKey } from "@/lib/keys";
 import type { ViewMode } from "@/lib/view";
+import { watchToggle } from "@/lib/watch";
 
 type Props = {
   disabled: boolean;
   mode: ViewMode;
   /** Secret typing, as the backend reports it (Status.human_secret): true while ANY console has it on. */
   secret: boolean;
+  /** Watch only: this tab forwards no input (Batt, 2026-10-07). */
+  watchOnly: boolean;
+  onWatchOnlyChange: (on: boolean) => void;
   onKeys: (steps: KeyStep[]) => void;
   onReleaseAll: () => void;
   onModeChange: (mode: ViewMode) => void;
@@ -21,11 +25,15 @@ const button =
  * defined in lib/keys.ts and never form one of the mux's reserved xfreerdp chords. */
 const secretOn =
   "rounded-md border border-red-500 bg-red-900/60 px-2.5 py-1 text-sm font-semibold text-red-100 hover:bg-red-900 disabled:opacity-40";
+const watchOn =
+  "rounded-md border border-amber-400 bg-amber-500 px-2.5 py-1 text-sm font-semibold text-neutral-950 hover:bg-amber-400";
 
 export default function Toolbar({
   disabled,
   mode,
   secret,
+  watchOnly,
+  onWatchOnlyChange,
   onKeys,
   onReleaseAll,
   onModeChange,
@@ -39,7 +47,7 @@ export default function Toolbar({
           type="button"
           className={button}
           title={TOOLBAR[key].title}
-          disabled={disabled}
+          disabled={disabled || watchOnly}
           onClick={() => onKeys(TOOLBAR[key].steps)}
         >
           {TOOLBAR[key].label}
@@ -49,7 +57,7 @@ export default function Toolbar({
         type="button"
         className={button}
         title="Release every key and button this tab holds on the remote side"
-        disabled={disabled}
+        disabled={disabled || watchOnly}
         onClick={onReleaseAll}
       >
         Release keyboard
@@ -67,6 +75,15 @@ export default function Toolbar({
         onClick={() => onSecretChange(!secret)}
       >
         {secret ? "Secret typing ON" : "Secret typing"}
+      </button>
+      <button
+        type="button"
+        className={watchOnly ? watchOn : button}
+        aria-pressed={watchOnly}
+        title={watchToggle(watchOnly).title}
+        onClick={() => onWatchOnlyChange(!watchOnly)}
+      >
+        {watchToggle(watchOnly).label}
       </button>
       <span className="mx-1 h-5 w-px bg-neutral-700" aria-hidden />
       <button

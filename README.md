@@ -144,9 +144,17 @@ Open **http://192.168.1.13:3000** (`HOST_LAN_IP`). What it gives you:
 - **View:** Fit (aspect ratio kept, letterboxed) or 1:1.
 - **Input:** click the screen to give it keyboard focus. That focus lives in a hidden textarea, so
   ⌘V pastes your clipboard into Windows (ADR-0004). Leaving it, or hiding the tab, releases
-  everything held.
+  everything held. It sends that release only while something IS held, and a closed tab holding
+  nothing submits nothing: in ASSIST any human event takes the lease and makes the bot let go
+  (Batt, 2026-10-07).
 - **Toolbar:** Ctrl+Alt+Del (sent as Ctrl+Alt+End, RDP's secure-attention mapping), Win, Alt+Tab, Esc,
-  Release keyboard.
+  Release keyboard, Secret typing, and **Watch only**.
+  - Watch only forwards no input at all from this tab: no mouse, keys, wheel or paste.
+  - So the bot keeps control in ASSIST while you watch; the mux mode is unchanged and switching to
+    HUMAN still works.
+  - Turning it on first releases what the tab holds. Off restores instant takeover, and every
+    page load starts with it off.
+  - An amber WATCH ONLY chip shows on the screen and in the header.
 - **Top bar (every page):** Console / Settings / Label QA, and the **mode badge**, always visible:
   **BOT** red and pulsing ("BOT in control"), **ASSIST** amber, **HUMAN** blue, grey = no status.
 - **Header:** mode switch (the same colours) and ASSIST lease. **Panel:** stats. A banner shows if

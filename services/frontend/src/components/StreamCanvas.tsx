@@ -13,6 +13,7 @@ import {
 import { type BrowserToBackend } from "@/lib/protocol";
 import { eventTimeMs, moveDelayMs } from "@/lib/timing";
 import { drawRect, normalizePoint, type Size, type ViewMode } from "@/lib/view";
+import { releaseNeeded } from "@/lib/watch";
 
 type Props = {
   videoRef: RefObject<HTMLCanvasElement | null>;
@@ -28,6 +29,9 @@ type Props = {
   overlay?: ReactNode;
   /** Pointer-move send interval (Status.move_interval_ms); null = one per animation frame. */
   moveIntervalMs?: number | null;
+  /** Watch only (Batt, 2026-10-07): forward no input at all, so the bot keeps control in ASSIST.
+   * Turning it on lets go of what this tab holds first; turning it off restores instant takeover. */
+  watchOnly?: boolean;
   children?: ReactNode;
 };
 
@@ -51,6 +55,7 @@ export default function StreamCanvas({
   onPaste,
   overlay,
   moveIntervalMs = null,
+  watchOnly = false,
   children,
 }: Props) {
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -60,6 +65,9 @@ export default function StreamCanvas({
   useEffect(() => {
     moveIntervalRef.current = moveIntervalMs;
   }, [moveIntervalMs]);
+  // Read live by the handlers too; flipped only AFTER the release below (see the effect).
+  const watchOnlyRef = useRef(watchOnly);
+  const releaseRef = useRef<() => void>(() => {});
   const [viewport, setViewport] = useState<Size>({ width: 0, height: 0 });
 
   useEffect(() => {
@@ -132,12 +140,16 @@ export default function StreamCanvas({
       flushNow();
       send({ type: "key", ...stamp(timeStampMs), code: step.code, action: step.action });
     };
+    // Only while something is held (Batt, 2026-10-07): in ASSIST a release_all is a human event,
+    // so one sent on every blur or hidden tab took the mux's lease and made the bot let go.
     const releaseAll = () => {
       flushNow();
+      if (!releaseNeeded(held.codes, buttons)) return;
       held.clear();
       buttons.clear();
       send({ type: "release_all", ...stamp() });
     };
+    releaseRef.current = releaseAll;
     const buttonDown = (e: PointerEvent, button: ButtonName) => {
       const p = at(e);
       if (!p.inside) return; // presses in the letterbox are not clicks on the remote screen
@@ -153,6 +165,7 @@ export default function StreamCanvas({
     };
 
     const onPointerMove = (e: PointerEvent) => {
+      if (watchOnlyRef.current) return;
       if (e.button >= 0) {
         const button = buttonName(e.button);
         if (button) {
@@ -170,8 +183,12 @@ export default function StreamCanvas({
     };
     // The default action of a press would move focus to <body> right after we focus the capture
     // textarea (the canvas is not focusable); it would also start a text selection.
-    const onMouseDown = (e: MouseEvent) => e.preventDefault();
+    // Watch only: the handlers return before preventDefault, so the page behaves as a page.
+    const onMouseDown = (e: MouseEvent) => {
+      if (!watchOnlyRef.current) e.preventDefault();
+    };
     const onPointerDown = (e: PointerEvent) => {
+      if (watchOnlyRef.current) return;
       e.preventDefault();
       input.focus({ preventScroll: true });
       const button = buttonName(e.button);
@@ -180,11 +197,13 @@ export default function StreamCanvas({
       buttonDown(e, button);
     };
     const onPointerUp = (e: PointerEvent) => {
+      if (watchOnlyRef.current) return;
       e.preventDefault();
       const button = buttonName(e.button);
       if (button) buttonUp(e, button);
     };
     const onWheel = (e: WheelEvent) => {
+      if (watchOnlyRef.current) return;
       e.preventDefault();
       if (!at(e).inside) return;
       const dy = wheel.push(e);
@@ -194,6 +213,7 @@ export default function StreamCanvas({
       }
     };
     const onKeyDown = (e: KeyboardEvent) => {
+      if (watchOnlyRef.current) return;
       // "paste": let the browser paste natively (-> onPasteEvent); never send the chord itself.
       // "local": Cmd/Win combos and keys the backend can't inject stay with the viewer's OS.
       if (keyDecision(e, isMac) !== "forward") return;
@@ -202,6 +222,7 @@ export default function StreamCanvas({
       sendKey({ code: e.code, action: "down" }, e.timeStamp);
     };
     const onKeyUp = (e: KeyboardEvent) => {
+      if (watchOnlyRef.current) return;
       if (e.metaKey || !shouldForwardPhysical(e.code)) return;
       e.preventDefault();
       // HeldKeys drops stray ups, e.g. the V of a paste chord, which was never sent down.
@@ -212,7 +233,8 @@ export default function StreamCanvas({
       const text = e.clipboardData?.getData("text/plain") ?? "";
       input.value = "";
       // A forwarded Ctrl/Shift still held on Windows would turn the backend's Ctrl+V into
-      // Ctrl+Shift+V (or worse): release everything first, exactly as a blur does.
+      // Ctrl+Shift+V (or worse): release everything first, exactly as a blur does. In watch-only
+      // mode nothing is held, and the console refuses the paste itself (with a toast).
       releaseAll();
       onPaste?.(text);
     };
@@ -230,7 +252,9 @@ export default function StreamCanvas({
       releaseAll();
       onFocusChange?.(false);
     };
-    const onContextMenu = (e: Event) => e.preventDefault(); // right-click belongs to the game
+    const onContextMenu = (e: Event) => {
+      if (!watchOnlyRef.current) e.preventDefault(); // right-click belongs to the game
+    };
 
     box.addEventListener("pointermove", onPointerMove);
     box.addEventListener("pointerdown", onPointerDown);
@@ -268,6 +292,12 @@ export default function StreamCanvas({
     };
   }, [videoRef, frameIdRef, held, send, onFocusChange, onPaste]);
 
+  // Turning watch-only ON: let go of what this tab holds while still forwarding, THEN go quiet.
+  useEffect(() => {
+    if (watchOnly && !watchOnlyRef.current) releaseRef.current();
+    watchOnlyRef.current = watchOnly;
+  }, [watchOnly]);
+
   const rect = drawRect(viewport, frameSize, mode);
   const stageStyle =
     mode === "fit"
@@ -278,8 +308,14 @@ export default function StreamCanvas({
     <div
       ref={viewportRef}
       role="application"
-      aria-label="Remote Windows desktop. Click to control it."
-      className={`relative h-[calc(100vh-15rem)] min-h-64 w-full cursor-crosshair select-none rounded-md border border-neutral-800 bg-black outline-none focus-within:ring-2 focus-within:ring-sky-500 ${
+      aria-label={
+        watchOnly
+          ? "Remote Windows desktop, watch only: nothing you do here is sent."
+          : "Remote Windows desktop. Click to control it."
+      }
+      className={`relative h-[calc(100vh-15rem)] min-h-64 w-full ${
+        watchOnly ? "cursor-default" : "cursor-crosshair"
+      } select-none rounded-md border border-neutral-800 bg-black outline-none focus-within:ring-2 focus-within:ring-sky-500 ${
         mode === "fit" ? "overflow-hidden" : "overflow-auto"
       }`}
     >
@@ -304,6 +340,11 @@ export default function StreamCanvas({
         />
         {children}
       </div>
+      {watchOnly && (
+        <div className="pointer-events-none absolute top-2 right-2 rounded-md bg-amber-500 px-2 py-0.5 text-xs font-semibold text-neutral-950 shadow">
+          WATCH ONLY: your input is not sent
+        </div>
+      )}
       {overlay && (
         <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center">
           {overlay}

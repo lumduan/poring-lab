@@ -857,7 +857,13 @@ class AppState:
     async def release_source(self, source: Source) -> None:
         """Release everything ``source`` holds -- a closed tab or a dead agent must never leave a
         key or button down on the one session. Runs as its own shielded task so it completes even
-        when the connection handler is being cancelled (server shutdown, test client teardown)."""
+        when the connection handler is being cancelled (server shutdown, test client teardown).
+
+        Holding nothing, there is nothing to release and nothing is submitted (Batt, 2026-10-07,
+        console A): in ASSIST a human ReleaseAll takes the lease and makes the bot let go, so a
+        console tab that merely closed or reconnected used to interrupt the bot."""
+        if not self.mux.holds_anything(source):
+            return
         task = asyncio.create_task(
             self.submit_many(source, [ReleaseAll(t_mono_ns=monotonic_ns())]),
             name=f"release-{source}",

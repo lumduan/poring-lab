@@ -380,3 +380,38 @@ def test_an_agent_that_disconnects_holding_the_left_button_releases_it(
             break
         _time.sleep(0.01)
     assert poring(client).mux.held(Source.BOT) == (frozenset(), frozenset())
+
+
+# --- console A (Batt, 2026-10-07): a release with nothing held is not a human event ------------
+
+
+def test_a_console_tab_that_closes_holding_nothing_takes_no_lease(lab: Any) -> None:
+    """In ASSIST a human ReleaseAll takes the lease and makes the bot let go (mux.py). A console
+    tab that merely closed or reconnected, holding nothing, used to interrupt the bot that way."""
+    client, _screen = lab()
+    set_mode(client, Mode.ASSIST)  # its own /ws/input closes here, holding nothing
+    state = poring(client)
+    assert state.mux.last_human_input_ns() is None
+    with client.websocket_connect("/internal/agent") as ws:
+        ws.send_text(AgentHello(t_mono_ns=1, agent_id="t", version="0").model_dump_json())
+        hold = MouseButton(t_mono_ns=1, button="left", action="down", x=0.5, y=0.5)
+        assert send(ws, hold)["accepted"] == 1, "no lease: the bot may act"
+        client.portal.call(state.release_source, Source.HUMAN)  # the tab's disconnect cleanup
+        assert state.mux.held(Source.BOT)[1] == frozenset({"left"}), "the bot still holds"
+        assert not state.mux.lease_active(monotonic_ns())
+        assert state.mux.last_human_input_ns() is None
+
+
+def test_a_console_tab_that_closes_holding_a_key_still_releases_it(lab: Any) -> None:
+    client, _screen = lab()
+    state = poring(client)
+    with client.websocket_connect("/ws/input") as ws:
+        ws.send_text(k("KeyA", "down").model_dump_json())
+        end = time.monotonic() + 3
+        while not state.mux.holds_anything(Source.HUMAN):
+            assert time.monotonic() < end
+            time.sleep(0.01)
+    client.portal.call(state.release_source, Source.HUMAN)
+    assert state.mux.held(Source.HUMAN) == (frozenset(), frozenset())
+    ups = [e for e in client.fake.events if isinstance(e, Key) and e.code == "KeyA"]
+    assert [e.action for e in ups][-1] == "up"
