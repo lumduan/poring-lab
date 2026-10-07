@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [demonstrations.md, knowledge/README.md, adr/0011-ui-anchor-map.md, adr/0012-locale-agnostic-ui.md, adr/0015-phase4-planner-linter-executor.md, phase2-plan.md]
-next_action: "Cut the window anchors (status, skills, inventory, equipment) from the demonstration snapshots; pre-register and run open_window@1; then the walk@1 alone-test results; NPC/shop decoders for wave 3."
+next_action: "Run walk@3 (demonstrations.md 3.5; walk@1/@2 failed on a one-motion hover). Cut the window anchors (status, skills, inventory, equipment) from the demonstration snapshots; pre-register and run open_window@1; NPC/shop decoders for wave 3."
 ---
 
 # Phase 4 UI: the example workflow's windows, shortcuts and NPCs
@@ -98,7 +98,7 @@ as the `npc` class.
 | L1 concept | L2 | L3 | alone-test |
 |---|---|---|---|
 | session.login | signatures + offsets (ro_agent) | the server's address (settings store) | login@1 RDP **PASS 50/50**; S2 to do |
-| nav.walk_to | the RDP / console cameras, the walk-marker cue | GAT walkability | walk@1: pre-registered, next |
+| nav.walk_to | the RDP / console cameras, the walk-marker cue (RDP only; two-motion hover) | GAT walkability | walk@1 FAIL, walk@2 FAIL 0/18 (one-motion hover); walk@3 pre-registered, next |
 | ui.open_window | shortcuts demonstrated; anchors NOT yet cut (resolution fails closed) | – | open_window@1: after the anchors |
 | nav.read_position | the minimap readout (T0 templates restored) | – | read_position@1 |
 | vitals.read | the basic-info bars (anchor map) | – | – |

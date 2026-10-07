@@ -3,12 +3,17 @@
 
     walk_marker_calibrate.py --scene outdoor|indoor [--n 30] [--seed 7] --out /dev/shm/...json
 
-The GM stands at the scene spot (this script warps there and closes the chat: an OPEN chat input
-suppresses the marker, 2026-10-07). It hovers n WALKABLE cells and n NON-walkable cells (from the
-map's GAT) around it, inside the click band, and counts each candidate filter's marker pixels in the
-90x90 hover crop. A threshold is usable only if the walkable hovers and the non-walkable hovers
-SEPARATE. The output (counts per hover, per filter) goes to /dev/shm. Client-derived crops are
-never written.
+The GM stands at the scene spot (this script warps there and closes the chat). It hovers n
+WALKABLE cells and n NON-walkable cells (from the map's GAT) around it, inside the click band, and
+counts each candidate filter's marker pixels in the 90x90 hover crop.
+- Each hover is TWO motion events (3 px off, then the cell). That is what made the marker appear:
+  the client draws it only on a second motion at the spot (probe 2026-10-07: one jump 0/18, a
+  second move 18/18). rule_run.hover_marker does the same since walk@3.
+- (Corrected 2026-10-07 ~13:15: this said an open chat input suppresses the marker. It does not:
+  6/6 markers drawn with the chat open and two moves. walk@1's misses were the one-jump hover.)
+
+A threshold is usable only if the walkable hovers and the non-walkable hovers SEPARATE. The output
+(counts per hover, per filter) goes to /dev/shm. Client-derived crops are never written.
 """
 
 from __future__ import annotations

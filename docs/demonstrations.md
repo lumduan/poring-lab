@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [phase3-plan.md, phase4-ui.md, adr/0007-packet-ground-truth-channel.md, adr/0011-ui-anchor-map.md, adr/0015-phase4-planner-linter-executor.md]
-next_action: "login@1 PASSED on RDP (50/50, 2026-10-07); S2 re-test in an evening S2 session. Next: walk@1 alone-test both scenes (n=50 each); attack@1 after the v0-JPEG run (GPU, R1-R3). Score each ONCE as written here."
+next_action: "login@1 PASSED on RDP (50/50, 2026-10-07). walk@1 and walk@2 FAILED: the rule hovered with ONE motion event and the client draws the walk marker only on a second (§Results). Next: walk@3 (3.5), outdoor then indoor, n=50 each; attack@1 after the v0-JPEG run (GPU, R1-R3); S2 re-tests in an evening S2 session. Score each ONCE as written here."
 ---
 
 # Outcome-verified demonstrations -> rules -> labels
@@ -169,6 +169,8 @@ Common rules:
 **What changes from walk@1:**
 - **The HARNESS closes the chat after every GM command** (an open chat input suppresses the walk
   marker), then brings the client to the front.
+  ➡️ **The parenthesis is WRONG** (found 13:10, §Results walk@2): an open chat does not suppress
+  the marker. The change is harmless and walk@3 keeps it as the calibration's UI state.
 - **The seed is 20261008**, so the situations are new.
 - **The rule's hover cue is re-calibrated for RDP** (`scripts/walk_marker_calibrate.py`, design
   time, chat closed):
@@ -190,6 +192,32 @@ Common rules:
   that a decline is a FAIL.
 - **A run is INVALID** (re-run once the cause is removed) only on a harness defect found
   afterwards. A rule failure is reported as is.
+
+### 3.5 walk@3 (pre-registered 2026-10-07 ~13:20, BEFORE its run; replaces walk@2 after §Results)
+**What changes from walk@2:**
+- **The rule's HOVER is two motion events:** 3 px up-left of the cell, 50 ms, then onto the cell,
+  0.4 s, then the crop. That is exactly the calibration's procedure (`rule_run.hover_marker`;
+  L2 `cue.walk_marker.hover`, drift-tested). The cue is unchanged: `green_v2` ≥ 60 px.
+- **The HARNESS enters the scene once** before attempt 0: a warp onto the scene's map, then 7 s.
+  walk@2's attempt 0 declined `no_selfpos`: 2.5 s after the first warp onto the map, the minimap
+  was not drawn yet. Warps within the map keep 2.5 s (the probe read the minimap 18 / 18).
+- **The seed is 20261009**, so the situations are new. The probes used seeds 4242 and 777, never
+  the run's.
+- **A systematic stop:** the run stops when the same decline repeats 10 times in a row, and is
+  scored as it stands. Otherwise it runs to n = 50.
+
+**Unchanged:**
+- The projection: outdoors the minimap origin + GAT altitude; indoors the flat floor with the RDP
+  camera's indoor block. That block is still NOT validated on RDP, so indoor misses remain an
+  EXPECTED failure source, stated in advance.
+- The harness's `close_chat` + `activate_client` before each attempt.
+- The verifier (verify@1), the bar (≥ 48 / 50 per scene), n = 50 per scene, and the rule that a
+  decline is a FAIL.
+
+**Order:** outdoor, then indoor. Each is scored once by `demo_verify.py`.
+
+**Design-time evidence, for the record (not a test):** the probes' 30 hovers were all outdoors on
+prt_fild08. Nothing was probed indoors.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
@@ -228,7 +256,11 @@ scripts, static data per ADR-0015) are pre-registered here before their tests.
 - **The L1 entry** `session.login` records this RDP pass in `verified_on`. Its status stays
   UNVERIFIED until the S2 re-test passes.
 
-### walk@1, outdoor, RDP: **STOPPED at 5 / 50; the run is INVALID (a harness defect), plus a rule finding** (2026-10-07 12:51–12:53 ICT)
+### walk@1, outdoor, RDP: **FAIL, a RULE failure** (stopped at 5 / 50) (2026-10-07 12:51–12:53 ICT)
+> ➡️ **Corrected 2026-10-07 ~13:15.** This run was first recorded as INVALID (a harness defect).
+> That attribution was wrong (Cause 1 below). Its misses came from the rule's one-motion hover,
+> the same as walk@2's (§walk@2). So walk@1 is a rule FAIL, not an invalid run.
+
 - **Session:** `20261007T125146-demo-walk-alone-outdoor`.
 - **All 5 attempts declined:**
   - attempt 0: `no_selfpos`. It came right after the first map change (prt_church → prt_fild08),
@@ -237,7 +269,10 @@ scripts, static data per ADR-0015) are pre-registered here before their tests.
     each time (it equalled the harness's warp spot).
 - **The run was stopped once the verdict could no longer change:** 4 failures cap it at 46 / 50,
   under the 48 bar.
-- **Cause 1, a HARNESS defect:** the harness's GM `@warp` opens the chat to type, and it never
+- ~~**Cause 1, a HARNESS defect**~~ ➡️ **WRONG, see the correction above and §walk@2:** an open
+  chat does not suppress the marker (6 / 6 drawn with it open). The hand check below did not control
+  how many times the cursor moved (the likely confound). As first written:
+  the harness's GM `@warp` opens the chat to type, and it never
   closed it again. With the chat input open, the client draws NO walk marker under the cursor
   (checked by hand: chat open → 0 marker px; chat closed → the chevrons are drawn). The tested
   situations were therefore not valid ones; the harness must close the chat after every GM
@@ -252,3 +287,35 @@ scripts, static data per ADR-0015) are pre-registered here before their tests.
   - The marker cue is RE-CALIBRATED per path at design time: walkable vs non-walkable hovers,
     both scenes, a threshold chosen only if the two separate.
   - Then n = 50 per scene, alone.
+
+### walk@2, outdoor, RDP: **FAIL, 0 / 18 (stopped; the bar was unreachable)** (2026-10-07 12:58–13:01 ICT / 05:58–06:01 UTC)
+- **Session:** `20261007T125804-demo-walk-alone-outdoor`, seed 20261008.
+- **verify@1** (`demo_verify.py`): 0 verified. Fail causes:
+  - `declined:no_marker` 17;
+  - `declined:no_selfpos` 1: attempt 0, the first warp onto the map; the minimap was not drawn
+    after 2.5 s.
+
+  Verdict: FAIL.
+- **What the evidence says:**
+  - Every `no_marker` had marker_px 0, and the minimap origin equalled the harness's spot each
+    time, so the projection's input was right.
+  - The after-snapshots show bare ground at the hover point. The marker was NOT drawn; this is
+    not a filter miss.
+- **Stopped** by the operator after 18 attempts (13:01:40). The session's packet window and the
+  stop note were written afterwards.
+- **The cause: the rule's hover.** A design-time probe (scratch; 18 trials, three variants
+  interleaved: the harness exactly, a 4 s settle, no `activate_client`):
+  - after ONE jump to the cell, 0 / 18 drew a marker (0–1 px);
+  - after a second 1-px move, 18 / 18 did (121–209 px).
+
+  The settle time and the title-bar click make no difference. The calibration hovered with two
+  moves (3 px off, then the cell), which is why it saw 30 / 30. walk@1 and walk@2 hovered with
+  one.
+- **The correction to walk@1's Cause 1.** A second probe, 12 trials, two moves each:
+  - chat OPEN: 6 / 6 markers (157–213 px);
+  - chat closed: 6 / 6 (136–215 px).
+
+  An open chat does not suppress the marker.
+- **The indoor walk@2 run was not run.** The rule's hover is the same in both scenes. walk@3
+  (3.5) replaces walk@2 in both.
+- **Next:** walk@3, pre-registered in 3.5 before it runs.

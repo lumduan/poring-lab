@@ -2,7 +2,7 @@
 """Run ONE rule ALONE and log every attempt (docs/demonstrations.md §3, pre-registered).
 
     rule_run.py login [--n 50] [--label login-alone]
-    rule_run.py walk --scene outdoor|indoor [--n 50] [--seed 20261008] [--label walk-alone]
+    rule_run.py walk --scene outdoor|indoor [--n 50] [--seed 20261009] [--label walk-alone]
 
 Batt, 2026-10-07: a rule is adopted only if it passes its bar ALONE.
 - No agent reasoning and no manual help: this script runs the rule's code only.
@@ -127,11 +127,19 @@ def run_login(n: int, label: str) -> int:
     return 0
 
 
-WALK_RULE = "walk@2"  # docs/demonstrations.md 3.4 (walk@1: §Results, retired)
+WALK_RULE = "walk@3"  # docs/demonstrations.md 3.5 (walk@1 and walk@2: §Results, failed)
 SCENES = {"outdoor": ("prt_fild08", 268, 107), "indoor": ("prt_church", 104, 122)}  # GM spots
 SPOT_RADIUS = 8
-WARP_SETTLE_S = 2.5
-HOVER_S = 0.35  # empty_cell's settle: the client draws the walk marker under a hovered cell
+WARP_SETTLE_S = 2.5  # a warp WITHIN the scene's map (probe 2026-10-07: the minimap read 18/18)
+SCENE_ENTRY_S = 7.0  # the first warp ONTO the map: its minimap is not drawn after 2.5 s (walk@2 #0)
+# The hover (walk@3). The client draws the walk marker only on a SECOND motion event at the spot:
+# one jump to the cell drew it 0/18 times, a second 1-px move 18/18 (probe, 2026-10-07; walk@1 and
+# walk@2 hovered with one jump). So the rule approaches from 3 px off, then moves onto the cell,
+# exactly as walk_marker_calibrate.py did for its 30/30. Mirrored in L2 cue.walk_marker.hover.
+HOVER_APPROACH_PX = 3
+HOVER_APPROACH_S = 0.05
+HOVER_S = 0.4
+SYSTEMATIC_K = 10  # the same decline 10 times in a row stops the run (pre-registered, 3.5)
 
 
 def walk_projector(scene: str) -> tuple[object, bool]:
@@ -152,10 +160,30 @@ def walk_projector(scene: str) -> tuple[object, bool]:
     return proj, scene == "outdoor"
 
 
+def hover_marker(agent: r.Agent, screen: r.Screen, x: int, y: int) -> int:
+    """Hover the screen pixel (x, y) with TWO motion events (3 px off, then onto it) and count the
+    walk marker's pixels (empty_cell.marker_px_v2) in the hover crop."""
+    import empty_cell as ec
+
+    agent.move(x - HOVER_APPROACH_PX, y - HOVER_APPROACH_PX)
+    time.sleep(HOVER_APPROACH_S)
+    agent.move(x, y)
+    time.sleep(HOVER_S)
+    return ec.marker_px_v2(screen.grab(*ec.crop_region(x, y))[1])
+
+
+def systematic_decline(declines: list[str | None], k: int = SYSTEMATIC_K) -> str | None:
+    """The decline cause when the last ``k`` attempts all declined with it, else None."""
+    tail = declines[-k:]
+    if len(tail) == k and tail[0] is not None and all(d == tail[0] for d in tail):
+        return tail[0]
+    return None
+
+
 def walk_rule(agent: r.Agent, screen: r.Screen, proj: object, outdoor: bool,
               offset: tuple[int, int], templates: object) -> dict[str, object]:  # fmt: skip
-    """walk@1, ALONE: our cell from the minimap (outdoors), the offset's pixel, the hover marker,
-    the click. Returns what it did (points / decline) -- never a verdict."""
+    """walk@3, ALONE: our cell from the minimap (outdoors), the offset's pixel, the hover marker
+    (two motion events), the click. Returns what it did (points / decline) -- never a verdict."""
     import empty_cell as ec
 
     from poring_dataset.camera import click_for_cell
@@ -170,10 +198,7 @@ def walk_rule(agent: r.Agent, screen: r.Screen, proj: object, outdoor: bool,
             return {"decline": "no_selfpos"}
         origin = xy
     u, v = click_for_cell(proj, offset, origin)  # type: ignore[arg-type]
-    agent.move(gx + round(u), gy + round(v))
-    time.sleep(HOVER_S)
-    crop = screen.grab(*ec.crop_region(gx + round(u), gy + round(v)))[1]
-    marker = ec.marker_px_v2(crop)
+    marker = hover_marker(agent, screen, gx + round(u), gy + round(v))
     if marker < ec.MIN_MARKER_PX_V2:
         return {"decline": "no_marker", "points": [(u, v)], "marker_px": marker, "origin": origin}
     agent.click(gx + round(u), gy + round(v))
@@ -204,7 +229,12 @@ def run_walk(scene: str, n: int, seed: int, label: str) -> int:
     print(json.dumps({"session": sid, "dir": str(log.dir), "rule": WALK_RULE, "scene": scene}),
           flush=True)  # fmt: skip
     t_first = r.ns()
+    declines: list[str | None] = []
     with r.session(f"rule:{WALK_RULE}") as (agent, screen):
+        # the HARNESS enters the scene once: the first warp onto its map needs the map loaded
+        r.gm(agent, screen, f"@warp {mapname} {sx0} {sy0}")
+        time.sleep(SCENE_ENTRY_S)
+        bench.close_chat(agent, screen)
         i = 0
         while i < n:
             if i % 10 == 0:
@@ -220,7 +250,9 @@ def run_walk(scene: str, n: int, seed: int, label: str) -> int:
             dx, dy, _, _ = pick
             r.gm(agent, screen, f"@warp {mapname} {sx} {sy}")
             time.sleep(WARP_SETTLE_S)
-            bench.close_chat(agent, screen)  # an open chat input suppresses the walk marker
+            # the calibration's UI state. (An open chat does NOT suppress the marker: probe
+            # 2026-10-07, 6/6 drawn with it open. walk@1's attribution to it was wrong.)
+            bench.close_chat(agent, screen)
             r.activate_client(agent, screen)
             t0 = r.ns()
             pre = snap(log, screen, f"{i:03d}-walk-before")
@@ -231,8 +263,8 @@ def run_walk(scene: str, n: int, seed: int, label: str) -> int:
             log.append(DemoRecord(
                 session=sid, actor=f"rule:{WALK_RULE}", t_mono_ns=t0, t_done_ns=r.ns(), frame=pre,
                 frame_after=post, rule=WALK_RULE, scene=f"{scene}:{mapname}",
-                cue="walk@2: minimap origin (outdoor) or flat floor (indoor) -> click_for_cell -> "
-                    "hover walk marker (green_v2 >= 60 px) -> click",
+                cue="walk@3: minimap origin (outdoor) or flat floor (indoor) -> click_for_cell -> "
+                    "hover 3 px off then on the cell; walk marker green_v2 >= 60 px -> click",
                 action=Action(type="walk", points=pts,  # type: ignore[arg-type]
                               intended=Intended(kind="cell", cell=(dx, dy), relative=True,
                                                 note=f"harness spot {sx},{sy}")),
@@ -242,9 +274,15 @@ def run_walk(scene: str, n: int, seed: int, label: str) -> int:
                   flush=True)  # fmt: skip
             time.sleep(max(abs(dx), abs(dy)) * 0.2 + 1.0)
             i += 1
+            declines.append(str(did["decline"]) if "decline" in did else None)
+            cause = systematic_decline(declines)
+            if cause is not None:
+                print(json.dumps({"stop": f"systematic: {SYSTEMATIC_K} x {cause} in a row"}),
+                      flush=True)  # fmt: skip
+                break
     events, anchor = record_session.write_packets(log.dir, t_first, r.ns())
-    log.finish(packet_events=len(events), packet_anchor=anchor, attempts=n)
-    print(json.dumps({"session": sid, "packet_events": len(events), "attempts": n}), flush=True)
+    log.finish(packet_events=len(events), packet_anchor=anchor, attempts=i)
+    print(json.dumps({"session": sid, "packet_events": len(events), "attempts": i}), flush=True)
     return 0
 
 
@@ -259,7 +297,7 @@ def main() -> int:
     wk = sub.add_parser("walk")
     wk.add_argument("--scene", choices=sorted(SCENES), required=True)
     wk.add_argument("--n", type=int, default=50)
-    wk.add_argument("--seed", type=int, default=20261008)
+    wk.add_argument("--seed", type=int, default=20261009)
     wk.add_argument("--label", default="walk-alone")
     a = ap.parse_args()
     if a.rule == "login":
