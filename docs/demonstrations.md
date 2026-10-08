@@ -1307,6 +1307,10 @@ first.
 - **P1 · the weight readout, from pixels:** the Basic Information line "Weight : N / M". A new L1
   read concept, since no reader exists yet. Proven when `@item` gives an item of known weight and
   the readout rises by exactly that weight.
+  - ➡️ **Batt, 2026-10-08:** P1 also REPORTS the readout's RESOLUTION: the smallest weight change
+    that moves the shown number, measured with items of known weight from the pinned item_db.
+    Some drops may weigh less than one step, and then the number does not move even on a
+    successful pickup.
 - **P2 · the offline decoders,** which do not exist yet:
   - the item-on-floor entry (`ZC_ITEM_FALL_ENTRY`: item and cell);
   - the pickup result (`ZC_ITEM_PICKUP_ACK`).
@@ -1319,6 +1323,13 @@ first.
   - Offline truth: its vanish with reason "died", and its last position from the packets.
 - **P4 · the drop rates** of the target species, read from the pinned rAthena mob_db (a KB
   extension). They are reported, never committed.
+  - Also the item weights (item_db), and the lab server's floor-item lifetime (its pinned config;
+    ~60 s is the expected order).
+- **P5 · the backup "item obtained" cue, from pixels** (Batt, 2026-10-08): the client's own
+  item-get notification, or its line in the chat / battle log.
+  - It is found by its L4 locale key; the text is never committed (rule 4).
+  - Proven on a KNOWN pickup: an item dragged from the GM's inventory to the floor, then picked up.
+    The cue must appear, and it must not appear on a click that picks nothing up.
 
 **The trial:** lab rAthena, RDP, ASSIST, the interlock green, the GM.
 1. `@heal`; a FRESH spot from a seeded list of open cells ≥ 6 cells apart, so no item left on the
@@ -1332,13 +1343,31 @@ first.
    - a click needs the cursor gate with PICKUP as its ONLY allowed shape (two reads), walk@11's
      unit gate, and the client's UI windows excluded;
    - click the first PICKUP point.
-5. **The runtime check:** the weight readout rises within 5 s of the click.
+5. **The runtime check:** within 5 s of the click, the weight readout rises by ≥ 1 step (P1),
+   **OR** the item-obtained cue appears (P5). The combination is pre-registered here:
+   - the item's expected weight (offline, P2 + item_db) decides which signal can count;
+   - an item lighter than one readout step can only be confirmed by the cue, and the trial is
+     marked "sub-resolution";
+   - either signal alone is enough at run time;
+   - each signal's own recall is reported separately (below).
 6. `@killmonster2`, then the next trial.
+
+**Speed: the floor-item lifetime (Batt).** The scan must finish well inside it.
+- The order: the death cell first, then its 8 neighbours.
+- Each hover is about 1 s (two motions, then the drawn cursor settles).
+- **Budget:** ≤ 20 s from the death to the pickup click. A trial past 45 s is a FAILURE ("too
+  slow"), even if it then picks the item up.
+- Reported: the death → click time (median, p95), and where items actually landed relative to the
+  death cell (P2's floor entries), which sets a better scan order next time.
 
 **Counted:**
 - trials whose kill DROPPED an item (offline, P2). Run until 20 such trials, at most 40 kills.
-- **A drop trial SUCCEEDS** when the weight readout rose (pixels) AND the server confirms the
-  pickup (offline: the pickup result, and the GM's pickup act).
+- **A drop trial SUCCEEDS** when all three hold:
+  - the runtime check says obtained (step 5);
+  - the server confirms the pickup (offline: the pickup result, and the GM's pickup act);
+  - it was within the speed budget.
+- **A runtime "obtained" without a server pickup is a FAILURE** (a false positive of the check).
+  So is a server pickup the runtime check missed.
 
 **The bar:** ≥ 19 / 20 drop trials.
 - This is the small alone-test Batt asked for.
@@ -1350,6 +1379,8 @@ zero `attack_request`, zero `npc_contact`, zero GM `act` of kind normal.
 - A pickup act is the expected outcome here, not a violation.
 
 **Also reported:**
+- each signal's recall on the confirmed pickups: weight alone, the cue alone, and the two combined,
+  with sub-resolution items counted apart;
 - hovers per success;
 - PICKUP reads with no item at that cell (against P2's floor entries);
 - time from death to pickup;
