@@ -375,6 +375,7 @@ class AppState:
         # The MW2 flow editor's computations (routes_flows.py): 20 a minute per client, one at
         # a time (each runs in a worker thread).
         self.flows_rate = RateLimit(limit=20, window_s=60.0)
+        self.flows_read_rate = RateLimit(limit=60, window_s=60.0)  # GET /flows/world (reads files)
         self.flows_lock = asyncio.Lock()
         # ADR-0016: the environment interlock (the user-managed set + attestation + window).
         self.interlock = Interlock(settings.environments_file, settings.win_host,

@@ -96,9 +96,14 @@ async def _body(request: Request) -> Envelope:
     length = request.headers.get("content-length")
     if length is not None and (not length.isdigit() or int(length) > MAX_BODY):
         raise _fail(request, 413, "too_large")
-    raw = await request.body()
-    if len(raw) > MAX_BODY:
-        raise _fail(request, 413, "too_large")
+    chunks: list[bytes] = []
+    size = 0
+    async for chunk in request.stream():  # capped while reading (a chunked body has no length)
+        size += len(chunk)
+        if size > MAX_BODY:
+            raise _fail(request, 413, "too_large")
+        chunks.append(chunk)
+    raw = b"".join(chunks)
     from poring_flow import ir
 
     if ir._depth(raw.decode("utf-8", errors="replace")) > ir.MAX_JSON_DEPTH + 2:
@@ -205,6 +210,10 @@ async def get_world(
     state: AppState = Depends(read_gate),
 ) -> dict[str, Any]:
     _engine(request)
+    if not state.flows_read_rate.allow(
+        request.client.host if request.client else "", time.monotonic()
+    ):
+        raise _fail(request, 429, "rate_limited")
     names = [m for m in maps.split(",") if m]
     if not KEY.match(server) or len(names) > 20 or not all(MAP_ID.match(m) for m in names):
         raise _fail(request, 422, "invalid_query")

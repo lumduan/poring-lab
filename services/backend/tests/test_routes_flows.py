@@ -234,3 +234,23 @@ def test_the_local_world_is_built_from_the_kb(make: Make, tmp_path: Path) -> Non
     assert w["maps"]["m_town"]["warps"][0]["to_map"] == "m_field"
     lint = post(client, "lint", {"flow": sample(), "world": "local"}).json()
     assert isinstance(lint["world_notes"], list)
+
+
+def test_a_chunked_body_is_capped_while_it_is_read(make: Make) -> None:
+    client = make()
+
+    def chunks() -> Any:
+        for _ in range(40):
+            yield b"x" * 65536  # 2.5 MiB without a content-length
+
+    r = client.post("/flows/lint", content=chunks(), headers=hdr(client))
+    assert r.status_code == 413 and r.json()["detail"]["reason"] == "too_large"
+
+
+def test_world_reads_are_rate_limited(make: Make) -> None:
+    client = make()
+    codes = [
+        client.get("/flows/world?source=sample&maps=town_1", headers=H).status_code
+        for _ in range(61)
+    ]
+    assert codes[:60] == [200] * 60 and codes[60] == 429

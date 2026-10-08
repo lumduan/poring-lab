@@ -28,7 +28,8 @@ const PALETTE_BLOCK: Record<string, string> = {
 let registered = false;
 
 function register(B: typeof BlocklyT): void {
-  if (registered) return;
+  // once per page load; Blockly's registries outlive a hot-reloaded copy of this module
+  if (registered || B.Extensions.isRegistered("pl_state")) return;
   registered = true;
   // Every block keeps what it does not show (lossless): the converter's extraState. Blockly lets
   // only a mutator define the state hooks; these have no mutator UI.

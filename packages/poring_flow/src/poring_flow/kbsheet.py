@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import struct
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -51,6 +52,8 @@ NOT_WALKABLE = frozenset(
 )  # rAthena's map cache: wall, cliff (THIRD_PARTY.md, the GAT layout)
 MAX_GAT_BYTES = 64 << 20
 MAX_SIDE = 1024
+# A server or map id names a FILE here: no path separators, no leading dot (no "..").
+SAFE_NAME = re.compile(r"^[A-Za-z0-9_@][A-Za-z0-9_@.\-]{0,63}$")
 
 
 def npc_key(map_id: str, name: str) -> str:
@@ -182,7 +185,20 @@ def load_local_world(
     """The sheets of the maps a flow names: a generated sheet file if there is one, else one built
     in memory from the extracted KB. `gat_dir` overrides the bindings' own GAT directory."""
     labels = Labels()
-    world = load_world(server, maps, root=kb_root / "maps")
+    if not SAFE_NAME.match(server):
+        labels.notes.append(f"server id {server!r} cannot name local data")
+        return World(server=server), labels
+    unsafe = sorted(m for m in maps if not SAFE_NAME.match(m))
+    if unsafe:
+        labels.notes.append(f"map ids that cannot name local data: {', '.join(unsafe)}")
+    maps = [m for m in maps if SAFE_NAME.match(m)]
+    try:
+        world = load_world(server, maps, root=kb_root / "maps")
+    except ValueError as e:  # a generated sheet file that does not validate: fail closed
+        labels.notes.append(
+            f"a generated sheet under data/kb/maps/{server} is invalid: {type(e).__name__}"
+        )
+        world = World(server=server)
     l3 = _json(kb_root / "bindings" / f"{server}.json")
     if not isinstance(l3, dict):
         labels.notes.append(f"no L3 bindings for {server} (data/kb/bindings/{server}.json)")

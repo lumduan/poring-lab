@@ -121,3 +121,18 @@ def test_a_walk_on_kb_sheets_follows_the_gat(tmp_path: Path) -> None:
     seg = next(p for p in t["paths"] if p["node"] == "main.1")
     assert not seg["estimated"]
     assert all(world.sheets["m_town"].walk.walkable((x, y)) for x, y in seg["cells"])  # type: ignore[union-attr]
+
+
+def test_ids_that_could_leave_the_kb_directory_are_refused(tmp_path: Path) -> None:
+    root = kb(tmp_path, None)
+    (root / "maps").mkdir()
+    for server in ("..", ".", "a/b", "../x"):
+        world, labels = load_local_world(server, ["m_town"], root)
+        assert world.sheets == {} and labels.notes, server
+    world, labels = load_local_world("srv", ["..", "spawns", "m_town"], root)
+    assert sorted(world.sheets) == ["m_town"]  # "spawns" is no map of the KB; ".." is refused
+    assert any("cannot name local data" in n for n in labels.notes)
+    (root / "maps" / "srv").mkdir()
+    (root / "maps" / "srv" / "m_town.json").write_text('{"map": 1}')
+    world, labels = load_local_world("srv", ["m_town"], root)
+    assert any("invalid" in n for n in labels.notes)
