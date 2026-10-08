@@ -22,7 +22,9 @@ import {
   ReactFlow,
   type Connection,
   type NodeChange,
+  type EdgeChange,
   type ReactFlowInstance,
+  applyEdgeChanges,
   applyNodeChanges,
 } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -265,7 +267,7 @@ export default function FlowCanvas(p: CanvasProps) {
     setView({ base: initial, nodes: initial.map((n) => ({ ...n, measured: measured.get(n.id) })) });
   }
   const nodes = view.base === initial ? view.nodes : initial;
-  const edges = useMemo(
+  const derivedEdges = useMemo(
     () =>
       graph.edges.map((e: GEdge) => ({
         id: e.id,
@@ -280,6 +282,14 @@ export default function FlowCanvas(p: CanvasProps) {
       })) as Edge[],
     [graph, runs],
   );
+  // React Flow's edge state (selection, so an exit can be selected and deleted), rebuilt with the
+  // graph like the nodes above
+  const [edgeView, setEdgeView] = useState<{ base: Edge[]; edges: Edge[] }>({ base: derivedEdges, edges: derivedEdges });
+  if (edgeView.base !== derivedEdges) setEdgeView({ base: derivedEdges, edges: derivedEdges });
+  const edges = edgeView.base === derivedEdges ? edgeView.edges : derivedEdges;
+  const onEdgesChange = useCallback((changes: EdgeChange[]) => {
+    setEdgeView((v) => ({ ...v, edges: applyEdgeChanges(changes.filter((c) => c.type === "select"), v.edges) }));
+  }, []);
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     setView((v) => ({ ...v, nodes: applyNodeChanges(changes, v.nodes) }));
@@ -303,6 +313,7 @@ export default function FlowCanvas(p: CanvasProps) {
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
         onNodeDragStop={(_, __, dragged) => onMove(Object.fromEntries(dragged.map((n) => [n.id, n.position])))}
         onConnect={onConnect}
         onEdgesDelete={(es) => es.forEach((e) => e.id.startsWith("exit:") && onDeleteExit(e.id.slice(5)))}

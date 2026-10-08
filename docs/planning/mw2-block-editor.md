@@ -64,7 +64,9 @@ the deploy steps are at the end of this section.
    canonical JSON (node tests); a browser's JSON round trip keeps `flow_hash` (pytest).
 2. Round trips: IR → canvas → IR and IR → blocks → IR exact for the 3 fixtures and 200 / 300 seeded
    random flows; 400 random expressions; and in the REAL Blockly (headless Chromium, production
-   build) load → save → IR was identical for the sample's town, farm and global-events scopes.
+   build) load → save → IR was identical for the sample's town, farm and global-events scopes. In
+   the browser, an exit drawn on the canvas appeared in the blocks as a placeholder, a field edited
+   in Blockly reached the IR on Apply, and a selected exit was deleted from the IR.
 3. The editor's lint equals MW1's for the same IR (`test_the_editor_lints_exactly_like_mw1`).
 4. Simulate: the sample on its synthetic sheets (town → npc_warp → farm loop → item_warp, a death at
    t = 200 s → death_respawn → town); and a LOCAL demo on the lab's real data (prontera ↔
