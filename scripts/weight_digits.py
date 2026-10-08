@@ -50,6 +50,9 @@ STEP_S = 3.0
 REC_HZ = 4.0
 
 
+SEPARATOR = "/ex"  # where_fix.py's separator line: harmless, and different from any @item
+
+
 def _record(out: str, region: tuple[int, int, int, int], stop: Any, hz: float) -> None:
     """The recorder process: the game region as <k>-<t_mono_ns>.jpg (quality 95)."""
     from PIL import Image
@@ -98,9 +101,18 @@ def run(step_s: float, hz: float) -> int:
             rec.start()
             time.sleep(step_s)  # a settled readout before the first step
             times: list[tuple[int, list[int]]] = []
+            prev = None
             for item, n in items:
+                cmd = f"@item {item} {n}"
+                if cmd == prev:
+                    # the client refuses the same phrase more than 3 times in a row (the 2026-10-08
+                    # runs lost 7 of 10 steps that way): a different line between repeats, as
+                    # where_fix does
+                    r.chat_line(agent, screen, SEPARATOR)
+                    time.sleep(0.5)
+                prev = cmd
                 t = r.ns()
-                r.gm(agent, screen, f"@item {item} {n}")
+                r.gm(agent, screen, cmd)
                 times.append((t, [item, n]))
                 time.sleep(step_s)
             t_end = r.ns()
