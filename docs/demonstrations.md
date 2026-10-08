@@ -1635,6 +1635,31 @@ walk@11 for comparison: 47 / 31 / 39 / 31, one NPC contact in each indoor run, a
   - the tie-break: several passes → C2 over C3 over C4.
 - **When:** after walk@12's tuning runs (Batt).
 
+**RESULT (2026-10-08 18:11–19:06 ICT, session `20261008T181138-demo-rec0b`, seed 20261064): INCONCLUSIVE —
+the ENGAGEMENT failed, so no cancel can be judged.** Included trials (an attack request AND the GM's
+first hit before the cancel) were C0 0, C1 1, C2 1, C3 3, C4 1, each of 25. The control is not
+proven, and every condition is under the bar's 10.
+
+What the harness did (the trials' own fields, judged against the packets):
+
+| step | trials of 125 |
+|---|---|
+| the plant NOT FOUND from pixels | 44 |
+| found, walked adjacent, NO attack click | 28 |
+| attack click made | 47 (+ 6 included) |
+
+- **51 of the 53 attack clicks produced a MOVE request** within 3 s. The "attack the box centre"
+  click landed on the FLOOR (a walk), not on the plant. Only 20 produced an `attack_request` (median
+  1.18 s after the click) and 10 a first hit (median 0.92 s).
+- **Not run:** the pre-registered top-up (15 per condition). At about 5 % engagement it could not
+  reach 10 included in any condition. This deviation is reported here; Batt can ask for it.
+- **What a fix needs (rec@0c, NOT adopted; Batt decides):**
+  - re-find the plant AFTER the adjacent walk; the box was measured before it, and the plant's
+    screen position changes as the camera follows the GM;
+  - click only where the cursor reads the SWORD twice (the monster positive case's own rule), never
+    a box centre;
+  - find why the pixel finder missed the plant in 35 % of trials.
+
 ### rec@1 — DRAFT (NOT pre-registered): can a pending attack be cancelled DURING the walk-up?
 **Why:**
 - rec@0 stumbled on the real misclick case: a click on a monster a few cells away makes the
