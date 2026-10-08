@@ -2423,3 +2423,48 @@ interrupted. Scored: the first 50.
   - Waits: 14.5 s over 17 routes.
 - **Reading:** on prt_fild08 the fastest species (Lunatic, 200 ms / cell) gives large envelopes.
   The unit gate traded completion for safety, the trade 3.18 chose.
+
+### walk@11 (3.18), outdoor CROWD, RDP (rerun): **FAIL, 31 / 50** — but **SAFE on every signal**; 115 / 115 clicks verified (2026-10-08 11:49:15–12:23:55 ICT / 04:49:15–05:23:55 UTC)
+**Session:** `20261008T114916-demo-walk11-alone-crowd-outdoor` (seed 20261050); 56 routes, none
+interrupted. Scored: the first 50. Its first attempt (11:09:57) got 0 routes (the blocked chat
+above); that empty session is kept and not scored.
+- **End to end: 31 / 50** → FAIL by count, as 3.18 expected for CROWD. walk@10: 48 / 50.
+- **SAFETY: all zero** (`attack_request`, `npc_contact`, GM acts). walk@10's outdoor crowd run
+  attacked twice (18 hits).
+- **Clicks: 115 / 115 verified**, every one a tier-A named click.
+- **The 19 failures:** `unit_stays` 13; 5 substitutes for a goal nobody had taken;
+  `no_click_point` 1. Waits: 22.0 s over 27 routes.
+
+### walk@11 — the verdict: **0 of 4 tuning runs PASS → the HELD-OUT set is NOT run** (per 3.18)
+
+| run | end to end | SAFETY (live, confirmed by the replay) | verdict |
+|---|---|---|---|
+| indoor CLEAN | 47 / 50 | 1 NPC contact (Sister Linus) | **HARD FAIL** |
+| indoor CROWD | 31 / 50 | 1 NPC contact (Sister Linus) + a UI click (not a SAFETY signal) | **HARD FAIL** |
+| outdoor CLEAN | 39 / 50 | **0 / 0 / 0** | FAIL (count) |
+| outdoor CROWD | 31 / 50 | **0 / 0 / 0** | FAIL (count) |
+
+**The replay re-check** (3.18):
+- The step: `guarded_build.py replay:20261008T00..20261008T05`, 11,052 events, worst capture
+  stall 3.6 %; then `replay_safety.py`.
+- The positive controls were seen first: the monster click (1 request, 7 hits), the NPC contact on
+  Garnet, and the pickup act.
+- It matches the live signals exactly: the two indoor runs have one Sister Linus contact each, and
+  both outdoor runs are zero on every signal.
+
+**What walk@11 settled:**
+- **The unit gate holds against monsters.**
+  - 0 attack requests and 0 GM attacks across all four runs and 586 rule clicks: walk@10 attacked
+    in three of its four.
+  - The click-instant envelope, with memory, closed the check-to-click race Batt asked about.
+- **What remains is NPC contact at one cell, and one UI click.**
+  - Every NPC contact since walk@8 is the same mechanism: a WALK read 8 px from TALK reads,
+    picking (112,114) beside Sister Linus. Batt's next rule: a TALK read blocks the whole picked
+    cell.
+  - The UI click needs the client's UI windows excluded from click points (Batt's next rule).
+- **The cost is completion.**
+  - The envelopes are large, from the fastest species' speed and the memory's growing radius.
+  - Crowd runs reach 31 / 50. Clean runs lose 3–11 routes to `unit_stays`, `no_click_point`, and
+    goals the envelope covers though nobody stands there.
+  - The motion model (walk@12's proposal) is where completion comes back. Its premise stays open
+    for Batt (the looter problem).
