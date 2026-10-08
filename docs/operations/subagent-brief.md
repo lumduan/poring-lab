@@ -31,8 +31,13 @@ Batt, 2026-10-07: **subagents inherit the shared-disk rules.**
 SHARED-DISK AND SAFETY RULES (poring-lab, CLAUDE.md rules 1-10; you inherit all of them)
 - The host disk is shared with live capture. Nothing heavy or many-small-files on it:
   - no .venv, node_modules, builds, caches or extracted trees in the repo or a worktree;
-  - Python in a worktree: export UV_PROJECT_ENVIRONMENT=/dev/shm/poring-lab-venvs/<your-name>
-    UV_LINK_MODE=copy before any `uv run` / `uv sync` (the env lives in RAM; delete it when done);
+  - Python in a worktree: do NOT build an env. Run the MAIN checkout's tools with your worktree's
+    sources first on PYTHONPATH (no install, no disk IO):
+      export PYTHONPATH=$PWD/scripts:$PWD/packages/<pkg>/src:...:$PWD/services/backend/src
+      /home/batt/docker/poring-lab/.venv/bin/{python -m pytest,ruff,mypy} ...
+    Only if a NEW dependency makes an env unavoidable: UV_PROJECT_ENVIRONMENT=/dev/shm/poring-lab-venvs/<your-name>
+    UV_LINK_MODE=copy, ONE agent at a time, never while a GPU step trains (it reads the wheels out of
+    ~/.cache/uv on the shared disk); leave `uv lock` to the parent;
   - npm/pnpm/json2ts and similar: install into /dev/shm only, never on disk;
   - scratch, test temp, caches: export PYTHONDONTWRITEBYTECODE=1 TMPDIR=/dev/shm/poring-lab-tmp;
     pytest -p no:cacheprovider --basetemp="$TMPDIR/pytest"; mypy --cache-dir=/dev/null;
@@ -54,7 +59,14 @@ SHARED-DISK AND SAFETY RULES (poring-lab, CLAUDE.md rules 1-10; you inherit all 
 - Before you finish: delete your /dev/shm env and scratch, and say what you left behind.
 ```
 
+- **2026-10-08 14:25, the second trip of this kind:** four worktrees were created at once (14:22:37)
+  and one agent built its RAM env (14:25:18, copying wheels out of `~/.cache/uv` on the disk). The IO
+  guard paused the GPU training at 14:25:43 (quant-postgres stall 25.5 %). The block above now says:
+  no env, the main `.venv` + PYTHONPATH.
+
 ## For the parent
+- Spawn worktree agents a few minutes apart while a GPU step trains (each worktree is a checkout
+  on the shared disk).
 - After merging a subagent's branch, remove its worktree and branch. Delete its `/dev/shm`
   leftovers.
 - When a guard trips while a subagent runs, note the subagent's timeline in the report. Its
