@@ -298,6 +298,42 @@ def pickup_click() -> int:
     return 0 if st["t_click"] is not None else 1
 
 
+def walk_click() -> int:
+    """loot@1 P5's NEGATIVE case: a click that picks nothing up. Pixels only, as every harness
+    click: hover cells around us until the cursor reads `walk` (v3) twice, click there; a screenshot
+    before and 2 s after, so `chat_cue.py check BEFORE AFTER` can show no "got" line appeared."""
+    from poring_dataset import camera as cam
+    from poring_dataset import gat as gatmod
+
+    refs = w6.CursorRefs.load(CURSOR_REFS_V3)
+    gat = gatmod.parse((cam.GAT_DIR / "prt_church.gat").read_bytes())
+    cj = json.loads((r.ROOT / "packages/poring_dataset/src/poring_dataset/camera_rdp.json")
+                    .read_text())  # fmt: skip
+    camera = cam.camera_for_map(cam.camera_from_json(cj["camera"]), True,
+                                cj["indoor"]["yaw_deg"], cj["indoor"]["distance"])  # fmt: skip
+    x, y = PICKUP_SPOT
+    out: dict[str, Any] = {"clicked": False}
+    with r.session("rule:safety-check") as (agent, screen):
+        pr = w10.Prober9(agent, screen, refs)
+        out["before"] = _shot(screen, "walk-before")
+        for dx, dy in [(0, 3), (3, 0), (0, -3), (-3, 0), (2, 2), (-2, -2)]:
+            rel = np.array([[dx, dy]], dtype=float)
+            u, v = camera.project(rel, gat.relative_altitude((x, y), rel))[0]
+            if not pr.park():
+                continue
+            pr.hover(u, v)
+            if pr.read(u, v)["shape"] != "walk" or pr.read(u, v)["shape"] != "walk":
+                continue
+            gx, gy, _, _ = r.game_region()
+            agent.click(gx + round(u), gy + round(v))  # the deliberate NON-pickup click
+            out.update(clicked=True, cell=[x + dx, y + dy])
+            break
+        time.sleep(2.0)
+        out["after"] = _shot(screen, "walk-after")
+    print(json.dumps(out), flush=True)
+    return 0 if out["clicked"] else 1
+
+
 def pickup_collect() -> int:
     st = json.loads((NPC_DIR / "pickup-state.json").read_text())
     log = DemoLog(st["session"])
@@ -820,6 +856,7 @@ def main() -> int:
     sub.add_parser("pickup-start")
     sub.add_parser("pickup-click")
     sub.add_parser("pickup-collect")
+    sub.add_parser("walk-click")
     a5 = sub.add_parser("ui-drag")
     for n in ("x1", "y1", "x2", "y2"):
         a5.add_argument(n, type=int)
@@ -850,6 +887,8 @@ def main() -> int:
         return pickup_click()
     if a.cmd == "pickup-collect":
         return pickup_collect()
+    if a.cmd == "walk-click":
+        return walk_click()
     if a.cmd == "monster-click":
         return monster_click(a.map, a.x, a.y)
     return 2
