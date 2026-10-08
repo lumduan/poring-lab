@@ -444,6 +444,143 @@ def cancel_test(delays_ms: list[int], n: int, mapname: str, x: int, y: int) -> i
     return 0
 
 
+REC0_CONDITIONS = ("C0", "C1", "C2", "C3", "C4")
+REC0_CANCEL_S = 0.4  # the cancel comes this long after the attack click (the attack is under way)
+REC0_AFTER_S = 0.3  # one swing already in flight is allowed
+REC0_WINDOW_S = 5.0
+REC0_SEED = 20261063
+REC0_WALK_CELLS = {"C1": 2, "C2": 6}  # the walk-away distances (the plant's reach is 1)
+REC0_SIT_KEY = "Insert"  # L2 `sit` (kro-20211103-prere.yaml, demonstrated)
+REC0_WING_KEY = "F1"  # hotbar row 1 slot 1: the Fly Wing, placed 2026-10-08 14:24 (verified)
+
+
+def judge_rec0(trials: list[dict[str, Any]], events: list[dict[str, Any]],
+               gm: int = GM_AID) -> dict[str, Any]:  # fmt: skip
+    """§3.19's bar from the packets: a trial SUCCEEDS when, after its cancel, the GM's act hits
+    (kind normal) in [t_cancel + 0.3 s, t_cancel + 5 s] AND its attack_requests after t_cancel are
+    both zero. C0 (no cancel) is the positive control: the attack must continue (>= 2 hits)."""
+    per: dict[str, dict[str, Any]] = {c: {"trials": 0, "success": 0, "continued": 0, "hits": []}
+                                      for c in REC0_CONDITIONS}  # fmt: skip
+    for t in trials:
+        if "t_cancel" not in t:
+            continue
+        tc = int(t["t_cancel"])
+        lo, hi = tc + int(REC0_AFTER_S * 1e9), tc + int(REC0_WINDOW_S * 1e9)
+        hits = sum(1 for e in events if e.get("type") == "act" and int(e.get("src_gid", -1)) == gm
+                   and e.get("kind") == "normal" and lo <= int(e["t_mono_ns"]) <= hi)  # fmt: skip
+        reqs = sum(1 for e in events if e.get("type") == "attack_request"
+                   and tc <= int(e["t_mono_ns"]) <= hi)  # fmt: skip
+        t["hits_after"], t["requests_after"] = hits, reqs
+        t["success"] = hits == 0 and reqs == 0
+        c = per[t["condition"]]
+        c["trials"] += 1
+        c["success"] += int(t["success"])
+        c["continued"] += int(hits >= 2)
+        c["hits"].append(hits)
+    control_ok = per["C0"]["trials"] > 0 and per["C0"]["continued"] >= 0.9 * per["C0"]["trials"]
+    stops = {c: control_ok and 0 < per[c]["trials"] <= per[c]["success"] / 0.9
+             for c in REC0_CONDITIONS[1:]}  # fmt: skip
+    return {"per_condition": per, "control_proven": control_ok, "stops_an_attack": stops}
+
+
+def rec0(n: int, mapname: str, x: int, y: int, seed: int) -> int:
+    """rec@0 (docs/demonstrations.md §3.19, pre-registered): what really STOPS an attack on our
+    client. Per trial: a fresh Red Plant (static, never fights back), the DELIBERATE attack click on
+    it, REC0_CANCEL_S later the condition's cancel, then REC0_WINDOW_S of watching. Conditions in a
+    seeded interleaved order; the live packets judge (judge_rec0)."""
+    import random
+
+    import bench
+
+    from poring_dataset import camera as cam
+    from poring_dataset import gat as gatmod
+
+    refs = w6.CursorRefs.load(CURSOR_REFS_V3)
+    gat = gatmod.parse((cam.GAT_DIR / f"{mapname}.gat").read_bytes())
+    cj = json.loads((r.ROOT / "packages/poring_dataset/src/poring_dataset/camera_rdp.json")
+                    .read_text())  # fmt: skip
+    camera = cam.camera_from_json(cj["camera"])
+    order = [c for c in REC0_CONDITIONS for _ in range(n)]
+    random.Random(seed).shuffle(order)
+    sid = new_session_id("rec0")
+    log = DemoLog(sid)
+    lock = record_session.read_lock(r.ROOT / "state")
+    log.start(backend=str(lock.backend), lock_seq=lock.seq, server="lab-rathena", rule="rec@0",
+              account="gm", n=n, seed=seed, order=order, map=mapname, spot=[x, y],
+              cancel_s=REC0_CANCEL_S)  # fmt: skip
+    t_first = r.ns()
+    trials: list[dict[str, Any]] = []
+    import unit_detector
+
+    det = unit_detector.UnitDetector()
+    with r.session("rule:rec0") as (agent, screen):
+        pr = w10.Prober9(agent, screen, refs)
+        gx, gy, _, _ = r.game_region()
+        for k, cond in enumerate(order):
+            trial: dict[str, Any] = {"k": k, "condition": cond}
+            trials.append(trial)
+            r.gm(agent, screen, "@killmonster2")
+            r.gm(agent, screen, f"@warp {mapname} {x} {y}")
+            time.sleep(rr.SCENE_ENTRY_S)
+            r.gm(agent, screen, "@monster 1078 1")
+            time.sleep(2.0)
+            bench.close_chat(agent, screen)
+            r.activate_client(agent, screen)
+            frame = screen.grab(*r.game_region())[1]
+            pc = camera.project(np.zeros((1, 2)), np.zeros(1))[0]  # our own feet
+            mobs = [bx for bx in det.detect(frame) if bx.cls == "monster"]
+            if not mobs:
+                trial["found"] = False
+                continue
+            box = min(mobs, key=lambda bx: abs(bx.foot[0] - pc[0]) + abs(bx.foot[1] - pc[1]))
+            u, v = (box.x0 + box.x1) / 2, box.y0 + 0.65 * (box.y1 - box.y0)
+            trial["found"] = True
+            su = sv = None
+            if cond in REC0_WALK_CELLS:  # the cancel's walk point, AWAY from the plant
+                kc = REC0_WALK_CELLS[cond]
+                rel = np.array([[-kc if u > pc[0] else kc, -kc if v < pc[1] else kc]], dtype=float)
+                su, sv = camera.project(rel, gat.relative_altitude((x, y), rel))[0]
+                if not pr.park():
+                    trial["safe_point"] = False
+                    continue
+                pr.hover(su, sv)
+                ok = pr.read(su, sv)["shape"] == "walk" and pr.read(su, sv)["shape"] == "walk"
+                trial["safe_point"] = bool(ok)
+                if not ok:
+                    continue
+            agent.move(gx + round(u) - 3, gy + round(v) - 3)
+            agent.move(gx + round(u), gy + round(v))
+            time.sleep(0.3)
+            trial["t_hit"] = r.ns()
+            agent.click(gx + round(u), gy + round(v))  # the DELIBERATE attack click
+            time.sleep(REC0_CANCEL_S)
+            trial["t_cancel"] = r.ns()
+            if cond in REC0_WALK_CELLS:
+                assert su is not None and sv is not None
+                agent.move(gx + round(su) - 3, gy + round(sv) - 3)
+                agent.move(gx + round(su), gy + round(sv))
+                agent.click(gx + round(su), gy + round(sv))
+            elif cond == "C3":
+                agent.keys(REC0_SIT_KEY)  # sit
+                time.sleep(1.0)
+                agent.keys(REC0_SIT_KEY)  # stand
+            elif cond == "C4":
+                agent.keys(REC0_WING_KEY)  # the Fly Wing
+            time.sleep(REC0_WINDOW_S)
+        r.gm(agent, screen, "@killmonster2")
+        bench.close_chat(agent, screen)
+    det.close()
+    events, anchor = record_session.write_packets(log.dir, t_first, r.ns())
+    verdict = judge_rec0(trials, events)
+    skipped = [{"k": t["k"], "condition": t["condition"], "found": t.get("found"),
+                "safe_point": t.get("safe_point")}
+               for t in trials if "t_cancel" not in t]  # fmt: skip
+    out = {"session": sid, **verdict, "skipped": skipped}
+    log.finish(packet_events=len(events), packet_anchor=anchor, result=out, trials=trials)
+    print(json.dumps(out, indent=1, default=str), flush=True)
+    return 0
+
+
 def _count(xs: Any) -> dict[str, int]:
     from collections import Counter
 
@@ -470,6 +607,12 @@ def main() -> int:
     a6.add_argument("--map", default="prt_fild08")
     a6.add_argument("--x", type=int, default=268)
     a6.add_argument("--y", type=int, default=107)
+    a7 = sub.add_parser("rec0")
+    a7.add_argument("--n", type=int, default=10)
+    a7.add_argument("--map", default="prt_fild08")
+    a7.add_argument("--x", type=int, default=268)
+    a7.add_argument("--y", type=int, default=107)
+    a7.add_argument("--seed", type=int, default=REC0_SEED)
     sub.add_parser("pickup-start")
     sub.add_parser("pickup-click")
     sub.add_parser("pickup-collect")
@@ -490,6 +633,8 @@ def main() -> int:
         return ui_click(a.x, a.y)
     if a.cmd == "ui-drag":
         return ui_drag(a.x1, a.y1, a.x2, a.y2)
+    if a.cmd == "rec0":
+        return rec0(a.n, a.map, a.x, a.y, a.seed)
     if a.cmd == "cancel-test":
         return cancel_test([int(x) for x in a.delays_ms.split(",")], a.n, a.map, a.x, a.y)
     if a.cmd == "pickup-start":

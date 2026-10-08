@@ -7,6 +7,7 @@ import importlib.util
 import sys
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 import pytest
 
@@ -41,3 +42,37 @@ def test_the_positive_case_needs_the_request_and_the_act_in_the_window(ssc: Modu
     assert ssc.judge_attack([act], t)["pass"] is False  # the blind sensor: acts but no request
     assert ssc.judge_attack([req, late], t)["pass"] is False  # outside the 5 s window
     assert ssc.judge_attack([req, theirs], t)["pass"] is False  # the monster hit US
+
+
+def test_rec0_judges_each_cancel_and_needs_the_control_to_see_the_attack_continue(
+    ssc: ModuleType,
+) -> None:
+    """§3.19: a trial succeeds with no GM hit in [t_cancel+0.3 s, +5 s] and no attack request
+    after t_cancel; a cancel 'stops an attack' at >= 9/10 only if C0 shows the attack continuing."""
+    S = 1_000_000_000
+    gm = ssc.GM_AID
+
+    def hit(t: float) -> dict[str, Any]:
+        return {"type": "act", "src_gid": gm, "kind": "normal", "t_mono_ns": int(t * S)}
+
+    trials: list[dict[str, Any]] = []
+    events: list[dict[str, Any]] = []
+    for k in range(10):  # C0: no cancel, the hits continue
+        tc = 100 * k + 10
+        trials.append({"k": k, "condition": "C0", "t_cancel": tc * S})
+        events += [hit(tc + 0.8), hit(tc + 1.6)]
+    for k in range(10):  # C4: the attack stops (one swing in flight before +0.3 s is allowed)
+        tc = 2000 + 100 * k
+        trials.append({"k": 10 + k, "condition": "C4", "t_cancel": tc * S})
+        events.append(hit(tc + 0.1))
+    for k in range(10):  # C1: after the 2-cell walk the attack resumes in 3 trials
+        tc = 4000 + 100 * k
+        trials.append({"k": 20 + k, "condition": "C1", "t_cancel": tc * S})
+        if k < 3:
+            events += [{"type": "attack_request", "t_mono_ns": int((tc + 0.5) * S)}, hit(tc + 1.0)]
+    v = ssc.judge_rec0(trials, events)
+    assert v["control_proven"] and v["per_condition"]["C0"]["continued"] == 10
+    assert v["stops_an_attack"]["C4"] and v["per_condition"]["C4"]["success"] == 10
+    assert not v["stops_an_attack"]["C1"] and v["per_condition"]["C1"]["success"] == 7
+    no_control = ssc.judge_rec0([t for t in trials if t["condition"] != "C0"], events)
+    assert not no_control["stops_an_attack"]["C4"]  # without the positive control, nothing passes
