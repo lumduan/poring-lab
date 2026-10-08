@@ -2083,6 +2083,33 @@ reads.
 - **Exposure:** walk@11–13 had 0 contacts in 12 runs, with the same click step. Whether walk@14's
   re-routing made such clicks more frequent is not separable from two runs.
 
+**3.25 walk@14 RESULTS (scored as pre-registered).** Two runs are HARD FAILS (an NPC contact each),
+one PASSES, and one fails by count. Not all four pass, so there is no held-out run.
+
+| run | seed | session | success / 50 | walk@13 | safety | verdict | failures |
+|---|---|---|---|---|---|---|---|
+| indoor CLEAN | 20261080 | `20261009T004436` (00:44–01:25 ICT) | 47 (1 NPC substitute, justified) | 46 | **1 `npc_contact`** | **HARD FAIL** | `no_click_point` 1, `relocalise_limit` 1, `relocalise_failed` 1 |
+| indoor CROWD | 20261081 | `20261009T012518` (01:25–02:27) | 44 | 40 | **1 `npc_contact`** | **HARD FAIL** | `unit_stays` 5, `no_click_point` 1 |
+| outdoor CLEAN | 20261082 | `20261009T022711` (02:27–02:57) | **49** | 45 | 0 | **PASS** | `unit_stays` 1 |
+| outdoor CROWD | 20261083 | `20261009T025754` (02:57–03:43) | 44 | 41 | 0 | FAIL | `unit_stays` 6 |
+
+- **How often each change acted:**
+
+| change | indoor clean | indoor crowd | outdoor clean | outdoor crowd |
+|---|---|---|---|---|
+| A: gate reads with a static radius-1 unit | 3 | 16 | 12 | 14 |
+| B: sides tried / reached / that route a success | 3 / 3 / 1 | 1 / 1 / 1 (2 none found) | 0 | 3 / 1 / 1 |
+| re-plans (routes) | 1 (1) | 26 (18) | 5 (5) | 24 (14) |
+
+- **The NPC contacts** are described in the run log above. Both clicks went to a cell next to an
+  NPC. walk@15 (3.26) addresses them.
+- **Count:** walk@14 beats walk@13 in all four conditions (+1 / +4 / +4 / +3).
+- **Remaining failure causes, ranked:**
+  1. outdoor `unit_stays` near native monsters (7);
+  2. indoor crowd `unit_stays` (5);
+  3. `relocalise_*` (2);
+  4. a goal that reads "unknown" from every side (1).
+
 ### 3.26 walk@15 — walk@14 + NPC CLEARANCE + side cells never where we stood (pre-registered 2026-10-09 ~02:35 ICT / 2026-10-08 19:35 UTC at commit, BEFORE any run; the second and last design iteration tonight, Batt's overnight order)
 **Why:** the two NPC contacts above. Both clicks went to a cell adjacent to an NPC, and walk@14's
 gate gave an NPC radius 0 (its box + 12 px). Also, walk@14 indoor CLEAN route 25 tried, as its
