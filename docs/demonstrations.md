@@ -2454,7 +2454,7 @@ above); that empty session is kept and not scored.
 
 **What walk@11 settled:**
 - **The unit gate holds against monsters.**
-  - 0 attack requests and 0 GM attacks across all four runs and 586 rule clicks: walk@10 attacked
+  - 0 attack requests and 0 GM attacks across all four runs and 705 rule clicks (231 + 212 + 147 + 115): walk@10 attacked
     in three of its four.
   - The click-instant envelope, with memory, closed the check-to-click race Batt asked about.
 - **What remains is NPC contact at one cell, and one UI click.**
