@@ -14,8 +14,8 @@ monsters died where, what fell where, and what WE picked up -- from a replay's e
 * OUR pickups: our act of kind pickup on a floor id, then our pickup_result ok for the same item
   within RESULT_WINDOW_S, then the floor item's vanish: "confirmed" only when all three hold.
 
-The positive cases (docs/demonstrations.md §2a) need a replay with the new decoders: the live
-sniffer image predates them.
+Since the 2026-10-08 17:51 sniffer rebuild the LIVE sniffer carries these decoders: a session's own
+packets.jsonl.gz works (P2 proven live, 20261008T210930-demo-safety-check-pickup); pass --aid.
 """
 
 from __future__ import annotations

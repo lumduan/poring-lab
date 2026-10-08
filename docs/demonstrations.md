@@ -1345,6 +1345,14 @@ first.
   - P2: the decoders above (§5, "Floor items and pickups"); proven only by a replay of a deliberate
     drop + pickup (`guarded_build.py replaydev:`, the checkout's decoders read-only in the sniffer
     image: no rebuild) and `scripts/loot_truth.py`.
+    ➡️ **PROVEN LIVE 2026-10-08 21:10 ICT / 14:10 UTC** (the 17:51 sniffer carries the decoders),
+    by a deliberate drop + pickup (`20261008T210930-demo-safety-check-pickup`):
+    - `floor_item_appear` (kind fall, floor id 54, item 1201, cell (98, 112));
+    - our `pickup_request` (floor id 54);
+    - `pickup_result` ok (1201 × 1);
+    - our `act` of kind pickup on 54, then 54's vanish.
+    - `loot_truth.py --aid 2000002`: **1 pickup "confirmed"**, 1 fall, 0 failed results. No replay
+      is needed for P2 any more.
   - P3: `poring_dataset/deathcell.py` (`death_cell`, `scan_order`: the server's drop pattern
     first); its truth is `loot_truth.py`'s death cells (the Timeline's position at the "died"
     vanish).
