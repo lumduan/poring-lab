@@ -101,6 +101,14 @@ export default function BlockEditor({ flow, scope, title, catalogue, lint, trace
     Object.entries(catalogue?.blocks ?? {}).map(([n, b]) => [n, { concept: b.spec.concept, timeout_s: b.spec.timeout_s }]),
   );
 
+  // The catalogue may arrive after the editor opened: the toolbox follows it (effect below).
+  const catRef = useRef<CatalogueDoc | null>(catalogue);
+  useEffect(() => {
+    catRef.current = catalogue;
+  }, [catalogue]);
+
+  // The workspace is created for ONE flow and scope; a new lint or run only re-decorates it, so
+  // edits not applied yet are never lost to a background lint.
   useEffect(() => {
     let disposed = false;
     void (async () => {
@@ -109,34 +117,34 @@ export default function BlockEditor({ flow, scope, title, catalogue, lint, trace
       if (disposed || !host.current) return;
       B.setLocale(En as unknown as Record<string, string>);
       register(B);
-      const cat = Object.fromEntries(
-        Object.entries(catalogue?.blocks ?? {})
-          .filter(([, b]) => b.spec.kind !== "core" || b.name === "assert_save_point")
-          .map(([n, b]) => [n, { concept: b.spec.concept, timeout_s: b.spec.timeout_s, badge: b.badge }]),
-      );
       const w = B.inject(host.current, {
         renderer: "zelos",
         theme: themeOf(B),
         media: "/blockly-media/",
         sounds: false,
         trashcan: true,
-        toolbox: toolbox(cat, scope.kind) as unknown as BlocklyT.utils.toolbox.ToolboxDefinition,
+        toolbox: toolboxOf(catRef.current, scope),
         zoom: { controls: true, wheel: true, startScale: 0.8, maxScale: 2, minScale: 0.3 },
         move: { scrollbars: true, drag: true, wheel: false },
         grid: { spacing: 24, length: 2, colour: "#2f2f35", snap: false },
       });
       ws.current = w;
       B.serialization.workspaces.load(toWorkspace(flow, scope) as unknown as object, w);
-      decorate(w, catalogue, lint, trace);
       setReady(true);
     })();
     return () => {
       disposed = true;
       ws.current?.dispose();
       ws.current = null;
+      setReady(false);
     };
-    // the editor is opened for one flow and scope; it is re-created when they change
-  }, [flow, scope, catalogue, lint, trace]);
+  }, [flow, scope]);
+
+  useEffect(() => {
+    if (!ready || !ws.current) return;
+    ws.current.updateToolbox(toolboxOf(catalogue, scope));
+    decorate(ws.current, catalogue, lint, trace);
+  }, [ready, catalogue, lint, trace, scope]);
 
   const apply = async () => {
     if (!ws.current) return;
@@ -179,6 +187,15 @@ export default function BlockEditor({ flow, scope, title, catalogue, lint, trace
   );
 }
 
+function toolboxOf(catalogue: CatalogueDoc | null, scope: Scope): BlocklyT.utils.toolbox.ToolboxDefinition {
+  const cat = Object.fromEntries(
+    Object.entries(catalogue?.blocks ?? {})
+      .filter(([, b]) => b.spec.kind !== "core" || b.name === "assert_save_point")
+      .map(([n, b]) => [n, { concept: b.spec.concept, timeout_s: b.spec.timeout_s, badge: b.badge }]),
+  );
+  return toolbox(cat, scope.kind) as unknown as BlocklyT.utils.toolbox.ToolboxDefinition;
+}
+
 /** Badges (L1 verification), lint warnings and the last run on each block, after loading. */
 function decorate(w: BlocklyT.WorkspaceSvg, catalogue: CatalogueDoc | null, lint: LintDoc | null, trace: Trace | null): void {
   const byPath = findingsByPath(lint);
@@ -197,8 +214,8 @@ function decorate(w: BlocklyT.WorkspaceSvg, catalogue: CatalogueDoc | null, lint
     if (!b.id.startsWith("n:")) continue;
     const path = b.id.slice(2).split("#")[0];
     const runField = b.getField("RUN");
-    if (runField && trace) runField.setValue(runLine(trace.nodes[path]) || "not run");
+    if (runField) runField.setValue(trace ? runLine(trace.nodes[path]) || "not run" : "");
     const own = byPath.get(path);
-    if (own?.length) b.setWarningText(own.map((f) => `${f.severity}: ${f.text}`).join("\n"));
+    b.setWarningText(own?.length ? own.map((f) => `${f.severity}: ${f.text}`).join("\n") : null);
   }
 }
