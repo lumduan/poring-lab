@@ -1196,6 +1196,9 @@ The cursor gate is the first layer; a click on a unit needs both layers to miss.
 
 The motion model below stays a proposal: its premise is open for Batt (the looter problem).
 
+➡️ **These three decisions are pre-registered as walk@12 in §3.21, WITHOUT the motion model.** The
+motion model below, if adopted, takes a later walk version.
+
 **Why:** walk@11's memory envelope is safe but stalls crowd routes. A unit out of view for a few
 seconds gets a 6–23 cell radius, because it may move at its fastest speed the whole time. The
 engine says otherwise (phase3-plan §6b, rAthena @e985006, read for mechanics only).
@@ -1388,6 +1391,100 @@ zero `attack_request`, zero `npc_contact`, zero GM `act` of kind normal.
 - the weight rise against the item's weight.
 
 **When:** after rec@0 (§3.19), and only once P1–P4 hold.
+
+### 3.21 walk@12 — walk@11 + the WORK ZONE, the TALK-cell block and a clean harness exit; TUNING (indoor/outdoor × CLEAN/CROWD), then the HELD-OUT set once (pre-registered 2026-10-08 ~14:43 ICT at merge, BEFORE any run; Batt's decisions of 2026-10-08 ~11:25)
+**Why:** the walk@11 verdict (0 of 4 tuning runs PASS; its results above).
+- **The unit gate held against monsters:** 0 attack requests and 0 GM attacks in 705 rule clicks
+  (231 + 212 + 147 + 115) across all four runs. walk@10 attacked in three of its four.
+- **What remained, and failed the bar:**
+  - one NPC contact in each indoor run, at the cell (112,114) beside Sister Linus. A WALK read 8 px
+    from two TALK reads, all three points picking that one cell: the mechanism of every NPC contact
+    since walk@8;
+  - one rule click on a UI window (indoor CROWD route 53: client (52.9, 295.8), the Basic
+    Information icon grid). It opened the Shortcut Description window, the chat input could not
+    open again, and the run exited without its end time and packets (finished offline).
+- **Completion** (47 / 31 / 39 / 31) is not what this version changes.
+
+**The rule:** `scripts/walk12.py` at the commit of this pre-registration = **walk@11 (3.18)
+unchanged** plus exactly Batt's three decisions.
+- walk12 does not copy walk@11. Its route loop and its harness ARE walk@11's functions (the same
+  code objects), re-bound to walk12's click step, label and session log. `test_walk12.py` checks
+  that the code is the same and that walk11's module is untouched.
+1. **Click points exclude the client's UI windows** (`scripts/work_zone.py`).
+   - The WORK ZONE is the game area minus each `route_preview.UI_WINDOWS` rectangle, grown by
+     **12 px**. The windows: basic info + its menu icons, the hotbar, the small top window, the
+     minimap, the chat window (client px at the frozen 1280×720 layout).
+   - Over a UI window the client shows its plain arrow, which the cursor gate reads as WALK, so the
+     gate cannot protect a click there.
+   - Every candidate pixel must lie in the work zone: tier A / B, the farther points' and the
+     substitutes' (they come from the same function), and the portal's. A refused pixel is never
+     hovered.
+   - Tier B is used only when no tier-A pixel lies in the work zone (named clicks only, as before).
+     A cell with no work-zone pixel is `no_safe_point`: the next point at once (walk@10's rule).
+   - Tested: the observed point (52.9, 295.8) is refused, a point 0.5 px outside the margin is
+     allowed, and with no window near a cell the points and tier are exactly walk@11's.
+   - The same helper is the work zone of the targeting proposal (c) below.
+2. **A TALK read blocks the whole picked cell.**
+   - Within one click attempt (the points of one target cell): once a point reads TALK, every later
+     point that the picking model maps to the same cell is refused without a hover.
+   - An attempt that clicks nothing ends **`covered_talk_cell`**: a unit at the click point, so
+     walk@8's patience and substitute rules apply.
+   - A round tries each cell once, and tier A / B points of different cells never pick the same
+     cell, so the block covers the whole round. It does not carry over into a later round: after
+     patience, the cell's points are read afresh.
+   - Tested on a synthetic band (one TALK point, four WALK points named in the same cell): walk@11
+     clicks the cell (the positive control), walk@12 refuses the four unhovered.
+3. **The harness finishes its session on any exit.**
+   - A Stop (e.g. "the chat input did not open"), any other exception, or an interrupt (SIGINT,
+     SIGTERM) still writes the session's packets (the manifest's t0 to the end) and its end time
+     t1, through walk@11's finish path. The manifest records `ended`, `reason` and `exit_code`.
+     No input is sent after the failure.
+   - The run then exits NONZERO: 3 for a Stop, 4 for another exception, 130 for an interrupt. A
+     normal end exits 0 with `ended: complete`.
+   - A rule decline is not a harness exit: a route declines and the run goes on, as in walk@11.
+   - If a harness exit leaves fewer than 50 scored routes, the run is re-run unchanged with its
+     pre-registered seed; the partial session is kept and not scored (walk@11's outdoor precedent,
+     3.18 results).
+- **Everything else is walk@11's:** the click-instant unit gate with its 8 s memory, the farther
+  points, the v3 cursor references, the detector (the same ONNX, confidence 0.25, IoU 0.5, 8 CPU
+  threads), tiers A / B, the `/where` fixes (4 per route, trust for 3 clicks), patience and
+  substitutes, the scene-shift check, the click time logged, the route preview.
+
+**Not included:** the motion model (T1-lite) stays a proposal (the "walk@12 — DESIGN PROPOSAL"
+above). Its premise is open for Batt: the looter problem.
+- **Expected** (Claude's reading of walk@11's numbers, not Batt's words; not a bar): the CROWD runs and outdoor CLEAN fail by count
+  again. What this version must show is zero safety events in every condition: no NPC contact and
+  no UI click.
+
+**Design pilot:** none at the time of writing; host tests only (`services/backend/tests/test_walk12.py`).
+
+**SAFETY instruments, all LIVE and proven by a deliberate positive case (§2a):** as 3.18.
+`attack_request`, `npc_contact`, and the server's `act` from the GM (kinds normal, pickup), each
+counted inside the session's manifest window. The banked-capture replay (`guarded_build.py
+replay:`) re-checks every run afterwards.
+
+**TUNING runs, all four whatever the first scores:**
+- Conditions as 3.14. FRESH seeds: indoor clean **20261055**, indoor crowd **20261056**, outdoor
+  clean **20261057**, outdoor crowd **20261058**.
+- 56 routes each; the first 50 not interrupted are scored.
+- e.g. `scripts/walk12.py --scene indoor --condition clean --seed 20261055 --label walk12-alone`.
+
+**HELD-OUT runs**, ONCE, scored separately, never used to tune, **only if all 4 tuning runs PASS**:
+guild (alberta_in) **20261059**, town (prontera) **20261060**, dungeon (iz_dun00) **20261061**,
+portal (prt_fild08 → prontera) **20261062**. All CLEAN, `@heal` after each warp, 56 each, the first
+50 scored.
+
+**The bar (zero tolerance, unchanged):** ≥ **48 / 50** per run **AND** zero `attack_request`,
+zero `npc_contact`, zero `act` from the GM of kind normal or pickup, in the run's window. Any one
+is a HARD FAIL.
+
+**Reported:** 3.18's items, plus:
+- **UI-exclusion refusals:** the click attempts with `ui_refused` (the pixels refused), the cells
+  left with no work-zone pixel, and the rule clicks whose pixel lies in a grown UI window (0 by
+  construction; checked from the logs).
+- **TALK-cell refusals:** the `covered_talk_cell` attempts, their refused points (`talk_refused`)
+  and cells (`talk_cells`), any later click on such a cell, and any `npc_contact` there.
+- **Harness ends:** each run's manifest `ended` and `exit_code`.
 
 ### Targeting — DESIGN PROPOSALS (Batt, 2026-10-08; NOT pre-registered: each is pre-registered before it is adopted)
 **Provenance:** ideas only, from a screen recording of another RO bot's debug view (unknown origin,
