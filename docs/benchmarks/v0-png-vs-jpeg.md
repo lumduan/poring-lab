@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [phase3-plan.md, h264-vs-png.md]
-next_action: "Batt 2026-10-07: (1) a matched-batch rerun TONIGHT (v0-JPEG at batch 2 / workers 1, same seed/split/epochs, a JPEG cache rebuilt with today's labels) so the format is the only variable; it decides whether PNG's ~5x storage is worth it. (2) TAKEAWAY: the v0 models sit exactly at their labels' P/R on the gold set, so labels are the ceiling and v1 labels (M4 must pass) are the lever; M4 is the top priority. Reported 2026-10-07 morning. In-domain: a tie. Domain shift (054429): PNG +0.22 mAP50, confounded by batch 2 vs 4 and one run each. A matched-batch rerun would attribute it (Batt's call). v1 labels, not the image format, are the in-domain lever: both models sit at the v0 auto labels' own P/R on the gold set."
+next_action: "2026-10-08 21:03: the matched-batch rerun (v0jpg-20261007, JPEG at batch 2) is SCORED: the 054429 domain-shift gain was the BATCH SIZE, not the format (JPEG b2 0.710 vs PNG 0.704 mAP50); in domain a tie; gold monster recall 0.52 vs 0.56 (4 boxes, one run each). PARKED for Batt: whether later caches return to JPEG (PNG costs ~5x storage for no measured gain). v1 stays PNG as pre-registered."
 ---
 
 # v0-PNG vs v0-JPEG: the same frames, the same labels, a different image format
@@ -111,7 +111,47 @@ Best by mAP50-95: JPEG epoch 26 (0.691); PNG epoch 29 (0.707).
 - Frigate inference during the PNG run: median 32.0 ms, p95 63.9 (7,531 samples at 5 s). Without
   a GPU job: 26.4 / 49.8.
 
+## The matched-batch rerun: RESULTS (`v0jpg-20261007`, done 2026-10-08 20:59 ICT / 13:59 UTC)
+
+Batt asked for it on 2026-10-07: v0-JPEG at batch 2 / workers 1, with the same seed, split and
+epochs, on a JPEG cache rebuilt with today's labels (`v0jpg-20261007`, the same labels as
+`v0png-20261006`). So the image format is now the only variable.
+- **Scored as the earlier comparison was:** last.pt (epoch 30) on the PNG cache's test frames, and
+  `gold_eval.py` on the 27 gold frames.
+- **The run:** the adaptive duty cycle, resumes after IO-guard pauses, and the R3 paired measurement.
+- **No numeric bar was pre-registered for it.** It answers the attribution question, so it is
+  reported as measured.
+
+| test set | frames | JPEG b4 (`v0-baseline`) | **JPEG b2 (matched)** | PNG b2 | PNG − JPEG b2 |
+|---|---|---|---|---|---|
+| indoor-c (in domain) | 1,166 | 0.767 / 0.573 | **0.753 / 0.558** | 0.782 / 0.567 | +0.029 / +0.009 |
+| indoor-v2 (gold session, auto labels) | 268 | 0.766 / 0.547 | **0.773 / 0.571** | 0.769 / 0.545 | −0.004 / −0.026 |
+| **054429 (domain shift)** | 1,077 | 0.484 / 0.384 | **0.710 / 0.608** | 0.704 / 0.584 | **−0.006 / −0.024** |
+
+Values are mAP50 / mAP50-95. On 054429, the matched JPEG run scores monster 0.519 / 0.396 and NPC
+0.901 / 0.819 (AP50 / AP); PNG scores 0.515 / 0.389 and 0.894 / 0.779.
+
+**The gold set** (model vs hand, conf 0.25, IoU ≥ 0.5):
+
+| | P | R | mean IoU | monster TP / FP / FN | npc TP / FP / FN |
+|---|---|---|---|---|---|
+| JPEG b2 (matched) | 0.712 | 0.643 | 0.828 | 52 / 33 / 48 | 47 / 7 / 7 |
+| PNG b2 | 0.715 | 0.669 | 0.816 | 56 / 35 / 44 | 47 / 6 / 7 |
+
+**Reading:**
+1. **The domain-shift gain was the BATCH SIZE, not the format.** JPEG at batch 2 scores 0.710 on
+   054429, against PNG's 0.704; JPEG at batch 4 scored 0.484. "Reading 2" above is therefore
+   ATTRIBUTED: the format did not cause it.
+2. In domain, the two formats tie again (within ±0.03 mAP50, and the sign flips between sessions).
+3. On the gold set, PNG finds 4 more monsters (recall 0.56 vs 0.52) at the same precision. That is
+   one run each, with no seed variance, and 4 boxes of 100: not separable from noise.
+4. **Storage (Batt's call, PARKED):** with this run, PNG's ~5× storage shows no measurable detection
+   gain. v1 stays on PNG as its pre-registration fixes (`v1-vs-v0png.md`, not moved after seeing
+   data). Whether LATER caches go back to JPEG is Batt's decision.
+
 ## Open (Batt's call)
+- ➡️ **ANSWERED 2026-10-08 by the matched-batch rerun (above): the 054429 gain was the batch size.**
+  The original open item:
 - **Attribution:** one matched-batch run, e.g. PNG at batch 4 in a night window (≈ 4–5 h) or JPEG
   at batch 2. It shows whether the 054429 gain is the format.
 - v1 stays blocked on M4, as before.
