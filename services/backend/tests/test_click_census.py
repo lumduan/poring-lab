@@ -16,8 +16,9 @@ ALLOWED = {
     "scripts/ro_agent.py": (14, "UI only: the client's title bar, login / server / character "
                                 "screens, console tabs, the chat input, the operator's click CLI"),
     "scripts/dataset_activity.py": (1, "UI: the death dialog's return button (world clicks gated)"),
-    "scripts/safety_signal_check.py": (4, "deliberate positive cases: sword / talk / pickup read "
-                                          "twice by pixels; dialog buttons by screenshot"),
+    "scripts/safety_signal_check.py": (6, "deliberate positive cases: sword / talk / pickup read "
+                                          "twice by pixels; dialog buttons by screenshot; the "
+                                          "cancel measurement's unit click + verified walk click"),
     "scripts/rule_run.py": (2, "walk@1-4 RULES (retired): their own marker / cursor gates"),
     "scripts/walk5.py": (1, "the walk@5 RULE's gated click"),
     "scripts/walk6.py": (1, "the walk@6 RULE's gated click (walk@7 reuses it)"),

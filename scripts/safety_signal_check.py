@@ -332,6 +332,118 @@ def npc_collect() -> int:
     return 0 if out["pass"] else 1
 
 
+def cancel_test(delays_ms: list[int], n: int, mapname: str, x: int, y: int) -> int:
+    """walk@11's defensive layer, MEASURED (Batt 2026-10-08): does a walk click right after a click
+    that hit a unit stop the attack? Per trial: one Red Plant, found by the detector + the cursor
+    (sword, re-read), a
+    safe walk point verified first (walk, re-read; away from the Poring), the deliberate click on
+    the Poring, D ms, then the walk click. The live packets say whether we hit it."""
+    import bench
+
+    from poring_dataset import camera as cam
+    from poring_dataset import gat as gatmod
+
+    refs = w6.CursorRefs.load(CURSOR_REFS_V3)
+    gat = gatmod.parse((cam.GAT_DIR / f"{mapname}.gat").read_bytes())
+    cj = json.loads((r.ROOT / "packages/poring_dataset/src/poring_dataset/camera_rdp.json")
+                    .read_text())  # fmt: skip
+    camera = cam.camera_from_json(cj["camera"])
+    sid = new_session_id("safety-check-cancel")
+    log = DemoLog(sid)
+    lock = record_session.read_lock(r.ROOT / "state")
+    log.start(backend=str(lock.backend), lock_seq=lock.seq, server="lab-rathena",
+              rule="safety-check/cancel", account="gm", delays_ms=delays_ms, n=n)  # fmt: skip
+    t_first = r.ns()
+    trials: list[dict[str, Any]] = []
+    import unit_detector
+
+    det = unit_detector.UnitDetector()
+    with r.session("rule:safety-check") as (agent, screen):
+        pr = w10.Prober9(agent, screen, refs)
+        gx, gy, _, _ = r.game_region()
+        for d_ms in delays_ms:
+            for _ in range(n):
+                r.gm(agent, screen, "@killmonster2")
+                r.gm(agent, screen, f"@warp {mapname} {x} {y}")
+                time.sleep(rr.WARP_SETTLE_S)
+                # a RED PLANT (1078): a monster that never moves, so the hover at its detected
+                # box still finds it (Porings hop away during the ~1 s park + hover)
+                r.gm(agent, screen, "@monster 1078 1")
+                time.sleep(2.0)
+                bench.close_chat(agent, screen)
+                r.activate_client(agent, screen)
+                hit = None
+                # the detector finds the Poring in one frame; the cursor confirms it (sword twice)
+                frame = screen.grab(*r.game_region())[1]
+                pc = camera.project(np.zeros((1, 2)), np.zeros(1))[0]  # our own feet
+                # the target: the detected monster nearest our feet (the static plant). The cursor
+                # is NOT required here: the sword reference set recognises 6 / 26 (leave-one-out);
+                # whether the click hit it is the live attack_request's to say
+                mobs = [bx for bx in det.detect(frame) if bx.cls == "monster"]
+                if mobs:
+                    box = min(
+                        mobs, key=lambda bx: abs(bx.foot[0] - pc[0]) + abs(bx.foot[1] - pc[1])
+                    )
+                    u, v = (box.x0 + box.x1) / 2, box.y0 + 0.65 * (box.y1 - box.y0)
+                    hit = (1 if u > pc[0] else -1, 1 if v < pc[1] else -1, u, v)
+                if hit is None:
+                    trials.append({"delay_ms": d_ms, "found": False})
+                    continue
+                # the safe point: 2 cells AWAY from the Poring, verified walk twice
+                sdx = -2 if hit[0] > 0 else 2
+                sdy = -2 if hit[1] > 0 else 2
+                rel = np.array([[sdx, sdy]], dtype=float)
+                su, sv = camera.project(rel, gat.relative_altitude((x, y), rel))[0]
+                if not pr.park():
+                    continue
+                pr.hover(su, sv)
+                safe = pr.read(su, sv)["shape"] == "walk" and pr.read(su, sv)["shape"] == "walk"
+                if not safe:
+                    trials.append({"delay_ms": d_ms, "found": True, "safe_point": False})
+                    continue
+                agent.move(gx + round(hit[2]) - 3, gy + round(hit[3]) - 3)
+                agent.move(gx + round(hit[2]), gy + round(hit[3]))
+                time.sleep(0.3)
+                t_hit = r.ns()
+                agent.click(gx + round(hit[2]), gy + round(hit[3]))  # the deliberate unit click
+                time.sleep(d_ms / 1000)
+                agent.move(gx + round(su) - 3, gy + round(sv) - 3)
+                agent.move(gx + round(su), gy + round(sv))
+                t_cancel = r.ns()
+                agent.click(gx + round(su), gy + round(sv))  # the CANCEL walk click
+                time.sleep(4.0)
+                trials.append({"delay_ms": d_ms, "found": True, "t_hit": t_hit,
+                               "t_cancel": t_cancel})  # fmt: skip
+        r.gm(agent, screen, "@killmonster2")
+        bench.close_chat(agent, screen)
+    det.close()
+    events, anchor = record_session.write_packets(log.dir, t_first, r.ns())
+    for t in trials:
+        if "t_hit" not in t:
+            continue
+        lo, hi = t["t_hit"] - 200_000_000, t["t_hit"] + 4_000_000_000
+        win = [e for e in events if lo <= int(e.get("t_mono_ns", 0)) <= hi]
+        t["attack_request"] = sum(e.get("type") == "attack_request" for e in win)
+        t["hits"] = sum(e.get("type") == "act" and int(e.get("src_gid", -1)) == GM_AID
+                        and e.get("kind") == "normal" for e in win)  # fmt: skip
+        t["walk_request_after_cancel"] = any(e.get("type") == "self_move_request"
+                                             and int(e["t_mono_ns"]) >= t["t_cancel"]
+                                             for e in win)  # fmt: skip
+    summary: dict[str, Any] = {}
+    for d_ms in delays_ms:
+        done = [t for t in trials if t["delay_ms"] == d_ms and t.get("attack_request")]
+        summary[str(d_ms)] = {"trials": len(done),
+                              "with_request": sum(t["attack_request"] > 0 for t in done),
+                              "with_hits": sum(t["hits"] > 0 for t in done),
+                              "hits": [t["hits"] for t in done]}  # fmt: skip
+    missed = sum(1 for t in trials if "t_hit" in t and not t.get("attack_request"))
+    out = {"session": sid, "summary": summary, "clicks_without_request": missed,
+           "skipped": [t for t in trials if "t_hit" not in t]}  # fmt: skip
+    log.finish(packet_events=len(events), packet_anchor=anchor, result=out)
+    print(json.dumps(out, indent=1), flush=True)
+    return 0
+
+
 def _count(xs: Any) -> dict[str, int]:
     from collections import Counter
 
@@ -352,6 +464,12 @@ def main() -> int:
     a3 = sub.add_parser("npc-key")
     a3.add_argument("code", help="KeyboardEvent.code, e.g. Enter or Escape")
     sub.add_parser("npc-collect")
+    a6 = sub.add_parser("cancel-test")
+    a6.add_argument("--delays-ms", default="150,300,600")
+    a6.add_argument("--n", type=int, default=5)
+    a6.add_argument("--map", default="prt_fild08")
+    a6.add_argument("--x", type=int, default=268)
+    a6.add_argument("--y", type=int, default=107)
     sub.add_parser("pickup-start")
     sub.add_parser("pickup-click")
     sub.add_parser("pickup-collect")
@@ -372,6 +490,8 @@ def main() -> int:
         return ui_click(a.x, a.y)
     if a.cmd == "ui-drag":
         return ui_drag(a.x1, a.y1, a.x2, a.y2)
+    if a.cmd == "cancel-test":
+        return cancel_test([int(x) for x in a.delays_ms.split(",")], a.n, a.map, a.x, a.y)
     if a.cmd == "pickup-start":
         return pickup_start()
     if a.cmd == "pickup-click":
