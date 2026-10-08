@@ -606,18 +606,31 @@ def fleet_load(last: dict[str, Any] | None) -> str:
             f"ms, skipping now: {', '.join(skipping) or 'none'}")  # fmt: skip
 
 
+# TEMPORARY R3 amendment (Batt, 2026-10-08 ~11:25; docs/operations/r3-paired.md): a resume after a
+# frame-drop abort ALSO waits until Frigate's rolling fleet load is below ~60 det/s, because without
+# mid-epoch checkpoints a daytime resume throws away its partial epoch. EXIT: once mid-epoch
+# checkpoints are merged AND their resume proof passes (docs/operations/mid-epoch-checkpoints.md),
+# set TEMP_HOLD_MAX_LOAD = None (the continuous rule: resume after the quiet gate, capped).
+TEMP_HOLD_MAX_LOAD: float | None = 60.0  # detections/s, the rolling mean below which we resume
+TEMP_HOLD_WINDOW_S = 600.0  # the rolling window: 10 min of observed distinct updates
+
+
 class QuietGate:
     """The resume gate after a frame-drop abort (Batt, 2026-10-07): ready once NO camera has
     skipped a frame for ``minutes`` continuous minutes of OBSERVED distinct Frigate updates. A
     skip anywhere restarts the clock; a gap in the stats (Frigate unreachable > 60 s) restarts it
-    too, since nothing was observed then (fail closed)."""
+    too, since nothing was observed then (fail closed). ``max_load`` (the TEMPORARY hold above):
+    also the mean fleet load of the last ``load_window_s`` of updates must be below it."""
 
-    def __init__(self, minutes: float, now: float) -> None:
+    def __init__(self, minutes: float, now: float, max_load: float | None = None,
+                 load_window_s: float = TEMP_HOLD_WINDOW_S) -> None:  # fmt: skip
         self.window = minutes * 60.0
         self.since = now  # the start of the current clean stretch
         self.last_seen = now
         self.seen: Any = None
         self.drops = 0
+        self.max_load, self.load_window = max_load, load_window_s
+        self.loads: deque[tuple[float, float]] = deque()  # (t, detection_fps) of distinct updates
 
     def update(self, now: float, p: dict[str, Any] | None) -> None:
         if p is None or p["updated"] == self.seen:
@@ -627,23 +640,41 @@ class QuietGate:
         if now - self.last_seen > UNREACHABLE_S:
             self.since = now
         self.seen, self.last_seen = p["updated"], now
+        self.loads.append((now, float(p["detection_fps"])))
+        while self.loads and self.loads[0][0] < now - self.load_window:
+            self.loads.popleft()
         if any(sk > 0 for _, sk in p["cameras"].values()):
             self.since, self.drops = now, self.drops + 1
 
-    def ready(self, now: float) -> bool:
+    def rolling_load(self) -> float | None:
+        return sum(v for _, v in self.loads) / len(self.loads) if self.loads else None
+
+    def quiet_ok(self, now: float) -> bool:
         return now - self.since >= self.window and now - self.last_seen <= UNREACHABLE_S
+
+    def load_ok(self) -> bool:
+        if self.max_load is None:
+            return True
+        load = self.rolling_load()
+        return load is not None and load < self.max_load
+
+    def ready(self, now: float) -> bool:
+        return self.quiet_ok(now) and self.load_ok()
 
 
 def quiet(minutes: float, max_wait_min: float, fetch: Fetch = fetch_json,
           clock: Callable[[], float] = time.time, sleep: Callable[[float], None] = time.sleep,
-          poll_s: float = 5.0) -> int:  # fmt: skip
+          poll_s: float = 5.0, max_load: float | None = None) -> int:  # fmt: skip
     """Wait for QuietGate: 0 when ready, 2 when max_wait_min passes first (never ready = stay
-    stopped). Prints each restart of the clock."""
+    stopped). Prints each restart of the clock, and (with ``max_load``) the load hold."""
     t0 = clock()
-    gate = QuietGate(minutes, t0)
-    print(f"[{stamp()}] QUIET: waiting for {minutes:g} min with no dropped frames on any camera",
-          flush=True)  # fmt: skip
+    gate = QuietGate(minutes, t0, max_load=max_load)
+    hold = (f"; TEMPORARY hold: and a rolling {gate.load_window / 60:g}-min mean load below "
+            f"{max_load:g} detections/s" if max_load is not None else "")  # fmt: skip
+    print(f"[{stamp()}] QUIET: waiting for {minutes:g} min with no dropped frames on any camera"
+          f"{hold}", flush=True)  # fmt: skip
     drops = 0
+    held_at = -1e18
     while True:
         now = clock()
         s = fetch(FRIGATE_STATS)
@@ -653,8 +684,16 @@ def quiet(minutes: float, max_wait_min: float, fetch: Fetch = fetch_json,
             print(f"[{stamp()}] QUIET: a camera dropped frames; the clock restarts "
                   f"({fleet_load(parse_stats(s) if s else None)})", flush=True)  # fmt: skip
         if gate.ready(now):
-            print(f"[{stamp()}] QUIET OK: {minutes:g} min without dropped frames", flush=True)
+            load = gate.rolling_load()
+            tail = f"; rolling load {load:.1f} detections/s" if load is not None else ""
+            print(f"[{stamp()}] QUIET OK: {minutes:g} min without dropped frames{tail}", flush=True)
             return 0
+        if gate.quiet_ok(now) and now - held_at >= 300.0:  # the load hold, at most every 5 min
+            held_at = now
+            load = gate.rolling_load()
+            print(f"[{stamp()}] QUIET: no drops for {minutes:g} min, but the rolling load is "
+                  f"{(load or 0.0):.1f} detections/s: held until it is below {max_load:g} "
+                  "(TEMPORARY, Batt 2026-10-08)", flush=True)  # fmt: skip
         if now - t0 >= max_wait_min * 60.0:
             print(f"[{stamp()}] QUIET TIMEOUT: no {minutes:g} quiet min within {max_wait_min:g} "
                   "min", flush=True)  # fmt: skip
@@ -874,6 +913,8 @@ def main() -> int:
     q = sub.add_parser("quiet")
     q.add_argument("--minutes", type=float, default=15.0)
     q.add_argument("--max-wait-min", type=float, default=120.0)
+    q.add_argument("--max-load", type=float, default=TEMP_HOLD_MAX_LOAD or 0.0,
+                   help="TEMPORARY hold: rolling load below this (0 = off)")  # fmt: skip
     a = ap.parse_args()
     for path in (getattr(a, "csv", None), getattr(a, "out", None)):
         if path is not None and not str(path).startswith("/dev/shm/"):
@@ -883,7 +924,7 @@ def main() -> int:
     if a.cmd == "sample":
         return run_loop(a.csv, None, False)
     if a.cmd == "quiet":
-        return quiet(a.minutes, a.max_wait_min)
+        return quiet(a.minutes, a.max_wait_min, max_load=a.max_load or None)
     if a.cmd == "check":
         why = prestart(a.baseline)
         print(f"[{stamp()}] {'REFUSED: ' + why if why else 'OK: R2 + R3 pre-start checks pass'}")

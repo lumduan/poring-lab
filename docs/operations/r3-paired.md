@@ -151,6 +151,8 @@ R1 / R2 are unchanged.
 - **A camera dropping frames for 30 s** → an IMMEDIATE, verified abort, logged with the fleet
   load. Then a wait for 15 quiet minutes (the gate re-arms until it passes; never a stop). Then a
   resume at L4, walking back up slowly.
+  ➡️ **TEMPORARY AMENDMENT (Batt, 2026-10-08 ~11:25), see "The temporary load hold" below:** the
+  resume ALSO waits until Frigate's rolling load is below ~60 detections/s.
 - **The 3rd frame-drop abort within a rolling 2 h** → a CAP at ≥ L3 (800 ms) for the next 60 min,
   plus a `NOTIFY:` line (the session pushes it to Batt). It keeps running. *(This replaces the
   15:40 rule "3 aborts in 2 h → stop and wait".)*
@@ -172,6 +174,34 @@ the accounting, the atomic file), `test_train_r3.py` (the container's reader: an
 the slowest level; the per-level accounting), `test_train_day.py` (the real script against stubs:
 resume at L4 after a drop, the cap + NOTIFY without a stop, a re-armed gate, a latency trip raising
 the floor).
+
+## The temporary load hold on the resume (Batt, 2026-10-08 ~11:25) — TEMPORARY, with an exit
+**Why:** on 2026-10-08 four camera-drop aborts in two hours came at Frigate's late-morning peak.
+- 09:32, 10:03, 10:37 and 11:15, at 74–87 detections/s. Every one was at the SLOWEST duty level,
+  and the cameras also skipped while nothing of ours ran.
+- Each resume ran a few minutes at the slow levels and was then aborted. Without mid-epoch
+  checkpoints, each abort also threw away its partial epoch: epoch 29 was trained and discarded
+  four times.
+
+**The rule:** after a frame-drop abort, the resume gate needs BOTH conditions:
+- 15 continuous quiet minutes (unchanged);
+- Frigate's rolling load below ~60 detections/s: the mean `detection_fps` over the last 10 min of
+  observed distinct updates.
+
+While the quiet minutes are met but the load is not, the gate logs a "held" line at most every 5
+min. The cap and the NOTIFY after 3 aborts in 2 h are unchanged.
+
+**Code:** `frigate_r3.py`:
+- `TEMP_HOLD_MAX_LOAD = 60.0`, `TEMP_HOLD_WINDOW_S = 600`;
+- `QuietGate(max_load=…)`;
+- `quiet --max-load` (default the constant; 0 = off).
+- Tests in `test_frigate_r3.py`.
+- It went live at 11:27:57. The running gate was restarted by hand, and a NOTE line in the run's
+  `train.log` says so.
+
+**EXIT (Batt):** once mid-epoch checkpoints are merged AND their pre-registered resume proof passes
+(docs/operations/mid-epoch-checkpoints.md), set `TEMP_HOLD_MAX_LOAD = None`. That reverts to the
+continuous rule: resume after the quiet gate, capped. Record the date here when it is done.
 
 ## Frame-drop aborts: an automatic resume (Batt, 2026-10-07 ~15:40)
 > ➡️ **AMENDED ~16:25:** "the 3rd abort within 2 h stops" is replaced by the cap + notify above.

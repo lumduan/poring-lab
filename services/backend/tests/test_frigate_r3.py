@@ -501,3 +501,48 @@ def test_time_per_level_is_accounted_and_the_duty_file_is_atomic(
         "t_epoch": 123.0,
     }
     assert not list(f.parent.glob("*.tmp"))
+
+
+# --- the TEMPORARY load hold on the resume gate (Batt, 2026-10-08 ~11:25) ------------------------
+def upd_load(i: int, load: float, skip: float = 0.0) -> dict[str, Any]:
+    return {"updated": i, "inference": 30.0, "detection_fps": load,
+            "cameras": {"a": (5.0, skip), "b": (5.0, 0.0)}}  # fmt: skip
+
+
+def test_the_load_hold_waits_for_the_rolling_load_after_the_quiet_minutes(fr: ModuleType) -> None:
+    g = fr.QuietGate(15, now=0.0, max_load=60.0)
+    for k, t in enumerate(range(0, 1200, 15)):  # 20 quiet minutes, but busy: 75 detections/s
+        g.update(float(t), upd_load(k, 75.0))
+    assert g.quiet_ok(1185.0) and not g.ready(1185.0)
+    for k, t in enumerate(range(1200, 1500, 15)):  # 5 calmer minutes: the 10-min mean is ~57.5
+        g.update(float(t), upd_load(100 + k, 40.0))
+    assert g.rolling_load() == pytest.approx(57.5, abs=1.0) and g.ready(1485.0)
+    g.update(1500.0, upd_load(999, 40.0, skip=1.0))  # a drop still restarts the quiet clock
+    assert not g.ready(1500.0)
+
+
+def test_no_hold_without_max_load_and_the_cli_default_is_the_temporary_60(fr: ModuleType) -> None:
+    g = fr.QuietGate(15, now=0.0)
+    for k, t in enumerate(range(0, 915, 15)):
+        g.update(float(t), upd_load(k, 85.0))
+    assert g.ready(900.0)  # the continuous rule: quiet is enough
+    assert fr.TEMP_HOLD_MAX_LOAD == 60.0  # the exit: None once mid-epoch checkpoints are proven
+
+
+def test_the_quiet_command_holds_while_busy(
+    fr: ModuleType, capsys: pytest.CaptureFixture[str]
+) -> None:
+    clock = {"t": 0.0}
+
+    def tick() -> float:
+        clock["t"] += 15.0
+        return clock["t"]
+
+    k = {"i": 0}
+
+    def busy(url: str) -> dict[str, Any]:
+        k["i"] += 1
+        return stats(k["i"], det_fps=80.0, cams={"a": (5.0, 0.0)})
+
+    assert fr.quiet(15, 40, fetch=busy, clock=tick, sleep=lambda s: None, max_load=60.0) == 2
+    assert "held until it is below 60" in capsys.readouterr().out
