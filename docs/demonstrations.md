@@ -1294,6 +1294,70 @@ under way by then.
 
 **When:** after walk@11's outdoor reruns and the route-preview demo (one client).
 
+### 3.20 loot@1 — kill, then loot WITHOUT new training: a hover-scan for the PICKUP cursor, verified by the weight readout (pre-registered 2026-10-08 ~11:40 ICT, BEFORE any run; Batt's Q21 decision; a SMALL alone-test, after rec@0)
+**Why:** Batt's decision (ADR-0020 open question 21): loot without a ground-item detector class
+first.
+1. The tracker knows where a monster died.
+2. Hover-scan the cells around that cell for the PICKUP cursor (references v2, calibrated
+   2026-10-07).
+3. Click it, and verify by the weight readout rising.
+- A ground-item class comes later, as an improvement.
+
+**Prerequisites:** each is built and proven by a deliberate POSITIVE case (§2a) BEFORE any trial.
+- **P1 · the weight readout, from pixels:** the Basic Information line "Weight : N / M". A new L1
+  read concept, since no reader exists yet. Proven when `@item` gives an item of known weight and
+  the readout rises by exactly that weight.
+- **P2 · the offline decoders,** which do not exist yet:
+  - the item-on-floor entry (`ZC_ITEM_FALL_ENTRY`: item and cell);
+  - the pickup result (`ZC_ITEM_PICKUP_ACK`).
+  - Each is proven on a banked capture by `replay:`. They are OFFLINE ground truth only, never
+    decision input (rule 1). The GM's live `act` of kind pickup is already decoded and proven
+    (§2a).
+- **P3 · the death cell, a stand-in for the tracker** (Phase 3 T1 is not built). For the ONE
+  deliberate target: its last detected foot cell (the detector + the picking model) on the last
+  frame before it vanishes after the kill.
+  - Offline truth: its vanish with reason "died", and its last position from the packets.
+- **P4 · the drop rates** of the target species, read from the pinned rAthena mob_db (a KB
+  extension). They are reported, never committed.
+
+**The trial:** lab rAthena, RDP, ASSIST, the interlock green, the GM.
+1. `@heal`; a FRESH spot from a seeded list of open cells ≥ 6 cells apart, so no item left on the
+   floor by an earlier trial is in reach.
+2. `@monster poring 1` beside the GM.
+3. DELIBERATE attack clicks until it dies. Death is read from pixels: the target is gone after its
+   death animation.
+4. **LOOT** (the rule under test):
+   - hover-scan the 3 × 3 cells around the death cell, with two motions per hover (the walk-marker
+     rule);
+   - a click needs the cursor gate with PICKUP as its ONLY allowed shape (two reads), walk@11's
+     unit gate, and the client's UI windows excluded;
+   - click the first PICKUP point.
+5. **The runtime check:** the weight readout rises within 5 s of the click.
+6. `@killmonster2`, then the next trial.
+
+**Counted:**
+- trials whose kill DROPPED an item (offline, P2). Run until 20 such trials, at most 40 kills.
+- **A drop trial SUCCEEDS** when the weight readout rose (pixels) AND the server confirms the
+  pickup (offline: the pickup result, and the GM's pickup act).
+
+**The bar:** ≥ 19 / 20 drop trials.
+- This is the small alone-test Batt asked for.
+- The full n = 50 comes before L1 `loot.pick_up` flips to verified.
+
+**SAFETY (zero tolerance), in the LOOT phase only** (from the target's death to the trial's end):
+zero `attack_request`, zero `npc_contact`, zero GM `act` of kind normal.
+- The kill phase's attacks are deliberate, and are excluded by that window.
+- A pickup act is the expected outcome here, not a violation.
+
+**Also reported:**
+- hovers per success;
+- PICKUP reads with no item at that cell (against P2's floor entries);
+- time from death to pickup;
+- items left behind when a kill dropped several;
+- the weight rise against the item's weight.
+
+**When:** after rec@0 (§3.19), and only once P1–P4 hold.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.

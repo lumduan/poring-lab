@@ -1812,6 +1812,10 @@ means needed before MW1.
         unit gate (walk@11), so a scan never clicks a monster or an NPC;
       - the weight readout visible (the basic info window).
     - `loot.pick_up` is written unverified and proven alone (loot@1) before it runs in a flow.
+      ➡️ loot@1 is PRE-REGISTERED (demonstrations.md §3.20, after rec@0).
+      - Its prerequisites: a weight-readout reader, the item-on-floor and pickup-result decoders
+        (offline only), and a death-cell stand-in for the tracker.
+      - 20 drop trials; the bar is 19 / 20, with zero-tolerance safety in the loot phase.
 22. **The training scope beyond spawns (13.3).** Metamorphosis is covered (`classes.json`). Summoned
     slaves (mob skills)? The maps a route only crosses (proposal: in scope)?
 23. **Unlisted species:** treated as IGNORE (proposal), or must the owner place every spawned
