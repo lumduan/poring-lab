@@ -12,6 +12,13 @@ client contacted the NPC (the replay). So, on the frame used for the click decis
 4. the click point must lie at least MARGIN_PX outside every such box. Otherwise it is refused
    and the rule moves the click along the polyline (a covered point).
 Our own character (the box at our feet) is not a unit to avoid.
+
+MEMORY (Batt, 2026-10-08, after walk@11's first pilot attacked a Poring hidden behind a pew --
+invisible to the detector AND the cursor, yet the client's hit test found it): every unit seen in
+the last MEMORY_TTL_S keeps an envelope that grows with the time since it was last seen,
+ceil((age + H) / speed) + 1 cells. A new detection of the same class within a remembered unit's
+reach updates it (the minimal association a growing envelope needs); unmatched sightings stay as
+possibly hidden units until they expire. Still the worst-case envelope: no velocity, no tracker.
 """
 
 from __future__ import annotations
@@ -97,3 +104,69 @@ def click_clear(u: float, v: float, envs: Sequence[Envelope],
             if d < best:
                 best, who = d, e.cls
     return best >= margin, best, who
+
+
+MEMORY_TTL_S = 8.0  # an unexplained sighting older than this is forgotten (a stated risk)
+
+
+@dataclass
+class Seen:
+    cls: str
+    cell: tuple[int, int]  # ABSOLUTE map cell (belief + the pick under its feet)
+    w: float
+    h: float
+    t_ns: int
+
+
+class UnitMemory:
+    """Remembered units (absolute cells), each with the time it was last seen."""
+
+    def __init__(self, ttl_s: float = MEMORY_TTL_S) -> None:
+        self.ttl_s = ttl_s
+        self.items: list[Seen] = []
+
+    def reset(self) -> None:
+        self.items = []
+
+    def observe(self, boxes: Sequence[Any], camera: Any, gat: Any, belief: tuple[int, int],
+                t_ns: int, monster_ms_per_cell: int, pick: Any = None) -> None:  # fmt: skip
+        if pick is None:
+            from poring_dataset.picking import pick_cells as pick
+        self_px = camera.project(np.zeros((1, 2)), np.zeros(1))[0]
+        self.items = [i for i in self.items if (t_ns - i.t_ns) / 1e9 <= self.ttl_s]
+        for b in boxes:
+            fx, fy = b.foot
+            if math.hypot(fx - self_px[0], fy - self_px[1]) <= SELF_PX:
+                continue
+            rel = tuple(int(c) for c in pick(camera, gat, belief, np.array([[fx, fy]]))[0])
+            if abs(rel[0]) > 10**5:
+                rel = _nearest_cell(camera, fx, fy)
+            cell = (belief[0] + rel[0], belief[1] + rel[1])
+            best, bi = None, None
+            for i, it in enumerate(self.items):
+                if it.cls != b.cls:
+                    continue
+                reach = radius_cells(b.cls, (t_ns - it.t_ns) / 1e9, monster_ms_per_cell)
+                d = max(abs(it.cell[0] - cell[0]), abs(it.cell[1] - cell[1]))
+                if d <= max(reach, 1) and (best is None or d < best):
+                    best, bi = d, i
+            seen = Seen(b.cls, cell, b.x1 - b.x0, b.y1 - b.y0, t_ns)
+            if bi is None:
+                self.items.append(seen)
+            else:
+                self.items[bi] = seen
+
+    def envelopes(self, camera: Any, gat: Any, belief: tuple[int, int], now_ns: int,
+                  horizon_s: float, monster_ms_per_cell: int) -> list[Envelope]:  # fmt: skip
+        out: list[Envelope] = []
+        for it in self.items:
+            age = max(0.0, (now_ns - it.t_ns) / 1e9)
+            rad = radius_cells(it.cls, age + horizon_s, monster_ms_per_cell)
+            rel = (it.cell[0] - belief[0], it.cell[1] - belief[1])
+            cells = np.array([(rel[0] + dx, rel[1] + dy) for dx in range(-rad, rad + 1)
+                              for dy in range(-rad, rad + 1)], dtype=float)  # fmt: skip
+            alt = None if gat is None else gat.relative_altitude(belief, cells)
+            feet = camera.project(cells, alt)
+            boxes = [(u - it.w / 2, v - it.h, u + it.w / 2, v) for u, v in feet]
+            out.append(Envelope(it.cls, rel, rad, boxes))
+        return out

@@ -81,3 +81,36 @@ def test_a_static_npc_refuses_only_points_near_its_own_box(ug: ModuleType) -> No
 def test_our_own_character_is_not_a_unit_to_avoid(ug: ModuleType) -> None:
     me = B("player", (0, 0), w=34, h=74)
     assert ug.envelopes([me], Cam(), None, (0, 0), 0.56, 400, pick=pick) == []
+
+
+def test_memory_keeps_a_hidden_unit_and_grows_its_envelope(ug: ModuleType) -> None:
+    """walk@11's pilot: a Poring hidden behind a pew was invisible to every layer. A unit seen once
+    stays forbidden ground, its radius growing with the time since it was seen."""
+    mem = ug.UnitMemory()
+    s = 1_000_000_000
+    mem.observe([B("monster", (3, 0))], Cam(), None, (0, 0), 10 * s, 400, pick=pick)
+    mem.observe([], Cam(), None, (0, 0), 12 * s, 400, pick=pick)  # hidden now
+    envs = mem.envelopes(Cam(), None, (0, 0), 12 * s, 0.5, 400)
+    assert len(envs) == 1 and envs[0].radius == ug.radius_cells("monster", 2.5, 400) == 8
+    assert not ug.click_clear(640 + 30 * 1, 360, envs)[0]  # 2 cells from where it was seen
+
+
+def test_a_re_sighting_updates_the_unit_instead_of_adding_one(ug: ModuleType) -> None:
+    mem = ug.UnitMemory()
+    s = 1_000_000_000
+    mem.observe([B("monster", (3, 0))], Cam(), None, (0, 0), 10 * s, 400, pick=pick)
+    mem.observe([B("monster", (4, 1))], Cam(), None, (0, 0), 11 * s, 400, pick=pick)  # it hopped
+    assert [(i.cell, i.t_ns) for i in mem.items] == [((4, 1), 11 * s)]
+    mem.observe([B("monster", (-6, 0))], Cam(), None, (0, 0), 11 * s, 400, pick=pick)  # another
+    assert len(mem.items) == 2
+    mem.observe([], Cam(), None, (0, 0), 20 * s, 400, pick=pick)  # past the TTL: forgotten
+    assert mem.items == []
+
+
+def test_memory_cells_are_absolute_so_our_own_walk_does_not_move_them(ug: ModuleType) -> None:
+    mem = ug.UnitMemory()
+    s = 1_000_000_000
+    mem.observe([B("npc", (3, 2), w=34, h=74)], Cam(), None, (100, 100), 1 * s, 400, pick=pick)
+    assert mem.items[0].cell == (103, 102)
+    envs = mem.envelopes(Cam(), None, (101, 100), 2 * s, 0.5, 400)  # we walked one cell east
+    assert envs[0].cell == (2, 2) and envs[0].radius == 0

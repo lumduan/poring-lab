@@ -25,6 +25,7 @@ ALLOWED = {
     "scripts/walk8.py": (3, "walk@8 RULE: confirmed / unnamed-after-fix / portal clicks, gated"),
     "scripts/walk9.py": (3, "walk@9 RULE: the same three, gated"),
     "scripts/walk10.py": (3, "walk@10 RULE: the same three, gated (tier A / B)"),
+    "scripts/walk11.py": (3, "walk@11 RULE: walk@10's three + the click-instant unit gate"),
 }  # fmt: skip
 
 
