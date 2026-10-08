@@ -706,3 +706,56 @@ def test_vision_steps_get_the_paired_measurement_without_a_baseline_file(
     )
     assert seen == [None, None]  # no baseline file needed
     assert (train.short, short.short, train.started) == (False, True, False)
+
+
+def test_replay_parses_a_utc_hour_range_and_refuses_anything_else(gb: ModuleType) -> None:
+    step = gb.parse_step("replay:20261007T10..20261007T21@5400")
+    assert (step.kind, step.services, step.seconds) == (
+        "replay",
+        ["20261007T10", "20261007T21"],
+        5400,
+    )
+    for bad in (
+        "replay:20261007T21..20261007T10",
+        "replay:20261007..20261008",
+        "replay:*",
+        "replay:20261007T10..20261007T21;rm",
+    ):
+        with pytest.raises(ValueError):
+            gb.parse_step(bad)
+
+
+def test_replay_selects_the_range_plus_the_file_open_at_its_start(gb: ModuleType) -> None:
+    names = [
+        "capture-20261007T085959Z.pcapng",
+        "capture-20261007T095900Z.pcapng",
+        "capture-20261007T105901Z.pcapng",
+        "capture-20261007T115902Z.pcapng",
+        "events-20261007T105901Z.jsonl.gz",
+        "capture-20261007T225903Z.pcapng",
+        "junk",
+    ]
+    assert gb.select_captures(names, "20261007T10", "20261007T11") == [
+        "capture-20261007T095900Z.pcapng",
+        "capture-20261007T105901Z.pcapng",
+        "capture-20261007T115902Z.pcapng",
+    ]
+
+
+def test_replay_runs_isolated_read_only_capped_and_never_in_the_live_sniffer(
+    gb: ModuleType,
+) -> None:
+    """Rule 5 (mem == memswap, oom 500), no network, captures read-only, reads capped on the root
+    LV, validated file names only, the sniffer IMAGE in a one-off container (never an exec into the
+    live one)."""
+    step = gb.parse_step("replay:20261007T10..20261007T11")
+    cmd = gb.replay_cmd(step, "poring-lab_captures", ["capture-20261007T105901Z.pcapng"], "rp-1")
+    s = " ".join(cmd)
+    assert cmd[:4] == ["timeout", "3600", "docker", "run"] and "exec" not in cmd
+    assert "--network none" in s and "--read-only" in s and "--cap-drop ALL" in s
+    assert "--memory 1g" in s and "--memory-swap 1g" in s and "--oom-score-adj 500" in s
+    assert f"--device-read-bps {gb.REPLAY_DEVICE}:{gb.REPLAY_READ_BPS}" in s
+    assert "poring-lab_captures:/captures:ro" in s and gb.REPLAY_IMAGE in cmd
+    assert str(gb.REPLAY_OUT).startswith("/dev/shm/")
+    with pytest.raises(AssertionError):
+        gb.replay_cmd(step, "v", ["capture-x.pcapng; rm -rf /"], "rp-2")

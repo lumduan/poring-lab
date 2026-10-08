@@ -1668,7 +1668,7 @@ first 50 (after the 3.13 amendment).
   the same yellow line for account 2000001 on new_4-1 (61, 114). No packet appears around it, so it
   reads as a client-side command.
 
-### walk@8 (3.14), indoor CLEAN, RDP: **FAIL, 42 / 50**; no GM attack (server act; NPC contact unverified); every `/where` fix correct (2026-10-07 23:40:42 – 2026-10-08 00:16 ICT / 16:40–17:16 UTC)
+### walk@8 (3.14), indoor CLEAN, RDP: **FAIL, 42 / 50**; ➡️ **SAFETY FAILED: 5 NPC contacts** (the 10-08 replay); every `/where` fix correct (2026-10-07 23:40:42 – 2026-10-08 00:16 ICT / 16:40–17:16 UTC)
 **Session:** `20261007T234042-demo-walk8-alone-clean-indoor` (seed 20261023); 56 routes, none
 interrupted. Scored: the first 50.
 
@@ -1676,7 +1676,8 @@ interrupted. Scored: the first 50.
 - **End to end: 42 / 50** (needed 48) → **FAIL**. For comparison, in the same room CLEAN: walk@7
   31 / 50; walk@6 23 / 50 (with Porings).
 - **SAFETY:** 0 `attack_request`, 0 `npc_contact`. ➡️ The request count was blind (2026-10-08 correction); the
-  server's act packets show NO GM attack in this run. NPC contact: unverified until the replay.
+  server's act packets show NO GM attack in this run. NPC contact: see the 10-08 replay table
+  (in the CORRECTION below the walk@10 results).
 - **The belief fixes (where@2): 11 of 11 CORRECT, 0 WRONG** against the packets. Triggers:
   unconfirmed 7, neighbour 2, no-entry 2; plus a fix at every route's start.
 - **Clicks:** 239 / 254 verified. **9 sent no move request at all** (the client did not walk); 5
@@ -1687,7 +1688,7 @@ interrupted. Scored: the first 50.
 
 | cause | n | what the logs show |
 |---|---|---|
-| `relocalise_limit` | 3 | **dead clicks:** from (112,111), two different targets were "confirmed" with the same 43 px of green. That was **static scenery**, not the walk marker; the clicks did not walk, and two `/where` fixes said we had not moved |
+| `relocalise_limit` | 3 | ➡️ **NPC CONTACTS (the 10-08 replay): these clicks opened Sister Linus's dialog**, which then blocked walking. As first read: **dead clicks:** from (112,111), two different targets were "confirmed" with the same 43 px of green. That was **static scenery**, not the walk marker; the clicks did not walk, and two `/where` fixes said we had not moved |
 | `no_click_point` | 3 | e.g. the north end (91,81): the cursor read UNKNOWN at every hover (likely the altar's animated light in \|A − B\|); and a lone unconfirmed goal that the 2-target streak never escalated |
 | the route ended elsewhere | 2 | dead reckoning one cell off |
 
@@ -1702,14 +1703,15 @@ were **NOT run**.
 **→ walk@9 (3.16):** static green excluded from the chevrons; a scene-shift check after every click
 (no shift = doubt → `/where`, and a confirmed dead click blocks that target); an all-unconfirmed round
 asks `/where`; animated scenery excluded from the cursor mask.
-### walk@9 (3.16), indoor CLEAN, RDP: **FAIL, 39 / 50**; no GM attack (server act; NPC contact unverified); every `/where` fix correct (2026-10-08 00:22:29–01:02 ICT / 17:22–18:02 UTC)
+### walk@9 (3.16), indoor CLEAN, RDP: **FAIL, 39 / 50**; ➡️ **SAFETY FAILED: 2 NPC contacts** (the 10-08 replay); every `/where` fix correct (2026-10-08 00:22:29–01:02 ICT / 17:22–18:02 UTC)
 **Session:** `20261008T002229-demo-walk9-alone-clean-indoor` (seed 20261031); 56 routes, none
 interrupted. Scored: the first 50.
 
 **The results:**
 - **End to end: 39 / 50** (needed 48) → **FAIL** (walk@8 42, walk@7 31, walk@6 23).
 - **SAFETY:** 0 `attack_request`, 0 `npc_contact`, 0 pickup. ➡️ The request count was blind (2026-10-08 correction); the
-  server's act packets show NO GM attack in this run. NPC contact: unverified until the replay.
+  server's act packets show NO GM attack in this run. NPC contact: see the 10-08 replay table
+  (in the CORRECTION below the walk@10 results).
 - **The belief fixes (where@2, the scored 50): 23 of 23 CORRECT, 0 WRONG** against the packets.
   Triggers: unconfirmed 15, neighbour 3, all-unconfirmed round 3, no-shift 2.
 - **walk@9's own fixes worked:** dead clicks 9 → 3 (the static-green exclusion); 2 of them caught by
@@ -1751,14 +1753,15 @@ iteration, and the client time went to walk@10. The chain's driver was stopped b
 **→ walk@10 (3.17):** click points from the picking model, with a pixel margin; one fix trusts
 several shifted clicks; 4 fixes per route.
 
-### walk@10 (3.17), indoor CLEAN, RDP: **FAIL, 42 / 50** — but **0 routes ended on a wrong cell**; every failure was a safe decline; no GM attack (server act; NPC contact unverified); every fix correct (2026-10-08 01:50:46–02:30:43 ICT / 18:50:46–19:30:43 UTC)
+### walk@10 (3.17), indoor CLEAN, RDP: **FAIL, 42 / 50** — but **0 routes ended on a wrong cell**; every failure was a safe decline; SAFETY clean on every signal (server act + the 10-08 replay); every fix correct (2026-10-08 01:50:46–02:30:43 ICT / 18:50:46–19:30:43 UTC)
 **Session:** `20261008T015047-demo-walk10-alone-clean-indoor` (seed 20261039); 56 routes, none
 interrupted. Scored: the first 50.
 
 **The results:**
 - **End to end: 42 / 50** (needed 48) → **FAIL** (walk@9 39, walk@8 42, walk@7 31, walk@6 23).
 - **SAFETY:** 0 `attack_request`, 0 `npc_contact`, 0 pickup. ➡️ The request count was blind (2026-10-08 correction); the
-  server's act packets show NO GM attack in this run. NPC contact: unverified until the replay.
+  server's act packets show NO GM attack in this run. NPC contact: see the 10-08 replay table
+  (in the CORRECTION below the walk@10 results).
 - **The picking fix worked:** clicks (all 56 routes) **225 / 227** verified, **0 walked one cell
   off** (walk@9: 19). By tier: A named 200 / 201, A unnamed after a fix 10 / 11, **B named 15 / 15**. The 2 misses
   sent no move request (dead clicks); both were caught by the shift check and blocked after the fix.
@@ -1909,12 +1912,12 @@ sprite. It only hovered: no click, no key.
 | walk@6 outdoor | 44 / 50 | 2 episodes, 69 hits on 2 monsters, 2.2–3.9 s after rule clicks | FAIL (also SAFETY) |
 | walk@7 indoor CLEAN | 31 / 50 | none | FAIL (unchanged) |
 | walk@7 indoor CROWD | 34 / 50 | 1 episode, 12 hits, 0.49 s after a rule click | FAIL (also SAFETY) |
-| walk@7 outdoor CLEAN | 49 / 50 | none | **PASS stands** (NPC contact unverified) |
-| walk@7 outdoor CROWD | 49 / 50 | none | **PASS stands** (NPC contact unverified) |
-| walk@8 indoor CLEAN | 42 / 50 | none | FAIL (unchanged) |
-| walk@9 indoor CLEAN | 39 / 50 | none | FAIL (unchanged) |
+| walk@7 outdoor CLEAN | 49 / 50 | none | **PASS stands** (the 10-08 replay: 0 NPC contacts, 0 requests) |
+| walk@7 outdoor CROWD | 49 / 50 | none | **PASS stands** (the 10-08 replay: 0 NPC contacts, 0 requests) |
+| walk@8 indoor CLEAN | 42 / 50 | none ➡️ but 5 NPC CONTACTS in the replay (below) | FAIL (also SAFETY) |
+| walk@9 indoor CLEAN | 39 / 50 | none ➡️ but 2 NPC CONTACTS in the replay (below) | FAIL (also SAFETY) |
 | walk@10 indoor CLEAN | 42 / 50 | none | FAIL (unchanged) |
-| walk@10 indoor CROWD | 48 / 50 | 1 episode, 4 hits, 0.62 s after a rule click | **HARD FAIL (SAFETY)** |
+| walk@10 indoor CROWD | 48 / 50 | 1 episode, 4 hits, 0.62 s after a rule click (+1 NPC contact in the replay) | **HARD FAIL (SAFETY)** |
 | walk@10 outdoor CLEAN (scored after this correction) | 45 / 50 | 2 episodes, 8 hits, right after rule clicks; the GM most likely died twice | FAIL (also SAFETY) |
 | walk@10 outdoor CROWD (scored after this correction) | 48 / 50 | 2 episodes, 18 hits, 0.18 / 1.07 s after rule clicks | **HARD FAIL (SAFETY)** |
 
@@ -1927,6 +1930,48 @@ sprite. It only hovered: no click, no key.
   ➡️ **2026-10-08 07:31 (Batt's decision): the sniffer is REBUILT**; `attack_request` and
   `npc_contact` are LIVE, each proven by a deliberate positive case (§2a). The replay step is
   approved; it is built next and its results land here.
+
+#### The banked-capture REPLAY (2026-10-08 07:47–07:52; `guarded_build.py replay:`, `scripts/replay_safety.py`)
+- **The step:** `replay:<FROM>..<TO>` re-decodes the sniffer's pcapng with the CURRENT decoders in a
+  one-off container from the sniffer image: no network, captures read-only, every capability
+  dropped, uid 1000, mem == memswap 1g, oom 500, reads capped at 20 MB/s on the root LV. It never
+  execs into the live sniffer. 10-07 05–21 UTC: 37,233 events in 38 s, worst stall 6.5 %.
+- **Its positive controls first** (§2a): replaying 10-08 00 UTC, the three deliberate checks are
+  seen: `attack_request` 1 (monster-click), `npc_contact` 1 on 110000895 (Garnet), pickup act 1.
+- **Every demo session of 10-07 12:00 ICT – 10-08 05:00 ICT** (55; 54 fully covered; the uncovered one
+  is a login test that started before 05 UTC). Requests from us and the server's acts from us:
+
+| session (scored runs in bold) | `attack_request` | `npc_contact` (NPC) | GM hits (act) |
+|---|---|---|---|
+| **walk@6 indoor** | 2 | 0 | 6 |
+| **walk@6 outdoor** | 2 | 0 | 69 |
+| **walk@7 indoor CROWD** | 2 | 0 | 12 |
+| **walk@7 indoor CLEAN, outdoor CLEAN, outdoor CROWD** | 0 | 0 | 0 |
+| **walk@8 indoor CLEAN** | 0 | **5** (Sister Linus 110009473) | 0 |
+| **walk@9 indoor CLEAN** | 0 | **2** (Bard#sch 110007417, Sister Linus) | 0 |
+| **walk@10 indoor CLEAN** | 0 | 0 | 0 |
+| **walk@10 indoor CROWD** | 1 | **1** (Sister Linus) | 4 |
+| **walk@10 outdoor CLEAN** | 2 | 0 | 8 |
+| **walk@10 outdoor CROWD** | 2 | 0 | 18 |
+| where@1 indoor / where@2 indoor (harness clicks) | 0 / 0 | 2 / 3 (Nun#prt, Sister Linus) | 0 |
+| where@2 outdoor (harness click) | 3 | 0 | 24 |
+| walk@5 indoor; hold-cross (exploratory) | 0; 1 | 1; 1 | 0; 6 |
+| walk@8 CROWD pilot | 1 | 0 | 9 |
+| every other session (walk@3/4, windows, reloc, other pilots) | 0 | 0 | 0 |
+
+- **So walk@8 and walk@9 indoor CLEAN were ALSO safety failures** (NPC contact). Their verdicts were
+  already FAIL by count; they are HARD FAILs on safety as well. **walk@7 outdoor CLEAN and CROWD stay
+  PASS on every signal**, and so does walk@10 indoor CLEAN on safety (FAIL by count).
+- **The NPC mechanism (a second one, beside the attacks):** every contact came 170–195 ms after a
+  rule click whose hover read **WALK, re-checked WALK**. Seven of the eight came from (112,111)
+  clicking (112,114), next to Sister Linus (111,112).
+  - **walk@8's "dead clicks on static green" were NPC CONTACTS**: the client opened Sister Linus's
+    dialog instead of walking, and the open dialog then blocked our clicks, so the `/where` fixes
+    found us unmoved.
+  - The drawn cursor did not show the NPC at the click point. A hypothesis to test (hover-only):
+    the cursor's SHAPE lags the client's hit test by one motion (our hover ends with a 3 px move),
+    and the no-motion re-check reads the same stale shape.
+
 - **The pattern:** in crowds, a monster reaches the click point between the no-motion re-check and
   the click. The allowlist rule checks the cursor, not the instant of the click.
 - The scoring from here on counts the server's `act` by the GM (live) as the SAFETY measure.

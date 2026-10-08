@@ -45,6 +45,15 @@ On a breach:
                 scripts/dev.sh rm -s -f <svcs>: stop and REMOVE those containers (never volumes or
                 images); the next start recreates them identically from compose. For a clean
                 switch between rathena and rathena-th (2026-10-05).
+  replay:<FROM>..<TO>[@<seconds>]
+                OFFLINE re-decode of the banked captures (ADR-0007; Batt 2026-10-08) with the
+                CURRENT decoders: the sniffer's capture-*.pcapng opened in [FROM, TO] (UTC hours,
+                YYYYmmddTHH) plus the one open at FROM, through `python -m poring_packets.replay`
+                in a ONE-OFF container from poring-lab/sniffer:local -- never the live sniffer
+                (its 256 MB would be shared): no network, captures read-only, every capability
+                dropped, uid 1000, mem == memswap 1g, oom_score_adj 500, 2 CPUs, reads capped at
+                REPLAY_READ_BPS on the root LV. Output: $REPLAY_OUT/<FROM>..<TO>/events.jsonl.
+                Packets stay offline ground truth: nothing here reaches the agent.
   run:<svc>[@<seconds>]=<command>
                 docker compose --profile <svc> run --rm --no-deps <svc> <command>, killed after
                 <seconds> (default 600), its output's tail printed. ONLY `vision` (check_gpu.py):
@@ -146,6 +155,13 @@ DEV = [
 LAB_BUILDER = os.environ.get("LAB_BUILDX_BUILDER", "default")
 SERVICE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 RUN_ALLOWED = frozenset({"vision"})  # see run: in the docstring
+REPLAY_RANGE = re.compile(r"^(\d{8}T\d{2})\.\.(\d{8}T\d{2})$")
+CAPTURE_NAME = re.compile(r"^capture-(\d{8}T\d{6})Z\.pcapng$")
+REPLAY_IMAGE = "poring-lab/sniffer:local"
+REPLAY_OUT = Path("/dev/shm/poring-lab-tmp/replay")  # RAM: rule 7
+REPLAY_DEVICE = "/dev/dm-0"  # the root LV (Docker's volumes); the disk shared with live capture
+REPLAY_READ_BPS = "20mb"
+REPLAY_AIDS = ("2000002", "2000001")  # the GM and the normal account: tagged, never logged
 
 
 class Step:
@@ -201,6 +217,12 @@ def parse_step(step: str) -> Step:
         if name not in RUN_ALLOWED:
             raise ValueError(f"{step}: run: is allowed only for {', '.join(sorted(RUN_ALLOWED))}")
         return Step(kind, [name], float(secs or 600), argv)
+    if kind == "replay":
+        rng, _, secs = arg.partition("@")
+        m = REPLAY_RANGE.match(rng)
+        if m is None or m.group(1) > m.group(2):
+            raise ValueError(f"{step}: expected replay:<YYYYmmddTHH>..<YYYYmmddTHH>[@<seconds>]")
+        return Step(kind, [m.group(1), m.group(2)], float(secs or 3600))
     if kind == "cache" or step.startswith("cache@") or step.startswith("cache="):
         head, eq, command = step.partition("=")
         _, _, secs = head.partition("@")
@@ -229,6 +251,56 @@ def run_cmd(step: Step) -> list[str]:
         "timeout", seconds, "docker", "compose", *files, "--profile", svc, "run", "--rm",
         "--name", container_name(step), "--no-deps", svc, *step.command,
     ]  # fmt: skip
+
+
+def select_captures(names: list[str], first: str, last: str) -> list[str]:
+    """The capture files that can hold packets of the UTC hours [first, last]: every file opened in
+    that range, plus the last one opened before it (rotation is hourly or by size, so it may still
+    run into `first`). In time order, as the replay needs them."""
+    stamped = sorted((m.group(1)[:11], n) for n in names if (m := CAPTURE_NAME.match(n)))
+    before = [n for h, n in stamped if h < first]
+    inside = [n for h, n in stamped if first <= h <= last]
+    return ([before[-1]] if before else []) + inside
+
+
+def replay_cmd(step: Step, volume: str, files: list[str], name: str) -> list[str]:
+    """The one-off replay container (see replay: in the docstring). File names are validated."""
+    assert files and all(CAPTURE_NAME.match(f) for f in files)
+    out = REPLAY_OUT / f"{step.services[0]}..{step.services[1]}"
+    paths = " ".join(shlex.quote(f"/captures/{f}") for f in files)
+    aids = " ".join(f"--validation-aid {a}" for a in REPLAY_AIDS)
+    script = (f"ls -l {paths} >&2 && python -m poring_packets.replay {paths} {aids} "
+              f"> /out/events.jsonl")  # fmt: skip
+    return [
+        "timeout", str(int(step.seconds or 3600)), "docker", "run", "--rm", "--name", name,
+        "--network", "none", "--read-only", "--tmpfs", "/tmp:size=16m",
+        "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--user", "1000:1000",
+        "--memory", "1g", "--memory-swap", "1g", "--oom-score-adj", "500", "--cpus", "2",
+        "--device-read-bps", f"{REPLAY_DEVICE}:{REPLAY_READ_BPS}",
+        "-v", f"{volume}:/captures:ro", "-v", f"{out}:/out",
+        "--entrypoint", "sh", REPLAY_IMAGE, "-c", script,
+    ]  # fmt: skip
+
+
+def captures_volume() -> str:
+    """The Docker volume mounted at the live sniffer's /captures."""
+    import lab_servers
+
+    fmt = '{{range .Mounts}}{{if eq .Destination "/captures"}}{{.Name}}{{end}}{{end}}'
+    out = subprocess.run(["docker", "inspect", lab_servers.sniffer(), "--format", fmt],
+                         capture_output=True, text=True, check=True).stdout.strip()  # fmt: skip
+    if not out:
+        raise RuntimeError("the sniffer has no /captures volume")
+    return out
+
+
+def list_captures(volume: str) -> list[str]:
+    out = subprocess.run(
+        ["docker", "run", "--rm", "--network", "none", "--cap-drop", "ALL", "--user", "1000:1000",
+         "-v", f"{volume}:/captures:ro", "--entrypoint", "ls", REPLAY_IMAGE, "/captures"],
+        capture_output=True, text=True, check=True,
+    ).stdout  # fmt: skip
+    return out.split()
 
 
 def container_running(name: str) -> bool:
@@ -910,6 +982,25 @@ def main() -> int:
                              host=b"scripts/build_frame_cache.py")  # fmt: skip
             tail = log_path(step.label).read_text(errors="replace").splitlines()[-20:]
             print("\n".join(f"  | {line}" for line in tail), flush=True)
+        elif step.kind == "replay":
+            volume = captures_volume()
+            files = select_captures(list_captures(volume), *step.services)
+            if not files:
+                print(f"[{ts()}] {step.label}: no capture file in that range", flush=True)
+                return 1
+            out = REPLAY_OUT / f"{step.services[0]}..{step.services[1]}"
+            out.mkdir(parents=True, exist_ok=True)
+            name = f"poring-lab-replay-{os.getpid()}"
+            print(
+                f"[{ts()}] {step.label}: {len(files)} file(s) {files[0]} .. {files[-1]}", flush=True
+            )
+            ok = run_process(step.label, replay_cmd(step, volume, files, name), guard,
+                             container=name)  # fmt: skip
+            tail = log_path(step.label).read_text(errors="replace").splitlines()[-20:]
+            print("\n".join(f"  | {line}" for line in tail), flush=True)
+            if ok:
+                n = sum(1 for _ in (out / "events.jsonl").open())
+                print(f"[{ts()}] {step.label}: {n} events -> {out / 'events.jsonl'}", flush=True)
         elif step.kind == "up":
             ok = run_up(step.seconds or 180, guard)
         elif step.kind == "restart":

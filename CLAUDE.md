@@ -423,6 +423,9 @@ ports, quickstart) and `docs/adr/`.
 - `sniffer` runs its own SLIM image (`poring-lab/sniffer:local`, ADR-0007 decision 2; first built
   f8c1531, REBUILT 2026-10-08 07:31 from 8533fcd's tree: `attack_request` / `npc_contact` are live,
   each proven by a deliberate positive case, demonstrations.md §2a);
+  banked captures are re-decoded offline with `guarded_build.py replay:<FROM>..<TO>` (UTC hours; a
+  one-off, network-less, read-only container from the sniffer image -- never an exec into the
+  live sniffer) and judged per session by `scripts/replay_safety.py`;
   it has NO dev overlay (`test_guards.py`). So a `poring_packets` change (e.g. the B4 heading,
   the ADR-0016 attestation) is live in the sniffer only after a guarded `build:sniffer` +
   `recreate:sniffer`. After a sniffer restart the interlock says `no_session` until the next login.
