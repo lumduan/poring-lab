@@ -31,7 +31,9 @@ def frame(lines: list[tuple[tuple[int, int, int], list[int]]], shift: int = 0) -
     img = np.zeros((720, 1280, 3), np.uint8)
     img[...] = SCENE
     img[545:600, :640] = (np.indices((55, 640)).sum(0)[..., None] * 7 + shift) % 60 + 40
-    y = 596
+    img[596:598, :640] = 255  # the input box's white border (outside the message lines)
+    img[548:592, 585:595] = 255 if shift % 2 else 0  # the scrollbar's white arrows, moving
+    y = 590  # the newest line's bottom, inside CHAT_AREA (y < 593)
     for colour, xs in reversed(lines):
         for x in xs:
             img[y - 9 : y, 7 + x : 10 + x] = colour
@@ -75,3 +77,16 @@ def test_an_unchanged_chat_is_no_cue_even_with_the_scene_moving(cc: ModuleType,
     same = [(GREEN, [0, 10, 20]), (CYAN, GOT)]
     got = cc.check(frame(same), frame(same, shift=29), cues)  # an old got line, a walk
     assert not got["cue"] and got["changed_px"] == 0, got
+
+
+def test_white_scene_border_and_scrollbar_are_never_a_line(cc: ModuleType,
+                                                           cues: dict[str, np.ndarray]
+                                                           ) -> None:  # fmt: skip
+    """2026-10-09 00:41: the input box's white border and the scrollbar read as a newer line, and
+    white scene highlights counted as a change. An old got line + a walk must be no cue AND be read
+    as the old got line (the right reason)."""
+    same = [(GREEN, [0, 10, 20]), (CYAN, GOT)]
+    before, after = frame(same), frame(same, shift=31)
+    after[560:570, 300:400] = 255  # a white highlight of the scene, moving behind the window
+    got = cc.check(before, after, cues)
+    assert not got["cue"] and got["kind"] == "got" and got["changed_px"] < cc.CHANGED_PX, got

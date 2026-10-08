@@ -4,8 +4,8 @@ the backup cue for a pickup, next to the weight readout).
 
 The client writes a CYAN line when an item ENTERS the inventory (a pickup, an `@item`), and a cyan
 line too when one LEAVES it (a drop). The two differ only in their first words. So:
-- the newest line of the log is found first, by any text colour; it must be cyan (one dark
-  channel, two bright: the darkened scene behind the window never is);
+- the newest COLOURED line of the log is found first (cyan, green, yellow or red; white is left
+  out: the scene behind the window has white highlights); it must be cyan;
 - its leading glyphs (PREFIX_PX from its first ink column) are matched against two masks cut
   LOCALLY from known frames (`cut`): a "got" line and a "dropped" line. They are client pixels in
   data/ (gitignored), never committed. The text itself is never stored (rule 4);
@@ -30,12 +30,15 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 CUES = ROOT / "data/ui_anchors/chat_cues.npz"
-CHAT_AREA = (0, 545, 640, 600)  # client px: the message area (where_fix.py, the frozen layout)
+# client px: the message lines only (the frozen layout). NOT where_fix's (0, 545, 640, 600): that
+# one holds the scrollbar's white arrows (x ~585) and the input box's white border (y ~595), which
+# a text mask reads as a newer "line" (the 2026-10-09 00:41 negative case, in demonstrations.md)
+CHAT_AREA = (0, 545, 570, 593)
 LINE_PITCH = 14
 PREFIX_PX = 48  # "<first word> <second word>" of the two cues, from the first ink column
 MATCH_IOU = 0.8  # the best shifted IoU a line's prefix must reach against a template
 SHIFT = 1  # px: the template is tried at +-SHIFT in x and y
-CHANGED_PX = 40  # text pixels (any message colour) that must differ for "a new line"
+CHANGED_PX = 40  # coloured text pixels that must differ for "a new line"
 
 
 def area_of(rgb: np.ndarray) -> np.ndarray:
@@ -48,18 +51,15 @@ def cyan(area: np.ndarray) -> np.ndarray:
     return (g > 190) & (b > 190) & (r < 130)
 
 
-def any_text(area: np.ndarray) -> np.ndarray:
-    """Every message colour: white, cyan, green, yellow, red (one or more channels saturated,
-    against a darkened scene behind the semi-transparent window)."""
+def coloured(area: np.ndarray) -> np.ndarray:
+    """The client's COLOURED message text: cyan (items), green (notices), yellow, red. Never white:
+    the darkened scene behind the semi-transparent window has white highlights that move while we
+    walk (1,039 changed white pixels on one walk click, 2026-10-09 00:41, with no new line)."""
     r, g, b = area[..., 0], area[..., 1], area[..., 2]
-    white = (r > 200) & (g > 200) & (b > 200)
-    return (
-        white
-        | cyan(area)
-        | ((g > 200) & (r < 120) & (b < 120))
-        | ((r > 200) & (g > 200) & (b < 120))
-        | ((r > 200) & (g < 100) & (b < 100))
-    )
+    green = (g > 200) & (r < 120) & (b < 120)
+    yellow = (r > 200) & (g > 200) & (b < 120)
+    red = (r > 200) & (g < 100) & (b < 100)
+    return cyan(area) | green | yellow | red
 
 
 def _bottom(mask: np.ndarray) -> int | None:
@@ -70,7 +70,7 @@ def _bottom(mask: np.ndarray) -> int | None:
 def newest_prefix(area: np.ndarray) -> tuple[np.ndarray | None, str]:
     """The newest line's leading PREFIX_PX columns as a cyan mask (LINE_PITCH x PREFIX_PX), or
     (None, why)."""
-    bottom = _bottom(any_text(area))
+    bottom = _bottom(coloured(area))
     if bottom is None:
         return None, "no_text"
     cy = cyan(area)
@@ -114,9 +114,9 @@ def classify(area: np.ndarray, cues: dict[str, np.ndarray]) -> dict[str, Any]:
 def check(before_rgb: np.ndarray, after_rgb: np.ndarray, cues: dict[str, np.ndarray]
           ) -> dict[str, Any]:  # fmt: skip
     a, b = area_of(before_rgb), area_of(after_rgb)
-    # TEXT pixels only: the scene scrolls behind the semi-transparent window while we walk, and
-    # moves thousands of raw pixels without any new line
-    changed = int((any_text(a) ^ any_text(b)).sum())
+    # COLOURED text pixels only: the scene scrolls behind the semi-transparent window while we
+    # walk, and moves thousands of raw (and white) pixels without any new line
+    changed = int((coloured(a) ^ coloured(b)).sum())
     got = classify(b, cues)
     return {"cue": bool(changed >= CHANGED_PX and got["kind"] == "got"), "changed_px": changed,
             **got}  # fmt: skip
