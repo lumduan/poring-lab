@@ -1794,6 +1794,148 @@ HUD screenshot):
   - A sign whose NPC would stand off-screen or under a UI window is kept on its shape.
 - The HUD scene runs the new finder since 20:40 (a display-only restart of `hud_scene.py`).
 
+### HUD scene: box drift while walking + doubled boxes — OFFLINE SIM RESULT (2026-10-08 night; branch `feat/hud-drift`, NOT deployed)
+
+**Why** (Batt, 2026-10-08 evening, from the 20:09 walk):
+- NPC boxes walking: 9.9 / 33.3 / 42.1 px (median / p95 / max, n 83); standing 0.4 / 14.1 / 63.8.
+- Doubled boxes: a drifted box stayed while re-detection added a second one.
+- His ask: raise the detector rate while the scene moves (niced, CPU measured); dedupe by id / IoU
+  on re-detection; use the route preview's camera estimate when a rule runs; report the offsets
+  walking and standing, before and after.
+
+**The instrument** (`scripts/hud_scene_sim.py`; `hud_scene_check.py truth | rescore | sim |
+simtable`):
+- The detector (2 threads, niced) and the signboard finder were run once on every recorded frame of
+  7 route-demo walks (all prt_church) and the 20:07 idle recording. The motion features were cached
+  too, all in RAM (`/dev/shm/poring-lab-tmp/hud-sim`, client-derived, never committed).
+- The sim runs `hud_scene.py`'s OWN tracker over the frames at their recorded times:
+  - the detector thread's cadence, with each pass taking the live 590 ms;
+  - the live frame → message latencies, sampled from the live log;
+  - the same message stream.
+  - It is scored like `offsets`: each drawn box against that frame's detections, nearest foot of its
+    class within 120 px.
+- Walking = the frame's OWN scroll since the previous recorded frame is at least 1 px.
+  - The first cut's `offsets` asked instead "did the process send a motion for this exact frame".
+    That filed every walking frame between the process's own frames (about 3 in 4) as STANDING:
+    83 walking samples of ~290. `offsets` is fixed the same way.
+- **Fidelity, the 20:09 walk:**
+  - Live, rescored: walking 10.0 / 33.7 / 42.1 on the frames the process saw, 9.5 / 41.6 / 63.8
+    between them; standing 0.4 / 7.3 / 63.7; 30 doubled box-frames.
+  - The first cut's code in the sim, over 6 latency seeds: walking 8.9–9.8 / 38–76 / 85–101;
+    10–87 doubled box-frames.
+  - The first cut is timing-sensitive and bimodal: does a drift cross the 40 px match gate before the
+    next detection? The live run sits inside the sim's spread.
+
+**Three causes, each measured:**
+1. **Perspective:** one 2-D shift cannot fit near and far rows. The camera model scrolls the floor
+   19.6 px per cell at y 100 and 29.4 at y 650 (±20 % around the centre).
+   - Floor patches against one shift: 1.3–1.7 px off per 0.1 s frame at the top and bottom rows.
+   - Against the perspective fit: 0.5 px.
+   - Yaw and distance do not change the screen flow, only pitch, FOV and the centre. So the fitted
+     camera serves indoor maps too, with no map knowledge (tested).
+2. **The scroll read ~0 on 7–15 % of moving frames:** the NPCs moved 10–15 px and the phase
+   correlation said "still".
+   - The live process missed the same motion: no `hud_motion` for 20:09 frames 417–420.
+   - The raw (lossless) 12:33 frames do it too (8 / 54), so it is not a JPEG artefact.
+   - Cause: a fine screen-fixed pattern wins the whitened peak. Full resolution doubled the misses;
+     static noise reproduces it in a test.
+   - Band-passing the correlation fixes it: 3×3 blur, minus a 9×9 box mean, |R|^0.5.
+     - Read-as-zero: 11–17 → 0–2 per walk.
+     - Scroll error p95 against the NPCs' own motion, on 4 walks: 6.5–8.9 → 4.2–4.8 px (12:33 raw:
+       46.9 → 10.7).
+     - Still frames are unchanged (p95 0.37).
+3. **Detection:** a box drifted past the 40 px gate and re-detection added a second one; the stale
+   one stayed for two misses (up to 10 s at the idle cadence).
+
+**What changed in `hud_scene.py`** (display only; no protocol, frontend or previewer change):
+- **The floor model:** the camera's move over a flat floor comes from route_preview's floor patches
+  against the camera model (`Ground`, the camera's floor homography). Then every world object moves
+  by its own projection.
+  - The global `HudMotion` still carries the bulk, frame-synced on the console.
+  - An object more than 4 px off it gets a `HudDelta.move` in that frame's delta.
+- **The band-passed scroll:** `route_preview.scene_shift(..., blur=True, highpass=9, power=0.5)`.
+  The previewer's defaults are unchanged.
+- **Dedupe:** one-to-one matching on the detected frame, nearest first.
+  - A leftover detection within 120 px (or IoU ≥ 0.1) of a leftover object of its class MOVES that
+    object instead of adding a second box.
+  - One miss removes an object while the scene moves.
+- **The detector:** every 0.5 s while the scene moves (at 2 threads that is back to back, ~0.6 s a
+  pass), 1 s while the frame changes, 5 s idle.
+  - Passes while moving, and the first still pass after, re-seat boxes at 1 px. Idle passes keep the
+    4 px hysteresis.
+- **Edge-cut boxes:** a unit box cut by the view's edge gets its sprite's size (NPC 34 × 75: the
+  median of ~9,000 detections), so its feet are not the screen's edge. (19:10: walking p95 12.4 → 10.3,
+  max 36.6 → 14.3.)
+- **One ordered send queue:** deltas from both threads reach consoles in `seq` order.
+
+**Results.** All 7 walks pooled (the raw offsets, not an average of medians), live latencies,
+5 seeds. Median / p95 / max px, n per seed:
+
+| | NPC walking | NPC standing | sign walking | sign standing | doubled boxes | ghosts |
+|---|---|---|---|---|---|---|
+| first cut (deployed) | 9.7–9.8 / 51–55 / 87–101, n ~1,940 | 0.6 / 15–21 / 87–98, n ~12,800 | 6.5–6.6 / 49–50 / 70–74, n ~685 | 0.0 / 23–27 / 72 | 307–380 | 1,345–1,578 |
+| **new** (`chosen`) | **2.6–2.7 / 10.5–11.2** / 40–111, n ~1,925 | **0.4–0.5 / 2.0–2.1** / 118, n ~12,660 | **5.1–5.3 / 12.0–12.9** / 21–48, n ~668 | 0.0 / 6.2–6.6 / 22 | **0** | 624–722 |
+
+- The max is set by detector FALSE POSITIVES. A one-off NPC box (by the piano, the top edge) stays
+  until it is missed twice and is scored against a real NPC ~115 px away. This happens in every
+  variant.
+- **Monsters: NOT measured.** All 8 recordings hold 21 monster detections (all in the 20:09 walk).
+- **Signs:** the finder's pure outline finds none on the 20:09 JPEGs, so the sign numbers come from
+  the other 6 walks.
+- **Idle (the 20:07 recording):** 0.5 deltas/min (the first add) + keyframes, the same as live and the
+  first cut. Idle detector: 0.25 cores, unchanged.
+
+**What each part buys** (ablations, the same 7 walks, a fixed 76 ms frame → message latency; NPC
+walking median / p95):
+
+| variant | NPC walking | doubled | ghosts | messages while moving | detector cores while moving |
+|---|---|---|---|---|---|
+| first cut | 9.7 / 54.9 | 392 | 1,511 | 9.2 motion + 0.7 delta /s | 1.40 |
+| + detector 0.5 s only (Batt's ask 1) | 9.0 / 45.7 | 101 | 897 | 9.2 + 1.4 /s | 2.13 |
+| + dedupe only (ask 2) | 9.6 / 52.4 | **0** | 1,323 | 9.2 + 0.7 /s | 1.40 |
+| + band-passed scroll only | 7.7 / 28.7 | 22 | 1,449 | 9.9 + 0.7 /s | 1.42 |
+| + floor model only | 3.9 / 53.6 | 348 | 1,505 | 9.2 + 2.7 /s | 1.40 |
+| new, but ONE 2-D shift | 6.6 / 24.9 | 0 | 730 | 9.9 + 1.6 /s | 2.13 |
+| new, but the plain scroll | 3.2 / 44.0 | 0 | 707 | 9.2 + 3.3 /s | 2.13 |
+| new, but detector 1 s | 2.9 / 10.5 | 0 | 1,087 | 9.9 + 2.9 /s | 1.42 |
+| new, but no dedupe | 2.6 / 9.6 | 0 | 914 | 9.9 + 3.4 /s | 2.13 |
+| **new** | **2.6 / 9.3** | **0** | **725** | 9.9 + 3.4 /s (5.8 moves/s) | 2.13 |
+
+- The floor model and the band-passed scroll do most of it.
+- The faster detector mostly removes stale and ghost boxes sooner (1,087 → 725). It costs +0.7 cores
+  while the scene moves, niced; 0 when still.
+- **The CPU of the motion path** (10 Hz, niced, tonight's loaded host):
+  - band-passed scroll: 26 ms a frame (plain: 20), so +0.07 cores at idle;
+  - floor model: +21 ms a frame, only while moving (+0.2 cores).
+
+**Measured and REJECTED:**
+- **The route preview's camera as the motion source** (Batt's ask 3; 19:10 / 19:12 / 20:09, the
+  current previewer).
+  - Frame to frame (20:09), it is off by 4.1 / 21.7 px (median / p95) against the NPCs' own motion.
+    The HUD's own floor patches are off by 1.0 / 2.9.
+  - In the sim, NPC walking gets far worse: 19.5–28.4 / 69–71 px on the three walks, against
+    2.4–3.3 / 7.2–10.3 without it.
+  - Why: its Kalman filter pulls the camera towards the engine's walk model (corrections up to 0.7
+    cell, ~23 px), and it samples at ~8 Hz on other frames. That is right for an ABSOLUTE route line
+    and wrong for the frame-to-frame motion of boxes.
+  - So the HUD does not use it, and there is no coupling between the two processes. ⇒ Batt decides.
+- **A console that extrapolates between motions** (a frontend option).
+  - Between frames, at a 5 Hz HUD on the 10 Hz recordings: 6.9 / 20.2 → 5.7 / 17.2 on 20:09, but
+    5.7 / 24.7 → 6.6 / 27.4 on 19:12.
+  - Standing p95 doubled from overshoot at stops: RO's camera stops and starts.
+  - No frontend change was made.
+
+**Left, parked:**
+- **Frames between the HUD's own frames.** The console draws them with the last motion.
+  - At a 5 Hz HUD over 10 Hz frames: 2.5 / 9.1 on the frames it saw, 7.3 / 21.8 between.
+  - Live, at 10 Hz against a ~30 fps console, the gap is about half that.
+  - The remaining fix is a faster HUD loop while moving (est. +1 core at 30 Hz), not measurable on
+    10 Hz recordings.
+- **Detector false positives** persist up to two idle passes (10 s): the ghosts and the max.
+
+**Deploy:** a display-only restart of `hud_scene.py`. No protocol regen, no frontend change. The
+previewer's behaviour is unchanged: its `scene_shift` defaults are untouched.
+
 ### walk@13 — DESIGN PROPOSAL (direction APPROVED by Batt 2026-10-08 ~17:00; NOT yet pre-registered: pre-registered before any run)
 
 **Why** (Batt, 2026-10-08 ~16:00; the direction APPROVED ~17:00): "walk@12: safety is solved; the binding problem is now refusals.
