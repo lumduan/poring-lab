@@ -38,6 +38,7 @@ from poring_env.protocol import (
     AgentHello,
     CleanRoom,
     ClipboardPaste,
+    DisplayFeed,
     ForegroundStatus,
     InputEvent,
     Key,
@@ -358,6 +359,8 @@ class AppState:
         )
         # True from an automatic ASSIST restore until a human next sets the mode (Status).
         self.mode_restored = False
+        # Display overlays relayed to viewers (HUD, live route preview): count, last time, sender
+        self.feeds: dict[str, tuple[int, int | None, str]] = {}
         # The USER-MANAGED environment set (Settings page; human-only writes; envstore.py). Its
         # audit log is opened first: the interlock's first read may seed the store (audited).
         self.allowlist_audit = allowlist.AuditLog(settings.settings_dir)
@@ -644,7 +647,19 @@ class AppState:
             environment=self.verdict.status(),
             foreground=self.foreground_status(),
             bot_agents=self.bot_agents,
+            hud_feed=self.feed_status("hud", now),
+            route_feed=self.feed_status("route", now),
         )
+
+    def feed_relayed(self, kind: str, source: str) -> None:
+        """A display message (``hud`` / ``route``) was relayed to viewers (Status shows it)."""
+        n, _, _ = self.feeds.get(kind, (0, None, ""))
+        self.feeds[kind] = (n + 1, monotonic_ns(), source[:64])
+
+    def feed_status(self, kind: str, now: int) -> DisplayFeed:
+        n, last, source = self.feeds.get(kind, (0, None, ""))
+        age = None if last is None else max(0, (now - last) // 1_000_000)
+        return DisplayFeed(relayed=n, age_ms=age, source=source)
 
     def foreground_status(self) -> ForegroundStatus:
         snap = self.foreground.snapshot()

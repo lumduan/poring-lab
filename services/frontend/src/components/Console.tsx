@@ -484,7 +484,7 @@ export default function Console({ backendUrl }: Props) {
         />
         {hudOn && <HudCanvas hud={hud} width={frameSize.width} height={frameSize.height} />}
       </StreamCanvas>
-      {hudOn && <HudPanel hud={hud} />}
+      {hudOn && <HudPanel hud={hud} status={status} />}
       <div className="grid gap-3 lg:grid-cols-2">
         <details className="rounded-md border border-neutral-800 p-3" open>
           <summary className="cursor-pointer text-sm font-medium">Paste to Windows</summary>

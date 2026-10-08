@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 
+import type { Status } from "@/lib/protocol";
 import {
   counterText,
+  feedLine,
   type HudFrame,
   hudAlive,
   lockedIndex,
@@ -14,13 +16,13 @@ import {
   walkPx,
 } from "@/lib/hud";
 
-type Props = { hud: HudFrame | null };
+type Props = { hud: HudFrame | null; status: Status | null };
 
 /** The operator HUD's text half (Batt 2026-10-08): the rule's plain-words log, its counters, the
  * walk vector's text and the lock's countdown, under the stream so it never covers the game. Every
  * value is a React text node (never markup). It keeps the last message on screen, marked stale
  * once its ttl has passed, so a stopped rule's last words stay readable. */
-export default function HudPanel({ hud }: Props) {
+export default function HudPanel({ hud, status }: Props) {
   const [now, setNow] = useState<number | null>(null);
 
   useEffect(() => {
@@ -29,10 +31,22 @@ export default function HudPanel({ hud }: Props) {
     return () => clearInterval(timer);
   }, [hud]);
 
+  // WHY it may be empty (Batt 2026-10-08): no publisher, a stopped one, or an old backend
+  const why = [feedLine("HUD", status), feedLine("Route preview", status)].filter((l): l is string => l != null);
+  const reasons =
+    why.length > 0 ? (
+      <ul className="font-mono text-amber-300" aria-label="Why the overlays are empty">
+        {why.map((line) => (
+          <li key={line}>{line}</li>
+        ))}
+      </ul>
+    ) : null;
+
   if (!hud) {
     return (
-      <section className="rounded-md border border-neutral-800 p-3 text-xs text-neutral-400">
-        Operator HUD: waiting for the agent. Display only; this tab sends nothing for it.
+      <section className="grid gap-1 rounded-md border border-neutral-800 p-3 text-xs text-neutral-400">
+        <span>Operator HUD: waiting for the agent. Display only; this tab sends nothing for it.</span>
+        {reasons}
       </section>
     );
   }
@@ -63,6 +77,7 @@ export default function HudPanel({ hud }: Props) {
         <dt className="text-neutral-500">state</dt>
         <dd>{alive ? "live" : `stale (${(age / 1000).toFixed(1)} s)`}</dd>
       </dl>
+      {reasons && <div className="md:col-span-2">{reasons}</div>}
       <ol className="min-h-[3rem] font-mono text-neutral-200">
         {lines.length === 0 ? (
           <li className="text-neutral-500">(no log lines)</li>

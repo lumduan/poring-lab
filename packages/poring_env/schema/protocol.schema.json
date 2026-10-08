@@ -508,6 +508,43 @@
       "title": "Detections",
       "type": "object"
     },
+    "DisplayFeed": {
+      "additionalProperties": false,
+      "description": "What the backend has relayed for one display overlay (the operator HUD, the live route\npreview) since it started (Batt 2026-10-08): an empty overlay says WHY -- no publisher, or a\nstopped one. Counts, age and the sender's id only, never content.",
+      "properties": {
+        "age_ms": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Since the last one; null = none since the backend started."
+        },
+        "relayed": {
+          "description": "Messages relayed since the backend started.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "source": {
+          "default": "",
+          "description": "The last sender's AgentHello id.",
+          "maxLength": 64,
+          "type": "string"
+        }
+      },
+      "required": [
+        "relayed",
+        "age_ms",
+        "source"
+      ],
+      "title": "DisplayFeed",
+      "type": "object"
+    },
     "EnvironmentStatus": {
       "additionalProperties": false,
       "description": "The environment interlock's verdict (ADR-0016, rewritten 2026-10-04), for the console and\n/health. Only humans see it: the copy of Status sent to an agent carries null here.",
@@ -1921,6 +1958,18 @@
           "default": null,
           "description": "The game region has been near-uniformly black for the hold time (in RDP mode, usually a lost D3D device after a reconnect; in console mode, no game picture in the stream); null = unknown (no recent grab)."
         },
+        "hud_feed": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DisplayFeed"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The operator HUD's feed (2026-10-08). Always sent by a backend that knows it; a console that sees no such key is talking to an older backend."
+        },
         "human_secret": {
           "default": false,
           "description": "Human secret typing is on (a console's SecretInput): the input log keeps no human key identities until it is off.",
@@ -1981,6 +2030,18 @@
           "default": null,
           "description": "An xfreerdp window exists on the display; null = X unreachable."
         },
+        "route_feed": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DisplayFeed"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The live route preview's feed (2026-10-08), as hud_feed."
+        },
         "stream_window_present": {
           "anyOf": [
             {
@@ -2036,7 +2097,9 @@
         "mode_restored",
         "environment",
         "foreground",
-        "bot_agents"
+        "bot_agents",
+        "hud_feed",
+        "route_feed"
       ],
       "title": "Status",
       "type": "object"

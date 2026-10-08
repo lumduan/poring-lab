@@ -285,6 +285,20 @@ class ForegroundStatus(BaseModel):
     refused: int = Field(default=0, ge=0, description="Refused typing batches since boot.")
 
 
+class DisplayFeed(BaseModel):
+    """What the backend has relayed for one display overlay (the operator HUD, the live route
+    preview) since it started (Batt 2026-10-08): an empty overlay says WHY -- no publisher, or a
+    stopped one. Counts, age and the sender's id only, never content."""
+
+    model_config = _MODEL_CONFIG
+
+    relayed: int = Field(ge=0, description="Messages relayed since the backend started.")
+    age_ms: int | None = Field(
+        default=None, ge=0, description="Since the last one; null = none since the backend started."
+    )
+    source: str = Field(default="", max_length=64, description="The last sender's AgentHello id.")
+
+
 class Status(Message):
     """Mux and pipeline state, pushed at ~1 Hz and on every change."""
 
@@ -371,6 +385,14 @@ class Status(Message):
         default_factory=list,
         description="The connected agents' AgentHello ids (e.g. auto_recover: guarded_build's GM "
         "re-login after a sniffer restart, 2026-10-04).",
+    )
+    hud_feed: DisplayFeed | None = Field(
+        default=None,
+        description="The operator HUD's feed (2026-10-08). Always sent by a backend that knows it; "
+        "a console that sees no such key is talking to an older backend.",
+    )
+    route_feed: DisplayFeed | None = Field(
+        default=None, description="The live route preview's feed (2026-10-08), as hud_feed."
     )
 
 

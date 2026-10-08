@@ -331,3 +331,41 @@ def test_an_agent_operator_hud_reaches_viewers_and_never_the_mux_or_the_input_lo
     on_disk = "".join(p.read_text() for p in tmp_path.rglob("*.jsonl"))
     assert "KeyA" in on_disk  # the log was live and written ...
     assert "operator_hud" not in on_disk and "walking to" not in on_disk  # ... and has no HUD
+
+
+def test_status_says_what_the_hud_and_route_feeds_relayed(
+    lab: tuple[TestClient, RecordingInput],
+) -> None:
+    """The console's empty-HUD line (Batt 2026-10-08): Status reports each display feed's count,
+    the age of its last message and its sender -- 'no publisher' vs 'stopped' vs 'live'."""
+    from poring_env.protocol import AgentHello, OperatorHud, RoutePoint, RoutePreview
+
+    client, _fake = lab
+
+    def feeds() -> tuple[dict[str, Any], dict[str, Any]]:
+        for _ in range(400):
+            raw = viewer.receive()
+            msg = json.loads(raw["text"]) if raw.get("text") else {}
+            if msg.get("type") == "status":
+                return msg["hud_feed"], msg["route_feed"]
+        raise AssertionError("no status")
+
+    with (
+        client.websocket_connect("/ws/stream", headers={"origin": ORIGIN}) as viewer,
+        client.websocket_connect("/internal/agent") as ws,
+    ):
+        hud0, route0 = feeds()
+        assert (hud0["relayed"], hud0["age_ms"], route0["relayed"]) == (0, None, 0)  # no publisher
+        ws.send_text(AgentHello(t_mono_ns=T, agent_id="route-preview", version="0").model_dump_json())
+        ws.send_text(OperatorHud(t_mono_ns=T, label="walk@12", log=["walking"]).model_dump_json())
+        pts = [RoutePoint(x=0.5, y=0.5, kind="feet"), RoutePoint(x=0.6, y=0.4, kind="goal")]
+        ws.send_text(RoutePreview(t_mono_ns=T, live=True, points=pts).model_dump_json())
+        for _ in range(50):
+            hud, route = feeds()
+            if hud["relayed"] and route["relayed"]:
+                break
+        else:
+            raise AssertionError("the feeds never counted the relays")
+    assert hud["relayed"] == 1 and hud["source"] == "route-preview" and hud["age_ms"] is not None
+    assert route["relayed"] == 1 and route["age_ms"] >= 0
+    assert "walking" not in json.dumps(hud)  # counts and ages only, never the content

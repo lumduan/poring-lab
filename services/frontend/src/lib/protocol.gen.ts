@@ -832,6 +832,10 @@ export interface Status {
    */
   game_black: boolean | null;
   /**
+   * The operator HUD's feed (2026-10-08). Always sent by a backend that knows it; a console that sees no such key is talking to an older backend.
+   */
+  hud_feed: DisplayFeed | null;
+  /**
    * Human secret typing is on (a console's SecretInput): the input log keeps no human key identities until it is off.
    */
   human_secret: boolean;
@@ -856,6 +860,10 @@ export interface Status {
    * An xfreerdp window exists on the display; null = X unreachable.
    */
   rdp_window_present: boolean | null;
+  /**
+   * The live route preview's feed (2026-10-08), as hud_feed.
+   */
+  route_feed: DisplayFeed | null;
   /**
    * A Moonlight (console-mode) window is on the display; null = X unreachable.
    */
@@ -991,6 +999,28 @@ export interface ForegroundStatus {
    * ok: the client's active title bar was seen on a fresh frame; refused: the batch's keys were refused and held bot keys released; exempt: a desktop operator window (the agent's own console); unchecked: no bot typing since boot.
    */
   state: "ok" | "refused" | "exempt" | "unchecked";
+}
+/**
+ * What the backend has relayed for one display overlay (the operator HUD, the live route
+ * preview) since it started (Batt 2026-10-08): an empty overlay says WHY -- no publisher, or a
+ * stopped one. Counts, age and the sender's id only, never content.
+ *
+ * This interface was referenced by `PoringProtocol`'s JSON-Schema
+ * via the `definition` "DisplayFeed".
+ */
+export interface DisplayFeed {
+  /**
+   * Since the last one; null = none since the backend started.
+   */
+  age_ms: number | null;
+  /**
+   * Messages relayed since the backend started.
+   */
+  relayed: number;
+  /**
+   * The last sender's AgentHello id.
+   */
+  source: string;
 }
 /**
  * Mux verdict for one AgentInput batch.

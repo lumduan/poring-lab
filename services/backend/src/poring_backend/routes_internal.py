@@ -40,6 +40,7 @@ async def ws_agent(ws: WebSocket) -> None:
     state.broadcast_status()  # bot_connected flipped
     throttle = ReplyThrottle()
     reply = offer(outbox.offer_control)
+    agent_id = ""
     try:
         while True:
             msg = await read_message(ws, parse_agent_to_backend, "agent", state, throttle, reply)
@@ -48,6 +49,7 @@ async def ws_agent(ws: WebSocket) -> None:
                     continue
                 case AgentHello():
                     log.info("agent %s (%s) connected", msg.agent_id, msg.version)
+                    agent_id = msg.agent_id
                     state.agent_hello(outbox, msg)
                 case AgentInput():
                     decisions = await state.submit_many(
@@ -65,6 +67,10 @@ async def ws_agent(ws: WebSocket) -> None:
                 case Detections() | RoutePreview() | OperatorHud():
                     # display only: relayed to viewers, never to the mux, never into the input log
                     state.hub.broadcast_control(msg.model_dump_json())
+                    if isinstance(msg, OperatorHud):  # Status says what was relayed, and when
+                        state.feed_relayed("hud", agent_id)
+                    elif isinstance(msg, RoutePreview):
+                        state.feed_relayed("route", agent_id)
                 case Ping():
                     pong = Pong(
                         t_mono_ns=monotonic_ns(),
