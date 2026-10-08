@@ -2063,6 +2063,60 @@ its route loop) plus exactly:
 side approaches (tried, reached, and the goal clicked from the side), and cells blocked by unknown
 reads.
 
+**3.25 walk@14 run log** (the full results follow when all four runs end):
+- **indoor CLEAN** (`20261009T004436`, 00:44–01:25 ICT): 47 / 50, but **1 `npc_contact` → HARD FAIL**.
+  - Route 44 clicked cell (97, 101) from (94, 100). 0.17 s later the client contacted
+    "Wedding Staff#w" (gid 110002354), which stands on (97, 100): ONE cell away.
+  - Before the click: the cursor read WALK twice, the marker named the cell, tier A, and the gate's
+    nearest NPC box was 18.9 px away (≥ 12 margin; an NPC's radius is 0).
+  - That route used no walk@14 change (no side approach, no static unit). The click step is
+    walk@13's, unchanged since walk@12.
+- **indoor CROWD** (`20261009T012518`, 01:25–02:27): 44 / 50, but **1 `npc_contact` → HARD FAIL**.
+  - Route 52 clicked cell (108, 125) from (103, 121). 0.20 s later the client contacted "Nun#prt"
+    (gid 110001758), which stands on (108, 124): ONE cell away.
+  - Before the click: WALK twice, the marker named the cell, and the nearest NPC box was 17.6 px
+    away. Again no side approach and no static unit.
+- **The mechanism is the same both times:** a click on a cell NEXT TO an NPC, 17–19 px from its
+  detected box, contacts it, although the cursor read WALK at that point.
+- **Not proven, two hypotheses:** an idle animation frame larger than the hover frame, or a detector
+  box smaller than the sprite.
+- **Exposure:** walk@11–13 had 0 contacts in 12 runs, with the same click step. Whether walk@14's
+  re-routing made such clicks more frequent is not separable from two runs.
+
+### 3.26 walk@15 — walk@14 + NPC CLEARANCE + side cells never where we stood (pre-registered 2026-10-09 ~02:35 ICT / 2026-10-08 19:35 UTC at commit, BEFORE any run; the second and last design iteration tonight, Batt's overnight order)
+**Why:** the two NPC contacts above. Both clicks went to a cell adjacent to an NPC, and walk@14's
+gate gave an NPC radius 0 (its box + 12 px). Also, walk@14 indoor CLEAN route 25 tried, as its
+second side cell, the cell it had just come from.
+
+**The rule:** `scripts/walk15.py` at the commit of this pre-registration. It is walk@14 UNCHANGED:
+its route loop and its memory are the same code, rebound. The changes are exactly:
+- **D. NPC clearance:** an NPC sighting's envelope has radius **1** (it was 0).
+  - The NPC's box is moved onto each neighbouring cell, + walk@11's 12 px margin, so no click point
+    picks a cell next to a detected NPC.
+  - NPCs do not move: walk@13's re-plan and walk@14's side approach route around the refusal.
+  - Monsters and players keep walk@14's radii.
+- **E.** A side cell is never a cell this route has stood on.
+
+**Scoring, instruments, the bar:** as 3.24 / 3.25, unchanged.
+- **The bar:** ≥ 48 / 50 AND zero `attack_request`, `npc_contact`, and GM acts (normal or pickup)
+  per run.
+
+**TUNING runs, all four whatever the first scores:**
+- FRESH seeds: indoor clean **20261090**, indoor crowd **20261091**, outdoor clean **20261092**,
+  outdoor crowd **20261093**.
+- 56 routes each; the first 50 not interrupted are scored.
+- e.g. `scripts/walk15.py --scene indoor --condition clean --seed 20261090 --label walk15-alone`.
+
+**HELD-OUT, ONCE, only if all 4 PASS:** guild (alberta_in) **20261094**, town (prontera)
+**20261095**, dungeon (iz_dun00) **20261096**, portal (prt_fild08 → prontera) **20261097**. All CLEAN,
+`@heal` after each warp, 56 each, the first 50 scored.
+
+**Expected** (Claude's reading; NOT a bar):
+- zero NPC contacts;
+- indoor refusals near NPCs rise (the TALK clusters), recovered in part by re-plans and side
+  approaches;
+- outdoor still fails on `unit_stays` near native monsters (3.25, item 4: not addressed).
+
 ### HUD scene: box drift while walking + doubled boxes — OFFLINE SIM RESULT (2026-10-08 night; branch `feat/hud-drift`, NOT deployed)
 
 **Why** (Batt, 2026-10-08 evening, from the 20:09 walk):
