@@ -58,7 +58,7 @@ workflow map can be estimated up front.
 ## 3. The constants (ESTIMATES until §6's first measurement)
 
 **Machine-readable copy (ADR-0020 13.4, open question 26):** the workflow editor's estimator reads
-these values from `packages/poring_flow/src/poring_flow/data/training_cost.json`, never from its own
+these values from `packages/poring_flow/src/poring_flow/training_cost.json`, never from its own
 code. Change this table and that file together: `packages/poring_flow/tests/test_prep.py` fails
 when they disagree. The history stays in this document.
 

@@ -115,7 +115,7 @@ def test_the_constants_come_from_one_source_the_doc_points_to() -> None:
     The doc points to the file, and the doc's section 3 / 4 tables equal it (drift guard)."""
     c = prep.constants()
     doc = DOC.read_text()
-    assert "packages/poring_flow/src/poring_flow/data/training_cost.json" in doc
+    assert "packages/poring_flow/src/poring_flow/training_cost.json" in doc
     section = doc.split("## 3.")[1].split("## 5.")[0]
 
     def row(name: str) -> str:
@@ -141,6 +141,26 @@ def test_the_constants_come_from_one_source_the_doc_points_to() -> None:
     ):
         assert re.search(rf"\| {label} \| {d[cls]} \|", section), cls
     assert f"**≈ {c.train_h_per_species:.1f} compute-h**" in row("train per species")
+
+
+def test_the_package_data_files_are_never_gitignored() -> None:
+    """The repo ignores every directory named data/ (rule 4): a package file there would pass
+    locally and be missing from every commit (it happened once, on this package)."""
+    import shutil
+    import subprocess
+
+    if shutil.which("git") is None or not (ROOT / ".git").exists():
+        pytest.skip("no git checkout")
+    pkg = ROOT / "packages" / "poring_flow"
+    for rel in (
+        "src/poring_flow/training_cost.json",
+        "src/poring_flow/blocks.yaml",
+        "schema/flow.schema.json",
+    ):
+        res = subprocess.run(
+            ["git", "-C", str(ROOT), "check-ignore", "-q", str(pkg / rel)], check=False
+        )
+        assert res.returncode == 1, f"{rel} is gitignored"
 
 
 def test_the_report_needs_no_gpl_data_in_the_repo() -> None:

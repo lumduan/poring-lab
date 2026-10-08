@@ -3,7 +3,7 @@
 - The TRAINING SCOPE of a workflow is every species spawned on its maps (and what they turn into),
   every species an event names, and the fixed classes, not only its TARGETS (13.3).
 - The estimate uses training-cost.md's planning formula. Its constants are read from ONE
-  machine-readable source, `poring_flow/data/training_cost.json`, which that document points to
+  machine-readable source, `poring_flow/training_cost.json`, which that document points to
   (Batt's Q26 proposal); nothing here restates a number. Compute hours and wall-clock hours are
   reported separately; wall = compute / availability.
 - The editor never starts preparation work (13.4): this is the operator's to-do list.
@@ -60,7 +60,7 @@ class Constants(BaseModel):
 
 @cache
 def constants() -> Constants:
-    text = (resources.files("poring_flow") / "data" / "training_cost.json").read_text("utf-8")
+    text = (resources.files("poring_flow") / "training_cost.json").read_text("utf-8")
     return Constants.model_validate(json.loads(text))
 
 
