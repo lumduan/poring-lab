@@ -188,11 +188,11 @@ class Sender:
 
     def send(self, msg: dict[str, Any]) -> None:
         text = json.dumps(msg)
-        with contextlib.suppress(Exception):
+        with contextlib.suppress(Exception):  # logged with the moment it left (the replay's order)
             if SCENE_LOG.exists() and SCENE_LOG.stat().st_size > SCENE_LOG_MAX:
                 SCENE_LOG.replace(SCENE_LOG.with_suffix(".jsonl.1"))
             with open(SCENE_LOG, "a") as fh:
-                fh.write(text + "\n")
+                fh.write(json.dumps({"logged_ns": time.monotonic_ns(), "msg": msg}) + "\n")
         if self.ws is None and time.monotonic() >= self.retry_at:
             try:
                 from websockets.sync.client import connect
