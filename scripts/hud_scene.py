@@ -80,6 +80,11 @@ SIGN_LIFT_PX = 175.0  # a signboard rides the floor under its NPC's feet: ~this 
 SIGN_NPC_GAP = (40.0, 160.0)  # (poring_env.signboard NPC_GAP / NPC_X) the NPC under a sign
 SIGN_NPC_X = 40.0
 VIEW_MARGIN_PX = 40.0  # an object's feet this far outside the view still get corrections
+# A unit's box size (w, h; median of ~9,000 detections, 2026-10-08 recordings): a box cut by the
+# view's edge (within CLIP_PX) is extended to it, so its feet are not the screen's edge (a clipped
+# NPC placed on the floor at the bottom edge rode 31 px off its sprite once in view, 19:10 walk)
+SPRITE_PX = {"npc": (34.0, 75.0), "monster": (42.0, 40.0)}
+CLIP_PX = 3.0
 
 
 @dataclass(frozen=True)
@@ -101,6 +106,7 @@ class Tuning:
     sharp: bool = True  # the scroll's correlation band-passed (SHARP_SHIFT): far fewer false zeros
     fine_px: float = 1.0  # a pass while moving, or the first still one after, re-seats boxes this
     # far off their detection (idle passes keep MOVE_PX: no jitter moves while nothing moves)
+    unclip: bool = True  # a unit box cut by the view's edge gets its class's size (SPRITE_PX)
 
 
 TUNING = Tuning()
@@ -112,6 +118,7 @@ LEGACY = Tuning(
     misses_moving=2,
     fine_px=MOVE_PX,
     sharp=False,
+    unclip=False,
 )
 # route_preview.scene_shift's band-pass for the HUD (its docstring has the measurement)
 SHARP_SHIFT: dict[str, Any] = {"blur": True, "highpass": 9, "power": 0.5}
@@ -413,6 +420,8 @@ class SceneTracker:
                 x0, y0, x1, y1 = (float(v) for v in f["box"])
                 box: Box = (x0, y0, x1, y1)
                 kind, cls = str(f.get("kind", "unit")), str(f.get("cls", ""))
+                if kind == "unit" and tu.unclip:
+                    box = self._unclip(box, cls)
                 lift = self._lift(box, found) if kind == "sign" and g is not None else 0.0
                 dets.append((box, kind, cls, lift, _foot(box, lift), f.get("conf")))
             pairs = []
@@ -472,6 +481,21 @@ class SceneTracker:
             return _shift(box, -off_k), None
         now = self.ground.to_screen(fl - self.cam)[0]
         return _shift(box, now - foot - self.offset), fl
+
+    def _unclip(self, box: Box, cls: str) -> Box:
+        """A unit box cut by the view's bottom, left or right edge -> its class's full size there
+        (its feet are past the edge, not on it)."""
+        if cls not in SPRITE_PX:
+            return box
+        w, h = SPRITE_PX[cls]
+        x0, y0, x1, y1 = box
+        if y1 >= self.gh - CLIP_PX and y1 - y0 < h:
+            y1 = y0 + h
+        if x0 <= CLIP_PX and x1 - x0 < w:
+            x0 = x1 - w
+        elif x1 >= self.gw - CLIP_PX and x1 - x0 < w:
+            x1 = x0 + w
+        return (x0, y0, x1, y1)
 
     @staticmethod
     def _lift(sign: Box, found: list[dict[str, Any]]) -> float:

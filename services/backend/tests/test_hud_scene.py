@@ -399,3 +399,16 @@ def test_the_process_loop_runs_end_to_end_offline(
         elif m["type"] == "hud_delta":
             assert seq is not None and m["seq"] == seq + 1  # no gap: a console never goes stale
             seq = m["seq"]
+
+
+def test_a_box_cut_by_the_views_edge_gets_its_sprites_size(hs: ModuleType) -> None:
+    t = hs.SceneTracker(REGION, DESKTOP, WINDOWS)
+    cut = {"kind": "unit", "cls": "npc", "conf": 0.8, "box": [600.0, 690.0, 634.0, 720.0]}
+    t.observe([cut], t.offset.copy())
+    o = next(o for o in t.objects.values() if o.cls == "npc")
+    assert o.box[3] == pytest.approx(690.0 + hs.SPRITE_PX["npc"][1])  # its feet are past the edge
+    left = {"kind": "unit", "cls": "npc", "conf": 0.8, "box": [0.0, 300.0, 12.0, 375.0]}
+    t2 = hs.SceneTracker(REGION, DESKTOP, WINDOWS)
+    t2.observe([left], t2.offset.copy())
+    o2 = next(o for o in t2.objects.values() if o.cls == "npc")
+    assert o2.box[0] == pytest.approx(12.0 - hs.SPRITE_PX["npc"][0]) and o2.box[3] == 375.0

@@ -221,6 +221,7 @@ def variants() -> dict[str, Variant]:
         Variant("chosen-fine4", replace(best, fine_px=4.0)),
         Variant("chosen-resid2", replace(best, resid_px=2.0)),
         Variant("chosen-resid1", replace(best, resid_px=1.0)),
+        Variant("chosen-no-unclip", replace(best, unclip=False)),
         Variant("first-cut/2", hud_every=2),
         Variant("chosen/2", best, hud_every=2),
     ]
@@ -450,6 +451,7 @@ def walking_mask(mo: dict[str, Any], moving_px: float = 1.0) -> np.ndarray:
 
 
 NEAR_PX = 120.0  # hud_scene_check.offsets: the nearest truth of the class within this
+EDGE_PX = 3.0  # a truth unit box this close to the view's bottom is cut: its feet are not seen
 DOUBLE_PX = 80.0  # a drawn box left over near a truth another drawn box took: a DOUBLED box
 
 
@@ -488,15 +490,18 @@ def score(log: list[dict[str, Any]], cache: dict[str, Any], region: tuple[int, i
       nearest detection of its class within NEAR_PX;
     - with ``hud_times``, walking frames split into the ones the scene process saw (`exact`) and
       the ones between them (`between`: the console uses the latest motion before it);
+    - a drawn box whose nearest detection is cut by the view's bottom edge is not scored (its feet
+      are past the edge; counted in `edge_skipped`);
     - DOUBLED boxes: a drawn box left over (one to one, nearest first) within DOUBLE_PX of a
       detection another drawn box took; GHOSTS: a drawn box with no detection of its class within
       NEAR_PX."""
     import hud_scene_check as hc
 
     tr, mo = cache["truth"], cache["motion"]
-    gx, gy = region[0], region[1]
+    gx, gy, gh = region[0], region[1], region[3]
     dw, dh = desktop
     rp = hc.Replay(log)
+    edge = 0
     if console == "extrapolate":
         rp.offset_at = lambda tt: extrapolated(rp, tt)  # type: ignore[method-assign]
     walk = walking_mask(mo, moving_px)
@@ -515,9 +520,11 @@ def score(log: list[dict[str, Any]], cache: dict[str, Any], region: tuple[int, i
         if walk[k] and hud_times is not None:
             state += ":exact" if t in hud_times else ":between"
         truth: dict[str, list[tuple[float, float]]] = {}
+        cut: dict[str, list[bool]] = {}
         for f in found:
             b = f["box"]
             truth.setdefault(f["cls"], []).append(((b[0] + b[2]) / 2, b[3]))
+            cut.setdefault(f["cls"], []).append(f["kind"] == "unit" and b[3] >= gh - EDGE_PX)
         feet = []
         for o in drawn:
             x, y, w, h = o["px"]
@@ -526,7 +533,9 @@ def score(log: list[dict[str, Any]], cache: dict[str, Any], region: tuple[int, i
         for di, (cls, ft) in enumerate(feet):
             same = truth.get(cls, [])
             ds = [float(np.hypot(ft[0] - s[0], ft[1] - s[1])) for s in same]
-            if ds and min(ds) <= NEAR_PX:
+            if ds and min(ds) <= NEAR_PX and cut[cls][int(np.argmin(ds))]:
+                edge += 1  # its sprite is cut by the view's bottom: no feet to measure to
+            elif ds and min(ds) <= NEAR_PX:
                 per.setdefault(f"{cls}:{state}", []).append(min(ds))
             else:
                 ghosts[cls] = ghosts.get(cls, 0) + 1
@@ -553,6 +562,7 @@ def score(log: list[dict[str, Any]], cache: dict[str, Any], region: tuple[int, i
     mins = (int(tr["t"][-1]) - int(tr["t"][0])) / 60e9
     return {"offsets": {key: _stat(ds) for key, ds in sorted(per.items())},
             "doubled": doubled, "doubled_frames": doubled_frames, "ghosts": ghosts,
+            "edge_skipped": edge,
             "drawn": drawn_n, "frames": len(tr["t"]), "minutes": round(mins, 2)}  # fmt: skip
 
 
