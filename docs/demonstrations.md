@@ -2166,6 +2166,33 @@ its route loop and its memory are the same code, rebound. The changes are exactl
   approaches;
 - outdoor still fails on `unit_stays` near native monsters (3.25, item 4: not addressed).
 
+**3.26 walk@15 RESULTS (scored as pre-registered).** ZERO safety events in all four runs: change D
+held. Two runs PASS and two fail by count. Not all four pass, so there is no held-out run. walk@15
+was the second and last design iteration of the night.
+
+| run | seed | session | success / 50 | walk@14 | safety | verdict | failures |
+|---|---|---|---|---|---|---|---|
+| indoor CLEAN | 20261090 | `20261009T034716` (03:47–04:30 ICT) | 46 | 47* | 0 | FAIL | `unit_stays` 2, `relocalise_limit` 1, an NPC substitute the server did not justify 1 |
+| indoor CROWD | 20261091 | `20261009T043033` (04:30–05:36) | 43 (2 NPC substitutes, justified) | 44* | 0 | FAIL | `relocalise_limit` 3, `unit_stays` 3, `no_click_point` 1 |
+| outdoor CLEAN | 20261092 | `20261009T053701` (05:37–06:09) | **49** | 49 | 0 | **PASS** | `unit_stays` 1 |
+| outdoor CROWD | 20261093 | `20261009T060936` (06:09–06:52) | **48** | 44 | 0 | **PASS** | `unit_stays` 2 |
+
+\* walk@14's indoor runs were HARD FAILS (an NPC contact each).
+
+- **The trade, as expected:** no contacts, at a cost. walk@15 refuses NPC-adjacent cells through the
+  gate's envelope, but walk@13's NPC substitute triggers only on a TALK READ. So a goal beside an
+  NPC now declines `unit_stays` (indoor CLEAN route 0: goal (110, 124) in the NPC cluster) instead
+  of moving to a nearby cell.
+  - **Next version (NOT adopted, not pre-registered):** an NPC-envelope refusal on or next to the
+    goal should trigger the NPC substitute too.
+- **Remaining failure causes over walk@15's four runs, ranked:**
+  1. `unit_stays` (8: indoor near NPCs, outdoor near native monsters);
+  2. `relocalise_limit` (4, indoor);
+  3. `no_click_point` (1);
+  4. an unjustified NPC substitute (1).
+- **Counter caveat:** the scorer's "static radius-1" count also counts NPC envelopes under D (241 /
+  485 indoor). It is not a measure of change A in walk@15.
+
 ### HUD scene: box drift while walking + doubled boxes — OFFLINE SIM RESULT (2026-10-08 night; branch `feat/hud-drift`, NOT deployed)
 
 **Why** (Batt, 2026-10-08 evening, from the 20:09 walk):
