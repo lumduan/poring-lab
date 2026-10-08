@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [demonstrations.md, knowledge/README.md, adr/0011-ui-anchor-map.md, adr/0012-locale-agnostic-ui.md, adr/0015-phase4-planner-linter-executor.md, phase2-plan.md]
-next_action: "walk@11 is decided (demonstrations.md verdict: 0/4, safe against monsters; next = walk@12 with Batt's three rules). The live route preview is anchored to the measured feet and camera (RA2 style; the stop jumps are being fixed). The OPERATOR HUD below is BUILT (code + tests, 2026-10-08; live only after the guarded backend restart; no rule sends it yet). S2 re-tests (where@2, walk outdoor); NPC/shop decoders for wave 3."
+next_action: "walk@12 is decided (demonstrations.md 3.21: 0/4 by count, ZERO safety events and ZERO UI clicks in all four; the binding problem is now refusals). walk@13 direction APPROVED (refused cells = temporary obstacles to re-plan around; goal taken = a unit ON the goal); idle@1 (3.23) pre-registered, runs before any first-click fix. LIVE since the 2026-10-08 17:45 backend restart: the RDP frame bus, the OPERATOR HUD (no rule sends it yet) and LIVE-ONLY route previews (every walk run publishes its plan in cells; route_previewd.py draws it). S2 re-tests (where@2, walk outdoor); NPC/shop decoders for wave 3."
 ---
 
 # Phase 4 UI: the example workflow's windows, shortcuts and NPCs
@@ -109,7 +109,7 @@ as the `npc` class.
 | nav.read_position | the minimap readout (T0 templates restored); indoors and anywhere: the client's `/where` (where_fix v2) | – | read_position@1 (minimap) to do; **where@2 RDP PASS 48/50 indoor, 50/50 outdoor, 0 WRONG** (2026-10-07); S2 to do |
 | vitals.read | the basic-info bars (anchor map) | – | – |
 
-## The operator HUD (BUILT 2026-10-08, deploy pending the backend restart; proposed by Batt 2026-10-08) — display-only, a console toggle
+## The operator HUD (BUILT 2026-10-08, LIVE since the 17:45 backend restart; proposed by Batt 2026-10-08) — display-only, a console toggle
 **Provenance:** ideas only. Batt shared a screen recording of another RO bot's debug view: its
 origin, server and licence are unknown. No code, assets or screenshots were copied into the repo.
 

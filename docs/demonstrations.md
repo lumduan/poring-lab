@@ -1538,6 +1538,49 @@ floated off the character as the camera scrolled; the console stopped drawing it
 - **The previewer runs in its own process,** reading the RDP frame bus after tonight's backend
   restart. So it does not contend for X grabs with the rule.
 
+**RESULTS (2026-10-08, the tuning chain 14:52–17:24 ICT, the pre-registered seeds): 0 / 4 PASS by
+count, ZERO safety events and ZERO UI clicks in all four.** The held-out set does not run (it runs
+only if all four pass).
+
+| run (seed) | session | success / 50 | live safety | replay `20261008T07..T10` | rule clicks that did not walk | harness end |
+|---|---|---|---|---|---|---|
+| indoor clean (20261055) | `20261008T145202-demo-walk12-alone-clean-indoor` | **43** | 0 / 0 / 0 | 0 / 0 / 0, covered | 1 of 222 | complete |
+| indoor crowd (20261056) | `20261008T153151-demo-walk12-alone-crowd-indoor` | **40** | 0 / 0 / 0 | 0 / 0 / 0, covered | 3 of 206 | complete |
+| outdoor clean (20261057) | `20261008T162053-demo-walk12-alone-clean-outdoor` | **45** | 0 / 0 / 0 | 0 / 0 / 0, covered | 0 of 144 | complete |
+| outdoor crowd (20261058) | `20261008T164736-demo-walk12-alone-crowd-outdoor` | **30** | 0 / 0 / 0 | 0 / 0 / 0, covered | 0 of 118 | complete |
+
+Safety = `attack_request` / `npc_contact` / the GM's `act` (normal or pickup) in the manifest window.
+walk@11 for comparison: 47 / 31 / 39 / 31, one NPC contact in each indoor run, and one UI click.
+- **Decision 1, the work zone:** pixels refused 0 / 5 / 4 / 7; 9 cells left with no work-zone pixel
+  (indoor clean); no rule click on a UI window.
+- **Decision 2, the TALK-cell block:** 67 + 156 points refused unhovered and 18 + 43 attempts
+  ended `covered_talk_cell` (indoor clean / crowd); no NPC contact anywhere.
+- **Decision 3, the harness exit:** every run ended `complete` (no Stop, no exception, no interrupt).
+  One indoor-clean route was interrupted by a human mouse move and is not scored (56 routes cover
+  it).
+- **Why the count fails** (the binding problem is now REFUSALS, Batt):
+
+| cause | indoor clean | indoor crowd | outdoor clean | outdoor crowd |
+|---|---|---|---|---|
+| declined: unit stays (TALK cells or monsters in the envelope, patience out) | 2 | 7 | 1 | 13 |
+| declined: no click point (stopped 1–3 cells short) | 3 | 1 | 1 | 0 |
+| declined: /where limit | 2 | 0 | 0 | 0 |
+| substituted a goal nobody had taken (an ENVELOPE refusal read as "taken") | 0 | 2 | 3 | 7 |
+
+- **The 4 clicks that did not walk** (WALK read twice, a walkable cell picked, the click delivered:
+  move / down / up in the input log, and NO request of any kind):
+  - all 4 were the FIRST click of a route: 4 / 158 route-first clicks indoors, 0 / 55 outdoors,
+    0 / 322 later clicks;
+  - each came 14–35 s after the previous move;
+  - one sat 2.5 px below a client-side SIGNBOARD (the wedding NPC's ring sign, drawn from client
+    data; no packet: 0 desyncs in 16 h of prt_church replays);
+  - the cause is OPEN. idle@1 (3.23) separates idle from chat typing before any fix.
+- **Batt's decisions (2026-10-08 ~17:00):** the walk@13 direction is approved:
+  - refused cells become temporary obstacles to re-plan around;
+  - "goal taken" only when a unit stands ON the goal;
+  - the idle test runs before any fix for the first-click failures.
+  - The design proposal (walk@13) follows; it is pre-registered before any run.
+
 ### 3.22 rec@0b — what stops an attack ALREADY UNDER WAY (pre-registered 2026-10-08 ~15:10 ICT, BEFORE any run; Batt's approval of rec@0b with three adjustments)
 **Why:**
 - rec@0 (3.19) was INCONCLUSIVE: the C0 control continued in 2 / 8.
@@ -1595,6 +1638,105 @@ floated off the character as the camera scrolled; the console stopped drawing it
   arrival.
 - **Control:** no cancel, so the walk-up and hits must follow.
 - Its own pre-registration comes after rec@0b.
+
+### 3.23 idle@1 — does the client drop the FIRST world click after idle, or after chat typing? (pre-registered 2026-10-08 ~18:10 ICT, BEFORE any run; Batt ~17:00: "run the deliberate idle test (15 s vs 2 s) before building any fix")
+
+**Why:** walk@12 had 4 rule clicks that did not walk (WALK cursor read twice; a walkable cell picked;
+the click delivered: move, down, up in the input log; NO request of any kind from the client):
+- all 4 were the FIRST click of a route: 4 / 158 route-first clicks indoors, 0 / 55 outdoors, and
+  0 / 322 later clicks;
+- each came > 10 s after the previous move (14–35 s; later clicks 4–8 s);
+- before a route's first click the harness types in the chat (the route-start GM command, the
+  `/where` start fix), so IDLE and CHAT TYPING are confounded in walk@12's data;
+- one of the 4 sat 2.5 px under a client-side signboard (a separate positive case, below).
+
+**The test: 2 × 2, interleaved, one condition per trial in a seeded shuffled order.**
+
+| condition | before the hover | then |
+|---|---|---|
+| T15 | type one chat line (`/where`, the rule's own typed line), close the chat | 15 s idle, no input |
+| T2 | the same chat line | 2 s idle |
+| N15 | no chat line | 15 s idle |
+| N2 | no chat line | 2 s idle |
+
+- **Where:** prt_church (where it happened), the GM at a fixed start cell; the target is a walkable
+  cell 3 cells away in a seeded direction, inside the work zone, no TALK read, at least 40 px from
+  any signboard (by the pixel detector, or the measured sign of route 31).
+- **Each trial:** warp back to the start cell (a GM command), wait 3 s, then the condition's
+  chat line or not, the idle, and the click EXACTLY as walk@12 makes it: the two-motion hover, the
+  cursor read twice (WALK), the click at the read point.
+  - The warp is typed in EVERY trial. So the T and N conditions differ by one extra chat line plus
+    closing the chat, and the 15 / 2 s idle starts after the last input.
+- **n = 30 per condition** (120 trials, ~45 min of client time), seed 20261066.
+- **The outcome, judged offline from packets:** a `self_move_request` within 2 s of the click.
+  Anything else is a FAILURE: no request, or another request.
+
+**What decides** (pre-registered; walk@12's base rate is about 4 % of route-first clicks, so this is
+deliberately a coarse screen):
+- a factor is IMPLICATED when its two cells together have ≥ 2 failures and the other factor's
+  level without it (N2) has 0;
+- a fix is built only for an implicated factor (e.g. a fresh two-motion re-hover after typing or
+  idle), and is pre-registered separately;
+- 0 failures in all 120: no fix; the walk@12 cases stay unexplained and are reported as such, with
+  the binomial upper bound for each cell.
+
+**Reported:** failures per cell with their exact 95 % upper bounds, each failure's frame before the
+click (the recorder at 4 Hz), and the input log's move / down / up for it.
+
+**Signboard positive case (same session, separate trials, n = 5 each):** clicks at 0 (inside),
+2.5, 5 and 10 px below a signboard's measured bottom edge. A click inside is expected to produce no
+move request, and one at 10 px a move. The edge of the hit area is the smallest distance that
+walks in 5 / 5.
+
+### walk@13 — DESIGN PROPOSAL (direction APPROVED by Batt 2026-10-08 ~17:00; NOT yet pre-registered: pre-registered before any run)
+
+**Why** (Batt, 2026-10-08 ~16:00; the direction APPROVED ~17:00): "walk@12: safety is solved; the binding problem is now refusals.
+For walk@13, turn refusals into ALTERNATIVES (another click point on the polyline, approach the goal
+from another side, a nearby goal cell when the goal is adjacent to an NPC) before declining."
+
+**walk@12's refusals** (the four tuning runs, 3.21 RESULTS: 43 / 40 / 45 / 30, every one with zero
+safety events):
+- `unit_stays` (2 / 7 / 1 / 13): every point of the next step's cell refused (TALK cells next to the
+  start, or monsters inside the unit-gate envelope), patience ran out, the route declined. The
+  plan's other corners and other approaches were never tried.
+- `no_click_point` (3 / 1 / 1 / 0): the route stopped 1–3 cells short of the goal; the goal's cell
+  had no safe point (UI zone, TALK, or an NPC beside it).
+- "substituted a goal nobody had taken" (0 / 2 / 3 / 7): the goal's points were refused by the unit
+  ENVELOPE (a monster NEAR the goal) and the rule substituted as if the goal were TAKEN; the server
+  shows nobody on it.
+- `relocalise_limit` (2 / 0 / 0 / 0): the /where budget (not a refusal; kept).
+- TALK cells cluster around two indoor NPCs ((109–111, 124–126) and (112–113, 112–114)).
+- 4 clicks did not walk, all route-first clicks after > 10 s (idle@1, 3.23).
+
+**The proposal — refusals become alternatives, tried in this order before any decline:**
+1. **Another click point on the polyline.** When a step's target cell is refused (covered TALK /
+   unit envelope / no safe point), try the other cells of the SAME planned path at the next shorter
+   and longer distances (walk@11's farther points, extended to shorter ones), before patience.
+2. **Approach from another side: re-plan around the refusal.** The refused cells join a per-route
+   BLOCKED set (TALK cells for the whole route: NPCs do not move; unit-envelope cells for 8 s, the
+   unit memory's horizon; no-safe-point cells for the route) and the route is re-planned with
+   `walk6.plan(w, goal, blocked)`. At most R = 3 re-plans per route, then walk@12's patience /
+   substitute / decline.
+3. **A nearby goal cell when the goal sits beside an NPC.** If the goal cell, or a cell adjacent to it,
+   read TALK during this route, the goal becomes the nearest walkable cell at Chebyshev distance
+   1–2 that is not adjacent to a TALK cell and is reachable. SCORED SEPARATELY ("arrived at an
+   NPC-adjacent substitute"), never as a plain success; the verifier checks the server's position.
+4. **"Taken" means a unit's own cell IS the goal** (its feet picked to a cell), not a unit
+   inside the click-point envelope. An envelope refusal at the goal waits (patience) or uses
+   1-2 above; only a unit on the goal cell triggers the substitute.
+5. **The work zone also excludes SIGNBOARDS** found from pixels (their outline and colours,
+   + 6 px), once a deliberate positive case proves the hit area (a click 2–3 px under a sign's edge
+   vs 10 px under it).
+6. **The idle first click** (hypothesis, to be tested first): if a deliberate test shows the client
+   drops the first world click after > 10 s idle, the rule re-hovers (two motions) before such a
+   click; otherwise nothing changes.
+
+**Kept from walk@12:** everything else (the unit gate, the TALK-cell block, the work zone, the
+harness exit, the bar ≥ 48/50 + zero safety events, fresh seeds, held-out only if all four pass).
+
+**To pre-register:** the exact candidate order, R, the blocked-set lifetimes, the substitute rule's
+distance and scoring, the signboard detector's thresholds (from its positive case), and the
+idle-click decision (from its test).
 
 ### Targeting — DESIGN PROPOSALS (Batt, 2026-10-08; NOT pre-registered: each is pre-registered before it is adopted)
 **Provenance:** ideas only, from a screen recording of another RO bot's debug view (unknown origin,

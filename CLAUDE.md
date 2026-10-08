@@ -317,7 +317,7 @@ ports, quickstart) and `docs/adr/`.
     - It was verified live on the bus: unfocused → refused `client_not_foreground`, active → ok.
     - Re-cut it if the client window or its title moves.
   - Tests that send bot keys get the client in front (conftest); `real_foreground` opts out.
-- **The RDP frame bus** (Batt 2026-10-08, `poring_backend/rdp_bus.py`; BUILT, live after the next
+- **The RDP frame bus** (Batt 2026-10-08, `poring_backend/rdp_bus.py`; LIVE since the 17:45
   backend restart): ONE X grabber fans the same frame (its `frame_id` and capture time) out to
   every consumer on the RDP path, as S2 does.
   - It grabs on XDamage (≤ 30 fps) with a 100 ms keepalive, only while the lock says `rdp`.
@@ -445,7 +445,9 @@ ports, quickstart) and `docs/adr/`.
   and group 20 apply with a recreate, not a build.
 - `sniffer` runs its own SLIM image (`poring-lab/sniffer:local`, ADR-0007 decision 2; first built
   f8c1531, REBUILT 2026-10-08 07:31 from 8533fcd's tree: `attack_request` / `npc_contact` are live,
-  each proven by a deliberate positive case, demonstrations.md §2a);
+  each proven by a deliberate positive case, demonstrations.md §2a; REBUILT AGAIN 2026-10-08 17:51
+  from 8be6261: the length table's 5 variable packets (chat rooms, 0x097B) + loot@1's floor-item /
+  pickup decoders; the §2a positive cases are re-run after it);
   banked captures are re-decoded offline with `guarded_build.py replay:<FROM>..<TO>` (UTC hours; a
   one-off, network-less, read-only container from the sniffer image -- never an exec into the
   live sniffer) and judged per session by `scripts/replay_safety.py`;
