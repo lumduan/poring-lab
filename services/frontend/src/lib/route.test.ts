@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import type { RoutePreview } from "./protocol.ts";
-import { routePath, routePixels, routeTtlMs } from "./route.ts";
+import { routePixels } from "./route.ts";
 
 const route: RoutePreview = {
   type: "route_preview",
@@ -27,16 +27,6 @@ test("points scale to the canvas like detection boxes", () => {
   assert.equal(px.length, 4);
 });
 
-test("the drawn path is the polyline without the next click", () => {
-  const path = routePath(routePixels(route, 100, 100));
-  assert.deepEqual(path.map((p) => p.kind), ["start", "waypoint", "goal"]);
-});
-
-test("an empty or missing route clears at once; otherwise it lives its ttl", () => {
-  assert.equal(routeTtlMs(null), 0);
-  assert.equal(routeTtlMs({ ...route, points: [] }), 0);
-  assert.equal(routeTtlMs(route), 4000);
-});
 
 // --- LIVE previews (Batt 2026-10-08): world-anchored, matched to the displayed frame ---------------
 import { FADE_MS, clipRects, isLive, passedAlpha, passedPixels, pickForFrame, pushLive } from "./route.ts";
@@ -60,6 +50,14 @@ test("an empty live message ends the route; the buffer keeps only the newest", (
   assert.equal(buf[0].t_mono_ns, 20 * 50e6);
   assert.deepEqual(pushLive(buf, live(9e9, { points: [] })), []);
   assert.ok(isLive(buf[0]) && !isLive(route));
+});
+
+test("a one-shot preview is never drawn and never clears a live route (Batt 2026-10-08)", () => {
+  assert.deepEqual(pushLive([], route), []); // walk@12's screen-pixel plan: dropped on arrival
+  const buf = pushLive([], live(1_000e6));
+  assert.equal(pushLive(buf, { ...route, points: [] }), buf); // its empty "clear" changes nothing
+  assert.equal(pushLive(buf, route), buf);
+  assert.equal(pickForFrame(pushLive([], route), 1), null); // nothing to draw
 });
 
 test("the walked-over stretch fades by its age and disappears at FADE_MS", () => {

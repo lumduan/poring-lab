@@ -157,10 +157,13 @@ Open **http://192.168.1.13:3000** (`HOST_LAN_IP`). What it gives you:
   - An amber WATCH ONLY chip shows on the screen and in the header.
 - **Top bar (every page):** Console / Settings / Label QA, and the **mode badge**, always visible:
   **BOT** red and pulsing ("BOT in control"), **ASSIST** amber, **HUMAN** blue, grey = no status.
-- **Route preview** (walk@8, 2026-10-07): when a walking rule plans a route, its waypoint polyline
-  (amber, dashed), the goal (a ring) and the next click point (a crosshair) are drawn over the
-  stream. It is display only (a `RoutePreview` the backend relays like detections, never to the mux),
-  and fades after a few seconds.
+- **Route preview** (2026-10-08): only the LIVE, world-anchored preview is drawn: a green line from
+  the character's feet with square corner nodes, a box on the next click and arrows converging on
+  the goal (the RA2 look), re-projected about 20 times a second and matched to the frame on screen.
+  Today only `scripts/route_demo.py` runs that previewer. A walk rule's one-shot plan picture
+  (walk@8-12, screen pixels) is dropped on arrival: it floated off the character as the camera
+  scrolled (Batt, 2026-10-08). It is display only (a `RoutePreview` the backend relays like
+  detections, never to the mux).
 - **Operator HUD** (2026-10-08; the **HUD** toolbar toggle, per tab, off on every load): the rule's
   detector boxes (class, confidence, distance in cells), its locked target and countdown, the work
   zone, the walk vector, counters, and a short plain-words log in a panel under the stream. Display

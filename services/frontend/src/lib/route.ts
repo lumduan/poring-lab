@@ -11,22 +11,15 @@ export function routePixels(route: RoutePreview | null, width: number, height: n
   return route.points.map((p) => ({ x: p.x * width, y: p.y * height, kind: p.kind ?? "waypoint" }));
 }
 
-/** The polyline the agent will walk: every point but the next click, in order. */
-export function routePath(pixels: RoutePixel[]): RoutePixel[] {
-  return pixels.filter((p) => p.kind !== "click");
-}
-
-/** How long to keep it on screen; an empty route clears at once. */
-export function routeTtlMs(route: RoutePreview | null): number {
-  if (!route || route.points.length === 0) return 0;
-  return route.ttl_ms ?? 5000;
-}
-
 // --- LIVE previews (Batt 2026-10-08): the route anchored to the WORLD -------------------------------
 // The agent re-projects its map cells ~20 times a second from the character's CURRENT position and
 // stamps each message with the host clock -- the clock of the stream frames' t_capture_ns too. The
 // console draws the live message nearest the frame it is showing, and NOTHING when none is close:
 // a stale route is never drawn (it would float over a scene the camera has moved).
+//
+// ONE-SHOT previews (walk@8-12's plan-time picture in screen pixels) are NOT drawn any more (Batt,
+// 2026-10-08): they stay where they were drawn while the camera scrolls, so they float off the
+// character during the walk. No route line is better than a misleading one.
 
 export const LIVE_MAX_SKEW_NS = 200e6; // a live route farther than this from the frame: not drawn
 export const LIVE_BUFFER = 40; // ~2 s at 20 Hz
@@ -36,8 +29,10 @@ export function isLive(route: RoutePreview | null): boolean {
   return route?.live === true;
 }
 
-/** Keep the newest live messages (time order); an empty one (the route ended) clears the buffer. */
+/** Keep the newest live messages (time order); an empty one (the route ended) clears the buffer.
+ * A one-shot message is ignored, its empty "clear" too: it never draws and never wipes a live one. */
 export function pushLive(buffer: RoutePreview[], msg: RoutePreview, cap = LIVE_BUFFER): RoutePreview[] {
+  if (!isLive(msg)) return buffer;
   if (msg.points.length === 0) return [];
   const out = [...buffer, msg].sort((a, b) => a.t_mono_ns - b.t_mono_ns);
   return out.slice(Math.max(0, out.length - cap));

@@ -77,7 +77,6 @@ export default function Console({ backendUrl }: Props) {
   const lastStatusMsRef = useRef<number | null>(null);
   const [statusAgeS, setStatusAgeS] = useState<number | null>(null);
   const [detections, setDetections] = useState<Detections | null>(null);
-  const [route, setRoute] = useState<RoutePreview | null>(null);
   const [stats, setStats] = useState<Stats>(EMPTY_STATS);
   const [links, setLinks] = useState<Links>({ stream: false, input: false });
   const [frameSize, setFrameSize] = useState<Size>({ width: 1280, height: 800 });
@@ -224,10 +223,8 @@ export default function Console({ backendUrl }: Props) {
           setStatus(msg);
         }
         else if (msg?.type === "detections") setDetections(msg);
-        else if (msg?.type === "route_preview") {
-          if (msg.live) liveRouteRef.current = pushLive(liveRouteRef.current, msg); // world-anchored
-          else setRoute(msg);
-        }
+        // world-anchored only: a one-shot preview is dropped on arrival (it floats; lib/route.ts)
+        else if (msg?.type === "route_preview") liveRouteRef.current = pushLive(liveRouteRef.current, msg);
         else if (msg?.type === "operator_hud") {
           if (hudOnRef.current) setHud({ msg, at: performance.now() }); // display only
         }
@@ -480,7 +477,6 @@ export default function Console({ backendUrl }: Props) {
       >
         <OverlayCanvas detections={detections} width={frameSize.width} height={frameSize.height} />
         <RouteCanvas
-          route={route}
           liveRef={liveRouteRef}
           frameNsRef={frameNsRef}
           width={frameSize.width}
