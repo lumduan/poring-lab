@@ -1,10 +1,10 @@
 ---
 title: "MW2 — the block programming editor (workflow canvas + block editor) on MW1's IR"
-status: PROPOSED
+status: "BUILT as a SKELETON on branch feat/mw2-editor (2026-10-08 night); not merged, not deployed (section 0)"
 date: 2026-10-08
 owner: Batt
 extends: docs/adr/0020-block-programming-flows.md
-gate: "built AFTER walk@13 passes (Batt, 2026-10-08); this plan stops for approval of the new frontend dependencies and their pinned versions"
+gate: "~~built AFTER walk@13 passes; stops for approval of the new frontend dependencies~~ ➡️ SUPERSEDED: Batt approved the build and both pinned dependencies on 2026-10-08 ~21:05 (section 0)"
 ---
 
 # MW2 — the block programming editor
@@ -12,6 +12,99 @@ gate: "built AFTER walk@13 passes (Batt, 2026-10-08); this plan stops for approv
 **Batt (2026-10-08 ~19:00):** "once walking (walk@13) passes, build the BLOCK PROGRAMMING editor
 next, so Batt can test with us. Plan first and stop for approval (new frontend dependencies + pinned
 versions)."
+
+## 0. Status: the skeleton is built (2026-10-08 night), not deployed
+
+**Batt (2026-10-08 ~21:05)** approved the build tonight and both dependencies (`blockly` 13.3.0,
+`@xyflow/react` 12.12.0), which supersedes this plan's two gates. His scope: the canvas (map nodes,
+typed exits incl. `death_respawn`, global and per-map event nodes, loops), double-click → a
+MakeCode-style block editor with ~6 blocks plus control, both compiling to MW1's IR, JSON import /
+export, the Python view, round-trip tests, lint on the canvas, SIMULATE only with verification
+badges, NO live run, the console unchanged. Where this plan and that scope differ, the scope won.
+
+**Where it is:** branch `feat/mw2-editor` (5+ commits on `d5021f2`). Nothing is merged or deployed;
+the deploy steps are at the end of this section.
+
+| Plan section | Built |
+|---|---|
+| 1 · four views | canvas, blocks, JSON (import / export), Python (read-only, MW1's printer). IR → canvas → IR and IR → blocks → IR are exact (tests below) |
+| 2 · canvas | `services/frontend/src/components/flows/FlowCanvas.tsx`, `lib/flow/canvas.ts`: map nodes with typed exit ports, the start marker, global + per-map event nodes (a lock on `dead` / `hp_critical` / `unexpected_map`), Node-RED-style status lines (lint, then the last run), drawing / deleting an exit edits the IR, double-click opens the blocks, "simulate this node only" |
+| 2 · `death_respawn` | DERIVED and read-only (this plan's proposal, open question 1): a dashed edge from every block to the save point's block, when a `dead` event exists and the flow sets (or asserts) the save point on ONE map. The IR is unchanged |
+| 3 · blocks | `BlockEditor.tsx`, `lib/flow/blocks.ts`, `blockdefs.ts`: Blockly `zelos`; the palette `walk_to`, `talk_npc`, `choose_menu`, `open_window`, `use_item`, `wait`; every other catalogue block by name; if / while / repeat / wait until / set / call / stop / break / continue; the three exits; event hats (global, override, add), extend, disable. Each skill block shows its BADGE (L1 `verified_on`: verified RDP / S2 / both, unverified, unknown, core), its lint findings (⚠) and its last run |
+| 4 · simulate | `poring_flow/trace.py`: MW1's `runtime.Sim` (unchanged) driven by the map sheets (routes on the walk grid, NPCs and menu keys checked, the Kafra sets the save point, a wing / a respawn go there) and a bounded SCENARIO (vitals, a loot model, a timeline, e.g. a death at t = 200 s). Returns the cells per map, the exits taken (death_respawn included), per-node outcomes and durations, the events. Input batches are COUNTED, never built or kept |
+| 4 · MW2-0 | `poring_flow/kbsheet.py`, at RUN TIME and in memory (see deviation 1) |
+| 5 · backend | `services/backend/src/poring_backend/routes_flows.py`: GET `/flows/catalogue`, `/flows/world`, `/flows/sample`; POST `/flows/lint`, `/flows/simulate`, `/flows/python`. Public listener, LAN viewer, Origin; POST also the CSRF token and 20 a minute per client; the IR through MW1's `ir.from_json` (1 MiB, depth 256, the schema); one computation at a time in a worker thread; no input, no mux, no storage; 503 when `poring_flow` is not installed |
+| 6 · dependencies | pinned exact; licences read at those versions and recorded in THIRD_PARTY.md; Blockly's peer `jsdom` removed by a pnpm override (pnpm 10 installs peers even under `ignoreMissing`); media self-hosted in `public/blockly-media`, sounds off; no `eval` / `new Function` in either library; the CSP is unchanged |
+
+**Deviations from this plan** (each reported, for Batt):
+1. **MW2-0 is a run-time builder, not a file generator.** For the maps a flow names, the sheet is
+   built in memory from what `kb_build` / `kb_route` / `kb_bindings` already extracted (L3 warps,
+   NPC positions and menus, Kafras, spawns, mobs) plus the map's GAT when its directory is
+   readable; a generated `data/kb/maps/<server>/<map>.json` still wins. Nothing is written. Not
+   extracted yet, so the linter fails closed: map flags, Kafra services and save cell, NPC warp
+   targets, items.
+2. **`wait(seconds)` is `wait_until(False, timeout_s=N)`**, the IR's only wait statement (section 3's
+   "core wait statement" does not exist in MW1's IR). No IR change.
+3. **Blocks outside the palette:** one generic block per catalogue block (parameters by name, in
+   the Python view's expression form), and a read-only block (kept exactly) for what MW2 has no
+   block for (`for` loops, an action inside a sensor argument).
+4. **Conditions are typed** in the Python view's expression form (`hp_percent() < 50`), parsed by our
+   own parser and never evaluated; compare / and / or / not / an action used as a value have blocks.
+5. **Unsupported bindings are listed apart** in the UI ("N unsupported"), so the first impression is
+   not all red; MW1's severity (ERROR) is unchanged. Open question 4 (#6) stays Batt's.
+6. **TS types:** `flow.gen.ts` is generated (json2ts, in `scripts/gen_protocol.sh`), but json2ts
+   makes defaulted fields optional; the editor uses hand-written canonical types, pinned to the
+   generated ones at typecheck (`lib/flow/check.ts`).
+7. **The rate limit** (20 a minute) covers lint, simulate and the Python view together; the editor
+   lints 2.5 s after the last change.
+8. **Layout** (node positions) is not stored: it is not in the IR, so not in the hash or the export.
+
+**Acceptance (section 7):**
+1. MW1's fixtures and the sample load into the canvas and the blocks and export with the same
+   canonical JSON (node tests); a browser's JSON round trip keeps `flow_hash` (pytest).
+2. Round trips: IR → canvas → IR and IR → blocks → IR exact for the 3 fixtures and 200 / 300 seeded
+   random flows; 400 random expressions; and in the REAL Blockly (headless Chromium, production
+   build) load → save → IR was identical for the sample's town, farm and global-events scopes.
+3. The editor's lint equals MW1's for the same IR (`test_the_editor_lints_exactly_like_mw1`).
+4. Simulate: the sample on its synthetic sheets (town → npc_warp → farm loop → item_warp, a death at
+   t = 200 s → death_respawn → town); and a LOCAL demo on the lab's real data (prontera ↔
+   prt_fild08 by walk exits, routes on the real GAT), kept in /dev/shm, never committed.
+5. Flipping an L1 concept's `verified_on` flips the badge (test).
+6. Hostile input refused with a message: oversize, too deep, not JSON, wrong shape (browser and
+   backend); a foreign Origin, no CSRF token, `:8001`, the agent network, a compose peer (backend).
+7. Production build: no CSP violation on `/flows`, requests only to the page's origin and the
+   backend, the console page's scripts the same total size as on `main` (639,845 B, 8 chunks; 5
+   byte-identical, 3 re-split), Blockly and React Flow only in chunks `/flows` loads on demand.
+8. Targeted suites green (poring_flow, the /flows routes, settings, qa, app; ruff, mypy; the
+   frontend's typecheck, lint, tests). The full Python suite is the parent's run.
+
+**Known limit:** JSON in a browser cannot keep `2.0` apart from `2`, so a LITERAL holding an integral
+float (`Lit(2.0)`) comes back as an int and the hash changes (float FIELDS such as `timeout_s` are
+safe). Test `test_a_float_literal_with_an_integral_value_is_the_known_exception`; MW1's canonical
+form decides.
+
+**Naming:** this plan's "MW2" (the editor) is not ADR-0020 13.8's "MW2 · One map block and its exits,
+live". One of the two needs another name (for Batt).
+
+**Parked for Batt:** `death_respawn` authored vs derived (Q1, derived built); flows stored only as
+files (Q2, as proposed); the Python view read-only (Q3, as proposed); #6 unsupported bindings as
+errors (Q4); who may open `/flows` (Q5: every LAN viewer today); the PROVISIONAL NPC / option key
+scheme of `kbsheet.py` and whether such keys may be committed (ADR-0020 Q11); the GAT directory is
+not mounted into the backend container (without it routes there are estimates); the MW2 naming;
+the float-literal hash limit.
+
+**To deploy** (the parent, in an operator-chosen window):
+1. Merge `feat/mw2-editor`.
+2. frontend-dev: a guarded restart (its entry runs `pnpm install --frozen-lockfile` into tmpfs, so
+   the two new packages arrive from the lockfile); the production frontend image needs a guarded
+   rebuild (its Dockerfile now also copies `public/`).
+3. Backend, dev mode: `poring_flow` and `poring_skills` are not in the backend image. This branch's
+   `compose.dev.yaml` mounts their `src` read-only on the dev backend's `PYTHONPATH`; a guarded
+   `recreate:backend` applies it (a restart does not pick up new mounts; check with
+   `scripts/verify_mount.py backend`). Until then the routes answer 503 `flow_engine_unavailable`
+   and the page says the engine is not reachable. Production: add `poring-flow` to the backend's
+   dependencies (`uv lock`), copy the two packages in its Dockerfile, and a guarded image rebuild.
+4. Optional: mount the GAT directory read-only into the backend for real routes on lab maps.
 
 ## 1. One IR, four views
 
