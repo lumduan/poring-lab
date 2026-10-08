@@ -64,6 +64,7 @@ def _record(out: str, region: tuple[int, int, int, int], stop: Any, hz: float) -
 def run(scene: str, n: int, seed: int) -> int:
     import multiprocessing as mp
 
+    import operator_hud
     import route_plan
     import walk12
 
@@ -77,6 +78,8 @@ def run(scene: str, n: int, seed: int) -> int:
     token = route_plan.enable(f"route-demo-{time.strftime('%H%M%S')}", walk12.SCENES8[scene][0],
                               log_path=str(out / "live.jsonl"))  # fmt: skip
     route_plan.ensure_previewer()
+    # and the operator HUD with its message log (walk@12's own enable then finds it owned)
+    hud = operator_hud.enable("route demo (walk@12)", log_path=str(out / "hud.jsonl"))
     rec.start()
     try:
         rc = walk12.run(scene, "clean", n, seed, "route-demo", 4)
@@ -85,6 +88,7 @@ def run(scene: str, n: int, seed: int) -> int:
         if rec.is_alive():
             rec.join(timeout=5)
         route_plan.disable(token)
+        operator_hud.disable(hud)
     sessions = sorted(Path("/dev/shm/poring-lab-demo").glob("*route-demo*"))
     (out / "session.txt").write_text(str(sessions[-1]) if sessions else "")
     print(json.dumps({"out": str(out), "session": str(sessions[-1]) if sessions else None}))
@@ -153,35 +157,105 @@ def ra2(d: Any, m: dict[str, Any], to: Any, t_ns: int) -> None:
                           outline=(0, 0, 0))  # fmt: skip
 
 
+HUD_ZONE = (90, 200, 255)
+HUD_CLASS = {"monster": (255, 90, 90), "npc": (255, 200, 60), "player": (90, 160, 255)}
+
+
+def _hud(out: Path) -> tuple[list[dict[str, Any]], np.ndarray]:
+    path = out / "hud.jsonl"
+    msgs = [json.loads(x) for x in path.read_text().splitlines() if x] if path.exists() else []
+    return msgs, np.array([m["t_mono_ns"] for m in msgs])
+
+
+def _hud_at(msgs: list[dict[str, Any]], ts: np.ndarray, t: int) -> dict[str, Any] | None:
+    """The latest HUD message at or before t that is still within its ttl (the console's rule)."""
+    if not len(ts):
+        return None
+    j = int(np.searchsorted(ts, t, side="right")) - 1
+    if j < 0:
+        return None
+    m = msgs[j]
+    return m if t - int(ts[j]) <= int(m.get("ttl_ms", 1500)) * 1_000_000 else None
+
+
+def draw_hud(d: Any, m: dict[str, Any], to: Any, size: tuple[int, int]) -> None:
+    """The console's HUD (HudCanvas.tsx + HudPanel.tsx), redrawn from the same message: the
+    excluded UI windows, each unit's box with class / confidence / distance in cells, the walk
+    vector, and the panel's plain-words log."""
+    z = m.get("zone") or {}
+    for r_ in z.get("exclude", []):
+        x0, y0 = to({"x": r_["x"], "y": r_["y"]})
+        x1, y1 = to({"x": r_["x"] + r_["w"], "y": r_["y"] + r_["h"]})
+        d.rectangle([x0, y0, x1, y1], outline=HUD_ZONE, width=1)
+    for u in m.get("units", []):
+        b = u["box"]
+        x0, y0 = to({"x": b["x"], "y": b["y"]})
+        x1, y1 = to({"x": b["x"] + b["w"], "y": b["y"] + b["h"]})
+        col = HUD_CLASS.get(u.get("cls", ""), (220, 220, 220))
+        d.rectangle([x0, y0, x1, y1], outline=col, width=2)
+        cells = u.get("dist_cells")
+        label = f"{u.get('cls', '?')} {u.get('conf', 0):.2f}" + (
+            "" if cells is None else f" · {cells} c"
+        )
+        d.rectangle([x0, y0 - 13, x0 + 7 * len(label), y0], fill=(0, 0, 0))
+        d.text((x0 + 2, y0 - 12), label, fill=col)
+    w = m.get("walk") or {}
+    if w.get("start") and w.get("end"):
+        d.line([to(w["start"]), to(w["end"])], fill=(255, 255, 255), width=2)
+    lines = [m.get("label", "")] + [str(x) for x in (m.get("log") or [])[-6:]]
+    if w.get("text"):
+        lines.insert(1, str(w["text"]))
+    W, H = size
+    px, py = W - 470, H - 18 * len(lines) - 160
+    d.rectangle([px - 6, py - 4, W - 8, py + 18 * len(lines)], fill=(0, 0, 0))
+    for i, line in enumerate(lines):
+        d.text((px, py + 18 * i), line[:66], fill=(230, 230, 230) if i else (255, 220, 120))
+
+
 def render(out: Path) -> int:
     import subprocess
 
     from PIL import Image, ImageDraw
 
+    hud_msgs, hud_t = _hud(out)
     live = _live(out)
     live_t = np.array([m["t_mono_ns"] for m in live])
     gx, gy, _, _ = r.game_region()
     dw, dh = r.desktop()
     frames = _frames(out)
     (out / "png").mkdir(exist_ok=True)
-    drawn = 0
+    drawn = hud_drawn = 0
+    best: tuple[int, int] = (-1, -1)  # (units shown with a route, frame index): the still
+    to = lambda p: ((p["x"] * dw) - gx, (p["y"] * dh) - gy)  # noqa: E731
     for k, (t, f) in enumerate(frames):
         img = Image.fromarray(np.ascontiguousarray(_load(f)[..., ::-1]))
         d = ImageDraw.Draw(img)
         m = _nearest(live, live_t, t)
         if m and m["points"]:
-            to = lambda p: ((p["x"] * dw) - gx, (p["y"] * dh) - gy)  # noqa: E731
             ra2(d, m, to, t)
             drawn += 1
-        img.save(out / "png" / f"{k:05d}.png")
+        h = _hud_at(hud_msgs, hud_t, t)
+        if h is not None:
+            draw_hud(d, h, to, img.size)
+            hud_drawn += 1
+            score = len(h.get("units", [])) + (100 if m and m["points"] else 0)
+            if score > best[0]:
+                best = (score, k)
+        img.save(out / "png" / f"{k:05d}.jpg", quality=90)
+    if best[1] >= 0:
+        Image.open(out / "png" / f"{best[1]:05d}.jpg").save(out / "still.png")
     ts = np.array([t for t, _ in frames])
     fps = 1e9 / float(np.median(np.diff(ts))) if len(ts) > 1 else REC_HZ
     mp4 = out / "route-demo.mp4"
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", f"{fps:.2f}", "-i",
-                    str(out / "png" / "%05d.png"), "-pix_fmt", "yuv420p", str(mp4)],
+                    str(out / "png" / "%05d.jpg"), "-pix_fmt", "yuv420p", str(mp4)],
                    check=True)  # fmt: skip
-    print(json.dumps({"frames": len(frames), "with_route": drawn, "fps": round(fps, 1),
-                      "video": str(mp4), "check": check(out, frames, live, live_t)}))  # fmt: skip
+    for f in (out / "png").glob("*.jpg"):  # the intermediates: re-renderable, RAM is shared
+        f.unlink()
+    print(json.dumps({"frames": len(frames), "with_route": drawn, "with_hud": hud_drawn,
+                      "fps": round(fps, 1), "video": str(mp4),
+                      "still": str(out / "still.png") if best[1] >= 0 else None,
+                      "check": check(out, frames, live, live_t)}))  # fmt: skip
     return 0
 
 
