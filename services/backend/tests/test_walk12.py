@@ -12,6 +12,7 @@ import builtins
 import contextlib
 import gzip
 import importlib.util
+import inspect
 import json
 import sys
 import types
@@ -122,7 +123,7 @@ def test_walk11_is_untouched_and_walk12_reuses_its_code(mods: Any) -> None:
     assert vars(w11)["click_step"].__module__ == "walk11"  # walk@11 still calls its own
     assert w11.DemoLog is sys.modules["poring_env.demo"].DemoLog
     # the SAME code, not a copy, under the display-only route-end wrapper (route_plan, 2026-10-08)
-    inner = w12.walk_route.__wrapped__
+    inner = inspect.unwrap(w12.walk_route)  # under the display-only route-plan + HUD wrappers
     assert inner.__code__ is w11.walk_route.__code__
     assert w12.run11.__code__ is w11.run.__code__
     assert inner.__defaults__ == w11.walk_route.__defaults__

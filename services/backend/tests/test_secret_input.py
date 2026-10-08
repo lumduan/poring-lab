@@ -356,7 +356,8 @@ def test_status_says_what_the_hud_and_route_feeds_relayed(
     ):
         hud0, route0 = feeds()
         assert (hud0["relayed"], hud0["age_ms"], route0["relayed"]) == (0, None, 0)  # no publisher
-        ws.send_text(AgentHello(t_mono_ns=T, agent_id="route-preview", version="0").model_dump_json())
+        hello = AgentHello(t_mono_ns=T, agent_id="route-preview", version="0")
+        ws.send_text(hello.model_dump_json())
         ws.send_text(OperatorHud(t_mono_ns=T, label="walk@12", log=["walking"]).model_dump_json())
         pts = [RoutePoint(x=0.5, y=0.5, kind="feet"), RoutePoint(x=0.6, y=0.4, kind="goal")]
         ws.send_text(RoutePreview(t_mono_ns=T, live=True, points=pts).model_dump_json())

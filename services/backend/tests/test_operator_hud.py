@@ -208,3 +208,89 @@ def test_gate_lines_are_plain_words(hud: ModuleType) -> None:
     assert line == "refused: monster 7.5 px from the click"
     assert hud.line_detected(1) == "detected 1 unit"
     assert hud.fps_from_ms(0) is None and hud.fps_from_ms(200.0) == 5.0
+
+
+# --- the rule side: enable + hooks (Batt 2026-10-08; display only, never blocking a decision) ---
+@pytest.fixture
+def enabled(hud: ModuleType, monkeypatch: pytest.MonkeyPatch) -> Any:
+    import ro_agent
+
+    monkeypatch.setattr(ro_agent, "game_region", lambda: REGION)
+    monkeypatch.setattr(ro_agent, "desktop", lambda: DESKTOP)
+    agent = Agent()
+    token = hud.enable("walk@12 indoor/clean", agent=agent)
+    assert token is not None and hud.enable("again", agent=Agent()) is None  # an outer owner wins
+    yield agent
+    hud.disable(token)
+    assert hud.sender() is None
+
+
+class Det:
+    last_ms = 12.0
+
+    def detect(self, frame: Any) -> list[Box]:
+        return [Box(600, 300, 640, 340, 0.9, "monster")]
+
+
+class World:
+    def __init__(self) -> None:
+        self.position = (100, 100)
+        self.camera = None
+        self.gat = None
+
+
+def test_disabled_hooks_are_pass_through(hud: ModuleType) -> None:
+    assert hud.sender() is None
+    gate = hud.hook_unit_check(lambda pr, w, u, v: (False, {"why": "x"}), {"detector": None})
+    step = hud.hook_click_step(lambda pr, w, end: {"clicked": True, "outcome": "confirmed"})
+    assert gate(None, World(), 1.0, 2.0) == (False, {"why": "x"})
+    assert step(None, World(), (101, 101)) == {"clicked": True, "outcome": "confirmed"}
+
+
+def test_the_gate_only_records_and_the_step_publishes_after_it_returned(
+    hud: ModuleType, enabled: Any
+) -> None:
+    det, units_ = Det(), {}
+    units_["detector"] = det
+    sent_during_gate: list[int] = []
+
+    def rule_gate(pr: Any, w: Any, u: float, v: float) -> tuple[bool, dict[str, Any]]:
+        boxes = units_["detector"].detect("frame")  # the gate's own detector call
+        assert boxes[0].cls == "monster"  # the detector's output is unchanged
+        return False, {"units": 1, "min_px": 26.0, "nearest": "monster"}
+
+    gate = hud.hook_unit_check(rule_gate, units_)
+
+    def rule_step(pr: Any, w: Any, end: tuple[int, int]) -> dict[str, Any]:
+        res = gate(pr, w, 640.0, 360.0)
+        sent_during_gate.append(len(enabled.ws.sent))  # nothing sent between gate and click
+        return {"clicked": not res[0], "outcome": "covered_unit_envelope"}
+
+    step = hud.hook_click_step(rule_step)
+    before = len(enabled.ws.sent)
+    out = step(None, World(), (103, 99))
+    assert out == {"clicked": True, "outcome": "covered_unit_envelope"}  # the result untouched
+    assert sent_during_gate == [before]
+    msg = json.loads(enabled.ws.sent[-1])
+    assert msg["type"] == "operator_hud" and msg["counters"]["units"] == 1
+    assert any("monster 26.0 px" in line for line in msg["log"])  # the gate's verdict, in words
+    assert msg["walk"]["dest"] == {"x": 103, "y": 99}
+
+
+def test_a_failing_hud_socket_never_reaches_the_rule(
+    hud: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import ro_agent
+
+    monkeypatch.setattr(ro_agent, "game_region", lambda: REGION)
+    monkeypatch.setattr(ro_agent, "desktop", lambda: DESKTOP)
+    token = hud.enable("walk@12", agent=Agent(fail=True))
+    try:
+        step = hud.hook_click_step(
+            lambda pr, w, end: {"clicked": False, "outcome": "no_safe_point"}
+        )
+        route = hud.hook_route(lambda pr, w, goal: {"decline": "unit_stays"})
+        assert step(None, World(), (1, 2)) == {"clicked": False, "outcome": "no_safe_point"}
+        assert route(None, World(), (5, 5)) == {"decline": "unit_stays"}
+    finally:
+        hud.disable(token)

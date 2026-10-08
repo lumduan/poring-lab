@@ -27,6 +27,7 @@ camera model and picking, never screen px: the rules reason in cells.
 from __future__ import annotations
 
 import contextlib
+import functools
 import json
 import math
 import time
@@ -297,6 +298,7 @@ class HudSender:
         self.skipped = 0
         self.refused = 0  # failed the protocol's own validation here: never sent
         self.last_error: str | None = None
+        self.log_path: str | None = None
         self._last_ns: int | None = None
         self._validate = _validator() if validate else None
         self.zone: dict[str, Any] | None
@@ -367,7 +369,166 @@ class HudSender:
                     return False
             self.agent.ws.send(text)
             self.sent += 1
+            if self.log_path:  # route_demo's render redraws the HUD from these (display only)
+                with contextlib.suppress(Exception), open(self.log_path, "a") as fh:
+                    fh.write(text + "\n")
             return True
         except Exception as exc:  # noqa: BLE001 -- display only: never a reason to stop
             self.last_error = f"{type(exc).__name__}: {exc}"[:200]
             return False
+
+
+# --- the rule side (Batt 2026-10-08: the walk / rec / idle harnesses publish; display only) -----
+# A run calls `enable` once; walk rules wrap their own functions with the hooks below. The GATE hook
+# only RECORDS its verdict (microseconds): the click-instant gate's envelope assumes the click
+# follows at once, so nothing is built, picked or sent between the gate and the click. Everything is
+# published by the click-step hook AFTER the step returned (the click is done). The HUD has its own
+# agent connection ("operator-hud"): an error reply can never stop the rule.
+_HUD: HudSender | None = None
+_OWNER: object | None = None
+_OWN_AGENT: Any = None
+_PENDING: list[dict[str, Any]] = []
+_LAST: dict[str, Any] = {}
+
+
+def enable(label: str, *, log_path: str | None = None, agent: Any = None) -> object | None:
+    """Start publishing (own agent unless given). None when already enabled (an outer caller,
+    e.g. route_demo with its log, keeps ownership) or when the HUD could not start (display only:
+    the run goes on without it)."""
+    global _HUD, _OWNER, _OWN_AGENT
+    if _HUD is not None:
+        return None
+    try:
+        import ro_agent as r
+
+        ag = agent if agent is not None else r.Agent("operator-hud")
+        hud = HudSender(ag, r.game_region(), r.desktop(), label=label)
+    except Exception:  # noqa: BLE001 -- display only
+        return None
+    hud.log_path = log_path
+    _HUD, _OWNER, _OWN_AGENT = hud, object(), (None if agent is not None else ag)
+    _PENDING.clear()
+    _LAST.clear()
+    return _OWNER
+
+
+def disable(token: object | None) -> None:
+    global _HUD, _OWNER, _OWN_AGENT
+    if token is None or token is not _OWNER or _HUD is None:
+        return
+    with contextlib.suppress(Exception):
+        _HUD.clear()
+    with contextlib.suppress(Exception):
+        if _OWN_AGENT is not None:
+            _OWN_AGENT.ws.close()
+    _HUD, _OWNER, _OWN_AGENT = None, None, None
+
+
+def sender() -> HudSender | None:
+    return _HUD
+
+
+def note(line: str) -> None:
+    if _HUD is not None:
+        _HUD.note(line)
+
+
+def publish(*, walk: dict[str, Any] | None = None, force: bool = True) -> None:
+    """Send the latest detector boxes (with their cells), the pending log lines and `walk`."""
+    if _HUD is None:
+        return
+    with contextlib.suppress(Exception):
+        boxes, w = _LAST.get("boxes") or [], _LAST.get("w")
+        cells = unit_cells(boxes, w.camera, w.gat, tuple(w.position)) if w is not None else None
+        _HUD.send(boxes=boxes, cells=cells, det_ms=_LAST.get("det_ms"), walk=walk, force=force)
+
+
+def _watch(det: Any) -> None:
+    """Remember the detector's last boxes: its `detect` is wrapped on the INSTANCE, returning
+    exactly what it returned (display only)."""
+    if det is None or getattr(det, "_hud_watched", False):
+        return
+    orig = det.detect
+
+    def detect(frame: Any) -> Any:
+        boxes = orig(frame)
+        _LAST["boxes"], _LAST["det_ms"] = boxes, getattr(det, "last_ms", None)
+        return boxes
+
+    det.detect, det._hud_watched = detect, True
+
+
+def hook_unit_check(fn: Callable[..., Any], units_: dict[str, Any]) -> Callable[..., Any]:
+    """Around the click-instant unit gate unit_check(pr, w, u, v) -> (ok, info): RECORD only."""
+
+    @functools.wraps(fn)
+    def check(pr: Any, w: Any, u: float, v: float) -> Any:
+        if _HUD is not None:
+            _watch(units_.get("detector"))
+        res = fn(pr, w, u, v)
+        if _HUD is not None:
+            _PENDING.append({"ok": res[0], "info": res[1], "u": u, "v": v})
+            _LAST["w"] = w
+        return res
+
+    return check
+
+
+def _outcome_line(res: dict[str, Any]) -> str:
+    out = str(res.get("outcome") or "")
+    if res.get("clicked"):
+        return plain(f"clicked: {out or 'walk'}")
+    extra = []
+    if res.get("ui_refused"):
+        extra.append(f"{len(res['ui_refused'])} px in UI windows")
+    if res.get("talk_refused"):
+        extra.append(f"{len(res['talk_refused'])} px on a TALK cell")
+    return line_refused(out + (f" ({', '.join(extra)})" if extra else ""))
+
+
+def hook_click_step(fn: Callable[..., dict[str, Any]]) -> Callable[..., dict[str, Any]]:
+    """Around click_step(pr, w, end, ...): AFTER it returned, the gate verdicts it recorded, its
+    outcome and the walk vector to `end` go out (the decision and the click are done)."""
+
+    @functools.wraps(fn)
+    def step(pr: Any, w: Any, end: tuple[int, int], *a: Any, **k: Any) -> dict[str, Any]:
+        if _HUD is None:
+            return fn(pr, w, end, *a, **k)
+        _PENDING.clear()
+        res = fn(pr, w, end, *a, **k)
+        with contextlib.suppress(Exception):
+            for g in _PENDING[-3:]:
+                _HUD.note(line_gate(bool(g["ok"]), g["info"]))
+            _HUD.note(_outcome_line(res))
+            at = res.get("at") or ((_PENDING[-1]["u"], _PENDING[-1]["v"]) if _PENDING else None)
+            _LAST["w"] = w
+            publish(walk=walk_vector(end, _HUD.region, _HUD.desktop, text=line_walking(end),
+                                     end_px=at))  # fmt: skip
+        _PENDING.clear()
+        return res
+
+    return step
+
+
+def hook_route(fn: Callable[..., dict[str, Any]]) -> Callable[..., dict[str, Any]]:
+    """Around walk_route(pr, w, goal, ...): a start line and the route's outcome."""
+
+    @functools.wraps(fn)
+    def route(pr: Any, w: Any, goal: tuple[int, int], *a: Any, **k: Any) -> dict[str, Any]:
+        if _HUD is not None:
+            with contextlib.suppress(Exception):
+                _HUD.note(
+                    plain(f"route: ({w.position[0]},{w.position[1]}) -> ({goal[0]},{goal[1]})")
+                )
+                # no boxes here: no picking work before the route's first decision
+                _HUD.send(walk=walk_vector(goal, _HUD.region, _HUD.desktop,
+                                           text=line_walking(goal)), force=True)  # fmt: skip
+        did = fn(pr, w, goal, *a, **k)
+        if _HUD is not None:
+            with contextlib.suppress(Exception):
+                why = did.get("decline") or ("arrived" if did.get("arrived_belief") else "ended")
+                _HUD.note(plain(f"route ended: {why}"))
+                publish()
+        return did
+
+    return route

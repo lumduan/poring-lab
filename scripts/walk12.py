@@ -52,6 +52,7 @@ from typing import Any
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import operator_hud  # noqa: E402
 import record_session  # noqa: E402
 import ro_agent as r  # noqa: E402
 import route_plan  # noqa: E402
@@ -70,7 +71,6 @@ from walk11 import (  # noqa: E402
     WALK,
     named8,
     observe_frame,
-    unit_check,
 )
 
 from poring_dataset import picking  # noqa: E402
@@ -79,7 +79,7 @@ from poring_env.demo import DEMO_ROOT, DemoRecord  # noqa: E402
 # walk@11's names (its constants, helpers and the unit memory UNITS: the SAME objects), so its
 # re-bound functions find everything they use here. The names below are walk@12's own.
 OWN = frozenset({"WALK8_RULE", "pick_points", "click_step", "portal_step", "walk_route", "run",
-                 "main", "DemoLog", "where_relocalise"})  # fmt: skip
+                 "main", "DemoLog", "where_relocalise", "unit_check"})  # fmt: skip
 globals().update({k: v for k, v in vars(w11).items() if not k.startswith("__") and k not in OWN})
 
 WALK8_RULE = "walk@12"
@@ -319,9 +319,13 @@ def engine_path(w: w5.World, start: tuple[int, int], end: tuple[int, int]) -> An
                      max_len=w5.PLAN_MAX) or [end]  # fmt: skip
 
 
-click_step = route_plan.hook_click_step(click_step, engine_path)
+# The OPERATOR HUD (Batt 2026-10-08; display only, operator_hud.py): the gate hook only RECORDS its
+# verdict (nothing between the click-instant gate and the click); the boxes, the verdicts and the
+# step's outcome are published after the step returned.
+unit_check = operator_hud.hook_unit_check(w11.unit_check, UNITS)
+click_step = operator_hud.hook_click_step(route_plan.hook_click_step(click_step, engine_path))
 where_relocalise = route_plan.hook_relocalise(w11.where_relocalise)
-walk_route = route_plan.hook_route_end(_walk11(w11.walk_route))
+walk_route = operator_hud.hook_route(route_plan.hook_route_end(_walk11(w11.walk_route)))
 run11 = _walk11(w11.run)  # walk@11's harness: `run` below adds decision 3 around it
 
 
@@ -393,12 +397,14 @@ def run(scene: str, condition: str, n: int, seed: int, label: str, crowd: int,
     SessionLog.current = None
     UNITS["detector"] = None  # walk@11's run loads its own; a failure before that has none to close
     plan = route_plan.enable(f"{WALK8_RULE}-{scene}-{condition}-{seed}", SCENES8[scene][0])
+    hud = operator_hud.enable(f"{WALK8_RULE} {scene}/{condition}")
     try:
         return int(run11(scene, condition, n, seed, label, crowd, fix))
     except BaseException as exc:  # noqa: BLE001 -- decision 3: EVERY way out finishes the session
         return finish_failed(exc)
     finally:
         route_plan.disable(plan)  # the line is cleared however the run ends
+        operator_hud.disable(hud)
 
 
 def _terminate(signum: int, frame: FrameType | None) -> None:
