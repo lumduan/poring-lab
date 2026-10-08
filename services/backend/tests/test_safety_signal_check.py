@@ -76,3 +76,40 @@ def test_rec0_judges_each_cancel_and_needs_the_control_to_see_the_attack_continu
     assert not v["stops_an_attack"]["C1"] and v["per_condition"]["C1"]["success"] == 7
     no_control = ssc.judge_rec0([t for t in trials if t["condition"] != "C0"], events)
     assert not no_control["stops_an_attack"]["C4"]  # without the positive control, nothing passes
+
+
+def test_rec0b_counts_only_engaged_trials_with_one_rule_for_every_condition(
+    ssc: ModuleType,
+) -> None:
+    """§3.22: INCLUDED = an attack request AND the GM's first hit between the attack click and the
+    cancel, for every condition (C0 too); the bar runs on included trials, >= 10 of them."""
+    S = 1_000_000_000
+    gm = ssc.GM_AID
+
+    def hit(t: float) -> dict[str, Any]:
+        return {"type": "act", "src_gid": gm, "kind": "normal", "t_mono_ns": int(t * S)}
+
+    def req(t: float) -> dict[str, Any]:
+        return {"type": "attack_request", "t_mono_ns": int(t * S)}
+
+    trials: list[dict[str, Any]] = []
+    events: list[dict[str, Any]] = []
+    t0 = 10.0
+    for cond, n_engaged, n_missed, continues in (("C0", 10, 3, True), ("C4", 11, 2, False),
+                                                 ("C1", 9, 0, False)):  # fmt: skip
+        for k in range(n_engaged + n_missed):
+            th, tc = t0, t0 + 0.8
+            trials.append(
+                {"k": len(trials), "condition": cond, "t_hit": th * S, "t_cancel": tc * S}
+            )
+            if k < n_engaged:  # engaged: the request and the first hit before the cancel
+                events += [req(th + 0.2), hit(th + 0.5)]
+                if continues:
+                    events += [hit(tc + 1.0), hit(tc + 2.0)]
+            t0 += 100.0
+    v = ssc.judge_rec0b(trials, events)
+    pc = v["per_condition"]
+    assert (pc["C0"]["attempts"], pc["C0"]["included"]) == (13, 10)  # the misses do not count
+    assert v["control_proven"] and pc["C0"]["continued"] == 10
+    assert v["stops_an_attack"]["C4"] and pc["C4"]["success"] == 11
+    assert not v["stops_an_attack"]["C1"] and "C1" in v["not_enough_engaged"]  # 9 < 10 engaged

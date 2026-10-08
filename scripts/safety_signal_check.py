@@ -581,6 +581,193 @@ def rec0(n: int, mapname: str, x: int, y: int, seed: int) -> int:
     return 0
 
 
+REC0B_CANCEL_S = 0.8  # 3.22: after the attack click; adjacent, the first hit lands before it
+REC0B_SEED, REC0B_TOPUP_SEED = 20261064, 20261065
+REC0B_ATTEMPTS, REC0B_TOPUP = 25, 15
+REC0B_INCLUDED_MIN = 10
+REC0B_SETTLE_S = 1.5  # after the walk to the plant's neighbour
+
+
+def judge_rec0b(trials: list[dict[str, Any]], events: list[dict[str, Any]],
+                gm: int = GM_AID) -> dict[str, Any]:  # fmt: skip
+    """§3.22: a trial is INCLUDED only if an attack_request AND the GM's first hit (act, normal)
+    both fall between its attack click and its cancel time -- the same rule for every condition,
+    C0 included. Then 3.19's success and continued measures, on included trials only."""
+
+    def n(pred: Any, lo: int, hi: int) -> int:
+        return sum(1 for e in events if lo <= int(e["t_mono_ns"]) <= hi and pred(e))
+
+    def is_req(e: dict[str, Any]) -> bool:
+        return e.get("type") == "attack_request"
+
+    def is_hit(e: dict[str, Any]) -> bool:
+        return (
+            e.get("type") == "act" and int(e.get("src_gid", -1)) == gm and e.get("kind") == "normal"
+        )
+
+    per: dict[str, dict[str, Any]] = {c: {"attempts": 0, "included": 0, "success": 0,
+                                          "continued": 0, "hits": []}
+                                      for c in REC0_CONDITIONS}  # fmt: skip
+    for t in trials:
+        c = per[t["condition"]]
+        c["attempts"] += 1
+        if "t_cancel" not in t:
+            t["included"] = False
+            continue
+        th, tc = int(t["t_hit"]), int(t["t_cancel"])
+        t["included"] = n(is_req, th, tc) > 0 and n(is_hit, th, tc) > 0
+        if not t["included"]:
+            continue
+        lo, hi = tc + int(REC0_AFTER_S * 1e9), tc + int(REC0_WINDOW_S * 1e9)
+        hits, reqs = n(is_hit, lo, hi), n(is_req, tc + 1, hi)
+        t["hits_after"], t["requests_after"] = hits, reqs
+        t["success"] = hits == 0 and reqs == 0
+        c["included"] += 1
+        c["success"] += int(t["success"])
+        c["continued"] += int(hits >= 2)
+        c["hits"].append(hits)
+    c0 = per["C0"]
+    control_ok = c0["included"] >= REC0B_INCLUDED_MIN and c0["continued"] >= 0.9 * c0["included"]
+    stops = {c: control_ok and per[c]["included"] >= REC0B_INCLUDED_MIN
+             and per[c]["success"] >= 0.9 * per[c]["included"]
+             for c in REC0_CONDITIONS[1:]}  # fmt: skip
+    short = [c for c in REC0_CONDITIONS if per[c]["included"] < REC0B_INCLUDED_MIN]
+    return {"per_condition": per, "control_proven": control_ok, "stops_an_attack": stops,
+            "not_enough_engaged": short}  # fmt: skip
+
+
+def rec0b(attempts: int, conditions: tuple[str, ...], mapname: str, x: int, y: int,
+          seed: int) -> int:  # fmt: skip
+    """rec@0b (docs/demonstrations.md §3.22, pre-registered): rec@0 with the attack starting AT
+    ONCE. The GM walks to the plant's neighbouring cell first (the plant's cell from pixels: the
+    detector's foot point + the picking model), then attacks the re-detected box centre; the cancel
+    comes REC0B_CANCEL_S later. Inclusion and outcome are judged offline (judge_rec0b)."""
+    import random
+
+    import bench
+    import cursor_gate
+
+    from poring_dataset import camera as cam
+    from poring_dataset import gat as gatmod
+    from poring_dataset import picking
+
+    refs = w6.CursorRefs.load(CURSOR_REFS_V3)
+    gat = gatmod.parse((cam.GAT_DIR / f"{mapname}.gat").read_bytes())
+    cj = json.loads((r.ROOT / "packages/poring_dataset/src/poring_dataset/camera_rdp.json")
+                    .read_text())  # fmt: skip
+    camera = cam.camera_from_json(cj["camera"])
+    order = [c for c in conditions for _ in range(attempts)]
+    random.Random(seed).shuffle(order)
+    sid = new_session_id("rec0b")
+    log = DemoLog(sid)
+    lock = record_session.read_lock(r.ROOT / "state")
+    log.start(backend=str(lock.backend), lock_seq=lock.seq, server="lab-rathena", rule="rec@0b",
+              account="gm", attempts=attempts, conditions=list(conditions), seed=seed,
+              order=order, map=mapname, spot=[x, y], cancel_s=REC0B_CANCEL_S)  # fmt: skip
+    t_first = r.ns()
+    trials: list[dict[str, Any]] = []
+    import unit_detector
+
+    det = unit_detector.UnitDetector()
+    feet = camera.project(np.zeros((1, 2)), np.zeros(1))[0]
+
+    def nearest_plant(frame: Any) -> Any:
+        mobs = [bx for bx in det.detect(frame) if bx.cls == "monster"]
+        return min(mobs, key=lambda b: abs(b.foot[0] - feet[0]) + abs(b.foot[1] - feet[1]),
+                   default=None)  # fmt: skip
+
+    with r.session("rule:rec0b") as (agent, screen):
+        pr = w10.Prober9(agent, screen, refs)
+        gx, gy, _, _ = r.game_region()
+        for k, cond in enumerate(order):
+            trial: dict[str, Any] = {"k": k, "condition": cond}
+            trials.append(trial)
+            r.gm(agent, screen, "@killmonster2")
+            r.gm(agent, screen, f"@warp {mapname} {x} {y}")
+            time.sleep(rr.SCENE_ENTRY_S)
+            r.gm(agent, screen, "@monster 1078 1")
+            time.sleep(2.0)
+            bench.close_chat(agent, screen)
+            r.activate_client(agent, screen)
+            box = nearest_plant(screen.grab(*r.game_region())[1])
+            if box is None:
+                time.sleep(0.5)
+                box = nearest_plant(screen.grab(*r.game_region())[1])
+            if box is None:
+                trial["found"] = False
+                continue
+            trial["found"] = True
+            off = picking.pick_cells(
+                camera, gat, (x, y), np.array([[box.foot[0], box.foot[1] - 4]])
+            )[0]
+            dx, dy = int(off[0]), int(off[1])
+            if abs(dx) > 1000:  # nothing picked under the plant's feet
+                trial["plant_cell"] = None
+                continue
+            trial["plant_rel"] = [dx, dy]
+            here = (x, y)
+            if max(abs(dx), abs(dy)) > 1:  # walk to the plant's neighbour on our side first
+                a = (dx - int(np.sign(dx)), dy - int(np.sign(dy)))
+                pts = picking.safe_points(camera, gat, (x, y), a, margin=6.0)
+                if not pts:
+                    trial["adjacent_walk"] = "no_point"
+                    continue
+                walked = cursor_gate.gated_click(pr, *pts[0])
+                trial["adjacent_walk"] = walked.get("why")
+                if not walked.get("clicked"):
+                    continue
+                time.sleep(REC0B_SETTLE_S)
+                here = (x + a[0], y + a[1])
+                dx, dy = dx - a[0], dy - a[1]
+            trial["here"] = list(here)
+            box = nearest_plant(screen.grab(*r.game_region())[1])
+            if box is None:
+                trial["refound"] = False
+                continue
+            u, v = (box.x0 + box.x1) / 2, (box.y0 + box.y1) / 2  # the box CENTRE
+            su = sv = None
+            if cond in REC0_WALK_CELLS:  # the cancel's walk point, AWAY from the plant
+                kc = REC0_WALK_CELLS[cond]
+                away = (-int(np.sign(dx)) * kc or kc, -int(np.sign(dy)) * kc or kc)
+                pts = picking.safe_points(camera, gat, here, away, margin=6.0)
+                if not pts or not pr.park():
+                    trial["safe_point"] = False
+                    continue
+                su, sv = pts[0]
+                pr.hover(su, sv)
+                ok = pr.read(su, sv)["shape"] == "walk" and pr.read(su, sv)["shape"] == "walk"
+                trial["safe_point"] = bool(ok)
+                if not ok:
+                    continue
+            agent.move(gx + round(u) - 3, gy + round(v) - 3)
+            agent.move(gx + round(u), gy + round(v))
+            time.sleep(0.3)
+            trial["t_hit"] = r.ns()
+            agent.click(gx + round(u), gy + round(v))  # the DELIBERATE attack click
+            time.sleep(REC0B_CANCEL_S)
+            trial["t_cancel"] = r.ns()
+            if cond in REC0_WALK_CELLS:
+                assert su is not None and sv is not None
+                agent.move(gx + round(su) - 3, gy + round(sv) - 3)
+                agent.move(gx + round(su), gy + round(sv))
+                agent.click(gx + round(su), gy + round(sv))
+            elif cond == "C3":
+                agent.keys(REC0_SIT_KEY)
+                time.sleep(1.0)
+                agent.keys(REC0_SIT_KEY)
+            elif cond == "C4":
+                agent.keys(REC0_WING_KEY)
+            time.sleep(REC0_WINDOW_S)
+        r.gm(agent, screen, "@killmonster2")
+        bench.close_chat(agent, screen)
+    det.close()
+    events, anchor = record_session.write_packets(log.dir, t_first, r.ns())
+    out = {"session": sid, **judge_rec0b(trials, events)}
+    log.finish(packet_events=len(events), packet_anchor=anchor, result=out, trials=trials)
+    print(json.dumps(out, indent=1, default=str), flush=True)
+    return 0
+
+
 def _count(xs: Any) -> dict[str, int]:
     from collections import Counter
 
@@ -613,6 +800,17 @@ def main() -> int:
     a7.add_argument("--x", type=int, default=268)
     a7.add_argument("--y", type=int, default=107)
     a7.add_argument("--seed", type=int, default=REC0_SEED)
+    a8 = sub.add_parser("rec0b")
+    a8.add_argument("--attempts", type=int, default=REC0B_ATTEMPTS)
+    a8.add_argument(
+        "--conditions",
+        default=",".join(REC0_CONDITIONS),
+        help="a top-up names its conditions (3.22: once, 15 attempts, seed 20261065)",
+    )
+    a8.add_argument("--map", default="prt_fild08")
+    a8.add_argument("--x", type=int, default=268)
+    a8.add_argument("--y", type=int, default=107)
+    a8.add_argument("--seed", type=int, default=REC0B_SEED)
     sub.add_parser("pickup-start")
     sub.add_parser("pickup-click")
     sub.add_parser("pickup-collect")
@@ -633,6 +831,9 @@ def main() -> int:
         return ui_click(a.x, a.y)
     if a.cmd == "ui-drag":
         return ui_drag(a.x1, a.y1, a.x2, a.y2)
+    if a.cmd == "rec0b":
+        conds = tuple(c for c in a.conditions.split(",") if c in REC0_CONDITIONS)
+        return rec0b(a.attempts, conds, a.map, a.x, a.y, a.seed)
     if a.cmd == "rec0":
         return rec0(a.n, a.map, a.x, a.y, a.seed)
     if a.cmd == "cancel-test":
