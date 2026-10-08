@@ -17,7 +17,7 @@ every frame, kept current by DELTAS, whether a rule runs or not (bot idle, or Ba
     one 2-D shift drifted off the sprites while walking. Needs no map knowledge: the camera's yaw
     and distance do not change how the floor moves on screen, only its pitch, FOV and centre;
   - the global offset carries the bulk (frame-synced on the console), and an object whose own
-    projection is more than RESID_PX off it gets a move in that frame's delta.
+    projection is more than `resid_px` (4 px) off it gets a move in that frame's delta.
 - **Messages** (`poring_env.protocol`):
   - `HudMotion` (the frame's offset), only while the scene moves;
   - `HudDelta` (add / move / remove), only on changes (and the perspective corrections, only while
