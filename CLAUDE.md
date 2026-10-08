@@ -420,7 +420,9 @@ ports, quickstart) and `docs/adr/`.
   - `frontend-dev` runs `next dev` with all writes on tmpfs.
 - `rathena` gets `entrypoint.sh` + `conf/import/groups.yml` bind-mounted, so the agent and GM accounts
   and group 20 apply with a recreate, not a build.
-- `sniffer` runs its own SLIM image (`poring-lab/sniffer:local`, f8c1531, ADR-0007 decision 2);
+- `sniffer` runs its own SLIM image (`poring-lab/sniffer:local`, ADR-0007 decision 2; first built
+  f8c1531, REBUILT 2026-10-08 07:31 from 8533fcd's tree: `attack_request` / `npc_contact` are live,
+  each proven by a deliberate positive case, demonstrations.md §2a);
   it has NO dev overlay (`test_guards.py`). So a `poring_packets` change (e.g. the B4 heading,
   the ADR-0016 attestation) is live in the sniffer only after a guarded `build:sniffer` +
   `recreate:sniffer`. After a sniffer restart the interlock says `no_session` until the next login.
