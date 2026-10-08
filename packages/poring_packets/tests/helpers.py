@@ -60,6 +60,34 @@ def zc_change_direction(gid: int, heading: int, head_dir: int = 0) -> bytes:
     return struct.pack("<HIHB", 0x009C, gid, head_dir, heading)
 
 
+def fall_entry(floor_id: int, item_id: int, item_type: int, identified: int, x: int, y: int,
+               sub_x: int, sub_y: int, amount: int, effect: int = 0,
+               mode: int = 0) -> bytes:  # fmt: skip
+    """ZC_ITEM_FALL_ENTRY5 0x0ADD (packets_struct.hpp:597-618 at PACKETVER 20211103), 24 bytes."""
+    return struct.pack("<HIIHBhhBBhbh", 0x0ADD, floor_id, item_id, item_type, identified, x, y,
+                       sub_x, sub_y, amount, effect, mode)  # fmt: skip
+
+
+def item_entry(floor_id: int, item_id: int, identified: int, x: int, y: int, amount: int,
+               sub_x: int = 6, sub_y: int = 6) -> bytes:  # fmt: skip
+    """ZC_ITEM_ENTRY 0x009D (packets_struct.hpp:2350-2364), 19 bytes."""
+    return struct.pack("<HIIBHHHBB", 0x009D, floor_id, item_id, identified, x, y, amount, sub_x,
+                       sub_y)  # fmt: skip
+
+
+def pickup_ack(index: int, amount: int, item_id: int, item_type: int, result: int,
+               refine: int = 0) -> bytes:  # fmt: skip
+    """ZC_ITEM_PICKUP_ACK 0x0B41 (packets_struct.hpp:540-595 at PACKETVER_RE_NUM >= 20200723),
+    70 bytes: index, count, nameid, identified, damaged, 4 cards, location, type, result, hire
+    expiry, bind type, 5 options x 5 bytes, favorite, look, refine, grade."""
+    head = struct.pack("<HHHIBB", 0x0B41, index, amount, item_id, 1 if item_id else 0, 0)
+    cards = struct.pack("<4I", 0, 0, 0, 0)
+    mid = struct.pack("<IBBiH", 0, item_type, result, 0, 0)
+    options = bytes(25)
+    tail = struct.pack("<BHBB", 0, 0, refine, 0)
+    return head + cards + mid + options + tail
+
+
 def ca_login(user: bytes, password: bytes) -> bytes:
     return (
         struct.pack("<HI", 0x0064, 20211103)

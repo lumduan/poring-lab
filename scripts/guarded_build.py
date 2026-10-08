@@ -54,6 +54,13 @@ On a breach:
                 dropped, uid 1000, mem == memswap 1g, oom_score_adj 500, 2 CPUs, reads capped at
                 REPLAY_READ_BPS on the root LV. Output: $REPLAY_OUT/<FROM>..<TO>/events.jsonl.
                 Packets stay offline ground truth: nothing here reaches the agent.
+  replaydev:<FROM>..<TO>[@<seconds>]
+                the same container, with THIS checkout's packages/poring_packets/src mounted
+                READ-ONLY first on PYTHONPATH (2026-10-08, loot@1 P2): decoders added since the
+                sniffer image was built are replayed WITHOUT rebuilding it (the live sniffer is
+                untouched; the image only lends its Python). Needs the generated length table
+                in that source (scripts/gen_packet_tables.py; its sha256 is checked against the
+                lock as always). Output: $REPLAY_OUT/<FROM>..<TO>-dev/events.jsonl.
   tables[@<seconds>][=--update-lock]
                 scripts/gen_packet_tables.py under the IO guard (2026-10-08: the generator starts
                 its own throwaway toolchain containers, and a container start can storm the
@@ -168,6 +175,7 @@ REPLAY_OUT = Path("/dev/shm/poring-lab-tmp/replay")  # RAM: rule 7
 REPLAY_DEVICE = "/dev/dm-0"  # the root LV (Docker's volumes); the disk shared with live capture
 REPLAY_READ_BPS = "20mb"
 REPLAY_AIDS = ("2000002", "2000001")  # the GM and the normal account: tagged, never logged
+REPLAY_DEV_SRC = REPO / "packages" / "poring_packets" / "src"  # replaydev: mounted read-only
 
 
 class Step:
@@ -223,11 +231,11 @@ def parse_step(step: str) -> Step:
         if name not in RUN_ALLOWED:
             raise ValueError(f"{step}: run: is allowed only for {', '.join(sorted(RUN_ALLOWED))}")
         return Step(kind, [name], float(secs or 600), argv)
-    if kind == "replay":
+    if kind in ("replay", "replaydev"):
         rng, _, secs = arg.partition("@")
         m = REPLAY_RANGE.match(rng)
         if m is None or m.group(1) > m.group(2):
-            raise ValueError(f"{step}: expected replay:<YYYYmmddTHH>..<YYYYmmddTHH>[@<seconds>]")
+            raise ValueError(f"{step}: expected {kind}:<YYYYmmddTHH>..<YYYYmmddTHH>[@<seconds>]")
         return Step(kind, [m.group(1), m.group(2)], float(secs or 3600))
     if step.split("=", 1)[0].split("@", 1)[0] == "tables":
         head, eq, command = step.partition("=")
@@ -280,10 +288,22 @@ def select_captures(names: list[str], first: str, last: str) -> list[str]:
     return ([before[-1]] if before else []) + inside
 
 
+def replay_out(step: Step) -> Path:
+    """Where a replay writes its events.jsonl (RAM); replaydev: apart, with a -dev suffix."""
+    suffix = "-dev" if step.kind == "replaydev" else ""
+    return REPLAY_OUT / f"{step.services[0]}..{step.services[1]}{suffix}"
+
+
 def replay_cmd(step: Step, volume: str, files: list[str], name: str) -> list[str]:
-    """The one-off replay container (see replay: in the docstring). File names are validated."""
+    """The one-off replay container (see replay: / replaydev: in the docstring). File names are
+    validated."""
     assert files and all(CAPTURE_NAME.match(f) for f in files)
-    out = REPLAY_OUT / f"{step.services[0]}..{step.services[1]}"
+    out = replay_out(step)
+    dev = (
+        ["-v", f"{REPLAY_DEV_SRC}:/repo-src:ro", "-e", "PYTHONPATH=/repo-src",
+         "-e", "PYTHONDONTWRITEBYTECODE=1"]
+        if step.kind == "replaydev" else []
+    )  # fmt: skip
     paths = " ".join(shlex.quote(f"/captures/{f}") for f in files)
     aids = " ".join(f"--validation-aid {a}" for a in REPLAY_AIDS)
     script = (f"ls -l {paths} >&2 && python -m poring_packets.replay {paths} {aids} "
@@ -294,7 +314,7 @@ def replay_cmd(step: Step, volume: str, files: list[str], name: str) -> list[str
         "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--user", "1000:1000",
         "--memory", "1g", "--memory-swap", "1g", "--oom-score-adj", "500", "--cpus", "2",
         "--device-read-bps", f"{REPLAY_DEVICE}:{REPLAY_READ_BPS}",
-        "-v", f"{volume}:/captures:ro", "-v", f"{out}:/out",
+        "-v", f"{volume}:/captures:ro", "-v", f"{out}:/out", *dev,
         "--entrypoint", "sh", REPLAY_IMAGE, "-c", script,
     ]  # fmt: skip
 
@@ -1013,13 +1033,18 @@ def main() -> int:
                              host=b"scripts/build_frame_cache.py")  # fmt: skip
             tail = log_path(step.label).read_text(errors="replace").splitlines()[-20:]
             print("\n".join(f"  | {line}" for line in tail), flush=True)
-        elif step.kind == "replay":
+        elif step.kind in ("replay", "replaydev"):
+            table = REPLAY_DEV_SRC / "poring_packets" / "_generated" / "lengths.json"
+            if step.kind == "replaydev" and not table.exists():
+                print(f"[{ts()}] {step.label}: {table} missing: run scripts/gen_packet_tables.py "
+                      "in this checkout first", flush=True)  # fmt: skip
+                return 1
             volume = captures_volume()
             files = select_captures(list_captures(volume), *step.services)
             if not files:
                 print(f"[{ts()}] {step.label}: no capture file in that range", flush=True)
                 return 1
-            out = REPLAY_OUT / f"{step.services[0]}..{step.services[1]}"
+            out = replay_out(step)
             out.mkdir(parents=True, exist_ok=True)
             name = f"poring-lab-replay-{os.getpid()}"
             print(

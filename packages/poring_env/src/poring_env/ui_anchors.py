@@ -359,6 +359,12 @@ ELEMENTS = {
     "hp_bar": ElementSpec("hp_bar", "basic_info", box=(35, 53, 135, 9)),
     "sp_bar": ElementSpec("sp_bar", "basic_info", box=(35, 68, 135, 9)),
     "hp_sp_text": ElementSpec("hp_sp_text", "basic_info", box=(30, 51, 190, 27)),
+    # The weight readout line (loot@1 P1, measured 2026-10-08 on RDP frames, window at (0, 0)):
+    # the label, the numbers, then the zeny text, across the window's whole width (the label moves
+    # with the weight's digit count: dx 53 at "90", 50 at "205"); a crisp 7 px-pitch bitmap font,
+    # black on the window's white, glyph rows 118-129. poring_env.weight reads it. No label_key:
+    # the label is only matched as pixels (a locally cut template), never as text.
+    "weight_line": ElementSpec("weight_line", "basic_info", box=(0, 114, 220, 20)),
     "chat_input": ElementSpec("chat_input", "chat", box=(80, 72, 400, 14)),
     **{
         f"hotbar_slot_{i + 1}": ElementSpec(

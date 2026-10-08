@@ -1328,6 +1328,21 @@ first.
   extension). They are reported, never committed.
   - Also the item weights (item_db), and the lab server's floor-item lifetime (its pinned config;
     ~60 s is the expected order).
+- ➡️ **Built 2026-10-08 (code + host tests only; NONE proven live yet, §2a):**
+  - P1: `poring_env/weight.py` (the reader: (N, M) or None + a reason + a confidence; it REFUSES
+    templates that lack any digit), `scripts/weight_calibrate.py` (templates cut locally into
+    `data/ui_anchors/weight_glyphs.npz`, labelled by packet truth), `scripts/weight_resolution.py`
+    (`plan` / `measure`: the resolution and the display rule). The banked frames show only
+    0 2 3 9 and '/': the live calibration must step the weight through every digit first.
+  - P2: the decoders above (§5, "Floor items and pickups"); proven only by a replay of a deliberate
+    drop + pickup (`guarded_build.py replaydev:`, the checkout's decoders read-only in the sniffer
+    image: no rebuild) and `scripts/loot_truth.py`.
+  - P3: `poring_dataset/deathcell.py` (`death_cell`, `scan_order`: the server's drop pattern
+    first); its truth is `loot_truth.py`'s death cells (the Timeline's position at the "died"
+    vanish).
+  - P4: `scripts/kb_build.py` writes `items.json` (weights), `drops.json` (rates, effective on the
+    lab server) and `server.json` (`flooritem_lifetime` 60 000 ms, from the pinned drops.conf);
+    `--show-drops 1002` prints a species' table. Generated locally, never committed.
 - **P5 · the backup "item obtained" cue, from pixels** (Batt, 2026-10-08): the client's own
   item-get notification, or its line in the chat / battle log.
   - It is found by its L4 locale key; the text is never committed (rule 4).
@@ -1639,6 +1654,25 @@ Event → fields (cs = our request, sc = the server):
   - Action 0 = attack once, 7 = keep attacking (both `is_attack`); 2 / 3 = sit / stand.
   - A walk click stays a `self_move_request`. That difference is what tells an attack click from
     a walk.
+- Floor items and pickups (**built 2026-10-08 for loot@1 P2; replay only**, `replaydev:` below):
+  - `floor_item_appear` (sc): `kind` "fall" (ZC_ITEM_FALL_ENTRY5 0x0ADD, 24 bytes: a FRESH drop)
+    or "in_sight" (ZC_ITEM_ENTRY 0x009D, 19 bytes: one already lying there comes into view),
+    `floor_id` (the pickup act's `target_gid`), `item_id` (u32 at this PACKETVER), `item_type`
+    (fall only), `identified`, `x`, `y`, `sub_x`, `sub_y`, `amount`, `drop_effect`.
+  - `floor_item_vanish` (sc, ZC_ITEM_DISAPPEAR 0x00A1): `floor_id`. Picked up, expired
+    (`flooritem_lifetime` 60 000 ms on the lab server), or out of OUR sight: the packet does not
+    say which.
+  - `pickup_request` (cs, CZ_ITEM_PICKUP2 0x0362): `floor_id`.
+  - `pickup_result` (sc, ZC_ITEM_PICKUP_ACK 0x0B41, 70 bytes): `index`, `amount`, `item_id`,
+    `result`, `reason`, `ok`. It is sent for EVERY item that enters the inventory (an `@item`
+    too), so a floor pickup is: our `act` of kind pickup on the floor id + `pickup_result` ok for
+    that item + the floor id's vanish (`scripts/loot_truth.py` "confirmed"). Result 6
+    ("refused") is also rAthena's generic fail packet (too far, loot priority, dead).
+  - `drop_request` (cs, CZ_ITEM_THROW2 0x0363) / `drop_result` (sc, ZC_ITEM_THROW_ACK 0x00AF):
+    `index`, `amount` (`ok` = amount > 0).
+  - Where a kill's drops fall (pinned rAthena, mob.cpp:2531-2551): the first ON the death cell,
+    then SE, W, N, SE, ... (a cell holding a char or pet moves that one to a free neighbour), at
+    once on the lab server (`delay_battle_damage` yes).
 
 ## Results
 

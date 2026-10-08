@@ -15,6 +15,11 @@ PACKETVER_MAIN_NUM undefined), its id and size checked against the generated len
 cross-checked against OpenKore's RagexeRE_2021_11_03 send/receive chain. These decoders never
 raise on a short or garbled packet: a fixed packet shorter than its size, or a variable one whose
 u16 length disagrees with its bytes, or whose entries do not divide evenly, decodes to None.
+
+The 2026-10-08 additions (loot@1 P2: floor items, the pickup request and result, the drop) follow
+the same rules, at the same pinned ref, and are OFFLINE ground truth only as well: the item-on-floor
+entries ZC_ITEM_FALL_ENTRY5 / ZC_ITEM_ENTRY, its vanish ZC_ITEM_DISAPPEAR, ZC_ITEM_PICKUP_ACK,
+ZC_ITEM_THROW_ACK, and the client's CZ_ITEM_PICKUP2 / CZ_ITEM_THROW2.
 """
 
 import struct
@@ -356,6 +361,91 @@ def _use_item_result(b: bytes) -> Decoded:
                                        "ok": bool(b[14])})  # fmt: skip
 
 
+# --- 2026-10-08 (loot@1 P2): floor items, the pickup request and its result, the drop ------------
+# rAthena pc.hpp:113-122 (enum e_additem_result): the result byte of ZC_ITEM_PICKUP_ACK. 6 is also
+# the generic refusal clif_parse_TakeItem sends when a pickup fails before pc_additem runs (too far,
+# loot priority, dead, cannot act: clif.cpp:12016-12034, "Client REQUIRES a fail packet").
+PICKUP_RESULTS = {
+    0: "ok", 1: "invalid", 2: "overweight", 3: "item", 4: "inventory_full", 5: "over_amount",
+    6: "refused", 7: "stack_limit",
+}  # fmt: skip
+
+
+def _floor_item_fall(b: bytes) -> Decoded:
+    # ZC_ITEM_FALL_ENTRY5 0x0ADD (packets_struct.hpp:597-618 struct packet_dropflooritem;
+    # dropflooritemType = 0x0ADD at PACKETVER >= 20180418, packets_struct.hpp:130-131; sent by
+    # clif_dropflooritem to the AREA, clif.cpp:861-924; 24 bytes = the OpenKore table's size):
+    # floor item id u32 @2, item id u32 @6 (u32 at PACKETVER_RE_NUM >= 20180704), item type u16
+    # @10, identified u8 @12, x i16 @13, y i16 @15, sub-cell x u8 @17, y u8 @18, amount i16 @19,
+    # drop effect u8 @21 + mode i16 @22. clif.cpp's comment still says <name id>.W: the struct
+    # wins. A FRESH drop (a kill, a player's throw, a GM's @item that overflows to the floor).
+    return Decoded("floor_item_appear", {
+        "kind": "fall", "floor_id": _u32(b, 2), "item_id": _u32(b, 6), "item_type": _u16(b, 10),
+        "identified": bool(b[12]), "x": _i16(b, 13), "y": _i16(b, 15), "sub_x": b[17],
+        "sub_y": b[18], "amount": _i16(b, 19), "drop_effect": b[21] != 0,
+    })  # fmt: skip
+
+
+def _floor_item_in_sight(b: bytes) -> Decoded:
+    # ZC_ITEM_ENTRY 0x009D (packets_struct.hpp:2350-2364; packets.hpp:2211; 19 bytes): floor item
+    # id u32 @2, item id u32 @6, identified u8 @10, x u16 @11, y u16 @13, amount u16 @15, sub-cell
+    # x u8 @17, y u8 @18. An item ALREADY on the floor coming into view (map entry, a walk:
+    # clif_getareachar_item, clif.cpp:5390-5410). No item type in this one.
+    return Decoded("floor_item_appear", {
+        "kind": "in_sight", "floor_id": _u32(b, 2), "item_id": _u32(b, 6), "item_type": None,
+        "identified": bool(b[10]), "x": _u16(b, 11), "y": _u16(b, 13), "sub_x": b[17],
+        "sub_y": b[18], "amount": _u16(b, 15), "drop_effect": False,
+    })  # fmt: skip
+
+
+def _floor_item_vanish(b: bytes) -> Decoded:
+    # ZC_ITEM_DISAPPEAR 0x00A1 (packets.hpp:611-615; 6 bytes): floor item id u32 @2. Sent to the
+    # AREA when the item leaves the map (picked up, or its flooritem_lifetime ran out:
+    # map_clearflooritem), or to ONE client when it goes out of that client's sight
+    # (clif_clearflooritem with a tsd, clif.cpp:928-941). The packet does not say which.
+    return Decoded("floor_item_vanish", {"floor_id": _u32(b, 2)})
+
+
+def _pickup_result(b: bytes) -> Decoded:
+    # ZC_ITEM_PICKUP_ACK 0x0B41 (packets_struct.hpp:540-595 at PACKETVER_RE_NUM >= 20200723; 70
+    # bytes = the generated table's size): inventory index u16 @2, amount u16 @4, item id u32 @6,
+    # identified u8 @10, damaged u8 @11, 4 cards u32 @12-27, equip location u32 @28, item type u8
+    # @32, result u8 @33, then hire expiry i32 @34, bind type u16 @38, 5 random options (5 bytes
+    # each) @40-64, favorite u8 @65, look u16 @66, refine u8 @68, grade u8 @69. SELF only
+    # (clif_additem, clif.cpp:2831-2890). NOT pickup-specific: pc_additem sends it for EVERY item
+    # that enters the inventory (an @item, an NPC, a trade), so a floor pickup is this + our act of
+    # kind pickup on the floor id + that id's vanish. A failure zeroes everything but the index
+    # (2) and the result.
+    result = b[33]
+    return Decoded("pickup_result", {
+        "index": _u16(b, 2), "amount": _u16(b, 4), "item_id": _u32(b, 6),
+        "identified": bool(b[10]), "item_type": b[32], "result": result,
+        "reason": PICKUP_RESULTS.get(result, f"result{result}"), "ok": result == 0,
+        "refine": b[68],
+    })  # fmt: skip
+
+
+def _pickup_request(b: bytes) -> Decoded:
+    # CZ_ITEM_PICKUP2 (packet_db 0x0362, 6 bytes, pos 2: the clif_shuffle.hpp:4732 block for
+    # PACKETVER > 20180307 -> clif_parse_TakeItem, clif.cpp:12002-12035): floor item id u32 @2.
+    return Decoded("pickup_request", {"floor_id": _u32(b, 2)})
+
+
+def _drop_request(b: bytes) -> Decoded:
+    # CZ_ITEM_THROW2 (packet_db 0x0363, 6 bytes, pos 2,4: clif_shuffle.hpp:4733 ->
+    # clif_parse_DropItem, clif.cpp:12038-12073): the client's inventory index u16 @2, amount u16
+    # @4.
+    return Decoded("drop_request", {"index": _u16(b, 2), "amount": _u16(b, 4)})
+
+
+def _drop_result(b: bytes) -> Decoded:
+    # ZC_ITEM_THROW_ACK 0x00AF (clif_dropitem, clif.cpp:2893-2903; 6 bytes): the client's
+    # inventory index u16 @2, amount u16 @4 -- removed from the inventory. A refused drop answers
+    # with amount 0 (clif.cpp:12071-12072).
+    amount = _u16(b, 4)
+    return Decoded("drop_result", {"index": _u16(b, 2), "amount": amount, "ok": amount > 0})
+
+
 def _attack_request(b: bytes) -> Decoded:
     # CZ_REQUEST_ACT2 (packet_db 0x0437, 7 bytes, pos 2,6: the clif_shuffle.hpp:4749 block for
     # PACKETVER > 20180307; 0x0089 is CZ_REQUEST_ACT's id only on older clients). Target id u32 @2,
@@ -390,6 +480,12 @@ MAP_SC: dict[int, _Layout] = {
     0x0999: _Layout(11, _equip_result),  # ZC_REQ_WEAR_EQUIP_ACK (V5)
     0x099A: _Layout(9, _unequip_result),  # ZC_REQ_TAKEOFF_EQUIP_ACK (V5)
     0x01C8: _Layout(15, _use_item_result),  # ZC_USE_ITEM_ACK2
+    # 2026-10-08 (loot@1 P2): floor items and the pickup result
+    0x0ADD: _Layout(24, _floor_item_fall),  # ZC_ITEM_FALL_ENTRY5
+    0x009D: _Layout(19, _floor_item_in_sight),  # ZC_ITEM_ENTRY
+    0x00A1: _Layout(6, _floor_item_vanish),  # ZC_ITEM_DISAPPEAR
+    0x0B41: _Layout(70, _pickup_result),  # ZC_ITEM_PICKUP_ACK (V7 + grade)
+    0x00AF: _Layout(6, _drop_result),  # ZC_ITEM_THROW_ACK
 }  # fmt: skip
 # client -> server: the map server's packet_db at PACKETVER 20211103 (clif_packetdb.hpp +
 # clif_shuffle.hpp, last write wins), where each id maps to the clif_parse_* handler named.
@@ -413,6 +509,8 @@ MAP_CS: dict[int, _Layout] = {
     0x00AB: _Layout(4, _u16_event("unequip_request", "index")),  # CZ_REQ_TAKEOFF_EQUIP
     0x0439: _Layout(8, _use_item_request),  # CZ_USE_ITEM2 -> UseItem
     0x0437: _Layout(7, _attack_request),  # CZ_REQUEST_ACT2 -> ActionRequest
+    0x0362: _Layout(6, _pickup_request),  # CZ_ITEM_PICKUP2 -> TakeItem (2026-10-08)
+    0x0363: _Layout(6, _drop_request),  # CZ_ITEM_THROW2 -> DropItem (2026-10-08)
 }  # fmt: skip
 
 

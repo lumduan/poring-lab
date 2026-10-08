@@ -51,6 +51,12 @@ export interface PoringPackets {
     | UseItemRequest
     | UseItemResult
     | AttackRequest
+    | FloorItemAppear
+    | FloorItemVanish
+    | PickupRequest
+    | PickupResult
+    | DropRequest
+    | DropResult
     | UnknownPacket
     | Desync;
   stats: PacketStats;
@@ -1207,6 +1213,178 @@ export interface AttackRequest {
    */
   target_gid: number;
   type: "attack_request";
+  validation_account: boolean;
+}
+/**
+ * An item on the floor: ZC_ITEM_FALL_ENTRY5 (0x0ADD, kind "fall": a FRESH drop, e.g. a kill's
+ * loot) or ZC_ITEM_ENTRY (0x009D, kind "in_sight": one already lying there comes into view).
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "FloorItemAppear".
+ */
+export interface FloorItemAppear {
+  amount: number;
+  dir: "cs" | "sc";
+  /**
+   * A drop pillar is shown (fall only).
+   */
+  drop_effect: boolean;
+  /**
+   * The floor item's block id: the pickup act's target_gid.
+   */
+  floor_id: number;
+  gm_command: boolean;
+  identified: boolean;
+  item_id: number;
+  /**
+   * rAthena item_types (mmo.hpp:223); fall entries only.
+   */
+  item_type: number | null;
+  kind: "fall" | "in_sight";
+  packet_id: number;
+  server: "login" | "char" | "map";
+  /**
+   * Position inside the cell (rAthena subx / suby).
+   */
+  sub_x: number;
+  sub_y: number;
+  /**
+   * Kernel receive time mapped onto CLOCK_MONOTONIC.
+   */
+  t_mono_ns: number;
+  type: "floor_item_appear";
+  validation_account: boolean;
+  x: number;
+  y: number;
+}
+/**
+ * ZC_ITEM_DISAPPEAR (0x00A1): a floor item is gone -- picked up, expired, or out of OUR sight
+ * (the packet does not say which).
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "FloorItemVanish".
+ */
+export interface FloorItemVanish {
+  dir: "cs" | "sc";
+  floor_id: number;
+  gm_command: boolean;
+  packet_id: number;
+  server: "login" | "char" | "map";
+  /**
+   * Kernel receive time mapped onto CLOCK_MONOTONIC.
+   */
+  t_mono_ns: number;
+  type: "floor_item_vanish";
+  validation_account: boolean;
+}
+/**
+ * CZ_ITEM_PICKUP2 (0x0362): our client asks to pick up a floor item (after walking in).
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "PickupRequest".
+ */
+export interface PickupRequest {
+  dir: "cs" | "sc";
+  floor_id: number;
+  gm_command: boolean;
+  packet_id: number;
+  server: "login" | "char" | "map";
+  /**
+   * Kernel receive time mapped onto CLOCK_MONOTONIC.
+   */
+  t_mono_ns: number;
+  type: "pickup_request";
+  validation_account: boolean;
+}
+/**
+ * ZC_ITEM_PICKUP_ACK (0x0B41): an item ENTERED our inventory (ok), or a pickup failed. Sent
+ * for every inventory gain (an @item, an NPC, a trade) -- a floor pickup is this plus our act of
+ * kind pickup on the floor id plus that id's floor_item_vanish.
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "PickupResult".
+ */
+export interface PickupResult {
+  /**
+   * How many were added (0 on a failure).
+   */
+  amount: number;
+  dir: "cs" | "sc";
+  gm_command: boolean;
+  identified: boolean;
+  /**
+   * The client's inventory index (2 on a failure).
+   */
+  index: number;
+  /**
+   * 0 on a failure.
+   */
+  item_id: number;
+  item_type: number;
+  ok: boolean;
+  packet_id: number;
+  /**
+   * ok, invalid, overweight, item, inventory_full, over_amount, refused (also the generic refusal: too far, loot priority, ...), stack_limit, or resultN.
+   */
+  reason: string;
+  refine: number;
+  /**
+   * rAthena e_additem_result (pc.hpp:113).
+   */
+  result: number;
+  server: "login" | "char" | "map";
+  /**
+   * Kernel receive time mapped onto CLOCK_MONOTONIC.
+   */
+  t_mono_ns: number;
+  type: "pickup_result";
+  validation_account: boolean;
+}
+/**
+ * CZ_ITEM_THROW2 (0x0363): our client drops an inventory item to the floor.
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "DropRequest".
+ */
+export interface DropRequest {
+  amount: number;
+  dir: "cs" | "sc";
+  gm_command: boolean;
+  /**
+   * The client's inventory index.
+   */
+  index: number;
+  packet_id: number;
+  server: "login" | "char" | "map";
+  /**
+   * Kernel receive time mapped onto CLOCK_MONOTONIC.
+   */
+  t_mono_ns: number;
+  type: "drop_request";
+  validation_account: boolean;
+}
+/**
+ * ZC_ITEM_THROW_ACK (0x00AF): the dropped amount left the inventory (0 = refused).
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "DropResult".
+ */
+export interface DropResult {
+  amount: number;
+  dir: "cs" | "sc";
+  gm_command: boolean;
+  /**
+   * The client's inventory index.
+   */
+  index: number;
+  ok: boolean;
+  packet_id: number;
+  server: "login" | "char" | "map";
+  /**
+   * Kernel receive time mapped onto CLOCK_MONOTONIC.
+   */
+  t_mono_ns: number;
+  type: "drop_result";
   validation_account: boolean;
 }
 /**
