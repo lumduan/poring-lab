@@ -207,6 +207,7 @@ def test_the_licences_are_declared_per_component() -> None:
     assert 'license = "AGPL-3.0-only"' in vision
     for rel in ("pyproject.toml", "packages/poring_env/pyproject.toml",
                 "packages/poring_packets/pyproject.toml", "packages/poring_dataset/pyproject.toml",
+                "packages/poring_flow/pyproject.toml",
                 "services/backend/pyproject.toml"):  # fmt: skip
         assert 'license = "Apache-2.0"' in (ROOT / rel).read_text(), rel
 
@@ -278,6 +279,72 @@ def test_vision_and_poring_env_never_get_the_dataset_package() -> None:
     assert "poring-dataset" not in (env_root / "pyproject.toml").read_text()
     for path in (env_root / "src").rglob("*.py"):
         assert "poring_dataset" not in path.read_text(), f"{path} imports poring_dataset"
+
+
+# --- ADR-0020: the flow package (the IR, the linter and the views; offline) -----------------------
+FLOW_SRC = ROOT / "packages" / "poring_flow" / "src" / "poring_flow"
+FLOW_BANNED_IMPORTS = {"poring_packets", "poring_dataset", "poring_vision", "ultralytics", "torch",
+                       "runpy", "code", "codeop"}  # fmt: skip
+FLOW_BANNED_CALLS = {"exec", "eval", "compile", "__import__", "import_module", "execfile"}
+
+
+def _flow_trees() -> list[tuple[Path, Any]]:
+    import ast
+
+    sources = sorted(FLOW_SRC.rglob("*.py"))
+    assert len(sources) >= 8
+    return [(p, ast.parse(p.read_text())) for p in sources]
+
+
+def test_poring_flow_imports_no_packets_dataset_or_vision() -> None:
+    """ADR-0020 F1: the flow package never sees packets (ADR-0007), the label code (ADR-0010, so
+    vision may import it) or the AGPL vision component (ADR-0018)."""
+    import ast
+
+    offenders = []
+    for path, tree in _flow_trees():
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                names = [a.name for a in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                names = [node.module or ""]
+            else:
+                continue
+            offenders += [
+                f"{path.name}: {n}" for n in names if n.split(".")[0] in FLOW_BANNED_IMPORTS
+            ]
+    assert offenders == []
+    deps = (ROOT / "packages" / "poring_flow" / "pyproject.toml").read_text()
+    deps = deps.split("dependencies = [", 1)[1].split("]", 1)[0]
+    for banned in ("poring-packets", "poring-dataset", "poring-vision", "ultralytics"):
+        assert banned not in deps
+
+
+def test_poring_flow_never_runs_text() -> None:
+    """ADR-0020 7.4: no exec, eval, compile, __import__ or import_module in poring_flow; the Python
+    view's single entry point is ast.parse, which builds an AST and runs nothing."""
+    import ast
+
+    offenders = []
+    for path, tree in _flow_trees():
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                f = node.func
+                name = (
+                    f.id
+                    if isinstance(f, ast.Name)
+                    else f.attr
+                    if isinstance(f, ast.Attribute)
+                    else ""
+                )
+                regex = (
+                    isinstance(f, ast.Attribute)
+                    and isinstance(f.value, ast.Name)
+                    and (f.value.id == "re")
+                )  # re.compile builds a regular expression, not code
+                if name in FLOW_BANNED_CALLS and not regex:
+                    offenders.append(f"{path.name}:{node.lineno}: {name}")
+    assert offenders == []
 
 
 def test_rathena_ip_is_pinned_to_the_ingest_peer() -> None:

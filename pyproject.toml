@@ -7,7 +7,7 @@ requires-python = ">=3.12,<3.13"
 authors = [{ name = "lumduan" }]
 # The virtual root installs what host-side dev/test needs. `poring-vision` is deliberately NOT here:
 # it pulls torch+CUDA (~3 GB) and only runs inside its GPU container (`uv sync --package poring-vision`).
-dependencies = ["poring-env[x11,remote]", "poring-backend", "poring-dataset", "poring-skills"]
+dependencies = ["poring-env[x11,remote]", "poring-backend", "poring-dataset", "poring-skills", "poring-flow"]
 
 [tool.uv]
 package = false
@@ -25,6 +25,7 @@ members = [
   "packages/poring_packets",
   "packages/poring_dataset",
   "packages/poring_skills",
+  "packages/poring_flow",
   "services/backend",
   "services/vision",
 ]
@@ -34,6 +35,7 @@ poring-env = { workspace = true }
 poring-packets = { workspace = true }
 poring-dataset = { workspace = true }
 poring-skills = { workspace = true }
+poring-flow = { workspace = true }
 poring-backend = { workspace = true }
 poring-vision = { workspace = true }
 torch = { index = "pytorch-cu130" }
@@ -67,7 +69,7 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 ignore = ["B008"] # FastAPI Depends() in defaults is idiomatic
 
 [tool.ruff.lint.isort]
-known-first-party = ["poring_env", "poring_packets", "poring_dataset", "poring_skills", "poring_backend", "poring_vision"]
+known-first-party = ["poring_env", "poring_packets", "poring_dataset", "poring_skills", "poring_flow", "poring_backend", "poring_vision"]
 
 [tool.mypy]
 python_version = "3.12"
@@ -79,6 +81,7 @@ files = [
   "packages/poring_packets/src",
   "packages/poring_dataset/src",
   "packages/poring_skills/src",
+  "packages/poring_flow/src",
   "services/backend/src",
 ]
 
@@ -93,6 +96,7 @@ testpaths = [
   "packages/poring_packets/tests",
   "packages/poring_dataset/tests",
   "packages/poring_skills/tests",
+  "packages/poring_flow/tests",
   "services/backend/tests",
   "services/vision/tests",
   "services/gamestream/tests",

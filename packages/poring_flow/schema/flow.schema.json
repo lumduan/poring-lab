@@ -1,0 +1,3277 @@
+{
+  "$defs": {
+    "ActionStmt": {
+      "additionalProperties": false,
+      "properties": {
+        "block": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_]{0,47}$",
+          "title": "Block",
+          "type": "string"
+        },
+        "concept": {
+          "pattern": "^[a-z]+\\.[a-z_]+$",
+          "title": "Concept",
+          "type": "string"
+        },
+        "kind": {
+          "const": "action",
+          "default": "action",
+          "title": "Kind",
+          "type": "string"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "on_fail": {
+          "default": "stop",
+          "enum": [
+            "stop",
+            "continue"
+          ],
+          "title": "On Fail",
+          "type": "string"
+        },
+        "outcome_to": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_]{0,47}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Outcome To"
+        },
+        "params": {
+          "default": {},
+          "patternProperties": {
+            "^[A-Za-z][A-Za-z0-9_]{0,47}$": {
+              "discriminator": {
+                "mapping": {
+                  "and": "#/$defs/Logic",
+                  "arith": "#/$defs/Arith",
+                  "cmp": "#/$defs/Cmp",
+                  "do": "#/$defs/Do",
+                  "list": "#/$defs/ListE",
+                  "lit": "#/$defs/Lit",
+                  "not": "#/$defs/Not_",
+                  "or": "#/$defs/Logic",
+                  "outcome": "#/$defs/OutcomeLit",
+                  "sense": "#/$defs/Sense",
+                  "var": "#/$defs/Var"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Lit"
+                },
+                {
+                  "$ref": "#/$defs/Var"
+                },
+                {
+                  "$ref": "#/$defs/OutcomeLit"
+                },
+                {
+                  "$ref": "#/$defs/ListE"
+                },
+                {
+                  "$ref": "#/$defs/Sense"
+                },
+                {
+                  "$ref": "#/$defs/Cmp"
+                },
+                {
+                  "$ref": "#/$defs/Logic"
+                },
+                {
+                  "$ref": "#/$defs/Not_"
+                },
+                {
+                  "$ref": "#/$defs/Arith"
+                },
+                {
+                  "$ref": "#/$defs/Do"
+                }
+              ]
+            }
+          },
+          "title": "Params",
+          "type": "object"
+        },
+        "timeout_s": {
+          "exclusiveMinimum": 0,
+          "maximum": 600,
+          "title": "Timeout S",
+          "type": "number"
+        }
+      },
+      "required": [
+        "block",
+        "concept",
+        "timeout_s"
+      ],
+      "title": "ActionStmt",
+      "type": "object"
+    },
+    "Add": {
+      "additionalProperties": false,
+      "properties": {
+        "event": {
+          "$ref": "#/$defs/Handler"
+        },
+        "kind": {
+          "const": "add",
+          "default": "add",
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_]{0,47}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        }
+      },
+      "required": [
+        "event"
+      ],
+      "title": "Add",
+      "type": "object"
+    },
+    "Arith": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "arith",
+          "default": "arith",
+          "title": "Kind",
+          "type": "string"
+        },
+        "left": {
+          "discriminator": {
+            "mapping": {
+              "and": "#/$defs/Logic",
+              "arith": "#/$defs/Arith",
+              "cmp": "#/$defs/Cmp",
+              "do": "#/$defs/Do",
+              "list": "#/$defs/ListE",
+              "lit": "#/$defs/Lit",
+              "not": "#/$defs/Not_",
+              "or": "#/$defs/Logic",
+              "outcome": "#/$defs/OutcomeLit",
+              "sense": "#/$defs/Sense",
+              "var": "#/$defs/Var"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Lit"
+            },
+            {
+              "$ref": "#/$defs/Var"
+            },
+            {
+              "$ref": "#/$defs/OutcomeLit"
+            },
+            {
+              "$ref": "#/$defs/ListE"
+            },
+            {
+              "$ref": "#/$defs/Sense"
+            },
+            {
+              "$ref": "#/$defs/Cmp"
+            },
+            {
+              "$ref": "#/$defs/Logic"
+            },
+            {
+              "$ref": "#/$defs/Not_"
+            },
+            {
+              "$ref": "#/$defs/Arith"
+            },
+            {
+              "$ref": "#/$defs/Do"
+            }
+          ],
+          "title": "Left"
+        },
+        "op": {
+          "enum": [
+            "+",
+            "-",
+            "*",
+            "//",
+            "%"
+          ],
+          "title": "Op",
+          "type": "string"
+        },
+        "right": {
+          "discriminator": {
+            "mapping": {
+              "and": "#/$defs/Logic",
+              "arith": "#/$defs/Arith",
+              "cmp": "#/$defs/Cmp",
+              "do": "#/$defs/Do",
+              "list": "#/$defs/ListE",
+              "lit": "#/$defs/Lit",
+              "not": "#/$defs/Not_",
+              "or": "#/$defs/Logic",
+              "outcome": "#/$defs/OutcomeLit",
+              "sense": "#/$defs/Sense",
+              "var": "#/$defs/Var"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Lit"
+            },
+            {
+              "$ref": "#/$defs/Var"
+            },
+            {
+              "$ref": "#/$defs/OutcomeLit"
+            },
+            {
+              "$ref": "#/$defs/ListE"
+            },
+            {
+              "$ref": "#/$defs/Sense"
+            },
+            {
+              "$ref": "#/$defs/Cmp"
+            },
+            {
+              "$ref": "#/$defs/Logic"
+            },
+            {
+              "$ref": "#/$defs/Not_"
+            },
+            {
+              "$ref": "#/$defs/Arith"
+            },
+            {
+              "$ref": "#/$defs/Do"
+            }
+          ],
+          "title": "Right"
+        }
+      },
+      "required": [
+        "op",
+        "left",
+        "right"
+      ],
+      "title": "Arith",
+      "type": "object"
+    },
+    "Break_": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "break",
+          "default": "break",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "Break_",
+      "type": "object"
+    },
+    "CallProc": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "call",
+          "default": "call",
+          "title": "Kind",
+          "type": "string"
+        },
+        "proc": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_]{0,47}$",
+          "title": "Proc",
+          "type": "string"
+        }
+      },
+      "required": [
+        "proc"
+      ],
+      "title": "CallProc",
+      "type": "object"
+    },
+    "CellRef": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "cell",
+          "default": "cell",
+          "title": "Kind",
+          "type": "string"
+        },
+        "map": {
+          "pattern": "^[A-Za-z0-9_@.\\-]{1,40}$",
+          "title": "Map",
+          "type": "string"
+        },
+        "x": {
+          "maximum": 2047,
+          "minimum": 0,
+          "title": "X",
+          "type": "integer"
+        },
+        "y": {
+          "maximum": 2047,
+          "minimum": 0,
+          "title": "Y",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "map",
+        "x",
+        "y"
+      ],
+      "title": "CellRef",
+      "type": "object"
+    },
+    "Cmp": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "cmp",
+          "default": "cmp",
+          "title": "Kind",
+          "type": "string"
+        },
+        "left": {
+          "discriminator": {
+            "mapping": {
+              "and": "#/$defs/Logic",
+              "arith": "#/$defs/Arith",
+              "cmp": "#/$defs/Cmp",
+              "do": "#/$defs/Do",
+              "list": "#/$defs/ListE",
+              "lit": "#/$defs/Lit",
+              "not": "#/$defs/Not_",
+              "or": "#/$defs/Logic",
+              "outcome": "#/$defs/OutcomeLit",
+              "sense": "#/$defs/Sense",
+              "var": "#/$defs/Var"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Lit"
+            },
+            {
+              "$ref": "#/$defs/Var"
+            },
+            {
+              "$ref": "#/$defs/OutcomeLit"
+            },
+            {
+              "$ref": "#/$defs/ListE"
+            },
+            {
+              "$ref": "#/$defs/Sense"
+            },
+            {
+              "$ref": "#/$defs/Cmp"
+            },
+            {
+              "$ref": "#/$defs/Logic"
+            },
+            {
+              "$ref": "#/$defs/Not_"
+            },
+            {
+              "$ref": "#/$defs/Arith"
+            },
+            {
+              "$ref": "#/$defs/Do"
+            }
+          ],
+          "title": "Left"
+        },
+        "op": {
+          "enum": [
+            "==",
+            "!=",
+            "<",
+            "<=",
+            ">",
+            ">=",
+            "in",
+            "not in"
+          ],
+          "title": "Op",
+          "type": "string"
+        },
+        "right": {
+          "discriminator": {
+            "mapping": {
+              "and": "#/$defs/Logic",
+              "arith": "#/$defs/Arith",
+              "cmp": "#/$defs/Cmp",
+              "do": "#/$defs/Do",
+              "list": "#/$defs/ListE",
+              "lit": "#/$defs/Lit",
+              "not": "#/$defs/Not_",
+              "or": "#/$defs/Logic",
+              "outcome": "#/$defs/OutcomeLit",
+              "sense": "#/$defs/Sense",
+              "var": "#/$defs/Var"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Lit"
+            },
+            {
+              "$ref": "#/$defs/Var"
+            },
+            {
+              "$ref": "#/$defs/OutcomeLit"
+            },
+            {
+              "$ref": "#/$defs/ListE"
+            },
+            {
+              "$ref": "#/$defs/Sense"
+            },
+            {
+              "$ref": "#/$defs/Cmp"
+            },
+            {
+              "$ref": "#/$defs/Logic"
+            },
+            {
+              "$ref": "#/$defs/Not_"
+            },
+            {
+              "$ref": "#/$defs/Arith"
+            },
+            {
+              "$ref": "#/$defs/Do"
+            }
+          ],
+          "title": "Right"
+        }
+      },
+      "required": [
+        "op",
+        "left",
+        "right"
+      ],
+      "title": "Cmp",
+      "type": "object"
+    },
+    "Continue_": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "continue",
+          "default": "continue",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "title": "Continue_",
+      "type": "object"
+    },
+    "Disable": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_]{0,47}$",
+          "title": "Key",
+          "type": "string"
+        },
+        "kind": {
+          "const": "disable",
+          "default": "disable",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key"
+      ],
+      "title": "Disable",
+      "type": "object"
+    },
+    "Do": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/ActionStmt"
+        },
+        "kind": {
+          "const": "do",
+          "default": "do",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "title": "Do",
+      "type": "object"
+    },
+    "Entry": {
+      "additionalProperties": false,
+      "properties": {
+        "at": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CellRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "name": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_]{0,47}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "radius": {
+          "default": 2,
+          "maximum": 15,
+          "minimum": 0,
+          "title": "Radius",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "Entry",
+      "type": "object"
+    },
+    "Exit": {
+      "additionalProperties": false,
+      "properties": {
+        "item": {
+          "anyOf": [
+            {
+              "discriminator": {
+                "mapping": {
+                  "item": "#/$defs/ItemRef",
+                  "var": "#/$defs/Var"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/ItemRef"
+                },
+                {
+                  "$ref": "#/$defs/Var"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Item"
+        },
+        "kind": {
+          "enum": [
+            "walk_exit",
+            "npc_warp",
+            "item_warp",
+            "death_respawn"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "npc": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NpcRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "options": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/OptionRef"
+          },
+          "maxItems": 10,
+          "title": "Options",
+          "type": "array"
+        },
+        "timeout_s": {
+          "default": 120,
+          "exclusiveMinimum": 0,
+          "maximum": 600,
+          "title": "Timeout S",
+          "type": "number"
+        },
+        "to_block": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_]{0,47}$",
+          "title": "To Block",
+          "type": "string"
+        },
+        "to_entry": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_]{0,47}$",
+          "title": "To Entry",
+          "type": "string"
+        },
+        "warp": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CellRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "kind",
+        "to_block",
+        "to_entry"
+      ],
+      "title": "Exit",
+      "type": "object"
+    },
+    "Extend": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_]{0,47}$",
+          "title": "Key",
+          "type": "string"
+        },
+        "kind": {
+          "const": "extend",
+          "default": "extend",
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_]{0,47}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "max_per_run": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Per Run"
+        },
+        "steps": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "action": "#/$defs/ActionStmt",
+                "break": "#/$defs/Break_",
+                "call": "#/$defs/CallProc",
+                "continue": "#/$defs/Continue_",
+                "for": "#/$defs/ForEach",
+                "if": "#/$defs/If",
+                "repeat": "#/$defs/Repeat",
+                "set": "#/$defs/SetVar",
+                "stop": "#/$defs/Stop",
+                "take_exit": "#/$defs/TakeExit",
+                "wait_until": "#/$defs/WaitUntil",
+                "while": "#/$defs/While"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/ActionStmt"
+              },
+              {
+                "$ref": "#/$defs/If"
+              },
+              {
+                "$ref": "#/$defs/While"
+              },
+              {
+                "$ref": "#/$defs/WaitUntil"
+              },
+              {
+                "$ref": "#/$defs/Repeat"
+              },
+              {
+                "$ref": "#/$defs/ForEach"
+              },
+              {
+                "$ref": "#/$defs/SetVar"
+              },
+              {
+                "$ref": "#/$defs/CallProc"
+              },
+              {
+                "$ref": "#/$defs/Stop"
+              },
+              {
+                "$ref": "#/$defs/Break_"
+              },
+              {
+                "$ref": "#/$defs/Continue_"
+              },
+              {
+                "$ref": "#/$defs/TakeExit"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "Steps",
+          "type": "array"
+        }
+      },
+      "required": [
+        "key",
+        "steps"
+      ],
+      "title": "Extend",
+      "type": "object"
+    },
+    "ForEach": {
+      "additionalProperties": false,
+      "properties": {
+        "body": {
+          "default": [],
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "action": "#/$defs/ActionStmt",
+                "break": "#/$defs/Break_",
+                "call": "#/$defs/CallProc",
+                "continue": "#/$defs/Continue_",
+                "for": "#/$defs/ForEach",
+                "if": "#/$defs/If",
+                "repeat": "#/$defs/Repeat",
+                "set": "#/$defs/SetVar",
+                "stop": "#/$defs/Stop",
+                "take_exit": "#/$defs/TakeExit",
+                "wait_until": "#/$defs/WaitUntil",
+                "while": "#/$defs/While"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/ActionStmt"
+              },
+              {
+                "$ref": "#/$defs/If"
+              },
+              {
+                "$ref": "#/$defs/While"
+              },
+              {
+                "$ref": "#/$defs/WaitUntil"
+              },
+              {
+                "$ref": "#/$defs/Repeat"
+              },
+              {
+                "$ref": "#/$defs/ForEach"
+              },
+              {
+                "$ref": "#/$defs/SetVar"
+              },
+              {
+                "$ref": "#/$defs/CallProc"
+              },
+              {
+                "$ref": "#/$defs/Stop"
+              },
+              {
+                "$ref": "#/$defs/Break_"
+              },
+              {
+                "$ref": "#/$defs/Continue_"
+              },
+              {
+                "$ref": "#/$defs/TakeExit"
+              }
+            ]
+          },
+          "title": "Body",
+          "type": "array"
+        },
+        "items": {
+          "discriminator": {
+            "mapping": {
+              "lit": "#/$defs/Lit",
+              "range": "#/$defs/Range",
+              "var": "#/$defs/Var"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Lit"
+            },
+            {
+              "$ref": "#/$defs/Var"
+            },
+            {
+              "$ref": "#/$defs/Range"
+            }
+          ],
+          "title": "Items"
+        },
+        "kind": {
+          "const": "for",
+          "default": "for",
+          "title": "Kind",
+          "type": "string"
+        },
+        "var": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_]{0,47}$",
+          "title": "Var",
+          "type": "string"
+        }
+      },
+      "required": [
+        "var",
+        "items"
+      ],
+      "title": "ForEach",
+      "type": "object"
+    },
+    "Handler": {
+      "additionalProperties": false,
+      "properties": {
+        "body": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "action": "#/$defs/ActionStmt",
+                "break": "#/$defs/Break_",
+                "call": "#/$defs/CallProc",
+                "continue": "#/$defs/Continue_",
+                "for": "#/$defs/ForEach",
+                "if": "#/$defs/If",
+                "repeat": "#/$defs/Repeat",
+                "set": "#/$defs/SetVar",
+                "stop": "#/$defs/Stop",
+                "take_exit": "#/$defs/TakeExit",
+                "wait_until": "#/$defs/WaitUntil",
+                "while": "#/$defs/While"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/ActionStmt"
+              },
+              {
+                "$ref": "#/$defs/If"
+              },
+              {
+                "$ref": "#/$defs/While"
+              },
+              {
+                "$ref": "#/$defs/WaitUntil"
+              },
+              {
+                "$ref": "#/$defs/Repeat"
+              },
+              {
+                "$ref": "#/$defs/ForEach"
+              },
+              {
+                "$ref": "#/$defs/SetVar"
+              },
+              {
+                "$ref": "#/$defs/CallProc"
+              },
+              {
+                "$ref": "#/$defs/Stop"
+              },
+              {
+                "$ref": "#/$defs/Break_"
+              },
+              {
+                "$ref": "#/$defs/Continue_"
+              },
+              {
+                "$ref": "#/$defs/TakeExit"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "Body",
+          "type": "array"
+        },
+        "cooldown_s": {
+          "default": 0,
+          "maximum": 3600,
+          "minimum": 0,
+          "title": "Cooldown S",
+          "type": "number"
+        },
+        "escalate": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_]{0,47}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Escalate"
+        },
+        "max_fires_per_10min": {
+          "default": 10,
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Max Fires Per 10Min",
+          "type": "integer"
+        },
+        "max_insert_fails": {
+          "default": 3,
+          "maximum": 10,
+          "minimum": 1,
+          "title": "Max Insert Fails",
+          "type": "integer"
+        },
+        "max_per_min": {
+          "anyOf": [
+            {
+              "maximum": 60,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Per Min"
+        },
+        "max_per_run": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Per Run"
+        },
+        "mode": {
+          "default": "preempt",
+          "enum": [
+            "insert",
+            "preempt"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "name": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_]{0,47}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "priority": {
+          "enum": [
+            "critical",
+            "survival",
+            "upkeep"
+          ],
+          "title": "Priority",
+          "type": "string"
+        },
+        "rearm": {
+          "anyOf": [
+            {
+              "discriminator": {
+                "mapping": {
+                  "and": "#/$defs/Logic",
+                  "arith": "#/$defs/Arith",
+                  "cmp": "#/$defs/Cmp",
+                  "do": "#/$defs/Do",
+                  "list": "#/$defs/ListE",
+                  "lit": "#/$defs/Lit",
+                  "not": "#/$defs/Not_",
+                  "or": "#/$defs/Logic",
+                  "outcome": "#/$defs/OutcomeLit",
+                  "sense": "#/$defs/Sense",
+                  "var": "#/$defs/Var"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Lit"
+                },
+                {
+                  "$ref": "#/$defs/Var"
+                },
+                {
+                  "$ref": "#/$defs/OutcomeLit"
+                },
+                {
+                  "$ref": "#/$defs/ListE"
+                },
+                {
+                  "$ref": "#/$defs/Sense"
+                },
+                {
+                  "$ref": "#/$defs/Cmp"
+                },
+                {
+                  "$ref": "#/$defs/Logic"
+                },
+                {
+                  "$ref": "#/$defs/Not_"
+                },
+                {
+                  "$ref": "#/$defs/Arith"
+                },
+                {
+                  "$ref": "#/$defs/Do"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rearm"
+        },
+        "then": {
+          "default": "resume",
+          "enum": [
+            "resume",
+            "skip_block",
+            "restart_flow",
+            "relocate",
+            "stop"
+          ],
+          "title": "Then",
+          "type": "string"
+        },
+        "until": {
+          "anyOf": [
+            {
+              "discriminator": {
+                "mapping": {
+                  "and": "#/$defs/Logic",
+                  "arith": "#/$defs/Arith",
+                  "cmp": "#/$defs/Cmp",
+                  "do": "#/$defs/Do",
+                  "list": "#/$defs/ListE",
+                  "lit": "#/$defs/Lit",
+                  "not": "#/$defs/Not_",
+                  "or": "#/$defs/Logic",
+                  "outcome": "#/$defs/OutcomeLit",
+                  "sense": "#/$defs/Sense",
+                  "var": "#/$defs/Var"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Lit"
+                },
+                {
+                  "$ref": "#/$defs/Var"
+                },
+                {
+                  "$ref": "#/$defs/OutcomeLit"
+                },
+                {
+                  "$ref": "#/$defs/ListE"
+                },
+                {
+                  "$ref": "#/$defs/Sense"
+                },
+                {
+                  "$ref": "#/$defs/Cmp"
+                },
+                {
+                  "$ref": "#/$defs/Logic"
+                },
+                {
+                  "$ref": "#/$defs/Not_"
+                },
+                {
+                  "$ref": "#/$defs/Arith"
+                },
+                {
+                  "$ref": "#/$defs/Do"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Until"
+        },
+        "when": {
+          "discriminator": {
+            "mapping": {
+              "and": "#/$defs/Logic",
+              "arith": "#/$defs/Arith",
+              "cmp": "#/$defs/Cmp",
+              "do": "#/$defs/Do",
+              "list": "#/$defs/ListE",
+              "lit": "#/$defs/Lit",
+              "not": "#/$defs/Not_",
+              "or": "#/$defs/Logic",
+              "outcome": "#/$defs/OutcomeLit",
+              "sense": "#/$defs/Sense",
+              "var": "#/$defs/Var"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Lit"
+            },
+            {
+              "$ref": "#/$defs/Var"
+            },
+            {
+              "$ref": "#/$defs/OutcomeLit"
+            },
+            {
+              "$ref": "#/$defs/ListE"
+            },
+            {
+              "$ref": "#/$defs/Sense"
+            },
+            {
+              "$ref": "#/$defs/Cmp"
+            },
+            {
+              "$ref": "#/$defs/Logic"
+            },
+            {
+              "$ref": "#/$defs/Not_"
+            },
+            {
+              "$ref": "#/$defs/Arith"
+            },
+            {
+              "$ref": "#/$defs/Do"
+            }
+          ],
+          "title": "When"
+        }
+      },
+      "required": [
+        "name",
+        "when",
+        "priority",
+        "body"
+      ],
+      "title": "Handler",
+      "type": "object"
+    },
+    "If": {
+      "additionalProperties": false,
+      "properties": {
+        "cond": {
+          "discriminator": {
+            "mapping": {
+              "and": "#/$defs/Logic",
+              "arith": "#/$defs/Arith",
+              "cmp": "#/$defs/Cmp",
+              "do": "#/$defs/Do",
+              "list": "#/$defs/ListE",
+              "lit": "#/$defs/Lit",
+              "not": "#/$defs/Not_",
+              "or": "#/$defs/Logic",
+              "outcome": "#/$defs/OutcomeLit",
+              "sense": "#/$defs/Sense",
+              "var": "#/$defs/Var"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Lit"
+            },
+            {
+              "$ref": "#/$defs/Var"
+            },
+            {
+              "$ref": "#/$defs/OutcomeLit"
+            },
+            {
+              "$ref": "#/$defs/ListE"
+            },
+            {
+              "$ref": "#/$defs/Sense"
+            },
+            {
+              "$ref": "#/$defs/Cmp"
+            },
+            {
+              "$ref": "#/$defs/Logic"
+            },
+            {
+              "$ref": "#/$defs/Not_"
+            },
+            {
+              "$ref": "#/$defs/Arith"
+            },
+            {
+              "$ref": "#/$defs/Do"
+            }
+          ],
+          "title": "Cond"
+        },
+        "kind": {
+          "const": "if",
+          "default": "if",
+          "title": "Kind",
+          "type": "string"
+        },
+        "orelse": {
+          "default": [],
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "action": "#/$defs/ActionStmt",
+                "break": "#/$defs/Break_",
+                "call": "#/$defs/CallProc",
+                "continue": "#/$defs/Continue_",
+                "for": "#/$defs/ForEach",
+                "if": "#/$defs/If",
+                "repeat": "#/$defs/Repeat",
+                "set": "#/$defs/SetVar",
+                "stop": "#/$defs/Stop",
+                "take_exit": "#/$defs/TakeExit",
+                "wait_until": "#/$defs/WaitUntil",
+                "while": "#/$defs/While"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/ActionStmt"
+              },
+              {
+                "$ref": "#/$defs/If"
+              },
+              {
+                "$ref": "#/$defs/While"
+              },
+              {
+                "$ref": "#/$defs/WaitUntil"
+              },
+              {
+                "$ref": "#/$defs/Repeat"
+              },
+              {
+                "$ref": "#/$defs/ForEach"
+              },
+              {
+                "$ref": "#/$defs/SetVar"
+              },
+              {
+                "$ref": "#/$defs/CallProc"
+              },
+              {
+                "$ref": "#/$defs/Stop"
+              },
+              {
+                "$ref": "#/$defs/Break_"
+              },
+              {
+                "$ref": "#/$defs/Continue_"
+              },
+              {
+                "$ref": "#/$defs/TakeExit"
+              }
+            ]
+          },
+          "title": "Orelse",
+          "type": "array"
+        },
+        "then": {
+          "default": [],
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "action": "#/$defs/ActionStmt",
+                "break": "#/$defs/Break_",
+                "call": "#/$defs/CallProc",
+                "continue": "#/$defs/Continue_",
+                "for": "#/$defs/ForEach",
+                "if": "#/$defs/If",
+                "repeat": "#/$defs/Repeat",
+                "set": "#/$defs/SetVar",
+                "stop": "#/$defs/Stop",
+                "take_exit": "#/$defs/TakeExit",
+                "wait_until": "#/$defs/WaitUntil",
+                "while": "#/$defs/While"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/ActionStmt"
+              },
+              {
+                "$ref": "#/$defs/If"
+              },
+              {
+                "$ref": "#/$defs/While"
+              },
+              {
+                "$ref": "#/$defs/WaitUntil"
+              },
+              {
+                "$ref": "#/$defs/Repeat"
+              },
+              {
+                "$ref": "#/$defs/ForEach"
+              },
+              {
+                "$ref": "#/$defs/SetVar"
+              },
+              {
+                "$ref": "#/$defs/CallProc"
+              },
+              {
+                "$ref": "#/$defs/Stop"
+              },
+              {
+                "$ref": "#/$defs/Break_"
+              },
+              {
+                "$ref": "#/$defs/Continue_"
+              },
+              {
+                "$ref": "#/$defs/TakeExit"
+              }
+            ]
+          },
+          "title": "Then",
+          "type": "array"
+        }
+      },
+      "required": [
+        "cond"
+      ],
+      "title": "If",
+      "type": "object"
+    },
+    "ItemRef": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "maximum": 10000000,
+          "minimum": 1,
+          "title": "Id",
+          "type": "integer"
+        },
+        "kind": {
+          "const": "item",
+          "default": "item",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "ItemRef",
+      "type": "object"
+    },
+    "ListE": {
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "and": "#/$defs/Logic",
+                "arith": "#/$defs/Arith",
+                "cmp": "#/$defs/Cmp",
+                "do": "#/$defs/Do",
+                "list": "#/$defs/ListE",
+                "lit": "#/$defs/Lit",
+                "not": "#/$defs/Not_",
+                "or": "#/$defs/Logic",
+                "outcome": "#/$defs/OutcomeLit",
+                "sense": "#/$defs/Sense",
+                "var": "#/$defs/Var"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Lit"
+              },
+              {
+                "$ref": "#/$defs/Var"
+              },
+              {
+                "$ref": "#/$defs/OutcomeLit"
+              },
+              {
+                "$ref": "#/$defs/ListE"
+              },
+              {
+                "$ref": "#/$defs/Sense"
+              },
+              {
+                "$ref": "#/$defs/Cmp"
+              },
+              {
+                "$ref": "#/$defs/Logic"
+              },
+              {
+                "$ref": "#/$defs/Not_"
+              },
+              {
+                "$ref": "#/$defs/Arith"
+              },
+              {
+                "$ref": "#/$defs/Do"
+              }
+            ]
+          },
+          "maxItems": 100,
+          "minItems": 1,
+          "title": "Items",
+          "type": "array"
+        },
+        "kind": {
+          "const": "list",
+          "default": "list",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "title": "ListE",
+      "type": "object"
+    },
+    "Lit": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "lit",
+          "default": "lit",
+          "title": "Kind",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "maximum": 1000000000,
+              "minimum": -1000000000,
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "discriminator": {
+                "mapping": {
+                  "cell": "#/$defs/CellRef",
+                  "item": "#/$defs/ItemRef",
+                  "map": "#/$defs/MapRef",
+                  "mob": "#/$defs/MobRef",
+                  "npc": "#/$defs/NpcRef",
+                  "option": "#/$defs/OptionRef",
+                  "skill": "#/$defs/SkillRef",
+                  "window": "#/$defs/WindowRef"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/MapRef"
+                },
+                {
+                  "$ref": "#/$defs/CellRef"
+                },
+                {
+                  "$ref": "#/$defs/NpcRef"
+                },
+                {
+                  "$ref": "#/$defs/OptionRef"
+                },
+                {
+                  "$ref": "#/$defs/ItemRef"
+                },
+                {
+                  "$ref": "#/$defs/MobRef"
+                },
+                {
+                  "$ref": "#/$defs/SkillRef"
+                },
+                {
+                  "$ref": "#/$defs/WindowRef"
+                }
+              ]
+            },
+            {
+              "items": {
+                "discriminator": {
+                  "mapping": {
+                    "cell": "#/$defs/CellRef",
+                    "item": "#/$defs/ItemRef",
+                    "map": "#/$defs/MapRef",
+                    "mob": "#/$defs/MobRef",
+                    "npc": "#/$defs/NpcRef",
+                    "option": "#/$defs/OptionRef",
+                    "skill": "#/$defs/SkillRef",
+                    "window": "#/$defs/WindowRef"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/MapRef"
+                  },
+                  {
+                    "$ref": "#/$defs/CellRef"
+                  },
+                  {
+                    "$ref": "#/$defs/NpcRef"
+                  },
+                  {
+                    "$ref": "#/$defs/OptionRef"
+                  },
+                  {
+                    "$ref": "#/$defs/ItemRef"
+                  },
+                  {
+                    "$ref": "#/$defs/MobRef"
+                  },
+                  {
+                    "$ref": "#/$defs/SkillRef"
+                  },
+                  {
+                    "$ref": "#/$defs/WindowRef"
+                  }
+                ]
+              },
+              "maxItems": 100,
+              "type": "array"
+            }
+          ],
+          "title": "Value"
+        }
+      },
+      "required": [
+        "value"
+      ],
+      "title": "Lit",
+      "type": "object"
+    },
+    "Logic": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "and",
+            "or"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "terms": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "and": "#/$defs/Logic",
+                "arith": "#/$defs/Arith",
+                "cmp": "#/$defs/Cmp",
+                "do": "#/$defs/Do",
+                "list": "#/$defs/ListE",
+                "lit": "#/$defs/Lit",
+                "not": "#/$defs/Not_",
+                "or": "#/$defs/Logic",
+                "outcome": "#/$defs/OutcomeLit",
+                "sense": "#/$defs/Sense",
+                "var": "#/$defs/Var"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Lit"
+              },
+              {
+                "$ref": "#/$defs/Var"
+              },
+              {
+                "$ref": "#/$defs/OutcomeLit"
+              },
+              {
+                "$ref": "#/$defs/ListE"
+              },
+              {
+                "$ref": "#/$defs/Sense"
+              },
+              {
+                "$ref": "#/$defs/Cmp"
+              },
+              {
+                "$ref": "#/$defs/Logic"
+              },
+              {
+                "$ref": "#/$defs/Not_"
+              },
+              {
+                "$ref": "#/$defs/Arith"
+              },
+              {
+                "$ref": "#/$defs/Do"
+              }
+            ]
+          },
+          "maxItems": 100,
+          "minItems": 2,
+          "title": "Terms",
+          "type": "array"
+        }
+      },
+      "required": [
+        "kind",
+        "terms"
+      ],
+      "title": "Logic",
+      "type": "object"
+    },
+    "MapBlock": {
+      "additionalProperties": false,
+      "properties": {
+        "entries": {
+          "items": {
+            "$ref": "#/$defs/Entry"
+          },
+          "maxItems": 20,
+          "minItems": 1,
+          "title": "Entries",
+          "type": "array"
+        },
+        "events": {
+          "default": [],
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "add": "#/$defs/Add",
+                "disable": "#/$defs/Disable",
+                "extend": "#/$defs/Extend",
+                "override": "#/$defs/Override"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Override"
+              },
+              {
+                "$ref": "#/$defs/Extend"
+              },
+              {
+                "$ref": "#/$defs/Disable"
+              },
+              {
+                "$ref": "#/$defs/Add"
+              }
+            ]
+          },
+          "maxItems": 50,
+          "title": "Events",
+          "type": "array"
+        },
+        "ignore": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/MobRef"
+          },
+          "maxItems": 100,
+          "title": "Ignore",
+          "type": "array"
+        },
+        "main": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "action": "#/$defs/ActionStmt",
+                "break": "#/$defs/Break_",
+                "call": "#/$defs/CallProc",
+                "continue": "#/$defs/Continue_",
+                "for": "#/$defs/ForEach",
+                "if": "#/$defs/If",
+                "repeat": "#/$defs/Repeat",
+                "set": "#/$defs/SetVar",
+                "stop": "#/$defs/Stop",
+                "take_exit": "#/$defs/TakeExit",
+                "wait_until": "#/$defs/WaitUntil",
+                "while": "#/$defs/While"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/ActionStmt"
+              },
+              {
+                "$ref": "#/$defs/If"
+              },
+              {
+                "$ref": "#/$defs/While"
+              },
+              {
+                "$ref": "#/$defs/WaitUntil"
+              },
+              {
+                "$ref": "#/$defs/Repeat"
+              },
+              {
+                "$ref": "#/$defs/ForEach"
+              },
+              {
+                "$ref": "#/$defs/SetVar"
+              },
+              {
+                "$ref": "#/$defs/CallProc"
+              },
+              {
+                "$ref": "#/$defs/Stop"
+              },
+              {
+                "$ref": "#/$defs/Break_"
+              },
+              {
+                "$ref": "#/$defs/Continue_"
+              },
+              {
+                "$ref": "#/$defs/TakeExit"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "Main",
+          "type": "array"
+        },
+        "map": {
+          "$ref": "#/$defs/MapRef"
+        },
+        "name": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_]{0,47}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "resume_here": {
+          "default": true,
+          "title": "Resume Here",
+          "type": "boolean"
+        },
+        "targets": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/MobRef"
+          },
+          "maxItems": 100,
+          "title": "Targets",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "map",
+        "entries",
+        "main"
+      ],
+      "title": "MapBlock",
+      "type": "object"
+    },
+    "MapRef": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "map",
+          "default": "map",
+          "title": "Kind",
+          "type": "string"
+        },
+        "map": {
+          "pattern": "^[A-Za-z0-9_@.\\-]{1,40}$",
+          "title": "Map",
+          "type": "string"
+        }
+      },
+      "required": [
+        "map"
+      ],
+      "title": "MapRef",
+      "type": "object"
+    },
+    "MobRef": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "maximum": 10000000,
+          "minimum": 1,
+          "title": "Id",
+          "type": "integer"
+        },
+        "kind": {
+          "const": "mob",
+          "default": "mob",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "MobRef",
+      "type": "object"
+    },
+    "Not_": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "not",
+          "default": "not",
+          "title": "Kind",
+          "type": "string"
+        },
+        "term": {
+          "discriminator": {
+            "mapping": {
+              "and": "#/$defs/Logic",
+              "arith": "#/$defs/Arith",
+              "cmp": "#/$defs/Cmp",
+              "do": "#/$defs/Do",
+              "list": "#/$defs/ListE",
+              "lit": "#/$defs/Lit",
+              "not": "#/$defs/Not_",
+              "or": "#/$defs/Logic",
+              "outcome": "#/$defs/OutcomeLit",
+              "sense": "#/$defs/Sense",
+              "var": "#/$defs/Var"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Lit"
+            },
+            {
+              "$ref": "#/$defs/Var"
+            },
+            {
+              "$ref": "#/$defs/OutcomeLit"
+            },
+            {
+              "$ref": "#/$defs/ListE"
+            },
+            {
+              "$ref": "#/$defs/Sense"
+            },
+            {
+              "$ref": "#/$defs/Cmp"
+            },
+            {
+              "$ref": "#/$defs/Logic"
+            },
+            {
+              "$ref": "#/$defs/Not_"
+            },
+            {
+              "$ref": "#/$defs/Arith"
+            },
+            {
+              "$ref": "#/$defs/Do"
+            }
+          ],
+          "title": "Term"
+        }
+      },
+      "required": [
+        "term"
+      ],
+      "title": "Not_",
+      "type": "object"
+    },
+    "NpcRef": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "pattern": "^[A-Za-z0-9_.\\-]{1,64}$",
+          "title": "Key",
+          "type": "string"
+        },
+        "kind": {
+          "const": "npc",
+          "default": "npc",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key"
+      ],
+      "title": "NpcRef",
+      "type": "object"
+    },
+    "OptionRef": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "pattern": "^[A-Za-z0-9_.\\-]{1,64}$",
+          "title": "Key",
+          "type": "string"
+        },
+        "kind": {
+          "const": "option",
+          "default": "option",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key"
+      ],
+      "title": "OptionRef",
+      "type": "object"
+    },
+    "OutcomeLit": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "outcome",
+          "default": "outcome",
+          "title": "Kind",
+          "type": "string"
+        },
+        "value": {
+          "enum": [
+            "ok",
+            "failed",
+            "unsupported",
+            "interrupted",
+            "refused"
+          ],
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "value"
+      ],
+      "title": "OutcomeLit",
+      "type": "object"
+    },
+    "Override": {
+      "additionalProperties": false,
+      "properties": {
+        "event": {
+          "$ref": "#/$defs/Handler"
+        },
+        "kind": {
+          "const": "override",
+          "default": "override",
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_]{0,47}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        }
+      },
+      "required": [
+        "event"
+      ],
+      "title": "Override",
+      "type": "object"
+    },
+    "Range": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "range",
+          "default": "range",
+          "title": "Kind",
+          "type": "string"
+        },
+        "start": {
+          "discriminator": {
+            "mapping": {
+              "and": "#/$defs/Logic",
+              "arith": "#/$defs/Arith",
+              "cmp": "#/$defs/Cmp",
+              "do": "#/$defs/Do",
+              "list": "#/$defs/ListE",
+              "lit": "#/$defs/Lit",
+              "not": "#/$defs/Not_",
+              "or": "#/$defs/Logic",
+              "outcome": "#/$defs/OutcomeLit",
+              "sense": "#/$defs/Sense",
+              "var": "#/$defs/Var"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Lit"
+            },
+            {
+              "$ref": "#/$defs/Var"
+            },
+            {
+              "$ref": "#/$defs/OutcomeLit"
+            },
+            {
+              "$ref": "#/$defs/ListE"
+            },
+            {
+              "$ref": "#/$defs/Sense"
+            },
+            {
+              "$ref": "#/$defs/Cmp"
+            },
+            {
+              "$ref": "#/$defs/Logic"
+            },
+            {
+              "$ref": "#/$defs/Not_"
+            },
+            {
+              "$ref": "#/$defs/Arith"
+            },
+            {
+              "$ref": "#/$defs/Do"
+            }
+          ],
+          "title": "Start"
+        },
+        "step": {
+          "discriminator": {
+            "mapping": {
+              "and": "#/$defs/Logic",
+              "arith": "#/$defs/Arith",
+              "cmp": "#/$defs/Cmp",
+              "do": "#/$defs/Do",
+              "list": "#/$defs/ListE",
+              "lit": "#/$defs/Lit",
+              "not": "#/$defs/Not_",
+              "or": "#/$defs/Logic",
+              "outcome": "#/$defs/OutcomeLit",
+              "sense": "#/$defs/Sense",
+              "var": "#/$defs/Var"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Lit"
+            },
+            {
+              "$ref": "#/$defs/Var"
+            },
+            {
+              "$ref": "#/$defs/OutcomeLit"
+            },
+            {
+              "$ref": "#/$defs/ListE"
+            },
+            {
+              "$ref": "#/$defs/Sense"
+            },
+            {
+              "$ref": "#/$defs/Cmp"
+            },
+            {
+              "$ref": "#/$defs/Logic"
+            },
+            {
+              "$ref": "#/$defs/Not_"
+            },
+            {
+              "$ref": "#/$defs/Arith"
+            },
+            {
+              "$ref": "#/$defs/Do"
+            }
+          ],
+          "title": "Step"
+        },
+        "stop": {
+          "discriminator": {
+            "mapping": {
+              "and": "#/$defs/Logic",
+              "arith": "#/$defs/Arith",
+              "cmp": "#/$defs/Cmp",
+              "do": "#/$defs/Do",
+              "list": "#/$defs/ListE",
+              "lit": "#/$defs/Lit",
+              "not": "#/$defs/Not_",
+              "or": "#/$defs/Logic",
+              "outcome": "#/$defs/OutcomeLit",
+              "sense": "#/$defs/Sense",
+              "var": "#/$defs/Var"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Lit"
+            },
+            {
+              "$ref": "#/$defs/Var"
+            },
+            {
+              "$ref": "#/$defs/OutcomeLit"
+            },
+            {
+              "$ref": "#/$defs/ListE"
+            },
+            {
+              "$ref": "#/$defs/Sense"
+            },
+            {
+              "$ref": "#/$defs/Cmp"
+            },
+            {
+              "$ref": "#/$defs/Logic"
+            },
+            {
+              "$ref": "#/$defs/Not_"
+            },
+            {
+              "$ref": "#/$defs/Arith"
+            },
+            {
+              "$ref": "#/$defs/Do"
+            }
+          ],
+          "title": "Stop"
+        }
+      },
+      "required": [
+        "start",
+        "stop",
+        "step"
+      ],
+      "title": "Range",
+      "type": "object"
+    },
+    "Repeat": {
+      "additionalProperties": false,
+      "properties": {
+        "body": {
+          "default": [],
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "action": "#/$defs/ActionStmt",
+                "break": "#/$defs/Break_",
+                "call": "#/$defs/CallProc",
+                "continue": "#/$defs/Continue_",
+                "for": "#/$defs/ForEach",
+                "if": "#/$defs/If",
+                "repeat": "#/$defs/Repeat",
+                "set": "#/$defs/SetVar",
+                "stop": "#/$defs/Stop",
+                "take_exit": "#/$defs/TakeExit",
+                "wait_until": "#/$defs/WaitUntil",
+                "while": "#/$defs/While"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/ActionStmt"
+              },
+              {
+                "$ref": "#/$defs/If"
+              },
+              {
+                "$ref": "#/$defs/While"
+              },
+              {
+                "$ref": "#/$defs/WaitUntil"
+              },
+              {
+                "$ref": "#/$defs/Repeat"
+              },
+              {
+                "$ref": "#/$defs/ForEach"
+              },
+              {
+                "$ref": "#/$defs/SetVar"
+              },
+              {
+                "$ref": "#/$defs/CallProc"
+              },
+              {
+                "$ref": "#/$defs/Stop"
+              },
+              {
+                "$ref": "#/$defs/Break_"
+              },
+              {
+                "$ref": "#/$defs/Continue_"
+              },
+              {
+                "$ref": "#/$defs/TakeExit"
+              }
+            ]
+          },
+          "title": "Body",
+          "type": "array"
+        },
+        "kind": {
+          "const": "repeat",
+          "default": "repeat",
+          "title": "Kind",
+          "type": "string"
+        },
+        "times": {
+          "discriminator": {
+            "mapping": {
+              "and": "#/$defs/Logic",
+              "arith": "#/$defs/Arith",
+              "cmp": "#/$defs/Cmp",
+              "do": "#/$defs/Do",
+              "list": "#/$defs/ListE",
+              "lit": "#/$defs/Lit",
+              "not": "#/$defs/Not_",
+              "or": "#/$defs/Logic",
+              "outcome": "#/$defs/OutcomeLit",
+              "sense": "#/$defs/Sense",
+              "var": "#/$defs/Var"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Lit"
+            },
+            {
+              "$ref": "#/$defs/Var"
+            },
+            {
+              "$ref": "#/$defs/OutcomeLit"
+            },
+            {
+              "$ref": "#/$defs/ListE"
+            },
+            {
+              "$ref": "#/$defs/Sense"
+            },
+            {
+              "$ref": "#/$defs/Cmp"
+            },
+            {
+              "$ref": "#/$defs/Logic"
+            },
+            {
+              "$ref": "#/$defs/Not_"
+            },
+            {
+              "$ref": "#/$defs/Arith"
+            },
+            {
+              "$ref": "#/$defs/Do"
+            }
+          ],
+          "title": "Times"
+        }
+      },
+      "required": [
+        "times"
+      ],
+      "title": "Repeat",
+      "type": "object"
+    },
+    "Sense": {
+      "additionalProperties": false,
+      "properties": {
+        "args": {
+          "default": {},
+          "patternProperties": {
+            "^[A-Za-z][A-Za-z0-9_]{0,47}$": {
+              "discriminator": {
+                "mapping": {
+                  "and": "#/$defs/Logic",
+                  "arith": "#/$defs/Arith",
+                  "cmp": "#/$defs/Cmp",
+                  "do": "#/$defs/Do",
+                  "list": "#/$defs/ListE",
+                  "lit": "#/$defs/Lit",
+                  "not": "#/$defs/Not_",
+                  "or": "#/$defs/Logic",
+                  "outcome": "#/$defs/OutcomeLit",
+                  "sense": "#/$defs/Sense",
+                  "var": "#/$defs/Var"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Lit"
+                },
+                {
+                  "$ref": "#/$defs/Var"
+                },
+                {
+                  "$ref": "#/$defs/OutcomeLit"
+                },
+                {
+                  "$ref": "#/$defs/ListE"
+                },
+                {
+                  "$ref": "#/$defs/Sense"
+                },
+                {
+                  "$ref": "#/$defs/Cmp"
+                },
+                {
+                  "$ref": "#/$defs/Logic"
+                },
+                {
+                  "$ref": "#/$defs/Not_"
+                },
+                {
+                  "$ref": "#/$defs/Arith"
+                },
+                {
+                  "$ref": "#/$defs/Do"
+                }
+              ]
+            }
+          },
+          "title": "Args",
+          "type": "object"
+        },
+        "kind": {
+          "const": "sense",
+          "default": "sense",
+          "title": "Kind",
+          "type": "string"
+        },
+        "sensor": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_]{0,47}$",
+          "title": "Sensor",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sensor"
+      ],
+      "title": "Sense",
+      "type": "object"
+    },
+    "SetVar": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "set",
+          "default": "set",
+          "title": "Kind",
+          "type": "string"
+        },
+        "value": {
+          "discriminator": {
+            "mapping": {
+              "and": "#/$defs/Logic",
+              "arith": "#/$defs/Arith",
+              "cmp": "#/$defs/Cmp",
+              "do": "#/$defs/Do",
+              "list": "#/$defs/ListE",
+              "lit": "#/$defs/Lit",
+              "not": "#/$defs/Not_",
+              "or": "#/$defs/Logic",
+              "outcome": "#/$defs/OutcomeLit",
+              "sense": "#/$defs/Sense",
+              "var": "#/$defs/Var"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Lit"
+            },
+            {
+              "$ref": "#/$defs/Var"
+            },
+            {
+              "$ref": "#/$defs/OutcomeLit"
+            },
+            {
+              "$ref": "#/$defs/ListE"
+            },
+            {
+              "$ref": "#/$defs/Sense"
+            },
+            {
+              "$ref": "#/$defs/Cmp"
+            },
+            {
+              "$ref": "#/$defs/Logic"
+            },
+            {
+              "$ref": "#/$defs/Not_"
+            },
+            {
+              "$ref": "#/$defs/Arith"
+            },
+            {
+              "$ref": "#/$defs/Do"
+            }
+          ],
+          "title": "Value"
+        },
+        "var": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_]{0,47}$",
+          "title": "Var",
+          "type": "string"
+        }
+      },
+      "required": [
+        "var",
+        "value"
+      ],
+      "title": "SetVar",
+      "type": "object"
+    },
+    "SkillRef": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "maximum": 100000,
+          "minimum": 1,
+          "title": "Id",
+          "type": "integer"
+        },
+        "kind": {
+          "const": "skill",
+          "default": "skill",
+          "title": "Kind",
+          "type": "string"
+        },
+        "level": {
+          "anyOf": [
+            {
+              "maximum": 20,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Level"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "SkillRef",
+      "type": "object"
+    },
+    "Stop": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "stop",
+          "default": "stop",
+          "title": "Kind",
+          "type": "string"
+        },
+        "reason": {
+          "pattern": "^[a-z_]{1,40}$",
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "reason"
+      ],
+      "title": "Stop",
+      "type": "object"
+    },
+    "TakeExit": {
+      "additionalProperties": false,
+      "properties": {
+        "exit": {
+          "$ref": "#/$defs/Exit"
+        },
+        "kind": {
+          "const": "take_exit",
+          "default": "take_exit",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "exit"
+      ],
+      "title": "TakeExit",
+      "type": "object"
+    },
+    "Target": {
+      "additionalProperties": false,
+      "properties": {
+        "client": {
+          "pattern": "^[A-Za-z0-9_.\\-]{1,64}$",
+          "title": "Client",
+          "type": "string"
+        },
+        "locale": {
+          "pattern": "^[A-Za-z0-9_.\\-]{1,64}$",
+          "title": "Locale",
+          "type": "string"
+        },
+        "path": {
+          "default": "s2",
+          "enum": [
+            "s2",
+            "rdp"
+          ],
+          "title": "Path",
+          "type": "string"
+        },
+        "server": {
+          "pattern": "^[A-Za-z0-9_.\\-]{1,64}$",
+          "title": "Server",
+          "type": "string"
+        }
+      },
+      "required": [
+        "client",
+        "server",
+        "locale"
+      ],
+      "title": "Target",
+      "type": "object"
+    },
+    "Var": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "var",
+          "default": "var",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_]{0,47}$",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "Var",
+      "type": "object"
+    },
+    "WaitUntil": {
+      "additionalProperties": false,
+      "properties": {
+        "cond": {
+          "discriminator": {
+            "mapping": {
+              "and": "#/$defs/Logic",
+              "arith": "#/$defs/Arith",
+              "cmp": "#/$defs/Cmp",
+              "do": "#/$defs/Do",
+              "list": "#/$defs/ListE",
+              "lit": "#/$defs/Lit",
+              "not": "#/$defs/Not_",
+              "or": "#/$defs/Logic",
+              "outcome": "#/$defs/OutcomeLit",
+              "sense": "#/$defs/Sense",
+              "var": "#/$defs/Var"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Lit"
+            },
+            {
+              "$ref": "#/$defs/Var"
+            },
+            {
+              "$ref": "#/$defs/OutcomeLit"
+            },
+            {
+              "$ref": "#/$defs/ListE"
+            },
+            {
+              "$ref": "#/$defs/Sense"
+            },
+            {
+              "$ref": "#/$defs/Cmp"
+            },
+            {
+              "$ref": "#/$defs/Logic"
+            },
+            {
+              "$ref": "#/$defs/Not_"
+            },
+            {
+              "$ref": "#/$defs/Arith"
+            },
+            {
+              "$ref": "#/$defs/Do"
+            }
+          ],
+          "title": "Cond"
+        },
+        "kind": {
+          "const": "wait_until",
+          "default": "wait_until",
+          "title": "Kind",
+          "type": "string"
+        },
+        "outcome_to": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_]{0,47}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Outcome To"
+        },
+        "timeout_s": {
+          "exclusiveMinimum": 0,
+          "maximum": 3600,
+          "title": "Timeout S",
+          "type": "number"
+        }
+      },
+      "required": [
+        "cond",
+        "timeout_s"
+      ],
+      "title": "WaitUntil",
+      "type": "object"
+    },
+    "While": {
+      "additionalProperties": false,
+      "properties": {
+        "body": {
+          "default": [],
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "action": "#/$defs/ActionStmt",
+                "break": "#/$defs/Break_",
+                "call": "#/$defs/CallProc",
+                "continue": "#/$defs/Continue_",
+                "for": "#/$defs/ForEach",
+                "if": "#/$defs/If",
+                "repeat": "#/$defs/Repeat",
+                "set": "#/$defs/SetVar",
+                "stop": "#/$defs/Stop",
+                "take_exit": "#/$defs/TakeExit",
+                "wait_until": "#/$defs/WaitUntil",
+                "while": "#/$defs/While"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/ActionStmt"
+              },
+              {
+                "$ref": "#/$defs/If"
+              },
+              {
+                "$ref": "#/$defs/While"
+              },
+              {
+                "$ref": "#/$defs/WaitUntil"
+              },
+              {
+                "$ref": "#/$defs/Repeat"
+              },
+              {
+                "$ref": "#/$defs/ForEach"
+              },
+              {
+                "$ref": "#/$defs/SetVar"
+              },
+              {
+                "$ref": "#/$defs/CallProc"
+              },
+              {
+                "$ref": "#/$defs/Stop"
+              },
+              {
+                "$ref": "#/$defs/Break_"
+              },
+              {
+                "$ref": "#/$defs/Continue_"
+              },
+              {
+                "$ref": "#/$defs/TakeExit"
+              }
+            ]
+          },
+          "title": "Body",
+          "type": "array"
+        },
+        "cond": {
+          "discriminator": {
+            "mapping": {
+              "and": "#/$defs/Logic",
+              "arith": "#/$defs/Arith",
+              "cmp": "#/$defs/Cmp",
+              "do": "#/$defs/Do",
+              "list": "#/$defs/ListE",
+              "lit": "#/$defs/Lit",
+              "not": "#/$defs/Not_",
+              "or": "#/$defs/Logic",
+              "outcome": "#/$defs/OutcomeLit",
+              "sense": "#/$defs/Sense",
+              "var": "#/$defs/Var"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Lit"
+            },
+            {
+              "$ref": "#/$defs/Var"
+            },
+            {
+              "$ref": "#/$defs/OutcomeLit"
+            },
+            {
+              "$ref": "#/$defs/ListE"
+            },
+            {
+              "$ref": "#/$defs/Sense"
+            },
+            {
+              "$ref": "#/$defs/Cmp"
+            },
+            {
+              "$ref": "#/$defs/Logic"
+            },
+            {
+              "$ref": "#/$defs/Not_"
+            },
+            {
+              "$ref": "#/$defs/Arith"
+            },
+            {
+              "$ref": "#/$defs/Do"
+            }
+          ],
+          "title": "Cond"
+        },
+        "kind": {
+          "const": "while",
+          "default": "while",
+          "title": "Kind",
+          "type": "string"
+        },
+        "max_iter": {
+          "anyOf": [
+            {
+              "maximum": 100000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Iter"
+        },
+        "max_s": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 86400,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max S"
+        }
+      },
+      "required": [
+        "cond"
+      ],
+      "title": "While",
+      "type": "object"
+    },
+    "WindowRef": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "window",
+          "default": "window",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "pattern": "^[a-z][a-z0-9_]{0,47}$",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "WindowRef",
+      "type": "object"
+    },
+    "Workflow": {
+      "additionalProperties": false,
+      "properties": {
+        "blocks": {
+          "items": {
+            "$ref": "#/$defs/MapBlock"
+          },
+          "maxItems": 100,
+          "minItems": 1,
+          "title": "Blocks",
+          "type": "array"
+        },
+        "run_until_stopped": {
+          "default": false,
+          "title": "Run Until Stopped",
+          "type": "boolean"
+        },
+        "start_block": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_]{0,47}$",
+          "title": "Start Block",
+          "type": "string"
+        },
+        "start_entry": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_]{0,47}$",
+          "title": "Start Entry",
+          "type": "string"
+        }
+      },
+      "required": [
+        "start_block",
+        "start_entry",
+        "blocks"
+      ],
+      "title": "Workflow",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "assumes": {
+      "default": [],
+      "items": {
+        "discriminator": {
+          "mapping": {
+            "and": "#/$defs/Logic",
+            "arith": "#/$defs/Arith",
+            "cmp": "#/$defs/Cmp",
+            "do": "#/$defs/Do",
+            "list": "#/$defs/ListE",
+            "lit": "#/$defs/Lit",
+            "not": "#/$defs/Not_",
+            "or": "#/$defs/Logic",
+            "outcome": "#/$defs/OutcomeLit",
+            "sense": "#/$defs/Sense",
+            "var": "#/$defs/Var"
+          },
+          "propertyName": "kind"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/Lit"
+          },
+          {
+            "$ref": "#/$defs/Var"
+          },
+          {
+            "$ref": "#/$defs/OutcomeLit"
+          },
+          {
+            "$ref": "#/$defs/ListE"
+          },
+          {
+            "$ref": "#/$defs/Sense"
+          },
+          {
+            "$ref": "#/$defs/Cmp"
+          },
+          {
+            "$ref": "#/$defs/Logic"
+          },
+          {
+            "$ref": "#/$defs/Not_"
+          },
+          {
+            "$ref": "#/$defs/Arith"
+          },
+          {
+            "$ref": "#/$defs/Do"
+          }
+        ]
+      },
+      "maxItems": 50,
+      "title": "Assumes",
+      "type": "array"
+    },
+    "description": {
+      "default": "",
+      "maxLength": 500,
+      "title": "Description",
+      "type": "string"
+    },
+    "handlers": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Handler"
+      },
+      "maxItems": 50,
+      "title": "Handlers",
+      "type": "array"
+    },
+    "ir": {
+      "const": 1,
+      "title": "Ir",
+      "type": "integer"
+    },
+    "main": {
+      "anyOf": [
+        {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "action": "#/$defs/ActionStmt",
+                "break": "#/$defs/Break_",
+                "call": "#/$defs/CallProc",
+                "continue": "#/$defs/Continue_",
+                "for": "#/$defs/ForEach",
+                "if": "#/$defs/If",
+                "repeat": "#/$defs/Repeat",
+                "set": "#/$defs/SetVar",
+                "stop": "#/$defs/Stop",
+                "take_exit": "#/$defs/TakeExit",
+                "wait_until": "#/$defs/WaitUntil",
+                "while": "#/$defs/While"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/ActionStmt"
+              },
+              {
+                "$ref": "#/$defs/If"
+              },
+              {
+                "$ref": "#/$defs/While"
+              },
+              {
+                "$ref": "#/$defs/WaitUntil"
+              },
+              {
+                "$ref": "#/$defs/Repeat"
+              },
+              {
+                "$ref": "#/$defs/ForEach"
+              },
+              {
+                "$ref": "#/$defs/SetVar"
+              },
+              {
+                "$ref": "#/$defs/CallProc"
+              },
+              {
+                "$ref": "#/$defs/Stop"
+              },
+              {
+                "$ref": "#/$defs/Break_"
+              },
+              {
+                "$ref": "#/$defs/Continue_"
+              },
+              {
+                "$ref": "#/$defs/TakeExit"
+              }
+            ]
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Main"
+    },
+    "max_runtime_s": {
+      "maximum": 86400,
+      "minimum": 1,
+      "title": "Max Runtime S",
+      "type": "integer"
+    },
+    "name": {
+      "pattern": "^[a-z][a-z0-9_]{0,47}$",
+      "title": "Name",
+      "type": "string"
+    },
+    "procedures": {
+      "default": {},
+      "patternProperties": {
+        "^[A-Za-z][A-Za-z0-9_]{0,47}$": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "action": "#/$defs/ActionStmt",
+                "break": "#/$defs/Break_",
+                "call": "#/$defs/CallProc",
+                "continue": "#/$defs/Continue_",
+                "for": "#/$defs/ForEach",
+                "if": "#/$defs/If",
+                "repeat": "#/$defs/Repeat",
+                "set": "#/$defs/SetVar",
+                "stop": "#/$defs/Stop",
+                "take_exit": "#/$defs/TakeExit",
+                "wait_until": "#/$defs/WaitUntil",
+                "while": "#/$defs/While"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/ActionStmt"
+              },
+              {
+                "$ref": "#/$defs/If"
+              },
+              {
+                "$ref": "#/$defs/While"
+              },
+              {
+                "$ref": "#/$defs/WaitUntil"
+              },
+              {
+                "$ref": "#/$defs/Repeat"
+              },
+              {
+                "$ref": "#/$defs/ForEach"
+              },
+              {
+                "$ref": "#/$defs/SetVar"
+              },
+              {
+                "$ref": "#/$defs/CallProc"
+              },
+              {
+                "$ref": "#/$defs/Stop"
+              },
+              {
+                "$ref": "#/$defs/Break_"
+              },
+              {
+                "$ref": "#/$defs/Continue_"
+              },
+              {
+                "$ref": "#/$defs/TakeExit"
+              }
+            ]
+          },
+          "type": "array"
+        }
+      },
+      "title": "Procedures",
+      "type": "object"
+    },
+    "stop_when": {
+      "anyOf": [
+        {
+          "discriminator": {
+            "mapping": {
+              "and": "#/$defs/Logic",
+              "arith": "#/$defs/Arith",
+              "cmp": "#/$defs/Cmp",
+              "do": "#/$defs/Do",
+              "list": "#/$defs/ListE",
+              "lit": "#/$defs/Lit",
+              "not": "#/$defs/Not_",
+              "or": "#/$defs/Logic",
+              "outcome": "#/$defs/OutcomeLit",
+              "sense": "#/$defs/Sense",
+              "var": "#/$defs/Var"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Lit"
+            },
+            {
+              "$ref": "#/$defs/Var"
+            },
+            {
+              "$ref": "#/$defs/OutcomeLit"
+            },
+            {
+              "$ref": "#/$defs/ListE"
+            },
+            {
+              "$ref": "#/$defs/Sense"
+            },
+            {
+              "$ref": "#/$defs/Cmp"
+            },
+            {
+              "$ref": "#/$defs/Logic"
+            },
+            {
+              "$ref": "#/$defs/Not_"
+            },
+            {
+              "$ref": "#/$defs/Arith"
+            },
+            {
+              "$ref": "#/$defs/Do"
+            }
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Stop When"
+    },
+    "target": {
+      "$ref": "#/$defs/Target"
+    },
+    "variables": {
+      "default": {},
+      "patternProperties": {
+        "^[A-Za-z][A-Za-z0-9_]{0,47}$": {
+          "$ref": "#/$defs/Lit"
+        }
+      },
+      "title": "Variables",
+      "type": "object"
+    },
+    "workflow": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Workflow"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "ir",
+    "name",
+    "target",
+    "max_runtime_s"
+  ],
+  "title": "Flow",
+  "type": "object"
+}

@@ -1,0 +1,318 @@
+# The block registry (ADR-0020 section 2): what L1 does not hold. Our own words and numbers only.
+#
+# The CATALOGUE (poring_flow.catalogue) joins this registry with the L1 concepts
+# (packages/poring_skills/src/poring_skills/l1/*.yaml): each block's L1 purpose, preconditions,
+# runtime outcome, bindings and status. A block whose concept is not in L1 is marked UNKNOWN; an
+# L1 concept that is neither a block's, a sensor's nor excluded here fails the coverage test.
+#
+# Per block:
+#   concept      its L1 concept (core.* = a core block: no input, proven by unit tests)
+#   params       name, type, required, positional (the Python view prints it positionally)
+#   timeout_s    the default timeout (the IR stores the value; the Python view omits the default)
+#   profile      anywhere | atomic: where a pre-emption may halt it (2.5 rule 5)
+#   long         a long action (a WARNING inside a critical event, section 5)
+#   moves        none | to_cell | near: where the character is afterwards (route simulation)
+#   changes_map  never | always | by_item | escape (13.6.9 relocating events)
+#   adds_weight  it can raise weight_percent() (13.5 weight rule)
+#   insertable   may run as an INSERT: Batt 2026-10-08 (Q17), hotbar use_item ONLY
+#   irreversible why the owner must acknowledge it at approval (section 5)
+#   kafra        the Kafra service it needs (13.5)
+#   assume       L1 preconditions that must be in the flow's `assumes` (13.5)
+#   affects      sensors it moves: + up, - down, ~ either way (loops, re-trigger)
+#   types        it types (the foreground gate applies)
+version: 1
+blocks:
+  walk_to:
+    concept: nav.walk_to
+    params: [{name: cell, type: cell, required: true, positional: true}]
+    timeout_s: 120
+    long: true
+    moves: to_cell
+    affects: {position: "~", sees: "~", count_visible: "~", engaged_species: "~"}
+  walk_away:
+    concept: nav.walk_to
+    params: [{name: min_cells, type: int}]
+    timeout_s: 30
+    long: true
+    moves: near
+    affects: {position: "~", sees: "~", count_visible: "~"}
+    note: walk at least min_cells away from the engaged unit (13.9); NOT yet proven to stop an attack (open question 32)
+  take_warp:
+    concept: nav.take_warp
+    params: [{name: to, type: map, required: true, positional: true}]
+    timeout_s: 60
+    long: true
+    moves: near
+    changes_map: always
+  kafra_teleport:
+    concept: nav.kafra_teleport
+    params:
+      - {name: npc, type: npc, required: true, positional: true}
+      - {name: to, type: map, required: true}
+    timeout_s: 60
+    long: true
+    profile: atomic
+    changes_map: always
+    kafra: teleport
+    affects: {zeny: "-"}
+  ride_transport:
+    concept: nav.take_transport
+    params:
+      - {name: npc, type: npc, required: true, positional: true}
+      - {name: to, type: map, required: true}
+    timeout_s: 300
+    long: true
+    changes_map: always
+  set_save_point:
+    concept: nav.set_save_point
+    params: [{name: npc, type: npc, required: true, positional: true}]
+    timeout_s: 60
+    long: true
+    profile: atomic
+    moves: near
+    kafra: save
+  escape:
+    concept: nav.escape
+    params: []
+    timeout_s: 10
+    changes_map: escape
+    note: hp_critical's FIXED body (13.6.8) -- a Fly Wing where the map allows it, else a Butterfly Wing, else stop
+  read_position:
+    concept: nav.read_position
+    params: []
+    timeout_s: 10
+    types: true
+    note: the ACTIVE /where read (13.6.6); it types, through the mux and the foreground gate
+  talk_npc:
+    concept: npc.talk
+    params: [{name: npc, type: npc, required: true, positional: true}]
+    timeout_s: 60
+    long: true
+    moves: near
+    affects: {dialog_shows: "~", window_open: "~"}
+  next_page:
+    concept: npc.next
+    timeout_s: 10
+    affects: {dialog_shows: "~"}
+  choose_menu:
+    concept: npc.choose
+    params: [{name: option, type: option, required: true, positional: true}]
+    timeout_s: 10
+    profile: atomic
+    affects: {dialog_shows: "~"}
+  enter_value:
+    concept: npc.input
+    params: [{name: value, type: value, required: true, positional: true}]
+    timeout_s: 20
+    profile: atomic
+    types: true
+  close_dialog:
+    concept: npc.close
+    timeout_s: 10
+    affects: {dialog_shows: "~", window_open: "~"}
+  close_npc_dialog:
+    concept: npc.close
+    timeout_s: 10
+    affects: {dialog_shows: "~", window_open: "~"}
+    note: closes an NPC dialog IF one is open (13.9's recovery); ok when none is
+  attack_nearest:
+    concept: combat.attack_target
+    params:
+      - {name: mob, type: mob, positional: true}
+      - {name: within, type: int}
+    timeout_s: 120
+    long: true
+    moves: near
+    affects: {hp_percent: "-", sp_percent: "~", base_level: "+", job_level: "+", sees: "~", count_visible: "~", engagement_seen: "~"}
+    note: in a map block without a mob it attacks only the block's TARGET species (13.3)
+  finish_target:
+    concept: combat.attack_target
+    timeout_s: 60
+    long: true
+    moves: near
+    affects: {hp_percent: "-", base_level: "+", job_level: "+", sees: "~", count_visible: "~", engagement_seen: "~"}
+    note: attack the unit we are engaged with until it dies (13.9's finish policy)
+  use_skill:
+    concept: combat.use_skill
+    params:
+      - {name: skill, type: skill, required: true, positional: true}
+      - {name: target, type: mob}
+    timeout_s: 30
+    affects: {sp_percent: "-", hp_percent: "~", base_level: "+", job_level: "+"}
+  loot:
+    concept: loot.pick_up
+    params: [{name: item, type: item, positional: true}]
+    timeout_s: 30
+    moves: near
+    adds_weight: true
+    affects: {weight_percent: "+", item_count: "+"}
+    note: Batt 2026-10-08 (Q21) -- a hover-scan around the death cell for the PICKUP cursor; verified by the weight readout rising
+  buy:
+    concept: trade.buy
+    params:
+      - {name: npc, type: npc, required: true, positional: true}
+      - {name: items, type: items, required: true}
+    timeout_s: 60
+    adds_weight: true
+    affects: {zeny: "-", weight_percent: "+", item_count: "+"}
+  sell:
+    concept: trade.sell
+    params:
+      - {name: npc, type: npc, required: true, positional: true}
+      - {name: keep, type: items, required: true}
+    timeout_s: 60
+    irreversible: sells every item not on the keep list
+    affects: {zeny: "+", weight_percent: "-", item_count: "-"}
+  kafra_store:
+    concept: storage.deposit
+    params:
+      - {name: npc, type: npc, required: true, positional: true}
+      - {name: items, type: items}
+      - {name: all_except, type: items}
+    timeout_s: 120
+    long: true
+    profile: atomic
+    kafra: storage
+    assume:
+      - {sensor: skill_level, skill: 1, op: ">=", value: 6, why: "storage.deposit: Basic Skill level 6"}
+    affects: {weight_percent: "-", item_count: "-", zeny: "-"}
+  kafra_withdraw:
+    concept: storage.withdraw
+    params:
+      - {name: npc, type: npc, required: true, positional: true}
+      - {name: items, type: items, required: true}
+    timeout_s: 120
+    long: true
+    profile: atomic
+    kafra: storage
+    adds_weight: true
+    assume:
+      - {sensor: skill_level, skill: 1, op: ">=", value: 6, why: "storage.withdraw: Basic Skill level 6"}
+    affects: {weight_percent: "+", item_count: "+", zeny: "-"}
+  use_item:
+    concept: item.use
+    params: [{name: item, type: item, required: true, positional: true}]
+    timeout_s: 10
+    insertable: true
+    changes_map: by_item
+    affects: {hp_percent: "+", sp_percent: "+", item_count: "-", weight_percent: "-"}
+  equip:
+    concept: item.equip
+    params: [{name: item, type: item, required: true, positional: true}]
+    timeout_s: 15
+  unequip:
+    concept: item.unequip
+    params: [{name: item, type: item, required: true, positional: true}]
+    timeout_s: 15
+  insert_card:
+    concept: item.insert_card
+    params:
+      - {name: card, type: item, required: true, positional: true}
+      - {name: item, type: item, required: true, positional: true}
+    timeout_s: 20
+    profile: atomic
+    irreversible: is permanent
+  refine:
+    concept: item.refine
+    params:
+      - {name: npc, type: npc, required: true, positional: true}
+      - {name: item, type: item, required: true, positional: true}
+    timeout_s: 60
+    profile: atomic
+    irreversible: can destroy the item
+  open_window:
+    concept: ui.open_window
+    params: [{name: window, type: window, required: true, positional: true}]
+    timeout_s: 10
+    affects: {window_open: "+"}
+  close_window:
+    concept: ui.close_window
+    params: [{name: window, type: window, required: true, positional: true}]
+    timeout_s: 10
+    affects: {window_open: "-"}
+  press_button:
+    concept: ui.press_button
+    params:
+      - {name: window, type: window, required: true, positional: true}
+      - {name: button, type: str, required: true, positional: true}
+    timeout_s: 10
+  sit:
+    concept: char.sit
+    timeout_s: 5
+  stand:
+    concept: char.stand
+    timeout_s: 5
+  raise_stat:
+    concept: char.allocate_stat
+    params:
+      - {name: stat, type: str, required: true, positional: true}
+      - {name: count, type: int}
+    timeout_s: 20
+  learn_skill:
+    concept: char.learn_skill
+    params:
+      - {name: skill, type: skill, required: true, positional: true}
+      - {name: count, type: int}
+    timeout_s: 20
+  respawn:
+    concept: char.respawn
+    timeout_s: 30
+    changes_map: always
+    affects: {is_dead: "-", hp_percent: "+"}
+  rent_cart:
+    concept: cart.rent
+    params: [{name: npc, type: npc, required: true, positional: true}]
+    timeout_s: 60
+    kafra: cart
+  cart_transfer:
+    concept: cart.transfer
+    params:
+      - {name: items, type: items, required: true, positional: true}
+      - {name: direction, type: str, required: true}
+    timeout_s: 30
+    affects: {weight_percent: "~", item_count: "~"}
+  change_job:
+    concept: char.change_job
+    params: [{name: job, type: str, required: true, positional: true}]
+    timeout_s: 600
+    long: true
+    note: a PROCEDURE per server in practice (section 10); the block is the outcome check
+  assert_save_point:
+    concept: core.assert_save_point
+    kind: core
+    params: [{name: cell, type: cell, required: true, positional: true}]
+    timeout_s: 1
+    note: the AUTHOR asserts the save point (13.5); no input; stays a visible warning at approval
+
+# Sensors (2.3): every one reads pixels. A sensor whose read concept is not in L1 yet is UNKNOWN
+# (open question 7: new read concepts go through L1 and the alone-test like any other).
+#   type     percent | int | bool | mob | map | cell
+#   passive  false = ACTIVE (it needs input to read): never in an event condition
+#   drift    it changes without our input (regeneration, damage, movement): loops may wait on it
+#   cue      a momentary cue (true for an instant): it cannot hold on every tick
+#   danger   low | high: which side of a threshold is the dangerous one ("looser", 13.6.9)
+sensors:
+  hp_percent: {concept: vitals.read, type: percent, passive: true, drift: true, range: [0, 100], resolution: 1, danger: low}
+  sp_percent: {concept: vitals.read, type: percent, passive: true, drift: true, range: [0, 100], resolution: 1, danger: low}
+  weight_percent: {concept: vitals.read, type: percent, passive: true, range: [0, 100], resolution: 1, danger: high}
+  zeny: {concept: vitals.read, type: int, passive: true, range: [0, 2000000000]}
+  position: {concept: nav.read_position, type: cell, passive: false, note: "the /where read types (13.6.6)"}
+  current_map: {concept: nav.read_position, type: map, passive: false, note: "the /where read types (13.6.6)"}
+  base_level: {type: int, passive: true, range: [1, 999], note: "a new L1 read concept, not written yet"}
+  job_level: {type: int, passive: true, range: [1, 999], note: "a new L1 read concept, not written yet"}
+  item_count: {type: int, passive: false, params: [{name: item, type: item, required: true, positional: true}], note: "opens the inventory"}
+  skill_level: {type: int, passive: false, params: [{name: skill, type: skill, required: true, positional: true}], note: "opens the skill window; for assumes"}
+  sees: {type: bool, passive: true, drift: true, params: [{name: mob, type: mob, required: true, positional: true}, {name: within, type: int}], note: "the world detector + tracker (Phase 3)"}
+  count_visible: {type: int, passive: true, drift: true, params: [{name: mob, type: mob, required: true, positional: true}, {name: within, type: int}], note: "the world detector + tracker (Phase 3)"}
+  is_dead: {concept: char.respawn, type: bool, passive: true, drift: true, note: "the death dialog's anchor (char.respawn's L2 binding)"}
+  window_open: {concept: ui.open_window, type: bool, passive: true, params: [{name: window, type: window, required: true, positional: true}]}
+  dialog_shows: {concept: npc.choose, type: bool, passive: true, params: [{name: option, type: option, required: true, positional: true}]}
+  map_load_seen: {type: bool, passive: true, drift: true, cue: true, note: "the loading screen or the map-load notice (open question 28)"}
+  engagement_seen: {type: bool, passive: true, drift: true, cue: true, note: "an engagement we did not order, from pixels (13.9)"}
+  engaged_species: {type: mob, passive: true, drift: true, note: "needs a detector that names species (13.9, open question 33)"}
+
+# L1 concepts that are neither a block nor a sensor in IR 1 (the coverage test).
+excluded:
+  session.login: before a map session exists the interlock is red; only a host tool's operator window lets input through (ADR-0016). Flows start in game.
+  session.select_char: before a map session exists the interlock is red; only a host tool's operator window lets input through (ADR-0016).
+  session.logout: it ends the map session a flow runs in; logging out stays a host tool's step (ADR-0016).

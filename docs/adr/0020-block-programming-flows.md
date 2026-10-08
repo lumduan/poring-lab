@@ -590,6 +590,10 @@ approval and the result changed, the run does not start.
 - the IR, parser, printer, catalogue, linter and tree runtime live in a new Apache-2.0 package
   (`poring_flow`, name to be decided); the block implementations that need the detector live in
   `services/vision` (AGPL-3.0, ADR-0018). Mixing is one-way, as ADR-0018 allows;
+  ➡️ MW1 built it under this working name: `packages/poring_flow` (renaming stays open). It depends
+  on `poring_skills` only. Its route check runs on the map sheet's walk grid with a small A* of its
+  own, not `poring_dataset/walk.py`; open question 15 (where the linter runs) is NOT decided by
+  that, and the two path finders are not yet checked against each other;
 - `test_guards.py` extends: `poring_flow` imports no `ultralytics`, no `poring_vision` and no
   `poring_packets`.
 
@@ -964,7 +968,8 @@ lab-rathena (unverified blocks show as warnings) and becomes runnable as its wav
    - **unsupported here**: `resolve()` raised `Unsupported`; the layer and key are shown; the block
      cannot run;
    - **core**: control and event blocks, proven by unit tests.
-6. **Today:** 37 L1 concepts, 0 verified. And `resolve()` has no L4 resolver yet ("lands with the
+6. **Today:** 37 L1 concepts, 0 verified (➡️ 39 since MW1, 2026-10-08: `nav.set_save_point` and
+   `nav.escape` added unverified; the live count is in docs/knowledge/README.md). And `resolve()` has no L4 resolver yet ("lands with the
    L4 work"), so every block that needs an L4 binding (menu options, Kafra services) resolves
    `unsupported` today. So flows can be built, linted and approved now, and become runnable only as
    bindings land and alone-tests pass. That is the intended order: rules are proven alone first.
@@ -1157,6 +1162,9 @@ run time for perception. Per map, one **map sheet**:
 
 - Sheets are generated LOCALLY from the pinned rAthena, like the KB (`data/kb/maps/<map>.json`, a
   name MW1 fixes). They are never committed (CLAUDE.md rule 4, THIRD_PARTY.md).
+  ➡️ MW1 (2026-10-08) fixed the shape and the name: `data/kb/maps/<server>/<map>.json` (one
+  `MapSheet`) plus `data/kb/maps/<server>/_server.json` (mobs, items); the models are
+  `poring_flow.sheet`. The generator from L3 is not built yet; the tests use synthetic sheets.
 - A missing entry fails closed: the block is `unsupported`, with the layer and the key (2.2). It is
   never guessed.
 - On a server other than the lab, the sheet is a prior and the pixels decide (ADR-0015).

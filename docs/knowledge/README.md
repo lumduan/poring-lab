@@ -13,7 +13,7 @@ What an action IS, in every RO client and server (Batt, 2026-10-07). How a clien
 
 Every entry starts **unverified**: written from memory, which may mix renewal, pre-renewal and regional versions. It flips to **verified** only when its rule passes a pre-registered alone-test on RDP AND S2 (docs/demonstrations.md); `verified_on` then names the client build, server, locale, path and session. The runtime outcome is a SCREEN check (packets are never decision input, ADR-0007); the offline outcome is the packet verifier used for tests and labels.
 
-37 concepts; 0 verified.
+39 concepts; 0 verified.
 
 | id | purpose | workflow wave | status | runtime outcome (screen) |
 |---|---|---|---|---|
@@ -32,9 +32,11 @@ Every entry starts **unverified**: written from memory, which may mix renewal, p
 | `item.refine` | Raise an equipment item's refine level. | - | unverified | the item name shows the new level, or the item is gone |
 | `item.unequip` | Take off a worn item. | 3 Merchant job change | unverified | the slot is empty and the item is back in the inventory |
 | `item.use` | Use a consumable (a potion, a teleport item, food). | 3 Merchant job change | unverified | the effect (the HP or SP bar rises) and the item count drops |
-| `loot.pick_up` | Pick up an item lying on the ground. | 2 combat | unverified | the item vanishes from the ground and its count rises in the inventory |
+| `loot.pick_up` | Pick up an item lying on the ground. | 2 combat | unverified | the weight readout rises by at least one step, or the item-obtained cue appears |
+| `nav.escape` | Leave danger at once with a teleport item the map allows (the fixed escape of hp_critical). | - | unverified | the teleport effect, then a new position (Fly Wing) or the save point map (Butterfly Wing) |
 | `nav.kafra_teleport` | Use a Kafra employee's paid teleport service. | 3 Merchant job change | unverified | a new map; the zeny readout drops by the fee |
 | `nav.read_position` | Know our current map and cell from the screen. | 1 Novice basics | unverified | a readout parsed as map plus x y |
+| `nav.set_save_point` | Make a Kafra employee's town the save point (where a death or a Butterfly Wing returns). | - | unverified | the save confirmation in the Kafra dialog, then the dialog closes |
 | `nav.take_transport` | Travel by a transport NPC or vehicle (for example an airship between towns). | 4 Blacksmith | unverified | a map change to the route's arrival point |
 | `nav.take_warp` | Change map through a warp portal or by walking across a map edge. | 3 Merchant job change | unverified | a loading screen then a new map name in the readout |
 | `nav.walk_to` | Walk to a cell. | 1 Novice basics | unverified | the walk marker under the cursor before the click; the readout reaches the cell |
@@ -307,19 +309,40 @@ Pick up an item lying on the ground.
 - **Parameters:** item
 - **Status:** unverified
 - **Steps:**
-  1. Click the item on the ground; the character walks to it and picks it up.
+  1. From the cell where the tracker saw a monster die, hover that cell and then its 8 neighbours (two motions per hover) until the cursor shows the PICKUP shape.
+  2. Click the first PICKUP point; the character walks to the item and picks it up.
 - **Preconditions:**
   - Enough free weight and inventory slots; the item is not reserved for another player.
+  - The weight readout is visible (the basic info window).
+  - Every scan click passes the cursor gate with PICKUP as its only allowed shape, and the unit gate.
 - **Failure modes:**
-  - The click hits the ground next to the item and becomes a walk.
+  - A scan click lands on a monster or an NPC (an attack or a dialog instead of a pickup).
   - Over the weight limit; the item belongs to someone else for a few seconds.
+  - The scan is slower than the floor item's lifetime.
 - **Game rules:**
   - Drops may be reserved for the killer for a short time.
 - **Exceptions:**
-  - Ground items have no world-detector class yet; their runtime cue is designed before this is bound.
-- **Outcome, runtime (screen):** the item vanishes from the ground and its count rises in the inventory
+  - Ground items have no world-detector class; the cue is the PICKUP cursor over a hovered cell (Batt, 2026-10-08, ADR-0020 open question 21). A detector class is a later improvement.
+- **Outcome, runtime (screen):** the weight readout rises by at least one step, or the item-obtained cue appears
 - **Outcome, offline (packets):** our pickup act on the floor item, its vanish, and the item added to our inventory
-- **Bindings needed:** `L2.cue.ground_item`, `L2.window.inventory`
+- **Bindings needed:** `L2.cue.pickup_cursor`, `L2.window.basic_info`
+
+## `nav.escape`
+
+Leave danger at once with a teleport item the map allows (the fixed escape of hp_critical).
+
+- **Status:** unverified
+- **Steps:**
+  1. Use a Fly Wing from the hotbar where the map allows it; otherwise a Butterfly Wing; otherwise release everything and stop the run.
+- **Preconditions:**
+  - The chosen wing is in the inventory and on the hotbar.
+- **Failure modes:**
+  - The map refuses the item (its map flags); the item is missing; the character is already dead.
+- **Game rules:**
+  - A Fly Wing teleports to a random cell of the same map; a Butterfly Wing goes to the save point.
+- **Outcome, runtime (screen):** the teleport effect, then a new position (Fly Wing) or the save point map (Butterfly Wing)
+- **Outcome, offline (packets):** the item use, then our new position or a map change to the save point
+- **Bindings needed:** `L2.shortcut.hotbar`, `L3.map.flags`
 
 ## `nav.kafra_teleport`
 
@@ -354,6 +377,25 @@ Know our current map and cell from the screen.
 - **Outcome, runtime (screen):** a readout parsed as map plus x y
 - **Outcome, offline (packets):** the readout equals our cell from the position packets at that frame
 - **Bindings needed:** `L2.window.minimap`, `L2.element.minimap_xy`
+
+## `nav.set_save_point`
+
+Make a Kafra employee's town the save point (where a death or a Butterfly Wing returns).
+
+- **Parameters:** npc
+- **Status:** unverified
+- **Steps:**
+  1. Talk to a Kafra employee and choose its save service; the dialog confirms it.
+- **Preconditions:**
+  - A Kafra employee whose type offers the save service; no other dialog is open.
+- **Failure modes:**
+  - The menu differs from the expected one; another dialog or window covers the menu.
+- **Game rules:**
+  - A death and a Butterfly Wing return to the save point, never to the previous map.
+  - The save point cannot be read from the screen; only setting it makes it known.
+- **Outcome, runtime (screen):** the save confirmation in the Kafra dialog, then the dialog closes
+- **Outcome, offline (packets):** the save point update for our character (decoder needed)
+- **Bindings needed:** `L3.npc.kafra`, `L3.kafra.menus`, `L4.text.menu_option`
 
 ## `nav.take_transport`
 
