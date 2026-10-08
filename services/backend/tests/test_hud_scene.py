@@ -317,3 +317,85 @@ def test_the_sim_scores_the_floor_model_on_its_own_message_stream(
     assert walk["legacy"]["p95_px"] > 2 * walk["chosen"]["p95_px"]
     assert walk["legacy"]["max_px"] > 6
     assert out["chosen"]["doubled"] == 0
+
+
+def test_the_process_loop_runs_end_to_end_offline(
+    hs: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """serve() itself on synthetic bus frames (a texture scrolling 4 px a frame, then still), a fake
+    detector, no backend: every message it logs is valid protocol, in seq order, and it ends."""
+    import json
+    import os
+    import signal
+    import time
+
+    import ro_agent
+    import unit_detector
+
+    from poring_env.protocol import parse_display_to_backend
+
+    rng = np.random.default_rng(5)
+    tex = rng.random((900, 1700)).astype(np.float32)
+    for _ in range(3):
+        tex = (np.roll(tex, 1, 0) + tex + np.roll(tex, -1, 0)) / 3
+        tex = (np.roll(tex, 1, 1) + tex + np.roll(tex, -1, 1)) / 3
+    tex = ((tex - tex.min()) / (tex.max() - tex.min()) * 200 + 20).astype(np.uint8)
+    n_frames, pos = 45, {"k": 0}
+
+    def scroll(k: int) -> int:
+        return 4 * min(k, 25)  # the camera walks for 25 frames, then stands
+
+    class FakeScreen:
+        def grab_meta(self, x: int, y: int, w: int, h: int) -> tuple[int, np.ndarray, int, str]:
+            k = pos["k"]
+            if k >= n_frames:
+                raise KeyboardInterrupt  # the end of the recording: leaves serve() via finally
+            pos["k"] += 1
+            g = tex[100 : 100 + h, 200 + scroll(k) : 200 + scroll(k) + w]
+            img = np.dstack([g, g, g, np.full_like(g, 255)])
+            return time.monotonic_ns(), img, 1000 + k, "bus"
+
+        def close(self) -> None:
+            pass
+
+    class FakeDetector:
+        def __init__(self, threads: int = 2) -> None:
+            pass
+
+        def detect(self, img: np.ndarray) -> list[unit_detector.Box]:
+            dx = -scroll(pos["k"] - 1)
+            return [unit_detector.Box(600 + dx, 300, 630 + dx, 360, 0.9, "npc"),
+                    unit_detector.Box(900 + dx, 500, 930 + dx, 560, 0.8, "npc")]  # fmt: skip
+
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr(hs, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(hs, "LOCK", tmp_path / "hud_scene.lock")
+    monkeypatch.setattr(hs, "SCENE_LOG", tmp_path / "scene.jsonl")
+    monkeypatch.setattr(os, "nice", lambda n: 0)
+    monkeypatch.setattr(signal, "signal", lambda *a: None)
+    monkeypatch.setattr(ro_agent, "Screen", FakeScreen)
+    monkeypatch.setattr(ro_agent, "game_region", lambda: REGION)
+    monkeypatch.setattr(ro_agent, "desktop", lambda: DESKTOP)
+    monkeypatch.setattr(ro_agent, "backend_ws", lambda: "ws://127.0.0.1:9/internal/agent")
+    monkeypatch.setattr(unit_detector, "UnitDetector", FakeDetector)
+    with pytest.raises(KeyboardInterrupt):
+        hs.serve(20.0, hs.TUNING)
+    log, size = tmp_path / "scene.jsonl", -1
+    for _ in range(50):  # the sender thread drains its queue
+        if log.exists() and log.stat().st_size == size:
+            break
+        size = log.stat().st_size if log.exists() else -1
+        time.sleep(0.1)
+    msgs = [json.loads(line)["msg"] for line in log.read_text().splitlines()]
+    types = {m["type"] for m in msgs}
+    assert {"hud_scene", "hud_motion", "hud_delta"} <= types
+    seq = None
+    for m in msgs:
+        parse_display_to_backend(json.dumps(m))
+        if m["type"] == "hud_scene":
+            seq = m["seq"]
+        elif m["type"] == "hud_delta":
+            assert seq is not None and m["seq"] == seq + 1  # no gap: a console never goes stale
+            seq = m["seq"]
