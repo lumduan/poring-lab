@@ -41,17 +41,22 @@ from typing import Any
 import numpy as np
 
 from poring_vision.resume import (
+    MID_META_KEYS,
     MID_VERSION,
+    Candidate,
     KeyedRandomness,
     StreamSampler,
     check_compatible,
     digest,
     mid_due,
     next_position,
+    rotate_write,
     sample_seeds,
+    verify_file,
 )
 
 MID_NAME = "mid.pt"
+PREV_NAME = "mid.prev.pt"  # the one before (Batt 2026-10-08 ~10:50: keep exactly these two)
 STREAM_NAME = "stream.json"  # marks a run trained on the StreamSampler (its resumes must be too)
 DIE_RC = 86  # the proof's deliberate kill
 
@@ -107,20 +112,34 @@ def to_cpu(obj: Any) -> Any:
     return deepcopy(obj)
 
 
-def read_mid_meta(path: Path) -> dict[str, Any] | None:
-    """The resume position etc. of a mid checkpoint (None: absent or unreadable)."""
+def inspect_mid(path: Path, load: Any = None) -> Candidate:
+    """A mid checkpoint on disk: missing, unreadable (the load fails, or it is not ours), corrupt
+    (its stored state does not hash to the digest taken when it was saved), or ok with its meta.
+    ``load`` defaults to ultralytics' torch_load (tests pass their own)."""
     if not path.exists():
-        return None
-    from ultralytics.utils.patches import torch_load
+        return Candidate(path.name, "missing")
+    if load is None:
+        from ultralytics.utils.patches import torch_load
+
+        def load(p: str) -> Any:
+            return torch_load(p, map_location="cpu")
 
     try:
-        ck = torch_load(str(path), map_location="cpu")
+        ck = load(str(path))
         mid = ck.get("poring_mid") if isinstance(ck, dict) else None
-        return {k: mid[k] for k in ("epoch", "next_i", "nb", "n", "batch", "seed", "workers",
-                                     "close_mosaic", "state_sha256")} if mid else None  # fmt: skip
-    except Exception as e:  # noqa: BLE001 -- an unreadable mid.pt must not block the epoch resume
-        print(json.dumps({"mid_ckpt_unreadable": str(path), "error": repr(e)[:200]}), flush=True)
-        return None
+        if not mid:
+            return Candidate(path.name, "unreadable", why="no poring_mid in it")
+        if not verify_file(ck, tensor_bytes):
+            return Candidate(path.name, "corrupt", why="its state does not match its digest")
+        return Candidate(path.name, "ok", {k: mid[k] for k in MID_META_KEYS})
+    except Exception as e:  # noqa: BLE001 -- a damaged file is a fallback, not a crash
+        return Candidate(path.name, "unreadable", why=repr(e)[:200])
+
+
+def effective_workers(workers: int, batches: int, gpus: int) -> int:
+    """ultralytics 8.4.165 build_dataloader's worker count, shared by the loader and the resume
+    check that runs before the trainer exists."""
+    return min((os.cpu_count() or 1) // max(gpus, 1), workers, 0 if batches <= 1 else batches)
 
 
 def read_last_epoch(path: Path) -> int | None:
@@ -181,11 +200,7 @@ def resumable(base: type, opts: MidOptions) -> type:  # noqa: PLR0915
                 if dev not in {"cpu", "mps"}
                 else 0
             )
-            nw = min(
-                (os.cpu_count() or 1) // max(nd, 1),
-                self.args.workers,
-                0 if batches <= 1 else batches,
-            )
+            nw = effective_workers(self.args.workers, batches, nd)
             generator = torch.Generator()  # only the workers' base seed: augmentation is keyed
             generator.manual_seed((6148914691236517205 + RANK + seed) % (1 << 64))
             loader = StreamLoader(
@@ -256,12 +271,7 @@ def resumable(base: type, opts: MidOptions) -> type:  # noqa: PLR0915
                   "ema": ema, "updates": self.ema.updates, "optimizer": None, "scaler": None,
                   "train_args": vars(self.args), "poring_mid": mid}  # fmt: skip
             path = self.wdir / MID_NAME
-            tmp = path.with_suffix(".pt.tmp")
-            with open(tmp, "wb") as fh:
-                torch.save(ck, fh)
-                fh.flush()
-                os.fsync(fh.fileno())
-            os.replace(tmp, path)
+            rotate_write(path, self.wdir / PREV_NAME, lambda fh: torch.save(ck, fh))
             line = {"mid_ckpt": {"at": [epoch, next_i], "sha256": sha[:16],
                                  "bytes": path.stat().st_size,
                                  "seconds": round(time.monotonic() - t0, 2)}}  # fmt: skip
@@ -314,11 +324,14 @@ def resumable(base: type, opts: MidOptions) -> type:  # noqa: PLR0915
             ok = restored == mid["state_sha256"]
             LOGGER.info(f"Resuming MID-EPOCH from {self.args.model}: epoch {epoch + 1} batch "
                         f"{next_i}/{mid['nb']}, state {'restored bitwise' if ok else 'MISMATCH'}")  # fmt: skip
-            print(json.dumps({"mid_resume": {"at": [epoch, next_i], "bitwise": ok}}), flush=True)
-            self._poring_trace({"kind": "resume", "at": [epoch, next_i],
+            src = Path(str(self.args.model)).name  # mid.pt, or mid.prev.pt after a fallback
+            print(json.dumps({"mid_resume": {"from": src, "at": [epoch, next_i], "bitwise": ok}}),
+                  flush=True)  # fmt: skip
+            self._poring_trace({"kind": "resume", "from": src, "at": [epoch, next_i],
                                 "saved_sha256": mid["state_sha256"], "restored_sha256": restored})  # fmt: skip
-            if not ok:
-                raise SystemExit("mid.pt did not restore bitwise: refusing to train on")
+            if not ok:  # the FILE passed its own digest before the trainer was built (train.py):
+                # a mismatch here is a restore fault, not a damaged file, so no fallback
+                raise SystemExit(f"{src} did not restore bitwise: refusing to train on")
 
         # --- the proof harness --------------------------------------------------------------
         def _poring_trace(self, rec: dict[str, Any]) -> None:
@@ -614,7 +627,8 @@ def resumable(base: type, opts: MidOptions) -> type:  # noqa: PLR0915
                         self._poring_save_mid(epoch + 1, 0, nb, last_opt_step)
                         since_n, since_t = 0, time.monotonic()
                     else:
-                        (self.wdir / MID_NAME).unlink(missing_ok=True)
+                        for f in (MID_NAME, PREV_NAME, MID_NAME + ".tmp"):  # poring
+                            (self.wdir / f).unlink(missing_ok=True)
 
                 # Scheduler
                 t = time.time()

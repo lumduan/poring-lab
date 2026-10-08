@@ -257,9 +257,18 @@ def main() -> int:  # noqa: PLR0915
     if a.close_mosaic is not None:
         overrides["close_mosaic"] = a.close_mosaic
     if a.resume:
-        overrides["resume"] = str(resume_checkpoint(a, run_dir, overrides["epochs"]))
+        from poring_vision.midckpt import effective_workers
+
+        n = len(splits["train"])
+        nb = -(-n // a.batch)
+        run = {"n": n, "nb": nb, "batch": a.batch,
+               "workers": effective_workers(a.workers, nb, torch.cuda.device_count())}  # fmt: skip
+        if a.close_mosaic is not None:  # else the checkpoint's own value is used
+            run["close_mosaic"] = a.close_mosaic
+        overrides["resume"] = str(resume_checkpoint(a, run_dir, overrides["epochs"], run))
     else:  # a fresh run: nothing of an older run in this directory may be resumed into it
-        (run_dir / "weights" / "mid.pt").unlink(missing_ok=True)
+        for f in ("mid.pt", "mid.prev.pt", "mid.pt.tmp"):
+            (run_dir / "weights" / f).unlink(missing_ok=True)
         (run_dir / "stream.json").unlink(missing_ok=True)
         if a.mid_ckpt:
             run_dir.mkdir(parents=True, exist_ok=True)
@@ -320,13 +329,19 @@ def main() -> int:  # noqa: PLR0915
     return 0
 
 
-def resume_checkpoint(a: argparse.Namespace, run_dir: Path, epochs: int) -> Path:
+def resume_checkpoint(a: argparse.Namespace, run_dir: Path, epochs: int,
+                      run: dict[str, Any] | None = None) -> Path:  # fmt: skip
     """The checkpoint ``--resume`` continues from. A run keeps its stream mode for life: a resume
-    in the other mode is refused (``stream.json`` marks a --mid-ckpt run). With --mid-ckpt,
-    mid.pt (exact) wins unless it is behind last.pt; last.pt alone is ultralytics' own
-    epoch-level resume, which is NOT exact (logged)."""
-    from poring_vision.midckpt import MID_NAME, STREAM_NAME, read_last_epoch, read_mid_meta
-    from poring_vision.resume import pick_resume
+    in the other mode is refused (``stream.json`` marks a --mid-ckpt run).
+    With --mid-ckpt (Batt 2026-10-08 ~10:50: the latest AND the previous mid checkpoint):
+    - mid.pt, else mid.prev.pt when mid.pt is unreadable, fails its own digest, or contradicts
+      the run while mid.prev.pt agrees (`choose_mid`; which one and why is logged);
+    - a genuine setup mismatch (``run``: frames, batches, batch, workers, close_mosaic) refuses
+      with both;
+    - the chosen one never rewinds the run behind last.pt; last.pt alone is ultralytics' own
+      epoch-level resume, which is NOT exact (logged)."""
+    from poring_vision.midckpt import MID_NAME, PREV_NAME, STREAM_NAME, inspect_mid, read_last_epoch
+    from poring_vision.resume import choose_mid, pick_resume
 
     wdir = run_dir / "weights"
     marked = (run_dir / STREAM_NAME).exists()
@@ -335,16 +350,19 @@ def resume_checkpoint(a: argparse.Namespace, run_dir: Path, epochs: int) -> Path
                          "resume it the same way (one data stream per run)")  # fmt: skip
     if not a.mid_ckpt:
         return wdir / "last.pt"
-    meta = read_mid_meta(wdir / MID_NAME)
+    cands = [inspect_mid(wdir / MID_NAME), inspect_mid(wdir / PREV_NAME)]
+    chosen, notes = choose_mid(cands, run or {})
+    meta = chosen.meta if chosen else None
     choice = pick_resume(meta, read_last_epoch(wdir / "last.pt"), epochs)
-    print(json.dumps({"resume_from": choice, "mid": meta and {k: meta[k] for k in
-                                                               ("epoch", "next_i", "nb")}}),
+    used = chosen.name if choice == "mid" and chosen else ("last.pt" if choice == "last" else None)
+    print(json.dumps({"resume_from": used, "skipped": notes,
+                      "mid": meta and {k: meta[k] for k in ("epoch", "next_i", "nb")}}),
           flush=True)  # fmt: skip
-    if choice == "none":
+    if used is None:
         raise SystemExit(f"{run_dir}: nothing to resume")
-    if choice == "last":
+    if used == "last.pt":
         print(json.dumps({"warning": "epoch-level resume from last.pt: NOT exact"}), flush=True)
-    return wdir / (MID_NAME if choice == "mid" else "last.pt")
+    return wdir / used
 
 
 def evaluate(

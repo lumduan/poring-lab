@@ -59,7 +59,7 @@ while :; do
   attempt=$((attempt + 1))
   if [ "$rc" -eq 0 ]; then log "TRAIN DONE"; break; fi
   if grep -q "STOP-UNVERIFIED" "$out"; then log "TRAIN STOPPED: the guard could NOT verify the stop ($(grep STOP-UNVERIFIED "$out" | tail -1 | cut -c1-160)): a person must look"; break; fi
-  { [ -e "data/train/$RUN/weights/last.pt" ] || [ -e "data/train/$RUN/weights/mid.pt" ]; } && extra="--resume"
+  for f in last.pt mid.pt mid.prev.pt; do [ -e "data/train/$RUN/weights/$f" ] && extra="--resume"; done
   if grep -q "R3-HARD" "$out"; then
     now=$(date +%s)
     echo "$now $(grep -a 'ABORT' "$out" | tail -1 | cut -c1-400)" >> "$D/drop-aborts.log"

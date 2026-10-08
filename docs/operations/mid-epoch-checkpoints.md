@@ -20,13 +20,19 @@ next_action: "Run the proof (below) after the v0-JPEG evals and before v1 starts
   position, resumed exactly ("or the closest safe equivalent"), proven on a short run first.
 
 ## What is built (`--mid-ckpt`; `poring_vision/midckpt.py` + `poring_vision/resume.py`)
-- **`weights/mid.pt`** is written atomically (tmp file, fsync, rename) right after an optimizer
-  step, so no gradients are pending.
+- **`weights/mid.pt`** is written right after an optimizer step, so no gradients are pending.
   - It is written every **640 batches or 300 s**, whichever comes first.
   - It is also written at every epoch END (the boundary), so an epoch-level resume is exact too.
     That epoch-end checkpoint carries the gradients the epoch's last batches left pending:
     ultralytics zeroes gradients only after a step.
-  - A finished run leaves no mid.pt behind.
+  - **Only the latest and the previous are kept** (Batt, 2026-10-08 ~10:50; `rotate_write`):
+    1. the current mid.pt becomes `mid.prev.pt` (os.replace; the older prev is dropped);
+    2. the new one is written as `mid.pt.tmp` and fsynced;
+    3. it is renamed onto mid.pt, and the directory is fsynced.
+    So at most two files exist at any moment, and neither checkpoint name ever holds a
+    half-written file. A kill during step 2 leaves mid.prev.pt (then the latest complete one)
+    and an orphan .tmp, which the next save overwrites.
+  - A finished run leaves neither file behind; a fresh run in the same directory deletes both.
 - **It holds:**
   - the LIVE model in fp32, the EMA in fp32 and its update count;
   - the optimizer state at full precision, and the AMP scaler;
@@ -48,15 +54,26 @@ next_action: "Run the proof (below) after the v0-JPEG evals and before v1 starts
   - A resume prefills it, before the worker forks, exactly as the uninterrupted worker held it.
   - It is left empty at close_mosaic's reset epoch, where the uninterrupted run starts a fresh
     worker.
-- **`--resume`** picks mid.pt over last.pt unless mid.pt is behind (`pick_resume`).
-  - It refuses a checkpoint from another stream: frames, batch, seed, batches per epoch,
-    workers or close_mosaic differ.
+- **`--resume`** (`train.py resume_checkpoint`, before the trainer is built):
+  - **mid.pt first.** It falls back to **mid.prev.pt** when mid.pt (`inspect_mid`, `choose_mid`):
+    - is unreadable (the load fails, or it is not ours);
+    - is corrupt: its stored state does not hash to the digest taken when it was saved;
+    - contradicts the run while mid.prev.pt agrees with it. The newer file then contradicts
+      its own run's history, so it is treated as corrupt.
+  - The log line `resume_from` names the file used, and `skipped` says why the other was not.
+  - **A genuine setup mismatch refuses with both:** every readable checkpoint disagrees with the
+    run on frames, batches per epoch, batch, workers or close_mosaic. With only mid.pt readable
+    and disagreeing, it also refuses: the cause cannot be told apart.
   - It refuses a run started in the other mode (`stream.json`).
-  - It refuses to train on unless the restored state's digest equals the saved one.
+  - **Never rewind:** whichever mid checkpoint is chosen is used only if it is at or past
+    last.pt's position (`pick_resume`); otherwise last.pt (stock, NOT exact, logged).
+  - In the trainer: the stream check runs again with the exact worker count, and the RESTORED
+    state's digest must equal the saved one. The file already passed its own digest, so a
+    mismatch here is a restore fault, not a damaged file: it refuses, with no fallback.
 - **Unchanged:** the duty-cycle sleeper, the summary line, validation, and the epoch-level
   last.pt / best.pt.
-- **`train-day.sh`:** `MID_CKPT=1` passes `--mid-ckpt`, and a mid.pt alone (an abort in epoch 1)
-  now also triggers `--resume`.
+- **`train-day.sh`:** `MID_CKPT=1` passes `--mid-ckpt`. Any of last.pt, mid.pt or mid.prev.pt
+  now triggers `--resume`, so an abort in epoch 1 resumes too.
 
 **Stock ultralytics resume, for contrast (8.4.165, read at the pinned wheel):**
 - the model restarts from the EMA weights, not the live ones;
@@ -78,8 +95,11 @@ them) restarted its stream that way.
 - **Disk:**
   - mid.pt ≈ 2–2.5× last.pt: the EMA and the AdamW state in fp32 instead of fp16, plus the live
     weights. last.pt is 21 MB, so an estimated ~45–55 MB; the proof logs the measured `bytes`.
-  - That is ~50 MB every ≥ 5 min on `data/train` (the shared disk): ~0.17 MB/s on average,
-    against last.pt's 21 MB per ~30 min today. Each write is one file, fsynced.
+  - **The steady state is TWO such files** (mid.pt + mid.prev.pt, ~100 MB per run directory).
+    During a write it is mid.prev.pt + the .tmp: still two, never three.
+  - Write volume: one ~50 MB file every ≥ 5 min on `data/train` (the shared disk), ~0.17 MB/s
+    on average, against last.pt's 21 MB per ~30 min today. Each write is fsynced; a rotation is
+    two renames.
 
 ## What is EXACT, and what is not
 - **Exact by construction, and checked by the proof:**
@@ -142,6 +162,29 @@ All of B goes to one trace file.
     stay ≤ 1.5 × those of |A2 − A| (+ 1e-6).
 - **(d) restore:** every resume's restored state digest equals the saved one. The trainer
   itself also refuses to continue otherwise.
+
+**The bar is UNCHANGED by the rotation (added 2026-10-08 ~11:00, before any run).**
+- B's resumes go through the rotation as written: two files on disk, mid.pt chosen.
+  Additionally reported: each resume's `resume_from` line, which must name mid.pt, and the
+  weights directory listing after B3, which must be empty of mid files.
+- **The FALLBACK to mid.prev.pt is proven on the host, not on the GPU**
+  (`services/vision/tests/test_resume.py`):
+  - the rotation never shows more than two files, never a half-written mid.pt, and keeps the
+    previous one through a kill during the write;
+  - a one-ulp change in a stored state fails the file's own digest;
+  - `inspect_mid` names missing, unreadable (a load error, or not ours), corrupt and ok;
+  - `choose_mid` falls back on each kind of damage, and on a mid.pt that contradicts the run
+    while mid.prev.pt agrees;
+  - it refuses a genuine setup change with both, and refuses when it cannot tell;
+  - `resume_checkpoint` picks mid.prev.pt over a truncated mid.pt, still never rewinds behind
+    last.pt, and refuses a different cache.
+- **Why not on the GPU:**
+  - The fallback only chooses WHICH file to restore. The restore itself is the code criterion
+    (d) already proves, on whichever file it is given.
+  - The cheap GPU variant would corrupt mid.pt before B3. B3's mid.prev.pt is epoch 2's last
+    mid save, which is behind last.pt (end of epoch 2). The never-rewind rule would then
+    correctly choose the inexact last.pt, and criterion (a) would fail by design.
+  - A GPU check that lands on mid.prev.pt would need its own run, ~15 min.
 
 **Reported whatever the outcome:**
 - each criterion;

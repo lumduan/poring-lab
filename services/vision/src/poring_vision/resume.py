@@ -20,8 +20,11 @@ from __future__ import annotations
 
 import hashlib
 import math
+import os
 from collections.abc import Callable, Iterator
-from typing import Any
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, BinaryIO
 
 import numpy as np
 import numpy.typing as npt
@@ -148,9 +151,87 @@ COMPAT_KEYS = ("n", "batch", "seed", "nb", "workers", "close_mosaic")
 def check_compatible(meta: dict[str, Any], run: dict[str, Any]) -> list[str]:
     """Why a mid checkpoint cannot continue THIS run (empty = it can): the stream must be the one
     it was cut from (frames, batch, seed, batches per epoch), with the same worker count (each
-    worker holds its own mosaic buffer) and the same close_mosaic epoch."""
-    return [f"{k}: checkpoint {meta.get(k)} != run {run.get(k)}" for k in COMPAT_KEYS
-            if meta.get(k) != run.get(k)]  # fmt: skip
+    worker holds its own mosaic buffer) and the same close_mosaic epoch. Only the keys ``run``
+    states are compared (before the trainer exists, the seed and close_mosaic come from the
+    checkpoint itself unless the command line overrides them)."""
+    return [f"{k}: checkpoint {meta.get(k)} != run {run[k]}" for k in COMPAT_KEYS
+            if k in run and meta.get(k) != run[k]]  # fmt: skip
+
+
+# --- the two newest checkpoints (Batt 2026-10-08 ~10:50: keep the latest AND the previous) -----
+MID_META_KEYS = ("epoch", "next_i", "nb", "n", "batch", "seed", "workers", "close_mosaic",
+                 "state_sha256")  # fmt: skip
+STATE_KEYS = ("model", "ema", "ema_updates", "optimizer", "scaler", "criterion_updates", "grads")
+
+
+def rotate_write(path: Path, prev: Path, write: Callable[[BinaryIO], None]) -> None:
+    """Replace ``path`` keeping the one before it: path -> prev (the older prev is dropped), then
+    the new file is written as ``<path>.tmp``, fsynced and renamed onto ``path``. At most two
+    files exist at any moment, and neither checkpoint name ever holds a half-written file; a kill
+    during the write leaves ``prev`` (the latest complete one) and an orphan .tmp."""
+    tmp = path.with_name(path.name + ".tmp")
+    if path.exists():
+        os.replace(path, prev)
+    with open(tmp, "wb") as fh:
+        write(fh)
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.replace(tmp, path)
+    dfd = os.open(path.parent, os.O_RDONLY)
+    try:
+        os.fsync(dfd)  # the renames themselves survive a power cut
+    finally:
+        os.close(dfd)
+
+
+def stored_state(ck: dict[str, Any]) -> dict[str, Any]:
+    """The training state as stored in a mid checkpoint (the EMA travels as the stock module)."""
+    mid = ck["poring_mid"]
+    return {**{k: mid[k] for k in STATE_KEYS if k != "ema"}, "ema": ck["ema"].state_dict()}
+
+
+def verify_file(ck: dict[str, Any], tensor_bytes: TensorBytes | None = None) -> bool:
+    """The file's integrity: its stored state hashes to the digest taken when it was saved."""
+    return digest(stored_state(ck), tensor_bytes) == ck["poring_mid"]["state_sha256"]
+
+
+@dataclass
+class Candidate:
+    """One mid checkpoint as found on disk: ok | missing | unreadable | corrupt."""
+
+    name: str
+    status: str
+    meta: dict[str, Any] | None = None
+    why: str = ""
+
+
+class SetupMismatch(SystemExit):
+    """Every readable mid checkpoint disagrees with the run: the setup changed, not the file."""
+
+
+def choose_mid(cands: list[Candidate], run: dict[str, Any]) -> tuple[Candidate | None, list[str]]:
+    """The newest usable mid checkpoint (``cands`` newest first: mid.pt, then mid.prev.pt) and
+    what was skipped and why.
+    - missing / unreadable / corrupt (its stored state fails its own digest): skipped;
+    - incompatible with the run while an OLDER one is compatible: the newer file contradicts its
+      own run's history, so it is treated as corrupt and skipped;
+    - every readable one incompatible: a genuine setup mismatch, refused (`SetupMismatch`).
+    None: nothing usable (the caller falls back to last.pt, never rewinding)."""
+    notes: list[str] = []
+    readable = [c for c in cands if c.status == "ok" and c.meta is not None]
+    clash = {c.name: check_compatible(c.meta or {}, run) for c in readable}
+    if readable and all(clash[c.name] for c in readable):
+        each = "; ".join(f"{c.name}: {clash[c.name]}" for c in readable)
+        raise SetupMismatch(f"the run's setup differs from every mid checkpoint, refusing: {each}")
+    for c in cands:
+        if c.status == "ok" and c.meta is not None and not clash[c.name]:
+            return c, notes
+        if c.status == "ok":
+            notes.append(f"{c.name}: contradicts the run ({clash[c.name]}) while an older "
+                         "checkpoint agrees: treated as corrupt")  # fmt: skip
+        elif c.status != "missing":
+            notes.append(f"{c.name}: {c.status} ({c.why})")
+    return None, notes
 
 
 def mid_due(stepped: bool, batches_since: int, seconds_since: float, every_batches: int,

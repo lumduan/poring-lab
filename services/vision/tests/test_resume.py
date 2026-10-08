@@ -309,18 +309,155 @@ def test_the_trainer_refuses_a_mixed_resume_and_prefers_mid(tmp_path, monkeypatc
     with pytest.raises(SystemExit, match="WITHOUT --mid-ckpt"):
         resume_checkpoint(a, run, 30)
     (run / "stream.json").write_text("{}")
-    monkeypatch.setattr(mc, "read_mid_meta", lambda p: {"epoch": 3, "next_i": 9, "nb": 50})
+    from poring_vision.resume import Candidate
+
+    def found(p: Path) -> Candidate:
+        ok = p.name == "mid.pt"
+        return Candidate(p.name, "ok", dict(META)) if ok else Candidate(p.name, "missing")
+
+    monkeypatch.setattr(mc, "inspect_mid", found)
     monkeypatch.setattr(mc, "read_last_epoch", lambda p: 2)
-    assert resume_checkpoint(a, run, 30) == run / "weights" / "mid.pt"
+    assert resume_checkpoint(a, run, 30, RUN) == run / "weights" / "mid.pt"
     monkeypatch.setattr(mc, "read_last_epoch", lambda p: 3)  # last.pt ahead: never rewind
-    assert resume_checkpoint(a, run, 30) == run / "weights" / "last.pt"
+    assert resume_checkpoint(a, run, 30, RUN) == run / "weights" / "last.pt"
     a.mid_ckpt = False
     with pytest.raises(SystemExit, match="WITH --mid-ckpt"):
         resume_checkpoint(a, run, 30)
 
 
-def test_train_day_passes_mid_ckpt_only_when_asked_and_resumes_on_a_mid_alone() -> None:
+def test_train_day_passes_mid_ckpt_only_when_asked_and_resumes_on_any_checkpoint() -> None:
     sh = (REPO / "scripts" / "runbooks" / "train-day.sh").read_text()
     assert 'mid=""; [ "${MID_CKPT:-0}" = 1 ] && mid=" --mid-ckpt"' in sh
     assert "/lab-duty/duty.json$mid $extra" in sh
-    assert '[ -e "data/train/$RUN/weights/mid.pt" ]' in sh
+    assert "for f in last.pt mid.pt mid.prev.pt; do" in sh
+
+
+# --- the latest AND the previous mid checkpoint (Batt 2026-10-08 ~10:50) -----------------------
+class FakeEMA:
+    """The stock EMA module's only role in a mid file's integrity check: its state_dict."""
+
+    def __init__(self, sd: dict[str, Any]) -> None:
+        self.sd = sd
+
+    def state_dict(self) -> dict[str, Any]:
+        return self.sd
+
+
+META = {"epoch": 3, "next_i": 9, "nb": 50, "n": 100, "batch": 2, "seed": 1, "workers": 1,
+        "close_mosaic": 10}  # fmt: skip
+RUN = {"n": 100, "nb": 50, "batch": 2, "workers": 1}
+
+
+def fake_ck(meta: dict[str, Any] | None = None, tamper: bool = False) -> dict[str, Any]:
+    state = {"model": {"w": np.arange(4.0)}, "ema": {"w": np.arange(4.0) / 2}, "ema_updates": 3,
+             "optimizer": {"state": {0: {"exp_avg": np.ones(4)}}, "param_groups": [{"lr": 0.01}]},
+             "scaler": {"scale": 1024.0}, "criterion_updates": None, "grads": [None]}  # fmt: skip
+    mid = {**(meta or META), "state_sha256": digest(state),
+           **{k: v for k, v in state.items() if k != "ema"}}  # fmt: skip
+    if tamper:  # one ulp in the optimizer state: a flipped bit the container did not catch
+        mid["optimizer"]["state"][0]["exp_avg"][1] = np.nextafter(1.0, 2.0)
+    return {"ema": FakeEMA(state["ema"]), "poring_mid": mid}
+
+
+def disk(tmp_path: Path, files: dict[str, Any]) -> tuple[Path, Any]:
+    """A weights dir whose files exist (their bytes do not matter) and a loader serving them; an
+    Exception value is raised as the load failure (a truncated or damaged file)."""
+    w = tmp_path / "run" / "weights"
+    w.mkdir(parents=True)
+    for name in files:
+        (w / name).write_bytes(b"x")
+
+    def load(p: str) -> Any:
+        v = files[Path(p).name]
+        if isinstance(v, Exception):
+            raise v
+        return v
+
+    return w, load
+
+
+def test_rotation_keeps_exactly_the_latest_and_the_previous(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    from poring_vision.resume import rotate_write
+
+    mid, prev = tmp_path / "mid.pt", tmp_path / "mid.prev.pt"
+    seen: list[set[str]] = []
+
+    def writer(payload: bytes) -> Any:
+        def write(fh: Any) -> None:
+            seen.append({p.name for p in tmp_path.iterdir()})  # what exists DURING the write
+            fh.write(payload)
+
+        return write
+
+    for k in range(4):
+        rotate_write(mid, prev, writer(b"save%d" % k))
+    assert {p.name for p in tmp_path.iterdir()} == {"mid.pt", "mid.prev.pt"}
+    assert (mid.read_bytes(), prev.read_bytes()) == (b"save3", b"save2")
+    assert all(len(s) <= 2 for s in seen)  # never more than two files, the .tmp included
+    assert all("mid.pt" not in s for s in seen)  # the name never holds a half-written file
+
+    def dies(fh: Any) -> None:
+        fh.write(b"half")
+        raise KeyboardInterrupt  # the guard's SIGINT in the middle of the write
+
+    with pytest.raises(KeyboardInterrupt):
+        rotate_write(mid, prev, dies)
+    assert not mid.exists() and prev.read_bytes() == b"save3"  # the latest complete one survives
+
+
+def test_a_file_is_verified_against_its_own_digest() -> None:
+    from poring_vision.resume import verify_file
+
+    assert verify_file(fake_ck())
+    assert not verify_file(fake_ck(tamper=True))
+
+
+def test_inspect_names_each_kind_of_damage(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    from poring_vision.midckpt import inspect_mid
+
+    w, load = disk(tmp_path, {"a.pt": RuntimeError("PytorchStreamReader failed"), "b.pt": {},
+                              "c.pt": fake_ck(tamper=True), "d.pt": fake_ck()})  # fmt: skip
+    got = {n: inspect_mid(w / n, load).status for n in ("a.pt", "b.pt", "c.pt", "d.pt", "e.pt")}
+    assert got == {"a.pt": "unreadable", "b.pt": "unreadable", "c.pt": "corrupt", "d.pt": "ok",
+                   "e.pt": "missing"}  # fmt: skip
+    meta = inspect_mid(w / "d.pt", load).meta
+    assert meta is not None and {k: meta[k] for k in META} == META
+
+
+def test_choose_falls_back_on_damage_and_refuses_a_real_setup_change() -> None:
+    from poring_vision.resume import Candidate, SetupMismatch, choose_mid
+
+    ok, ok_old = Candidate("mid.pt", "ok", dict(META)), Candidate("mid.prev.pt", "ok", dict(META))
+    assert choose_mid([ok, ok_old], RUN)[0] is ok
+    for bad in (Candidate("mid.pt", "unreadable", why="zip"), Candidate("mid.pt", "corrupt"),
+                Candidate("mid.pt", "missing")):  # fmt: skip
+        chosen, notes = choose_mid([bad, ok_old], RUN)
+        assert chosen is ok_old and bool(notes) == (bad.status != "missing")
+    odd = Candidate("mid.pt", "ok", {**META, "batch": 7})  # contradicts its own run's history
+    chosen, notes = choose_mid([odd, ok_old], RUN)
+    assert chosen is ok_old and "treated as corrupt" in notes[0]
+    with pytest.raises(SetupMismatch, match="mid.pt.*mid.prev.pt"):
+        choose_mid([ok, ok_old], {**RUN, "batch": 4})  # the run changed: refused with both
+    with pytest.raises(SetupMismatch):
+        choose_mid([odd, Candidate("mid.prev.pt", "missing")], RUN)  # cannot tell: fail closed
+    nothing = [Candidate("mid.pt", "corrupt"), Candidate("mid.prev.pt", "missing")]
+    assert choose_mid(nothing, RUN)[0] is None
+
+
+def test_the_trainer_falls_back_to_the_previous_and_never_rewinds(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    import poring_vision.midckpt as mc
+    from poring_vision.train import resume_checkpoint
+
+    real = mc.inspect_mid
+    w, load = disk(tmp_path, {"mid.pt": RuntimeError("truncated"),
+                              "mid.prev.pt": fake_ck({**META, "next_i": 0})})  # fmt: skip
+    run_dir = w.parent
+    (run_dir / "stream.json").write_text("{}")
+    monkeypatch.setattr(mc, "inspect_mid", lambda p: real(p, load))
+    monkeypatch.setattr(mc, "read_last_epoch", lambda p: 1)
+    a = argparse.Namespace(mid_ckpt=True)
+    assert resume_checkpoint(a, run_dir, 30, RUN) == w / "mid.prev.pt"  # (3, 0) past last (2, 0)
+    monkeypatch.setattr(mc, "read_last_epoch", lambda p: 3)  # last.pt ahead of the fallback
+    assert resume_checkpoint(a, run_dir, 30, RUN) == w / "last.pt"
+    with pytest.raises(SystemExit, match="setup differs"):
+        resume_checkpoint(a, run_dir, 30, {**RUN, "n": 120})  # a different cache: refused

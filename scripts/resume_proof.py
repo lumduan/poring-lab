@@ -150,6 +150,9 @@ def main() -> int:
         for label, cmd, expect in plan(args.cache):
             print(f"# {label}: expect {expect}\n{cmd}\n")
         traces = " ".join(f"data/train/resume-proof-{r}/trace.jsonl" for r in ("A", "A2", "B"))
+        print("# reported too: each B resume's `resume_from` names mid.pt; after B3 the weights\n"
+              "# dir holds no mid*.pt (a finished run leaves neither):\n"
+              "ls data/train/resume-proof-B/weights\n")  # fmt: skip
         print(f"# then:\npython3 scripts/resume_proof.py compare {traces}")
         return 0
     out = compare(load_trace(args.a), load_trace(args.a2), load_trace(args.b))
