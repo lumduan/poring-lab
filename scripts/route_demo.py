@@ -41,6 +41,7 @@ import route_preview as rp  # noqa: E402
 
 OUT = Path("/dev/shm/poring-lab-tmp/route-demo")
 REC_HZ = 10.0
+GM_SPEED_MS = 150.0  # the lab GM's walk speed (ms per cell; verify.speed_before reads it offline)
 MATCH_NS = 200_000_000  # the console draws a live message only within 200 ms of the frame
 
 
@@ -89,7 +90,13 @@ def run(scene: str, n: int, seed: int) -> int:
     orig_click = walk11.click_step
 
     def click_step(pr: Any, w: Any, end: Any, *a: Any, **k: Any) -> dict[str, Any]:
-        res = orig_click(pr, w, end, *a, **k)
+        start = tuple(w.position)
+        res = orig_click(pr, w, end, *a, **k)  # returns right after the click
+        if state["lp"] is not None and res.get("clicked"):  # the engine's walk, from the click
+            import walk6 as w6
+
+            path = w6.plan(w, end, set()) or [end]
+            state["lp"].walk(start, path, GM_SPEED_MS, int(res["t_click"]))
         if state["lp"] is not None:
             state["lp"].snap(w.position)  # the rule's belief after the step, applied at rest
         return res
@@ -232,7 +239,8 @@ def check(out: Path, frames: list[tuple[int, Path]], live: list[dict[str, Any]],
           live_t: np.ndarray) -> dict[str, Any]:  # fmt: skip
     """Per frame: the scene's scroll from the previous frame, the goal ring's move (GLUED = the
     same), and the feet measured on the frame against the drawn line's start (FEET). Walking = the
-    scene scrolls >= 1 px, or the feet are off their rest point by > 3 px."""
+    scene scrolls >= 1 px, or the feet are off their rest point by > 3 px. A frame pair drawn with
+    the SAME message is skipped for GLUED: it measures the preview's rate, not its gluing."""
     gx, gy, _, _ = r.game_region()
     dw, dh = r.desktop()
     anchor = (640.75, 361.89)  # the camera model's projection of our own cell (client px)
@@ -252,7 +260,8 @@ def check(out: Path, frames: list[tuple[int, Path]], live: list[dict[str, Any]],
         sx, sy = (None, None) if shift is None else (round(shift[0], 1), round(shift[1], 1))
         age = None if m is None else round((t - m["t_mono_ns"]) / 1e6, 1)
         rows.append({"t_ms": t // 1_000_000, "shift_x": sx, "shift_y": sy, "feet": feet,
-                     "line_start": start, "goal": goal, "msg_age_ms": age})  # fmt: skip
+                     "line_start": start, "goal": goal, "msg_age_ms": age,
+                     "msg_t": None if m is None else m["t_mono_ns"]})  # fmt: skip
         prev = img
     walking = [False] * len(rows)
     for i, w in enumerate(rows):
@@ -262,7 +271,8 @@ def check(out: Path, frames: list[tuple[int, Path]], live: list[dict[str, Any]],
         w["walking"] = walking[i]
         w["feet_to_line_px"] = (round(math_dist(w["feet"], w["line_start"]), 1)
                                 if w["feet"] and w["line_start"] else None)  # fmt: skip
-        if i and w["goal"] and rows[i - 1]["goal"] and w["shift_x"] is not None:
+        same_msg = i and w["msg_t"] is not None and w["msg_t"] == rows[i - 1]["msg_t"]
+        if i and w["goal"] and rows[i - 1]["goal"] and w["shift_x"] is not None and not same_msg:
             gdx = w["goal"][0] - rows[i - 1]["goal"][0]
             gdy = w["goal"][1] - rows[i - 1]["goal"][1]
             w["ring_err_px"] = round(float(np.hypot(gdx - w["shift_x"], gdy - w["shift_y"])), 1)
@@ -283,11 +293,19 @@ def check(out: Path, frames: list[tuple[int, Path]], live: list[dict[str, Any]],
         med, p95 = round(float(np.median(a)), 1), round(float(np.percentile(a, 95)), 1)
         return {"n": len(a), "median": med, "p95": p95, "max": round(float(a.max()), 1)}
 
+    corrections, prev_c = [], None  # the camera's correction at each stop (eased in, not drawn)
+    for m in live:
+        me = m.get("measured") or {}
+        if me.get("snapped") and prev_c is not None and me.get("c") is not None:
+            corrections.append(float(np.hypot(me["c"][0] - prev_c[0], me["c"][1] - prev_c[1])))
+        if me.get("c") is not None:
+            prev_c = me["c"]
     sel = lambda key, walk: [w[key] for w in rows if w[key] is not None and w["walking"] == walk]  # noqa: E731
     return {"walking_feet_to_line_px": q(sel("feet_to_line_px", True)),
             "standing_feet_to_line_px": q(sel("feet_to_line_px", False)),
             "walking_ring_error_px": q(sel("ring_err_px", True)),
             "standing_ring_error_px": q(sel("ring_err_px", False)),
+            "stop_corrections_cells": q(corrections),
             "walking_frames": int(sum(walking)), "frames_csv": str(out / "frames.csv")}  # fmt: skip
 
 

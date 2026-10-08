@@ -89,7 +89,7 @@ def walk(rp: ModuleType, world: np.ndarray, core: Any) -> list[dict[str, Any]]:
         traj.append((pk, ck))
     for k in range(1, 4):  # stopped: the camera catches up
         traj.append((np.array([102.0, 100.0]), np.array([min(102.0, 101.5 + 0.25 * k), 100.0])))
-    traj += [(np.array([102.0, 100.0]), np.array([102.0, 100.0]))] * 4
+    traj += [(np.array([102.0, 100.0]), np.array([102.0, 100.0]))] * 14
     for k, (pk, ck) in enumerate(traj):
         cam_px = J @ (ck - np.array([100.0, 100.0]))
         feet = ANCHOR + J @ (pk - ck)
@@ -123,7 +123,7 @@ def test_the_camera_follows_the_measured_scroll_and_the_line_starts_at_the_feet(
     goal = next(px(p) for p in mid["msg"]["points"] if p["kind"] == "goal")
     true_goal = ANCHOR + J @ (np.array([106.0, 100.0]) - mid["c_true"])
     assert np.hypot(*(goal - true_goal)) <= 4.0  # the goal ring glued to the floor
-    assert np.allclose(frames[-1]["c"], [102.0, 100.0])  # at rest: snapped to the rule's cell
+    assert np.abs(frames[-1]["c"] - [102.0, 100.0]).max() < 0.02  # at rest: the rule's cell
     assert frames[-1]["msg"]["passed"] == [] or all(
         s["age_ms"] < 400 for s in frames[-1]["msg"]["passed"]
     )
@@ -175,9 +175,53 @@ def test_a_step_belief_waits_for_its_move_but_a_where_fix_applies_at_rest(
     still = frame(world, np.zeros(2), ANCHOR, rp.BAR_OFFSET)
     core.snap((102, 100))  # said at click time: the character has not moved yet
     for k in range(6):
-        core.step(k, still)
+        core.step(k * 50_000_000, still)
     assert np.allclose(core.c, [100.0, 100.0])  # still standing: the belief waits
     core.snap_fix((101, 100))  # a /where fix says where we stand now
-    for k in range(6, 10):
-        core.step(k, still)
-    assert np.allclose(core.c, [101.0, 100.0])
+    for k in range(6, 30):
+        core.step(k * 50_000_000, still)
+    assert np.abs(core.c - [101.0, 100.0]).max() < 0.02
+
+
+def test_a_correction_at_a_stop_eases_in_over_200_ms_never_a_jump(
+    rp: ModuleType, world: np.ndarray
+) -> None:
+    """Batt 2026-10-08: any residual correction at a stop eases in (EASE_S), instead of snapping."""
+    core = rp.PreviewCore(Cam(), None, (80, 77, W, H), (1440, 900), "t")
+    core.set_route((100, 100), [(104, 100)], (104, 100))
+    still = frame(world, np.zeros(2), ANCHOR, rp.BAR_OFFSET)
+    t, goals = 0, []
+    for _ in range(4):
+        core.step(t, still)
+        t += 50_000_000
+    core.snap_fix((101, 100))  # the camera was a cell off: the fix says so
+    for _ in range(30):
+        m = core.step(t, still)
+        goals.append(px(next(p for p in m["points"] if p["kind"] == "goal")))
+        t += 50_000_000
+    old, new = ANCHOR + J @ np.array([4.0, 0.0]), ANCHOR + J @ np.array([3.0, 0.0])
+    steps = np.linalg.norm(np.diff(np.array(goals), axis=0), axis=1)
+    assert steps.max() <= 0.3 * np.linalg.norm(new - old)  # no single-frame jump
+    assert np.hypot(*(goals[-1] - new)) <= 1.0  # it arrives at the corrected place
+    assert any(np.hypot(*(g - old)) > 2 and np.hypot(*(g - new)) > 2 for g in goals)  # in between
+
+
+def test_an_engine_walk_waits_for_motion_after_the_click_and_a_dead_click_stands_down(
+    rp: ModuleType, world: np.ndarray
+) -> None:
+    """2026-10-08 13:45: armed before the rule's hover, a noise frame passed for the onset and
+    the engine pulled the camera a whole step ahead. Now: onset only after the click, two clear
+    frames running; nothing moving for 2.5 s = a dead click."""
+    core = rp.PreviewCore(Cam(), None, (80, 77, W, H), (1440, 900), "t")
+    core.set_route((100, 100), [(104, 100)], (104, 100))
+    still = frame(world, np.zeros(2), ANCHOR, rp.BAR_OFFSET)
+    t = 0
+    for _ in range(4):
+        core.step(t, still)
+        t += 50_000_000
+    core.walk((100, 100), [(101, 100), (102, 100)], 150.0, t)
+    for _ in range(70):  # 3.5 s and the character never moves
+        core.step(t, still)
+        t += 50_000_000
+    assert core.engine is None  # stood down
+    assert np.abs(core.c - [100.0, 100.0]).max() < 0.02  # and never pulled the camera
