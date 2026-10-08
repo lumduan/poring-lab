@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [ADR-0015, ADR-0002, ADR-0003, ADR-0004, ADR-0006, ADR-0007, ADR-0011, ADR-0012, ADR-0014, ADR-0016, ADR-0018, ADR-0019]
-next_action: "Batt accepts, amends or rejects. On acceptance: answer the open questions marked FIRST (unverified blocks, executor placement, session blocks, takeover resume, where approved flows live), then build phase F1 (the flow IR, the block catalogue and linter layers 1-3, offline, no UI and no input). Section 13 (2026-10-08, map-centric workflows + event flows and scopes) adds open questions 16-30 and phases MW0-MW4 beside F1-F2. Batt ANSWERED 16, 17, 18, 20, 21, 29 and part of 27 the same day (recorded at each question); 30 is new from those answers. Nothing is built yet."
+next_action: "Batt accepts, amends or rejects. On acceptance: answer the open questions marked FIRST (unverified blocks, executor placement, session blocks, takeover resume, where approved flows live), then build phase F1 (the flow IR, the block catalogue and linter layers 1-3, offline, no UI and no input). Section 13 (2026-10-08, map-centric workflows + event flows and scopes) adds open questions 16-30 and phases MW0-MW4 beside F1-F2. Batt ANSWERED 16, 17, 18, 20, 21, 29 and part of 27 the same day (recorded at each question); 30 is new from those answers. Section 13.9 (defence in depth for walking, Batt 2026-10-08) adds the unintended_engagement event and questions 31-34. Nothing is built yet."
 ---
 
 # ADR-0020: Block programs over one flow IR (the agent builds blocks, users compose flows)
@@ -20,6 +20,9 @@ next_action: "Batt accepts, amends or rejects. On acceptance: answer the open qu
     an alone-test; relocation as 13.6.6; `hp_critical` joins the safety-critical set; the save
     point is REQUIRED before any wing; loot by a hover-scan for the PICKUP cursor; the L3 map-sheet
     extraction is approved. Each is recorded at its open question.
+  - **Defence in depth for walking (Batt, 2026-10-08), section 13.9:** PREVENT (the gates),
+    DETECT an unintended engagement from pixels, RECOVER per map through an `unintended_engagement`
+    event. Walk rules keep the zero-tolerance bar; recovery is tested on its own.
 - **The direction (Batt, 2026-10-07):** users build bot behaviour as BLOCK PROGRAMS, the way
   Microsoft MakeCode or LEGO EV3 programs are built. The agent builds the BLOCKS; users compose the
   FLOWS. Flows are not hard-coded by the agent. An example flow: start → walk to (map, x, y) →
@@ -1336,11 +1339,12 @@ For the current map block B, in this order:
 | 1 | `dead` (safety-critical) | critical | pre-empt | the death dialog's anchor: `is_dead()` |
 | 2 | `hp_critical` (safety-critical; Batt, 2026-10-08) | critical | pre-empt | `hp_percent() < 20`, rearmed above 50 %: an immediate ESCAPE (the fixed body in 13.6.8), then `relocate`. Its place above `unexpected_map` is a proposal (open question 30) |
 | 3 | `unexpected_map` (safety-critical) | critical | pre-empt | a map load seen while no exit, respawn or relocating event runs (`map_load_seen()`: the loading screen, or the client's map-load notice, demonstrations.md §3.13); or an exit's arrival check reads another map |
-| 4 | `hp_low` | survival | INSERT | `hp_percent() < 50`, until `> 80` |
-| 5 | `weight` | upkeep | pre-empt | `weight_percent() >= 90`: the backstop. The plan's own threshold sits in the map's main flow (farm's 50 %) |
-| 6 | the main flow | – | – | – |
+| 4 | `unintended_engagement` (13.9; Batt, 2026-10-08) | survival | pre-empt | `engagement_seen()`: an engagement we did not order, from pixels (13.9). Its place is a proposal (open question 31) |
+| 5 | `hp_low` | survival | INSERT | `hp_percent() < 50`, until `> 80` |
+| 6 | `weight` | upkeep | pre-empt | `weight_percent() >= 90`: the backstop. The plan's own threshold sits in the map's main flow (farm's 50 %) |
+| 7 | the main flow | – | – | – |
 
-- So **dead > HP critical > HP low > weight > the main flow.** `dead` and `unexpected_map` never
+- So **dead > HP critical > (unexpected map) > unintended engagement > HP low > weight > the main flow.** `dead` and `unexpected_map` never
   compete: a respawn is an expected map change. Nor do `hp_critical` and `unexpected_map`: a Fly
   Wing keeps the map.
 - These defaults hold on every map unless a map OVERRIDE changes a class. The linter WARNS on any
@@ -1415,10 +1419,10 @@ Batt's loop runs through this rule: farm's wing → the save point on map_1 → 
 
 #### 13.6.8 The always-on set, and the scope examples
 
-Every new workflow starts with five GLOBAL events:
+Every new workflow starts with six GLOBAL events:
 - `dead`, `hp_critical` and `unexpected_map`: safety-critical and required (removing any of them is
   a lint ERROR);
-- `hp_low` and `weight`: defaults, editable.
+- `unintended_engagement`, `hp_low` and `weight`: defaults, editable per map (13.9 for the first).
 
 Map events then shape them per map. The effective sets of Batt's example (farm is taken to be a
 dungeon):
@@ -1428,6 +1432,7 @@ dungeon):
 | `dead` · critical · safety | respawn; 1 per run; relocate | global | global | global |
 | `hp_critical` · critical · safety | < 20 % → ESCAPE: a Fly Wing where the map allows it, else a Butterfly Wing, else stop; rearm > 50 %; relocate | global | global | global |
 | `unexpected_map` · critical · safety | read the position; relocate or stop | global | EXTENDED: + close an open dialog, after the global body | global |
+| `unintended_engagement` · survival · pre-empt | walk away; close an unintended NPC dialog (13.9) | global | global | OVERRIDDEN by species: a passive weak species → finish it; a dangerous or chasing one → a wing; relocate |
 | `hp_low` · survival · insert | < 50 % → potions until > 80 %, ≤ 6 a minute | DISABLED: a safe town, no potions spent | global | OVERRIDDEN: < 70 % → until > 90 % |
 | `weight` · upkeep · pre-empt | ≥ 90 % → a wing; relocate | DISABLED: town is where the weight is stored; a wing there would loop to the save point | global | global |
 | `boss_seen` · survival · pre-empt | – | – | – | ADDED: `sees(boss)` → a wing; relocate |
@@ -1514,6 +1519,12 @@ def weight():
     use_item(WING)
 
 
+@on(engagement_seen(), priority=SURVIVAL, then=RELOCATE, max_per_min=4)
+def unintended_engagement():  # 13.9: the global default
+    close_npc_dialog()  # if one opened
+    walk_away(min_cells=5)  # NOT yet proven to stop an attack (13.9, open question 32)
+
+
 # MAP events
 disable(hp_low, scope=town)  # a safe town: no potions spent
 disable(weight, scope=town)  # town is where the weight is stored
@@ -1546,6 +1557,21 @@ def farm_hp_low():
 )
 def boss_seen():  # BOSS joins the training scope (13.3)
     use_item(WING)
+
+
+@on(
+    engagement_seen(),
+    priority=SURVIVAL,
+    then=RELOCATE,
+    max_per_min=4,
+    overrides=unintended_engagement,
+    scope=farm,
+)
+def farm_engagement():  # by species (13.9); the policies are suggested from L3 mob data
+    if engaged_species() in (mob(9101), mob(9102)):  # passive and weak: finish it
+        finish_target()
+    else:  # dangerous, chasing, or not recognised: leave
+        use_item(WING)
 ```
 
 #### 13.6.9 Lint rules for events
@@ -1564,6 +1590,7 @@ not a warning), they win.
 | looser on a harder map | WARNING, acknowledged at approval: a map OVERRIDE that fires later, stops earlier or allows more (a lower HP start or stop, a higher weight, a higher death count, a longer cooldown) on a HARDER map. **A map is HARDER, from its L3 sheet, when** it spawns an aggressive species (mob_db `ai`), it has a boss spawn line, or its highest spawn level exceeds the character's base level (from `assumes`; skipped, and said so, when unknown) | "farm: hp_low < 30 is looser than the global < 50, and map_3 spawns an aggressive species (mob 9105)" |
 | insert body | ERROR: a block not marked `insertable` inside an INSERT event | "hp_low: walk_to cannot be inserted: make the event pre-empt" |
 | relocating events | ERROR: an event whose body can change the map (a wing, a respawn) without `then: relocate` or `stop` | "boss_seen: a Butterfly Wing changes the map: then must be relocate or stop" |
+| engagement policy (13.9) | WARNING: a map's `unintended_engagement` override that FINISHES a species the L3 mob data marks aggressive, chasing or above our level; a species policy while the detector cannot name species (the run uses the map's most cautious policy instead); a policy that is a mob-data suggestion nobody confirmed | "farm: finish_target for mob 9103: it chases (L3 mob data)" |
 | species named by events | WARNING: a `sees(mob)` species that spawns on none of the event's maps. It joins the training scope either way | "boss_seen: mob 9109 is in no spawn line of map_3" |
 
 ### 13.7 The runtime display
@@ -1621,7 +1648,8 @@ The section itself stays PROPOSED until Batt accepts it.
   - insert@1: a hotbar potion during an attack and during a walk (13.6.4);
   - save@1: `set_save_point` at a Kafra, then a Butterfly Wing arrives at its cell;
   - escape@1: the `hp_critical` escape (a Fly Wing) proven by a staged low-HP positive case;
-  - loot@1: the hover-scan pickup, with the weight readout rising.
+  - loot@1: the hover-scan pickup, with the weight readout rising;
+  - rec@1: recovery from DELIBERATE engagements, scored on its own (13.9), never inside a walk run's score.
 - One block: entry → walk → `walk_exit`, the arrival confirmed by `/where`. Then `npc_warp` and
   `item_warp`, each alone.
 - `unexpected_map` and `dead` proven by a DELIBERATE positive case each (a staged warp and a staged
@@ -1641,6 +1669,61 @@ The section itself stays PROPOSED until Batt accepts it.
 **MW4 · Users add workflows.** Each new map or species goes through the preparation report.
 training-cost.md's history table is updated after every species addition (that document's own
 rule).
+
+### 13.9 Defence in depth for walking (Batt, 2026-10-08)
+
+Three layers. Each is measured on its own, so one never hides the failure of another.
+
+| layer | what | how it is measured |
+|---|---|---|
+| 1 · PREVENT | the existing gates: the picking model, the cursor gate (two reads, fail closed), walk@11's unit gate with memory (demonstrations.md §3.18) | the walk rules' ZERO-TOLERANCE bar, unchanged. An engagement during a walk run is a HARD FAIL even when layer 3 recovered from it: the live packet signals count it either way |
+| 2 · DETECT | an unintended engagement, from PIXELS only (rule 1) | its own pre-registered test (rec@1), with packets as the OFFLINE ground truth for recall and latency |
+| 3 · RECOVER | the `unintended_engagement` event (13.6): a global default, overridden per map and by species | the same test: did the bot apply the map's rule, and did the outcome follow |
+
+**2 · DETECT: the pixel cues.** Each is a new L1 read concept, written unverified and proven by a
+DELIBERATE positive case (demonstrations.md §2a: a zero from a sensor that cannot see the event is
+not evidence):
+- damage numbers rising from a unit near our character;
+- our own attack animation;
+- our HP dropping (`vitals.read`, against its regeneration noise);
+- an NPC dialog window opening (its anchor, L2).
+
+`engagement_seen()` is true when any cue fires while the running block ordered no attack and no
+talk. The live packets (`attack_request`, `npc_contact`, the GM's `act`) never feed it: they score
+it offline.
+
+**3 · RECOVER: the event flow** (13.6 scopes apply):
+- **Global default:** walk away, and close any unintended NPC dialog.
+  - ⚠️ **"A walk click cancels an attack" is NOT confirmed here.** walk@11's cancel test
+    (demonstrations.md §3.18 point 3: a static Red Plant, n = 3) clicked a walk point 2 cells away
+    right after the attack click. The client re-requested the attack after the walk, and hits
+    continued 3 / 3.
+  - Untested: a walk beyond the target's reach, a key, closing the target's window. rec@0 measures
+    which one stops an attack before rec@1 fixes the default (open question 32).
+- **Map override, by species** (Batt's example, the farm map):
+  - a passive, weak species (e.g. Poring, Lunatic) → finish it;
+  - a dangerous or chasing species → a Butterfly Wing or a Fly Wing.
+- **Default policies are SUGGESTED from the L3 mob data** (rAthena's mob_db: `ai` / mode flags for
+  aggressive and chasing, the level against ours). Proposal:
+  - passive and not above our level → finish;
+  - aggressive, chasing, or above our level → a wing (a Fly Wing where the map allows it);
+  - immobile → walk out of its range.
+  - A suggestion is shown in the preparation report (13.4) and runs only after the owner confirms
+    it.
+- **Species knowledge:** today's detector names player, monster and npc, not the species.
+  - A species policy needs species recognition: per-species classes from the training scope
+    (13.3), or a sprite match.
+  - Until then, the map's override runs its MOST CAUTIOUS policy for every engagement (here: the
+    wing), and the linter says so (13.6.9). Open question 33.
+
+**Testing stays separated** (Batt):
+- The walk rules keep the zero-tolerance bar, which measures PREVENTION.
+- Recovery is tested alone, pre-registered: rec@0 (which cancel works), then rec@1.
+  - rec@1 stages DELIBERATE engagements: a click on a monster of each policy class, and a click on
+    an NPC.
+  - Detection is scored on recall and latency, against the packets.
+  - The rule is scored on whether the map's policy was applied, and whether its outcome followed:
+    the attack stopped, the target finished, the wing taken, or the dialog closed.
 
 ## Open questions
 
@@ -1764,6 +1847,16 @@ means needed before MW1.
     - The thresholds: proposal < 20 %, rearmed above 50 %, at most 2 a minute.
     - What happens on a map where neither wing is allowed. Proposal: the linter shows "no escape"
       on that map, and a BOT run there needs Batt's explicit acknowledgement at approval.
+31. **`unintended_engagement`'s priority (13.9).** Proposal: below `unexpected_map`, above
+    `hp_low`; pre-empt. Should it outrank `hp_low`, given that recovering may itself cost HP?
+32. **Which action stops an attack** (13.9). A 2-cell walk click did not stop it (3 / 3). rec@0
+    measures the candidates before the global default is fixed: a walk beyond the target's reach, a
+    key, closing its window.
+33. **Species policies before the detector names species** (13.9). Proposal: the map's most
+    cautious policy for every engagement. Or a sprite match for the species a map's policy names?
+34. **Detection thresholds** (13.9): how near our character a damage number counts; the HP-drop
+    size against regeneration noise; the latency budget from the cue to the recovery's first
+    input.
 
 ## Consequences
 
