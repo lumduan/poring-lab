@@ -34,6 +34,7 @@ COPY packages/poring_env/pyproject.toml packages/poring_env/
 COPY packages/poring_packets/pyproject.toml packages/poring_packets/
 COPY packages/poring_dataset/pyproject.toml packages/poring_dataset/
 COPY packages/poring_skills/pyproject.toml packages/poring_skills/
+COPY packages/poring_flow/pyproject.toml packages/poring_flow/
 COPY services/backend/pyproject.toml services/backend/
 COPY services/vision/pyproject.toml services/vision/
 # ~5 GB of CUDA wheels: downloaded two at a time and installed one at a time, so the writes come as

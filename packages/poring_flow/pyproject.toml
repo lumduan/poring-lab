@@ -1,0 +1,17 @@
+[project]
+name = "poring-flow"
+version = "0.1.0"
+license = "Apache-2.0"  # ADR-0018, ADR-0020 section 6
+description = "poring-lab ADR-0020: block programs over one flow IR -- the IR, the block catalogue, the linter (layers 1-3), the restricted Python view (parsed, never run) and the preparation estimate. Offline: no input, no packets, no GPU."
+requires-python = ">=3.12"
+# poring-skills (L1 concepts, resolve) and what it already brings (poring-env, pyyaml). Never
+# poring-packets, poring-dataset, poring-vision or ultralytics (test_guards.py).
+dependencies = ["poring-skills", "pydantic>=2.13", "pyyaml>=6"]
+
+[project.scripts]
+# Prints the flow IR's JSON Schema; tests/test_schema.py fails when the committed copy drifts.
+poring-flow-schema = "poring_flow.ir:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

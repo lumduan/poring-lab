@@ -57,6 +57,11 @@ workflow map can be estimated up front.
 
 ## 3. The constants (ESTIMATES until §6's first measurement)
 
+**Machine-readable copy (ADR-0020 13.4, open question 26):** the workflow editor's estimator reads
+these values from `packages/poring_flow/src/poring_flow/training_cost.json`, never from its own
+code. Change this table and that file together: `packages/poring_flow/tests/test_prep.py` fails
+when they disagree. The history stays in this document.
+
 | constant | value | source |
 |---|---|---|
 | **k**, compute per training frame per epoch | **0.146 s** (c = 0.293 s per batch of 2) | **fitted**: v0-JPEG's 12 h night attempt (2026-10-07 17:09 → 10-08 05:09). 21.9 epochs × 4,097 batches over the logged duty levels, R3-paused 10.1 %. It includes each epoch's validation. Hardware: RTX 5060 Ti at `VISION_MAX_VRAM_FRACTION` 0.25, batch 2, workers 1, imgsz 1280, AMP |

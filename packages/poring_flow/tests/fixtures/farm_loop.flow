@@ -1,0 +1,118 @@
+flow(
+    ir=1,
+    name="farm_loop",
+    max_runtime_s=14400,
+    run_until_stopped=True,
+    start=entry("town", "A"),
+    target=target(client="kro-20211103-prere", server="lab-rathena", locale="en", path=S2),
+)
+
+WING = item(9002)  # every id, key and cell below is an illustrative placeholder
+POTION = item(9001)
+BOSS = mob(9109)
+
+
+@map_block(map_id("map_1"), entries=[entry_at("A", cell("map_1", 150, 180))])
+def town():
+    walk_to(cell("map_1", 146, 92))  # B, beside the Kafra
+    set_save_point(npc("n_k1"))  # the fix the linter offers (13.5)
+    kafra_store(npc("n_k1"), all_except=[WING, POTION])  # all, keeping what later maps use
+    take_exit(walk_exit(cell("map_1", 150, 20), to=entry("relay", "south")))  # C
+
+
+@map_block(map_id("map_2"), entries=[entry_at("south", cell("map_2", 40, 300))])
+def relay():
+    take_exit(npc_warp(npc("n_2b71"), [option("o_5d0e")], to=entry("farm", "arrival")))
+
+
+@map_block(
+    map_id("map_3"),
+    entries=[entry_at("arrival", cell("map_3", 100, 100))],
+    targets=[mob(9101), mob(9102), mob(9103)],
+    ignore=[mob(9105), mob(9106)],
+)
+def farm():
+    while weight_percent() < 50:
+        attack_nearest(within=12)
+    take_exit(item_warp(WING, to=entry("town", "A")))
+
+
+# GLOBAL events: every map
+@on(is_dead(), priority=CRITICAL, max_per_run=1, then=RELOCATE)
+def dead():
+    respawn()
+
+
+@on(hp_percent() < 20, rearm=hp_percent() > 50, priority=CRITICAL, then=RELOCATE, max_per_min=2)
+def hp_critical():
+    escape()  # fixed body: Fly Wing where allowed, else Butterfly Wing, else stop (13.6.8)
+
+
+@on(map_load_seen(), priority=CRITICAL, then=RELOCATE)
+def unexpected_map():
+    read_position()
+
+
+@on(hp_percent() < 50, until=hp_percent() > 80, priority=SURVIVAL, mode=INSERT, max_per_min=6)
+def hp_low():
+    use_item(POTION)
+
+
+@on(weight_percent() >= 90, rearm=weight_percent() < 50, priority=UPKEEP, then=RELOCATE)
+def weight():
+    use_item(WING)
+
+
+@on(engagement_seen(), priority=SURVIVAL, then=RELOCATE, max_per_min=4)
+def unintended_engagement():  # 13.9: the global default
+    close_npc_dialog()  # if one opened
+    walk_away(min_cells=5)  # NOT yet proven to stop an attack (13.9, open question 32)
+
+
+# MAP events
+disable(hp_low, scope=town)  # a safe town: no potions spent
+disable(weight, scope=town)  # town is where the weight is stored
+
+
+@extend(unexpected_map, scope=relay)
+def relay_recover():
+    close_dialog()  # safety-critical: runs AFTER the global body
+
+
+@on(
+    hp_percent() < 70,
+    until=hp_percent() > 90,
+    priority=SURVIVAL,
+    mode=INSERT,
+    max_per_min=6,
+    overrides=hp_low,
+    scope=farm,
+)
+def farm_hp_low():
+    use_item(POTION)
+
+
+@on(
+    sees(BOSS, within=15),
+    rearm=not sees(BOSS, within=15),
+    priority=SURVIVAL,
+    then=RELOCATE,
+    scope=farm,
+)
+def boss_seen():  # BOSS joins the training scope (13.3)
+    use_item(WING)
+
+
+@on(
+    engagement_seen(),
+    priority=SURVIVAL,
+    then=RELOCATE,
+    max_per_min=4,
+    overrides=unintended_engagement,
+    scope=farm,
+)
+def farm_engagement():  # by species (13.9); the policies are suggested from L3 mob data
+    if engaged_species() in (mob(9101), mob(9102)):  # passive and weak: finish it
+        finish_target()
+    else:  # dangerous, chasing, or not recognised: leave
+        use_item(WING)

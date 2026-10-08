@@ -4,22 +4,26 @@ concepts:
     purpose: Pick up an item lying on the ground.
     params: [item]
     steps:
-      - Click the item on the ground; the character walks to it and picks it up.
+      - From the cell where the tracker saw a monster die, hover that cell and then its 8 neighbours (two motions per hover) until the cursor shows the PICKUP shape.
+      - Click the first PICKUP point; the character walks to the item and picks it up.
     preconditions:
       - Enough free weight and inventory slots; the item is not reserved for another player.
+      - The weight readout is visible (the basic info window).
+      - Every scan click passes the cursor gate with PICKUP as its only allowed shape, and the unit gate.
     failure_modes:
-      - The click hits the ground next to the item and becomes a walk.
+      - A scan click lands on a monster or an NPC (an attack or a dialog instead of a pickup).
       - Over the weight limit; the item belongs to someone else for a few seconds.
+      - The scan is slower than the floor item's lifetime.
     game_rules:
       - Drops may be reserved for the killer for a short time.
     outcome:
       runtime:
         kind: screen
-        signal: the item vanishes from the ground and its count rises in the inventory
+        signal: the weight readout rises by at least one step, or the item-obtained cue appears
       offline:
         kind: packets
         signal: our pickup act on the floor item, its vanish, and the item added to our inventory
     exceptions:
-      - Ground items have no world-detector class yet; their runtime cue is designed before this is bound.
-    bindings_needed: [L2.cue.ground_item, L2.window.inventory]
+      - Ground items have no world-detector class; the cue is the PICKUP cursor over a hovered cell (Batt, 2026-10-08, ADR-0020 open question 21). A detector class is a later improvement.
+    bindings_needed: [L2.cue.pickup_cursor, L2.window.basic_info]
     workflow_wave: 2

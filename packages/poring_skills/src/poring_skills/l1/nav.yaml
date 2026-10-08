@@ -94,3 +94,41 @@ concepts:
         signal: a map change to the arrival map
     bindings_needed: [L3.npc.transport, L4.text.menu_option]
     workflow_wave: 4
+  - id: nav.set_save_point
+    purpose: Make a Kafra employee's town the save point (where a death or a Butterfly Wing returns).
+    params: [npc]
+    steps:
+      - Talk to a Kafra employee and choose its save service; the dialog confirms it.
+    preconditions:
+      - A Kafra employee whose type offers the save service; no other dialog is open.
+    failure_modes:
+      - The menu differs from the expected one; another dialog or window covers the menu.
+    game_rules:
+      - A death and a Butterfly Wing return to the save point, never to the previous map.
+      - The save point cannot be read from the screen; only setting it makes it known.
+    outcome:
+      runtime:
+        kind: screen
+        signal: the save confirmation in the Kafra dialog, then the dialog closes
+      offline:
+        kind: packets
+        signal: the save point update for our character (decoder needed)
+    bindings_needed: [L3.npc.kafra, L3.kafra.menus, L4.text.menu_option]
+  - id: nav.escape
+    purpose: Leave danger at once with a teleport item the map allows (the fixed escape of hp_critical).
+    steps:
+      - Use a Fly Wing from the hotbar where the map allows it; otherwise a Butterfly Wing; otherwise release everything and stop the run.
+    preconditions:
+      - The chosen wing is in the inventory and on the hotbar.
+    failure_modes:
+      - The map refuses the item (its map flags); the item is missing; the character is already dead.
+    game_rules:
+      - A Fly Wing teleports to a random cell of the same map; a Butterfly Wing goes to the save point.
+    outcome:
+      runtime:
+        kind: screen
+        signal: the teleport effect, then a new position (Fly Wing) or the save point map (Butterfly Wing)
+      offline:
+        kind: packets
+        signal: the item use, then our new position or a map change to the save point
+    bindings_needed: [L2.shortcut.hotbar, L3.map.flags]

@@ -1,0 +1,22 @@
+flow(
+    ir=1,
+    name="visit_and_choose",
+    max_runtime_s=1800,
+    target=target(client="kro-20211103-prere", server="lab-rathena", locale="en", path=S2),
+)
+
+GOAL = cell("prt_fild08", 170, 210)
+CLERK = npc("n_3f2a")  # an L3 key from data/kb/bindings/<env>.json; the editor shows the name
+ANSWER = option("o_91c0aa2e")  # a menu-option key; the editor shows its text
+
+
+@on(hp_percent() < 35, priority=SURVIVAL, rearm=hp_percent() > 60, then=RESUME)
+def drink():
+    use_item(item(9001))
+
+
+walk_to(GOAL)
+talk_npc(CLERK)
+if choose_menu(ANSWER) != OK:
+    stop("menu_mismatch")
+close_dialog()
