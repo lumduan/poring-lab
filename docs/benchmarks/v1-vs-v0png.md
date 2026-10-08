@@ -89,5 +89,31 @@ This file is written and committed BEFORE any v1 model exists. It is scored once
    - `gold_eval.py score --metric position` (primary) and the IoU score (reported);
    - plus the 2 × 2 mAP (both models × both test-label sets).
 
+## The cache: BUILT (2026-10-08 22:20–23:41 ICT / 15:20–16:41 UTC, `cache-day.sh`, attempt 0, no guard trip)
+- `v1png-20261008`: labels v1, k = 0.140, PNG, the same 10 sessions and split as v0png, with
+  `build_frame_cache.py`'s defaults.
+- **13,946 frames, 47 shards, 23,091,722,240 bytes** on the NAS. Every shard was
+  read back against the manifest's sha256: **0 mismatched**.
+- `manifest.json` sha256 `c11423e346657364e522664d710656a61e6c0b6c7973c029f1707910b9a4e3b6`.
+
+| session | split | frames | boxes |
+|---|---|---|---|
+| 20261004T150114-console-p3-outdoor-d | train | 2,309 | 12,377 |
+| 20261004T130548-console-p3-outdoor-a | train | 2,582 | 5,164 |
+| 20261004T135714-console-p3-outdoor-b | train | 472 | 1,639 |
+| 20261004T141832-console-p3-indoor-b | train | 2,421 | 16,371 |
+| 20261003T215314-console-s2-outdoor | train | 409 | 1,346 |
+| 20261004T143947-console-p3-outdoor-c | val | 2,124 | 10,240 |
+| 20261004T133558-console-p3-indoor-a | val | 1,118 | 6,712 |
+| 20261004T152232-console-p3-indoor-c | test | 1,166 | 5,940 |
+| 20261004T054429-console-s2-outdoor | test | 1,077 | 4,186 |
+| 20261004T103815-console-s2-indoor-v2 | test | 268 | 1,493 |
+
+- The v1 labels change only monster boxes. NPC boxes are v0's, as stated above, but the box COUNTS
+  per session also differ a little from v0png's (e.g. outdoor-d 12,377 vs 12,474), because
+  `predict_sprite` drops boxes it cannot place. Reported, not a decision.
+
 ## Results
 Not yet: no v1 model exists.
+
+- **Mid-epoch checkpoints, recorded by the overnight chain BEFORE v1 started (2026-10-08 23:44:01 ICT):** FAIL: proof run B2 (the first --resume from mid.pt, expected to die at rc 86) CRASHED with rc 1, RuntimeError in fused Adam (params, grads, exp_avgs and exp_avg_sqs must have the same dtype, device and layout) right after the bitwise state restore; compare was not run. v1 keeps epoch-level checkpoints (MID_CKPT unset), as pre-registered. The proof: `/dev/shm/poring-lab-tmp/gpu-night/proof-B2-221713.out`.
