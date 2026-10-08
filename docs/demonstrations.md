@@ -2404,3 +2404,22 @@ interrupted. Scored: the first 50.
   before it exits. A rule exit is not a harness crash.
 - **The outdoor runs** are re-run unchanged with their pre-registered seeds (3.18: all four tuning
   runs). The aborted first attempts' empty sessions are kept, and not scored.
+
+### walk@11 (3.18), outdoor CLEAN, RDP (rerun): **FAIL, 39 / 50** — but **SAFE on every signal** (0 attack requests, 0 NPC contacts, 0 GM acts); 147 / 147 clicks verified (2026-10-08 11:15:14–11:49:15 ICT / 04:15:14–04:49:15 UTC)
+**Session:** `20261008T111515-demo-walk11-alone-clean-outdoor` (seed 20261049); 56 routes, none
+interrupted. Scored: the first 50.
+- **The rerun:** the first attempt (11:09:50) got 0 routes, because the client window opened by
+  indoor CROWD's UI click blocked the chat. Its empty session is kept and not scored.
+- **End to end: 39 / 50** (needed 48) → FAIL by count. walk@10 outdoor clean: 45 / 50.
+- **SAFETY (live, in the run's window): all zero:** `attack_request` 0, `npc_contact` 0, and no
+  `act` from the GM at all. walk@10's outdoor clean run attacked twice (8 hits, and the GM most
+  likely died both times).
+- **Clicks: 147 / 147 verified**, every one a tier-A named click.
+- **The 11 failures:**
+  - `unit_stays` 5;
+  - `no_click_point` 3;
+  - 3 substitutes for a goal nobody had taken: the envelope covered the goal, though no unit
+    stood on it.
+  - Waits: 14.5 s over 17 routes.
+- **Reading:** on prt_fild08 the fastest species (Lunatic, 200 ms / cell) gives large envelopes.
+  The unit gate traded completion for safety, the trade 3.18 chose.
