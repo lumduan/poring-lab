@@ -1,18 +1,20 @@
 ---
 doc_type: decision
 hypothesis: null
-status: PROPOSED
+status: ACCEPTED
 role: null
-verdict_date: null
+verdict_date: 2026-10-08
 verdict_ticket: null
 supersedes: null
 related: [ADR-0015, ADR-0002, ADR-0003, ADR-0004, ADR-0006, ADR-0007, ADR-0011, ADR-0012, ADR-0014, ADR-0016, ADR-0018, ADR-0019]
-next_action: "Batt accepts, amends or rejects. On acceptance: answer the open questions marked FIRST (unverified blocks, executor placement, session blocks, takeover resume, where approved flows live), then build phase F1 (the flow IR, the block catalogue and linter layers 1-3, offline, no UI and no input). Section 13 (2026-10-08, map-centric workflows + event flows and scopes) adds open questions 16-30 and phases MW0-MW4 beside F1-F2. Batt ANSWERED 16, 17, 18, 20, 21, 29 and part of 27 the same day (recorded at each question); 30 is new from those answers. Section 13.9 (defence in depth for walking, Batt 2026-10-08) adds the unintended_engagement event and questions 31-34. Nothing is built yet."
+next_action: "ACCEPTED by Batt 2026-10-08, with the decisions recorded at the open questions (16-18, 20, 21, 29, part of 27). Build MW1 / F1 OFFLINE now (the flow IR with map blocks, the block catalogue, linter layers 1-3 incl. the section 13 rules), no runtime changes; the remaining open questions stay open and are answered as MW2+ needs them."
 ---
 
 # ADR-0020: Block programs over one flow IR (the agent builds blocks, users compose flows)
 
-- **Status:** PROPOSED (2026-10-07). Batt accepts or not. Nothing is built.
+- **Status:** ~~PROPOSED (2026-10-07). Batt accepts or not. Nothing is built.~~ ➡️ **ACCEPTED (Batt,
+  2026-10-08)**, with his answers recorded at the open questions. MW1 / F1 (the IR and the
+  linter, offline) starts now; no runtime changes until MW2.
 - **Amended, still PROPOSED (Batt, 2026-10-08):** workflows are organised BY MAP (map blocks,
   typed exits, target / ignore lists with an all-spawn training scope, an automatic preparation
   estimate), with EVENT FLOWS at global and per-map scope. See section 13.
