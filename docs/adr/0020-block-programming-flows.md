@@ -1742,6 +1742,10 @@ it offline.
 
 ## Open questions
 
+**➡️ The 19 contradictions MW1 found** (each built one provisional way), with a recommended
+resolution per item: [docs/planning/adr0020-contradictions.md](../planning/adr0020-contradictions.md).
+They await Batt's decision (2026-10-08); this ADR is unchanged until he decides.
+
 Marked FIRST: needed before F1 or F2.
 
 1. **FIRST · Unverified blocks at run time.** Proposal: a run is refused unless every action
