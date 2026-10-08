@@ -33,6 +33,14 @@ It runs inside the vision container only (guarded_build `run:`/`rundev:`), never
   OFF window froze it), never as throughput. Until 2026-10-07 18:20 the NOMINAL sleep was added
   and a frozen batch counted as compute, so the per-level rates of the first v0-JPEG resume mix
   in R3's pauses.
+- **Mid-epoch checkpoints (Batt, 2026-10-08), opt-in `--mid-ckpt`:** `weights/mid.pt` every
+  `--mid-every-batches` batches or `--mid-every-s` seconds (whichever first, right after an
+  optimizer step) and at every epoch end. `--resume` then continues at the exact batch, with the
+  data stream, augmentation, mosaic buffer, live weights, optimizer and loop state as they were
+  (`poring_vision.midckpt`, `poring_vision.resume`). The run's training order comes from a
+  `StreamSampler` instead of ultralytics' shuffling, so a run keeps ONE mode for life
+  (`stream.json` marks it; a resume in the other mode is refused). The proof harness: `--trace`,
+  `--die-after-batches`, `scripts/resume_proof.py` (docs/operations/mid-epoch-checkpoints.md).
 - **The final line** is a JSON summary: per-class AP50, mAP50, mAP50-95, peak VRAM, seconds.
 """
 
@@ -140,7 +148,19 @@ def main() -> int:  # noqa: PLR0915
                     help="R3: sleep after every training batch (duty cycle only)")  # fmt: skip
     ap.add_argument("--duty-file", type=Path, default=None,
                     help="the host's live duty level (read-only)")  # fmt: skip
+    ap.add_argument("--mid-ckpt", action="store_true",
+                    help="mid-epoch checkpoints + the exact resume")  # fmt: skip
+    ap.add_argument("--mid-every-batches", type=int, default=640)
+    ap.add_argument("--mid-every-s", type=float, default=300.0)
+    ap.add_argument("--close-mosaic", type=int, default=None,
+                    help="ultralytics' close_mosaic (default 10); the proof uses 1")  # fmt: skip
+    ap.add_argument("--trace", type=Path, default=None,
+                    help="--mid-ckpt: one JSON line per batch (the resume proof)")  # fmt: skip
+    ap.add_argument("--die-after-batches", type=int, default=None,
+                    help="PROOF ONLY: os._exit after this global batch (ni)")  # fmt: skip
     a = ap.parse_args()
+    if (a.trace is not None or a.die_after_batches is not None) and not a.mid_ckpt:
+        raise SystemExit("--trace / --die-after-batches need --mid-ckpt")
     t0 = time.monotonic()
 
     from poring_vision.gpu import configure_gpu
@@ -201,6 +221,8 @@ def main() -> int:  # noqa: PLR0915
     if a.eval is not None:
         data["val"] = "eval"
 
+    from poring_vision.midckpt import StreamItems
+
     class ShardTrainer(DetectionTrainer):  # type: ignore[misc]
         def get_dataset(self) -> dict[str, Any]:
             return dict(data)
@@ -209,7 +231,10 @@ def main() -> int:  # noqa: PLR0915
             self, img_path: str, mode: str = "train", batch: int | None = None
         ) -> Any:
             gs = max(int(unwrap_model(self.model).stride.max()), 32) if self.model else 32
-            cls = type(f"ShardDataset_{img_path}", (ShardDataset,), {"part": img_path})
+            bases = (
+                (StreamItems, ShardDataset) if a.mid_ckpt and mode == "train" else (ShardDataset,)
+            )
+            cls = type(f"ShardDataset_{img_path}", bases, {"part": img_path})
             return cls(
                 img_path=img_path, imgsz=self.args.imgsz, batch_size=batch,
                 augment=mode == "train", hyp=self.args, rect=mode == "val", cache=None,
@@ -229,8 +254,17 @@ def main() -> int:  # noqa: PLR0915
         "project": str(a.project), "name": name, "exist_ok": True, "plots": False,
         "device": 0, "seed": a.seed, "cache": False, "amp": True, "verbose": False,
     }  # fmt: skip
+    if a.close_mosaic is not None:
+        overrides["close_mosaic"] = a.close_mosaic
     if a.resume:
-        overrides["resume"] = str(run_dir / "weights" / "last.pt")
+        overrides["resume"] = str(resume_checkpoint(a, run_dir, overrides["epochs"]))
+    else:  # a fresh run: nothing of an older run in this directory may be resumed into it
+        (run_dir / "weights" / "mid.pt").unlink(missing_ok=True)
+        (run_dir / "stream.json").unlink(missing_ok=True)
+        if a.mid_ckpt:
+            run_dir.mkdir(parents=True, exist_ok=True)
+            (run_dir / "stream.json").write_text(json.dumps({"sampler": "StreamSampler",
+                                                             "seed": a.seed}) + "\n")  # fmt: skip
     # ultralytics' AMP self-check downloads yolo26n.pt; vision is offline (and its cwd read-only),
     # so it dies with PermissionError (2026-10-04 smoke run). fp16 on this card is verified by
     # scripts/check_gpu.py (matmul + conv2d in fp16), so the check is skipped, not faked.
@@ -248,7 +282,14 @@ def main() -> int:  # noqa: PLR0915
         return dict(data) if dataset == "shards" else check_det(dataset, *args, **kwargs)
 
     ul_validator.check_det_dataset = shard_dataset
-    trainer = ShardTrainer(overrides=overrides)
+    trainer_cls: type = ShardTrainer
+    if a.mid_ckpt:
+        from poring_vision.midckpt import MidOptions, resumable
+
+        opts = MidOptions(every_batches=a.mid_every_batches, every_s=a.mid_every_s, trace=a.trace,
+                          die_at=a.die_after_batches)  # fmt: skip
+        trainer_cls = resumable(ShardTrainer, opts)
+    trainer = trainer_cls(overrides=overrides)
     sleeper = None
     if a.step_sleep_ms > 0 or a.duty_file is not None:
         sleeper = step_sleeper(a.step_sleep_ms, a.duty_file)
@@ -277,6 +318,33 @@ def main() -> int:  # noqa: PLR0915
     }  # fmt: skip
     print(json.dumps(summary), flush=True)
     return 0
+
+
+def resume_checkpoint(a: argparse.Namespace, run_dir: Path, epochs: int) -> Path:
+    """The checkpoint ``--resume`` continues from. A run keeps its stream mode for life: a resume
+    in the other mode is refused (``stream.json`` marks a --mid-ckpt run). With --mid-ckpt,
+    mid.pt (exact) wins unless it is behind last.pt; last.pt alone is ultralytics' own
+    epoch-level resume, which is NOT exact (logged)."""
+    from poring_vision.midckpt import MID_NAME, STREAM_NAME, read_last_epoch, read_mid_meta
+    from poring_vision.resume import pick_resume
+
+    wdir = run_dir / "weights"
+    marked = (run_dir / STREAM_NAME).exists()
+    if marked != a.mid_ckpt:
+        raise SystemExit(f"{run_dir} was trained {'WITH' if marked else 'WITHOUT'} --mid-ckpt: "
+                         "resume it the same way (one data stream per run)")  # fmt: skip
+    if not a.mid_ckpt:
+        return wdir / "last.pt"
+    meta = read_mid_meta(wdir / MID_NAME)
+    choice = pick_resume(meta, read_last_epoch(wdir / "last.pt"), epochs)
+    print(json.dumps({"resume_from": choice, "mid": meta and {k: meta[k] for k in
+                                                               ("epoch", "next_i", "nb")}}),
+          flush=True)  # fmt: skip
+    if choice == "none":
+        raise SystemExit(f"{run_dir}: nothing to resume")
+    if choice == "last":
+        print(json.dumps({"warning": "epoch-level resume from last.pt: NOT exact"}), flush=True)
+    return wdir / (MID_NAME if choice == "mid" else "last.pt")
 
 
 def evaluate(
