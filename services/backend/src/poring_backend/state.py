@@ -372,6 +372,10 @@ class AppState:
         # Settings writes: a per-process CSRF secret and a per-client rate limit (2026-10-06).
         self.csrf_secret = os.urandom(32)
         self.settings_rate = RateLimit(limit=20, window_s=60.0)
+        # The MW2 flow editor's computations (routes_flows.py): 20 a minute per client, one at
+        # a time (each runs in a worker thread).
+        self.flows_rate = RateLimit(limit=20, window_s=60.0)
+        self.flows_lock = asyncio.Lock()
         # ADR-0016: the environment interlock (the user-managed set + attestation + window).
         self.interlock = Interlock(settings.environments_file, settings.win_host,
                                    source=self._envset_source)  # fmt: skip
