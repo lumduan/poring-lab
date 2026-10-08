@@ -44,6 +44,10 @@ CLS_CHARS = 32
 MAX_CELL = 4096
 MAX_TTL_MS = 60_000
 DEFAULT_TTL_MS = 1500
+# A rule publishes once per click step (~every 4-6 s) and at each route's start / end: its HUD lives
+# until the next one (Batt 2026-10-08: the HUD must stay visible while the bot walks), and a stopped
+# rule's HUD still goes stale within this.
+RULE_TTL_MS = 8000
 MIN_INTERVAL_S = 0.1  # at most ~10 a second: a viewer's control queue holds 64 messages
 NO_CELL = 10**5  # poring_dataset.picking's "nothing picked" magnitude (unit_gate.py)
 
@@ -402,7 +406,7 @@ def enable(label: str, *, log_path: str | None = None, agent: Any = None) -> obj
         import ro_agent as r
 
         ag = agent if agent is not None else r.Agent("operator-hud")
-        hud = HudSender(ag, r.game_region(), r.desktop(), label=label)
+        hud = HudSender(ag, r.game_region(), r.desktop(), label=label, ttl_ms=RULE_TTL_MS)
     except Exception:  # noqa: BLE001 -- display only
         return None
     hud.log_path = log_path
