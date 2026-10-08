@@ -1183,6 +1183,19 @@ misses ~2–3 % of units in a frame (scenery occlusion: one Poring under the chu
 The cursor gate is the first layer; a click on a unit needs both layers to miss.
 
 ### walk@12 — DESIGN PROPOSAL: the motion model (T1-lite) inside walk@11's envelope (NOT pre-registered; Batt approves first)
+**➡️ Batt's decisions for the next walk version (2026-10-08 ~11:25), from walk@11's runs:**
+1. **Click points exclude the client's UI windows.** Their anchors are known (L2): each window's
+   rectangle plus a margin. The cursor gate cannot protect there: over a UI window the client shows
+   its plain arrow, which reads as WALK. (walk@11 indoor CROWD route 53 clicked the Basic
+   Information icon grid.)
+2. **The harness finishes its session cleanly when it cannot type** (t1 + packets), instead of
+   exiting without them.
+3. **A TALK read blocks the whole picked cell:** every band point that picks the same cell is
+   refused. (Three NPC contacts, walk@11 clean and crowd: a WALK read 8 px from two TALK reads,
+   all three points picking one cell.)
+
+The motion model below stays a proposal: its premise is open for Batt (the looter problem).
+
 **Why:** walk@11's memory envelope is safe but stalls crowd routes. A unit out of view for a few
 seconds gets a 6–23 cell radius, because it may move at its fastest speed the whole time. The
 engine says otherwise (phase3-plan §6b, rAthena @e985006, read for mechanics only).
@@ -1215,7 +1228,7 @@ click in walk@10/@11's recorded sessions, the model's envelope at the click's ar
 every monster's true cell (`Walk.position_at` from the packets). Required: **100 % containment**,
 and the refusals it would have caused reported against walk@11's.
 
-**Then** a pilot and a pre-registration as 3.19, all four tuning runs.
+**Then** a pilot and a pre-registration under the next free number (3.19 went to rec@0), all four tuning runs.
 
 **Premise check (offline, 2026-10-08 ~09:40; the live packets of walk@10's four runs and walk@11's
 three pilots; 2,267 monster moves):**
@@ -1231,6 +1244,55 @@ three pilots; 2,267 monster moves):**
   a looter-aware model (are items on the floor? the detector has no item class), a different crowd
   species, or keep walk@11's bound.
 
+
+### 3.19 rec@0 — what really STOPS an attack on our client (pre-registered 2026-10-08 ~11:35 ICT, BEFORE any run; Batt's decision of ~11:25)
+**Why:**
+- ADR-0020 §13.9's recovery default is "walk away", and Batt's premise was that "a walk click
+  cancels an attack in RO". He confirmed it was an assumption, never measured on our client.
+- walk@11's cancel test (§3.18 point 3) measured the opposite for one variant: a walk click 2 cells
+  away, right after the attack click, against a static Red Plant (n = 3). The client re-requested
+  the attack after the walk, and hits continued 3 / 3.
+- rec@0 finds which action stops an attack before rec@1 fixes the recovery default. "Walk away"
+  stays the default meanwhile, with its caveat.
+
+**The setup:** lab rAthena, RDP, ASSIST, the interlock green, the GM.
+- The target is one Red Plant (1078), spawned at the cancel test's spot (`safety_signal_check.py
+  cancel-test`'s placement). It is static and never fights back. A plant takes 1 damage per hit,
+  so it survives long enough to show whether hits continue.
+- The detector finds it, and the attack click on it is DELIBERATE (harness, not a rule).
+- `@killmonster2` and a fresh plant between trials.
+
+**The conditions**, n = 10 each, in a seeded interleaved order. Each cancel input comes 400 ms
+after the attack click: walk@11 measured the first hit 0–245 ms after the request, so the attack is
+under way by then.
+
+| id | the cancel | why |
+|---|---|---|
+| C0 | NONE | the POSITIVE CONTROL: the instrument must see the attack continue |
+| C1 | a walk click 2 cells away (cursor-gated walk point) | walk@11's cancel, replicated |
+| C2 | a walk click ≥ 6 cells away, beyond the target's reach (cursor-gated walk point) | Batt's "walk away" |
+| C3 | the sit key (L2 `sit`: Insert), then stand 1 s later | sitting is a different state change |
+| C4 | a Fly Wing by its hotbar key (the GM is given them with `@item`) | the known hard stop: a teleport |
+
+**The measure:** the live packets, in the run's window; GM = the lab GM's block id.
+- the GM's `act` hits (kind normal) on the plant in [t_cancel + 0.3 s, t_cancel + 5 s] (one swing
+  already in flight is allowed);
+- any `attack_request` after t_cancel.
+- **A trial SUCCEEDS** when both are zero.
+
+**The bar:**
+- A cancel STOPS an attack if ≥ 9 / 10 of its trials succeed, AND C0 shows the attack continuing
+  (≥ 2 hits after t_cancel + 0.3 s) in ≥ 9 / 10. Without C0 the zero means nothing (§2a).
+- A cancel that passes is the recovery default for rec@1. With several passes, the one with the
+  fewest side effects wins: C2 over C3 over C4.
+- If none passes, ADR-0020 §13.9's default falls back to the wing, and a new candidate is studied.
+
+**Also reported:**
+- the time from the cancel input to the last hit;
+- the end state: moving, sitting, or teleported (position from `/where`);
+- side effects: a Fly Wing used, a sitting state left behind.
+
+**When:** after walk@11's outdoor reruns and the route-preview demo (one client).
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,

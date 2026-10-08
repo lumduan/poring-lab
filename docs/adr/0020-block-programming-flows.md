@@ -1700,6 +1700,11 @@ it offline.
     continued 3 / 3.
   - Untested: a walk beyond the target's reach, a key, closing the target's window. rec@0 measures
     which one stops an attack before rec@1 fixes the default (open question 32).
+  - ➡️ **Batt, 2026-10-08:** the premise was his assumption, never measured on our client. Keep
+    "walk away" with this caveat. **rec@0 is PRE-REGISTERED** (demonstrations.md §3.19):
+    - the conditions: no cancel (the positive control), a walk 2 cells away, a walk of ≥ 6 cells,
+      sit/stand, and a Fly Wing;
+    - n = 10 each; the bar is 9 / 10 with the control proven.
 - **Map override, by species** (Batt's example, the farm map):
   - a passive, weak species (e.g. Poring, Lunatic) → finish it;
   - a dangerous or chasing species → a Butterfly Wing or a Fly Wing.
