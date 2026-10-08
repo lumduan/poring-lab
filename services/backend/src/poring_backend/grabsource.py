@@ -2,10 +2,12 @@
 (the bench's packet->frame / key->paint / delivery-fps watchers, ro_agent's screen helper).
 
 ONE rule, the backend's own (capture_select.py): the capture-backend lock says ``console`` AND the
-S2 frame bus has a live writer (heartbeat < 2 s) -> the bus, else X (:99, ``mss``, imported only
-then). In V3b (S2, PAINT=bus) nothing is painted into X, so an X grab there would measure a black
-window; on the bus each frame carries the writer's decode-complete time, the moment the lab could
-first use it (an X grab's time is the moment of the grab).
+S2 frame bus has a live writer (heartbeat < 2 s) -> the bus; it says ``rdp`` AND the RDP frame bus
+(rdp_bus.py: the backend's one X grabber, Batt 2026-10-08) has a live writer -> that ring; else X
+(:99, ``mss``, imported only then). In V3b (S2, PAINT=bus) nothing is painted into X, so an X
+grab there would measure a black window; on the bus each frame carries the writer's
+decode-complete time, the moment the lab could first use it (an X grab's time, and an RDP bus
+frame's, is the moment of the grab).
 
 ``frames()`` yields EVERY new bus frame once (plus ``None`` ticks while none arrives, so per-second
 counters keep counting); in X mode it grab-loops. Every item says which source it came from, and a
@@ -41,12 +43,15 @@ class GrabSource:
         *,
         lab_state: Path | None = None,
         ring: Path | None = None,
+        rdp_ring: Path | None = None,
         stale_s: float = STALE_S,
         x_grab: XGrab | None = None,
     ) -> None:
         self.display = display
         self.lab_state = lab_state or _env_path("GRAB_LAB_STATE", "/lab-state")
         self.ring = ring or _env_path("GRAB_FRAMEBUS", "/framebus/ring")
+        self.rdp_ring = rdp_ring or _env_path("GRAB_RDP_RING", "/dev/shm/rdp-ring")
+        self._bus_path: Path | None = None  # the ring self._bus is open on
         self.stale_s = stale_s
         self._x_grab = x_grab
         self._sct: object | None = None
@@ -63,11 +68,16 @@ class GrabSource:
             return self._bus if self._live else None
         self._checked = now
         self._live = False
-        if read_lock(self.lab_state).backend != "console" or not self.ring.exists():
+        backend = read_lock(self.lab_state).backend
+        path = {"console": self.ring, "rdp": self.rdp_ring}.get(backend)
+        if path is None or not path.exists():
             return None
+        if self._bus is not None and self._bus_path != path:  # the lock flipped: the other ring
+            self._bus.close()
+            self._bus = None
         try:
             if self._bus is None:
-                self._bus = FrameBusReader(self.ring, "grabsource")
+                self._bus, self._bus_path = FrameBusReader(path, "grabsource"), path
             else:
                 self._bus.reopen_if_replaced()
             self._live = self._bus.writer().heartbeat_age_s < self.stale_s

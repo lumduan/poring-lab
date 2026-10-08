@@ -6,6 +6,10 @@ same ``frame_id`` / ``t_mono_ns``) the bot reads, never an X mirror. A bus whose
 heart-beating falls back to X11 on the next grab, and comes back by itself.
 
 Inert until compose mounts the ``framebus`` volume: without ``/framebus/ring`` nothing changes.
+
+RDP mode WITH a live RDP frame-bus writer (rdp_bus.py, Batt 2026-10-08: ONE X grabber fans the same
+frame out to every consumer): that ring, so the console shows the very frames, ``frame_id`` and
+capture time the bot and the route preview read. A stale writer falls back to X11, as above.
 """
 
 import os
@@ -34,10 +38,15 @@ class CaptureSelector:
         console_mode: Callable[[], bool],
         console_fps: float,
         stale_s: float = STALE_S,
+        rdp_bus_path: Path | None = None,
+        rdp_mode: Callable[[], bool] | None = None,
     ) -> None:
         self._x11_factory = x11_factory
         self.bus_path = bus_path
         self._console_mode = console_mode
+        self.rdp_bus_path = rdp_bus_path
+        self._rdp_mode = rdp_mode or (lambda: False)
+        self._probe_path: Path | None = None
         self.console_fps = console_fps
         self.stale_s = stale_s
         self._x11: FrameSource | None = None
@@ -49,14 +58,28 @@ class CaptureSelector:
         self.switches = 0
         self.probe_errors = 0
 
+    def _ring(self) -> Path | None:
+        """The ring this mode reads: console -> the S2 bus, rdp -> the RDP bus (if configured)."""
+        if self._console_mode():
+            return self.bus_path
+        if self.rdp_bus_path is not None and self._rdp_mode():
+            return self.rdp_bus_path
+        return None
+
     def _bus_live(self) -> bool:
-        """console mode + a ring + a writer that heart-beat within stale_s (cached for /health)."""
-        if not self._console_mode() or not os.path.exists(self.bus_path):
+        """A ring for this mode + a writer that heart-beat within stale_s (cached for /health)."""
+        ring = self._ring()
+        if ring is None or not os.path.exists(ring):
             self._writer = None
             return False
+        if self._probe is not None and self._probe_path != ring:  # the mode flipped
+            self._close_probe()
+            if self.active == "bus":
+                self._close_sources()
+                self.active = "x11"
         try:
             if self._probe is None:
-                self._probe = FrameBusReader(self.bus_path, "probe")
+                self._probe, self._probe_path = FrameBusReader(ring, "probe"), ring
             else:
                 self._probe.reopen_if_replaced()
             status = self._probe.writer()
@@ -95,8 +118,9 @@ class CaptureSelector:
             self._close_sources()
         if want == "bus":
             if self._bus is None:
+                ring = self._probe_path or self.bus_path
                 self._bus = BusFrameSource(
-                    self.bus_path, "stream", repeat_on_timeout=True, max_fps=self.console_fps
+                    ring, "stream", repeat_on_timeout=True, max_fps=self.console_fps
                 )
             return self._bus.grab()
         if self._x11 is None:
@@ -129,7 +153,7 @@ class CaptureSelector:
             }
         bus = self._bus
         return {
-            "path": str(self.bus_path),
+            "path": str(self._probe_path or self.bus_path),
             "active": self.active,
             "console_fps": self.console_fps,
             "switches": self.switches,

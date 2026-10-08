@@ -9,6 +9,7 @@ import logging
 import socket
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
+from typing import Any
 
 import uvicorn
 from fastapi import FastAPI
@@ -38,8 +39,15 @@ def create_app(
     s2_input_factory: Callable[[], S2Sink] | None = None,
     clipboard_factory: Callable[[], SelectionIO] | None = None,
     damage_factory: Callable[[Callable[[int], None]], ChangeWatcher] | None = None,
+    rdp_grab_factory: Callable[[], Any] | None = None,
 ) -> FastAPI:
     cfg = settings or Settings()
+    if rdp_grab_factory is None and capture_factory is None:  # production: the real X session
+
+        def rdp_grab_factory() -> Any:
+            from poring_backend.rdp_bus import x_session_grab
+
+            return x_session_grab(cfg.display)
 
     def default_capture() -> FrameSource:
         from poring_env.x11 import X11Capture, parse_session_size
@@ -78,6 +86,7 @@ def create_app(
             s2_input_factory=s2_input_factory or default_s2_input,
             clipboard_factory=clipboard_factory or default_clipboard,
             damage_factory=damage_factory or default_damage,
+            rdp_grab_factory=rdp_grab_factory,
         )
         if cfg.transfer_enabled:
             sweep_partials(cfg.transfer_dir)

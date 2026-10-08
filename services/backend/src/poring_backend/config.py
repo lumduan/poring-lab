@@ -64,6 +64,8 @@ class Settings(BaseSettings):
     # S2 frame bus (docs/s2-plan.md): in console mode with a live writer, the console stream reads
     # decoded frames from this ring instead of grabbing X. CONSOLE_FPS caps that human view.
     framebus_path: Path = Path("/framebus/ring")
+    # the RDP frame bus (rdp_bus.py): backend-private, written by the one X grabber on the RDP path
+    rdp_ring_path: Path = Path("/dev/shm/rdp-ring")
     # S2 input socket (ADR-0014): in console mode, while the S2 client listens here, the Injector
     # sends the mux's events to it instead of XTest.
     s2_input_socket: Path = Path("/s2-input/input.sock")

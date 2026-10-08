@@ -310,6 +310,15 @@ ports, quickstart) and `docs/adr/`.
     - It was verified live on the bus: unfocused → refused `client_not_foreground`, active → ok.
     - Re-cut it if the client window or its title moves.
   - Tests that send bot keys get the client in front (conftest); `real_foreground` opts out.
+- **The RDP frame bus** (Batt 2026-10-08, `poring_backend/rdp_bus.py`; BUILT, live after the next
+  backend restart): ONE X grabber fans the same frame (its `frame_id` and capture time) out to
+  every consumer on the RDP path, as S2 does.
+  - It grabs on XDamage (≤ 30 fps) with a 100 ms keepalive, only while the lock says `rdp`.
+  - It writes the backend-PRIVATE `/dev/shm/rdp-ring`, never the shared `framebus` volume:
+    vision stays S2-only (ADR-0005).
+  - `GrabSource` (ro_agent's helper, the bench, the foreground gate) and `CaptureSelector` (the
+    console) read it while it heart-beats, else X.
+  - `RDP_FRAMEBUS=off` disables it; `/health` `rdp_bus` reports it.
 - **The frame-age guard** (2026-10-04, `poring_env/freshness.py`): never act on a stale picture.
   - Presses are refused (`StaleFrame`) when the S2 stream is older than `STREAM_MAX_AGE_MS` (150),
     or the cited frame is older than `CITED_MAX_AGE_MS` (400). Releases always pass.

@@ -28,6 +28,8 @@ from poring_backend.latency import InputRecord, LatencyRecorder
 from poring_backend.mode_restore import read_verdict
 from poring_backend.mux import Decision, InputMux, Routed, Source
 from poring_backend.packets import PacketHub
+from poring_backend.rdp_bus import RdpBusWriter
+from poring_backend.rdp_bus import enabled as rdp_bus_enabled
 from poring_backend.stream import CaptureHub, ChangeWatcher, Outbox, StreamTuning
 from poring_backend.transfer_log import TransferLog
 from poring_env.clock import monotonic_ns
@@ -277,8 +279,20 @@ class AppState:
         s2_input_factory: Callable[[], S2Sink] | None = None,
         clipboard_factory: Callable[[], SelectionIO] | None = None,
         damage_factory: Callable[[Callable[[int], None]], ChangeWatcher] | None = None,
+        rdp_grab_factory: Callable[[], Any] | None = None,
     ) -> None:
         self.settings = settings
+        # The RDP frame bus (rdp_bus.py, Batt 2026-10-08): ONE X grabber for every consumer on the
+        # RDP path. Production passes the grab factory (main.py); without it, X as before.
+        self.rdp_bus: RdpBusWriter | None = None
+        if rdp_grab_factory is not None and rdp_bus_enabled():
+            self.rdp_bus = RdpBusWriter(
+                rdp_grab_factory(),
+                ring=settings.rdp_ring_path,
+                lab_state=settings.lab_state_dir,
+                damage_factory=damage_factory,
+                lock_backend=lambda: self.capture.backend,
+            )
         # Boots in HUMAN (ADR-0002); only a guarded restart's marker can restore ASSIST (below).
         self.mux = InputMux(lease_ns=settings.lease_ns)
         self.input_log = InputLog(settings.data_dir)
@@ -317,6 +331,8 @@ class AppState:
             bus_path=settings.framebus_path,
             console_mode=lambda: self.capture.backend == "console",
             console_fps=settings.console_fps,
+            rdp_bus_path=settings.rdp_ring_path if self.rdp_bus is not None else None,
+            rdp_mode=lambda: self.capture.backend == "rdp",
         )
         self.hub = CaptureHub(
             lambda: self.capture_source,
@@ -362,7 +378,10 @@ class AppState:
             Region.parse(settings.game_region),
             lambda: (
                 GrabSource(
-                    settings.display, lab_state=settings.lab_state_dir, ring=settings.framebus_path
+                    settings.display,
+                    lab_state=settings.lab_state_dir,
+                    ring=settings.framebus_path,
+                    rdp_ring=settings.rdp_ring_path,
                 ).grab
             ),
         )
@@ -410,6 +429,8 @@ class AppState:
 
     async def start(self) -> None:
         self.stalls.start()
+        if self.rdp_bus is not None:
+            self.rdp_bus.start()
         if self.clipboard is not None:
             self.clipboard.start()
         self._status_task = asyncio.create_task(self._status_loop(), name="status-loop")
@@ -422,6 +443,8 @@ class AppState:
         if self._background:
             await asyncio.wait(self._background, timeout=2.0)
         await self.hub.stop()
+        if self.rdp_bus is not None:
+            await asyncio.to_thread(self.rdp_bus.stop)
         await asyncio.to_thread(self.stalls.stop)
         await self.injector.close()
         if self.clipboard is not None:

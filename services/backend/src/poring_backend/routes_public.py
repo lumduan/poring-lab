@@ -139,6 +139,7 @@ async def health(request: Request) -> dict[str, Any]:
         "cleanroom": state.cleanroom.model_dump() if state.cleanroom else None,
         # S2 frame bus (docs/s2-plan.md): the writer and this backend's consumer counters.
         "framebus": {**state.capture_source.snapshot(), "stalls": state.stalls.snapshot()},
+        "rdp_bus": state.rdp_bus.snapshot() if state.rdp_bus is not None else {"enabled": False},
         "viewers": state.hub.viewer_count,
         "bot_connected": bool(state.agents),
         "capture_fps": round(state.hub.capture_fps, 2),
