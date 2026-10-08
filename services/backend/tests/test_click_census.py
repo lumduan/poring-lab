@@ -27,6 +27,8 @@ ALLOWED = {
     "scripts/walk9.py": (3, "walk@9 RULE: the same three, gated"),
     "scripts/walk10.py": (3, "walk@10 RULE: the same three, gated (tier A / B)"),
     "scripts/walk11.py": (3, "walk@11 RULE: walk@10's three + the click-instant unit gate"),
+    "scripts/idle_click.py": (1, "idle@1 (3.23): the deliberate walk click after two WALK reads, "
+                                 "as walk@12 makes it; the signboard hit-area case"),
     "scripts/walk12.py": (3, "walk@12 RULE: walk@11's three, on work-zone points only, with the "
                              "TALK-cell block"),
 }  # fmt: skip
