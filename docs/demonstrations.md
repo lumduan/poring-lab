@@ -1938,6 +1938,79 @@ HARD FAIL.
   - **Fix:** the window was closed (Alt+E, screenshot-checked) and the run restarted UNCHANGED with
     its seed at 21:26 ICT. `pickup-click` now closes the window it opened.
 
+### 3.25 walk@14 — walk@13 + STATIC UNITS, SIDE APPROACH, UNKNOWN READS RE-PLANNED; TUNING, then the HELD-OUT set once (pre-registered 2026-10-09 ~00:20 ICT / 2026-10-08 17:20 UTC at commit, BEFORE any run; Batt's overnight order: "If it fails: diagnose, at most 2 more design iterations tonight (walk@14/15), each pre-registered")
+**Why: walk@13's diagnosed failures** (3.24 results below; zero safety events in every run).
+
+| run | score | failures |
+|---|---|---|
+| indoor CLEAN | 46 / 50 | `unit_stays` 2, `no_click_point` 2 |
+| indoor CROWD | 40 / 50 | `no_click_point` 6, `relocalise_limit` 2, `unit_stays` 1, an NPC substitute the server did not justify 1 |
+| outdoor CLEAN | 45 / 50 | `unit_stays` 4, `no_click_point` 1 |
+
+1. **An NPC read as a monster.**
+   - In indoor CLEAN, **all 29** monster-envelope refusals had NO monster on the server. The NPCs
+     there are Pastor#1011 (87, 127) and Crusader (95, 127).
+   - A monster's envelope (radius 3 at 400 ms per cell) on an NPC that never moves blocked goals
+     (90, 126) / (89, 127) / (91, 127) for 67–95 s, through 3 re-plans and patience.
+2. **The TARGET's own points refused for a non-unit reason.** This is 5 of crowd's 6
+   `no_click_point` routes and clean's 2: `recheck_unknown`, `covered_unknown`, `no_safe_point`,
+   `recheck_walk` at the goal.
+   - The route stopped 1–2 cells short. walk@13 never re-plans its target.
+3. **Cells read UNKNOWN were not re-planned around** (crowd route 0: two unknown reads at its start,
+   then a decline). walk@13 put only talk / unit / no-safe-point cells into the blocked set.
+4. **NOT addressed:**
+   - **Outdoor `unit_stays` near the field's own monsters** (prt_fild08's fastest species, 200 ms per
+     cell, gives the gate a 4–5-cell radius). Only 2 of 207 refusals had a monster within 1 cell of
+     the refused cell; most had one 4–6 cells away. The gate's conservatism is what holds the zero
+     attacks: **it is NOT changed.**
+   - `relocalise_limit`.
+
+**The rule:** `scripts/walk14.py` at the commit of this pre-registration = walk@13 UNCHANGED (its click
+step with the sign mask, its route-loop changes 1–4, the harness; the same code objects or a copy of
+its route loop) plus exactly:
+- **A. A static unit keeps a small envelope.**
+  - A sighting that has stayed within **1** cell of where its streak began, for **≥ 8 s** over
+    **≥ 3** sightings, gets radius **1** instead of the growing radius.
+  - rAthena's monsters pause ≤ 5 s between moves (walk11's `PATIENCE_S`). A unit still for 8 s is
+    an immobile monster, an NPC read as a monster, or scenery.
+  - Its own box (+ 12 px) is still refused. Radius 1 covers one step within the click latency.
+  - The memory's matching and TTL are walk@11's, copied exactly.
+- **B. Approach the target from another side.**
+  - **When:** a round clicks nothing and the TARGET's own points were refused for a non-unit reason
+    (no safe point, a re-check read, an unknown or unconfirmed read).
+  - **What:** the rule first walks to a SIDE cell, Chebyshev **1–2** from the target, that is
+    walkable, reachable, not next to a TALK cell and not where we stand. From it, the target must
+    have work-zone points: tier A, else B, by the picking model. The shortest plan comes first.
+  - **Limits:** at most **2** per route, tried before walk@13's NPC substitute, re-plan, patience and
+    decline.
+- **C. A cell refused by an unknown or re-check read** joins the per-route blocked set, like walk@13's
+  no-safe-point cells (not a unit, not TALK), so the re-plan goes around it.
+
+**SAFETY instruments, scoring, the bar:** as 3.24, unchanged.
+- **The bar:** ≥ 48 / 50 per run AND zero `attack_request`, zero `npc_contact`, zero `act` from the
+  GM of kind normal or pickup. Any one is a HARD FAIL.
+- **Scoring:** the NPC substitute counts only with a drawn NPC beside the goal on the server. A
+  strict count is reported apart.
+
+**TUNING runs, all four whatever the first scores:**
+- FRESH seeds: indoor clean **20261080**, indoor crowd **20261081**, outdoor clean **20261082**,
+  outdoor crowd **20261083**.
+- 56 routes each; the first 50 not interrupted are scored.
+- e.g. `scripts/walk14.py --scene indoor --condition clean --seed 20261080 --label walk14-alone`.
+
+**HELD-OUT, ONCE, only if all 4 PASS:** guild (alberta_in) **20261084**, town (prontera)
+**20261085**, dungeon (iz_dun00) **20261086**, portal (prt_fild08 → prontera) **20261087**. All CLEAN,
+`@heal` after each warp, 56 each, the first 50 scored.
+
+**Expected** (Claude's reading of walk@13's numbers; NOT a bar):
+- indoor CLEAN gains its 4;
+- indoor CROWD gains most of its `no_click_point`;
+- outdoor CLEAN / CROWD still FAIL on `unit_stays` near native monsters (item 4).
+
+**Reported:** 3.24's items, plus static units (sightings that went static, and refusals avoided),
+side approaches (tried, reached, and the goal clicked from the side), and cells blocked by unknown
+reads.
+
 ### HUD scene: box drift while walking + doubled boxes — OFFLINE SIM RESULT (2026-10-08 night; branch `feat/hud-drift`, NOT deployed)
 
 **Why** (Batt, 2026-10-08 evening, from the 20:09 walk):
