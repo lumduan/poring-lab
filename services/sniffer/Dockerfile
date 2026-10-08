@@ -18,6 +18,7 @@ COPY pyproject.toml uv.lock ./
 COPY packages/poring_env/pyproject.toml packages/poring_env/
 COPY packages/poring_packets/pyproject.toml packages/poring_packets/
 COPY packages/poring_dataset/pyproject.toml packages/poring_dataset/
+COPY packages/poring_skills/pyproject.toml packages/poring_skills/
 COPY services/backend/pyproject.toml services/backend/
 COPY services/vision/pyproject.toml services/vision/
 RUN --mount=type=cache,target=/root/.cache/uv \

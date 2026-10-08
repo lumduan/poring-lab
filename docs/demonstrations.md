@@ -48,6 +48,30 @@ Batt, 2026-10-07: **the OUTCOME judges, never the explanation.**
 `poring_dataset.verify` (`VERIFIER_VERSION` 1). They run offline, on packets, which are never
 decision input (ADR-0007). The screen is used only for client-side menus.
 
+### 2a. Every verifier names its signal and PROVES it can see a positive case (Batt, 2026-10-08)
+**"0 observed" from a sensor that cannot see the event is not evidence.** On 2026-10-07/08 the walk
+SAFETY counts read `attack_request` / `npc_contact`, which the live sniffer did not emit, and
+reported "SAFETY held" over runs where the GM attacked (the CORRECTION below the walk@10 results).
+So:
+- every verifier states the exact event (and its source: live sniffer, server packet, offline
+  replay) it relies on;
+- before its "0" counts as evidence, a DELIBERATE positive case must be seen through the same path
+  (the same sniffer image, the same session-packet window), recorded here with its session;
+- after any sniffer rebuild, decoder change or new event type, the positive cases are re-run
+  (`scripts/safety_signal_check.py`).
+
+| signal | used by | source | positive case (deliberate, pixels-only click) | result |
+|---|---|---|---|---|
+| `attack_request` (CZ_REQUEST_ACT2, ours) | walk SAFETY; attack verify@2 | LIVE sniffer since the 2026-10-08 07:31 rebuild | `20261008T073452-demo-safety-check-monster-click`: the GM clicks a Poring | **1 request**, the same target as 4 GM hits → **PASS** |
+| `act` from us, kind `normal` | walk SAFETY; attack verify | live (server ZC_NOTIFY_ACT) | the same session | **4 acts** on the Poring → **PASS** |
+| `npc_contact` (CZ_CONTACTNPC, ours) | walk SAFETY | LIVE since 07:31 | `20261008T073847-demo-safety-check-npc-garnet`: the GM clicks Garnet#pront (TALK cursor, v3 references) | **1 contact** (gid 110000895), then `npc_say` ×3, `npc_wait`; the dialog was paged and CANCELLED by screenshot-checked clicks → **PASS** |
+| `act` from us, kind `pickup` | walk SAFETY | live (server act) | `20261008T074118-demo-safety-check-pickup`: an `@item` Knife dropped, then clicked where the cursor read `pickup` | **1 pickup act** (the client walks in first: a `self_move_request`; the pickup REQUEST itself is not a decoded event) → **PASS** |
+
+- `demo_verify.py` prints `safety.our_acts` / `unsafe_acts` per session and labels the request counts
+  with the instrument's history (63873bc).
+- Still open: the banked-capture replay for the walk runs of 2026-10-07/08 (NPC contact was not
+  observable live then).
+
 | action | success | window (fixed) | fail / ambiguous |
 |---|---|---|---|
 | login | our `login_accepted` (aid) → `char_selected` → `map_enter`, in that order | 60 s from the attempt's first input | the first missing step names the cause |
@@ -1900,6 +1924,9 @@ sprite. It only hovered: no click, no key.
   (`python -m poring_packets.replay`, current decoders), and the captures live in a volume mounted
   only in the sniffer and the backend. There is no guarded step to run the replay → **parked for
   Batt** (with the sniffer rebuild that would make both events live).
+  ➡️ **2026-10-08 07:31 (Batt's decision): the sniffer is REBUILT**; `attack_request` and
+  `npc_contact` are LIVE, each proven by a deliberate positive case (§2a). The replay step is
+  approved; it is built next and its results land here.
 - **The pattern:** in crowds, a monster reaches the click point between the no-motion re-check and
   the click. The allowlist rule checks the cursor, not the instant of the click.
 - The scoring from here on counts the server's `act` by the GM (live) as the SAFETY measure.

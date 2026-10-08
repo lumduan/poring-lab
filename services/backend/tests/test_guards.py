@@ -835,3 +835,18 @@ def test_no_th_variable_is_required_at_interpolation() -> None:
     variable would break every compose command until .env has it."""
     text = (ROOT / "compose.yaml").read_text()
     assert not re.search(r"\$\{(?:RATHENA_TH|DB_TH)_[A-Z_]+:\?", text)
+
+
+def test_every_uv_image_copies_every_workspace_member_pyproject() -> None:
+    """`uv sync --frozen` needs every workspace member's pyproject in the build context's first
+    layer. poring_skills (2026-10-07) was missing from all three Dockerfiles until the sniffer
+    rebuild of 2026-10-08 found it."""
+    import tomllib
+
+    members = tomllib.loads((ROOT / "pyproject.toml").read_text())["tool"]["uv"]["workspace"][
+        "members"
+    ]
+    for name in ("sniffer", "backend", "vision"):
+        text = (ROOT / "services" / name / "Dockerfile").read_text()
+        for m in members:
+            assert f"COPY {m}/pyproject.toml {m}/" in text, (name, m)

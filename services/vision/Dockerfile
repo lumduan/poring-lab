@@ -33,6 +33,7 @@ COPY packages/poring_env/pyproject.toml packages/poring_env/
 # image (ADR-0007: no packet data on the agent side; tests/test_guards.py).
 COPY packages/poring_packets/pyproject.toml packages/poring_packets/
 COPY packages/poring_dataset/pyproject.toml packages/poring_dataset/
+COPY packages/poring_skills/pyproject.toml packages/poring_skills/
 COPY services/backend/pyproject.toml services/backend/
 COPY services/vision/pyproject.toml services/vision/
 # ~5 GB of CUDA wheels: downloaded two at a time and installed one at a time, so the writes come as
