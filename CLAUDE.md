@@ -326,6 +326,11 @@ ports, quickstart) and `docs/adr/`.
   - `GrabSource` (ro_agent's helper, the bench, the foreground gate) and `CaptureSelector` (the
     console) read it while it heart-beats, else X.
   - `RDP_FRAMEBUS=off` disables it; `/health` `rdp_bus` reports it.
+- **Route previews are LIVE only** (Batt 2026-10-08): a walk rule publishes its plan in map CELLS
+  (`scripts/route_plan.py`: `enable` once per run; `preview` + the `hook_*` wrappers, which change no
+  argument and no result). The daemon `scripts/route_previewd.py` re-projects it from what the
+  screen shows and sends `RoutePreview` with `live: true`, which the protocol requires. Never add a
+  screen-pixel (one-shot) preview back: it floated off the character as the camera scrolled.
 - **The frame-age guard** (2026-10-04, `poring_env/freshness.py`): never act on a stale picture.
   - Presses are refused (`StaleFrame`) when the S2 stream is older than `STREAM_MAX_AGE_MS` (150),
     or the cited frame is older than `CITED_MAX_AGE_MS` (400). Releases always pass.

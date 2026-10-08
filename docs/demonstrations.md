@@ -1501,6 +1501,43 @@ is a HARD FAIL.
   and cells (`talk_cells`), any later click on such a cell, and any `npc_contact` there.
 - **Harness ends:** each run's manifest `ended` and `exit_code`.
 
+**AMENDMENT (2026-10-08 ~15:50, Batt: "allowed, recorded as display-only"): the route preview
+becomes the LIVE previewer, applied AFTER the four tuning runs.** The pre-registration lists "the
+route preview" among walk@11's parts. That preview was the one-shot screen-pixel picture, which
+floated off the character as the camera scrolled; the console stopped drawing it at 15:20 (ffb5b82).
+- **What changed** (branch `feat/route-plan-wiring`, merged after the tuning chain):
+  - walk@11's `preview` IS `route_plan.preview`: the route in map cells to the previewer daemon
+    (`route_previewd.py`), and nothing at all unless a run enables publishing. walk@8-10 get the
+    same binding and never enable it (retired: no line).
+  - walk@12's `run` enables publishing around walk@11's run (`route_plan.enable` / `disable`).
+  - Display-only wrappers publish the engine's walk after each click, each `/where` fix, and the
+    clear at each route's end. They change no argument and no result:
+    `route_plan.hook_click_step` / `hook_relocalise` / `hook_route_end`.
+- **The proof that no decision changed.** Every function's COMPILED code was hashed (bytecode,
+  constants, names, argument layout; line numbers ignored) in main (before) and on the branch
+  (after), with `decision_hash.py` (scratch; the method is in its docstring). Every file the walk
+  imports and the branch does not touch is byte-identical.
+
+| file | functions | identical | differs |
+|---|---|---|---|
+| walk5.py | 22 | 22 | — |
+| walk6.py | 30 | 30 | — |
+| rule_run.py | 28 | 28 | — |
+| work_zone.py | 2 | 2 | — |
+| cursor_gate.py | 3 | 3 | — |
+| unit_gate.py | 14 | 14 | — |
+| walk11.py | 35 | 34 | `preview` (now the binding above) |
+| walk12.py | 20 | 19 | `run` (enable/disable around walk@11's run); `engine_path` added (display) |
+
+  - `test_walk12.py` still checks that walk_route and run11 ARE walk@11's code objects, now
+    through the wrapper's `__wrapped__`.
+- **The one cost.** The wrapper computes the engine's path for the preview AFTER each click returns.
+  Measured over 300 random steps per map: prt_church median 0.00 ms, p95 0.19 ms, max 0.88 ms;
+  prontera median 0.04 ms, p95 0.96 ms, max 18.65 ms. That is negligible beside the rule's own
+  waits for motion. The publish itself is one non-blocking datagram.
+- **The previewer runs in its own process,** reading the RDP frame bus after tonight's backend
+  restart. So it does not contend for X grabs with the rule.
+
 ### 3.22 rec@0b — what stops an attack ALREADY UNDER WAY (pre-registered 2026-10-08 ~15:10 ICT, BEFORE any run; Batt's approval of rec@0b with three adjustments)
 **Why:**
 - rec@0 (3.19) was INCONCLUSIVE: the C0 control continued in 2 / 8.

@@ -20,21 +20,20 @@ Now, for every frame it grabs:
 5. **the timestamp:** the message carries the grabbed frame's capture time (host clock), so the
    console draws it on the matching frame.
 
-It runs in its OWN process, with its own grabber and its own agent connection, so the walk rule's
-work cannot starve it.
+It runs in its OWN process, scripts/route_previewd.py (the daemon every walk run feeds in CELLS
+through scripts/route_plan.py, Batt 2026-10-08), with its own grabber and its own agent
+connection, so the walk rule's work cannot starve it. This module is its geometry (PreviewCore)
+and its message.
 
 DISPLAY ONLY: nothing here feeds a decision, and the message cannot carry input (the protocol).
 """
 
 from __future__ import annotations
 
-import contextlib
 import functools
-import json
 import math
 import time
 from collections.abc import Callable, Sequence
-from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -574,107 +573,5 @@ def message(
     body: dict[str, Any], label: str, clock: Callable[[], int] = time.monotonic_ns
 ) -> dict[str, Any]:
     t = int(body.pop("t", clock()))
-    return {"type": "route_preview", "t_mono_ns": t, "frame_id": -1, "live": True, "ttl_ms": 300,
-            "label": label, **body}  # fmt: skip
-
-
-# --- its own process ---------------------------------------------------------------------------
-def _run(conn: Any, camera: Any, gat: Any, region: Sequence[int], desktop: Sequence[int],
-         label: str, hz: float, log_path: str | None) -> None:  # fmt: skip
-    """The preview process: grab -> step -> send, at hz; commands from the walk rule's process."""
-    import ro_agent as r
-
-    core = PreviewCore(camera, gat, region, desktop, label)
-    agent = r.Agent("route-preview")
-    screen = r.Screen()
-    log = open(log_path, "a") if log_path else None  # noqa: SIM115 -- closed at stop
-    gx, gy, gw, gh = (int(v) for v in region)
-
-    def send(body: dict[str, Any], meas: dict[str, Any] | None = None) -> None:
-        msg = message(body, core.label)
-        with contextlib.suppress(Exception):  # display only: never a reason to stop
-            agent.ws.send(json.dumps(msg))
-        if log is not None:
-            log.write(json.dumps({**msg, "measured": meas}) + "\n")
-
-    try:
-        while True:
-            t0 = time.monotonic()
-            while conn.poll():
-                cmd, args = conn.recv()
-                if cmd == "stop":
-                    return
-                if cmd == "clear":
-                    send(core.clear())
-                else:
-                    getattr(core, cmd)(*args)
-            t1 = time.monotonic()
-            t, img = screen.grab(gx, gy, gw, gh)
-            t2 = time.monotonic()
-            body = core.step(t, img)
-            core.last["grab_ms"] = round(1000 * (t2 - t1), 1)
-            core.last["step_ms"] = round(1000 * (time.monotonic() - t2), 1)
-            if body is not None:
-                send(body, core.last)
-            with contextlib.suppress(Exception):  # the backend's status messages: drop them
-                while True:
-                    agent.ws.recv(timeout=0)
-            time.sleep(max(0.0, 1.0 / hz - (time.monotonic() - t0)))
-    finally:
-        if log is not None:
-            log.close()
-        with contextlib.suppress(Exception):
-            agent.ws.close()
-
-
-class LivePreview:
-    """The walk rule's handle on the preview process."""
-
-    def __init__(
-        self, camera: Any, gat: Any, region: Sequence[int], desktop: Sequence[int],
-        label: str = "", hz: float = HZ, log_path: Path | None = None,
-    ) -> None:  # fmt: skip
-        self.args = (camera, gat, tuple(region), tuple(desktop), label[:64], hz,
-                     None if log_path is None else str(log_path))  # fmt: skip
-        self.proc: Any = None
-        self.conn: Any = None
-
-    def start(self) -> LivePreview:
-        import multiprocessing as mp
-
-        ctx = mp.get_context("spawn")
-        self.conn, child = ctx.Pipe()
-        self.proc = ctx.Process(target=_run, args=(child, *self.args), name="route-preview",
-                                daemon=True)  # fmt: skip
-        self.proc.start()
-        return self
-
-    def _cmd(self, name: str, *args: Any) -> None:
-        with contextlib.suppress(Exception):
-            self.conn.send((name, args))
-
-    def set_route(self, position: Sequence[int], corners: Sequence[Sequence[int]],
-                  goal: Sequence[int], click: Sequence[int] | None = None) -> None:  # fmt: skip
-        self._cmd("set_route", tuple(position), [tuple(c) for c in corners], tuple(goal),
-                  None if click is None else tuple(click))  # fmt: skip
-
-    def snap(self, cell: Sequence[int]) -> None:
-        self._cmd("snap", tuple(cell))
-
-    def snap_fix(self, cell: Sequence[int]) -> None:
-        self._cmd("snap_fix", tuple(cell))
-
-    def walk(self, start: Sequence[int], path: Sequence[Sequence[int]], ms_per_cell: float,
-             t_click_ns: int) -> None:  # fmt: skip
-        self._cmd("walk", tuple(start), [tuple(c) for c in path], float(ms_per_cell),
-                  int(t_click_ns))  # fmt: skip
-
-    def clear(self) -> None:
-        self._cmd("clear")
-
-    def stop(self) -> None:
-        self._cmd("stop")
-        if self.proc is not None:
-            self.proc.join(timeout=5)
-            if self.proc.is_alive():
-                self.proc.terminate()
+    return {"type": "route_preview", "t_mono_ns": t, "frame_id": -1, "live": True, "label": label,
+            **body}  # fmt: skip

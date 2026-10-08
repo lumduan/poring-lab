@@ -221,12 +221,13 @@ def test_bot_keys_are_never_redacted_by_a_human_toggle(
 def test_an_agent_route_preview_reaches_viewers_and_never_the_mux(
     lab: tuple[TestClient, RecordingInput],
 ) -> None:
-    """walk@8's route preview (Batt, 2026-10-07): display only, relayed like detections."""
+    """The route preview (Batt, 2026-10-07; LIVE only since 2026-10-08): display only, relayed like
+    detections."""
     from poring_env.protocol import AgentHello, RoutePoint, RoutePreview
 
     client, fake = lab
-    points = [RoutePoint(x=0.5, y=0.5, kind="start"), RoutePoint(x=0.6, y=0.4, kind="goal")]
-    preview = RoutePreview(t_mono_ns=T, label="walk@8 route 0", ttl_ms=4000, points=points)
+    points = [RoutePoint(x=0.5, y=0.5, kind="feet"), RoutePoint(x=0.6, y=0.4, kind="goal")]
+    preview = RoutePreview(t_mono_ns=T, label="walk@12 route 0", live=True, points=points)
     hello = AgentHello(t_mono_ns=T, agent_id="t", version="0")
     with (
         client.websocket_connect("/ws/stream", headers={"origin": ORIGIN}) as viewer,
@@ -241,8 +242,26 @@ def test_an_agent_route_preview_reaches_viewers_and_never_the_mux(
                 break
         else:
             raise AssertionError("the viewer never got the route preview")
-    assert msg["points"][1] == {"x": 0.6, "y": 0.4, "kind": "goal"} and msg["ttl_ms"] == 4000
+    assert msg["points"][1] == {"x": 0.6, "y": 0.4, "kind": "goal"} and msg["live"] is True
     assert fake.events == []  # nothing reached the injector
+
+
+def test_a_one_shot_route_preview_is_refused_as_a_counted_drop() -> None:
+    """The one-shot (screen-pixel) preview is removed (Batt 2026-10-08): a route_preview without
+    live=true fails validation, so the backend drops it -- counted, never silent -- and never
+    relays it."""
+    from pydantic import ValidationError
+
+    from poring_backend.drops import drop_reason
+    from poring_env.protocol import parse_agent_to_backend
+
+    one_shot = ('{"type":"route_preview","t_mono_ns":1,"frame_id":-1,"label":"walk@11 route 3",'
+                '"points":[{"x":0.5,"y":0.5,"kind":"start"}]}')  # fmt: skip
+    for raw in (one_shot, one_shot.replace('"label"', '"live":false,"label"'),
+                one_shot.replace('"label"', '"ttl_ms":6000,"live":true,"label"')):  # fmt: skip
+        with pytest.raises(ValidationError) as info:
+            parse_agent_to_backend(raw)
+        assert drop_reason(info.value)  # a named reason for the counter and the warning
 
 
 def test_an_agent_operator_hud_reaches_viewers_and_never_the_mux_or_the_input_log(

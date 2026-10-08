@@ -6,10 +6,11 @@ part fades. NOT scored.
     route_demo.py run [--scene indoor] [--n 3] [--seed 31]      then
     route_demo.py render DIR                                    (the composite video + the check)
 
-run: walk@11 routes with route_preview.LivePreview attached through runtime hooks (walk11.py, the
-pre-registered rule, is not modified).
-- Its plan sets the route; each step and each /where fix tells it the believed cell; each route end
-  clears it.
+run: walk@12 routes, exactly as every walk run since 2026-10-08: the rule publishes its plan in
+CELLS (route_plan.py) and the previewer daemon (route_previewd.py) draws it. route_demo only adds
+the previewer's message log (live.jsonl) and the recorder.
+- The plan sets the route; each click gives the engine's walk; each step and each /where fix gives
+  the believed cell; each route end clears it.
 - A RECORDER process grabs the game region ~10 times a second, independently of the preview's own
   grabs, as the console sees the stream.
 - The frames (JPEG), the preview's live messages and the session's packets go to /dev/shm (client
@@ -41,7 +42,6 @@ import route_preview as rp  # noqa: E402
 
 OUT = Path("/dev/shm/poring-lab-tmp/route-demo")
 REC_HZ = 10.0
-GM_SPEED_MS = 150.0  # the lab GM's walk speed (ms per cell; verify.speed_before reads it offline)
 MATCH_NS = 200_000_000  # the console draws a live message only within 200 ms of the frame
 
 
@@ -64,77 +64,27 @@ def _record(out: str, region: tuple[int, int, int, int], stop: Any, hz: float) -
 def run(scene: str, n: int, seed: int) -> int:
     import multiprocessing as mp
 
-    import walk11
+    import route_plan
+    import walk12
 
-    state: dict[str, Any] = {"lp": None}
     out = OUT / time.strftime("%Y%m%dT%H%M%S")
     (out / "frames").mkdir(parents=True, exist_ok=True)
     ctx = mp.get_context("spawn")
     stop = ctx.Event()
     rec = ctx.Process(target=_record, args=(str(out / "frames"), tuple(r.game_region()), stop,
                                             REC_HZ), daemon=True)  # fmt: skip
-
-    orig_preview = walk11.preview
-
-    def preview(agent: Any, w: Any, start: Any, wps: Any, click: Any, label: str) -> None:
-        if state["lp"] is None:
-            lp = rp.LivePreview(
-                w.camera, w.gat, r.game_region(), r.desktop(), "route demo",
-                log_path=out / "live.jsonl",
-            )  # fmt: skip
-            state["lp"] = lp.start()
-            rec.start()
-        goal = wps[-1] if wps else start
-        state["lp"].set_route(w.position, list(wps), goal, click)
-
-    orig_click = walk11.click_step
-
-    def click_step(pr: Any, w: Any, end: Any, *a: Any, **k: Any) -> dict[str, Any]:
-        start = tuple(w.position)
-        res = orig_click(pr, w, end, *a, **k)  # returns right after the click
-        if state["lp"] is not None and res.get("clicked"):  # the engine's walk, from the click
-            import walk6 as w6
-
-            path = w6.plan(w, end, set()) or [end]
-            state["lp"].walk(start, path, GM_SPEED_MS, int(res["t_click"]))
-        if state["lp"] is not None:
-            state["lp"].snap(w.position)  # the rule's belief after the step, applied at rest
-        return res
-
-    orig_reloc = walk11.where_relocalise
-
-    def where_relocalise(templates: Any) -> Any:
-        fix = orig_reloc(templates)
-
-        def wrapped(*a: Any, **k: Any) -> dict[str, Any]:
-            rl = fix(*a, **k)
-            if rl.get("ok") and state["lp"] is not None:
-                state["lp"].snap_fix(rl["to"])
-            return rl
-
-        return wrapped
-
-    orig_route = walk11.walk_route
-
-    def walk_route(*a: Any, **k: Any) -> dict[str, Any]:
-        try:
-            return orig_route(*a, **k)
-        finally:
-            if state["lp"] is not None:
-                state["lp"].clear()
-
-    walk11.preview, walk11.click_step = preview, click_step
-    walk11.where_relocalise, walk11.walk_route = where_relocalise, walk_route
+    # walk@12 publishes its plan itself; enabling it here first adds the previewer's log
+    token = route_plan.enable(f"route-demo-{time.strftime('%H%M%S')}", walk12.SCENES8[scene][0],
+                              log_path=str(out / "live.jsonl"))  # fmt: skip
+    route_plan.ensure_previewer()
+    rec.start()
     try:
-        rc = walk11.run(scene, "clean", n, seed, "route-demo", 4)
+        rc = walk12.run(scene, "clean", n, seed, "route-demo", 4)
     finally:
         stop.set()
         if rec.is_alive():
             rec.join(timeout=5)
-        if state["lp"] is not None:
-            state["lp"].stop()
-        walk11.preview, walk11.click_step = orig_preview, orig_click
-        walk11.where_relocalise, walk11.walk_route = orig_reloc, orig_route
+        route_plan.disable(token)
     sessions = sorted(Path("/dev/shm/poring-lab-demo").glob("*route-demo*"))
     (out / "session.txt").write_text(str(sessions[-1]) if sessions else "")
     print(json.dumps({"out": str(out), "session": str(sessions[-1]) if sessions else None}))

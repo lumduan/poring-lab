@@ -40,6 +40,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import record_session  # noqa: E402
 import reloc2  # noqa: E402
 import ro_agent as r  # noqa: E402
+import route_plan  # noqa: E402
 import rule_run as rr  # noqa: E402
 import walk5 as w5  # noqa: E402
 import walk6 as w6  # noqa: E402
@@ -271,24 +272,10 @@ def where_relocalise(templates: dict[str, Any]) -> Callable[..., dict[str, Any]]
     return relocalise
 
 
-def preview(agent: Any, w: w5.World, start: tuple[int, int], wps: Sequence[tuple[int, int]],
-            click: tuple[int, int] | None, label: str) -> None:  # fmt: skip
-    """The RoutePreview for the console (display only; poring_env.protocol.RoutePreview). Sent on
-    the agent's socket with no reply expected; a viewer-side extra, never a reason to stop."""
-    try:
-        gx, gy, _, _ = r.game_region()
-        dw, dh = r.desktop()
-        cells = [start, *wps] + ([click] if click else [])
-        kinds = ["start"] + ["waypoint"] * (len(wps) - 1) + ["goal"] + (["click"] if click else [])
-        px = w.project(cells)
-        pts = [{"x": min(max((gx + float(u)) / dw, 0.0), 1.0),
-                "y": min(max((gy + float(v)) / dh, 0.0), 1.0), "kind": k}
-               for (u, v), k in zip(px, kinds, strict=True)]  # fmt: skip
-        msg = {"type": "route_preview", "t_mono_ns": r.ns(), "frame_id": -1, "points": pts[:64],
-               "label": label[:64], "ttl_ms": 6000}  # fmt: skip
-        agent.ws.send(json.dumps(msg))
-    except Exception:  # noqa: BLE001 -- the preview must never break the walk
-        pass
+# The route preview (display only): since 2026-10-08 the route goes in CELLS to the live previewer
+# (route_plan.py -> route_previewd.py). The one-shot screen-pixel preview is removed: it floated off
+# the character as the camera scrolled (Batt). A no-op unless the run enables publishing.
+preview = route_plan.preview
 
 
 def substitute_goal(w: w5.World, goal: tuple[int, int],

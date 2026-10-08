@@ -14,6 +14,11 @@ walk@12). The console no longer draws one-shot previews (ffb5b82).
 - **What the messages carry:** what the previewer cannot know by itself, all in CELLS:
   - the map (for its GAT), the camera (its six numbers), the game region and the desktop size;
   - the route; the engine's walk from the click; the rule's believed cell; its /where fixes.
+- **The rule side** (the bottom of this module): a run calls `enable` once, and the walk rules'
+  `preview` IS `route_plan.preview`. The `hook_*` wrappers publish the engine's walk at each click,
+  each /where fix, and the clear at each route's end, around the rule's own functions; they change
+  no argument and no result. A rule that never enables publishes nothing: walk@8-11 (retired) keep
+  their calls and show no line.
 
 DISPLAY ONLY: nothing travels back to the rule, and no message can carry input.
 """
@@ -21,13 +26,14 @@ DISPLAY ONLY: nothing travels back to the rule, and no message can carry input.
 from __future__ import annotations
 
 import contextlib
+import functools
 import json
 import os
 import socket
 import subprocess
 import sys
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -39,6 +45,9 @@ START_WAIT_S = 5.0  # how long ensure_previewer waits for a new previewer's sock
 MAX_DATAGRAM = 60_000  # a route of 64 cells is ~2 KB; anything near this is a bug
 
 COMMANDS = ("route", "walk", "snap", "fix", "clear", "ping")
+# The lab GM's walk speed (ms per cell; rAthena's default 150, verify.speed_before reads it
+# offline): the previewer's model of the engine's walk after a click. Display only.
+SELF_MS_PER_CELL = 150.0
 
 
 def _cells(cells: Sequence[Sequence[float]]) -> list[list[int]]:
@@ -78,10 +87,10 @@ def decode(data: bytes) -> dict[str, Any] | None:
 class PlanPublisher:
     """A walk rule's side of the channel. Every method is fire and forget."""
 
-    def __init__(
-        self, session: str, *, sock_path: Path = PLAN_SOCK, autostart: bool = True
-    ) -> None:
+    def __init__(self, session: str, *, sock_path: Path = PLAN_SOCK, autostart: bool = True,
+                 log_path: str | None = None) -> None:  # fmt: skip
         self.session = session[:96]
+        self.log_path = log_path  # the previewer appends its messages there (route_demo's check)
         self.sock_path = sock_path
         self.autostart = autostart
         self.sent = 0
@@ -167,3 +176,124 @@ def ensure_previewer(sock_path: Path = PLAN_SOCK, wait_s: float = START_WAIT_S) 
     except Exception:  # noqa: BLE001 -- display only: never a reason to stop a walk
         pass
     return False
+
+
+# --- the rule side --------------------------------------------------------------------------------
+_PUB: PlanPublisher | None = None
+_MAP: str | None = None
+_OWNER: object | None = None
+_REGION: tuple[tuple[int, int, int, int], tuple[int, int]] | None = None
+
+
+def enable(session: str, map_name: str, *, log_path: str | None = None,
+           sock_path: Path = PLAN_SOCK) -> object | None:  # fmt: skip
+    """Start publishing for this run. Returns a token for `disable`, or None when publishing was
+    already enabled (an outer caller, e.g. route_demo with its log, keeps ownership)."""
+    global _PUB, _MAP, _OWNER
+    if _PUB is not None:
+        return None
+    _PUB = PlanPublisher(session, sock_path=sock_path, log_path=log_path)
+    _MAP, _OWNER = map_name, object()
+    return _OWNER
+
+
+def disable(token: object | None) -> None:
+    """Clear the line and stop publishing, if `token` enabled it (None: not ours, nothing)."""
+    global _PUB, _MAP, _OWNER
+    if token is None or token is not _OWNER or _PUB is None:
+        return
+    _PUB.clear()
+    _PUB.close()
+    _PUB, _MAP, _OWNER = None, None, None
+
+
+def publisher() -> PlanPublisher | None:
+    return _PUB
+
+
+def _screen() -> tuple[tuple[int, int, int, int], tuple[int, int]]:
+    global _REGION
+    if _REGION is None:
+        import ro_agent as r
+
+        _REGION = (tuple(r.game_region()), tuple(r.desktop()))  # type: ignore[assignment]
+    assert _REGION is not None
+    return _REGION
+
+
+def preview(agent: Any, w: Any, start: Sequence[int], wps: Sequence[Sequence[int]],
+            click: Sequence[int] | None, label: str) -> None:  # fmt: skip
+    """The walk rules' route preview (walk@8-12 call it under this signature when they plan a
+    route): the route in CELLS to the previewer. Nothing when no run enabled publishing. Display
+    only: never raises."""
+    if _PUB is None or _MAP is None:
+        return
+    try:
+        region, desktop = _screen()
+        goal = wps[-1] if wps else start
+        _PUB.route(map_name=_MAP, camera=w.camera, region=region, desktop=desktop,
+                   position=w.position, corners=list(wps), goal=goal, click=click, label=label,
+                   log_path=_PUB.log_path)  # fmt: skip
+    except Exception:  # noqa: BLE001 -- the preview must never break the walk
+        pass
+
+
+Planner = Callable[[Any, tuple[int, int], tuple[int, int]], Sequence[Sequence[int]]]
+
+
+def hook_click_step(fn: Callable[..., dict[str, Any]],
+                    planner: Planner) -> Callable[..., dict[str, Any]]:  # fmt: skip
+    """Around a rule's click_step(pr, w, end, ...): after a click, the engine's walk from the cell
+    the rule stood on (planner(w, start, end): the cells the engine walks, computed AFTER the
+    click, so the click's timing is unchanged); after the step, the rule's believed cell. The
+    step's arguments and result are untouched."""
+
+    @functools.wraps(fn)
+    def step(pr: Any, w: Any, end: tuple[int, int], *a: Any, **k: Any) -> dict[str, Any]:
+        if _PUB is None:
+            return fn(pr, w, end, *a, **k)
+        start = tuple(w.position)
+        res = fn(pr, w, end, *a, **k)
+        with contextlib.suppress(Exception):  # display only
+            if res.get("clicked") and res.get("t_click"):
+                path = list(planner(w, start, end)) or [end]
+                _PUB.walk(start, path, SELF_MS_PER_CELL, int(res["t_click"]))
+            _PUB.snap(w.position)
+        return res
+
+    return step
+
+
+def hook_relocalise(factory: Callable[..., Callable[..., dict[str, Any]]]
+                    ) -> Callable[..., Callable[..., dict[str, Any]]]:  # fmt: skip
+    """Around where_relocalise(templates) -> fix(...): each confirmed /where fix ("ok", "to")."""
+
+    @functools.wraps(factory)
+    def make(*fa: Any, **fk: Any) -> Callable[..., dict[str, Any]]:
+        fix = factory(*fa, **fk)
+
+        @functools.wraps(fix)
+        def wrapped(*a: Any, **k: Any) -> dict[str, Any]:
+            rl = fix(*a, **k)
+            if _PUB is not None and isinstance(rl, dict) and rl.get("ok") and rl.get("to"):
+                with contextlib.suppress(Exception):
+                    _PUB.fix(rl["to"])
+            return rl
+
+        return wrapped
+
+    return make
+
+
+def hook_route_end(fn: Callable[..., Any]) -> Callable[..., Any]:
+    """Around walk_route(...): the line is cleared when the route ends, however it ends."""
+
+    @functools.wraps(fn)
+    def route(*a: Any, **k: Any) -> Any:
+        try:
+            return fn(*a, **k)
+        finally:
+            if _PUB is not None:
+                _PUB.clear()
+
+    return route
