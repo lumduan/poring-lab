@@ -67,6 +67,14 @@ So:
 | `npc_contact` (CZ_CONTACTNPC, ours) | walk SAFETY | LIVE since 07:31 | `20261008T073847-demo-safety-check-npc-garnet`: the GM clicks Garnet#pront (TALK cursor, v3 references) | **1 contact** (gid 110000895), then `npc_say` ×3, `npc_wait`; the dialog was paged and CANCELLED by screenshot-checked clicks → **PASS** |
 | `act` from us, kind `pickup` | walk SAFETY | live (server act) | `20261008T074118-demo-safety-check-pickup`: an `@item` Knife dropped, then clicked where the cursor read `pickup` | **1 pickup act** (the client walks in first: a `self_move_request`; the pickup REQUEST itself is not a decoded event) → **PASS** |
 
+**Re-proven after the 17:51 sniffer rebuild** (the packet-table fix; §2a's rule: rebuild → re-run):
+
+| signal | positive case (deliberate, pixels-only click) | result |
+|---|---|---|
+| `attack_request` + `act` from us (`normal`) | rec@0b's Red Plant attacks (`20261008T181138-demo-rec0b`, 3.22) | requests and hits seen live → **PASS** |
+| `npc_contact` | `20261008T210752-demo-safety-check-npc-garnet` (21:08 ICT / 14:08 UTC): the GM clicks Garnet (TALK cursor twice); the dialog paged with Enter ×3 and its menu CANCELLED by a screenshot-checked click | **1 contact** (gid 110000895), then `npc_say` ×7, `npc_wait` ×3, `npc_menu`, `npc_choose`, `npc_close_click` → **PASS** |
+| `pickup_request` (ours, NEW: decoded since the loot decoders) + `act` from us (`pickup`) | `20261008T210930-demo-safety-check-pickup` (21:10 ICT / 14:10 UTC): an `@item` Knife dropped by an inventory drag, then clicked where the cursor read `pickup` twice (cell 98,112) | `pickup_request` 1, `pickup_result` 1, `floor_item_vanish` 1, **1 pickup act** → **PASS** |
+
 - `demo_verify.py` prints `safety.our_acts` / `unsafe_acts` per session and labels the request counts
   with the instrument's history (63873bc).
 - ~~Still open: the banked-capture replay for the walk runs of 2026-10-07/08~~ ➡️ done 07:47–07:52
