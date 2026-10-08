@@ -354,7 +354,7 @@ class SceneTracker:
     # --- inputs -------------------------------------------------------------------------------
     def motion(self, shift: tuple[float, float]) -> bool:
         """The scene moved by ``shift`` (game px) since the last frame: True when it counts (the
-        global model; the floor model's frames go through ``on_frame``)."""
+        floor model's frames go through ``on_frame``, with the camera's move)."""
         moved, _ = self.on_frame(shift, None)
         return moved
 
@@ -366,10 +366,14 @@ class SceneTracker:
             if float(np.hypot(*shift)) < MOTION_MIN_PX:
                 return False, None
             self.unsettled = True
-            if self.ground is None or dc is None:
+            if self.ground is None:
                 self.offset = self.offset + np.asarray(shift, dtype=float)
                 return True, None
-            g, dc = self.ground, np.asarray(dc, dtype=float)
+            g = self.ground
+            if dc is None:  # no floor patches: the scroll read at the band's centre, as FloorMotion
+                jref = g.flow(g.to_floor(np.array([FloorMotion.BAND_CENTRE])), np.zeros(2))[1][0]
+                dc = np.linalg.solve(jref, np.asarray(shift, dtype=float))
+            dc = np.asarray(dc, dtype=float)
             self.cam = self.cam + dc
             on_floor = [o for o in self.objects.values()
                         if o.anchor == "world" and o.floor is not None]  # fmt: skip

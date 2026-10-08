@@ -560,7 +560,7 @@ def score(log: list[dict[str, Any]], cache: dict[str, Any], region: tuple[int, i
         doubled_frames += dbl > 0
         drawn_n += len(drawn)
     mins = (int(tr["t"][-1]) - int(tr["t"][0])) / 60e9
-    return {"offsets": {key: _stat(ds) for key, ds in sorted(per.items())},
+    return {"offsets": {key: _stat(ds) for key, ds in sorted(per.items())}, "raw": per,
             "doubled": doubled, "doubled_frames": doubled_frames, "ghosts": ghosts,
             "edge_skipped": edge,
             "drawn": drawn_n, "frames": len(tr["t"]), "minutes": round(mins, 2)}  # fmt: skip

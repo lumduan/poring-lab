@@ -412,3 +412,18 @@ def test_a_box_cut_by_the_views_edge_gets_its_sprites_size(hs: ModuleType) -> No
     t2.observe([left], t2.offset.copy())
     o2 = next(o for o in t2.objects.values() if o.cls == "npc")
     assert o2.box[0] == pytest.approx(12.0 - hs.SPRITE_PX["npc"][0]) and o2.box[3] == 375.0
+
+
+def test_a_floor_frame_without_a_camera_move_reads_the_scroll(
+    hs: ModuleType, camera: object
+) -> None:
+    """The floor model never moves the offset without its camera (else the next frame pulls it
+    back): no camera move given -> the scroll read at the band's centre."""
+    g = hs.Ground(camera)
+    t = hs.SceneTracker(REGION, DESKTOP, WINDOWS, g)
+    t.observe([unit("npc", 700, 400)], t.ref())
+    d = np.array([0.2, -0.1])
+    band = np.array([hs.FloorMotion.BAND_CENTRE])
+    shift = g.to_screen(g.to_floor(band) - d)[0] - band[0]
+    assert t.on_frame(shift, None)[0]
+    assert np.abs(t.cam - d).max() < 0.02
