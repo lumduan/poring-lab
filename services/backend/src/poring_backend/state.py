@@ -649,6 +649,7 @@ class AppState:
             bot_agents=self.bot_agents,
             hud_feed=self.feed_status("hud", now),
             route_feed=self.feed_status("route", now),
+            scene_feed=self.feed_status("scene", now),
         )
 
     def feed_relayed(self, kind: str, source: str) -> None:

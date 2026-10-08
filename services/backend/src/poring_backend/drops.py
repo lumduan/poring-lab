@@ -23,7 +23,7 @@ from pydantic import ValidationError
 
 log = logging.getLogger(__name__)
 
-Channel = Literal["ws_input", "ws_stream", "agent", "ingest", "ws_packets"]
+Channel = Literal["ws_input", "ws_stream", "agent", "ingest", "ws_packets", "display"]
 
 _TYPE = re.compile(r"^[a-z_]{1,32}$")
 _LOC_PART = re.compile(r"^[A-Za-z0-9_]{1,32}$")

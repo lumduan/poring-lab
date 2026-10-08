@@ -74,9 +74,12 @@ while :; do
     continue
   fi
   pause=$IO_PAUSE_S
-  if grep -q "R3 inconclusive\|R3 latency" "$out"; then
+  # Only an ABORT line classifies (2026-10-08): an inconclusive R3 no longer aborts -- it logs
+  # "R3: inconclusive measurement ... KEEP TRAINING" -- and an IO abort later in the same attempt
+  # must not be mistaken for an R3 trip.
+  if grep -q "ABORT [^ ]*: R3 \(inconclusive\|latency\)" "$out"; then
     export DUTY_MIN=$(( DUTY_MIN < FLOOR ? DUTY_MIN + 1 : FLOOR )) DUTY_START=$FLOOR DUTY_AFTER_ABORT=0
-    log "R3 $(grep -o 'R3 inconclusive\|R3 latency' "$out" | tail -1): the duty floor is now level $DUTY_MIN; resuming in 30 s"
+    log "R3 $(grep -o 'ABORT [^ ]*: R3 \(inconclusive\|latency\)' "$out" | tail -1 | grep -o 'R3 [a-z]*'): the duty floor is now level $DUTY_MIN; resuming in 30 s"
     pause=$R3_PAUSE_S
   elif grep -q "REFUSED rundev" "$out"; then
     trips=$((trips + 1))

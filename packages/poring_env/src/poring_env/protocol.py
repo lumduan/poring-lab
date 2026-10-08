@@ -394,6 +394,9 @@ class Status(Message):
     route_feed: DisplayFeed | None = Field(
         default=None, description="The live route preview's feed (2026-10-08), as hud_feed."
     )
+    scene_feed: DisplayFeed | None = Field(
+        default=None, description="The HUD scene's feed (keyframes, deltas, motion), as hud_feed."
+    )
 
 
 class PasteResult(Message):
@@ -412,7 +415,7 @@ class ErrorReply(Message):
     Never silent (ADR-0004 decision 4): the drop is also logged and counted in /health."""
 
     type: Literal["error"] = "error"
-    channel: Literal["ws_input", "ws_stream", "agent", "ingest", "ws_packets"]
+    channel: Literal["ws_input", "ws_stream", "agent", "ingest", "ws_packets", "display"]
     reason: str = Field(max_length=128, description="e.g. missing:key.t_mono_ns, json_invalid.")
     ref_type: str | None = Field(
         default=None, max_length=32, description="The dropped message's type, if readable."
@@ -660,10 +663,109 @@ type BrowserToBackend = Annotated[
     | ViewerTiming,
     Field(discriminator="type"),
 ]
+# --- the HUD SCENE (Batt 2026-10-08, H.264-style; display only) ---------------------------------
+# A RETAINED overlay: the console keeps a scene of objects with ids and draws it on EVERY frame
+# until told otherwise.
+# - Screen-anchored objects (the client's UI windows, the work zone) never shift.
+# - World-anchored ones (units, signboards) all shift by ONE global motion per frame: the scene's
+#   measured scroll, like a motion vector.
+# - Messages are DELTAS (add / move / remove), plus a periodic KEYFRAME with the full state (a newly
+#   opened console, a dropped message).
+# - Published by the HUD scene process (scripts/hud_scene.py) through the backend's display-only
+#   channel; never input.
+SCENE_MAX_OBJECTS = 128
+
+
+class SceneRect(BaseModel):
+    """A desktop-normalized rectangle whose POSITION may leave [0, 1]: a world-anchored object's
+    box at motion offset (0, 0), after the camera has scrolled."""
+
+    model_config = _MODEL_CONFIG
+
+    x: float = Field(ge=-1000.0, le=1000.0)
+    y: float = Field(ge=-1000.0, le=1000.0)
+    w: NormCoord
+    h: NormCoord
+
+
+class SceneObject(BaseModel):
+    """One retained object. ``box`` is desktop-normalized: for a ``screen`` object where it is
+    drawn; for a ``world`` object where it is drawn when the scene's motion offset is (0, 0) -- it
+    is drawn at box + the offset of the frame on screen."""
+
+    model_config = _MODEL_CONFIG
+
+    id: int = Field(ge=0, le=2**31 - 1)
+    kind: Literal["unit", "window", "zone", "sign"]
+    anchor: Literal["world", "screen"]
+    box: SceneRect
+    cls: str = Field(default="", max_length=32)
+    conf: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
+class SceneMove(BaseModel):
+    model_config = _MODEL_CONFIG
+
+    id: int = Field(ge=0, le=2**31 - 1)
+    box: SceneRect
+    conf: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
+class SceneOffset(BaseModel):
+    """The cumulative motion of world-anchored objects, desktop-normalized (can leave [0, 1])."""
+
+    model_config = _MODEL_CONFIG
+
+    x: float = Field(ge=-1000.0, le=1000.0)
+    y: float = Field(ge=-1000.0, le=1000.0)
+
+
+class HudScene(Message):
+    """A KEYFRAME: the full retained scene, and the motion offset of ``frame_id``."""
+
+    type: Literal["hud_scene"] = "hud_scene"
+    seq: int = Field(ge=0)
+    offset: SceneOffset
+    objects: list[SceneObject] = Field(default_factory=list, max_length=SCENE_MAX_OBJECTS)
+    period_ms: int = Field(default=5000, ge=0, le=60_000, description="The keyframe period.")
+
+
+class HudDelta(Message):
+    """Changes since ``seq - 1`` (a console that missed one waits for the next keyframe)."""
+
+    type: Literal["hud_delta"] = "hud_delta"
+    seq: int = Field(ge=0)
+    add: list[SceneObject] = Field(default_factory=list, max_length=SCENE_MAX_OBJECTS)
+    move: list[SceneMove] = Field(default_factory=list, max_length=SCENE_MAX_OBJECTS)
+    remove: list[int] = Field(default_factory=list, max_length=SCENE_MAX_OBJECTS)
+
+
+class HudMotion(Message):
+    """The global motion of ``frame_id`` (the bus frame): world-anchored objects are drawn at their
+    box + this offset on that frame. Sent only while the scene moves."""
+
+    type: Literal["hud_motion"] = "hud_motion"
+    offset: SceneOffset
+
+
 type BackendToBrowser = Annotated[
-    FrameMeta | Status | Detections | RoutePreview | OperatorHud | Pong | PasteResult | ErrorReply,
+    FrameMeta
+    | Status
+    | Detections
+    | RoutePreview
+    | OperatorHud
+    | HudScene
+    | HudDelta
+    | HudMotion
+    | Pong
+    | PasteResult
+    | ErrorReply,
     Field(discriminator="type"),
 ]
+# The HUD scene process -> backend (/internal/display, the internal listener only): display
+# messages and nothing else. It is not an agent (never "bot connected"), carries no input, and works
+# in any mux mode (the HUD stays on while a human plays).
+type DisplayToBackend = Annotated[HudScene | HudDelta | HudMotion, Field(discriminator="type")]
 type AgentToBackend = Annotated[
     AgentHello | AgentInput | Detections | RoutePreview | OperatorHud | Ping,
     Field(discriminator="type"),
@@ -675,6 +777,7 @@ _BACKEND_TO_BROWSER: TypeAdapter[BackendToBrowser] = TypeAdapter(BackendToBrowse
 _AGENT_TO_BACKEND: TypeAdapter[AgentToBackend] = TypeAdapter(AgentToBackend)
 _BACKEND_TO_AGENT: TypeAdapter[BackendToAgent] = TypeAdapter(BackendToAgent)
 _INPUT_EVENT: TypeAdapter[InputEvent] = TypeAdapter(InputEvent)
+_DISPLAY_TO_BACKEND: TypeAdapter[DisplayToBackend] = TypeAdapter(DisplayToBackend)
 
 
 def parse_browser_to_backend(raw: str | bytes) -> BrowserToBackend:
@@ -697,6 +800,10 @@ def parse_input_event(raw: str | bytes) -> InputEvent:
     return _INPUT_EVENT.validate_json(raw)
 
 
+def parse_display_to_backend(raw: str | bytes) -> DisplayToBackend:
+    return _DISPLAY_TO_BACKEND.validate_json(raw)
+
+
 class ProtocolDocument(BaseModel):
     """Schema root that pulls every channel into one document for json-schema-to-typescript."""
 
@@ -709,6 +816,7 @@ class ProtocolDocument(BaseModel):
     agent_to_backend: AgentToBackend
     backend_to_agent: BackendToAgent
     input_event: InputEvent
+    display_to_backend: DisplayToBackend
 
 
 def _drop_property_titles(schema: dict[str, Any]) -> None:

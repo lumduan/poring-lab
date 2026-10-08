@@ -20,6 +20,7 @@ from poring_env.protocol import (
     Pong,
     RoutePreview,
     parse_agent_to_backend,
+    parse_display_to_backend,
 )
 
 log = logging.getLogger(__name__)
@@ -85,3 +86,33 @@ async def ws_agent(ws: WebSocket) -> None:
         await stop_task(sender)
         state.broadcast_status()
         await state.release_source(Source.BOT)
+
+
+@router.websocket("/internal/display")
+async def ws_display(ws: WebSocket) -> None:
+    """The HUD SCENE process (scripts/hud_scene.py, Batt 2026-10-08): keyframes, deltas and the
+    global motion, relayed to viewers. DISPLAY ONLY: the internal listener only, never the mux,
+    never the input log, not an agent (no "bot connected"; any mux mode, so the HUD stays on while a
+    human plays). Drops are never silent (the shared reader)."""
+    state = get_state(ws)
+    server = ws.scope.get("server")
+    if not server or server[1] != state.settings.internal_port:
+        await ws.close(code=1008, reason="internal listener only")
+        return
+    await ws.accept()
+    throttle = ReplyThrottle()
+
+    async def reply(text: str) -> None:
+        await ws.send_text(text)
+
+    try:
+        while True:
+            msg = await read_message(
+                ws, parse_display_to_backend, "display", state, throttle, reply
+            )
+            if msg is None:
+                continue
+            state.hub.broadcast_control(msg.model_dump_json())
+            state.feed_relayed("scene", "hud-scene")
+    except WebSocketDisconnect:
+        pass

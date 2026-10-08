@@ -11,6 +11,7 @@ import OverlayCanvas from "@/components/OverlayCanvas";
 import PacketTimeline from "@/components/PacketTimeline";
 import PastePanel from "@/components/PastePanel";
 import RouteCanvas from "@/components/RouteCanvas";
+import SceneCanvas from "@/components/SceneCanvas";
 import StatsPanel, { EMPTY_STATS, type Links, type Stats } from "@/components/StatsPanel";
 import StreamCanvas from "@/components/StreamCanvas";
 import Toolbar from "@/components/Toolbar";
@@ -33,6 +34,7 @@ import {
 } from "@/lib/protocol";
 import type { Size, ViewMode } from "@/lib/view";
 import { pushLive } from "@/lib/route";
+import { SceneStore } from "@/lib/scene";
 import { LatestSlot, OffsetEstimator } from "@/lib/timing";
 import { checkPaste, describePaste } from "@/lib/transfer";
 import { mayForward } from "@/lib/watch";
@@ -71,6 +73,7 @@ export default function Console({ backendUrl }: Props) {
   const frameIdRef = useRef<number>(NO_FRAME);
   const frameNsRef = useRef<number | null>(null); // the shown frame's t_capture_ns (host clock)
   const liveRouteRef = useRef<RoutePreview[]>([]); // LIVE route previews, newest last
+  const sceneRef = useRef(new SceneStore()); // the retained HUD scene (always fed; drawn while HUD on)
   const [held] = useState(() => new HeldKeys());
   const [status, setStatus] = useState<Status | null>(null);
   // When the last Status arrived (performance.now(), this tab's clock): the banner's staleness.
@@ -225,6 +228,9 @@ export default function Console({ backendUrl }: Props) {
         else if (msg?.type === "detections") setDetections(msg);
         // world-anchored only: a one-shot preview is dropped on arrival (it floats; lib/route.ts)
         else if (msg?.type === "route_preview") liveRouteRef.current = pushLive(liveRouteRef.current, msg);
+        else if (msg?.type === "hud_scene") sceneRef.current.keyframe(msg);
+        else if (msg?.type === "hud_delta") sceneRef.current.delta(msg);
+        else if (msg?.type === "hud_motion") sceneRef.current.motion(msg);
         else if (msg?.type === "operator_hud") {
           if (hudOnRef.current) setHud({ msg, at: performance.now() }); // display only
         }
@@ -482,6 +488,15 @@ export default function Console({ backendUrl }: Props) {
           width={frameSize.width}
           height={frameSize.height}
         />
+        {hudOn && (
+          <SceneCanvas
+            store={sceneRef}
+            frameNsRef={frameNsRef}
+            frameIdRef={frameIdRef}
+            width={frameSize.width}
+            height={frameSize.height}
+          />
+        )}
         {hudOn && <HudCanvas hud={hud} width={frameSize.width} height={frameSize.height} />}
       </StreamCanvas>
       {hudOn && <HudPanel hud={hud} status={status} />}

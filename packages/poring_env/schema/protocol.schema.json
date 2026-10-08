@@ -154,6 +154,9 @@
           "detections": "#/$defs/Detections",
           "error": "#/$defs/ErrorReply",
           "frame": "#/$defs/FrameMeta",
+          "hud_delta": "#/$defs/HudDelta",
+          "hud_motion": "#/$defs/HudMotion",
+          "hud_scene": "#/$defs/HudScene",
           "operator_hud": "#/$defs/OperatorHud",
           "paste_result": "#/$defs/PasteResult",
           "pong": "#/$defs/Pong",
@@ -177,6 +180,15 @@
         },
         {
           "$ref": "#/$defs/OperatorHud"
+        },
+        {
+          "$ref": "#/$defs/HudScene"
+        },
+        {
+          "$ref": "#/$defs/HudDelta"
+        },
+        {
+          "$ref": "#/$defs/HudMotion"
         },
         {
           "$ref": "#/$defs/Pong"
@@ -545,6 +557,27 @@
       "title": "DisplayFeed",
       "type": "object"
     },
+    "DisplayToBackend": {
+      "discriminator": {
+        "mapping": {
+          "hud_delta": "#/$defs/HudDelta",
+          "hud_motion": "#/$defs/HudMotion",
+          "hud_scene": "#/$defs/HudScene"
+        },
+        "propertyName": "type"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/HudScene"
+        },
+        {
+          "$ref": "#/$defs/HudDelta"
+        },
+        {
+          "$ref": "#/$defs/HudMotion"
+        }
+      ]
+    },
     "EnvironmentStatus": {
       "additionalProperties": false,
       "description": "The environment interlock's verdict (ADR-0016, rewritten 2026-10-04), for the console and\n/health. Only humans see it: the copy of Status sent to an agent carries null here.",
@@ -635,7 +668,8 @@
             "ws_stream",
             "agent",
             "ingest",
-            "ws_packets"
+            "ws_packets",
+            "display"
           ],
           "type": "string"
         },
@@ -920,6 +954,64 @@
       "title": "HudCounters",
       "type": "object"
     },
+    "HudDelta": {
+      "additionalProperties": false,
+      "description": "Changes since ``seq - 1`` (a console that missed one waits for the next keyframe).",
+      "properties": {
+        "add": {
+          "items": {
+            "$ref": "#/$defs/SceneObject"
+          },
+          "maxItems": 128,
+          "type": "array"
+        },
+        "frame_id": {
+          "default": -1,
+          "description": "Frame this message refers to or was produced from; -1 means none.",
+          "minimum": -1,
+          "type": "integer"
+        },
+        "move": {
+          "items": {
+            "$ref": "#/$defs/SceneMove"
+          },
+          "maxItems": 128,
+          "type": "array"
+        },
+        "remove": {
+          "items": {
+            "type": "integer"
+          },
+          "maxItems": 128,
+          "type": "array"
+        },
+        "seq": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "t_mono_ns": {
+          "description": "Sender's monotonic clock, ns (see module docstring).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "hud_delta",
+          "default": "hud_delta",
+          "type": "string"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "frame_id",
+        "type",
+        "seq",
+        "add",
+        "move",
+        "remove"
+      ],
+      "title": "HudDelta",
+      "type": "object"
+    },
     "HudLock": {
       "additionalProperties": false,
       "description": "The rule's locked target: a unit of this message by ``index``, or by track ``id`` (a lock\nmay outlive its unit's detection). ``lock_remaining_ms`` counts down from this message.",
@@ -962,6 +1054,39 @@
         "lock_remaining_ms"
       ],
       "title": "HudLock",
+      "type": "object"
+    },
+    "HudMotion": {
+      "additionalProperties": false,
+      "description": "The global motion of ``frame_id`` (the bus frame): world-anchored objects are drawn at their\nbox + this offset on that frame. Sent only while the scene moves.",
+      "properties": {
+        "frame_id": {
+          "default": -1,
+          "description": "Frame this message refers to or was produced from; -1 means none.",
+          "minimum": -1,
+          "type": "integer"
+        },
+        "offset": {
+          "$ref": "#/$defs/SceneOffset"
+        },
+        "t_mono_ns": {
+          "description": "Sender's monotonic clock, ns (see module docstring).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "hud_motion",
+          "default": "hud_motion",
+          "type": "string"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "frame_id",
+        "type",
+        "offset"
+      ],
+      "title": "HudMotion",
       "type": "object"
     },
     "HudPoint": {
@@ -1018,6 +1143,60 @@
         "h"
       ],
       "title": "HudRect",
+      "type": "object"
+    },
+    "HudScene": {
+      "additionalProperties": false,
+      "description": "A KEYFRAME: the full retained scene, and the motion offset of ``frame_id``.",
+      "properties": {
+        "frame_id": {
+          "default": -1,
+          "description": "Frame this message refers to or was produced from; -1 means none.",
+          "minimum": -1,
+          "type": "integer"
+        },
+        "objects": {
+          "items": {
+            "$ref": "#/$defs/SceneObject"
+          },
+          "maxItems": 128,
+          "type": "array"
+        },
+        "offset": {
+          "$ref": "#/$defs/SceneOffset"
+        },
+        "period_ms": {
+          "default": 5000,
+          "description": "The keyframe period.",
+          "maximum": 60000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "seq": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "t_mono_ns": {
+          "description": "Sender's monotonic clock, ns (see module docstring).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "hud_scene",
+          "default": "hud_scene",
+          "type": "string"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "frame_id",
+        "type",
+        "seq",
+        "offset",
+        "objects",
+        "period_ms"
+      ],
+      "title": "HudScene",
       "type": "object"
     },
     "HudUnit": {
@@ -1796,6 +1975,153 @@
       "title": "RouteSegment",
       "type": "object"
     },
+    "SceneMove": {
+      "additionalProperties": false,
+      "properties": {
+        "box": {
+          "$ref": "#/$defs/SceneRect"
+        },
+        "conf": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "id": {
+          "maximum": 2147483647,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "box",
+        "conf"
+      ],
+      "title": "SceneMove",
+      "type": "object"
+    },
+    "SceneObject": {
+      "additionalProperties": false,
+      "description": "One retained object. ``box`` is desktop-normalized: for a ``screen`` object where it is\ndrawn; for a ``world`` object where it is drawn when the scene's motion offset is (0, 0) -- it\nis drawn at box + the offset of the frame on screen.",
+      "properties": {
+        "anchor": {
+          "enum": [
+            "world",
+            "screen"
+          ],
+          "type": "string"
+        },
+        "box": {
+          "$ref": "#/$defs/SceneRect"
+        },
+        "cls": {
+          "default": "",
+          "maxLength": 32,
+          "type": "string"
+        },
+        "conf": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "id": {
+          "maximum": 2147483647,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kind": {
+          "enum": [
+            "unit",
+            "window",
+            "zone",
+            "sign"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "anchor",
+        "box",
+        "cls",
+        "conf"
+      ],
+      "title": "SceneObject",
+      "type": "object"
+    },
+    "SceneOffset": {
+      "additionalProperties": false,
+      "description": "The cumulative motion of world-anchored objects, desktop-normalized (can leave [0, 1]).",
+      "properties": {
+        "x": {
+          "maximum": 1000.0,
+          "minimum": -1000.0,
+          "type": "number"
+        },
+        "y": {
+          "maximum": 1000.0,
+          "minimum": -1000.0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "title": "SceneOffset",
+      "type": "object"
+    },
+    "SceneRect": {
+      "additionalProperties": false,
+      "description": "A desktop-normalized rectangle whose POSITION may leave [0, 1]: a world-anchored object's\nbox at motion offset (0, 0), after the camera has scrolled.",
+      "properties": {
+        "h": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "w": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "x": {
+          "maximum": 1000.0,
+          "minimum": -1000.0,
+          "type": "number"
+        },
+        "y": {
+          "maximum": 1000.0,
+          "minimum": -1000.0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "w",
+        "h"
+      ],
+      "title": "SceneRect",
+      "type": "object"
+    },
     "SecretInput": {
       "additionalProperties": false,
       "description": "Human secret typing on/off (a password into Windows or the game), from the console's toggle.\n\nWhile any console connection has it on, the backend still injects every key through the mux,\nbut the input log keeps no key identities for the human source (type, action and timing only),\na synthetic release of a human-held key is redacted the same way, and a paste logs neither its\nlength nor a digest. Browser channel only; never on the agent protocol.",
@@ -2042,6 +2368,18 @@
           "default": null,
           "description": "The live route preview's feed (2026-10-08), as hud_feed."
         },
+        "scene_feed": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DisplayFeed"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The HUD scene's feed (keyframes, deltas, motion), as hud_feed."
+        },
         "stream_window_present": {
           "anyOf": [
             {
@@ -2099,7 +2437,8 @@
         "foreground",
         "bot_agents",
         "hud_feed",
-        "route_feed"
+        "route_feed",
+        "scene_feed"
       ],
       "title": "Status",
       "type": "object"
@@ -2226,6 +2565,9 @@
     "browser_to_backend": {
       "$ref": "#/$defs/BrowserToBackend"
     },
+    "display_to_backend": {
+      "$ref": "#/$defs/DisplayToBackend"
+    },
     "input_event": {
       "$ref": "#/$defs/InputEvent"
     }
@@ -2235,7 +2577,8 @@
     "backend_to_browser",
     "agent_to_backend",
     "backend_to_agent",
-    "input_event"
+    "input_event",
+    "display_to_backend"
   ],
   "title": "PoringProtocol",
   "type": "object"

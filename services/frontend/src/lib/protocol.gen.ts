@@ -28,13 +28,28 @@ export type Mode = "HUMAN" | "BOT" | "ASSIST";
  * via the `definition` "BackendToBrowser".
  */
 export type BackendToBrowser =
-  FrameMeta | Status | Detections | RoutePreview | OperatorHud | Pong | PasteResult | ErrorReply;
+  | FrameMeta
+  | Status
+  | Detections
+  | RoutePreview
+  | OperatorHud
+  | HudScene
+  | HudDelta
+  | HudMotion
+  | Pong
+  | PasteResult
+  | ErrorReply;
 /**
  * This interface was referenced by `PoringProtocol`'s JSON-Schema
  * via the `definition` "BrowserToBackend".
  */
 export type BrowserToBackend =
   MouseMove | MouseButton | Wheel | Key | ReleaseAll | SetMode | Ping | ClipboardPaste | SecretInput | ViewerTiming;
+/**
+ * This interface was referenced by `PoringProtocol`'s JSON-Schema
+ * via the `definition` "DisplayToBackend".
+ */
+export type DisplayToBackend = HudScene | HudDelta | HudMotion;
 
 /**
  * Schema root that pulls every channel into one document for json-schema-to-typescript.
@@ -44,6 +59,7 @@ export interface PoringProtocol {
   backend_to_agent: BackendToAgent;
   backend_to_browser: BackendToBrowser;
   browser_to_backend: BrowserToBackend;
+  display_to_backend: DisplayToBackend;
   input_event: InputEvent;
   [k: string]: unknown;
 }
@@ -865,6 +881,10 @@ export interface Status {
    */
   route_feed: DisplayFeed | null;
   /**
+   * The HUD scene's feed (keyframes, deltas, motion), as hud_feed.
+   */
+  scene_feed: DisplayFeed | null;
+  /**
    * A Moonlight (console-mode) window is on the display; null = X unreachable.
    */
   stream_window_present: boolean | null;
@@ -1069,7 +1089,7 @@ export interface Pong {
  * via the `definition` "ErrorReply".
  */
 export interface ErrorReply {
-  channel: "ws_input" | "ws_stream" | "agent" | "ingest" | "ws_packets";
+  channel: "ws_input" | "ws_stream" | "agent" | "ingest" | "ws_packets" | "display";
   /**
    * Frame this message refers to or was produced from; -1 means none.
    */
@@ -1109,6 +1129,130 @@ export interface FrameMeta {
   t_mono_ns: number;
   type: "frame";
   width: number;
+}
+/**
+ * A KEYFRAME: the full retained scene, and the motion offset of ``frame_id``.
+ *
+ * This interface was referenced by `PoringProtocol`'s JSON-Schema
+ * via the `definition` "HudScene".
+ */
+export interface HudScene {
+  /**
+   * Frame this message refers to or was produced from; -1 means none.
+   */
+  frame_id: number;
+  /**
+   * @maxItems 128
+   */
+  objects: SceneObject[];
+  offset: SceneOffset;
+  /**
+   * The keyframe period.
+   */
+  period_ms: number;
+  seq: number;
+  /**
+   * Sender's monotonic clock, ns (see module docstring).
+   */
+  t_mono_ns: number;
+  type: "hud_scene";
+}
+/**
+ * One retained object. ``box`` is desktop-normalized: for a ``screen`` object where it is
+ * drawn; for a ``world`` object where it is drawn when the scene's motion offset is (0, 0) -- it
+ * is drawn at box + the offset of the frame on screen.
+ *
+ * This interface was referenced by `PoringProtocol`'s JSON-Schema
+ * via the `definition` "SceneObject".
+ */
+export interface SceneObject {
+  anchor: "world" | "screen";
+  box: SceneRect;
+  cls: string;
+  conf: number | null;
+  id: number;
+  kind: "unit" | "window" | "zone" | "sign";
+}
+/**
+ * A desktop-normalized rectangle whose POSITION may leave [0, 1]: a world-anchored object's
+ * box at motion offset (0, 0), after the camera has scrolled.
+ *
+ * This interface was referenced by `PoringProtocol`'s JSON-Schema
+ * via the `definition` "SceneRect".
+ */
+export interface SceneRect {
+  h: number;
+  w: number;
+  x: number;
+  y: number;
+}
+/**
+ * The cumulative motion of world-anchored objects, desktop-normalized (can leave [0, 1]).
+ *
+ * This interface was referenced by `PoringProtocol`'s JSON-Schema
+ * via the `definition` "SceneOffset".
+ */
+export interface SceneOffset {
+  x: number;
+  y: number;
+}
+/**
+ * Changes since ``seq - 1`` (a console that missed one waits for the next keyframe).
+ *
+ * This interface was referenced by `PoringProtocol`'s JSON-Schema
+ * via the `definition` "HudDelta".
+ */
+export interface HudDelta {
+  /**
+   * @maxItems 128
+   */
+  add: SceneObject[];
+  /**
+   * Frame this message refers to or was produced from; -1 means none.
+   */
+  frame_id: number;
+  /**
+   * @maxItems 128
+   */
+  move: SceneMove[];
+  /**
+   * @maxItems 128
+   */
+  remove: number[];
+  seq: number;
+  /**
+   * Sender's monotonic clock, ns (see module docstring).
+   */
+  t_mono_ns: number;
+  type: "hud_delta";
+}
+/**
+ * This interface was referenced by `PoringProtocol`'s JSON-Schema
+ * via the `definition` "SceneMove".
+ */
+export interface SceneMove {
+  box: SceneRect;
+  conf: number | null;
+  id: number;
+}
+/**
+ * The global motion of ``frame_id`` (the bus frame): world-anchored objects are drawn at their
+ * box + this offset on that frame. Sent only while the scene moves.
+ *
+ * This interface was referenced by `PoringProtocol`'s JSON-Schema
+ * via the `definition` "HudMotion".
+ */
+export interface HudMotion {
+  /**
+   * Frame this message refers to or was produced from; -1 means none.
+   */
+  frame_id: number;
+  offset: SceneOffset;
+  /**
+   * Sender's monotonic clock, ns (see module docstring).
+   */
+  t_mono_ns: number;
+  type: "hud_motion";
 }
 /**
  * Outcome of one ClipboardPaste. ``reason`` is "ok" or why it was refused or failed.

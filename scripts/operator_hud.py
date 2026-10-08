@@ -438,13 +438,24 @@ def note(line: str) -> None:
 
 
 def publish(*, walk: dict[str, Any] | None = None, force: bool = True) -> None:
-    """Send the latest detector boxes (with their cells), the pending log lines and `walk`."""
+    """The DECISION layer (Batt 2026-10-08): the pending log lines, the walk vector and the unit
+    COUNT. The boxes themselves are the PERCEPTION layer's (scripts/hud_scene.py, anchored to the
+    world, drawn on every frame): boxes drawn in a decision frame's px floated as the camera
+    scrolled. The nearest units' distances in cells ride in the log instead."""
     if _HUD is None:
         return
     with contextlib.suppress(Exception):
         boxes, w = _LAST.get("boxes") or [], _LAST.get("w")
         cells = unit_cells(boxes, w.camera, w.gat, tuple(w.position)) if w is not None else None
-        _HUD.send(boxes=boxes, cells=cells, det_ms=_LAST.get("det_ms"), walk=walk, force=force)
+        near = sorted(
+            (chebyshev(c), _box_fields(b)[5])
+            for b, c in zip(boxes, cells or [None] * len(boxes), strict=False)
+            if chebyshev(c) is not None
+        )[:3]
+        if near:
+            _HUD.note("near: " + ", ".join(f"{cls} {d} c" for d, cls in near))
+        _HUD.send(boxes=[], n_units=len(boxes), det_ms=_LAST.get("det_ms"), walk=walk,
+                  force=force)  # fmt: skip
 
 
 def _watch(det: Any) -> None:

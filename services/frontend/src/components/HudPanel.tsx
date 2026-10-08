@@ -32,7 +32,9 @@ export default function HudPanel({ hud, status }: Props) {
   }, [hud]);
 
   // WHY it may be empty (Batt 2026-10-08): no publisher, a stopped one, or an old backend
-  const why = [feedLine("HUD", status), feedLine("Route preview", status)].filter((l): l is string => l != null);
+  const why = [feedLine("HUD scene", status), feedLine("HUD", status), feedLine("Route preview", status)].filter(
+    (l): l is string => l != null,
+  );
   const reasons =
     why.length > 0 ? (
       <ul className="font-mono text-amber-300" aria-label="Why the overlays are empty">

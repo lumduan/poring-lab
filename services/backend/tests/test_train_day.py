@@ -24,6 +24,9 @@ case "$what" in
   drop) echo "$m1$m2 (no resume)"; echo "DUTY summary: {}"; exit 1 ;;
   latency) echo "[12:00:00] ABORT rundev:vision: R3 latency: paired median delta +6.1 ms"
            exit 1 ;;
+  heldthenio) echo "[12:00:00] R3: inconclusive measurement: only 3 kept pairs -> KEEP TRAINING"
+              echo "[12:30:00] ABORT rundev:vision: quant-postgres full IO stall 26.1% (spike)"
+              exit 1 ;;
   *) echo "DUTY summary: {}"; echo done; exit 0 ;;
 esac
 """
@@ -75,3 +78,11 @@ def test_a_latency_trip_raises_the_duty_floor_and_keeps_running(tmp_path: Path) 
     log, calls = run(tmp_path, "latency,latency,ok")
     assert "the duty floor is now level 1" in log and "the duty floor is now level 2" in log
     assert "DUTY_MIN=0" in calls[0] and "DUTY_MIN=2" in calls[2] and "TRAIN DONE" in log
+
+
+def test_a_kept_training_line_never_makes_a_later_io_abort_an_r3_trip(tmp_path: Path) -> None:
+    """2026-10-08: an inconclusive R3 keeps training (no ABORT); an IO abort later in the SAME
+    attempt is an IO trip (the long pause, counted), never an R3 floor raise."""
+    log, calls = run(tmp_path, "heldthenio,ok")
+    assert "TRAIN DONE" in log and "the duty floor is now level" not in log
+    assert "pausing 0 s before the next attempt" in log and "DUTY_MIN=0" in calls[1]

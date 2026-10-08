@@ -191,9 +191,9 @@ export const FEED_STALE_MS = 3000;
 
 /** The status line for one display feed, or null when it is live. `status` is the backend's latest
  * Status; an older backend sends no feed key at all, which is how "not updated" is told apart. */
-export function feedLine(kind: "HUD" | "Route preview", status: Status | null): string | null {
+export function feedLine(kind: "HUD" | "Route preview" | "HUD scene", status: Status | null): string | null {
   if (!status) return `${kind}: no backend status yet (connecting)`;
-  const key = kind === "HUD" ? "hud_feed" : "route_feed";
+  const key = kind === "HUD" ? "hud_feed" : kind === "HUD scene" ? "scene_feed" : "route_feed";
   // an older backend's Status has no such key at all (undefined), whatever the generated type says
   const feed = (status as unknown as Partial<Record<string, DisplayFeed | null>>)[key];
   if (feed === undefined || feed === null) return `${kind}: backend not updated (it does not report this feed; restart pending)`;

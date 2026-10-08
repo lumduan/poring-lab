@@ -370,3 +370,39 @@ def test_status_says_what_the_hud_and_route_feeds_relayed(
     assert hud["relayed"] == 1 and hud["source"] == "route-preview" and hud["age_ms"] is not None
     assert route["relayed"] == 1 and route["age_ms"] >= 0
     assert "walking" not in json.dumps(hud)  # counts and ages only, never the content
+
+
+def test_the_hud_scene_channel_relays_display_only_and_is_not_a_bot(
+    lab: tuple[TestClient, RecordingInput],
+) -> None:
+    """Batt 2026-10-08 (the retained HUD scene): /internal/display relays keyframes, deltas and
+    motion to viewers; it is not an agent (no "bot connected"), carries no input, and a bad
+    message is a counted drop answered with an ErrorReply."""
+    from poring_env.protocol import HudScene, SceneObject, SceneOffset, SceneRect
+
+    client, fake = lab
+    obj = SceneObject(
+        id=1, kind="window", anchor="screen", box=SceneRect(x=0.05, y=0.08, w=0.15, h=0.36)
+    )
+    key = HudScene(t_mono_ns=T, frame_id=41, seq=0, offset=SceneOffset(x=0.0, y=0.0), objects=[obj])
+    with (
+        client.websocket_connect("/ws/stream", headers={"origin": ORIGIN}) as viewer,
+        client.websocket_connect("/internal/display") as ws,
+    ):
+        ws.send_text(key.model_dump_json())
+        got, status = None, None
+        for _ in range(400):
+            raw = viewer.receive()
+            msg = json.loads(raw["text"]) if raw.get("text") else {}
+            if msg.get("type") == "hud_scene":
+                got = msg
+            if got and msg.get("type") == "status" and msg["scene_feed"]["relayed"] >= 1:
+                status = msg
+                break
+        assert got is not None and got["objects"][0]["kind"] == "window" and got["frame_id"] == 41
+        assert status is not None and status["bot_connected"] is False
+        assert status["scene_feed"]["source"] == "hud-scene"
+        ws.send_text('{"type": "agent_input", "t_mono_ns": 1, "frame_id": -1, "events": []}')
+        reply = json.loads(ws.receive_text())
+        assert reply["type"] == "error" and reply["channel"] == "display"  # input never passes here
+    assert fake.events == []
