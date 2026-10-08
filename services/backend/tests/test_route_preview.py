@@ -225,3 +225,33 @@ def test_an_engine_walk_waits_for_motion_after_the_click_and_a_dead_click_stands
         t += 50_000_000
     assert core.engine is None  # stood down
     assert np.abs(core.c - [100.0, 100.0]).max() < 0.02  # and never pulled the camera
+
+
+def test_a_screen_fixed_pattern_hides_the_scroll_unless_band_passed(
+    rp: ModuleType, world: np.ndarray
+) -> None:
+    """2026-10-08 night: on ~9 % of the 20:09 walk's moving frames the plain correlation read ~0
+    while the NPCs moved 10-15 px. A fine screen-fixed pattern (codec / JPEG noise) wins the
+    whitened peak. Reproduced with static noise; the HUD's band-pass (blur, high-pass, |R|^0.5)
+    reads the scroll through it, and the plain default is unchanged (the previewer's)."""
+    static = np.random.default_rng(3).normal(0, 6, (H, W, 1)).astype(np.float32)
+    sharp = {"blur": True, "highpass": 9, "power": 0.5}
+
+    def shot(cam: np.ndarray) -> np.ndarray:
+        img = frame(world, cam, None, rp.BAR_OFFSET).astype(np.float32) + static
+        return np.clip(img, 0, 255).astype(np.uint8)
+
+    a = shot(np.zeros(2))
+    for d in ((-7.0, 5.0), (-3.0, 2.0), (12.0, -9.0)):
+        b = shot(np.array(d))
+        assert np.hypot(*rp.scene_shift(a, b)) < 0.5  # the plain one: "nothing moved"
+        dx, dy = rp.scene_shift(a, b, **sharp)
+        assert dx == pytest.approx(-d[0], abs=0.75) and dy == pytest.approx(-d[1], abs=0.75)
+    assert np.hypot(*rp.scene_shift(a, a, **sharp)) < 0.1  # still stays still
+
+
+def test_the_box_mean_is_exact(rp: ModuleType) -> None:
+    g = np.random.default_rng(0).normal(size=(40, 70)).astype(np.float32)
+    p = np.pad(g, 4, mode="edge")
+    want = np.mean([p[dy : dy + 40, dx : dx + 70] for dy in range(9) for dx in range(9)], axis=0)
+    assert np.abs(rp._box(g, 9) - want).max() < 1e-4

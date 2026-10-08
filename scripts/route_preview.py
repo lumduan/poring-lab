@@ -98,9 +98,23 @@ def _hann(h: int, w: int) -> np.ndarray:
     return (np.hanning(h)[:, None] * np.hanning(w)[None, :]).astype(np.float32)
 
 
-def _band(img: np.ndarray, down: int) -> np.ndarray:
+def _box(g: np.ndarray, k: int) -> np.ndarray:
+    """The k x k (odd) box mean of g, edge-padded: separable, by cumulative sums."""
+    r = k // 2
+    c = np.cumsum(np.pad(g, r, mode="edge"), axis=0, dtype=np.float64)
+    c = np.vstack([np.zeros((1, c.shape[1])), c])
+    v = (c[k:] - c[:-k]) / k
+    c = np.hstack([np.zeros((v.shape[0], 1)), np.cumsum(v, axis=1)])
+    return ((c[:, k:] - c[:, :-k]) / k).astype(np.float32)
+
+
+def _band(img: np.ndarray, down: int, blur: bool = False, highpass: int = 0) -> np.ndarray:
     y0, y1, x0, x1 = BAND
     g = img[y0:y1:down, x0:x1:down, :3].astype(np.float32).mean(-1)
+    if blur:
+        g = _box(g, 3)
+    if highpass:
+        g = g - _box(g, highpass)
     g -= g.mean()
     my0, my1, mx0, mx1 = CHAR_MASK
     g[(my0 - y0) // down : (my1 - y0) // down, (mx0 - x0) // down : (mx1 - x0) // down] = 0.0
@@ -112,12 +126,22 @@ def _sub(cm: float, c0: float, cp: float) -> float:
     return 0.0 if d == 0 else float(np.clip(0.5 * (cm - cp) / d, -0.5, 0.5))
 
 
-def scene_shift(a: np.ndarray, b: np.ndarray, down: int = DOWN) -> tuple[float, float]:
+def scene_shift(a: np.ndarray, b: np.ndarray, down: int = DOWN, *, blur: bool = False,
+                highpass: int = 0, power: float = 1.0) -> tuple[float, float]:  # fmt: skip
     """How far the SCENE moved from frame a to frame b (client px, sub-pixel): phase correlation of
-    the band around the character, the client's UI windows excluded."""
-    fa, fb = np.fft.fft2(_band(a, down)), np.fft.fft2(_band(b, down))
+    the band around the character, the client's UI windows excluded.
+
+    The defaults are the previewer's. ``blur`` (3x3), ``highpass`` (minus a k x k box mean) and
+    ``power`` < 1 (partial whitening, |R|^power) band-pass the correlation: the HUD scene's choice
+    (2026-10-08 night). Measured on the 20:09 walk against the NPCs' own motion, the plain one read
+    ~0 on 12 of 140 moving frames (a screen-fixed pattern wins the peak: full resolution doubled
+    that); blur + highpass 9 + power 0.5 read ~0 on 1, error p95 8.5 -> 4.6 px, still frames
+    unchanged."""
+    fa = np.fft.fft2(_band(a, down, blur, highpass))
+    fb = np.fft.fft2(_band(b, down, blur, highpass))
     r = fb * np.conj(fa)
-    c = np.fft.ifft2(r / (np.abs(r) + 1e-9)).real
+    mag = np.abs(r) if power == 1.0 else np.abs(r) ** power
+    c = np.fft.ifft2(r / (mag + 1e-9)).real
     h, w = c.shape
     iy, ix = np.unravel_index(int(np.argmax(c)), c.shape)
     dy = iy + _sub(c[iy - 1, ix], c[iy, ix], c[(iy + 1) % h, ix])
