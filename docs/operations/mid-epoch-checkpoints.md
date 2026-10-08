@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "A training run killed mid-epoch and resumed from weights/mid.pt trains on the SAME batches, with the SAME augmentation and the SAME schedule as the uninterrupted run, and its losses stay within the GPU's own run-to-run noise."
-status: PRE-REGISTERED
+status: FAILED
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [../benchmarks/v1-vs-v0png.md, r3-paired.md, ../../services/vision/src/poring_vision/midckpt.py]
-next_action: "Run the proof (below) after the v0-JPEG evals and before v1 starts, under R1-R3. PASS: v1 trains with MID_CKPT=1. FAIL: v1 keeps epoch-level checkpoints, and the failure is reported."
+next_action: "2026-10-08 22:19: the proof FAILED at B2 (rc 1, a fused-Adam state mismatch on the first step after a bitwise restore; RESULT section). v1 trains WITHOUT mid-epoch checkpoints, as pre-registered; TEMP_HOLD stays. Batt: whether to fix (proposed in RESULT) and re-run the proof as a new pre-registration."
 ---
 
 # Mid-epoch checkpoints with an exact resume (Batt, 2026-10-08; pre-registered BEFORE any run)
@@ -198,3 +198,45 @@ All of B goes to one trace file.
 - **PASS:** v1 trains with `MID_CKPT=1` (v1-vs-v0png.md records it before v1 starts).
 - **FAIL on any criterion:** v1 keeps epoch-level checkpoints (`MID_CKPT` unset, code path
   unchanged), and the failing criterion is reported.
+
+## RESULT (2026-10-08, scored as written): **FAIL** — B2 crashed on its first optimizer step after the resume
+
+**The runs** (`/dev/shm/poring-lab-tmp/gpu-night/chain6.sh`; guarded `rundev:vision`, the adaptive duty
+cycle, R3 paired):
+
+| run | expected | got | ICT (UTC) |
+|---|---|---|---|
+| A | rc 0 | **rc 0** | 21:06–21:35 (14:06–14:35) |
+| A2 | rc 0 | **rc 0** | 21:35–22:01 (14:35–15:01) |
+| B1 | dies, rc 86 | **rc 86** (the deliberate kill after batch 850) | 22:01–22:17 (15:01–15:17) |
+| B2 | resumes from mid.pt, dies, rc 86 | **rc 1: CRASHED** | 22:17–22:19 (15:17–15:19) |
+| B3 | — | not run | — |
+
+- **The resume itself went as designed:** `{"resume_from": "mid.pt", "mid": {"epoch": 1, "next_i":
+  300}}`, then "Resuming MID-EPOCH … epoch 2 batch 300/500, state restored bitwise" (`"bitwise":
+  true`). Criterion (d) held for what it checks.
+- **The first optimizer step then raised**, in `torch/optim/adam.py` `_fused_adam`:
+  `RuntimeError: params, grads, exp_avgs, and exp_avg_sqs must have same dtype, device, and layout`.
+- `resume_proof.py compare` was not run: there is no B trace to compare. **Per the decision above:
+  FAIL, so v1 keeps epoch-level checkpoints (`MID_CKPT` unset).** The overnight chain recorded that
+  in `v1-vs-v0png.md` before v1 started. `TEMP_HOLD_MAX_LOAD` stays: its exit condition (r3-paired.md,
+  "EXIT") is not met.
+
+**Diagnosis (Claude, NOT proven: both hypotheses need a GPU check):**
+1. **The step counters' device.** `load_state_dict` casts the per-parameter `step` to the
+   parameter's device only when the SAVED param group says `fused` / `capturable`. `_restore`
+   copies `group.get("fused")` from the live group, and that can be `None` while the runtime still
+   picks the fused kernel (the traceback shows `_fused_adam`). So the `step` tensors could stay on
+   the CPU.
+2. **The state's strides.** `to_cpu` makes every saved tensor `.contiguous()`, and
+   `load_state_dict` only moves the device and dtype. Any parameter whose memory format is not
+   contiguous then gets state with different strides, which the fused kernel refuses.
+
+**Proposed fix (not applied):**
+- after `load_state_dict`, rebuild each state tensor as `torch.empty_like(param).copy_(saved)` (the
+  parameter's device, dtype and strides), and each `step` as a float32 tensor on the parameter's
+  device;
+- or pin the kernel at save AND restore (`fused` recorded in the checkpoint and passed explicitly).
+- A host test cannot reproduce the fused CUDA kernel (no torch on the host). The fix needs its own
+  short GPU check, then the SAME proof re-run as a NEW pre-registration. That is Batt's call; until
+  then, `--mid-ckpt` stays opt-in and unused.
