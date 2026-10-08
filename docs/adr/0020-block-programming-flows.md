@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [ADR-0015, ADR-0002, ADR-0003, ADR-0004, ADR-0006, ADR-0007, ADR-0011, ADR-0012, ADR-0014, ADR-0016, ADR-0018, ADR-0019]
-next_action: "Batt accepts, amends or rejects. On acceptance: answer the open questions marked FIRST (unverified blocks, executor placement, session blocks, takeover resume, where approved flows live), then build phase F1 (the flow IR, the block catalogue and linter layers 1-3, offline, no UI and no input). Section 13 (2026-10-08, map-centric workflows + event flows and scopes) adds open questions 16-29 (FIRST: 16-18, 29) and phases MW0-MW4 beside F1-F2. Nothing is built yet."
+next_action: "Batt accepts, amends or rejects. On acceptance: answer the open questions marked FIRST (unverified blocks, executor placement, session blocks, takeover resume, where approved flows live), then build phase F1 (the flow IR, the block catalogue and linter layers 1-3, offline, no UI and no input). Section 13 (2026-10-08, map-centric workflows + event flows and scopes) adds open questions 16-30 and phases MW0-MW4 beside F1-F2. Batt ANSWERED 16, 17, 18, 20, 21, 29 and part of 27 the same day (recorded at each question); 30 is new from those answers. Nothing is built yet."
 ---
 
 # ADR-0020: Block programs over one flow IR (the agent builds blocks, users compose flows)
@@ -16,6 +16,10 @@ next_action: "Batt accepts, amends or rejects. On acceptance: answer the open qu
 - **Amended, still PROPOSED (Batt, 2026-10-08):** workflows are organised BY MAP (map blocks,
   typed exits, target / ignore lists with an all-spawn training scope, an automatic preparation
   estimate), with EVENT FLOWS at global and per-map scope. See section 13.
+  - **Batt's answers, 2026-10-08:** map blocks are in IR 1; INSERT = hotbar `use_item` only, after
+    an alone-test; relocation as 13.6.6; `hp_critical` joins the safety-critical set; the save
+    point is REQUIRED before any wing; loot by a hover-scan for the PICKUP cursor; the L3 map-sheet
+    extraction is approved. Each is recorded at its open question.
 - **The direction (Batt, 2026-10-07):** users build bot behaviour as BLOCK PROGRAMS, the way
   Microsoft MakeCode or LEGO EV3 programs are built. The agent builds the BLOCKS; users compose the
   FLOWS. Flows are not hard-coded by the agent. An example flow: start → walk to (map, x, y) →
@@ -364,7 +368,7 @@ from its L1 entry.
 | `close_dialog` | `npc.close` | – | the dialog anchor disappears | |
 | `attack_nearest` | `combat.attack_target` | mob, `until`, `within` | damage or a miss above the target; the target gone at the end | target choice by the detector and tracker |
 | `use_skill` | `combat.use_skill` | skill, target | the skill effect; the SP bar drops | |
-| `loot` | `loot.pick_up` | item or any | the item vanishes, its count rises | not bindable yet: no ground-item class (L1 exception) |
+| `loot` | `loot.pick_up` | item or any | the item vanishes, its count rises | not bindable yet: no ground-item class (L1 exception) ➡️ **Batt, 2026-10-08: bindable WITHOUT new training** -- a hover-scan around the cell where the tracker saw a monster die, for the PICKUP cursor; verified by the weight readout rising (open question 21) |
 | `buy` / `sell` | `trade.buy` / `trade.sell` | shop npc, items, keep policy | zeny drops / rises; items appear / leave | `sell` takes a KEEP list; an empty one must be acknowledged at approval |
 | `kafra_store` / `kafra_withdraw` | `storage.deposit` / `storage.withdraw` | items | items move between the windows | |
 | `use_item` | `item.use` | item | the bar rises, the count drops | |
@@ -1140,10 +1144,10 @@ run time for perception. Per map, one **map sheet**:
 |---|---|---|---|
 | spawns: every species, its counts, boss lines | the target / ignore pickers; the training scope (13.3); "harder" (13.6.9); the unit gate's speed bound | `scripts/kb_build.py` → `data/kb/spawns.json`, `classes.json` (spawns plus metamorphosis), `mobs.json` (level, walk speed, ai) | only the maps of `kb_build.SPAWNS` (the Prontera fields and Byalan) |
 | NPCs: positions and menus (option KEYS) | `talk_npc`, `choose_menu`, `npc_warp` | `scripts/kb_bindings.py` → L3 `npc.positions`, `npc.menus` | only the route's NPCs (`scripts/kb_route.py`) |
-| NPC warp targets, per option | `npc_warp` destinations | – | not extracted (the script's warp after a menu choice) |
+| NPC warp targets, per option | `npc_warp` destinations | – | not extracted (the script's warp after a menu choice) ➡️ extraction APPROVED (Batt, 2026-10-08; open question 27) |
 | warps and exits | `walk_exit` | L3 `warp.cells`; `data/kb/warps.json` | only the route's maps |
-| Kafra functions | `kafra_store`, `set_save_point`, Kafra teleports | L3 `npc.kafra`, `kafra.menus` (per type), `kafra.destinations` (per town: fees, arrival cells) | the save point's cell is not extracted |
-| map flags | which item warps a map refuses | – | not extracted |
+| Kafra functions | `kafra_store`, `set_save_point`, Kafra teleports | L3 `npc.kafra`, `kafra.menus` (per type), `kafra.destinations` (per town: fees, arrival cells) | the save point's cell is not extracted ➡️ extraction APPROVED (Batt, 2026-10-08) |
+| map flags | which item warps a map refuses (and so `hp_critical`'s escape, 13.6.8) | – | not extracted ➡️ extraction APPROVED (Batt, 2026-10-08) |
 | walkability | the cell picker; the routes (13.5) | L3 `map.walkability` → the GAT (client data in `/dev/shm`, never committed); `poring_dataset/walk.py` | – |
 
 - Sheets are generated LOCALLY from the pinned rAthena, like the KB (`data/kb/maps/<map>.json`, a
@@ -1245,7 +1249,7 @@ tracks the save point. The messages are examples.
 
 | Rule | Layer | Checks | Example message |
 |---|---|---|---|
-| save point | 3 · simulation | An `item_warp` (a Butterfly Wing) and every death go to the SAVE POINT, never to "the previous map". The save point cannot be read from pixels, so it is UNKNOWN at the start unless the workflow sets it (`set_save_point` at a Kafra) or `assumes` asserts it (an assertion stays a visible warning at approval). WARNING when a wing or a respawn relies on an unknown or different save point; the editor offers the fix block "set save point at Kafra" in the intended map's block | "farm.1: a Butterfly Wing returns to the save point, not to town, and nothing sets it on map_1. Add 'set save point' at town's Kafra?" |
+| save point | 3 · simulation | An `item_warp` (a Butterfly Wing) and every death go to the SAVE POINT, never to "the previous map". The save point cannot be read from pixels, so it is UNKNOWN at the start unless the workflow sets it (`set_save_point` at a Kafra) or `assumes` asserts it (an assertion stays a visible warning at approval). WARNING when a wing or a respawn relies on an unknown or different save point; the editor offers the fix block "set save point at Kafra" in the intended map's block ➡️ **Batt, 2026-10-08: an ERROR for every wing.** Each `item_warp` that goes to the save point needs, on every path before it, a `set_save_point` at the intended map's Kafra, or an `assert_save_point(map, cell)` block, which stays a visible warning at approval. A respawn relying on an unknown save point stays a WARNING (open question 20) | "farm.1: a Butterfly Wing returns to the save point, not to town, and nothing sets it on map_1. Add 'set save point' at town's Kafra?" |
 | exit destinations | 2 · semantics | The destination map exists; the exit's L3 data leads there; its arrival cell lies in `to_entry`. `walk_exit`: an L3 warp (or edge) on this map. `npc_warp`: the NPC is on this map, every option key is in its menu at that point, the warp after them is known (else the destination is the author's: a warning, checked on arrival). `item_warp`: the map allows it (L3 map flags) | "relay.0: option o_5d0e of npc n_2b71 warps to map_4, not to farm's map_3" |
 | NPC, menu, Kafra service | 2 · semantics | The NPC is on the block's map (L3 `npc.positions`); option keys are in `npc.menus`, never an index; the Kafra service (save, storage, teleport) is offered by that Kafra's type (`kafra.menus`); L1 preconditions are `assumes` or sensors (storage: Basic Skill 6 and the fee, `storage.deposit`, [phase4-ui.md](../phase4-ui.md)) | "town.1: npc n_k1 is not on map_1" |
 | routes | 3 · simulation | Every entry reaches every walk target and exit on the walk graph (`poring_dataset/walk.py`, legs ≤ 128 steps). A leg that crosses another warp's cells would leave the map: ERROR | "town.3: the route from A to C crosses the warp at (156, 22): it would leave map_1" |
@@ -1288,10 +1292,11 @@ INSERT vs PRE-EMPT (13.6.4), the `until` stop threshold and run limits (13.6.7),
   - **DISABLE:** the global event does not run on that map.
 - A map event with a new key is **map-only** (ADDED).
 - **The safety-critical set is FIXED,** in this design and in code, and never user-editable:
-  **`dead` and `unexpected_map`.**
-  - Every workflow has both, globally (13.6.8).
+  **`dead`, `hp_critical` and `unexpected_map`.** `hp_critical` was added by Batt (2026-10-08,
+  open question 29).
+  - Every workflow has all three, globally (13.6.8).
   - A map may only EXTEND them. A DISABLE or an OVERRIDE is a lint ERROR.
-  - **Their extensions run AFTER the global body,** not first: a dead character can do nothing
+  - **Their extensions run AFTER the global body,** not first (confirmed by Batt, 2026-10-08): a dead character can do nothing
     before it respawns, and nothing may act on an unexpected map before the position is read. The
     extension runs before the global `then`, and is skipped if the global body ends the run.
   - **An extension may ADD bounded recovery steps** (e.g. close an NPC dialog left open on that
@@ -1329,13 +1334,15 @@ For the current map block B, in this order:
 |---|---|---|---|---|
 | 0 | the built-in guards | guard | abort | 2.5 rule 1 |
 | 1 | `dead` (safety-critical) | critical | pre-empt | the death dialog's anchor: `is_dead()` |
-| 2 | `unexpected_map` (safety-critical) | critical | pre-empt | a map load seen while no exit, respawn or relocating event runs (`map_load_seen()`: the loading screen, or the client's map-load notice, demonstrations.md §3.13); or an exit's arrival check reads another map |
-| 3 | `hp_low` | survival | INSERT | `hp_percent() < 50`, until `> 80` |
-| 4 | `weight` | upkeep | pre-empt | `weight_percent() >= 90`: the backstop. The plan's own threshold sits in the map's main flow (farm's 50 %) |
-| 5 | the main flow | – | – | – |
+| 2 | `hp_critical` (safety-critical; Batt, 2026-10-08) | critical | pre-empt | `hp_percent() < 20`, rearmed above 50 %: an immediate ESCAPE (the fixed body in 13.6.8), then `relocate`. Its place above `unexpected_map` is a proposal (open question 30) |
+| 3 | `unexpected_map` (safety-critical) | critical | pre-empt | a map load seen while no exit, respawn or relocating event runs (`map_load_seen()`: the loading screen, or the client's map-load notice, demonstrations.md §3.13); or an exit's arrival check reads another map |
+| 4 | `hp_low` | survival | INSERT | `hp_percent() < 50`, until `> 80` |
+| 5 | `weight` | upkeep | pre-empt | `weight_percent() >= 90`: the backstop. The plan's own threshold sits in the map's main flow (farm's 50 %) |
+| 6 | the main flow | – | – | – |
 
-- So **dead > HP low > weight > the main flow.** `dead` and `unexpected_map` never compete: a
-  respawn is an expected map change.
+- So **dead > HP critical > HP low > weight > the main flow.** `dead` and `unexpected_map` never
+  compete: a respawn is an expected map change. Nor do `hp_critical` and `unexpected_map`: a Fly
+  Wing keeps the map.
 - These defaults hold on every map unless a map OVERRIDE changes a class. The linter WARNS on any
   change (13.6.9). The safety-critical rows cannot change.
 
@@ -1351,6 +1358,11 @@ For the current map block B, in this order:
 | example | HP < 50 % → one potion per insert, until HP > 80 % | dead → respawn; weight ≥ 90 % → a Butterfly Wing |
 
 - Only blocks the registry marks `insertable` may appear in an INSERT body (lint, 13.6.9).
+  **Batt, 2026-10-08: `insertable` = `use_item` through the hotbar only.** No insert runs live
+  before an alone-test (insert@1, pre-registered in demonstrations.md §3 before it runs) shows that
+  a hotbar potion during an attack leaves the attack going (the server's act packets from the GM,
+  offline) and during a walk leaves the walk going to the same destination (the accepted move,
+  offline).
 - **Escalation.** An insert whose L1 runtime check fails (`item.use`: the bar does not rise and the
   count does not drop, e.g. no potions left) counts toward `max_insert_fails`. Then its `escalate`
   procedure runs as a PRE-EMPT (e.g. a wing out, then `relocate`), or, without one, the run stops.
@@ -1370,7 +1382,7 @@ For the current map block B, in this order:
 - The run progress messages (section 6) name the event and its node path, so the run log and the
   input log line up by time.
 
-#### 13.6.6 After a pre-empt: resume where the character IS (`then: relocate`)
+#### 13.6.6 After a pre-empt: resume where the character IS (`then: relocate`; confirmed by Batt, 2026-10-08)
 
 1. **Read where the character is, from pixels:** `current_map()` and `position()` through the
    client's own `/where` line ([demonstrations.md](../demonstrations.md) §3.15, where@2 on RDP:
@@ -1403,8 +1415,9 @@ Batt's loop runs through this rule: farm's wing → the save point on map_1 → 
 
 #### 13.6.8 The always-on set, and the scope examples
 
-Every new workflow starts with four GLOBAL events:
-- `dead` and `unexpected_map`: safety-critical and required (removing either is a lint ERROR);
+Every new workflow starts with five GLOBAL events:
+- `dead`, `hp_critical` and `unexpected_map`: safety-critical and required (removing any of them is
+  a lint ERROR);
 - `hp_low` and `weight`: defaults, editable.
 
 Map events then shape them per map. The effective sets of Batt's example (farm is taken to be a
@@ -1413,11 +1426,19 @@ dungeon):
 | Event (key) | Global | town (map_1) | relay (map_2) | farm (map_3) |
 |---|---|---|---|---|
 | `dead` · critical · safety | respawn; 1 per run; relocate | global | global | global |
+| `hp_critical` · critical · safety | < 20 % → ESCAPE: a Fly Wing where the map allows it, else a Butterfly Wing, else stop; rearm > 50 %; relocate | global | global | global |
 | `unexpected_map` · critical · safety | read the position; relocate or stop | global | EXTENDED: + close an open dialog, after the global body | global |
 | `hp_low` · survival · insert | < 50 % → potions until > 80 %, ≤ 6 a minute | DISABLED: a safe town, no potions spent | global | OVERRIDDEN: < 70 % → until > 90 % |
 | `weight` · upkeep · pre-empt | ≥ 90 % → a wing; relocate | DISABLED: town is where the weight is stored; a wing there would loop to the save point | global | global |
 | `boss_seen` · survival · pre-empt | – | – | – | ADDED: `sees(boss)` → a wing; relocate |
 
+- **`hp_critical`'s body is FIXED** (it is safety-critical): ESCAPE with the first item the map's
+  L3 flags allow. A Fly Wing is a random teleport within the map; a Butterfly Wing goes to the save
+  point. Otherwise it releases everything and stops the run. rAthena's map flags `noteleport` and
+  `noreturn` restrict the two wings; the exact flags are read from the map sheet once its
+  extraction lands (13.2, open question 27). The linter shows which escape applies on each map,
+  and flags a map with none (open question 30). A Fly Wing keeps the map, so `relocate` resumes
+  the same block from its first step.
 - **`boss_seen` needs the detector to recognise that boss species.** It joins the workflow's
   training scope (13.3), and the linter checks that it spawns on map_3 (L3).
 - **The town disables the combat events** (`hp_low`, `weight`), and no others. A town that tries to
@@ -1471,6 +1492,11 @@ def farm():
 @on(is_dead(), priority=CRITICAL, max_per_run=1, then=RELOCATE)
 def dead():
     respawn()
+
+
+@on(hp_percent() < 20, rearm=hp_percent() > 50, priority=CRITICAL, then=RELOCATE, max_per_min=2)
+def hp_critical():
+    escape()  # fixed body: Fly Wing where allowed, else Butterfly Wing, else stop (13.6.8)
 
 
 @on(map_load_seen(), priority=CRITICAL, then=RELOCATE)
@@ -1532,7 +1558,7 @@ not a warning), they win.
 | hysteresis pair (`until` or `rearm`) | ERROR unless the stop threshold lies BEYOND the start threshold, on the far side: `hp < 50` with `until hp > 80` is valid; `until hp > 40` is INVERTED (both hold between 40 and 50, so the event flaps). ERROR when the stop can never hold (`hp > 100`). WARNING when the band is narrower than the readout's resolution | "hp_low: until hp_percent() > 40 overlaps when hp_percent() < 50: the stop threshold must exceed 50" |
 | same direction | ERROR: start and stop compare the same way, so the stop never ends the event (`weight >= 90` until `weight > 95`) | "weight: until weight_percent() > 95 does not end weight_percent() >= 90: the stop must lie below 90" |
 | ties | ERROR: two effective events of one class on overlapping conditions of the same sensor (13.6.2 step 4). WARNING for different sensors (they queue, 2.5 rule 4) | "farm: hp_low and hp_panic are both survival on hp_percent() < 30" |
-| safety-critical | ERROR: a DISABLE or OVERRIDE of `dead` or `unexpected_map`; either one missing from the global set; an extension that tries to loosen a limit | "town: dead is safety-critical: it can be extended, never disabled" |
+| safety-critical | ERROR: a DISABLE or OVERRIDE of `dead`, `hp_critical` or `unexpected_map`; any of them missing from the global set; an extension that tries to loosen a limit | "town: dead is safety-critical: it can be extended, never disabled" |
 | scope | ERROR: an OVERRIDE, EXTEND or DISABLE of a key that is not global; an ADD of a key that is; two map events on one key | "relay: extend weight_low: there is no global event weight_low" |
 | class change | WARNING on any map OVERRIDE that changes a class | "farm: hp_low moved from survival to upkeep: weight no longer waits for it" |
 | looser on a harder map | WARNING, acknowledged at approval: a map OVERRIDE that fires later, stops earlier or allows more (a lower HP start or stop, a higher weight, a higher death count, a longer cooldown) on a HARDER map. **A map is HARDER, from its L3 sheet, when** it spawns an aggressive species (mob_db `ai`), it has a boss spawn line, or its highest spawn level exceeds the character's base level (from `assumes`; skipped, and said so, when unknown) | "farm: hp_low < 30 is looser than the global < 50, and map_3 spawns an aggressive species (mob 9105)" |
@@ -1564,13 +1590,18 @@ not a warning), they win.
 Aligned with F1-F2 (section 12). Each phase ends with its acceptance criteria met and reported.
 
 **MW0 · Decide.** Batt accepts or amends this section and answers its FIRST questions (16-18, 29).
+➡️ The FIRST questions were answered on 2026-10-08 (16, 17, 18, 29; also 20, 21 and part of 27).
+The section itself stays PROPOSED until Batt accepts it.
 
 **MW1 · Offline, with F1 (no UI, no input).**
 - The IR additions (map blocks, entries, typed exits, target / ignore lists, event scopes, `until`,
   insert / pre-empt, `relocate`, the limits) and their lint rules (13.5, 13.6.9); the merge rule
   (13.6.2); the tree compiler (the block selector, the insert gate, relocation).
-- The map-sheet generator (local, never committed); the preparation report; the estimator, reading
-  training-cost.md's constants.
+- The map-sheet generator (local, never committed): the extended L3 extraction Batt approved on
+  2026-10-08 (NPC warp targets per option, the Kafra save cell, map flags). Then the preparation
+  report, and the estimator, reading training-cost.md's constants.
+- The new L1 concepts, written unverified: `set_save_point`, `assert_save_point`, the
+  `hp_critical` escape, and `loot.pick_up` by a hover-scan.
 - Acceptance:
   - one fixture per lint rule, with its exact message (committed fixtures hold synthetic map data
     only);
@@ -1586,6 +1617,11 @@ Aligned with F1-F2 (section 12). Each phase ends with its acceptance criteria me
 **MW2 · One map block and its exits, live** (after F2; lab-rathena, ASSIST, Batt present).
 - Prerequisites: `walk_to` under walk@11's safety bar, `take_warp` and the position read verified
   alone.
+- Alone-tests before their blocks run in a flow, each pre-registered:
+  - insert@1: a hotbar potion during an attack and during a walk (13.6.4);
+  - save@1: `set_save_point` at a Kafra, then a Butterfly Wing arrives at its cell;
+  - escape@1: the `hp_critical` escape (a Fly Wing) proven by a staged low-HP positive case;
+  - loot@1: the hover-scan pickup, with the weight readout rising.
 - One block: entry → walk → `walk_exit`, the arrival confirmed by `/where`. Then `npc_warp` and
   `item_warp`, each alone.
 - `unexpected_map` and `dead` proven by a DELIBERATE positive case each (a staged warp and a staged
@@ -1653,19 +1689,41 @@ means needed before MW1.
 
 16. **FIRST · Map blocks in IR 1?** Proposal: yes. Nothing is built, so no converter is needed. A
     plain `main` flow stays valid for small flows and the course's first steps.
+    ➡️ **ANSWERED (Batt, 2026-10-08): yes, map blocks are in IR 1.**
 17. **FIRST · INSERT mode (13.6.4).** Which blocks are `insertable` (proposal: `use_item` through
     the hotbar only), and the bound (proposal: ≤ 2 s). Does a hotbar potion during an attack or a
     walk really leave it undisturbed? An alone-test decides before any insert runs live.
+    ➡️ **ANSWERED (Batt, 2026-10-08): insertable = hotbar `use_item` only, as proposed.** The
+    alone-test (insert@1) must show that a potion during an attack and during a walk disturbs
+    neither (13.6.4). The ≤ 2 s bound stays a proposal until insert@1 measures it.
 18. **FIRST · Relocation (13.6.6).** Resume only through a matching entry or an `anywhere` entry,
     with `resume_here` for a shared map (proposal)? Or always stop after a pre-empt that changed
     the map?
+    ➡️ **ANSWERED (Batt, 2026-10-08):** resume at the matching map block when the actual map is
+    known and has a block. On any unknown map, stop safely through the `unexpected_map` event.
+    This is 13.6.6 as written.
 19. **The death limit.** `dead` defaults to `max_per_run` 1: the second death stops the workflow
     (proposal). Another default? Deaths cost EXP (L1 `char.respawn`).
 20. **The save point (13.5)** cannot be read from pixels. Is Batt's WARNING enough, or should a
     BOT-mode run need an ERROR unless the workflow sets the save point itself?
+    ➡️ **ANSWERED for wings (Batt, 2026-10-08):** add `set_save_point` (at a Kafra) and an
+    `assert_save_point` block. The linter REQUIRES one of them before any wing use (an ERROR, 13.5).
+    A respawn relying on an unknown save point stays a WARNING: open.
 21. **Loot and weight.** `loot` is unsupported (no ground-item class), so nothing in Batt's farm adds
     weight, and its weight exit cannot fire. Add a ground-item class (it would join the training
     scope), or another plan? Batt decides.
+    ➡️ **ANSWERED (Batt, 2026-10-08): loot WITHOUT new training.**
+    1. The tracker knows where a monster died.
+    2. Hover-scan the cells around that cell for the PICKUP cursor (references calibrated
+       2026-10-07, demonstrations.md).
+    3. Click it, and verify by the weight readout rising (`vitals.read`).
+    - A ground-item detector class is a later improvement.
+    - The plan's dependencies:
+      - the tracker reporting a death cell from pixels (Phase 3 T1, not built);
+      - every scan click passing the cursor gate with PICKUP as its only allowed shape, and the
+        unit gate (walk@11), so a scan never clicks a monster or an NPC;
+      - the weight readout visible (the basic info window).
+    - `loot.pick_up` is written unverified and proven alone (loot@1) before it runs in a flow.
 22. **The training scope beyond spawns (13.3).** Metamorphosis is covered (`classes.json`). Summoned
     slaves (mob skills)? The maps a route only crosses (proposal: in scope)?
 23. **Unlisted species:** treated as IGNORE (proposal), or must the owner place every spawned
@@ -1681,17 +1739,31 @@ means needed before MW1.
 27. **Map sheets (13.2):** generated on demand for the maps a workflow names (proposal), or for the
     whole server at KB build? The NPC warp targets, the Kafra save cell and the map flags are not
     extracted yet (`scripts/kb_bindings.py`).
+    ➡️ **PARTLY ANSWERED (Batt, 2026-10-08): extend the L3 extraction for per-map sheets.** The
+    new outputs are the NPC warp targets per menu option, the Kafra save cell and the map flags.
+    They are generated locally from the pinned rAthena and never committed. On demand vs the
+    whole server stays open.
 28. **The unexpected-map cue:** which passive signal (the loading screen, or the client's map-load
     notice in chat, demonstrations.md §3.13), proven like any L1 read concept.
 29. **FIRST · Event scopes (13.6.1-2, 13.6.9).**
     - Is the safety-critical set {`dead`, `unexpected_map`} complete, or should a last-resort
       `hp_critical` (e.g. a wing out below 20 %) join it?
+      ➡️ **ANSWERED (Batt, 2026-10-08): add `hp_critical`** (e.g. HP < 20 % → an immediate
+      escape with a Fly Wing). The set is now {`dead`, `hp_critical`, `unexpected_map`} (13.6.1,
+      13.6.3, 13.6.8, 13.6.9).
     - Safety-critical extensions run AFTER the global body, unlike Batt's "map first" EXTEND, for
       the reason in 13.6.1. Confirm.
+      ➡️ **CONFIRMED (Batt, 2026-10-08):** a dead character respawns first.
     - A looser override on a harder map: a WARNING acknowledged at approval (proposal), or an
       ERROR?
     - The "harder" criteria: an aggressive species, a boss spawn line, a spawn level above the
       character's. Enough?
+30. **`hp_critical`'s details (new, from Batt's answer to 29).**
+    - Its place above `unexpected_map` (proposal: yes; a Fly Wing keeps the map, so they do not
+      compete).
+    - The thresholds: proposal < 20 %, rearmed above 50 %, at most 2 a minute.
+    - What happens on a map where neither wing is allowed. Proposal: the linter shows "no escape"
+      on that map, and a BOT run there needs Batt's explicit acknowledgement at approval.
 
 ## Consequences
 
