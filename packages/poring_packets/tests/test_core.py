@@ -308,3 +308,23 @@ def test_the_attestation_names_its_server_and_the_sniffer_needs_one(
         monkeypatch.setenv("SNIFFER_SERVER_ID", bad)
         with pytest.raises(SystemExit, match="SNIFFER_SERVER_ID"):
             sniffer.run()
+
+
+def test_a_chat_room_in_sight_frames_cleanly_with_the_generated_table() -> None:
+    """2026-10-08: ZC_ROOM_NEWENTRY (0x00D7) carries its title after a 17-byte head; the table had
+    it FIXED at 17, so a chat room in sight desynced the server->client stream. The real generated
+    table must frame it and the packet after it, with no desync (ZC_PERSONAL_INFOMATION 0x097B
+    likewise)."""
+    if not tables.DEFAULT_TABLE.exists():
+        pytest.skip("generated at build time: python3 scripts/gen_packet_tables.py")
+    t = tables.load()
+    for pid in (0x00D4, 0x00D7, 0x00DB, 0x00DF, 0x097B):
+        assert t.length("map", "sc", pid) == -1, hex(pid)
+    title = b"room title" + b"\x00"
+    room = struct.pack("<HHIIHHB", 0x00D7, 17 + len(title), 2000099, 7, 20, 1, 1) + title
+    vanish = struct.pack("<HIB", 0x0080, 110023393, 0)  # ZC_NOTIFY_VANISH, 7 bytes
+    f = RoFramer(t, "map", "sc")
+    got = list(f.feed(room + vanish, 1))
+    assert [p.packet_id for p in got] == [0x00D7, 0x0080]
+    assert len(got[0].data) == 17 + len(title)
+    assert f.stats.desyncs == 0 and f.stats.skipped_bytes == 0

@@ -32,6 +32,9 @@ struct PACKET_ZC_SAY_DIALOG { int16 PacketType; int16 PacketLength; uint32 NpcID
 const int16 HEADER_ZC_SOMETHING_LEN = 0x1234;
 struct PACKET_ZC_SOMETHING_LEN { int16 packetType; int16 packetLen; char x[]; }
   __attribute__((packed));
+const int16 HEADER_ZC_PERSONAL_INFOMATION = 0x97b;
+struct PACKET_ZC_PERSONAL_INFOMATION { int16 packetType; int16 length; int32 total_exp;
+  struct PACKET_ZC_PERSONAL_INFOMATION_SUB details[]; } __attribute__((packed));
 const int16 HEADER_ZC_ITEM_DISAPPEAR = 0xa1;
 struct PACKET_ZC_ITEM_DISAPPEAR { int16 packetType; uint32 itemAid; } __attribute__((packed));
 """
@@ -42,6 +45,7 @@ def test_every_length_field_name_makes_a_packet_variable(gen: ModuleType) -> Non
     assert pairs["ZC_ROOM_NEWENTRY"] == (0xD7, True)  # packetSize: was tabled FIXED 17
     assert pairs["ZC_SAY_DIALOG"] == (0xB4, True)  # PacketLength
     assert pairs["ZC_SOMETHING_LEN"] == (0x1234, True)  # packetLen
+    assert pairs["ZC_PERSONAL_INFOMATION"] == (0x97B, True)  # `length` + a flexible array
     assert pairs["ZC_ITEM_DISAPPEAR"] == (0xA1, False)  # no length field: fixed
 
 

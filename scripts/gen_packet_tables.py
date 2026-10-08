@@ -123,7 +123,11 @@ def container(script: str, mounts: list[str]) -> str:
 # 0x00DB, ZC_CHANGE_CHATROOM 0x00DF and ZC_WHISPER_LIST 0x00D4 were tabled as FIXED 17 / 8 / 17 / 4,
 # their head sizes, although the server appends the title / members; a chat room in sight would
 # have desynced the server->client stream).
+# AND a struct ending in a FLEXIBLE ARRAY (`x[]`) is variable by definition, whatever its length
+# field is called: ZC_PERSONAL_INFOMATION 0x097B names it `length` (tabled FIXED 16, found the same
+# day once the 4 above were fixed).
 LENGTH_FIELD = re.compile(r"\b[pP]acket(?:[lL](?:ength|en)|[sS]ize)\b")
+FLEX_ARRAY = re.compile(r"\w+\s*\[\s*\]\s*;")
 
 
 def parse_preprocessed(text: str) -> dict[str, tuple[int, bool]]:
@@ -133,7 +137,7 @@ def parse_preprocessed(text: str) -> dict[str, tuple[int, bool]]:
         headers[m.group(1)] = int(m.group(2), 0)
     structs: dict[str, bool] = {}
     for m in re.finditer(r"struct\s+PACKET_(\w+)\s*\{(.*?)\}\s*__attribute__", text, re.S):
-        structs[m.group(1)] = bool(LENGTH_FIELD.search(m.group(2)))
+        structs[m.group(1)] = bool(LENGTH_FIELD.search(m.group(2)) or FLEX_ARRAY.search(m.group(2)))
     return {n: (headers[n], structs[n]) for n in headers if n in structs}
 
 

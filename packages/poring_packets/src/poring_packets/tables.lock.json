@@ -66,12 +66,7 @@
     "cs:map:0x0963:8!=2",
     "cs:map:0x096a:6!=2",
     "cs:map:0x09ae:20!=19",
-    "cs:map:0x09c3:8!=10",
-    "sc:map:0x00d4:4!=-1",
-    "sc:map:0x00d7:17!=-1",
-    "sc:map:0x00db:8!=-1",
-    "sc:map:0x00df:17!=-1",
-    "sc:map:0x097b:16!=-1"
+    "cs:map:0x09c3:8!=10"
   ],
   "inputs": {
     "openkore_recvpackets": {
@@ -85,7 +80,7 @@
       "url": "https://github.com/rathena/rathena/archive/e985006171d2eb320ee512a653f4c83aea3d81b6.tar.gz"
     }
   },
-  "output_sha256": "109b40c302a78620827b327179700391cb77d363a9ee22dda5d5d0a8ba1ff0bb",
+  "output_sha256": "0e523cc69cf724e3b730c23bd801342e774492c2f74d3dda2dff99c79acf66dc",
   "packetver": 20211103,
   "prere": true
 }
