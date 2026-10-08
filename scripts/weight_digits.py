@@ -50,9 +50,6 @@ STEP_S = 3.0
 REC_HZ = 4.0
 
 
-SEPARATOR = "/ex"  # where_fix.py's separator line: harmless, and different from any @item
-
-
 def _record(out: str, region: tuple[int, int, int, int], stop: Any, hz: float) -> None:
     """The recorder process: the game region as <k>-<t_mono_ns>.jpg (quality 95)."""
     from PIL import Image
@@ -101,16 +98,15 @@ def run(step_s: float, hz: float) -> int:
             rec.start()
             time.sleep(step_s)  # a settled readout before the first step
             times: list[tuple[int, list[int]]] = []
-            prev = None
+            seen: dict[tuple[int, int], int] = {}
             for item, n in items:
-                cmd = f"@item {item} {n}"
-                if cmd == prev:
-                    # the client refuses the same phrase more than 3 times in a row (the 2026-10-08
-                    # runs lost 7 of 10 steps that way): a different line between repeats, as
-                    # where_fix does
-                    r.chat_line(agent, screen, SEPARATOR)
-                    time.sleep(0.5)
-                prev = cmd
+                # every command line UNIQUE: the client refuses a phrase repeated more than 3 times
+                # (2026-10-08/09: 7-8 of 10 identical steps never reached the server, and a "/ex"
+                # line between repeats did not help -- a client command is not a chat line).
+                # Leading zeros on the item id: rAthena reads "0909" as item 909
+                k = seen.get((item, n), 0)
+                seen[(item, n)] = k + 1
+                cmd = f"@item {'0' * k}{item} {n}"
                 t = r.ns()
                 r.gm(agent, screen, cmd)
                 times.append((t, [item, n]))
