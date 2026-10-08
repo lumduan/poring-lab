@@ -30,6 +30,13 @@ def gb() -> ModuleType:
     return module
 
 
+@pytest.fixture(autouse=True)
+def _own_logdir(gb: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Step logs go to the TEST's directory: a run_process test with the label rundev:vision once
+    truncated the LIVE training step's log in the shared $TMPDIR (2026-10-08 18:50)."""
+    monkeypatch.setattr(gb, "LOGDIR", tmp_path)
+
+
 def test_parse_build_and_pull(gb: ModuleType) -> None:
     step = gb.parse_step("build:rathena")
     assert (step.kind, step.services, step.label) == ("build", ["rathena"], "build:rathena")
