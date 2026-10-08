@@ -1538,6 +1538,19 @@ floated off the character as the camera scrolled; the console stopped drawing it
 - **The previewer runs in its own process,** reading the RDP frame bus after tonight's backend
   restart. So it does not contend for X grabs with the rule.
 
+**AMENDMENT 2 (2026-10-08 ~18:50, Batt: "wire operator_hud publishing into the walk rules' harness
+... display-only, never blocking a decision ... prove decision code is unchanged"): walk@12 publishes
+the OPERATOR HUD.** The HUD shows the detector's boxes (class, confidence, distance in cells), each
+click's gate verdict (allowed / refused + reason), the work zone, and a plain-words decision log.
+- **No work between the gate and the click.** walk@11's unit gate decides at the click instant, and
+  its envelope assumes the click follows at once, so its hook only RECORDS the verdict. Everything
+  else is published by the click-step hook AFTER the step returned (the click is done).
+- **Its own agent connection** ("operator-hud"): an error reply can never stop the rule.
+- **The proof** (the same method; `HEAD` 79ffa9f vs 7d23e13): walk5, walk6, walk11, rule_run,
+  work_zone, cursor_gate and unit_gate are identical. walk12 differs only in `run` (the enable /
+  disable around walk@11's run).
+- walk@12 itself is decided (above); the HUD serves walk@13 and the demo runs.
+
 **RESULTS (2026-10-08, the tuning chain 14:52–17:24 ICT, the pre-registered seeds): 0 / 4 PASS by
 count, ZERO safety events and ZERO UI clicks in all four.** The held-out set does not run (it runs
 only if all four pass).
@@ -1679,6 +1692,12 @@ deliberately a coarse screen):
   idle), and is pre-registered separately;
 - 0 failures in all 120: no fix; the walk@12 cases stay unexplained and are reported as such, with
   the binomial upper bound for each cell.
+
+**Display only, during the run** (Batt, 2026-10-08 ~18:50: HUD + route preview from the next run on):
+- each trial's target is shown as a live route BEFORE the hover; no input is sent for it;
+- the engine's walk and the HUD's line for the trial go out AFTER the click;
+- nothing is published or sent between a WALK read and its click, and no input is sent during the
+  idle. The harness was built with these before any run.
 
 **Reported:** failures per cell with their exact 95 % upper bounds, each failure's frame before the
 click (the recorder at 4 Hz), and the input log's move / down / up for it.

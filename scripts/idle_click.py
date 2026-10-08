@@ -29,8 +29,10 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import bench  # noqa: E402
+import operator_hud  # noqa: E402
 import record_session  # noqa: E402
 import ro_agent as r  # noqa: E402
+import route_plan  # noqa: E402
 import walk6 as w6  # noqa: E402
 import walk10 as w10  # noqa: E402
 
@@ -94,6 +96,35 @@ def _record(out: str, region: tuple[int, int, int, int], stop: Any, hz: float) -
         )
         k += 1
         time.sleep(max(0.0, 1.0 / hz - (time.monotonic() - t0)))
+
+
+class _At:
+    """What route_plan / operator_hud need of a world: the camera, the GAT, our cell."""
+
+    def __init__(self, camera: Any, gat: Any, position: tuple[int, int]) -> None:
+        self.camera, self.gat, self.position = camera, gat, position
+
+
+def _show(
+    camera: Any, gat: Any, start: tuple[int, int], target: tuple[int, int], label: str
+) -> None:
+    """Display only: the trial's target as a live route (before the hover: no input is sent)."""
+    route_plan.preview(None, _At(camera, gat, start), start, [target], target, label)
+
+
+def _shown(t: dict[str, Any], start: tuple[int, int], target: tuple[int, int]) -> None:
+    """Display only, AFTER the click: the engine's walk, the HUD's line for this trial."""
+    pub = route_plan.publisher()
+    if pub is not None and t.get("clicked"):
+        pub.walk(start, [target], route_plan.SELF_MS_PER_CELL, int(t["t_click"]))
+    hud = operator_hud.sender()
+    if hud is not None:
+        reads = "/".join(t.get("reads", [])) or t.get("why", "")
+        operator_hud.note(f"trial {t['k']} {t['condition']}: "
+                          f"{'clicked' if t.get('clicked') else 'skipped'} ({reads})")  # fmt: skip
+        operator_hud.publish(walk=operator_hud.walk_vector(
+            target, hud.region, hud.desktop, text=operator_hud.line_walking(target),
+            end_px=t.get("at")))  # fmt: skip
 
 
 def _click_walk(agent: Any, pr: Any, u: float, v: float) -> dict[str, Any]:
@@ -165,6 +196,9 @@ def idle(n: int, seed: int) -> int:
     rec = ctx.Process(target=_record, args=(str(out / "frames"), tuple(r.game_region()), stop, 4.0),
                       daemon=True)  # fmt: skip
     trials: list[dict[str, Any]] = []
+    plan = route_plan.enable(f"idle1-{seed}", MAP)
+    route_plan.ensure_previewer()
+    hud = operator_hud.enable("idle@1")
     rec.start()
     try:
         with r.session("rule:idle1") as (agent, screen):
@@ -181,16 +215,24 @@ def idle(n: int, seed: int) -> int:
                     bench.close_chat(agent, screen)
                 time.sleep(idle_s)  # no input of any kind
                 t: dict[str, Any] = {"k": k, "condition": cond, "rel": list(rel)}
+                target = (START[0] + rel[0], START[1] + rel[1])
                 if not pts:
                     t.update(clicked=False, why="no safe point")
                 else:
+                    _show(camera, gat, START, target, f"idle@1 {cond}")
                     t.update(_click_walk(agent, pr, *pts[0]))
+                    _shown(t, START, target)
                 trials.append(t)
                 print(json.dumps(t), flush=True)
                 time.sleep(JUDGE_S + 0.5)
+                pub = route_plan.publisher()
+                if pub is not None:
+                    pub.clear()
     finally:
         stop.set()
         rec.join(timeout=5)
+        route_plan.disable(plan)
+        operator_hud.disable(hud)
         result = _finish(sid, log, t_first, trials, out)
         print(json.dumps(result, indent=1), flush=True)
     return 0
