@@ -13,6 +13,7 @@ members = [
     "poring-backend",
     "poring-dataset",
     "poring-env",
+    "poring-flow",
     "poring-lab",
     "poring-packets",
     "poring-skills",
@@ -759,6 +760,23 @@ requires-dist = [
 provides-extras = ["x11", "remote"]
 
 [[package]]
+name = "poring-flow"
+version = "0.1.0"
+source = { editable = "packages/poring_flow" }
+dependencies = [
+    { name = "poring-skills" },
+    { name = "pydantic" },
+    { name = "pyyaml" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "poring-skills", editable = "packages/poring_skills" },
+    { name = "pydantic", specifier = ">=2.13" },
+    { name = "pyyaml", specifier = ">=6" },
+]
+
+[[package]]
 name = "poring-lab"
 version = "0.1.0"
 source = { virtual = "." }
@@ -766,6 +784,7 @@ dependencies = [
     { name = "poring-backend" },
     { name = "poring-dataset" },
     { name = "poring-env", extra = ["remote", "x11"] },
+    { name = "poring-flow" },
     { name = "poring-skills" },
 ]
 
@@ -785,6 +804,7 @@ requires-dist = [
     { name = "poring-backend", editable = "services/backend" },
     { name = "poring-dataset", editable = "packages/poring_dataset" },
     { name = "poring-env", extras = ["x11", "remote"], editable = "packages/poring_env" },
+    { name = "poring-flow", editable = "packages/poring_flow" },
     { name = "poring-skills", editable = "packages/poring_skills" },
 ]
 
