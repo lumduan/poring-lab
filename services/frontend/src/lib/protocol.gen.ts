@@ -229,15 +229,260 @@ export interface Box {
  * the waypoint polyline it will follow and the point it will click next. Display only -- it
  * moves nothing and never reaches the mux. An empty list clears it; it fades after ttl_ms.
  *
+ * LIVE (Batt 2026-10-08): the route is anchored to the WORLD. The agent re-projects its map cells
+ * for this message's t_mono_ns (the host clock, the stream frames' clock too) from the
+ * character's CURRENT position, ~20 times a second; the first point is the character's feet
+ * ("feet"), `passed` holds the stretches just walked over (fading), `clip` the client's UI
+ * windows. The console draws the live message nearest the displayed frame's capture time and
+ * nothing when none is close: a stale route is never drawn.
+ *
  * This interface was referenced by `PoringProtocol`'s JSON-Schema
  * via the `definition` "RoutePreview".
  */
 export interface RoutePreview {
   /**
+   * @maxItems 16
+   */
+  clip:
+    | []
+    | [RouteRect]
+    | [RouteRect, RouteRect]
+    | [RouteRect, RouteRect, RouteRect]
+    | [RouteRect, RouteRect, RouteRect, RouteRect]
+    | [RouteRect, RouteRect, RouteRect, RouteRect, RouteRect]
+    | [RouteRect, RouteRect, RouteRect, RouteRect, RouteRect, RouteRect]
+    | [RouteRect, RouteRect, RouteRect, RouteRect, RouteRect, RouteRect, RouteRect]
+    | [RouteRect, RouteRect, RouteRect, RouteRect, RouteRect, RouteRect, RouteRect, RouteRect]
+    | [RouteRect, RouteRect, RouteRect, RouteRect, RouteRect, RouteRect, RouteRect, RouteRect, RouteRect]
+    | [RouteRect, RouteRect, RouteRect, RouteRect, RouteRect, RouteRect, RouteRect, RouteRect, RouteRect, RouteRect]
+    | [
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect
+      ]
+    | [
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect
+      ]
+    | [
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect
+      ]
+    | [
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect
+      ]
+    | [
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect
+      ]
+    | [
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect,
+        RouteRect
+      ];
+  /**
    * Frame this message refers to or was produced from; -1 means none.
    */
   frame_id: number;
   label: string;
+  live: boolean;
+  /**
+   * @maxItems 16
+   */
+  passed:
+    | []
+    | [RouteSegment]
+    | [RouteSegment, RouteSegment]
+    | [RouteSegment, RouteSegment, RouteSegment]
+    | [RouteSegment, RouteSegment, RouteSegment, RouteSegment]
+    | [RouteSegment, RouteSegment, RouteSegment, RouteSegment, RouteSegment]
+    | [RouteSegment, RouteSegment, RouteSegment, RouteSegment, RouteSegment, RouteSegment]
+    | [RouteSegment, RouteSegment, RouteSegment, RouteSegment, RouteSegment, RouteSegment, RouteSegment]
+    | [RouteSegment, RouteSegment, RouteSegment, RouteSegment, RouteSegment, RouteSegment, RouteSegment, RouteSegment]
+    | [
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment
+      ]
+    | [
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment
+      ]
+    | [
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment
+      ]
+    | [
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment
+      ]
+    | [
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment
+      ]
+    | [
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment
+      ]
+    | [
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment
+      ]
+    | [
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment,
+        RouteSegment
+      ];
   /**
    * @maxItems 64
    */
@@ -250,13 +495,47 @@ export interface RoutePreview {
   type: "route_preview";
 }
 /**
+ * A client UI window the overlay must stay UNDER (normalized like the points).
+ *
+ * This interface was referenced by `PoringProtocol`'s JSON-Schema
+ * via the `definition` "RouteRect".
+ */
+export interface RouteRect {
+  h: number;
+  w: number;
+  x: number;
+  y: number;
+}
+/**
+ * A stretch of route the character has just walked over (a LIVE preview): drawn fading by
+ * its age, then gone (Batt 2026-10-08: the consumed route disappears).
+ *
+ * This interface was referenced by `PoringProtocol`'s JSON-Schema
+ * via the `definition` "RouteSegment".
+ */
+export interface RouteSegment {
+  age_ms: number;
+  /**
+   * @minItems 2
+   * @maxItems 8
+   */
+  points:
+    | [RoutePoint, RoutePoint]
+    | [RoutePoint, RoutePoint, RoutePoint]
+    | [RoutePoint, RoutePoint, RoutePoint, RoutePoint]
+    | [RoutePoint, RoutePoint, RoutePoint, RoutePoint, RoutePoint]
+    | [RoutePoint, RoutePoint, RoutePoint, RoutePoint, RoutePoint, RoutePoint]
+    | [RoutePoint, RoutePoint, RoutePoint, RoutePoint, RoutePoint, RoutePoint, RoutePoint]
+    | [RoutePoint, RoutePoint, RoutePoint, RoutePoint, RoutePoint, RoutePoint, RoutePoint, RoutePoint];
+}
+/**
  * One point of a planned route, normalized to [0, 1] like a detection box.
  *
  * This interface was referenced by `PoringProtocol`'s JSON-Schema
  * via the `definition` "RoutePoint".
  */
 export interface RoutePoint {
-  kind: "start" | "waypoint" | "goal" | "click";
+  kind: "start" | "waypoint" | "goal" | "click" | "feet";
   x: number;
   y: number;
 }

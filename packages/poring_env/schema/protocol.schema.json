@@ -1217,7 +1217,8 @@
             "start",
             "waypoint",
             "goal",
-            "click"
+            "click",
+            "feet"
           ],
           "type": "string"
         },
@@ -1242,8 +1243,15 @@
     },
     "RoutePreview": {
       "additionalProperties": false,
-      "description": "The agent's PLANNED route, drawn for the human over the stream (walk@8, Batt 2026-10-07):\nthe waypoint polyline it will follow and the point it will click next. Display only -- it\nmoves nothing and never reaches the mux. An empty list clears it; it fades after ttl_ms.",
+      "description": "The agent's PLANNED route, drawn for the human over the stream (walk@8, Batt 2026-10-07):\nthe waypoint polyline it will follow and the point it will click next. Display only -- it\nmoves nothing and never reaches the mux. An empty list clears it; it fades after ttl_ms.\n\nLIVE (Batt 2026-10-08): the route is anchored to the WORLD. The agent re-projects its map cells\nfor this message's t_mono_ns (the host clock, the stream frames' clock too) from the\ncharacter's CURRENT position, ~20 times a second; the first point is the character's feet\n(\"feet\"), `passed` holds the stretches just walked over (fading), `clip` the client's UI\nwindows. The console draws the live message nearest the displayed frame's capture time and\nnothing when none is close: a stale route is never drawn.",
       "properties": {
+        "clip": {
+          "items": {
+            "$ref": "#/$defs/RouteRect"
+          },
+          "maxItems": 16,
+          "type": "array"
+        },
         "frame_id": {
           "default": -1,
           "description": "Frame this message refers to or was produced from; -1 means none.",
@@ -1254,6 +1262,17 @@
           "default": "",
           "maxLength": 64,
           "type": "string"
+        },
+        "live": {
+          "default": false,
+          "type": "boolean"
+        },
+        "passed": {
+          "items": {
+            "$ref": "#/$defs/RouteSegment"
+          },
+          "maxItems": 16,
+          "type": "array"
         },
         "points": {
           "items": {
@@ -1285,9 +1304,71 @@
         "type",
         "points",
         "label",
-        "ttl_ms"
+        "ttl_ms",
+        "live",
+        "passed",
+        "clip"
       ],
       "title": "RoutePreview",
+      "type": "object"
+    },
+    "RouteRect": {
+      "additionalProperties": false,
+      "description": "A client UI window the overlay must stay UNDER (normalized like the points).",
+      "properties": {
+        "h": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "w": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "x": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "y": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "w",
+        "h"
+      ],
+      "title": "RouteRect",
+      "type": "object"
+    },
+    "RouteSegment": {
+      "additionalProperties": false,
+      "description": "A stretch of route the character has just walked over (a LIVE preview): drawn fading by\nits age, then gone (Batt 2026-10-08: the consumed route disappears).",
+      "properties": {
+        "age_ms": {
+          "maximum": 10000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "points": {
+          "items": {
+            "$ref": "#/$defs/RoutePoint"
+          },
+          "maxItems": 8,
+          "minItems": 2,
+          "type": "array"
+        }
+      },
+      "required": [
+        "points",
+        "age_ms"
+      ],
+      "title": "RouteSegment",
       "type": "object"
     },
     "SecretInput": {

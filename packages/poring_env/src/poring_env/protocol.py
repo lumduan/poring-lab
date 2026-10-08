@@ -425,18 +425,49 @@ class RoutePoint(BaseModel):
 
     x: NormCoord
     y: NormCoord
-    kind: Literal["start", "waypoint", "goal", "click"] = "waypoint"
+    kind: Literal["start", "waypoint", "goal", "click", "feet"] = "waypoint"
+
+
+class RouteSegment(BaseModel):
+    """A stretch of route the character has just walked over (a LIVE preview): drawn fading by
+    its age, then gone (Batt 2026-10-08: the consumed route disappears)."""
+
+    model_config = _MODEL_CONFIG
+
+    points: list[RoutePoint] = Field(min_length=2, max_length=8)
+    age_ms: int = Field(ge=0, le=10_000)
+
+
+class RouteRect(BaseModel):
+    """A client UI window the overlay must stay UNDER (normalized like the points)."""
+
+    model_config = _MODEL_CONFIG
+
+    x: NormCoord
+    y: NormCoord
+    w: NormCoord
+    h: NormCoord
 
 
 class RoutePreview(Message):
     """The agent's PLANNED route, drawn for the human over the stream (walk@8, Batt 2026-10-07):
     the waypoint polyline it will follow and the point it will click next. Display only -- it
-    moves nothing and never reaches the mux. An empty list clears it; it fades after ttl_ms."""
+    moves nothing and never reaches the mux. An empty list clears it; it fades after ttl_ms.
+
+    LIVE (Batt 2026-10-08): the route is anchored to the WORLD. The agent re-projects its map cells
+    for this message's t_mono_ns (the host clock, the stream frames' clock too) from the
+    character's CURRENT position, ~20 times a second; the first point is the character's feet
+    ("feet"), `passed` holds the stretches just walked over (fading), `clip` the client's UI
+    windows. The console draws the live message nearest the displayed frame's capture time and
+    nothing when none is close: a stale route is never drawn."""
 
     type: Literal["route_preview"] = "route_preview"
     points: list[RoutePoint] = Field(default_factory=list, max_length=64)
     label: str = Field(default="", max_length=64)
     ttl_ms: int = Field(default=5000, ge=0, le=60_000)
+    live: bool = False
+    passed: list[RouteSegment] = Field(default_factory=list, max_length=16)
+    clip: list[RouteRect] = Field(default_factory=list, max_length=16)
 
 
 # --- agent <-> backend ----------------------------------------------------------------------------

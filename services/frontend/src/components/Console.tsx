@@ -29,6 +29,7 @@ import {
   type Status,
 } from "@/lib/protocol";
 import type { Size, ViewMode } from "@/lib/view";
+import { pushLive } from "@/lib/route";
 import { LatestSlot, OffsetEstimator } from "@/lib/timing";
 import { checkPaste, describePaste } from "@/lib/transfer";
 import { mayForward } from "@/lib/watch";
@@ -65,6 +66,8 @@ export default function Console({ backendUrl }: Props) {
   const videoRef = useRef<HTMLCanvasElement>(null);
   const inputRef = useRef<ReconnectingSocket | null>(null);
   const frameIdRef = useRef<number>(NO_FRAME);
+  const frameNsRef = useRef<number | null>(null); // the shown frame's t_capture_ns (host clock)
+  const liveRouteRef = useRef<RoutePreview[]>([]); // LIVE route previews, newest last
   const [held] = useState(() => new HeldKeys());
   const [status, setStatus] = useState<Status | null>(null);
   // When the last Status arrived (performance.now(), this tab's clock): the banner's staleness.
@@ -153,6 +156,7 @@ export default function Console({ backendUrl }: Props) {
       bitmap.close();
       const painted = browserNowNs();
       frameIdRef.current = meta.frame_id;
+      frameNsRef.current = meta.t_capture_ns; // the live route is matched to THIS frame's time
       frames += 1;
       bytes += meta.nbytes;
       // Both intervals are on the backend's clock, so they are directly meaningful.
@@ -212,7 +216,10 @@ export default function Console({ backendUrl }: Props) {
           setStatus(msg);
         }
         else if (msg?.type === "detections") setDetections(msg);
-        else if (msg?.type === "route_preview") setRoute(msg);
+        else if (msg?.type === "route_preview") {
+          if (msg.live) liveRouteRef.current = pushLive(liveRouteRef.current, msg); // world-anchored
+          else setRoute(msg);
+        }
         else if (msg?.type === "error") showDropped(msg);
       },
       onBinary: (blob) => {
@@ -453,7 +460,13 @@ export default function Console({ backendUrl }: Props) {
         }
       >
         <OverlayCanvas detections={detections} width={frameSize.width} height={frameSize.height} />
-        <RouteCanvas route={route} width={frameSize.width} height={frameSize.height} />
+        <RouteCanvas
+          route={route}
+          liveRef={liveRouteRef}
+          frameNsRef={frameNsRef}
+          width={frameSize.width}
+          height={frameSize.height}
+        />
       </StreamCanvas>
       <div className="grid gap-3 lg:grid-cols-2">
         <details className="rounded-md border border-neutral-800 p-3" open>
