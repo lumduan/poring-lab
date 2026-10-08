@@ -490,6 +490,10 @@ class PairedR3:
         self.models: list[dict[str, Any]] = []
         self.last: dict[str, Any] | None = None
         self.result: tuple[str, float | None, int] = ("pending", None, 0)
+        # R3 inconclusive is not evidence of harm (Batt 2026-10-08): the job keeps running and
+        # the measurement starts a new SERIES at this window index (cycles and pairs count from it)
+        self.series_start = 0
+        self.remeasures = 0
 
     @property
     def phase(self) -> str:
@@ -517,7 +521,7 @@ class PairedR3:
     def summary(self) -> dict[str, Any]:
         state, med, n = self.result
         return {"mode": self.mode, "verdict": state, "median_delta_ms": med, "kept_pairs": n,
-                "pairs": self.pairs()}  # fmt: skip
+                "remeasures": self.remeasures, "pairs": self.pairs()}  # fmt: skip
 
     def tick(self, now: float | None = None) -> str | None:
         now = time.time() if now is None else now
@@ -533,7 +537,7 @@ class PairedR3:
         nxt = "off" if w["phase"] == "on" else "on"
         self._close(now, nxt)
         if w["phase"] == "off":  # an OFF just closed: the ON before it is now paired
-            pairs = make_pairs(self.windows[:-1])
+            pairs = make_pairs(self.windows[self.series_start : -1])
             self.result = verdict(pairs, last=PAIR_MIN if self.mode == "monitor" else None)
             if self.mode == "measure" and self.result[0] == "pass" and not self.short:
                 self.mode = "monitor"
@@ -566,6 +570,14 @@ class PairedR3:
     def pairs(self) -> list[dict[str, Any]]:
         return make_pairs([w for w in self.windows if "t1" in w])
 
+    def remeasure(self, now: float | None = None) -> None:
+        """After "inconclusive" (Batt 2026-10-08): a NEW measurement series from the current
+        window on (the earlier windows stay as history, never paired with the new ones); the job is
+        NOT stopped -- the caller holds the duty cycle at its slowest level meanwhile."""
+        self.series_start = len(self.windows) - 1
+        self.result = ("pending", None, 0)
+        self.remeasures += 1
+
     def breach(self, now: float | None = None) -> tuple[str, str, bool] | None:
         now = time.time() if now is None else now
         for cam, (since, n) in sorted(self.bad_since.items()):
@@ -585,7 +597,8 @@ class PairedR3:
         if state == "trip":
             return ("latency", f"paired median ON-OFF delta {med:+.2f} ms over {n} kept pairs "
                     f"(> +{DELTA_MS:g}; {self.mode})", False)  # fmt: skip
-        cycles = sum(1 for w in self.windows if w["phase"] == "off" and "t1" in w)
+        cycles = sum(1 for w in self.windows[self.series_start :]
+                     if w["phase"] == "off" and "t1" in w)  # fmt: skip
         if (
             self.mode == "measure"
             and not self.short
@@ -738,6 +751,7 @@ class DutyController:
                  cap_level: int = 0, cap_until: float = 0.0,
                  after_abort: bool = False) -> None:  # fmt: skip
         self.minimum, self.cap_level, self.cap_until = minimum, cap_level, cap_until
+        self.held = False  # R3 inconclusive: the SLOWEST level while re-measuring (2026-10-08)
         self.dwell = DUTY_DOWN_MIN_S_AFTER_ABORT if after_abort else DUTY_DOWN_MIN_S
         self.level = self._bounded(start, now)
         self.changed_at = now
@@ -749,7 +763,18 @@ class DutyController:
 
     def _bounded(self, level: int, now: float) -> int:
         floor = max(self.minimum, self.cap_level if now < self.cap_until else 0)
+        if self.held:
+            floor = DUTY_FLOOR
         return min(DUTY_FLOOR, max(level, floor))
+
+    def hold(self, now: float, on: bool) -> int:
+        """R3 inconclusive (Batt 2026-10-08): ``on`` pins the SLOWEST level while the paired
+        measurement re-measures; ``off`` (the re-measurement passed) lets it walk back up, one
+        level at a time as always."""
+        self._account(now)
+        self.held = on
+        self._set(now, self._bounded(self.level, now), -1.0)
+        return self.level
 
     def _set(self, now: float, level: int, load: float) -> None:
         if level != self.level:
@@ -787,7 +812,8 @@ class DutyController:
     def summary(self) -> dict[str, Any]:
         return {"seconds_per_level": {f"{ms}ms": round(t) for ms, t in
                                       zip(DUTY_LEVELS_MS, self.seconds, strict=True)},
-                "changes": len(self.changes), "level": self.level}  # fmt: skip
+                "changes": len(self.changes), "level": self.level,
+                "held": self.held}  # fmt: skip
 
 
 def write_duty(path: Path, level: int, load: float, now: float | None = None) -> None:

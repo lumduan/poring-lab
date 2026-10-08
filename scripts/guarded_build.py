@@ -691,7 +691,31 @@ def run_process(
                 if act:
                     subprocess.run(["docker", act, container], capture_output=True, check=False)
                     print(f"[{ts()}] R3 {act} {container} [{frigate_r3.stamp()}]", flush=True)
+                if (duty is not None and duty.held and r3.mode == "monitor"
+                        and r3.result[0] == "pass"):  # fmt: skip
+                    duty.hold(time.time(), False)
+                    med = r3.result[1] or 0.0
+                    print(f"[{ts()}] R3 re-measurement PASSED ({med:+.2f} ms over "
+                          f"{r3.result[2]} kept pairs): the slowest-level hold is released "
+                          f"[{frigate_r3.stamp()}]", flush=True)  # fmt: skip
                 r3hit = r3.breach()
+                if r3hit and r3hit[0] == "inconclusive" and duty is not None:
+                    # Batt 2026-10-08: "can't measure" is not evidence of harm, and our own rule:
+                    # KEEP TRAINING at the slowest level and re-measure; never stop the container.
+                    # Only the infra rule (camera frame drops, HARD) stops at once, as before.
+                    now = time.time()
+                    duty.hold(now, True)
+                    frigate_r3.write_duty(DUTY_FILE, duty.level, -1.0, now)
+                    beat = now
+                    r3.remeasure(now)
+                    ms = frigate_r3.DUTY_LEVELS_MS[duty.level]
+                    # NB: never the string "R3 inconclusive" here -- the running train-day.sh greps
+                    # it to classify an ABORT, and this is not one
+                    print(f"[{ts()}] R3: inconclusive measurement: {r3hit[1]} -> KEEP "
+                          f"TRAINING at the slowest level ({ms} ms step sleep), re-measuring "
+                          f"(series {r3.remeasures}); never a stop [{frigate_r3.stamp()}]",
+                          flush=True)  # fmt: skip
+                    r3hit = None
                 if r3hit:
                     kind, detail, hard = r3hit
                     tag = (

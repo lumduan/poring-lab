@@ -156,8 +156,30 @@ R1 / R2 are unchanged.
 - **The 3rd frame-drop abort within a rolling 2 h** → a CAP at ≥ L3 (800 ms) for the next 60 min,
   plus a `NOTIFY:` line (the session pushes it to Batt). It keeps running. *(This replaces the
   15:40 rule "3 aborts in 2 h → stop and wait".)*
-- **A paired R3 latency trip, or "R3 inconclusive"** → the FLOOR rises one level (`DUTY_MIN`), and
-  training resumes in 30 s. At L4 it keeps running there.
+- **A paired R3 latency trip** → the FLOOR rises one level (`DUTY_MIN`), and training resumes in
+  30 s. At L4 it keeps running there.
+- ~~**"R3 inconclusive"** → the FLOOR rises one level, and training resumes in 30 s.~~ ➡️
+  **AMENDMENT (Batt, 2026-10-08 ~19:00): an INCONCLUSIVE measurement never stops the container.**
+  "Inconclusive" is OUR paired-measurement rule, not the infra rule, and "can't measure" is not
+  evidence of harm. It cost 74 % of epoch 29 at 18:33.
+  - The duty cycle drops to the SLOWEST level (L4, 2000 ms) and HOLDS there.
+  - The measurement starts a NEW series from the current window (`PairedR3.remeasure`); training
+    goes on.
+  - When the re-measurement PASSES, the hold is released, and the duty cycle walks back up one level
+    at a time as always.
+  - If the re-measurement TRIPS (a paired delta over +5 ms), the latency rule above applies.
+  - If it is inconclusive again, it holds and re-measures again; still never a stop.
+  - **Only the infra rule (a camera dropping frames for 30 s) stops at once**, as before. The IO
+    guard and R2 are unchanged.
+  - Logged as `R3: inconclusive measurement ... KEEP TRAINING at the slowest level`. It is never an
+    `ABORT` line, so train-day.sh never treats it as a trip. `DUTY summary` shows `held`, and
+    `R3 summary` shows `remeasures`.
+  - Code: `guarded_build.run_process`, `frigate_r3.DutyController.hold`. Tests:
+    `test_an_inconclusive_r3_keeps_training_at_the_slowest_level`,
+    `test_without_a_duty_cycle_an_inconclusive_r3_still_aborts` (non-training steps unchanged),
+    `test_frame_drops_still_stop_at_once_even_with_a_duty_cycle`.
+  - **In effect from the next training start.** The attempt running at the change (since 18:34)
+    loaded the earlier code, and a restart would itself cost its partial epoch.
 - **The IO guard and R2:** unchanged (15-min pauses, at most 3).
 - **The paired measurement's own 3-min OFF windows remain.** They are a measurement, not a load
   response.

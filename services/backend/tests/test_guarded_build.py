@@ -802,3 +802,77 @@ def test_replaydev_lends_the_image_and_reads_this_checkouts_decoders_read_only(
     assert gb.REPLAY_DEV_SRC.name == "src" and gb.REPLAY_DEV_SRC.parent.name == "poring_packets"
     with pytest.raises(ValueError):
         gb.parse_step("replaydev:20261008T01..20261008T00")
+
+
+class _R3Inconclusive:
+    """A PairedR3 stand-in: "inconclusive" once, then quiet (Batt 2026-10-08's amendment)."""
+
+    started = True
+    last = None
+    mode = "measure"
+    result = ("pending", None, 0)
+
+    def __init__(self) -> None:
+        self.calls, self.remeasures = 0, 0
+
+    def poll(self) -> None:
+        pass
+
+    def tick(self) -> None:
+        return None
+
+    def summary(self) -> dict:
+        return {"verdict": "pending", "remeasures": self.remeasures}
+
+    def breach(self) -> tuple[str, str, bool] | None:
+        self.calls += 1
+        if self.calls == 1:
+            return ("inconclusive", "only 3 kept pairs after 10 cycles", False)
+        return None
+
+    def remeasure(self, now: float | None = None) -> None:
+        self.remeasures += 1
+
+
+def test_an_inconclusive_r3_keeps_training_at_the_slowest_level(
+    gb: ModuleType, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:  # fmt: skip
+    """Batt 2026-10-08: "can't measure" is not evidence of harm. With a duty cycle (training), an
+    inconclusive R3 holds the SLOWEST level and re-measures; the container is never stopped."""
+    import frigate_r3 as fr
+
+    monkeypatch.setattr(gb, "DUTY_FILE", tmp_path / "duty.json")
+    monkeypatch.setattr(gb, "verify_stop", lambda *a, **k: pytest.fail("no stop expected"))
+    duty = fr.DutyController(time.time(), start=1)
+    r3 = _R3Inconclusive()
+    assert gb.run_process("rundev:vision", ["sleep", "3"], _QuietGuard(), r3=r3, duty=duty) is True
+    out = capsys.readouterr().out
+    assert "R3: inconclusive measurement" in out and "KEEP TRAINING at the slowest level" in out
+    # train-day.sh classifies an ABORT by grepping "R3 inconclusive": this line must never match
+    assert "ABORT" not in out and "R3 inconclusive" not in out and r3.remeasures == 1
+    assert duty.held and duty.level == fr.DUTY_FLOOR
+
+
+def test_without_a_duty_cycle_an_inconclusive_r3_still_aborts(
+    gb: ModuleType, capsys: pytest.CaptureFixture[str]
+) -> None:
+    ok = gb.run_process("rundev:vision", ["sleep", "30"], _QuietGuard(),
+                        r3=_R3Hit(("inconclusive", "only 2 kept pairs", False)))  # fmt: skip
+    assert ok is False and "ABORT rundev:vision: R3 inconclusive" in capsys.readouterr().out
+
+
+def test_frame_drops_still_stop_at_once_even_with_a_duty_cycle(
+    gb: ModuleType, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:  # fmt: skip
+    import frigate_r3 as fr
+
+    monkeypatch.setattr(gb, "DUTY_FILE", tmp_path / "duty.json")
+    duty = fr.DutyController(time.time(), start=1)
+    hit = _R3Hit(("drops", "camera a dropping frames for 31 s", True))
+    hit.last = None  # type: ignore[attr-defined]
+    hit.mode, hit.result = "measure", ("pending", None, 0)  # type: ignore[attr-defined]
+    assert gb.run_process("rundev:vision", ["sleep", "30"], _QuietGuard(), r3=hit,
+                          duty=duty) is False  # fmt: skip
+    assert "R3-HARD drops" in capsys.readouterr().out

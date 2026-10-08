@@ -546,3 +546,28 @@ def test_the_quiet_command_holds_while_busy(
 
     assert fr.quiet(15, 40, fetch=busy, clock=tick, sleep=lambda s: None, max_load=60.0) == 2
     assert "held until it is below 60" in capsys.readouterr().out
+
+
+def test_remeasure_starts_a_new_series_and_the_job_is_not_stopped(fr: ModuleType) -> None:
+    """Batt 2026-10-08: after "inconclusive" the measurement starts over; the counting of cycles
+    and pairs begins at the current window, so it is not inconclusive again at once."""
+    (g, hit), _ = run(fr, short=False, on_ms=40.0, seconds=8000, load_on=45.0, load_off=25.0)
+    assert hit is not None and hit[0] == "inconclusive"
+    t = g.last_fresh + 1.0  # the moment of the trip, Frigate still answering
+    g.remeasure(t)
+    assert g.breach(t) is None and g.result[0] == "pending" and g.remeasures == 1
+    assert g.summary()["remeasures"] == 1
+
+
+def test_the_duty_hold_pins_the_slowest_level_until_released(fr: ModuleType) -> None:
+    d = fr.DutyController(0.0, start=1)
+    assert d.hold(1.0, True) == fr.DUTY_FLOOR and d.held
+    for k in range(20):  # a light load would walk it down -- not while held
+        d.update(2.0 + k, 5.0, False)
+    assert d.level == fr.DUTY_FLOOR
+    d.hold(30.0, False)
+    t = 30.0
+    for _ in range(fr.DUTY_DOWN_UPDATES + 2):
+        t += fr.DUTY_DOWN_MIN_S_AFTER_ABORT + 1
+        d.update(t, 5.0, False)
+    assert d.level < fr.DUTY_FLOOR  # released: back down, one level at a time

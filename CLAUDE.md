@@ -76,6 +76,8 @@ ports, quickstart) and `docs/adr/`.
          (TEMPORARILY also once Frigate's 10-min mean load is < 60 det/s, Batt 2026-10-08, until
          mid-epoch checkpoints are merged and proven; `TEMP_HOLD_MAX_LOAD` in frigate_r3.py).
          The 3rd abort within 2 h caps it at ≥ 800 ms for an hour and NOTIFIES Batt.
+         An INCONCLUSIVE paired measurement never stops training (Batt 2026-10-08): it holds the
+         slowest level and re-measures; only camera frame drops stop at once.
          `docs/operations/r3-paired.md`.
      - `scripts/frigate_r3.py` (`PairedR3`) implements them, and `guarded_build.py` enforces them on
        every `run:`/`rundev:` vision step (pre-start refusal + pause/unpause + in-run abort).
