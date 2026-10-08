@@ -1486,6 +1486,64 @@ is a HARD FAIL.
   and cells (`talk_cells`), any later click on such a cell, and any `npc_contact` there.
 - **Harness ends:** each run's manifest `ended` and `exit_code`.
 
+### 3.22 rec@0b — what stops an attack ALREADY UNDER WAY (pre-registered 2026-10-08 ~15:10 ICT, BEFORE any run; Batt's approval of rec@0b with three adjustments)
+**Why:**
+- rec@0 (3.19) was INCONCLUSIVE: the C0 control continued in 2 / 8.
+- The packets showed that its attack click rarely ENGAGED inside the 0.4 s before the cancel. The
+  plant spawns up to 3 cells away (rAthena `@monster`: a random free cell within √n + 2 cells), so
+  the client walked up first, or the click missed the small sprite.
+- rec@0b makes the attack start AT ONCE, and only counts trials where it did.
+
+**What changes from 3.19:**
+1. **ADJACENT before the attack** (Batt).
+   - `@monster` cannot place the plant on a given cell (pinned rAthena `atcommand.cpp`), so the GM
+     walks next to it.
+   - The plant's cell comes from pixels: the detector's foot point, then the picking model, with
+     the GM's own cell known from the harness warp.
+   - The GM walks to the neighbouring cell on its own side (a cursor-gated walk click: `walk` read
+     twice), waits 1.5 s, and re-detects the plant.
+   - A plant already adjacent skips the walk.
+   - The attack click goes on the re-detected box CENTRE. If no plant is found, one more detection
+     follows 0.5 s later.
+2. **The cancel comes 0.8 s after the attack click**, so the first hit lands first: the request is
+   immediate when adjacent, the first hit 0–245 ms after it (walk@11).
+3. **The INCLUSION RULE, identical for every condition and judged OFFLINE from the packets:** a
+   trial counts only if an `attack_request` AND the GM's first hit (act, kind normal) both fall
+   between the attack click and the cancel time. For C0 the cancel time is the same 0.8 s mark,
+   with no input.
+4. **Attempts:** 25 per condition, seeded and interleaved (seed **20261064**), in one run.
+   - A condition that ends with fewer than 10 included trials gets ONE top-up run of 15 more
+     attempts of that condition (seed 20261065).
+   - Below 10 even then, it is reported as "not enough engaged trials": inconclusive for that
+     condition, never a pass.
+   - **Reported per condition: the attempts made and the trials included.**
+- **Unchanged from 3.19:**
+  - the place: prt_fild08 (268,107), a fresh Red Plant (1078) per attempt;
+  - the conditions C0–C4: the walks go AWAY from the plant, 2 / 6 cells; the Fly Wing is on F1;
+  - the outcome measures: a trial SUCCEEDS with zero GM hits in [t_cancel + 0.3 s, t_cancel + 5 s]
+    and zero `attack_request` after t_cancel;
+  - the bar: ≥ 9 / 10 of a condition's included trials, AND C0 continued (≥ 2 hits) in ≥ 9 / 10
+    of ITS included trials;
+  - the tie-break: several passes → C2 over C3 over C4.
+- **When:** after walk@12's tuning runs (Batt).
+
+### rec@1 — DRAFT (NOT pre-registered): can a pending attack be cancelled DURING the walk-up?
+**Why:**
+- rec@0 stumbled on the real misclick case: a click on a monster a few cells away makes the
+  client walk up BEFORE it attacks.
+- If the walk-up can be cancelled, a misclick is recoverable before any hit lands. If it cannot,
+  the click itself has to be prevented (walk@12's gates).
+
+**The idea:**
+- A static plant placed 3–4 cells away: the GM is warped there from the plant's picked cell.
+- The attack click, then a cancel DURING the walk-up, 0.2–0.4 s after the click: before the
+  character can arrive at 150 ms a cell.
+- Candidates: a walk click away, sit, a Fly Wing, Esc.
+- **Measured:** whether any hit lands at all, and whether the `attack_request` is followed by an
+  arrival.
+- **Control:** no cancel, so the walk-up and hits must follow.
+- Its own pre-registration comes after rec@0b.
+
 ### Targeting — DESIGN PROPOSALS (Batt, 2026-10-08; NOT pre-registered: each is pre-registered before it is adopted)
 **Provenance:** ideas only, from a screen recording of another RO bot's debug view (unknown origin,
 server and licence). No code or assets copied.
@@ -2615,7 +2673,9 @@ prt_fild08 (268,107). The Fly Wing was on hotbar F1 (verified by a teleport befo
 - Plain observations, not results: in the 5 engaged trials, C3 (sit/stand) was followed by hits
   twice, and C1 once.
 
-**PROPOSED amendment, rec@0b (NOT adopted; Batt decides before any re-run):**
+**PROPOSED amendment, rec@0b** ➡️ **ADOPTED with Batt's three adjustments (2026-10-08 ~15:05):
+pre-registered as §3.22** (adjacent first, the inclusion rule judged offline for every condition,
+rec@1 drafted for the walk-up case). The list below is the proposal as first written:
 1. **Count only ENGAGED trials,** judged offline by an `attack_request` between the click and the
    cancel. Run until 10 engaged trials per condition, at most 30 attempts each.
 2. **Start the cancel once the attack is under way:** 1.5 s after the click, enough for the walk-up
