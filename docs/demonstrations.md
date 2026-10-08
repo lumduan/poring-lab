@@ -1342,6 +1342,28 @@ first.
     `data/ui_anchors/weight_glyphs.npz`, labelled by packet truth), `scripts/weight_resolution.py`
     (`plan` / `measure`: the resolution and the display rule). The banked frames show only
     0 2 3 9 and '/': the live calibration must step the weight through every digit first.
+  - ➡️ **P1 PROVEN LIVE 2026-10-09 06:52–06:56 ICT / 2026-10-08 23:52–23:56 UTC** (session
+    `20261009T065204-demo-weight-digits`, after two harness fixes):
+    - **The two fixes:** the client refuses a phrase repeated more than 3 times, so the first four
+      runs (2026-10-08/09) delivered only 2–3 of 10 identical `@item` steps (the packets show it). A
+      `/ex` line between repeats did NOT help (d7abcf7). Every line is now unique: leading zeros on
+      the item id, which rAthena reads with `strtoul` (8592426).
+    - **The start:** the weight was topped up to a whole 641.0 (server 6410) with arrows, so every
+      calibration step lands on a multiple of 10.
+    - **Calibration:** 10 × Jellopy (+1.0 each), 642 → 651, all ten digits shown. `weight_calibrate`:
+      **READY**: complete, 63 held-out reads OK, 0 wrong.
+    - **On known totals** (held out from calibration), `weight_resolution.py measure`:
+      - Knife +40.0: **651 → 691**;
+      - Knife +40.0: **691 → 731**;
+      - Jellopy × 5, +5.0: **731 → 736**;
+      - **all three EXACT.**
+    - **Resolution:** the display FLOORS, consistent with the server in all 26 readouts checked.
+      Ten arrows of +0.1 each: the first nine never moved the number (736), the tenth did (737,
+      server 7370). **The resolution is 10 rAthena units = 1.0 shown.** A pickup lighter than 1.0
+      may not move the number, which is what P5's chat cue backs up.
+    - The templates are installed locally at `data/ui_anchors/weight_glyphs.npz` (client pixels,
+      never committed). `data/kb` now holds P4's `items.json` / `drops.json` / `server.json`
+      (`kb_build.py`, local, GPL-derived, never committed).
   - P2: the decoders above (§5, "Floor items and pickups"); proven only by a replay of a deliberate
     drop + pickup (`guarded_build.py replaydev:`, the checkout's decoders read-only in the sniffer
     image: no rebuild) and `scripts/loot_truth.py`.
