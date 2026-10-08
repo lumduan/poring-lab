@@ -457,6 +457,12 @@ class TraceSim(Sim):
 
     def _exit(self, x: ir.Exit, owner: str) -> Generator[_Tick, str | None, None]:
         before_block, before_map, t0 = self.block, self.world.get("map"), self.t
+        if x.kind == "item_warp" and self.save_point is None:
+            self.notes.append(
+                f"t={self.t:.0f}s: {before_block}'s item_warp with an UNKNOWN save point: the "
+                f"model arrives at {x.to_block}.{x.to_entry} (the real client goes to the save "
+                "point)"
+            )
         self._exit_ctx = x
         try:
             yield from super()._exit(x, owner)

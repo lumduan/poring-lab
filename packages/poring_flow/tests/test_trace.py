@@ -63,6 +63,9 @@ def test_run_a_single_map_node() -> None:
     assert t["end"] == "single_block_exit"
     assert [x["kind"] for x in t["transitions"]] == ["item_warp"]
     assert not any(p.startswith("town.") for p in t["nodes"])
+    # town's Kafra never ran: the save point is unknown, and the trace says what the model did
+    assert t["save_point"] is None
+    assert any("UNKNOWN save point" in n for n in t["notes"])
 
 
 def test_the_trace_reports_what_the_static_data_refuses() -> None:
