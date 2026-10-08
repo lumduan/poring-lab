@@ -5,6 +5,9 @@ console receives it, over recorded frames.
     hud_scene_check.py rate --from T0 --to T1            messages per minute by type (idle ~0)
     hud_scene_check.py render FRAMES_DIR [--latency-ms 100]   an MP4 + a still, the scene drawn
     hud_scene_check.py offsets FRAMES_DIR [--threads 4]  box-to-sprite foot offsets per frame
+    hud_scene_check.py truth FRAMES_DIR...               the sim's per-frame caches (detector: slow)
+    hud_scene_check.py rescore FRAMES_DIR [--log L]      a live log, scored as `sim` (cached truth)
+    hud_scene_check.py sim FRAMES_DIR [--variants a,b]   the scene process OFFLINE, per variant
 
 - **Frames:** `<k>-<t_mono_ns>.jpg` (route_demo's recorder). A frame's time is its bus capture time,
   the same clock as the scene's messages.
@@ -12,7 +15,13 @@ console receives it, over recorded frames.
   and the frame's own motion offset (exact by time, else the latest at or before it).
 - **offsets:** on every frame, each drawn unit box against the SAME detector run offline on that
   frame (the nearest foot of that class, within 120 px). Reported by class, walking and standing
-  apart (walking = the scene moved on that frame).
+  apart (walking = the scene moved >= 1 px since the previous recorded frame; `:exact` = the scene
+  process saw that very frame, `:between` = the console drew it with an older motion).
+- **truth / rescore / sim** (2026-10-08 night, scripts/hud_scene_sim.py): the detector and the
+  motion features cached once per recording in RAM; `sim` runs hud_scene.py's own tracker over the
+  recorded frames at their recorded times and scores what a console would draw, per variant
+  (walking = the scene moved >= 1 px since the previous recorded frame; `rescore` scores a live
+  log the same way, so the two compare).
 """
 
 from __future__ import annotations
@@ -34,9 +43,9 @@ LOG = Path("/dev/shm/poring-lab-route/scene.jsonl")
 COLOUR = {"monster": (255, 90, 90), "npc": (255, 200, 60), "sign": (251, 146, 60)}
 
 
-def load_log(t0: int | None = None, t1: int | None = None) -> list[dict[str, Any]]:
+def load_log(t0: int | None = None, t1: int | None = None, log: Path = LOG) -> list[dict[str, Any]]:
     rows = []
-    for path in (LOG.with_suffix(".jsonl.1"), LOG):
+    for path in (log.with_suffix(".jsonl.1"), log):
         if path.exists():
             for line in path.read_text().splitlines():
                 if line:
@@ -105,10 +114,6 @@ def frames(d: Path) -> list[tuple[int, Path]]:
     return [(int(f.stem.split("-")[1]), f) for f in fs]
 
 
-def moving_times(log: list[dict[str, Any]]) -> set[int]:
-    return {e["msg"]["t_mono_ns"] for e in log if e["msg"]["type"] == "hud_motion"}
-
-
 def rate(t0: int, t1: int) -> int:
     log = load_log(t0, t1)
     mins = max((t1 - t0) / 60e9, 1e-9)
@@ -165,26 +170,37 @@ def render(d: Path, latency_ms: float) -> int:
 
 
 def offsets(d: Path, latency_ms: float, threads: int) -> int:
+    import hud_scene as hs
+    import route_preview as rpv
     import unit_detector
     from PIL import Image
 
     fs = frames(d)
     log = load_log(fs[0][0] - int(60e9), fs[-1][0] + int(5e9))
-    moving = moving_times(log)
+    sent = {e["msg"]["t_mono_ns"] for e in log}  # the frames the scene process itself saw
     rp = Replay(log)
     gx, gy, _, _ = r.game_region()
     dw, dh = r.desktop()
     det = unit_detector.UnitDetector(threads=threads)
     per: dict[str, list[float]] = {}
+    prev: np.ndarray | None = None
     try:
         for t, f in fs:
             rp.advance(t + int(latency_ms * 1e6))
+            img = np.asarray(Image.open(f).convert("RGB"))[..., ::-1]
+            # walking = THIS frame moved since the previous recorded one (the band-passed scroll).
+            # The first cut asked "did the process send a motion for this exact frame", which
+            # filed every walking frame between the process's own frames as standing (2026-10-08
+            # night: 83 walking samples of ~290). `:between` = the console used an older motion.
+            moved = prev is not None and math.hypot(*rpv.scene_shift(prev, img, **hs.SHARP_SHIFT))
+            prev = img
             drawn = [o for o in rp.boxes(t, dw, dh, gx, gy) if o["kind"] == "unit"]
             if not drawn:
                 continue
-            img = np.asarray(Image.open(f).convert("RGB"))[..., ::-1]
             found = det.detect(img)
-            state = "walking" if t in moving else "standing"
+            state = "standing"
+            if moved and moved >= 1.0:
+                state = "walking:exact" if t in sent else "walking:between"
             for o in drawn:
                 x, y, w, h = o["px"]
                 foot = (x + w / 2, y + h)
@@ -207,6 +223,94 @@ def offsets(d: Path, latency_ms: float, threads: int) -> int:
     return 0
 
 
+REGION, DESKTOP = (80, 77, 1280, 720), (1440, 900)  # the recordings' (sim: no .env, no backend)
+
+
+def _table(rows: list[tuple[str, dict[str, Any]]]) -> str:
+    """One line per variant: offsets per class x state (median / p95 / max, n), doubled boxes,
+    message rates and the detector's cores."""
+    keys = sorted({k for _, rep in rows for k in rep["score"]["offsets"]})
+    out = []
+    for name, rep in rows:
+        sc = rep["score"]
+        cells = []
+        for k in keys:
+            st = sc["offsets"].get(k, {"n": 0})
+            cells.append(f"{k} " + (f"{st['median_px']}/{st['p95_px']}/{st['max_px']} n{st['n']}"
+                                    if st["n"] else "-"))  # fmt: skip
+        rt = rep.get("rates", {})
+        mv, still = rt.get("moving", {}), rt.get("still", {})
+        cost = rep.get("cost", {})
+        out.append(
+            f"{name:16s} " + " | ".join(cells)
+            + f" | doubled {sc['doubled']} ({sc['doubled_frames']} fr) ghosts {sc['ghosts']}"
+            + (f" | msgs/min moving {sum(mv.get('per_minute', {}).values()):.0f} "
+               f"(moves {mv.get('moves_per_minute', 0)}), still deltas "
+               f"{still.get('per_minute', {}).get('hud_delta', 0)}" if rt else "")
+            + (f" | det cores moving {cost['moving']['cores']} still {cost['still']['cores']}"
+               if cost else "")
+        )  # fmt: skip
+    return "\n".join(out)
+
+
+def truth(dirs: list[Path], threads: int) -> int:
+    import hud_scene_sim as sim
+
+    for d in dirs:
+        print(sim.build_motion(d), flush=True)
+        print(sim.build_truth(d, threads=threads), flush=True)
+    return 0
+
+
+def rescore(d: Path, log_path: Path, latency_ms: float) -> int:
+    import hud_scene_sim as sim
+
+    cache = sim.load_cache(d)
+    t = cache["truth"]["t"]
+    log = load_log(int(t[0]) - int(60e9), int(t[-1]) + int(5e9), log_path)
+    hud_times = {e["msg"]["t_mono_ns"] for e in log}  # the frames the live process saw (logged)
+    sc = sim.score(log, cache, REGION, DESKTOP, latency_ms, hud_times=hud_times)
+    rep = {"score": sc, "rates": sim.rates(log, cache)}
+    print(_table([("live", rep)]))
+    out = sim.cache_dir(d) / "rescore-live.json"
+    out.write_text(json.dumps(rep, indent=1))
+    print(out)
+    return 0
+
+
+def run_sim(
+    d: Path, names: list[str], latency_ms: float, grab_from: Path | None, console: str = "hold"
+) -> int:
+    import hud_scene_sim as sim
+
+    cache = sim.load_cache(d)
+    reg = sim.variants()
+    grab: Any = sim.LIVE_GRAB_MS
+    if grab_from is not None:  # the live process's own frame -> motion message latencies
+        ls = [(e["logged_ns"] - e["msg"]["t_mono_ns"]) / 1e6 for e in load_log(log=grab_from)
+              if e["msg"]["type"] == "hud_motion"]  # fmt: skip
+        grab = ls or grab
+    rows = []
+    for name in names:
+        v = reg[name]
+        res = sim.simulate(d, cache, v, REGION, DESKTOP, grab_ms=grab)
+        hud_times = {int(cache["truth"]["t"][k]) for k in res["hud_frames"]}
+        between = hud_times if v.hud_every > 1 else None
+        sc = sim.score(res["log"], cache, REGION, DESKTOP, latency_ms, hud_times=between,
+                       console=console)  # fmt: skip
+        rep = {
+            "score": sc,
+            "rates": sim.rates(res["log"], cache),
+            "cost": sim.det_cost(res["runs"], cache),
+            "motion_source": res["motion_source"],
+        }
+        rows.append((name, rep))
+        tag = name.replace("/", "_") + ("" if console == "hold" else f"-{console}")
+        (sim.cache_dir(d) / f"sim-{tag}.json").write_text(json.dumps(rep, indent=1))
+        print(_table([(name, rep)]), flush=True)
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -220,9 +324,30 @@ def main() -> int:
     c.add_argument("dir", type=Path)
     c.add_argument("--latency-ms", type=float, default=100.0)
     c.add_argument("--threads", type=int, default=4)
+    tr = sub.add_parser("truth")
+    tr.add_argument("dirs", type=Path, nargs="+")
+    tr.add_argument("--threads", type=int, default=2)
+    rs = sub.add_parser("rescore")
+    rs.add_argument("dir", type=Path)
+    rs.add_argument("--log", type=Path, default=LOG)
+    rs.add_argument("--latency-ms", type=float, default=100.0)
+    sm = sub.add_parser("sim")
+    sm.add_argument("dir", type=Path)
+    sm.add_argument("--variants", default="first-cut,chosen")
+    sm.add_argument("--latency-ms", type=float, default=100.0)
+    sm.add_argument("--grab-from", type=Path, default=None,
+                    help="a live scene log: sample its frame -> motion latencies")  # fmt: skip
+    sm.add_argument("--console", choices=("hold", "extrapolate"), default="hold",
+                    help="hold = scene.ts today; extrapolate = a parked option")  # fmt: skip
     x = ap.parse_args()
     if x.cmd == "rate":
         return rate(x.t0, x.t1)
+    if x.cmd == "truth":
+        return truth(x.dirs, x.threads)
+    if x.cmd == "rescore":
+        return rescore(x.dir, x.log, x.latency_ms)
+    if x.cmd == "sim":
+        return run_sim(x.dir, x.variants.split(","), x.latency_ms, x.grab_from, x.console)
     return (
         render(x.dir, x.latency_ms)
         if x.cmd == "render"
