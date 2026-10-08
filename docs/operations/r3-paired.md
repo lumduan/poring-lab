@@ -240,3 +240,6 @@ Each pair: delta = ON − OFF latency (ms); kept only if the loads agree within 
 - **Progress:** the run reached epoch 2 / 30 (3 %); `last.pt` holds epoch 1. Resume by hand:
 
       RESUME=1 SLEEP_LEVEL=1 scripts/runbooks/train-day.sh v0jpg-20261007 v0jpg-20261007 30 <dir> 2 1
+
+  ➡️ SUPERSEDED the same day by the ADAPTIVE DUTY CYCLE below: `SLEEP_LEVEL` is gone; a hand
+  resume is `RESUME=1 DUTY_START=4 scripts/runbooks/train-day.sh …`.

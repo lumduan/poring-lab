@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [../phase3-plan.md, v0-png-vs-jpeg.md]
-next_action: "Build the v1png cache (after the v0-JPEG matched-batch run and its evals), then train v1 when R1-R3 allow, with the 0.3 step-sleep setting; score ONCE as written here."
+next_action: "Build the v1png cache (after the v0-JPEG matched-batch run and its evals), then train v1 when R1-R3 allow, under the ADAPTIVE DUTY CYCLE (Batt 2026-10-08: it replaces the 0.3 step-sleep setting; bar unchanged) and with MID-EPOCH checkpoints if their resume equivalence is proven first (Batt 2026-10-08); score ONCE as written here."
 ---
 
 # v1 vs v0-PNG: the same frames, the same format, different labels (pre-registered 2026-10-07)
@@ -71,6 +71,18 @@ This file is written and committed BEFORE any v1 model exists. It is scored once
        SLEEP_LEVEL=<the 0.3 level> scripts/runbooks/train-day.sh v1png-<date> v1png-<date> 30 <dir> 2 1
 
    It starts on a fresh baseline with R2 clear, through guarded_build (IO + R1–R3).
+   - ➡️ **SUPERSEDED (Batt, 2026-10-08): `SLEEP_LEVEL` is gone.** The ADAPTIVE DUTY CYCLE
+     (docs/operations/r3-paired.md, Batt 2026-10-07) replaced the step-sleep ladder;
+     `train-day.sh` no longer reads `SLEEP_LEVEL`. v1 trains under the duty cycle, as v0-JPEG did:
+
+         scripts/runbooks/train-day.sh v1png-<date> v1png-<date> 30 <dir> 2 1
+
+     **The bar and the scoring are unchanged.** Only the operating setting moved, and it is the
+     same for v0-JPEG, the run v1 follows.
+   - **Mid-epoch checkpoints (Batt, 2026-10-08):** v1 runs ~15–16 h through daytime Frigate peaks,
+     so an abort must not throw away a partial epoch. They are added before v1 starts, and only
+     after a short run proves the resume equivalent. Otherwise v1 keeps epoch-level checkpoints.
+     Either way the choice is recorded here before v1 starts.
 3. **Evals:** the same chain as v0-JPEG's:
    - last.pt on the PNG test frames;
    - `predict_dir` on the gold frames;

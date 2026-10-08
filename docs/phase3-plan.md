@@ -1363,6 +1363,8 @@ unchanged.
   them is excluded and counted.
 - **Weekday:** S2 after 17:00. Training is PAUSED first, by SIGINT to the host-side training step
   (train-day.sh stops), and resumed after with RESUME=1 and SLEEP_LEVEL at its ladder level.
+  ➡️ SUPERSEDED: since the ADAPTIVE DUTY CYCLE (Batt 2026-10-07, docs/operations/r3-paired.md)
+  there is no SLEEP_LEVEL; resume with `RESUME=1 DUTY_START=4` (the slowest level, as after an abort).
 - **The foreground gate's @stream template is installed** (2026-10-07). m4-rerun.sh checks it.
 
 **The analysis (fixed now; nothing else changes):**

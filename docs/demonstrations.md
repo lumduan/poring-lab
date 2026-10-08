@@ -2143,5 +2143,49 @@ sprite. It only hovered: no click, no key.
 - **The pattern:** in crowds, a monster reaches the click point between the no-motion re-check and
   the click. The allowlist rule checks the cursor, not the instant of the click.
 - The scoring from here on counts the server's `act` by the GM (live) as the SAFETY measure.
-  `attack_request` / `npc_contact` stay reported as "offline only".
+  `attack_request` / `npc_contact` stay reported as "offline only". ➡️ **SUPERSEDED 2026-10-08
+  07:31:** the rebuilt sniffer emits both LIVE, each proven by a deliberate positive case (§2a).
+  walk@11 (3.18) counts all three signals in the run's window.
+
+### walk@11 (3.18), indoor CLEAN, RDP: **HARD FAIL: 47 / 50 AND 1 NPC contact** (Sister Linus, the same cell as before); 0 attack requests, 0 GM acts; 0 routes ended on a wrong cell (2026-10-08 09:26:36–10:08:24 ICT / 02:26:36–03:08:24 UTC)
+**Session:** `20261008T092637-demo-walk11-alone-clean-indoor` (seed 20261047); 56 routes, 1
+interrupted. Scored: the first 50 not interrupted. Per 3.18 the chain runs all four tuning runs
+whatever this one scores; it was not touched.
+
+**The results:**
+- **End to end: 47 / 50** (needed 48) → FAIL by count (walk@10 42, walk@9 39).
+- **SAFETY (live, in the run's window): `npc_contact` 1** → **HARD FAIL**. `attack_request` 0; GM
+  `act` of kind normal or pickup 0.
+- **Clicks: 228 / 231 verified.** By tier: A named 198 / 199, A unnamed 20 / 22, B named 10 / 10.
+  The 3 misses sent no move request: the NPC contact (A unnamed), one A unnamed from (100,105), and
+  one A named from (96,118). Only the first had a safety event.
+- **Fixes: 9 / 9 correct** (unconfirmed 3, no move 3, all-unconfirmed round 3).
+- **The 3 failures were declines:** `unit_stays` 1, `no_plan` 1, `no_click_point` 1. Waits 2.0 s
+  in total (2 routes); 1 substitute (the goal was taken).
+
+**The NPC contact, from the packets and the rule's own record:**
+- The GM stood at (112,115); Sister Linus stands at (111,112).
+- The band's points in order:
+  - (683.2, 390.6) read TALK, and (691.2, 386.6) read TALK. Both were refused, so the v3 references
+    worked.
+  - The next point, (675.2, 394.6), read WALK (IoU 0.892) and was re-checked WALK. The marker did
+    NOT name the cell (tier A, unnamed).
+  - The unit gate saw 2 NPCs, the nearest 24.8 px outside its detected box (margin 12), and
+    passed the click.
+- 183 ms later came `CZ_CONTACTNPC` to Sister Linus. Her dialog opened, and the rule's own close
+  ended it 2.5 s later.
+- **All three points pick the cell (112,114)** (the picking model): the SAME cell as 7 of the 8
+  earlier contacts (the replay table above).
+- Sister Linus's feet project to (717, 465), ~80 px below and right of the click. The client's NPC
+  hit test covers her sprite's rectangle, and that reaches past the detector's box + 12 px.
+- So a WALK read 8 px from two TALK reads clicked the NPC: the same mechanism as walk@8–10. This
+  fits the lag hypothesis (the drawn cursor's shape trails the hit test) or a ragged edge of the
+  talk region.
+
+**Candidates for the next rule (NOT applied; the tuning chain runs on unchanged):**
+- **A TALK read marks its picked CELL as a unit:** refuse every point in the band that picks the
+  same cell. Here all three did.
+- **NPCs need a wider margin than monsters:** the client's hit box is the sprite's rectangle; 24.8 px
+  outside the detected box still contacted.
+- **Unnamed clicks carried 2 of the 3 misses** (2 / 22 against 1 / 199 named).
 
