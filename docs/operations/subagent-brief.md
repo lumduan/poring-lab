@@ -31,6 +31,9 @@ Batt, 2026-10-07: **subagents inherit the shared-disk rules.**
 SHARED-DISK AND SAFETY RULES (poring-lab, CLAUDE.md rules 1-10; you inherit all of them)
 - The host disk is shared with live capture. Nothing heavy or many-small-files on it:
   - no .venv, node_modules, builds, caches or extracted trees in the repo or a worktree;
+  - your worktree is in tmpfs (/dev/shm/poring-lab-wt/<name>, created by the parent): stay in it;
+  - no disk-heavy steps (worktrees, env work, cache builds) between 09:30-10:15 or 14:00-14:45 ICT
+    (the market opens);
   - Python in a worktree: do NOT build an env. Run the MAIN checkout's tools with your worktree's
     sources first on PYTHONPATH (no install, no disk IO):
       export PYTHONPATH=$PWD/scripts:$PWD/packages/<pkg>/src:...:$PWD/services/backend/src
@@ -65,8 +68,12 @@ SHARED-DISK AND SAFETY RULES (poring-lab, CLAUDE.md rules 1-10; you inherit all 
   no env, the main `.venv` + PYTHONPATH.
 
 ## For the parent
-- Spawn worktree agents a few minutes apart while a GPU step trains (each worktree is a checkout
-  on the shared disk).
+- **Worktrees in tmpfs** (Batt, 2026-10-08): `git worktree add /dev/shm/poring-lab-wt/<name> -b
+  <branch>`, then spawn the agent WITHOUT the harness's worktree isolation (that one checks out on
+  the disk, under .claude/worktrees) and tell it its directory. A checkout is ~5 MB in ~560 files.
+- **At most 2 agents start at once**, a few minutes apart.
+- **Never in the market-open windows** (09:30-10:15, 14:00-14:45 ICT): no worktrees, env work or
+  cache builds.
 - After merging a subagent's branch, remove its worktree and branch. Delete its `/dev/shm`
   leftovers.
 - When a guard trips while a subagent runs, note the subagent's timeline in the report. Its

@@ -106,10 +106,17 @@ ports, quickstart) and `docs/adr/`.
      Use a specific path, `ls`, `stat`, `findmnt`, `df` or `git ls-files`.
    - **Subagents inherit all of this** (Batt, 2026-10-07). Paste the block in
      `docs/operations/subagent-brief.md` into every subagent brief:
-     - no `.venv`, `node_modules`, builds or many-small-file trees on the shared disk: a worktree's
-       uv env goes to `/dev/shm` via `UV_PROJECT_ENVIRONMENT` and `UV_LINK_MODE=copy`;
+     - no `.venv`, `node_modules`, builds or many-small-file trees on the shared disk;
+     - **worktrees live in tmpfs** (Batt, 2026-10-08): the parent creates them with
+       `git worktree add /dev/shm/poring-lab-wt/<name> -b <branch>`, never the harness's on-disk
+       worktree isolation (a checkout is a many-small-file tree);
+     - **no env builds**: the main `.venv` with the worktree's sources first on `PYTHONPATH`;
+     - **at most 2 subagents start at once**, staggered;
      - guarded steps only; the docker, bigread and walk hooks apply;
      - remove its worktree and its `/dev/shm` leftovers after the merge.
+   - **No disk-heavy steps at the market opens** (Batt, 2026-10-08, after IO trips at ~14:25 two
+     days running): no worktrees, env work or cache builds between 09:30 and 10:15 ICT or between
+     14:00 and 14:45 ICT. That applies to every agent, the parent included.
 
 6. **Never put a Docker network on a 192.168.x subnet on this host.** The LAN uses 192.168.1, 110, 111, 112
    and 120, and Docker can't see the segments behind the router. On 2026-09-29 an auto-assigned
