@@ -1,0 +1,21 @@
+/* The block editor's verification badges (L1 verified_on) and run labels. Blockly draws them as
+   SVG text with its own fill (.blocklyText); the badge class sits on the field's group. */
+.pl-badge-verified_rdp_s2 .blocklyText,
+.pl-badge-verified_rdp .blocklyText,
+.pl-badge-verified_s2 .blocklyText {
+  fill: #bbf7d0 !important;
+}
+.pl-badge-unverified .blocklyText {
+  fill: #fde68a !important;
+}
+.pl-badge-unknown .blocklyText {
+  fill: #fecaca !important;
+}
+.pl-badge-core .blocklyText {
+  fill: #e5e7eb !important;
+}
+.blocklyText.pl-run,
+.pl-run .blocklyText {
+  fill: #f5d0fe !important;
+  font-style: italic;
+}

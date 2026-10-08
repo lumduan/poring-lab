@@ -29,6 +29,8 @@ ENV NODE_ENV=production \
 # The standalone server binds process.env.HOSTNAME (default: localhost) -- hence 0.0.0.0 above.
 COPY --from=builder --chown=app:app /app/.next/standalone ./
 COPY --from=builder --chown=app:app /app/.next/static ./.next/static
+# Static files (MW2: Blockly's self-hosted media, /blockly-media/*): standalone output does not copy them.
+COPY --from=builder --chown=app:app /app/public ./public
 USER app
 EXPOSE 3000
 HEALTHCHECK --interval=15s --timeout=5s --start-period=15s --retries=3 \

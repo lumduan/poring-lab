@@ -273,6 +273,21 @@ Open **Settings** in the console's top bar (`http://<host>:3000/settings`).
   are refused too; every save carries a CSRF token and is rate limited.
 - The set lives in `./settings/` (gitignored, mounted into the backend only); see ADR-0016.
 
+## Flows: block programs, SIMULATE only (MW2, 2026-10-08)
+
+Open `http://<host>:3000/flows` (not in the top bar yet). The page edits ADR-0020's flow IR:
+- **Canvas:** map blocks joined by typed exits (walk exit, NPC warp, item warp; the death respawn
+  is derived from the save point), the global and per-map events, a lint / run line under each.
+  Draw an exit from a port onto another block; double-click a block for its blocks.
+- **Blocks:** Blockly (MakeCode look). Each skill block shows its L1 verification badge (verified
+  RDP / S2, unverified), its lint findings and its last simulated run.
+- **Lint, Simulate, JSON, Python:** MW1's linter; a simulated run against static data (the
+  synthetic sample sheets, or the lab's own data/kb) with a scenario you choose; JSON import /
+  export; the Python view, read-only.
+- **No live run:** nothing on the page reaches the executor, the mux or an input path. The backend's
+  `/flows/*` routes only compute (public listener, LAN viewer, Origin; POSTs need the CSRF token,
+  20 a minute). See [docs/planning/mw2-block-editor.md](docs/planning/mw2-block-editor.md).
+
 **Bot typing needs the game window in front.** Before the bot types anything, the backend checks
 the game client's title bar on a fresh frame; clicks are never blocked.
 - The reference picture is installed with

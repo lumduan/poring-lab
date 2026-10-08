@@ -1,0 +1,4 @@
+These files are copied unchanged from the blockly 13.3.0 npm package (node_modules/blockly/media/),
+licensed under the Apache License, Version 2.0 (see THIRD_PARTY.md in the repository root and
+node_modules/blockly/LICENSE). Self-hosted so the flow editor makes no outside request; the sound
+files are not copied (sounds are off).

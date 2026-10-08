@@ -1,0 +1,87 @@
+flow(
+    ir=1,
+    name="town_warp_farm",
+    description="Batt's MW2 sample (2026-10-08): a town, an NPC warp, a farm loop; a death respawns in town. SYNTHETIC maps, keys and ids.",
+    max_runtime_s=7200,
+    run_until_stopped=True,
+    start=entry("town", "spawn"),
+    target=target(client="kro-20211103-prere", server="lab-rathena", locale="en", path=S2),
+)
+
+POTION = item(9001)
+WING = item(9002)
+BOSS = mob(9109)
+
+
+@map_block(map_id("town_1"), entries=[entry_at("spawn", cell("town_1", 40, 40))])
+def town():
+    walk_to(cell("town_1", 55, 45))
+    set_save_point(npc("n_kafra"))
+    open_window(window("basic_info"))
+    walk_to(cell("town_1", 83, 61))
+    talk_npc(npc("n_guide"))
+    if choose_menu(option("o_field_info")) != OK:
+        stop("menu_mismatch")
+    close_dialog()
+    wait_until(False, timeout_s=2)
+    walk_to(cell("town_1", 97, 71))
+    take_exit(npc_warp(npc("n_warper"), [option("o_to_field")], to=entry("farm", "arrival")))
+
+
+@map_block(
+    map_id("field_1"),
+    entries=[entry_at("arrival", cell("field_1", 30, 30))],
+    targets=[mob(9101), mob(9102)],
+    ignore=[mob(9105)],
+)
+def farm():
+    for _ in range(20):
+        attack_nearest(within=12)
+    take_exit(item_warp(WING, to=entry("town", "spawn")))
+
+
+@on(is_dead(), priority=CRITICAL, max_per_run=3, then=RELOCATE)
+def dead():
+    respawn()
+
+
+@on(hp_percent() < 20, rearm=hp_percent() > 50, priority=CRITICAL, then=RELOCATE, max_per_min=2)
+def hp_critical():
+    escape()
+
+
+@on(map_load_seen(), priority=CRITICAL, then=RELOCATE)
+def unexpected_map():
+    read_position()
+
+
+@on(hp_percent() < 50, until=hp_percent() > 80, priority=SURVIVAL, mode=INSERT, max_per_min=6)
+def hp_low():
+    use_item(POTION)
+
+
+disable(hp_low, scope=town)
+
+
+@on(
+    hp_percent() < 70,
+    until=hp_percent() > 90,
+    priority=SURVIVAL,
+    mode=INSERT,
+    max_per_min=6,
+    overrides=hp_low,
+    scope=farm,
+)
+def farm_hp_low():
+    use_item(POTION)
+
+
+@on(
+    sees(BOSS, within=15),
+    rearm=not sees(BOSS, within=15),
+    priority=SURVIVAL,
+    then=RELOCATE,
+    scope=farm,
+)
+def boss_seen():
+    use_item(WING)

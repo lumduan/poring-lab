@@ -1,0 +1,45 @@
+{
+ "server": "sample",
+ "mobs": [
+  {
+   "id": 9101,
+   "label": "slime A (synthetic)",
+   "level": 3
+  },
+  {
+   "id": 9102,
+   "label": "slime B (synthetic)",
+   "level": 5
+  },
+  {
+   "id": 9105,
+   "label": "beetle (synthetic)",
+   "level": 12
+  },
+  {
+   "id": 9109,
+   "label": "boss (synthetic)",
+   "level": 40,
+   "aggressive": true,
+   "boss": true,
+   "difficulty": "boss_multi_form"
+  }
+ ],
+ "items": [
+  {
+   "id": 9001,
+   "label": "heal item (synthetic)",
+   "kind": "heal"
+  },
+  {
+   "id": 9002,
+   "label": "return wing (synthetic)",
+   "kind": "butterfly_wing"
+  },
+  {
+   "id": 9003,
+   "label": "fly wing (synthetic)",
+   "kind": "fly_wing"
+  }
+ ]
+}

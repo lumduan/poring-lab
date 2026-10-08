@@ -1652,6 +1652,9 @@ The section itself stays PROPOSED until Batt accepts it.
   - the Byalan fixture's training scope is all 7 species.
 
 **MW2 · One map block and its exits, live** (after F2; lab-rathena, ASSIST, Batt present).
+➡️ 2026-10-08: not the EDITOR plan [mw2-block-editor.md](../planning/mw2-block-editor.md), which is
+also called "MW2" (its skeleton is built on branch `feat/mw2-editor`, SIMULATE only, no live run).
+The naming is parked for Batt.
 - Prerequisites: `walk_to` under walk@11's safety bar, `take_warp` and the position read verified
   alone.
 - Alone-tests before their blocks run in a flow, each pre-registered:

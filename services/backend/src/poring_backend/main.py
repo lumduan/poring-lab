@@ -19,6 +19,7 @@ from poring_backend.agent_net import AgentNetworkGuard
 from poring_backend.clipboard import SelectionIO
 from poring_backend.config import Settings
 from poring_backend.routes_debug import router as debug_router
+from poring_backend.routes_flows import router as flows_router
 from poring_backend.routes_internal import router as internal_router
 from poring_backend.routes_packets import router as packets_router
 from poring_backend.routes_public import router as public_router
@@ -104,6 +105,7 @@ def create_app(
     app.include_router(transfer_router)
     app.include_router(qa_router)
     app.include_router(settings_router)
+    app.include_router(flows_router)
     app.include_router(debug_router)
     # The console (another origin: :3000) calls the /transfer HTTP routes with fetch/XHR. Only the
     # allowlisted console origins may read the responses; the routes also refuse any request
@@ -111,7 +113,7 @@ def create_app(
     app.add_middleware(
         CORSMiddleware,
         allow_origins=sorted(cfg.origins),
-        allow_methods=["GET", "PUT", "DELETE"],
+        allow_methods=["GET", "PUT", "DELETE", "POST"],  # POST: the /flows computations (MW2)
         allow_headers=["content-type", "x-csrf-token"],
         expose_headers=["content-disposition", "x-content-sha256"],
         max_age=600,

@@ -32,12 +32,17 @@ services:
   backend:
     environment:
       # Mounted source wins over the copy installed in the image's site-packages.
-      PYTHONPATH: /dev-src/poring_env:/dev-src/poring_packets:/dev-src/backend
+      # poring_flow + poring_skills (MW2, 2026-10-08): the /flows routes' engine (computation only:
+      # lint, simulate, the Python view). Not in the backend image yet; without them the routes
+      # answer 503 flow_engine_unavailable.
+      PYTHONPATH: /dev-src/poring_env:/dev-src/poring_packets:/dev-src/backend:/dev-src/poring_skills:/dev-src/poring_flow
       PYTHONDONTWRITEBYTECODE: "1"
     volumes:
       - ./packages/poring_env/src:/dev-src/poring_env:ro
       - ./packages/poring_packets/src:/dev-src/poring_packets:ro
       - ./services/backend/src:/dev-src/backend:ro
+      - ./packages/poring_skills/src:/dev-src/poring_skills:ro
+      - ./packages/poring_flow/src:/dev-src/poring_flow:ro
 
   gamestream:
     # The clean room (2026-10-03): the loop and the S2 spike run from the host source, read-only.
