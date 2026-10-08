@@ -11,6 +11,9 @@ cursor read WALK beside an NPC's edge contacted the NPC (the replay: walk@8/9/10
    and the Poring; NPCs static) -- Batt's worst-case envelope, no tracker. The click point must
    clear every moved box by 12 px, else it is treated as a point covered by a UNIT (the next point
    on the polyline; walk@8's patience / substitute rules).
+   MEMORY (Batt, after pilot 1 attacked a Poring hidden behind a pew): units seen on any park or
+   decision frame are remembered 8 s at their absolute cell, their envelope growing with age;
+   a refused point moves FARTHER along the polyline (FARTHER points) before patience.
 2. The talk references v3 (+72 filled bubbles): an NPC at the click point reads TALK, a unit.
 3. NOT included: the "cancel" walk click after a click that hit a unit. Measured 2026-10-08
    (safety_signal_check cancel-test, n=3 clicks that hit): the first hit lands 0-245 ms after the

@@ -1106,6 +1106,82 @@ pickup requests.
 - dead clicks caught by the shift check; fixes (trigger; correct / WRONG);
 - waits; substitutes (justified or not); declines by cause (incl. no pick-safe point); route time.
 
+### 3.18 walk@11 — the click-instant UNIT GATE; TUNING (indoor/outdoor × CLEAN/CROWD), then the HELD-OUT set once (pre-registered 2026-10-08 ~09:25 ICT, BEFORE any scored run; Batt's decisions 3 + 4 of 2026-10-08)
+**Why:** walk@10 solved the wrong-cell walks, but safety failed. A walk click became an attack (3
+hard fails: a unit reached the click point after the cursor re-check). Clicks whose cursor read
+WALK beside an NPC's edge contacted the NPC (the replay: walk@8, walk@9, walk@10 crowd).
+
+**The rule:** `scripts/walk11.py` at the commit of this pre-registration = **walk@10 (3.17)
+unchanged** plus:
+1. **The click-instant unit gate** (`unit_gate.py`; Batt: PREDICTION, not a later check; the
+   worst-case envelope, his choice over a tracker).
+   - Right after the cursor read and its re-check, a fresh frame goes to the CPU detector
+     (`unit_detector.py`: player / monster / npc). The detector is proven on RDP frames in §2c:
+     monsters 97.9 % outdoor / 97.0 % indoor, NPCs 40 / 40, feet within 45 px.
+   - Each unit's cell is the client's pick under its feet. At the click's arrival it may be
+     anywhere within ceil(H / its fastest speed) cells, **+ one more step**. NPCs are static.
+   - H = the frame's age at the click + **0.36 s**: frame staleness (RDP packet→frame p95 157 ms) +
+     click→server (median 178, **p99 197 ms**, n = 720 walk@10 clicks) + 0.05 s.
+   - Speeds are mob_db's fastest over the map's KB spawns and the Poring: **prt_fild08 200 ms /
+     cell, prt_church 400, iz_dun00 150, prontera 400, alberta_in 400**; players 150.
+   - The click point must lie **≥ 12 px outside every moved box**. Otherwise it is a point covered
+     by a UNIT: the next point on the polyline, walk@8's patience and substitute rules.
+   - Our own character is excluded. No detector = no click (fail closed).
+   - **MEMORY** (Batt's choice after pilot 1 below): every unit seen on any frame the rule grabs
+     (each park, each decision) is remembered at its absolute cell for **8 s**. Its envelope grows
+     with the time since it was last seen: ceil((age + H) / speed) + 1. A new detection of the same
+     class within a remembered unit's reach updates it. The memory resets at every harness warp.
+   - **Farther points:** a point refused by the envelope moves FARTHER along the polyline (up to 4
+     points beyond seg_max, in the click band; Batt's walk@8 rule) before patience.
+2. **The v3 cursor references** (§ the talk calibration): an NPC at the click point reads TALK, a
+   unit.
+3. **Not included, measured:** the "cancel" walk click after a click that hit a unit
+   (`safety_signal_check.py cancel-test`, a static Red Plant; n = 3 clicks that hit). The first
+   hit lands 0–245 ms after the request, and after the cancel's walk request the client
+   re-requests the attack. Hits continued in 3 / 3. A different cancel (a key, the dialog close)
+   is a later study.
+- **The detector:** v0-PNG `best.pt` sha256 `b5966feb…`, exported to ONNX 1280×736 (sha256
+  `0b5aa3d3…`), confidence 0.25, IoU 0.5, 8 CPU threads, in the RAM environment of
+  docs/operations/detector-cpu.md.
+
+**The design pilots** (NOT scored): three, prt_church CROWD, NOT scored; the safety signals were live and proven.
+- `20261008T084919-demo-walk11-cal-crowd-indoor` (seed 17, the gate WITHOUT memory): **1 attack**
+  (11 hits). The click at (109,118) read WALK with the marker naming the cell, and the envelope saw
+  only 2 NPCs. The Poring stood ON that cell, **hidden behind a pew** (a kneeler cell), invisible to
+  the detector and to the cursor; the client's hit test found it. → the MEMORY.
+- `20261008T090156-demo-walk11-cal-crowd-indoor` (seed 19, memory): **0 requests, 0 GM acts**;
+  19 / 19 clicks verified; 4 / 8 routes. After route 5's spawn, routes 5–7 never clicked: every
+  point within seg_max lay in some Poring's envelope. → the farther points.
+- `20261008T091024-demo-walk11-cal-crowd-indoor` (seed 21, memory + farther points): **0 requests,
+  0 GM acts**; 27 / 27 clicks verified; 4 / 10 routes. 48 envelope refusals against 25 clicks; a
+  Poring out of view for a few seconds gets a 6–23 cell radius (the whole screen).
+- **Batt, 09:23: pre-register as is (safety first)**, run all four tuning runs, and design the
+  tracker (T1 motion model) in parallel as walk@12 to win completion back. **Expected:** the CROWD
+  runs FAIL by count; the point is safety in every condition, and the clean runs may pass.
+
+**SAFETY instruments, all LIVE and proven by a deliberate positive case (§2a):** `attack_request`,
+`npc_contact`, and the server's `act` from the GM (kinds normal, pickup), each counted inside the
+session's manifest window. The banked-capture replay (`guarded_build.py replay:`) re-checks every
+run afterwards.
+
+**TUNING runs, all four whatever the first scores:**
+- Conditions as 3.14. FRESH seeds: indoor clean **20261047**, indoor crowd **20261048**, outdoor
+  clean **20261049**, outdoor crowd **20261050**.
+- 56 routes each; the first 50 not interrupted are scored.
+
+**HELD-OUT runs**, ONCE, scored separately, never used to tune, **only if all 4 tuning runs PASS**:
+guild (alberta_in) **20261051**, town (prontera) **20261052**, dungeon (iz_dun00) **20261053**,
+portal (prt_fild08 → prontera) **20261054**. All CLEAN, `@heal` after each warp, 56 each.
+
+**The bar (zero tolerance, unchanged):** ≥ **48 / 50** per run **AND** zero `attack_request`,
+zero `npc_contact`, zero `act` from the GM of kind normal or pickup, in the run's window. Any one
+is a HARD FAIL.
+
+**Reported:** the 3.17 items, plus per click the envelope (units, nearest class and distance,
+horizon, detection ms) and the refusals the gate caused. **Known residual risk:** the detector
+misses ~2–3 % of units in a frame (scenery occlusion: one Poring under the church chandelier).
+The cursor gate is the first layer; a click on a unit needs both layers to miss.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
