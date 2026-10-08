@@ -1361,6 +1361,23 @@ first.
     `--show-drops 1002` prints a species' table. Generated locally, never committed.
 - **P5 · the backup "item obtained" cue, from pixels** (Batt, 2026-10-08): the client's own
   item-get notification, or its line in the chat / battle log.
+  - ➡️ **BUILT and PROVEN LIVE 2026-10-09 00:42–00:44 ICT** (`scripts/chat_cue.py`, db0f0a6 + the fix
+    75778a8).
+    - **The reader:** the newest COLOURED chat line must be cyan, its first 48 px must match a
+      locally cut "got" mask (not the "dropped" one, IoU ≥ 0.8), and the coloured text must have
+      changed.
+    - **The fix:** the first live check (00:39–00:41) passed its negative case for the WRONG reason.
+      The scrollbar's arrows and the input box's white border read as a newer line, and white scene
+      highlights counted as a change. With only those removed, an old "got" line + a walk would have
+      cued falsely. 75778a8 reads only the message lines and coloured text.
+    - **The re-proof on fresh frames** (session `20261009T004257-demo-safety-check-pickup`):
+
+| case | expected | got |
+|---|---|---|
+| a known pickup (drag to floor, pickup click; packets: 1 pickup act) | cue | **cue** (got 1.00, dropped 0.54) |
+| a cursor-gated walk click that picks nothing up | no cue | **no cue**, read as the OLD got line with 1 px of coloured text changed |
+| the drop itself | no cue | **no cue** (read as "dropped") |
+
   - It is found by its L4 locale key; the text is never committed (rule 4).
   - Proven on a KNOWN pickup: an item dragged from the GM's inventory to the floor, then picked up.
     The cue must appear, and it must not appear on a click that picks nothing up.
@@ -1937,6 +1954,41 @@ HARD FAIL.
     land on it. It also covered the weight readout, which voided the 21:17 weight-digit run.
   - **Fix:** the window was closed (Alt+E, screenshot-checked) and the run restarted UNCHANGED with
     its seed at 21:26 ICT. `pickup-click` now closes the window it opened.
+
+**3.24 walk@13 RESULTS (scored as pre-registered; all four tuning runs FAIL the bar → no held-out run).
+ZERO safety events in every run.**
+
+| run | seed | session | success / 50 | walk@12 | failures |
+|---|---|---|---|---|---|
+| indoor CLEAN | 20261070 | `20261008T212700-…-clean-indoor` (21:27–22:07 ICT) | **46** (1 an NPC substitute, justified) | 43 | `unit_stays` 2, `no_click_point` 2 |
+| indoor CROWD | 20261071 | `20261008T220741-…-crowd-indoor` (22:07–23:13) | **40** (2 NPC substitutes, justified) | 40 | `no_click_point` 6, `relocalise_limit` 2, `unit_stays` 1, an NPC substitute the server did not justify 1 |
+| outdoor CLEAN | 20261072 | `20261008T231320-…-clean-outdoor` (23:13–23:52) | **45** | 45 | `unit_stays` 4, `no_click_point` 1 |
+| outdoor CROWD | 20261073 | `20261008T235223-…-crowd-outdoor` (23:52–00:35) | **41** | 30 | `unit_stays` 7, `relocalise_limit` 1, `no_click_point` 1 |
+
+- **SAFETY:** 0 `attack_request`, 0 `npc_contact`, 0 acts from the GM (normal or pickup) in all four
+  windows.
+- **Strict count** (every substitute a failure): 45 / 38 / 45 / 41.
+- **How often each change acted:**
+
+| change | indoor clean | indoor crowd | outdoor clean | outdoor crowd |
+|---|---|---|---|---|
+| 2: re-plans (routes) | 5 (3) | 30 (19) | 21 (10) | 23 (11) |
+| 3: NPC substitutes | 1 | 3 | 0 | 0 |
+| 4: taken checks, nobody ON the target | 2 / 2 | 1 / 1 | 4 / 4 | 7 / 7 |
+| 5: steps with a sign in view | 66 | 163 | 0 | 0 |
+
+- **Diagnosis** (offline, from the packets; the scratch scripts are named in 3.25):
+  - **Indoor CLEAN:** all 29 monster refusals had no monster on the server. An NPC is read as a
+    monster at (87, 127) / (95, 127).
+  - **The `no_click_point` routes:** the target's own points were refused for non-unit reasons.
+  - **Outdoor `unit_stays`:**
+    - At the decline, no monster stood within 2 cells of the goal.
+    - Of 207 refusals (clean) and 334 (crowd), the nearest real monster was ≤ 1 cell from the
+      refused cell in 2 and 19.
+    - The gate refuses within its 4–5-cell radius for prt_fild08's fastest species (200 ms per
+      cell). Aged sightings reach 44 cells.
+    - The patience step waited only 0.5–1 s: each refusal round itself takes seconds.
+- **walk@14 (3.25) addresses the first two causes. It does not change the gate.**
 
 ### 3.25 walk@14 — walk@13 + STATIC UNITS, SIDE APPROACH, UNKNOWN READS RE-PLANNED; TUNING, then the HELD-OUT set once (pre-registered 2026-10-09 ~00:20 ICT / 2026-10-08 17:20 UTC at commit, BEFORE any run; Batt's overnight order: "If it fails: diagnose, at most 2 more design iterations tonight (walk@14/15), each pre-registered")
 **Why: walk@13's diagnosed failures** (3.24 results below; zero safety events in every run).
