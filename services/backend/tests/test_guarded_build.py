@@ -757,5 +757,32 @@ def test_replay_runs_isolated_read_only_capped_and_never_in_the_live_sniffer(
     assert f"--device-read-bps {gb.REPLAY_DEVICE}:{gb.REPLAY_READ_BPS}" in s
     assert "poring-lab_captures:/captures:ro" in s and gb.REPLAY_IMAGE in cmd
     assert str(gb.REPLAY_OUT).startswith("/dev/shm/")
+    assert "/repo-src" not in s and "PYTHONPATH" not in s  # the image's own decoders
     with pytest.raises(AssertionError):
         gb.replay_cmd(step, "v", ["capture-x.pcapng; rm -rf /"], "rp-2")
+
+
+def test_replaydev_lends_the_image_and_reads_this_checkouts_decoders_read_only(
+    gb: ModuleType,
+) -> None:
+    """2026-10-08 (loot@1 P2): new decoders replayed without a sniffer rebuild -- the same isolated
+    container, plus the checkout's poring_packets source READ-ONLY first on PYTHONPATH; its output
+    kept apart from replay:'s."""
+    step = gb.parse_step("replaydev:20261008T00..20261008T01@900")
+    assert (step.kind, step.services, step.seconds) == (
+        "replaydev",
+        ["20261008T00", "20261008T01"],
+        900,
+    )
+    cmd = gb.replay_cmd(step, "poring-lab_captures", ["capture-20261008T005901Z.pcapng"], "rp-3")
+    s = " ".join(cmd)
+    assert f"{gb.REPLAY_DEV_SRC}:/repo-src:ro" in s and "PYTHONPATH=/repo-src" in s
+    assert "--network none" in s and "--read-only" in s and "--memory-swap 1g" in s
+    assert cmd[:4] == ["timeout", "900", "docker", "run"] and "exec" not in cmd
+    assert str(gb.replay_out(step)).endswith("20261008T00..20261008T01-dev")
+    assert gb.replay_out(gb.parse_step("replay:20261008T00..20261008T01")).name == (
+        "20261008T00..20261008T01"
+    )
+    assert gb.REPLAY_DEV_SRC.name == "src" and gb.REPLAY_DEV_SRC.parent.name == "poring_packets"
+    with pytest.raises(ValueError):
+        gb.parse_step("replaydev:20261008T01..20261008T00")

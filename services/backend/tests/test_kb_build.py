@@ -97,3 +97,119 @@ def test_classes_include_what_a_spawn_turns_into() -> None:
     assert classes["1018"] == {
         "slots": 0, "via": "metamorphosis of 1008", "aegis": "CREAMY", "name": "Creamy",
     }  # fmt: skip
+
+
+# --- 2026-10-08 (loot@1 P4): items, drops and the server's drop config. Synthetic entries in the
+# rAthena formats (no rAthena data committed).
+ITEMS_ETC = """Header:
+  Type: ITEM_DB
+  Version: 3
+Body:
+  - Id: 9101
+    AegisName: Test_Goo
+    Name: Test Goo
+    Type: Etc
+    Weight: 10
+  - Id: 9102
+    AegisName: Test_Feather
+    Name: Test Feather
+    Weight: 3
+  - Id: 9103
+    AegisName: Test_Token
+    Name: Test Token
+"""
+ITEMS_EQUIP = """Header:
+  Type: ITEM_DB
+  Version: 3
+Body:
+  - Id: 9201
+    AegisName: Test_Blade
+    Name: Test Blade
+    Type: Weapon
+    Weight: 400
+"""
+MOB_WITH_DROPS = """Header:
+  Type: MOB_DB
+  Version: 4
+Body:
+  - Id: 9001
+    AegisName: TEST_BLOB
+    Name: Test Blob
+    Drops:
+      - Item: Test_Goo
+        Rate: 7000
+      - Item: Test_Blade
+        Rate: 100
+        StealProtected: true
+      - Item: Not_In_Item_Db
+        Rate: 5
+    MvpDrops:
+      - Item: Test_Feather
+        Rate: 50
+  - Id: 9002
+    AegisName: TEST_NODROP
+    Name: Test Nodrop
+"""
+DROPS_CONF = """// a comment
+flooritem_lifetime: 60000
+item_first_get_time: 3000
+item_auto_get: no
+item_rate_common: 100
+item_drop_common_min: 1
+item_drop_common_max: 10000
+item_rate_equip: 100
+item_logarithmic_drops: no
+drops_by_luk: 0
+unrelated_setting: 7
+"""
+
+
+def test_item_db_weights_are_rathena_units_ten_per_shown_weight() -> None:
+    items = kb.parse_item_db(ITEMS_ETC)
+    items.update(kb.parse_item_db(ITEMS_EQUIP))
+    assert items[9101]["weight"] == 10 and items[9101]["weight_shown"] == 1.0
+    assert items[9102]["weight_shown"] == 0.3  # lighter than one shown unit
+    assert items[9102]["type"] == "Etc"  # the format's default type
+    assert items[9103]["weight"] == 0  # the format's default weight
+    assert items[9201]["type"].lower() == "weapon" and items[9201]["weight_shown"] == 40.0
+
+
+def test_battle_conf_last_write_wins_and_names_its_file() -> None:
+    override = "flooritem_lifetime: 30000 // the lab would override here\n"
+    server = kb.server_drop_config(
+        [("conf/battle/drops.conf", DROPS_CONF), ("conf/import/battle_conf.txt", override)]
+    )
+    assert server["flooritem_lifetime"] == {"value": 30000, "source": "conf/import/battle_conf.txt"}
+    assert server["item_first_get_time"]["value"] == 3000
+    assert server["item_auto_get"]["value"] is False
+    assert "unrelated_setting" not in server
+    assert kb.rate_adjustment_reason(server) is None
+
+
+def test_drops_join_items_by_aegis_and_keep_rates_on_a_default_server() -> None:
+    items = {**kb.parse_item_db(ITEMS_ETC), **kb.parse_item_db(ITEMS_EQUIP)}
+    server = kb.server_drop_config([("conf/battle/drops.conf", DROPS_CONF)])
+    drops = kb.parse_drops(MOB_WITH_DROPS, items, server)
+    assert 9002 not in drops  # a species without drops has no row
+    rows = {d["aegis"]: d for d in drops[9001]}
+    assert rows["Test_Goo"]["item_id"] == 9101 and rows["Test_Goo"]["rate"] == 7000
+    assert rows["Test_Goo"]["rate_effective"] == 7000 and rows["Test_Goo"]["weight"] == 10
+    assert rows["Test_Blade"]["rate_class"] == "equip" and rows["Test_Blade"]["steal_protected"]
+    assert rows["Not_In_Item_Db"]["item_id"] is None  # reported, never guessed
+    assert rows["Test_Feather"]["mvp"] is True
+    lines = kb.drop_table(9001, drops, items)
+    assert len(lines) == 4 and "70.00 %" in lines[0] and "(1 shown)" in lines[0]
+
+
+def test_an_adjusting_battle_config_leaves_the_effective_rate_unknown() -> None:
+    items = kb.parse_item_db(ITEMS_ETC)
+    for conf, reason in (
+        ("item_rate_common: 300\n", "item_rate_common = 300"),
+        ("item_drop_common_min: 50\n", "item_drop_common_min = 50"),
+        ("item_logarithmic_drops: yes\n", "item_logarithmic_drops on"),
+        ("drops_by_luk: 100\n", "drops_by_luk = 100"),
+    ):
+        server = kb.server_drop_config([("a.conf", DROPS_CONF), ("b.conf", conf)])
+        assert kb.rate_adjustment_reason(server) == reason
+        row = kb.parse_drops(MOB_WITH_DROPS, items, server)[9001][0]
+        assert row["rate_effective"] is None and row["rate_note"] == reason and row["rate"] == 7000

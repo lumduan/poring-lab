@@ -421,6 +421,138 @@
       "title": "Desync",
       "type": "object"
     },
+    "DropRequest": {
+      "additionalProperties": false,
+      "description": "CZ_ITEM_THROW2 (0x0363): our client drops an inventory item to the floor.",
+      "properties": {
+        "amount": {
+          "type": "integer"
+        },
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "index": {
+          "description": "The client's inventory index.",
+          "type": "integer"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "drop_request",
+          "default": "drop_request",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "type",
+        "index",
+        "amount"
+      ],
+      "title": "DropRequest",
+      "type": "object"
+    },
+    "DropResult": {
+      "additionalProperties": false,
+      "description": "ZC_ITEM_THROW_ACK (0x00AF): the dropped amount left the inventory (0 = refused).",
+      "properties": {
+        "amount": {
+          "type": "integer"
+        },
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "index": {
+          "description": "The client's inventory index.",
+          "type": "integer"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "drop_result",
+          "default": "drop_result",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "type",
+        "index",
+        "amount",
+        "ok"
+      ],
+      "title": "DropResult",
+      "type": "object"
+    },
     "EntityAppear": {
       "additionalProperties": false,
       "description": "ZC_NOTIFY_{NEW,STAND,MOVE}ENTRY11.",
@@ -932,6 +1064,181 @@
         "ok"
       ],
       "title": "EquipResult",
+      "type": "object"
+    },
+    "FloorItemAppear": {
+      "additionalProperties": false,
+      "description": "An item on the floor: ZC_ITEM_FALL_ENTRY5 (0x0ADD, kind \"fall\": a FRESH drop, e.g. a kill's\nloot) or ZC_ITEM_ENTRY (0x009D, kind \"in_sight\": one already lying there comes into view).",
+      "properties": {
+        "amount": {
+          "type": "integer"
+        },
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "drop_effect": {
+          "default": false,
+          "description": "A drop pillar is shown (fall only).",
+          "type": "boolean"
+        },
+        "floor_id": {
+          "description": "The floor item's block id: the pickup act's target_gid.",
+          "type": "integer"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "identified": {
+          "type": "boolean"
+        },
+        "item_id": {
+          "type": "integer"
+        },
+        "item_type": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "rAthena item_types (mmo.hpp:223); fall entries only."
+        },
+        "kind": {
+          "enum": [
+            "fall",
+            "in_sight"
+          ],
+          "type": "string"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "sub_x": {
+          "description": "Position inside the cell (rAthena subx / suby).",
+          "type": "integer"
+        },
+        "sub_y": {
+          "type": "integer"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "floor_item_appear",
+          "default": "floor_item_appear",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        },
+        "x": {
+          "type": "integer"
+        },
+        "y": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "type",
+        "kind",
+        "floor_id",
+        "item_id",
+        "item_type",
+        "identified",
+        "x",
+        "y",
+        "sub_x",
+        "sub_y",
+        "amount",
+        "drop_effect"
+      ],
+      "title": "FloorItemAppear",
+      "type": "object"
+    },
+    "FloorItemVanish": {
+      "additionalProperties": false,
+      "description": "ZC_ITEM_DISAPPEAR (0x00A1): a floor item is gone -- picked up, expired, or out of OUR sight\n(the packet does not say which).",
+      "properties": {
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "floor_id": {
+          "type": "integer"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "floor_item_vanish",
+          "default": "floor_item_vanish",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "type",
+        "floor_id"
+      ],
+      "title": "FloorItemVanish",
       "type": "object"
     },
     "LoginAccepted": {
@@ -2030,6 +2337,163 @@
         "ingest_dropped"
       ],
       "title": "PacketStats",
+      "type": "object"
+    },
+    "PickupRequest": {
+      "additionalProperties": false,
+      "description": "CZ_ITEM_PICKUP2 (0x0362): our client asks to pick up a floor item (after walking in).",
+      "properties": {
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "floor_id": {
+          "type": "integer"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "pickup_request",
+          "default": "pickup_request",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "type",
+        "floor_id"
+      ],
+      "title": "PickupRequest",
+      "type": "object"
+    },
+    "PickupResult": {
+      "additionalProperties": false,
+      "description": "ZC_ITEM_PICKUP_ACK (0x0B41): an item ENTERED our inventory (ok), or a pickup failed. Sent\nfor every inventory gain (an @item, an NPC, a trade) -- a floor pickup is this plus our act of\nkind pickup on the floor id plus that id's floor_item_vanish.",
+      "properties": {
+        "amount": {
+          "description": "How many were added (0 on a failure).",
+          "type": "integer"
+        },
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "identified": {
+          "type": "boolean"
+        },
+        "index": {
+          "description": "The client's inventory index (2 on a failure).",
+          "type": "integer"
+        },
+        "item_id": {
+          "description": "0 on a failure.",
+          "type": "integer"
+        },
+        "item_type": {
+          "type": "integer"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "reason": {
+          "description": "ok, invalid, overweight, item, inventory_full, over_amount, refused (also the generic refusal: too far, loot priority, ...), stack_limit, or resultN.",
+          "type": "string"
+        },
+        "refine": {
+          "type": "integer"
+        },
+        "result": {
+          "description": "rAthena e_additem_result (pc.hpp:113).",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "pickup_result",
+          "default": "pickup_result",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "type",
+        "index",
+        "amount",
+        "item_id",
+        "identified",
+        "item_type",
+        "result",
+        "reason",
+        "ok",
+        "refine"
+      ],
+      "title": "PickupResult",
       "type": "object"
     },
     "SelfMove": {
@@ -3601,12 +4065,16 @@
           "char_selected": "#/$defs/CharSelected",
           "chat": "#/$defs/Chat",
           "desync": "#/$defs/Desync",
+          "drop_request": "#/$defs/DropRequest",
+          "drop_result": "#/$defs/DropResult",
           "entity_appear": "#/$defs/EntityAppear",
           "entity_stop": "#/$defs/EntityStop",
           "entity_turn": "#/$defs/EntityTurn",
           "entity_vanish": "#/$defs/EntityVanish",
           "equip_request": "#/$defs/EquipRequest",
           "equip_result": "#/$defs/EquipResult",
+          "floor_item_appear": "#/$defs/FloorItemAppear",
+          "floor_item_vanish": "#/$defs/FloorItemVanish",
           "login_accepted": "#/$defs/LoginAccepted",
           "map_change": "#/$defs/MapChange",
           "map_enter": "#/$defs/MapEnter",
@@ -3622,6 +4090,8 @@
           "npc_text_input": "#/$defs/NpcTextInput",
           "npc_text_prompt": "#/$defs/NpcTextPrompt",
           "npc_wait": "#/$defs/NpcWait",
+          "pickup_request": "#/$defs/PickupRequest",
+          "pickup_result": "#/$defs/PickupResult",
           "self_move": "#/$defs/SelfMove",
           "self_move_request": "#/$defs/SelfMoveRequest",
           "shop_buy_list": "#/$defs/ShopBuyList",
@@ -3785,6 +4255,24 @@
         },
         {
           "$ref": "#/$defs/AttackRequest"
+        },
+        {
+          "$ref": "#/$defs/FloorItemAppear"
+        },
+        {
+          "$ref": "#/$defs/FloorItemVanish"
+        },
+        {
+          "$ref": "#/$defs/PickupRequest"
+        },
+        {
+          "$ref": "#/$defs/PickupResult"
+        },
+        {
+          "$ref": "#/$defs/DropRequest"
+        },
+        {
+          "$ref": "#/$defs/DropResult"
         },
         {
           "$ref": "#/$defs/UnknownPacket"

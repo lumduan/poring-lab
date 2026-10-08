@@ -115,3 +115,25 @@ test("NPC, shop, stat and attack-click events get a kind and a line (2026-10-07,
   const buy = ev("shop_buy_request", { items: [{ item_id: 9001, amount: 3 }] }, "cs");
   assert.equal(describe(buy), "buy 3× item 9001");
 });
+
+test("floor items, pickups and drops get a kind and a line (2026-10-08 loot@1, replay only)", () => {
+  const ev = (type: string, fields: object, dir: "cs" | "sc" = "sc") =>
+    ({ ...base, dir, t_mono_ns: 1, packet_id: 1, type, ...fields }) as PacketEvent;
+  const fall = ev("floor_item_appear", { kind: "fall", floor_id: 77, item_id: 9001, item_type: 3,
+    identified: true, x: 150, y: 201, sub_x: 4, sub_y: 9, amount: 2, drop_effect: false });
+  assert.equal(kindOf(fall), "entity");
+  assert.equal(describe(fall), "item falls #77: 2× item 9001 (150,201)");
+  assert.equal(describe(ev("floor_item_vanish", { floor_id: 77 })), "item #77 gone from the floor");
+  const pick = ev("pickup_request", { floor_id: 77 }, "cs");
+  assert.equal(kindOf(pick), "self");
+  assert.equal(describe(pick), "pick up #77");
+  const got = ev("pickup_result", { index: 7, amount: 2, item_id: 9001, identified: true,
+    item_type: 3, result: 0, reason: "ok", ok: true, refine: 0 });
+  assert.equal(kindOf(got), "session");
+  assert.equal(describe(got), "got 2× item 9001 (slot 7)");
+  const refused = ev("pickup_result", { index: 2, amount: 0, item_id: 0, identified: false,
+    item_type: 0, result: 6, reason: "refused", ok: false, refine: 0 });
+  assert.equal(describe(refused), "pickup failed: refused");
+  assert.equal(describe(ev("drop_request", { index: 6, amount: 1 }, "cs")), "drop 1× slot 6");
+  assert.equal(describe(ev("drop_result", { index: 6, amount: 0, ok: false })), "drop of slot 6 refused");
+});

@@ -13,7 +13,7 @@ import pytest
 from pydantic import TypeAdapter
 
 sys.path.insert(0, str(Path(__file__).parent))
-from helpers import cz_enter2, seg, table, var  # noqa: E402
+from helpers import cz_enter2, fall_entry, item_entry, pickup_ack, seg, table, var  # noqa: E402
 
 from poring_packets import tables
 from poring_packets.decode import MAP_CS, MAP_SC, STAT_NAMES, VARIABLE, decode
@@ -85,6 +85,14 @@ SAMPLES: dict[tuple[str, int], bytes] = {
     ("cs", 0x00AB): struct.pack("<HH", 0x00AB, 5),
     ("cs", 0x0439): struct.pack("<HHI", 0x0439, 7, AID),
     ("cs", 0x0437): struct.pack("<HIB", 0x0437, 110_012_345, 7),
+    # 2026-10-08 (loot@1 P2): floor items, pickups, drops (test_items.py has their semantics)
+    ("sc", 0x0ADD): fall_entry(77, 9001, 3, 1, 150, 201, 4, 9, 2),
+    ("sc", 0x009D): item_entry(78, 9002, 1, 151, 202, 1, 12, 3),
+    ("sc", 0x00A1): struct.pack("<HI", 0x00A1, 77),
+    ("sc", 0x0B41): pickup_ack(5, 2, 9001, 3, 0),
+    ("sc", 0x00AF): struct.pack("<HHH", 0x00AF, 6, 1),
+    ("cs", 0x0362): struct.pack("<HI", 0x0362, 77),
+    ("cs", 0x0363): struct.pack("<HHH", 0x0363, 6, 1),
 }
 LISTS = {("sc", 0x0B77), ("sc", 0x00C7), ("sc", 0x0B32), ("cs", 0x00C8), ("cs", 0x00C9)}
 LAYOUTS = {**{("sc", p): lay for p, lay in MAP_SC.items()},

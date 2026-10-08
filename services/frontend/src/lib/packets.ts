@@ -26,6 +26,8 @@ export function kindOf(e: PacketEvent): Kind {
     case "entity_stop":
     case "entity_turn":
     case "act":
+    case "floor_item_appear": // 2026-10-08 (loot@1): floor items, replay only until a rebuild
+    case "floor_item_vanish":
       return "entity";
     // our own requests (2026-10-07 decoders; replay only until the sniffer image is rebuilt)
     case "attack_request":
@@ -43,6 +45,8 @@ export function kindOf(e: PacketEvent): Kind {
     case "equip_request":
     case "unequip_request":
     case "use_item_request":
+    case "pickup_request":
+    case "drop_request":
       return "self";
     case "stat_change":
     case "stat_raise_result":
@@ -216,6 +220,18 @@ function describeInteraction(e: Interaction): string {
       return e.is_attack
         ? `attack click #${e.target_gid}${e.action === 7 ? " (keep attacking)" : ""}`
         : `action request ${e.kind}`;
+    case "floor_item_appear":
+      return `${e.kind === "fall" ? "item falls" : "item in sight"} #${e.floor_id}: ${e.amount}× item ${e.item_id} ${cell(e.x, e.y)}`;
+    case "floor_item_vanish":
+      return `item #${e.floor_id} gone from the floor`;
+    case "pickup_request":
+      return `pick up #${e.floor_id}`;
+    case "pickup_result":
+      return e.ok ? `got ${e.amount}× item ${e.item_id} (slot ${e.index})` : `pickup failed: ${e.reason}`;
+    case "drop_request":
+      return `drop ${e.amount}× slot ${e.index}`;
+    case "drop_result":
+      return e.ok ? `dropped ${e.amount}× slot ${e.index}` : `drop of slot ${e.index} refused`;
   }
 }
 
