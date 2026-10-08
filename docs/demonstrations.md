@@ -1389,6 +1389,25 @@ zero `attack_request`, zero `npc_contact`, zero GM `act` of kind normal.
 
 **When:** after rec@0 (§3.19), and only once P1–P4 hold.
 
+### Targeting — DESIGN PROPOSALS (Batt, 2026-10-08; NOT pre-registered: each is pre-registered before it is adopted)
+**Provenance:** ideas only, from a screen recording of another RO bot's debug view (unknown origin,
+server and licence). No code or assets copied.
+- **(a) Target lock with a minimum hold time.** Hysteresis: the rule keeps its target for at least
+  H s and never switches between EQUAL targets. It switches only to one strictly better by a margin,
+  or when the target is gone or unreachable.
+  - The test before adoption: count target switches per kill in a crowd (attack@1's scene), with
+    the lock against without. Kills, time to kill, and the safety signals are reported.
+- **(b) A FOCUS crop.** Around the locked target, a crop (e.g. 260 × 260 client px) is re-detected
+  at a higher input resolution, so small or distant sprites are found more reliably.
+  - The test before adoption, OFFLINE: on banked frames with packet ground truth, the recall gain
+    for small / distant units against the full-frame pass. Byalan's small species are the case
+    that matters (docs/planning/training-cost.md). Plus the extra CPU per frame.
+- **(c) A WORK ZONE mask shared by clicking and detection:** the game area minus the client's UI
+  windows (`route_preview.UI_WINDOWS` + a margin). It is the same rule as walk@12's UI exclusion
+  (Batt's decision 1), applied to detections too, so a "unit" seen through a UI window is never a
+  target.
+  - The test: a deliberate positive case, a unit drawn under a UI window, ignored by both.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.

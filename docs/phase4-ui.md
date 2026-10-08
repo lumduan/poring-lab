@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [demonstrations.md, knowledge/README.md, adr/0011-ui-anchor-map.md, adr/0012-locale-agnostic-ui.md, adr/0015-phase4-planner-linter-executor.md, phase2-plan.md]
-next_action: "Batt decides walk@11 (demonstrations.md walk@10 verdict: the click-instant entity check for safety, cursor UNKNOWN by cursor_diag, outdoor unnamed clicks, tier-B goals); the sniffer rebuild so attack_request / npc_contact are live; S2 re-tests (where@2, walk outdoor); NPC/shop decoders for wave 3."
+next_action: "walk@11 is decided (demonstrations.md verdict: 0/4, safe against monsters; next = walk@12 with Batt's three rules). The live route preview is anchored to the measured feet and camera (RA2 style; the stop jumps are being fixed). The OPERATOR HUD below is PROPOSED (Batt 2026-10-08), not built. S2 re-tests (where@2, walk outdoor); NPC/shop decoders for wave 3."
 ---
 
 # Phase 4 UI: the example workflow's windows, shortcuts and NPCs
@@ -108,3 +108,28 @@ as the `npc` class.
 | ui.open_window | shortcuts demonstrated; anchors CUT for status / skills / inventory / equipment (RDP, title text 60x13, max_distance 6); other windows still fail closed | – | **open_window@1 RDP PASS 50/50 outdoor and 50/50 indoor**; S2 re-test next |
 | nav.read_position | the minimap readout (T0 templates restored); indoors and anywhere: the client's `/where` (where_fix v2) | – | read_position@1 (minimap) to do; **where@2 RDP PASS 48/50 indoor, 50/50 outdoor, 0 WRONG** (2026-10-07); S2 to do |
 | vitals.read | the basic-info bars (anchor map) | – | – |
+
+## The operator HUD (PROPOSED, Batt 2026-10-08) — display-only, a console toggle
+**Provenance:** ideas only. Batt shared a screen recording of another RO bot's debug view: its
+origin, server and licence are unknown. No code, assets or screenshots were copied into the repo.
+
+**What it shows**, over the stream. It is drawn on its own canvas like the route preview, and
+carries no input (protocol), exactly as `route_preview`:
+
+| element | content | source (ours) |
+|---|---|---|
+| detector boxes | class + confidence + distance in CELLS, not px (the Chebyshev distance from our cell to the cell under the box's feet) | the rule's detector frame; `poring_dataset.picking` + the camera model |
+| the locked target | highlighted, with its lock countdown | the targeting rule (the proposals below) |
+| the work zone | the game area minus the client's UI windows, outlined | `route_preview.UI_WINDOWS` (the same mask the clicks will use, walk@12) |
+| the walk vector | the live route (RA2 style) + its destination cell as text | `route_preview` (built) |
+| a short live log | the rule's decisions in plain words: "walking to (x,y)", "attacking", "detected …", "refused: TALK" | the rule's own records (demo log) |
+| counters | units in view, the detector's rate (FPS) | the rule |
+
+**Rules:**
+- A per-tab toggle, off by default, like "Watch only".
+- The messages are display-only and reach viewers only, never the mux (the
+  `test_secret_input` pattern for `route_preview`).
+- A new protocol message means `gen_protocol.sh` plus a backend restart (a market-closed window).
+- **Distances in cells** come from our own camera model and picking, never screen px. The rules
+  reason in cells.
+
