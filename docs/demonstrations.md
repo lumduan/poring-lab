@@ -2584,3 +2584,43 @@ above); that empty session is kept and not scored.
     goals the envelope covers though nobody stands there.
   - The motion model (walk@12's proposal) is where completion comes back. Its premise stays open
     for Batt (the looter problem).
+
+### rec@0 (3.19), RDP: **INCONCLUSIVE: the positive control failed** (C0 continued in 2 / 8). The harness mostly did not ENGAGE; no cancel can be judged (2026-10-08 14:28:52–14:50:52 ICT)
+**Session:** `20261008T142852-demo-rec0` (seed 20261063); 50 trials ordered as pre-registered, at
+prt_fild08 (268,107). The Fly Wing was on hotbar F1 (verified by a teleport before the run).
+
+**By the pre-registered bar:**
+
+| condition | judged trials | success (0 hits after +0.3 s, 0 requests) | attack continued (≥ 2 hits) |
+|---|---|---|---|
+| C0 none (the control) | 8 | 6 | **2** (needed ≥ 90 %) |
+| C1 walk 2 cells | 8 | 7 | 1 |
+| C2 walk 6 cells | 8 | 7 | 0 |
+| C3 sit / stand | 7 | 3 | 2 |
+| C4 Fly Wing | 6 | 6 | 0 |
+
+- Skipped: 13 (the detector found no plant in 12; one C1 walk point failed its cursor read).
+- **The control is not proven, so no cancel "stops an attack"** (3.19: without C0 the zeros mean
+  nothing).
+
+**Why, from the packets** (offline):
+- **The attack click rarely engaged inside the 0.4 s window.** An `attack_request` between the click
+  and the cancel appears in only 5 of the 37 trials that ran.
+- **Several requests came AFTER the cancel time,** with the character moving first: the plant spawns
+  a few cells away, and the client walks up before it attacks.
+- **Most trials show no request at all:** the click at 65 % down the detected box missed the small
+  sprite.
+- So C0's "0 hits" is mostly "never attacked", and so are many cancels' "successes". The design's
+  0.4 s cancel assumed an attack already under way.
+- Plain observations, not results: in the 5 engaged trials, C3 (sit/stand) was followed by hits
+  twice, and C1 once.
+
+**PROPOSED amendment, rec@0b (NOT adopted; Batt decides before any re-run):**
+1. **Count only ENGAGED trials,** judged offline by an `attack_request` between the click and the
+   cancel. Run until 10 engaged trials per condition, at most 30 attempts each.
+2. **Start the cancel once the attack is under way:** 1.5 s after the click, enough for the walk-up
+   and the first swing (walk@11 measured the first hit 0–245 ms after the request). Or spawn the
+   plant adjacent, if the GM tooling can place it.
+3. **Aim the click better:** the box centre, re-detected 0.5 s later if no plant was found. A
+   trial still records whether the click read the attack cursor.
+4. The C0 control, the 9 / 10 bar and the outcome measures stay unchanged.
