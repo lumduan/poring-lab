@@ -1182,6 +1182,42 @@ horizon, detection ms) and the refusals the gate caused. **Known residual risk:*
 misses ~2–3 % of units in a frame (scenery occlusion: one Poring under the church chandelier).
 The cursor gate is the first layer; a click on a unit needs both layers to miss.
 
+### walk@12 — DESIGN PROPOSAL: the motion model (T1-lite) inside walk@11's envelope (NOT pre-registered; Batt approves first)
+**Why:** walk@11's memory envelope is safe but stalls crowd routes. A unit out of view for a few
+seconds gets a 6–23 cell radius, because it may move at its fastest speed the whole time. The
+engine says otherwise (phase3-plan §6b, rAthena @e985006, read for mechanics only).
+- **The random walk:** a monster walks to a target within ±7 cells, then **stands at least
+  4.0–5.0 s** (`MIN_RANDOMWALKTIME 4000 + rnd()%1000`, after the walk ENDS).
+- **Who moves or chases, per map** (the KB's `ai` over its spawn list; the detector cannot name
+  species, so each map takes its worst species):
+
+| map | species (ai, ms/cell) | worst mobile behaviour |
+|---|---|---|
+| prt_fild08 | Lunatic (1, 200), Pupa (–, immobile), Poring (2, 400), Drops (2, 400) | passive random walk |
+| iz_dun00 | Plankton (1), Marina (1), Kukre (2, 150), Hydra (10, aggressive IMMOBILE), Vadon (17), Black Mushroom (–) | passive random walk |
+| prt_church, prontera, alberta_in | no spawns; the crowd's Porings (2) | passive random walk |
+
+  No mobile species on these maps chases unless attacked, and the gate exists to prevent that.
+
+**The proposal:**
+1. **Detect while we stand.** A ~3 Hz background detection between our own walks (the camera is
+   still): units are tracked in world cells. Only this is new perception.
+2. **Per unit, the walk END we saw** (its cell changed, then held). For T < t_end + 4.0 s the unit
+   cannot move: radius 0, + the one step. Outside that window, it can complete at most one walk
+   per 4 s, so the reach is min(speed reach, 9 cells per possible walk) + 1. That is the ±7 target
+   plus 2 for a detour.
+3. **Unknown phase** (never seen move): walk@11's speed bound, capped by the per-walk bound.
+4. **A map with an aggressive MOBILE species:** walk@11's rule (speed-only, no cap).
+5. **Memory:** as walk@11. An occluded unit seen to stop keeps radius 0 + 1 for up to 4 s.
+
+**Its own safety test BEFORE any walk run** (offline, the packets as ground truth): over every
+click in walk@10/@11's recorded sessions, the model's envelope at the click's arrival must CONTAIN
+every monster's true cell (`Walk.position_at` from the packets). Required: **100 % containment**,
+and the refusals it would have caused reported against walk@11's.
+
+**Then** a pilot and a pre-registration as 3.19, all four tuning runs.
+
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
