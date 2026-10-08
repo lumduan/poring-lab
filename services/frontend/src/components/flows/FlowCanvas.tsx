@@ -333,7 +333,7 @@ export default function FlowCanvas(p: CanvasProps) {
       >
         <Background gap={24} />
         <Controls showInteractive={false} />
-        <MiniMap pannable zoomable nodeColor={(n) => (n.type === "events" ? "#9d4b6b" : "#3b5b8f")} />
+        <MiniMap position="top-right" pannable zoomable nodeColor={(n) => (n.type === "events" ? "#9d4b6b" : "#3b5b8f")} />
       </ReactFlow>
     </div>
   );
