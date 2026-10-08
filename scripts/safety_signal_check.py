@@ -286,6 +286,12 @@ def pickup_click() -> int:
             break
         time.sleep(2.0)
         shot = _shot(screen, "after-pickup")
+        # close the inventory pickup-start opened (2026-10-08 21:22: left open, it covered the
+        # weight readout and part of the world outside the walk work zone): restore the UI
+        r.activate_client(agent, screen)
+        agent.chord("AltLeft", "KeyE")
+        time.sleep(1.0)
+        st["closed_shot"] = _shot(screen, "inventory-closed")
     (NPC_DIR / "pickup-state.json").write_text(json.dumps(st))
     print(json.dumps({"clicked": st["t_click"] is not None, "cell": st.get("cell"),
                       "shot": shot}), flush=True)  # fmt: skip

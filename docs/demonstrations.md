@@ -1918,6 +1918,18 @@ HARD FAIL.
   refusals;
 - the remaining declines by cause.
 
+**3.24 run log (kept as written):**
+- **21:22 ICT / 14:22 UTC, indoor CLEAN attempt 0** (session `20261008T212248-demo-walk13-alone-clean-indoor`):
+  STOPPED by Claude with SIGTERM before its first route (0 routes). The harness finished the session
+  (exit 130). It is kept and NOT scored.
+  - **Why:** the client's INVENTORY window was still open, left by the pickup positive case
+    (`safety_signal_check.py pickup-start` opens it; nothing closed it).
+  - That is not the pre-registered UI state. The window reaches past the work zone's grown
+    basic-information rectangle (a strip at x 232–280, y 338–375 client px), where a rule click could
+    land on it. It also covered the weight readout, which voided the 21:17 weight-digit run.
+  - **Fix:** the window was closed (Alt+E, screenshot-checked) and the run restarted UNCHANGED with
+    its seed at 21:26 ICT. `pickup-click` now closes the window it opened.
+
 ### walk@13 — DESIGN PROPOSAL (direction APPROVED by Batt 2026-10-08 ~17:00; PRE-REGISTERED as 3.24 above, 2026-10-08 ~21:50)
 
 **Why** (Batt, 2026-10-08 ~16:00; the direction APPROVED ~17:00): "walk@12: safety is solved; the binding problem is now refusals.
