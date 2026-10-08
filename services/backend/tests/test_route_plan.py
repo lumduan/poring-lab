@@ -160,3 +160,103 @@ def test_map_names_cannot_leave_the_gat_directory() -> None:
     for bad in ("../etc/passwd", "a/b", ".hidden"):
         with pytest.raises(ValueError):
             pd._gat(bad)
+
+
+# --- the rule side: enable / preview / hooks ------------------------------------------------------
+class FakeWorld:
+    def __init__(self) -> None:
+        self.camera, self.position = FakeCamera(), (10, 10)
+
+
+@pytest.fixture
+def enabled(sock: Any, monkeypatch: pytest.MonkeyPatch) -> Any:
+    path, s = sock
+    monkeypatch.setattr(plan, "_screen", lambda: ((8, 31, 1280, 720), (1440, 900)))
+    token = plan.enable("run-1", "prt_church", sock_path=path, log_path="/dev/shm/x.jsonl")
+    pub = plan.publisher()
+    assert pub is not None
+    pub.autostart = False
+    yield s
+    plan.disable(token)
+
+
+def _recv(s: socket.socket) -> dict[str, Any]:
+    msg = plan.decode(s.recv(plan.MAX_DATAGRAM))
+    assert msg is not None
+    return msg
+
+
+def test_nothing_is_published_until_a_run_enables_it() -> None:
+    assert plan.publisher() is None
+    plan.preview(None, FakeWorld(), (10, 10), [(12, 12)], None, "walk@11 route 1")  # a no-op
+    step = plan.hook_click_step(lambda pr, w, end: {"clicked": True, "t_click": 5},
+                                lambda w, a, b: [b])  # fmt: skip
+    assert step(None, FakeWorld(), (12, 12)) == {"clicked": True, "t_click": 5}
+
+
+def test_the_rule_side_publishes_the_route_the_walk_the_fix_and_the_clear(enabled: Any) -> None:
+    s = enabled
+    w = FakeWorld()
+    plan.preview(None, w, (10, 10), [(10, 14), (12, 16)], (10, 13), "walk@12 route 3")
+    r = _recv(s)
+    assert (r["cmd"], r["position"], r["corners"], r["goal"], r["click"]) == (
+        "route",
+        [10, 10],
+        [[10, 14], [12, 16]],
+        [12, 16],
+        [10, 13],
+    )
+    assert r["map"] == "prt_church" and r["region"] == [8, 31, 1280, 720]
+    assert r["log"] == "/dev/shm/x.jsonl" and r["session"] == "run-1"
+
+    seen: list[Any] = []
+
+    def rule_step(pr: Any, w: Any, end: tuple[int, int]) -> dict[str, Any]:
+        seen.append(tuple(w.position))
+        return {"clicked": True, "t_click": 77, "outcome": "confirmed"}
+
+    step = plan.hook_click_step(rule_step, lambda w, a, b: [(a[0], a[1] + 1), b])
+    assert step(None, w, (10, 13)) == {"clicked": True, "t_click": 77, "outcome": "confirmed"}
+    wk, sn = _recv(s), _recv(s)
+    assert (wk["cmd"], wk["start"], wk["path"], wk["t_click_ns"]) == (
+        "walk",
+        [10, 10],
+        [[10, 11], [10, 13]],
+        77,
+    )
+    assert wk["ms_per_cell"] == plan.SELF_MS_PER_CELL and sn["cmd"] == "snap"
+
+    fix = plan.hook_relocalise(lambda tpl: lambda *a: {"ok": True, "to": [11, 12]})(None)
+    assert fix() == {"ok": True, "to": [11, 12]}
+    assert (lambda m: (m["cmd"], m["cell"]))(_recv(s)) == ("fix", [11, 12])
+
+    def route_fails(*a: Any) -> None:
+        raise RuntimeError("the chat input did not open")
+
+    with pytest.raises(RuntimeError):
+        plan.hook_route_end(route_fails)()
+    assert _recv(s)["cmd"] == "clear"  # cleared however the route ends
+
+
+def test_an_unclicked_step_publishes_no_walk(enabled: Any) -> None:
+    s = enabled
+    step = plan.hook_click_step(lambda pr, w, end: {"clicked": False, "outcome": "no_safe_point"},
+                                lambda w, a, b: [b])  # fmt: skip
+    step(None, FakeWorld(), (12, 12))
+    assert _recv(s)["cmd"] == "snap"  # the belief only
+
+
+def test_an_outer_enable_keeps_ownership(sock: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """route_demo enables first (with its log); walk@12's own enable then neither replaces nor
+    disables it."""
+    path, s = sock
+    outer = plan.enable("demo", "prt_church", sock_path=path, log_path="/dev/shm/live.jsonl")
+    try:
+        inner = plan.enable("walk@12-indoor", "prt_church", sock_path=path)
+        assert inner is None
+        plan.disable(inner)  # not ours: nothing
+        pub = plan.publisher()
+        assert pub is not None and pub.log_path == "/dev/shm/live.jsonl"
+    finally:
+        plan.disable(outer)
+    assert plan.publisher() is None

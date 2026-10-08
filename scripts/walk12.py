@@ -54,6 +54,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import record_session  # noqa: E402
 import ro_agent as r  # noqa: E402
+import route_plan  # noqa: E402
 import rule_run as rr  # noqa: E402
 import walk5 as w5  # noqa: E402
 import walk6 as w6  # noqa: E402
@@ -78,7 +79,7 @@ from poring_env.demo import DEMO_ROOT, DemoRecord  # noqa: E402
 # walk@11's names (its constants, helpers and the unit memory UNITS: the SAME objects), so its
 # re-bound functions find everything they use here. The names below are walk@12's own.
 OWN = frozenset({"WALK8_RULE", "pick_points", "click_step", "portal_step", "walk_route", "run",
-                 "main", "DemoLog"})  # fmt: skip
+                 "main", "DemoLog", "where_relocalise"})  # fmt: skip
 globals().update({k: v for k, v in vars(w11).items() if not k.startswith("__") and k not in OWN})
 
 WALK8_RULE = "walk@12"
@@ -303,7 +304,24 @@ def _walk11(fn: Callable[..., Any]) -> Any:
     return g
 
 
-walk_route = _walk11(w11.walk_route)
+# The LIVE route preview (Batt 2026-10-08; display only): the run publishes its plan in CELLS
+# (route_plan.py) and the previewer daemon draws it. These wrappers only publish: the engine's walk
+# at each click, each /where fix, the clear at each route's end. They change no argument and no
+# result, and walk_route / run11 still run walk@11's code (`__wrapped__`, test_walk12.py).
+
+
+def engine_path(w: w5.World, start: tuple[int, int], end: tuple[int, int]) -> Any:
+    """The cells the engine walks from `start` to `end` (the GAT, nothing blocked): the preview's
+    model of the walk a click starts. Display only."""
+    from poring_dataset.walk import walk_path
+
+    return walk_path(w6.Grid(w.walkable, set()), start[0], start[1], end[0], end[1],
+                     max_len=w5.PLAN_MAX) or [end]  # fmt: skip
+
+
+click_step = route_plan.hook_click_step(click_step, engine_path)
+where_relocalise = route_plan.hook_relocalise(w11.where_relocalise)
+walk_route = route_plan.hook_route_end(_walk11(w11.walk_route))
 run11 = _walk11(w11.run)  # walk@11's harness: `run` below adds decision 3 around it
 
 
@@ -374,10 +392,13 @@ def run(scene: str, condition: str, n: int, seed: int, label: str, crowd: int,
     """walk@11's run (re-bound: walk@12's label, click step and session log) + decision 3."""
     SessionLog.current = None
     UNITS["detector"] = None  # walk@11's run loads its own; a failure before that has none to close
+    plan = route_plan.enable(f"{WALK8_RULE}-{scene}-{condition}-{seed}", SCENES8[scene][0])
     try:
         return int(run11(scene, condition, n, seed, label, crowd, fix))
     except BaseException as exc:  # noqa: BLE001 -- decision 3: EVERY way out finishes the session
         return finish_failed(exc)
+    finally:
+        route_plan.disable(plan)  # the line is cleared however the run ends
 
 
 def _terminate(signum: int, frame: FrameType | None) -> None:

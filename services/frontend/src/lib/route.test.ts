@@ -9,8 +9,7 @@ const route: RoutePreview = {
   t_mono_ns: 1,
   frame_id: -1,
   label: "walk@8 route 3",
-  ttl_ms: 4000,
-  live: false,
+  live: true,
   passed: [],
   clip: [],
   points: [
@@ -20,6 +19,10 @@ const route: RoutePreview = {
     { x: 0.6, y: 0.4, kind: "click" },
   ],
 };
+
+// An older sender's one-shot (screen-pixel) message: the protocol refuses it since 2026-10-08
+// (live must be true), and the console ignores it anyway.
+const oneShot = { ...route, live: false, ttl_ms: 4000 } as unknown as RoutePreview;
 
 test("points scale to the canvas like detection boxes", () => {
   const px = routePixels(route, 1000, 500);
@@ -32,7 +35,7 @@ test("points scale to the canvas like detection boxes", () => {
 import { FADE_MS, clipRects, isLive, passedAlpha, passedPixels, pickForFrame, pushLive } from "./route.ts";
 
 const live = (t: number, extra: Partial<RoutePreview> = {}): RoutePreview =>
-  ({ ...route, t_mono_ns: t, live: true, ttl_ms: 300, points: [{ x: 0.5, y: 0.5, kind: "feet" }], ...extra }) as RoutePreview;
+  ({ ...route, t_mono_ns: t, points: [{ x: 0.5, y: 0.5, kind: "feet" }], ...extra }) as RoutePreview;
 
 test("the live message drawn is the one nearest the displayed frame; none when all are stale", () => {
   let buf: RoutePreview[] = [];
@@ -49,15 +52,15 @@ test("an empty live message ends the route; the buffer keeps only the newest", (
   assert.equal(buf.length, 40);
   assert.equal(buf[0].t_mono_ns, 20 * 50e6);
   assert.deepEqual(pushLive(buf, live(9e9, { points: [] })), []);
-  assert.ok(isLive(buf[0]) && !isLive(route));
+  assert.ok(isLive(buf[0]) && !isLive(oneShot));
 });
 
 test("a one-shot preview is never drawn and never clears a live route (Batt 2026-10-08)", () => {
-  assert.deepEqual(pushLive([], route), []); // walk@12's screen-pixel plan: dropped on arrival
+  assert.deepEqual(pushLive([], oneShot), []); // walk@8-12's screen-pixel plan: dropped on arrival
   const buf = pushLive([], live(1_000e6));
-  assert.equal(pushLive(buf, { ...route, points: [] }), buf); // its empty "clear" changes nothing
-  assert.equal(pushLive(buf, route), buf);
-  assert.equal(pickForFrame(pushLive([], route), 1), null); // nothing to draw
+  assert.equal(pushLive(buf, { ...oneShot, points: [] }), buf); // its empty "clear" changes nothing
+  assert.equal(pushLive(buf, oneShot), buf);
+  assert.equal(pickForFrame(pushLive([], oneShot), 1), null); // nothing to draw
 });
 
 test("the walked-over stretch fades by its age and disappears at FADE_MS", () => {

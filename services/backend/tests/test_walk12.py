@@ -121,10 +121,12 @@ def test_walk11_is_untouched_and_walk12_reuses_its_code(mods: Any) -> None:
     assert w11.walk_route.__globals__ is vars(w11) and w11.run.__globals__ is vars(w11)
     assert vars(w11)["click_step"].__module__ == "walk11"  # walk@11 still calls its own
     assert w11.DemoLog is sys.modules["poring_env.demo"].DemoLog
-    assert w12.walk_route.__code__ is w11.walk_route.__code__  # the SAME code, not a copy
+    # the SAME code, not a copy, under the display-only route-end wrapper (route_plan, 2026-10-08)
+    inner = w12.walk_route.__wrapped__
+    assert inner.__code__ is w11.walk_route.__code__
     assert w12.run11.__code__ is w11.run.__code__
-    assert w12.walk_route.__defaults__ == w11.walk_route.__defaults__
-    g = w12.walk_route.__globals__
+    assert inner.__defaults__ == w11.walk_route.__defaults__
+    g = inner.__globals__
     assert g is vars(w12) and g["click_step"] is w12.click_step and g["DemoLog"] is w12.SessionLog
     assert g["UNITS"] is w11.UNITS  # one unit memory and detector, read by walk@11's gate
     assert "pick_points" not in g  # walk@12 picks through zone_points only

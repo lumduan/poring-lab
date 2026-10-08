@@ -226,16 +226,18 @@ export interface Box {
   y2: number;
 }
 /**
- * The agent's PLANNED route, drawn for the human over the stream (walk@8, Batt 2026-10-07):
- * the waypoint polyline it will follow and the point it will click next. Display only -- it
- * moves nothing and never reaches the mux. An empty list clears it; it fades after ttl_ms.
+ * The agent's route, drawn for the human over the stream (walk@8, Batt 2026-10-07). Display
+ * only -- it moves nothing and never reaches the mux. An empty list clears it.
  *
- * LIVE (Batt 2026-10-08): the route is anchored to the WORLD. The agent re-projects its map cells
- * for this message's t_mono_ns (the host clock, the stream frames' clock too) from the
- * character's CURRENT position, ~20 times a second; the first point is the character's feet
- * ("feet"), `passed` holds the stretches just walked over (fading), `clip` the client's UI
- * windows. The console draws the live message nearest the displayed frame's capture time and
- * nothing when none is close: a stale route is never drawn.
+ * LIVE ONLY (Batt 2026-10-08): the route is anchored to the WORLD. The previewer
+ * (scripts/route_previewd.py, fed in CELLS by the walk rules through scripts/route_plan.py)
+ * re-projects the route for this message's t_mono_ns (the host clock, the stream frames' clock
+ * too) from the character's CURRENT position, ~20 times a second; the first point is the
+ * character's feet ("feet"), `passed` holds the stretches just walked over (fading), `clip` the
+ * client's UI windows. The console draws the live message nearest the displayed frame's capture
+ * time and nothing when none is close: a stale route is never drawn. The one-shot preview (a
+ * rule's screen-pixel plan, walk@8-12) is REMOVED: it floated off the character as the camera
+ * scrolled, so `live` must be true and a message without it is refused (a counted drop).
  *
  * This interface was referenced by `PoringProtocol`'s JSON-Schema
  * via the `definition` "RoutePreview".
@@ -354,7 +356,7 @@ export interface RoutePreview {
    */
   frame_id: number;
   label: string;
-  live: boolean;
+  live: true;
   /**
    * @maxItems 16
    */
@@ -492,7 +494,6 @@ export interface RoutePreview {
    * Sender's monotonic clock, ns (see module docstring).
    */
   t_mono_ns: number;
-  ttl_ms: number;
   type: "route_preview";
 }
 /**

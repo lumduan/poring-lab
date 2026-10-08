@@ -1638,7 +1638,7 @@
     },
     "RoutePreview": {
       "additionalProperties": false,
-      "description": "The agent's PLANNED route, drawn for the human over the stream (walk@8, Batt 2026-10-07):\nthe waypoint polyline it will follow and the point it will click next. Display only -- it\nmoves nothing and never reaches the mux. An empty list clears it; it fades after ttl_ms.\n\nLIVE (Batt 2026-10-08): the route is anchored to the WORLD. The agent re-projects its map cells\nfor this message's t_mono_ns (the host clock, the stream frames' clock too) from the\ncharacter's CURRENT position, ~20 times a second; the first point is the character's feet\n(\"feet\"), `passed` holds the stretches just walked over (fading), `clip` the client's UI\nwindows. The console draws the live message nearest the displayed frame's capture time and\nnothing when none is close: a stale route is never drawn.",
+      "description": "The agent's route, drawn for the human over the stream (walk@8, Batt 2026-10-07). Display\nonly -- it moves nothing and never reaches the mux. An empty list clears it.\n\nLIVE ONLY (Batt 2026-10-08): the route is anchored to the WORLD. The previewer\n(scripts/route_previewd.py, fed in CELLS by the walk rules through scripts/route_plan.py)\nre-projects the route for this message's t_mono_ns (the host clock, the stream frames' clock\ntoo) from the character's CURRENT position, ~20 times a second; the first point is the\ncharacter's feet (\"feet\"), `passed` holds the stretches just walked over (fading), `clip` the\nclient's UI windows. The console draws the live message nearest the displayed frame's capture\ntime and nothing when none is close: a stale route is never drawn. The one-shot preview (a\nrule's screen-pixel plan, walk@8-12) is REMOVED: it floated off the character as the camera\nscrolled, so `live` must be true and a message without it is refused (a counted drop).",
       "properties": {
         "clip": {
           "items": {
@@ -1659,7 +1659,7 @@
           "type": "string"
         },
         "live": {
-          "default": false,
+          "const": true,
           "type": "boolean"
         },
         "passed": {
@@ -1681,12 +1681,6 @@
           "minimum": 0,
           "type": "integer"
         },
-        "ttl_ms": {
-          "default": 5000,
-          "maximum": 60000,
-          "minimum": 0,
-          "type": "integer"
-        },
         "type": {
           "const": "route_preview",
           "default": "route_preview",
@@ -1699,7 +1693,6 @@
         "type",
         "points",
         "label",
-        "ttl_ms",
         "live",
         "passed",
         "clip"

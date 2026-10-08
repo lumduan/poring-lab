@@ -154,16 +154,42 @@ def t7_clock() -> Any:
     return clock
 
 
-def test_the_planned_route_is_previewed_for_the_human(fake: Any) -> None:
+def test_the_planned_route_goes_to_the_live_previewer_in_cells(
+    fake: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Since 2026-10-08 (Batt) the plan goes in CELLS to the live previewer (route_plan.py); the
+    one-shot screen-pixel preview is gone. A run that does not enable publishing sends nothing."""
+    import socket
+
+    import route_plan
+
     w8, _, _ = fake
     s = sim(fake, (10, 18))
     w8.walk_route(s.pr, s.w, (14, 14), BAND, 3, lambda *a: None, ring(),
                   relocalise=lambda *a: {"ok": True}, label="walk@8 route 7")  # fmt: skip
-    sent = [m for m in s.client.ws.sent if m["type"] == "route_preview"]
-    assert sent and sent[0]["label"] == "walk@8 route 7"
-    kinds = [p["kind"] for p in sent[0]["points"]]
-    assert kinds[0] == "start" and "goal" in kinds and kinds[-1] == "click"
-    assert all(0.0 <= p["x"] <= 1.0 and 0.0 <= p["y"] <= 1.0 for m in sent for p in m["points"])
+    assert not [m for m in s.client.ws.sent if m["type"] == "route_preview"]  # no one-shot
+
+    path = Path("/dev/shm") / f"walk8-plan-{tmp_path.name}.sock"
+    rx = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+    rx.bind(str(path))
+    rx.settimeout(1.0)
+    monkeypatch.setattr(route_plan, "_screen", lambda: ((0, 0, 1280, 720), (1440, 900)))
+    monkeypatch.setattr(route_plan, "camera_dict", lambda cam: {"vector": [0.0] * 6, "height": 720})
+    token = route_plan.enable("walk8-test", "prt_church", sock_path=path)
+    try:
+        route_plan.publisher().autostart = False  # type: ignore[union-attr]
+        s = sim(fake, (10, 18))
+        w8.walk_route(s.pr, s.w, (14, 14), BAND, 3, lambda *a: None, ring(),
+                      relocalise=lambda *a: {"ok": True}, label="walk@8 route 7")  # fmt: skip
+        msg = route_plan.decode(rx.recv(route_plan.MAX_DATAGRAM))
+    finally:
+        route_plan.disable(token)
+        rx.close()
+        path.unlink(missing_ok=True)
+    assert msg is not None and msg["cmd"] == "route" and msg["label"] == "walk@8 route 7"
+    assert msg["map"] == "prt_church" and msg["position"] == [10, 18]
+    assert msg["goal"] == [14, 14] and "points" not in msg  # cells, never screen pixels
+    assert not [m for m in s.client.ws.sent if m["type"] == "route_preview"]
 
 
 def door() -> list[tuple[int, int]]:  # the warp cursor: a door (a rectangle) over the hotspot

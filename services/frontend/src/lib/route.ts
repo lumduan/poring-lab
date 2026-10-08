@@ -17,9 +17,11 @@ export function routePixels(route: RoutePreview | null, width: number, height: n
 // console draws the live message nearest the frame it is showing, and NOTHING when none is close:
 // a stale route is never drawn (it would float over a scene the camera has moved).
 //
-// ONE-SHOT previews (walk@8-12's plan-time picture in screen pixels) are NOT drawn any more (Batt,
-// 2026-10-08): they stay where they were drawn while the camera scrolls, so they float off the
-// character during the walk. No route line is better than a misleading one.
+// ONE-SHOT previews (walk@8-12's plan-time picture in screen pixels) are REMOVED (Batt, 2026-10-08):
+// they stayed where they were drawn while the camera scrolled, so they floated off the character
+// during the walk. The rules now publish their plan in cells to the live previewer, the protocol
+// requires `live: true`, and the console still ignores anything else. No route line is better than
+// a misleading one.
 
 export const LIVE_MAX_SKEW_NS = 200e6; // a live route farther than this from the frame: not drawn
 export const LIVE_BUFFER = 40; // ~2 s at 20 Hz
