@@ -167,6 +167,49 @@ ground truth; phase3-plan §6 LABEL-QA):
 - The exact URL, version and the attribution line required by CC BY 4.0 are recorded here when it
   is downloaded, under `data/` and never committed.
 
+## Frontend dependencies of the MW2 flow editor (Batt approved, 2026-10-08)
+The `/flows` page ([mw2-block-editor.md](docs/planning/mw2-block-editor.md) section 6): pinned EXACT
+in `services/frontend/package.json`, installed into tmpfs only, never on the host disk. Each LICENSE
+was read from the installed package at that exact version (`node_modules/<pkg>/LICENSE`, the files
+pnpm extracted from the registry tarball), 2026-10-08.
+
+| Package | Version | License | Where used | Licence file read |
+|---|---|---|---|---|
+| [blockly](https://github.com/RaspberryPiFoundation/blockly) | 13.3.0 (registry tarball `blockly-13.3.0.tgz`, `latest` on 2026-10-08) | Apache-2.0: the full Apache License 2.0 text plus its appendix, 202 lines | the block editor (`src/components/flows/BlockEditor.tsx`), lazy-loaded on `/flows` only | `node_modules/blockly/LICENSE`, sha256 `cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30` |
+| [@xyflow/react](https://github.com/xyflow/xyflow) | 12.12.0 (`latest` on 2026-10-08) | MIT, © 2019-2025 webkid GmbH | the workflow canvas (`src/components/flows/FlowCanvas.tsx`), lazy-loaded on `/flows` only | `node_modules/@xyflow/react/LICENSE`, sha256 `023119ac20fb1c8c9930abe0bcd196989a1960388529a96fc43cebf96f07c9ff` |
+
+Their transitive packages (the `license` field and the LICENSE file present in each installed
+package; all permissive):
+
+| Package | Version | License |
+|---|---|---|
+| @xyflow/system | 0.0.83 | MIT |
+| zustand | 4.5.7 | MIT |
+| classcat | 5.0.5 | MIT (`LICENSE.md`) |
+| use-sync-external-store | 1.7.0 | MIT |
+| d3-drag, d3-zoom, d3-selection, d3-interpolate, d3-transition, d3-dispatch, d3-color, d3-timer | 3.0.0, 3.0.0, 3.0.0, 3.0.1, 3.0.1, 3.0.1, 3.1.0, 3.0.1 | ISC |
+| d3-ease | 3.0.1 | BSD-3-Clause (the plan expected ISC: a correction, still permissive) |
+| @types/d3-color, -drag, -interpolate, -selection, -transition, -zoom | 3.1.3, 3.0.7, 3.0.4, 3.0.12, 3.0.9, 3.0.9 | MIT (type declarations only) |
+
+- **Blockly's peer `jsdom` is NOT installed:** it serves Blockly's headless Node use only, and the
+  package's own `browser` field maps it to `false`. pnpm 10 auto-installs peers even under
+  `peerDependencyRules.ignoreMissing`, so `pnpm-workspace.yaml` removes it with the override
+  `blockly>jsdom: "-"` (the lockfile has no jsdom).
+- **No `eval`, no `new Function`:** neither appears in `blockly_compressed.js`,
+  `blocks_compressed.js`, `blockly.mjs`, `msg/en.mjs` or `@xyflow/react` / `@xyflow/system` /
+  `zustand` (checked 2026-10-08). The CSP is unchanged.
+- **Blockly's media are SELF-HOSTED:** the images and cursors of `node_modules/blockly/media/`
+  (Apache-2.0, same licence file) are copied into `services/frontend/public/blockly-media/`; its
+  sounds (`*.mp3`) are not copied and sounds are off. No outside request.
+
+**Ideas only (no code, no assets, no text):**
+
+| Source | License | Used for |
+|---|---|---|
+| Node-RED | Apache-2.0 (as stated by the project; its code was not opened) | status badges under nodes, typed output ports |
+| n8n | Sustainable Use License: NOT OSI open source (its code was not opened, never read) | per-node run data after a run, "run a single node" |
+| MakeCode | — | the block look comes from Blockly's own `zelos` renderer, nothing from MakeCode |
+
 ## Noted for later (not used yet)
 - ~~**RagLite ACT/SPR decoding** (same commit and license as above) is a path to synthetic training
   data: sprites with exact labels (s2-plan / Phase 3). Its license would be re-read at the commit

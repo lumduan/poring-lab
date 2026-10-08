@@ -1,3 +1,10 @@
 ignoredBuiltDependencies:
   - sharp
   - unrs-resolver
+# Blockly's peer jsdom serves its headless Node use only; the browser build never loads it
+# (MW2, docs/planning/mw2-block-editor.md section 6). Not installed.
+peerDependencyRules:
+  ignoreMissing:
+    - jsdom
+overrides:
+  blockly>jsdom: "-"
