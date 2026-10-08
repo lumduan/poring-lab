@@ -1749,6 +1749,51 @@ all 120 trials. No factor is implicated, so NO fix is built.**
 - The signboard positive case (the same pre-registration, separate trials) runs next on the free
   client.
 
+**Signboard finder REPLACED before the positive case ran** (Batt, 2026-10-08 ~20:20, from his 20:10
+HUD screenshot):
+- `idle_click.sign_box` found a sign as the union of every pixel in the sign's orange. The church is
+  full of those colours (floor, piano, robes, wood). It drew one giant "sign" over half the scene in
+  194 of 224 banked walk@12 frames.
+- Its users were the HUD scene (display) and this positive case, which had NOT run. walk@12's
+  decision code never used it; idle@1's main trials used a fixed start, not the finder.
+- The positive case had measured from the icon's bottom row: 4 px below the bar the clicks go under.
+  The new `sign_box` returns the TITLE BAR, so the clicks are measured from the bar's bottom outline,
+  as this pre-registration says ("a signboard's measured bottom edge"). This change is pre-run.
+- **The replacement, `poring_env.signboard`:** a sign is found by its SHAPE.
+  - Both parts, the icon square and the attached title bar, are UI-drawn: a 1-px black outline with
+    a 1-px white halo.
+  - The icon is 24–40 px with a mostly-orange frame. The bar is attached at the icon's right outline
+    and filled with its brown and the title's white.
+  - Nothing larger than 400 × 44 px is returned.
+  - A sign inside a UI window is the window's.
+  - With NPC detections (the HUD), an NPC must stand under the sign wherever one could be seen.
+- **The proof** (`scripts/signboard_check.py`; client frames stay local):
+
+| set | frames | signs found | what they are |
+|---|---|---|---|
+| prt_church, walk@11/12 route starts (lossless) | 223 | 47 | all the wedding NPC's sign: 160 × 32, pixels within 12.7 (mean abs diff) of the reference |
+| prt_fild08, walk@11/12 route starts (lossless) | 224 | **0** | — |
+| prt_church, route-demo recordings (JPEG) | 7,611 | 4,419 | all the wedding sign (diff ≤ 21.9; the 12 highest checked by eye: our own HP bar or a chat label over it) |
+| prt_church, the HUD idle recording (JPEG) | 1,186 | **0** | — |
+| prt_church, idle@1's recorder (JPEG) | 10,035 | 13 | the wedding sign, the 13 frames before idle@1's first warp |
+
+- **An INDEPENDENT check: geometry, not pixels** (`signboard_check.py oracle`).
+  - Method: the sign's NPC cell was fitted from the hits and the route start cells through the
+    camera. It came out at (96, 101), with a worst residual of 5 / 12 px.
+  - Then, for every one of the 223 church route starts, the camera says whether the sign must be in
+    view:
+    - 44 must be in view, and all 44 were found;
+    - in 146 the sign is not in view, and nothing was found (**0 false signs**);
+    - 33 are partly in view, or within 8 px of a UI window, and are not scored.
+  - One sign the finder misses: the inventory window overdraws the icon's top outline (walk@12 crowd
+    route 37).
+  - A sign crossed by our own HP/SP bar IS found: a bar's left outline is the icon's right one.
+- **The NPC rule** (`signboard_check.py npc`, v0 detector): it keeps 46 of the 47 real signs. The one
+  it drops (walk@12 clean route 27) has its NPC plainly visible, but the detector missed it.
+  - Measured: the NPC box's top is 93–102 px below the sign's bottom, centred (−8 … +10 px).
+  - A sign whose NPC would stand off-screen or under a UI window is kept on its shape.
+- The HUD scene runs the new finder since 20:40 (a display-only restart of `hud_scene.py`).
+
 ### walk@13 — DESIGN PROPOSAL (direction APPROVED by Batt 2026-10-08 ~17:00; NOT yet pre-registered: pre-registered before any run)
 
 **Why** (Batt, 2026-10-08 ~16:00; the direction APPROVED ~17:00): "walk@12: safety is solved; the binding problem is now refusals.
@@ -1785,19 +1830,28 @@ safety events):
 4. **"Taken" means a unit's own cell IS the goal** (its feet picked to a cell), not a unit
    inside the click-point envelope. An envelope refusal at the goal waits (patience) or uses
    1-2 above; only a unit on the goal cell triggers the substitute.
-5. **The work zone also excludes SIGNBOARDS** found from pixels (their outline and colours,
-   + 6 px), once a deliberate positive case proves the hit area (a click 2–3 px under a sign's edge
-   vs 10 px under it).
+5. **The work zone also excludes SIGNBOARDS** found from pixels, + 6 px, once a deliberate positive
+   case proves the hit area (a click 2–3 px under a sign's edge vs 10 px under it).
+   - The finder is `poring_env.signboard` (2026-10-08 ~20:40, Batt): a sign is found by its SHAPE.
+     It is an outlined icon square with a title bar attached; both have a 1-px black outline and a
+     1-px white halo, plus fill and size limits, and an NPC must be detected under it wherever one
+     could be seen. It is NEVER found by colour.
+   - The first finder (a union of every sign-coloured pixel, `idle_click.sign_box`) was WITHDRAWN.
+     It put one giant false "sign" over half the church in 194 of 224 banked walk@12 frames: it
+     would have masked half the clickable area and added refusals. walk@12 never used it. Its proof
+     is the signboard section below.
 6. **The idle first click** (hypothesis, to be tested first): if a deliberate test shows the client
    drops the first world click after > 10 s idle, the rule re-hovers (two motions) before such a
-   click; otherwise nothing changes.
+   click; otherwise nothing changes. ➡️ TESTED by idle@1 (3.23): 0 failures in 120, so NOTHING
+   changes; walk@13 builds no first-click fix.
 
 **Kept from walk@12:** everything else (the unit gate, the TALK-cell block, the work zone, the
 harness exit, the bar ≥ 48/50 + zero safety events, fresh seeds, held-out only if all four pass).
 
 **To pre-register:** the exact candidate order, R, the blocked-set lifetimes, the substitute rule's
-distance and scoring, the signboard detector's thresholds (from its positive case), and the
-idle-click decision (from its test).
+distance and scoring, the signboard finder's version (`poring_env.signboard`, frozen at
+pre-registration) and the hit-area margin (from its positive case). The idle-click decision is made
+(no fix, idle@1).
 
 ### Targeting — DESIGN PROPOSALS (Batt, 2026-10-08; NOT pre-registered: each is pre-registered before it is adopted)
 **Provenance:** ideas only, from a screen recording of another RO bot's debug view (unknown origin,

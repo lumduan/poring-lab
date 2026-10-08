@@ -33,6 +33,7 @@ import operator_hud  # noqa: E402
 import record_session  # noqa: E402
 import ro_agent as r  # noqa: E402
 import route_plan  # noqa: E402
+import route_preview as rp  # noqa: E402
 import walk6 as w6  # noqa: E402
 import walk10 as w10  # noqa: E402
 
@@ -46,7 +47,6 @@ CONDITIONS = {"T15": (True, 15.0), "T2": (True, 2.0), "N15": (False, 15.0), "N2"
 SETTLE_S = 3.0  # after the warp
 JUDGE_S = 2.0  # a move request within this after the click
 SIGN_OFFSETS = ("inside", 2.5, 5.0, 10.0)  # px below the sign's measured bottom outline
-SIGN_SEARCH = (230, 140, 1130, 530)  # x0, y0, x1, y1 (client px): the world between the UI windows
 CURSOR_REFS_V3 = r.ROOT / "data/walk6/cursor_refs_rdp_v3.npz"
 OUT_ROOT = Path("/dev/shm/poring-lab-tmp/idle1")
 
@@ -64,23 +64,18 @@ def _world() -> tuple[Any, Any]:
 
 
 def sign_box(img: np.ndarray) -> tuple[int, int, int, int] | None:
-    """The signboard's box (x0, y0, x1, y_bottom) in client px: its orange/gold border, then the
-    last dark outline row under it. None when no sign is in view."""
-    rgb = img[..., 2::-1].astype(int)  # BGR(A) -> RGB
-    sx0, sy0, sx1, sy1 = SIGN_SEARCH
-    rr_, gg, bb = rgb[..., 0], rgb[..., 1], rgb[..., 2]
-    orange = (rr_ > 180) & (gg > 110) & (gg < 200) & (bb < 90)
-    orange[:sy0], orange[sy1:], orange[:, :sx0], orange[:, sx1:] = False, False, False, False
-    ys, xs = np.nonzero(orange)
-    if len(xs) < 200:
+    """The signboard's TITLE BAR (x0, y0, x1, y_bottom) in client px, its outline rows and columns
+    included: the clicks of the positive case go under the bar, so its bottom outline is the edge
+    they are measured from. None when no sign is in view. The sign is found by its SHAPE
+    (poring_env.signboard, 2026-10-08), never by its colour: the first finder's colour union put one
+    giant false box over half the church in 194 of 224 banked frames."""
+    from poring_env.signboard import find_signs
+
+    signs = find_signs(img, exclude=rp.UI_WINDOWS)  # the whole client but the UI windows
+    if not signs:
         return None
-    x0, x1, y0, y1 = int(xs.min()), int(xs.max()), int(ys.min()), int(ys.max())
-    dark = rgb.sum(-1) < 60
-    bottom = y1
-    for y in range(y1 + 1, min(y1 + 6, rgb.shape[0])):
-        if dark[y, x0 : x1 + 1].sum() >= 10:
-            bottom = y
-    return x0, y0, x1, bottom
+    bar = signs[0].bar
+    return bar.x0, bar.y0, bar.x1, bar.y1
 
 
 def _record(out: str, region: tuple[int, int, int, int], stop: Any, hz: float) -> None:

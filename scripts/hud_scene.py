@@ -250,7 +250,8 @@ def serve(hz: float, det_period: float) -> int:
 
     def detector() -> None:
         import unit_detector
-        from idle_click import sign_box
+
+        from poring_env.signboard import find_signs
 
         try:
             det = unit_detector.UnitDetector(threads=DET_THREADS)
@@ -272,12 +273,15 @@ def serve(hz: float, det_period: float) -> int:
                     stop.wait(0.1)
                     continue
                 t0 = time.monotonic()
+                units = [b for b in det.detect(img) if b.cls != "player"]
                 found = [{"kind": "unit", "cls": b.cls, "conf": b.score,
-                          "box": [b.x0, b.y0, b.x1, b.y1]} for b in det.detect(img)
-                         if b.cls != "player"]  # fmt: skip
-                sb = sign_box(img)
-                if sb is not None:
-                    found.append({"kind": "sign", "cls": "sign", "conf": None, "box": list(sb)})
+                          "box": [b.x0, b.y0, b.x1, b.y1]} for b in units]  # fmt: skip
+                # signboards by their SHAPE, with an NPC under each wherever one could be seen
+                npcs = [(b.x0, b.y0, b.x1, b.y1) for b in units if b.cls == "npc"]
+                for sign in find_signs(img, npcs=npcs, exclude=rp.UI_WINDOWS):
+                    sb = sign.box
+                    found.append({"kind": "sign", "cls": "sign", "conf": None,
+                                  "box": [sb.x0, sb.y0, sb.x1 + 1, sb.y1 + 1]})  # fmt: skip
                 stats["det_ms"].append(1000 * (time.monotonic() - t0))
                 stats["det"] += 1
                 last_img, last_t = img, now
@@ -300,9 +304,19 @@ def serve(hz: float, det_period: float) -> int:
     try:
         while True:
             t_loop = time.monotonic()
-            if screen is None:
-                screen = r.Screen()
-            t, img, fid, src = screen.grab_meta(*region)
+            try:
+                if screen is None:
+                    screen = r.Screen()
+                t, img, fid, src = screen.grab_meta(*region)
+            except Exception as exc:  # noqa: BLE001 -- e.g. a backend restart killed the helper
+                print(f"{time.strftime('%H:%M:%S')} grab failed ({type(exc).__name__}); "
+                      "a new screen helper in 1 s", flush=True)  # fmt: skip
+                with contextlib.suppress(Exception):
+                    if screen is not None:
+                        screen.close()
+                screen, prev = None, None
+                time.sleep(1.0)
+                continue
             if src != "bus":  # never an extra X grab: wait for the frame bus
                 prev = None
                 time.sleep(1.0)
