@@ -74,6 +74,14 @@ export default function RouteCanvas({ route, liveRef, frameNsRef, width, height 
   );
 }
 
+// The RA2 look (Batt 2026-10-08, from Red Alert 2's move line): a thin solid line from the unit's
+// feet, small square nodes at the corners, a box on the next click, and at the goal four arrows
+// converging on the ground point, animated. The faint shadow keeps it visible on bright floors.
+const RA2_LINE = "rgba(70, 230, 90, 0.95)";
+const RA2_SHADOW = "rgba(0, 0, 0, 0.35)";
+const RA2_NODE = "#fde68a";
+const RA2_PULSE_MS = 700;
+
 function drawLive(ctx: CanvasRenderingContext2D, route: RoutePreview | null, w: number, h: number) {
   if (!route || route.points.length === 0) return;
   ctx.save();
@@ -84,8 +92,8 @@ function drawLive(ctx: CanvasRenderingContext2D, route: RoutePreview | null, w: 
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   for (const s of passedPixels(route, w, h)) {
-    ctx.strokeStyle = `rgba(245, 158, 11, ${(0.6 * s.alpha).toFixed(3)})`;
-    ctx.lineWidth = 4;
+    ctx.strokeStyle = `rgba(70, 230, 90, ${(0.6 * s.alpha).toFixed(3)})`;
+    ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(s.a.x, s.a.y);
     ctx.lineTo(s.b.x, s.b.y);
@@ -95,8 +103,8 @@ function drawLive(ctx: CanvasRenderingContext2D, route: RoutePreview | null, w: 
   const path = pixels.filter((p) => p.kind === "feet" || p.kind === "waypoint");
   if (path.length > 1) {
     for (const [width, style] of [
-      [7, "rgba(0, 0, 0, 0.55)"],
-      [4, "rgba(245, 158, 11, 0.95)"],
+      [4, RA2_SHADOW],
+      [2, RA2_LINE],
     ] as const) {
       ctx.lineWidth = width;
       ctx.strokeStyle = style;
@@ -104,29 +112,49 @@ function drawLive(ctx: CanvasRenderingContext2D, route: RoutePreview | null, w: 
       path.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
       ctx.stroke();
     }
+    for (const p of path.slice(1)) node(ctx, p.x, p.y, 3, RA2_NODE); // the corners
   }
+  const phase = (performance.now() % RA2_PULSE_MS) / RA2_PULSE_MS;
   for (const p of pixels) {
-    ctx.beginPath();
-    if (p.kind === "goal") {
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = "#f59e0b";
-      ctx.arc(p.x, p.y, 10, 0, 2 * Math.PI);
-      ctx.stroke();
-    } else if (p.kind === "click") {
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = "#fde68a";
-      ctx.moveTo(p.x - 8, p.y);
-      ctx.lineTo(p.x + 8, p.y);
-      ctx.moveTo(p.x, p.y - 8);
-      ctx.lineTo(p.x, p.y + 8);
-      ctx.stroke();
-    } else if (p.kind === "feet") {
-      ctx.fillStyle = "#fbbf24";
-      ctx.arc(p.x, p.y, 4, 0, 2 * Math.PI);
-      ctx.fill();
-    }
+    if (p.kind === "goal") arrowsIn(ctx, p.x, p.y, 14 - 8 * phase);
+    else if (p.kind === "click") box(ctx, p.x, p.y, 5);
   }
   ctx.restore();
+}
+
+function node(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, fill: string) {
+  ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+  ctx.fillRect(x - r - 1, y - r - 1, 2 * r + 2, 2 * r + 2);
+  ctx.fillStyle = fill;
+  ctx.fillRect(x - r, y - r, 2 * r, 2 * r);
+}
+
+function box(ctx: CanvasRenderingContext2D, x: number, y: number, r: number) {
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = RA2_NODE;
+  ctx.strokeRect(x - r, y - r, 2 * r, 2 * r);
+}
+
+/** Four arrowheads on the diagonals, pointing in at (x, y) from radius r (RA2's move marker). */
+function arrowsIn(ctx: CanvasRenderingContext2D, x: number, y: number, r: number) {
+  ctx.fillStyle = "rgba(70, 230, 90, 0.95)";
+  ctx.strokeStyle = RA2_SHADOW;
+  ctx.lineWidth = 1;
+  for (const a of [Math.PI / 4, (3 * Math.PI) / 4, (5 * Math.PI) / 4, (7 * Math.PI) / 4]) {
+    const tx = x + Math.cos(a) * r; // the tip, nearest the goal
+    const ty = y + Math.sin(a) * r * 0.6; // flattened: the ground is seen at an angle
+    const bx = x + Math.cos(a) * (r + 7);
+    const by = y + Math.sin(a) * (r + 7) * 0.6;
+    const nx = -Math.sin(a) * 4;
+    const ny = Math.cos(a) * 4 * 0.6;
+    ctx.beginPath();
+    ctx.moveTo(tx, ty);
+    ctx.lineTo(bx + nx, by + ny);
+    ctx.lineTo(bx - nx, by - ny);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
 }
 
 function drawPlan(ctx: CanvasRenderingContext2D, route: RoutePreview | null, w: number, h: number) {
