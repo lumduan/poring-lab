@@ -1732,6 +1732,23 @@ click (the recorder at 4 Hz), and the input log's move / down / up for it.
 move request, and one at 10 px a move. The edge of the hit area is the smallest distance that
 walks in 5 / 5.
 
+**RESULT (2026-10-08 19:19–20:03 ICT, session `20261008T191912-demo-idle1`, seed 20261066): 0 failures in
+all 120 trials. No factor is implicated, so NO fix is built.**
+
+| condition | clicked | walked (a move request within 2 s) | failed | 95 % upper bound on the failure rate |
+|---|---|---|---|---|
+| T15 (a chat line, 15 s idle) | 30 | 30 | 0 | 9.5 % |
+| T2 (a chat line, 2 s idle) | 30 | 30 | 0 | 9.5 % |
+| N15 (no chat line, 15 s idle) | 30 | 30 | 0 | 9.5 % |
+| N2 (no chat line, 2 s idle) | 30 | 30 | 0 | 9.5 % |
+| all | 120 | 120 | 0 | 2.5 % |
+
+- Every target read WALK twice, and every click walked.
+- Neither idling nor chat typing reproduces walk@12's route-first failures (about 4 % there). Those 4
+  cases stay UNEXPLAINED, as pre-registered. walk@13 builds no first-click fix.
+- The signboard positive case (the same pre-registration, separate trials) runs next on the free
+  client.
+
 ### walk@13 — DESIGN PROPOSAL (direction APPROVED by Batt 2026-10-08 ~17:00; NOT yet pre-registered: pre-registered before any run)
 
 **Why** (Batt, 2026-10-08 ~16:00; the direction APPROVED ~17:00): "walk@12: safety is solved; the binding problem is now refusals.
