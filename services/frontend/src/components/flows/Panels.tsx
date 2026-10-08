@@ -32,6 +32,8 @@ export function InspectPanel({
   selected,
   lint,
   sim,
+  api,
+  world,
   onUpdate,
   onDelete,
   onStart,
@@ -42,6 +44,8 @@ export function InspectPanel({
   selected: string | null;
   lint: LintDoc | null;
   sim: SimDoc | null;
+  api: FlowsApi | null;
+  world: WorldSource;
   onUpdate: (name: string, props: BlockProps) => void;
   onDelete: (name: string) => void;
   onStart: (name: string, entry: string) => void;
@@ -61,7 +65,14 @@ export function InspectPanel({
       </div>
     );
   }
-  if (block) return <BlockInspector key={block.name + JSON.stringify(block.entries)} block={block} flow={flow} lint={lint} sim={sim} onUpdate={onUpdate} onDelete={onDelete} onStart={onStart} onOpen={onOpen} onSimulateHere={onSimulateHere} />;
+  if (block) {
+    return (
+      <>
+        <BlockInspector key={block.name + JSON.stringify(block.entries)} block={block} flow={flow} lint={lint} sim={sim} onUpdate={onUpdate} onDelete={onDelete} onStart={onStart} onOpen={onOpen} onSimulateHere={onSimulateHere} />
+        <StaticData api={api} world={world} server={flow.target.server} map={block.map.map} />
+      </>
+    );
+  }
   return (
     <div className="space-y-2 text-xs">
       <div className="font-semibold">{selected === "events:global" ? "Global events" : selected}</div>
@@ -196,6 +207,89 @@ function BlockInspector({
   );
 }
 
+/** What the static data says about a map (keys to use in the blocks; names for display only). */
+function StaticData({ api, world, server, map }: { api: FlowsApi | null; world: WorldSource; server: string; map: string }) {
+  const [doc, setDoc] = useState<{ for: string; w: WorldDoc | null; err: string } | null>(null);
+  const want = `${world}|${server}|${map}`;
+  useEffect(() => {
+    if (!api) return;
+    let alive = true;
+    api
+      .world(world, server, [map])
+      .then((w) => alive && setDoc({ for: want, w, err: "" }))
+      .catch((e) => alive && setDoc({ for: want, w: null, err: e instanceof ApiError ? e.reason : "unavailable" }));
+    return () => {
+      alive = false;
+    };
+  }, [api, world, server, map, want]);
+  if (!doc || doc.for !== want) return <div className="mt-3 text-xs text-neutral-500">Loading the static data…</div>;
+  const sheet = doc.w?.maps[map];
+  const label = (k: string) => doc.w?.labels?.npcs[k];
+  const opt = (k: string) => doc.w?.labels?.options[k];
+  return (
+    <div className="mt-4 space-y-1 border-t border-neutral-800 pt-3 text-xs" data-testid="static-data">
+      <div className="font-semibold">
+        Static data for {map} ({world === "sample" ? "synthetic sample sheets" : `local data/kb, ${server}`})
+      </div>
+      {doc.err && <div className="text-red-300">{doc.err}</div>}
+      {(doc.w?.notes ?? []).map((n) => (
+        <div key={n} className="text-amber-300">{n}</div>
+      ))}
+      {!sheet && !doc.err && <div className="text-red-300">No map sheet for {map}: blocks on it are unsupported (fail closed).</div>}
+      {sheet && (
+        <>
+          <div className="text-neutral-400">
+            walk grid {sheet.size ? `${sheet.size[0]}×${sheet.size[1]}` : "none (routes are estimates)"} · {sheet.warps.length} warps · {sheet.npcs.length} NPCs ·{" "}
+            {sheet.spawns.length} spawn lines
+          </div>
+          <details open={sheet.npcs.length <= 8}>
+            <summary className="cursor-pointer">NPCs (key · name · cell · menu keys)</summary>
+            <ul className="mt-1 space-y-0.5">
+              {sheet.npcs.map((n) => (
+                <li key={n.key}>
+                  <code>{n.key}</code> {label(n.key) ? `· ${label(n.key)} ` : ""}· ({n.x}, {n.y}){n.kafra ? " · Kafra" : ""}
+                  {n.menu.length > 0 && (
+                    <div className="pl-3 text-neutral-400">
+                      {n.menu.map((k) => (
+                        <span key={k} className="mr-2">
+                          <code>{k}</code>
+                          {opt(k) ? ` ${opt(k)}` : ""}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </details>
+          <details>
+            <summary className="cursor-pointer">Warps (cell → map)</summary>
+            <ul className="mt-1">
+              {sheet.warps.map((w, i) => (
+                <li key={i}>
+                  ({w.x}, {w.y}) → {w.to_map} ({w.to_x}, {w.to_y})
+                </li>
+              ))}
+            </ul>
+          </details>
+          <details>
+            <summary className="cursor-pointer">Spawns (mob id × count)</summary>
+            <ul className="mt-1">
+              {sheet.spawns.map((sp, i) => (
+                <li key={i}>
+                  {sp.mob}
+                  {doc.w?.mobs[String(sp.mob)]?.label ? ` ${doc.w.mobs[String(sp.mob)].label}` : ""} × {sp.count}
+                  {sp.boss ? " (boss)" : ""}
+                </li>
+              ))}
+            </ul>
+          </details>
+        </>
+      )}
+    </div>
+  );
+}
+
 // --- lint ------------------------------------------------------------------------------------------
 export function LintPanel({ lint, stale, onSelect }: { lint: LintDoc | null; stale: boolean; onSelect: (owner: string) => void }) {
   const [showUnsupported, setShowUnsupported] = useState(false);
@@ -208,6 +302,9 @@ export function LintPanel({ lint, stale, onSelect }: { lint: LintDoc | null; sta
         MW1&apos;s linter, layers 1-3 · {lint.counts.error} errors · {lint.counts.warning} warnings · {lint.counts.info} info · static data:{" "}
         {lint.world.server ?? "none"} ({lint.world.maps.join(", ") || "no sheets"}){stale ? " · STALE: the flow changed since" : ""}
       </div>
+      {(lint.world_notes ?? []).map((n) => (
+        <div key={n} className="text-amber-300">{n}</div>
+      ))}
       <ul className="space-y-1">
         {own.map((f, i) => (
           <li key={i} className={`cursor-pointer rounded border p-1.5 ${SEV_CLASS[f.severity]}`} onClick={() => onSelect(f.owner)}>

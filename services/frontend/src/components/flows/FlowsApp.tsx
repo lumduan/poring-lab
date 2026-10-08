@@ -228,6 +228,8 @@ export default function FlowsApp({ backendUrl }: { backendUrl: string | null }) 
                 selected={selected}
                 lint={lintDoc}
                 sim={simDoc && !simStale ? simDoc : null}
+                api={api}
+                world={world}
                 onUpdate={(name: string, props: BlockProps) => { edit(updateBlock(flow, name, props)); if (props.name !== name) setSelected(`block:${props.name}`); }}
                 onDelete={(name) => { edit(removeBlock(flow, name)); setSelected(null); }}
                 onStart={(name, entry) => edit(setStart(flow, name, entry))}

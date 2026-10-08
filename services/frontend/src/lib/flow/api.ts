@@ -37,6 +37,7 @@ export interface LintDoc {
   by_owner: Record<string, Record<Severity | "unsupported", number>>;
   effective: Record<string, EffectiveEvent[]>;
   world: { server: string | null; maps: string[] };
+  world_notes?: string[]; // how the static data was found (e.g. no GAT here: routes are estimates)
 }
 
 export interface NodeRun {
@@ -138,6 +139,8 @@ export interface WorldDoc {
   mobs: Record<string, { label: string | null; level: number }>;
   items: Record<string, { label: string | null; kind: string }>;
   walk?: Record<string, string[]>;
+  labels?: { npcs: Record<string, string>; options: Record<string, string> }; // display only
+  notes?: string[];
 }
 
 export class ApiError extends Error {

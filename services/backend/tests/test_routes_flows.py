@@ -213,3 +213,24 @@ def test_without_the_flow_engine_the_routes_answer_503(
     monkeypatch.setitem(sys.modules, "poring_flow", None)
     r = client.get("/flows/catalogue", headers=H)
     assert r.status_code == 503 and r.json()["detail"]["reason"] == "flow_engine_unavailable"
+
+
+def test_the_local_world_is_built_from_the_kb(make: Make, tmp_path: Path) -> None:
+    """MW2-0 at run time: sheets from the extracted KB (synthetic here), keys and their labels."""
+    kb = tmp_path / "data" / "kb"
+    (kb / "bindings").mkdir(parents=True)
+    l3 = {
+        "warp": {"cells": {"by_map": {"m_town": [
+            {"x": 5, "y": 1, "to_map": "m_field", "to_x": 2, "to_y": 2}]}}},
+        "npc": {"positions": {"npcs": [{"name": "Guide#t", "map": "m_town", "x": 3, "y": 4}]},
+                "menus": {"by_npc": {"Guide#t": [{"options": ["Go."]}]}}},
+    }  # fmt: skip
+    (kb / "bindings" / "lab-rathena.json").write_text(json.dumps(l3))
+    client = make()
+    w = client.get("/flows/world?source=local&server=lab-rathena&maps=m_town", headers=H).json()
+    npc = w["maps"]["m_town"]["npcs"][0]
+    assert npc["key"].startswith("n_") and w["labels"]["npcs"][npc["key"]] == "Guide#t"
+    assert w["labels"]["options"][npc["menu"][0]] == "Go."
+    assert w["maps"]["m_town"]["warps"][0]["to_map"] == "m_field"
+    lint = post(client, "lint", {"flow": sample(), "world": "local"}).json()
+    assert isinstance(lint["world_notes"], list)

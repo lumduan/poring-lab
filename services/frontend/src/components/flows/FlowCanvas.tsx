@@ -190,6 +190,8 @@ function ExitEdge(props: EdgeProps<ExitEdgeT>) {
   const kind = data?.kind ?? "walk_exit";
   const colour = EXIT_COLOURS[kind];
   const derived = data?.derived;
+  // a backward edge (a loop back to an earlier block) gets its label lower than the forward one
+  const dy = (LABEL_DY[kind] ?? 0) + (sourceX > targetX ? 48 : 0);
   const label = kind === "attach" ? "" : `${kind.replace("_", " ")}${data?.entry ? ` → ${data.entry}` : ""}${data?.runs ? ` · ${data.runs}×` : ""}`;
   return (
     <>
@@ -202,7 +204,7 @@ function ExitEdge(props: EdgeProps<ExitEdgeT>) {
         <EdgeLabelRenderer>
           <div
             className="nodrag nopan pointer-events-auto absolute rounded bg-neutral-950/90 px-1.5 py-0.5 text-[10px]"
-            style={{ transform: `translate(-50%, -50%) translate(${lx}px, ${ly + (LABEL_DY[kind] ?? 0)}px)`, color: colour }}
+            style={{ transform: `translate(-50%, -50%) translate(${lx}px, ${ly + dy}px)`, color: colour }}
           >
             {label}
             {derived && kind === "death_respawn" ? " (derived)" : ""}

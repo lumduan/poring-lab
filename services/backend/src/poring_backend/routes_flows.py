@@ -1,7 +1,7 @@
 """The MW2 flow editor's engine: COMPUTATION ONLY (docs/planning/mw2-block-editor.md section 5).
 
     GET  /flows/catalogue[?client=<L2 build>]   blocks, sensors, verification badges, windows
-    GET  /flows/world?source=&server=&maps=      the pickers' static data (map sheets)
+    GET  /flows/world?source=&server=&maps=      the pickers' static data (map sheets, labels)
     GET  /flows/sample                           the committed SYNTHETIC sample flow (IR JSON)
     POST /flows/lint      {flow, world}          MW1's linter (layers 1-3), findings by node
     POST /flows/simulate  {flow, world, scenario}  the trace (poring_flow.trace): no game
@@ -129,18 +129,21 @@ def _flow(request: Request, env: Envelope) -> Any:
         raise _fail(request, 422, "invalid_flow", errors=e.messages[:50]) from None
 
 
-def _world(state: AppState, flow: Any, source: World) -> Any:
+def _world(state: AppState, flow: Any, source: World) -> tuple[Any, list[str]]:
+    """The static data: the committed synthetic sample's sheets, or the LOCAL KB (data/kb: a
+    generated sheet file, else a sheet built in memory from the extracted L3 data; kbsheet.py)."""
     from poring_flow import editor
-    from poring_flow.sheet import load_world
+    from poring_flow.kbsheet import load_local_world
 
     maps = editor.maps_of(flow)
     if source == "sample":
-        return editor.sample_world(maps)
-    return load_world(flow.target.server, maps, root=_maps_root(state))
+        return editor.sample_world(maps), []
+    world, labels = load_local_world(flow.target.server, maps, _kb_root(state))
+    return world, labels.notes
 
 
-def _maps_root(state: AppState) -> Path:
-    return Path(state.settings.data_dir) / "kb" / "maps"
+def _kb_root(state: AppState) -> Path:
+    return Path(state.settings.data_dir) / "kb"
 
 
 def _resolver(state: AppState, flow: Any) -> Any:
@@ -206,15 +209,17 @@ async def get_world(
     if not KEY.match(server) or len(names) > 20 or not all(MAP_ID.match(m) for m in names):
         raise _fail(request, 422, "invalid_query")
     from poring_flow import editor
-    from poring_flow.sheet import load_world
+    from poring_flow.kbsheet import Labels, load_local_world
 
     def build() -> dict[str, Any]:
-        world = (
-            editor.sample_world(names or None)
-            if source == "sample"
-            else load_world(server, names, root=_maps_root(state))
-        )
+        if source == "sample":
+            world, labels = editor.sample_world(names or None), Labels()
+        else:
+            world, labels = load_local_world(server, names, _kb_root(state))
         doc = editor.world_doc(world)
+        # display text for the keys (local data, never stored in a flow)
+        doc["labels"] = {"npcs": labels.npcs, "options": labels.options}
+        doc["notes"] = labels.notes
         if walk:
             doc["walk"] = {
                 m: rows
@@ -236,9 +241,9 @@ async def post_lint(request: Request, state: AppState = Depends(compute_gate)) -
     from poring_flow import editor
 
     def run() -> dict[str, Any]:
-        return editor.lint_doc(
-            flow, world=_world(state, flow, env.world), resolver=_resolver(state, flow)
-        )
+        world, notes = _world(state, flow, env.world)
+        doc = editor.lint_doc(flow, world=world, resolver=_resolver(state, flow))
+        return {**doc, "world_notes": notes}
 
     return dict(await _compute(request, state, run))
 
@@ -258,8 +263,9 @@ async def post_simulate(
         raise _fail(request, 422, "invalid_scenario", errors=_errors(e)) from None
 
     def run() -> dict[str, Any]:
-        world = _world(state, flow, env.world)
-        lint = editor.lint_doc(flow, world=world, resolver=_resolver(state, flow))
+        world, notes = _world(state, flow, env.world)
+        lint = {**editor.lint_doc(flow, world=world, resolver=_resolver(state, flow)),
+                "world_notes": notes}  # fmt: skip
         result = trace.simulate(flow, world, scenario)
         return {"flow_hash": ir.flow_hash(flow), "trace": result, "lint": lint}
 
