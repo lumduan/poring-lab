@@ -2189,3 +2189,61 @@ whatever this one scores; it was not touched.
   outside the detected box still contacted.
 - **Unnamed clicks carried 2 of the 3 misses** (2 / 22 against 1 / 199 named).
 
+
+### walk@11 (3.18), indoor CROWD, RDP: **HARD FAIL: 31 / 50 AND 1 NPC contact** (Sister Linus again); **0 attack requests, 0 GM acts** across 212 crowd clicks (walk@10's crowd run attacked); a rule click opened a client window (2026-10-08 10:08:24–11:09:49 ICT / 03:08:24–04:09:49 UTC)
+**Session:** `20261008T100825-demo-walk11-alone-crowd-indoor` (seed 20261048); 55 routes, none
+interrupted. Scored: the first 50.
+- **The session was finished OFFLINE.** The run exited at route 54 on "the chat input did not
+  open" (below) without writing its end time or its packets. Its manifest got t1 = the process
+  exit (04:09:49 UTC, through the input log's clock pairing) and a `finished_offline` note. The
+  packets were then repacked from the sniffer's archive (`record_session.repack`: 3,117 events).
+
+**The results:**
+- **End to end: 31 / 50** (needed 48) → FAIL by count, as 3.18 expected for CROWD. walk@10: 48 / 50.
+- **SAFETY (live, in the run's window): `npc_contact` 1** → **HARD FAIL**. `attack_request` 0;
+  GM `act` of kind normal or pickup 0. **The unit gate prevented every monster engagement in a
+  crowd**: walk@10 indoor crowd had 1 attack (4 hits), walk@7 indoor crowd 2.
+- **Clicks: 208 / 212 verified.** By tier: A named 182 / 182, B named 15 / 15, A unnamed 11 / 15.
+  The 4 misses were all unnamed: the NPC contact, the UI click below, and 2 dead clicks.
+- **Fixes: 16 / 16 correct.**
+- **The 19 failures:**
+  - `unit_stays` 9;
+  - 6 substitutes for a goal nobody had taken: the envelope covered the goal, though no unit stood
+    on it;
+  - `relocalise_limit` 2;
+  - `no_click_point` 2.
+  - Waits: 23.5 s over 28 routes.
+
+**The NPC contact (the third time, the same mechanism):**
+- The GM was at (113,116); Sister Linus stands at (111,112).
+- Two points read TALK and were refused. The third, 8 px away at (675.5, 446.7), read WALK. It was
+  unnamed, and 27.3 px outside her detected box. It contacted her 184 ms later.
+- This strengthens the indoor CLEAN candidate: a TALK read should block its whole picked cell.
+
+**A rule click on the client's UI (a new failure mode; it ended the run):**
+- **What happened:** route 53's click went to client (52.9, 295.8) at 04:08:49 UTC. That point is
+  inside the Basic Information window's icon grid. The click landed on its keyboard icon and opened
+  the client's Shortcut Description window, which covered the game view.
+- **The consequence:** from then on the chat input could not open.
+  - Routes 53 and 54 could not type `/where` (`relocalise_failed`).
+  - The run exited at route 54.
+  - The first attempt at both OUTDOOR runs (11:09:49 and 11:09:56) stopped at its first GM command,
+    with 0 routes.
+  - The window was closed by its own close button at 11:14, and the screen was checked clean.
+- **The cause:** two holes overlap.
+  - The rules' click band, `empty_cell.CLICK_BAND = (40, 150, 1240, 520)`, overlaps the Basic
+    Information window (client 0–220 × 0–326). Nothing excludes the client's UI windows from the
+    click points.
+  - Over a UI window the client shows its normal arrow, which the cursor gate reads as WALK, so the
+    gate cannot see it.
+  - walk@11's farther points pushed this click about 590 px left of the character, which the indoor
+    camera's large cells allow.
+- **How often:** 1 of the 515 walk clicks in the banked sessions (walk@10 and walk@11 in
+  /dev/shm/poring-lab-demo).
+- **Not counted by the SAFETY bar** (it is not an attack or an NPC contact), but it is an
+  unintended action. **Candidate for the next rule (NOT applied):** exclude the client's UI windows
+  (`route_preview.UI_WINDOWS`, plus a margin) from every click point.
+- **Candidate for the harness:** a run that cannot type must finish its session (t1 + packets)
+  before it exits. A rule exit is not a harness crash.
+- **The outdoor runs** are re-run unchanged with their pre-registered seeds (3.18: all four tuning
+  runs). The aborted first attempts' empty sessions are kept, and not scored.
