@@ -1217,6 +1217,20 @@ and the refusals it would have caused reported against walk@11's.
 
 **Then** a pilot and a pre-registration as 3.19, all four tuning runs.
 
+**Premise check (offline, 2026-10-08 ~09:40; the live packets of walk@10's four runs and walk@11's
+three pilots; 2,267 monster moves):**
+- **One walk ≤ 7 cells (Chebyshev): HOLDS.** The largest observed displacement is 7.
+- **A stand ≥ 4.0 s after a walk ends: does NOT hold for Porings.** Of the walk-to-walk gaps of
+  monsters we never touched, short ones occur only for Porings: 35 of 1,805 (1.9 %). Lunatic
+  (ai 1): 0 of 81; Drops (ai 2): 0 of 26, too few to tell.
+- Porings are ai 2 (passive LOOTER): a looter may walk to an item on the floor without the
+  random-walk timer.
+- **Consequence:** for Porings, the crowd condition's own monster, the stand guarantee is not a
+  safety bound. Chained walks also break the per-walk cap, so for a looter map the model falls back
+  to walk@11's speed bound. walk@12 as proposed would gain little on crowd routes. **Open for Batt:**
+  a looter-aware model (are items on the floor? the detector has no item class), a different crowd
+  species, or keep walk@11's bound.
+
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
