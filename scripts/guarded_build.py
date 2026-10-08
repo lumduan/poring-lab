@@ -54,6 +54,12 @@ On a breach:
                 dropped, uid 1000, mem == memswap 1g, oom_score_adj 500, 2 CPUs, reads capped at
                 REPLAY_READ_BPS on the root LV. Output: $REPLAY_OUT/<FROM>..<TO>/events.jsonl.
                 Packets stay offline ground truth: nothing here reaches the agent.
+  tables[@<seconds>][=--update-lock]
+                scripts/gen_packet_tables.py under the IO guard (2026-10-08: the generator starts
+                its own throwaway toolchain containers, and a container start can storm the
+                shared disk). Niced; its only options are --update-lock / --accept-drift.
+                Afterwards the sniffer needs `build:sniffer` + `recreate:sniffer` for the new
+                table to be live.
   run:<svc>[@<seconds>]=<command>
                 docker compose --profile <svc> run --rm --no-deps <svc> <command>, killed after
                 <seconds> (default 600), its output's tail printed. ONLY `vision` (check_gpu.py):
@@ -223,6 +229,17 @@ def parse_step(step: str) -> Step:
         if m is None or m.group(1) > m.group(2):
             raise ValueError(f"{step}: expected replay:<YYYYmmddTHH>..<YYYYmmddTHH>[@<seconds>]")
         return Step(kind, [m.group(1), m.group(2)], float(secs or 3600))
+    if step.split("=", 1)[0].split("@", 1)[0] == "tables":
+        head, eq, command = step.partition("=")
+        _, _, secs = head.partition("@")
+        argv = shlex.split(command)
+        if (
+            head not in ("tables", f"tables@{secs}")
+            or (eq and not argv)
+            or any(a not in TABLES_ARGS for a in argv)
+        ):
+            raise ValueError(f"{step}: expected tables[@<seconds>][=--update-lock|--accept-drift]")
+        return Step("tables", [], float(secs or 1800), argv)
     if kind == "cache" or step.startswith("cache@") or step.startswith("cache="):
         head, eq, command = step.partition("=")
         _, _, secs = head.partition("@")
@@ -431,6 +448,15 @@ def cache_cmd(step: Step) -> list[str]:
         "timeout", str(int(step.seconds or 7200)), "nice", "-n", "19", str(CACHE_PY),
         "scripts/build_frame_cache.py", *step.command,
     ]  # fmt: skip
+
+
+TABLES_ARGS = ("--update-lock", "--accept-drift")
+
+
+def tables_cmd(step: Step) -> list[str]:
+    """The packet-table generator, niced; never a shell, never another script (tables: step)."""
+    return ["timeout", str(int(step.seconds or 1800)), "nice", "-n", "19", str(CACHE_PY),
+            "scripts/gen_packet_tables.py", *step.command]  # fmt: skip
 
 
 def cache_env() -> dict[str, str]:
@@ -976,6 +1002,11 @@ def main() -> int:
                 duty=duty_for(step),
             )
             tail = log_path(step.label).read_text(errors="replace").splitlines()[-80:]
+            print("\n".join(f"  | {line}" for line in tail), flush=True)
+        elif step.kind == "tables":
+            ok = run_process(step.label, tables_cmd(step), guard, env=cache_env(),
+                             host=b"scripts/gen_packet_tables.py")  # fmt: skip
+            tail = log_path(step.label).read_text(errors="replace").splitlines()[-20:]
             print("\n".join(f"  | {line}" for line in tail), flush=True)
         elif step.kind == "cache":
             ok = run_process(step.label, cache_cmd(step), guard, env=cache_env(),

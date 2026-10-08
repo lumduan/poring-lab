@@ -183,6 +183,22 @@ def test_cache_runs_only_the_host_frame_cache_builder(gb: ModuleType) -> None:
     assert gb.cache_env()["PYTHONDONTWRITEBYTECODE"] == "1"
 
 
+def test_tables_runs_only_the_packet_table_generator(gb: ModuleType) -> None:
+    """The packet-table generator under the IO guard (2026-10-08): niced, the generator only,
+    with its two options at most."""
+    step = gb.parse_step("tables@900=--update-lock")
+    assert (step.kind, step.seconds, step.label) == ("tables", 900.0, "tables")
+    assert gb.tables_cmd(step) == [
+        "timeout", "900", "nice", "-n", "19", str(gb.CACHE_PY), "scripts/gen_packet_tables.py",
+        "--update-lock",
+    ]  # fmt: skip
+    assert gb.parse_step("tables").command == [] and gb.parse_step("tables").seconds == 1800.0
+    for refused in ("tables=", "tables=--x", "tables=--update-lock; id", "tables@60=$(id)",
+                    "tablesx", "tables:x"):  # fmt: skip
+        with pytest.raises(ValueError):
+            gb.parse_step(refused)
+
+
 def test_a_target_image_tag_never_becomes_a_log_directory(gb: ModuleType) -> None:
     """target:<svc>:<stage>:poring-lab/<x>:local put a `/` into the log name and the step crashed
     before docker ran (2026-10-03)."""
