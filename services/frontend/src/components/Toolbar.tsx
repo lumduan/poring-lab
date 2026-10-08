@@ -1,5 +1,6 @@
 "use client";
 
+import { hudToggle } from "@/lib/hud";
 import { TOOLBAR, type KeyStep, type ToolbarKey } from "@/lib/keys";
 import type { ViewMode } from "@/lib/view";
 import { watchToggle } from "@/lib/watch";
@@ -12,6 +13,9 @@ type Props = {
   /** Watch only: this tab forwards no input (Batt, 2026-10-07). */
   watchOnly: boolean;
   onWatchOnlyChange: (on: boolean) => void;
+  /** The operator HUD: shown in this tab only, off on every load (Batt, 2026-10-08). */
+  hud: boolean;
+  onHudChange: (on: boolean) => void;
   onKeys: (steps: KeyStep[]) => void;
   onReleaseAll: () => void;
   onModeChange: (mode: ViewMode) => void;
@@ -27,6 +31,8 @@ const secretOn =
   "rounded-md border border-red-500 bg-red-900/60 px-2.5 py-1 text-sm font-semibold text-red-100 hover:bg-red-900 disabled:opacity-40";
 const watchOn =
   "rounded-md border border-amber-400 bg-amber-500 px-2.5 py-1 text-sm font-semibold text-neutral-950 hover:bg-amber-400";
+const hudOn =
+  "rounded-md border border-fuchsia-400 bg-fuchsia-900/60 px-2.5 py-1 text-sm font-semibold text-fuchsia-100 hover:bg-fuchsia-900";
 
 export default function Toolbar({
   disabled,
@@ -34,6 +40,8 @@ export default function Toolbar({
   secret,
   watchOnly,
   onWatchOnlyChange,
+  hud,
+  onHudChange,
   onKeys,
   onReleaseAll,
   onModeChange,
@@ -84,6 +92,15 @@ export default function Toolbar({
         onClick={() => onWatchOnlyChange(!watchOnly)}
       >
         {watchToggle(watchOnly).label}
+      </button>
+      <button
+        type="button"
+        className={hud ? hudOn : button}
+        aria-pressed={hud}
+        title={hudToggle(hud).title}
+        onClick={() => onHudChange(!hud)}
+      >
+        {hudToggle(hud).label}
       </button>
       <span className="mx-1 h-5 w-px bg-neutral-700" aria-hidden />
       <button

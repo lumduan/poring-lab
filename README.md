@@ -161,6 +161,10 @@ Open **http://192.168.1.13:3000** (`HOST_LAN_IP`). What it gives you:
   (amber, dashed), the goal (a ring) and the next click point (a crosshair) are drawn over the
   stream. It is display only (a `RoutePreview` the backend relays like detections, never to the mux),
   and fades after a few seconds.
+- **Operator HUD** (2026-10-08; the **HUD** toolbar toggle, per tab, off on every load): the rule's
+  detector boxes (class, confidence, distance in cells), its locked target and countdown, the work
+  zone, the walk vector, counters, and a short plain-words log in a panel under the stream. Display
+  only (an `OperatorHud` the backend relays to viewers, never to the mux); see docs/phase4-ui.md.
 - **Header:** mode switch (the same colours) and ASSIST lease. **Panel:** stats. A banner shows if
   the stream or RDP is down, and when bot typing was just refused because the game window was not
   in front.

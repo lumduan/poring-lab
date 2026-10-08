@@ -4,7 +4,7 @@
  * This interface was referenced by `PoringProtocol`'s JSON-Schema
  * via the `definition` "AgentToBackend".
  */
-export type AgentToBackend = AgentHello | AgentInput | Detections | RoutePreview | Ping;
+export type AgentToBackend = AgentHello | AgentInput | Detections | RoutePreview | OperatorHud | Ping;
 /**
  * This interface was referenced by `PoringProtocol`'s JSON-Schema
  * via the `definition` "InputEvent".
@@ -27,7 +27,8 @@ export type Mode = "HUMAN" | "BOT" | "ASSIST";
  * This interface was referenced by `PoringProtocol`'s JSON-Schema
  * via the `definition` "BackendToBrowser".
  */
-export type BackendToBrowser = FrameMeta | Status | Detections | RoutePreview | Pong | PasteResult | ErrorReply;
+export type BackendToBrowser =
+  FrameMeta | Status | Detections | RoutePreview | OperatorHud | Pong | PasteResult | ErrorReply;
 /**
  * This interface was referenced by `PoringProtocol`'s JSON-Schema
  * via the `definition` "BrowserToBackend".
@@ -538,6 +539,234 @@ export interface RoutePoint {
   kind: "start" | "waypoint" | "goal" | "click" | "feet";
   x: number;
   y: number;
+}
+/**
+ * The operator HUD (Batt 2026-10-08, docs/phase4-ui.md): what the rule saw and decided, drawn
+ * for the human over the stream on its own canvas -- detector boxes with class, confidence and
+ * distance in CELLS, the locked target with its countdown, the work zone, the walk vector, a
+ * short plain-words log and counters. DISPLAY ONLY, exactly like RoutePreview: the backend relays
+ * it to viewers, never to the mux, never into the input log; it carries no input. A console
+ * shows it only while its per-tab HUD toggle is on (off on every load), and drops it after
+ * ttl_ms (0 clears at once).
+ *
+ * This interface was referenced by `PoringProtocol`'s JSON-Schema
+ * via the `definition` "OperatorHud".
+ */
+export interface OperatorHud {
+  counters: HudCounters;
+  /**
+   * Frame this message refers to or was produced from; -1 means none.
+   */
+  frame_id: number;
+  label: string;
+  lock: HudLock | null;
+  /**
+   * @maxItems 12
+   */
+  log:
+    | []
+    | [string]
+    | [string, string]
+    | [string, string, string]
+    | [string, string, string, string]
+    | [string, string, string, string, string]
+    | [string, string, string, string, string, string]
+    | [string, string, string, string, string, string, string]
+    | [string, string, string, string, string, string, string, string]
+    | [string, string, string, string, string, string, string, string, string]
+    | [string, string, string, string, string, string, string, string, string, string]
+    | [string, string, string, string, string, string, string, string, string, string, string]
+    | [string, string, string, string, string, string, string, string, string, string, string, string];
+  /**
+   * Sender's monotonic clock, ns (see module docstring).
+   */
+  t_mono_ns: number;
+  ttl_ms: number;
+  type: "operator_hud";
+  /**
+   * @maxItems 64
+   */
+  units: HudUnit[];
+  walk: HudWalk | null;
+  zone: HudZone | null;
+}
+/**
+ * Units in view and the detector's rate (frames per second; null when unknown).
+ *
+ * This interface was referenced by `PoringProtocol`'s JSON-Schema
+ * via the `definition` "HudCounters".
+ */
+export interface HudCounters {
+  det_fps: number | null;
+  units: number;
+}
+/**
+ * The rule's locked target: a unit of this message by ``index``, or by track ``id`` (a lock
+ * may outlive its unit's detection). ``lock_remaining_ms`` counts down from this message.
+ *
+ * This interface was referenced by `PoringProtocol`'s JSON-Schema
+ * via the `definition` "HudLock".
+ */
+export interface HudLock {
+  id: number | null;
+  index: number | null;
+  lock_remaining_ms: number;
+}
+/**
+ * One detected unit as the rule saw it. ``dist_cells`` is the Chebyshev distance in CELLS from
+ * our cell to the cell under the unit's feet, computed by the agent from its camera model and
+ * the client's picking (never screen px); null when no cell could be picked.
+ *
+ * This interface was referenced by `PoringProtocol`'s JSON-Schema
+ * via the `definition` "HudUnit".
+ */
+export interface HudUnit {
+  box: HudRect;
+  cls: string;
+  conf: number;
+  dist_cells: number | null;
+  foot: HudPoint;
+  /**
+   * A track id, if any.
+   */
+  id: number | null;
+}
+/**
+ * A rectangle on the desktop, normalized to [0, 1] (top-left x, y; width, height).
+ *
+ * This interface was referenced by `PoringProtocol`'s JSON-Schema
+ * via the `definition` "HudRect".
+ */
+export interface HudRect {
+  h: number;
+  w: number;
+  x: number;
+  y: number;
+}
+/**
+ * A point on the desktop, normalized to [0, 1] like a detection box.
+ *
+ * This interface was referenced by `PoringProtocol`'s JSON-Schema
+ * via the `definition` "HudPoint".
+ */
+export interface HudPoint {
+  x: number;
+  y: number;
+}
+/**
+ * The walk vector: the destination cell, a short text, and (when on screen) the vector from
+ * our feet (``start``) to the destination (``end``).
+ *
+ * This interface was referenced by `PoringProtocol`'s JSON-Schema
+ * via the `definition` "HudWalk".
+ */
+export interface HudWalk {
+  dest: HudCell | null;
+  end: HudPoint | null;
+  start: HudPoint | null;
+  text: string;
+}
+/**
+ * A map cell (the rules reason in cells).
+ *
+ * This interface was referenced by `PoringProtocol`'s JSON-Schema
+ * via the `definition` "HudCell".
+ */
+export interface HudCell {
+  x: number;
+  y: number;
+}
+/**
+ * The work zone: the game area minus the client's UI windows (``exclude``).
+ *
+ * This interface was referenced by `PoringProtocol`'s JSON-Schema
+ * via the `definition` "HudZone".
+ */
+export interface HudZone {
+  area: HudRect;
+  /**
+   * @maxItems 16
+   */
+  exclude:
+    | []
+    | [HudRect]
+    | [HudRect, HudRect]
+    | [HudRect, HudRect, HudRect]
+    | [HudRect, HudRect, HudRect, HudRect]
+    | [HudRect, HudRect, HudRect, HudRect, HudRect]
+    | [HudRect, HudRect, HudRect, HudRect, HudRect, HudRect]
+    | [HudRect, HudRect, HudRect, HudRect, HudRect, HudRect, HudRect]
+    | [HudRect, HudRect, HudRect, HudRect, HudRect, HudRect, HudRect, HudRect]
+    | [HudRect, HudRect, HudRect, HudRect, HudRect, HudRect, HudRect, HudRect, HudRect]
+    | [HudRect, HudRect, HudRect, HudRect, HudRect, HudRect, HudRect, HudRect, HudRect, HudRect]
+    | [HudRect, HudRect, HudRect, HudRect, HudRect, HudRect, HudRect, HudRect, HudRect, HudRect, HudRect]
+    | [HudRect, HudRect, HudRect, HudRect, HudRect, HudRect, HudRect, HudRect, HudRect, HudRect, HudRect, HudRect]
+    | [
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect
+      ]
+    | [
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect
+      ]
+    | [
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect
+      ]
+    | [
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect,
+        HudRect
+      ];
 }
 /**
  * Round-trip probe; its ``t_mono_ns`` comes back verbatim as ``Pong.echo_t_mono_ns``.

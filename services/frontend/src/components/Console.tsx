@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import Banner from "@/components/Banner";
 import FilesPanel from "@/components/FilesPanel";
+import HudCanvas from "@/components/HudCanvas";
+import HudPanel from "@/components/HudPanel";
 import ModeSwitch from "@/components/ModeSwitch";
 import OverlayCanvas from "@/components/OverlayCanvas";
 import PacketTimeline from "@/components/PacketTimeline";
@@ -13,6 +15,7 @@ import StatsPanel, { EMPTY_STATS, type Links, type Stats } from "@/components/St
 import StreamCanvas from "@/components/StreamCanvas";
 import Toolbar from "@/components/Toolbar";
 import { statusWatch } from "@/lib/banner";
+import type { HudFrame } from "@/lib/hud";
 import { HeldKeys, type KeyStep } from "@/lib/keys";
 import {
   browserNowNs,
@@ -84,6 +87,11 @@ export default function Console({ backendUrl }: Props) {
   // reload always brings instant takeover back.
   const [watchOnly, setWatchOnlyState] = useState(false);
   const watchOnlyRef = useRef(false);
+  // The operator HUD (Batt, 2026-10-08): display only, per tab, off on every load. While off,
+  // its messages are dropped on arrival.
+  const [hudOn, setHudOnState] = useState(false);
+  const hudOnRef = useRef(false);
+  const [hud, setHud] = useState<HudFrame | null>(null);
   const pasteIdRef = useRef(0);
   // Phase 0 console knob, pushed by the backend in Status (docs/phase0-latency.md).
   const paintModeRef = useRef<"decode" | "raf">("decode");
@@ -220,6 +228,9 @@ export default function Console({ backendUrl }: Props) {
           if (msg.live) liveRouteRef.current = pushLive(liveRouteRef.current, msg); // world-anchored
           else setRoute(msg);
         }
+        else if (msg?.type === "operator_hud") {
+          if (hudOnRef.current) setHud({ msg, at: performance.now() }); // display only
+        }
         else if (msg?.type === "error") showDropped(msg);
       },
       onBinary: (blob) => {
@@ -336,6 +347,12 @@ export default function Console({ backendUrl }: Props) {
     setWatchOnlyState(on);
   };
 
+  const setHudOn = (on: boolean) => {
+    hudOnRef.current = on;
+    setHudOnState(on);
+    if (!on) setHud(null); // turned off: nothing kept, nothing drawn
+  };
+
   const stamp = () => ({ t_mono_ns: browserNowNs(), frame_id: frameIdRef.current });
 
   const setMode = (mode: Mode) => send({ type: "set_mode", ...stamp(), mode });
@@ -432,6 +449,8 @@ export default function Console({ backendUrl }: Props) {
         secret={status?.human_secret ?? false}
         watchOnly={watchOnly}
         onWatchOnlyChange={setWatchOnly}
+        hud={hudOn}
+        onHudChange={setHudOn}
         onKeys={sendKeys}
         onReleaseAll={releaseAll}
         onModeChange={setViewMode}
@@ -467,7 +486,9 @@ export default function Console({ backendUrl }: Props) {
           width={frameSize.width}
           height={frameSize.height}
         />
+        {hudOn && <HudCanvas hud={hud} width={frameSize.width} height={frameSize.height} />}
       </StreamCanvas>
+      {hudOn && <HudPanel hud={hud} />}
       <div className="grid gap-3 lg:grid-cols-2">
         <details className="rounded-md border border-neutral-800 p-3" open>
           <summary className="cursor-pointer text-sm font-medium">Paste to Windows</summary>

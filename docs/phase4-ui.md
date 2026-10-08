@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [demonstrations.md, knowledge/README.md, adr/0011-ui-anchor-map.md, adr/0012-locale-agnostic-ui.md, adr/0015-phase4-planner-linter-executor.md, phase2-plan.md]
-next_action: "walk@11 is decided (demonstrations.md verdict: 0/4, safe against monsters; next = walk@12 with Batt's three rules). The live route preview is anchored to the measured feet and camera (RA2 style; the stop jumps are being fixed). The OPERATOR HUD below is PROPOSED (Batt 2026-10-08), not built. S2 re-tests (where@2, walk outdoor); NPC/shop decoders for wave 3."
+next_action: "walk@11 is decided (demonstrations.md verdict: 0/4, safe against monsters; next = walk@12 with Batt's three rules). The live route preview is anchored to the measured feet and camera (RA2 style; the stop jumps are being fixed). The OPERATOR HUD below is BUILT (code + tests, 2026-10-08; live only after the guarded backend restart; no rule sends it yet). S2 re-tests (where@2, walk outdoor); NPC/shop decoders for wave 3."
 ---
 
 # Phase 4 UI: the example workflow's windows, shortcuts and NPCs
@@ -109,7 +109,7 @@ as the `npc` class.
 | nav.read_position | the minimap readout (T0 templates restored); indoors and anywhere: the client's `/where` (where_fix v2) | – | read_position@1 (minimap) to do; **where@2 RDP PASS 48/50 indoor, 50/50 outdoor, 0 WRONG** (2026-10-07); S2 to do |
 | vitals.read | the basic-info bars (anchor map) | – | – |
 
-## The operator HUD (PROPOSED, Batt 2026-10-08) — display-only, a console toggle
+## The operator HUD (BUILT 2026-10-08, deploy pending the backend restart; proposed by Batt 2026-10-08) — display-only, a console toggle
 **Provenance:** ideas only. Batt shared a screen recording of another RO bot's debug view: its
 origin, server and licence are unknown. No code, assets or screenshots were copied into the repo.
 
@@ -132,4 +132,67 @@ carries no input (protocol), exactly as `route_preview`:
 - A new protocol message means `gen_protocol.sh` plus a backend restart (a market-closed window).
 - **Distances in cells** come from our own camera model and picking, never screen px. The rules
   reason in cells.
+
+### Built (2026-10-08): the message, the console toggle, the sender
+**Status:** code + tests. **Not live** until the guarded backend restart
+(`python3 scripts/guarded_build.py --sustain 30 --spike 25 restart:backend@30`): until then the
+running backend does not know the message, refuses it, and answers the sender with an ErrorReply.
+`ro_agent.Agent` STOPS on an error reply. ⇒ **no rule may send the HUD before that restart.** No
+walk rule sends it yet; wiring one in (walk@12) is the next step.
+
+**The message** `OperatorHud` (`type: "operator_hud"`, `poring_env/protocol.py`; generated into
+`protocol.schema.json` and `protocol.gen.ts`). Every list and string is bounded; normalized means
+over the desktop, like a detection box:
+
+| field | content | bound |
+|---|---|---|
+| `units[]` | `cls`, `conf`, `box` {x, y, w, h}, `foot` {x, y}, `dist_cells` (Chebyshev, CELLS; null = no cell picked), optional track `id` | ≤ 64 units; `cls` ≤ 32 chars; `dist_cells` 0 … 4096 |
+| `lock` | `index` (into `units`) or `id`, and `lock_remaining_ms`, counted down from the message's receipt | index < 64; ≤ 60 000 ms |
+| `zone` | `area` (the game area) and `exclude[]` (the client's UI windows) | ≤ 16 windows |
+| `walk` | `dest` cell {x, y}, `text`, and the on-screen vector `start` (our feet) → `end` | text ≤ 96 chars; cells 0 … 4096 |
+| `log[]` | the rule's last decisions in plain words, oldest first | ≤ 12 lines, each ≤ 96 printable chars (no control characters, so no line breaks) |
+| `counters` | `units` (in view, all of them, not only those drawn) and `det_fps` | units ≤ 512; fps ≤ 1000 |
+| `label`, `ttl_ms` | the rule's name; how long the console shows it (0 clears at once) | ≤ 64 chars; ≤ 60 000 ms, default 1500 |
+| `t_mono_ns`, `frame_id` | as every message | – |
+
+**Viewer-only, never the mux** (`routes_internal.py`): `/internal/agent` relays it to viewers with
+`Detections` and `RoutePreview`. Nothing else happens to it: no mux, no injector, no input log, no
+reply to the agent. Pinned by tests:
+- `test_secret_input.py::test_an_agent_operator_hud_reaches_viewers_and_never_the_mux_or_the_input_log`.
+  The viewer gets the message unchanged and the agent gets no reply. The injector gets nothing
+  from it, and the input log has no trace of it. The input log is proven live in the same test by
+  a human key that IS logged (the positive case).
+- `test_protocol.py`: the message reaches viewers and comes in only on the agent channel; it
+  reaches no input type; every bound above refuses one past it.
+
+**The console** (`components/HudCanvas.tsx`, `HudPanel.tsx`; pure math in `lib/hud.ts`, unit tested
+by `lib/hud.test.ts`):
+- **The toggle:** "HUD" in the toolbar, per tab, **off on every load**, like "Watch only". While off,
+  the tab drops the messages on arrival. It sends nothing in either state.
+- **The canvas**, its own, over the stream like the route preview:
+  - boxes coloured by class, labelled `monster 81% 4 cells`;
+  - the locked target bracketed in magenta, with `LOCK 1.3 s` counting down;
+  - the work zone dashed, the UI windows dimmed;
+  - the walk vector as an arrow, with its text;
+  - the counters bottom right.
+- **The panel** under the stream: the rule's label, counters, walk text, lock and the log.
+  - It keeps the last message after its ttl, marked stale, so a stopped rule's last words stay
+    readable.
+- **Text only:** every string is drawn with canvas `fillText` or a React text node, never as markup.
+  `lib/hud.ts` strips control characters again on the console side. No new script source: the
+  nonce CSP is untouched.
+
+**The sender** (`scripts/operator_hud.py`, tested by `services/backend/tests/test_operator_hud.py`):
+- `HudSender(agent, region, desktop, label)`, then `.note(line)` and `.send(boxes=…, cells=…,
+  lock_=…, walk=…, det_ms=…)`.
+- `unit_cells()` gives each unit's cell from `poring_dataset.picking`, else the camera's nearest
+  flat cell. That is the unit gate's own rule, so the HUD shows the cells the gate reasoned with.
+- The plain-words lines: `line_walking`, `line_refused`, `line_detected`, `line_gate`.
+- **Never a reason to stop:**
+  - every error is swallowed;
+  - every field is clamped to the bounds above;
+  - each message is checked with the backend's own parser before it leaves, and one that fails is
+    never sent (a refused HUD would come back as an ErrorReply, and `ro_agent.Agent` stops on
+    those);
+  - at most ~10 messages a second, and a skipped message's log lines ride on the next one.
 

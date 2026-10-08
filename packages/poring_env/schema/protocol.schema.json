@@ -96,6 +96,7 @@
           "agent_hello": "#/$defs/AgentHello",
           "agent_input": "#/$defs/AgentInput",
           "detections": "#/$defs/Detections",
+          "operator_hud": "#/$defs/OperatorHud",
           "ping": "#/$defs/Ping",
           "route_preview": "#/$defs/RoutePreview"
         },
@@ -113,6 +114,9 @@
         },
         {
           "$ref": "#/$defs/RoutePreview"
+        },
+        {
+          "$ref": "#/$defs/OperatorHud"
         },
         {
           "$ref": "#/$defs/Ping"
@@ -150,6 +154,7 @@
           "detections": "#/$defs/Detections",
           "error": "#/$defs/ErrorReply",
           "frame": "#/$defs/FrameMeta",
+          "operator_hud": "#/$defs/OperatorHud",
           "paste_result": "#/$defs/PasteResult",
           "pong": "#/$defs/Pong",
           "route_preview": "#/$defs/RoutePreview",
@@ -169,6 +174,9 @@
         },
         {
           "$ref": "#/$defs/RoutePreview"
+        },
+        {
+          "$ref": "#/$defs/OperatorHud"
         },
         {
           "$ref": "#/$defs/Pong"
@@ -822,6 +830,293 @@
       "title": "FrameTiming",
       "type": "object"
     },
+    "HudCell": {
+      "additionalProperties": false,
+      "description": "A map cell (the rules reason in cells).",
+      "properties": {
+        "x": {
+          "maximum": 4096,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "y": {
+          "maximum": 4096,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "title": "HudCell",
+      "type": "object"
+    },
+    "HudCounters": {
+      "additionalProperties": false,
+      "description": "Units in view and the detector's rate (frames per second; null when unknown).",
+      "properties": {
+        "det_fps": {
+          "anyOf": [
+            {
+              "maximum": 1000.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "units": {
+          "default": 0,
+          "maximum": 512,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "units",
+        "det_fps"
+      ],
+      "title": "HudCounters",
+      "type": "object"
+    },
+    "HudLock": {
+      "additionalProperties": false,
+      "description": "The rule's locked target: a unit of this message by ``index``, or by track ``id`` (a lock\nmay outlive its unit's detection). ``lock_remaining_ms`` counts down from this message.",
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "maximum": 2147483647,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "index": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 64,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "lock_remaining_ms": {
+          "maximum": 60000,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "index",
+        "id",
+        "lock_remaining_ms"
+      ],
+      "title": "HudLock",
+      "type": "object"
+    },
+    "HudPoint": {
+      "additionalProperties": false,
+      "description": "A point on the desktop, normalized to [0, 1] like a detection box.",
+      "properties": {
+        "x": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "y": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "title": "HudPoint",
+      "type": "object"
+    },
+    "HudRect": {
+      "additionalProperties": false,
+      "description": "A rectangle on the desktop, normalized to [0, 1] (top-left x, y; width, height).",
+      "properties": {
+        "h": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "w": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "x": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "y": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "w",
+        "h"
+      ],
+      "title": "HudRect",
+      "type": "object"
+    },
+    "HudUnit": {
+      "additionalProperties": false,
+      "description": "One detected unit as the rule saw it. ``dist_cells`` is the Chebyshev distance in CELLS from\nour cell to the cell under the unit's feet, computed by the agent from its camera model and\nthe client's picking (never screen px); null when no cell could be picked.",
+      "properties": {
+        "box": {
+          "$ref": "#/$defs/HudRect"
+        },
+        "cls": {
+          "maxLength": 32,
+          "minLength": 1,
+          "type": "string"
+        },
+        "conf": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "dist_cells": {
+          "anyOf": [
+            {
+              "maximum": 4096,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "foot": {
+          "$ref": "#/$defs/HudPoint"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "maximum": 2147483647,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A track id, if any."
+        }
+      },
+      "required": [
+        "cls",
+        "conf",
+        "box",
+        "foot",
+        "dist_cells",
+        "id"
+      ],
+      "title": "HudUnit",
+      "type": "object"
+    },
+    "HudWalk": {
+      "additionalProperties": false,
+      "description": "The walk vector: the destination cell, a short text, and (when on screen) the vector from\nour feet (``start``) to the destination (``end``).",
+      "properties": {
+        "dest": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HudCell"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "end": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HudPoint"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "start": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HudPoint"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "text": {
+          "default": "",
+          "maxLength": 96,
+          "pattern": "^[^\\x00-\\x1f\\x7f]*$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "dest",
+        "text",
+        "start",
+        "end"
+      ],
+      "title": "HudWalk",
+      "type": "object"
+    },
+    "HudZone": {
+      "additionalProperties": false,
+      "description": "The work zone: the game area minus the client's UI windows (``exclude``).",
+      "properties": {
+        "area": {
+          "$ref": "#/$defs/HudRect"
+        },
+        "exclude": {
+          "items": {
+            "$ref": "#/$defs/HudRect"
+          },
+          "maxItems": 16,
+          "type": "array"
+        }
+      },
+      "required": [
+        "area",
+        "exclude"
+      ],
+      "title": "HudZone",
+      "type": "object"
+    },
     "InputAck": {
       "additionalProperties": false,
       "description": "Mux verdict for one AgentInput batch.",
@@ -1064,6 +1359,106 @@
         "y"
       ],
       "title": "MouseMove",
+      "type": "object"
+    },
+    "OperatorHud": {
+      "additionalProperties": false,
+      "description": "The operator HUD (Batt 2026-10-08, docs/phase4-ui.md): what the rule saw and decided, drawn\nfor the human over the stream on its own canvas -- detector boxes with class, confidence and\ndistance in CELLS, the locked target with its countdown, the work zone, the walk vector, a\nshort plain-words log and counters. DISPLAY ONLY, exactly like RoutePreview: the backend relays\nit to viewers, never to the mux, never into the input log; it carries no input. A console\nshows it only while its per-tab HUD toggle is on (off on every load), and drops it after\nttl_ms (0 clears at once).",
+      "properties": {
+        "counters": {
+          "$ref": "#/$defs/HudCounters"
+        },
+        "frame_id": {
+          "default": -1,
+          "description": "Frame this message refers to or was produced from; -1 means none.",
+          "minimum": -1,
+          "type": "integer"
+        },
+        "label": {
+          "default": "",
+          "maxLength": 64,
+          "type": "string"
+        },
+        "lock": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HudLock"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "log": {
+          "items": {
+            "maxLength": 96,
+            "pattern": "^[^\\x00-\\x1f\\x7f]*$",
+            "type": "string"
+          },
+          "maxItems": 12,
+          "type": "array"
+        },
+        "t_mono_ns": {
+          "description": "Sender's monotonic clock, ns (see module docstring).",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "ttl_ms": {
+          "default": 1500,
+          "maximum": 60000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "operator_hud",
+          "default": "operator_hud",
+          "type": "string"
+        },
+        "units": {
+          "items": {
+            "$ref": "#/$defs/HudUnit"
+          },
+          "maxItems": 64,
+          "type": "array"
+        },
+        "walk": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HudWalk"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "zone": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HudZone"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "frame_id",
+        "type",
+        "units",
+        "lock",
+        "zone",
+        "walk",
+        "log",
+        "counters",
+        "label",
+        "ttl_ms"
+      ],
+      "title": "OperatorHud",
       "type": "object"
     },
     "PasteResult": {

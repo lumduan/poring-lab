@@ -15,11 +15,20 @@ from poring_env.protocol import (
     Detections,
     ErrorReply,
     FrameMeta,
+    HudCell,
+    HudCounters,
+    HudLock,
+    HudPoint,
+    HudRect,
+    HudUnit,
+    HudWalk,
+    HudZone,
     InputAck,
     Key,
     Mode,
     MouseButton,
     MouseMove,
+    OperatorHud,
     PasteResult,
     Ping,
     Pong,
@@ -39,6 +48,43 @@ from poring_env.protocol import (
 SCHEMA_FILE = Path(__file__).resolve().parents[1] / "schema" / "protocol.schema.json"
 
 T = 1_000_000_000
+
+# The operator HUD (Batt 2026-10-08): display only, every part filled
+HUD = OperatorHud(
+    t_mono_ns=T,
+    frame_id=4,
+    label="walk@12 route 3",
+    ttl_ms=1200,
+    units=[
+        HudUnit(
+            cls="monster",
+            conf=0.81,
+            box=HudRect(x=0.40, y=0.30, w=0.03, h=0.05),
+            foot=HudPoint(x=0.415, y=0.35),
+            dist_cells=4,
+            id=7,
+        ),
+        HudUnit(
+            cls="npc",
+            conf=0.5,
+            box=HudRect(x=0.6, y=0.3, w=0.02, h=0.06),
+            foot=HudPoint(x=0.61, y=0.36),
+        ),
+    ],
+    lock=HudLock(index=0, id=7, lock_remaining_ms=1800),
+    zone=HudZone(
+        area=HudRect(x=0.05, y=0.08, w=0.89, h=0.8),
+        exclude=[HudRect(x=0.05, y=0.08, w=0.15, h=0.36)],
+    ),
+    walk=HudWalk(
+        dest=HudCell(x=102, y=110),
+        text="walking to (102,110)",
+        start=HudPoint(x=0.5, y=0.48),
+        end=HudPoint(x=0.6, y=0.4),
+    ),
+    log=["detected 2 units", "refused: TALK cell", "walking to (102,110)"],
+    counters=HudCounters(units=2, det_fps=4.5),
+)
 
 BROWSER_TO_BACKEND: list[BaseModel] = [
     MouseMove(t_mono_ns=T, frame_id=7, x=0.25, y=0.5),
@@ -77,6 +123,7 @@ BACKEND_TO_BROWSER: list[BaseModel] = [
         boxes=[Box(x1=0.1, y1=0.2, x2=0.3, y2=0.4, cls="poring", conf=0.9)],
     ),
     Pong(t_mono_ns=T, echo_t_mono_ns=12345),
+    HUD,
     PasteResult(t_mono_ns=T, request_id=1, ok=True, reason="ok", chars=17),
     ErrorReply(t_mono_ns=T, channel="ws_input", reason="missing:key.t_mono_ns", ref_type="key"),
 ]
@@ -89,6 +136,8 @@ AGENT_TO_BACKEND: list[BaseModel] = [
         events=[MouseMove(t_mono_ns=T, frame_id=9, x=0.5, y=0.5)],
     ),
     Detections(t_mono_ns=T, frame_id=9, t_capture_ns=T - 3),
+    HUD,
+    OperatorHud(t_mono_ns=T),  # every part optional: an empty HUD
     Ping(t_mono_ns=T),
 ]
 BACKEND_TO_AGENT: list[BaseModel] = [
@@ -248,3 +297,67 @@ def test_poring_env_never_imports_poring_packets() -> None:
         if "poring_packets" in path.read_text() or "packets" in path.stem
     ]
     assert offenders == []
+
+
+# --- the operator HUD (Batt 2026-10-08): display only, bounded, carries no input ------------------
+
+INPUT_DEFS = {"AgentInput", "MouseMove", "MouseButton", "Wheel", "Key", "ReleaseAll", "SetMode"}
+
+
+def test_the_operator_hud_cannot_reach_any_input_message() -> None:
+    schema = json_schema()
+    reachable = _reachable_defs(schema, schema["$defs"]["OperatorHud"])
+    assert reachable == {
+        "HudCell", "HudCounters", "HudLock", "HudPoint", "HudRect", "HudUnit", "HudWalk", "HudZone"
+    }  # fmt: skip
+    assert not INPUT_DEFS & reachable
+
+
+def test_the_operator_hud_reaches_viewers_and_comes_only_from_the_agent_channel() -> None:
+    schema = json_schema()
+    viewers = _reachable_defs(schema, schema["properties"]["backend_to_browser"])
+    agent_in = _reachable_defs(schema, schema["properties"]["agent_to_backend"])
+    browser_in = _reachable_defs(schema, schema["properties"]["browser_to_backend"])
+    back_to_agent = _reachable_defs(schema, schema["properties"]["backend_to_agent"])
+    assert "OperatorHud" in viewers and "OperatorHud" in agent_in
+    assert "OperatorHud" not in browser_in and "OperatorHud" not in back_to_agent
+    events = _reachable_defs(schema, schema["properties"]["input_event"])
+    assert not {name for name in events if name.startswith("Hud") or name == "OperatorHud"}
+
+
+KEY_EVENT = {"type": "key", "t_mono_ns": 1, "frame_id": -1, "code": "KeyA", "action": "down"}
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"log": ["two\nlines"]},  # a log line is one printable line
+        {"log": ["\x1b[31mred"]},
+        {"log": ["x" * 97]},
+        {"log": ["ok"] * 13},
+        {"label": "x" * 65},
+        {"ttl_ms": 60_001},
+        {"lock": {"index": 64, "id": None, "lock_remaining_ms": 10}},
+        {"lock": {"index": 0, "id": None, "lock_remaining_ms": 60_001}},
+        {"counters": {"units": 513, "det_fps": 1.0}},
+        {"walk": {"dest": {"x": -1, "y": 5}, "text": "", "start": None, "end": None}},
+        {"zone": {"area": {"x": 0, "y": 0, "w": 1.5, "h": 1}, "exclude": []}},
+        {"events": [KEY_EVENT]},  # it carries no input: an extra field is refused
+    ],
+    ids=lambda v: next(iter(v)),
+)
+def test_the_operator_hud_is_bounded(bad: dict[str, Any]) -> None:
+    wire = {**json.loads(HUD.model_dump_json()), **bad}
+    with pytest.raises(ValidationError):
+        parse_agent_to_backend(json.dumps(wire))
+
+
+def test_the_operator_hud_unit_cap_and_its_distances_are_cells() -> None:
+    unit = HUD.units[0].model_dump()
+    with pytest.raises(ValidationError):
+        OperatorHud.model_validate({"t_mono_ns": T, "units": [unit] * 65})
+    OperatorHud.model_validate({"t_mono_ns": T, "units": [unit] * 64})
+    with pytest.raises(ValidationError):  # a cell distance is a whole number of cells
+        HudUnit.model_validate({**unit, "dist_cells": 2.5})
+    with pytest.raises(ValidationError):
+        HudUnit.model_validate({**unit, "dist_cells": -1})

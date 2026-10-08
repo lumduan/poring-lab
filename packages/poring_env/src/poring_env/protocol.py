@@ -470,6 +470,120 @@ class RoutePreview(Message):
     clip: list[RouteRect] = Field(default_factory=list, max_length=16)
 
 
+# --- the operator HUD (display only; Batt 2026-10-08, docs/phase4-ui.md) --------------------------
+
+# One plain-words line: bounded, printable (no control characters, so no line breaks either). The
+# console renders it as TEXT only (canvas fillText / React text nodes), never as markup.
+HudText = Annotated[str, Field(max_length=96, pattern=r"^[^\x00-\x1f\x7f]*$")]
+HUD_MAX_UNITS = 64
+HUD_MAX_LOG = 12
+
+
+class HudPoint(BaseModel):
+    """A point on the desktop, normalized to [0, 1] like a detection box."""
+
+    model_config = _MODEL_CONFIG
+
+    x: NormCoord
+    y: NormCoord
+
+
+class HudRect(BaseModel):
+    """A rectangle on the desktop, normalized to [0, 1] (top-left x, y; width, height)."""
+
+    model_config = _MODEL_CONFIG
+
+    x: NormCoord
+    y: NormCoord
+    w: NormCoord
+    h: NormCoord
+
+
+class HudCell(BaseModel):
+    """A map cell (the rules reason in cells)."""
+
+    model_config = _MODEL_CONFIG
+
+    x: int = Field(ge=0, le=4096)
+    y: int = Field(ge=0, le=4096)
+
+
+class HudUnit(BaseModel):
+    """One detected unit as the rule saw it. ``dist_cells`` is the Chebyshev distance in CELLS from
+    our cell to the cell under the unit's feet, computed by the agent from its camera model and
+    the client's picking (never screen px); null when no cell could be picked."""
+
+    model_config = _MODEL_CONFIG
+
+    cls: str = Field(min_length=1, max_length=32)
+    conf: float = Field(ge=0.0, le=1.0)
+    box: HudRect
+    foot: HudPoint
+    dist_cells: int | None = Field(default=None, ge=0, le=4096)
+    id: int | None = Field(default=None, ge=0, le=2**31 - 1, description="A track id, if any.")
+
+
+class HudLock(BaseModel):
+    """The rule's locked target: a unit of this message by ``index``, or by track ``id`` (a lock
+    may outlive its unit's detection). ``lock_remaining_ms`` counts down from this message."""
+
+    model_config = _MODEL_CONFIG
+
+    index: int | None = Field(default=None, ge=0, lt=HUD_MAX_UNITS)
+    id: int | None = Field(default=None, ge=0, le=2**31 - 1)
+    lock_remaining_ms: int = Field(ge=0, le=60_000)
+
+
+class HudZone(BaseModel):
+    """The work zone: the game area minus the client's UI windows (``exclude``)."""
+
+    model_config = _MODEL_CONFIG
+
+    area: HudRect
+    exclude: list[HudRect] = Field(default_factory=list, max_length=16)
+
+
+class HudWalk(BaseModel):
+    """The walk vector: the destination cell, a short text, and (when on screen) the vector from
+    our feet (``start``) to the destination (``end``)."""
+
+    model_config = _MODEL_CONFIG
+
+    dest: HudCell | None = None
+    text: HudText = ""
+    start: HudPoint | None = None
+    end: HudPoint | None = None
+
+
+class HudCounters(BaseModel):
+    """Units in view and the detector's rate (frames per second; null when unknown)."""
+
+    model_config = _MODEL_CONFIG
+
+    units: int = Field(default=0, ge=0, le=512)
+    det_fps: float | None = Field(default=None, ge=0.0, le=1000.0)
+
+
+class OperatorHud(Message):
+    """The operator HUD (Batt 2026-10-08, docs/phase4-ui.md): what the rule saw and decided, drawn
+    for the human over the stream on its own canvas -- detector boxes with class, confidence and
+    distance in CELLS, the locked target with its countdown, the work zone, the walk vector, a
+    short plain-words log and counters. DISPLAY ONLY, exactly like RoutePreview: the backend relays
+    it to viewers, never to the mux, never into the input log; it carries no input. A console
+    shows it only while its per-tab HUD toggle is on (off on every load), and drops it after
+    ttl_ms (0 clears at once)."""
+
+    type: Literal["operator_hud"] = "operator_hud"
+    units: list[HudUnit] = Field(default_factory=list, max_length=HUD_MAX_UNITS)
+    lock: HudLock | None = None
+    zone: HudZone | None = None
+    walk: HudWalk | None = None
+    log: list[HudText] = Field(default_factory=list, max_length=HUD_MAX_LOG)
+    counters: HudCounters = Field(default_factory=HudCounters)
+    label: str = Field(default="", max_length=64)
+    ttl_ms: int = Field(default=1500, ge=0, le=60_000)
+
+
 # --- agent <-> backend ----------------------------------------------------------------------------
 
 
@@ -524,11 +638,12 @@ type BrowserToBackend = Annotated[
     Field(discriminator="type"),
 ]
 type BackendToBrowser = Annotated[
-    FrameMeta | Status | Detections | RoutePreview | Pong | PasteResult | ErrorReply,
+    FrameMeta | Status | Detections | RoutePreview | OperatorHud | Pong | PasteResult | ErrorReply,
     Field(discriminator="type"),
 ]
 type AgentToBackend = Annotated[
-    AgentHello | AgentInput | Detections | RoutePreview | Ping, Field(discriminator="type")
+    AgentHello | AgentInput | Detections | RoutePreview | OperatorHud | Ping,
+    Field(discriminator="type"),
 ]
 type BackendToAgent = Annotated[Status | InputAck | Pong | ErrorReply, Field(discriminator="type")]
 

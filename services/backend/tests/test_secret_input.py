@@ -20,6 +20,7 @@ from poring_env.protocol import (
     InputEvent,
     Key,
     Mode,
+    Ping,
     SecretInput,
     SetMode,
 )
@@ -242,3 +243,72 @@ def test_an_agent_route_preview_reaches_viewers_and_never_the_mux(
             raise AssertionError("the viewer never got the route preview")
     assert msg["points"][1] == {"x": 0.6, "y": 0.4, "kind": "goal"} and msg["ttl_ms"] == 4000
     assert fake.events == []  # nothing reached the injector
+
+
+def test_an_agent_operator_hud_reaches_viewers_and_never_the_mux_or_the_input_log(
+    lab: tuple[TestClient, RecordingInput], tmp_path: Path
+) -> None:
+    """The operator HUD (Batt, 2026-10-08): display only, relayed like route_preview; the agent
+    gets no reply, the injector nothing, and the input log never records it."""
+    from poring_env.protocol import (
+        AgentHello,
+        HudCounters,
+        HudLock,
+        HudPoint,
+        HudRect,
+        HudUnit,
+        OperatorHud,
+    )
+
+    client, fake = lab
+    unit = HudUnit(
+        cls="monster",
+        conf=0.8,
+        box=HudRect(x=0.4, y=0.3, w=0.03, h=0.05),
+        foot=HudPoint(x=0.415, y=0.35),
+        dist_cells=3,
+    )
+    hud = OperatorHud(
+        t_mono_ns=T,
+        label="walk@12",
+        ttl_ms=1500,
+        units=[unit],
+        lock=HudLock(index=0, lock_remaining_ms=900),
+        log=["detected 1 unit", "walking to (102,110)"],
+        counters=HudCounters(units=1, det_fps=4.0),
+    )
+    hello = AgentHello(t_mono_ns=T, agent_id="t", version="0")
+    # the positive case: a human key goes through the same input log in this test
+    with client.websocket_connect("/ws/input", headers={"origin": ORIGIN}) as human:
+        human.send_text(key("KeyA", "down"))
+        human.send_text(key("KeyA", "up"))
+        for _ in range(200):
+            if len(fake.events) == 2:
+                break
+            time.sleep(0.01)
+    injected = list(fake.events)
+    with (
+        client.websocket_connect("/ws/stream", headers={"origin": ORIGIN}) as viewer,
+        client.websocket_connect("/internal/agent") as ws,
+    ):
+        ws.send_text(hello.model_dump_json())
+        ws.send_text(hud.model_dump_json())
+        for _ in range(400):
+            raw = viewer.receive()  # the stream also carries binary video frames
+            msg = json.loads(raw["text"]) if raw.get("text") else {}
+            if msg.get("type") == "operator_hud":
+                break
+        else:
+            raise AssertionError("the viewer never got the operator HUD")
+        ws.send_text(Ping(t_mono_ns=T + 1).model_dump_json())
+        replies = []
+        while (reply := json.loads(ws.receive_text()))["type"] != "pong":
+            replies.append(reply["type"])
+    assert OperatorHud.model_validate(msg) == hud  # relayed unchanged
+    assert "error" not in replies and "input_ack" not in replies  # no reply to a display message
+    assert [e.code for e in injected if isinstance(e, Key)] == ["KeyA", "KeyA"]
+    assert fake.events == injected  # the HUD added nothing at the injector
+    client.__exit__(None, None, None)
+    on_disk = "".join(p.read_text() for p in tmp_path.rglob("*.jsonl"))
+    assert "KeyA" in on_disk  # the log was live and written ...
+    assert "operator_hud" not in on_disk and "walking to" not in on_disk  # ... and has no HUD

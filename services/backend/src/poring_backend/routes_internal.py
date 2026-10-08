@@ -15,6 +15,7 @@ from poring_env.protocol import (
     AgentInput,
     Detections,
     InputAck,
+    OperatorHud,
     Ping,
     Pong,
     RoutePreview,
@@ -61,7 +62,8 @@ async def ws_agent(ws: WebSocket) -> None:
                         reasons=sorted({d.reason for d in decisions if not d.accepted}),
                     )
                     outbox.offer_control(ack.model_dump_json())
-                case Detections() | RoutePreview():  # display only: relayed, never to the mux
+                case Detections() | RoutePreview() | OperatorHud():
+                    # display only: relayed to viewers, never to the mux, never into the input log
                     state.hub.broadcast_control(msg.model_dump_json())
                 case Ping():
                     pong = Pong(
