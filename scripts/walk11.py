@@ -142,6 +142,24 @@ def observe_frame(frame: Any, w: w5.World, t_ns: int) -> None:
         observe(det.detect(frame), w, t_ns)
 
 
+FARTHER = 4  # walk@11: points beyond seg_max, tried only after the nearer ones are refused
+
+
+def farther_candidates(w: w5.World, path: Sequence[tuple[int, int]], seg_max: int,
+                       band: tuple[int, int, int, int]) -> list[tuple[int, int]]:  # fmt: skip
+    """walk@11 pilot 2: four Porings spawned around us made every point within seg_max fall inside a
+    unit's envelope, and three routes never clicked. Batt's walk@8 rule moves a covered point along
+    the polyline; these are the next FARTHER points (in the click band), after the nearer ones.
+    Each passes the same picking, naming and unit checks."""
+    x0, y0, x1, y1 = band
+    out: list[tuple[int, int]] = []
+    for i in range(seg_max + 3, min(len(path), seg_max + 3 + FARTHER)):
+        u, v = w.project([path[i]])[0]
+        if x0 <= u <= x1 and y0 <= v <= y1:
+            out.append(path[i])
+    return out
+
+
 def unit_check(pr: w6.Prober, w: w5.World, u: float, v: float) -> tuple[bool, dict[str, Any]]:
     """walk@11's click-instant gate: the decision frame NOW, the detector, the envelope."""
     det = UNITS["detector"]
@@ -563,7 +581,9 @@ def walk_route(pr: w6.Prober, w: w5.World, goal: tuple[int, int], band: tuple[in
             preview(pr.agent, w, w.position, [target], None, label)
             return done(arrived_belief=True)
         assert path is not None
-        cands = click_candidates(w, path, seg_max, band)
+        cands = click_candidates(w, path, seg_max, band) + farther_candidates(
+            w, path, seg_max, band
+        )
         if not cands:
             return done(decline="out_of_band")
         clicked = replanned = False

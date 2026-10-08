@@ -307,3 +307,24 @@ def test_no_detector_means_no_click(mods: Any) -> None:
     w11.UNITS["detector"] = None
     ok, info = w11.unit_check(None, None, 0.0, 0.0)
     assert ok is False and info == {"why": "no_detector"}
+
+
+def test_when_every_near_point_is_in_an_envelope_a_farther_point_on_the_route_is_used(
+    fake: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """walk@11 pilot 2: Porings spawned around us covered every point within seg_max; the click
+    moves farther along the polyline (Batt's walk@8 rule) instead of waiting it out."""
+    w11, _, _ = fake
+    s = sim(fake, (10, 18))
+    near = {(11, 18), (12, 18), (13, 18), (14, 18)}
+
+    def check(pr: Any, w: Any, u: float, v: float) -> tuple[bool, dict[str, Any]]:
+        cell = s.client.cell_under(round(u) + 80, round(v) + 77)
+        return cell not in near, {"cell": list(cell)}
+
+    monkeypatch.setattr(w11, "unit_check", check)
+    did = w11.walk_route(s.pr, s.w, (18, 18), BAND, 2, lambda *a: None, ring(),
+                         relocalise=fix_to_truth(s, []))  # fmt: skip
+    assert did.get("arrived_belief") and s.client.true == (18, 18), did
+    clicked = [tuple(e["end"]) for e in did["events"] if e.get("clicked")]
+    assert clicked and not set(clicked) & near and clicked[0][0] >= 15
