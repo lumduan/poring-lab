@@ -326,6 +326,47 @@ def test_a_walk7_substitute_counts_only_when_the_goal_was_taken(dv: ModuleType) 
     assert (free.status, free.cause) == ("fail", "substituted a goal nobody had taken")
 
 
+def test_a_walk13_npc_substitute_counts_only_with_an_npc_beside_the_goal(dv: ModuleType) -> None:
+    """3.24 change 3: a route that ends on its NPC-adjacent substitute is a success only if the
+    SERVER shows a drawn NPC within one cell of the goal when the rule gave it up; a monster there
+    does not count, and the plain walk@7 substitute path is not taken."""
+    s = 10**9
+
+    def route() -> DemoRecord:
+        return DemoRecord(
+            session=SID, actor="rule:walk@13", t_mono_ns=T, t_done_ns=T + 9 * s, rule="walk@13",
+            cue="route", action=Action(type="walk", intended=Intended(kind="route",
+                                                                      cell=(110, 120))),
+            outcome={"status": "pending", "evidence": {  # type: ignore[arg-type]
+                "substitute": None, "npc_substitute": [108, 120],
+                "events": [{"npc_substitute": [108, 120], "for": [110, 120], "t": T + 4 * s}]}},
+        )  # fmt: skip
+
+    base = [
+        {"t_mono_ns": T - s, "type": "map_change", "map": "m.gat", "x": 100, "y": 120},
+        {"t_mono_ns": T + 2 * s, "type": "self_move", "x0": 100, "y0": 120, "x1": 108, "y1": 120,
+         "server_tick": (T + 2 * s) // 10**6 % 2**32},
+    ]  # fmt: skip
+
+    def unit(objtype: int, job: int) -> dict[str, object]:
+        return {"t_mono_ns": T + s, "type": "entity_appear", "gid": 88, "objtype": objtype,
+                "job": job, "x": 111, "y": 120, "x1": None, "y1": None, "dir": "s",
+                "heading": 0, "kind": "stand", "speed": 200, "effect_state": 0, "char_id": 0,
+                "name": "x", "move_start_tick": None, "server": "map"}  # fmt: skip
+
+    aids = {"gm": 2000002, "player": 2000001}
+    npc = dv.judge(route(), [*base, unit(6, 70)], aids, None)
+    assert (npc.status, npc.cause, npc.evidence["npcs"]) == (
+        "success",
+        "npc_substitute: an NPC beside the goal",
+        [88],
+    )
+    monster = dv.judge(route(), [*base, unit(5, 1002)], aids, None)
+    assert (monster.status, monster.cause) == ("fail", "npc_substitute with no NPC beside the goal")
+    hidden = dv.judge(route(), [*base, unit(6, 111)], aids, None)  # a class drawn as nothing
+    assert hidden.status == "fail"
+
+
 def test_a_walk8_portal_route_must_end_on_the_other_map(dv: ModuleType) -> None:
     s = 10**9
     rec = DemoRecord(

@@ -1802,7 +1802,123 @@ HUD screenshot):
   - A sign whose NPC would stand off-screen or under a UI window is kept on its shape.
 - The HUD scene runs the new finder since 20:40 (a display-only restart of `hud_scene.py`).
 
-### walk@13 — DESIGN PROPOSAL (direction APPROVED by Batt 2026-10-08 ~17:00; NOT yet pre-registered: pre-registered before any run)
+**Signboard positive case: RESULT** (2026-10-08 21:11–21:17 ICT / 14:11–14:17 UTC, session
+`20261008T211125-demo-idle1-sign`, seed 20261067).
+- **The setup:** the wedding NPC's sign, found live by the shape finder at the same place in all 20
+  trials (bar `[630, 463, 758, 486]`).
+- **Clicks:** at u = the bar's 66 %, after the two-motion hover. The cursor read WALK twice in every
+  trial: over a sign, the client shows its plain arrow.
+
+| click point | clicked | walked (a move request within 2 s) |
+|---|---|---|
+| inside the bar | 5 | **0** |
+| 2.5 px below the bar's bottom outline | 5 | **0** |
+| 5 px below | 5 | **0** |
+| 10 px below | 5 | **5** |
+
+- **The hit area's edge**, as pre-registered (the smallest distance that walks in 5 / 5): **10 px**
+  below the outline. The sign swallows a click at least 5 px past its drawn outline, and the cursor
+  gate cannot see it.
+- **Safety:** 0 `npc_contact`, 0 `attack_request`, 0 acts from the GM in the session window. Clicking
+  a sign does nothing.
+- **This explains one of walk@12's 4 non-walking clicks:** the one 2.5 px under this sign (3.23,
+  "Why"). The other 3 stay unexplained.
+- **For walk@13:** the work zone excludes each sign's box grown by **12 px**: the measured 10 px
+  edge + 2 px. The same margin is applied on all four sides; the top and sides were not measured.
+
+### 3.24 walk@13 — walk@12 + REFUSALS BECOME ALTERNATIVES; TUNING (indoor/outdoor × CLEAN/CROWD), then the HELD-OUT set once (pre-registered 2026-10-08 ~21:50 ICT / 14:50 UTC at commit, BEFORE any run; Batt's direction approved ~17:00, overnight order ~21:05)
+**Why:** walk@12 (3.21) had zero safety events in all four tuning runs. It failed the bar on
+REFUSALS (43 / 40 / 45 / 30): `unit_stays`, `no_click_point`, and substitutes for goals nobody had
+taken. The design proposal below lists them.
+
+**The rule:** `scripts/walk13.py` at the commit of this pre-registration. It reuses walk@12's code:
+- walk@12's click step and walk@11's / walk@12's harness are the SAME code objects, rebound so that
+  they call walk@13's work zone, route loop, label and session log;
+- `services/backend/tests/test_walk13.py` checks that, and that walk@12's module is untouched.
+
+**The route loop is walk@11's, with exactly these changes:**
+1. **Shorter points on the polyline.** After walk@11's candidates (the farthest in-band cell within
+   seg_max, its neighbours, then the 4 FARTHER points) come up to **SHORTER = 4** nearer cells of the
+   same plan, nearest last.
+2. **Re-plan around refusals.** A round that clicks nothing puts its refused cells into a per-route
+   BLOCKED set, and the route is planned again around them (`walk6.plan`), **at most 3 times per
+   route**.
+   - **Lifetimes:** a TALK cell (the NPC's own picked cells too) and a no-safe-point cell stay
+     blocked for the route; a unit-envelope refusal for **8 s**, the unit memory's horizon.
+   - The route's target is never blocked.
+   - When no new plan exists, or 3 are used: walk@12's patience, substitute and decline.
+3. **A nearby goal when the goal sits beside an NPC.** This is tried BEFORE the re-plan in a refused
+   round.
+   - **The trigger:** the goal cell, or a cell next to it, read TALK during the route.
+   - **The new target:** the nearest walkable, reachable cell at Chebyshev distance **1–2** from the
+     goal that is not next to any TALK cell (ring 1 first, the shortest plan first), recorded as
+     `npc_substitute`. Once per route.
+4. **"Taken" means a unit stands ON the target.** After patience, walk@8's substitute is used ONLY if
+   a sighting in the unit memory, no older than **2 s**, has its feet picked ON the target cell.
+   Otherwise the route declines `unit_stays`. walk@12 substituted on any unit envelope within one
+   cell of the goal.
+5. **Signboards leave the work zone.** Every candidate pixel inside a signboard's box grown by
+   **12 px** is refused like a UI-window pixel (tier A first, tier B only if A has none).
+   - The 12 px is the measured 10 px edge (the positive case above: 0/5 walked at 5 px, 5/5 at 10)
+     + 2 px.
+   - The signs come from `poring_env.signboard` (d5021f2: shape only, no NPC requirement, UI windows
+     excluded) on a frame grabbed at each click step.
+   - The portal click (walk@12's) is unchanged.
+6. **No first-click fix** (idle@1: 0 failures in 120).
+
+**Everything else is walk@12's:**
+- the click-instant unit gate with its 8 s memory;
+- the work zone (UI windows + 12 px) and the TALK-cell block;
+- tiers A / B, the v3 cursor references and the detector (the same ONNX, confidence 0.25, IoU 0.5);
+- the `/where` fixes (4 per route, trust for 3 clicks) and the scene-shift check;
+- the harness exit (3 / 4 / 130);
+- the live route preview and the operator HUD (display only).
+
+**SAFETY instruments, all LIVE and proven by a deliberate positive case** (§2a; re-proven on the
+17:51 sniffer at 21:08–21:11 ICT):
+- `attack_request`, `npc_contact`, `pickup_request`, and the server's `act` from the GM (kinds normal
+  and pickup), each counted inside the session's manifest window;
+- the banked-capture replay re-checks every run afterwards.
+
+**Scoring** (`demo_verify.py` at this commit):
+- A route succeeds when the server puts the GM on the goal at its end.
+- A route that ends on a walk@8 substitute succeeds only if another unit stood within one cell of
+  the goal when the rule gave it up (walk@7 (b), unchanged).
+- **NEW for change 3:** a route that ends on its `npc_substitute` succeeds only if the SERVER shows a
+  drawn NPC (objtype 6, not a hidden class) within one cell of the goal at that moment. Otherwise it
+  FAILS.
+- Both kinds of substitute success are reported APART from plain arrivals.
+- A strict count (every substitute a failure) is reported as well, but does not decide.
+
+**TUNING runs, all four whatever the first scores:**
+- Conditions as 3.14, with FRESH seeds: indoor clean **20261070**, indoor crowd **20261071**, outdoor
+  clean **20261072**, outdoor crowd **20261073**.
+- 56 routes each; the first 50 not interrupted are scored.
+- e.g. `scripts/walk13.py --scene indoor --condition clean --seed 20261070 --label walk13-alone`.
+- A harness exit that leaves fewer than 50 scored routes means the run is re-run unchanged with its
+  seed; the partial session is kept, not scored.
+
+**HELD-OUT runs**, ONCE, scored separately, never used to tune, **only if all 4 tuning runs PASS**:
+- guild (alberta_in, the Merchant guild on the workflow route) **20261074**;
+- town (prontera) **20261075**;
+- dungeon (iz_dun00) **20261076**;
+- portal (prt_fild08 → prontera) **20261077**.
+- All CLEAN, `@heal` after each warp, 56 each, the first 50 scored.
+
+**The bar (zero tolerance, unchanged):** ≥ **48 / 50** per run **AND** zero `attack_request`, zero
+`npc_contact`, zero `act` from the GM of kind normal or pickup, in the run's window. Any one is a
+HARD FAIL.
+
+**If a tuning run fails** (Batt, overnight order): diagnose; at most 2 more design iterations tonight
+(walk@14 / walk@15), each pre-registered before it runs.
+
+**Reported:** 3.21's items, plus:
+- per change, how often it acted: shorter points clicked, re-plans (and the cells blocked), NPC
+  substitutes (and whether the server shows an NPC), taken checks (ON the target or not), sign
+  refusals;
+- the remaining declines by cause.
+
+### walk@13 — DESIGN PROPOSAL (direction APPROVED by Batt 2026-10-08 ~17:00; PRE-REGISTERED as 3.24 above, 2026-10-08 ~21:50)
 
 **Why** (Batt, 2026-10-08 ~16:00; the direction APPROVED ~17:00): "walk@12: safety is solved; the binding problem is now refusals.
 For walk@13, turn refusals into ALTERNATIVES (another click point on the polyline, approach the goal

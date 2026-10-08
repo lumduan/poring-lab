@@ -102,6 +102,23 @@ def goal_taken(events: list[dict[str, Any]], goal: tuple[int, int], t_ns: int,
     return sorted(gids)
 
 
+def npc_near(events: list[dict[str, Any]], goal: tuple[int, int], t_ns: int,
+             slack_ns: int = 1_000_000_000) -> list[int]:  # fmt: skip
+    """The gids of NPCs within one cell of ``goal`` at any 0.25 s step of t +- slack (walk@13)."""
+    from poring_dataset.labels import OBJTYPE_CLASS, drawn
+    from poring_dataset.timeline import Timeline
+
+    tl = Timeline(events)
+    gids: set[int] = set()
+    for t in range(t_ns - slack_ns, t_ns + slack_ns + 1, 250_000_000):
+        for e in tl.frame_world(t).entities:
+            if OBJTYPE_CLASS.get(e.objtype) != "npc" or e.hidden or not drawn(e.objtype, e.job):
+                continue  # a drawn NPC only (labels.py: hidden and non-drawn NPCs are not one)
+            if max(abs(round(e.x) - goal[0]), abs(round(e.y) - goal[1])) <= 1:
+                gids.add(int(e.gid))
+    return sorted(gids)
+
+
 @functools.cache
 def click_targets(session_dir: Path, offset_ms: float | None) -> tuple[Any, float, str | None]:
     """(a Labeler over this session's packets, the offset used, the benchmark run it came from)."""
@@ -193,6 +210,19 @@ def judge(
             if near:
                 return V.Verdict("success", "substitute: the goal was taken", ev)
             return V.Verdict("fail", "substituted a goal nobody had taken", ev)
+        npc_sub = rec.outcome.evidence.get("npc_substitute")
+        if npc_sub is not None and tuple(end) == tuple(npc_sub):
+            # walk@13 (3.24): the goal sat beside an NPC (TALK read on or next to it) and the rule
+            # walked to a nearby cell instead. It counts only if the SERVER shows an NPC within one
+            # cell of the goal when the rule gave it up; reported apart from plain arrivals.
+            t_sub = max((e["t"] for e in rec.outcome.evidence.get("events", [])
+                         if e.get("npc_substitute") and "t" in e), default=None)  # fmt: skip
+            near = npc_near(events, tuple(goal), t_sub) if t_sub is not None else []
+            ev = {"end": list(end), "goal": list(goal), "npc_substitute": list(npc_sub),
+                  "npcs": near}  # fmt: skip
+            if near:
+                return V.Verdict("success", "npc_substitute: an NPC beside the goal", ev)
+            return V.Verdict("fail", "npc_substitute with no NPC beside the goal", ev)
         return V.Verdict(
             "fail", "the route ended elsewhere", {"end": list(end), "goal": list(goal)}
         )
