@@ -24,7 +24,10 @@
 #   To pause for a session started later, SIGINT the host-side `timeout ... poring_vision.train`
 #   process by PID (`ps -eo pid,args | grep 'timeout .*poring_vision.train --cache'`); this script
 #   then stops. Re-run with RESUME=1 afterwards.
-#   [RESUME=1] [DUTY_START=4] [DUTY_MIN=0] \
+# - MID_CKPT=1 (Batt 2026-10-08; v1 onwards, once docs/operations/mid-epoch-checkpoints.md's proof
+#   PASSED): `--mid-ckpt`, so an abort loses at most ~5 min (weights/mid.pt), not the epoch, and
+#   the resume is exact. A run keeps the mode it started with (train.py refuses a mixed resume).
+#   [RESUME=1] [MID_CKPT=1] [DUTY_START=4] [DUTY_MIN=0] \
 #     scripts/runbooks/train-day.sh RUN_NAME CACHE_ID EPOCHS OUT_DIR [BATCH=2] [WORKERS=1]
 set -u
 cd "$(dirname "$0")/../.."
@@ -41,13 +44,14 @@ mkdir -p "$D"
 log() { echo "$(TZ=Asia/Bangkok date '+%F %T') ICT / $(date -u '+%T') UTC $*" | tee -a "$D/train.log"; }
 s2_active() { grep -q '^BACKEND=console' state/capture-backend 2>/dev/null || [ -e state/cleanroom ]; }
 extra=""; [ "${RESUME:-0}" = 1 ] && extra="--resume"
+mid=""; [ "${MID_CKPT:-0}" = 1 ] && mid=" --mid-ckpt"
 trips=0; attempt=0
 while :; do
   while s2_active; do log "S2 session/clean room active: waiting 5 min"; sleep 300; done
   log "attempt $attempt batch $BATCH workers $WORKERS duty start $DUTY_START min $DUTY_MIN cap $DUTY_CAP_LEVEL until $DUTY_CAP_UNTIL after-abort $DUTY_AFTER_ABORT $extra"
   out="$D/train-guarded-$attempt.out"
   $GUARD --sustain 30 --spike 25 \
-    "rundev:vision@43200=python -m poring_vision.train --cache $CACHE --epochs $EPOCHS --batch $BATCH --workers $WORKERS --name $RUN --step-sleep-ms 2000 --duty-file /lab-duty/duty.json $extra" \
+    "rundev:vision@43200=python -m poring_vision.train --cache $CACHE --epochs $EPOCHS --batch $BATCH --workers $WORKERS --name $RUN --step-sleep-ms 2000 --duty-file /lab-duty/duty.json$mid $extra" \
     > "$out" 2>&1
   rc=$?
   log "attempt $attempt rc=$rc: $(grep -E 'ABORT|REFUSED' "$out" | tail -1 | cut -c1-200)"
@@ -55,7 +59,7 @@ while :; do
   attempt=$((attempt + 1))
   if [ "$rc" -eq 0 ]; then log "TRAIN DONE"; break; fi
   if grep -q "STOP-UNVERIFIED" "$out"; then log "TRAIN STOPPED: the guard could NOT verify the stop ($(grep STOP-UNVERIFIED "$out" | tail -1 | cut -c1-160)): a person must look"; break; fi
-  [ -e "data/train/$RUN/weights/last.pt" ] && extra="--resume"
+  for f in last.pt mid.pt mid.prev.pt; do [ -e "data/train/$RUN/weights/$f" ] && extra="--resume"; done
   if grep -q "R3-HARD" "$out"; then
     now=$(date +%s)
     echo "$now $(grep -a 'ABORT' "$out" | tail -1 | cut -c1-400)" >> "$D/drop-aborts.log"
