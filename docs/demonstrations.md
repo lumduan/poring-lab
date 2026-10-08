@@ -69,8 +69,27 @@ So:
 
 - `demo_verify.py` prints `safety.our_acts` / `unsafe_acts` per session and labels the request counts
   with the instrument's history (63873bc).
-- Still open: the banked-capture replay for the walk runs of 2026-10-07/08 (NPC contact was not
-  observable live then).
+- ~~Still open: the banked-capture replay for the walk runs of 2026-10-07/08~~ ➡️ done 07:47–07:52
+  (`guarded_build.py replay:`, its own positive controls first; results in the CORRECTION below the
+  walk@10 results).
+- **Session windows:** a session's `packets.jsonl.gz` reaches back to the last map change before it
+  started, so a safety count over the whole file can borrow earlier events. Counts use the
+  manifest window (`demo_verify` safety and `replay_safety.py`).
+
+### 2b. Every HARNESS click passes the cursor gate (Batt, 2026-10-08)
+- where@2's harness clicked blind and attacked field monsters (24 hits) and contacted NPCs.
+- Every world click outside a rule now goes through `scripts/cursor_gate.gated_click`: park,
+  two-motion hover, the walk@9 reader with the v3 references, a no-motion re-read, and a click
+  only if both reads are allowed (`walk`; `warp` only for an intended portal).
+- It fails closed: no references, or a path without them (S2 for now), means no click.
+- Gated: where_run's harness click, the dataset activity driver, both camera calibration tools,
+  and the delay benchmark.
+- `test_click_census.py` pins every remaining direct `.click(` in `scripts/` with its reason (UI
+  clicks; the rules' own gates; the deliberate positive cases).
+- **Smoke (08:00, 2 attempts, not scored):** one candidate refused (`cursor_noentry`), the next
+  clicked; in-window 0 requests, 0 GM acts.
+- The gate checks the cursor, not the click instant. The NPC contacts above came through a WALK
+  cursor, so the rule needs walk@11's click-instant layer as well.
 
 | action | success | window (fixed) | fail / ambiguous |
 |---|---|---|---|
@@ -1401,8 +1420,8 @@ Event → fields (cs = our request, sc = the server):
 ~~**SAFETY:** **0** `attack_request`, **0** `npc_contact`, **0** pickup acts by us, over 235 clicked
 runs among 4 Porings per 10 routes and the church's NPCs. The allowlist never clicked an entity.~~
 ➡️ **SUPERSEDED (2026-10-08):** that count was blind (the live sniffer emits no `attack_request`).
-The server's act packets show the GM attacking: 2 episodes (6 hits) 1.6–2.9 s after rule clicks,
-plus 2 before the first rule click. See the 2026-10-08 ~03:15 CORRECTION below the walk@10 results.
+The server's act packets show the GM attacking: 2 episodes (6 hits) 1.6–2.9 s after rule clicks
+(8 more hits in the packet file came from its look-back, before the session started). See the 2026-10-08 ~03:15 CORRECTION below the walk@10 results.
 
 **Why the routes failed** (27):
 
@@ -1908,7 +1927,7 @@ sprite. It only hovered: no click, no key.
 
 | run | routes | GM attacks (server act, kind normal) | verdict now |
 |---|---|---|---|
-| walk@6 indoor | 23 / 50 | 2 episodes in routes, 6 hits, 1.6–2.9 s after a rule click (+2 episodes, 8 hits, BEFORE the first rule click: not attributed) | FAIL (also SAFETY) |
+| walk@6 indoor | 23 / 50 | 2 episodes in routes, 6 hits, 1.6–2.9 s after a rule click (+8 hits BEFORE the session started: the packet file's look-back, not this run; the replay's in-window count is 6) | FAIL (also SAFETY) |
 | walk@6 outdoor | 44 / 50 | 2 episodes, 69 hits on 2 monsters, 2.2–3.9 s after rule clicks | FAIL (also SAFETY) |
 | walk@7 indoor CLEAN | 31 / 50 | none | FAIL (unchanged) |
 | walk@7 indoor CROWD | 34 / 50 | 1 episode, 12 hits, 0.49 s after a rule click | FAIL (also SAFETY) |

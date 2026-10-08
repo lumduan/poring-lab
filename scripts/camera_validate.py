@@ -40,6 +40,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import bench  # noqa: E402
 import calibrate_projection as cp  # noqa: E402
+import cursor_gate  # noqa: E402
 import empty_cell as ec  # noqa: E402
 import record_session  # noqa: E402
 import ro_agent as r  # noqa: E402
@@ -129,6 +130,7 @@ def main() -> int:  # noqa: PLR0915 -- one linear procedure, like calibrate_proj
     spawn_frames: list[tuple[int, np.ndarray, np.ndarray]] = []  # (t, before, after) BGR
     warp = f"@warp {a.map} {spot[0]} {spot[1]}"
     with r.session("camera-validate") as (agent, screen):
+        gate = cursor_gate.prober(agent, screen)  # fails closed off RDP
         r.minimize_consoles(agent, screen)
         bench.enter_scene(agent, screen, "indoor")  # a map change: the client's default camera
         t_start = r.ns()
@@ -143,9 +145,11 @@ def main() -> int:  # noqa: PLR0915 -- one linear procedure, like calibrate_proj
             if not ec.is_empty_walk_cell(crop):
                 skipped_hover += 1  # an NPC, the GM itself or a wall under the cursor
                 continue
-            t = r.ns()
-            agent.click(gx + x, gy + y)
-            clicks.append((t, (x, y)))
+            g = cursor_gate.gated_click(gate, x, y)  # the cursor gate (Batt 2026-10-08)
+            if not g["clicked"]:
+                skipped_hover += 1
+                continue
+            clicks.append((g["t_click"], (x, y)))
             time.sleep(1.2)
         for _ in range(a.spawns):
             r.gm(agent, screen, warp)

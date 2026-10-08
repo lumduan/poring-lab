@@ -41,6 +41,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import benchlib  # noqa: E402
+import cursor_gate  # noqa: E402
 import lab_servers  # noqa: E402
 import ro_agent as r  # noqa: E402
 
@@ -125,7 +126,7 @@ def measure_walks(
     gx, gy, gw, gh = r.game_region()
     cx, cy = gx + gw // 2, gy + int(gh * 0.53)  # the character's feet (screen centre)
     band = (gx + gw // 4, gy + int(gh * 0.12), gw // 2, int(gh * 0.18))  # above the character
-    secs = n * 2.2 + 6
+    secs = n * 4.5 + 6  # each click is gated (park + two-motion hover + two reads, ~2 s)
     r.activate_client(agent, screen)
     if r.any_console(screen):
         raise r.Stop("a PowerShell console is in front: no input")
@@ -143,11 +144,13 @@ def measure_walks(
     reader.start()
     time.sleep(2)
     clicks: list[int] = []
+    gate = cursor_gate.prober(agent, screen)  # every world click is gated (Batt 2026-10-08)
     for i in range(n):
         dx = cells * px_per_cell * (1 if i % 2 == 0 else -1)
-        t0 = r.ns()
-        agent.click(cx + dx, cy)
-        clicks.append(t0)
+        g = cursor_gate.gated_click(gate, cx + dx - gx, cy - gy)
+        if not g["clicked"]:
+            continue
+        clicks.append(g["t_click"])
         time.sleep(2.1)
     watcher.wait(timeout=120)
     reader.join(timeout=10)

@@ -7,8 +7,9 @@
 
 Per attempt (prt_church, the indoor map every re-localisation test used):
 1. the HARNESS: a seeded @warp to a walkable cell near the GM spot, then a seeded click on a cell
-   3-8 cells away -- the character walks somewhere (where exactly, only the packets know) and
-   stops; this is the "belief in doubt" situation the fix is for;
+   3-8 cells away, THROUGH THE CURSOR GATE (cursor_gate.py, Batt 2026-10-08: no blind clicks) --
+   the character walks somewhere (where exactly, only the packets know) and stops; this is the
+   "belief in doubt" situation the fix is for;
 2. the RULE: type /where (the chat path: the foreground gate applies), read the STABLE newest
    chat line (where_fix: the chat-font templates), (X, Y) or nothing.
 Scoring (offline): correct = the packets' position at the read time; WRONG = another cell (a
@@ -31,6 +32,7 @@ from typing import Any
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import cursor_gate  # noqa: E402
 import record_session  # noqa: E402
 import ro_agent as r  # noqa: E402
 import rule_run as rr  # noqa: E402
@@ -43,7 +45,8 @@ RULES = {1: "where@1", 2: "where@2"}
 SCENES = {"indoor": ("prt_church", 104, 122, True), "outdoor": ("prt_fild08", 268, 107, False)}
 GM_AID = 2000002
 WALK_WAIT_S = 3.0
-SAFE = (300, 200, 980, 520)  # client px (x0, y0, x1, y1): the harness's blind walk click
+SAFE = (300, 200, 980, 520)  # client px (x0, y0, x1, y1): the harness's walk click
+HARNESS_TRIES = 6  # seeded candidates the cursor gate may refuse before the attempt goes clickless
 
 
 def score(session: Path) -> dict[str, Any]:
@@ -104,6 +107,7 @@ def run(n: int, seed: int, label: str, version: int = 1, scene: str = "indoor") 
     print(json.dumps({"session": sid, "rule": rule}), flush=True)
     t_first = r.ns()
     with r.session(f"rule:{rule}") as (agent, screen):
+        pr = cursor_gate.prober(agent, screen)  # fails closed: no click without the gate
         r.gm(agent, screen, "@killmonster2")
         for i in range(n):
             if version == 2:
@@ -116,6 +120,8 @@ def run(n: int, seed: int, label: str, version: int = 1, scene: str = "indoor") 
             time.sleep(rr.WARP_SETTLE_S)
             bench.close_chat(agent, screen)
             r.activate_client(agent, screen)
+            gate: list[str] = []
+            d = (0, 0)
             for _ in range(400):  # ... then a seeded click 3-8 cells away: where we stop is unknown
                 d = (rng.randint(-8, 8), rng.randint(-8, 8))
                 if not 3 <= max(abs(d[0]), abs(d[1])) <= 8:
@@ -126,13 +132,18 @@ def run(n: int, seed: int, label: str, version: int = 1, scene: str = "indoor") 
                 u, v = camera.project(rel, gat.relative_altitude((sx, sy), rel))[0]
                 # a SAFE box clear of every UI panel: the first run's blind click hit the left menu
                 # icons and opened the shortcut help (22:02, amended in 3.13 before scoring)
-                if SAFE[0] <= u <= SAFE[2] and SAFE[1] <= v <= SAFE[3]:
+                if not (SAFE[0] <= u <= SAFE[2] and SAFE[1] <= v <= SAFE[3]):
+                    continue
+                # the CURSOR GATE (Batt 2026-10-08): where@2's blind click attacked monsters and
+                # contacted NPCs; a harness click needs the walk cursor, twice, or no click
+                g = cursor_gate.gated_click(pr, u, v)
+                gate.append(g["why"])
+                if g["clicked"] or len(gate) >= HARNESS_TRIES:
                     break
-            gx, gy, _, _ = r.game_region()
-            agent.move(gx + round(u) - 3, gy + round(v) - 3)
-            time.sleep(0.05)
-            agent.click(gx + round(u), gy + round(v))
-            time.sleep(WALK_WAIT_S)
+            if gate and gate[-1] == "ok":
+                time.sleep(WALK_WAIT_S)
+            else:
+                d = (0, 0)  # no harness click: the character stays on the warp cell
             t0 = r.ns()
             belief = (sx + d[0], sy + d[1])  # the rule's own dead reckoning: where it clicked to go
             got = (wf.fix(agent, screen, templates) if version == 1
@@ -148,7 +159,7 @@ def run(n: int, seed: int, label: str, version: int = 1, scene: str = "indoor") 
                     "attempt": i, "warp_cell": [sx, sy], "click_rel": list(d),
                     "xy": list(got["xy"]) if got["xy"] else None, "why": got.get("why"),
                     "rejects": got.get("rejects", []), "belief": list(belief),
-                    "t_read": got["t"]}},
+                    "harness_gate": gate, "t_read": got["t"]}},
             ))  # fmt: skip
             print(json.dumps({"attempt": i, "warp": [sx, sy], "click_rel": list(d),
                               "read": got["xy"]}), flush=True)  # fmt: skip

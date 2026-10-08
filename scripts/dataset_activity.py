@@ -38,6 +38,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import bench  # noqa: E402
+import cursor_gate  # noqa: E402
 import empty_cell as ec  # noqa: E402
 import gm_vitals as gv  # noqa: E402
 import ro_agent as r  # noqa: E402
@@ -121,6 +122,7 @@ def main() -> int:
         "click_rejects": 0,
         "heals": 0,
         "revives": 0,
+        "gate_refused": 0,
     }
     info: dict[str, str] = {}
     mapname, sx, sy = bench.SCENES[a.scene]
@@ -143,6 +145,8 @@ def main() -> int:
     pos = (sx, sy)  # the character's cell, tracked from our own clicks (approximate)
     stuck = 0  # consecutive no_cell
     with r.session("dataset-activity") as (agent, screen):
+        # every world click passes the cursor gate (fails closed off RDP: no S2 references yet)
+        gate = cursor_gate.prober(agent, screen)
         # like bench.preflight: a console left open (open-terminal before to-console) covers the
         # client's title bar, so activation fails closed and the run records an idle GM
         # (p3-outdoor-a, 2026-10-04 13:05)
@@ -234,12 +238,13 @@ def main() -> int:
                     stuck = 0
                     dx, dy, u, v = pick
                     x, y = gx + int(round(u)), gy + int(round(v))
-                    if still_empty(x, y):
-                        agent.click(x, y)
+                    if not still_empty(x, y):
+                        counts["click_rejects"] += 1
+                    elif cursor_gate.gated_click(gate, u, v)["clicked"]:  # Batt 2026-10-08
                         pos = (pos[0] + dx, pos[1] + dy)
                         counts["walks"] += 1
                     else:
-                        counts["click_rejects"] += 1
+                        counts["gate_refused"] += 1
                 agent.idle(rng.uniform(4.0, 9.0))
                 look_after_the_gm()
         finally:

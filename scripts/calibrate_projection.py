@@ -31,6 +31,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import bench  # noqa: E402
+import cursor_gate  # noqa: E402
 import record_session  # noqa: E402
 import ro_agent as r  # noqa: E402
 
@@ -105,6 +106,7 @@ def main() -> int:
     clicks: list[tuple[int, tuple[int, int]]] = []
     validation: list[dict[str, Any]] = []
     with r.session("calibrate") as (agent, screen):
+        gate = cursor_gate.prober(agent, screen)  # fails closed off RDP
         r.minimize_consoles(agent, screen)
         bench.enter_scene(agent, screen, "outdoor")
         t_start = r.ns()
@@ -112,9 +114,10 @@ def main() -> int:
             r.gm(agent, screen, f"@warp prt_fild08 {SPOT[0]} {SPOT[1]}")
             time.sleep(2.5)
             bench.close_chat(agent, screen)
-            t = r.ns()
-            agent.click(gx + x, gy + y)
-            clicks.append((t, (x, y)))
+            g = cursor_gate.gated_click(gate, x, y)  # the cursor gate (Batt 2026-10-08)
+            if not g["clicked"]:
+                continue
+            clicks.append((g["t_click"], (x, y)))
             time.sleep(1.2)
         frames: list[tuple[int, np.ndarray]] = []
         if a.validate:

@@ -221,10 +221,13 @@ REQUESTS_NOTE = (
 )
 
 
-def safety(events: list[dict[str, Any]], aid: int) -> dict[str, Any]:
+def safety(events: list[dict[str, Any]], aid: int,
+           window: tuple[int, int] | None = None) -> dict[str, Any]:  # fmt: skip
     """What the SERVER says we did: ZC_NOTIFY_ACT with src_gid = us (decoded live). In 2026-10-07/08
     the walk scores counted only request events, which the live sniffer never emits, and reported
     "SAFETY held" over runs where the GM attacked (demonstrations.md, the 03:15 correction)."""
+    if window is not None:  # packets.jsonl.gz reaches back to the last map change before t0
+        events = [e for e in events if window[0] <= int(e.get("t_mono_ns", 0)) <= window[1]]
     acts = Counter(str(e.get("kind")) for e in events
                    if e.get("type") == "act" and int(e.get("src_gid", -1)) == aid)  # fmt: skip
     requests = Counter(str(e["type"]) for e in events if e.get("type") in V.ATTACK_REQUESTS)
@@ -284,8 +287,13 @@ def main() -> int:
         records = read(session_dir / "demo.jsonl")
         events = load_events(session_dir)
         n_events += len(events)
+        man_path = session_dir / "manifest.json"
+        man = json.loads(man_path.read_text()) if man_path.exists() else {}
+        window = ((int(man["t0_mono_ns"]), int(man["t1_mono_ns"]))
+                  if "t0_mono_ns" in man and "t1_mono_ns" in man else None)  # fmt: skip
         safety_by_session[session_dir.name] = {
-            who: safety(events, aid) for who, aid in aids.items()
+            who: {**safety(events, aid, window), "window": "manifest" if window else "whole file"}
+            for who, aid in aids.items()
         }
         marks_path = session_dir / "interrupted.json"
         marks: dict[str, str] = json.loads(marks_path.read_text()) if marks_path.exists() else {}

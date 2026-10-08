@@ -356,3 +356,14 @@ def test_safety_counts_what_the_server_says_we_did_not_the_blind_requests(dv: Mo
     assert s["unsafe_acts"] == 2 and s["our_acts"] == {"normal": 1, "stand": 1, "pickup": 1}
     assert s["requests_seen"] == {} and "proves nothing" in s["requests_note"]
     assert dv.safety(events, 2000001)["unsafe_acts"] == 0
+
+
+def test_safety_counts_only_inside_the_session_window(dv: ModuleType) -> None:
+    """packets.jsonl.gz reaches back before t0: an earlier pickup is not this session's."""
+    gm = 2000002
+    events = [
+        {"type": "act", "kind": "pickup", "src_gid": gm, "target_gid": 53, "t_mono_ns": 5},
+        {"type": "act", "kind": "normal", "src_gid": gm, "target_gid": 9, "t_mono_ns": 50},
+    ]
+    assert dv.safety(events, gm)["unsafe_acts"] == 2
+    assert dv.safety(events, gm, (10, 100))["our_acts"] == {"normal": 1}
