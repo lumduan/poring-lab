@@ -76,6 +76,29 @@ So:
   started, so a safety count over the whole file can borrow earlier events. Counts use the
   manifest window (`demo_verify` safety and `replay_safety.py`).
 
+### 2c. walk@11's unit detector, proven on RDP frames (2026-10-08 08:42–08:50; design time)
+- **The sensor:** v0-PNG exported to ONNX (1280×736), CPU, ~180 ms on 8 threads
+  (docs/operations/detector-cpu.md).
+- **The check:** `scripts/detector_check.py`, session `20261008T084236-demo-detector-check`, 80
+  frames ~1 s apart, 6 Porings per scene + the church's NPCs, no clicks. Ground truth is the packet
+  boxes (`qa_export.Labeler`, as `demo_verify`), inside the click band.
+
+| scene : class | units | seen (feet ≤ 30 px) | seen (≤ 45 px: the envelope's own one-cell slack) |
+|---|---|---|---|
+| prt_fild08 : monster | 145 | 141 (97.2 %) | 142 (97.9 %) |
+| prt_church : npc | 40 | 40 (100 %) | 40 (100 %) |
+| prt_church : monster | 133 | 119 (89.5 %) | 129 (97.0 %) |
+
+- Lower confidence (0.05–0.25) changes nothing indoors: the misses are not faint boxes.
+- The 30-to-45 px difference is hopping Porings against a ground truth slightly off in time.
+- **True misses: ~2–3 %.** Three of the four church ones are one Poring under the chandelier: an
+  occluding scenery sprite.
+- Unmatched detections: 2 (at 45 px).
+- Detected feet sit a median 6.7 px above the true feet (p10 −12.5): the envelope's +1 step covers
+  it.
+- **So the envelope is the SECOND layer:** a click on a unit needs both the cursor gate (sword / talk
+  / unknown = no click) and the envelope to miss it.
+
 ### 2b. Every HARNESS click passes the cursor gate (Batt, 2026-10-08)
 - where@2's harness clicked blind and attacked field monsters (24 hits) and contacted NPCs.
 - Every world click outside a rule now goes through `scripts/cursor_gate.gated_click`: park,

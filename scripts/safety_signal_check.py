@@ -84,7 +84,7 @@ def monster_click(mapname: str, x: int, y: int) -> int:
         pr = w10.Prober9(agent, screen, refs)
         r.gm(agent, screen, "@killmonster2")
         r.gm(agent, screen, f"@warp {mapname} {x} {y}")
-        time.sleep(rr.WARP_SETTLE_S)
+        time.sleep(rr.SCENE_ENTRY_S)  # may be a warp onto another map
         r.gm(agent, screen, "@monster poring 1")
         time.sleep(2.0)
         bench.close_chat(agent, screen)
@@ -167,7 +167,7 @@ def npc_click(npc: str) -> int:
         pr = w10.Prober9(agent, screen, refs)
         r.gm(agent, screen, "@killmonster2")
         r.gm(agent, screen, f"@warp prt_church {sx} {sy}")
-        time.sleep(rr.WARP_SETTLE_S)
+        time.sleep(rr.SCENE_ENTRY_S)  # may be a warp onto another map
         bench.close_chat(agent, screen)
         r.activate_client(agent, screen)
         rel = np.array([[nx - sx, ny - sy]], dtype=float)
@@ -233,7 +233,7 @@ def pickup_start() -> int:
     with r.session("rule:safety-check") as (agent, screen):
         r.gm(agent, screen, "@killmonster2")
         r.gm(agent, screen, f"@warp prt_church {PICKUP_SPOT[0]} {PICKUP_SPOT[1]}")
-        time.sleep(rr.WARP_SETTLE_S)
+        time.sleep(rr.SCENE_ENTRY_S)  # may be a warp onto another map
         r.gm(agent, screen, "@item 1201 1")
         bench.close_chat(agent, screen)
         r.activate_client(agent, screen)
@@ -365,7 +365,7 @@ def cancel_test(delays_ms: list[int], n: int, mapname: str, x: int, y: int) -> i
             for _ in range(n):
                 r.gm(agent, screen, "@killmonster2")
                 r.gm(agent, screen, f"@warp {mapname} {x} {y}")
-                time.sleep(rr.WARP_SETTLE_S)
+                time.sleep(rr.SCENE_ENTRY_S)  # may be a warp onto another map
                 # a RED PLANT (1078): a monster that never moves, so the hover at its detected
                 # box still finds it (Porings hop away during the ~1 s park + hover)
                 r.gm(agent, screen, "@monster 1078 1")
