@@ -8,6 +8,7 @@ import importlib.util
 import sys
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 import numpy as np
 import pytest
@@ -32,6 +33,13 @@ def unit(cls: str, x: float, y: float, w: float = 30, h: float = 60, conf: float
     return {"kind": "unit", "cls": cls, "conf": conf, "box": [x - w / 2, y - h, x + w / 2, y]}
 
 
+def seen(t: Any, found: list[dict], floor: bool = False) -> dict | None:
+    """Two detector passes on the same view: a new unit is drawn on the second (seen twice)."""
+    first = t.observe(found, t.ref() if floor else t.offset.copy())
+    assert first is None or not first["add"] or all(o["kind"] != "unit" for o in first["add"])
+    return t.observe(found, t.ref() if floor else t.offset.copy())  # type: ignore[no-any-return]
+
+
 def test_the_keyframe_holds_the_screen_anchored_zone_and_ui_windows(hs: ModuleType) -> None:
     t = hs.SceneTracker(REGION, DESKTOP, WINDOWS)
     k = t.keyframe()
@@ -48,7 +56,7 @@ def test_the_keyframe_holds_the_screen_anchored_zone_and_ui_windows(hs: ModuleTy
 
 def test_a_static_npc_rides_the_global_motion_and_sends_nothing_new(hs: ModuleType) -> None:
     t = hs.SceneTracker(REGION, DESKTOP, WINDOWS)
-    d = t.observe([unit("npc", 700, 400)], t.offset.copy())
+    d = seen(t, [unit("npc", 700, 400)])
     assert d is not None and [o["cls"] for o in d["add"]] == ["npc"] and d["seq"] == 1
     assert not t.motion((0.1, -0.2))  # sub-threshold jitter: no motion, no message
     for _ in range(10):  # we walk: the scene scrolls 3 px a frame, the NPC with it
@@ -60,7 +68,7 @@ def test_a_static_npc_rides_the_global_motion_and_sends_nothing_new(hs: ModuleTy
 
 def test_a_moving_monster_gets_a_move_and_a_missed_unit_is_removed(hs: ModuleType) -> None:
     t = hs.SceneTracker(REGION, DESKTOP, WINDOWS)
-    t.observe([unit("monster", 600, 300), unit("npc", 900, 500)], t.offset.copy())
+    seen(t, [unit("monster", 600, 300), unit("npc", 900, 500)])
     d = t.observe([unit("monster", 620, 300), unit("npc", 900, 500)], t.offset.copy())
     assert d is not None and len(d["move"]) == 1 and d["add"] == [] and d["remove"] == []
     assert t.observe([unit("monster", 620, 300)], t.offset.copy()) is None  # npc missed once
@@ -70,7 +78,7 @@ def test_a_moving_monster_gets_a_move_and_a_missed_unit_is_removed(hs: ModuleTyp
 
 def test_a_still_scene_sends_no_deltas(hs: ModuleType) -> None:
     t = hs.SceneTracker(REGION, DESKTOP, WINDOWS)
-    t.observe([unit("npc", 700, 400), unit("npc", 300, 450)], t.offset.copy())
+    seen(t, [unit("npc", 700, 400), unit("npc", 300, 450)])
     for _ in range(20):
         assert not t.motion((0.05, 0.0))
         assert t.observe([unit("npc", 701, 400), unit("npc", 300, 451)], t.offset.copy()) is None
@@ -85,7 +93,8 @@ def test_every_message_is_valid_protocol(hs: ModuleType) -> None:
     for _ in range(50):  # far enough that world boxes leave [0, 1] at offset 0
         t.motion((-30.0, 0.0))
     sign = {"kind": "sign", "cls": "sign", "conf": None, "box": [601, 459, 758, 490]}
-    d = t.observe([unit("npc", 700, 400), sign], t.offset.copy())
+    t.observe([unit("npc", 700, 400), sign], t.offset.copy())  # the sign at once, the NPC held
+    d = t.observe([unit("npc", 700, 400), sign], t.offset.copy())  # ... seen twice: drawn
     for msg in (
         {"type": "hud_scene", "t_mono_ns": 1, "frame_id": 3, **t.keyframe()},
         {"type": "hud_delta", "t_mono_ns": 1, "frame_id": 3, **d},
@@ -154,7 +163,7 @@ def test_far_and_near_npcs_stay_on_their_sprites_while_walking(
     g = hs.Ground(camera)
     t = hs.SceneTracker(REGION, DESKTOP, WINDOWS, g)
     far, near = np.array([700.0, 140.0]), np.array([500.0, 650.0])
-    d = t.observe([unit("npc", *far), unit("npc", *near)], t.ref())
+    d = seen(t, [unit("npc", *far), unit("npc", *near)], floor=True)
     assert d is not None and len(d["add"]) == 2
     world = [g.to_floor([far])[0], g.to_floor([near])[0]]  # their floor points (camera at 0)
     step, corrections = np.array([0.0, 0.08]), 0  # walking: the camera moves 0.08 cell a frame
@@ -172,7 +181,7 @@ def test_far_and_near_npcs_stay_on_their_sprites_while_walking(
     assert 0 < corrections <= 25
     # the global model, the same walk: the far NPC ends well off its sprite
     t2 = hs.SceneTracker(REGION, DESKTOP, WINDOWS)
-    t2.observe([unit("npc", *far), unit("npc", *near)], t2.offset.copy())
+    seen(t2, [unit("npc", *far), unit("npc", *near)])
     for k in range(1, 26):
         t2.motion(tuple(g.to_screen([world[1] - k * step])[0]
                         - g.to_screen([world[1] - (k - 1) * step])[0]))  # fmt: skip
@@ -183,7 +192,7 @@ def test_far_and_near_npcs_stay_on_their_sprites_while_walking(
 
 def test_a_still_floor_scene_sends_nothing(hs: ModuleType, camera: object) -> None:
     t = hs.SceneTracker(REGION, DESKTOP, WINDOWS, hs.Ground(camera))
-    t.observe([unit("npc", 700, 400), unit("npc", 300, 450)], t.ref())
+    seen(t, [unit("npc", 700, 400), unit("npc", 300, 450)], floor=True)
     for _ in range(20):
         assert t.on_frame((0.05, 0.0), np.array([0.001, 0.0])) == (False, None)
         assert t.observe([unit("npc", 701, 400), unit("npc", 300, 451)], t.ref()) is None
@@ -194,6 +203,7 @@ def test_a_drifted_box_is_moved_not_doubled(hs: ModuleType) -> None:
     for tuning, doubled in ((hs.TUNING, False), (hs.LEGACY, True)):
         t = hs.SceneTracker(REGION, DESKTOP, WINDOWS, tuning=tuning)
         t.observe([unit("npc", 700, 400)], t.offset.copy())
+        t.observe([unit("npc", 700, 400)], t.offset.copy())  # drawn (seen twice), both tunings
         d = t.observe([unit("npc", 760, 410)], t.offset.copy())  # 61 px off: past match_px
         n = len([o for o in t.objects.values() if o.cls == "npc"])
         if doubled:  # the first cut: a second box, the stale one kept until missed twice
@@ -204,7 +214,7 @@ def test_a_drifted_box_is_moved_not_doubled(hs: ModuleType) -> None:
 
 def test_one_to_one_nearest_first(hs: ModuleType) -> None:
     t = hs.SceneTracker(REGION, DESKTOP, WINDOWS)
-    t.observe([unit("npc", 500, 400), unit("npc", 530, 400)], t.offset.copy())
+    seen(t, [unit("npc", 500, 400), unit("npc", 530, 400)])
     ids = sorted(o.id for o in t.objects.values() if o.cls == "npc")
     # the first detection is nearer the second object: each still keeps its own
     assert t.observe([unit("npc", 518, 400), unit("npc", 531, 400)], t.offset.copy()) is not None
@@ -213,11 +223,11 @@ def test_one_to_one_nearest_first(hs: ModuleType) -> None:
 
 def test_a_missed_object_goes_after_one_pass_while_moving(hs: ModuleType) -> None:
     t = hs.SceneTracker(REGION, DESKTOP, WINDOWS)
-    t.observe([unit("npc", 700, 400), unit("npc", 300, 450)], t.offset.copy())
+    seen(t, [unit("npc", 700, 400), unit("npc", 300, 450)])
     assert t.observe([unit("npc", 700, 400)], t.offset.copy()) is None  # still: one miss kept
     d = t.observe([unit("npc", 700, 400)], t.offset.copy(), moving=True)
     assert d is not None and len(d["remove"]) == 1
-    t.observe([unit("npc", 300, 450)], t.offset.copy())
+    seen(t, [unit("npc", 300, 450)])  # it is back: a new unit, seen twice
     d = t.observe([unit("npc", 700, 400)], t.offset.copy(), moving=True)
     assert d is not None and len(d["remove"]) == 1  # one miss while moving is enough
 
@@ -227,7 +237,7 @@ def test_a_sign_rides_its_npcs_floor(hs: ModuleType, camera: object) -> None:
     t = hs.SceneTracker(REGION, DESKTOP, WINDOWS, g)
     npc = unit("npc", 700, 400, h=80)  # box top 320
     sign = {"kind": "sign", "cls": "sign", "conf": None, "box": [640, 200, 790, 225]}
-    t.observe([npc, sign], t.ref())
+    t.observe([npc, sign], t.ref())  # a sign is drawn at once (no measured false signs)
     s = next(o for o in t.objects.values() if o.kind == "sign")
     assert s.lift == pytest.approx(400 - 225)
     alone = hs.SceneTracker(REGION, DESKTOP, WINDOWS, g)
@@ -254,7 +264,7 @@ def test_floor_corrections_are_valid_protocol(hs: ModuleType, camera: object) ->
 
     g = hs.Ground(camera)
     t = hs.SceneTracker(REGION, DESKTOP, WINDOWS, g)
-    t.observe([unit("npc", 700, 140), unit("npc", 500, 650)], t.ref())
+    seen(t, [unit("npc", 700, 140), unit("npc", 500, 650)], floor=True)
     msgs = []
     for _ in range(10):
         moved, delta = t.on_frame((0.0, -3.0), np.array([0.0, 0.12]))
@@ -404,12 +414,12 @@ def test_the_process_loop_runs_end_to_end_offline(
 def test_a_box_cut_by_the_views_edge_gets_its_sprites_size(hs: ModuleType) -> None:
     t = hs.SceneTracker(REGION, DESKTOP, WINDOWS)
     cut = {"kind": "unit", "cls": "npc", "conf": 0.8, "box": [600.0, 690.0, 634.0, 720.0]}
-    t.observe([cut], t.offset.copy())
+    seen(t, [cut])
     o = next(o for o in t.objects.values() if o.cls == "npc")
     assert o.box[3] == pytest.approx(690.0 + hs.SPRITE_PX["npc"][1])  # its feet are past the edge
     left = {"kind": "unit", "cls": "npc", "conf": 0.8, "box": [0.0, 300.0, 12.0, 375.0]}
     t2 = hs.SceneTracker(REGION, DESKTOP, WINDOWS)
-    t2.observe([left], t2.offset.copy())
+    seen(t2, [left])
     o2 = next(o for o in t2.objects.values() if o.cls == "npc")
     assert o2.box[0] == pytest.approx(12.0 - hs.SPRITE_PX["npc"][0]) and o2.box[3] == 375.0
 
@@ -427,3 +437,130 @@ def test_a_floor_frame_without_a_camera_move_reads_the_scroll(
     shift = g.to_screen(g.to_floor(band) - d)[0] - band[0]
     assert t.on_frame(shift, None)[0]
     assert np.abs(t.cam - d).max() < 0.02
+
+
+# --- seen twice (Batt 2026-10-09): a new unit is drawn only when a later pass sees it again -------
+def test_a_new_unit_is_drawn_only_when_a_second_pass_sees_it(hs: ModuleType) -> None:
+    t = hs.SceneTracker(REGION, DESKTOP, WINDOWS)
+    assert t.observe([unit("npc", 700, 400)], t.offset.copy()) is None  # held: no message at all
+    assert [o["kind"] for o in t.keyframe()["objects"]] == ["zone", "window", "window"]
+    d = t.observe([unit("npc", 703, 401)], t.offset.copy())
+    assert d is not None and d["seq"] == 1 and [o["cls"] for o in d["add"]] == ["npc"]
+    assert d["add"][0]["id"] > 0 and not t.candidates  # a wire id; the candidate is gone
+    assert d["add"][0]["box"]["x"] == pytest.approx((80 + 703 - 15) / 1440)  # the 2nd pass's box
+
+
+def test_a_one_off_detection_never_reaches_the_wire(hs: ModuleType) -> None:
+    t = hs.SceneTracker(REGION, DESKTOP, WINDOWS)
+    seen(t, [unit("npc", 300, 450)])
+    seq = t.seq
+    flash = unit("npc", 900, 200, conf=0.27)
+    assert t.observe([unit("npc", 300, 450), flash], t.offset.copy()) is None
+    for _ in range(3):
+        assert t.observe([unit("npc", 300, 450)], t.offset.copy()) is None
+    assert t.seq == seq and not t.candidates and t.counts == {"held": 2, "confirmed": 1,
+                                                              "expired": 1}  # fmt: skip
+    world = [o for o in t.objects.values() if o.anchor == "world"]
+    assert len(world) == 1 and world[0].box[0] == pytest.approx(285.0)
+
+
+def test_the_window_is_counted_in_detector_passes(hs: ModuleType) -> None:
+    from dataclasses import replace
+
+    passes = [[unit("monster", 600, 300)], [], [unit("monster", 610, 300)],
+              [unit("monster", 611, 300)]]  # fmt: skip
+    for window, drawn_on in ((2, 3), (1, 4)):  # missed once: still a candidate / a new one
+        t = hs.SceneTracker(REGION, DESKTOP, WINDOWS, tuning=replace(hs.TUNING, seen_window=window))
+        got = [t.observe(f, t.offset.copy()) is not None for f in passes]
+        assert got.index(True) + 1 == drawn_on and got.count(True) == 1
+
+
+def test_drawn_objects_behave_exactly_as_without_the_rule(hs: ModuleType) -> None:
+    """The same passes with the rule on and off: once both drew the units, every later message is
+    the same (moves, the dedupe of a drifted box, misses and removals)."""
+    from dataclasses import replace
+
+    on = hs.SceneTracker(REGION, DESKTOP, WINDOWS)
+    off = hs.SceneTracker(REGION, DESKTOP, WINDOWS, tuning=replace(hs.TUNING, seen_twice=()))
+    start = [unit("npc", 500, 400), unit("monster", 800, 300)]
+    off.observe(start, off.offset.copy())
+    seen(on, start)
+    assert on.keyframe() == off.keyframe()
+    passes = [
+        ([unit("npc", 510, 400), unit("monster", 861, 310)], False),  # a move; a dedupe move
+        ([unit("npc", 510, 400)], False),  # the monster missed once
+        ([unit("npc", 530, 410)], True),  # ... and again, while moving: removed
+        ([], False),
+        ([], False),
+    ]
+    for found, moving in passes:
+        for t in (on, off):
+            t.motion((-3.0, 2.0))
+        assert on.observe(found, on.offset.copy(), moving=moving) == off.observe(
+            found, off.offset.copy(), moving=moving
+        )
+    assert on.keyframe() == off.keyframe() and on.seq == off.seq >= 3
+
+
+def test_a_candidate_rides_the_floor_until_it_is_seen_again(hs: ModuleType, camera: object) -> None:
+    """The camera walks ~150 px between the two passes: the candidate is matched where its floor
+    point projects now (a plain match), not where it was first seen."""
+    g = hs.Ground(camera)
+    t = hs.SceneTracker(REGION, DESKTOP, WINDOWS, g)
+    p = np.array([700.0, 300.0])
+    assert t.observe([unit("npc", *p)], t.ref()) is None
+    fl, step = g.to_floor([p])[0], np.array([0.0, 0.3])
+    for k in range(1, 21):
+        t.on_frame(g.to_screen([fl - k * step])[0] - g.to_screen([fl - (k - 1) * step])[0], step)
+    now = g.to_screen([fl - 20 * step])[0]
+    assert np.hypot(*(now - p)) > t.tuning.dedupe_px  # out of reach unless it rode the floor
+    d = t.observe([unit("npc", *now)], t.ref(), moving=True)
+    assert d is not None and len(d["add"]) == 1 and not t.candidates
+
+
+def test_signs_are_drawn_at_once_and_the_rule_switches_off(hs: ModuleType) -> None:
+    from dataclasses import replace
+
+    sign = {"kind": "sign", "cls": "sign", "conf": None, "box": [601, 459, 758, 490]}
+    t = hs.SceneTracker(REGION, DESKTOP, WINDOWS)
+    d = t.observe([sign], t.offset.copy())
+    assert d is not None and [o["kind"] for o in d["add"]] == ["sign"]
+    t2 = hs.SceneTracker(REGION, DESKTOP, WINDOWS, tuning=replace(hs.TUNING, seen_twice=()))
+    d2 = t2.observe([unit("npc", 700, 400)], t2.offset.copy())
+    assert d2 is not None and len(d2["add"]) == 1
+    assert hs.LEGACY.seen_twice == () and hs.TUNING.seen_twice == ("unit",)
+
+
+def test_the_sim_counts_flashes_and_the_first_box_delay(hs: ModuleType, tmp_path: Path) -> None:
+    """hud_scene_sim's seen-twice measures on a hand-made log: a REAL unit drawn 5 frames after it
+    appears, and a one-frame flash drawn for 6 frames."""
+    sim = importlib.import_module("hud_scene_sim")
+    n = 60
+    t = (np.arange(n) * 100_000_000 + 10**12).astype(np.int64)
+    units = [[k, 485, 340, 515, 400, 0.9, 2] for k in range(n)]  # A, all along
+    units += [[k, 885, 440, 915, 500, 0.6, 2] for k in range(30, n)]  # B, from frame 30
+    units.append([40, 285, 140, 315, 200, 0.3, 2])  # a flash on frame 40
+    cache = {
+        "truth": {"t": t, "units": np.array(units, dtype=float), "signs": np.zeros((0, 5))},
+        "motion": {"t": t, "shift": np.zeros((n, 2)), "gray8": np.zeros((n, 2, 2))},
+    }
+
+    def obj(i: int, x0: float, y0: float) -> dict:
+        box = {"x": (80 + x0) / 1440, "y": (77 + y0) / 900, "w": 30 / 1440, "h": 60 / 900}
+        return {"id": i, "kind": "unit", "anchor": "world", "box": box, "cls": "npc"}
+
+    def delta(k: int, seq: int, add: list, remove: list) -> dict:
+        return {"logged_ns": int(t[k]), "msg": {"type": "hud_delta", "t_mono_ns": int(t[k]),
+                "frame_id": k, "seq": seq, "add": add, "move": [], "remove": remove}}  # fmt: skip
+
+    log = [{"logged_ns": int(t[0]), "msg": {"type": "hud_scene", "t_mono_ns": int(t[0]),
+            "frame_id": 0, "seq": 0, "offset": {"x": 0.0, "y": 0.0},
+            "objects": [obj(1, 485, 340)], "period_ms": 5000}},  # fmt: skip
+           delta(35, 1, [obj(2, 885, 440)], []), delta(40, 2, [obj(3, 285, 140)], []),
+           delta(46, 3, [], [3])]  # fmt: skip
+    sc = sim.score(log, cache, REGION, DESKTOP, latency_ms=0.0)
+    assert sc["fp"]["objects"] == 1 and sc["fp"]["box_frames"] == 6
+    nu = sc["new_units"]
+    assert nu["n"] == 1 and nu["never"] == 0
+    assert nu["delay_s"]["median_s"] == pytest.approx(0.5) and nu["delay_frames"]["median_fr"] == 5
+    assert sc["recall"] == {"real": 40 + 30, "drawn": 40 + 25}
