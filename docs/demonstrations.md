@@ -1539,6 +1539,26 @@ nothing) and the HARNESS FIXES it needed, committed BEFORE step 1:**
   checks the fixes end to end before step 1. If it still cannot kill, step 1 does not start, and that
   is reported to Batt.
 
+➡️ **PILOT 2 (2026-10-09 15:05–15:07 ICT, session `20261009T150554-demo-loot1-run`, main at af9693c;
+counts for nothing): the chain works end to end once; the kill phase is still fragile.**
+
+| trial | what the pixels did | what the server says |
+|---|---|---|
+| 1 (spot 255,92) | found on the 2nd frame; probe 1 read WALK (moved-off box); probe 2 read SWORD twice and clicked; "vanished"; death cell (254,97), stable; PICKUP click 3.94 s after the death; runtime: weight rose AND cue "got" | `attack_request` → 11 GM attacks → the Poring DIED at (255,99)±1; then `pickup_request` + the GM's pickup act. A full success, and P3's cell within 1 |
+| 0 (spot 292,121) | found at once; probe 1 read SWORD twice and clicked; probe 2 (another box) read unknown ×2, WALK | the sword-read click became a WALK (`self_move_request`): the Poring had just started moving. The GM's walk scrolled the camera, so the screen-space track lost the Poring; the pixels then declared a death (cell unstable: no loot). The Poring was alive and was removed by the next trial's `@killmonster2` |
+
+- **Two kill-phase weaknesses are NOT fixed** (P3 and the trials report them; they are not P3's
+  verdict):
+  1. A target that starts moving between the SWORD read and the click turns the click into a walk.
+     This is benign, the mirror of walk's safety case.
+  2. The track lives in SCREEN space, so the GM's own walk (the camera follows it) can break it and
+     produce a false pixel death. P3 judges only kills that died on the server, so a false death
+     costs a judged kill, not a wrong verdict.
+- **Step 1 may start:** the pilot killed once, with the server's confirmation. P3 needs ≥ 8 judged
+  kills of 10; if the kill phase loses too many, P3 is INCONCLUSIVE and is reported so.
+- **Held** until the console layout fix is deployed (Batt 2026-10-09 ~14:57: deploy in a gap with no
+  scored client run).
+
 **Step 1 · P3's positive case (BEFORE any loot trial; §2a's rule):** `loot1.py p3 --n 10 --seed
 20261110`, the same kills with no loot.
 - **Judged per kill whose target died on the server** (its "died" vanish within 5 cells of the
