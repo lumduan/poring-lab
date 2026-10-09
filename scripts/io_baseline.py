@@ -31,7 +31,8 @@ CAPTURE = [
     "quant-mongo",
     "frigate",
 ]
-LAB = ["desktop", "backend", "frontend-dev", "frontend", "rathena", "db", "vision"]
+# vision-worker: option A's long-lived vision container (docs/operations/vision-long-lived.md)
+LAB = ["desktop", "backend", "frontend-dev", "frontend", "rathena", "db", "vision", "vision-worker"]
 CRON = ("cron.service", Path("/sys/fs/cgroup/system.slice/cron.service/io.pressure"))
 
 

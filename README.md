@@ -340,12 +340,25 @@ does the same thing unguarded.
   - frames come as tar shards built on the host by `scripts/build_frame_cache.py` (one sequential pass
     per session, split by session) under `/mnt/poring-lab-datasets/.framecache/<id>/`;
   - `rundev:` mounts the host's vision source read-only, so no image rebuild is needed.
-  - Heavy runs only 20:00–05:00 ICT (Batt):
+  - GPU runs follow the sharing rules R1–R3 (`scripts/frigate_r3.py`, enforced by the guard); the old
+    20:00–05:00 window is retired (Batt, 2026-10-07):
   ```bash
   python3 scripts/guarded_build.py --sustain 30 --spike 25 \
     'rundev:vision@3600=python -m poring_vision.train --cache /datasets/.framecache/<id> --smoke'
   python3 scripts/guarded_build.py --sustain 30 --spike 25 \
     'rundev:vision@900=python -m poring_vision.train --cache /datasets/.framecache/<id> --eval /data/train/<run>/weights/best.pt --split test'
+  ```
+  - **Option A, the long-lived vision worker** (BUILT, NOT switched; `docs/operations/vision-long-lived.md`):
+    one idle vision container per day (`compose.vision-worker.yaml`), started once in a measured quiet
+    window; each attempt is an `execdev:` inside it, with the same R2/R3, IO-guard and verified-stop
+    rules. `train-day.sh` uses it only with `WORKER=1`. Its live proof is
+    `scripts/runbooks/worker_proof.py`.
+  ```bash
+  python3 scripts/runbooks/quiet_start.py -- \
+    python3 scripts/guarded_build.py --sustain 30 --spike 25 worker:vision@120
+  python3 scripts/guarded_build.py --sustain 30 --spike 25 \
+    'execdev:vision@3600=python -m poring_vision.train --cache /datasets/.framecache/<id> --smoke'
+  python3 scripts/guarded_build.py worker-stop:vision
   ```
 - **Agent loop:**
   ```bash

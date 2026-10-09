@@ -12,9 +12,13 @@ REFUSES (exit 2, reason on stderr):
   - docker compose / docker-compose / scripts/dev.sh with a mutating subcommand
     (up create build pull run restart start down rm scale watch) or --force-recreate
   - docker compose config WITHOUT --no-interpolate / -q (an interpolated config prints .env secrets)
-ALLOWS everything else -- ps, logs, exec, inspect, images, stats, tag, stop … -- and any command
-whose head is `scripts/guarded_build.py` (the guard's own docker calls are subprocesses and never
-reach this hook).
+  - `docker exec` / `docker container exec` / `docker compose exec` into a VISION container (the
+    long-lived worker of option A, a rundev one-off, the agent): a GPU job there must go through
+    `guarded_build.py execdev:` (R2/R3, the IO guard, the verified stop); look from the host
+    instead (nvidia-smi, docker top / inspect / logs). 2026-10-09, vision-long-lived.md.
+ALLOWS everything else -- ps, logs, exec (outside vision), inspect, images, stats, tag, stop … --
+and any command whose head is `scripts/guarded_build.py` (the guard's own docker calls are
+subprocesses and never reach this hook).
 
 SEES THROUGH: `;` `&&` `||` `|` `&` `( )`, newlines, `# comments` (quote-aware: a comment never
 hides the next line), leading VAR=… assignments, the wrappers sudo, env, nice, ionice, timeout,
@@ -42,8 +46,33 @@ from _shell import SHELLS, segments, strip_heredocs, unwrap  # noqa: E402
 GUARDED = "python3 scripts/guarded_build.py --sustain 30 --spike 25 <step>"
 STEPS = (
     "start:<svc>[@s] recreate:<svc>[@s] restart:<svc>[@s] rm:<svc> build:<svc> pull:<svc> "
-    "run:vision rundev:vision"
+    "run:vision rundev:vision worker:vision[@s] execdev:vision@s=<cmd> worker-stop:vision"
 )
+DOCKER_EXEC_OPTS_WITH_VALUE = frozenset(
+    {"-e", "--env", "--env-file", "-u", "--user", "-w", "--workdir", "--detach-keys"}
+)  # fmt: skip
+
+
+def _exec_target(args: list[str], opts_with_value: frozenset[str]) -> str | None:
+    """The container (or compose service) an exec names: its first non-option word."""
+    skip = False
+    for a in args:
+        if skip:
+            skip = False
+        elif a in opts_with_value:
+            skip = True
+        elif not a.startswith("-"):
+            return a
+    return None
+
+
+def _exec_reason(args: list[str], what: str, opts: frozenset[str]) -> str | None:
+    target = _exec_target(args, opts)
+    if target is not None and "vision" in target:
+        return f"`{what} {target}` (a vision container: GPU jobs go through execdev:)"
+    return None
+
+
 DOCKER_BLOCK = frozenset({"build", "buildx", "pull", "run", "create", "start", "restart"})
 COMPOSE_BLOCK = frozenset(
     {"up", "create", "build", "pull", "run", "restart", "start", "down", "rm", "scale", "watch"}
@@ -64,9 +93,10 @@ FALLBACK = re.compile(
 
 def _compose_reason(args: list[str], what: str) -> str | None:
     sub = None
+    sub_at = 0
     force = safe_config = False
     skip = False
-    for a in args:
+    for i, a in enumerate(args):
         if skip:
             skip = False
             continue
@@ -77,9 +107,14 @@ def _compose_reason(args: list[str], what: str) -> str | None:
         elif a in ("--no-interpolate", "-q", "--quiet"):
             safe_config = True
         elif not a.startswith("-") and sub is None:
-            sub = a
+            sub, sub_at = a, i
     if sub in COMPOSE_BLOCK:
         return f"`{what} {sub}`"
+    if sub == "exec":
+        opts = DOCKER_EXEC_OPTS_WITH_VALUE | {"--index"}
+        reason = _exec_reason(args[sub_at + 1 :], f"{what} exec", opts)
+        if reason:
+            return reason
     if force:
         return f"`{what} … --force-recreate`"
     if sub == "config" and not safe_config:
@@ -121,6 +156,9 @@ def classify_words(words: list[str], depth: int = 0) -> str | None:
     verb = rest[i]
     if verb == "compose":
         return _compose_reason(rest[i + 1 :], "docker compose")
+    if verb == "exec" or (verb == "container" and rest[i + 1 : i + 2] == ["exec"]):
+        at = i + 1 if verb == "exec" else i + 2
+        return _exec_reason(rest[at:], "docker exec", DOCKER_EXEC_OPTS_WITH_VALUE)
     sub_blocked = i + 1 < len(rest) and (verb == "buildx" or rest[i + 1] in DOCKER_BLOCK)
     if verb in ("container", "image", "buildx") and sub_blocked:
         return f"`docker {verb} {rest[i + 1]}`"
@@ -161,7 +199,7 @@ def main() -> int:
     print(
         f"BLOCKED by poring-lab's docker guard (CLAUDE.md rule 5): {reason} must run through the "
         f"IO guard. Use: {GUARDED}  (steps: {STEPS}). Read-only docker/compose commands (ps, "
-        "logs, exec, inspect, config --no-interpolate) are fine.",
+        "logs, exec outside the vision containers, inspect, config --no-interpolate) are fine.",
         file=sys.stderr,
     )
     return 2
