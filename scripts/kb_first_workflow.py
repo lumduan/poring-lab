@@ -1857,6 +1857,97 @@ def check_packets(doc: dict[str, Any], sessions: Sequence[Path]) -> dict[str, An
     }
 
 
+# --- npc_cells.json (npc_noclick / npc_click_test's L3 list; npc-click-test.md 5.1 P1) ---
+
+HIDDEN_OPTIONS = 0x2 | 0x4 | 0x40  # poring_packets.world: HIDE, CLOAK, INVISIBLE (sent, not drawn)
+NPC_CELLS = ROOT / "data" / "kb" / "npc_cells.json"
+
+
+def _file_line(key: str) -> tuple[str, int | None]:
+    file, _, line = key.rpartition(":")
+    return (file, int(line)) if line.isdigit() else (key, None)
+
+
+def map_complete(doc: dict[str, Any], m: str) -> bool:
+    """A map's NPC list is COMPLETE when the server loads it, every file line naming it was
+    classified, and no script places anything on it at run time (the build's completeness)."""
+    c = doc.get("completeness", {})
+    rec = doc["maps"].get(m, {})
+    if not rec.get("loaded_by_server") or m not in c.get("counts", {}):
+        return False
+    unclassified = [u for u in c.get("unclassified", []) if m in json.dumps(u)]
+    placements = [p for p in c.get("script_placements", []) if m in json.dumps(p)]
+    return not unclassified and not placements
+
+
+def npc_cells(doc: dict[str, Any], check: dict[str, Any] | None = None) -> dict[str, Any]:
+    """The KB's NPCs per map in npc_noclick's format, each MARKED drawn / not: ``drawn`` is the
+    KB's (True, False, or "conditional": the script hides itself at start, e.g. prt_church's
+    wedding row, sent with an invisibility option). ``probe`` is True only for an NPC the client
+    always draws with its own sprite (the probe plan's candidates)."""
+    out: dict[str, Any] = {}
+    for m, rec in doc["maps"].items():
+        rows = []
+        for n in rec.get("npcs", []):
+            file, line = _file_line(n["key"])
+            drawn = n.get("drawn")
+            rows.append({
+                "x": n["x"], "y": n["y"], "file": file, "line": line, "sprite": n["sprite"],
+                "sprite_class": n.get("sprite_class"), "kind": n.get("kind"), "drawn": drawn,
+                "probe": drawn is True and n.get("sprite_class") == "npc"
+                and n.get("kind") != "warp_portal",
+            })  # fmt: skip
+        block: dict[str, Any] = {"complete": map_complete(doc, m), "npcs": rows}
+        if check is not None:
+            block["packet_check"] = check.get(m)
+        out[m] = block
+    return {
+        "generator": "scripts/kb_first_workflow.py npc-cells",
+        "kb_built_at": doc.get("built_at"),
+        "rathena_ref": doc.get("rathena_ref"),
+        "rule": "complete = every loaded file parsed, every line naming the map classified, no "
+        "run-time placement; drawn: True / False / 'conditional' (hidden at start)",
+        "maps": out,
+    }
+
+
+def packet_check_per_map(doc: dict[str, Any], sessions: Sequence[Path]) -> dict[str, Any]:
+    """P1's check per map: every NPC object the server showed is in the list at its cell with its
+    sprite, and the DRAWN marks agree with the packets: an object sent with an invisibility option
+    must not be marked drawn=True; one sent without it must not be marked drawn=False."""
+    seen: dict[tuple[str, int, int, int], set[int]] = defaultdict(set)
+    for s in sessions:
+        for r in packet_npcs(s):
+            if r["map"] in doc["maps"]:
+                seen[(r["map"], r["x"], r["y"], r["job"])].add(int(r["effect_state"] or 0))
+    kb: dict[tuple[str, int, int], list[dict[str, Any]]] = defaultdict(list)
+    for m, e in doc["maps"].items():
+        for n in e["npcs"]:
+            kb[(m, n["x"], n["y"])].append({"sprite": n["sprite"], "drawn": n.get("drawn")})
+        for x in e["warps"]:
+            kb[(m, x["x"], x["y"])].append({"sprite": 45, "drawn": x.get("drawn", True)})
+    per: dict[str, dict[str, Any]] = {}
+    for (m, x, y, job), effects in sorted(seen.items()):
+        row = per.setdefault(m, {"objects": 0, "matched": 0, "hidden_sent": 0, "missing": [],
+                                 "wrong_sprite": [], "drawn_disagrees": []})  # fmt: skip
+        row["objects"] += 1
+        here = [h for h in kb.get((m, x, y), []) if h["sprite"] == job]
+        hidden = any(e & HIDDEN_OPTIONS for e in effects)
+        shown = any(not e & HIDDEN_OPTIONS for e in effects)
+        row["hidden_sent"] += int(hidden)
+        if not here:
+            other = [h["sprite"] for h in kb.get((m, x, y), [])]
+            (row["wrong_sprite"] if other else row["missing"]).append([x, y, job])
+            continue
+        row["matched"] += 1
+        marks = {h["drawn"] for h in here}
+        if (hidden and not shown and True in marks) or (shown and not hidden and False in marks):
+            row["drawn_disagrees"].append([x, y, job, sorted(effects)])
+    for row in per.values():
+        row["pass"] = row["matched"] == row["objects"] and not row["drawn_disagrees"]
+    return per
+
+
 # --- budget ---
 
 
@@ -1981,6 +2072,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=None,
         help="poring_dataset's _generated map caches (clone groups)",
     )
+    q = sub.add_parser("npc-cells", help="data/kb/npc_cells.json (npc-click-test.md 5.1 P1)")
+    q.add_argument("--kb", type=Path, default=OUT)
+    q.add_argument("--out", type=Path, default=NPC_CELLS)
+    q.add_argument("--sessions", nargs="*", type=Path, default=[], help="banked: P1's check")
     for name in ("summary", "budget", "check-packets"):
         q = sub.add_parser(name)
         q.add_argument("--kb", type=Path, default=OUT)
@@ -2011,6 +2106,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return 0
     doc = json.loads(a.kb.read_text())
+    if a.cmd == "npc-cells":
+        check = packet_check_per_map(doc, a.sessions) if a.sessions else None
+        cells = npc_cells(doc, check)
+        _write(a.out, cells)
+        report = {
+            m: {"complete": b["complete"], "npcs": len(b["npcs"]),
+                "probe": sum(1 for n in b["npcs"] if n["probe"]),
+                "not_drawn": sum(1 for n in b["npcs"] if n["drawn"] is not True),
+                **({"packet_check": {k: (len(v) if isinstance(v, list) else v)
+                                     for k, v in b["packet_check"].items()}}
+                   if b.get("packet_check") else {})}
+            for m, b in cells["maps"].items()
+        }  # fmt: skip
+        print(json.dumps({"out": str(a.out), "maps": report}, indent=1))
+        failed = [m for m, b in cells["maps"].items()
+                  if b.get("packet_check") and not b["packet_check"]["pass"]]  # fmt: skip
+        return 1 if failed else 0
     if a.cmd == "summary":
         print(json.dumps(summary(doc), indent=1, default=list))
     elif a.cmd == "check-packets":
