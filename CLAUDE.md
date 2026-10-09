@@ -369,6 +369,10 @@ ports, quickstart) and `docs/adr/`.
     sha256 on Windows) and give him the printed `Copy-Item … '\\tsclient\transfer\'` line
     (Batt, 2026-10-03). Agent reads/writes in `/transfer` are ADR-0004 exceptions: rare, each one
     in its "Exceptions log";
+  - **every typed GAME line passes the UI GATE first** (`scripts/ui_gate.py`, Batt 2026-10-09,
+    mandatory): `ro_agent.open_chat` and `bench.close_chat` check the client from pixels (talk@1's
+    NPC dialog / menu reader + the four cut windows) and close only by KNOWN steps (Enter on a dialog
+    showing CLOSE; a window's own chord); anything else stops. Never press Enter into an unknown state;
   - **every console line goes through `ro_agent.type_line`** (2026-10-04): Escape first (a
     cut-off line had left a `>>` prompt that swallowed tscon), then `cls` + a proof bar of a
     fresh width it waits for. A marker of a fixed width proves nothing (a stale one passed);

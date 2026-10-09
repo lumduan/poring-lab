@@ -1200,6 +1200,11 @@ def open_chat(agent: Agent, screen: Screen) -> None:
     """Make sure the chat input is open (Enter opens it), then click INTO it: an open but
     unfocused input (e.g. after clicks on the world) drops the first keystrokes -- a `@warp ...`
     went out as public chat without its `@warp ` (2026-10-01)."""
+    # THE UI GATE first (Batt 2026-10-09, walk@17 item 6, mandatory): no Enter into an unknown
+    # state -- an NPC dialog / menu or an open window is closed by known steps, or this stops.
+    import ui_gate
+
+    ui_gate.ensure_clear(agent, screen, why="open_chat")
     # Enter toggles an EMPTY input. The signature can miss an input that IS open (the blinking text
     # cursor, 2026-10-02): then the first Enter closed it -- so toggle up to twice.
     pressed: int | None = None

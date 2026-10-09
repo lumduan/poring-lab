@@ -1579,6 +1579,11 @@ shapes:
   pilot still counts for nothing.
 - The 3.20 bar, the safety window and every verdict rule are unchanged.
 
+➡️ **TYPING TRANSPORT CHANGED BEFORE STEP 1 (2026-10-09 ~16:10; Batt's mandatory item 6):** every
+line loot@1 types (its GM commands) now passes the UI gate (`scripts/ui_gate.py`, 3.32 item 6)
+first. No decision code changes: the gate either finds the client clear (~1.5 s per line) or stops
+the run before typing. A stop is a harness stop (exit 3), never a trial result.
+
 **Step 1 · P3's positive case (BEFORE any loot trial; §2a's rule):** `loot1.py p3 --n 10 --seed
 20261110`, the same kills with no loot.
 - **Judged per kill whose target died on the server** (its "died" vanish within 5 cells of the
@@ -3162,6 +3167,31 @@ pre-registration):
    - This is a harness change: refuse to start a run while a dialog or window is open, judged from
      pixels, and log it.
    - How such a dialog is closed (a human-like cancel, or a stop for Batt) is Batt's call.
+   - ➡️ **DECIDED (Batt ~15:20): MANDATORY for every harness** ("every harness checks the UI state
+     from pixels before typing anything (open NPC dialog, menus, windows) and closes it only by
+     known steps; never press Enter into an unknown state").
+   - ➡️ **BUILT + PROVEN LIVE (2026-10-09 ~16:10):** `scripts/ui_gate.py`, called by `ro_agent.open_chat`
+     (so every `chat_line` / `gm` / `say` / where_fix line) and `bench.close_chat`.
+     - **What it reads, on two fresh frames that must agree, the cursor parked:**
+       - the NPC dialog / menu by talk@1's T2 (proven 168 / 168 held-out, 3.30);
+       - the four windows with cut anchors (status, skills, inventory, equipment), each within
+         12 px of where the client reopens it.
+     - **Its only known closing steps:** Enter on a dialog showing CLOSE with no menu; a window's own
+       L2 chord.
+     - **Everything else STOPS** (NEXT, a menu, unreadable, unstable, missing templates, a non-RDP
+       path), with nothing typed and a frame saved. Every check is logged in
+       `data/ro_agent/ui_gate.jsonl`.
+     - **Cost:** ~1.5 s per typed line in a running process (~3 s for the first, which loads the
+       templates).
+     - **Positive cases (live, deliberate):**
+       - `ui_gate.py prove-windows`: each of the four windows opened by its chord was seen (home box
+         = full-frame locate) and closed by its chord: 4 / 4 PASS.
+       - The city guide, session `20261009T160329-demo-talk-cal-guide`. The gate STOPPED on the
+         dialog's NEXT (the server saw no click until the drive's own Enter 12 s later) and STOPPED on
+         the menu (no choice until the drive's keys). On CLOSE its one Enter became the server's
+         `npc_close_click`, then clear.
+     - **Gaps, stated:** windows without a cut anchor (the options window, a shop, a trade), and one
+       of the four dragged away from its home, are not seen.
 
 ### 3.33 The GM's IMMUNITY: a test condition for the visual-diversity block (pre-registered 2026-10-09 ~14:05 ICT / 07:05 UTC, BEFORE the check; Batt: "keep gl_prison; a GM doesn't need to fear monsters. Make the GM safe without changing what the bot sees")
 **The condition, PRIMARY:** rAthena's `@monsterignore`, granted to the GM's group 20 (`groups.yml`,

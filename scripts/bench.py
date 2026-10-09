@@ -136,6 +136,9 @@ def run_config(backend: str) -> dict[str, Any]:
 
 def close_chat(agent: r.Agent, screen: r.Screen) -> None:
     if r.is_state(screen, "chat_open"):
+        import ui_gate
+
+        ui_gate.ensure_clear(agent, screen, why="close_chat")  # item 6: never Enter into a dialog
         agent.keys("Enter")  # an EMPTY open input: Enter closes it
         time.sleep(0.8)
 
