@@ -115,6 +115,7 @@ sessions in `/dev/shm/poring-lab-demo` and the local KB; nothing written outside
     ➡️ **2026-10-09 ~19:30 (section 7.3): it is a `warp` LINE**, npc/quests/quests_prontera.txt:2174,
     a file route.json's hand list does not read. `kb_first_workflow.py --also prt_church` lists it.
     `labels_v2.l3_warps` still reads route.json: pointing it at the new KB is a follow-up, not done.
+    ➡️ DONE 2026-10-09 ~21:15 (e6f3b1d, merged 748260d): route.json's warp lists now come from this KB's COMPLETE per-map list (kb_route.py; prt_church gains (115,122) and (166,106)), so labels_v2 and npc_noclick read the completed lists.
 - **Why the visibility table (found on the banked frames, 2026-10-09):** the packets send a portal
   that map geometry hides.
   - Prontera's building doors are job-45 portals under their roofs: 12 / 12 aligned crops of
@@ -949,7 +950,7 @@ to each.
 6. **Typing:** the character name and the serial go through the typing guard and the UI /
    foreground gates.
 7. **NPC sprites only along the route.**
-8. (the follow-up stays open.)
+8. (the follow-up stays open.) ➡️ DONE 2026-10-09 ~21:15 (e6f3b1d, merged 748260d): route.json's warp lists now come from this KB's COMPLETE per-map list (kb_route.py; prt_church gains (115,122) and (166,106)), so labels_v2 and npc_noclick read the completed lists.
 
 **Also decided (same message):**
 - A NEW L1 concept for the job change: allocating skill points (Basic Skill > 8) through the skill
@@ -983,3 +984,4 @@ to each.
    the route?
 8. **Follow-up, not done:** `labels_v2.l3_warps` and `npc_noclick` still read route.json; pointing
    them at this KB is a separate change.
+   ➡️ DONE 2026-10-09 ~21:15 (e6f3b1d, merged 748260d): route.json's warp lists now come from this KB's COMPLETE per-map list (kb_route.py; prt_church gains (115,122) and (166,106)), so labels_v2 and npc_noclick read the completed lists.
