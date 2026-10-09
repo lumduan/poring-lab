@@ -21,6 +21,16 @@ commands." The rules, from L2 `chat` (the measured fact and the policy):
 - `ChatRefused` is raised. With `on_refuse="skip"`, the line is simply not typed and the caller is
   told (False). That is for an idempotent GM command, whose repeat would be dropped anyway.
 
+**THE ONE EXEMPTION** (Batt 2026-10-09, 3.29a): walk@15's FROZEN where@2 (`where_fix.fix_v2`: an
+"/ex" separator, then /where, read twice) may type its pattern inside the held-out re-runs of 3.29a
+only, so the rule is tested exactly as pre-registered.
+- The re-run chain sets it (`set_exemption`) and clears it when the re-runs end. It also expires by
+  itself (`until`).
+- It covers ONLY lines tagged with where@2's reasons (EXEMPT_REASONS). For those, the filler, /where
+  retry and /where budget rules are lifted; the repeat rule and the minimum interval still apply.
+- Every line it lets through is logged with the exemption's id.
+- From walk@17 on, no exemption: no separators, /where once per need, passive sources first.
+
 **A RUN** (`start_run`) sets the /where budget and resets its count. Without one, the L2 default
 budget applies to the host's default run.
 
@@ -29,6 +39,7 @@ processes type through the one client in turn. An unreadable state file starts f
 warning.
 
     chat_guard.py status | where | start-run --id ID [--budget N]
+    chat_guard.py exempt --id 3.29a --hours H | clear-exempt
 """
 
 from __future__ import annotations
@@ -48,6 +59,7 @@ STATE = Path("/dev/shm/poring-lab-tmp/chat-guard.json")
 LOG = ROOT / "data" / "ro_agent" / "chat_guard.jsonl"
 L2_CLIENT = "kro-20211103-prere"
 FILLER = frozenset({"/ex"})  # lines our code typed only to reset the repeat count (where@2)
+EXEMPT_REASONS = frozenset({"where_fix.fix_v2", "where_fix.fix_v2 separator"})  # 3.29a only
 FALLBACK_POLICY = {"refuse_identical_in_a_row": 3, "where_retry_s": 60,
                    "where_budget_per_run": 12, "min_line_interval_s": 0.5}  # fmt: skip
 
@@ -115,9 +127,26 @@ def start_run(run_id: str, budget: int | None = None, *, state_path: Path = STAT
     _log(log, {"event": "run_start", "run": run_id, "where_budget": b})
 
 
+def set_exemption(eid: str, hours: float, *, state_path: Path = STATE, log: Path = LOG,
+                  wall: Callable[[], float] = time.time) -> None:  # fmt: skip
+    """The 3.29a exemption for the frozen where@2 (see the module docstring), expiring by itself."""
+    if not 0 < hours <= 8:
+        raise ValueError("an exemption lasts at most 8 h")
+    with _locked(state_path) as state:
+        state["exemption"] = {"id": eid, "until": wall() + hours * 3600}
+    _log(log, {"event": "exemption_set", "id": eid, "hours": hours})
+
+
+def clear_exemption(*, state_path: Path = STATE, log: Path = LOG) -> None:
+    with _locked(state_path) as state:
+        old = state.pop("exemption", None)
+    _log(log, {"event": "exemption_cleared", "id": (old or {}).get("id")})
+
+
 def before_typing(text: str, *, reason: str | None = None, on_refuse: str = "raise",
                   state_path: Path = STATE, log: Path = LOG, pol: dict[str, Any] | None = None,
-                  clock: Callable[[], float] = time.monotonic) -> bool:  # fmt: skip
+                  clock: Callable[[], float] = time.monotonic,
+                  wall: Callable[[], float] = time.time) -> bool:  # fmt: skip
     """Call right before typing ``text``. True: type it now. A refusal is logged, then raised
     (ChatRefused) or, with ``on_refuse="skip"``, returned as False."""
     if on_refuse not in ("raise", "skip"):
@@ -134,7 +163,10 @@ def before_typing(text: str, *, reason: str | None = None, on_refuse: str = "rai
         last_t, last_where = state.get("last_t"), state.get("last_where_t")
         gap = now - last_t if isinstance(last_t, (int, float)) else None
         where_gap = now - last_where if isinstance(last_where, (int, float)) else None
-        if text.strip() in FILLER:
+        ex = state.get("exemption") or {}
+        exempt = (reason in EXEMPT_REASONS and isinstance(ex.get("until"), (int, float))
+                  and wall() < float(ex["until"]))  # fmt: skip
+        if text.strip() in FILLER and not exempt:
             refusal = ("filler", f"{text!r} is only ever a separator: never type a line to reset "
                                  "the client's repeat count (Batt 2026-10-09)")  # fmt: skip
         elif n >= int(p["refuse_identical_in_a_row"]):
@@ -142,10 +174,11 @@ def before_typing(text: str, *, reason: str | None = None, on_refuse: str = "rai
         elif gap is not None and 0 <= gap < float(p["min_line_interval_s"]):
             refusal = ("interval", f"{gap:.2f} s after the previous line "
                                    f"(min {p['min_line_interval_s']} s)")  # fmt: skip
-        elif is_where and where_gap is not None and 0 <= where_gap < float(p["where_retry_s"]):
+        elif (is_where and not exempt and where_gap is not None
+              and 0 <= where_gap < float(p["where_retry_s"])):  # fmt: skip
             refusal = ("where_retry", f"/where {where_gap:.1f} s after the previous one (once "
                                       f"per need; retry after {p['where_retry_s']} s)")  # fmt: skip
-        elif is_where and int(run["where"]) >= int(run["budget"]):
+        elif is_where and not exempt and int(run["where"]) >= int(run["budget"]):
             refusal = ("where_budget", f"the run {run['id']!r} used its /where budget "
                                        f"({run['budget']})")  # fmt: skip
         if refusal is None:
@@ -161,6 +194,8 @@ def before_typing(text: str, *, reason: str | None = None, on_refuse: str = "rai
         if on_refuse == "skip":
             return False
         raise ChatRefused(*refusal)
+    if exempt:
+        _log(log, {"event": "exempted", "id": ex.get("id"), "line": _shown(text), "reason": reason})
     if is_where:
         _log(log, {"event": "where", "run": run["id"], "n": run["where"], "budget": run["budget"],
                    "reason": reason or "unspecified", "argv0": Path(sys.argv[0]).name})  # fmt: skip
@@ -189,7 +224,8 @@ def summary(log: Path = LOG, run_id: str | None = None) -> dict[str, Any]:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)  # fmt: skip
-    ap.add_argument("cmd", choices=("status", "where", "start-run"))
+    ap.add_argument("cmd", choices=("status", "where", "start-run", "exempt", "clear-exempt"))
+    ap.add_argument("--hours", type=float, default=None)
     ap.add_argument("--id", default=None)
     ap.add_argument("--budget", type=int, default=None)
     a = ap.parse_args()
@@ -197,6 +233,12 @@ def main() -> int:
         if not a.id:
             raise SystemExit("start-run needs --id")
         start_run(a.id, a.budget)
+    elif a.cmd == "exempt":
+        if not a.id or a.hours is None:
+            raise SystemExit("exempt needs --id and --hours")
+        set_exemption(a.id, a.hours)
+    elif a.cmd == "clear-exempt":
+        clear_exemption()
     elif a.cmd == "status":
         state = json.loads(STATE.read_text()) if STATE.exists() else {}
         print(json.dumps({"policy": policy(), **state}))

@@ -230,3 +230,65 @@ def test_fix_v2_fails_closed_on_its_refused_separator(monkeypatch: pytest.Monkey
     monkeypatch.setattr(wf.time, "sleep", lambda s: None)
     got = wf.fix_v2(None, None, {}, (10, 10), np.ones((50, 50), bool))
     assert got["xy"] is None and set(got["rejects"]) == {"guard:filler"}
+
+
+# --- the ONE exemption: walk@15's frozen where@2 inside 3.29a's re-runs (Batt 2026-10-09) --------
+@pytest.fixture
+def exempt(tmp_path: Path) -> Any:
+    clock, wall = Clock(), {"t": 5_000_000.0}
+    paths = {"state_path": tmp_path / "s.json", "log": tmp_path / "g.jsonl"}
+
+    def go(text: str, reason: str | None = None, dt: float = 2.0) -> bool:
+        clock.t += dt
+        wall["t"] += dt
+        return bool(cg.before_typing(text, reason=reason, pol=POL, clock=clock,
+                                     wall=lambda: wall["t"], **paths))  # fmt: skip
+
+    def set_ex(hours: float = 2.0) -> None:
+        cg.set_exemption("3.29a", hours, wall=lambda: wall["t"], **paths)
+
+    return go, set_ex, wall, paths
+
+
+def test_the_exemption_lets_where2s_pattern_through_and_logs_it(exempt: Any) -> None:
+    go, set_ex, _, paths = exempt
+    cg.start_run("re-run", 2, **paths)
+    set_ex()
+    for _ in range(6):  # /ex then two reads of /where, seconds apart, past the retry and budget
+        assert go("/ex", reason="where_fix.fix_v2 separator")
+        assert go("/where", reason="where_fix.fix_v2")
+    rows = [json.loads(x) for x in paths["log"].read_text().splitlines()]
+    assert sum(1 for r in rows if r.get("event") == "exempted" and r["id"] == "3.29a") == 12
+
+
+def test_the_exemption_covers_where2_only(exempt: Any) -> None:
+    go, set_ex, _, _ = exempt
+    set_ex()
+    with pytest.raises(cg.ChatRefused, match="filler"):
+        go("/ex")  # any other caller: still filler
+    assert go("/where", reason="loot1")
+    with pytest.raises(cg.ChatRefused, match="where_retry"):
+        go("/where", reason="loot1")  # the policy still holds for everyone else
+
+
+def test_the_exemption_expires_and_is_cleared(exempt: Any) -> None:
+    go, set_ex, wall, paths = exempt
+    set_ex(hours=1.0)
+    assert go("/ex", reason="where_fix.fix_v2 separator")
+    wall["t"] += 3601
+    with pytest.raises(cg.ChatRefused, match="filler"):
+        go("/ex", reason="where_fix.fix_v2 separator")
+    set_ex()
+    cg.clear_exemption(**paths)
+    with pytest.raises(cg.ChatRefused, match="filler"):
+        go("/ex", reason="where_fix.fix_v2 separator")
+    with pytest.raises(ValueError):
+        set_ex(hours=9)
+
+
+def test_the_exemption_keeps_the_repeat_rule(exempt: Any) -> None:
+    go, set_ex, _, _ = exempt
+    set_ex()
+    assert go("/where", reason="where_fix.fix_v2") and go("/where", reason="where_fix.fix_v2")
+    with pytest.raises(cg.ChatRefused, match="repeat"):
+        go("/where", reason="where_fix.fix_v2")

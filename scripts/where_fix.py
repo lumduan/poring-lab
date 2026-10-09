@@ -231,7 +231,7 @@ def fix_v2(agent: Any, screen: Any, templates: dict[str, Any], belief: tuple[int
         for _ in range(2):
             r.activate_client(agent, screen)
             try:
-                r.chat_line(agent, screen, SEPARATOR)  # breaks the client's repetition refusal
+                r.chat_line(agent, screen, SEPARATOR, reason="where_fix.fix_v2 separator")
                 time.sleep(SETTLE_S)
                 before = text_mask_v2(stable_area(screen))
                 r.chat_line(agent, screen, "/where", reason="where_fix.fix_v2")
