@@ -55,19 +55,19 @@ export function importFlow(text: string): ImportResult {
   const bytes = new TextEncoder().encode(text).length;
   if (bytes > MAX_JSON_BYTES) return { ok: false, errors: [`the file is ${bytes} bytes; at most ${MAX_JSON_BYTES}`] };
   if (jsonDepth(text) > MAX_JSON_DEPTH) return { ok: false, errors: [`nested deeper than ${MAX_JSON_DEPTH}`] };
-  let data: unknown;
+  let parsed: unknown;
   try {
-    data = JSON.parse(text);
+    parsed = JSON.parse(text);
   } catch {
     return { ok: false, errors: ["not JSON"] };
   }
   const errors: string[] = [];
-  if (!isObj(data)) return { ok: false, errors: ["a flow is a JSON object"] };
-  if (data.ir !== 1 && data.ir !== IR_VERSION) {
-    const shown = (JSON.stringify(data.ir) ?? "?").slice(0, 20);
+  if (!isObj(parsed)) return { ok: false, errors: ["a flow is a JSON object"] };
+  if (parsed.ir !== 1 && parsed.ir !== IR_VERSION) {
+    const shown = (JSON.stringify(parsed.ir) ?? "?").slice(0, 20);
     errors.push(`ir: IR version ${shown} is not supported: this editor reads IR ${IR_VERSION} (and converts IR 1)`);
   }
-  data = upgradeFlow(data);
+  const data = upgradeFlow(parsed);
   if (typeof data.name !== "string" || !FLOW_NAME.test(data.name)) errors.push("name: lower-case letters, digits and _");
   if (!isObj(data.target)) errors.push("target: missing");
   const hasMain = Array.isArray(data.main);
