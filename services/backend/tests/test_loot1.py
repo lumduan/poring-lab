@@ -186,3 +186,26 @@ def test_the_spawn_line_is_never_varied(loot1: Any) -> None:
     """Batt's typing policy (2026-10-09): no line is altered to dodge the repeat counter."""
     src = (SCRIPTS / "loot1.py").read_text()
     assert 'f"@monster {PORING} 1"' in src and "'0' *" not in src
+
+
+def test_the_hud_is_display_only_and_never_raises(loot1: Any) -> None:
+    """Batt 2026-10-09 ~19:30: loot@1 tells the operator HUD what it does; display only."""
+
+    class Hud:
+        def __init__(self) -> None:
+            self.lines: list[str] = []
+            self.boxes: list[list[Any]] = []
+
+        def note(self, line: str) -> None:
+            self.lines.append(line)
+
+        def send(self, boxes: list[Any], force: bool) -> bool:
+            self.boxes.append(boxes)
+            raise RuntimeError("a HUD failure must never reach the trial")
+
+    rig = SimpleNamespace(hud=Hud())
+    loot1.hud(rig, "trial 0: target found", [box(640, 400), None])
+    assert rig.hud.lines == ["trial 0: target found"] and len(rig.hud.boxes[0]) == 1
+    loot1.hud(SimpleNamespace(hud=None), "nothing to send")  # no HUD: no-op
+    hit = {"tried": [[1.0, 2.0, "unknown", None], [1.0, 3.0, "sword", "sword"]]}
+    assert loot1._reads(hit) == "unknown sword/sword"

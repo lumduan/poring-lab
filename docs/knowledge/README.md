@@ -21,7 +21,7 @@ Every entry starts **unverified**: written from memory, which may mix renewal, p
 | `cart.transfer` | Move items between the inventory and the cart. | - | unverified | the item moves between the two windows |
 | `char.allocate_stat` | Spend status points to raise a base stat. | 1 Novice basics | unverified | the stat value in the status window rises and the remaining points drop |
 | `char.change_job` | Change to a new job through the job's NPC process. | 3 Merchant job change | unverified | the character's job name and sprite change |
-| `char.learn_skill` | Spend skill points to raise a skill level. | 1 Novice basics | unverified | the skill's level in the skill window rises and the points drop |
+| `char.learn_skill` | Spend skill points to raise a skill level (the first workflow needs Basic Skill above 8). | 1 Novice basics | unverified | the skill's level in the skill window rises and the points drop |
 | `char.respawn` | Return to the save point after dying. | 1 Novice basics | unverified | the death dialog closes and the save point map is drawn |
 | `char.sit` | Sit down to regenerate faster. | 1 Novice basics | unverified | the character sprite shows the sitting pose |
 | `char.stand` | Stand up after sitting. | 1 Novice basics | unverified | the standing pose |
@@ -122,21 +122,24 @@ Change to a new job through the job's NPC process.
 
 ## `char.learn_skill`
 
-Spend skill points to raise a skill level.
+Spend skill points to raise a skill level (the first workflow needs Basic Skill above 8).
 
 - **Parameters:** skill, levels
 - **Status:** unverified
 - **Steps:**
-  1. Open the skill window, find the skill, press its raise control once per level, apply where the build asks.
+  1. Open the skill window by its shortcut, find the skill's row by its icon, press its raise control once per level, apply where the build asks, close the window.
+  2. Check the row's level and the points left from pixels before and after.
 - **Preconditions:**
-  - Unspent skill points; the skill's prerequisites are met.
+  - Unspent skill points; the skill's prerequisites are met; the skill window's anchor is known (open_window@1).
 - **Failure modes:**
-  - The prerequisite is missing; the wrong row is raised.
+  - The prerequisite is missing; the wrong row is raised; a raise needs a confirmation the build shows; the points stay unspent.
 - **Game rules:**
   - One skill point per job level; a novice's basic skill gates sitting, storage and the job change.
+  - The Merchant job change in the lab's pinned server requires the novice's Basic Skill above 8 (the local first-workflow KB, labels-v2-plan section 7.4).
   - Second-job changes usually require every skill point to be spent.
+  - In the pinned server, lowering a job level by GM command (@joblevelup -N) takes back the skill points, and when the unspent points are fewer it RESETS the skills (atcommand.cpp joblevelup, pc_resetskill); a repeatable test can restore Job Lv 1 with Basic Skill 0 that way.
 - **Outcome, runtime (screen):** the skill's level in the skill window rises and the points drop
-- **Outcome, offline (packets):** the skill update for that skill (decoder needed)
+- **Outcome, offline (packets):** the skill update for that skill (skill_update, ZC_SKILLINFO_UPDATE 0x010E, decoded) and the skill list (0x0B32)
 - **Bindings needed:** `L2.shortcut.window`, `L2.window.skills`, `L3.skill.tree`
 
 ## `char.respawn`

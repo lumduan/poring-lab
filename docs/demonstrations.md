@@ -3353,6 +3353,38 @@ FAIL: the backup is raised with Batt, and gl_prison waits.
 - It is applied once after each GM login and confirmed per run offline: zero acts on the GM.
 - An act on the GM in a run is reported as a condition failure, not a rule failure.
 
+### 3.34 learn_skill@1 -- spend skill points in the skill window (DESIGN 2026-10-09 ~19:50; NOT pre-registered; Batt ~19:30: "add the new skill the job change needs: allocating skill points (Basic Skill > 8) via the skill window, as an L1 concept with its own alone-test")
+**The concept:** `char.learn_skill` (L1, packages/poring_skills, updated): the first workflow's
+Merchant change needs the novice's Basic Skill above 8 (labels-v2-plan section 7.4).
+
+**The alone-test, as designed (to be pre-registered with n, seeds and the bar before any trial):**
+- **Start state** (the GM's fixed state, 3.20a): Base / Job Lv 1, Basic Skill 0.
+  - `@joblevelup 9` gives the 9 points (Job Lv 10). That is a level change, so the notices come
+    back; `gm_state` clears them by the status window.
+- **One trial:**
+  1. Open the skill window by its L2 shortcut (open_window@1's skills anchor).
+  2. Find Basic Skill's row by its icon.
+  3. Press its raise control N times (N seeded, 1-9), clicking only on the measured control; apply if
+     the build asks.
+  4. Close the window by its chord.
+  5. Read the row's level and the points left from pixels.
+  6. Restore: `@joblevelup -49`. In the pinned server that RESETS the skills when the unspent points
+     are fewer (atcommand.cpp joblevelup, pc_resetskill), so the next trial starts at Job Lv 1 with
+     Basic Skill 0.
+- **Judged offline:** the server's `skill_update` (ZC_SKILLINFO_UPDATE 0x010E, already decoded) for
+  skill 1 at level N, and SP_SKILLPOINT. Success = level N exactly, the points dropped by N, and
+  no other skill changed.
+- **Runtime outcome (pixels):** the row's level digit and the points readout. These need a small
+  digit reader, as the weight reader does.
+
+**Prerequisites before pre-registration:**
+- The raise control's place in the skill window (an L2 binding), measured from banked frames of a
+  live, hover-only look.
+- The window's layout for a Novice's tree.
+- Whether the 2021 client asks for an "apply" after the raises.
+- The click is a NEW UI click: registered in the click census, and only on the measured control.
+- A positive case for the offline judge: one deliberate raise, seen as `skill_update`.
+
 ### HUD scene: box drift while walking + doubled boxes — OFFLINE SIM RESULT (2026-10-08 night; branch `feat/hud-drift`, merged 0d6cd79, DEPLOYED 2026-10-09 00:36 ICT; LIVE RE-MEASURE below)
 
 #### 2026-10-09 — SEEN TWICE + the display-only RECONNECT: BUILT on `feat/hud-seen-twice` (merged 9687631), measured offline; ➡️ the plain rule SUPERSEDED by the CONFIRMING PASS (first sub-entry)

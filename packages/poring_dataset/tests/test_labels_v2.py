@@ -292,3 +292,9 @@ def test_median_crop_and_bright_extent_find_the_disc() -> None:
     assert lv.bright_extent(med, (40, 40)) == (-20, -14, 21, 15)
     assert lv.bright_extent(med, (40, 40), threshold=250.0) is None
     assert lv.otsu(np.r_[np.full(50, 10.0), np.full(50, 200.0)]) == pytest.approx(10.0, abs=6)
+
+
+def test_intersect_is_the_overlap_or_none() -> None:
+    assert lv.intersect((0, 0, 10, 10), (5, 5, 20, 20)) == (5, 5, 10, 10)
+    assert lv.intersect((0, 0, 10, 10), (10, 0, 20, 10)) is None  # touching edges: no overlap
+    assert lv.intersect((984, 599, 1033, 644), (957, 249, 1183, 720)) == (984, 599, 1033, 644)

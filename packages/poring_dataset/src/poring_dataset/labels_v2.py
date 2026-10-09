@@ -483,6 +483,12 @@ class Verdict:
     against: tuple[int, ...] = ()  # the gids it overlapped
 
 
+def intersect(a: Rect, b: Rect) -> Rect | None:
+    """The overlap of two rects (x0, y0, x1, y1), or None when they do not overlap."""
+    x0, y0, x1, y1 = max(a[0], b[0]), max(a[1], b[1]), min(a[2], b[2]), min(a[3], b[3])
+    return (x0, y0, x1, y1) if x0 < x1 and y0 < y1 else None
+
+
 def verify_region(
     region: Rect,
     units: Sequence[V2Label],
@@ -519,7 +525,8 @@ def self_label(frame: FrameWorld, scene: Scene) -> V2Label | None:
     """Our own character's box: v0's player box at the camera target (our feet). v1 never labels
     it (the S2 sessions' GM played hidden); the RDP runs' GM is VISIBLE, so a v2 frame carries it
     at least as SHADOW: a background region must not touch it (the HUD boxed it, 2026-10-09).
-    Labelling it ``player`` is an open decision (labels-v2-plan.md section 1.1)."""
+    DECIDED (Batt 2026-10-09 ~19:30): it is LABELLED ``player`` (kind "self"); hidden behind the UI
+    or the cut-in it goes to shadow like any other unit (``assemble``)."""
     if frame.self_pos is None:
         return None
     (u, v), z = project_cell(scene, frame.self_pos)

@@ -74,8 +74,14 @@ scope, the budget and collection plan, a DRAFT pre-registration of v2 vs v1) **a
     600 ms) AND the cut-in's pixels are there (the steady difference to the closed view);
   - the cut-in's own packet, ZC_SHOW_IMAGE2 (0x01B3), is NOT decoded by `poring_packets` yet: the
     dialog state stands in for it. An offline decoder would make the label exact (open, not built);
-  - the region is accepted only when the packets show NO unit (monster, NPC, player) whose projected
-    box overlaps the cut-in's extent on that frame. No real unit is ever labelled background.
+  - ~~the region is accepted only when the packets show NO unit (monster, NPC, player) whose projected
+    box overlaps the cut-in's extent on that frame~~ ➡️ **AMENDED (Batt 2026-10-09 ~19:30): "verify
+    the phantom's region"**.
+    - The region checked is the PHANTOM's own box on the cut-in, (984, 599)-(1033, 644)
+      (`labels_v2.CUTIN_PHANTOM_GUIDE`), not the whole extent.
+    - A guild flag (job 722) stands behind the guide's cut-in on every open frame, so the whole-extent
+      rule admitted 0 / 120; the phantom's region passes on 120 / 120.
+    - The rule holds: no real unit is ever labelled background.
 - **Not covered yet:** other NPCs' cut-ins (Kafra employees, other towns' guides) and the other anchors
   (bottom left, bottom middle, the middle window) were never seen. One banked dialog per cut-in NPC on
   the workflow's maps (`talk_calibrate.py drive`) adds them; each gets its extent measured the same way.

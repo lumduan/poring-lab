@@ -71,8 +71,10 @@ sessions in `/dev/shm/poring-lab-demo` and the local KB; nothing written outside
   VISIBLE, so in those frames a player sprite trains as background.
   - v2 carries it as SHADOW (`labels_v2.self_label`: v0's player box at the camera target), so no
     background region may touch it.
-  - **Open (Batt):** label it `player`? The GM's appearance is fixed (Novice, Base/Job Lv 1, 3.20a),
-    so one measured box would do.
+  - ~~**Open (Batt):** label it `player`?~~ ➡️ **DECIDED (Batt 2026-10-09 ~19:30): label our GM as
+    "player"** (`scripts/labels_v2.py` passes `self_label` with the labelled units; hidden behind
+    the UI or the cut-in, it goes to shadow like any unit). The GM's appearance is fixed (Novice,
+    Base/Job Lv 1, 3.20a), so v0's player box at the camera target is used until one is measured.
 
 ### 1.2 NPCs per sprite (Batt ~16:10)
 - **The cell:** each `entity_appear` with objtype 6 and a drawn class, from `Timeline` at the frame's

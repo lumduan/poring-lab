@@ -82,6 +82,9 @@ TRAINED = frozenset({1002, 1063, 1008, 1113, 1018})
 PREPARED_MAPS = frozenset({"prt_fild08", "prt_church"})
 # Cut-ins by NPC (labels_v2.npc_key: map, job, cell; NO names). "measured": scripts/ui_mask.py
 # holds the region (CUTIN_GUIDE); None: measured to show none (ui_mask.py, 2026-10-09).
+# The PHANTOM v0-PNG boxed "monster 0.31" on the guide's cut-in (the hand on the spear): measured on
+# the banked talk-cal frames, 120 / 120 open frames (ui_mask.py's measurement, 2026-10-09).
+CUTIN_PHANTOM_GUIDE = (984.0, 599.0, 1033.0, 644.0)
 CUTINS: dict[str, str | None] = {
     "prontera:105:154,187": "measured",  # the prontera city guide
     "prt_church:67:103,76": None,
@@ -302,7 +305,7 @@ class Session:
         cut = lv.cutin_for(open_, key, table, unavailable=missing)
         dead = ("self_dead",) if any(a <= tw <= b for a, b in self.dead) else ()
         me = lv.self_label(world, scene)
-        hidden += [me] if me is not None else []
+        units = [*units, me] if me is not None else units  # Batt ~19:30: our GM IS "player"
         return "ok", lv.assemble(t, world, units, npcs, warps, cut, hidden, dead), scene
 
 
@@ -374,9 +377,13 @@ def session_coverage(s: Session, every: int) -> tuple[lv.Coverage, int]:
             continue
         cov.add(fr)
         if fr.cutin.rect is not None:  # section 2a: the shown cut-in, verified against the packets
-            v = lv.verify_region(fr.cutin.rect, fr.projected, SIZE, cutin=fr.cutin.rect,
-                                 allow_cutin=True)  # fmt: skip
-            cov.cutin_verified += int(v.accepted)
+            # Batt 2026-10-09 ~19:30: verify the PHANTOM's region, not the whole extent (a guild
+            # flag stands behind the guide's cut-in on every open frame: 0 / 120 qualified)
+            region = lv.intersect(CUTIN_PHANTOM_GUIDE, fr.cutin.rect)
+            if region is not None:
+                v = lv.verify_region(region, fr.projected, SIZE, cutin=fr.cutin.rect,
+                                     allow_cutin=True)  # fmt: skip
+                cov.cutin_verified += int(v.accepted)
     return cov, len(frames)
 
 

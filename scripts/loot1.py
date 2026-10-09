@@ -28,11 +28,13 @@ Packets are never read here (rule 1): they judge the session offline (loot1_scor
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import random
 import sys
 import threading
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -260,6 +262,23 @@ class Rig:
     digits: Any  # the minimap digit templates (selfpos)
     glyphs: Any
     cues: dict[str, Any]
+    hud: Any = None  # operator_hud.HudSender: DISPLAY ONLY (Batt 2026-10-09 ~19:30)
+
+
+def hud(rig: Rig, line: str, boxes: Sequence[Any] = ()) -> None:
+    """The operator HUD's decision log for loot@1 (Batt: "why I did not see bot action in the log"):
+    a plain-words line and the target's box. Display only: it never decides, never stops a trial
+    (operator_hud swallows every error)."""
+    h = rig.hud
+    if h is None:
+        return
+    with contextlib.suppress(Exception):
+        h.note(line)
+        h.send(boxes=[b for b in boxes if b is not None], force=True)
+
+
+def _reads(hit: dict[str, Any]) -> str:
+    return " ".join(f"{p[2]}{'/' + p[3] if p[3] else ''}" for p in hit.get("tried", [])) or "-"
 
 
 def frame_bgr(rig: Rig) -> Any:
@@ -343,6 +362,7 @@ def kill(rig: Rig, spot: Cell, trial: dict[str, Any]) -> tuple[Track | None, Cel
             return None, None
         trial["found"] = True
         idx, target = hit
+        hud(rig, f"trial {trial['k']}: target found", [target])
         track = Track(foot_of(target))
         track.update(frames[idx][0], [target])
         k = idx + 1
@@ -363,12 +383,15 @@ def kill(rig: Rig, spot: Cell, trial: dict[str, Any]) -> tuple[Track | None, Cel
                 return track, here
             if t_first is None and (now - t_find) / 1e9 > NO_CLICK_S:
                 trial["kill"] = "no_sword" if trial.get("attack_tries") else "never_still"
+                hud(rig, f"trial {trial['k']}: {trial['kill']} (no sword-gated click in 30 s)")
                 return track, here
             again = last_attack is None or (now - last_attack) / 1e9 > REATTACK_S
             ready = track.still(now) if again else None
             if ready is not None:
                 hit = sword_click(rig, track.last_box)
                 hit["box"] = ready
+                verdict = "ATTACK click" if hit["clicked"] else "no sword"
+                hud(rig, f"probe {_reads(hit)} -> {verdict}", [track.last_box])
                 trial.setdefault("attack_tries", []).append(hit)
                 if hit["clicked"]:
                     attacks.append(hit)
@@ -385,6 +408,7 @@ def kill(rig: Rig, spot: Cell, trial: dict[str, Any]) -> tuple[Track | None, Cel
             time.sleep(0.05)
         trial["kill"] = "vanished"
         trial["attacks"] = [a["t"] for a in attacks]
+        hud(rig, f"trial {trial['k']}: target gone from the pixels")
         if here is None:  # it died before the read, or that read failed: the GM stands still now
             got = minimap_cell(rig, spot)
             trial["where_after"] = got
@@ -433,6 +457,7 @@ def loot(rig: Rig, here: Cell, dead: dcm.DeathCell, trial: dict[str, Any]) -> No
         row: dict[str, Any] = {"cell": list(cell), "at": [round(u, 1), round(v, 1)],
                                "shape": first, "again": again}  # fmt: skip
         scan.append(row)
+        hud(rig, f"scan {cell[0]},{cell[1]}: {first}{'/' + again if again else ''}")
         if first != "pickup" or again != "pickup":
             continue
         ok, env = w11.unit_check(rig.pr, w, u, v)
@@ -448,7 +473,9 @@ def loot(rig: Rig, here: Cell, dead: dcm.DeathCell, trial: dict[str, Any]) -> No
             "t": t_click, "cell": list(cell), "at": [round(u, 1), round(v, 1)],
             "after_death_s": round((t_click - dead.gone_ns) / 1e9, 2),
         }  # fmt: skip
+        hud(rig, f"PICKUP click on {cell[0]},{cell[1]}")
         check(rig, before, before_w, t_click, trial)
+        hud(rig, f"runtime: {trial.get('runtime')}")
         return
     trial["pickup_click"] = None
 
@@ -491,8 +518,12 @@ def rig_up(agent: Any, screen: Any) -> Rig:
     w11.UNITS["ms_per_cell"] = w11.map_ms_per_cell(MAP)
     pr = w10.Prober9(agent, screen, w6.CursorRefs.load(CURSOR_REFS_V3))
     glyphs = wt.load_weight_glyphs(r.ROOT / wt.DEFAULT_TEMPLATES)
+    import operator_hud
+
+    sender = operator_hud.HudSender(agent, region=r.game_region(), desktop=r.desktop(), label=RULE,
+                                    ttl_ms=operator_hud.RULE_TTL_MS)  # fmt: skip
     return Rig(agent, screen, pr, det, camera, gat, gat.walkable(),
-               selfpos.load_digit_templates(), glyphs, chat_cue.load_cues())  # fmt: skip
+               selfpos.load_digit_templates(), glyphs, chat_cue.load_cues(), sender)  # fmt: skip
 
 
 def run(mode: str, n: int, seed: int) -> int:
@@ -529,6 +560,7 @@ def run(mode: str, n: int, seed: int) -> int:
                 # every trial starts at Base / Job Lv 1, checked from pixels and recorded
                 trial["gm_state"] = gm_state.ensure_fixed(agent, screen, why=f"{RULE}:trial{k}",
                                                           out_dir=log.dir / "gm_state")  # fmt: skip
+                hud(rig, f"trial {k}: spot {spot[0]},{spot[1]} ({mode})")
                 track, here = kill(rig, spot, trial)
                 if track is None or trial.get("kill") != "vanished" or here is None:
                     trial["t_end"] = r.ns()
@@ -536,6 +568,7 @@ def run(mode: str, n: int, seed: int) -> int:
                           flush=True)  # fmt: skip
                     continue
                 dead = death_of(rig, track, here)
+                hud(rig, f"death cell {dead.cell} ({dead.reason})")
                 trial["here"] = list(here)
                 trial["death"] = {
                     "cell": None if dead.cell is None else list(dead.cell),
@@ -553,6 +586,8 @@ def run(mode: str, n: int, seed: int) -> int:
             r.gm(agent, screen, "@killmonster2")
             bench.close_chat(agent, screen)
             rig.det.close()
+            if rig.hud is not None:
+                rig.hud.clear()
     events, anchor = record_session.write_packets(log.dir, t_first, r.ns())
     (log.dir / "trials.json").write_text(json.dumps(trials, default=str))
     log.finish(packet_events=len(events), packet_anchor=anchor, trials=len(trials))
