@@ -132,6 +132,14 @@ def irflow(*main: dict[str, Any], **over: Any) -> Callable[[], ir.Flow]:
     )
 
 
+def SENSE(name: str) -> dict[str, Any]:  # noqa: N802 -- a fixture constructor
+    return {"kind": "sense", "sensor": name}
+
+
+def IN(right: dict[str, Any]) -> dict[str, Any]:  # noqa: N802 -- a fixture constructor
+    return {"kind": "cmp", "op": "in", "left": SENSE("engaged_species"), "right": right}
+
+
 def nested(depth: int) -> dict[str, Any]:
     node: dict[str, Any] = SIT
     for _ in range(depth):
@@ -303,6 +311,30 @@ CASES = [
         "loop_control",
         irflow({"kind": "break"}),
         ["main.0: break outside a loop"],
+        farm=False,
+    ),
+    Case(  # #2 (Batt 2026-10-09): `in` only against a literal list of refs or a list variable
+        "membership",
+        "membership",
+        irflow(
+            {"kind": "if", "cond": IN(SENSE("engaged_species")), "then": [SIT]},
+            {"kind": "if", "cond": IN({"kind": "var", "name": "N"}), "then": [SIT]},
+            {
+                "kind": "if",
+                "cond": IN({"kind": "lit", "value": [{"kind": "mob", "id": 9101}]}),
+                "then": [SIT],
+            },
+            {"kind": "if", "cond": IN({"kind": "var", "name": "KEEP"}), "then": [SIT]},
+            variables={
+                "N": {"kind": "lit", "value": 3},
+                "KEEP": {"kind": "lit", "value": [{"kind": "mob", "id": 9102}]},
+            },
+        ),  # fmt: skip
+        [
+            "main.0: in needs a literal list of references or a list variable, not "
+            "engaged_species()",
+            "main.1: in needs a literal list of references or a list variable, not N",
+        ],
         farm=False,
     ),
     # --- layer 2 -------------------------------------------------------------------------------

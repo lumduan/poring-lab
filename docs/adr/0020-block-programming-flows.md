@@ -714,7 +714,7 @@ default):
 | `Call` | the callee is a `Name` from the catalogue (blocks, sensors, reference constructors such as `cell`, `npc`, `item`, `option`; helpers `range`, `bounded`, `known`, `wait_until`, `on`, `flow`, `target`) or a procedure; positional and keyword arguments matching the catalogue signature; no `*args` or `**kwargs` |
 | `Name` | `Store`: a flow variable. `Load`: a flow variable, a procedure (as a callee) or a catalogue constant (`OK`, `FAILED`, `SURVIVAL`, `RESUME`, `S2`, …). ASCII `[A-Za-z][A-Za-z0-9_]*` only |
 | `Constant` | int (bounded), finite float, bool, `None` where a signature allows it, str up to 200 characters |
-| `Compare` | `Eq`, `NotEq`, `Lt`, `LtE`, `Gt`, `GtE` (chains allowed) |
+| `Compare` | `Eq`, `NotEq`, `Lt`, `LtE`, `Gt`, `GtE` (chains allowed). ➡️ **DECIDED 2026-10-09 (Batt, contradictions #2): also `In` / `NotIn`, restricted**: only against a LITERAL list of typed references (`[mob(9101), mob(9102)]`, or a list of constant variables) or a list variable, never another expression; statically checked (the parser, and lint layer 1 for any IR: "in needs a literal list of references or a list variable") |
 | `BoolOp` / `UnaryOp` / `BinOp` | `And`, `Or` / `Not`, `USub` / `Add`, `Sub`, `Mult`, `FloorDiv`, `Mod` |
 | `List`, `Tuple` | literals of constants and references, at most 100 elements |
 | `keyword`, `arguments` (empty), `Load`, `Store` | as needed by the above |
@@ -725,7 +725,8 @@ it: the block API is flat names), `Subscript`, `Slice`, `Lambda`, `ClassDef`, `A
 `Try`, `TryStar`, `Raise`, `Assert`, `Delete`, `Match`, `TypeAlias`, `AnnAssign`, `NamedExpr`,
 `IfExp`, comprehensions and generator expressions, f-strings (`JoinedStr`), `Starred`, `Dict`,
 `Set`, `Pow`, `MatMult`, `Div`, bit and shift operators, `Is`, `In` and their negations, any
-decorator other than `on(...)`.
+decorator other than `on(...)`. ➡️ `In` / `NotIn` are allowed in their restricted form since
+2026-10-09 (the `Compare` row, contradictions #2); `Is` / `IsNot` stay refused.
 
 **Names:**
 - a call to anything outside the catalogue is refused, so `open`, `exec`, `eval`, `compile`,
