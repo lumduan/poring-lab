@@ -2396,6 +2396,108 @@ packets, the same instruments as tuning) per map, then `walk_readiness.py` on ea
 
 **Before each run:** a client screenshot, and the UI as pre-registered (3.24's inventory incident).
 
+### 3.30 talk@1 — talk to an NPC, choose a menu option BY ITS TEXT, close the dialog (pre-registered 2026-10-09 ~10:00 ICT / 03:00 UTC at commit, BEFORE any trial and before its prerequisites are built; Batt 2026-10-09: "Then the next skill: talk_npc + choose_menu + close_dialog. Design and pre-register talk@1")
+**What it verifies:** the L1 concepts `npc.talk`, `npc.next`, `npc.choose` and `npc.close` on RDP.
+When talk@1 PASSES, the /flows blocks `talk_npc`, `next_page`, `choose_menu` and `close_dialog`
+become "verified RDP" (the L1 entries' `verified_on` gets the RDP session). The S2 re-test comes
+later.
+
+**The targets (L3, static server data; the pinned rAthena, generated locally, never committed):**
+
+| scene | NPC (L3 name, cell) | its first menu (L3, the script's `select`) | the options a trial may pick |
+|---|---|---|---|
+| prt_church | Garnet (103, 76) | About Heal / About Cure / About Increase AGI / About Angelus / About Blessing / About Warp Portal / End Conversation | one "About …" option, then "End Conversation" |
+| prt_church | Henson (103, 71) | About Divine Protection / About Demon Bane / About Decrease AGI / About Signum Crusis / About Pneuma / … / End Conversation (its script's own list) | one "About …" option, then its end option |
+| prontera | Guide#prt (154, 187), the city guide | City Guide. / Remove Marks from Mini-Map / Notice / Cancel | "Remove Marks from Mini-Map" or "Notice", then "Cancel" |
+
+- These menus are harmless: information only, no save point, no zeny, no items.
+- Options with colour codes, inputs or side effects are never picked (for example the guide's
+  "City Guide." submenu, which marks the mini-map and asks Yes / No).
+- Only these three NPCs are in scope for talk@1.
+
+**One trial (the rule under test):**
+1. `@warp` to a seeded start cell 4–8 cells from the target (walkable, from the GAT). The other
+   NPC of the scene stays ≥ 3 cells from the start.
+2. **APPROACH with the walk rule:** the READY walk version chosen in 3.29. Its goal is a walkable
+   cell 2–3 cells from the NPC, on our side; its NPC clearance and substitutes act as in its own
+   pre-registration.
+3. **CONTACT, one click:** hover the NPC's projected L3 cell and up its sprite (the monster
+   positive case's points: 0, −14, −28 px). Click ONLY where the cursor reads **TALK** twice (no
+   motion between the reads).
+   - TALK is the allowed shape for this ONE click, as WARP is for the portal walk's last click.
+   - Every other click of the trial keeps the walk rule's gates.
+4. **The DIALOG, from pixels (T2):** wait for the dialog window. Then loop:
+   - the dialog shows NEXT: click its NEXT button;
+   - a MENU window shows: read its option lines (T3) and cross-check them against the L3 list;
+   - the dialog shows CLOSE: click its CLOSE button.
+5. **CHOOSE BY TEXT, never by blind index:**
+   - The read lines must equal the L3 options (same count, same order, text matched).
+   - Click the line whose text matches the intended option, check (pixels) that the highlight is
+     on that line, then click OK.
+   - A mismatch, or a line read with low confidence, is a decline: the menu's Cancel, then close.
+     The trial is a FAILURE ("menu unread"), but a safe one.
+   - The trial's first choice is its seeded option; the second is the end option (End
+     Conversation / Cancel).
+6. **CLOSE CLEANLY:** the dialog's CLOSE when the server shows it. The trial ends when the dialog
+   and menu windows are gone (pixels, two frames).
+
+**Prerequisites:** each is built and proven by a deliberate POSITIVE case (§2a) BEFORE any trial.
+- **T1 · L3 for the targets:** `kb_route.py` / `kb_bindings.py` extended with
+  npc/cities/prontera.txt and npc/pre-re/guides/guides_prontera.txt (local, regenerated). The three
+  NPCs' cells and menu lists come from them, never typed by hand.
+- **T2 · the dialog and menu windows from pixels:**
+  - L2 anchors for the dialog window and its NEXT / CLOSE buttons, and for the menu window, its
+    rows and OK / Cancel;
+  - templates cut LOCALLY from live frames into `data/ui_anchors` (client pixels, never committed;
+    the L2 YAML keeps names and offsets only).
+  - **Proven** on ≥ 50 held-out frames of deliberate dialogs: present / absent and the button
+    states agree with the packets (`npc_say`, `npc_wait`, `npc_menu`, `npc_close`) in every frame.
+- **T3 · the menu text reader:** glyphs of the dialog font cut locally, labelled by packet truth
+  (`npc_menu`'s option strings) at design time, as `weight_calibrate` did.
+  - **Proven** on held-out menus: every option line read exactly, 0 wrong, and a refusal (not a
+    guess) on a line it cannot read.
+- **T4 · the dialog decoders LIVE** on the 17:51 sniffer: `npc_contact`, `npc_say`, `npc_wait`,
+  `npc_menu`, `npc_choose`, `npc_next_click`, `npc_close`, `npc_close_click`. One deliberate
+  dialog through `safety_signal_check.py`'s NPC path must show each of them live.
+- **T5 · the TALK-gated contact click:** `safety_signal_check.py npc-click`, already proven for
+  `npc_contact` (§2a). It is re-run on all three targets.
+
+**Step 0 · a PILOT, never scored:** 3 trials per scene, to check the harness end to end. Any fix
+it needs is committed BEFORE the scored runs.
+
+**The scored runs:** 50 trials per scene, RDP, ASSIST, the interlock green, the GM.
+- prt_church: Garnet and Henson alternate, seed **20261130** (start cells and options).
+- prontera: Guide#prt, seed **20261131**.
+- The client's UI as pre-registered, with a screenshot before each run.
+
+**A trial SUCCEEDS** when the packets show (offline, judged by a scorer committed before the runs):
+- our `npc_contact` on the TARGET NPC: the NPC on the server at the L3 cell, matched by position;
+- its `npc_menu` with the L3 options (otherwise the L3 data is wrong: reported, and a FAILURE);
+- our `npc_choose` whose 1-based choice is the INTENDED option's position in that menu, and later
+  the end option's;
+- the dialog ended by OUR `npc_close_click` after the server's `npc_close` (or, for the end
+  option, the script's own end), with no dialog left open at the trial's end;
+- the runtime check (pixels) agreeing: the windows gone;
+- all within 120 s of the contact click.
+
+**SAFETY (zero tolerance), over the WHOLE trial:**
+- any `npc_contact` on another NPC;
+- a second contact on the target after its dialog closed;
+- any `attack_request`;
+- any GM act of kind normal or pickup.
+
+**The bar:** ≥ 48 / 50 PER SCENE AND zero safety events, each scene scored separately.
+
+**Reported:**
+- per scene: success with its 95 % Wilson interval, and failures by cause (approach,
+  contact, dialog unread, menu unread, wrong choice, close, timeout);
+- reads that refused (safe declines) apart from wrong reads;
+- the walk approach's own route outcomes;
+- the time from the contact to the close (median, p95).
+
+**Order:** after 3.29's held-out runs and loot@1 (3.20a). T1 and the scorer are desk work and come
+first; T2–T5 need the client, in its gaps.
+
 ### HUD scene: box drift while walking + doubled boxes — OFFLINE SIM RESULT (2026-10-08 night; branch `feat/hud-drift`, merged 0d6cd79, DEPLOYED 2026-10-09 00:36 ICT; LIVE RE-MEASURE below)
 
 #### 2026-10-09 — SEEN TWICE + the display-only RECONNECT: BUILT on `feat/hud-seen-twice` (merged 9687631), measured offline; ➡️ the plain rule SUPERSEDED by the CONFIRMING PASS (first sub-entry)
