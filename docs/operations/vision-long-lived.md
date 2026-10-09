@@ -1,16 +1,22 @@
 ---
 doc_type: runbook
 hypothesis: "One long-lived vision container per day, with every training/eval attempt run inside it, removes the cold-start IO bursts that stalled quant at ~100 % (2026-10-09 16:46) without changing R1-R3, the IO guard or the verified stop."
-status: PROPOSED
+status: "APPROVED by Batt 2026-10-09 (~19:30); BUILT on feat/vision-worker (90a7b74), unit-tested, NOT proven live, NOT switched"
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
-related: [r3-paired.md, ../../scripts/guarded_build.py, ../../scripts/runbooks/train-day.sh, ../../scripts/runbooks/quiet_start.py]
-next_action: "Batt: OK the plan. Then build the two guarded steps + their unit tests (no switch), run THE PROOF once in a measured quiet window (quiet_start), report, and switch v1 / the evals only after Batt's OK of the proof."
+related: [r3-paired.md, ../../scripts/guarded_build.py, ../../scripts/runbooks/train-day.sh, ../../scripts/runbooks/quiet_start.py, ../../compose.vision-worker.yaml, ../../scripts/runbooks/worker_proof.py]
+next_action: "Parent: merge feat/vision-worker once v1's chain10 has ended; run THE PROOF once (scripts/runbooks/worker_proof.py, section 5) with the 1 s IO sampler on, outside the market windows; report it step by step; switch v1 / the evals only after Batt's OK of the proof."
 ---
 
-# Option A: one long-lived vision container per day (PLAN; nothing switched)
+# Option A: one long-lived vision container per day (BUILT; NOT proven live; NOT switched)
+
+> **Status, 2026-10-09 ~20:30:** the plan (sections 3-6) was APPROVED by Batt (~19:30). It is
+> **BUILT on `feat/vision-worker` (90a7b74), unit-tested, NOT proven live, NOT switched.** Nothing
+> uses it until the parent runs THE PROOF (section 5, "How to run it") and Batt OKs the result:
+> `train-day.sh` still runs `rundev:` unless `WORKER=1`, and `eval.sh` is unchanged. What was
+> built, and where it departs from the plan: section 3a.
 
 **Batt, 2026-10-09 ~17:00:** "option A (one long-lived vision container per day; each attempt runs
 inside it). PROVE first that an R3 stop still leaves NOTHING of ours on the GPU (the training process
@@ -44,7 +50,7 @@ and quant, so they can be evicted within hours.
 
 The proof measures the two separately. Section 6 states what each outcome means for the design.
 
-## 3. The design (PROPOSED)
+## 3. The design (APPROVED 2026-10-09 ~19:30; BUILT 90a7b74, section 3a)
 - **A long-lived service** `vision-worker` (compose.vision-dev.yaml): the same image, mounts and
   limits as today's `vision` run: R1's `VISION_MAX_VRAM_FRACTION`, mem == memswap, `oom_score_adj`,
   the read-only duty mount, the `agent` network only (ADR-0005).
@@ -69,7 +75,82 @@ The proof measures the two separately. Section 6 states what each outcome means 
   Everything else is unchanged: the exit codes, MAX_ATTEMPTS, the market windows, the R3 flows.
 - **The evals** (chain8's list) become `execdev:` steps inside the same worker, one at a time.
 
-## 4. Unit tests (before any live run)
+## 3a. As built (90a7b74, `feat/vision-worker`; offline only)
+**The pieces:**
+- `compose.vision-worker.yaml`: service `vision-worker` (profile `vision-worker`), container
+  `poring-lab-vision-worker-1`. It is EXACTLY a `rundev:vision` container: compose.yaml's vision plus
+  compose.vision-dev.yaml's two read-only mounts and `PYTHONPATH`, the same image, environment,
+  limits, GPU and network. `tests/test_guards.py` pins every field against vision's.
+- `guarded_build.py`:
+  - `worker:vision@S` = `docker compose -f compose.yaml -f compose.vision-worker.yaml --profile
+    vision-worker up -d --no-deps --no-build vision-worker`, under the IO guard, then a watch of S
+    seconds, then a check: idle, nothing of it on the GPU (`WORKER UP ...`).
+  - `execdev:vision@S=CMD` = `timeout S+60 docker exec poring-lab-vision-worker-1 timeout
+    --kill-after=30 S CMD`, with the rundev: machinery unchanged around it.
+  - `worker-stop:vision` = `docker compose ... stop vision-worker`, then verified down
+    (`WORKER STOPPED ...`).
+- `verify_stop(..., exec_mode=True)`. The guard's SIGINT reaches only the `docker exec` client, so:
+  1. SIGINT to the exec'd process (the tops of what runs in the worker beyond its entrypoint),
+     confirmed within `STOP_VERIFY_S` (30 s);
+  2. else kill -9 of every job process in the worker, our GPU processes and the host client,
+     confirmed within 15 s;
+  3. else, if the GPU still lists ours or the worker is still busy, `docker kill` of the worker,
+     logged `WORKER KILLED`, confirmed within 15 s;
+  4. else STOP-UNVERIFIED (a person looks).
+  "Stopped" = the worker runs only `docker-init -- sleep infinity`; no GPU process of ours (in the
+  worker, still exiting in its cgroup, or `poring_vision` anywhere); no client left on the host.
+- `train-day.sh WORKER=1`: `GUARD` builds `execdev:`. A worker that is down or was killed ->
+  PAUSED (3) at once; one that is not ready -> STOPPED (2). Everything else is unchanged.
+- `--test-abort-after-cycles N` (TEST ONLY, proof step 4): the IO-trip abort path once the step's R3
+  schedule has closed N ON/OFF cycles.
+- `scripts/runbooks/worker_proof.py`: section 5 as a runbook (below).
+- Unit tests: `services/backend/tests/test_vision_worker.py` (42), plus cases in test_guards,
+  test_guard_hook and test_train_day. The whole suite passes in the worktree (2675; one map-cache
+  test needs the gitignored generated caches the tmpfs worktree lacks).
+
+**Departures from the plan, each found while building (none changes R1-R3, the IO guard or the
+exit codes):**
+1. **An INNER `timeout` in the exec.** The plan's `timeout S docker exec <worker> CMD` would bound
+   only the client: the Docker API cannot signal an exec'd process, so killing the client leaves it
+   running. The outer bound is now S + 60 s, and the inner one (`--kill-after=30 S`) bounds the
+   process.
+2. **kill -9 from the host, by host pid**, not `docker exec <worker> kill -9 <pid>`. Same uid, no
+   daemon round trip, and no new process in the worker that would read as a job.
+3. **`docker kill` of the worker also when it is still BUSY after kill -9**, not only when the GPU
+   lists ours.
+4. **"Ours on the GPU" in exec mode covers more than `poring_vision`:** any process in the worker
+   (e.g. `check_gpu.py`), and an exiting task still in its cgroup (a CUDA context being torn down).
+5. **A normal end is verified too** (`settle_exec`). A client that ends on its own while the worker
+   is still busy (a daemon hiccup, a SIGINT to it by hand) is stopped like an abort, never left
+   running unguarded.
+6. **`execdev:` refuses unless the worker is ready:** up, unpaused, IDLE (one job at a time), and
+   started from THIS checkout (its source, duty-file and data mounts).
+   - Down -> `REFUSED ... WORKER down` (rc 3).
+   - Anything else -> `REFUSED ... WORKER not ready` (rc 3).
+7. **The worker: `restart: "no"`, no `build`, `pull_policy: never`, no `depends_on`.**
+   - A reboot or a crash never restarts it: that would be an unmeasured cold start.
+   - `worker:` never recreates a running worker.
+   - `worker-stop:` refuses while a job runs.
+8. **The docker hook refuses raw `docker exec` into any vision container.** Before this, `docker
+   exec` was allowed, and it would have been the one way around R2/R3 for a job in the worker.
+9. **Proof step 4 runs a TRAINING step (bound 3600 s: R3's 180 s windows), not a short one.**
+   - A short step's 60 s window has ~2.4 Frigate updates after its 20 s settle (one per ~16 s,
+     r3-paired.md), below the 3 a window needs, so one cycle would measure no pair.
+   - It holds the duty at the slowest level (`DUTY_START=DUTY_MIN=4`), so the smoke is still running
+     when the cycle closes.
+10. **`quiet_start` wraps the step; `worker:` does not wait for quiet itself.** The proof runbook,
+    the guard's docstring and the compose file say to start it as `quiet_start.py --
+    guarded_build.py ... worker:vision@120`.
+
+**Left for the switch (needs Batt's OK after the proof; nothing here is wrong today):**
+- `scripts/runbooks/eval.sh` and `train.sh` still run `rundev:`. The evals move to `execdev:` at the
+  switch.
+- The LEGACY `frigate_r3.py watch --sigint` (no production caller since 2026-10-07) finds only
+  compose service `vision` containers, so it would not stop a job inside the worker.
+- CLAUDE.md rule 5 names "every `run:`/`rundev:` vision step". `execdev:` enforces the same rules;
+  add it to that line at the switch.
+
+## 4. Unit tests (before any live run) -- BUILT: test_vision_worker.py + cases elsewhere (3a)
 - `run_cmd` / `exec_cmd`: the exact argv for `execdev:`; the worker's name; `timeout`.
 - `verify_stop` in exec mode (fakes for docker, ps and nvidia-smi):
   - the process exits → VERIFIED with the container still up;
@@ -80,6 +161,22 @@ The proof measures the two separately. Section 6 states what each outcome means 
 - train-day with `WORKER=1`: the guard gets `execdev:`; the exit codes and MAX_ATTEMPTS hold.
 
 ## 5. THE PROOF (live, once, in a measured quiet window; one container start)
+**How to run it** (the parent, after the merge and after v1's chain10 has ended; never alongside an
+S2 session; R1-R3 refuse it by themselves while Ollama holds a model or another job of ours is on
+the GPU):
+
+    python3 scripts/io_baseline.py --interval 1 ...      # the 1 s sampler (already the parent's)
+    python3 scripts/runbooks/worker_proof.py --cache <CACHE_ID> --dry-run    # print the six steps
+    python3 scripts/runbooks/worker_proof.py --cache <CACHE_ID> \
+        --io-csv data/metrics/io_pressure_<start>.csv  [--steps 3-6 to resume]
+
+- Each step prints its MEASUREMENT and PASS / FAIL, and the run stops at the first FAIL.
+- It never starts a step inside, or within 15 min of, a market-open window.
+- Its only docker actions are guarded_build steps; everything else is read-only (docker inspect,
+  the worker's cgroup, /proc, nvidia-smi).
+- What step 2 must show: the worker's processes are exactly `docker-init -- sleep infinity` and
+  `sleep infinity`. `idle_argv` assumes that shape, and it was not observable offline.
+
 Run by the parent with the 1 s IO sampler on, and reported step by step:
 1. `quiet_start` → `worker:vision@120`: start the idle worker. **Measure** the per-second full
    stall of every capture cgroup over the start (question 2, event i).
