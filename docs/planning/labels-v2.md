@@ -4,7 +4,7 @@ status: PROPOSED
 date: 2026-10-09
 owner: Batt
 extends: docs/phase3-plan.md
-gate: "Batt 2026-10-09 ~13:15 approved the warp class (auto-labelled from L3) and the hard negatives verified against packets, in the v2 label set. The training round itself is a later decision (GPU, R1-R3)."
+gate: "Batt 2026-10-09 ~13:15 approved the warp class (auto-labelled from L3) and the hard negatives verified against packets, in the v2 label set; ~16:10 added NPC dialog cut-in frames as hard negatives (section 2a). The training round itself is a later decision (GPU, R1-R3)."
 ---
 
 # Labels v2
@@ -44,6 +44,39 @@ gate: "Batt 2026-10-09 ~13:15 approved the warp class (auto-labelled from L3) an
   - the walk runs' detection logs (from 2026-10-09: every detector batch with scores and classes,
     `detections.jsonl` per session);
   - each matched to the packets' world state at that frame.
+
+## 2a. NPC dialog cut-ins as hard negatives (Batt 2026-10-09 ~16:10)
+- **Why (Batt, verbatim, his 16:04 screenshot, prontera, the city guide's dialog):** "The NPC dialog's
+  large CUT-IN illustration (the character art at the lower right) is boxed as 'monster 31%'. It's
+  client UI, shown only while a dialog is open, at a fixed place: when the dialog reader sees an open
+  dialog, mask the cut-in area as UI (screen-anchored) for the detector, the HUD and the walk gate; add
+  cut-in frames as hard negatives in the next labels."
+- **Measured offline (2026-10-09, banked RDP talk-cal frames):**
+  - the v0-PNG detector boxes the guide's cut-in as "monster" 0.305-0.316, at (984, 599)-(1033, 644)
+    (the hand on the spear), on 120 / 120 dialog-open frames of the three guide sessions, and draws
+    nothing there on the 12 closed frames;
+  - the cut-in's opaque extent is (957, 249)-(1183, 720) in client pixels, pixel-identical in two
+    sessions (`scripts/ui_mask.py measure`; `ui_mask.CUTIN_GUIDE`);
+  - Garnet and Henson (prt_church) show no cut-in.
+- **The run-time mask is not the fix for the model.** `scripts/ui_mask.py` keeps the phantom off the
+  HUD and out of the gates while a dialog is open; these hard negatives are what teaches the detector
+  that the art is not a unit.
+- **What is labelled:** on a frame where the cut-in is shown, its extent is BACKGROUND: no unit box
+  inside it. As in section 1 (UI windows), a unit hidden under the cut-in is not labelled either.
+- **The frames:** the talk-cal guide sessions `20261009T153815`, `T154802` and `T160329` (54 + 54 + 12
+  open frames). Their closed frames (6 + 6) are the same view without the cut-in.
+- **Verified against the packets (section 2's rule):**
+  - a frame counts as "cut-in shown" only when the packets' dialog state says a dialog or menu is open
+    (`talk_calibrate.dialog_timeline`: our `npc_contact` ... `npc_close_click`, settled as T2's labels,
+    600 ms) AND the cut-in's pixels are there (the steady difference to the closed view);
+  - the cut-in's own packet, ZC_SHOW_IMAGE2 (0x01B3), is NOT decoded by `poring_packets` yet: the
+    dialog state stands in for it. An offline decoder would make the label exact (open, not built);
+  - the region is accepted only when the packets show NO unit (monster, NPC, player) whose projected
+    box overlaps the cut-in's extent on that frame. No real unit is ever labelled background.
+- **Not covered yet:** other NPCs' cut-ins (Kafra employees, other towns' guides) and the other anchors
+  (bottom left, bottom middle, the middle window) were never seen. One banked dialog per cut-in NPC on
+  the workflow's maps (`talk_calibrate.py drive`) adds them; each gets its extent measured the same way.
+- The frames are client pixels: they stay local (`/dev/shm`, `data/`), never committed (rule 4).
 
 ## 3. New species and visual domains
 - **The training scope:**

@@ -42,6 +42,12 @@ every frame, kept current by DELTAS, whether a rule runs or not (bot idle, or Ba
   - **The confirming pass** (Batt 2026-10-09 ~09:20): a pass that made a new candidate asks for ONE
     extra pass `confirm_s` (1 s) after it, unless a regular pass comes first (`Cadence`), so a
     unit first seen on a still scene is drawn ~1 s later instead of at the next 5-s idle pass.
+  - **The cut-in mask** (Batt 2026-10-09 ~16:10): an NPC dialog's CUT-IN illustration is client UI
+    (the prontera guide's was boxed "monster 31%"). While the dialog reader sees an open dialog, or
+    cannot read it (fail closed), the cut-in region is UI (scripts/ui_mask.py): a detection lying
+    there is dropped and a drawn box there removed. The dialog is read only when something lies
+    over that region, and reused while the region looks the same (`ui_mask.CutinWatch`); the
+    report line every 60 s gives its reads and the added time per detector pass.
 - **Frames:** the RDP frame bus through ro_agent's screen helper (the `frame_id` the console shows).
   It runs only while the frames come from the bus (never an extra X grab).
 - **Output:** the backend's display-only channel (`/internal/display`, the internal listener). It is
@@ -196,6 +202,16 @@ def _iou(a: Box, b: Box) -> float:
     inter = iw * ih
     union = (a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - inter
     return inter / union if union > 0 else 0.0
+
+
+def _masked_test(masked: Any) -> Callable[[Any], bool] | None:
+    """A box -> "the UI covers it" test for the masked regions (ui_mask's rule), or None."""
+    rects = [tuple(float(c) for c in r) for r in masked]
+    if not rects:
+        return None
+    import ui_mask
+
+    return lambda box: any(ui_mask.inside_share(box, r) >= ui_mask.INSIDE_SHARE for r in rects)
 
 
 # --- the floor under the camera --------------------------------------------------------------
@@ -438,11 +454,24 @@ class SceneTracker:
                     moves.append(self._move(o))
             return True, self._delta([], moves, [])
 
+    def world_rects(self, frame_offset: Any) -> list[Box]:
+        """Every drawn world object's and candidate's box on a frame whose motion state was
+        ``frame_offset`` (a FrameRef, or the offset alone), by the global offset only: what
+        ui_mask.CutinWatch needs to decide whether a dialog read is needed."""
+        with self.lock:
+            off = frame_offset.offset if isinstance(frame_offset, FrameRef) else frame_offset
+            objs = [o for o in self.objects.values() if o.anchor == "world"]
+            return [_shift(o.box, off) for o in [*objs, *self.candidates.values()]]
+
     def observe(self, found: list[dict[str, Any]], frame_offset: Any,
-                frame_cam: Any = None, moving: bool = False) -> dict[str, Any] | None:  # fmt: skip
+                frame_cam: Any = None, moving: bool = False,
+                masked: Any = ()) -> dict[str, Any] | None:  # fmt: skip
         """One detection pass on a frame whose motion state was ``frame_offset`` (a FrameRef, or
         the offset alone): ``found`` = boxes in game px with cls / conf / kind ("unit" or "sign").
-        ``moving``: the scene moves (stale objects go sooner). Returns a delta, or None."""
+        ``moving``: the scene moves (stale objects go sooner). ``masked``: the UI regions masked on
+        that frame (the NPC dialog's cut-in while a dialog is open: ui_mask, Batt 2026-10-09). A
+        detection lying ui_mask.INSIDE_SHARE inside one is UI and dropped; a drawn object or a
+        candidate seen there is removed at once. Returns a delta, or None."""
         with self.lock:
             self.fresh = 0
             if isinstance(frame_offset, FrameRef):
@@ -459,6 +488,18 @@ class SceneTracker:
                     return np.asarray(g.to_screen(o.floor - cam_k)[0])
                 return np.asarray(_foot(o.box, o.lift) + off_k)
 
+            under = _masked_test(masked)
+            gone_masked: list[int] = []
+            if under is not None:  # the UI covers these: drawn objects go now, candidates silently
+                found = [f for f in found if not under([float(v) for v in f["box"]])]
+                for i, o in list(world.items()):
+                    if under(_shift(o.box, seen_at(o) - _foot(o.box, o.lift))):
+                        del self.objects[i], world[i]
+                        gone_masked.append(i)
+                for i, c in list(self.candidates.items()):
+                    if under(_shift(c.box, seen_at(c) - _foot(c.box, c.lift))):
+                        del self.candidates[i]
+
             at = {i: seen_at(o) for i, o in world.items()}
             dets: list[Det] = []
             for f in found:
@@ -470,7 +511,7 @@ class SceneTracker:
                 lift = self._lift(box, found) if kind == "sign" and g is not None else 0.0
                 dets.append((box, kind, cls, lift, _foot(box, lift), f.get("conf")))
             got = self._match(dets, range(len(dets)), world, at)
-            add, move, remove = [], [], []
+            add, move, remove = [], [], list(gone_masked)
             fine = moving or self.unsettled  # the scene moved: re-seat boxes more finely
             thr = tu.fine_px if fine else MOVE_PX
             new: list[tuple[int, Box, np.ndarray | None]] = []  # no drawn object took them
@@ -893,6 +934,7 @@ class Sender:
 def serve(hz: float, tuning: Tuning) -> int:
     import ro_agent as r
     import route_preview as rp
+    import ui_mask
 
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     lock = open(LOCK, "w")  # noqa: SIM115 -- held for the process's life
@@ -924,7 +966,13 @@ def serve(hz: float, tuning: Tuning) -> int:
     latest: dict[str, Any] = {}
     stop = threading.Event()
     stats: dict[str, Any] = {"det": 0, "det_ms": [], "frames": 0, "motion": 0, "corr": 0,
-                             "floor_ms": [], "confirm": 0}  # fmt: skip
+                             "floor_ms": [], "confirm": 0, "mask_ms": [], "masked": 0}  # fmt: skip
+    # THE CUT-IN MASK (Batt 2026-10-09 ~16:10): while the dialog reader sees an open dialog (or
+    # cannot read it: fail closed), the NPC dialog's cut-in region is UI. The dialog is read only
+    # when a detection or a drawn box lies over that region, and the read is reused while the
+    # region looks the same (ui_mask.CutinWatch): no cost on a pass with nothing there.
+    cutin = ui_mask.CutinWatch()
+    cutin.templates()  # loaded now: missing templates are reported at start (then: fail closed)
 
     def detector() -> None:
         import unit_detector
@@ -955,11 +1003,17 @@ def serve(hz: float, tuning: Tuning) -> int:
                 npcs = [(b.x0, b.y0, b.x1, b.y1) for b in units if b.cls == "npc"]
                 found = detect_found(units, find_signs(img, npcs=npcs, exclude=rp.UI_WINDOWS))
                 stats["det_ms"].append(1000 * (time.monotonic() - t0))
+                t1 = time.monotonic()
+                found, masked, umask = cutin.filter(img, found, also=tracker.world_rects(ref))
+                stats["mask_ms"].append(1000 * (time.monotonic() - t1))
+                stats["masked"] += len(masked)
+                ui = [r for _, r in umask.cutin_regions]
                 stats["det"] += 1
                 stats["confirm"] += kind == "confirm"
                 cadence.ran(now, g8, kind)
                 with tracker.lock:  # made and queued together: the seq order is the send order
-                    delta = tracker.observe(found, ref, moving=cadence.moving(time.monotonic()))
+                    delta = tracker.observe(found, ref, moving=cadence.moving(time.monotonic()),
+                                            masked=ui)  # fmt: skip
                     if delta is not None:
                         out.put({"type": "hud_delta", "t_mono_ns": t, "frame_id": fid, **delta})
                     if tracker.fresh:  # a new candidate: one confirming pass ~confirm_s later
@@ -1041,7 +1095,13 @@ def serve(hz: float, tuning: Tuning) -> int:
                       f"candidates so far {tracker.counts}), display {out.state}: sent "
                       f"{out.sent}, dropped {out.dropped}, superseded {out.superseded}, "
                       f"connects {out.connects}", flush=True)  # fmt: skip
-                stats.update(det=0, det_ms=[], frames=0, motion=0, corr=0, floor_ms=[], confirm=0)
+                mm = sorted(stats["mask_ms"]) or [0.0]
+                print(f"{time.strftime('%H:%M:%S')} HUD scene: {cutin.report()}; added per "
+                      f"detector pass median {mm[len(mm) // 2]:.1f} ms, max {mm[-1]:.0f} ms; "
+                      f"{stats['masked']} detections masked as UI", flush=True)  # fmt: skip
+                cutin.stats.update(reads=0, reused=0, skipped=0, read_ms=[])
+                stats.update(det=0, det_ms=[], frames=0, motion=0, corr=0, floor_ms=[], confirm=0,
+                             mask_ms=[], masked=0)  # fmt: skip
                 t_report = time.monotonic()
             time.sleep(max(0.0, 1.0 / hz - (time.monotonic() - t_loop)))
     finally:

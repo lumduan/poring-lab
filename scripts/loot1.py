@@ -44,8 +44,8 @@ import chat_cue  # noqa: E402
 import gm_state  # noqa: E402
 import record_session  # noqa: E402
 import ro_agent as r  # noqa: E402
-import route_preview  # noqa: E402
 import rule_run as rr  # noqa: E402
+import ui_mask  # noqa: E402
 import walk5 as w5  # noqa: E402
 import walk6 as w6  # noqa: E402
 import walk10 as w10  # noqa: E402
@@ -197,9 +197,11 @@ class Track:
                 "gap_ms": round(gap * 1000)}  # fmt: skip
 
 
-def in_ui(u: float, v: float, pad: float = UI_PAD) -> bool:
-    return any(x0 - pad <= u <= x1 + pad and y0 - pad <= v <= y1 + pad
-               for x0, y0, x1, y1 in route_preview.UI_WINDOWS)  # fmt: skip
+def in_ui(u: float, v: float, pad: float = UI_PAD, mask: Any = None) -> bool:
+    """Over a UI region grown by ``pad`` (edges count). ``mask``: a ui_mask.UiMask read on the
+    decision frame (the NPC dialog's cut-in while a dialog is open, Batt 2026-10-09); None = the
+    client's static windows only (route_preview.UI_WINDOWS), exactly as before."""
+    return (ui_mask.STATIC if mask is None else mask).window_at(u, v, pad) is not None
 
 
 def runtime_obtained(weight_before: tuple[int, int] | None, weight_after: tuple[int, int] | None,
