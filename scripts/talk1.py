@@ -407,6 +407,54 @@ def choose(io: Io, read_menu: ReadMenu, seen: Seen, plan: DialogPlan, stage: int
     return decline(io, read_menu, seen, "the highlight is not on the line", log)
 
 
+def decline_all(io: Io, read_menu: ReadMenu, budget_s: float = 60.0) -> DialogLog:
+    """talk@1's SAFE DECLINE for a dialog nobody meant to open (Batt 2026-10-09 ~19:30: walk@17 item
+    5's NPC-click test uses it instead of stopping for a person): NEXT pages are clicked by image,
+    ANY menu is answered with its Cancel at once (never read, never chosen), CLOSE is clicked; every
+    step on a stable T2 state, its windows gone at the end. Unread / stuck / a Cancel that did not
+    take -> the outcome says so and the caller stops for a person. outcome None = declined."""
+    log = DialogLog()
+    end = io.now() + int(budget_s * S)
+    unread = idle_next = 0
+    while io.now() < end:
+        seen = observe_stable(io, read_menu)
+        st = seen.state
+        if not st.ok:
+            unread += 1
+            if unread >= MAX_UNREAD:
+                log.outcome = "dialog unread"
+                return log
+            io.wait(0.2)
+            continue
+        unread = 0
+        if st.gone:
+            return log
+        if st.menu is not None:
+            if log.declined is not None:  # the Cancel did not take: never click again
+                log.outcome = "cancel did not take"
+                return log
+            decline(io, read_menu, seen, "an unintended dialog (decline all)", log)
+            continue
+        d = st.dialog
+        assert d is not None
+        if d.button == "next":
+            click(io, log, _point(d.button_rect), "next", d.rect)
+            idle_next = 0 if wait_change(io, read_menu, seen) is not None else idle_next + 1
+            if idle_next >= MAX_IDLE_NEXT:
+                log.outcome = "dialog stuck"
+                return log
+            continue
+        if d.button == "close":
+            log.close_click = click(io, log, _point(d.button_rect), "close", d.rect)
+            if wait_change(io, read_menu, seen) is None:
+                log.outcome = "close did not take"
+                return log
+            continue
+        io.wait(0.2)  # no button yet: the server has not answered
+    log.outcome = "timeout"
+    return log
+
+
 def dialog_loop(io: Io, read_menu: ReadMenu, plan: DialogPlan, t_click: int,
                 budget_s: float = BUDGET_S) -> DialogLog:  # fmt: skip
     """3.30 steps 4-6 after the contact click. The outcome is None when the dialog was closed by

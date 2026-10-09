@@ -20,8 +20,10 @@ gets STANDS stand cells 3-5 cells away (seeded), from which:
   the walk rules' own gate), at the cell's tier-A pick-safe point (walk@12's points). The L3
   no-click layer's verdict is RECORDED, never applied (the arms are judged offline). After every
   click, the DIALOG POLICY (Batt's item 6): T2 (poring_env.npc_dialog) on two fresh frames; none ->
-  go on; a dialog showing CLOSE on both -> Enter, then the windows gone on two frames; ANYTHING
-  ELSE -> STOP FOR A PERSON (exit 7, the dialog left as it is; --resume continues the session).
+  go on; a dialog showing CLOSE on both -> Enter, then the windows gone on two frames; a dialog
+  showing NEXT, or a menu -> talk@1's SAFE DECLINE (talk1.decline_all: NEXT by image, any menu
+  Cancelled unread, CLOSE; Batt 2026-10-09 ~19:30); ANYTHING ELSE, or a decline that does not end
+  with the windows gone -> STOP FOR A PERSON (exit 7; --resume continues the session).
 GM commands only through ro_agent.gm (the typing guard applies): @warp to a known stand cell, never
 /where (Batt's typing policy). Consecutive @warp lines always differ (the stands alternate).
 Pixels in, input out: packets are never read here; npc_click_score.py judges the session offline.
@@ -403,6 +405,11 @@ def run(
     missing = [*templates.missing, *([] if nd.CLOSE in templates.images else [nd.CLOSE])]
     if missing:
         raise SystemExit(f"T2 templates missing {missing}: talk_calibrate.py cut (design time)")
+    from poring_env import menu_text as mt
+
+    if not talk1.GLYPHS.exists():  # the decline path reads stable states, menu rows included
+        raise SystemExit("T3 glyphs missing: talk_calibrate.py cut (design time)")
+    read_menu = talk1.menu_reader(mt.load_menu_glyphs(talk1.GLYPHS))
     lock = record_session.read_lock(r.ROOT / "state")
     ses = Session(kind, map_name, resume)
     ses.log.start(backend=str(lock.backend), lock_seq=lock.seq, server="lab-rathena", rule=RULE,
@@ -516,6 +523,14 @@ def run(
                             dialog["closed"] = gone
                             if not gone:
                                 dialog["action"] = "stop:close_failed"
+                        elif act in ("stop:dialog_next", "stop:menu"):
+                            # talk@1's safe decline (Batt ~19:30): never a choice, never a guess
+                            dlog = talk1.decline_all(io, read_menu)
+                            gone = dlog.outcome is None and any(
+                                _ui_clear(io) == "none" for _ in range(CLOSE_GONE_TRIES)
+                            )
+                            dialog.update(declined=dlog.as_dict(), closed=gone,
+                                          action="declined" if gone else f"stop:{act}")  # fmt: skip
                     ev = {**c, "at": None if at is None else [round(at[0], 1), round(at[1], 1)],
                           "gate": gate, "dialog": dialog,
                           "l3": None if at is None else layer.refuse_point(w, *at)}  # fmt: skip

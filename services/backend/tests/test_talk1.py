@@ -343,3 +343,24 @@ def test_an_unstable_state_is_never_acted_on(talk1: Any) -> None:
     log, _ = run_dialog(talk1, c, MENU7, 2, budget=30.0)
     assert log.outcome == "dialog unread" or log.outcome == "no dialog"
     assert c.clicks == []
+
+
+def test_decline_all_pages_cancels_and_never_chooses(talk1: Any) -> None:
+    """Batt 2026-10-09 ~19:30 (walk@17 item 5): an unintended dialog is declined by talk@1's safe
+    path -- NEXT by image, any menu CANCELLED unread, CLOSE clicked -- never a choice."""
+    c = FakeClient(MENU7, pages=2)
+    log = talk1.decline_all(c, reader(c))
+    assert log.outcome is None and c.closed_by == "cancel" and c.choices == []
+    whats = [w for w, _, _ in c.clicks]
+    assert whats.count("next") == 2 and whats.count("cancel") == 1
+    assert not any(w.startswith(("row_", "scroll")) or w == "ok" for w in whats)
+    assert log.declined["why"] == "an unintended dialog (decline all)"
+    assert talk1.runtime_gone(c, reader(c))["closed"]
+
+
+def test_decline_all_cancels_an_unread_menu_and_ignores_no_dialog(talk1: Any) -> None:
+    c = FakeClient(MENU7, unread=tuple(range(7)))  # every menu row unreadable: still a menu
+    assert talk1.decline_all(c, reader(c)).outcome is None
+    assert c.closed_by == "cancel"  # a menu is cancelled without reading its rows
+    c2 = FakeClient(MENU7, opens=False)
+    assert talk1.decline_all(c2, reader(c2)).outcome is None and c2.clicks == []  # nothing open

@@ -346,8 +346,13 @@ fresh park. Each hover records:
    After Batt closes it, `--resume <session>` continues the same plan from the next click.
 - The run refuses to start unless T2 reads no window on two frames.
 - Expected stops: a contact with the city guide opens a NEXT dialog. The flags open none (the server
-  closes at once). **Question for Batt:** allow talk1's T2-proven decline path (Cancel on the menu,
-  then CLOSE) for the three talk@1 NPCs only, instead of a stop? Not built; default is STOP.
+  closes at once). ~~**Question for Batt:** allow talk1's T2-proven decline path (Cancel on the menu,
+  then CLOSE) for the three talk@1 NPCs only, instead of a stop? Not built; default is STOP.~~
+  ➡️ **DECIDED (Batt 2026-10-09 ~19:30): "item 5 uses talk@1's decline path."**
+  - Built as `talk1.decline_all`: NEXT clicked by image, any menu Cancelled unread, CLOSE clicked.
+  - A NEXT or menu state now declines instead of stopping.
+  - It still STOPS for a person when the decline does not end with the windows gone on two frames,
+    or on any unread or unstable state.
 
 ### 5.5 Metrics (`npc_click_score.py score`)
 - **TALK read rate** (Wilson 95 %) per NPC, per job, per stand (the background), per probe kind and
@@ -429,7 +434,9 @@ The plan, dry-run OFFLINE with each map's drawn NPCs from the packets standing i
 > (3.30, proven), the CPU detector, the GATs.
 >
 > **The dialog policy:** after every click, two T2 frames. None: go on. CLOSE on both: Enter, then
-> gone on two frames. Anything else: STOP for a person (exit 7); `--resume` after Batt closes it.
+> gone on two frames. NEXT or a menu: talk@1's decline (`talk1.decline_all`, Batt ~19:30), then gone
+> on two frames. Anything else, or a failed decline: STOP for a person (exit 7); `--resume` after
+> Batt closes it.
 >
 > **Decision rule for the layer** (reported, not a walk@17 bar): "the layer alone removes the town
 > contacts" when, in prontera's click arm, every `npc_contact` click is refused by the complete layer
