@@ -227,6 +227,8 @@ class Session:
         import talk_calibrate
 
         qa_export.KB_CLASSES = a.kb / "classes.json"
+        # the client's own sprite stems first (1011, 1051, 1053, 1184 differ from the aegis name)
+        qa_export.KB_SPRITE_NAMES = a.kb / "monster_sprite_names.json"
         self.path = path
         manifest = load_json(path / "manifest.json")
         self.backend = str(manifest.get("backend") or "rdp")
@@ -397,14 +399,22 @@ def session_coverage(s: Session, every: int) -> tuple[lv.Coverage, int]:
 def cmd_coverage(a: argparse.Namespace) -> int:
     total = lv.Coverage()
     per: dict[str, Any] = {}
+    no_sheet: dict[int, str] = {}  # species on screen whose sprite was not found: v0's box
     for p in a.sessions:
         s = Session(p, a)
         cov, n = session_coverage(s, a.every)
         per[p.name] = cov.as_dict()
         total.merge(cov)
+        sheets = getattr(s.labeler, "sheets", None)
+        no_sheet.update(getattr(sheets, "missing", {}) or {})
         print(json.dumps({"session": p.name, "frames": n, **cov.as_dict()}), flush=True)
-    out = {"total": total.as_dict(), "sessions": per}
-    print(json.dumps({"total": total.as_dict()}, indent=1))
+    out = {"total": total.as_dict(), "sessions": per,
+           "sprite_lookup_missing": {str(k): v for k, v in sorted(no_sheet.items())}}  # fmt: skip
+    if no_sheet:
+        print(f"WARNING: {len(no_sheet)} species without a sprite sheet keep v0's box: "
+              f"{out['sprite_lookup_missing']}", file=sys.stderr)  # fmt: skip
+    print(json.dumps({"total": total.as_dict(), "sprite_lookup_missing":
+                      out["sprite_lookup_missing"]}, indent=1))  # fmt: skip
     if a.out:
         a.out.write_text(json.dumps(out, indent=1) + "\n")
     return 0
