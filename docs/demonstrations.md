@@ -1624,6 +1624,11 @@ scored by the amended `loot1_score.py`): INCONCLUSIVE, so loot@1's 40 trials do 
   - This is the same family as walk@17 item 5's finding for TALK: thin colour margins, and a 1-px
     shift of a reference reproduces "unknown" (docs/planning/npc-click-test.md).
   - Its fix belongs to that analysis (hypotheses C1–C5), not to loot@1.
+  - ➡️ **Offline follow-up (2026-10-09 ~20:30, NOT live, the gate unchanged):**
+    docs/planning/cursor-robust.md reproduces it (SWORD over a bobbing Poring: the gate's reader
+    0 / 150, over a still one 21 / 75; 9 of the 26 SWORD references are mostly Poring motion) and
+    builds a robust reader (97 / 150 there, 0 cross-shape errors). Its live acceptance (a SWORD
+    probe over Porings + npc-click's probe arm) is a DRAFT for the parent.
 - **The GM's fixed state:** no trial needed a restore (Base / Job Lv 1 throughout); no notices.
 - **Safety:** no loot phase ran, so there are no loot-phase safety events to count.
 

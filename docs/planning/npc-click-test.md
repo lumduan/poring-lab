@@ -186,6 +186,14 @@ also moves the mask edge, so it lowers the IoU too.
 | C4 | an unseen animation frame (dots / phase) | the dot-pixel count of the failing crops is absent from the references |
 | C5 | a hover overlay touching the bubble (the NPC's name label) | extra connected pixels outside the reference mask; only near the feet |
 
+➡️ **2026-10-09 ~20:30, OFFLINE: measured under controlled perturbations, and a robust candidate
+built** (docs/planning/cursor-robust.md). C1 (1-2 px shifts), C3 (light floors: talk 36 / 92 on
+prontera's paving) and animation (SWORD 0 / 150 over a bobbing Poring) each reproduce "unknown"
+with the gate's reader; the robust reader (`scripts/cursor_robust.py`) reads 910 / 920, 92 / 92 and
+97 / 150 there, with 0 cross-shape errors for both readers. C2 (softening, σ ≥ 0.8) still fails both.
+The gate is unchanged; the live acceptance there is a DRAFT. The crops this test saves are its
+evidence too (`cursor_eval.py live`).
+
 ## 4. Analysis d + e: the detector, and the L3 no-click layer
 
 ### 4.1 Detector recall on town NPCs (Batt ~16:10)
@@ -403,7 +411,7 @@ The plan, dry-run OFFLINE with each map's drawn NPCs from the packets standing i
 | the measured contact maps sit well inside PROVISIONAL | tighten per job (fewer refused moves); the cost metric decides |
 | P(contact \| WALK twice) > 0 at points the cursor reads WALK on every grab | the cursor gate cannot protect a click near an NPC (the hover and click hit tests differ, H-a..H-c): the static layer is required, not optional |
 | remembered cells ≠ the NPC's cell in most TALK reads | replace walk@12's memory: the NPC is the one whose feet lie below the pixel within its footprint, or L3 itself where it is complete |
-| `best_shift` restores ≥ 80 % of the colour fails (C1) | a shift-tolerant match (±1 px) in the reader, re-validated leave-one-out with 0 class confusions (a gate change: Batt) |
+| `best_shift` restores ≥ 80 % of the colour fails (C1) | a shift-tolerant match (±1 px) in the reader, re-validated leave-one-out with 0 class confusions (a gate change: Batt). ➡️ The candidate exists (±2 px, leave-one-out 0 confusions): docs/planning/cursor-robust.md, its live acceptance a DRAFT (section 5) |
 | blurred references or a later grab restore them (C2) | read until stable (a later grab), or references cut under that scene load; a gate change |
 | neither restores them | more references (C4) or a further diagnostic; no change |
 | detector recall < 50 % for a job on a map | the map is not walk-ready (3.28 + Batt ~16:10); bank its frames for labels v2 (section 7) |
