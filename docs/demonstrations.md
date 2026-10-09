@@ -3831,8 +3831,18 @@ comes back. **Proof: 5 / 5 round trips** (`/dev/shm/poring-lab-tmp/learn_skill/c
 The re-entry also clears the job-level notices that gm_state's references do not cover (an "N" badge on
 the skills shortcut button and an "up" icon at the client's bottom-left, seen after `@joblevelup`).
 
-**DRAFT pre-registration for learn_skill@1 (2026-10-10 ~01:15 ICT; NOT binding: it waits for Batt's
-restore decision, then it is re-dated and committed as PRE-REGISTERED before any trial):**
+**➡️ PRE-REGISTERED 2026-10-10 ~03:50 ICT / 20:50 UTC at commit (BEFORE the scored run), from the draft
+below, with these settings fixed:** the restore is **B, `--restore charselect`** (no change to group 20
+needed; Batt's option A, `@skreset`, stays open and would need its own amendment); the harness and
+scorer at e54b9d6 + this commit; **the pilot is DONE**: `20261010T033852-demo-learn-skill1-pilot-charselect`
+(`--n 3 --seed 20261180`, never scored): N = 9, 7, 2, all three `server: ok` with the runtime reads
+agreeing (one APPLY sends N `skill_up_request`); RESET / CANCEL / +N were measured earlier the same
+night (look7 / look8). **The scored run:** `learn_skill1.py run --n 50 --seed 20261181 --restore
+charselect --label learn-skill1-alone`, the GM on RDP where it stands (prontera, no monsters), scored
+by `learn_skill1_score.py SESSION` once.
+
+**DRAFT pre-registration for learn_skill@1 (2026-10-10 ~01:15 ICT; superseded by the PRE-REGISTERED
+settings above):**
 - **The rule and harness:** `scripts/learn_skill1.py` at the commit of the pre-registration; scored
   by `scripts/learn_skill1_score.py SESSION` at the same commit.
 - **The restore (one of, Batt's choice):** (A) `--restore skreset --skreset-allowed`, after
