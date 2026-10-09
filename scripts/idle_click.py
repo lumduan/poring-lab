@@ -206,7 +206,7 @@ def idle(n: int, seed: int) -> int:
                 bench.close_chat(agent, screen)
                 time.sleep(SETTLE_S)
                 if typed:
-                    r.chat_line(agent, screen, "/where")
+                    r.chat_line(agent, screen, "/where", reason="idle_click")
                     bench.close_chat(agent, screen)
                 time.sleep(idle_s)  # no input of any kind
                 t: dict[str, Any] = {"k": k, "condition": cond, "rel": list(rel)}

@@ -8,8 +8,9 @@
 After every typed line the chat's NEWEST line is classified from pixels (where_fix's colours):
 `yellow` = a /where answer (its X, Y parsed when it parses), `red` = the client's refusal line,
 `cyan` = the /ex answer, `none` = no new line. Each chat-area crop is saved under
-/dev/shm/poring-lab-tmp/chat-repeat/ so a person can check the reading. Typing only through
-ro_agent.chat_line (the chat input, ASSIST); no click, no packets.
+/dev/shm/poring-lab-tmp/chat-repeat/ so a person can check the reading. Typing through the chat
+input, ASSIST, deliberately PAST the typing guard (scripts/chat_guard.py) that
+enforces what it measured; no click, no packets.
 """
 
 from __future__ import annotations
@@ -69,7 +70,10 @@ def main() -> int:
             lines = ["/ex", "/where"] if a.mode == "sep" else ["/where"]
             for line in lines:
                 before = wf.stable_area(screen)
-                r.chat_line(agent, screen, line)
+                # the probe MEASURES the limit, so it must be able to exceed it: it types past the
+                # typing guard (ro_agent.chat_line would refuse the 4th identical line)
+                r.open_chat(agent, screen)
+                agent.type_text(line + "\n")
                 time.sleep(wf.SETTLE_S)
                 area = wf.stable_area(screen)
                 got = newest_kind(before, area, templates)

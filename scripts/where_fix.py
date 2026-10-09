@@ -217,9 +217,14 @@ def parse_v2(area_bgr: Any, templates: dict[str, Any]) -> tuple[int, int] | None
 
 def fix_v2(agent: Any, screen: Any, templates: dict[str, Any], belief: tuple[int, int],
            walkable: Any) -> dict[str, Any]:  # fmt: skip
-    """where@2: TWO consecutive /where reads that agree, each fresh (the stale guard), inside the
+    """SUPERSEDED for every NEW rule by `fix_once` (Batt 2026-10-09: no filler separators, /where
+    once per need); kept as walk@11-16's frozen code. With the typing guard it can no longer type
+    its "/ex" separator, so it now fails closed at that line.
+    where@2: TWO consecutive /where reads that agree, each fresh (the stale guard), inside the
     map, on a GAT-walkable cell, within PLAUSIBLE_CELLS of the dead-reckoned belief. Up to
     FIX_TRIES pairs; otherwise no fix. Every rejection is logged by its gate."""
+    import chat_guard
+
     rejects: list[str] = []
     for _ in range(FIX_TRIES):
         reads = []
@@ -229,9 +234,12 @@ def fix_v2(agent: Any, screen: Any, templates: dict[str, Any], belief: tuple[int
                 r.chat_line(agent, screen, SEPARATOR)  # breaks the client's repetition refusal
                 time.sleep(SETTLE_S)
                 before = text_mask_v2(stable_area(screen))
-                r.chat_line(agent, screen, "/where")
+                r.chat_line(agent, screen, "/where", reason="where_fix.fix_v2")
             except r.Stop as exc:
                 rejects.append(f"chat: {exc}")
+                break
+            except chat_guard.ChatRefused as exc:  # the "/ex" separator is refused: no fix
+                rejects.append(f"guard:{exc.rule}")
                 break
             time.sleep(SETTLE_S)
             area = stable_area(screen)
@@ -263,6 +271,44 @@ def fix_v2(agent: Any, screen: Any, templates: dict[str, Any], belief: tuple[int
             continue
         return {"xy": (x, y), "rejects": rejects, "t": r.ns()}
     return {"xy": None, "rejects": rejects, "t": r.ns()}
+
+
+def fix_once(agent: Any, screen: Any, templates: dict[str, Any], belief: tuple[int, int],
+             walkable: Any, reason: str) -> dict[str, Any]:  # fmt: skip
+    """where@3 (Batt 2026-10-09): ONE /where per need, the way a player types it. No separator line
+    (where@2's "/ex" is refused by the typing guard), no second /where to confirm, no retype on a
+    miss: the caller falls back to passive sources (the minimap readout, dead reckoning,
+    landmarks) and may ask again only after the guard's long retry interval, within its run's
+    /where budget. The one answer is read on a STABLE chat area (two identical grabs: a
+    frame-level double read, nothing typed) and accepted only if it is fresh, the newest line,
+    parsed exactly, on the map, on a walkable cell and within PLAUSIBLE_CELLS of ``belief``."""
+    import chat_guard
+
+    r.activate_client(agent, screen)
+    before = text_mask_v2(stable_area(screen))
+    try:
+        r.chat_line(agent, screen, "/where", reason=reason)
+    except chat_guard.ChatRefused as exc:
+        return {"xy": None, "rejects": [f"guard:{exc.rule}"], "t": r.ns()}
+    except r.Stop as exc:
+        return {"xy": None, "rejects": [f"chat: {exc}"], "t": r.ns()}
+    time.sleep(SETTLE_S)
+    area = stable_area(screen)
+    if bool((text_mask_v2(area) == before).all()):
+        return {"xy": None, "rejects": ["stale"], "t": r.ns()}
+    if not newest_is_yellow(area):
+        return {"xy": None, "rejects": ["not_newest"], "t": r.ns()}
+    xy = parse_v2(area, templates)
+    if xy is None:
+        return {"xy": None, "rejects": ["unparsed"], "t": r.ns()}
+    x, y = xy
+    if not (0 <= y < walkable.shape[0] and 0 <= x < walkable.shape[1]):
+        return {"xy": None, "rejects": ["off_map"], "t": r.ns()}
+    if not walkable[y, x]:
+        return {"xy": None, "rejects": ["not_walkable"], "t": r.ns()}
+    if max(abs(x - belief[0]), abs(y - belief[1])) > PLAUSIBLE_CELLS:
+        return {"xy": None, "rejects": ["implausible"], "t": r.ns()}
+    return {"xy": (x, y), "rejects": [], "t": r.ns()}
 
 
 def cut_v2(labels: Path) -> int:
@@ -325,7 +371,7 @@ def fix(agent: Any, screen: Any, templates: dict[str, Any]) -> dict[str, Any]:
     r.activate_client(agent, screen)
     before = text_mask(stable_area(screen))
     try:
-        r.chat_line(agent, screen, "/where")
+        r.chat_line(agent, screen, "/where", reason="where_fix.fix")
     except r.Stop as exc:
         return {"xy": None, "why": f"chat: {exc}", "t": r.ns()}
     time.sleep(SETTLE_S)
