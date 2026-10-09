@@ -75,11 +75,11 @@ def test_a_missing_answer_is_no_fix_never_the_previous_line(
     monkeypatch.setattr(wf.r, "activate_client", lambda a, s: None)
     monkeypatch.setattr(wf.r, "ns", lambda: 0)
     monkeypatch.setattr(wf, "stable_area", lambda screen: old)  # nothing new ever appears
-    monkeypatch.setattr(wf.r, "chat_line", lambda a, s, text: None)
+    monkeypatch.setattr(wf.r, "chat_line", lambda a, s, text, **k: None)
     got = wf.fix(None, None, t)
     assert got["xy"] is None and got["why"] == "no new chat line"
 
-    def refuse(a: object, s: object, text: str) -> None:
+    def refuse(a: object, s: object, text: str, **k: object) -> None:
         raise wf.r.Stop("the chat input did not open: nothing typed")
 
     monkeypatch.setattr(wf.r, "chat_line", refuse)
@@ -125,7 +125,7 @@ def test_v2_gates_reject_and_never_guess(
     monkeypatch.setattr(wf.time, "sleep", lambda s: None)
     monkeypatch.setattr(wf.r, "activate_client", lambda a, s: None)
     monkeypatch.setattr(wf.r, "ns", lambda: 0)
-    monkeypatch.setattr(wf.r, "chat_line", lambda a, s, text: None)
+    monkeypatch.setattr(wf.r, "chat_line", lambda a, s, text, **k: None)
     monkeypatch.setattr(wf, "stable_area", lambda screen: np.full((55, 640, 3), next(frames) % 255,
                                                                    np.uint8))  # fmt: skip
     monkeypatch.setattr(wf, "text_mask_v2", lambda a: a[..., 0] % 2 == 1)  # every grab is "new"
@@ -144,14 +144,14 @@ def test_v2_accepts_two_agreeing_plausible_reads(
     monkeypatch.setattr(wf.time, "sleep", lambda s: None)
     monkeypatch.setattr(wf.r, "activate_client", lambda a, s: None)
     monkeypatch.setattr(wf.r, "ns", lambda: 0)
-    monkeypatch.setattr(wf.r, "chat_line", lambda a, s, text: None)
+    monkeypatch.setattr(wf.r, "chat_line", lambda a, s, text, **k: None)
     monkeypatch.setattr(wf, "stable_area", lambda screen: np.full((55, 640, 3), next(frames) % 255,
                                                                    np.uint8))  # fmt: skip
     monkeypatch.setattr(wf, "text_mask_v2", lambda a: a[..., 0] % 2 == 1)
     monkeypatch.setattr(wf, "parse_v2", lambda a, t: next(it))
     monkeypatch.setattr(wf, "newest_is_yellow", lambda a: True)
     typed: list[str] = []
-    monkeypatch.setattr(wf.r, "chat_line", lambda a, s, text: typed.append(text))
+    monkeypatch.setattr(wf.r, "chat_line", lambda a, s, text, **k: typed.append(text))
     assert wf.fix_v2(None, None, {}, (10, 12), walk)["xy"] == (11, 13)
     assert typed == [wf.SEPARATOR, "/where", wf.SEPARATOR, "/where"]  # never 2 /where in a row
 
