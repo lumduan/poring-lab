@@ -15,7 +15,7 @@ const SEV_CLASS: Record<string, string> = {
   error: "border-red-700 bg-red-950/50 text-red-200",
   warning: "border-amber-700 bg-amber-950/40 text-amber-100",
   info: "border-neutral-700 bg-neutral-900 text-neutral-200",
-  unsupported: "border-sky-800 bg-sky-950/40 text-sky-100",
+  readiness: "border-sky-800 bg-sky-950/40 text-sky-100",
 };
 const btn = "rounded bg-neutral-800 px-2.5 py-1 text-xs hover:bg-neutral-700 disabled:opacity-50";
 const input = "w-full rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs";
@@ -292,15 +292,19 @@ function StaticData({ api, world, server, map }: { api: FlowsApi | null; world: 
 
 // --- lint ------------------------------------------------------------------------------------------
 export function LintPanel({ lint, stale, onSelect }: { lint: LintDoc | null; stale: boolean; onSelect: (owner: string) => void }) {
-  const [showUnsupported, setShowUnsupported] = useState(false);
+  const [showReadiness, setShowReadiness] = useState(false);
   if (!lint) return <div className="text-xs text-neutral-400">Not linted yet.</div>;
-  const own = lint.findings.filter((f) => f.rule !== "bindings");
-  const unsupported = lint.findings.filter((f) => f.rule === "bindings");
+  const own = lint.findings.filter((f) => f.severity !== "readiness");
+  const readiness = lint.findings.filter((f) => f.severity === "readiness");
   return (
     <div className="space-y-2 text-xs">
       <div className={stale ? "text-amber-300" : "text-neutral-400"}>
-        MW1&apos;s linter, layers 1-3 · {lint.counts.error} errors · {lint.counts.warning} warnings · {lint.counts.info} info · static data:{" "}
-        {lint.world.server ?? "none"} ({lint.world.maps.join(", ") || "no sheets"}){stale ? " · STALE: the flow changed since" : ""}
+        MW1&apos;s linter, layers 1-3 · {lint.counts.error} errors · {lint.counts.warning} warnings · {lint.counts.info} info ·{" "}
+        {lint.counts.readiness} not ready · static data: {lint.world.server ?? "none"} ({lint.world.maps.join(", ") || "no sheets"})
+        {stale ? " · STALE: the flow changed since" : ""}
+      </div>
+      <div className={lint.run.allowed ? "text-emerald-300" : "text-neutral-400"}>
+        Run-start check (a live run, MW3; MW2 runs nothing): {lint.run.summary}
       </div>
       {(lint.world_notes ?? []).map((n) => (
         <div key={n} className="text-amber-300">{n}</div>
@@ -315,18 +319,19 @@ export function LintPanel({ lint, stale, onSelect }: { lint: LintDoc | null; sta
         ))}
         {!own.length && <li className="text-emerald-300">No findings of the flow itself.</li>}
       </ul>
-      {unsupported.length > 0 && (
-        <div className={`rounded border p-1.5 ${SEV_CLASS.unsupported}`}>
-          <button className="font-semibold" onClick={() => setShowUnsupported(!showUnsupported)}>
-            {showUnsupported ? "▾" : "▸"} {unsupported.length} unsupported bindings (rule bindings, errors in MW1)
+      {readiness.length > 0 && (
+        <div className={`rounded border p-1.5 ${SEV_CLASS.readiness}`}>
+          <button className="font-semibold" onClick={() => setShowReadiness(!showReadiness)}>
+            {showReadiness ? "▾" : "▸"} {readiness.length} readiness item{readiness.length > 1 ? "s" : ""}: bindings not there yet
           </button>
           <div className="text-sky-200/80">
-            Blocks whose L2 / L3 / L4 bindings are not there for this environment yet. Today no real flow lints clean
-            (ADR-0020 open question #6), so they are listed apart here; MW1&apos;s severity is unchanged.
+            Blocks whose L2 / L3 / L4 bindings are not there for this environment yet. They block the RUN (the run-start
+            check refuses), not the design: the flow can still be designed, linted and simulated (ADR-0020 contradictions
+            #6, Batt 2026-10-09).
           </div>
-          {showUnsupported && (
+          {showReadiness && (
             <ul className="mt-1 space-y-0.5">
-              {unsupported.map((f, i) => (
+              {readiness.map((f, i) => (
                 <li key={i} className="cursor-pointer" onClick={() => onSelect(f.owner)}>{f.message}</li>
               ))}
             </ul>

@@ -157,9 +157,7 @@ export default function FlowsApp({ backendUrl }: { backendUrl: string | null }) 
   const lintStale = lint !== null && lint.for !== key;
   const simDoc = sim?.doc ?? null;
   const simStale = sim !== null && sim.for !== key;
-  const total = lintDoc
-    ? lintLine({ ...lintDoc.counts, unsupported: lintDoc.findings.filter((f) => f.rule === "bindings").length })
-    : null;
+  const total = lintDoc ? lintLine(lintDoc.counts) : null;
 
   return (
     <main className="flex h-[calc(100vh-49px)] flex-col" data-testid="flows-app">

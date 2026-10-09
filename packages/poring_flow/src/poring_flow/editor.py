@@ -5,7 +5,9 @@ catalogue / L1 / L2 files and the static map sheets it is handed.
 - `catalogue_doc()`: the block catalogue plus each block's VERIFICATION BADGE, derived from L1's
   `verified_on` (an alone-test pass per path): verified on RDP / on S2 / on both, unverified,
   unknown (no L1 concept), core (no input). Flipping a concept's `verified_on` flips the badge.
-- `lint_doc()`: MW1's linter findings, each with the canvas node that owns it, the counts, and
+- `lint_doc()`: MW1's linter findings, each with the canvas node that owns it, the counts by
+  severity (READINESS apart from errors: an unsupported binding blocks the run, not the design;
+  Batt 2026-10-09, contradictions #6), the run-start gate's verdict on them (`runstart`), and
   every map block's effective event set (13.6.2).
 - `python_doc()`: MW1's canonical Python view (read-only in MW2: import waits for F3's sandbox).
 - `world_doc()`: what the pickers offer from the static data (NPCs, their menu keys, warps,
@@ -23,6 +25,7 @@ from poring_flow import ir, pyview
 from poring_flow.catalogue import Catalogue, catalogue
 from poring_flow.effective import global_set, merge
 from poring_flow.lint import Detector, Resolver, lint
+from poring_flow.runstart import verdict
 from poring_flow.sheet import World, load_world
 from poring_skills.schema import Concept, load_l1
 
@@ -144,16 +147,14 @@ def lint_doc(
 ) -> dict[str, Any]:
     findings = lint(flow, world=world, resolver=resolver, detector=detector)
     roots = owners(flow)
-    counts = {"error": 0, "warning": 0, "info": 0}
+    zero = {"error": 0, "readiness": 0, "warning": 0, "info": 0}
+    counts = dict(zero)
     by_owner: dict[str, dict[str, int]] = {}
     items = []
     for f in findings:
         own = owner_of(f.path, roots)
         counts[f.severity] += 1
-        c = by_owner.setdefault(own, {"error": 0, "warning": 0, "info": 0, "unsupported": 0})
-        c[f.severity] += 1
-        if f.rule == "bindings":
-            c["unsupported"] += 1
+        by_owner.setdefault(own, dict(zero))[f.severity] += 1
         items.append(
             {
                 "rule": f.rule,
@@ -166,11 +167,17 @@ def lint_doc(
                 "owner": own,
             }
         )
+    run = verdict(
+        flow, findings, world_loaded=world is not None, resolver_given=resolver is not None
+    )
     return {
         "flow_hash": ir.flow_hash(flow),
         "findings": items,
         "counts": counts,
         "by_owner": by_owner,
+        # what the run-start check would say (MW3's live run; MW2 runs nothing): errors and
+        # readiness items each refuse it
+        "run": {"allowed": run.allowed, "summary": run.summary(), "reasons": list(run.reasons)},
         "effective": effective_doc(flow),
         "world": {
             "server": world.server if world else None,

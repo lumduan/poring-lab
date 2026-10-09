@@ -2,8 +2,9 @@
 
 The map (its sheet), the NPC on the map the flow is on at that point, the option in that NPC's
 menu, the Kafra service, the item / monster on this server; every action's bindings through
-`resolve()` (an `Unsupported` is an error naming the layer and key); the L1 preconditions that
-must be assumed; exit destinations; TARGET / IGNORE lists; the workflow graph.
+`resolve()` (an `Unsupported` is a READINESS item naming the layer and key: it blocks the run, not
+the design; Batt 2026-10-09, ADR-0020 contradictions #6); the L1 preconditions that must be
+assumed; exit destinations; TARGET / IGNORE lists; the workflow graph.
 """
 
 from __future__ import annotations
@@ -104,7 +105,7 @@ def _bindings(ctx: Ctx, consts: Consts) -> None:
             except Unsupported as u:
                 ctx.add(
                     "bindings",
-                    "error",
+                    "readiness",  # #6: blocks the run (runstart), not the design
                     2,
                     site.path,
                     f"{a.block} is unsupported here: {u.layer} binding {u.key} ({u.reason})",

@@ -4,7 +4,9 @@
 // (GET /settings/csrf, as the Settings page), fetched once and renewed on `csrf_invalid`.
 import type { Flow } from "./ir.ts";
 
-export type Severity = "error" | "warning" | "info";
+// "readiness" (Batt 2026-10-09, ADR-0020 contradictions #6): a binding not there YET for the target
+// environment. Listed apart from errors: it blocks the RUN (the run-start check), not the design.
+export type Severity = "error" | "readiness" | "warning" | "info";
 export type Badge = "verified_rdp_s2" | "verified_rdp" | "verified_s2" | "unverified" | "unknown" | "core";
 export type WorldSource = "local" | "sample";
 
@@ -34,7 +36,8 @@ export interface LintDoc {
   flow_hash: string;
   findings: Finding[];
   counts: Record<Severity, number>;
-  by_owner: Record<string, Record<Severity | "unsupported", number>>;
+  by_owner: Record<string, Record<Severity, number>>;
+  run: { allowed: boolean; summary: string; reasons: string[] }; // the run-start check's verdict (MW3)
   effective: Record<string, EffectiveEvent[]>;
   world: { server: string | null; maps: string[] };
   world_notes?: string[]; // how the static data was found (e.g. no GAT here: routes are estimates)

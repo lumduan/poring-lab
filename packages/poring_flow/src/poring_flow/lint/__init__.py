@@ -4,6 +4,10 @@
 layer, node path and message (`Finding.message` = "<path>: <text>"). Errors are short sentences
 naming the node by its path; the owner reads the same text the LLM drafter gets back.
 
+Severities: `error` (the design is wrong: it cannot be approved), `readiness` (an unsupported
+binding: listed, it blocks the RUN, not the design; Batt 2026-10-09, contradictions #6), `warning`,
+`info`. `blocking()` is what the run-start check refuses on (`poring_flow.runstart`).
+
 Inputs:
 - `world`: the server's static data (map sheets, mobs, items; `poring_flow.sheet`). None means not
   loaded: the checks that need it are skipped, and the bindings check still fails closed.
@@ -26,9 +30,18 @@ from poring_flow.lint import events, loops, semantics, simulate, structure
 from poring_flow.lint.common import Ctx, Detector, Finding, Resolver
 from poring_flow.sheet import World
 
-__all__ = ["Detector", "Finding", "Resolver", "default_resolver", "errors", "lint"]
+__all__ = [
+    "Detector",
+    "Finding",
+    "Resolver",
+    "blocking",
+    "default_resolver",
+    "errors",
+    "lint",
+    "readiness",
+]
 
-SEVERITY_ORDER = {"error": 0, "warning": 1, "info": 2}
+SEVERITY_ORDER = {"error": 0, "readiness": 1, "warning": 2, "info": 3}
 
 
 def default_resolver(target: ir.Target, l3_root: Path | None = None) -> Resolver:
@@ -66,4 +79,15 @@ def lint(
 
 
 def errors(findings: list[Finding]) -> list[Finding]:
+    """The design errors (approval refuses them). Readiness items are NOT errors (#6)."""
     return [f for f in findings if f.severity == "error"]
+
+
+def readiness(findings: list[Finding]) -> list[Finding]:
+    """Bindings not there yet for the target environment: the run waits for them (#6)."""
+    return [f for f in findings if f.severity == "readiness"]
+
+
+def blocking(findings: list[Finding]) -> list[Finding]:
+    """What the run-start check refuses on: every error and every readiness item."""
+    return [f for f in findings if f.severity in ("error", "readiness")]

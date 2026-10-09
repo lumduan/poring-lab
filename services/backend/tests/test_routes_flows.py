@@ -106,8 +106,11 @@ def test_lint_simulate_python(make: Make) -> None:
     assert r.status_code == 200, r.text
     lint = r.json()
     assert len(lint["flow_hash"]) == 64
-    # the real L2/L3/L4 bindings are not there for these blocks: reported as unsupported, by node
-    assert lint["by_owner"]["block:town"]["unsupported"] >= 1
+    # the real L2/L3/L4 bindings are not there for these blocks: READINESS items, by node (#6,
+    # Batt 2026-10-09): they block the run, not the design
+    assert lint["by_owner"]["block:town"]["readiness"] >= 1
+    assert {f["severity"] for f in lint["findings"] if f["rule"] == "bindings"} == {"readiness"}
+    assert lint["run"]["allowed"] is False and "readiness item" in lint["run"]["summary"]
     assert all(f["owner"] in ("flow", "global", "block:town", "block:farm")
                for f in lint["findings"])  # fmt: skip
     r = post(client, "simulate", {"flow": flow, "world": "sample",

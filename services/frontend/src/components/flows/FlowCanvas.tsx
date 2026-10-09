@@ -64,7 +64,7 @@ function Lock() {
 const LEVEL_CLASS: Record<string, string> = {
   error: "text-red-300",
   warning: "text-amber-300",
-  unsupported: "text-sky-300",
+  readiness: "text-sky-300",
   info: "text-neutral-300",
   ok: "text-emerald-300",
 };

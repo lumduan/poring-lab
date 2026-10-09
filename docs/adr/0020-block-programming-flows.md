@@ -570,7 +570,7 @@ by its path; the owner reads the same text the LLM drafter gets back.
 | Layer | Checks | Example message |
 |---|---|---|
 | 1 · schema | the Pydantic model; bounds on counts, timeouts, `max_runtime_s`, string lengths, nesting depth and node count; variable types consistent; procedure call graph acyclic | "main.4: `repeat.times` must be 1..10000" |
-| 2 · semantics | every reference exists for the target environment: the map; the NPC on that map; the option offered by that NPC; the item, monster, skill. Every action block resolves its bindings (`resolve()`); an `Unsupported` is an error naming the layer and key. `assumes` uses known sensors | "main.1: npc n_3f2a is not on the map the flow is on at this point" |
+| 2 · semantics | every reference exists for the target environment: the map; the NPC on that map; the option offered by that NPC; the item, monster, skill. Every action block resolves its bindings (`resolve()`); an `Unsupported` is ~~an error~~ naming the layer and key ➡️ **DECIDED 2026-10-09 (Batt, contradictions #6): a READINESS item, not an error.** It is listed in the report and blocks the RUN (the run-start check refuses on it, `poring_flow.runstart`), not the design: a flow with readiness items can be designed, linted, simulated and approved. `assumes` uses known sensors | "main.1: npc n_3f2a is not on the map the flow is on at this point"; readiness: "town.0: walk_to is unsupported here: L3 binding L3.map.walkability (…)" |
 | 3 · simulation | an abstract walk through the flow tracking the current map: reachability on the GAT/warp graph (`poring_dataset/walk.py`, legs ≤ 128 steps, waypoints beyond); a time estimate; monster spawns on the map for `attack_nearest`; element matchups (warning) | "main.2: cell (170, 210) is unreachable from the warp you arrive by" |
 | 3 · loops | every `while` has a bound, a sensor/variable its body can change, or a `break`; a loop body with no action and no wait is a busy loop (error); the flow-level `max_runtime_s` bounds everything | "main.6: this loop can never end: nothing in it changes job_level()" |
 | 3 · events | every handler has `rearm` or a cooldown; conditions use passive sensors only; two handlers of one class with overlapping conditions (warning; on the SAME sensor an error, 13.6.9); a handler that can re-trigger itself; a handler with no failure path; a `critical` handler containing a long action (warning). Event scopes and hysteresis pairs: 13.6.9 | "handlers.drink: no re-arm and no cooldown: it would fire on every tick" |
@@ -582,6 +582,12 @@ by its path; the owner reads the same text the LLM drafter gets back.
 
 The linter re-runs at run start against the current KB and catalogue. If either changed since
 approval and the result changed, the run does not start.
+➡️ **DECIDED 2026-10-09 (Batt, contradictions #6):** the severities are `error` (the design is
+wrong: approval refuses it), `readiness` (a binding not there yet: the RUN waits for it), `warning`
+and `info`. The run-start check refuses on ANY error or readiness item, fails closed (no static data
+or no resolver is a refusal) and, given the approved hash, refuses another hash. It is built
+(`poring_flow.runstart`, tested) but nothing calls it yet: MW2 runs nothing, and the live executor
+(MW3) calls it before its first input. Simulation is design time and is not gated.
 
 ## 6. Runtime
 
@@ -973,6 +979,9 @@ lab-rathena (unverified blocks show as warnings) and becomes runnable as its wav
    L4 work"), so every block that needs an L4 binding (menu options, Kafra services) resolves
    `unsupported` today. So flows can be built, linted and approved now, and become runnable only as
    bindings land and alone-tests pass. That is the intended order: rules are proven alone first.
+   ➡️ **DECIDED 2026-10-09 (Batt, contradictions #6):** the linter reports each of those
+   `unsupported` bindings as a READINESS item (section 5), not an error, so a real flow lints
+   without errors today and its readiness items block only the run.
 
 ## 13. Map-centric workflows (Batt, 2026-10-08)
 
@@ -1217,7 +1226,7 @@ layer plus the catalogue).
 | NPC dialogs | every NPC and option key on the workflow's path (L3), and its text match (L4) | a key does not resolve. Today every L4 binding is `unsupported` (section 12, "Today") |
 | routes | entry → steps → exits on the walk graph | a leg is unreachable (13.5) |
 | blocks | the badges (section 12) | a block is not verified for this environment (open question 1) |
-| bindings | `resolve()` for every block | any `Unsupported` |
+| bindings | `resolve()` for every block | any `Unsupported`: the linter's READINESS items (section 5; ➡️ Batt 2026-10-09, contradictions #6) |
 
 **The estimate of the AI preparation time.** The editor computes it with the planning formula of
 [training-cost.md](../planning/training-cost.md). That document is the instrument: its constants
@@ -1251,6 +1260,9 @@ values, not for numbers decided here:
 ```
 
 - **Run stays disabled while any item is open** (proposal; open question 25).
+  ➡️ **DECIDED for the bindings row (Batt 2026-10-09, contradictions #6):** an unsupported binding
+  is a lint READINESS item, and the run-start check refuses while any is open (section 5). The
+  other rows (species, windows, blocks) stay open question 25.
 - **The editor never starts preparation work.** Collection sessions and training runs are operator
   steps on the existing paths (`scripts/guarded_build.py`, R1-R3, the clean-room and ASSIST rules).
   The report is their to-do list. The agent never self-authorises GPU work.
@@ -1271,7 +1283,7 @@ tracks the save point. The messages are examples.
 | species lists | 2 · semantics | Every TARGET and IGNORE species spawns on that block's map (L3 spawns); none is on both lists; unlisted spawned species are listed as IGNORE (INFO). An aggressive species on IGNORE: WARNING (it attacks; the bot never answers; the HP event decides). A target and an ignored species that look alike: WARNING until the detector's confusion between them is measured | "farm: mob 9104 is in no spawn line of map_3" |
 | keep lists | 3 · simulation | A store-all or sell-all keeps every item that a later block or an event uses (the wings, the potions) | "town.2: storing everything also stores the Butterfly Wings that farm's exit uses: add them to the keep list" |
 | graph | 2 · semantics | Every block is reachable from the start; every `take_exit` names an existing block and entry; every path of a main flow ends in `take_exit` or `stop`; a map with several blocks has exactly one `resume_here`. A death that lands on no block: WARNING (a death then stops the run) | "map_1 holds town and town_back: mark one resume_here" |
-| readiness | 4 · approval | The preparation report (13.4). Not a lint error, but Run waits for it | "not runnable: 3 species untrained, 5 blocks unverified" |
+| readiness | 4 · approval | The preparation report (13.4). Not a lint error, but Run waits for it. ➡️ Unsupported bindings are the linter's own `readiness` severity (section 5; Batt 2026-10-09, contradictions #6): the run-start check refuses on them | "not runnable: 3 species untrained, 5 blocks unverified" |
 
 ### 13.6 Event flows and event scopes (Batt, 2026-10-08)
 

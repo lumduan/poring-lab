@@ -14,7 +14,11 @@ from poring_flow.effective import Merged, global_set, merge
 from poring_flow.pyview import expr_src
 from poring_flow.sheet import MapSheet, World
 
-Severity = Literal["error", "warning", "info"]
+# READINESS (Batt 2026-10-09, ADR-0020 contradictions #6): a binding that is not there YET for the
+# target environment (`resolve()` raised `Unsupported`). It is listed in the report and blocks the
+# RUN (`poring_flow.runstart` refuses on it), never the design: a flow with readiness items can be
+# designed, linted, simulated and approved; it becomes runnable as its bindings land.
+Severity = Literal["error", "readiness", "warning", "info"]
 # resolve(block, concept, params) raises poring_skills.resolve.Unsupported for a missing binding
 Resolver = Callable[[str, str, dict[str, str]], None]
 
