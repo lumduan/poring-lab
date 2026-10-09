@@ -137,3 +137,76 @@ test("floor items, pickups and drops get a kind and a line (2026-10-08 loot@1, r
   assert.equal(describe(ev("drop_request", { index: 6, amount: 1 }, "cs")), "drop 1× slot 6");
   assert.equal(describe(ev("drop_result", { index: 6, amount: 0, ok: false })), "drop of slot 6 refused");
 });
+
+// --- the source state (Batt 2026-10-09 ~14:40) ---------------------------------------------------
+import { clockText, SOURCE_REPORT_STALE_MS, sourceView, type PacketSource } from "./packets.ts";
+
+const T_1431 = Date.UTC(2026, 9, 9, 7, 31, 5); // 14:31:05 ICT
+function source(extra: Partial<PacketSource> = {}): PacketSource {
+  return {
+    type: "packet_source", t_mono_ns: 1, state: "live", reason: "ok", ingest_connected: true,
+    heartbeat_age_ms: 400, stale_after_ms: 5000, last_feed_unix_ms: T_1431 + 60_000,
+    last_event_unix_ms: T_1431, ...extra,
+  };
+}
+const TZ = "Asia/Bangkok";
+
+test("wall times are formatted HH:MM:SS (the backend's unix ms; never a cross-clock subtraction)", () => {
+  assert.equal(clockText(T_1431, TZ), "14:31:05");
+  assert.equal(clockText(Date.UTC(2026, 9, 9, 17, 0, 9), TZ), "00:00:09");
+});
+
+test("live: the heartbeat and the last game packet; an empty list still says why", () => {
+  const v = sourceView({ connected: true, source: source(), receivedAgoMs: 300, rows: 0, timeZone: TZ });
+  assert.equal(v.kind, "live");
+  assert.equal(v.line, "Sniffer live · heartbeat 0.4 s ago · last game packet 14:31:05");
+  assert.match(v.note ?? "", /no game packets in this tab yet/); // never a bare empty list
+  assert.equal(sourceView({ connected: true, source: source(), receivedAgoMs: 300, rows: 5 }).note, null);
+  const idle = sourceView({ connected: true, source: source({ last_event_unix_ms: null }), receivedAgoMs: 0, rows: 0 });
+  assert.match(idle.line, /no game packet since the backend started/);
+});
+
+test("sniffer offline: 'Sniffer offline (no packets since HH:MM:SS)', in the list too, rows dimmed", () => {
+  const off = source({ state: "sniffer_offline", reason: "heartbeat_stale", heartbeat_age_ms: 9000 });
+  const v = sourceView({ connected: true, source: off, receivedAgoMs: 200, rows: 12, timeZone: TZ });
+  assert.equal(v.kind, "sniffer_offline");
+  assert.equal(v.line, "Sniffer offline (no packets since 14:32:05) · its 1 Hz heartbeat stopped");
+  assert.equal(v.note, v.line);
+  assert.equal(v.dim, true);
+  const never = source({ state: "sniffer_offline", reason: "never_heard", last_feed_unix_ms: null, last_event_unix_ms: null });
+  assert.match(sourceView({ connected: true, source: never, receivedAgoMs: 0, rows: 0 }).line,
+    /^Sniffer offline \(no packets since the backend started\)/);
+  for (const reason of ["ingest_disconnected", "not_attesting"]) {
+    const line = sourceView({ connected: true, source: source({ state: "sniffer_offline", reason }), receivedAgoMs: 0, rows: 0 }).line;
+    assert.match(line, /^Sniffer offline/);
+  }
+});
+
+test("external: the by-design line, shown only when the backend says so", () => {
+  const v = sourceView({ connected: true, source: source({ state: "external", reason: "external_environment" }), receivedAgoMs: 0, rows: 3 });
+  assert.equal(v.kind, "external");
+  assert.equal(v.line, "External server: packet log not available (not captured by design)");
+  assert.equal(v.note, v.line);
+  assert.equal(v.tone, "neutral");
+});
+
+test("disconnected, an old backend, and a backend that stopped reporting are never shown as live", () => {
+  assert.equal(sourceView({ connected: false, source: source(), receivedAgoMs: 0, rows: 0 }).kind, "disconnected");
+  const old = sourceView({ connected: true, source: null, receivedAgoMs: null, rows: 0 });
+  assert.equal(old.kind, "unknown");
+  assert.match(old.line, /not reported/);
+  assert.match(old.note ?? "", /does not say whether the sniffer is live/);
+  const quiet = sourceView({ connected: true, source: source(), receivedAgoMs: SOURCE_REPORT_STALE_MS + 1000, rows: 4 });
+  assert.equal(quiet.kind, "unknown");
+  assert.match(quiet.line, /no report from the backend for 6 s/);
+});
+
+test("every event gets a stable sequence number (row keys survive new arrivals)", () => {
+  const t = new Timeline(3);
+  const a = chat("a"), b = chat("b"), c = chat("c"), d = chat("d");
+  for (const e of [a, b, c]) t.push(e);
+  assert.deepEqual([t.seqOf(a), t.seqOf(b), t.seqOf(c)], [1, 2, 3]);
+  t.push(d); // evicts a
+  assert.deepEqual(t.view(new Set(KINDS), false).map((e) => t.seqOf(e)), [4, 3, 2]);
+  assert.equal(t.seqOf(chat("never pushed")), -1);
+});

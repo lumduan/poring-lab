@@ -16,6 +16,7 @@ import StatsPanel, { EMPTY_STATS, type Links, type Stats } from "@/components/St
 import StreamCanvas from "@/components/StreamCanvas";
 import Toolbar from "@/components/Toolbar";
 import { statusWatch } from "@/lib/banner";
+import { connectingViews, type FeedState, NOTHING_SEEN, type Seen, stepFeeds } from "@/lib/feeds";
 import type { HudFrame } from "@/lib/hud";
 import { HeldKeys, type KeyStep } from "@/lib/keys";
 import {
@@ -94,6 +95,12 @@ export default function Console({ backendUrl }: Props) {
   const [hudOn, setHudOnState] = useState(false);
   const hudOnRef = useRef(false);
   const [hud, setHud] = useState<HudFrame | null>(null);
+  // The overlays' feed lines (lib/feeds.ts), stepped on every Status whether the HUD is on or not:
+  // what this tab saw besides Status (keyframes, route clears, the HUD's ttl; times only, never
+  // content) and when its stream socket last opened.
+  const [feeds, setFeeds] = useState<FeedState | null>(null);
+  const seenRef = useRef<Seen>(NOTHING_SEEN);
+  const watchSinceRef = useRef<number | null>(null);
   const pasteIdRef = useRef(0);
   // Phase 0 console knob, pushed by the backend in Status (docs/phase0-latency.md).
   const paintModeRef = useRef<"decode" | "raf">("decode");
@@ -215,24 +222,42 @@ export default function Console({ backendUrl }: Props) {
     };
 
     const stream = new ReconnectingSocket(`${base}/ws/stream`, {
-      onOpen: () => setLinks((l) => ({ ...l, stream: true })),
+      onOpen: () => {
+        watchSinceRef.current = performance.now();
+        setLinks((l) => ({ ...l, stream: true }));
+      },
       onClose: () => setLinks((l) => ({ ...l, stream: false })),
       onText: (text) => {
         const msg = parseServerMessage(text);
         if (msg?.type === "frame") pendingMeta = msg;
         else if (msg?.type === "status") {
           paintModeRef.current = msg.paint ?? "decode";
-          lastStatusMsRef.current = performance.now();
+          const nowMs = performance.now();
+          lastStatusMsRef.current = nowMs;
           setStatus(msg);
+          const obs = { status: msg, nowMs, watchSinceMs: watchSinceRef.current ?? nowMs, seen: seenRef.current };
+          setFeeds((prev) => stepFeeds(prev, obs));
         }
         else if (msg?.type === "detections") setDetections(msg);
         // world-anchored only: a one-shot preview is dropped on arrival (it floats; lib/route.ts)
-        else if (msg?.type === "route_preview") liveRouteRef.current = pushLive(liveRouteRef.current, msg);
-        else if (msg?.type === "hud_scene") sceneRef.current.keyframe(msg);
+        else if (msg?.type === "route_preview") {
+          liveRouteRef.current = pushLive(liveRouteRef.current, msg);
+          seenRef.current = { ...seenRef.current, route: { atMs: performance.now(), active: msg.points.length > 0 } };
+        }
+        else if (msg?.type === "hud_scene") {
+          sceneRef.current.keyframe(msg);
+          const k = seenRef.current.keyframe;
+          seenRef.current = {
+            ...seenRef.current,
+            keyframe: { count: k.count + 1, atMs: performance.now(), periodMs: msg.period_ms },
+          };
+        }
         else if (msg?.type === "hud_delta") sceneRef.current.delta(msg);
         else if (msg?.type === "hud_motion") sceneRef.current.motion(msg);
         else if (msg?.type === "operator_hud") {
-          if (hudOnRef.current) setHud({ msg, at: performance.now() }); // display only
+          // its receipt and ttl only (the feed line), even with the HUD off; content: display only
+          seenRef.current = { ...seenRef.current, hud: { atMs: performance.now(), ttlMs: msg.ttl_ms } };
+          if (hudOnRef.current) setHud({ msg, at: performance.now() });
         }
         else if (msg?.type === "error") showDropped(msg);
       },
@@ -499,9 +524,11 @@ export default function Console({ backendUrl }: Props) {
         )}
         {hudOn && <HudCanvas hud={hud} width={frameSize.width} height={frameSize.height} />}
       </StreamCanvas>
-      {hudOn && <HudPanel hud={hud} status={status} />}
+      {hudOn && <HudPanel hud={hud} feeds={feeds?.views ?? connectingViews()} />}
+      {/* Batt 2026-10-09: the Packet timeline is read WITH the decision log, so it comes next */}
+      <PacketTimeline backendUrl={backendUrl} />
       <div className="grid gap-3 lg:grid-cols-2">
-        <details className="rounded-md border border-neutral-800 p-3" open>
+        <details data-layout="paste-panel" className="rounded-md border border-neutral-800 p-3" open>
           <summary className="cursor-pointer text-sm font-medium">Paste to Windows</summary>
           <div className="mt-2">
             <PastePanel
@@ -524,7 +551,6 @@ export default function Console({ backendUrl }: Props) {
           </div>
         </details>
       </div>
-      <PacketTimeline backendUrl={backendUrl} />
       <StatsPanel stats={stats} status={status} links={links} />
       <p className="text-xs text-neutral-500">
         {watchOnly
