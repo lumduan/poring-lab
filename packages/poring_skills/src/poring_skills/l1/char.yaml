@@ -42,10 +42,19 @@ concepts:
       offline:
         kind: packets
         signal: the skill update for that skill (skill_update, ZC_SKILLINFO_UPDATE 0x010E, decoded) and the skill list (0x0B32)
-    bindings_needed: [L2.shortcut.window, L2.window.skills, L3.skill.tree]
+    bindings_needed: [L2.shortcut.window, L2.window.skills, L2.skill_tree, L3.skill.tree]
     workflow_wave: 1
+    verified_on:  # RDP only (50/50, N 1-9, 0 unsafe); S2 not yet: the status stays unverified
+      - client: kro-20211103-prere
+        server: lab-rathena
+        locale: en
+        path: rdp
+        session: 20261010T035032-demo-learn-skill1-alone-charselect
+        rule: learn_skill@1
+        date: "2026-10-10"
     references:
-      - Batt 2026-10-09 ~19:30 asked for this concept with its own alone-test (learn_skill@1, designed in docs/demonstrations.md, not yet pre-registered).
+      - Batt 2026-10-09 ~19:30 asked for this concept with its own alone-test (learn_skill@1, docs/demonstrations.md 3.34; PASSED on RDP 2026-10-10, 50/50).
+      - On the 2021 client a raise is TENTATIVE (icon click, then APPLY and a confirm modal); every UI click needs a two-motion approach (3.34).
   - id: char.sit
     purpose: Sit down to regenerate faster.
     steps:

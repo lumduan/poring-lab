@@ -3860,6 +3860,19 @@ same way before its rule; two harness stops in a row ended the run, as pre-regis
   50 --seed 20261182 --restore charselect --label learn-skill1-alone`, everything else as above. The
   first run's numbers stay recorded here.
 
+**➡️ RESULT, THE SCORED RE-RUN (2026-10-10 03:50-04:4x ICT; scored once by `learn_skill1_score.py`):
+PASS -- 50 / 50.** Session `20261010T035032-demo-learn-skill1-alone-charselect` (`--n 50 --seed
+20261182 --restore charselect`, harness at 492d7b3), complete, no harness stop.
+- **50 valid, 50 successes** (every N from 1 to 9: 6/5/6/6/6/6/5/5/5 trials): each trial's server
+  evidence (exactly N `skill_up_request` for skill 1 in the rule's window, the last `skill_update` at
+  level N, `skill_point` 9 - N, the skill list at N, no other skill) and the rule's runtime read
+  (points 9 - N on two fresh frames) agree.
+- **0 false positives, 0 unsafe events** (attack / contact / pickup requests, GM acts), 0 requests
+  outside the rule's window.
+- The bar (>= 48 / 50, 0 false positives, 0 unsafe) is MET. `char.learn_skill` records the RDP pass in
+  `verified_on`; it stays `unverified` until an S2 alone-test passes too (the plan's rule).
+- The pilot (`20261010T034752`, n = 2) and the first, INCOMPLETE run stay recorded above.
+
 **DRAFT pre-registration for learn_skill@1 (2026-10-10 ~01:15 ICT; superseded by the PRE-REGISTERED
 settings above):**
 - **The rule and harness:** `scripts/learn_skill1.py` at the commit of the pre-registration; scored

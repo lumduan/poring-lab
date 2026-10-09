@@ -125,7 +125,7 @@ Change to a new job through the job's NPC process.
 Spend skill points to raise a skill level (the first workflow needs Basic Skill above 8).
 
 - **Parameters:** skill, levels
-- **Status:** unverified
+- **Status:** unverified (1 alone-test pass(es))
 - **Steps:**
   1. Open the skill window by its shortcut, find the skill's row by its icon, press its raise control once per level, apply where the build asks, close the window.
   2. Check the row's level and the points left from pixels before and after.
@@ -140,7 +140,8 @@ Spend skill points to raise a skill level (the first workflow needs Basic Skill 
   - In the pinned server, lowering a job level by GM command (@joblevelup -N) takes back the skill points, and when the unspent points are fewer it RESETS the skills (atcommand.cpp joblevelup, pc_resetskill); a repeatable test can restore Job Lv 1 with Basic Skill 0 that way.
 - **Outcome, runtime (screen):** the skill's level in the skill window rises and the points drop
 - **Outcome, offline (packets):** the skill update for that skill (skill_update, ZC_SKILLINFO_UPDATE 0x010E, decoded) and the skill list (0x0B32)
-- **Bindings needed:** `L2.shortcut.window`, `L2.window.skills`, `L3.skill.tree`
+- **Bindings needed:** `L2.shortcut.window`, `L2.window.skills`, `L2.skill_tree`, `L3.skill.tree`
+- **Verified on:** kro-20211103-prere / lab-rathena / en / rdp, learn_skill@1, session 20261010T035032-demo-learn-skill1-alone-charselect, 2026-10-10
 
 ## `char.respawn`
 
