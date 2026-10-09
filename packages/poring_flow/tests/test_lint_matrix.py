@@ -334,7 +334,12 @@ CASES = [
         WALK,
         [
             "main.0: walk_to is unsupported here: L3 binding "
-            "L3.map.walkability (no L3 bindings for lab-rathena)"
+            "L3.map.walkability (no L3 bindings for lab-rathena)",
+            # the always-on safety events the flow does not write run too (#15): their bindings
+            "dead.0: respawn is unsupported here: L2 binding L2.window.death_dialog (not bound "
+            "for kro-20211103-prere/lab-rathena (params {}))",
+            "hp_critical.0: escape is unsupported here: L3 binding L3.map.flags (no L3 bindings "
+            "for lab-rathena)",
         ],
         resolver=default_resolver(ir.Target(**TARGET), Path("/nonexistent-l3")),
         farm=False,
@@ -725,7 +730,10 @@ CASES = [
         [
             "main.0: a Butterfly Wing returns to the save point, and nothing sets it before "
             "main.0. "
-            "Add 'set save point' first?"
+            "Add 'set save point' first?",
+            # the always-on dead (#15) respawns there too, in every flow
+            "dead: a death at main.0 respawns at the save point, which nothing sets before it: "
+            "set it first, or assert it",
         ],
         farm=False,
     ),
@@ -939,8 +947,8 @@ CASES = [
         ),
         ["farm: dead is safety-critical: it can be extended, never overridden"],
     ),
-    Case(
-        "missing",
+    Case(  # #15: no longer an error -- the compiler adds the built-in (test_always_on.py)
+        "missing_is_built_in",
         "safety_critical",
         farm(
             (
@@ -952,9 +960,57 @@ CASES = [
                 "",
             )
         ),
+        [],
+    ),
+    Case(  # #15: stricter is allowed -- fires earlier, stops the run instead of relocating
+        "stricter",
+        "safety_critical",
+        farm(
+            ("@on(hp_percent() < 20, rearm", "@on(hp_percent() < 30, rearm"),
+            ("max_per_run=1, then=RELOCATE)", "max_per_run=1, then=STOP)"),
+        ),
+        [],
+    ),
+    Case(
+        "weakened_limit",
+        "safety_critical",
+        farm(
+            (
+                "is_dead(), priority=CRITICAL, max_per_run=1",
+                "is_dead(), priority=CRITICAL, max_per_run=3",
+            )
+        ),
         [
-            "hp_critical is safety-critical and missing from the global events: every workflow has "
-            "dead, hp_critical and unexpected_map"
+            "dead: dead is safety-critical: max_per_run 3 loosens the built-in 1: it may only be "
+            "tightened"
+        ],
+    ),
+    Case(
+        "weakened_trigger",
+        "safety_critical",
+        farm(("@on(hp_percent() < 20, rearm", "@on(hp_percent() < 10, rearm")),
+        [
+            "hp_critical: hp_critical is safety-critical: when hp_percent() < 10 fires later than "
+            "the built-in hp_percent() < 20"
+        ],
+    ),
+    Case(
+        "weakened_then_rearm_body",
+        "safety_critical",
+        farm(
+            (
+                "@on(map_load_seen(), priority=CRITICAL, then=RELOCATE)",
+                "@on(map_load_seen(), rearm=hp_percent() > 10, priority=CRITICAL, then=RESUME)",
+            ),
+            ("def unexpected_map():\n    read_position()", "def unexpected_map():\n    sit()"),
+        ),  # fmt: skip
+        [
+            "unexpected_map: unexpected_map is safety-critical: then is relocate or stop, not "
+            "resume",
+            "unexpected_map: unexpected_map is safety-critical: its re-arm is the built-in's "
+            "(none: it re-arms when its trigger clears)",
+            "unexpected_map: unexpected_map's body starts with the built-in read_position(): "
+            "steps may only follow it",
         ],
     ),
     Case(

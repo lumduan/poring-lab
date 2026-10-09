@@ -19,6 +19,7 @@ map prep included; section 1's formula text leaves that ambiguous):
 
 from __future__ import annotations
 
+import itertools
 import json
 from dataclasses import dataclass, field
 from functools import cache
@@ -27,7 +28,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-from poring_flow import ir
+from poring_flow import always_on, ir
 from poring_flow.catalogue import Catalogue, catalogue
 from poring_flow.lint import Detector, Finding, Resolver, lint
 from poring_flow.lint.common import Consts, assigned_vars, handler_exprs
@@ -256,7 +257,8 @@ def report(
     maps = sorted({b.map.map for b in blocks})
     rep = Report(flow=flow.name, environment=_env(flow), scope=scope, new_species=new)
     consts = Consts(flow, assigned_vars(flow))
-    for site in ir.sites(flow):
+    # the always-on events the flow does not write run too (#15): their blocks and windows count
+    for site in itertools.chain(ir.sites(flow), always_on.sites(flow)):
         for a in ir.actions_in(site.stmt):
             cb = cat.blocks.get(a.block)
             if cb is None:

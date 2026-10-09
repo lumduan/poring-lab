@@ -21,7 +21,7 @@ from importlib import resources
 from pathlib import Path
 from typing import Any, Literal
 
-from poring_flow import ir, pyview
+from poring_flow import always_on, ir, pyview
 from poring_flow.catalogue import Catalogue, catalogue
 from poring_flow.effective import global_set, merge
 from poring_flow.lint import Detector, Resolver, lint
@@ -101,7 +101,7 @@ def owners(flow: ir.Flow) -> dict[str, str]:
     out: dict[str, str] = {"": "flow", "main": "flow"}
     for name in flow.procedures:
         out[name] = "flow"
-    for h in flow.handlers:
+    for h in always_on.global_handlers(flow):  # the always-on built-ins are global events (#15)
         out[h.name] = "global"
     for b in flow.workflow.blocks if flow.workflow else []:
         out[b.name] = f"block:{b.name}"
@@ -130,6 +130,7 @@ def effective_doc(flow: ir.Flow) -> dict[str, list[dict[str, Any]]]:
                 "label": e.label,
                 "active": e.active,
                 "safety_critical": e.key in ir.SAFETY_CRITICAL,
+                "built_in": e.built_in,  # the engine's always-on definition (#15)
                 "extension": e.extension_label,
             }
             for e in m.events

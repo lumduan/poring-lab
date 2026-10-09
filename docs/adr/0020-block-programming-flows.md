@@ -1319,7 +1319,9 @@ INSERT vs PRE-EMPT (13.6.4), the `until` stop threshold and run limits (13.6.7),
 - **The safety-critical set is FIXED,** in this design and in code, and never user-editable:
   **`dead`, `hp_critical` and `unexpected_map`.** `hp_critical` was added by Batt (2026-10-08,
   open question 29).
-  - Every workflow has all three, globally (13.6.8).
+  - Every workflow has all three, globally (13.6.8). ➡️ **DECIDED 2026-10-09 (Batt,
+    contradictions #15): EVERY flow, a workflow or a plain main flow, by construction**: the
+    compiler adds the ones a flow does not write, and a flow may only make them stricter (13.6.8).
   - A map may only EXTEND them. A DISABLE or an OVERRIDE is a lint ERROR.
   - **Their extensions run AFTER the global body,** not first (confirmed by Batt, 2026-10-08): a dead character can do nothing
     before it respawns, and nothing may act on an unexpected map before the position is read. The
@@ -1334,7 +1336,9 @@ INSERT vs PRE-EMPT (13.6.4), the `until` stop threshold and run limits (13.6.7),
 #### 13.6.2 The merge rule: a block's EFFECTIVE event set
 
 For the current map block B, in this order:
-1. Start from the global events, by key.
+1. Start from the global events, by key. ➡️ The always-on `dead`, `hp_critical` and
+   `unexpected_map` are among them in every flow, written or added by the compiler (Batt
+   2026-10-09, contradictions #15; 13.6.8).
 2. Apply B's map events, at most one per key (two is an ERROR):
    - **DISABLE k:** k must be global and not safety-critical (else ERROR). Remove it.
    - **OVERRIDE k:** k must be global and not safety-critical (else ERROR). Replace it.
@@ -1444,6 +1448,26 @@ Batt's loop runs through this rule: farm's wing → the save point on map_1 → 
 Every new workflow starts with six GLOBAL events:
 - `dead`, `hp_critical` and `unexpected_map`: safety-critical and required (removing any of them is
   a lint ERROR);
+  ➡️ **DECIDED 2026-10-09 (Batt, contradictions #15): ALWAYS ON BY CONSTRUCTION, in every flow.**
+  - The compiler adds `dead`, `hp_critical` and `unexpected_map` to EVERY flow, a workflow or a
+    plain main flow, as global events (`poring_flow.always_on`). Their definitions are this
+    section's global events, fixed in code: `dead` respawn, 1 per run, relocate; `hp_critical`
+    below 20 % the fixed escape, re-armed above 50 %, at most 2 a minute, relocate;
+    `unexpected_map` read the position, relocate.
+  - They are derived like the effective set, not written into the IR: a flow that leaves one out
+    keeps its own hash and runs the built-in. Leaving one out is no longer an error.
+  - A flow that writes one may only make it STRICTER. The lint check is "not weakened" (13.6.9):
+    the class (critical) and mode (pre-empt) stay; `then` is relocate or stop; the trigger fires no
+    later (e.g. `hp_percent() < 30` for `hp_critical`); the re-arm stays the built-in's; the limits
+    (`max_per_run`, `max_per_min`, `max_fires_per_10min`, `cooldown_s`) are no looser; the body
+    starts with the built-in step (`hp_critical`'s body is exactly the escape). Anything else is an
+    ERROR at the event's node path.
+  - The canvas shows them as LOCKED rows on the global events node: "BUILT-IN, always on,
+    read-only" when the flow does not write them, "stricter only" when it does.
+  - Their bindings are checked even when the flow does not write them (a death needs the death
+    dialog bound), so they appear among the readiness items (section 5).
+  - A consequence for open question 19: `dead`'s 1 per run is now a CEILING a flow cannot raise,
+    not only a default. MW2's sample said 3; it now says 1.
 - `unintended_engagement`, `hp_low` and `weight`: defaults, editable per map (13.9 for the first).
 
 Map events then shape them per map. The effective sets of Batt's example (farm is taken to be a
@@ -1606,7 +1630,7 @@ not a warning), they win.
 | hysteresis pair (`until` or `rearm`) | ERROR unless the stop threshold lies BEYOND the start threshold, on the far side: `hp < 50` with `until hp > 80` is valid; `until hp > 40` is INVERTED (both hold between 40 and 50, so the event flaps). ERROR when the stop can never hold (`hp > 100`). WARNING when the band is narrower than the readout's resolution | "hp_low: until hp_percent() > 40 overlaps when hp_percent() < 50: the stop threshold must exceed 50" |
 | same direction | ERROR: start and stop compare the same way, so the stop never ends the event (`weight >= 90` until `weight > 95`) | "weight: until weight_percent() > 95 does not end weight_percent() >= 90: the stop must lie below 90" |
 | ties | ERROR: two effective events of one class on overlapping conditions of the same sensor (13.6.2 step 4). WARNING for different sensors (they queue, 2.5 rule 4) | "farm: hp_low and hp_panic are both survival on hp_percent() < 30" |
-| safety-critical | ERROR: a DISABLE or OVERRIDE of `dead`, `hp_critical` or `unexpected_map`; any of them missing from the global set; an extension that tries to loosen a limit | "town: dead is safety-critical: it can be extended, never disabled" |
+| safety-critical | ERROR: a DISABLE or OVERRIDE of `dead`, `hp_critical` or `unexpected_map`; ~~any of them missing from the global set~~ ➡️ **not weakened** (Batt 2026-10-09, contradictions #15: the compiler adds a missing one, 13.6.8): a written one weaker than the built-in in class, mode, `then`, trigger, re-arm, limits or body; an extension that tries to loosen a limit | "town: dead is safety-critical: it can be extended, never disabled"; "dead: dead is safety-critical: max_per_run 3 loosens the built-in 1: it may only be tightened" |
 | scope | ERROR: an OVERRIDE, EXTEND or DISABLE of a key that is not global; an ADD of a key that is; two map events on one key | "relay: extend weight_low: there is no global event weight_low" |
 | class change | WARNING on any map OVERRIDE that changes a class | "farm: hp_low moved from survival to upkeep: weight no longer waits for it" |
 | looser on a harder map | WARNING, acknowledged at approval: a map OVERRIDE that fires later, stops earlier or allows more (a lower HP start or stop, a higher weight, a higher death count, a longer cooldown) on a HARDER map. **A map is HARDER, from its L3 sheet, when** it spawns an aggressive species (mob_db `ai`), it has a boss spawn line, or its highest spawn level exceeds the character's base level (from `assumes`; skipped, and said so, when unknown) | "farm: hp_low < 30 is looser than the global < 50, and map_3 spawns an aggressive species (mob 9105)" |

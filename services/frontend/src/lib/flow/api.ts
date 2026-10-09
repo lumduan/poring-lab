@@ -23,12 +23,13 @@ export interface Finding {
 
 export interface EffectiveEvent {
   key: string;
-  state: "inherited" | "overridden" | "extended" | "disabled" | "added";
+  state: "built_in" | "inherited" | "overridden" | "extended" | "disabled" | "added";
   priority: string;
   mode: string;
   label: string;
   active: boolean;
   safety_critical: boolean;
+  built_in: boolean; // the engine's always-on definition (ADR-0020 contradictions #15)
   extension: string | null;
 }
 

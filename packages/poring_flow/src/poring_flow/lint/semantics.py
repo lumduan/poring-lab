@@ -9,9 +9,10 @@ assumed; exit destinations; TARGET / IGNORE lists; the workflow graph.
 
 from __future__ import annotations
 
+import itertools
 from typing import Any
 
-from poring_flow import ir
+from poring_flow import always_on, ir
 from poring_flow.lint.common import Consts, Ctx, assigned_vars, handler_exprs
 
 PARAM_STR = {"window": "name", "npc": "key", "option": "key", "map": "map"}
@@ -96,7 +97,8 @@ def _bindings(ctx: Ctx, consts: Consts) -> None:
         return
     from poring_skills.resolve import Unsupported
 
-    for site in ir.sites(ctx.flow):
+    # the always-on events the flow does not write run too (#15): their bindings count
+    for site in itertools.chain(ir.sites(ctx.flow), always_on.sites(ctx.flow)):
         for a in ir.actions_in(site.stmt):
             if a.concept.startswith("core.") or a.block not in ctx.cat.blocks:
                 continue

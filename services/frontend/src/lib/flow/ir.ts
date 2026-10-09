@@ -164,6 +164,14 @@ export const FLOW_NAME = /^[a-z][a-z0-9_]{0,47}$/;
 export const MAP_ID = /^[A-Za-z0-9_@.\-]{1,40}$/;
 export const KEY = /^[A-Za-z0-9_.\-]{1,64}$/;
 export const SAFETY_CRITICAL = ["dead", "hp_critical", "unexpected_map"];
+
+/** The ALWAYS-ON safety events (Batt 2026-10-09, ADR-0020 contradictions #15): the compiler adds
+ * the ones a flow does not write to EVERY flow (poring_flow.always_on); they are not in the IR. A
+ * flow that writes one may only make it stricter (the linter's "not weakened" check). */
+export function builtInEvents(flow: Flow): string[] {
+  const written = new Set(flow.handlers.map((h) => h.name));
+  return SAFETY_CRITICAL.filter((k) => !written.has(k));
+}
 export const MAX_JSON_BYTES = 1 << 20;
 export const MAX_JSON_DEPTH = 256;
 

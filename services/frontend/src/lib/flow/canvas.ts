@@ -2,7 +2,8 @@
 //
 // Nodes: one per map block (`block:<name>`), the GLOBAL events (`events:global`) and each map
 // block's own events (`events:<name>`, attached to its block). A plain flow (no workflow) shows its
-// `main` node instead of map blocks.
+// `main` node instead of map blocks. The global node also lists the ALWAYS-ON safety events the flow
+// does not write (ADR-0020 #15: the compiler adds them; locked, read-only, never IR).
 // Edges are DERIVED, never stored: one per `take_exit` statement of a block's main flow (typed by
 // its exit kind, on the port of that kind), plus the read-only `death_respawn` edges to the save
 // point's block (MW1's IR refuses an authored death_respawn: the respawn map follows the save point,
@@ -18,6 +19,7 @@ import {
   type MapBlock,
   type MapEvent,
   type Stmt,
+  builtInEvents,
   clone,
   exitOf,
   exitsOf,
@@ -30,7 +32,7 @@ import {
 export type XY = { x: number; y: number };
 export type MapNodeData = { kind: "map"; block: MapBlock; index: number; start: boolean; startEntry: string | null };
 export type EventsNodeData =
-  | { kind: "events"; scope: "global"; handlers: Handler[] }
+  | { kind: "events"; scope: "global"; handlers: Handler[]; builtIn: string[] }
   | { kind: "events"; scope: "block"; block: string; events: MapEvent[] };
 export type MainNodeData = { kind: "main"; main: Exclude<Flow["main"], null> };
 export type NodeData = MapNodeData | EventsNodeData | MainNodeData;
@@ -78,9 +80,8 @@ export function savePointBlock(flow: Flow): { block: string | null; why: string 
   return pick ? { block: pick.name, why: `the save point is on ${map}` } : { block: null, why: `no block is on ${map}` };
 }
 
-function respawns(flow: Flow): boolean {
-  return flow.handlers.some((h) => h.name === "dead");
-}
+// `dead` is always on (ADR-0020 #15: written by the flow or added by the compiler), so every
+// workflow's death respawns: the death_respawn edges follow the save point alone.
 
 // --- layout -------------------------------------------------------------------------------------
 export const COL_W = 560;
@@ -132,7 +133,12 @@ export function toGraph(flow: Flow, positions: Record<string, XY> = {}): Graph {
   const { handlers, workflow, main, ...rest } = flow;
   const meta: Meta = { ...rest, workflow: workflow ? withoutBlocks(workflow) : null };
   const nodes: GNode[] = [
-    { id: "events:global", type: "events", position: at("events:global"), data: { kind: "events", scope: "global", handlers } },
+    {
+      id: "events:global",
+      type: "events",
+      position: at("events:global"),
+      data: { kind: "events", scope: "global", handlers, builtIn: builtInEvents(flow) },
+    },
   ];
   const edges: GEdge[] = [];
   const notes: string[] = [];
@@ -177,22 +183,20 @@ export function toGraph(flow: Flow, positions: Record<string, XY> = {}): Graph {
       });
     }
   });
-  if (respawns(flow)) {
-    const sp = savePointBlock(flow);
-    if (sp.block) {
-      for (const b of workflow.blocks) {
-        if (b.name === sp.block) continue;
-        edges.push({
-          id: `respawn:${b.name}`,
-          source: blockId(b.name),
-          target: blockId(sp.block),
-          sourceHandle: "death_respawn",
-          targetHandle: "in",
-          data: { kind: "death_respawn", derived: true },
-        });
-      }
-    } else notes.push(`death_respawn: ${sp.why}`);
-  }
+  const sp = savePointBlock(flow);
+  if (sp.block) {
+    for (const b of workflow.blocks) {
+      if (b.name === sp.block) continue;
+      edges.push({
+        id: `respawn:${b.name}`,
+        source: blockId(b.name),
+        target: blockId(sp.block),
+        sourceHandle: "death_respawn",
+        targetHandle: "in",
+        data: { kind: "death_respawn", derived: true },
+      });
+    }
+  } else notes.push(`death_respawn: ${sp.why}`);
   return { meta, nodes, edges, notes };
 }
 

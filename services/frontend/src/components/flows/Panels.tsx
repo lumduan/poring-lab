@@ -8,7 +8,7 @@ import type { FlowsApi, LintDoc, Scenario, SimDoc, WorldDoc, WorldSource } from 
 import { ApiError } from "@/lib/flow/api";
 import { type BlockProps, savePointBlock } from "@/lib/flow/canvas";
 import { exportText } from "@/lib/flow/importer";
-import { exitsOf, type Flow, type MapBlock } from "@/lib/flow/ir";
+import { builtInEvents, exitsOf, type Flow, type MapBlock } from "@/lib/flow/ir";
 import { END_TEXT, lintLine, lintOf, runLine } from "@/lib/flow/status";
 
 const SEV_CLASS: Record<string, string> = {
@@ -81,6 +81,13 @@ export function InspectPanel({
       </button>
       {selected === "events:global" && (
         <ul className="space-y-1">
+          {builtInEvents(flow).map((k) => (
+            <li key={k} className="rounded border border-neutral-800 p-1.5 text-neutral-300">
+              <b>(locked) {k}</b> · built in, always on · read-only: the compiler adds it to every flow (ADR-0020 #15); write
+              it in the global events only to make it stricter
+              {sim && <div className="text-fuchsia-300">{runLine(sim.trace.nodes[`${k}.0`]) || "did not fire"}</div>}
+            </li>
+          ))}
           {flow.handlers.map((h) => (
             <li key={h.name} className="rounded border border-neutral-800 p-1.5">
               <b>{h.name}</b> · {h.priority} · {h.mode} · then {h.then}
@@ -190,7 +197,7 @@ function BlockInspector({
             {eff.map((e) => (
               <tr key={e.key} className={e.active ? "" : "text-neutral-500 line-through"}>
                 <td>{e.safety_critical ? "(locked) " : ""}{e.key}</td>
-                <td>{e.state}</td>
+                <td>{e.state === "built_in" ? "built in" : e.state}{e.built_in && e.state !== "built_in" ? " (built in)" : ""}</td>
                 <td>{e.priority}</td>
                 <td>{e.mode}</td>
               </tr>

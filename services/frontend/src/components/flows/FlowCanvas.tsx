@@ -140,9 +140,18 @@ function eventRow(ev: MapEvent): { mode: string; key: string; detail: string } {
 
 function EventsNode({ data }: NodeProps<EventsNodeT>) {
   if (data.kind !== "events") return null;
+  // the ALWAYS-ON safety events the flow does not write (ADR-0020 #15): locked, read-only rows;
+  // the compiler adds them, they are not in the IR, so nothing here can delete or edit them
   const rows =
     data.scope === "global"
-      ? data.handlers.map((h) => ({ mode: "GLOBAL", key: h.name, detail: `${h.priority} · ${h.mode} · then ${h.then}` }))
+      ? [
+          ...data.builtIn.map((k) => ({ mode: "BUILT-IN", key: k, detail: "always on · critical · read-only" })),
+          ...data.handlers.map((h) => ({
+            mode: "GLOBAL",
+            key: h.name,
+            detail: `${h.priority} · ${h.mode} · then ${h.then}${SAFETY_CRITICAL.includes(h.name) ? " · stricter only" : ""}`,
+          })),
+        ]
       : data.events.map(eventRow);
   const owner = data.scope === "global" ? "global" : `block:${data.block}`;
   return (
