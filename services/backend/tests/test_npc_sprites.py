@@ -272,3 +272,33 @@ def test_summary_counts(ns: ModuleType) -> None:
     assert s["training_grounds"] == [46] and s["merchant_route"] == [98]
     assert s["merchant_route_per_map"] == {"t": [98]} and s["own_sprite_files_present"] == 1
     assert s["with_problems"] == [98] and s["name_differs_from_const"] == [98]
+
+
+def test_mob_names_flag_a_client_name_that_differs(ns: ModuleType, tmp_path: Path) -> None:
+    """The client draws a monster id with the sprite jobname.lub names, which need not be
+    rAthena's aegis name (qa_export.Sheets looks files up by the aegis name)."""
+    lub = "data/luafiles514/lua files/datainfo/"
+    ident = chunk(
+        [abc("NEWTABLE", 0), abc("SETTABLE", 0, K + 1, K + 2), abc("SETTABLE", 0, K + 3, K + 4),
+         abx("SETGLOBAL", 0, 0), abc("RETURN", 0, 1)],
+        ["jobtbl", "JT_BUG", 1051, "JT_SLIME", 1002],
+    )  # fmt: skip
+    names = chunk(
+        [abc("NEWTABLE", 0), abx("GETGLOBAL", 1, 1), abc("GETTABLE", 2, 1, K + 2),
+         abc("SETTABLE", 0, 2, K + 3), abc("GETTABLE", 2, 1, K + 4), abc("SETTABLE", 0, 2, K + 5),
+         abx("SETGLOBAL", 0, 0), abc("RETURN", 0, 1)],
+        ["JobNameTable", "jobtbl", "JT_BUG", "Bug_Larva", "JT_SLIME", "SLIME"],
+    )  # fmt: skip
+    mon = "data/sprite/몬스터/"
+    grf = tmp_path / "m.grf"
+    build_grf(grf, {lub + "npcidentity.lub": ident, lub + "jobname.lub": names,
+                    mon + "bug_larva.spr": b"SP", mon + "bug_larva.act": b"AC",
+                    mon + "slime.spr": b"SP"})  # fmt: skip
+    with grf.open("rb") as f:
+        res = ns.mob_names(ns.Archive.open(f), [1051, 1002, 1999], {1051: "BUG", 1002: "SLIME"})
+    bug, slime, none = (res["mobs"][k] for k in ("1051", "1002", "1999"))
+    assert bug == {"aegis": "BUG", "client_sprite": "Bug_Larva", "stem": "bug_larva",
+                   "files_present": True, "differs_from_aegis": True}  # fmt: skip
+    assert slime["files_present"] is False and slime["differs_from_aegis"] is False
+    assert none["client_sprite"] is None
+    assert len(res["problems"]) == 2

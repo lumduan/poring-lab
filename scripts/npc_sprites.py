@@ -386,6 +386,31 @@ def build(
     }
 
 
+MONSTER_DIR = "data/sprite/몬스터/"
+
+
+def mob_names(arc: Archive, ids: Iterable[int], aegis: dict[int, str]) -> dict[str, Any]:
+    """Monster ids -> the sprite stem the CLIENT draws them with (jobname.lub), with the files'
+    presence in the monster folder and whether the stem differs from rAthena's aegis name (the
+    name qa_export.Sheets looks files up by)."""
+    _const, by_id, problems = client_tables(arc)
+    rows = {}
+    for i in ids:
+        name = by_id.get(int(i))
+        row: dict[str, Any] = {"aegis": aegis.get(int(i)), "client_sprite": name}
+        if name is None:
+            problems.append(f"{i}: no client sprite name")
+        else:
+            stem = name.lower()
+            row["stem"] = stem
+            row["files_present"] = all(arc.has(MONSTER_DIR + stem + e) for e in (".spr", ".act"))
+            row["differs_from_aegis"] = stem != str(aegis.get(int(i), "")).lower()
+            if not row["files_present"]:
+                problems.append(f"{i}: {MONSTER_DIR}{stem}.spr/.act not both in the archive")
+        rows[str(i)] = row
+    return {"mobs": rows, "problems": problems}
+
+
 def summary(table: dict[str, Any]) -> dict[str, Any]:
     """Ids and counts only (what a committed doc may quote)."""
     rows = table["sprites"]
@@ -429,10 +454,28 @@ def main(argv: list[str] | None = None) -> int:
     pb.add_argument("--out", type=Path, default=OUT)
     ps = sub.add_parser("summary")
     ps.add_argument("--table", type=Path, default=OUT)
+    pm = sub.add_parser("mob-names", help="monster ids -> the client's sprite stems")
+    pm.add_argument("ids", nargs="+", type=int)
+    pm.add_argument("--grf", type=Path, default=DEFAULT_GRF)
+    pm.add_argument("--mobs", type=Path, default=REPO / "data" / "kb" / "mobs.json")
+    pm.add_argument("--out", type=Path, default=REPO / "data" / "kb" / "monster_sprite_names.json")
     a = ap.parse_args(argv)
     if a.cmd == "summary":
         print(json.dumps(summary(json.loads(a.table.read_text())), indent=1))
         return 0
+    if a.cmd == "mob-names":
+        mobs = json.loads(a.mobs.read_text())
+        mobs = mobs.get("mobs", mobs)
+        aegis = {int(k): str(v.get("aegis")) for k, v in mobs.items() if isinstance(v, dict)}
+        with a.grf.open("rb") as f:
+            res = mob_names(Archive.open(f), a.ids, aegis)
+        a.out.parent.mkdir(parents=True, exist_ok=True)
+        a.out.write_text(json.dumps(res, ensure_ascii=False, indent=1) + "\n")
+        for i, r in res["mobs"].items():
+            flag = " (differs from the aegis name)" if r.get("differs_from_aegis") else ""
+            print(f"{i}: files {'present' if r.get('files_present') else 'MISSING'}{flag}")
+        print(f"problems: {len(res['problems'])}; table (client names, local): {a.out}")
+        return 0 if not res["problems"] else 1
     from kb_first_workflow import NPC_HPP, SRC, Src
 
     from poring_dataset import mapcache

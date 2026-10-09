@@ -770,7 +770,7 @@ labels_v2.difficulty (all "normal" here).
     - The sprite name is the constant's name in all 38 cases. None is a composite player-class
       sprite, and none is a monster sprite. Most SPRs are MIXCRYPT (the study decoder, as for the
       monsters).
-  - ➡️ **N2 (the NPC SPR/ACT): DONE 2026-10-09 ~21:00 for the same 38 sprites.**
+  - ➡️ **N2 (the NPC SPR/ACT): DONE 2026-10-09 ~20:55 for the same 38 sprites.**
     - The command: `scripts/sprite_catalog.py --npc-from data/kb/npc_sprites.json
       --decode-mixcrypt`, with a new NPC mode (`--npc` / `--npc-from`) and a test.
     - It reads data\sprite\npc\ the way the monsters are read and writes the same record format.
@@ -781,6 +781,24 @@ labels_v2.difficulty (all "normal" here).
     - **Integrity:** 11,104 ACT 2.5 layer sizes equal their SPR image sizes, 0 mismatches.
     - **Boxes:** `predict_sprite` boxes all 38 through labels_v2's own loader (`npc_sheets`),
       every box OPAQUE. Native idle sizes: 32-59 sprite px wide, 73-108 tall.
+  - ➡️ **The sprite catalog for the 11 new species: DONE 2026-10-09 ~21:00.**
+    - The species: 1009, 1010, 1011, 1012, 1014, 1050, 1051, 1052, 1053, 1184, 1261.
+    - **The client's own name decides the file.** `scripts/npc_sprites.py mob-names` reads
+      jobname.lub and writes `data/kb/monster_sprite_names.json` (local).
+      - For **4 of the 11** (1011, 1051, 1053, 1184) the client draws a sprite whose name is NOT
+        rAthena's aegis name.
+      - The trained 1002, 1063 and 1113 match.
+      - **Follow-up, not done here:** `qa_export.Sheets` (v1's loader, reused by labels_v2) looks
+        a monster's files up by the aegis name (classes.json). It would find no sheet for those 4
+        and fall back to v0's 44 x 40 box. It should read the stem from that table.
+    - **The catalog:** `scripts/sprite_catalog.py --decode-mixcrypt` on the 12 old + 11 new names
+      (the client's stems).
+      - 23 / 23 species have ACT + SPR decoded, all boxes OPAQUE.
+      - The 12 old records reproduce the stored catalog exactly (0 differ).
+      - `data/kb/sprite_catalog.json` now holds 23 species. The decoded files are in
+        `/dev/shm/poring-lab-tmp/sprites/data/sprite/` (local).
+    - **For Batt's "similar" call (7.5):** 1051 and 1053 use the SAME SPR (byte-identical images)
+      with different ACTs. 1053 is drawn larger: idle 50 x 36 against 35 x 25 native px.
 - **Accounts:** the GM (2000002) collects, with 3.33's immunity after each login, the fixed GM
   state checked and the UI gate before each run. It reaches any copy by `@warp` (the copies are
   clones). **The agent account 2000001 is not used for collection:** its quest state on new_4-1 is
