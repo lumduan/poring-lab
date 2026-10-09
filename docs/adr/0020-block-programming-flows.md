@@ -1725,8 +1725,11 @@ The section itself stays PROPOSED until Batt accepts it.
 - The map-sheet generator (local, never committed): the extended L3 extraction Batt approved on
   2026-10-08 (NPC warp targets per option, the Kafra save cell, map flags). Then the preparation
   report, and the estimator, reading training-cost.md's constants.
-- The new L1 concepts, written unverified: `set_save_point`, `assert_save_point`, the
+- The new L1 concepts, written unverified: `set_save_point`, ~~`assert_save_point`~~, the
   `hp_critical` escape, and `loot.pick_up` by a hover-scan.
+  ➡️ **DECIDED 2026-10-09 (Batt, contradictions #4): `assert_save_point` is a CORE block, not an
+  L1 concept.** It sends no input, so it is a check (core, proven by unit tests, badge "core"), not
+  an L1 skill that needs an alone-test. MW1 built it so (`core.assert_save_point`).
 - Acceptance:
   - one fixture per lint rule, with its exact message (committed fixtures hold synthetic map data
     only);
