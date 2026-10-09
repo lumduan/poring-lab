@@ -52,6 +52,40 @@ element:
   hp_bar: {anchor_element: hp_bar, status: unverified}
   sp_bar: {anchor_element: sp_bar, status: unverified}
   minimap_xy: {anchor_element: minimap_xy, status: unverified}
+skill_tree:
+  # char.learn_skill on this build (learn_skill@1, docs/demonstrations.md 3.34). Measured 2026-10-09
+  # 20:39-20:52 ICT on banked RDP frames of the GM, a Novice (look1-look6, local; `learn_skill1.py
+  # prove` re-reads them). Numbers only: the templates (the confirm modal, the points label, the
+  # level digit) are cut locally into data/ui_anchors/learn_skill/ (`learn_skill1.py cut`).
+  # Boxes are [dx, dy, w, h], points [dx, dy]: relative to the `skills` window's origin (the
+  # ADR-0011 anchor: its title bar's frame; home = client 378,200), EXCEPT `modal`: the client
+  # centres the confirm modal on the CLIENT area (client pixels).
+  # The raise is TENTATIVE: a click on a skill's icon draws a red +N right of it and colours the
+  # points line; nothing is sent. APPLY opens the confirm modal; its OK sends the request(s).
+  # RESET and the modal's CANCEL were never clicked (expected: drop the tentative raise / close
+  # the modal, nothing sent -- unmeasured).
+  window: skills
+  status: unverified
+  measured_on: [rdp]
+  novice:
+    # Basic Skill: the Novice column's first icon (highlighted while points remain)
+    basic_skill:
+      icon: [56, 42, 28, 28]
+      click: [69, 56]  # the click proven live (look3)
+      tentative: [84, 44, 17, 14]  # the red +N (look3: red ink at dx 84-97, dy 47-55)
+      level: [62, 71, 16, 13]  # the level digit under the icon once applied (look5: a 1 at dx 67-72)
+  points:
+    # the points line: the weight readout's bitmap font (poring_env.weight's glyphs, 14x7 cells,
+    # 7 px pitch); black when settled, coloured P-N(N) / P while a raise is tentative
+    label: [61, 378, 66, 14]
+    band: [127, 378, 85, 14]  # the glyph cells' rows; the number's first cell starts at first_cell
+    first_cell: 130
+  apply: [442, 373, 40, 20]
+  reset: [492, 373, 40, 20]
+  modal:
+    box: [504, 300, 281, 120]
+    ok: [694, 396, 40, 20]
+    cancel: [739, 396, 41, 20]
 camera:
   projection: {rdp: camera_rdp.json, s2: camera_console.json, status: unverified}
 cue:
