@@ -3384,6 +3384,12 @@ draft, adopted as written, with these values:
 - **Arm B, SWORD over a Poring:** `scripts/cursor_probe.py sword --n 10 --seed 20261170` at
   c5bcb55 (or the commit of a pilot fix, recorded here first), RDP, the GM on prt_fild08, hover
   only (NOTHING clicked). Pilot first, never scored: `--n 2 --seed 20261171`.
+  - ➡️ **AMENDED 2026-10-09 ~21:06 ICT, after the pilot and BEFORE the scored run: `--n 30`** (was
+    10). The pilot (`20261009T210018-demo-cursor-probe-sword`, never scored) gave 13 probes in 2
+    trials, 8 of them sword points (the probes wait for a fresh, still box; a Poring rarely stands
+    still): ~4 sword points per trial, so n = 10 would give ~40, under the bar's 100 (INCONCLUSIVE
+    by construction). No harness change; the pilot's packets hold no attack / contact / pickup /
+    move request and no GM act. The seed stays 20261170.
 - **Arm A, TALK (and WALK on cells):** npc-click@1's PROBE arm, under its own pre-registration
   (3.32a, pasted from npc-click-test.md 6 once its P1, the complete L3 NPC list for prontera and
   prt_church, is checked): prontera `--near 156,191 --seed 20261160`, prt_church `--near 103,74
