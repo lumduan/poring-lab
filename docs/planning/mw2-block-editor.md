@@ -1,6 +1,6 @@
 ---
 title: "MW2 — the block programming editor (workflow canvas + block editor) on MW1's IR"
-status: "BUILT as a SKELETON on branch feat/mw2-editor (2026-10-08 night); not merged, not deployed (section 0)"
+status: "BUILT as a SKELETON; MERGED 2026-10-08 (2862808) and DEPLOYED 2026-10-09 07:01 ICT (SIMULATE only; section 0)"
 date: 2026-10-08
 owner: Batt
 extends: docs/adr/0020-block-programming-flows.md
@@ -13,7 +13,17 @@ gate: "~~built AFTER walk@13 passes; stops for approval of the new frontend depe
 next, so Batt can test with us. Plan first and stop for approval (new frontend dependencies + pinned
 versions)."
 
-## 0. Status: the skeleton is built (2026-10-08 night), not deployed
+## 0. Status: the skeleton is built (2026-10-08 night) ➡️ MERGED 2862808, DEPLOYED 2026-10-09 ~07:00 ICT
+
+**Deployed** (Claude, in the gap after the overnight walk runs; no scored run active):
+- **Backend:** a guarded `recreate:backend@90` at 06:59 for the new `poring_flow` / `poring_skills`
+  mounts. ASSIST was restored automatically; the worst capture stall was 6.6 %.
+  `verify_mount.py backend` passed, and `GET /flows/catalogue` answers 200 from the LAN.
+- **Frontend:** a guarded `restart:frontend-dev@120` at 07:01. The lockfile installed blockly
+  13.3.0 and @xyflow/react 12.12.0 into tmpfs. `/` and `/flows` both answer 200.
+- **The HUD scene process had to be restarted after the backend recreate.** Its websocket stayed on
+  the old container, and it kept counting sends. A display-only reconnect is a follow-up.
+- The console's toggles were reset by the frontend restart, as expected.
 
 **Batt (2026-10-08 ~21:05)** approved the build tonight and both dependencies (`blockly` 13.3.0,
 `@xyflow/react` 12.12.0), which supersedes this plan's two gates. His scope: the canvas (map nodes,

@@ -2193,7 +2193,25 @@ was the second and last design iteration of the night.
 - **Counter caveat:** the scorer's "static radius-1" count also counts NPC envelopes under D (241 /
   485 indoor). It is not a measure of change A in walk@15.
 
-### HUD scene: box drift while walking + doubled boxes — OFFLINE SIM RESULT (2026-10-08 night; branch `feat/hud-drift`, NOT deployed)
+### HUD scene: box drift while walking + doubled boxes — OFFLINE SIM RESULT (2026-10-08 night; branch `feat/hud-drift`, merged 0d6cd79, DEPLOYED 2026-10-09 00:36 ICT; LIVE RE-MEASURE below)
+
+**LIVE RE-MEASURE after the deploy** (2026-10-09 06:55 ICT, a 3-route indoor `route_demo` walk, seed 34,
+frames `route-demo/20261009T065545`; `hud_scene_check.py truth` + `rescore` against the live scene log).
+It is the same scorer as the "before" row: the 20:09 walk, re-scored by the subagent. Values are
+median / p95 / max px.
+
+| NPC boxes | before (20:09, first cut, live) | after (06:55, new code, live) | the sim predicted |
+|---|---|---|---|
+| walking, on the HUD's own frames | 10.0 / 33.7 / 42.1 | **5.6 / 16.7 / 24.9** (n 80) | 2.6–2.7 / 10.5–11.2 |
+| walking, between them | 9.5 / 41.6 / 63.8 | **4.2 / 15.0 / 44.7** (n 245) | — |
+| standing | 0.4 / 7.3 / 63.7 | **0.6 / 2.0 / 12.6** (n 2813) | 0.4–0.5 / 2.0–2.1 |
+| doubled box-frames | 30 | **0** | 0 |
+
+- **Signs:** standing 1.0 / 10.3 (n 122); walking 7.0 / 21.8 (n 13).
+- **Messages while moving:** 784 per minute (13 / s), as the sim said.
+- **Live is better than before, and worse than the sim** on the walking p95 (16.7 vs ~11). One walk:
+  the cause of the gap is not measured.
+
 
 **Why** (Batt, 2026-10-08 evening, from the 20:09 walk):
 - NPC boxes walking: 9.9 / 33.3 / 42.1 px (median / p95 / max, n 83); standing 0.4 / 14.1 / 63.8.
