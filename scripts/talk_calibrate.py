@@ -16,6 +16,7 @@ LIVE (the parent runs these; RDP, ASSIST, the interlock green, the GM):
         references / UI gate are not proven yet, e.g. the S2 set's first cut): it waits (no input)
         until a PERSON has opened the NPC's dialog and let go of the input (/health lease), then
         the same keys, frames and `collect` (T5 is n/a: the contact was not ours).
+    talk_calibrate.py stand --npc NPC      OFFLINE: the stand cell `drive` warps to + its @warp line
     talk_calibrate.py key CODE [CODE ...] | frames [--n 4] | click next|close|ok|cancel|up|down|row
         [--row K] | contact --npc NPC | collect
         Single steps on the CURRENT session (a person looking at the frames decides); `click` finds
@@ -721,6 +722,21 @@ def live_contact(npc_key: str, agent: Any, screen: Any) -> dict[str, Any]:
     return doc
 
 
+def stand_of(npc_key: str) -> dict[str, Any]:
+    """OFFLINE: the stand cell `drive` warps to (live_contact's rule), and its @warp line."""
+    from poring_dataset import camera as cam
+    from poring_dataset import gat as gatmod
+
+    tgt = talk1.TARGETS[npc_key]
+    info = talk1.l3_target(talk1.load_l3(), tgt)
+    gat = gatmod.parse((cam.GAT_DIR / f"{tgt.map}.gat").read_bytes())
+    stand = stand_cell(gat.walkable(), tgt.cell, info["others"])
+    if stand is None:
+        raise SystemExit(f"no stand cell beside {npc_key}")
+    return {"npc": npc_key, "map": tgt.map, "npc_cell": list(tgt.cell), "stand": list(stand),
+            "warp": f"@warp {tgt.map} {stand[0]} {stand[1]}"}  # fmt: skip
+
+
 def attach_session(npc_key: str) -> dict[str, Any]:
     """drive --attach: a new calibration session with NO warp and NO click of ours: a person
     opens the dialog (the session starts first, so the packets hold the contact)."""
@@ -955,6 +971,8 @@ def main() -> int:
         action="store_true",
         help="no warp, no contact click: a person opens the dialog (S2 first cut)",
     )
+    sb = sub.add_parser("stand")
+    sb.add_argument("--npc", choices=sorted(talk1.TARGETS), required=True)
     c = sub.add_parser("contact")
     c.add_argument("--npc", choices=sorted(talk1.TARGETS), required=True)
     k = sub.add_parser("key")
@@ -985,6 +1003,8 @@ def main() -> int:
     out: dict[str, Any]
     if a.cmd == "drive":
         out = drive(a.npc, a.first, a.attach)
+    elif a.cmd == "stand":
+        out = stand_of(a.npc)
     elif a.cmd == "contact":
         import ro_agent as r
 

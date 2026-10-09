@@ -1026,9 +1026,17 @@ full protocol and the findings), `scripts/runbooks/collect-v2.sh`; tests
      stops there, before the recorder.
      - Unblock it with S2 templates for the gate (a live cut + a reviewed change), or collect over
        RDP, which needs a decision: 3.3 names S2.
+     - ➡️ **2026-10-09: the reviewed change is BUILT (branch `feat/s2-gate-templates`), the live cut
+       is NOT done.** The gate is path-aware (`poring_env.ui_sets`): on console it reads
+       `data/ui_anchors/s2/` only while its `proof.json` says windows + T2 are proven on S2. Until
+       the session in `docs/operations/s2-gate-templates.md` passes, preflight still stops here
+       (now with "the s2 template set is not proven").
   2. **The GM-state template is RDP-cut too** (gm_state.py, measured on RDP frames). Check on the
      stream that `gm_state.py check` reads Lv 1 / 1 (and `gm_vitals` the HP bar) before relying on
      it.
+     - ➡️ **2026-10-09: gm_state is path-aware too** (same rule: the S2 `gm_levels` + `gm_notices`
+       must be proven; it refuses on S2 until then). Preflight's `gm_state_template` check is now
+       `gm_state.require_ready()`. `gm_vitals` is NOT covered by this change.
   3. **immune-on -> read the shot -> immune-confirm,** after every GM login. guarded_build's
      automatic GM re-login also counts.
   4. **The S2 foreground template** (installed 2026-10-07; re-cut if the client window moved), and
