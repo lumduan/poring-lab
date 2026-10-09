@@ -88,7 +88,10 @@ def sword_scan(agent: Any, pr: Any, camera: Any, gat: Any, x: int, y: int,
     return None
 
 
-def monster_click(mapname: str, x: int, y: int) -> int:
+SPAWN_IDS = {"poring": "poring", "red_plant": "1078"}  # @monster arguments
+
+
+def monster_click(mapname: str, x: int, y: int, species: str = "poring") -> int:
     import bench
 
     from poring_dataset import camera as cam
@@ -115,7 +118,7 @@ def monster_click(mapname: str, x: int, y: int) -> int:
         r.gm(agent, screen, "@killmonster2")
         r.gm(agent, screen, f"@warp {mapname} {x} {y}")
         time.sleep(rr.SCENE_ENTRY_S)  # may be a warp onto another map
-        r.gm(agent, screen, "@monster poring 1")
+        r.gm(agent, screen, f"@monster {SPAWN_IDS[species]} 1")
         time.sleep(2.0)
         bench.close_chat(agent, screen)
         r.activate_client(agent, screen)
@@ -906,6 +909,10 @@ def main() -> int:
     a1.add_argument("--map", default="prt_fild08")
     a1.add_argument("--x", type=int, default=268)
     a1.add_argument("--y", type=int, default=107)
+    a1.add_argument("--species", default="poring", choices=("poring", "red_plant"),
+                    help="red_plant: a monster that never moves, so the cursor reads SWORD on it "
+                         "(2026-10-10: the v3 reader reads SWORD on a bobbing Poring ~7 %% of the "
+                         "time, demonstrations 3.35)")  # fmt: skip
     a2 = sub.add_parser("npc-click")
     a2.add_argument("--npc", choices=sorted(NPCS), default="garnet")
     a3 = sub.add_parser("npc-key")
@@ -977,7 +984,7 @@ def main() -> int:
     if a.cmd == "walk-click":
         return walk_click()
     if a.cmd == "monster-click":
-        return monster_click(a.map, a.x, a.y)
+        return monster_click(a.map, a.x, a.y, a.species)
     return 2
 
 
