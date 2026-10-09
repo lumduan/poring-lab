@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import struct
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -57,6 +58,10 @@ class UnitDetector:
             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
         )  # fmt: skip
         self.last_ms = 0.0
+        # Batt 2026-10-09: every detection batch may be logged (class + score per box) so the walk
+        # gate's refusals can be attributed to the boxes behind them, and hard negatives found.
+        # The harness sets it per session (RAM); None = no log. detect() returns the same boxes.
+        self.log_path: Path | None = None
 
     def detect(self, img: Any) -> list[Box]:
         a = np.ascontiguousarray(np.asarray(img)[..., :3], dtype=np.uint8)
@@ -69,7 +74,14 @@ class UnitDetector:
             raise DetectorUnavailable("the detector worker died")
         reply = json.loads(line)
         self.last_ms = float(reply["ms"])
-        return [Box(*b[:5], NAMES[int(b[5])]) for b in reply["boxes"]]
+        boxes = [Box(*b[:5], NAMES[int(b[5])]) for b in reply["boxes"]]
+        if self.log_path is not None:
+            row = {"t_ns": time.monotonic_ns(), "ms": self.last_ms, "h": h, "w": w,
+                   "boxes": [[round(b.x0, 1), round(b.y0, 1), round(b.x1, 1), round(b.y1, 1),
+                              round(b.score, 3), b.cls] for b in boxes]}  # fmt: skip
+            with self.log_path.open("a") as fh:
+                fh.write(json.dumps(row) + "\n")
+        return boxes
 
     def close(self) -> None:
         if self.proc.stdin is not None:

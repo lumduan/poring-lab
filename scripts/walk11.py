@@ -721,6 +721,7 @@ def run(scene: str, condition: str, n: int, seed: int, label: str, crowd: int,
     rng = random.Random(seed)
     sid = new_session_id(f"{label}-{condition}-{scene}")
     log = DemoLog(sid)
+    UNITS["detector"].log_path = log.dir / "detections.jsonl"  # every batch: class + score (Batt)
     lock = record_session.read_lock(r.ROOT / "state")
     log.start(backend=str(lock.backend), lock_seq=lock.seq, server="lab-rathena", rule=WALK8_RULE,
               n=n, scene=scene, map=mapname, heldout=heldout, indoor_camera=indoor,
