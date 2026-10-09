@@ -110,7 +110,7 @@ def login_events(since_s: float) -> int:
 
     t1 = r.ns()
     t0 = t1 - int((time.time() - since_s) * 1e9)
-    out = Path("/dev/shm/poring-lab-tmp/scrub-check")  # reused, never deleted (no rm under /dev/shm)
+    out = Path("/dev/shm/poring-lab-tmp/scrub-check")  # reused, never deleted (no rm in /dev/shm)
     out.mkdir(parents=True, exist_ok=True)
     events, _ = record_session.write_packets(out, t0, t1)
     return sum(1 for e in events if e.get("type") == "login_accepted")
