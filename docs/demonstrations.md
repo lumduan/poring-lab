@@ -2572,6 +2572,42 @@ it needs is committed BEFORE the scored runs.
 **Order:** after 3.29's held-out runs and loot@1 (3.20a). T1 and the scorer are desk work and come
 first; T2–T5 need the client, in its gaps.
 
+**3.29 HELD-OUT RESULTS (walk@15, 2026-10-09 12:01–13:46 ICT; scored per map, `walk_readiness.py`):**
+
+| map | session | routes scored | success | 95 % CI | safety | ended | walk-ready (3.28) | verdict |
+|---|---|---|---|---|---|---|---|---|
+| guild (alberta_in) | `20261009T120146` | 5 | 0 / 5 | 0–43 % | 0 | harness stop at route 5 (chat input) | species: none spawn there | **INCOMPLETE** |
+| town (prontera) | `20261009T120857` | 45 | 39 / 45 = 86.7 % | 73.8–93.7 % | 0 | harness stop at route 45 (chat input) | no spawns | **INCOMPLETE** |
+| dungeon (iz_dun00) | `20261009T123810` | 50 | 29 / 50 = 58.0 % | 44.2–70.6 % | 0 | complete (harness stop after route 50) | **NO** (6 species out of scope) | FAIL; path-following only |
+| portal (prt_fild08 → prontera) | `20261009T134557` | 0 | — | — | 0 | harness stop at start: no seeded start cell | — | **INCOMPLETE** |
+
+- **guild:** route 0's goal (77, 42) lay inside alberta_in's exit warp trigger area (span 2 × 5 around
+  (78, 44)).
+  - The GM was warped to alberta, and every relocalisation after that failed (wrong map).
+  - The harness then stopped at its periodic `@warp`. A RULE finding: walk@15 does not avoid warp
+    areas (walk@17 B).
+- **town:** the failures were `relocalise_failed` 3, an unjustified NPC substitute 1, `no_click_point`
+  1, and a route that ended elsewhere 1. The harness stopped at route 45.
+- **dungeon:** the failures were `relocalise_limit` 17 and 4 others.
+  - The GM walked into iz_dun00's exit warp to izlu2dun 3 times (warp areas again).
+  - Monsters hit the GM 7 times (167 damage over 4 episodes; its HP fell to 14–17 of 40 each time, and
+    the harness's `@heal` at its warps restored it; no death in the packets).
+  - The walk marker never named a cell on the dark floor: every click was "unnamed after fix", and 68
+    of them produced no move request.
+  - The scorer listed 4 GM "stand" acts (at harness `@warp`s) under SAFETY. They are NOT safety events
+    under the definition; `walk_readiness.py` now counts only the defined kinds.
+  - **Batt's 13:03 screenshot:** the Hydra he saw unboxed was on the server, 3 cells west and 8 north
+    of the GM, at the moment /where read (165, 164). That is a FALSE NEGATIVE: Byalan species were
+    never in training.
+  - **Gate refusals vs the HUD's boxes:** 44 monster refusals.
+    - 37 with a server monster within 15 cells, 7 with none (false positives such as the portal and
+      the torch).
+    - In 2, the HUD's only monster boxes were below 0.30.
+    - The gate's own scores were not logged in this run (logged from now on).
+- **portal:** the L3 portal cell (170, 378) is NOT walkable in the GAT; its trigger area (span 4 × 1)
+  holds walkable cells such as (170, 377). The harness's start-cell search plans TO the portal cell,
+  so it found none. A HARNESS fault.
+
 ### 3.29a AMENDMENT — re-run every held-out map that ended INCOMPLETE, once (pre-registered 2026-10-09 ~13:45 ICT / 06:45 UTC, BEFORE any re-run; Batt 2026-10-09 ~13:20 + ~13:40)
 **Why:** two held-out maps ended early on a HARNESS stop, "the chat input did not open: nothing
 typed" (exit 3):
@@ -2587,6 +2623,14 @@ fault first: route 0's goal lay inside the exit warp's trigger area. That findin
 - Each INCOMPLETE map once more, with FRESH seeds: guild **20261124**, town **20261125**. iz_dun00
   **20261126** and the portal walk **20261127** are reserved, and are used only if those runs also end
   INCOMPLETE.
+  - ➡️ **Updated 13:50, after the chain, before any re-run:** iz_dun00 COMPLETED (50 scored) and is
+    not re-run.
+  - The portal walk ended INCOMPLETE with 0 routes, from a different harness fault: its target cell is
+    not walkable. It is re-run with **20261127**, after one more HARNESS fix: the harness's portal
+    target is the walkable cell of the L3 trigger area nearest the warp's centre (170, 377), for both
+    the start-cell search and the route's goal.
+  - The bytecode proof must still PASS. The portal target is a harness constant, which the rule only
+    receives as its goal.
 - The rest exactly as 3.29: CLEAN, the first 50 routes scored, the bar per map (≥ 45 / 50 + zero
   safety), walk-readiness per map stated (3.28).
 - **The incomplete runs' data is kept and reported alongside** (Batt), not replaced.

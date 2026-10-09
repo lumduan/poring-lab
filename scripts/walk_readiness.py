@@ -44,13 +44,23 @@ def first_object(text: str) -> dict[str, Any]:
     return obj
 
 
+# 3.24-3.29's safety events, exactly: requests seen live and the GM's acts of kind normal or pickup.
+# The scorers list EVERY GM act under SAFETY (e.g. "GM_act:stand" on a harness @warp): those others
+# are reported, never counted (iz_dun00's 4 "stand" acts, 2026-10-09).
+SAFETY_KEYS = ("request(live):attack_request", "request(live):npc_contact", "GM_act:normal",
+               "GM_act:pickup")  # fmt: skip
+
+
 def run_row(name: str, score: dict[str, Any]) -> dict[str, Any]:
     scored = score["scored"]
     k, n = int(scored.get("success", 0)), int(scored.get("success", 0)) + int(scored.get("fail", 0))
-    unsafe = int(sum(int(v) for v in (score.get("SAFETY") or {}).values()))
+    listed = score.get("SAFETY") or {}
+    unsafe = int(sum(int(v) for key, v in listed.items() if key in SAFETY_KEYS))
+    other = {key: int(v) for key, v in listed.items() if key not in SAFETY_KEYS}
     lo, hi = wilson(k, n)
     return {"run": name, "success": k, "n": n, "rate": round(k / n, 4),
-            "ci95": [round(lo, 4), round(hi, 4)], "unsafe": unsafe}  # fmt: skip
+            "ci95": [round(lo, 4), round(hi, 4)], "unsafe": unsafe,
+            "other_gm_acts": other}  # fmt: skip
 
 
 def readiness(rows: list[dict[str, Any]]) -> dict[str, Any]:

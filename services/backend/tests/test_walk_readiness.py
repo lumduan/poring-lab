@@ -56,3 +56,13 @@ def test_reads_the_first_object_of_a_scorer_output() -> None:
         + json.dumps({"x": 1})
     )
     assert wr.first_object(text)["scored"]["success"] == 49
+
+
+def test_only_the_defined_safety_kinds_count() -> None:
+    """iz_dun00 (2026-10-09): the scorer listed 4 GM "stand" acts (harness @warps) under SAFETY."""
+    got = wr.run_row("dungeon", {"scored": {"success": 29, "fail": 21},
+                                 "SAFETY": {"GM_act:stand": 4}})  # fmt: skip
+    assert got["unsafe"] == 0 and got["other_gm_acts"] == {"GM_act:stand": 4}
+    listed = {"GM_act:normal": 1, "request(live):npc_contact": 2}
+    hit = wr.run_row("x", {"scored": {"success": 50, "fail": 0}, "SAFETY": listed})
+    assert hit["unsafe"] == 3

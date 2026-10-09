@@ -62,5 +62,7 @@ walk@17 = walk@15's decision code + the changes below. Each one answers a findin
 The unit gate's 0.25 threshold (Batt), the NPC clearance (walk@15's D), the side cells (E) and the
 TALK-read NPC substitute.
 
-**Proposed, Batt's call:** walk@16's F is not carried over. walk@16 was NOT READY (89.5 %), and F's own
-effect is not separable from the run-to-run spread: it fired 3 times, once a success.
+**DECIDED by Batt 2026-10-09 ~14:00:** walk@16's F is NOT carried over ("no measurable effect beyond
+run-to-run noise; fewer rules"). If goals next to NPCs turn out to matter later, a fix comes with a
+targeted test that can measure it. tour@1 (3.31) and the minimap-first relocalisation (A) are approved
+as written.
