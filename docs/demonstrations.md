@@ -2357,6 +2357,16 @@ is no walk@16 held-out run (3.27's own rule).
 - **READINESS (3.28):** pooled **179 / 200 = 89.5 %** (95 % CI 84.5–93.0 %), 0 safety events:
   **NOT READY** (under 90 %).
 
+- **Disclosure: test connections during indoor CROWD** (found 2026-10-09 ~12:40 by a subagent).
+  - At 10:20 and 10:33 ICT (03:20 / 03:33 UTC), test suites run on the host opened agent links to
+    the LIVE backend: `test_walk12`'s `operator_hud.enable()` built a real `ro_agent.Agent`
+    ("operator-hud" hellos in the live input log).
+  - The input log shows no input from them and no release of any kind. The run's own input pattern
+    (its clicks and its typing) continued unchanged around them.
+  - What they could reach was display only (HUD / route-preview feeds), which the rule never reads.
+    The result stands.
+  - Fixed in a9a11ec: the tests' conftest refuses any non-loopback WebSocket connection.
+
 **3.29's version choice, applied mechanically after walk@16's tuning (2026-10-09 11:57 ICT, before
 any held-out data):**
 - walk@15 is READY (186 / 200 = 93.0 %, 0 safety).
