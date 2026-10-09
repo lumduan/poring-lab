@@ -498,7 +498,29 @@ the Merchant job-change maps -> everything else later (towns at large, diversity
 
 **The maps.** The server's map list has 20: new_N-M, N = 1..5 copies, M = 1..4 stages. Within a
 stage the five copies are the SAME map: their server walkability grids are byte-identical (map
-cache), so there are **4 layouts**. Visual identity of the copies (client files) is not verified.
+cache), so there are **4 layouts**. ~~Visual identity of the copies (client files) is not verified.~~
+➡️ **2026-10-09 ~20:40: VERIFIED, IDENTICAL per layout in the client files too** (Batt's 7.7 item 4
+condition; `scripts/map_identity.py check`, tests `services/backend/tests/test_map_identity.py`):
+- **The client has no separate files for the copies.** Its rename table
+  (data\resnametable.txt) sends every new_N-M's .rsw, .gnd and .gat to ONE file set per stage,
+  new_zone0M (15 aliased names per stage). No new_N-M file exists in the archive, so every copy of
+  a stage opens the same RSW, GND and GAT entries, and with them the same textures and models.
+- **Per layout: IDENTICAL, 4 / 4.** Stage 1: 21 RSW models (235 placed), 39 textures (10 ground,
+  the rest the models' own). Stage 2: 18 models (139), 31 textures. Stage 3: 13 models (239),
+  27 textures. Stage 4: 7 models (303), 18 textures. 0 missing and 0 unreadable references.
+- **Client and server agree:** each copy's client GAT against the server's map cache, 20 / 20 maps:
+  0 cells differ in walkability, 0 in cell type.
+- **Every file parsed** (RSW 2.1, GND 1.7, RSM 1.4); the RSW parse ends exactly at the quad tree.
+  Stage 2-4's RSWs are MIXCRYPT; they were read with the host-local study decoder (grf_read
+  `--decode-mixcrypt`, Batt 2026-10-05 option (a): offline, study only).
+- **The caveat: one archive.** This is the host's only client GRF, the Thai data.grf on the NAS.
+  The lab client draws from the kRO data.grf on the Dell. The 12 KB species' sprites were
+  byte-identical between the two (thai-data-experiment.md 3d), but nobody has compared the map
+  files or the rename table. Two cheap checks would close it, and each needs a person on the Dell:
+  the kRO table's new_N-M lines, or the declared sizes of the new_zone0M entries in both GRFs.
+- The hashes and the client's file names stay in the local JSON
+  (`/dev/shm/poring-lab-tmp/labels-prep/map_identity.json`), never committed.
+
 **16 are reachable; new_2-4, new_3-4, new_4-4, new_5-4 are never reached** (they carry mapflags
 only). All 20 carry the mapflags nobranch, nomemo, nopenalty, noteleport.
 
@@ -742,6 +764,130 @@ labels_v2.difficulty (all "normal" here).
   the camera: the client's indoor table lists alberta_in, geffen_in and morocc_in, not the training
   maps (outdoor camera); the sprite catalog for the 11 new species; N1-N3 for the 15 training-ground
   sprites first.
+  - ➡️ **GATs + camera: DONE 2026-10-09 ~20:45.**
+    - `scripts/map_identity.py gat` wrote each server map name's GAT into the GAT dir
+      (`/dev/shm/poring-lab-tmp/gat/data`), resolved through the client's rename table: all 20
+      new_N-M (each its stage's new_zone0M), plus morocc and morocc_in. alberta, alberta_in and
+      prontera were already there, byte-unchanged.
+    - `scripts/flows_gat.py` then copied them to `data/gat` (the MW2 mount; gitignored).
+    - **Indoor table:** no training map is listed, under the server name or the opened new_zone0M
+      name, so the outdoor camera applies. alberta_in and morocc_in are listed (indoor).
+  - **Found on the way (needs a decision before the Merchant maps' labels):** on this host's GRF,
+    two route towns' client GATs do NOT match the server's walkability.
+    - `map_identity.py check --group <town>` counts the cells: alberta 5,091 differ (4,836 walkable
+      only in the client, 255 only on the server); morocc 6,999 (4,482 / 2,517); prontera 46 (the
+      known 46, thai-data-experiment.md 1).
+    - alberta_in and morocc_in: 0 differ. The 20 training maps: 0 differ (7.1).
+    - The projection reads the CLIENT GAT's altitude (camera.py), so labels on alberta and morocc
+      may not fit the map the lab client draws. The kRO data on the Dell decides it, and it is not
+      on this host (7.1's caveat). Until then, treat alberta and morocc GATs as unverified.
+  - ➡️ **N1 (the NPC id -> sprite file table): BUILT 2026-10-09 ~20:50, along the route only**
+    (Batt 7.7 item 7). `scripts/npc_sprites.py build` writes `data/kb/npc_sprites.json` (local,
+    never committed). Its Lua table reader is `scripts/lua51_tables.py`. Tests:
+    `services/backend/tests/test_npc_sprites.py`.
+    - **Scope rule:**
+      - the training grounds: every drawn NPC;
+      - the Merchant route, for Batt's two first destinations (prontera, morocc_in): the
+        graduation arrival, the job changer, the storehouse, the KB's `walk_kafra` legs out and
+        back (a Kafra leg walks to the nearest Kafra of the same service);
+      - shortest paths on the server grid between those stops;
+      - an NPC counts when it is within 14 cells (Chebyshev) of a path cell. That is the server's
+        `area_size`: nothing farther is ever sent to the client.
+    - **Counts:**
+      - training grounds: the 15 sprites of 7.3;
+      - the Merchant route: 29 sprites (alberta 12, alberta_in 5, morocc 7, morocc_in 5,
+        prontera 8), 6 of them shared with the training grounds;
+      - **38 distinct sprites** in total, against 120 for whole towns (7.5).
+    - **Three sources agree on all 38:**
+      - rAthena's constant (npc.hpp);
+      - the client's own tables (npcidentity.lub constant -> id, jobname.lub id -> sprite name;
+        compiled Lua, read without running it);
+      - the archive: SPR + ACT present under data\sprite\npc\ for every one.
+    - The sprite name is the constant's name in all 38 cases. None is a composite player-class
+      sprite, and none is a monster sprite. Most SPRs are MIXCRYPT (the study decoder, as for the
+      monsters).
+  - ➡️ **N2 (the NPC SPR/ACT): DONE 2026-10-09 ~20:55 for the same 38 sprites.**
+    - The command: `scripts/sprite_catalog.py --npc-from data/kb/npc_sprites.json
+      --decode-mixcrypt`, with a new NPC mode (`--npc` / `--npc-from`) and a test.
+    - It reads data\sprite\npc\ the way the monsters are read and writes the same record format.
+      Outputs, all local: `data/kb/npc_sprite_catalog.json`, `data/kb/npc_sprite_names.json`
+      (job -> stem, for `labels_v2.py --npc-sprite-names`), and the decoded files in
+      `/dev/shm/poring-lab-tmp/sprites/data/sprite/npc/` (for `--npc-sprites`).
+    - **38 / 38 decoded:** 30 MIXCRYPT SPRs (study decoder) and 8 plain.
+    - **Integrity:** 11,104 ACT 2.5 layer sizes equal their SPR image sizes, 0 mismatches.
+    - **Boxes:** `predict_sprite` boxes all 38 through labels_v2's own loader (`npc_sheets`),
+      every box OPAQUE. Native idle sizes: 32-59 sprite px wide, 73-108 tall.
+  - ➡️ **The sprite catalog for the 11 new species: DONE 2026-10-09 ~21:00.**
+    - The species: 1009, 1010, 1011, 1012, 1014, 1050, 1051, 1052, 1053, 1184, 1261.
+    - **The client's own name decides the file.** `scripts/npc_sprites.py mob-names` reads
+      jobname.lub and writes `data/kb/monster_sprite_names.json` (local).
+      - For **4 of the 11** (1011, 1051, 1053, 1184) the client draws a sprite whose name is NOT
+        rAthena's aegis name.
+      - The trained 1002, 1063 and 1113 match.
+      - **Follow-up, not done here:** `qa_export.Sheets` (v1's loader, reused by labels_v2) looks
+        a monster's files up by the aegis name (classes.json). It would find no sheet for those 4
+        and fall back to v0's 44 x 40 box. It should read the stem from that table.
+    - **The catalog:** `scripts/sprite_catalog.py --decode-mixcrypt` on the 12 old + 11 new names
+      (the client's stems).
+      - 23 / 23 species have ACT + SPR decoded, all boxes OPAQUE.
+      - The 12 old records reproduce the stored catalog exactly (0 differ).
+      - `data/kb/sprite_catalog.json` now holds 23 species. The decoded files are in
+        `/dev/shm/poring-lab-tmp/sprites/data/sprite/` (local).
+    - **For Batt's "similar" call (7.5):** 1051 and 1053 use the SAME SPR (byte-identical images)
+      with different ACTs. 1053 is drawn larger: idle 50 x 36 against 35 x 25 native px.
+  - ➡️ **N3 preparation: READY FOR A PERSON 2026-10-09 ~21:10. Not judged.**
+    - The command: `scripts/labels_v2.py npc-sheet <the banked demo sessions> --npc-sprites ...
+      --npc-sprite-names data/kb/npc_sprite_names.json` (new subcommand, tests in
+      `test_labels_v2_tool.py`).
+    - It takes the labels' own path (`Session.frame`, so the boxes a v2 cache would train on).
+      Per NPC sprite it writes a contact sheet: up to 8 crops spread over the sightings, the
+      `predict_sprite` box in green, M5's NCC printed on each crop.
+    - It also gives `label_check`'s NCC for every sighting: the M5 metric, with M4's tau 0.092 as
+      a reference line only.
+    - Output: `/dev/shm/poring-lab-tmp/labels-prep/n3/` (PNG + JSON; client pixels, never
+      committed). It read the 78 banked demo sessions that have packets and skipped the 9 that
+      have none.
+    - **9 of the 38 route sprites appear in banked frames, 382 sightings in all:**
+
+      | job | maps | sightings (sessions) | NCC median (p10) | below 0.092 (UI-covered) |
+      |---|---|---|---|---|
+      | 59 | alberta_in | 6 (2) | 0.059 (0.005) | 4 (1) |
+      | 84 | prt_in | 3 (1) | 0.473 | 0 |
+      | 85 | prt_in | 3 (1) | 0.349 | 0 |
+      | 86 | alberta_in, prt_in | 6 (2) | 0.136 (0.119) | 0 |
+      | 89 | alberta | 4 (1) | 0.414 | 0 |
+      | 92 | prontera | 176 (5) | 0.451 (0.272) | 0 |
+      | 98 | alberta_in | 7 (2) | 0.182 (0.041) | 1 |
+      | 105 | prontera | 176 (5) | 0.313 (0.212) | 1 |
+      | 874 | prontera | 1 (1) | 0.520 | 0 |
+
+    - **What needs a person:** the 9 sheets. Job 59 on alberta_in (indoor camera) scores low, and
+      on its sheet the box sits right of the drawn sprite in several crops. A person decides
+      whether that is a label error (the indoor camera, the heading) or the NCC.
+    - The other 29 sprites have no banked sighting.
+      - The training-ground maps themselves were never banked. Still, 5 of their 15 sprites (84,
+        85, 86, 92, 105) were seen on other maps: the same files, so the same check.
+      - The other 10 (46, 47, 57, 90, 117, 726, 727, 751, 753, 754) wait for the first collection
+        session.
+  - ➡️ **L3 warp lists on these maps (walk@17's B; labels_v2's `warp` class): DONE 2026-10-09
+    ~21:15.**
+    - `scripts/kb_route.py` now takes first_workflow.json's COMPLETE list for every map that KB
+      covers: the `warp` lines of every loaded file, plus the touch-triggered script NPCs that
+      warp (cell ± trigger span).
+    - A map without portals gets an empty list, which reads as "none"; a map with no entry reads
+      as "unknown", and walk@17 refuses it.
+    - `REQUIRED_WARP_MAPS` (the 20 copies and the 10 route maps) fails the run closed when one is
+      missing. Test: `test_kb_route.py`.
+    - route.json was regenerated LOCALLY: 83 -> 107 maps, every other key unchanged.
+    - **Warp areas per map:**
+      - new_N-1: 1 each;
+      - new_N-2: 5 each;
+      - new_N-3 and new_N-4: 0 (listed empty);
+      - alberta 11, alberta_in 25, prontera 20, morocc 14 (13 + 1 touch NPC), morocc_in 36,
+        geffen 13 (11 + 2 touch NPCs), geffen_in 25, izlude 8, izlu2dun 1, payon 16.
+    - **Against the old hand list:** nothing was dropped. Added: prt_church +2 (the quest-file
+      `warp` lines (115,122) and (166,106); the first is 1.3's portal_unconfirmed case), izlude +1,
+      payon +1. alberta, alberta_in, prontera, iz_dun00, izlu2dun and prt_fild08 are the same sets.
 - **Accounts:** the GM (2000002) collects, with 3.33's immunity after each login, the fixed GM
   state checked and the UI gate before each run. It reaches any copy by `@warp` (the copies are
   clones). **The agent account 2000001 is not used for collection:** its quest state on new_4-1 is

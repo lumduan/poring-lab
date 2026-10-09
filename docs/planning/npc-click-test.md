@@ -236,6 +236,8 @@ box (ANY class) sees each (its foot within 40 px of the feet, or the feet inside
   require_complete=True)` fails closed. On 2026-10-09 no map is complete: prontera's L3 lists 16
   NPCs, but not the 5 flags, job 92 (157,187), job 99 (163,204) nor job 700 (156,212) of the
   centre; prt_church lists 2 of its 10 drawn NPCs (packets of 20261009T034716).
+  ➡️ **2026-10-09 ~21:10: superseded by P1 (5.1).** `npc_cells.json` now declares 33 maps
+  complete, prontera and prt_church included, with the flags and every drawn NPC.
 - **The footprint (PROVISIONAL):** a screen box hung from the NPC's projected feet (the camera +
   the map's GAT at the rule's belief): 60 px left and right, 165 px above, 36 px below. Sized from
   the largest town sprite in the evidence (the flag, ~95 × 150 px drawn; TALK read up to 23 px
@@ -288,8 +290,39 @@ The layer slots in where walk@12/13's `zone_points` already removes work-zone an
   (labels-v2-plan.md section 7.3) extracts every NPC of a map from every file the server loads
   (`npc/pre-re/scripts_main.conf`, 522 files); prontera is in its scope and `--also prt_church`
   adds the church. Its packet check over the 85 banked demo sessions: 49 / 49 NPC objects at
-  their cell and sprite, prontera 16 and prt_church 19 among them. It does NOT write
-  `npc_cells.json` yet, so `npc_noclick.py` still reports no map complete (a follow-up).
+  their cell and sprite, prontera 16 and prt_church 19 among them. ~~It does NOT write
+  `npc_cells.json` yet, so `npc_noclick.py` still reports no map complete (a follow-up).~~
+  ➡️ **2026-10-09 ~21:10: P1 BUILT and CHECKED** (branch feat/labels-v2-prep; local data, never
+  committed).
+  - **The file:** `kb_first_workflow.py npc-cells --sessions <banked>` writes
+    `data/kb/npc_cells.json` for the KB's 33 maps: the first workflow's 30 plus prt_church,
+    prt_fild08 and iz_dun00. Each map is declared complete by the build's rule (every loaded file
+    parsed, every line naming the map classified, no run-time placement). Each NPC carries its
+    file:line, sprite and a DRAWN mark: True, False, or "conditional" (hidden at start).
+  - **Hidden NPCs:** `npc_noclick.StaticNpc.drawn` carries the mark. The no-click layer keeps
+    every NPC (the safe side). `npc_click_test.make_plan` probes only `drawn is True`; a hidden
+    NPC's cell still keeps stands away.
+  - **The check** (`packet_check_per_map`): every NPC object the server showed must be in the list
+    at its cell with its sprite. An object sent with an invisibility option must not be marked
+    drawn, and one sent without it must not be marked hidden. Over the banked demo sessions (78
+    with packets):
+
+    | map | objects (matched) | sent invisible | drawn marks disagreeing |
+    |---|---|---|---|
+    | prontera | 16 (16) | 0 | 0 |
+    | prt_church | 19 (19) | 6 (the wedding row, all marked "conditional") | 0 |
+    | alberta_in | 6 (6) | 0 | 0 |
+    | alberta | 2 (2) | 0 | 0 |
+    | izlu2dun | 2 (2) | 0 | 0 |
+    | prt_fild08 | 3 (3) | 0 | 0 |
+    | iz_dun00 | 1 (1, its portal) | 0 | 0 |
+
+    - **The two sessions this section names:** the town re-run (20261009T140625) gives prontera
+      16 / 16 objects, its 13 drawn NPCs included. The prt_church session (20261009T034716) gives
+      19 / 19, its 10 drawn NPCs plus the 6 hidden ones, marked.
+    - **`npc_noclick.py cells` now reports COMPLETE** for prontera (94 listed, 88 after the
+      undrawn classes; the 5 flags included), prt_church (32 / 31), alberta_in and new_1-2.
+    - The training grounds have no banked packets: their check is the first collection's.
 - **P2 · T2** (`poring_env.npc_dialog`), proven 168 / 168 (3.30): the dialog policy reads it.
 - **P3 · the CPU detector** (`/dev/shm/poring-lab-detector`): every probe logs its boxes.
 - **P4 · GAT + indoor table extracted** for the test maps (`/dev/shm/poring-lab-tmp/gat/data`).

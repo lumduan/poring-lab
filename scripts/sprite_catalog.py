@@ -13,6 +13,13 @@ what the ACT alone gives. Extracted files go only under /dev/shm (--work); the c
 (numbers and the ACT's event names, no pixels) goes to data/kb/ (gitignored). Both are
 CLIENT-derived and never committed (CLAUDE.md rule 4).
 
+NPC sprites (labels v2 N2, docs/planning/labels-v2-plan.md 1.2): --npc STEM ... or --npc-from
+data/kb/npc_sprites.json (scripts/npc_sprites.py, N1) reads data\\sprite\\npc\\<stem>.spr / .act the
+same way, into the same --work tree (data/sprite/npc/), and writes the same record format to
+data/kb/npc_sprite_catalog.json (records keyed by the file stem, with the NPC ids that use it), so
+render.SpriteSheet / predict_sprite and labels_v2.py --npc-sprites take them unchanged. An NPC's
+action groups are not a monster's: group 0 is idle, the rest are named group<N>.
+
 Boxes are native sprite px around the anchor (the actor's feet; x right, y down), x0 y0 x1 y1:
   * "opaque": the composed frame's alpha > 0 extent (needs the SPR);
   * "quad": the union of the layer quads from the ACT 2.5 sizes -- the images' extents, their
@@ -59,11 +66,14 @@ from poring_dataset.sprites import (  # noqa: E402
 DEFAULT_GRF = Path("/mnt/poring-thai-src/ro_thai/data.grf")  # the Thai client, NAS, read-only
 DEFAULT_WORK = Path("/dev/shm/poring-lab-tmp/sprites")
 DEFAULT_OUT = REPO / "data" / "kb" / "sprite_catalog.json"
+DEFAULT_NPC_OUT = REPO / "data" / "kb" / "npc_sprite_catalog.json"
 # prt_fild08 + Byalan F1-F2 (docs/phase3-plan.md §2, the pre-renewal spawn tables) + Creamy (seen)
 DEFAULT_AEGIS = ("PORING", "LUNATIC", "PUPA", "DROPS", "CREAMY", "PLANKTON", "MARINA", "HYDRA",
                  "KUKRE", "VADON", "BLACK_MUSHROOM", "CORNUTUS")  # fmt: skip
 MONSTER_DIR = "data/sprite/몬스터/"  # norm_name form of data\sprite\몬스터\ (CP949 in the GRF)
+NPC_DIR = "data/sprite/npc/"
 GROUP_NAMES = {a.value: a.name.lower() for a in MonsterAction}
+NPC_GROUP_NAMES = {0: "idle"}  # an NPC ACT: idle first; its other groups are not a monster's
 
 
 def _r(x: float) -> float:
@@ -109,7 +119,7 @@ def _read(
     return data, info
 
 
-def describe(act: Act, spr: Spr | None) -> dict[str, Any]:
+def describe(act: Act, spr: Spr | None, names: dict[int, str] | None = None) -> dict[str, Any]:
     """The catalog record of one parsed sprite: per action group x direction, the motions, delays,
     every motion's box and the envelope."""
     sheet = SpriteSheet(act, spr)
@@ -135,7 +145,8 @@ def describe(act: Act, spr: Spr | None) -> dict[str, Any]:
                 "boxes": [_box(b) for b in boxes], "envelope": _box(env),
                 "envelope_size": _size(env), "events": events,
             })  # fmt: skip
-        groups.append({"group": g, "name": GROUP_NAMES.get(g, f"group{g}"), "directions": dirs})
+        label = (GROUP_NAMES if names is None else names).get(g, f"group{g}")
+        groups.append({"group": g, "name": label, "directions": dirs})
     idle = groups[0]["directions"][0] if groups else None
     first = None
     if idle is not None and idle["boxes"]:
@@ -156,7 +167,11 @@ def describe(act: Act, spr: Spr | None) -> dict[str, Any]:
 
 
 def catalog(
-    grf: Path, aegis: list[str], work: Path | None, mixcrypt: bool = False
+    grf: Path,
+    aegis: list[str],
+    work: Path | None,
+    mixcrypt: bool = False,
+    folder: str = MONSTER_DIR,
 ) -> dict[str, Any]:
     """The whole catalog: one record per species (``work`` None: extract nothing to disk)."""
     if work is not None:
@@ -166,7 +181,7 @@ def catalog(
         entries = [e for e in iter_entries(f, read_header(f)) if e.is_file]
         by_name = {norm_name(e.name): e for e in entries}
         for name in aegis:
-            base = MONSTER_DIR + name.lower()
+            base = folder + name.lower()
             rec: dict[str, Any] = {"aegis": name, "files": {}}
             data: dict[str, bytes | None] = {}
             for ext in ("act", "spr"):
@@ -191,14 +206,38 @@ def catalog(
                 except SpriteFormatError as exc:
                     rec["files"][ext]["status"] = f"unparsed: {exc}"
             if act is not None:
-                rec.update(describe(act, spr))
+                rec.update(describe(act, spr, NPC_GROUP_NAMES if folder == NPC_DIR else None))
             species[name] = rec
     return {
         "generated": datetime.now(UTC).isoformat(timespec="seconds"),
         "grf": str(grf),
+        "folder": folder,
         "boxes": "native sprite px around the anchor (the feet), x right, y down: x0 y0 x1 y1",
         "species": species,
     }
+
+
+def npc_jobs(table: dict[str, Any]) -> dict[str, list[int]]:
+    """N1's table (scripts/npc_sprites.py) -> {file stem: [NPC ids drawn with it]}, own sprites
+    only (a composite or a monster-sprite NPC has no file here)."""
+    out: dict[str, list[int]] = {}
+    for row in table.get("sprites", []):
+        name = row.get("client_sprite")
+        if row.get("sprite_class") == "npc" and name:
+            out.setdefault(str(name).lower(), []).append(int(row["id"]))
+    return out
+
+
+def names_map(cat: dict[str, Any]) -> dict[str, str]:
+    """{job: stem} for every catalogued NPC sprite whose ACT AND SPR were read (the files
+    labels_v2.npc_sheets loads)."""
+    out: dict[str, str] = {}
+    for stem, rec in cat["species"].items():
+        files = rec.get("files", {})
+        if all(str(files.get(e, {}).get("status", "")).startswith("ok") for e in ("act", "spr")):
+            for job in rec.get("jobs", []):
+                out[str(job)] = stem
+    return out
 
 
 def _wh(size: list[float] | None) -> str:
@@ -240,19 +279,43 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--grf", type=Path, default=DEFAULT_GRF)
     ap.add_argument("--work", type=Path, default=DEFAULT_WORK, help="extract here (/dev/shm only)")
     ap.add_argument("--no-extract", action="store_true", help="read in memory, write no SPR/ACT")
-    ap.add_argument("--out", type=Path, default=DEFAULT_OUT)
+    ap.add_argument("--out", type=Path, default=None, help=f"default {DEFAULT_OUT.name}, or "
+                    f"{DEFAULT_NPC_OUT.name} with --npc / --npc-from")  # fmt: skip
     ap.add_argument(
         "--decode-mixcrypt", action="store_true",
         help="STUDY ONLY (Batt 2026-10-05): MIXCRYPT SPRs via the host-local decoder (grf_read)",
     )  # fmt: skip
+    ap.add_argument("--npc", nargs="+", help="NPC sprite file stems (data\\sprite\\npc\\)")
+    ap.add_argument("--npc-from", type=Path, help="N1's table (scripts/npc_sprites.py)")
+    ap.add_argument("--names-out", type=Path, default=None,
+                    help="NPC mode: job -> stem JSON for labels_v2.py --npc-sprite-names "
+                         "(default data/kb/npc_sprite_names.json)")  # fmt: skip
     a = ap.parse_args(argv)
+    npc_mode = bool(a.npc or a.npc_from)
+    jobs: dict[str, list[int]] = {}
+    if npc_mode:
+        stems = list(a.npc or [])
+        if a.npc_from:
+            jobs = npc_jobs(json.loads(a.npc_from.read_text()))
+            stems += [st for st in jobs if st not in stems]
+        names, folder = stems, NPC_DIR
+        out = a.out or DEFAULT_NPC_OUT
+    else:
+        names, folder, out = a.aegis, MONSTER_DIR, a.out or DEFAULT_OUT
     try:
-        cat = catalog(a.grf, a.aegis, None if a.no_extract else a.work, a.decode_mixcrypt)
+        cat = catalog(a.grf, names, None if a.no_extract else a.work, a.decode_mixcrypt, folder)
     except GrfError as exc:
         print(f"sprite_catalog: {exc}", file=sys.stderr)
         return 2
-    a.out.parent.mkdir(parents=True, exist_ok=True)
-    a.out.write_text(json.dumps(cat, ensure_ascii=False, indent=1) + "\n")
+    for stem, ids in jobs.items():
+        if stem in cat["species"]:
+            cat["species"][stem]["jobs"] = ids
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(cat, ensure_ascii=False, indent=1) + "\n")
+    if npc_mode:
+        names_out = a.names_out or out.with_name("npc_sprite_names.json")
+        names_out.write_text(json.dumps(names_map(cat), indent=1) + "\n")
+        print(f"job -> stem (labels_v2.py --npc-sprite-names): {names_out}")
     print(summary(cat))
     refused = [
         n for n, r in cat["species"].items()
@@ -263,7 +326,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"\nREFUSED (encrypted, not worked around): {' '.join(refused)}")
     if missing:
         print(f"NO ACT: {' '.join(missing)} (see 'candidates' in the catalog)")
-    print(f"\ncatalog: {a.out}")
+    print(f"\ncatalog: {out}")
     return 1 if missing else 0
 
 

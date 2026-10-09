@@ -86,7 +86,15 @@ def kb(tmp: Path, complete: bool | None = None) -> Path:
                         "town": {
                             "complete": complete,
                             "npcs": [
-                                {"x": 55, "y": 90, "sprite": "722", "file": "npc/g.txt", "line": 7}
+                                {"x": 55, "y": 90, "sprite": "722", "file": "npc/g.txt", "line": 7},
+                                {
+                                    "x": 58,
+                                    "y": 92,
+                                    "sprite": "705",
+                                    "file": "npc/w.txt",
+                                    "line": 9,
+                                    "drawn": "conditional",
+                                },
                             ],
                         }
                     }
@@ -107,6 +115,8 @@ def test_only_the_complete_list_declares_coverage(tmp_path: Path) -> None:
     npcs, cov = nc.load_l3_npcs("town", kb(tmp_path, complete=True))
     assert cov["complete"] is True
     assert (55, 90) in [n.cell for n in npcs]
+    marks = {n.cell: n.drawn for n in npcs}
+    assert marks[(58, 92)] == "conditional" and marks[(55, 90)] is True  # kept, but marked
     with pytest.raises(SystemExit):
         nc.NoClickLayer.for_map("town", kb(tmp_path / "partial", complete=False),
                                 require_complete=True)  # fmt: skip

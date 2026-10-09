@@ -21,9 +21,13 @@ feet, on its stand) plus walk@11's 12 px margin: 60 px left and right of the fee
 
 L3 is read at run time from data/kb (route.json's NPC groups, the bindings' NPC positions and, when
 a KB extension writes it, npc_cells.json). Those files are GPL-derived (rAthena): never committed.
-COVERAGE MATTERS: the KB lists only the NPC files it was built from. On 2026-10-09 it lacks
-prontera's five guild flags (job 722), one of which was contact 1. ``coverage()`` says whether a
-map's list is declared COMPLETE; a caller that needs safety must refuse to run on a map that is not.
+COVERAGE MATTERS: the KB lists only the NPC files it was built from. ~~On 2026-10-09 it lacks
+prontera's five guild flags (job 722), one of which was contact 1.~~ ➡️ 2026-10-09 evening:
+npc_cells.json is written by `kb_first_workflow.py npc-cells` from EVERY file the server loads
+(the first workflow's maps + prt_church, prt_fild08, iz_dun00; the flags included), each map
+declared complete by that build, each NPC marked drawn / not (``StaticNpc.drawn``).
+``coverage()`` says whether a map's list is declared COMPLETE; a caller that needs safety must
+refuse to run on a map that is not.
 
     npc_noclick.py cells --map prontera [--kb data/kb]     the map's L3 NPC cells and coverage
 Pixels and static data only: nothing here reads packets.
@@ -88,6 +92,10 @@ class StaticNpc:
     key: str  # a stable L3 reference (file:line), never the NPC's name in committed text
     sprite: str | None  # the script's sprite field when L3 has it (route.json), else None
     source: str  # which L3 list named it
+    # npc_cells.json's mark: True, False, or "conditional" (the script hides it at start; the
+    # server sends it with an invisibility option, e.g. prt_church's wedding row). The no-click
+    # layer keeps every NPC (the safe side); a probe plan takes only drawn ones.
+    drawn: bool | str = True
 
 
 def _key(file: str | None, line: Any, cell: Cell) -> str:
@@ -111,7 +119,8 @@ def load_l3_npcs(map_name: str, kb_dir: Path = KB_DIR) -> tuple[list[StaticNpc],
                 c = (int(p["x"]), int(p["y"]))
                 out.setdefault(c, StaticNpc(map_name, c, _key(p.get("file"), p.get("line"), c),
                                             str(p["sprite"]) if p.get("sprite") is not None
-                                            else None, "npc_cells.json"))  # fmt: skip
+                                            else None, "npc_cells.json",
+                                            p.get("drawn", True)))  # fmt: skip
             counts["npc_cells.json"] = len(block.get("npcs", []))
     route = kb_dir / "route.json"
     if route.exists():

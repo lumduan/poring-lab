@@ -26,6 +26,13 @@ GPU, no client, no NAS walk, nothing written outside --out / stdout.
         at one depth, their median and a sheet (PNG in /dev/shm), the bright extent as a hint. A
         person reads them: the warp's visibility and the ring's radius.
 
+    labels_v2.py npc-sheet SESSION [SESSION ...] --npc-sprites DIR --npc-sprite-names JSON
+                           [--per-sprite N] [--tau T] [--out-dir DIR] [common options]
+        N3 PREPARATION (labels-v2-plan 1.2): per catalogued NPC sprite on screen in the banked
+        frames, a contact sheet of frame crops with predict_sprite's box drawn (PNG in /dev/shm,
+        client pixels, never committed) and label_check's NCC per sighting (the M5 metric;
+        --tau, default M4's 0.092, is a reference line only). A PERSON judges the sheets.
+
 Common options: --kb DIR (route.json, classes.json; default <repo>/data/kb), --offset-ms MS (the
 packet->frame delay; default: qa_export.auto_offset_ms for the session's backend), --npc-extents
 JSON (job -> [x0, y0, x1, y1] sprite px, measured), --npc-sprites DIR + --npc-sprite-names JSON
@@ -653,6 +660,146 @@ def cmd_warp_measure(a: argparse.Namespace) -> int:
     return 0
 
 
+# --- npc-sheet: N3's material for a person -------------------------------------------------------
+
+M5_TAU = 0.092  # label_check's tau, fixed from M4's clean standing frames (phase3-plan.md)
+SHEET_MARGIN = 24  # px of context around a box in a crop
+TILE_H = 220  # every crop scaled to this height on the sheet
+
+
+def pick_spread(items: Sequence[Any], n: int) -> list[Any]:
+    """Up to ``n`` items spread evenly over the (time-sorted) list, first and last included."""
+    if n <= 0 or not items:
+        return []
+    if len(items) <= n:
+        return list(items)
+    step = (len(items) - 1) / (n - 1) if n > 1 else 0
+    return [items[round(i * step)] for i in range(n)]
+
+
+def sighting_rows(items: Sequence[dict[str, Any]], tau: float) -> dict[str, Any]:
+    """The per-sprite numbers: sightings, scored, the NCC median, how many fall below tau and why
+    (label_check.classify's order: occluded, ui_covered, else low)."""
+    scores = [it["ncc"] for it in items if it["ncc"] is not None]
+    low = [it for it in items if it["ncc"] is not None and it["ncc"] < tau]
+    return {
+        "sightings": len(items),
+        "sessions": len({it["session"] for it in items}),
+        "maps": sorted({str(it.get("map")) for it in items}),
+        "scored": len(scores),
+        "ncc_median": round(statistics.median(scores), 3) if scores else None,
+        "ncc_p10": round(float(np.percentile(scores, 10)), 3) if scores else None,
+        "below_tau": len(low),
+        "below_tau_occluded": sum(1 for it in low if it["why_low"] == "occluded"),
+        "below_tau_ui": sum(1 for it in low if it["why_low"] == "ui_covered"),
+    }
+
+
+def draw_sheet(items: Sequence[dict[str, Any]], path: Path, cols: int = 4) -> None:
+    """Crops (box + SHEET_MARGIN) with the predicted box in green and the NCC as a number."""
+    from PIL import Image, ImageDraw
+
+    tiles = []
+    for it in items:
+        img = Image.open(it["image"]).convert("RGB")
+        x0, y0, x1, y1 = it["box"]
+        cx0, cy0 = max(0, int(x0) - SHEET_MARGIN), max(0, int(y0) - SHEET_MARGIN)
+        cx1 = min(img.width, int(x1) + SHEET_MARGIN)
+        cy1 = min(img.height, int(y1) + SHEET_MARGIN)
+        crop = img.crop((cx0, cy0, cx1, cy1))
+        d = ImageDraw.Draw(crop)
+        d.rectangle((x0 - cx0, y0 - cy0, x1 - cx0, y1 - cy0), outline=(0, 255, 0), width=1)
+        f = TILE_H / max(1, crop.height)
+        crop = crop.resize((max(1, round(crop.width * f)), TILE_H), Image.Resampling.NEAREST)
+        label = "-" if it["ncc"] is None else f"{it['ncc']:.2f}"
+        d = ImageDraw.Draw(crop)
+        d.rectangle((0, 0, 8 + 7 * len(label), 15), fill=(0, 0, 0))
+        d.text((3, 2), label, fill=(255, 255, 0))
+        tiles.append(crop)
+    if not tiles:
+        return
+    w = max(t.width for t in tiles)
+    rows = (len(tiles) + cols - 1) // cols
+    sheet = Image.new("RGB", (cols * (w + 4), rows * (TILE_H + 4)), (40, 40, 40))
+    for i, t in enumerate(tiles):
+        sheet.paste(t, ((i % cols) * (w + 4), (i // cols) * (TILE_H + 4)))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    sheet.save(path)
+
+
+def cmd_npc_sheet(a: argparse.Namespace) -> int:
+    """N3 material: per NPC sprite (job) seen in the banked frames, its sightings scored with M5's
+    NCC and a contact sheet for a person. Uses the labels' own path (Session.frame), so a sheet
+    shows exactly the boxes a v2 cache would train on."""
+    import label_check
+
+    from poring_dataset.render import Actor, MonsterAction, predict_sprite
+
+    if a.npc_sprites is None or a.npc_sprite_names is None:
+        print("npc-sheet needs --npc-sprites DIR and --npc-sprite-names JSON", file=sys.stderr)
+        return 2
+    out_dir: Path = a.out_dir
+    by_job: dict[int, list[dict[str, Any]]] = defaultdict(list)
+    skipped: list[str] = []
+    for p in a.sessions:
+        if not (p / "packets.jsonl.gz").exists():
+            skipped.append(p.name)  # no packets: no labels to show
+            continue
+        s = Session(p, a)
+        for t, img_path in banked_frames(p):
+            if img_path is None:
+                continue
+            _status, fr, scene = s.frame(t)
+            if fr is None or scene is None:
+                continue
+            world = s.world(t)
+            ents = {e.gid: e for e in world.entities}
+            img = None
+            for lab in fr.labels:
+                if lab.cls != "npc" or not lab.kind.startswith("sprite_") or lab.gid not in ents:
+                    continue
+                ent = ents[lab.gid]
+                sheet = s.npc_sheet(ent.job)
+                pred = predict_sprite(Actor((float(ent.x), float(ent.y)),
+                                            int(ent.heading or 0) % 8, MonsterAction.IDLE),
+                                      sheet, scene, s.labeler.k)  # fmt: skip
+                if pred is None:
+                    continue
+                if img is None:
+                    from PIL import Image
+
+                    img = np.asarray(Image.open(img_path).convert("RGB"))
+                ncc = label_check.score(img, sheet, pred)
+                others = [(u.x0, u.y0, u.x1, u.y1) for u in fr.projected if u.gid != lab.gid]
+                why = label_check.classify(pred.box, others) if ncc is not None else None
+                by_job[int(ent.job)].append({
+                    "session": p.name, "t_ns": t, "image": str(img_path),
+                    "map": map_key(fr.map or ""), "key": lv.npc_key(fr.map, ent),
+                    "box": [round(v, 1) for v in pred.box],
+                    "ncc": None if ncc is None else round(ncc, 3), "why_low": why,
+                })  # fmt: skip
+    result = []
+    for job, items in sorted(by_job.items()):
+        items.sort(key=lambda it: (it["session"], it["t_ns"]))
+        row = {"job": job, **sighting_rows(items, a.tau)}
+        chosen = pick_spread(items, a.per_sprite)
+        sheet_path = out_dir / f"npc_{job}.png"
+        draw_sheet(chosen, sheet_path)
+        row["sheet"] = str(sheet_path)
+        row["shown"] = [{k: it[k] for k in ("session", "t_ns", "key", "ncc")} for it in chosen]
+        result.append(row)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "npc_sheet.json").write_text(
+        json.dumps({"tau": a.tau, "sprites": result, "sightings": by_job}, indent=1, default=str)
+        + "\n"
+    )
+    print(json.dumps({"tau_reference": a.tau, "sessions_without_packets": len(skipped),
+                      "sprites": [{k: v for k, v in r.items() if k != "shown"} for r in result]},
+                     indent=1))  # fmt: skip
+    print(f"sheets + JSON (client pixels; never committed): {out_dir}")
+    return 0
+
+
 # --- main -----------------------------------------------------------------------------------------
 
 
@@ -691,6 +838,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     p.add_argument("sessions", nargs="+", type=Path)
     p.add_argument("--region", required=True, help="x0,y0,x1,y1 client px")
     common(p)
+    p = sub.add_parser("npc-sheet")
+    p.add_argument("sessions", nargs="+", type=Path)
+    p.add_argument("--per-sprite", type=int, default=8)
+    p.add_argument("--tau", type=float, default=M5_TAU)
+    p.add_argument("--out-dir", type=Path,
+                   default=Path("/dev/shm/poring-lab-tmp/labels-prep/n3"))  # fmt: skip
+    common(p)
     p = sub.add_parser("warp-measure")
     p.add_argument("sessions", nargs="+", type=Path)
     p.add_argument("--half", type=int, default=110)
@@ -699,7 +853,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     a = ap.parse_args(argv)
     return {"scope": cmd_scope, "budget": cmd_budget, "coverage": cmd_coverage,
             "labels": cmd_labels, "negatives": cmd_negatives, "verify-region": cmd_verify_region,
-            "warp-measure": cmd_warp_measure}[a.cmd](a)  # fmt: skip
+            "warp-measure": cmd_warp_measure, "npc-sheet": cmd_npc_sheet}[a.cmd](a)  # fmt: skip
 
 
 if __name__ == "__main__":

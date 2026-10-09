@@ -189,7 +189,10 @@ def make_plan(map_name: str, npcs: Sequence[nc.StaticNpc], walkable: Any, camera
     ``near``: a PRE-REGISTERED spot; only NPCs within ``near_radius`` of it are candidates."""
     rng = random.Random(seed)
     cells = [n.cell for n in npcs]
-    pool = [n for n in npcs if near is None or cheb(n.cell, near) <= near_radius]
+    # probe only NPCs the client draws: one sent with an invisibility option (npc_cells.json
+    # drawn False / "conditional") is no NPC to hover; its cell still keeps stands away (cells)
+    pool = [n for n in npcs if n.drawn is True
+            and (near is None or cheb(n.cell, near) <= near_radius)]  # fmt: skip
     chosen: list[dict[str, Any]] = []
     for n in dense_npcs(pool, k):
         others = [c for c in cells if c != n.cell]

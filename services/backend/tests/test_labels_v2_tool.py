@@ -201,3 +201,49 @@ def test_packets_reader(tmp_path: Path) -> None:
     with gzip.open(tmp_path / "packets.jsonl.gz", "wt") as fh:
         fh.write(json.dumps({"t_mono_ns": 1, "type": "map_change"}) + "\n")
     assert L.load_events(tmp_path) == [{"t_mono_ns": 1, "type": "map_change"}]
+
+
+# --- npc-sheet (N3 preparation) ---
+
+
+def test_pick_spread_keeps_first_and_last() -> None:
+    assert L.pick_spread(list(range(10)), 4) == [0, 3, 6, 9]
+    assert L.pick_spread([1, 2], 8) == [1, 2]
+    assert L.pick_spread([], 3) == [] and L.pick_spread([1], 0) == []
+
+
+def test_sighting_rows_count_below_tau_and_why() -> None:
+    items = [
+        {"session": "a", "map": "m", "ncc": 0.5, "why_low": None},
+        {"session": "a", "map": "m", "ncc": 0.05, "why_low": "occluded"},
+        {"session": "b", "map": "n", "ncc": 0.01, "why_low": "ui_covered"},
+        {"session": "b", "map": "n", "ncc": None, "why_low": None},
+    ]
+    r = L.sighting_rows(items, 0.092)
+    assert (r["sightings"], r["sessions"], r["scored"], r["below_tau"]) == (4, 2, 3, 2)
+    assert (r["below_tau_occluded"], r["below_tau_ui"], r["maps"]) == (1, 1, ["m", "n"])
+    assert r["ncc_median"] == 0.05
+
+
+def test_draw_sheet_tiles_crops_with_the_box(tmp_path: Path) -> None:
+    from PIL import Image
+
+    img = np.zeros((100, 200, 3), np.uint8)
+    img[40:80, 90:110] = 200
+    path = tmp_path / "f.png"
+    Image.fromarray(img).save(path)
+    items = [{"image": str(path), "box": [90.0, 40.0, 110.0, 80.0], "ncc": 0.4},
+             {"image": str(path), "box": [-5.0, 10.0, 15.0, 60.0], "ncc": None}]  # fmt: skip
+    out = tmp_path / "sheet" / "npc_1.png"
+    L.draw_sheet(items, out, cols=2)
+    sheet = np.asarray(Image.open(out).convert("RGB"))
+    assert sheet.shape[0] == L.TILE_H + 4
+    assert ((sheet[..., 1] == 255) & (sheet[..., 0] == 0)).any()  # the green box is drawn
+    L.draw_sheet([], tmp_path / "none.png")
+    assert not (tmp_path / "none.png").exists()
+
+
+def test_npc_sheet_needs_the_sprites(capsys: pytest.CaptureFixture[str]) -> None:
+    a = SimpleNamespace(npc_sprites=None, npc_sprite_names=None)
+    assert L.cmd_npc_sheet(a) == 2
+    assert "--npc-sprites" in capsys.readouterr().err

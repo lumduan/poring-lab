@@ -501,3 +501,65 @@ def test_rooms_and_room_level_trips() -> None:
     assert trip["map_changes"] == 2 and trip["hops"] == 4
     inside = {x["npc"]: (x["reachable"], len(x["via"])) for x in rt["home_inside"]}
     assert inside == {"q:1": (True, 0), "q:2": (True, 1)}
+
+
+# --- npc_cells.json (npc-click-test.md 5.1 P1) ---
+
+
+def _doc() -> dict:
+    def n(key: str, x: int, y: int, sprite: int, drawn: object = True, **kw: object) -> dict:
+        return {"key": key, "x": x, "y": y, "sprite": sprite, "sprite_class": "npc",
+                "kind": "dialog", "drawn": drawn, **kw}  # fmt: skip
+
+    return {
+        "built_at": "synthetic", "rathena_ref": "abc",
+        "completeness": {"counts": {"town": {}, "hall": {}}, "unclassified": [],
+                         "script_placements": [{"map": "hall", "cmd": "monster"}]},
+        "maps": {
+            "town": {"loaded_by_server": True, "warps": [{"x": 9, "y": 9, "drawn": True}],
+                     "npcs": [n("npc/a.txt:12", 10, 10, 86),
+                              n("npc/a.txt:30", 11, 10, 705, "conditional"),
+                              n("npc/b.txt:4", 12, 10, 111, False, sprite_class="hidden",
+                                kind="invisible")]},
+            "hall": {"loaded_by_server": True, "warps": [], "npcs": [n("npc/c.txt:1", 5, 5, 90)]},
+            "far": {"loaded_by_server": False, "warps": [], "npcs": []},
+        },
+    }  # fmt: skip
+
+
+def test_npc_cells_mark_drawn_and_completeness() -> None:
+    cells = fw.npc_cells(_doc())["maps"]
+    assert cells["town"]["complete"] is True
+    assert cells["hall"]["complete"] is False  # a run-time placement names it
+    assert cells["far"]["complete"] is False  # the server does not load it
+    rows = {(r["x"], r["y"]): r for r in cells["town"]["npcs"]}
+    assert rows[(10, 10)]["file"] == "npc/a.txt"
+    assert (rows[(10, 10)]["line"], rows[(10, 10)]["probe"]) == (12, True)
+    assert (rows[(11, 10)]["drawn"], rows[(11, 10)]["probe"]) == ("conditional", False)
+    assert rows[(12, 10)]["probe"] is False
+
+
+def test_packet_check_per_map_matches_cells_sprites_and_drawn_marks(tmp_path: Path) -> None:
+    s = tmp_path / "s1"
+    s.mkdir()
+    rows = [
+        {"type": "map_change", "map": "town.gat"},
+        {"type": "entity_appear", "objtype": 6, "x": 10, "y": 10, "job": 86, "gid": 1},
+        {"type": "entity_appear", "objtype": 6, "x": 11, "y": 10, "job": 705, "gid": 2,
+         "effect_state": 2},
+        {"type": "entity_appear", "objtype": 6, "x": 9, "y": 9, "job": 45, "gid": 3},
+        {"type": "entity_appear", "objtype": 6, "x": 30, "y": 30, "job": 92, "gid": 4},
+        {"type": "map_change", "map": "hall.gat"},
+        {"type": "entity_appear", "objtype": 6, "x": 5, "y": 5, "job": 91, "gid": 5},
+    ]  # fmt: skip
+    with gzip.open(s / "packets.jsonl.gz", "wt") as f:
+        f.write("\n".join(json.dumps(r) for r in rows) + "\n")
+    per = fw.packet_check_per_map(_doc(), [s])
+    town, hall = per["town"], per["hall"]
+    assert (town["objects"], town["matched"], town["hidden_sent"]) == (4, 3, 1)
+    assert town["missing"] == [[30, 30, 92]] and town["pass"] is False
+    assert town["drawn_disagrees"] == []
+    assert hall["wrong_sprite"] == [[5, 5, 91]] and hall["pass"] is False
+    doc = _doc()
+    doc["maps"]["town"]["npcs"][1]["drawn"] = True  # sent invisible, marked drawn: disagrees
+    assert fw.packet_check_per_map(doc, [s])["town"]["drawn_disagrees"] == [[11, 10, 705, [2]]]

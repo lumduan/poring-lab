@@ -64,6 +64,13 @@ def test_the_densest_npcs_come_first_and_near_limits_the_pool() -> None:
     assert [n["cell"] for n in plan["npcs"]] == [[90, 20]]
 
 
+def test_an_npc_not_drawn_is_never_probed_but_still_keeps_stands_away() -> None:
+    hidden = nc.StaticNpc("town", (90, 20), "test:hidden", "705", "test", "conditional")
+    plan = nct.make_plan("town", [*NPCS[:3], hidden], flat_gat().walkable(), camera(), flat_gat(),
+                         7, k=6, near=(90, 20), near_radius=5)  # fmt: skip
+    assert plan["npcs"] == []  # the only NPC near the spot is sent invisible: nothing to probe
+
+
 @pytest.fixture(scope="module")
 def plan() -> dict[str, Any]:
     g = flat_gat()
