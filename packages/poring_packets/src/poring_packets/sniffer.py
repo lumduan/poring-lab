@@ -33,7 +33,7 @@ from poring_packets.clock import ClockMap, take_sample
 from poring_packets.decode import Decoded, decode, is_gm_command, text
 from poring_packets.events import GM_WINDOW_NS, Attestation, PacketEvent, PacketStats
 from poring_packets.framing import RoFramer, TcpReassembler
-from poring_packets.pcapng import PcapngWriter, redact
+from poring_packets.pcapng import LOGIN_PORTS_ENV, LoginScrub, PcapngWriter, login_ports
 from poring_packets.tables import LengthTable
 from poring_packets.tables import load as load_table
 from poring_packets.world import World
@@ -317,6 +317,8 @@ def run() -> None:
         raise SystemExit("SNIFFER_SERVER_ID must name this sniffer's server (an environment id)")
     table = load_table()
     session = Session(table, os.environ.get("CLIENT_IP", "192.168.1.169"), userids, server_id)
+    scrub = LoginScrub(login_ports(os.environ.get(LOGIN_PORTS_ENV)))
+    log.info("pcap credential scrub: %s", scrub.mode)
     cap = Capture(iface)
     out = Rotating(root)
     ingest = Ingest(url) if url else None
@@ -352,7 +354,7 @@ def run() -> None:
             if seg is None:
                 continue
             pcap, events = out.ensure()
-            pcap.packet(redact(frame, seg.payload_offset, seg.dport), t_real)
+            pcap.packet(scrub(seg), t_real)
             for ev in session.feed(seg):
                 line = json.dumps(_EVENT.dump_python(ev, mode="json"), separators=(",", ":"))
                 events.write(line.encode() + b"\n")

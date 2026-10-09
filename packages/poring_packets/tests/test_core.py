@@ -28,7 +28,7 @@ from poring_packets.clock import ClockMap, Sample
 from poring_packets.decode import decode, is_gm_command, pos, pos2
 from poring_packets.events import json_schema
 from poring_packets.framing import RoFramer, TcpReassembler
-from poring_packets.pcapng import PcapngWriter, redact
+from poring_packets.pcapng import LoginScrub, PcapngWriter, login_ports
 from poring_packets.sniffer import Session
 from poring_packets.world import Walk, path_cells
 
@@ -142,9 +142,9 @@ def test_clock_map_detects_steps_and_maps_by_segment() -> None:
 
 # --- pcapng + credentials -----------------------------------------------------------------------
 def test_login_payload_is_zeroed_before_writing(tmp_path: Path) -> None:
-    payload = ca_login(b"agentuser", b"s3cretpass")
-    fr = frame("192.168.1.169", 50000, "10.210.96.6", 6900, 1, payload)
-    red = redact(fr, 54, 6900)
+    scrub = LoginScrub(frozenset({6900}))
+    s = seg("cs", 6900, 1, ca_login(b"agentuser", b"s3cretpass"))
+    red = scrub(s)
     assert b"s3cretpass" not in red and b"agentuser" not in red and red[54:56] == b"\x64\x00"
     w = PcapngWriter(tmp_path / "c.pcapng")
     w.packet(red, 1_700_000_000_123_456_789)
@@ -152,12 +152,57 @@ def test_login_payload_is_zeroed_before_writing(tmp_path: Path) -> None:
     w.close()
     data = (tmp_path / "c.pcapng").read_bytes()
     assert data[:4] == b"\x0a\x0d\x0d\x0a" and b"s3cretpass" not in data
-    assert (
-        redact(frame("10.210.96.6", 5121, "192.168.1.169", 50000, 1, b"\x87\x00abc"), 54, 50000)[
-            54:
-        ]
-        == b"\x87\x00abc"
-    )
+    server = seg("sc", 5121, 1, b"\x87\x00abc")  # server -> client: never touched
+    assert scrub(server)[54:] == b"\x87\x00abc"
+
+
+def test_a_continuation_segment_keeps_no_bytes_at_all() -> None:
+    """Batt 2026-10-09: the old scrub kept the first 2 bytes of EVERY login segment; when TCP splits
+    CA_LOGIN, a continuation segment's first 2 bytes are data -- possibly password bytes."""
+    scrub = LoginScrub(frozenset({6900}))
+    whole = ca_login(b"agentuser", b"s3cretpass")
+    first, rest = whole[:31], whole[31:]  # the cut falls inside the password
+    assert rest[:2] == b"3c"
+    assert scrub(seg("cs", 6900, 1, first))[54:56] == b"\x64\x00"
+    red = scrub(seg("cs", 6900, 1 + len(first), rest))
+    assert red[54:] == bytes(len(rest))
+
+
+def test_unknown_ports_fail_closed_by_shape_per_connection() -> None:
+    """SNIFF_LOGIN_PORTS unset or invalid: a connection whose FIRST client payload is a login
+    request is scrubbed on any port; a map stream keeps its ground truth even when one of its
+    segments happens to start with a login id."""
+    scrub = LoginScrub(login_ports(None))
+    assert scrub.ports is None and "fail closed" in scrub.mode
+    whole = ca_login(b"agentuser", b"s3cretpass")
+    a = scrub(seg("cs", 7000, 1, whole[:31], cport=50001))
+    b = scrub(seg("cs", 7000, 32, whole[31:], cport=50001))
+    assert b"agentuser" not in a and b"3cretpass" not in b and b[54:] == bytes(len(whole) - 31)
+    m1 = seg("cs", 5121, 1, cz_enter2(2_000_002), cport=50002)
+    m2 = seg("cs", 5121, 2, b"\x64\x00" + b"map-bytes", cport=50002)
+    assert scrub(m1) == m1.frame and scrub(m2) == m2.frame
+
+
+def test_a_login_shaped_connection_on_another_port_is_scrubbed_with_ports_set() -> None:
+    scrub = LoginScrub(frozenset({6900}))
+    red = scrub(seg("cs", 6901, 1, ca_login(b"agentuser", b"s3cretpass"), cport=50003))
+    assert b"s3cretpass" not in red and red[54:56] == b"\x64\x00"
+
+
+@pytest.mark.parametrize(
+    ("value", "want"),
+    [("6900", {6900}), (" 6900 , 6901 ", {6900, 6901}), (None, None), ("", None), ("abc", None),
+     ("0", None), ("70000", None), ("6900,x", None), ("6900,", None)],
+)  # fmt: skip
+def test_login_ports_from_the_environment(value: str | None, want: set[int] | None) -> None:
+    got = login_ports(value)
+    assert (got is None and want is None) or got == frozenset(want or ())
+
+
+def test_compose_gives_both_sniffers_the_published_login_port() -> None:
+    text = (Path(__file__).resolve().parents[3] / "compose.yaml").read_text()
+    assert text.count('SNIFF_LOGIN_PORTS: "6900"') == 2
+    assert text.count(':6900:6900" # login') == 2  # rathena and rathena-th publish it
 
 
 def test_bpf_constant_matches_libpcap() -> None:

@@ -373,6 +373,9 @@ services:
       # WHICH server this sniffer watches (2026-10-05): the interlock requires the attested
       # server to equal the environment id (config/environments.yaml). Required at start.
       SNIFFER_SERVER_ID: lab-rathena
+      # The login port(s) whose client payloads the pcap scrubs (pcapng.LoginScrub; Batt
+      # 2026-10-09): = rathena's published login port. Unset/invalid = shape-only, fail closed.
+      SNIFF_LOGIN_PORTS: "6900"
       PYTHONDONTWRITEBYTECODE: "1"
     # pcapng + events (hourly / 256 MB; 7 days or 20 GB). NEVER ./data: RO login packets carry
     # credentials (the sniffer zeroes the password bytes, and captures still stay out of git).
@@ -484,6 +487,9 @@ services:
       INGEST_URL: ws://backend:8001/ingest/packets
       VALIDATION_USERIDS: ${RATHENA_TH_GM_USER:-}
       SNIFFER_SERVER_ID: lab-rathena-th
+      # The login port(s) whose client payloads the pcap scrubs (pcapng.LoginScrub; Batt
+      # 2026-10-09): = rathena's published login port. Unset/invalid = shape-only, fail closed.
+      SNIFF_LOGIN_PORTS: "6900"
       PYTHONDONTWRITEBYTECODE: "1"
     # Its own captures (own retention: a shared directory would let one sniffer delete the other's
     # files). Never ./data, never vision (test_guards.py).
