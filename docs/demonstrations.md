@@ -2732,7 +2732,7 @@ map, seeded):
 - Position reads by source: minimap readouts, /where uses (with reasons, against the run's budget),
   dead reckoning.
 
-### 3.33 The GM's IMMUNITY: a test condition for the visual-diversity block (pre-registered 2026-10-09 ~14:30 ICT / 07:30 UTC, BEFORE the check; Batt: "keep gl_prison; a GM doesn't need to fear monsters. Make the GM safe without changing what the bot sees")
+### 3.33 The GM's IMMUNITY: a test condition for the visual-diversity block (pre-registered 2026-10-09 ~14:05 ICT / 07:05 UTC, BEFORE the check; Batt: "keep gl_prison; a GM doesn't need to fear monsters. Make the GM safe without changing what the bot sees")
 **The condition, PRIMARY:** rAthena's `@monsterignore`, granted to the GM's group 20 (`groups.yml`,
 in place; it applies at the next guarded rathena recreate, never during a scored client run).
 - In the pinned source (e985006): `atcommand.cpp:9025` toggles `PCBLOCK_IMMUNE`, and
