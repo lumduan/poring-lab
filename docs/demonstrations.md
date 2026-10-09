@@ -3380,13 +3380,14 @@ their causes; the measured footprints per job; which fix (5.7) each result point
   click arm after it.
   - **Root cause, found offline (01:05) on the still screen** (the cursor far away): T2 still reads
     `button_unknown` -- the NEXT button is drawn in its blue HOVER/FOCUS state (distance 28.7 to the
-    plain NEXT template, accept <= 6.0). The click landed where the button then appeared; the
-    harness's park before the T2 read is a single jump, and the client redraws a hover only on a
-    SECOND motion (the walk-marker finding, 2026-10-07). So the button kept its hover look.
-  - **Fix options (a harness / reader change: Batt's call at resume, recorded here before use):**
-    (a) park with two motions before every T2 read in the dialog policy; (b) add the hovered-NEXT
-    look as a T2 template, cut from a labelled frame and proven like prove-t2. (a) is the smaller
-    change; resuming with it alters the harness for the remaining clicks of this scored run.
+    plain NEXT template, accept <= 6.0). The click landed where the button then appeared.
+    ~~the harness's park is a single jump~~ ➡️ CORRECTED the same minute: talk@1's park
+    (`talk1.LiveIo.park`) is already TWO motions (3 px off, then the point, 0.6 s settle), and the
+    highlight stayed. Whether it is a hover the client does not release or a keyboard focus is
+    unknown.
+  - **Fix option (a reader change: Batt's call at resume, recorded here before use):** add the
+    highlighted-NEXT look as a T2 template, cut from a labelled frame and proven like prove-t2;
+    resuming with it alters the reader for the remaining clicks of this scored run.
 
 ### 3.33 The GM's IMMUNITY: a test condition for the visual-diversity block (pre-registered 2026-10-09 ~14:05 ICT / 07:05 UTC, BEFORE the check; Batt: "keep gl_prison; a GM doesn't need to fear monsters. Make the GM safe without changing what the bot sees")
 **The condition, PRIMARY:** rAthena's `@monsterignore`, granted to the GM's group 20 (`groups.yml`,
