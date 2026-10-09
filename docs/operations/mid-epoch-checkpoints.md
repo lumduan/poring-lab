@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [../benchmarks/v1-vs-v0png.md, r3-paired.md, ../../services/vision/src/poring_vision/midckpt.py]
-next_action: "2026-10-09: proof 1 FAILED at B2 (RESULT section; v1 trains WITHOUT mid-epoch checkpoints, as pre-registered). Batt decided: fix it and re-prove under a NEW pre-registration. The cause was found in the code (channels_last parameters, optimizer state restored NCHW) and fixed in 2a2ff28 (branch fix/vision-midckpt-state). Re-proof 2 is pre-registered in its own section. Next: merge the fix to main, then run re-proof 2's five runs (resume-proof2-*) once the GPU is free after v1; not urgent. TEMP_HOLD stays until it passes; PASS => MID_CKPT=1 for the next training run."
+next_action: "➡️ 2026-10-10: the fix is merged (b9fd792); re-proof 2 (pre-registered) waits for the GPU after v1 and option A's proof. History: 2026-10-09: proof 1 FAILED at B2 (RESULT section; v1 trains WITHOUT mid-epoch checkpoints, as pre-registered). Batt decided: fix it and re-prove under a NEW pre-registration. The cause was found in the code (channels_last parameters, optimizer state restored NCHW) and fixed in 2a2ff28 (branch fix/vision-midckpt-state). Re-proof 2 is pre-registered in its own section. Next: merge the fix to main, then run re-proof 2's five runs (resume-proof2-*) once the GPU is free after v1; not urgent. TEMP_HOLD stays until it passes; PASS => MID_CKPT=1 for the next training run."
 ---
 
 # Mid-epoch checkpoints with an exact resume (Batt, 2026-10-08; pre-registered BEFORE any run)

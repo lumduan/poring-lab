@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [../phase3-plan.md, v0-png-vs-jpeg.md]
-next_action: "v1 is TRAINING since 2026-10-08 23:44 ICT (cache v1png-20261008 built and NAS-verified) under the ADAPTIVE DUTY CYCLE, with epoch-level checkpoints only: the mid-epoch resume proof FAILED before v1 started, so v1 keeps that mode to its end (re-proof 2 of the fix is pre-registered in mid-epoch-checkpoints.md, for later runs). After epoch 30: the evals, then score ONCE as written here."
+next_action: "➡️ 2026-10-10: v1 paused at 17/30 on 2026-10-09 (IO trips; Batt), resumed by quiet_start (option D) at 20:02 ICT (from 18/30), epoch 19 done, 20 running; trains at the slowest duty level while R3 is inconclusive at night; the evals follow option A's proof (one worker start). History: v1 is TRAINING since 2026-10-08 23:44 ICT (cache v1png-20261008 built and NAS-verified) under the ADAPTIVE DUTY CYCLE, with epoch-level checkpoints only: the mid-epoch resume proof FAILED before v1 started, so v1 keeps that mode to its end (re-proof 2 of the fix is pre-registered in mid-epoch-checkpoints.md, for later runs). After epoch 30: the evals, then score ONCE as written here."
 ---
 
 # v1 vs v0-PNG: the same frames, the same format, different labels (pre-registered 2026-10-07)

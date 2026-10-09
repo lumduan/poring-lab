@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [phase3-plan.md, phase4-ui.md, adr/0007-packet-ground-truth-channel.md, adr/0011-ui-anchor-map.md, adr/0015-phase4-planner-linter-executor.md]
-next_action: "login@1 PASSED on RDP (50/50, 2026-10-07). walk@1 and walk@2 FAILED: the rule hovered with ONE motion event and the client draws the walk marker only on a second (§Results). Next: walk@3 (3.5), outdoor then indoor, n=50 each; attack@1 after the v0-JPEG run (GPU, R1-R3); S2 re-tests in an evening S2 session. Score each ONCE as written here."
+next_action: "➡️ 2026-10-10: a running log; the newest work is 3.32a npc-click@1 (probe arms done, click arm parked for a person), 3.34 learn_skill@1 (DRAFT pre-registration, waits for Batt's restore choice) and 3.35 cursor@1 (FAIL as written on bar 1 for both readers; no switch); ROADMAP's 'rules proven alone' row tracks the rest. History: login@1 PASSED on RDP (50/50, 2026-10-07). walk@1 and walk@2 FAILED: the rule hovered with ONE motion event and the client draws the walk marker only on a second (§Results). Next: walk@3 (3.5), outdoor then indoor, n=50 each; attack@1 after the v0-JPEG run (GPU, R1-R3); S2 re-tests in an evening S2 session. Score each ONCE as written here."
 ---
 
 # Outcome-verified demonstrations -> rules -> labels

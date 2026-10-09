@@ -1,13 +1,13 @@
 ---
 doc_type: runbook
 hypothesis: "One long-lived vision container per day, with every training/eval attempt run inside it, removes the cold-start IO bursts that stalled quant at ~100 % (2026-10-09 16:46) without changing R1-R3, the IO guard or the verified stop."
-status: "APPROVED by Batt 2026-10-09 (~19:30); BUILT on feat/vision-worker (90a7b74), unit-tested, NOT proven live, NOT switched"
+status: "MERGED 4c5edbf (2026-10-09 ~20:35); APPROVED by Batt 2026-10-09 (~19:30); BUILT on feat/vision-worker (90a7b74), unit-tested, NOT proven live, NOT switched"
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [r3-paired.md, ../../scripts/guarded_build.py, ../../scripts/runbooks/train-day.sh, ../../scripts/runbooks/quiet_start.py, ../../compose.vision-worker.yaml, ../../scripts/runbooks/worker_proof.py]
-next_action: "Parent: merge feat/vision-worker once v1's chain10 has ended; run THE PROOF once (scripts/runbooks/worker_proof.py, section 5) with the 1 s IO sampler on, outside the market windows; report it step by step; switch v1 / the evals only after Batt's OK of the proof."
+next_action: "➡️ 2026-10-10: merged (4c5edbf); THE PROOF (5, pre-registered 5a) runs after v1's training ends (chain14), then the switch only on PASS. History: Parent: merge feat/vision-worker once v1's chain10 has ended; run THE PROOF once (scripts/runbooks/worker_proof.py, section 5) with the 1 s IO sampler on, outside the market windows; report it step by step; switch v1 / the evals only after Batt's OK of the proof."
 ---
 
 # Option A: one long-lived vision container per day (BUILT; NOT proven live; NOT switched)

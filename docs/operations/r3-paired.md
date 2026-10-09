@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [../../CLAUDE.md, ../demonstrations.md]
-next_action: "Build PairedR3 (frigate_r3.py + guarded_build docker pause/unpause), test it, then re-run the step-sleep ladder 0/100/200/400 ms with it. No GPU training until it is in place (Batt, 2026-10-07)."
+next_action: "➡️ 2026-10-10: BUILT and LIVE (PairedR3 in frigate_r3.py, enforced by guarded_build); an inconclusive measurement holds the slowest level and re-measures (2026-10-08). On 2026-10-09 night it came back inconclusive every hour (Frigate load too variable), so v1 ran at the slowest level: Batt's call whether to adjust. History: Build PairedR3 (frigate_r3.py + guarded_build docker pause/unpause), test it, then re-run the step-sleep ladder 0/100/200/400 ms with it. No GPU training until it is in place (Batt, 2026-10-07)."
 ---
 
 # R3, measured like with like: the paired ON/OFF design (pre-registered 2026-10-07)

@@ -1,6 +1,6 @@
 ---
 title: "walk@17: the typing policy, warp areas, and long walks (design; pre-registered separately before any run)"
-status: "APPROVED by Batt 2026-10-09 (~13:42, ~14:00); BUILT (scripts/walk17.py, b7cf790) and PRE-REGISTERED as demonstrations 3.32; NOT run. SIX points wait for Batt before its tuning runs (3.32 items 1-6: the guard's repeat rule vs /where once per need; iz_dun00 has no L3 warp list; the harness start draw can land in a warp area; the server path across a warp area, measured 0; ADDED 15:05: 3.29a town's 2 NPC contacts with the decision code walk@17 keeps (E); a chain must judge the client's UI state between runs)"
+status: "➡️ 2026-10-10: item 2 DONE (route.json covers iz_dun00 and the first-workflow maps, e6f3b1d); item 6 BUILT (the mandatory UI gate); item 5 = npc-click@1 (demonstrations 3.32a: probe arms done, click arm parked for a person). APPROVED by Batt 2026-10-09 (~13:42, ~14:00); BUILT (scripts/walk17.py, b7cf790) and PRE-REGISTERED as demonstrations 3.32; NOT run. SIX points wait for Batt before its tuning runs (3.32 items 1-6: the guard's repeat rule vs /where once per need; iz_dun00 has no L3 warp list; the harness start draw can land in a warp area; the server path across a warp area, measured 0; ADDED 15:05: 3.29a town's 2 NPC contacts with the decision code walk@17 keeps (E); a chain must judge the client's UI state between runs)"
 date: 2026-10-09
 owner: Batt
 extends: docs/demonstrations.md
