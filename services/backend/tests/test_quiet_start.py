@@ -40,3 +40,12 @@ def test_never_in_a_market_open_window(qs: ModuleType) -> None:
     assert qs.in_market(ict(9, 30)) and qs.in_market(ict(14, 44))
     assert not qs.in_market(ict(10, 15)) and not qs.in_market(ict(14, 45))
     assert not qs.in_market(ict(21, 0))
+
+
+def test_market_windows_only_on_weekdays(qs: ModuleType) -> None:
+    # Batt 2026-10-09: the 09:30-10:15 / 14:00-14:45 windows do not apply on Saturday or Sunday.
+    sat = datetime(2026, 10, 10, 9 - 7, 45, tzinfo=UTC)
+    sun = datetime(2026, 10, 11, 14 - 7, 10, tzinfo=UTC)
+    mon = datetime(2026, 10, 12, 9 - 7, 45, tzinfo=UTC)
+    assert not qs.in_market(sat) and not qs.in_market(sun)
+    assert qs.in_market(mon)

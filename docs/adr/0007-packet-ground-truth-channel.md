@@ -16,6 +16,8 @@ next_action: Implemented and validated (docs/phase1-validation.md). The slim sni
   "Acceptance decisions" and "Implementation notes" below, and
   [phase1-validation.md](../phase1-validation.md).
 - Deciders: Batt
+- ➡️ 2026-10-09: Amendment C (PROPOSED, at the end) would change Acceptance decision 2 in dev
+  mode: the sniffer's code from a read-only source mount, no image build for a code change.
 - ➡️ 2026-10-09: [ADR-0021](0021-external-servers.md) (PROPOSED) would add, for an allowed
   EXTERNAL server: nothing is captured there ~~by design~~ ➡️ BY DEFAULT (Batt, 2026-10-09
   ~15:20: only where that server's own rules permit it, recorded in Settings; ADR-0021 4.5);
@@ -95,6 +97,9 @@ time):
    connected, a GM relog captured (`login_accepted` → `map_enter`), 36 events tagged
    `validation_account`, and the GM password and user found 0 times in the new pcapng (the GM
    character name, the positive control, 7 times).
+   ➡️ 2026-10-09: [Amendment C](#amendment-c-proposed-2026-10-09-the-sniffers-code-from-a-read-only-source-mount-in-dev-mode)
+   (PROPOSED, for Batt's acceptance) would run the sniffer's CODE from a read-only source mount in
+   dev mode again, on the slim image's dependencies, so a code change needs no image build.
 3. **GAT later (Phase 2).** Until then, paths are rAthena's diagonal-first fallback. That is exact
    on open ground; around obstacles, the error is bounded by the detour.
 
@@ -140,3 +145,69 @@ closer to decision time than this ADR's "offline ground truth only" line.
 - the pixels-only path reaches the stored profile's residual on rAthena (validated against the
   packet-assisted fit there).
 
+
+## Amendment C (PROPOSED, 2026-10-09): the sniffer's code from a read-only source mount in dev mode
+
+**Status:** PROPOSED, for Batt's acceptance (his call of 2026-10-09 ~20:20: "Option C (sniffer code
+from a bind-mounted source, no image build for code changes): write it as an amendment to
+ADR-0007's slim-image decision for my acceptance"). Nothing is built or changed until he accepts.
+
+**Context.**
+- Every `poring_packets` change reaches the live sniffer only through a guarded `build:sniffer` +
+  `recreate:sniffer` (Acceptance decision 2, as superseded on 2026-10-03; CLAUDE.md "Dev mode").
+- Builds are the most IO-expensive step we run on the shared disk, and quant's live capture pays
+  for them. On 2026-10-09 the build that carries the password-scrub fix (f36276e, ADR-0021 risk 1)
+  aborted 18 s in, in a MEASURED quiet window (`quiet_start`: 10 min with no capture cgroup above
+  25 %): 19:50:32 ICT the capture cron 99.9 %, quant-orderbook 99.1 %, quant-ticker 98.7 % full IO
+  stall; the guard stopped it at 19:50:42 (quant-postgres 25.2 %). The context is ~15 MB, so the
+  burst is the build itself (the uv install into a new layer and the layer export), not the
+  context.
+- A security fix therefore waits for a night slot (option D, 2026-10-10 02:00-04:00), and every
+  future decoder change will too.
+
+**Proposal (dev mode only; the image path is unchanged and stays the production form).**
+1. **The slim image stays the dependency base.** Python, pydantic, websockets and the image's
+   installed `poring_packets` are unchanged. A DEPENDENCY change (pyproject, uv.lock) still needs a
+   guarded build.
+2. **The code comes from the host, read-only.** `compose.dev.yaml` mounts
+   `./packages/poring_packets/src` at `/dev-src/poring_packets:ro`, as the backend's overlay does
+   today, and puts it first on `PYTHONPATH`. The rest of the hardening is unchanged: user 0:0 with
+   only NET_RAW, the read-only rootfs, rathena's network namespace, the captures volume, no `./data`.
+3. **A consistent snapshot per start.** The entrypoint copies the mounted package into the
+   container's tmpfs and runs from that copy. An edit on the host can never be half-imported into
+   a running sniffer (a lazy import of a newer module); it goes live only at the next start.
+4. **The length table is checked at START instead of at build.** The mounted tree carries the
+   locally generated `_generated/lengths.json` (gitignored, from `scripts/gen_packet_tables.py`).
+   The sniffer runs the same `load()` check against `tables.lock.json` before it opens the socket
+   and REFUSES to start on a mismatch (fail closed, as the build does now).
+5. **A start-time scrub self-test, fail closed.** Before capturing, the sniffer feeds `LoginScrub`
+   one synthetic login request per id in `LOGIN_REQUEST_IDS`, carrying a dummy secret, on a port
+   from `SNIFF_LOGIN_PORTS` and on one that is not, and refuses to start unless every dummy secret
+   is zeroed. A broken edit to the scrub can then never capture a real password: it cannot start.
+6. **Only committed code goes live.** The guarded step that restarts the sniffer
+   (`guarded_build.py recreate:sniffer` / `restart:sniffer`) refuses when `git status --porcelain
+   packages/poring_packets` is not clean, and records the commit. The sniffer writes that commit
+   (passed in the environment by the step) into its start log and into each capture's metadata, so a
+   banked capture still names the decoder that produced it, as the image tag does today.
+7. **Still one container start at a time.** A recreate is a container start: it goes through the
+   guard (and `quiet_start` when the operator asks for a measured window), never alongside a vision
+   cold start. After it, the interlock reads `no_session` until the next login and guarded_build
+   re-logs the GM in by itself, as now.
+8. **Tests.** `test_guards.py`'s `test_the_dev_overlay_runs_the_slim_sniffer_image` becomes: the dev
+   overlay mounts ONLY `packages/poring_packets/src`, read-only, on the slim image; no other service
+   gains a mount; vision still never sees `poring_packets` (Decision 4). New unit tests cover the
+   start-time table check, the scrub self-test (including a deliberately broken scrub that must
+   refuse) and the dirty-tree refusal.
+9. **Rollback.** Remove the overlay entry: the image's own installed copy runs again, as today.
+
+**What it costs.**
+- The guarantee that the running decoder equals a built, table-checked image moves from build time
+  to start time (points 4-6 restore it at start).
+- One more host mount into a container that holds NET_RAW (read-only, code only).
+- Production (non-dev) deployments keep the image path; this is the lab's dev loop.
+
+**What it buys.** A decoder or scrub fix goes live with a guarded recreate (seconds of light IO)
+instead of a build (the 2026-10-09 bursts), so a security fix no longer waits for a night slot.
+
+**Decision needed from Batt:** accept / change / reject. Until then the sniffer stays on the image
+path and tonight's option D build is the way the scrub goes live.

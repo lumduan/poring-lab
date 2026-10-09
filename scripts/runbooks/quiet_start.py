@@ -13,7 +13,8 @@ been quiet for --quiet-min minutes, measured each second exactly as scripts/io_b
 
 "Quiet": no second in the last --quiet-min minutes with any capture cgroup's full stall above
 --limit % (the guard's spike threshold). It never starts inside the market-open windows
-(09:30-10:15, 14:00-14:45 ICT). It runs COMMAND once, returns its exit code, logs every decision.
+(09:30-10:15, 14:00-14:45 ICT, Monday to Friday: not on Saturday or Sunday, Batt 2026-10-09). It
+runs COMMAND once, returns its exit code, logs every decision.
 """
 
 from __future__ import annotations
@@ -35,8 +36,10 @@ WATCHED = [*iob.CAPTURE, iob.CRON[0]]
 
 
 def in_market(now: datetime) -> bool:
-    hhmm = now.astimezone(ICT).hour * 100 + now.astimezone(ICT).minute
-    return any(a <= hhmm < b for a, b in MARKET)
+    """Inside a market-open window, Monday to Friday ICT (the Thai market is shut at weekends)."""
+    t = now.astimezone(ICT)
+    hhmm = t.hour * 100 + t.minute
+    return t.weekday() < 5 and any(a <= hhmm < b for a, b in MARKET)
 
 
 def quiet(window: deque[tuple[float, float]], now: float, need_s: float, limit: float) -> bool:

@@ -118,7 +118,8 @@ ports, quickstart) and `docs/adr/`.
      - remove its worktree and its `/dev/shm` leftovers after the merge.
    - **No disk-heavy steps at the market opens** (Batt, 2026-10-08, after IO trips at ~14:25 two
      days running): no worktrees, env work or cache builds between 09:30 and 10:15 ICT or between
-     14:00 and 14:45 ICT. That applies to every agent, the parent included.
+     14:00 and 14:45 ICT, Monday to Friday (not on Saturday or Sunday: Batt 2026-10-09). That
+     applies to every agent, the parent included.
 
 6. **Never put a Docker network on a 192.168.x subnet on this host.** The LAN uses 192.168.1, 110, 111, 112
    and 120, and Docker can't see the segments behind the router. On 2026-09-29 an auto-assigned
