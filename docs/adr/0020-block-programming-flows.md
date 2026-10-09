@@ -7,7 +7,7 @@ verdict_date: 2026-10-08
 verdict_ticket: null
 supersedes: null
 related: [ADR-0015, ADR-0002, ADR-0003, ADR-0004, ADR-0006, ADR-0007, ADR-0011, ADR-0012, ADR-0014, ADR-0016, ADR-0018, ADR-0019]
-next_action: "ACCEPTED by Batt 2026-10-08, with the decisions recorded at the open questions (16-18, 20, 21, 29, part of 27). Build MW1 / F1 OFFLINE now (the flow IR with map blocks, the block catalogue, linter layers 1-3 incl. the section 13 rules), no runtime changes; the remaining open questions stay open and are answered as MW2+ needs them. ➡️ 2026-10-09: Batt decided 5 of the 19 MW1 contradictions (#6 readiness, #15 always-on safety events, #13 rank = IR 2, #14 ties, #18 one planner: the cross-check, the swap waits) and MW2-editor's parked items; each recorded in place with a dated marker and built (db27d76, 87d654a, c131ddc (+ 3d4215b), 60e75a9 (+ 2f84873), 22ac314). Open question 15 CLOSED, 11 decided."
+next_action: "ACCEPTED by Batt 2026-10-08, with the decisions recorded at the open questions (16-18, 20, 21, 29, part of 27). Build MW1 / F1 OFFLINE now (the flow IR with map blocks, the block catalogue, linter layers 1-3 incl. the section 13 rules), no runtime changes; the remaining open questions stay open and are answered as MW2+ needs them. ➡️ 2026-10-09: Batt decided 5 of the 19 MW1 contradictions (#6 readiness, #15 always-on safety events, #13 rank = IR 2, #14 ties, #18 one planner: the cross-check, the swap waits) and MW2-editor's parked items; each recorded in place with a dated marker and built (db27d76, 87d654a, c131ddc (+ 3d4215b), 60e75a9 (+ 2f84873), 22ac314). Open question 15 CLOSED, 11 decided. ➡️ 2026-10-09 ~10:40: 11 more contradictions decided as recommended (#2-#5, #7-#9, #11, #12, #16, #19; recorded in place, built where they have code); #1, #10, #17 brought to Batt."
 ---
 
 # ADR-0020: Block programs over one flow IR (the agent builds blocks, users compose flows)
@@ -1883,6 +1883,11 @@ They await Batt's decision (2026-10-08); this ADR is unchanged until he decides.
 Each is recorded where the ADR said otherwise, with a "DECIDED 2026-10-09 (Batt, contradictions
 #N)" marker (sections 1, 2.5, 5, 6, 12, 13.4, 13.5, 13.6.1-13.6.3, 13.6.8, 13.6.9; open question
 15 closed). The other 14 still await him.
+➡️ **2026-10-09 ~10:40: 11 more decided, each as recommended** (Batt: "resolve them per your own
+recommendations, EXCEPT any item that changes safety semantics"): #2, #3, #4, #5, #7, #8, #9, #11,
+#12, #16, #19, each with a "DECIDED 2026-10-09 (Batt, contradictions #N)" marker where the ADR said
+otherwise (sections 1, 7.2, 13.1, 13.3, 13.4, 13.5, 13.6.7, 13.6.8, 13.8; open question 22).
+#1, #10 and #17 touch safety semantics and were brought to Batt.
 
 Marked FIRST: needed before F1 or F2.
 
