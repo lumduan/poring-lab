@@ -828,6 +828,12 @@ labels_v2.difficulty (all "normal" here).
       - **Follow-up, not done here:** `qa_export.Sheets` (v1's loader, reused by labels_v2) looks
         a monster's files up by the aegis name (classes.json). It would find no sheet for those 4
         and fall back to v0's 44 x 40 box. It should read the stem from that table.
+        ➡️ **DONE 2026-10-09 ~22:00 (branch feat/collect-v2, 1ddcf75):** `Sheets` takes the
+        client's stem from `monster_sprite_names.json` when it lists the species, else the aegis
+        name. A species with neither gets no sheet and is reported (`labels_v2.py coverage`:
+        `sprite_lookup_missing`). It was worse than 4: classes.json lists only the prt_fild08 /
+        iz_dun00-01 species, so ALL 11 new species had fallen back. On the local KB all 16 of
+        the scope now resolve, 0 missing.
     - **The catalog:** `scripts/sprite_catalog.py --decode-mixcrypt` on the 12 old + 11 new names
       (the client's stems).
       - 23 / 23 species have ACT + SPR decoded, all boxes OPAQUE.
@@ -945,6 +951,92 @@ protocol, with every MOVE made by `@warp` instead of a walk:
   `pickup_request`, any GM act), judged offline per session.
 **What it loses:** frames of the camera scrolling with a walking GM (each dwell is a static camera);
 the walk legs are added once walk@17 is ready. The labels skip each GM line's 2 s window as before.
+
+➡️ **AS BUILT 2026-10-09 ~22:00 (Claude, branch feat/collect-v2; offline only, NOTHING run live,
+nothing collected; not a pre-registration).** Code: `scripts/collect_v2.py` (its docstring holds the
+full protocol and the findings), `scripts/runbooks/collect-v2.sh`; tests
+`services/backend/tests/test_collect_v2.py` (synthetic grids, KB snippets and events).
+- **Commands:**
+
+      .venv/bin/python scripts/collect_v2.py plan --map new_1-3 --seed S      # offline, read it
+      .venv/bin/python scripts/collect_v2.py immune-on                         # once per GM login
+      .venv/bin/python scripts/collect_v2.py immune-confirm --shot <its PNG>   # after reading it
+      .venv/bin/python scripts/collect_v2.py preflight --map new_1-3 --seed S  # no input
+      scripts/runbooks/collect-v2.sh new_1-3 S /dev/shm/poring-lab-tmp/collect/<run> [options]
+      .venv/bin/python scripts/collect_v2.py judge <session>                   # the runbook runs it
+
+  Options: `--spots K` (6), `--dwell-s` (120), `--blocks ID ...` (default: the map's own species),
+  `--block-s` (300), `--block-repeats R` (1), `--count` (8), `--portal-dwell-s` (60),
+  `--no-portals`, `--max-minutes` (55; one S2 recording is capped at 3600 s).
+- **The plan, as built:** spots = walkable cells (the client GAT AND the server's map cache when it
+  is on the host; @warp tests the server's CELL_CHKNOPASS), outside every warp area, Chebyshev >= 8
+  from EVERY L3 NPC (npc_cells.json, drawn or not, plus route.json's groups; a map not declared
+  complete fails closed), >= 12 apart, and an open view (>= 50 % walkable in +-7). Portal-pass
+  cells: Chebyshev 3-5 from each warp AREA, outside every area, >= 3 from any NPC. Blocks: the map's
+  own species in KB order, one spot each in rotation (a spot needs room for 2 x count monsters).
+  The GM lines are simulated against the typing guard's repeat rule; a warp to the cell the GM
+  stands on is never typed.
+- **The plan for new_1-3, seed 20261010 (counts only):** 6 / 6 spots from 7,492 candidates, nearest
+  NPC 15-32 cells, open view 0.72-1.0; 0 portal passes (new_N-3 has no warp); 5 blocks (1002, 1113,
+  1063, 1011, 1184; 8 each, spawn box +-4); 21 GM lines, longest identical run 1, 0 guard
+  violations; @warp check OK; ~38.9 min at the defaults. new_2-3 and new_4-3: the same counts
+  (one layout). new_1-2: 6 spots, 5 / 5 portal cells, no blocks; new_1-1: 6 spots, 1 / 1 portal.
+- **The session order:** natural dwells first, spawn blocks after, portal passes last.
+  `@killmonster2` only ends a block, never starts a session (finding below); a crashed run's block
+  is removed at the next start by `@killmonster2 <map>`. A heal or revive need after the start
+  means the immunity condition failed: the run recovers and STOPS (rc 3).
+- **@warp finding (pinned e985006):** `ACMD_FUNC(mapmove)` refuses only on the destination's
+  `nowarpto` or the source's `nowarp` for a group without `any_warp` (atcommand.cpp:632, 636), or
+  when `pc_job_can_entermap` says no (pc.cpp:15471: db/pre-re/job_noenter_map.txt is empty, so
+  zone 0 -> allowed). The training maps carry nobranch / nomemo / nopenalty / noteleport only;
+  noteleport is checked by @jump (atcommand.cpp:739) and random warps (pc.cpp:7216), nomemo by
+  @memo (pc.cpp:7242), never by @warp. **So group 20 can @warp into and within new_N-M.** A
+  non-walkable target becomes a random free cell within 10 (atcommand.cpp:626-631): the judge
+  checks where each warp landed (map_change).
+- **@killmonster2 finding:** it kills EVERY monster of the map, the natural spawns too (only WoE
+  guardians are spared; atcommand.cpp:2422-2464). A natural one respawns after max(1 s, its delay)
+  (mob.cpp:1092); the training maps give no delay, so they return ~1 s later at random cells. A
+  @monster one is freed (mob.cpp:1068-1069, 3640-3645).
+- **@monster placement:** each of the N lands within int(sqrt(N)) + 2 cells of the GM
+  (atcommand.cpp:2393): +-4 for 8. Spawned monsters wander off: the 3.33 check's 3 Familiars all
+  left the GM's view within ~200 s, so several shorter blocks (`--block-repeats`) keep more of
+  them on screen than one long block.
+- **Immunity:** `@monsterignore` is a TOGGLE (atcommand.cpp:9025-9038), and 3.33 read its answer
+  from a screenshot (no pixel reader exists). So the driver never types it. `immune-on` types it
+  once per GM LOGIN and saves the client's answer. The login is identified by a marker from the DB:
+  `char.last_login` (set at every character select, char.cpp:121-123) + `login.logincount`, read as
+  `ro_agent.gm` already reads `online_chars`. A person (or the parent) reads the answer and runs
+  `immune-confirm`. `run` / `preflight` refuse unless it is confirmed for the CURRENT login: any
+  re-login means OFF, so refused. The judge then checks per session: zero acts targeting the GM.
+- **The judge** (`collect_v2.py judge SESSION`, offline):
+  - safety: no attack / NPC-contact / pickup / self-move request from any client, and no GM act of
+    kind normal or pickup;
+  - immunity: no act targets the GM, with the monster moves counted;
+  - the sensor's POSITIVE case: the GM's own typed lines seen client -> server;
+  - where each warp landed, and each block's monsters.
+
+  It was run on REAL banked sessions (local), and each signal fired:
+  - the 3.33 immune check: 0 acts on the GM, 134 monster moves, its deliberate click = 2 attack
+    requests, 8 / 8 lines seen, the warp landed as typed, 3 / 3 Familiars counted;
+  - monster-click (GM not immune): 5 acts on the GM, so the immunity check fails;
+  - pickup: pickup requests and acts; npc-garnet: npc_contact.
+- **What the parent must verify LIVE before the first session** (none of it was possible offline):
+  1. **The UI gate refuses every typed line on S2 today.** `ui_gate._require_ready`: its T2
+     templates are RDP-cut, and it refuses while the lock says console. As built, `preflight`
+     stops there, before the recorder.
+     - Unblock it with S2 templates for the gate (a live cut + a reviewed change), or collect over
+       RDP, which needs a decision: 3.3 names S2.
+  2. **The GM-state template is RDP-cut too** (gm_state.py, measured on RDP frames). Check on the
+     stream that `gm_state.py check` reads Lv 1 / 1 (and `gm_vitals` the HP bar) before relying on
+     it.
+  3. **immune-on -> read the shot -> immune-confirm,** after every GM login. guarded_build's
+     automatic GM re-login also counts.
+  4. **The S2 foreground template** (installed 2026-10-07; re-cut if the client window moved), and
+     `--check-client` on the stream.
+  5. **A pilot first:** a short `--max-minutes`, `--spots 2`, `--blocks <one id>`. Then judge it:
+     safety and immunity pass, the sensor sees every line, warps land as planned, the block
+     appears.
+  6. **One lab client logged in** (the GM). Requests from any other client fail the judge too.
 
 ### 7.7 Open questions for Batt
 

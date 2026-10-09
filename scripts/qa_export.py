@@ -50,6 +50,11 @@ from poring_dataset.timeline import Timeline  # noqa: E402
 # the KB's job table (kb_build.py). Both are local, never committed.
 SPRITE_DIR = Path("/dev/shm/poring-lab-tmp/sprites/data/sprite/몬스터")  # sprite_catalog.py --work
 KB_CLASSES = ROOT / "data" / "kb" / "classes.json"
+# The CLIENT's sprite stem per monster id (scripts/npc_sprites.py mob-names, from jobname.lub;
+# local, never committed). For 1011, 1051, 1053 and 1184 it is NOT rAthena's aegis name
+# (labels-v2-plan 7.6): an aegis lookup finds no files there, and the label falls back to v0's
+# 44 x 40 box.
+KB_SPRITE_NAMES = ROOT / "data" / "kb" / "monster_sprite_names.json"
 
 
 def job_aegis() -> dict[int, str]:
@@ -58,20 +63,62 @@ def job_aegis() -> dict[int, str]:
     return {int(job): row["aegis"] for rows in table.values() for job, row in rows.items()}
 
 
-class Sheets:
-    """job -> the species' OPAQUE SpriteSheet (None: not catalogued or no decoded SPR)."""
+def sprite_stems(path: Path | None = None) -> dict[int, str | None]:
+    """job id -> the client's sprite stem (lower case), from KB_SPRITE_NAMES; None for a species the
+    table lists without a client name. {} when the table is absent (the aegis name decides)."""
+    p = KB_SPRITE_NAMES if path is None else path
+    if not p.exists():
+        return {}
+    doc = json.loads(p.read_text())
+    rows = doc.get("mobs", doc) if isinstance(doc, dict) else {}
+    out: dict[int, str | None] = {}
+    for job, row in rows.items():
+        stem = row.get("stem") if isinstance(row, dict) else None
+        out[int(job)] = str(stem).lower() if stem else None
+    return out
 
-    def __init__(self, directory: Path = SPRITE_DIR) -> None:
-        self.directory, self.aegis, self.cache = directory, job_aegis(), {}
+
+class Sheets:
+    """job -> the species' OPAQUE SpriteSheet (None: no name or no decoded SPR / ACT).
+
+    The file stem: the CLIENT's own name (``stems``, KB_SPRITE_NAMES) when that table lists the
+    species, else the aegis name (``aegis``, classes.json). A species with neither, a table row
+    without a client name, or a stem whose files are not decoded gets None -- never a guessed file
+    -- and is recorded in ``missing`` (job -> reason) so a report says which species keep v0's box.
+    """
+
+    def __init__(self, directory: Path = SPRITE_DIR, *, stems: dict[int, str | None] | None = None,
+                 aegis: dict[int, str] | None = None) -> None:  # fmt: skip
+        self.directory = directory
+        self.aegis = job_aegis() if aegis is None else aegis
+        self.stems = sprite_stems() if stems is None else stems
+        self.cache: dict[int, SpriteSheet | None] = {}
+        self.missing: dict[int, str] = {}
+
+    def stem(self, job: int) -> tuple[str | None, str]:
+        """(the file stem, where it came from: client_table | aegis), or (None, why not)."""
+        if job in self.stems:
+            s = self.stems[job]
+            return (s, "client_table") if s else (None, "no_client_name")
+        if job in self.aegis:
+            return self.aegis[job].lower(), "aegis"
+        return None, "no_name"
 
     def __call__(self, job: int | None) -> SpriteSheet | None:
-        if job is None or job not in self.aegis:
+        if job is None:
             return None
         if job not in self.cache:
-            name = self.aegis[job].lower()
-            act, spr = self.directory / f"{name}.act", self.directory / f"{name}.spr"
-            self.cache[job] = (SpriteSheet(parse_act(act.read_bytes()), parse_spr(spr.read_bytes()))
-                               if act.exists() and spr.exists() else None)  # fmt: skip
+            name, source = self.stem(job)
+            sheet = None
+            if name is None:
+                self.missing[job] = source
+            else:
+                act, spr = self.directory / f"{name}.act", self.directory / f"{name}.spr"
+                if act.exists() and spr.exists():
+                    sheet = SpriteSheet(parse_act(act.read_bytes()), parse_spr(spr.read_bytes()))
+                else:
+                    self.missing[job] = f"no_files:{source}"
+            self.cache[job] = sheet
         return self.cache[job]
 
 
