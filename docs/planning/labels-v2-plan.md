@@ -110,6 +110,9 @@ sessions in `/dev/shm/poring-lab-demo` and the local KB; nothing written outside
   - **Found on the banked frames:** prt_church has a job-45 script NPC at (115,122) that is not an
     L3 warp. It excludes **227** church frames until the KB lists script NPCs with the portal sprite
     (npc-click-test.md's P1: every NPC file the server loads).
+    ➡️ **2026-10-09 ~19:30 (section 7.3): it is a `warp` LINE**, npc/quests/quests_prontera.txt:2174,
+    a file route.json's hand list does not read. `kb_first_workflow.py --also prt_church` lists it.
+    `labels_v2.l3_warps` still reads route.json: pointing it at the new KB is a follow-up, not done.
 - **Why the visibility table (found on the banked frames, 2026-10-09):** the packets send a portal
   that map geometry hides.
   - Prontera's building doors are job-45 portals under their roofs: 12 / 12 aligned crops of
@@ -338,7 +341,15 @@ frames, 2,026 frames):
    - the session ships to the NAS in a quiet window (`dataset_ship.py`; the banked tmpfs sessions
      first: labels-v2.md section 3 lists them).
 
-**The order (PROPOSED):**
+**The order: ➡️ DECIDED 2026-10-09 ~18:20 (Batt; section 7, verbatim there):**
+1. **Tooling, no session:** N1-N3, KB P1, the warp visibility table. KB P1 for the first
+   workflow's maps is built (`scripts/kb_first_workflow.py`, section 7).
+2. **The TRAINING GROUNDS** (new_N-M), with their NPCs and warps (section 7.1-7.3).
+3. **The Merchant job-change maps** (alberta_in, alberta and the delivery destinations, section 7.4).
+4. **Everything else later:** towns at large, the diversity maps, Byalan.
+
+**➡️ SUPERSEDED the same day by the order above (Batt ~18:20, "replaces my town-first
+suggestion").** Kept as history: the town-first order this section first proposed.
 1. **Tooling first, no session:**
    - N1-N3 (NPC sprites) and the KB's P1 (script NPCs with the portal sprite; every NPC file);
    - the warp visibility table for the 12 banked cells, confirmed by a person;
@@ -431,8 +442,307 @@ on 2026-10-09).
 | the portal ring radius | a hand reading of 19 crops; the automatic hint over-reads on bright floors | a person on `warp-measure`'s medians |
 | the visibility of every warp on the planned maps | only 12 cells have banked frames | the portal passes of 3.3 step 4 |
 | other NPCs' cut-ins, other anchors | never seen (ui_mask's own gap) | one deliberate dialog per NPC (3.3 step 5) |
-| L3 completeness per map | route.json lists `warp` lines only (not script NPCs with the portal sprite, e.g. prt_church (115,122)); no NPC lists for payon / xmas / morocc | the KB's P1 (npc-click-test.md) |
+| L3 completeness per map | route.json lists `warp` lines only (not script NPCs with the portal sprite, e.g. prt_church (115,122)); no NPC lists for payon / xmas / morocc | the KB's P1 (npc-click-test.md). ➡️ **Built for the first workflow's maps** (section 7.3, `kb_first_workflow.py`): every file the server loads. prt_church (115,122) turned out to be a `warp` line (npc/quests/quests_prontera.txt:2174), from a file route.json does not read; `--also prt_church` lists it |
 | whether our GM is labelled `player` | a policy | Batt (1.1) |
 | "similar" species (half budget) | needs the sprite catalog per species | Batt, per species |
 | the HUD log's small sites (n < 10) | tracker drift vs a projection miss | more sightings, or `detections.jsonl` only |
 | windows the UI gate cannot see in banked frames (the restart window when not dead, an options window) | the gate reads a dialog, a menu and four windows only | excluded only via `self_dead` today |
+
+## 7. First workflow scope: the Novice training grounds -> Merchant (2026-10-09 ~19:30)
+
+**Batt, verbatim (2026-10-09 ~18:20):** "Batt's call for labels v2 ORDER (replaces my town-first
+suggestion): start with the NOVICE TRAINING GROUNDS. A novice can reach the Merchant job
+requirements there alone, so it's exactly the first workflow's scope; it has both monsters to
+attack and monsters NOT to attack (a real test of ADR-0020's target/ignore lists); some species are
+already in our data; the account 2000001 was already there (new_4-1). Verify from the pinned server
+data (local, nothing committed) before planning:
+1. the training-ground maps (names, connections, warps), their spawns per map, and which species
+   must NOT be attacked and why (quest/protected/other), from the scripts;
+2. every NPC there (for KB P1 and the NPC sprite set);
+3. the full Novice -> Merchant path from L3: every map the job change needs beyond the training
+   grounds (the merchant guild in Alberta, any delivery/quest maps), so the scope covers the whole
+   first workflow;
+4. then the budget with training-cost.md (species, NPC sprites, warps on those maps only) and the
+   collection plan.
+New order: tooling (N1-N3, KB P1, visibility table) -> TRAINING GROUNDS (+ their NPCs and warps) ->
+the Merchant job-change maps -> everything else later (towns at large, diversity maps, Byalan)."
+
+**How it was verified (offline; nothing collected, nothing committed from the server tree):**
+- **The tool:** `scripts/kb_first_workflow.py` (tests: `services/backend/tests/test_kb_first_workflow.py`,
+  synthetic snippets only). It writes `data/kb/first_workflow.json` (gitignored, local): per map the
+  warps, spawns, every NPC keyed by `file:line` (sprite id, cell, facing, kind, drawn, what its
+  script warps / tests / calls), mapflags, and the Novice -> Merchant path. Names, menus and serials
+  stay in that JSON; this section quotes ids, map names, cells and counts only.
+- **Which files:** the map-server's own list, not a hand list. A pre-renewal map-server loads
+  `npc/pre-re/scripts_main.conf` (map.cpp `map_reloadnpc`); the tool follows its `npc:` / `delnpc:`
+  / `import:` lines with `map_reloadnpc_sub`'s rules: **522 files**, every one parsed, **0 parse
+  problems** (unbalanced script, unknown definition type). rAthena e985006, pre-renewal.
+- **Which maps:** derived (module docstring): the char-server's start points, closed over the warp
+  lines and the literal NPC warps; the Merchant job script's NPCs and the functions it defines;
+  travel between them on (map, room) nodes (section 7.4).
+
+      export PYTHONPATH=$PWD/scripts:$PWD/packages/poring_dataset/src:$PWD/packages/poring_flow/src
+      M=/home/batt/docker/poring-lab
+      $M/.venv/bin/python scripts/kb_first_workflow.py build --kb-dir $M/data/kb \
+        --mapcache-dir $M/packages/poring_dataset/src/poring_dataset/_generated --also prt_church
+      $M/.venv/bin/python scripts/kb_first_workflow.py summary          # ids / cells / counts
+      $M/.venv/bin/python scripts/kb_first_workflow.py check-packets /dev/shm/poring-lab-demo/2026*
+      $M/.venv/bin/python scripts/kb_first_workflow.py budget --kb-dir $M/data/kb
+
+### 7.1 The training-ground maps (a)
+
+**The maps.** The server's map list has 20: new_N-M, N = 1..5 copies, M = 1..4 stages. Within a
+stage the five copies are the SAME map: their server walkability grids are byte-identical (map
+cache), so there are **4 layouts**. Visual identity of the copies (client files) is not verified.
+**16 are reachable; new_2-4, new_3-4, new_4-4, new_5-4 are never reached** (they carry mapflags
+only). All 20 carry the mapflags nobranch, nomemo, nopenalty, noteleport.
+
+**Which copy a character is on.** Not a script rule: the CHAR server places a new pre-renewal
+character at one of five start points, new_N-1 (53,111), N picked at random (conf/char_athena.conf
+`start_point_pre`; char.cpp:1400, `rnd() % start_point_count`). So 2000001 got copy 4 at creation.
+The copy only matters on stages 1 and 2; after that every novice shares the same maps:
+
+| stage | maps used | how a novice gets there | leaves by |
+|---|---|---|---|
+| 1, the yard | new_N-1, its own copy | char creation (53,111) | portal (148,112) span 2,2 -> new_N-2 (100,9); or job 727 at (53,114) -> new_1-2 (99,99) once the tutor flags are set (novice.txt:219) |
+| 2, the reception | new_N-2, its own copy | the yard's portal | job 86 at (100,29): -> **new_1-2** (100,70) for everyone (novice.txt:118), or skip the training -> one of 6 towns at random with a savepoint (novice.txt:135-158). Portal (100,6) back to new_N-1 (144,112) |
+| 2, the school | **new_1-2 only** | the reception, any copy | job 92 at (38,182): savepoint new_1-2 (23,188), warp **new_1-3** (96,21) (novice.txt:2542-2543); tutors send to (28,178) beside it |
+| 3, combat | **new_1-3 first**, then any new_N-3 | the school | job 84 at (95,30) on every copy moves between copies: from 1-3 to 2-3 / 3-3 (random) or 4-3 / 5-3 (random); from 2-3 / 3-3 back to 1-3 or to 4-3 / 5-3; from 4-3 / 5-3 to 1-3 or 2-3 / 3-3 (novice.txt:2647-2718). Job 85 at (96,174) -> **new_1-4** (99,10) (novice.txt:2740) |
+| 4, the exam | **new_1-4 only** | job 85, any combat copy | job 46 at (100,29): graduation (section 7.4) or a random field start (novice.txt:3762-3836) |
+
+- Inside new_N-2 two internal portal pairs join its rooms: (126,106) -> (160,171), (156,171) ->
+  (123,106); (73,106) -> (41,172), (46,172) -> (78,106). New_N-3 and new_1-4 have no portals.
+- The other exits: the school's job 117 at (118,108) sends to a town chosen at run time
+  (`warp .@mapn$`, novice.txt:1371, 1434).
+
+**Spawns** (novice.txt:4278-4302; every line is `map,0,0`: anywhere on the map, no respawn delay
+given). Nothing else spawns on these maps (no script `monster` command names them):
+
+| map | species (count) | job EXP per kill, spawn-weighted | kills to Novice JL10 (1,151 job EXP) | NPC-sell zeny per kill | kills to 1,000 z |
+|---|---|---|---|---|---|
+| new_1-3 | 1002 (10), 1113 (10), 1063 (10), 1011 (10), 1184 (5) | 2.22 | 518 | 7.78 | 129 |
+| new_2-3, new_3-3 | 1009 (10), 1050 (10), 1010 (10), 1012 (10), 1184 (5) | 4.00 | 288 | 15.69 | 64 |
+| new_4-3 | 1052 (10), 1051 (10), 1053 (10), 1014 (10), 1184 (5) | 32.67 | 35 | 16.54 | 60 |
+| new_5-3 | 1052 (10), 1051 (1), 1053 (1), 1014 (1), 1184 (5) | 16.17 | 71 | 14.64 | 68 |
+| the other 12 | none | | | | |
+
+- Job EXP from mob_db at the server's rates (exp.conf: 100 / 100); zeny from the local KB's drop
+  tables at their effective rates (drops.json) times the NPC sell price. Kills are assumed in spawn
+  proportion. The tutors' own job EXP gifts (while JL < 7) are ignored, so the kill counts are
+  upper bounds. **Batt's premise holds on the data:** the job level, the skill points and the
+  zeny the job change needs (7.4) are all reachable on the combat maps, and new_1-2's shop (job 90
+  at (28,185)) buys the loot.
+
+### 7.2 Species NOT to attack, and why (b)
+
+**The scripts name none.** Checked in every loaded file that names these maps:
+- the 25 `monster` lines carry no event label; novice.txt has no kill counter (`OnMyMobDead`,
+  `mobcount`, `killmonster`), no quest on a species, no "protected" flag; the maps carry no mapflag
+  beyond the four above (nopenalty: no EXP loss on death);
+- the combat trainer (job 84 at (95,30), novice.txt:2647) warns in general that many of them are
+  aggressive, naming no species;
+- the only "do not attack" rule in the scripts is about OTHER PLAYERS' targets: the battle tutor
+  (job 84 at new_1-2 (17,182), novice.txt:2193; its lines 2340 and 2444) discourages attacking a
+  monster someone else is already fighting. It concerns the community server, not species.
+
+**What the DATA says** (mob_db; AI bits from mob.hpp's `MONSTER_TYPE_xx`). These are candidate
+reasons for an IGNORE list, NOT script reasons; the list is Batt's:
+
+| species | where | level / HP | job EXP | AI | why it might be IGNORE |
+|---|---|---|---|---|---|
+| 1184 | every new_N-3, 5 each | 1 / 30 | **0** | 04, **aggressive** | worth nothing toward JL10, and it attacks first: the case ADR-0020 open question 24 asks about (an aggressive species on IGNORE) |
+| 1014 | new_4-3 (10), new_5-3 (1) | 16 / 510 | 108 | 01 | far above a level-1 novice (the copies the trainer calls harder) |
+| 1053, 1051 | new_4-3 (10 each), new_5-3 (1 each) | 10 / 170, 6 / 126 | 18, 5 | 07: looter + **assist** | hitting one draws the others |
+| 1009 | new_2-3, new_3-3 (10) | 5 / 92 | 5 | 03: assist | as above |
+| 1261 | 1 in each of alberta, prontera, geffen, morocc, izlude, payon (respawn 2-3 h) | 38 / 2,980 | 688 | 02, looter | the Merchant path's towns (7.4): a city cleaner, npc/pre-re/mobs/citycleaners.txt (its header states the purpose: monsters that clean the cities); far beyond a novice |
+
+**A proposal for ADR-0020's target / ignore test** (MW3's positive case, Batt decides): new_1-3,
+TARGET 1002, 1113, 1063, 1011; IGNORE 1184. All five are on one map, four are trained or new
+there, and the ignored one is aggressive.
+
+### 7.3 Every NPC there (c), and how completeness was checked
+
+| map(s) | NPCs by kind | drawn sprite ids | drawn portal cells |
+|---|---|---|---|
+| new_N-1 (each copy) | 3 dialog, 1 invisible (sprite 111 at (66,114): a clickable spot on the map art) | 105 (144,116) and (144,107); 727 (53,114) | 1 |
+| new_1-2 | 11 dialog, 1 shop | 86 (100,29), 751 (99,105), 753 (83,111), 726 (115,111), 117 (118,108), 92 (161,182) and (38,182), 754 (182,182), 47 (184,172), 105 (121,101), 84 (17,182); shop 90 (28,185) | 5 |
+| new_2..5-2 | 1 dialog | 86 (100,29) | 5 each |
+| new_N-3 (each copy) | 2 dialog | 84 (95,30), 85 (96,174) | 0 |
+| new_1-4 | 2 dialog | 46 (100,29), 57 (91,22) | 0 |
+| new_2..5-4 | none | | 0 |
+
+- **The training grounds' NPC sprite set (N1-N3): 15 drawn sprites:** 46, 47, 57, 84, 85, 86, 90,
+  92, 105, 117, 726, 727, 751, 753, 754. Sprite 111 is not drawn.
+- **No training-ground script calls `cutin` or any function**, so no dialog there shows a cut-in
+  (labels-v2.md 2a: nothing to measure). On the Merchant path, the two Kafra-sprite quest NPCs
+  (prontera (248,42), izlu2dun (106,58)) do call `cutin`: unmeasured, so their dialog frames are
+  excluded until `ui_mask measure` has them.
+- **The Merchant path's maps** (7.4), every NPC there (whole maps, not only along a route):
+
+| map | NPCs: dialog / shop / script portal / invisible (trigger) | drawn sprites | portal cells | spawns |
+|---|---|---|---|---|
+| alberta_in | 25 / 6 / 0 / 1 | 23 | 25 | none |
+| alberta | 47 / 1 / 0 / 2 | 36 | 11 | 1261 x1 |
+| prontera | 78 / 10 / 0 / 4 (+2 triggers) | 47 | 20 | 1261 x1 |
+| geffen | 42 / 2 / 1 / 3 | 32 | 11 | 1261 x1 |
+| geffen_in | 30 / 7 / 0 / 2 | 26 | 25 | none |
+| morocc | 39 / 0 / 1 / 1 (+1 trigger) | 29 | 13 | 1261 x1 |
+| morocc_in | 22 / 3 / 0 / 0 | 20 | 36 | none |
+| izlude | 24 / 4 / 0 / 2 | 23 | 8 | 1261 x1 |
+| izlu2dun | 3 / 0 / 0 / 0 | 3 | 1 | none |
+| payon | 63 / 3 / 0 / 5 (+1 trigger) | 38 | 16 | 1261 x1 |
+
+  "Drawn" counts NPCs whose script hides them at start (`hideonnpc` / `disablenpc` of themselves)
+  as conditional, not drawn: the packets confirm it on prt_church's six wedding-row NPCs
+  (effect_state 2).
+
+**How completeness is checked (KB P1):**
+1. **Every loaded file is parsed** the way the server splits it: 522 / 522, 0 problems. An NPC on a
+   scope map can only come from a top-level definition (script, duplicate, shop, warp, monster,
+   mapflag) or a script command that places something at run time.
+2. **Every line of every loaded file that names a scope map is accounted for** (`completeness` in
+   the JSON): a comment, a definition on that map, a warp line to it, another map's definition that
+   names it, or a script statement classified by its command (warp, savepoint, condition, dialog
+   text, array). **0 unclassified lines; 0 run-time placements** (`monster`, `areamonster`,
+   `movenpc`, `setcell`, `setwall`, `duplicate_dynamic`) on any scope map. The files the server does
+   NOT load (the renewal tree, tests) are listed apart and ignored.
+3. **Against the banked packets** (`check-packets`, the 85 demo sessions in tmpfs): every NPC object
+   (objtype 6) the server showed on a covered map is in the KB at that cell with that sprite:
+   **49 / 49** (prontera 16, prt_church 19, alberta_in 6, alberta 2, izlu2dun 2, prt_fild08 3,
+   iz_dun00 1), 0 at a wrong sprite, 0 missing. The training grounds have NO banked packets: their
+   check is the first collection session's packets.
+4. **Two facts found on the way:** prt_church (115,122) is a `warp` line
+   (npc/quests/quests_prontera.txt:2174; section 1.3's 227 excluded frames); prontera's five
+   guild flags (job 722) come from the guild files and are in the KB.
+
+### 7.4 The Novice -> Merchant path (d)
+
+**The steps** (keys are the script lines; the dialog choices are in the local JSON):
+1. **Yard -> reception -> school** (7.1). The reception asks the player to TYPE their character's
+   name (`input`, novice.txt:86) before the training option.
+2. **Combat (new_N-3):** reach Novice JL10, put 9 skill points into Basic Skill, earn 1,000 zeny
+   (start zeny 0, char_athena.conf; sell loot to new_1-2's shop, reached back through the savepoint
+   new_1-2 (23,188)).
+3. **Exam (new_1-4):** first job 57 at (91,22) (any job's information sets the flag the exam
+   needs, novice.txt:4023-4229), then job 46 at (100,29), which needs free weight
+   (`checkweight`, novice.txt:2760) and the flag (novice.txt:2765). Its aptitude test is a series of
+   menus; then either the job it suggests or the player's own pick from a six-job menu
+   (`S_UserJobchoice`, novice.txt:3860).
+   **Merchant either way:** savepoint alberta (30,232), warp **alberta_in (62,44)**
+   (novice.txt:3518-3519 suggested, 3970-3971 picked). Items: 4 free Kafra teleport tickets
+   (item 7060) on the suggested path (novice.txt:3482), 5 on the picked one (novice.txt:3932).
+4. **The application** (alberta_in, job 86 at (53,43), merchant.txt:34; the job changer): Basic
+   Skill > 8 (`F_CanChangeJob`, Global_Functions.txt:626-628), the 1,000 zeny fee or 500 now and 500
+   at the end (merchant.txt:329, 343, 131). The script then picks the delivery AT RANDOM:
+   `rand(1,4)` (merchant.txt:383), each with two serial numbers (`rand(2)`, merchant.txt:486), so
+   8 states; the Byalan option also hands a message item (1072; 200 z reward at the end).
+5. **The storehouse** (alberta_in, job 83 at (28,29), merchant.txt:498; reached from the
+   arrival room through the internal portal (64,31) -> (24,29)): pick the destination (4-option
+   menu) and TYPE the 7-digit serial (`input`, merchant.txt:685; 1,000,000-5,000,000). A wrong
+   serial still gives a box, the wrong one.
+6. **The delivery:** one of four NPCs swaps the box for a voucher (table below).
+7. **Back to the storehouse** (the voucher check: a wrong or missing voucher FAILS the test,
+   merchant.txt:553, as does admitting a lost package, 581 and 607; the job changer then erases the
+   record, merchant.txt:100-106, and nothing returns the fee), then **the job changer**
+   (merchant.txt:155: the job change).
+
+**The four delivery options** (every one the script can choose). Routes are on (map, room) nodes,
+from and back to the storehouse's room; Kafra teleports on the free tickets:
+
+| option (state values) | destination NPC | route (fewest moves), map changes | Kafra hops (tickets) | zeny |
+|---|---|---|---|---|
+| 1, 2 | prontera (248,42), sprite 116 (merchant.txt:941) | alberta_in -> alberta -> Kafra -> prontera; back by Kafra; 4 | 2 | 0 |
+| 3, 4 | geffen_in (155,122), sprite 47 (merchant.txt:860) | alberta -> Kafra prontera -> Kafra geffen -> door (61,180) -> geffen_in; back the same way; 8 | 4 | 0 |
+| 5, 6 | morocc_in (140,102), sprite 86 (merchant.txt:775) | alberta -> Kafra morocc -> door (274,269) -> morocc_in, then its internal portal (144,122) -> (144,106); back through (144,109) -> (144,125) and (136,136); 6 | 2 | 0 |
+| 7, 8 | izlu2dun (106,58), sprite 116 (kafras.txt:601 calling merchant.txt's `F_MercKafra`, pre-renewal only) | NO Kafra goes there. Fewest moves: alberta boat (189,151, sprite 100) 500 z -> izlude; izlude boat (201,181) 150 z -> izlu2dun; back izlu2dun (108,27) free -> izlude; izlude (182,186) 250 z -> alberta; 6 | 0 | 900 |
+| 7, 8, least zeny | | Kafra prontera, Kafra izlude, boat 150 z, back, Kafra payon, Kafra alberta; 8 | 4 | 150 |
+
+- **Every map the job change needs beyond the training grounds:** alberta_in, alberta (the
+  savepoint town), prontera, geffen, geffen_in, morocc, morocc_in, izlude, izlu2dun, and payon (the
+  least-zeny Byalan route only). Walking between the towns (fields only) is not used: it is 18 to 30
+  map changes per round trip and crosses field maps outside this scope.
+- **The interiors are rooms.** A map-level route was wrong in every interior (alberta_in, geffen_in,
+  morocc_in: the door a map-level search picked does not reach the NPC's room). The routes above
+  are checked cell by cell on the server's walkability grid, including the arrival from
+  graduation: (62,44) reaches the job changer directly and the storehouse through (64,31).
+- **Transport NPCs** are literal script warps whose script tests no variable (boats, a warper);
+  quest NPCs that warp under a condition are never used. A fee is the script's own `Zeny < N` before
+  the warp; a script that charges otherwise is counted as unknown and never relied on.
+
+### 7.5 The budget (e) (training-cost.md's method, `kb_first_workflow.py budget`)
+
+`poring_flow.prep.estimate` on training_cost.json, NEW species and NEW maps only, blocks in Batt's
+order; trained = labels_v2.TRAINED (1002, 1063, 1008, 1113, 1018); difficulty =
+labels_v2.difficulty (all "normal" here).
+
+| block | maps (new) | new species (Σd) | map prep h (a clone group once) | collect S2 h | train compute h | wall h: night / mix | NPC sprites first met | drawn portal cells |
+|---|---|---|---|---|---|---|---|---|
+| training grounds | 16 (4 layouts) | 10 (10.0): 1009, 1010, 1011, 1012, 1014, 1050, 1051, 1052, 1053, 1184. Trained: 1002, 1063, 1113 | 83.2 (20.8) | 13.0 | 23.73 | 37.7 / 47.0 | 15 | 30 |
+| Merchant guild | alberta_in, alberta (2) | 1 (1.0): 1261 | 10.4 | 1.3 | 2.37 | 3.8 / 4.7 | 45 | 36 |
+| delivery: morocc_in | morocc, morocc_in (2) | 0 | 10.4 | 0 | 0 | 0 | 23 | 50 |
+| delivery: geffen_in | prontera, geffen, geffen_in (3) | 0 | 15.6 | 0 | 0 | 0 | 26 | 56 |
+| delivery: prontera | (prontera above) | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| delivery: izlu2dun | izlude, izlu2dun, payon (3) | 0 | 15.6 | 0 | 0 | 0 | 11 | 25 |
+| **total** | **26** | **11 (11.0)** | **135.2 (72.8)** | **14.3** | **26.1** | **41.4 / 51.7** | **120** | **197** |
+
+- **Map prep dominates** because the formula counts every NEW map: the training grounds' 16 maps
+  are 4 layouts, 5 copies each. If a clone group counts once (Batt), the training grounds cost
+  20.8 h, not 83.2 h.
+- **"Similar" (half budget) candidates:** within this scope only 1053 / 1051 (a variant pair, both
+  on new_4-3 / new_5-3). Batt, with the sprite catalog.
+- **Not in the estimate** (as in 3.2): the NPC sprites (750 frames each on the union of frames:
+  15 for the training grounds, 105 more on the towns if whole towns are in scope), `warp` (one class,
+  750 frames from >= 4 maps' backgrounds: the training grounds give 2 layouts with portals, so the
+  class needs town portals too), the hard negatives.
+- **1261 needs spawn blocks:** one per town, respawning every 2-3 h; natural frames will not reach
+  1,500.
+
+### 7.6 The collection plan (f) (waits for G1 option A and G2 quiet windows; nothing collected)
+
+- **Gates:** G1-G3 as in 3.3. **G4 for these maps:** this KB (built); the GATs of the 4 training
+  layouts and the path towns extracted into `/dev/shm` (alberta, alberta_in, prontera are already);
+  the camera: the client's indoor table lists alberta_in, geffen_in and morocc_in, not the training
+  maps (outdoor camera); the sprite catalog for the 11 new species; N1-N3 for the 15 training-ground
+  sprites first.
+- **Accounts:** the GM (2000002) collects, with 3.33's immunity after each login, the fixed GM
+  state checked and the UI gate before each run. It reaches any copy by `@warp` (the copies are
+  clones). **The agent account 2000001 is not used for collection:** its quest state on new_4-1 is
+  the workflow's starting state, and its tutorial variables are unknown offline (open question 5).
+- **Sessions, in Batt's order:**
+  1. **new_1-3** natural spawns (walk@17's legs): 1011 and 1184 new, 1002 / 1113 / 1063 trained.
+  2. **new_2-3** (new_3-3 is the same set): 1009, 1010, 1012, 1050, 1184.
+  3. **new_4-3**: 1014, 1051, 1052, 1053, 1184 (new_5-3 has the same species, sparser: keep it
+     and new_3-3 for test sessions, T2).
+  4. Spawn blocks (`@monster <id> 8`, ~25 min each, `@killmonster2` between) for species short of
+     1,500 frames after 1-3.
+  5. **NPC and portal passes:** new_1-2 (11 NPCs, the shop, 5 portals), a yard and a reception
+     copy, new_1-4: standing views per sprite toward 750 frames, and the portal cells for the
+     visibility table. No dialog is needed for the cut-in (none there).
+  6. **Then the Merchant maps** (Batt's step 3): alberta_in / alberta, then the delivery maps; 1261
+     by spawn blocks.
+- **The target / ignore test** (7.2's proposal) runs later, on the trained detector, with the
+  player account: an ignored 1184 beside the targets, zero acts on it (the server's act packets,
+  offline), as MW3 specifies.
+- **Frames to bank:** per new species 1,500 training frames with >= 3,000 instances (+ 0.40 for
+  validation and test); per NPC sprite 750; `warp` 750 in total.
+
+### 7.7 Open questions for Batt
+
+1. **The delivery is told only in dialog text.** The destination and the serial number come from
+   the job changer's dialog (merchant.txt:383-415); the storehouse wants the destination picked and
+   the serial TYPED. A wrong guess fails the test and costs the fee. So the first workflow must
+   read dialog text from pixels (no reader exists), or Batt picks another way.
+2. **The IGNORE list:** the scripts give no species reason; 7.2's data candidates (1184, 1014,
+   1051 / 1053, 1009; 1261 in towns) are yours to choose.
+3. **The four delivery options:** the script picks one at random, so a workflow that cannot choose
+   must cover all four (10 maps). Keep all four, or narrow the scope (each retry costs the fee)?
+4. **Map prep for clone copies:** 16 maps or 4 layouts (83.2 h vs 20.8 h)?
+5. **2000001's state:** which tutorial / quest variables it has (it decides each NPC's branch). A
+   read-only look at its character variables, or its own dialogs, before the workflow is designed.
+6. **Typing:** the reception wants the character name and the storehouse a serial: two typed
+   inputs for the typing guard and the foreground gate.
+7. **Whole towns or routes only:** the towns hold 105 of the 120 NPC sprites; a route through a town
+   meets far fewer. Train every sprite of a scope map (3.28's rule as written), or only those near
+   the route?
+8. **Follow-up, not done:** `labels_v2.l3_warps` and `npc_noclick` still read route.json; pointing
+   them at this KB is a separate change.
