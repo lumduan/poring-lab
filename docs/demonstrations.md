@@ -1591,9 +1591,17 @@ status window opened at 16:02).
   - the state recorded in `trials.json` (`gm_state`: restored or not, the weight readout, a crop
     of the Basic Information window).
 - Job EXP is recorded, not fixed.
-- **The grant is NOT live yet:** the guarded rathena restart that applies it was stopped by the IO
-  guard at 16:10:35 (quant-ticker-engine 47.3 %), and rathena is DOWN pending Batt. P3 waits for the
-  grant, the Lv 1 / 1 template cut and one restore proof.
+- ~~The grant is NOT live yet~~ ➡️ **LIVE since 16:35 (Batt's ordered sequence).**
+  - The 16:10 restart was stopped by the IO guard (quant-ticker-engine 47.3 %).
+  - At 16:35:24 a guarded `restart:rathena@120` + `restart:sniffer@30` passed (guard worst 4.7 %). The
+    GM's auto re-login was OK and the interlock green at 16:38:34.
+  - **At 16:39 the GM was restored by command,** from Base Lv 2 (HP 45) to **Base Lv 1 / Job Lv 1**
+    (HP 40 / 40, SP 11 / 11, base EXP 0). Job EXP stayed (~78 %); the weight was 738 / 2030 (one
+    Jellopy).
+  - **The Lv 1 / 1 template was cut** (`data/ui_anchors/gm_state/`).
+  - **The check:** the restored frame differs from the template by 0 px; the Lv 2 frame saved before
+    the restore by **20 px** (the limit is 4). So a level change is detected: the positive case.
+  - P3 may start once Batt clears it (his 16:35 sequence stopped at step 4 on an IO trip).
 
 ➡️ **TYPING TRANSPORT CHANGED BEFORE STEP 1 (2026-10-09 ~16:10; Batt's mandatory item 6):** every
 line loot@1 types (its GM commands) now passes the UI gate (`scripts/ui_gate.py`, 3.32 item 6)
