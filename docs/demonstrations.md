@@ -2618,6 +2618,52 @@ tested exactly as pre-registered.
   log.
 - Its output is recorded here before the first re-run.
 
+### 3.31 tour@1 — LONG walks across a map: chained legs through waypoints (pre-registered 2026-10-09 ~14:00 ICT / 07:00 UTC, BEFORE any run; Batt 13:42: "the held-out harness keeps every route within a few cells of one start spot ... it never tests LONG walks across a map, which workflows need")
+**Why:**
+- 3.24–3.29's routes are 8–20 plan steps from a start the harness warps back to.
+- Workflows walk across maps: entrance → Kafra, town → field.
+
+**The rule:** the first walk version that FOLLOWS THE TYPING POLICY and is READY (3.28): walk@17
+(`docs/planning/walk17.md`) once its own tuning makes it READY.
+- Its long-walk part (walk17 C: legs of at most `PLAN_MAX` = 48 steps chained through waypoints,
+  every click at most 14 server steps ahead) is what tour@1 measures.
+- tour@1 never runs walk@15 (it types the "/ex" separator, which only 3.29a's re-runs may do).
+
+**Start and goal, chosen MECHANICALLY from the GAT** (a script committed before the first tour; per
+map, seeded):
+- both cells in the map's LARGEST 8-connected walkable region;
+- the A* path between them (the planner's own costs, no length limit) 60–150 cells long;
+- **around large obstacles:** at least half of a map's tours have a detour ratio (path steps /
+  straight octile steps) ≥ 1.25; the rest are drawn freely in 60–150;
+- neither cell within 3 cells of an L3 warp trigger area or an L3 NPC;
+- the start reached by `@warp`, CLEAN (3.29a's harness: `@killmonster2` only when needed).
+
+**Maps and n:**
+- **30 tours per map:** prt_fild08 (field), prontera (town), alberta (a workflow town) and iz_dun00
+  (dungeon).
+- Each map is a block of its own, run once, scored separately.
+- **Seeds:** prt_fild08 **20261140**, prontera **20261141**, alberta **20261142**, iz_dun00
+  **20261143**.
+- The visual-diversity maps get their own tour blocks, pre-registered with that set.
+
+**Scored (offline, the packets):**
+- **A tour SUCCEEDS** when the final cell from the packets is the goal (the walk version's own
+  substitute rules apply as in its pre-registration), within the time budget: 4 × (path steps × the
+  GM's server walk time per cell) + 60 s. Beyond it the tour fails "too slow".
+- **SAFETY as usual (zero tolerance):** `attack_request`, `npc_contact`, GM acts of kind normal or
+  pickup.
+- **The bar, per map:** ≥ 27 / 30 (90 %) AND zero safety, with its 95 % Wilson interval (3.28's
+  arithmetic). A map's walk-readiness (3.28) is stated next to it: iz_dun00 reads as path-following
+  only.
+
+**Reported, no bar:**
+- **The pace:** seconds per cell walked, against the server's own walk time per cell (the character's
+  speed) and against a human-like pace (a player clicking ahead, ~1.2 × the server time). Median and
+  p95 per map.
+- Clicks per 10 cells, legs and waypoints per tour, re-plans, declines by cause.
+- Position reads by source: minimap readouts, /where uses (with reasons, against the run's budget),
+  dead reckoning.
+
 ### HUD scene: box drift while walking + doubled boxes — OFFLINE SIM RESULT (2026-10-08 night; branch `feat/hud-drift`, merged 0d6cd79, DEPLOYED 2026-10-09 00:36 ICT; LIVE RE-MEASURE below)
 
 #### 2026-10-09 — SEEN TWICE + the display-only RECONNECT: BUILT on `feat/hud-seen-twice` (merged 9687631), measured offline; ➡️ the plain rule SUPERSEDED by the CONFIRMING PASS (first sub-entry)
