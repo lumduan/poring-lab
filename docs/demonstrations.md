@@ -2572,6 +2572,52 @@ it needs is committed BEFORE the scored runs.
 **Order:** after 3.29's held-out runs and loot@1 (3.20a). T1 and the scorer are desk work and come
 first; T2–T5 need the client, in its gaps.
 
+### 3.29a AMENDMENT — re-run every held-out map that ended INCOMPLETE, once (pre-registered 2026-10-09 ~13:45 ICT / 06:45 UTC, BEFORE any re-run; Batt 2026-10-09 ~13:20 + ~13:40)
+**Why:** two held-out maps ended early on a HARNESS stop, "the chat input did not open: nothing
+typed" (exit 3):
+- guild: 5 routes, 0 / 5;
+- town: 45 routes, 39 / 45 = 86.7 %, 0 safety.
+
+Both stops came at the harness's periodic `@warp`, right after its `@killmonster2`. The harness typed
+`@killmonster2` before EVERY route, and the client refuses the 4th identical chat line in a row (L2
+`chat.repeat`). The stop is a harness fault; the rule is unchanged. The guild run had also met a rule
+fault first: route 0's goal lay inside the exit warp's trigger area. That finding stands.
+
+**The re-runs:**
+- Each INCOMPLETE map once more, with FRESH seeds: guild **20261124**, town **20261125**. iz_dun00
+  **20261126** and the portal walk **20261127** are reserved, and are used only if those runs also end
+  INCOMPLETE.
+- The rest exactly as 3.29: CLEAN, the first 50 routes scored, the bar per map (≥ 45 / 50 + zero
+  safety), walk-readiness per map stated (3.28).
+- **The incomplete runs' data is kept and reported alongside** (Batt), not replaced.
+
+**What changes: the HARNESS only.**
+1. `@killmonster2` only when CLEAN needs it: a monster seen in the scene now, or one the previous
+   route saw.
+2. The typing guard (`scripts/chat_guard.py`, Batt 2026-10-09):
+   - no 3rd identical line in a row (a repeated GM command is skipped and logged);
+   - no filler line;
+   - a minimum interval;
+   - /where once per need.
+3. `open_chat` recognises and recovers from the post-refusal chat state. This is built after the live
+   probe that characterises that state (`chat_repeat_probe.py chat`), BEFORE the re-runs.
+4. The detector logs every batch (class + score per box) to the session.
+
+**THE ONE EXEMPTION (Batt, option A):** walk@15's FROZEN where@2 (`where_fix.fix_v2`: an "/ex"
+separator, then /where, read twice) may type its pattern inside these re-runs ONLY, so the rule is
+tested exactly as pre-registered.
+- The re-run chain sets it (`chat_guard.py exempt --id 3.29a`) and clears it when the re-runs end;
+  it also expires by itself (≤ 8 h).
+- It covers only where@2's own tagged lines. Every line it lets through is logged with id 3.29a.
+- **From walk@17 on, every rule follows the policy:** no separator commands, /where once per need,
+  passive sources first.
+
+**The proof, before any re-run:** `scripts/bytecode_proof.py walk15 <e1299f5> <the merged tree>`.
+- It must be **PASS**: walk@15's DECISION code is bytecode-identical to its pre-registration.
+- Only the declared harness may differ: the run loop, typing, the /where transport and the detector's
+  log.
+- Its output is recorded here before the first re-run.
+
 ### HUD scene: box drift while walking + doubled boxes — OFFLINE SIM RESULT (2026-10-08 night; branch `feat/hud-drift`, merged 0d6cd79, DEPLOYED 2026-10-09 00:36 ICT; LIVE RE-MEASURE below)
 
 #### 2026-10-09 — SEEN TWICE + the display-only RECONNECT: BUILT on `feat/hud-seen-twice` (merged 9687631), measured offline; ➡️ the plain rule SUPERSEDED by the CONFIRMING PASS (first sub-entry)
