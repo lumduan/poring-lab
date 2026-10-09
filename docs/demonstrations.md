@@ -3538,6 +3538,10 @@ the GPU; frames and packets local in `/dev/shm/poring-lab-tmp/learn_skill/`):**
 - **New UI states for the harness:** the tentative "+N" and the confirm modal are NOT among the UI
   gate's known states, so `ui_gate` stops on them (fail closed). The harness must close them only by
   known steps: RESET (초기화) for a tentative raise, Cancel for the modal, then the window's chord.
+  ➡️ **"stops on them" does not hold** (the gate's own readers on the banked look3 / look4 frames,
+  2026-10-09 ~21:10; see "AS BUILT" below): the gate does not see either state. It sees the skill
+  window's anchor and would close the window by its chord. The harness's own `close_known` runs
+  before every typed line instead.
 - **The same design for status points (char.allocate_stat):** the GM has 48 unspent points; a
   reversible restore needs `@streset` (pinned `@baselevelup` lowering resets the stats only when the
   unspent points are fewer than the level's, which 48 never is). Same parked decision.
@@ -3546,6 +3550,123 @@ the GPU; frames and packets local in `/dev/shm/poring-lab-tmp/learn_skill/`):**
   Point 48". There is NO apply button: a click on an arrow is expected to send the raise at once
   (CZ_STATUS_CHANGE), so allocate_stat@1 has no tentative state, and every click is irreversible
   without `@streset`. NOT clicked: a positive case would change the GM's stats for good.
+
+**➡️ AS BUILT, OFFLINE (2026-10-09 ~21:00-21:30 ICT, branch `feat/learn-skill1`, code 86ede5c;
+NOT pre-registered, NOT run live; no input was sent while building it):**
+- **What exists:**
+  - `scripts/learn_skill1.py`: the readers, the rule, `close_known`, the harness, and the `cut` /
+    `prove` tools.
+  - `scripts/learn_skill1_score.py`: the offline judge.
+  - `services/backend/tests/test_learn_skill1.py`: 15 tests on synthetic frames and packets (and
+    the harness's trial sequence through a fake client: nothing is typed while a skill-window state is
+    up; a stale digit is synced once).
+  - The L2 binding `skill_tree` in `l2/kro-20211103-prere.yaml`: numbers only, status unverified,
+    measured on RDP.
+  - The click census entry: one direct click, `LiveIo.ui_click`, refused outside the box it names.
+- **The geometry** is the L2 binding: window-relative to the `skills` anchor's located origin (within
+  `HOME_PX` of its home, as `ui_gate` looks), except the modal, which the client centres on its area.
+  Without the binding, nothing runs (`Unbound`).
+- **The readers** (pure; each fails closed with a reason):
+  - window: the `skills` anchor at its home;
+  - tentative: red ink right of the icon and nothing else; its digest changes with N, so a raise the
+    client ignored is caught;
+  - modal: its OWN pixels against its template and against a no-modal reference;
+  - points: the label by template, then the number in the WEIGHT READOUT'S glyphs, unchanged (the same
+    bitmap font: score 0.01 on look1's "9"). Coloured ink means a pending raise ("tentative"); an
+    unexplained mark, a '/', a low margin or a leading zero is None;
+  - level: ink in the box under the icon. Only "1" is ever named (the one digit seen live); any other
+    ink is "unseen", never guessed.
+- **Templates:** `learn_skill1.py cut` writes them to `data/ui_anchors/learn_skill/` (local, never
+  committed):
+  - the modal from look4, the no-modal reference from look3-click1-away;
+  - the points label from look1, the level "1" from look5.
+- **`learn_skill1.py prove`: 10 / 10 banked frames read as expected.** This is a reproducibility check:
+  four of the frames gave the templates. What is held out: the "1" on look6, the label on seven
+  frames, and the modal's negative on six. The cursor rows are explained below the table.
+
+  | frame | window | tentative | modal (own px: modal / none) | points | level ink, glyph |
+  |---|---|---|---|---|---|
+  | look1-after-joblevelup | no | – | – | – | – |
+  | look1-skillwin | yes | no | no (0.16 / 1.00) | **9** | none |
+  | look2-hover, look2-hover-2s (cursor on the icon) | yes | no | no (0.16 / 1.00) | **9** | not judged |
+  | look3-click1 (cursor on the icon) | yes | **yes** | no (0.16 / 1.00) | None (tentative) | not judged |
+  | look3-click1-away | yes | **yes** | no (0.16 / 1.00) | None (tentative) | none |
+  | look4-applied | yes | **yes** | **yes (1.00 / 0.16)** | None (tentative) | none |
+  | look5-confirmed | yes | no | no | **8** | **yes, "1"** |
+  | look6-skillwin-after-reset | yes | no | no | **0** | **yes, "1" (the stale one)** |
+  | look6-end | no | – | – | – | – |
+
+  - On the cursor-on-icon frames the cursor sprite covers the level box: it reads "unseen" ink there.
+  - The live rule therefore parks the cursor (two motions, `ui_gate`'s rest points) before every look.
+- **The rule, `learn_skill(io, geo, keys, n)`**, one trial: the window by its chord; the points P on two
+  fresh frames, which must be 9; N icon clicks, paced 0.35 s, each followed by a NEW tentative; APPLY;
+  the modal within 2 s; OK; the points P - N within 3 s; close by the chord. Every refusal is a recorded
+  decline with its reason.
+- **`close_known`** handles what a trial leaves open, by KNOWN steps only: CANCEL for the modal, then
+  RESET for a tentative raise, then the chord. Any unreadable state STOPS, with nothing pressed.
+- **The UI gate is blind to the tentative and the modal.** Its `decide` on the banked look3 and look4
+  frames says `chord skills`, not stop: the skill window's title anchor is unaffected by either state.
+  So `close_known` runs before EVERY typed line of the harness, and the gate never meets these states
+  from this harness. Another harness's gate would still press Alt+S on them, an effect never measured.
+  Extending the gate is a separate change, not made here.
+- **The harness, `learn_skill1.py run --n N --seed S --restore skreset|charselect`.** Per trial:
+  1. `close_known`;
+  2. `gm_state.ensure_fixed`;
+  3. the START STATE: the window open, the points 0, the level box EMPTY. A stale digit runs the
+     restore's sync once, else the trial stops;
+  4. `@joblevelup 9`, then `gm_state.clear_notices`;
+  5. the rule, with N from shuffled blocks of 1..9 (seeded);
+  6. `close_known` if the rule declined;
+  7. the restore, then `ensure_fixed` again.
+
+  A DemoRecord is written per rule trial and per harness action, plus `trials.json`, the packets at
+  the end, and snapshots before and after each trial. Two consecutive harness stops end the run.
+  - `skreset`: `@skreset`, then `@joblevelup -49`. **Refused unless `--skreset-allowed`**: `@skreset`
+    is not in group 20, and that is Batt's call. `groups.yml` is untouched.
+  - `charselect`: `@joblevelup -49`, then character select and back in. **Refused ("unmeasured: the
+    in-game route to character select")** until an L2 `game_option.char_select: {box: [...]}` exists.
+- **The scorer, `learn_skill1_score.py SESSION`**, judges inside the rule's own window (`t_rule_start`
+  .. `t_rule_end`). The checks:
+  - exactly N `skill_up_request` for skill 1, and none for any other skill;
+  - the last `skill_update` for skill 1 at level N, and none for other skills;
+  - the last `skill_point` after the first request equal to 9 - N;
+  - no `attack_request` and no `npc_contact`;
+  - no request outside the rule's window inside the trial.
+
+  A start other than 9 makes the trial INVALID (a harness problem, not the rule's), and so does a stop
+  before the rule. "Success" needs the server AND the rule's runtime claim. The output gives totals,
+  the result per N, and false positives.
+- **The positive case on REAL packets:** pk + pk5, with the window from pk5's first event, run as
+  `learn_skill1_score.py --packets pk/packets.jsonl.gz pk5/packets.jsonl.gz --n 1 --t0 <pk5's first
+  t>`. The result is **server_ok**:
+  - start points 9, taken from pk's `@joblevelup 9`;
+  - 1 request for skill 1, `skill_update` level 1, `skill_point` 8, `skill_list` level 1;
+  - nothing unsafe.
+
+  With `--n 2` the same packets FAIL on all three counts.
+- **Still UNMEASURED live** (each needed before the pre-registration, or named in it):
+  1. RESET and the modal's CANCEL have never been clicked. `close_known` relies on them: CANCEL is
+     expected to close the modal and keep the raise, RESET to drop it. Nothing should be sent.
+  2. N > 1:
+     - the tentative's +2..+9 have never been seen; the rule only requires its red digest to change;
+     - one OK is expected to send N `skill_up_request`s, since 0x0112 carries only a skill id.
+  3. Level digits 2-9 have never been seen: they read "unseen". The runtime outcome is the points line.
+  4. `@skreset`: group 20 (Batt). Also unmeasured: that it resends the list at Job Lv 1 with nothing
+     learned (the START-STATE sync).
+  5. `charselect`, all of it:
+     - a banked frame of the game option window (Escape);
+     - its character-select button's box;
+     - the `char_select` signature after the click;
+     - `ro_agent.enter_game` back in;
+     - the skill window's level box EMPTY after re-entry (the list at `connect_new`).
+  6. The Alt+S chord's effect while a raise or the modal is up: never measured, and never relied on.
+  7. S2: nothing is measured there. All the templates are RDP-cut.
+- **Commands:**
+
+      python3 scripts/learn_skill1.py cut                 # once: the templates from the banked looks
+      python3 scripts/learn_skill1.py prove               # exit 1 on any mismatch
+      python3 scripts/learn_skill1.py run --n N --seed S --restore skreset --skreset-allowed
+      python3 scripts/learn_skill1_score.py /dev/shm/poring-lab-demo/<session>
 
 ### HUD scene: box drift while walking + doubled boxes — OFFLINE SIM RESULT (2026-10-08 night; branch `feat/hud-drift`, merged 0d6cd79, DEPLOYED 2026-10-09 00:36 ICT; LIVE RE-MEASURE below)
 

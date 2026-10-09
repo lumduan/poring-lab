@@ -41,6 +41,10 @@ ALLOWED = {
                             "the contact click is cursor_gate's (TALK read twice)"),
     "scripts/talk_calibrate.py": (1, "talk@1 calibration: the `click` step, through talk1.LiveIo "
                                      "(a T2-read element); its contact click is cursor_gate's"),
+    "scripts/learn_skill1.py": (1, "learn_skill@1 (3.34): UI clicks only -- LiveIo.ui_click, "
+                                   "refused outside the box it names: Basic Skill's icon, APPLY, "
+                                   "RESET (the skill window found at home), the confirm modal's "
+                                   "OK / CANCEL (the modal read on stable frames); no world click"),
 }  # fmt: skip
 
 
