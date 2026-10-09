@@ -34,6 +34,12 @@ ALLOWED = {
                                  "as walk@12 makes it; the signboard hit-area case"),
     "scripts/walk12.py": (3, "walk@12 RULE: walk@11's three, on work-zone points only, with the "
                              "TALK-cell block"),
+    "scripts/talk1.py": (2, "talk@1 (3.30): UI clicks only -- LiveIo.click (NEXT, CLOSE, a menu "
+                            "row, OK, Cancel, a scroll arrow; each inside a window T2 read on a "
+                            "stable frame, refused outside it) and the dialog logic's call of it; "
+                            "the contact click is cursor_gate's (TALK read twice)"),
+    "scripts/talk_calibrate.py": (1, "talk@1 calibration: the `click` step, through talk1.LiveIo "
+                                     "(a T2-read element); its contact click is cursor_gate's"),
 }  # fmt: skip
 
 
