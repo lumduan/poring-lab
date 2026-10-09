@@ -3796,6 +3796,29 @@ NOT pre-registered, NOT run live; no input was sent while building it):**
       python3 scripts/learn_skill1.py run --n N --seed S --restore skreset --skreset-allowed
       python3 scripts/learn_skill1_score.py /dev/shm/poring-lab-demo/<session>
 
+**DRAFT pre-registration for learn_skill@1 (2026-10-10 ~01:15 ICT; NOT binding: it waits for Batt's
+restore decision, then it is re-dated and committed as PRE-REGISTERED before any trial):**
+- **The rule and harness:** `scripts/learn_skill1.py` at the commit of the pre-registration; scored
+  by `scripts/learn_skill1_score.py SESSION` at the same commit.
+- **The restore (one of, Batt's choice):** (A) `--restore skreset --skreset-allowed`, after
+  `@skreset` is added to group 20 (lab only; groups.yml change by Batt); (B) `--restore charselect`,
+  after the in-game route to character select is measured live (an L2 binding:
+  `game_option.char_select`) and proven on 5 round trips.
+- **Before the scored run:** the unmeasured live steps (3.34 "STILL UNMEASURED") are measured in a
+  pilot, never scored: RESET and the modal's CANCEL each clicked once (expected: nothing sent), a
+  tentative +2 and +9 seen, one APPLY of N = 3 (expected: 3 `skill_up_request`); the pilot is
+  `run --n 3 --seed 20261180`.
+- **n = 50, seed 20261181** (N drawn from shuffled blocks of 1..9), RDP, the GM, a town spot with
+  no monsters (prt_church 100,73).
+- **Success per trial** (the scorer): the server's evidence -- exactly N `skill_up_request` for skill
+  1 inside the rule's window, the last `skill_update` for skill 1 at level N, `stat_change`
+  skill_point = 9 - N, no other skill changed -- AND the rule's own runtime claim (points read 9 - N
+  on two fresh frames) agree. A disagreement counts as a false positive or a miss.
+- **Bar:** >= 48 / 50 successes (>= 0.95) with 0 false positives (a runtime claim of success the
+  server contradicts), 0 unsafe events (attack / contact / pickup requests, GM acts), and no stop
+  of the UI gate on an unknown state left behind. A harness stop (restore or sync failure) is
+  INVALID for that trial, counted, and two in a row end the run.
+
 ### HUD scene: box drift while walking + doubled boxes — OFFLINE SIM RESULT (2026-10-08 night; branch `feat/hud-drift`, merged 0d6cd79, DEPLOYED 2026-10-09 00:36 ICT; LIVE RE-MEASURE below)
 
 #### 2026-10-09 — SEEN TWICE + the display-only RECONNECT: BUILT on `feat/hud-seen-twice` (merged 9687631), measured offline; ➡️ the plain rule SUPERSEDED by the CONFIRMING PASS (first sub-entry)
