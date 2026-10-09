@@ -70,6 +70,10 @@ SCRIPTS = {
     "kafra_functions": "npc/kafras/functions_kafras.txt",
     "airport_izlude": "npc/airports/izlude.txt",
     "airships": "npc/airports/airships.txt",
+    # talk@1's targets (docs/demonstrations.md 3.30, T1): prt_church's Garnet / Henson and the city
+    # guide, with their menus (the scripts' own `select` lists)
+    "prontera_city": "npc/cities/prontera.txt",
+    "prontera_guides": "npc/pre-re/guides/guides_prontera.txt",
 }
 # rAthena's e_job names; its YAML spells a job as the name without JOB_, title-cased. Built at run
 # time: the client's job names are locale-pack strings, never literals in this repo (ADR-0012 hook).

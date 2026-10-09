@@ -3,7 +3,7 @@
 every frame, kept current by DELTAS, whether a rule runs or not (bot idle, or Batt playing).
 
     hud_scene.py [--hz 10] [--det-period 0.5] [--motion floor|global] [--seen-twice units|off]
-    (one at a time: an flock)
+                 [--confirm-s 1.0]   (one at a time: an flock)
 
 - **Screen-anchored objects** (the client's UI windows, the work zone) are sent once and never
   shift.
@@ -39,6 +39,9 @@ every frame, kept current by DELTAS, whether a rule runs or not (bot idle, or Ba
     false detection never flashes on screen. Drawn objects take their detections first, so they
     behave exactly as before. Signs are drawn at once (no measured false signs).
     `Tuning.seen_twice = ()` switches it off.
+  - **The confirming pass** (Batt 2026-10-09 ~09:20): a pass that made a new candidate asks for ONE
+    extra pass `confirm_s` (1 s) after it, unless a regular pass comes first (`Cadence`), so a
+    unit first seen on a still scene is drawn ~1 s later instead of at the next 5-s idle pass.
 - **Frames:** the RDP frame bus through ro_agent's screen helper (the `frame_id` the console shows).
   It runs only while the frames come from the bus (never an extra X grab).
 - **Output:** the backend's display-only channel (`/internal/display`, the internal listener). It is
@@ -131,6 +134,11 @@ class Tuning:
     # cadence runs a pass every ~0.6 s while moving and every 5 s still, so a time window would
     # either never confirm a unit first seen while still or wait seconds while walking
     seen_window: int = 2
+    # THE CONFIRMING PASS (Batt 2026-10-09 ~09:20): a pass that makes a new candidate asks for ONE
+    # extra detector pass this long after it started, unless a regular pass comes first; it never
+    # moves the regular cadence. 0 = none: a candidate waits for the regular cadence (up to the 5-s
+    # idle pass; the plain seen-twice rule, 06:55 walk's first box 6.2 s median)
+    confirm_s: float = 1.0
 
 
 TUNING = Tuning()
@@ -144,6 +152,7 @@ LEGACY = Tuning(
     sharp=False,
     unclip=False,
     seen_twice=(),
+    confirm_s=0.0,
 )
 # route_preview.scene_shift's band-pass for the HUD (its docstring has the measurement)
 SHARP_SHIFT: dict[str, Any] = {"blur": True, "highpass": 9, "power": 0.5}
@@ -325,6 +334,7 @@ class SceneTracker:
         self.candidates: dict[int, Obj] = {}
         self.next_candidate = -1
         self.counts = {"held": 0, "confirmed": 0, "expired": 0}  # candidates, for the report
+        self.fresh = 0  # candidates the last pass made (Cadence.held: the confirming pass)
         self.seq = 0
         self.unsettled = False  # the scene moved since the last still detection pass
         self.lock = threading.RLock()
@@ -434,6 +444,7 @@ class SceneTracker:
         the offset alone): ``found`` = boxes in game px with cls / conf / kind ("unit" or "sign").
         ``moving``: the scene moves (stale objects go sooner). Returns a delta, or None."""
         with self.lock:
+            self.fresh = 0
             if isinstance(frame_offset, FrameRef):
                 frame_cam = frame_offset.cam if frame_cam is None else frame_cam
                 frame_offset = frame_offset.offset
@@ -487,6 +498,7 @@ class SceneTracker:
                     self.next_candidate -= 1
                     self.candidates[c.id] = c
                     self.counts["held"] += 1
+                    self.fresh += 1
                     continue
                 if di in again:  # seen twice: drawn where the second pass saw it
                     del self.candidates[again[di]]
@@ -589,18 +601,25 @@ class SceneTracker:
 class Cadence:
     """When the detector runs: every det_moving_s while the scene moves (it moved within
     moving_hold_s), det_changed_s while the frame changes, det_idle_s when still. Times in seconds
-    on one clock (the process's monotonic, or a recording's)."""
+    on one clock (the process's monotonic, or a recording's).
+
+    THE CONFIRMING PASS (Tuning.confirm_s, Batt 2026-10-09): a pass that made new seen-once
+    candidates asks for ONE extra pass confirm_s after it started (`held`). Any pass that runs
+    first serves it: a regular one cancels it. At most one is ever asked for, and it never moves
+    the regular cadence (only a regular pass sets last_run / last_gray). While the scene moves the
+    regular passes already run back to back, so it costs nothing there."""
 
     def __init__(self, tuning: Tuning = TUNING) -> None:
         self.tuning = tuning
         self.last_motion = -1e18
         self.last_run = -1e18
         self.last_gray: np.ndarray | None = None
+        self.confirm_at: float | None = None  # the one confirming pass asked for, or None
 
     def moving(self, now: float) -> bool:
         return now - self.last_motion < self.tuning.moving_hold_s
 
-    def due(self, now: float, g8: np.ndarray) -> bool:
+    def regular_due(self, now: float, g8: np.ndarray) -> bool:
         tu = self.tuning
         if self.moving(now):
             period = tu.det_moving_s
@@ -608,8 +627,29 @@ class Cadence:
             period = tu.det_changed_s if frame_changed_gray(self.last_gray, g8) else tu.det_idle_s
         return now - self.last_run >= period
 
-    def ran(self, now: float, g8: np.ndarray) -> None:
-        self.last_run, self.last_gray = now, g8
+    def kind(self, now: float, g8: np.ndarray) -> str | None:
+        """The pass due now: "regular" (the cadence), "confirm" (the confirming pass), or None."""
+        if self.regular_due(now, g8):
+            return "regular"
+        if self.confirm_at is not None and now >= self.confirm_at:
+            return "confirm"
+        return None
+
+    def due(self, now: float, g8: np.ndarray) -> bool:
+        return self.kind(now, g8) is not None
+
+    def ran(self, now: float, g8: np.ndarray, kind: str = "regular") -> None:
+        """A pass started at ``now``: it is the waiting candidates' second look, so the confirming
+        pass asked for is served (or cancelled, by a regular pass). Only a regular pass moves the
+        regular cadence."""
+        self.confirm_at = None
+        if kind == "regular":
+            self.last_run, self.last_gray = now, g8
+
+    def held(self, now: float) -> None:
+        """The pass started at ``now`` made new candidates: ask for the confirming pass."""
+        if self.tuning.confirm_s > 0 and self.confirm_at is None:
+            self.confirm_at = now + self.tuning.confirm_s
 
 
 def gray8(img: np.ndarray) -> np.ndarray:
@@ -884,7 +924,7 @@ def serve(hz: float, tuning: Tuning) -> int:
     latest: dict[str, Any] = {}
     stop = threading.Event()
     stats: dict[str, Any] = {"det": 0, "det_ms": [], "frames": 0, "motion": 0, "corr": 0,
-                             "floor_ms": []}  # fmt: skip
+                             "floor_ms": [], "confirm": 0}  # fmt: skip
 
     def detector() -> None:
         import unit_detector
@@ -905,7 +945,8 @@ def serve(hz: float, tuning: Tuning) -> int:
                     continue
                 t, fid, img, ref = got
                 g8 = gray8(img)
-                if not cadence.due(now, g8):
+                kind = cadence.kind(now, g8)
+                if kind is None:
                     stop.wait(0.1)
                     continue
                 t0 = time.monotonic()
@@ -915,11 +956,14 @@ def serve(hz: float, tuning: Tuning) -> int:
                 found = detect_found(units, find_signs(img, npcs=npcs, exclude=rp.UI_WINDOWS))
                 stats["det_ms"].append(1000 * (time.monotonic() - t0))
                 stats["det"] += 1
-                cadence.ran(now, g8)
+                stats["confirm"] += kind == "confirm"
+                cadence.ran(now, g8, kind)
                 with tracker.lock:  # made and queued together: the seq order is the send order
                     delta = tracker.observe(found, ref, moving=cadence.moving(time.monotonic()))
                     if delta is not None:
                         out.put({"type": "hud_delta", "t_mono_ns": t, "frame_id": fid, **delta})
+                    if tracker.fresh:  # a new candidate: one confirming pass ~confirm_s later
+                        cadence.held(now)
         finally:
             with contextlib.suppress(Exception):
                 det.close()
@@ -932,7 +976,9 @@ def serve(hz: float, tuning: Tuning) -> int:
         f"{'floor' if floor is not None else 'global'} motion, detector every "
         f"{tuning.det_moving_s:g} s moving / {tuning.det_changed_s:g} s changing / "
         f"{tuning.det_idle_s:g} s idle, keyframe every {KEYFRAME_S:g} s, seen twice: "
-        + (f"{'+'.join(tuning.seen_twice)} ({tuning.seen_window} passes)"
+        + (f"{'+'.join(tuning.seen_twice)} ({tuning.seen_window} passes, "
+           + (f"a confirming pass {tuning.confirm_s:g} s after)" if tuning.confirm_s > 0
+              else "no confirming pass)")
            if tuning.seen_twice else "off"),
         flush=True,
     )  # fmt: skip
@@ -989,12 +1035,13 @@ def serve(hz: float, tuning: Tuning) -> int:
                 print(f"{time.strftime('%H:%M:%S')} HUD scene: frames {stats['frames'] / 60:.1f}"
                       f" Hz, motion msgs {stats['motion'] / 60:.2f}/s (with corrections "
                       f"{stats['corr'] / 60:.2f}/s, floor median {fm[len(fm) // 2]:.0f} ms), "
-                      f"detector {stats['det'] / 60:.2f} Hz (median {ms[len(ms) // 2]:.0f} ms), "
+                      f"detector {stats['det'] / 60:.2f} Hz (median {ms[len(ms) // 2]:.0f} ms; "
+                      f"{stats['confirm']} confirming passes), "
                       f"objects {len(tracker.objects)} (seen once {len(tracker.candidates)}; "
                       f"candidates so far {tracker.counts}), display {out.state}: sent "
                       f"{out.sent}, dropped {out.dropped}, superseded {out.superseded}, "
                       f"connects {out.connects}", flush=True)  # fmt: skip
-                stats.update(det=0, det_ms=[], frames=0, motion=0, corr=0, floor_ms=[])
+                stats.update(det=0, det_ms=[], frames=0, motion=0, corr=0, floor_ms=[], confirm=0)
                 t_report = time.monotonic()
             time.sleep(max(0.0, 1.0 / hz - (time.monotonic() - t_loop)))
     finally:
@@ -1014,9 +1061,12 @@ def main() -> int:
     ap.add_argument("--motion", choices=("floor", "global"), default=TUNING.motion)
     ap.add_argument("--seen-twice", choices=("units", "off"), default="units",
                     help="draw a new unit once a later pass sees it (off: at once)")  # fmt: skip
+    ap.add_argument("--confirm-s", type=float, default=TUNING.confirm_s,
+                    help="the confirming pass after a new unit is seen (s; 0: none)")  # fmt: skip
     a = ap.parse_args()
     seen = TUNING.seen_twice if a.seen_twice == "units" else ()
-    return serve(a.hz, replace(TUNING, det_moving_s=a.det_period, motion=a.motion, seen_twice=seen))
+    return serve(a.hz, replace(TUNING, det_moving_s=a.det_period, motion=a.motion,
+                               seen_twice=seen, confirm_s=max(0.0, a.confirm_s)))  # fmt: skip
 
 
 if __name__ == "__main__":

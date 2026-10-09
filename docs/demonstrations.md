@@ -2331,9 +2331,246 @@ change is exactly:
   off, F can fire for an NPC really 2 cells away, and the server will score that substitute a
   failure.
 
+### 3.28 WALKING READINESS — a definition, "good enough to build on" (Batt 2026-10-09 ~09:40; it changes NO past pre-registered verdict)
+**Batt (2026-10-09):** "Walking readiness ('good enough to build on'): zero safety events (hard) AND
+pooled success >= 90 % with its 95 % CI, over the four tuning conditions. 96 % stays the long-term
+target."
+
+**The definition, exactly** (`scripts/walk_readiness.py`):
+- A walk version is **READY** when, over its four TUNING runs (indoor/outdoor × clean/crowd, the
+  first 50 scored routes each, n = 200 pooled), both hold:
+  1. **ZERO safety events** in all four runs: `attack_request`, `npc_contact`, and GM acts normal
+     or pickup. Any one event means NOT ready, whatever the success.
+  2. **The pooled success rate is ≥ 90 %**, reported with its 95 % Wilson score interval.
+- **Claude's reading, stated so Batt can correct it before any held-out data:** the 90 % applies to
+  the POOLED POINT ESTIMATE, and the interval is reported with it, not required to clear 90 %.
+  The stricter reading (the interval's LOWER bound ≥ 90 %) is computed and reported too
+  (`ci_lower_bound_ge_ready`). At n = 200 it needs about 190 / 200.
+- **96 %** stays the long-term target (`target_met`, reported).
+- The per-run bar of each pre-registration (≥ 48 / 50 per run) is unchanged, and so are the verdicts
+  already given under it: walk@13–15's FAILs stay FAILs as pre-registered. Readiness is a separate,
+  pooled question.
+
+**Applied to the tuning runs so far** (`walk_readiness.py` over each version's four scorer outputs):
+
+| version | per run (IC / ICr / OC / OCr) | pooled | 95 % CI | safety | READY | lower bound ≥ 90 % |
+|---|---|---|---|---|---|---|
+| walk@13 | 46 / 40 / 45 / 41 | 172 / 200 = 86.0 % | 80.5–90.1 % | 0 | no (< 90 %) | no |
+| walk@14 | 47 / 44 / 49 / 44 | 184 / 200 = 92.0 % | 87.4–95.0 % | **2** (NPC contacts) | **no** (safety) | no |
+| walk@15 | 46 / 43 / 49 / 48 | 186 / 200 = 93.0 % | 88.6–95.8 % | 0 | **YES** | no |
+| walk@16 | running (3.27) | — | — | — | — | — |
+
+### 3.29 walk HELD-OUT under the readiness bar — once, per map, with the best READY version (pre-registered 2026-10-09 ~09:45 ICT / 02:45 UTC at commit, BEFORE any held-out data; Batt 2026-10-09: "Held-out maps NEXT, once, with the best qualifying version: pre-register NOW (before any held-out data) with the new bar, scored separately per map")
+**The version (decided by TUNING data only):** among walk@15 and walk@16, the READY version (3.28)
+with the higher pooled tuning success. On a tie, walk@16 (walk@15 + Batt's approved F). walk@15 is
+READY now. walk@16's tuning runs finish untouched first (3.27), then the choice is applied
+mechanically, and stated with its numbers before the first held-out run starts.
+
+**The maps, each run ONCE** (in this order, all CLEAN as the earlier held-out plans: `@heal` after
+each warp, 56 routes, the first 50 not interrupted scored):
+
+| scene | map / start | what it adds | seed |
+|---|---|---|---|
+| guild | alberta_in (60, 40): the Merchant Guild room, on the workflow route (L3 NPC at 53, 43) | a new interior, NPCs | **20261120** |
+| town | prontera (156, 180) | a town: NPCs, other players' chat rooms if any (the 17:51 sniffer's length table decodes them) | **20261121** |
+| dungeon | iz_dun00 (168, 168) | a dungeon: its own monsters respawn | **20261122** |
+| portal | prt_fild08 (170, 368) → the north portal (170, 378) → prontera (156, 26) | the cross-map portal walk (the route must END on prontera) | **20261123** |
+
+These seeds are fresh: 3.26's and 3.27's reserved held-out seeds (20261094–97, 20261104–07) stay
+unused.
+
+**The bar, PER MAP, scored separately** (the 3.28 arithmetic on n = 50):
+- zero safety events (hard), AND
+- success ≥ 45 / 50 (90 %), with its 95 % Wilson interval reported (and whether its lower bound
+  clears 90 %).
+- A pooled held-out number over the four maps is reported too, with no verdict attached.
+
+**Scoring:** the version's own scorer (`walk15_score.py` / `walk16_score.py`: demo_verify + the
+packets, the same instruments as tuning) per map, then `walk_readiness.py` on each map's output.
+
+**Once means once:**
+- No map is re-run, and no held-out result tunes anything.
+- A run that ENDS EARLY on an infrastructure failure (client crash, disconnect, guard stop) before
+  50 scored routes is reported as INCOMPLETE with its routes so far. It is not re-run without
+  Batt's word.
+
+**Before each run:** a client screenshot, and the UI as pre-registered (3.24's inventory incident).
+
+### 3.30 talk@1 — talk to an NPC, choose a menu option BY ITS TEXT, close the dialog (pre-registered 2026-10-09 ~10:00 ICT / 03:00 UTC at commit, BEFORE any trial and before its prerequisites are built; Batt 2026-10-09: "Then the next skill: talk_npc + choose_menu + close_dialog. Design and pre-register talk@1")
+**What it verifies:** the L1 concepts `npc.talk`, `npc.next`, `npc.choose` and `npc.close` on RDP.
+When talk@1 PASSES, the /flows blocks `talk_npc`, `next_page`, `choose_menu` and `close_dialog`
+become "verified RDP" (the L1 entries' `verified_on` gets the RDP session). The S2 re-test comes
+later.
+
+**The targets (L3, static server data; the pinned rAthena, generated locally, never committed):**
+
+| scene | NPC (L3 name, cell) | its first menu (L3, the script's `select`; the strings stay in the local L3 data, GPL-derived, never quoted here) | the options a trial may pick |
+|---|---|---|---|
+| prt_church | Garnet (103, 76) | 7 options: six that explain an acolyte skill, then an end option | one skill option, then the end option |
+| prt_church | Henson (103, 71) | 8 options: seven that explain a skill, then an end option (its text differs from Garnet's) | one skill option, then the end option |
+| prontera | Guide#prt (154, 187), the city guide | 4 options: a city-guide submenu, removing the map marks, a notice, cancel | the map-marks or the notice option, then cancel |
+
+- These menus are harmless: information only, no save point, no zeny, no items.
+- Options with colour codes, inputs or side effects are never picked (for example the guide's
+  city-guide submenu, which marks the mini-map and asks yes / no).
+- The menu strings differ in small ways the reader must take as they are: one option has a
+  trailing space, and the two church NPCs' end options are spelled differently.
+- Only these three NPCs are in scope for talk@1.
+
+**One trial (the rule under test):**
+1. `@warp` to a seeded start cell 4–8 cells from the target (walkable, from the GAT). The other
+   NPC of the scene stays ≥ 3 cells from the start.
+2. **APPROACH with the walk rule:** the READY walk version chosen in 3.29. Its goal is a walkable
+   cell 2–3 cells from the NPC, on our side; its NPC clearance and substitutes act as in its own
+   pre-registration.
+3. **CONTACT, one click:** hover the NPC's projected L3 cell and up its sprite (the monster
+   positive case's points: 0, −14, −28 px). Click ONLY where the cursor reads **TALK** twice (no
+   motion between the reads).
+   - TALK is the allowed shape for this ONE click, as WARP is for the portal walk's last click.
+   - Every other click of the trial keeps the walk rule's gates.
+4. **The DIALOG, from pixels (T2):** wait for the dialog window. Then loop:
+   - the dialog shows NEXT: click its NEXT button;
+   - a MENU window shows: read its option lines (T3) and cross-check them against the L3 list;
+   - the dialog shows CLOSE: click its CLOSE button.
+5. **CHOOSE BY TEXT, never by blind index:**
+   - The read lines must equal the L3 options (same count, same order, text matched).
+   - Click the line whose text matches the intended option, check (pixels) that the highlight is
+     on that line, then click OK.
+   - A mismatch, or a line read with low confidence, is a decline: the menu's Cancel, then close.
+     The trial is a FAILURE ("menu unread"), but a safe one.
+   - The trial's first choice is its seeded option; the second is the end option (End
+     Conversation / Cancel).
+6. **CLOSE CLEANLY:** the dialog's CLOSE when the server shows it. The trial ends when the dialog
+   and menu windows are gone (pixels, two frames).
+
+**Prerequisites:** each is built and proven by a deliberate POSITIVE case (§2a) BEFORE any trial.
+- **T1 · L3 for the targets:** `kb_route.py` / `kb_bindings.py` extended with
+  npc/cities/prontera.txt and npc/pre-re/guides/guides_prontera.txt (local, regenerated). The three
+  NPCs' cells and menu lists come from them, never typed by hand.
+- **T2 · the dialog and menu windows from pixels:**
+  - L2 anchors for the dialog window and its NEXT / CLOSE buttons, and for the menu window, its
+    rows and OK / Cancel;
+  - templates cut LOCALLY from live frames into `data/ui_anchors` (client pixels, never committed;
+    the L2 YAML keeps names and offsets only).
+  - **Proven** on ≥ 50 held-out frames of deliberate dialogs: present / absent and the button
+    states agree with the packets (`npc_say`, `npc_wait`, `npc_menu`, `npc_close`) in every frame.
+- **T3 · the menu text reader:** glyphs of the dialog font cut locally, labelled by packet truth
+  (`npc_menu`'s option strings) at design time, as `weight_calibrate` did.
+  - **Proven** on held-out menus: every option line read exactly, 0 wrong, and a refusal (not a
+    guess) on a line it cannot read.
+- **T4 · the dialog decoders LIVE** on the 17:51 sniffer: `npc_contact`, `npc_say`, `npc_wait`,
+  `npc_menu`, `npc_choose`, `npc_next_click`, `npc_close`, `npc_close_click`. One deliberate
+  dialog through `safety_signal_check.py`'s NPC path must show each of them live.
+- **T5 · the TALK-gated contact click:** `safety_signal_check.py npc-click`, already proven for
+  `npc_contact` (§2a). It is re-run on all three targets.
+
+**Step 0 · a PILOT, never scored:** 3 trials per scene, to check the harness end to end. Any fix
+it needs is committed BEFORE the scored runs.
+
+**The scored runs:** 50 trials per scene, RDP, ASSIST, the interlock green, the GM.
+- prt_church: Garnet and Henson alternate, seed **20261130** (start cells and options).
+- prontera: Guide#prt, seed **20261131**.
+- The client's UI as pre-registered, with a screenshot before each run.
+
+**A trial SUCCEEDS** when the packets show (offline, judged by a scorer committed before the runs):
+- our `npc_contact` on the TARGET NPC: the NPC on the server at the L3 cell, matched by position;
+- its `npc_menu` with the L3 options (otherwise the L3 data is wrong: reported, and a FAILURE);
+- our `npc_choose` whose 1-based choice is the INTENDED option's position in that menu, and later
+  the end option's;
+- the dialog ended by OUR `npc_close_click` after the server's `npc_close` (or, for the end
+  option, the script's own end), with no dialog left open at the trial's end;
+- the runtime check (pixels) agreeing: the windows gone;
+- all within 120 s of the contact click.
+
+**SAFETY (zero tolerance), over the WHOLE trial:**
+- any `npc_contact` on another NPC;
+- a second contact on the target after its dialog closed;
+- any `attack_request`;
+- any GM act of kind normal or pickup.
+
+**The bar:** ≥ 48 / 50 PER SCENE AND zero safety events, each scene scored separately.
+
+**Reported:**
+- per scene: success with its 95 % Wilson interval, and failures by cause (approach,
+  contact, dialog unread, menu unread, wrong choice, close, timeout);
+- reads that refused (safe declines) apart from wrong reads;
+- the walk approach's own route outcomes;
+- the time from the contact to the close (median, p95).
+
+**Order:** after 3.29's held-out runs and loot@1 (3.20a). T1 and the scorer are desk work and come
+first; T2–T5 need the client, in its gaps.
+
 ### HUD scene: box drift while walking + doubled boxes — OFFLINE SIM RESULT (2026-10-08 night; branch `feat/hud-drift`, merged 0d6cd79, DEPLOYED 2026-10-09 00:36 ICT; LIVE RE-MEASURE below)
 
-#### 2026-10-09 — SEEN TWICE + the display-only RECONNECT: BUILT on `feat/hud-seen-twice`, measured offline, NOT deployed
+#### 2026-10-09 — SEEN TWICE + the display-only RECONNECT: BUILT on `feat/hud-seen-twice` (merged 9687631), measured offline; ➡️ the plain rule SUPERSEDED by the CONFIRMING PASS (first sub-entry)
+
+##### ➡️ THE CONFIRMING PASS (Batt 2026-10-09 ~09:20) SUPERSEDES the plain rule below. BUILT on `feat/hud-confirm-pass`, NOT deployed yet
+
+**Batt:** "HUD: use the CONFIRMING PASS (re-check a candidate ~1 s after first seen: 37 -> 1 false boxes,
+first box 1.3 s, +0.02 cores) instead of plain seen-twice (6.2 s first box is too slow). My earlier 'no
+cadence change' didn't anticipate this; approved."
+
+**What runs** (`hud_scene.Tuning.confirm_s = 1.0`, `hud_scene.py --confirm-s 1.0`; `0` = the plain rule;
+`--seen-twice off` = draw at once):
+- A pass that makes a new candidate asks for ONE extra detector pass, 1 s after that pass started
+  (`Cadence.held`).
+- Any pass that runs first serves it. If a regular pass comes sooner, the confirming pass is
+  cancelled; while the scene moves, the regular passes already run back to back, so it never runs
+  there.
+- At most one confirming pass is ever asked for.
+- It never moves the regular cadence: only a regular pass sets `last_run` / `last_gray`. The regular
+  passes stay at 0 / 5 / 10 s on a still scene (tested).
+- The candidate is drawn when the confirming pass, or any regular pass within its window of 2 passes,
+  matches it. Otherwise it is dropped, never drawn.
+- **The port is tighter than the parked sim variant**, which forced a pass every 1 s while ANY
+  candidate waited and reset the cadence. The numbers below are re-measured with the live code (the
+  sim drives `hud_scene.Cadence` itself).
+- The 60-s report counts confirming passes. The sim's `confirm1` is `hud_scene.TUNING`.
+
+**Results, the 7 walks pooled** (5 seeds, the same instrument as below; median / p95 / max px for
+offsets):
+
+| | before (drift fix, live) | plain seen twice (merged 9687631, never deployed) | **the confirming pass** |
+|---|---|---|---|
+| FP drawn: objects / box-frames | 37 / 286 | 13 / 75 | **1 / 6** |
+| ghost box-frames: NPC / monster / sign | 2,907 / 122 / 465 | 2,479 / 0 / 465 | **2,771 / 0 / 462** |
+| new units' first box, median / p95: s (frames) | 0.83 / 1.47 (8 / 15) | 1.30 / 6.60 (13 / 66) | **1.30 / 2.57 (13 / 26)** |
+| new units never drawn (of 310) | 3 | 8 | **5** |
+| real units' frames with a box | 97.2 % | 93.4 % | **95.3 %** |
+| NPC walking | 2.6 / 10.7 / 111.3 | 2.7 / 10.7 / 66.0 | **2.7 / 10.7 / 111.2** |
+| NPC standing | 0.4 / 2.0 / 117.8 | 0.4 / 1.9 / 117.8 | **0.4 / 1.9 / 117.8** |
+| sign walking / standing | 5.2 / 12.1 / 47.5 · 0.0 / 6.4 / 22.2 | the same | 5.2 / 12.0 / 48.5 · 0.0 / 6.4 / 22.2 |
+| doubled boxes | 0 | 0 | 0 |
+| detector passes: regular + confirming | 2,316 | 2,316 | **2,307 + 69** (+3 %) |
+| detector cores, moving / still | 2.14 / 0.48 | 2.14 / 0.48 | **2.14 / 0.50** |
+| messages per minute while moving | 812 | 809 | 809 |
+
+**The 06:55 live walk** (5 seeds):
+
+| | before | plain | **confirming pass** |
+|---|---|---|---|
+| new units' first box, median / p95: s (frames) | 1.19 / 5.53 (12 / 55) | 6.22 / 6.82 (62 / 68) | **2.21 / 6.02 (22 / 60)** |
+| real units' frames with a box | 94.9 % | 84.3 % | **91.8 %** |
+| FP drawn: objects / box-frames | 2 / 12 | 0 / 0 | **0 / 0** |
+| NPC walking / standing | 2.7 / 9.0 / 38.2 · 0.4 / 2.2 / 8.6 | 2.6 / 9.1 / 38.2 · 0.5 / 2.4 / 8.5 | **2.6 / 9.2 / 36.8 · 0.5 / 2.4 / 8.6** |
+| detector cores, moving / still | 2.15 / 0.47 | 2.15 / 0.47 | **2.21 / 0.49** |
+| passes: regular + confirming | 415 | 415 | **415 + 15** |
+
+- **Idle (20:07):** 0.5 deltas/min, unchanged. 0.26 detector cores (0.25 before): one confirming pass
+  at the start. Real with a box is back to 100 % (plain: 96.8 %).
+- **The trade:** it hides ~6.5 real box-frames for each false one it removes (1,821 vs 280, 5 seeds).
+  The plain rule hid ~18.
+- **The first-box p95 on the 06:55 walk stays ~6 s** (5.5 s before any rule). A unit that appears on a
+  still scene still waits up to the 5-s idle pass for its FIRST sighting; the confirming pass only
+  shortens the second.
+- **Measured, not adopted:**
+  - a window of 1 pass with the confirming pass: the same results (FP 1 / 6, 95.3 %, never 5);
+  - `confirm_s` 0.7 s: the first box 1.30 / 2.27 s (06:55 median 1.91 s), the same FP and cost.
+  Batt approved ~1 s.
+- The 20:09 low-confidence monster is still not drawn by the port (the parked sim variant drew it:
+  its passes fell differently).
+
+##### The plain seen-twice rule and the reconnect (2026-10-09 morning; ➡️ the rule's numbers below are HISTORY: the confirming pass above superseded them)
 
 **Batt (2026-10-09):** "HUD: rejection of ask 3 confirmed; add the seen-twice rule; no faster loop for
 now." and "Add the display-only reconnect for the HUD process."
@@ -2372,7 +2609,9 @@ now." and "Add the display-only reconnect for the HUD process."
 - **Real with a box:** the REAL units' detection-frames that a drawn box was paired with.
 - Live latencies, 5 seeds; "before" is the deployed drift fix (`chosen`).
 
-**Results, the 7 walks pooled** (5 seeds; median / p95 / max px for offsets):
+**Results, the 7 walks pooled** (5 seeds; median / p95 / max px for offsets). ➡️ HISTORY: the plain
+rule, never deployed; the confirming pass above superseded it. The PARKED column is the sim-only
+variant, since ported with tighter semantics and re-measured above.
 
 | | before (drift fix, live) | **after: seen twice** (`seen2`) | PARKED: + a confirming pass 1 s after a candidate (`seen2+confirm1`, sim only) |
 |---|---|---|---|
@@ -2413,7 +2652,9 @@ now." and "Add the display-only reconnect for the HUD process."
 - **PARKED for Batt** (a cadence change, which he ruled out for now): a pass due 1 s after a
   candidate is seen, only while one waits. It keeps the FP cut (37 → 1 objects) at +0.02 cores when
   still, with the first box at 1.3 / 2.7 s. It is in the sim only (`Variant.confirm_s`), not in
-  `hud_scene.py`.
+  `hud_scene.py`. ➡️ **Batt 2026-10-09 ~09:20: APPROVED.** Ported into `hud_scene.py` as the
+  confirming pass, with tighter semantics and re-measured: see "THE CONFIRMING PASS" at the top of
+  this entry.
 - Monsters: still not measured (the 20:09 one is the only one).
 
 **Display-only reconnect** (`hud_scene.Sender`):
@@ -2458,6 +2699,7 @@ now." and "Add the display-only reconnect for the HUD process."
 
 **Deploy:** a display-only restart of `hud_scene.py`, by default `--seen-twice units`;
 `--seen-twice off` restores drawing at once. No protocol, frontend or backend change.
+➡️ Merged 9687631 but NOT deployed as such: the confirming pass (top of this entry) goes out with it.
 
 **LIVE RE-MEASURE after the deploy** (2026-10-09 06:55 ICT, a 3-route indoor `route_demo` walk, seed 34,
 frames `route-demo/20261009T065545`; `hud_scene_check.py truth` + `rescore` against the live scene log).

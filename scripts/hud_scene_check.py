@@ -365,13 +365,14 @@ def simtable(dirs: list[Path], names: list[str], latency_ms: float, grab_from: P
             sc = sim.score(res["log"], cache, REGION, DESKTOP, latency_ms, hud_times=between)
             rep = {"score": {k: x for k, x in sc.items() if not k.startswith("raw")},
                    "rates": sim.rates(res["log"], cache),
-                   "cost": sim.det_cost(res["runs"], cache)}  # fmt: skip
+                   "cost": sim.det_cost(res["runs"], cache), "passes": res["kinds"]}  # fmt: skip
             out["recordings"][name_d][name if seeds == 1 else f"{name}#{seed}"] = rep
             tag = "" if seeds == 1 else f" #{seed}"
             print(_table([(f"{name_d[9:]} {name}{tag}", rep)]), flush=True)
             p = pooled.setdefault(name, {
                 "raw": {}, "doubled": 0, "ghosts": 0, "frames": 0, "delays": [], "never": 0,
-                "fp_objects": 0, "fp_box_frames": 0, "real": 0, "real_drawn": 0})  # fmt: skip
+                "fp_objects": 0, "fp_box_frames": 0, "real": 0, "real_drawn": 0,
+                "passes": {}})  # fmt: skip
             for key, ds in sc["raw"].items():
                 p["raw"].setdefault(key, []).extend(ds)
             p["doubled"] += sc["doubled"]
@@ -383,6 +384,8 @@ def simtable(dirs: list[Path], names: list[str], latency_ms: float, grab_from: P
             p["fp_box_frames"] += sc["fp"]["box_frames"]
             p["real"] += sc["recall"]["real"]
             p["real_drawn"] += sc["recall"]["drawn"]
+            for kind, n in res["kinds"].items():
+                p["passes"][kind] = p["passes"].get(kind, 0) + n
     print(f"POOLED ({len(dirs)} recordings x {seeds} seeds)")
     for name, p in pooled.items():
         st = {key: sim._stat(ds) for key, ds in sorted(p["raw"].items())}
@@ -390,10 +393,11 @@ def simtable(dirs: list[Path], names: list[str], latency_ms: float, grab_from: P
                 "new_units": sim.new_units_stat(p["delays"], p["never"]),
                 "recall": {"real": p["real"], "drawn": p["real_drawn"]}}  # fmt: skip
         out["pooled"][name] = {"offsets": st, "doubled": p["doubled"], "ghosts": p["ghosts"],
-                               "frames": p["frames"], **seen}  # fmt: skip
+                               "frames": p["frames"], "passes": p["passes"], **seen}  # fmt: skip
         cells = " | ".join(f"{k} {x['median_px']}/{x['p95_px']}/{x['max_px']} n{x['n']}"
                            for k, x in st.items() if x["n"])  # fmt: skip
-        print(f"{name:18s} {cells} | doubled {p['doubled']} ghosts {p['ghosts']} | {_seen(seen)}")
+        print(f"{name:18s} {cells} | doubled {p['doubled']} ghosts {p['ghosts']} | {_seen(seen)}"
+              f" | passes {p['passes']}")  # fmt: skip
     path = sim.CACHE_DIR / "simtable.json"
     path.write_text(json.dumps(out, indent=1))
     print(path)

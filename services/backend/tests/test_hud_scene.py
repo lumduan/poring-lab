@@ -564,3 +564,69 @@ def test_the_sim_counts_flashes_and_the_first_box_delay(hs: ModuleType, tmp_path
     assert nu["n"] == 1 and nu["never"] == 0
     assert nu["delay_s"]["median_s"] == pytest.approx(0.5) and nu["delay_frames"]["median_fr"] == 5
     assert sc["recall"] == {"real": 40 + 30, "drawn": 40 + 25}
+
+
+# --- the confirming pass (Batt 2026-10-09 ~09:20): one extra look ~1 s after a new candidate -----
+def drive(hs: ModuleType, found_at: Any, until: float, moving: Any = None, **tune: Any) -> dict:
+    """serve()'s detector loop on a clock of 0.1-s steps, every pass instant: the cadence picks the
+    pass (regular / confirm), the tracker observes what ``found_at(t)`` returns."""
+    from dataclasses import replace
+
+    tuning = replace(hs.TUNING, **tune)
+    t, c = hs.SceneTracker(REGION, DESKTOP, WINDOWS, tuning=tuning), hs.Cadence(tuning)
+    g8 = np.zeros((90, 160), np.float32)  # a still frame: no "changed" passes
+    passes, drawn = [], {}
+    for i in range(int(until * 10)):
+        now = i / 10
+        if moving is not None and moving(now):
+            c.last_motion = now
+        kind = c.kind(now, g8)
+        if kind is None:
+            continue
+        c.ran(now, g8, kind)
+        d = t.observe(found_at(now), t.offset.copy(), moving=c.moving(now))
+        if t.fresh:
+            c.held(now)
+        passes.append((now, kind))
+        for o in (d or {}).get("add", []):
+            drawn[o["id"]] = now
+    return {"tracker": t, "cadence": c, "passes": passes, "drawn": drawn}
+
+
+def test_the_confirming_pass_runs_once_and_leaves_the_cadence_alone(hs: ModuleType) -> None:
+    """Still scene: a unit first seen at 0 s is drawn by the confirming pass at 1 s, not at the
+    next idle pass (5 s); the regular passes stay at 0 / 5 / 10 s; a unit new at 5 s gets its
+    own."""
+
+    def found(now: float) -> list[dict]:
+        return [unit("npc", 700, 400)] + ([unit("npc", 300, 450)] if now >= 4.0 else [])
+
+    r = drive(hs, found, 12.0)
+    assert r["passes"] == [(0.0, "regular"), (1.0, "confirm"), (5.0, "regular"),
+                           (6.0, "confirm"), (10.0, "regular")]  # fmt: skip
+    assert sorted(r["drawn"].values()) == [1.0, 6.0]
+    off = drive(hs, found, 12.0, confirm_s=0.0)  # the plain rule: the idle passes only
+    assert off["passes"] == [(0.0, "regular"), (5.0, "regular"), (10.0, "regular")]
+    assert sorted(off["drawn"].values()) == [5.0, 10.0]
+    c = hs.Cadence(hs.TUNING)
+    c.held(3.0)
+    c.held(3.5)  # never more than one asked for: the first stands
+    assert c.confirm_at == 4.0
+
+
+def test_a_regular_pass_first_cancels_the_confirming_pass(hs: ModuleType) -> None:
+    """Moving: the regular passes run every 0.5 s, so the unit is confirmed by the next regular
+    pass and no confirming pass ever runs."""
+    r = drive(hs, lambda now: [unit("npc", 700, 400)], 3.0, moving=lambda now: True)
+    assert {k for _, k in r["passes"]} == {"regular"}
+    assert list(r["drawn"].values()) == [0.5] and r["cadence"].confirm_at is None
+
+
+def test_a_candidate_the_confirming_pass_does_not_see_is_never_drawn(hs: ModuleType) -> None:
+    """A one-pass flash: the confirming pass at 1 s does not see it; it is never drawn, and it is
+    gone once its window of passes has passed."""
+    r = drive(hs, lambda now: [unit("npc", 900, 200, conf=0.27)] if now < 0.5 else [], 12.0)
+    assert r["drawn"] == {} and r["tracker"].seq == 0
+    assert [k for _, k in r["passes"]].count("confirm") == 1
+    t = r["tracker"]
+    assert not t.candidates and t.counts == {"held": 1, "confirmed": 0, "expired": 1}
