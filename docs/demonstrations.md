@@ -3486,6 +3486,42 @@ draft, adopted as written, with these values:
   best-shift distribution (C1); whether later grabs pass where the first failed (C2); unknown
   reasons; labelling time.
 
+**➡️ ARM B -- INTERIM RESULT (2026-10-09 21:04-22:10 ICT; scored once as written; the acceptance verdict
+needs arm A).** Session `20261009T210428-demo-cursor-probe-sword` (`--n 30 --seed 20261170`, code at
+58f5e44): 30 trials, 412 probes (290 on the Poring box, 122 controls), every one hovered only.
+- **The runs' own safety: CLEAN.** The packets hold 0 `attack_request`, 0 `npc_contact`, 0
+  `pickup_request`, 0 `self_move_request` and 0 GM acts.
+- **Truth:** all 412 crops (the grab-0 image the sheets show) labelled BLIND twice, by Claude and by a
+  second agent: 404 agree (sword 254, walk 150), 8 differ -> unclear (excluded): the 7 crops showing a
+  1-2 px diagonal line (the second labeller: the arrow seen edge-on in its rotation; Claude: unclear)
+  and one arrow under an HP bar.
+- **Bar 1, SAFETY, as written** (each crop's label vs the first read of grabs 0-2): **1 cross-shape
+  error, the SAME for both readers**: crop 243 (a control point), labelled sword, first read WALK.
+  - Its series shows why: in grab 0 (the labelled image) a Poring passes under the cursor and the
+    client draws the SWORD; both readers read grab 0 UNKNOWN. In grabs 1-5 the Poring has moved on and
+    the client draws the ARROW; both read WALK, correctly. No image was misread: the label belongs to
+    grab 0, the scored read to grab 1. As the bar is written it counts as an error, and it is reported
+    so: **bar 1 as written: 1 error for each reader.**
+- **The per-grab audit (added after the first scoring, reported beside it, decides nothing by
+  itself):** every grab image a read came from that was not grab 0 (362 images) was labelled blind
+  and shuffled, again by both labellers: **362 / 362 agree** (walk 183, sword 158, unclear 21; all
+  21 unclear are the edge-on thin line). Judging every read against the label of the image it came
+  from: **0 cross-shape errors and 0 WALK on another label, for both readers** (gate 309 reads
+  judged, robust 540).
+  - **Caveat, for Batt:** on the edge-on thin-line images (unclear by both labellers) the robust
+    reader reads **WALK 26 times** (3 unknown); the gate reads them all UNKNOWN. Both labellers lean
+    walk (the line runs at the arrow's axis angle, ~66 deg, not the sword's ~40 deg, and no sword frame
+    is ever thin), but nobody could confirm it from the pixels. The client's own cursor sprite (its
+    animation frames) can settle it offline.
+- **Bar 3, SWORD (box points labelled sword, n = 248):** robust read twice **127 / 248 = 0.512**
+  (Wilson 0.450-0.574; first read 155 / 248 = 0.625); the gate **17 / 248 = 0.069** (first 21 =
+  0.085). >= 0.40 with >= 100 probes, and +0.44 over the gate (>= +0.25): **met.**
+- **Bar 4, WALK, arm B's part (controls labelled walk, n = 109):** read twice robust **103 / 109 =
+  0.945**, the gate 103 / 109 = 0.945 (first read 109 / 109 and 108 / 109). The bar (>= 0.95, pooled
+  with arm A's cell points) is decided with arm A; on arm B alone it is just under 0.95, equal to
+  the gate's.
+- Labels, sheets and scores: `/dev/shm/poring-lab-tmp/cursor-acc/armb/` (local).
+
 ### 3.34 learn_skill@1 -- spend skill points in the skill window (DESIGN 2026-10-09 ~19:50; NOT pre-registered; Batt ~19:30: "add the new skill the job change needs: allocating skill points (Basic Skill > 8) via the skill window, as an L1 concept with its own alone-test")
 **The concept:** `char.learn_skill` (L1, packages/poring_skills, updated): the first workflow's
 Merchant change needs the novice's Basic Skill above 8 (labels-v2-plan section 7.4).
