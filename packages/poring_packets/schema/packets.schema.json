@@ -2208,6 +2208,97 @@
       "title": "NpcWait",
       "type": "object"
     },
+    "PacketSource": {
+      "additionalProperties": false,
+      "description": "The console's Packet timeline: WHERE its packets come from, right now (Batt 2026-10-09).\n\nMade by the BACKEND for /ws/packets (the LAN viewers' channel) about the sniffer it hears;\nnever sent by the sniffer (parse_feed refuses it on /ingest/packets) and never to an agent.\nIt tells \"nothing happened\" apart from \"nobody is listening\": an idle GM sends few game\npackets, so liveness is the sniffer's own 1 Hz heartbeat (its PacketStats + Attestation\npair), not the last game packet. Wall-clock times are the BACKEND's receipt times (unix ms),\nfor display only; ages are the backend's own (CLOCK_MONOTONIC).",
+      "properties": {
+        "heartbeat_age_ms": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Since the OLDER of the sniffer's last stats and last attestation (backend clock); null = one of them never arrived since the backend started."
+        },
+        "ingest_connected": {
+          "description": "The sniffer's /ingest/packets socket is open.",
+          "type": "boolean"
+        },
+        "last_event_unix_ms": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Wall clock (unix ms) of the last GAME packet event received; null = none."
+        },
+        "last_feed_unix_ms": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Wall clock (unix ms) of the backend's last receipt of ANY sniffer line (heartbeat or game packet); null = none since the backend started."
+        },
+        "reason": {
+          "description": "One word: ok, never_heard, ingest_disconnected, heartbeat_stale, not_attesting, external_environment.",
+          "maxLength": 64,
+          "type": "string"
+        },
+        "stale_after_ms": {
+          "description": "The heartbeat age beyond which it is offline.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "state": {
+          "description": "live: the lab sniffer's heartbeat is fresh; sniffer_offline: it is not (no packets can arrive); external: the human plays on an external server whose packets are not captured by design (no such environment exists yet: the backend never says so).",
+          "enum": [
+            "live",
+            "sniffer_offline",
+            "external"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "The backend's clock when it made this line.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "packet_source",
+          "default": "packet_source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "t_mono_ns",
+        "state",
+        "reason",
+        "ingest_connected",
+        "heartbeat_age_ms",
+        "stale_after_ms",
+        "last_feed_unix_ms",
+        "last_event_unix_ms"
+      ],
+      "title": "PacketSource",
+      "type": "object"
+    },
     "PacketStats": {
       "additionalProperties": false,
       "description": "Periodic counters + world summary for the console (never silent).",
@@ -4282,13 +4373,17 @@
         }
       ]
     },
+    "source": {
+      "$ref": "#/$defs/PacketSource"
+    },
     "stats": {
       "$ref": "#/$defs/PacketStats"
     }
   },
   "required": [
     "event",
-    "stats"
+    "stats",
+    "source"
   ],
   "title": "PoringPackets",
   "type": "object"

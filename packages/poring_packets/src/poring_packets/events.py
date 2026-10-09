@@ -689,6 +689,47 @@ class Attestation(BaseModel):
     )
 
 
+class PacketSource(BaseModel):
+    """The console's Packet timeline: WHERE its packets come from, right now (Batt 2026-10-09).
+
+    Made by the BACKEND for /ws/packets (the LAN viewers' channel) about the sniffer it hears;
+    never sent by the sniffer (parse_feed refuses it on /ingest/packets) and never to an agent.
+    It tells "nothing happened" apart from "nobody is listening": an idle GM sends few game
+    packets, so liveness is the sniffer's own 1 Hz heartbeat (its PacketStats + Attestation
+    pair), not the last game packet. Wall-clock times are the BACKEND's receipt times (unix ms),
+    for display only; ages are the backend's own (CLOCK_MONOTONIC)."""
+
+    model_config = _MODEL_CONFIG
+    type: Literal["packet_source"] = "packet_source"
+    t_mono_ns: int = Field(ge=0, description="The backend's clock when it made this line.")
+    state: Literal["live", "sniffer_offline", "external"] = Field(
+        description="live: the lab sniffer's heartbeat is fresh; sniffer_offline: it is not "
+        "(no packets can arrive); external: the human plays on an external server whose packets "
+        "are not captured by design (no such environment exists yet: the backend never says so)."
+    )
+    reason: str = Field(
+        max_length=64,
+        description="One word: ok, never_heard, ingest_disconnected, heartbeat_stale, "
+        "not_attesting, external_environment.",
+    )
+    ingest_connected: bool = Field(description="The sniffer's /ingest/packets socket is open.")
+    heartbeat_age_ms: int | None = Field(
+        default=None, ge=0,
+        description="Since the OLDER of the sniffer's last stats and last attestation (backend "
+        "clock); null = one of them never arrived since the backend started.",
+    )  # fmt: skip
+    stale_after_ms: int = Field(ge=0, description="The heartbeat age beyond which it is offline.")
+    last_feed_unix_ms: int | None = Field(
+        default=None, ge=0,
+        description="Wall clock (unix ms) of the backend's last receipt of ANY sniffer line "
+        "(heartbeat or game packet); null = none since the backend started.",
+    )  # fmt: skip
+    last_event_unix_ms: int | None = Field(
+        default=None, ge=0,
+        description="Wall clock (unix ms) of the last GAME packet event received; null = none.",
+    )  # fmt: skip
+
+
 def parse_event(text: str | bytes) -> PacketEvent:
     return _EVENT_ADAPTER.validate_json(text)
 
@@ -720,7 +761,7 @@ _FEED_ADAPTER: TypeAdapter[FeedMessage] = TypeAdapter(FeedMessage)
 
 def parse_feed(text: str | bytes) -> FeedMessage:
     """One line of the sniffer -> backend feed: a packet event, a stats snapshot or the
-    session attestation."""
+    session attestation. Never a PacketSource: that line is the backend's own."""
     return _FEED_ADAPTER.validate_json(text)
 
 
@@ -732,6 +773,7 @@ class PacketDocument(BaseModel):
     )
     event: PacketEvent
     stats: PacketStats
+    source: PacketSource
 
 
 def _drop_property_titles(node: dict[str, Any]) -> None:

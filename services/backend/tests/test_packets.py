@@ -1,4 +1,5 @@
-"""ADR-0007 routes (/ingest/packets, /ws/packets) and sensitive agent batches, end-to-end."""
+"""ADR-0007 routes (/ingest/packets, /ws/packets) and sensitive agent batches, end-to-end; the
+Packet timeline's source state (Batt 2026-10-09)."""
 
 import ipaddress
 import json
@@ -11,14 +12,15 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
+from poring_backend import packets as packets_mod
 from poring_backend.config import Settings
 from poring_backend.main import create_app
-from poring_backend.packets import PacketOutbox
+from poring_backend.packets import SOURCE_STALE_MS, PacketHub, PacketOutbox
 from poring_backend.routes_packets import viewer_refusal
 from poring_env.clock import FrameCounter, monotonic_ns
 from poring_env.frame import Frame
 from poring_env.protocol import AgentInput, InputEvent, Key, Mode, MouseButton, MouseMove, SetMode
-from poring_packets.events import Chat, PacketStats
+from poring_packets.events import Attestation, Chat, PacketSource, PacketStats, parse_feed
 
 ORIGIN = "http://lab.test:3000"
 T = 1_000
@@ -111,6 +113,22 @@ def stats() -> str:
     ).model_dump_json()  # fmt: skip
 
 
+def attest() -> str:
+    return Attestation(
+        t_mono_ns=monotonic_ns(), client_ip="192.168.1.169", session_live=True, aid=2000002,
+        last_packet_age_ms=300, map_conns=1, server="lab-rathena",
+    ).model_dump_json()  # fmt: skip
+
+
+def feed(viewer: Any) -> dict[str, Any]:
+    """The next /ws/packets line that is not the backend's own PacketSource (sent at connect and
+    every second, interleaved with the feed)."""
+    while True:
+        msg: dict[str, Any] = json.loads(viewer.receive_text())
+        if msg["type"] != "packet_source":
+            return msg
+
+
 def log_lines(tmp_path: Path) -> list[dict[str, Any]]:
     return [
         json.loads(line)
@@ -140,11 +158,12 @@ def test_ingested_events_reach_the_console_with_a_replay_for_late_viewers(
         ingest.send_text(chat("first"))
         wait_health(client, lambda h: h["packets"]["events_in"] == 1)
         with client.websocket_connect("/ws/packets", headers={"origin": ORIGIN}) as viewer:
-            # Replay: the last stats, then the recent events.
-            assert json.loads(viewer.receive_text())["type"] == "packet_stats"
-            assert json.loads(viewer.receive_text())["text"] == "first"
+            # The source state first, then the replay: the last stats, then the recent events.
+            assert json.loads(viewer.receive_text())["type"] == "packet_source"
+            assert feed(viewer)["type"] == "packet_stats"
+            assert feed(viewer)["text"] == "first"
             ingest.send_text(chat("live"))
-            assert json.loads(viewer.receive_text())["text"] == "live"
+            assert feed(viewer)["text"] == "live"
     h = health(client)["packets"]
     assert h["events_in"] == 2 and h["stats_in"] == 1
     assert h["sniffer_ingest_dropped"] == 7  # the sniffer's own queue drops surface here
@@ -223,7 +242,7 @@ def test_ws_packets_is_receive_only(make_client: Factory) -> None:
     client, _ = make_client()
     with client.websocket_connect("/ws/packets", headers={"origin": ORIGIN}) as viewer:
         viewer.send_text('{"type": "ping", "t_mono_ns": 1}')
-        reply = json.loads(viewer.receive_text())
+        reply = feed(viewer)
     assert (reply["type"], reply["channel"], reply["reason"]) == (
         "error",
         "ws_packets",
@@ -238,6 +257,94 @@ def test_a_slow_viewer_drops_the_oldest_lines_and_counts_them() -> None:
         outbox.offer(str(i))
     assert outbox.dropped == 2
     assert list(outbox._queue) == ["2", "3", "4"]
+
+
+# --- the source state (Batt 2026-10-09): "sniffer offline" is never an empty list -----------------
+
+
+def beat(hub: PacketHub, now_ns: int) -> None:
+    """One sniffer heartbeat (stats + attestation) received at ``now_ns``."""
+    hub.ingest_connections = 1
+    hub.publish(PacketStats.model_validate_json(stats()))
+    hub.attested()
+    hub.last_stats_ns = hub.last_attest_ns = now_ns
+
+
+def test_the_source_is_the_sniffer_heartbeat_not_the_last_game_packet() -> None:
+    hub = PacketHub()
+    s = hub.source(10**12)
+    assert (s.state, s.reason, s.last_feed_unix_ms) == ("sniffer_offline", "never_heard", None)
+    t0 = 10**12
+    beat(hub, t0)
+    live = hub.source(t0 + SOURCE_STALE_MS * 1_000_000)  # exactly at the threshold: still live
+    assert (live.state, live.reason, live.heartbeat_age_ms) == ("live", "ok", SOURCE_STALE_MS)
+    assert live.last_event_unix_ms is None  # no game packet at all, and still live (idle GM)
+    assert live.last_feed_unix_ms is not None
+    assert abs(live.last_feed_unix_ms - time.time() * 1000) < 5_000  # WALL clock, for HH:MM:SS
+    late = hub.source(t0 + (SOURCE_STALE_MS + 1) * 1_000_000)
+    assert (late.state, late.reason) == ("sniffer_offline", "heartbeat_stale")
+    assert late.last_feed_unix_ms == live.last_feed_unix_ms  # "no packets since" stays put
+
+
+def test_not_attesting_or_disconnected_is_offline() -> None:
+    hub = PacketHub()
+    t0 = 10**12
+    beat(hub, t0)
+    hub.last_attest_ns = t0 - (SOURCE_STALE_MS + 1) * 1_000_000  # stats flow, attestations stop
+    assert (hub.source(t0).state, hub.source(t0).reason) == ("sniffer_offline", "not_attesting")
+    beat(hub, t0)
+    hub.ingest_connections = 0
+    s = hub.source(t0)
+    assert (s.state, s.reason, s.ingest_connected) == (
+        "sniffer_offline",
+        "ingest_disconnected",
+        False,
+    )
+
+
+def test_external_is_an_inert_hook_today(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No environment that exists today makes the backend say `external` (the ADR that defines
+    external environments is PROPOSED); the state renders only when the hook says so."""
+    hub = PacketHub()
+    assert packets_mod.external_environment_active() is False
+    beat(hub, 10**12)
+    assert hub.source(10**12).state == "live"
+    monkeypatch.setattr(packets_mod, "external_environment_active", lambda: True)
+    s = hub.source(10**12)
+    assert (s.state, s.reason) == ("external", "external_environment")
+
+
+def test_the_sniffer_cannot_send_a_source_line() -> None:
+    line = PacketHub().source(1).model_dump_json()
+    assert PacketSource.model_validate_json(line).type == "packet_source"
+    with pytest.raises(ValueError):
+        parse_feed(line)  # /ingest/packets refuses it (a counted drop): only the backend makes it
+
+
+def test_the_console_gets_the_source_state_end_to_end(
+    make_client: Factory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(packets_mod, "SOURCE_TICK_S", 0.05)
+    client, _ = make_client()
+    with client.websocket_connect("/ws/packets", headers={"origin": ORIGIN}) as viewer:
+        first = json.loads(viewer.receive_text())
+        assert (first["type"], first["state"], first["reason"]) == (
+            "packet_source",
+            "sniffer_offline",
+            "never_heard",
+        )
+        with client.websocket_connect("/ingest/packets") as ingest:
+            ingest.send_text(stats())
+            ingest.send_text(attest())
+            for _ in range(200):  # re-sent every tick, so the change arrives by itself
+                msg = json.loads(viewer.receive_text())
+                if msg["type"] == "packet_source" and msg["state"] == "live":
+                    break
+            else:
+                raise AssertionError("never live")
+            assert msg["ingest_connected"] is True and msg["stale_after_ms"] == SOURCE_STALE_MS
+        h = health(client)["packets"]
+    assert (h["source"], h["source_reason"]) == ("sniffer_offline", "ingest_disconnected")
 
 
 def test_packet_events_never_reach_the_agent_channel(make_client: Factory) -> None:
