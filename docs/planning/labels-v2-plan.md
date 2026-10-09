@@ -495,7 +495,29 @@ the Merchant job-change maps -> everything else later (towns at large, diversity
 
 **The maps.** The server's map list has 20: new_N-M, N = 1..5 copies, M = 1..4 stages. Within a
 stage the five copies are the SAME map: their server walkability grids are byte-identical (map
-cache), so there are **4 layouts**. Visual identity of the copies (client files) is not verified.
+cache), so there are **4 layouts**. ~~Visual identity of the copies (client files) is not verified.~~
+➡️ **2026-10-09 ~21:00: VERIFIED, IDENTICAL per layout in the client files too** (Batt's 7.7 item 4
+condition; `scripts/map_identity.py check`, tests `services/backend/tests/test_map_identity.py`):
+- **The client has no separate files for the copies.** Its rename table
+  (data\resnametable.txt) sends every new_N-M's .rsw, .gnd and .gat to ONE file set per stage,
+  new_zone0M (15 aliased names per stage). No new_N-M file exists in the archive, so every copy of
+  a stage opens the same RSW, GND and GAT entries, and with them the same textures and models.
+- **Per layout: IDENTICAL, 4 / 4.** Stage 1: 21 RSW models (235 placed), 39 textures (10 ground,
+  the rest the models' own). Stage 2: 18 models (139), 31 textures. Stage 3: 13 models (239),
+  27 textures. Stage 4: 7 models (303), 18 textures. 0 missing and 0 unreadable references.
+- **Client and server agree:** each copy's client GAT against the server's map cache, 20 / 20 maps:
+  0 cells differ in walkability, 0 in cell type.
+- **Every file parsed** (RSW 2.1, GND 1.7, RSM 1.4); the RSW parse ends exactly at the quad tree.
+  Stage 2-4's RSWs are MIXCRYPT; they were read with the host-local study decoder (grf_read
+  `--decode-mixcrypt`, Batt 2026-10-05 option (a): offline, study only).
+- **The caveat: one archive.** This is the host's only client GRF, the Thai data.grf on the NAS.
+  The lab client draws from the kRO data.grf on the Dell. The 12 KB species' sprites were
+  byte-identical between the two (thai-data-experiment.md 3d), but nobody has compared the map
+  files or the rename table. Two cheap checks would close it, and each needs a person on the Dell:
+  the kRO table's new_N-M lines, or the declared sizes of the new_zone0M entries in both GRFs.
+- The hashes and the client's file names stay in the local JSON
+  (`/dev/shm/poring-lab-tmp/labels-prep/map_identity.json`), never committed.
+
 **16 are reachable; new_2-4, new_3-4, new_4-4, new_5-4 are never reached** (they carry mapflags
 only). All 20 carry the mapflags nobranch, nomemo, nopenalty, noteleport.
 
