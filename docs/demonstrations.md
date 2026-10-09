@@ -3304,6 +3304,52 @@ pre-registration):
      - **Gaps, stated:** windows without a cut anchor (the options window, a shop, a trade), and one
        of the four dragged away from its home, are not seen.
 
+### 3.32a npc-click@1 -- the NPC-click targeted test (walk@17 item 5; pre-registered 2026-10-09 ~21:25 ICT / 14:25 UTC at commit c5c149d, BEFORE any run; Batt 2026-10-09 ~15:20, ~15:50, ~16:10, ~16:15, ~19:30; the weekend run ~20:20: "Item 5 targeted town NPC test (L3 no-click layer, TALK read rate) after the cursor work")
+Pasted from `docs/planning/npc-click-test.md` section 6 (the DRAFT), with its placeholders filled.
+Its PROBE arm is also arm A of cursor@1 (3.35): the same crops are scored offline by both readers.
+**What it measures** (nothing here is a pass / fail of walk@17):
+- where the client shows TALK around town and church NPCs, and how often the TALK read fails the
+  colour check, per NPC / position / background; why, from the saved crops;
+- how often a click the walk gate allows (WALK read twice) beside an NPC becomes `npc_contact`;
+- whether the L3 no-click layer ALONE (complete L3, PROVISIONAL footprint) refuses those contacts,
+  and at what cost;
+- the detector's recall on the same NPCs, and walk@12's remembered TALK cells against packet truth.
+
+**The harness:** `scripts/npc_click_test.py` at c5c149d (`probe`, then `click`), scored by
+`scripts/npc_click_score.py score` at the same commit. Spots, points, clicks, the dialog policy and
+the metrics as in `docs/planning/npc-click-test.md` 5.2-5.5.
+- prontera: `--near 156,191 --seed 20261160` (6 NPCs); prt_church: `--near 103,74 --seed 20261161`
+  (its 2 NPCs within 12 cells).
+- Pilot first, never scored: `--npcs 1 --reps 1`, seeds 20261162 (prontera) / 20261163 (prt_church).
+  Any harness fix is committed (and recorded here) before the scored runs.
+- Order: the probe arm (hover only) on both maps first, then the click arm; each arm judged offline
+  (its packets) before the next one runs.
+
+**Prerequisites:** P1 -- the complete L3 NPC list for both maps, checked against their packets:
+DONE 2026-10-09 (0c8120a, merged 748260d: `data/kb/npc_cells.json`, prontera 16 / 16 objects at
+cell and sprite incl. its 13 drawn NPCs in the town re-run 20261009T140625, prt_church 19 / 19 with
+the 6 wedding-row NPCs sent invisible and marked `conditional`; `npc_noclick.py cells` reports both
+COMPLETE); T2 (3.30, proven 168 / 168); the CPU detector (`/dev/shm/poring-lab-detector`); the GATs.
+
+**The dialog policy:** after every click, two T2 frames. None: go on. CLOSE on both: Enter, then gone
+on two frames. NEXT or a menu: talk@1's decline (`talk1.decline_all`, Batt ~19:30), then gone on two
+frames. Anything else, or a failed decline: STOP for a person (exit 7); `--resume` after Batt closes
+it. (In an unattended weekend window a stop parks the test until a person is back; the parent does
+not close an unknown state by itself.)
+
+**Decision rule for the layer** (reported, not a walk@17 bar): "the layer alone removes the town
+contacts" when, in prontera's click arm, every `npc_contact` click is refused by the complete layer
+AND no click the layer allows becomes `npc_contact` (reported with the Wilson upper bound of that
+rate and the share of moves the layer refuses).
+
+**Safety:** contacts are the measurement on the lab server. Every opened dialog is closed by the
+policy above or by a person. An `attack_request` or a GM act of kind normal / pickup is a safety
+event: the harness cannot see packets, so each arm is judged offline before the next one runs, and
+any such event ends the test until Batt decides. The GM stands only on known cells (`@warp`).
+
+**Reported:** every metric of npc-click-test.md 5.5 per map, with Wilson intervals; the stops and
+their causes; the measured footprints per job; which fix (5.7) each result points to.
+
 ### 3.33 The GM's IMMUNITY: a test condition for the visual-diversity block (pre-registered 2026-10-09 ~14:05 ICT / 07:05 UTC, BEFORE the check; Batt: "keep gl_prison; a GM doesn't need to fear monsters. Make the GM safe without changing what the bot sees")
 **The condition, PRIMARY:** rAthena's `@monsterignore`, granted to the GM's group 20 (`groups.yml`,
 in place; it applies at the next guarded rathena recreate, never during a scored client run).
