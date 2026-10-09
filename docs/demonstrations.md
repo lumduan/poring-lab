@@ -1508,6 +1508,37 @@ more), every pair ≥ 6 cells apart (`loot1.spots`; 3.20's "fresh spot").
 checks the harness end to end on the live client. Any fix it needs is committed BEFORE step 1, and
 the pilot's session is reported but counts for nothing.
 
+➡️ **THE PILOT (2026-10-09 15:00–15:01 ICT, session `20261009T150021-demo-loot1-run`; counts for
+nothing) and the HARNESS FIXES it needed, committed BEFORE step 1:**
+- **Trial 0 (spot 294,121): "no_sword".**
+  - The packets show the spawned Poring WANDERING: 2–12 cells from the spot, a step every ~6–7 s.
+  - The sampler ran at ~2 fps (116 frames in 60 s, CPU detector).
+  - The fixed 45 px track gate lost the Poring after its first step, so 5 of the 6 sword probes
+    hovered the SAME stale box, over empty ground (cursor WALK).
+- **Trial 1 (spot 264,108): not found.** The Poring appeared 1 cell from the GM 3.2 s before the
+  find decision, but that decision judged only the LAST of 3 frames.
+- **Found in the code, a policy breach of my own (8a1ac98, 09:00):** the `@monster` line was varied
+  with leading zeros per trial (`@monster 01002 1` was typed once, trial 1), a device against the
+  client's repeat counter.
+  - It was not caught at the 14:00 amendment.
+  - Batt's typing policy (~12:15) forbids that kind of evasion, and it served nothing: four other
+    lines stand between two `@monster` lines.
+- **The fixes (harness only; the kill's safety rule is unchanged: a click only where the cursor reads
+  the SWORD twice):**
+  1. `@monster 1002 1`, plain, every trial (a test pins it).
+  2. The spawn is looked for on EVERY frame for up to `FIND_S` = 6 s, not on one frame.
+  3. The track gate grows with the time since the last sighting: `MOVE_PX_S` = 110 px/s, from 45 px
+     up to `TRACK_MAX_PX` = 160 px.
+  4. A sword probe needs a FRESH and STILL box: seen ≤ 0.5 s ago, its feet moved < 6 px since the
+     sighting before it, ≤ 1.5 s earlier. A Poring stands for seconds between steps.
+  5. Found but no sword-gated click within 30 s → "no_sword" (probes tried) or "never_still" (none).
+     The 6-tries rule stays.
+  - Each probe logs the box's age and motion. Unit tests cover the gate, the still rule, the
+    every-frame find and the plain line.
+- **A SECOND PILOT, also never scored** (`loot1.py run --n 2 --seed 20261112`, a fresh seed),
+  checks the fixes end to end before step 1. If it still cannot kill, step 1 does not start, and that
+  is reported to Batt.
+
 **Step 1 · P3's positive case (BEFORE any loot trial; §2a's rule):** `loot1.py p3 --n 10 --seed
 20261110`, the same kills with no loot.
 - **Judged per kill whose target died on the server** (its "died" vanish within 5 cells of the

@@ -62,6 +62,17 @@ APART = 6  # spots this far apart (Chebyshev): no item of an earlier trial is in
 SPAWN_WAIT_S = 2.0
 SPAWN_PX = 220.0  # the Poring lands within 3 cells of the GM: its feet this close to the GM's
 TRACK_PX = 45.0  # frame to frame, the target's feet move less than this (400 ms per cell)
+# Pilot 2026-10-09 15:00 (3.20a step 0): the spawned Poring WANDERS (2-12 cells from the spot, a
+# step every ~6-7 s) and the sampler runs at ~2 fps on the CPU, so a fixed 45 px gate lost it after
+# its first move and the sword probes kept hovering a stale box. The gate now grows with the time
+# since the last sighting, and a probe needs a FRESH and STILL box.
+MOVE_PX_S = 110.0  # ~2.5 cells/s (400 ms per cell) x ~40 px per cell, on screen
+TRACK_MAX_PX = 160.0  # never wider than this, however long unseen
+FIND_S = 6.0  # the spawn is looked for on EVERY frame this long (the pilot judged one frame)
+FRESH_S = 0.5  # a probe only on a box seen this recently ...
+STILL_PX = 6.0  # ... whose feet moved less than this since the sighting before it ...
+STILL_GAP_S = 1.5  # ... taken at most this long before it
+NO_CLICK_S = 30.0  # found but no sword-gated click within this: "no_sword" / "never_still"
 GONE_FRAMES = 3  # deathcell's rule
 GONE_S = 1.0  # and at least this long unseen, after an attack (the detector misses a frame or two)
 KILL_S = 30.0  # no vanish within this of the first attack click: "no_kill"
@@ -116,6 +127,17 @@ def nearest(boxes: list[Any], p: tuple[float, float], within: float) -> Any | No
     return best
 
 
+def find_spawn(frames: list[tuple[int, list[Any]]], gm_feet: tuple[float, float],
+               within: float = SPAWN_PX) -> tuple[int, Any] | None:  # fmt: skip
+    """The first frame with a monster box whose feet are within ``within`` of the GM's: (its
+    index, the box nearest the GM there). Every frame counts, not only the last."""
+    for i, (_t, boxes) in enumerate(frames):
+        b = nearest(boxes, gm_feet, within)
+        if b is not None:
+            return i, b
+    return None
+
+
 @dataclass
 class Track:
     """The target over the sampler's frames: the monster box nearest its last feet."""
@@ -125,8 +147,15 @@ class Track:
     last_box: Any = None
     last_seen_ns: int | None = None
 
+    def gate_px(self, t_ns: int) -> float:
+        """How far the feet may have moved since the last sighting (the target wanders)."""
+        if self.last_seen_ns is None:
+            return TRACK_PX
+        dt = max(0.0, (t_ns - self.last_seen_ns) / 1e9)
+        return min(TRACK_MAX_PX, max(TRACK_PX, MOVE_PX_S * dt))
+
     def update(self, t_ns: int, monsters: list[Any]) -> None:
-        b = nearest(monsters, self.foot, TRACK_PX)
+        b = nearest(monsters, self.foot, self.gate_px(t_ns))
         if b is None:
             self.sightings.append(dcm.Sighting(t_ns, None))
             return
@@ -147,6 +176,24 @@ class Track:
                 break
             tail += 1
         return tail >= GONE_FRAMES and (now_ns - self.last_seen_ns) / 1e9 >= GONE_S
+
+    def still(self, now_ns: int) -> dict[str, Any] | None:
+        """The last box, if it may be probed: seen within FRESH_S, and its feet moved less than
+        STILL_PX since the sighting before it (taken at most STILL_GAP_S earlier). A probe on a
+        stale or moving box hovers empty ground (the pilot); None means wait."""
+        seen = [s for s in self.sightings if s.box is not None]
+        if len(seen) < 2 or self.last_seen_ns is None:
+            return None
+        age = (now_ns - self.last_seen_ns) / 1e9
+        a, b = seen[-2], seen[-1]
+        gap = (b.t_ns - a.t_ns) / 1e9
+        fa = ((a.box[0] + a.box[2]) / 2, a.box[3])
+        fb = ((b.box[0] + b.box[2]) / 2, b.box[3])
+        moved = float(np.hypot(fb[0] - fa[0], fb[1] - fa[1]))
+        if age > FRESH_S or gap > STILL_GAP_S or moved >= STILL_PX:
+            return None
+        return {"age_ms": round(age * 1000), "moved_px": round(moved, 1),
+                "gap_ms": round(gap * 1000)}  # fmt: skip
 
 
 def in_ui(u: float, v: float, pad: float = UI_PAD) -> bool:
@@ -269,7 +316,9 @@ def kill(rig: Rig, spot: Cell, trial: dict[str, Any]) -> tuple[Track | None, Cel
     """Spawn, find, attack until it vanishes. Returns the track and the GM's cell (where@2)."""
     import bench
 
-    r.gm(rig.agent, rig.screen, f"@monster {'0' * (trial['k'] % 8)}{PORING} 1")
+    # Plain, every trial: never varied to dodge the client's repeat counter (Batt's typing policy,
+    # 2026-10-09 ~12:15). Four other lines stand between two @monster lines anyway.
+    r.gm(rig.agent, rig.screen, f"@monster {PORING} 1")
     bench.close_chat(rig.agent, rig.screen)
     r.activate_client(rig.agent, rig.screen)
     sampler = Sampler(rig.det)
@@ -277,17 +326,23 @@ def kill(rig: Rig, spot: Cell, trial: dict[str, Any]) -> tuple[Track | None, Cel
     try:
         time.sleep(SPAWN_WAIT_S)
         gm_feet = tuple(rig.camera.project(np.zeros((1, 2)), np.zeros(1))[0])
-        frames = sampler.since(0)
-        if not frames:
-            trial["found"] = "no_frames"
-            return None, None
-        target = nearest(frames[-1][1], gm_feet, SPAWN_PX)
-        if target is None:
-            trial["found"] = False
+        t_find = r.ns()
+        hit: tuple[int, Any] | None = None
+        frames: list[tuple[int, list[Any]]] = []
+        while hit is None and (r.ns() - t_find) / 1e9 <= FIND_S:
+            frames = sampler.since(0)
+            hit = find_spawn(frames, gm_feet)
+            if hit is None:
+                time.sleep(0.1)
+        trial["find"] = {"frames": len(frames), "s": round((r.ns() - t_find) / 1e9, 2)}
+        if hit is None:
+            trial["found"] = "no_frames" if not frames else False
             return None, None
         trial["found"] = True
+        idx, target = hit
         track = Track(foot_of(target))
-        k = len(frames)
+        track.update(frames[idx][0], [target])
+        k = idx + 1
         attacks: list[dict[str, Any]] = []
         here: Cell | None = None
         t_first: int | None = None
@@ -303,9 +358,14 @@ def kill(rig: Rig, spot: Cell, trial: dict[str, Any]) -> tuple[Track | None, Cel
             if t_first is not None and (now - t_first) / 1e9 > KILL_S:
                 trial["kill"] = "no_kill"
                 return track, here
+            if t_first is None and (now - t_find) / 1e9 > NO_CLICK_S:
+                trial["kill"] = "no_sword" if trial.get("attack_tries") else "never_still"
+                return track, here
             again = last_attack is None or (now - last_attack) / 1e9 > REATTACK_S
-            if track.last_box is not None and again:
+            ready = track.still(now) if again else None
+            if ready is not None:
                 hit = sword_click(rig, track.last_box)
+                hit["box"] = ready
                 trial.setdefault("attack_tries", []).append(hit)
                 if hit["clicked"]:
                     attacks.append(hit)

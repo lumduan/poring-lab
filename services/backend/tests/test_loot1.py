@@ -108,3 +108,47 @@ def test_the_gm_cell_comes_from_two_equal_minimap_reads(
                             lambda img, t, it=it: SimpleNamespace(xy=next(it)))  # fmt: skip
         got = loot1.minimap_cell(rig, (271, 103))
         assert got["why"] == want and (got["xy"] is not None) == (want == "ok"), got
+
+
+def test_the_gate_grows_with_the_time_unseen_and_is_capped(loot1: Any) -> None:
+    """Pilot 2026-10-09: the spawned Poring wanders; a fixed 45 px gate lost it after one step."""
+    t = loot1.Track((640.0, 400.0))
+    t.update(1 * S, [box(640, 400)])
+    t.update(1 * S + S // 5, [box(700, 400)])  # 60 px in 0.2 s: farther than a Poring walks
+    assert t.foot == (640.0, 400.0)
+    t.update(2 * S, [box(740, 400)])  # 100 px, 1 s after the last sighting: followed
+    assert t.foot == (740.0, 400.0)
+    t.update(30 * S, [box(740 + loot1.TRACK_MAX_PX + 5, 400)])  # never wider than the cap
+    assert t.foot == (740.0, 400.0)
+
+
+def test_a_probe_needs_a_fresh_and_still_box(loot1: Any) -> None:
+    t = loot1.Track((640.0, 400.0))
+    t.update(1 * S, [box(640, 400)])
+    assert t.still(1 * S) is None  # one sighting cannot show it stands
+    t.update(1 * S + S // 2, [box(642, 401)])
+    got = t.still(1 * S + S // 2 + S // 10)
+    assert got is not None and got["moved_px"] < loot1.STILL_PX
+    assert t.still(1 * S + S // 2 + S) is None  # 1 s old: stale
+    t.update(2 * S, [box(660, 401)])  # it walks
+    assert t.still(2 * S) is None
+    t.update(2 * S + S // 2, [])
+    t.update(3 * S, [box(661, 401)])  # stands again, but the sighting before is 1.0 s old: ok
+    assert t.still(3 * S) is not None
+    t.update(5 * S, [box(661, 401)])  # 2 s between the two sightings: not proof of standing
+    assert t.still(5 * S) is None
+
+
+def test_the_spawn_is_looked_for_on_every_frame(loot1: Any) -> None:
+    feet = (640.0, 400.0)
+    near, far = box(660, 410), box(640 + loot1.SPAWN_PX + 30, 400)
+    frames = [(1 * S, []), (2 * S, [far, near]), (3 * S, [])]
+    assert loot1.find_spawn(frames, feet) == (1, near)  # the pilot judged only the last frame
+    assert loot1.find_spawn([(1 * S, [far])], feet) is None
+    assert loot1.find_spawn([], feet) is None
+
+
+def test_the_spawn_line_is_never_varied(loot1: Any) -> None:
+    """Batt's typing policy (2026-10-09): no line is altered to dodge the repeat counter."""
+    src = (SCRIPTS / "loot1.py").read_text()
+    assert 'f"@monster {PORING} 1"' in src and "'0' *" not in src
