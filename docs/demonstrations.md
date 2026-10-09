@@ -1579,6 +1579,22 @@ shapes:
   pilot still counts for nothing.
 - The 3.20 bar, the safety window and every verdict rule are unchanged.
 
+➡️ **THE GM'S FIXED TEST STATE, BEFORE STEP 1 (Batt 2026-10-09 ~16:00):** pilot 2's kill levelled
+the GM up (Base Lv 2; HP 45; status points; the level-up icon and badges, which cleared when the
+status window opened at 16:02).
+- Batt: "the GM's level is now an uncontrolled variable. Restore a fixed test state ... and record the
+  GM's state at each run start."
+- Every loot@1 trial now starts at **Base Lv 1 / Job Lv 1**, through `scripts/gm_state.py`:
+  - the level lines checked from pixels against a Lv 1 / 1 template;
+  - `@baselevelup -98`, `@joblevelup -49`, `@heal` typed only when they differ (group 20 got both
+    commands in `groups.yml`);
+  - the state recorded in `trials.json` (`gm_state`: restored or not, the weight readout, a crop
+    of the Basic Information window).
+- Job EXP is recorded, not fixed.
+- **The grant is NOT live yet:** the guarded rathena restart that applies it was stopped by the IO
+  guard at 16:10:35 (quant-ticker-engine 47.3 %), and rathena is DOWN pending Batt. P3 waits for the
+  grant, the Lv 1 / 1 template cut and one restore proof.
+
 ➡️ **TYPING TRANSPORT CHANGED BEFORE STEP 1 (2026-10-09 ~16:10; Batt's mandatory item 6):** every
 line loot@1 types (its GM commands) now passes the UI gate (`scripts/ui_gate.py`, 3.32 item 6)
 first. No decision code changes: the gate either finds the client clear (~1.5 s per line) or stops

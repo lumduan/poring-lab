@@ -16,6 +16,10 @@
 #   item             lab only (Batt, 2026-10-07): ground items for the walk@6 PICKUP-cursor
 #                    calibration -- @item into the GM's inventory, then dropped on the floor
 #                    (the GM died hunting Porings for drops; killmonster2 drops nothing)
+#   baselevelup /    lab only (Batt, 2026-10-09 ~16:00): the GM's FIXED TEST STATE -- a loot kill
+#   joblevelup       levelled the GM (Base Lv 2); lowering takes back that level's status points
+#                    (pinned atcommand.cpp ACMD_FUNC(baselevelup)); scripts/gm_state.py restores
+#                    Lv 1 / Job 1 at each run start and records the state.
 #   monsterignore    lab only (Batt, 2026-10-09): the visual-diversity block's test condition --
 #                    monsters ignore the GM (atcommand.cpp:9025 toggles PCBLOCK_IMMUNE; battle.cpp
 #                    :8010 makes an immune player no enemy target) while they keep moving, and the
@@ -47,3 +51,5 @@ Body:
       heal: true
       item: true
       monsterignore: true
+      baselevelup: true
+      joblevelup: true
