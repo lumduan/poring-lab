@@ -1268,6 +1268,12 @@ and their history live there, not here.
 
     new map time = map prep + Σ over the new species ( difficulty × (collect per species + train per species) ) × contingency
 
+➡️ **DECIDED 2026-10-09 (Batt, contradictions #5): the conservative reading.** The contingency
+applies to every part, map prep included, and map prep counts per NEW map (Byalan's iz_dun00 and
+iz_dun01 are two maps: 10.4 h, not 5.2 h). training-cost.md's sections 1, 3 and 5 carry MW1's
+numbers (collect 8.45 h, compute 15.42 h, wall 24.5 h at night, 30.5 h mixed, 44.1 h at the
+effective day rate).
+
 - **Compute hours and wall-clock hours are reported separately.** wall = compute / availability.
   Availability is MEASURED from the training duty-cycle logs (`state/train-duty`, the `duty_stats`
   lines; [r3-paired.md](../operations/r3-paired.md)), night and day apart.

@@ -79,11 +79,18 @@ def test_the_estimator_equals_a_hand_computation() -> None:
     assert e.wall_h["day_effective"] == pytest.approx(15.42125 / 0.35)  # ~44.1 h
     assert e.wall_h["mix"] == pytest.approx(15.42125 / ((9 * 0.63 + 15 * 0.43) / 24))  # ~30.5 h
     assert (e.status, e.version) == (c.status, c.version) == ("ESTIMATE", 1)
-    # training-cost.md section 5 rounds these to 8.5 h, 15.5 compute-h, 25 h night, 31 h mixed,
-    # 44 h effective day: the same numbers within its rounding
-    assert abs(e.collect_s2_h - 8.5) < 0.1 and abs(e.train_compute_h - 15.5) < 0.1
-    assert abs(e.wall_h["night"] - 25) < 1 and abs(e.wall_h["mix"] - 31) < 1
-    assert abs(e.wall_h["day_effective"] - 44) < 0.5
+    # #5 (Batt 2026-10-09): training-cost.md section 5 now carries THESE numbers (it used to
+    # round them, and its map prep was one map without the contingency, 5.2 h)
+    section5 = DOC.read_text().split("## 5.")[1].split("## 6.")[0]
+    for shown in (
+        f"**≈ {e.map_prep_h:.1f} h**",
+        f"**{e.collect_s2_h:.2f} h of S2**",
+        f"**{e.train_compute_h:.2f} compute-h**",
+        f"**≈ {e.wall_h['night']:.1f} h at night only**",
+        f"**≈ {e.wall_h['mix']:.1f} h around the clock**",
+        f"≈ {e.wall_h['day_effective']:.1f} h at today's effective day rate",
+    ):
+        assert shown in section5, shown
 
 
 def test_a_measured_species_or_a_prepared_map_adds_nothing() -> None:
