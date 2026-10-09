@@ -76,6 +76,9 @@ cells and the neighbours their clickable footprint covers are refused, independe
 - The cursor and detector layers stay for moving / hidden NPCs and units.
 - The targeted town test (3.32 item 5) measures whether the layer alone removes the contacts.
 - It enters walk17.py as a recorded amendment before the tuning runs.
+- ➡️ The offline analysis, the layer (`scripts/npc_noclick.py`, PROVISIONAL) and the targeted test:
+  `docs/planning/npc-click-test.md` (merged 70e851d). The layer needs a COMPLETE L3 NPC list per map
+  (KB extension P1), and the town flags (job 722) are missing today.
 
 
 **DECIDED by Batt 2026-10-09 ~14:00:** walk@16's F is NOT carried over ("no measurable effect beyond

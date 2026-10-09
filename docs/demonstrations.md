@@ -3234,6 +3234,33 @@ pre-registration):
      - **The test measures whether that layer ALONE removes the town contacts.**
      - Analysis, design and harness: branch `feat/npc-click-test` (offline; nothing run live). The
        layer is integrated into walk@17 as a recorded amendment before its tuning runs.
+     - ➡️ **OFFLINE RESULTS (merged 70e851d; `docs/planning/npc-click-test.md`, PROPOSED, its DRAFT
+       pre-registration in section 6):**
+       - **The "one column off" cause:** the remembered talk cell is the FLOOR cell under the TALK
+         pixel, i.e. the click TARGET, never the NPC's cell (24 / 24 reproduced, only 2 / 24 are an
+         NPC's true cell). Route 55 had TWO NPCs, and the job-722 flag at (155,190) IS in the
+         remembered column.
+       - **Contact 1's NPC:** job 722 is a guild flag; 5 stand in prontera's centre. Their script
+         files are not read by kb_route.py, so today's L3 does not know them.
+       - **Why WALK read over them:** not determined offline (H-a/b/c, separated by the test).
+       - **The colour check:** "col 0.0" is a placeholder for any unknown. The real margins are thin
+         (leave-one-out colour minimum 0.851 against a floor of 0.85), and a 1-px reference shift
+         reproduces the live failure. Hypotheses C1–C5 are separated by the test's crops.
+       - **The detector on town NPCs:** 1 / 2,195 sightings boxed (Wilson 0.01–0.26 %); 1 of 13 NPCs
+         was ever boxed. Batt's 16:10 reading is confirmed.
+       - **The L3 NO-CLICK layer** (`scripts/npc_noclick.py`; footprint PROVISIONAL): with today's
+         L3 it refuses contact 2 but not contact 1 (the flags are missing). With a complete L3 it
+         refuses both, at a cost of 10 refused clicks in 6 of the 50 scored routes. It fails closed
+         unless a map's NPC list is declared COMPLETE: the KB extension P1 (every NPC file the
+         server loads) gates both the layer and the test.
+       - **loot@1 P3 (above) hit the same cursor weakness** over Porings (64 % unknown).
+     - ➡️ **The cut-in mask** (Batt 16:10) is BUILT and merged (2834541, `scripts/ui_mask.py`), NOT
+       deployed.
+       - Measured: the guide's cut-in at (957,249)-(1183,720), pixel-identical across sessions.
+       - The "monster 31 %" phantom is masked on 120 / 120 open frames.
+       - Other NPCs' cut-ins and other anchors are unmeasured, so not masked.
+       - The HUD applies it after a restart of the HUD process. walk@17 gets a patch point (an
+         amendment); loot1's `in_ui` now uses the shared mask (equivalence-tested).
 6. **➡️ Added 2026-10-09 ~15:05, from 3.29a's portal re-run: a chain must JUDGE the client's UI state
    between runs, not only screenshot it.** An NPC dialog left open by one run took the next run's
    Enter presses.
