@@ -113,7 +113,7 @@ becomes config-driven** (a-e), **code or doc**.
 | C5 | `services/rathena/Dockerfile:84, 86` | `EXPOSE` and the HEALTHCHECK on 6900/6121/5121 (127.0.0.1) | R1 ports | Docker | **(b)**: rathena's own listen ports; they move with the image. Change only if the ports change (then rebuild) | none |
 | C6 | `config/environments.yaml:31, 49` (+ header lines 4-7) | `lab-rathena` and `lab-rathena-th`: `server: {host: 192.168.1.13, ports: [6900, 6121, 5121]}` | R1 | read ONCE at the seed (allowed servers are seeded EMPTY), then on every Settings read by `envstore.suggestions()` as "Found by the lab" | **(a)**: the store already wins (ADR-0016); the literal survives as a SUGGESTION. Proposal: offer the lab suggestion only while it equals what the local rathena advertises (C4's check), else none; or drop the host at the move | code (envstore) + config |
 | C7 | `packages/poring_packets/src/poring_packets/capture.py:1-11, 18-27` | the sniffer's kernel filter, COMPILED to constants: client 192.168.1.169 + ports 6900/6121/5121; `PORT_SERVER` maps port → login/char/map | R1 ports (+ the Dell) | the sniffer at start | **(a)**: the target is the environment's `windows_host` + its servers' ports (with roles), from the store. HOW the sniffer receives it is open (ADR-0021 D18, section 7 P2). The filter is then built at start (the slim image has no libpcap today: a small builder, tested against libpcap as `test_core.py` already does) | code, sniffer rebuild, positive cases re-proved |
-| C8 | `packages/poring_packets/src/poring_packets/pcapng.py:4-7, 18, 36` | `LOGIN_PORT = 6900`: the login-password REDACTION keys on it | R1 port | every pcapng write | **(a)**, from the SAME value as C7's login port, and fail closed: no pcapng without a known login port (section 5, risk 1) | code, with C7 |
+| C8 ➡️ fixed in code f36276e, not deployed (section 5 risk 1) | `packages/poring_packets/src/poring_packets/pcapng.py:4-7, 18, 36` | `LOGIN_PORT = 6900`: the login-password REDACTION keys on it | R1 port | every pcapng write | **(a)**, from the SAME value as C7's login port, and fail closed: no pcapng without a known login port (section 5, risk 1) | code, with C7 |
 | C9 | `packages/poring_packets/src/poring_packets/sniffer.py:88, 319`; `replay.py:4, 27, 72` | the role lookup by port; `CLIENT_IP` env with the default `"192.168.1.169"` (it changes the session filter but NOT the compiled kernel filter: a half-wired knob); replay's `--client-ip` default | R1 ports + the Dell | the sniffer; offline replay | **(a)** with C7: ONE target object, no second default | code, with C7 |
 | C10 | `services/backend/src/poring_backend/config.py:80`; `compose.yaml:103, 187, 458` | rathena's pinned compose address 10.210.96.6 = the backend's only `/ingest/packets` peer (the sniffer shares rathena's namespace) | not an endpoint | the backend's ingest check | **a move breaks it** (ADR-0021 D19): the sniffer moves with rathena; `:8001` is never published. Needs the remote-attestation design (ADR-0016 "Remote deployment notes": signed attestations), or lab-rathena stays red `no_attestation` | code + an ADR, only at a move |
 | C11 | `services/backend/src/poring_backend/config.py:102-106`; `routes_settings.py:26-27, 168` | `host_lan_ip` → the `lab_host_peer` refusal of Settings writes. Line 27 is the dated 2026-10-06 finding | R3 | every Settings write | **(b)**; open point P6: after a move, should the rathena machine also be refused as a writer? | none now |
@@ -189,6 +189,17 @@ becomes config-driven** (a-e), **code or doc**.
    passes only 6900/6121/5121, so it covers every login. If the login port ever comes from config
    while this constant stays, a login on another port is written UNREDACTED: plaintext passwords
    in captures. It must move in the same change as C7, from the same value, and fail closed.
+   ➡️ **2026-10-09 ~17:10, FIXED IN CODE (Batt: "do it before any endpoint change"; f36276e),
+   NOT DEPLOYED.**
+   - `pcapng.LoginScrub` takes the login port(s) from `SNIFF_LOGIN_PORTS` (compose sets "6900" for
+     both sniffers).
+   - Defense in depth: it also scrubs, on ANY port, every connection whose first client payload is
+     a login request id (the pinned rAthena login packet db).
+   - With the ports unset or invalid it scrubs by that shape alone (fail closed).
+   - A continuation segment now keeps no bytes; the old scrub kept 2 per segment.
+   - Live only after a guarded `build:sniffer` + `recreate:sniffer` (and the section 2a positive
+     cases re-run).
+   - C7's filter itself is unchanged (later).
 2. **W2, the lab-only watch on Windows.** 192.168.1.13 is typed into a script that has no channel
    to Settings, by design. On a move it kills the lab client at its first connection to the new
    address. It must change, or be retired, BEFORE W3 repoints the client.
