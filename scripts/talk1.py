@@ -804,7 +804,9 @@ def run(mode: str, scene: str, n: int, seed: int, walk_name: str, contact_fix: s
                           flush=True)  # fmt: skip
             finally:
                 bench.close_chat(agent, screen)
-                w11.UNITS["detector"].close()
+                det = w11.UNITS.get("detector")
+                if det is not None:  # rig_up may have failed before it loaded one
+                    det.close()
     except BaseException as exc:  # noqa: BLE001 -- every way out finishes the session
         ended, code, why = w12.ended_by(exc)
     finally:
