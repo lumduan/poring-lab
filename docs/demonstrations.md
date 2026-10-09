@@ -2331,6 +2331,71 @@ change is exactly:
   off, F can fire for an NPC really 2 cells away, and the server will score that substitute a
   failure.
 
+### 3.28 WALKING READINESS — a definition, "good enough to build on" (Batt 2026-10-09 ~09:40; it changes NO past pre-registered verdict)
+**Batt (2026-10-09):** "Walking readiness ('good enough to build on'): zero safety events (hard) AND
+pooled success >= 90 % with its 95 % CI, over the four tuning conditions. 96 % stays the long-term
+target."
+
+**The definition, exactly** (`scripts/walk_readiness.py`):
+- A walk version is **READY** when, over its four TUNING runs (indoor/outdoor × clean/crowd, the
+  first 50 scored routes each, n = 200 pooled), both hold:
+  1. **ZERO safety events** in all four runs: `attack_request`, `npc_contact`, and GM acts normal
+     or pickup. Any one event means NOT ready, whatever the success.
+  2. **The pooled success rate is ≥ 90 %**, reported with its 95 % Wilson score interval.
+- **Claude's reading, stated so Batt can correct it before any held-out data:** the 90 % applies to
+  the POOLED POINT ESTIMATE, and the interval is reported with it, not required to clear 90 %.
+  The stricter reading (the interval's LOWER bound ≥ 90 %) is computed and reported too
+  (`ci_lower_bound_ge_ready`). At n = 200 it needs about 190 / 200.
+- **96 %** stays the long-term target (`target_met`, reported).
+- The per-run bar of each pre-registration (≥ 48 / 50 per run) is unchanged, and so are the verdicts
+  already given under it: walk@13–15's FAILs stay FAILs as pre-registered. Readiness is a separate,
+  pooled question.
+
+**Applied to the tuning runs so far** (`walk_readiness.py` over each version's four scorer outputs):
+
+| version | per run (IC / ICr / OC / OCr) | pooled | 95 % CI | safety | READY | lower bound ≥ 90 % |
+|---|---|---|---|---|---|---|
+| walk@13 | 46 / 40 / 45 / 41 | 172 / 200 = 86.0 % | 80.5–90.1 % | 0 | no (< 90 %) | no |
+| walk@14 | 47 / 44 / 49 / 44 | 184 / 200 = 92.0 % | 87.4–95.0 % | **2** (NPC contacts) | **no** (safety) | no |
+| walk@15 | 46 / 43 / 49 / 48 | 186 / 200 = 93.0 % | 88.6–95.8 % | 0 | **YES** | no |
+| walk@16 | running (3.27) | — | — | — | — | — |
+
+### 3.29 walk HELD-OUT under the readiness bar — once, per map, with the best READY version (pre-registered 2026-10-09 ~09:45 ICT / 02:45 UTC at commit, BEFORE any held-out data; Batt 2026-10-09: "Held-out maps NEXT, once, with the best qualifying version: pre-register NOW (before any held-out data) with the new bar, scored separately per map")
+**The version (decided by TUNING data only):** among walk@15 and walk@16, the READY version (3.28)
+with the higher pooled tuning success. On a tie, walk@16 (walk@15 + Batt's approved F). walk@15 is
+READY now. walk@16's tuning runs finish untouched first (3.27), then the choice is applied
+mechanically, and stated with its numbers before the first held-out run starts.
+
+**The maps, each run ONCE** (in this order, all CLEAN as the earlier held-out plans: `@heal` after
+each warp, 56 routes, the first 50 not interrupted scored):
+
+| scene | map / start | what it adds | seed |
+|---|---|---|---|
+| guild | alberta_in (60, 40): the Merchant Guild room, on the workflow route (L3 NPC at 53, 43) | a new interior, NPCs | **20261120** |
+| town | prontera (156, 180) | a town: NPCs, other players' chat rooms if any (the 17:51 sniffer's length table decodes them) | **20261121** |
+| dungeon | iz_dun00 (168, 168) | a dungeon: its own monsters respawn | **20261122** |
+| portal | prt_fild08 (170, 368) → the north portal (170, 378) → prontera (156, 26) | the cross-map portal walk (the route must END on prontera) | **20261123** |
+
+These seeds are fresh: 3.26's and 3.27's reserved held-out seeds (20261094–97, 20261104–07) stay
+unused.
+
+**The bar, PER MAP, scored separately** (the 3.28 arithmetic on n = 50):
+- zero safety events (hard), AND
+- success ≥ 45 / 50 (90 %), with its 95 % Wilson interval reported (and whether its lower bound
+  clears 90 %).
+- A pooled held-out number over the four maps is reported too, with no verdict attached.
+
+**Scoring:** the version's own scorer (`walk15_score.py` / `walk16_score.py`: demo_verify + the
+packets, the same instruments as tuning) per map, then `walk_readiness.py` on each map's output.
+
+**Once means once:**
+- No map is re-run, and no held-out result tunes anything.
+- A run that ENDS EARLY on an infrastructure failure (client crash, disconnect, guard stop) before
+  50 scored routes is reported as INCOMPLETE with its routes so far. It is not re-run without
+  Batt's word.
+
+**Before each run:** a client screenshot, and the UI as pre-registered (3.24's inventory incident).
+
 ### HUD scene: box drift while walking + doubled boxes — OFFLINE SIM RESULT (2026-10-08 night; branch `feat/hud-drift`, merged 0d6cd79, DEPLOYED 2026-10-09 00:36 ICT; LIVE RE-MEASURE below)
 
 #### 2026-10-09 — SEEN TWICE + the display-only RECONNECT: BUILT on `feat/hud-seen-twice` (merged 9687631), measured offline; ➡️ the plain rule SUPERSEDED by the CONFIRMING PASS (first sub-entry)
