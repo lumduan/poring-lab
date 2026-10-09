@@ -1,7 +1,8 @@
 """Every WORLD click passes the cursor gate (Batt, 2026-10-08, decision 6): where@2's blind harness
 click attacked monsters and contacted NPCs. A script may call `.click(` directly only where this
 census says why; any new direct click changes a count here and must either use
-`scripts/cursor_gate.gated_click` or be added with its reason."""
+`scripts/cursor_gate.gated_click` or be added with its reason. Gated world clicks are registered
+too (GATED: who calls the gate, how often, why)."""
 
 from __future__ import annotations
 
@@ -41,6 +42,38 @@ ALLOWED = {
     "scripts/talk_calibrate.py": (1, "talk@1 calibration: the `click` step, through talk1.LiveIo "
                                      "(a T2-read element); its contact click is cursor_gate's"),
 }  # fmt: skip
+
+
+# WORLD clicks made ONLY through the gate (`cursor_gate.gated_click(`): every script calling it,
+# with how many calls and why (walk@17 item 5, 2026-10-09: a new gated world click is registered).
+GATED = {
+    "scripts/cursor_gate.py": (1, "the definition"),
+    "scripts/calibrate_projection.py": (1, "projection calibration clicks, WALK read twice"),
+    "scripts/camera_validate.py": (1, "camera validation clicks, WALK read twice"),
+    "scripts/dataset_activity.py": (1, "the dataset activity driver's world clicks"),
+    "scripts/measure_delay.py": (1, "the packet->frame benchmark's walk click"),
+    "scripts/safety_signal_check.py": (1, "a walk to the plant's neighbour, WALK read twice"),
+    "scripts/talk1.py": (1, "talk@1's ONE contact click: TALK read twice"),
+    "scripts/talk_calibrate.py": (1, "the calibration drive's contact click: TALK read twice"),
+    "scripts/where_run.py": (1, "where@'s harness walk clicks"),
+    "scripts/npc_click_test.py": (1, "walk@17 item 5's targeted test: a deliberate click beside "
+                                     "an NPC, ONLY where the cursor reads WALK twice (the walk "
+                                     "rules' own gate); probes never click"),
+}  # fmt: skip
+
+
+def test_gated_world_clicks_are_registered() -> None:
+    files = subprocess.run(["git", "ls-files", "scripts/*.py"], cwd=ROOT, capture_output=True,
+                           text=True, check=True).stdout.split()  # fmt: skip
+    files += [f for f in GATED if f not in files]  # new, not yet committed
+    found = {}
+    for f in files:
+        path = ROOT / f
+        if path.exists():
+            n = len(re.findall(r"gated_click\(", path.read_text()))
+            if n:
+                found[f] = n
+    assert found == {f: n for f, (n, _) in GATED.items()}, found
 
 
 def test_direct_clicks_are_only_where_the_census_says_why() -> None:
