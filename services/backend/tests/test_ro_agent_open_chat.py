@@ -26,8 +26,29 @@ def load() -> ModuleType:
     return mod
 
 
+class Gate:
+    """A stand-in for scripts/ui_gate.py (its own tests: test_ui_gate.py): records each check."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+        self.stop: Exception | None = None
+
+    def ensure_clear(self, agent: Any, screen: Any, *, why: str) -> dict[str, Any]:
+        self.calls.append(why)
+        if self.stop is not None:
+            raise self.stop
+        return {"clear": True}
+
+
 @pytest.fixture
-def r(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Any:
+def gate(monkeypatch: pytest.MonkeyPatch) -> Gate:
+    g = Gate()
+    monkeypatch.setitem(sys.modules, "ui_gate", g)
+    return g
+
+
+@pytest.fixture
+def r(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, gate: Gate) -> Any:
     mod = load()
     monkeypatch.setattr(mod.time, "sleep", lambda s: None)
     monkeypatch.setattr(mod, "is_state", lambda screen, st, after_ns=None: False)  # never at first
@@ -71,3 +92,12 @@ def test_a_real_failure_stops_with_its_distances_and_frame(r: Any, monkeypatch: 
     with pytest.raises(r.Stop, match=r"distances \[9\.5.*fail\.png"):
         r.open_chat(a, Screen())
     assert a.keys_sent == ["Enter", "Enter"] and a.clicks == []
+
+
+def test_the_ui_gate_runs_before_any_key_and_its_stop_sends_none(r: Any, gate: Gate) -> None:
+    """Batt 2026-10-09 (walk@17 item 6): never press Enter into an unknown state."""
+    a = Agent()
+    gate.stop = r.Stop("ui gate (open_chat): npc_dialog_open:next")
+    with pytest.raises(r.Stop, match="npc_dialog_open"):
+        r.open_chat(a, Screen())
+    assert gate.calls == ["open_chat"] and a.keys_sent == [] and a.clicks == []
