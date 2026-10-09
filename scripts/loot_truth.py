@@ -9,8 +9,9 @@ monsters died where, what fell where, and what WE picked up -- from a replay's e
 * deaths: every entity_vanish with reason "died": the unit, the time, and its cell then
   (poring_dataset.timeline: where it fell -- the P3 truth);
 * floor items: every floor_item_appear (kind "fall" = a fresh drop, "in_sight" = one already
-  there), its fate (vanished, and who acted "pickup" on it) and, for a fall within
-  DROP_WINDOW_S of a death and DROP_RADIUS cells of its cell, that death and the offset;
+  there), its fate (vanished, and who acted "pickup" on it) and, for a fall from DROP_BEFORE_S
+  before to DROP_WINDOW_S after a death and within DROP_RADIUS cells of its cell, that death and
+  the offset;
 * OUR pickups: our act of kind pickup on a floor id, then our pickup_result ok for the same item
   within RESULT_WINDOW_S, then the floor item's vanish: "confirmed" only when all three hold.
 
@@ -29,6 +30,9 @@ from pathlib import Path
 from typing import Any
 
 DROP_WINDOW_S = 1.5  # a kill's drops fall at once (delay_battle_damage yes) or 0.5 s after
+# ... or BEFORE the "died" vanish: loot@1's pilot 2 (2026-10-09 15:06) saw the fall 0.24 s before
+# the dead Poring's vanish packet, so the drop was linked to no death.
+DROP_BEFORE_S = 1.0
 DROP_RADIUS = 2  # cells: the drop pattern's neighbours, plus a free-cell search of 1
 RESULT_WINDOW_S = 2.0
 S = 1_000_000_000
@@ -87,11 +91,11 @@ def ledger(events: list[dict[str, Any]], aid: int | None) -> dict[str, Any]:
             }  # fmt: skip
             if e["kind"] == "fall":
                 near = [d for d in deaths if d["cell"] is not None
-                        and 0 <= t - d["t_ns"] <= DROP_WINDOW_S * S
+                        and -DROP_BEFORE_S * S <= t - d["t_ns"] <= DROP_WINDOW_S * S
                         and max(abs(d["cell"][0] - row["cell"][0]),
                                 abs(d["cell"][1] - row["cell"][1])) <= DROP_RADIUS]  # fmt: skip
                 if near:
-                    d = near[-1]
+                    d = min(near, key=lambda d: abs(t - d["t_ns"]))  # the closest in time
                     row["death"] = d["gid"]
                     row["offset"] = (row["cell"][0] - d["cell"][0], row["cell"][1] - d["cell"][1])
             items[fid] = row

@@ -39,6 +39,7 @@ def kill_and_drop(t: float, gid: int, cell: tuple[int, int], fid: int,
     out = [
         ev(t - 5, "entity_appear", kind="stand", gid=gid, char_id=0, objtype=5, job=1002,
            speed=400, name="", x=x, y=y, heading=0),
+        ev(t - 3.9, "attack_request", dir="cs", target_gid=gid, kind="repeat"),  # our click
         ev(t, "entity_vanish", gid=gid, reason=1),
         ev(t, "floor_item_appear", kind="fall", floor_id=fid, item_id=909, item_type=3,
            identified=True, x=x, y=y, sub_x=6, sub_y=6, amount=1, drop_effect=False),
@@ -112,4 +113,22 @@ def test_no_drop_is_not_a_drop_trial_and_two_deaths_are_never_guessed() -> None:
     two = base() + kill_and_drop(10.0, 1, (101, 101), 501, None)
     two += kill_and_drop(10.5, 2, (102, 101), 502, None)
     out = ls.judge([trial(0, 10.0, (101, 101), None, False)], two, None, first=1)
-    assert out["rows"][0]["server"] == "ambiguous"
+    assert out["rows"][0]["server_death"]["gid"] == 1  # the one our attack request named
+    assert out["rows"][0]["server_death"]["other_targets"] == [2]  # reported, never a guess
+
+
+def test_the_target_is_the_gid_our_attack_request_named_wherever_it_died() -> None:
+    """3.20a amendment (pilot 2): a chased Poring died 6 cells from the spot, and the server sent
+    its drop 0.24 s BEFORE its "died" vanish. Both must still be found."""
+    events = base() + kill_and_drop(10.0, 7, (106, 98), 507, 14.0)
+    fall = next(e for e in events if e["type"] == "floor_item_appear")
+    fall["t_mono_ns"] -= int(0.24 * S)  # the real order
+    events += kill_and_drop(10.2, 8, (100, 101), 508, None)  # another Poring dies ON the spot
+    events = [e for e in events if not (e["type"] == "attack_request" and e["target_gid"] == 8)]
+    out = ls.judge([trial(0, 10.0, (106, 98), 13.5, True)], events, None, first=1)
+    row = out["rows"][0]
+    assert row["server_death"]["gid"] == 7 and row["server_death"]["from_spot"] == 6
+    assert row["drop_trial"] and row["result"] == "success" and row["p3"] == 0
+    none = [e for e in events if e["type"] != "attack_request"]  # the click became a walk
+    out = ls.judge([trial(0, 10.0, (106, 98), 13.5, True)], none, None, first=1)
+    assert out["rows"][0]["server"] == "no attack request"

@@ -1544,7 +1544,7 @@ counts for nothing): the chain works end to end once; the kill phase is still fr
 
 | trial | what the pixels did | what the server says |
 |---|---|---|
-| 1 (spot 255,92) | found on the 2nd frame; probe 1 read WALK (moved-off box); probe 2 read SWORD twice and clicked; "vanished"; death cell (254,97), stable; PICKUP click 3.94 s after the death; runtime: weight rose AND cue "got" | `attack_request` → 11 GM attacks → the Poring DIED at (255,99)±1; then `pickup_request` + the GM's pickup act. A full success, and P3's cell within 1 |
+| 1 (spot 255,92) | found on the 2nd frame; probe 1 read WALK (moved-off box); probe 2 read SWORD twice and clicked; "vanished"; death cell (254,97), stable; PICKUP click 3.94 s after the death; runtime: weight rose AND cue "got" | `attack_request` → 11 GM attacks → the Poring DIED at (254,98), 6 cells from the spot; its Jellopy fell ON that cell; then `pickup_request` + the GM's pickup act. A full success; P3 within 1 (pixel 254,97). Scored by the AMENDED scorer below |
 | 0 (spot 292,121) | found at once; probe 1 read SWORD twice and clicked; probe 2 (another box) read unknown ×2, WALK | the sword-read click became a WALK (`self_move_request`): the Poring had just started moving. The GM's walk scrolled the camera, so the screen-space track lost the Poring; the pixels then declared a death (cell unstable: no loot). The Poring was alive and was removed by the next trial's `@killmonster2` |
 
 - **Two kill-phase weaknesses are NOT fixed** (P3 and the trials report them; they are not P3's
@@ -1558,6 +1558,26 @@ counts for nothing): the chain works end to end once; the kill phase is still fr
   kills of 10; if the kill phase loses too many, P3 is INCONCLUSIVE and is reported so.
 - **Held** until the console layout fix is deployed (Batt 2026-10-09 ~14:57: deploy in a gap with no
   scored client run).
+
+➡️ **SCORER AMENDMENT (2026-10-09 ~15:25 ICT, BEFORE any scored loot@1 run; found by scoring pilot 2,
+whose trial 1 is the positive case):** the committed scorer gave pilot 2 "no server death" for
+BOTH trials and 0 drop trials, although the packets show trial 1's Poring dying and our pickup.
+Two defects, fixed in `loot1_score.py` / `loot_truth.py` with tests built on pilot 2's real event
+shapes:
+1. **The target rule.** "A Poring death within 5 cells of the spot" missed the chased Poring, which
+   died 6 cells away.
+   - Now the target is the unit our FIRST `attack_request` after the first attack click names
+     (`target_gid`): the server's own record of what the deliberate click attacked.
+   - No request means "no attack request" (the click became a walk: pilot 2 trial 0).
+   - Other gids we attacked are reported, never guessed between.
+   - This replaces 3.20a's "within 5 cells of the spot" for P3 and the trials alike.
+2. **The drop link.** The server sent the drop's `fall` 0.24 s BEFORE the "died" vanish, and the
+   ledger accepted falls only 0–1.5 s AFTER it.
+   - Now from `DROP_BEFORE_S` = 1.0 s before to 1.5 s after, the closest death in time.
+- **Re-scored pilot 2:** trial 1 success, P3 within 1, drop offset (0,0), death → click 4.09 s, both
+  runtime signals; trial 0 "no attack request". This proves the scorer on a positive case, and the
+  pilot still counts for nothing.
+- The 3.20 bar, the safety window and every verdict rule are unchanged.
 
 **Step 1 · P3's positive case (BEFORE any loot trial; §2a's rule):** `loot1.py p3 --n 10 --seed
 20261110`, the same kills with no loot.

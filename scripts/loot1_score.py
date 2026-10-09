@@ -5,9 +5,12 @@ scripts/loot1.py did from pixels. Never fed back into a run (ADR-0007).
     loot1_score.py SESSION_DIR [--first 20]
 
 Per trial:
-* the TARGET's death: the "died" vanish (loot_truth.death_cells) of a Poring after the trial's
-  first attack click and before its end, within TARGET_CELLS of the spot; none = "no server
-  death"; more than one = "ambiguous" (never guessed);
+* the TARGET: the unit our FIRST attack request after the trial's first attack click names
+  (`attack_request.target_gid`, the server's own record of what the deliberate click attacked);
+  no request = "no attack request" (the click did not become an attack). Its death: that gid's
+  "died" vanish (loot_truth.death_cells) before the trial's end; none = "no server death".
+  AMENDED 2026-10-09, BEFORE any scored loot@1 run (3.20a, pilot 2): the first rule, "a Poring
+  death within 5 cells of the spot", missed a chased Poring that died 6 cells away;
 * P3 (mode p3 and run): the pixel death cell vs the server's: exact / within 1 / farther;
 * its DROPS: the floor items that fell from that death (loot_truth.ledger);
 * a DROP TRIAL succeeds when the runtime check said obtained, the server confirms OUR pickup of
@@ -35,7 +38,7 @@ import loot_truth as lt  # noqa: E402
 
 GM_AID = 2000002
 PORING = 1002
-TARGET_CELLS = 5  # the Poring spawns within 3 cells of the GM, who stands on the spot
+CLICK_SLACK_S = 0.5  # the click's own time is taken just BEFORE the click is sent
 S = 1_000_000_000
 TOO_SLOW_S = 45.0
 BAR = (19, 20)
@@ -45,19 +48,22 @@ def cheb(a: Any, b: Any) -> int:
     return max(abs(int(a[0]) - int(b[0])), abs(int(a[1]) - int(b[1])))
 
 
-def target_death(trial: dict[str, Any], deaths: list[dict[str, Any]]) -> dict[str, Any]:
+def target_death(trial: dict[str, Any], deaths: list[dict[str, Any]],
+                 requests: list[dict[str, Any]]) -> dict[str, Any]:  # fmt: skip
     attacks = trial.get("attacks") or []
     if not attacks:
         return {"why": "no attack"}
     t0, t1 = int(attacks[0]), int(trial.get("t_end") or attacks[0] + 60 * S)
-    near = [d for d in deaths if t0 <= d["t_ns"] <= t1 and d["cell"] is not None
-            and d.get("job") in (PORING, None)
-            and cheb(d["cell"], trial["spot"]) <= TARGET_CELLS]  # fmt: skip
-    if not near:
-        return {"why": "no server death"}
-    if len(near) > 1:
-        return {"why": "ambiguous", "gids": [d["gid"] for d in near]}
-    return {"death": near[0]}
+    req = [e for e in requests if t0 - CLICK_SLACK_S * S <= int(e["t_mono_ns"]) <= t1
+           and e.get("target_gid") is not None]  # fmt: skip
+    if not req:
+        return {"why": "no attack request"}
+    gid = int(req[0]["target_gid"])
+    others = sorted({int(e["target_gid"]) for e in req} - {gid})
+    died = [d for d in deaths if d["gid"] == gid and t0 <= d["t_ns"] <= t1 and d["cell"]]
+    if not died:
+        return {"why": "no server death", "target_gid": gid, "other_targets": others}
+    return {"death": died[0], "target_gid": gid, "other_targets": others}
 
 
 def judge(trials: list[dict[str, Any]], events: list[dict[str, Any]],
@@ -65,6 +71,8 @@ def judge(trials: list[dict[str, Any]], events: list[dict[str, Any]],
           first: int = BAR[1]) -> dict[str, Any]:  # fmt: skip
     led = lt.ledger(events, GM_AID)
     deaths = led["deaths"]
+    requests = sorted((e for e in events if e.get("type") == "attack_request"),
+                      key=lambda e: int(e["t_mono_ns"]))  # fmt: skip
     items = led["floor_items"]
     rows: list[dict[str, Any]] = []
     p3 = Counter()
@@ -73,13 +81,15 @@ def judge(trials: list[dict[str, Any]], events: list[dict[str, Any]],
         rows.append(row)
         if tr.get("kill") != "vanished":
             continue
-        td = target_death(tr, deaths)
+        td = target_death(tr, deaths, requests)
         if "death" not in td:
             row["server"] = td["why"]
             p3["no_server_target"] += 1
             continue
         d = td["death"]
-        row["server_death"] = {"gid": d["gid"], "cell": list(d["cell"]), "t_ns": d["t_ns"]}
+        row["server_death"] = {"gid": d["gid"], "cell": list(d["cell"]), "t_ns": d["t_ns"],
+                               "job": d.get("job"), "from_spot": cheb(d["cell"], tr["spot"]),
+                               "other_targets": td["other_targets"]}  # fmt: skip
         px = (tr.get("death") or {}).get("cell")
         if px is None:
             row["p3"] = "no pixel cell: " + str((tr.get("death") or {}).get("reason")

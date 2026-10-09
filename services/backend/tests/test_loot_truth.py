@@ -92,3 +92,13 @@ def test_a_late_drop_is_not_attributed_to_the_death() -> None:
     events = [*scene(), fall(5.0 + lt.DROP_WINDOW_S + 0.1, 504, 9104, 150, 200)]
     rows = {r["floor_id"]: r for r in lt.ledger(events, AID)["floor_items"]}
     assert rows[504]["death"] is None
+
+
+def test_a_drop_sent_just_before_the_died_vanish_is_attributed() -> None:
+    """loot@1 pilot 2 (2026-10-09 15:06): the server sent the Poring's drop 0.24 s BEFORE its
+    "died" vanish; the ledger linked it to no death. Up to DROP_BEFORE_S before counts."""
+    early = fall(5.0 - 0.24, 505, 9105, 150, 200)
+    too_early = fall(5.0 - lt.DROP_BEFORE_S - 0.1, 506, 9106, 150, 200)
+    rows = {r["floor_id"]: r for r in lt.ledger([*scene(), early, too_early], AID)["floor_items"]}
+    assert rows[505]["death"] == MOB and rows[505]["offset"] == (0, 0)
+    assert rows[506]["death"] is None
