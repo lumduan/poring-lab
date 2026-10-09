@@ -2,12 +2,13 @@
 // The console's "Packet timeline" is a HUMAN view of offline ground truth: nothing here ever feeds
 // an input, and the agent cannot open /ws/packets (the backend refuses compose peers).
 
-import type { PacketStats, PoringPackets } from "./packets.gen";
+import type { PacketSource, PacketStats, PoringPackets } from "./packets.gen";
 
 export type * from "./packets.gen";
 
 export type PacketEvent = PoringPackets["event"];
-export type FeedMessage = PacketEvent | PacketStats;
+/** One /ws/packets line: a sniffer event, its stats, or the BACKEND's source-state line. */
+export type FeedMessage = PacketEvent | PacketStats | PacketSource;
 
 export const KINDS = ["chat", "self", "entity", "stat", "session", "error"] as const;
 export type Kind = (typeof KINDS)[number];
@@ -72,9 +73,11 @@ export function parseFeed(text: string): FeedMessage | null {
   }
 }
 
-/** Newest-last ring of events with eviction counted (never silent). */
+/** Newest-last ring of events with eviction counted (never silent). Every event gets a sequence
+ * number on arrival (`seqOf`): a stable row key, so rows keep their DOM node as new ones arrive. */
 export class Timeline {
   private items: PacketEvent[] = [];
+  private seqs = new WeakMap<PacketEvent, number>();
   received = 0;
   evicted = 0;
   readonly capacity: number;
@@ -86,10 +89,16 @@ export class Timeline {
   push(e: PacketEvent): void {
     this.items.push(e);
     this.received += 1;
+    this.seqs.set(e, this.received);
     if (this.items.length > this.capacity) {
       this.items.shift();
       this.evicted += 1;
     }
+  }
+
+  /** The arrival number of an event this timeline holds (-1: not one of ours). */
+  seqOf(e: PacketEvent): number {
+    return this.seqs.get(e) ?? -1;
   }
 
   /** Newest first, filtered by kind; validation-account / GM-command events optionally hidden. */
@@ -286,4 +295,78 @@ export function summarize(s: PacketStats | null): string[] {
     `map ${s.map ?? "–"} · self ${pos} · ${s.entities} entities · HP ${hp} · SP ${sp}`,
     `${s.packets} packets${problems.length ? ` · ${problems.join(" · ")}` : " · no decode problems"}`,
   ];
+}
+
+// --- the SOURCE STATE (Batt 2026-10-09 ~14:40): never an empty list that means nothing ----------
+// The backend sends a PacketSource line on /ws/packets at connect and every second. Its times are
+// WALL clock (unix ms, the backend's receipts), formatted here; ages are the backend's own. The
+// only age measured in the browser is how long ago THIS tab got the last line (its own clock).
+
+/** No source line for this long (this tab's clock): the state shown is unknown, not "live". */
+export const SOURCE_REPORT_STALE_MS = 5000;
+
+export type SourceKind = "disconnected" | "unknown" | "live" | "sniffer_offline" | "external";
+export type SourceView = {
+  kind: SourceKind;
+  tone: "ok" | "amber" | "neutral";
+  /** The panel's one-line source state (always shown, in a reserved slot). */
+  line: string;
+  /** Shown INSIDE the list box above any rows, so the list is never silently empty. */
+  note: string | null;
+  /** Rows in the box are history from before the source stopped: drawn dimmed. */
+  dim: boolean;
+};
+
+/** "14:31:05" for a unix-ms wall time, in the viewer's time zone (or the one given: tests). */
+export function clockText(unixMs: number, timeZone?: string): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23", timeZone,
+  }).format(new Date(unixMs)); // fmt: skip
+}
+
+const OFFLINE_WHY: Record<string, string> = {
+  never_heard: "nothing from the sniffer since the backend started",
+  ingest_disconnected: "its feed to the backend is closed",
+  heartbeat_stale: "its 1 Hz heartbeat stopped",
+  not_attesting: "it stopped attesting",
+};
+
+export type SourceInput = {
+  connected: boolean; // the /ws/packets socket is open
+  source: PacketSource | null; // the backend's last source line (null: none on this socket)
+  receivedAgoMs: number | null; // since this tab received it (this tab's clock)
+  rows: number; // rows the list would show
+  timeZone?: string;
+};
+
+export function sourceView({ connected, source, receivedAgoMs, rows, timeZone }: SourceInput): SourceView {
+  if (!connected) {
+    const line = "/ws/packets disconnected: reconnecting… (is the backend up?)";
+    return { kind: "disconnected", tone: "amber", line, note: "Not connected to the backend: no packets arrive.", dim: true };
+  }
+  if (source === null || receivedAgoMs === null) {
+    const line = "Packet source: not reported (a backend from before 2026-10-09 does not; restart pending)";
+    return { kind: "unknown", tone: "amber", line, note: rows ? null : "No packets in this tab yet, and the backend does not say whether the sniffer is live.", dim: false };
+  }
+  if (receivedAgoMs > SOURCE_REPORT_STALE_MS) {
+    const line = `Packet source: no report from the backend for ${Math.round(receivedAgoMs / 1000)} s (state unknown)`;
+    return { kind: "unknown", tone: "amber", line, note: line, dim: true };
+  }
+  if (source.state === "external") {
+    const line = "External server: packet log not available (not captured by design)";
+    return { kind: "external", tone: "neutral", line, note: line, dim: true };
+  }
+  if (source.state === "sniffer_offline") {
+    const since = source.last_feed_unix_ms == null ? "the backend started" : clockText(source.last_feed_unix_ms, timeZone);
+    const why = OFFLINE_WHY[source.reason] ?? source.reason;
+    const line = `Sniffer offline (no packets since ${since})${why ? ` · ${why}` : ""}`;
+    return { kind: "sniffer_offline", tone: "amber", line, note: line, dim: true };
+  }
+  const beat = source.heartbeat_age_ms == null ? "?" : (source.heartbeat_age_ms / 1000).toFixed(1);
+  const game = source.last_event_unix_ms == null ? "no game packet since the backend started" : `last game packet ${clockText(source.last_event_unix_ms, timeZone)}`;
+  return {
+    kind: "live", tone: "ok", line: `Sniffer live · heartbeat ${beat} s ago · ${game}`,
+    note: rows ? null : "Sniffer live: no game packets in this tab yet (an idle character sends few).",
+    dim: false,
+  }; // fmt: skip
 }

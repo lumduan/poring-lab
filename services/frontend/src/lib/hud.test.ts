@@ -18,7 +18,7 @@ import {
   walkPx,
   zonePx,
 } from "./hud.ts";
-import type { HudUnit, OperatorHud, Status } from "./protocol.ts";
+import type { HudUnit, OperatorHud } from "./protocol.ts";
 
 const unit = (extra: Partial<HudUnit> = {}): HudUnit => ({
   cls: "monster",
@@ -166,17 +166,4 @@ test("the toggle says which state it is in and that it sends nothing", () => {
   assert.match(hudToggle(false).title, /off on every load/);
 });
 
-// --- the empty-overlay status line (Batt 2026-10-08) ---------------------------------------------
-import { FEED_STALE_MS, feedLine } from "./hud.ts";
-
-test("an empty overlay says why: no status, an old backend, no publisher, a stopped one, or live", () => {
-  const base = { type: "status" } as unknown as Status;
-  assert.match(feedLine("HUD", null) ?? "", /no backend status yet/);
-  assert.match(feedLine("HUD", base) ?? "", /backend not updated/); // an older backend: no key
-  const feed = (relayed: number, age_ms: number | null, source = "") =>
-    ({ ...base, hud_feed: { relayed, age_ms, source }, route_feed: { relayed, age_ms, source } }) as Status;
-  assert.match(feedLine("HUD", feed(0, null)) ?? "", /no publisher running/);
-  assert.match(feedLine("Route preview", feed(4, FEED_STALE_MS + 9000, "route-preview")) ?? "",
-    /last message 12 s ago from route-preview/);
-  assert.equal(feedLine("HUD", feed(9, 200, "walk@12")), null); // live: nothing to explain
-});
+// The empty-overlay feed lines are tested in feeds.test.ts (2026-10-09).

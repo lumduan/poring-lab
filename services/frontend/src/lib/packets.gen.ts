@@ -59,6 +59,7 @@ export interface PoringPackets {
     | DropResult
     | UnknownPacket
     | Desync;
+  source: PacketSource;
   stats: PacketStats;
   [k: string]: unknown;
 }
@@ -1422,6 +1423,54 @@ export interface Desync {
   t_mono_ns: number;
   type: "desync";
   validation_account: boolean;
+}
+/**
+ * The console's Packet timeline: WHERE its packets come from, right now (Batt 2026-10-09).
+ *
+ * Made by the BACKEND for /ws/packets (the LAN viewers' channel) about the sniffer it hears;
+ * never sent by the sniffer (parse_feed refuses it on /ingest/packets) and never to an agent.
+ * It tells "nothing happened" apart from "nobody is listening": an idle GM sends few game
+ * packets, so liveness is the sniffer's own 1 Hz heartbeat (its PacketStats + Attestation
+ * pair), not the last game packet. Wall-clock times are the BACKEND's receipt times (unix ms),
+ * for display only; ages are the backend's own (CLOCK_MONOTONIC).
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "PacketSource".
+ */
+export interface PacketSource {
+  /**
+   * Since the OLDER of the sniffer's last stats and last attestation (backend clock); null = one of them never arrived since the backend started.
+   */
+  heartbeat_age_ms: number | null;
+  /**
+   * The sniffer's /ingest/packets socket is open.
+   */
+  ingest_connected: boolean;
+  /**
+   * Wall clock (unix ms) of the last GAME packet event received; null = none.
+   */
+  last_event_unix_ms: number | null;
+  /**
+   * Wall clock (unix ms) of the backend's last receipt of ANY sniffer line (heartbeat or game packet); null = none since the backend started.
+   */
+  last_feed_unix_ms: number | null;
+  /**
+   * One word: ok, never_heard, ingest_disconnected, heartbeat_stale, not_attesting, external_environment.
+   */
+  reason: string;
+  /**
+   * The heartbeat age beyond which it is offline.
+   */
+  stale_after_ms: number;
+  /**
+   * live: the lab sniffer's heartbeat is fresh; sniffer_offline: it is not (no packets can arrive); external: the human plays on an external server whose packets are not captured by design (no such environment exists yet: the backend never says so).
+   */
+  state: "live" | "sniffer_offline" | "external";
+  /**
+   * The backend's clock when it made this line.
+   */
+  t_mono_ns: number;
+  type: "packet_source";
 }
 /**
  * Periodic counters + world summary for the console (never silent).

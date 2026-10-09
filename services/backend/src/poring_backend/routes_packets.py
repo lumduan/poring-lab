@@ -4,7 +4,9 @@
 sniffer lives in rathena's network namespace) receives the sniffer's events and stats. It is
 one-way: drops are counted and logged, never answered.
 
-``/ws/packets`` (public listener :8000 only) fans them out to console tabs. It accepts only peers
+``/ws/packets`` (public listener :8000 only) fans them out to console tabs, with the backend's own
+``PacketSource`` line (the source state: live / sniffer offline / external) at connect and every
+second. It accepts only peers
 on the LAN viewer networks (VIEWER_NETWORKS) with an allowlisted Origin: compose peers -- vision,
 and the lab gateway through which a container reaching the published port is proxied -- are
 refused, so the vision agent cannot read it even with a forged Origin. Every refusal is counted in
@@ -24,7 +26,7 @@ from pydantic import ValidationError
 from pydantic_core import InitErrorDetails, PydanticCustomError
 
 from poring_backend.drops import ReplyThrottle
-from poring_backend.packets import pump_packets
+from poring_backend.packets import pump_packets, tick_source
 from poring_backend.routes_public import get_state, offer, read_message, stop_task
 from poring_env.clock import monotonic_ns
 from poring_packets.events import Attestation, parse_feed
@@ -93,6 +95,7 @@ async def ingest_packets(ws: WebSocket) -> None:
             if isinstance(msg, Attestation):
                 # ADR-0016: to the interlock ONLY -- never to a viewer, never to an agent.
                 state.interlock.attested(msg, monotonic_ns())
+                hub.attested()  # its receipt time only: the Packet timeline's source state
             elif msg is not None:
                 hub.publish(msg)
     except WebSocketDisconnect:
@@ -126,6 +129,7 @@ async def ws_packets(ws: WebSocket) -> None:
     hub = state.packets
     outbox = hub.add_viewer()
     sender = asyncio.create_task(pump_packets(ws, outbox), name="packets-pump")
+    ticker = asyncio.create_task(tick_source(hub, outbox), name="packets-source")
     throttle = ReplyThrottle()
     try:
         while True:
@@ -134,4 +138,5 @@ async def ws_packets(ws: WebSocket) -> None:
         pass
     finally:
         hub.remove_viewer(outbox)
+        await stop_task(ticker)
         await stop_task(sender)

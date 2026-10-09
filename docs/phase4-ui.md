@@ -178,6 +178,12 @@ by `lib/hud.test.ts`):
 - **The panel** under the stream: the rule's label, counters, walk text, lock and the log.
   - It keeps the last message after its ttl, marked stale, so a stopped rule's last words stay
     readable.
+  - ➡️ 2026-10-09 (Batt): a FIXED layout (status block left, decision log right with its own
+    scroll, a reserved 3-line slot for the feed lines), then the Packet timeline right under it.
+    The feed lines say grey "idle" when no rule runs (or no route is active) and yellow only when
+    a running rule's channel stops; the HUD scene's heartbeat is its 5 s keyframe (stale after
+    2.5 periods). Rules and thresholds: `services/frontend/src/lib/feeds.ts`; the record is
+    docs/planning/mw2-block-editor.md section 10, items 3-5.
 - **Text only:** every string is drawn with canvas `fillText` or a React text node, never as markup.
   `lib/hud.ts` strips control characters again on the console side. No new script source: the
   nonce CSP is untouched.

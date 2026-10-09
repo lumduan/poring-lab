@@ -4,7 +4,7 @@
 // tested with `node --test` (src/lib/hud.test.ts). Every string it returns is drawn as TEXT
 // (canvas fillText or a React text node), never as markup.
 
-import type { DisplayFeed, HudUnit, OperatorHud, Status } from "./protocol.ts";
+import type { HudUnit, OperatorHud } from "./protocol.ts";
 
 export type PxPoint = { x: number; y: number };
 export type PxRect = { x: number; y: number; w: number; h: number };
@@ -186,21 +186,4 @@ export function hudToggle(on: boolean): { label: string; title: string } {
       };
 }
 
-// --- WHY an overlay is empty (Batt 2026-10-08: tell "no data" from "broken") ----------------------
-export const FEED_STALE_MS = 3000;
-
-/** The status line for one display feed, or null when it is live. `status` is the backend's latest
- * Status; an older backend sends no feed key at all, which is how "not updated" is told apart. */
-export function feedLine(kind: "HUD" | "Route preview" | "HUD scene", status: Status | null): string | null {
-  if (!status) return `${kind}: no backend status yet (connecting)`;
-  const key = kind === "HUD" ? "hud_feed" : kind === "HUD scene" ? "scene_feed" : "route_feed";
-  // an older backend's Status has no such key at all (undefined), whatever the generated type says
-  const feed = (status as unknown as Partial<Record<string, DisplayFeed | null>>)[key];
-  if (feed === undefined || feed === null) return `${kind}: backend not updated (it does not report this feed; restart pending)`;
-  if (feed.relayed === 0) return `${kind}: no publisher running (nothing sent since the backend started)`;
-  if (feed.age_ms != null && feed.age_ms > FEED_STALE_MS) {
-    const who = feed.source ? ` from ${plain(feed.source, 32)}` : "";
-    return `${kind}: last message ${Math.round(feed.age_ms / 1000)} s ago${who} (its publisher stopped or is idle)`;
-  }
-  return null;
-}
+// WHY an overlay is empty (its feed lines) lives in ./feeds.ts since 2026-10-09.
