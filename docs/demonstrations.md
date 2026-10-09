@@ -2344,6 +2344,9 @@ target."
   2. **The pooled success rate is ≥ 90 %**, reported with its 95 % Wilson score interval.
 - **Claude's reading, stated so Batt can correct it before any held-out data:** the 90 % applies to
   the POOLED POINT ESTIMATE, and the interval is reported with it, not required to clear 90 %.
+  ➡️ **CONFIRMED by Batt 2026-10-09 ~10:30 (before any held-out data): "interpretation A is what I
+  meant: the pooled POINT estimate >= 90 % with zero safety events, the Wilson CI reported next to
+  it (not the lower bound). walk@15 qualifies."**
   The stricter reading (the interval's LOWER bound ≥ 90 %) is computed and reported too
   (`ci_lower_bound_ge_ready`). At n = 200 it needs about 190 / 200.
 - **96 %** stays the long-term target (`target_met`, reported).
@@ -2463,6 +2466,18 @@ later.
   dialog through `safety_signal_check.py`'s NPC path must show each of them live.
 - **T5 · the TALK-gated contact click:** `safety_signal_check.py npc-click`, already proven for
   `npc_contact` (§2a). It is re-run on all three targets.
+
+**Design detail from banked frames (2026-10-09 ~10:25, before any trial and before T2/T3 are built):**
+- The source is last night's NPC positive case (Garnet; `npc-check` screenshots, local).
+- The dialog window and the menu window are separate. The menu window shows **4 lines** and
+  SCROLLS: Garnet's 7 options do not fit.
+- So the reader (T3) reads the visible lines, scrolls the list, and reads again, until the lines
+  it has read cover the whole L3 list in order. The cross-check is on the WHOLE list.
+- The intended option is clicked only while it is VISIBLE, read on the current frame. The highlight
+  is then checked on that line.
+- The menu's OK / Cancel buttons are labelled in the client's own locale. They are found by their
+  image anchors (T2), never by text.
+- None of this changes a bar or a target.
 
 **Step 0 · a PILOT, never scored:** 3 trials per scene, to check the harness end to end. Any fix
 it needs is committed BEFORE the scored runs.
