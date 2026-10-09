@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from flow_synthetic import FIXTURES, farm_flow  # noqa: E402
 
 HEAD = (
-    'flow(ir=1, name="t", max_runtime_s=600, target=target(client="kro-20211103-prere", '
+    'flow(ir=2, name="t", max_runtime_s=600, target=target(client="kro-20211103-prere", '
     'server="lab-rathena", locale="en", path=S2))\n'
 )
 SOURCES = sorted(FIXTURES.glob("*.flow"))
@@ -181,3 +181,41 @@ def test_parse_never_runs_the_source(tmp_path: Path) -> None:
     with pytest.raises(pyview.ParseError):
         pyview.parse(src)
     assert not marker.exists()
+
+
+def test_the_bare_underscore_is_only_repeats_target() -> None:
+    """#16 (Batt 2026-10-09): `repeat N` prints as `for _ in range(N)`, the ONE exception to the
+    underscore rule; `_` is nothing else (not a variable, not another loop's target)."""
+    flow = parse_ok("for _ in range(3):\n    sit()\n")
+    assert isinstance((flow.main or [])[0], ir.Repeat)
+    assert "for _ in range(3):\n    sit()" in pyview.print_flow(flow)
+    assert refused('SPOTS = [cell("m", 1, 2)]\nfor _ in SPOTS:\n    sit()\n') == [
+        "line 3, col 1: for _ in range(n) is the repeat block: one argument"
+    ]
+    assert refused("for _ in range(1, 3):\n    sit()\n") == [
+        "line 2, col 1: for _ in range(n) is the repeat block: one argument"
+    ]
+    assert refused("X = 1\nfor _ in range(3):\n    X = _\n") == [
+        "line 4, col 9: _ is not a flow variable"
+    ]
+    assert refused("for _x in range(3):\n    sit()\n") == [
+        "line 2, col 5: name _x is not allowed in a flow (a name starting with _ is refused)"
+    ]
+
+
+def test_close_npc_dialog_is_an_alias_that_warns() -> None:
+    """#7 (Batt 2026-10-09): ONE block, close_dialog (idempotent); close_npc_dialog imports as it,
+    with a warning, and nothing prints or stores the old name."""
+    seen: list[str] = []
+    flow = pyview.parse(HEAD + "close_npc_dialog()\n", warnings=seen)
+    a = (flow.main or [])[0]
+    assert isinstance(a, ir.ActionStmt) and a.block == "close_dialog" and a.concept == "npc.close"
+    assert seen == ["line 2, col 1: close_npc_dialog() is an alias of close_dialog(): imported as "
+                    "close_dialog"]  # fmt: skip
+    assert "close_npc_dialog" not in pyview.print_flow(flow)
+    assert flow == pyview.parse(HEAD + "close_dialog()\n")
+    with pytest.warns(pyview.AliasWarning, match="alias of close_dialog"):
+        pyview.parse(HEAD + "close_npc_dialog()\n")
+    from poring_flow.catalogue import catalogue
+
+    assert "close_npc_dialog" not in catalogue().blocks

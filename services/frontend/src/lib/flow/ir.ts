@@ -104,6 +104,7 @@ export type Handler = {
   until: Expr | null;
   rearm: Expr | null;
   priority: Priority;
+  rank: number | null; // IR 2 (ADR-0020 #13): the rank inside the class; null = 13.6.3's table order
   mode: "insert" | "preempt";
   escalate: string | null;
   max_insert_fails: number;
@@ -144,12 +145,13 @@ export type Workflow = {
 };
 export type Target = { client: string; server: string; locale: string; path: "s2" | "rdp" };
 export type Flow = {
-  ir: 1;
+  ir: 2;
   name: string;
   description: string;
   target: Target;
   assumes: Expr[];
   max_runtime_s: number;
+  where_budget: number; // ADR-0020 #10: the run's /where budget (ACTIVE position reads)
   stop_when: Expr | null;
   variables: Record<string, Lit>;
   procedures: Record<string, Stmt[]>;
@@ -159,11 +161,25 @@ export type Flow = {
 };
 
 // MW1's constants (ir.py): names, limits and the safety-critical set, fixed in code.
+// IR 2 (Batt 2026-10-09, ADR-0020 contradictions #13): Handler.rank. IR 1 converts on import
+// (importer.ts upgradeFlow, the same converter as MW1's ir.upgrade).
+export const IR_VERSION = 2;
+export const MAX_RANK = 99;
+// ADR-0020 #10 (Batt 2026-10-09): MW1's default per-run /where budget (ir.WHERE_BUDGET_DEFAULT).
+export const WHERE_BUDGET_DEFAULT = 12;
 export const NAME = /^[A-Za-z][A-Za-z0-9_]{0,47}$/;
 export const FLOW_NAME = /^[a-z][a-z0-9_]{0,47}$/;
 export const MAP_ID = /^[A-Za-z0-9_@.\-]{1,40}$/;
 export const KEY = /^[A-Za-z0-9_.\-]{1,64}$/;
 export const SAFETY_CRITICAL = ["dead", "hp_critical", "unexpected_map"];
+
+/** The ALWAYS-ON safety events (Batt 2026-10-09, ADR-0020 contradictions #15): the compiler adds
+ * the ones a flow does not write to EVERY flow (poring_flow.always_on); they are not in the IR. A
+ * flow that writes one may only make it stricter (the linter's "not weakened" check). */
+export function builtInEvents(flow: Flow): string[] {
+  const written = new Set(flow.handlers.map((h) => h.name));
+  return SAFETY_CRITICAL.filter((k) => !written.has(k));
+}
 export const MAX_JSON_BYTES = 1 << 20;
 export const MAX_JSON_DEPTH = 256;
 
@@ -212,14 +228,21 @@ export function exitOf(kind: AuthoredExit, to_block: string, to_entry: string): 
   return { kind, warp: null, npc: null, options: [], item: null, to_block, to_entry, timeout_s: 120 };
 }
 
-export function emptyFlow(name = "new_flow"): Flow {
+/** Batt's default run time for a new flow (ADR-0020 #17, 4 h) until the configured one arrives
+ * (`CatalogueDoc.runtime_limits.default_s`, set on the Settings page). */
+export const RUNTIME_DEFAULT_S = 14_400;
+/** MW1's schema SANITY cap (ir.MAX_RUNTIME_S, 7 days); the policy maximum is configured (#17). */
+export const MAX_RUNTIME_CAP_S = 604_800;
+
+export function emptyFlow(name = "new_flow", maxRuntimeS = RUNTIME_DEFAULT_S): Flow {
   return {
-    ir: 1,
+    ir: IR_VERSION,
     name,
     description: "",
     target: { client: "kro-20211103-prere", server: "lab-rathena", locale: "en", path: "s2" },
     assumes: [],
-    max_runtime_s: 3600,
+    max_runtime_s: maxRuntimeS,
+    where_budget: WHERE_BUDGET_DEFAULT,
     stop_when: null,
     variables: {},
     procedures: {},
@@ -296,4 +319,22 @@ export function stmtAt(stmts: Stmt[], rest: string[]): { list: Stmt[]; index: nu
     i += 2;
   }
   return null;
+}
+
+/** A flow's run settings (ADR-0020 #10 / #17), checked before they reach the IR. `maxS` is the
+ * CONFIGURED maximum run time (the Settings page), when known. */
+export function runSettings(
+  flow: Flow,
+  maxRuntimeS: string,
+  whereBudget: string,
+  maxS: number | null,
+): { ok: true; flow: Flow } | { ok: false; error: string } {
+  const cap = maxS ?? MAX_RUNTIME_CAP_S;
+  if (!/^[0-9]{1,6}$/.test(maxRuntimeS.trim()) || Number(maxRuntimeS) < 1 || Number(maxRuntimeS) > cap) {
+    return { ok: false, error: `max_runtime_s: whole seconds, 1..${cap}${maxS ? " (the configured maximum)" : ""}` };
+  }
+  if (!/^[0-9]{1,4}$/.test(whereBudget.trim()) || Number(whereBudget) > 1000) {
+    return { ok: false, error: "where_budget: a whole number, 0..1000" };
+  }
+  return { ok: true, flow: { ...clone(flow), max_runtime_s: Number(maxRuntimeS), where_budget: Number(whereBudget) } };
 }

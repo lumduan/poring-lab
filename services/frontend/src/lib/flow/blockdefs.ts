@@ -241,8 +241,9 @@ export const BLOCK_DEFS: BlockDef[] = [
     type: "pl_event",
     message0: "%1 when %2",
     args0: [label("SCOPE"), { type: "input_value", name: "WHEN" }],
-    message1: "event %1 class %2 mode %3 then %4",
+    message1: "event %1 class %2 rank %3 mode %4 then %5",
     args1: [text("NAME", "my_event"), { type: "field_dropdown", name: "PRIORITY", options: opts(PRIORITY_OPTIONS) },
+      text("RANK"), // IR 2 (ADR-0020 #13): 1..99 inside the class; empty = 13.6.3's table order
       { type: "field_dropdown", name: "MODE", options: opts(MODE_OPTIONS) },
       { type: "field_dropdown", name: "THEN", options: opts(THEN_OPTIONS) }],
     message2: "until %1 rearm %2",
@@ -251,7 +252,8 @@ export const BLOCK_DEFS: BlockDef[] = [
     args3: [{ type: "input_statement", name: "DO" }],
     colour: COLOURS.event,
     mutator: STATE,
-    tooltip: "when <condition> do: until (repeat until it holds) and rearm (one-shot) are exclusive",
+    tooltip:
+      "when <condition> do: until (repeat until it holds) and rearm (one-shot) are exclusive; rank orders the events of one class (empty: 13.6.3's table order)",
   },
   {
     type: "pl_extend",

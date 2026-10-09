@@ -1,6 +1,8 @@
 """Linter layer 3, events (section 5's "3 · events" row and 13.6.9).
 
-Where 13.6.9 is stricter (a same-sensor tie is an ERROR, not a warning), it wins.
+Where 13.6.9 is stricter (a same-sensor tie is an ERROR, not a warning), it wins. Ties need the
+same class AND the same rank (Batt 2026-10-09, contradictions #14); events at different ranks are
+ordered, and only an INFO says so.
 
 Interpretation (reported, not decided here): section 5 requires "a rearm or a cooldown" on every
 handler, while 13.6.8's own defaults give `dead`, `unexpected_map` and `unintended_engagement`
@@ -15,6 +17,7 @@ import math
 from typing import Any
 
 from poring_flow import ir
+from poring_flow.always_on import BUILT_IN
 from poring_flow.effective import Effective
 from poring_flow.lint.common import (
     Consts,
@@ -39,7 +42,7 @@ def check(ctx: Ctx) -> None:
     consts = Consts(ctx.flow, assigned_vars(ctx.flow))
     for issue in _merge_issues(ctx):
         ctx.add(issue[0], "error", 3, issue[1], issue[2])
-    _safety_critical(ctx)
+    _safety_critical(ctx, consts)
     for label, h, block, _ in ir.handler_bodies(ctx.flow):
         _handler(ctx, consts, label, h, block)
     for b in ctx.blocks:
@@ -65,41 +68,76 @@ def _merge_issues(ctx: Ctx) -> list[tuple[str, str, str]]:
     return out
 
 
-# --- the fixed safety-critical set (13.6.1, 13.6.9) -----------------------------------------------
-def _safety_critical(ctx: Ctx) -> None:
-    glob = {h.name: h for h in ctx.flow.handlers}
-    if ctx.flow.workflow is not None:
-        for k in ir.SAFETY_CRITICAL:
-            if k not in glob:
-                ctx.add(
-                    "safety_critical",
-                    "error",
-                    3,
-                    "",
-                    f"{k} is safety-critical and missing from the global events: every workflow "
-                    "has dead, hp_critical and unexpected_map",
-                )
-    for k in ir.SAFETY_CRITICAL:
-        h = glob.get(k)
-        if h is None:
-            continue
-        if h.priority != "critical":
-            ctx.add(
-                "safety_critical",
-                "error",
-                3,
-                k,
-                f"{k} is safety-critical: its class is critical, not {h.priority}",
-            )
-        if h.mode != "preempt":
-            ctx.add("safety_critical", "error", 3, k, f"{k} is safety-critical: it pre-empts")
-    hc = glob.get("hp_critical")
-    if hc is not None and not (
-        len(hc.body) == 1 and isinstance(hc.body[0], ir.ActionStmt) and hc.body[0].block == "escape"
-    ):
-        ctx.add(
-            "safety_critical", "error", 3, "hp_critical", "hp_critical's body is fixed: escape()"
+# --- the fixed safety-critical set (13.6.1, 13.6.9; always on, contradictions #15) -------------
+LIMITS = ("max_per_run", "max_per_min", "max_fires_per_10min")
+
+
+def _safety_critical(ctx: Ctx, consts: Consts) -> None:
+    """NOT WEAKENED (Batt 2026-10-09, contradictions #15): the compiler adds dead, hp_critical and
+    unexpected_map to every flow (always_on.py), so a flow that leaves one out gets the built-in.
+    A flow that writes one may only make it STRICTER than the built-in; each way it is weaker is an
+    ERROR at the event's node path."""
+    for h in ctx.flow.handlers:
+        if h.name in BUILT_IN:
+            for text in weakened(ctx, consts, h, BUILT_IN[h.name]):
+                ctx.add("safety_critical", "error", 3, h.name, text)
+
+
+def weakened(ctx: Ctx, consts: Consts, h: ir.Handler, d: ir.Handler) -> list[str]:
+    """Every way a written safety-critical event `h` is weaker than its built-in `d`."""
+    k = h.name
+    out: list[str] = []
+    if h.priority != "critical":
+        out.append(f"{k} is safety-critical: its class is critical, not {h.priority}")
+    if h.mode != "preempt":
+        out.append(f"{k} is safety-critical: it pre-empts")
+    if h.rank is not None and h.rank != ir.DEFAULT_RANK[k]:
+        out.append(
+            f"{k} is safety-critical: its rank is fixed ({ir.DEFAULT_RANK[k]}, 13.6.3), not "
+            f"{h.rank}"
         )
+    if h.then not in (d.then, "stop"):
+        out.append(f"{k} is safety-critical: then is {d.then} or stop, not {h.then}")
+    if h.when != d.when:
+        th, td = threshold(h.when, ctx, consts), threshold(d.when, ctx, consts)
+        ih = interval(th) if th is not None and not th.boolean else None
+        idd = interval(td) if td is not None and not td.boolean else None
+        if th is not None and td is not None and th.key == td.key and ih and idd:
+            if idd.meet(ih) != idd:  # the built-in's range must lie inside the written one
+                out.append(
+                    f"{k} is safety-critical: when {ctx.src(h.when)} fires later than the "
+                    f"built-in {ctx.src(d.when)}"
+                )
+        else:
+            out.append(f"{k} is safety-critical: its trigger is the built-in {ctx.src(d.when)}")
+    if (h.until, h.rearm) != (d.until, d.rearm):
+        fixed = (
+            f"rearm={ctx.src(d.rearm)}"
+            if d.rearm is not None
+            else "none: it re-arms when its trigger clears"
+        )
+        out.append(f"{k} is safety-critical: its re-arm is the built-in's ({fixed})")
+    for lim in LIMITS:
+        vh, vd = getattr(h, lim), getattr(d, lim)
+        if vd is not None and (vh is None or vh > vd):
+            shown = "unlimited" if vh is None else str(vh)
+            out.append(
+                f"{k} is safety-critical: {lim} {shown} loosens the built-in {vd}: it may only "
+                "be tightened"
+            )
+    if h.cooldown_s > d.cooldown_s:
+        out.append(
+            f"{k} is safety-critical: cooldown_s {num(h.cooldown_s)} loosens the built-in "
+            f"{num(d.cooldown_s)}: it may only be tightened"
+        )
+    want = [a.block for a in d.body if isinstance(a, ir.ActionStmt)]
+    got = [a.block if isinstance(a, ir.ActionStmt) else a.kind for a in h.body]
+    if k == "hp_critical" and got != want:
+        out.append("hp_critical's body is fixed: escape()")
+    elif got[: len(want)] != want:
+        steps = ", ".join(f"{b}()" for b in want)
+        out.append(f"{k}'s body starts with the built-in {steps}: steps may only follow it")
+    return out
 
 
 # --- one handler ------------------------------------------------------------------------------
@@ -206,7 +244,7 @@ def _handler(ctx: Ctx, consts: Consts, label: str, h: ir.Handler, b: ir.MapBlock
 
 
 def _extension(ctx: Ctx, label: str, ev: ir.Extend, b: ir.MapBlock) -> None:
-    g = next((h for h in ctx.flow.handlers if h.name == ev.key), None)
+    g = next((h for h in ctx.flow.handlers if h.name == ev.key), BUILT_IN.get(ev.key))
     if g is None:
         return
     for a in body_actions(ev.steps, ctx.flow):
@@ -309,7 +347,11 @@ def _hysteresis(ctx: Ctx, consts: Consts, label: str, h: ir.Handler) -> None:
             )
 
 
-# --- ties: two effective events of one class (13.6.2 step 4) --------------------------------------
+# --- ties: two effective events of one class (13.6.2 step 4; 13.6.9) -----------------------------
+# Batt 2026-10-09 (contradictions #14, after #13's rank): a tie needs the same class AND the same
+# rank. Only then can arrival order decide, so only then is it a WARNING (different sensors: they
+# queue first in, first out) or an ERROR (overlapping on the same sensor, 13.6.2 step 4). Two
+# events of one class at different ranks are ordered already: an INFO says which runs first.
 def _ties(ctx: Ctx, consts: Consts) -> None:
     scopes: list[tuple[str, list[Effective], bool]] = [("global", ctx.merged(None).active(), True)]
     scopes += [(b.name, ctx.merged(b).active(), False) for b in ctx.blocks]
@@ -326,23 +368,41 @@ def _ties(ctx: Ctx, consts: Consts) -> None:
 
 
 def _tie(ctx: Ctx, consts: Consts, scope: str, a: Effective, b: Effective) -> None:
+    """`a` precedes `b` in the effective order (effective.order_key)."""
     cls = a.handler.priority
     ta, tb = threshold(a.handler.when, ctx, consts), threshold(b.handler.when, ctx, consts)
+    region = None
     if ta is not None and tb is not None and ta.key == tb.key:
         ia, ib = interval(ta), interval(tb)
         if ia is None or ib is None:
             return
         both = ia.meet(ib)
-        if not both.empty():
-            region = ta.shown if ta.boolean else both.text(ta.shown)
-            ctx.add("ties", "error", 3, scope, f"{a.key} and {b.key} are both {cls} on {region}")
+        if both.empty():
+            return  # never due together
+        region = ta.shown if ta.boolean else both.text(ta.shown)
+    on = f" on {region}" if region else ""
+    if ir.place_in_class(a.handler) != ir.place_in_class(b.handler):
+        ra, rb = ir.rank_of(a.handler), ir.rank_of(b.handler)
+        why = "safety-critical first" if a.key in ir.SAFETY_CRITICAL else f"rank {ra} before {rb}"
+        ctx.add(
+            "ties",
+            "info",
+            3,
+            scope,
+            f"{a.key} and {b.key} are both {cls}{on}: {a.key} runs first when both are due ({why})",
+        )
+        return
+    r = ir.rank_of(a.handler)
+    if region:
+        ctx.add("ties", "error", 3, scope, f"{a.key} and {b.key} are both {cls} at rank {r}{on}")
         return
     ctx.add(
         "ties",
         "warning",
         3,
         scope,
-        f"{a.key} and {b.key} are both {cls} on different sensors: they queue",
+        f"{a.key} and {b.key} are both {cls} at rank {r} on different sensors: they queue "
+        "first in, first out",
     )
 
 

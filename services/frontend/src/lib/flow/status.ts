@@ -3,23 +3,23 @@
 import type { Finding, LintDoc, NodeRun, Severity, Trace } from "./api.ts";
 import type { GEdge } from "./canvas.ts";
 
-export type LintCounts = Record<Severity | "unsupported", number>;
-const ZERO: LintCounts = { error: 0, warning: 0, info: 0, unsupported: 0 };
+export type LintCounts = Record<Severity, number>;
+const ZERO: LintCounts = { error: 0, readiness: 0, warning: 0, info: 0 };
 
-/** Findings of one canvas node (`block:<name>`, `global`, `flow`). Unsupported bindings (rule
- * `bindings`, ADR-0020 open question #6: no real flow lints clean today) are counted apart. */
+/** Findings of one canvas node (`block:<name>`, `global`, `flow`), by severity. READINESS items
+ * (unsupported bindings, ADR-0020 contradictions #6, decided by Batt 2026-10-09) are their own
+ * severity: they block the run, not the design, so they never turn a node red. */
 export function lintOf(lint: LintDoc | null, owner: string): LintCounts {
   return { ...ZERO, ...(lint?.by_owner[owner] ?? {}) };
 }
 
-export function lintLine(c: LintCounts): { text: string; level: Severity | "ok" | "unsupported" } {
-  const own = { error: c.error - c.unsupported, warning: c.warning, info: c.info };
+export function lintLine(c: LintCounts): { text: string; level: Severity | "ok" } {
   const parts: string[] = [];
-  if (own.error) parts.push(`${own.error} error${own.error > 1 ? "s" : ""}`);
-  if (own.warning) parts.push(`${own.warning} warning${own.warning > 1 ? "s" : ""}`);
-  if (own.info) parts.push(`${own.info} info`);
-  if (c.unsupported) parts.push(`${c.unsupported} unsupported`);
-  const level = own.error ? "error" : own.warning ? "warning" : c.unsupported ? "unsupported" : own.info ? "info" : "ok";
+  if (c.error) parts.push(`${c.error} error${c.error > 1 ? "s" : ""}`);
+  if (c.warning) parts.push(`${c.warning} warning${c.warning > 1 ? "s" : ""}`);
+  if (c.info) parts.push(`${c.info} info`);
+  if (c.readiness) parts.push(`${c.readiness} not ready`);
+  const level = c.error ? "error" : c.warning ? "warning" : c.readiness ? "readiness" : c.info ? "info" : "ok";
   return { text: parts.length ? parts.join(" · ") : "lint ok", level };
 }
 

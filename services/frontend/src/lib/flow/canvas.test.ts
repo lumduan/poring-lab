@@ -78,3 +78,21 @@ test("blocks: add, rename (exits and start follow), remove, start", () => {
   const e = ok(connectExit(a, "block_3", "item_warp", "town")).flow;
   assert.deepEqual(e.workflow!.blocks[2].main.map((m) => m.kind), ["take_exit"]);
 });
+
+test("the always-on safety events show on the global node, never in the IR (ADR-0020 #15)", () => {
+  const plain = toGraph(fixture("visit_and_choose"));
+  const g = plain.nodes.find((n) => n.id === "events:global")!;
+  assert.ok(g.data.kind === "events" && g.data.scope === "global");
+  assert.deepEqual(g.data.builtIn, ["dead", "hp_critical", "unexpected_map"]); // none written
+  const farm = fixture("farm_loop");
+  const fg = toGraph(farm).nodes.find((n) => n.id === "events:global")!;
+  assert.ok(fg.data.kind === "events" && fg.data.scope === "global" && fg.data.builtIn.length === 0); // all three written
+  // a workflow that writes no dead still respawns (the built-in): the derived edges remain
+  const noDead = { ...farm, handlers: farm.handlers.filter((h) => h.name !== "dead") };
+  const g2 = toGraph(noDead);
+  const gn = g2.nodes.find((n) => n.id === "events:global")!;
+  assert.ok(gn.data.kind === "events" && gn.data.scope === "global");
+  assert.deepEqual(gn.data.builtIn, ["dead"]);
+  assert.ok(g2.edges.some((e) => e.data.kind === "death_respawn"));
+  assert.equal(canonical(fromGraph(JSON.parse(JSON.stringify(g2)))), canonical(noDead)); // not IR
+});

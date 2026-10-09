@@ -114,7 +114,7 @@ def test_a_walk_on_kb_sheets_follows_the_gat(tmp_path: Path) -> None:
     from poring_flow import pyview
 
     flow = pyview.parse(
-        'flow(ir=1, name="t", max_runtime_s=60, target=target(client="c", server="srv", '
+        'flow(ir=2, name="t", max_runtime_s=60, target=target(client="c", server="srv", '
         'locale="en", path=S2))\n\nwalk_to(cell("m_town", 2, 4))\nwalk_to(cell("m_town", 12, 4))\n'
     )
     t = simulate(flow, world, Scenario(horizon_s=30))

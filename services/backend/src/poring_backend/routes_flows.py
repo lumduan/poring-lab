@@ -39,6 +39,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, ValidationError
 
+from poring_backend.flows_settings import runtime_limits
 from poring_backend.routes_public import get_state
 from poring_backend.routes_settings import _browser_refusal, csrf_valid
 from poring_backend.state import AppState
@@ -191,7 +192,10 @@ async def get_catalogue(
         raise _fail(request, 422, "invalid_client")
     from poring_flow import editor
 
-    return dict(await _compute(request, state, lambda: editor.catalogue_doc(client=client)))
+    default_s, max_s = runtime_limits(state)
+    doc = dict(await _compute(request, state, lambda: editor.catalogue_doc(client=client)))
+    # #17: the configured run-time limits (a new flow's default; the most a flow may set)
+    return {**doc, "runtime_limits": {"default_s": default_s, "max_s": max_s}}
 
 
 @router.get("/sample")
@@ -259,9 +263,13 @@ async def post_lint(request: Request, state: AppState = Depends(compute_gate)) -
     flow = _flow(request, env)
     from poring_flow import editor
 
+    _, max_s = runtime_limits(state)
+
     def run() -> dict[str, Any]:
         world, notes = _world(state, flow, env.world)
-        doc = editor.lint_doc(flow, world=world, resolver=_resolver(state, flow))
+        doc = editor.lint_doc(
+            flow, world=world, resolver=_resolver(state, flow), runtime_max_s=max_s
+        )
         return {**doc, "world_notes": notes}
 
     return dict(await _compute(request, state, run))
@@ -281,9 +289,12 @@ async def post_simulate(
     except ValidationError as e:
         raise _fail(request, 422, "invalid_scenario", errors=_errors(e)) from None
 
+    _, max_s = runtime_limits(state)
+
     def run() -> dict[str, Any]:
         world, notes = _world(state, flow, env.world)
-        lint = {**editor.lint_doc(flow, world=world, resolver=_resolver(state, flow)),
+        lint = {**editor.lint_doc(flow, world=world, resolver=_resolver(state, flow),
+                                  runtime_max_s=max_s),
                 "world_notes": notes}  # fmt: skip
         result = trace.simulate(flow, world, scenario)
         return {"flow_hash": ir.flow_hash(flow), "trace": result, "lint": lint}

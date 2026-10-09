@@ -7,14 +7,14 @@ verdict_date: 2026-10-08
 verdict_ticket: null
 supersedes: null
 related: [ADR-0015, ADR-0002, ADR-0003, ADR-0004, ADR-0006, ADR-0007, ADR-0011, ADR-0012, ADR-0014, ADR-0016, ADR-0018, ADR-0019]
-next_action: "ACCEPTED by Batt 2026-10-08, with the decisions recorded at the open questions (16-18, 20, 21, 29, part of 27). Build MW1 / F1 OFFLINE now (the flow IR with map blocks, the block catalogue, linter layers 1-3 incl. the section 13 rules), no runtime changes; the remaining open questions stay open and are answered as MW2+ needs them."
+next_action: "ACCEPTED by Batt 2026-10-08, with the decisions recorded at the open questions (16-18, 20, 21, 29, part of 27). Build MW1 / F1 OFFLINE now (the flow IR with map blocks, the block catalogue, linter layers 1-3 incl. the section 13 rules), no runtime changes; the remaining open questions stay open and are answered as MW2+ needs them. ➡️ 2026-10-09: Batt decided 5 of the 19 MW1 contradictions (#6 readiness, #15 always-on safety events, #13 rank = IR 2, #14 ties, #18 one planner: the cross-check, the swap waits) and MW2-editor's parked items; each recorded in place with a dated marker and built (db27d76, 87d654a, c131ddc (+ 3d4215b), 60e75a9 (+ 2f84873), 22ac314). Open question 15 CLOSED, 11 decided. ➡️ 2026-10-09 ~10:40: 11 more contradictions decided as recommended (#2-#5, #7-#9, #11, #12, #16, #19; recorded in place, built where they have code); #1, #10, #17 brought to Batt and decided by him ~10:50 (#1 recorded; #10 the /where budget, #17 the configured run-time maximum: built). All 19 decided; #18's code waits for his approval of docs/planning/poring-nav.md."
 ---
 
 # ADR-0020: Block programs over one flow IR (the agent builds blocks, users compose flows)
 
 - **Status:** ~~PROPOSED (2026-10-07). Batt accepts or not. Nothing is built.~~ ➡️ **ACCEPTED (Batt,
   2026-10-08)**, with his answers recorded at the open questions. MW1 / F1 (the IR and the
-  linter, offline) starts now; no runtime changes until MW2.
+  linter, offline) starts now; no runtime changes until MW2 (➡️ MW2-live, 13.8; renamed 2026-10-09).
 - **Amended, still PROPOSED (Batt, 2026-10-08):** workflows are organised BY MAP (map blocks,
   typed exits, target / ignore lists with an all-spawn training scope, an automatic preparation
   estimate), with EVENT FLOWS at global and per-map scope. See section 13.
@@ -98,11 +98,31 @@ The hard lines of ADR-0015 hold without change:
 - **Typed.** Parameters are typed references (section 4), never free strings where a list exists.
 - **Versioned.** `ir: 1`. A breaking change is a new version with a converter, never a silent edit
   (the ADR-0012 rule for keys, applied to flows).
+  ➡️ **IR 2 since 2026-10-09** (Batt, contradictions #13): `Handler.rank`, the rank inside an event
+  class (13.6.3). IR 1 converts on load (`poring_flow.ir.upgrade`, and the editor's importer): the
+  version becomes 2 and every handler's rank is left at its default, 13.6.3's table order; the
+  converted flow has a new hash (no flow had been approved). Any other version is refused with a
+  message. The examples below that say `ir=1` load converted. "IR 2" in contradictions #19 (a route
+  crossing maps) now means a LATER version.
 - **Canonical form and hash.** Canonical JSON (sorted keys, no insignificant whitespace, UTF-8,
   NFC). `flow_hash` = sha256 of it. Approval, run logs and progress messages cite the hash.
 - **Node ids are structural paths** (`main.2.then.0`, `handlers.1.body.0`), computed by the
   canonicaliser and never stored by authors. Together with the hash they name a block
   unambiguously in a log, and they make every round trip exact.
+  ➡️ **DECIDED 2026-10-09 (Batt, contradictions #3): ONE grammar for the node paths people read**
+  (every lint message, every schema error, the LLM drafter's feedback): named nodes by name,
+  statements by index.
+  - `main.4`; `procedures.<name>.2`; `handlers.<key>` and `handlers.<key>.1` (a global event,
+    written or always-on); `maps.<block>` and `maps.<block>.3` (a map block by its NAME: two blocks
+    may share a map); `maps.<block>.events.<key>.0` (a map event of that block); `variables.<NAME>`;
+    `global` for the global pairs.
+  - It replaces MW1's bare `drink:` / `town.3:` / `farm_hp_low:` forms and this paragraph's
+    `handlers.1.body.0` in messages. Example: "maps.town.3: the route from …", "handlers.dead: dead
+    is safety-critical: …".
+  - Messages only, as recommended: `poring_flow.ir.PathNames` prints the structural ids, which
+    stay the editor's and the trace's keys (`town.3`, `farm_hp_low.0`: where a finding is drawn,
+    a simulate run's per-node rows). The examples elsewhere in this ADR (13.1, 13.5, 13.6.9) keep
+    their first wording as history; they print in this grammar.
 - **View state is not IR.** Block positions, collapsed blocks and the like are editor metadata
   stored beside the IR, keyed by node path, and excluded from the hash.
 - **Text is never stored** (ADR-0012: the bot thinks in keys). The IR holds keys and ids; the views
@@ -429,13 +449,41 @@ perception the blocks already use; none reads packets or server state.
 |---|---|---|---|
 | `hp_percent()`, `sp_percent()` | `vitals.read` | passive (HUD) | the basic info window must be visible |
 | `weight_percent()`, `zeny()` | `vitals.read` | passive | the full basic info view |
-| `position()`, `current_map()` | `nav.read_position` | passive | UNKNOWN indoors (no minimap readout in this client) ➡️ the client's `/where` line gives both, indoors and out (demonstrations.md §3.15, where@2, RDP): an ACTIVE read, since it types (13.6.6) |
+| `position()`, `current_map()` | `nav.read_position` | ~~passive~~ ➡️ **ACTIVE** | UNKNOWN indoors (no minimap readout in this client) ➡️ the client's `/where` line gives both, indoors and out (demonstrations.md §3.15, where@2, RDP): an ACTIVE read, since it types (13.6.6). ➡️ **DECIDED 2026-10-09 (Batt, contradictions #10): ACTIVE, never in an event condition, used as little as possible, within a per-run budget** (below the table) |
 | `base_level()`, `job_level()` | a new L1 read concept | passive | added to L1 first, unverified |
 | `item_count(item)` | a new L1 read concept | ACTIVE | opens the inventory: costs time and UI; never in an event condition |
 | `sees(mob, within)`, `count_visible(mob, within)` | the world detector + tracker (Phase 3) | passive, at the detector rate | ~5 Hz detection, prediction at stream rate (phase3-plan T3) |
 | `is_dead()` | the death dialog's anchor (`char.respawn`'s L2 binding) | passive | |
 | `window_open(window)` | the window's anchor (`ui.open_window`) | passive | |
 | `dialog_shows(option)` | `npc.choose`'s text check | passive while a dialog is open | text is MATCHED to known keys, never obeyed |
+
+➡️ **DECIDED 2026-10-09 (Batt, contradictions #10): `position()` and `current_map()` are ACTIVE.**
+They type the client's `/where`, so they are never allowed in an event condition (lint
+`passive_only`, as MW1 built it). A future PASSIVE `minimap_position()` (outdoors only) may be
+added when needed. Batt's additions:
+- **The policy: "USE IT AS LITTLE AS POSSIBLE."** The bot should look human, and players almost
+  never type `/where`. Passive sources come first: the minimap readout outdoors, dead reckoning,
+  landmarks. `/where` only when needed: a route start indoors, or a position belief in doubt.
+  Applying it at run time is the executor's (MW3) and the walk rules' (a future pre-registered
+  walk version), not the flow engine's.
+- **Measurable and limited** (built in `poring_flow`):
+  - a per-run budget, `Flow.where_budget` (IR 2; default 12, about three reads an hour over the
+    default 4 h run; each flow sets its own, 0..1000; the Python view writes `where_budget=N`);
+  - the linter WARNS when a read repeats (inside a loop, in a `while` or `wait_until` condition, in
+    a repeating `until` event: `where_loop`) and when the static count on the flow's longest path
+    is above the budget (`where_budget`; lint/where.py says how it counts);
+  - the simulator counts every read (a sensor read, `read_position`, a relocation's read) with
+    its reason, its node path; the simulate trace (and so the run report) shows the count
+    against the budget.
+- **Every use logged with its reason, at RUN time (MW3's executor; specified here, not built):**
+  one log line per `/where` read with `t_mono_ns`, the run id (`flow:<name>@<hash12>`), the node
+  path that caused it (or `relocate` / `<event>.when`), the reason class (`route_start_indoor`,
+  `belief_in_doubt`, `relocation`, `flow_sensor`), the read's outcome (map and cell, or `unknown`)
+  and the run's count so far against its budget. The run report shows the count. Reaching the
+  budget is reported; what the executor then does is MW3's design, with Batt.
+- **The typing guard** stays where it is: the client's repeat refusal (L2: the client refuses a
+  phrase typed more than 3 times in a row; measured 2026-10-09, Batt's `scripts/ro_agent.py`).
+  The flow engine relies on it and does not duplicate it.
 
 **Unknown is a value, not a guess.** A read returns a value with its `frame_id` and age, or
 `unknown(reason)`.
@@ -481,10 +529,19 @@ weight above N % → go and sell. The rules are fixed here so that a flow means 
 3. **Edge, re-arm, cooldown.** A handler fires when its condition goes false → true. It is then
    disarmed until `rearm` holds (hysteresis, e.g. fire below 35 % HP, re-arm above 60 %) AND
    `cooldown_s` has passed. Without `rearm` the condition itself must go false. The linter requires
-   a `rearm` or a cooldown.
+   a `rearm` or a cooldown. ➡️ **DECIDED 2026-10-09 (Batt, contradictions #1): a RE-FIRE BOUND.**
+   Any bound counts: `rearm`, `until`, `cooldown_s`, `max_per_min` or `max_per_run`; and a
+   condition built only from momentary cues (`map_load_seen()`, `engagement_seen()`) is
+   self-bounded (a cue cannot hold on every tick). A plain level condition with none of them is
+   the ERROR. This is MW1's rule (lint/events.py), unchanged.
 4. **Who pre-empts whom.** A firing handler pre-empts anything of a strictly LOWER class. Equal
    classes never pre-empt each other: they queue (first in, first out, de-duplicated). While a
    handler runs, its own class and lower ones queue; a guard pre-empts everything.
+   ➡️ **DECIDED 2026-10-09 (Batt, contradictions #13):** the queue inside a class is ordered by an
+   explicit RANK (`rank`, IR 2), defaulting to 13.6.3's table order (`unintended_engagement` before
+   `hp_low`: stop the fight before drinking). First in, first out applies only between events of
+   EQUAL rank (two user events left at the default, for instance). A safety pair never depends on
+   arrival order. The rank orders the queue only: equal classes still never pre-empt each other.
 5. **Where a block may be stopped.** Each block declares a profile:
    - `anywhere` (the default for task-level blocks: walking, the attack loop): halted between
      fast-loop ticks;
@@ -569,11 +626,11 @@ by its path; the owner reads the same text the LLM drafter gets back.
 
 | Layer | Checks | Example message |
 |---|---|---|
-| 1 · schema | the Pydantic model; bounds on counts, timeouts, `max_runtime_s`, string lengths, nesting depth and node count; variable types consistent; procedure call graph acyclic | "main.4: `repeat.times` must be 1..10000" |
-| 2 · semantics | every reference exists for the target environment: the map; the NPC on that map; the option offered by that NPC; the item, monster, skill. Every action block resolves its bindings (`resolve()`); an `Unsupported` is an error naming the layer and key. `assumes` uses known sensors | "main.1: npc n_3f2a is not on the map the flow is on at this point" |
-| 3 · simulation | an abstract walk through the flow tracking the current map: reachability on the GAT/warp graph (`poring_dataset/walk.py`, legs ≤ 128 steps, waypoints beyond); a time estimate; monster spawns on the map for `attack_nearest`; element matchups (warning) | "main.2: cell (170, 210) is unreachable from the warp you arrive by" |
+| 1 · schema | the Pydantic model; bounds on counts, timeouts, `max_runtime_s` (➡️ the CONFIGURED maximum, Batt 2026-10-09, contradictions #17: open question 8), string lengths, nesting depth and node count; variable types consistent; procedure call graph acyclic | "main.4: `repeat.times` must be 1..10000" |
+| 2 · semantics | every reference exists for the target environment: the map; the NPC on that map; the option offered by that NPC; the item, monster, skill. Every action block resolves its bindings (`resolve()`); an `Unsupported` is ~~an error~~ naming the layer and key ➡️ **DECIDED 2026-10-09 (Batt, contradictions #6): a READINESS item, not an error.** It is listed in the report and blocks the RUN (the run-start check refuses on it, `poring_flow.runstart`), not the design: a flow with readiness items can be designed, linted, simulated and approved. `assumes` uses known sensors | "main.1: npc n_3f2a is not on the map the flow is on at this point"; readiness: "town.0: walk_to is unsupported here: L3 binding L3.map.walkability (…)" |
+| 3 · simulation | an abstract walk through the flow tracking the current map: reachability on the GAT/warp graph (`poring_dataset/walk.py`, legs ≤ 128 steps, waypoints beyond; ➡️ Batt 2026-10-09, contradictions #18: with the EXECUTOR's planner, `walk_path`; until the swap, MW1's A* held to it by a cross-check test, open question 15); a time estimate; monster spawns on the map for `attack_nearest`; element matchups (warning) | "main.2: cell (170, 210) is unreachable from the warp you arrive by" |
 | 3 · loops | every `while` has a bound, a sensor/variable its body can change, or a `break`; a loop body with no action and no wait is a busy loop (error); the flow-level `max_runtime_s` bounds everything | "main.6: this loop can never end: nothing in it changes job_level()" |
-| 3 · events | every handler has `rearm` or a cooldown; conditions use passive sensors only; two handlers of one class with overlapping conditions (warning; on the SAME sensor an error, 13.6.9); a handler that can re-trigger itself; a handler with no failure path; a `critical` handler containing a long action (warning). Event scopes and hysteresis pairs: 13.6.9 | "handlers.drink: no re-arm and no cooldown: it would fire on every tick" |
+| 3 · events | every handler has `rearm` or a cooldown (➡️ a re-fire bound: any of rearm, until, cooldown, a per-minute or per-run limit, or a cue-only condition; Batt 2026-10-09, contradictions #1); conditions use passive sensors only; two handlers of one class with overlapping conditions (warning; on the SAME sensor an error, 13.6.9; ➡️ only at the same RANK since 2026-10-09, contradictions #14: different ranks are an INFO); a handler that can re-trigger itself; a handler with no failure path; a `critical` handler containing a long action (warning). Event scopes and hysteresis pairs: 13.6.9 | "handlers.drink: no re-arm and no cooldown: it would fire on every tick" |
 | map workflows | save point, exits, NPC / menu / Kafra service, routes, weight, loops, species lists, keep lists, the graph: 13.5 | – |
 | 3 · irreversible | `refine`, `insert_card`, and `sell` with an empty keep list | "main.9: refine can destroy the item: acknowledge it at approval" |
 | 4 · approval | the owner sees the blocks, the lint report, the time estimate and the badges (section 12), and approves THIS hash | – |
@@ -582,6 +639,12 @@ by its path; the owner reads the same text the LLM drafter gets back.
 
 The linter re-runs at run start against the current KB and catalogue. If either changed since
 approval and the result changed, the run does not start.
+➡️ **DECIDED 2026-10-09 (Batt, contradictions #6):** the severities are `error` (the design is
+wrong: approval refuses it), `readiness` (a binding not there yet: the RUN waits for it), `warning`
+and `info`. The run-start check refuses on ANY error or readiness item, fails closed (no static data
+or no resolver is a refusal) and, given the approved hash, refuses another hash. It is built
+(`poring_flow.runstart`, tested) but nothing calls it yet: MW2-editor runs nothing, and the live executor
+(MW3) calls it before its first input. Simulation is design time and is not gated.
 
 ## 6. Runtime
 
@@ -594,6 +657,23 @@ approval and the result changed, the run does not start.
   on `poring_skills` only. Its route check runs on the map sheet's walk grid with a small A* of its
   own, not `poring_dataset/walk.py`; open question 15 (where the linter runs) is NOT decided by
   that, and the two path finders are not yet checked against each other;
+  ➡️ **DECIDED 2026-10-09 (Batt, contradictions #18; open question 15 CLOSED):** the linter runs
+  in the BACKEND at run time (the L3 data stays local, never shipped), and it routes with the
+  executor's planner, `poring_dataset.walk.walk_path`; until then, a cross-check test holds MW1's
+  A* to it (open question 15 has the details and the result);
+  ➡️ **DECIDED 2026-10-09 (Batt, #18, second decision): ONE source of truth.** A small shared
+  package for map navigation, `poring_nav`: GAT loading, the walk graph, A*, and the path limits as
+  single named constants. Both `poring_flow` and the executor import it, and the duplicate planner
+  is removed afterwards. The cross-check test stays the regression gate, unchanged.
+  - **The server's per-click limit** (the pinned rAthena, read 2026-10-09):
+    - `unit.cpp:860` refuses a player walk longer than `max_walk_path`, which is 17
+      (battle.cpp:8684, client.conf:42).
+    - With `OFFICIAL_WALKPATH` (core.hpp:26), a walk longer than 14 steps passes only on a clear
+      straight line (unit.cpp:864–868).
+    - The often-quoted 32 is only the search buffer (path.hpp:14).
+  - The plan is `docs/planning/poring-nav.md` (PROPOSED). **No code moves before Batt approves
+    it**, never while a scored client run is active, and pre-registered rules move only with a
+    bytecode-identical proof.
 - `test_guards.py` extends: `poring_flow` imports no `ultralytics`, no `poring_vision` and no
   `poring_packets`.
 
@@ -674,13 +754,13 @@ default):
 | `AugAssign` | a `Name` target, operator `Add` or `Sub` |
 | `If` | `elif` is a nested `If` in `orelse` |
 | `While` | the test is any allowed expression, optionally `bounded(cond, max_iter=…, max_s=…)`; `orelse` empty |
-| `For` | target a `Name`; iterable `range(...)` (1-3 int args), a `List`/`Tuple` literal, or a `Name` bound to one; `orelse` empty |
+| `For` | target a `Name`; iterable `range(...)` (1-3 int args), a `List`/`Tuple` literal, or a `Name` bound to one; `orelse` empty. ➡️ **DECIDED 2026-10-09 (Batt, contradictions #16):** `for _ in range(n)` (one argument) is the `repeat n` block; the bare `_` is allowed there and nowhere else (not a variable, not another loop's target) |
 | `Break`, `Continue`, `Pass` | as in Python |
 | `FunctionDef` | top level only; no arguments, no annotations, no type parameters; either NO decorator (a procedure) or exactly ONE `on(...)` decorator (an event handler); the body is this same subset without `FunctionDef` |
 | `Call` | the callee is a `Name` from the catalogue (blocks, sensors, reference constructors such as `cell`, `npc`, `item`, `option`; helpers `range`, `bounded`, `known`, `wait_until`, `on`, `flow`, `target`) or a procedure; positional and keyword arguments matching the catalogue signature; no `*args` or `**kwargs` |
 | `Name` | `Store`: a flow variable. `Load`: a flow variable, a procedure (as a callee) or a catalogue constant (`OK`, `FAILED`, `SURVIVAL`, `RESUME`, `S2`, …). ASCII `[A-Za-z][A-Za-z0-9_]*` only |
 | `Constant` | int (bounded), finite float, bool, `None` where a signature allows it, str up to 200 characters |
-| `Compare` | `Eq`, `NotEq`, `Lt`, `LtE`, `Gt`, `GtE` (chains allowed) |
+| `Compare` | `Eq`, `NotEq`, `Lt`, `LtE`, `Gt`, `GtE` (chains allowed). ➡️ **DECIDED 2026-10-09 (Batt, contradictions #2): also `In` / `NotIn`, restricted**: only against a LITERAL list of typed references (`[mob(9101), mob(9102)]`, or a list of constant variables) or a list variable, never another expression; statically checked (the parser, and lint layer 1 for any IR: "in needs a literal list of references or a list variable") |
 | `BoolOp` / `UnaryOp` / `BinOp` | `And`, `Or` / `Not`, `USub` / `Add`, `Sub`, `Mult`, `FloorDiv`, `Mod` |
 | `List`, `Tuple` | literals of constants and references, at most 100 elements |
 | `keyword`, `arguments` (empty), `Load`, `Store` | as needed by the above |
@@ -691,12 +771,14 @@ it: the block API is flat names), `Subscript`, `Slice`, `Lambda`, `ClassDef`, `A
 `Try`, `TryStar`, `Raise`, `Assert`, `Delete`, `Match`, `TypeAlias`, `AnnAssign`, `NamedExpr`,
 `IfExp`, comprehensions and generator expressions, f-strings (`JoinedStr`), `Starred`, `Dict`,
 `Set`, `Pow`, `MatMult`, `Div`, bit and shift operators, `Is`, `In` and their negations, any
-decorator other than `on(...)`.
+decorator other than `on(...)`. ➡️ `In` / `NotIn` are allowed in their restricted form since
+2026-10-09 (the `Compare` row, contradictions #2); `Is` / `IsNot` stay refused.
 
 **Names:**
 - a call to anything outside the catalogue is refused, so `open`, `exec`, `eval`, `compile`,
   `getattr`, `__import__`, `globals`, `input` and `print` are simply unknown names;
-- a name starting with `_` is refused (this covers every dunder);
+- a name starting with `_` is refused (this covers every dunder); ➡️ the ONE exception is the bare
+  `_` of `for _ in range(n)`, which is the `repeat` block (Batt 2026-10-09, contradictions #16);
 - assigning to a catalogue name is refused (no shadowing);
 - names are ASCII only: Python normalises identifiers with NFKC, so a look-alike Unicode name could
   otherwise alias a catalogue name.
@@ -893,7 +975,8 @@ Every phase is offline until stated. Each ends with its acceptance criteria met 
 
 **F0 · Decide.** Batt accepts or amends this ADR and answers the open questions marked FIRST.
 
-Map-centric workflows add phases MW0-MW4 beside these (13.8): MW1 runs with F1, MW2 after F2.
+Map-centric workflows add phases MW0-MW4 beside these (13.8): MW1 runs with F1, MW2 (➡️ MW2-live,
+renamed 2026-10-09) after F2.
 
 **F1 · IR + catalogue + linter (offline; no UI, no input).**
 - `poring_flow` (Apache-2.0): the models, canonical JSON and hash, the generated JSON Schema and
@@ -973,6 +1056,9 @@ lab-rathena (unverified blocks show as warnings) and becomes runnable as its wav
    L4 work"), so every block that needs an L4 binding (menu options, Kafra services) resolves
    `unsupported` today. So flows can be built, linted and approved now, and become runnable only as
    bindings land and alone-tests pass. That is the intended order: rules are proven alone first.
+   ➡️ **DECIDED 2026-10-09 (Batt, contradictions #6):** the linter reports each of those
+   `unsupported` bindings as a READINESS item (section 5), not an error, so a real flow lints
+   without errors today and its readiness items block only the run.
 
 ## 13. Map-centric workflows (Batt, 2026-10-08)
 
@@ -1043,7 +1129,8 @@ L3 and checked by the linter (13.5). The arrival is CHECKED at run time, from pi
   variable. Each block's subtree is its main flow; an exit is an action leaf, then its arrival
   check, then `current_block := destination`.
 - Node paths inside a workflow start with the block's name (`town.3`, `farm.0`: section 1's
-  structural paths). The messages in 13.5 and 13.6.9 use the node paths of the Python example in
+  structural paths). ➡️ Messages print them as `maps.town.3`, `maps.farm.0` (section 1's one
+  grammar, contradictions #3, 2026-10-09); the structural ids are unchanged. The messages in 13.5 and 13.6.9 use the node paths of the Python example in
   13.6.8, as if each rule's fault were present there. The example itself already carries the fixes
   (the save point is set, the wings and potions are kept).
 
@@ -1144,6 +1231,10 @@ class Workflow(BaseModel):  # Flow gains `workflow`: exactly one of `main` / `wo
     # the GLOBAL events are the flow's `handlers`; the effective set per block is derived (13.6.2)
 ```
 
+➡️ **DECIDED 2026-10-09 (Batt, contradictions #12): `Exit.item` is an `ItemRef` or a variable
+TYPED `ItemRef`** (13.6.8 passes `WING`). The IR takes either; lint layer 1 refuses a variable that
+holds anything else ("exit.item: BOSS holds a mob: an item_warp takes an item").
+
 ### 13.2 Per-map data from L3: the map sheet
 
 Everything a map block offers in the editor, and everything the linter checks, comes from the
@@ -1195,6 +1286,10 @@ Three reasons, all from this repo:
    the map's KB spawns (§3.18).
 
 **The scope** is, for every map block AND every map a route crosses:
+➡️ **DECIDED 2026-10-09 (Batt, contradictions #19): "every map a route crosses" belongs to a LATER
+IR version (after IR 2), not to IR 1 or IR 2.** `walk_to` is per map and exits are explicit, so in
+IR 1 and IR 2 a route crosses no maps: the scope is every map block's map. ("IR 2" was this
+marker's first wording; IR 2 is now #13's rank.)
 - the species of its L3 spawns;
 - what they turn into (`classes.json` already adds metamorphosis);
 - any species an event names, e.g. a boss (13.6.8);
@@ -1217,13 +1312,19 @@ layer plus the catalogue).
 | NPC dialogs | every NPC and option key on the workflow's path (L3), and its text match (L4) | a key does not resolve. Today every L4 binding is `unsupported` (section 12, "Today") |
 | routes | entry → steps → exits on the walk graph | a leg is unreachable (13.5) |
 | blocks | the badges (section 12) | a block is not verified for this environment (open question 1) |
-| bindings | `resolve()` for every block | any `Unsupported` |
+| bindings | `resolve()` for every block | any `Unsupported`: the linter's READINESS items (section 5; ➡️ Batt 2026-10-09, contradictions #6) |
 
 **The estimate of the AI preparation time.** The editor computes it with the planning formula of
 [training-cost.md](../planning/training-cost.md). That document is the instrument: its constants
 and their history live there, not here.
 
     new map time = map prep + Σ over the new species ( difficulty × (collect per species + train per species) ) × contingency
+
+➡️ **DECIDED 2026-10-09 (Batt, contradictions #5): the conservative reading.** The contingency
+applies to every part, map prep included, and map prep counts per NEW map (Byalan's iz_dun00 and
+iz_dun01 are two maps: 10.4 h, not 5.2 h). training-cost.md's sections 1, 3 and 5 carry MW1's
+numbers (collect 8.45 h, compute 15.42 h, wall 24.5 h at night, 30.5 h mixed, 44.1 h at the
+effective day rate).
 
 - **Compute hours and wall-clock hours are reported separately.** wall = compute / availability.
   Availability is MEASURED from the training duty-cycle logs (`state/train-duty`, the `duty_stats`
@@ -1251,6 +1352,9 @@ values, not for numbers decided here:
 ```
 
 - **Run stays disabled while any item is open** (proposal; open question 25).
+  ➡️ **DECIDED for the bindings row (Batt 2026-10-09, contradictions #6):** an unsupported binding
+  is a lint READINESS item, and the run-start check refuses while any is open (section 5). The
+  other rows (species, windows, blocks) stay open question 25.
 - **The editor never starts preparation work.** Collection sessions and training runs are operator
   steps on the existing paths (`scripts/guarded_build.py`, R1-R3, the clean-room and ASSIST rules).
   The report is their to-do list. The agent never self-authorises GPU work.
@@ -1258,20 +1362,21 @@ values, not for numbers decided here:
 ### 13.5 Linter rules for map workflows
 
 Added to section 5's layers. The simulation layer already tracks the current map; it now also
-tracks the save point. The messages are examples.
+tracks the save point. The messages are examples. ➡️ They print in section 1's one grammar since
+2026-10-09 (contradictions #3): `town.3:` reads `maps.town.3:`, `farm:` reads `maps.farm:`.
 
 | Rule | Layer | Checks | Example message |
 |---|---|---|---|
 | save point | 3 · simulation | An `item_warp` (a Butterfly Wing) and every death go to the SAVE POINT, never to "the previous map". The save point cannot be read from pixels, so it is UNKNOWN at the start unless the workflow sets it (`set_save_point` at a Kafra) or `assumes` asserts it (an assertion stays a visible warning at approval). WARNING when a wing or a respawn relies on an unknown or different save point; the editor offers the fix block "set save point at Kafra" in the intended map's block ➡️ **Batt, 2026-10-08: an ERROR for every wing.** Each `item_warp` that goes to the save point needs, on every path before it, a `set_save_point` at the intended map's Kafra, or an `assert_save_point(map, cell)` block, which stays a visible warning at approval. A respawn relying on an unknown save point stays a WARNING (open question 20) | "farm.1: a Butterfly Wing returns to the save point, not to town, and nothing sets it on map_1. Add 'set save point' at town's Kafra?" |
 | exit destinations | 2 · semantics | The destination map exists; the exit's L3 data leads there; its arrival cell lies in `to_entry`. `walk_exit`: an L3 warp (or edge) on this map. `npc_warp`: the NPC is on this map, every option key is in its menu at that point, the warp after them is known (else the destination is the author's: a warning, checked on arrival). `item_warp`: the map allows it (L3 map flags) | "relay.0: option o_5d0e of npc n_2b71 warps to map_4, not to farm's map_3" |
 | NPC, menu, Kafra service | 2 · semantics | The NPC is on the block's map (L3 `npc.positions`); option keys are in `npc.menus`, never an index; the Kafra service (save, storage, teleport) is offered by that Kafra's type (`kafra.menus`); L1 preconditions are `assumes` or sensors (storage: Basic Skill 6 and the fee, `storage.deposit`, [phase4-ui.md](../phase4-ui.md)) | "town.1: npc n_k1 is not on map_1" |
-| routes | 3 · simulation | Every entry reaches every walk target and exit on the walk graph (`poring_dataset/walk.py`, legs ≤ 128 steps). A leg that crosses another warp's cells would leave the map: ERROR | "town.3: the route from A to C crosses the warp at (156, 22): it would leave map_1" |
-| weight thresholds | 3 · simulation | Explained with RO's rules (`vitals.read` in [knowledge/README.md](../knowledge/README.md)): at ≥ 50 % natural HP / SP regeneration stops; at ≥ 90 % attacks and skills stop. A threshold ≥ 90 % guarding an attack loop: ERROR (the loop stalls before it fires). 50-89 %: INFO (regeneration is already off). A weight condition in a block where nothing adds weight: WARNING. Today `loot` is unsupported (no ground-item class, 2.1), so nothing does (open question 21) | "farm.0: weight_percent() < 50 can change only by picking up items, and loot is unsupported here" |
-| unbounded loops | 3 · loops | Every cycle of the workflow graph and every `while` has a stop condition (a counter, a sensor bound, `stop_when`) or the explicit `run_until_stopped`. `max_runtime_s` still bounds the run | "the cycle town → relay → farm → town never ends: add a stop condition or mark the workflow run until stopped" |
+| routes | 3 · simulation | Every entry reaches every walk target and exit on the walk graph (`poring_dataset/walk.py`, legs ≤ 128 steps; ➡️ the executor's planner, Batt 2026-10-09, contradictions #18: MW1's A* is cross-checked against it until the swap, open question 15). A leg that crosses another warp's cells would leave the map: ERROR | ~~"town.3: the route from A to C crosses the warp at (156, 22): it would leave map_1"~~ ➡️ "town.3: the route from npc n_k1 (146, 90) to (150, 20) crosses the warp at (156, 22): it would leave map_1". **DECIDED 2026-10-09 (Batt, contradictions #8): messages name CELLS and NPCs, never diagram labels** (A, C): the IR holds no diagram labels; the editor places each finding on its canvas node and block by its node path |
+| weight thresholds | 3 · simulation | Explained with RO's rules (`vitals.read` in [knowledge/README.md](../knowledge/README.md)): at ≥ 50 % natural HP / SP regeneration stops; at ≥ 90 % attacks and skills stop. A threshold ≥ 90 % guarding an attack loop: ERROR (the loop stalls before it fires). 50-89 %: INFO (regeneration is already off). A weight condition in a block where nothing adds weight: WARNING. ➡️ **DECIDED 2026-10-09 (Batt, contradictions #9): one finding per cause.** When this WARNING covers a loop's condition, the loops rule (below) does not add its own "can never end" ERROR for the same cause; the `< 50` INFO is applied literally (a threshold from 50 to 89 % gets it). Today `loot` is unsupported (no ground-item class, 2.1), so nothing does (open question 21) | "farm.0: weight_percent() < 50 can change only by picking up items, and loot is unsupported here" |
+| unbounded loops | 3 · loops | Every cycle of the workflow graph and every `while` has a stop condition (a counter, a sensor bound, `stop_when`) or the explicit `run_until_stopped`. `max_runtime_s` still bounds the run | "the cycle town → relay → farm → town never ends: add a stop condition or mark the workflow run until stopped" ➡️ It defers to the weight WARNING on the same loop (#9, Batt 2026-10-09). |
 | species lists | 2 · semantics | Every TARGET and IGNORE species spawns on that block's map (L3 spawns); none is on both lists; unlisted spawned species are listed as IGNORE (INFO). An aggressive species on IGNORE: WARNING (it attacks; the bot never answers; the HP event decides). A target and an ignored species that look alike: WARNING until the detector's confusion between them is measured | "farm: mob 9104 is in no spawn line of map_3" |
 | keep lists | 3 · simulation | A store-all or sell-all keeps every item that a later block or an event uses (the wings, the potions) | "town.2: storing everything also stores the Butterfly Wings that farm's exit uses: add them to the keep list" |
 | graph | 2 · semantics | Every block is reachable from the start; every `take_exit` names an existing block and entry; every path of a main flow ends in `take_exit` or `stop`; a map with several blocks has exactly one `resume_here`. A death that lands on no block: WARNING (a death then stops the run) | "map_1 holds town and town_back: mark one resume_here" |
-| readiness | 4 · approval | The preparation report (13.4). Not a lint error, but Run waits for it | "not runnable: 3 species untrained, 5 blocks unverified" |
+| readiness | 4 · approval | The preparation report (13.4). Not a lint error, but Run waits for it. ➡️ Unsupported bindings are the linter's own `readiness` severity (section 5; Batt 2026-10-09, contradictions #6): the run-start check refuses on them | "not runnable: 3 species untrained, 5 blocks unverified" |
 
 ### 13.6 Event flows and event scopes (Batt, 2026-10-08)
 
@@ -1307,7 +1412,9 @@ INSERT vs PRE-EMPT (13.6.4), the `until` stop threshold and run limits (13.6.7),
 - **The safety-critical set is FIXED,** in this design and in code, and never user-editable:
   **`dead`, `hp_critical` and `unexpected_map`.** `hp_critical` was added by Batt (2026-10-08,
   open question 29).
-  - Every workflow has all three, globally (13.6.8).
+  - Every workflow has all three, globally (13.6.8). ➡️ **DECIDED 2026-10-09 (Batt,
+    contradictions #15): EVERY flow, a workflow or a plain main flow, by construction**: the
+    compiler adds the ones a flow does not write, and a flow may only make them stricter (13.6.8).
   - A map may only EXTEND them. A DISABLE or an OVERRIDE is a lint ERROR.
   - **Their extensions run AFTER the global body,** not first (confirmed by Batt, 2026-10-08): a dead character can do nothing
     before it respawns, and nothing may act on an unexpected map before the position is read. The
@@ -1322,7 +1429,9 @@ INSERT vs PRE-EMPT (13.6.4), the `until` stop threshold and run limits (13.6.7),
 #### 13.6.2 The merge rule: a block's EFFECTIVE event set
 
 For the current map block B, in this order:
-1. Start from the global events, by key.
+1. Start from the global events, by key. ➡️ The always-on `dead`, `hp_critical` and
+   `unexpected_map` are among them in every flow, written or added by the compiler (Batt
+   2026-10-09, contradictions #15; 13.6.8).
 2. Apply B's map events, at most one per key (two is an ERROR):
    - **DISABLE k:** k must be global and not safety-critical (else ERROR). Remove it.
    - **OVERRIDE k:** k must be global and not safety-critical (else ERROR). Replace it.
@@ -1332,6 +1441,9 @@ For the current map block B, in this order:
      OVERRIDE, so only a hand-written IR can hit this).
 3. Order the result by class: guard > critical > survival > upkeep > the main flow. Inside
    `critical`, `dead` comes before `unexpected_map`. Other equal-class events queue (2.5 rule 4).
+   ➡️ Inside a class, by RANK (Batt 2026-10-09, contradictions #13; 13.6.3): the safety-critical
+   three lead `critical` in their fixed order, then the rank, then the declaration order for equal
+   ranks.
 4. **Ties are a lint ERROR:** two effective events of one class whose conditions can hold together
    on the same sensor.
 
@@ -1359,6 +1471,17 @@ For the current map block B, in this order:
   Wing keeps the map.
 - These defaults hold on every map unless a map OVERRIDE changes a class. The linter WARNS on any
   change (13.6.9). The safety-critical rows cannot change.
+- ➡️ **DECIDED 2026-10-09 (Batt, contradictions #13): an explicit RANK inside each class.**
+  - Every event has a `rank` (IR 2; 1..99, a lower rank runs first). Left out, it is this table's
+    order: `dead` 1, `hp_critical` 2, `unexpected_map` 3, `unintended_engagement` 4, `hp_low` 5,
+    `weight` 6; any other key 50, after the table's events of its class.
+  - So `unintended_engagement` runs before `hp_low` when both wait (stop the fight before
+    drinking), whatever their arrival order. First in, first out only between events of equal
+    rank.
+  - The safety-critical ranks are fixed (writing another one is a lint ERROR, 13.6.9); they lead
+    `critical` whatever a user event's rank.
+  - The queue of the simulated executor follows it (`runtime.queue_key`), and so do waiting
+    inserts; the effective sets (13.6.2) are listed in this order.
 
 #### 13.6.4 INSERT or PRE-EMPT
 
@@ -1389,7 +1512,7 @@ For the current map block B, in this order:
   input writer). No event has a second path, a second connection or a direct Injector call.
 - **The executor serialises with ONE input token.** At any instant exactly one flow owns it: the
   main flow between its ticks, an insert at a safe point, a pre-empt after the halt and its
-  ReleaseAll. Batches from two flows never interleave (checked in the input log, MW1 and MW2).
+  ReleaseAll. Batches from two flows never interleave (checked in the input log, MW1 and MW2-live).
 - The mux's own checks apply to every batch unchanged: the lease, the interlock, the foreground
   gate, the frame-age guard. A refused event input is never retried fast (section 6). A human
   takeover pauses everything; a red interlock stops everything (the guards).
@@ -1418,6 +1541,10 @@ Batt's loop runs through this rule: farm's wing → the save point on map_1 → 
 - **Two thresholds, no flapping.** `when` starts the event; `until` stops it. The body repeats while
   the event is on (paced by `cooldown_s` and `max_per_min`). The event re-arms only after `until`
   has held. One-shot events keep 2.5's `rearm`.
+  ➡️ **DECIDED 2026-10-09 (Batt, contradictions #11): `until` and `rearm` are mutually exclusive
+  on one event**: `until` makes it repeating, `rearm` one-shot. Both on one event is a layer 1
+  ERROR (the IR refuses it: "until (a repeating event) and rearm (a one-shot event) are
+  exclusive").
 - **`cooldown_s`:** the minimum gap between two runs of the body (e.g. a potion, then the bar's
   update).
 - **`max_per_min`:** a rate cap; extra runs wait (e.g. at most 6 potions a minute).
@@ -1432,6 +1559,26 @@ Batt's loop runs through this rule: farm's wing → the save point on map_1 → 
 Every new workflow starts with six GLOBAL events:
 - `dead`, `hp_critical` and `unexpected_map`: safety-critical and required (removing any of them is
   a lint ERROR);
+  ➡️ **DECIDED 2026-10-09 (Batt, contradictions #15): ALWAYS ON BY CONSTRUCTION, in every flow.**
+  - The compiler adds `dead`, `hp_critical` and `unexpected_map` to EVERY flow, a workflow or a
+    plain main flow, as global events (`poring_flow.always_on`). Their definitions are this
+    section's global events, fixed in code: `dead` respawn, 1 per run, relocate; `hp_critical`
+    below 20 % the fixed escape, re-armed above 50 %, at most 2 a minute, relocate;
+    `unexpected_map` read the position, relocate.
+  - They are derived like the effective set, not written into the IR: a flow that leaves one out
+    keeps its own hash and runs the built-in. Leaving one out is no longer an error.
+  - A flow that writes one may only make it STRICTER. The lint check is "not weakened" (13.6.9):
+    the class (critical) and mode (pre-empt) stay; `then` is relocate or stop; the trigger fires no
+    later (e.g. `hp_percent() < 30` for `hp_critical`); the re-arm stays the built-in's; the limits
+    (`max_per_run`, `max_per_min`, `max_fires_per_10min`, `cooldown_s`) are no looser; the body
+    starts with the built-in step (`hp_critical`'s body is exactly the escape). Anything else is an
+    ERROR at the event's node path.
+  - The canvas shows them as LOCKED rows on the global events node: "BUILT-IN, always on,
+    read-only" when the flow does not write them, "stricter only" when it does.
+  - Their bindings are checked even when the flow does not write them (a death needs the death
+    dialog bound), so they appear among the readiness items (section 5).
+  - A consequence for open question 19: `dead`'s 1 per run is now a CEILING a flow cannot raise,
+    not only a default. The MW2-editor sample said 3; it now says 1.
 - `unintended_engagement`, `hp_low` and `weight`: defaults, editable per map (13.9 for the first).
 
 Map events then shape them per map. The effective sets of Batt's example (farm is taken to be a
@@ -1531,7 +1678,7 @@ def weight():
 
 @on(engagement_seen(), priority=SURVIVAL, then=RELOCATE, max_per_min=4)
 def unintended_engagement():  # 13.9: the global default
-    close_npc_dialog()  # if one opened
+    close_dialog()  # if one opened (was close_npc_dialog: contradictions #7)
     walk_away(min_cells=5)  # NOT yet proven to stop an attack (13.9, open question 32)
 
 
@@ -1584,17 +1731,28 @@ def farm_engagement():  # by species (13.9); the policies are suggested from L3 
         use_item(WING)
 ```
 
+➡️ **DECIDED 2026-10-09 (Batt, contradictions #7): ONE dialog-close block, `close_dialog()`** (L1
+`npc.close`), IDEMPOTENT: it closes a dialog only if one is open, so a recovery step can always
+call it. The example above said `close_npc_dialog()` in its global `unintended_engagement`; it is
+renamed. `close_npc_dialog()` survives only as a Python-import ALIAS: the Python view imports it as
+`close_dialog()` with a warning; the catalogue, the IR and every printed view know only the one
+name.
+
 #### 13.6.9 Lint rules for events
 
 They extend section 5's "3 · events" row. Where they are stricter (a same-sensor tie is an ERROR,
 not a warning), they win.
 
+➡️ The example messages below print, since 2026-10-09, in section 1's one grammar (contradictions
+#3): `farm:` reads `maps.farm:`, `hp_low:` reads `handlers.hp_low:`, `boss_seen:` reads
+`maps.farm.events.boss_seen:`, `town:` reads `maps.town:`.
+
 | Rule | Severity and check | Example message |
 |---|---|---|
 | hysteresis pair (`until` or `rearm`) | ERROR unless the stop threshold lies BEYOND the start threshold, on the far side: `hp < 50` with `until hp > 80` is valid; `until hp > 40` is INVERTED (both hold between 40 and 50, so the event flaps). ERROR when the stop can never hold (`hp > 100`). WARNING when the band is narrower than the readout's resolution | "hp_low: until hp_percent() > 40 overlaps when hp_percent() < 50: the stop threshold must exceed 50" |
 | same direction | ERROR: start and stop compare the same way, so the stop never ends the event (`weight >= 90` until `weight > 95`) | "weight: until weight_percent() > 95 does not end weight_percent() >= 90: the stop must lie below 90" |
-| ties | ERROR: two effective events of one class on overlapping conditions of the same sensor (13.6.2 step 4). WARNING for different sensors (they queue, 2.5 rule 4) | "farm: hp_low and hp_panic are both survival on hp_percent() < 30" |
-| safety-critical | ERROR: a DISABLE or OVERRIDE of `dead`, `hp_critical` or `unexpected_map`; any of them missing from the global set; an extension that tries to loosen a limit | "town: dead is safety-critical: it can be extended, never disabled" |
+| ties | ERROR: two effective events of one class on overlapping conditions of the same sensor (13.6.2 step 4). WARNING for different sensors (they queue, 2.5 rule 4). ➡️ **DECIDED 2026-10-09 (Batt, contradictions #14, after #13's rank):** a tie needs the same class AND the same RANK. Same rank: the ERROR (the same sensor, overlapping) and the WARNING (different sensors: they queue first in, first out) stand. Different ranks: the order is decided, so only an INFO says which runs first. Batt's 13.6.8 example's four tie WARNINGs (`unintended_engagement` / `hp_low` globally and on farm, `hp_low` / `boss_seen`, `unintended_engagement` / `boss_seen`) are INFOs now | "farm: hp_low and hp_panic are both survival on hp_percent() < 30" ➡️ "farm: hp_low and hp_panic are both survival at rank 5 on hp_percent() < 30"; info: "farm: unintended_engagement and hp_low are both survival: unintended_engagement runs first when both are due (rank 4 before 5)" |
+| safety-critical | ERROR: a DISABLE or OVERRIDE of `dead`, `hp_critical` or `unexpected_map`; ~~any of them missing from the global set~~ ➡️ **not weakened** (Batt 2026-10-09, contradictions #15: the compiler adds a missing one, 13.6.8): a written one weaker than the built-in in class, mode, `then`, trigger, re-arm, limits or body, or with a rank other than its fixed one (#13, 13.6.3); an extension that tries to loosen a limit | "town: dead is safety-critical: it can be extended, never disabled"; "dead: dead is safety-critical: max_per_run 3 loosens the built-in 1: it may only be tightened" |
 | scope | ERROR: an OVERRIDE, EXTEND or DISABLE of a key that is not global; an ADD of a key that is; two map events on one key | "relay: extend weight_low: there is no global event weight_low" |
 | class change | WARNING on any map OVERRIDE that changes a class | "farm: hp_low moved from survival to upkeep: weight no longer waits for it" |
 | looser on a harder map | WARNING, acknowledged at approval: a map OVERRIDE that fires later, stops earlier or allows more (a lower HP start or stop, a higher weight, a higher death count, a longer cooldown) on a HARDER map. **A map is HARDER, from its L3 sheet, when** it spawns an aggressive species (mob_db `ai`), it has a boss spawn line, or its highest spawn level exceeds the character's base level (from `assumes`; skipped, and said so, when unknown) | "farm: hp_low < 30 is looser than the global < 50, and map_3 spawns an aggressive species (mob 9105)" |
@@ -1637,8 +1795,11 @@ The section itself stays PROPOSED until Batt accepts it.
 - The map-sheet generator (local, never committed): the extended L3 extraction Batt approved on
   2026-10-08 (NPC warp targets per option, the Kafra save cell, map flags). Then the preparation
   report, and the estimator, reading training-cost.md's constants.
-- The new L1 concepts, written unverified: `set_save_point`, `assert_save_point`, the
+- The new L1 concepts, written unverified: `set_save_point`, ~~`assert_save_point`~~, the
   `hp_critical` escape, and `loot.pick_up` by a hover-scan.
+  ➡️ **DECIDED 2026-10-09 (Batt, contradictions #4): `assert_save_point` is a CORE block, not an
+  L1 concept.** It sends no input, so it is a check (core, proven by unit tests, badge "core"), not
+  an L1 skill that needs an alone-test. MW1 built it so (`core.assert_save_point`).
 - Acceptance:
   - one fixture per lint rule, with its exact message (committed fixtures hold synthetic map data
     only);
@@ -1651,10 +1812,12 @@ The section itself stays PROPOSED until Batt accepts it.
   - the estimator equals a hand computation;
   - the Byalan fixture's training scope is all 7 species.
 
-**MW2 · One map block and its exits, live** (after F2; lab-rathena, ASSIST, Batt present).
+**MW2-live · One map block and its exits, live** (after F2; lab-rathena, ASSIST, Batt present). Named
+"MW2" until 2026-10-09.
 ➡️ 2026-10-08: not the EDITOR plan [mw2-block-editor.md](../planning/mw2-block-editor.md), which is
 also called "MW2" (its skeleton is built on branch `feat/mw2-editor`, SIMULATE only, no live run).
-The naming is parked for Batt.
+The naming is parked for Batt. ➡️ **DECIDED by Batt 2026-10-09: this phase is MW2-live; the
+editor plan is MW2-editor** (mw2-block-editor.md section 0).
 - Prerequisites: `walk_to` under walk@11's safety bar, `take_warp` and the position read verified
   alone.
 - Alone-tests before their blocks run in a flow, each pre-registered:
@@ -1748,6 +1911,18 @@ it offline.
 **➡️ The 19 contradictions MW1 found** (each built one provisional way), with a recommended
 resolution per item: [docs/planning/adr0020-contradictions.md](../planning/adr0020-contradictions.md).
 They await Batt's decision (2026-10-08); this ADR is unchanged until he decides.
+➡️ **2026-10-09: Batt decided 5 of them, each as recommended: #6, #15, #13, #14, #18** (his order).
+Each is recorded where the ADR said otherwise, with a "DECIDED 2026-10-09 (Batt, contradictions
+#N)" marker (sections 1, 2.5, 5, 6, 12, 13.4, 13.5, 13.6.1-13.6.3, 13.6.8, 13.6.9; open question
+15 closed). The other 14 still await him.
+➡️ **2026-10-09 ~10:40: 11 more decided, each as recommended** (Batt: "resolve them per your own
+recommendations, EXCEPT any item that changes safety semantics"): #2, #3, #4, #5, #7, #8, #9, #11,
+#12, #16, #19, each with a "DECIDED 2026-10-09 (Batt, contradictions #N)" marker where the ADR said
+otherwise (sections 1, 7.2, 13.1, 13.3, 13.4, 13.5, 13.6.7, 13.6.8, 13.8; open question 22).
+#1, #10 and #17 touch safety semantics and were brought to Batt. ➡️ **~10:50 he decided them
+too** (#1: MW1's re-fire bound, 2.5 rule 3; #10: ACTIVE, as little as possible, a per-run budget,
+2.3; #17: not hard-coded, configured, open question 8). All 19 are decided; #18's code waits for his
+approval of docs/planning/poring-nav.md.
 
 Marked FIRST: needed before F1 or F2.
 
@@ -1770,6 +1945,26 @@ Marked FIRST: needed before F1 or F2.
    that they go through L1 and the alone-test like any concept.
 8. **`max_runtime_s`'s bound and default**, and when long runs are allowed: ADR-0002 notes the
    input log grows ~1 GB/day and needs rotation before long unattended runs.
+   ➡️ **DECIDED 2026-10-09 (Batt, contradictions #17): NOT hard-coded.** "User-configurable: a
+   global default and maximum in the Settings page (human-only writes, like the environments
+   store), defaults 4 h and 24 h; each flow may set its own value up to the global maximum; the
+   editor shows it; changes are logged; the run-start check refuses a flow above the configured
+   maximum."
+   - **The flow side (built):** the flow's own `max_runtime_s` (the IR field, unchanged in name);
+     the IR's bound is only a SANITY cap now, 7 days (`ir.MAX_RUNTIME_S`; it was 24 h); the editor
+     shows and edits it with `where_budget` (the Inspect panel's run settings, refusing a value
+     above the configured maximum) and a new flow starts at the configured default; the linter
+     takes the configured maximum as an input (`lint(..., runtime_max_s=)`: above it an ERROR,
+     `runtime_max`) and so does the run-start check (`runstart.check(..., runtime_max_s=)`:
+     above it, or with NO configured value, the run is refused: fail closed).
+   - **The interface the Settings store implements** (another piece of work: the store, its page,
+     its audit log; not built here): `poring_backend.flows_settings.runtime_limits(state) ->
+     (default_s, max_s)`, in seconds. `/flows/catalogue` returns it as `runtime_limits`, and
+     `/flows/lint` and `/flows/simulate` lint with its maximum. Until the store lands it returns
+     Batt's defaults, (14400, 86400).
+   - **Changes are logged:** a flow is a file the browser exports and imports, so a change of its
+     `max_runtime_s` shows in its JSON diff; a change of the global default or maximum is the
+     Settings store's audit log.
 9. **The UI reset before a handler** (2.5 rule 9): which windows and dialogs it may close, and how
    it is verified.
 10. **How the console reaches the host-side LLM drafter** without any lab container joining
@@ -1777,6 +1972,11 @@ Marked FIRST: needed before F1 or F2.
 11. **Committing L3-derived keys.** ADR-0012 allowed one-way message keys from the client table.
     Are keys derived from GPL server scripts (NPC and option keys) committable in shared flows, or
     do filled flows always stay under `data/`? Proposal: they stay under `data/` until Batt rules.
+    ➡️ **DECIDED by Batt 2026-10-09 (with MW2-editor's parked items): the proposal.** L3-derived
+    NPC and option keys, and every filled flow that holds them, stay LOCAL under `data/` and are
+    never committed; committed flows and fixtures hold synthetic keys only. The PROVISIONAL scheme
+    of `poring_flow/kbsheet.py` (`n_` / `o_` + 8 hex digits of sha256) stays as built: no derived
+    key is ever committed, so a later change only re-resolves local flows (section 4's re-pick).
 12. **Comments in the Python view**: carry them (tokenize) or drop them.
 13. **JavaScript import**: never, or later with a parser whose licence is checked first.
 14. **Blockly's CSP fit** (section 9): only measurable on the pinned version; the fallback is our
@@ -1788,6 +1988,40 @@ Marked FIRST: needed before F1 or F2.
     backend-side and hands `vision` an approved, re-linted IR, or the walk graph moves to a package
     `vision` may import (it is our own clean A*, but it lives beside the label code). Decide before
     F1.
+    ➡️ **2026-10-09, Batt's second #18 decision: one shared package (`poring_nav`); the plan
+    `docs/planning/poring-nav.md` awaits his approval (section 5 has the summary).**
+    ➡️ **CLOSED 2026-10-09 (Batt, contradictions #18):** "the linter runs in the backend at run
+    time (L3 local), and routes with the EXECUTOR's planner (`poring_dataset.walk.walk_path`, the
+    client's own path rules), not MW1's small A*. Until then, a cross-check test on the sheet
+    maps."
+    - **Where it runs:** the backend. It already lints there for the editor (`/flows/lint`), and
+      the run-start check (`poring_flow.runstart`, section 5) is where a live run re-lints; the
+      backend hands `vision` an approved, re-linted IR (MW3).
+    - **The swap WAITS**, because the dependency rules do not allow it yet and it is not small:
+      1. `poring_flow` may not import `poring_dataset` (`test_guards.py`: vision imports
+         `poring_flow`, and vision never gets the dataset package, ADR-0010);
+      2. the backend has no `poring_dataset` either (its image copies only the pyproject; dev mode
+         mounts `poring_flow` and `poring_skills` only; the package brings PyAV);
+      3. the executor itself (MW3, in `vision`) needs the same planner, so `walk_path` (our own
+         clean A*, stdlib only) has to MOVE first to a package the backend and `vision` may both
+         import. The walk rules in `scripts/` import it from `poring_dataset` today. That move is
+         a code change with its own review, and where it lands is a choice for Batt.
+    - **Until then, the cross-check:** `packages/poring_dataset/tests/test_walk_matches_flow_planner.py`.
+      For sampled pairs of walkable cells, MW1's `Walk.route` and `walk_path` (unbounded) must
+      agree on reachability, on the path cost exactly (both are shortest under one cost model:
+      10 straight, 14 diagonal, no corner cutting) and on the step count within 2 (equally cheap
+      paths can trade 7 straight steps for 5 diagonal ones); both paths must be legal walks.
+      Committed: the MW2-editor sample's two sheets (150 pairs each) and four seeded mazes (120
+      pairs each, with unreachable pockets): no disagreement. A deliberately corner-cutting
+      planner is caught (the positive case). Local only (client data, never committed), with
+      `PORING_FLOW_CROSSCHECK_GAT=data/gat`: 240 sampled legs (40 per map, targets within 60 cells) on alberta, alberta_in, iz_dun00, prontera, prt_church and prt_fild08 (2026-10-09 10:16): 206 reachable, 34 unreachable, 0 disagreements, the same cost and the same step count on every reachable leg; the two GAT readers (kbsheet.read_gat, the linter's; poring_dataset.gat, the executor's) see identical walkable cells on all six maps. 75 of the 240 legs are longer than the executor's one-plan limit (below); one plan refuses all 75.
+    - **A difference it found, recorded and not hidden:** the executor plans ONE walk of at most
+      48 steps (`PLAN_MAX`, scripts/walk5.py), and MW1's linter routes a leg of any length. A
+      longer leg is either refused by one plan (it needs waypoints: section 5 says legs ≤ 128
+      steps, waypoints beyond, which MW1 does not model), or, where a walk of at most 48 steps
+      exists, the plan takes a DEARER route than the one the linter checked (seen on a seeded
+      maze, asserted in the test). The swap has to bring the executor's leg limit into the
+      linter with the planner.
 
 **Added with section 13 (map-centric workflows and event flows, Batt, 2026-10-08).** FIRST here
 means needed before MW1.
@@ -1834,7 +2068,9 @@ means needed before MW1.
         (offline only), and a death-cell stand-in for the tracker.
       - 20 drop trials; the bar is 19 / 20, with zero-tolerance safety in the loot phase.
 22. **The training scope beyond spawns (13.3).** Metamorphosis is covered (`classes.json`). Summoned
-    slaves (mob skills)? The maps a route only crosses (proposal: in scope)?
+    slaves (mob skills)? The maps a route only crosses (proposal: in scope)? ➡️ That part waits
+    for a later IR version (after IR 2): in IR 1 and IR 2 a route crosses no maps (Batt 2026-10-09,
+    contradictions #19; 13.3).
 23. **Unlisted species:** treated as IGNORE (proposal), or must the owner place every spawned
     species on a list?
 24. **An aggressive species on IGNORE** attacks us: never answer (proposal; the HP events decide),

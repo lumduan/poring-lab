@@ -2,15 +2,17 @@
 
 The map (its sheet), the NPC on the map the flow is on at that point, the option in that NPC's
 menu, the Kafra service, the item / monster on this server; every action's bindings through
-`resolve()` (an `Unsupported` is an error naming the layer and key); the L1 preconditions that
-must be assumed; exit destinations; TARGET / IGNORE lists; the workflow graph.
+`resolve()` (an `Unsupported` is a READINESS item naming the layer and key: it blocks the run, not
+the design; Batt 2026-10-09, ADR-0020 contradictions #6); the L1 preconditions that must be
+assumed; exit destinations; TARGET / IGNORE lists; the workflow graph.
 """
 
 from __future__ import annotations
 
+import itertools
 from typing import Any
 
-from poring_flow import ir
+from poring_flow import always_on, ir
 from poring_flow.lint.common import Consts, Ctx, assigned_vars, handler_exprs
 
 PARAM_STR = {"window": "name", "npc": "key", "option": "key", "map": "map"}
@@ -95,7 +97,8 @@ def _bindings(ctx: Ctx, consts: Consts) -> None:
         return
     from poring_skills.resolve import Unsupported
 
-    for site in ir.sites(ctx.flow):
+    # the always-on events the flow does not write run too (#15): their bindings count
+    for site in itertools.chain(ir.sites(ctx.flow), always_on.sites(ctx.flow)):
         for a in ir.actions_in(site.stmt):
             if a.concept.startswith("core.") or a.block not in ctx.cat.blocks:
                 continue
@@ -104,7 +107,7 @@ def _bindings(ctx: Ctx, consts: Consts) -> None:
             except Unsupported as u:
                 ctx.add(
                     "bindings",
-                    "error",
+                    "readiness",  # #6: blocks the run (runstart), not the design
                     2,
                     site.path,
                     f"{a.block} is unsupported here: {u.layer} binding {u.key} ({u.reason})",
@@ -211,7 +214,7 @@ def _walk_npcs(
                         path,
                         f"option {opt.key} is not in npc {npc.key}'s menu",
                     )
-            if a.block in ("close_dialog", "close_npc_dialog"):
+            if a.block == "close_dialog":
                 npc = None
             if not fixed and spec is not None and spec.changes_map != "never":
                 to = consts.ref(a.params.get("to"), ir.MapRef) if "to" in a.params else None

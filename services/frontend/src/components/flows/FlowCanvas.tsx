@@ -64,7 +64,7 @@ function Lock() {
 const LEVEL_CLASS: Record<string, string> = {
   error: "text-red-300",
   warning: "text-amber-300",
-  unsupported: "text-sky-300",
+  readiness: "text-sky-300",
   info: "text-neutral-300",
   ok: "text-emerald-300",
 };
@@ -135,14 +135,28 @@ function eventRow(ev: MapEvent): { mode: string; key: string; detail: string } {
   if (ev.kind === "disable") return { mode: "DISABLE", key: ev.key, detail: "" };
   if (ev.kind === "extend") return { mode: "EXTEND", key: ev.key, detail: `${ev.steps.length} step(s)` };
   const h = ev.event;
-  return { mode: ev.kind === "override" ? "OVERRIDE" : "ADD", key: h.name, detail: `${h.priority} · ${h.mode}` };
+  return { mode: ev.kind === "override" ? "OVERRIDE" : "ADD", key: h.name, detail: `${h.priority}${rankText(h.rank)} · ${h.mode}` };
+}
+
+/** An explicit rank inside the class (IR 2, ADR-0020 #13); none shown = 13.6.3's table order. */
+function rankText(rank: number | null): string {
+  return rank === null ? "" : ` rank ${rank}`;
 }
 
 function EventsNode({ data }: NodeProps<EventsNodeT>) {
   if (data.kind !== "events") return null;
+  // the ALWAYS-ON safety events the flow does not write (ADR-0020 #15): locked, read-only rows;
+  // the compiler adds them, they are not in the IR, so nothing here can delete or edit them
   const rows =
     data.scope === "global"
-      ? data.handlers.map((h) => ({ mode: "GLOBAL", key: h.name, detail: `${h.priority} · ${h.mode} · then ${h.then}` }))
+      ? [
+          ...data.builtIn.map((k) => ({ mode: "BUILT-IN", key: k, detail: "always on · critical · read-only" })),
+          ...data.handlers.map((h) => ({
+            mode: "GLOBAL",
+            key: h.name,
+            detail: `${h.priority}${rankText(h.rank)} · ${h.mode} · then ${h.then}${SAFETY_CRITICAL.includes(h.name) ? " · stricter only" : ""}`,
+          })),
+        ]
       : data.events.map(eventRow);
   const owner = data.scope === "global" ? "global" : `block:${data.block}`;
   return (

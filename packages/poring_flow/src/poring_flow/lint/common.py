@@ -14,7 +14,11 @@ from poring_flow.effective import Merged, global_set, merge
 from poring_flow.pyview import expr_src
 from poring_flow.sheet import MapSheet, World
 
-Severity = Literal["error", "warning", "info"]
+# READINESS (Batt 2026-10-09, ADR-0020 contradictions #6): a binding that is not there YET for the
+# target environment (`resolve()` raised `Unsupported`). It is listed in the report and blocks the
+# RUN (`poring_flow.runstart` refuses on it), never the design: a flow with readiness items can be
+# designed, linted, simulated and approved; it becomes runnable as its bindings land.
+Severity = Literal["error", "readiness", "warning", "info"]
 # resolve(block, concept, params) raises poring_skills.resolve.Unsupported for a missing binding
 Resolver = Callable[[str, str, dict[str, str]], None]
 
@@ -27,10 +31,12 @@ class Finding:
     path: str  # a node path (section 1 / 13.1), a map block, or "" for the whole workflow
     text: str
     ack: bool = False  # the owner acknowledges it at approval (section 5, 13.6.9)
+    shown: str = ""  # the path as a person reads it (ir.PathNames, #3); `path` stays the node id
 
     @property
     def message(self) -> str:
-        return f"{self.path}: {self.text}" if self.path else self.text
+        where = self.shown or self.path
+        return f"{where}: {self.text}" if where else self.text
 
 
 @dataclass(frozen=True)
@@ -52,6 +58,13 @@ class Ctx:
     findings: list[Finding] = field(default_factory=list)
     _seen: set[tuple[str, str, str]] = field(default_factory=set)
     _merged: dict[str, Merged] = field(default_factory=dict)
+    _names: ir.PathNames | None = None
+
+    def shown(self, path: str) -> str:
+        """A node path in the grammar a person reads (#3): `maps.town.3`, `handlers.dead`."""
+        if self._names is None:
+            self._names = ir.PathNames(self.flow)
+        return self._names(path)
 
     def add(
         self, rule: str, severity: Severity, layer: int, path: str, text: str, ack: bool = False
@@ -59,7 +72,9 @@ class Ctx:
         key = (rule, path, text)
         if key not in self._seen:
             self._seen.add(key)
-            self.findings.append(Finding(rule, severity, layer, path, text, ack))
+            self.findings.append(
+                Finding(rule, severity, layer, path, text, ack, self.shown(path) if path else "")
+            )
 
     @property
     def blocks(self) -> list[ir.MapBlock]:

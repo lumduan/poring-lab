@@ -29,6 +29,7 @@ import {
   eventLabel,
   KEY,
   MAP_ID,
+  MAX_RANK,
   NAME,
 } from "./ir.ts";
 
@@ -256,7 +257,14 @@ function eventHat(
   return {
     type: "pl_event",
     id: ids.take(`h:${root}`),
-    fields: { SCOPE: kind === "global" ? "global" : kind, NAME: h.name, PRIORITY: h.priority, MODE: h.mode, THEN: h.then },
+    fields: {
+      SCOPE: kind === "global" ? "global" : kind,
+      NAME: h.name,
+      PRIORITY: h.priority,
+      RANK: h.rank === null ? "" : String(h.rank),
+      MODE: h.mode,
+      THEN: h.then,
+    },
     inputs,
     extraState: { kind, label, order, rest: restOf(h) },
   };
@@ -563,6 +571,15 @@ class Reader {
     return { ...base, kind: "item_warp", item: this.item(b, "ITEM", where) };
   }
 
+  /** IR 2 (ADR-0020 #13): empty = 13.6.3's table order (null); else a whole number 1..99. */
+  rank(b: WsBlock, where: string): number | null {
+    const t = this.field(b, "RANK").trim();
+    if (t === "") return null;
+    if (/^[0-9]{1,2}$/.test(t) && Number(t) >= 1 && Number(t) <= MAX_RANK) return Number(t);
+    this.err(where, `rank ${JSON.stringify(t)}: a whole number 1..${MAX_RANK}, or empty for the 13.6.3 table order`);
+    return null;
+  }
+
   handler(b: WsBlock, where: string): Handler {
     const st = (b.extraState ?? {}) as { rest?: HandlerRest };
     const r: HandlerRest = st.rest ?? {
@@ -580,6 +597,7 @@ class Reader {
       until: b.inputs?.UNTIL?.block ? this.expr(b.inputs.UNTIL.block, where, "until") : null,
       rearm: b.inputs?.REARM?.block ? this.expr(b.inputs.REARM.block, where, "rearm") : null,
       priority: this.field(b, "PRIORITY") as Handler["priority"],
+      rank: this.rank(b, where),
       mode: this.field(b, "MODE") as Handler["mode"],
       then: this.field(b, "THEN") as Handler["then"],
       body: this.stmts(b.inputs?.DO?.block, name),

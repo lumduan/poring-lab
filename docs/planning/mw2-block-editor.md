@@ -1,13 +1,16 @@
 ---
-title: "MW2 — the block programming editor (workflow canvas + block editor) on MW1's IR"
-status: "BUILT as a SKELETON; MERGED 2026-10-08 (2862808) and DEPLOYED 2026-10-09 07:01 ICT (SIMULATE only; section 0)"
+title: "MW2-editor — the block programming editor (workflow canvas + block editor) on MW1's IR"
+status: "BUILT as a SKELETON; MERGED 2026-10-08 (2862808) and DEPLOYED 2026-10-09 07:01 ICT (SIMULATE only; section 0); its parked items DECIDED by Batt 2026-10-09 (section 0); renamed MW2-editor"
 date: 2026-10-08
 owner: Batt
 extends: docs/adr/0020-block-programming-flows.md
 gate: "~~built AFTER walk@13 passes; stops for approval of the new frontend dependencies~~ ➡️ SUPERSEDED: Batt approved the build and both pinned dependencies on 2026-10-08 ~21:05 (section 0)"
 ---
 
-# MW2 — the block programming editor
+# MW2-editor — the block programming editor
+
+➡️ **Renamed 2026-10-09 (Batt):** this plan was "MW2"; it is **MW2-editor**, apart from ADR-0020
+13.8's live phase, now **MW2-live** (section 0, "Naming").
 
 **Batt (2026-10-08 ~19:00):** "once walking (walk@13) passes, build the BLOCK PROGRAMMING editor
 next, so Batt can test with us. Plan first and stop for approval (new frontend dependencies + pinned
@@ -59,12 +62,14 @@ the deploy steps are at the end of this section.
 2. **`wait(seconds)` is `wait_until(False, timeout_s=N)`**, the IR's only wait statement (section 3's
    "core wait statement" does not exist in MW1's IR). No IR change.
 3. **Blocks outside the palette:** one generic block per catalogue block (parameters by name, in
-   the Python view's expression form), and a read-only block (kept exactly) for what MW2 has no
+   the Python view's expression form), and a read-only block (kept exactly) for what MW2-editor has no
    block for (`for` loops, an action inside a sensor argument).
 4. **Conditions are typed** in the Python view's expression form (`hp_percent() < 50`), parsed by our
    own parser and never evaluated; compare / and / or / not / an action used as a value have blocks.
 5. **Unsupported bindings are listed apart** in the UI ("N unsupported"), so the first impression is
    not all red; MW1's severity (ERROR) is unchanged. Open question 4 (#6) stays Batt's.
+   ➡️ SUPERSEDED 2026-10-09: Batt decided #6; the linter's own `readiness` severity replaces the
+   side-count (db27d76), and the UI shows "N not ready" apart from errors.
 6. **TS types:** `flow.gen.ts` is generated (json2ts, in `scripts/gen_protocol.sh`), but json2ts
    makes defaulted fields optional; the editor uses hand-written canonical types, pinned to the
    generated ones at typecheck (`lib/flow/check.ts`).
@@ -96,10 +101,17 @@ the deploy steps are at the end of this section.
 **Known limit:** JSON in a browser cannot keep `2.0` apart from `2`, so a LITERAL holding an integral
 float (`Lit(2.0)`) comes back as an int and the hash changes (float FIELDS such as `timeout_s` are
 safe). Test `test_a_float_literal_with_an_integral_value_is_the_known_exception`; MW1's canonical
-form decides.
+form decides. ➡️ **DECIDED by Batt 2026-10-09: recorded, not fixed.** The guard is that test (it
+fails the day the round trip changes). The fix is NOT trivial: the int / float difference is
+meaningful in the IR (layer 1 refuses a float into a variable declared with an int, so `X = 2.0`
+then `X = 2.5` is valid and `X = 2` then `X = 2.5` is not), so MW1's canonical form cannot fold
+`2.0` into `2`; keeping it would need the browser to carry float-ness (an IR encoding change).
 
 **Naming:** this plan's "MW2" (the editor) is not ADR-0020 13.8's "MW2 · One map block and its exits,
-live". One of the two needs another name (for Batt).
+live". One of the two needs another name (for Batt). ➡️ **DECIDED by Batt 2026-10-09: two names.**
+This plan's milestone is **MW2-editor**; ADR-0020 13.8's live phase is **MW2-live**. Both documents
+say so from now on (older text keeps "MW2" where it is history). The editor's own steps keep their
+labels (MW2-0, MW2a-MW2e, section 8): they are MW2-editor's steps.
 
 **Parked for Batt:** `death_respawn` authored vs derived (Q1, derived built); flows stored only as
 files (Q2, as proposed); the Python view read-only (Q3, as proposed); #6 unsupported bindings as
@@ -111,6 +123,30 @@ disk copy made by `scripts/flows_gat.py`, not a bind of the /dev/shm extraction,
 backend start would create root-owned); it takes effect with the next guarded `recreate:backend`
 (not during a scored client run).** The other parked items go with ADR-0020 (Batt, 2026-10-09); the MW2 naming;
 the float-literal hash limit.
+
+➡️ **DECIDED by Batt 2026-10-09** ("ADR-0020: confirmed, resolve in your order #6 -> #15 -> #13/#14
+-> #18, with the MW2 parked items"), each as this plan proposed. The text above is kept as history.
+- **Q1 `death_respawn`:** DERIVED and read-only, as built (the IR is unchanged). Since #15 (`dead`
+  is always on) the derived edges no longer need a written `dead`: they follow the save point
+  alone (`lib/flow/canvas.ts`).
+- **Q2 where flows live:** files only (JSON export / import in the browser), as proposed. No
+  server-side store; it is a later decision.
+- **Q3 the Python view:** read-only until ADR-0020 F3's sandbox, as proposed (`POST /flows/python`
+  prints; nothing parses user Python on the backend).
+- **Q4 (= ADR-0020 contradictions #6):** an unsupported binding is a READINESS item: listed apart,
+  it blocks the run, not the design. BUILT in db27d76 (deviation 5 above is superseded).
+- **Q5 who may open `/flows`:** every LAN viewer, as today: the page is served to the LAN like the
+  console, its GET routes take a LAN viewer with an allowlisted Origin, its POST routes also the
+  CSRF token and 20 a minute (section 5). It computes only and sends no input; a "Watch only"
+  style toggle comes with MW3's live run if Batt wants one.
+- **ADR-0020 Q11, the PROVISIONAL key scheme and committing keys:** the ADR's own proposal applies:
+  L3-derived NPC / option keys, and every filled flow holding them, stay LOCAL (under `data/`,
+  never committed); committed flows and fixtures hold synthetic keys only. The scheme stays as
+  `kbsheet.py` builds it (`n_` / `o_` + 8 hex digits of sha256, one-way); as no derived key is ever
+  committed, a later change of the scheme only re-resolves local flows (ADR-0020 section 4, the
+  re-pick). ADR-0020 Q11 is marked decided.
+- **The naming:** MW2-editor (this plan) and MW2-live (ADR-0020 13.8), above.
+- **The float-literal hash limit:** recorded with its guard, not fixed (above).
 
 **To deploy** (the parent, in an operator-chosen window):
 1. Merge `feat/mw2-editor`.
@@ -134,17 +170,17 @@ truth. Its linter, its effective-event-set rule and its simulated executor run u
 
 | view | where | edits | built in |
 |---|---|---|---|
-| workflow canvas (Node-RED / n8n-like) | browser, React Flow | map nodes, typed exits, event nodes | MW2 |
-| block editor (MakeCode-like) | browser, Blockly | a map node's main flow + its map events | MW2 |
-| JSON | browser (export / import) | the whole flow | MW2 |
-| restricted Python | backend (`poring_flow.pyview`) | read-only in MW2 | MW2 shows it; import later (below) |
+| workflow canvas (Node-RED / n8n-like) | browser, React Flow | map nodes, typed exits, event nodes | MW2-editor |
+| block editor (MakeCode-like) | browser, Blockly | a map node's main flow + its map events | MW2-editor |
+| JSON | browser (export / import) | the whole flow | MW2-editor |
+| restricted Python | backend (`poring_flow.pyview`) | read-only in MW2-editor | MW2-editor shows it; import later (below) |
 
 - **Every view compiles to the IR, and back.** The browser holds the IR JSON. Pure TS converters
   map IR ↔ canvas graph and IR ↔ Blockly workspace JSON. The backend lints, simulates and prints
   Python from the IR.
 - **Round trips:** IR → view → IR must be equal by MW1's canonical `flow_hash`, for every view.
 - **Python IMPORT is deferred.** MW1's parser is `ast`-only and never runs code, but its subprocess
-  sandbox (ADR-0020 F3) is not built. So MW2 shows the Python view read-only; import comes with F3.
+  sandbox (ADR-0020 F3) is not built. So MW2-editor shows the Python view read-only; import comes with F3.
 
 ## 2. Level 1 — the workflow canvas
 
@@ -170,7 +206,7 @@ truth. Its linter, its effective-event-set rule and its simulated executor run u
 
 - **Look:** Blockly's `zelos` renderer (Scratch / MakeCode style). Tabs: `main`, then one per map
   event.
-- **MW2's blocks** (from MW1's catalogue, `blocks.yaml`; their fields are dropdowns from local data):
+- **MW2-editor's blocks** (from MW1's catalogue, `blocks.yaml`; their fields are dropdowns from local data):
 
 | block | IR | field source |
 |---|---|---|
@@ -187,7 +223,7 @@ truth. Its linter, its effective-event-set rule and its simulated executor run u
   on S2 / unverified / unknown. The badge follows L1's `verified_on`: when an alone-test flips a
   concept, the badge flips.
 - **Runtime highlighting (MW3):** the active block glows during a live run, and after a run every
-  block carries its outcome. MW2 already returns per-node traces from simulate (MW1's node paths),
+  block carries its outcome. MW2-editor already returns per-node traces from simulate (MW1's node paths),
   so MW3 only adds the live feed.
 
 ## 4. Safe testing: SIMULATE, no game
@@ -202,7 +238,7 @@ truth. Its linter, its effective-event-set rule and its simulated executor run u
   the map cache, NPCs, warps, menu keys, Kafra options. MW1 built only the sheet INTERFACE.
   - **Prerequisite MW2-0:** the sheet GENERATOR from `kb_build` / `kb_route` + the map cache. It is
     GPL-derived, so it is generated locally and never committed (CLAUDE.md rule 4).
-- **No live run in MW2.** The live executor is MW3, and it gets:
+- **No live run in MW2-editor.** The live executor is MW3, and it gets:
   - an explicit confirmation listing every UNVERIFIED block before a live run;
   - live runs only on an `allowed` environment with the interlock green, in ASSIST (ADR-0016);
   - the agent never confirms environments.
@@ -223,7 +259,7 @@ Rules for these routes:
   validation). Plus the console's Origin, the CSRF token (as `/settings`), and 20 requests/min per
   client.
 - **Never on `:8001`, never to the mux:** the routes compute and return; nothing they do sends input.
-- **No storage in MW2:** flows are exported / imported as JSON files by the browser. A server-side
+- **No storage in MW2-editor:** flows are exported / imported as JSON files by the browser. A server-side
   store is a later decision (open question 2).
 - **TS types** from `packages/poring_flow/schema/flow.schema.json` via json2ts (in frontend-dev,
   drift-tested like the protocol).
@@ -266,11 +302,11 @@ Transitive packages (all permissive; `pnpm licenses list` is recorded in THIRD_P
     node.
   - MakeCode: the block look comes from Blockly's own `zelos` renderer.
 
-## 7. MW2 acceptance (tests; nothing ships without them)
+## 7. MW2-editor acceptance (tests; nothing ships without them)
 
 1. MW1's fixtures (`visit_and_choose.flow`, `farm_loop.flow`) load into the canvas and the blocks, and
    export to JSON with the SAME `flow_hash`.
-2. Round-trip property tests (TS, `node --test`): random IR within MW2's block set → Blockly JSON →
+2. Round-trip property tests (TS, `node --test`): random IR within MW2-editor's block set → Blockly JSON →
    IR is equal; IR → canvas → IR is equal.
 3. A flow built in the editor lints with EXACTLY the findings MW1's linter gives the same IR (a
    subset of Batt's 13.6.8 example).
@@ -287,8 +323,8 @@ Transitive packages (all permissive; `pnpm licenses list` is recorded in THIRD_P
 
 ## 8. Order and size
 
-MW2-0 → MW2a → MW2b → MW2c → MW2d → MW2e, roughly 2–3 working days of agent time, built after walk@13
-passes.
+MW2-editor's steps (labels kept): MW2-0 → MW2a → MW2b → MW2c → MW2d → MW2e, roughly 2–3
+working days of agent time, built after walk@13 passes.
 
 | step | content | needs |
 |---|---|---|
@@ -302,15 +338,38 @@ passes.
 ## 9. Open questions for Batt
 
 1. **`death_respawn` on the canvas:** derived and read-only (IR unchanged, proposed), or authored
-   (an IR change)?
+   (an IR change)? ➡️ DECIDED by Batt 2026-10-09: derived, as built (section 0).
 2. **Where flows live:** export / import files only in MW2 (proposed), or a server-side store now
-   (human-only writes, like the settings store)?
-3. **The Python view read-only until F3's sandbox** (proposed)?
+   (human-only writes, like the settings store)? ➡️ DECIDED by Batt 2026-10-09: files only, as
+   proposed (section 0).
+3. **The Python view read-only until F3's sandbox** (proposed)? ➡️ DECIDED by Batt 2026-10-09:
+   read-only, as proposed (section 0).
 4. **ADR-0020's 19 contradictions** (MW1): the editor surfaces several directly:
    - #3 node paths (what a badge points at);
    - #6 an unsupported binding as an ERROR: today NO real flow lints clean, so every node would be
      red;
    - #2 `in`, #12 `Exit.item`, #16 `repeat`.
    Deciding at least #6 before MW2 avoids an all-red first impression.
+   ➡️ DECIDED by Batt 2026-10-09: #6 (readiness), #13, #14, #15 and #18, each as recommended
+   ([adr0020-contradictions.md](adr0020-contradictions.md)); #2, #3, #12 and #16 stay open there.
+   ➡️ Later the same day all 19 were decided (round 2, ~11:20): see adr0020-contradictions.md.
 5. **Who may open `/flows`:** every LAN viewer (proposed, read-only until MW3) or a toggle like
-   "Watch only"?
+   "Watch only"? ➡️ DECIDED by Batt 2026-10-09: every LAN viewer, as today (section 0).
+
+## 10. UI issues (Batt's testing of the deployed editor, from 2026-10-09)
+
+Batt tests the deployed `/flows` and sends findings (screenshots); each one is fixed at its cause and
+checked in a real browser before it is listed as fixed. Fixed = committed on the branch named; deployed =
+the frontend-dev hot reload after the parent's merge (CSS / TSX only: no restart).
+
+| # | date | reporter | issue | cause | fix commit | status |
+|---|---|---|---|---|---|---|
+| 1 | 2026-10-09 09:23 | Batt | Open a category (Events), drag a block onto the workspace: the flyout closes but a **vertical line stays at its old edge**, drawn over the workspace and the dropped block. | Blockly hides a scrollbar with the SVG presentation attribute `display="none"` on its outer `<svg>`; Tailwind's preflight `svg { display: block }` (`@layer base`) beats any presentation attribute. So the flyout's scrollbar (z-index 30) stayed drawn after the flyout closed, and also while it was open when Blockly wanted none (the line Batt saw as the flyout's divider). Measured: attribute `none`, computed `block`. The main workspace's scrollbars hide the same way. | `aab6963` (branch `fix/flows-flyout-scrollbar`): an unlayered `.injectionDiv svg[display="none"] { display: none; }` in `flows.css`, pinned by `lib/flow/editor_css.test.ts` | **fixed** on the branch; checked in headless Chromium (dev and production build): 75/75 checks after, 39/75 before (all 36 fails this scrollbar). Covered: drag from a flyout, a category clicked closed, a category whose blocks overflow (Blockly shows the scrollbar, and it is drawn), a window resize, zoom in/out, the trashcan's flyout, the editor closed and reopened 3 times (two map blocks, global events); no CSP violation. Deploy pending (parent) |
+| 2 | 2026-10-09 | Claude (seen during #1's check) | An open flyout **closes by itself** when a lint result arrives while the editor is open, e.g. the editor opened within ~2.5 s of loading a sample, importing, or applying an edit. | `BlockEditor.tsx` calls `updateToolbox` in the same effect as the badge/lint decoration, so every new lint re-renders the toolbox (Blockly's `Toolbox.render` disposes and rebuilds the categories, which closes the open flyout). The toolbox depends only on the catalogue and the scope. Measured (production build): Events open at page t = 3111 ms, the lint response at 3212 ms, the categories rebuilt at 3250 ms, the flyout closed ~260 ms after it opened. Since #1's fix this close leaves no line. | none yet | **open**, not fixed here: the fix is in `BlockEditor.tsx`'s effects (update the toolbox only when the catalogue or scope changes), where the ADR-0020 work is editing in parallel; for the parent to schedule |
+
+**How #1 was checked** (scripts kept in `/dev/shm`, not in the repo: a browser test needs a Chromium and two
+local servers, outside the repo's `node --test` conventions): `chrome-headless-shell` copied into `/dev/shm`
+and driven over CDP with Node's own WebSocket; the worktree's own `next dev` and `next start` on
+`127.0.0.1`; and a local stand-in for the `/flows` GET routes, built in memory from the worktree's
+`poring_flow` (never the real backend). The CSS domain's `getMatchedStylesForNode` named the winning rule:
+preflight before the fix, the unlayered rule after it.

@@ -8,14 +8,14 @@ import type { FlowsApi, LintDoc, Scenario, SimDoc, WorldDoc, WorldSource } from 
 import { ApiError } from "@/lib/flow/api";
 import { type BlockProps, savePointBlock } from "@/lib/flow/canvas";
 import { exportText } from "@/lib/flow/importer";
-import { exitsOf, type Flow, type MapBlock } from "@/lib/flow/ir";
+import { builtInEvents, exitsOf, type Flow, type MapBlock, runSettings } from "@/lib/flow/ir";
 import { END_TEXT, lintLine, lintOf, runLine } from "@/lib/flow/status";
 
 const SEV_CLASS: Record<string, string> = {
   error: "border-red-700 bg-red-950/50 text-red-200",
   warning: "border-amber-700 bg-amber-950/40 text-amber-100",
   info: "border-neutral-700 bg-neutral-900 text-neutral-200",
-  unsupported: "border-sky-800 bg-sky-950/40 text-sky-100",
+  readiness: "border-sky-800 bg-sky-950/40 text-sky-100",
 };
 const btn = "rounded bg-neutral-800 px-2.5 py-1 text-xs hover:bg-neutral-700 disabled:opacity-50";
 const input = "w-full rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs";
@@ -39,6 +39,8 @@ export function InspectPanel({
   onStart,
   onOpen,
   onSimulateHere,
+  limits,
+  onFlow,
 }: {
   flow: Flow;
   selected: string | null;
@@ -51,12 +53,15 @@ export function InspectPanel({
   onStart: (name: string, entry: string) => void;
   onOpen: (id: string) => void;
   onSimulateHere: (block: string) => void;
+  limits: { default_s: number; max_s: number } | null;
+  onFlow: (flow: Flow) => void;
 }) {
   const block = selected?.startsWith("block:") ? flow.workflow?.blocks.find((b) => `block:${b.name}` === selected) : undefined;
   if (!selected) {
     const sp = savePointBlock(flow);
     return (
       <div className="space-y-2 text-xs text-neutral-300">
+        <FlowSettings key={`${flow.max_runtime_s}|${flow.where_budget}`} flow={flow} limits={limits} onFlow={onFlow} />
         <p>Click a node to inspect it; double-click a map block (or an events node) to open its blocks.</p>
         <p>Draw an exit from a port (walk exit, npc warp, item warp) onto another map block; select an exit and press Delete to remove it. The new exit gets placeholder details the linter names: fill them in the blocks.</p>
         <p className="text-neutral-400">
@@ -81,14 +86,61 @@ export function InspectPanel({
       </button>
       {selected === "events:global" && (
         <ul className="space-y-1">
+          {builtInEvents(flow).map((k) => (
+            <li key={k} className="rounded border border-neutral-800 p-1.5 text-neutral-300">
+              <b>(locked) {k}</b> · built in, always on · read-only: the compiler adds it to every flow (ADR-0020 #15); write
+              it in the global events only to make it stricter
+              {sim && <div className="text-fuchsia-300">{runLine(sim.trace.nodes[`${k}.0`]) || "did not fire"}</div>}
+            </li>
+          ))}
           {flow.handlers.map((h) => (
             <li key={h.name} className="rounded border border-neutral-800 p-1.5">
-              <b>{h.name}</b> · {h.priority} · {h.mode} · then {h.then}
+              <b>{h.name}</b> · {h.priority}{h.rank === null ? "" : ` rank ${h.rank}`} · {h.mode} · then {h.then}
               {sim && <div className="text-fuchsia-300">{runLine(sim.trace.nodes[`${h.name}.0`]) || "did not fire"}</div>}
             </li>
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+/** The flow's run settings (ADR-0020 #17 max_runtime_s, #10 where_budget). A change is part of
+ * the flow, so it shows in its JSON export / diff; the global default and maximum are the
+ * Settings page's (human-only writes, audited). */
+function FlowSettings({ flow, limits, onFlow }: { flow: Flow; limits: { default_s: number; max_s: number } | null; onFlow: (f: Flow) => void }) {
+  const [runtime, setRuntime] = useState(String(flow.max_runtime_s));
+  const [budget, setBudget] = useState(String(flow.where_budget));
+  const [err, setErr] = useState("");
+  const apply = () => {
+    const r = runSettings(flow, runtime, budget, limits?.max_s ?? null);
+    if (!r.ok) return setErr(r.error);
+    setErr("");
+    onFlow(r.flow);
+  };
+  const hours = (s: number) => `${(s / 3600).toFixed(s % 3600 ? 2 : 0)} h`;
+  return (
+    <div className="space-y-1 rounded border border-neutral-800 p-2">
+      <div className="font-semibold">Flow {flow.name}: run settings</div>
+      <div className="grid grid-cols-2 gap-2">
+        <label>
+          max_runtime_s ({hours(Number(runtime) || 0)})
+          <input className={input} value={runtime} onChange={(e) => setRuntime(e.target.value)} />
+        </label>
+        <label>
+          where_budget (/where reads a run)
+          <input className={input} value={budget} onChange={(e) => setBudget(e.target.value)} />
+        </label>
+      </div>
+      <div className="text-neutral-400">
+        {limits
+          ? `Configured on the Settings page: default ${hours(limits.default_s)}, maximum ${hours(limits.max_s)}. A run above the maximum is refused.`
+          : "The configured limits are not loaded yet."}
+      </div>
+      <div className="flex items-center gap-2">
+        <button className={btn} onClick={apply}>Apply</button>
+        {err && <span className="text-red-300">{err}</span>}
+      </div>
     </div>
   );
 }
@@ -190,8 +242,8 @@ function BlockInspector({
             {eff.map((e) => (
               <tr key={e.key} className={e.active ? "" : "text-neutral-500 line-through"}>
                 <td>{e.safety_critical ? "(locked) " : ""}{e.key}</td>
-                <td>{e.state}</td>
-                <td>{e.priority}</td>
+                <td>{e.state === "built_in" ? "built in" : e.state}{e.built_in && e.state !== "built_in" ? " (built in)" : ""}</td>
+                <td>{e.priority} · rank {e.rank}</td>
                 <td>{e.mode}</td>
               </tr>
             ))}
@@ -292,15 +344,19 @@ function StaticData({ api, world, server, map }: { api: FlowsApi | null; world: 
 
 // --- lint ------------------------------------------------------------------------------------------
 export function LintPanel({ lint, stale, onSelect }: { lint: LintDoc | null; stale: boolean; onSelect: (owner: string) => void }) {
-  const [showUnsupported, setShowUnsupported] = useState(false);
+  const [showReadiness, setShowReadiness] = useState(false);
   if (!lint) return <div className="text-xs text-neutral-400">Not linted yet.</div>;
-  const own = lint.findings.filter((f) => f.rule !== "bindings");
-  const unsupported = lint.findings.filter((f) => f.rule === "bindings");
+  const own = lint.findings.filter((f) => f.severity !== "readiness");
+  const readiness = lint.findings.filter((f) => f.severity === "readiness");
   return (
     <div className="space-y-2 text-xs">
       <div className={stale ? "text-amber-300" : "text-neutral-400"}>
-        MW1&apos;s linter, layers 1-3 · {lint.counts.error} errors · {lint.counts.warning} warnings · {lint.counts.info} info · static data:{" "}
-        {lint.world.server ?? "none"} ({lint.world.maps.join(", ") || "no sheets"}){stale ? " · STALE: the flow changed since" : ""}
+        MW1&apos;s linter, layers 1-3 · {lint.counts.error} errors · {lint.counts.warning} warnings · {lint.counts.info} info ·{" "}
+        {lint.counts.readiness} not ready · static data: {lint.world.server ?? "none"} ({lint.world.maps.join(", ") || "no sheets"})
+        {stale ? " · STALE: the flow changed since" : ""}
+      </div>
+      <div className={lint.run.allowed ? "text-emerald-300" : "text-neutral-400"}>
+        Run-start check (a live run, MW3; MW2 runs nothing): {lint.run.summary}
       </div>
       {(lint.world_notes ?? []).map((n) => (
         <div key={n} className="text-amber-300">{n}</div>
@@ -315,18 +371,19 @@ export function LintPanel({ lint, stale, onSelect }: { lint: LintDoc | null; sta
         ))}
         {!own.length && <li className="text-emerald-300">No findings of the flow itself.</li>}
       </ul>
-      {unsupported.length > 0 && (
-        <div className={`rounded border p-1.5 ${SEV_CLASS.unsupported}`}>
-          <button className="font-semibold" onClick={() => setShowUnsupported(!showUnsupported)}>
-            {showUnsupported ? "▾" : "▸"} {unsupported.length} unsupported bindings (rule bindings, errors in MW1)
+      {readiness.length > 0 && (
+        <div className={`rounded border p-1.5 ${SEV_CLASS.readiness}`}>
+          <button className="font-semibold" onClick={() => setShowReadiness(!showReadiness)}>
+            {showReadiness ? "▾" : "▸"} {readiness.length} readiness item{readiness.length > 1 ? "s" : ""}: bindings not there yet
           </button>
           <div className="text-sky-200/80">
-            Blocks whose L2 / L3 / L4 bindings are not there for this environment yet. Today no real flow lints clean
-            (ADR-0020 open question #6), so they are listed apart here; MW1&apos;s severity is unchanged.
+            Blocks whose L2 / L3 / L4 bindings are not there for this environment yet. They block the RUN (the run-start
+            check refuses), not the design: the flow can still be designed, linted and simulated (ADR-0020 contradictions
+            #6, Batt 2026-10-09).
           </div>
-          {showUnsupported && (
+          {showReadiness && (
             <ul className="mt-1 space-y-0.5">
-              {unsupported.map((f, i) => (
+              {readiness.map((f, i) => (
                 <li key={i} className="cursor-pointer" onClick={() => onSelect(f.owner)}>{f.message}</li>
               ))}
             </ul>
@@ -441,6 +498,12 @@ export function SimulatePanel({
               {t.final.cell ? ` (${t.final.cell[0]}, ${t.final.cell[1]})` : ""} · HP {t.final.hp_percent ?? "?"} % · weight {t.final.weight_percent ?? "?"} %
             </div>
             <div>save point: {t.save_point ? `${t.save_point.map} (${t.save_point.cell[0]}, ${t.save_point.cell[1]})` : "unknown"} · input batches a real run would send: {t.input_batches_counted} (counted, never built or sent)</div>
+            {t.where && (
+              <div className={t.where.over ? "text-amber-300" : ""}>
+                /where reads (they type; use as few as possible): {t.where.count} of the flow&apos;s budget {t.where.budget}
+                {t.where.reads.length > 0 && ` · ${t.where.reads.map((r) => `${r.reason} @${r.t} s`).join(", ")}`}
+              </div>
+            )}
           </div>
           <div>
             <div className="mb-1 font-semibold">Exits taken</div>

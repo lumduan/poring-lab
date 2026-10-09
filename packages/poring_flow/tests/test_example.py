@@ -69,16 +69,19 @@ def test_the_merged_details_follow_the_table() -> None:
     assert eng is not None and eng.label == "farm_engagement" and eng.handler.then == "relocate"
     boss = m.by_key("boss_seen")
     assert boss is not None and boss.source == "map" and boss.handler.then == "relocate"
-    # order: class first; inside critical dead > hp_critical > unexpected_map (13.6.3)
+    # order: class first; inside critical dead > hp_critical > unexpected_map (13.6.3); then the
+    # RANK inside the class (IR 2, Batt 2026-10-09, #13): unintended_engagement (4) before hp_low
+    # (5), boss_seen last (a user event: 50), although hp_low is declared first
     assert [e.key for e in m.active()] == [
         "dead",
         "hp_critical",
         "unexpected_map",
-        "hp_low",
         "unintended_engagement",
+        "hp_low",
         "boss_seen",
         "weight",
     ]
+    assert [ir.rank_of(e.handler) for e in m.active()] == [1, 2, 3, 4, 5, 50, 6]
     # dead keeps 1 per run everywhere
     assert all(merge(flow, b).by_key("dead").max_per_run == 1 for b in (town, relay, farm))  # type: ignore[union-attr]
 
@@ -90,65 +93,72 @@ EXPECTED = sorted(
         # 13.5 NPC rule, L1 preconditions: storage needs Basic Skill 6; nothing assumes it
         (
             "warning",
-            "town.2: kafra_store needs skill_level(skill(1)) >= 6 (storage.deposit: Basic "
+            "maps.town.2: kafra_store needs skill_level(skill(1)) >= 6 (storage.deposit: Basic "
             "Skill level 6): add it to the flow's assumes",
         ),
         # 13.5 species lists: map_3 spawns two species on neither list; the boss is aggressive
-        ("info", "farm: mob 9104 spawns on map_3 and is on neither list: treated as IGNORE"),
-        ("info", "farm: mob 9109 spawns on map_3 and is on neither list: treated as IGNORE"),
+        ("info", "maps.farm: mob 9104 spawns on map_3 and is on neither list: treated as IGNORE"),
+        ("info", "maps.farm: mob 9109 spawns on map_3 and is on neither list: treated as IGNORE"),
         (
             "warning",
-            "farm: mob 9109 is aggressive and ignored: it attacks, the bot never answers, the "
+            "maps.farm: mob 9109 is aggressive and ignored: it attacks, the bot never answers, the "
             "HP events decide",
         ),
         # 13.5 save point: a death before town.1 sets it respawns at an unknown save point (WARNING)
         (
             "warning",
-            "dead: a death at town.0 respawns at the save point, which nothing sets before it: "
+            "handlers.dead: a death at maps.town.0 respawns at the save point, which nothing "
+            "sets before it: "
             "set it first, or assert it",
         ),
         # 13.5 weight: nothing in farm picks items up, so the weight exit cannot fire (Q21's case)
         (
             "warning",
-            "farm.0: weight_percent() < 50 can change only by picking up items, and nothing in "
+            "maps.farm.0: weight_percent() < 50 can change only by picking up items, and "
+            "nothing in "
             "farm picks any up",
         ),
         (
             "info",
-            "farm.0: weight_percent() < 50: at 50 % and above, natural HP and SP regeneration "
+            "maps.farm.0: weight_percent() < 50: at 50 % and above, natural HP and SP regeneration "
             "has already stopped",
         ),
         # 13.5 keep lists: store-all keeps the Butterfly Wings and potions, not the escape's Fly
         # Wings
         (
             "warning",
-            "town.2: storing everything also stores the Fly Wings that hp_critical's escape "
+            "maps.town.2: storing everything also stores the Fly Wings that hp_critical's escape "
             "uses: add them to the keep list",
         ),
-        # 13.6.9 ties on different sensors queue (2.5 rule 4): a WARNING each
+        # 13.6.9 ties: these four were WARNINGs ("on different sensors: they queue") until
+        # Batt 2026-10-09 (contradictions #13 + #14): each pair has two different ranks, so its
+        # order is decided, and an INFO says which runs first
         (
-            "warning",
-            "global: hp_low and unintended_engagement are both survival on different sensors: "
-            "they queue",
+            "info",
+            "global: unintended_engagement and hp_low are both survival: unintended_engagement "
+            "runs first when both are due (rank 4 before 5)",
         ),
         (
-            "warning",
-            "farm: hp_low and unintended_engagement are both survival on different sensors: "
-            "they queue",
+            "info",
+            "maps.farm: unintended_engagement and hp_low are both survival: unintended_engagement "
+            "runs first when both are due (rank 4 before 5)",
         ),
         (
-            "warning",
-            "farm: hp_low and boss_seen are both survival on different sensors: they queue",
+            "info",
+            "maps.farm: hp_low and boss_seen are both survival: hp_low runs first when both are "
+            "due "
+            "(rank 5 before 50)",
         ),
         (
-            "warning",
-            "farm: unintended_engagement and boss_seen are both survival on different sensors: "
-            "they queue",
+            "info",
+            "maps.farm: unintended_engagement and boss_seen are both survival: "
+            "unintended_engagement "
+            "runs first when both are due (rank 4 before 50)",
         ),
         # 13.9 / 13.6.9: a species policy while today's detector cannot name species
         (
             "warning",
-            "farm: farm_engagement decides by species, and the detector cannot name species "
+            "maps.farm: farm_engagement decides by species, and the detector cannot name species "
             "yet: the run applies its most cautious branch",
         ),
     ]
@@ -161,6 +171,9 @@ def test_batts_example_lints_with_exactly_the_expected_findings() -> None:
     )
     assert got == EXPECTED
     assert not [f for f in EXPECTED if f[0] == "error"]  # approvable: no errors
+    # #14: the four ties WARNINGs of this example are gone (each pair is ordered by rank)
+    ties = [(sev, m) for sev, m in got if "are both survival" in m]
+    assert len(ties) == 4 and {sev for sev, _ in ties} == {"info"}
 
 
 def test_the_example_is_unsupported_today_on_the_real_bindings(tmp_path: Path) -> None:
@@ -174,7 +187,20 @@ def test_the_example_is_unsupported_today_on_the_real_bindings(tmp_path: Path) -
         if f.rule == "bindings"
     ]
     assert (
-        "town.0: walk_to is unsupported here: L3 binding L3.map.walkability (no L3 bindings for "
+        "maps.town.0: walk_to is unsupported here: L3 binding L3.map.walkability (no L3 "
+        "bindings for "
         "lab-rathena)" in msgs
     )
-    assert any(m.startswith("farm.0.body.0: attack_nearest is unsupported here") for m in msgs)
+    assert any(m.startswith("maps.farm.0.body.0: attack_nearest is unsupported here") for m in msgs)
+
+
+def test_one_finding_per_cause_on_the_farm_loop() -> None:
+    """#9 (Batt 2026-10-09): farm's `while weight_percent() < 50` gets the weight rule's WARNING
+    (nothing picks items up) and its literal `< 50` INFO; the loops rule DEFERS to the weight
+    WARNING instead of a second error for the same cause."""
+    at = sorted(
+        (f.rule, f.severity)
+        for f in lint(farm_flow(), world=farm_world(), resolver=resolve_all)
+        if f.path == "farm.0"
+    )
+    assert at == [("weight", "info"), ("weight", "warning")]

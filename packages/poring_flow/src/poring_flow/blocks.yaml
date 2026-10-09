@@ -110,11 +110,9 @@ blocks:
     concept: npc.close
     timeout_s: 10
     affects: {dialog_shows: "~", window_open: "~"}
-  close_npc_dialog:
-    concept: npc.close
-    timeout_s: 10
-    affects: {dialog_shows: "~", window_open: "~"}
-    note: closes an NPC dialog IF one is open (13.9's recovery); ok when none is
+    # Batt 2026-10-09 (ADR-0020 contradictions #7): THE one dialog-close block. close_npc_dialog
+    # is only a Python-import alias of it (pyview.ALIASES, with a warning), never a block.
+    note: IDEMPOTENT -- closes the dialog IF one is open (13.9's recovery included); ok when none is
   attack_nearest:
     concept: combat.attack_target
     params:

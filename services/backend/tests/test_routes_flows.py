@@ -91,12 +91,27 @@ def test_catalogue_and_sample(make: Make) -> None:
     assert r.status_code == 200, r.text
     doc = r.json()
     assert doc["blocks"]["open_window"]["badge"] == "verified_rdp"
+    # #17: the configured run-time limits (flows_settings.runtime_limits; Batt's defaults for now)
+    assert doc["runtime_limits"] == {"default_s": 14_400, "max_s": 86_400}
     assert "basic_info" in doc["windows"] and "walk_to" in doc["palette"]
     s = client.get("/flows/sample", headers=H).json()
     assert s["flow"] == sample() and s["world"] == "sample"
     w = client.get("/flows/world?source=sample&maps=town_1&walk=true", headers=H).json()
     assert list(w["maps"]) == ["town_1"] and len(w["walk"]["town_1"]) == 90
     assert {n["key"] for n in w["maps"]["town_1"]["npcs"]} == {"n_kafra", "n_guide", "n_warper"}
+
+
+def test_an_ir_1_flow_is_converted_not_refused(make: Make) -> None:
+    """IR 2 (ADR-0020 contradictions #13, Batt 2026-10-09): an IR 1 body (an older browser tab or
+    an exported file) is converted on load; the hash is the converted flow's."""
+    client = make()
+    flow = sample()
+    ir1 = {**flow, "ir": 1, "handlers": [
+        {k: v for k, v in h.items() if k != "rank"} for h in flow["handlers"]]}  # fmt: skip
+    a = post(client, "lint", {"flow": ir1, "world": "sample"})
+    b = post(client, "lint", {"flow": flow, "world": "sample"})
+    assert a.status_code == b.status_code == 200, a.text
+    assert a.json()["flow_hash"] == b.json()["flow_hash"]
 
 
 def test_lint_simulate_python(make: Make) -> None:
@@ -106,8 +121,16 @@ def test_lint_simulate_python(make: Make) -> None:
     assert r.status_code == 200, r.text
     lint = r.json()
     assert len(lint["flow_hash"]) == 64
-    # the real L2/L3/L4 bindings are not there for these blocks: reported as unsupported, by node
-    assert lint["by_owner"]["block:town"]["unsupported"] >= 1
+    # the real L2/L3/L4 bindings are not there for these blocks: READINESS items, by node (#6,
+    # Batt 2026-10-09): they block the run, not the design
+    assert lint["by_owner"]["block:town"]["readiness"] >= 1
+    assert {f["severity"] for f in lint["findings"] if f["rule"] == "bindings"} == {"readiness"}
+    assert lint["run"]["allowed"] is False and "readiness item" in lint["run"]["summary"]
+    assert "no configured maximum run time" not in lint["run"]["reasons"]  # the routes give one
+    too_long = post(client, "lint", {"flow": {**flow, "max_runtime_s": 90_000}, "world": "sample"})
+    assert "max_runtime_s 90000 is above the configured maximum 86400 (the Settings page)" in [
+        f["text"] for f in too_long.json()["findings"]
+    ]
     assert all(f["owner"] in ("flow", "global", "block:town", "block:farm")
                for f in lint["findings"])  # fmt: skip
     r = post(client, "simulate", {"flow": flow, "world": "sample",
@@ -181,10 +204,12 @@ def test_hostile_bodies(make: Make) -> None:
     raw = {**hdr(client), "content-type": "application/json"}
     r = client.post("/flows/lint", content=b"{not json", headers=raw)
     assert r.status_code == 422 and r.json()["detail"]["reason"] == "invalid_body"
-    bad = {**sample(), "ir": 2}
+    bad = {**sample(), "ir": 3}
     r = post(client, "lint", {"flow": bad})
     assert r.status_code == 422 and r.json()["detail"]["reason"] == "invalid_flow"
-    assert any("ir" in m for m in r.json()["detail"]["errors"])
+    assert r.json()["detail"]["errors"] == [
+        "flow: ir: IR version 3 is not supported: this engine reads IR 2 (and converts IR 1)"
+    ]
     r = post(client, "lint", {"flow": sample(), "world": "/etc"})
     assert r.json()["detail"]["reason"] == "invalid_body"
     r = post(client, "simulate", {"flow": sample(), "scenario": {"horizon_s": 1e9}})

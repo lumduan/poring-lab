@@ -1,5 +1,5 @@
 flow(
-    ir=1,
+    ir=2,
     name="visit_and_choose",
     max_runtime_s=1800,
     target=target(client="kro-20211103-prere", server="lab-rathena", locale="en", path=S2),

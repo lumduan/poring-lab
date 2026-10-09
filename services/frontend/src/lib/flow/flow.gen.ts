@@ -135,6 +135,7 @@ export type MaxPerRun = number | null;
 export type Mode = "insert" | "preempt";
 export type Name2 = string;
 export type Priority = "critical" | "survival" | "upkeep";
+export type Rank = number | null;
 export type Rearm = (Lit | Var | OutcomeLit | ListE | Sense | Cmp | Logic | Not_ | Arith | Do) | null;
 export type Then1 = "resume" | "skip_block" | "restart_flow" | "relocate" | "stop";
 export type Until = (Lit | Var | OutcomeLit | ListE | Sense | Cmp | Logic | Not_ | Arith | Do) | null;
@@ -143,7 +144,7 @@ export type When = Lit | Var | OutcomeLit | ListE | Sense | Cmp | Logic | Not_ |
  * @maxItems 50
  */
 export type Handlers = Handler[];
-export type Ir = 1;
+export type Ir = 2;
 export type Main =
   | (
       ActionStmt | If | While | WaitUntil | Repeat | ForEach | SetVar | CallProc | Stop | Break_ | Continue_ | TakeExit
@@ -156,6 +157,7 @@ export type Client = string;
 export type Locale = string;
 export type Path = "s2" | "rdp";
 export type Server = string;
+export type WhereBudget = number;
 export type Name4 = string;
 export type Radius = number;
 /**
@@ -220,6 +222,7 @@ export interface Flow {
   stop_when?: StopWhen;
   target: Target;
   variables?: Variables;
+  where_budget?: WhereBudget;
   workflow?: Workflow | null;
 }
 /**
@@ -420,6 +423,7 @@ export interface Handler {
   mode?: Mode;
   name: Name2;
   priority: Priority;
+  rank?: Rank;
   rearm?: Rearm;
   then?: Then1;
   until?: Until;

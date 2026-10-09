@@ -157,9 +157,7 @@ export default function FlowsApp({ backendUrl }: { backendUrl: string | null }) 
   const lintStale = lint !== null && lint.for !== key;
   const simDoc = sim?.doc ?? null;
   const simStale = sim !== null && sim.for !== key;
-  const total = lintDoc
-    ? lintLine({ ...lintDoc.counts, unsupported: lintDoc.findings.filter((f) => f.rule === "bindings").length })
-    : null;
+  const total = lintDoc ? lintLine(lintDoc.counts) : null;
 
   return (
     <main className="flex h-[calc(100vh-49px)] flex-col" data-testid="flows-app">
@@ -172,7 +170,7 @@ export default function FlowsApp({ backendUrl }: { backendUrl: string | null }) 
         <span className="rounded bg-amber-900/60 px-2 py-0.5 text-xs text-amber-200">SIMULATE only · no live run in MW2</span>
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <button className="rounded bg-neutral-800 px-2.5 py-1 text-xs hover:bg-neutral-700" onClick={() => void loadSample()}>Load sample</button>
-          <button className="rounded bg-neutral-800 px-2.5 py-1 text-xs hover:bg-neutral-700" onClick={() => { setFlow(emptyFlow()); setPositions({}); setSim(null); setSelected(null); }}>New</button>
+          <button className="rounded bg-neutral-800 px-2.5 py-1 text-xs hover:bg-neutral-700" onClick={() => { setFlow(emptyFlow("new_flow", catalogue?.runtime_limits?.default_s)); setPositions({}); setSim(null); setSelected(null); }}>New</button>
           <button className="rounded bg-neutral-800 px-2.5 py-1 text-xs hover:bg-neutral-700" onClick={() => fileRef.current?.click()}>Import JSON</button>
           <input ref={fileRef} type="file" accept=".json,application/json" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void importFile(f); }} />
           <button className="rounded bg-neutral-800 px-2.5 py-1 text-xs hover:bg-neutral-700" onClick={exportFile}>Export JSON</button>
@@ -235,6 +233,8 @@ export default function FlowsApp({ backendUrl }: { backendUrl: string | null }) 
                 onStart={(name, entry) => edit(setStart(flow, name, entry))}
                 onOpen={open}
                 onSimulateHere={(b) => { const f = { ...simForm, startBlock: b, single: true }; setSimForm(f); void simulate(f); }}
+                limits={catalogue?.runtime_limits ?? null}
+                onFlow={(f) => { setFlow(f); setMessage(null); }}
               />
             )}
             {tab === "lint" && <LintPanel lint={lintDoc} stale={lintStale} onSelect={(o) => setSelected(o.startsWith("block:") ? o : o === "global" ? "events:global" : null)} />}

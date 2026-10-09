@@ -87,7 +87,7 @@ def test_windows_come_from_l2() -> None:
 # --- lint ---------------------------------------------------------------------------------------
 def test_lint_findings_name_their_canvas_node() -> None:
     flow = farm_flow()
-    doc = editor.lint_doc(flow, world=farm_world(), resolver=resolve_all)
+    doc = editor.lint_doc(flow, world=farm_world(), resolver=resolve_all, runtime_max_s=86_400)
     assert doc["flow_hash"] == ir.flow_hash(flow)
     owners = {f["path"]: f["owner"] for f in doc["findings"]}
     roots = editor.owners(flow)
@@ -95,10 +95,31 @@ def test_lint_findings_name_their_canvas_node() -> None:
     assert roots["dead"] == "global" and roots[""] == "flow"
     for path, own in owners.items():
         assert own == editor.owner_of(path, roots)
-    total = sum(sum(v[k] for k in ("error", "warning", "info")) for v in doc["by_owner"].values())
+    total = sum(sum(v.values()) for v in doc["by_owner"].values())
     assert total == len(doc["findings"])
+    assert set(doc["counts"]) == {"error", "readiness", "warning", "info"}
+    assert doc["run"] == {"allowed": True, "summary": "run allowed", "reasons": []}
     eff = {e["key"]: e["state"] for e in doc["effective"]["town"]}
     assert eff["hp_low"] == "disabled" and eff["dead"] == "inherited"
+
+
+def test_readiness_items_are_counted_apart_from_errors() -> None:
+    """#6 (Batt 2026-10-09): unsupported bindings are READINESS, apart from the design's errors;
+    the run-start gate's verdict travels with the lint."""
+    from poring_flow.lint import default_resolver
+
+    flow = farm_flow()
+    res = default_resolver(flow.target, Path("/nonexistent-l3"))
+    doc = editor.lint_doc(flow, world=farm_world(), resolver=res, runtime_max_s=86_400)
+    assert doc["counts"]["error"] == 0 and doc["counts"]["readiness"] >= 5
+    assert doc["by_owner"]["block:town"]["readiness"] >= 1
+    assert {f["severity"] for f in doc["findings"] if f["rule"] == "bindings"} == {"readiness"}
+    n = doc["counts"]["readiness"]
+    assert doc["run"] == {
+        "allowed": False,
+        "summary": f"run refused: {n} readiness items",
+        "reasons": [],
+    }
 
 
 def test_the_editor_lints_exactly_like_mw1() -> None:

@@ -104,6 +104,18 @@ def check(ctx: Ctx) -> None:
             ctx.add("loop_control", "error", 1, path, f"{st.kind} outside a loop")
         if isinstance(st, ir.TakeExit) and site.scope != "block":
             ctx.add("exit_placement", "error", 1, path, "take_exit belongs in a map block's main")
+        if isinstance(st, ir.TakeExit) and isinstance(st.exit.item, ir.Var):
+            # #12 (Batt 2026-10-09): an ItemRef, or a variable TYPED ItemRef
+            held = types.get(st.exit.item.name)
+            if held is not None and held != "item":
+                ctx.add(
+                    "exit_item",
+                    "error",
+                    1,
+                    path,
+                    f"exit.item: {st.exit.item.name} holds {_article(held)}: an item_warp takes an "
+                    "item",
+                )
         if isinstance(st, ir.CallProc) and st.proc not in flow.procedures:
             ctx.add("procedures", "error", 1, path, f"there is no procedure {st.proc}")
         if isinstance(st, ir.SetVar):
@@ -197,8 +209,34 @@ def _action(ctx: Ctx, path: str, a: ir.ActionStmt, types: dict[str, str]) -> Non
         _set_var(ctx, path, a.outcome_to, "outcome", types)
 
 
+def _membership_ok(right: Any, types: dict[str, str]) -> bool:
+    """`x in ...` / `not in` only against a LITERAL list of typed references (a list literal, or a
+    list of constant variables) or a list variable: never another expression (Batt 2026-10-09,
+    ADR-0020 contradictions #2: statically checkable)."""
+    if isinstance(right, ir.Lit):
+        return isinstance(right.value, list)
+    if isinstance(right, ir.ListE):
+        return all(isinstance(i, ir.Var | ir.Lit) for i in right.items)
+    if isinstance(right, ir.Var):
+        return types.get(right.name, "?").startswith("list") or right.name not in types
+    return False
+
+
 def _expr(ctx: Ctx, path: str, e: Any, types: dict[str, str]) -> None:
     for x in ir.sub_exprs(e):
+        if (
+            isinstance(x, ir.Cmp)
+            and x.op in ("in", "not in")
+            and not _membership_ok(x.right, types)
+        ):
+            ctx.add(
+                "membership",
+                "error",
+                1,
+                path,
+                f"{x.op} needs a literal list of references or a list variable, not "
+                f"{ctx.src(x.right)}",
+            )
         if isinstance(x, ir.Var) and x.name not in types:
             ctx.add("variables", "error", 1, path, f"{x.name} is not a flow variable")
         elif isinstance(x, ir.Sense):

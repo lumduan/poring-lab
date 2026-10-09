@@ -24,6 +24,20 @@ Deviations from the ADR's illustrative sketch (each one reported, none decided s
 - `Override`, `Extend` and `Add` carry an optional `label`: the Python view's function name
   (`farm_hp_low`), which is also the event's node path;
 - `until` and `rearm` are exclusive (13.6.7: `until` for repeating events, `rearm` for one-shot).
+
+IR VERSIONS (section 1: "a breaking change is a new version with a converter, never a silent
+edit"):
+- IR 2 (Batt 2026-10-09, contradictions #13): `Handler.rank`, an explicit rank INSIDE an event
+  class. `None` means 13.6.3's table order (`DEFAULT_RANK`: unintended_engagement 4 before hp_low
+  5, ...; any other key `USER_RANK`). Equal classes still never pre-empt each other: the rank
+  orders their queue, and only events of equal rank queue first in, first out.
+- IR 2 also carries `Flow.where_budget` (Batt 2026-10-09, contradictions #10; added before IR 2
+  was released): the per-run budget of ACTIVE position reads (/where), default 12.
+- IR 1 is CONVERTED on load (`upgrade`): every handler gets `rank: None`, the flow gets the
+  default `where_budget`, nothing else changes. Its
+  meaning changes (equal-class events were FIFO only), so the converted flow is IR 2 and its hash
+  is a new one (no flow was approved under IR 1: MW2 runs nothing). Any other version is refused
+  with a message naming the versions this engine reads.
 """
 
 from __future__ import annotations
@@ -44,8 +58,18 @@ NAME = r"^[A-Za-z][A-Za-z0-9_]{0,47}$"  # ASCII only (7.2: identifier normalisat
 FLOW_NAME = r"^[a-z][a-z0-9_]{0,47}$"
 MAP_ID = r"^[A-Za-z0-9_@.\-]{1,40}$"
 KEY = r"^[A-Za-z0-9_.\-]{1,64}$"  # an L3 / L4 key
-IR_VERSION = 1
-MAX_RUNTIME_S = 86_400  # PROVISIONAL: the bound is open question 8
+IR_VERSION = 2  # IR 1 converts on load (`upgrade`); see the module docstring
+# A SANITY CAP on hostile input, not the policy (Batt 2026-10-09, contradictions #17: NOT
+# hard-coded). The policy is CONFIGURED: a global default (4 h) and maximum (24 h) on the Settings
+# page, given to the linter and the run-start check as `runtime_max_s`. Was 86_400 (24 h), the
+# provisional bound of open question 8.
+MAX_RUNTIME_S = 604_800  # 7 days
+# The per-run /where budget (Batt 2026-10-09, contradictions #10): how many ACTIVE position reads
+# (position(), current_map(), read_position, a relocation's read) a run may make. They TYPE /where,
+# which players almost never do; passive sources come first. 12 = about three an hour over the
+# default 4 h run (proposed by Claude; each flow may set its own).
+WHERE_BUDGET_DEFAULT = 12
+WHERE_BUDGET_MAX = 1000
 MAX_STR = 200
 MAX_LIST = 100
 MAX_JSON_BYTES = 1 << 20  # imported JSON is hostile input (7.1)
@@ -53,6 +77,19 @@ MAX_JSON_DEPTH = 256
 # Fixed in code, never user-editable (13.6.1; hp_critical added by Batt, 2026-10-08, Q29).
 SAFETY_CRITICAL = ("dead", "hp_critical", "unexpected_map")  # in their critical order (13.6.3)
 CLASSES = ("critical", "survival", "upkeep")  # highest first; the built-in guards sit above
+# The rank INSIDE a class (Batt 2026-10-09, contradictions #13): 13.6.3's table order by default;
+# a lower rank runs first. The safety-critical three always lead their class in this order (13.6.2
+# step 3) and their rank is fixed; any other key defaults to USER_RANK, after the table's events.
+DEFAULT_RANK = {
+    "dead": 1,
+    "hp_critical": 2,
+    "unexpected_map": 3,
+    "unintended_engagement": 4,
+    "hp_low": 5,
+    "weight": 6,
+}
+USER_RANK = 50
+MAX_RANK = 99
 OUTCOMES = ("ok", "failed", "unsupported", "interrupted", "refused")
 
 Int = Annotated[int, Field(ge=-1_000_000_000, le=1_000_000_000)]
@@ -359,6 +396,8 @@ class Handler(BaseModel):
     until: Expr | None = None  # STOP: the body repeats until it holds (the hysteresis pair)
     rearm: Expr | None = None  # one-shot events (2.5)
     priority: Literal["critical", "survival", "upkeep"]
+    # IR 2: the rank inside the class (lower first); None = 13.6.3's table order (`rank_of`)
+    rank: int | None = Field(default=None, ge=1, le=MAX_RANK)
     mode: Literal["insert", "preempt"] = "preempt"
     escalate: str | None = Field(default=None, pattern=NAME)  # insert: a procedure, as a pre-empt
     max_insert_fails: int = Field(default=3, ge=1, le=10)
@@ -376,6 +415,21 @@ class Handler(BaseModel):
         if self.escalate is not None and self.mode != "insert":
             raise ValueError("escalate belongs to an insert event")
         return self
+
+
+def rank_of(h: Handler) -> int:
+    """A handler's rank inside its class: its own, else 13.6.3's table order (#13)."""
+    return h.rank if h.rank is not None else DEFAULT_RANK.get(h.name, USER_RANK)
+
+
+def place_in_class(h: Handler) -> tuple[int, int]:
+    """Where an event sits INSIDE its class, the one definition the effective order, the
+    executor's queue and the ties rule share: the safety-critical three lead `critical` in their
+    fixed order (13.6.2 step 3), then the rank (#13). Equal places keep their arrival order."""
+    lead = len(SAFETY_CRITICAL)
+    if h.priority == "critical" and h.name in SAFETY_CRITICAL:
+        lead = SAFETY_CRITICAL.index(h.name)
+    return lead, rank_of(h)
 
 
 class Override(BaseModel):  # map scope: replaces the global event of the same key
@@ -466,12 +520,14 @@ class Target(BaseModel):
 
 class Flow(BaseModel):
     model_config = CFG
-    ir: Literal[1]
+    ir: Literal[2]  # IR 1 converts on load (`upgrade`)
     name: str = Field(pattern=FLOW_NAME)
     description: str = Field(default="", max_length=500)
     target: Target
     assumes: list[Expr] = Field(default=[], max_length=50)  # character facts, sensed before input
     max_runtime_s: int = Field(ge=1, le=MAX_RUNTIME_S)
+    # #10: the run's /where budget (lint warns above it; the run report counts every read)
+    where_budget: int = Field(default=WHERE_BUDGET_DEFAULT, ge=0, le=WHERE_BUDGET_MAX)
     stop_when: Expr | None = None
     variables: dict[Annotated[str, Field(pattern=NAME)], Lit] = {}
     procedures: dict[Annotated[str, Field(pattern=NAME)], list[Stmt]] = {}
@@ -691,6 +747,45 @@ def count_nodes(flow: Flow) -> int:
     return n
 
 
+# --- the node-path grammar a person reads (Batt 2026-10-09, ADR-0020 contradictions #3) ----------
+class PathNames:
+    """ONE grammar for the node paths printed in every message (lint findings, schema errors):
+    named nodes by name, statements by index.
+
+        main.4                               the plain main flow
+        procedures.<name>.2                  a procedure
+        handlers.<key>  / handlers.<key>.1   a global event (written, or the always-on built-in)
+        maps.<block> / maps.<block>.3        a map block (by its NAME: two blocks may share a map)
+        maps.<block>.events.<key>.0          a map event (override, add, extend) of that block
+        variables.<NAME>                     a flow variable
+        global                               the global pairs (the ties rule)
+
+    It prints the structural node ids (`sites()`: `town.3`, `drink.0`, `farm_hp_low.0`), which
+    stay the editor's and the trace's keys; only what a person reads changes ("messages only")."""
+
+    def __init__(self, flow: Flow) -> None:
+        roots: dict[str, str] = {"main": "main", "global": "global"}
+        for name in flow.variables:
+            roots[name] = f"variables.{name}"
+        for name in flow.procedures:
+            roots[name] = f"procedures.{name}"
+        for k in SAFETY_CRITICAL:  # always on (always_on.py): global even when not written
+            roots[k] = f"handlers.{k}"
+        for h in flow.handlers:
+            roots[h.name] = f"handlers.{h.name}"
+        for b in flow.workflow.blocks if flow.workflow else []:
+            roots[b.name] = f"maps.{b.name}"
+            for ev in b.events:
+                if not isinstance(ev, Disable):
+                    roots[event_label(ev, b)] = f"maps.{b.name}.events.{event_key(ev)}"
+        self.roots = roots
+
+    def __call__(self, path: str) -> str:
+        root, sep, rest = path.partition(".")
+        pre = self.roots.get(root)
+        return pre + sep + rest if pre is not None else path
+
+
 # --- canonical JSON and the hash ------------------------------------------------------------------
 class FlowError(ValueError):
     """An IR that does not validate: one `path: message` line per problem."""
@@ -763,7 +858,28 @@ def from_json(raw: str | bytes) -> Flow:
     return validate(_nfc(data))
 
 
+def upgrade(data: Any) -> Any:
+    """The IR 1 -> IR 2 converter (section 1; #13): only the version changes, and every handler's
+    rank is left out, which IR 2 reads as 13.6.3's table order (`rank: None`). Another version is
+    refused with a message; a non-dict is left to the schema."""
+    if not isinstance(data, dict) or "ir" not in data:
+        return data
+    v = data["ir"]
+    if v == IR_VERSION and not isinstance(v, bool):
+        return data
+    if v == 1 and not isinstance(v, bool):
+        return {**data, "ir": IR_VERSION}
+    shown = json.dumps(v)[:20] if isinstance(v, str | int | float | bool) or v is None else "?"
+    raise FlowError(
+        [
+            f"flow: ir: IR version {shown} is not supported: this engine reads IR "
+            f"{IR_VERSION} (and converts IR 1)"
+        ]
+    )
+
+
 def validate(data: Any) -> Flow:
+    data = upgrade(data)
     try:
         return Flow.model_validate(data)
     except ValidationError as e:
@@ -776,8 +892,8 @@ _BODIES = ("then", "orelse", "body", "steps")
 def _message(data: Any, err: Any) -> str:
     """A pydantic error as `node path: field: message`, discriminator tags dropped.
 
-    Paths follow `sites()`: main.<i>, <procedure>.<i>, <handler>.<i>, <block>.<i>, nested
-    then / orelse / body.
+    Paths follow the printed grammar (`PathNames`, #3): main.<i>, procedures.<name>.<i>,
+    handlers.<name>.<i>, maps.<block>.<i>, nested then / orelse / body.
     """
     loc = list(err["loc"])
     node: Any = data
@@ -805,12 +921,12 @@ def _message(data: Any, err: Any) -> str:
             if top and part == "main" and isinstance(child, list):
                 path.append("main")
             elif top and part == "procedures" and isinstance(child, dict) and nxt in child:
-                path.append(str(nxt))
+                path.append(f"procedures.{nxt}")  # the printed grammar (#3, PathNames)
                 child, i = child[nxt], i + 1
             elif top and part == "handlers" and isinstance(child, list) and isinstance(nxt, int):
                 item = child[nxt] if nxt < len(child) else None
                 name = item.get("name") if isinstance(item, dict) else None
-                path.append(str(name) if name else f"handlers.{nxt}")
+                path.append(f"handlers.{name}" if name else f"handlers.{nxt}")
                 child, i = item, i + 1
             elif top and part == "workflow" and nxt == "blocks" and isinstance(child, dict):
                 blocks = child.get("blocks")
@@ -818,7 +934,7 @@ def _message(data: Any, err: Any) -> str:
                 if isinstance(blocks, list) and isinstance(j, int) and j < len(blocks):
                     item = blocks[j]
                     name = item.get("name") if isinstance(item, dict) else None
-                    path.append(str(name) if name else f"blocks.{j}")
+                    path.append(f"maps.{name}" if name else f"maps.{j}")
                     child, i = item, i + 2
                     if loc[i + 1 : i + 2] == ["main"]:
                         child, i = item.get("main") if isinstance(item, dict) else None, i + 1

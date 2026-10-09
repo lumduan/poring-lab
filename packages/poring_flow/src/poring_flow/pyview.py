@@ -272,8 +272,33 @@ def _nesting(stmts: list[ast.stmt], depth: int = 1) -> int:
 
 
 # --- the parser ---------------------------------------------------------------------------------
-def parse(source: str, cat: Catalogue | None = None) -> ir.Flow:
-    """Restricted Python -> the flow IR. Never runs the source."""
+# Python-import ALIASES (Batt 2026-10-09, ADR-0020 contradictions #7): an old name imports as the
+# one block, with a warning; the IR, the catalogue and every printed view know only the new name.
+ALIASES = {"close_npc_dialog": "close_dialog"}
+
+
+class AliasWarning(UserWarning):
+    """A Python view used an alias name: it was imported as the one block (ALIASES)."""
+
+
+def _aliases(tree: ast.Module) -> list[str]:
+    """Rename every call to an alias in place (the AST is only read, never run); one warning per
+    call, by line and column."""
+    out = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            new = ALIASES.get(node.func.id)
+            if new is not None:
+                out.append(
+                    f"{_at(node)}: {node.func.id}() is an alias of {new}(): imported as {new}"
+                )
+                node.func.id = new
+    return out
+
+
+def parse(source: str, cat: Catalogue | None = None, warnings: list[str] | None = None) -> ir.Flow:
+    """Restricted Python -> the flow IR. Never runs the source. Warnings (an alias name, #7) are
+    appended to `warnings` when given, else issued as `AliasWarning`s."""
     pre = _precheck(source)
     if pre:
         raise ParseError(pre)
@@ -285,6 +310,14 @@ def parse(source: str, cat: Catalogue | None = None) -> ir.Flow:
     except (RecursionError, MemoryError, ValueError) as e:
         msg = f"line 1, col 1: the source cannot be parsed ({type(e).__name__})"
         raise ParseError([msg]) from None
+    alias_warnings = _aliases(tree)
+    if warnings is not None:
+        warnings.extend(alias_warnings)
+    else:
+        import warnings as py_warnings
+
+        for w in alias_warnings:
+            py_warnings.warn(w, AliasWarning, stacklevel=2)
     ctx = _Ctx(cat or catalogue())
     try:
         _allow_list(tree, ctx)
@@ -430,6 +463,7 @@ def _flow_head(call: ast.Call, ctx: _Ctx, out: dict[str, Any], doc: str | None) 
         "name",
         "description",
         "max_runtime_s",
+        "where_budget",
         "target",
         "assumes",
         "stop_when",
@@ -439,7 +473,7 @@ def _flow_head(call: ast.Call, ctx: _Ctx, out: dict[str, Any], doc: str | None) 
     for k in kw:
         if k not in allowed:
             ctx.err(kw[k], f"flow(...) has no argument {k}")
-    for k in ("ir", "name", "max_runtime_s"):
+    for k in ("ir", "name", "max_runtime_s", "where_budget"):
         if k in kw:
             out[k] = _const(kw[k], ctx)
     if "description" in kw:
@@ -940,6 +974,7 @@ HANDLER_KW = (
     "until",
     "rearm",
     "priority",
+    "rank",  # IR 2 (#13): the rank inside the class; left out = 13.6.3's table order
     "mode",
     "then",
     "escalate",
@@ -1327,6 +1362,8 @@ def _on_args(h: ir.Handler, cat: Catalogue) -> list[str]:
     if h.rearm is not None:
         args.append(f"rearm={expr_src(h.rearm, cat)}")
     args.append(f"priority={CONST_OF[h.priority]}")
+    if h.rank is not None:
+        args.append(f"rank={h.rank}")
     if h.mode != "preempt":
         args.append(f"mode={CONST_OF[h.mode]}")
     if h.then != "resume":
@@ -1357,6 +1394,8 @@ def print_flow(flow: ir.Flow, cat: Catalogue | None = None) -> str:
     if flow.description:
         head.append(f"description={_s(flow.description)}")
     head.append(f"max_runtime_s={flow.max_runtime_s}")
+    if flow.where_budget != ir.WHERE_BUDGET_DEFAULT:
+        head.append(f"where_budget={flow.where_budget}")
     wf = flow.workflow
     if wf is not None:
         if wf.run_until_stopped:

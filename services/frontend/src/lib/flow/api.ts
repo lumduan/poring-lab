@@ -4,7 +4,9 @@
 // (GET /settings/csrf, as the Settings page), fetched once and renewed on `csrf_invalid`.
 import type { Flow } from "./ir.ts";
 
-export type Severity = "error" | "warning" | "info";
+// "readiness" (Batt 2026-10-09, ADR-0020 contradictions #6): a binding not there YET for the target
+// environment. Listed apart from errors: it blocks the RUN (the run-start check), not the design.
+export type Severity = "error" | "readiness" | "warning" | "info";
 export type Badge = "verified_rdp_s2" | "verified_rdp" | "verified_s2" | "unverified" | "unknown" | "core";
 export type WorldSource = "local" | "sample";
 
@@ -21,12 +23,14 @@ export interface Finding {
 
 export interface EffectiveEvent {
   key: string;
-  state: "inherited" | "overridden" | "extended" | "disabled" | "added";
+  state: "built_in" | "inherited" | "overridden" | "extended" | "disabled" | "added";
   priority: string;
+  rank: number; // the effective rank inside the class (IR 2, ADR-0020 #13)
   mode: string;
   label: string;
   active: boolean;
   safety_critical: boolean;
+  built_in: boolean; // the engine's always-on definition (ADR-0020 contradictions #15)
   extension: string | null;
 }
 
@@ -34,7 +38,8 @@ export interface LintDoc {
   flow_hash: string;
   findings: Finding[];
   counts: Record<Severity, number>;
-  by_owner: Record<string, Record<Severity | "unsupported", number>>;
+  by_owner: Record<string, Record<Severity, number>>;
+  run: { allowed: boolean; summary: string; reasons: string[] }; // the run-start check's verdict (MW3)
   effective: Record<string, EffectiveEvent[]>;
   world: { server: string | null; maps: string[] };
   world_notes?: string[]; // how the static data was found (e.g. no GAT here: routes are estimates)
@@ -82,6 +87,8 @@ export interface Trace {
   events: { t: number; kind: string; what: string }[];
   events_capped: boolean;
   input_batches_counted: number;
+  // ADR-0020 #10: every /where read (it types) with its reason, against the flow's budget
+  where: { count: number; budget: number; over: boolean; reads: { t: number; reason: string }[] };
   notes: string[];
   scenario: Scenario;
   world: { server: string | null; maps: string[] };
@@ -123,6 +130,8 @@ export interface CatalogueDoc {
   palette: string[];
   windows: string[];
   safety_critical: string[];
+  // ADR-0020 #17: the CONFIGURED run-time limits (the backend's flows_settings.runtime_limits)
+  runtime_limits?: { default_s: number; max_s: number };
 }
 
 export interface WorldMap {

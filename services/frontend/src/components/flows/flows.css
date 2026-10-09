@@ -19,3 +19,13 @@
   fill: #f5d0fe !important;
   font-style: italic;
 }
+
+/* Blockly hides an <svg> with the SVG PRESENTATION ATTRIBUTE display="none" (Scrollbar.updateDisplay_:
+   the flyout's and the workspace's scrollbars). Tailwind's preflight (`svg { display: block }`, in
+   @layer base) beats any presentation attribute, so a closed flyout's scrollbar stayed drawn: the
+   vertical line at the flyout's old edge, over the workspace (Batt 2026-10-09; z-index 30).
+   This rule is UNLAYERED, so it wins over preflight and gives the attribute its meaning back
+   inside Blockly's DOM only (docs/planning/mw2-block-editor.md, UI issues). */
+.injectionDiv svg[display="none"] {
+  display: none;
+}

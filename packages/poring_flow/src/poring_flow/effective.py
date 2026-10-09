@@ -1,7 +1,9 @@
 """The merge rule: a map block's EFFECTIVE event set (ADR-0020 13.6.2).
 
 For the current map block B, in this order:
-1. start from the global events (the flow's `handlers`), by key;
+1. start from the global events (the flow's `handlers`), by key, plus the ALWAYS-ON safety events
+   the flow does not write (`always_on.BUILT_IN`: dead, hp_critical, unexpected_map; Batt
+   2026-10-09, contradictions #15), state `built_in`;
 2. apply B's map events, at most one per key:
    - DISABLE k: k global and not safety-critical; removed;
    - OVERRIDE k: k global and not safety-critical; replaced, all of it;
@@ -10,7 +12,9 @@ For the current map block B, in this order:
      tighter of the two;
    - ADD k: k not global;
 3. order by class (critical > survival > upkeep; the guards above, the main flow below); inside
-   critical, dead > hp_critical > unexpected_map (13.6.3), then the others in declaration order.
+   critical, dead > hp_critical > unexpected_map (13.6.3) lead; then by RANK inside the class (IR 2,
+   Batt 2026-10-09, contradictions #13: an explicit rank, else 13.6.3's table order, so
+   unintended_engagement before hp_low); only equal ranks keep their declaration order.
 
 The effective set is DERIVED, never stored: the flow hash covers it. Disabled events stay in the
 result with `active=False`, because the editor and the runtime display show them (13.7).
@@ -22,6 +26,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
+from poring_flow.always_on import added
 from poring_flow.ir import (
     CLASSES,
     SAFETY_CRITICAL,
@@ -35,9 +40,10 @@ from poring_flow.ir import (
     StmtT,
     event_key,
     event_label,
+    place_in_class,
 )
 
-State = Literal["inherited", "overridden", "extended", "disabled", "added"]
+State = Literal["built_in", "inherited", "overridden", "extended", "disabled", "added"]
 
 
 @dataclass(frozen=True)
@@ -51,6 +57,7 @@ class Effective:
     extension_after: bool = False  # safety-critical: the map steps run AFTER the global body
     max_per_run: int | None = None  # merged: the tighter of the global and the extension
     global_handler: Handler | None = None  # what an override replaced
+    built_in: bool = False  # the global definition is the engine's always-on one (#15)
 
     @property
     def active(self) -> bool:
@@ -85,16 +92,24 @@ def _tighter(a: int | None, b: int | None) -> int | None:
     return min(vals) if vals else None
 
 
-def order_key(e: Effective, index: int) -> tuple[int, int, int]:
-    rank = CLASSES.index(e.handler.priority)
-    fixed = SAFETY_CRITICAL.index(e.key) if e.key in SAFETY_CRITICAL else len(SAFETY_CRITICAL)
-    return (rank, fixed if rank == 0 else 0, index)
+def order_key(e: Effective, index: int) -> tuple[int, int, int, int]:
+    """(class, the safety-critical lead, the rank inside the class, declaration order)."""
+    return (CLASSES.index(e.handler.priority), *place_in_class(e.handler), index)
+
+
+def _global(flow: Flow) -> dict[str, Effective]:
+    """The global events by key: the always-on built-ins the flow does not write, then its own."""
+    out = {
+        h.name: Effective(h.name, "built_in", h, h.name, max_per_run=h.max_per_run, built_in=True)
+        for h in added(flow)
+    }
+    for h in flow.handlers:
+        out[h.name] = Effective(h.name, "inherited", h, h.name, max_per_run=h.max_per_run)
+    return out
 
 
 def global_set(flow: Flow) -> Merged:
-    out = Merged()
-    for h in flow.handlers:
-        out.events.append(Effective(h.name, "inherited", h, h.name, max_per_run=h.max_per_run))
+    out = Merged(events=list(_global(flow).values()))
     _order(out)
     return out
 
@@ -107,12 +122,10 @@ def _order(m: Merged) -> None:
 
 def merge(flow: Flow, block: MapBlock) -> Merged:
     out = Merged()
-    glob = {h.name: h for h in flow.handlers}
-    by_key: dict[str, Effective] = {
-        h.name: Effective(h.name, "inherited", h, h.name, max_per_run=h.max_per_run)
-        for h in flow.handlers
-    }
-    order = [h.name for h in flow.handlers]
+    by_key = _global(flow)
+    glob = {k: e.handler for k, e in by_key.items()}
+    builtin = {k for k, e in by_key.items() if e.built_in}
+    order = list(by_key)
     seen: set[str] = set()
     b = block.name
     for ev in block.events:
@@ -148,7 +161,9 @@ def merge(flow: Flow, block: MapBlock) -> Merged:
                     )
                 )
                 continue
-            by_key[k] = Effective(k, "disabled", g, g.name, max_per_run=g.max_per_run)
+            by_key[k] = Effective(
+                k, "disabled", g, g.name, max_per_run=g.max_per_run, built_in=k in builtin
+            )
         elif isinstance(ev, Override):
             if critical:
                 out.issues.append(
@@ -190,6 +205,7 @@ def merge(flow: Flow, block: MapBlock) -> Merged:
                 extension_label=event_label(ev, block),
                 extension_after=critical,
                 max_per_run=_tighter(g.max_per_run, ev.max_per_run),
+                built_in=k in builtin,
             )
     out.events = [by_key[k] for k in order]
     _order(out)

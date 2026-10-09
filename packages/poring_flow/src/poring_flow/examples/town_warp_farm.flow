@@ -1,5 +1,5 @@
 flow(
-    ir=1,
+    ir=2,
     name="town_warp_farm",
     description="Batt's MW2 sample (2026-10-08): a town, an NPC warp, a farm loop; a death respawns in town. SYNTHETIC maps, keys and ids.",
     max_runtime_s=7200,
@@ -40,7 +40,7 @@ def farm():
     take_exit(item_warp(WING, to=entry("town", "spawn")))
 
 
-@on(is_dead(), priority=CRITICAL, max_per_run=3, then=RELOCATE)
+@on(is_dead(), priority=CRITICAL, max_per_run=1, then=RELOCATE)
 def dead():
     respawn()
 

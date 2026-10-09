@@ -24,6 +24,15 @@ workflow map can be estimated up front.
 
     new map time = map prep + Σ_species d_s × (collect + train) × contingency
 
+➡️ **DECIDED 2026-10-09 (Batt, ADR-0020 contradictions #5): the conservative reading, as the
+estimator computes it** (`packages/poring_flow/src/poring_flow/prep.py`, `estimate`):
+
+    new map time = Σ_NEW maps (map prep × contingency) + Σ_species d_s × (collect + train) × contingency
+
+- the contingency applies to EVERY part, map prep included;
+- map prep is counted per NEW map (a workflow over iz_dun00 and iz_dun01 prepares two maps);
+- the line above is kept as history: it read as one map prep, without the contingency.
+
 | term | unit | what it covers | competes with |
 |---|---|---|---|
 | **map prep** | operator/agent hours | GAT + camera + walkability check; sprite-catalog entries for the new species (decoded at run time, never committed); a v1 label check per species on a small hand-checked sample; ~300 background frames of the map | nothing (overlaps training) |
@@ -68,7 +77,7 @@ when they disagree. The history stays in this document.
 | **E**, epochs | 30 | the v0 / v1 standard |
 | **train per species** = B × E × k | **≈ 1.8 compute-h** | 1,500 × 30 × 0.146 s |
 | **collect per species** | **≈ 1.0 h** (S2) | ESTIMATE. ~25 min of recording at 1 frame/s with the species on screen, + spawn setup, + clean-room start/stop, + cache build and label QA. v0's sessions were not recorded per species, so there is no measurement yet |
-| **map prep** | **≈ 4 h** per map | ESTIMATE |
+| **map prep** | **≈ 4 h** per map ➡️ per NEW map, times the contingency (#5, 2026-10-09) | ESTIMATE |
 | **contingency** | 1.3 | ESTIMATE |
 | **availability**, compute-h per wall-h | **night 0.63, day 0.43** (measured); **effective night 0.61, day 0.35** | `scripts/train_availability.py` on the 10-07/08 guard outputs: night 20:00–05:00, day 05:00–10:30 |
 
@@ -127,11 +136,15 @@ data:
 
 | part | hours | how |
 |---|---|---|
-| map prep | ≈ 5.2 h (operator/agent) | 4 h × 1.3, overlapping training |
-| collect | ≈ **8.5 h of S2** (training paused) | 6.5 × 1.0 h × 1.3 |
-| train | ≈ **15.5 compute-h** | 6.5 × 1.83 h × 1.3 |
-| train, wall-clock | **≈ 25 h at night only** (0.63), **≈ 31 h around the clock** (a 9 h night + 15 h day mix, 0.50), ≈ 44 h at today's effective day rate (0.35) | compute / availability |
+| map prep | ~~≈ 5.2 h~~ ➡️ **≈ 10.4 h** (operator/agent) | ~~4 h × 1.3~~ ➡️ 2 new maps × 4 h × 1.3 (#5), overlapping training |
+| collect | ≈ **8.45 h of S2** (training paused; was rounded to 8.5) | 6.5 × 1.0 h × 1.3 |
+| train | ≈ **15.42 compute-h** (was rounded to 15.5) | 6.5 × 1.825 h × 1.3 |
+| train, wall-clock | **≈ 24.5 h at night only** (0.63), **≈ 30.5 h around the clock** (a 9 h night + 15 h day mix, 0.505), ≈ 44.1 h at today's effective day rate (0.35) (was rounded to 25 / 31 / 44) | compute / availability |
 | eval | ≈ 1 h | the held-out session + the gold check, as for v0-JPEG |
+
+➡️ **DECIDED 2026-10-09 (Batt, ADR-0020 contradictions #5):** these numbers are MW1's estimator's
+own (`packages/poring_flow/tests/test_prep.py` computes them from `training_cost.json`): map prep
+per NEW map with the contingency, the rest unrounded. The struck values are the first draft's.
 
 - **Calendar:** about **3–4 days after v1's training ends**.
   - The GPU is v1's until then (R2).

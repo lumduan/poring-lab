@@ -297,7 +297,7 @@ class TraceSim(Sim):
                 )
                 return Plan(ticks=5, outcome="failed")
             return Plan(ticks=5)
-        if a.block in ("close_dialog", "close_npc_dialog"):
+        if a.block == "close_dialog":
             self.dialog_npc = None
             return Plan(ticks=5)
         if a.block in ("attack_nearest", "finish_target"):
@@ -379,6 +379,9 @@ class TraceSim(Sim):
         s.last_t = self.t
         s.last = outcome
         s.outcomes[outcome] += 1
+
+    def _reason_of(self, st: Any, owner: str) -> str:
+        return self.paths.get(id(st)) or owner
 
     def _stmt(self, st: Any, owner: str) -> Generator[_Tick, str | None, str]:
         path = self.paths.get(id(st))
@@ -547,6 +550,13 @@ class TraceSim(Sim):
             "events": events,
             "events_capped": len(self.log) > MAX_EVENTS,
             "input_batches_counted": self.batches,
+            # #10 (Batt 2026-10-09): every /where read with its reason, against the budget
+            "where": {
+                "count": len(self.where),
+                "budget": self.flow.where_budget,
+                "over": len(self.where) > self.flow.where_budget,
+                "reads": [{"t": round(t, 1), "reason": r} for t, r in self.where[:MAX_EVENTS]],
+            },
             "notes": sorted(set(self.notes))[:50],
             "scenario": self.scenario.model_dump(mode="json"),
             "world": {
