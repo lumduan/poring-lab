@@ -2357,6 +2357,16 @@ is no walk@16 held-out run (3.27's own rule).
 - **READINESS (3.28):** pooled **179 / 200 = 89.5 %** (95 % CI 84.5–93.0 %), 0 safety events:
   **NOT READY** (under 90 %).
 
+- **Disclosure: test connections during indoor CROWD** (found 2026-10-09 ~12:40 by a subagent).
+  - At 10:20 and 10:33 ICT (03:20 / 03:33 UTC), test suites run on the host opened agent links to
+    the LIVE backend: `test_walk12`'s `operator_hud.enable()` built a real `ro_agent.Agent`
+    ("operator-hud" hellos in the live input log).
+  - The input log shows no input from them and no release of any kind. The run's own input pattern
+    (its clicks and its typing) continued unchanged around them.
+  - What they could reach was display only (HUD / route-preview feeds), which the rule never reads.
+    The result stands.
+  - Fixed in a9a11ec: the tests' conftest refuses any non-loopback WebSocket connection.
+
 **3.29's version choice, applied mechanically after walk@16's tuning (2026-10-09 11:57 ICT, before
 any held-out data):**
 - walk@15 is READY (186 / 200 = 93.0 %, 0 safety).
@@ -2386,6 +2396,20 @@ target."
 - The per-run bar of each pre-registration (≥ 48 / 50 per run) is unchanged, and so are the verdicts
   already given under it: walk@13–15's FAILs stay FAILs as pre-registered. Readiness is a separate,
   pooled question.
+
+**PER-MAP WALK-READINESS (Batt 2026-10-09 ~13:15, approved):** a map is **walk-ready** only when
+both hold:
+- the version is READY (above);
+- EVERY species the map's L3 spawn list holds is in the unit detector's TRAINING SCOPE (ADR-0020
+  13.3: the training scope = all species on the workflow's maps).
+
+The detector is class-agnostic ("monster"), but it only knows the sprites it was trained on. On a map
+whose species it never saw, the unit gate cannot protect walking.
+- **Today's scope:** v0 / v1 were trained on prt_fild08 and prt_church sessions only.
+- **iz_dun00** spawns Plankton, Marina, Kukre, Hydra, Vadon and Black Mushroom (the local KB): all out
+  of scope. So iz_dun00 is NOT walk-ready, and its held-out result (3.29) is reported as
+  **PATH-FOLLOWING ONLY, not unit safety** (Batt). Its safety count is still reported.
+- A held-out map's own walk-ready status is stated next to its result.
 
 **Applied to the tuning runs so far** (`walk_readiness.py` over each version's four scorer outputs):
 

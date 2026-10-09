@@ -4,10 +4,31 @@ import os
 import threading
 from collections.abc import Callable
 from typing import Any
+from urllib.parse import urlsplit
 
 import pytest
+import websockets.sync.client as _ws_client
 
 from poring_backend.clipboard import ConvertRequest, OwnerChanged, OwnershipLost, SelectionEvent
+
+# NO TEST EVER REACHES THE LIVE BACKEND (2026-10-09). test_walk12's operator_hud.enable() built a
+# real ro_agent.Agent and opened /internal/agent links ("operator-hud" hellos in the live input log)
+# while scored client runs were going: no input was sent, but a test must not touch the live
+# system at all. ro_agent binds `connect` at import, and pytest imports this file before any test
+# module loads a script, so the wrapper is what every script gets. Loopback servers that tests
+# start themselves (test_hud_scene_sender, test_ro_agent_ws) stay allowed.
+_REAL_CONNECT = _ws_client.connect
+_LOOPBACK = {"127.0.0.1", "localhost", "::1"}
+
+
+def _test_connect(uri: str, *args: Any, **kwargs: Any) -> Any:
+    host = urlsplit(uri).hostname or ""
+    if host not in _LOOPBACK:
+        raise ConnectionRefusedError(f"tests never connect to the live backend ({uri})")
+    return _REAL_CONNECT(uri, *args, **kwargs)
+
+
+_ws_client.connect = _test_connect  # type: ignore[assignment]
 
 
 class FakeXfreerdp:
