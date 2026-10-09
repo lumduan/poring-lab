@@ -353,6 +353,15 @@ WINDOWS = {
         template_size=(60, 13),
         max_distance=6.0,
     ),
+    # An NPC's dialog and its menu (talk@1 T2, measured 2026-10-09 on banked RDP frames). Both are
+    # matched as WHOLE windows under a mask without their text, list and buttons, and judged by the
+    # share of pixels that differ, not by this mean distance: poring_env.npc_dialog reads them.
+    # Their templates live in data/ui_anchors/npc_dialog/ (a subdirectory: default_registry does
+    # not load them, so the generic locate never matches them by mean distance).
+    "npc_dialog": WindowSpec(
+        "npc_dialog", size=(278, 178), template_size=(278, 178), max_distance=4.0
+    ),
+    "npc_menu": WindowSpec("npc_menu", size=(278, 118), template_size=(278, 118), max_distance=4.0),
 }
 
 ELEMENTS = {
@@ -378,6 +387,24 @@ ELEMENTS = {
     # above and below the 11-row digit cell for the reader's baseline search, and stops where the
     # zoom buttons start (dx 72). poring_env.selfpos reads it (T0).
     "minimap_xy": ElementSpec("minimap_xy", "minimap", box=(16, 127, 56, 15)),
+    # The NPC dialog (talk@1 T2): the grey text area, and ONE button place that shows NEXT or
+    # CLOSE (both found by image; the labels are the client's locale: no label_key, never read as
+    # text). The menu: 4 rows on a 16 px pitch (each row's text part, left of the scrollbar; the
+    # highlight band covers a row's first 15), the scrollbar's arrows and track, OK and Cancel.
+    "npc_dialog_text": ElementSpec("npc_dialog_text", "npc_dialog", box=(9, 9, 260, 140)),
+    "npc_dialog_next": ElementSpec("npc_dialog_next", "npc_dialog", box=(233, 155, 42, 20)),
+    "npc_dialog_close": ElementSpec("npc_dialog_close", "npc_dialog", box=(233, 155, 42, 20)),
+    **{
+        f"npc_menu_row_{k + 1}": ElementSpec(
+            f"npc_menu_row_{k + 1}", "npc_menu", box=(11, 25 + 16 * k, 243, 16)
+        )
+        for k in range(4)
+    },
+    "npc_menu_up": ElementSpec("npc_menu_up", "npc_menu", box=(254, 28, 13, 10)),
+    "npc_menu_track": ElementSpec("npc_menu_track", "npc_menu", box=(254, 38, 13, 39)),
+    "npc_menu_down": ElementSpec("npc_menu_down", "npc_menu", box=(254, 77, 13, 10)),
+    "npc_menu_ok": ElementSpec("npc_menu_ok", "npc_menu", box=(187, 95, 42, 20)),
+    "npc_menu_cancel": ElementSpec("npc_menu_cancel", "npc_menu", box=(233, 95, 42, 20)),
 }
 
 # Where the windows sat when the templates were cut (client-area pixels, 1280x720, 2026-10-02).
@@ -393,6 +420,9 @@ CAPTURE_ORIGINS = {
     "skills": (378, 200),
     "inventory": (0, 120),
     "equipment": (185, 300),
+    # the client's default place for an NPC's dialog and menu (the 2026-10-08 Garnet frames, RDP)
+    "npc_dialog": (201, 101),
+    "npc_menu": (201, 301),
 }
 
 
