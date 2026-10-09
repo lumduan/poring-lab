@@ -7,7 +7,7 @@ verdict_date: 2026-10-01
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: Implemented and validated (docs/phase1-validation.md). The slim sniffer image is LIVE since 2026-10-03 (71 MB, guarded build; live re-verified: ingest, validation tagging, password zeroing). GAT in Phase 2.
+next_action: "➡️ 2026-10-10 02:50: the image carrying LoginScrub (f36276e, login ports from the environment + every login-shaped connection) is LIVE, verified by scripts/scrub_check.py and the §2a positive cases (demonstrations.md §2a). Amendment C (code from a source mount) PROPOSED. History: Implemented and validated (docs/phase1-validation.md). The slim sniffer image is LIVE since 2026-10-03 (71 MB, guarded build; live re-verified: ingest, validation tagging, password zeroing). GAT in Phase 2."
 ---
 
 # ADR-0007: Packet ground truth — a viewer-only channel and a separate captures volume

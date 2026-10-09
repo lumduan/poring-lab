@@ -75,6 +75,17 @@ So:
 | `npc_contact` | `20261008T210752-demo-safety-check-npc-garnet` (21:08 ICT / 14:08 UTC): the GM clicks Garnet (TALK cursor twice); the dialog paged with Enter ×3 and its menu CANCELLED by a screenshot-checked click | **1 contact** (gid 110000895), then `npc_say` ×7, `npc_wait` ×3, `npc_menu`, `npc_choose`, `npc_close_click` → **PASS** |
 | `pickup_request` (ours, NEW: decoded since the loot decoders) + `act` from us (`pickup`) | `20261008T210930-demo-safety-check-pickup` (21:10 ICT / 14:10 UTC): an `@item` Knife dropped by an inventory drag, then clicked where the cursor read `pickup` twice (cell 98,112) | `pickup_request` 1, `pickup_result` 1, `floor_item_vanish` 1, **1 pickup act** → **PASS** |
 
+**Re-proven after the 2026-10-10 02:50 ICT sniffer rebuild** (the credential scrub `LoginScrub`,
+f36276e; built from main 6b90746 in a measured quiet window, worst capture stall 6.5 %; recreate and
+the GM's auto re-login OK at 02:51:57):
+
+| signal | positive case | result |
+|---|---|---|
+| the scrub itself | `scripts/scrub_check.py --since <recreate>` over the 2 capture files since the recreate: the GM's user and password searched, FOUND / NOT FOUND only | user **NOT FOUND**, password **NOT FOUND**; controls: 1 `login_accepted` in the window, the character name FOUND → **PASS** (the sniffer logs "login ports [6900] + every login-shaped connection") |
+| `attack_request` + `act` from us (`normal`) | `20261010T031437-demo-safety-check-monster-click --species red_plant` (a still monster: the v3 cursor reads SWORD on a bobbing Poring ~7 %, 3.35, and the Poring case ran past 10 min twice) | 1 request, 3 acts, the same target → **PASS** |
+| `pickup_request` + `act` from us (`pickup`) | `20261010T031556-demo-safety-check-pickup` (an `@item` Knife dropped by an inventory drag, clicked where the cursor read pickup twice) | `pickup_request` 1, `pickup_result` 1, `floor_item_vanish` 1, 1 pickup act → **PASS** |
+| `npc_contact` | `20261010T031924-demo-npc-click-click-prontera` (npc-click@1's prontera CLICK pilot re-run, unscored; `safety_signal_check.py npc-click` got no TALK read twice on Garnet or Henson, the v3 colour weakness of 3.30 / 3.35) | **4 contacts**, each declined (4 `npc_choose` cancels, 19 `npc_say`), 0 attack → **PASS** |
+
 - `demo_verify.py` prints `safety.our_acts` / `unsafe_acts` per session and labels the request counts
   with the instrument's history (63873bc).
 - ~~Still open: the banked-capture replay for the walk runs of 2026-10-07/08~~ ➡️ done 07:47–07:52

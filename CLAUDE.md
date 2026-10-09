@@ -458,7 +458,9 @@ ports, quickstart) and `docs/adr/`.
   f8c1531, REBUILT 2026-10-08 07:31 from 8533fcd's tree: `attack_request` / `npc_contact` are live,
   each proven by a deliberate positive case, demonstrations.md §2a; REBUILT AGAIN 2026-10-08 17:51
   from 8be6261: the length table's 5 variable packets (chat rooms, 0x097B) + loot@1's floor-item /
-  pickup decoders; the §2a positive cases are re-run after it);
+  pickup decoders; the §2a positive cases are re-run after it; REBUILT 2026-10-10 02:50 from
+  6b90746: the credential scrub LoginScrub (login ports from `SNIFF_LOGIN_PORTS` + every
+  login-shaped connection), verified by `scripts/scrub_check.py`, §2a re-run);
   banked captures are re-decoded offline with `guarded_build.py replay:<FROM>..<TO>` (UTC hours; a
   one-off, network-less, read-only container from the sniffer image -- never an exec into the
   live sniffer) and judged per session by `scripts/replay_safety.py`;
