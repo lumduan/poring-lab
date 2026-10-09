@@ -53,6 +53,18 @@ def step(m: Any, opt: Any, seed: int) -> None:
     opt.step()
 
 
+def trained(device: str, kernel: dict[str, bool]) -> Any:
+    """A model and its optimizer after one step. A torch whose kernel refuses channels_last
+    parameters on this device is not ultralytics' path (CUDA): skipped, saying so, not failed."""
+    m = net(device)
+    opt = adamw(m, kernel)
+    try:
+        step(m, opt, 1)
+    except RuntimeError as e:
+        pytest.skip(f"this torch's {kernel} AdamW refuses channels_last on {device}: {e}")
+    return m, opt
+
+
 def saved(m: Any, opt: Any) -> dict[str, Any]:
     """Saved as midckpt saves (`to_cpu`, torch.save), read back as a resume reads (to the CPU)."""
     buf = io.BytesIO()
@@ -85,10 +97,7 @@ def states(m: Any, opt: Any) -> list[tuple[Any, dict[str, Any]]]:
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("kernel", list(KERNELS.values()), ids=list(KERNELS))
 def test_the_restored_state_is_laid_out_as_its_parameters(device: str, kernel: Any) -> None:
-    m = net(device)
-    opt = adamw(m, kernel)
-    step(m, opt, 1)
-    ck = saved(m, opt)
+    ck = saved(*trained(device, kernel))
     m2, opt2 = resumed(device, kernel, ck, load_optimizer)
     for p, st in states(m2, opt2):
         for k in ("exp_avg", "exp_avg_sq"):
@@ -104,17 +113,10 @@ def test_the_restored_state_is_laid_out_as_its_parameters(device: str, kernel: A
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("kernel", list(KERNELS.values()), ids=list(KERNELS))
 def test_a_resumed_step_equals_the_uninterrupted_one_bitwise(device: str, kernel: Any) -> None:
-    a = net(device)  # uninterrupted: two steps
-    a_opt = adamw(a, kernel)
-    try:
-        step(a, a_opt, 1)
-    except RuntimeError as e:  # not ultralytics' path (CUDA); say so rather than fail on it
-        pytest.skip(f"this torch's {kernel} AdamW refuses channels_last on {device}: {e}")
+    a, a_opt = trained(device, kernel)  # uninterrupted: two steps
     step(a, a_opt, 2)
-    k = net(device)  # interrupted: one step, saved, restored into a fresh model, one more step
-    k_opt = adamw(k, kernel)
-    step(k, k_opt, 1)
-    b, b_opt = resumed(device, kernel, saved(k, k_opt), load_optimizer)
+    ck = saved(*trained(device, kernel))  # interrupted after one step, restored into a fresh model
+    b, b_opt = resumed(device, kernel, ck, load_optimizer)
     step(b, b_opt, 2)  # proof 1 raised here on CUDA
     for pa, pb in zip(a.parameters(), b.parameters(), strict=True):
         assert tensor_bytes(pa) == tensor_bytes(pb) and pa.stride() == pb.stride()
@@ -127,9 +129,7 @@ def test_a_resumed_step_equals_the_uninterrupted_one_bitwise(device: str, kernel
 
 @pytest.mark.skipif("cuda" not in DEVICES, reason="PORING_CUDA_TESTS=1 only (a guarded step)")
 def test_proof_1s_restore_reproduces_its_crash_on_cuda() -> None:
-    k = net("cuda")
-    k_opt = adamw(k, KERNELS["fused"])
-    step(k, k_opt, 1)
-    b, b_opt = resumed("cuda", KERNELS["fused"], saved(k, k_opt), stock_restore)
+    ck = saved(*trained("cuda", KERNELS["fused"]))
+    b, b_opt = resumed("cuda", KERNELS["fused"], ck, stock_restore)
     with pytest.raises(RuntimeError, match="same dtype, device, and layout"):
         step(b, b_opt, 2)
