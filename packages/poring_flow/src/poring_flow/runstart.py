@@ -11,6 +11,9 @@ severity has its enforcement point in code, tested, and not only in prose.
 - It fails closed: no static data (no map sheets) or no resolver is a refusal, never a pass,
   because the linter would then skip the very checks the run depends on.
 - If an approved hash is given, the flow's hash must equal it (approval binds a hash, section 6).
+- The flow's `max_runtime_s` must not exceed the CONFIGURED maximum run time (Batt 2026-10-09,
+  contradictions #17: a Settings value, not a constant), given as `runtime_max_s`; without a
+  configured value the run is refused.
 - Simulation is design time and is NOT gated: `runtime.Sim` and `trace.simulate` run a flow that
   has readiness items (that is how a flow is designed before its bindings land).
 """
@@ -56,15 +59,23 @@ def verdict(
     *,
     world_loaded: bool,
     resolver_given: bool,
+    runtime_max_s: int | None,
     approved_hash: str | None = None,
 ) -> Verdict:
-    """The gate's verdict from findings already computed (the editor shows it beside the lint)."""
+    """The gate's verdict from findings already computed (the editor shows it beside the lint).
+    `runtime_max_s` is the CONFIGURED maximum run time (#17): None refuses (fail closed)."""
     h = ir.flow_hash(flow)
     reasons = []
     if not world_loaded:
         reasons.append("no static data: references and routes are unchecked")
     if not resolver_given:
         reasons.append("no resolver: bindings are unchecked")
+    if runtime_max_s is None:
+        reasons.append("no configured maximum run time")
+    elif flow.max_runtime_s > runtime_max_s and not any(f.rule == "runtime_max" for f in findings):
+        reasons.append(
+            f"max_runtime_s {flow.max_runtime_s} is above the configured maximum {runtime_max_s}"
+        )
     if approved_hash is not None and approved_hash != h:
         reasons.append(f"the flow's hash {h[:12]} is not the approved {approved_hash[:12]}")
     errs = tuple(f.message for f in findings if f.severity == "error")
@@ -79,14 +90,19 @@ def check(
     resolver: Resolver | None,
     detector: Detector | None = None,
     approved_hash: str | None = None,
+    runtime_max_s: int | None = None,
 ) -> Verdict:
-    """Re-lint NOW and return the verdict (no exception)."""
-    findings = lint(flow, world=world, resolver=resolver, detector=detector)
+    """Re-lint NOW and return the verdict (no exception). `runtime_max_s`: the configured
+    maximum run time (#17); without one the run is refused."""
+    findings = lint(
+        flow, world=world, resolver=resolver, detector=detector, runtime_max_s=runtime_max_s
+    )
     return verdict(
         flow,
         findings,
         world_loaded=world is not None,
         resolver_given=resolver is not None,
+        runtime_max_s=runtime_max_s,
         approved_hash=approved_hash,
     )
 
@@ -98,10 +114,18 @@ def require(
     resolver: Resolver | None,
     detector: Detector | None = None,
     approved_hash: str | None = None,
+    runtime_max_s: int | None = None,
 ) -> Verdict:
     """The call a live run makes before its first input: returns the verdict, or raises
     `RunRefused` (with every reason) when the run may not start."""
-    v = check(flow, world=world, resolver=resolver, detector=detector, approved_hash=approved_hash)
+    v = check(
+        flow,
+        world=world,
+        resolver=resolver,
+        detector=detector,
+        approved_hash=approved_hash,
+        runtime_max_s=runtime_max_s,
+    )
     if not v.allowed:
         raise RunRefused(v)
     return v

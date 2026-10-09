@@ -626,7 +626,7 @@ by its path; the owner reads the same text the LLM drafter gets back.
 
 | Layer | Checks | Example message |
 |---|---|---|
-| 1 · schema | the Pydantic model; bounds on counts, timeouts, `max_runtime_s`, string lengths, nesting depth and node count; variable types consistent; procedure call graph acyclic | "main.4: `repeat.times` must be 1..10000" |
+| 1 · schema | the Pydantic model; bounds on counts, timeouts, `max_runtime_s` (➡️ the CONFIGURED maximum, Batt 2026-10-09, contradictions #17: open question 8), string lengths, nesting depth and node count; variable types consistent; procedure call graph acyclic | "main.4: `repeat.times` must be 1..10000" |
 | 2 · semantics | every reference exists for the target environment: the map; the NPC on that map; the option offered by that NPC; the item, monster, skill. Every action block resolves its bindings (`resolve()`); an `Unsupported` is ~~an error~~ naming the layer and key ➡️ **DECIDED 2026-10-09 (Batt, contradictions #6): a READINESS item, not an error.** It is listed in the report and blocks the RUN (the run-start check refuses on it, `poring_flow.runstart`), not the design: a flow with readiness items can be designed, linted, simulated and approved. `assumes` uses known sensors | "main.1: npc n_3f2a is not on the map the flow is on at this point"; readiness: "town.0: walk_to is unsupported here: L3 binding L3.map.walkability (…)" |
 | 3 · simulation | an abstract walk through the flow tracking the current map: reachability on the GAT/warp graph (`poring_dataset/walk.py`, legs ≤ 128 steps, waypoints beyond; ➡️ Batt 2026-10-09, contradictions #18: with the EXECUTOR's planner, `walk_path`; until the swap, MW1's A* held to it by a cross-check test, open question 15); a time estimate; monster spawns on the map for `attack_nearest`; element matchups (warning) | "main.2: cell (170, 210) is unreachable from the warp you arrive by" |
 | 3 · loops | every `while` has a bound, a sensor/variable its body can change, or a `break`; a loop body with no action and no wait is a busy loop (error); the flow-level `max_runtime_s` bounds everything | "main.6: this loop can never end: nothing in it changes job_level()" |
@@ -1942,6 +1942,26 @@ Marked FIRST: needed before F1 or F2.
    that they go through L1 and the alone-test like any concept.
 8. **`max_runtime_s`'s bound and default**, and when long runs are allowed: ADR-0002 notes the
    input log grows ~1 GB/day and needs rotation before long unattended runs.
+   ➡️ **DECIDED 2026-10-09 (Batt, contradictions #17): NOT hard-coded.** "User-configurable: a
+   global default and maximum in the Settings page (human-only writes, like the environments
+   store), defaults 4 h and 24 h; each flow may set its own value up to the global maximum; the
+   editor shows it; changes are logged; the run-start check refuses a flow above the configured
+   maximum."
+   - **The flow side (built):** the flow's own `max_runtime_s` (the IR field, unchanged in name);
+     the IR's bound is only a SANITY cap now, 7 days (`ir.MAX_RUNTIME_S`; it was 24 h); the editor
+     shows and edits it with `where_budget` (the Inspect panel's run settings, refusing a value
+     above the configured maximum) and a new flow starts at the configured default; the linter
+     takes the configured maximum as an input (`lint(..., runtime_max_s=)`: above it an ERROR,
+     `runtime_max`) and so does the run-start check (`runstart.check(..., runtime_max_s=)`:
+     above it, or with NO configured value, the run is refused: fail closed).
+   - **The interface the Settings store implements** (another piece of work: the store, its page,
+     its audit log; not built here): `poring_backend.flows_settings.runtime_limits(state) ->
+     (default_s, max_s)`, in seconds. `/flows/catalogue` returns it as `runtime_limits`, and
+     `/flows/lint` and `/flows/simulate` lint with its maximum. Until the store lands it returns
+     Batt's defaults, (14400, 86400).
+   - **Changes are logged:** a flow is a file the browser exports and imports, so a change of its
+     `max_runtime_s` shows in its JSON diff; a change of the global default or maximum is the
+     Settings store's audit log.
 9. **The UI reset before a handler** (2.5 rule 9): which windows and dialogs it may close, and how
    it is verified.
 10. **How the console reaches the host-side LLM drafter** without any lab container joining

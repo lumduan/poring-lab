@@ -8,7 +8,7 @@ import type { FlowsApi, LintDoc, Scenario, SimDoc, WorldDoc, WorldSource } from 
 import { ApiError } from "@/lib/flow/api";
 import { type BlockProps, savePointBlock } from "@/lib/flow/canvas";
 import { exportText } from "@/lib/flow/importer";
-import { builtInEvents, exitsOf, type Flow, type MapBlock } from "@/lib/flow/ir";
+import { builtInEvents, exitsOf, type Flow, type MapBlock, runSettings } from "@/lib/flow/ir";
 import { END_TEXT, lintLine, lintOf, runLine } from "@/lib/flow/status";
 
 const SEV_CLASS: Record<string, string> = {
@@ -39,6 +39,8 @@ export function InspectPanel({
   onStart,
   onOpen,
   onSimulateHere,
+  limits,
+  onFlow,
 }: {
   flow: Flow;
   selected: string | null;
@@ -51,12 +53,15 @@ export function InspectPanel({
   onStart: (name: string, entry: string) => void;
   onOpen: (id: string) => void;
   onSimulateHere: (block: string) => void;
+  limits: { default_s: number; max_s: number } | null;
+  onFlow: (flow: Flow) => void;
 }) {
   const block = selected?.startsWith("block:") ? flow.workflow?.blocks.find((b) => `block:${b.name}` === selected) : undefined;
   if (!selected) {
     const sp = savePointBlock(flow);
     return (
       <div className="space-y-2 text-xs text-neutral-300">
+        <FlowSettings key={`${flow.max_runtime_s}|${flow.where_budget}`} flow={flow} limits={limits} onFlow={onFlow} />
         <p>Click a node to inspect it; double-click a map block (or an events node) to open its blocks.</p>
         <p>Draw an exit from a port (walk exit, npc warp, item warp) onto another map block; select an exit and press Delete to remove it. The new exit gets placeholder details the linter names: fill them in the blocks.</p>
         <p className="text-neutral-400">
@@ -96,6 +101,46 @@ export function InspectPanel({
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+/** The flow's run settings (ADR-0020 #17 max_runtime_s, #10 where_budget). A change is part of
+ * the flow, so it shows in its JSON export / diff; the global default and maximum are the
+ * Settings page's (human-only writes, audited). */
+function FlowSettings({ flow, limits, onFlow }: { flow: Flow; limits: { default_s: number; max_s: number } | null; onFlow: (f: Flow) => void }) {
+  const [runtime, setRuntime] = useState(String(flow.max_runtime_s));
+  const [budget, setBudget] = useState(String(flow.where_budget));
+  const [err, setErr] = useState("");
+  const apply = () => {
+    const r = runSettings(flow, runtime, budget, limits?.max_s ?? null);
+    if (!r.ok) return setErr(r.error);
+    setErr("");
+    onFlow(r.flow);
+  };
+  const hours = (s: number) => `${(s / 3600).toFixed(s % 3600 ? 2 : 0)} h`;
+  return (
+    <div className="space-y-1 rounded border border-neutral-800 p-2">
+      <div className="font-semibold">Flow {flow.name}: run settings</div>
+      <div className="grid grid-cols-2 gap-2">
+        <label>
+          max_runtime_s ({hours(Number(runtime) || 0)})
+          <input className={input} value={runtime} onChange={(e) => setRuntime(e.target.value)} />
+        </label>
+        <label>
+          where_budget (/where reads a run)
+          <input className={input} value={budget} onChange={(e) => setBudget(e.target.value)} />
+        </label>
+      </div>
+      <div className="text-neutral-400">
+        {limits
+          ? `Configured on the Settings page: default ${hours(limits.default_s)}, maximum ${hours(limits.max_s)}. A run above the maximum is refused.`
+          : "The configured limits are not loaded yet."}
+      </div>
+      <div className="flex items-center gap-2">
+        <button className={btn} onClick={apply}>Apply</button>
+        {err && <span className="text-red-300">{err}</span>}
+      </div>
     </div>
   );
 }

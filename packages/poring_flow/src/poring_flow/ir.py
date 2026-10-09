@@ -59,7 +59,11 @@ FLOW_NAME = r"^[a-z][a-z0-9_]{0,47}$"
 MAP_ID = r"^[A-Za-z0-9_@.\-]{1,40}$"
 KEY = r"^[A-Za-z0-9_.\-]{1,64}$"  # an L3 / L4 key
 IR_VERSION = 2  # IR 1 converts on load (`upgrade`); see the module docstring
-MAX_RUNTIME_S = 86_400  # PROVISIONAL: the bound is open question 8
+# A SANITY CAP on hostile input, not the policy (Batt 2026-10-09, contradictions #17: NOT
+# hard-coded). The policy is CONFIGURED: a global default (4 h) and maximum (24 h) on the Settings
+# page, given to the linter and the run-start check as `runtime_max_s`. Was 86_400 (24 h), the
+# provisional bound of open question 8.
+MAX_RUNTIME_S = 604_800  # 7 days
 # The per-run /where budget (Batt 2026-10-09, contradictions #10): how many ACTIVE position reads
 # (position(), current_map(), read_position, a relocation's read) a run may make. They TYPE /where,
 # which players almost never do; passive sources come first. 12 = about three an hour over the

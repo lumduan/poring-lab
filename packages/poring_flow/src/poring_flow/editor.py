@@ -147,8 +147,11 @@ def lint_doc(
     world: World | None,
     resolver: Resolver | None,
     detector: Detector | None = None,
+    runtime_max_s: int | None = None,
 ) -> dict[str, Any]:
-    findings = lint(flow, world=world, resolver=resolver, detector=detector)
+    findings = lint(
+        flow, world=world, resolver=resolver, detector=detector, runtime_max_s=runtime_max_s
+    )
     roots = owners(flow)
     zero = {"error": 0, "readiness": 0, "warning": 0, "info": 0}
     counts = dict(zero)
@@ -171,7 +174,11 @@ def lint_doc(
             }
         )
     run = verdict(
-        flow, findings, world_loaded=world is not None, resolver_given=resolver is not None
+        flow,
+        findings,
+        world_loaded=world is not None,
+        resolver_given=resolver is not None,
+        runtime_max_s=runtime_max_s,
     )
     return {
         "flow_hash": ir.flow_hash(flow),

@@ -130,6 +130,8 @@ export interface CatalogueDoc {
   palette: string[];
   windows: string[];
   safety_critical: string[];
+  // ADR-0020 #17: the CONFIGURED run-time limits (the backend's flows_settings.runtime_limits)
+  runtime_limits?: { default_s: number; max_s: number };
 }
 
 export interface WorldMap {

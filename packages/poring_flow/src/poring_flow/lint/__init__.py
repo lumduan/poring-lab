@@ -68,8 +68,21 @@ def lint(
     resolver: Resolver | None = None,
     detector: Detector | None = None,
     cat: Catalogue | None = None,
+    runtime_max_s: int | None = None,
 ) -> list[Finding]:
+    """`runtime_max_s`: the CONFIGURED maximum run time (#17; the backend's
+    `flows_settings.runtime_limits`); None skips that check here (the run-start check refuses
+    without one)."""
     ctx = Ctx(flow, cat or catalogue(), world, resolver, detector or Detector())
+    if runtime_max_s is not None and flow.max_runtime_s > runtime_max_s:
+        ctx.add(
+            "runtime_max",
+            "error",
+            1,
+            "",
+            f"max_runtime_s {flow.max_runtime_s} is above the configured maximum {runtime_max_s} "
+            "(the Settings page)",
+        )
     structure.check(ctx)
     semantics.check(ctx)
     simulate.check(ctx)

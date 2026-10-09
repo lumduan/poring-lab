@@ -228,14 +228,20 @@ export function exitOf(kind: AuthoredExit, to_block: string, to_entry: string): 
   return { kind, warp: null, npc: null, options: [], item: null, to_block, to_entry, timeout_s: 120 };
 }
 
-export function emptyFlow(name = "new_flow"): Flow {
+/** Batt's default run time for a new flow (ADR-0020 #17, 4 h) until the configured one arrives
+ * (`CatalogueDoc.runtime_limits.default_s`, set on the Settings page). */
+export const RUNTIME_DEFAULT_S = 14_400;
+/** MW1's schema SANITY cap (ir.MAX_RUNTIME_S, 7 days); the policy maximum is configured (#17). */
+export const MAX_RUNTIME_CAP_S = 604_800;
+
+export function emptyFlow(name = "new_flow", maxRuntimeS = RUNTIME_DEFAULT_S): Flow {
   return {
     ir: IR_VERSION,
     name,
     description: "",
     target: { client: "kro-20211103-prere", server: "lab-rathena", locale: "en", path: "s2" },
     assumes: [],
-    max_runtime_s: 3600,
+    max_runtime_s: maxRuntimeS,
     where_budget: WHERE_BUDGET_DEFAULT,
     stop_when: null,
     variables: {},
@@ -313,4 +319,22 @@ export function stmtAt(stmts: Stmt[], rest: string[]): { list: Stmt[]; index: nu
     i += 2;
   }
   return null;
+}
+
+/** A flow's run settings (ADR-0020 #10 / #17), checked before they reach the IR. `maxS` is the
+ * CONFIGURED maximum run time (the Settings page), when known. */
+export function runSettings(
+  flow: Flow,
+  maxRuntimeS: string,
+  whereBudget: string,
+  maxS: number | null,
+): { ok: true; flow: Flow } | { ok: false; error: string } {
+  const cap = maxS ?? MAX_RUNTIME_CAP_S;
+  if (!/^[0-9]{1,6}$/.test(maxRuntimeS.trim()) || Number(maxRuntimeS) < 1 || Number(maxRuntimeS) > cap) {
+    return { ok: false, error: `max_runtime_s: whole seconds, 1..${cap}${maxS ? " (the configured maximum)" : ""}` };
+  }
+  if (!/^[0-9]{1,4}$/.test(whereBudget.trim()) || Number(whereBudget) > 1000) {
+    return { ok: false, error: "where_budget: a whole number, 0..1000" };
+  }
+  return { ok: true, flow: { ...clone(flow), max_runtime_s: Number(maxRuntimeS), where_budget: Number(whereBudget) } };
 }

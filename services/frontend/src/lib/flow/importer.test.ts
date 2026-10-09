@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import { exportText, importFlow, jsonDepth } from "./importer.ts";
-import { canonical } from "./ir.ts";
+import { canonical, emptyFlow, runSettings } from "./ir.ts";
 import { FIXTURES, fixture } from "./testkit.ts";
 
 test("JSON export -> import is exact", () => {
@@ -41,4 +41,17 @@ test("an IR 1 file converts to IR 2 exactly as MW1's ir.upgrade does (ADR-0020 #
   const r = importFlow(ir1);
   assert.ok(r.ok, JSON.stringify(r));
   if (r.ok) assert.equal(canonical(r.flow), canonical(fixture("farm_loop")));
+});
+
+test("the run settings stay inside the configured maximum (ADR-0020 #17) and the /where budget (#10)", () => {
+  const f = fixture("farm_loop");
+  const ok = runSettings(f, "7200", "3", 86_400);
+  assert.ok(ok.ok && ok.flow.max_runtime_s === 7200 && ok.flow.where_budget === 3 && f.max_runtime_s === 14_400);
+  const over = runSettings(f, "90000", "3", 86_400);
+  assert.ok(!over.ok && /1\.\.86400 \(the configured maximum\)/.test(over.error));
+  assert.ok(!runSettings(f, "0", "3", 86_400).ok);
+  assert.ok(!runSettings(f, "3600", "1001", 86_400).ok);
+  assert.ok(runSettings(f, "600000", "0", null).ok); // no configured value known: the schema cap only
+  assert.equal(emptyFlow("x", 7200).max_runtime_s, 7200);
+  assert.equal(emptyFlow().max_runtime_s, 14_400);
 });

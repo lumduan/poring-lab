@@ -91,6 +91,8 @@ def test_catalogue_and_sample(make: Make) -> None:
     assert r.status_code == 200, r.text
     doc = r.json()
     assert doc["blocks"]["open_window"]["badge"] == "verified_rdp"
+    # #17: the configured run-time limits (flows_settings.runtime_limits; Batt's defaults for now)
+    assert doc["runtime_limits"] == {"default_s": 14_400, "max_s": 86_400}
     assert "basic_info" in doc["windows"] and "walk_to" in doc["palette"]
     s = client.get("/flows/sample", headers=H).json()
     assert s["flow"] == sample() and s["world"] == "sample"
@@ -124,6 +126,11 @@ def test_lint_simulate_python(make: Make) -> None:
     assert lint["by_owner"]["block:town"]["readiness"] >= 1
     assert {f["severity"] for f in lint["findings"] if f["rule"] == "bindings"} == {"readiness"}
     assert lint["run"]["allowed"] is False and "readiness item" in lint["run"]["summary"]
+    assert "no configured maximum run time" not in lint["run"]["reasons"]  # the routes give one
+    too_long = post(client, "lint", {"flow": {**flow, "max_runtime_s": 90_000}, "world": "sample"})
+    assert "max_runtime_s 90000 is above the configured maximum 86400 (the Settings page)" in [
+        f["text"] for f in too_long.json()["findings"]
+    ]
     assert all(f["owner"] in ("flow", "global", "block:town", "block:farm")
                for f in lint["findings"])  # fmt: skip
     r = post(client, "simulate", {"flow": flow, "world": "sample",
