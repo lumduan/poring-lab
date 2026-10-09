@@ -31,7 +31,10 @@ edit"):
   class. `None` means 13.6.3's table order (`DEFAULT_RANK`: unintended_engagement 4 before hp_low
   5, ...; any other key `USER_RANK`). Equal classes still never pre-empt each other: the rank
   orders their queue, and only events of equal rank queue first in, first out.
-- IR 1 is CONVERTED on load (`upgrade`): every handler gets `rank: None`, nothing else changes. Its
+- IR 2 also carries `Flow.where_budget` (Batt 2026-10-09, contradictions #10; added before IR 2
+  was released): the per-run budget of ACTIVE position reads (/where), default 12.
+- IR 1 is CONVERTED on load (`upgrade`): every handler gets `rank: None`, the flow gets the
+  default `where_budget`, nothing else changes. Its
   meaning changes (equal-class events were FIFO only), so the converted flow is IR 2 and its hash
   is a new one (no flow was approved under IR 1: MW2 runs nothing). Any other version is refused
   with a message naming the versions this engine reads.
@@ -57,6 +60,12 @@ MAP_ID = r"^[A-Za-z0-9_@.\-]{1,40}$"
 KEY = r"^[A-Za-z0-9_.\-]{1,64}$"  # an L3 / L4 key
 IR_VERSION = 2  # IR 1 converts on load (`upgrade`); see the module docstring
 MAX_RUNTIME_S = 86_400  # PROVISIONAL: the bound is open question 8
+# The per-run /where budget (Batt 2026-10-09, contradictions #10): how many ACTIVE position reads
+# (position(), current_map(), read_position, a relocation's read) a run may make. They TYPE /where,
+# which players almost never do; passive sources come first. 12 = about three an hour over the
+# default 4 h run (proposed by Claude; each flow may set its own).
+WHERE_BUDGET_DEFAULT = 12
+WHERE_BUDGET_MAX = 1000
 MAX_STR = 200
 MAX_LIST = 100
 MAX_JSON_BYTES = 1 << 20  # imported JSON is hostile input (7.1)
@@ -513,6 +522,8 @@ class Flow(BaseModel):
     target: Target
     assumes: list[Expr] = Field(default=[], max_length=50)  # character facts, sensed before input
     max_runtime_s: int = Field(ge=1, le=MAX_RUNTIME_S)
+    # #10: the run's /where budget (lint warns above it; the run report counts every read)
+    where_budget: int = Field(default=WHERE_BUDGET_DEFAULT, ge=0, le=WHERE_BUDGET_MAX)
     stop_when: Expr | None = None
     variables: dict[Annotated[str, Field(pattern=NAME)], Lit] = {}
     procedures: dict[Annotated[str, Field(pattern=NAME)], list[Stmt]] = {}

@@ -2,7 +2,7 @@
 // size, nesting depth (a linear scan, as MW1's ir._depth), JSON, the top-level shape — and then the
 // backend's /flows/lint validates it against MW1's schema. Nothing is evaluated.
 import type { Flow } from "./ir.ts";
-import { FLOW_NAME, IR_VERSION, MAX_JSON_BYTES, MAX_JSON_DEPTH } from "./ir.ts";
+import { FLOW_NAME, IR_VERSION, MAX_JSON_BYTES, MAX_JSON_DEPTH, WHERE_BUDGET_DEFAULT } from "./ir.ts";
 
 export type ImportResult = { ok: true; flow: Flow } | { ok: false; errors: string[] };
 
@@ -30,12 +30,14 @@ export function jsonDepth(text: string): number {
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 
 /** The IR 1 -> IR 2 converter (ADR-0020 section 1 + contradictions #13), as MW1's `ir.upgrade`:
- * only the version changes, and every handler (global, map override / add) gets `rank: null`, the
- * 13.6.3 table order. The flow's hash changes with it (the backend computes it). */
+ * only the version changes, every handler (global, map override / add) gets `rank: null`, the
+ * 13.6.3 table order, and the flow gets the default `where_budget` (#10). The flow's hash changes
+ * with it (the backend computes it). */
 export function upgradeFlow(data: Record<string, unknown>): Record<string, unknown> {
   if (data.ir !== 1) return data;
   const ranked = (h: unknown) => (isObj(h) && !("rank" in h) ? { ...h, rank: null } : h);
   const out: Record<string, unknown> = { ...data, ir: IR_VERSION };
+  if (!("where_budget" in data)) out.where_budget = WHERE_BUDGET_DEFAULT; // IR 2's #10 field
   if (Array.isArray(data.handlers)) out.handlers = data.handlers.map(ranked);
   const wf = data.workflow;
   if (isObj(wf) && Array.isArray(wf.blocks)) {

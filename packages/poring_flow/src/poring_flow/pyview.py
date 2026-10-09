@@ -463,6 +463,7 @@ def _flow_head(call: ast.Call, ctx: _Ctx, out: dict[str, Any], doc: str | None) 
         "name",
         "description",
         "max_runtime_s",
+        "where_budget",
         "target",
         "assumes",
         "stop_when",
@@ -472,7 +473,7 @@ def _flow_head(call: ast.Call, ctx: _Ctx, out: dict[str, Any], doc: str | None) 
     for k in kw:
         if k not in allowed:
             ctx.err(kw[k], f"flow(...) has no argument {k}")
-    for k in ("ir", "name", "max_runtime_s"):
+    for k in ("ir", "name", "max_runtime_s", "where_budget"):
         if k in kw:
             out[k] = _const(kw[k], ctx)
     if "description" in kw:
@@ -1393,6 +1394,8 @@ def print_flow(flow: ir.Flow, cat: Catalogue | None = None) -> str:
     if flow.description:
         head.append(f"description={_s(flow.description)}")
     head.append(f"max_runtime_s={flow.max_runtime_s}")
+    if flow.where_budget != ir.WHERE_BUDGET_DEFAULT:
+        head.append(f"where_budget={flow.where_budget}")
     wf = flow.workflow
     if wf is not None:
         if wf.run_until_stopped:

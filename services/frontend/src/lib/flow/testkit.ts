@@ -280,6 +280,7 @@ export function randomFlow(seed: number): Flow {
     target: { client: "kro-20211103-prere", server: "lab-rathena", locale: "en", path: "s2" },
     assumes: r.chance(0.3) ? [expr(r, 1, false)] : [],
     max_runtime_s: 3600,
+    where_budget: 12,
     stop_when: r.chance(0.3) ? expr(r, 1, false) : null,
     variables: { POTION: { kind: "lit", value: { kind: "item", id: 9001 } } },
     procedures: { helper: stmts(r, 1, names) },

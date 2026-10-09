@@ -151,6 +151,7 @@ export type Flow = {
   target: Target;
   assumes: Expr[];
   max_runtime_s: number;
+  where_budget: number; // ADR-0020 #10: the run's /where budget (ACTIVE position reads)
   stop_when: Expr | null;
   variables: Record<string, Lit>;
   procedures: Record<string, Stmt[]>;
@@ -164,6 +165,8 @@ export type Flow = {
 // (importer.ts upgradeFlow, the same converter as MW1's ir.upgrade).
 export const IR_VERSION = 2;
 export const MAX_RANK = 99;
+// ADR-0020 #10 (Batt 2026-10-09): MW1's default per-run /where budget (ir.WHERE_BUDGET_DEFAULT).
+export const WHERE_BUDGET_DEFAULT = 12;
 export const NAME = /^[A-Za-z][A-Za-z0-9_]{0,47}$/;
 export const FLOW_NAME = /^[a-z][a-z0-9_]{0,47}$/;
 export const MAP_ID = /^[A-Za-z0-9_@.\-]{1,40}$/;
@@ -233,6 +236,7 @@ export function emptyFlow(name = "new_flow"): Flow {
     target: { client: "kro-20211103-prere", server: "lab-rathena", locale: "en", path: "s2" },
     assumes: [],
     max_runtime_s: 3600,
+    where_budget: WHERE_BUDGET_DEFAULT,
     stop_when: null,
     variables: {},
     procedures: {},

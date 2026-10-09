@@ -3268,6 +3268,13 @@
       "title": "Variables",
       "type": "object"
     },
+    "where_budget": {
+      "default": 12,
+      "maximum": 1000,
+      "minimum": 0,
+      "title": "Where Budget",
+      "type": "integer"
+    },
     "workflow": {
       "anyOf": [
         {

@@ -157,6 +157,7 @@ export type Client = string;
 export type Locale = string;
 export type Path = "s2" | "rdp";
 export type Server = string;
+export type WhereBudget = number;
 export type Name4 = string;
 export type Radius = number;
 /**
@@ -221,6 +222,7 @@ export interface Flow {
   stop_when?: StopWhen;
   target: Target;
   variables?: Variables;
+  where_budget?: WhereBudget;
   workflow?: Workflow | null;
 }
 /**
