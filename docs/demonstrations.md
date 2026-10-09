@@ -3530,6 +3530,37 @@ needs arm A).** Session `20261009T210428-demo-cursor-probe-sword` (`--n 30 --see
   the gate's.
 - Labels, sheets and scores: `/dev/shm/poring-lab-tmp/cursor-acc/armb/` (local).
 
+**➡️ RESULT, BOTH ARMS (2026-10-10 00:45 ICT; scored once as written): FAIL on bar 1 -- for BOTH readers,
+by the client's own cursor animations; bars 2, 3 and 4 MET by the robust reader; the robust reader is
+never worse than the gate. As pre-registered: no switch.**
+- **Arm A** = npc-click@1's probe arm (3.32a): `20261009T220521-demo-npc-click-probe-prontera` (1,517
+  probes) + `20261009T233300-demo-npc-click-probe-prt-church` (566), hover only, safety EMPTY in both
+  (0 attack / contact / pickup / move requests, 0 GM acts).
+- **Truth:** 4,455 images (grab 0 of every crop + every other grab a read came from), shuffled,
+  labelled BLIND by two independent agents with the client's own cursor sprite as the reference:
+  **4,455 / 4,455 agree** (walk 2,325, talk 1,825, noentry 303, warp 2).
+
+| bar | robust (twice) | gate (twice) | verdict |
+|---|---|---|---|
+| 1 SAFETY as written (grab-0 label vs first read; any WALK on another label) | arm B 1 (crop 243); arm A first-read noentry->walk 9, read-twice noentry->walk **3** | arm B 1; arm A first 11, twice **4** | **FAIL (both)** |
+| 1 per image (the label of the exact grab read) | 0 cross-shape, 0 WALK on another label | 0 / 0 | (reported) |
+| 2 TALK, sprite points labelled talk | **590 / 610 = 0.967** (prontera 0.986, church 0.920) | 522 / 610 = 0.856 | MET (>= 0.85) |
+| 3 SWORD, box points labelled sword | **127 / 248 = 0.512** | 17 / 248 = 0.069 | MET (>= 0.40, +0.44) |
+| 4 WALK, arm B controls + arm A cells labelled walk | **621 / 649 = 0.957** | 586 / 649 = 0.903 | MET (>= 0.95, not below the gate) |
+
+- **Why bar 1 fails (the series show it):** the client's NO-ENTRY cursor is an ANIMATION: a red ring
+  and slash drawn over the arrow, growing in, with frames in between that show the BARE ARROW (grab 1 in
+  every one of the three series rendered). A reader that sees such a frame reads WALK, correctly for the
+  pixels; the client means "no entry". When both read groups (grabs 0-2 and 3-5) land on bare-arrow
+  frames, "read twice" passes: 3 times for the robust reader, 4 for the gate, out of 255 no-entry
+  probes. Arm B's crop 243 is the other way round (a Poring passing under the cursor). Neither reader
+  misread a single image (the per-image audit), and the gate fails in exactly the same way.
+- **What it would take (a design change, for Batt; not done):** a WALK verdict that covers the cursor's
+  animation period (e.g. no non-WALK shape on ANY of the 6 grabs, or a longer series), re-measured under
+  a new pre-registration. The walk rules already add the walk MARKER condition (no marker on a
+  non-walkable cell), which refuses these clicks; the npc-click test's gate is cursor-only.
+- **Consequence today:** the live gate stays v3 (it was never changed); cursor_robust stays a candidate.
+
 ### 3.34 learn_skill@1 -- spend skill points in the skill window (DESIGN 2026-10-09 ~19:50; NOT pre-registered; Batt ~19:30: "add the new skill the job change needs: allocating skill points (Basic Skill > 8) via the skill window, as an L1 concept with its own alone-test")
 **The concept:** `char.learn_skill` (L1, packages/poring_skills, updated): the first workflow's
 Merchant change needs the novice's Basic Skill above 8 (labels-v2-plan section 7.4).
