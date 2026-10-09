@@ -3430,6 +3430,20 @@ SAFETY check at the merged commit, not a fresh test; stage 2 is the fresh test.
   another label** in all three sets. One error FAILS stage 1: no live run uses the robust reader's
   output for anything but the record.
 - **Reported:** read / unknown / wrong per shape for both readers, as cursor-robust.md 3.
+- ➡️ **STAGE 1 RESULT (2026-10-09 21:06-21:45 ICT, scored once as written; code at aab9c7f =
+  cursor_robust.py / cursor_eval.py b4b7b2f; outputs /dev/shm/poring-lab-tmp/cursor-acc/stage1/):
+  PASS.**
+
+  | set | reads | robust: wrong / false WALK / unknown | gate: wrong / false WALK / unknown |
+  |---|---|---|---|
+  | (a) 78 banked crops (twice-labelled) | 78 | 0 / 0 / 11 (walk 60/71, talk 3/3, sword 3/3, warp 1/1) | 0 / 0 / 18 (walk 54/71, talk 3/3, sword 3/3, warp 0/1) |
+  | (b) leave-one-out, 61 conditions | 18,469 | 0 / 0 / 2,415 | 0 / 0 / 9,078 |
+  | (c) leave-neighbours-out (3), 15 conditions | 3,795 | 0 / 0 / 371 | 0 / 0 / 1,612 |
+
+  - (b)'s count differs from the design-time 15,433 (cursor-robust.md 1.3): this run used the
+    defaults as written (walk sample 100, every condition); the bar holds on all of them.
+  - As stated above, this is a reproducibility and safety check on seen data; the fresh test is
+    stage 2.
 
 **STAGE 2 -- live, both readers on the same grabs (fresh data).** Cursor-robust.md section 5's
 draft, adopted as written, with these values:
