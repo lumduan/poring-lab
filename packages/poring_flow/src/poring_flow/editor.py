@@ -90,6 +90,7 @@ def catalogue_doc(
         "windows": windows,
         "outcomes": list(ir.OUTCOMES),
         "classes": list(ir.CLASSES),
+        "ranks": {"default": dict(ir.DEFAULT_RANK), "user": ir.USER_RANK, "max": ir.MAX_RANK},
         "safety_critical": list(ir.SAFETY_CRITICAL),
         "limits": {"json_bytes": ir.MAX_JSON_BYTES, "json_depth": ir.MAX_JSON_DEPTH},
     }
@@ -126,6 +127,7 @@ def effective_doc(flow: ir.Flow) -> dict[str, list[dict[str, Any]]]:
                 "key": e.key,
                 "state": e.state,
                 "priority": e.handler.priority,
+                "rank": ir.rank_of(e.handler),  # inside the class (IR 2, #13)
                 "mode": e.handler.mode,
                 "label": e.label,
                 "active": e.active,

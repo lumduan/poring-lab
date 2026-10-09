@@ -1041,6 +1041,20 @@
           "title": "Priority",
           "type": "string"
         },
+        "rank": {
+          "anyOf": [
+            {
+              "maximum": 99,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rank"
+        },
         "rearm": {
           "anyOf": [
             {
@@ -3031,7 +3045,7 @@
       "type": "array"
     },
     "ir": {
-      "const": 1,
+      "const": 2,
       "title": "Ir",
       "type": "integer"
     },

@@ -89,6 +89,11 @@ def weakened(ctx: Ctx, consts: Consts, h: ir.Handler, d: ir.Handler) -> list[str
         out.append(f"{k} is safety-critical: its class is critical, not {h.priority}")
     if h.mode != "preempt":
         out.append(f"{k} is safety-critical: it pre-empts")
+    if h.rank is not None and h.rank != ir.DEFAULT_RANK[k]:
+        out.append(
+            f"{k} is safety-critical: its rank is fixed ({ir.DEFAULT_RANK[k]}, 13.6.3), not "
+            f"{h.rank}"
+        )
     if h.then not in (d.then, "stop"):
         out.append(f"{k} is safety-critical: then is {d.then} or stop, not {h.then}")
     if h.when != d.when:

@@ -20,7 +20,7 @@ TARGET = {"client": "kro-20211103-prere", "server": "lab-rathena", "locale": "en
 
 def plain(*main: dict[str, Any], **over: Any) -> dict[str, Any]:
     return {
-        "ir": 1,
+        "ir": 2,
         "name": "t",
         "target": TARGET,
         "max_runtime_s": 600,

@@ -20,7 +20,7 @@ DOC = ROOT / "docs" / "planning" / "training-cost.md"
 # Two map blocks on the Byalan maps that TARGET only two of the seven species (13.3's example).
 BYALAN = """\
 flow(
-    ir=1,
+    ir=2,
     name="byalan_loop",
     max_runtime_s=7200,
     run_until_stopped=True,

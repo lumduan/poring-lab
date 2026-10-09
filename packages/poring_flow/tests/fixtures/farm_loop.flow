@@ -1,5 +1,5 @@
 flow(
-    ir=1,
+    ir=2,
     name="farm_loop",
     max_runtime_s=14400,
     run_until_stopped=True,

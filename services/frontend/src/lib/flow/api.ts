@@ -25,6 +25,7 @@ export interface EffectiveEvent {
   key: string;
   state: "built_in" | "inherited" | "overridden" | "extended" | "disabled" | "added";
   priority: string;
+  rank: number; // the effective rank inside the class (IR 2, ADR-0020 #13)
   mode: string;
   label: string;
   active: boolean;

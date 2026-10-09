@@ -90,7 +90,7 @@ export function InspectPanel({
           ))}
           {flow.handlers.map((h) => (
             <li key={h.name} className="rounded border border-neutral-800 p-1.5">
-              <b>{h.name}</b> · {h.priority} · {h.mode} · then {h.then}
+              <b>{h.name}</b> · {h.priority}{h.rank === null ? "" : ` rank ${h.rank}`} · {h.mode} · then {h.then}
               {sim && <div className="text-fuchsia-300">{runLine(sim.trace.nodes[`${h.name}.0`]) || "did not fire"}</div>}
             </li>
           ))}
@@ -198,7 +198,7 @@ function BlockInspector({
               <tr key={e.key} className={e.active ? "" : "text-neutral-500 line-through"}>
                 <td>{e.safety_critical ? "(locked) " : ""}{e.key}</td>
                 <td>{e.state === "built_in" ? "built in" : e.state}{e.built_in && e.state !== "built_in" ? " (built in)" : ""}</td>
-                <td>{e.priority}</td>
+                <td>{e.priority} · rank {e.rank}</td>
                 <td>{e.mode}</td>
               </tr>
             ))}

@@ -104,6 +104,7 @@ export type Handler = {
   until: Expr | null;
   rearm: Expr | null;
   priority: Priority;
+  rank: number | null; // IR 2 (ADR-0020 #13): the rank inside the class; null = 13.6.3's table order
   mode: "insert" | "preempt";
   escalate: string | null;
   max_insert_fails: number;
@@ -144,7 +145,7 @@ export type Workflow = {
 };
 export type Target = { client: string; server: string; locale: string; path: "s2" | "rdp" };
 export type Flow = {
-  ir: 1;
+  ir: 2;
   name: string;
   description: string;
   target: Target;
@@ -159,6 +160,10 @@ export type Flow = {
 };
 
 // MW1's constants (ir.py): names, limits and the safety-critical set, fixed in code.
+// IR 2 (Batt 2026-10-09, ADR-0020 contradictions #13): Handler.rank. IR 1 converts on import
+// (importer.ts upgradeFlow, the same converter as MW1's ir.upgrade).
+export const IR_VERSION = 2;
+export const MAX_RANK = 99;
 export const NAME = /^[A-Za-z][A-Za-z0-9_]{0,47}$/;
 export const FLOW_NAME = /^[a-z][a-z0-9_]{0,47}$/;
 export const MAP_ID = /^[A-Za-z0-9_@.\-]{1,40}$/;
@@ -222,7 +227,7 @@ export function exitOf(kind: AuthoredExit, to_block: string, to_entry: string): 
 
 export function emptyFlow(name = "new_flow"): Flow {
   return {
-    ir: 1,
+    ir: IR_VERSION,
     name,
     description: "",
     target: { client: "kro-20211103-prere", server: "lab-rathena", locale: "en", path: "s2" },

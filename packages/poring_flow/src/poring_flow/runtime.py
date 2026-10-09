@@ -15,9 +15,11 @@ The rules it implements (each table-tested in tests/test_runtime.py):
   `cooldown_s` has passed; a repeating event (`until`) runs its body again while it is on, paced by
   `cooldown_s` and `max_per_min`, until `until` holds;
 - a PRE-EMPT event halts anything of a strictly LOWER class at once (an atomic section ends
-  first); equal classes queue, first in first out, de-duplicated; ReleaseAll precedes the
-  handler's first batch; afterwards `then` decides (resume restarts the interrupted block from its
-  start, skip_block fails it, restart_flow, relocate, stop);
+  first); equal classes queue, de-duplicated, ordered by RANK inside the class (IR 2, Batt
+  2026-10-09, contradictions #13: the safety-critical three first, then `ir.rank_of`), first in
+  first out only between equal ranks; ReleaseAll precedes the handler's first batch; afterwards
+  `then` decides (resume restarts the interrupted block from its start, skip_block fails it,
+  restart_flow, relocate, stop); waiting inserts are taken in the same order;
 - an INSERT event runs at the running flow's next SAFE POINT (between two ticks, never inside an
   atomic section); the block it suspended continues at its next tick, not restarted; ReleaseAll
   first only if something is held; a failed insert counts toward `max_insert_fails`, then its
@@ -43,8 +45,18 @@ from poring_flow.catalogue import Catalogue, catalogue
 from poring_flow.effective import Effective, global_set, merge
 
 TICK_S = 0.1
-RANK = {"critical": 0, "survival": 1, "upkeep": 2}
+RANK = {"critical": 0, "survival": 1, "upkeep": 2}  # the CLASS level (lower runs first)
 MAIN_RANK = 3
+
+
+def queue_key(e: Effective) -> tuple[int, int, int]:
+    """Where a due event sits in the queue: its class, the safety-critical lead, its rank inside
+    the class (#13). Ties keep their arrival order (FIFO only between equal ranks)."""
+    h = e.handler
+    lead = ir.SAFETY_CRITICAL.index(e.key) if e.key in ir.SAFETY_CRITICAL else 3
+    return (RANK[h.priority], lead, ir.rank_of(h))
+
+
 Outcome = str  # ok | failed | interrupted | ...
 
 
@@ -172,7 +184,9 @@ class Sim:
         self.block = flow.workflow.start_block if flow.workflow else ""
         self.held = False
         self.expect_map_change = False
-        self.queue: list[tuple[int, int, str]] = []  # (rank, seq, key) pre-empts waiting
+        # pre-empts waiting: (class, safety lead, rank, seq, key) -- sorted, so FIFO by seq only
+        # between events of equal rank (#13)
+        self.queue: list[tuple[int, int, int, int, str]] = []
         self.inserts: list[str] = []
         self.seq = 0
         self.stack: list[_Frame] = []
@@ -491,7 +505,7 @@ class Sim:
 
     def _waiting(self) -> set[str]:
         running = {f.event.key for f in self.stack if f.event is not None}
-        return {k for _, _, k in self.queue} | set(self.inserts) | running
+        return {q[-1] for q in self.queue} | set(self.inserts) | running
 
     def _fire(self, e: Effective) -> None:
         s = self._st(e.key)
@@ -512,7 +526,7 @@ class Sim:
                 self.inserts.append(e.key)
         elif e.key not in self._waiting():
             self.seq += 1
-            self.queue.append((RANK[h.priority], self.seq, e.key))
+            self.queue.append((*queue_key(e), self.seq, e.key))
 
     def _event(self, key: str) -> Effective | None:
         return next((e for e in self.tree.active(self.block) if e.key == key), None)
@@ -534,9 +548,9 @@ class Sim:
         if not self.queue or (self.stack and self.stack[-1].atomic):
             return
         self.queue.sort()
-        rank, _, key = self.queue[0]
+        rank, key = self.queue[0][0], self.queue[0][-1]
         if rank >= self._top_rank():
-            return  # equal or lower: it queues (2.5 rule 4)
+            return  # equal or lower CLASS: it queues (2.5 rule 4), in rank order (#13)
         self.queue.pop(0)
         e = self._event(key)
         if e is None:
@@ -555,7 +569,10 @@ class Sim:
         """At a safe point: between ticks, never inside an atomic section (13.6.4)."""
         if not self.inserts or (self.stack and self.stack[-1].atomic):
             return
-        for key in list(self.inserts):
+        order = {e.key: queue_key(e) for e in self.tree.active(self.block)}
+        far = (len(RANK), 0, 0)
+        # by class and rank (#13); the sort is stable, so equal ranks stay first in, first out
+        for key in sorted(self.inserts, key=lambda k: order.get(k, far)):
             e = self._event(key)
             if e is None:  # not effective on this block any more
                 self.inserts.remove(key)

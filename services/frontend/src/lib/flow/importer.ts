@@ -2,7 +2,7 @@
 // size, nesting depth (a linear scan, as MW1's ir._depth), JSON, the top-level shape — and then the
 // backend's /flows/lint validates it against MW1's schema. Nothing is evaluated.
 import type { Flow } from "./ir.ts";
-import { FLOW_NAME, MAX_JSON_BYTES, MAX_JSON_DEPTH } from "./ir.ts";
+import { FLOW_NAME, IR_VERSION, MAX_JSON_BYTES, MAX_JSON_DEPTH } from "./ir.ts";
 
 export type ImportResult = { ok: true; flow: Flow } | { ok: false; errors: string[] };
 
@@ -29,6 +29,28 @@ export function jsonDepth(text: string): number {
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 
+/** The IR 1 -> IR 2 converter (ADR-0020 section 1 + contradictions #13), as MW1's `ir.upgrade`:
+ * only the version changes, and every handler (global, map override / add) gets `rank: null`, the
+ * 13.6.3 table order. The flow's hash changes with it (the backend computes it). */
+export function upgradeFlow(data: Record<string, unknown>): Record<string, unknown> {
+  if (data.ir !== 1) return data;
+  const ranked = (h: unknown) => (isObj(h) && !("rank" in h) ? { ...h, rank: null } : h);
+  const out: Record<string, unknown> = { ...data, ir: IR_VERSION };
+  if (Array.isArray(data.handlers)) out.handlers = data.handlers.map(ranked);
+  const wf = data.workflow;
+  if (isObj(wf) && Array.isArray(wf.blocks)) {
+    out.workflow = {
+      ...wf,
+      blocks: wf.blocks.map((b) =>
+        isObj(b) && Array.isArray(b.events)
+          ? { ...b, events: b.events.map((ev) => (isObj(ev) && isObj(ev.event) ? { ...ev, event: ranked(ev.event) } : ev)) }
+          : b,
+      ),
+    };
+  }
+  return out;
+}
+
 export function importFlow(text: string): ImportResult {
   const bytes = new TextEncoder().encode(text).length;
   if (bytes > MAX_JSON_BYTES) return { ok: false, errors: [`the file is ${bytes} bytes; at most ${MAX_JSON_BYTES}`] };
@@ -41,7 +63,11 @@ export function importFlow(text: string): ImportResult {
   }
   const errors: string[] = [];
   if (!isObj(data)) return { ok: false, errors: ["a flow is a JSON object"] };
-  if (data.ir !== 1) errors.push("ir: only IR version 1 is supported");
+  if (data.ir !== 1 && data.ir !== IR_VERSION) {
+    const shown = (JSON.stringify(data.ir) ?? "?").slice(0, 20);
+    errors.push(`ir: IR version ${shown} is not supported: this editor reads IR ${IR_VERSION} (and converts IR 1)`);
+  }
+  data = upgradeFlow(data);
   if (typeof data.name !== "string" || !FLOW_NAME.test(data.name)) errors.push("name: lower-case letters, digits and _");
   if (!isObj(data.target)) errors.push("target: missing");
   const hasMain = Array.isArray(data.main);

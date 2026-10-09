@@ -35,7 +35,7 @@ from flow_synthetic import (  # noqa: E402
 
 FARM = (FIXTURES / "farm_loop.flow").read_text()
 HEAD = (
-    'flow(ir=1, name="t", max_runtime_s=600, target=target(client="kro-20211103-prere", '
+    'flow(ir=2, name="t", max_runtime_s=600, target=target(client="kro-20211103-prere", '
     'server="lab-rathena", locale="en", path=S2))\n'
 )
 BOX = ((160, 200, 180, 200), (160, 220, 180, 220), (160, 200, 160, 220), (180, 200, 180, 220))
@@ -128,7 +128,7 @@ SIT = {"kind": "action", "block": "sit", "concept": "char.sit", "timeout_s": 5}
 
 def irflow(*main: dict[str, Any], **over: Any) -> Callable[[], ir.Flow]:
     return lambda: ir.validate(
-        {"ir": 1, "name": "t", "target": TARGET, "max_runtime_s": 600, "main": list(main), **over}
+        {"ir": 2, "name": "t", "target": TARGET, "max_runtime_s": 600, "main": list(main), **over}
     )
 
 

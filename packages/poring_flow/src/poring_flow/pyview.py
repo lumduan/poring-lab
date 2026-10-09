@@ -940,6 +940,7 @@ HANDLER_KW = (
     "until",
     "rearm",
     "priority",
+    "rank",  # IR 2 (#13): the rank inside the class; left out = 13.6.3's table order
     "mode",
     "then",
     "escalate",
@@ -1327,6 +1328,8 @@ def _on_args(h: ir.Handler, cat: Catalogue) -> list[str]:
     if h.rearm is not None:
         args.append(f"rearm={expr_src(h.rearm, cat)}")
     args.append(f"priority={CONST_OF[h.priority]}")
+    if h.rank is not None:
+        args.append(f"rank={h.rank}")
     if h.mode != "preempt":
         args.append(f"mode={CONST_OF[h.mode]}")
     if h.then != "resume":

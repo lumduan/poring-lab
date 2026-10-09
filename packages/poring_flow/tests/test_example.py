@@ -69,16 +69,19 @@ def test_the_merged_details_follow_the_table() -> None:
     assert eng is not None and eng.label == "farm_engagement" and eng.handler.then == "relocate"
     boss = m.by_key("boss_seen")
     assert boss is not None and boss.source == "map" and boss.handler.then == "relocate"
-    # order: class first; inside critical dead > hp_critical > unexpected_map (13.6.3)
+    # order: class first; inside critical dead > hp_critical > unexpected_map (13.6.3); then the
+    # RANK inside the class (IR 2, Batt 2026-10-09, #13): unintended_engagement (4) before hp_low
+    # (5), boss_seen last (a user event: 50), although hp_low is declared first
     assert [e.key for e in m.active()] == [
         "dead",
         "hp_critical",
         "unexpected_map",
-        "hp_low",
         "unintended_engagement",
+        "hp_low",
         "boss_seen",
         "weight",
     ]
+    assert [ir.rank_of(e.handler) for e in m.active()] == [1, 2, 3, 4, 5, 50, 6]
     # dead keeps 1 per run everywhere
     assert all(merge(flow, b).by_key("dead").max_per_run == 1 for b in (town, relay, farm))  # type: ignore[union-attr]
 
@@ -128,12 +131,12 @@ EXPECTED = sorted(
         # 13.6.9 ties on different sensors queue (2.5 rule 4): a WARNING each
         (
             "warning",
-            "global: hp_low and unintended_engagement are both survival on different sensors: "
+            "global: unintended_engagement and hp_low are both survival on different sensors: "
             "they queue",
         ),
         (
             "warning",
-            "farm: hp_low and unintended_engagement are both survival on different sensors: "
+            "farm: unintended_engagement and hp_low are both survival on different sensors: "
             "they queue",
         ),
         (

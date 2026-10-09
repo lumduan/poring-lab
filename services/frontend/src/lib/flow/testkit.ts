@@ -239,6 +239,7 @@ export function handler(r: Rng, name: string, blocks: string[]): Handler {
     until,
     rearm: until === null && r.chance(0.5) ? expr(r, 1) : null,
     priority: r.pick(["critical", "survival", "upkeep"] as const),
+    rank: r.chance(0.3) ? r.int(1, 99) : null,
     mode: r.pick(["insert", "preempt"] as const),
     escalate: r.chance(0.2) ? "helper" : null,
     max_insert_fails: r.int(1, 10),
@@ -273,7 +274,7 @@ export function randomFlow(seed: number): Flow {
   });
   const plain = r.chance(0.2);
   return {
-    ir: 1,
+    ir: 2,
     name: `random_${seed}`,
     description: r.pick(TEXTS),
     target: { client: "kro-20211103-prere", server: "lab-rathena", locale: "en", path: "s2" },

@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from flow_synthetic import farm_flow  # noqa: E402
 
 HEAD = (
-    'flow(ir=1, name="t", max_runtime_s=600, target=target(client="kro-20211103-prere", '
+    'flow(ir=2, name="t", max_runtime_s=600, target=target(client="kro-20211103-prere", '
     'server="lab-rathena", locale="en", path=S2))\n'
 )
 WALK = 'walk_to(cell("m", 10, 10))\n'

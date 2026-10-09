@@ -135,7 +135,12 @@ function eventRow(ev: MapEvent): { mode: string; key: string; detail: string } {
   if (ev.kind === "disable") return { mode: "DISABLE", key: ev.key, detail: "" };
   if (ev.kind === "extend") return { mode: "EXTEND", key: ev.key, detail: `${ev.steps.length} step(s)` };
   const h = ev.event;
-  return { mode: ev.kind === "override" ? "OVERRIDE" : "ADD", key: h.name, detail: `${h.priority} · ${h.mode}` };
+  return { mode: ev.kind === "override" ? "OVERRIDE" : "ADD", key: h.name, detail: `${h.priority}${rankText(h.rank)} · ${h.mode}` };
+}
+
+/** An explicit rank inside the class (IR 2, ADR-0020 #13); none shown = 13.6.3's table order. */
+function rankText(rank: number | null): string {
+  return rank === null ? "" : ` rank ${rank}`;
 }
 
 function EventsNode({ data }: NodeProps<EventsNodeT>) {
@@ -149,7 +154,7 @@ function EventsNode({ data }: NodeProps<EventsNodeT>) {
           ...data.handlers.map((h) => ({
             mode: "GLOBAL",
             key: h.name,
-            detail: `${h.priority} · ${h.mode} · then ${h.then}${SAFETY_CRITICAL.includes(h.name) ? " · stricter only" : ""}`,
+            detail: `${h.priority}${rankText(h.rank)} · ${h.mode} · then ${h.then}${SAFETY_CRITICAL.includes(h.name) ? " · stricter only" : ""}`,
           })),
         ]
       : data.events.map(eventRow);

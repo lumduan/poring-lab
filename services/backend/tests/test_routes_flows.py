@@ -99,6 +99,19 @@ def test_catalogue_and_sample(make: Make) -> None:
     assert {n["key"] for n in w["maps"]["town_1"]["npcs"]} == {"n_kafra", "n_guide", "n_warper"}
 
 
+def test_an_ir_1_flow_is_converted_not_refused(make: Make) -> None:
+    """IR 2 (ADR-0020 contradictions #13, Batt 2026-10-09): an IR 1 body (an older browser tab or
+    an exported file) is converted on load; the hash is the converted flow's."""
+    client = make()
+    flow = sample()
+    ir1 = {**flow, "ir": 1, "handlers": [
+        {k: v for k, v in h.items() if k != "rank"} for h in flow["handlers"]]}  # fmt: skip
+    a = post(client, "lint", {"flow": ir1, "world": "sample"})
+    b = post(client, "lint", {"flow": flow, "world": "sample"})
+    assert a.status_code == b.status_code == 200, a.text
+    assert a.json()["flow_hash"] == b.json()["flow_hash"]
+
+
 def test_lint_simulate_python(make: Make) -> None:
     client = make()
     flow = sample()
@@ -184,10 +197,12 @@ def test_hostile_bodies(make: Make) -> None:
     raw = {**hdr(client), "content-type": "application/json"}
     r = client.post("/flows/lint", content=b"{not json", headers=raw)
     assert r.status_code == 422 and r.json()["detail"]["reason"] == "invalid_body"
-    bad = {**sample(), "ir": 2}
+    bad = {**sample(), "ir": 3}
     r = post(client, "lint", {"flow": bad})
     assert r.status_code == 422 and r.json()["detail"]["reason"] == "invalid_flow"
-    assert any("ir" in m for m in r.json()["detail"]["errors"])
+    assert r.json()["detail"]["errors"] == [
+        "flow: ir: IR version 3 is not supported: this engine reads IR 2 (and converts IR 1)"
+    ]
     r = post(client, "lint", {"flow": sample(), "world": "/etc"})
     assert r.json()["detail"]["reason"] == "invalid_body"
     r = post(client, "simulate", {"flow": sample(), "scenario": {"horizon_s": 1e9}})

@@ -98,6 +98,12 @@ The hard lines of ADR-0015 hold without change:
 - **Typed.** Parameters are typed references (section 4), never free strings where a list exists.
 - **Versioned.** `ir: 1`. A breaking change is a new version with a converter, never a silent edit
   (the ADR-0012 rule for keys, applied to flows).
+  ➡️ **IR 2 since 2026-10-09** (Batt, contradictions #13): `Handler.rank`, the rank inside an event
+  class (13.6.3). IR 1 converts on load (`poring_flow.ir.upgrade`, and the editor's importer): the
+  version becomes 2 and every handler's rank is left at its default, 13.6.3's table order; the
+  converted flow has a new hash (no flow had been approved). Any other version is refused with a
+  message. The examples below that say `ir=1` load converted. "IR 2" in contradictions #19 (a route
+  crossing maps) now means a LATER version.
 - **Canonical form and hash.** Canonical JSON (sorted keys, no insignificant whitespace, UTF-8,
   NFC). `flow_hash` = sha256 of it. Approval, run logs and progress messages cite the hash.
 - **Node ids are structural paths** (`main.2.then.0`, `handlers.1.body.0`), computed by the
@@ -485,6 +491,11 @@ weight above N % → go and sell. The rules are fixed here so that a flow means 
 4. **Who pre-empts whom.** A firing handler pre-empts anything of a strictly LOWER class. Equal
    classes never pre-empt each other: they queue (first in, first out, de-duplicated). While a
    handler runs, its own class and lower ones queue; a guard pre-empts everything.
+   ➡️ **DECIDED 2026-10-09 (Batt, contradictions #13):** the queue inside a class is ordered by an
+   explicit RANK (`rank`, IR 2), defaulting to 13.6.3's table order (`unintended_engagement` before
+   `hp_low`: stop the fight before drinking). First in, first out applies only between events of
+   EQUAL rank (two user events left at the default, for instance). A safety pair never depends on
+   arrival order. The rank orders the queue only: equal classes still never pre-empt each other.
 5. **Where a block may be stopped.** Each block declares a profile:
    - `anywhere` (the default for task-level blocks: walking, the attack loop): halted between
      fast-loop ticks;
@@ -1348,6 +1359,9 @@ For the current map block B, in this order:
      OVERRIDE, so only a hand-written IR can hit this).
 3. Order the result by class: guard > critical > survival > upkeep > the main flow. Inside
    `critical`, `dead` comes before `unexpected_map`. Other equal-class events queue (2.5 rule 4).
+   ➡️ Inside a class, by RANK (Batt 2026-10-09, contradictions #13; 13.6.3): the safety-critical
+   three lead `critical` in their fixed order, then the rank, then the declaration order for equal
+   ranks.
 4. **Ties are a lint ERROR:** two effective events of one class whose conditions can hold together
    on the same sensor.
 
@@ -1375,6 +1389,17 @@ For the current map block B, in this order:
   Wing keeps the map.
 - These defaults hold on every map unless a map OVERRIDE changes a class. The linter WARNS on any
   change (13.6.9). The safety-critical rows cannot change.
+- ➡️ **DECIDED 2026-10-09 (Batt, contradictions #13): an explicit RANK inside each class.**
+  - Every event has a `rank` (IR 2; 1..99, a lower rank runs first). Left out, it is this table's
+    order: `dead` 1, `hp_critical` 2, `unexpected_map` 3, `unintended_engagement` 4, `hp_low` 5,
+    `weight` 6; any other key 50, after the table's events of its class.
+  - So `unintended_engagement` runs before `hp_low` when both wait (stop the fight before
+    drinking), whatever their arrival order. First in, first out only between events of equal
+    rank.
+  - The safety-critical ranks are fixed (writing another one is a lint ERROR, 13.6.9); they lead
+    `critical` whatever a user event's rank.
+  - The queue of the simulated executor follows it (`runtime.queue_key`), and so do waiting
+    inserts; the effective sets (13.6.2) are listed in this order.
 
 #### 13.6.4 INSERT or PRE-EMPT
 
@@ -1630,7 +1655,7 @@ not a warning), they win.
 | hysteresis pair (`until` or `rearm`) | ERROR unless the stop threshold lies BEYOND the start threshold, on the far side: `hp < 50` with `until hp > 80` is valid; `until hp > 40` is INVERTED (both hold between 40 and 50, so the event flaps). ERROR when the stop can never hold (`hp > 100`). WARNING when the band is narrower than the readout's resolution | "hp_low: until hp_percent() > 40 overlaps when hp_percent() < 50: the stop threshold must exceed 50" |
 | same direction | ERROR: start and stop compare the same way, so the stop never ends the event (`weight >= 90` until `weight > 95`) | "weight: until weight_percent() > 95 does not end weight_percent() >= 90: the stop must lie below 90" |
 | ties | ERROR: two effective events of one class on overlapping conditions of the same sensor (13.6.2 step 4). WARNING for different sensors (they queue, 2.5 rule 4) | "farm: hp_low and hp_panic are both survival on hp_percent() < 30" |
-| safety-critical | ERROR: a DISABLE or OVERRIDE of `dead`, `hp_critical` or `unexpected_map`; ~~any of them missing from the global set~~ ➡️ **not weakened** (Batt 2026-10-09, contradictions #15: the compiler adds a missing one, 13.6.8): a written one weaker than the built-in in class, mode, `then`, trigger, re-arm, limits or body; an extension that tries to loosen a limit | "town: dead is safety-critical: it can be extended, never disabled"; "dead: dead is safety-critical: max_per_run 3 loosens the built-in 1: it may only be tightened" |
+| safety-critical | ERROR: a DISABLE or OVERRIDE of `dead`, `hp_critical` or `unexpected_map`; ~~any of them missing from the global set~~ ➡️ **not weakened** (Batt 2026-10-09, contradictions #15: the compiler adds a missing one, 13.6.8): a written one weaker than the built-in in class, mode, `then`, trigger, re-arm, limits or body, or with a rank other than its fixed one (#13, 13.6.3); an extension that tries to loosen a limit | "town: dead is safety-critical: it can be extended, never disabled"; "dead: dead is safety-critical: max_per_run 3 loosens the built-in 1: it may only be tightened" |
 | scope | ERROR: an OVERRIDE, EXTEND or DISABLE of a key that is not global; an ADD of a key that is; two map events on one key | "relay: extend weight_low: there is no global event weight_low" |
 | class change | WARNING on any map OVERRIDE that changes a class | "farm: hp_low moved from survival to upkeep: weight no longer waits for it" |
 | looser on a harder map | WARNING, acknowledged at approval: a map OVERRIDE that fires later, stops earlier or allows more (a lower HP start or stop, a higher weight, a higher death count, a longer cooldown) on a HARDER map. **A map is HARDER, from its L3 sheet, when** it spawns an aggressive species (mob_db `ai`), it has a boss spawn line, or its highest spawn level exceeds the character's base level (from `assumes`; skipped, and said so, when unknown) | "farm: hp_low < 30 is looser than the global < 50, and map_3 spawns an aggressive species (mob 9105)" |

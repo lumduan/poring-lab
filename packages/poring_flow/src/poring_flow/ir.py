@@ -24,6 +24,17 @@ Deviations from the ADR's illustrative sketch (each one reported, none decided s
 - `Override`, `Extend` and `Add` carry an optional `label`: the Python view's function name
   (`farm_hp_low`), which is also the event's node path;
 - `until` and `rearm` are exclusive (13.6.7: `until` for repeating events, `rearm` for one-shot).
+
+IR VERSIONS (section 1: "a breaking change is a new version with a converter, never a silent
+edit"):
+- IR 2 (Batt 2026-10-09, contradictions #13): `Handler.rank`, an explicit rank INSIDE an event
+  class. `None` means 13.6.3's table order (`DEFAULT_RANK`: unintended_engagement 4 before hp_low
+  5, ...; any other key `USER_RANK`). Equal classes still never pre-empt each other: the rank
+  orders their queue, and only events of equal rank queue first in, first out.
+- IR 1 is CONVERTED on load (`upgrade`): every handler gets `rank: None`, nothing else changes. Its
+  meaning changes (equal-class events were FIFO only), so the converted flow is IR 2 and its hash
+  is a new one (no flow was approved under IR 1: MW2 runs nothing). Any other version is refused
+  with a message naming the versions this engine reads.
 """
 
 from __future__ import annotations
@@ -44,7 +55,7 @@ NAME = r"^[A-Za-z][A-Za-z0-9_]{0,47}$"  # ASCII only (7.2: identifier normalisat
 FLOW_NAME = r"^[a-z][a-z0-9_]{0,47}$"
 MAP_ID = r"^[A-Za-z0-9_@.\-]{1,40}$"
 KEY = r"^[A-Za-z0-9_.\-]{1,64}$"  # an L3 / L4 key
-IR_VERSION = 1
+IR_VERSION = 2  # IR 1 converts on load (`upgrade`); see the module docstring
 MAX_RUNTIME_S = 86_400  # PROVISIONAL: the bound is open question 8
 MAX_STR = 200
 MAX_LIST = 100
@@ -53,6 +64,19 @@ MAX_JSON_DEPTH = 256
 # Fixed in code, never user-editable (13.6.1; hp_critical added by Batt, 2026-10-08, Q29).
 SAFETY_CRITICAL = ("dead", "hp_critical", "unexpected_map")  # in their critical order (13.6.3)
 CLASSES = ("critical", "survival", "upkeep")  # highest first; the built-in guards sit above
+# The rank INSIDE a class (Batt 2026-10-09, contradictions #13): 13.6.3's table order by default;
+# a lower rank runs first. The safety-critical three always lead their class in this order (13.6.2
+# step 3) and their rank is fixed; any other key defaults to USER_RANK, after the table's events.
+DEFAULT_RANK = {
+    "dead": 1,
+    "hp_critical": 2,
+    "unexpected_map": 3,
+    "unintended_engagement": 4,
+    "hp_low": 5,
+    "weight": 6,
+}
+USER_RANK = 50
+MAX_RANK = 99
 OUTCOMES = ("ok", "failed", "unsupported", "interrupted", "refused")
 
 Int = Annotated[int, Field(ge=-1_000_000_000, le=1_000_000_000)]
@@ -359,6 +383,8 @@ class Handler(BaseModel):
     until: Expr | None = None  # STOP: the body repeats until it holds (the hysteresis pair)
     rearm: Expr | None = None  # one-shot events (2.5)
     priority: Literal["critical", "survival", "upkeep"]
+    # IR 2: the rank inside the class (lower first); None = 13.6.3's table order (`rank_of`)
+    rank: int | None = Field(default=None, ge=1, le=MAX_RANK)
     mode: Literal["insert", "preempt"] = "preempt"
     escalate: str | None = Field(default=None, pattern=NAME)  # insert: a procedure, as a pre-empt
     max_insert_fails: int = Field(default=3, ge=1, le=10)
@@ -376,6 +402,11 @@ class Handler(BaseModel):
         if self.escalate is not None and self.mode != "insert":
             raise ValueError("escalate belongs to an insert event")
         return self
+
+
+def rank_of(h: Handler) -> int:
+    """A handler's rank inside its class: its own, else 13.6.3's table order (#13)."""
+    return h.rank if h.rank is not None else DEFAULT_RANK.get(h.name, USER_RANK)
 
 
 class Override(BaseModel):  # map scope: replaces the global event of the same key
@@ -466,7 +497,7 @@ class Target(BaseModel):
 
 class Flow(BaseModel):
     model_config = CFG
-    ir: Literal[1]
+    ir: Literal[2]  # IR 1 converts on load (`upgrade`)
     name: str = Field(pattern=FLOW_NAME)
     description: str = Field(default="", max_length=500)
     target: Target
@@ -763,7 +794,28 @@ def from_json(raw: str | bytes) -> Flow:
     return validate(_nfc(data))
 
 
+def upgrade(data: Any) -> Any:
+    """The IR 1 -> IR 2 converter (section 1; #13): only the version changes, and every handler's
+    rank is left out, which IR 2 reads as 13.6.3's table order (`rank: None`). Another version is
+    refused with a message; a non-dict is left to the schema."""
+    if not isinstance(data, dict) or "ir" not in data:
+        return data
+    v = data["ir"]
+    if v == IR_VERSION and not isinstance(v, bool):
+        return data
+    if v == 1 and not isinstance(v, bool):
+        return {**data, "ir": IR_VERSION}
+    shown = json.dumps(v)[:20] if isinstance(v, str | int | float | bool) or v is None else "?"
+    raise FlowError(
+        [
+            f"flow: ir: IR version {shown} is not supported: this engine reads IR "
+            f"{IR_VERSION} (and converts IR 1)"
+        ]
+    )
+
+
 def validate(data: Any) -> Flow:
+    data = upgrade(data)
     try:
         return Flow.model_validate(data)
     except ValidationError as e:

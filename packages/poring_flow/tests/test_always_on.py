@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from flow_synthetic import FIXTURES, farm_flow, farm_world, resolve_all  # noqa: E402
 
 HEAD = (
-    'flow(ir=1, name="t", max_runtime_s=600, target=target(client="kro-20211103-prere", '
+    'flow(ir=2, name="t", max_runtime_s=600, target=target(client="kro-20211103-prere", '
     'server="lab-rathena", locale="en", path=S2))\n'
 )
 PLAIN = HEAD + 'walk_to(cell("m", 10, 10))\nwalk_to(cell("m", 20, 20))\n'
