@@ -615,6 +615,19 @@ or no resolver is a refusal) and, given the approved hash, refuses another hash.
   in the BACKEND at run time (the L3 data stays local, never shipped), and it routes with the
   executor's planner, `poring_dataset.walk.walk_path`; until then, a cross-check test holds MW1's
   A* to it (open question 15 has the details and the result);
+  ➡️ **DECIDED 2026-10-09 (Batt, #18, second decision): ONE source of truth.** A small shared
+  package for map navigation, `poring_nav`: GAT loading, the walk graph, A*, and the path limits as
+  single named constants. Both `poring_flow` and the executor import it, and the duplicate planner
+  is removed afterwards. The cross-check test stays the regression gate, unchanged.
+  - **The server's per-click limit** (the pinned rAthena, read 2026-10-09):
+    - `unit.cpp:860` refuses a player walk longer than `max_walk_path`, which is 17
+      (battle.cpp:8684, client.conf:42).
+    - With `OFFICIAL_WALKPATH` (core.hpp:26), a walk longer than 14 steps passes only on a clear
+      straight line (unit.cpp:864–868).
+    - The often-quoted 32 is only the search buffer (path.hpp:14).
+  - The plan is `docs/planning/poring-nav.md` (PROPOSED). **No code moves before Batt approves
+    it**, never while a scored client run is active, and pre-registered rules move only with a
+    bytecode-identical proof.
 - `test_guards.py` extends: `poring_flow` imports no `ultralytics`, no `poring_vision` and no
   `poring_packets`.
 
@@ -1865,6 +1878,8 @@ Marked FIRST: needed before F1 or F2.
     backend-side and hands `vision` an approved, re-linted IR, or the walk graph moves to a package
     `vision` may import (it is our own clean A*, but it lives beside the label code). Decide before
     F1.
+    ➡️ **2026-10-09, Batt's second #18 decision: one shared package (`poring_nav`); the plan
+    `docs/planning/poring-nav.md` awaits his approval (section 5 has the summary).**
     ➡️ **CLOSED 2026-10-09 (Batt, contradictions #18):** "the linter runs in the backend at run
     time (L3 local), and routes with the EXECUTOR's planner (`poring_dataset.walk.walk_path`, the
     client's own path rules), not MW1's small A*. Until then, a cross-check test on the sheet
