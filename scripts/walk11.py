@@ -140,6 +140,15 @@ def observe(boxes: Any, w: w5.World, t_ns: int) -> None:
     UNITS["memory"].observe(boxes, w.camera, w.gat, w.position, t_ns, UNITS["ms_per_cell"])
 
 
+def scene_has_monsters(screen: Any) -> bool:
+    """The HARNESS's CLEAN check (2026-10-09): any monster box on a fresh frame (the detector)."""
+    det = UNITS["detector"]
+    if det is None:
+        return True  # no detector: clean anyway (the old behaviour), never assume an empty scene
+    frame = screen.grab(*r.game_region())[1]
+    return any(b.cls == "monster" for b in det.detect(frame))
+
+
 def observe_frame(frame: Any, w: w5.World, t_ns: int) -> None:
     det = UNITS["detector"]
     if det is not None:
@@ -712,6 +721,7 @@ def run(scene: str, condition: str, n: int, seed: int, label: str, crowd: int,
     rng = random.Random(seed)
     sid = new_session_id(f"{label}-{condition}-{scene}")
     log = DemoLog(sid)
+    UNITS["detector"].log_path = log.dir / "detections.jsonl"  # every batch: class + score (Batt)
     lock = record_session.read_lock(r.ROOT / "state")
     log.start(backend=str(lock.backend), lock_seq=lock.seq, server="lab-rathena", rule=WALK8_RULE,
               n=n, scene=scene, map=mapname, heldout=heldout, indoor_camera=indoor,
@@ -750,9 +760,14 @@ def run(scene: str, condition: str, n: int, seed: int, label: str, crowd: int,
                     return c
             return None
 
+        saw_monsters = True  # the HARNESS's CLEAN condition: the first route checks the scene
         for i in range(n):
             gm_cmd = False
-            if condition == "clean":
+            # Batt 2026-10-09: @killmonster2 only when CLEAN needs it -- a monster seen in the scene
+            # now, or one the previous route saw -- never 3+ identical lines in a row (the client
+            # refuses the 4th, and two held-out runs then stopped on a chat input that would not
+            # open). The rule's own code is untouched.
+            if condition == "clean" and (saw_monsters or scene_has_monsters(screen)):
                 r.gm(agent, screen, "@killmonster2")
                 gm_cmd = True
             # the HARNESS: a seeded warp (every 5th route; EVERY route of the portal scene)
@@ -824,6 +839,7 @@ def run(scene: str, condition: str, n: int, seed: int, label: str, crowd: int,
                                  relocalise=relocalise, label=f"walk@8 {scene} route {i}",
                                  expect_goal="warp" if portal else WALK,
                                  fixed_at_start=bool(start_fix and start_fix["ok"]))  # fmt: skip
+            saw_monsters = any(it.cls == "monster" for it in UNITS["memory"].items)
             judged = PORTAL["to"] if portal else goal  # a portal route ends on the OTHER map
             extra: dict[str, Any] = (
                 {"to_map": PORTAL["to_map"], "portal": list(PORTAL["cell"])} if portal else {}

@@ -1213,10 +1213,21 @@ def open_chat(agent: Agent, screen: Screen) -> None:
     time.sleep(0.2)
 
 
-def chat_line(agent: Agent, screen: Screen, text: str) -> None:
-    """Open the chat input if it is closed, type, send (Enter)."""
+def chat_line(agent: Agent, screen: Screen, text: str, *, reason: str | None = None,
+              on_refuse: str = "raise") -> bool:  # fmt: skip
+    """Open the chat input if it is closed, type, send (Enter). Every line passes the TYPING GUARD
+    first (scripts/chat_guard.py, ADR-0020 #10, Batt 2026-10-09): no filler line, no 3rd identical
+    line in a row, a minimum interval, /where once per need within the run's budget, every /where
+    logged with ``reason``. A refusal raises chat_guard.ChatRefused, or with ``on_refuse="skip"``
+    returns False; the guard never waits a line out or types another one instead."""
+    import chat_guard
+
+    if not chat_guard.before_typing(text, reason=reason, on_refuse=on_refuse):
+        log(f"chat guard: refused {text!r} (not typed)")
+        return False
     open_chat(agent, screen)
     agent.type_text(text + "\n")
+    return True
 
 
 def gm(agent: Agent, screen: Screen, command: str) -> None:
@@ -1232,7 +1243,17 @@ def gm(agent: Agent, screen: Screen, command: str) -> None:
     with (STATE_DIR / "gm.jsonl").open("a") as fh:
         fh.write(json.dumps(record) + "\n")
     activate_client(agent, screen)  # a Windows popup can take focus at any time
-    chat_line(agent, screen, command)
+    import chat_guard
+
+    try:
+        chat_line(agent, screen, command)
+    except chat_guard.ChatRefused as exc:
+        # only an identical REPEAT is skipped (the walk harness's @killmonster2 before every
+        # route: the client drops such repeats anyway); any other refusal stops the caller
+        if exc.rule != "repeat":
+            raise Stop(str(exc)) from None
+        log(f"gm: {command} NOT typed ({exc})")
+        return
     log(f"gm: {command}")
 
 
@@ -1241,6 +1262,9 @@ def say(agent: Agent, screen: Screen, which: str, text: str, thai_keys: bool) ->
     if char not in online_chars(which):
         raise Stop(f"{which} is not online=1: nothing sent")
     activate_client(agent, screen)
+    import chat_guard
+
+    chat_guard.before_typing(text)  # the TYPING GUARD (ADR-0020 #10): raises ChatRefused
     open_chat(agent, screen)  # typed while closed, the letters are hotkeys (2026-10-01)
     if thai_keys:
         require_eng(screen)

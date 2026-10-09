@@ -70,3 +70,33 @@ cue:
       # chevrons to these anchors names the picked cell even when a model hides some of them.
       corner_anchors: [[-0.42, -0.3], [0.4, -0.3], [0.4, 0.45], [-0.42, 0.45]]
     status: unverified
+chat:
+  # The client's REPEAT-PHRASE refusal (Batt 2026-10-09, ADR-0020 #10: "first test it ... and record
+  # the real behaviour in L2 knowledge"). Measured live on RDP 2026-10-09 11:59-12:01 ICT with
+  # scripts/chat_repeat_probe.py (crops in /dev/shm/poring-lab-tmp/chat-repeat, local):
+  #   /where x7 in a row, nothing between (after one @heal): 3 answered, the 4th-7th DROPPED with no
+  #   line at all (no refusal line for a slash command);
+  #   "/ex" then "/where", x5: all 5 answered (a different slash command resets the count).
+  # And 2026-10-08/09 (weight digits, 8592426): identical "@item" lines -- chat-sent lines -- were
+  # refused WITH the red refusal line ("more than 3 times") even with "/ex" between them: a slash
+  # command does NOT reset the chat-line count; unique lines (leading zeros) did.
+  # THE FACT (measured): the client accepts 3 identical lines of a kind in a row; the 4th and later
+  # are dropped (a slash command silently). Another line of the same kind resets the count -- a FACT
+  # to record, NOT a technique to use (Batt 2026-10-09, `policy` below).
+  repeat:
+    max_identical_in_a_row: 3
+    kinds:
+      slash: {prefix: "/", dropped: silently, reset_by: another slash command}
+      chat: {prefix: "", dropped: with the refusal line, reset_by: another chat line (a slash command does not)}
+    status: verified
+    verified_on: [{path: rdp, date: 2026-10-09, probe: scripts/chat_repeat_probe.py}]
+  # THE POLICY (Batt 2026-10-09 ~12:15): "Players type /where once and are done; they don't
+  # interleave filler commands." scripts/chat_guard.py enforces it for every rule, flow and tool:
+  policy:
+    no_separators: true  # never a line sent only to reset the repeat count (/ex or any filler)
+    refuse_identical_in_a_row: 3  # the guard REFUSES the 3rd identical line in a row (and logs it)
+    where_once_per_need: true  # no answer: no quick retype; passive sources first (minimap readout,
+    #                            dead reckoning, landmarks), a retry only after where_retry_s, in budget
+    where_retry_s: 60  # the shortest time between two /where (a human-like interval)
+    where_budget_per_run: 12  # the default per run; a run sets its own (ADR-0020 #10's where_budget)
+    min_line_interval_s: 0.5  # two typed lines closer than this: refused, never waited out
