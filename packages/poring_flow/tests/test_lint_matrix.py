@@ -313,6 +313,12 @@ CASES = [
         ["main.0: break outside a loop"],
         farm=False,
     ),
+    Case(  # #12 (Batt 2026-10-09): Exit.item is an ItemRef or a variable TYPED ItemRef
+        "exit_item",
+        "exit_item",
+        farm(("take_exit(item_warp(WING, to=", "take_exit(item_warp(BOSS, to=")),
+        ["farm.1: exit.item: BOSS holds a mob: an item_warp takes an item"],
+    ),
     Case(  # #2 (Batt 2026-10-09): `in` only against a literal list of refs or a list variable
         "membership",
         "membership",

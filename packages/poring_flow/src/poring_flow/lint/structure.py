@@ -104,6 +104,18 @@ def check(ctx: Ctx) -> None:
             ctx.add("loop_control", "error", 1, path, f"{st.kind} outside a loop")
         if isinstance(st, ir.TakeExit) and site.scope != "block":
             ctx.add("exit_placement", "error", 1, path, "take_exit belongs in a map block's main")
+        if isinstance(st, ir.TakeExit) and isinstance(st.exit.item, ir.Var):
+            # #12 (Batt 2026-10-09): an ItemRef, or a variable TYPED ItemRef
+            t = types.get(st.exit.item.name)
+            if t is not None and t != "item":
+                ctx.add(
+                    "exit_item",
+                    "error",
+                    1,
+                    path,
+                    f"exit.item: {st.exit.item.name} holds {_article(t)}: an item_warp takes an "
+                    "item",
+                )
         if isinstance(st, ir.CallProc) and st.proc not in flow.procedures:
             ctx.add("procedures", "error", 1, path, f"there is no procedure {st.proc}")
         if isinstance(st, ir.SetVar):

@@ -1184,6 +1184,10 @@ class Workflow(BaseModel):  # Flow gains `workflow`: exactly one of `main` / `wo
     # the GLOBAL events are the flow's `handlers`; the effective set per block is derived (13.6.2)
 ```
 
+➡️ **DECIDED 2026-10-09 (Batt, contradictions #12): `Exit.item` is an `ItemRef` or a variable
+TYPED `ItemRef`** (13.6.8 passes `WING`). The IR takes either; lint layer 1 refuses a variable that
+holds anything else ("exit.item: BOSS holds a mob: an item_warp takes an item").
+
 ### 13.2 Per-map data from L3: the map sheet
 
 Everything a map block offers in the editor, and everything the linter checks, comes from the
