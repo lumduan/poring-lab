@@ -17,7 +17,9 @@ next_action: Implemented and validated (docs/phase1-validation.md). The slim sni
   [phase1-validation.md](../phase1-validation.md).
 - Deciders: Batt
 - ➡️ 2026-10-09: [ADR-0021](0021-external-servers.md) (PROPOSED) would add, for an allowed
-  EXTERNAL server: nothing is captured there, by design; this channel's viewer shows an explicit
+  EXTERNAL server: nothing is captured there ~~by design~~ ➡️ BY DEFAULT (Batt, 2026-10-09
+  ~15:20: only where that server's own rules permit it, recorded in Settings; ADR-0021 4.5);
+  this channel's viewer shows an explicit
   `external` state (built dormant on `feat/console-layout`), and every packet-based tool reports
   "not available on this environment". Decision 4 (nothing in the agent path) is unchanged.
 - Related:

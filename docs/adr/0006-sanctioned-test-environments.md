@@ -18,9 +18,12 @@ next_action: Batt records the community server's bot/AI-testing permission (docs
 - Supersedes: the "never run against public servers" wording in the project brief (official servers
   remain forbidden)
 - ➡️ 2026-10-09: [ADR-0021](0021-external-servers.md) (PROPOSED) would amend the community
-  server's row and rule 2: on an allowed EXTERNAL server the bot may act (pixels only), with NO
-  packet capture even where the server's rules allow it, gated by a person-confirmed exe-scoped
-  firewall rule set instead of a sniffer. Nothing changes until Batt accepts it.
+  server's row and rule 2: on an allowed EXTERNAL server the bot may act (pixels only),
+  ~~with NO packet capture even where the server's rules allow it~~ ➡️ with NO packet capture BY
+  DEFAULT (Batt, 2026-10-09 ~15:20: allowed only where that server's own rules explicitly permit
+  it, recorded per environment in Settings, hard path; this row's condition stands), gated by a
+  person-confirmed exe-scoped firewall rule set instead of a sniffer. Nothing changes until Batt
+  accepts it.
 
 ## Context
 poring-lab needs two kinds of environment that no single server provides:
@@ -49,8 +52,12 @@ Two environments are sanctioned. Everything else is forbidden.
 | Official servers and any other public server | — | FORBIDDEN, for all components, in all modes |
 
 ➡️ 2026-10-09: ADR-0021 (PROPOSED) would amend the community row's "No packet capture or
-modification unless the server's rules explicitly allow it" to: NO packet capture of an external
-server, whatever its rules allow (its section 3; open question 2 there).
+modification unless the server's rules explicitly allow it" to: ~~NO packet capture of an external
+server, whatever its rules allow (its section 3; open question 2 there)~~ ➡️ **Batt, 2026-10-09
+~15:20 (its Q2, corrected): the condition stays.** No capture BY DEFAULT; capture only where the
+server's own rules explicitly permit it, recorded per environment in Settings (a capture
+permission, off by default, the rule as evidence, turned on only by ADR-0016's hard path;
+ADR-0021 section 4.5). Modification stays forbidden.
 
 Rules that apply on the community server:
 1. Evidence of permission: `docs/environments/community-server.md` records the server's rules or

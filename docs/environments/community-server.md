@@ -19,8 +19,11 @@ next_action: Batt supplies the server's bot/AI-testing rules or announcement (li
 > - ➡️ 2026-10-09: [ADR-0021](../adr/0021-external-servers.md) (PROPOSED) designs that interlock
 >   for an external server without packets: a separate client copy whose exes may reach only this
 >   server's endpoints (a firewall rule set generated from Settings, run by Batt, confirmed by
->   his paste-back), and NO packet capture here even if the rules below allowed it. This record's
->   evidence is still required first (ADR-0006 rule 1).
+>   his paste-back), and ~~NO packet capture here even if the rules below allowed it~~ ➡️ (Batt,
+>   2026-10-09 ~15:20) NO packet capture here BY DEFAULT: only if the rules below explicitly
+>   permit it, recorded as this environment's capture permission in Settings (off by default, the
+>   rule as evidence, turned on only by the hard path; ADR-0021 4.5). This record's evidence is
+>   still required first (ADR-0006 rule 1).
 
 | Field | Value |
 |---|---|

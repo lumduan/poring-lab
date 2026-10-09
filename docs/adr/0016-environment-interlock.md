@@ -258,8 +258,10 @@ never OS-wide, and never the community client (`RagnarokClassic\Ragnarok.exe`).
 ➡️ 2026-10-09: ADR-0021 (PROPOSED) would extend this per EXTERNAL environment: a group
 `poring-lab env <id>` for a SEPARATE client copy (never the original community client), allowing
 only that environment's endpoints, generated from Settings, run by Batt, and confirmed by a
-checksum he pastes back. This group stays as it is unless he decides otherwise (its open
-question 6).
+checksum he pastes back. ~~This group stays as it is unless he decides otherwise (its open
+question 6).~~ ➡️ Batt, 2026-10-09 ~15:20 (its Q6 yes): this lab group is to come from the SAME
+generator, from the lab environment's endpoints in Settings (ADR-0021 5.7: a replacement PLAN,
+his console act; nothing changed yet; the `firewall` signal for lab-rathena is still to confirm).
 
 **Why Block rules.** Windows Firewall's Block rules win over Allow, and the default outbound
 policy is Allow. So "allow only the lab host and loopback" is ONE Block rule per exe, whose
@@ -433,6 +435,12 @@ environments themselves, and list each one's servers, from the page.
 **State:** the lab's Allowed environment is red `no_servers` until Batt confirms the lab's servers
 ("Confirm all" on Lab rAthena) from his own computer. The first confirmation is a person's act; the
 agent never does it, by any route.
+
+➡️ 2026-10-09 ~15:20 (Batt, ADR-0021's decisions): endpoints are config, never hard-coded: every
+server endpoint, the lab's included, lives in this store (the single source of truth). Where the
+lab endpoint is still hard-coded today, and how each place becomes config-driven:
+[docs/planning/endpoints-as-config.md](../planning/endpoints-as-config.md) (PROPOSED; nothing
+changed yet).
 
 ## "Find servers from a game file" (Batt, 2026-10-06; BUILT)
 
