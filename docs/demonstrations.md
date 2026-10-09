@@ -1460,7 +1460,85 @@ zero `attack_request`, zero `npc_contact`, zero GM `act` of kind normal.
 - items left behind when a kill dropped several;
 - the weight rise against the item's weight.
 
-**When:** after rec@0 (§3.19), and only once P1–P4 hold.
+**When:** after rec@0 (§3.19), and only once P1–P4 hold. ➡️ The run plan is 3.20a (2026-10-09:
+P3's positive case first, then the trials).
+
+### 3.20a loot@1 — the RUN PLAN: P3's positive case, then the trials (pre-registered 2026-10-09 ~09:00 ICT / 02:00 UTC at commit, BEFORE any run; Batt 2026-10-09 ~08:30: "loot@1: pre-register and run after walk@16's tuning runs")
+3.20 stands as written. This fixes what it left open, before any run. Nothing in 3.20 is moved.
+
+**The harness:** `scripts/loot1.py` at the commit of this section; scored OFFLINE by
+`scripts/loot1_score.py` (the packets, `loot_truth.ledger`).
+
+**Place and spots:** prt_fild08. The spots are a seeded list of open cells in x 245–295,
+y 85–130, each with its ±4 square walkable (the spawn lands within 3 cells, the scan reaches 1
+more), every pair ≥ 6 cells apart (`loot1.spots`; 3.20's "fresh spot").
+
+**One trial:** `@killmonster2`, `@alive`, `@heal`, `@warp` to the spot, `@monster` Poring 1. Then:
+- **The target:** the monster box nearest the GM's feet (within 220 px), tracked frame to frame
+  (its feet within 45 px) by a sampler thread running the CPU detector on every frame it can.
+- **The kill (3.20 step 3, deliberate attack clicks):** a click on the target's box ONLY where the
+  cursor reads the SWORD twice. This is the monster positive case's rule (§2a), never a box centre
+  (rec@0b: 51 of 53 box-centre clicks walked). It is repeated if the target is still visible 8 s
+  after a click, and the kill is "no_kill" if the target has not vanished 30 s after the first
+  click. `@alive` + `@heal` start every trial, because the level-1 GM can lose to a Poring.
+  - `@killmonster` (WITH drops) was considered and is NOT used: it is not in the GM's command set
+    (group 20 in `groups.yml` is deliberately minimal), and adding it is Batt's call.
+- **The GM's cell:** where@2 (`/where`, two agreeing reads) once the GM has walked up and fights
+  (1.5 s after the first attack click), or after the death. No fix means no loot, never a guess
+  (a failure if the kill dropped an item).
+- **Death from pixels:** the target seen after the first attack click, then unseen for ≥ 3 frames
+  AND ≥ 1.0 s. Its cell: `poring_dataset.deathcell.death_cell` (the last 3 sightings' feet, 4 px up,
+  through the picking model from the GM's fixed cell; spread ≤ 1 cell).
+- **LOOT and the runtime check:** exactly 3.20 steps 4–5. The 3 × 3 cells in
+  `deathcell.scan_order`; one hover per cell, two motions; PICKUP read twice is the only shape that
+  clicks; walk@11's unit gate; no point within 12 px of the client's UI windows; the first such point
+  is clicked. Within 5 s: the weight readout rises (two equal reads) OR the chat cue reads "got".
+  - Every Poring drop weighs ≥ 1.0 shown (the local KB: Jellopy 1.0, Sticky Mucus 1.0, Apple 2.0,
+    Empty Bottle 2.0, Knife 40.0, Unripe Apple 5.0, Poring Card 1.0). So no sub-resolution trial
+    is expected; any one would be reported apart.
+
+**Step 1 · P3's positive case (BEFORE any loot trial; §2a's rule):** `loot1.py p3 --n 10 --seed
+20261110`, the same kills with no loot.
+- **Judged per kill whose target died on the server** (its "died" vanish within 5 cells of the
+  spot, after the first attack click; never guessed between two):
+  - the pixel death cell against the server's cell at that vanish;
+  - a missing pixel cell (unstable, no /where fix) counts as a miss.
+- **P3 PASSES** with the pixel cell within 1 cell of the server's in ≥ 9 / 10 judged kills, with ≥ 8
+  kills judged (the 3 × 3 scan covers ±1). Fewer than 8 judged kills: INCONCLUSIVE.
+- **Exact matches are reported too.** Kills that failed (no target found, no sword read, no kill)
+  are reported apart. They are the kill phase's failures, not P3's.
+- **If P3 does not pass, loot@1 does NOT run,** and that is reported.
+
+**Step 2 · the trials:** `loot1.py run --n 40 --seed 20261111`. All 40 are attempted whatever happens.
+- **The scored set:** the FIRST 20 DROP trials in order, where a drop trial is a kill whose server
+  death dropped ≥ 1 item (P2).
+- **The verdicts are 3.20's:**
+  - a success needs the runtime "obtained", the server's confirmation of OUR pickup of one of those
+    drops after the loot click, and the click within 45 s of the server's death;
+  - a runtime "obtained" without a server pickup is a FAILURE, as is a server pickup the runtime
+    check missed.
+- **SAFETY** is counted from the server's death to the trial's end: `attack_request`,
+  `npc_contact`, and our act of kind normal. The kill phase's attacks are deliberate and excluded.
+- **The bar (3.20):** ≥ 19 / 20 AND zero safety events. Fewer than 20 drop trials in the 40:
+  INCONCLUSIVE ("not enough drop trials"), never a pass.
+- **Reported, as 3.20 lists:**
+  - each signal's recall on the confirmed pickups;
+  - death → click (median, p95; the 20 s budget);
+  - hovers per success, and PICKUP reads with no item;
+  - where the items landed against the death cell;
+  - the items left behind;
+  - the weight rise against the item's weight;
+  - the kill phase's outcomes.
+
+**Before each run:** a client screenshot, and the UI as pre-registered (the 3.24 inventory
+incident).
+
+**Expected** (Claude's reading; NOT a bar):
+- The kill phase is the least proven part: the sword gate on a moving Poring has one positive case
+  so far, and the GM may lose a fight.
+- /where adds ~4–6 s; the scan ~1.5 s per cell.
+- The drop falls ON the death cell first (rAthena's pattern), so most pickups should come from the
+  first hover.
 
 ### 3.21 walk@12 — walk@11 + the WORK ZONE, the TALK-cell block and a clean harness exit; TUNING (indoor/outdoor × CLEAN/CROWD), then the HELD-OUT set once (pre-registered 2026-10-08 ~14:43 ICT at merge, BEFORE any run; Batt's decisions of 2026-10-08 ~11:25)
 **Why:** the walk@11 verdict (0 of 4 tuning runs PASS; its results above).
