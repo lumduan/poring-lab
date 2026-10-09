@@ -3358,6 +3358,62 @@ FAIL: the backup is raised with Batt, and gl_prison waits.
 - It is applied once after each GM login and confirmed per run offline: zero acts on the GM.
 - An act on the GM in a run is reported as a condition failure, not a rule failure.
 
+### 3.35 cursor@1 -- the robust cursor reader: a banked-hover proof, then its LIVE acceptance (pre-registered 2026-10-09 ~21:20 ICT / 14:20 UTC at commit, BEFORE any scoring or run; Batt 2026-10-09 ~20:20: "finish offline, pre-register, prove on banked hovers (hard bar: zero false WALK / cross-shape errors), then the live acceptance. It unblocks loot, attack and talk.")
+**The readers:** the gate's (walk6.CursorRefs v3, LIVE, unchanged throughout) and the robust candidate
+(`scripts/cursor_robust.py` `RobustRefs` at c5bcb55, OFFLINE only, on the saved crops). Design and
+numbers: `docs/planning/cursor-robust.md` (merged c5bcb55). **Nothing changes in the live gate.**
+The switch-over (cursor-robust.md 6: a named flag, pre-registered rules keep v3) is Batt's decision
+after this result; a default flip is never a side effect.
+
+**STAGE 1 -- banked hovers (offline, scored once at c5bcb55).** Honest scope: every banked hover
+was seen during development (the floors were learned leave-one-out on the references; the 78 crops
+were replayed before this pre-registration, 0 wrong). Stage 1 is therefore a REPRODUCIBILITY and
+SAFETY check at the merged commit, not a fresh test; stage 2 is the fresh test.
+- **Sets:** (a) the 78 banked non-reference crops (`cursor_eval.py replay`), labelled TWICE: by
+  the subagent at design time and BLIND by Claude (a shuffled contact sheet, no reader output,
+  2026-10-09 ~21:10): **78 / 78 agree** (walk 71, talk 3, sword 3, warp 1); (b) the leave-one-out
+  perturbation reads (`cursor_eval.py perturb`, seed 20261009, 61 conditions) and (c) the
+  leave-neighbours-out reads (`--neighbours 3`, 15 conditions).
+- **Bar (hard):** the robust reader makes **0 cross-shape errors** and reads **WALK on 0 crops of
+  another label** in all three sets. One error FAILS stage 1: no live run uses the robust reader's
+  output for anything but the record.
+- **Reported:** read / unknown / wrong per shape for both readers, as cursor-robust.md 3.
+
+**STAGE 2 -- live, both readers on the same grabs (fresh data).** Cursor-robust.md section 5's
+draft, adopted as written, with these values:
+- **Arm B, SWORD over a Poring:** `scripts/cursor_probe.py sword --n 10 --seed 20261170` at
+  c5bcb55 (or the commit of a pilot fix, recorded here first), RDP, the GM on prt_fild08, hover
+  only (NOTHING clicked). Pilot first, never scored: `--n 2 --seed 20261171`.
+- **Arm A, TALK (and WALK on cells):** npc-click@1's PROBE arm, under its own pre-registration
+  (3.32a, pasted from npc-click-test.md 6 once its P1, the complete L3 NPC list for prontera and
+  prt_church, is checked): prontera `--near 156,191 --seed 20261160`, prt_church `--near 103,74
+  --seed 20261161`; prt_church alone if prontera's P1 is not ready.
+- **Scoring:** `cursor_eval.py live SESSION` for both readers (first read = the first non-unknown
+  of grabs 0-2; read twice = grabs 0-2 and 3-5 agree).
+- **Truth by eye, every label fixed before any bar is computed:** (1) every robust CLAIM, per
+  shape (`cursor_eval.py sheet SESSION --verdict S`), every WALK claim looked at, and the gate's
+  claims the same way; a SECOND labeller (a second agent, or Batt) checks every flag; (2) a blind
+  seeded sample of 200 crops per arm (seed 20261172) from sheets without verdicts; labels walk,
+  talk, sword, pickup, noentry, warp, none, unclear (unclear excluded and counted).
+- **The bars (the robust reader; the gate's numbers beside them):**
+  1. **SAFETY, hard: 0 cross-shape errors** among all labelled crops, first read or read twice,
+     both arms; **WALK on a crop labelled anything else: 0.** One error FAILS the acceptance.
+  2. **TALK** (arm A sprite points labelled talk): read twice >= 0.85.
+  3. **SWORD** (arm B box points labelled sword): read twice >= 0.40 with >= 100 such probes, and
+     >= the gate's + 0.25.
+  4. **WALK** (arm B controls + arm A cell points labelled walk): read twice >= 0.95 and not below
+     the gate's - 0.02.
+  - Fewer than 100 labelled sword or 200 labelled talk probes: INCONCLUSIVE.
+  - Arm B alone gives bars 1, 3 and part of 4 as an INTERIM report; the acceptance verdict needs
+    both arms.
+- **Safety of the runs:** arm B never clicks: any `attack_request` or GM act of kind normal /
+  pickup in its packets is a harness fault and stops the test. The client's UI state is judged
+  before each run (the UI gate, a screenshot), and the GM's fixed state per trial (loot@1's
+  machinery).
+- **Reported:** both readers per arm, kind, background and grab index; the robust reader's
+  best-shift distribution (C1); whether later grabs pass where the first failed (C2); unknown
+  reasons; labelling time.
+
 ### 3.34 learn_skill@1 -- spend skill points in the skill window (DESIGN 2026-10-09 ~19:50; NOT pre-registered; Batt ~19:30: "add the new skill the job change needs: allocating skill points (Basic Skill > 8) via the skill window, as an L1 concept with its own alone-test")
 **The concept:** `char.learn_skill` (L1, packages/poring_skills, updated): the first workflow's
 Merchant change needs the novice's Basic Skill above 8 (labels-v2-plan section 7.4).
