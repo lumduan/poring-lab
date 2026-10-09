@@ -674,6 +674,39 @@ from and back to the storehouse's room; Kafra teleports on the free tickets:
   quest NPCs that warp under a condition are never used. A fee is the script's own `Zeny < N` before
   the warp; a script that charges otherwise is counted as unknown and never relied on.
 
+### 7.4a The delivery-dialog classifier: DESIGN FACTS (2026-10-09 ~21:30, offline; nothing built)
+Batt ~19:30: "build it as a CLASSIFIER over the KNOWN set from L3 (4 destinations x 2 serials = 8
+variants), like the T3 menu reader; never free OCR. Verify on the live dialog before relying on it."
+Read from the pinned merchant.txt (local; no script text or serial is committed here):
+- **Where the 8 variants show:**
+  1. the ASSIGNMENT (the application, merchant.txt ~383-410): one page names the destination in
+     plain black text (a destination word per option: the Prontera / Geffen / Morocc / Byalan
+     line), then `S_GiveSerial` (merchant.txt:480) shows a page of four short lines whose last is
+     the 7-digit serial;
+  2. the REMINDER: every later talk to the job changer while the test runs (merchant.txt:183-247,
+     `job_merchant_q2` 1-8) restates the destination and the serial on ONE page. So the variant can
+     be re-read at any time before the storehouse, and a live capture does not need a new
+     application per variant.
+- **The serial is COLOURED** (`^3355FF`, then `^000000`). T3's reader refuses any coloured row
+  (`coloured_text`, by design for menus). The classifier needs a colour-ink path for that one line:
+  ink = distance to the script's blue, then the SAME glyph matching, against only the 2 serials of
+  the destination read on the plain line (a closed set of 2, never free digits).
+- **A second pixel source:** `setquest` 1009-1012, one quest id per destination, so the quest window
+  (Alt+U, an L2 shortcut) shows the destination too. A disagreement between the dialog and the quest
+  window is a STOP (hand over), never a guess.
+- **Glyphs:** the dialog's font is expected to be the menu's (T3 glyphs, `menu_glyphs.npz`); the
+  dialog window's background is the npc_dialog white. Both are checked on live frames before use;
+  any character of the 8 variants missing from the glyph set (digits, capitals) is cut from a
+  labelled live frame (talk_calibrate), as T3's were.
+- **Batt's c (2 easiest first):** only the prontera and morocc_in variants (4 of 8) are acted on;
+  the geffen_in and izlu2dun variants are classified too (so the hand-over says which), then STOP
+  before the storehouse's serial input and before any fare.
+- **The live verification needs a dialog on screen.** Two ways, both for Batt:
+  (a) the agent account's own application, in the workflow (the real fee, once);
+  (b) the GM applying first (needs Job Lv 10 + Basic Skill 9, which learn_skill@1 builds, and 500 or
+  1,000 zeny, which the GM lacks: no zeny command in group 20; and it writes the GM's job_merchant_q
+  variables, which persist). Not started.
+
 ### 7.5 The budget (e) (training-cost.md's method, `kb_first_workflow.py budget`)
 
 `poring_flow.prep.estimate` on training_cost.json, NEW species and NEW maps only, blocks in Batt's
