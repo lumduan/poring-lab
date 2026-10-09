@@ -314,3 +314,21 @@ passes.
    Deciding at least #6 before MW2 avoids an all-red first impression.
 5. **Who may open `/flows`:** every LAN viewer (proposed, read-only until MW3) or a toggle like
    "Watch only"?
+
+## 10. UI issues (Batt's testing of the deployed editor, from 2026-10-09)
+
+Batt tests the deployed `/flows` and sends findings (screenshots); each one is fixed at its cause and
+checked in a real browser before it is listed as fixed. Fixed = committed on the branch named; deployed =
+the frontend-dev hot reload after the parent's merge (CSS / TSX only: no restart).
+
+| # | date | reporter | issue | cause | fix commit | status |
+|---|---|---|---|---|---|---|
+| 1 | 2026-10-09 09:23 | Batt | Open a category (Events), drag a block onto the workspace: the flyout closes but a **vertical line stays at its old edge**, drawn over the workspace and the dropped block. | Blockly hides a scrollbar with the SVG presentation attribute `display="none"` on its outer `<svg>`; Tailwind's preflight `svg { display: block }` (`@layer base`) beats any presentation attribute. So the flyout's scrollbar (z-index 30) stayed drawn after the flyout closed, and also while it was open when Blockly wanted none (the line Batt saw as the flyout's divider). Measured: attribute `none`, computed `block`. The main workspace's scrollbars hide the same way. | `aab6963` (branch `fix/flows-flyout-scrollbar`): an unlayered `.injectionDiv svg[display="none"] { display: none; }` in `flows.css`, pinned by `lib/flow/editor_css.test.ts` | **fixed** on the branch; checked in headless Chromium (dev and production build): 75/75 checks after, 39/75 before (all 36 fails this scrollbar). Covered: drag from a flyout, a category clicked closed, a category whose blocks overflow (Blockly shows the scrollbar, and it is drawn), a window resize, zoom in/out, the trashcan's flyout, the editor closed and reopened 3 times (two map blocks, global events); no CSP violation. Deploy pending (parent) |
+| 2 | 2026-10-09 | Claude (seen during #1's check) | An open flyout **closes by itself** when a lint result arrives while the editor is open, e.g. the editor opened within ~2.5 s of loading a sample, importing, or applying an edit. | `BlockEditor.tsx` calls `updateToolbox` in the same effect as the badge/lint decoration, so every new lint re-renders the toolbox (Blockly's `Toolbox.render` disposes and rebuilds the categories, which closes the open flyout). The toolbox depends only on the catalogue and the scope. Measured (production build): Events open at page t = 3111 ms, the lint response at 3212 ms, the categories rebuilt at 3250 ms, the flyout closed ~260 ms after it opened. Since #1's fix this close leaves no line. | none yet | **open**, not fixed here: the fix is in `BlockEditor.tsx`'s effects (update the toolbox only when the catalogue or scope changes), where the ADR-0020 work is editing in parallel; for the parent to schedule |
+
+**How #1 was checked** (scripts kept in `/dev/shm`, not in the repo: a browser test needs a Chromium and two
+local servers, outside the repo's `node --test` conventions): `chrome-headless-shell` copied into `/dev/shm`
+and driven over CDP with Node's own WebSocket; the worktree's own `next dev` and `next start` on
+`127.0.0.1`; and a local stand-in for the `/flows` GET routes, built in memory from the worktree's
+`poring_flow` (never the real backend). The CSS domain's `getMatchedStylesForNode` named the winning rule:
+preflight before the fix, the unlayered rule after it.
