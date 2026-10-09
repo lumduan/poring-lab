@@ -745,6 +745,31 @@ labels_v2.difficulty (all "normal" here).
     - The projection reads the CLIENT GAT's altitude (camera.py), so labels on alberta and morocc
       may not fit the map the lab client draws. The kRO data on the Dell decides it, and it is not
       on this host (7.1's caveat). Until then, treat alberta and morocc GATs as unverified.
+  - ➡️ **N1 (the NPC id -> sprite file table): BUILT 2026-10-09 ~21:45, along the route only**
+    (Batt 7.7 item 7). `scripts/npc_sprites.py build` writes `data/kb/npc_sprites.json` (local,
+    never committed). Its Lua table reader is `scripts/lua51_tables.py`. Tests:
+    `services/backend/tests/test_npc_sprites.py`.
+    - **Scope rule:**
+      - the training grounds: every drawn NPC;
+      - the Merchant route, for Batt's two first destinations (prontera, morocc_in): the
+        graduation arrival, the job changer, the storehouse, the KB's `walk_kafra` legs out and
+        back (a Kafra leg walks to the nearest Kafra of the same service);
+      - shortest paths on the server grid between those stops;
+      - an NPC counts when it is within 14 cells (Chebyshev) of a path cell. That is the server's
+        `area_size`: nothing farther is ever sent to the client.
+    - **Counts:**
+      - training grounds: the 15 sprites of 7.3;
+      - the Merchant route: 29 sprites (alberta 12, alberta_in 5, morocc 7, morocc_in 5,
+        prontera 8), 6 of them shared with the training grounds;
+      - **38 distinct sprites** in total, against 120 for whole towns (7.5).
+    - **Three sources agree on all 38:**
+      - rAthena's constant (npc.hpp);
+      - the client's own tables (npcidentity.lub constant -> id, jobname.lub id -> sprite name;
+        compiled Lua, read without running it);
+      - the archive: SPR + ACT present under data\sprite\npc\ for every one.
+    - The sprite name is the constant's name in all 38 cases. None is a composite player-class
+      sprite, and none is a monster sprite. Most SPRs are MIXCRYPT (the study decoder, as for the
+      monsters).
 - **Accounts:** the GM (2000002) collects, with 3.33's immunity after each login, the fixed GM
   state checked and the UI gate before each run. It reaches any copy by `@warp` (the copies are
   clones). **The agent account 2000001 is not used for collection:** its quest state on new_4-1 is
