@@ -2184,7 +2184,8 @@ was the second and last design iteration of the night.
   NPC now declines `unit_stays` (indoor CLEAN route 0: goal (110, 124) in the NPC cluster) instead
   of moving to a nearby cell.
   - **Next version (NOT adopted, not pre-registered):** an NPC-envelope refusal on or next to the
-    goal should trigger the NPC substitute too.
+    goal should trigger the NPC substitute too. ➡️ ADOPTED by Batt 2026-10-09 ~08:30 as walk@16
+    (3.27, pre-registered; NPC within ONE cell of the goal, the verifier's rule).
 - **Remaining failure causes over walk@15's four runs, ranked:**
   1. `unit_stays` (8: indoor near NPCs, outdoor near native monsters);
   2. `relocalise_limit` (4, indoor);
@@ -2192,6 +2193,61 @@ was the second and last design iteration of the night.
   4. an unjustified NPC substitute (1).
 - **Counter caveat:** the scorer's "static radius-1" count also counts NPC envelopes under D (241 /
   485 indoor). It is not a measure of change A in walk@15.
+
+### 3.27 walk@16 — walk@15 + an NPC-ENVELOPE REFUSAL AT THE GOAL TRIGGERS THE NPC SUBSTITUTE; TUNING, then the HELD-OUT set once (pre-registered 2026-10-09 ~08:45 ICT / 01:45 UTC at commit, BEFORE any run; Batt 2026-10-09 ~08:30: "walk@16 approved: an NPC-envelope refusal at the goal triggers the nearby-cell substitute (still judged by the server). Pre-register; then, if all four tuning runs pass, the held-out set once.")
+**Why:** 3.26's trade. walk@15's NPC clearance (D) refuses a goal BESIDE an NPC through the unit
+gate's envelope, but walk@13's NPC substitute triggers only on a TALK cursor read. Such a goal
+waits out its patience and declines `unit_stays` (walk@15 indoor CLEAN route 44: goal (95, 126), the
+server's "Crusader" one cell away, the gate's nearest box an NPC at 0.0 px three times).
+
+**The rule:** `scripts/walk16.py` at the commit of this pre-registration. It is walk@15 UNCHANGED
+(walk@14's route loop rebound, walk@15's memory, side cells and visited set; the same code). The
+change is exactly:
+- **F.** When the click step refuses the route's GOAL (its own points, walk intent, before any
+  substitute) with `covered_unit_envelope` and the gate's nearest unit is an NPC, every remembered
+  NPC sighting within **1** cell of the goal (`NPC_SUB_NEAR`) joins the route's TALK set, as if its
+  cell had read TALK.
+  - walk@13's NPC substitute then runs exactly as for a TALK read: ring 1, then 2, never on or next
+    to a TALK/NPC cell, the shortest plan first.
+  - An NPC sighting 2 cells away does NOT trigger it: the verifier counts an NPC substitute only with
+    a drawn NPC within one cell of the goal on the server (`demo_verify.npc_near`, walk@13; unchanged).
+  - A refused waypoint (not the goal) and a monster envelope keep walk@15's handling.
+  - The step's record carries `npc_envelope_talk` (the NPC cells used) whenever F fires.
+
+**Scoring, instruments, the bar:** as 3.24–3.26, unchanged.
+- **The bar:** ≥ 48 / 50 AND zero `attack_request`, `npc_contact`, and GM acts (normal or pickup)
+  per run.
+- An NPC substitute counts as a success only when the server confirms a drawn NPC within one cell of
+  the goal; otherwise it is a failure ("npc_substitute with no NPC beside the goal").
+
+**TUNING runs, all four whatever the first scores:**
+- FRESH seeds: indoor clean **20261100**, indoor crowd **20261101**, outdoor clean **20261102**,
+  outdoor crowd **20261103**.
+- 56 routes each; the first 50 not interrupted are scored.
+- e.g. `scripts/walk16.py --scene indoor --condition clean --seed 20261100 --label walk16-alone`.
+- Before each run: a screenshot of the client, and any leftover window closed (the inventory
+  incident of 3.24).
+
+**HELD-OUT, ONCE, only if all 4 PASS:** guild (alberta_in) **20261104**, town (prontera)
+**20261105**, dungeon (iz_dun00) **20261106**, portal (prt_fild08 → prontera) **20261107**. All CLEAN,
+`@heal` after each warp, 56 each, the first 50 scored, reported apart from tuning.
+
+**Expected** (Claude's reading; NOT a bar), from walk@15's four TUNING sessions replayed offline
+(`walk16/diag15.py`; tuning data only, the held-out maps never looked at):
+- F would have applied to **one** indoor CLEAN failure (route 44, the NPC one cell from the goal) and
+  at most one indoor CROWD failure (route 35, "Sister Linus" one cell away; that route declined on
+  `relocalise_limit` first).
+- Two other NPC-envelope declines had the NPC **2** cells from the goal (CLEAN route 0, "Nun";
+  CROWD route 18, "Wedding Staff"). F does not apply to them; they stay `unit_stays`.
+- So F alone is expected to add about +1 route per indoor run (CLEAN ≈ 47, CROWD ≈ 43–44): **indoor
+  is NOT expected to reach 48 on F alone.** The remaining indoor causes are `relocalise_limit` (4
+  over the two runs), the 2-cell NPC goals (2), monster envelopes indoors in CROWD (2), unknown reads
+  (1), and a TALK-triggered substitute the server did not justify (1).
+- Outdoor: no NPCs, so F never fires there; walk@15's outdoor passes (49, 48) were near the bar,
+  and run-to-run spread has been ±3.
+- Risk: a remembered NPC cell comes from pixels (belief + the pick under its feet). If it is one cell
+  off, F can fire for an NPC really 2 cells away, and the server will score that substitute a
+  failure.
 
 ### HUD scene: box drift while walking + doubled boxes — OFFLINE SIM RESULT (2026-10-08 night; branch `feat/hud-drift`, merged 0d6cd79, DEPLOYED 2026-10-09 00:36 ICT; LIVE RE-MEASURE below)
 
