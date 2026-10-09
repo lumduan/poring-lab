@@ -297,6 +297,18 @@ def test_the_proof_kills_land_between_saves_and_cover_the_boundary() -> None:
     assert sum("--resume" in c for c in cmds) == 2
 
 
+def test_each_proof_runs_under_its_own_names(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    import resume_proof as rp
+
+    assert rp.PREFIX != "resume-proof"  # proof 1's names (2026-10-08): never reused
+    cmds = [c for _, c, _ in rp.plan("v0png-20261006", "rp-x")]
+    for c, run in zip(cmds, ("A", "A2", "B", "B", "B"), strict=True):
+        assert f"--name rp-x-{run} " in c and f"/data/train/rp-x-{run}/trace.jsonl" in c
+    assert rp.used_runs("rp-x", tmp_path) == []
+    (tmp_path / "rp-x-A2").mkdir()  # a fresh run there would APPEND to the old trace
+    assert rp.used_runs("rp-x", tmp_path) == [tmp_path / "rp-x-A2"]
+
+
 def test_the_trainer_refuses_a_mixed_resume_and_prefers_mid(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     import poring_vision.midckpt as mc
     from poring_vision.train import resume_checkpoint
@@ -461,3 +473,92 @@ def test_the_trainer_falls_back_to_the_previous_and_never_rewinds(tmp_path, monk
     assert resume_checkpoint(a, run_dir, 30, RUN) == w / "last.pt"
     with pytest.raises(SystemExit, match="setup differs"):
         resume_checkpoint(a, run_dir, 30, {**RUN, "n": 120})  # a different cache: refused
+
+
+# --- the optimizer restore, laid out as its parameters (2026-10-09: proof 1's B2 crash) ---------
+def test_restored_optimizer_state_is_rebuilt_by_kind() -> None:
+    from poring_vision.resume import state_kind
+
+    conv = (8, 3, 3, 3)
+    assert state_kind("step", (), conv) == "step"
+    assert state_kind("step", (), ()) == "step"  # a scalar parameter's counter is still the step
+    for k in ("exp_avg", "exp_avg_sq", "max_exp_avg_sq", "momentum_buffer", "momentum_buffer_SGD"):
+        assert state_kind(k, conv, conv) == "param"
+    assert state_kind("exp_avg", (8,), conv) == "keep"  # not shaped like it: left as loaded
+
+
+def test_a_restored_step_goes_where_adams_lazy_init_puts_a_fresh_one() -> None:
+    from poring_vision.resume import step_placement
+
+    assert step_placement(True, False) == ("float32", True)  # ultralytics' fused AdamW on CUDA
+    assert step_placement(True, None, default_float64=True) == ("float32", True)
+    assert step_placement(None, True) == ("float32", True)  # capturable
+    assert step_placement(False, True, default_float64=True) == ("float64", True)
+    assert step_placement(False, False) == ("float32", False)  # foreach / for-loop: a CPU scalar
+    assert step_placement(None, None) == ("float32", False)
+    assert step_placement(None, False, default_float64=True) == ("float64", False)
+
+
+class FakeTensor:
+    """Just enough of a tensor for `load_optimizer`'s wiring: a shape, a device, and what it was
+    made from (so the test can tell a rebuilt entry from one left as loaded)."""
+
+    def __init__(self, shape: tuple[int, ...], made: str, device: str = "cpu") -> None:
+        self.shape, self.made, self.device = shape, made, device
+        self.src: FakeTensor | None = None
+
+    def to(self, dtype: str, device: str) -> FakeTensor:
+        return FakeTensor(self.shape, f"{self.made} as {dtype} on {device}", device)
+
+    def copy_(self, src: FakeTensor) -> FakeTensor:
+        self.src = src
+        return self
+
+
+class FakeOptimizer:
+    """torch's Optimizer as `load_optimizer` sees it: groups with their kernel flags, and a state
+    keyed by parameter that load_state_dict fills from the saved one (strides as saved)."""
+
+    def __init__(self, params: list[FakeTensor], fused: bool | None) -> None:
+        self.param_groups = [{"params": params, "fused": fused, "capturable": False}]
+        self.state: dict[Any, dict[str, Any]] = {}
+        self.loaded: dict[str, Any] = {}
+
+    def load_state_dict(self, sd: dict[str, Any]) -> None:
+        self.loaded = sd
+        params = self.param_groups[0]["params"]
+        self.state = {p: dict(sd["state"][i]) for i, p in enumerate(params) if i in sd["state"]}
+
+
+def test_load_optimizer_lays_each_state_entry_out_as_its_parameter(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    import types
+
+    import poring_vision.midckpt as mc
+
+    fake = types.SimpleNamespace(
+        float32="float32", float64="float64", preserve_format="preserve",
+        get_default_dtype=lambda: "float32", is_tensor=lambda v: isinstance(v, FakeTensor),
+        empty_like=lambda p, memory_format: FakeTensor(p.shape, f"like {p.made} ({memory_format})",
+                                                       p.device),
+    )  # fmt: skip
+    monkeypatch.setitem(sys.modules, "torch", fake)
+    w, b = FakeTensor((8, 3, 3, 3), "w", "cuda:0"), FakeTensor((8,), "b", "cuda:0")
+    saved = {"param_groups": [{"params": [0, 1], "fused": None}], "state": {
+        0: {"step": FakeTensor((), "s0"), "exp_avg": FakeTensor((8, 3, 3, 3), "m0"),
+            "exp_avg_sq": FakeTensor((8, 3, 3, 3), "v0")},
+        1: {"step": FakeTensor((), "s1"), "exp_avg": FakeTensor((8,), "m1"),
+            "odd": FakeTensor((2,), "x"), "count": 3}}}  # fmt: skip
+    opt = FakeOptimizer([w, b], fused=True)
+    mc.load_optimizer(opt, saved)
+    assert opt.loaded["param_groups"][0]["fused"] is True  # the live kernel, as stock does
+    assert saved["param_groups"][0]["fused"] is None  # the checkpoint itself is untouched
+    sw, sb = opt.state[w], opt.state[b]
+    for k, src in (("exp_avg", "m0"), ("exp_avg_sq", "v0")):
+        assert sw[k].made == "like w (preserve)" and sw[k].device == "cuda:0"
+        assert sw[k].src is not None and sw[k].src.made == src  # the saved values, copied in
+    assert sb["exp_avg"].made == "like b (preserve)"
+    assert sw["step"].made == "s0 as float32 on cuda:0"  # fused: on the parameter's device
+    assert sb["odd"].made == "x" and sb["count"] == 3  # neither kind: left as loaded
+    opt = FakeOptimizer([w, b], fused=False)
+    mc.load_optimizer(opt, saved)
+    assert opt.state[w]["step"].made == "s0 as float32 on cpu"  # not fused: a CPU scalar
