@@ -52,10 +52,37 @@ def newest_kind(before: Any, area: Any, templates: dict[str, Any]) -> dict[str, 
     return out
 
 
+def chat_mode(agent: Any, screen: Any, n: int, gap_s: float) -> int:
+    """The POST-REFUSAL chat state (Batt 2026-10-09: "make open_chat recognise and recover from
+    the post-refusal chat state"): one GM line typed n times in a row past the guard. After each:
+    the chat_open signature's distance, a screenshot of the chat window + input, then whether
+    open_chat itself still works."""
+    gx, gy, _, _ = r.game_region()
+    rows = []
+    for k in range(n):
+        r.open_chat(agent, screen)
+        agent.type_text("@heal\n")
+        time.sleep(1.2)
+        dist = r.distance(screen, "chat_open")
+        r.to_png(screen.grab(gx, gy + 530, 680, 190)[1], OUT / f"chat-{k:02d}.png")
+        rows.append({"k": k, "chat_open_distance": round(float(dist), 2),
+                     "chat_open": bool(dist <= r.SIG_MATCH)})  # fmt: skip
+        print(json.dumps(rows[-1]), flush=True)
+        time.sleep(gap_s)
+    try:
+        r.open_chat(agent, screen)
+        after = "open_chat ok"
+    except r.Stop as exc:
+        after = f"open_chat Stop: {exc}"
+    r.to_png(screen.grab(gx, gy + 530, 680, 190)[1], OUT / "chat-after.png")
+    print(json.dumps({"mode": "chat", "n": n, "after": after}), flush=True)
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)  # fmt: skip
-    ap.add_argument("mode", choices=("same", "sep"))
+    ap.add_argument("mode", choices=("same", "sep", "chat"))
     ap.add_argument("--n", type=int, default=7)
     ap.add_argument("--gap-s", type=float, default=1.5)
     a = ap.parse_args()
@@ -66,6 +93,8 @@ def main() -> int:
         r.activate_client(agent, screen)
         r.gm(agent, screen, "@heal")  # a different line first: whatever was typed before is not
         time.sleep(a.gap_s)  #           what the probe repeats
+        if a.mode == "chat":
+            return chat_mode(agent, screen, a.n, a.gap_s)
         for k in range(a.n):
             lines = ["/ex", "/where"] if a.mode == "sep" else ["/where"]
             for line in lines:
