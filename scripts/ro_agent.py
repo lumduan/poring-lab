@@ -1193,6 +1193,9 @@ def account_chars(which: str) -> list[str]:
     return [r[0] for r in rows]
 
 
+CHAT_RECHECK_S = 2.0  # open_chat's re-judging window on fresh frames (2026-10-09)
+
+
 def open_chat(agent: Agent, screen: Screen) -> None:
     """Make sure the chat input is open (Enter opens it), then click INTO it: an open but
     unfocused input (e.g. after clicks on the world) drops the first keystrokes -- a `@warp ...`
@@ -1208,7 +1211,25 @@ def open_chat(agent: Agent, screen: Screen) -> None:
         time.sleep(1.0)
     # judged on a frame decoded AFTER the last Enter: a frozen frame is FrozenStream, not "closed"
     if not is_state(screen, "chat_open", after_ns=pressed):
-        raise Stop("the chat input did not open: nothing typed")
+        # RECOVERY (Batt 2026-10-09; three held-out runs stopped here): re-judge on FRESH frames for
+        # up to CHAT_RECHECK_S, no key sent -- a progressive RDP frame still refining, or a scene
+        # change behind the translucent chat window. The probe of the same day showed the client's
+        # repeat refusal leaves the input open and empty (chat_repeat_probe.py chat), so it is not
+        # that. A real failure saves the frame and the distances, then stops as before.
+        dists: list[float] = []
+        end = time.monotonic() + CHAT_RECHECK_S
+        while time.monotonic() < end:
+            d = distance(screen, "chat_open")
+            dists.append(round(float(d), 2))
+            if d <= SIG_MATCH:
+                break
+            time.sleep(0.25)
+        else:
+            shot = to_png(screen.full(), Path("/dev/shm/poring-lab-tmp/chat-open-fail")
+                          / f"{time.strftime('%Y%m%d-%H%M%S')}.png")  # fmt: skip
+            raise Stop(f"the chat input did not open: nothing typed (chat_open distances {dists}, "
+                       f"match <= {SIG_MATCH}; frame {shot})")  # fmt: skip
+        log(f"chat input recognised on a re-check (distances {dists})")
     agent.click(*layout("chat_input"))
     time.sleep(0.2)
 

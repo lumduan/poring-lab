@@ -140,6 +140,22 @@ def observe(boxes: Any, w: w5.World, t_ns: int) -> None:
     UNITS["memory"].observe(boxes, w.camera, w.gat, w.position, t_ns, UNITS["ms_per_cell"])
 
 
+def portal_goal(mapname: str, walkable: Any) -> tuple[int, int]:
+    """The walkable cell of PORTAL's L3 trigger area (cell +- span) nearest its centre."""
+    route = json.loads((r.ROOT / "data/kb/route.json").read_text())
+    cx, cy = PORTAL["cell"]
+    warp = next((x for x in route["warps"].get(mapname, []) if (x["x"], x["y"]) == (cx, cy)), None)
+    if warp is None:
+        raise SystemExit(f"no L3 warp at {PORTAL['cell']} on {mapname} (data/kb/route.json)")
+    cells = [(cx + dx, cy + dy) for dy in range(-int(warp["span_y"]), int(warp["span_y"]) + 1)
+             for dx in range(-int(warp["span_x"]), int(warp["span_x"]) + 1)]  # fmt: skip
+    ok = [c for c in cells if 0 <= c[1] < walkable.shape[0] and 0 <= c[0] < walkable.shape[1]
+          and walkable[c[1], c[0]]]  # fmt: skip
+    if not ok:
+        raise SystemExit(f"the warp at {PORTAL['cell']} has no walkable trigger cell")
+    return min(ok, key=lambda c: (max(abs(c[0] - cx), abs(c[1] - cy)), abs(c[0] - cx)))
+
+
 def scene_has_monsters(screen: Any) -> bool:
     """The HARNESS's CLEAN check (2026-10-09): any monster box on a fresh frame (the detector)."""
     det = UNITS["detector"]
@@ -760,6 +776,10 @@ def run(scene: str, condition: str, n: int, seed: int, label: str, crowd: int,
                     return c
             return None
 
+        # the HARNESS's portal target (2026-10-09, 3.29a): the L3 warp cell itself is not walkable
+        # in the GAT (prt_fild08's (170, 378)); its trigger area is. The walkable trigger cell
+        # nearest the warp's centre is the goal and the start search's anchor; none = fail closed.
+        portal_target = portal_goal(mapname, w.walkable) if portal else None
         saw_monsters = True  # the HARNESS's CLEAN condition: the first route checks the scene
         for i in range(n):
             gm_cmd = False
@@ -774,7 +794,7 @@ def run(scene: str, condition: str, n: int, seed: int, label: str, crowd: int,
             if portal or i % rr.DR_WARP_EVERY == 0:
                 if condition == "crowd":
                     r.gm(agent, screen, "@killmonster2")
-                start_cell = (seeded_cell(PORTAL["cell"], 8, 15, PORTAL["cell"]) if portal
+                start_cell = (seeded_cell(portal_target, 8, 15, portal_target) if portal
                               else seeded_cell((sx0, sy0), 0, 8))  # fmt: skip
                 if start_cell is None:
                     raise SystemExit("the harness found no seeded start cell")
@@ -798,7 +818,7 @@ def run(scene: str, condition: str, n: int, seed: int, label: str, crowd: int,
             elif fix == "where":  # no minimap readout here: an absolute fix at the route's start
                 start_fix = relocalise(agent, screen, w, noentry_mask, band)
             if portal:
-                goal: tuple[int, int] | None = PORTAL["cell"]  # type: ignore[assignment]
+                goal: tuple[int, int] | None = portal_target
             else:
                 here = w.position
                 goal = None

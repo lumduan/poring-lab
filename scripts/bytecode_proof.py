@@ -43,7 +43,7 @@ def fp_code(c):
 def fp_func(f):
     f = inspect.unwrap(f)
     code = getattr(f, "__code__", None)
-    if code is None or not code.co_filename.startswith(root):
+    if code is None or not code.co_filename.startswith(root) or "/.venv/" in code.co_filename:
         return None  # generated code (dataclass methods, exec'd helpers): not our source
     return fp_code(code) + ":" + hashlib.sha256(norm((f.__defaults__, f.__kwdefaults__)).encode()
                                                  ).hexdigest()[:8]
@@ -56,7 +56,7 @@ for name, mod in list(sys.modules.items()):
     short = name
     for k, v in vars(mod).items():
         if getattr(v, "__module__", None) != mod.__name__:
-            plain = (int, float, str, bytes, bool, tuple, frozenset)
+            plain = (int, float, str, bytes, bool, tuple, frozenset, dict, list)
             if isinstance(v, plain) and not k.startswith("__"):
                 val = sorted(map(repr, v)) if isinstance(v, frozenset) else v
                 out[f"{short}.{k}"] = "const:" + hashlib.sha256(norm(val).encode()).hexdigest()[:16]

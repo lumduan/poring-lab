@@ -61,3 +61,10 @@ def test_moved_lines_pass_and_a_constant_fails(tmp_path: Path) -> None:
     assert proof(tree(tmp_path / "a"), tree(tmp_path / "b", rule=moved))["verdict"] == "PASS"
     got = proof(tree(tmp_path / "c"), tree(tmp_path / "d", rule=RULE.replace("= 3", "= 4")))
     assert got["verdict"] == "FAIL" and got["undeclared_changes"] == ["rule.LIMIT"]
+
+
+def test_a_changed_dict_constant_fails(tmp_path: Path) -> None:
+    rule = RULE + 'PORTAL = {"cell": (1, 2)}\n'
+    got = proof(tree(tmp_path / "a", rule=rule),
+                tree(tmp_path / "b", rule=rule.replace("(1, 2)", "(1, 3)")))  # fmt: skip
+    assert got["verdict"] == "FAIL" and got["undeclared_changes"] == ["rule.PORTAL"]
