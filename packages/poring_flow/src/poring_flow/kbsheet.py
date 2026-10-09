@@ -15,9 +15,11 @@ Per map, in this order:
 3. Left out, so the linter fails closed (13.2): map flags, the Kafra's services and save cell, the
    warp an NPC makes after an option, items. Those extractions are approved (Q27) and not built.
 
-KEYS (PROVISIONAL, for Batt: ADR-0020 open question 11 and the key scheme): the IR stores keys,
-never text (ADR-0012). An NPC's key is `n_` + the first 8 hex digits of sha256("<map>|<npc name>"),
-an option's is `o_` + the first 8 of sha256("<npc name>|<option text>"): one-way, stable while the
+KEYS (~~PROVISIONAL, for Batt: ADR-0020 open question 11 and the key scheme~~ ➡️ DECIDED by Batt
+2026-10-09, ADR-0020 Q11: these keys are LOCAL ONLY -- they and every filled flow holding them stay
+under data/, never committed; the scheme stays as built): the IR stores keys, never text
+(ADR-0012). An NPC's key is `n_` + the first 8 hex digits of sha256("<map>|<npc name>"), an
+option's is `o_` + the first 8 of sha256("<npc name>|<option text>"): one-way, stable while the
 server's scripts are. The names and texts are returned as LABELS for display only, never stored in
 a flow.
 """

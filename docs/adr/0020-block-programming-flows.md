@@ -7,14 +7,14 @@ verdict_date: 2026-10-08
 verdict_ticket: null
 supersedes: null
 related: [ADR-0015, ADR-0002, ADR-0003, ADR-0004, ADR-0006, ADR-0007, ADR-0011, ADR-0012, ADR-0014, ADR-0016, ADR-0018, ADR-0019]
-next_action: "ACCEPTED by Batt 2026-10-08, with the decisions recorded at the open questions (16-18, 20, 21, 29, part of 27). Build MW1 / F1 OFFLINE now (the flow IR with map blocks, the block catalogue, linter layers 1-3 incl. the section 13 rules), no runtime changes; the remaining open questions stay open and are answered as MW2+ needs them."
+next_action: "ACCEPTED by Batt 2026-10-08, with the decisions recorded at the open questions (16-18, 20, 21, 29, part of 27). Build MW1 / F1 OFFLINE now (the flow IR with map blocks, the block catalogue, linter layers 1-3 incl. the section 13 rules), no runtime changes; the remaining open questions stay open and are answered as MW2+ needs them. ➡️ 2026-10-09: Batt decided 5 of the 19 MW1 contradictions (#6 readiness, #15 always-on safety events, #13 rank = IR 2, #14 ties, #18 one planner: the cross-check, the swap waits) and MW2-editor's parked items; each recorded in place with a dated marker and built (db27d76, 87d654a, c131ddc (+ 3d4215b), 60e75a9 (+ 2f84873), 22ac314). Open question 15 CLOSED, 11 decided."
 ---
 
 # ADR-0020: Block programs over one flow IR (the agent builds blocks, users compose flows)
 
 - **Status:** ~~PROPOSED (2026-10-07). Batt accepts or not. Nothing is built.~~ ➡️ **ACCEPTED (Batt,
   2026-10-08)**, with his answers recorded at the open questions. MW1 / F1 (the IR and the
-  linter, offline) starts now; no runtime changes until MW2.
+  linter, offline) starts now; no runtime changes until MW2 (➡️ MW2-live, 13.8; renamed 2026-10-09).
 - **Amended, still PROPOSED (Batt, 2026-10-08):** workflows are organised BY MAP (map blocks,
   typed exits, target / ignore lists with an all-spawn training scope, an automatic preparation
   estimate), with EVENT FLOWS at global and per-map scope. See section 13.
@@ -597,7 +597,7 @@ approval and the result changed, the run does not start.
 wrong: approval refuses it), `readiness` (a binding not there yet: the RUN waits for it), `warning`
 and `info`. The run-start check refuses on ANY error or readiness item, fails closed (no static data
 or no resolver is a refusal) and, given the approved hash, refuses another hash. It is built
-(`poring_flow.runstart`, tested) but nothing calls it yet: MW2 runs nothing, and the live executor
+(`poring_flow.runstart`, tested) but nothing calls it yet: MW2-editor runs nothing, and the live executor
 (MW3) calls it before its first input. Simulation is design time and is not gated.
 
 ## 6. Runtime
@@ -914,7 +914,8 @@ Every phase is offline until stated. Each ends with its acceptance criteria met 
 
 **F0 · Decide.** Batt accepts or amends this ADR and answers the open questions marked FIRST.
 
-Map-centric workflows add phases MW0-MW4 beside these (13.8): MW1 runs with F1, MW2 after F2.
+Map-centric workflows add phases MW0-MW4 beside these (13.8): MW1 runs with F1, MW2 (➡️ MW2-live,
+renamed 2026-10-09) after F2.
 
 **F1 · IR + catalogue + linter (offline; no UI, no input).**
 - `poring_flow` (Apache-2.0): the models, canonical JSON and hash, the generated JSON Schema and
@@ -1434,7 +1435,7 @@ For the current map block B, in this order:
   input writer). No event has a second path, a second connection or a direct Injector call.
 - **The executor serialises with ONE input token.** At any instant exactly one flow owns it: the
   main flow between its ticks, an insert at a safe point, a pre-empt after the halt and its
-  ReleaseAll. Batches from two flows never interleave (checked in the input log, MW1 and MW2).
+  ReleaseAll. Batches from two flows never interleave (checked in the input log, MW1 and MW2-live).
 - The mux's own checks apply to every batch unchanged: the lease, the interlock, the foreground
   gate, the frame-age guard. A refused event input is never retried fast (section 6). A human
   takeover pauses everything; a red interlock stops everything (the guards).
@@ -1496,7 +1497,7 @@ Every new workflow starts with six GLOBAL events:
   - Their bindings are checked even when the flow does not write them (a death needs the death
     dialog bound), so they appear among the readiness items (section 5).
   - A consequence for open question 19: `dead`'s 1 per run is now a CEILING a flow cannot raise,
-    not only a default. MW2's sample said 3; it now says 1.
+    not only a default. The MW2-editor sample said 3; it now says 1.
 - `unintended_engagement`, `hp_low` and `weight`: defaults, editable per map (13.9 for the first).
 
 Map events then shape them per map. The effective sets of Batt's example (farm is taken to be a
@@ -1716,10 +1717,12 @@ The section itself stays PROPOSED until Batt accepts it.
   - the estimator equals a hand computation;
   - the Byalan fixture's training scope is all 7 species.
 
-**MW2 · One map block and its exits, live** (after F2; lab-rathena, ASSIST, Batt present).
+**MW2-live · One map block and its exits, live** (after F2; lab-rathena, ASSIST, Batt present). Named
+"MW2" until 2026-10-09.
 ➡️ 2026-10-08: not the EDITOR plan [mw2-block-editor.md](../planning/mw2-block-editor.md), which is
 also called "MW2" (its skeleton is built on branch `feat/mw2-editor`, SIMULATE only, no live run).
-The naming is parked for Batt.
+The naming is parked for Batt. ➡️ **DECIDED by Batt 2026-10-09: this phase is MW2-live; the
+editor plan is MW2-editor** (mw2-block-editor.md section 0).
 - Prerequisites: `walk_to` under walk@11's safety bar, `take_warp` and the position read verified
   alone.
 - Alone-tests before their blocks run in a flow, each pre-registered:
@@ -1813,6 +1816,10 @@ it offline.
 **➡️ The 19 contradictions MW1 found** (each built one provisional way), with a recommended
 resolution per item: [docs/planning/adr0020-contradictions.md](../planning/adr0020-contradictions.md).
 They await Batt's decision (2026-10-08); this ADR is unchanged until he decides.
+➡️ **2026-10-09: Batt decided 5 of them, each as recommended: #6, #15, #13, #14, #18** (his order).
+Each is recorded where the ADR said otherwise, with a "DECIDED 2026-10-09 (Batt, contradictions
+#N)" marker (sections 1, 2.5, 5, 6, 12, 13.4, 13.5, 13.6.1-13.6.3, 13.6.8, 13.6.9; open question
+15 closed). The other 14 still await him.
 
 Marked FIRST: needed before F1 or F2.
 
@@ -1842,6 +1849,11 @@ Marked FIRST: needed before F1 or F2.
 11. **Committing L3-derived keys.** ADR-0012 allowed one-way message keys from the client table.
     Are keys derived from GPL server scripts (NPC and option keys) committable in shared flows, or
     do filled flows always stay under `data/`? Proposal: they stay under `data/` until Batt rules.
+    ➡️ **DECIDED by Batt 2026-10-09 (with MW2-editor's parked items): the proposal.** L3-derived
+    NPC and option keys, and every filled flow that holds them, stay LOCAL under `data/` and are
+    never committed; committed flows and fixtures hold synthetic keys only. The PROVISIONAL scheme
+    of `poring_flow/kbsheet.py` (`n_` / `o_` + 8 hex digits of sha256) stays as built: no derived
+    key is ever committed, so a later change only re-resolves local flows (section 4's re-pick).
 12. **Comments in the Python view**: carry them (tokenize) or drop them.
 13. **JavaScript import**: never, or later with a parser whose licence is checked first.
 14. **Blockly's CSP fit** (section 9): only measurable on the pinned version; the fallback is our
