@@ -109,6 +109,20 @@ The hard lines of ADR-0015 hold without change:
 - **Node ids are structural paths** (`main.2.then.0`, `handlers.1.body.0`), computed by the
   canonicaliser and never stored by authors. Together with the hash they name a block
   unambiguously in a log, and they make every round trip exact.
+  ➡️ **DECIDED 2026-10-09 (Batt, contradictions #3): ONE grammar for the node paths people read**
+  (every lint message, every schema error, the LLM drafter's feedback): named nodes by name,
+  statements by index.
+  - `main.4`; `procedures.<name>.2`; `handlers.<key>` and `handlers.<key>.1` (a global event,
+    written or always-on); `maps.<block>` and `maps.<block>.3` (a map block by its NAME: two blocks
+    may share a map); `maps.<block>.events.<key>.0` (a map event of that block); `variables.<NAME>`;
+    `global` for the global pairs.
+  - It replaces MW1's bare `drink:` / `town.3:` / `farm_hp_low:` forms and this paragraph's
+    `handlers.1.body.0` in messages. Example: "maps.town.3: the route from …", "handlers.dead: dead
+    is safety-critical: …".
+  - Messages only, as recommended: `poring_flow.ir.PathNames` prints the structural ids, which
+    stay the editor's and the trace's keys (`town.3`, `farm_hp_low.0`: where a finding is drawn,
+    a simulate run's per-node rows). The examples elsewhere in this ADR (13.1, 13.5, 13.6.9) keep
+    their first wording as history; they print in this grammar.
 - **View state is not IR.** Block positions, collapsed blocks and the like are editor metadata
   stored beside the IR, keyed by node path, and excluded from the hash.
 - **Text is never stored** (ADR-0012: the bot thinks in keys). The IR holds keys and ids; the views
@@ -1083,7 +1097,8 @@ L3 and checked by the linter (13.5). The arrival is CHECKED at run time, from pi
   variable. Each block's subtree is its main flow; an exit is an action leaf, then its arrival
   check, then `current_block := destination`.
 - Node paths inside a workflow start with the block's name (`town.3`, `farm.0`: section 1's
-  structural paths). The messages in 13.5 and 13.6.9 use the node paths of the Python example in
+  structural paths). ➡️ Messages print them as `maps.town.3`, `maps.farm.0` (section 1's one
+  grammar, contradictions #3, 2026-10-09); the structural ids are unchanged. The messages in 13.5 and 13.6.9 use the node paths of the Python example in
   13.6.8, as if each rule's fault were present there. The example itself already carries the fixes
   (the save point is set, the wings and potions are kept).
 
@@ -1315,7 +1330,8 @@ values, not for numbers decided here:
 ### 13.5 Linter rules for map workflows
 
 Added to section 5's layers. The simulation layer already tracks the current map; it now also
-tracks the save point. The messages are examples.
+tracks the save point. The messages are examples. ➡️ They print in section 1's one grammar since
+2026-10-09 (contradictions #3): `town.3:` reads `maps.town.3:`, `farm:` reads `maps.farm:`.
 
 | Rule | Layer | Checks | Example message |
 |---|---|---|---|
@@ -1694,6 +1710,10 @@ name.
 
 They extend section 5's "3 · events" row. Where they are stricter (a same-sensor tie is an ERROR,
 not a warning), they win.
+
+➡️ The example messages below print, since 2026-10-09, in section 1's one grammar (contradictions
+#3): `farm:` reads `maps.farm:`, `hp_low:` reads `handlers.hp_low:`, `boss_seen:` reads
+`maps.farm.events.boss_seen:`, `town:` reads `maps.town:`.
 
 | Rule | Severity and check | Example message |
 |---|---|---|

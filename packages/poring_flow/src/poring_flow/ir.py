@@ -732,6 +732,45 @@ def count_nodes(flow: Flow) -> int:
     return n
 
 
+# --- the node-path grammar a person reads (Batt 2026-10-09, ADR-0020 contradictions #3) ----------
+class PathNames:
+    """ONE grammar for the node paths printed in every message (lint findings, schema errors):
+    named nodes by name, statements by index.
+
+        main.4                               the plain main flow
+        procedures.<name>.2                  a procedure
+        handlers.<key>  / handlers.<key>.1   a global event (written, or the always-on built-in)
+        maps.<block> / maps.<block>.3        a map block (by its NAME: two blocks may share a map)
+        maps.<block>.events.<key>.0          a map event (override, add, extend) of that block
+        variables.<NAME>                     a flow variable
+        global                               the global pairs (the ties rule)
+
+    It prints the structural node ids (`sites()`: `town.3`, `drink.0`, `farm_hp_low.0`), which
+    stay the editor's and the trace's keys; only what a person reads changes ("messages only")."""
+
+    def __init__(self, flow: Flow) -> None:
+        roots: dict[str, str] = {"main": "main", "global": "global"}
+        for name in flow.variables:
+            roots[name] = f"variables.{name}"
+        for name in flow.procedures:
+            roots[name] = f"procedures.{name}"
+        for k in SAFETY_CRITICAL:  # always on (always_on.py): global even when not written
+            roots[k] = f"handlers.{k}"
+        for h in flow.handlers:
+            roots[h.name] = f"handlers.{h.name}"
+        for b in flow.workflow.blocks if flow.workflow else []:
+            roots[b.name] = f"maps.{b.name}"
+            for ev in b.events:
+                if not isinstance(ev, Disable):
+                    roots[event_label(ev, b)] = f"maps.{b.name}.events.{event_key(ev)}"
+        self.roots = roots
+
+    def __call__(self, path: str) -> str:
+        root, sep, rest = path.partition(".")
+        pre = self.roots.get(root)
+        return pre + sep + rest if pre is not None else path
+
+
 # --- canonical JSON and the hash ------------------------------------------------------------------
 class FlowError(ValueError):
     """An IR that does not validate: one `path: message` line per problem."""
@@ -838,8 +877,8 @@ _BODIES = ("then", "orelse", "body", "steps")
 def _message(data: Any, err: Any) -> str:
     """A pydantic error as `node path: field: message`, discriminator tags dropped.
 
-    Paths follow `sites()`: main.<i>, <procedure>.<i>, <handler>.<i>, <block>.<i>, nested
-    then / orelse / body.
+    Paths follow the printed grammar (`PathNames`, #3): main.<i>, procedures.<name>.<i>,
+    handlers.<name>.<i>, maps.<block>.<i>, nested then / orelse / body.
     """
     loc = list(err["loc"])
     node: Any = data
@@ -867,12 +906,12 @@ def _message(data: Any, err: Any) -> str:
             if top and part == "main" and isinstance(child, list):
                 path.append("main")
             elif top and part == "procedures" and isinstance(child, dict) and nxt in child:
-                path.append(str(nxt))
+                path.append(f"procedures.{nxt}")  # the printed grammar (#3, PathNames)
                 child, i = child[nxt], i + 1
             elif top and part == "handlers" and isinstance(child, list) and isinstance(nxt, int):
                 item = child[nxt] if nxt < len(child) else None
                 name = item.get("name") if isinstance(item, dict) else None
-                path.append(str(name) if name else f"handlers.{nxt}")
+                path.append(f"handlers.{name}" if name else f"handlers.{nxt}")
                 child, i = item, i + 1
             elif top and part == "workflow" and nxt == "blocks" and isinstance(child, dict):
                 blocks = child.get("blocks")
@@ -880,7 +919,7 @@ def _message(data: Any, err: Any) -> str:
                 if isinstance(blocks, list) and isinstance(j, int) and j < len(blocks):
                     item = blocks[j]
                     name = item.get("name") if isinstance(item, dict) else None
-                    path.append(str(name) if name else f"blocks.{j}")
+                    path.append(f"maps.{name}" if name else f"maps.{j}")
                     child, i = item, i + 2
                     if loc[i + 1 : i + 2] == ["main"]:
                         child, i = item.get("main") if isinstance(item, dict) else None, i + 1

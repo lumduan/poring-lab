@@ -255,7 +255,7 @@ CASES = [
         "recursion",
         "procedures",
         "def a():\n    b()\n\n\ndef b():\n    a()\n\n\nsit()\n",
-        ["a: recursion (a → b → a) is not allowed"],
+        ["procedures.a: recursion (a → b → a) is not allowed"],
         farm=False,
     ),
     Case(
@@ -267,7 +267,7 @@ CASES = [
                 "mode=INSERT, escalate=leave, max_per_min=6)\ndef hp_low",
             )
         ),
-        ["hp_low: escalate names no procedure leave"],
+        ["handlers.hp_low: escalate names no procedure leave"],
     ),
     Case(
         "names",
@@ -297,13 +297,16 @@ CASES = [
         "map_change",
         "exit_placement",
         farm(("attack_nearest(within=12)", "use_item(WING)")),
-        ["farm.0.body.0: a Butterfly Wing changes the map: a map block leaves through take_exit"],
+        [
+            "maps.farm.0.body.0: a Butterfly Wing changes the map: a map block leaves through "
+            "take_exit"
+        ],
     ),
     Case(
         "do_placement",
         "do_placement",
         "@on(sit(), priority=SURVIVAL, cooldown_s=5)\ndef h():\n    stand()\n\n\nsit()\n",
-        ["h: an event condition cannot run a block"],
+        ["handlers.h: an event condition cannot run a block"],
         farm=False,
     ),
     Case(
@@ -317,7 +320,7 @@ CASES = [
         "exit_item",
         "exit_item",
         farm(("take_exit(item_warp(WING, to=", "take_exit(item_warp(BOSS, to=")),
-        ["farm.1: exit.item: BOSS holds a mob: an item_warp takes an item"],
+        ["maps.farm.1: exit.item: BOSS holds a mob: an item_warp takes an item"],
     ),
     Case(  # #2 (Batt 2026-10-09): `in` only against a literal list of refs or a list variable
         "membership",
@@ -348,7 +351,7 @@ CASES = [
         "map_sheet",
         "map_sheet",
         FARM,
-        ["farm: no map sheet for map_3 on lab-rathena (L3): unsupported here"],
+        ["maps.farm: no map sheet for map_3 on lab-rathena (L3): unsupported here"],
         world=World(
             server="lab-rathena",
             sheets={k: v for k, v in farm_sheets().items() if k != "map_3"},
@@ -374,9 +377,11 @@ CASES = [
             "main.0: walk_to is unsupported here: L3 binding "
             "L3.map.walkability (no L3 bindings for lab-rathena)",
             # the always-on safety events the flow does not write run too (#15): their bindings
-            "dead.0: respawn is unsupported here: L2 binding L2.window.death_dialog (not bound "
+            "handlers.dead.0: respawn is unsupported here: L2 binding L2.window.death_dialog "
+            "(not bound "
             "for kro-20211103-prere/lab-rathena (params {}))",
-            "hp_critical.0: escape is unsupported here: L3 binding L3.map.flags (no L3 bindings "
+            "handlers.hp_critical.0: escape is unsupported here: L3 binding L3.map.flags (no L3 "
+            "bindings "
             "for lab-rathena)",
         ],
         resolver=default_resolver(ir.Target(**TARGET), Path("/nonexistent-l3")),
@@ -386,7 +391,7 @@ CASES = [
         "npc_block",
         "npc_menu",
         FARM,
-        ["town.1: npc n_k1 is not on map_1", "town.2: npc n_k1 is not on map_1"],
+        ["maps.town.1: npc n_k1 is not on map_1", "maps.town.2: npc n_k1 is not on map_1"],
         world=world(map_1=map_("map_1", npcs=[])),
     ),
     Case(
@@ -400,7 +405,7 @@ CASES = [
         "option_exit",
         "npc_menu",
         farm(('[option("o_5d0e")]', '[option("o_x")]')),
-        ["relay.0: option o_x is not in npc n_2b71's menu"],
+        ["maps.relay.0: option o_x is not in npc n_2b71's menu"],
     ),
     Case(
         "option_plain",
@@ -413,7 +418,7 @@ CASES = [
         "kafra",
         "kafra_service",
         FARM,
-        ["town.1: npc n_k1 offers no save service"],
+        ["maps.town.1: npc n_k1 offers no save service"],
         world=world(
             map_1=map_(
                 "map_1", npcs=[Npc(key="n_k1", x=146, y=90, kafra=Kafra(services=["storage"]))]
@@ -441,7 +446,7 @@ CASES = [
         "npc_warp_target",
         "exit_destinations",
         FARM,
-        ["relay.0: option o_5d0e of npc n_2b71 warps to map_4, not to farm's map_3"],
+        ["maps.relay.0: option o_5d0e of npc n_2b71 warps to map_4, not to farm's map_3"],
         world=world(
             map_2=map_(
                 "map_2",
@@ -462,7 +467,8 @@ CASES = [
         "exit_destinations",
         FARM,
         [
-            "relay.0: the warp after option o_5d0e of npc n_2b71 is not known: the destination is "
+            "maps.relay.0: the warp after option o_5d0e of npc n_2b71 is not known: the "
+            "destination is "
             "the author's, checked on arrival"
         ],
         world=world(map_2=map_("map_2", npcs=[Npc(key="n_2b71", x=40, y=302, menu=["o_5d0e"])])),
@@ -471,13 +477,13 @@ CASES = [
         "not_a_warp",
         "exit_destinations",
         farm(('cell("map_1", 150, 20)', 'cell("map_1", 151, 20)')),
-        ["town.3: (151, 20) is not a warp on map_1"],
+        ["maps.town.3: (151, 20) is not a warp on map_1"],
     ),
     Case(
         "warp_elsewhere",
         "exit_destinations",
         FARM,
-        ["town.3: the warp at (150, 20) leads to map_9, not to relay's map_2"],
+        ["maps.town.3: the warp at (150, 20) leads to map_9, not to relay's map_2"],
         world=world(map_1=map_("map_1", warps=[Warp(x=150, y=20, to_map="map_9", to_x=1, to_y=1)])),
     ),
     Case(
@@ -485,7 +491,8 @@ CASES = [
         "exit_destinations",
         FARM,
         [
-            "town.3: the warp at (150, 20) arrives at (40, 290) on map_2, outside relay's entry "
+            "maps.town.3: the warp at (150, 20) arrives at (40, 290) on map_2, outside relay's "
+            "entry "
             "south "
             "((40, 300), radius 2)"
         ],
@@ -497,21 +504,21 @@ CASES = [
         "noreturn",
         "exit_destinations",
         FARM,
-        ["farm.1: map_3 refuses a Butterfly Wing (noreturn)"],
+        ["maps.farm.1: map_3 refuses a Butterfly Wing (noreturn)"],
         world=world(map_3=map_("map_3", flags=MapFlags(noreturn=True))),
     ),
     Case(
         "not_a_wing",
         "exit_destinations",
         farm(("item_warp(WING", "item_warp(POTION")),
-        ["farm.1: item 9001 is not a Butterfly Wing: an item_warp needs one"],
+        ["maps.farm.1: item 9001 is not a Butterfly Wing: an item_warp needs one"],
     ),
     Case(
         "save_cell",
         "exit_destinations",
         FARM,
         [
-            "farm.1: a Butterfly Wing arrives at (150, 150) on map_1, outside town's entry A "
+            "maps.farm.1: a Butterfly Wing arrives at (150, 150) on map_1, outside town's entry A "
             "((150, 180), radius 2)"
         ],
         world=world(
@@ -532,21 +539,22 @@ CASES = [
         "target_spawn",
         "species_lists",
         farm(("mob(9103)]", "mob(9103), mob(9107)]")),
-        ["farm: mob 9107 is in no spawn line of map_3"],
+        ["maps.farm: mob 9107 is in no spawn line of map_3"],
         world=with_mobs(m9107={"level": 3}),
     ),
     Case(
         "both_lists",
         "species_lists",
         farm(("mob(9103)]", "mob(9103), mob(9105)]")),
-        ["farm: mob 9105 is on both the TARGET and the IGNORE list"],
+        ["maps.farm: mob 9105 is on both the TARGET and the IGNORE list"],
     ),
     Case(
         "aggressive_ignore",
         "species_lists",
         FARM,
         [
-            "farm: mob 9105 is aggressive and ignored: it attacks, the bot never answers, the HP "
+            "maps.farm: mob 9105 is aggressive and ignored: it attacks, the bot never answers, "
+            "the HP "
             "events decide"
         ],
         world=with_mobs(m9105={"aggressive": True}),
@@ -556,7 +564,7 @@ CASES = [
         "species_lists",
         FARM,
         [
-            "farm: mob 9101 (TARGET) and mob 9105 (IGNORE) look alike: their confusion is not "
+            "maps.farm: mob 9101 (TARGET) and mob 9105 (IGNORE) look alike: their confusion is not "
             "measured"
         ],
         world=with_mobs(m9101={"look_alike": [9105]}),
@@ -586,28 +594,28 @@ CASES = [
                 '\n    stop("done")\n\n\n# GLOBAL events',
             )
         ),
-        ["orphan: no exit reaches it from the start block town"],
+        ["maps.orphan: no exit reaches it from the start block town"],
     ),
     Case(
         "no_block",
         "graph",
         farm(('to=entry("farm", "arrival")', 'to=entry("farm2", "arrival")')),
         [
-            "farm: no exit reaches it from the start block town",
-            "relay.0: there is no map block farm2",
+            "maps.farm: no exit reaches it from the start block town",
+            "maps.relay.0: there is no map block farm2",
         ],
     ),
     Case(
         "no_entry",
         "graph",
         farm(('to=entry("farm", "arrival")', 'to=entry("farm", "north")')),
-        ["relay.0: farm has no entry north"],
+        ["maps.relay.0: farm has no entry north"],
     ),
     Case(
         "path_end",
         "graph",
         farm(('    take_exit(item_warp(WING, to=entry("town", "A")))\n', "")),
-        ["farm: a path of its main flow ends without take_exit or stop"],
+        ["maps.farm: a path of its main flow ends without take_exit or stop"],
     ),
     Case(
         "start",
@@ -619,7 +627,7 @@ CASES = [
         "entry_map",
         "graph",
         farm(('entry_at("A", cell("map_1", 150, 180))', 'entry_at("A", cell("map_2", 150, 180))')),
-        ["town: entry A is on map_2, not on map_1"],
+        ["maps.town: entry A is on map_2, not on map_1"],
     ),
     Case(
         "death_no_block",
@@ -650,7 +658,8 @@ CASES = [
         "routes",
         FARM,
         [
-            "town.3: the route from npc n_k1 (146, 90) to (150, 20) crosses the warp at (156, 22): "
+            "maps.town.3: the route from npc n_k1 (146, 90) to (150, 20) crosses the warp at "
+            "(156, 22): "
             "it would leave map_1"
         ],
         world=world(
@@ -667,55 +676,63 @@ CASES = [
         "no_walk",
         "routes",
         FARM,
-        ["town: routes on map_1 are not checked: its sheet has no walkability"],
+        ["maps.town: routes on map_1 are not checked: its sheet has no walkability"],
         world=world(map_1=map_("map_1", walk=None)),
     ),
     Case(
         "entry_wall",
         "routes",
         FARM,
-        ["town: entry A (150, 180) is not walkable on map_1"],
+        ["maps.town: entry A (150, 180) is not walkable on map_1"],
         world=world(map_1=map_("map_1", walk=grid(200, 200, ((150, 180, 150, 180),)))),
     ),
     Case(
         "attack_ignored",
         "attacks",
         farm(("attack_nearest(within=12)", "attack_nearest(mob(9105), within=12)")),
-        ["farm.0.body.0: mob 9105 is on farm's IGNORE list"],
+        ["maps.farm.0.body.0: mob 9105 is on farm's IGNORE list"],
     ),
     Case(
         "attack_spawn",
         "attacks",
         farm(("attack_nearest(within=12)", "attack_nearest(mob(9107), within=12)")),
-        ["farm.0.body.0: mob 9107 is in no spawn line of map_3"],
+        ["maps.farm.0.body.0: mob 9107 is in no spawn line of map_3"],
         world=with_mobs(m9107={"level": 3}),
     ),
     Case(
         "attack_no_target",
         "attacks",
         farm(("    targets=[mob(9101), mob(9102), mob(9103)],\n", "")),
-        ["farm.0.body.0: attack_nearest has no target: give it a mob or the block a TARGET list"],
+        [
+            "maps.farm.0.body.0: attack_nearest has no target: give it a mob or the block a TARGET "
+            "list"
+        ],
     ),
     Case(
         "save_point",
         "save_point",
         farm(('set_save_point(npc("n_k1"))', "sit()")),
         [
-            "boss_seen: a Butterfly Wing on farm returns to the save point, and nothing sets it "
+            "maps.farm.events.boss_seen: a Butterfly Wing on farm returns to the save point, "
+            "and nothing sets it "
             "before "
-            "farm.0. Add 'set save point' first?",
-            "farm.1: a Butterfly Wing returns to the save point, not to town, and nothing sets it "
+            "maps.farm.0. Add 'set save point' first?",
+            "maps.farm.1: a Butterfly Wing returns to the save point, not to town, and nothing "
+            "sets it "
             "on "
             "map_1. Add 'set save point' at town's Kafra?",
-            "farm_engagement: a Butterfly Wing on farm returns to the save point, and nothing sets "
+            "maps.farm.events.unintended_engagement: a Butterfly Wing on farm returns to the "
+            "save point, and nothing sets "
             "it "
-            "before farm.0. Add 'set save point' first?",
-            "weight: a Butterfly Wing on farm returns to the save point, and nothing sets it "
+            "before maps.farm.0. Add 'set save point' first?",
+            "handlers.weight: a Butterfly Wing on farm returns to the save point, and nothing "
+            "sets it "
             "before "
-            "farm.0. Add 'set save point' first?",
-            "weight: a Butterfly Wing on relay returns to the save point, and nothing sets it "
+            "maps.farm.0. Add 'set save point' first?",
+            "handlers.weight: a Butterfly Wing on relay returns to the save point, and nothing "
+            "sets it "
             "before "
-            "relay.0. Add 'set save point' first?",
+            "maps.relay.0. Add 'set save point' first?",
         ],
     ),
     Case(
@@ -726,10 +743,12 @@ CASES = [
             ("def relay():\n", 'def relay():\n    set_save_point(npc("n_k2"))\n'),
         ),
         [
-            "farm.1: a Butterfly Wing returns to the save point on map_2, not to town on map_1",
-            "weight: a Butterfly Wing on relay returns to the save point, and nothing sets it "
+            "maps.farm.1: a Butterfly Wing returns to the save point on map_2, not to town on "
+            "map_1",
+            "handlers.weight: a Butterfly Wing on relay returns to the save point, and nothing "
+            "sets it "
             "before "
-            "relay.0. Add 'set save point' first?",
+            "maps.relay.0. Add 'set save point' first?",
         ],
         world=world(
             map_2=map_(
@@ -747,7 +766,10 @@ CASES = [
         "assert",
         "save_point",
         farm(('set_save_point(npc("n_k1"))', 'assert_save_point(cell("map_1", 150, 180))')),
-        ["town.1: the save point is asserted, not set: the assertion stays visible at approval"],
+        [
+            "maps.town.1: the save point is asserted, not set: the assertion stays visible at "
+            "approval"
+        ],
     ),
     Case(
         "respawn_unknown",
@@ -755,7 +777,8 @@ CASES = [
         "@on(is_dead(), priority=CRITICAL, max_per_run=1, then=STOP)\ndef dead():\n    respawn()"
         "\n\n\nsit()\n",
         [
-            "dead: a death at main.0 respawns at the save point, which nothing sets before it: set "
+            "handlers.dead: a death at main.0 respawns at the save point, which nothing sets "
+            "before it: set "
             "it "
             "first, or assert it"
         ],
@@ -770,7 +793,8 @@ CASES = [
             "main.0. "
             "Add 'set save point' first?",
             # the always-on dead (#15) respawns there too, in every flow
-            "dead: a death at main.0 respawns at the save point, which nothing sets before it: "
+            "handlers.dead: a death at main.0 respawns at the save point, which nothing sets "
+            "before it: "
             "set it first, or assert it",
         ],
         farm=False,
@@ -780,10 +804,12 @@ CASES = [
         "weight",
         farm(("weight_percent() < 50:", "weight_percent() < 95:")),
         [
-            "farm.0: weight_percent() < 95 can change only by picking up items, and nothing in "
+            "maps.farm.0: weight_percent() < 95 can change only by picking up items, and "
+            "nothing in "
             "farm "
             "picks any up",
-            "farm.0: weight_percent() < 95 guards an attack loop, and attacks stop at 90 %: the "
+            "maps.farm.0: weight_percent() < 95 guards an attack loop, and attacks stop at 90 "
+            "%: the "
             "loop "
             "stalls before it ends",
         ],
@@ -798,7 +824,7 @@ CASES = [
             )
         ),
         [
-            "farm.0: weight_percent() < 50 can change only by picking up items, and loot is "
+            "maps.farm.0: weight_percent() < 50 can change only by picking up items, and loot is "
             "unsupported here"
         ],
         resolver=raises_for("loot"),
@@ -808,7 +834,8 @@ CASES = [
         "keep_lists",
         farm(("all_except=[WING, POTION]", "all_except=[POTION]")),
         [
-            "town.2: storing everything also stores the Butterfly Wings that farm's exit, weight, "
+            "maps.town.2: storing everything also stores the Butterfly Wings that farm's exit, "
+            "weight, "
             "boss_seen and farm_engagement use: add them to the keep list"
         ],
     ),
@@ -816,14 +843,17 @@ CASES = [
         "escape_unknown",
         "escape",
         FARM,
-        ["farm: hp_critical's escape on map_3 is unknown: its map flags are not extracted"],
+        ["maps.farm: hp_critical's escape on map_3 is unknown: its map flags are not extracted"],
         world=world(map_3=map_("map_3", flags=None)),
     ),
     Case(
         "escape_none",
         "escape",
         FARM,
-        ["farm: hp_critical has no escape on map_3 (noteleport, noreturn): it stops the run there"],
+        [
+            "maps.farm: hp_critical has no escape on map_3 (noteleport, noreturn): it stops the "
+            "run there"
+        ],
         world=world(map_3=map_("map_3", flags=MapFlags(noteleport=True, noreturn=True))),
     ),
     Case(
@@ -875,7 +905,7 @@ CASES = [
         "rearm",
         "@on(hp_percent() < 30, priority=SURVIVAL)\ndef drink():\n"
         "    use_item(item(9001))\n\n\nsit()\n",
-        ["drink: no re-arm and no cooldown: it would fire on every tick"],
+        ["handlers.drink: no re-arm and no cooldown: it would fire on every tick"],
         farm=False,
     ),
     Case(
@@ -883,7 +913,7 @@ CASES = [
         "passive_only",
         "@on(item_count(item(9001)) < 3, priority=UPKEEP, cooldown_s=60)"
         "\ndef restock():\n    sit()\n\n\nsit()\n",
-        ["restock: item_count() is an active sensor: never in an event condition"],
+        ["handlers.restock: item_count() is an active sensor: never in an event condition"],
         farm=False,
     ),
     # ties (13.6.9, Batt 2026-10-09 #14): a tie needs the same class AND the same rank (#13)
@@ -899,10 +929,12 @@ CASES = [
             )
         ),
         [
-            "farm: hp_low and hp_panic are both survival at rank 5 on hp_percent() < 30",
-            "farm: unintended_engagement and hp_panic are both survival: unintended_engagement "
+            "maps.farm: hp_low and hp_panic are both survival at rank 5 on hp_percent() < 30",
+            "maps.farm: unintended_engagement and hp_panic are both survival: "
+            "unintended_engagement "
             "runs first when both are due (rank 4 before 5)",
-            "farm: hp_panic and boss_seen are both survival: hp_panic runs first when both are "
+            "maps.farm: hp_panic and boss_seen are both survival: hp_panic runs first when both "
+            "are "
             "due (rank 5 before 50)",
         ],
     ),
@@ -919,11 +951,14 @@ CASES = [
             )
         ),
         [
-            "farm: hp_low and hp_panic are both survival on hp_percent() < 30: hp_low runs first "
+            "maps.farm: hp_low and hp_panic are both survival on hp_percent() < 30: hp_low runs "
+            "first "
             "when both are due (rank 5 before 50)",
-            "farm: unintended_engagement and hp_panic are both survival: unintended_engagement "
+            "maps.farm: unintended_engagement and hp_panic are both survival: "
+            "unintended_engagement "
             "runs first when both are due (rank 4 before 50)",
-            "farm: hp_panic and boss_seen are both survival at rank 50 on different sensors: they "
+            "maps.farm: hp_panic and boss_seen are both survival at rank 50 on different "
+            "sensors: they "
             "queue first in, first out",
         ],
     ),
@@ -932,7 +967,7 @@ CASES = [
         "retrigger",
         "@on(hp_percent() < 50, priority=SURVIVAL, cooldown_s=5)\n"
         "def fight():\n    attack_nearest(mob(9101))\n\n\nsit()\n",
-        ["fight: attack_nearest lowers hp_percent(), which can re-trigger fight"],
+        ["handlers.fight: attack_nearest lowers hp_percent(), which can re-trigger fight"],
         farm=False,
     ),
     Case(
@@ -941,7 +976,8 @@ CASES = [
         "@on(hp_percent() < 30, until=hp_percent() > 60, priority=SURVIVAL)\ndef drink():\n"
         "    use_item(item(9001), on_fail=CONTINUE)\n\n\nsit()\n",
         [
-            "drink: use_item continues on failure and nothing reads its outcome: a failure goes "
+            "handlers.drink: use_item continues on failure and nothing reads its outcome: a "
+            "failure goes "
             "unnoticed"
         ],
         farm=False,
@@ -950,14 +986,15 @@ CASES = [
         "critical_long",
         "critical_long",
         farm(("    respawn()\n", '    respawn()\n    walk_to(cell("map_1", 1, 1))\n')),
-        ["dead: walk_to is a long action inside a critical event"],
+        ["handlers.dead: walk_to is a long action inside a critical event"],
     ),
     Case(
         "inverted",
         "hysteresis",
         farm(("until=hp_percent() > 80", "until=hp_percent() > 40")),
         [
-            "hp_low: until hp_percent() > 40 overlaps when hp_percent() < 50: the stop threshold "
+            "handlers.hp_low: until hp_percent() > 40 overlaps when hp_percent() < 50: the stop "
+            "threshold "
             "must "
             "exceed 50"
         ],
@@ -966,14 +1003,15 @@ CASES = [
         "never_holds",
         "hysteresis",
         farm(("until=hp_percent() > 80", "until=hp_percent() > 100")),
-        ["hp_low: until hp_percent() > 100 can never hold: hp_percent() reads 0..100"],
+        ["handlers.hp_low: until hp_percent() > 100 can never hold: hp_percent() reads 0..100"],
     ),
     Case(
         "narrow",
         "hysteresis",
         farm(("until=hp_percent() > 80", "until=hp_percent() > 50")),
         [
-            "hp_low: the band between when hp_percent() < 50 and until hp_percent() > 50 is "
+            "handlers.hp_low: the band between when hp_percent() < 50 and until hp_percent() > "
+            "50 is "
             "narrower "
             "than the readout's resolution (1)"
         ],
@@ -983,7 +1021,8 @@ CASES = [
         "same_direction",
         farm(("rearm=weight_percent() < 50", "until=weight_percent() > 95")),
         [
-            "weight: until weight_percent() > 95 does not end weight_percent() >= 90: the stop "
+            "handlers.weight: until weight_percent() > 95 does not end weight_percent() >= 90: "
+            "the stop "
             "must "
             "lie below 90"
         ],
@@ -992,7 +1031,7 @@ CASES = [
         "disable_dead",
         "safety_critical",
         farm(("disable(hp_low, scope=town)", "disable(dead, scope=town)")),
-        ["town: dead is safety-critical: it can be extended, never disabled"],
+        ["maps.town: dead is safety-critical: it can be extended, never disabled"],
     ),
     Case(
         "override_dead",
@@ -1006,7 +1045,7 @@ CASES = [
                 "# MAP events",
             )
         ),
-        ["farm: dead is safety-critical: it can be extended, never overridden"],
+        ["maps.farm: dead is safety-critical: it can be extended, never overridden"],
     ),
     Case(  # #15: no longer an error -- the compiler adds the built-in (test_always_on.py)
         "missing_is_built_in",
@@ -1042,7 +1081,8 @@ CASES = [
             )
         ),
         [
-            "dead: dead is safety-critical: max_per_run 3 loosens the built-in 1: it may only be "
+            "handlers.dead: dead is safety-critical: max_per_run 3 loosens the built-in 1: it "
+            "may only be "
             "tightened"
         ],
     ),
@@ -1051,7 +1091,8 @@ CASES = [
         "safety_critical",
         farm(("@on(hp_percent() < 20, rearm", "@on(hp_percent() < 10, rearm")),
         [
-            "hp_critical: hp_critical is safety-critical: when hp_percent() < 10 fires later than "
+            "handlers.hp_critical: hp_critical is safety-critical: when hp_percent() < 10 fires "
+            "later than "
             "the built-in hp_percent() < 20"
         ],
     ),
@@ -1066,11 +1107,14 @@ CASES = [
             ("def unexpected_map():\n    read_position()", "def unexpected_map():\n    sit()"),
         ),  # fmt: skip
         [
-            "unexpected_map: unexpected_map is safety-critical: then is relocate or stop, not "
+            "handlers.unexpected_map: unexpected_map is safety-critical: then is relocate or "
+            "stop, not "
             "resume",
-            "unexpected_map: unexpected_map is safety-critical: its re-arm is the built-in's "
+            "handlers.unexpected_map: unexpected_map is safety-critical: its re-arm is the "
+            "built-in's "
             "(none: it re-arms when its trigger clears)",
-            "unexpected_map: unexpected_map's body starts with the built-in read_position(): "
+            "handlers.unexpected_map: unexpected_map's body starts with the built-in "
+            "read_position(): "
             "steps may only follow it",
         ],
     ),
@@ -1084,31 +1128,34 @@ CASES = [
                 "\ndef farm_dead():\n    close_dialog()\n\n\n# MAP events",
             )
         ),
-        ["farm: extend dead: max_per_run 3 loosens the global 1: an extension may only tighten"],
+        [
+            "maps.farm: extend dead: max_per_run 3 loosens the global 1: an extension may only "
+            "tighten"
+        ],
     ),
     Case(
         "class",
         "safety_critical",
         farm(("@on(is_dead(), priority=CRITICAL", "@on(is_dead(), priority=SURVIVAL")),
-        ["dead: dead is safety-critical: its class is critical, not survival"],
+        ["handlers.dead: dead is safety-critical: its class is critical, not survival"],
     ),
     Case(
         "fixed_body",
         "safety_critical",
         farm(("    escape()  # fixed body", "    sit()  # fixed body")),
-        ["hp_critical: hp_critical's body is fixed: escape()"],
+        ["handlers.hp_critical: hp_critical's body is fixed: escape()"],
     ),
     Case(
         "scope_extend",
         "scope",
         farm(("@extend(unexpected_map, scope=relay)", "@extend(weight_low, scope=relay)")),
-        ["relay: extend weight_low: there is no global event weight_low"],
+        ["maps.relay: extend weight_low: there is no global event weight_low"],
     ),
     Case(
         "scope_add",
         "scope",
         farm_ir(_add_hp_low),
-        ["relay: add hp_low: hp_low is a global event: override it instead"],
+        ["maps.relay: add hp_low: hp_low is a global event: override it instead"],
     ),
     Case(
         "scope_twice",
@@ -1119,7 +1166,7 @@ CASES = [
                 "disable(weight, scope=town)\ndisable(hp_low, scope=farm)",
             )
         ),
-        ["farm: two map events on hp_low: at most one per key"],
+        ["maps.farm: two map events on hp_low: at most one per key"],
     ),
     Case(
         "class_change",
@@ -1131,14 +1178,14 @@ CASES = [
                 "    priority=UPKEEP,\n    mode=INSERT,\n    max_per_min=6,\n    overrides=hp_low,",
             )
         ),
-        ["farm: hp_low moved from survival to upkeep: weight no longer waits for it"],
+        ["maps.farm: hp_low moved from survival to upkeep: weight no longer waits for it"],
     ),
     Case(
         "looser",
         "looser_harder",
         farm(("    hp_percent() < 70,", "    hp_percent() < 30,")),
         [
-            "farm: hp_low < 30 is looser than the global < 50, and map_3 spawns an aggressive "
+            "maps.farm: hp_low < 30 is looser than the global < 50, and map_3 spawns an aggressive "
             "species "
             "(mob 9105)"
         ],
@@ -1149,7 +1196,8 @@ CASES = [
         "looser_harder",
         farm(("    hp_percent() < 70,", "    hp_percent() < 30,")),
         [
-            "farm: hp_low is looser than the global; whether map_3 is harder was judged without "
+            "maps.farm: hp_low is looser than the global; whether map_3 is harder was judged "
+            "without "
             "the "
             "level criterion: the character's base level is not in assumes"
         ],
@@ -1173,7 +1221,7 @@ CASES = [
                 'def hp_low():\n    walk_to(cell("map_1", 1, 1))',
             )
         ),
-        ["hp_low: walk_to cannot be inserted: make the event pre-empt"],
+        ["handlers.hp_low: walk_to cannot be inserted: make the event pre-empt"],
     ),
     Case(
         "relocating",
@@ -1184,20 +1232,23 @@ CASES = [
                 "    priority=SURVIVAL,\n    scope=farm,\n)\ndef boss_seen",
             )
         ),
-        ["boss_seen: a Butterfly Wing changes the map: then must be relocate or stop"],
+        [
+            "maps.farm.events.boss_seen: a Butterfly Wing changes the map: then must be relocate "
+            "or stop"
+        ],
     ),
     Case(
         "engagement",
         "engagement_policy",
         farm(("(mob(9101), mob(9102))", "(mob(9101), mob(9102), mob(9103))")),
-        ["farm: finish_target for mob 9103: it chases (L3 mob data)"],
+        ["maps.farm: finish_target for mob 9103: it chases (L3 mob data)"],
         world=with_mobs(m9103={"chases": True}),
     ),
     Case(
         "event_species",
         "event_species",
         FARM,
-        ["boss_seen: mob 9109 is in no spawn line of map_3"],
+        ["maps.farm.events.boss_seen: mob 9109 is in no spawn line of map_3"],
         world=world(
             map_3=map_("map_3", spawns=[s for s in farm_sheets()["map_3"].spawns if s.mob != 9109])
         ),

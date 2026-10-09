@@ -107,7 +107,7 @@ def test_a_safety_critical_rank_is_fixed() -> None:
         for f in lint(ir.validate(data), world=farm_world(), resolver=resolve_all)
         if f.rule == "safety_critical"
     ]
-    assert found == ["dead: dead is safety-critical: its rank is fixed (1, 13.6.3), not 9"]
+    assert found == ["handlers.dead: dead is safety-critical: its rank is fixed (1, 13.6.3), not 9"]
     data["handlers"][0]["rank"] = 1  # its own rank, written out: allowed
     assert not [
         f

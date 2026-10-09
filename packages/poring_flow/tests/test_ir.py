@@ -101,7 +101,7 @@ INVALID = [
                 }
             ],
         ),
-        ["h: until (a repeating event) and rearm (a one-shot event) are exclusive"],
+        ["handlers.h: until (a repeating event) and rearm (a one-shot event) are exclusive"],
     ),
     (
         plain(
@@ -115,7 +115,7 @@ INVALID = [
                 }
             ],
         ),
-        ["h: priority: Input should be 'critical', 'survival' or 'upkeep'"],
+        ["handlers.h: priority: Input should be 'critical', 'survival' or 'upkeep'"],
     ),
 ]
 
@@ -139,7 +139,7 @@ def test_a_death_respawn_exit_is_never_authored() -> None:
     with pytest.raises(ir.FlowError) as e:
         ir.validate(wf)
     assert e.value.messages == [
-        "farm.1: exit: death_respawn is derived from the dead event, never authored"
+        "maps.farm.1: exit: death_respawn is derived from the dead event, never authored"
     ]
 
 
@@ -149,7 +149,7 @@ def test_an_exit_takes_exactly_its_own_fields() -> None:
     with pytest.raises(ir.FlowError) as e:
         ir.validate(wf)
     assert e.value.messages == [
-        "town.3: exit: walk_exit takes warp (missing none, not allowed ['item'])"
+        "maps.town.3: exit: walk_exit takes warp (missing none, not allowed ['item'])"
     ]
 
 
@@ -206,3 +206,44 @@ def test_text_is_never_stored_only_keys_and_ids() -> None:
         return []
 
     assert all(len(s) <= 48 for s in strings(data))
+
+
+def test_messages_print_one_path_grammar() -> None:
+    """#3 (Batt 2026-10-09): named nodes by name, statements by index. The structural ids
+    (`sites()`) stay the editor's and the trace's keys; messages print the grammar."""
+    names = ir.PathNames(farm_flow())
+    assert [
+        names(p)
+        for p in (
+            "main.4",
+            "town.3",
+            "farm.0.body.0",
+            "farm",
+            "dead",
+            "hp_low.0",
+            "farm_hp_low.0",
+            "relay_recover.0",
+            "boss_seen",
+            "WING",
+            "global",
+            "",
+        )
+    ] == [
+        "main.4",
+        "maps.town.3",
+        "maps.farm.0.body.0",
+        "maps.farm",
+        "handlers.dead",
+        "handlers.hp_low.0",
+        "maps.farm.events.hp_low.0",
+        "maps.relay.events.unexpected_map.0",
+        "maps.farm.events.boss_seen",
+        "variables.WING",
+        "global",
+        "",
+    ]
+    # the built-ins are global events even when a flow does not write them (#15)
+    bare = ir.validate(plain(SIT))
+    assert ir.PathNames(bare)("hp_critical.0") == "handlers.hp_critical.0"
+    # the node ids themselves are unchanged
+    assert "town.3" in [s.path for s in ir.sites(farm_flow())]

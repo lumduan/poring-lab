@@ -93,39 +93,41 @@ EXPECTED = sorted(
         # 13.5 NPC rule, L1 preconditions: storage needs Basic Skill 6; nothing assumes it
         (
             "warning",
-            "town.2: kafra_store needs skill_level(skill(1)) >= 6 (storage.deposit: Basic "
+            "maps.town.2: kafra_store needs skill_level(skill(1)) >= 6 (storage.deposit: Basic "
             "Skill level 6): add it to the flow's assumes",
         ),
         # 13.5 species lists: map_3 spawns two species on neither list; the boss is aggressive
-        ("info", "farm: mob 9104 spawns on map_3 and is on neither list: treated as IGNORE"),
-        ("info", "farm: mob 9109 spawns on map_3 and is on neither list: treated as IGNORE"),
+        ("info", "maps.farm: mob 9104 spawns on map_3 and is on neither list: treated as IGNORE"),
+        ("info", "maps.farm: mob 9109 spawns on map_3 and is on neither list: treated as IGNORE"),
         (
             "warning",
-            "farm: mob 9109 is aggressive and ignored: it attacks, the bot never answers, the "
+            "maps.farm: mob 9109 is aggressive and ignored: it attacks, the bot never answers, the "
             "HP events decide",
         ),
         # 13.5 save point: a death before town.1 sets it respawns at an unknown save point (WARNING)
         (
             "warning",
-            "dead: a death at town.0 respawns at the save point, which nothing sets before it: "
+            "handlers.dead: a death at maps.town.0 respawns at the save point, which nothing "
+            "sets before it: "
             "set it first, or assert it",
         ),
         # 13.5 weight: nothing in farm picks items up, so the weight exit cannot fire (Q21's case)
         (
             "warning",
-            "farm.0: weight_percent() < 50 can change only by picking up items, and nothing in "
+            "maps.farm.0: weight_percent() < 50 can change only by picking up items, and "
+            "nothing in "
             "farm picks any up",
         ),
         (
             "info",
-            "farm.0: weight_percent() < 50: at 50 % and above, natural HP and SP regeneration "
+            "maps.farm.0: weight_percent() < 50: at 50 % and above, natural HP and SP regeneration "
             "has already stopped",
         ),
         # 13.5 keep lists: store-all keeps the Butterfly Wings and potions, not the escape's Fly
         # Wings
         (
             "warning",
-            "town.2: storing everything also stores the Fly Wings that hp_critical's escape "
+            "maps.town.2: storing everything also stores the Fly Wings that hp_critical's escape "
             "uses: add them to the keep list",
         ),
         # 13.6.9 ties: these four were WARNINGs ("on different sensors: they queue") until
@@ -138,23 +140,25 @@ EXPECTED = sorted(
         ),
         (
             "info",
-            "farm: unintended_engagement and hp_low are both survival: unintended_engagement "
+            "maps.farm: unintended_engagement and hp_low are both survival: unintended_engagement "
             "runs first when both are due (rank 4 before 5)",
         ),
         (
             "info",
-            "farm: hp_low and boss_seen are both survival: hp_low runs first when both are due "
+            "maps.farm: hp_low and boss_seen are both survival: hp_low runs first when both are "
+            "due "
             "(rank 5 before 50)",
         ),
         (
             "info",
-            "farm: unintended_engagement and boss_seen are both survival: unintended_engagement "
+            "maps.farm: unintended_engagement and boss_seen are both survival: "
+            "unintended_engagement "
             "runs first when both are due (rank 4 before 50)",
         ),
         # 13.9 / 13.6.9: a species policy while today's detector cannot name species
         (
             "warning",
-            "farm: farm_engagement decides by species, and the detector cannot name species "
+            "maps.farm: farm_engagement decides by species, and the detector cannot name species "
             "yet: the run applies its most cautious branch",
         ),
     ]
@@ -183,10 +187,11 @@ def test_the_example_is_unsupported_today_on_the_real_bindings(tmp_path: Path) -
         if f.rule == "bindings"
     ]
     assert (
-        "town.0: walk_to is unsupported here: L3 binding L3.map.walkability (no L3 bindings for "
+        "maps.town.0: walk_to is unsupported here: L3 binding L3.map.walkability (no L3 "
+        "bindings for "
         "lab-rathena)" in msgs
     )
-    assert any(m.startswith("farm.0.body.0: attack_nearest is unsupported here") for m in msgs)
+    assert any(m.startswith("maps.farm.0.body.0: attack_nearest is unsupported here") for m in msgs)
 
 
 def test_one_finding_per_cause_on_the_farm_loop() -> None:

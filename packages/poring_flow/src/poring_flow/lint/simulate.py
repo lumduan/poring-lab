@@ -333,7 +333,7 @@ class SavePoint:
                     3,
                     path,
                     f"{what} returns to the save point, and nothing sets it before "
-                    f"{path}. Add 'set save point' first?",
+                    f"{self.ctx.shown(path)}. Add 'set save point' first?",
                 )
             return
         if to is not None:
@@ -441,7 +441,8 @@ class SavePoint:
                         3,
                         e.label,
                         f"{self._what(wing)} on {b.name} returns to the save point, and "
-                        f"nothing sets it before {b.name}.{first}. Add 'set save point' "
+                        f"nothing sets it before {ctx.shown(f'{b.name}.{first}')}. Add 'set "
+                        "save point' "
                         "first?",
                     )
                 respawn = any(a.block == "respawn" for a in acts)
@@ -452,7 +453,8 @@ class SavePoint:
                         "warning",
                         3,
                         e.label,
-                        f"a death at {b.name}.{first} respawns at the save point, which "
+                        f"a death at {ctx.shown(f'{b.name}.{first}')} respawns at the save "
+                        "point, which "
                         "nothing sets before it: set it first, or assert it",
                     )
                 if respawn or wing is not None:
