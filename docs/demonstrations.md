@@ -1486,6 +1486,13 @@ more), every pair ≥ 6 cells apart (`loot1.spots`; 3.20's "fresh spot").
 - **The GM's cell:** where@2 (`/where`, two agreeing reads) once the GM has walked up and fights
   (1.5 s after the first attack click), or after the death. No fix means no loot, never a guess
   (a failure if the kill dropped an item).
+  ➡️ **AMENDED 2026-10-09 ~14:00, BEFORE any loot@1 run (the pilot included), Batt's typing policy:**
+  - "Players type /where once and are done ... position comes from the MINIMAP readout on every map
+    that has one."
+  - loot@1 is on prt_fild08, outdoors with a minimap: the GM's cell is the MINIMAP readout
+    (`poring_env.selfpos`, T0; read 267, 125 exactly on today's RDP frame), two EQUAL reads on fresh
+    frames, walkable, within 6 cells of the spot.
+  - **loot@1 types no /where at all.** No read means no loot, never a guess.
 - **Death from pixels:** the target seen after the first attack click, then unseen for ≥ 3 frames
   AND ≥ 1.0 s. Its cell: `poring_dataset.deathcell.death_cell` (the last 3 sightings' feet, 4 px up,
   through the picking model from the GM's fixed cell; spread ≤ 1 cell).

@@ -12,7 +12,8 @@ One trial, on prt_fild08 at a fresh spot (a seeded list of open cells >= 6 apart
      vanishes; the target is the monster nearest the GM's feet, then tracked frame to frame.
   3. The KILL (3.20 step 3, deliberate): a click on the target only where the cursor reads the
      SWORD twice (the proven monster positive case's rule, never a box centre), again after
-     REATTACK_S if it still lives; the GM's own cell by /where (where@2) once it stands and fights.
+     REATTACK_S if it still lives; the GM's own cell from the MINIMAP readout (two equal reads on
+     fresh frames, passive: no /where is ever typed, Batt 2026-10-09) once it stands and fights.
   4. Death from pixels: the target unseen for GONE_FRAMES frames and GONE_S after an attack. Its
      cell: poring_dataset.deathcell (the last sightings' feet through the picking model).
   5. LOOT (the rule under test): the 3 x 3 cells around the death cell, the server's drop pattern
@@ -48,7 +49,6 @@ import walk5 as w5  # noqa: E402
 import walk6 as w6  # noqa: E402
 import walk10 as w10  # noqa: E402
 import walk11 as w11  # noqa: E402
-import where_fix as wf  # noqa: E402
 
 from poring_dataset import deathcell as dcm  # noqa: E402
 from poring_env.demo import DemoLog, new_session_id  # noqa: E402
@@ -66,7 +66,8 @@ GONE_FRAMES = 3  # deathcell's rule
 GONE_S = 1.0  # and at least this long unseen, after an attack (the detector misses a frame or two)
 KILL_S = 30.0  # no vanish within this of the first attack click: "no_kill"
 REATTACK_S = 8.0  # still visible this long after an attack click: one more sword-gated click
-WHERE_AFTER_S = 1.5  # /where once the GM has walked up (<= 3 cells at 150 ms) and stands fighting
+FIX_AFTER_S = 1.5  # the minimap read once the GM has walked up (<= 3 cells at 150 ms) and fights
+PLAUSIBLE_CELLS = 6  # a readout farther than this from the spot is refused (never a guess)
 CHECK_S = 5.0
 BUDGET_S = 20.0  # death -> pickup click (3.20: reported)
 TOO_SLOW_S = 45.0  # death -> pickup click beyond this: FAILURE "too slow" (judged offline too)
@@ -206,7 +207,7 @@ class Rig:
     camera: Any
     gat: Any
     walkable: Any
-    templates: dict[str, Any]
+    digits: Any  # the minimap digit templates (selfpos)
     glyphs: Any
     cues: dict[str, Any]
 
@@ -240,6 +241,28 @@ def sword_click(rig: Rig, box: Any) -> dict[str, Any]:
             rig.agent.click(gx + round(u), gy + round(v))  # the DELIBERATE attack (kill phase)
             return {"clicked": True, "t": t, "at": [round(u, 1), round(v, 1)], "tried": tried}
     return {"clicked": False, "tried": tried}
+
+
+def minimap_cell(rig: Rig, spot: Cell) -> dict[str, Any]:
+    """The GM's cell from the minimap readout (poring_env.selfpos, T0; RDP-checked 2026-10-09): two
+    equal reads on fresh frames, walkable, within PLAUSIBLE_CELLS of the spot. Nothing is typed."""
+    from poring_env import selfpos
+
+    reads = []
+    for _ in range(2):
+        got = selfpos.read_minimap(frame_bgr(rig)[..., :3], rig.digits)
+        reads.append(got.xy)
+        time.sleep(0.15)
+    a, b = reads
+    if a is None or a != b:
+        return {"xy": None, "why": "unread" if a is None else "disagree", "reads": reads}
+    x, y = a
+    if not (0 <= y < rig.walkable.shape[0] and 0 <= x < rig.walkable.shape[1]) \
+            or not rig.walkable[y, x]:  # fmt: skip
+        return {"xy": None, "why": "not_walkable", "reads": reads}
+    if max(abs(x - spot[0]), abs(y - spot[1])) > PLAUSIBLE_CELLS:
+        return {"xy": None, "why": "implausible", "reads": reads}
+    return {"xy": (x, y), "why": "ok", "reads": reads}
 
 
 def kill(rig: Rig, spot: Cell, trial: dict[str, Any]) -> tuple[Track | None, Cell | None]:
@@ -290,19 +313,18 @@ def kill(rig: Rig, spot: Cell, trial: dict[str, Any]) -> tuple[Track | None, Cel
                 elif t_first is None and len(trial["attack_tries"]) >= 6:
                     trial["kill"] = "no_sword"
                     return track, here
-            fighting = t_first is not None and (now - t_first) / 1e9 > WHERE_AFTER_S
+            fighting = t_first is not None and (now - t_first) / 1e9 > FIX_AFTER_S
             if "where" not in trial and fighting:
-                got = wf.fix_v2(rig.agent, rig.screen, rig.templates, spot, rig.walkable)
-                trial["where"] = {"xy": got["xy"], "rejects": got["rejects"]}
+                got = minimap_cell(rig, spot)
+                trial["where"] = got
                 here = got["xy"]  # no fix: no guess (once more after the death, then no loot)
-                r.activate_client(rig.agent, rig.screen)
                 continue
             time.sleep(0.05)
         trial["kill"] = "vanished"
         trial["attacks"] = [a["t"] for a in attacks]
-        if here is None:  # it died before the /where, or that fix failed: the GM stands still now
-            got = wf.fix_v2(rig.agent, rig.screen, rig.templates, spot, rig.walkable)
-            trial["where_after"] = {"xy": got["xy"], "rejects": got["rejects"]}
+        if here is None:  # it died before the read, or that read failed: the GM stands still now
+            got = minimap_cell(rig, spot)
+            trial["where_after"] = got
             here = got["xy"]
         return track, here
     finally:
@@ -394,6 +416,7 @@ def rig_up(agent: Any, screen: Any) -> Rig:
 
     from poring_dataset import camera as cam
     from poring_dataset import gat as gatmod
+    from poring_env import selfpos
     from poring_env import weight as wt
 
     gat = gatmod.parse((cam.GAT_DIR / f"{MAP}.gat").read_bytes())
@@ -406,7 +429,7 @@ def rig_up(agent: Any, screen: Any) -> Rig:
     pr = w10.Prober9(agent, screen, w6.CursorRefs.load(CURSOR_REFS_V3))
     glyphs = wt.load_weight_glyphs(r.ROOT / wt.DEFAULT_TEMPLATES)
     return Rig(agent, screen, pr, det, camera, gat, gat.walkable(),
-               wf.load_templates(wf.TEMPLATES_V2), glyphs, chat_cue.load_cues())  # fmt: skip
+               selfpos.load_digit_templates(), glyphs, chat_cue.load_cues())  # fmt: skip
 
 
 def run(mode: str, n: int, seed: int) -> int:
@@ -478,7 +501,7 @@ def main() -> int:
     ap.add_argument("--n", type=int, required=True)
     ap.add_argument("--seed", type=int, required=True)
     a = ap.parse_args()
-    for p in (CURSOR_REFS_V3, wf.TEMPLATES_V2, chat_cue.CUES):
+    for p in (CURSOR_REFS_V3, chat_cue.CUES):
         if not p.exists():
             raise SystemExit(f"{p} missing (design-time calibration)")
     return run(a.mode, a.n, a.seed)

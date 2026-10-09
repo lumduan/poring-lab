@@ -87,3 +87,24 @@ def test_either_runtime_signal_is_enough(loot1: Any) -> None:
     assert not f((737, 2030), (737, 2030), False)["obtained"]
     assert not f(None, (738, 2030), False)["obtained"]  # no baseline: weight cannot count
     assert not f((737, 2030), (736, 2030), False)["obtained"]
+
+
+def test_the_gm_cell_comes_from_two_equal_minimap_reads(
+    loot1: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """3.20a amendment (Batt 2026-10-09): no /where in loot@1; the minimap readout, passive."""
+    from poring_env import selfpos
+
+    walk = np.ones((200, 300), dtype=bool)
+    frame = np.zeros((4, 4, 4), np.uint8)
+    rig = SimpleNamespace(screen=SimpleNamespace(grab=lambda *a: (0, frame)), walkable=walk,
+                          digits=None)  # fmt: skip
+    monkeypatch.setattr(loot1.time, "sleep", lambda s: None)
+    monkeypatch.setattr(loot1.r, "game_region", lambda: (0, 0, 4, 4))
+    for reads, want in (([(270, 104), (270, 104)], "ok"), ([(270, 104), (271, 104)], "disagree"),
+                        ([None, None], "unread"), ([(290, 104)] * 2, "implausible")):  # fmt: skip
+        it = iter(reads)
+        monkeypatch.setattr(selfpos, "read_minimap",
+                            lambda img, t, it=it: SimpleNamespace(xy=next(it)))  # fmt: skip
+        got = loot1.minimap_cell(rig, (271, 103))
+        assert got["why"] == want and (got["xy"] is not None) == (want == "ok"), got
