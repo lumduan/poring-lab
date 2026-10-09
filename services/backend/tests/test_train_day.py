@@ -39,7 +39,8 @@ def run(tmp_path: Path, outcomes: str, quiet_fails: int = 0) -> tuple[str, list[
     return log, args
 
 
-def run_rc(tmp_path: Path, outcomes: str, quiet_fails: int = 0) -> tuple[str, list[str], int]:
+def run_rc(tmp_path: Path, outcomes: str, quiet_fails: int = 0,
+           clock: str = "1200") -> tuple[str, list[str], int]:  # fmt: skip
     state = tmp_path / "state"
     state.mkdir()
     guard = tmp_path / "guard.sh"
@@ -50,9 +51,12 @@ def run_rc(tmp_path: Path, outcomes: str, quiet_fails: int = 0) -> tuple[str, li
         f"q=$(cat {state}/q 2>/dev/null || echo 0); q=$((q + 1)); echo $q > {state}/q\n"
         f'[ "$q" -gt {quiet_fails} ]\n'
     )
+    sleeper = tmp_path / "sleep.sh"
+    sleeper.write_text(f'#!/usr/bin/env bash\necho slept "$1" >> {state}/slept\n')
     out = tmp_path / "out"
     env = {**os.environ, "GUARD": f"bash {guard}", "QUIET": f"bash {quiet}", "STATE": str(state),
-           "OUTCOMES": outcomes, "IO_PAUSE_S": "0", "R3_PAUSE_S": "0"}  # fmt: skip
+           "OUTCOMES": outcomes, "IO_PAUSE_S": "0", "R3_PAUSE_S": "0", "CLOCK_HHMM": clock,
+           "SLEEP": f"bash {sleeper}"}  # fmt: skip
     for k in ("DUTY_START", "DUTY_MIN", "DUTY_CAP_LEVEL", "DUTY_CAP_UNTIL", "DUTY_AFTER_ABORT"):
         env.pop(k, None)
     p = subprocess.run(["bash", str(SCRIPT), "test-run-nonexistent", "cache-x", "1", str(out)],
@@ -106,3 +110,17 @@ def test_a_kept_training_line_never_makes_a_later_io_abort_an_r3_trip(tmp_path: 
     log, calls = run(tmp_path, "heldthenio,ok")
     assert "TRAIN DONE" in log and "the duty floor is now level" not in log
     assert "pausing 0 s before the next attempt" in log and "DUTY_MIN=0" in calls[1]
+
+
+def test_no_attempt_starts_inside_a_market_open_window(tmp_path: Path) -> None:
+    """Batt 2026-10-09: auto-resumes at 14:12 and 14:33 tripped the IO guard; an attempt due
+    inside 09:30-10:15 or 14:00-14:45 ICT waits until the window ends (+1 min)."""
+    for d in ("in", "edge", "out"):
+        (tmp_path / d).mkdir()
+    log, _, rc = run_rc(tmp_path / "in", "ok", clock="1410")
+    assert rc == 0 and "market-open window: waiting 2160 s before attempt 0" in log
+    assert (tmp_path / "in" / "state" / "slept").read_text().split() == ["slept", "2160"]
+    log, _, _ = run_rc(tmp_path / "edge", "ok", clock="0930")
+    assert "waiting 2760 s" in log
+    log, _, _ = run_rc(tmp_path / "out", "ok", clock="1445")
+    assert "market-open window" not in log and not (tmp_path / "out" / "state" / "slept").exists()

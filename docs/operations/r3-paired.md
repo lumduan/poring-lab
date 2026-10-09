@@ -233,6 +233,9 @@ continuous rule: resume after the quiet gate, capped. Record the date here when 
   the unfinished checkpoint. The eval was stopped by hand within a minute and left no output.
 - A chain should also check the run's own `results.csv` for the expected epoch count before any
   eval.
+- **Market-open windows (Batt 2026-10-09):** no attempt starts or auto-resumes between
+  09:30-10:15 or 14:00-14:45 ICT; one due inside a window waits until it ends (+1 min). That day's
+  two IO aborts (14:17:57, 14:37:24) followed auto-resumes at 14:12 and 14:33.
 
 ## Frame-drop aborts: an automatic resume (Batt, 2026-10-07 ~15:40)
 > ➡️ **AMENDED ~16:25:** "the 3rd abort within 2 h stops" is replaced by the cap + notify above.

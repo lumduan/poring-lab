@@ -29,6 +29,9 @@
 #   the resume is exact. A run keeps the mode it started with (train.py refuses a mixed resume).
 #   [RESUME=1] [MID_CKPT=1] [DUTY_START=4] [DUTY_MIN=0] \
 #     scripts/runbooks/train-day.sh RUN_NAME CACHE_ID EPOCHS OUT_DIR [BATCH=2] [WORKERS=1]
+# - MARKET-OPEN WINDOWS (Batt 2026-10-09): no attempt starts or auto-resumes between 09:30-10:15 or
+#   14:00-14:45 ICT (CLAUDE.md rule 5; two IO aborts that day came from auto-resumes at 14:12 and
+#   14:33). An attempt due inside a window waits until it ends.
 # EXIT CODES (2026-10-09: it exited 0 on every end, so a chain read "TRAIN PAUSED" at epoch 17 of 30
 # as finished and started v1's evals on an unfinished checkpoint):
 #   0 TRAIN DONE   2 TRAIN STOPPED (a person must look)   3 TRAIN PAUSED (resume by hand)
@@ -40,6 +43,20 @@ GUARD=${GUARD:-python3 scripts/guarded_build.py}  # overridable for tests only
 QUIET=${QUIET:-python3 -S scripts/frigate_r3.py quiet --minutes 15 --max-wait-min 120}
 DROP_WINDOW_S=7200; DROP_MAX=3; CAP_LEVEL=3; CAP_S=3600; FLOOR=4
 IO_PAUSE_S=${IO_PAUSE_S:-900}; R3_PAUSE_S=${R3_PAUSE_S:-30}  # overridable for tests only
+MARKET_WINDOWS=${MARKET_WINDOWS:-"0930-1015 1400-1445"}  # ICT, CLAUDE.md rule 5
+SLEEP=${SLEEP:-sleep}  # overridable for tests only
+now_hhmm() { if [ -n "${CLOCK_HHMM:-}" ]; then echo "$CLOCK_HHMM"; else TZ=Asia/Bangkok date +%H%M; fi; }  # CLOCK_HHMM: tests only
+market_wait_s() {  # seconds until the market-open window we are in ends (minute grain, +1 min); 0 outside
+  local now w a b
+  now=$((10#$(now_hhmm)))
+  for w in $MARKET_WINDOWS; do
+    a=$((10#${w%-*})); b=$((10#${w#*-}))
+    if [ "$now" -ge "$a" ] && [ "$now" -lt "$b" ]; then
+      echo $(( ((b / 100) * 60 + b % 100 - (now / 100) * 60 - now % 100) * 60 + 60 )); return
+    fi
+  done
+  echo 0
+}
 export DUTY_START=${DUTY_START:-$FLOOR} DUTY_MIN=${DUTY_MIN:-0}
 export DUTY_CAP_LEVEL=${DUTY_CAP_LEVEL:-0} DUTY_CAP_UNTIL=${DUTY_CAP_UNTIL:-0}
 export DUTY_AFTER_ABORT=${DUTY_AFTER_ABORT:-0}
@@ -51,6 +68,11 @@ mid=""; [ "${MID_CKPT:-0}" = 1 ] && mid=" --mid-ckpt"
 trips=0; attempt=0; status=0
 while :; do
   while s2_active; do log "S2 session/clean room active: waiting 5 min"; sleep 300; done
+  ws=$(market_wait_s)
+  if [ "$ws" -gt 0 ]; then
+    log "market-open window: waiting ${ws} s before attempt $attempt (no disk-heavy steps 09:30-10:15 / 14:00-14:45 ICT)"
+    $SLEEP "$ws"
+  fi
   log "attempt $attempt batch $BATCH workers $WORKERS duty start $DUTY_START min $DUTY_MIN cap $DUTY_CAP_LEVEL until $DUTY_CAP_UNTIL after-abort $DUTY_AFTER_ABORT $extra"
   out="$D/train-guarded-$attempt.out"
   $GUARD --sustain 30 --spike 25 \
