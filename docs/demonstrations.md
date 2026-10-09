@@ -2397,6 +2397,20 @@ target."
   already given under it: walk@13–15's FAILs stay FAILs as pre-registered. Readiness is a separate,
   pooled question.
 
+**PER-MAP WALK-READINESS (Batt 2026-10-09 ~13:15, approved):** a map is **walk-ready** only when
+both hold:
+- the version is READY (above);
+- EVERY species the map's L3 spawn list holds is in the unit detector's TRAINING SCOPE (ADR-0020
+  13.3: the training scope = all species on the workflow's maps).
+
+The detector is class-agnostic ("monster"), but it only knows the sprites it was trained on. On a map
+whose species it never saw, the unit gate cannot protect walking.
+- **Today's scope:** v0 / v1 were trained on prt_fild08 and prt_church sessions only.
+- **iz_dun00** spawns Plankton, Marina, Kukre, Hydra, Vadon and Black Mushroom (the local KB): all out
+  of scope. So iz_dun00 is NOT walk-ready, and its held-out result (3.29) is reported as
+  **PATH-FOLLOWING ONLY, not unit safety** (Batt). Its safety count is still reported.
+- A held-out map's own walk-ready status is stated next to its result.
+
 **Applied to the tuning runs so far** (`walk_readiness.py` over each version's four scorer outputs):
 
 | version | per run (IC / ICr / OC / OCr) | pooled | 95 % CI | safety | READY | lower bound ≥ 90 % |
