@@ -3841,6 +3841,25 @@ night (look7 / look8). **The scored run:** `learn_skill1.py run --n 50 --seed 20
 charselect --label learn-skill1-alone`, the GM on RDP where it stands (prontera, no monsters), scored
 by `learn_skill1_score.py SESSION` once.
 
+**➡️ RESULT OF THE FIRST SCORED RUN (2026-10-10 03:43-03:45 ICT): INCOMPLETE -- a HARNESS fault, not the
+rule.** Session `20261010T034329-demo-learn-skill1-alone-charselect`: trial 0 (N = 2) **success** (server
+ok: 2 requests, level 2, points 7; the runtime read agrees); then the restore's route reached character
+select, and `enter_game`'s Enter was REFUSED by the mux (`environment_unattested`). Trial 1 stopped the
+same way before its rule; two harness stops in a row ended the run, as pre-registered. Scored: 1 valid,
+1 success, 1 invalid, 0 unsafe, 0 false positives.
+- **The cause:** `ro_agent.ensure_window` skips the login window while /health still reports GREEN, and
+  /health's interlock view ticks at 1 Hz; right after character select it still said green, so no
+  window opened, and the Enter came after the interlock had turned red. The 5 / 5 route proof had
+  waited long enough by chance.
+- **The fix (committed BEFORE the re-run, below):** the route waits for the interlock to leave green at
+  character select (<= 15 s) before `enter_game`, and for green again (<= 30 s) before any further
+  input (`learn_skill1.wait_interlock`, tested). The GM was put back in by hand (`ro_agent enter-game
+  gm`, 03:46:58; green).
+- **➡️ AMENDMENT (pre-registered at this commit, BEFORE the re-run):** a pilot of the fix, never scored
+  (`--n 2 --seed 20261183`), then the scored run ONCE more with a FRESH seed: `learn_skill1.py run --n
+  50 --seed 20261182 --restore charselect --label learn-skill1-alone`, everything else as above. The
+  first run's numbers stay recorded here.
+
 **DRAFT pre-registration for learn_skill@1 (2026-10-10 ~01:15 ICT; superseded by the PRE-REGISTERED
 settings above):**
 - **The rule and harness:** `scripts/learn_skill1.py` at the commit of the pre-registration; scored

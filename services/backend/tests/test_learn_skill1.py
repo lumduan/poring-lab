@@ -499,3 +499,15 @@ def test_the_harness_trial_syncs_a_stale_client_then_restores(
     with pytest.raises(ls.r.Stop, match="start state: points 3"):
         ls.run_trial(harness2, {"k": 1, "n": 2})
     assert io2.typed == []
+
+
+def test_wait_interlock_waits_for_the_state_and_times_out() -> None:
+    import learn_skill1 as ls
+
+    states = iter(["green", "green", "red"])
+    assert ls.wait_interlock(lambda s: s != "green", 5.0,
+                             health=lambda: {"environment": {"state": next(states)}},
+                             sleep=lambda _s: None)  # fmt: skip
+    assert not ls.wait_interlock(lambda s: s == "green", 0.0,
+                                 health=lambda: {"environment": {"state": "red"}},
+                                 sleep=lambda _s: None)  # fmt: skip

@@ -94,6 +94,7 @@ SETTLE_S = 0.6  # the cursor parked (two motions) before a look
 STABLE_TRIES = 6  # looks until two in a row agree
 MAX_CLOSE_STEPS = 4  # CANCEL, RESET, the chord, and one spare
 GM_SETTLE_S = 2.0
+INTERLOCK_WAIT_S = 15.0  # /health's interlock view after character select (1 Hz ticks)
 BETWEEN_S = 3.0
 MAX_STOPS = 2  # consecutive harness stops end the run
 
@@ -841,10 +842,33 @@ def to_char_select_and_back(rig: Rig) -> None:
     rig.io.ui_click(centre(btn), "char_select", btn)
     _harness(rig, "window", "character select (game option)", t0, points=[centre(btn)])
     r.wait_state(rig.screen, ["char_select"], 20)
+    # /health ticks at 1 Hz: right after character select it can still say green, and
+    # ensure_window then skips the login window, so enter_game's Enter is refused once the
+    # interlock turns red (2026-10-10 03:44, the first scored run). Wait for red first, and for
+    # green again before any further input.
+    if not wait_interlock(lambda s: s != "green", INTERLOCK_WAIT_S):
+        raise r.Stop("learn_skill@1 charselect: the interlock stayed green at character select")
     t1 = r.ns()
     r.enter_game(rig.agent, rig.screen, "gm")
     _harness(rig, "login", "back into the game (enter_game)", t1, atype="login")
+    if not wait_interlock(lambda s: s == "green", INTERLOCK_WAIT_S * 2):
+        raise r.Stop("learn_skill@1 charselect: the interlock did not turn green after enter_game")
     time.sleep(GM_SETTLE_S)
+
+
+def wait_interlock(ok: Callable[[str], bool], timeout: float,
+                   health: Callable[[], dict[str, Any]] | None = None,
+                   sleep: Callable[[float], None] = time.sleep) -> bool:  # fmt: skip
+    """Poll /health's interlock state (1 Hz ticks) until ``ok(state)`` or ``timeout`` seconds."""
+    get = health or r.backend_health
+    end = time.monotonic() + timeout
+    while True:
+        state = str((get().get("environment") or {}).get("state"))
+        if ok(state):
+            return True
+        if time.monotonic() >= end:
+            return False
+        sleep(0.5)
 
 
 def restore_trial(rig: Rig) -> None:
