@@ -14,6 +14,14 @@ rule 4). That includes NPC positions, menu options and dialog lines. ADR-0015 al
 data at runtime; Batt (2026-10-07) applies that to NPC dialog OPTIONS read from the scripts.
 Packets stay forbidden at decision time.
 
+Warp lists (route.json "warps", read by walk@17's warp areas and labels_v2's `warp` class): the
+hand list WARP_FILES below, and, for every map the first-workflow KB covers
+(scripts/kb_first_workflow.py -> data/kb/first_workflow.json, built from EVERY file the server
+loads), that KB's COMPLETE list instead: its `warp` lines plus the touch-triggered script NPCs
+that warp (cell +- trigger span). A map with no portal gets an EMPTY list there, which says "none"
+(a map missing from the dict says "unknown": walk@17 refuses it). REQUIRED_WARP_MAPS must all be
+listed, else the run exits 1 (fail closed). "warps_source" says where each map's list came from.
+
 Outputs:
     data/kb/route.json   phases, candidate leveling maps per band with EXP projections, skill trees,
                          the job NPCs with their menus (select/menu/prompt/input) and dialog lines
@@ -69,6 +77,14 @@ WARP_FILES = (
     "npc/warps/cities/lutie.txt",
     "npc/warps/fields/glastheim.txt",
 )
+FIRST_WORKFLOW = ROOT / "data" / "kb" / "first_workflow.json"
+# walk@17 refuses a map route.json does not list (Batt 2026-10-09): the first workflow's maps --
+# the 20 training-ground copies and the Merchant route with its delivery towns
+REQUIRED_WARP_MAPS = (
+    *(f"new_{n}-{m}" for n in range(1, 6) for m in range(1, 5)),
+    "alberta", "alberta_in", "prontera", "morocc", "morocc_in",
+    "geffen", "geffen_in", "izlude", "izlu2dun", "payon",
+)  # fmt: skip
 SCRIPTS = {
     "novice": "npc/pre-re/jobs/novice/novice.txt",
     "merchant": "npc/pre-re/jobs/1-1/merchant.txt",
@@ -269,6 +285,56 @@ def map_table(
     return rows
 
 
+def kb_warp_rows(rec: dict[str, Any]) -> list[dict[str, Any]]:
+    """One first-workflow KB map's warp areas in route.json's row format: every `warp` line, then
+    every touch-triggered script NPC whose script warps (its trigger span as the area)."""
+    rows = [
+        {"x": int(w["x"]), "y": int(w["y"]), "span_x": int(w.get("span_x", 0)),
+         "span_y": int(w.get("span_y", 0)), "to_map": w.get("to_map"), "to_x": w.get("to_x"),
+         "to_y": w.get("to_y"), "name": w.get("name"), "key": w.get("key"),
+         "kind": w.get("kind", "warp"), "drawn": w.get("drawn", True)}
+        for w in rec.get("warps", [])
+    ]  # fmt: skip
+    for n in rec.get("npcs", []):
+        span = n.get("trigger_span")
+        dest = (n.get("script") or {}).get("warps") or []
+        if not (n.get("touch") and span and dest):
+            continue
+        rows.append({
+            "x": int(n["x"]), "y": int(n["y"]), "span_x": int(span[0]), "span_y": int(span[1]),
+            "to_map": dest[0].get("map"), "to_x": dest[0].get("x"), "to_y": dest[0].get("y"),
+            "name": None, "key": n.get("key"), "kind": "touch_npc", "drawn": n.get("drawn"),
+        })  # fmt: skip
+    return rows
+
+
+def merge_kb_warps(
+    warps: dict[str, list[dict[str, Any]]], kb: dict[str, Any] | None
+) -> tuple[dict[str, list[dict[str, Any]]], dict[str, str], dict[str, dict[str, int]]]:
+    """(warps, source per map, the change per map that had a hand list): every map the KB covers
+    takes the KB's complete list (an empty list when it has none); the rest keep the hand list."""
+    out = {m: list(v) for m, v in warps.items()}
+    source = {m: "WARP_FILES" for m in warps}
+    changed: dict[str, dict[str, int]] = {}
+    for m, rec in sorted(((kb or {}).get("maps") or {}).items()):
+        if not rec.get("loaded_by_server"):
+            continue
+        rows = kb_warp_rows(rec)
+        if m in out:
+            old = {(w["x"], w["y"]) for w in out[m]}
+            new = {(w["x"], w["y"]) for w in rows}
+            changed[m] = {"hand": len(old), "kb": len(new), "added": len(new - old),
+                          "dropped": len(old - new)}  # fmt: skip
+        out[m] = rows
+        source[m] = "first_workflow.json (every file the server loads)"
+    return out, source, changed
+
+
+def missing_required(warps: dict[str, Any], required: tuple[str, ...]) -> list[str]:
+    """Required maps route.json would not list (an empty list counts as listed: "no portal")."""
+    return [m for m in required if m not in warps]
+
+
 def base_level_after(base_exp: float, table: list[int]) -> int:
     lvl, left = 1, base_exp
     for need in table:
@@ -284,6 +350,8 @@ def main() -> int:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     ap.add_argument("--out", type=Path, default=ROOT / "data" / "kb")
+    ap.add_argument("--first-workflow", type=Path, default=FIRST_WORKFLOW,
+                    help="kb_first_workflow.py's KB: complete warp lists for its maps")  # fmt: skip
     a = ap.parse_args()
     ref = json.loads(kb_build.LOCK.read_text())["rathena_ref"]
     mobs = mob_exp(ref)
@@ -301,6 +369,11 @@ def main() -> int:
             continue
         for m, lines in kb_build.parse_warps(text).items():
             warps.setdefault(m, []).extend(lines)
+    kb = json.loads(a.first_workflow.read_text()) if a.first_workflow.exists() else None
+    if kb is not None and kb.get("rathena_ref") not in (None, ref):
+        print(f"kb_route: {a.first_workflow} is from {kb.get('rathena_ref')}, not {ref}: not used")
+        kb = None
+    warps, warps_source, warps_changed = merge_kb_warps(warps, kb)
     scripts = {
         k: npcs(kb_build.fetch(ref, p).decode(errors="replace"), p) for k, p in SCRIPTS.items()
     }
@@ -327,6 +400,7 @@ def main() -> int:
         "skill_trees": trees,
         "maps": sorted(maps, key=lambda r: r["level"]),
         "warps": warps,
+        "warps_source": warps_source,
         "npcs": scripts,
     }
     a.out.mkdir(parents=True, exist_ok=True)
@@ -339,9 +413,18 @@ def main() -> int:
                 "maps": len(maps),
                 "npcs": {k: len(v) for k, v in scripts.items()},
                 "job_exp_needed": need,
+                "warp_maps": len(warps),
+                "required_warps": {m: len(warps[m]) for m in REQUIRED_WARP_MAPS if m in warps},
+                "hand_list_vs_kb": warps_changed,
             }
         )
     )
+    missing = missing_required(warps, REQUIRED_WARP_MAPS)
+    if missing:
+        print(f"kb_route: NO warp list for {missing} (build data/kb/first_workflow.json "
+              "first: kb_first_workflow.py build): walk@17 refuses these maps",
+              file=sys.stderr)  # fmt: skip
+        return 1
     return 0
 
 

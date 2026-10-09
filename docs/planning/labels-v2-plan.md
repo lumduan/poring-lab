@@ -830,6 +830,25 @@ labels_v2.difficulty (all "normal" here).
       whether that is a label error (the indoor camera, the heading) or the NCC.
     - The other 29 sprites have no banked sighting. The training grounds' 15 have none at all
       (never banked), so their N3 waits for the first collection session.
+  - ➡️ **L3 warp lists on these maps (walk@17's B; labels_v2's `warp` class): DONE 2026-10-09
+    ~21:15.**
+    - `scripts/kb_route.py` now takes first_workflow.json's COMPLETE list for every map that KB
+      covers: the `warp` lines of every loaded file, plus the touch-triggered script NPCs that
+      warp (cell ± trigger span).
+    - A map without portals gets an empty list, which reads as "none"; a map with no entry reads
+      as "unknown", and walk@17 refuses it.
+    - `REQUIRED_WARP_MAPS` (the 20 copies and the 10 route maps) fails the run closed when one is
+      missing. Test: `test_kb_route.py`.
+    - route.json was regenerated LOCALLY: 83 -> 107 maps, every other key unchanged.
+    - **Warp areas per map:**
+      - new_N-1: 1 each;
+      - new_N-2: 5 each;
+      - new_N-3 and new_N-4: 0 (listed empty);
+      - alberta 11, alberta_in 25, prontera 20, morocc 14 (13 + 1 touch NPC), morocc_in 36,
+        geffen 13 (11 + 2 touch NPCs), geffen_in 25, izlude 8, izlu2dun 1, payon 16.
+    - **Against the old hand list:** nothing was dropped. Added: prt_church +2 (the quest-file
+      `warp` lines (115,122) and (166,106); the first is 1.3's portal_unconfirmed case), izlude +1,
+      payon +1. alberta, alberta_in, prontera, iz_dun00, izlu2dun and prt_fild08 are the same sets.
 - **Accounts:** the GM (2000002) collects, with 3.33's immunity after each login, the fixed GM
   state checked and the UI gate before each run. It reaches any copy by `@warp` (the copies are
   clones). **The agent account 2000001 is not used for collection:** its quest state on new_4-1 is

@@ -3204,6 +3204,12 @@ pre-registration):
      the held-out dungeon map and tour@1's iz_dun00 block.
    - The KB's own `warps.json` lists 3 warps there. One is the exit to izlu2dun at (168, 173) ± 3 ×
      3, 5 cells south of the scene's start.
+   - ➡️ **2026-10-09: superseded.** 2f69c85 added iz_dun00's warp file. Then
+     feat/labels-v2-prep (~21:15) made `kb_route.py` take the first-workflow KB's COMPLETE list
+     (every file the server loads) for each map that KB covers. route.json now lists 107 maps:
+     the 20 training-ground copies and the Merchant route maps are among them, and an empty list
+     means "no portal". `REQUIRED_WARP_MAPS` fails the run closed when one is missing. Per-map
+     counts are in labels-v2-plan.md 7.6 (G4).
 3. **The harness's start draw is not covered by B.**
    - Every 5th route, `@warp` goes to a walkable cell within ± 8 of the scene's start, with no plan
      check. That is walk@11's harness, bytecode-frozen for walk@15.

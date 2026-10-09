@@ -66,3 +66,44 @@ def test_map_table_weights_by_population(kr: ModuleType) -> None:
     )
     r = rows[0]
     assert (r["level"], r["hp"], r["job_exp"], r["aggressive_share"]) == (1.5, 75, 1.5, 0.25)
+
+
+# --- warp lists: the first-workflow KB's complete lists (walk@17 refuses unlisted maps) ---
+
+
+def test_required_maps_cover_the_training_grounds_and_the_merchant_route(kr: ModuleType) -> None:
+    req = set(kr.REQUIRED_WARP_MAPS)
+    assert {f"new_{n}-{m}" for n in range(1, 6) for m in range(1, 5)} <= req
+    assert {"alberta", "alberta_in", "prontera", "morocc", "morocc_in"} <= req
+
+
+def test_the_kb_list_replaces_the_hand_list_and_says_none_explicitly(kr: ModuleType) -> None:
+    hand = {"town": [{"x": 1, "y": 1, "span_x": 1, "span_y": 1, "to_map": "x", "to_x": 1,
+                      "to_y": 1, "name": "w"}],
+            "field": [{"x": 5, "y": 5, "span_x": 2, "span_y": 2, "to_map": "town", "to_x": 1,
+                       "to_y": 1, "name": "f"}]}  # fmt: skip
+    kb = {"maps": {
+        "town": {"loaded_by_server": True, "warps": [
+            {"key": "npc/w.txt:1", "kind": "warp", "x": 1, "y": 1, "span_x": 1, "span_y": 1,
+             "to_map": "x", "to_x": 1, "to_y": 1, "name": "w", "drawn": True},
+            {"key": "npc/q.txt:9", "kind": "warp", "x": 7, "y": 8, "span_x": 0, "span_y": 0,
+             "to_map": "y", "to_x": 2, "to_y": 2, "name": "q", "drawn": True}],
+            "npcs": [{"key": "npc/t.txt:3", "x": 20, "y": 20, "touch": True,
+                      "trigger_span": [2, 1], "drawn": "conditional",
+                      "script": {"warps": [{"map": "z", "x": 3, "y": 4}]}},
+                     {"key": "npc/d.txt:4", "x": 30, "y": 30, "touch": True,
+                      "trigger_span": [3, 3], "script": {"warps": []}}]},
+        "yard": {"loaded_by_server": True, "warps": [], "npcs": []},
+        "ghost": {"loaded_by_server": False, "warps": [], "npcs": []},
+    }}  # fmt: skip
+    warps, source, changed = kr.merge_kb_warps(hand, kb)
+    assert [(w["x"], w["y"], w["kind"]) for w in warps["town"]] == [
+        (1, 1, "warp"), (7, 8, "warp"), (20, 20, "touch_npc")]  # fmt: skip
+    touch = warps["town"][2]
+    assert (touch["span_x"], touch["span_y"], touch["to_map"]) == (2, 1, "z")
+    assert warps["yard"] == [] and "ghost" not in warps  # none, vs unknown
+    assert warps["field"] == hand["field"] and source["field"] == "WARP_FILES"
+    assert source["town"].startswith("first_workflow")
+    assert changed == {"town": {"hand": 1, "kb": 3, "added": 2, "dropped": 0}}
+    assert kr.missing_required(warps, ("town", "yard", "ghost")) == ["ghost"]
+    assert kr.merge_kb_warps(hand, None)[0] == hand
