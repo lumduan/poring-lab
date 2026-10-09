@@ -2333,7 +2333,75 @@ change is exactly:
 
 ### HUD scene: box drift while walking + doubled boxes — OFFLINE SIM RESULT (2026-10-08 night; branch `feat/hud-drift`, merged 0d6cd79, DEPLOYED 2026-10-09 00:36 ICT; LIVE RE-MEASURE below)
 
-#### 2026-10-09 — SEEN TWICE + the display-only RECONNECT: BUILT on `feat/hud-seen-twice`, measured offline, NOT deployed
+#### 2026-10-09 — SEEN TWICE + the display-only RECONNECT: BUILT on `feat/hud-seen-twice` (merged 9687631), measured offline; ➡️ the plain rule SUPERSEDED by the CONFIRMING PASS (first sub-entry)
+
+##### ➡️ THE CONFIRMING PASS (Batt 2026-10-09 ~09:20) SUPERSEDES the plain rule below. BUILT on `feat/hud-confirm-pass`, NOT deployed yet
+
+**Batt:** "HUD: use the CONFIRMING PASS (re-check a candidate ~1 s after first seen: 37 -> 1 false boxes,
+first box 1.3 s, +0.02 cores) instead of plain seen-twice (6.2 s first box is too slow). My earlier 'no
+cadence change' didn't anticipate this; approved."
+
+**What runs** (`hud_scene.Tuning.confirm_s = 1.0`, `hud_scene.py --confirm-s 1.0`; `0` = the plain rule;
+`--seen-twice off` = draw at once):
+- A pass that makes a new candidate asks for ONE extra detector pass, 1 s after that pass started
+  (`Cadence.held`).
+- Any pass that runs first serves it. If a regular pass comes sooner, the confirming pass is
+  cancelled; while the scene moves, the regular passes already run back to back, so it never runs
+  there.
+- At most one confirming pass is ever asked for.
+- It never moves the regular cadence: only a regular pass sets `last_run` / `last_gray`. The regular
+  passes stay at 0 / 5 / 10 s on a still scene (tested).
+- The candidate is drawn when the confirming pass, or any regular pass within its window of 2 passes,
+  matches it. Otherwise it is dropped, never drawn.
+- **The port is tighter than the parked sim variant**, which forced a pass every 1 s while ANY
+  candidate waited and reset the cadence. The numbers below are re-measured with the live code (the
+  sim drives `hud_scene.Cadence` itself).
+- The 60-s report counts confirming passes. The sim's `confirm1` is `hud_scene.TUNING`.
+
+**Results, the 7 walks pooled** (5 seeds, the same instrument as below; median / p95 / max px for
+offsets):
+
+| | before (drift fix, live) | plain seen twice (merged 9687631, never deployed) | **the confirming pass** |
+|---|---|---|---|
+| FP drawn: objects / box-frames | 37 / 286 | 13 / 75 | **1 / 6** |
+| ghost box-frames: NPC / monster / sign | 2,907 / 122 / 465 | 2,479 / 0 / 465 | **2,771 / 0 / 462** |
+| new units' first box, median / p95: s (frames) | 0.83 / 1.47 (8 / 15) | 1.30 / 6.60 (13 / 66) | **1.30 / 2.57 (13 / 26)** |
+| new units never drawn (of 310) | 3 | 8 | **5** |
+| real units' frames with a box | 97.2 % | 93.4 % | **95.3 %** |
+| NPC walking | 2.6 / 10.7 / 111.3 | 2.7 / 10.7 / 66.0 | **2.7 / 10.7 / 111.2** |
+| NPC standing | 0.4 / 2.0 / 117.8 | 0.4 / 1.9 / 117.8 | **0.4 / 1.9 / 117.8** |
+| sign walking / standing | 5.2 / 12.1 / 47.5 · 0.0 / 6.4 / 22.2 | the same | 5.2 / 12.0 / 48.5 · 0.0 / 6.4 / 22.2 |
+| doubled boxes | 0 | 0 | 0 |
+| detector passes: regular + confirming | 2,316 | 2,316 | **2,307 + 69** (+3 %) |
+| detector cores, moving / still | 2.14 / 0.48 | 2.14 / 0.48 | **2.14 / 0.50** |
+| messages per minute while moving | 812 | 809 | 809 |
+
+**The 06:55 live walk** (5 seeds):
+
+| | before | plain | **confirming pass** |
+|---|---|---|---|
+| new units' first box, median / p95: s (frames) | 1.19 / 5.53 (12 / 55) | 6.22 / 6.82 (62 / 68) | **2.21 / 6.02 (22 / 60)** |
+| real units' frames with a box | 94.9 % | 84.3 % | **91.8 %** |
+| FP drawn: objects / box-frames | 2 / 12 | 0 / 0 | **0 / 0** |
+| NPC walking / standing | 2.7 / 9.0 / 38.2 · 0.4 / 2.2 / 8.6 | 2.6 / 9.1 / 38.2 · 0.5 / 2.4 / 8.5 | **2.6 / 9.2 / 36.8 · 0.5 / 2.4 / 8.6** |
+| detector cores, moving / still | 2.15 / 0.47 | 2.15 / 0.47 | **2.21 / 0.49** |
+| passes: regular + confirming | 415 | 415 | **415 + 15** |
+
+- **Idle (20:07):** 0.5 deltas/min, unchanged. 0.26 detector cores (0.25 before): one confirming pass
+  at the start. Real with a box is back to 100 % (plain: 96.8 %).
+- **The trade:** it hides ~6.5 real box-frames for each false one it removes (1,821 vs 280, 5 seeds).
+  The plain rule hid ~18.
+- **The first-box p95 on the 06:55 walk stays ~6 s** (5.5 s before any rule). A unit that appears on a
+  still scene still waits up to the 5-s idle pass for its FIRST sighting; the confirming pass only
+  shortens the second.
+- **Measured, not adopted:**
+  - a window of 1 pass with the confirming pass: the same results (FP 1 / 6, 95.3 %, never 5);
+  - `confirm_s` 0.7 s: the first box 1.30 / 2.27 s (06:55 median 1.91 s), the same FP and cost.
+  Batt approved ~1 s.
+- The 20:09 low-confidence monster is still not drawn by the port (the parked sim variant drew it:
+  its passes fell differently).
+
+##### The plain seen-twice rule and the reconnect (2026-10-09 morning; ➡️ the rule's numbers below are HISTORY: the confirming pass above superseded them)
 
 **Batt (2026-10-09):** "HUD: rejection of ask 3 confirmed; add the seen-twice rule; no faster loop for
 now." and "Add the display-only reconnect for the HUD process."
@@ -2372,7 +2440,9 @@ now." and "Add the display-only reconnect for the HUD process."
 - **Real with a box:** the REAL units' detection-frames that a drawn box was paired with.
 - Live latencies, 5 seeds; "before" is the deployed drift fix (`chosen`).
 
-**Results, the 7 walks pooled** (5 seeds; median / p95 / max px for offsets):
+**Results, the 7 walks pooled** (5 seeds; median / p95 / max px for offsets). ➡️ HISTORY: the plain
+rule, never deployed; the confirming pass above superseded it. The PARKED column is the sim-only
+variant, since ported with tighter semantics and re-measured above.
 
 | | before (drift fix, live) | **after: seen twice** (`seen2`) | PARKED: + a confirming pass 1 s after a candidate (`seen2+confirm1`, sim only) |
 |---|---|---|---|
@@ -2413,7 +2483,9 @@ now." and "Add the display-only reconnect for the HUD process."
 - **PARKED for Batt** (a cadence change, which he ruled out for now): a pass due 1 s after a
   candidate is seen, only while one waits. It keeps the FP cut (37 → 1 objects) at +0.02 cores when
   still, with the first box at 1.3 / 2.7 s. It is in the sim only (`Variant.confirm_s`), not in
-  `hud_scene.py`.
+  `hud_scene.py`. ➡️ **Batt 2026-10-09 ~09:20: APPROVED.** Ported into `hud_scene.py` as the
+  confirming pass, with tighter semantics and re-measured: see "THE CONFIRMING PASS" at the top of
+  this entry.
 - Monsters: still not measured (the 20:09 one is the only one).
 
 **Display-only reconnect** (`hud_scene.Sender`):
@@ -2458,6 +2530,7 @@ now." and "Add the display-only reconnect for the HUD process."
 
 **Deploy:** a display-only restart of `hud_scene.py`, by default `--seen-twice units`;
 `--seen-twice off` restores drawing at once. No protocol, frontend or backend change.
+➡️ Merged 9687631 but NOT deployed as such: the confirming pass (top of this entry) goes out with it.
 
 **LIVE RE-MEASURE after the deploy** (2026-10-09 06:55 ICT, a 3-route indoor `route_demo` walk, seed 34,
 frames `route-demo/20261009T065545`; `hud_scene_check.py truth` + `rescore` against the live scene log).
