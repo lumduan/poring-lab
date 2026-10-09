@@ -188,22 +188,21 @@ class Variant:
     hud_every: int = 1  # the scene process sees every k-th recorded frame (the rest are between)
     preview: bool = False  # the route previewer's camera (live.jsonl) while it has one
     det_ms: float | None = LIVE_DET_MS  # every pass's time (None: the cached per-frame times)
-    # SIM ONLY, a PARKED option (2026-10-09; a detector cadence change, not live): while a seen-once
-    # candidate waits, the next pass is due this soon after the last one, whatever the cadence says
-    confirm_s: float | None = None
 
 
 def variants() -> dict[str, Variant]:
     """The named variants (`hud_scene_check.py sim --variants a,b`). `first-cut` runs the deployed
     code itself; `legacy` is the new code with the first cut's behaviour (a cross-check).
     `chosen` (and its ablations) stays the 2026-10-08 drift fix, the rows of that result: every new
-    object drawn at once. `seen2` is what runs live since 2026-10-09 (hud_scene.TUNING): a new unit
-    or sign drawn only when a later pass sees it again (Tuning.seen_twice)."""
+    object drawn at once. `seen2` is the plain seen-twice rule (merged 9687631): a new unit drawn
+    only when a later regular pass sees it again. `confirm1` is hud_scene.TUNING (2026-10-09): the
+    same rule plus the confirming pass (Tuning.confirm_s)."""
     from dataclasses import replace
 
     import hud_scene as hs
 
     lg, best = hs.LEGACY, replace(hs.TUNING, seen_twice=())
+    plain = replace(hs.TUNING, confirm_s=0.0)
     dd = {"dedupe_px": best.dedupe_px, "dedupe_iou": best.dedupe_iou,
           "misses_moving": best.misses_moving}  # fmt: skip
     vs = [
@@ -230,13 +229,17 @@ def variants() -> dict[str, Variant]:
         Variant("chosen-no-unclip", replace(best, unclip=False)),
         Variant("first-cut/2", hud_every=2),
         Variant("chosen/2", best, hud_every=2),
-        # seen twice (2026-10-09): live = units only, 2 passes; the window; signs too; and a
-        # PARKED cadence option (a confirming pass 1 s after a candidate is seen; not live)
-        Variant("seen2", hs.TUNING),
-        Variant("seen2-w1", replace(hs.TUNING, seen_window=1)),
-        Variant("seen2-w3", replace(hs.TUNING, seen_window=3)),
-        Variant("seen2-signs", replace(hs.TUNING, seen_twice=("unit", "sign"))),
-        Variant("seen2+confirm1", hs.TUNING, confirm_s=1.0),
+        # seen twice (2026-10-09), the PLAIN rule (no confirming pass; merged 9687631): units
+        # only, 2 passes; the window; signs too
+        Variant("seen2", plain),
+        Variant("seen2-w1", replace(plain, seen_window=1)),
+        Variant("seen2-w3", replace(plain, seen_window=3)),
+        Variant("seen2-signs", replace(plain, seen_twice=("unit", "sign"))),
+        # ... with THE CONFIRMING PASS (Batt 2026-10-09 ~09:20; live): one extra pass 1 s after a
+        # new candidate unless a regular pass comes first; its window and its delay
+        Variant("confirm1", hs.TUNING),
+        Variant("confirm1-w1", replace(hs.TUNING, seen_window=1)),
+        Variant("confirm0.7", replace(hs.TUNING, confirm_s=0.7)),
     ]
     return {v.name: v for v in vs}
 
@@ -339,8 +342,14 @@ class _LegacyCadence:
         changed = hs.frame_changed_gray(self.last_gray, g8)
         return now - self.last_run >= (self.mod.DET_PERIOD_S if changed else self.mod.DET_IDLE_S)
 
-    def ran(self, now: float, g8: np.ndarray) -> None:
+    def kind(self, now: float, g8: np.ndarray) -> str | None:
+        return "regular" if self.due(now, g8) else None
+
+    def ran(self, now: float, g8: np.ndarray, kind: str = "regular") -> None:
         self.last_run, self.last_gray = now, g8
+
+    def held(self, now: float) -> None:
+        pass
 
 
 def simulate(d: Path, cache: dict[str, Any], v: Variant, region: tuple[int, int, int, int],
@@ -372,9 +381,10 @@ def simulate(d: Path, cache: dict[str, Any], v: Variant, region: tuple[int, int,
     log: list[dict[str, Any]] = []
     hud = list(range(0, n, max(1, v.hud_every)))
     det_check = -1
-    pending: tuple[int, int, Any] | None = None
+    pending: tuple[int, int, Any, int] | None = None  # (done ns, frame, ref, pickup ns)
     latest: tuple[int, Any] | None = None
     runs: list[tuple[int, float]] = []  # (pickup ns, pass ms)
+    kinds: dict[str, int] = {}  # passes by kind: regular / confirm
     t_key = -(10**18)
     used = {"preview": 0, "patches": 0, "shift": 0}
 
@@ -382,7 +392,7 @@ def simulate(d: Path, cache: dict[str, Any], v: Variant, region: tuple[int, int,
         nonlocal det_check, pending
         while True:
             if pending is not None:
-                done, k, ref = pending
+                done, k, ref, start = pending
                 if done > p:
                     return
                 found = found_on(cache, k)
@@ -390,6 +400,8 @@ def simulate(d: Path, cache: dict[str, Any], v: Variant, region: tuple[int, int,
                     delta = tracker.observe(found, ref)
                 else:
                     delta = tracker.observe(found, ref, moving=cadence.moving(done / 1e9))
+                    if tracker.fresh:  # as hud_scene.serve: the confirming pass
+                        cadence.held(start / 1e9)
                 if delta is not None:
                     log.append({"logged_ns": done, "msg": {"type": "hud_delta",
                                 "t_mono_ns": int(t[k]), "frame_id": k, **delta}})  # fmt: skip
@@ -399,13 +411,13 @@ def simulate(d: Path, cache: dict[str, Any], v: Variant, region: tuple[int, int,
                 return
             k, ref = latest
             g8 = mo["gray8"][k]
-            confirm = (v.confirm_s is not None and not legacy and bool(tracker.candidates)
-                       and det_check / 1e9 - cadence.last_run >= v.confirm_s)  # fmt: skip
-            if confirm or cadence.due(det_check / 1e9, g8):
+            kind = cadence.kind(det_check / 1e9, g8)
+            if kind is not None:
                 ms = v.det_ms if v.det_ms is not None else tr["det_ms"][k] + tr["sign_ms"][k]
-                pending = (det_check + int(ms * 1e6), k, ref)
+                pending = (det_check + int(ms * 1e6), k, ref, det_check)
                 runs.append((det_check, float(ms)))
-                cadence.ran(det_check / 1e9, g8)
+                kinds[kind] = kinds.get(kind, 0) + 1
+                cadence.ran(det_check / 1e9, g8, kind)
             else:
                 det_check += int(POLL_S * 1e9)
 
@@ -454,7 +466,7 @@ def simulate(d: Path, cache: dict[str, Any], v: Variant, region: tuple[int, int,
         prev_k = k
     detector_until(int(t[-1] + 5e9))
     log.sort(key=lambda e: e["logged_ns"])  # stable: a frame's messages keep their order
-    return {"log": log, "hud_frames": hud, "runs": runs, "motion_source": used}
+    return {"log": log, "hud_frames": hud, "runs": runs, "kinds": kinds, "motion_source": used}
 
 
 # --- the score ---------------------------------------------------------------------------------
