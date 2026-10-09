@@ -433,17 +433,20 @@ def test_preflight_fails_closed_then_passes(cv: ModuleType, monkeypatch: pytest.
     p = cv.make_plan(mapdata(cv), 1)
 
     def console_path() -> None:
-        raise ui_gate.UiUnknown("ui gate: the T2 templates are RDP-cut, the lock says console")
+        raise ui_gate.UiUnknown("ui gate: the s2 template set is not proven (no valid proof.json)")
+
+    def no_gm_set() -> None:
+        raise gm_state.r.Stop("gm_state: the s2 template set is not proven (gm_levels)")
 
     monkeypatch.setattr(ui_gate, "_require_ready", console_path)
-    monkeypatch.setattr(gm_state, "TEMPLATE", tmp_path / "levels.npy")
+    monkeypatch.setattr(gm_state, "require_ready", no_gm_set)
     monkeypatch.setattr(cv, "IMMUNE", tmp_path / "immune.json")
     monkeypatch.setattr(cv, "gm_marker", lambda: MARK)
     monkeypatch.setattr(cv, "guard_state", lambda: None)
     monkeypatch.setattr(cv, "guard_limit", lambda: 3)
     out = cv.preflight(p, 55.0)
     assert not out["pass"]
-    assert "RDP-cut" in out["checks"]["ui_gate"]
+    assert "not proven" in out["checks"]["ui_gate"]
     assert "no immune-on record" in out["checks"]["immunity"]
     assert out["checks"]["gm_state_template"] != "ok" and out["checks"]["typing_guard"] == "ok"
     # the guard's state: the plan's first line typed twice already -> a 3rd would be skipped
@@ -451,7 +454,7 @@ def test_preflight_fails_closed_then_passes(cv: ModuleType, monkeypatch: pytest.
     assert "would be #3" in cv.preflight(p, 55.0)["checks"]["typing_guard"]
     monkeypatch.setattr(cv, "guard_state", lambda: None)
     monkeypatch.setattr(ui_gate, "_require_ready", lambda: None)
-    (tmp_path / "levels.npy").write_bytes(b"x")
+    monkeypatch.setattr(gm_state, "require_ready", lambda: "s2")
     cv.write_json(tmp_path / "immune.json", {"marker": MARK, "state": "confirmed"})
     ok = cv.preflight(p, 1.0)
     assert ok["pass"] and ok["duration"].startswith("cut at 1.0 min")

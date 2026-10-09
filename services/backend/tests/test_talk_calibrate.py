@@ -304,3 +304,62 @@ def test_a_cut_without_close_frames_is_not_ready_and_writes_nothing(
     rep = tc.cut([s], 600, tmp_path / "anchors")
     assert rep["verdict"].startswith("NOT READY") and nd.CLOSE in rep["missing_t2"]
     assert not (tmp_path / "anchors" / "npc_dialog").exists()
+
+
+# --- the S2 set (2026-10-09, poring_env.ui_sets): prove-t2 / prove-t3 record their verdict --------
+
+
+def test_an_s2_prove_records_a_pass_and_removes_it_on_a_failure(
+    tc: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from poring_env import ui_sets
+
+    monkeypatch.setattr(tc, "DIALOG_O", nd.CAPTURE_ORIGINS_DIALOG)
+    monkeypatch.setattr(tc, "MENU_O", nd.CAPTURE_ORIGINS_MENU)
+    monkeypatch.setattr(tc, "PROVE_T2_MIN", 10)
+    a = [session(tmp_path, "A0", 100, first=2)]
+    b = [session(tmp_path, "B0", 900, first=5)]
+    s2 = tmp_path / "s2"
+    assert tc.cut(a, 600, s2)["verdict"].startswith("READY")
+    assert ui_sets.problems(s2, ["t2"])  # cut, not proven
+    p2 = tc.prove_t2(b, 600, s2, record=True)
+    p3 = tc.prove_t3(b, 600, s2, record=True)
+    assert p2["verdict"] == p3["verdict"] == "PASS" and p2["proof"] == p3["proof"] == "PASS"
+    assert ui_sets.problems(s2, ["t2", "t3"]) == []
+    entry = json.loads((s2 / ui_sets.PROOF_FILE).read_text())["components"]["t2"]
+    assert entry["evidence"]["sessions"] == ["B0"] and entry["evidence"]["agree"] == p2["frames"]
+    assert tc.prove_t2(a, 600, s2, record=True)["verdict"].startswith("REFUSED")
+    assert ui_sets.problems(s2, ["t2"]) == []  # a refused prove proves nothing, removes nothing
+    monkeypatch.setattr(tc, "PROVE_T2_MIN", 10_000)
+    p2 = tc.prove_t2(b, 600, s2, record=True)
+    assert p2["verdict"].startswith("INCOMPLETE") and p2["proof"] == "FAIL"
+    assert ui_sets.problems(s2, ["t2"]) == ["t2: not proven"]
+    assert ui_sets.problems(s2, ["t3"]) == []  # T3's own proof stands
+    rdp = tmp_path / "rdp"
+    assert tc.cut(a, 600, rdp)["verdict"].startswith("READY")
+    assert tc.prove_t2(b, 600, rdp)["verdict"].startswith("INCOMPLETE")
+    assert not (rdp / ui_sets.PROOF_FILE).exists()  # without record (rdp): no proof file
+
+
+def test_attach_waits_for_a_persons_dialog_then_the_lease(tc: Any) -> None:
+    """drive --attach: no input at all until a dialog shows on two agreeing frames AND the
+    ASSIST lease has ended; else it says why (no key is pressed)."""
+    closed = draw(scene(1), None, None)
+    opened = draw(scene(1), "next", None)
+    t = [0.0]
+
+    def clock() -> float:
+        return t[0]
+
+    def sleep(s: float) -> None:
+        t[0] += s
+
+    frames = iter([closed, closed, closed, opened, opened, opened])
+    leases = iter([{"lease_active": True}, {}, {"lease_active": False}])
+    got = tc.wait_for_person(None, grab=lambda: next(frames), health=lambda: next(leases),
+                             clock=clock, sleep=sleep)  # fmt: skip
+    assert got is None
+    assert tc.wait_for_person(None, grab=lambda: closed, health=lambda: {}, clock=clock,
+                              sleep=sleep) == "no_dialog"  # fmt: skip
+    assert tc.wait_for_person(None, grab=lambda: opened, health=lambda: {"lease_active": True},
+                              clock=clock, sleep=sleep) == "lease_active"  # fmt: skip

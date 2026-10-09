@@ -11,6 +11,11 @@ LIVE (the parent runs these; RDP, ASSIST, the interlock green, the GM):
         in a menu ArrowDown / ArrowUp until the selected line is option N (first menu) or the end
         option (later menus), then Enter. Frames after every step (the cursor parked away), then
         `collect`. Stops (no key) on anything it cannot read.
+    talk_calibrate.py drive --npc garnet|henson|guide --attach [--first N]
+        The same drive WITHOUT the warp and WITHOUT our contact click (for a path whose cursor
+        references / UI gate are not proven yet, e.g. the S2 set's first cut): it waits (no input)
+        until a PERSON has opened the NPC's dialog and let go of the input (/health lease), then
+        the same keys, frames and `collect` (T5 is n/a: the contact was not ours).
     talk_calibrate.py key CODE [CODE ...] | frames [--n 4] | click next|close|ok|cancel|up|down|row
         [--row K] | contact --npc NPC | collect
         Single steps on the CURRENT session (a person looking at the frames decides); `click` finds
@@ -30,6 +35,11 @@ OFFLINE (frames + the session's packets; labels from packet truth, ADR-0007; nev
         PASS: every labelled option line read EXACTLY (0 wrong, 0 refused), every option of every
         menu seen read at least once, and the damaged copies (2 ink pixels removed, a coloured
         patch) never read WRONG.
+    --path rdp|s2 (cut / prove-t2 / prove-t3; instead of --out-dir): the template set of that
+        display path (poring_env.ui_sets: rdp = data/ui_anchors, s2 = data/ui_anchors/s2). With
+        s2, prove-t2 / prove-t3 record their verdict in the set's proof.json ("t2" / "t3"): a PASS
+        writes the component with its files' sha256, anything else removes it. The UI gate reads
+        the S2 set only while "windows" and "t2" are proven there.
 
 A frame is labelled only when the dialog's last packet event and our last step are >= --settle-ms
 (600) old. Menu rows are labelled by STRUCTURE (each row's glyph runs and word gaps against the
@@ -58,6 +68,7 @@ import talk1  # noqa: E402
 
 from poring_env import menu_text as mt  # noqa: E402
 from poring_env import npc_dialog as nd  # noqa: E402
+from poring_env import ui_sets  # noqa: E402
 from poring_env.ui_anchors import CAPTURE_ORIGINS  # noqa: E402
 
 S = 1_000_000_000
@@ -75,6 +86,8 @@ DIALOG_O = CAPTURE_ORIGINS[nd.DIALOG]
 MENU_O = CAPTURE_ORIGINS[nd.MENU]
 DIALOG_EVENTS = ("npc_contact", "npc_say", "npc_wait", "npc_menu", "npc_choose",
                  "npc_next_click", "npc_close", "npc_close_click")  # fmt: skip
+ATTACH_WAIT_S = 180.0  # drive --attach: how long a person has to open the dialog
+LEASE_WAIT_S = 30.0  # ... and then to let go of the input (the ASSIST lease ends)
 
 
 # --- packet truth (pure) ------------------------------------------------------------------------
@@ -552,10 +565,30 @@ def used_by_cut(out_dir: Path) -> set[str]:
     return set(doc.get("meta", {}).get("sessions", []))
 
 
-def prove_t2(sessions: Sequence[Path], settle_ms: int, out_dir: Path) -> dict[str, Any]:
+def _record(out_dir: Path, component: str, res: dict[str, Any],
+            before: dict[str, str | None], sessions: Sequence[Path]) -> None:  # fmt: skip
+    """The verdict into the set's proof.json (poring_env.ui_sets): PASS writes the component,
+    anything else removes it. The evidence: the counts, never a frame."""
+    keep = ("frames", "agree", "classes", "refused", "rows", "exact", "menu_frames", "coverage",
+            "neg", "unlabelled")  # fmt: skip
+    evidence = {k: res[k] for k in keep if k in res}
+    evidence.update(verdict=res["verdict"], sessions=[s.name for s in sessions])
+    res["proof"] = ui_sets.record(
+        out_dir,
+        component,
+        res["verdict"] == "PASS",
+        evidence,
+        before,
+        command=f"talk_calibrate.py prove-{component}",
+    )["verdict"]
+
+
+def prove_t2(sessions: Sequence[Path], settle_ms: int, out_dir: Path,
+             record: bool = False) -> dict[str, Any]:  # fmt: skip
     clash = used_by_cut(out_dir) & {s.name for s in sessions}
     if clash:
         return {"verdict": f"REFUSED: {sorted(clash)} were used to cut the templates"}
+    before = ui_sets.file_hashes(out_dir, "t2")
     t = nd.load_templates(out_dir / "npc_dialog")
     items = labelled(sessions, settle_ms)
     res = agree_t2(t, items)
@@ -570,13 +603,17 @@ def prove_t2(sessions: Sequence[Path], settle_ms: int, out_dir: Path) -> dict[st
         if res["agree"] != res["frames"]
         else (f"INCOMPLETE: {res['frames']} frames (need {PROVE_T2_MIN}), no frame of {lacking}")
     )
+    if record:
+        _record(out_dir, "t2", res, before, sessions)
     return {"sessions": [s.name for s in sessions], **res}
 
 
-def prove_t3(sessions: Sequence[Path], settle_ms: int, out_dir: Path) -> dict[str, Any]:
+def prove_t3(sessions: Sequence[Path], settle_ms: int, out_dir: Path,
+             record: bool = False) -> dict[str, Any]:  # fmt: skip
     clash = used_by_cut(out_dir) & {s.name for s in sessions}
     if clash:
         return {"verdict": f"REFUSED: {sorted(clash)} were used to cut the templates"}
+    before = ui_sets.file_hashes(out_dir, "t3")
     t = nd.load_templates(out_dir / "npc_dialog")
     g = mt.load_menu_glyphs(out_dir / "menu_glyphs.npz")
     items = labelled(sessions, settle_ms)
@@ -587,6 +624,8 @@ def prove_t3(sessions: Sequence[Path], settle_ms: int, out_dir: Path) -> dict[st
     res["verdict"] = ("PASS" if ok else "FAIL: WRONG reads" if not clean
                       else "FAIL: refusals on clean lines" if res["refused"]
                       else "INCOMPLETE: not every option read")  # fmt: skip
+    if record:
+        _record(out_dir, "t3", res, before, sessions)
     return {"sessions": [s.name for s in sessions], **res}
 
 
@@ -682,6 +721,66 @@ def live_contact(npc_key: str, agent: Any, screen: Any) -> dict[str, Any]:
     return doc
 
 
+def attach_session(npc_key: str) -> dict[str, Any]:
+    """drive --attach: a new calibration session with NO warp and NO click of ours: a person
+    opens the dialog (the session starts first, so the packets hold the contact)."""
+    import record_session
+    import ro_agent as r
+
+    from poring_env.demo import DemoLog, new_session_id
+
+    tgt = talk1.TARGETS[npc_key]
+    info = talk1.l3_target(talk1.load_l3(), tgt)
+    sid = new_session_id(f"talk-cal-{npc_key}")
+    log = DemoLog(sid)
+    lock = record_session.read_lock(r.ROOT / "state")
+    log.start(backend=str(lock.backend), lock_seq=lock.seq, server="lab-rathena",
+              rule="talk@1/calibration", npc=info["name"], account="gm",
+              contact="person")  # fmt: skip
+    doc: dict[str, Any] = {"session": sid, "dir": str(log.dir), "npc": info["name"],
+                           "target": npc_key, "npc_cell": list(tgt.cell), "map": tgt.map,
+                           "stand": None, "t_first": r.ns(), "t_click": None, "steps": [],
+                           "menu_len": tgt.menu_len, "attach": True}  # fmt: skip
+    _save_steps(doc)
+    return doc
+
+
+def wait_for_person(screen: Any, grab: Any = None, health: Any = None, clock: Any = None,
+                    sleep: Any = None) -> str | None:  # fmt: skip
+    """NO INPUT. Until two frames agree (template-free) on an open dialog or menu -- a person
+    opened it -- then until the ASSIST lease has ended (/health lease_active false: the person
+    let go, so our keys are not refused mid-drive). None when ready, else why not."""
+    import ro_agent as r
+
+    def live_grab() -> Any:
+        return np.ascontiguousarray(r.grab_after(screen, r.game_region(), None)[..., :3])
+
+    grab = grab or live_grab
+    health = health or r.backend_health
+    clock = clock or time.monotonic
+    sleep = sleep or time.sleep
+    end = clock() + ATTACH_WAIT_S
+    print(f"waiting <= {ATTACH_WAIT_S:.0f} s for a PERSON to open the NPC's dialog (click the "
+          "NPC once, then let go of the mouse and keys)", file=sys.stderr, flush=True)  # fmt: skip
+    while True:
+        a = coarse(grab())
+        sleep(0.25)
+        b = coarse(grab())
+        if a == b and (b.dialog or b.menu):
+            break
+        if clock() > end:
+            return "no_dialog"
+        sleep(0.5)
+    end = clock() + LEASE_WAIT_S
+    while True:
+        h = health()
+        if h and h.get("lease_active") is False:
+            return None
+        if clock() > end:
+            return "lease_active"
+        sleep(1.0)
+
+
 def collect(doc: dict[str, Any]) -> dict[str, Any]:
     """The session's packets; T5 (our contact on the NPC at its L3 cell within 5 s of the click)
     and T4 (each of the 8 dialog events seen live)."""
@@ -716,7 +815,7 @@ def collect(doc: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def drive(npc_key: str, first: int | None) -> dict[str, Any]:
+def drive(npc_key: str, first: int | None, attach: bool = False) -> dict[str, Any]:
     import ro_agent as r
 
     tgt = talk1.TARGETS[npc_key]
@@ -724,16 +823,24 @@ def drive(npc_key: str, first: int | None) -> dict[str, Any]:
     if first not in tgt.first:
         raise SystemExit(f"--first {first}: {npc_key}'s allowed first options are {tgt.first}")
     with r.session("rule:talk-calibrate") as (agent, screen):
-        doc = live_contact(npc_key, agent, screen)
+        waited_for: str | None = None
+        if attach:
+            doc = attach_session(npc_key)
+            waited_for = wait_for_person(screen)
+            doc["attach_wait"] = waited_for or "ok"
+            started = r.ns() if waited_for is None else None
+        else:
+            doc = live_contact(npc_key, agent, screen)
+            started = doc["t_click"]
         io = talk1.LiveIo(agent, screen, nd.DialogTemplates({}))
-        io.last_action = doc["t_click"]
+        io.last_action = started
         grab_frames(io, doc, 4)
         menus_done, ended = 0, "max_steps"
         waited = 0.0
         last: tuple[Coarse, list[str]] | None = None
         repeats = 0
-        if doc["t_click"] is None:
-            ended = "no_contact"
+        if started is None:
+            ended = f"attach_{waited_for}" if attach else "no_contact"
         else:
             for _ in range(DRIVE_MAX_STEPS):
                 fr = grab_frames(io, doc, 2, 0.15)
@@ -843,6 +950,11 @@ def main() -> int:
     d = sub.add_parser("drive")
     d.add_argument("--npc", choices=sorted(talk1.TARGETS), required=True)
     d.add_argument("--first", type=int)
+    d.add_argument(
+        "--attach",
+        action="store_true",
+        help="no warp, no contact click: a person opens the dialog (S2 first cut)",
+    )
     c = sub.add_parser("contact")
     c.add_argument("--npc", choices=sorted(talk1.TARGETS), required=True)
     k = sub.add_parser("key")
@@ -859,14 +971,20 @@ def main() -> int:
         p = sub.add_parser(name)
         p.add_argument("sessions", nargs="+", type=Path)
         p.add_argument("--settle-ms", type=int, default=SETTLE_MS)
-        p.add_argument("--out-dir", type=Path, default=talk1.TEMPLATES.parent)
+        where = p.add_mutually_exclusive_group()
+        where.add_argument("--out-dir", type=Path, default=talk1.TEMPLATES.parent)
+        where.add_argument(
+            "--path",
+            choices=ui_sets.PATHS,
+            help="the display path's template set (s2: proof.json is recorded)",
+        )
         p.add_argument("--report", type=Path)
         if name == "cut":
             p.add_argument("--force", action="store_true", help="write even when NOT READY")
     a = ap.parse_args()
     out: dict[str, Any]
     if a.cmd == "drive":
-        out = drive(a.npc, a.first)
+        out = drive(a.npc, a.first, a.attach)
     elif a.cmd == "contact":
         import ro_agent as r
 
@@ -882,16 +1000,22 @@ def main() -> int:
     elif a.cmd == "collect":
         out = collect(_doc())
     else:
+        import ro_agent as r
+
+        out_dir = (ui_sets.set_root(r.ROOT / "data" / "ui_anchors", a.path) if a.path
+                   else a.out_dir)  # fmt: skip
         if a.cmd == "cut":
-            out = cut(a.sessions, a.settle_ms, a.out_dir, a.force)
+            out = cut(a.sessions, a.settle_ms, out_dir, a.force)
         else:
             fn = prove_t2 if a.cmd == "prove-t2" else prove_t3
-            out = fn(a.sessions, a.settle_ms, a.out_dir)
+            out = fn(a.sessions, a.settle_ms, out_dir, record=a.path == "s2")
     text = json.dumps(out, indent=1, default=str)
     if getattr(a, "report", None):
         a.report.write_text(text + "\n")
     print(text, flush=True)
     verdict = str(out.get("verdict", ""))
+    if out.get("proof") not in (None, "PASS"):  # s2: the RECORDED verdict decides
+        return 1
     return 0 if not verdict or verdict.startswith(("PASS", "READY")) else 1
 
 

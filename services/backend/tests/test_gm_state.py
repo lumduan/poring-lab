@@ -4,6 +4,7 @@ check (two frames must agree), the restore decision, and the crop geometry."""
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -73,3 +74,192 @@ def test_the_notices_are_seen_only_when_shown(gs: Any) -> None:
         shown[y + 2 : y + 12, x + 2 : x + 12] = refs[name].astype(np.uint8)[2:12, 2:12, None]
         shown[y + 20 : y + 30, x + 20 : x + 30] = 0  # the scene behind changes: irrelevant
         assert gs.notices(shown, refs) == [name], name
+
+
+# --- per path (2026-10-09, poring_env.ui_sets): rdp unchanged; console only with a PROVEN S2 set
+
+
+@pytest.fixture()
+def lab(gs: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
+    """gs with its ROOT (and the rdp TEMPLATE) in tmp_path and a writable lock."""
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(gs.r, "ROOT", tmp_path)
+    monkeypatch.setattr(gs, "TEMPLATE", tmp_path / "data/ui_anchors/gm_state/levels_1_1.npy")
+    (tmp_path / "state").mkdir()
+
+    def lock(backend: str) -> None:
+        (tmp_path / "state" / "capture-backend").write_text(
+            f"BACKEND={backend}\nSEQ=1\nPHASE=steady\nOWNER=t\nSINCE=1\nREASON=t\n"
+        )
+
+    lock("rdp")
+    return SimpleNamespace(gs=gs, lock=lock, anchors=tmp_path / "data" / "ui_anchors")
+
+
+def _gm_files(d: Path, seed: int) -> None:
+    rng = np.random.default_rng(seed)
+    d.mkdir(parents=True, exist_ok=True)
+    np.save(d / "levels_1_1.npy", rng.random((25, 68)).astype(np.float32))
+    for name in ("badge", "levelup_icon"):
+        np.save(d / f"{name}.npy", rng.random((4, 4)).astype(np.float32))
+    np.save(d / "badge_mask.npy", np.ones((4, 4), bool))
+    np.save(d / "levelup_mask.npy", np.ones((4, 4), bool))
+
+
+def _prove(root: Path, *components: str) -> None:
+    from poring_env import ui_sets
+
+    for c in components:
+        ui_sets.record(root, c, True, {}, ui_sets.file_hashes(root, c), command="test")
+
+
+def test_the_lock_picks_the_gm_state_set(lab: Any) -> None:
+    gs = lab.gs
+    assert gs._path() == "rdp"
+    lab.lock("console")
+    assert gs._path() == "s2"
+    (lab.anchors.parent.parent / "state" / "capture-backend").write_text("BACKEND=both\n")
+    with pytest.raises(gs.r.Stop, match="no template set for the lock's hold"):
+        gs._path()  # a malformed lock reads as hold: refused
+
+
+def test_rdp_is_unchanged_and_needs_no_proof(lab: Any) -> None:
+    gs = lab.gs
+    with pytest.raises(gs.r.Stop) as e:
+        gs._template()
+    assert str(e.value) == (f"gm_state: no Lv 1 / 1 template ({gs.TEMPLATE}): run "
+                            "`gm_state.py cut` first")  # fmt: skip
+    _gm_files(lab.anchors / "gm_state", 1)
+    assert gs.require_ready() == "rdp"
+    assert np.array_equal(gs._template(), np.load(gs.TEMPLATE))
+    assert set(gs._notice_refs()) == {"badge", "badge_mask", "levelup_icon", "levelup_icon_mask"}
+    assert not (lab.anchors / "proof.json").exists()
+
+
+def test_console_needs_the_proven_s2_set(lab: Any) -> None:
+    gs, s2 = lab.gs, lab.anchors / "s2"
+    _gm_files(lab.anchors / "gm_state", 1)  # the RDP set: never read on console
+    lab.lock("console")
+    with pytest.raises(gs.r.Stop, match="the s2 template set is not proven"):
+        gs.require_ready()
+    _gm_files(s2 / "gm_state", 2)
+    with pytest.raises(gs.r.Stop, match="not proven"):
+        gs._template()
+    _prove(s2, "gm_levels")
+    assert np.array_equal(gs._template(), np.load(s2 / "gm_state" / "levels_1_1.npy"))
+    with pytest.raises(gs.r.Stop, match="gm_notices: not proven"):
+        gs.require_ready()  # the notices are not proven yet
+    with pytest.raises(gs.r.Stop, match="gm_notices: not proven"):
+        gs._notice_refs()
+    _prove(s2, "gm_notices")
+    assert gs.require_ready() == "s2"
+    np.save(s2 / "gm_state" / "badge.npy", np.zeros((4, 4), np.float32))  # edited after
+    with pytest.raises(gs.r.Stop, match=r"gm_notices: stale since the proof"):
+        gs._notice_refs()
+    lab.lock("rdp")
+    assert gs.require_ready() == "rdp"  # the RDP path is not affected
+
+
+def test_the_legacy_live_cut_refuses_off_rdp(lab: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    gs = lab.gs
+    lab.lock("console")
+    monkeypatch.setattr(gs.sys, "argv", ["gm_state.py", "cut"])
+    with pytest.raises(gs.r.Stop, match="writes the RDP set from a live frame"):
+        gs.main()  # never an S2 frame into the RDP template
+
+
+# --- the S2 cut and proof on banked frames (synthetic) -------------------------------------------
+
+
+def _scene(seed: int) -> np.ndarray:
+    rng = np.random.default_rng(seed)
+    return np.kron(rng.random((45, 80, 3)) * 255, np.ones((16, 16, 1))).astype(np.uint8)
+
+
+LEVELS = np.random.default_rng(21).integers(150, 250, (25, 68))
+BADGE = np.random.default_rng(22).integers(0, 255, (10, 10))
+ICON = np.random.default_rng(23).integers(0, 255, (30, 30))
+
+
+def _gm_frame(gs: Any, seed: int, fixed: bool, notices: bool) -> np.ndarray:
+    f = _scene(seed)
+    x, y, w, h = gs.LEVEL_BOX
+    lv = LEVELS.copy()
+    if not fixed:
+        lv[4:13, 50:56] = 10  # a changed digit
+    noise = np.random.default_rng(seed + 1).integers(-6, 7, lv.shape)
+    f[y : y + h, x : x + w] = np.clip(lv + noise, 0, 255)[..., None]
+    if notices:
+        bx, by, _, _ = gs.BADGE_BOX
+        f[by + 2 : by + 12, bx + 26 : bx + 36] = BADGE[..., None]
+        ix, iy, _, _ = gs.ICON_BOX
+        f[iy + 8 : iy + 38, ix + 8 : ix + 38] = ICON[..., None]
+    return f
+
+
+def _gm_bank(gs: Any, bank: Path, spec: list[tuple[int, bool, bool]]) -> list[Path]:
+    from PIL import Image
+
+    (bank / "frames").mkdir(parents=True, exist_ok=True)
+    labels, paths = [], []
+    for seed, fixed, shown in spec:
+        name = f"{seed}-{fixed}-{shown}.png"
+        Image.fromarray(_gm_frame(gs, seed, fixed, shown)[..., ::-1]).save(bank / "frames" / name)
+        labels.append({"file": name, "levels": "fixed" if fixed else "not_fixed",
+                       "notices": ["badge", "levelup_icon"] if shown else [], "scene": f"s{seed}",
+                       "path": "s2", "t_ns": seed})  # fmt: skip
+        paths.append(bank / "frames" / name)
+    (bank / "labels.json").write_text(json.dumps(labels))
+    return paths
+
+
+def test_the_s2_gm_state_cut_and_proof(lab: Any) -> None:
+    from poring_env import ui_sets
+
+    gs, s2 = lab.gs, lab.anchors / "s2"
+    cut_spec = [(100, True, True), (100, True, False)]  # the same place, with / without notices
+    held = [(200 + k, k % 2 == 0, k % 3 == 0) for k in range(12)]
+    bank = lab.anchors.parent / "bank"
+    paths = _gm_bank(gs, bank, cut_spec + held)
+    gs.cut_levels(paths[1], s2)
+    rep = gs.cut_notices(paths[0], paths[1], s2)
+    # each mask = the notice's own pixels (those differing from the frame without it by > 40)
+    assert 0 < rep["mask_px"]["badge"] <= BADGE.size
+    assert 0 < rep["mask_px"]["levelup_icon"] <= ICON.size
+    out = gs.prove([bank], s2)
+    assert out["excluded_cut"] == 2 and out["held_out"] == 12
+    lv, nt = out["gm_levels"], out["gm_notices"]
+    assert lv["verdict"] == "PASS", lv
+    assert lv["fixed_max"] <= gs.MATCH and lv["not_fixed_min"] >= gs.NOT_FIXED_MIN
+    assert nt["verdict"] == "PASS", nt
+    assert len(nt["clean_scenes"]) >= 3  # clean frames over other scenes than the cut's
+    for comp in ("gm_levels", "gm_notices"):
+        res = out[comp]
+        ui_sets.record(s2, comp, res["pass"], {}, res.pop("before"), command="test")
+    lab.lock("console")
+    assert gs.require_ready() == "s2"
+
+
+def test_the_s2_gm_state_proof_fails_on_a_wrong_label(lab: Any) -> None:
+    gs, s2 = lab.gs, lab.anchors / "s2"
+    bank = lab.anchors.parent / "bank"
+    held = [(300 + k, k % 2 == 0, k % 3 == 0) for k in range(10)]
+    paths = _gm_bank(gs, bank, [(100, True, True), (100, True, False)] + held)
+    labels = json.loads((bank / "labels.json").read_text())
+    labels[3]["levels"] = "fixed" if labels[3]["levels"] == "not_fixed" else "not_fixed"
+    (bank / "labels.json").write_text(json.dumps(labels))
+    assert gs.prove([bank], s2)["gm_levels"]["verdict"].startswith("REFUSED")  # nothing cut
+    gs.cut_levels(paths[1], s2)
+    gs.cut_notices(paths[0], paths[1], s2)
+    out = gs.prove([bank], s2)
+    assert out["gm_levels"]["verdict"] == "FAIL" and len(out["gm_levels"]["wrong"]) == 1
+    assert out["gm_notices"]["verdict"] == "PASS"  # each component on its own bar
+
+
+def test_the_notices_label_parser(gs: Any) -> None:
+    assert gs.parse_notices("none") == []
+    assert gs.parse_notices("levelup_icon,badge") == ["badge", "levelup_icon"]
+    for bad in ("", "badge,grass", "all"):
+        with pytest.raises(ValueError):
+            gs.parse_notices(bad)
