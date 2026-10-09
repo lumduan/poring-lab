@@ -178,6 +178,7 @@ def run_sword(n: int, seed: int, per: int = PER_TRIAL) -> int:  # pragma: no cov
                         p = full[j % len(full)]
                         j += 1
                         if not usable([p], loot1.in_ui):
+                            time.sleep(0.02)  # the next entry; never a busy loop
                             continue
                         if not rig.pr.park():
                             continue
