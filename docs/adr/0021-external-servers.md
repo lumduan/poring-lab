@@ -361,7 +361,7 @@ for the lab).
 | `demo_verify.py` (+ `poring_dataset.verify`) | `demo.jsonl` + `packets.jsonl.gz` | not available; no `demo.verified.jsonl` |
 | `demo_labels.py` | `demo.verified.jsonl` | refuses (no verified file; and never labels from an external session, section 9.3) |
 | `demo_interruptions.py` | the backend's input log (no packets) | WORKS: human takeovers are still marked |
-| `walk17_score.py` (its docstring cites `walk15_score.py`, which is not in the repo: `git ls-files`, 2026-10-09) | packets + the run's logs | not available; its first JSON object is `available: false` with no `scored` or `SAFETY` |
+| `walk17_score.py` (its docstring cites `walk15_score.py`, which was in no commit, `git ls-files` 2026-10-09; ➡️ since 0648ade it is kept verbatim in `docs/records/scorers/` with walk@7–16's) | packets + the run's logs | not available; its first JSON object is `available: false` with no `scored` or `SAFETY` |
 | `walk_readiness.py` | the scorers' JSON | any `available: false` input → `not available`, never READY |
 | `loot1_score.py`, `loot_truth.py` | packets | not available |
 | `talk1_score.py` | `trials.json` + packets | not available |
