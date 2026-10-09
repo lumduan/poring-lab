@@ -1233,6 +1233,10 @@ Three reasons, all from this repo:
    the map's KB spawns (§3.18).
 
 **The scope** is, for every map block AND every map a route crosses:
+➡️ **DECIDED 2026-10-09 (Batt, contradictions #19): "every map a route crosses" belongs to a LATER
+IR version (after IR 2), not to IR 1 or IR 2.** `walk_to` is per map and exits are explicit, so in
+IR 1 and IR 2 a route crosses no maps: the scope is every map block's map. ("IR 2" was this
+marker's first wording; IR 2 is now #13's rank.)
 - the species of its L3 spawns;
 - what they turn into (`classes.json` already adds metamorphosis);
 - any species an event names, e.g. a boss (13.6.8);
@@ -1958,7 +1962,9 @@ means needed before MW1.
         (offline only), and a death-cell stand-in for the tracker.
       - 20 drop trials; the bar is 19 / 20, with zero-tolerance safety in the loot phase.
 22. **The training scope beyond spawns (13.3).** Metamorphosis is covered (`classes.json`). Summoned
-    slaves (mob skills)? The maps a route only crosses (proposal: in scope)?
+    slaves (mob skills)? The maps a route only crosses (proposal: in scope)? ➡️ That part waits
+    for a later IR version (after IR 2): in IR 1 and IR 2 a route crosses no maps (Batt 2026-10-09,
+    contradictions #19; 13.3).
 23. **Unlisted species:** treated as IGNORE (proposal), or must the owner place every spawned
     species on a list?
 24. **An aggressive species on IGNORE** attacks us: never answer (proposal; the HP events decide),
