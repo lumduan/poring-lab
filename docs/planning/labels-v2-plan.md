@@ -870,6 +870,23 @@ labels_v2.difficulty (all "normal" here).
         85, 86, 92, 105) were seen on other maps: the same files, so the same check.
       - The other 10 (46, 47, 57, 90, 117, 726, 727, 751, 753, 754) wait for the first collection
         session.
+    - ➡️ **Claude's reading of the 9 sheets (2026-10-09 ~21:30; for Batt to confirm, as with the warp
+      sheet):**
+      - **Fit (the box holds the drawn sprite, edges within a few px):** 84 (prt_in), 89 (alberta),
+        92 (prontera, all 8), 874 (prontera, 1 crop), 105 (prontera; the guide's halberd tip sticks
+        out on the left in 2 crops, the body fits).
+      - **Shifted RIGHT on alberta_in, in most crops:** 59 (4 of 6), 86 (3 of its 4 alberta_in
+        crops; its prt_in crop fits), 98 (2-3 of 7): the box's left edge sits near the sprite's
+        middle, i.e. about a third of a sprite width (~15-25 px) to the right. 85 (prt_in) is
+        shifted ~10 px the same way. The outdoor and town sprites do not shift.
+      - **So the shift is a label (projection) error on the indoor camera, not the sprite or the
+        NCC:** the same sprite (86) fits on prt_in in one crop and not on alberta_in. Two crops (86
+        #5, 98 #6) also show a closer camera (a zoomed view), where the box still roughly fits.
+      - **Consequence:** indoor NPC boxes (alberta_in at least) are NOT trainable until the indoor
+        projection offset is explained (the indoor camera's yaw / distance per map, or the GM's
+        packet position lag); the training grounds are outdoor-camera maps and are not affected.
+        alberta_in is the job changer's map, so this blocks the Merchant maps' NPC labels, not the
+        training grounds'.
   - ➡️ **L3 warp lists on these maps (walk@17's B; labels_v2's `warp` class): DONE 2026-10-09
     ~21:15.**
     - `scripts/kb_route.py` now takes first_workflow.json's COMPLETE list for every map that KB
