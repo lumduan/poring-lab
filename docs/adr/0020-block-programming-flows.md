@@ -501,7 +501,11 @@ weight above N % → go and sell. The rules are fixed here so that a flow means 
 3. **Edge, re-arm, cooldown.** A handler fires when its condition goes false → true. It is then
    disarmed until `rearm` holds (hysteresis, e.g. fire below 35 % HP, re-arm above 60 %) AND
    `cooldown_s` has passed. Without `rearm` the condition itself must go false. The linter requires
-   a `rearm` or a cooldown.
+   a `rearm` or a cooldown. ➡️ **DECIDED 2026-10-09 (Batt, contradictions #1): a RE-FIRE BOUND.**
+   Any bound counts: `rearm`, `until`, `cooldown_s`, `max_per_min` or `max_per_run`; and a
+   condition built only from momentary cues (`map_load_seen()`, `engagement_seen()`) is
+   self-bounded (a cue cannot hold on every tick). A plain level condition with none of them is
+   the ERROR. This is MW1's rule (lint/events.py), unchanged.
 4. **Who pre-empts whom.** A firing handler pre-empts anything of a strictly LOWER class. Equal
    classes never pre-empt each other: they queue (first in, first out, de-duplicated). While a
    handler runs, its own class and lower ones queue; a guard pre-empts everything.
@@ -598,7 +602,7 @@ by its path; the owner reads the same text the LLM drafter gets back.
 | 2 · semantics | every reference exists for the target environment: the map; the NPC on that map; the option offered by that NPC; the item, monster, skill. Every action block resolves its bindings (`resolve()`); an `Unsupported` is ~~an error~~ naming the layer and key ➡️ **DECIDED 2026-10-09 (Batt, contradictions #6): a READINESS item, not an error.** It is listed in the report and blocks the RUN (the run-start check refuses on it, `poring_flow.runstart`), not the design: a flow with readiness items can be designed, linted, simulated and approved. `assumes` uses known sensors | "main.1: npc n_3f2a is not on the map the flow is on at this point"; readiness: "town.0: walk_to is unsupported here: L3 binding L3.map.walkability (…)" |
 | 3 · simulation | an abstract walk through the flow tracking the current map: reachability on the GAT/warp graph (`poring_dataset/walk.py`, legs ≤ 128 steps, waypoints beyond; ➡️ Batt 2026-10-09, contradictions #18: with the EXECUTOR's planner, `walk_path`; until the swap, MW1's A* held to it by a cross-check test, open question 15); a time estimate; monster spawns on the map for `attack_nearest`; element matchups (warning) | "main.2: cell (170, 210) is unreachable from the warp you arrive by" |
 | 3 · loops | every `while` has a bound, a sensor/variable its body can change, or a `break`; a loop body with no action and no wait is a busy loop (error); the flow-level `max_runtime_s` bounds everything | "main.6: this loop can never end: nothing in it changes job_level()" |
-| 3 · events | every handler has `rearm` or a cooldown; conditions use passive sensors only; two handlers of one class with overlapping conditions (warning; on the SAME sensor an error, 13.6.9; ➡️ only at the same RANK since 2026-10-09, contradictions #14: different ranks are an INFO); a handler that can re-trigger itself; a handler with no failure path; a `critical` handler containing a long action (warning). Event scopes and hysteresis pairs: 13.6.9 | "handlers.drink: no re-arm and no cooldown: it would fire on every tick" |
+| 3 · events | every handler has `rearm` or a cooldown (➡️ a re-fire bound: any of rearm, until, cooldown, a per-minute or per-run limit, or a cue-only condition; Batt 2026-10-09, contradictions #1); conditions use passive sensors only; two handlers of one class with overlapping conditions (warning; on the SAME sensor an error, 13.6.9; ➡️ only at the same RANK since 2026-10-09, contradictions #14: different ranks are an INFO); a handler that can re-trigger itself; a handler with no failure path; a `critical` handler containing a long action (warning). Event scopes and hysteresis pairs: 13.6.9 | "handlers.drink: no re-arm and no cooldown: it would fire on every tick" |
 | map workflows | save point, exits, NPC / menu / Kafra service, routes, weight, loops, species lists, keep lists, the graph: 13.5 | – |
 | 3 · irreversible | `refine`, `insert_card`, and `sell` with an empty keep list | "main.9: refine can destroy the item: acknowledge it at approval" |
 | 4 · approval | the owner sees the blocks, the lint report, the time estimate and the badges (section 12), and approves THIS hash | – |
