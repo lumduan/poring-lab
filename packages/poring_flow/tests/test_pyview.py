@@ -201,4 +201,3 @@ def test_the_bare_underscore_is_only_repeats_target() -> None:
     assert refused("for _x in range(3):\n    sit()\n") == [
         "line 2, col 5: name _x is not allowed in a flow (a name starting with _ is refused)"
     ]
-

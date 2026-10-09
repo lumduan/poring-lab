@@ -1482,6 +1482,10 @@ Batt's loop runs through this rule: farm's wing → the save point on map_1 → 
 - **Two thresholds, no flapping.** `when` starts the event; `until` stops it. The body repeats while
   the event is on (paced by `cooldown_s` and `max_per_min`). The event re-arms only after `until`
   has held. One-shot events keep 2.5's `rearm`.
+  ➡️ **DECIDED 2026-10-09 (Batt, contradictions #11): `until` and `rearm` are mutually exclusive
+  on one event**: `until` makes it repeating, `rearm` one-shot. Both on one event is a layer 1
+  ERROR (the IR refuses it: "until (a repeating event) and rearm (a one-shot event) are
+  exclusive").
 - **`cooldown_s`:** the minimum gap between two runs of the body (e.g. a potion, then the bar's
   update).
 - **`max_per_min`:** a rate cap; extra runs wait (e.g. at most 6 potions a minute).
