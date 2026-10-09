@@ -728,6 +728,23 @@ labels_v2.difficulty (all "normal" here).
   the camera: the client's indoor table lists alberta_in, geffen_in and morocc_in, not the training
   maps (outdoor camera); the sprite catalog for the 11 new species; N1-N3 for the 15 training-ground
   sprites first.
+  - ➡️ **GATs + camera: DONE 2026-10-09 ~21:15.**
+    - `scripts/map_identity.py gat` wrote each server map name's GAT into the GAT dir
+      (`/dev/shm/poring-lab-tmp/gat/data`), resolved through the client's rename table: all 20
+      new_N-M (each its stage's new_zone0M), plus morocc and morocc_in. alberta, alberta_in and
+      prontera were already there, byte-unchanged.
+    - `scripts/flows_gat.py` then copied them to `data/gat` (the MW2 mount; gitignored).
+    - **Indoor table:** no training map is listed, under the server name or the opened new_zone0M
+      name, so the outdoor camera applies. alberta_in and morocc_in are listed (indoor).
+  - **Found on the way (needs a decision before the Merchant maps' labels):** on this host's GRF,
+    two route towns' client GATs do NOT match the server's walkability.
+    - `map_identity.py check --group <town>` counts the cells: alberta 5,091 differ (4,836 walkable
+      only in the client, 255 only on the server); morocc 6,999 (4,482 / 2,517); prontera 46 (the
+      known 46, thai-data-experiment.md 1).
+    - alberta_in and morocc_in: 0 differ. The 20 training maps: 0 differ (7.1).
+    - The projection reads the CLIENT GAT's altitude (camera.py), so labels on alberta and morocc
+      may not fit the map the lab client draws. The kRO data on the Dell decides it, and it is not
+      on this host (7.1's caveat). Until then, treat alberta and morocc GATs as unverified.
 - **Accounts:** the GM (2000002) collects, with 3.33's immunity after each login, the fixed GM
   state checked and the UI gate before each run. It reaches any copy by `@warp` (the copies are
   clones). **The agent account 2000001 is not used for collection:** its quest state on new_4-1 is
