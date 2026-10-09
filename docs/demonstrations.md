@@ -2515,6 +2515,69 @@ it needs is committed BEFORE the scored runs.
 **Order:** after 3.29's held-out runs and loot@1 (3.20a). T1 and the scorer are desk work and come
 first; T2–T5 need the client, in its gaps.
 
+➡️ **Built 2026-10-09 (branch `feat/talk1-dialog`; code + host tests only, offline; NONE of T2–T5
+proven live yet, §2a).** Nothing above is changed: no bar, no target, no step.
+- **T2 · `poring_env/npc_dialog.py`:** `state(frame, templates)` → the dialog (its rect, its button:
+  NEXT, CLOSE or none) and the menu (4 row boxes, the highlighted row, the scrollbar: can scroll
+  up / down, OK, Cancel and the arrows by image), with a reason and a confidence.
+  - The windows `npc_dialog` / `npc_menu` and their elements are registered in the ADR-0011 map
+    (`ui_anchors.py`; keys and offsets only).
+  - Each window is found anywhere as a WHOLE window under a mask without its text, list and
+    buttons. It is judged by the share of differing pixels and of its border lines: present,
+    absent, or UNCERTAIN in between (refused).
+  - It fails closed: a hovered or unknown button, a covered row, two highlights, a half-seen
+    scrollbar or missing templates give `ok=False`. Callers act only on two agreeing frames.
+- **T3 · `poring_env/menu_text.py`:** `read_row` reads one option line exactly or refuses
+  (coloured text, foreign pixels, an unknown or ambiguous glyph, an unexplained gap, a cut-off or
+  indented line). Trailing spaces are invisible, so the expected text is compared without them.
+  - `accumulate` merges the reads of successive scroll positions (each aligned by its overlap, one
+    shift only) into the WHOLE list, from top to bottom.
+  - `cross_check` compares that list with an L3 menu (count, order, every line). `line_of` /
+    `align` place the intended line on the current frame.
+- **The banked frames' geometry (the 2026-10-08 Garnet positive case, RDP, client px):**
+  - dialog 278 × 178 at (201, 101); its text area (9, 9, 260, 140); NEXT / CLOSE at
+    (233, 155, 42, 20);
+  - menu 278 × 118 at (201, 301); rows at dy 25 + 16k, the text part dx 11, w 243; the highlight
+    band covers a row's first 15 px rows;
+  - the scrollbar at dx 254 (arrows dy 28 and 77, track dy 38–76); OK (187, 95, 42, 20), Cancel
+    (233, 95, 42, 20);
+  - the font: black on grey, no anti-aliasing; glyphs 1–7 px wide, 1 blank column inside a word, a
+    5-column gap at a space; the first ink on a row's 4th column (dx 14).
+  - A development check, NOT a proof (templates cut from the same 8 banked frames): NEXT read on
+    4, the hovered NEXT (the cursor on it) refused on 2, the menu frame read (highlight row 0, can
+    scroll down; its 4 lines read exactly), the closed frame read as no window.
+- **The tools, `scripts/talk_calibrate.py`:**
+  - `drive --npc garnet|henson|guide [--first N]`: one deliberate dialog, from the TALK-gated
+    contact (cursor_gate, 3.30's points) to the end. It uses KEYS only (Enter, arrows), decided
+    from template-free pixels at the windows' default places, and takes frames after every step.
+    Then `collect`: T5 (our contact on the NPC at its L3 cell within 5 s) and T4 (each of the 8
+    dialog events live).
+  - `cut`: T2 and T3 templates from those sessions, labelled by the packets; the menu rows are
+    labelled by structure and the scrollbar, never by the reader. It writes nothing unless READY.
+  - `prove-t2` / `prove-t3`: on sessions NOT used by `cut`, with the bars above.
+- **The harness, `scripts/talk1.py` (`pilot` / `run`):**
+  - Trials (L3 read at run time): the start cell, then walk@15's route (or `--walk walk16`) to a
+    goal 2–3 cells away on our side.
+  - The one TALK-gated click, then the dialog by T2 and the choice by T3 (scroll to the top, read
+    the whole list, cross-check it, the intended line visible and re-read, its highlight checked,
+    then OK; anything else is Cancel). Then CLOSE, and the windows gone on two frames.
+  - It writes `trials.json` in `talk1_score.py`'s contract and the session's packets.
+- **What the parent must still run, live, in order:**
+  1. T4 + T5 + the cut sessions: `drive` once per NPC (garnet, henson, guide). Each prints T5 /
+     T4.
+  2. `cut` on those three sessions: READY?
+  3. Three fresh `drive` sessions, then `prove-t2` and `prove-t3` on them (≥ 50 held-out frames).
+  4. Step 0, the pilot, per scene; `talk1_score.py` on it (never scored).
+  5. The scored runs.
+- **To confirm before the pilot (not decided by the pre-registration):**
+  - The contact projection is placed by ONE `/where` fix after the route (`--contact-fix where`,
+    the default; `none` uses the route's belief).
+  - The walk version is walk@15 unless 3.29 chooses walk@16.
+  - The pilot seeds are fresh: 20261132 (prt_church) and 20261133 (prontera).
+  - A row click that chooses by itself (client behaviour not yet seen) is accepted and logged.
+  - A window covered over about a quarter or more reads as absent, not uncertain. No client window
+    opens over the default places in the lab layout.
+
 ### HUD scene: box drift while walking + doubled boxes — OFFLINE SIM RESULT (2026-10-08 night; branch `feat/hud-drift`, merged 0d6cd79, DEPLOYED 2026-10-09 00:36 ICT; LIVE RE-MEASURE below)
 
 #### 2026-10-09 — SEEN TWICE + the display-only RECONNECT: BUILT on `feat/hud-seen-twice` (merged 9687631), measured offline; ➡️ the plain rule SUPERSEDED by the CONFIRMING PASS (first sub-entry)
