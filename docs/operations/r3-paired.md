@@ -225,6 +225,15 @@ min. The cap and the NOTIFY after 3 aborts in 2 h are unchanged.
 (docs/operations/mid-epoch-checkpoints.md), set `TEMP_HOLD_MAX_LOAD = None`. That reverts to the
 continuous rule: resume after the quiet gate, capped. Record the date here when it is done.
 
+## How a chain knows training ended (2026-10-09)
+- `train-day.sh` exits **0** only on `TRAIN DONE`, **2** on `TRAIN STOPPED` (a person must look) and
+  **3** on `TRAIN PAUSED` (IO/R2 resumes used up; resume by hand with `RESUME=1`).
+- Before 2026-10-09 it exited 0 on every end. A chain that gated on rc 0 read v1's PAUSE at epoch
+  17 of 30 (14:37:29, after IO aborts at 14:17:57 and 14:37:24) as finished and started an eval on
+  the unfinished checkpoint. The eval was stopped by hand within a minute and left no output.
+- A chain should also check the run's own `results.csv` for the expected epoch count before any
+  eval.
+
 ## Frame-drop aborts: an automatic resume (Batt, 2026-10-07 ~15:40)
 > ➡️ **AMENDED ~16:25:** "the 3rd abort within 2 h stops" is replaced by the cap + notify above.
 > The resume now starts at L4.

@@ -24,6 +24,8 @@ case "$what" in
   drop) echo "$m1$m2 (no resume)"; echo "DUTY summary: {}"; exit 1 ;;
   latency) echo "[12:00:00] ABORT rundev:vision: R3 latency: paired median delta +6.1 ms"
            exit 1 ;;
+  io) echo "[12:00:00] ABORT rundev:vision: quant-postgres full IO stall 45.8% (spike)"; exit 1 ;;
+  crash) echo "Traceback: something else"; exit 1 ;;
   heldthenio) echo "[12:00:00] R3: inconclusive measurement: only 3 kept pairs -> KEEP TRAINING"
               echo "[12:30:00] ABORT rundev:vision: quant-postgres full IO stall 26.1% (spike)"
               exit 1 ;;
@@ -33,6 +35,11 @@ esac
 
 
 def run(tmp_path: Path, outcomes: str, quiet_fails: int = 0) -> tuple[str, list[str]]:
+    log, args, _rc = run_rc(tmp_path, outcomes, quiet_fails)
+    return log, args
+
+
+def run_rc(tmp_path: Path, outcomes: str, quiet_fails: int = 0) -> tuple[str, list[str], int]:
     state = tmp_path / "state"
     state.mkdir()
     guard = tmp_path / "guard.sh"
@@ -48,9 +55,22 @@ def run(tmp_path: Path, outcomes: str, quiet_fails: int = 0) -> tuple[str, list[
            "OUTCOMES": outcomes, "IO_PAUSE_S": "0", "R3_PAUSE_S": "0"}  # fmt: skip
     for k in ("DUTY_START", "DUTY_MIN", "DUTY_CAP_LEVEL", "DUTY_CAP_UNTIL", "DUTY_AFTER_ABORT"):
         env.pop(k, None)
-    subprocess.run(["bash", str(SCRIPT), "test-run-nonexistent", "cache-x", "1", str(out)],
-                   env=env, check=False, capture_output=True, timeout=60)  # fmt: skip
-    return (out / "train.log").read_text(), (state / "args").read_text().splitlines()
+    p = subprocess.run(["bash", str(SCRIPT), "test-run-nonexistent", "cache-x", "1", str(out)],
+                       env=env, check=False, capture_output=True, timeout=60)  # fmt: skip
+    return (out / "train.log").read_text(), (state / "args").read_text().splitlines(), p.returncode
+
+
+def test_the_exit_code_tells_done_from_paused_from_stopped(tmp_path: Path) -> None:
+    """2026-10-09: train-day exited 0 on 'TRAIN PAUSED' (epoch 17 of 30), and a chain gating on
+    rc 0 evaluated an unfinished checkpoint. 0 done, 2 stopped, 3 paused."""
+    for d in ("done", "paused", "stopped"):
+        (tmp_path / d).mkdir()
+    log, _, rc = run_rc(tmp_path / "done", "ok")
+    assert rc == 0 and "TRAIN DONE" in log
+    log, _, rc = run_rc(tmp_path / "paused", "io,io,io,io")
+    assert rc == 3 and "TRAIN PAUSED" in log and "TRAIN DONE" not in log
+    log, _, rc = run_rc(tmp_path / "stopped", "crash")
+    assert rc == 2 and "TRAIN STOPPED" in log
 
 
 def test_a_drop_resumes_at_the_slowest_level_after_the_quiet_gate(tmp_path: Path) -> None:

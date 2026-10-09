@@ -29,6 +29,9 @@
 #   the resume is exact. A run keeps the mode it started with (train.py refuses a mixed resume).
 #   [RESUME=1] [MID_CKPT=1] [DUTY_START=4] [DUTY_MIN=0] \
 #     scripts/runbooks/train-day.sh RUN_NAME CACHE_ID EPOCHS OUT_DIR [BATCH=2] [WORKERS=1]
+# EXIT CODES (2026-10-09: it exited 0 on every end, so a chain read "TRAIN PAUSED" at epoch 17 of 30
+# as finished and started v1's evals on an unfinished checkpoint):
+#   0 TRAIN DONE   2 TRAIN STOPPED (a person must look)   3 TRAIN PAUSED (resume by hand)
 set -u
 cd "$(dirname "$0")/../.."
 RUN=${1:?RUN_NAME}; CACHE=/datasets/.framecache/${2:?CACHE_ID}; EPOCHS=${3:?EPOCHS}; D=${4:?OUT_DIR}
@@ -45,7 +48,7 @@ log() { echo "$(TZ=Asia/Bangkok date '+%F %T') ICT / $(date -u '+%T') UTC $*" | 
 s2_active() { grep -q '^BACKEND=console' state/capture-backend 2>/dev/null || [ -e state/cleanroom ]; }
 extra=""; [ "${RESUME:-0}" = 1 ] && extra="--resume"
 mid=""; [ "${MID_CKPT:-0}" = 1 ] && mid=" --mid-ckpt"
-trips=0; attempt=0
+trips=0; attempt=0; status=0
 while :; do
   while s2_active; do log "S2 session/clean room active: waiting 5 min"; sleep 300; done
   log "attempt $attempt batch $BATCH workers $WORKERS duty start $DUTY_START min $DUTY_MIN cap $DUTY_CAP_LEVEL until $DUTY_CAP_UNTIL after-abort $DUTY_AFTER_ABORT $extra"
@@ -57,8 +60,8 @@ while :; do
   log "attempt $attempt rc=$rc: $(grep -E 'ABORT|REFUSED' "$out" | tail -1 | cut -c1-200)"
   log "  $(grep -a 'DUTY summary' "$out" | tail -1 | cut -c1-300)"
   attempt=$((attempt + 1))
-  if [ "$rc" -eq 0 ]; then log "TRAIN DONE"; break; fi
-  if grep -q "STOP-UNVERIFIED" "$out"; then log "TRAIN STOPPED: the guard could NOT verify the stop ($(grep STOP-UNVERIFIED "$out" | tail -1 | cut -c1-160)): a person must look"; break; fi
+  if [ "$rc" -eq 0 ]; then log "TRAIN DONE"; status=0; break; fi
+  if grep -q "STOP-UNVERIFIED" "$out"; then log "TRAIN STOPPED: the guard could NOT verify the stop ($(grep STOP-UNVERIFIED "$out" | tail -1 | cut -c1-160)): a person must look"; status=2; break; fi
   for f in last.pt mid.pt mid.prev.pt; do [ -e "data/train/$RUN/weights/$f" ] && extra="--resume"; done
   if grep -q "R3-HARD" "$out"; then
     now=$(date +%s)
@@ -88,11 +91,12 @@ while :; do
   elif grep -q "REFUSED rundev" "$out"; then
     trips=$((trips + 1))
   elif ! grep -q "ABORT rundev" "$out"; then
-    log "TRAIN STOPPED: not a guard trip (see $out)"; break
+    log "TRAIN STOPPED: not a guard trip (see $out)"; status=2; break
   else
     trips=$((trips + 1))
   fi
-  if [ "$trips" -gt 3 ]; then log "TRAIN PAUSED: 3 IO/R2 resumes used, resume by hand later (RESUME=1 DUTY_MIN=$DUTY_MIN)"; break; fi
+  if [ "$trips" -gt 3 ]; then log "TRAIN PAUSED: 3 IO/R2 resumes used, resume by hand later (RESUME=1 DUTY_MIN=$DUTY_MIN)"; status=3; break; fi
   log "pausing ${pause} s before the next attempt"
   sleep "$pause"
 done
+exit "$status"
