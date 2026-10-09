@@ -827,10 +827,14 @@ def to_char_select_and_back(rig: Rig) -> None:
     harness_close(rig, "before character select")
     reg = ua.default_registry(r.ROOT / "data" / "ui_anchors")
     t0 = r.ns()
-    rig.io.chord(load_l2(CLIENT)["shortcut"]["system_menu"]["keys"])
-    time.sleep(OPEN_S)
-    frame = np.ascontiguousarray(r.grab_after(rig.screen, r.game_region(), r.ns())[..., :3])
-    origin = reg.locate(frame).get("game_option")
+    origin = None
+    for _ in range(2):  # an open chat input takes the first Escape (measured 2026-10-10)
+        rig.io.chord(load_l2(CLIENT)["shortcut"]["system_menu"]["keys"])
+        time.sleep(OPEN_S)
+        frame = np.ascontiguousarray(r.grab_after(rig.screen, r.game_region(), r.ns())[..., :3])
+        origin = reg.locate(frame).get("game_option")
+        if origin is not None:
+            break
     if origin is None:
         raise r.Stop("learn_skill@1 charselect: the game option window did not open")
     btn = at(origin, box)

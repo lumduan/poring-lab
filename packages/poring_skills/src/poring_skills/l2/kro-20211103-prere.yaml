@@ -52,6 +52,14 @@ element:
   hp_bar: {anchor_element: hp_bar, status: unverified}
   sp_bar: {anchor_element: sp_bar, status: unverified}
   minimap_xy: {anchor_element: minimap_xy, status: unverified}
+game_option:
+  # The in-game system menu (Escape = shortcut.system_menu), measured live 2026-10-10 03:33-03:35 ICT on
+  # RDP (docs/demonstrations.md 3.34): five buttons on a 23 px pitch; the FIRST goes to character
+  # select (one round trip measured: character select, then enter_game, interlock green again).
+  # Box relative to the game_option anchor's origin (CAPTURE_ORIGINS (505,450)); its bottom button is
+  # ui_anchors' game_option_close (30,113,220,20). With the chat input open, the first Escape only
+  # closes the input: the route presses Escape once more if the window did not open.
+  char_select: {box: [30, 18, 220, 20], status: unverified, measured_on: [rdp]}
 skill_tree:
   # char.learn_skill on this build (learn_skill@1, docs/demonstrations.md 3.34). Measured 2026-10-09
   # 20:39-20:52 ICT on banked RDP frames of the GM, a Novice (look1-look6, local; `learn_skill1.py

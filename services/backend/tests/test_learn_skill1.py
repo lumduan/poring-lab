@@ -368,8 +368,11 @@ def test_the_restore_modes_fail_closed(ls: ModuleType) -> None:
     with pytest.raises(SystemExit, match="group 20"):
         ls.check_restore("skreset", False, l2)
     assert ls.check_restore("skreset", True, l2) == {}
+    unbound = {k: val for k, val in l2.items() if k != "game_option"}
     with pytest.raises(ls.Unbound, match="unmeasured: the in-game route to character select"):
-        ls.check_restore("charselect", False, l2)
+        ls.check_restore("charselect", False, unbound)
+    # measured live 2026-10-10 (3.34): the game option window's first button
+    assert ls.check_restore("charselect", False, l2) == {"char_select": (30, 18, 220, 20)}
     measured = {**l2, "game_option": {"char_select": {"box": [10, 20, 30, 40]}}}
     assert ls.check_restore("charselect", False, measured) == {"char_select": (10, 20, 30, 40)}
 
