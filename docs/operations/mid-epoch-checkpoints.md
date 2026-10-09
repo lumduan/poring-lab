@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [../benchmarks/v1-vs-v0png.md, r3-paired.md, ../../services/vision/src/poring_vision/midckpt.py]
-next_action: "2026-10-08 22:19: the proof FAILED at B2 (rc 1, a fused-Adam state mismatch on the first step after a bitwise restore; RESULT section). v1 trains WITHOUT mid-epoch checkpoints, as pre-registered; TEMP_HOLD stays. Batt: whether to fix (proposed in RESULT) and re-run the proof as a new pre-registration."
+next_action: "2026-10-09: proof 1 FAILED at B2 (RESULT section; v1 trains WITHOUT mid-epoch checkpoints, as pre-registered). Batt decided: fix it and re-prove under a NEW pre-registration. The cause was found in the code (channels_last parameters, optimizer state restored NCHW) and fixed in 2a2ff28 (branch fix/vision-midckpt-state). Re-proof 2 is pre-registered in its own section. Next: merge the fix to main, then run re-proof 2's five runs (resume-proof2-*) once the GPU is free after v1; not urgent. TEMP_HOLD stays until it passes; PASS => MID_CKPT=1 for the next training run."
 ---
 
 # Mid-epoch checkpoints with an exact resume (Batt, 2026-10-08; pre-registered BEFORE any run)
@@ -70,6 +70,9 @@ next_action: "2026-10-08 22:19: the proof FAILED at B2 (rc 1, a fused-Adam state
   - In the trainer: the stream check runs again with the exact worker count, and the RESTORED
     state's digest must equal the saved one. The file already passed its own digest, so a
     mismatch here is a restore fault, not a damaged file: it refuses, with no fallback.
+  - The optimizer state is laid out as its parameters (`load_optimizer`; added 2026-10-09, after
+    proof 1's B2 crash, see "Re-proof 2"). The digest compares values only, so it cannot check
+    a layout.
 - **Unchanged:** the duty-cycle sleeper, the summary line, validation, and the epoch-level
   last.pt / best.pt.
 - **`train-day.sh`:** `MID_CKPT=1` passes `--mid-ckpt`. Any of last.pt, mid.pt or mid.prev.pt
@@ -240,3 +243,120 @@ cycle, R3 paired):
 - A host test cannot reproduce the fused CUDA kernel (no torch on the host). The fix needs its own
   short GPU check, then the SAME proof re-run as a NEW pre-registration. That is Batt's call; until
   then, `--mid-ckpt` stays opt-in and unused.
+
+## Re-proof 2 (pre-registered 2026-10-09, BEFORE any run)
+**Batt's decision (2026-10-09):** "fix (rebuild optimizer state tensors to match their params'
+dtype/device/layout) and re-run the proof as a NEW pre-registration; not urgent, TEMP_HOLD stays
+until it passes." Proof 1's RESULT above stays as recorded.
+
+**The cause, found in the code (Claude, 2026-10-09; the pinned ultralytics 8.4.165 wheel read, no
+GPU run):**
+- ultralytics trains the model in **channels_last** on CUDA: `_setup_train`
+  (`ultralytics/engine/trainer.py` L337–343; on by default, except on Windows).
+- It builds AdamW with **`fused=True`** on CUDA (`build_optimizer`, L1223–1226).
+- The mid save stored the optimizer state through `to_cpu`, which makes every tensor
+  `.contiguous()`: NCHW (`midckpt.py` L105 at afe7a03).
+- torch's `Optimizer.load_state_dict` moves each state tensor to its parameter's device and dtype,
+  and keeps the strides it was saved with (the old restore, `midckpt.py` L297–300 at afe7a03).
+- So the restored `exp_avg` / `exp_avg_sq` of every conv weight larger than 1×1 were NCHW-strided
+  while their parameters are NHWC. The fused kernel checks params, grads, exp_avgs and
+  exp_avg_sqs for equal strides, and refuses with exactly B2's message.
+- The state digest hashes values in logical order (`tensor_bytes`), so it cannot see a layout.
+  That is how B2 restored "bitwise" and still crashed.
+- **Diagnosis 1 (the `step` counters' device) is ruled out by the same reading.** The live groups
+  have `fused: True`, which the restore copies into the saved groups, so `load_state_dict` already
+  put `step` on the parameter's device in float32. The kernel's check does not cover the step
+  tensors anyway.
+- This is a reading of the code, not a measurement. Only the GPU runs below exercise the CUDA
+  kernel.
+
+**The fix** (commit `2a2ff28`, branch `fix/vision-midckpt-state`): `midckpt.load_optimizer`, which
+the resume now uses. After torch's `load_state_dict`:
+- every state tensor shaped like its parameter becomes
+  `torch.empty_like(param, memory_format=torch.preserve_format).copy_(saved)`: the parameter's
+  dtype, device and strides, the saved values bit for bit;
+- every `step` goes where Adam's lazy init puts a fresh one (`resume.step_placement`): on the
+  parameter's device when the group is fused or capturable (float32 when fused), else a float32
+  CPU scalar.
+
+Unchanged: what is saved, the digest, the rotation, the data stream and the loop.
+
+**Its tests:**
+- On the host, no torch (`test_resume.py`): the two rules, and the wiring through a stand-in
+  torch. Removing the rebuild fails it.
+- With torch only, SKIPPED on the host (`test_optimizer_restore.py`):
+  - CPU fused and foreach AdamW on channels_last parameters;
+  - the restored layout, with proof 1's restore as the positive case (its state stays NCHW);
+  - a resumed step bitwise equal to the uninterrupted one;
+  - proof 1's exact CUDA error only with `PORING_CUDA_TESTS=1`, in a guarded step.
+- **The torch tests have NOT run** (the host has no torch, and the vision container mounts only
+  `services/vision/src`). They are not a gate: the runs below are the check.
+
+**Before A starts:** the fix must be on `main`, because `rundev:vision` mounts the main checkout's
+`services/vision/src`. Record the commit `main` is at when A starts.
+
+**When:** not urgent (Batt). Once the GPU is free (after v1's training), through guarded
+`rundev:vision` (IO + R1–R3, the adaptive duty cycle), as proof 1.
+
+**The runs and the bar: the SAME as proof 1, copied verbatim below.** Only the names change.
+- Every run goes under `resume-proof2-*` (`scripts/resume_proof.py plan`, whose default
+  `--prefix` is now `resume-proof2`).
+- Proof 1's `resume-proof-*` directories stay as its record. A fresh run in an old directory
+  APPENDS to its `trace.jsonl`, so `plan` refuses names that exist.
+- All five runs again, on the fixed code: A and A2 included. Proof 1's traces are not reused.
+
+**The runs:**
+- All `--smoke` on `v0png-20261006`: 1,000 train frames = 500 batches/epoch.
+- 3 epochs, `--close-mosaic 1`: mosaic in epochs 1–2, the reset at epoch 3's start. Warmup spans
+  epochs 1–2.
+- Batch 2 / workers 1, as v1.
+- A mid save every 64 batches (`--mid-every-s 0`: deterministic positions), and `--trace` on every
+  batch.
+
+| run | what | expected |
+|---|---|---|
+| A | uninterrupted | rc 0 |
+| A2 | A again: the GPU's own noise floor | rc 0 |
+| B1 | dies after global batch 850 (epoch 2, batch 350; mosaic on, in warmup); its last mid save was at batch 300 | rc 86 |
+| B2 | `--resume`: re-trains batches 300–350, dies after batch 1037 (epoch 3, batch 37: after close_mosaic's reset, before epoch 3's first mid save) | rc 86 |
+| B3 | `--resume` from the BOUNDARY checkpoint written at the end of epoch 2, to the end | rc 0 |
+
+All of B goes to one trace file.
+
+**The bar** (`scripts/resume_proof.py compare`, rc 0 only on PASS). PASS iff ALL of:
+- **(a) data:** every batch of A exists in B with the same sample indices, stream positions,
+  image hash and label hash.
+- **(b) schedule:** at every optimizer step, the same lr and momentum per parameter group, the
+  same accumulate, and the same EMA update count.
+- **(c) losses:**
+  - **If A and A2 are bitwise equal everywhere:** B's per-batch losses must be bitwise equal to
+    A's after the first resume.
+  - **Otherwise:** after the first resume, per loss item, the median and p95 of |B − A| must
+    stay ≤ 1.5 × those of |A2 − A| (+ 1e-6).
+- **(d) restore:** every resume's restored state digest equals the saved one. The trainer
+  itself also refuses to continue otherwise.
+
+**The bar is UNCHANGED by the rotation (added 2026-10-08 ~11:00, before any run).**
+- B's resumes go through the rotation as written: two files on disk, mid.pt chosen.
+  Additionally reported: each resume's `resume_from` line, which must name mid.pt, and the
+  weights directory listing after B3, which must be empty of mid files.
+
+The host-proven fallback (proof 1's section above) still holds: `test_resume.py` passes unchanged.
+
+**Reported whatever the outcome:**
+- each criterion;
+- whether A == A2 bitwise;
+- the loss envelopes;
+- the resume points;
+- mid.pt's size and write time (`mid_ckpt` log lines);
+- the wall time of each run.
+
+**Decision (Batt's, 2026-10-09):**
+- **TEMP_HOLD stays until this passes** (`TEMP_HOLD_MAX_LOAD` in `frigate_r3.py`; the exit is
+  r3-paired.md's "EXIT": merged AND proven).
+- **PASS ⇒ `MID_CKPT=1` for the next training run.** v1, already training without it, keeps
+  epoch-level checkpoints to its end: a run keeps its mode for life (`stream.json`).
+- **FAIL on any criterion:** `MID_CKPT` stays unset (opt-in, unused), TEMP_HOLD stays, the failing
+  criterion is reported, and another fix needs another new pre-registration.
+
+**RESULT:** not run yet.
