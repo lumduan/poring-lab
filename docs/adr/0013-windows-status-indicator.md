@@ -19,6 +19,9 @@ next_action: "➡️ ADR-0019 (Batt 2026-10-06): WINDOWS STAYS CLEAN. The 2026-1
   - the indicator below is NOT built (its server-side candidates are in ADR-0019);
   - the 2026-10-06 amendment (Part B) is DEFERRED;
   - the 2026-10-05 watcher is lab-only, with retirement criteria.
+- ➡️ 2026-10-09: [ADR-0021](0021-external-servers.md) (PROPOSED) would answer Part B's "remote
+  attestation" purpose WITHOUT a channel: a firewall rule set generated from Settings, run once by
+  Batt per allowlist change, its read-back carried back by a person. Part B stays deferred.
 - **Related:**
   - [ADR-0009](0009-console-session-capture.md): the console mode and its 2026-10-02 amendment;
   - [docs/s2-plan.md](../s2-plan.md) §11: shared control;
@@ -156,6 +159,10 @@ exe calling Gravity's `kro-assit.ragnarok.co.kr:3000` at character select (ADR-0
 - Its two purposes go server-side:
   - discovery: drag a game file onto the Settings page (ADR-0016's finder);
   - remote attestation: the server-side candidates in ADR-0019.
+    ➡️ 2026-10-09: ADR-0021 (PROPOSED) would amend this line. Its section 10 weighs those
+    candidates; none PREVENTS a connection per exe, so it proposes a generated, operator-run
+    exe-scoped firewall script (one-time OS config, nothing running, no key, no channel), with
+    the read-back pasted into Settings by a person.
 - The design below is kept as history. Nothing was ever built: no code, test or `.env` variable.
 
 **Status (as written): PROPOSED. Nothing is built or deployed on Windows.** Batt asked for the design first

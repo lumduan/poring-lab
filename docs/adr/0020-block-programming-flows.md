@@ -35,6 +35,10 @@ next_action: "ACCEPTED by Batt 2026-10-08, with the decisions recorded at the op
   ADR-0005 implemented (done 2026-10-04) and the environment interlock
   ([ADR-0016](0016-environment-interlock.md), done 2026-10-04). The IR, the linter, the editor and
   the Python view need none of these: they are offline work.
+- ➡️ 2026-10-09: [ADR-0021](0021-external-servers.md) (PROPOSED) would let flows run on an
+  allowed EXTERNAL server (lint layer 6 and the safety rules in section 6 would change): only
+  blocks verified on lab-rathena for the same client, locale and path; L3 there an assumption
+  checked by pixels, with a safe stop on a mismatch; no packet-based verdicts there.
 - **Related:**
   - [ADR-0002](0002-input-mux.md): one input writer, the lease, releases on handoff;
   - [ADR-0003](0003-env-abstraction.md): the `Env` contract the blocks act through;
@@ -637,6 +641,11 @@ by its path; the owner reads the same text the LLM drafter gets back.
 | 5 · runtime | the built-in guards (2.5), block timeouts, perception confidence | – |
 | 6 · interlock | the target environment is `allowed` in the user-managed set (`settings/environments.json`); never the community server or an official one. The mux stays the enforcement (`environment_unattested`); the lint check only fails earlier | "target community-bot-testing is pending: flows never run there" |
 
+➡️ 2026-10-09: ADR-0021 (PROPOSED) would amend layer 6's "never the community server": an
+allowed EXTERNAL environment with a confirmed firewall rule set may be a target, and `verified`
+there means verified on lab-rathena for the same client, locale and path (an external server
+can never run a packet-scored alone-test).
+
 The linter re-runs at run start against the current KB and catalogue. If either changed since
 approval and the result changed, the run does not start.
 ➡️ **DECIDED 2026-10-09 (Batt, contradictions #6):** the severities are `error` (the design is
@@ -684,6 +693,8 @@ or no resolver is a refusal) and, given the approved hash, refuses another hash.
 - **The interlock** gates every press (ADR-0016). A flow runs only on an `allowed`, attested
   environment. The community server stays manual-only: its entry is `pending` with no signals, so it
   can never be green. Official servers are forbidden.
+  ➡️ 2026-10-09: ADR-0021 (PROPOSED) would amend this: an allowed EXTERNAL environment is
+  green on `lab_host` + a person-confirmed firewall rule set, without an attestation.
 - **The foreground gate** applies to every block that types (`enter_value`, chords); clicks are
   not gated (ADR-0016).
 - **The frame-age guard** applies: blocks decide on fresh frames and judge outcomes on a frame

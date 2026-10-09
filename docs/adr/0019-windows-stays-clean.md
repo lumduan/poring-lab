@@ -16,6 +16,11 @@ next_action: "Principle in force (Batt, 2026-10-06). Part B and Part C DEFERRED 
   proposal.
 - **Prompted by:** the Part B design (ADR-0013's 2026-10-06 amendment), which would have put a
   reporting channel and an HMAC key on Windows.
+- ➡️ 2026-10-09: [ADR-0021](0021-external-servers.md) (PROPOSED) is the new ADR this principle
+  asks for, for the known need "attest a REMOTE server that has no sniffer". It weighs the
+  server-side candidates first (its section 10) and proposes a generated, operator-run,
+  exe-scoped firewall script: one-time OS config, nothing running, no key, no channel, its
+  read-back carried to Settings by a person. Nothing changes until Batt accepts it.
 - **Related:**
   - [ADR-0013](0013-windows-status-indicator.md): the indicator, the watcher and Part B;
   - [ADR-0016](0016-environment-interlock.md): the interlock, the finder, Part C;
@@ -66,6 +71,11 @@ the places to look:
 | Attest a REMOTE server that has no sniffer (what Part C was for) | (a) the pixels: the server name the client shows at login and server select, read by vision, checked against the Settings list; (b) the network: see the Dell's game connections from outside it, e.g. the router's state table or flow log, or route the Dell's game ports through the bot server so the existing sniffer sees them (an infra decision, Batt's); (c) for a server WE host: signed attestations from its own sniffer (ADR-0016 remote notes) |
 | Map several clients to their servers | one session and one Sunshine app per client, so the mapping is per stream, on the server; or the pixels (the server name in each client) |
 | Show a person at the Dell what the bot is doing (ADR-0013's indicator) | the console in a browser on a phone or tablet next to the Dell; a light or sound driven by the bot server (e.g. through Home Assistant) |
+
+➡️ 2026-10-09: for the first row, ADR-0021 (PROPOSED) finds that none of (a)-(c) PREVENTS a
+connection per exe ((a) and (b) detect after the fact, (b) by routing would capture an external
+server's traffic, (c) needs a server we host). It keeps (a) as an optional `login_screen` check
+and proposes the Windows-side, one-time firewall config described there.
 
 ## Consequences
 
@@ -297,6 +307,12 @@ while experiments add unknown clients and data.
    - Today: KILLED 0 since 2026-10-05 19:29 (about 21 h).
 5. **The server-side interlock is unchanged:** green only on a fresh lab-session attestation.
 
+➡️ 2026-10-09: ADR-0021 (PROPOSED) would re-word criteria 2 and 5 on acceptance: an external
+environment's exes are covered by their OWN generated group (its endpoints, not 192.168.1.13),
+and an external environment is green on a confirmed rule set, not an attestation. Its client copy
+must live outside `C:\RO-rAthena\client\` (this watch would kill it), and adding one re-opens
+criterion 1.
+
 **Retirement:**
 - Two lines from the agent's own standard shell, where the task was registered:
   `Unregister-ScheduledTask 'poring-lab watch' -Confirm:$false`, then remove
@@ -309,7 +325,10 @@ while experiments add unknown clients and data.
 ## The user-facing Windows setup
 
 **Game client (with its one-time config) + Sunshine.** That is the whole list. The step by step
-is in [docs/windows-setup.md](../windows-setup.md). Not part of it:
+is in [docs/windows-setup.md](../windows-setup.md).
+➡️ 2026-10-09: ADR-0021 (PROPOSED) would add, for an external environment only, its generated
+firewall script, run by a person once per allowlist change (nothing stays running). Not part of
+it:
 - RDP (the lab's human admin path);
 - the watch;
 - the agent's shell;
