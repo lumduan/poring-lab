@@ -3821,6 +3821,16 @@ and packets local in `/dev/shm/poring-lab-tmp/learn_skill/look7*`, `look8*`):**
 - Restored: `@joblevelup -49` with no skill learned (no reset needed: the client stays in sync);
   the fixed state checked at the end of both looks.
 
+**➡️ RESTORE OPTION B MEASURED AND PROVEN (2026-10-10 03:33-03:46 ICT, RDP, the GM):** the in-game route
+to character select. Escape opens the GAME OPTION window (the `game_option` anchor at its home (505,450);
+with the chat input open, the FIRST Escape only closes the input, so the route presses it once more);
+its first button (L2 `game_option.char_select`, box (30, 18, 220, 20) from the window's origin; the
+bottom button is ui_anchors' `game_option_close`) goes to character select; `ro_agent.enter_game`
+comes back. **Proof: 5 / 5 round trips** (`/dev/shm/poring-lab-tmp/learn_skill/cs_proof.py`), each
+11.7-14.4 s, the char_select signature within 7.5-8.9 s, the interlock green after every one (e54b9d6).
+The re-entry also clears the job-level notices that gm_state's references do not cover (an "N" badge on
+the skills shortcut button and an "up" icon at the client's bottom-left, seen after `@joblevelup`).
+
 **DRAFT pre-registration for learn_skill@1 (2026-10-10 ~01:15 ICT; NOT binding: it waits for Batt's
 restore decision, then it is re-dated and committed as PRE-REGISTERED before any trial):**
 - **The rule and harness:** `scripts/learn_skill1.py` at the commit of the pre-registration; scored
