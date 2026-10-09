@@ -228,7 +228,7 @@ box (ANY class) sees each (its foot within 40 px of the feet, or the feet inside
   require_complete=True)` fails closed. On 2026-10-09 no map is complete: prontera's L3 lists 16
   NPCs, but not the 5 flags, job 92 (157,187), job 99 (163,204) nor job 700 (156,212) of the
   centre; prt_church lists 2 of its 10 drawn NPCs (packets of 20261009T034716).
-  ➡️ **2026-10-09 ~21:15: superseded by P1 (5.1).** `npc_cells.json` now declares 33 maps
+  ➡️ **2026-10-09 ~21:10: superseded by P1 (5.1).** `npc_cells.json` now declares 33 maps
   complete, prontera and prt_church included, with the flags and every drawn NPC.
 - **The footprint (PROVISIONAL):** a screen box hung from the NPC's projected feet (the camera +
   the map's GAT at the rule's belief): 60 px left and right, 165 px above, 36 px below. Sized from
@@ -284,7 +284,7 @@ The layer slots in where walk@12/13's `zone_points` already removes work-zone an
   adds the church. Its packet check over the 85 banked demo sessions: 49 / 49 NPC objects at
   their cell and sprite, prontera 16 and prt_church 19 among them. ~~It does NOT write
   `npc_cells.json` yet, so `npc_noclick.py` still reports no map complete (a follow-up).~~
-  ➡️ **2026-10-09 ~21:15: P1 BUILT and CHECKED** (branch feat/labels-v2-prep; local data, never
+  ➡️ **2026-10-09 ~21:10: P1 BUILT and CHECKED** (branch feat/labels-v2-prep; local data, never
   committed).
   - **The file:** `kb_first_workflow.py npc-cells --sessions <banked>` writes
     `data/kb/npc_cells.json` for the KB's 33 maps: the first workflow's 30 plus prt_church,
