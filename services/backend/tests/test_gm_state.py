@@ -56,18 +56,20 @@ def test_the_restore_lines_lower_both_levels_then_heal(gs: Any) -> None:
 
 
 def test_the_notices_are_seen_only_when_shown(gs: Any) -> None:
+    """Each notice on its OWN pixels: the see-through shortcut window must not matter."""
     rng = np.random.default_rng(9)
     frame = rng.integers(60, 200, (720, 1280, 3)).astype(np.uint8)
-    bx, by, bw, bh = gs.BADGE_BOX
-    ix, iy, iw, ih = gs.ICON_BOX
-    icon = rng.integers(0, 255, (ih, iw)).astype(np.float32)
-    mask = np.zeros((ih, iw), bool)
-    mask[5:40, 5:40] = True
-    refs = {"badge_clean": gs.crop(frame, gs.BADGE_BOX), "icon": icon, "icon_mask": mask}
+    refs: dict[str, Any] = {}
+    for name, box in (("badge", gs.BADGE_BOX), ("levelup_icon", gs.ICON_BOX)):
+        _x, _y, w, h = box
+        refs[name] = rng.integers(0, 255, (h, w)).astype(np.float32)
+        mask = np.zeros((h, w), bool)
+        mask[2:12, 2:12] = True
+        refs[f"{name}_mask"] = mask
     assert gs.notices(frame, refs) == []
-    badged = frame.copy()
-    badged[by + 2 : by + 10, bx + 28 : bx + 36] = (0, 0, 230)  # a red dot on the icon
-    assert gs.notices(badged, refs) == ["badge"]
-    shown = frame.copy()
-    shown[iy : iy + ih, ix : ix + iw] = icon.astype(np.uint8)[..., None]
-    assert gs.notices(shown, refs) == ["levelup_icon"]
+    for name, box in (("badge", gs.BADGE_BOX), ("levelup_icon", gs.ICON_BOX)):
+        x, y, w, h = box
+        shown = frame.copy()
+        shown[y + 2 : y + 12, x + 2 : x + 12] = refs[name].astype(np.uint8)[2:12, 2:12, None]
+        shown[y + 20 : y + 30, x + 20 : x + 30] = 0  # the scene behind changes: irrelevant
+        assert gs.notices(shown, refs) == [name], name

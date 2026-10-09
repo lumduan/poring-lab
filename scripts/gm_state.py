@@ -59,11 +59,14 @@ SETTLE_S = 2.0
 # level-up icon in the corner. Opening the status window clears both (2026-10-09 16:53, checked on a
 # frame); ui_gate then closes it by its own chord. Client px, measured that day by differencing a
 # frame with the notices (16:40) and one without (16:53).
-BADGE_BOX = (7, 145, 39, 40)  # x, y, w, h: the first shortcut icon; a clean reference
-ICON_BOX = (1235, 675, 45, 45)  # the level-up icon over the scene: its template + its own pixels
+# Both are judged on their OWN pixels only (a template + the mask of the pixels that differ between
+# a frame with the notice and one without, both cut in prontera): the shortcut window is see-through
+# around and slightly through its icons, so a clean-reference comparison read the field's grass as a
+# badge (loot@1 P3 trial 0, 2026-10-09 16:55: stopped, nothing else typed).
+BADGE_BOX = (7, 145, 39, 40)  # x, y, w, h: the first shortcut icon, with the badge's corner
+ICON_BOX = (1235, 675, 45, 45)  # the level-up icon over the scene
 NOTICE_DIFF = 40.0  # gray levels
-BADGE_MAX = 12  # more strongly differing pixels than this on the icon = a badge
-ICON_SHARE = 0.8  # this share of the icon's own pixels matching = the icon is shown
+NOTICE_SHARE = 0.8  # this share of a notice's own pixels matching its template = it is shown
 
 
 def to_gray(bgr: Any) -> Any:
@@ -121,27 +124,22 @@ def _weight(frames: tuple[Any, Any]) -> list[int] | None:
 
 
 def notices(frame: Any, refs: dict[str, Any]) -> list[str]:
-    """PURE: which notices show: "badge" (the first shortcut icon differs from its clean
-    reference) and "levelup_icon" (the icon's own pixels match its template)."""
+    """PURE: which notices show ("badge", "levelup_icon"): each by its own pixels matching its
+    template (``refs[name]``, ``refs[name + "_mask"]``), whatever the scene behind."""
     out = []
-    x, y, w, h = BADGE_BOX
-    if (
-        float((np.abs(crop(frame, BADGE_BOX) - refs["badge_clean"]) > NOTICE_DIFF).sum())
-        > BADGE_MAX
-    ):
-        out.append("badge")
-    m = refs["icon_mask"]
-    near = np.abs(crop(frame, ICON_BOX) - refs["icon"]) < NOTICE_DIFF
-    if m.sum() and float((near & m).sum()) / float(m.sum()) >= ICON_SHARE:
-        out.append("levelup_icon")
+    for name, box in (("badge", BADGE_BOX), ("levelup_icon", ICON_BOX)):
+        m = refs[f"{name}_mask"]
+        near = np.abs(crop(frame, box) - refs[name]) < NOTICE_DIFF
+        if m.sum() and float((near & m).sum()) / float(m.sum()) >= NOTICE_SHARE:
+            out.append(name)
     return out
 
 
 def _notice_refs() -> dict[str, Any]:
     d = TEMPLATE.parent
-    return {"badge_clean": np.load(d / "status_icon_clean.npy"),
-            "icon": np.load(d / "levelup_icon.npy"),
-            "icon_mask": np.load(d / "levelup_mask.npy")}  # fmt: skip
+    return {"badge": np.load(d / "badge.npy"), "badge_mask": np.load(d / "badge_mask.npy"),
+            "levelup_icon": np.load(d / "levelup_icon.npy"),
+            "levelup_icon_mask": np.load(d / "levelup_mask.npy")}  # fmt: skip
 
 
 def clear_notices(agent: Any, screen: Any, *, why: str) -> dict[str, Any]:

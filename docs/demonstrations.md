@@ -1602,6 +1602,15 @@ status window opened at 16:02).
   - **The check:** the restored frame differs from the template by 0 px; the Lv 2 frame saved before
     the restore by **20 px** (the limit is 4). So a level change is detected: the positive case.
   - P3 may start once Batt clears it (his 16:35 sequence stopped at step 4 on an IO trip).
+  - ➡️ **Batt cleared P3 (~16:50).** The level change brings back the client's NOTICES (a badge on
+    the first shortcut icon + the level-up icon). The known clearing step (the status window
+    opened, then closed by the UI gate) is now part of `gm_state`, judged from pixels.
+  - **P3 attempt 0 (16:54:59, session `20261009T165459-demo-loot1-p3`): a HARNESS STOP before trial
+    0's kill.** The notice check called the field's grass seen through the shortcut window a
+    "badge". Nothing else was typed (only the status chord and its close).
+  - Fixed: each notice is judged on its own pixels. Checked on the stored frames: with notices,
+    both are found; on the clean prontera and field frames, none.
+  - P3 is re-run unchanged with the same seed, 20261110: no trial had run (the walk@13 precedent).
 
 ➡️ **TYPING TRANSPORT CHANGED BEFORE STEP 1 (2026-10-09 ~16:10; Batt's mandatory item 6):** every
 line loot@1 types (its GM commands) now passes the UI gate (`scripts/ui_gate.py`, 3.32 item 6)
