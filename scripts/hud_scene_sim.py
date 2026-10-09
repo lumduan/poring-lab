@@ -188,16 +188,22 @@ class Variant:
     hud_every: int = 1  # the scene process sees every k-th recorded frame (the rest are between)
     preview: bool = False  # the route previewer's camera (live.jsonl) while it has one
     det_ms: float | None = LIVE_DET_MS  # every pass's time (None: the cached per-frame times)
+    # SIM ONLY, a PARKED option (2026-10-09; a detector cadence change, not live): while a seen-once
+    # candidate waits, the next pass is due this soon after the last one, whatever the cadence says
+    confirm_s: float | None = None
 
 
 def variants() -> dict[str, Variant]:
     """The named variants (`hud_scene_check.py sim --variants a,b`). `first-cut` runs the deployed
-    code itself; `legacy` is the new code with the first cut's behaviour (a cross-check)."""
+    code itself; `legacy` is the new code with the first cut's behaviour (a cross-check).
+    `chosen` (and its ablations) stays the 2026-10-08 drift fix, the rows of that result: every new
+    object drawn at once. `seen2` is what runs live since 2026-10-09 (hud_scene.TUNING): a new unit
+    or sign drawn only when a later pass sees it again (Tuning.seen_twice)."""
     from dataclasses import replace
 
     import hud_scene as hs
 
-    lg, best = hs.LEGACY, hs.TUNING
+    lg, best = hs.LEGACY, replace(hs.TUNING, seen_twice=())
     dd = {"dedupe_px": best.dedupe_px, "dedupe_iou": best.dedupe_iou,
           "misses_moving": best.misses_moving}  # fmt: skip
     vs = [
@@ -224,6 +230,13 @@ def variants() -> dict[str, Variant]:
         Variant("chosen-no-unclip", replace(best, unclip=False)),
         Variant("first-cut/2", hud_every=2),
         Variant("chosen/2", best, hud_every=2),
+        # seen twice (2026-10-09): live = units only, 2 passes; the window; signs too; and a
+        # PARKED cadence option (a confirming pass 1 s after a candidate is seen; not live)
+        Variant("seen2", hs.TUNING),
+        Variant("seen2-w1", replace(hs.TUNING, seen_window=1)),
+        Variant("seen2-w3", replace(hs.TUNING, seen_window=3)),
+        Variant("seen2-signs", replace(hs.TUNING, seen_twice=("unit", "sign"))),
+        Variant("seen2+confirm1", hs.TUNING, confirm_s=1.0),
     ]
     return {v.name: v for v in vs}
 
@@ -386,7 +399,9 @@ def simulate(d: Path, cache: dict[str, Any], v: Variant, region: tuple[int, int,
                 return
             k, ref = latest
             g8 = mo["gray8"][k]
-            if cadence.due(det_check / 1e9, g8):
+            confirm = (v.confirm_s is not None and not legacy and bool(tracker.candidates)
+                       and det_check / 1e9 - cadence.last_run >= v.confirm_s)  # fmt: skip
+            if confirm or cadence.due(det_check / 1e9, g8):
                 ms = v.det_ms if v.det_ms is not None else tr["det_ms"][k] + tr["sign_ms"][k]
                 pending = (det_check + int(ms * 1e6), k, ref)
                 runs.append((det_check, float(ms)))
@@ -453,15 +468,67 @@ def walking_mask(mo: dict[str, Any], moving_px: float = 1.0) -> np.ndarray:
 NEAR_PX = 120.0  # hud_scene_check.offsets: the nearest truth of the class within this
 EDGE_PX = 3.0  # a truth unit box this close to the view's bottom is cut: its feet are not seen
 DOUBLE_PX = 80.0  # a drawn box left over near a truth another drawn box took: a DOUBLED box
+# Truth TRACKS (2026-10-09, the seen-twice rule): which detections are one REAL unit over time
+LINK_PX = 30.0  # a detection this near a track's predicted feet (the scene's scroll applied) ...
+LINK_GAP = 5  # ... continues it, after up to this many recorded frames the detector missed it
+REAL_MIN = 10  # a track detected on at least this many recorded frames (~1 s) is a REAL unit
+START_S = 2.0  # a track that starts this soon after the recording starts is not a NEW unit
 
 
-def _stat(ds: list[float]) -> dict[str, Any]:
+def _stat(ds: list[float], unit: str = "px", nd: int = 1) -> dict[str, Any]:
     if not ds:
         return {"n": 0}
     a = np.sort(np.asarray(ds))
-    return {"n": len(a), "median_px": round(float(a[len(a) // 2]), 1),
-            "p95_px": round(float(a[int(len(a) * 0.95)]), 1),
-            "max_px": round(float(a[-1]), 1)}  # fmt: skip
+    return {"n": len(a), f"median_{unit}": round(float(a[len(a) // 2]), nd),
+            f"p95_{unit}": round(float(a[int(len(a) * 0.95)]), nd),
+            f"max_{unit}": round(float(a[-1]), nd)}  # fmt: skip
+
+
+def truth_tracks(cache: dict[str, Any]) -> tuple[list[dict[str, list[int]]], dict[int, Any]]:
+    """The cached detections linked over the recorded frames into TRACKS: per frame and class, the
+    track of each detection (found_on's order, as `score` lists them), and per track its class,
+    first and last frame and the number of frames it was detected on. A track continues to the
+    nearest detection of its class within LINK_PX of its last feet moved by the scene's scroll since
+    (band-passed), one to one, across up to LINK_GAP missed frames. A REAL unit is a track of at
+    least REAL_MIN detections. A shorter one is a FLASH (the detector's one-off false positive),
+    unless the recording cut it (it starts or ends within REAL_MIN frames of an end: `cut`)."""
+    mo = cache["motion"]
+    shift = mo.get("shift_hp", mo["shift"])
+    n = len(cache["truth"]["t"])
+    ids: list[dict[str, list[int]]] = []
+    tracks: dict[int, dict[str, Any]] = {}
+    live: dict[int, list[Any]] = {}  # track -> [cls, predicted feet, last frame]
+    for k in range(n):
+        for tr in live.values():
+            tr[1] = tr[1] + shift[k]
+        feet: dict[str, list[np.ndarray]] = {}
+        for f in found_on(cache, k):
+            b = f["box"]
+            feet.setdefault(f["cls"], []).append(np.array([(b[0] + b[2]) / 2, b[3]]))
+        row: dict[str, list[int]] = {}
+        for cls, fs in feet.items():
+            pairs = sorted((float(np.hypot(*(ft - tr[1]))), si, tid) for tid, tr in live.items()
+                           if tr[0] == cls for si, ft in enumerate(fs))  # fmt: skip
+            got: dict[int, int] = {}
+            for d, si, tid in pairs:
+                if d <= LINK_PX and si not in got and tid not in got.values():
+                    got[si] = tid
+            row[cls] = []
+            for si, ft in enumerate(fs):
+                tid = got.get(si)
+                if tid is None:
+                    tid = len(tracks)
+                    tracks[tid] = {"cls": cls, "first": k, "last": k, "n": 0}
+                live[tid] = [cls, ft, k]
+                tracks[tid]["n"] += 1
+                tracks[tid]["last"] = k
+                row[cls].append(tid)
+        ids.append(row)
+        live = {tid: tr for tid, tr in live.items() if k - tr[2] <= LINK_GAP}
+    for x in tracks.values():
+        x["real"] = x["n"] >= REAL_MIN
+        x["cut"] = not x["real"] and (x["first"] < REAL_MIN or x["last"] >= n - REAL_MIN)
+    return ids, tracks
 
 
 def extrapolated(rp: Any, t: int, cap_ns: int = 120_000_000) -> dict[str, float]:
@@ -494,13 +561,24 @@ def score(log: list[dict[str, Any]], cache: dict[str, Any], region: tuple[int, i
       are past the edge; counted in `edge_skipped`);
     - DOUBLED boxes: a drawn box left over (one to one, nearest first) within DOUBLE_PX of a
       detection another drawn box took; GHOSTS: a drawn box with no detection of its class within
-      NEAR_PX."""
+      NEAR_PX;
+    - against the truth TRACKS (`truth_tracks`; the seen-twice rule, 2026-10-09):
+      - `fp`: drawn objects never paired (one to one) with a REAL unit's detection in their whole
+        life (nor a `cut` track's), and their box-frames: the detector's flashes, drawn;
+      - `new_units`: each REAL unit that appears after START_S, from its first detection to the
+        first frame a drawn box is paired with it (seconds and recorded frames), or never;
+      - `recall`: REAL units' detections (after START_S), and how many a drawn box paired with."""
     import hud_scene_check as hc
 
     tr, mo = cache["truth"], cache["motion"]
     gx, gy, gh = region[0], region[1], region[3]
     dw, dh = desktop
     rp = hc.Replay(log)
+    trk, tracks = truth_tracks(cache)
+    t_start = int(tr["t"][0]) + int(START_S * 1e9)
+    first_drawn: dict[int, int] = {}  # track -> the first frame a drawn box was paired with it
+    life: dict[int, list[Any]] = {}  # drawn object id -> [box-frames, paired with REAL, cls]
+    real_n = real_drawn = 0
     edge = 0
     if console == "extrapolate":
         rp.offset_at = lambda tt: extrapolated(rp, tt)  # type: ignore[method-assign]
@@ -513,6 +591,8 @@ def score(log: list[dict[str, Any]], cache: dict[str, Any], region: tuple[int, i
         t = int(t)
         rp.advance(t + int(latency_ms * 1e6))
         drawn = [o for o in rp.boxes(t, dw, dh, gx, gy) if o["kind"] in ("unit", "sign")]
+        if t >= t_start:
+            real_n += sum(tracks[i]["real"] for ids in trk[k].values() for i in ids)
         if not drawn:
             continue
         found = found_on(cache, k)
@@ -541,13 +621,21 @@ def score(log: list[dict[str, Any]], cache: dict[str, Any], region: tuple[int, i
                 ghosts[cls] = ghosts.get(cls, 0) + 1
             pairs += [(dd, di, si) for si, dd in enumerate(ds) if dd <= NEAR_PX]
         pairs.sort()
-        got_d: set[int] = set()
+        got_d: dict[int, int] = {}
         got_s: set[tuple[str, int]] = set()
         for _, di, si in pairs:
             key = (feet[di][0], si)
             if di not in got_d and key not in got_s:
-                got_d.add(di)
+                got_d[di] = si
                 got_s.add(key)
+        for di, (cls, _ft) in enumerate(feet):
+            lf = life.setdefault(int(drawn[di]["id"]), [0, 0, cls])
+            lf[0] += 1
+            if di in got_d:
+                tid = trk[k][cls][got_d[di]]
+                first_drawn.setdefault(tid, k)
+                lf[1] += int(tracks[tid]["real"] or tracks[tid]["cut"])
+                real_drawn += int(tracks[tid]["real"] and t >= t_start)
         dbl = 0
         for di, (cls, ft) in enumerate(feet):
             if di in got_d:
@@ -560,10 +648,38 @@ def score(log: list[dict[str, Any]], cache: dict[str, Any], region: tuple[int, i
         doubled_frames += dbl > 0
         drawn_n += len(drawn)
     mins = (int(tr["t"][-1]) - int(tr["t"][0])) / 60e9
+    delays: list[tuple[float, int]] = []
+    never = 0
+    for tid, x in tracks.items():
+        if not x["real"] or int(tr["t"][x["first"]]) < t_start:
+            continue
+        if tid not in first_drawn:
+            never += 1
+            continue
+        k0, k1 = x["first"], first_drawn[tid]
+        delays.append(((int(tr["t"][k1]) - int(tr["t"][k0])) / 1e9, k1 - k0))
+    fp: dict[str, list[int]] = {}
+    for frames_, real_, cls in life.values():
+        if real_ == 0:
+            c = fp.setdefault(cls, [0, 0])
+            c[0] += 1
+            c[1] += frames_
     return {"offsets": {key: _stat(ds) for key, ds in sorted(per.items())}, "raw": per,
             "doubled": doubled, "doubled_frames": doubled_frames, "ghosts": ghosts,
             "edge_skipped": edge,
+            "fp": {"objects": sum(c[0] for c in fp.values()),
+                   "box_frames": sum(c[1] for c in fp.values()), "by_cls": fp},
+            "new_units": new_units_stat(delays, never), "raw_delays": delays, "raw_never": never,
+            "recall": {"real": real_n, "drawn": real_drawn},
             "drawn": drawn_n, "frames": len(tr["t"]), "minutes": round(mins, 2)}  # fmt: skip
+
+
+def new_units_stat(delays: list[tuple[float, int]], never: int) -> dict[str, Any]:
+    """New REAL units' delay to their first drawn box: seconds and recorded frames, and how many
+    were never drawn."""
+    return {"n": len(delays) + never, "never": never,
+            "delay_s": _stat([d for d, _ in delays], "s", 2),
+            "delay_frames": _stat([float(f) for _, f in delays], "fr", 0)}  # fmt: skip
 
 
 def rates(log: list[dict[str, Any]], cache: dict[str, Any], moving_px: float = 1.0

@@ -8,7 +8,7 @@ console receives it, over recorded frames.
     hud_scene_check.py truth FRAMES_DIR...               the sim's per-frame caches (detector: slow)
     hud_scene_check.py rescore FRAMES_DIR [--log L]      a live log, scored as `sim` (cached truth)
     hud_scene_check.py sim FRAMES_DIR [--variants a,b]   the scene process OFFLINE, per variant
-    hud_scene_check.py simtable DIR... [--variants a,b]  ... over recordings, offsets pooled
+    hud_scene_check.py simtable DIR... [--variants a,b] [--seeds N]   ... over recordings, pooled
 
 - **Frames:** `<k>-<t_mono_ns>.jpg` (route_demo's recorder). A frame's time is its bus capture time,
   the same clock as the scene's messages.
@@ -23,6 +23,8 @@ console receives it, over recorded frames.
   recorded frames at their recorded times and scores what a console would draw, per variant
   (walking = the scene moved >= 1 px since the previous recorded frame; `rescore` scores a live
   log the same way, so the two compare).
+- **The seen-twice measures** (2026-10-09, hud_scene_sim.truth_tracks): false positives drawn,
+  new real units' delay to their first box, and the real units' frames with a box.
 """
 
 from __future__ import annotations
@@ -45,12 +47,16 @@ COLOUR = {"monster": (255, 90, 90), "npc": (255, 200, 60), "sign": (251, 146, 60
 
 
 def load_log(t0: int | None = None, t1: int | None = None, log: Path = LOG) -> list[dict[str, Any]]:
+    """The scene log as a console received it: a message the Sender DROPPED (the display channel
+    was down) or that a reconnect's keyframe SUPERSEDED never left, so it is skipped (`link`)."""
     rows = []
     for path in (log.with_suffix(".jsonl.1"), log):
         if path.exists():
             for line in path.read_text().splitlines():
                 if line:
                     e = json.loads(line)
+                    if e.get("link") is not None:
+                        continue
                     if (t0 is None or e["logged_ns"] >= t0) and (
                         t1 is None or e["logged_ns"] <= t1
                     ):
@@ -245,6 +251,7 @@ def _table(rows: list[tuple[str, dict[str, Any]]]) -> str:
         out.append(
             f"{name:16s} " + " | ".join(cells)
             + f" | doubled {sc['doubled']} ({sc['doubled_frames']} fr) ghosts {sc['ghosts']}"
+            + (f" | {_seen(sc)}" if "fp" in sc else "")
             + (f" | msgs/min moving {sum(mv.get('per_minute', {}).values()):.0f} "
                f"(moves {mv.get('moves_per_minute', 0)}), still deltas "
                f"{still.get('per_minute', {}).get('hud_delta', 0)}" if rt else "")
@@ -252,6 +259,20 @@ def _table(rows: list[tuple[str, dict[str, Any]]]) -> str:
                if cost else "")
         )  # fmt: skip
     return "\n".join(out)
+
+
+def _seen(sc: dict[str, Any]) -> str:
+    """The seen-twice measures of one score (hud_scene_sim.score): false positives drawn, new real
+    units' delay to their first box, and the real units' detections with a box."""
+    nu, fp, rc = sc["new_units"], sc["fp"], sc["recall"]
+    ds, df = nu["delay_s"], nu["delay_frames"]
+    delay = (f"{ds['median_s']}/{ds['p95_s']} s ({df['median_fr']:.0f}/{df['p95_fr']:.0f} fr)"
+             if ds["n"] else "-")  # fmt: skip
+    return (
+        f"FP drawn {fp['objects']} objs / {fp['box_frames']} box-fr | new units {nu['n']}: "
+        f"first box {delay}, never {nu['never']} | real with a box "
+        f"{100 * rc['drawn'] / max(rc['real'], 1):.1f} % of {rc['real']}"
+    )
 
 
 def truth(dirs: list[Path], threads: int) -> int:
@@ -271,7 +292,10 @@ def rescore(d: Path, log_path: Path, latency_ms: float) -> int:
     log = load_log(int(t[0]) - int(60e9), int(t[-1]) + int(5e9), log_path)
     hud_times = {e["msg"]["t_mono_ns"] for e in log}  # the frames the live process saw (logged)
     sc = sim.score(log, cache, REGION, DESKTOP, latency_ms, hud_times=hud_times)
-    rep = {"score": {k: x for k, x in sc.items() if k != "raw"}, "rates": sim.rates(log, cache)}
+    rep = {
+        "score": {k: x for k, x in sc.items() if not k.startswith("raw")},
+        "rates": sim.rates(log, cache),
+    }
     print(_table([("live", rep)]))
     out = sim.cache_dir(d) / "rescore-live.json"
     out.write_text(json.dumps(rep, indent=1))
@@ -300,7 +324,7 @@ def run_sim(
         sc = sim.score(res["log"], cache, REGION, DESKTOP, latency_ms, hud_times=between,
                        console=console)  # fmt: skip
         rep = {
-            "score": {k: x for k, x in sc.items() if k != "raw"},
+            "score": {k: x for k, x in sc.items() if not k.startswith("raw")},
             "rates": sim.rates(res["log"], cache),
             "cost": sim.det_cost(res["runs"], cache),
             "motion_source": res["motion_source"],
@@ -312,9 +336,11 @@ def run_sim(
     return 0
 
 
-def simtable(dirs: list[Path], names: list[str], latency_ms: float, grab_from: Path | None) -> int:
+def simtable(dirs: list[Path], names: list[str], latency_ms: float, grab_from: Path | None,
+             seeds: int = 1) -> int:  # fmt: skip
     """The variants over several recordings: one row per recording and variant, and the offsets
-    POOLED over the recordings (the raw distances, not an average of medians)."""
+    POOLED over the recordings (the raw distances, not an average of medians); with ``seeds`` > 1,
+    every recording again per latency seed, all pooled."""
     import hud_scene_sim as sim
 
     reg = sim.variants()
@@ -329,33 +355,45 @@ def simtable(dirs: list[Path], names: list[str], latency_ms: float, grab_from: P
         cache = sim.load_cache(d)
         name_d = sim.cache_dir(d).name
         out["recordings"][name_d] = {}
-        for name in names:
+        for name, seed in ((n, s) for n in names for s in range(seeds)):
             v = reg[name]
             if v.preview and sim.preview_track(d) is None:
                 continue
-            res = sim.simulate(d, cache, v, REGION, DESKTOP, grab_ms=grab)
+            res = sim.simulate(d, cache, v, REGION, DESKTOP, grab_ms=grab, seed=seed)
             hud_times = {int(cache["truth"]["t"][k]) for k in res["hud_frames"]}
             between = hud_times if v.hud_every > 1 else None
             sc = sim.score(res["log"], cache, REGION, DESKTOP, latency_ms, hud_times=between)
-            rep = {"score": {k: x for k, x in sc.items() if k != "raw"},
+            rep = {"score": {k: x for k, x in sc.items() if not k.startswith("raw")},
                    "rates": sim.rates(res["log"], cache),
                    "cost": sim.det_cost(res["runs"], cache)}  # fmt: skip
-            out["recordings"][name_d][name] = rep
-            print(_table([(f"{name_d[9:]} {name}", rep)]), flush=True)
-            p = pooled.setdefault(name, {"raw": {}, "doubled": 0, "ghosts": 0, "frames": 0})
+            out["recordings"][name_d][name if seeds == 1 else f"{name}#{seed}"] = rep
+            tag = "" if seeds == 1 else f" #{seed}"
+            print(_table([(f"{name_d[9:]} {name}{tag}", rep)]), flush=True)
+            p = pooled.setdefault(name, {
+                "raw": {}, "doubled": 0, "ghosts": 0, "frames": 0, "delays": [], "never": 0,
+                "fp_objects": 0, "fp_box_frames": 0, "real": 0, "real_drawn": 0})  # fmt: skip
             for key, ds in sc["raw"].items():
                 p["raw"].setdefault(key, []).extend(ds)
             p["doubled"] += sc["doubled"]
             p["ghosts"] += sum(sc["ghosts"].values())
             p["frames"] += sc["frames"]
-    print("POOLED")
+            p["delays"] += sc["raw_delays"]
+            p["never"] += sc["raw_never"]
+            p["fp_objects"] += sc["fp"]["objects"]
+            p["fp_box_frames"] += sc["fp"]["box_frames"]
+            p["real"] += sc["recall"]["real"]
+            p["real_drawn"] += sc["recall"]["drawn"]
+    print(f"POOLED ({len(dirs)} recordings x {seeds} seeds)")
     for name, p in pooled.items():
         st = {key: sim._stat(ds) for key, ds in sorted(p["raw"].items())}
+        seen = {"fp": {"objects": p["fp_objects"], "box_frames": p["fp_box_frames"]},
+                "new_units": sim.new_units_stat(p["delays"], p["never"]),
+                "recall": {"real": p["real"], "drawn": p["real_drawn"]}}  # fmt: skip
         out["pooled"][name] = {"offsets": st, "doubled": p["doubled"], "ghosts": p["ghosts"],
-                               "frames": p["frames"]}  # fmt: skip
+                               "frames": p["frames"], **seen}  # fmt: skip
         cells = " | ".join(f"{k} {x['median_px']}/{x['p95_px']}/{x['max_px']} n{x['n']}"
                            for k, x in st.items() if x["n"])  # fmt: skip
-        print(f"{name:18s} {cells} | doubled {p['doubled']} ghosts {p['ghosts']}")
+        print(f"{name:18s} {cells} | doubled {p['doubled']} ghosts {p['ghosts']} | {_seen(seen)}")
     path = sim.CACHE_DIR / "simtable.json"
     path.write_text(json.dumps(out, indent=1))
     print(path)
@@ -395,9 +433,10 @@ def main() -> int:
     st.add_argument("--variants", default="first-cut,chosen")
     st.add_argument("--latency-ms", type=float, default=100.0)
     st.add_argument("--grab-from", type=Path, default=None)
+    st.add_argument("--seeds", type=int, default=1, help="latency seeds per recording, pooled")
     x = ap.parse_args()
     if x.cmd == "simtable":
-        return simtable(x.dirs, x.variants.split(","), x.latency_ms, x.grab_from)
+        return simtable(x.dirs, x.variants.split(","), x.latency_ms, x.grab_from, x.seeds)
     if x.cmd == "rate":
         return rate(x.t0, x.t1)
     if x.cmd == "truth":

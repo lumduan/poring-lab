@@ -23,6 +23,9 @@ versions)."
   13.3.0 and @xyflow/react 12.12.0 into tmpfs. `/` and `/flows` both answer 200.
 - **The HUD scene process had to be restarted after the backend recreate.** Its websocket stayed on
   the old container, and it kept counting sends. A display-only reconnect is a follow-up.
+  ➡️ 2026-10-09: the reconnect is BUILT on `feat/hud-seen-twice`, deployed with the next HUD restart.
+  Its re-read of `hud_scene.log` shows a NEW connection at ~06:59, so "stayed on the old
+  container" is not established (demonstrations.md, HUD section, 2026-10-09 entry).
 - The console's toggles were reset by the frontend restart, as expected.
 
 **Batt (2026-10-08 ~21:05)** approved the build tonight and both dependencies (`blockly` 13.3.0,

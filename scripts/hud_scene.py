@@ -2,7 +2,8 @@
 """The HUD SCENE process (Batt 2026-10-08, H.264-style): a RETAINED overlay the console draws on
 every frame, kept current by DELTAS, whether a rule runs or not (bot idle, or Batt playing).
 
-    hud_scene.py [--hz 10] [--det-period 0.5] [--motion floor|global]   (one at a time: an flock)
+    hud_scene.py [--hz 10] [--det-period 0.5] [--motion floor|global] [--seen-twice units|off]
+    (one at a time: an flock)
 
 - **Screen-anchored objects** (the client's UI windows, the work zone) are sent once and never
   shift.
@@ -33,10 +34,16 @@ every frame, kept current by DELTAS, whether a rule runs or not (bot idle, or Ba
     one to one); a leftover one near a leftover object of its class (`dedupe_px`, or overlapping
     it) MOVES that object instead of adding a second box (the doubled boxes).
   - An object missed by `misses` passes is removed; while the scene moves, by `misses_moving`.
+  - **Seen twice** (Batt 2026-10-09): a NEW unit is a candidate, never drawn and never in a
+    message, until one of the next `seen_window` (2) passes matches it by the same rules; a one-off
+    false detection never flashes on screen. Drawn objects take their detections first, so they
+    behave exactly as before. Signs are drawn at once (no measured false signs).
+    `Tuning.seen_twice = ()` switches it off.
 - **Frames:** the RDP frame bus through ro_agent's screen helper (the `frame_id` the console shows).
   It runs only while the frames come from the bus (never an extra X grab).
 - **Output:** the backend's display-only channel (`/internal/display`, the internal listener). It is
-  not an agent, works in any mux mode, and sends no input.
+  not an agent, works in any mux mode, and sends no input. A dead connection (a backend restart or
+  recreate) is noticed and re-made with backoff; every connection starts with a keyframe (`Sender`).
 - **Log:** every message sent goes to SCENE_LOG (RAM, rotated) for renders and the offline check.
 - **Offline:** scripts/hud_scene_sim.py runs this module's SceneTracker / FloorMotion / Cadence over
   recorded frames (`hud_scene_check.py sim`).
@@ -57,6 +64,7 @@ import signal
 import sys
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
@@ -72,6 +80,13 @@ SCENE_LOG_MAX = 20_000_000  # bytes, then rotated once (.1)
 CAMERA_JSON = Path(__file__).resolve().parents[1] / "packages/poring_dataset/src/poring_dataset"
 CAMERA_JSON = CAMERA_JSON / "camera_rdp.json"
 KEYFRAME_S = 5.0
+# The display channel (Sender): reconnect backoff 1 s doubling to 30 s, forever; WebSocket protocol
+# pings (the server's library answers them) find a silent dead link within ~2 x PING_S; a send into
+# a black hole fails after DEAD_SEND_MS (TCP_USER_TIMEOUT) instead of TCP's ~15 min
+RECONNECT_S = (1.0, 30.0)
+PING_S = 5.0
+DEAD_SEND_MS = 10_000
+OPEN_TIMEOUT_S = 5.0
 MOTION_MIN_PX = 0.3  # a smaller frame-to-frame shift is noise: no motion, no message
 DET_THREADS = 2
 MOVE_PX = 4.0  # a matched object whose box moved more than this gets a move delta
@@ -107,6 +122,15 @@ class Tuning:
     fine_px: float = 1.0  # a pass while moving, or the first still one after, re-seats boxes this
     # far off their detection (idle passes keep MOVE_PX: no jitter moves while nothing moves)
     unclip: bool = True  # a unit box cut by the view's edge gets its class's size (SPRITE_PX)
+    # SEEN TWICE (Batt 2026-10-09): a NEW object of these kinds is a CANDIDATE, never drawn and
+    # never on the wire, until a later pass matches it (the same matching and dedupe rules);
+    # () = off: every new object is drawn at once. Units only: the signboard finder (by SHAPE) has
+    # no measured false positives, so for signs the rule would only add delay (demonstrations.md)
+    seen_twice: tuple[str, ...] = ("unit",)
+    # ... within this many detector PASSES after the first, then it goes. Passes, not seconds: the
+    # cadence runs a pass every ~0.6 s while moving and every 5 s still, so a time window would
+    # either never confirm a unit first seen while still or wait seconds while walking
+    seen_window: int = 2
 
 
 TUNING = Tuning()
@@ -119,11 +143,13 @@ LEGACY = Tuning(
     fine_px=MOVE_PX,
     sharp=False,
     unclip=False,
+    seen_twice=(),
 )
 # route_preview.scene_shift's band-pass for the HUD (its docstring has the measurement)
 SHARP_SHIFT: dict[str, Any] = {"blur": True, "highpass": 9, "power": 0.5}
 
 Box = tuple[float, float, float, float]
+Det = tuple[Box, str, str, float, np.ndarray, Any]  # box, kind, cls, lift, feet, conf
 
 
 @dataclass
@@ -295,6 +321,10 @@ class SceneTracker:
         self.cam = np.zeros(2)  # floor model: the camera's cumulative move over the floor (cells)
         self.objects: dict[int, Obj] = {}
         self.next_id = 1
+        # seen once, not drawn yet (Tuning.seen_twice): negative ids, never in a message
+        self.candidates: dict[int, Obj] = {}
+        self.next_candidate = -1
+        self.counts = {"held": 0, "confirmed": 0, "expired": 0}  # candidates, for the report
         self.seq = 0
         self.unsettled = False  # the scene moved since the last still detection pass
         self.lock = threading.RLock()
@@ -419,7 +449,7 @@ class SceneTracker:
                 return np.asarray(_foot(o.box, o.lift) + off_k)
 
             at = {i: seen_at(o) for i, o in world.items()}
-            dets: list[tuple[Box, str, str, float, np.ndarray, Any]] = []
+            dets: list[Det] = []
             for f in found:
                 x0, y0, x1, y1 = (float(v) for v in f["box"])
                 box: Box = (x0, y0, x1, y1)
@@ -428,33 +458,15 @@ class SceneTracker:
                     box = self._unclip(box, cls)
                 lift = self._lift(box, found) if kind == "sign" and g is not None else 0.0
                 dets.append((box, kind, cls, lift, _foot(box, lift), f.get("conf")))
-            pairs = []
-            for di, (box, kind, cls, _lift, foot, _conf) in enumerate(dets):
-                for i, o in world.items():
-                    if o.kind != kind or o.cls != cls:
-                        continue
-                    d = float(np.hypot(*(foot - at[i])))
-                    if d < tu.match_px:
-                        pairs.append((0, d, di, i))
-                        continue
-                    near = tu.dedupe_px > 0 and d < tu.dedupe_px
-                    lap = tu.dedupe_iou > 0 and _iou(box, _shift(o.box, at[i] - _foot(
-                        o.box, o.lift))) >= tu.dedupe_iou  # fmt: skip
-                    if near or lap:
-                        pairs.append((1, d, di, i))  # the doubled-box case: move it, never add
-            pairs.sort()
-            got: dict[int, int] = {}
-            for _, _, di, i in pairs:  # one to one: plain matches first, then the closest
-                if di not in got and i not in got.values():
-                    got[di] = i
+            got = self._match(dets, range(len(dets)), world, at)
             add, move, remove = [], [], []
             fine = moving or self.unsettled  # the scene moved: re-seat boxes more finely
             thr = tu.fine_px if fine else MOVE_PX
-            for di, (box, kind, cls, lift, foot, conf) in enumerate(dets):
+            new: list[tuple[int, Box, np.ndarray | None]] = []  # no drawn object took them
+            for di, (box, _kind, _cls, lift, foot, conf) in enumerate(dets):
                 placed, fl = self._place(box, foot, off_k, cam_k)
                 if di not in got:
-                    o = self._add(Obj(0, kind, "world", placed, cls, conf, floor=fl, lift=lift))
-                    add.append(self._obj(o))
+                    new.append((di, placed, fl))
                     continue
                 o = world[got[di]]
                 o.misses, o.floor, o.lift = 0, fl, lift
@@ -462,6 +474,34 @@ class SceneTracker:
                 if float(np.hypot(*(_foot(placed, lift) - _foot(o.box, lift)))) > thr:
                     o.box = placed
                     move.append(self._move(o))
+            # NEW objects: drawn at once, or (seen_twice) a CANDIDATE until a later pass matches it.
+            # Drawn objects took their detections first, so they behave exactly as without the rule.
+            held = {i: seen_at(c) for i, c in self.candidates.items()}
+            again = self._match(dets, [di for di, _, _ in new if dets[di][1] in tu.seen_twice],
+                                self.candidates, held)  # fmt: skip
+            for di, placed, fl in new:
+                _box, kind, cls, lift, _ft, conf = dets[di]
+                if kind in tu.seen_twice and di not in again:
+                    c = Obj(self.next_candidate, kind, "world", placed, cls, conf, floor=fl,
+                            lift=lift)  # fmt: skip
+                    self.next_candidate -= 1
+                    self.candidates[c.id] = c
+                    self.counts["held"] += 1
+                    continue
+                if di in again:  # seen twice: drawn where the second pass saw it
+                    del self.candidates[again[di]]
+                    self.counts["confirmed"] += 1
+                o = self._add(Obj(0, kind, "world", placed, cls, conf, floor=fl, lift=lift))
+                add.append(self._obj(o))
+            seen_again = set(again.values())
+            for i in list(held):  # a candidate never seen again goes silently: it was never drawn
+                if i in seen_again:
+                    continue
+                c = self.candidates[i]
+                c.misses += 1
+                if not self._in_view(held[i]) or c.misses >= tu.seen_window:
+                    del self.candidates[i]
+                    self.counts["expired"] += 1
             limit = tu.misses_moving if moving else tu.misses
             taken = set(got.values())
             for i, o in world.items():
@@ -474,6 +514,35 @@ class SceneTracker:
             if not moving:
                 self.unsettled = False
             return self._delta(add, move, remove)
+
+    def _match(self, dets: list[Det], which: Any, objs: dict[int, Obj],
+               at: dict[int, np.ndarray]) -> dict[int, int]:  # fmt: skip
+        """Detections ``which`` (indices into dets) -> the objects they ARE, one to one: same kind
+        and class; a plain match (feet within match_px on the detected frame) first, then the
+        closest leftover within dedupe_px or overlapping at dedupe_iou (the doubled-box case: it
+        moves that object, never adds a second one)."""
+        tu = self.tuning
+        pairs = []
+        for di in which:
+            box, kind, cls, _lift, foot, _conf = dets[di]
+            for i, o in objs.items():
+                if o.kind != kind or o.cls != cls:
+                    continue
+                d = float(np.hypot(*(foot - at[i])))
+                if d < tu.match_px:
+                    pairs.append((0, d, di, i))
+                    continue
+                near = tu.dedupe_px > 0 and d < tu.dedupe_px
+                lap = tu.dedupe_iou > 0 and _iou(box, _shift(o.box, at[i] - _foot(
+                    o.box, o.lift))) >= tu.dedupe_iou  # fmt: skip
+                if near or lap:
+                    pairs.append((1, d, di, i))
+        pairs.sort()
+        got: dict[int, int] = {}
+        for _, _, di, i in pairs:  # one to one: plain matches first, then the closest
+            if di not in got and i not in got.values():
+                got[di] = i
+        return got
 
     def _place(self, box: Box, foot: np.ndarray, off_k: np.ndarray,
                cam_k: np.ndarray | None) -> tuple[Box, np.ndarray | None]:  # fmt: skip
@@ -584,59 +653,201 @@ def detect_found(units: list[Any], signs: list[Any]) -> list[dict[str, Any]]:
 
 # --- the process --------------------------------------------------------------------------------
 class Sender:
-    """The display channel (the internal listener), reconnecting; every message is also logged.
-    ONE thread sends everything, in the order it was queued, so deltas reach consoles in their seq
-    order whichever thread made them."""
+    """The display channel (the internal listener); every message is also logged (SCENE_LOG). ONE
+    thread sends everything, in the order it was queued, so deltas reach consoles in their seq
+    order whichever thread made them. DISPLAY ONLY: it sends the scene's own keyframes, deltas and
+    motions (nothing else), reads only the backend's error replies (printed), and the capture and
+    detector threads only ever ``put()``: the link never blocks them.
 
-    def __init__(self) -> None:
+    The connection (2026-10-09: after a guarded backend recreate it sat on a dead socket):
+    - DEAD = a send error, the connection's closed state (checked before every send and on every
+      idle tick), or a missed WebSocket protocol ping (PING_S: the server's library answers it, no
+      message of ours). TCP_USER_TIMEOUT bounds a send into a black hole (the old address gone).
+    - It RECONNECTS with backoff, RECONNECT_S (1 s doubling to 30 s), forever. Quiet: one line
+      when it goes down, one when it is back (with the outage's attempts and drops).
+    - Every connection STARTS WITH A KEYFRAME: the tracker's state at that moment, made under its
+      lock, so nothing queued before it is sent after it (a console rebuilds its scene at once and
+      never sees a stale seq). The messages it replaces are `superseded`.
+    - While down, messages are DROPPED and counted (`dropped`): the queue never grows. Both are
+      still logged, tagged (`link`), so a replay of the log can skip them.
+    """
+
+    TICK_S = 0.5  # the sender's idle wake-up: the liveness check and a due reconnect
+
+    def __init__(
+        self,
+        keyframe: Callable[[], dict[str, Any] | None] | None = None,
+        lock: Any = None,
+        connect: Callable[[], Any] | None = None,
+        backoff: tuple[float, float] = RECONNECT_S,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
         self.ws: Any = None
-        self.retry_at = 0.0
-        self.sent = 0
         self.q: queue.SimpleQueue[dict[str, Any] | None] = queue.SimpleQueue()
+        self.keyframe = keyframe  # the scene NOW as a hud_scene message (None: nothing yet)
+        self.lock = lock if lock is not None else threading.RLock()  # every put() happens under it
+        self.connect = connect if connect is not None else self._open
+        self.backoff, self.clock = backoff, clock
+        self.sent = self.dropped = self.superseded = self.connects = 0
+        self.state = "new"  # new | up | down
+        self.delay, self.retry_at = backoff[0], 0.0
+        self.down_since, self.attempts, self.dropped_before = 0.0, 0, 0
 
     def put(self, msg: dict[str, Any] | None) -> None:
         self.q.put(msg)
 
     def run(self) -> None:
-        while (msg := self.q.get()) is not None:
-            self.send(msg)
+        while True:
+            try:
+                msg = self.q.get(timeout=self.TICK_S)
+            except queue.Empty:
+                self.step(None)
+                continue
+            if msg is None:
+                break
+            self.step(msg)
+        if self.ws is not None:
+            with contextlib.suppress(Exception):
+                self.ws.close()
+
+    def step(self, msg: dict[str, Any] | None) -> None:
+        """One queued message, or None (an idle tick): check the link, reconnect when due, send."""
+        if self.ws is not None and not self._is_open(self.ws):
+            self._down("closed by the backend")
+        if self.ws is None and self.clock() >= self.retry_at and self._reconnect():
+            if msg is not None:  # queued before the new connection's keyframe, which carries it
+                self._log(msg, "superseded")
+                self.superseded += 1
+            return
+        if msg is None:
+            return
+        if self.ws is None:
+            self._log(msg, "dropped")
+            self.dropped += 1
+            return
+        self._log(msg)
+        self._send(msg)
+
+    def _send(self, msg: dict[str, Any]) -> bool:
+        try:
+            self.ws.send(json.dumps(msg))
+        except Exception as exc:  # noqa: BLE001 -- display only: the link is gone
+            self.dropped += 1
+            self._down(f"send failed: {type(exc).__name__}")
+            return False
+        self.sent += 1
+        while True:  # an ErrorReply would mean a protocol bug: print it
+            try:
+                reply = self.ws.recv(timeout=0)
+            except TimeoutError:
+                return True
+            except Exception as exc:  # noqa: BLE001
+                self._down(f"closed: {type(exc).__name__}")
+                return True  # this message did leave
+            print(f"{time.strftime('%H:%M:%S')} display reply: {str(reply)[:200]}", flush=True)
+
+    def _reconnect(self) -> bool:
+        try:
+            ws = self.connect()
+        except Exception as exc:  # noqa: BLE001 -- display only: try again later
+            self._down(f"connect failed: {type(exc).__name__}: {str(exc)[:120]}")
+            return False
+        with self.lock:  # no producer can queue between the drain and the keyframe
+            key = self.keyframe() if self.keyframe is not None else None
+            stale = self._drain() if key is not None else []
+        for m in stale:
+            self._log(m, "superseded")
+        self.superseded += len(stale)
+        self.ws = ws
+        if key is not None:
+            self._log(key)
+            self._send(key)
+        if self.ws is None:  # it died at once: down again, the backoff goes on
+            return False
+        now = self.clock()
+        if self.state == "down":
+            print(f"{time.strftime('%H:%M:%S')} display channel UP again after "
+                  f"{now - self.down_since:.0f} s ({self.attempts + 1} attempts, "
+                  f"{self.dropped - self.dropped_before} messages dropped meanwhile); "
+                  f"keyframe first", flush=True)  # fmt: skip
+        else:
+            print(f"{time.strftime('%H:%M:%S')} display channel up; keyframe first", flush=True)
+        self.state, self.delay = "up", self.backoff[0]
+        self.connects += 1
+        return True
+
+    def _down(self, why: str) -> None:
+        """The link is gone, or a connect failed: let it go, schedule the next attempt (one log
+        line per outage, none per attempt)."""
+        if self.ws is not None:
+            ws, self.ws = self.ws, None
+            with contextlib.suppress(Exception):
+                ws.close()
+        now = self.clock()
+        if self.state != "down":
+            self.state, self.down_since, self.attempts = "down", now, 0
+            self.dropped_before, self.delay = self.dropped, self.backoff[0]
+            print(f"{time.strftime('%H:%M:%S')} display channel DOWN ({why}): dropping messages "
+                  f"(counted), reconnecting every {self.backoff[0]:g} s doubling to "
+                  f"{self.backoff[1]:g} s", flush=True)  # fmt: skip
+        else:
+            self.attempts += 1
+            self.delay = min(self.delay * 2, self.backoff[1])
+        self.retry_at = now + self.delay
+
+    def _drain(self) -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = []
+        while True:
+            try:
+                m = self.q.get_nowait()
+            except queue.Empty:
+                return out
+            if m is None:  # the stop sentinel stays for run()
+                self.q.put(None)
+                return out
+            out.append(m)
+
+    @staticmethod
+    def _is_open(ws: Any) -> bool:
+        from websockets.protocol import State
+
+        return getattr(ws, "state", State.OPEN) is State.OPEN
+
+    def _log(self, msg: dict[str, Any], link: str | None = None) -> None:
+        """Logged with the moment it left (the replay's order); `link` tags one that did not."""
+        entry: dict[str, Any] = {"logged_ns": time.monotonic_ns(), "msg": msg}
+        if link is not None:
+            entry["link"] = link
+        with contextlib.suppress(Exception):
+            if SCENE_LOG.exists() and SCENE_LOG.stat().st_size > SCENE_LOG_MAX:
+                SCENE_LOG.replace(SCENE_LOG.with_suffix(".jsonl.1"))
+            with open(SCENE_LOG, "a") as fh:
+                fh.write(json.dumps(entry) + "\n")
 
     def _url(self) -> str:
         import ro_agent as r
 
         return r.backend_ws().replace("/internal/agent", "/internal/display")
 
-    def send(self, msg: dict[str, Any]) -> None:
-        text = json.dumps(msg)
-        with contextlib.suppress(Exception):  # logged with the moment it left (the replay's order)
-            if SCENE_LOG.exists() and SCENE_LOG.stat().st_size > SCENE_LOG_MAX:
-                SCENE_LOG.replace(SCENE_LOG.with_suffix(".jsonl.1"))
-            with open(SCENE_LOG, "a") as fh:
-                fh.write(json.dumps({"logged_ns": time.monotonic_ns(), "msg": msg}) + "\n")
-        if self.ws is None and time.monotonic() >= self.retry_at:
-            try:
-                from websockets.sync.client import connect
+    def _open(self) -> Any:
+        """A new connection: our own socket, so a send into a dead peer fails in DEAD_SEND_MS
+        (TCP_USER_TIMEOUT) instead of TCP's ~15 min; WebSocket pings every PING_S."""
+        import socket
+        from urllib.parse import urlsplit
 
-                self.ws = connect(self._url(), open_timeout=5, max_size=2**20)
-            except Exception as exc:  # noqa: BLE001 -- display only
-                print(f"{time.strftime('%H:%M:%S')} display channel down ({exc})", flush=True)
-                self.retry_at = time.monotonic() + 5.0
-                return
-        if self.ws is None:
-            return
+        from websockets.sync.client import connect
+
+        url = self._url()
+        u = urlsplit(url)
+        sock = socket.create_connection((u.hostname, u.port or 80), timeout=OPEN_TIMEOUT_S)
         try:
-            self.ws.send(text)
-            self.sent += 1
-            with contextlib.suppress(Exception):  # an ErrorReply would mean a protocol bug: log it
-                while True:
-                    reply = self.ws.recv(timeout=0)
-                    print(
-                        f"{time.strftime('%H:%M:%S')} display reply: {str(reply)[:200]}", flush=True
-                    )
-        except Exception:  # noqa: BLE001
-            with contextlib.suppress(Exception):
-                self.ws.close()
-            self.ws, self.retry_at = None, time.monotonic() + 5.0
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_USER_TIMEOUT, DEAD_SEND_MS)
+            return connect(url, sock=sock, open_timeout=OPEN_TIMEOUT_S, ping_interval=PING_S,
+                           ping_timeout=PING_S, close_timeout=1.0, max_size=2**20,
+                           legacy=True)  # fmt: skip
+        except BaseException:
+            sock.close()
+            raise
 
 
 def serve(hz: float, tuning: Tuning) -> int:
@@ -658,7 +869,16 @@ def serve(hz: float, tuning: Tuning) -> int:
     windows = [tuple(w) for w in rp.UI_WINDOWS]
     tracker = SceneTracker(region, desktop, windows, ground, tuning)  # type: ignore[arg-type]
     cadence = Cadence(tuning)
-    out = Sender()
+    stamp: dict[str, int] = {}  # the frame the tracker's offset is at (written under its lock)
+
+    def keyframe_now() -> dict[str, Any] | None:
+        """The scene NOW, for a new display connection (the Sender holds the tracker's lock)."""
+        if not stamp:
+            return None
+        return {"type": "hud_scene", "t_mono_ns": stamp["t"], "frame_id": stamp["fid"],
+                **tracker.keyframe()}  # fmt: skip
+
+    out = Sender(keyframe=keyframe_now, lock=tracker.lock)
     threading.Thread(target=out.run, name="hud-sender", daemon=True).start()
     screen: Any = None
     latest: dict[str, Any] = {}
@@ -711,9 +931,11 @@ def serve(hz: float, tuning: Tuning) -> int:
         f"{time.strftime('%H:%M:%S')} HUD scene: {hz:g} Hz frames, "
         f"{'floor' if floor is not None else 'global'} motion, detector every "
         f"{tuning.det_moving_s:g} s moving / {tuning.det_changed_s:g} s changing / "
-        f"{tuning.det_idle_s:g} s idle, keyframe every {KEYFRAME_S:g} s",
+        f"{tuning.det_idle_s:g} s idle, keyframe every {KEYFRAME_S:g} s, seen twice: "
+        + (f"{'+'.join(tuning.seen_twice)} ({tuning.seen_window} passes)"
+           if tuning.seen_twice else "off"),
         flush=True,
-    )
+    )  # fmt: skip
     try:
         while True:
             t_loop = time.monotonic()
@@ -735,7 +957,10 @@ def serve(hz: float, tuning: Tuning) -> int:
                 time.sleep(1.0)
                 continue
             stats["frames"] += 1
-            if prev is not None:
+            if prev is None:
+                with tracker.lock:
+                    stamp.update(t=int(t), fid=int(fid))
+            else:
                 shift = rp.scene_shift(prev, img, **(SHARP_SHIFT if tuning.sharp else {}))
                 dc = None
                 if floor is not None and float(np.hypot(*shift)) >= MOTION_MIN_PX:
@@ -744,6 +969,7 @@ def serve(hz: float, tuning: Tuning) -> int:
                     stats["floor_ms"].append(1000 * (time.monotonic() - t1))
                 with tracker.lock:
                     moved, delta = tracker.on_frame(shift, dc)
+                    stamp.update(t=int(t), fid=int(fid))
                     for msg in frame_messages(tracker, t, fid, moved, delta):
                         out.put(msg)
                 if moved:
@@ -764,7 +990,10 @@ def serve(hz: float, tuning: Tuning) -> int:
                       f" Hz, motion msgs {stats['motion'] / 60:.2f}/s (with corrections "
                       f"{stats['corr'] / 60:.2f}/s, floor median {fm[len(fm) // 2]:.0f} ms), "
                       f"detector {stats['det'] / 60:.2f} Hz (median {ms[len(ms) // 2]:.0f} ms), "
-                      f"objects {len(tracker.objects)}, sent {out.sent}", flush=True)  # fmt: skip
+                      f"objects {len(tracker.objects)} (seen once {len(tracker.candidates)}; "
+                      f"candidates so far {tracker.counts}), display {out.state}: sent "
+                      f"{out.sent}, dropped {out.dropped}, superseded {out.superseded}, "
+                      f"connects {out.connects}", flush=True)  # fmt: skip
                 stats.update(det=0, det_ms=[], frames=0, motion=0, corr=0, floor_ms=[])
                 t_report = time.monotonic()
             time.sleep(max(0.0, 1.0 / hz - (time.monotonic() - t_loop)))
@@ -783,8 +1012,11 @@ def main() -> int:
     ap.add_argument("--det-period", type=float, default=TUNING.det_moving_s,
                     help="the detector's period while the scene moves (s)")  # fmt: skip
     ap.add_argument("--motion", choices=("floor", "global"), default=TUNING.motion)
+    ap.add_argument("--seen-twice", choices=("units", "off"), default="units",
+                    help="draw a new unit once a later pass sees it (off: at once)")  # fmt: skip
     a = ap.parse_args()
-    return serve(a.hz, replace(TUNING, det_moving_s=a.det_period, motion=a.motion))
+    seen = TUNING.seen_twice if a.seen_twice == "units" else ()
+    return serve(a.hz, replace(TUNING, det_moving_s=a.det_period, motion=a.motion, seen_twice=seen))
 
 
 if __name__ == "__main__":
