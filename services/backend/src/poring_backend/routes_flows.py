@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 import time
 from collections.abc import Callable
@@ -143,12 +144,21 @@ def _world(state: AppState, flow: Any, source: World) -> tuple[Any, list[str]]:
     maps = editor.maps_of(flow)
     if source == "sample":
         return editor.sample_world(maps), []
-    world, labels = load_local_world(flow.target.server, maps, _kb_root(state))
+    world, labels = load_local_world(flow.target.server, maps, _kb_root(state), _gat_dir())
     return world, labels.notes
 
 
 def _kb_root(state: AppState) -> Path:
     return Path(state.settings.data_dir) / "kb"
+
+
+def _gat_dir() -> Path | None:
+    """The map GATs, read-only (Batt 2026-10-09: simulate on real routes). compose.dev.yaml mounts
+    the local copy `data/gat` (scripts/flows_gat.py; client-derived, never committed) at /lab-gat
+    and sets PORING_GAT_DIR. Unset: the bindings' own directory, which the container cannot read,
+    so routes are estimates (kbsheet's note says so)."""
+    gd = os.environ.get("PORING_GAT_DIR")
+    return Path(gd) if gd else None
 
 
 def _resolver(state: AppState, flow: Any) -> Any:
@@ -224,7 +234,7 @@ async def get_world(
         if source == "sample":
             world, labels = editor.sample_world(names or None), Labels()
         else:
-            world, labels = load_local_world(server, names, _kb_root(state))
+            world, labels = load_local_world(server, names, _kb_root(state), _gat_dir())
         doc = editor.world_doc(world)
         # display text for the keys (local data, never stored in a flow)
         doc["labels"] = {"npcs": labels.npcs, "options": labels.options}

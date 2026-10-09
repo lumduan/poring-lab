@@ -5,6 +5,7 @@ stored and nothing reaches the mux."""
 from __future__ import annotations
 
 import json
+import struct
 import sys
 from collections.abc import Callable, Iterator
 from pathlib import Path
@@ -234,6 +235,32 @@ def test_the_local_world_is_built_from_the_kb(make: Make, tmp_path: Path) -> Non
     assert w["maps"]["m_town"]["warps"][0]["to_map"] == "m_field"
     lint = post(client, "lint", {"flow": sample(), "world": "local"}).json()
     assert isinstance(lint["world_notes"], list)
+
+
+def test_the_gat_mount_gives_real_walkability(
+    make: Make, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Batt 2026-10-09: simulate on REAL routes. The bindings name the HOST's GAT directory, which
+    the container cannot read; PORING_GAT_DIR (compose.dev: the read-only /lab-gat) overrides it."""
+    kb = tmp_path / "data" / "kb"
+    (kb / "bindings").mkdir(parents=True)
+    l3 = {"map": {"walkability": {"gat_dir": str(tmp_path / "not-here")}}}
+    (kb / "bindings" / "lab-rathena.json").write_text(json.dumps(l3))
+    gats = tmp_path / "gat"
+    gats.mkdir()
+    rows = ["..#", "..#", "..."]
+    tiles = b"".join(
+        struct.pack("<4fHH", 0, 0, 0, 0, 1 if c == "#" else 0, 0) for row in rows for c in row
+    )
+    (gats / "m_town.gat").write_bytes(struct.pack("<4sBBII", b"GRAT", 1, 2, 3, 3) + tiles)
+    url = "/flows/world?source=local&server=lab-rathena&maps=m_town&walk=true"
+    without = make().get(url, headers=H).json()
+    assert any("not readable here" in n for n in without["notes"])
+    assert "m_town" not in without.get("walk", {})
+    monkeypatch.setenv("PORING_GAT_DIR", str(gats))
+    got = make().get(url, headers=H).json()
+    assert not any("not readable" in n for n in got["notes"])
+    assert got["walk"]["m_town"] == rows
 
 
 def test_a_chunked_body_is_capped_while_it_is_read(make: Make) -> None:

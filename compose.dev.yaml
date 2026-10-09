@@ -37,12 +37,18 @@ services:
       # answer 503 flow_engine_unavailable.
       PYTHONPATH: /dev-src/poring_env:/dev-src/poring_packets:/dev-src/backend:/dev-src/poring_skills:/dev-src/poring_flow
       PYTHONDONTWRITEBYTECODE: "1"
+      # MW2 simulate on REAL routes (Batt 2026-10-09): the map GATs, read-only (routes_flows).
+      PORING_GAT_DIR: /lab-gat
     volumes:
       - ./packages/poring_env/src:/dev-src/poring_env:ro
       - ./packages/poring_packets/src:/dev-src/poring_packets:ro
       - ./services/backend/src:/dev-src/backend:ro
       - ./packages/poring_skills/src:/dev-src/poring_skills:ro
       - ./packages/poring_flow/src:/dev-src/poring_flow:ro
+      # The GATs: a LOCAL copy on disk (scripts/flows_gat.py; client-derived, gitignored, never
+      # committed), not the /dev/shm extraction itself: the backend restarts at boot, and a bind of
+      # a missing /dev/shm path would be created root-owned before the extraction runs.
+      - ./data/gat:/lab-gat:ro
 
   gamestream:
     # The clean room (2026-10-03): the loop and the S2 spike run from the host source, read-only.

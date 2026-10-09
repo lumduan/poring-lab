@@ -580,6 +580,21 @@ def test_the_gamestream_dev_overlay_binds_code_read_only_and_no_secrets() -> Non
     assert "/lab-state" not in str(writable) and "./data" not in str(writable)
 
 
+def test_the_gat_mount_is_the_backends_read_only_local_copy() -> None:
+    """MW2 simulate on real routes (Batt 2026-10-09): the GATs are client-derived. Only the
+    backend sees them, read-only, from the local disk copy (scripts/flows_gat.py), never a bind of
+    the /dev/shm extraction (a missing source would be created root-owned at boot)."""
+    for name in ("compose.yaml", "compose.dev.yaml"):
+        for svc, conf in compose(name)["services"].items():
+            gat = [v for v in conf.get("volumes", []) if "gat" in str(v).lower()]
+            if name == "compose.dev.yaml" and svc == "backend":
+                assert gat == ["./data/gat:/lab-gat:ro"], gat
+                assert conf["environment"]["PORING_GAT_DIR"] == "/lab-gat"
+            else:
+                assert not gat, (name, svc, gat)
+            assert "/dev/shm/poring-lab-tmp" not in str(conf.get("volumes", [])), (name, svc)
+
+
 def focus_function(path: Path) -> str:
     text = path.read_text()
     start = text.index("focus_pointer_root() {")

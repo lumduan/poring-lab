@@ -102,7 +102,11 @@ live". One of the two needs another name (for Batt).
 files (Q2, as proposed); the Python view read-only (Q3, as proposed); #6 unsupported bindings as
 errors (Q4); who may open `/flows` (Q5: every LAN viewer today); the PROVISIONAL NPC / option key
 scheme of `kbsheet.py` and whether such keys may be committed (ADR-0020 Q11); the GAT directory is
-not mounted into the backend container (without it routes there are estimates); the MW2 naming;
+not mounted into the backend container (without it routes there are estimates) ➡️ **DECIDED by
+Batt 2026-10-09: mount it read-only. BUILT: `./data/gat:/lab-gat:ro` + `PORING_GAT_DIR` (a local
+disk copy made by `scripts/flows_gat.py`, not a bind of the /dev/shm extraction, which the boot-time
+backend start would create root-owned); it takes effect with the next guarded `recreate:backend`
+(not during a scored client run).** The other parked items go with ADR-0020 (Batt, 2026-10-09); the MW2 naming;
 the float-literal hash limit.
 
 **To deploy** (the parent, in an operator-chosen window):
@@ -116,7 +120,9 @@ the float-literal hash limit.
    `scripts/verify_mount.py backend`). Until then the routes answer 503 `flow_engine_unavailable`
    and the page says the engine is not reachable. Production: add `poring-flow` to the backend's
    dependencies (`uv lock`), copy the two packages in its Dockerfile, and a guarded image rebuild.
-4. Optional: mount the GAT directory read-only into the backend for real routes on lab maps.
+4. ~~Optional: mount the GAT directory read-only into the backend for real routes on lab maps.~~
+   ➡️ Batt approved 2026-10-09; built (see "Parked" above): run `scripts/flows_gat.py`, then a
+   guarded `recreate:backend@90` at a gap with no scored client run, then `verify_mount.py backend`.
 
 ## 1. One IR, four views
 
