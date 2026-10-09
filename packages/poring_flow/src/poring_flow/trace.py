@@ -297,7 +297,7 @@ class TraceSim(Sim):
                 )
                 return Plan(ticks=5, outcome="failed")
             return Plan(ticks=5)
-        if a.block in ("close_dialog", "close_npc_dialog"):
+        if a.block == "close_dialog":
             self.dialog_npc = None
             return Plan(ticks=5)
         if a.block in ("attack_nearest", "finish_target"):

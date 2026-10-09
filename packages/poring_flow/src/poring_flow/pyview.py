@@ -272,8 +272,33 @@ def _nesting(stmts: list[ast.stmt], depth: int = 1) -> int:
 
 
 # --- the parser ---------------------------------------------------------------------------------
-def parse(source: str, cat: Catalogue | None = None) -> ir.Flow:
-    """Restricted Python -> the flow IR. Never runs the source."""
+# Python-import ALIASES (Batt 2026-10-09, ADR-0020 contradictions #7): an old name imports as the
+# one block, with a warning; the IR, the catalogue and every printed view know only the new name.
+ALIASES = {"close_npc_dialog": "close_dialog"}
+
+
+class AliasWarning(UserWarning):
+    """A Python view used an alias name: it was imported as the one block (ALIASES)."""
+
+
+def _aliases(tree: ast.Module) -> list[str]:
+    """Rename every call to an alias in place (the AST is only read, never run); one warning per
+    call, by line and column."""
+    out = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            new = ALIASES.get(node.func.id)
+            if new is not None:
+                out.append(
+                    f"{_at(node)}: {node.func.id}() is an alias of {new}(): imported as {new}"
+                )
+                node.func.id = new
+    return out
+
+
+def parse(source: str, cat: Catalogue | None = None, warnings: list[str] | None = None) -> ir.Flow:
+    """Restricted Python -> the flow IR. Never runs the source. Warnings (an alias name, #7) are
+    appended to `warnings` when given, else issued as `AliasWarning`s."""
     pre = _precheck(source)
     if pre:
         raise ParseError(pre)
@@ -285,6 +310,14 @@ def parse(source: str, cat: Catalogue | None = None) -> ir.Flow:
     except (RecursionError, MemoryError, ValueError) as e:
         msg = f"line 1, col 1: the source cannot be parsed ({type(e).__name__})"
         raise ParseError([msg]) from None
+    alias_warnings = _aliases(tree)
+    if warnings is not None:
+        warnings.extend(alias_warnings)
+    else:
+        import warnings as py_warnings
+
+        for w in alias_warnings:
+            py_warnings.warn(w, AliasWarning, stacklevel=2)
     ctx = _Ctx(cat or catalogue())
     try:
         _allow_list(tree, ctx)

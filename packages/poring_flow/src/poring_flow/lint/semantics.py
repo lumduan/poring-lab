@@ -214,7 +214,7 @@ def _walk_npcs(
                         path,
                         f"option {opt.key} is not in npc {npc.key}'s menu",
                     )
-            if a.block in ("close_dialog", "close_npc_dialog"):
+            if a.block == "close_dialog":
                 npc = None
             if not fixed and spec is not None and spec.changes_map != "never":
                 to = consts.ref(a.params.get("to"), ir.MapRef) if "to" in a.params else None

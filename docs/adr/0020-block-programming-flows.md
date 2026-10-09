@@ -1630,7 +1630,7 @@ def weight():
 
 @on(engagement_seen(), priority=SURVIVAL, then=RELOCATE, max_per_min=4)
 def unintended_engagement():  # 13.9: the global default
-    close_npc_dialog()  # if one opened
+    close_dialog()  # if one opened (was close_npc_dialog: contradictions #7)
     walk_away(min_cells=5)  # NOT yet proven to stop an attack (13.9, open question 32)
 
 
@@ -1682,6 +1682,13 @@ def farm_engagement():  # by species (13.9); the policies are suggested from L3 
     else:  # dangerous, chasing, or not recognised: leave
         use_item(WING)
 ```
+
+➡️ **DECIDED 2026-10-09 (Batt, contradictions #7): ONE dialog-close block, `close_dialog()`** (L1
+`npc.close`), IDEMPOTENT: it closes a dialog only if one is open, so a recovery step can always
+call it. The example above said `close_npc_dialog()` in its global `unintended_engagement`; it is
+renamed. `close_npc_dialog()` survives only as a Python-import ALIAS: the Python view imports it as
+`close_dialog()` with a warning; the catalogue, the IR and every printed view know only the one
+name.
 
 #### 13.6.9 Lint rules for events
 

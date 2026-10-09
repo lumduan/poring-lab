@@ -65,7 +65,7 @@ def weight():
 
 @on(engagement_seen(), priority=SURVIVAL, then=RELOCATE, max_per_min=4)
 def unintended_engagement():  # 13.9: the global default
-    close_npc_dialog()  # if one opened
+    close_dialog()  # if one opened
     walk_away(min_cells=5)  # NOT yet proven to stop an attack (13.9, open question 32)
 
 

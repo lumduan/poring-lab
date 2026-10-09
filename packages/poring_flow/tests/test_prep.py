@@ -110,7 +110,8 @@ def test_a_measured_species_or_a_prepared_map_adds_nothing() -> None:
 def test_the_report_lists_what_is_open_and_run_stays_disabled() -> None:
     rep = prep.report(farm_flow(), farm_world(), resolver=resolve_all)
     assert not rep.runnable()
-    assert rep.summary() == "not runnable: 7 species untrained, 12 blocks unverified"
+    # 11 distinct blocks: the example used close_npc_dialog AND close_dialog, one block since #7
+    assert rep.summary() == "not runnable: 7 species untrained, 11 blocks unverified"
     assert rep.escape == {"town": "Fly Wing", "relay": "Fly Wing", "farm": "Fly Wing"}
     text = "\n".join(rep.lines())
     assert "Species to recognise: 7 (targets 3, ignore 2, unlisted 2) · new: 7" in text

@@ -201,3 +201,21 @@ def test_the_bare_underscore_is_only_repeats_target() -> None:
     assert refused("for _x in range(3):\n    sit()\n") == [
         "line 2, col 5: name _x is not allowed in a flow (a name starting with _ is refused)"
     ]
+
+
+def test_close_npc_dialog_is_an_alias_that_warns() -> None:
+    """#7 (Batt 2026-10-09): ONE block, close_dialog (idempotent); close_npc_dialog imports as it,
+    with a warning, and nothing prints or stores the old name."""
+    seen: list[str] = []
+    flow = pyview.parse(HEAD + "close_npc_dialog()\n", warnings=seen)
+    a = (flow.main or [])[0]
+    assert isinstance(a, ir.ActionStmt) and a.block == "close_dialog" and a.concept == "npc.close"
+    assert seen == ["line 2, col 1: close_npc_dialog() is an alias of close_dialog(): imported as "
+                    "close_dialog"]  # fmt: skip
+    assert "close_npc_dialog" not in pyview.print_flow(flow)
+    assert flow == pyview.parse(HEAD + "close_dialog()\n")
+    with pytest.warns(pyview.AliasWarning, match="alias of close_dialog"):
+        pyview.parse(HEAD + "close_npc_dialog()\n")
+    from poring_flow.catalogue import catalogue
+
+    assert "close_npc_dialog" not in catalogue().blocks
