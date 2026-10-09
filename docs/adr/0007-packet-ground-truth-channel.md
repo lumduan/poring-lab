@@ -16,6 +16,10 @@ next_action: Implemented and validated (docs/phase1-validation.md). The slim sni
   "Acceptance decisions" and "Implementation notes" below, and
   [phase1-validation.md](../phase1-validation.md).
 - Deciders: Batt
+- ➡️ 2026-10-09: [ADR-0021](0021-external-servers.md) (PROPOSED) would add, for an allowed
+  EXTERNAL server: nothing is captured there, by design; this channel's viewer shows an explicit
+  `external` state (built dormant on `feat/console-layout`), and every packet-based tool reports
+  "not available on this environment". Decision 4 (nothing in the agent path) is unchanged.
 - Related:
   - [phase1-plan.md](../phase1-plan.md);
   - [ADR-0005](0005-vision-x-access.md), the vision isolation gap;
@@ -126,6 +130,8 @@ closer to decision time than this ADR's "offline ground truth only" line.
 3. **The deployable bot must also have a pixels-only calibration path,** for servers without packet
    access (the community server, ADR-0006). D3 must ship both. The pixels-only path is the one
    acceptance is judged on outside rAthena.
+   ➡️ 2026-10-09: under ADR-0021 (PROPOSED) the pixels-only path is the ONLY calibration path on
+   an external server; the packet-assisted tools report "not available" there.
 
 **Consequences.** D3 moves from "needs Batt's ruling" to "planned". Its tests must show:
 - the agent never receives packet-derived values, only the profile;

@@ -16,6 +16,11 @@ next_action: Batt supplies the server's bot/AI-testing rules or announcement (li
 > - Batt may play there manually, through the console, as the human.
 > - Even once evidence is recorded, **no agent automation** runs there until the environment
 >   interlock exists (ADR-0006 rule 2, [issue #2](https://github.com/lumduan/poring-lab/issues/2)).
+> - ➡️ 2026-10-09: [ADR-0021](../adr/0021-external-servers.md) (PROPOSED) designs that interlock
+>   for an external server without packets: a separate client copy whose exes may reach only this
+>   server's endpoints (a firewall rule set generated from Settings, run by Batt, confirmed by
+>   his paste-back), and NO packet capture here even if the rules below allowed it. This record's
+>   evidence is still required first (ADR-0006 rule 1).
 
 | Field | Value |
 |---|---|

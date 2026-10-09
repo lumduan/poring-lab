@@ -17,6 +17,10 @@ next_action: Batt records the community server's bot/AI-testing permission (docs
 - Deciders: Batt
 - Supersedes: the "never run against public servers" wording in the project brief (official servers
   remain forbidden)
+- ➡️ 2026-10-09: [ADR-0021](0021-external-servers.md) (PROPOSED) would amend the community
+  server's row and rule 2: on an allowed EXTERNAL server the bot may act (pixels only), with NO
+  packet capture even where the server's rules allow it, gated by a person-confirmed exe-scoped
+  firewall rule set instead of a sniffer. Nothing changes until Batt accepts it.
 
 ## Context
 poring-lab needs two kinds of environment that no single server provides:
@@ -44,6 +48,10 @@ Two environments are sanctioned. Everything else is forbidden.
 | Community bot-testing server (`<COMMUNITY_SERVER_NAME>`, `<HOST:PORT>`) | Multi-party social/chat research (addressee detection, turn-taking, Typhoon slow loop), agent behavior among other agents and humans | Pixel + input only (principle 1). No packet capture or modification unless the server's rules explicitly allow it; record that rule here if so |
 | Official servers and any other public server | — | FORBIDDEN, for all components, in all modes |
 
+➡️ 2026-10-09: ADR-0021 (PROPOSED) would amend the community row's "No packet capture or
+modification unless the server's rules explicitly allow it" to: NO packet capture of an external
+server, whatever its rules allow (its section 3; open question 2 there).
+
 Rules that apply on the community server:
 1. Evidence of permission: `docs/environments/community-server.md` records the server's rules or
    announcement that permits bot/AI testing (link and date checked, no credentials). Re-check the
@@ -54,6 +62,9 @@ Rules that apply on the community server:
    judgment: define a verifiable signal (e.g. the client folder/exe used, window title, a marker on
    screen, or the backend's knowledge of which client profile was launched). If the signal is
    missing or unknown, the mux refuses BOT/ASSIST automation.
+   ➡️ 2026-10-09: ADR-0021 (PROPOSED) would supply this signal for an external server that has
+   no sniffer: a firewall rule set generated from Settings, applied by Batt and confirmed by his
+   paste-back of its read-back (plus recommended pixel and human signals).
 3. Etiquette: rate-limit chat and actions; follow the server's rules on identifying bot characters;
    do not disrupt other participants' experiments; a human can always take over (ASSIST/HUMAN).
 4. Other participants' data: chat lines and names from other players are stored locally only,

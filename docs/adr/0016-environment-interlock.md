@@ -23,6 +23,13 @@ next_action: "2026-10-06: user-managed environments (Settings page, asymmetric r
 - **Implements:** [ADR-0006](0006-sanctioned-test-environments.md) rule 2. Closes
   [issue #2](https://github.com/lumduan/poring-lab/issues/2) for the lab's rAthena; the community
   server stays forbidden for automation (below).
+- ➡️ **2026-10-09: [ADR-0021](0021-external-servers.md) (PROPOSED) would amend:** the community
+  entry (an `external` kind, signals `lab_host` + a new `firewall`, no `session`); layer 1 (a
+  generated group per external environment, allowing only its endpoints, confirmed by Batt's
+  paste-back); the forbidden list (the editing guard unchanged, plus a refusal at rule
+  generation); the production option (its rule shape adopted for external environments). The
+  History line "OS-level locks belong to production and teaching distributions only" would no
+  longer hold for external environments: there, a confirmed OS lock is a required signal.
 
 ## Rule
 The mux accepts a **BOT press** only while the interlock says so; everything else gets
@@ -62,12 +69,20 @@ Today it holds two environments:
   `[lab_host, session]`;
 - `community-bot-testing`: `pending`, no signals. Packet capture is not allowed there, so it can
   never be green.
+  - ➡️ 2026-10-09: ADR-0021 (PROPOSED) would give it (once its evidence exists and Batt allows
+    it) the `external` kind and the signals `lab_host` + `firewall`, so it CAN be green without
+    packets.
 
 ## Signals (what each name means is fixed in `poring_backend/interlock.py`)
 | Signal | Holds when | Source | The agent can reach it? |
 |---|---|---|---|
 | `lab_host` | the capture-backend lock is `steady` on `rdp`/`console`, and the backend's `WIN_HOST` is the environment's `windows_host` | `state/capture-backend` (its only writer is `capture_backend.py`), compose env | no |
 | `session` | the sniffer's **attestation** is fresh (≤ `attestation_max_age_s` = 10 s) and says: a map session from `windows_host`, open (no FIN/RST) and recent (≤ 60 s since its last packet), for one of `accounts` | `/ingest/packets`: the internal port and rathena's pinned 10.210.96.6 only (ADR-0007) | no |
+
+➡️ 2026-10-09: ADR-0021 (PROPOSED) would add `firewall` (the environment's intended rule set has
+the checksum a person last confirmed, and that confirmation is fresh) for EXTERNAL environments,
+and recommends `login_screen` and `operator_start` (its sections 4.2 and 7). `lab_host` is reused
+as built: it is already sniffer-free.
 
 **The attestation is attestation, never world data** (ADR-0007 ruling).
 - It carries `client_ip`, `session_live`, `aid`, `last_packet_age_ms` and `map_conns`. Nothing
@@ -240,6 +255,12 @@ interlock says `no_session` (fail closed). `ro_agent recover` or a re-login rest
 Batt replaced the th client's IP blocklist with an exe-scoped ALLOWLIST for both lab clients. It is
 never OS-wide, and never the community client (`RagnarokClassic\Ragnarok.exe`).
 
+➡️ 2026-10-09: ADR-0021 (PROPOSED) would extend this per EXTERNAL environment: a group
+`poring-lab env <id>` for a SEPARATE client copy (never the original community client), allowing
+only that environment's endpoints, generated from Settings, run by Batt, and confirmed by a
+checksum he pastes back. This group stays as it is unless he decides otherwise (its open
+question 6).
+
 **Why Block rules.** Windows Firewall's Block rules win over Allow, and the default outbound
 policy is Allow. So "allow only the lab host and loopback" is ONE Block rule per exe, whose
 RemoteAddress is everything else:
@@ -285,6 +306,10 @@ This differs from the Production-option template below: that template's IPv4 ran
 127.0.0.0/8, and its `::/0` blocked ::1.
 
 ## Production option (NOT applied in the lab): the outbound firewall rule
+
+➡️ 2026-10-09: ADR-0021 (PROPOSED) would adopt this three-BLOCK shape (no other hosts; the
+allowed host on other ports; no UDP) for every external environment, generated per exe from the
+Settings store instead of hand-written.
 For a production or teaching distribution, an OS-level lock adds an independent layer: Windows
 Firewall lets the lab exe reach only the lab server. Block rules win over the default Allow, so it
 is three BLOCKs on the program. The **operator** runs this in an elevated console; the agent never
@@ -494,7 +519,10 @@ a camera LED), key releases, and ReleaseAll.
 ➡️ **DEFERRED, 2026-10-06 ([ADR-0019](0019-windows-stays-clean.md), "Windows stays clean").** It
 needs the Windows-side reporting channel (ADR-0013 Part B), which that principle rules out. A
 remote server without a sniffer must first be attested server-side; ADR-0019 lists the
-candidates: pixels, the network, or signed attestations from a server we host. Kept as history:
+candidates: pixels, the network, or signed attestations from a server we host.
+➡️ 2026-10-09: it stays deferred; ADR-0021 (PROPOSED) is the alternative for external servers
+(prevention by a confirmed exe-scoped rule set, with no Windows-side reporting). Kept as
+history:
 
 - A new signal `client_endpoint`: green when a fresh (≤ 10 s) watcher report shows the
   environment's client exe with an ESTABLISHED remote in that environment's allowlist (DNS names
