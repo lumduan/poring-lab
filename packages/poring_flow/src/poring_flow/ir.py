@@ -409,6 +409,16 @@ def rank_of(h: Handler) -> int:
     return h.rank if h.rank is not None else DEFAULT_RANK.get(h.name, USER_RANK)
 
 
+def place_in_class(h: Handler) -> tuple[int, int]:
+    """Where an event sits INSIDE its class, the one definition the effective order, the
+    executor's queue and the ties rule share: the safety-critical three lead `critical` in their
+    fixed order (13.6.2 step 3), then the rank (#13). Equal places keep their arrival order."""
+    lead = len(SAFETY_CRITICAL)
+    if h.priority == "critical" and h.name in SAFETY_CRITICAL:
+        lead = SAFETY_CRITICAL.index(h.name)
+    return lead, rank_of(h)
+
+
 class Override(BaseModel):  # map scope: replaces the global event of the same key
     model_config = CFG
     kind: Literal["override"] = "override"

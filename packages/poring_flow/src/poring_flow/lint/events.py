@@ -367,12 +367,6 @@ def _ties(ctx: Ctx, consts: Consts) -> None:
                 _tie(ctx, consts, scope, a, b)
 
 
-def _place(e: Effective) -> tuple[int, int]:
-    """Where an event sits inside its class: the safety-critical lead, then its rank (#13)."""
-    lead = ir.SAFETY_CRITICAL.index(e.key) if e.key in ir.SAFETY_CRITICAL else 3
-    return lead, ir.rank_of(e.handler)
-
-
 def _tie(ctx: Ctx, consts: Consts, scope: str, a: Effective, b: Effective) -> None:
     """`a` precedes `b` in the effective order (effective.order_key)."""
     cls = a.handler.priority
@@ -387,7 +381,7 @@ def _tie(ctx: Ctx, consts: Consts, scope: str, a: Effective, b: Effective) -> No
             return  # never due together
         region = ta.shown if ta.boolean else both.text(ta.shown)
     on = f" on {region}" if region else ""
-    if _place(a) != _place(b):
+    if ir.place_in_class(a.handler) != ir.place_in_class(b.handler):
         ra, rb = ir.rank_of(a.handler), ir.rank_of(b.handler)
         why = "safety-critical first" if a.key in ir.SAFETY_CRITICAL else f"rank {ra} before {rb}"
         ctx.add(

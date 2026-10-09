@@ -52,9 +52,7 @@ MAIN_RANK = 3
 def queue_key(e: Effective) -> tuple[int, int, int]:
     """Where a due event sits in the queue: its class, the safety-critical lead, its rank inside
     the class (#13). Ties keep their arrival order (FIFO only between equal ranks)."""
-    h = e.handler
-    lead = ir.SAFETY_CRITICAL.index(e.key) if e.key in ir.SAFETY_CRITICAL else 3
-    return (RANK[h.priority], lead, ir.rank_of(h))
+    return (RANK[e.handler.priority], *ir.place_in_class(e.handler))
 
 
 Outcome = str  # ok | failed | interrupted | ...

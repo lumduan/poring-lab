@@ -40,7 +40,7 @@ from poring_flow.ir import (
     StmtT,
     event_key,
     event_label,
-    rank_of,
+    place_in_class,
 )
 
 State = Literal["built_in", "inherited", "overridden", "extended", "disabled", "added"]
@@ -94,9 +94,7 @@ def _tighter(a: int | None, b: int | None) -> int | None:
 
 def order_key(e: Effective, index: int) -> tuple[int, int, int, int]:
     """(class, the safety-critical lead, the rank inside the class, declaration order)."""
-    cls = CLASSES.index(e.handler.priority)
-    fixed = SAFETY_CRITICAL.index(e.key) if e.key in SAFETY_CRITICAL else len(SAFETY_CRITICAL)
-    return (cls, fixed if cls == 0 else len(SAFETY_CRITICAL), rank_of(e.handler), index)
+    return (CLASSES.index(e.handler.priority), *place_in_class(e.handler), index)
 
 
 def _global(flow: Flow) -> dict[str, Effective]:
