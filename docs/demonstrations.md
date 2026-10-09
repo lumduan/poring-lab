@@ -2331,6 +2331,39 @@ change is exactly:
   off, F can fire for an NPC really 2 cells away, and the server will score that substitute a
   failure.
 
+**3.27 walk@16 RESULTS (scored as pre-registered; 2026-10-09 08:41–11:55 ICT).** ZERO safety events
+in all four runs. One run PASSES the per-run bar and three fail by count. Not all four pass, so there
+is no walk@16 held-out run (3.27's own rule).
+
+| run | seed | session | success / 50 | walk@15 | safety | verdict | failures |
+|---|---|---|---|---|---|---|---|
+| indoor CLEAN | 20261100 | `20261009T084142` (08:41–09:31 ICT) | 43 (2 NPC substitutes, justified) | 46 | 0 | FAIL | `no_click_point` 2, `unit_stays` 2, an NPC substitute the server did not justify 2, `relocalise_limit` 1 |
+| indoor CROWD | 20261101 | `20261009T093115` (09:31–10:41) | 40 (2 NPC substitutes, justified) | 43 | 0 | FAIL | `unit_stays` 4, `relocalise_limit` 3, `no_click_point` 2, unjustified NPC substitute 1 |
+| outdoor CLEAN | 20261102 | `20261009T104128` (10:41–11:11) | **49** | 49 | 0 | **PASS** | `unit_stays` 1 |
+| outdoor CROWD | 20261103 | `20261009T111132` (11:11–11:55) | 47 | 48 | 0 | FAIL | `no_click_point` 1, `relocalise_limit` 1, `unit_stays` 1 |
+
+- **Change F fired 3 times.**
+  - Indoor CLEAN, once: a server-justified NPC substitute, and the route a success.
+  - Indoor CROWD, twice: the substitute was chosen, and its own route then declined `unit_stays`.
+  - Outdoors never (no NPCs), as expected.
+  - The unjustified substitutes all came from TALK reads (walk@13's path, unchanged).
+- As stated before the runs, F alone did not lift indoor to the bar: indoor went 46 → 43 and
+  43 → 40, within the ±3 run-to-run spread seen since walk@13.
+- **Failure causes over the four runs, ranked:**
+  1. `unit_stays` 8;
+  2. `relocalise_limit` 5;
+  3. `no_click_point` 5;
+  4. unjustified NPC substitutes 3 (TALK-read path).
+- **READINESS (3.28):** pooled **179 / 200 = 89.5 %** (95 % CI 84.5–93.0 %), 0 safety events:
+  **NOT READY** (under 90 %).
+
+**3.29's version choice, applied mechanically after walk@16's tuning (2026-10-09 11:57 ICT, before
+any held-out data):**
+- walk@15 is READY (186 / 200 = 93.0 %, 0 safety).
+- walk@16 is NOT READY (179 / 200 = 89.5 %).
+- ⇒ **the held-out set runs walk@15** (`scripts/walk15.py` at e1299f5's rule; its harness is
+  unchanged since: walk@15's import graph was checked before each merge today).
+
 ### 3.28 WALKING READINESS — a definition, "good enough to build on" (Batt 2026-10-09 ~09:40; it changes NO past pre-registered verdict)
 **Batt (2026-10-09):** "Walking readiness ('good enough to build on'): zero safety events (hard) AND
 pooled success >= 90 % with its 95 % CI, over the four tuning conditions. 96 % stays the long-term
