@@ -738,6 +738,7 @@ def test_the_proof_never_starts_a_step_in_or_just_before_a_market_window(
     assert proof.in_market(datetime(2026, 10, 9, 13, 50, tzinfo=ict))  # 14:00 is 10 min away
     assert not proof.in_market(datetime(2026, 10, 9, 19, 40, tzinfo=ict))
     assert not proof.in_market(datetime(2026, 10, 9, 10, 15, tzinfo=ict))
+    assert not proof.in_market(datetime(2026, 10, 10, 9, 40, tzinfo=ict))  # a Saturday
     assert proof.parse_steps("1-6") == [1, 2, 3, 4, 5, 6] and proof.parse_steps("3,5") == [3, 5]
     for bad in ("0", "7", "4-2", "3,3"):
         with pytest.raises(ValueError):

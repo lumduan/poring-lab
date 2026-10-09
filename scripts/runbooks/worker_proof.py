@@ -73,10 +73,10 @@ def now_str() -> str:
 
 def in_market(t: datetime, ahead_min: float = 15.0) -> bool:
     """Inside a market-open window, or one starts within ``ahead_min`` (a step's first minutes are
-    its disk-heavy import)."""
+    its disk-heavy import). Monday to Friday only (Batt 2026-10-09: not on Saturday or Sunday)."""
     for dt in (0.0, ahead_min):
         u = (t + timedelta(minutes=dt)).astimezone(ICT)
-        if any(a <= u.hour * 100 + u.minute < b for a, b in MARKET):
+        if u.weekday() < 5 and any(a <= u.hour * 100 + u.minute < b for a, b in MARKET):
             return True
     return False
 
