@@ -799,6 +799,37 @@ labels_v2.difficulty (all "normal" here).
         `/dev/shm/poring-lab-tmp/sprites/data/sprite/` (local).
     - **For Batt's "similar" call (7.5):** 1051 and 1053 use the SAME SPR (byte-identical images)
       with different ACTs. 1053 is drawn larger: idle 50 x 36 against 35 x 25 native px.
+  - ➡️ **N3 preparation: READY FOR A PERSON 2026-10-09 ~21:10. Not judged.**
+    - The command: `scripts/labels_v2.py npc-sheet <the banked demo sessions> --npc-sprites ...
+      --npc-sprite-names data/kb/npc_sprite_names.json` (new subcommand, tests in
+      `test_labels_v2_tool.py`).
+    - It takes the labels' own path (`Session.frame`, so the boxes a v2 cache would train on).
+      Per NPC sprite it writes a contact sheet: up to 8 crops spread over the sightings, the
+      `predict_sprite` box in green, M5's NCC printed on each crop.
+    - It also gives `label_check`'s NCC for every sighting: the M5 metric, with M4's tau 0.092 as
+      a reference line only.
+    - Output: `/dev/shm/poring-lab-tmp/labels-prep/n3/` (PNG + JSON; client pixels, never
+      committed). It read the 78 banked demo sessions that have packets and skipped the 9 that
+      have none.
+    - **9 of the 38 route sprites appear in banked frames, 382 sightings in all:**
+
+      | job | maps | sightings (sessions) | NCC median (p10) | below 0.092 (UI-covered) |
+      |---|---|---|---|---|
+      | 59 | alberta_in | 6 (2) | 0.059 (0.005) | 4 (1) |
+      | 84 | prt_in | 3 (1) | 0.473 | 0 |
+      | 85 | prt_in | 3 (1) | 0.349 | 0 |
+      | 86 | alberta_in, prt_in | 6 (2) | 0.136 (0.119) | 0 |
+      | 89 | alberta | 4 (1) | 0.414 | 0 |
+      | 92 | prontera | 176 (5) | 0.451 (0.272) | 0 |
+      | 98 | alberta_in | 7 (2) | 0.182 (0.041) | 1 |
+      | 105 | prontera | 176 (5) | 0.313 (0.212) | 1 |
+      | 874 | prontera | 1 (1) | 0.520 | 0 |
+
+    - **What needs a person:** the 9 sheets. Job 59 on alberta_in (indoor camera) scores low, and
+      on its sheet the box sits right of the drawn sprite in several crops. A person decides
+      whether that is a label error (the indoor camera, the heading) or the NCC.
+    - The other 29 sprites have no banked sighting. The training grounds' 15 have none at all
+      (never banked), so their N3 waits for the first collection session.
 - **Accounts:** the GM (2000002) collects, with 3.33's immunity after each login, the fixed GM
   state checked and the UI gate before each run. It reaches any copy by `@warp` (the copies are
   clones). **The agent account 2000001 is not used for collection:** its quest state on new_4-1 is
