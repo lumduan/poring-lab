@@ -190,6 +190,16 @@ class Sim:
         self.stack: list[_Frame] = []
         self.end: str | None = None
         self.preempts: list[tuple[int, str]] = []  # (index of the ReleaseAll in out, handler)
+        # #10 (Batt 2026-10-09): every /where read, with its reason (a node path, an event's
+        # condition, or a relocation); the trace / run report shows the count against the budget
+        self.where: list[tuple[float, str]] = []
+        self._reason = "main"
+        self._where_sensors = {
+            n for n, sp in self.cat.sensors.items() if sp.spec.concept == "nav.read_position"
+        }
+        self._where_blocks = {
+            n for n, b in self.cat.blocks.items() if b.spec.concept == "nav.read_position"
+        }
 
     # --- the world ------------------------------------------------------------------------------
     def _apply_timeline(self) -> None:
@@ -205,6 +215,8 @@ class Sim:
             self.world["_map_cause"] = cause
 
     def _sense(self, s: ir.Sense) -> Any:
+        if s.sensor in self._where_sensors:  # an ACTIVE read: it types /where (#10)
+            self.where.append((self.t, self._reason))
         if s.sensor == "known":
             return self._eval(s.args["value"]) is not None
         if s.sensor in ("sees", "count_visible"):
@@ -284,6 +296,8 @@ class Sim:
 
     # --- the interpreter (generators that yield one tick at a time) ------------------------------
     def _action(self, a: ir.ActionStmt, owner: str) -> Generator[_Tick, str | None, Outcome]:
+        if a.block in self._where_blocks:  # read_position types /where (#10)
+            self.where.append((self.t, self._reason))
         while True:
             plan = self.planner(a, self)
             restarted = False
@@ -331,7 +345,12 @@ class Sim:
                 return r
         return "next"
 
+    def _reason_of(self, st: Any, owner: str) -> str:
+        """Why a /where read happens: the statement (TraceSim names its node path)."""
+        return owner
+
     def _stmt(self, st: Any, owner: str) -> Generator[_Tick, str | None, str]:
+        self._reason = self._reason_of(st, owner)
         if isinstance(st, ir.ActionStmt):
             out = yield from self._action(st, owner)
             if st.outcome_to:
@@ -346,7 +365,9 @@ class Sim:
             return (yield from self._loop(st, owner))
         if isinstance(st, ir.WaitUntil):
             waited = 0.0
+            reason = self._reason
             while not (yield from self._cond(st.cond, owner)):
+                self._reason = reason  # the next poll is this statement's again
                 if waited >= st.timeout_s:
                     if st.outcome_to:
                         self.vars[st.outcome_to] = "failed"
@@ -390,7 +411,9 @@ class Sim:
         else:
             items = []
         i = 0
+        reason = self._reason
         while True:
+            self._reason = reason  # the loop's own condition, not its body's last statement
             if isinstance(st, ir.While):
                 if st.max_iter is not None and n >= st.max_iter:
                     return "next"
@@ -470,6 +493,7 @@ class Sim:
         fired = []
         for e in self.tree.active(self.block):
             h, s = e.handler, self._st(e.key)
+            self._reason = f"{e.label}.when"
             c = self._eval(h.when)
             if (
                 e.key == "unexpected_map"
@@ -642,6 +666,7 @@ class Sim:
         """13.6.6: read where the character is (typed, active), pick its block, run it."""
         read = ir.ActionStmt(block="read_position", concept="nav.read_position", timeout_s=10)
         self._emit("executor", self._batch(read, False), "relocate: read position")
+        self.where.append((self.t, "relocate"))  # the relocation's /where read (#10)
         map_id, cell = self.world.get("map"), self.world.get("cell")
         target = self._resume_block(map_id, cell)
         if target is None:

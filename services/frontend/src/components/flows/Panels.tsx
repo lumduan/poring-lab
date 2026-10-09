@@ -453,6 +453,12 @@ export function SimulatePanel({
               {t.final.cell ? ` (${t.final.cell[0]}, ${t.final.cell[1]})` : ""} · HP {t.final.hp_percent ?? "?"} % · weight {t.final.weight_percent ?? "?"} %
             </div>
             <div>save point: {t.save_point ? `${t.save_point.map} (${t.save_point.cell[0]}, ${t.save_point.cell[1]})` : "unknown"} · input batches a real run would send: {t.input_batches_counted} (counted, never built or sent)</div>
+            {t.where && (
+              <div className={t.where.over ? "text-amber-300" : ""}>
+                /where reads (they type; use as few as possible): {t.where.count} of the flow&apos;s budget {t.where.budget}
+                {t.where.reads.length > 0 && ` · ${t.where.reads.map((r) => `${r.reason} @${r.t} s`).join(", ")}`}
+              </div>
+            )}
           </div>
           <div>
             <div className="mb-1 font-semibold">Exits taken</div>

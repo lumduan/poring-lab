@@ -61,3 +61,24 @@ def test_the_static_count_follows_the_longest_path_of_map_blocks() -> None:
         "the longest path reads the position 2 times (/where), above the flow's where_budget 1: "
         "use a passive source, or raise the budget"
     ]
+
+
+def test_the_simulator_counts_every_read_with_its_reason() -> None:
+    """The run report's count (#10): sensor reads, read_position, relocations, each with its
+    reason (the node path), against the flow's budget."""
+    from poring_flow.trace import Scenario, simulate
+
+    flow = pyview.parse(
+        HEAD.format(extra=", where_budget=3")
+        + 'HERE = cell("m", 1, 1)\nfor _ in range(3):\n    HERE = position()\n'
+        + "read_position()\nsit()\n"
+    )
+    w = simulate(flow, None, Scenario(horizon_s=60))["where"]
+    assert (w["count"], w["budget"], w["over"]) == (4, 3, True)
+    assert [r["reason"] for r in w["reads"]] == ["main.0.body.0"] * 3 + ["main.1"]
+    # the sample: a death at 200 s relocates (and the escape's relocation): reads, not in a path
+    from poring_flow import editor
+
+    death = Scenario(horizon_s=300, timeline=[{"t": 200, "set": {"is_dead": True}}])
+    sample = simulate(editor.sample_flow(), editor.sample_world(), death)["where"]
+    assert sample["count"] >= 1 and {r["reason"] for r in sample["reads"]} == {"relocate"}

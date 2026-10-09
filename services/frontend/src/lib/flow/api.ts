@@ -87,6 +87,8 @@ export interface Trace {
   events: { t: number; kind: string; what: string }[];
   events_capped: boolean;
   input_batches_counted: number;
+  // ADR-0020 #10: every /where read (it types) with its reason, against the flow's budget
+  where: { count: number; budget: number; over: boolean; reads: { t: number; reason: string }[] };
   notes: string[];
   scenario: Scenario;
   world: { server: string | null; maps: string[] };

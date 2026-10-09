@@ -449,13 +449,41 @@ perception the blocks already use; none reads packets or server state.
 |---|---|---|---|
 | `hp_percent()`, `sp_percent()` | `vitals.read` | passive (HUD) | the basic info window must be visible |
 | `weight_percent()`, `zeny()` | `vitals.read` | passive | the full basic info view |
-| `position()`, `current_map()` | `nav.read_position` | passive | UNKNOWN indoors (no minimap readout in this client) ➡️ the client's `/where` line gives both, indoors and out (demonstrations.md §3.15, where@2, RDP): an ACTIVE read, since it types (13.6.6) |
+| `position()`, `current_map()` | `nav.read_position` | ~~passive~~ ➡️ **ACTIVE** | UNKNOWN indoors (no minimap readout in this client) ➡️ the client's `/where` line gives both, indoors and out (demonstrations.md §3.15, where@2, RDP): an ACTIVE read, since it types (13.6.6). ➡️ **DECIDED 2026-10-09 (Batt, contradictions #10): ACTIVE, never in an event condition, used as little as possible, within a per-run budget** (below the table) |
 | `base_level()`, `job_level()` | a new L1 read concept | passive | added to L1 first, unverified |
 | `item_count(item)` | a new L1 read concept | ACTIVE | opens the inventory: costs time and UI; never in an event condition |
 | `sees(mob, within)`, `count_visible(mob, within)` | the world detector + tracker (Phase 3) | passive, at the detector rate | ~5 Hz detection, prediction at stream rate (phase3-plan T3) |
 | `is_dead()` | the death dialog's anchor (`char.respawn`'s L2 binding) | passive | |
 | `window_open(window)` | the window's anchor (`ui.open_window`) | passive | |
 | `dialog_shows(option)` | `npc.choose`'s text check | passive while a dialog is open | text is MATCHED to known keys, never obeyed |
+
+➡️ **DECIDED 2026-10-09 (Batt, contradictions #10): `position()` and `current_map()` are ACTIVE.**
+They type the client's `/where`, so they are never allowed in an event condition (lint
+`passive_only`, as MW1 built it). A future PASSIVE `minimap_position()` (outdoors only) may be
+added when needed. Batt's additions:
+- **The policy: "USE IT AS LITTLE AS POSSIBLE."** The bot should look human, and players almost
+  never type `/where`. Passive sources come first: the minimap readout outdoors, dead reckoning,
+  landmarks. `/where` only when needed: a route start indoors, or a position belief in doubt.
+  Applying it at run time is the executor's (MW3) and the walk rules' (a future pre-registered
+  walk version), not the flow engine's.
+- **Measurable and limited** (built in `poring_flow`):
+  - a per-run budget, `Flow.where_budget` (IR 2; default 12, about three reads an hour over the
+    default 4 h run; each flow sets its own, 0..1000; the Python view writes `where_budget=N`);
+  - the linter WARNS when a read repeats (inside a loop, in a `while` or `wait_until` condition, in
+    a repeating `until` event: `where_loop`) and when the static count on the flow's longest path
+    is above the budget (`where_budget`; lint/where.py says how it counts);
+  - the simulator counts every read (a sensor read, `read_position`, a relocation's read) with
+    its reason, its node path; the simulate trace (and so the run report) shows the count
+    against the budget.
+- **Every use logged with its reason, at RUN time (MW3's executor; specified here, not built):**
+  one log line per `/where` read with `t_mono_ns`, the run id (`flow:<name>@<hash12>`), the node
+  path that caused it (or `relocate` / `<event>.when`), the reason class (`route_start_indoor`,
+  `belief_in_doubt`, `relocation`, `flow_sensor`), the read's outcome (map and cell, or `unknown`)
+  and the run's count so far against its budget. The run report shows the count. Reaching the
+  budget is reported; what the executor then does is MW3's design, with Batt.
+- **The typing guard** stays where it is: the client's repeat refusal (L2: the client refuses a
+  phrase typed more than 3 times in a row; measured 2026-10-09, Batt's `scripts/ro_agent.py`).
+  The flow engine relies on it and does not duplicate it.
 
 **Unknown is a value, not a guess.** A read returns a value with its `frame_id` and age, or
 `unknown(reason)`.
