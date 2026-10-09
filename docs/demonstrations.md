@@ -2714,6 +2714,35 @@ proven live yet, §2a).** Nothing above is changed: no bar, no target, no step.
   - A window covered over about a quarter or more reads as absent, not uncertain. No client window
     opens over the default places in the lab layout.
 
+➡️ **LIVE STEPS 1–3 DONE (2026-10-09 15:32–15:49 ICT, RDP, ASSIST, GM; main at 5a22d08 for the cut and
+the proofs). Merged to main early (ddbf21c): Batt's item 6 (~15:20) needs T2 before any more typing.**
+
+| step | sessions (`/dev/shm/poring-lab-demo/…`) | result |
+|---|---|---|
+| T4 + T5 drives (cut set) | `20261009T153405-demo-talk-cal-garnet`, `…153614-…-henson`, `…153815-…-guide` | all three **T5 PASS** (our contact on the NPC at its L3 cell within 5 s) and **T4 PASS** (all 8 dialog event types live) |
+| `cut` | the three above | 1st: NOT READY (T2: 6 frames labelled "dialog with CLOSE" read as no window); **the LABEL was wrong** (below); after the fix **READY**: T2 held self-check 92/92, T3 136/136 exact |
+| fresh drives (proof set) | `…154601-…-henson`, `…154802-…-guide` | T5 + T4 PASS |
+| `prove-t2` | the two fresh sessions | **PASS: 168/168** frames agree with the packets (NEXT 54, menu 90, CLOSE 12, no window 12) |
+| `prove-t3` | the two fresh sessions | **PASS: 216/216** option rows exact, 0 wrong, 0 refused; damaged copies never read wrong |
+
+- **The label fix (5a22d08):** the city guide's script sends a second ZC_CLOSE_DIALOG 0.5 ms AFTER
+  our close click. The client opens no window for it (frames 0054–0059 show none), but the labeller
+  marked "dialog with CLOSE". Now a CLOSE with no dialog open labels no window, with a test. The
+  reader was right.
+- **Contact failures (no click, safe), both Garnet:** `…153202-…-garnet` and the 3rd-round
+  `…154531-…-garnet` ended "no_contact": all three probe points read the cursor "unknown". A
+  hover-only diagnostic at 15:33 read the same points: TALK at the feet (IoU 0.90, colour 0.85), then
+  "unknown" at dv −14 / −28 with IoU 0.86–0.89 but COLOUR 0.0. The shape matched and the colour
+  check failed. This is intermittent: the same feet point failed in the first drive. Batt
+  (~15:50): measure the TALK read rate per NPC / position / background and find why the colour check
+  fails, BEFORE talk@1's scored trials (folded into walk@17 item 5's targeted test).
+- **T3 coverage caveat:** the guide's 4-option menu rows found no structure fit in either set (36
+  unlabelled rows in the proof), so T3's proof covers the 8-option menus (Garnet / Henson) only. The
+  prontera scene's menu reads are therefore unproven. This must be closed before talk@1's prontera
+  pilot.
+- Templates are in `data/ui_anchors/npc_dialog/` and `data/ui_anchors/menu_glyphs.npz` (client
+  pixels, gitignored).
+
 **3.29 HELD-OUT RESULTS (walk@15, 2026-10-09 12:01–13:46 ICT; scored per map, `walk_readiness.py`):**
 
 | map | session | routes scored | success | 95 % CI | safety | ended | walk-ready (3.28) | verdict |
