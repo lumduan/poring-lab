@@ -3385,6 +3385,44 @@ Merchant change needs the novice's Basic Skill above 8 (labels-v2-plan section 7
 - The click is a NEW UI click: registered in the click census, and only on the measured control.
 - A positive case for the offline judge: one deliberate raise, seen as `skill_update`.
 
+**➡️ PREREQUISITES MEASURED LIVE, 2026-10-09 20:39-20:42 ICT (RDP, the GM, v1 training alongside on
+the GPU; frames and packets local in `/dev/shm/poring-lab-tmp/learn_skill/`):**
+- **Start:** the GM's fixed state recorded (gm_state: Base / Job Lv 1, no notices; DB read-only:
+  Novice, all stats 1, 48 unspent status points, 0 skill points, no skills). `@joblevelup 9` ->
+  `stat_change` job_level 10 and skill_point 9.
+- **The window** (Alt+S, the L2 `skills` chord): "Skill Tree", the Novice column; Basic Skill is the
+  first icon (highlighted while points remain), the two quest skills (First Aid, Play Dead) greyed.
+  Bottom right: an APPLY button (적용) and a RESET button (초기화); bottom left "Skill Points : 9".
+  It opened at desktop (460,280)-(998,676) (the client remembers the last place): the L2 binding
+  must be relative to the window's title anchor, not absolute.
+- **Hover-only:** no "+" control and no tooltip appear over the icon.
+- **The raise is TENTATIVE:** one single click on the icon shows a red "+1" beside it and "Skill
+  Points : 8(1) / 9". Nothing is sent (no packet).
+- **The 2021 client DOES ask for an apply, and a confirmation:** APPLY opens a modal ("Once used,
+  skill points cannot be re-allocated. Would you like to use the skill points?") with OK (확인) and
+  Cancel (취소). OK sends the request.
+- **THE POSITIVE CASE (proven, live sniffer):** after OK, `skill_up_request` (CZ_UPGRADE_SKILLLEVEL
+  0x0112, skill 1) -> `skill_update` (0x010E: skill 1, level 1) + `stat_change` skill_point 8 +
+  `skill_list` (0x0B32, the full list) within 1 ms of each other. The window then shows "1" under the
+  icon and "Skill Points : 8" (the runtime pixel outcome).
+- **The restore has a client-sync gap (pinned pc.cpp `pc_resetskill`):** `@joblevelup -49` gave
+  `stat_change` job_level 1 and skill_point 0, and the server reset Basic Skill to 0, but with flag 0
+  it sends NO skill list (only flag&1 does). The client kept showing Basic Skill "1" (stale) after
+  the restore. The full list is resent only at a login (`connect_new`) or after a raise
+  (`pc_skillup`). So a trial after this restore would start from a stale picture (and a seeded N = 9
+  could not even be entered: the client believes one level is taken).
+  - **Options:** (a) a re-login before each trial (slow, existing tools), or (b) the stock
+    `@skreset` (pc_resetskill flag 1, which sends the list) in group 20, lab only, like
+    baselevelup / joblevelup: **Batt's call** (CLAUDE.md: group 20's commands are his approvals).
+  - The GM's client shows the stale "1" until its next login (the server is at 0; harmless to the
+    other rules, which do not read the skill window).
+- **New UI states for the harness:** the tentative "+N" and the confirm modal are NOT among the UI
+  gate's known states, so `ui_gate` stops on them (fail closed). The harness must close them only by
+  known steps: RESET (초기화) for a tentative raise, Cancel for the modal, then the window's chord.
+- **The same design for status points (char.allocate_stat):** the GM has 48 unspent points; a
+  reversible restore needs `@streset` (pinned `@baselevelup` lowering resets the stats only when the
+  unspent points are fewer than the level's, which 48 never is). Same parked decision.
+
 ### HUD scene: box drift while walking + doubled boxes — OFFLINE SIM RESULT (2026-10-08 night; branch `feat/hud-drift`, merged 0d6cd79, DEPLOYED 2026-10-09 00:36 ICT; LIVE RE-MEASURE below)
 
 #### 2026-10-09 — SEEN TWICE + the display-only RECONNECT: BUILT on `feat/hud-seen-twice` (merged 9687631), measured offline; ➡️ the plain rule SUPERSEDED by the CONFIRMING PASS (first sub-entry)
