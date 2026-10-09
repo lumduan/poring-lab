@@ -3422,6 +3422,11 @@ the GPU; frames and packets local in `/dev/shm/poring-lab-tmp/learn_skill/`):**
 - **The same design for status points (char.allocate_stat):** the GM has 48 unspent points; a
   reversible restore needs `@streset` (pinned `@baselevelup` lowering resets the stats only when the
   unspent points are fewer than the level's, which 48 never is). Same parked decision.
+- **The status window, looked at (20:52, Alt+A, no click):** each of the six stats shows its value,
+  a raise arrow and the cost of the next point (2 at value 1, the pre-renewal cost), and "Status
+  Point 48". There is NO apply button: a click on an arrow is expected to send the raise at once
+  (CZ_STATUS_CHANGE), so allocate_stat@1 has no tentative state, and every click is irreversible
+  without `@streset`. NOT clicked: a positive case would change the GM's stats for good.
 
 ### HUD scene: box drift while walking + doubled boxes — OFFLINE SIM RESULT (2026-10-08 night; branch `feat/hud-drift`, merged 0d6cd79, DEPLOYED 2026-10-09 00:36 ICT; LIVE RE-MEASURE below)
 
