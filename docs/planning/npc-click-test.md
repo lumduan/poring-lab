@@ -276,6 +276,12 @@ The layer slots in where walk@12/13's `zone_points` already removes work-zone an
   EVERY NPC file the pinned rAthena loads (`npc/scripts_*.conf`, recursively). The spot choice, the
   L3 arm and the layer all need it. Its check: every drawn NPC in the town re-run's packets (13)
   and in a prt_church session's packets is in the list.
+  ➡️ **2026-10-09 ~19:30: the list exists, the file does not yet.** `scripts/kb_first_workflow.py`
+  (labels-v2-plan.md section 7.3) extracts every NPC of a map from every file the server loads
+  (`npc/pre-re/scripts_main.conf`, 522 files); prontera is in its scope and `--also prt_church`
+  adds the church. Its packet check over the 85 banked demo sessions: 49 / 49 NPC objects at
+  their cell and sprite, prontera 16 and prt_church 19 among them. It does NOT write
+  `npc_cells.json` yet, so `npc_noclick.py` still reports no map complete (a follow-up).
 - **P2 · T2** (`poring_env.npc_dialog`), proven 168 / 168 (3.30): the dialog policy reads it.
 - **P3 · the CPU detector** (`/dev/shm/poring-lab-detector`): every probe logs its boxes.
 - **P4 · GAT + indoor table extracted** for the test maps (`/dev/shm/poring-lab-tmp/gat/data`).
