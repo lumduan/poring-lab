@@ -1,6 +1,6 @@
 ---
 title: "walk@17: the typing policy, warp areas, and long walks (design; pre-registered separately before any run)"
-status: "APPROVED by Batt 2026-10-09 (~13:42, ~14:00); BUILT (scripts/walk17.py, b7cf790) and PRE-REGISTERED as demonstrations 3.32; NOT run. Four points found while building wait for Batt (3.32: the guard's repeat rule vs /where once per need; iz_dun00 has no L3 warp list; the harness start draw can land in a warp area; the server path across a warp area, measured 0)"
+status: "APPROVED by Batt 2026-10-09 (~13:42, ~14:00); BUILT (scripts/walk17.py, b7cf790) and PRE-REGISTERED as demonstrations 3.32; NOT run. SIX points wait for Batt before its tuning runs (3.32 items 1-6: the guard's repeat rule vs /where once per need; iz_dun00 has no L3 warp list; the harness start draw can land in a warp area; the server path across a warp area, measured 0; ADDED 15:05: 3.29a town's 2 NPC contacts with the decision code walk@17 keeps (E); a chain must judge the client's UI state between runs)"
 date: 2026-10-09
 owner: Batt
 extends: docs/demonstrations.md
@@ -61,6 +61,14 @@ walk@17 = walk@15's decision code + the changes below. Each one answers a findin
 ## E. Not changed
 The unit gate's 0.25 threshold (Batt), the NPC clearance (walk@15's D), the side cells (E) and the
 TALK-read NPC substitute.
+
+➡️ **2026-10-09 ~15:05: a safety finding against E (demonstrations 3.29a, town re-run).** walk@15's
+decision code, which walk@17 keeps, made TWO NPC contacts in 50 routes in prontera.
+- Both times the cursor read WALK and the detector envelope held 0 units.
+- One came through the TALK-read NPC substitute: its remembered talk cells were one column off the
+  NPC.
+- Listed for Batt as 3.32 item 5. "Not changed" stays the design until he decides.
+
 
 **DECIDED by Batt 2026-10-09 ~14:00:** walk@16's F is NOT carried over ("no measurable effect beyond
 run-to-run noise; fewer rules"). If goals next to NPCs turn out to matter later, a fix comes with a

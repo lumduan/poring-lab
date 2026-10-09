@@ -2687,6 +2687,73 @@ tested exactly as pre-registered.
   log.
 - Its output is recorded here before the first re-run.
 
+#### ➡️ 3.29a RESULTS (2026-10-09 13:54–14:38 ICT, main at a41ad13; scored offline by the packets): NO held-out map passes; walk@15 is NOT walk-ready on held-out
+
+| map (seed) | ended | scored | success | Wilson 95 % | safety | 3.28 verdict |
+|---|---|---|---|---|---|---|
+| guild, alberta_in (20261124) | INCOMPLETE again, 14:06 (harness stop, exit 3) | 10 | 8 / 10 = 80.0 % | 49.0–94.3 % | 0 | not ready (incomplete; < 90 %) |
+| town, prontera (20261125) | COMPLETE, 56 routes, 14:38 | 50 | 48 / 50 = **96.0 %** | 86.5–98.9 % | **2 `npc_contact`** | **FAIL: safety** |
+| portal, prt_fild08 (20261127) | INCOMPLETE, 0 routes, 14:38 (harness stop, exit 3) | 0 | — | — | 0 | not run (see the cause) |
+| iz_dun00 (3.29, not re-run) | COMPLETE | 50 | 29 / 50 = 58 % | — | 0 | path-following only |
+
+The first runs (3.29) are kept as reported: guild 0 / 5 and town 39 / 45, both INCOMPLETE. The
+exemption was set at 13:54:32 and CLEARED at 14:38:47 by the chain's exit trap. The guard's log over
+the re-runs: 129 /where, all `where_fix.fix_v2` (the exempted pattern), and 1 refusal (`repeat`, a
+harness `@killmonster2` skipped at 14:04:47). The iz_dun00 seed 20261126 is unused.
+
+**guild (20261124): the 3.29 rule fault, again.** In route 9 the rule walked into alberta_in's exit
+warp area (3.29's finding; walk@17 B blocks those areas). The harness's `@warp alberta_in 66 42` then
+became a cross-map load. Its next typed line came 2.5 s after the warp (`WARP_SETTLE_S`), while the
+map was still loading, and the Enter was swallowed: chat_open distance 118 ×8, frame
+`/dev/shm/poring-lab-tmp/chat-open-fail/20261009-140611.png`.
+
+**town (20261125): 96 % success, but TWO NPC CONTACTS, so it FAILS (3.28: zero safety).** Both
+contacts came from walk@15's own single-click step. Each time:
+- the cursor was read as WALK;
+- the hover walk marker was drawn;
+- the detector envelope had ZERO units;
+- yet the server received a contact with an NPC 2 cells away.
+
+| # | when (ICT) | route | clicked cell, screen point | cursor read | NPC contacted (packets) |
+|---|---|---|---|---|---|
+| 1 | ~14:32:51 | 48, (161,192) → (150,192) | (156,192), (465,361) | WALK, IoU 0.807, marker 63 px | a job-722 NPC at (155,190) |
+| 2 | ~14:37:45 | 55, goal (155,191) | (153,189), (568,292) | WALK, IoU 0.615, marker 39 px | the city guide NPC (job 105) at (154,187) |
+
+- **Contact 2 came from walk@15's TALK-read NPC substitute.**
+  - The goal (155,191) was refused as a talk cell.
+  - The remembered talk cells (155,187…191) were ONE COLUMN off the guide's true cell (154,187).
+  - So the substitute (153,189) sat beside the guide, and the client resolved the click to the guide.
+- **Contact 1 had no talk-cell memory involved at all:** the rule never saw that NPC as a unit (no
+  detector box, no remembered cell), and its walk click 2 cells away became a contact.
+- **What follows from it (a fact, not a fix):** walk@15's NPC safety in a town rests on the cursor
+  read and the detector. Twice in 50 routes, both said "clear" over an NPC's click area. walk@17
+  carries the same decision code (`docs/planning/walk17.md` E), so this is its top safety cause before
+  its tuning runs.
+- **The aftermath, also bot input.** Contact 2's dialog stayed open. Every Enter the harness pressed
+  afterwards went to the dialog, not the chat. Between ~14:37:48 and ~14:38:36 that was 5 "next"
+  clicks and 5 menu choices, each choice 1 (the guide's city-guide branch → "mark on the minimap: yes"
+  → the first building ×3).
+  - Their effect was dialog text and client-side minimap marks only. Both were gone after the 14:47
+    rathena restart's re-login (screenshot 14:50: no dialog, a plain minimap). There was no item,
+    zeny or position change.
+  - They are not in 3.28's safety keys, but they are unintended NPC interactions and are reported as
+    such.
+  - The town run's closing `@killmonster2` (14:38:03) never reached the server: it is still in the
+    chat input on the next screenshot.
+
+**portal (20261127): a HARNESS fault, mine, not a rule result.**
+- The town run left the guide's dialog open, and the chain started the portal run on top of it.
+- The chain's own pre-run screenshot (`/dev/shm/poring-lab-tmp/shots/heldout-a-portal.png`,
+  14:38:16) shows the dialog. The chain took that screenshot but never JUDGED it.
+- The portal run's first typed line after its `@warp` found the chat input not open (distance
+  11.0 ×8, frame `.../chat-open-fail/20261009-143836.png`) and stopped with 0 routes.
+- This breaks the standing rule "screenshot + close leftover windows before any scored run"
+  (2026-10-08). A chain must judge the client's UI state between runs, not only record it.
+
+**Not done, waiting for Batt:** any further re-run. Batt allowed ONE re-run per map, and the
+where@2 exemption ended with the chain. A third guild run or a second portal run would need a new
+decision, and the exemption again.
+
 ### 3.31 tour@1 — LONG walks across a map: chained legs through waypoints (pre-registered 2026-10-09 ~14:00 ICT / 07:00 UTC, BEFORE any run; Batt 13:42: "the held-out harness keeps every route within a few cells of one start spot ... it never tests LONG walks across a map, which workflows need")
 **Why:**
 - 3.24–3.29's routes are 8–20 plan steps from a start the harness warps back to.
@@ -2918,6 +2985,20 @@ pre-registration):
 4. **Measured, not built:** the server's own path to a click could cross a warp area even when the
    clicked cell lies outside one. On harness-like routes it never did: 0 of ~20,000 click cells on
    alberta_in and 0 of ~20,000 on prontera (offline, the GAT's own A*).
+5. **➡️ Added 2026-10-09 ~15:05, from 3.29a's town re-run: TWO `npc_contact` with walk@15's
+   decision code, which walk@17 keeps unchanged** (walk17.md E).
+   - Both times the cursor read WALK, the walk marker was drawn, and the detector envelope held 0
+     units.
+   - Contact 2 came through the TALK-read NPC substitute: its remembered talk cells were one column
+     off the NPC's true cell.
+   - walk@17's tuning bar needs zero safety. Whether a fix comes before its tuning runs is Batt's
+     call. Per his rule for F, any fix comes with a targeted test that can measure it.
+6. **➡️ Added 2026-10-09 ~15:05, from 3.29a's portal re-run: a chain must JUDGE the client's UI state
+   between runs, not only screenshot it.** An NPC dialog left open by one run took the next run's
+   Enter presses.
+   - This is a harness change: refuse to start a run while a dialog or window is open, judged from
+     pixels, and log it.
+   - How such a dialog is closed (a human-like cancel, or a stop for Batt) is Batt's call.
 
 ### 3.33 The GM's IMMUNITY: a test condition for the visual-diversity block (pre-registered 2026-10-09 ~14:05 ICT / 07:05 UTC, BEFORE the check; Batt: "keep gl_prison; a GM doesn't need to fear monsters. Make the GM safe without changing what the bot sees")
 **The condition, PRIMARY:** rAthena's `@monsterignore`, granted to the GM's group 20 (`groups.yml`,
@@ -2951,6 +3032,29 @@ HP headroom. It is not granted now; that would be its own step, with Batt.
 - an `attack_request` within 5 s of the click.
 
 FAIL: the backup is raised with Batt, and gl_prison waits.
+
+➡️ **RESULT (2026-10-09 14:51–14:56 ICT): PASS.** Session `20261009T145110-demo-safety-check-immune`.
+- **The grant went live first.**
+  - `groups.yml` was verified inside the container (`verify_mount.py rathena`: ok).
+  - A guarded `restart:rathena@120`, then `restart:sniffer@30` (the sniffer shares rathena's network
+    namespace), ran 14:47:01–14:50:15. The worst capture stall was 13.1 % on quant-postgres for 8 s,
+    within the tolerant guard.
+  - The GM auto re-login was OK and the interlock was green again at 14:50:15.
+  - The client was clean on the screenshot after it: `/dev/shm/poring-lab-tmp/shots/after-rathena-restart.png`.
+- **ON:** the client's own answer is on the screenshot (`.../npc-check/1791532292-immune-on.png`).
+  The answer appears once as a chat line and a transient bubble above the GM; nothing persistent
+  changes.
+- **The packets:**
+  - 3 Familiars on the server;
+  - **0 acts on the GM** in the window, and 0 in the whole session (7 acts in all);
+  - 50 Familiar movements;
+  - 2 `attack_request` within 5 s of the deliberate click.
+- **Deviation, disclosed:** the window from the spawn to the click was **263 s, not ~60 s**. The
+  sword-twice scan needed 104 hovers before the cursor read the sword twice. The longer window
+  is the stricter test: four times as long for a monster to act on the GM.
+- **OFF:** `@monsterignore` toggled off at 14:56:10 (`.../1791532571-immune-off.png`).
+- **The condition is ready for the visual-diversity block:** ON once after each GM login, judged per
+  run offline (zero acts on the GM).
 
 **In the visual-diversity block** (perception + walking, NOT combat), the GM is immune on every map.
 - It is applied once after each GM login and confirmed per run offline: zero acts on the GM.
