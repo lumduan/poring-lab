@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [phase3-plan.md, h264-vs-png.md]
-next_action: "2026-10-08 21:03: the matched-batch rerun (v0jpg-20261007, JPEG at batch 2) is SCORED: the 054429 domain-shift gain was the BATCH SIZE, not the format (JPEG b2 0.710 vs PNG 0.704 mAP50); in domain a tie; gold monster recall 0.52 vs 0.56 (4 boxes, one run each). PARKED for Batt: whether later caches return to JPEG (PNG costs ~5x storage for no measured gain). v1 stays PNG as pre-registered."
+next_action: "2026-10-08 21:03: the matched-batch rerun (v0jpg-20261007, JPEG at batch 2) is SCORED: the 054429 domain-shift gain was the BATCH SIZE, not the format (JPEG b2 0.710 vs PNG 0.704 mAP50); in domain a tie; gold monster recall 0.52 vs 0.56 (4 boxes, one run each). Batt DECIDED 2026-10-09: future caches are JPEG q95 (matched settings; build_frame_cache defaults to jpeg again); v1 stays PNG as pre-registered."
 ---
 
 # v0-PNG vs v0-JPEG: the same frames, the same labels, a different image format
@@ -148,6 +148,9 @@ Values are mAP50 / mAP50-95. On 054429, the matched JPEG run scores monster 0.51
 4. **Storage (Batt's call, PARKED):** with this run, PNG's ~5× storage shows no measurable detection
    gain. v1 stays on PNG as its pre-registration fixes (`v1-vs-v0png.md`, not moved after seeing
    data). Whether LATER caches go back to JPEG is Batt's decision.
+   ➡️ **DECIDED by Batt 2026-10-09 ~08:30: future caches are JPEG (q95, matched settings); PNG stays
+   for v1 as pre-registered.** `build_frame_cache.py --image` now defaults to `jpeg` (q95);
+   `--image png` remains for v1png's resume and re-builds.
 
 ## Open (Batt's call)
 - ➡️ **ANSWERED 2026-10-08 by the matched-batch rerun (above): the 054429 gain was the batch size.**

@@ -15,11 +15,14 @@ files), never one file per frame on the shared disk. So:
 - labels come from qa_export's Labeler (the same as /qa and label_iou: the backend's camera, the
   packet->frame offset, GM-command windows skipped). Frames on any map other than the session's
   scene maps (prt_fild08, prt_church) are skipped (p3-outdoor-b's stray minutes in prontera);
-- frames are written as PNG (lossless, the default since 2026-10-06; ``--image jpeg`` gives v0's
-  JPEG q95) + YOLO txt + json into ~512 MB tar shards under ``<out>/<cache_id>/``. That is a
-  dot-directory on the NAS root: dataset_ship's sessions/status/prune skip it by design. Each shard
-  is written as ``.part``, renamed, then re-hashed from the NAS (read back). Each session closes
-  its own shards, so a session is either complete or absent;
+- frames are written as JPEG q95: the default again since Batt's decision of 2026-10-09 (the
+  matched-batch rerun found no detection gain for PNG's ~5x storage; docs/benchmarks/
+  v0-png-vs-jpeg.md). ``--image png`` gives the lossless PNG of 2026-10-06..09, which v1png keeps
+  as pre-registered. Each frame + YOLO txt + json goes into ~512 MB tar shards under
+  ``<out>/<cache_id>/``. That is a dot-directory on the NAS root: dataset_ship's
+  sessions/status/prune skip it by design. Each shard is written as ``.part``, renamed, then
+  re-hashed from the NAS (read back). Each session closes its own shards, so a session is either
+  complete or absent;
 - RESUMABLE (Batt, 2026-10-06: daytime caches pause when the IO guard trips, then resume):
   ``progress.json`` is rewritten after every finished session (its arguments, sessions and shard
   hashes). ``--resume`` refuses different arguments, checks every recorded shard's size on the
@@ -188,8 +191,8 @@ def main() -> int:
     ap.add_argument(
         "--image",
         choices=("png", "jpeg"),
-        default="png",
-        help="png: lossless (Batt's decision for every cache after v0); jpeg: q95 (v0)",
+        default="jpeg",
+        help="jpeg: q95 (Batt 2026-10-09: every future cache); png: lossless (v1png)",
     )
     ap.add_argument("--quality", type=int, default=95, help="jpeg only")
     ap.add_argument(
