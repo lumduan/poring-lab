@@ -3350,6 +3350,35 @@ any such event ends the test until Batt decides. The GM stands only on known cel
 **Reported:** every metric of npc-click-test.md 5.5 per map, with Wilson intervals; the stops and
 their causes; the measured footprints per job; which fix (5.7) each result points to.
 
+**➡️ INTERIM (2026-10-10 00:50 ICT): the PROBE arm is COMPLETE on both maps; the CLICK arm is PARKED
+(stopped for a person).**
+- **Pilots (never scored):** probe prontera `20261009T215405` (156 probes), probe prt_church
+  `20261009T232306` (156), click prontera `20261010T000550` (5 `npc_contact`, all declined by
+  `talk1.decline_all`: NEXT, then the menu Cancelled; 17 moves; 0 attack). No harness change.
+- **Probe arm, scored** (`npc_click_score.py score`, the gate's own reads; safety EMPTY in both: 0
+  attack / contact / pickup / move requests, 0 GM acts):
+
+| | prontera `20261009T220521` | prt_church `20261009T233300` |
+|---|---|---|
+| probes (planned) | 1,517 (1,566) | 566 (566) |
+| gate TALK reads, sprite points | 378 / 721 = 0.524 | 150 / 248 = 0.605 |
+| gate TALK reads, cell points | 212 / 734 = 0.289 | 34 / 256 = 0.133 |
+| colour-check fails (unknown, best IoU >= 0.6) | 149 / 1,517 = 0.098 (job 700: 74 / 250 = 0.296) | 37 / 566 = 0.065 |
+| DETECTOR, NPC sightings boxed | **0 / 7,816** (0 boxes in all 1,517 batches) | **378 / 1,008 = 0.375** (job 67 252/504, job 120 126/504) |
+| walk@12's remembered TALK cell = the NPC's cell | 28 / 590 | 26 / 184 |
+
+  - The detector's zero in prontera is real, not a dead sensor: the same CPU detector found the
+    Poring in all 30 of cursor@1 arm B's trials that night and boxed church NPCs in 252 batches.
+  - The TRUTH-labelled TALK rates (both readers, blind labels) are in 3.35: gate 0.856, robust 0.967.
+- **Click arm prontera, scored `20261010T001818`: STOPPED FOR A PERSON** at its 18th record
+  (`stop:unread:button_unknown`). The city guide's (job 105) first page with NEXT is open. The click
+  that opened it was at client (470, 270), where the dialog's NEXT button then sat: the reader most
+  likely saw a hovered or covered button, a state its templates lack (the pilot declined the same
+  page 5 times). Up to the stop: 3 `npc_contact`, 9 moves, 0 attack, 0 GM acts. **Not closed by the
+  parent** (the policy above). Next: a person closes it, then `npc_click_test.py click --map prontera
+  --seed 20261160 --near 156,191 --resume 20261010T001818-demo-npc-click-click-prontera`; the church
+  click arm after it.
+
 ### 3.33 The GM's IMMUNITY: a test condition for the visual-diversity block (pre-registered 2026-10-09 ~14:05 ICT / 07:05 UTC, BEFORE the check; Batt: "keep gl_prison; a GM doesn't need to fear monsters. Make the GM safe without changing what the bot sees")
 **The condition, PRIMARY:** rAthena's `@monsterignore`, granted to the GM's group 20 (`groups.yml`,
 in place; it applies at the next guarded rathena recreate, never during a scored client run).
