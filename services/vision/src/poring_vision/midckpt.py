@@ -52,6 +52,8 @@ from poring_vision.resume import (
     next_position,
     rotate_write,
     sample_seeds,
+    state_kind,
+    step_placement,
     verify_file,
 )
 
@@ -100,7 +102,9 @@ def tensor_bytes(t: Any) -> tuple[str, tuple[int, ...], bytes]:
 
 
 def to_cpu(obj: Any) -> Any:
-    """A CPU copy of a nested state (no VRAM spent: the 25 % cap)."""
+    """A CPU copy of a nested state (no VRAM spent: the 25 % cap). Contiguous: the layout is NOT
+    kept, so the restore re-applies each parameter's (`load_optimizer`; `copy_` and `empty_like`
+    already do for the weights and the gradients)."""
     if hasattr(obj, "detach"):
         return obj.detach().to("cpu", copy=True).contiguous()
     if isinstance(obj, dict):
@@ -110,6 +114,41 @@ def to_cpu(obj: Any) -> Any:
     if isinstance(obj, tuple):
         return tuple(to_cpu(v) for v in obj)
     return deepcopy(obj)
+
+
+def load_optimizer(optimizer: Any, saved: dict[str, Any]) -> None:
+    """Restores ``saved`` (a state_dict as `to_cpu` stored it) into ``optimizer``, every state
+    tensor laid out as its parameter's (2026-10-09: proof 1's B2 crash, mid-epoch-checkpoints.md).
+
+    torch's load_state_dict moves each state tensor to its parameter's device and dtype, but keeps
+    the strides it was SAVED with, and `to_cpu` saves contiguous (NCHW). ultralytics 8.4.165 trains
+    in channels_last on CUDA (`_setup_train`) with fused AdamW (`build_optimizer`), and the fused
+    kernel refuses state strided unlike its parameter: "params, grads, exp_avgs, and exp_avg_sqs
+    must have same dtype, device, and layout". So each tensor shaped like its parameter becomes
+    ``empty_like(param, preserve_format).copy_(saved)`` (the parameter's dtype, device and strides,
+    the saved values bit for bit), and each ``step`` goes where a fresh one would
+    (`step_placement`). The state digest hashes values in logical order (`tensor_bytes`), so it
+    could not see the layout: proof 1's restore was "bitwise" and still crashed."""
+    import torch
+
+    opt = deepcopy(saved)
+    for s, group in zip(opt["param_groups"], optimizer.param_groups, strict=True):
+        s["fused"] = group.get("fused")  # as stock: the runtime picks the kernel
+    optimizer.load_state_dict(opt)
+    f64 = torch.get_default_dtype() == torch.float64
+    for group in optimizer.param_groups:
+        dtype, on_param = step_placement(group.get("fused"), group.get("capturable"), f64)
+        for p in group["params"]:
+            state = optimizer.state.get(p, {})
+            for k, v in list(state.items()):
+                if not torch.is_tensor(v):
+                    continue
+                kind = state_kind(k, tuple(v.shape), tuple(p.shape))
+                if kind == "step":
+                    state[k] = v.to(dtype=getattr(torch, dtype),
+                                    device=p.device if on_param else "cpu")  # fmt: skip
+                elif kind == "param":
+                    state[k] = torch.empty_like(p, memory_format=torch.preserve_format).copy_(v)
 
 
 def inspect_mid(path: Path, load: Any = None) -> Candidate:
@@ -294,10 +333,7 @@ def resumable(base: type, opts: MidOptions) -> type:  # noqa: PLR0915
                 raise SystemExit(f"{self.args.model}: training to {self.epochs} epochs is finished")
             self._load_checkpoint_state(ckpt)  # the EMA (saved fp32: exact) + its update count
             unwrap_model(self.model).load_state_dict(mid["model"])  # the LIVE weights, not the EMA
-            opt = deepcopy(mid["optimizer"])
-            for saved, group in zip(opt["param_groups"], self.optimizer.param_groups, strict=True):
-                saved["fused"] = group.get("fused")  # as stock: the runtime picks the kernel
-            self.optimizer.load_state_dict(opt)
+            load_optimizer(self.optimizer, mid["optimizer"])  # laid out as its parameters
             self.scaler.load_state_dict(mid["scaler"])
             self.ema.updates = mid["ema_updates"]
             params = list(unwrap_model(self.model).parameters())

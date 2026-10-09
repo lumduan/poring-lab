@@ -245,6 +245,31 @@ def mid_due(stepped: bool, batches_since: int, seconds_since: float, every_batch
     )
 
 
+# --- the optimizer state, laid out as its parameters (2026-10-09: proof 1's B2 crash) ----------
+def state_kind(key: str, shape: tuple[int, ...], param_shape: tuple[int, ...]) -> str:
+    """How `midckpt.load_optimizer` rebuilds one restored per-parameter state tensor:
+    - "step": the step counter, placed by `step_placement`;
+    - "param": shaped like its parameter (Adam's exp_avg / exp_avg_sq / max_exp_avg_sq, the SGD
+      and MuSGD momentum buffers): given the parameter's own dtype, device and strides;
+    - "keep": anything else, left as torch's load_state_dict put it."""
+    if key == "step":
+        return "step"
+    return "param" if tuple(shape) == tuple(param_shape) else "keep"
+
+
+def step_placement(fused: bool | None, capturable: bool | None,
+                   default_float64: bool = False) -> tuple[str, bool]:  # fmt: skip
+    """(dtype, on the parameter's device?) of a restored ``step``: where torch's Adam/AdamW lazy
+    init puts a fresh one (torch/optim/adam.py, "[special device hosting for step]"), so the
+    resumed step feeds the kernel what the uninterrupted one did.
+    - fused: float32, on the parameter's device;
+    - capturable: on the parameter's device; otherwise a CPU scalar. Both in the default float
+      dtype: float32, unless torch's default dtype is float64 (training never sets that)."""
+    if fused:
+        return "float32", True
+    return ("float64" if default_float64 else "float32"), bool(capturable)
+
+
 # --- the state digest (the round-trip proof) ----------------------------------------------------
 TensorBytes = Callable[[Any], tuple[str, tuple[int, ...], bytes]]
 

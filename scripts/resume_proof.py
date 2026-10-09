@@ -3,8 +3,14 @@
 docs/operations/mid-epoch-checkpoints.md BEFORE any run; the bar is `compare` below. (Apache-2.0,
 host only: it reads the vision runs' trace files and imports nothing from the AGPL component.)
 
-    resume_proof.py plan [--cache v0png-20261006]     the guarded commands, in order (run by hand)
+    resume_proof.py plan [--cache v0png-20261006] [--prefix resume-proof2] [--existing-ok]
+                                                      the guarded commands, in order (run by hand)
     resume_proof.py compare A.jsonl A2.jsonl B.jsonl  PASS (rc 0) or FAIL (rc 1), JSON on stdout
+
+Each proof runs under its own names (`--prefix`): proof 1 (2026-10-08, FAIL) ran as resume-proof-*,
+re-proof 2 (pre-registered 2026-10-09) runs as resume-proof2-*. `plan` refuses names that already
+exist (unless --existing-ok, to re-print a plan mid-proof): a fresh run in an old directory APPENDS
+to its trace.jsonl, and the old proof's records would mix into the new comparison.
 
 The runs, all `--smoke` (1,000 train frames = 500 batches/epoch at batch 2), 3 epochs,
 close_mosaic 1 (mosaic in epochs 1-2, the reset at epoch 3's start), warmup over epochs 1-2,
@@ -32,6 +38,9 @@ import numpy as np
 
 KILLS = (850, 1037)
 GUARD = "python3 scripts/guarded_build.py --sustain 30 --spike 25"
+PREFIX = "resume-proof2"  # re-proof 2 (2026-10-09); proof 1 (2026-10-08) ran as "resume-proof"
+RUNS = ("A", "A2", "B")
+TRAIN_DIR = Path(__file__).resolve().parents[1] / "data" / "train"  # /data/train in vision
 
 
 def train_cmd(cache: str, name: str, extra: str = "") -> str:
@@ -42,12 +51,12 @@ def train_cmd(cache: str, name: str, extra: str = "") -> str:
     return f"{GUARD} 'rundev:vision@3600={run}'"
 
 
-def plan(cache: str) -> list[tuple[str, str, str]]:
+def plan(cache: str, prefix: str = PREFIX) -> list[tuple[str, str, str]]:
     """(label, command, the expected outcome)."""
-    b = "resume-proof-B"
+    b = f"{prefix}-B"
     return [
-        ("A", train_cmd(cache, "resume-proof-A"), "rc 0"),
-        ("A2", train_cmd(cache, "resume-proof-A2"), "rc 0"),
+        ("A", train_cmd(cache, f"{prefix}-A"), "rc 0"),
+        ("A2", train_cmd(cache, f"{prefix}-A2"), "rc 0"),
         ("B1", train_cmd(cache, b, f" --die-after-batches {KILLS[0]}"), "dies, rc 86"),
         (
             "B2",
@@ -56,6 +65,11 @@ def plan(cache: str) -> list[tuple[str, str, str]]:
         ),
         ("B3", train_cmd(cache, b, " --resume"), "resumes from the epoch-2 boundary, rc 0"),
     ]
+
+
+def used_runs(prefix: str, train_dir: Path = TRAIN_DIR) -> list[Path]:
+    """This prefix's run directories that already exist (a new proof needs new names)."""
+    return [d for r in RUNS if (d := train_dir / f"{prefix}-{r}").exists()]
 
 
 # --- the proof: trace comparison ----------------------------------------------------------------
@@ -141,18 +155,27 @@ def main() -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("plan")
     p.add_argument("--cache", default="v0png-20261006")
+    p.add_argument("--prefix", default=PREFIX, help="the runs' names: <prefix>-A, -A2, -B")
+    p.add_argument("--existing-ok", action="store_true",
+                   help="re-print the plan of a proof already under way")  # fmt: skip
     c = sub.add_parser("compare")
     c.add_argument("a", type=Path)
     c.add_argument("a2", type=Path)
     c.add_argument("b", type=Path)
     args = ap.parse_args()
     if args.cmd == "plan":
-        for label, cmd, expect in plan(args.cache):
+        used = used_runs(args.prefix)
+        if used and not args.existing_ok:
+            names = ", ".join(str(d) for d in used)
+            print(f"refused: {names} already exist(s). A fresh run there APPENDS to its "
+                  "trace.jsonl: give this proof a new --prefix.", file=sys.stderr)  # fmt: skip
+            return 2
+        for label, cmd, expect in plan(args.cache, args.prefix):
             print(f"# {label}: expect {expect}\n{cmd}\n")
-        traces = " ".join(f"data/train/resume-proof-{r}/trace.jsonl" for r in ("A", "A2", "B"))
+        traces = " ".join(f"data/train/{args.prefix}-{r}/trace.jsonl" for r in RUNS)
         print("# reported too: each B resume's `resume_from` names mid.pt; after B3 the weights\n"
               "# dir holds no mid*.pt (a finished run leaves neither):\n"
-              "ls data/train/resume-proof-B/weights\n")  # fmt: skip
+              f"ls data/train/{args.prefix}-B/weights\n")  # fmt: skip
         print(f"# then:\npython3 scripts/resume_proof.py compare {traces}")
         return 0
     out = compare(load_trace(args.a), load_trace(args.a2), load_trace(args.b))
