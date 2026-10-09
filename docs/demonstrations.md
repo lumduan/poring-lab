@@ -2657,6 +2657,23 @@ tested exactly as pre-registered.
   passive sources first.
 
 **The proof, before any re-run:** `scripts/bytecode_proof.py walk15 <e1299f5> <the merged tree>`.
+➡️ **RESULT (2026-10-09 ~14:10, main at f8064f8): PASS.**
+- 1,083 functions, methods and constants were compared.
+- **Changed, all declared harness:** `walk11.run` (+ its rebound copies `run11` in walk12–15),
+  `ro_agent.chat_line` / `gm` / `say` / `open_chat`, `where_fix.fix` / `fix_v2` (the typing
+  transport).
+- **Added:** `walk11.portal_goal`, `walk11.scene_has_monsters`, `where_fix.fix_once`,
+  `ro_agent.CHAT_RECHECK_S`.
+- **Undeclared changes: none.** walk@15's decision code (the route loop, the click step, the gates, the
+  unit memory, the planner) is bytecode-identical to e1299f5.
+
+**The post-refusal chat state, as found** (`chat_repeat_probe.py chat`, 13:49, live):
+- After the client's repeat refusal, the chat input stays OPEN and EMPTY: chat_open distance 1.2–1.3
+  (a match is ≤ 6), and `open_chat` works after it.
+- So the three harness stops had ANOTHER cause, still unknown.
+- `open_chat` now re-judges on fresh frames for up to 2 s (no key sent), and a real failure saves the
+  frame and the distances.
+
 - It must be **PASS**: walk@15's DECISION code is bytecode-identical to its pre-registration.
 - Only the declared harness may differ: the run loop, typing, the /where transport and the detector's
   log.
