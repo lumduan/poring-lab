@@ -828,8 +828,11 @@ labels_v2.difficulty (all "normal" here).
     - **What needs a person:** the 9 sheets. Job 59 on alberta_in (indoor camera) scores low, and
       on its sheet the box sits right of the drawn sprite in several crops. A person decides
       whether that is a label error (the indoor camera, the heading) or the NCC.
-    - The other 29 sprites have no banked sighting. The training grounds' 15 have none at all
-      (never banked), so their N3 waits for the first collection session.
+    - The other 29 sprites have no banked sighting.
+      - The training-ground maps themselves were never banked. Still, 5 of their 15 sprites (84,
+        85, 86, 92, 105) were seen on other maps: the same files, so the same check.
+      - The other 10 (46, 47, 57, 90, 117, 726, 727, 751, 753, 754) wait for the first collection
+        session.
   - ➡️ **L3 warp lists on these maps (walk@17's B; labels_v2's `warp` class): DONE 2026-10-09
     ~21:15.**
     - `scripts/kb_route.py` now takes first_workflow.json's COMPLETE list for every map that KB
