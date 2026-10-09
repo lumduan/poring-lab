@@ -112,7 +112,10 @@ def dialog_timeline(events: Sequence[dict[str, Any]]) -> list[tuple[int, Label]]
         elif typ == "npc_wait":
             cur = replace(cur, dialog=True, button="next")
         elif typ == "npc_close":
-            cur = replace(cur, dialog=True, button="close")
+            # A CLOSE with no dialog open opens no window: the city guide's script answers our
+            # close click with a second ZC_CLOSE_DIALOG 0.5 ms later, and the client shows nothing
+            # (2026-10-09 15:40, the guide drive's frames 0054-0059; first cut: NOT READY on them).
+            cur = replace(cur, button="close") if cur.dialog else cur
         elif typ == "npc_menu":
             cur = replace(cur, menu=True, button=None, options=tuple(e["options"]))
         elif typ == "npc_next_click":

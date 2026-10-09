@@ -218,6 +218,18 @@ def test_the_dialog_timeline_and_the_settle_rule(tc: Any) -> None:
     assert tc.label_at(tl, int(1.8 * S), settle, actions=[int(1.5 * S)]) is None  # our step
 
 
+def test_a_close_after_our_close_click_opens_no_window(tc: Any) -> None:
+    """The city guide (2026-10-09 15:40): ZC_CLOSE_DIALOG again 0.5 ms after our close click; the
+    client showed no window on the six frames after it, so the label stays CLOSED."""
+    events = [ev(1.0, "npc_contact", contact_type=1), ev(1.1, "npc_say", text="", raw_hex=""),
+              ev(1.2, "npc_close"), ev(2.0, "npc_close_click"),
+              ev(2.0005, "npc_close")]  # fmt: skip
+    tl = tc.dialog_timeline(events)
+    settle = 600_000_000
+    assert tc.label_at(tl, int(1.9 * S), settle) == tc.Label(True, False, "close")
+    assert tc.label_at(tl, int(3.0 * S), settle) == tc.CLOSED
+
+
 def test_rows_are_labelled_by_structure_and_the_thumb(tc: Any) -> None:
     img = draw(scene(1), "blank", (2, 3))
     o = nd.CAPTURE_ORIGINS_MENU
