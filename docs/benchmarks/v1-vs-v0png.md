@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [../phase3-plan.md, v0-png-vs-jpeg.md]
-next_action: "Build the v1png cache (after the v0-JPEG matched-batch run and its evals), then train v1 when R1-R3 allow, under the ADAPTIVE DUTY CYCLE (Batt 2026-10-08: it replaces the 0.3 step-sleep setting; bar unchanged) and with MID-EPOCH checkpoints if their resume equivalence is proven first (Batt 2026-10-08); score ONCE as written here."
+next_action: "v1 is TRAINING since 2026-10-08 23:44 ICT (cache v1png-20261008 built and NAS-verified) under the ADAPTIVE DUTY CYCLE, with epoch-level checkpoints only: the mid-epoch resume proof FAILED before v1 started, so v1 keeps that mode to its end (re-proof 2 of the fix is pre-registered in mid-epoch-checkpoints.md, for later runs). After epoch 30: the evals, then score ONCE as written here."
 ---
 
 # v1 vs v0-PNG: the same frames, the same format, different labels (pre-registered 2026-10-07)
