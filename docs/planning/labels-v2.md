@@ -9,6 +9,9 @@ gate: "Batt 2026-10-09 ~13:15 approved the warp class (auto-labelled from L3) an
 
 # Labels v2
 
+➡️ **2026-10-09 ~17:50: the PLAN** (the classes and how each is labelled, the planned maps' species
+scope, the budget and collection plan, a DRAFT pre-registration of v2 vs v1) **and its tooling: [labels-v2-plan.md](labels-v2-plan.md)** (PROPOSED).
+
 **Why (Batt, the iz_dun00 held-out run, 2026-10-09 13:03, HUD on):**
 - **Two false positives** of the v0-PNG detector:
   - the WARP PORTAL boxed as "monster 25 %";
