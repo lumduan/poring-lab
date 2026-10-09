@@ -2425,7 +2425,8 @@ whose species it never saw, the unit gate cannot protect walking.
 | walk@13 | 46 / 40 / 45 / 41 | 172 / 200 = 86.0 % | 80.5–90.1 % | 0 | no (< 90 %) | no |
 | walk@14 | 47 / 44 / 49 / 44 | 184 / 200 = 92.0 % | 87.4–95.0 % | **2** (NPC contacts) | **no** (safety) | no |
 | walk@15 | 46 / 43 / 49 / 48 | 186 / 200 = 93.0 % | 88.6–95.8 % | 0 | **YES** | no |
-| walk@16 | running (3.27) | — | — | — | — | — |
+| walk@16 | 43 / 40 / 49 / 47 | 179 / 200 = 89.5 % | 84.5–93.0 % | 0 | no (< 90 %) | no |
+| walk@17 | pre-registered (3.32), not run | — | — | — | — | — |
 
 ### 3.29 walk HELD-OUT under the readiness bar — once, per map, with the best READY version (pre-registered 2026-10-09 ~09:45 ICT / 02:45 UTC at commit, BEFORE any held-out data; Batt 2026-10-09: "Held-out maps NEXT, once, with the best qualifying version: pre-register NOW (before any held-out data) with the new bar, scored separately per map")
 **The version (decided by TUNING data only):** among walk@15 and walk@16, the READY version (3.28)
@@ -2731,6 +2732,192 @@ map, seeded):
 - Clicks per 10 cells, legs and waypoints per tour, re-plans, declines by cause.
 - Position reads by source: minimap readouts, /where uses (with reasons, against the run's budget),
   dead reckoning.
+
+### 3.32 walk@17 — walk@15 + the TYPING POLICY (minimap first, /where once per need), WARP AREAS, LONG WALKS; TUNING, then READINESS (pre-registered 2026-10-09 ~14:30 ICT / 07:30 UTC at commit, BEFORE any run; design `docs/planning/walk17.md`, approved by Batt 2026-10-09 ~13:42 and ~14:00)
+**Why:**
+- walk@15 is READY (3.28: 186 / 200, 0 safety), but its relocalisation types where@2's pattern:
+  an "/ex" separator, then /where twice. From walk@17 on, no rule may (3.29a, the typing policy).
+- 3.29's held-out runs walked into warp areas. Guild route 0's goal lay inside alberta_in's exit
+  warp area, and on iz_dun00 the GM walked into the exit warp 3 times.
+- A route is one A* plan of at most `PLAN_MAX` = 48 steps. Workflows and tour@1 (3.31) need walks
+  across a map.
+
+**The rule:** `scripts/walk17.py` at b7cf790 (this pre-registration's parent commit). It is
+walk@15's decision code REBOUND, not copied:
+- walk@14's route loop, walk@15's route wrapper (its visited set, E), walk@15's NPC clearance (D),
+  walk@13's click step and walk@11's harness are the SAME code objects. They are re-bound so that
+  they call walk@17's relocalisation, planner, click step, label and session log.
+- walk@11's substitute ring, walk@13's NPC substitute and walk@14's side search are rebound too:
+  they PLAN, so B applies to them.
+- `services/backend/tests/test_walk17.py` checks the reuse, that every name resolves, and that
+  walk@15's module is untouched.
+- **The bytecode proof:** `scripts/bytecode_proof.py walk15 <main at 11961fb> <the walk17 tree>`
+  → **PASS**. 1,087 functions, methods and constants were compared; nothing changed, nothing was
+  removed or added.
+
+**The changes, exactly:**
+- **A. Position: the minimap first, /where only where there is none.**
+  - Every relocalisation reads the minimap readout first (`poring_env.selfpos`). That is walk@8's
+    doubt path, and walk@11's fix at a route's start when the single minimap read gave nothing.
+  - The read: two reads on two DISTINCT fresh frames (a new frame-bus id, else a new grab), equal,
+    on the map, walkable, within 6 cells of the belief. Nothing is typed.
+  - Only when NEITHER read shows a readout (the client draws none indoors) does it type /where.
+    That is where@3 (`where_fix.fix_once`): ONE line and one answer, tagged with its reason class
+    (ADR-0020 #10): `walk@17 route_start_indoor` before a route, `walk@17 belief_in_doubt` inside
+    one.
+  - It never prepares a /where within the guard's retry interval (60 s, L2) of its previous one.
+    Once the guard refuses one for the run's budget, or as a 3rd identical line in a row, it asks
+    no more for the rest of the run.
+  - A miss is no fix, and nothing is typed again for that need. A route START goes on dead
+    reckoning; a DOUBT declines (`relocalise_failed`: walk@15's route loop, unchanged).
+  - A minimap miss (the reads disagree, off the map, not walkable, implausible, no fresh frame) is
+    never a reason to type.
+  - where@2 (`fix_v2`) and "/ex" are never used (tested).
+- **B. Warp areas are not walkable for a walk.**
+  - **The planner** blocks every L3 warp trigger area of the run's map (`data/kb/route.json`:
+    cell ± span). That covers every `walk6.plan` call of walk@15's decision code and harness: the
+    route loop, the re-plan, the substitutes, the side cells, the harness's goal draw and the
+    portal scene's start search.
+  - Only a plan whose intent IS the portal (`expect_goal="warp"`; the portal scene's start search)
+    may enter the area(s) holding its goal. **Claude's reading, stated so Batt can correct it
+    before any run:** every OTHER warp area stays blocked for a portal route too.
+  - **The click step** refuses a walk click whose cell lies inside a warp area (`no_safe_point`:
+    the next point, and the cell is re-planned around). The portal click is unchanged.
+  - So **the harness never draws a goal inside a warp area** (its goal check is "a plan exists").
+  - A map that route.json does not list FAILS CLOSED: the run refuses to start.
+- **C. Long walks: chained legs through waypoints.**
+  - A route whose A* path (warp areas blocked, no length limit) is longer than `PLAN_MAX` = 48
+    steps is split into legs at waypoints. A waypoint is the nearest walkable cell outside every
+    warp area to a mark on that path, about every 40 steps. Each leg is at most 48 steps.
+  - Each leg is walk@15's route, walked as a route is today (its own plan, limits, substitutes and
+    declines). The route's own intent (a portal) applies to its last leg only.
+  - A leg that does not arrive ends the route with its decline. A waypoint's substitute is never
+    reported as the goal's.
+  - **No click is farther than 14 server steps** (`CLICK_MAX_SAFE`, poring-nav.md §2). The
+    farthest candidate is 12 cells along the plan (asserted at import). The click step refuses a
+    cell whose server path (the GAT's own A*) is longer than 14 (`no_safe_point`,
+    `beyond_click_max`).
+  - Until poring_nav lands, the split is walk@17's own. test_walk17.py cross-checks it by the
+    cross-check test's method: each leg's own plan exists within 48 steps, and the legs' costs sum
+    to the whole A*'s.
+  - A route of at most 48 steps is walk@15's route, unchanged. Every tuning route is one (8–20
+    steps).
+- **D. The harness as on main (3.29a):**
+  - walk@11's run, with `@killmonster2` only when CLEAN needs it;
+  - the typing guard and `open_chat`'s re-check;
+  - the portal target fix;
+  - the detector's batch log (`detections.jsonl` in each session).
+- **NOT carried: walk@16's F** (Batt ~14:00: "no measurable effect beyond run-to-run noise; fewer
+  rules").
+- **Everything else is walk@15's:** the unit gate (0.25), the NPC clearance (D), the side cells
+  (E), the TALK-read NPC substitute, the work zone and the signs, 4 relocalisations per route, and
+  the trust for 3 clicks.
+
+**The typing policy, per run:**
+- No separator or filler line. `/where` once per need, its reason logged by the guard.
+- **The run's /where BUDGET: 56**, one per route (`WHERE_PER_ROUTE` × 56 routes; Claude's
+  proposal).
+  - It is opened by `chat_guard.start_run` when the session starts, with the session id as the
+    run id.
+  - Why one per route: ADR-0020 #10 counts a route start indoors as a need, and walk@15's indoor
+    runs fixed every route start. The budget caps that at today's need; the retry interval keeps
+    the lines apart.
+- **Reported per run** (`walk17_score.py`, from `data/ro_agent/chat_guard.jsonl`):
+  - the /where count and its reasons;
+  - any other run's /where in the window;
+  - the guard's refusals by rule;
+  - exemptions in the window (must be 0: walk@17 has none);
+  - the relocalisations by method (minimap / where) and outcome against the packets (correct /
+    WRONG / undecided).
+
+**Scoring, instruments:** as 3.24–3.27, unchanged: demo_verify and the packets, the substitutes as
+there, the strict count reported.
+- The scorer is `scripts/walk17_score.py` at b7cf790: walk15_score.py's approach, committed and
+  tested on a synthetic session. Its first object is what `walk_readiness.py` reads.
+- It also reports B: walk clicks refused in a warp area, and walk routes during which the server
+  changed our map.
+- And C: routes walked as legs, the legs planned and walked, the leg that declined, clicks
+  refused beyond 14, the farthest click.
+
+**TUNING runs, all four whatever the first scores:**
+- FRESH seeds: indoor clean **20261150**, indoor crowd **20261151**, outdoor clean **20261152**,
+  outdoor crowd **20261153**.
+- 56 routes each; the first 50 not interrupted are scored.
+- e.g. `scripts/walk17.py --scene indoor --condition clean --seed 20261150 --label walk17-alone`.
+- Conditions as 3.24–3.27. 3.33's GM immunity is the visual-diversity block's condition, not
+  tuning's.
+- Before each run: a client screenshot, and any leftover window closed (3.24's inventory incident).
+- A harness exit that leaves fewer than 50 scored routes means the run is re-run unchanged with its
+  seed. The partial session is kept, not scored.
+
+**The bar:**
+- **Per run** (3.24–3.27's, reported): ≥ 48 / 50 AND zero `attack_request`, zero `npc_contact`,
+  zero GM `act` of kind normal or pickup. Any safety event is a HARD FAIL.
+- **READINESS** (3.28; it decides what follows):
+  - zero safety events in all four runs;
+  - AND the pooled point estimate ≥ 90 % (≥ 180 / 200), with its 95 % Wilson interval reported
+    (and the stricter lower-bound reading);
+  - computed by `walk_readiness.py --label walk@17` over the four scorer outputs.
+
+**Only if walk@17 is READY** (these runs are not pre-registered again here):
+- **HELD-OUT:** 3.29's four maps and rules, once each, scored per map (≥ 45 / 50 + zero safety,
+  the Wilson CI, walk-readiness per map). NEW seeds, reserved now: guild **20261154**, town
+  **20261155**, dungeon **20261156**, portal **20261157**.
+- **tour@1:** 3.31 as pre-registered (its seeds 20261140–43), with walk@17.
+- A's per-map minimap check (walk17.md A) belongs to the visual-diversity block and is
+  pre-registered with it.
+
+**Expected** (Claude's reading of walk@15's four tuning sessions, re-read offline 14:25 ICT; NOT a
+bar):
+- **Outdoors ≈ walk@15 (49, 48).**
+  - walk@15's outdoor runs never relocalised: 0 in-route relocalisations and 0 route-start fixes in
+    100 routes. The single minimap read gave every start. So A changes nothing there.
+  - B and C never act there: no warp cell lies within 20 cells of (268, 107), and the routes are
+    8–20 steps.
+- **Indoors, A is expected to COST routes, through the typing guard's REPEAT rule.**
+  - The guard refuses a 3rd identical line of a kind in a row. Its count spans time and runs, and
+    only another slash line resets it. walk@17 types no other slash line (the GM commands are
+    chat-kind lines).
+  - So walk@17 can type /where at most twice in a row: in practice at most 2 per run, and none if
+    the host's guard state already ends with two /where. At 14:16 ICT the live state held one
+    (3.29a's re-runs): the first indoor run would get one /where, the next none.
+  - walk@15's indoor runs fixed all 50 route starts by /where. They also relocalised 8 (clean) and
+    18 (crowd) times inside routes, in 5 and 9 routes, all on `unconfirmed` doubts.
+  - Of their 46 and 43 successes, 40 and 30 used neither an in-route relocalisation nor an
+    unnamed-after-fix click. Those are the routes walk@17 can be expected to keep without /where.
+    The others decline `relocalise_failed` at their first doubt. Dead-reckoned route starts (no
+    start fix) can add failures.
+  - ⇒ indoor clean ≈ 40, indoor crowd ≈ 30: both FAIL the per-run bar. Pooled ≈ 167 / 200 =
+    83.5 %: **NOT READY is expected under the guard as it stands.**
+  - The budget (56) and the retry interval (60 s) would bind only if the repeat rule did not.
+    Route starts come every ~42 s (clean) and ~60 s (crowd), so even then about half of them would
+    go unfixed.
+- **B** is inert on the tuning maps (geometry, above). It acts on the held-out guild map (58
+  walkable warp cells within 20 cells of its start) and in tour@1.
+- **C** never fires in tuning (routes 8–20 steps). tour@1 measures it.
+
+**Found while building, for Batt BEFORE the tuning runs** (nothing here is decided by this
+pre-registration):
+1. **The repeat rule vs "/where once per need"** (the expected indoor loss above).
+   - Only a change to the guard can lift it. The guard is the typing transport, not walk@17's
+     decision code.
+   - A deliberate measurement would show whether the client's own repeat count lapses with time:
+     /where, ≥ 60 s, /where, ≥ 60 s, /where, ≥ 60 s, /where. Is the 4th answered?
+   - If the guard changes before the runs, the change is recorded here first.
+2. **iz_dun00 is not in route.json's warp list** (kb_route.py's scope: 44 maps).
+   - B cannot hold there, so walk@17 refuses to start there until the KB covers it. That blocks
+     the held-out dungeon map and tour@1's iz_dun00 block.
+   - The KB's own `warps.json` lists 3 warps there. One is the exit to izlu2dun at (168, 173) ± 3 ×
+     3, 5 cells south of the scene's start.
+3. **The harness's start draw is not covered by B.**
+   - Every 5th route, `@warp` goes to a walkable cell within ± 8 of the scene's start, with no plan
+     check. That is walk@11's harness, bytecode-frozen for walk@15.
+   - It can land INSIDE a trigger area: 8 of 181 candidate cells on alberta_in (the (64, 31) area),
+     and 25 of 231 on iz_dun00 (by warps.json). None on the tuning maps or on prontera.
+   - A fix is a harness change, with Batt.
+4. **Measured, not built:** the server's own path to a click could cross a warp area even when the
+   clicked cell lies outside one. On harness-like routes it never did: 0 of ~20,000 click cells on
+   alberta_in and 0 of ~20,000 on prontera (offline, the GAT's own A*).
 
 ### 3.33 The GM's IMMUNITY: a test condition for the visual-diversity block (pre-registered 2026-10-09 ~14:05 ICT / 07:05 UTC, BEFORE the check; Batt: "keep gl_prison; a GM doesn't need to fear monsters. Make the GM safe without changing what the bot sees")
 **The condition, PRIMARY:** rAthena's `@monsterignore`, granted to the GM's group 20 (`groups.yml`,

@@ -1,6 +1,6 @@
 ---
 title: "walk@17: the typing policy, warp areas, and long walks (design; pre-registered separately before any run)"
-status: PROPOSED
+status: "APPROVED by Batt 2026-10-09 (~13:42, ~14:00); BUILT (scripts/walk17.py, b7cf790) and PRE-REGISTERED as demonstrations 3.32; NOT run. Four points found while building wait for Batt (3.32: the guard's repeat rule vs /where once per need; iz_dun00 has no L3 warp list; the harness start draw can land in a warp area; the server path across a warp area, measured 0)"
 date: 2026-10-09
 owner: Batt
 extends: docs/demonstrations.md
@@ -66,3 +66,11 @@ TALK-read NPC substitute.
 run-to-run noise; fewer rules"). If goals next to NPCs turn out to matter later, a fix comes with a
 targeted test that can measure it. tour@1 (3.31) and the minimap-first relocalisation (A) are approved
 as written.
+
+➡️ **BUILT and PRE-REGISTERED (2026-10-09 ~14:30 ICT):** `scripts/walk17.py` at b7cf790, scored by
+`scripts/walk17_score.py`, pre-registered as `docs/demonstrations.md` 3.32 (tuning seeds
+20261150–53; held-out seeds 20261154–57 reserved, used only if READY). Not run. 3.32 lists what the
+build found for Batt before any run: the typing guard's repeat rule leaves walk@17 at most two
+/where per run (the expected indoor loss); iz_dun00 has no L3 warp list (walk@17 refuses to start
+there); the harness's start draw can land inside a warp area (alberta_in, iz_dun00); and the
+server's own path across a warp area (measured: 0 of ~40,000 click cells).
