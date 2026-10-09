@@ -26,7 +26,7 @@ from pathlib import Path
 
 from poring_flow import ir
 from poring_flow.catalogue import Catalogue, catalogue
-from poring_flow.lint import events, loops, semantics, simulate, structure
+from poring_flow.lint import events, loops, semantics, simulate, structure, where
 from poring_flow.lint.common import Ctx, Detector, Finding, Resolver
 from poring_flow.sheet import World
 
@@ -75,6 +75,7 @@ def lint(
     simulate.check(ctx)
     loops.check(ctx)
     events.check(ctx)
+    where.check(ctx)  # the /where budget (#10)
     return sorted(ctx.findings, key=lambda f: (f.layer, SEVERITY_ORDER[f.severity]))
 
 

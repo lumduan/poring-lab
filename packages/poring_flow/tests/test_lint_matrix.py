@@ -124,6 +124,7 @@ def introduced(c: Case) -> list[str]:
 # --- IR-only fixtures (constructs the Python view cannot write) ---------------------------------
 TARGET = {"client": "kro-20211103-prere", "server": "lab-rathena", "locale": "en"}
 SIT = {"kind": "action", "block": "sit", "concept": "char.sit", "timeout_s": 5}
+READ = {"kind": "action", "block": "read_position", "concept": "nav.read_position", "timeout_s": 10}
 
 
 def irflow(*main: dict[str, Any], **over: Any) -> Callable[[], ir.Flow]:
@@ -314,6 +315,29 @@ CASES = [
         "loop_control",
         irflow({"kind": "break"}),
         ["main.0: break outside a loop"],
+        farm=False,
+    ),
+    Case(  # #10 (Batt 2026-10-09): /where as little as possible -- a read that repeats
+        "where_loop",
+        "where_loop",
+        'HERE = cell("m", 1, 1)\nfor _ in range(3):\n    HERE = position()\n'
+        'wait_until(current_map() == map_id("m"), timeout_s=10)\nsit()\n',
+        [
+            "main.0.body.0: position() types /where and it is inside a loop: read the position "
+            "once, or use a passive source",
+            "main.1: current_map() types /where and wait_until polls its condition on every "
+            "tick: read the position once, or use a passive source",
+        ],
+        farm=False,
+    ),
+    Case(  # #10: the static count on the longest path above the flow's budget
+        "where_budget",
+        "where_budget",
+        irflow(READ, SIT, READ, where_budget=1),
+        [
+            "the longest path reads the position 2 times (/where), above the flow's "
+            "where_budget 1: use a passive source, or raise the budget"
+        ],
         farm=False,
     ),
     Case(  # #12 (Batt 2026-10-09): Exit.item is an ItemRef or a variable TYPED ItemRef
