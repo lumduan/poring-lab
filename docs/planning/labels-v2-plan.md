@@ -764,6 +764,24 @@ labels_v2.difficulty (all "normal" here).
 - **Frames to bank:** per new species 1,500 training frames with >= 3,000 instances (+ 0.40 for
   validation and test); per NPC sprite 750; `warp` 750 in total.
 
+### 7.6a Collection WITHOUT walking until walk@17 is ready (Claude, 2026-10-09 ~21:15; for Batt's review, flagged in the weekend report)
+**Why:** 3.3's sessions take natural spawns along walk@17's long walks, but walk@17 has not run its
+tuning yet (gated by item 5's NPC-click test and the static no-click layer, demonstrations.md 3.32).
+Waiting for walk@17's readiness would push every collection session past the weekend.
+**The variant (collect@1, to build; nothing collected yet):** the same gates and the same session
+protocol, with every MOVE made by `@warp` instead of a walk:
+- per map, K seeded spots: walkable cells outside every L3 warp area (route.json, fail closed) and
+  >= 8 cells from every L3 NPC, spaced >= 12 cells apart; the GM `@warp`s to each and DWELLS T s
+  while the session records (natural spawns wander through the view);
+- spawn blocks as 3.3 (`@monster <id> 8` beside the spot, `@killmonster2` between);
+- portal passes as 3.3 (`@warp` beside each L3 warp cell);
+- the GM is immune (3.33, `@monsterignore` after each login), at the fixed state, and the UI gate +
+  typing guard pass every typed line. **The GM makes NO world click at all** (no walk, no attack, no
+  talk): the session's safety signal must stay empty (`attack_request`, `npc_contact`,
+  `pickup_request`, any GM act), judged offline per session.
+**What it loses:** frames of the camera scrolling with a walking GM (each dwell is a static camera);
+the walk legs are added once walk@17 is ready. The labels skip each GM line's 2 s window as before.
+
 ### 7.7 Open questions for Batt
 
 ➡️ **DECIDED 2026-10-09 ~19:30 (Batt).** The questions below are kept as history; this is the answer
