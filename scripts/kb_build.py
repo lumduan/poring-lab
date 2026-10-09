@@ -51,13 +51,26 @@ WORK = Path("/dev/shm/poring-lab-kb")
 RAW = "https://raw.githubusercontent.com/rathena/rathena/{ref}/{path}"
 MOB_DB = "db/pre-re/mob_db.yml"
 MOB_SKILLS = "db/pre-re/mob_skill_db.txt"
-SPAWNS = ("npc/pre-re/mobs/fields/prontera.txt", "npc/pre-re/mobs/dungeons/iz_dun.txt")
+SPAWNS = (
+    "npc/pre-re/mobs/fields/prontera.txt",
+    "npc/pre-re/mobs/dungeons/iz_dun.txt",
+    # the visual-diversity maps (Batt 2026-10-09): moc_fild12, pay_fild08, xmas, gl_prison
+    "npc/pre-re/mobs/fields/morocc.txt",
+    "npc/pre-re/mobs/fields/payon.txt",
+    "npc/pre-re/mobs/fields/lutie.txt",
+    "npc/pre-re/mobs/dungeons/glastheim.txt",
+)
 # Loaded by npc/pre-re/scripts_warps.conf (pre-renewal overrides) and npc/scripts_warps.conf
 WARPS = (
     "npc/pre-re/warps/fields/prontera_fild.txt",
     "npc/pre-re/warps/cities/prontera.txt",
     "npc/pre-re/warps/cities/izlude.txt",
     "npc/warps/dungeons/iz_dun.txt",
+    # the visual-diversity maps (Batt 2026-10-09)
+    "npc/pre-re/warps/fields/morroc_fild.txt",
+    "npc/pre-re/warps/fields/payon_fild.txt",
+    "npc/warps/cities/lutie.txt",
+    "npc/warps/fields/glastheim.txt",
 )
 DEFAULT_MAPS = ("prt_fild08", "iz_dun00", "iz_dun01")
 # 2026-10-08 (loot@1 P4). db/item_db.yml imports db/pre-re/item_db.yml in a pre-renewal build,

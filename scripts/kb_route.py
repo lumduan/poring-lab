@@ -62,6 +62,12 @@ WARP_FILES = (
     "npc/pre-re/warps/cities/einbroch.txt",
     "npc/pre-re/warps/fields/prontera_fild.txt",
     "npc/pre-re/warps/fields/payon_fild.txt",
+    # the held-out dungeon and the visual-diversity maps (Batt 2026-10-09: walk@17 blocks warp
+    # areas from this table and refuses a map it does not list)
+    "npc/warps/dungeons/iz_dun.txt",
+    "npc/pre-re/warps/fields/morroc_fild.txt",
+    "npc/warps/cities/lutie.txt",
+    "npc/warps/fields/glastheim.txt",
 )
 SCRIPTS = {
     "novice": "npc/pre-re/jobs/novice/novice.txt",
