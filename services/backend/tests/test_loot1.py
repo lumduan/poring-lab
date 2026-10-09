@@ -73,10 +73,44 @@ def test_death_needs_a_sighting_after_the_attack_then_frames_and_time_unseen(loo
 
 
 def test_ui_windows_are_never_clicked(loot1: Any) -> None:
-    x0, y0, x1, y1 = loot1.route_preview.UI_WINDOWS[0]
+    x0, y0, x1, y1 = loot1.ui_mask.route_preview.UI_WINDOWS[0]
     assert loot1.in_ui((x0 + x1) / 2, (y0 + y1) / 2)
     assert loot1.in_ui(x1 + loot1.UI_PAD - 1, y0 + 1)
     assert not loot1.in_ui(640, 384)
+
+
+def test_in_ui_without_a_mask_is_the_old_static_rule(loot1: Any) -> None:
+    """2026-10-09: in_ui delegates to ui_mask; with no mask it is the old formula, point for point
+    (every window edge +- 2 px, and a grid over the client)."""
+    windows = loot1.ui_mask.route_preview.UI_WINDOWS
+
+    def old(u: float, v: float, pad: float = loot1.UI_PAD) -> bool:
+        return any(x0 - pad <= u <= x1 + pad and y0 - pad <= v <= y1 + pad
+                   for x0, y0, x1, y1 in windows)  # fmt: skip
+
+    pts = [(float(u), float(v)) for u in range(-20, 1300, 7) for v in range(-20, 740, 7)]
+    for x0, y0, x1, y1 in windows:
+        for e in (-2.0, -1.0, 0.0, 1.0, 2.0):
+            for pad in (0.0, loot1.UI_PAD):
+                pts += [(x0 - pad + e, (y0 + y1) / 2), (x1 + pad + e, (y0 + y1) / 2),
+                        ((x0 + x1) / 2, y0 - pad + e), ((x0 + x1) / 2, y1 + pad + e)]  # fmt: skip
+    for u, v in pts:
+        assert loot1.in_ui(u, v) == old(u, v), (u, v)
+        assert loot1.in_ui(u, v, 0.0) == old(u, v, 0.0), (u, v)
+
+
+def test_in_ui_with_a_dialog_mask_refuses_the_cutin(loot1: Any) -> None:
+    """The patch point: a mask read with an open dialog makes the cut-in region UI; a certain
+    "no dialog" leaves it a click point (the guide's phantom box centre, 2026-10-09)."""
+    um = loot1.ui_mask
+    u, v = 1008.0, 621.0
+    open_ = um.UiMask(cutin=True, why="dialog_open")
+    assert not loot1.in_ui(u, v)
+    assert loot1.in_ui(u, v, mask=open_)
+    assert not loot1.in_ui(u, v, mask=um.UiMask(cutin=False, why="no_dialog"))
+    x0 = um.CUTIN_BOTTOM_RIGHT[0]
+    assert loot1.in_ui(x0 - loot1.UI_PAD, 400, mask=open_)  # the grown edge counts
+    assert not loot1.in_ui(x0 - loot1.UI_PAD - 1, 400, mask=open_)
 
 
 def test_either_runtime_signal_is_enough(loot1: Any) -> None:
