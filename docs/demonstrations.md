@@ -2195,6 +2195,132 @@ was the second and last design iteration of the night.
 
 ### HUD scene: box drift while walking + doubled boxes — OFFLINE SIM RESULT (2026-10-08 night; branch `feat/hud-drift`, merged 0d6cd79, DEPLOYED 2026-10-09 00:36 ICT; LIVE RE-MEASURE below)
 
+#### 2026-10-09 — SEEN TWICE + the display-only RECONNECT: BUILT on `feat/hud-seen-twice`, measured offline, NOT deployed
+
+**Batt (2026-10-09):** "HUD: rejection of ask 3 confirmed; add the seen-twice rule; no faster loop for
+now." and "Add the display-only reconnect for the HUD process."
+
+**Seen twice** (`hud_scene.Tuning.seen_twice` / `seen_window`; `hud_scene.py --seen-twice units|off`):
+- A NEW unit (no drawn object took its detection) is a CANDIDATE. It is never drawn and never in a
+  message: candidates have negative ids and are not in keyframes.
+- It is drawn when one of the next 2 detector PASSES matches it, by the same one-to-one matching and
+  dedupe rules as drawn objects (feet within 40 px on the detected frame first, then 120 px or IoU
+  0.1), where its floor point projects now. Never matched again: dropped silently.
+- Drawn objects take their detections first, so they behave exactly as before. A test runs the same
+  passes with the rule on and off: once both have drawn the units, every message is identical.
+- **The window is 2 passes, not seconds.** The cadence runs a pass every ~0.6 s while moving and every
+  5 s when still. A time window would either never confirm a unit first seen on a still scene, or wait
+  seconds while walking. With 2 passes, one detector miss does not reset a candidate. 3 passes measured
+  the same as 2; 1 pass lost 2 more real units (10 never drawn vs 8).
+- **Signs are EXEMPT** (drawn at once):
+  - The shape finder has no measured false signs: 0 of 146 out-of-view route starts, 0 on 1,186 idle
+    frames (above).
+  - In the sim, before the rule, no sign object was drawn without a real sign.
+  - The rule on signs (`seen2-signs`) removed 606 correct sign box-frames for 32 ghost ones (5 seeds
+    pooled).
+- The wire messages and the detector cadence are unchanged.
+
+**The instrument** (`hud_scene_check.py simtable --seeds 5`; new columns from
+`hud_scene_sim.truth_tracks`):
+- **Truth tracks:** each cached detection is linked over the recorded frames: within 30 px of its
+  track's predicted feet (the scene's scroll applied), across up to 5 missed frames.
+  - A REAL unit is detected on at least 10 frames (~1 s).
+  - Shorter tracks cut by the recording's ends are not judged.
+- **FP drawn:** drawn objects never paired with a REAL unit in their whole life, and their box-frames.
+- **Ghosts** (as before): box-frames with no detection of their class within 120 px. This also counts a
+  real unit the detector missed on that frame.
+- **New units:** REAL units that appear at least 2 s into a recording, from their first detection to
+  their first box.
+- **Real with a box:** the REAL units' detection-frames that a drawn box was paired with.
+- Live latencies, 5 seeds; "before" is the deployed drift fix (`chosen`).
+
+**Results, the 7 walks pooled** (5 seeds; median / p95 / max px for offsets):
+
+| | before (drift fix, live) | **after: seen twice** (`seen2`) | PARKED: + a confirming pass 1 s after a candidate (`seen2+confirm1`, sim only) |
+|---|---|---|---|
+| FP drawn: objects / box-frames | 37 / 286 | **13 / 75** | 1 / 6 |
+| ghost box-frames: NPC / monster / sign | 2,907 / 122 / 465 | **2,479 / 0 / 465** | 2,818 / 13 / 462 |
+| new units' first box, median / p95: s (frames) | 0.83 / 1.47 (8 / 15) | **1.30 / 6.60 (13 / 66)** | 1.30 / 2.72 (13 / 27) |
+| new units never drawn (of 310) | 3 | **8** | 4 |
+| real units' frames with a box | 97.2 % | **93.4 %** | 95.2 % |
+| NPC walking | 2.6 / 10.7 / 111.3 | 2.7 / 10.7 / 66.0 | 2.7 / 10.7 / 111.2 |
+| NPC standing | 0.4 / 2.0 / 117.8 | 0.4 / 1.9 / 117.8 | 0.4 / 1.9 / 117.8 |
+| sign walking / standing | 5.2 / 12.1 / 47.5 · 0.0 / 6.4 / 22.2 | the same | the same |
+| doubled boxes | 0 | 0 | 0 |
+| messages per minute while moving | 812 | 809 | 808 |
+| detector cores, moving / still | 2.14 / 0.48 | 2.14 / 0.48 | 2.14 / 0.50 |
+
+**The 06:55 live walk** (route_demo: each route warps, stands, then walks; 5 seeds):
+
+| | before | **after** | parked confirm1 |
+|---|---|---|---|
+| new units' first box, median / p95: s (frames) | 1.19 / 5.53 (12 / 55) | **6.22 / 6.82 (62 / 68)** | 1.77 / 6.02 (18 / 60) |
+| real units' frames with a box | 94.9 % | **84.3 %** | 92.0 % |
+| FP drawn: objects / box-frames | 2 / 12 | 0 / 0 | 0 / 0 |
+| NPC walking / standing | 2.7 / 9.0 / 38.2 · 0.4 / 2.2 / 8.6 | 2.6 / 9.1 / 38.2 · 0.5 / 2.4 / 8.5 | — |
+
+- **Idle (20:07):** 0.5 deltas/min and 0.25 detector cores, unchanged. Its 2 NPCs, there from the
+  start, are drawn one idle pass later (real with a box 100 → 96.8 %).
+
+**What it means:**
+- **The rule does what it says.** Drawn false positives fall by 65 % (objects) and 74 % (box-frames).
+  The NPC walking max falls 111 → 66 px; the standing max stays 117.8 px.
+- The 20:09 walk's monster is no longer drawn at all: 21 detections at confidence 0.26–0.71, never on
+  two passes in a row. Whether it is a real monster is not established (prt_church has no spawns).
+- **The cost: one detector pass on every new unit.** When a unit first shows on a STILL scene, the
+  next pass is the 5-s idle one. On the 06:55 walk (warps, then still), the median first box goes from
+  1.2 s to 6.2 s.
+- **On these prt_church recordings the detector's flashes are rare:** 3 tracks of at most 2 frames in
+  7 walks. The rule hides ~18 real box-frames for each false one it removes (3,720 vs 211, 5 seeds).
+- **PARKED for Batt** (a cadence change, which he ruled out for now): a pass due 1 s after a
+  candidate is seen, only while one waits. It keeps the FP cut (37 → 1 objects) at +0.02 cores when
+  still, with the first box at 1.3 / 2.7 s. It is in the sim only (`Variant.confirm_s`), not in
+  `hud_scene.py`.
+- Monsters: still not measured (the 20:09 one is the only one).
+
+**Display-only reconnect** (`hud_scene.Sender`):
+- **Dead** means any of:
+  - a send error;
+  - the connection's closed state, checked before every send and on a 0.5-s idle tick;
+  - a missed WebSocket protocol ping: every 5 s, 5 s timeout. The server's library answers pings; no
+    message type of ours is involved.
+- **No blocked send:** the Sender opens its own socket with TCP_USER_TIMEOUT 10 s. A send into a black
+  hole (the old address gone) then fails in 10 s. Before, it could block the sender thread for TCP's
+  ~15 min, and a ping could not help: the library sends while holding the connection's lock.
+- **Reconnect:** backoff 1 s, doubling to 30 s, forever. One log line when the channel goes DOWN, one
+  when it is UP again (with the attempts and the messages dropped meanwhile).
+- **Every connection starts with a KEYFRAME.** It is made under the tracker's lock, so nothing queued
+  before it is sent after it, and a console never sees a stale seq. The messages it replaces are
+  counted as `superseded`.
+- **While down:** messages are dropped and counted (`dropped`), so the queue never grows. The capture
+  and detector threads only ever `put()`.
+- **The 60-s report line** adds the display state, sent / dropped / superseded / connects, and the
+  candidates (held / confirmed / expired).
+- **The scene log** keeps every message. Undelivered ones are tagged `link: dropped|superseded`, and
+  `hud_scene_check.load_log` skips them, so a replay is what a console received.
+- The websockets 17.1 legacy-connect DeprecationWarning is gone (`legacy=True`, the library's own
+  direct-connect form).
+- **Tests** (`services/backend/tests/test_hud_scene_sender.py`; 20 repeated runs green):
+  - a fake link killed, then refused twice: attempts at +1 s and +3 s; on the new link, a keyframe
+    first with the tracker's seq; the delta queued before it superseded; a console replay current;
+    one DOWN and one UP line; the drops counted and tagged;
+  - the backoff ladder 1, 2, 4, 8, 16, 30, 30 s, with one log line;
+  - a real websockets server on loopback, shut down and restarted on the same port: pings (5 s) and
+    TCP_USER_TIMEOUT (10,000 ms) are on the socket, messages drop while down, and the new server's
+    first message is a keyframe.
+- **The 06:59 incident, re-read from `hud_scene.log`:** a NEW connection WAS made at ~06:59, and `sent`
+  kept rising at the keyframe rate.
+  - The evidence: the DeprecationWarning above fires once per connection, on its first send, and it
+    printed again. There is no "display channel down" line.
+  - So the old code did re-dial once. Why the console showed no scene until the 07:04 restart is NOT
+    established. The frontend-dev restart at 07:01 also reset the console's toggles.
+  - The new Sender covers what the old one could miss: a silent dead link (pings), a blocked send
+    (TCP_USER_TIMEOUT), and the seq gap after a reconnect (keyframe first; the old code waited for the
+    next 5-s keyframe).
+
+**Deploy:** a display-only restart of `hud_scene.py`, by default `--seen-twice units`;
+`--seen-twice off` restores drawing at once. No protocol, frontend or backend change.
+
 **LIVE RE-MEASURE after the deploy** (2026-10-09 06:55 ICT, a 3-route indoor `route_demo` walk, seed 34,
 frames `route-demo/20261009T065545`; `hud_scene_check.py truth` + `rescore` against the live scene log).
 It is the same scorer as the "before" row: the 20:09 walk, re-scored by the subagent. Values are
@@ -2336,6 +2462,7 @@ walking median / p95):
     cell, ~23 px), and it samples at ~8 Hz on other frames. That is right for an ABSOLUTE route line
     and wrong for the frame-to-frame motion of boxes.
   - So the HUD does not use it, and there is no coupling between the two processes. ⇒ Batt decides.
+    ➡️ **Batt 2026-10-09: rejection CONFIRMED.**
 - **A console that extrapolates between motions** (a frontend option).
   - Between frames, at a 5 Hz HUD on the 10 Hz recordings: 6.9 / 20.2 → 5.7 / 17.2 on 20:09, but
     5.7 / 24.7 → 6.6 / 27.4 on 19:12.
@@ -2347,8 +2474,10 @@ walking median / p95):
   - At a 5 Hz HUD over 10 Hz frames: 2.5 / 9.1 on the frames it saw, 7.3 / 21.8 between.
   - Live, at 10 Hz against a ~30 fps console, the gap is about half that.
   - The remaining fix is a faster HUD loop while moving (est. +1 core at 30 Hz), not measurable on
-    10 Hz recordings.
+    10 Hz recordings. ➡️ **Batt 2026-10-09: no faster loop for now.**
 - **Detector false positives** persist up to two idle passes (10 s): the ghosts and the max.
+  ➡️ 2026-10-09: the seen-twice rule keeps one-off detections off the screen (the dated entry at the
+  top of this section, with its cost).
 
 **Deploy:** a display-only restart of `hud_scene.py`. No protocol regen, no frontend change. The
 previewer's behaviour is unchanged: its `scene_shift` defaults are untouched.
