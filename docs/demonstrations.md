@@ -1497,6 +1497,10 @@ more), every pair ≥ 6 cells apart (`loot1.spots`; 3.20's "fresh spot").
     Empty Bottle 2.0, Knife 40.0, Unripe Apple 5.0, Poring Card 1.0). So no sub-resolution trial
     is expected; any one would be reported apart.
 
+**Step 0 · a PILOT, never scored:** `loot1.py run --n 2 --seed 20261109` (2 kills with loot)
+checks the harness end to end on the live client. Any fix it needs is committed BEFORE step 1, and
+the pilot's session is reported but counts for nothing.
+
 **Step 1 · P3's positive case (BEFORE any loot trial; §2a's rule):** `loot1.py p3 --n 10 --seed
 20261110`, the same kills with no loot.
 - **Judged per kill whose target died on the server** (its "died" vanish within 5 cells of the
