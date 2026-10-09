@@ -199,6 +199,40 @@ Run by the parent with the 1 s IO sampler on, and reported step by step:
 - the R3 pairs are measured as today;
 - the IO of steps 3-5 states whether event (i), event (ii) or both cause the burst.
 
+### 5a. Pre-registered for the run (2026-10-09 ~21:00 ICT, BEFORE any live step)
+Batt, 2026-10-09 ~20:20 (the weekend run): "Option A: build, unit-test, then the ONE live proof (start
+vs cold torch import answered first). Advance approval to SWITCH train-day to the worker IF every
+proof item passes as pre-registered (nothing of ours on the GPU after a forced stop, R3/IO flows
+unchanged); otherwise stay on the current path and report."
+- **When:** after v1's training ends (chain12 logs `v1 TRAIN DONE`), before v1's evals: the evals
+  are ~10 vision starts and were held for option A (chain10's note). Never alongside an S2 session.
+- **The command:** `worker_proof.py --cache v0png-20261006 --io-csv <the 1 s sampler's CSV>` (the
+  smoke uses the v0png cache, as re-proof 2 does; the cache does not matter to the proof).
+- **The bar is section 5's PASS, item by item, scored from the runbook's printed measurements:**
+  1. steps 4 and 5: every stop `STOP VERIFIED` within STOP_VERIFY_S (30 s), and nvidia-smi lists no
+     process of ours afterwards;
+  2. steps 2, 4 and 5: the idle worker's processes are exactly the `sleep infinity` pair, with no
+     process on the GPU (no CUDA context);
+  3. step 4: the R3 summary shows at least one closed ON/OFF pair measured as today (the same
+     `R3 summary` fields as a rundev run), and the forced stop took the IO-trip path (unpause,
+     SIGINT, verified stop);
+  4. steps 1, 3 and 5: the per-second capture-cgroup stalls are reported for each event, and the
+     report states which event (i) start / (ii) import / both carried the burst, or "neither burst".
+- **An IO-guard trip during a step is an INTERRUPTION, not a result** (as chain8 / re-proof 2): the
+  step stops (verified), its IO is still a measurement for question 2, and the remaining steps run
+  ONCE in the next measured quiet window (`--steps N-6`), never an immediate retry (Batt's v1 rule
+  for the weekend: "after an IO trip wait for the next quiet window"). A second interruption of the
+  same step ends the proof as INCOMPLETE: no switch, reported.
+- **PASS (all 4) =>** the switch, under Batt's advance approval: train-day `WORKER=1` from the next
+  training run, v1's evals and re-proof 2's runs as `execdev:` steps inside the worker (one start
+  for all of them), the worker stopped by `worker-stop:vision` when the GPU queue is empty and
+  always before Monday 05:00 ICT. CLAUDE.md rule 5 gains `execdev:` in the same commit.
+- **FAIL or INCOMPLETE =>** no switch: the current `rundev:` path stays, each eval one start per
+  quiet window, and the report says which item failed.
+- **What the IO result changes (section 6):** if the burst is (ii) the import, the warm-Python
+  variant or the pre-warm is Batt's choice; the switch above still holds (one start per day is
+  already an improvement), and the import burst is reported with the numbers.
+
 ## 6. What the proof's IO result means
 - **The burst is (i), the container start:** option A as designed. One cold start per day, in a
   quiet window.
