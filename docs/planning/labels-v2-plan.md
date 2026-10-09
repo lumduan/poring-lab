@@ -728,6 +728,41 @@ labels_v2.difficulty (all "normal" here).
 
 ### 7.7 Open questions for Batt
 
+➡️ **DECIDED 2026-10-09 ~19:30 (Batt).** The questions below are kept as history; this is the answer
+to each.
+1. **Dialog reader:** "build it as a CLASSIFIER over the KNOWN set from L3 (4 destinations x 2
+   serials = 8 variants), like the T3 menu reader; never free OCR. Verify on the live dialog before
+   relying on it."
+2. **IGNORE list:** 1184 IGNORE (no job EXP, aggressive); 1014 AVOID for a novice.
+3. **Deliveries:** "support the 2 easiest destinations first; on any other, stop safely and hand
+   over to a person (before paying anything irreversible). Extend later."
+   - By the 7.4 table, the two easiest are prontera (2 Kafra hops) and morocc_in (2 hops + internal
+     portals).
+   - Check before building: the fee may be paid BEFORE the random assignment is known. Then "before
+     anything irreversible" means before the serial is typed and before any fare.
+4. **Map prep per LAYOUT (4),** "after verifying the copies are visually identical too
+   (RSW/GND/textures), not only the GAT."
+5. **2000001:** a read-only check, for planning only (never a rule input). Done 19:40 ICT; see the
+   facts below.
+6. **Typing:** the character name and the serial go through the typing guard and the UI /
+   foreground gates.
+7. **NPC sprites only along the route.**
+8. (the follow-up stays open.)
+
+**Also decided (same message):**
+- A NEW L1 concept for the job change: allocating skill points (Basic Skill > 8) through the skill
+  window, with its own alone-test (to be designed and pre-registered).
+- Labels v2: label OUR GM as "player"; verify the phantom's REGION (not the whole extent); the
+  DRAFT bar (section 5) is OK.
+- **2000001, read-only (19:40):** one character (char_id 150001), a Novice at Base / Job Lv 1, all
+  six stats 1, **48 unspent status points**, 0 skill points, 0 zeny.
+  - Inventory: the starter Knife (1201) and Cotton Shirt (2301).
+  - last / save map new_4-1 (61,114), next to the start point.
+  - No quests, no character or account variables.
+  - So the workflow starts at the reception, and it also needs status-point allocation
+    (`char.allocate_stat`).
+
+
 1. **The delivery is told only in dialog text.** The destination and the serial number come from
    the job changer's dialog (merchant.txt:383-415); the storehouse wants the destination picked and
    the serial TYPED. A wrong guess fails the test and costs the fee. So the first workflow must
