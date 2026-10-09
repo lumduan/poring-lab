@@ -128,3 +128,39 @@ def test_main_writes_the_catalog_and_exits_1_on_a_missing_species(
 def test_extraction_is_refused_outside_dev_shm(cat: ModuleType, archive: Path) -> None:
     with pytest.raises(cat.GrfError, match="dev/shm"):
         cat.catalog(archive, ["PORING"], Path("/var/tmp/sprites"))
+
+
+def test_npc_mode_reads_the_npc_folder_and_writes_the_job_names(
+    cat: ModuleType, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """N2 (labels-v2-plan 1.2): N1's table -> data\\sprite\\npc\\<stem>, the same record format,
+    the NPC ids on each record and a job -> stem file for labels_v2.py --npc-sprite-names."""
+    npc = b"data\\sprite\\npc\\"
+    path = tmp_path / "npc.grf"
+    build_grf(path, [
+        (npc + b"4_m_test.act", act_bytes(4), 0x01),
+        (npc + b"4_m_test.spr", spr_bytes(), 0x01),
+        (npc + b"4_f_onlyact.act", act_bytes(5), 0x01),  # no SPR: catalogued, not in the names
+        (MONSTER + b"4_m_test.act", act_bytes(5), 0x01),  # the monster folder is not read
+    ])  # fmt: skip
+    table = tmp_path / "npc_sprites.json"
+    table.write_text(json.dumps({"sprites": [
+        {"id": 84, "sprite_class": "npc", "client_sprite": "4_M_TEST"},
+        {"id": 85, "sprite_class": "npc", "client_sprite": "4_M_TEST"},
+        {"id": 90, "sprite_class": "npc", "client_sprite": "4_F_ONLYACT"},
+        {"id": 4001, "sprite_class": "player_job"},  # composite: no file of its own
+    ]}))  # fmt: skip
+    out = tmp_path / "kb" / "npc_sprite_catalog.json"
+    rc = cat.main(["--grf", str(path), "--npc-from", str(table), "--no-extract", "--out", str(out)])
+    assert rc == 0
+    doc = json.loads(out.read_text())
+    assert doc["folder"] == "data/sprite/npc/" and set(doc["species"]) == {
+        "4_m_test",
+        "4_f_onlyact",
+    }
+    rec = doc["species"]["4_m_test"]
+    assert rec["jobs"] == [84, 85] and rec["box_kind"] == "opaque" and rec["idle_size"] == [6, 10]
+    assert rec["groups"][0]["name"] == "idle" and rec["groups"][1]["name"] == "group1"
+    names = json.loads((out.parent / "npc_sprite_names.json").read_text())
+    assert names == {"84": "4_m_test", "85": "4_m_test"}
+    assert "npc_sprite_names.json" in capsys.readouterr().out

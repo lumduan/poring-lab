@@ -770,6 +770,17 @@ labels_v2.difficulty (all "normal" here).
     - The sprite name is the constant's name in all 38 cases. None is a composite player-class
       sprite, and none is a monster sprite. Most SPRs are MIXCRYPT (the study decoder, as for the
       monsters).
+  - ➡️ **N2 (the NPC SPR/ACT): DONE 2026-10-09 ~21:00 for the same 38 sprites.**
+    - The command: `scripts/sprite_catalog.py --npc-from data/kb/npc_sprites.json
+      --decode-mixcrypt`, with a new NPC mode (`--npc` / `--npc-from`) and a test.
+    - It reads data\sprite\npc\ the way the monsters are read and writes the same record format.
+      Outputs, all local: `data/kb/npc_sprite_catalog.json`, `data/kb/npc_sprite_names.json`
+      (job -> stem, for `labels_v2.py --npc-sprite-names`), and the decoded files in
+      `/dev/shm/poring-lab-tmp/sprites/data/sprite/npc/` (for `--npc-sprites`).
+    - **38 / 38 decoded:** 30 MIXCRYPT SPRs (study decoder) and 8 plain.
+    - **Integrity:** 11,104 ACT 2.5 layer sizes equal their SPR image sizes, 0 mismatches.
+    - **Boxes:** `predict_sprite` boxes all 38 through labels_v2's own loader (`npc_sheets`),
+      every box OPAQUE. Native idle sizes: 32-59 sprite px wide, 73-108 tall.
 - **Accounts:** the GM (2000002) collects, with 3.33's immunity after each login, the fixed GM
   state checked and the UI gate before each run. It reaches any copy by `@warp` (the copies are
   clones). **The agent account 2000001 is not used for collection:** its quest state on new_4-1 is
