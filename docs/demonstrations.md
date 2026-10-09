@@ -1612,6 +1612,21 @@ status window opened at 16:02).
     both are found; on the clean prontera and field frames, none.
   - P3 is re-run unchanged with the same seed, 20261110: no trial had run (the walk@13 precedent).
 
+➡️ **P3 RESULT (2026-10-09 16:57–17:09 ICT, session `20261009T165750-demo-loot1-p3`, main at f17edd1;
+scored by the amended `loot1_score.py`): INCONCLUSIVE, so loot@1's 40 trials do NOT run (3.20a).**
+- **Kills:** 3 of 10 vanished from the pixels and 7 ended "no_sword".
+  - Only trial 1 had a server death of our target: **P3 exact** (pixel (261,124) = server (261,124)).
+  - Trials 8 and 9 were FALSE pixel deaths. The attack requests reached the server, but those
+    Porings never died in their trials.
+  - **1 judged kill < 8 → INCONCLUSIVE.**
+- **The blocker is the cursor read over a Poring.** Of 105 first reads at the probe points: **unknown
+  67 (64 %)**, WALK 35, SWORD 3. 37 probe tries gave 3 clicks.
+  - This is the same family as walk@17 item 5's finding for TALK: thin colour margins, and a 1-px
+    shift of a reference reproduces "unknown" (docs/planning/npc-click-test.md).
+  - Its fix belongs to that analysis (hypotheses C1–C5), not to loot@1.
+- **The GM's fixed state:** no trial needed a restore (Base / Job Lv 1 throughout); no notices.
+- **Safety:** no loot phase ran, so there are no loot-phase safety events to count.
+
 ➡️ **TYPING TRANSPORT CHANGED BEFORE STEP 1 (2026-10-09 ~16:10; Batt's mandatory item 6):** every
 line loot@1 types (its GM commands) now passes the UI gate (`scripts/ui_gate.py`, 3.32 item 6)
 first. No decision code changes: the gate either finds the client clear (~1.5 s per line) or stops
