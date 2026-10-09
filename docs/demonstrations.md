@@ -2404,15 +2404,17 @@ later.
 
 **The targets (L3, static server data; the pinned rAthena, generated locally, never committed):**
 
-| scene | NPC (L3 name, cell) | its first menu (L3, the script's `select`) | the options a trial may pick |
+| scene | NPC (L3 name, cell) | its first menu (L3, the script's `select`; the strings stay in the local L3 data, GPL-derived, never quoted here) | the options a trial may pick |
 |---|---|---|---|
-| prt_church | Garnet (103, 76) | About Heal / About Cure / About Increase AGI / About Angelus / About Blessing / About Warp Portal / End Conversation | one "About …" option, then "End Conversation" |
-| prt_church | Henson (103, 71) | About Divine Protection / About Demon Bane / About Decrease AGI / About Signum Crusis / About Pneuma / … / End Conversation (its script's own list) | one "About …" option, then its end option |
-| prontera | Guide#prt (154, 187), the city guide | City Guide. / Remove Marks from Mini-Map / Notice / Cancel | "Remove Marks from Mini-Map" or "Notice", then "Cancel" |
+| prt_church | Garnet (103, 76) | 7 options: six that explain an acolyte skill, then an end option | one skill option, then the end option |
+| prt_church | Henson (103, 71) | 8 options: seven that explain a skill, then an end option (its text differs from Garnet's) | one skill option, then the end option |
+| prontera | Guide#prt (154, 187), the city guide | 4 options: a city-guide submenu, removing the map marks, a notice, cancel | the map-marks or the notice option, then cancel |
 
 - These menus are harmless: information only, no save point, no zeny, no items.
 - Options with colour codes, inputs or side effects are never picked (for example the guide's
-  "City Guide." submenu, which marks the mini-map and asks Yes / No).
+  city-guide submenu, which marks the mini-map and asks yes / no).
+- The menu strings differ in small ways the reader must take as they are: one option has a
+  trailing space, and the two church NPCs' end options are spelled differently.
 - Only these three NPCs are in scope for talk@1.
 
 **One trial (the rule under test):**
