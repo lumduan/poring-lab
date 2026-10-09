@@ -62,7 +62,7 @@ dev = [
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-extend-exclude = ["services/frontend", "data"]
+extend-exclude = ["services/frontend", "data", "docs/records"]  # docs/records: verbatim scorers as used, never edited
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
