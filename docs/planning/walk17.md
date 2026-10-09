@@ -69,6 +69,14 @@ decision code, which walk@17 keeps, made TWO NPC contacts in 50 routes in pronte
   NPC.
 - Listed for Batt as 3.32 item 5. "Not changed" stays the design until he decides.
 
+➡️ **DECIDED 2026-10-09 ~16:15 (Batt): a static L3 NO-CLICK layer** joins walk@17's gate. The L3 NPC
+cells and the neighbours their clickable footprint covers are refused, independent of the detector.
+- Batt: "talk@1 finds NPCs from L3 ... + the camera model ... the detector isn't involved. walk@15
+  avoided NPCs with the detector (blind to town NPCs) and remembered TALK cells (one column off)."
+- The cursor and detector layers stay for moving / hidden NPCs and units.
+- The targeted town test (3.32 item 5) measures whether the layer alone removes the contacts.
+- It enters walk17.py as a recorded amendment before the tuning runs.
+
 
 **DECIDED by Batt 2026-10-09 ~14:00:** walk@16's F is NOT carried over ("no measurable effect beyond
 run-to-run noise; fewer rules"). If goals next to NPCs turn out to matter later, a fix comes with a

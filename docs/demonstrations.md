@@ -2493,6 +2493,18 @@ whose species it never saw, the unit gate cannot protect walking.
   of scope. So iz_dun00 is NOT walk-ready, and its held-out result (3.29) is reported as
   **PATH-FOLLOWING ONLY, not unit safety** (Batt). Its safety count is still reported.
 - A held-out map's own walk-ready status is stated next to its result.
+- ➡️ **AMENDED (Batt 2026-10-09 ~16:10, his 16:04 screenshot): a THIRD condition, the map's NPC
+  SPRITES.** "The detector does NOT box the town NPCs at all ... v0/v1 never trained on town NPC
+  sprites ... per the walk-ready rule, a map is not walk-ready while its NPC sprites are outside the
+  detector's training scope."
+  - So prontera, alberta and every town are NOT walk-ready today. The two town contacts of 3.29a had
+    "0 units in the envelope": the detector was blind there; the gate was not wrong.
+  - Measured in walk@17 item 5's targeted test: the detector's recall on town NPCs against packet
+    truth, per NPC sprite.
+  - Batt ~16:15 added a detector-independent layer for walk@17: the L3 NPC cells (and their
+    clickable footprint) as static NO-CLICK cells (3.32 item 5). Whether that layer alone removes the
+    town contacts is measured. If it does, whether this third condition still binds the walk-ready
+    status is Batt's call; until then it binds.
 
 **Applied to the tuning runs so far** (`walk_readiness.py` over each version's four scorer outputs):
 
@@ -3161,6 +3173,19 @@ pre-registration):
      off the NPC's true cell.
    - walk@17's tuning bar needs zero safety. Whether a fix comes before its tuning runs is Batt's
      call. Per his rule for F, any fix comes with a targeted test that can measure it.
+   - ➡️ **DECIDED (Batt ~15:20, ~16:10, ~16:15):**
+     - **A targeted test first:** dense-NPC town spots and deliberate clicks near NPCs, measuring the
+       cursor, the detector and the remembered talk cells; find why the cells were one column off.
+     - **Fold in:** the TALK read rate per NPC / position / background, and why the cursor's colour
+       check fails (3.30).
+     - **The detector's recall on town NPCs** against packet truth, per sprite: it boxed none in Batt's
+       16:04 screenshot.
+     - **For walk@17, a STATIC NO-CLICK layer:** the L3 NPC cells plus their clickable footprint,
+       refused in the walk gate independent of the detector. The cursor and detector layers stay
+       for moving / hidden NPCs and units.
+     - **The test measures whether that layer ALONE removes the town contacts.**
+     - Analysis, design and harness: branch `feat/npc-click-test` (offline; nothing run live). The
+       layer is integrated into walk@17 as a recorded amendment before its tuning runs.
 6. **➡️ Added 2026-10-09 ~15:05, from 3.29a's portal re-run: a chain must JUDGE the client's UI state
    between runs, not only screenshot it.** An NPC dialog left open by one run took the next run's
    Enter presses.

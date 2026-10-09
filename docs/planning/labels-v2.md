@@ -54,6 +54,20 @@ gate: "Batt 2026-10-09 ~13:15 approved the warp class (auto-labelled from L3) an
   - the visual-diversity maps' species (moc_fild, payon / pay_fild, xmas / Lutie, a dark Glast Heim level).
   - Their frames are banked by the held-out and diversity runs.
 - Spawn sessions for unseen species, as M4 / M7 did, come where the runs alone are not enough.
+- ➡️ **TOWN NPC SPRITES (Batt 2026-10-09 ~16:10):** "The detector does NOT box the town NPCs at all
+  ... Bank these frames for the next training round (NPC class from packets)."
+  - The NPC class comes from the packets: each NPC's cell (entity_appear, objtype NPC) projected
+    through the camera at the GM's packet position, as the v1 labels do.
+  - Only units the packets place are labelled. An NPC the packets do not list (a client-side
+    decoration) is never labelled NPC.
+  - **The frames to bank (2026-10-09, RDP):**
+    - the talk@1 calibration drives in prontera (the city guide's surroundings) and prt_church
+      (`/dev/shm/poring-lab-demo/20261009T15*-demo-talk-cal-*`, `…T160329-…-guide`);
+    - the 3.29 / 3.29a town runs' snapshots and detection logs;
+    - Batt's 16:04 frame (the console screenshot).
+  - These sessions live in tmpfs, so banking them to durable storage is a parent step, done in a
+    quiet IO window (2026-10-09 16:10: an IO-guard trip).
+  - The detector's per-sprite recall on them is measured by walk@17 item 5's test (3.32).
 
 ## 4. Open (Batt)
 - When the v2 round trains (GPU), and on which sessions.
