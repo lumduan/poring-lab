@@ -708,7 +708,7 @@ default):
 | `AugAssign` | a `Name` target, operator `Add` or `Sub` |
 | `If` | `elif` is a nested `If` in `orelse` |
 | `While` | the test is any allowed expression, optionally `bounded(cond, max_iter=…, max_s=…)`; `orelse` empty |
-| `For` | target a `Name`; iterable `range(...)` (1-3 int args), a `List`/`Tuple` literal, or a `Name` bound to one; `orelse` empty |
+| `For` | target a `Name`; iterable `range(...)` (1-3 int args), a `List`/`Tuple` literal, or a `Name` bound to one; `orelse` empty. ➡️ **DECIDED 2026-10-09 (Batt, contradictions #16):** `for _ in range(n)` (one argument) is the `repeat n` block; the bare `_` is allowed there and nowhere else (not a variable, not another loop's target) |
 | `Break`, `Continue`, `Pass` | as in Python |
 | `FunctionDef` | top level only; no arguments, no annotations, no type parameters; either NO decorator (a procedure) or exactly ONE `on(...)` decorator (an event handler); the body is this same subset without `FunctionDef` |
 | `Call` | the callee is a `Name` from the catalogue (blocks, sensors, reference constructors such as `cell`, `npc`, `item`, `option`; helpers `range`, `bounded`, `known`, `wait_until`, `on`, `flow`, `target`) or a procedure; positional and keyword arguments matching the catalogue signature; no `*args` or `**kwargs` |
@@ -730,7 +730,8 @@ decorator other than `on(...)`.
 **Names:**
 - a call to anything outside the catalogue is refused, so `open`, `exec`, `eval`, `compile`,
   `getattr`, `__import__`, `globals`, `input` and `print` are simply unknown names;
-- a name starting with `_` is refused (this covers every dunder);
+- a name starting with `_` is refused (this covers every dunder); ➡️ the ONE exception is the bare
+  `_` of `for _ in range(n)`, which is the `repeat` block (Batt 2026-10-09, contradictions #16);
 - assigning to a catalogue name is refused (no shadowing);
 - names are ASCII only: Python normalises identifiers with NFKC, so a look-alike Unicode name could
   otherwise alias a catalogue name.

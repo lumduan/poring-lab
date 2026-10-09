@@ -181,3 +181,24 @@ def test_parse_never_runs_the_source(tmp_path: Path) -> None:
     with pytest.raises(pyview.ParseError):
         pyview.parse(src)
     assert not marker.exists()
+
+
+def test_the_bare_underscore_is_only_repeats_target() -> None:
+    """#16 (Batt 2026-10-09): `repeat N` prints as `for _ in range(N)`, the ONE exception to the
+    underscore rule; `_` is nothing else (not a variable, not another loop's target)."""
+    flow = parse_ok("for _ in range(3):\n    sit()\n")
+    assert isinstance((flow.main or [])[0], ir.Repeat)
+    assert "for _ in range(3):\n    sit()" in pyview.print_flow(flow)
+    assert refused('SPOTS = [cell("m", 1, 2)]\nfor _ in SPOTS:\n    sit()\n') == [
+        "line 3, col 1: for _ in range(n) is the repeat block: one argument"
+    ]
+    assert refused("for _ in range(1, 3):\n    sit()\n") == [
+        "line 2, col 1: for _ in range(n) is the repeat block: one argument"
+    ]
+    assert refused("X = 1\nfor _ in range(3):\n    X = _\n") == [
+        "line 4, col 9: _ is not a flow variable"
+    ]
+    assert refused("for _x in range(3):\n    sit()\n") == [
+        "line 2, col 5: name _x is not allowed in a flow (a name starting with _ is refused)"
+    ]
+
