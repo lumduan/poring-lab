@@ -2344,6 +2344,9 @@ target."
   2. **The pooled success rate is ≥ 90 %**, reported with its 95 % Wilson score interval.
 - **Claude's reading, stated so Batt can correct it before any held-out data:** the 90 % applies to
   the POOLED POINT ESTIMATE, and the interval is reported with it, not required to clear 90 %.
+  ➡️ **CONFIRMED by Batt 2026-10-09 ~10:30 (before any held-out data): "interpretation A is what I
+  meant: the pooled POINT estimate >= 90 % with zero safety events, the Wilson CI reported next to
+  it (not the lower bound). walk@15 qualifies."**
   The stricter reading (the interval's LOWER bound ≥ 90 %) is computed and reported too
   (`ci_lower_bound_ge_ready`). At n = 200 it needs about 190 / 200.
 - **96 %** stays the long-term target (`target_met`, reported).
