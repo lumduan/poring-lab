@@ -3513,6 +3513,14 @@ needs arm A).** Session `20261009T210428-demo-cursor-probe-sword` (`--n 30 --see
     walk (the line runs at the arrow's axis angle, ~66 deg, not the sword's ~40 deg, and no sword frame
     is ever thin), but nobody could confirm it from the pixels. The client's own cursor sprite (its
     animation frames) can settle it offline.
+    ➡️ **SETTLED the same evening (22:20, offline) by the client's own cursor sprite** (`data\sprite\
+    cursors.spr/.act`, read from the host's GRF with the study decoder; local, never committed): the
+    default ARROW cursor's animation (ACT action 0) cycles images 0, 1, 2, **3**, 4, 5, and image 3
+    is exactly that 1-2 px diagonal line: the arrow seen edge-on. The SWORD cursor (action 5 / 6,
+    image 19) has ONE static frame and is never thin. So the robust reader's 26 WALK reads on those
+    frames are CORRECT, and the gate's UNKNOWN there is a miss. (The scoring above keeps them
+    excluded as the labellers marked them; the sprite is the host's Thai GRF, the lab client draws
+    from the kRO data, whose cursor sprite was not compared.)
 - **Bar 3, SWORD (box points labelled sword, n = 248):** robust read twice **127 / 248 = 0.512**
   (Wilson 0.450-0.574; first read 155 / 248 = 0.625); the gate **17 / 248 = 0.069** (first 21 =
   0.085). >= 0.40 with >= 100 probes, and +0.44 over the gate (>= +0.25): **met.**
