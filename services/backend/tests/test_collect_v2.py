@@ -102,7 +102,7 @@ def test_blocks_take_the_map_own_species_in_kb_order(cv: ModuleType) -> None:
     assert [b["species"] for b in p["blocks"]] == [1002, 1184]  # 1184 kept: collection is data
     assert [b["spot"] for b in p["blocks"]] == [0, 1]
     assert all(b["count"] == cv.DEFAULT_COUNT for b in p["blocks"])
-    assert p["spawn_range"] == 4  # int(sqrt(8)) + 2, atcommand.cpp:2396
+    assert p["spawn_range"] == 4  # int(sqrt(8)) + 2, atcommand.cpp:2393
     with pytest.raises(SystemExit, match="do not spawn"):
         cv.make_plan(md, 1, blocks=[1261])
     assert [b["species"] for b in cv.make_plan(md, 1, blocks=[1184])["blocks"]] == [1184]

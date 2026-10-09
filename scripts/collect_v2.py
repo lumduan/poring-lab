@@ -38,7 +38,7 @@ THE SESSION (run), after preflight passes:
   3. NATURAL DWELLS: per spot `@warp M x y`, dwell T s (the natural spawns wander through a static
      view);
   4. SPAWN BLOCKS, only after every dwell: `@warp` to the block's spot, `@monster <id> <count>`
-     (rAthena places them within int(sqrt(count)) + 2 cells of the GM, atcommand.cpp:2396-2399),
+     (rAthena places them within int(sqrt(count)) + 2 cells of the GM, atcommand.cpp:2393-2397),
      hold B s, `@killmonster2`. That command kills EVERY monster on the map, the natural ones
      too (KILLMONSTER2_FINDING), so it is never typed at the session start and never before a
      dwell; on these maps the natural ones respawn >= 1 s later at random cells;
@@ -78,12 +78,12 @@ THE FINDINGS (pinned rAthena e985006; the parent asked for file:line):
   (groups.yml: mapmove, no any_warp) can @warp INTO and WITHIN new_N-M. A non-walkable target
   cell is replaced by a random free cell within 10 (atcommand.cpp:626-631): the plan picks
   walkable cells only, and the judge checks where each warp landed (map_change).
-- KILLMONSTER2_FINDING: `@killmonster2` (ACMD_FUNC(killmonster), atcommand.cpp:2440-2463) runs
-  atkillmonster_sub over EVERY BL_MOB of the map (atcommand.cpp:2422-2437, only WoE guardians
+- KILLMONSTER2_FINDING: `@killmonster2` (ACMD_FUNC(killmonster), atcommand.cpp:2440-2464) runs
+  atkillmonster_sub over EVERY BL_MOB of the map (atcommand.cpp:2422-2438, only WoE guardians
   spared): the natural spawns die too. A natural one respawns via mob_setdelayspawn after
   max(1 s, its delay) (mob.cpp:1064-1097, the floor at 1092); the training maps' spawn lines give
   no delay (0), so they come back ~1 s later at random cells (`map,0,0`). A @monster one has no
-  spawn data and is freed (mob.cpp:1068-1069, 3639-3643).
+  spawn data and is freed (mob.cpp:1068-1069, 3640-3645).
 
 Client pixels (screenshots, crops) stay in /dev/shm; nothing here reads packets at decision time
 (rule 1); the KB files it reads are local and never committed (rule 4).
@@ -306,7 +306,7 @@ def portal_cells(md: MapData, rng: random.Random) -> list[dict[str, Any]]:
 
 
 def spawn_range(count: int) -> int:
-    """@monster's placement box around the GM: int(sqrt(count)) + 2 (atcommand.cpp:2396)."""
+    """@monster's placement box around the GM: int(sqrt(count)) + 2 (atcommand.cpp:2393)."""
     return int(math.sqrt(count)) + 2
 
 
