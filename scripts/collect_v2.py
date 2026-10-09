@@ -754,11 +754,15 @@ def preflight(p: dict[str, Any], max_minutes: float) -> dict[str, Any]:
 
     checks: dict[str, Any] = {"plan": plan_problems(p) or "ok"}
     try:
-        ui_gate._require_ready()  # the T2 templates are RDP-cut: refused on another path
+        ui_gate._require_ready()  # the lock's path; on S2 only a PROVEN S2 set (ui_sets)
         checks["ui_gate"] = "ok"
     except r.Stop as exc:
         checks["ui_gate"] = str(exc)
-    checks["gm_state_template"] = "ok" if gm_state.TEMPLATE.exists() else str(gm_state.TEMPLATE)
+    try:
+        gm_state.require_ready()  # the same path rule for the level lines and the notices
+        checks["gm_state_template"] = "ok"
+    except r.Stop as exc:
+        checks["gm_state_template"] = str(exc)
     try:
         ok, why = immunity_ok(read_json(IMMUNE), gm_marker())
         checks["immunity"] = "ok" if ok else why

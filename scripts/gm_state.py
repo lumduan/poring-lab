@@ -28,10 +28,30 @@ dir). The packets judge offline: after a restore the server sends the new levels
     gm_state.py restore   ensure_fixed once (types the restore lines only when the check fails)
     gm_state.py cut       cut the Lv 1 / 1 template from the CURRENT frame (a person has checked
                           the screen shows Base Lv. 1 and Job Lv. 1)
+
+PER PATH (2026-10-09, poring_env.ui_sets; as ui_gate): the lock picks the template set. rdp ->
+data/ui_anchors/gm_state/ (unchanged); console -> data/ui_anchors/s2/gm_state/, used ONLY while
+data/ui_anchors/s2/proof.json says "gm_levels" (the level lines) / "gm_notices" (the notices) are
+proven on S2 with the same bytes; anything else -> Stop. The S2 templates
+(docs/operations/s2-gate-templates.md):
+
+    gm_state.py bank --out DIR --levels fixed|not_fixed --notices none|badge,levelup_icon
+                     --scene NAME [--n 4]
+        LIVE, no input at all: n client frames + labels.json; the labels are a PERSON's reading
+        of the client at that moment (the same standard as `cut`)
+    gm_state.py cut --path s2 --png FRAME             the level lines from a banked Lv 1 / 1 frame
+    gm_state.py cut-notices --path s2 --with FRAME --without FRAME
+        each notice's template from a frame showing both, its mask = its own pixels (those that
+        differ from a frame without them by > NOTICE_DIFF)
+    gm_state.py prove --path s2 BANK [BANK ...]
+        offline, frames NOT used by the cuts: PASS writes "gm_levels" / "gm_notices" (each on its
+        own bar) into proof.json; a FAIL removes it
 """
 
 from __future__ import annotations
 
+import argparse
+import hashlib
 import json
 import sys
 import time
@@ -47,7 +67,19 @@ import ro_agent as r  # noqa: E402
 # EXP bars (measured 2026-10-09 on RDP frames: text x 16-72, rows y 87-97 and 98-108)
 LEVEL_BOX = (14, 85, 68, 25)  # x, y, w, h
 BASIC_INFO_BOX = (0, 0, 220, 140)
-TEMPLATE = r.ROOT / "data" / "ui_anchors" / "gm_state" / "levels_1_1.npy"
+TEMPLATE = r.ROOT / "data" / "ui_anchors" / "gm_state" / "levels_1_1.npy"  # the rdp set
+LEVELS_REL = "gm_state/levels_1_1.npy"  # inside another path's set root (poring_env.ui_sets)
+NOTICE_FILES = {"badge": "badge.npy", "badge_mask": "badge_mask.npy",
+                "levelup_icon": "levelup_icon.npy",
+                "levelup_icon_mask": "levelup_mask.npy"}  # fmt: skip
+CUT_META = "cut.json"  # the S2 cuts' source frames (sha256): never used to prove
+BANK_LABELS = "labels.json"
+# The S2 proof's bars (pre-registered 2026-10-09): every held-out frame right, with margins; a
+# changed digit gives "tens" of strongly differing pixels (above), so a not-fixed frame must sit
+# well clear of MATCH.
+NOT_FIXED_MIN = 10  # a not-fixed frame differs in at least this many pixels
+PROVE_MIN_LEVELS = 4  # held-out frames of each: fixed, not fixed
+PROVE_MIN_NOTICES = 3  # held-out frames showing both notices, and showing none
 # A mean difference over the box dilutes one changed digit (~20 ink px of ~1700): count the pixels
 # that differ strongly instead. RDP codec noise stays far below DIFF_LEVEL; a changed digit gives
 # tens of such pixels.
@@ -101,10 +133,66 @@ def _frames(screen: Any) -> tuple[Any, Any]:
     return a, b
 
 
-def _template() -> Any:
-    if not TEMPLATE.exists():
-        raise r.Stop(f"gm_state: no Lv 1 / 1 template ({TEMPLATE}): run `gm_state.py cut` first")
-    return np.load(TEMPLATE)
+def _path() -> str:
+    """The lock's template path ("rdp" | "s2"), or Stop (poring_env.ui_sets)."""
+    import record_session
+
+    from poring_env import ui_sets
+
+    backend = str(record_session.read_lock(r.ROOT / "state").backend)
+    try:
+        return ui_sets.path_for_backend(backend)
+    except ui_sets.UnknownPath:
+        raise r.Stop(f"gm_state: no template set for the lock's {backend}: nothing checked or "
+                     "typed") from None  # fmt: skip
+
+
+def _root(path: str) -> Path:
+    from poring_env import ui_sets
+
+    return ui_sets.set_root(r.ROOT / "data" / "ui_anchors", path)
+
+
+def _template_path(path: str) -> Path:
+    return TEMPLATE if path == "rdp" else _root(path) / LEVELS_REL
+
+
+def _require_proven(path: str, needs: tuple[str, ...]) -> None:
+    """rdp: nothing (its set is the one proven on RDP). Any other path: its proof, or Stop."""
+    from poring_env import ui_sets
+
+    if path == "rdp":
+        return
+    why = ui_sets.problems(_root(path), needs)
+    if why:
+        raise r.Stop(f"gm_state: the {path} template set is not proven ({'; '.join(why)}; "
+                     "docs/operations/s2-gate-templates.md)")  # fmt: skip
+
+
+def _template(path: str | None = None) -> Any:
+    from poring_env import ui_sets
+
+    path = path if path is not None else _path()
+    _require_proven(path, ui_sets.GM_LEVELS_NEEDS)
+    tp = _template_path(path)
+    if not tp.exists():
+        raise r.Stop(f"gm_state: no Lv 1 / 1 template ({tp}): run `gm_state.py cut` first")
+    return np.load(tp)
+
+
+def require_ready() -> str:
+    """Everything ensure_fixed reads, for the lock's path (no input, no frame): the level lines'
+    template and the notices' references, proven when the path is not rdp. Returns the path."""
+    from poring_env import ui_sets
+
+    path = _path()
+    _require_proven(path, ui_sets.GM_LEVELS_NEEDS + ui_sets.GM_NOTICES_NEEDS)
+    _template(path)
+    d = _template_path(path).parent
+    missing = [f for f in NOTICE_FILES.values() if not (d / f).exists()]
+    if missing:
+        raise r.Stop(f"gm_state: no notice references in {d} ({', '.join(missing)})")
+    return path
 
 
 def check(screen: Any) -> dict[str, Any]:
@@ -118,7 +206,12 @@ def _weight(frames: tuple[Any, Any]) -> list[int] | None:
     """The weight readout, two equal reads on the two frames (poring_env.weight), or None."""
     from poring_env import weight as wt
 
-    glyphs = wt.load_weight_glyphs(r.ROOT / wt.DEFAULT_TEMPLATES)
+    path = _path()
+    gpath = (r.ROOT / wt.DEFAULT_TEMPLATES if path == "rdp"
+             else _root(path) / wt.DEFAULT_TEMPLATES.name)  # fmt: skip
+    if path != "rdp" and not gpath.exists():
+        return None  # recorded, not gated: RDP-cut glyphs are never read on another path's frames
+    glyphs = wt.load_weight_glyphs(gpath)
     v = wt.stable_value([wt.read_weight(f, glyphs) for f in frames])
     return None if v is None else list(v)
 
@@ -135,8 +228,12 @@ def notices(frame: Any, refs: dict[str, Any]) -> list[str]:
     return out
 
 
-def _notice_refs() -> dict[str, Any]:
-    d = TEMPLATE.parent
+def _notice_refs(path: str | None = None) -> dict[str, Any]:
+    from poring_env import ui_sets
+
+    path = path if path is not None else _path()
+    _require_proven(path, ui_sets.GM_NOTICES_NEEDS)
+    d = _template_path(path).parent
     return {"badge": np.load(d / "badge.npy"), "badge_mask": np.load(d / "badge_mask.npy"),
             "levelup_icon": np.load(d / "levelup_icon.npy"),
             "levelup_icon_mask": np.load(d / "levelup_mask.npy")}  # fmt: skip
@@ -198,11 +295,243 @@ def ensure_fixed(agent: Any, screen: Any, *, why: str,
     return rec
 
 
+# --- the S2 set: bank (live, no input), cut and prove (offline) -----------------------------------
+
+
+def _png(path: Path) -> Any:
+    """A banked frame as BGR (ro_agent.to_png writes true RGB)."""
+    from PIL import Image
+
+    return np.ascontiguousarray(np.asarray(Image.open(path).convert("RGB"))[..., ::-1])
+
+
+def _sha(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+NOTICE_NAMES = ("badge", "levelup_icon")
+
+
+def parse_notices(text: str) -> list[str]:
+    """``none`` -> []; ``badge,levelup_icon`` -> both (sorted); anything else -> ValueError."""
+    if text == "none":
+        return []
+    got = sorted({x.strip() for x in text.split(",") if x.strip()})
+    if not got or any(x not in NOTICE_NAMES for x in got):
+        raise ValueError(f"--notices: 'none' or a comma list of {NOTICE_NAMES}, not {text!r}")
+    return got
+
+
+def bank(screen: Any, out: Path, levels: str, notices: list[str], scene: str, n: int,
+         path: str) -> dict[str, Any]:  # fmt: skip
+    """LIVE, no input: ``n`` client frames, labelled with what a PERSON reads on the client now."""
+    frames = out / "frames"
+    frames.mkdir(parents=True, exist_ok=True)
+    lpath = out / BANK_LABELS
+    labels: list[dict[str, Any]] = json.loads(lpath.read_text()) if lpath.exists() else []
+    for _ in range(n):
+        img = np.ascontiguousarray(r.grab_after(screen, r.game_region(), r.ns())[..., :3])
+        name = f"{levels}-{'-'.join(notices) or 'clean'}-{r.ns()}.png"
+        r.to_png(img, frames / name)
+        labels.append({"file": name, "levels": levels, "notices": notices, "scene": scene,
+                       "path": path, "t_ns": r.ns()})  # fmt: skip
+        time.sleep(0.3)
+    lpath.write_text(json.dumps(labels, indent=1) + "\n")
+    return {"bank": str(out), "frames": len(labels), "added": n, "levels": levels,
+            "notices": notices, "path": path}  # fmt: skip
+
+
+def _cut_meta(root: Path) -> dict[str, Any]:
+    p = root / "gm_state" / CUT_META
+    return dict(json.loads(p.read_text())) if p.exists() else {}
+
+
+def _write_cut_meta(root: Path, key: str, shas: list[str]) -> None:
+    meta = _cut_meta(root)
+    meta[key] = {"frames": shas, "cut_at": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
+    (root / "gm_state" / CUT_META).write_text(json.dumps(meta, indent=1) + "\n")
+
+
+def cut_levels(png: Path, root: Path) -> dict[str, Any]:
+    """The Lv 1 / 1 level lines from a banked frame (a person read Base Lv. 1 / Job Lv. 1)."""
+    frame = _png(png)
+    dest = root / LEVELS_REL
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    np.save(dest, crop(frame))
+    r.to_png(np.ascontiguousarray(frame[:140, :220]), dest.with_suffix(".png"))
+    _write_cut_meta(root, "levels", [_sha(png)])
+    return {"cut": str(dest), "check": str(dest.with_suffix(".png")), "from": png.name}
+
+
+def cut_notice_refs(with_frame: Any, without_frame: Any) -> dict[str, Any]:
+    """PURE: each notice's template (its box on the frame WITH both notices) and its mask (the
+    pixels there that differ from the frame WITHOUT them by > NOTICE_DIFF: its own pixels)."""
+    out: dict[str, Any] = {}
+    for name, box in (("badge", BADGE_BOX), ("levelup_icon", ICON_BOX)):
+        t = crop(with_frame, box)
+        out[name] = t
+        out[f"{name}_mask"] = np.abs(t - crop(without_frame, box)) > NOTICE_DIFF
+    return out
+
+
+def cut_notices(with_png: Path, without_png: Path, root: Path) -> dict[str, Any]:
+    refs = cut_notice_refs(_png(with_png), _png(without_png))
+    d = root / "gm_state"
+    d.mkdir(parents=True, exist_ok=True)
+    for key, fname in NOTICE_FILES.items():
+        np.save(d / fname, refs[key])
+    _write_cut_meta(root, "notices", [_sha(with_png), _sha(without_png)])
+    return {"cut": str(d), "mask_px": {n: int(refs[f"{n}_mask"].sum()) for n in NOTICE_NAMES},
+            "with": with_png.name, "without": without_png.name}  # fmt: skip
+
+
+def bank_items(banks: list[Path], path: str) -> list[dict[str, Any]]:
+    out = []
+    for b in banks:
+        for it in json.loads((b / BANK_LABELS).read_text()):
+            if it.get("path") != path:
+                continue
+            f = b / "frames" / str(it["file"])
+            out.append({**it, "abs": f, "sha256": _sha(f), "bank": b.name})
+    return out
+
+
+def prove(banks: list[Path], root: Path, path: str = "s2") -> dict[str, Any]:
+    """Both components on held-out frames, each on its own bar:
+    gm_levels: every "fixed" frame <= MATCH, every "not_fixed" >= NOT_FIXED_MIN, >= 4 of each;
+    gm_notices: notices() == the label on every frame, >= 3 showing both and >= 3 showing none.
+    -> {"gm_levels": {...}, "gm_notices": {...}}, each with "pass" and "before" (its hashes)."""
+    from poring_env import ui_sets
+
+    out: dict[str, Any] = {}
+    meta = _cut_meta(root)
+    used = {s for v in meta.values() for s in v.get("frames", [])}
+    items = bank_items(banks, path)
+    held = [it for it in items if it["sha256"] not in used]
+    # the level lines
+    before = ui_sets.file_hashes(root, "gm_levels")
+    tp = root / LEVELS_REL
+    if "levels" not in meta or not tp.exists():
+        out["gm_levels"] = {"verdict": "REFUSED: no level-lines cut (cut --path s2 first)"}
+    else:
+        t = np.load(tp)
+        res: dict[str, Any] = {"fixed": [], "not_fixed": [], "wrong": []}
+        for it in held:
+            d = distance(_png(it["abs"]), t)
+            res[str(it["levels"])].append(d)
+            ok = d <= MATCH if it["levels"] == "fixed" else d >= NOT_FIXED_MIN
+            if not ok:
+                res["wrong"].append({"file": it["file"], "label": it["levels"], "dist": d})
+        n_f, n_n = len(res["fixed"]), len(res["not_fixed"])
+        passed = not res["wrong"] and n_f >= PROVE_MIN_LEVELS and n_n >= PROVE_MIN_LEVELS
+        out["gm_levels"] = {
+            "verdict": "PASS" if passed else "FAIL" if res["wrong"] else
+            f"INCOMPLETE: {n_f} fixed / {n_n} not fixed (need {PROVE_MIN_LEVELS} each)",
+            "pass": passed, "fixed": n_f, "not_fixed": n_n,
+            "fixed_max": max(res["fixed"], default=None),
+            "not_fixed_min": min(res["not_fixed"], default=None), "wrong": res["wrong"][:20],
+            "bar": {"fixed": f"<= {MATCH}", "not_fixed": f">= {NOT_FIXED_MIN}",
+                    "min_each": PROVE_MIN_LEVELS},
+            "before": before,
+        }  # fmt: skip
+    # the notices
+    before = ui_sets.file_hashes(root, "gm_notices")
+    d = root / "gm_state"
+    if "notices" not in meta or not all((d / f).exists() for f in NOTICE_FILES.values()):
+        out["gm_notices"] = {"verdict": "REFUSED: no notices cut (cut-notices --path s2 first)"}
+    else:
+        refs = {k: np.load(d / f) for k, f in NOTICE_FILES.items()}
+        wrong, both, none, scenes = [], 0, 0, set()
+        for it in held:
+            got = notices(_png(it["abs"]), refs)
+            want = sorted(it["notices"])
+            both += want == list(NOTICE_NAMES)
+            none += not want
+            if not want:
+                scenes.add(str(it.get("scene")))
+            if got != want:
+                wrong.append({"file": it["file"], "label": want, "got": got})
+        passed = not wrong and both >= PROVE_MIN_NOTICES and none >= PROVE_MIN_NOTICES
+        out["gm_notices"] = {
+            "verdict": "PASS" if passed else "FAIL" if wrong else
+            f"INCOMPLETE: {both} with both / {none} with none (need {PROVE_MIN_NOTICES} each)",
+            "pass": passed, "both": both, "none": none, "clean_scenes": sorted(scenes),
+            "wrong": wrong[:20], "bar": {"share": NOTICE_SHARE, "min_each": PROVE_MIN_NOTICES},
+            "before": before,
+        }  # fmt: skip
+    out["held_out"], out["excluded_cut"] = len(held), len(items) - len(held)
+    return out
+
+
+def _main_s2(argv: list[str]) -> int:
+    from poring_env import ui_sets
+
+    ap = argparse.ArgumentParser(prog="gm_state.py", description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)  # fmt: skip
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    b = sub.add_parser("bank")
+    b.add_argument("--out", type=Path, required=True)
+    b.add_argument("--levels", choices=("fixed", "not_fixed"), required=True)
+    b.add_argument("--notices", required=True, help="none | badge,levelup_icon | one of them")
+    b.add_argument("--scene", required=True)
+    b.add_argument("--n", type=int, default=4)
+    c = sub.add_parser("cut")
+    c.add_argument("--path", choices=("s2",), required=True)
+    c.add_argument("--png", type=Path, required=True)
+    cn = sub.add_parser("cut-notices")
+    cn.add_argument("--path", choices=("s2",), required=True)
+    cn.add_argument("--with", dest="with_png", type=Path, required=True)
+    cn.add_argument("--without", dest="without_png", type=Path, required=True)
+    p = sub.add_parser("prove")
+    p.add_argument("--path", choices=("s2",), required=True)
+    p.add_argument("banks", nargs="+", type=Path)
+    a = ap.parse_args(argv)
+    out: dict[str, Any]
+    rc = 0
+    if a.cmd == "bank":
+        path = _path()
+        screen = r.Screen()  # frames only: no agent, no input
+        try:
+            out = bank(screen, a.out, a.levels, parse_notices(a.notices), a.scene, a.n, path)
+        finally:
+            screen.close()
+    elif a.cmd == "cut":
+        out = cut_levels(a.png, _root(a.path))
+    elif a.cmd == "cut-notices":
+        out = cut_notices(a.with_png, a.without_png, _root(a.path))
+    else:
+        root = _root(a.path)
+        out = prove(a.banks, root, a.path)
+        for comp in ("gm_levels", "gm_notices"):
+            res = out[comp]
+            before = res.pop("before", None)
+            if before is None:  # REFUSED: nothing proven, nothing recorded
+                rc = 1
+                continue
+            evidence = {k: v for k, v in res.items() if k != "wrong"}
+            evidence["banks"] = [str(x) for x in a.banks]
+            res["proof"] = ui_sets.record(root, comp, bool(res["pass"]), evidence, before,
+                                          command="gm_state.py prove")["verdict"]  # fmt: skip
+            rc = rc or (0 if res["proof"] == "PASS" else 1)  # the RECORDED verdict
+    print(json.dumps(out, indent=1, default=str))
+    return rc
+
+
+S2_COMMANDS = ("bank", "cut-notices", "prove")
+
+
 def main() -> int:
     cmd = sys.argv[1:]
+    if cmd and (cmd[0] in S2_COMMANDS or (cmd[0] == "cut" and len(cmd) > 1)):
+        return _main_s2(cmd)
     if cmd not in (["check"], ["restore"], ["cut"]):
         print(__doc__)
         return 2
+    if cmd == ["cut"] and _path() != "rdp":
+        raise r.Stop(
+            "gm_state: `cut` writes the RDP set from a live frame; on this path use "
+            "`bank` + `cut --path s2 --png FRAME` (docs/operations/s2-gate-templates.md)"
+        )
     with r.session("gm-state") as (agent, screen):
         if cmd == ["cut"]:
             frame = np.ascontiguousarray(r.grab_after(screen, r.game_region(), r.ns())[..., :3])

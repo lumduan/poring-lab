@@ -13,10 +13,12 @@
 #  0. G1-G3 (labels-v2-plan 3.3): G1's long-lived vision container if any vision step runs; a
 #     quiet IO window (scripts/runbooks/quiet_start.py), never 09:30-10:15 / 14:00-14:45 ICT;
 #     training paused (one Windows session).
-#  1. The UI gate must be able to see the client on THIS path: ui_gate.py's T2 templates are
-#     RDP-cut and it refuses every typed line while the lock says console (ui_gate._require_ready).
-#     `collect_v2.py preflight` reports it; until the gate has S2 templates, an S2 session cannot
-#     type a single GM line (it stops before the recorder starts).
+#  1. The UI gate must be able to see the client on THIS path. Since 2026-10-09 it is path-aware
+#     (poring_env.ui_sets): on console it reads ONLY a PROVEN S2 set (data/ui_anchors/s2/proof.json:
+#     windows + T2; gm_state: gm_levels + gm_notices) and refuses every typed line otherwise.
+#     `collect_v2.py preflight` reports it (`ui_gate.py status` shows the proof). Until the S2 set
+#     is cut and proven live (docs/operations/s2-gate-templates.md), an S2 session cannot type a
+#     single GM line (it stops before the recorder starts).
 #  2. Enter the S2 clean room: `cleanroom.py preflight` -> `cleanroom.py start --hard-cap-min N`
 #     -> `cleanroom.py variant S2` -> `cleanroom.py checks --box-min N`; then start
 #     `scripts/runbooks/heartbeat.sh LOG &` (it stops on the first refusal). Never run a room
