@@ -496,7 +496,7 @@ the Merchant job-change maps -> everything else later (towns at large, diversity
 **The maps.** The server's map list has 20: new_N-M, N = 1..5 copies, M = 1..4 stages. Within a
 stage the five copies are the SAME map: their server walkability grids are byte-identical (map
 cache), so there are **4 layouts**. ~~Visual identity of the copies (client files) is not verified.~~
-➡️ **2026-10-09 ~21:00: VERIFIED, IDENTICAL per layout in the client files too** (Batt's 7.7 item 4
+➡️ **2026-10-09 ~20:40: VERIFIED, IDENTICAL per layout in the client files too** (Batt's 7.7 item 4
 condition; `scripts/map_identity.py check`, tests `services/backend/tests/test_map_identity.py`):
 - **The client has no separate files for the copies.** Its rename table
   (data\resnametable.txt) sends every new_N-M's .rsw, .gnd and .gat to ONE file set per stage,
@@ -728,7 +728,7 @@ labels_v2.difficulty (all "normal" here).
   the camera: the client's indoor table lists alberta_in, geffen_in and morocc_in, not the training
   maps (outdoor camera); the sprite catalog for the 11 new species; N1-N3 for the 15 training-ground
   sprites first.
-  - ➡️ **GATs + camera: DONE 2026-10-09 ~21:15.**
+  - ➡️ **GATs + camera: DONE 2026-10-09 ~20:45.**
     - `scripts/map_identity.py gat` wrote each server map name's GAT into the GAT dir
       (`/dev/shm/poring-lab-tmp/gat/data`), resolved through the client's rename table: all 20
       new_N-M (each its stage's new_zone0M), plus morocc and morocc_in. alberta, alberta_in and
@@ -745,7 +745,7 @@ labels_v2.difficulty (all "normal" here).
     - The projection reads the CLIENT GAT's altitude (camera.py), so labels on alberta and morocc
       may not fit the map the lab client draws. The kRO data on the Dell decides it, and it is not
       on this host (7.1's caveat). Until then, treat alberta and morocc GATs as unverified.
-  - ➡️ **N1 (the NPC id -> sprite file table): BUILT 2026-10-09 ~21:45, along the route only**
+  - ➡️ **N1 (the NPC id -> sprite file table): BUILT 2026-10-09 ~20:50, along the route only**
     (Batt 7.7 item 7). `scripts/npc_sprites.py build` writes `data/kb/npc_sprites.json` (local,
     never committed). Its Lua table reader is `scripts/lua51_tables.py`. Tests:
     `services/backend/tests/test_npc_sprites.py`.
