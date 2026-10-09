@@ -582,7 +582,7 @@ by its path; the owner reads the same text the LLM drafter gets back.
 |---|---|---|
 | 1 · schema | the Pydantic model; bounds on counts, timeouts, `max_runtime_s`, string lengths, nesting depth and node count; variable types consistent; procedure call graph acyclic | "main.4: `repeat.times` must be 1..10000" |
 | 2 · semantics | every reference exists for the target environment: the map; the NPC on that map; the option offered by that NPC; the item, monster, skill. Every action block resolves its bindings (`resolve()`); an `Unsupported` is ~~an error~~ naming the layer and key ➡️ **DECIDED 2026-10-09 (Batt, contradictions #6): a READINESS item, not an error.** It is listed in the report and blocks the RUN (the run-start check refuses on it, `poring_flow.runstart`), not the design: a flow with readiness items can be designed, linted, simulated and approved. `assumes` uses known sensors | "main.1: npc n_3f2a is not on the map the flow is on at this point"; readiness: "town.0: walk_to is unsupported here: L3 binding L3.map.walkability (…)" |
-| 3 · simulation | an abstract walk through the flow tracking the current map: reachability on the GAT/warp graph (`poring_dataset/walk.py`, legs ≤ 128 steps, waypoints beyond); a time estimate; monster spawns on the map for `attack_nearest`; element matchups (warning) | "main.2: cell (170, 210) is unreachable from the warp you arrive by" |
+| 3 · simulation | an abstract walk through the flow tracking the current map: reachability on the GAT/warp graph (`poring_dataset/walk.py`, legs ≤ 128 steps, waypoints beyond; ➡️ Batt 2026-10-09, contradictions #18: with the EXECUTOR's planner, `walk_path`; until the swap, MW1's A* held to it by a cross-check test, open question 15); a time estimate; monster spawns on the map for `attack_nearest`; element matchups (warning) | "main.2: cell (170, 210) is unreachable from the warp you arrive by" |
 | 3 · loops | every `while` has a bound, a sensor/variable its body can change, or a `break`; a loop body with no action and no wait is a busy loop (error); the flow-level `max_runtime_s` bounds everything | "main.6: this loop can never end: nothing in it changes job_level()" |
 | 3 · events | every handler has `rearm` or a cooldown; conditions use passive sensors only; two handlers of one class with overlapping conditions (warning; on the SAME sensor an error, 13.6.9; ➡️ only at the same RANK since 2026-10-09, contradictions #14: different ranks are an INFO); a handler that can re-trigger itself; a handler with no failure path; a `critical` handler containing a long action (warning). Event scopes and hysteresis pairs: 13.6.9 | "handlers.drink: no re-arm and no cooldown: it would fire on every tick" |
 | map workflows | save point, exits, NPC / menu / Kafra service, routes, weight, loops, species lists, keep lists, the graph: 13.5 | – |
@@ -611,6 +611,10 @@ or no resolver is a refusal) and, given the approved hash, refuses another hash.
   on `poring_skills` only. Its route check runs on the map sheet's walk grid with a small A* of its
   own, not `poring_dataset/walk.py`; open question 15 (where the linter runs) is NOT decided by
   that, and the two path finders are not yet checked against each other;
+  ➡️ **DECIDED 2026-10-09 (Batt, contradictions #18; open question 15 CLOSED):** the linter runs
+  in the BACKEND at run time (the L3 data stays local, never shipped), and it routes with the
+  executor's planner, `poring_dataset.walk.walk_path`; until then, a cross-check test holds MW1's
+  A* to it (open question 15 has the details and the result);
 - `test_guards.py` extends: `poring_flow` imports no `ultralytics`, no `poring_vision` and no
   `poring_packets`.
 
@@ -1288,7 +1292,7 @@ tracks the save point. The messages are examples.
 | save point | 3 · simulation | An `item_warp` (a Butterfly Wing) and every death go to the SAVE POINT, never to "the previous map". The save point cannot be read from pixels, so it is UNKNOWN at the start unless the workflow sets it (`set_save_point` at a Kafra) or `assumes` asserts it (an assertion stays a visible warning at approval). WARNING when a wing or a respawn relies on an unknown or different save point; the editor offers the fix block "set save point at Kafra" in the intended map's block ➡️ **Batt, 2026-10-08: an ERROR for every wing.** Each `item_warp` that goes to the save point needs, on every path before it, a `set_save_point` at the intended map's Kafra, or an `assert_save_point(map, cell)` block, which stays a visible warning at approval. A respawn relying on an unknown save point stays a WARNING (open question 20) | "farm.1: a Butterfly Wing returns to the save point, not to town, and nothing sets it on map_1. Add 'set save point' at town's Kafra?" |
 | exit destinations | 2 · semantics | The destination map exists; the exit's L3 data leads there; its arrival cell lies in `to_entry`. `walk_exit`: an L3 warp (or edge) on this map. `npc_warp`: the NPC is on this map, every option key is in its menu at that point, the warp after them is known (else the destination is the author's: a warning, checked on arrival). `item_warp`: the map allows it (L3 map flags) | "relay.0: option o_5d0e of npc n_2b71 warps to map_4, not to farm's map_3" |
 | NPC, menu, Kafra service | 2 · semantics | The NPC is on the block's map (L3 `npc.positions`); option keys are in `npc.menus`, never an index; the Kafra service (save, storage, teleport) is offered by that Kafra's type (`kafra.menus`); L1 preconditions are `assumes` or sensors (storage: Basic Skill 6 and the fee, `storage.deposit`, [phase4-ui.md](../phase4-ui.md)) | "town.1: npc n_k1 is not on map_1" |
-| routes | 3 · simulation | Every entry reaches every walk target and exit on the walk graph (`poring_dataset/walk.py`, legs ≤ 128 steps). A leg that crosses another warp's cells would leave the map: ERROR | "town.3: the route from A to C crosses the warp at (156, 22): it would leave map_1" |
+| routes | 3 · simulation | Every entry reaches every walk target and exit on the walk graph (`poring_dataset/walk.py`, legs ≤ 128 steps; ➡️ the executor's planner, Batt 2026-10-09, contradictions #18: MW1's A* is cross-checked against it until the swap, open question 15). A leg that crosses another warp's cells would leave the map: ERROR | "town.3: the route from A to C crosses the warp at (156, 22): it would leave map_1" |
 | weight thresholds | 3 · simulation | Explained with RO's rules (`vitals.read` in [knowledge/README.md](../knowledge/README.md)): at ≥ 50 % natural HP / SP regeneration stops; at ≥ 90 % attacks and skills stop. A threshold ≥ 90 % guarding an attack loop: ERROR (the loop stalls before it fires). 50-89 %: INFO (regeneration is already off). A weight condition in a block where nothing adds weight: WARNING. Today `loot` is unsupported (no ground-item class, 2.1), so nothing does (open question 21) | "farm.0: weight_percent() < 50 can change only by picking up items, and loot is unsupported here" |
 | unbounded loops | 3 · loops | Every cycle of the workflow graph and every `while` has a stop condition (a counter, a sensor bound, `stop_when`) or the explicit `run_until_stopped`. `max_runtime_s` still bounds the run | "the cycle town → relay → farm → town never ends: add a stop condition or mark the workflow run until stopped" |
 | species lists | 2 · semantics | Every TARGET and IGNORE species spawns on that block's map (L3 spawns); none is on both lists; unlisted spawned species are listed as IGNORE (INFO). An aggressive species on IGNORE: WARNING (it attacks; the bot never answers; the HP event decides). A target and an ignored species that look alike: WARNING until the detector's confusion between them is measured | "farm: mob 9104 is in no spawn line of map_3" |
@@ -1849,6 +1853,38 @@ Marked FIRST: needed before F1 or F2.
     backend-side and hands `vision` an approved, re-linted IR, or the walk graph moves to a package
     `vision` may import (it is our own clean A*, but it lives beside the label code). Decide before
     F1.
+    ➡️ **CLOSED 2026-10-09 (Batt, contradictions #18):** "the linter runs in the backend at run
+    time (L3 local), and routes with the EXECUTOR's planner (`poring_dataset.walk.walk_path`, the
+    client's own path rules), not MW1's small A*. Until then, a cross-check test on the sheet
+    maps."
+    - **Where it runs:** the backend. It already lints there for the editor (`/flows/lint`), and
+      the run-start check (`poring_flow.runstart`, section 5) is where a live run re-lints; the
+      backend hands `vision` an approved, re-linted IR (MW3).
+    - **The swap WAITS**, because the dependency rules do not allow it yet and it is not small:
+      1. `poring_flow` may not import `poring_dataset` (`test_guards.py`: vision imports
+         `poring_flow`, and vision never gets the dataset package, ADR-0010);
+      2. the backend has no `poring_dataset` either (its image copies only the pyproject; dev mode
+         mounts `poring_flow` and `poring_skills` only; the package brings PyAV);
+      3. the executor itself (MW3, in `vision`) needs the same planner, so `walk_path` (our own
+         clean A*, stdlib only) has to MOVE first to a package the backend and `vision` may both
+         import. The walk rules in `scripts/` import it from `poring_dataset` today. That move is
+         a code change with its own review, and where it lands is a choice for Batt.
+    - **Until then, the cross-check:** `packages/poring_dataset/tests/test_walk_matches_flow_planner.py`.
+      For sampled pairs of walkable cells, MW1's `Walk.route` and `walk_path` (unbounded) must
+      agree on reachability, on the path cost exactly (both are shortest under one cost model:
+      10 straight, 14 diagonal, no corner cutting) and on the step count within 2 (equally cheap
+      paths can trade 7 straight steps for 5 diagonal ones); both paths must be legal walks.
+      Committed: the MW2-editor sample's two sheets (150 pairs each) and four seeded mazes (120
+      pairs each, with unreachable pockets): no disagreement. A deliberately corner-cutting
+      planner is caught (the positive case). Local only (client data, never committed), with
+      `PORING_FLOW_CROSSCHECK_GAT=data/gat`: 240 sampled legs (40 per map, targets within 60 cells) on alberta, alberta_in, iz_dun00, prontera, prt_church and prt_fild08 (2026-10-09 10:16): 206 reachable, 34 unreachable, 0 disagreements, the same cost and the same step count on every reachable leg; the two GAT readers (kbsheet.read_gat, the linter's; poring_dataset.gat, the executor's) see identical walkable cells on all six maps. 75 of the 240 legs are longer than the executor's one-plan limit (below); one plan refuses all 75.
+    - **A difference it found, recorded and not hidden:** the executor plans ONE walk of at most
+      48 steps (`PLAN_MAX`, scripts/walk5.py), and MW1's linter routes a leg of any length. A
+      longer leg is either refused by one plan (it needs waypoints: section 5 says legs ≤ 128
+      steps, waypoints beyond, which MW1 does not model), or, where a walk of at most 48 steps
+      exists, the plan takes a DEARER route than the one the linter checked (seen on a seeded
+      maze, asserted in the test). The swap has to bring the executor's leg limit into the
+      linter with the planner.
 
 **Added with section 13 (map-centric workflows and event flows, Batt, 2026-10-08).** FIRST here
 means needed before MW1.
