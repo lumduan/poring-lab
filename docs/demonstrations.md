@@ -3807,6 +3807,20 @@ NOT pre-registered, NOT run live; no input was sent while building it):**
       python3 scripts/learn_skill1.py run --n N --seed S --restore skreset --skreset-allowed
       python3 scripts/learn_skill1_score.py /dev/shm/poring-lab-demo/<session>
 
+**➡️ UNMEASURED ITEMS 1-2 MEASURED LIVE (2026-10-10 03:30-03:37 ICT, RDP, the GM; never scored; frames
+and packets local in `/dev/shm/poring-lab-tmp/learn_skill/look7*`, `look8*`):**
+- **A UI click needs the two-motion approach.** look7 clicked the icon with a cold jump (no prior
+  motion): 3 and then 9 clicks did NOTHING (no "+N", "Skill Points : 9" unchanged). look8 repeated it
+  with the harness's own approach (`LiveIo.ui_click`: 3 px off, then the point, 0.15 s): every click
+  counted. (The 2026-10-09 look3 click worked because the cursor already rested on the icon.)
+- **Tentative +N:** +3 shows a red "+3" and "Skill Points : 6(3) / 9"; +9 shows "+9", "0(9) / 9" and
+  the icon greys out (no point left).
+- **RESET** clears any tentative raise (back to "9"); **APPLY** opens the confirm modal even with
+  nothing tentative (look7); the modal's **CANCEL** closes it and KEEPS the tentative raise; a second
+  RESET clears it. **No skill packet was sent at any step** of either look (no `skill_up_request`).
+- Restored: `@joblevelup -49` with no skill learned (no reset needed: the client stays in sync);
+  the fixed state checked at the end of both looks.
+
 **DRAFT pre-registration for learn_skill@1 (2026-10-10 ~01:15 ICT; NOT binding: it waits for Batt's
 restore decision, then it is re-dated and committed as PRE-REGISTERED before any trial):**
 - **The rule and harness:** `scripts/learn_skill1.py` at the commit of the pre-registration; scored
