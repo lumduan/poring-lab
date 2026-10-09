@@ -86,6 +86,35 @@ On a breach:
                   model, or (training only, right after an epoch ends) a baseline due for
                   re-measurement; `ABORT <label>: R3-HARD drops ... (no resume)` when a camera
                   drops frames for 30 s. --frigate-baseline PATH overrides the baseline file.
+  OPTION A, the long-lived vision worker (docs/operations/vision-long-lived.md; Batt 2026-10-09:
+  BUILT and unit-tested, NOT proven live, NOT switched -- train-day.sh uses it only with WORKER=1):
+  worker:vision[@<seconds>]
+                start THE worker once: `docker compose -f compose.yaml -f
+                compose.vision-worker.yaml --profile vision-worker up -d --no-deps --no-build
+                vision-worker`, then watch the IO guard for <seconds> (default 120; a breach stops
+                it) and check it is IDLE (docker-init + `sleep infinity`) with nothing of ours on
+                the GPU. The same image, mounts, limits and network as a rundev: run
+                (tests/test_guards.py); its entrypoint never imports torch, so it holds no CUDA
+                context. It is the day's ONE cold start: run it through
+                scripts/runbooks/quiet_start.py (a measured quiet window). Already up and idle:
+                nothing is started. Busy, paused or unreadable: REFUSED (rc 3).
+  execdev:vision[@<seconds>]=<command>
+                <command> INSIDE the worker: `timeout <seconds+60> docker exec
+                poring-lab-vision-worker-1 timeout --kill-after=30 <seconds> <command>`. The INNER
+                timeout bounds the process: a killed `docker exec` client never stops what it
+                started (the Docker API cannot signal an exec). Everything of rundev: holds: the
+                same R2/R3 pre-start refusals, the PairedR3 ON/OFF windows (docker pause / unpause
+                of the WORKER), the IO guard, the duty file. REFUSED (rc 3) unless the worker is
+                up, unpaused, IDLE (one job at a time) and started from THIS checkout (its source,
+                duty and data mounts): `REFUSED execdev:vision: WORKER down ...` / `... WORKER not
+                ready ...`. A stop is verified in EXEC MODE (verify_stop): the worker idle again,
+                nothing of ours on the GPU, no client left on the host; escalation SIGINT -> kill
+                -9 -> docker kill of the worker (`WORKER KILLED`), else STOP-UNVERIFIED. A normal
+                end is checked the same way: a client that ended while the worker is still busy is
+                stopped.
+  worker-stop:vision
+                `docker compose ... stop vision-worker`, then checks it is down with nothing of ours
+                on the GPU. REFUSED (rc 3) while a job runs in it (or it is paused).
   cache[@<seconds>]=<args>
                 the HOST frame-cache builder, `nice -n 19 .venv/bin/python
                 scripts/build_frame_cache.py <args>` (it reads sessions from the NAS and writes tar
@@ -102,6 +131,16 @@ On a breach:
         'rundev:vision@3600=python -m poring_vision.train --cache /datasets/.framecache/ID --smoke'
     python3 scripts/guarded_build.py --sustain 30 --spike 25 \
         'cache@7200=--train S1 S2 --val S3 --test S4 --cache-id ID --labels v0 --resume'
+    python3 scripts/runbooks/quiet_start.py -- \
+        python3 scripts/guarded_build.py --sustain 30 --spike 25 worker:vision@120
+    python3 scripts/guarded_build.py --sustain 30 --spike 25 \
+        'execdev:vision@3600=python -m poring_vision.train --cache /datasets/.framecache/ID --smoke'
+    python3 scripts/guarded_build.py worker-stop:vision
+
+--test-abort-after-cycles N is TEST ONLY (the worker proof: scripts/runbooks/worker_proof.py,
+step 4): once a GPU step's R3 schedule has closed N ON/OFF cycles (N measured pairs, as in any
+run), the step is aborted exactly as on an IO trip (an ABORT line, unpause, SIGINT, the verified
+stop). Never in a production run: train-day.sh and eval.sh never pass it.
 
 Logs go to $TMPDIR/poring-guarded-*.log. Exit 0 only if every step completed without a breach.
 """
@@ -222,7 +261,7 @@ def parse_step(step: str) -> Step:
         if not all(SERVICE.match(s) for s in services):
             raise ValueError(f"{step}: expected rm:<svc>[,<svc>...]")
         return Step(kind, services)
-    if kind in ("run", "rundev"):
+    if kind in ("run", "rundev", "execdev"):
         head, eq, command = arg.partition("=")
         name, _, secs = head.partition("@")
         argv = shlex.split(command)
@@ -231,6 +270,11 @@ def parse_step(step: str) -> Step:
         if name not in RUN_ALLOWED:
             raise ValueError(f"{step}: run: is allowed only for {', '.join(sorted(RUN_ALLOWED))}")
         return Step(kind, [name], float(secs or 600), argv)
+    if kind in ("worker", "worker-stop"):
+        name, _, secs = arg.partition("@")
+        if name not in RUN_ALLOWED or (kind == "worker-stop" and secs):
+            raise ValueError(f"{step}: expected worker:vision[@<seconds>] or worker-stop:vision")
+        return Step(kind, [name], float(secs or 120) if kind == "worker" else None)
     if kind in ("replay", "replaydev"):
         rng, _, secs = arg.partition("@")
         m = REPLAY_RANGE.match(rng)
@@ -276,6 +320,150 @@ def run_cmd(step: Step) -> list[str]:
         "timeout", seconds, "docker", "compose", *files, "--profile", svc, "run", "--rm",
         "--name", container_name(step), "--no-deps", svc, *step.command,
     ]  # fmt: skip
+
+
+# --- OPTION A: the long-lived vision worker (docs/operations/vision-long-lived.md) ---------------
+WORKER_SERVICE = "vision-worker"
+WORKER = "poring-lab-vision-worker-1"  # compose's name for the ONE worker container
+VISION_WORKER = ["-f", "compose.yaml", "-f", "compose.vision-worker.yaml", "--profile",
+                 WORKER_SERVICE]  # fmt: skip
+EXEC_GRACE_S = 60  # the docker exec client outlives the inner timeout by this much
+EXEC_KILL_AFTER_S = 30  # the inner timeout's SIGKILL, this long after its SIGTERM
+EXEC_SETTLE_S = 10  # after the client ends: orphaned children get this long to exit by themselves
+# The step's host-side processes: the outer `timeout` and the `docker exec` client (cmdline bytes).
+EXEC_HOST = b"docker\x00exec\x00" + WORKER.encode() + b"\x00"
+# The worker must run THIS checkout's source, duty file and data dir (container path -> host path):
+# the duty file guarded_build writes and the results it reads are this checkout's.
+WORKER_MOUNTS = {
+    "/opt/vision-src": REPO / "services" / "vision" / "src",
+    "/lab-duty": REPO / "state" / "train-duty",
+    "/data": REPO / "data",
+}
+WORKER_STATES = {"running": "running", "paused": "paused", "created": "stopped",
+                 "exited": "stopped", "dead": "stopped"}  # fmt: skip
+
+
+def exec_cmd(step: Step) -> list[str]:
+    """execdev: the command INSIDE the long-lived worker. Two bounds: the inner `timeout` stops the
+    process (killing a `docker exec` client never stops what it started: the API cannot signal an
+    exec), the outer one the client, EXEC_GRACE_S later."""
+    seconds = int(step.seconds or 600)
+    return [
+        "timeout", str(seconds + EXEC_GRACE_S), "docker", "exec", WORKER,
+        "timeout", f"--kill-after={EXEC_KILL_AFTER_S}", str(seconds), *step.command,
+    ]  # fmt: skip
+
+
+def worker_start_cmd() -> list[str]:
+    return ["docker", "compose", *VISION_WORKER, "up", "-d", "--no-deps", "--no-build",
+            WORKER_SERVICE]  # fmt: skip
+
+
+def worker_stop_cmd() -> list[str]:
+    return ["docker", "compose", *VISION_WORKER, "stop", WORKER_SERVICE]
+
+
+def docker_state(name: str) -> tuple[str, str]:
+    """(state, container id): running | paused | stopped | absent | unknown (docker not answering,
+    or restarting / being removed)."""
+    try:
+        r = subprocess.run(["docker", "inspect", "-f", "{{.Id}} {{.State.Status}}", name],
+                           capture_output=True, text=True, timeout=15, check=False)  # fmt: skip
+    except (OSError, subprocess.SubprocessError):
+        return "unknown", ""
+    if r.returncode != 0:
+        return ("absent", "") if "no such" in (r.stderr or "").lower() else ("unknown", "")
+    parts = (r.stdout or "").split()
+    if len(parts) != 2:
+        return "unknown", ""
+    return WORKER_STATES.get(parts[1], "unknown"), parts[0]
+
+
+def _argv(raw: bytes) -> list[bytes]:
+    return raw[:-1].split(b"\x00") if raw.endswith(b"\x00") else (raw.split(b"\x00") if raw else [])
+
+
+def worker_procs(name: str) -> dict[int, tuple[int, list[bytes]]] | None:
+    """The HOST's view of the worker's processes: {host pid: (ppid, argv)} from its cgroup; {} when
+    it is not running; None when that cannot be read (fail closed: unverifiable)."""
+    state, cid = docker_state(name)
+    if state in ("stopped", "absent"):
+        return {}
+    if state == "unknown":
+        return None
+    try:
+        procs = Path(f"/sys/fs/cgroup/system.slice/docker-{cid}.scope/cgroup.procs").read_text()
+        pids = [int(p) for p in procs.split()]
+    except (OSError, ValueError):
+        return None
+    out: dict[int, tuple[int, list[bytes]]] = {}
+    for pid in pids:
+        try:
+            status = Path(f"/proc/{pid}/status").read_text()
+            ppid = int(status.split("\nPPid:", 1)[1].split()[0])
+            out[pid] = (ppid, _argv(Path(f"/proc/{pid}/cmdline").read_bytes()))
+        except (OSError, IndexError, ValueError):
+            continue  # exited meanwhile
+    return out
+
+
+def idle_argv(argv: list[bytes]) -> bool:
+    """The worker's idle entrypoint: `sleep infinity` and its init (`docker-init -- sleep
+    infinity`). Anything else in it is a job."""
+    if argv == [b"sleep", b"infinity"]:
+        return True
+    return (len(argv) == 4 and argv[0].rsplit(b"/", 1)[-1] in (b"docker-init", b"tini")
+            and argv[1:] == [b"--", b"sleep", b"infinity"])  # fmt: skip
+
+
+def busy(procs: dict[int, tuple[int, list[bytes]]]) -> dict[int, tuple[int, list[bytes]]]:
+    return {p: v for p, v in procs.items() if not idle_argv(v[1])}
+
+
+def exec_roots(procs: dict[int, tuple[int, list[bytes]]]) -> list[int]:
+    """The tops of what runs in the worker beyond its entrypoint (an exec'd process's parent is the
+    containerd shim, outside the container): the processes a SIGINT goes to first."""
+    b = busy(procs)
+    return sorted(p for p, (ppid, _) in b.items() if ppid not in b)
+
+
+def describe(procs: dict[int, tuple[int, list[bytes]]]) -> str:
+    words = [f"{p} ({b' '.join(v[1]).decode(errors='replace')[:70] or 'zombie'})"
+             for p, v in sorted(procs.items())]  # fmt: skip
+    return ", ".join(words)
+
+
+def worker_mounts(name: str) -> dict[str, str] | None:
+    """The worker's bind mounts {container path: host path}, or None when docker does not answer."""
+    try:
+        cmd = ["docker", "inspect", "-f", "{{json .Mounts}}", name]
+        out = subprocess.run(cmd, capture_output=True, text=True, timeout=15, check=True).stdout
+        return {str(m["Destination"]): str(m.get("Source", "")) for m in json.loads(out)}
+    except (OSError, subprocess.SubprocessError, ValueError, TypeError, KeyError):
+        return None
+
+
+def worker_not_ready(name: str = WORKER) -> str | None:
+    """Why an execdev: must NOT start in the worker now, or None: up, unpaused, idle (one job at a
+    time), and started from THIS checkout."""
+    state, _ = docker_state(name)
+    if state in ("stopped", "absent"):
+        return (f"down ({name} {state}): start it with worker:vision@<s>, through quiet_start "
+                "(a measured quiet window)")  # fmt: skip
+    if state != "running":
+        return f"not ready ({name} {state}): a person must look"
+    procs = worker_procs(name)
+    if procs is None:
+        return f"not ready ({name}: its processes are unreadable)"
+    if busy(procs):
+        return f"not ready ({name} is busy: {describe(busy(procs))}): one job at a time"
+    mounts = worker_mounts(name) or {}
+    wrong = {dst: mounts.get(dst) for dst, src in WORKER_MOUNTS.items()
+             if dst not in mounts or Path(mounts[dst]).resolve() != src.resolve()}  # fmt: skip
+    if wrong:
+        return (f"not ready ({name} was not started from this checkout: {wrong}); its source, "
+                "duty file and data must be this checkout's")  # fmt: skip
+    return None
 
 
 def select_captures(names: list[str], first: str, last: str) -> list[str]:
@@ -397,6 +585,130 @@ def leftovers(container: str | None, gpu: bool, host: bytes | None) -> list[str]
     return left
 
 
+def pid_cgroup(pid: int) -> str:
+    """/proc/<pid>/cgroup ("" when gone): an EXITING task (a CUDA context being torn down) has
+    already left cgroup.procs but still names its cgroup here."""
+    try:
+        return Path(f"/proc/{pid}/cgroup").read_text()
+    except OSError:
+        return ""
+
+
+def gpu_ours_exec(worker: str, pids: list[int], procs: dict[int, Any]) -> list[int]:
+    """GPU compute processes of ours in exec mode: in the worker (its processes, or its cgroup for
+    one that is exiting), or ours by command line anywhere (poring_vision)."""
+    cid = docker_state(worker)[1]
+    inside = {p for p in pids if p in procs or (cid and f"docker-{cid}.scope" in pid_cgroup(p))}
+    return sorted(set(own_pids(b"poring_vision", pids)) | inside)
+
+
+def exec_leftovers(worker: str, host: bytes | None) -> list[str]:
+    """EXEC MODE (execdev:): what of the step is still alive. The worker itself stays up: stopped
+    means it runs only its idle entrypoint again (the exec'd process and every child gone), no GPU
+    process of ours (in the worker, or ours by command line), no client left on the host. Empty =
+    verified. Unreadable = never verified (fail closed)."""
+    left = []
+    procs = worker_procs(worker)
+    if procs is None:
+        left.append(f"worker {worker} unverifiable (its state / cgroup unreadable)")
+        procs = {}
+    jobs = busy(procs)
+    if jobs:
+        left.append(f"worker busy: {describe(jobs)}")
+    pids = gpu_pids()
+    if pids is None:
+        left.append("GPU unverifiable (nvidia-smi failed)")
+    else:
+        ours = gpu_ours_exec(worker, pids, procs)
+        if ours:
+            left.append(f"our GPU processes {ours}")
+    if host is not None:
+        hosts = own_pids(host)
+        if hosts:
+            left.append(f"host processes {hosts} (the docker exec client)")
+    return left
+
+
+def _signal(pid: int, sig: int, where: str) -> None:
+    name = {2: "SIGINT", 9: "kill -9"}.get(sig, f"signal {sig}")
+    try:
+        os.kill(pid, sig)
+        print(f"[{ts()}] {'ESCALATED: ' if sig == 9 else ''}{name} {pid} ({where})", flush=True)
+    except OSError as exc:
+        print(f"[{ts()}] {name} {pid} ({where}) failed ({exc})", flush=True)
+
+
+def worker_word(worker: str) -> str:
+    state = docker_state(worker)[0]
+    if state == "running":
+        return f"worker {worker} up and idle (no CUDA context)"
+    return f"worker {worker} {state}"
+
+
+def verify_exec_stop(
+    label: str, worker: str, host: bytes | None, *, t0: float, sleep: Any, clock: Any
+) -> bool:
+    """verify_stop in EXEC MODE (option A). The SIGINT the guard sent reached only the host-side
+    `docker exec` client, never the process it started, so: (1) SIGINT to the exec'd process (the
+    tops of what runs in the worker beyond its entrypoint), confirmed within STOP_VERIFY_S; (2)
+    ESCALATE: kill -9 of every job process in the worker, our GPU processes and the host client,
+    confirmed within ESCALATED_VERIFY_S; (3) if the GPU still lists ours or the worker is still
+    busy: `docker kill` of the worker itself (logged `WORKER KILLED`: the next execdev needs a new
+    worker: start), confirmed within ESCALATED_VERIFY_S. Else STOP-UNVERIFIED, a person must look.
+    Signals go from the host by host pid (same uid, no daemon round trip, and no new process in the
+    worker that would read as a job)."""
+    if docker_state(worker)[0] == "paused":  # an R3 OFF window: a frozen process cannot exit
+        subprocess.run(["docker", "unpause", worker], capture_output=True, check=False)
+        print(f"[{ts()}] {label}: {worker} was paused: unpaused", flush=True)
+    nudged = False
+    left = exec_leftovers(worker, host)
+    while left and clock() - t0 < STOP_VERIFY_S:
+        if not nudged:
+            nudged = True
+            for pid in exec_roots(worker_procs(worker) or {}):
+                _signal(pid, 2, f"the exec'd process in {worker}")
+        sleep(2)
+        left = exec_leftovers(worker, host)
+    if not left:
+        print(f"[{ts()}] STOP VERIFIED {label} after {clock() - t0:.0f}s: the exec'd process gone, "
+              f"no process of ours on the GPU or left on the host; {worker_word(worker)} "
+              f"[{frigate_r3.stamp()}]", flush=True)  # fmt: skip
+        return True
+    print(f"[{ts()}] STOP NOT VERIFIED {label} after {STOP_VERIFY_S:.0f}s ({'; '.join(left)}): "
+          f"ESCALATING [{frigate_r3.stamp()}]", flush=True)  # fmt: skip
+    procs = worker_procs(worker) or {}
+    gpu = gpu_ours_exec(worker, gpu_pids() or [], procs)
+    for pid in sorted(set(busy(procs)) | (set(gpu) & set(procs))):
+        _signal(pid, 9, f"in {worker}")
+    for pid in sorted(set(gpu) - set(procs)):
+        _signal(pid, 9, "ours on the GPU")
+    for pid in own_pids(host) if host is not None else []:
+        _signal(pid, 9, "the host's docker exec client")
+
+    def settle() -> list[str]:
+        t1 = clock()
+        now = exec_leftovers(worker, host)
+        while now and clock() - t1 < ESCALATED_VERIFY_S:
+            sleep(2)
+            now = exec_leftovers(worker, host)
+        return now
+
+    left = settle()
+    if any(x.startswith(("our GPU processes", "worker busy")) for x in left):
+        subprocess.run(["docker", "kill", worker], capture_output=True, check=False)
+        print(f"[{ts()}] ESCALATED: docker kill {worker} ({'; '.join(left)} after kill -9) -- "
+              f"WORKER KILLED: start it again (worker:vision@<s>, through quiet_start) before the "
+              f"next execdev [{frigate_r3.stamp()}]", flush=True)  # fmt: skip
+        left = settle()
+    if not left:
+        print(f"[{ts()}] STOP VERIFIED {label} after escalation ({clock() - t0:.0f}s); "
+              f"{worker_word(worker)} [{frigate_r3.stamp()}]", flush=True)  # fmt: skip
+        return True
+    print(f"[{ts()}] STOP-UNVERIFIED {label}: {'; '.join(left)} STILL PRESENT after escalation -- "
+          f"stop it by hand [{frigate_r3.stamp()}]", flush=True)  # fmt: skip
+    return False
+
+
 def verify_stop(
     label: str,
     container: str | None,
@@ -406,14 +718,19 @@ def verify_stop(
     t0: float | None = None,
     sleep: Any = time.sleep,
     clock: Any = time.monotonic,
+    exec_mode: bool = False,
 ) -> bool:
     """Every guard stop is VERIFIED, never assumed (Batt, 2026-10-07): within STOP_VERIFY_S of the
     SIGINT the step's container must be gone, no process of ours on the GPU, no host process of
     the step left. A container still up gets its own SIGINT (the compose client may not forward
     it: 2026-10-07 11:06, the training ran on for 10.5 min). Past the deadline: ESCALATE (`docker
     kill`, `kill -9` of our leftover processes), logged, and confirm again within
-    ESCALATED_VERIFY_S. False = still not stopped: STOP-UNVERIFIED, a person must look."""
+    ESCALATED_VERIFY_S. False = still not stopped: STOP-UNVERIFIED, a person must look.
+    ``exec_mode`` (execdev:): ``container`` is the long-lived worker, which STAYS up: see
+    verify_exec_stop."""
     t0 = clock() if t0 is None else t0
+    if exec_mode and container is not None:
+        return verify_exec_stop(label, container, host, t0=t0, sleep=sleep, clock=clock)
     nudged = False
     left = leftovers(container, gpu, host)
     while left and clock() - t0 < STOP_VERIFY_S:
@@ -604,6 +921,7 @@ def abort(
     container: str | None = None,
     gpu: bool = False,
     host: bytes | None = None,
+    exec_mode: bool = False,
 ) -> bool:
     """SIGINT the step, then VERIFY it stopped (verify_stop); True only when verified."""
     t0 = time.monotonic()
@@ -615,7 +933,39 @@ def abort(
     except subprocess.TimeoutExpired:
         proc.kill()
         proc.wait(timeout=30)
+    if exec_mode:
+        return verify_stop(label, container, gpu, host, t0=t0, exec_mode=True)
     return verify_stop(label, container, gpu, host, t0=t0)
+
+
+def r3_cycles(r3: Any) -> int:
+    """The ON/OFF cycles the R3 schedule has closed (each closed OFF window ends one)."""
+    return sum(1 for w in getattr(r3, "windows", []) if w.get("phase") == "off" and "t1" in w)
+
+
+def settle_exec(label: str, worker: str, host: bytes | None, rc: int | None, *,
+                sleep: Any = time.sleep, clock: Any = time.monotonic) -> bool:  # fmt: skip
+    """After the `docker exec` client ended by itself: the worker must be idle again with nothing of
+    ours on the GPU. Orphaned children get EXEC_SETTLE_S; what is left then is STOPPED (exec-mode
+    verify_stop) -- a client that died alone (daemon hiccup, a SIGINT to it by hand) must never
+    leave a training running unguarded in the worker. False only when that stop is unverified."""
+    left = exec_leftovers(worker, host)
+    for _ in range(EXEC_SETTLE_S):
+        if not left:
+            break
+        sleep(1)
+        left = exec_leftovers(worker, host)
+    if not left:
+        state = docker_state(worker)[0]
+        print(f"[{ts()}] {label}: the exec ended (rc={rc}); {worker_word(worker)}, nothing of ours "
+              f"on the GPU [{frigate_r3.stamp()}]", flush=True)  # fmt: skip
+        if state != "running":
+            print(f"[{ts()}] {label}: WORKER DOWN after the step ({worker} {state}): the next "
+                  "execdev needs worker:vision@<s> (through quiet_start)", flush=True)  # fmt: skip
+        return True
+    print(f"[{ts()}] {label}: the docker exec client ended (rc={rc}) but {'; '.join(left)}: "
+          f"stopping what is left in the worker [{frigate_r3.stamp()}]", flush=True)  # fmt: skip
+    return verify_stop(label, worker, True, host, sleep=sleep, clock=clock, exec_mode=True)
 
 
 def run_process(
@@ -628,7 +978,13 @@ def run_process(
     gpu: bool = False,
     host: bytes | None = None,
     duty: "frigate_r3.DutyController | None" = None,
+    exec_mode: bool = False,
+    test_abort_cycles: int = 0,
 ) -> bool:
+    """Run one step under the IO guard (and R3 / the duty cycle for GPU steps). ``exec_mode``
+    (execdev:): ``container`` is the long-lived worker the command runs in -- R3 pauses it, a stop
+    is verified in exec mode, and a normal end must leave it idle (settle_exec).
+    ``test_abort_cycles``: TEST ONLY (--test-abort-after-cycles)."""
     log = log_path(label)
     seen: Any = None
     beat = 0.0
@@ -654,7 +1010,7 @@ def run_process(
                 )
                 if duty is not None:
                     print(f"[{ts()}] DUTY summary: {json.dumps(duty.summary())}", flush=True)
-                abort(proc, label, container, gpu, host)
+                abort(proc, label, container, gpu, host, exec_mode)
                 return False
             if r3 is not None:
                 r3.poll()
@@ -725,10 +1081,22 @@ def run_process(
                     print(f"[{ts()}] R3 summary: {json.dumps(r3.summary())}", flush=True)
                     if duty is not None:
                         print(f"[{ts()}] DUTY summary: {json.dumps(duty.summary())}", flush=True)
-                    abort(proc, label, container, gpu, host)
+                    abort(proc, label, container, gpu, host, exec_mode)
+                    return False
+                if test_abort_cycles and r3_cycles(r3) >= test_abort_cycles:
+                    # TEST ONLY (the worker proof, step 4): the IO trip's own path, on demand
+                    print(f"[{ts()}] ABORT {label}: TEST forced stop after {r3_cycles(r3)} R3 "
+                          "ON/OFF cycle(s) (--test-abort-after-cycles; handled as an IO trip) "
+                          f"[{frigate_r3.stamp()}]", flush=True)  # fmt: skip
+                    print(f"[{ts()}] R3 summary: {json.dumps(r3.summary())}", flush=True)
+                    if duty is not None:
+                        print(f"[{ts()}] DUTY summary: {json.dumps(duty.summary())}", flush=True)
+                    abort(proc, label, container, gpu, host, exec_mode)
                     return False
             time.sleep(2)
     ok = proc.returncode == 0
+    if exec_mode and container is not None:
+        ok = settle_exec(label, container, host, proc.returncode) and ok
     if r3 is not None:
         print(f"[{ts()}] R3 summary: {json.dumps(r3.summary())}", flush=True)
     if duty is not None:
@@ -925,6 +1293,63 @@ def run_start(services: list[str], seconds: float, guard: Guard, *, recreate: bo
     return auto_recover_gm() if recreate and "sniffer" in services else True
 
 
+def run_worker(seconds: float, guard: Guard) -> int:
+    """worker:vision@S -- start the long-lived worker (0 ok, 1 failed, 3 refused)."""
+    label = "worker:vision"
+    state, _ = docker_state(WORKER)
+    if state == "running":
+        why = worker_not_ready()
+        if why is not None:
+            print(f"[{ts()}] REFUSED {label}: {WORKER} is up but {why}", flush=True)
+            return 3
+        print(f"[{ts()}] {label}: {WORKER} is already up and idle: nothing started", flush=True)
+        return 0
+    if state not in ("stopped", "absent"):
+        print(f"[{ts()}] REFUSED {label}: {WORKER} is {state}: a person must look", flush=True)
+        return 3
+    if not run_process(label, worker_start_cmd(), guard):
+        return 1
+    if not watch(seconds, guard, f"the vision worker {WORKER}", worker_stop_cmd()):
+        return 1
+    procs, pids = worker_procs(WORKER), gpu_pids()
+    gpu = None if pids is None else sorted(set(pids) & set(procs or {}))
+    if docker_state(WORKER)[0] == "running" and procs and not busy(procs) and gpu == []:
+        print(f"[{ts()}] WORKER UP {WORKER}: idle ({describe(procs)}), nothing of it on the GPU "
+              f"(no CUDA context) [{frigate_r3.stamp()}]", flush=True)  # fmt: skip
+        return 0
+    print(f"[{ts()}] WORKER NOT IDLE after its start ({WORKER} {docker_state(WORKER)[0]}; "
+          f"processes {describe(procs) if procs else procs}; on the GPU {gpu}): a person must "
+          "look", flush=True)  # fmt: skip
+    return 1
+
+
+def run_worker_stop(guard: Guard) -> int:
+    """worker-stop:vision -- stop the idle worker, verified (0 ok, 1 failed, 3 refused)."""
+    label = "worker-stop:vision"
+    state, _ = docker_state(WORKER)
+    if state in ("stopped", "absent"):
+        print(f"[{ts()}] {label}: {WORKER} is already {state}", flush=True)
+        return 0
+    procs = worker_procs(WORKER) if state == "running" else None
+    if procs is None or busy(procs):
+        what = f"busy: {describe(busy(procs))}" if procs else state
+        print(f"[{ts()}] REFUSED {label}: {WORKER} is {what} -- end or abort its execdev step "
+              "first", flush=True)  # fmt: skip
+        return 3
+    if not run_process(label, worker_stop_cmd(), guard):
+        return 1
+    state, pids = docker_state(WORKER)[0], gpu_pids()
+    ours = own_pids(b"poring_vision", pids or [])
+    if state in ("stopped", "absent") and pids is not None and not ours:
+        print(f"[{ts()}] WORKER STOPPED {WORKER} ({state}), nothing of ours on the GPU "
+              f"[{frigate_r3.stamp()}]", flush=True)  # fmt: skip
+        return 0
+    gpu = "unverifiable" if pids is None else ours
+    print(f"[{ts()}] WORKER STOP NOT VERIFIED: {WORKER} {state}, GPU {gpu}: a person must look",
+          flush=True)  # fmt: skip
+    return 1
+
+
 def results_csv(step: Step) -> Path | None:
     """A training step's per-epoch results.csv (ultralytics, under the shared ./data mount): R3's
     re-baseline waits for a new row there, so a planned stop loses no epoch. None for non-training
@@ -1005,12 +1430,26 @@ def main() -> int:
         "--frigate-baseline", type=Path, default=frigate_r3.BASELINE,
         help="R3: the Frigate baseline (frigate_r3.py baseline) for vision steps",
     )  # fmt: skip
+    ap.add_argument(
+        "--test-abort-after-cycles", type=int, default=0, metavar="N",
+        help="TEST ONLY (worker proof): abort a GPU step as on an IO trip once its R3 schedule has "
+             "closed N ON/OFF cycles",
+    )  # fmt: skip
     args = ap.parse_args()
     try:
         steps = [parse_step(s) for s in args.steps]
     except ValueError as exc:
         print(exc, flush=True)
         return 2
+    if args.test_abort_after_cycles:
+        if args.test_abort_after_cycles < 0 or not any(
+            s.kind in ("run", "rundev", "execdev") for s in steps
+        ):
+            print("--test-abort-after-cycles: a positive N, and only with a GPU step (run:, "
+                  "rundev:, execdev:)", flush=True)  # fmt: skip
+            return 2
+        print(f"[{ts()}] TEST ONLY: GPU steps are aborted as on an IO trip after "
+              f"{args.test_abort_after_cycles} R3 ON/OFF cycle(s)", flush=True)  # fmt: skip
     if any(s.kind == "up" for s in steps) and dev_overlay_active():
         print(
             "up: refused -- the dev overlay (scripts/dev.sh) is running. A plain `compose up` "
@@ -1044,9 +1483,42 @@ def main() -> int:
                 container=container_name(step),
                 gpu=True,
                 duty=duty_for(step),
+                test_abort_cycles=args.test_abort_after_cycles,
             )
             tail = log_path(step.label).read_text(errors="replace").splitlines()[-80:]
             print("\n".join(f"  | {line}" for line in tail), flush=True)
+        elif step.kind == "execdev":
+            why = worker_not_ready()
+            if why is not None:
+                print(f"[{ts()}] REFUSED {step.label}: WORKER {why} [{frigate_r3.stamp()}]",
+                      flush=True)  # fmt: skip
+                return 3
+            r3 = gpu_rules(step, args.frigate_baseline)
+            if r3 is None:
+                return 3
+            ok = run_process(
+                step.label,
+                exec_cmd(step),
+                guard,
+                r3=r3,
+                container=WORKER,
+                gpu=True,
+                host=EXEC_HOST,
+                duty=duty_for(step),
+                exec_mode=True,
+                test_abort_cycles=args.test_abort_after_cycles,
+            )
+            tail = log_path(step.label).read_text(errors="replace").splitlines()[-80:]
+            print("\n".join(f"  | {line}" for line in tail), flush=True)
+        elif step.kind in ("worker", "worker-stop"):
+            rc = (
+                run_worker(step.seconds or 120, guard)
+                if step.kind == "worker"
+                else run_worker_stop(guard)
+            )
+            if rc:
+                return rc
+            ok = True
         elif step.kind == "tables":
             ok = run_process(step.label, tables_cmd(step), guard, env=cache_env(),
                              host=b"scripts/gen_packet_tables.py")  # fmt: skip

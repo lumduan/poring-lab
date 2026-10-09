@@ -2,9 +2,10 @@
 # YOLO training under the GPU sharing rules R1-R3 (scripts/frigate_r3.py; infra side, Batt
 # 2026-10-07). The 20:00-05:00 window is RETIRED: R1-R3 decide, day or night. The IO guard stays.
 # Defaults: batch 2 / workers 1, the 25 % VRAM cap (train.py), checkpoints every epoch.
-# - Every attempt goes through guarded_build.py rundev:, which REFUSES to start while Ollama holds
-#   a model or another job of ours is on the GPU (R2) or Frigate does not answer, and aborts on an
-#   IO stall, an R3 trip (below), Frigate unreachable for 60 s, or Ollama loading a model.
+# - Every attempt goes through guarded_build.py rundev: (execdev: with WORKER=1, below), which
+#   REFUSES to start while Ollama holds a model or another job of ours is on the GPU (R2) or Frigate
+#   does not answer, and aborts on an IO stall, an R3 trip (below), Frigate unreachable for 60 s,
+#   or Ollama loading a model.
 # - THE ADAPTIVE DUTY CYCLE (Batt 2026-10-07 ~16:25; docs/operations/r3-paired.md): the training
 #   NEVER pauses or stops because of load; it slows down. guarded_build's DutyController sets the
 #   step sleep after every batch (100 / 200 / 400 / 800 / 2000 ms) from Frigate's live fleet load and
@@ -35,6 +36,15 @@
 # - MAX_ATTEMPTS=N (Batt 2026-10-09, option D: "one attempt, no auto-retry after an IO trip"): after
 #   N container starts that did not finish, stop as PAUSED (exit 3) -- no IO pause, no R3 resume.
 #   0 (the default) = unlimited, as before.
+# - WORKER=1 (option A, docs/operations/vision-long-lived.md; BUILT, NOT switched: Batt's OK after
+#   the live proof): every attempt is `guarded_build.py execdev:` INSIDE the long-lived vision worker
+#   (started once, beforehand, through quiet_start: `worker:vision@120`) instead of a new `rundev:`
+#   container. Everything else is unchanged (the exit codes, MAX_ATTEMPTS, the market windows, R3).
+#   A worker that is down -> PAUSED (3) at once (its start is a cold start: a person picks the quiet
+#   window); not ready (busy, paused, another checkout's) -> STOPPED (2); a stop that escalated to
+#   `docker kill` of the worker (WORKER KILLED) -> PAUSED (3), no retry. To pause it for an S2
+#   session by hand: SIGINT the in-worker `timeout --kill-after=30 ... poring_vision.train` process
+#   (it shows in the host's ps); the guard then verifies the worker idle again. 0 (default): rundev:.
 # EXIT CODES (2026-10-09: it exited 0 on every end, so a chain read "TRAIN PAUSED" at epoch 17 of 30
 # as finished and started v1's evals on an unfinished checkpoint):
 #   0 TRAIN DONE   2 TRAIN STOPPED (a person must look)   3 TRAIN PAUSED (resume by hand)
@@ -49,6 +59,7 @@ IO_PAUSE_S=${IO_PAUSE_S:-900}; R3_PAUSE_S=${R3_PAUSE_S:-30}  # overridable for t
 MARKET_WINDOWS=${MARKET_WINDOWS:-"0930-1015 1400-1445"}  # ICT, CLAUDE.md rule 5
 SLEEP=${SLEEP:-sleep}  # overridable for tests only
 MAX_ATTEMPTS=${MAX_ATTEMPTS:-0}
+KIND=rundev; [ "${WORKER:-0}" = 1 ] && KIND=execdev  # option A: an exec inside the long-lived worker
 now_hhmm() { if [ -n "${CLOCK_HHMM:-}" ]; then echo "$CLOCK_HHMM"; else TZ=Asia/Bangkok date +%H%M; fi; }  # CLOCK_HHMM: tests only
 market_wait_s() {  # seconds until the market-open window we are in ends (minute grain, +1 min); 0 outside
   local now w a b
@@ -80,7 +91,7 @@ while :; do
   log "attempt $attempt batch $BATCH workers $WORKERS duty start $DUTY_START min $DUTY_MIN cap $DUTY_CAP_LEVEL until $DUTY_CAP_UNTIL after-abort $DUTY_AFTER_ABORT $extra"
   out="$D/train-guarded-$attempt.out"
   $GUARD --sustain 30 --spike 25 \
-    "rundev:vision@43200=python -m poring_vision.train --cache $CACHE --epochs $EPOCHS --batch $BATCH --workers $WORKERS --name $RUN --step-sleep-ms 2000 --duty-file /lab-duty/duty.json$mid $extra" \
+    "$KIND:vision@43200=python -m poring_vision.train --cache $CACHE --epochs $EPOCHS --batch $BATCH --workers $WORKERS --name $RUN --step-sleep-ms 2000 --duty-file /lab-duty/duty.json$mid $extra" \
     > "$out" 2>&1
   rc=$?
   log "attempt $attempt rc=$rc: $(grep -E 'ABORT|REFUSED' "$out" | tail -1 | cut -c1-200)"
@@ -88,6 +99,9 @@ while :; do
   attempt=$((attempt + 1))
   if [ "$rc" -eq 0 ]; then log "TRAIN DONE"; status=0; break; fi
   if grep -q "STOP-UNVERIFIED" "$out"; then log "TRAIN STOPPED: the guard could NOT verify the stop ($(grep STOP-UNVERIFIED "$out" | tail -1 | cut -c1-160)): a person must look"; status=2; break; fi
+  if grep -q "REFUSED $KIND:vision: WORKER down" "$out"; then log "TRAIN PAUSED: the vision worker is down -- start it through quiet_start (worker:vision@120), then RESUME=1"; status=3; break; fi
+  if grep -q "REFUSED $KIND:vision: WORKER" "$out"; then log "TRAIN STOPPED: the vision worker is not ready ($(grep 'REFUSED' "$out" | tail -1 | cut -c1-200)): a person must look"; status=2; break; fi
+  if grep -q "WORKER KILLED" "$out"; then log "TRAIN PAUSED: the stop escalated to docker kill of the vision worker -- start it again through quiet_start (worker:vision@120), then RESUME=1"; status=3; break; fi
   if [ "$MAX_ATTEMPTS" -gt 0 ] && [ "$attempt" -ge "$MAX_ATTEMPTS" ]; then log "TRAIN PAUSED: MAX_ATTEMPTS=$MAX_ATTEMPTS container start(s) used, no retry (resume by hand: RESUME=1)"; status=3; break; fi
   for f in last.pt mid.pt mid.prev.pt; do [ -e "data/train/$RUN/weights/$f" ] && extra="--resume"; done
   if grep -q "R3-HARD" "$out"; then
@@ -115,9 +129,9 @@ while :; do
     export DUTY_MIN=$(( DUTY_MIN < FLOOR ? DUTY_MIN + 1 : FLOOR )) DUTY_START=$FLOOR DUTY_AFTER_ABORT=0
     log "R3 $(grep -o 'ABORT [^ ]*: R3 \(inconclusive\|latency\)' "$out" | tail -1 | grep -o 'R3 [a-z]*'): the duty floor is now level $DUTY_MIN; resuming in 30 s"
     pause=$R3_PAUSE_S
-  elif grep -q "REFUSED rundev" "$out"; then
+  elif grep -q "REFUSED $KIND" "$out"; then
     trips=$((trips + 1))
-  elif ! grep -q "ABORT rundev" "$out"; then
+  elif ! grep -q "ABORT $KIND" "$out"; then
     log "TRAIN STOPPED: not a guard trip (see $out)"; status=2; break
   else
     trips=$((trips + 1))

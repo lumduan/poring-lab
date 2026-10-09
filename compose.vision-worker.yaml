@@ -1,0 +1,61 @@
+# OPTION A (docs/operations/vision-long-lived.md; Batt 2026-10-09): ONE long-lived vision container
+# per day, every training / eval attempt run INSIDE it, so the ~5 GB torch image is cold-started once
+# (in a measured quiet window), not once per attempt. BUILT, NOT switched.
+#
+#   python3 scripts/runbooks/quiet_start.py -- \
+#       python3 scripts/guarded_build.py --sustain 30 --spike 25 worker:vision@120
+#   python3 scripts/guarded_build.py --sustain 30 --spike 25 'execdev:vision@S=CMD'
+#   python3 scripts/guarded_build.py worker-stop:vision
+#
+# Used ONLY as `-f compose.yaml -f compose.vision-worker.yaml --profile vision-worker` by those
+# guarded steps (compose.yaml lends the volumes and the agent network). The service is EXACTLY a
+# `rundev:vision` container -- compose.yaml's vision + compose.vision-dev.yaml's two read-only
+# mounts and PYTHONPATH -- with the same image, environment, limits (R1's VRAM cap, mem == memswap,
+# oom_score_adj 500), GPU and network (`agent` only, ADR-0005), and only these differences
+# (tests/test_guards.py pins every field against vision's):
+#   - entrypoint `sleep infinity`: IDLE. It never imports torch, so it holds NO CUDA context;
+#   - restart "no": it starts only through the guarded step (never after a reboot or a crash: that
+#     would be an unmeasured cold start);
+#   - no build (never a 5 GB rebuild by accident), pull_policy never, no depends_on.
+services:
+  vision-worker:
+    profiles: [vision-worker]
+    image: poring-lab/vision:local
+    pull_policy: never
+    restart: "no"
+    init: true
+    oom_score_adj: 500
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    entrypoint: ["sleep", "infinity"]
+    environment:
+      SESSION_SIZE: ${SESSION_SIZE:-1440x900}
+      BACKEND_AGENT_URL: ws://backend:8001/internal/agent
+      AGENT_HZ: ${AGENT_HZ:-10}
+      VISION_MAX_VRAM_FRACTION: ${VISION_MAX_VRAM_FRACTION:-0.25}
+      VISION_DEBUG_BOX: ${VISION_DEBUG_BOX:-false}
+      VISION_FRAME_SOURCE: bus
+      YOLO_OFFLINE: "1"
+      HF_HUB_OFFLINE: "1"
+      PYTHONPATH: /opt/vision-src
+    volumes:
+      - ./data:/data
+      - framebus:/framebus:ro
+      - ./services/vision/acceptance:/opt/acceptance:ro
+      - datasets-nas:/datasets:ro
+      - ./services/vision/src:/opt/vision-src:ro
+      - ./state/train-duty:/lab-duty:ro
+    networks: [agent]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    mem_limit: 6g
+    memswap_limit: 6g
+    shm_size: 1g

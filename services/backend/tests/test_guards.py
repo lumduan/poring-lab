@@ -44,12 +44,13 @@ def volume_sources(service: dict[str, Any]) -> set[str]:
     return out
 
 
-@pytest.mark.parametrize("name", ["compose.yaml", "compose.dev.yaml"])
+@pytest.mark.parametrize("name", ["compose.yaml", "compose.dev.yaml", "compose.vision-worker.yaml"])
 def test_transfer_volume_is_mounted_only_in_desktop_and_backend(name: str) -> None:
     services = compose(name)["services"]
     mounting = {svc for svc, spec in services.items() if "transfer" in volume_sources(spec or {})}
     assert mounting <= TRANSFER_SERVICES, mounting
-    for forbidden in ("vision", "rathena", "sniffer", "db", "frontend", "frontend-dev"):
+    for forbidden in ("vision", "vision-worker", "rathena", "sniffer", "db", "frontend",
+                      "frontend-dev"):  # fmt: skip
         assert forbidden not in mounting
 
 
@@ -224,7 +225,7 @@ def mounts_of(service: dict[str, Any], volume: str) -> list[str]:
     return out
 
 
-@pytest.mark.parametrize("name", ["compose.yaml", "compose.dev.yaml"])
+@pytest.mark.parametrize("name", ["compose.yaml", "compose.dev.yaml", "compose.vision-worker.yaml"])
 def test_captures_volume_only_in_sniffer_rw_and_backend_ro(name: str) -> None:
     services = compose(name)["services"]
     for svc, spec in services.items():
@@ -434,7 +435,7 @@ def test_a_missing_override_key_means_the_default_not_the_previous_value(tmp_pat
 # --- the capture-backend lock (ADR-0009) ---------------------------------------------------------
 
 
-@pytest.mark.parametrize("name", ["compose.yaml", "compose.dev.yaml"])
+@pytest.mark.parametrize("name", ["compose.yaml", "compose.dev.yaml", "compose.vision-worker.yaml"])
 def test_lock_directory_is_read_only_everywhere_and_never_in_vision(name: str) -> None:
     for service_name, service in compose(name)["services"].items():
         for vol in service.get("volumes", []):
@@ -442,6 +443,8 @@ def test_lock_directory_is_read_only_everywhere_and_never_in_vision(name: str) -
                 continue
             assert vol.endswith(":ro"), f"{name}: {service_name} mounts the lock writable: {vol}"
             assert service_name != "vision", f"{name}: vision must not see the lock"
+            if service_name == "vision-worker":  # the duty level only, never the lock directory
+                assert vol == "./state/train-duty:/lab-duty:ro", f"{name}: {vol}"
     base = compose("compose.yaml")["services"]
     for must in ("desktop", "backend"):
         assert "./state:/lab-state:ro" in base[must]["volumes"], f"{must} must see the lock"
@@ -454,7 +457,7 @@ def test_lock_directory_exists_in_git_so_docker_never_creates_it_as_root() -> No
 # --- the human-only settings store (2026-10-06) --------------------------------------------------
 
 
-@pytest.mark.parametrize("name", ["compose.yaml", "compose.dev.yaml"])
+@pytest.mark.parametrize("name", ["compose.yaml", "compose.dev.yaml", "compose.vision-worker.yaml"])
 def test_the_settings_store_is_writable_by_the_backend_only(name: str) -> None:
     """The server allowlist decides when the interlock may turn green, and the foreground gate's
     templates decide when bot typing passes: only the backend (whose one writer is the Settings
@@ -500,7 +503,7 @@ def test_gamestream_service_is_contained() -> None:
     assert not any(k.startswith("RDP_") for k in env), "no RDP credentials in gamestream"
 
 
-@pytest.mark.parametrize("name", ["compose.yaml", "compose.dev.yaml"])
+@pytest.mark.parametrize("name", ["compose.yaml", "compose.dev.yaml", "compose.vision-worker.yaml"])
 def test_the_pairing_key_volume_is_mounted_in_gamestream_only(name: str) -> None:
     for service_name, service in compose(name)["services"].items():
         if "gamestream-state" in volume_sources(service):
@@ -704,10 +707,11 @@ def test_the_canvas_lets_moonlight_open_the_stream_at_native_size(source: str) -
 
 
 # --- S2 frame bus (docs/s2-plan.md) ---------------------------------------------------------------
-FRAMEBUS_MOUNTS = {"gamestream": False, "backend": True, "vision": True}  # service -> read-only
+FRAMEBUS_MOUNTS = {"gamestream": False, "backend": True, "vision": True,
+                   "vision-worker": True}  # service -> read-only  # fmt: skip
 
 
-@pytest.mark.parametrize("name", ["compose.yaml", "compose.dev.yaml"])
+@pytest.mark.parametrize("name", ["compose.yaml", "compose.dev.yaml", "compose.vision-worker.yaml"])
 def test_the_frame_bus_has_one_writer_and_read_only_readers(name: str) -> None:
     for svc, spec in compose(name)["services"].items():
         mounts = mounts_of(spec or {}, "framebus")
@@ -732,7 +736,7 @@ def test_the_frame_bus_is_a_capped_tmpfs_charged_to_its_writer() -> None:
 S2_INPUT_MOUNTS = {"gamestream": ["s2-input:/s2-input"], "backend": ["s2-input:/s2-input"]}
 
 
-@pytest.mark.parametrize("name", ["compose.yaml", "compose.dev.yaml"])
+@pytest.mark.parametrize("name", ["compose.yaml", "compose.dev.yaml", "compose.vision-worker.yaml"])
 def test_the_s2_input_socket_is_mounted_in_gamestream_and_backend_only(name: str) -> None:
     """An input path into Windows: the listener (the S2 client) and the ONE input writer (the
     backend's Injector) only. Never vision -- the bot reaches Windows only through the mux."""
@@ -761,13 +765,20 @@ def test_vision_never_ships_cuda_forward_compat_libs() -> None:
 # --- ADR-0005 closed for S2 (Batt, 2026-10-04): vision S2-only + option c2 -----------------------
 
 
-@pytest.mark.parametrize("name", ["compose.yaml", "compose.dev.yaml", "compose.vision-dev.yaml"])
+@pytest.mark.parametrize(
+    "name",
+    ["compose.yaml", "compose.dev.yaml", "compose.vision-dev.yaml", "compose.vision-worker.yaml"],
+)
 def test_the_nas_datasets_are_mounted_read_only_in_vision_only(name: str) -> None:
     """Batt 2026-10-04: training reads the NAS datasets READ-ONLY; nothing else mounts them (the
-    host's own mount stays the only writer, nas-sink.md)."""
+    host's own mount stays the only writer, nas-sink.md). The vision worker (option A) is a vision
+    container."""
     for svc, spec in compose(name)["services"].items():
         mounts = mounts_of(spec or {}, "datasets-nas")
-        if svc == "vision" and name == "compose.yaml":
+        if (svc, name) in (
+            ("vision", "compose.yaml"),
+            ("vision-worker", "compose.vision-worker.yaml"),
+        ):
             assert mounts == ["datasets-nas:/datasets:ro"]
         else:
             assert mounts == [], f"{name}: {svc} mounts the NAS datasets"
@@ -789,6 +800,69 @@ def test_the_vision_dev_overlay_adds_only_the_source() -> None:
         "./state/train-duty:/lab-duty:ro",
     ]
     assert vision["environment"] == {"PYTHONPATH": "/opt/vision-src"}
+
+
+# --- OPTION A: the long-lived vision worker (docs/operations/vision-long-lived.md, 2026-10-09) ---
+WORKER_KEYS = {
+    "profiles", "image", "pull_policy", "restart", "init", "oom_score_adj", "logging",
+    "entrypoint", "environment", "volumes", "networks", "deploy", "mem_limit", "memswap_limit",
+    "shm_size",
+}  # fmt: skip
+
+
+def test_the_vision_worker_is_exactly_a_rundev_vision_container() -> None:
+    """The worker IS today's `rundev:vision` container, made long-lived: compose.yaml's vision plus
+    compose.vision-dev.yaml's two read-only mounts and PYTHONPATH -- the same image, environment
+    (R1's VRAM cap, bus-only frames, offline), limits (mem == memswap, oom_score_adj 500, no CPU
+    change), GPU and network (agent only, ADR-0005). The only differences: an IDLE entrypoint (it
+    never imports torch: no CUDA context), restart "no" (it starts only through the guarded step,
+    never after a reboot: an unmeasured cold start), no build / pull / depends_on."""
+    services = compose("compose.vision-worker.yaml")["services"]
+    assert list(services) == ["vision-worker"]
+    worker = services["vision-worker"]
+    base = compose("compose.yaml")["services"]["vision"]
+    dev = compose("compose.vision-dev.yaml")["services"]["vision"]
+    assert set(worker) == WORKER_KEYS, set(worker) ^ WORKER_KEYS
+    assert worker["image"] == base["image"] == "poring-lab/vision:local"
+    assert worker["environment"] == {**base["environment"], **dev["environment"]}
+    assert worker["volumes"] == [*base["volumes"], *dev["volumes"]]
+    assert worker["networks"] == base["networks"] == ["agent"]
+    assert worker["deploy"] == base["deploy"]
+    for key in ("mem_limit", "memswap_limit", "shm_size", "oom_score_adj", "init", "logging",
+                "cpus", "cpu_shares"):  # fmt: skip
+        assert worker.get(key) == base.get(key), key
+    assert worker["mem_limit"] == worker["memswap_limit"] and worker["oom_score_adj"] == 500
+    assert worker["environment"]["VISION_MAX_VRAM_FRACTION"] == "${VISION_MAX_VRAM_FRACTION:-0.25}"
+    assert worker["environment"]["VISION_FRAME_SOURCE"] == "bus"
+    assert mounts_of(worker, "x11-unix") == [] and "DISPLAY" not in worker["environment"]
+    assert worker["entrypoint"] == ["sleep", "infinity"] and "command" not in worker
+    assert worker["restart"] == "no" and worker["pull_policy"] == "never"
+    assert worker["profiles"] == ["vision-worker"]
+    assert "./state/train-duty:/lab-duty:ro" in worker["volumes"]
+    assert "./services/vision/src:/opt/vision-src:ro" in worker["volumes"]
+
+
+def test_the_vision_worker_is_named_where_the_guard_looks_for_it() -> None:
+    """guarded_build's steps target compose's container name for the service, and the worker's
+    bind mounts are this checkout's (source, duty level, data)."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "guarded_build_names", ROOT / "scripts" / "guarded_build.py"
+    )
+    assert spec and spec.loader
+    gb = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gb)
+    project = compose("compose.yaml")["name"]
+    assert project == "poring-lab"
+    container = f"{project}-{gb.WORKER_SERVICE}-1"  # compose's default container name
+    assert container == gb.WORKER
+    assert gb.WORKER_SERVICE in compose("compose.vision-worker.yaml")["services"]
+    assert gb.VISION_WORKER[:4] == ["-f", "compose.yaml", "-f", "compose.vision-worker.yaml"]
+    worker = compose("compose.vision-worker.yaml")["services"]["vision-worker"]
+    binds = {v.split(":")[1]: v.split(":")[0] for v in worker["volumes"] if v.startswith("./")}
+    for dst, src in gb.WORKER_MOUNTS.items():
+        assert (ROOT / binds[dst]).resolve() == src.resolve(), dst
 
 
 def test_vision_has_no_x_and_reads_only_the_bus() -> None:
@@ -818,14 +892,16 @@ def test_the_backend_refuses_exactly_the_agent_subnet() -> None:
 
 
 def test_only_vision_and_backend_are_on_the_agent_network() -> None:
-    for name in ("compose.yaml", "compose.dev.yaml"):
+    for name in ("compose.yaml", "compose.dev.yaml", "compose.vision-worker.yaml"):
         for svc, spec in compose(name)["services"].items():
             nets = (spec or {}).get("networks") or []
             if "agent" in nets:
-                assert svc in ("vision", "backend"), f"{name}: {svc} joined the agent network"
+                assert svc in ("vision", "vision-worker", "backend"), (
+                    f"{name}: {svc} joined the agent network"
+                )
 
 
-@pytest.mark.parametrize("name", ["compose.yaml", "compose.dev.yaml"])
+@pytest.mark.parametrize("name", ["compose.yaml", "compose.dev.yaml", "compose.vision-worker.yaml"])
 def test_the_environment_allowlist_is_mounted_read_only_in_the_backend_only(name: str) -> None:
     """ADR-0016 (2026-10-04): the interlock's config is the backend's, read-only; nothing the
     agent runs in (vision) or that streams (gamestream) can see or change it."""

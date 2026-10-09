@@ -63,6 +63,16 @@ def hook() -> ModuleType:
         "echo '#'; docker build .",
         'echo "#" ; docker pull x',
         "echo $# ; docker pull x",
+        # 2026-10-09 (option A): a GPU job inside a vision container goes through execdev: only
+        "docker exec poring-lab-vision-worker-1 python -m poring_vision.train --smoke",
+        "docker exec -e A=1 -u agent poring-lab-vision-worker-1 true",
+        "docker exec -it poring-lab-vision-worker-1 bash",
+        "docker container exec poring-lab-vision-worker-1 true",
+        "timeout 60 docker exec poring-lab-vision-worker-1 python -c 'import torch'",
+        "docker exec poring-lab-vision-rundev-123 nvidia-smi",
+        "docker compose -f compose.yaml -f compose.vision-worker.yaml exec vision-worker python",
+        "docker compose exec -T vision-worker true",
+        "bash -c 'docker exec poring-lab-vision-worker-1 true'",
     ],
 )
 def test_refused(hook: ModuleType, command: str) -> None:
@@ -96,6 +106,14 @@ def test_refused(hook: ModuleType, command: str) -> None:
         "ls # docker build .",
         "# docker compose up -d\nls",
         "rg 'foo#bar' README.md",
+        "docker exec -w /app poring-lab-frontend-dev-1 corepack pnpm lint",
+        "docker compose exec backend true",
+        "docker top poring-lab-vision-worker-1",
+        "docker inspect -f '{{.State.Status}}' poring-lab-vision-worker-1",
+        "docker logs poring-lab-vision-worker-1",
+        "python3 scripts/guarded_build.py 'execdev:vision@600=python -c \"import torch\"'",
+        "python3 scripts/guarded_build.py --sustain 30 --spike 25 worker:vision@120",
+        "python3 scripts/guarded_build.py worker-stop:vision",
     ],
 )
 def test_allowed(hook: ModuleType, command: str) -> None:
@@ -114,3 +132,6 @@ def test_hook_exit_codes_and_message() -> None:
     ok = run(json.dumps({"tool_name": "Bash", "tool_input": {"command": "docker ps"}}))
     assert ok.returncode == 0
     assert run("not json").returncode == 0  # unreadable input: fail open
+    raw = "docker exec poring-lab-vision-worker-1 python -m poring_vision.train"
+    worker = run(json.dumps({"tool_name": "Bash", "tool_input": {"command": raw}}))
+    assert worker.returncode == 2 and "execdev:vision" in worker.stderr
