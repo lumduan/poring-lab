@@ -32,6 +32,9 @@
 # - MARKET-OPEN WINDOWS (Batt 2026-10-09): no attempt starts or auto-resumes between 09:30-10:15 or
 #   14:00-14:45 ICT (CLAUDE.md rule 5; two IO aborts that day came from auto-resumes at 14:12 and
 #   14:33). An attempt due inside a window waits until it ends.
+# - MAX_ATTEMPTS=N (Batt 2026-10-09, option D: "one attempt, no auto-retry after an IO trip"): after
+#   N container starts that did not finish, stop as PAUSED (exit 3) -- no IO pause, no R3 resume.
+#   0 (the default) = unlimited, as before.
 # EXIT CODES (2026-10-09: it exited 0 on every end, so a chain read "TRAIN PAUSED" at epoch 17 of 30
 # as finished and started v1's evals on an unfinished checkpoint):
 #   0 TRAIN DONE   2 TRAIN STOPPED (a person must look)   3 TRAIN PAUSED (resume by hand)
@@ -45,6 +48,7 @@ DROP_WINDOW_S=7200; DROP_MAX=3; CAP_LEVEL=3; CAP_S=3600; FLOOR=4
 IO_PAUSE_S=${IO_PAUSE_S:-900}; R3_PAUSE_S=${R3_PAUSE_S:-30}  # overridable for tests only
 MARKET_WINDOWS=${MARKET_WINDOWS:-"0930-1015 1400-1445"}  # ICT, CLAUDE.md rule 5
 SLEEP=${SLEEP:-sleep}  # overridable for tests only
+MAX_ATTEMPTS=${MAX_ATTEMPTS:-0}
 now_hhmm() { if [ -n "${CLOCK_HHMM:-}" ]; then echo "$CLOCK_HHMM"; else TZ=Asia/Bangkok date +%H%M; fi; }  # CLOCK_HHMM: tests only
 market_wait_s() {  # seconds until the market-open window we are in ends (minute grain, +1 min); 0 outside
   local now w a b
@@ -84,6 +88,7 @@ while :; do
   attempt=$((attempt + 1))
   if [ "$rc" -eq 0 ]; then log "TRAIN DONE"; status=0; break; fi
   if grep -q "STOP-UNVERIFIED" "$out"; then log "TRAIN STOPPED: the guard could NOT verify the stop ($(grep STOP-UNVERIFIED "$out" | tail -1 | cut -c1-160)): a person must look"; status=2; break; fi
+  if [ "$MAX_ATTEMPTS" -gt 0 ] && [ "$attempt" -ge "$MAX_ATTEMPTS" ]; then log "TRAIN PAUSED: MAX_ATTEMPTS=$MAX_ATTEMPTS container start(s) used, no retry (resume by hand: RESUME=1)"; status=3; break; fi
   for f in last.pt mid.pt mid.prev.pt; do [ -e "data/train/$RUN/weights/$f" ] && extra="--resume"; done
   if grep -q "R3-HARD" "$out"; then
     now=$(date +%s)

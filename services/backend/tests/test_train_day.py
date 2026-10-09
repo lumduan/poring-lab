@@ -39,8 +39,8 @@ def run(tmp_path: Path, outcomes: str, quiet_fails: int = 0) -> tuple[str, list[
     return log, args
 
 
-def run_rc(tmp_path: Path, outcomes: str, quiet_fails: int = 0,
-           clock: str = "1200") -> tuple[str, list[str], int]:  # fmt: skip
+def run_rc(tmp_path: Path, outcomes: str, quiet_fails: int = 0, clock: str = "1200",
+           extra: dict[str, str] | None = None) -> tuple[str, list[str], int]:  # fmt: skip
     state = tmp_path / "state"
     state.mkdir()
     guard = tmp_path / "guard.sh"
@@ -57,8 +57,16 @@ def run_rc(tmp_path: Path, outcomes: str, quiet_fails: int = 0,
     env = {**os.environ, "GUARD": f"bash {guard}", "QUIET": f"bash {quiet}", "STATE": str(state),
            "OUTCOMES": outcomes, "IO_PAUSE_S": "0", "R3_PAUSE_S": "0", "CLOCK_HHMM": clock,
            "SLEEP": f"bash {sleeper}"}  # fmt: skip
-    for k in ("DUTY_START", "DUTY_MIN", "DUTY_CAP_LEVEL", "DUTY_CAP_UNTIL", "DUTY_AFTER_ABORT"):
+    for k in (
+        "DUTY_START",
+        "DUTY_MIN",
+        "DUTY_CAP_LEVEL",
+        "DUTY_CAP_UNTIL",
+        "DUTY_AFTER_ABORT",
+        "MAX_ATTEMPTS",
+    ):
         env.pop(k, None)
+    env.update(extra or {})
     p = subprocess.run(["bash", str(SCRIPT), "test-run-nonexistent", "cache-x", "1", str(out)],
                        env=env, check=False, capture_output=True, timeout=60)  # fmt: skip
     return (out / "train.log").read_text(), (state / "args").read_text().splitlines(), p.returncode
@@ -124,3 +132,15 @@ def test_no_attempt_starts_inside_a_market_open_window(tmp_path: Path) -> None:
     assert "waiting 2760 s" in log
     log, _, _ = run_rc(tmp_path / "out", "ok", clock="1445")
     assert "market-open window" not in log and not (tmp_path / "out" / "state" / "slept").exists()
+
+
+def test_max_attempts_one_never_retries_after_any_stop(tmp_path: Path) -> None:
+    """Option D (Batt 2026-10-09): one container start; an IO trip or an R3 stop ends it, PAUSED."""
+    for d in ("io", "drop", "ok"):
+        (tmp_path / d).mkdir()
+    log, args, rc = run_rc(tmp_path / "io", "io,ok", extra={"MAX_ATTEMPTS": "1"})
+    assert rc == 3 and "MAX_ATTEMPTS=1" in log and len(args) == 1
+    log, args, rc = run_rc(tmp_path / "drop", "drop,ok", extra={"MAX_ATTEMPTS": "1"})
+    assert rc == 3 and len(args) == 1 and "waiting for 15 quiet minutes" not in log
+    log, args, rc = run_rc(tmp_path / "ok", "ok", extra={"MAX_ATTEMPTS": "1"})
+    assert rc == 0 and "TRAIN DONE" in log
