@@ -2732,6 +2732,43 @@ map, seeded):
 - Position reads by source: minimap readouts, /where uses (with reasons, against the run's budget),
   dead reckoning.
 
+### 3.33 The GM's IMMUNITY: a test condition for the visual-diversity block (pre-registered 2026-10-09 ~14:30 ICT / 07:30 UTC, BEFORE the check; Batt: "keep gl_prison; a GM doesn't need to fear monsters. Make the GM safe without changing what the bot sees")
+**The condition, PRIMARY:** rAthena's `@monsterignore`, granted to the GM's group 20 (`groups.yml`,
+in place; it applies at the next guarded rathena recreate, never during a scored client run).
+- In the pinned source (e985006): `atcommand.cpp:9025` toggles `PCBLOCK_IMMUNE`, and
+  `battle.cpp:8010` makes an immune player no enemy target ("Global immunity only to Attacks").
+- Monsters keep moving. The GM's own clicks still send their requests: a misclick on a monster is
+  still an `attack_request`, so the safety signal stays valid.
+- The flag lives until the GM logs out. Only the anti-macro captcha paths clear it (`pc.cpp:15730`,
+  `15866`, `15962`), not a warp.
+- **Nothing visible changes:** no `@hide`, no transparency, no equipment or headgear. The HP bar
+  under the feet, the HUD and the detector see the same pixels.
+
+**BACKUP, only if the check below FAILS:** raising the GM's level / stats (`@blvl` / `@allstats`) for
+HP headroom. It is not granted now; that would be its own step, with Batt.
+
+**THE CHECK (prt_fild08 (268, 107), one deliberate session,
+`safety_signal_check.py immune-check`), right after the recreate and a fresh GM login:**
+1. `@monsterignore` ON (a screenshot of the client's own answer).
+2. `@monster` Familiar (1005, level 8, AGGRESSIVE) × 3 beside the GM.
+3. 60 s waiting.
+4. One DELIBERATE attack click where the cursor reads the sword twice (the monster positive case's
+   own rule).
+5. `@killmonster2`, `@monsterignore` OFF (a screenshot).
+
+**PASS iff** (the packets, offline):
+- the 3 Familiars were on the server;
+- ZERO acts targeting the GM from the spawn to the click;
+- ≥ 1 movement of a Familiar in that window (they moved, so ignoring the GM was not just standing
+  still);
+- an `attack_request` within 5 s of the click.
+
+FAIL: the backup is raised with Batt, and gl_prison waits.
+
+**In the visual-diversity block** (perception + walking, NOT combat), the GM is immune on every map.
+- It is applied once after each GM login and confirmed per run offline: zero acts on the GM.
+- An act on the GM in a run is reported as a condition failure, not a rule failure.
+
 ### HUD scene: box drift while walking + doubled boxes — OFFLINE SIM RESULT (2026-10-08 night; branch `feat/hud-drift`, merged 0d6cd79, DEPLOYED 2026-10-09 00:36 ICT; LIVE RE-MEASURE below)
 
 #### 2026-10-09 — SEEN TWICE + the display-only RECONNECT: BUILT on `feat/hud-seen-twice` (merged 9687631), measured offline; ➡️ the plain rule SUPERSEDED by the CONFIRMING PASS (first sub-entry)

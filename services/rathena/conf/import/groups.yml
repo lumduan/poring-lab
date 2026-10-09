@@ -16,6 +16,11 @@
 #   item             lab only (Batt, 2026-10-07): ground items for the walk@6 PICKUP-cursor
 #                    calibration -- @item into the GM's inventory, then dropped on the floor
 #                    (the GM died hunting Porings for drops; killmonster2 drops nothing)
+#   monsterignore    lab only (Batt, 2026-10-09): the visual-diversity block's test condition --
+#                    monsters ignore the GM (atcommand.cpp:9025 toggles PCBLOCK_IMMUNE; battle.cpp
+#                    :8010 makes an immune player no enemy target) while they keep moving, and the
+#                    GM's own clicks still send their requests (the safety signal stays valid).
+#                    Nothing visible changes (no @hide, no equipment): the pixels stay the same.
 # LogCommands: every command lands in atcommandlog (offline audit). Inherits Player for the basics.
 # No permissions beyond Player's otherwise: no zeny/stat commands, no any_warp, no hide_session.
 Header:
@@ -41,3 +46,4 @@ Body:
       alive: true
       heal: true
       item: true
+      monsterignore: true

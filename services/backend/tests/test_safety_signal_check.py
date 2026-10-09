@@ -113,3 +113,26 @@ def test_rec0b_counts_only_engaged_trials_with_one_rule_for_every_condition(
     assert v["control_proven"] and pc["C0"]["continued"] == 10
     assert v["stops_an_attack"]["C4"] and pc["C4"]["success"] == 11
     assert not v["stops_an_attack"]["C1"] and "C1" in v["not_enough_engaged"]  # 9 < 10 engaged
+
+
+def test_the_immunity_check_passes_only_when_monsters_ignore_the_gm(ssc: ModuleType) -> None:
+    """3.33: zero monster acts on the GM while the spawned Familiars move, and a deliberate attack
+    click still shows as an attack request."""
+    S = 1_000_000_000
+    gm = ssc.GM_AID
+
+    def ev(t: float, etype: str, **f: Any) -> dict[str, Any]:
+        return {"t_mono_ns": int(t * S), "type": etype, **f}
+
+    base = [ev(1, "entity_appear", gid=g, job=1005, kind="new") for g in (11, 12, 13)]
+    base += [ev(5, "entity_appear", gid=11, job=1005, kind="move"), ev(9, "entity_stop", gid=12)]
+    click = 62 * S
+    ok = base + [ev(62.2, "attack_request", target_gid=11)]
+    assert ssc.judge_immune(ok, 1 * S, click)["pass"]
+    hit = ok + [ev(30, "act", src_gid=11, target_gid=gm, kind="normal", damage=5)]
+    assert not ssc.judge_immune(hit, 1 * S, click)["pass"]
+    still = [e for e in ok if e["type"] != "entity_stop" and e.get("kind") != "move"]
+    assert not ssc.judge_immune(still, 1 * S, click)["pass"]  # no movement: proves nothing
+    assert not ssc.judge_immune(base, 1 * S, click)["pass"]  # no attack request after the click
+    two = [e for e in ok if e.get("gid") != 13]
+    assert not ssc.judge_immune(two, 1 * S, click)["pass"]  # fewer than 3 Familiars

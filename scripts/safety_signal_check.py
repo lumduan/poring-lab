@@ -58,6 +58,36 @@ def judge_attack(events: list[dict[str, Any]], t_click: int) -> dict[str, Any]:
             "pass": bool(req) and bool(acts)}  # fmt: skip
 
 
+def sword_scan(agent: Any, pr: Any, camera: Any, gat: Any, x: int, y: int,
+               hovers: list[dict[str, Any]]) -> int | None:  # fmt: skip
+    """The monster positive case's DELIBERATE attack: hover the cells around (x, y) (and up their
+    sprites) until the cursor reads `sword` twice, then click there. The click time, or None."""
+    w = w5.World(camera, gat, (x, y))
+    for _round in range(3):  # a monster wanders: up to three scans
+        for dx, dy in SCAN:
+            cell = (x + dx, y + dy)
+            if not w.walkable[cell[1], cell[0]]:
+                continue
+            rel = np.array([[dx, dy]], dtype=float)
+            u, v = camera.project(rel, gat.relative_altitude((x, y), rel))[0]
+            for du, dv in ((0, 0), (0, -14), (0, -28)):  # the cell, then up its sprite
+                if not pr.park():
+                    continue
+                pr.hover(u + du, v + dv)
+                p = pr.read(u + du, v + dv)
+                hovers.append({"cell": list(cell), "dv": dv, "shape": p["shape"]})
+                if p["shape"] != "sword":
+                    continue
+                again = pr.read(u + du, v + dv)
+                if again["shape"] != "sword":
+                    continue
+                gx, gy, _, _ = r.game_region()
+                t_click = r.ns()
+                agent.click(gx + round(u + du), gy + round(v + dv))  # the DELIBERATE attack
+                return t_click
+    return None
+
+
 def monster_click(mapname: str, x: int, y: int) -> int:
     import bench
 
@@ -89,33 +119,7 @@ def monster_click(mapname: str, x: int, y: int) -> int:
         time.sleep(2.0)
         bench.close_chat(agent, screen)
         r.activate_client(agent, screen)
-        w = w5.World(camera, gat, (x, y))
-        for _round in range(3):  # the Poring wanders: up to three scans
-            for dx, dy in SCAN:
-                cell = (x + dx, y + dy)
-                if not w.walkable[cell[1], cell[0]]:
-                    continue
-                rel = np.array([[dx, dy]], dtype=float)
-                u, v = camera.project(rel, gat.relative_altitude((x, y), rel))[0]
-                for du, dv in ((0, 0), (0, -14), (0, -28)):  # the cell, then up its sprite
-                    if not pr.park():
-                        continue
-                    pr.hover(u + du, v + dv)
-                    p = pr.read(u + du, v + dv)
-                    hovers.append({"cell": list(cell), "dv": dv, "shape": p["shape"]})
-                    if p["shape"] != "sword":
-                        continue
-                    again = pr.read(u + du, v + dv)
-                    if again["shape"] != "sword":
-                        continue
-                    gx, gy, _, _ = r.game_region()
-                    t_click = r.ns()
-                    agent.click(gx + round(u + du), gy + round(v + dv))  # the DELIBERATE attack
-                    break
-                if t_click is not None:
-                    break
-            if t_click is not None:
-                break
+        t_click = sword_scan(agent, pr, camera, gat, x, y, hovers)
         time.sleep(WINDOW_S + 1.0)
         r.gm(agent, screen, "@killmonster2")
         bench.close_chat(agent, screen)
@@ -128,6 +132,83 @@ def monster_click(mapname: str, x: int, y: int) -> int:
     log.finish(packet_events=len(events), packet_anchor=anchor, result=out)
     print(json.dumps(out, indent=1), flush=True)
     return 0 if out.get("pass") else 1
+
+
+IMMUNE_MOB = 1005  # Familiar: level 8, AGGRESSIVE (ai 4), weak if the immunity were to fail
+IMMUNE_WAIT_S = 60.0
+
+
+def judge_immune(events: list[dict[str, Any]], t0: int, t_click: int | None) -> dict[str, Any]:
+    """3.33's check: in [t0, t_click) no monster acts on the GM while the spawned ones MOVE; after
+    the deliberate click our attack request is still seen (the safety signal stays valid)."""
+    t1 = t_click if t_click is not None else t0 + int(IMMUNE_WAIT_S * 1e9)
+    win = [e for e in events if t0 <= int(e.get("t_mono_ns", 0)) < t1]
+    fam = {int(e["gid"]) for e in events if e.get("type") == "entity_appear"
+           and int(e.get("job", -1)) == IMMUNE_MOB}  # fmt: skip
+    hits = [e for e in win if e.get("type") == "act" and int(e.get("target_gid", -1)) == GM_AID]
+    moves = [e for e in win if int(e.get("gid", -1)) in fam
+             and (e.get("type") == "entity_stop"
+                  or (e.get("type") == "entity_appear" and e.get("kind") == "move"))]  # fmt: skip
+    req: list[dict[str, Any]] = []
+    if t_click is not None:
+        lo, hi = t_click - 500_000_000, t_click + int(WINDOW_S * 1e9)
+        req = [e for e in events if e.get("type") == "attack_request"
+               and lo <= int(e["t_mono_ns"]) <= hi]  # fmt: skip
+    return {"familiars": len(fam), "acts_on_gm": len(hits), "familiar_moves": len(moves),
+            "window_s": round((t1 - t0) / 1e9, 1), "attack_request_after_click": len(req),
+            "pass": len(fam) >= 3 and not hits and bool(moves) and bool(req)}  # fmt: skip
+
+
+def immune_check(mapname: str, x: int, y: int) -> int:
+    """3.33 (Batt 2026-10-09): @monsterignore makes monsters ignore the GM while they keep moving,
+    and a deliberate attack click still shows as an attack request. Turned on, judged, turned
+    off again (the toggle's state: this session starts it right after a fresh GM login)."""
+    import bench
+
+    from poring_dataset import camera as cam
+    from poring_dataset import gat as gatmod
+
+    refs = w6.CursorRefs.load(CURSOR_REFS_V3)
+    gat = gatmod.parse((cam.GAT_DIR / f"{mapname}.gat").read_bytes())
+    cj = json.loads((r.ROOT / "packages/poring_dataset/src/poring_dataset/camera_rdp.json")
+                    .read_text())  # fmt: skip
+    camera = cam.camera_from_json(cj["camera"])
+    sid = new_session_id("safety-check-immune")
+    log = DemoLog(sid)
+    lock = record_session.read_lock(r.ROOT / "state")
+    log.start(backend=str(lock.backend), lock_seq=lock.seq, server="lab-rathena",
+              rule="safety-check/immune", map=mapname, account="gm", mob=IMMUNE_MOB)  # fmt: skip
+    t_first = r.ns()
+    hovers: list[dict[str, Any]] = []
+    with r.session("rule:safety-check") as (agent, screen):
+        pr = w10.Prober9(agent, screen, refs)
+        r.gm(agent, screen, "@killmonster2")
+        r.gm(agent, screen, f"@warp {mapname} {x} {y}")
+        time.sleep(rr.SCENE_ENTRY_S)
+        r.gm(agent, screen, "@heal")
+        r.gm(agent, screen, "@monsterignore")  # ON (fresh login: it was off)
+        time.sleep(1.0)
+        shot_on = _shot(screen, "immune-on")
+        r.gm(agent, screen, f"@monster {IMMUNE_MOB} 3")
+        bench.close_chat(agent, screen)
+        r.activate_client(agent, screen)
+        t0 = r.ns()
+        time.sleep(IMMUNE_WAIT_S)
+        t_click = sword_scan(agent, pr, camera, gat, x, y, hovers)
+        time.sleep(WINDOW_S + 1.0)
+        r.gm(agent, screen, "@killmonster2")
+        r.gm(agent, screen, "@monsterignore")  # OFF again
+        time.sleep(1.0)
+        shot_off = _shot(screen, "immune-off")
+        r.gm(agent, screen, "@heal")
+        bench.close_chat(agent, screen)
+    events, anchor = record_session.write_packets(log.dir, t_first, r.ns())
+    out: dict[str, Any] = {"session": sid, **judge_immune(events, t0, t_click),
+                           "clicked": t_click is not None, "hovers": len(hovers),
+                           "shots": [shot_on, shot_off]}  # fmt: skip
+    log.finish(packet_events=len(events), packet_anchor=anchor, result=out)
+    print(json.dumps(out, indent=1), flush=True)
+    return 0 if out["pass"] else 1
 
 
 NPC_DIR = Path("/dev/shm/poring-lab-tmp/npc-check")
@@ -853,6 +934,10 @@ def main() -> int:
     a8.add_argument("--x", type=int, default=268)
     a8.add_argument("--y", type=int, default=107)
     a8.add_argument("--seed", type=int, default=REC0B_SEED)
+    a9 = sub.add_parser("immune-check")
+    a9.add_argument("--map", default="prt_fild08")
+    a9.add_argument("--x", type=int, default=268)
+    a9.add_argument("--y", type=int, default=107)
     sub.add_parser("pickup-start")
     sub.add_parser("pickup-click")
     sub.add_parser("pickup-collect")
@@ -881,6 +966,8 @@ def main() -> int:
         return rec0(a.n, a.map, a.x, a.y, a.seed)
     if a.cmd == "cancel-test":
         return cancel_test([int(x) for x in a.delays_ms.split(",")], a.n, a.map, a.x, a.y)
+    if a.cmd == "immune-check":
+        return immune_check(a.map, a.x, a.y)
     if a.cmd == "pickup-start":
         return pickup_start()
     if a.cmd == "pickup-click":
