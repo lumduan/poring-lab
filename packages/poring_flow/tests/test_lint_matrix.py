@@ -848,8 +848,29 @@ CASES = [
         ["restock: item_count() is an active sensor: never in an event condition"],
         farm=False,
     ),
-    Case(
+    # ties (13.6.9, Batt 2026-10-09 #14): a tie needs the same class AND the same rank (#13)
+    Case(  # same class, same rank (5), the same sensor overlapping: ERROR (13.6.2 step 4)
         "tie_same_sensor",
+        "ties",
+        farm(
+            (
+                "# MAP events",
+                "@on(hp_percent() < 30, until=hp_percent() "
+                "> 90, priority=SURVIVAL, rank=5, scope=farm)\ndef hp_panic():\n"
+                "    use_item(POTION)\n\n\n# MAP events",
+            )
+        ),
+        [
+            "farm: hp_low and hp_panic are both survival at rank 5 on hp_percent() < 30",
+            "farm: unintended_engagement and hp_panic are both survival: unintended_engagement "
+            "runs first when both are due (rank 4 before 5)",
+            "farm: hp_panic and boss_seen are both survival: hp_panic runs first when both are "
+            "due (rank 5 before 50)",
+        ],
+    ),
+    Case(  # the same overlap at DIFFERENT ranks: ordered, an INFO; two user events left at the
+        # default rank (50) on different sensors: a WARNING, they queue first in, first out
+        "tie_ranked",
         "ties",
         farm(
             (
@@ -860,10 +881,12 @@ CASES = [
             )
         ),
         [
-            "farm: hp_low and hp_panic are both survival on hp_percent() < 30",
-            "farm: hp_panic and boss_seen are both survival on different sensors: they queue",
-            "farm: unintended_engagement and hp_panic are both survival on different sensors: they "
-            "queue",
+            "farm: hp_low and hp_panic are both survival on hp_percent() < 30: hp_low runs first "
+            "when both are due (rank 5 before 50)",
+            "farm: unintended_engagement and hp_panic are both survival: unintended_engagement "
+            "runs first when both are due (rank 4 before 50)",
+            "farm: hp_panic and boss_seen are both survival at rank 50 on different sensors: they "
+            "queue first in, first out",
         ],
     ),
     Case(

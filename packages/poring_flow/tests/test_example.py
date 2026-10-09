@@ -128,25 +128,28 @@ EXPECTED = sorted(
             "town.2: storing everything also stores the Fly Wings that hp_critical's escape "
             "uses: add them to the keep list",
         ),
-        # 13.6.9 ties on different sensors queue (2.5 rule 4): a WARNING each
+        # 13.6.9 ties: these four were WARNINGs ("on different sensors: they queue") until
+        # Batt 2026-10-09 (contradictions #13 + #14): each pair has two different ranks, so its
+        # order is decided, and an INFO says which runs first
         (
-            "warning",
-            "global: unintended_engagement and hp_low are both survival on different sensors: "
-            "they queue",
+            "info",
+            "global: unintended_engagement and hp_low are both survival: unintended_engagement "
+            "runs first when both are due (rank 4 before 5)",
         ),
         (
-            "warning",
-            "farm: unintended_engagement and hp_low are both survival on different sensors: "
-            "they queue",
+            "info",
+            "farm: unintended_engagement and hp_low are both survival: unintended_engagement "
+            "runs first when both are due (rank 4 before 5)",
         ),
         (
-            "warning",
-            "farm: hp_low and boss_seen are both survival on different sensors: they queue",
+            "info",
+            "farm: hp_low and boss_seen are both survival: hp_low runs first when both are due "
+            "(rank 5 before 50)",
         ),
         (
-            "warning",
-            "farm: unintended_engagement and boss_seen are both survival on different sensors: "
-            "they queue",
+            "info",
+            "farm: unintended_engagement and boss_seen are both survival: unintended_engagement "
+            "runs first when both are due (rank 4 before 50)",
         ),
         # 13.9 / 13.6.9: a species policy while today's detector cannot name species
         (
@@ -164,6 +167,9 @@ def test_batts_example_lints_with_exactly_the_expected_findings() -> None:
     )
     assert got == EXPECTED
     assert not [f for f in EXPECTED if f[0] == "error"]  # approvable: no errors
+    # #14: the four ties WARNINGs of this example are gone (each pair is ordered by rank)
+    ties = [(sev, m) for sev, m in got if "are both survival" in m]
+    assert len(ties) == 4 and {sev for sev, _ in ties} == {"info"}
 
 
 def test_the_example_is_unsupported_today_on_the_real_bindings(tmp_path: Path) -> None:

@@ -1,6 +1,8 @@
 """Linter layer 3, events (section 5's "3 · events" row and 13.6.9).
 
-Where 13.6.9 is stricter (a same-sensor tie is an ERROR, not a warning), it wins.
+Where 13.6.9 is stricter (a same-sensor tie is an ERROR, not a warning), it wins. Ties need the
+same class AND the same rank (Batt 2026-10-09, contradictions #14); events at different ranks are
+ordered, and only an INFO says so.
 
 Interpretation (reported, not decided here): section 5 requires "a rearm or a cooldown" on every
 handler, while 13.6.8's own defaults give `dead`, `unexpected_map` and `unintended_engagement`
@@ -345,7 +347,11 @@ def _hysteresis(ctx: Ctx, consts: Consts, label: str, h: ir.Handler) -> None:
             )
 
 
-# --- ties: two effective events of one class (13.6.2 step 4) --------------------------------------
+# --- ties: two effective events of one class (13.6.2 step 4; 13.6.9) -----------------------------
+# Batt 2026-10-09 (contradictions #14, after #13's rank): a tie needs the same class AND the same
+# rank. Only then can arrival order decide, so only then is it a WARNING (different sensors: they
+# queue first in, first out) or an ERROR (overlapping on the same sensor, 13.6.2 step 4). Two
+# events of one class at different ranks are ordered already: an INFO says which runs first.
 def _ties(ctx: Ctx, consts: Consts) -> None:
     scopes: list[tuple[str, list[Effective], bool]] = [("global", ctx.merged(None).active(), True)]
     scopes += [(b.name, ctx.merged(b).active(), False) for b in ctx.blocks]
@@ -361,24 +367,48 @@ def _ties(ctx: Ctx, consts: Consts) -> None:
                 _tie(ctx, consts, scope, a, b)
 
 
+def _place(e: Effective) -> tuple[int, int]:
+    """Where an event sits inside its class: the safety-critical lead, then its rank (#13)."""
+    lead = ir.SAFETY_CRITICAL.index(e.key) if e.key in ir.SAFETY_CRITICAL else 3
+    return lead, ir.rank_of(e.handler)
+
+
 def _tie(ctx: Ctx, consts: Consts, scope: str, a: Effective, b: Effective) -> None:
+    """`a` precedes `b` in the effective order (effective.order_key)."""
     cls = a.handler.priority
     ta, tb = threshold(a.handler.when, ctx, consts), threshold(b.handler.when, ctx, consts)
+    region = None
     if ta is not None and tb is not None and ta.key == tb.key:
         ia, ib = interval(ta), interval(tb)
         if ia is None or ib is None:
             return
         both = ia.meet(ib)
-        if not both.empty():
-            region = ta.shown if ta.boolean else both.text(ta.shown)
-            ctx.add("ties", "error", 3, scope, f"{a.key} and {b.key} are both {cls} on {region}")
+        if both.empty():
+            return  # never due together
+        region = ta.shown if ta.boolean else both.text(ta.shown)
+    on = f" on {region}" if region else ""
+    if _place(a) != _place(b):
+        ra, rb = ir.rank_of(a.handler), ir.rank_of(b.handler)
+        why = "safety-critical first" if a.key in ir.SAFETY_CRITICAL else f"rank {ra} before {rb}"
+        ctx.add(
+            "ties",
+            "info",
+            3,
+            scope,
+            f"{a.key} and {b.key} are both {cls}{on}: {a.key} runs first when both are due ({why})",
+        )
+        return
+    r = ir.rank_of(a.handler)
+    if region:
+        ctx.add("ties", "error", 3, scope, f"{a.key} and {b.key} are both {cls} at rank {r}{on}")
         return
     ctx.add(
         "ties",
         "warning",
         3,
         scope,
-        f"{a.key} and {b.key} are both {cls} on different sensors: they queue",
+        f"{a.key} and {b.key} are both {cls} at rank {r} on different sensors: they queue "
+        "first in, first out",
     )
 
 
