@@ -53,3 +53,21 @@ def test_a_changed_digit_is_far_from_the_template(gs: Any) -> None:
 def test_the_restore_lines_lower_both_levels_then_heal(gs: Any) -> None:
     assert gs.RESTORE == ("@baselevelup -98", "@joblevelup -49", "@heal")
     assert len(set(gs.RESTORE)) == len(gs.RESTORE)  # never an identical line in a row
+
+
+def test_the_notices_are_seen_only_when_shown(gs: Any) -> None:
+    rng = np.random.default_rng(9)
+    frame = rng.integers(60, 200, (720, 1280, 3)).astype(np.uint8)
+    bx, by, bw, bh = gs.BADGE_BOX
+    ix, iy, iw, ih = gs.ICON_BOX
+    icon = rng.integers(0, 255, (ih, iw)).astype(np.float32)
+    mask = np.zeros((ih, iw), bool)
+    mask[5:40, 5:40] = True
+    refs = {"badge_clean": gs.crop(frame, gs.BADGE_BOX), "icon": icon, "icon_mask": mask}
+    assert gs.notices(frame, refs) == []
+    badged = frame.copy()
+    badged[by + 2 : by + 10, bx + 28 : bx + 36] = (0, 0, 230)  # a red dot on the icon
+    assert gs.notices(badged, refs) == ["badge"]
+    shown = frame.copy()
+    shown[iy : iy + ih, ix : ix + iw] = icon.astype(np.uint8)[..., None]
+    assert gs.notices(shown, refs) == ["levelup_icon"]

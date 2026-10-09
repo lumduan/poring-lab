@@ -55,6 +55,15 @@ DIFF_LEVEL = 60.0  # gray levels
 MATCH = 4  # at most this many strongly differing pixels
 RESTORE = ("@baselevelup -98", "@joblevelup -49", "@heal")
 SETTLE_S = 2.0
+# The client's NOTICES after a level change (either way): a badge on the first shortcut icon and the
+# level-up icon in the corner. Opening the status window clears both (2026-10-09 16:53, checked on a
+# frame); ui_gate then closes it by its own chord. Client px, measured that day by differencing a
+# frame with the notices (16:40) and one without (16:53).
+BADGE_BOX = (7, 145, 39, 40)  # x, y, w, h: the first shortcut icon; a clean reference
+ICON_BOX = (1235, 675, 45, 45)  # the level-up icon over the scene: its template + its own pixels
+NOTICE_DIFF = 40.0  # gray levels
+BADGE_MAX = 12  # more strongly differing pixels than this on the icon = a badge
+ICON_SHARE = 0.8  # this share of the icon's own pixels matching = the icon is shown
 
 
 def to_gray(bgr: Any) -> Any:
@@ -111,6 +120,51 @@ def _weight(frames: tuple[Any, Any]) -> list[int] | None:
     return None if v is None else list(v)
 
 
+def notices(frame: Any, refs: dict[str, Any]) -> list[str]:
+    """PURE: which notices show: "badge" (the first shortcut icon differs from its clean
+    reference) and "levelup_icon" (the icon's own pixels match its template)."""
+    out = []
+    x, y, w, h = BADGE_BOX
+    if (
+        float((np.abs(crop(frame, BADGE_BOX) - refs["badge_clean"]) > NOTICE_DIFF).sum())
+        > BADGE_MAX
+    ):
+        out.append("badge")
+    m = refs["icon_mask"]
+    near = np.abs(crop(frame, ICON_BOX) - refs["icon"]) < NOTICE_DIFF
+    if m.sum() and float((near & m).sum()) / float(m.sum()) >= ICON_SHARE:
+        out.append("levelup_icon")
+    return out
+
+
+def _notice_refs() -> dict[str, Any]:
+    d = TEMPLATE.parent
+    return {"badge_clean": np.load(d / "status_icon_clean.npy"),
+            "icon": np.load(d / "levelup_icon.npy"),
+            "icon_mask": np.load(d / "levelup_mask.npy")}  # fmt: skip
+
+
+def clear_notices(agent: Any, screen: Any, *, why: str) -> dict[str, Any]:
+    """The known step: open the status window by its chord, ui_gate closes it; then no notice
+    may show."""
+    import ui_gate
+
+    refs = _notice_refs()
+    a, b = _frames(screen)
+    seen = sorted(set(notices(a, refs)) & set(notices(b, refs)))
+    if not seen:
+        return {"notices": [], "cleared": False}
+    r.activate_client(agent, screen)
+    agent.chord(*ui_gate.window_keys("status"))
+    time.sleep(1.2)
+    ui_gate.ensure_clear(agent, screen, why=f"{why}:clear-notices")
+    a, b = _frames(screen)
+    left = sorted(set(notices(a, refs)) | set(notices(b, refs)))
+    if left:
+        raise r.Stop(f"gm_state ({why}): the notices {left} did not clear after the status window")
+    return {"notices": seen, "cleared": True}
+
+
 def ensure_fixed(agent: Any, screen: Any, *, why: str,
                  out_dir: Path | None = None) -> dict[str, Any]:  # fmt: skip
     """The fixed state, restored by GM command when the level lines differ; else r.Stop."""
@@ -130,6 +184,10 @@ def ensure_fixed(agent: Any, screen: Any, *, why: str,
         if got["decision"] != "fixed":
             raise r.Stop(f"gm_state ({why}): the GM is not at Base Lv 1 / Job Lv 1 after "
                          f"the restore (differing px {got['dist']}, match <= {MATCH})")  # fmt: skip
+    rec["notices"] = clear_notices(agent, screen, why=why)
+    got = check(screen)  # the level lines again, after the status window came and went
+    if got["decision"] != "fixed":
+        raise r.Stop(f"gm_state ({why}): the level lines changed after the notices step")
     frame = got["frames"][1]
     rec["weight"] = _weight(got["frames"])
     if out_dir is not None:
