@@ -697,7 +697,7 @@ from and back to the storehouse's room; Kafra teleports on the free tickets:
   quest NPCs that warp under a condition are never used. A fee is the script's own `Zeny < N` before
   the warp; a script that charges otherwise is counted as unknown and never relied on.
 
-### 7.4a The delivery-dialog classifier: DESIGN FACTS (2026-10-09 ~21:30, offline; nothing built)
+### 7.4a The delivery-dialog classifier: DESIGN FACTS (2026-10-09 ~21:30, offline) and AS BUILT (2026-10-10, offline; NOT verified live)
 Batt ~19:30: "build it as a CLASSIFIER over the KNOWN set from L3 (4 destinations x 2 serials = 8
 variants), like the T3 menu reader; never free OCR. Verify on the live dialog before relying on it."
 Read from the pinned merchant.txt (local; no script text or serial is committed here):
@@ -710,6 +710,10 @@ Read from the pinned merchant.txt (local; no script text or serial is committed 
      `job_merchant_q2` 1-8) restates the destination and the serial on ONE page. So the variant can
      be re-read at any time before the storehouse, and a live capture does not need a new
      application per variant.
+     ➡️ CORRECTED 2026-10-10 (AS BUILT below, from the L3 extract): not one page. The reminder is
+     6-7 pages; the destination and the serial are on 2-3 of them, and the serial page's own
+     wording is unique to its destination, so it classifies with no context. The conclusion (re-read
+     at any time, no new application per variant) stands.
 - **The serial is COLOURED** (`^3355FF`, then `^000000`). T3's reader refuses any coloured row
   (`coloured_text`, by design for menus). The classifier needs a colour-ink path for that one line:
   ink = distance to the script's blue, then the SAME glyph matching, against only the 2 serials of
@@ -721,6 +725,10 @@ Read from the pinned merchant.txt (local; no script text or serial is committed 
   dialog window's background is the npc_dialog white. Both are checked on live frames before use;
   any character of the 8 variants missing from the glyph set (digits, capitals) is cut from a
   labelled live frame (talk_calibrate), as T3's were.
+  ➡️ CHECKED 2026-10-10 on BANKED dialog frames (AS BUILT below): the same font (32 shared
+  characters, identical bitmaps); the background is (247,247,247), the menu's plain row colour, not
+  white. But the dialog's word GAPS differ from the menu's, so the glyph set is cut from DIALOG
+  lines (`dialog_variants.py cut`), not T3's file as it stands.
 - **Batt's c (2 easiest first):** only the prontera and morocc_in variants (4 of 8) are acted on;
   the geffen_in and izlu2dun variants are classified too (so the hand-over says which), then STOP
   before the storehouse's serial input and before any fare.
@@ -729,6 +737,103 @@ Read from the pinned merchant.txt (local; no script text or serial is committed 
   (b) the GM applying first (needs Job Lv 10 + Basic Skill 9, which learn_skill@1 builds, and 500 or
   1,000 zeny, which the GM lacks: no zeny command in group 20; and it writes the GM's job_merchant_q
   variables, which persist). Not started.
+
+**AS BUILT (2026-10-10 ~00:30-01:30 ICT, offline, branch `feat/dialog-variant`; nothing live, nothing
+pre-registered).** No script text, serial number or client pixel is committed; the numbers below are
+counts.
+
+What exists:
+- `packages/poring_env/src/poring_env/dialog_variant.py` (mypy strict):
+  - `read_page`: the dialog's text area (T2's geometry) cut into 16-row bands on its 21-px line
+    pitch, T3's glyph matching per band on a MULTI-INK map (black + every ^RRGGBB code the
+    candidate pages use);
+  - `classify`: the closed set (rules below); `classify_frame` = both;
+  - `Conversation`: folds the pages of one talk (a destination page gives the context the
+    assignment's serial page needs; pages that disagree = `conflict_*`);
+  - `decide`: prontera / morocc_in variants -> `act`, geffen_in / izlu2dun -> `hand_over`, None ->
+    `stop` (Batt's c).
+  - Results: `ok` (a variant), `destination_only`, `no_variant_info` (a page every variant shows).
+    Fail-closed reasons: `glyph_missing:<chars>` (checked before reading), `lineK:<unknown_glyph |
+    ambiguous_glyph | unexplained_gap | mixed_colour | coloured_text | foreign_pixels |
+    leading_blank>`, `overflow` (a 7th line), `beyond_wrap` (ink right of the wrap width: the
+    scrollbar), `no_page_matches`, `destination_conflict`, `destination_unknown`,
+    `serial_not_candidate`, `wrap_inconsistent`, `ambiguous_variant`.
+- `scripts/dialog_variants.py`: `extract` (L3, local: `data/kb/merchant_delivery.json`, gitignored),
+  `coverage`, `measure-wrap`, `cut` + `selfcheck` (a dialog glyph set from banked labelled frames,
+  and its held-out check), `prove` (the live bar, fixed in its docstring; runs once merchant frames
+  are banked).
+- Tests: `packages/poring_env/tests/test_dialog_variant.py` (16: synthetic font, invented pages),
+  `services/backend/tests/test_dialog_variants.py` (4: a synthetic script).
+
+The extract: a small interpreter runs the job changer for every random path of the application and
+for every variant's reminder (a statement it does not know stops it). Result: 8 variants (4
+destinations x 2 serial slots; slot = the order of the variant value), quests 1009-1012 one per
+destination, 48 distinct pages (16 show one variant, i.e. its serial; 15 one destination; 17 every
+variant), 0 problems.
+
+Design choices:
+- **Wrapping, MEASURED** (`measure-wrap` on the 7 banked talk@1 calibration sessions: 28 pages, 126
+  lines, 59 wraps, PASS). The client word-wraps by PIXEL width, not by character count (a
+  41-character line fitted where a 35-character one wrapped). Every line that fit ended its ink at
+  text-area column <= 213; every wrap was where the next word would have ended at >= 214. The
+  classifier maps physical lines onto mes lines only when they join (one space) into the mes line
+  AND every wrap is where that rule puts it (+-1 px). So not "any wrap": a wrap the client would not
+  make is `wrap_inconsistent`.
+- **Colour ink.** Each pixel is a background-to-ink blend of the ink that leaves the least residual
+  (black or a page's colour code, drawn as the client's 15-bit colour: ^6666CC drew exactly
+  (99,99,206) on the banked frames); a pixel no ink explains is foreign. Each glyph takes the colour
+  of >= 90 % of its ink. Coloured glyphs are WILDCARDS in the plain match, compared only after the
+  plain text (and the conversation) fixed ONE destination, against that destination's <= 2 serials.
+- **Margins.** Per glyph: T3's (`max_score`, `min_margin`). Per line: the smallest glyph margin
+  (returned). Per variant: the distance, at the read glyph boxes, from the read to every other
+  eligible page (the score differences where characters differ; infinite when the glyph count, a
+  colour or a width differs); below `min_margin` -> `ambiguous_variant`.
+- **Where the variant is read.** The reminder's serial page classifies with no context (its wording
+  is unique to its destination). The assignment's serial page is the same text for all 4
+  destinations and needs the destination page before it. The workflow reads every page of the talk,
+  folds them, and acts only on a folded variant; a refused page is no decision (re-read the
+  reminder).
+
+Glyph coverage (characters as counts per class only):
+
+| glyph set | chars | missing, all 48 pages (of 67 needed) | missing, the 31 variant / destination pages (of 60) |
+|---|---|---|---|
+| T3 as cut (`menu_glyphs.npz`) | 33 | 34: 10 digit, 10 upper, 7 lower, 7 punct | 27: 10 digit, 7 upper, 4 lower, 6 punct |
+| dialog cut, the 3 T3-cut sessions (local experiment, `/dev/shm`) | 54 | 15: 7 digit, 6 upper, 1 lower, 1 punct | 11: 7 digit, 4 upper |
+| both sets' characters | 55 | 14: 7 digit, 5 upper, 1 lower, 1 punct | 10: 7 digit, 3 upper |
+
+- Of the 27 characters T3 lacks on the variant pages, 18 occur in banked packet-labelled dialogs (14
+  sessions: talk@1 calibration + npc-click). 9 (7 digits, 2 capitals) occur in NO banked dialog:
+  only a merchant dialog on screen gives them.
+- The serial's digits are drawn ONLY in blue: `cut` redraws a band of the page's inks in black
+  before T3's fit (`as_black`; the font is crisp, so the shapes are unchanged).
+
+Offline evidence on real pixels (banked dialogs of OTHER NPCs; NOT the merchant proof):
+- The dialog font IS the menu font: 32 characters in both sets, same widths, identical bitmaps.
+- The GAPS differ: in the dialog, in-word gaps are 1-3 columns (an ellipsis: 3) and spaces 4-6 (the
+  menus showed 1-2 and 5 only). T3's set as cut refuses most dialog lines (`unexplained_gap`). The
+  classifier's glyph set must be cut from DIALOG lines, including the merchant's own (its
+  assignment serial page holds an ellipsis). `cut` splits a band's words at >= 4 blank columns.
+- `selfcheck`, each banked page its own closed-set member:
+  - cut on the 3 T3-cut sessions (54 characters), judged on the 4 T3-prove sessions: 58 frames
+    right (24 on pages with coloured text), 0 wrong, 10 refused (`beyond_wrap`: the guide's page
+    with a scrollbar);
+  - the reverse split (44 characters): 60 right (24 coloured), 0 wrong, 54 refused (6
+    `beyond_wrap`, 48 `unknown_glyph`: characters that cut never saw). PASS both ways.
+- Page length, estimated from glyph widths: every variant / destination page fits the 6 visible
+  lines (the geffen_in assignment's destination page is borderline at 6). One generic page needs 7:
+  the client shows a scrollbar and the reader refuses it, harmless under the fold.
+
+What must be measured LIVE before relying on it (Batt's (a) or (b) above):
+1. The cut: the 9 characters no banked dialog shows, and the merchant's own lines (ellipsis gaps, the
+   blue serial): `dialog_variants.py cut` on the banked merchant session(s).
+2. The serial's blue: ^3355FF is predicted to draw as (49,82,255); the ink tolerance (32) is checked
+   on the first frame.
+3. The wrap column (213) and the page lengths, on the merchant's own pages.
+4. `dialog_variants.py prove` on sessions NOT used by the cut, to the bar in its docstring: 0 wrong;
+   every banked serial page read as its variant and every destination page as its destination;
+   unknowns counted; only the variants actually banked are proven.
+5. The quest window (the second source) is NOT built.
 
 ### 7.5 The budget (e) (training-cost.md's method, `kb_first_workflow.py budget`)
 
@@ -1053,6 +1158,8 @@ to each.
 1. **Dialog reader:** "build it as a CLASSIFIER over the KNOWN set from L3 (4 destinations x 2
    serials = 8 variants), like the T3 menu reader; never free OCR. Verify on the live dialog before
    relying on it."
+   ➡️ BUILT OFFLINE 2026-10-10 (branch `feat/dialog-variant`, 7.4a AS BUILT): NOT verified live;
+   the live cut + `prove` wait for a merchant dialog on screen (7.4a (a) or (b)).
 2. **IGNORE list:** 1184 IGNORE (no job EXP, aggressive); 1014 AVOID for a novice.
 3. **Deliveries:** "support the 2 easiest destinations first; on any other, stop safely and hand
    over to a person (before paying anything irreversible). Extend later."
