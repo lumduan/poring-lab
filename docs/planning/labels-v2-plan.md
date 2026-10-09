@@ -131,6 +131,9 @@ sessions in `/dev/shm/poring-lab-demo` and the local KB; nothing written outside
   - Claude's provisional reading of the 12 banked warp cells: **4 visible** (iz_dun00 (168,173),
     alberta_in (78,44) and (64,31), prt_church (90,81)), **5 occluded**, **3 partial**. A person
     confirms before any cache is built.
+    ➡️ **CONFIRMED by Batt, 2026-10-09 ~20:20** ("The warp visibility table (4 visible / 5
+    occluded / 3 partial): CONFIRMED"), from the contact sheet sent at ~19:55. The local table is
+    unchanged.
   - A later per-frame check (a ring template's correlation) would handle cells whose visibility
     changes with the camera position. It is not built.
 - **The box: a ground ring, not a billboard.**

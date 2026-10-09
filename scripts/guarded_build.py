@@ -177,6 +177,7 @@ CONTAINERS = [
     "quant-marketdata-engine",
     "quant-postgres",
     "quant-mongo",
+    # The NVR's 24/7 recording IO: R3 covers its detector, not its disk (Batt 2026-10-09: it stays).
     "frigate",
 ]
 EXTRA_CGROUPS = {"cron.service(capture-streaming-pro)": "/sys/fs/cgroup/system.slice/cron.service"}
