@@ -187,3 +187,15 @@ def test_the_example_is_unsupported_today_on_the_real_bindings(tmp_path: Path) -
         "lab-rathena)" in msgs
     )
     assert any(m.startswith("farm.0.body.0: attack_nearest is unsupported here") for m in msgs)
+
+
+def test_one_finding_per_cause_on_the_farm_loop() -> None:
+    """#9 (Batt 2026-10-09): farm's `while weight_percent() < 50` gets the weight rule's WARNING
+    (nothing picks items up) and its literal `< 50` INFO; the loops rule DEFERS to the weight
+    WARNING instead of a second error for the same cause."""
+    at = sorted(
+        (f.rule, f.severity)
+        for f in lint(farm_flow(), world=farm_world(), resolver=resolve_all)
+        if f.path == "farm.0"
+    )
+    assert at == [("weight", "info"), ("weight", "warning")]
