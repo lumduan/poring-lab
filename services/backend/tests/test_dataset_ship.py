@@ -83,6 +83,18 @@ def test_ship_verifies_then_deletes_the_local_copy(ds: ModuleType, dirs: SimpleN
     assert line["event"] == "shipped" and line["session_id"] == SID
 
 
+def test_keep_local_banks_a_verified_copy_and_keeps_the_working_one(
+    ds: ModuleType, dirs: SimpleNamespace
+) -> None:
+    make_session(dirs.root, SID)
+    assert ds.main(ship_argv(dirs, "--keep-local")) == 0
+    assert (dirs.root / SID / "shard-000000.tar").exists()  # the working copy stays
+    assert (dirs.dest / SID / "shard-000000.tar").exists()
+    assert [e["session_id"] for e in index_lines(dirs.dest) if e["event"] == "shipped"] == [SID]
+    nas = json.loads((dirs.dest / SID / "manifest.json").read_text())
+    assert nas["storage"]["verified_at"] and nas["storage"]["files"] >= 1
+
+
 def test_the_order_is_verify_record_index_then_delete(
     ds: ModuleType, dirs: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
 ) -> None:

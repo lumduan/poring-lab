@@ -23,7 +23,8 @@ ship, per session (one with a manifest.json: a finished recording), in this orde
   3. re-hash on the NAS: every file must match, and the manifest must arrive byte-identical;
   4. the NAS manifest gets storage: {nas_path, verified_at, files, bytes, checksums_sha256};
   5. one line appended to <dest>/INDEX.jsonl (where each session lives);
-  6. ONLY THEN the local copy is deleted.
+  6. ONLY THEN the local copy is deleted. With --keep-local (2026-10-09: banking the tmpfs demo
+     sessions, which the scorers and the labels-v2 tools still read) step 6 is skipped.
   Any failure before 6 keeps the local copy. Refused during SET hours (09:30-17:00 Asia/Bangkok,
   weekdays: the quant stack's busy window) unless --force-market, and when --dest is not a
   mounted filesystem (the NAS is down: never fill the empty mount-point directory instead).
@@ -272,7 +273,8 @@ def check_dest(dest: Path, allow_plain_dir: bool) -> None:
         raise Refused(f"{dest} is not a mounted filesystem: the NAS is not mounted")
 
 
-def ship_one(session: Path, dest: Path, *, bwlimit: int, guard: Guard | None) -> dict[str, Any]:
+def ship_one(session: Path, dest: Path, *, bwlimit: int, guard: Guard | None,
+             keep_local: bool = False) -> dict[str, Any]:  # fmt: skip
     if not finished(session):
         raise Refused(f"{session.name}: no manifest.json (still recording, or it crashed)")
     manifest = read_manifest(session)
@@ -298,8 +300,10 @@ def ship_one(session: Path, dest: Path, *, bwlimit: int, guard: Guard | None) ->
                         **storage})  # fmt: skip
     if read_manifest(remote).get("storage", {}).get("verified_at") != stamp:
         raise Refused(f"{sid}: the NAS manifest did not keep storage.verified_at; local kept")
-    shutil.rmtree(session)  # 6
-    return {"session_id": sid, "nas_path": str(remote), "files": len(sums), "bytes": total}
+    if not keep_local:  # 6 (--keep-local: a working copy stays, e.g. a tmpfs session in use)
+        shutil.rmtree(session)
+    return {"session_id": sid, "nas_path": str(remote), "files": len(sums), "bytes": total,
+            "local_kept": keep_local}  # fmt: skip
 
 
 @contextlib.contextmanager
@@ -340,7 +344,8 @@ def cmd_ship(a: argparse.Namespace, guard_factory: Callable[[], Guard | None]) -
         guard = guard_factory()
         for session in todo:
             try:
-                print(json.dumps(ship_one(session, a.dest, bwlimit=a.bwlimit, guard=guard)))
+                print(json.dumps(ship_one(session, a.dest, bwlimit=a.bwlimit, guard=guard,
+                                          keep_local=a.keep_local)))  # fmt: skip
             except Refused as exc:
                 print(f"KEPT {session.name}: {exc}", file=sys.stderr)
                 rc = 1
@@ -495,6 +500,8 @@ def parser() -> argparse.ArgumentParser:
     ship = sub.add_parser("ship", parents=[common])
     ship.add_argument("sessions", nargs="*", help="session ids or paths (default: all finished)")
     ship.add_argument("--force-market", action="store_true", help="ship during SET hours")
+    ship.add_argument("--keep-local", action="store_true",
+                      help="keep the local copy after the verified NAS copy")  # fmt: skip
     ship.add_argument("--bwlimit", type=int, default=BWLIMIT_KBPS, help="rsync --bwlimit, KiB/s")
     ship.add_argument("--no-io-guard", action="store_true", help=argparse.SUPPRESS)
     status = sub.add_parser("status", parents=[common])
