@@ -71,6 +71,9 @@ def now_str() -> str:
     return f"{t.astimezone(ICT):%F %T} ICT / {t:%T} UTC"
 
 
+PROBE_OUT = re.compile(r"PROBE import_s=\d")  # the probe's printed result, never its source
+
+
 def in_market(t: datetime, ahead_min: float = 15.0) -> bool:
     """Inside a market-open window, or one starts within ``ahead_min`` (a step's first minutes are
     its disk-heavy import). Monday to Friday only (Batt 2026-10-09: not on Saturday or Sunday)."""
@@ -334,7 +337,9 @@ class Proof:
             ok = rc == 0 and idle_and_free(after)
             return self.record(1, ok, f"rc {rc}; {io}")
         if n == 3:
-            probe = next((ln for ln in lines if "PROBE import_s=" in ln), "no PROBE line")
+            # the probe's OUTPUT line, not the guard's echo of the command (whose python text holds
+            # "PROBE import_s=%.1f ... cuda_initialized=%s": the 2026-10-10 09:00 mis-score)
+            probe = next((ln for ln in lines if PROBE_OUT.search(ln)), "no PROBE line")
             ok = rc == 0 and "cuda_initialized=False" in probe and idle_and_free(after)
             return self.record(3, ok, f"rc {rc}; {probe.split('| ')[-1].strip()}; {io}")
         if n == 4:

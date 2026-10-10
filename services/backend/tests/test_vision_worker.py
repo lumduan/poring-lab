@@ -751,3 +751,13 @@ def test_the_proof_reads_the_worker_io_profile(proof: ModuleType) -> None:
     text = proof.profile_text(prof)
     assert "read 1000 MiB" in text and "peak read 500 MiB/s at +1 s" in text
     assert "no samples" in proof.profile_text([])
+
+
+def test_probe_line_is_the_output_not_the_command_echo(proof: ModuleType) -> None:
+    echo = (
+        "[09:00:47] execdev:vision: timeout 660 docker exec w timeout 600 python -c "
+        'import time; print("PROBE import_s=%.1f cuda_initialized=%s torch=%s" % (...))'
+    )
+    out = "  |   | PROBE import_s=7.6 cuda_initialized=False torch=2.14.0+cu130"
+    hits = [ln for ln in (echo, out) if proof.PROBE_OUT.search(ln)]
+    assert hits == [out]

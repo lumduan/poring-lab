@@ -233,6 +233,29 @@ unchanged); otherwise stay on the current path and report."
   variant or the pre-warm is Batt's choice; the switch above still holds (one start per day is
   already an improvement), and the import burst is reported with the numbers.
 
+### 5b. The run (2026-10-10, chain14 after v1's TRAIN DONE at 08:22 ICT)
+- **Step 1 start: PASS.** The quiet window came at 08:58:39 ICT (the wait from 08:23:55 saw quant's
+  own bursts: quant-postgres up to 37 %, frigate up to 32 %, cron 30.5 %). `worker:vision@120` rc 0;
+  the worker cgroup read 35 MiB, wrote 0, in 121 s. Capture full stall over the START itself
+  (01:58:37-02:00:46 UTC, computed from the 1 s CSV): frigate 21.9 %, quant-postgres 12.3 %, all
+  others <= 4 %, **0 s above 25 %**.
+- **Step 2 idle: PASS.** The worker's processes are exactly `docker-init -- sleep infinity` and
+  `sleep infinity`; nothing of ours on the GPU.
+- **Step 3 probe: the runbook printed FAIL, and the FAIL is the RUNBOOK's (a parser bug), not the
+  probe's.** The probe's own output: `PROBE import_s=7.6 cuda_initialized=False torch=2.14.0+cu130`,
+  rc 0, the worker idle and nothing of ours on the GPU afterwards -- every condition of step 3 holds.
+  The parser took the FIRST line containing "PROBE import_s=", which was the guard's echo of the
+  command (its python text holds `cuda_initialized=%s`). The import's IO: the worker read 493 MiB in
+  11 s (peak 234 MiB/s); capture full stall over it (02:00:43-02:00:59 UTC): frigate 5.0 %,
+  quant-postgres 4.7 %, **0 s above 25 %**.
+- **So far, question 2: NEITHER event burst in this quiet window** (neither the start nor the cold
+  import pushed any capture cgroup over 25 %); the 2026-10-09 ~100 % bursts came from `rundev` cold
+  starts in busier windows.
+- **➡️ AMENDMENT (recorded BEFORE continuing, like the IO-trip rule above):** the parser now matches only
+  the probe's printed result (`PROBE import_s=<digits>`, tested); step 3 is scored from its own
+  output as PASS; the proof continues ONCE with `--steps 4-6` on the same, still-idle worker. The
+  runbook's original summary stays in `/dev/shm/poring-lab-tmp/gpu-day/worker-proof.out`.
+
 ## 6. What the proof's IO result means
 - **The burst is (i), the container start:** option A as designed. One cold start per day, in a
   quiet window.
