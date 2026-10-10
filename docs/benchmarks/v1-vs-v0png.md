@@ -145,5 +145,12 @@ higher).** NPCs: identical (52 / 1 / 2, precision 0.981, recall 0.963 for both).
   cross cells mostly measure that convention, not the detector; the decision is the position metric
   above, as pre-registered.
 - **Runtime:** inference 5.35 ms / image at 1280 (indoor-c), peak VRAM 694 MiB (cap 3,962 MiB).
+- **Found after scoring (2026-10-10 ~11:15, the labels-v2 cache builder's dry run; reported, the
+  verdict unchanged):** our GM lay DEAD in parts of the cached sessions (labels_v2.self_dead_spans:
+  our entity_vanish reason 1 until a map change or a GM HP raise): ~1,512 frames of the v1 cache
+  (train 1,474, test 38; the v0 caches hold the same frames). **2 of the 27 gold frames** lie in the
+  gold session's dead span (957364.2-957388.9 s). Their boxes are Batt's hand-checked truth for
+  monsters and NPCs, and both models were scored on them alike, so the primary comparison stands;
+  the v2 labels exclude dead-GM frames (`self_dead`).
 
 - **Mid-epoch checkpoints, recorded by the overnight chain BEFORE v1 started (2026-10-08 23:44:01 ICT):** FAIL: proof run B2 (the first --resume from mid.pt, expected to die at rc 86) CRASHED with rc 1, RuntimeError in fused Adam (params, grads, exp_avgs and exp_avg_sqs must have the same dtype, device and layout) right after the bitwise state restore; compare was not run. v1 keeps epoch-level checkpoints (MID_CKPT unset), as pre-registered. The proof: `/dev/shm/poring-lab-tmp/gpu-night/proof-B2-221713.out`.
