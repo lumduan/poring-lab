@@ -3738,6 +3738,30 @@ reported beside it):
   never WALK.
 - On alberta, the NPC sprites are new to the reader: TALK may read lower there.
 
+**➡️ RUNS (2026-10-10, all as pre-registered at b77529d; every run hover only; NO verdict yet: the
+blind labels decide).**
+
+| arm | session | time (ICT) | probes / crops | packets |
+|---|---|---|---|---|
+| B2 sword, prt_fild08 (`--n 30 --seed 20261184`) | `20261010T133737-demo-cursor-probe-sword` | 13:37-14:23 | 30 trials, 379 | SAFE |
+| A2 prontera (`--seed 20261180`) | `20261010T142556-demo-npc-click-probe-prontera` | 14:26-15:42 | 1,507 | SAFE |
+| A2 prt_church (`--seed 20261181`) | `20261010T154307-demo-npc-click-probe-prt-church` | 15:43-16:10 | 560 | SAFE |
+| alberta PILOT (`--npcs 1 --reps 1 --seed 20261183`; never scored) | `20261010T161258-demo-npc-click-probe-alberta` | 16:12-16:20 | 156 | SAFE |
+| **HELD-OUT alberta** (`--seed 20261182`), once | `20261010T162806-demo-npc-click-probe-alberta` | 16:28-17:41 | 1,528 | SAFE |
+
+- **SAFE** = 0 `attack_request`, 0 `npc_contact`, 0 `pickup_request`, 0 `self_move_request` and 0 GM
+  acts in the run's packets. The same packets carry our own typed GM lines (151, 15, 5, 3 and 13), so
+  the sensor saw our client throughout.
+- **Before each run:** the client screenshot was judged clean (no dialog, menu or window), and every
+  typed line passed the UI gate.
+- **No run ended early, and none was re-run.** The alberta pilot completed (3 stands), so alberta
+  was not dropped.
+- **Truth sets** (`cursor2_truth.py sheets` at e57a7e7, the four scored sessions pooled):
+  - 8,190 images (seed 20261185, 164 pages);
+  - 2,740 series strips (seed 20261186, 274 pages): every robust2 WALK series plus as many others.
+  - Two blind agent labellers started 17:47 ICT, in opposite page orders. Their briefs forbid any
+    reader output and any pixel rule deciding a label.
+
 ### 3.34 learn_skill@1 -- spend skill points in the skill window (DESIGN 2026-10-09 ~19:50; NOT pre-registered; Batt ~19:30: "add the new skill the job change needs: allocating skill points (Basic Skill > 8) via the skill window, as an L1 concept with its own alone-test")
 **The concept:** `char.learn_skill` (L1, packages/poring_skills, updated): the first workflow's
 Merchant change needs the novice's Basic Skill above 8 (labels-v2-plan section 7.4).
