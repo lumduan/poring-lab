@@ -270,6 +270,9 @@ class V2Inputs:
             "kb": str(a.kb), "route_sha256": sha256_of(a.kb / "route.json"), "kb_maps": len(maps),
             "monster_sprite_names_sha256": sha256_of(a.kb / "monster_sprite_names.json")
             if (a.kb / "monster_sprite_names.json").exists() else None,
+            "classes_sha256": sha256_of(a.kb / "classes.json")
+            if (a.kb / "classes.json").exists() else None,
+            "monster_sprites": str(qa_export.SPRITE_DIR),
             "warp_visibility": str(a.warp_visibility),
             "warp_visibility_sha256": sha256_of(a.warp_visibility),
             "npc_sprites": None if a.npc_sprites is None else str(a.npc_sprites),
