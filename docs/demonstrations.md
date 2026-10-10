@@ -3762,7 +3762,7 @@ blind labels decide).**
   - Two blind agent labellers started 17:47 ICT, in opposite page orders. Their briefs forbid any
     reader output and any pixel rule deciding a label.
 
-**➡️ RESULT (2026-10-10 ~18:55 ICT; scored once as written, `cursor2_score.py` at e57a7e7, rc 1):
+**➡️ RESULT (2026-10-10 ~18:48 ICT; scored once as written, `cursor2_score.py` at e57a7e7, rc 1):
 FAIL on bar 4 (WALK 0.848 < 0.95), from the held-out town. The SAFETY bars, the reason for this
 version, are MET on fresh data, held-out included: 0 WALK verdicts on any series that shows the
 no-entry sign (1,370 judged), and no-entry read as no-entry 0.971 (robust 0.103). As
@@ -3833,10 +3833,19 @@ pre-registered: no switch; the live gate stays v3.**
         empties when the cursor sits there.
       - A next version needs a cursor mask that survives large animated scenery near the cursor.
         That is Batt's design call.
-- **What it would take** (a design step, for Batt; not done): a cursor mask that holds on alberta,
-  i.e. the parked background re-taken or validated per hover, or the robust reader's colour test on
-  A alone when the mask is implausible. Re-measured under a NEW pre-registration, on a held-out map
-  not yet used (alberta is now used for cursor@2).
+- **What it would take** (a design step, for Batt; not done): a cursor mask that survives big
+  animated scenery (alberta's windmill, below). Options, none measured:
+  - **(a) Fail closed, then step aside:** detect "animated near the hotspot" (two parked grabs) and
+    let the caller pick another point or wait for a calmer phase. Cheapest; it costs clicks, not
+    safety.
+  - **(b) A fresh background per hover:** re-grab B right before the hover. A sail still moves in
+    the ~0.5 s the hover takes, so it only narrows the problem.
+  - **(c) Read the cursor on A alone when the mask is implausible.** One-sided: a white talk bubble
+    contains the arrow's area in white, so it needs an outline / two-sidedness test of its own
+    before it can be trusted with WALK.
+  - Any of them is re-measured under a NEW pre-registration, on a held-out map not yet used (alberta
+    is now used for cursor@2). alberta is the Merchant guild's town, so the first workflow meets the
+    windmill.
 - **Consequence today:** nothing live changes. robust2 is a candidate whose SAFETY property is
   proven on fresh and held-out data; its walk recall is not accepted. The click callers that need
   it (loot, attack, talk) wait for Batt's decision.
