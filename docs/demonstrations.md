@@ -3811,6 +3811,14 @@ pre-registered: no switch; the live gate stays v3.**
     fails closed (UNKNOWN, no click).
   - Hypothesis, unmeasured: something on alberta changes between the parked frames and the hover
     grab.
+    - ➡️ **Looked at the same evening:** each crop carries the parked background B and the
+      animated map. In 6 of 8 crops viewed, B shows a large white-and-blue ROOF element where the
+      hover grab A shows plain cobblestone floor (only the roof's edge left in a corner). So a
+      building part is present in one frame and absent in the other.
+    - Of the 121 misses, 55 differ from B by more than 60 (summed) over more than 1,500 px (median
+      1,328), and 38 have more than 1,000 px marked "animated", the cursor's own pixels among them.
+    - The mechanism (the client hiding a model under or near the cursor, or something else) is NOT
+      measured; it is the first question for any next version.
 - **What it would take** (a design step, for Batt; not done): a cursor mask that holds on alberta,
   i.e. the parked background re-taken or validated per hover, or the robust reader's colour test on
   A alone when the mask is implausible. Re-measured under a NEW pre-registration, on a held-out map
