@@ -14,8 +14,10 @@ gate: "OFFLINE only: nothing here touched the client. The gate's default is NOT 
 > ➡️ **Status (2026-10-10):** the live acceptance (section 5, run as demonstrations.md 3.35, cursor@1)
 > FAILED bar 1 for both readers on the client's no-entry ANIMATION (a blink frame shows the bare
 > arrow). Its fix, robust2 (this reader per grab + a red-RING cue over the 6-grab series,
-> `cursor_robust.ring_pixels` / `series_verdict`), is pre-registered as cursor@2 (3.36). The
-> switch-over (section 6) stays Batt's decision; the live gate is still v3.
+> `cursor_robust.ring_pixels` / `series_verdict`), was scored as cursor@2 (3.36): SAFETY met on
+> fresh + held-out data (0 WALK on no-entry series, no-entry 0.971), but FAIL on bar 4 (WALK 0.848;
+> the held-out alberta 0.682, where the cursor MASK floods or empties). The switch-over (section 6)
+> stays Batt's decision; the live gate is still v3.
 
 **Why:** the gate clicks only on a shape read twice, and its reader says UNKNOWN where it matters:
 - loot@1 P3 (demonstrations 3.20a): over a Poring the first reads were **unknown 67 / 105 (64 %)**,

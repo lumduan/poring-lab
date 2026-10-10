@@ -3762,6 +3762,65 @@ blind labels decide).**
   - Two blind agent labellers started 17:47 ICT, in opposite page orders. Their briefs forbid any
     reader output and any pixel rule deciding a label.
 
+**➡️ RESULT (2026-10-10 ~18:55 ICT; scored once as written, `cursor2_score.py` at e57a7e7, rc 1):
+FAIL on bar 4 (WALK 0.848 < 0.95), from the held-out town. The SAFETY bars, the reason for this
+version, are MET on fresh data, held-out included: 0 WALK verdicts on any series that shows the
+no-entry sign (1,370 judged), and no-entry read as no-entry 0.971 (robust 0.103). As
+pre-registered: no switch; the live gate stays v3.**
+- **Truth:** the two labellers agree on **8,190 / 8,190 images** (walk 4,097, talk 3,046, noentry
+  638, sword 409; no pickup, warp, none or unclear) and **2,740 / 2,740 series** (yes 301, no
+  2,439). Each took ~45-55 min.
+  - Labeller B used a red-pixel FLAGGER, allowed by the brief: it only picks items to re-view, never
+    labels. It flagged one series (index 1696, typed no, corrected to yes by eye). Labeller A, who
+    used no such check, also said yes. Reported because the flagger resembles the cue under test.
+
+| bar | robust2 | robust | the gate | verdict |
+|---|---|---|---|---|
+| 1a per image: cross-shape / WALK on another label | **0 / 0** (6,731 reads) | 0 / 0 (6,731) | 0 / 0 (6,025) | MET |
+| 1b WALK series showing the no-entry sign | **0 of 1,370**, 0 unclear | -- | -- | MET |
+| 1c 3.35's bar 1 as written: no-entry -> WALK | **0** | 7 | 7 | reported |
+| 2 TALK, sprite points labelled talk | **949 / 1,060 = 0.895** (0.875-0.912) | 0.895 | 0.777 | MET (>= 0.85) |
+| 3 SWORD, box points labelled sword | **124 / 217 = 0.571** (0.505-0.635) | 0.571 | 0.097 | MET (>= 0.40, +0.47 over the gate) |
+| 4 WALK, cell points + controls labelled walk | **849 / 1,001 = 0.848** (0.825-0.869) | 0.848 | 0.759 | **FAIL** (< 0.95; above the gate - 0.02) |
+| 5 NO-ENTRY, grab 0 labelled noentry | **530 / 546 = 0.971** (0.953-0.982) | 0.103 | 0.106 | reported |
+
+- **Per map** (robust2; the gate in brackets):
+
+  | map | WALK | TALK | NO-ENTRY |
+  |---|---|---|---|
+  | prontera | 344 / 365 = 0.943 (0.786) | 435 / 443 = 0.982 (0.815) | 166 / 168 = 0.988 |
+  | prt_church | 156 / 157 = 0.994 (0.968) | 153 / 168 = 0.911 (0.863) | 87 / 87 = 1.000 |
+  | sword arm's controls | 90 / 99 = 0.909 (0.879) | -- | 1 / 1 |
+  | **alberta, HELD-OUT** | **259 / 380 = 0.682** (0.616) | **361 / 449 = 0.804** (0.708) | 276 / 290 = 0.952 |
+
+  - Without alberta, WALK would pool to 590 / 621 = 0.950. That is reported only: the bar pools all
+    maps, and alberta is in it as pre-registered.
+- **robust2 = robust on bars 1a, 2, 3 and 4:** the ring changed no WALK, TALK or SWORD read twice
+  on a series those labels count. Its 12 "as written" items are all walk -> noentry: grab 0 caught
+  a blink frame, and the ring is on later grabs of the same series (the client means no-entry).
+- **Why WALK fails on alberta** (DIAGNOSIS after scoring, decides nothing): 121 walk cells were not
+  read twice.
+  - On grab 0 the robust reader says `no_match` 62, `low_score` 14, `no_cursor` 13, and `walk` 32
+    (the re-read failed).
+  - 12 of the `no_match` crops viewed with their masks: the arrow is drawn normally, but the CURSOR
+    MASK (|A - B| against the parked background, animated pixels removed) either FLOODS (most of
+    the crop differs from the parked frame) or EMPTIES (the cursor's own pixels fall in the
+    "animated" map).
+  - The mask's median size is 319 px on alberta's misses vs 267 on prontera's. So the miss lies
+    in the background model on that map (the two parked frames), not in the shape reader, and it
+    fails closed (UNKNOWN, no click).
+  - Hypothesis, unmeasured: something on alberta changes between the parked frames and the hover
+    grab.
+- **What it would take** (a design step, for Batt; not done): a cursor mask that holds on alberta,
+  i.e. the parked background re-taken or validated per hover, or the robust reader's colour test on
+  A alone when the mask is implausible. Re-measured under a NEW pre-registration, on a held-out map
+  not yet used (alberta is now used for cursor@2).
+- **Consequence today:** nothing live changes. robust2 is a candidate whose SAFETY property is
+  proven on fresh and held-out data; its walk recall is not accepted. The click callers that need
+  it (loot, attack, talk) wait for Batt's decision.
+- Outputs: `/dev/shm/poring-lab-tmp/cursor2/` (result.json, live/, truth/, the labels in
+  c2-labeller{A,B}/; local, client pixels).
+
 ### 3.34 learn_skill@1 -- spend skill points in the skill window (DESIGN 2026-10-09 ~19:50; NOT pre-registered; Batt ~19:30: "add the new skill the job change needs: allocating skill points (Basic Skill > 8) via the skill window, as an L1 concept with its own alone-test")
 **The concept:** `char.learn_skill` (L1, packages/poring_skills, updated): the first workflow's
 Merchant change needs the novice's Basic Skill above 8 (labels-v2-plan section 7.4).
