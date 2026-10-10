@@ -3819,6 +3819,20 @@ pre-registered: no switch; the live gate stays v3.**
       1,328), and 38 have more than 1,000 px marked "animated", the cursor's own pixels among them.
     - The mechanism (the client hiding a model under or near the cursor, or something else) is NOT
       measured; it is the first question for any next version.
+    - ➡️ **MEASURED the same evening** (EXPLORATORY, not a rule, never scored; hover only, one
+      `@warp`; `/dev/shm/poring-lab-tmp/cursor2/roof_probe.py`, frames in `cursor2/roof/`): **it is
+      alberta's WINDMILL.**
+      - Its white-and-blue sails rotate continuously, about one cycle in 2 s.
+      - With the cursor PARKED, no motion, the game region differs from its first frame by
+        20,000-60,000 px at every 0.2 s grab; the difference is the sweeping sails (the left half of
+        the view from stand 129,48).
+      - Hovering changes nothing: the roof / roof2 / floor hovers show the same cycle.
+      - So the "roof element" in the failed crops is a sail. The scene changes by itself, and the
+        cursor plays no part. The parked background is stale wherever a sail passes, so the mask
+        floods. The two parked frames 0.25 s apart mark the sails' area "animated", so the mask
+        empties when the cursor sits there.
+      - A next version needs a cursor mask that survives large animated scenery near the cursor.
+        That is Batt's design call.
 - **What it would take** (a design step, for Batt; not done): a cursor mask that holds on alberta,
   i.e. the parked background re-taken or validated per hover, or the robust reader's colour test on
   A alone when the mask is implausible. Re-measured under a NEW pre-registration, on a held-out map
