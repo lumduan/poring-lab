@@ -320,6 +320,28 @@ Not built (a gate change: Batt's decision after section 5). The shape of it:
 5. Flipping the DEFAULT, if ever, is Batt's decision recorded in demonstrations.md, never a side
    effect of a merge.
 
+### 6a. robust2 in the gate (2026-10-10; DESIGN only, NOT built; for Batt's decision after 3.36)
+robust2's verdict was measured over the npc-click harness's FULL 6-grab series
+(`npc_click_test.read_series`: 6 grabs 0.1 s apart, then the ring per grab). The live gate does not
+see those 6 grabs today:
+- `Prober9.read` (walk9.py) grabs up to `SHAPE_GRABS` = 3 times and STOPS at the first
+  non-unknown shape;
+- `cursor_gate.gated_click` reads twice. A WALK verdict can therefore rest on as few as 2 grabs,
+  which is exactly cursor@1's failure (both on blink frames).
+
+What `--cursor robust2` would change (nothing else):
+1. **A walk-intent read takes all 6 grabs, no early stop:** 3 for the first read and 3 for the
+   re-read, 0.1 s apart, the ring counted on each (`cursor_robust.ring_pixels`). Then
+   `series_verdict`: any ring grab means NOENTRY (no click); otherwise read twice as today.
+2. **Cost:** up to ~0.4 s more per walk click (today a read can stop after 1 grab; not measured
+   how often). A route of ~4 clicks gains up to ~1.6 s.
+3. **TALK / SWORD / PICKUP intents** keep the early stop. The ring only ever REMOVES a click, and
+   these intents never click on WALK.
+4. **The walk rules' marker condition** (no walk marker on a non-walkable cell) stays as it is. The
+   ring is the cursor gate's own guard, for callers that have no marker check (npc-click's click
+   arm, loot, talk).
+5. Pre-registered rules keep v3. A rule that uses robust2 names it in a NEW pre-registration.
+
 ## 7. Tools (this branch) and the commands behind the numbers
 - `scripts/cursor_robust.py`: the robust reader (`RobustRefs`), `consensus_supports`.
 - `scripts/cursor_eval.py`: `audit`, `floors`, `perturb`, `report`, `table`, `replay`, `live`,
