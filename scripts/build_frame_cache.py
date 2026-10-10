@@ -33,6 +33,34 @@ files), never one file per frame on the shared disk. So:
 
 Nothing lands on the root disk: frames are encoded in memory, and the shards go straight to the
 NAS.
+
+LABELS v2 (docs/planning/labels-v2-plan.md 3.3 step 1; PROPOSED plan, offline tooling):
+
+    build_frame_cache.py --labels v2 --kb DIR --warp-visibility JSON [--npc-sprites DIR
+                         --npc-sprite-names JSON] [--npc-checked JSON] [--npc-extents JSON]
+                         [--allow-hold H ...] [--demo-root DIR] [--every-demo 1] [--dry-run] ...
+
+- the labels are scripts/labels_v2.py's ``Session.frame`` (the same path as ``labels_v2.py
+  coverage``: v1's players and monsters, our own GM as ``player``, NPCs per sprite, ``warp`` from
+  L3 + packets + the person's visibility table, the cut-in as dynamic UI); the manifest's names
+  are ``labels_v2.V2_CLASSES`` (player 0, monster 1, npc 2, warp 3);
+- every frame is labelled completely or EXCLUDED, never written: ``Frame.excluded``'s reasons
+  (npc_unsized, portal_unconfirmed, warp_partial, warp_visibility_unknown, l3_warp_unseen,
+  cutin_unmeasured, cutin_region_unavailable, self_dead), plus this builder's FAIL-CLOSED gates:
+  * ``map_not_in_kb:<map>``: the scene maps are EVERY map the KB covers (route.json's warp lists:
+    an empty list = no portals; a map with no entry is unknown), not v0/v1's two;
+  * ``gat_missing:<map>``: the map's GAT is not extracted (the projection would be flat ground);
+  * HOLDS, each lifted only by ``--allow-hold`` once a person decides:
+    ``gat_unverified:<map>`` (alberta, morocc: the client GAT differs from the server's, plan
+    7.6) and ``npc_unchecked:<job>`` (an NPC sprite box no person has judged: plan 1.2's N3; the
+    ``--npc-checked`` table, job or "map:job" -> "fit", admits it; any other verdict is
+    ``npc_rejected:<job>`` and no hold lifts it);
+- sessions: a banked DEMO session under --demo-root (/dev/shm/poring-lab-demo: its snapshots and
+  frames/, every --every-demo-th, keyed by position), else the session under --datasets (a
+  recorded session, as v0/v1, or a demo session already shipped there);
+- ``--dry-run`` (v2 only): no shard, no manifest, no directory; no image is read. Prints per
+  session and per split: frames seen / kept / excluded by reason, boxes per class, per species
+  and per NPC sprite (ids and counts only, never names or pixels).
 """
 
 from __future__ import annotations
@@ -44,7 +72,10 @@ import json
 import sys
 import tarfile
 import time
-from collections.abc import Iterator
+from collections import Counter
+from collections.abc import Callable, Iterator, Sequence
+from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -54,13 +85,26 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import qa_export  # noqa: E402
 
+from poring_dataset import camera as camera_mod  # noqa: E402
+from poring_dataset import labels_v2 as lv  # noqa: E402
+from poring_dataset.camera import map_key  # noqa: E402
 from poring_dataset.labels import CLASSES  # noqa: E402
 from poring_dataset.shards import encode_png, read_shard  # noqa: E402
 
 NAS = Path("/mnt/poring-lab-datasets")
 OUT = NAS / ".framecache"
-SCENE_MAPS = {"prt_fild08", "prt_church"}
+SCENE_MAPS = {"prt_fild08", "prt_church"}  # v0 / v1; v2's are the KB's maps (kb_maps)
 GOLD = "20261004T103815-console-s2-indoor-v2"
+DEMO = Path("/dev/shm/poring-lab-demo")  # banked demo sessions (tmpfs; v2 reads them too)
+V2_SIZE = (1280, 720)  # labels_v2.py's game region (scripts/labels_v2.py SIZE)
+# The client GAT differs from the server's walkability on this host's GRF (labels-v2-plan 7.6:
+# alberta 5,091 cells, morocc 6,999); the projection reads the CLIENT GAT's altitude. Unverified
+# until the Dell's kRO data decides it: a HOLD (``--allow-hold gat_unverified`` lifts it).
+UNVERIFIED_GAT = frozenset({"alberta", "morocc"})
+# Fail-closed gates a person lifts (``--allow-hold``): gat_unverified (above); npc_unchecked: an
+# NPC sprite box no person has judged (labels-v2-plan 1.2's N3: "READY FOR A PERSON, not judged").
+HOLDS = ("gat_unverified", "npc_unchecked")
+NPC_REASONS = ("npc_unsized", "npc_unchecked", "npc_rejected")  # what N2 / N3 alone would admit
 
 
 def session_frames(
@@ -142,7 +186,7 @@ class ShardSink:
 
 
 RESUME_KEYS = ("labels", "k", "every", "every_png", "max_per_session", "shard_mb", "image",
-               "quality", "split")  # fmt: skip
+               "quality", "split", "every_demo", "v2")  # fmt: skip
 
 
 def write_json(directory: Path, name: str, doc: Any) -> None:
@@ -174,14 +218,399 @@ def resume_state(directory: Path, args: dict[str, Any]) -> tuple[dict[str, Any],
     return prog["sessions"], prog["shards"]
 
 
-def main() -> int:
+# --- labels v2 ------------------------------------------------------------------------------------
+
+
+def sha256_of(path: Path | None) -> str | None:
+    return None if path is None else hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def kb_maps(kb: Path) -> frozenset[str]:
+    """The maps the KB covers: route.json's warp lists (kb_route.py: an EMPTY list = no portals; a
+    map with no entry is unknown, so its frames are excluded)."""
+    route = json.loads((kb / "route.json").read_text())
+    return frozenset(map_key(m) for m in (route.get("warps") or {}))
+
+
+@dataclass(frozen=True)
+class V2Inputs:
+    """Everything v2's labels depend on beyond the session (validated once, recorded in the
+    progress file and the manifest: a resume with any other input is refused)."""
+
+    ns: argparse.Namespace  # scripts/labels_v2.py Session's options
+    maps: frozenset[str]
+    gat_dir: Path
+    checked: dict[str, str]  # N3 verdicts: "<job>" or "<map>:<job>" -> "fit" | anything else
+    lifted: frozenset[str]
+    k: float | None
+    provenance: dict[str, Any]
+
+    @classmethod
+    def from_args(cls, a: argparse.Namespace) -> V2Inputs:
+        if a.kb is None or a.warp_visibility is None:
+            raise SystemExit("--labels v2 needs --kb DIR and --warp-visibility JSON (a person's "
+                             "table; labels-v2-plan 1.3)")  # fmt: skip
+        if (a.npc_sprites is None) != (a.npc_sprite_names is None):
+            raise SystemExit("--npc-sprites and --npc-sprite-names go together")
+        for p in (a.kb / "route.json", a.warp_visibility, a.npc_sprite_names, a.npc_extents,
+                  a.npc_checked):  # fmt: skip
+            if p is not None and not p.exists():
+                raise SystemExit(f"{p}: not found")
+        checked = ({str(k): str(v) for k, v in json.loads(a.npc_checked.read_text()).items()}
+                   if a.npc_checked else {})  # fmt: skip
+        ns = argparse.Namespace(
+            kb=a.kb, offset_ms=a.offset_ms, npc_extents=a.npc_extents, npc_sprites=a.npc_sprites,
+            npc_sprite_names=a.npc_sprite_names, cutin_rect=a.cutin_rect,
+            warp_visibility=a.warp_visibility,
+        )  # fmt: skip
+        maps = kb_maps(a.kb)
+        gat_dir = camera_mod.GAT_DIR  # the directory load_scene / projector_for read
+        shape = lv.PORTAL_PROVISIONAL
+        provenance = {
+            "kb": str(a.kb), "route_sha256": sha256_of(a.kb / "route.json"), "kb_maps": len(maps),
+            "monster_sprite_names_sha256": sha256_of(a.kb / "monster_sprite_names.json")
+            if (a.kb / "monster_sprite_names.json").exists() else None,
+            "classes_sha256": sha256_of(a.kb / "classes.json")
+            if (a.kb / "classes.json").exists() else None,
+            "monster_sprites": str(qa_export.SPRITE_DIR),
+            "warp_visibility": str(a.warp_visibility),
+            "warp_visibility_sha256": sha256_of(a.warp_visibility),
+            "npc_sprites": None if a.npc_sprites is None else str(a.npc_sprites),
+            "npc_sprite_names_sha256": sha256_of(a.npc_sprite_names),
+            "npc_extents_sha256": sha256_of(a.npc_extents),
+            "npc_checked_sha256": sha256_of(a.npc_checked),
+            "cutin_rect": a.cutin_rect, "offset_ms": a.offset_ms, "gat_dir": str(gat_dir),
+            "holds_lifted": sorted(a.allow_hold), "unverified_gat": sorted(UNVERIFIED_GAT),
+            "portal_shape": {"radius": shape.radius, "height": shape.height,
+                             "measured": shape.measured, "source": shape.source},
+            "classes": lv.V2_CLASSES,
+        }  # fmt: skip
+        return cls(ns, maps, gat_dir, checked, frozenset(a.allow_hold), a.k, provenance)
+
+
+def make_v2_session(path: Path, v2: V2Inputs) -> Any:
+    """scripts/labels_v2.py's Session: the labels of ``labels_v2.py coverage``, frame by frame."""
+    import labels_v2 as tool
+
+    s = tool.Session(path, v2.ns)
+    if v2.k is not None:
+        s.labeler.k = v2.k  # v1's --k: the sprite scale (monsters' and NPCs' predict_sprite)
+    return s
+
+
+def map_reasons(map_name: str, v2: V2Inputs) -> list[str]:
+    """The map gates (fail closed): not in the KB; its GAT not extracted; a held GAT."""
+    mk = map_key(map_name)
+    if mk not in v2.maps:
+        return [f"map_not_in_kb:{mk}"]
+    out = []
+    if not (v2.gat_dir / f"{mk}.gat").exists():
+        out.append(f"gat_missing:{mk}")
+    if mk in UNVERIFIED_GAT and "gat_unverified" not in v2.lifted:
+        out.append(f"gat_unverified:{mk}")
+    return out
+
+
+def npc_reasons(fr: lv.Frame, checked: dict[str, str], lifted: frozenset[str]) -> list[str]:
+    """N3's gate on every LABELLED NPC with a sprite / measured box (an unsized one is already
+    excluded by labels_v2): a person's "fit" admits it; no verdict is ``npc_unchecked`` (the hold);
+    any other verdict is ``npc_rejected`` (no hold lifts it)."""
+    mk = map_key(fr.map or "")
+    out = []
+    for lab in fr.labels:
+        if lab.cls != "npc" or lab.kind == "unsized":
+            continue
+        verdict = checked.get(f"{mk}:{lab.job}", checked.get(str(lab.job)))
+        if verdict == "fit":
+            continue
+        if verdict is None:
+            if "npc_unchecked" not in lifted:
+                out.append(f"npc_unchecked:{lab.job}")
+        else:
+            out.append(f"npc_rejected:{lab.job}")
+    return list(dict.fromkeys(out))
+
+
+def v2_yolo(labels: Sequence[lv.V2Label], size: tuple[int, int]) -> tuple[str, list[lv.V2Label]]:
+    """YOLO lines with V2_CLASSES ids, clipped to the frame (as yolo_lines); the labels written."""
+    w, h = size
+    lines, written = [], []
+    for b in labels:
+        x0, y0 = max(0.0, b.x0), max(0.0, b.y0)
+        x1, y1 = min(float(w), b.x1), min(float(h), b.y1)
+        if x1 <= x0 or y1 <= y0:
+            continue
+        lines.append(f"{lv.V2_CLASSES[b.cls]} {(x0 + x1) / 2 / w:.6f} {(y0 + y1) / 2 / h:.6f} "
+                     f"{(x1 - x0) / w:.6f} {(y1 - y0) / h:.6f}")  # fmt: skip
+        written.append(b)
+    return "\n".join(lines) + ("\n" if lines else ""), written
+
+
+def _keyed(c: Counter[Any]) -> dict[str, int]:
+    return {str(k): v for k, v in sorted(c.items(), key=lambda kv: (-kv[1], str(kv[0])))}
+
+
+@dataclass
+class V2Tally:
+    """Counts only (ids, never names): frames seen / kept / skipped, exclusions by reason, the
+    written boxes per class, species (monster id) and NPC sprite (job)."""
+
+    seen: int = 0
+    kept: int = 0
+    gm_window: int = 0
+    no_world: int = 0
+    excluded_frames: int = 0
+    only_npc: int = 0  # excluded ONLY for NPC sprites (unsized / unchecked / rejected): N2-N3
+    excluded: Counter[str] = field(default_factory=Counter)  # reason -> frames
+    excluded_detail: Counter[str] = field(default_factory=Counter)  # reason:arg -> frames
+    maps_seen: Counter[str] = field(default_factory=Counter)
+    maps_kept: Counter[str] = field(default_factory=Counter)
+    class_frames: Counter[str] = field(default_factory=Counter)
+    class_boxes: Counter[str] = field(default_factory=Counter)
+    species_frames: Counter[int] = field(default_factory=Counter)
+    species_boxes: Counter[int] = field(default_factory=Counter)
+    npc_frames: Counter[int] = field(default_factory=Counter)
+    npc_boxes: Counter[int] = field(default_factory=Counter)
+    kinds: Counter[str] = field(default_factory=Counter)  # "<class>:<box kind>"
+    cutin_kept: int = 0  # kept frames with the cut-in shown (its units in shadow)
+
+    INTS = ("seen", "kept", "gm_window", "no_world", "excluded_frames", "only_npc", "cutin_kept")
+
+    def exclude(self, reasons: Sequence[str]) -> None:
+        self.excluded_frames += 1
+        heads = {r.split(":", 1)[0] for r in reasons}
+        for r in heads:
+            self.excluded[r] += 1
+        for r in dict.fromkeys(reasons):
+            self.excluded_detail[r] += 1
+        if heads <= set(NPC_REASONS):
+            self.only_npc += 1
+
+    def keep(self, fr: lv.Frame, written: Sequence[lv.V2Label]) -> None:
+        self.kept += 1
+        self.maps_kept[map_key(fr.map or "?")] += 1
+        self.cutin_kept += int(fr.cutin.rect is not None)
+        for cls in {b.cls for b in written}:
+            self.class_frames[cls] += 1
+        for b in written:
+            self.class_boxes[b.cls] += 1
+            self.kinds[f"{b.cls}:{b.kind}"] += 1
+            if b.job is not None and b.cls == "monster":
+                self.species_boxes[b.job] += 1
+            elif b.job is not None and b.cls == "npc":
+                self.npc_boxes[b.job] += 1
+        for j in {b.job for b in written if b.cls == "monster" and b.job is not None}:
+            self.species_frames[j] += 1
+        for j in {b.job for b in written if b.cls == "npc" and b.job is not None}:
+            self.npc_frames[j] += 1
+
+    def merge(self, other: V2Tally) -> None:
+        for name in self.INTS:
+            setattr(self, name, getattr(self, name) + getattr(other, name))
+        for name, value in vars(other).items():
+            if isinstance(value, Counter):
+                getattr(self, name).update(value)
+
+    def as_dict(self) -> dict[str, Any]:
+        out: dict[str, Any] = {name: getattr(self, name) for name in self.INTS}
+        for name, value in vars(self).items():
+            if isinstance(value, Counter):
+                out[name] = _keyed(value)
+        return out
+
+
+Loader = Callable[[], np.ndarray] | None
+
+
+def read_bgr(path: Path) -> np.ndarray:
+    return np.ascontiguousarray(np.asarray(Image.open(path).convert("RGB"))[:, :, ::-1])
+
+
+def demo_frames(session: Path, every: int) -> Iterator[tuple[int, int, dict[str, Any], Loader]]:
+    """A demo session's banked frames (scripts/labels_v2.py banked_frames: frames/<n>-<t>.png and
+    the snapshots demo.jsonl references), every ``every``-th; keyed by position in that list."""
+    import labels_v2 as tool
+
+    for i, (t, img) in enumerate(tool.banked_frames(session)):
+        if img is None or i % every:
+            continue
+        yield i, t, {"index": i, "ref": str(img.relative_to(session))}, partial(read_bgr, img)
+
+
+def recorded_times(
+    session: Path, manifest: dict[str, Any], every: int, every_png: int
+) -> Iterator[tuple[int, int]]:
+    """(frame_id, t_ns) of exactly the frames ``session_frames`` decodes, WITHOUT decoding: the
+    H.264 index (usable frames, every n-th, as iter_every) or the PNG shards' json members."""
+    if (manifest.get("format") or "png") == "h264":
+        from poring_dataset.h264 import H264Session
+
+        s = H264Session(session, check_versions=False)
+        t_of = {u.frame_id: u.t_ns for u in s.units}
+        for fid in s.usable()[::every]:
+            yield fid, t_of[fid]
+        return
+    n = 0
+    for shard in manifest["shards"]:
+        with tarfile.open(session / shard) as tar:
+            for m in tar:
+                if not m.name.endswith(".json"):
+                    continue
+                n += 1
+                if not (n - 1) % every_png:
+                    fh = tar.extractfile(m)
+                    assert fh is not None
+                    meta = json.loads(fh.read())
+                    yield int(meta["frame_id"]), int(meta["t_mono_ns"])
+
+
+def v2_frames(
+    session: Path, manifest: dict[str, Any], a: argparse.Namespace, decode: bool
+) -> Iterator[tuple[int, int, dict[str, Any], Loader]]:
+    """(key id, t_ns, json extras, image loader) per candidate frame; no loader in a dry run."""
+    if manifest.get("kind") == "demo":
+        for i, t, extra, load in demo_frames(session, a.every_demo):
+            yield i, t, extra, (load if decode else None)
+    elif decode:
+        for meta, img in session_frames(session, manifest, a.every, a.every_png):
+            fid = int(meta["frame_id"])
+            yield fid, int(meta["t_mono_ns"]), {"frame_id": fid}, partial(np.asarray, img)
+    else:
+        for fid, t in recorded_times(session, manifest, a.every, a.every_png):
+            yield fid, t, {"frame_id": fid}, None
+
+
+def resolve_session(sid: str, a: argparse.Namespace) -> Path:
+    """v2: a banked demo session under --demo-root (RAM) first, else the session under --datasets
+    (a recorded session, or a demo session dataset_ship already copied to the NAS)."""
+    for root in (a.demo_root, a.datasets):
+        if (root / sid / "manifest.json").exists():
+            return root / sid  # type: ignore[no-any-return]
+    raise SystemExit(f"{sid}: no manifest under {a.demo_root} or {a.datasets}")
+
+
+def v2_session(
+    sid: str, part: str, path: Path, a: argparse.Namespace, v2: V2Inputs, sink: ShardSink | None
+) -> tuple[dict[str, Any], V2Tally]:
+    """One session's v2 frames: every candidate labelled by labels_v2's Session, gated, and (with a
+    sink) written; ``sink=None`` is the dry run (nothing read but packets and indexes)."""
+    manifest = json.loads((path / "manifest.json").read_text())
+    sess = make_v2_session(path, v2)
+    size = tuple(getattr(sess.labeler, "size", V2_SIZE))
+    if size != V2_SIZE:
+        raise SystemExit(f"{sid}: game region {size}, labels_v2 labels {V2_SIZE}")
+    tally = V2Tally()
+    row: dict[str, Any] = {"split": part, "path": str(path),
+                           "format": "demo" if manifest.get("kind") == "demo"
+                           else manifest.get("format") or "png", "shards": []}  # fmt: skip
+    for kid, t, extra, load in v2_frames(path, manifest, a, decode=sink is not None):
+        tally.seen += 1
+        world = sess.world(t)
+        if world.map:
+            tally.maps_seen[map_key(world.map)] += 1
+            gate = map_reasons(world.map, v2)
+            if gate:
+                tally.exclude(gate)
+                continue
+        status, fr, _scene = sess.frame(t)
+        if fr is None:
+            setattr(tally, status, getattr(tally, status) + 1)  # gm_window | no_world
+            continue
+        reasons = [*fr.excluded, *npc_reasons(fr, v2.checked, v2.lifted)]
+        if reasons:
+            tally.exclude(reasons)
+            continue
+        text, written = v2_yolo(fr.labels, V2_SIZE)
+        tally.keep(fr, written)
+        if sink is not None:
+            assert load is not None
+            img = load()
+            if img.shape[:2] != (V2_SIZE[1], V2_SIZE[0]):
+                raise SystemExit(f"{sid}: frame {kid} is {img.shape[1]}x{img.shape[0]}, the "
+                                 f"labels are {V2_SIZE[0]}x{V2_SIZE[1]}")  # fmt: skip
+            info = {"session": sid, "t_mono_ns": t, "map": map_key(fr.map or ""), "labels": "v2",
+                    **extra,
+                    "boxes": [[lv.V2_CLASSES[b.cls], b.job, b.kind] for b in written],
+                    "shadow": len(fr.shadow),
+                    "cutin": None if fr.cutin.rect is None else list(fr.cutin.rect)}  # fmt: skip
+            image = ({"png": encode_png(np.ascontiguousarray(img[:, :, :3]))}
+                     if a.image == "png" else {"jpg": jpeg(img, a.quality)})  # fmt: skip
+            shard = sink.add(f"{sid}.{kid:09d}", {**image, "txt": text.encode(),
+                                                  "json": json.dumps(info).encode()})  # fmt: skip
+            if shard not in row["shards"]:
+                row["shards"].append(shard)
+        if a.max_per_session and tally.kept >= a.max_per_session:
+            break
+    sheets = getattr(sess.labeler, "sheets", None)
+    missing = getattr(sheets, "missing", None) or {}
+    row.update(tally.as_dict())
+    row["boxes"] = sum(tally.class_boxes.values())
+    row["sprite_lookup_missing"] = {str(k): v for k, v in sorted(missing.items())}
+    return row, tally
+
+
+def dry_run(a: argparse.Namespace, split: dict[str, list[str]], v2: V2Inputs) -> int:
+    """Counts only: no directory, no shard, no manifest, no image read."""
+    parts = {part: V2Tally() for part in split}
+    total = V2Tally()
+    for part, ids in split.items():
+        for sid in ids:
+            row, tally = v2_session(sid, part, resolve_session(sid, a), a, v2, None)
+            row.pop("shards")
+            print(json.dumps({"session": sid, **row}), flush=True)
+            parts[part].merge(tally)
+            total.merge(tally)
+    print(json.dumps({"dry_run": True, "labels": "v2", "inputs": v2.provenance,
+                      "splits": {p: t.as_dict() for p, t in parts.items()},
+                      "total": total.as_dict()}, indent=1))  # fmt: skip
+    return 0
+
+
+def v01_session(sid: str, part: str, a: argparse.Namespace, sink: ShardSink) -> dict[str, Any]:
+    """One session, labels v0 / v1 (unchanged): qa_export.Labeler, v0 / v1's scene maps."""
+    path = a.datasets / sid
+    manifest = json.loads((path / "manifest.json").read_text())
+    labeler = qa_export.Labeler(path, labels=a.labels,
+                                **({"k": a.k} if a.k is not None else {}))  # fmt: skip
+    w, h = labeler.size
+    row = {"split": part, "format": manifest.get("format") or "png", "kept": 0,
+           "gm_window": 0, "off_scene": 0, "boxes": 0, "shards": []}  # fmt: skip
+    for meta, img in session_frames(path, manifest, a.every, a.every_png):
+        t = int(meta["t_mono_ns"])
+        world = labeler.timeline.frame_world(t - int(labeler.offset_ms * 1e6))
+        world_map = (world.map or "").removesuffix(".gat")  # packets say prt_fild08.gat
+        if world_map not in SCENE_MAPS:
+            row["off_scene"] += 1
+            continue
+        boxes = labeler.boxes(t)
+        if boxes is None:
+            row["gm_window"] += 1
+            continue
+        key = f"{sid}.{int(meta['frame_id']):09d}"
+        info = {"session": sid, "frame_id": int(meta["frame_id"]), "t_mono_ns": t,
+                "map": world_map, "labels": a.labels}  # fmt: skip
+        image = ({"png": encode_png(np.ascontiguousarray(img[:, :, :3]))}
+                 if a.image == "png" else {"jpg": jpeg(img, a.quality)})  # fmt: skip
+        shard = sink.add(key, {**image,
+                               "txt": yolo_lines(boxes, w, h).encode(),
+                               "json": json.dumps(info).encode()})  # fmt: skip
+        if shard not in row["shards"]:
+            row["shards"].append(shard)
+        row["kept"] += 1
+        row["boxes"] += len(boxes)
+        if a.max_per_session and row["kept"] >= a.max_per_session:
+            break
+    return row
+
+
+def main(argv: Sequence[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     ap.add_argument("--train", nargs="*", default=[])
     ap.add_argument("--val", nargs="*", default=[])
     ap.add_argument("--test", nargs="*", default=[])
     ap.add_argument("--cache-id", default=None)
-    ap.add_argument("--labels", choices=("v0", "v1"), default="v0")
-    ap.add_argument("--k", type=float, default=None, help="v1: M4's k (default: nostalro)")
+    ap.add_argument("--labels", choices=("v0", "v1", "v2"), default="v0")
+    ap.add_argument("--k", type=float, default=None, help="v1/v2: M4's k (default: nostalro)")
     ap.add_argument("--every", type=int, default=15)  # H.264 (~32 fps): ~2 fps kept
     ap.add_argument("--every-png", type=int, default=1)  # PNG sessions (~1 fps): every frame
     ap.add_argument("--max-per-session", type=int, default=None)
@@ -200,7 +629,61 @@ def main() -> int:
         action="store_true",
         help="continue an interrupted build of the same --cache-id (same arguments)",
     )
-    a = ap.parse_args()
+    g = ap.add_argument_group("labels v2 (docs/planning/labels-v2-plan.md; local inputs, never "
+                              "committed)")  # fmt: skip
+    g.add_argument(
+        "--kb",
+        type=Path,
+        default=None,
+        help="v2, required: the KB dir (route.json, classes.json, sprite names)",
+    )
+    g.add_argument(
+        "--warp-visibility",
+        type=Path,
+        default=None,
+        help="v2, required: warp key -> visible|occluded|partial (a person's table)",
+    )
+    g.add_argument(
+        "--npc-sprites",
+        type=Path,
+        default=None,
+        help="v2: decoded NPC SPR/ACT dir (without it every NPC is unsized: excluded)",
+    )
+    g.add_argument("--npc-sprite-names", type=Path, default=None, help="v2: job -> sprite stem")
+    g.add_argument(
+        "--npc-extents",
+        type=Path,
+        default=None,
+        help="v2: job -> [x0, y0, x1, y1] measured sprite px",
+    )
+    g.add_argument(
+        "--npc-checked",
+        type=Path,
+        default=None,
+        help='v2: N3 verdicts, "<job>" or "<map>:<job>" -> "fit" (else rejected)',
+    )
+    g.add_argument("--cutin-rect", default=None, help="v2: x0,y0,x1,y1 (default: ui_mask's)")
+    g.add_argument(
+        "--offset-ms",
+        type=float,
+        default=None,
+        help="v2 demo sessions: packet->frame ms (default: the backend's benchmark)",
+    )
+    g.add_argument("--demo-root", type=Path, default=DEMO)
+    g.add_argument("--every-demo", type=int, default=1, help="v2: every n-th banked demo frame")
+    g.add_argument(
+        "--allow-hold",
+        nargs="*",
+        default=[],
+        choices=HOLDS,
+        help="v2: lift a fail-closed hold once a person has decided it",
+    )
+    g.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="v2: count only; no directory, shard or manifest; no image read",
+    )
+    a = ap.parse_args(argv)
     split = {"train": a.train, "val": a.val, "test": a.test}
     seen = [s for ss in split.values() for s in ss]
     if not seen:
@@ -209,11 +692,18 @@ def main() -> int:
         raise SystemExit("a session is in two splits: the split is BY SESSION")
     if GOLD in a.train or GOLD in a.val:
         raise SystemExit(f"{GOLD} is the hand-checked gold set: test only")
+    v2 = V2Inputs.from_args(a) if a.labels == "v2" else None
+    if a.dry_run:
+        if v2 is None or a.resume:
+            raise SystemExit("--dry-run is for --labels v2, without --resume")
+        return dry_run(a, split, v2)
     cache_id = a.cache_id or f"{a.labels}-{time.strftime('%Y%m%dT%H%M%S')}"
     directory = a.out / cache_id
     args = {"labels": a.labels, "k": a.k, "every": a.every, "every_png": a.every_png,
             "max_per_session": a.max_per_session, "shard_mb": a.shard_mb, "image": a.image,
             "quality": a.quality if a.image == "jpeg" else None, "split": split}  # fmt: skip
+    if v2 is not None:  # v0 / v1 progress files keep their keys (a missing key resumes as None)
+        args.update({"every_demo": a.every_demo, "v2": v2.provenance})
     sessions: dict[str, Any] = {}
     shards: dict[str, Any] = {}
     if a.resume:
@@ -232,38 +722,10 @@ def main() -> int:
         for sid in ids:
             if sid in sessions:
                 continue  # done before the interruption (its shards were checked)
-            path = a.datasets / sid
-            manifest = json.loads((path / "manifest.json").read_text())
-            labeler = qa_export.Labeler(path, labels=a.labels,
-                                        **({"k": a.k} if a.k is not None else {}))  # fmt: skip
-            w, h = labeler.size
-            row = {"split": part, "format": manifest.get("format") or "png", "kept": 0,
-                   "gm_window": 0, "off_scene": 0, "boxes": 0, "shards": []}  # fmt: skip
-            for meta, img in session_frames(path, manifest, a.every, a.every_png):
-                t = int(meta["t_mono_ns"])
-                world = labeler.timeline.frame_world(t - int(labeler.offset_ms * 1e6))
-                world_map = (world.map or "").removesuffix(".gat")  # packets say prt_fild08.gat
-                if world_map not in SCENE_MAPS:
-                    row["off_scene"] += 1
-                    continue
-                boxes = labeler.boxes(t)
-                if boxes is None:
-                    row["gm_window"] += 1
-                    continue
-                key = f"{sid}.{int(meta['frame_id']):09d}"
-                info = {"session": sid, "frame_id": int(meta["frame_id"]), "t_mono_ns": t,
-                        "map": world_map, "labels": a.labels}  # fmt: skip
-                image = ({"png": encode_png(np.ascontiguousarray(img[:, :, :3]))}
-                         if a.image == "png" else {"jpg": jpeg(img, a.quality)})  # fmt: skip
-                shard = sink.add(key, {**image,
-                                       "txt": yolo_lines(boxes, w, h).encode(),
-                                       "json": json.dumps(info).encode()})  # fmt: skip
-                if shard not in row["shards"]:
-                    row["shards"].append(shard)
-                row["kept"] += 1
-                row["boxes"] += len(boxes)
-                if a.max_per_session and row["kept"] >= a.max_per_session:
-                    break
+            if v2 is not None:
+                row, _ = v2_session(sid, part, resolve_session(sid, a), a, v2, sink)
+            else:
+                row = v01_session(sid, part, a, sink)
             sink.close()  # a session owns its shards: complete, or absent after a resume
             sessions[sid] = row
             write_json(directory, "progress.json",
@@ -274,11 +736,14 @@ def main() -> int:
         "cache_id": cache_id, "labels": a.labels, "k": a.k, "every": a.every,
         "every_png": a.every_png,
         "image": a.image, "quality": a.quality if a.image == "jpeg" else None,
-        "names": {v: k for k, v in sorted(CLASSES.items(), key=lambda kv: kv[1])},
+        "names": {v: k for k, v in sorted((CLASSES if v2 is None else lv.V2_CLASSES).items(),
+                                          key=lambda kv: kv[1])},
         "split": split, "sessions": sessions, "shards": sink.done, "gold": GOLD,
         "built_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         "seconds": round(time.monotonic() - t0, 1),
     }  # fmt: skip
+    if v2 is not None:
+        manifest.update({"every_demo": a.every_demo, "v2": v2.provenance})
     for name, doc in (("manifest.json", manifest), ("split.json", split)):
         write_json(directory, name, doc)
     print(json.dumps({"cache": str(directory), "frames": sum(r["kept"] for r in sessions.values()),

@@ -247,3 +247,44 @@ def test_npc_sheet_needs_the_sprites(capsys: pytest.CaptureFixture[str]) -> None
     a = SimpleNamespace(npc_sprites=None, npc_sprite_names=None)
     assert L.cmd_npc_sheet(a) == 2
     assert "--npc-sprites" in capsys.readouterr().err
+
+
+# --- Session: which labeller a session gets -------------------------------------------------------
+
+
+def test_a_recorded_png_session_gets_its_own_recording_labeller(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A recorded PNG session has no stream.idx.csv; it must not fall to the demo branch, whose
+    console offset lookup has no client name (2026-10-10: the v1 PNG sessions failed there)."""
+    import qa_export
+
+    calls: list[tuple[Any, ...]] = []
+
+    class FakeLabeler:
+        def __init__(self, path: Path, labels: str = "v0", **kw: Any) -> None:
+            calls.append(("recording", path.name, labels))
+            self.offset_ms, self.timeline = 40.0, SimpleNamespace(inferred_aid=None)
+
+        @classmethod
+        def from_events(cls, events: Any, backend: str, size: Any, offset_ms: float,
+                        labels: str = "v1") -> Any:  # fmt: skip
+            calls.append(("events", backend, offset_ms))
+            return SimpleNamespace(offset_ms=offset_ms, timeline=SimpleNamespace(inferred_aid=None))
+
+    for name in ("Labeler", "KB_CLASSES", "KB_SPRITE_NAMES"):  # Session sets the KB paths
+        monkeypatch.setattr(qa_export, name, getattr(qa_export, name))
+    monkeypatch.setattr(qa_export, "Labeler", FakeLabeler)
+    (tmp_path / "route.json").write_text(json.dumps({"warps": {}}))
+    a = SimpleNamespace(kb=tmp_path, offset_ms=55.0, npc_extents=None, npc_sprites=None,
+                        npc_sprite_names=None, cutin_rect="1,2,3,4",
+                        warp_visibility=None)  # fmt: skip
+    manifests = {"rec": {"backend": "console", "game_region": [80, 77, 1280, 720], "shards": []},
+                 "demo": {"kind": "demo", "backend": "console"}}  # fmt: skip
+    for name, manifest in manifests.items():
+        (tmp_path / name).mkdir()
+        (tmp_path / name / "manifest.json").write_text(json.dumps(manifest))
+        with gzip.open(tmp_path / name / "packets.jsonl.gz", "wt") as fh:
+            fh.write("")
+        L.Session(tmp_path / name, a)
+    assert calls == [("recording", "rec", "v1"), ("events", "console", 55.0)]

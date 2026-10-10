@@ -116,6 +116,8 @@ sessions in `/dev/shm/poring-lab-demo` and the local KB; nothing written outside
     a file route.json's hand list does not read. `kb_first_workflow.py --also prt_church` lists it.
     `labels_v2.l3_warps` still reads route.json: pointing it at the new KB is a follow-up, not done.
     ➡️ DONE 2026-10-09 ~21:15 (e6f3b1d, merged 748260d): route.json's warp lists now come from this KB's COMPLETE per-map list (kb_route.py; prt_church gains (115,122) and (166,106)), so labels_v2 and npc_noclick read the completed lists.
+    ➡️ 2026-10-10 (section 4a's dry run): those frames are now `warp_visibility_unknown` instead
+    (215 banked frames): (115,122) is not in the person's visibility table, which needs its reading.
 - **Why the visibility table (found on the banked frames, 2026-10-09):** the packets send a portal
   that map geometry hides.
   - Prontera's building doors are job-45 portals under their roofs: 12 / 12 aligned crops of
@@ -256,6 +258,8 @@ frames, 2,026 frames):
   session table) hold prt_fild08 and prt_church only. So they cover no planned species.
   - Their per-species counts were not computed here: that reads their packets and frame indexes on
     the NAS.
+    ➡️ COUNTED 2026-10-10 under v2's rules (section 4a: `build_frame_cache.py --labels v2
+    --dry-run` over v1's ten sessions; only 603 of v1's 13,946 frames pass as they stand).
   - `labels_v2.py coverage <recorded session>` reads `stream.idx.csv` + `packets.jsonl.gz` only (no
     decode). It runs in a quiet window.
 
@@ -361,6 +365,7 @@ suggestion").** Kept as history: the town-first order this section first propose
    - the warp visibility table for the 12 banked cells, confirmed by a person;
    - `build_frame_cache.py --labels v2`: widen `SCENE_MAPS`, read demo sessions' snapshots and
      frames, write `labels_v2.V2_CLASSES` as the manifest's names, skip excluded frames;
+     ➡️ BUILT 2026-10-10, offline, no cache written (section 4a);
    - bank the tmpfs sessions (labels-v2.md 3).
 2. **Byalan** (iz_dun00 + iz_dun01): sprites catalogued, KB complete, the held-out dungeon's map.
 3. **Towns' NPC sprites** (prontera, prt_church, alberta): mostly ALREADY banked. They need step 1,
@@ -392,6 +397,154 @@ suggestion").** Kept as history: the town-first order this section first propose
         --scene-log /dev/shm/poring-lab-route/scene.jsonl.1 /dev/shm/poring-lab-route/scene.jsonl
       labels_v2.py --kb <main>/data/kb verify-region <3 guide sessions> --region 984,599,1033,644
       labels_v2.py --kb <main>/data/kb warp-measure <sessions>
+
+### 4a. `build_frame_cache.py --labels v2`: AS BUILT (Claude, 2026-10-10, branch feat/v2-cache; offline, NO cache written)
+
+3.3's original step 1 (in the superseded order's history list), built. Nothing was written to the
+NAS or the disk; a cache build waits for a quiet window the parent picks.
+- **The labels:** per candidate frame, `scripts/labels_v2.py`'s `Session.frame` (the `coverage`
+  path, `assemble()`). The YOLO ids are `V2_CLASSES`, and the manifest's `names` are player 0 /
+  monster 1 / npc 2 / warp 3. Each written box's class id, job and box kind ride in the frame's
+  json (ids only).
+- **A frame with ANY exclusion is never written**; it is counted by reason. On top of labels_v2's
+  reasons, the builder adds FAIL-CLOSED gates:
+  - `map_not_in_kb`: the scene maps are every map route.json's warp lists cover (107 today), not
+    v0 / v1's two;
+  - `gat_missing`: the map's GAT is not extracted (the projection would be flat ground);
+  - two HOLDS, lifted only by `--allow-hold` once a person decides:
+    - `gat_unverified`: alberta and morocc (7.6: the client GAT differs from the server's);
+    - `npc_unchecked`: N3 is not judged. An NPC sprite box trains only with a person's `fit` in
+      `--npc-checked` (per job, or per `map:job`). Any other verdict is `npc_rejected`, which no
+      hold lifts (the alberta_in shift of 7.6 would be `alberta_in:59` etc.).
+- **Sessions:** banked demo sessions (`--demo-root`, RAM first: snapshots and `frames/`) or
+  recorded ones (`--datasets`).
+- **`--dry-run`:** no directory, no shard, no manifest, and no image is read (a recorded session's
+  frame times come from its index or its shards' json members, exactly the frames a build
+  decodes). It prints per session and per split: frames seen / kept / excluded by reason, boxes
+  per class, per species and per NPC sprite.
+- **Provenance:** the manifest and progress.json record the sha256 of route.json and of each
+  local table, the holds lifted, and the PROVISIONAL portal shape (R 7, `measured: false`, 1.3).
+  `--resume` refuses any other input.
+- **v0 / v1 are unchanged.** Their per-session loop moved verbatim into `v01_session`, and an old
+  progress.json still resumes.
+- **Tests:** `services/backend/tests/test_build_frame_cache_v2.py` (11, synthetic sessions and
+  KB), the existing 7, and one new in `test_labels_v2_tool.py` (the Session fix below; it fails
+  without the fix). With the labels_v2 and qa_export tests: 65 passed.
+
+**The dry run over every banked demo session with packets** (92 sessions in
+`/dev/shm/poring-lab-demo`; counts only; the `coverage` defaults: k nostalro, the auto offset, the
+38 route NPC sprites, the confirmed warp table, no N3 table). The "split" only groups the counts:
+the T4-named sessions (3 talk-cal guide sessions + the 12:38 iz_dun00 run) as test, the rest as
+train. It binds nothing.
+
+| | frames |
+|---|---|
+| seen | 2,244 (train 2,062, test 182) |
+| **kept** | **569** (train 558, test 11): prt_fild08 500, prt_church 35, prontera 20, iz_dun00 11, alberta_in 3 |
+| GM-command windows | 216 |
+| excluded | 1,459; per reason (a frame can have several): npc_unsized 1,423, npc_unchecked 395, warp_visibility_unknown 217, warp_partial 132, self_dead 10, gat_missing 4 (prt_in 3, izlu2dun 1), gat_unverified 4 (alberta) |
+| excluded ONLY for NPC sprites | 1,094 (N1-N3 alone would admit them) |
+
+- **Boxes on the kept frames:**
+  - player 569, all our own GM (kind `self`);
+  - monster 822, all sprite boxes (`opaque`);
+  - npc 0;
+  - warp 9.
+- **Species, frames / boxes:** 1002 335 / 631, 1063 92 / 98, 1008 56 / 57, 1113 26 / 27, 1161 4 / 4,
+  1141 2 / 3, 1018 1 / 1, 1070 1 / 1. No species lacks a sprite sheet.
+- **Why npc is 0:** every banked frame with a drawn NPC also holds one of these:
+  - an NPC outside N1 / N2's 38 route sprites (`npc_unsized`: the 722 flag 399 frames, prt_church's
+    79 402, 67 345, 120 340, ...);
+  - or a sprite box no person has judged (`npc_unchecked`: 105 382, 92 380).
+- **The holds lifted (a what-if, NOT a decision):** 584 kept, npc 20 boxes on 15 frames (92 5,
+  89 4, 98 4, 59 3, 86 2, 105 1, 874 1), warp 14. Three of those sprites (59, 86, 98) are the
+  alberta_in sprites 7.6's N3 reading calls shifted.
+- **`warp_visibility_unknown` 217:** prt_church (115,122) 215 and (100,56) 2.
+  - route.json now lists (115,122) as an L3 warp (7.6, 21:15), so it is no longer 1.3's
+    `portal_unconfirmed`.
+  - It is not in the person's visibility table. A person's reading of it would admit those frames
+    or keep them out.
+- **Cross-check:** `labels_v2.py coverage` on the same 92 sessions with the same inputs gives 584
+  trainable, the same per map as the builder with both holds lifted. Every other difference is the
+  builder's map gate, which counts first (1 GM-window frame and 3 `warp_partial` frames sit on maps
+  without a GAT).
+
+**The dry run over v1's ten NAS sessions** (the v1png-20261008 split and arguments: k 0.14,
+`--every 15`, `--every-png 1`). Read-only on the NAS: packets, indexes, and the PNG shards' json
+members. Counts only. It also found a bug: `labels_v2.Session` sent a recorded PNG session down the
+demo branch, so the console offset lookup failed. Fixed in this branch, with a test.
+- **The frame set is v1's exactly:** 16,995 frames seen = v1's 13,946 kept + 2,294 off-scene + 755
+  GM-window.
+
+| session | split | seen | v1 kept | **v2 kept** | exclusions (frames per reason) |
+|---|---|---|---|---|---|
+| p3-outdoor-d | train | 2,510 | 2,309 | **130** | npc_unchecked 2,109, warp_visibility_unknown 1,585, npc_unsized 1,179 |
+| p3-outdoor-a | train | 2,582 | 2,582 | **0** | all three on every frame |
+| p3-outdoor-b | train | 2,510 | 472 | **24** | npc_unchecked 2,435, warp_visibility_unknown 2,331, self_dead 2,073, npc_unsized 287, l3_warp_unseen 8 |
+| p3-indoor-b | train | 2,506 | 2,421 | **32** | npc_unsized 2,389, self_dead 1,265, warp_visibility_unknown 133 |
+| s2-outdoor (10-03) | train | 441 | 409 | **56** | npc_unchecked 353, warp_visibility_unknown 353, npc_unsized 301, self_dead 209 |
+| p3-outdoor-c | val | 2,510 | 2,124 | **92** | npc_unchecked 2,018, warp_visibility_unknown 1,758, npc_unsized 1,228, self_dead 289, l3_warp_unseen 67 |
+| p3-indoor-a | val | 1,179 | 1,118 | **108** | npc_unsized 1,010, warp_visibility_unknown 100 |
+| p3-indoor-c | test | 1,257 | 1,166 | **81** | npc_unsized 1,085, warp_visibility_unknown 240, self_dead 21 |
+| 054429 s2-outdoor | test | 1,200 | 1,077 | **80** | npc_unchecked 1,059, warp_visibility_unknown 758, npc_unsized 649, self_dead 256, l3_warp_unseen 51 |
+| gold (s2-indoor-v2) | test | 300 | 268 | **0** | npc_unsized 268, warp_visibility_unknown 74, self_dead 17 |
+| **total** | | **16,995** | **13,946** | **603** | GM windows 773; excluded 15,619 |
+
+- **Kept:** prt_fild08 360, prt_church 243 (train 242, val 200, test 161).
+  - Boxes: player 603 (our GM), monster 2,167 (1002 1,970 on 538 frames; 1008 91; 1063 60;
+    1113 46). npc 0, warp 0.
+- **What keeps them out, by cause** (frames; a frame can have several):
+  - `npc_unchecked:51`, 8,332: an NPC on prt_fild08 inside N1's route set, waiting only for N3.
+  - `warp_visibility_unknown`: three warps no person has read:
+    - prt_fild08 (170,378), 7,143;
+    - prontera (156,22), 2,224;
+    - prt_church (115,122), 547.
+  - `npc_unsized` (outside N1's 38 route sprites): 909 6,157; prt_church's 71 2,521, 79 2,421,
+    741 2,226, 798 870, 745 529, 60 230, 755 161.
+  - `npc_unchecked`: 105 2,224 and 115 2,224 (prontera).
+  - `self_dead`, 4,130: see below.
+- **A what-if, NOT a decision** (a /dev/shm copy of the table with the four unread warps set
+  "occluded", plus both holds lifted). Either "visible" or "occluded" admits a frame; "partial"
+  would not.
+  - It gives **3,034 kept** (train 1,482, val 1,129, test 423): prt_fild08 2,527, prontera 264,
+    prt_church 243.
+  - npc 2,695 boxes (51 2,167, 105 264, 115 264).
+  - What still blocks is `npc_unsized` 10,978 and `self_dead` 4,130.
+  - `npc_unsized` is EIGHT sprites outside N1's route scope: 909 on prt_fild08 (6,157 frames) and
+    prt_church's 71, 79, 741, 798, 745, 60, 755.
+  - So extending N1 / N2 (and N3) to those sprites is what would let v1's sessions replay under
+    v2.
+- **Found: our GM lay dead in v1's sessions, and v1 trained on some of it.**
+  - In p3-indoor-b our own `entity_vanish` (reason 1) comes at 586.3 s. After it there is no
+    self-move, no HP raise and no map change until the end (1,201.7 s), while 26 GM-flagged events
+    go on. The session's 1,265 `self_dead` frames are prt_church frames v1 KEPT for training.
+  - p3-outdoor-b's death at 260.7 s is in prontera (frames v1 skipped as off-scene).
+  - The other spans: outdoor-c 289 (val), 054429 256 (test), s2-outdoor 209 (train), indoor-c 21
+    (test), and the gold session 17 (test).
+  - The sessions recorded on ONE scene map (indoor-b, s2-outdoor, indoor-c, gold) put **1,512
+    dead-GM frames inside v1's cache**: train 1,474, test 38 (the gold set's 17 among them).
+    outdoor-c's and 054429's spans were not split by map, so how many of their frames v1 kept is
+    not known.
+- **The GM-window count differs by 18** (773 vs v1's 755): v1 counted prontera's GM-window frames
+  as off-scene first.
+
+**What the vision side needs** (read in the pinned source; nothing run on the GPU):
+- **Reading a v2 cache: nothing.** `poring_vision.shards.load_split` takes `names` from the
+  manifest, and train.py sets `nc = len(names)` = 4. A test reads a v2 cache through it.
+- **Fine-tuning from v1's last.pt (section 5): nothing in code.**
+  - ultralytics 8.4.165 (vision's pin) remaps the class-head rows BY NAME when nc differs:
+    `BaseModel.load` -> `_remap_cls_by_names`, with `cls_remap: True` the default, and train.py
+    does not override it.
+  - `Detect`'s c3 width (`max(ch[0], min(nc, 100))`) is the same for nc 3 and 4, so the weights
+    are copied too, not only the biases.
+  - So player / monster / npc keep v1's rows, and only `warp` starts fresh. Check it on the first
+    run: the log should say "Remapped 3/4 cls head rows".
+- **v1 replay (section 5):** train.py reads ONE cache. v1's own 3-class frames would train the
+  visible portals as background, so the replay must go through `--labels v2` into the same cache.
+  The NAS dry run above is what that yields today.
+- **Host consumers of a v2 model:** `scripts/unit_detector.py` maps the class index through a
+  fixed 3-name `NAMES`, so a class-3 box would raise IndexError. It must take the model's names
+  (or add `warp`) before a v2 ONNX is deployed. `detector_worker.py` decodes `4 + nc` generically.
 
 ## 5. DRAFT pre-registration: v2 vs v1 (for the parent to review; it binds nothing yet)
 
@@ -444,7 +597,7 @@ on 2026-10-09).
 | item | why | what settles it |
 |---|---|---|
 | NPC sprite boxes (all 22 banked sprites) | no job -> sprite table, no NPC SPR/ACT extracted; player-class NPCs are composites | N1-N3 (section 1.2) |
-| per-species counts on the NAS-held frames | needs the NAS sessions' packets + indexes | `labels_v2.py coverage` on them, in a quiet window |
+| per-species counts on the NAS-held frames | needs the NAS sessions' packets + indexes | `labels_v2.py coverage` on them, in a quiet window. ➡️ COUNTED 2026-10-10 (section 4a's NAS dry run) |
 | the portal ring radius | a hand reading of 19 crops; the automatic hint over-reads on bright floors | a person on `warp-measure`'s medians |
 | the visibility of every warp on the planned maps | only 12 cells have banked frames | the portal passes of 3.3 step 4 |
 | other NPCs' cut-ins, other anchors | never seen (ui_mask's own gap) | one deliberate dialog per NPC (3.3 step 5) |

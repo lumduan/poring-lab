@@ -233,7 +233,10 @@ class Session:
         manifest = load_json(path / "manifest.json")
         self.backend = str(manifest.get("backend") or "rdp")
         self.events = load_events(path)
-        if (path / "stream.idx.csv").exists():
+        # a RECORDED session (H.264, or PNG shards without an index: its manifest carries the game
+        # region) has its own recording manifest; until 2026-10-10 a PNG one fell to the demo
+        # branch below, whose console offset lookup has no client name and failed
+        if (path / "stream.idx.csv").exists() or "game_region" in manifest:
             self.labeler = qa_export.Labeler(path, labels="v1")
         else:
             offset = a.offset_ms
