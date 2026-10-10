@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [../benchmarks/v1-vs-v0png.md, r3-paired.md, ../../services/vision/src/poring_vision/midckpt.py]
-next_action: "➡️ 2026-10-10: the fix is merged (b9fd792); re-proof 2 (pre-registered) waits for the GPU after v1 and option A's proof. History: 2026-10-09: proof 1 FAILED at B2 (RESULT section; v1 trains WITHOUT mid-epoch checkpoints, as pre-registered). Batt decided: fix it and re-prove under a NEW pre-registration. The cause was found in the code (channels_last parameters, optimizer state restored NCHW) and fixed in 2a2ff28 (branch fix/vision-midckpt-state). Re-proof 2 is pre-registered in its own section. Next: merge the fix to main, then run re-proof 2's five runs (resume-proof2-*) once the GPU is free after v1; not urgent. TEMP_HOLD stays until it passes; PASS => MID_CKPT=1 for the next training run."
+next_action: "➡️ 2026-10-11 00:45: re-proof 2 PASSED (RESULT at the end): MID_CKPT=1 for the next training run; TEMP_HOLD exited (frigate_r3.py TEMP_HOLD_MAX_LOAD = None). History: proof 1 FAILED at B2 (2026-10-08, channels_last optimizer state restored NCHW); fixed in 2a2ff28 / merged b9fd792; re-proof 2 pre-registered 2026-10-09."
 ---
 
 # Mid-epoch checkpoints with an exact resume (Batt, 2026-10-08; pre-registered BEFORE any run)
@@ -359,4 +359,44 @@ The host-proven fallback (proof 1's section above) still holds: `test_resume.py`
 - **FAIL on any criterion:** `MID_CKPT` stays unset (opt-in, unused), TEMP_HOLD stays, the failing
   criterion is reported, and another fix needs another new pre-registration.
 
-**RESULT:** not run yet.
+**RESULT (2026-10-10 23:20 -> 2026-10-11 00:45 ICT, scored as written): PASS** (`resume_proof.py
+compare` rc 0: `{"batches": 1500, "fail": [], "resumed_at": [[1, 300], [2, 0]], "a_equals_a2":
+true, "pass": true}`).
+- **Where it ran:** chain16 (the weekend run), inside ONE vision worker (option A, `execdev:`),
+  through the guarded steps (IO + R1-R3, the duty cycle), on `main` at 7e735e9 (the fix b9fd792 is
+  in it).
+  - The worker started at 23:20:43, through the quiet launcher (10 quiet minutes). It was stopped
+    at 00:45:41: stop verified, nothing of ours on the GPU.
+  - An earlier attempt of run A (2026-10-10 10:22, chain15) was INTERRUPTED by an R3-HARD camera
+    abort (cam-1-01 drops at 85 det/s). That is an interruption, not a result. Its partial trace is
+    kept in /dev/shm (`gpu-day/c16/interrupted-1022-A`), and run A was re-run from scratch.
+- **Each criterion:**
+  - (a) data: met;
+  - (b) schedule: met;
+  - (c) losses: **A == A2 bitwise**, so B had to be bitwise equal to A after the first resume:
+    met;
+  - (d) restore: met. Both resumes restored the saved digest exactly: `a693a046...` at epoch
+    index 1 batch 300, and `e55f9a24...` at the epoch-2 boundary [2, 0].
+- **The rotation:**
+  - both resumes' trace records name `mid.pt`;
+  - the weights directory after B3 holds only `best.pt` and `last.pt` (no mid files);
+  - B's trace records 22 mid saves (positions + sha256).
+  - mid.pt's size and write time are NOT in the step output (the `mid_ckpt` log lines did not reach
+    it). The 10:22 interrupted run's mid.pt and mid.prev.pt were 42,416,811 bytes each.
+- **Return codes and wall times:**
+
+  | run | rc (expected) | wall time | worst capture stall |
+  |---|---|---|---|
+  | A | 0 (0) | 26.9 min | 11.0 % quant-postgres, 7 s above 10 % (the worker's first CUDA run) |
+  | A2 | 0 (0) | 27.7 min | 12.2 %, 6 s above 10 % |
+  | B1 | 86 (86) | 15.5 min | 11.4 %, 15 s above 10 % |
+  | B2 | 86 (86) | 4.9 min | 4.6 % (frigate) |
+  | B3 | 0 (0) | 10.0 min | 10.2 %, 2 s above 10 % |
+
+  - No guard abort in any of them.
+  - R3 stayed in measure mode, with 1 kept pair (+2.97 ms) in A.
+- **As decided (Batt 2026-10-09):**
+  - **`MID_CKPT=1` for the next training run.** No run is scheduled; `train-day.sh` keeps the
+    opt-in, so the next run is launched with `MID_CKPT=1`.
+  - **TEMP_HOLD exits** (r3-paired.md's EXIT): `TEMP_HOLD_MAX_LOAD = None` in `frigate_r3.py`,
+    2026-10-11.

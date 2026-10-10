@@ -73,8 +73,8 @@ ports, quickstart) and `docs/adr/`.
        - Training never stops for load (Batt, 2026-10-07): the ADAPTIVE DUTY CYCLE sets the step
          sleep from Frigate's live load (100 ms … 2 s; a read-only `state/train-duty` mount).
          After a frame-drop abort it resumes at the slowest level once 15 quiet minutes pass
-         (TEMPORARILY also once Frigate's 10-min mean load is < 60 det/s, Batt 2026-10-08, until
-         mid-epoch checkpoints are merged and proven; `TEMP_HOLD_MAX_LOAD` in frigate_r3.py).
+         (the TEMPORARY extra hold, Frigate's 10-min mean load < 60 det/s, EXITED 2026-10-11 when
+         re-proof 2 of mid-epoch checkpoints passed: `TEMP_HOLD_MAX_LOAD = None` in frigate_r3.py).
          The 3rd abort within 2 h caps it at ≥ 800 ms for an hour and NOTIFIES Batt.
          An INCONCLUSIVE paired measurement never stops training (Batt 2026-10-08): it holds the
          slowest level and re-measures; only camera frame drops stop at once.

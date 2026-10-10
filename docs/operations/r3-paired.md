@@ -224,6 +224,9 @@ min. The cap and the NOTIFY after 3 aborts in 2 h are unchanged.
 **EXIT (Batt):** once mid-epoch checkpoints are merged AND their pre-registered resume proof passes
 (docs/operations/mid-epoch-checkpoints.md), set `TEMP_HOLD_MAX_LOAD = None`. That reverts to the
 continuous rule: resume after the quiet gate, capped. Record the date here when it is done.
+➡️ **DONE 2026-10-11 ~00:50 ICT:** re-proof 2 PASSED (mid-epoch-checkpoints.md, RESULT) with the fix
+merged (b9fd792); `TEMP_HOLD_MAX_LOAD = None`. A resume after a frame-drop abort now needs the 15 quiet
+minutes only (capped as before). `quiet --max-load N` stays available as an explicit option.
 
 ## How a chain knows training ended (2026-10-09)
 - `train-day.sh` exits **0** only on `TRAIN DONE`, **2** on `TRAIN STOPPED` (a person must look) and

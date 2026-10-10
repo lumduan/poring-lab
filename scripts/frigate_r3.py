@@ -624,7 +624,10 @@ def fleet_load(last: dict[str, Any] | None) -> str:
 # mid-epoch checkpoints a daytime resume throws away its partial epoch. EXIT: once mid-epoch
 # checkpoints are merged AND their resume proof passes (docs/operations/mid-epoch-checkpoints.md),
 # set TEMP_HOLD_MAX_LOAD = None (the continuous rule: resume after the quiet gate, capped).
-TEMP_HOLD_MAX_LOAD: float | None = 60.0  # detections/s, the rolling mean below which we resume
+# EXITED 2026-10-11 ~00:50 ICT: re-proof 2 PASSED (mid-epoch-checkpoints.md, chain16) and the fix
+# is merged (b9fd792). The hold is OFF; QuietGate(max_load=...) and `quiet --max-load N` stay for
+# an explicit choice.
+TEMP_HOLD_MAX_LOAD: float | None = None  # detections/s; None = no load hold (the continuous rule)
 TEMP_HOLD_WINDOW_S = 600.0  # the rolling window: 10 min of observed distinct updates
 
 
@@ -940,7 +943,7 @@ def main() -> int:
     q.add_argument("--minutes", type=float, default=15.0)
     q.add_argument("--max-wait-min", type=float, default=120.0)
     q.add_argument("--max-load", type=float, default=TEMP_HOLD_MAX_LOAD or 0.0,
-                   help="TEMPORARY hold: rolling load below this (0 = off)")  # fmt: skip
+                   help="optional load hold (0 = off, the default since 2026-10-11)")  # fmt: skip
     a = ap.parse_args()
     for path in (getattr(a, "csv", None), getattr(a, "out", None)):
         if path is not None and not str(path).startswith("/dev/shm/"):

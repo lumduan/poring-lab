@@ -521,12 +521,13 @@ def test_the_load_hold_waits_for_the_rolling_load_after_the_quiet_minutes(fr: Mo
     assert not g.ready(1500.0)
 
 
-def test_no_hold_without_max_load_and_the_cli_default_is_the_temporary_60(fr: ModuleType) -> None:
+def test_no_hold_without_max_load_and_the_temporary_hold_has_exited(fr: ModuleType) -> None:
     g = fr.QuietGate(15, now=0.0)
     for k, t in enumerate(range(0, 915, 15)):
         g.update(float(t), upd_load(k, 85.0))
     assert g.ready(900.0)  # the continuous rule: quiet is enough
-    assert fr.TEMP_HOLD_MAX_LOAD == 60.0  # the exit: None once mid-epoch checkpoints are proven
+    # the EXIT (Batt, r3-paired.md): mid-epoch checkpoints merged AND re-proof 2 passed, 2026-10-11
+    assert fr.TEMP_HOLD_MAX_LOAD is None
 
 
 def test_the_quiet_command_holds_while_busy(
