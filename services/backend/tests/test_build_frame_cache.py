@@ -22,6 +22,7 @@ def bfc() -> ModuleType:
     )
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
+    sys.modules["build_frame_cache"] = module  # its dataclasses resolve their module by name
     spec.loader.exec_module(module)
     return module
 
