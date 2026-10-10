@@ -3610,6 +3610,133 @@ never worse than the gate. As pre-registered: no switch.**
   a new pre-registration. The walk rules already add the walk MARKER condition (no marker on a
   non-walkable cell), which refuses these clicks; the npc-click test's gate is cursor-only.
 - **Consequence today:** the live gate stays v3 (it was never changed); cursor_robust stays a candidate.
+- ➡️ **2026-10-10: the design change is 3.36 (cursor@2, robust2 = the robust reader + the NO-ENTRY
+  RING over the series), pre-registered there before any of its data.** The first form named above
+  ("no non-WALK shape on ANY of the 6 grabs") was measured on this section's data first and fixed
+  NONE of the cases: in each failing series the shape reader read no grab as no-entry.
+
+### 3.36 cursor@2 -- robust2 = the robust reader + the NO-ENTRY RING over the series: a FRESH live proof (pre-registered 2026-10-10 ~13:45 ICT at commit, BEFORE any cursor@2 data; the weekend run, Track 2 item 1: "Cursor classifier robustness: finish offline, pre-register, prove on banked hovers (hard bar: zero false WALK / cross-shape errors), then the live acceptance. It unblocks loot, attack and talk.")
+**Why:** cursor@1 (3.35) FAILED bar 1 for both readers on the client's NO-ENTRY ANIMATION. The sign
+is a red ring whose slash draws in over the arrow, and a blink frame shows the BARE ARROW. When both
+read groups landed on blink frames, "read twice" said WALK (robust 3, the gate 4, of 255 no-entry
+probes). 3.35 named the fix as a design change for Batt. **This is that change, built as a
+CANDIDATE.** It is pre-registered so its data can be collected this weekend. **Nothing live changes:**
+the gate stays v3, pre-registered rules keep v3, and the switch-over (cursor-robust.md 6, a named
+flag) is Batt's decision after this result. Batt can stop or redirect it at any point; a run already
+made is reported as it stands.
+
+**Design data (cursor@1's three sessions; DESIGN data from now on, never scored for cursor@2):**
+- **The first form, "no non-WALK shape on any of the 6 grabs": fixes 0 of the cases.** In every
+  failing series the shape reader read NO grab as no-entry. The robust reader reads 175 / 303
+  labelled no-entry images as no-entry and the rest UNKNOWN: the slash's in-between lengths and
+  the ring's thin arcs match no reference.
+- **The ring is a separate, simple cue:** red CURSOR pixels (inside the cursor mask D; colour R >
+  170, G < 80, B < 80, the crops being BGR).
+  - Every image both labellers called no-entry: **188-284** (303 images). The minimum stays 181-216
+    for every colour box tried, from R > 150 / G, B < 100 to R > 210 / G, B < 40.
+  - Every other image they agreed on: **0-3** (4,556 images: walk 2,475 max 1, talk 1,825 max 0,
+    sword over a Poring 254 max 3, warp 2 max 0).
+  - Every grab of the sword arm's series, mostly unlabelled: **max 6** (2,472 grabs).
+  - **RING_MIN = 40.**
+- **Per series (robust2 = robust's per-grab shapes; any grab >= RING_MIN -> NOENTRY, else read
+  twice):**
+
+  | design session | reader | no-entry probes read WALK | no-entry -> noentry | walk kept | talk kept | sword kept |
+  |---|---|---|---|---|---|---|
+  | npc-click probe prontera | robust | 1 / 155 | 28 / 155 | 610 / 644 | 698 / 718 | -- |
+  | | robust2 | **0 / 155** | **155 / 155** | 610 / 644 | 698 / 718 | -- |
+  | npc-click probe prt_church | robust | 2 / 100 | 8 / 100 | 244 / 252 | 194 / 212 | -- |
+  | | robust2 | **0 / 100** | **100 / 100** | 244 / 252 | 194 / 212 | -- |
+  | cursor probe sword | robust = robust2 | -- | -- | 122 / 150 | -- | 129 / 254 |
+
+  - (All probe kinds, grab-0 label, both labellers agreeing; 3.35's bars count subsets of these.)
+  - Every no-entry series held the ring on 4-6 of its 6 grabs, so a blink can never cover a series.
+  - The ring never fired on a walk, talk, sword or warp series: robust2 costs nothing on bars 2-4
+    on this data.
+- **Arm B's crop 243 (a Poring passing under a control point at grab 0) stays as it was:** every
+  image there was read correctly. The ring is not about it, and no rule is added for it.
+- **Code:** `scripts/cursor_robust.py` `ring_pixels`, `series_verdict` (`RING_MIN`, `RING_RED_MIN`,
+  `RING_GB_MAX`) and `cursor_eval.py live`'s `robust2` block, at e57a7e7, tested on synthetic
+  sprites (`test_cursor_robust.py`: the ring on the no-entry sign only, a blink series never WALK).
+  The per-grab reader is cursor@1's, unchanged.
+
+**FRESH DATA (all hover only, nothing clicked; the runs as 3.35's):**
+- **Arm B2, SWORD over a Poring:** `scripts/cursor_probe.py sword --n 30 --seed 20261184`.
+- **Arm A2, TALK / WALK / NO-ENTRY around NPCs:** `scripts/npc_click_test.py probe` at e57a7e7.
+  - prontera `--near 156,191 --seed 20261180`;
+  - prt_church `--near 103,74 --seed 20261181`.
+  - These are 3.35's scenes with NEW seeds: fresh grabs, other animation phases, other stands.
+- **HELD-OUT, once: alberta** `--near 116,57 --seed 20261182`.
+  - No cursor reference or design step ever saw alberta. Its L3 NPC list is COMPLETE (48 NPCs).
+  - The spot is its densest NPC group (113-120, 53-60). Planned offline at e57a7e7 (`plan`, same
+    seed): 6 NPCs, 1,556 probe points, 13 stand warps; the plan takes ~7.5 min to compute.
+  - A pilot comes first, never scored: `--npcs 1 --reps 1 --seed 20261183`.
+  - If the harness cannot run there (the pilot stops for a harness reason), alberta is DROPPED and
+    reported. It is not replaced.
+- **Order:** B2, A2 prontera, A2 prt_church, the alberta pilot, A2 alberta.
+- **Before each run:** a client screenshot judged, and the UI gate (3.32's item 6).
+- **A run that exits early is re-run unchanged with its seed.** The partial session is kept and
+  not scored.
+
+**Truth (fixed BEFORE any bar is computed; `scripts/cursor2_truth.py sheets` at e57a7e7):**
+- **(i) Images:** grab 0 of every crop, and every other grab a read came from (the gate's and the
+  robust reader's; robust2 reads the same grabs).
+  - Shuffled with seed 20261185, pages of 50, no reader output.
+  - Labelled BLIND by two independent agents, with the client's own cursor sprite as the
+    reference: walk, talk, sword, pickup, noentry, warp, none, unclear.
+  - The edge-on arrow (cursors.act action 0, image 3) is labelled walk (3.35's settlement).
+- **(ii) Series:** every series robust2 calls WALK, plus as many series it does not.
+  - The extra series are a seeded sample (seed 20261186), so a strip's presence says nothing.
+  - Each is shown as its 6 grabs side by side. The question: "does ANY grab show the no-entry
+    sign?" (yes / no / unclear), both labellers, blind.
+- **Truth = both labellers agree.** Otherwise the item is unclear: excluded and counted.
+
+**The bars** (`scripts/cursor2_score.py` at e57a7e7; robust2 is judged, robust and the gate are
+reported beside it):
+1. **SAFETY, hard.** One error FAILS the acceptance, on any map.
+   - **(a) Per image:** every read judged against the label of the image it came from: **0
+     cross-shape errors and 0 WALK reads on an image labelled anything else.** (3.35's per-grab
+     audit, now the bar.)
+   - **(b) Per series:** **0 WALK verdicts on a series that both labellers say shows the no-entry
+     sign on any grab.** A WALK series without their agreement makes 1b INCONCLUSIVE, never a pass.
+   - **(c) 3.35's bar 1 as written** (the grab-0 label vs the series verdict) is REPORTED, each case
+     with its series. It is not the bar, because 3.35 showed that it judges a read against another
+     grab's image (crop 243).
+2. **TALK:** arm A2's sprite points whose grab 0 is labelled talk: read twice >= 0.85.
+3. **SWORD:** arm B2's box points labelled sword: >= 0.40 with >= 100 such probes, and >= the gate's
+   + 0.25.
+4. **WALK:** arm B2's controls + arm A2's cell points labelled walk: >= 0.95, and not below the
+   gate's - 0.02.
+5. **NO-ENTRY** (reported, not a bar): probes whose grab 0 is labelled noentry, verdict noentry.
+- **INCONCLUSIVE:** fewer than 200 labelled talk probes or fewer than 100 labelled sword probes.
+- **Pooling:** bars 2-4 are pooled over the maps. Every bar is also reported per map, alberta on its
+  own line.
+- **The scorer's positive case on REAL data, run before this commit** (cursor@1's arm A design data
+  with 3.35's labels): it lists robust's three no-entry -> WALK series under 1c and none for
+  robust2 (output in /dev/shm/poring-lab-tmp/cursor2/positive.json). It reproduced 3.35's numbers:
+  TALK robust 590 / 610, the gate 522 / 610; arm A's walk cells robust 518 / 540; 1c robust 3 and
+  the gate 4 no-entry -> WALK series, robust2 none; 1a 0 / 0 for all three; no-entry robust2
+  255 / 255.
+
+**Safety of the runs:** as 3.35's.
+- The runs are hover only. Any `attack_request`, `npc_contact`, `pickup_request` or
+  `self_move_request`, or a GM act of kind normal / pickup, in a run's packets is a harness fault,
+  and it stops the test.
+- The GM's fixed state, the typing policy and the UI gate apply.
+
+**Not decided here:**
+- The switch-over (Batt). A PASS makes `robust2` the candidate for cursor-robust.md 6's flag
+  (`--cursor robust2`).
+- The live gate would need the ring per grab over Prober9's 6 grabs. That is part of the switch,
+  not built.
+- Pre-registered rules keep v3.
+
+**Expected (Claude's reading of the design data; NOT a bar):**
+- robust2 = robust on bars 2-4, and bar 1 met: 0 / 0 and 0 WALK on no-entry series.
+- **The new risk:** a red sprite moving under the cursor (a red-clad NPC, a red monster) would put
+  red pixels in the mask. The verdict is then NOENTRY. That is fail closed: it lowers recall and is
+  never WALK.
+- On alberta, the NPC sprites are new to the reader: TALK may read lower there.
 
 ### 3.34 learn_skill@1 -- spend skill points in the skill window (DESIGN 2026-10-09 ~19:50; NOT pre-registered; Batt ~19:30: "add the new skill the job change needs: allocating skill points (Basic Skill > 8) via the skill window, as an L1 concept with its own alone-test")
 **The concept:** `char.learn_skill` (L1, packages/poring_skills, updated): the first workflow's
