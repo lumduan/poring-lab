@@ -322,6 +322,44 @@ class RobustRefs:
         return out
 
 
+# --- robust2: the series verdict with the NO-ENTRY RING (cursor@2, demonstrations 3.36) ----------
+# The client's no-entry cursor is an ANIMATION: a red ring whose slash draws in over the arrow, and
+# a blink frame that shows the BARE ARROW (cursor@1's bar 1: when both read groups landed on
+# blink frames, "read twice" said WALK). The ring is read per grab as RED CURSOR PIXELS: inside
+# the cursor mask D, colour R > RING_RED_MIN, G and B < RING_GB_MAX (the crops are BGR). Design
+# data (cursor@1's arms, 2026-10-10): every image both labellers called no-entry >= 188 (303
+# images; 181-216 for every colour box tried); every other image they agreed on <= 3 (4,556:
+# walk 1, talk 0, sword over a Poring 3, warp 0); every grab of the sword arm's series <= 6
+# (2,472, mostly unlabelled). RING_MIN sits between them. ONE ring grab in the series = NOENTRY,
+# never WALK.
+RING_RED_MIN, RING_GB_MAX = 170, 80
+RING_MIN = 40
+READ_GRABS = 3  # Prober9's read group: grabs 0-2 (the hover read), 3-5 (the no-motion re-read)
+
+
+def ring_pixels(a: Any, mask: Any) -> int:
+    """The red cursor pixels of one grab (a: BGR crop, mask: the cursor mask D)."""
+    x = np.asarray(a).astype(np.int16)
+    red = (x[..., 2] > RING_RED_MIN) & (x[..., 1] < RING_GB_MAX) & (x[..., 0] < RING_GB_MAX)
+    return int((red & np.asarray(mask, dtype=bool)).sum())
+
+
+def series_verdict(shapes: Sequence[str], rings: Sequence[int],
+                   grabs: int = READ_GRABS) -> tuple[str, str]:  # fmt: skip
+    """robust2 over one timed series: (verdict, why). NOENTRY if any grab carries the ring (the
+    blink frames between do not count); else Prober9's read twice: the first non-unknown shape of
+    grabs 0..grabs-1 and of grabs..2*grabs-1, equal, or UNKNOWN."""
+    if len(shapes) != len(rings) or len(shapes) < 2 * grabs:
+        raise ValueError(f"a series needs {2 * grabs} grabs with a ring count each")
+    if any(r >= RING_MIN for r in rings):
+        return "noentry", "ring"
+    first = next((s for s in shapes[:grabs] if s != "unknown"), "unknown")
+    again = next((s for s in shapes[grabs : 2 * grabs] if s != "unknown"), "unknown")
+    if first == again and first != "unknown":
+        return first, "twice"
+    return "unknown", "not_twice"
+
+
 def timing(refs: RobustRefs, a: Any, mask: Any, n: int = 20) -> float:
     """Median wall time of one match, ms."""
     ts = []

@@ -400,3 +400,75 @@ def test_the_sword_probe_plan_is_on_the_box_with_controls_beside_it(mods: tuple)
     kept = probe.usable(pts, lambda u, v: u < 610)  # a "UI window" over the left
     assert kept and all(p["at"][0] >= 610 for p in kept)
     assert probe.usable([{"at": (30.0, 300.0)}], lambda u, v: False) == []  # the grab leaves
+
+
+# --- robust2: the no-entry RING over the series (cursor@2) ----------------------------------------
+def test_the_ring_counts_red_cursor_pixels_inside_the_mask_only(mods: tuple) -> None:
+    """The ring is red CURSOR pixels: the no-entry sign carries them; the arrow, the bubble, the
+    glove and the blade carry none; a red floor outside the cursor mask adds none."""
+    cr, w6, _ = mods
+    b = floor(3)
+    for shape in SPRITES:
+        a = draw(b, shape)
+        n = cr.ring_pixels(a, w6.cursor_mask(a, b))
+        assert (n >= cr.RING_MIN) == (shape == "noentry"), (shape, n)
+    red = np.zeros((64, 64, 3), np.uint8)
+    red[...] = RED
+    red[20:44, 20:44] = (40, 60, 80)  # the hotspot's surroundings plain, the rest red floor
+    a = draw(red, "walk")
+    assert cr.ring_pixels(a, w6.cursor_mask(a, red)) == 0
+
+
+def test_a_blink_frame_in_a_no_entry_series_never_reads_walk(mods: tuple) -> None:
+    """cursor@1's bar-1 failure: both read groups land on the blink (the bare arrow) -> read twice
+    says WALK. One ring grab anywhere in the series makes it NOENTRY."""
+    cr, _, _ = mods
+    w, u, n = "walk", "unknown", "noentry"
+    assert cr.series_verdict([w, u, u, w, u, u], [0, 0, 210, 0, 0, 0]) == (n, "ring")
+    assert cr.series_verdict([w, u, u, w, u, u], [0, 1, 6, 0, 3, 0]) == (w, "twice")
+    assert cr.series_verdict([u, u, u, w, w, w], [0] * 6) == (u, "not_twice")
+    assert cr.series_verdict(["talk", u, u, "talk", u, u], [0] * 6) == ("talk", "twice")
+    assert cr.series_verdict([w, u, u, w, u, u], [0, 0, 0, 0, 0, cr.RING_MIN]) == (n, "ring")
+    with pytest.raises(ValueError):
+        cr.series_verdict([w] * 6, [0] * 5)
+
+
+def test_live_reports_robust2_and_a_blink_series_is_noentry(mods: tuple, tmp_path: Path) -> None:
+    """cmd_live on a synthetic no-entry series whose read groups start on blink frames: robust
+    reads it WALK twice (cursor@1's failure); robust2 reads NOENTRY by the ring."""
+    import argparse
+    import json
+
+    cr, w6, ce = mods
+    a, m, cls = [], [], []
+    for s in SPRITES:
+        for k in range(3):
+            b = floor(k)
+            h = draw(b, s)
+            a.append(h)
+            m.append(w6.cursor_mask(h, b))
+            cls.append(s)
+    refs = tmp_path / "refs.npz"
+    np.savez_compressed(refs, a=np.array(a), m=np.array(m), cls=np.array(cls),
+                        src=np.array([f"syn/{i}" for i in range(len(cls))]))  # fmt: skip
+    ses = tmp_path / "ses"
+    (ses / "crops").mkdir(parents=True)
+    b = floor(9)
+    series = [draw(b, s) for s in ("walk", "walk", "noentry", "walk", "noentry", "noentry")]
+    masks = [w6.cursor_mask(h, b) for h in series]
+    np.savez_compressed(ses / "crops" / "00000.npz", a=series[0], mask=masks[0],
+                        a_series=np.stack(series), mask_series=np.stack(masks))  # fmt: skip
+    rec = {"outcome": {"evidence": {"crop": "crops/00000.npz", "kind": "cell"}}}
+    (ses / "demo.jsonl").write_text(json.dumps(rec) + "\n")
+    labels = tmp_path / "labels.json"
+    labels.write_text(json.dumps({"crops/00000.npz": "noentry"}))
+    args = argparse.Namespace(summary=ses, labels=labels, refs=refs, out=tmp_path / "out",
+                              verdict="")  # fmt: skip
+    res = ce.cmd_live(args)
+    assert res["robust"]["twice"]["cell"] == {"walk": 1}
+    assert res["robust"]["walk_from_other"] == 1
+    assert res["robust2"]["twice"]["cell"] == {"noentry": 1}
+    assert res["robust2"]["walk_from_other"] == 0 and res["robust2"]["cross_shape"] == []
+    row = json.loads((tmp_path / "out" / "live-ses.json").read_text())["rows"][0]
+    assert row["robust2"]["why"] == "ring"
+    assert sum(r >= cr.RING_MIN for r in row["robust2"]["rings"]) == 3

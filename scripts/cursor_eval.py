@@ -641,9 +641,15 @@ def cmd_live(args: argparse.Namespace) -> dict[str, Any]:
             first, again = series_verdicts(shapes)
             out[name] = {"shapes": shapes, "first": first, "twice": first if first == again
                          else "unknown"}  # fmt: skip
+        # robust2 (cursor@2): robust's per-grab shapes + the no-entry ring over the series
+        rings = [cr.ring_pixels(a, m) for a, m in zip(z["a_series"], z["mask_series"], strict=True)]
+        v2, why2 = cr.series_verdict(out["robust"]["shapes"], rings)
+        out["robust2"] = {"shapes": out["robust"]["shapes"], "rings": rings,
+                          "first": "noentry" if why2 == "ring" else out["robust"]["first"],
+                          "twice": v2, "why": why2}  # fmt: skip
         rows.append(out)
     res: dict[str, Any] = {"session": ses.name, "probes": len(rows)}
-    for name in ("current", "robust"):
+    for name in ("current", "robust", "robust2"):
         by: dict[str, Counter[str]] = defaultdict(Counter)
         twice: dict[str, Counter[str]] = defaultdict(Counter)
         for r in rows:
