@@ -80,7 +80,10 @@ ports, quickstart) and `docs/adr/`.
          slowest level and re-measures; only camera frame drops stop at once.
          `docs/operations/r3-paired.md`.
      - `scripts/frigate_r3.py` (`PairedR3`) implements them, and `guarded_build.py` enforces them on
-       every `run:`/`rundev:` vision step (pre-start refusal + pause/unpause + in-run abort).
+       every `run:`/`rundev:`/`execdev:` vision step (pre-start refusal + pause/unpause + in-run abort).
+       Since 2026-10-10 (option A, docs/operations/vision-long-lived.md 5b) GPU work runs as
+       `execdev:` inside ONE long-lived worker (`worker:vision` once per day in a quiet window,
+       `worker-stop:vision` at the end); its first CUDA run is the IO burst, later runs are warm.
      - Every abort unpauses the container and VERIFIES the stop: container gone, no process of ours
        on the GPU, else escalation.
      - Ollama is called from HOST scripts only, never by joining a poring-lab container to its

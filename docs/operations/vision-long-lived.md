@@ -1,13 +1,13 @@
 ---
 doc_type: runbook
 hypothesis: "One long-lived vision container per day, with every training/eval attempt run inside it, removes the cold-start IO bursts that stalled quant at ~100 % (2026-10-09 16:46) without changing R1-R3, the IO guard or the verified stop."
-status: "MERGED 4c5edbf (2026-10-09 ~20:35); APPROVED by Batt 2026-10-09 (~19:30); BUILT on feat/vision-worker (90a7b74), unit-tested, NOT proven live, NOT switched"
+status: "PROVEN 2026-10-10 (5b: PASS on all four items of 5a) and SWITCHED under Batt's advance approval; history: MERGED 4c5edbf (2026-10-09 ~20:35); APPROVED by Batt 2026-10-09 (~19:30); BUILT on feat/vision-worker (90a7b74), unit-tested, NOT proven live, NOT switched"
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [r3-paired.md, ../../scripts/guarded_build.py, ../../scripts/runbooks/train-day.sh, ../../scripts/runbooks/quiet_start.py, ../../compose.vision-worker.yaml, ../../scripts/runbooks/worker_proof.py]
-next_action: "➡️ 2026-10-10: merged (4c5edbf); THE PROOF (5, pre-registered 5a) runs after v1's training ends (chain14), then the switch only on PASS. History: Parent: merge feat/vision-worker once v1's chain10 has ended; run THE PROOF once (scripts/runbooks/worker_proof.py, section 5) with the 1 s IO sampler on, outside the market windows; report it step by step; switch v1 / the evals only after Batt's OK of the proof."
+next_action: "chain15 runs v1's evals + re-proof 2 in one worker; the next training uses train-day WORKER=1. Batt: whether to pre-warm the CUDA libraries before a worker's first run (the remaining burst, 5b)."
 ---
 
 # Option A: one long-lived vision container per day (BUILT; NOT proven live; NOT switched)
@@ -255,6 +255,27 @@ unchanged); otherwise stay on the current path and report."
   the probe's printed result (`PROBE import_s=<digits>`, tested); step 3 is scored from its own
   output as PASS; the proof continues ONCE with `--steps 4-6` on the same, still-idle worker. The
   runbook's original summary stays in `/dev/shm/poring-lab-tmp/gpu-day/worker-proof.out`.
+
+- **Steps 4-6 (`--steps 4-6`, 09:10-09:38 ICT): all PASS.**
+  - **Step 4 forced:** the TEST abort after one R3 ON/OFF cycle took the IO-trip path; **STOP VERIFIED
+    after 3 s** (limit 30), no escalation, the worker not killed, nothing of ours on the GPU after;
+    the R3 summary held 1 pair, kept 1 (measured as today).
+  - **Step 5 warm:** a second smoke run in the same worker finished normally (rc 0); idle and free after.
+  - **Step 6 stop:** `worker-stop:vision` rc 0; the worker stopped; nothing of ours on the GPU.
+- **Question 2 ANSWERED (the 1 s CSV, per second):** the burst comes from the FIRST CUDA RUN in a
+  fresh container, not from the container start (step 1: 0 s > 25 %) nor from the bare torch import
+  (step 3: 0 s > 25 %, no CUDA init). Step 4 began 02:03:11 UTC; from 02:03:22 the worker's own cgroup
+  stalled 25-46 % for ~80 s (it read 611 MiB: the CUDA libraries and the model) and every capture
+  cgroup spiked with it (02:03:32-33: quant-postgres 83.7 %, quant-orderbook 78.4 %, quant-ticker
+  70.2 %, cron 79.3 %); the guard's 10 s rule did not trip. In the WARM step 5 (same worker, 8 min
+  later) the worker stalled itself again (up to 69 %) but NO capture cgroup passed 25 % at its start.
+- **➡️ VERDICT, scored against 5a: PASS on all four items.** Under Batt's advance approval (2026-10-09
+  ~20:20) the switch is made: the next training run uses train-day `WORKER=1`; v1's evals and re-proof
+  2 run as `execdev:` steps inside ONE worker (chain15, a single worker start in a quiet window);
+  CLAUDE.md rule 5 names `execdev:` (this commit). What the result means (section 6): one worker per
+  day pays the CUDA burst once, at its first run; later runs reuse the page cache. The warm-Python
+  variant would not avoid it (the burst is at CUDA's first use, not the import); a pre-warm of the
+  CUDA libraries in a quiet window remains an option for Batt.
 
 ## 6. What the proof's IO result means
 - **The burst is (i), the container start:** option A as designed. One cold start per day, in a
