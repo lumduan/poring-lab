@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "Labels v1 (k = 0.140, PROVISIONAL) train a detector that points at monsters at least as well as v0-PNG's, on Batt's hand-checked gold set."
-status: PRE-REGISTERED
+status: SCORED
 role: null
-verdict_date: null
+verdict_date: 2026-10-10
 verdict_ticket: null
 supersedes: null
 related: [../phase3-plan.md, v0-png-vs-jpeg.md]
-next_action: "➡️ 2026-10-10: v1 paused at 17/30 on 2026-10-09 (IO trips; Batt), resumed by quiet_start (option D) at 20:02 ICT (from 18/30), epoch 19 done, 20 running; trains at the slowest duty level while R3 is inconclusive at night; the evals follow option A's proof (one worker start). History: v1 is TRAINING since 2026-10-08 23:44 ICT (cache v1png-20261008 built and NAS-verified) under the ADAPTIVE DUTY CYCLE, with epoch-level checkpoints only: the mid-epoch resume proof FAILED before v1 started, so v1 keeps that mode to its end (re-proof 2 of the fix is pre-registered in mid-epoch-checkpoints.md, for later runs). After epoch 30: the evals, then score ONCE as written here."
+next_action: "SCORED 2026-10-10: v1 >= v0-PNG on the primary (gold, position, monsters: P 0.902 vs 0.857, R 0.830 vs 0.780). Batt: whether v1 replaces v0-PNG as the live detector (the CPU ONNX export for the walk/loot rules is a separate step)."
 ---
 
 # v1 vs v0-PNG: the same frames, the same format, different labels (pre-registered 2026-10-07)
@@ -114,6 +114,36 @@ This file is written and committed BEFORE any v1 model exists. It is scored once
   `predict_sprite` drops boxes it cannot place. Reported, not a decision.
 
 ## Results
-Not yet: no v1 model exists.
+~~Not yet: no v1 model exists.~~ ➡️ **SCORED 2026-10-10 ~10:05 ICT, once, as written** (v1 `last.pt`, epoch 30,
+TRAIN DONE 2026-10-10 08:22 ICT; the evals ran inside the long-lived vision worker, option A,
+chain15; outputs `/dev/shm/poring-lab-tmp/gpu-day/c15/`).
+
+**PRIMARY -- the gold set (Batt's 27 hand-checked frames, 154 boxes), POSITION metric, monsters, conf
+0.25 (`gold_eval.py score --metric position`):**
+
+| model | monster TP / FP / FN | precision | recall | centre px median / p90 |
+|---|---|---|---|---|
+| v0-PNG (`v0png-20261006`) | 78 / 13 / 22 | 0.857 | 0.780 | 7.0 / 15.2 |
+| **v1 (`v1png-20261008`)** | **83 / 9 / 17** | **0.902** | **0.830** | 6.8 / 14.6 |
+
+**VERDICT: v1 is "at least as good" -- its monster precision AND recall are both >= v0-PNG's (both are
+higher).** NPCs: identical (52 / 1 / 2, precision 0.981, recall 0.963 for both).
+
+**Reported, no decision:**
+- **The gold set's box metrics (IoU >= 0.5), monsters:** v1 precision 0.522, recall 0.48, mean IoU 0.578;
+  v0-PNG 0.615, 0.56, 0.766. As stated before the run, the gold set encodes v0's 44 x 40 size
+  convention (82 % of its monster boxes), so box metrics favour v0 by construction.
+- **The 2 x 2 mAP (mAP50 / mAP50-95; monster AP50 / AP), the same PNG test frames, two label sets:**
+
+| test set (frames) | v0 model, v0 labels | v1 model, v0 labels | v0 model, v1 labels | v1 model, v1 labels |
+|---|---|---|---|---|
+| indoor-c (1,166) | 0.782 / 0.567 (v0-png-vs-jpeg.md) | 0.565 / 0.312; monster 0.348 / 0.052 | 0.608 / 0.333; monster 0.413 / 0.064 | **0.772 / 0.566; monster 0.762 / 0.559** |
+| indoor-v2, gold session (268) | 0.769 / 0.545 (ibid.) | 0.579 / 0.338; monster 0.297 / 0.041 | 0.571 / 0.345; monster 0.263 / 0.038 | **0.781 / 0.559; monster 0.701 / 0.483** |
+| 054429, domain shift (1,077), apart | 0.704 / 0.584 (ibid.) | 0.631 / 0.438; monster 0.396 / 0.104 | 0.613 / 0.429; monster 0.332 / 0.078 | **0.694 / 0.584; monster 0.523 / 0.397** |
+
+  Each model scores best on its own label convention (the box-size convention differs), so the
+  cross cells mostly measure that convention, not the detector; the decision is the position metric
+  above, as pre-registered.
+- **Runtime:** inference 5.35 ms / image at 1280 (indoor-c), peak VRAM 694 MiB (cap 3,962 MiB).
 
 - **Mid-epoch checkpoints, recorded by the overnight chain BEFORE v1 started (2026-10-08 23:44:01 ICT):** FAIL: proof run B2 (the first --resume from mid.pt, expected to die at rc 86) CRASHED with rc 1, RuntimeError in fused Adam (params, grads, exp_avgs and exp_avg_sqs must have the same dtype, device and layout) right after the bitwise state restore; compare was not run. v1 keeps epoch-level checkpoints (MID_CKPT unset), as pre-registered. The proof: `/dev/shm/poring-lab-tmp/gpu-night/proof-B2-221713.out`.
