@@ -340,7 +340,7 @@ def test_the_trainer_refuses_a_mixed_resume_and_prefers_mid(tmp_path, monkeypatc
 def test_train_day_passes_mid_ckpt_only_when_asked_and_resumes_on_any_checkpoint() -> None:
     sh = (REPO / "scripts" / "runbooks" / "train-day.sh").read_text()
     assert 'mid=""; [ "${MID_CKPT:-0}" = 1 ] && mid=" --mid-ckpt"' in sh
-    assert "/lab-duty/duty.json$mid $extra" in sh
+    assert "/lab-duty/duty.json$mid$w $extra" in sh  # $w: INIT_WEIGHTS, never with --resume
     assert "for f in last.pt mid.pt mid.prev.pt; do" in sh
 
 

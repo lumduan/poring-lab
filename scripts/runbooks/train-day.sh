@@ -28,7 +28,7 @@
 # - MID_CKPT=1 (Batt 2026-10-08; v1 onwards, once docs/operations/mid-epoch-checkpoints.md's proof
 #   PASSED): `--mid-ckpt`, so an abort loses at most ~5 min (weights/mid.pt), not the epoch, and
 #   the resume is exact. A run keeps the mode it started with (train.py refuses a mixed resume).
-#   [RESUME=1] [MID_CKPT=1] [DUTY_START=4] [DUTY_MIN=0] \
+#   [RESUME=1] [MID_CKPT=1] [INIT_WEIGHTS=/data/train/RUN0/weights/last.pt] [DUTY_START=4] [DUTY_MIN=0] \
 #     scripts/runbooks/train-day.sh RUN_NAME CACHE_ID EPOCHS OUT_DIR [BATCH=2] [WORKERS=1]
 # - MARKET-OPEN WINDOWS (Batt 2026-10-09): no attempt starts or auto-resumes between 09:30-10:15 or
 #   14:00-14:45 ICT (CLAUDE.md rule 5; two IO aborts that day came from auto-resumes at 14:12 and
@@ -36,8 +36,8 @@
 # - MAX_ATTEMPTS=N (Batt 2026-10-09, option D: "one attempt, no auto-retry after an IO trip"): after
 #   N container starts that did not finish, stop as PAUSED (exit 3) -- no IO pause, no R3 resume.
 #   0 (the default) = unlimited, as before.
-# - WORKER=1 (option A, docs/operations/vision-long-lived.md; BUILT, NOT switched: Batt's OK after
-#   the live proof): every attempt is `guarded_build.py execdev:` INSIDE the long-lived vision worker
+# - WORKER=1 (option A, docs/operations/vision-long-lived.md; PROVEN + SWITCHED 2026-10-10, 5b):
+#   every attempt is `guarded_build.py execdev:` INSIDE the long-lived vision worker
 #   (started once, beforehand, through quiet_start: `worker:vision@120`) instead of a new `rundev:`
 #   container. Everything else is unchanged (the exit codes, MAX_ATTEMPTS, the market windows, R3).
 #   A worker that is down -> PAUSED (3) at once (its start is a cold start: a person picks the quiet
@@ -80,6 +80,10 @@ log() { echo "$(TZ=Asia/Bangkok date '+%F %T') ICT / $(date -u '+%T') UTC $*" | 
 s2_active() { grep -q '^BACKEND=console' state/capture-backend 2>/dev/null || [ -e state/cleanroom ]; }
 extra=""; [ "${RESUME:-0}" = 1 ] && extra="--resume"
 mid=""; [ "${MID_CKPT:-0}" = 1 ] && mid=" --mid-ckpt"
+# INIT_WEIGHTS (2026-10-11, Batt: "continue training"): a NEW run's starting weights (train.py
+# --weights; container path), e.g. a finished run's last.pt. Never passed with --resume, which
+# continues from the run's own checkpoint.
+init=""; [ -n "${INIT_WEIGHTS:-}" ] && init=" --weights $INIT_WEIGHTS"
 trips=0; attempt=0; status=0
 while :; do
   while s2_active; do log "S2 session/clean room active: waiting 5 min"; sleep 300; done
@@ -90,8 +94,9 @@ while :; do
   fi
   log "attempt $attempt batch $BATCH workers $WORKERS duty start $DUTY_START min $DUTY_MIN cap $DUTY_CAP_LEVEL until $DUTY_CAP_UNTIL after-abort $DUTY_AFTER_ABORT $extra"
   out="$D/train-guarded-$attempt.out"
+  w="$init"; [ "$extra" = "--resume" ] && w=""
   $GUARD --sustain 30 --spike 25 \
-    "$KIND:vision@43200=python -m poring_vision.train --cache $CACHE --epochs $EPOCHS --batch $BATCH --workers $WORKERS --name $RUN --step-sleep-ms 2000 --duty-file /lab-duty/duty.json$mid $extra" \
+    "$KIND:vision@43200=python -m poring_vision.train --cache $CACHE --epochs $EPOCHS --batch $BATCH --workers $WORKERS --name $RUN --step-sleep-ms 2000 --duty-file /lab-duty/duty.json$mid$w $extra" \
     > "$out" 2>&1
   rc=$?
   log "attempt $attempt rc=$rc: $(grep -E 'ABORT|REFUSED' "$out" | tail -1 | cut -c1-200)"

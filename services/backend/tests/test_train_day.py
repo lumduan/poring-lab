@@ -73,6 +73,8 @@ def run_rc(tmp_path: Path, outcomes: str, quiet_fails: int = 0, clock: str = "12
         "DUTY_AFTER_ABORT",
         "MAX_ATTEMPTS",
         "WORKER",
+        "INIT_WEIGHTS",
+        "RESUME",
     ):
         env.pop(k, None)
     env.update(extra or {})
@@ -209,3 +211,18 @@ def test_worker_1_never_retries_into_a_worker_that_is_down_busy_or_killed(tmp_pa
     assert rc == 2 and "the vision worker is not ready" in log and len(args) == 1
     log, args, rc = run_rc(tmp_path / "killed", "wkill,ok", extra=W1)
     assert rc == 3 and "docker kill of the vision worker" in log and len(args) == 1
+
+
+def test_init_weights_start_a_new_run_and_never_ride_along_a_resume(tmp_path: Path) -> None:
+    """INIT_WEIGHTS (2026-10-11): a new run starts from a finished run's weights; a --resume
+    continues from the run's own checkpoint, so it never carries --weights."""
+    for d in ("new", "resume", "plain"):
+        (tmp_path / d).mkdir()
+    iw = {"INIT_WEIGHTS": "/data/train/v1/weights/last.pt"}
+    _, args, rc = run_rc(tmp_path / "new", "ok", extra=iw)
+    assert rc == 0 and "--weights /data/train/v1/weights/last.pt" in args[0]
+    assert "--resume" not in args[0]
+    _, args, rc = run_rc(tmp_path / "resume", "ok", extra={**iw, "RESUME": "1"})
+    assert rc == 0 and "--weights" not in args[0] and args[0].endswith("--resume")
+    _, args, _ = run_rc(tmp_path / "plain", "ok")
+    assert "--weights" not in args[0]
