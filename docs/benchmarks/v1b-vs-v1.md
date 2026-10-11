@@ -10,7 +10,7 @@ related: [v1-vs-v0png.md, ../operations/mid-epoch-checkpoints.md, ../operations/
 next_action: "Train v1b in the vision worker (chain17) until it finishes or Mon 2026-10-12 04:30 ICT; if it finishes, evaluate and score ONCE as below."
 ---
 
-# v1b vs v1: v1's training continued (pre-registered 2026-10-11 ~08:15 ICT, BEFORE the run starts)
+# v1b vs v1: v1's training continued (pre-registered 2026-10-11 ~07:47 ICT at commit 0ae7eb9, BEFORE the run starts)
 
 **Batt (2026-10-11 ~07:40 ICT):** "today all cams use less gpu, please use this golden time to
 continue training to monday 05:00".
