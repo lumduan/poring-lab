@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "Twenty more epochs of v1's own recipe, started from v1's final weights, give a detector that points at monsters at least as well as v1 on Batt's hand-checked gold set."
-status: PRE-REGISTERED
+status: SCORED
 role: null
-verdict_date: null
+verdict_date: 2026-10-12
 verdict_ticket: null
 supersedes: null
 related: [v1-vs-v0png.md, ../operations/mid-epoch-checkpoints.md, ../operations/vision-long-lived.md]
-next_action: "Train v1b in the vision worker (chain17) until it finishes or Mon 2026-10-12 04:30 ICT; if it finishes, evaluate and score ONCE as below."
+next_action: "SCORED 2026-10-12 ~03:10: FAIL as written (gold, position, monsters: v1b P 0.888 / R 0.790 vs v1 0.902 / 0.830); v1 stays the candidate. Reported: v1b is better on the test sessions against v1's own labels (mAP50-95 +0.016 to +0.064). Batt: whether that divergence (auto labels vs the hand set) changes what is trained next."
 ---
 
 # v1b vs v1: v1's training continued (pre-registered 2026-10-11 ~07:47 ICT at commit 0ae7eb9, BEFORE the run starts)
@@ -67,4 +67,50 @@ The only other queued training (labels v2) waits on collection. The run is calle
     decision (it needs the CPU ONNX export).
 
 ## Results
-Not yet.
+**SCORED 2026-10-12 ~03:10 ICT, once, as written.**
+- **The run:** chain17, 2026-10-11 07:48 -> 2026-10-12 03:05 ICT, inside the vision worker.
+  - Worker UP 08:10:37 (quiet launcher). TRAIN DONE 03:02:34 (20 / 20). Evals 03:03-03:05. Worker
+    STOPPED 03:05:54, nothing of ours on the GPU.
+  - Three attempts:
+    - attempt 0: 08:53-11:57, ended by R3-HARD (cam-1-01-font-s drops, fleet 87.6 det/s);
+    - attempt 1: 12:41-16:19, ended by R3-HARD (cam-1-06-back-n drops, fleet 81.5 det/s);
+    - attempt 2: 18:06-03:02.
+  - Each abort: STOP VERIFIED in 5 s, then 15 quiet Frigate minutes and a quiet IO window. The
+    resume was MID-EPOCH from mid.pt and bitwise, e.g. epoch 3 batch 1,949 / 4,097. These were the
+    first live mid-epoch resumes.
+  - Epoch time: ~85 min by day, ~30 min at night. Final epoch: val P 0.924, R 0.859, mAP50 0.909,
+    mAP50-95 0.743 (v1's final 0.715; each on v1's own val labels, reported only).
+
+**PRIMARY -- the gold set (27 frames, 154 boxes), POSITION metric, monsters, conf 0.25:**
+
+| model | monster TP / FP / FN | precision | recall | centre px median / p90 |
+|---|---|---|---|---|
+| v1 (`v1png-20261008`, re-scored here: identical to 2026-10-10) | 83 / 9 / 17 | **0.902** | **0.830** | 6.84 / 14.59 |
+| v1b (`v1b-20261011`) | 79 / 10 / 21 | 0.888 | 0.790 | 7.16 / 14.87 |
+
+**VERDICT: FAIL -- v1b is NOT "at least as good" as v1: its monster precision AND recall are both
+lower. v1 stays the candidate.** The difference is 4 hits, 1 false positive and 4 misses on 100 hand
+boxes.
+
+**Reported, no decision:**
+- **NPCs, gold, position:** v1b 51 / 2 / 3 (P 0.962, R 0.944); v1 52 / 1 / 2 (0.981, 0.963).
+- **Gold box metrics (IoU >= 0.5), monsters:**
+  - v1b P 0.539, R 0.48, mean IoU 0.570;
+  - v1 0.522, 0.48, 0.578.
+  - (v1-vs-v0png's caveat: the gold set encodes v0's box convention.)
+- **Test sessions on the v1 labels** (mAP50 / mAP50-95; monster AP50 / AP):
+
+  | session (frames) | v1 | v1b |
+  |---|---|---|
+  | indoor-c (1,166) | 0.772 / 0.566; 0.762 / 0.559 | **0.832 / 0.630; 0.837 / 0.637** |
+  | 054429, domain shift (1,077) | 0.694 / 0.584; 0.523 / 0.397 | 0.704 / 0.600; 0.564 / 0.445 |
+  | indoor-v2, the gold session (268) | 0.781 / 0.559; 0.701 / 0.483 | 0.809 / 0.591; 0.725 / 0.517 |
+
+- **The divergence, stated:** against v1's AUTOMATIC labels, v1b is better on every test session.
+  Against the HAND-checked gold boxes, it is slightly worse.
+  - One reading (not tested): the extra epochs fit v1's label convention more closely, and that
+    convention is not exactly what a person marks.
+  - The gold set is small: 100 monster boxes, so 4 boxes move recall by 0.04.
+  - Neither is decided here. The pre-registered primary decides, and it says v1 stays.
+- **Outputs:** `/dev/shm/poring-lab-tmp/gpu-day/c17/` (local); predictions
+  `data/train/eval/gold/20261004T103815-console-s2-indoor-v2/pred-v1b-20261011.json`.
