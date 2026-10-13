@@ -350,3 +350,8 @@ def test_model_misses_splits_by_the_labels_own_misses_and_the_dead_gm(lq: Module
     assert r["by_gm"]["gm_dead"] == {"frames": 1, "tp": 0, "fn": 1, "fp": 1}
     assert r["gm_dead_fp_offset_to_nearest_hand"]["dx"]["median"] == 100.0
     assert r["gm_dead_fp_offset_to_nearest_hand"]["dy"]["median"] == -100.0
+
+
+def test_peek_refuses_to_write_pixels_outside_dev_shm(lq: ModuleType, tmp_path: Path) -> None:
+    with pytest.raises(SystemExit, match="/dev/shm only"):
+        lq.peek("S", 1.0, Path("/tmp/x.png"), tmp_path, tmp_path, 0.14)

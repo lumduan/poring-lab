@@ -11,6 +11,8 @@ v2"; docs/planning/label-quality.md).
     label_quality.py report DUMP
         Matching (IoU >= 0.5 and position), per-pair geometry, the systematic gaps, the FN / FP
         causes and the ranked single-gap what-ifs -> JSON on stdout.
+    label_quality.py peek SESSION SECONDS OUT.png
+        One recorded frame with its v1 labels drawn, written under /dev/shm only (to LOOK at a gap).
     label_quality.py models DUMP PRED.json [PRED.json ...]
         A detector's gold-set misses beside the labels' own (its predict_dir output; no model run).
     label_quality.py census CACHE_MANIFEST [--step-s 1]
@@ -307,6 +309,86 @@ def dump(
         "sheets_missing": {str(j): r for j, r in (v1.sheets.missing if v1.sheets else {}).items()},
         "frames": frames,
     }
+
+
+# --- peek: one recorded frame with its v1 labels drawn (to LOOK at a gap; pixels stay in RAM) ---
+
+
+def session_frame(path: Path, at_s: float) -> tuple[int, Any]:
+    """(capture time, RGB game-region image) of the recorded frame nearest ``at_s`` seconds after
+    the recording's t0. H.264: only the bytes from the GOP's IDR to that frame are read (never the
+    whole stream); PNG shards: the tar is walked by its headers and one PNG is read."""
+    import numpy as np
+
+    manifest = json.loads((path / "manifest.json").read_text())
+    want = int(manifest["t0_mono_ns"]) + int(at_s * 1e9)
+    if (manifest.get("format") or "png") == "h264":
+        import av
+
+        from poring_dataset.h264 import read_index
+
+        units = read_index(path / "stream.idx.csv")
+        target = min(range(len(units)), key=lambda i: abs(units[i].t_ns - want))
+        start = max(i for i in range(target + 1) if units[i].idr)
+        with open(path / "stream.h264", "rb") as fh:
+            fh.seek(units[start].offset)
+            blob = fh.read(units[target].offset + units[target].length - units[start].offset)
+        ctx = av.CodecContext.create("h264", "r")
+        img = None
+        for i in range(start, target + 1):
+            o = units[i].offset - units[start].offset
+            for fr in ctx.decode(av.Packet(blob[o : o + units[i].length])):
+                if i == target:
+                    img = fr.to_ndarray(format="rgb24")
+        if img is None:
+            raise SystemExit("the frame decoded to nothing")
+        x, y, w, h = (int(v) for v in manifest["game_region"])
+        return int(units[target].t_ns), img[y : y + h, x : x + w]
+    from PIL import Image
+
+    best: tuple[int, str, str] | None = None
+    for shard in manifest["shards"]:
+        with tarfile.open(path / shard, "r:") as tar:
+            for m in tar:
+                if m.name.endswith(".json"):
+                    meta = tar.extractfile(m)
+                    assert meta is not None
+                    t = int(json.loads(meta.read())["t_mono_ns"])
+                    if best is None or abs(t - want) < abs(best[0] - want):
+                        best = (t, shard, m.name.rsplit(".", 1)[0])
+    if best is None:
+        raise SystemExit("no frames")
+    with tarfile.open(path / best[1], "r:") as tar:
+        png = tar.extractfile(tar.getmember(best[2] + ".png"))
+        assert png is not None
+        return best[0], np.asarray(Image.open(png).convert("RGB"))
+
+
+def peek(session: str, at_s: float, out: Path, datasets: Path, data: Path, k: float,
+         mapcache_dir: Path | None = None) -> dict[str, Any]:  # fmt: skip
+    """One recorded frame with its v1 labels drawn (monsters yellow, NPCs and players cyan), saved
+    to ``out`` -- which must be under /dev/shm: client pixels never land on the disk or in git."""
+    if not str(out.resolve()).startswith("/dev/shm/"):
+        raise SystemExit(f"{out}: peek writes client pixels to /dev/shm only")
+    import qa_export
+    from PIL import Image, ImageDraw
+
+    setup(data, mapcache_dir)
+    path = datasets / session
+    t, img = session_frame(path, at_s)
+    v1 = qa_export.Labeler(path, labels="v1", k=k)
+    boxes = v1.boxes(t) or []
+    world = v1.timeline.frame_world(t - int(v1.offset_ms * 1e6))
+    im = Image.fromarray(img)
+    draw = ImageDraw.Draw(im)
+    for b in boxes:
+        colour = (255, 255, 0) if b["cls"] == "monster" else (0, 255, 255)
+        draw.rectangle([b["x1"], b["y1"], b["x2"], b["y2"]], outline=colour, width=2)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    im.save(out)
+    t0 = int(json.loads((path / "manifest.json").read_text())["t0_mono_ns"])
+    return {"session": session, "t_s": round((t - t0) / 1e9, 3), "map": world.map,
+            "self_pos": world.self_pos, "boxes": len(boxes), "out": str(out)}  # fmt: skip
 
 
 # --- census: how much of a frame cache each gap touches (packets only, no pixels) ----------------
@@ -1711,6 +1793,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     ca.add_argument("shard", type=Path, help="the v1 cache shard holding the session's frames")
     rp = sub.add_parser("report")
     rp.add_argument("dump", type=Path)
+    pk = sub.add_parser("peek")
+    pk.add_argument("session")
+    pk.add_argument("seconds", type=float, help="seconds after the recording's t0")
+    pk.add_argument("out", type=Path, help="a PNG path under /dev/shm")
+    pk.add_argument("--datasets", type=Path, default=NAS)
+    pk.add_argument("--data", type=Path, default=ROOT / "data")
+    pk.add_argument("--mapcache", type=Path, default=None)
+    pk.add_argument("--k", type=float, default=0.140)
     mo = sub.add_parser("models")
     mo.add_argument("dump", type=Path)
     mo.add_argument("preds", type=Path, nargs="+", help="predict_dir outputs on the gold frames")
@@ -1721,6 +1811,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     ce.add_argument("--mapcache", type=Path, default=None)
     ce.add_argument("--step-s", type=float, default=1.0)
     a = ap.parse_args(argv)
+    if a.cmd == "peek":
+        print(json.dumps(peek(a.session, a.seconds, a.out, a.datasets, a.data, a.k, a.mapcache)))
+        return 0
     if a.cmd == "census":
         m = json.loads(a.cache_manifest.read_text())
         sessions = [(sid, part) for part, sids in m["split"].items() for sid in sids]
