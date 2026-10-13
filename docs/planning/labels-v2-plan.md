@@ -77,6 +77,20 @@ sessions in `/dev/shm/poring-lab-demo` and the local KB; nothing written outside
     Base/Job Lv 1, 3.20a), so v0's player box at the camera target is used until one is measured.
 
 ### 1.2 NPCs per sprite (Batt ~16:10)
+➡️ **2026-10-13 (Batt): the N1-N3 sprite path is now THE FIRST NPC STEP.** Every static NPC is
+RENDERED from game data (L3's cell, the script's facing and sprite id + the client's sprite files +
+the camera model) instead of being collected or detected:
+[npc-render.md](npc-render.md) (PROPOSED; built offline on branch feat/npc-render).
+- Measured on design data: the rendered sprites sit within a median 1.4 px outdoors and 4.1 px
+  indoors of where the client draws them, and L3's cell, sprite and facing agree with the packets
+  on every one of 3,214 sightings.
+- **The clickable area is wider than the drawn pixels** (the mask holds 39 % of the TALK hovers),
+  so the walk gate's NO-CLICK region needs the measured hit box, not the mask alone.
+- Labels v2's NPC boxes from rendering (the envelope per frame) and the walk gate's region wait
+  for its DRAFT pre-registration (npc-render.md section 6), which the parent reviews.
+- The rules below (packets at the frame's time, `predict_sprite` at the NPC's heading) stay what
+  the v2 cache builds today.
+
 - **The cell:** each `entity_appear` with objtype 6 and a drawn class, from `Timeline` at the frame's
   capture time minus the packet->frame offset, projected through the camera at the GM's packet
   position: the v1 path (`labels_v2.npc_labels`).
@@ -1342,6 +1356,8 @@ labels_v2.difficulty (all "normal" here).
   5. **NPC and portal passes:** new_1-2 (11 NPCs, the shop, 5 portals), a yard and a reception
      copy, new_1-4: standing views per sprite toward 750 frames, and the portal cells for the
      visibility table. No dialog is needed for the cut-in (none there).
+     ➡️ 2026-10-13 (Batt): NPC boxes from rendering (npc-render.md) are to replace most of this
+     NPC collection, once its pre-registered check passes; the portal cells are still needed.
   6. **Then the Merchant maps** (Batt's step 3): alberta_in / alberta, then the delivery maps; 1261
      by spawn blocks.
 - **The target / ignore test** (7.2's proposal) runs later, on the trained detector, with the
