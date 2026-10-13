@@ -3570,6 +3570,36 @@ their causes; the measured footprints per job; which fix (5.7) each result point
       `1995cabbaf9a7d9144bd7005e28ab4c05764833b2e9b301fe4ba9750cfff67fc`, read back equal.
       `talk1.TEMPLATES` loads both highlighted looks.
     - Next: the prontera arm resumes (segment 3).
+  - ➡️ **THE PRONTERA ARM, SEGMENT 3 (14:39-14:42, robust2 + NEXT_HI + CLOSE_HI): STOPPED after ONE
+    click (record 140, click 139).**
+    - Click 139 at (148,202), beside YuNA again (stand (149,205)): the series read walk 5 / 6, then
+      `npc_contact`. Her FIRST page (NEXT) opened.
+    - T2 read it `npc_dialog_uncertain`: mismatch 0.008 (accept 0.03), but the EDGE share was 0.0868
+      (accept 0.05).
+    - **Cause, measured on the frame:** the right part of the dialog's bottom border line (from
+      column ~104, an RDP codec tile boundary) reads grey 191-192 instead of 198. That is 7 levels,
+      just over `pixel_tol` 6.
+      - The values were identical on 6 fresh frames over 7 s: stale tiles that never refined, so a
+        re-read would not have helped. It failed closed.
+    - **DECIDED (Batt, 2026-10-13 ~14:47): "Park prontera; church next."**
+      - After a person closes the dialog: prt_church's click pilot, then its scored arm, then the
+        rest of the queue.
+      - Offline: a T2 border fix that tolerates a per-tile shade offset on the four border lines,
+        proven on every banked labelled frame + both stop frames. **For Batt's OK before prontera
+        resumes.**
+  - **The prontera click arm, PARKED at 140 records** (`npc_click_score.py score` at 5aef29b; the arm
+    is NOT complete, so this is not its result):
+
+    | segment | gate / T2 | records | clicked: moves / contacts / nothing | not clicked (TALK twice / unknown / other) | attack_request | GM act normal / pickup |
+    |---|---|---|---|---|---|---|
+    | 0 (10-10 00:18-00:23) | v3 | 18 | 8 / 3 / 0 | 5 / 2 / 0 | 0 | 0 / 0 |
+    | 1 (13:19-13:54) | robust2, NEXT_HI | 121 | 53 / 5 / 1 | 58 / 3 / 1 | 0 | 0 / 0 |
+    | 2 (14:42) | robust2, NEXT_HI + CLOSE_HI | 1 | 0 / 1 / 0 | 0 / 0 / 0 | 0 | 0 / 0 |
+
+    - L3 layer (complete here; recorded, never applied): it refuses 9 / 9 contact clicks. 0 of the
+      36 clicks it allows became a contact (Wilson 95 % up to 0.096). The cost: 25 / 61 moves
+      refused (0.41).
+    - A click the walk gate allowed became `npc_contact`: 9 / 71 = 0.127 (0.068-0.224).
 
 ### 3.33 The GM's IMMUNITY: a test condition for the visual-diversity block (pre-registered 2026-10-09 ~14:05 ICT / 07:05 UTC, BEFORE the check; Batt: "keep gl_prison; a GM doesn't need to fear monsters. Make the GM safe without changing what the bot sees")
 **The condition, PRIMARY:** rAthena's `@monsterignore`, granted to the GM's group 20 (`groups.yml`,
