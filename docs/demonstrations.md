@@ -3721,6 +3721,26 @@ their causes; the measured footprints per job; which fix (5.7) each result point
     - **New in segment 3:** 6 clicks were not made with `stale_background` (Prober9's park found the
       background still changing). They fail closed and are reported.
     - Next: the church arm resumes (`--resume 20261013T151312-demo-npc-click-click-prt-church`).
+  - ➡️ **THE CHURCH CLICK ARM: COMPLETE** (`20261013T151312`; segment 2, 17:18-17:23, with the border fix:
+    14 records, no stop). 52 records, scored:
+
+    | segment | records | clicked: moves / contacts | not clicked | stops | attack_request | GM act normal / pickup |
+    |---|---|---|---|---|---|---|
+    | 0 (15:13-15:24) | 38 | 33 / 2 | TALK 1, unknown 1, no safe point 1 | 1 (codec border, Garnet) | 0 | 0 / 0 |
+    | 1 (17:18-17:23) | 14 | 13 / 0 | TALK 1 | 0 | 0 | 0 / 0 |
+    | **the arm** | **52** | **46 / 2** | 4 | 1 | **0** | **0 / 0** |
+
+    - **L3 layer** (complete; recorded, not applied): it refuses **2 / 2** contact clicks; **0 / 38**
+      allowed clicks became `npc_contact` (Wilson upper 0.092); it costs **8 / 46** moves (0.17).
+      The decision rule holds here too.
+    - A click the walk gate allowed became `npc_contact`: 2 / 48 = 0.042. By ring: ring 1 2 / 18,
+      rings 2-3 0 / 30.
+  - **npc-click@1, both arms complete (2026-10-13 17:23): every metric above, safety 0 throughout.**
+    - The L3 no-click layer refused **11 / 11** contact clicks over both maps.
+    - **0 / 87** clicks it allows became a contact.
+    - Its cost was **35 / 122** moves.
+    - What this means for walk@17 (its L3 no-click amendment, and the NPC render region of 3.38)
+      is Batt's call.
 
 ### 3.33 The GM's IMMUNITY: a test condition for the visual-diversity block (pre-registered 2026-10-09 ~14:05 ICT / 07:05 UTC, BEFORE the check; Batt: "keep gl_prison; a GM doesn't need to fear monsters. Make the GM safe without changing what the bot sees")
 **The condition, PRIMARY:** rAthena's `@monsterignore`, granted to the GM's group 20 (`groups.yml`,
