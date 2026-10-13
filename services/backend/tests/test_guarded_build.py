@@ -883,3 +883,30 @@ def test_frame_drops_still_stop_at_once_even_with_a_duty_cycle(
     assert gb.run_process("rundev:vision", ["sleep", "30"], _QuietGuard(), r3=hit,
                           duty=duty) is False  # fmt: skip
     assert "R3-HARD drops" in capsys.readouterr().out
+
+
+# --- ADR-0007 Amendment C (ACCEPTED, Batt 2026-10-13): only committed decoder code goes live ------
+class FakeGit:
+    def __init__(self, status: str = "", head: str = "abc123def456") -> None:
+        self.status, self.head, self.calls = status, head, []
+
+    def __call__(self, cmd: list[str], **kw: Any) -> Any:
+        self.calls.append(cmd)
+        out = self.status if cmd[1] == "status" else self.head + "\n"
+        return type("R", (), {"returncode": 0, "stdout": out})()
+
+
+def test_the_sniffer_code_gate(gb: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("SNIFFER_COMMIT", raising=False)
+    steps = [gb.parse_step("recreate:sniffer@90")]
+    assert gb.sniffer_code_gate(steps, git=FakeGit()) is None
+    import os
+
+    assert os.environ["SNIFFER_COMMIT"] == "abc123def456"
+    why = gb.sniffer_code_gate(steps, git=FakeGit(status=" M packages/poring_packets/x.py\n"))
+    assert why is not None and "uncommitted" in why
+    why = gb.sniffer_code_gate([gb.parse_step("restart:sniffer@90")], git=FakeGit())
+    assert why is not None and "recreate:sniffer" in why
+    g = FakeGit(status="dirty")
+    assert gb.sniffer_code_gate([gb.parse_step("restart:backend@30")], git=g) is None
+    assert g.calls == []  # no sniffer step: git is never asked

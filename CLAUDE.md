@@ -467,9 +467,15 @@ ports, quickstart) and `docs/adr/`.
   banked captures are re-decoded offline with `guarded_build.py replay:<FROM>..<TO>` (UTC hours; a
   one-off, network-less, read-only container from the sniffer image -- never an exec into the
   live sniffer) and judged per session by `scripts/replay_safety.py`;
-  it has NO dev overlay (`test_guards.py`). So a `poring_packets` change (e.g. the B4 heading,
-  the ADR-0016 attestation) is live in the sniffer only after a guarded `build:sniffer` +
-  `recreate:sniffer`. After a sniffer restart the interlock says `no_session` until the next login.
+  ~~it has NO dev overlay~~ ➡️ **since ADR-0007 Amendment C (ACCEPTED, Batt 2026-10-13) its dev
+  overlay runs the decoder CODE from the host** (`packages/poring_packets/src`, read-only, copied to
+  tmpfs at each start; `test_guards.py`). The start-time self-test (`poring_packets.selftest`: the
+  length table + the credential scrub on dummy secrets) must PASS, or the sniffer refuses to start.
+  So a `poring_packets` CODE change goes live with a guarded `recreate:sniffer`, which refuses a dirty
+  `packages/poring_packets` and records the commit (SNIFFER_COMMIT: the start log and every capture's
+  header). `restart:sniffer` is refused: it would keep the old commit. A DEPENDENCY change still needs
+  `build:sniffer`, and `replay:` still decodes with the image's copy. After a sniffer restart the
+  interlock says `no_session` until the next login.
   - guarded_build then re-logs the GM in BY ITSELF (Batt, 2026-10-04): `recover gm --retries 0
     --agent-id auto_recover`.
   - It runs only in ASSIST, on a steady rdp/console lock, with the interlock config ok and not

@@ -7,7 +7,7 @@ verdict_date: 2026-10-01
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: "➡️ 2026-10-10 02:50: the image carrying LoginScrub (f36276e, login ports from the environment + every login-shaped connection) is LIVE, verified by scripts/scrub_check.py and the §2a positive cases (demonstrations.md §2a). Amendment C (code from a source mount) ACCEPTED 2026-10-13 (Batt); implementation + guarded recreate pending. History: Implemented and validated (docs/phase1-validation.md). The slim sniffer image is LIVE since 2026-10-03 (71 MB, guarded build; live re-verified: ingest, validation tagging, password zeroing). GAT in Phase 2."
+next_action: "➡️ 2026-10-10 02:50: the image carrying LoginScrub (f36276e, login ports from the environment + every login-shaped connection) is LIVE, verified by scripts/scrub_check.py and the §2a positive cases (demonstrations.md §2a). Amendment C (code from a source mount) ACCEPTED 2026-10-13 (Batt), BUILT the same day; live at the next guarded recreate:sniffer. History: Implemented and validated (docs/phase1-validation.md). The slim sniffer image is LIVE since 2026-10-03 (71 MB, guarded build; live re-verified: ingest, validation tagging, password zeroing). GAT in Phase 2."
 ---
 
 # ADR-0007: Packet ground truth — a viewer-only channel and a separate captures volume
@@ -151,6 +151,12 @@ closer to decision time than this ADR's "offline ground truth only" line.
 > ➡️ **ACCEPTED by Batt, 2026-10-13** (decision 7: "ADR-0007 Amendment C: ACCEPTED"). It is implemented as
 > written below: the dev overlay, its guard test, and CLAUDE.md's dev-mode text. It goes live at a guarded
 > `recreate:sniffer` in a measured quiet window, and the §2a positive cases are re-run after it.
+> ➡️ **BUILT 2026-10-13** (`compose.dev.yaml` sniffer overlay; `poring_packets/selftest.py`; the
+> sniffer stamps SNIFFER_COMMIT into its log and every capture's SHB; `guarded_build.sniffer_code_gate`;
+> tests in test_guards / test_guarded_build / packages/poring_packets/tests/test_selftest.py). One
+> stricter detail than point 6: `restart:sniffer` is REFUSED, because a restart keeps the environment
+> (the old SNIFFER_COMMIT) of the container's creation; `recreate:sniffer` is the step. NOT LIVE until
+> that guarded recreate (needs the client free + ASSIST for the GM's auto re-login).
 
 **Status (as of 2026-10-09):** PROPOSED, for Batt's acceptance (his call of 2026-10-09 ~20:20: "Option C (sniffer code
 from a bind-mounted source, no image build for code changes): write it as an amendment to

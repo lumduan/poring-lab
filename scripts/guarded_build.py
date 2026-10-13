@@ -1420,6 +1420,43 @@ def our_gpu_mib() -> int:
     return sum(mib[p] for p in own_pids(b"poring_vision", list(mib)))
 
 
+# --- ADR-0007 Amendment C (ACCEPTED, Batt 2026-10-13): the sniffer's code from the host -----------
+SNIFFER_SRC = "packages/poring_packets"
+
+
+def sniffer_code_gate(steps: list[Step], root: Path = REPO,
+                      git: Any = subprocess.run) -> str | None:  # fmt: skip
+    """A step that (re)creates the sniffer runs its code from the host tree (compose.dev.yaml's
+    sniffer overlay), so only COMMITTED code may go live: a dirty packages/poring_packets refuses.
+    The commit is recorded (SNIFFER_COMMIT, read by compose at create time and stamped into the
+    sniffer's start log and every capture's header). `restart:sniffer` refuses: a restart keeps
+    the environment of the container's creation, so it could run new code under an old commit --
+    use `recreate:sniffer`. Returns a refusal, or None (and sets os.environ["SNIFFER_COMMIT"])."""
+    kinds = ("start", "recreate", "restart")
+    hit = [s for s in steps if s.kind in kinds and "sniffer" in s.services]
+    if not hit:
+        return None
+    if any(s.kind == "restart" for s in hit):
+        return ("restart:sniffer: refused -- the sniffer runs the host's code (ADR-0007 "
+                "Amendment C) and a restart keeps its old SNIFFER_COMMIT; "
+                "use recreate:sniffer")  # fmt: skip
+    st = git(["git", "status", "--porcelain", "--", SNIFFER_SRC], cwd=root, capture_output=True,
+             text=True, check=False)  # fmt: skip
+    if st.returncode != 0:
+        return f"sniffer: refused -- git status failed ({st.returncode}): the code cannot be named"
+    if st.stdout.strip():
+        return (f"sniffer: refused -- {SNIFFER_SRC} has uncommitted changes; only committed code "
+                "goes live (ADR-0007 Amendment C)")  # fmt: skip
+    head = git(["git", "rev-parse", "--short=12", "HEAD"], cwd=root, capture_output=True,
+               text=True, check=False)  # fmt: skip
+    commit = head.stdout.strip()
+    if head.returncode != 0 or not commit:
+        return "sniffer: refused -- the commit cannot be read"
+    os.environ["SNIFFER_COMMIT"] = commit
+    print(f"[{ts()}] sniffer code: {commit} (committed; passed as SNIFFER_COMMIT)", flush=True)
+    return None
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("steps", nargs="+")
@@ -1458,6 +1495,9 @@ def main() -> int:
             "frontend. Use start:<svc>[,<svc>...][@<seconds>].",
             flush=True,
         )
+        return 2
+    if (why := sniffer_code_gate(steps)) is not None:
+        print(why, flush=True)
         return 2
     guard = Guard(
         cgroup_paths(), args.threshold, args.window, sustain=args.sustain, spike=args.spike

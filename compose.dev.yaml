@@ -22,6 +22,28 @@ services:
       - ./services/rathena/entrypoint.sh:/usr/local/bin/rathena-entrypoint:ro
       - ./services/rathena/conf/import/groups.yml:/opt/rathena-conf-templates/groups.yml:ro
 
+  sniffer:
+    # ADR-0007 Amendment C (ACCEPTED, Batt 2026-10-13): the decoder CODE comes from the host, read-only;
+    # the slim image stays the dependency base (a pyproject / uv.lock change still needs a guarded
+    # build). Each start copies the tree into the container's tmpfs (a consistent snapshot: a host
+    # edit never half-imports into a running sniffer), runs the start-time self-test FROM THAT COPY
+    # (the length table against tables.lock.json + the credential scrub on dummy secrets) and REFUSES
+    # to start on a failure, then runs the sniffer from the copy. The guarded restart passes
+    # SNIFFER_COMMIT and refuses an uncommitted packages/poring_packets (scripts/guarded_build.py).
+    # Everything else (NET_RAW only, read-only rootfs, rathena's netns, captures, no ./data) is
+    # compose.yaml's, unchanged. Rollback: delete this entry (the image's own copy runs again).
+    volumes:
+      - ./packages/poring_packets/src:/dev-src:ro
+    environment:
+      SNIFFER_COMMIT: ${SNIFFER_COMMIT:-}
+    command:
+      - sh
+      - -c
+      - >-
+        mkdir -p /tmp/devsrc && cp -R /dev-src/. /tmp/devsrc/ && cd /
+        && PYTHONPATH=/tmp/devsrc python -m poring_packets.selftest
+        && PYTHONPATH=/tmp/devsrc exec python -m poring_packets.sniffer
+
   rathena-th:
     volumes:
       # The same host files as rathena (read-only): the GM's group 20 (@heal/@alive) and the

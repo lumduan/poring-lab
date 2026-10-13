@@ -257,8 +257,8 @@ class Ingest(threading.Thread):
 class Rotating:
     """pcapng + events shard, rotated by age or size; enforces retention after each rotation."""
 
-    def __init__(self, root: Path) -> None:
-        self.root = root
+    def __init__(self, root: Path, app: str = "poring-lab sniffer") -> None:
+        self.root, self.app = root, app  # app: the pcapng SHB's shb_userappl (names the code)
         root.mkdir(parents=True, exist_ok=True)
         self.pcap: PcapngWriter | None = None
         self.events: gzip.GzipFile | None = None
@@ -274,7 +274,7 @@ class Rotating:
         ):
             self.close()
             stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime(now))
-            self.pcap = PcapngWriter(self.root / f"capture-{stamp}.pcapng")
+            self.pcap = PcapngWriter(self.root / f"capture-{stamp}.pcapng", app=self.app)
             self.events = gzip.open(self.root / f"events-{stamp}.jsonl.gz", "ab")  # noqa: SIM115
             self.opened = now
             self.retention()
@@ -319,8 +319,12 @@ def run() -> None:
     session = Session(table, os.environ.get("CLIENT_IP", "192.168.1.169"), userids, server_id)
     scrub = LoginScrub(login_ports(os.environ.get(LOGIN_PORTS_ENV)))
     log.info("pcap credential scrub: %s", scrub.mode)
+    # ADR-0007 Amendment C: the code's commit (the guarded restart passes it in dev mode; the image
+    # path leaves it unset) names the decoder in the start log and in every capture's header
+    commit = os.environ.get("SNIFFER_COMMIT", "").strip() or "image"
+    log.info("decoder code: %s", commit)
     cap = Capture(iface)
-    out = Rotating(root)
+    out = Rotating(root, app=f"poring-lab sniffer (code {commit})")
     ingest = Ingest(url) if url else None
     if ingest:
         ingest.start()

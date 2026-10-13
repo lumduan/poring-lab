@@ -239,10 +239,25 @@ def test_captures_volume_only_in_sniffer_rw_and_backend_ro(name: str) -> None:
 
 
 def test_the_dev_overlay_runs_the_slim_sniffer_image() -> None:
-    """2026-10-03: the slim image replaced the dev overlay (backend image + host source)."""
-    assert "sniffer" not in compose("compose.dev.yaml")["services"]
+    """2026-10-03: the slim image replaced the dev overlay (backend image + host source).
+    ADR-0007 Amendment C (ACCEPTED, Batt 2026-10-13): the dev overlay mounts ONLY the decoder's
+    source, read-only, on that slim image; each start copies it to tmpfs and runs the start-time
+    self-test (the table + the scrub) BEFORE the sniffer; no other service gains the mount."""
     build = compose("compose.yaml")["services"]["sniffer"]["build"]
     assert build == {"context": ".", "dockerfile": "services/sniffer/Dockerfile"}
+    dev = compose("compose.dev.yaml")["services"]
+    sniffer = dev["sniffer"]
+    assert sniffer["volumes"] == ["./packages/poring_packets/src:/dev-src:ro"]
+    assert set(sniffer) == {"volumes", "environment", "command"}  # nothing else is overridden
+    cmd = " ".join(sniffer["command"])
+    assert cmd.index("cp -R /dev-src/. /tmp/devsrc/") < cmd.index("poring_packets.selftest")
+    assert cmd.index("poring_packets.selftest &&") < cmd.index("python -m poring_packets.sniffer")
+    assert "SNIFFER_COMMIT" in sniffer["environment"]
+    mounting = {n for n, svc in dev.items()
+                if any("poring_packets" in str(v) for v in svc.get("volumes", []))}  # fmt: skip
+    assert mounting == {"backend", "sniffer"}  # the backend's mount predates Amendment C
+    base = compose("compose.yaml")["services"]["sniffer"]
+    assert base["read_only"] is True and base["cap_add"] == ["NET_RAW"]
 
 
 def test_captures_volume_exists_and_sniffer_never_writes_the_data_dir() -> None:
