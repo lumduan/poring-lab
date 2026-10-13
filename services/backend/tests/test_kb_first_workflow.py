@@ -517,7 +517,7 @@ def _doc() -> dict:
                          "script_placements": [{"map": "hall", "cmd": "monster"}]},
         "maps": {
             "town": {"loaded_by_server": True, "warps": [{"x": 9, "y": 9, "drawn": True}],
-                     "npcs": [n("npc/a.txt:12", 10, 10, 86),
+                     "npcs": [n("npc/a.txt:12", 10, 10, 86, dir=6),
                               n("npc/a.txt:30", 11, 10, 705, "conditional"),
                               n("npc/b.txt:4", 12, 10, 111, False, sprite_class="hidden",
                                 kind="invisible")]},
@@ -537,6 +537,8 @@ def test_npc_cells_mark_drawn_and_completeness() -> None:
     assert (rows[(10, 10)]["line"], rows[(10, 10)]["probe"]) == (12, True)
     assert (rows[(11, 10)]["drawn"], rows[(11, 10)]["probe"]) == ("conditional", False)
     assert rows[(12, 10)]["probe"] is False
+    # the script's facing rides along (Batt 2026-10-13: the rendered-sprite path needs it)
+    assert rows[(10, 10)]["dir"] == 6 and rows[(11, 10)]["dir"] is None
 
 
 def test_packet_check_per_map_matches_cells_sprites_and_drawn_marks(tmp_path: Path) -> None:

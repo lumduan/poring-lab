@@ -111,6 +111,37 @@ def test_l3_npcs_merge_the_lists_by_cell_and_drop_undrawn_sprites(tmp_path: Path
     assert cov["complete"] is False and cov["counts"] == {"route.json": 2, "bindings": 2}
 
 
+def test_l3_npcs_keep_the_scripts_facing(tmp_path: Path) -> None:
+    """The npc line's dir (Batt 2026-10-13: the rendered-sprite path needs it): the winning
+    list's when it carries one; else a later list's at the same cell with an agreeing sprite
+    (an npc_cells.json built before the field existed); else None."""
+    cells = [
+        {"x": 10, "y": 10, "dir": 6, "sprite": 86, "file": "npc/a.txt", "line": 1},
+        {"x": 20, "y": 20, "sprite": 90, "file": "npc/a.txt", "line": 2},
+        {"x": 30, "y": 30, "sprite": 92, "file": "npc/a.txt", "line": 3},
+    ]
+    route = [{"map": "town", "x": 20, "y": 20, "dir": 3, "sprite": 90, "file": "npc/a.txt",
+              "line": 2},
+             {"map": "town", "x": 30, "y": 30, "dir": 5, "sprite": 999, "file": "npc/z.txt",
+              "line": 9},
+             {"map": "town", "x": 10, "y": 10, "dir": 1, "sprite": 86, "file": "npc/a.txt",
+              "line": 1},
+             {"map": "town", "x": 40, "y": 40, "dir": 0, "sprite": 84, "file": "npc/b.txt",
+              "line": 4}]  # fmt: skip
+    (tmp_path / "npc_cells.json").write_text(
+        json.dumps({"maps": {"town": {"complete": True, "npcs": cells}}})
+    )
+    (tmp_path / "route.json").write_text(json.dumps({"npcs": {"g": route}}))
+    npcs, _ = nc.load_l3_npcs("town", tmp_path)
+    got = {n.cell: (n.dir, n.source) for n in npcs}
+    assert got == {
+        (10, 10): (6, "npc_cells.json"),  # its own; route.json's 1 never overrides it
+        (20, 20): (3, "npc_cells.json"),  # filled from route.json: the same sprite
+        (30, 30): (None, "npc_cells.json"),  # the sprites disagree: not filled
+        (40, 40): (0, "route.json"),
+    }
+
+
 def test_only_the_complete_list_declares_coverage(tmp_path: Path) -> None:
     npcs, cov = nc.load_l3_npcs("town", kb(tmp_path, complete=True))
     assert cov["complete"] is True

@@ -27,17 +27,24 @@ GPU, no client, no NAS walk, nothing written outside --out / stdout.
         person reads them: the warp's visibility and the ring's radius.
 
     labels_v2.py npc-sheet SESSION [SESSION ...] --npc-sprites DIR --npc-sprite-names JSON
-                           [--per-sprite N] [--tau T] [--out-dir DIR] [common options]
+                           [--jobs ID ...] [--per-sprite N] [--tau T] [--out-dir DIR]
+                           [common options]
         N3 PREPARATION (labels-v2-plan 1.2): per catalogued NPC sprite on screen in the banked
         frames, a contact sheet of frame crops with predict_sprite's box drawn (PNG in /dev/shm,
         client pixels, never committed) and label_check's NCC per sighting (the M5 metric;
         --tau, default M4's 0.092, is a reference line only). A PERSON judges the sheets.
+        --jobs: only those NPC sprite ids. Images: a demo session's frames, or a RECORDED PNG
+        session's tar shards (each named session's own shards, every --every-th frame, only the
+        frames that show a scored sprite are read). A recorded H.264 session is NOT decoded
+        here: it is listed as without images.
 
 Common options: --kb DIR (route.json, classes.json; default <repo>/data/kb), --offset-ms MS (the
 packet->frame delay; default: qa_export.auto_offset_ms for the session's backend), --npc-extents
 JSON (job -> [x0, y0, x1, y1] sprite px, measured), --npc-sprites DIR + --npc-sprite-names JSON
 (job -> sprite file stem; client data decoded into /dev/shm at run time), --cutin-rect
 x0,y0,x1,y1 (overrides scripts/ui_mask.py's measured CUTIN_GUIDE, e.g. for a re-measure),
+--k K (the sprite scale for monster and NPC sprite boxes; default qa_export's, nostalro; v1's
+cache and build_frame_cache's v1 replay use 0.14),
 --warp-visibility JSON (warp key "map:x,y" -> visible | occluded | partial; a person's reading of
 warp-measure's sheets; local, never committed).
 
@@ -54,8 +61,10 @@ from __future__ import annotations
 import argparse
 import gzip
 import json
+import re
 import statistics
 import sys
+import tarfile
 from collections import Counter, defaultdict
 from collections.abc import Sequence
 from pathlib import Path
@@ -218,6 +227,61 @@ def banked_frames(session: Path, every: int = 15) -> list[tuple[int, Path | None
     return sorted(out, key=lambda r: r[0])
 
 
+# A frame inside a recorded PNG session's tar shard: "<shard path>@<data offset>+<size>".
+SHARD_REF = re.compile(r"^(?P<path>.+\.tar)@(?P<offset>\d+)\+(?P<size>\d+)$")
+
+
+def shard_frames(session: Path, every: int = 1) -> list[tuple[int, str]]:
+    """(capture time t_ns, SHARD_REF) of every ``every``-th frame of a RECORDED PNG session (its
+    manifest's tar ``shards``, counted in json-member order as build_frame_cache's
+    recorded_times does). Only tar headers and the chosen frames' json members are read; no
+    image. [] for any other session."""
+    mpath = session / "manifest.json"
+    manifest = load_json(mpath) if mpath.exists() else {}
+    if manifest.get("kind") == "demo" or (manifest.get("format") or "png") != "png":
+        return []
+    out: list[tuple[int, str]] = []
+    n = 0
+    for shard in manifest.get("shards") or []:
+        path = session / shard
+        pngs: dict[str, tuple[int, int]] = {}
+        with tarfile.open(path) as tar:
+            for m in tar:
+                key, _, ext = m.name.partition(".")
+                if ext == "png":
+                    pngs[key] = (m.offset_data, m.size)
+                    continue
+                if ext != "json":
+                    continue
+                n += 1
+                if (n - 1) % every or key not in pngs:
+                    continue
+                fh = tar.extractfile(m)
+                assert fh is not None
+                meta = json.loads(fh.read())
+                off, size = pngs[key]
+                out.append((int(meta["t_mono_ns"]), f"{path}@{off}+{size}"))
+    return sorted(out, key=lambda r: r[0])
+
+
+def open_frame(ref: str) -> Any:
+    """A frame image (PIL) from a file path or a SHARD_REF (one seek + read of its PNG bytes)."""
+    import io
+
+    from PIL import Image
+
+    m = SHARD_REF.match(ref)
+    if m is None:
+        return Image.open(ref)
+    size = int(m["size"])
+    with open(m["path"], "rb") as fh:
+        fh.seek(int(m["offset"]))
+        data = fh.read(size)
+    if len(data) != size:
+        raise ValueError(f"{ref}: short read ({len(data)} of {size} bytes)")
+    return Image.open(io.BytesIO(data))
+
+
 class Session:
     """A banked session's labeller: qa_export.Labeler (v1, the same camera / offset / GM windows /
     filters) + the v2 additions."""
@@ -246,6 +310,8 @@ class Session:
                 offset, _ = qa_export.auto_offset_ms(cfg)
             self.labeler = qa_export.Labeler.from_events(self.events, self.backend, SIZE,
                                                          float(offset), labels="v1")  # fmt: skip
+        if getattr(a, "k", None) is not None:
+            self.labeler.k = float(a.k)  # the sprite scale (monster and NPC sprite boxes)
         self.offset_ns = int(self.labeler.offset_ms * 1e6)
         self.route = load_json(a.kb / "route.json")
         self.dialog = talk_calibrate.dialog_timeline(self.events)
@@ -714,7 +780,7 @@ def draw_sheet(items: Sequence[dict[str, Any]], path: Path, cols: int = 4) -> No
 
     tiles = []
     for it in items:
-        img = Image.open(it["image"]).convert("RGB")
+        img = open_frame(it["image"]).convert("RGB")
         x0, y0, x1, y1 = it["box"]
         cx0, cy0 = max(0, int(x0) - SHEET_MARGIN), max(0, int(y0) - SHEET_MARGIN)
         cx1 = min(img.width, int(x1) + SHEET_MARGIN)
@@ -740,6 +806,12 @@ def draw_sheet(items: Sequence[dict[str, Any]], path: Path, cols: int = 4) -> No
     sheet.save(path)
 
 
+def s_k(a: argparse.Namespace) -> float | str:
+    """The sprite scale the sheets were drawn at (--k, else qa_export's default)."""
+    k = getattr(a, "k", None)
+    return float(k) if k is not None else "default (qa_export, nostalro)"
+
+
 def cmd_npc_sheet(a: argparse.Namespace) -> int:
     """N3 material: per NPC sprite (job) seen in the banked frames, its sightings scored with M5's
     NCC and a contact sheet for a person. Uses the labels' own path (Session.frame), so a sheet
@@ -752,16 +824,21 @@ def cmd_npc_sheet(a: argparse.Namespace) -> int:
         print("npc-sheet needs --npc-sprites DIR and --npc-sprite-names JSON", file=sys.stderr)
         return 2
     out_dir: Path = a.out_dir
+    jobs = frozenset(getattr(a, "jobs", None) or ())
     by_job: dict[int, list[dict[str, Any]]] = defaultdict(list)
     skipped: list[str] = []
+    no_images: list[str] = []  # a recorded H.264 session: its index only, never decoded here
     for p in a.sessions:
         if not (p / "packets.jsonl.gz").exists():
             skipped.append(p.name)  # no packets: no labels to show
             continue
+        frames = [(t, str(i)) for t, i in banked_frames(p) if i is not None]
+        frames = frames or shard_frames(p, a.every)
+        if not frames:
+            no_images.append(p.name)
+            continue
         s = Session(p, a)
-        for t, img_path in banked_frames(p):
-            if img_path is None:
-                continue
+        for t, img_path in frames:
             _status, fr, scene = s.frame(t)
             if fr is None or scene is None:
                 continue
@@ -772,6 +849,8 @@ def cmd_npc_sheet(a: argparse.Namespace) -> int:
                 if lab.cls != "npc" or not lab.kind.startswith("sprite_") or lab.gid not in ents:
                     continue
                 ent = ents[lab.gid]
+                if jobs and int(ent.job) not in jobs:
+                    continue
                 sheet = s.npc_sheet(ent.job)
                 pred = predict_sprite(Actor((float(ent.x), float(ent.y)),
                                             int(ent.heading or 0) % 8, MonsterAction.IDLE),
@@ -779,14 +858,12 @@ def cmd_npc_sheet(a: argparse.Namespace) -> int:
                 if pred is None:
                     continue
                 if img is None:
-                    from PIL import Image
-
-                    img = np.asarray(Image.open(img_path).convert("RGB"))
+                    img = np.asarray(open_frame(img_path).convert("RGB"))
                 ncc = label_check.score(img, sheet, pred)
                 others = [(u.x0, u.y0, u.x1, u.y1) for u in fr.projected if u.gid != lab.gid]
                 why = label_check.classify(pred.box, others) if ncc is not None else None
                 by_job[int(ent.job)].append({
-                    "session": p.name, "t_ns": t, "image": str(img_path),
+                    "session": p.name, "t_ns": t, "image": img_path,
                     "map": map_key(fr.map or ""), "key": lv.npc_key(fr.map, ent),
                     "box": [round(v, 1) for v in pred.box],
                     "ncc": None if ncc is None else round(ncc, 3), "why_low": why,
@@ -803,10 +880,12 @@ def cmd_npc_sheet(a: argparse.Namespace) -> int:
         result.append(row)
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "npc_sheet.json").write_text(
-        json.dumps({"tau": a.tau, "sprites": result, "sightings": by_job}, indent=1, default=str)
+        json.dumps({"tau": a.tau, "k": s_k(a), "sessions_without_images": no_images,
+                    "sprites": result, "sightings": by_job}, indent=1, default=str)
         + "\n"
-    )
+    )  # fmt: skip
     print(json.dumps({"tau_reference": a.tau, "sessions_without_packets": len(skipped),
+                      "sessions_without_images": no_images,
                       "sprites": [{k: v for k, v in r.items() if k != "shown"} for r in result]},
                      indent=1))  # fmt: skip
     print(f"sheets + JSON (client pixels; never committed): {out_dir}")
@@ -834,6 +913,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         q.add_argument("--cutin-rect", default=None)
         q.add_argument("--warp-visibility", type=Path, default=None)
         q.add_argument("--every", type=int, default=15)
+        q.add_argument("--k", type=float, default=None, help="sprite scale (default nostalro)")
 
     p = sub.add_parser("coverage")
     p.add_argument("sessions", nargs="+", type=Path)
@@ -855,6 +935,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     p.add_argument("sessions", nargs="+", type=Path)
     p.add_argument("--per-sprite", type=int, default=8)
     p.add_argument("--tau", type=float, default=M5_TAU)
+    p.add_argument("--jobs", nargs="*", type=int, default=None, help="only these NPC sprite ids")
     p.add_argument("--out-dir", type=Path,
                    default=Path("/dev/shm/poring-lab-tmp/labels-prep/n3"))  # fmt: skip
     common(p)

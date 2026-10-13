@@ -302,3 +302,85 @@ def test_mob_names_flag_a_client_name_that_differs(ns: ModuleType, tmp_path: Pat
     assert slime["files_present"] is False and slime["differs_from_aegis"] is False
     assert none["client_sprite"] is None
     assert len(res["problems"]) == 2
+
+
+# --- the explicit extra set (Batt 2026-10-13, decision 9) ---
+
+
+def test_extra_set_is_batts_decision(ns: ModuleType) -> None:
+    """The eight sprites labels-v2-plan 4a found unsized on v1's NAS sessions, by map: exactly
+    Batt's list, nothing derived or added."""
+    assert ns.EXTRA == {"prt_fild08": (909,), "prt_church": (71, 79, 741, 798, 745, 60, 755)}
+    assert sum(len(v) for v in ns.EXTRA.values()) == 8
+
+
+def test_extra_uses_are_listed_beside_the_route_rule(ns: ModuleType) -> None:
+    """An extra sprite is listed on its map (every drawn use, scope "extra", the script's facing
+    kept); the route rule is unchanged: without the extra set the same KB gives the old uses."""
+    doc = kb()
+    doc["maps"]["c"] = {"npcs": [npc("c:1", 5, 5, 71, dir=6), npc("c:2", 40, 9, 71, dir=2),
+                                 npc("c:3", 7, 7, 79), npc("c:4", 9, 9, 45),
+                                 npc("c:5", 3, 3, 798, drawn=False)]}  # fmt: skip
+    grids = {"h": grid(ns, 60, 20, set()), "t": grid(ns, 60, 20, set())}
+    cells, _ = ns.route_cells(ns.route_stops(doc, "t"), grids)
+    base = ns.collect(doc, cells, 45)
+    assert 71 not in base and 79 not in base
+    extra = {"c": (71, 798), "t": (99,)}
+    uses = ns.collect(doc, cells, 45, extra)
+    assert {k: v for k, v in uses.items() if k != 71} == base
+    assert [(u["key"], u["scope"], u["dir"]) for u in uses[71]] == [
+        ("c:1", "extra", 6),
+        ("c:2", "extra", 2),
+    ]
+    assert 79 not in uses  # on the map, not in the set
+    # 798 is not drawn there and 99 is not on t at all: reported, never guessed
+    assert ns.extra_problems(uses, extra) == [
+        "extra c:798: no drawn NPC with that sprite in the KB",
+        "extra t:99: no drawn NPC with that sprite in the KB",
+    ]
+
+
+def test_three_sources_per_sprite(ns: ModuleType, tmp_path: Path) -> None:
+    lub = "data/luafiles514/lua files/datainfo/"
+    grf = tmp_path / "x.grf"
+    build_grf(grf, {lub + "npcidentity.lub": IDENTITY, lub + "jobname.lub": JOBNAME,
+                    "data/sprite/npc/a_npc.spr": b"SP", "data/sprite/npc/a_npc.act": b"AC",
+                    "data/sprite/npc/b_sprite.spr": b"SP"})  # fmt: skip
+    uses = [{"scope": "extra", "map": "c"}]
+    with grf.open("rb") as f:
+        arc = ns.Archive.open(f)
+        const, names, _ = ns.client_tables(arc)
+        ok = ns.sprite_row(46, uses, {46: ["JT_A_NPC"]}, const, names, arc, "npc")
+        assert ok["three_sources"] == {"rathena_const": True, "client_tables": True,
+                                       "archive": True, "flags": {"act": "0x01", "spr": "0x01"},
+                                       "agree": True}  # fmt: skip
+        half = ns.sprite_row(47, uses, {47: ["JT_B_NPC"]}, const, names, arc, "npc")
+        assert half["three_sources"]["archive"] is False and not half["three_sources"]["agree"]
+        nok = ns.sprite_row(46, uses, {}, const, names, arc, "npc")  # rAthena has no constant
+        assert nok["three_sources"]["rathena_const"] is False and not nok["three_sources"]["agree"]
+        unnamed = ns.sprite_row(48, uses, {48: ["JT_C_NPC"]}, const, names, arc, "npc")
+        assert unnamed["three_sources"]["client_tables"] is False
+        comp = ns.sprite_row(4001, uses, {4001: ["JT_X"]}, const, names, arc, "player_job")
+        assert comp["three_sources"]["agree"] is False and comp["sprite_class"] == "player_job"
+
+
+def test_summary_reports_the_extra_set(ns: ModuleType) -> None:
+    agree = {"rathena_const": True, "client_tables": True, "archive": True,
+             "flags": {"act": "0x01", "spr": "0x03"}, "agree": True}  # fmt: skip
+    table = {
+        "trips": {}, "problems": [],
+        "sprites": [
+            {"id": 46, "scopes": ["training_grounds"], "uses": [{"scope": "training_grounds"}],
+             "sprite_class": "npc", "problems": []},
+            {"id": 909, "scopes": ["extra"], "sprite_class": "npc", "problems": [],
+             "three_sources": agree,
+             "uses": [{"scope": "extra", "map": "f"}, {"scope": "extra", "map": "f"}]},
+            {"id": 4001, "scopes": ["extra"], "sprite_class": "player_job", "problems": [],
+             "uses": [{"scope": "extra", "map": "c"}]},
+        ],
+    }  # fmt: skip
+    s = ns.summary(table)
+    assert s["extra"] == [909, 4001] and s["extra_per_map"] == {"c": [4001], "f": [909]}
+    assert s["extra_check"]["909"] == {**agree, "class": "npc", "uses": 2, "problems": 0}
+    assert s["extra_check"]["4001"]["class"] == "player_job" and s["composite"] == [4001]
+    assert s["merchant_route_per_map"] == {}
