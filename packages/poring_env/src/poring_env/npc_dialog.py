@@ -47,10 +47,14 @@ Verdict = Literal["present", "absent", "uncertain"]
 
 DIALOG, MENU = "npc_dialog", "npc_menu"
 NEXT, CLOSE, BLANK = "npc_dialog_next", "npc_dialog_close", "npc_dialog_blank"
+# OPTIONAL (Batt 2026-10-13, decision 2): the NEXT button in its blue HOVER / FOCUS look
+# (npc-click@1's click arm stopped on it, 3.32a). It reads as NEXT; without its file the reader
+# is unchanged.
+NEXT_HI = "npc_dialog_next_hi"
 OK, CANCEL = "npc_menu_ok", "npc_menu_cancel"
 UP, DOWN = "npc_menu_up", "npc_menu_down"
 WINDOW_NAMES = (DIALOG, MENU)
-BUTTON_NAMES = (NEXT, CLOSE, BLANK, OK, CANCEL)
+BUTTON_NAMES = (NEXT, NEXT_HI, CLOSE, BLANK, OK, CANCEL)
 ARROW_NAMES = (UP, DOWN)
 # Without these nothing is read; CLOSE may be missing (then a CLOSE button is "unknown": closed).
 REQUIRED = (DIALOG, MENU, NEXT, BLANK, OK, CANCEL, UP, DOWN)
@@ -109,7 +113,8 @@ class Geometry:
 
     def element_box(self, name: str) -> Box:
         return {
-            NEXT: self.dialog_button, CLOSE: self.dialog_button, BLANK: self.dialog_button,
+            NEXT: self.dialog_button, NEXT_HI: self.dialog_button, CLOSE: self.dialog_button,
+            BLANK: self.dialog_button,
             OK: self.ok_button, CANCEL: self.cancel_button, UP: self.up_arrow,
             DOWN: self.down_arrow,
         }[name]  # fmt: skip
@@ -425,17 +430,25 @@ def find_confidence(f: Find, p: Params) -> float:
     return 0.0
 
 
-def classify_button(crop: Gray | None, candidates: Sequence[str], t: DialogTemplates
-                    ) -> tuple[str | None, dict[str, float]]:  # fmt: skip
-    """The one candidate image within button_accept that beats every other by button_margin;
-    None otherwise. Returns (name or None, distances)."""
+def classify_button(
+    crop: Gray | None,
+    candidates: Sequence[str],
+    t: DialogTemplates,
+    same: dict[str, str] | None = None,
+) -> tuple[str | None, dict[str, float]]:
+    """The one candidate image within button_accept that beats every candidate of ANOTHER
+    button by button_margin; None otherwise. ``same`` maps a look to the button it shows (e.g.
+    NEXT_HI -> NEXT): two looks of one button never refuse each other. Returns (name or None,
+    distances)."""
+    same = same or {}
     dist = {n: (image_distance(crop, t.images[n]) if crop is not None else float("inf"))
             for n in candidates if n in t.images}  # fmt: skip
     if not dist:
         return None, dist
     ranked = sorted(dist.items(), key=lambda kv: kv[1])
     best, d1 = ranked[0]
-    d2 = ranked[1][1] if len(ranked) > 1 else float("inf")
+    group = same.get(best, best)
+    d2 = min((d for n, d in ranked[1:] if same.get(n, n) != group), default=float("inf"))
     p = t.params
     if d1 <= p.button_accept and d2 - d1 >= p.button_margin:
         return best, dist
@@ -521,11 +534,13 @@ def state(
     fd, fm = finds
     if fd.origin is not None:
         brect = _abs(fd.origin, g.dialog_button)
-        label, dist = classify_button(_crop(gray, brect), (NEXT, CLOSE, BLANK), t)
+        label, dist = classify_button(_crop(gray, brect), (NEXT, NEXT_HI, CLOSE, BLANK), t,
+                                      same={NEXT_HI: NEXT})  # fmt: skip
         if label is None:
             return NpcUiState(False, "button_unknown", 0.0, finds=finds)
         conf.append(1.0 - dist[label] / (2 * p.button_accept))
-        button: Button | None = "next" if label == NEXT else "close" if label == CLOSE else None
+        button: Button | None = ("next" if label in (NEXT, NEXT_HI) else "close" if label == CLOSE
+                                 else None)  # fmt: skip
         w, h = g.dialog_size
         dialog = DialogView((*fd.origin, w, h), button, brect, fd.distance, dist)
     if fm.origin is not None:
