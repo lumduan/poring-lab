@@ -163,6 +163,13 @@ def test_a_plan_that_stands_or_walks_in_a_warp_span_is_refused_never_filtered(
     nct.check_warps("town", plan, tmp_path)
     with pytest.raises(SystemExit, match="lists no warps"):
         nct.check_warps("elsewhere", plan, tmp_path)
+    # a click cell in a span refuses the CLICK arm only: a probe arm hovers and never walks there
+    only_click = [w for w in [portal(*click)] if not nct.warp_conflicts(plan, [w], clicks=False)]
+    assert only_click, "the test needs a click cell that is no stand and no control"
+    (tmp_path / "route.json").write_text(json.dumps({"warps": {"town": only_click}}))
+    nct.check_warps("town", plan, tmp_path, clicks=False)
+    with pytest.raises(SystemExit, match="inside a warp span"):
+        nct.check_warps("town", plan, tmp_path, clicks=True)
 
 
 def test_warp_lines_type_only_changes_of_stand() -> None:

@@ -260,15 +260,17 @@ def load_warps(map_name: str, kb_dir: Path = nc.KB_DIR) -> list[dict[str, Any]] 
     return list(warps[map_name]) if map_name in warps else None
 
 
-def warp_conflicts(plan: dict[str, Any], warps: Sequence[dict[str, Any]]) -> list[str]:
+def warp_conflicts(plan: dict[str, Any], warps: Sequence[dict[str, Any]],
+                   clicks: bool = True) -> list[str]:  # fmt: skip
     """Every planned cell the GM would STAND on or WALK to that lies inside a warp's trigger span
     (|dx| <= span_x and |dy| <= span_y): an @warp onto it, or a walk into it, changes the map
     (2026-10-13: a stand inside prt_church's (100,56) portal span sent the GM to prontera). Stands,
-    the control stand and the click arm's cells; empty = clear."""
+    the control stand and, when ``clicks`` (the click arm: a probe arm only hovers and never walks
+    to them), the click cells; empty = clear."""
     cells: list[tuple[str, Sequence[int]]] = [
         *(("stand", s) for n in plan["npcs"] for s in n["stands"]),
         *((("control", plan["control"]),) if plan.get("control") else ()),
-        *(("click", c["cell"]) for c in plan["clicks"]),
+        *((("click", c["cell"]) for c in plan["clicks"]) if clicks else ()),
     ]
     out = []
     for what, c in cells:
@@ -278,13 +280,15 @@ def warp_conflicts(plan: dict[str, Any], warps: Sequence[dict[str, Any]]) -> lis
     return sorted(set(out))
 
 
-def check_warps(map_name: str, plan: dict[str, Any], kb_dir: Path = nc.KB_DIR) -> None:
+def check_warps(map_name: str, plan: dict[str, Any], kb_dir: Path = nc.KB_DIR,
+                clicks: bool = True) -> None:  # fmt: skip
     """REFUSE a plan that would stand or walk into a warp span, or a map whose warps L3 does not
-    list. A refusal, never a filter: a plan that passes is exactly the plan without the check."""
+    list. A refusal, never a filter: a plan that passes is exactly the plan without the check.
+    ``clicks``: the click arm (its cells are walked to); a probe arm checks its stands only."""
     warps = load_warps(map_name, kb_dir)
     if warps is None:
         raise SystemExit(f"L3 lists no warps for {map_name}: the plan cannot be checked (refused)")
-    if bad := warp_conflicts(plan, warps):
+    if bad := warp_conflicts(plan, warps, clicks):
         raise SystemExit(f"the plan stands or walks inside a warp span: {bad[:5]} (refused)")
 
 
@@ -451,7 +455,7 @@ def run(
     )  # fmt: skip
     if not plan["npcs"]:
         raise SystemExit(f"no L3 NPC with two stands on {map_name} (coverage {cov})")
-    check_warps(map_name, plan)
+    check_warps(map_name, plan, clicks=kind == "click")
     layer = nc.NoClickLayer(npcs)
     templates = nd.load_templates(talk1.TEMPLATES)  # T2: the dialog policy needs it (fails closed)
     missing = [*templates.missing, *([] if nd.CLOSE in templates.images else [nd.CLOSE])]
