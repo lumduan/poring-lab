@@ -4323,6 +4323,9 @@ sheets are labelled.
     the safety bars are per image. What the displacement changes is WHERE the cursor sat, not
     what truth is. **Reported beside the bars (not a bar):** every morocc number without the 188
     displaced records.
+  - **Script-NPC touch areas** (checked 23:05, after npc-render B1 hit one, 3.38): no cursor@3 stand
+    and neither displaced morocc position lies inside one (morocc.txt:32's 7x7 area ends one cell
+    west of (154,118)); no touch dialog opened in any cursor@3 run.
 
 - **Truth sets built 22:52-22:54** (`cursor2_truth.py sheets --judged robust3 --item-seed 20261205
   --strip-seed 20261206` run at a6a0754, where `cursor2_truth.py`, `cursor_eval.py` and the readers
