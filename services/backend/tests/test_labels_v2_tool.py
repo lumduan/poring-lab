@@ -249,6 +249,108 @@ def test_npc_sheet_needs_the_sprites(capsys: pytest.CaptureFixture[str]) -> None
     assert "--npc-sprites" in capsys.readouterr().err
 
 
+def _png_bytes(value: int) -> bytes:
+    import io
+
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.fromarray(np.full((6, 8, 3), value, np.uint8)).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def recorded_png_session(root: Path, frames_per_shard: tuple[int, ...]) -> Path:
+    """A synthetic recorded PNG session: tar shards of <key>.png + <key>.json (the recorder's
+    member order), a manifest naming them. Frame n has t_mono_ns 1000 + n and grey level n."""
+    import io
+    import tarfile
+
+    s = root / "rec"
+    s.mkdir()
+    shards, n = [], 0
+    for i, count in enumerate(frames_per_shard):
+        name = f"shard-{i:06d}.tar"
+        with tarfile.open(s / name, "w") as tar:
+            for _ in range(count):
+                key = f"{n:09d}"
+                for ext, data in (
+                    ("png", _png_bytes(n)),
+                    ("json", json.dumps({"frame_id": n, "t_mono_ns": 1000 + n}).encode()),
+                ):
+                    info = tarfile.TarInfo(f"{key}.{ext}")
+                    info.size = len(data)
+                    tar.addfile(info, io.BytesIO(data))
+                n += 1
+        shards.append(name)
+    (s / "manifest.json").write_text(json.dumps({"format": "png", "shards": shards,
+                                                 "game_region": [0, 0, 8, 6]}))  # fmt: skip
+    return s
+
+
+def test_shard_frames_read_a_recorded_png_session_without_images(tmp_path: Path) -> None:
+    """Every n-th frame across shards (json-member order, as build_frame_cache's
+    recorded_times counts), each a seek-and-read reference to its own PNG bytes."""
+    s = recorded_png_session(tmp_path, (3, 2))
+    every1 = L.shard_frames(s)
+    assert [t for t, _ in every1] == [1000, 1001, 1002, 1003, 1004]
+    got = L.shard_frames(s, every=2)
+    assert [t for t, _ in got] == [1000, 1002, 1004]
+    assert all(L.SHARD_REF.match(ref) for _, ref in got)
+    assert got[2][1].startswith(str(s / "shard-000001.tar") + "@")
+    for t, ref in got:
+        img = np.asarray(L.open_frame(ref).convert("RGB"))
+        assert img.shape == (6, 8, 3) and int(img[0, 0, 0]) == t - 1000  # the frame's own bytes
+    # an H.264 session, a demo session and a bare directory have no shard frames
+    (tmp_path / "h").mkdir()
+    (tmp_path / "h" / "manifest.json").write_text(json.dumps({"format": "h264"}))
+    (tmp_path / "d").mkdir()
+    (tmp_path / "d" / "manifest.json").write_text(json.dumps({"kind": "demo", "shards": ["x"]}))
+    assert L.shard_frames(tmp_path / "h") == L.shard_frames(tmp_path / "d") == []
+    assert L.shard_frames(tmp_path) == []
+
+
+def test_open_frame_refuses_a_short_shard_read(tmp_path: Path) -> None:
+    s = recorded_png_session(tmp_path, (1,))
+    _t, ref = L.shard_frames(s)[0]
+    m = L.SHARD_REF.match(ref)
+    assert m is not None
+    big = f"{m['path']}@{m['offset']}+{10**9}"
+    with pytest.raises(ValueError, match="short read"):
+        L.open_frame(big)
+
+
+def test_draw_sheet_takes_shard_frames(tmp_path: Path) -> None:
+    from PIL import Image
+
+    s = recorded_png_session(tmp_path, (2,))
+    items = [{"image": ref, "box": [1.0, 1.0, 5.0, 4.0], "ncc": 0.3}
+             for _t, ref in L.shard_frames(s)]  # fmt: skip
+    out = tmp_path / "sheet.png"
+    L.draw_sheet(items, out, cols=2)
+    assert Image.open(out).size[1] == L.TILE_H + 4
+
+
+def test_npc_sheet_lists_h264_sessions_as_without_images(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """npc-sheet never decodes video: a recorded H.264 session (index only) is reported, and no
+    labeller is built for it."""
+    h = tmp_path / "h264"
+    h.mkdir()
+    (h / "manifest.json").write_text(json.dumps({"format": "h264"}))
+    (h / "stream.idx.csv").write_text("au,frame_id,idr,offset,length,t_publish_ns\n0,0,1,0,10,5\n")
+    with gzip.open(h / "packets.jsonl.gz", "wt") as fh:
+        fh.write("")
+    a = SimpleNamespace(npc_sprites=tmp_path, npc_sprite_names=tmp_path / "n.json",
+                        out_dir=tmp_path / "out", sessions=[h], every=15, tau=0.092,
+                        per_sprite=8, jobs=[909], k=0.14)  # fmt: skip
+    assert L.cmd_npc_sheet(a) == 0
+    out = json.loads(capsys.readouterr().out.split("\nsheets")[0])
+    assert out["sessions_without_images"] == ["h264"] and out["sprites"] == []
+    saved = json.loads((tmp_path / "out" / "npc_sheet.json").read_text())
+    assert saved["k"] == 0.14 and saved["sessions_without_images"] == ["h264"]
+
+
 # --- Session: which labeller a session gets -------------------------------------------------------
 
 
@@ -288,3 +390,6 @@ def test_a_recorded_png_session_gets_its_own_recording_labeller(
             fh.write("")
         L.Session(tmp_path / name, a)
     assert calls == [("recording", "rec", "v1"), ("events", "console", 55.0)]
+    # --k sets the labeller's sprite scale (v1's 0.14); without it the labeller's default stays
+    a.k = 0.14
+    assert L.Session(tmp_path / "rec", a).labeler.k == 0.14
