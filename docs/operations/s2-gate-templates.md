@@ -139,11 +139,14 @@ These typed lines go through the RDP gate, which is proven.
 
 These are the m4 / collect-v2 runbooks' steps.
 
+    $PY scripts/ro_agent.py open-terminal          # 2026-10-13 attempt 1: to-console types its tscon
+                                                   # trigger into this shell; none on screen = rc 1
     $PY scripts/cleanroom.py preflight
     $PY scripts/cleanroom.py start --hard-cap-min 120
     $PY scripts/cleanroom.py variant S2            # must end RELIABLE, left streaming
     $PY scripts/cleanroom.py checks --box-min 90
     scripts/runbooks/heartbeat.sh "$B/heartbeat.log" &      # stops on the first refusal
+    $PY scripts/ro_agent.py minimize-consoles      # attempt 1: the shell covered the client on S2
 
 - Never run the room across a question to Batt. Ask before `start`; he is at the console for
   phase A.
@@ -269,6 +272,10 @@ Pick the cut frames from `$B/gm/labels.json`:
 - The second windows prove replaces the first with the stronger evidence (both scenes). A FAIL
   there REMOVES the windows component: the gate closes again on S2. That is intended. Report it.
 - Then:
+  - (attempt 1's gap, UNTESTED) `ro_agent.py open-terminal`, so the shell is in front when `end`'s
+    `to-rdp` runs its Sunshine revert check. In attempt 1 the shell ended up behind the client and
+    covered the desktop shortcut: UNVERIFIED. If `end` still says UNVERIFIED, a person checks the
+    log by hand;
   - `cleanroom.py end`;
   - stop the heartbeat loop;
   - resume training (`RESUME=1`).
