@@ -312,3 +312,28 @@ Pick the cut frames from `$B/gm/labels.json`:
   - learn_skill1's templates;
   - cursor_gate's references, which block talk@1 and every world click on S2;
   - the minimap readers.
+
+## Runs
+
+### Attempt 1: 2026-10-13 16:00-17:02 ICT, ENDED before phase A step 4 (no person at the console). Nothing cut, nothing proven.
+
+Batt picked 16:00. Bank: `/dev/shm/poring-lab-tmp/s2-gate/20261013-1600/` (RAM).
+
+| step | result |
+|---|---|
+| 0. RDP prep | GM already fixed (Lv 1 / 1, no notices); `@warp prt_church 100 73`; `ui_gate.py check` -> clear. The typed GM line left the chat input OPEN: closed by `bench.close_chat` (through the gate) before the room. |
+| 1. enter (1st try 16:01) | `to-console` **rc 1**: "no active PowerShell console on screen: nothing typed". The tscon trigger needs the agent's "poring-lab shell" ON SCREEN, and none was. Ended the room cleanly (`cleanroom.py end`), ran `ro_agent.py open-terminal`, then preflight + start again. |
+| 1. enter (2nd try 16:05) | ENTERED 16:06, hard cap 18:05; `variant S2` **reliable** (first picture 5.7 s, ~31 fps); `checks --box-min 90` (box to 17:38); heartbeat loop up. The shell then covered the client (`--check-client`: false). Fixed with `ro_agent.py minimize-consoles` (as collect_v2 does at its start); title distance 0.3. |
+| 2. phase A start | judged clean: no window, no dialog, Base / Job Lv 1, no badge, no level-up icon. |
+| 2. windows bank | 4 rounds, 112 frames, labels spot-checked (round 1's four open frames show the right windows). |
+| 3. GM state bank | `fixed` / `none`, 4 frames. |
+| 4. NPC drives | `drive --npc garnet --attach --first 1` waited 180 s per try, 15 tries from 16:13 to 17:01: every one `attach_no_dialog`. No person clicked. |
+| end 17:02 | lock rdp / steady (SEQ 200); every exit check true. **`to-rdp` rc 3: the Sunshine revert check did NOT run.** The shell window sat behind the client and covered the desktop shortcut, so `open_terminal` refused ("shortcut is not visible: nothing clicked"). Two re-runs (17:04, 17:05) said the same. **Sunshine's revert is UNVERIFIED: a person checks `Get-Content 'C:\Program Files\Sunshine\config\sunshine.log' -Tail 5`.** |
+
+**Runbook gaps this attempt found** (to fix before attempt 2):
+- Before `cleanroom.py start`: `ro_agent.py open-terminal`, because `to-console` types the tscon trigger into that shell.
+- After `variant S2`: `ro_agent.py minimize-consoles`, so the client is in front for phase A.
+- Before `cleanroom.py end`: the shell must be findable again for the revert check (it ended up behind the client). The fix is not built yet; until then, a person checks the revert when `end` says UNVERIFIED.
+- Phase A step 4 needs Batt AT the console when it starts. Agree the moment, not only the hour.
+
+The banks of steps 2-3 are valid S2 frames. Attempt 2 banks afresh anyway: one session, as above.
