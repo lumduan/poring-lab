@@ -3600,7 +3600,7 @@ their causes; the measured footprints per job; which fix (5.7) each result point
       36 clicks it allows became a contact (Wilson 95 % up to 0.096). The cost: 25 / 61 moves
       refused (0.41).
     - A click the walk gate allowed became `npc_contact`: 9 / 71 = 0.127 (0.068-0.224).
-  - **THE T2 BORDER FIX: ITS PROOF, PRE-REGISTERED (__TIME__, before it is scored).** Code:
+  - **THE T2 BORDER FIX: ITS PROOF, PRE-REGISTERED (2026-10-13 14:53 ICT, commit 32d13bb, before it is scored).** Code:
     branch `feat/t2-border-offset` 669a8d3, NOT live.
     - **The change:** `npc_dialog.edge_share`. On the four border lines, the running median of
       (frame - template) over 15 px, clipped to +-12 grey levels, is removed before the 6-level
