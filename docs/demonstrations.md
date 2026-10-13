@@ -3494,6 +3494,24 @@ their causes; the measured footprints per job; which fix (5.7) each result point
         `button_unknown` stop into a NEXT stop.
     - **On FAIL or INCONCLUSIVE:** nothing is installed. Stop and report to Batt; the click arms
       wait.
+  - ➡️ **ATTEMPT 2 RESULT (2026-10-13 13:09-13:16 ICT; scored ~13:20): PASS. INSTALLED.**
+    - Sessions: S1 `20261013T130927-demo-talk-cal-guide` (drive `--first 3`, 78 frames) and S2
+      `20261013T131115-demo-talk-cal-guide` (single steps; 50 labelled + 8 in place). T4 and T5
+      PASS on both.
+
+      | set | labelled | agree | classes (next / menu / close / none) | verdict |
+      |---|---|---|---|---|
+      | **candidate** | 128 | **128** | 52 / 54 / 10 / 12 | **PASS** |
+      | installed (reported) | 128 | 116 | same | FAIL: the 12 parked highlighted frames -> `button_unknown` |
+
+    - **The highlight bar:** 12 labelled frames that the installed set reads `button_unknown` and
+      the candidate reads NEXT (needed >= 8). They are S2 0008-0013 and 0028-0033: both NEXT pages,
+      after their hovers.
+    - **In place (reported only):** 8 / 8 `button_unknown` with both sets (fail closed).
+    - **Installed** 13:2x: `data/ui_anchors/npc_dialog/npc_dialog_next_hi.npy`, sha256
+      `695a0e0d406352f76446ae11fc240b3f5fc2f2cf4dccdaa6443cd165e98d57c9`, read back equal.
+      `talk1.TEMPLATES` loads it.
+    - Next, per the amendment: the prontera click arm resumes, then the church click arm.
 
 ### 3.33 The GM's IMMUNITY: a test condition for the visual-diversity block (pre-registered 2026-10-09 ~14:05 ICT / 07:05 UTC, BEFORE the check; Batt: "keep gl_prison; a GM doesn't need to fear monsters. Make the GM safe without changing what the bot sees")
 **The condition, PRIMARY:** rAthena's `@monsterignore`, granted to the GM's group 20 (`groups.yml`,

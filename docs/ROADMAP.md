@@ -145,7 +145,9 @@ flowchart TD
 - **Labels v2:** the S2 UI-gate session is scheduled with Batt (~15 min of his clicks). Warp readings
   accepted provisionally; prt_church (100,56) to be read with more frames; N1 extends to 909 and the
   church's off-route sprites.
-- **Client queue:** the highlighted-NEXT T2 template, then npc-click's click arms (robust2 gate,
+- **Client queue:** ~~the highlighted-NEXT T2 template~~ ➡️ DONE 2026-10-13: proven on fresh
+  sessions (attempt 2 PASS 128 / 128; attempt 1 FAIL 104 / 110 on in-place hover frames, recorded) and
+  INSTALLED ([demonstrations.md](demonstrations.md) 3.32a); then npc-click's click arms (robust2 gate,
   amended); the merchant dialog collected by Claude (GM warp, decline path); talk@1 reworked onto the
   minimap-first walk (no /ex); @streset / @skreset for group 20.
 - **walk@17:** "/where once per need" wins over the repeat rule; never draw a harness start inside a
