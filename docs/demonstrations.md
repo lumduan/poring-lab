@@ -4497,6 +4497,18 @@ plans need (733, 734, 86, 59, 117, 726, 105, 84, 90, 92), and 0 problems. sha256
     `ended: complete` (a bookkeeping bug, fixed in the same commit); it is KEPT and not scored.
   - **B2 (alberta_in) and B3 (new_1-2) are unaffected:** L3 lists no touch area on either map.
     B1's replacement is Batt's call; a proposal follows when it is planned.
+- ➡️ **PROPOSED amendment (NOT accepted; Batt decides): B1' = prontera `--near 148,326 --seed
+  20261190`** (B1's seed kept). Chosen on the PLAN ALONE, before any B1 hover (B1 has none), by
+  B1's own rule: the densest prontera L3 group away from cursor@2/@3's spot (156,191; Chebyshev
+  >= 20) and from the 722 flags (> 12). Every candidate (73: each drawn L3 NPC's cell as --near) was
+  planned with B1's seed, and those failing any of the three refusals were dropped.
+  - B1': 4 NPCs (sprites 112 at (152,326), 734 at (148,326), 105 at (151,330) and (160,330)),
+    1,000 probes; 0 conflicts. All 3 sprites are in the pre-built table (no problems).
+  - B1 had 5 NPCs / 1,316 probes. The B runs then plan 3,044 probes against 3,360. The n rule is
+    unchanged (>= 600 TALK points in total and >= 150 per run; fewer = INCONCLUSIVE).
+  - The runners-up (816-814 probes): (29,200), (282,208). (55,350), 812 probes, is refused: one of
+    its stands is inside #tour.
+  - Search: `/dev/shm/poring-lab-tmp/warpcheck/b1_search.py` (local), 23:04-23:11.
 
 **Not decided here (Batt):**
 - the hit box itself (a box, against "not a box or a cell guess");
