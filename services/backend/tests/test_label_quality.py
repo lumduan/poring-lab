@@ -297,3 +297,56 @@ def test_repeated_constants_match_the_labeller(lq: ModuleType) -> None:
     assert tuple(sorted(labels.CLASSES, key=labels.CLASSES.__getitem__)) == lq.CLASSES
     bfc = load("build_frame_cache")
     assert set(lq.SCENE_MAPS) == set(bfc.SCENE_MAPS)
+
+
+# --- the dead-GM walk signature and a detector's misses ------------------------------------------
+
+
+def test_dead_span_walks_flags_a_walk_inside_a_hits_damage_motion(lq: ModuleType) -> None:
+    s = 1_000_000_000
+    events = [
+        {"t_mono_ns": 10 * s, "type": "act", "target_gid": 7, "damage": 6, "dmotion": 796},
+        {
+            "t_mono_ns": 10 * s + 153_000_000,
+            "type": "self_move",
+            "x0": 98,
+            "y0": 109,
+            "x1": 94,
+            "y1": 108,
+        },
+        {"t_mono_ns": 30 * s, "type": "self_move", "x0": 1, "y0": 1, "x1": 2, "y1": 2},
+        {"t_mono_ns": 40 * s, "type": "act", "target_gid": 7, "damage": 3, "dmotion": 500},
+        {"t_mono_ns": 45 * s, "type": "act", "target_gid": 9, "damage": 3, "dmotion": 5000},
+    ]
+    spans = [(12 * s, 20 * s), (46 * s, 1 << 62)]
+    rows = lq.dead_span_walks(events, 7, spans, 0)
+    first, second = rows
+    assert first["start_s"] == 12.0 and first["end_s"] == 20.0
+    assert first["last_walk"] == {
+        "from": [98, 109],
+        "to": [94, 108],
+        "ms_before_death": 1847,
+        "ms_after_last_hit": 153,
+        "in_damage_motion": True,
+    }
+    assert second["end_s"] is None
+    assert second["last_walk"]["to"] == [2, 2] and second["last_walk"]["in_damage_motion"] is False
+
+
+def test_model_misses_splits_by_the_labels_own_misses_and_the_dead_gm(lq: ModuleType) -> None:
+    alive = frame_with_units()
+    alive["self_moving"] = False
+    m1 = alive["v1"][0]
+    alive["hand"] = [
+        b("monster", m1["x1"], m1["y1"], m1["x2"], m1["y2"], gid=1),
+        b("monster", 270, 540, 330, 600, gid=3),
+    ]
+    dead = dict(frame_with_units(), frame_id=1, self_dead=True, self_moving=False)
+    dead["hand"] = [b("monster", 100, 100, 144, 140, gid=1)]
+    preds = {"0": [], "1": [b("monster", 200, 0, 244, 40)]}
+    r = lq.model_misses([alive, dead], preds)
+    assert (r["tp"], r["fp"], r["fn"]) == (0, 1, 3)
+    assert r["fn_by_label_cause_gm_alive"] == {"label_hit": 1, "ui_window:chat": 1}
+    assert r["by_gm"]["gm_dead"] == {"frames": 1, "tp": 0, "fn": 1, "fp": 1}
+    assert r["gm_dead_fp_offset_to_nearest_hand"]["dx"]["median"] == 100.0
+    assert r["gm_dead_fp_offset_to_nearest_hand"]["dy"]["median"] == -100.0

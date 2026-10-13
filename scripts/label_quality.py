@@ -11,6 +11,8 @@ v2"; docs/planning/label-quality.md).
     label_quality.py report DUMP
         Matching (IoU >= 0.5 and position), per-pair geometry, the systematic gaps, the FN / FP
         causes and the ranked single-gap what-ifs -> JSON on stdout.
+    label_quality.py models DUMP PRED.json [PRED.json ...]
+        A detector's gold-set misses beside the labels' own (its predict_dir output; no model run).
     label_quality.py census CACHE_MANIFEST [--step-s 1]
         How much of a frame cache's sessions each gap touches (packets only).
 
@@ -314,6 +316,7 @@ SCENE_MAPS = (
     "prt_church",
 )  # build_frame_cache.SCENE_MAPS (test_label_quality pins it)
 CENSUS_LAG_MS = 125
+NEAR_MISS_PX = 40.0  # model_misses: a detection this close to a missed hand box is a near miss
 
 
 def census_frame(f: dict[str, Any], lag_ms: int = CENSUS_LAG_MS) -> dict[str, Any]:
@@ -354,6 +357,45 @@ def census_frame(f: dict[str, Any], lag_ms: int = CENSUS_LAG_MS) -> dict[str, An
     return out
 
 
+def dead_span_walks(
+    events: Sequence[dict[str, Any]], aid: int | None, spans: Sequence[tuple[int, int]], t0: int
+) -> list[dict[str, Any]]:
+    """Per dead-GM span: the last walk the server acknowledged for us before the death, and whether
+    it came inside the damage motion of a hit on us (``act`` with our gid as target, ``dmotion``
+    ms). Such a walk is one the client may never show (2026-10-13: the indoor-b death); if it does
+    not, our position in the packets runs ahead of the camera for the whole span. Times are seconds
+    from ``t0``; a CANDIDATE signature only -- pixels decide."""
+    evs = sorted(events, key=lambda e: int(e["t_mono_ns"]))
+    hits = [
+        (int(e["t_mono_ns"]), float(e.get("dmotion") or 0))
+        for e in evs
+        if e.get("type") == "act"
+        and aid is not None
+        and e.get("target_gid") == aid
+        and (e.get("damage") or 0) > 0
+    ]
+    out = []
+    for a, b in spans:
+        row: dict[str, Any] = {
+            "start_s": round((a - t0) / 1e9, 2),
+            "end_s": round((b - t0) / 1e9, 2) if b < 1 << 61 else None,
+        }
+        walks = [e for e in evs if e.get("type") == "self_move" and int(e["t_mono_ns"]) <= a]
+        if walks:
+            w = walks[-1]
+            tw = int(w["t_mono_ns"])
+            before = [h for h in hits if h[0] <= tw]
+            row["last_walk"] = {
+                "from": [w.get("x0"), w.get("y0")],
+                "to": [w.get("x1"), w.get("y1")],
+                "ms_before_death": round((a - tw) / 1e6),
+                "ms_after_last_hit": round((tw - before[-1][0]) / 1e6) if before else None,
+                "in_damage_motion": bool(before) and tw - before[-1][0] <= before[-1][1] * 1e6,
+            }
+        out.append(row)
+    return out
+
+
 def census(
     sessions: Sequence[tuple[str, str]],
     datasets: Path,
@@ -383,7 +425,9 @@ def census(
         )
         with gzip.open(path / name, "rt") as fh:
             events = [json.loads(line) for line in fh]
-        dead = self_dead_spans(events, infer_self_aid(events))
+        aid = infer_self_aid(events)
+        dead = self_dead_spans(events, aid)
+        spans = dead_span_walks(events, aid, dead, int(manifest["t0_mono_ns"]))
         tally: Counter[str] = Counter()
         shifts: list[float] = []
         t = int(manifest["t0_mono_ns"])
@@ -405,6 +449,21 @@ def census(
             tally["indoor_frames"] += "indoor" in str(f.get("projection"))
             tally["self_moving_frames"] += bool(f.get("self_moving"))
             tally["self_dead_frames"] += any(a <= tw <= b for a, b in dead)
+            for (a, b), sp in zip(dead, spans, strict=True):
+                if a <= tw <= b:
+                    sp["frames"] = sp.get("frames", 0) + 1
+                    lw = sp.get("last_walk")
+                    if lw and "shift_px_if_not_shown" not in lw and f.get("self_pos"):
+                        # labels minus pixels, for a unit at our packet cell, if the camera
+                        # stayed where that walk started
+                        proj = v1.projectors[f["map"]][0]
+                        sx, sy = f["self_pos"]
+                        fx, fy = lw["from"]
+                        import numpy as np
+
+                        ((u0, v0),) = proj(np.array([[0.0, 0.0]]), (int(sx), int(sy)))
+                        ((u1, v1_),) = proj(np.array([[sx - fx, sy - fy]]), (int(fx), int(fy)))
+                        lw["shift_px_if_not_shown"] = [round(u0 - u1, 1), round(v0 - v1_, 1)]
             c = census_frame(f)
             shifts.append(c.pop("self_shift_px"))
             tally["frames_self_shift_gt_10px"] += shifts[-1] > 10
@@ -418,6 +477,7 @@ def census(
             "split": split,
             **dict(tally),
             "self_shift_px_when_moving": describe(x for x in shifts if x > 0),
+            "dead_spans": spans,
         }
         print(json.dumps({sid: rows[sid]}), file=sys.stderr, flush=True)
     totals: dict[str, Counter[str]] = defaultdict(Counter)
@@ -911,6 +971,7 @@ def causes(
                 {
                     "frame_id": f["frame_id"],
                     "side": "fn",
+                    "hand_index": i,
                     "gid": gid,
                     "cause": why,
                     "provenance": provenance(h, f.get("bundle")),
@@ -1310,6 +1371,108 @@ def lofo_offset(
     return out, (statistics.median(-p[axis] for p in use) if use else None)
 
 
+def model_misses(
+    frames: Sequence[dict[str, Any]], preds: dict[str, list[dict[str, Any]]], source: str = "v1"
+) -> dict[str, Any]:
+    """A detector's gold-set misses (position metric, monsters; its detections as
+    poring_vision.predict_dir writes them) set beside the LABELS' own misses: each hand box the
+    model misses is ``label_hit`` (the training label pointed at it) or the cause the label missed
+    it by (``causes``); each false detection is counted by whether our character walked in that
+    frame and whether its centre lies under a UI window. No model is run here."""
+    label_fn = {
+        (r["frame_id"], r["hand_index"]): r["cause"]
+        for r in causes(frames, source, "position")["rows"]
+        if r["side"] == "fn"
+    }
+    fn: Counter[str] = Counter()
+    fn_alive: Counter[str] = Counter()
+    fp: Counter[str] = Counter()
+    near_miss: list[dict[str, Any]] = []
+    no_det: list[str] = []
+    by_gm: dict[str, Counter[str]] = {"gm_alive": Counter(), "gm_dead": Counter()}
+    dead_fp_offset: list[tuple[float, float]] = []
+    tp = 0
+    for f in frames:
+        truth = [b for b in f["hand"] if b["cls"] == "monster"]
+        det = [b for b in preds.get(str(f["frame_id"]), []) if b["cls"] == "monster"]
+        pairs = greedy_position([rect_of(b) for b in truth], [rect_of(b) for b in det])
+        tp += len(pairs)
+        mt, mp = {i for i, _, _ in pairs}, {j for _, j, _ in pairs}
+        gm = by_gm["gm_dead" if f.get("self_dead") else "gm_alive"]
+        gm["frames"] += 1
+        gm["tp"] += len(pairs)
+        gm["fn"] += len(truth) - len(pairs)
+        gm["fp"] += len(det) - len(pairs)
+        if f.get("self_dead"):
+            # a false detection under a dead GM: its offset from the nearest hand box
+            for j, d in enumerate(det):
+                if j in mp or not truth:
+                    continue
+                c = centre(rect_of(d))
+                hc = min((centre(rect_of(h)) for h in truth),
+                         key=lambda q: math.hypot(q[0] - c[0], q[1] - c[1]))  # fmt: skip
+                dead_fp_offset.append((c[0] - hc[0], c[1] - hc[1]))
+        free = [d for j, d in enumerate(det) if j not in mp]
+        for i, h in enumerate(truth):
+            if i in mt:
+                continue
+            why = label_fn.get((f["frame_id"], i), "label_hit")
+            fn[why] += 1
+            if not f.get("self_dead"):
+                fn_alive[why] += 1
+            if why != "label_hit":
+                continue
+            # the model missed a unit its label pointed at: its nearest unpaired detection
+            hc = centre(rect_of(h))
+            near = sorted(
+                (math.hypot(c[0] - hc[0], c[1] - hc[1]), c)
+                for c in (centre(rect_of(d)) for d in free)
+            )
+            gid, _ = link_unit(h, f)
+            state = (f.get("entities", {}).get(gid) or {}).get("state") if gid else None
+            if near and near[0][0] <= NEAR_MISS_PX:
+                c = near[0][1]
+                near_miss.append({"dx": c[0] - hc[0], "dy": c[1] - hc[1], "state": state})
+            else:
+                no_det.append(str(state))
+        for j, d in enumerate(det):
+            if j in mp:
+                continue
+            c = centre(rect_of(d))
+            under = any(
+                inside(c, (rx, ry, rx + rw, ry + rh))
+                for name, (rx, ry, rw, rh) in zip(UI_NAMES, UI_RECTS_PX, strict=True)
+                if name != "minimap"
+            )
+            fp[
+                ("self_moving_frame" if f.get("self_moving") else "self_still_frame")
+                + (":under_ui_window" if under else "")
+            ] += 1
+    n_fp, n_fn = sum(fp.values()), sum(fn.values())
+    return {
+        "tp": tp,
+        "fp": n_fp,
+        "fn": n_fn,
+        "precision": _ratio(tp, tp + n_fp),
+        "recall": _ratio(tp, tp + n_fn),
+        "fn_by_label_cause": dict(fn.most_common()),
+        "fn_by_label_cause_gm_alive": dict(fn_alive.most_common()),
+        "label_hit_near_miss": {
+            "n": len(near_miss),
+            "dx": describe(m["dx"] for m in near_miss),
+            "dy": describe(m["dy"] for m in near_miss),
+            "states": dict(Counter(str(m["state"]) for m in near_miss)),
+        },
+        "label_hit_no_detection": dict(Counter(no_det)),
+        "fp_by_frame": dict(fp.most_common()),
+        "by_gm": {k: dict(v) for k, v in by_gm.items()},
+        "gm_dead_fp_offset_to_nearest_hand": {
+            "dx": describe(x for x, _ in dead_fp_offset),
+            "dy": describe(y for _, y in dead_fp_offset),
+        },
+    }
+
+
 def _envelope(frames: Sequence[dict[str, Any]]) -> dict[str, Any]:
     """How much the phase-unknown ENVELOPE (the union of an action's frames) inflates a v1 box over
     the action's single frames: envelope / median single-frame size, per state (sprite px)."""
@@ -1548,6 +1711,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     ca.add_argument("shard", type=Path, help="the v1 cache shard holding the session's frames")
     rp = sub.add_parser("report")
     rp.add_argument("dump", type=Path)
+    mo = sub.add_parser("models")
+    mo.add_argument("dump", type=Path)
+    mo.add_argument("preds", type=Path, nargs="+", help="predict_dir outputs on the gold frames")
     ce = sub.add_parser("census")
     ce.add_argument("cache_manifest", type=Path, help="a frame cache's manifest.json (its split)")
     ce.add_argument("--datasets", type=Path, default=NAS)
@@ -1584,6 +1750,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return 0
     d = json.loads(a.dump.read_text())
+    if a.cmd == "models":
+        out = {}
+        for path in a.preds:
+            p = json.loads(path.read_text())
+            out[path.name] = {"weights": p.get("weights"), "conf": p.get("conf"),
+                              **model_misses(d["frames"], p["frames"])}  # fmt: skip
+        print(_json(out))
+        return 0
     print(_json(cache_check(d, a.shard) if a.cmd == "cache" else report(d)))
     return 0
 
