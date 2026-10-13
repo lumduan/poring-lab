@@ -147,16 +147,22 @@ flowchart TD
   ([demonstrations.md](demonstrations.md) 3.38) and runs after cursor@3. On the design data the
   drawn mask holds only 39 % of TALK hovers, so the region under test adds a PROVISIONAL hit box;
   that box is Batt's decision.
-- **Labels v2:** the S2 UI-gate session is scheduled with Batt (~15 min of his clicks). Warp readings
-  accepted provisionally; prt_church (100,56) to be read with more frames; N1 extends to 909 and the
-  church's off-route sprites.
+- **Labels v2:** ~~the S2 UI-gate session is scheduled with Batt (~15 min of his clicks)~~ ➡️
+  attempt 1 (2026-10-13 16:00-17:02) entered the room and banked phase A steps 1-3, but no NPC
+  click came. It ended cleanly; Sunshine's revert is UNVERIFIED (a person checks). The runbook gaps
+  are recorded ([s2-gate-templates.md](operations/s2-gate-templates.md) "Runs"). **Attempt 2 needs
+  a time with Batt AT the console.** Warp readings accepted provisionally. ~~prt_church (100,56) to
+  be read with more frames~~ ➡️ 24 crops banked 17:24; the sheet waits for Batt's reading. N1
+  extends to 909 and the church's off-route sprites.
 - **Client queue:** ~~the highlighted-NEXT T2 template~~ ➡️ DONE 2026-10-13: proven on fresh
   sessions (attempt 2 PASS 128 / 128; attempt 1 FAIL 104 / 110 on in-place hover frames, recorded) and
   INSTALLED ([demonstrations.md](demonstrations.md) 3.32a). ➡️ The highlighted CLOSE (CLOSE_HI) as
   well, after the prontera arm's second stop (Batt: "prove then resume"; PASS 172 / 172, installed
   14:38). ➡️ And a T2 border fix for RDP codec-tile shade shifts: two click-arm stops; attempt 2
-  PASS on fresh drives; merged fb2b5ac. Then npc-click's click arms (robust2 gate, amended;
-  prontera and church PARKED until after the S2 session; scored in segments); ~~the merchant
+  PASS on fresh drives; merged fb2b5ac. ~~Then npc-click's click arms~~ ➡️ **npc-click@1 COMPLETE
+  2026-10-13 17:23** (both arms, scored in segments, safety 0): the L3 no-click layer refuses 11 / 11
+  contact clicks, and 0 / 87 of the clicks it allows became a contact, at a cost of 35 / 122 moves.
+  3.32a's decision rule is met; what it means for walk@17 is Batt's call; ~~the merchant
   dialog (Claude, GM warp, decline path)~~ ➡️ collected 15:37; talk@1 reworked onto the
   minimap-first walk (no /ex); @streset / @skreset for group 20.
 - **walk@17:** "/where once per need" wins over the repeat rule; never draw a harness start inside a
