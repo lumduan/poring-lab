@@ -154,3 +154,33 @@ higher).** NPCs: identical (52 / 1 / 2, precision 0.981, recall 0.963 for both).
   the v2 labels exclude dead-GM frames (`self_dead`).
 
 - **Mid-epoch checkpoints, recorded by the overnight chain BEFORE v1 started (2026-10-08 23:44:01 ICT):** FAIL: proof run B2 (the first --resume from mid.pt, expected to die at rc 86) CRASHED with rc 1, RuntimeError in fused Adam (params, grads, exp_avgs and exp_avg_sqs must have the same dtype, device and layout) right after the bitwise state restore; compare was not run. v1 keeps epoch-level checkpoints (MID_CKPT unset), as pre-registered. The proof: `/dev/shm/poring-lab-tmp/gpu-night/proof-B2-221713.out`.
+
+## Deployment parity: v1 as the LIVE CPU detector (pre-registered 2026-10-13 ~12:00 ICT, BEFORE the export)
+**Batt (2026-10-13, decision 10):** "v1 replaces v0 as the live detector (CPU ONNX export, verify
+parity on the gold set first)."
+
+**The export:** v1's scored weights, `data/train/v1png-20261008/weights/last.pt` (sha256
+`03d53979…258ca`, epoch 30). The ONNX is exported exactly as v0's (docs/operations/detector-cpu.md):
+- in the detector's own RAM environment, on the CPU;
+- `imgsz=(736, 1280)`, `simplify=True`;
+- to `/dev/shm/poring-lab-detector/model/v1png-last-736x1280.onnx`.
+No container and no GPU.
+
+**The check:** the LIVE pipeline (`unit_detector.UnitDetector`: onnxruntime on 8 threads, our
+letterbox / decode / NMS, conf 0.25, NMS IoU 0.5) runs on the 27 gold frames, for BOTH models:
+- v1's new ONNX;
+- v0's deployed ONNX (`v0png-best-736x1280.onnx`), as the like-for-like baseline.
+
+Both are scored by `gold_eval.py score --metric position` (the primary; IoU reported), beside
+v1's PyTorch numbers (monsters 83 / 9 / 17, P 0.902, R 0.830).
+
+**The bar (both must hold, monsters, position metric):**
+- (a) **parity:** the v1 ONNX's monster precision AND recall are each within 0.03 of v1 PyTorch's
+  (P >= 0.872, R >= 0.800);
+- (b) **no regression live:** the v1 ONNX's monster precision AND recall are each >= v0's deployed
+  ONNX on the same pipeline.
+
+**If both hold:** `unit_detector.MODEL` points at the v1 ONNX (the classes are the same: player /
+monster / npc). The v0 ONNX stays beside it for a rollback, and detector-cpu.md records the swap.
+**If either fails:** v0 stays live and the gap is reported.
+NPCs are reported, not a bar (v1 and v0 tied on the gold NPCs in PyTorch).
