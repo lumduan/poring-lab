@@ -16,9 +16,14 @@ detector runs in its OWN environment, in RAM.
   no ultralytics code at decision time.
 - `scripts/unit_detector.py`: the host client (spawns the worker, frames over a pipe). It FAILS
   CLOSED: no environment or model raises `DetectorUnavailable`, and a rule must not click then.
-- The model: v0-PNG (`data/train/v0png-20261006/weights/best.pt`, 30 epochs, mAP50 0.864), exported
-  to ONNX with a 1280 x 736 input (~180 ms on 8 threads; the square 1280 input took ~500 ms).
-  Classes: player / monster / npc.
+- **The model (since 2026-10-13, Batt decision 10): v1** (`data/train/v1png-20261008/weights/last.pt`,
+  epoch 30, sha256 `03d53979…`), exported the same way to `model/v1png-last-736x1280.onnx`.
+  - Deployment parity on the gold set (docs/benchmarks/v1-vs-v0png.md), position metric, monsters: v1
+    ONNX 83 / 8 / 17 (P 0.912, R 0.830), vs v1 PyTorch 0.902 / 0.830, vs v0's ONNX 0.868 / 0.790.
+  - ~263 ms median per 1280 x 720 frame on 8 threads (gold frames, 2026-10-13).
+- **Before it:** v0-PNG (`data/train/v0png-20261006/weights/best.pt`, 30 epochs, mAP50 0.864), exported
+  to ONNX with a 1280 x 736 input (~180 ms on 8 threads; the square 1280 input took ~500 ms). It stays
+  in `model/` for a rollback (`unit_detector.V0_MODEL`). Classes: player / monster / npc (both models).
 
 ## Rebuild after a host reboot (`/dev/shm` is wiped)
 All of it lives in RAM; nothing touches the shared disk, the host `.venv` or `uv.lock`.
@@ -28,10 +33,11 @@ All of it lives in RAM; nothing touches the shared disk, the host `.venv` or `uv
     uv venv -q .venv --python 3.12
     uv pip install -q --python .venv/bin/python --index-url https://download.pytorch.org/whl/cpu torch torchvision
     uv pip install -q --python .venv/bin/python "ultralytics==8.4.165" onnx onnxslim onnxruntime opencv-python-headless
-    cp ~/docker/poring-lab/data/train/v0png-20261006/weights/best.pt model/v0png-best.pt
-    cd model && ../.venv/bin/python -c "from ultralytics import YOLO; import shutil; \
-        shutil.move(YOLO('v0png-best.pt').export(format='onnx', imgsz=(736, 1280), simplify=True, device='cpu'), \
-        'v0png-best-736x1280.onnx')"
+    cp ~/docker/poring-lab/data/train/v1png-20261008/weights/last.pt model/v1png-last.pt     # LIVE (v1)
+    cp ~/docker/poring-lab/data/train/v0png-20261006/weights/best.pt model/v0png-best.pt     # rollback
+    cd model && for m in v1png-last v0png-best; do ../.venv/bin/python -c "from ultralytics import YOLO; import shutil; \
+        shutil.move(YOLO('$m.pt').export(format='onnx', imgsz=(736, 1280), simplify=True, device='cpu'), \
+        '$m-736x1280.onnx')"; done
     rm -rf /dev/shm/poring-lab-detector/uv-cache        # ~1.4 GB of RAM back
 
 Check the export against the pre-registration (sha256 of the .pt is pinned there):

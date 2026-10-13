@@ -7,7 +7,7 @@ verdict_date: 2026-10-10
 verdict_ticket: null
 supersedes: null
 related: [../phase3-plan.md, v0-png-vs-jpeg.md]
-next_action: "➡️ 2026-10-13 (Batt, decision 10): v1 REPLACES v0 as the live detector: CPU ONNX export, parity verified on the gold set FIRST, then deploy. History: SCORED 2026-10-10: v1 >= v0-PNG on the primary (gold, position, monsters: P 0.902 vs 0.857, R 0.830 vs 0.780); v1b (2026-10-12) did not beat v1."
+next_action: "➡️ 2026-10-13: v1 is the LIVE CPU detector (deployment parity PASS on the gold set: P 0.912 / R 0.830 vs v0 ONNX 0.868 / 0.790). Batt decision 10. History: SCORED 2026-10-10: v1 >= v0-PNG on the primary (gold, position, monsters: P 0.902 vs 0.857, R 0.830 vs 0.780); v1b (2026-10-12) did not beat v1."
 ---
 
 # v1 vs v0-PNG: the same frames, the same format, different labels (pre-registered 2026-10-07)
@@ -155,7 +155,7 @@ higher).** NPCs: identical (52 / 1 / 2, precision 0.981, recall 0.963 for both).
 
 - **Mid-epoch checkpoints, recorded by the overnight chain BEFORE v1 started (2026-10-08 23:44:01 ICT):** FAIL: proof run B2 (the first --resume from mid.pt, expected to die at rc 86) CRASHED with rc 1, RuntimeError in fused Adam (params, grads, exp_avgs and exp_avg_sqs must have the same dtype, device and layout) right after the bitwise state restore; compare was not run. v1 keeps epoch-level checkpoints (MID_CKPT unset), as pre-registered. The proof: `/dev/shm/poring-lab-tmp/gpu-night/proof-B2-221713.out`.
 
-## Deployment parity: v1 as the LIVE CPU detector (pre-registered 2026-10-13 ~12:00 ICT, BEFORE the export)
+## Deployment parity: v1 as the LIVE CPU detector (pre-registered 2026-10-13 ~11:40 ICT at 202a4e8, BEFORE the export)
 **Batt (2026-10-13, decision 10):** "v1 replaces v0 as the live detector (CPU ONNX export, verify
 parity on the gold set first)."
 
@@ -184,3 +184,28 @@ v1's PyTorch numbers (monsters 83 / 9 / 17, P 0.902, R 0.830).
 monster / npc). The v0 ONNX stays beside it for a rollback, and detector-cpu.md records the swap.
 **If either fails:** v0 stays live and the gap is reported.
 NPCs are reported, not a bar (v1 and v0 tied on the gold NPCs in PyTorch).
+
+**➡️ RESULT (2026-10-13 11:44-11:47 ICT, scored once as written): PASS on (a) and (b) -> v1 is the LIVE
+CPU detector.**
+- **The export:** 28 s on the CPU; the .pt's sha256 matches the scored weights.
+- **Speed:** ~263 ms median per gold frame on 8 threads (v0's ONNX: 265 ms).
+- **Gold set, position metric:**
+
+  | model (pipeline) | monsters TP / FP / FN | P | R | NPCs TP / FP / FN |
+  |---|---|---|---|---|
+  | v1 PyTorch (`predict_dir`, the reference) | 83 / 9 / 17 | 0.902 | 0.830 | 52 / 1 / 2 |
+  | **v1 ONNX, live CPU pipeline** | **83 / 8 / 17** | **0.912** | **0.830** | 52 / 1 / 2 |
+  | v0 ONNX, live CPU pipeline (deployed until now) | 79 / 12 / 21 | 0.868 | 0.790 | 52 / 1 / 2 |
+
+  - (a) parity: P 0.912 and R 0.830 are within 0.03 of 0.902 / 0.830. **Met.**
+  - (b) no regression live: both are >= v0's ONNX (0.868 / 0.790). **Met.**
+- **Reported, no decision:** the IoU >= 0.5 metric (monsters):
+  - v1 ONNX P 0.495, R 0.45;
+  - v1 PyTorch 0.522 / 0.48;
+  - v0 ONNX 0.626 / 0.57.
+
+  The gold set encodes v0's box convention, so this metric favours v0 by construction. Closing
+  that convention gap is decision 11 (label quality).
+- **Deployed:** `unit_detector.MODEL` = `model/v1png-last-736x1280.onnx`; `V0_MODEL` is kept for a
+  rollback; detector-cpu.md is updated. The predictions are `pred-v1onnx-cpu.json` /
+  `pred-v0onnx-cpu.json` in the gold dir (local).

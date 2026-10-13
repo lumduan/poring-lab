@@ -3181,6 +3181,9 @@ there, the strict count reported.
 - A's per-map minimap check (walk17.md A) belongs to the visual-diversity block and is
   pre-registered with it.
 
+> ➡️ **2026-10-13: the CPU detector this rule uses is now v1** (Batt decision 10; deployment parity PASS,
+> v1-vs-v0png.md). walk@17's tuning runs, still to come, run with it: recorded here before they run.
+
 **Expected** (Claude's reading of walk@15's four tuning sessions, re-read offline 14:25 ICT; NOT a
 bar):
 - **Outdoors ≈ walk@15 (49, 48).**

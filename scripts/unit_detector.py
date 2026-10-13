@@ -20,7 +20,10 @@ import numpy as np
 
 ENV = Path("/dev/shm/poring-lab-detector")
 PYTHON = ENV / ".venv/bin/python"
-MODEL = ENV / "model/v0png-best-736x1280.onnx"  # v0-PNG (2026-10-06, 30 epochs), 1280 x 736 input
+# v1 (labels v1, 30 epochs): LIVE since 2026-10-13 (Batt decision 10), after the gold-set deployment
+# parity in docs/benchmarks/v1-vs-v0png.md. Rollback: V0_MODEL. 1280 x 736 input, classes as v0.
+MODEL = ENV / "model/v1png-last-736x1280.onnx"
+V0_MODEL = ENV / "model/v0png-best-736x1280.onnx"  # v0-PNG (2026-10-06, 30 epochs)
 WORKER = Path(__file__).resolve().parent / "detector_worker.py"
 NAMES = ("player", "monster", "npc")
 CONF, IOU, THREADS = 0.25, 0.5, 8

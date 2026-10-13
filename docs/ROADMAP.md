@@ -137,7 +137,7 @@ flowchart TD
 - **Cursor:** the live gate SWITCHED to robust2 (safety-driven, departs from 3.36's bar 4, which stays
   the target; demonstrations.md 3.36 ADOPTION). Next: cursor@3, the windmill (per-map animated regions
   masked + a fresh background per hover), pre-registered first.
-- **Detector:** v1 REPLACES v0 live: CPU ONNX export, parity on the gold set first. **Next training:**
+- **Detector:** v1 REPLACES v0 live: ➡️ DONE 2026-10-13 (deployment parity PASS on the gold set: v1 ONNX P 0.912 / R 0.830 vs v0 ONNX 0.868 / 0.790; `unit_detector.MODEL`). **Next training:**
   LABEL QUALITY toward Batt's gold convention (auto-label boxes vs gold, the systematic gaps) before
   labels v2; no more epochs on v1.
 - **Labels v2:** the S2 UI-gate session is scheduled with Batt (~15 min of his clicks). Warp readings
