@@ -172,6 +172,13 @@ class Params:
     edge_accept: float = 0.05  # the same share on the four border LINES alone (``edge_mask``) ...
     edge_absent: float = 0.3  # ... absent from here: another white window (the hotbar) differs
     #                           from ours in 24 % of the mask but in 55-62 % of these lines
+    # The border lines tolerate a LOCALLY UNIFORM shade offset of at most this many grey levels,
+    # taken as the running median of (frame - template) over ``edge_offset_run`` px of the line
+    # (2026-10-13: an RDP codec tile shifted part of the dialog's bottom line by 7 levels, just over
+    # pixel_tol, and the dialog read "uncertain"). A structural difference (another window's white,
+    # +57 on these lines) is far beyond it and still differs.
+    edge_offset_max: float = 12.0
+    edge_offset_run: int = 15
     button_accept: float = 6.0  # a button image matches at most this ...
     button_margin: float = 4.0  # ... and beats the other images of its place by this
     arrow_accept: float = 8.0  # a scroll arrow (masked to its own pixels) matches at most this
@@ -389,6 +396,32 @@ def score_at(gray: Gray, tmpl: Gray, mask: Gray, origin: tuple[int, int],
     return float(d.sum() / s), float(((d > pixel_tol) * mask).sum() / s)
 
 
+def edge_share(gray: Gray, tmpl: Gray, origin: tuple[int, int], name: str, p: Params,
+               g: Geometry = GEOMETRY) -> float | None:  # fmt: skip
+    """The share of the four border lines' pixels (``edge_mask``) that differ from the template by
+    more than ``pixel_tol`` AFTER removing a locally uniform offset (the running median of the
+    signed difference over ``edge_offset_run`` px, clipped to +-``edge_offset_max``); None off the
+    frame."""
+    crop = _crop(gray, (origin[0], origin[1], tmpl.shape[1], tmpl.shape[0]))
+    if crop is None:
+        return None
+    w, h = g.size(name)
+    c = g.corner
+    ax, ay = slice(c, w - c), slice(c, h - c)
+    lines = [(crop[2, ax], tmpl[2, ax]), (crop[h - 3, ax], tmpl[h - 3, ax]),
+             (crop[ay, 2], tmpl[ay, 2]), (crop[ay, w - 3], tmpl[ay, w - 3])]  # fmt: skip
+    k = max(1, int(p.edge_offset_run)) | 1  # odd
+    differ = total = 0
+    for got, want in lines:
+        d = np.asarray(got, np.float32) - np.asarray(want, np.float32)
+        pad = np.pad(d, k // 2, mode="edge")
+        local = np.median(np.lib.stride_tricks.sliding_window_view(pad, k), axis=-1)
+        local = np.clip(local, -p.edge_offset_max, p.edge_offset_max)
+        differ += int((np.abs(d - local) > p.pixel_tol).sum())
+        total += d.size
+    return differ / total
+
+
 def find_window(gray: Gray, name: str, t: DialogTemplates,
                 hint: tuple[int, int] | None = None) -> Find:  # fmt: skip
     """The window's best place: a ``hint`` (where it was) first, else the coarse search's best
@@ -415,8 +448,8 @@ def find_window(gray: Gray, name: str, t: DialogTemplates,
     if best is None:
         return Find(name, None, None, float("inf"), 1.0, 1.0, "absent")
     mismatch, distance, at = best
-    got = score_at(gray, tmpl, edge_mask(name, t.geometry), at, p.pixel_tol)
-    edge = 1.0 if got is None else got[1]
+    e = edge_share(gray, tmpl, at, name, p, t.geometry)
+    edge = 1.0 if e is None else e
     verdict: Verdict
     if mismatch <= p.window_accept and edge <= p.edge_accept:
         verdict = "present"
