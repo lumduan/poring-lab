@@ -20,6 +20,7 @@ NEXT_IMG = (RNG.random((20, 42)) * 120 + 100).astype(np.uint8)
 CLOSE_IMG = (RNG.random((20, 42)) * 120 + 100).astype(np.uint8)
 # the NEXT button's highlighted (hover / focus) look: NEXT's ink on a different fill
 HI_IMG = np.clip(NEXT_IMG.astype(int) - 70, 0, 255).astype(np.uint8)
+CLOSE_HI_IMG = np.clip(CLOSE_IMG.astype(int) - 70, 0, 255).astype(np.uint8)
 OK_IMG = (RNG.random((20, 42)) * 120 + 100).astype(np.uint8)
 CANCEL_IMG = (RNG.random((20, 42)) * 120 + 100).astype(np.uint8)
 ARROW = (60, 70, 160)  # BGR, a dark blue arrow
@@ -55,7 +56,8 @@ def draw_dialog(img: np.ndarray, origin: tuple[int, int], button: str | None,
     win[iy + 2 : iy + 2 + ih - 30, ix + 1 : ix + 1 + iw - 60][ink] = 0
     bx, by, bw, bh = G.dialog_button
     if button is not None:
-        img_b = {"next": NEXT_IMG, "next_hi": HI_IMG}.get(button, CLOSE_IMG)
+        looks = {"next": NEXT_IMG, "next_hi": HI_IMG, "close_hi": CLOSE_HI_IMG}
+        img_b = looks.get(button, CLOSE_IMG)
         win[by : by + bh, bx : bx + bw] = img_b[..., None]
 
 
@@ -295,3 +297,30 @@ def test_the_highlighted_next_reads_as_next_only_with_its_template(
     label, _ = nd.classify_button(crop, (nd.NEXT, nd.NEXT_HI, nd.CLOSE), t2,
                                   same={nd.NEXT_HI: nd.NEXT})  # fmt: skip
     assert label == nd.NEXT_HI
+
+
+def test_the_highlighted_close_reads_as_close_only_with_its_template(
+    templates: nd.DialogTemplates,
+) -> None:
+    """Batt 2026-10-13 (npc-click@1's second stop): CLOSE in the same sticky highlight. Without its
+    template: button_unknown (stop). With both highlighted looks installed, each look reads as its
+    own button, and a highlighted NEXT never reads as CLOSE (or the reverse)."""
+    f = scene(8)
+    draw_dialog(f, D0, "close_hi", seed=98)
+    st = nd.state(f, templates)
+    assert not st.ok and st.reason == "button_unknown"
+    images = dict(templates.images)
+    for look, name in (("next_hi", nd.NEXT_HI), ("close_hi", nd.CLOSE_HI)):
+        cuts = []
+        for i in range(2):
+            h = scene(500 + i)
+            draw_dialog(h, D0, look, seed=40 + i)
+            cuts.append(h)
+        images[name] = nd.cut_element(cuts, [D0] * 2, name)
+    t2 = nd.DialogTemplates(images, dict(templates.masks), templates.params)
+    for look, want in (("close_hi", "close"), ("next_hi", "next"), ("next", "next"),
+                       ("close", "close"), (None, None)):  # fmt: skip
+        g = scene(8)
+        draw_dialog(g, D0, look, seed=98)
+        st = nd.state(g, t2)
+        assert st.ok and st.dialog is not None and st.dialog.button == want, look

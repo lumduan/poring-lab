@@ -51,10 +51,16 @@ NEXT, CLOSE, BLANK = "npc_dialog_next", "npc_dialog_close", "npc_dialog_blank"
 # (npc-click@1's click arm stopped on it, 3.32a). It reads as NEXT; without its file the reader
 # is unchanged.
 NEXT_HI = "npc_dialog_next_hi"
+# OPTIONAL (Batt 2026-10-13, after npc-click@1's second stop): the CLOSE button in the same sticky
+# highlight (a decline's NEXT clicks leave the cursor's hover on the button's place; the last page's
+# CLOSE then shows blue). It reads as CLOSE; without its file the reader is unchanged.
+CLOSE_HI = "npc_dialog_close_hi"
+# Each highlighted look -> the button it shows: two looks of one button never refuse each other.
+SAME_BUTTON = {NEXT_HI: NEXT, CLOSE_HI: CLOSE}
 OK, CANCEL = "npc_menu_ok", "npc_menu_cancel"
 UP, DOWN = "npc_menu_up", "npc_menu_down"
 WINDOW_NAMES = (DIALOG, MENU)
-BUTTON_NAMES = (NEXT, NEXT_HI, CLOSE, BLANK, OK, CANCEL)
+BUTTON_NAMES = (NEXT, NEXT_HI, CLOSE, CLOSE_HI, BLANK, OK, CANCEL)
 ARROW_NAMES = (UP, DOWN)
 # Without these nothing is read; CLOSE may be missing (then a CLOSE button is "unknown": closed).
 REQUIRED = (DIALOG, MENU, NEXT, BLANK, OK, CANCEL, UP, DOWN)
@@ -114,7 +120,7 @@ class Geometry:
     def element_box(self, name: str) -> Box:
         return {
             NEXT: self.dialog_button, NEXT_HI: self.dialog_button, CLOSE: self.dialog_button,
-            BLANK: self.dialog_button,
+            CLOSE_HI: self.dialog_button, BLANK: self.dialog_button,
             OK: self.ok_button, CANCEL: self.cancel_button, UP: self.up_arrow,
             DOWN: self.down_arrow,
         }[name]  # fmt: skip
@@ -534,13 +540,13 @@ def state(
     fd, fm = finds
     if fd.origin is not None:
         brect = _abs(fd.origin, g.dialog_button)
-        label, dist = classify_button(_crop(gray, brect), (NEXT, NEXT_HI, CLOSE, BLANK), t,
-                                      same={NEXT_HI: NEXT})  # fmt: skip
+        label, dist = classify_button(_crop(gray, brect), (NEXT, NEXT_HI, CLOSE, CLOSE_HI, BLANK),
+                                      t, same=SAME_BUTTON)  # fmt: skip
         if label is None:
             return NpcUiState(False, "button_unknown", 0.0, finds=finds)
         conf.append(1.0 - dist[label] / (2 * p.button_accept))
-        button: Button | None = ("next" if label in (NEXT, NEXT_HI) else "close" if label == CLOSE
-                                 else None)  # fmt: skip
+        shown = SAME_BUTTON.get(label, label)
+        button: Button | None = "next" if shown == NEXT else "close" if shown == CLOSE else None
         w, h = g.dialog_size
         dialog = DialogView((*fd.origin, w, h), button, brect, fd.distance, dist)
     if fm.origin is not None:

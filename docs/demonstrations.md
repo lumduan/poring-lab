@@ -3512,6 +3512,22 @@ their causes; the measured footprints per job; which fix (5.7) each result point
       `695a0e0d406352f76446ae11fc240b3f5fc2f2cf4dccdaa6443cd165e98d57c9`, read back equal.
       `talk1.TEMPLATES` loads it.
     - Next, per the amendment: the prontera click arm resumes, then the church click arm.
+  - ➡️ **THE PRONTERA CLICK ARM, RESUMED (2026-10-13 13:19-13:54 ICT, robust2 + NEXT_HI): STOPPED
+    FOR A PERSON again, at record 139 (click 138).**
+    - The session `20261010T001818-demo-npc-click-click-prontera` had been deleted from /dev/shm
+      by Monday's cleanup, after it was verified on the NAS. It was restored from the NAS first:
+      checksums 20 / 20, the manifest byte-identical. Then `--resume`, the command unchanged.
+    - 121 records were added (18 -> 139).
+    - **The stop:** click 138 at (148,204), beside YuNA (`npc/cities/prontera.txt:87`, cell
+      (149,202)). The robust2 series read walk 5 / 6, so it clicked; the L3 layer, recorded and
+      not applied, would have refused it. YuNA's dialog opened.
+      - talk@1's decline clicked NEXT five times, and NEXT_HI read each of those pages.
+      - Her last page shows CLOSE in the same STICKY highlight: the decline's clicks left the
+        hover on the button's place. T2 reads it `button_unknown` (distance 29.7 to CLOSE, 15.55
+        to NEXT_HI), so the result was `stop:dialog_next`, and per the policy no key was pressed.
+    - **DECIDED (Batt, 2026-10-13 ~14:10):** "Yes, prove then resume". A highlighted-CLOSE
+      template (CLOSE_HI) is built, pre-registered and proven like NEXT_HI, then the arm resumes
+      with it. A person closes YuNA's dialog first.
 
 ### 3.33 The GM's IMMUNITY: a test condition for the visual-diversity block (pre-registered 2026-10-09 ~14:05 ICT / 07:05 UTC, BEFORE the check; Batt: "keep gl_prison; a GM doesn't need to fear monsters. Make the GM safe without changing what the bot sees")
 **The condition, PRIMARY:** rAthena's `@monsterignore`, granted to the GM's group 20 (`groups.yml`,
