@@ -46,7 +46,7 @@ import argparse
 import json
 import sys
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -96,6 +96,27 @@ class StaticNpc:
     # server sends it with an invisibility option, e.g. prt_church's wedding row). The no-click
     # layer keeps every NPC (the safe side); a probe plan takes only drawn ones.
     drawn: bool | str = True
+    # The SCRIPT's facing: the npc line's dir field (rAthena's 0 N, 1 NW, ... 7 NE; the heading a
+    # packet carries), fixed for a static NPC. None when no L3 source gives it (the bindings; an
+    # npc_cells.json built before 2026-10-13). The rendered-sprite path needs it (Batt 2026-10-13).
+    dir: int | None = None
+
+
+def _dir(p: dict[str, Any]) -> int | None:
+    d = p.get("dir")
+    return None if d is None else int(d)
+
+
+def _put(out: dict[Cell, StaticNpc], npc: StaticNpc) -> None:
+    """The first source wins a cell; a later one only fills a facing the winner lacks, when the
+    sprites do not disagree (the same NPC seen by two lists)."""
+    have = out.get(npc.cell)
+    if have is None:
+        out[npc.cell] = npc
+        return
+    agree = have.sprite == npc.sprite or None in (have.sprite, npc.sprite)
+    if have.dir is None and npc.dir is not None and agree:
+        out[npc.cell] = replace(have, dir=npc.dir)
 
 
 def _key(file: str | None, line: Any, cell: Cell) -> str:
@@ -103,9 +124,10 @@ def _key(file: str | None, line: Any, cell: Cell) -> str:
 
 
 def load_l3_npcs(map_name: str, kb_dir: Path = KB_DIR) -> tuple[list[StaticNpc], dict[str, Any]]:
-    """Every static NPC on ``map_name`` that L3 lists (deduplicated by cell, the first source wins),
-    and the coverage: {"complete": bool, "sources": [...], "counts": {...}}. A map is COMPLETE only
-    when npc_cells.json (a KB extension built from every NPC file the server loads) says so."""
+    """Every static NPC on ``map_name`` that L3 lists (deduplicated by cell, the first source wins;
+    the script's facing ``dir`` kept where a source carries it), and the coverage: {"complete":
+    bool, "sources": [...], "counts": {...}}. A map is COMPLETE only when npc_cells.json (a KB
+    extension built from every NPC file the server loads) says so."""
     out: dict[Cell, StaticNpc] = {}
     counts: dict[str, int] = {}
     complete = False
@@ -117,10 +139,9 @@ def load_l3_npcs(map_name: str, kb_dir: Path = KB_DIR) -> tuple[list[StaticNpc],
             complete = bool(block.get("complete"))
             for p in block.get("npcs", []):
                 c = (int(p["x"]), int(p["y"]))
-                out.setdefault(c, StaticNpc(map_name, c, _key(p.get("file"), p.get("line"), c),
-                                            str(p["sprite"]) if p.get("sprite") is not None
-                                            else None, "npc_cells.json",
-                                            p.get("drawn", True)))  # fmt: skip
+                _put(out, StaticNpc(map_name, c, _key(p.get("file"), p.get("line"), c),
+                                    str(p["sprite"]) if p.get("sprite") is not None else None,
+                                    "npc_cells.json", p.get("drawn", True), _dir(p)))  # fmt: skip
             counts["npc_cells.json"] = len(block.get("npcs", []))
     route = kb_dir / "route.json"
     if route.exists():
@@ -133,8 +154,8 @@ def load_l3_npcs(map_name: str, kb_dir: Path = KB_DIR) -> tuple[list[StaticNpc],
                 c = (int(p["x"]), int(p["y"]))
                 n += 1
                 sprite = None if p.get("sprite") is None else str(p["sprite"])
-                out.setdefault(c, StaticNpc(map_name, c, _key(p.get("file"), p.get("line"), c),
-                                            sprite, "route.json"))  # fmt: skip
+                _put(out, StaticNpc(map_name, c, _key(p.get("file"), p.get("line"), c),
+                                    sprite, "route.json", dir=_dir(p)))  # fmt: skip
         counts["route.json"] = n
     bindings = kb_dir / "bindings/lab-rathena.json"
     if bindings.exists():
@@ -145,8 +166,8 @@ def load_l3_npcs(map_name: str, kb_dir: Path = KB_DIR) -> tuple[list[StaticNpc],
                 continue
             c = (int(p["x"]), int(p["y"]))
             n += 1
-            out.setdefault(c, StaticNpc(map_name, c, _key(p.get("file"), p.get("line"), c), None,
-                                        "bindings"))  # fmt: skip
+            _put(out, StaticNpc(map_name, c, _key(p.get("file"), p.get("line"), c), None,
+                                "bindings"))  # fmt: skip
         counts["bindings"] = n
     npcs = [v for v in out.values() if v.sprite is None or v.sprite not in NOT_SPRITES]
     cov = {"complete": complete, "sources": sorted(counts), "counts": counts, "npcs": len(npcs)}

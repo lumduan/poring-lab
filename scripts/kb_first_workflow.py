@@ -1881,7 +1881,8 @@ def map_complete(doc: dict[str, Any], m: str) -> bool:
 
 
 def npc_cells(doc: dict[str, Any], check: dict[str, Any] | None = None) -> dict[str, Any]:
-    """The KB's NPCs per map in npc_noclick's format, each MARKED drawn / not: ``drawn`` is the
+    """The KB's NPCs per map in npc_noclick's format (cell, the script's facing ``dir``, file:line,
+    sprite), each MARKED drawn / not: ``drawn`` is the
     KB's (True, False, or "conditional": the script hides itself at start, e.g. prt_church's
     wedding row, sent with an invisibility option). ``probe`` is True only for an NPC the client
     always draws with its own sprite (the probe plan's candidates)."""
@@ -1892,7 +1893,8 @@ def npc_cells(doc: dict[str, Any], check: dict[str, Any] | None = None) -> dict[
             file, line = _file_line(n["key"])
             drawn = n.get("drawn")
             rows.append({
-                "x": n["x"], "y": n["y"], "file": file, "line": line, "sprite": n["sprite"],
+                "x": n["x"], "y": n["y"], "dir": n.get("dir"), "file": file, "line": line,
+                "sprite": n["sprite"],
                 "sprite_class": n.get("sprite_class"), "kind": n.get("kind"), "drawn": drawn,
                 "probe": drawn is True and n.get("sprite_class") == "npc"
                 and n.get("kind") != "warp_portal",
