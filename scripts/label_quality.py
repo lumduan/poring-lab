@@ -14,7 +14,8 @@ v2"; docs/planning/label-quality.md).
     label_quality.py peek SESSION SECONDS OUT.png
         One recorded frame with its v1 labels drawn, written under /dev/shm only (to LOOK at a gap).
     label_quality.py models DUMP PRED.json [PRED.json ...]
-        A detector's gold-set misses beside the labels' own (its predict_dir output; no model run).
+        A detector's gold-set misses beside the labels' own (its predict_dir output; no model run),
+        and every later file's misses against the first one's, box by box.
     label_quality.py census CACHE_MANIFEST [--step-s 1]
         How much of a frame cache's sessions each gap touches (packets only).
 
@@ -1587,6 +1588,7 @@ def model_misses(
         "fn_by_label_cause": dict(fn.most_common()),
         "fn_by_label_cause_gm_alive": dict(fn_alive.most_common()),
         "fn_rows": [r for r in fn_rows if r[2] != "label_hit"],
+        "missed": [[r[0], r[1]] for r in fn_rows],
         "label_hit_near_miss": {
             "n": len(near_miss),
             "dx": describe(m["dx"] for m in near_miss),
@@ -1606,6 +1608,33 @@ def model_misses(
         "gm_dead_fp_offset_to_nearest_hand": {
             "dx": describe(x for x, _ in dead_fp_offset),
             "dy": describe(y for _, y in dead_fp_offset),
+        },
+    }
+
+
+def compare_misses(
+    frames: Sequence[dict[str, Any]], ref: dict[str, Any], other: dict[str, Any]
+) -> dict[str, Any]:
+    """Two model_misses results on the same gold frames, hand box by hand box: the boxes ``other``
+    misses that ``ref`` finds and the reverse, each with its frame and whether our GM lay dead."""
+    dead = {f["frame_id"] for f in frames if f.get("self_dead")}
+    a = {tuple(x) for x in ref["missed"]}
+    b = {tuple(x) for x in other["missed"]}
+
+    def rows(keys: set[tuple[Any, ...]]) -> dict[str, Any]:
+        items = sorted(keys)
+        return {
+            "n": len(items),
+            "in_dead_gm_frames": sum(1 for k in items if k[0] in dead),
+            "boxes": [[k[0], k[1], k[0] in dead] for k in items],
+        }
+
+    return {
+        "extra_misses": rows(b - a),
+        "extra_finds": rows(a - b),
+        "fp_delta": other["fp"] - ref["fp"],
+        "fp_delta_by_gm": {
+            g: other["by_gm"][g]["fp"] - ref["by_gm"][g]["fp"] for g in ("gm_alive", "gm_dead")
         },
     }
 
@@ -1911,12 +1940,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     d = json.loads(a.dump.read_text())
     if a.cmd == "models":
-        out = {}
+        res: dict[str, Any] = {}
         for path in a.preds:
             p = json.loads(path.read_text())
-            out[path.name] = {"weights": p.get("weights"), "conf": p.get("conf"),
+            res[path.name] = {"weights": p.get("weights"), "conf": p.get("conf"),
                               **model_misses(d["frames"], p["frames"])}  # fmt: skip
-        print(_json(out))
+        names = [path.name for path in a.preds]
+        # every later file against the FIRST one, hand box by hand box
+        res["vs_first"] = {n: compare_misses(d["frames"], res[names[0]], res[n]) for n in names[1:]}
+        print(_json(res))
         return 0
     print(_json(cache_check(d, a.shard) if a.cmd == "cache" else report(d)))
     return 0

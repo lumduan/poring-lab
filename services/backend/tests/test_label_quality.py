@@ -364,3 +364,22 @@ def test_model_misses_splits_by_the_labels_own_misses_and_the_dead_gm(lq: Module
 def test_peek_refuses_to_write_pixels_outside_dev_shm(lq: ModuleType, tmp_path: Path) -> None:
     with pytest.raises(SystemExit, match="/dev/shm only"):
         lq.peek("S", 1.0, Path("/tmp/x.png"), tmp_path, tmp_path, 0.14)
+
+
+def test_compare_misses_names_the_extra_misses_and_where_they_fall(lq: ModuleType) -> None:
+    frames = [{"frame_id": 0, "self_dead": False}, {"frame_id": 1, "self_dead": True}]
+    gm = {"gm_alive": {"fp": 0}, "gm_dead": {"fp": 2}}
+    ref = {"missed": [[0, 1], [1, 0]], "fp": 2, "by_gm": gm}
+    other = {
+        "missed": [[1, 0], [1, 1], [1, 2]],
+        "fp": 3,
+        "by_gm": {"gm_alive": {"fp": 0}, "gm_dead": {"fp": 3}},
+    }
+    c = lq.compare_misses(frames, ref, other)
+    assert c["extra_misses"] == {
+        "n": 2,
+        "in_dead_gm_frames": 2,
+        "boxes": [[1, 1, True], [1, 2, True]],
+    }
+    assert c["extra_finds"] == {"n": 1, "in_dead_gm_frames": 0, "boxes": [[0, 1, False]]}
+    assert c["fp_delta"] == 1 and c["fp_delta_by_gm"] == {"gm_alive": 0, "gm_dead": 1}
