@@ -152,6 +152,24 @@ the camera model) instead of being collected or detected:
     ➡️ **2026-10-13: N1 and N2 DONE for the eight; the N3 sheets wait for a person** (section 7.6,
     "N1-N3 EXTENDED"). The local warp table was not edited: these readings are in a /dev/shm
     what-if copy only.
+    ➡️ **2026-10-13 17:24: prt_church (100,56) READ WITH MORE FRAMES** (decision 9).
+    - Session `20261013T172355-demo-warp-frames-prt-church`: the GM at 3 stands where the portal
+      projects clear of the UI ((100,60), (96,60), (99,62)), 8 frames each, cursor parked right.
+      Banked by a one-off script, `/dev/shm/poring-lab-tmp/warp-100-56/bank.py`.
+    - `labels_v2.py warp-measure` built 24 aligned crops:
+      `/dev/shm/poring-lab-tmp/warp-100-56/sheet/prt_church_100_56.png` (client pixels, never
+      committed).
+    - **A slip, recorded:** the first stand, (96,56), lies INSIDE the portal's trigger span. The
+      GM's `@warp` landed on it and the portal moved the GM to prontera (234,314). Its 8 frames are
+      prontera frames, and warp-measure put them under prontera's (237,317) warp. Nothing was
+      clicked, and the next `@warp` brought the GM back.
+      - The stand search checked walkability and projection only. A warp's trigger cells must be
+        excluded too: Batt's decision 15 rule for walk@17 starts applies to any harness stand.
+    - **Claude's PROVISIONAL reading (NOT a verdict):**
+      - the ring and its sparkles are clear in every crop;
+      - the church's diagonal wall edge crosses the outer ring's lower-left in every view.
+      - So "visible" or "partial" is the question for a person. Batt reads the sheet; the local
+        table changes only with his reading.
   - Claude's provisional reading of the 12 banked warp cells: **4 visible** (iz_dun00 (168,173),
     alberta_in (78,44) and (64,31), prt_church (90,81)), **5 occluded**, **3 partial**. A person
     confirms before any cache is built.
