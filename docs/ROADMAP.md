@@ -139,7 +139,9 @@ flowchart TD
   region + a fresh background; alberta targeted, morocc held out); its runs follow the S2 session.
 - **Detector:** v1 REPLACES v0 live: ➡️ DONE 2026-10-13 (deployment parity PASS on the gold set: v1 ONNX P 0.912 / R 0.830 vs v0 ONNX 0.868 / 0.790; `unit_detector.MODEL`). **Next training:**
   LABEL QUALITY toward Batt's gold convention (auto-label boxes vs gold, the systematic gaps) before
-  labels v2; no more epochs on v1.
+  labels v2; no more epochs on v1. ➡️ The analysis: [label-quality.md](planning/label-quality.md)
+  (PROPOSED, offline; five gaps ranked, the largest a dead-GM span of indoor-b whose labels sit ~4
+  cells off, which every detector learned; fixes for Batt to choose).
 - **Labels v2:** the S2 UI-gate session is scheduled with Batt (~15 min of his clicks). Warp readings
   accepted provisionally; prt_church (100,56) to be read with more frames; N1 extends to 909 and the
   church's off-route sprites.
