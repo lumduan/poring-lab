@@ -7,7 +7,7 @@ verdict_date: 2026-10-01
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: "➡️ 2026-10-10 02:50: the image carrying LoginScrub (f36276e, login ports from the environment + every login-shaped connection) is LIVE, verified by scripts/scrub_check.py and the §2a positive cases (demonstrations.md §2a). Amendment C (code from a source mount) PROPOSED. History: Implemented and validated (docs/phase1-validation.md). The slim sniffer image is LIVE since 2026-10-03 (71 MB, guarded build; live re-verified: ingest, validation tagging, password zeroing). GAT in Phase 2."
+next_action: "➡️ 2026-10-10 02:50: the image carrying LoginScrub (f36276e, login ports from the environment + every login-shaped connection) is LIVE, verified by scripts/scrub_check.py and the §2a positive cases (demonstrations.md §2a). Amendment C (code from a source mount) ACCEPTED 2026-10-13 (Batt); implementation + guarded recreate pending. History: Implemented and validated (docs/phase1-validation.md). The slim sniffer image is LIVE since 2026-10-03 (71 MB, guarded build; live re-verified: ingest, validation tagging, password zeroing). GAT in Phase 2."
 ---
 
 # ADR-0007: Packet ground truth — a viewer-only channel and a separate captures volume
@@ -97,7 +97,7 @@ time):
    connected, a GM relog captured (`login_accepted` → `map_enter`), 36 events tagged
    `validation_account`, and the GM password and user found 0 times in the new pcapng (the GM
    character name, the positive control, 7 times).
-   ➡️ 2026-10-09: [Amendment C](#amendment-c-proposed-2026-10-09-the-sniffers-code-from-a-read-only-source-mount-in-dev-mode)
+   ➡️ 2026-10-09: [Amendment C](#amendment-c-accepted-2026-10-13-proposed-2026-10-09-the-sniffers-code-from-a-read-only-source-mount-in-dev-mode)
    (PROPOSED, for Batt's acceptance) would run the sniffer's CODE from a read-only source mount in
    dev mode again, on the slim image's dependencies, so a code change needs no image build.
 3. **GAT later (Phase 2).** Until then, paths are rAthena's diagonal-first fallback. That is exact
@@ -146,9 +146,13 @@ closer to decision time than this ADR's "offline ground truth only" line.
   packet-assisted fit there).
 
 
-## Amendment C (PROPOSED, 2026-10-09): the sniffer's code from a read-only source mount in dev mode
+## Amendment C (ACCEPTED 2026-10-13; proposed 2026-10-09): the sniffer's code from a read-only source mount in dev mode
 
-**Status:** PROPOSED, for Batt's acceptance (his call of 2026-10-09 ~20:20: "Option C (sniffer code
+> ➡️ **ACCEPTED by Batt, 2026-10-13** (decision 7: "ADR-0007 Amendment C: ACCEPTED"). It is implemented as
+> written below: the dev overlay, its guard test, and CLAUDE.md's dev-mode text. It goes live at a guarded
+> `recreate:sniffer` in a measured quiet window, and the §2a positive cases are re-run after it.
+
+**Status (as of 2026-10-09):** PROPOSED, for Batt's acceptance (his call of 2026-10-09 ~20:20: "Option C (sniffer code
 from a bind-mounted source, no image build for code changes): write it as an amendment to
 ADR-0007's slim-image decision for my acceptance"). Nothing is built or changed until he accepts.
 

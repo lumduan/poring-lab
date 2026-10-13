@@ -2617,6 +2617,9 @@ packets, the same instruments as tuning) per map, then `walk_readiness.py` on ea
 **Before each run:** a client screenshot, and the UI as pre-registered (3.24's inventory incident).
 
 ### 3.30 talk@1 — talk to an NPC, choose a menu option BY ITS TEXT, close the dialog (pre-registered 2026-10-09 ~10:00 ICT / 03:00 UTC at commit, BEFORE any trial and before its prerequisites are built; Batt 2026-10-09: "Then the next skill: talk_npc + choose_menu + close_dialog. Design and pre-register talk@1")
+> ➡️ **DECIDED (Batt, 2026-10-13, decision 4):** "talk@1: approach with the minimap-first walk
+> (walk@17 design), no /ex." talk@1's approach step no longer calls walk@15 (it types "/ex" + /where,
+> refused by the typing policy). The rework is pre-registered before any scored trial.
 **What it verifies:** the L1 concepts `npc.talk`, `npc.next`, `npc.choose` and `npc.close` on RDP.
 When talk@1 PASSES, the /flows blocks `talk_npc`, `next_page`, `choose_menu` and `close_dialog`
 become "verified RDP" (the L1 entries' `verified_on` gets the RDP session). The S2 re-test comes
@@ -3215,6 +3218,10 @@ pre-registration):
    - A deliberate measurement would show whether the client's own repeat count lapses with time:
      /where, ≥ 60 s, /where, ≥ 60 s, /where, ≥ 60 s, /where. Is the 4th answered?
    - If the guard changes before the runs, the change is recorded here first.
+   - ➡️ **DECIDED (Batt, 2026-10-13, decision 15):** "'/where once per need' wins over the repeat
+     rule". The typing guard must not refuse a needed /where as a 3rd identical line. The retry
+     interval and the run's budget stay. A /where the CLIENT drops is no fix, and the rule goes on
+     as for a miss. It is built and recorded as a walk@17 amendment before its tuning runs.
 2. **iz_dun00 is not in route.json's warp list** (kb_route.py's scope: 44 maps).
    - B cannot hold there, so walk@17 refuses to start there until the KB covers it. That blocks
      the held-out dungeon map and tour@1's iz_dun00 block.
@@ -3232,6 +3239,8 @@ pre-registration):
    - It can land INSIDE a trigger area: 8 of 181 candidate cells on alberta_in (the (64, 31) area),
      and 25 of 231 on iz_dun00 (by warps.json). None on the tuning maps or on prontera.
    - A fix is a harness change, with Batt.
+   - ➡️ **DECIDED (Batt, 2026-10-13):** "never draw a harness start inside a warp area" -- a walk@17
+     amendment before its tuning runs.
 4. **Measured, not built:** the server's own path to a click could cross a warp area even when the
    clicked cell lies outside one. On harness-like routes it never did: 0 of ~20,000 click cells on
    alberta_in and 0 of ~20,000 on prontera (offline, the GAT's own A*).
@@ -3399,6 +3408,13 @@ their causes; the measured footprints per job; which fix (5.7) each result point
   - **Fix option (a reader change: Batt's call at resume, recorded here before use):** add the
     highlighted-NEXT look as a T2 template, cut from a labelled frame and proven like prove-t2;
     resuming with it alters the reader for the remaining clicks of this scored run.
+  - ➡️ **DECIDED (Batt, 2026-10-13, decision 2):** "the highlighted-NEXT T2 template, then resume
+    npc-click's click arms". **AMENDMENT before the resume:**
+    - the remaining clicks use T2 with the highlighted-NEXT template (cut and proven first);
+    - they use the cursor gate AS SWITCHED the same day: robust2 (3.36's ADOPTION). The first 18
+      records of the prontera click arm were read by v3.
+    - The scorer reports the two segments apart. The resume command is unchanged otherwise
+      (`--resume 20261010T001818-demo-npc-click-click-prontera`); then the church click arm.
 
 ### 3.33 The GM's IMMUNITY: a test condition for the visual-diversity block (pre-registered 2026-10-09 ~14:05 ICT / 07:05 UTC, BEFORE the check; Batt: "keep gl_prison; a GM doesn't need to fear monsters. Make the GM safe without changing what the bot sees")
 **The condition, PRIMARY:** rAthena's `@monsterignore`, granted to the GM's group 20 (`groups.yml`,
@@ -3846,13 +3862,46 @@ pre-registered: no switch; the live gate stays v3.**
   - Any of them is re-measured under a NEW pre-registration, on a held-out map not yet used (alberta
     is now used for cursor@2). alberta is the Merchant guild's town, so the first workflow meets the
     windmill.
-- **Consequence today:** nothing live changes. robust2 is a candidate whose SAFETY property is
+- ➡️ **SUPERSEDED 2026-10-13: the live gate SWITCHED to robust2 (Batt; the ADOPTION below).**
+- **Consequence today (as of 2026-10-10):** nothing live changes. robust2 is a candidate whose SAFETY property is
   proven on fresh and held-out data; its walk recall is not accepted. The click callers that need
   it (loot, attack, talk) wait for Batt's decision.
 - Outputs: `/dev/shm/poring-lab-tmp/cursor2/` (result.json, live/, truth/, the labels in
   c2-labeller{A,B}/; local, client pixels).
 
+**➡️ ADOPTION (Batt, 2026-10-13, decision 3): the live gate SWITCHED to robust2. This is a
+SAFETY-DRIVEN adoption that DEPARTS from 3.36's bar 4, by Batt's decision; bar 4 stays the target.**
+- **Batt:** "SWITCH the live gate to robust2 now. Its safety bars are all met (0 false WALK / 0
+  cross-shape over 6,731 reads; no-entry .971) and the current v3 gate has a measured hole
+  (no-entry blink frames read twice as WALK, 4/255). Its lower WALK recall fails closed (UNKNOWN,
+  no click), costing speed, not safety. Record it as a safety-driven adoption that departs from
+  3.36's bar 4 (my decision), keep bar 4 as the target, and fix the windmill next."
+- **What changed** (`scripts/cursor_gate.py`, cursor-robust.md 6 / 6a):
+  - `DEFAULT_CLASSIFIER = "robust2"`; `classifier="v3"` stays available by name.
+  - A WALK-intent `gated_click` reads the FULL 6-grab series, 0.1 s apart, with no early stop.
+    That is cursor@2's measured procedure: the same crop, mask, count and gap as
+    `npc_click_test.read_series` (a parity test).
+  - It clicks only when `series_verdict` is walk: one ring grab anywhere is NOENTRY.
+  - Other intents (TALK, an intended WARP) keep the early-stop reads, now by the robust reader.
+- **Who reads with it:** every caller of `cursor_gate.prober()`:
+  - npc-click's click arms (3.32a, amended below);
+  - talk@1 / talk_calibrate's contact click;
+  - where_run, measure_delay, camera_validate, calibrate_projection, dataset_activity;
+  - safety_signal_check.
+- **Who does NOT:** the pre-registered rules that load `walk6.CursorRefs` themselves (walk@6-17,
+  loot@1). They keep v3 as registered.
+  - The walk rules also require the walk MARKER (no marker on a non-walkable cell), which refuses
+    the no-entry clicks v3's hole would allow.
+  - A rule adopts robust2 only through a NEW pre-registration or a recorded amendment (cursor-robust
+    6 item 3).
+- **Next (Batt):** fix the windmill: per-map ANIMATED regions measured with the cursor parked are
+  masked, plus a fresh background per hover. That is cursor@3, pre-registered before it runs.
+
 ### 3.34 learn_skill@1 -- spend skill points in the skill window (DESIGN 2026-10-09 ~19:50; NOT pre-registered; Batt ~19:30: "add the new skill the job change needs: allocating skill points (Basic Skill > 8) via the skill window, as an L1 concept with its own alone-test")
+> ➡️ **DECIDED (Batt, 2026-10-13, decision 5):** "@streset / @skreset for GM group 20 (lab)".
+> They are added to `groups.yml` in place and apply at the next guarded rathena recreate (as
+> `@monsterignore`, 3.33), never during a client run. This unblocks allocate_stat@1 (irreversible
+> without @streset) and gives learn_skill@1 a server-side restore.
 **The concept:** `char.learn_skill` (L1, packages/poring_skills, updated): the first workflow's
 Merchant change needs the novice's Basic Skill above 8 (labels-v2-plan section 7.4).
 

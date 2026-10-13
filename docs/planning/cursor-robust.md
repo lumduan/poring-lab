@@ -18,6 +18,9 @@ gate: "OFFLINE only: nothing here touched the client. The gate's default is NOT 
 > fresh + held-out data (0 WALK on no-entry series, no-entry 0.971), but FAIL on bar 4 (WALK 0.848;
 > the held-out alberta 0.682, where the cursor MASK floods or empties). The switch-over (section 6)
 > stays Batt's decision; the live gate is still v3.
+> ➡️ **2026-10-13: SWITCHED (Batt, decision 3).** `cursor_gate.DEFAULT_CLASSIFIER = "robust2"` (section 6a as
+> designed): a safety-driven adoption that departs from 3.36's bar 4 (demonstrations.md 3.36 ADOPTION).
+> Next: cursor@3 (the windmill: per-map animated regions masked + a fresh background per hover).
 
 **Why:** the gate clicks only on a shape read twice, and its reader says UNKNOWN where it matters:
 - loot@1 P3 (demonstrations 3.20a): over a Poring the first reads were **unknown 67 / 105 (64 %)**,
@@ -320,7 +323,7 @@ Not built (a gate change: Batt's decision after section 5). The shape of it:
    reader's own fields (`score`, `second`, `margin`, `shift`) instead. Part of the switch, not of
    the measurement (the measurement scores the robust reader offline).
 5. Flipping the DEFAULT, if ever, is Batt's decision recorded in demonstrations.md, never a side
-   effect of a merge.
+   effect of a merge. ➡️ **Flipped 2026-10-13 by Batt's decision** (demonstrations.md 3.36 ADOPTION).
 
 ### 6a. robust2 in the gate (2026-10-10; DESIGN only, NOT built; for Batt's decision after 3.36)
 robust2's verdict was measured over the npc-click harness's FULL 6-grab series

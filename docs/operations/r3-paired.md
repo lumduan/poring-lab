@@ -221,6 +221,9 @@ min. The cap and the NOTIFY after 3 aborts in 2 h are unchanged.
 - It went live at 11:27:57. The running gate was restarted by hand, and a NOTE line in the run's
   `train.log` says so.
 
+> ➡️ **2026-10-13 (Batt, decision 8):** "R3 at night: keep the rule (inconclusive = slowest level, never
+> stop)." Unchanged.
+
 **EXIT (Batt):** once mid-epoch checkpoints are merged AND their pre-registered resume proof passes
 (docs/operations/mid-epoch-checkpoints.md), set `TEMP_HOLD_MAX_LOAD = None`. That reverts to the
 continuous rule: resume after the quiet gate, capped. Record the date here when it is done.

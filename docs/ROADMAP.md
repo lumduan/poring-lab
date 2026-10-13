@@ -1,7 +1,7 @@
 ---
 doc_type: roadmap
 status: LIVING
-last_reviewed: 2026-10-10
+last_reviewed: 2026-10-13
 ---
 
 # poring-lab roadmap
@@ -132,7 +132,26 @@ flowchart TD
 | **Phase 5** | ⬜ BLOCKED | Humanizer (timing and trajectories of the bot's input) + a human-vs-bot detector trained on the human and bot input logs; target ROC-AUC toward 0.5. | Phase 4 bot traces |
 | **Phase 6** | ⬜ BLOCKED | ➡️ ADR-0015 (ACCEPTED 2026-10-04) moves the LLM planner into Phase 4; Phase 6 keeps the social and chat research. ~~Until then:~~ Typhoon slow loop (addressee detection and multi-party chat on the community server; deterministic tests on rAthena). The LLM emits **intents only**, consumed by the ~~FSM~~ ➡️ executor (ADR-0015's behavior tree); never in the fast loop. Any chat it writes goes through the mux as `source=bot`. | Phase 4 (independent of Phase 5); community-server experiments also need the permission evidence ➡️ and [ADR-0021](adr/0021-external-servers.md) (external servers, PROPOSED 2026-10-09) |
 
-**➡️ 2026-10-10: the real bottlenecks are now these four** (the paragraph and bullets after this list
+**➡️ 2026-10-13: Batt's decisions on the weekend's open items** (each recorded in its doc; the
+2026-10-10 list below is now history for items it names):
+- **Cursor:** the live gate SWITCHED to robust2 (safety-driven, departs from 3.36's bar 4, which stays
+  the target; demonstrations.md 3.36 ADOPTION). Next: cursor@3, the windmill (per-map animated regions
+  masked + a fresh background per hover), pre-registered first.
+- **Detector:** v1 REPLACES v0 live: CPU ONNX export, parity on the gold set first. **Next training:**
+  LABEL QUALITY toward Batt's gold convention (auto-label boxes vs gold, the systematic gaps) before
+  labels v2; no more epochs on v1.
+- **Labels v2:** the S2 UI-gate session is scheduled with Batt (~15 min of his clicks). Warp readings
+  accepted provisionally; prt_church (100,56) to be read with more frames; N1 extends to 909 and the
+  church's off-route sprites.
+- **Client queue:** the highlighted-NEXT T2 template, then npc-click's click arms (robust2 gate,
+  amended); the merchant dialog collected by Claude (GM warp, decline path); talk@1 reworked onto the
+  minimap-first walk (no /ex); @streset / @skreset for group 20.
+- **walk@17:** "/where once per need" wins over the repeat rule; never draw a harness start inside a
+  warp area (amendments before its tuning).
+- **Infra / process:** ADR-0007 Amendment C ACCEPTED; R3 at night unchanged; a resume inside a WARM
+  worker skips the IO quiet window (vision-long-lived.md 5c). /dev/shm and swap: Batt.
+
+**➡️ 2026-10-10: the real bottlenecks were these four** (the paragraph and bullets after this list
 are the history, to 2026-10-07):
 1. **The shared disk's IO, not a decision.** Every vision start and every image build needs a measured
    quiet window (option D). Option A's live proof, after v1, decides whether training needs only one

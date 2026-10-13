@@ -277,6 +277,17 @@ unchanged); otherwise stay on the current path and report."
   variant would not avoid it (the burst is at CUDA's first use, not the import); a pre-warm of the
   CUDA libraries in a quiet window remains an option for Batt.
 
+## 5c. The warm-resume rule (Batt, 2026-10-13, decision 14)
+"Yes: a resume inside a WARM worker skips the IO quiet window; keep the window for worker
+(re)starts and after IO trips."
+- **Why:** 5b measured that the IO burst is a fresh container's FIRST CUDA run. Later runs in the
+  same worker do not burst. On 2026-10-11, v1b lost ~1.5 h waiting for a quiet IO window before a
+  warm resume after an R3-HARD abort.
+- **So:** after an R3-HARD abort (once the 15 quiet Frigate minutes pass), after an R3 latency trip,
+  or after the 12 h step cap, the next attempt in an UP worker starts at once.
+  - After an IO trip it waits for the next measured quiet window (unchanged).
+  - A worker (re)start always goes through `quiet_start` (unchanged).
+
 ## 6. What the proof's IO result means
 - **The burst is (i), the container start:** option A as designed. One cold start per day, in a
   quiet window.

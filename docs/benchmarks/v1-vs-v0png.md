@@ -7,7 +7,7 @@ verdict_date: 2026-10-10
 verdict_ticket: null
 supersedes: null
 related: [../phase3-plan.md, v0-png-vs-jpeg.md]
-next_action: "SCORED 2026-10-10: v1 >= v0-PNG on the primary (gold, position, monsters: P 0.902 vs 0.857, R 0.830 vs 0.780). Batt: whether v1 replaces v0-PNG as the live detector (the CPU ONNX export for the walk/loot rules is a separate step)."
+next_action: "➡️ 2026-10-13 (Batt, decision 10): v1 REPLACES v0 as the live detector: CPU ONNX export, parity verified on the gold set FIRST, then deploy. History: SCORED 2026-10-10: v1 >= v0-PNG on the primary (gold, position, monsters: P 0.902 vs 0.857, R 0.830 vs 0.780); v1b (2026-10-12) did not beat v1."
 ---
 
 # v1 vs v0-PNG: the same frames, the same format, different labels (pre-registered 2026-10-07)

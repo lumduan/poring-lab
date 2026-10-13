@@ -131,6 +131,10 @@ sessions in `/dev/shm/poring-lab-demo` and the local KB; nothing written outside
   - The table is a person's reading of `labels_v2.py warp-measure`'s sheets (local:
     `/dev/shm/poring-lab-tmp/labels-v2/warp_visibility.json`; client pixels + rAthena cells, never
     committed).
+  - ➡️ **2026-10-13 (Batt, decision 9):** the readings of the 2026-10-10 sheets are accepted as
+    PROVISIONAL: prontera (156,22) partial, prt_fild08 (170,378) visible, prt_church (115,122)
+    visible. prt_church (100,56) is to be read with more frames. **N1 extends** to prt_fild08's
+    909 and the church's off-route sprites (71, 79, 741, 798, 745, 60, 755).
   - Claude's provisional reading of the 12 banked warp cells: **4 visible** (iz_dun00 (168,173),
     alberta_in (78,44) and (64,31), prt_church (90,81)), **5 occluded**, **3 partial**. A person
     confirms before any cache is built.
