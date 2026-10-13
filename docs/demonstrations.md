@@ -3696,6 +3696,31 @@ their causes; the measured footprints per job; which fix (5.7) each result point
     - **Next:** the S2 UI-gate session (16:00, Batt). After it, the prontera arm resumes as
       segment 4 and the church arm resumes (`--resume 20261013T151312-demo-npc-click-click-prt-church`),
       each scored by segment.
+  - ➡️ **THE PRONTERA CLICK ARM: COMPLETE** (segment 4, 17:06-17:17, robust2 + NEXT_HI + CLOSE_HI + the border
+    fix: 36 records, no stop). Scored by `npc_click_score.py score` (5aef29b's segments) over its 176 records:
+
+    | segment | gate / T2 | records | clicked: moves / contacts / nothing | not clicked (TALK twice / unknown / stale park / other) | stops | attack_request | GM act normal / pickup |
+    |---|---|---|---|---|---|---|---|
+    | 0 (10-10) | v3 | 18 | 8 / 3 / 0 | 5 / 2 / 0 / 0 | 1 (highlighted NEXT) | 0 | 0 / 0 |
+    | 1 (13:19-13:54) | robust2, NEXT_HI | 121 | 53 / 5 / 1 | 58 / 3 / 0 / 1 | 1 (highlighted CLOSE) | 0 | 0 / 0 |
+    | 2 (14:42) | + CLOSE_HI | 1 | 0 / 1 / 0 | 0 | 1 (codec border) | 0 | 0 / 0 |
+    | 3 (17:06-17:17) | + the border fix | 36 | 15 / 0 / 0 | 14 / 1 / 6 / 0 | 0 | 0 | 0 / 0 |
+    | **the arm** | | **176** | **76 / 9 / 1** | 77 / 6 / 6 / 1 | 3 | **0** | **0 / 0** |
+
+    - **The L3 no-click layer** (prontera's L3 is complete, so `l3_kb` = `l3_complete`; recorded,
+      never applied):
+      - it refuses **9 / 9** contact clicks (Wilson 95 % 0.70-1.00);
+      - **0 / 49** of the clicks it allows became `npc_contact` (Wilson upper 0.073);
+      - it costs **27 / 76** moves refused (0.36, 0.26-0.47).
+      - **3.32a's decision rule is MET in prontera: "the layer alone removes the town contacts".**
+        Every contact click is refused, and no click it allows became a contact.
+    - **A click the walk gate allowed became `npc_contact`:** 9 / 86 = 0.105 (0.056-0.187).
+      - By ring (Chebyshev cells from the NPC): ring 1 5 / 20 (0.25); ring 2 3 / 29 (0.10);
+        ring 3 1 / 37 (0.027).
+      - So the cursor gate alone does not keep a walk click off an NPC beside it. The layer does.
+    - **New in segment 3:** 6 clicks were not made with `stale_background` (Prober9's park found the
+      background still changing). They fail closed and are reported.
+    - Next: the church arm resumes (`--resume 20261013T151312-demo-npc-click-click-prt-church`).
 
 ### 3.33 The GM's IMMUNITY: a test condition for the visual-diversity block (pre-registered 2026-10-09 ~14:05 ICT / 07:05 UTC, BEFORE the check; Batt: "keep gl_prison; a GM doesn't need to fear monsters. Make the GM safe without changing what the bot sees")
 **The condition, PRIMARY:** rAthena's `@monsterignore`, granted to the GM's group 20 (`groups.yml`,
