@@ -4324,6 +4324,14 @@ sheets are labelled.
     what truth is. **Reported beside the bars (not a bar):** every morocc number without the 188
     displaced records.
 
+- **Truth sets built 22:52-22:54** (`cursor2_truth.py sheets --judged robust3 --item-seed 20261205
+  --strip-seed 20261206` run at a6a0754, where `cursor2_truth.py`, `cursor_eval.py` and the readers
+  are byte-identical to 5f2f0ef; the five scored sessions pooled, the pilot excluded): **10,175
+  images (204 pages) and 3,524 series strips (353 pages)**. The readers' live outputs
+  (`cursor_eval.py live`, 21:46-22:51) are their input; no bar has been computed.
+- **Two blind agent labellers**, briefed with 3.36's brief (paths moved to cursor3/; the page and
+  item counts and a no-delete note added), in OPPOSITE page orders: A started 22:55, B 22:55.
+
 **Truth (fixed BEFORE any bar is computed):**
 - `scripts/cursor2_truth.py sheets --judged robust3 --item-seed 20261205 --strip-seed 20261206` at
   5f2f0ef (cursor_anim 223fa82, its scoring deebcaa):
@@ -4469,7 +4477,23 @@ plans need (733, 734, 86, 59, 117, 726, 105, 84, 90, 92), and 0 problems. sha256
 
 | run | session | time | records | safety |
 |---|---|---|---|---|
-| B1 prontera `--near 70,356 --seed 20261190` | running (started 22:51, a judged screenshot first) | | | |
+| B1 prontera `--near 70,356 --seed 20261190` | `20261013T225520-demo-npc-click-probe-prontera` | 22:51-22:55 | **0: STOPPED FOR A PERSON at the first stand** (below) | 0 / 0 / 0 / 0 |
+
+- ➡️ **B1 STOPPED (22:55), nothing hovered, nothing typed after the stop.** The first @warp put the
+  GM on (73,348), inside the TOUCH area of a hidden script NPC (`#tour`, knight_skills.txt, at
+  (69,351), span 5,5: cells 64-74 x 346-356). Its OnTouch dialog opened on arrival ("[?]"
+  ... with NEXT). The UI gate then refused the next typed line and stopped the run for a person
+  (frame `/dev/shm/poring-lab-tmp/ui-gate/20261013-225538.png`). The packets show map_change
+  (73,348), then npc_say x4 + npc_wait, and NO npc_contact: the server ran it; we sent nothing.
+  - **The dialog is LEFT OPEN for Batt.** The gate says "a person"; Claude does not close it. Its
+    script (read from the pinned source) is two NEXT pages, then CLOSE, with no menu. Its only
+    state change is KNGT_SK 1 -> 2, for a character on that quest step.
+  - **B1 cannot be re-run unchanged:** all 5 of its NPCs (72-78 x 352-358) sit in or beside that
+    area, and the seeded stands land inside it. The harness now REFUSES such a plan (1d78ee5:
+    stands and walked cells inside an L3 touch area). The stopped session's manifest said
+    `ended: complete` (a bookkeeping bug, fixed in the same commit); it is KEPT and not scored.
+  - **B2 (alberta_in) and B3 (new_1-2) are unaffected:** L3 lists no touch area on either map.
+    B1's replacement is Batt's call; a proposal follows when it is planned.
 
 **Not decided here (Batt):**
 - the hit box itself (a box, against "not a box or a cell guess");
