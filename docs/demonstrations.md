@@ -4306,6 +4306,11 @@ PASS alone):
 **FAIL:** the region is not used. The failing points (offset, sprite, map) are reported, and a new
 hit-box model is pre-registered.
 
+**➡️ The sprite table, built 2026-10-13 14:45 (before any run):**
+`/dev/shm/poring-lab-tmp/npc-render/n1-measure-3.38.json`. It holds 77 sprites, every sprite B's
+plans need (733, 734, 86, 59, 117, 726, 105, 84, 90, 92), and 0 problems. sha256
+`690537890ad2728103dc1a8905db3f0e535c0b7f11451b2aa462440929252540`.
+
 **Not decided here (Batt):**
 - the hit box itself (a box, against "not a box or a cell guess");
 - decoding MIXCRYPT sprites at RUN time. Claude reads "the client's sprite files (decoded
