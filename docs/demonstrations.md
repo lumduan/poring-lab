@@ -4291,7 +4291,13 @@ sheets are labelled.
 | A3 alberta | `20261013T182009-demo-npc-click-probe-alberta` | 18:20-19:33 | 1,495 | 0 / 0 / 0 / 0 |
 | A3 prontera | `20261013T193638-demo-npc-click-probe-prontera` | 19:36-20:52 | 1,498 | 0 / 0 / 0 / 0 |
 | A3 prt_church | `20261013T205443-demo-npc-click-probe-prt-church` | 20:54-21:22 | 566 | 0 / 0 / 0 / 0 |
-| morocc pilot (never scored) | running (started 21:34, a judged screenshot first) | | | |
+| morocc pilot (never scored) | `20261013T213555-demo-npc-click-probe-morocc` | 21:35-21:44 | 156 (3 stands; live reads walk 77 / talk 53 / unknown 26: the harness runs there, morocc is NOT dropped) | 0 / 0 / 0 / 0 |
+| A3 morocc (HELD-OUT, once) | running (started 21:45, a judged screenshot first; the plan's 9 stands and 75 click cells checked offline against morocc's 14 warp spans: none inside, none within 1 cell) | | | |
+
+- **A harness change between the pilot and A3 morocc (860871f, merged 21:44:31 by the reflog):** `npc_click_test.py` now
+  REFUSES a plan that stands or walks inside a warp's trigger span, or on a map whose warps L3
+  does not list (after a (100,56) banking stand warped the GM to prontera, 63e310e). It is a refusal, never a
+  filter: a plan that passes is unchanged, so morocc's spots are as pre-registered.
 
 **Truth (fixed BEFORE any bar is computed):**
 - `scripts/cursor2_truth.py sheets --judged robust3 --item-seed 20261205 --strip-seed 20261206` at
