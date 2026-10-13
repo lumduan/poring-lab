@@ -167,20 +167,20 @@ def test_a_plan_that_stands_or_walks_in_a_warp_span_is_refused_never_filtered(
     before = json.dumps(plan, sort_keys=True)
     (tmp_path / "route.json").write_text(json.dumps({"warps": {"town": [portal(*stand)]}}))
     with pytest.raises(SystemExit, match="inside a warp span"):
-        nct.check_warps("town", plan, tmp_path, server=server)
+        nct.check_warps("town", plan, tmp_path, server=server, touch=[])
     assert json.dumps(plan, sort_keys=True) == before
     # clear -> no refusal; a map L3 does not list -> refused (unknown is not clear)
     (tmp_path / "route.json").write_text(json.dumps({"warps": {"town": []}}))
-    nct.check_warps("town", plan, tmp_path, server=server)
+    nct.check_warps("town", plan, tmp_path, server=server, touch=[])
     with pytest.raises(SystemExit, match="lists no warps"):
-        nct.check_warps("elsewhere", plan, tmp_path, server=server)
+        nct.check_warps("elsewhere", plan, tmp_path, server=server, touch=[])
     # a click cell in a span refuses the CLICK arm only: a probe arm hovers and never walks there
     only_click = [w for w in [portal(*click)] if not nct.warp_conflicts(plan, [w], clicks=False)]
     assert only_click, "the test needs a click cell that is no stand and no control"
     (tmp_path / "route.json").write_text(json.dumps({"warps": {"town": only_click}}))
-    nct.check_warps("town", plan, tmp_path, clicks=False, server=server)
+    nct.check_warps("town", plan, tmp_path, clicks=False, server=server, touch=[])
     with pytest.raises(SystemExit, match="inside a warp span"):
-        nct.check_warps("town", plan, tmp_path, clicks=True, server=server)
+        nct.check_warps("town", plan, tmp_path, clicks=True, server=server, touch=[])
 
 
 def test_a_plan_cell_the_server_will_not_stand_on_is_refused(plan: dict, tmp_path: Path) -> None:
@@ -193,15 +193,46 @@ def test_a_plan_cell_the_server_will_not_stand_on_is_refused(plan: dict, tmp_pat
     assert nct.server_conflicts(plan, FakeGrid({tuple(ctl)}).nopass) == [f"control {tuple(ctl)}"]
     before = json.dumps(plan, sort_keys=True)
     with pytest.raises(SystemExit, match="does not let the GM stand on"):
-        nct.check_warps("town", plan, tmp_path, server={"town": FakeGrid({tuple(stand)})})
+        nct.check_warps("town", plan, tmp_path, server={"town": FakeGrid({tuple(stand)})}, touch=[])
     assert json.dumps(plan, sort_keys=True) == before
     if tuple(click) not in s_cells:  # a click cell: the click arm only
         bad = {"town": FakeGrid({tuple(click)})}
-        nct.check_warps("town", plan, tmp_path, clicks=False, server=bad)
+        nct.check_warps("town", plan, tmp_path, clicks=False, server=bad, touch=[])
         with pytest.raises(SystemExit, match="does not let the GM stand on"):
-            nct.check_warps("town", plan, tmp_path, clicks=True, server=bad)
+            nct.check_warps("town", plan, tmp_path, clicks=True, server=bad, touch=[])
     with pytest.raises(SystemExit, match="map cache lacks"):
-        nct.check_warps("town", plan, tmp_path, server={})
+        nct.check_warps("town", plan, tmp_path, server={}, touch=[])
+
+
+def test_a_stand_inside_an_npc_touch_area_is_refused(plan: dict, tmp_path: Path) -> None:
+    # npc-render B1, 2026-10-13: a stand inside prontera's #tour area (a hidden script NPC, span
+    # 5,5) opened its dialog on arrival; a script NPC with a span runs OnTouch (or its main dialog)
+    stand = plan["npcs"][0]["stands"][0]
+    (tmp_path / "route.json").write_text(json.dumps({"warps": {"town": []}}))
+    tour = {"key": "npc/quests/q.txt:311", "type": "script", "x": stand[0] - 5, "y": stand[1] + 5,
+            "trigger_span": [5, 5]}  # fmt: skip
+    shop = {"key": "npc/shops.txt:9", "type": "shop", "x": stand[0], "y": stand[1],
+            "trigger_span": [5, 5]}  # fmt: skip
+    plain = {"key": "npc/q.txt:1", "type": "script", "x": stand[0], "y": stand[1],
+             "trigger_span": [0, 0]}  # fmt: skip
+    fw = {"maps": {"town": {"npcs": [tour, shop, plain]}}}
+    (tmp_path / "first_workflow.json").write_text(json.dumps(fw))
+    areas = nct.load_touch_areas("town", tmp_path)
+    assert areas == [{"x": stand[0] - 5, "y": stand[1] + 5, "span_x": 5, "span_y": 5,
+                      "name": "q.txt:311", "to_map": "an NPC dialog"}]  # fmt: skip
+    before = json.dumps(plan, sort_keys=True)
+    with pytest.raises(SystemExit, match="inside an NPC touch area"):
+        nct.check_warps("town", plan, tmp_path, server={"town": FakeGrid()})
+    assert json.dumps(plan, sort_keys=True) == before
+    # one cell past the span edge is clear; a map L3 does not cover refuses
+    nct.check_warps("town", plan, tmp_path, server={"town": FakeGrid()},
+                    touch=[dict(areas[0], x=stand[0] - 6)])  # fmt: skip
+    assert nct.load_touch_areas("elsewhere", tmp_path) is None
+    bare = tmp_path / "bare"  # warps listed, touch areas not
+    bare.mkdir()
+    (bare / "route.json").write_text(json.dumps({"warps": {"town": []}}))
+    with pytest.raises(SystemExit, match="does not cover"):
+        nct.check_warps("town", plan, bare, server={"town": FakeGrid()})
 
 
 def test_warp_lines_type_only_changes_of_stand() -> None:

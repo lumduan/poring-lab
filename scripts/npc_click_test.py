@@ -26,10 +26,11 @@ gets STANDS stand cells 3-5 cells away (seeded), from which:
   with the windows gone -> STOP FOR A PERSON (exit 7; --resume continues the session).
 GM commands only through ro_agent.gm (the typing guard applies): @warp to a known stand cell, never
 /where (Batt's typing policy). Consecutive @warp lines always differ (the stands alternate).
-A plan that would STAND or WALK inside a warp's trigger span (L3 route.json) or onto a cell the
-SERVER's map cache does not let the GM stand on (the plan is built on the client's GAT; @warp tests
-the server's), or on a map either source lacks, is REFUSED before any input (check_warps; never
-filtered, so a plan that passes is unchanged).
+A plan that would STAND or WALK inside a warp's trigger span (L3 route.json), inside a script
+NPC's TOUCH area (L3 first_workflow.json), or onto a cell the SERVER's map cache does not let the
+GM stand on (the plan is built on the client's GAT; @warp tests the server's), or on a map any of
+those sources lacks, is REFUSED before any input (check_warps; never filtered, so a plan that
+passes is unchanged).
 Pixels in, input out: packets are never read here; npc_click_score.py judges the session offline.
 """
 
@@ -284,6 +285,28 @@ def warp_conflicts(plan: dict[str, Any], warps: Sequence[dict[str, Any]],
     return sorted(set(out))
 
 
+def load_touch_areas(map_name: str, kb_dir: Path = nc.KB_DIR) -> list[dict[str, Any]] | None:
+    """The map's script-NPC TOUCH areas from L3 (first_workflow.json: every file the server loads;
+    GPL-derived, local only): a script NPC whose header carries a span (``sprite,xs,ys``) runs its
+    OnTouch label, or without one its main dialog, when a character steps inside
+    (|dx| <= xs and |dy| <= ys). As warps, shaped {x, y, span_x, span_y, name, to_map}. None when
+    L3 does not cover the map (unknown: the plan check then refuses)."""
+    p = kb_dir / "first_workflow.json"
+    if not p.exists():
+        return None
+    maps = json.loads(p.read_text()).get("maps", {})
+    if map_name not in maps:
+        return None
+    out = []
+    for n in maps[map_name].get("npcs", []):
+        span = n.get("trigger_span") or []
+        if n.get("type") != "shop" and len(span) >= 2 and (span[0] > 0 or span[1] > 0):
+            name = str(n.get("key", "?")).rsplit("/", 1)[-1]
+            out.append({"x": n["x"], "y": n["y"], "span_x": span[0], "span_y": span[1],
+                        "name": name, "to_map": "an NPC dialog"})  # fmt: skip
+    return out
+
+
 def server_conflicts(plan: dict[str, Any], nopass: Callable[[int, int], bool],
                      clicks: bool = True) -> list[str]:  # fmt: skip
     """Every plan cell the SERVER does not let the GM stand on (its map cache's CELL_CHKNOPASS).
@@ -295,17 +318,25 @@ def server_conflicts(plan: dict[str, Any], nopass: Callable[[int, int], bool],
 
 
 def check_warps(map_name: str, plan: dict[str, Any], kb_dir: Path = nc.KB_DIR,
-                clicks: bool = True, server: Any = None) -> None:  # fmt: skip
-    """REFUSE a plan that would stand or walk into a warp span or onto a cell the SERVER does not
-    let the GM stand on, or a map whose warps L3 does not list or the server's map cache lacks. A
-    refusal, never a filter: a plan that passes is exactly the plan without the check. ``clicks``:
-    the click arm (its cells are walked to); a probe arm checks its stands only. ``server``: the
-    server's grids by map (default: rAthena's pre-renewal map cache, poring_dataset.mapcache)."""
+                clicks: bool = True, server: Any = None,
+                touch: list[dict[str, Any]] | None = None) -> None:  # fmt: skip
+    """REFUSE a plan that would stand or walk into a warp span, into a script NPC's TOUCH area
+    (2026-10-13, npc-render B1: a stand inside prontera's #tour area opened its dialog on arrival)
+    or onto a cell the SERVER does not let the GM stand on; or a map whose warps or touch areas L3
+    does not list, or the server's map cache lacks. A refusal, never a filter: a plan that passes
+    is exactly the plan without the check. ``clicks``: the click arm (its cells are walked to); a
+    probe arm checks its stands only. ``server``: the server's grids by map (default: rAthena's
+    pre-renewal map cache, poring_dataset.mapcache). ``touch``: the areas (default: L3)."""
     warps = load_warps(map_name, kb_dir)
     if warps is None:
         raise SystemExit(f"L3 lists no warps for {map_name}: the plan cannot be checked (refused)")
     if bad := warp_conflicts(plan, warps, clicks):
         raise SystemExit(f"the plan stands or walks inside a warp span: {bad[:5]} (refused)")
+    touch = load_touch_areas(map_name, kb_dir) if touch is None else touch
+    if touch is None:
+        raise SystemExit(f"L3 does not cover {map_name}'s NPC touch areas (refused)")
+    if bad := warp_conflicts(plan, touch, clicks):
+        raise SystemExit(f"the plan stands or walks inside an NPC touch area: {bad[:5]} (refused)")
     if server is None:
         from poring_dataset import mapcache
 
@@ -642,6 +673,9 @@ def run(
                                           "person closes it, then --resume " + ses.sid,
                                           "why": dialog["action"]}), flush=True)  # fmt: skip
                         break
+        except BaseException as exc:  # a stop raised inside a step (e.g. the UI gate while typing)
+            ended = f"stopped:{type(exc).__name__}: {str(exc)[:160]}"  # never recorded "complete"
+            raise
         finally:
             if det is not None:
                 det.close()
@@ -692,6 +726,8 @@ def main() -> int:
                           "warp_conflicts": None if warps is None else warp_conflicts(plan, warps),
                           "server_conflicts": None if grid is None
                           else server_conflicts(plan, grid.nopass),
+                          "touch_conflicts": None if (ta := load_touch_areas(a.map)) is None
+                          else warp_conflicts(plan, ta),
                           "npcs": plan["npcs"], "probes": len(plan["probes"]),
                           "clicks": len(plan["clicks"]), "probe_warps": len(lines),
                           "click_warps_ok": no_identical_in_a_row(click_warps(a.map,
