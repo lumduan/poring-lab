@@ -7,7 +7,7 @@ verdict_date: 2026-10-12
 verdict_ticket: null
 supersedes: null
 related: [v1-vs-v0png.md, ../operations/mid-epoch-checkpoints.md, ../operations/vision-long-lived.md]
-next_action: "SCORED 2026-10-12 ~03:10: FAIL as written (gold, position, monsters: v1b P 0.888 / R 0.790 vs v1 0.902 / 0.830); v1 stays the candidate. Reported: v1b is better on the test sessions against v1's own labels (mAP50-95 +0.016 to +0.064). Batt: whether that divergence (auto labels vs the hand set) changes what is trained next."
+next_action: "➡️ 2026-10-13 (Batt, decision 11): the divergence below DID change what is trained next: label quality first, no more epochs on v1; the analysis is ../planning/label-quality.md (PROPOSED). History: SCORED 2026-10-12 ~03:10: FAIL as written (gold, position, monsters: v1b P 0.888 / R 0.790 vs v1 0.902 / 0.830); v1 stays the candidate. Reported: v1b is better on the test sessions against v1's own labels (mAP50-95 +0.016 to +0.064)."
 ---
 
 # v1b vs v1: v1's training continued (pre-registered 2026-10-11 ~07:47 ICT at commit 0ae7eb9, BEFORE the run starts)
@@ -110,6 +110,12 @@ boxes.
   Against the HAND-checked gold boxes, it is slightly worse.
   - One reading (not tested): the extra epochs fit v1's label convention more closely, and that
     convention is not exactly what a person marks.
+    ➡️ **Measured 2026-10-13 ([label-quality.md](../planning/label-quality.md) §4.1), not a verdict:**
+    22 of v1b's 31 gold errors (12 FN + 10 FP) are in the 2 dead-GM frames, where every detector so far
+    (v0-baseline, v0-JPEG, v0-PNG, v1b) finds none of the 12 monsters and draws boxes up and to the right
+    of them (v1b: median +97.9, -96.0 px): the training session indoor-b's dead-GM span carries labels
+    displaced that way. On the 25
+    other frames v1b is 79 / 0 / 9. v1's own split waits for its gold predictions (missing on disk).
   - The gold set is small: 100 monster boxes, so 4 boxes move recall by 0.04.
   - Neither is decided here. The pre-registered primary decides, and it says v1 stays.
 - **Outputs:** `/dev/shm/poring-lab-tmp/gpu-day/c17/` (local); predictions

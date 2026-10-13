@@ -139,7 +139,9 @@ flowchart TD
   masked + a fresh background per hover), pre-registered first.
 - **Detector:** v1 REPLACES v0 live: CPU ONNX export, parity on the gold set first. **Next training:**
   LABEL QUALITY toward Batt's gold convention (auto-label boxes vs gold, the systematic gaps) before
-  labels v2; no more epochs on v1.
+  labels v2; no more epochs on v1. ➡️ The analysis: [label-quality.md](planning/label-quality.md)
+  (PROPOSED, offline; five gaps ranked, the largest a dead-GM span of indoor-b whose labels sit ~4
+  cells off, which every detector learned; fixes for Batt to choose).
 - **Labels v2:** the S2 UI-gate session is scheduled with Batt (~15 min of his clicks). Warp readings
   accepted provisionally; prt_church (100,56) to be read with more frames; N1 extends to 909 and the
   church's off-route sprites.
