@@ -18,7 +18,7 @@ LIVE (the parent runs these; RDP, ASSIST, the interlock green, the GM):
         the same keys, frames and `collect` (T5 is n/a: the contact was not ours).
     talk_calibrate.py stand --npc NPC      OFFLINE: the stand cell `drive` warps to + its @warp line
     talk_calibrate.py key CODE [CODE ...] | frames [--n 4] | click next|close|ok|cancel|up|down|row
-        [--row K] | contact --npc NPC | collect
+        [--row K] | hover next|close [--n 4] | contact --npc NPC | collect
         Single steps on the CURRENT session (a person looking at the frames decides); `click` finds
         its element by T2 (cut templates) and clicks it through talk1.LiveIo (its one UI click).
 
@@ -77,6 +77,7 @@ CURRENT = Path("/dev/shm/poring-lab-tmp/talk-cal/current.json")
 STEPS_FILE = "talk_cal.json"
 FRAMES_DIR = "frames"
 SETTLE_MS = 600
+HOVER_SETTLE_S = 0.8  # the hover step: the client draws its cursor ~0.4-0.8 s after the 2nd motion
 HOLDOUT_EVERY = 3
 PROVE_T2_MIN = 50
 STAND = [(0, 3), (-3, 0), (0, -3), (3, 0), (-3, 3), (3, 3), (-3, -3), (3, -3)]
@@ -650,11 +651,14 @@ def _doc() -> dict[str, Any]:
     return dict(json.loads((Path(cur["dir"]) / STEPS_FILE).read_text()))
 
 
-def grab_frames(io: talk1.LiveIo, doc: dict[str, Any], n: int, gap_s: float = 0.25) -> list[Any]:
-    """Park the cursor away from the windows, then ``n`` frames (decoded after the last step)."""
+def grab_frames(io: talk1.LiveIo, doc: dict[str, Any], n: int, gap_s: float = 0.25,
+                park: bool = True) -> list[Any]:  # fmt: skip
+    """Park the cursor away from the windows (unless ``park`` is False: the `hover` step keeps it
+    on the element), then ``n`` frames (decoded after the last step)."""
     import ro_agent as r
 
-    io.park()
+    if park:
+        io.park()
     out = []
     fdir = Path(doc["dir"]) / FRAMES_DIR
     k = len(list(fdir.glob("*.png"))) if fdir.exists() else 0
@@ -911,7 +915,7 @@ def one_step(kind: str, args: argparse.Namespace) -> dict[str, Any]:
 
     doc = _doc()
     with r.session("rule:talk-calibrate") as (agent, screen):
-        templates = (nd.load_templates(talk1.TEMPLATES) if kind == "click"
+        templates = (nd.load_templates(talk1.TEMPLATES) if kind in ("click", "hover")
                      else nd.DialogTemplates({}))  # fmt: skip
         io = talk1.LiveIo(agent, screen, templates)
         if kind == "key":
@@ -930,7 +934,22 @@ def one_step(kind: str, args: argparse.Namespace) -> dict[str, Any]:
             t = io.click(*nd.centre(box), args.element, inside)
             doc["steps"].append({"kind": "click", "element": args.element, "row": args.row,
                                  "t": t})  # fmt: skip
-        frames = grab_frames(io, doc, args.n)
+        elif kind == "hover":  # 2026-10-13: the highlighted NEXT's proof frames; NEVER a click
+            seen = talk1.observe_stable(io, talk1.menu_reader(mt.load_menu_glyphs(talk1.GLYPHS)))
+            st = seen.state
+            if not st.ok:
+                raise SystemExit(f"T2 cannot read the windows ({st.reason}): no hover")
+            box, _ = element_box(st, args.element, None)
+            x, y = nd.centre(box)
+            gx, gy, _, _ = r.game_region()
+            agent.move(gx + x - 3, gy + y - 3)  # two motions: the client draws its cursor (and
+            time.sleep(0.05)  # any hover look) only where a SECOND motion leaves it
+            agent.move(gx + x, gy + y)
+            time.sleep(HOVER_SETTLE_S)
+            io.parked = False
+            doc["steps"].append({"kind": "hover", "element": args.element, "at": [x, y],
+                                 "t": r.ns()})  # fmt: skip
+        frames = grab_frames(io, doc, args.n, park=kind != "hover")
         _save_steps(doc)
         st = nd.state(frames[-1], nd.load_templates(talk1.TEMPLATES)) \
             if (talk1.TEMPLATES / nd.PARAMS_FILE).exists() else None  # fmt: skip
@@ -982,6 +1001,9 @@ def main() -> int:
     cl.add_argument("element", choices=("next", "close", "ok", "cancel", "up", "down", "row"))
     cl.add_argument("--row", type=int)
     cl.add_argument("--n", type=int, default=4)
+    hv = sub.add_parser("hover")  # the cursor ON the element (no click), then frames in place
+    hv.add_argument("element", choices=("next", "close"))
+    hv.add_argument("--n", type=int, default=4)
     f = sub.add_parser("frames")
     f.add_argument("--n", type=int, default=4)
     sub.add_parser("collect")
@@ -1015,7 +1037,7 @@ def main() -> int:
             grab_frames(io, doc, 4)
             _save_steps(doc)
         out = {"session": doc["session"], "clicked": doc["t_click"] is not None}
-    elif a.cmd in ("key", "click", "frames"):
+    elif a.cmd in ("key", "click", "hover", "frames"):
         out = one_step(a.cmd, a)
     elif a.cmd == "collect":
         out = collect(_doc())
