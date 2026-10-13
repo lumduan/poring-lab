@@ -347,7 +347,16 @@ def test_model_misses_splits_by_the_labels_own_misses_and_the_dead_gm(lq: Module
     r = lq.model_misses([alive, dead], preds)
     assert (r["tp"], r["fp"], r["fn"]) == (0, 1, 3)
     assert r["fn_by_label_cause_gm_alive"] == {"label_hit": 1, "ui_window:chat": 1}
-    assert r["by_gm"]["gm_dead"] == {"frames": 1, "tp": 0, "fn": 1, "fp": 1}
+    assert r["by_gm"]["gm_dead"] == {
+        "frames": 1,
+        "tp": 0,
+        "fn": 1,
+        "fp": 1,
+        "precision": 0.0,
+        "recall": 0.0,
+    }
+    # the dead frame's hand box is far from unit 1's label too: the label missed it as well
+    assert r["fn_rows"] == [[0, 1, "ui_window:chat"], [1, 0, "unit_position:idle"]]
     assert r["gm_dead_fp_offset_to_nearest_hand"]["dx"]["median"] == 100.0
     assert r["gm_dead_fp_offset_to_nearest_hand"]["dy"]["median"] == -100.0
 

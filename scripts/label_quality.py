@@ -1057,6 +1057,9 @@ def causes(
                     "gid": gid,
                     "cause": why,
                     "provenance": provenance(h, f.get("bundle")),
+                    "hand_centre": [round(v, 1) for v in centre(rect_of(h))],
+                    "hand_wh": [round(h["x2"] - h["x1"], 1), round(h["y2"] - h["y1"], 1)],
+                    "unit_foot_px": [round(v, 1) for v in e["foot_px"]] if e else None,
                 }
             )
         for j, a in enumerate(pred):
@@ -1070,7 +1073,15 @@ def causes(
             else:
                 why = f"no_hand_box:{(e or {}).get('state')}"
             fp[why] += 1
-            rows.append({"frame_id": f["frame_id"], "side": "fp", "gid": gid, "cause": why})
+            rows.append(
+                {
+                    "frame_id": f["frame_id"],
+                    "side": "fp",
+                    "gid": gid,
+                    "cause": why,
+                    "auto_centre": [round(v, 1) for v in centre(rect_of(a))],
+                }
+            )
     return {
         "source": source,
         "metric": metric,
@@ -1380,10 +1391,29 @@ def labels_of(source: str) -> AutoOf:
     return lambda f: f[source]
 
 
+def position_outcome(
+    frames: Sequence[dict[str, Any]], auto_of: AutoOf
+) -> dict[tuple[int, str], tuple[str, list[float]]]:
+    """(frame, gid) -> ("tp" or "fp", the box centre) for every monster auto box, by the position
+    metric: what a what-if changes, box by box."""
+    out: dict[tuple[int, str], tuple[str, list[float]]] = {}
+    for f in frames:
+        auto = auto_of(f)
+        if auto is None:
+            continue
+        pred = [b for b in auto if b["cls"] == "monster"]
+        truth = [rect_of(b) for b in f["hand"] if b["cls"] == "monster"]
+        hit = {j for _, j, _ in greedy_position(truth, [rect_of(b) for b in pred])}
+        for j, b in enumerate(pred):
+            c = [round(v, 1) for v in centre(rect_of(b))]
+            out[(f["frame_id"], str(b.get("gid")))] = ("tp" if j in hit else "fp", c)
+    return out
+
+
 def run_what_ifs(frames: Sequence[dict[str, Any]], ifs: Sequence[WhatIf]) -> list[dict[str, Any]]:
-    """Each what-if scored on both metrics (monsters; NPCs beside), with its change against as_is.
-    The cost of a gap = the errors (FN + FP) its what-if removes: ranked by the position metric's
-    errors removed, then the IoU metric's."""
+    """Each what-if scored on both metrics (monsters; NPCs beside), with its change against as_is
+    (``ifs[0]``), box by box for the position metric. The cost of a gap = the errors (FN + FP) its
+    what-if removes: ranked by the position metric's errors removed, then the IoU metric's."""
     rows = []
     base: dict[str, dict[str, Any]] = {}
     for w in ifs:
@@ -1422,6 +1452,21 @@ def run_what_ifs(frames: Sequence[dict[str, Any]], ifs: Sequence[WhatIf]) -> lis
             "npc_position_errors_removed": (bn["fp"] + bn["fn"])
             - (row["npc_position"]["fp"] + row["npc_position"]["fn"]),
         }
+        before = position_outcome(fs, ifs[0].auto_of)
+        after = position_outcome(fs, w.auto_of)
+        row["position_changes"] = {
+            kind: [
+                [fid, gid, *c]
+                for (fid, gid), (o, c) in sorted(after.items())
+                if o == kind and (before.get((fid, gid)) or ("",))[0] != kind
+            ]
+            for kind in ("tp", "fp")
+        }
+        row["position_changes"]["lost_tp"] = [
+            [fid, gid, *c]
+            for (fid, gid), (o, c) in sorted(before.items())
+            if o == "tp" and (after.get((fid, gid)) or ("",))[0] != "tp"
+        ]
         rows.append(row)
     ranked = sorted(
         (r for r in rows if r["name"] != "as_is" and r["gap"] != "combined"),
@@ -1468,6 +1513,7 @@ def model_misses(
     }
     fn: Counter[str] = Counter()
     fn_alive: Counter[str] = Counter()
+    fn_rows: list[list[Any]] = []
     fp: Counter[str] = Counter()
     near_miss: list[dict[str, Any]] = []
     no_det: list[str] = []
@@ -1500,6 +1546,7 @@ def model_misses(
                 continue
             why = label_fn.get((f["frame_id"], i), "label_hit")
             fn[why] += 1
+            fn_rows.append([f["frame_id"], i, why])
             if not f.get("self_dead"):
                 fn_alive[why] += 1
             if why != "label_hit":
@@ -1539,6 +1586,7 @@ def model_misses(
         "recall": _ratio(tp, tp + n_fn),
         "fn_by_label_cause": dict(fn.most_common()),
         "fn_by_label_cause_gm_alive": dict(fn_alive.most_common()),
+        "fn_rows": [r for r in fn_rows if r[2] != "label_hit"],
         "label_hit_near_miss": {
             "n": len(near_miss),
             "dx": describe(m["dx"] for m in near_miss),
@@ -1547,7 +1595,14 @@ def model_misses(
         },
         "label_hit_no_detection": dict(Counter(no_det)),
         "fp_by_frame": dict(fp.most_common()),
-        "by_gm": {k: dict(v) for k, v in by_gm.items()},
+        "by_gm": {
+            k: {
+                **dict(v),
+                "precision": _ratio(v["tp"], v["tp"] + v["fp"]),
+                "recall": _ratio(v["tp"], v["tp"] + v["fn"]),
+            }
+            for k, v in by_gm.items()
+        },
         "gm_dead_fp_offset_to_nearest_hand": {
             "dx": describe(x for x, _ in dead_fp_offset),
             "dy": describe(y for _, y in dead_fp_offset),
@@ -1619,6 +1674,9 @@ def report(d: dict[str, Any]) -> dict[str, Any]:
     out["geometry"] = {
         s: {
             "all": group_geometry(pairs[s], ("self_moving",)),
+            "by_self_dead_self_still": group_geometry(
+                [p for p in pairs[s] if not p["self_moving"]], ("self_dead",)
+            ),
             "by_provenance_state_self_still": group_geometry(
                 [p for p in pairs[s] if not p["self_moving"]], ("provenance", "state")
             ),
@@ -1685,8 +1743,17 @@ def report(d: dict[str, Any]) -> dict[str, Any]:
         ),
     }
     drawn = [p for p in pairs["v1"] if p["provenance"] in ("added", "resized")]
+    own = [
+        h
+        for f in frames
+        for h in f["hand"]
+        if h["cls"] == "monster" and provenance(h, f.get("bundle")) in ("added", "resized")
+    ]
     v1_boxes = [b for f in frames for b in f.get("v1") or [] if b["cls"] == "monster"]
     out["size"] = {
+        "batt_drawn_all_n": len(own),
+        "batt_drawn_all_w": describe(h["x2"] - h["x1"] for h in own),
+        "batt_drawn_all_h": describe(h["y2"] - h["y1"] for h in own),
         "batt_drawn_hand_w": describe(p["hand_w"] for p in drawn),
         "batt_drawn_hand_h": describe(p["hand_h"] for p in drawn),
         "batt_drawn_v1_over_hand_w": describe((p["w_ratio"] for p in drawn), 3),
