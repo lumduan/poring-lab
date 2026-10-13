@@ -292,3 +292,27 @@ def test_the_exemption_keeps_the_repeat_rule(exempt: Any) -> None:
     assert go("/where", reason="where_fix.fix_v2") and go("/where", reason="where_fix.fix_v2")
     with pytest.raises(cg.ChatRefused, match="repeat"):
         go("/where", reason="where_fix.fix_v2")
+
+
+def test_a_where_for_a_stated_need_wins_over_the_repeat_rule(guard: Any) -> None:
+    """Batt 2026-10-13 (decision 15): '/where once per need' wins over the repeat rule. A 3rd
+    /where in a row with a reason passes (logged repeat_waived); the retry interval and the budget
+    still apply; a /where without a reason, or where@2's frozen pattern, keeps the repeat rule."""
+    _, clock, paths, logged = guard
+    pol = {**POL, "where_need_over_repeat": True, "where_budget_per_run": 9}
+    cg.start_run("run-b", 9, state_path=paths["state_path"], log=paths["log"])
+
+    def where(dt: float, reason: str | None) -> bool:
+        clock.t += dt
+        return bool(cg.before_typing("/where", reason=reason, pol=pol, clock=clock, **paths))
+
+    assert where(5.0, "route_start_indoor") and where(61.0, "belief_in_doubt")
+    assert where(61.0, "belief_in_doubt")  # the 3rd in a row: a stated need wins
+    waived = [r for r in logged() if r["event"] == "repeat_waived"]
+    assert len(waived) == 1 and waived[0]["n_in_a_row"] == 3
+    with pytest.raises(cg.ChatRefused, match="where_retry"):
+        where(10.0, "belief_in_doubt")  # the retry interval still applies
+    with pytest.raises(cg.ChatRefused, match="repeat"):
+        where(61.0, None)  # no stated need: the repeat rule
+    with pytest.raises(cg.ChatRefused, match="repeat"):
+        where(61.0, "where_fix.fix_v2")  # where@2's frozen pattern never gets the waiver

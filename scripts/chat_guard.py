@@ -10,6 +10,10 @@ commands." The rules, from L2 `chat` (the measured fact and the policy):
 - **No 3rd identical line in a row** of a kind (`policy.refuse_identical_in_a_row`). The client
   itself accepts 3 and silently drops the 4th slash command (`repeat`, measured). The kinds count
   apart: a slash command does not reset the chat count.
+  - EXCEPT a /where typed for a STATED NEED (a reason, not where@2's frozen pattern): "'/where once
+    per need' wins over the repeat rule" (Batt 2026-10-13, decision 15; L2
+    `where_need_over_repeat`). It is logged `repeat_waived`; the retry interval and the budget still
+    apply. A /where the client then drops is no fix, as for a miss.
 - **The minimum interval:** a line within `min_line_interval_s` of the previous one is refused.
 - **/where once per need:**
   - a /where within `where_retry_s` of the previous one is refused (a quick retype is not what a
@@ -61,7 +65,8 @@ L2_CLIENT = "kro-20211103-prere"
 FILLER = frozenset({"/ex"})  # lines our code typed only to reset the repeat count (where@2)
 EXEMPT_REASONS = frozenset({"where_fix.fix_v2", "where_fix.fix_v2 separator"})  # 3.29a only
 FALLBACK_POLICY = {"refuse_identical_in_a_row": 3, "where_retry_s": 60,
-                   "where_budget_per_run": 12, "min_line_interval_s": 0.5}  # fmt: skip
+                   "where_budget_per_run": 12, "min_line_interval_s": 0.5,
+                   "where_need_over_repeat": True}  # fmt: skip
 
 
 class ChatRefused(RuntimeError):
@@ -166,10 +171,15 @@ def before_typing(text: str, *, reason: str | None = None, on_refuse: str = "rai
         ex = state.get("exemption") or {}
         exempt = (reason in EXEMPT_REASONS and isinstance(ex.get("until"), (int, float))
                   and wall() < float(ex["until"]))  # fmt: skip
+        # a /where for a STATED need (Batt 2026-10-13, decision 15): never where@2's frozen pattern
+        need = bool(reason) and reason not in EXEMPT_REASONS
+        waived = False
         if text.strip() in FILLER and not exempt:
             refusal = ("filler", f"{text!r} is only ever a separator: never type a line to reset "
                                  "the client's repeat count (Batt 2026-10-09)")  # fmt: skip
-        elif n >= int(p["refuse_identical_in_a_row"]):
+        elif n >= int(p["refuse_identical_in_a_row"]) and not (
+            is_where and need and bool(p.get("where_need_over_repeat", False))
+        ):
             refusal = ("repeat", f"{text!r} would be identical {kind} line #{n} in a row")
         elif gap is not None and 0 <= gap < float(p["min_line_interval_s"]):
             refusal = ("interval", f"{gap:.2f} s after the previous line "
@@ -182,6 +192,7 @@ def before_typing(text: str, *, reason: str | None = None, on_refuse: str = "rai
             refusal = ("where_budget", f"the run {run['id']!r} used its /where budget "
                                        f"({run['budget']})")  # fmt: skip
         if refusal is None:
+            waived = is_where and n >= int(p["refuse_identical_in_a_row"])
             state[kind] = {"text": text, "count": n}
             state["last_t"] = now
             if is_where:
@@ -196,6 +207,9 @@ def before_typing(text: str, *, reason: str | None = None, on_refuse: str = "rai
         raise ChatRefused(*refusal)
     if exempt:
         _log(log, {"event": "exempted", "id": ex.get("id"), "line": _shown(text), "reason": reason})
+    if waived:  # the client may drop it (the 4th+ identical slash line, measured): no fix then
+        _log(log, {"event": "repeat_waived", "line": _shown(text), "n_in_a_row": n,
+                   "reason": reason})  # fmt: skip
     if is_where:
         _log(log, {"event": "where", "run": run["id"], "n": run["where"], "budget": run["budget"],
                    "reason": reason or "unspecified", "argv0": Path(sys.argv[0]).name})  # fmt: skip

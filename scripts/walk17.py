@@ -77,7 +77,7 @@ import chat_guard  # noqa: E402
 import operator_hud  # noqa: E402
 import ro_agent as r  # noqa: E402
 import route_plan  # noqa: E402
-import walk5 as w5  # noqa: E402
+import walk5 as _walk5  # noqa: E402
 import walk6 as _walk6  # noqa: E402
 import walk11 as w11  # noqa: E402
 import walk12 as w12  # noqa: E402
@@ -113,7 +113,7 @@ WARPS: dict[str, Any] = {"map": None, "areas": [], "cells": frozenset(), "intent
 ROUTE: dict[str, Any] = {"active": False, "intent": WALK}  # set while a route (leg) runs
 
 # C: long walks
-PLAN_MAX = w5.PLAN_MAX  # 48: one leg = one walk6.plan
+PLAN_MAX = _walk5.PLAN_MAX  # 48: one leg = one walk6.plan
 LEG_STEPS = 40  # a waypoint about every this many steps of the full path
 FULL_MAX = 10_000  # the full path's A* has no practical length limit
 CLICK_MAX_SAFE = 14  # the server's unconditional per-click limit (poring-nav.md section 2)
@@ -308,6 +308,32 @@ class _Walk6:
 
 
 w6 = _Walk6()
+
+
+class _Walk5:
+    """walk5 as walk@17's code sees it: every name is walk5's, except `World` (AMENDMENT, Batt
+    2026-10-13, decision 15: "never draw a harness start inside a warp area"). In a WALK scene the
+    world's `walkable` grid offers no warp-area cell, so walk@11's seeded start draw (a walkable
+    cell within +-8 of the scene's start, no plan check) can never land inside a trigger area. The
+    planner's grid is untouched (B blocks those cells already); the portal scene's world is
+    unchanged (its start search plans TO the portal)."""
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(_walk5, name)
+
+    @staticmethod
+    def World(camera: Any, gat: Any, position: tuple[int, int]) -> Any:  # noqa: N802
+        world = _walk5.World(camera, gat, position)
+        if WARPS["map"] is not None and plan_intent() != "warp":
+            walk = np.array(world.walkable, dtype=bool, copy=True)
+            for x, y in WARPS["cells"]:
+                if 0 <= y < walk.shape[0] and 0 <= x < walk.shape[1]:
+                    walk[y, x] = False
+            world.walkable = walk
+        return world
+
+
+w5 = _Walk5()
 
 # the decision code that PLANS, rebound so that its planner is walk@17's (B); the same code
 substitute_goal = _rebind(w11.substitute_goal)  # walk@8's substitute ring

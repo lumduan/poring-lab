@@ -566,3 +566,32 @@ def test_c_the_click_step_refuses_a_cell_beyond_14_server_steps(mods: Any, warps
     far = w17.click_step(None, w, (25, 10))  # 15 steps
     assert far["outcome"] == "no_safe_point" and far["beyond_click_max"] == 14 and not calls
     assert w17.click_step(None, w, (24, 10))["clicked"] and len(calls) == 1  # 14 steps
+
+
+class FlatGat:
+    """A flat 30 x 30 GAT for walk5.World (walkable everywhere, no altitude)."""
+
+    altitude = np.zeros((30, 30))
+
+    def walkable(self) -> np.ndarray:
+        return np.ones((30, 30), dtype=bool)
+
+    def relative_altitude(self, position: Any, cells: Any) -> np.ndarray:
+        return np.zeros(len(np.atleast_2d(cells)))
+
+
+def test_b_the_harness_never_draws_a_start_inside_a_warp_area(mods: Any, warps: Any) -> None:
+    """AMENDMENT (Batt 2026-10-13, decision 15): walk@11's start draw takes any walkable cell within
+    +-8 of the scene's start. walk@17's harness sees walk5 through a proxy whose World offers no
+    warp-area cell as walkable in a WALK scene; the portal scene's world is unchanged."""
+    w17, w11 = mods[0], mods[5]
+    assert w17.run11.__globals__["w5"] is w17.w5 and "w5" in names(w11.run.__code__)
+    a = area(15, 15, 2, 2)
+    warps(a)
+    w = w17.w5.World(None, FlatGat(), (10, 10))
+    starts = {(x, y) for x in range(30) for y in range(30) if w.walkable[y, x]}
+    assert starts and not starts & a["cells"] and len(starts) == 900 - len(a["cells"])
+    assert w.grid is not None  # the planner's grid is walk5's own (B blocks warp cells there)
+    warps(a, intent="warp")
+    assert w17.w5.World(None, FlatGat(), (10, 10)).walkable.all()
+    assert w17.w5.PLAN_MAX == 48 and w17.PLAN_MAX == 48  # every other name is walk5's

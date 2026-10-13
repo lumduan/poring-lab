@@ -3183,6 +3183,25 @@ there, the strict count reported.
 
 > ➡️ **2026-10-13: the CPU detector this rule uses is now v1** (Batt decision 10; deployment parity PASS,
 > v1-vs-v0png.md). walk@17's tuning runs, still to come, run with it: recorded here before they run.
+>
+> ➡️ **AMENDMENTS (2026-10-13, Batt decision 15), built and tested BEFORE any tuning run:**
+> 1. **"'/where once per need' wins over the repeat rule"** (`chat_guard.py`; L2
+>    `chat.policy.where_need_over_repeat: true`):
+>    - a /where typed with a stated need (walk@17's reasons) is not refused as a 3rd identical
+>      line; each such line is logged `repeat_waived`;
+>    - the 60 s retry interval and the run's budget still apply;
+>    - a /where the client then drops (the measured 4th-identical drop) is no fix, as for a miss;
+>    - where@2's frozen pattern keeps the repeat rule (`test_chat_guard.py`).
+>    The expected indoor loss stated above (the guard's repeat rule) therefore no longer applies as
+>    written. The client's own drop now decides, and the runs report the /where answered vs
+>    dropped.
+> 2. **"Never draw a harness start inside a warp area"** (`walk17.py` `_Walk5`): walk@17's harness
+>    sees walk5 through a proxy whose `World` offers no warp-area cell as walkable in a WALK scene,
+>    so walk@11's seeded start draw cannot land in a trigger area.
+>    - The planner's grid is untouched (B already blocks those cells).
+>    - The portal scene's world is unchanged.
+>    - walk@15's code objects are reused exactly as before (`test_walk17.py`, including the
+>      identity test).
 
 **Expected** (Claude's reading of walk@15's four tuning sessions, re-read offline 14:25 ICT; NOT a
 bar):

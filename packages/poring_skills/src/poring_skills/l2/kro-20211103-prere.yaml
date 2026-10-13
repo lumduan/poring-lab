@@ -137,6 +137,10 @@ chat:
   policy:
     no_separators: true  # never a line sent only to reset the repeat count (/ex or any filler)
     refuse_identical_in_a_row: 3  # the guard REFUSES the 3rd identical line in a row (and logs it)
+    # Batt 2026-10-13 (decision 15): "'/where once per need' wins over the repeat rule": a /where
+    # typed for a stated need is not refused as a 3rd identical line (logged repeat_waived); the
+    # retry interval and the budget still apply. A /where the client drops is no fix.
+    where_need_over_repeat: true
     where_once_per_need: true  # no answer: no quick retype; passive sources first (minimap readout,
     #                            dead reckoning, landmarks), a retry only after where_retry_s, in budget
     where_retry_s: 60  # the shortest time between two /where (a human-like interval)
