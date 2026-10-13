@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """N1 (labels v2, docs/planning/labels-v2-plan.md 1.2): the NPC id -> sprite FILE table for the
-first workflow's NPCs ALONG THE ROUTE (Batt 2026-10-09: "NPC sprites only along the route").
+first workflow's NPCs ALONG THE ROUTE (Batt 2026-10-09: "NPC sprites only along the route"), plus
+Batt's EXPLICIT extra set of 2026-10-13 (EXTRA, below).
 
     npc_sprites.py build [--kb data/kb/first_workflow.json] [--grf PATH] [--mapcache-dir DIR]
                          [--dest prontera --dest morocc_in] [--out data/kb/npc_sprites.json]
+                         [--no-extra]
     npc_sprites.py summary [--table data/kb/npc_sprites.json]      ids and counts only
 
 Which NPCs (the scope, derived from the KB, not listed by hand):
@@ -17,6 +19,13 @@ Which NPCs (the scope, derived from the KB, not listed by hand):
     walkability grid (10 / 14, no corner cutting). An NPC is "along the route" when its cell is
     within AREA_SIZE (14) cells, Chebyshev, of a path cell: the server sends a unit to the client
     only within that range, so an NPC farther from every path cell is never drawn on this route.
+  * an EXPLICIT extra set beside that rule (EXTRA; the rule above is unchanged): Batt 2026-10-13,
+    decision 9, "Extend N1 to prt_fild08's 909 and the church's off-route sprites", i.e. the eight
+    sprites labels-v2-plan 4a's dry run over v1's NAS sessions found unsized (npc_unsized):
+    prt_fild08 909; prt_church 71, 79, 741, 798, 745, 60, 755. Every drawn use of such a sprite on
+    its map is listed (scope "extra"); one the KB does not list there is a problem, never a guess.
+
+Each use keeps the SCRIPT's facing (``dir``, the npc line's fourth field) with its map and cell.
 
 The sprite file (three sources, all must agree or the row says why not):
   1. rAthena's constant for the id (src/map/npc.hpp `e_job_types`, the pinned ref; JT_X);
@@ -50,6 +59,16 @@ KB = REPO / "data" / "kb" / "first_workflow.json"
 OUT = REPO / "data" / "kb" / "npc_sprites.json"
 AREA_SIZE = 14  # rAthena battle_config.area_size: a unit is sent to clients within this range
 DESTS = ("prontera", "morocc_in")  # Batt 2026-10-09 7.7 item 3: the two easiest first
+# Batt 2026-10-13 (decision 9; labels-v2-plan 1.3 / 4a): an EXPLICIT extra set beside the route
+# scope, whose rule stays as it is. map -> the sprite ids to list there (every drawn use).
+EXTRA: dict[str, tuple[int, ...]] = {
+    "prt_fild08": (909,),
+    "prt_church": (71, 79, 741, 798, 745, 60, 755),
+}
+EXTRA_WHY = (
+    "Batt 2026-10-13 decision 9: the sprites outside the route scope that labels-v2-plan 4a's "
+    "dry run over v1's NAS sessions found unsized (npc_unsized)"
+)
 LUB_DIR = "data/luafiles514/lua files/datainfo/"
 NPC_DIR = "data/sprite/npc/"
 Cell = tuple[int, int]
@@ -266,28 +285,46 @@ def drawable(n: dict[str, Any], portal: int) -> bool:
 
 
 def collect(
-    doc: dict[str, Any], route: dict[str, set[Cell]], portal: int
+    doc: dict[str, Any],
+    route: dict[str, set[Cell]],
+    portal: int,
+    extra: dict[str, tuple[int, ...]] | None = None,
 ) -> dict[int, list[dict[str, Any]]]:
-    """sprite id -> its uses (map, key, cell, scope, distance to the route)."""
+    """sprite id -> its uses (map, key, cell, the script's facing, scope, distance to the route).
+    ``extra`` (map -> sprite ids) adds every drawn use of those sprites on those maps, scope
+    "extra", whatever the route (EXTRA: Batt's explicit set)."""
     uses: dict[int, list[dict[str, Any]]] = {}
     grounds = set(doc["scope"]["training_grounds"]["maps"])
+    extra = extra or {}
     for map_name, rec in doc["maps"].items():
         for n in rec.get("npcs", []):
             if not drawable(n, portal):
                 continue
             row = {"map": map_name, "key": n["key"], "cell": [n["x"], n["y"]],
                    "dir": n.get("dir"), "drawn": n["drawn"], "kind": n["kind"]}  # fmt: skip
+            d = near_route(n, route[map_name]) if map_name in route else None
             if map_name in grounds:
                 row["scope"] = "training_grounds"
-            elif map_name in route:
-                d = near_route(n, route[map_name])
-                if d is None or d > AREA_SIZE:
-                    continue
+            elif d is not None and d <= AREA_SIZE:
                 row.update(scope="merchant_route", route_distance=d)
+            elif int(n["sprite"]) in extra.get(map_name, ()):
+                row["scope"] = "extra"
             else:
                 continue
             uses.setdefault(int(n["sprite"]), []).append(row)
     return uses
+
+
+def extra_problems(
+    uses: dict[int, list[dict[str, Any]]], extra: dict[str, tuple[int, ...]]
+) -> list[str]:
+    """An extra sprite the KB does not list as a drawn NPC on its map: reported, never guessed."""
+    out = []
+    for map_name, ids in extra.items():
+        for sid in ids:
+            if not any(u["map"] == map_name for u in uses.get(sid, [])):
+                out.append(f"extra {map_name}:{sid}: no drawn NPC with that sprite in the KB")
+    return out
 
 
 def sprite_row(
@@ -306,6 +343,7 @@ def sprite_row(
     }  # fmt: skip
     if sprite_class == "player_job":
         row["box"] = "measured extent (composite body + head, labels-v2-plan 1.2)"
+        row["three_sources"] = three_sources(row)  # never "agree": no single sprite file
         return row
     if sprite_class == "mob":
         row["box"] = "monster sprite (the monster catalog)"
@@ -319,6 +357,7 @@ def sprite_row(
     row["client_sprite"] = name
     if name is None:
         row["problems"].append("no client sprite name for the id")
+        row["three_sources"] = three_sources(row)
         return row
     if consts and sprite_class == "npc" and norm(name) != norm(consts[0].removeprefix("JT_")):
         row["note"] = "client sprite name differs from the rAthena constant's"
@@ -334,7 +373,23 @@ def sprite_row(
     row["files"] = files
     if sprite_class == "npc":
         row["box"] = "own sprite (N2: sprite_catalog --npc)"
+    row["three_sources"] = three_sources(row)
     return row
+
+
+def three_sources(row: dict[str, Any]) -> dict[str, Any]:
+    """The per-sprite agreement N1 requires (ids and flags only): rAthena names a constant for the
+    id; the client's npcidentity maps that constant to the same id and jobname names a sprite
+    for it; the archive holds that sprite's SPR and ACT. ``agree`` only when all three hold."""
+    files = row.get("files") or {}
+    out = {
+        "rathena_const": bool(row.get("rathena_const")),
+        "client_tables": bool(row.get("client_const_agrees")) and bool(row.get("client_sprite")),
+        "archive": bool(files) and all(f["present"] for f in files.values()),
+        "flags": {e: f["flags"] for e, f in sorted(files.items())},
+    }
+    out["agree"] = out["rathena_const"] and out["client_tables"] and out["archive"]
+    return out
 
 
 def norm(s: str) -> str:
@@ -347,7 +402,10 @@ def build(
     grids: Any,
     npc_hpp: str,
     dests: Iterable[str] = DESTS,
+    extra: dict[str, tuple[int, ...]] | None = None,
 ) -> dict[str, Any]:
+    """The table: the route scope (training grounds + the Merchant route) and the ``extra`` set
+    (default EXTRA; ``{}`` for the route scope alone)."""
     from kb_first_workflow import Sprites, npc_constants
 
     consts = npc_constants(npc_hpp)
@@ -366,7 +424,9 @@ def build(
         for m, cs in cells.items():
             route.setdefault(m, set()).update(cs)
         trips[dest] = {"stops": stops, "cells_per_map": {m: len(c) for m, c in cells.items()}}
-    uses = collect(doc, route, sprites.portal)
+    extra = EXTRA if extra is None else extra
+    uses = collect(doc, route, sprites.portal, extra)
+    problems += extra_problems(uses, extra)
     mob_ids = {int(n["sprite"]) for rec in doc["maps"].values() for n in rec.get("npcs", [])
                if n.get("sprite_class") == "mob"}  # fmt: skip
     rows = []
@@ -379,6 +439,10 @@ def build(
         "rathena_ref": doc.get("rathena_ref"),
         "area_size": AREA_SIZE,
         "destinations": list(dests),
+        "extra_scope": {
+            "why": EXTRA_WHY if extra else None,
+            "maps": {m: list(ids) for m, ids in extra.items()},
+        },
         "trips": trips,
         "client_tables": {"constants": len(client_const), "names": len(client_name)},
         "problems": problems,
@@ -418,17 +482,30 @@ def summary(table: dict[str, Any]) -> dict[str, Any]:
     def ids(scope: str) -> list[int]:
         return [r["id"] for r in rows if scope in r["scopes"]]
 
-    per_map: dict[str, list[int]] = {}
-    for r in rows:
-        for u in r["uses"]:
-            if u["scope"] == "merchant_route":
-                per_map.setdefault(u["map"], [])
-                if r["id"] not in per_map[u["map"]]:
-                    per_map[u["map"]].append(r["id"])
+    def per_map(scope: str) -> dict[str, list[int]]:
+        out: dict[str, set[int]] = {}
+        for r in rows:
+            for u in r["uses"]:
+                if u["scope"] == scope:
+                    out.setdefault(u["map"], set()).add(r["id"])
+        return {m: sorted(v) for m, v in sorted(out.items())}
+
+    extra_rows = [r for r in rows if "extra" in r["scopes"]]
     return {
         "training_grounds": ids("training_grounds"),
         "merchant_route": ids("merchant_route"),
-        "merchant_route_per_map": {m: sorted(v) for m, v in sorted(per_map.items())},
+        "merchant_route_per_map": per_map("merchant_route"),
+        "extra": ids("extra"),
+        "extra_per_map": per_map("extra"),
+        "extra_check": {
+            str(r["id"]): {
+                **(r.get("three_sources") or {}),
+                "class": r["sprite_class"],
+                "uses": sum(1 for u in r["uses"] if u["scope"] == "extra"),
+                "problems": len(r["problems"]),
+            }
+            for r in extra_rows
+        },
         "union": len(rows),
         "own_sprite_files_present": sum(
             1 for r in rows if r.get("files") and all(f["present"] for f in r["files"].values())
@@ -452,6 +529,8 @@ def main(argv: list[str] | None = None) -> int:
     pb.add_argument("--mapcache-dir", type=Path)
     pb.add_argument("--dest", action="append", help=f"destinations (default {', '.join(DESTS)})")
     pb.add_argument("--out", type=Path, default=OUT)
+    pb.add_argument("--no-extra", action="store_true",
+                    help="the route scope alone (without Batt's 2026-10-13 EXTRA set)")  # fmt: skip
     ps = sub.add_parser("summary")
     ps.add_argument("--table", type=Path, default=OUT)
     pm = sub.add_parser("mob-names", help="monster ids -> the client's sprite stems")
@@ -485,7 +564,7 @@ def main(argv: list[str] | None = None) -> int:
     npc_hpp = Src(SRC, doc.get("rathena_ref")).read(NPC_HPP)
     with a.grf.open("rb") as f:
         arc = Archive.open(f)
-        table = build(doc, arc, grids, npc_hpp, a.dest or DESTS)
+        table = build(doc, arc, grids, npc_hpp, a.dest or DESTS, {} if a.no_extra else None)
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(table, ensure_ascii=False, indent=1) + "\n")
     print(json.dumps(summary(table), indent=1))
