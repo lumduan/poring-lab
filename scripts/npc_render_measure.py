@@ -562,6 +562,11 @@ def cmd_click(a: argparse.Namespace) -> int:
                     if near_box is None
                     else round(box_distance(near_box.box, u, v), 1),
                     "rel_target": None if target is None else rel(target, u, v),
+                    "in_hit_box": res.no_click(u, v) is not None,
+                    "near_unsupported": any(
+                        a_ is not None and overlaps((u, v, u + 1, v + 1), unsupported_box(a_))
+                        for _n, _w, a_ in res.unsupported_near()
+                    ),
                     "complete": res.complete,
                 }
             )
@@ -651,6 +656,8 @@ def click_summary(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
         return {
             "mask_dilation": dilation_curve(rs, "mask_distance"),
             "box_dilation": dilation_curve(rs, "box_distance"),
+            "talk_in_hit_box": share(talk, "in_hit_box"),
+            "other_in_hit_box": share(other, "in_hit_box"),
             "talk_in_mask": share(talk, "in_mask"),
             "talk_in_box": share(talk, "in_box"),
             "other_in_mask": share(other, "in_mask"),
@@ -674,6 +681,7 @@ def click_summary(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
         "excluded_gm_moving": sum(1 for r in rows if r["moving"]),
         "stand_agrees_with_packets": sum(1 for r in rows if r["stand_agrees"]),
         "all": block(usable),
+        "all_not_near_an_unrendered_npc": block([r for r in usable if not r["near_unsupported"]]),
     }
     by: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for r in usable:

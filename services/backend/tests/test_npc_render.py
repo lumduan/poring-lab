@@ -146,11 +146,22 @@ def test_fail_closed_unsupported_conditional_and_undrawn_npcs() -> None:
     assert {u["why"] for u in summary["unsupported_near"]} == set(why.values())
 
 
-def test_an_unsupported_npc_far_off_screen_or_behind_does_not_block() -> None:
-    res = nr.render_scene(
-        [npc((102, 100)), npc((180, 100), dir_=None), npc((100, 10), dir_=None)], scene(), sheets
-    )
-    assert res.complete and len(res.unsupported) == 2 and not res.unsupported_near()
+def test_an_unsupported_npc_beyond_the_area_does_not_block_one_inside_does() -> None:
+    res = nr.render_scene([npc((102, 100)), npc((180, 100), dir_=None)], scene(), sheets)
+    assert [n.cell for n in res.beyond_area] == [(180, 100)]  # never sent, never drawn
+    assert res.complete and not res.unsupported
+    # 10 cells east is inside the area and on screen (~340 px right of us): it blocks
+    res = nr.render_scene([npc((102, 100)), npc((110, 100), dir_=None)], scene(), sheets)
+    assert not res.complete and res.unsupported_near()[0][1] == "no_facing"
+
+
+def test_an_npc_beyond_the_server_area_is_not_drawn_even_on_screen() -> None:
+    near, beyond = npc((100 + nr.AREA_SIZE, 100)), npc((100, 100 + nr.AREA_SIZE + 1))
+    res = nr.render_scene([near, beyond], scene(), sheets)
+    assert [r.npc.cell for r in res.rendered] == [near.cell]
+    assert res.beyond_area == [beyond]
+    lifted = nr.render_scene([near, beyond], scene(), sheets, area=None)
+    assert sorted(r.npc.cell for r in lifted.rendered) == sorted([near.cell, beyond.cell])
 
 
 def test_the_script_facing_turns_the_drawn_direction() -> None:

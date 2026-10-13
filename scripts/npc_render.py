@@ -77,6 +77,12 @@ SPRITES = Path("/dev/shm/poring-lab-tmp/sprites/data/sprite/npc")  # N2's decode
 NAMES = KB / "npc_sprite_names.json"  # N2's job -> stem (the files read and decoded)
 SCREEN = (1280, 720)  # the game region labels and probes use
 NEAR_MARGIN = 160  # px: an unsupported NPC anchored this close to the screen makes it incomplete
+RENDER_MARGIN = 300  # px: an NPC anchored farther off screen than this is never drawn on it
+MIN_DEPTH = 50.0  # world units: an anchor nearer the camera than this is not on our screen
+# rAthena battle_config area_size: the server sends a unit to the client only within this many
+# cells (Chebyshev) of our character, so the client never draws an NPC farther away, even when
+# its cell is on screen (measured, npc-render.md 3.2: no packet object for 81 / 82 such NPCs)
+AREA_SIZE = 14
 PORTAL = 45  # JT_WARPNPC: the `warp` class (labels-v2-plan 1.3), not an NPC sprite
 CAMERA_PATHS = {"rdp": "rdp", "s2": "console"}  # path -> projection.camera_file backend
 UNVERIFIED_GAT = frozenset({"alberta", "morocc"})  # labels-v2-plan 7.6: client != server GAT
@@ -235,6 +241,7 @@ class RenderResult:
     rendered: list[RenderedNpc] = field(default_factory=list)
     conditional: list[L3Npc] = field(default_factory=list)  # listed apart, never rendered
     undrawn: list[L3Npc] = field(default_factory=list)
+    beyond_area: list[L3Npc] = field(default_factory=list)  # never sent, so never drawn
     unsupported: list[tuple[L3Npc, str, tuple[float, float] | None]] = field(default_factory=list)
     off_screen: int = 0
     warnings: list[str] = field(default_factory=list)
@@ -291,6 +298,7 @@ class RenderResult:
             ],
             "conditional": [{"sprite": n.sprite, "cell": list(n.cell)} for n in self.conditional],
             "undrawn": len(self.undrawn),
+            "beyond_area": len(self.beyond_area),
             "off_screen": self.off_screen,
             "unsupported_near": [
                 {
@@ -320,13 +328,18 @@ def render_scene(
     map_name: str = "",
     camera_path: str = "",
     size: tuple[int, int] = SCREEN,
+    area: int | None = AREA_SIZE,
 ) -> RenderResult:
     """The pure core: every L3 NPC through predict_sprite (idle, no phase, with the mask)."""
     res = RenderResult(map_name, scene.player, camera_path, k, l3_complete)
     known = getattr(sheets, "stems", None)
+    px, py = scene.player
     for n in npcs:
         if n.sprite == PORTAL or n.sprite_class == "hidden" or n.drawn is False:
             res.undrawn.append(n)
+            continue
+        if area is not None and max(abs(n.cell[0] - px), abs(n.cell[1] - py)) > area:
+            res.beyond_area.append(n)
             continue
         if n.drawn != True:  # noqa: E712  ("conditional": hidden at start, state unknown)
             res.conditional.append(n)
@@ -348,6 +361,18 @@ def render_scene(
         stem, sheet = got
         if sheet.spr is None:
             res.unsupported.append((n, "no_spr", where))
+            continue
+        if (
+            where is None
+            or z < MIN_DEPTH
+            or not (
+                -RENDER_MARGIN <= where[0] <= size[0] + RENDER_MARGIN
+                and -RENDER_MARGIN <= where[1] <= size[1] + RENDER_MARGIN
+            )
+        ):
+            # far off screen, behind or at the camera: never drawn on our screen (and a mask over
+            # a near-plane box would be gigabytes)
+            res.off_screen += 1
             continue
         pred = predict_sprite(
             Actor((float(n.cell[0]), float(n.cell[1])), int(n.dir) % 8, MonsterAction.IDLE),
