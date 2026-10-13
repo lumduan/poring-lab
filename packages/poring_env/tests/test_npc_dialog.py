@@ -324,3 +324,29 @@ def test_the_highlighted_close_reads_as_close_only_with_its_template(
         draw_dialog(g, D0, look, seed=98)
         st = nd.state(g, t2)
         assert st.ok and st.dialog is not None and st.dialog.button == want, look
+
+
+def test_the_border_lines_tolerate_a_codec_tile_shade_offset_only(
+    templates: nd.DialogTemplates,
+) -> None:
+    """2026-10-13 (npc-click@1's third stop): an RDP codec tile shifted the right part of the
+    dialog's bottom border line by 7 grey levels (just over pixel_tol) and the dialog read
+    "uncertain". A LOCALLY UNIFORM offset up to edge_offset_max is tolerated; a larger one, or a
+    structural difference (another window's white on the line), still differs."""
+    g, h = nd.GEOMETRY, nd.GEOMETRY.dialog_size[1]
+    w = g.dialog_size[0]
+
+    def shifted(delta: int, start: int = 120) -> nd.NpcUiState:
+        f = scene(21)
+        draw_dialog(f, D0, "next", seed=5)
+        row = f[D0[1] + h - 3, D0[0] + start : D0[0] + w - g.corner].astype(int)
+        f[D0[1] + h - 3, D0[0] + start : D0[0] + w - g.corner] = np.clip(row + delta, 0, 255)
+        return nd.state(f, templates)
+
+    st = shifted(-7)
+    assert st.ok and st.dialog is not None and st.dialog.button == "next"
+    assert st.finds[0].edge < templates.params.edge_accept
+    far = shifted(-40)  # far beyond edge_offset_max: the whole run differs
+    assert far.finds[0].edge > shifted(-7).finds[0].edge
+    white = shifted(255, start=g.corner)  # the bottom line gone white (another window's edge)
+    assert white.finds[0].edge >= (w - 2 * g.corner) / (2 * (w + h - 4 * g.corner)) - 1e-6
