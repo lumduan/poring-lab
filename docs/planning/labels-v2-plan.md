@@ -135,6 +135,9 @@ sessions in `/dev/shm/poring-lab-demo` and the local KB; nothing written outside
     PROVISIONAL: prontera (156,22) partial, prt_fild08 (170,378) visible, prt_church (115,122)
     visible. prt_church (100,56) is to be read with more frames. **N1 extends** to prt_fild08's
     909 and the church's off-route sprites (71, 79, 741, 798, 745, 60, 755).
+    ➡️ **2026-10-13: N1 and N2 DONE for the eight; the N3 sheets wait for a person** (section 7.6,
+    "N1-N3 EXTENDED"). The local warp table was not edited: these readings are in a /dev/shm
+    what-if copy only.
   - Claude's provisional reading of the 12 banked warp cells: **4 visible** (iz_dun00 (168,173),
     alberta_in (78,44) and (64,31), prt_church (90,81)), **5 occluded**, **3 partial**. A person
     confirms before any cache is built.
@@ -518,6 +521,9 @@ demo branch, so the console offset lookup failed. Fixed in this branch, with a t
     prt_church's 71, 79, 741, 798, 745, 60, 755.
   - So extending N1 / N2 (and N3) to those sprites is what would let v1's sessions replay under
     v2.
+    ➡️ **2026-10-13: N1 / N2 EXTENDED to the eight** (section 7.6, "N1-N3 EXTENDED").
+    - `npc_unsized` on v1's sessions is now 10,978 -> 0: the boxes wait for N3 (`npc_unchecked`).
+    - The same what-if (N3 `fit` everywhere) now gives 11,994 frames, against 3,034.
 - **Found: our GM lay dead in v1's sessions, and v1 trained on some of it.**
   - In p3-indoor-b our own `entity_vanish` (reason 1) comes at 586.3 s. After it there is no
     self-move, no HP raise and no map change until the end (1,201.7 s), while 26 GM-flagged events
@@ -600,7 +606,7 @@ on 2026-10-09).
 
 | item | why | what settles it |
 |---|---|---|
-| NPC sprite boxes (all 22 banked sprites) | no job -> sprite table, no NPC SPR/ACT extracted; player-class NPCs are composites | N1-N3 (section 1.2) |
+| NPC sprite boxes (all 22 banked sprites) | no job -> sprite table, no NPC SPR/ACT extracted; player-class NPCs are composites | N1-N3 (section 1.2). ➡️ N1 / N2 BUILT for the 38 route sprites (2026-10-09) and the 8 off-route ones (2026-10-13, section 7.6); N3 (a person's reading of the sheets) is open |
 | per-species counts on the NAS-held frames | needs the NAS sessions' packets + indexes | `labels_v2.py coverage` on them, in a quiet window. ➡️ COUNTED 2026-10-10 (section 4a's NAS dry run) |
 | the portal ring radius | a hand reading of 19 crops; the automatic hint over-reads on bright floors | a person on `warp-measure`'s medians |
 | the visibility of every warp on the planned maps | only 12 cells have banked frames | the portal passes of 3.3 step 4 |
@@ -1155,6 +1161,154 @@ labels_v2.difficulty (all "normal" here).
         packet position lag); the training grounds are outdoor-camera maps and are not affected.
         alberta_in is the job changer's map, so this blocks the Merchant maps' NPC labels, not the
         training grounds'.
+  - ➡️ **N1-N3 EXTENDED to the eight off-route sprites: AS BUILT 2026-10-13 (Claude, branch
+    feat/n1-extend; local outputs only; N3 NOT judged).** Batt's decision 9 (1.3): "Extend N1 to
+    prt_fild08's 909 and the church's off-route sprites".
+    - **N1, the scope:** `npc_sprites.EXTRA` is an EXPLICIT set beside the route scope, whose rule
+      is unchanged:
+      - prt_fild08 909; prt_church 71, 79, 741, 798, 745, 60, 755: the sprites section 4a's NAS
+        dry run found `npc_unsized`.
+      - Every drawn use of such a sprite on its map is listed (scope `extra`, with the script's
+        facing `dir`). A sprite the KB does not list on its map would be a problem, never a guess:
+        there are none.
+      - `--no-extra` gives the route scope alone.
+    - **N1, the run:** `npc_sprites.py build` -> `data/kb/npc_sprites.json`, 38 -> **46 sprites**.
+      - The 38 route rows, the trips and the problems (0) are reproduced exactly.
+      - Uses on the map (KB): 909 1, 71 3, 79 4, 741 1, 798 1, 745 1, 60 7, 755 1.
+    - **The three-source check, per sprite** (each row's `three_sources`; `summary`'s
+      `extra_check`):
+
+      | job | map | rAthena constant | client tables (npcidentity -> id, jobname -> sprite) | archive SPR / ACT (GRF flags) | class |
+      |---|---|---|---|---|---|
+      | 909 | prt_fild08 | yes | yes | yes / yes (0x03 / 0x05) | npc |
+      | 71 | prt_church | yes | yes | yes / yes (0x03 / 0x05) | npc |
+      | 79 | prt_church | yes | yes | yes / yes (0x03 / 0x05) | npc |
+      | 741 | prt_church | yes | yes | yes / yes (0x03 / 0x05) | npc |
+      | 798 | prt_church | yes | yes | yes / yes (0x03 / 0x05) | npc |
+      | 745 | prt_church | yes | yes | yes / yes (0x03 / 0x05) | npc |
+      | 60 | prt_church | yes | yes | yes / yes (0x03 / 0x05) | npc |
+      | 755 | prt_church | yes | yes | yes / yes (0x03 / 0x05) | npc |
+
+      - **All 8 agree.** The client's sprite name is the constant's name in all 8.
+      - **None is a composite player-class sprite, and none is a monster-class id.**
+      - Every SPR is MIXCRYPT (0x03: the study decoder); every ACT is DES-header only (0x05).
+      - The client tables and the files come from this host's only GRF, the Thai client's on the
+        NAS, as for the 38. The lab client draws kRO data; the 12 KB monster species were
+        byte-identical between the two (Part C), but these NPC files were not compared.
+    - ⚠️ **909 LOOKS LIKE A PORING (flag for a person).** Its own NPC file reuses the monster
+      Poring's images: all 13 of its decoded images are byte-identical to images of 1002's SPR.
+      Only its ACT is its own (1 group, a 22-frame idle). So by identity it is an NPC (objtype 6,
+      a fixed cell), and by appearance it is a 1002. The 1.2 rule boxes it as `npc`, which
+      teaches the detector a Poring-looking sprite as an NPC. A person decides: `npc` as the rule
+      says, an ignore region, or the frames excluded.
+    - **N2:** `sprite_catalog.py --npc-from data/kb/npc_sprites.json --decode-mixcrypt` ->
+      `data/kb/npc_sprite_catalog.json` + `npc_sprite_names.json`, and the decoded files in
+      `/dev/shm/poring-lab-tmp/sprites/data/sprite/npc/`.
+      - **46 / 46 decoded.** The 38 old records are reproduced exactly (0 differ), and the old
+        job -> stem rows are kept.
+      - **Integrity:** 1,064 ACT 2.5 layer sizes of the 8 new sprites equal their SPR image
+        sizes, 0 mismatches. 71, 79 and 60 are ACT 2.1 / 2.3, which carry no layer sizes to check.
+      - **Boxes:** all OPAQUE. The idle (ACT group 0) per sprite:
+
+        | job | idle frames per direction | frame delay | native idle box (first frame) |
+        |---|---|---|---|
+        | 909 | 22 | 96 ms | 37 x 31 (envelope 41 x 42-46) |
+        | 71 | 1 | - | 45 x 88 |
+        | 79 | 1 | - | 30 x 89 |
+        | 741 | 45 | 48 ms | 39 x 88 |
+        | 798 | 21 | 96 ms | 35 x 94 |
+        | 745 | 12 | 96 ms | 42 x 92 |
+        | 60 | 1 | - | 39 x 95 |
+        | 755 | 33 | 96 ms | 35 x 93 |
+
+    - **N3 preparation:** `labels_v2.py npc-sheet` gained what 909 needed (c0eb19e).
+      - 909 is seen only in v1's NAS sessions, and npc-sheet read demo frames only. It now also
+        reads a RECORDED PNG session's own tar shards: only tar headers and the chosen frames'
+        json, and a frame's PNG bytes only when a scored sprite is on it.
+      - **It does NOT decode H.264.** v1's 7 H.264 sessions are listed as "without images".
+        Their frames carry most of these sprites' sightings, so the sheets come from the other
+        sources (below).
+      - New options: `--jobs` (only these sprite ids) and `--k` (the labeller's sprite scale;
+        0.14 here, as v1's cache and the v1 replay).
+      - **The sessions read:**
+        - the 24 banked demo sessions that show the church sprites: now on the NAS
+          (`/mnt/poring-lab-datasets/<id>`; their /dev/shm copies were removed 2026-10-12), by
+          name from the 10-10 demo dry run;
+        - v1's 3 PNG sessions, every 3rd frame: 20261003T215314-console-s2-outdoor and
+          20261004T054429-console-s2-outdoor (909), 20261004T103815-console-s2-indoor-v2 (the
+          gold session, church).
+      - **Output:** `/dev/shm/poring-lab-tmp/labels-prep/n3-extend/`, one sheet per sprite
+        (`npc_<job>.png`) + `npc_sheet.json` (client pixels; never committed).
+
+        | job | map | sightings (sessions) | from | NCC median (p10) | below 0.092 (UI-covered) |
+        |---|---|---|---|---|---|
+        | 909 | prt_fild08 | 319 (2) | PNG shards only | 0.634 (0.391) | 13 (1) |
+        | 71 | prt_church | 188 (21) | demo 173, gold 15 | 0.181 (-0.027) | 71 (23) |
+        | 79 | prt_church | 688 (25) | demo 585, gold 103 | 0.075 (-0.070) | 368 (103) |
+        | 741 | prt_church | 169 (21) | demo 156, gold 13 | 0.073 (-0.007) | 98 (32) |
+        | 798 | prt_church | 182 (17) | demo 150, gold 32 | 0.268 (0.139) | 6 (1) |
+        | 745 | prt_church | 146 (18) | demo 127, gold 19 | 0.084 (-0.147) | 86 (64) |
+        | 60 | prt_church | 90 (18) | demo 89, gold 1 | 0.127 (0.004) | 29 (25) |
+        | 755 | prt_church | 59 (13) | demo 59 | 0.216 (0.098) | 5 (4) |
+
+    - ➡️ **Claude's PROVISIONAL reading of the 8 sheets (2026-10-13 ~12:05; NOT a verdict, a
+      person confirms, as with the 10-09 sheets):**
+      - **909:** the box holds the sprite in 7 of 8 crops. In one (NCC -0.12) it sits on the
+        fence post, with the sprite down-left of it. The flag above matters more than the fit.
+      - **798, 755:** fit in most crops (798 in 7 of 8).
+      - **79, 71, 741, 745, 60:** the box holds the standing sprite in most crops where it is not
+        under a window. Several crops are covered by the UI (the chat / skill windows); 60 also
+        stands behind a counter.
+      - **The low NCC on the church sprites is NOT matched by a bad fit on most crops.** 79 scores
+        about 0 on crops where the box visibly holds the sprite, so NCC is not a usable reading
+        for these sprites.
+      - **Our GM covers 79 in some frames:** 79's fourth crop is our GM standing ON 79's cell
+        (111,112), a walk demo's target cell (its /where line is on screen).
+      - **Crops at the screen edge look enlarged** (each crop is scaled to one height, and the
+        screen edge cuts it). Their box runs past the edge: 71 and 741 at the bottom, 79 and 798 at
+        the top, 755 at the left. In several of them the box sits right of the visible sprite, by
+        up to half a sprite width (71's first two, 79's second).
+        - So the misses grow away from the screen centre. The 10-09 sheets saw a right shift on
+          alberta_in, also indoor.
+        - An indoor-camera mis-fit would look like this. That is a hypothesis, not a finding.
+        - A person decides whether the indoor projection is trusted on prt_church; that decides
+          the 7 church sprites' `fit`, perhaps only near the screen centre.
+    - **The dry run (counts only), before / after,** over v1's ten NAS sessions with 4a's
+      arguments (k 0.14, `--every 15`, `--every-png 1`, the v1png split, the confirmed warp table,
+      no N3 table). "before" = the old job -> stem table under today's code: it reproduces 4a
+      exactly (603 kept; npc_unsized 10,978; what-if 3,034).
+
+      | run | kept (train / val / test) | npc_unsized | npc_unchecked | npc boxes |
+      |---|---|---|---|---|
+      | before, as 4a | 603 (242 / 200 / 161) | 10,978 | 10,556 | 0 |
+      | **after**, as 4a | **566** (242 / 194 / 130) | **0** | 15,560 | 0 |
+      | before, 4a's what-if (4 unread warps "occluded", both holds lifted) | 3,034 (1,482 / 1,129 / 423) | 10,978 | (lifted) | 2,695 (51, 105, 115) |
+      | **after, 4a's what-if** | **11,994** (6,633 / 3,078 / 2,283) | **0** | (lifted) | 20,720 (11 sprites) |
+      | after, Batt's 2026-10-13 provisional warp readings, both holds lifted | 11,730 (6,606 / 2,920 / 2,204) | 0 | (lifted) | 20,192 + warp 6,954 |
+
+      - **Per sprite** (frames; `npc_unsized` before -> `npc_unchecked` after -> frames KEPT with
+        its box in the what-if): 909 6,157 -> 6,251 -> 5,536; 71 2,521 -> 2,584 -> 1,319; 79
+        2,421 -> 2,421 -> 2,400 (3,075 boxes: two 79s); 741 2,226 -> 2,462 -> 1,197; 798 870 ->
+        869 -> 869; 745 529 -> 453 -> 415; 60 230 -> 169 -> 169; 755 161 -> 149 -> 149.
+      - **The extension alone admits no frame:** every new box waits for N3 (`npc_unchecked`, the
+        hold).
+      - **Kept drops by 37 (603 -> 566), on p3-indoor-a (-6) and p3-indoor-c (-31).** Those frames
+        were kept before with a church NPC on screen and NO NPC label: the fallback 34 x 74 box
+        was off screen or under the UI, while the sprite's own box is on screen. So they were a
+        label hole, and they are now held for N3.
+      - **With N3 judged `fit` for every sprite (a what-if, NOT a decision),** v1's sessions give
+        11,994 frames, against 3,034 before. The only reasons left are `self_dead` 4,130 (1.5) and
+        `l3_warp_unseen` 126.
+      - **Under Batt's 10-13 provisional readings:** prontera (156,22) `partial` excludes its 2,224
+        prontera frames; prt_fild08 (170,378) and prt_church (115,122) `visible` give 6,954 warp
+        boxes. The local warp table was NOT edited; the readings went into a /dev/shm what-if copy.
+    - **The script's facing (Batt ~11:45, via the parent):** N1 already kept `dir` per use;
+      `kb_first_workflow.npc_cells` and `npc_noclick.StaticNpc` now carry it too (3cb59fc).
+      The local `npc_cells.json` predates the field: it gains `dir` when it is rebuilt
+      (`kb_first_workflow.py npc-cells --sessions <the banked sessions>`). Until then
+      `load_l3_npcs` fills it from route.json where both list the same NPC.
+    - **What a person still decides:** the 8 sheets (fit / shifted, and the indoor camera on
+      prt_church), and 909's class. Then an `--npc-checked` table for the build.
   - ➡️ **L3 warp lists on these maps (walk@17's B; labels_v2's `warp` class): DONE 2026-10-09
     ~21:15.**
     - `scripts/kb_route.py` now takes first_workflow.json's COMPLETE list for every map that KB
