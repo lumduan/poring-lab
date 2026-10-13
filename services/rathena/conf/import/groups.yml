@@ -25,6 +25,11 @@
 #                    :8010 makes an immune player no enemy target) while they keep moving, and the
 #                    GM's own clicks still send their requests (the safety signal stays valid).
 #                    Nothing visible changes (no @hide, no equipment): the pixels stay the same.
+#   resetstat /      lab only (Batt, 2026-10-13, decision 5: "@streset / @skreset for GM group 20
+#   resetskill       (lab)"): typed as their stock aliases @streset / @skreset. The pinned
+#                    atcommand.cpp ACMD_FUNC(resetstat) = pc_resetstate, ACMD_FUNC(resetskill) =
+#                    pc_resetskill(sd, 1). allocate_stat@1's restore (a stat point is otherwise
+#                    irreversible) and learn_skill@1's server-side restore.
 # LogCommands: every command lands in atcommandlog (offline audit). Inherits Player for the basics.
 # No permissions beyond Player's otherwise: no zeny/stat commands, no any_warp, no hide_session.
 Header:
@@ -53,3 +58,5 @@ Body:
       monsterignore: true
       baselevelup: true
       joblevelup: true
+      resetstat: true
+      resetskill: true
