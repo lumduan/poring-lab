@@ -3919,6 +3919,100 @@ SAFETY-DRIVEN adoption that DEPARTS from 3.36's bar 4, by Batt's decision; bar 4
 - **Next (Batt):** fix the windmill: per-map ANIMATED regions measured with the cursor parked are
   masked, plus a fresh background per hover. That is cursor@3, pre-registered before it runs.
 
+### 3.37 cursor@3 -- robust3 = robust2 + the per-view ANIMATED REGION (measured with the cursor parked) + a FRESH background per hover: a fresh live proof (pre-registered 2026-10-13 ~12:10 ICT at commit, BEFORE any cursor@3 data; Batt 2026-10-13, decision 3: "fix the windmill next: mask per-map ANIMATED regions (measured with the cursor parked) plus a fresh background per hover; pre-register that as cursor@3")
+**Why:** cursor@2 (3.36) met every safety bar but failed bar 4 (WALK 0.848). The loss was on the
+held-out alberta (0.682), and it was MEASURED to be the windmill.
+- Its sails rotate in about 2 s. With the cursor parked, 20-60k px of the view change every 0.2 s.
+- So the cursor mask |A - B| against ONE parked frame floods wherever a sail moved after the park.
+- Prober9's 0.25 s "animated" map (two parked frames) catches only the sails' last quarter-second.
+
+robust2 went live anyway (3.36's ADOPTION, safety-driven). **Bar 4 stays the target, and this is the
+fix Batt named.** Nothing live changes here: the gate stays robust2 until Batt decides on this
+result.
+
+**The reader:** `robust3` = `cursor_anim.ProberAnim`, with robust2's reader unchanged (per-grab
+`RobustRefs` + the no-entry ring over the 6-grab series). Code at 5f2f0ef (cursor_anim 223fa82, its scoring deebcaa)
+(`scripts/cursor_anim.py`, `cursor_gate` classifier `robust3`). Two changes, nothing else:
+1. **The ANIMATED REGION of the view**, measured with the cursor parked:
+   - 13 grabs, 0.2 s apart (2.4 s, longer than the windmill's cycle);
+   - a pixel is animated if ANY grab differs from the first by more than 60 (summed BGR,
+     walk@9's threshold), grown by 2 px;
+   - it is unioned with Prober9's 0.25 s map. Animated pixels never count as the cursor;
+   - it is measured once per VIEW (`set_view((map, x, y))`: the camera follows the GM, so one GM
+     cell is one view) and cached for the session. Batt's "per-map" region is realised per view of
+     the map.
+2. **A FRESH background:** the background is grabbed again right before each hover (the cursor still
+   parked), not kept from the park.
+- **Design check (offline, on synthetic frames; NOT data):** a rotating bar's whole sweep is
+  covered by the cycle region, and two frames 0.25 s apart cover under 30 % of it
+  (`test_cursor_anim.py`). On a synthetic windmill crop, robust2 floods to UNKNOWN and robust3 reads
+  WALK (`test_cursor_robust.py`).
+- **Its cost, for the switch decision (not a bar):** 2.4 s at the first park in each new view. A
+  probe arm visits few views; a walk visits a new view every click.
+
+**FRESH DATA** (all hover only, nothing clicked; the runs and their safety are as 3.36's):
+- **The harness records BOTH readers' inputs on the same grabs:**
+  - the probe arm runs with `--anim` (ProberAnim; its live log keeps the v3 references, as every
+    probe arm does);
+  - each crop keeps robust3's background and region AND robust2's own (Prober9's background and
+    0.25 s map: `b2` / `anim2`);
+  - `cursor_eval.py live` scores robust2, robust3, robust and the v3 gate on the identical grabs.
+- **Arm B3, SWORD over a Poring:** `scripts/cursor_probe.py sword --anim --n 30 --seed 20261204`.
+- **Arm A3, around NPCs:** `scripts/npc_click_test.py probe --anim` with:
+  - **alberta, the windmill map, TARGETED** (not held-out: cursor@2 used it): `--near 116,57
+    --seed 20261200`;
+  - prontera `--near 156,191 --seed 20261201`;
+  - prt_church `--near 103,74 --seed 20261202`.
+- **HELD-OUT, once: morocc** `--near 140,111 --seed 20261203`.
+  - No cursor test has used morocc. Its L3 NPC list is COMPLETE (39 NPCs).
+  - Planned offline at 5f2f0ef (`plan`, the same seed): 4 NPCs (sprites 703, 741, 707, 837),
+    990 probe points, 9 stand warps.
+  - The spot first tried, (295, 153), held one drawn NPC (314 points): too thin. It was changed
+    BEFORE any data.
+  - A pilot comes first, never scored: `--npcs 1 --reps 1 --seed 20261207`. If the harness cannot
+    run there, morocc is DROPPED and reported, not replaced.
+- **Order:** B3, A3 alberta, A3 prontera, A3 prt_church, the morocc pilot, A3 morocc.
+- Before each run: a client screenshot judged, and the UI gate.
+- A run that exits early is re-run unchanged with its seed; the partial session is kept and not
+  scored.
+
+**Truth (fixed BEFORE any bar is computed):**
+- `scripts/cursor2_truth.py sheets --judged robust3 --item-seed 20261205 --strip-seed 20261206` at
+  5f2f0ef (cursor_anim 223fa82, its scoring deebcaa):
+  - IMAGES: grab 0 of every crop + every grab any reader's read came from (v3, robust, robust3);
+  - SERIES: every robust3 WALK series + as many others (seeded).
+- Two blind labellers, with 3.36's brief (eye only; no pixel rule may decide a label).
+- Truth = both agree; otherwise unclear.
+
+**The bars** (`scripts/cursor2_score.py --judged robust3 --gate robust2 --sword-gain -0.02` at
+5f2f0ef (cursor_anim 223fa82, its scoring deebcaa); robust3 judged, with robust2 (the live gate), robust and v3 beside it):
+1. **SAFETY, hard; one error fails, on any map:**
+   - (a) per image: 0 cross-shape and 0 WALK on another label;
+   - (b) per series: 0 WALK verdicts on a series both labellers say shows the no-entry sign; a WALK
+     series without agreement is INCONCLUSIVE;
+   - (c) 3.35's "as written": reported.
+2. **TALK:** sprite points labelled talk: read twice >= 0.85.
+3. **SWORD:** box points labelled sword: >= 0.40 (>= 100 probes) and not below robust2's - 0.02.
+4. **WALK, the target Batt kept:** cell points + controls labelled walk: >= 0.95 pooled, and not
+   below robust2's - 0.02.
+5. **Reported, not bars:**
+   - NO-ENTRY;
+   - **alberta's WALK for robust3 vs robust2** (the question this version answers);
+   - every bar per map;
+   - the animated region's size per view, and the share of misses whose cursor fell inside it.
+- **INCONCLUSIVE:** fewer than 200 talk or 100 sword probes.
+
+**Not decided here:**
+- whether robust3 replaces robust2 live (Batt, with its 2.4 s-per-view cost);
+- the rules that would adopt it (each through its own pre-registration or amendment).
+
+**Expected (Claude's reading; NOT a bar):**
+- alberta's walk recall rises: the stale-B floods go. Probes whose cursor sits inside the sails'
+  sweep stay UNKNOWN (fail closed).
+- prontera and prt_church are ~unchanged (little animated scenery).
+- **The risk:** on a view with much animated scenery (crowds, a busy fountain), a large region masks
+  the cursor itself and lowers recall there. Reported per view.
+
 ### 3.34 learn_skill@1 -- spend skill points in the skill window (DESIGN 2026-10-09 ~19:50; NOT pre-registered; Batt ~19:30: "add the new skill the job change needs: allocating skill points (Basic Skill > 8) via the skill window, as an L1 concept with its own alone-test")
 > ➡️ **DECIDED (Batt, 2026-10-13, decision 5):** "@streset / @skreset for GM group 20 (lab)".
 > They are added to `groups.yml` in place and apply at the next guarded rathena recreate (as

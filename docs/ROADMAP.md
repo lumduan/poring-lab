@@ -135,8 +135,8 @@ flowchart TD
 **➡️ 2026-10-13: Batt's decisions on the weekend's open items** (each recorded in its doc; the
 2026-10-10 list below is now history for items it names):
 - **Cursor:** the live gate SWITCHED to robust2 (safety-driven, departs from 3.36's bar 4, which stays
-  the target; demonstrations.md 3.36 ADOPTION). Next: cursor@3, the windmill (per-map animated regions
-  masked + a fresh background per hover), pre-registered first.
+  the target; demonstrations.md 3.36 ADOPTION). ➡️ cursor@3 PRE-REGISTERED 2026-10-13 (3.37: robust3 = robust2 + the per-view animated
+  region + a fresh background; alberta targeted, morocc held out); its runs follow the S2 session.
 - **Detector:** v1 REPLACES v0 live: ➡️ DONE 2026-10-13 (deployment parity PASS on the gold set: v1 ONNX P 0.912 / R 0.830 vs v0 ONNX 0.868 / 0.790; `unit_detector.MODEL`). **Next training:**
   LABEL QUALITY toward Batt's gold convention (auto-label boxes vs gold, the systematic gaps) before
   labels v2; no more epochs on v1.
