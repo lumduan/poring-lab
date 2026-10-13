@@ -26,9 +26,10 @@ gets STANDS stand cells 3-5 cells away (seeded), from which:
   with the windows gone -> STOP FOR A PERSON (exit 7; --resume continues the session).
 GM commands only through ro_agent.gm (the typing guard applies): @warp to a known stand cell, never
 /where (Batt's typing policy). Consecutive @warp lines always differ (the stands alternate).
-A plan that would STAND or WALK inside a warp's trigger span (L3 route.json), or on a map whose
-warps L3 does not list, is REFUSED before any input (check_warps; never filtered, so a plan that
-passes is unchanged).
+A plan that would STAND or WALK inside a warp's trigger span (L3 route.json) or onto a cell the
+SERVER's map cache does not let the GM stand on (the plan is built on the client's GAT; @warp tests
+the server's), or on a map either source lacks, is REFUSED before any input (check_warps; never
+filtered, so a plan that passes is unchanged).
 Pixels in, input out: packets are never read here; npc_click_score.py judges the session offline.
 """
 
@@ -39,7 +40,7 @@ import json
 import random
 import sys
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -260,36 +261,60 @@ def load_warps(map_name: str, kb_dir: Path = nc.KB_DIR) -> list[dict[str, Any]] 
     return list(warps[map_name]) if map_name in warps else None
 
 
-def warp_conflicts(plan: dict[str, Any], warps: Sequence[dict[str, Any]],
-                   clicks: bool = True) -> list[str]:  # fmt: skip
-    """Every planned cell the GM would STAND on or WALK to that lies inside a warp's trigger span
-    (|dx| <= span_x and |dy| <= span_y): an @warp onto it, or a walk into it, changes the map
-    (2026-10-13: a stand inside prt_church's (100,56) portal span sent the GM to prontera). Stands,
-    the control stand and, when ``clicks`` (the click arm: a probe arm only hovers and never walks
-    to them), the click cells; empty = clear."""
-    cells: list[tuple[str, Sequence[int]]] = [
+def plan_cells(plan: dict[str, Any], clicks: bool = True) -> list[tuple[str, Sequence[int]]]:
+    """The cells the GM would STAND on (the NPC stands, the control stand) and, when ``clicks``
+    (the click arm: a probe arm only hovers and never walks to them), WALK to."""
+    return [
         *(("stand", s) for n in plan["npcs"] for s in n["stands"]),
         *((("control", plan["control"]),) if plan.get("control") else ()),
         *((("click", c["cell"]) for c in plan["clicks"]) if clicks else ()),
     ]
+
+
+def warp_conflicts(plan: dict[str, Any], warps: Sequence[dict[str, Any]],
+                   clicks: bool = True) -> list[str]:  # fmt: skip
+    """Every plan cell (``plan_cells``) inside a warp's trigger span (|dx| <= span_x and
+    |dy| <= span_y): an @warp onto it, or a walk into it, changes the map (2026-10-13: a stand
+    inside prt_church's (100,56) portal span sent the GM to prontera); empty = clear."""
     out = []
-    for what, c in cells:
+    for what, c in plan_cells(plan, clicks):
         for w in warps:
             if abs(c[0] - w["x"]) <= w["span_x"] and abs(c[1] - w["y"]) <= w["span_y"]:
                 out.append(f"{what} {tuple(c)} in {w.get('name', '?')} -> {w.get('to_map', '?')}")
     return sorted(set(out))
 
 
+def server_conflicts(plan: dict[str, Any], nopass: Callable[[int, int], bool],
+                     clicks: bool = True) -> list[str]:  # fmt: skip
+    """Every plan cell the SERVER does not let the GM stand on (its map cache's CELL_CHKNOPASS).
+    The plan is built on the CLIENT's GAT, and the two differ (alberta ~5,100 cells, morocc ~7,000):
+    @warp to such a cell says "Invalid coordinates" and puts the GM on a random free cell nearby
+    (2026-10-13, cursor@3's morocc: 131,116 -> 133,120 and 158,125 -> 154,118); empty = clear."""
+    cells = plan_cells(plan, clicks)
+    return sorted({f"{what} {tuple(c)}" for what, c in cells if nopass(c[0], c[1])})
+
+
 def check_warps(map_name: str, plan: dict[str, Any], kb_dir: Path = nc.KB_DIR,
-                clicks: bool = True) -> None:  # fmt: skip
-    """REFUSE a plan that would stand or walk into a warp span, or a map whose warps L3 does not
-    list. A refusal, never a filter: a plan that passes is exactly the plan without the check.
-    ``clicks``: the click arm (its cells are walked to); a probe arm checks its stands only."""
+                clicks: bool = True, server: Any = None) -> None:  # fmt: skip
+    """REFUSE a plan that would stand or walk into a warp span or onto a cell the SERVER does not
+    let the GM stand on, or a map whose warps L3 does not list or the server's map cache lacks. A
+    refusal, never a filter: a plan that passes is exactly the plan without the check. ``clicks``:
+    the click arm (its cells are walked to); a probe arm checks its stands only. ``server``: the
+    server's grids by map (default: rAthena's pre-renewal map cache, poring_dataset.mapcache)."""
     warps = load_warps(map_name, kb_dir)
     if warps is None:
         raise SystemExit(f"L3 lists no warps for {map_name}: the plan cannot be checked (refused)")
     if bad := warp_conflicts(plan, warps, clicks):
         raise SystemExit(f"the plan stands or walks inside a warp span: {bad[:5]} (refused)")
+    if server is None:
+        from poring_dataset import mapcache
+
+        server = mapcache.load(prere=True)
+    grid = server.get(map_name)
+    if grid is None:
+        raise SystemExit(f"the server's map cache lacks {map_name}: the plan cannot be checked")
+    if bad := server_conflicts(plan, grid.nopass, clicks):
+        raise SystemExit(f"the server does not let the GM stand on: {bad[:5]} (refused)")
 
 
 def warp_lines(map_name: str, stands: Sequence[Sequence[int]]) -> list[str]:
@@ -660,8 +685,13 @@ def main() -> int:
         )
         lines = warp_lines(a.map, [p["stand"] for p in plan["probes"]])
         warps = load_warps(a.map)
+        from poring_dataset import mapcache
+
+        grid = mapcache.load(prere=True).get(a.map)
         print(json.dumps({"coverage": cov,
                           "warp_conflicts": None if warps is None else warp_conflicts(plan, warps),
+                          "server_conflicts": None if grid is None
+                          else server_conflicts(plan, grid.nopass),
                           "npcs": plan["npcs"], "probes": len(plan["probes"]),
                           "clicks": len(plan["clicks"]), "probe_warps": len(lines),
                           "click_warps_ok": no_identical_in_a_row(click_warps(a.map,

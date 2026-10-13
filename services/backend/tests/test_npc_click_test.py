@@ -135,10 +135,21 @@ def test_the_plan_is_seeded() -> None:
     assert a == b and a != c
 
 
+class FakeGrid:
+    """The server's map cache for one map: ``nopass`` cells (CELL_CHKNOPASS)."""
+
+    def __init__(self, nopass: tuple[tuple[int, int], ...] | set[tuple[int, int]] = ()) -> None:
+        self.cells = set(nopass)
+
+    def nopass(self, x: int, y: int) -> bool:
+        return (x, y) in self.cells
+
+
 def test_a_plan_that_stands_or_walks_in_a_warp_span_is_refused_never_filtered(
     plan: dict, tmp_path: Path
 ) -> None:
     stand, click, ctl = plan["npcs"][0]["stands"][0], plan["clicks"][0]["cell"], plan["control"]
+    server = {"town": FakeGrid()}
 
     def hits(what: str, cell: Any, w: dict) -> bool:
         return any(c.startswith(f"{what} {tuple(cell)} ") for c in nct.warp_conflicts(plan, [w]))
@@ -156,20 +167,41 @@ def test_a_plan_that_stands_or_walks_in_a_warp_span_is_refused_never_filtered(
     before = json.dumps(plan, sort_keys=True)
     (tmp_path / "route.json").write_text(json.dumps({"warps": {"town": [portal(*stand)]}}))
     with pytest.raises(SystemExit, match="inside a warp span"):
-        nct.check_warps("town", plan, tmp_path)
+        nct.check_warps("town", plan, tmp_path, server=server)
     assert json.dumps(plan, sort_keys=True) == before
     # clear -> no refusal; a map L3 does not list -> refused (unknown is not clear)
     (tmp_path / "route.json").write_text(json.dumps({"warps": {"town": []}}))
-    nct.check_warps("town", plan, tmp_path)
+    nct.check_warps("town", plan, tmp_path, server=server)
     with pytest.raises(SystemExit, match="lists no warps"):
-        nct.check_warps("elsewhere", plan, tmp_path)
+        nct.check_warps("elsewhere", plan, tmp_path, server=server)
     # a click cell in a span refuses the CLICK arm only: a probe arm hovers and never walks there
     only_click = [w for w in [portal(*click)] if not nct.warp_conflicts(plan, [w], clicks=False)]
     assert only_click, "the test needs a click cell that is no stand and no control"
     (tmp_path / "route.json").write_text(json.dumps({"warps": {"town": only_click}}))
-    nct.check_warps("town", plan, tmp_path, clicks=False)
+    nct.check_warps("town", plan, tmp_path, clicks=False, server=server)
     with pytest.raises(SystemExit, match="inside a warp span"):
-        nct.check_warps("town", plan, tmp_path, clicks=True)
+        nct.check_warps("town", plan, tmp_path, clicks=True, server=server)
+
+
+def test_a_plan_cell_the_server_will_not_stand_on_is_refused(plan: dict, tmp_path: Path) -> None:
+    # the plan is built on the client's GAT; @warp tests the SERVER's map cache (cursor@3's morocc,
+    # 2026-10-13: two stands walkable on the client were "Invalid coordinates" on the server)
+    stand, click, ctl = plan["npcs"][0]["stands"][0], plan["clicks"][0]["cell"], plan["control"]
+    (tmp_path / "route.json").write_text(json.dumps({"warps": {"town": []}}))
+    s_cells = {tuple(s) for n in plan["npcs"] for s in n["stands"]} | {tuple(ctl)}
+    assert nct.server_conflicts(plan, FakeGrid({tuple(stand)}).nopass) == [f"stand {tuple(stand)}"]
+    assert nct.server_conflicts(plan, FakeGrid({tuple(ctl)}).nopass) == [f"control {tuple(ctl)}"]
+    before = json.dumps(plan, sort_keys=True)
+    with pytest.raises(SystemExit, match="does not let the GM stand on"):
+        nct.check_warps("town", plan, tmp_path, server={"town": FakeGrid({tuple(stand)})})
+    assert json.dumps(plan, sort_keys=True) == before
+    if tuple(click) not in s_cells:  # a click cell: the click arm only
+        bad = {"town": FakeGrid({tuple(click)})}
+        nct.check_warps("town", plan, tmp_path, clicks=False, server=bad)
+        with pytest.raises(SystemExit, match="does not let the GM stand on"):
+            nct.check_warps("town", plan, tmp_path, clicks=True, server=bad)
+    with pytest.raises(SystemExit, match="map cache lacks"):
+        nct.check_warps("town", plan, tmp_path, server={})
 
 
 def test_warp_lines_type_only_changes_of_stand() -> None:
