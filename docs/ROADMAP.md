@@ -154,8 +154,10 @@ flowchart TD
   sessions (attempt 2 PASS 128 / 128; attempt 1 FAIL 104 / 110 on in-place hover frames, recorded) and
   INSTALLED ([demonstrations.md](demonstrations.md) 3.32a). ➡️ The highlighted CLOSE (CLOSE_HI) as
   well, after the prontera arm's second stop (Batt: "prove then resume"; PASS 172 / 172, installed
-  14:38). Then npc-click's click arms (robust2 gate, amended; the resumed arm is scored in
-  segments); the merchant dialog collected by Claude (GM warp, decline path); talk@1 reworked onto the
+  14:38). ➡️ And a T2 border fix for RDP codec-tile shade shifts: two click-arm stops; attempt 2
+  PASS on fresh drives; merged fb2b5ac. Then npc-click's click arms (robust2 gate, amended;
+  prontera and church PARKED until after the S2 session; scored in segments); ~~the merchant
+  dialog~~ ➡️ collected 15:37 (decline path); the merchant dialog collected by Claude (GM warp, decline path); talk@1 reworked onto the
   minimap-first walk (no /ex); @streset / @skreset for group 20.
 - **walk@17:** "/where once per need" wins over the repeat rule; never draw a harness start inside a
   warp area (amendments before its tuning).

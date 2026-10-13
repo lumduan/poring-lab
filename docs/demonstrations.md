@@ -3678,6 +3678,24 @@ their causes; the measured footprints per job; which fix (5.7) each result point
         (fresh), plus any later one, each with both readers' reads.
     - **On PASS:** the fix is merged (T2 live on RDP). The prontera arm resumes as segment 4, and the
       church arm resumes. **On FAIL / INCONCLUSIVE:** not merged; reported to Batt.
+  - ➡️ **ATTEMPT 2 RESULT (fresh drives 15:37-15:43, scored 15:45): PASS. MERGED (fb2b5ac).**
+    - Sessions: `20261013T153740-demo-talk-cal-merchant` (Batt's decision 6: the merchant dialog,
+      decline path, 66 frames), `153924-…-guide` (`--first 3`, 78), `154115-…-henson` (`--first
+      3`, 108). T4 and T5 PASS on all three.
+
+      | | labelled | classes (next / menu / close / none) | current reader | FIXED reader | verdicts changed |
+      |---|---|---|---|---|---|
+      | **fresh (the bars)** | 252 | 96 / 120 / 18 / 18 | 252 | **252** | 0 |
+      | banked, corrected (reported; known) | 592 | | 592 | 592 | 0 |
+
+    - Rule 1 PASS; rule 2: 0 regressions; rule 3: 0 false `present`.
+    - **What the PASS shows, and what it does not:** none of the fresh frames had a shifted border
+      (0 verdicts changed), so it shows the fix does no harm. The evidence that it HELPS is the
+      click-arm stop frames: YuNA 14:42 (a design frame) and Garnet 15:24 (FRESH, n = 1). Both
+      read NEXT with the merged reader.
+    - **Next:** the S2 UI-gate session (16:00, Batt). After it, the prontera arm resumes as
+      segment 4 and the church arm resumes (`--resume 20261013T151312-demo-npc-click-click-prt-church`),
+      each scored by segment.
 
 ### 3.33 The GM's IMMUNITY: a test condition for the visual-diversity block (pre-registered 2026-10-09 ~14:05 ICT / 07:05 UTC, BEFORE the check; Batt: "keep gl_prison; a GM doesn't need to fear monsters. Make the GM safe without changing what the bot sees")
 **The condition, PRIMARY:** rAthena's `@monsterignore`, granted to the GM's group 20 (`groups.yml`,
