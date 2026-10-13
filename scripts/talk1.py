@@ -97,6 +97,10 @@ TARGETS = {
     "henson": Target("henson", "prt_church", (103, 71), 8, (1, 2, 3, 4, 5, 6, 7)),
     # the guide's first option opens a mini-map submenu with a yes / no: never picked (3.30)
     "guide": Target("guide", "prontera", (154, 187), 4, (2, 3)),
+    # the Merchant job changer (merchant.txt:34): talk_calibrate drive --npc merchant --first 2 is
+    # the DECLINE path (Batt 2026-10-13, decision 6: its pages banked for the delivery-dialog
+    # classifier's glyphs); option 2 is the first menu's end option. Not a talk@1 scene target.
+    "merchant": Target("merchant", "alberta_in", (53, 43), 2, (2,)),
 }
 SCENES: dict[str, tuple[tuple[str, ...], int]] = {
     "prt_church": (("garnet", "henson"), 20261130),  # alternate, seed 20261130 (3.30)
