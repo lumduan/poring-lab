@@ -4292,13 +4292,37 @@ sheets are labelled.
 | A3 prontera | `20261013T193638-demo-npc-click-probe-prontera` | 19:36-20:52 | 1,498 | 0 / 0 / 0 / 0 |
 | A3 prt_church | `20261013T205443-demo-npc-click-probe-prt-church` | 20:54-21:22 | 566 | 0 / 0 / 0 / 0 |
 | morocc pilot (never scored) | `20261013T213555-demo-npc-click-probe-morocc` | 21:35-21:44 | 156 (3 stands; live reads walk 77 / talk 53 / unknown 26: the harness runs there, morocc is NOT dropped) | 0 / 0 / 0 / 0 |
-| A3 morocc (HELD-OUT, once) | running (started 21:45, a judged screenshot first; the plan's 9 stands and 75 click cells checked offline against morocc's 14 warp spans: none inside, none within 1 cell) | | | |
+| A3 morocc (HELD-OUT, once) | `20261013T215522-demo-npc-click-probe-morocc` | 21:55-22:43 | 990 (**188 from two DISPLACED positions**, below) | 0 / 0 / 0 / 0 |
 
 - **A harness change between the pilot and A3 morocc (860871f, merged 21:44:31 by the reflog):** `npc_click_test.py` now
   REFUSES a plan that stands or walks inside a warp's trigger span, or on a map whose warps L3
   does not list (after a (100,56) banking stand warped the GM to prontera, 63e310e). It is a refusal, never a
   filter: a plan that passes is unchanged, so morocc's spots are as pre-registered. 85019f8 then
   limited the click cells to the click arm (a probe arm never walks to them).
+
+- ➡️ **A deviation in the held-out morocc run, found AFTER it (22:43, from the chat log on the
+  pre-run screenshot of the next run, then the session's own packets):** the server refused 2 of
+  its 9 @warps ("Invalid coordinates, using random target cell") and put the GM on a free cell
+  nearby (its map_change packets):
+  - the NPC stand (131,116) -> (133,120): 126 records (64 cell, 62 sprite), 22:13-22:19;
+  - the CONTROL stand (158,125) -> (154,118): 62 records, 22:40-22:43.
+  - **Why:** the plan is built on the CLIENT's GAT; @warp tests the SERVER's map cache
+    (CELL_CHKNOPASS), and on morocc they disagree on ~7,000 cells beyond the edge row and column
+    (alberta ~5,100, prontera 46, prt_church 0). Both cells are walkable on the client and not on
+    the server. collect_v2 already used both sources; npc_click_test did not.
+  - **Every other @warp today landed where typed:** 202 of the 204 @warps in today's 33 banked
+    sessions (each @warp line against the map_change that answered it). Among them: B3 30,
+    A3 alberta 13, A3 prontera 13, A3 prt_church 5, the morocc pilot 3, and the npc-click church
+    arm's 118. The 2 that did not are these two.
+  - **The harness now refuses such a plan** (f275ab6: a stand, the control, or a click-arm cell the
+    server will not let the GM stand on; a refusal, never a filter).
+  - **How it is scored: AS PRE-REGISTERED, all 990 records.** The run did not exit early, so the
+    re-run rule does not apply, and the held-out map is used once. A hover from a displaced position
+    is still a real hover, and its truth is the labellers' eye label. The bars condition on that
+    label (bar 2: sprite points labelled talk; bar 4: cell points + controls labelled walk), and
+    the safety bars are per image. What the displacement changes is WHERE the cursor sat, not
+    what truth is. **Reported beside the bars (not a bar):** every morocc number without the 188
+    displaced records.
 
 **Truth (fixed BEFORE any bar is computed):**
 - `scripts/cursor2_truth.py sheets --judged robust3 --item-seed 20261205 --strip-seed 20261206` at
