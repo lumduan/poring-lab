@@ -498,6 +498,96 @@ def verdict(reads: Sequence[dict[str, Any]], grabs: int = 3) -> str:
     return "unknown"
 
 
+def click_metrics(clicks: Sequence[dict[str, Any]], events: list[dict[str, Any]], camera: Any,
+                  gat: Any, layers: dict[str, Any]) -> dict[str, Any]:  # fmt: skip
+    """The click arm's metrics over ``clicks``: what the server did, the L3 arms, the dialogs."""
+
+    def table(d: dict[tuple[Any, ...], list[bool]]) -> dict[str, Any]:
+        return {"/".join(str(x) for x in k): rate(sum(v), len(v)) for k, v in sorted(
+            d.items(), key=lambda kv: tuple(str(x) for x in kv[0]))}  # fmt: skip
+
+    outcome: Counter[str] = Counter()
+    walk_contact = defaultdict(list)
+    l3_arm: dict[str, Counter[str]] = {n: Counter() for n in layers}
+    stops = []
+    for rec in clicks:
+        ev = rec["outcome"]["evidence"]
+        gate = ev.get("gate", {})
+        if ev.get("dialog", {}).get("action", "").startswith("stop"):
+            stops.append({"cell": ev["cell"], "dialog": ev["dialog"]})
+        if not gate.get("clicked"):
+            outcome["not_clicked:" + str(gate.get("why"))] += 1
+            continue
+        t = int(gate["t_click"])
+        con = [e for e in events if e.get("type") == "npc_contact"
+               and 0 <= int(e["t_mono_ns"]) - t <= CONTACT_S * S]  # fmt: skip
+        mv = [e for e in events if e.get("type") == "self_move_request"
+              and 0 <= int(e["t_mono_ns"]) - t <= MOVE_S * S]  # fmt: skip
+        res = "npc_contact" if con else "self_move_request" if mv else "nothing"
+        outcome[res] += 1
+        ring = max(abs(ev["cell"][0] - ev["npc_cell"][0]), abs(ev["cell"][1] - ev["npc_cell"][1]))
+        for key in (("all",), ("ring", ring), ("npc", ev["npc"])):
+            walk_contact[key].append(res == "npc_contact")
+        w = world(camera, gat, ev["stand"])
+        for n, layer in layers.items():
+            refused = layer.refuse_point(w, *ev["at"]) is not None
+            l3_arm[n][f"{'refused' if refused else 'allowed'}:{res}"] += 1
+    arms = {}
+    for n, c in l3_arm.items():
+        contacts = c["refused:npc_contact"] + c["allowed:npc_contact"]
+        allowed = sum(v for k, v in c.items() if k.startswith("allowed:"))
+        arms[n] = {"counts": dict(c),
+                   "contacts_refused": rate(c["refused:npc_contact"], contacts),
+                   "contacts_left_with_layer": c["allowed:npc_contact"],
+                   "contact_rate_among_allowed": rate(c["allowed:npc_contact"], allowed),
+                   "moves_refused (cost)": rate(c["refused:self_move_request"],
+                                                c["refused:self_move_request"]
+                                                + c["allowed:self_move_request"])}  # fmt: skip
+    return {
+        "click_outcomes": dict(outcome),
+        "walk_read_but_contact": table(walk_contact),
+        "l3_arms": arms,
+        "dialog_stops": stops,
+    }
+
+
+SEGMENT_GAP_S = 600  # a resume after a stop for a person is a new segment (3.32a amendment)
+
+
+Segment = tuple[dict[str, Any], list[dict[str, Any]]]
+
+
+def segments(clicks: Sequence[dict[str, Any]], events: list[dict[str, Any]],
+             gap_s: float = SEGMENT_GAP_S) -> list[Segment]:  # fmt: skip
+    """The click records split where two consecutive records are more than ``gap_s`` apart (each
+    run of a resumed session): per segment its span, its gate (robust2 when its clicks carry the
+    6-grab series, else v3), and replay_safety's request / act counts over its window."""
+    import replay_safety
+
+    recs = sorted(clicks, key=lambda r: int(r["t_mono_ns"]))
+    runs: list[list[dict[str, Any]]] = []
+    for rec in recs:
+        if runs and int(rec["t_mono_ns"]) - int(runs[-1][-1]["t_mono_ns"]) <= gap_s * S:
+            runs[-1].append(rec)
+        else:
+            runs.append([rec])
+    out = []
+    for k, run in enumerate(runs):
+        t0 = int(run[0]["t_mono_ns"])
+        t1 = max(int(r.get("t_done_ns") or r["t_mono_ns"]) for r in run) + 5 * S
+        gates = set()
+        for r in run:
+            g = r["outcome"]["evidence"].get("gate", {})
+            if "shapes" in g:  # robust2's 6-grab series (cursor_gate.read_series)
+                gates.add("robust2")
+            elif g.get("shape") is not None:  # a read without the series: the v3 gate
+                gates.add("v3")
+        seg = {"segment": k, "records": len(run), "t0_mono_ns": t0, "t1_mono_ns": t1,
+               "gate": sorted(gates), "safety": replay_safety.judge(events, t0, t1)}  # fmt: skip
+        out.append((seg, run))
+    return out
+
+
 def score(
     session: Path,
     layers: dict[str, Any] | None = None,
@@ -580,44 +670,7 @@ def score(
         return {"/".join(str(x) for x in k): rate(sum(v), len(v)) for k, v in sorted(
             d.items(), key=lambda kv: tuple(str(x) for x in kv[0]))}  # fmt: skip
 
-    # clicks: what the server did, the L3 arm, the dialogs
-    outcome: Counter[str] = Counter()
-    walk_contact = defaultdict(list)
-    l3_arm: dict[str, Counter[str]] = {n: Counter() for n in layers}
-    stops = []
-    for rec in clicks:
-        ev = rec["outcome"]["evidence"]
-        gate = ev.get("gate", {})
-        if ev.get("dialog", {}).get("action", "").startswith("stop"):
-            stops.append({"cell": ev["cell"], "dialog": ev["dialog"]})
-        if not gate.get("clicked"):
-            outcome["not_clicked:" + str(gate.get("why"))] += 1
-            continue
-        t = int(gate["t_click"])
-        con = [e for e in events if e.get("type") == "npc_contact"
-               and 0 <= int(e["t_mono_ns"]) - t <= CONTACT_S * S]  # fmt: skip
-        mv = [e for e in events if e.get("type") == "self_move_request"
-              and 0 <= int(e["t_mono_ns"]) - t <= MOVE_S * S]  # fmt: skip
-        res = "npc_contact" if con else "self_move_request" if mv else "nothing"
-        outcome[res] += 1
-        ring = max(abs(ev["cell"][0] - ev["npc_cell"][0]), abs(ev["cell"][1] - ev["npc_cell"][1]))
-        for key in (("all",), ("ring", ring), ("npc", ev["npc"])):
-            walk_contact[key].append(res == "npc_contact")
-        w = world(camera, gat, ev["stand"])
-        for n, layer in layers.items():
-            refused = layer.refuse_point(w, *ev["at"]) is not None
-            l3_arm[n][f"{'refused' if refused else 'allowed'}:{res}"] += 1
-    arms = {}
-    for n, c in l3_arm.items():
-        contacts = c["refused:npc_contact"] + c["allowed:npc_contact"]
-        allowed = sum(v for k, v in c.items() if k.startswith("allowed:"))
-        arms[n] = {"counts": dict(c),
-                   "contacts_refused": rate(c["refused:npc_contact"], contacts),
-                   "contacts_left_with_layer": c["allowed:npc_contact"],
-                   "contact_rate_among_allowed": rate(c["allowed:npc_contact"], allowed),
-                   "moves_refused (cost)": rate(c["refused:self_move_request"],
-                                                c["refused:self_move_request"]
-                                                + c["allowed:self_move_request"])}  # fmt: skip
+    clk = click_metrics(clicks, events, camera, gat, layers)
     det = recall(events, batches_from_log(session)) if events else None
     return {
         "session": session.name,
@@ -629,10 +682,11 @@ def score(
         "colour_fail_rate": table(colour),
         "colour_fail_causes": dict(causes),
         "remembered_cell_offset": {f"{k[0]},{k[1]}": v for k, v in sorted(offsets.items())},
-        "click_outcomes": dict(outcome),
-        "walk_read_but_contact": table(walk_contact),
-        "l3_arms": arms,
-        "dialog_stops": stops,
+        **clk,
+        "segments": [
+            {**seg, **click_metrics(seg_recs, events, camera, gat, layers)}
+            for seg, seg_recs in segments(clicks, events)
+        ],  # fmt: skip
         "detector": None if det is None else {k: v for k, v in det.items() if k != "rows"},
     }
 

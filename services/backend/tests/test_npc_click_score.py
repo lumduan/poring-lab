@@ -280,3 +280,33 @@ def test_score_sorts_a_colour_fail_by_what_restores_it(tmp_path: Path) -> None:
     out = ncs.score(d, layers={}, camera_gat=CAM_GAT, refs=refs)
     assert out["colour_fail_causes"] == {"no_later_grab_passed": 1, "C1_restored_by_shift": 1,
                                          "C2_not_by_blur": 1}  # fmt: skip
+
+
+def test_a_resumed_click_arm_is_scored_in_segments(tmp_path: Path) -> None:
+    """3.32a amendment: each run of a resumed session (records > SEGMENT_GAP_S apart) is reported
+    apart, with its gate (robust2 = the 6-grab series, else v3) and the safety of ITS window."""
+    pos = (155, 185)
+    fu, fv = feet(pos, (155, 190))
+    gap = ncs.SEGMENT_GAP_S + 60
+    recs = []
+    for k, (t, robust) in enumerate([(4, False), (19, False), (4 + gap, True), (19 + gap, True)]):
+        rec = click(k, pos, [150, 180], (fu - 300, fv + 200), int((t + 1) * S))
+        rec["t_mono_ns"] = int(t * S)
+        rec["outcome"]["evidence"]["gate"]["shape"] = "walk"
+        if robust:
+            rec["outcome"]["evidence"]["gate"]["shapes"] = ["walk"] * 6
+        recs.append(rec)
+    events = [*town(*pos),
+              ev(5.2, "self_move_request", x=150, y=180, dir="cs"),
+              ev(20.2, "self_move_request", x=150, y=180, dir="cs"),
+              ev(5.2 + gap, "self_move_request", x=150, y=180, dir="cs"),
+              ev(20.2 + gap, "attack_request", target_gid=1, dir="cs")]  # fmt: skip
+    d = write_session(tmp_path / "s", events, recs)
+    out = ncs.score(d, layers={"none": nc.NoClickLayer([])}, camera_gat=CAM_GAT)
+    segs = out["segments"]
+    assert [s["records"] for s in segs] == [2, 2]
+    assert [s["gate"] for s in segs] == [["v3"], ["robust2"]]
+    assert segs[0]["safety"]["attack_request"] == 0 and segs[1]["safety"]["attack_request"] == 1
+    assert segs[0]["click_outcomes"] == {"self_move_request": 2}
+    assert segs[1]["click_outcomes"] == {"self_move_request": 1, "nothing": 1}
+    assert out["click_outcomes"] == {"self_move_request": 3, "nothing": 1}  # the whole arm
