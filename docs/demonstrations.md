@@ -4458,6 +4458,19 @@ hit-box model is pre-registered.
 plans need (733, 734, 86, 59, 117, 726, 105, 84, 90, 92), and 0 problems. sha256
 `690537890ad2728103dc1a8905db3f0e535c0b7f11451b2aa462440929252540`.
 
+**➡️ B runs** (RDP, the GM, hover only; times ICT; the sprite table's sha256 re-checked
+`690537890ad2...` at 22:43, before B1). NOT SCORED until every B run is in and labelled.
+- **Harness changes since 3f8831d, each a REFUSAL that changes no plan that passes:** a stand or
+  walked cell inside a warp span (860871f; click cells in the click arm only, 85019f8); a stand,
+  control or click-arm cell the SERVER's map cache will not let the GM stand on (f275ab6). The B
+  plans pass both: no stand inside a span (above), and on prontera, alberta_in and new_1-2 no cell
+  is client-walkable and server-NOPASS (beyond the edge row and column), so every client-walkable
+  stand is one the server accepts. cursor@3's held-out morocc is why the second exists (3.37).
+
+| run | session | time | records | safety |
+|---|---|---|---|---|
+| B1 prontera `--near 70,356 --seed 20261190` | running (started 22:51, a judged screenshot first) | | | |
+
 **Not decided here (Batt):**
 - the hit box itself (a box, against "not a box or a cell guess");
 - decoding MIXCRYPT sprites at RUN time. Claude reads "the client's sprite files (decoded
