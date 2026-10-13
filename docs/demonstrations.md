@@ -3550,6 +3550,26 @@ their causes; the measured footprints per job; which fix (5.7) each result point
       20261010T001818-demo-npc-click-click-prontera`, unchanged). The scorer reports its THREE
       segments apart: v3; robust2 + NEXT_HI; robust2 + NEXT_HI + CLOSE_HI.
     - **On FAIL or INCONCLUSIVE:** nothing is installed; report to Batt.
+  - ➡️ **THE CLOSE_HI PROOF, RESULT: PASS, INSTALLED.** Batt closed YuNA's dialog at 14:31. The sessions
+    ran 14:31-14:37 ICT and were scored at 14:37.
+    - S1 `20261013T143147-demo-talk-cal-henson`: drive `--first 2`, 108 frames.
+    - S2 `20261013T143410-demo-talk-cal-guide`: 64 labelled + 12 in place.
+    - T4 and T5 PASS on both.
+
+      | set | labelled | agree | classes (next / menu / close / none) | verdict |
+      |---|---|---|---|---|
+      | **candidate** | 172 | **172** | 64 / 72 / 24 / 12 | **PASS** |
+      | installed (with NEXT_HI; reported) | 172 | 162 | same | FAIL: the 10 parked highlighted CLOSE frames -> `button_unknown` |
+
+    - **The highlight bar:** 10 labelled frames that the installed set reads `button_unknown` and the
+      candidate reads CLOSE (needed >= 8).
+    - NEXT_HI, live since ~13:15, read S2's highlighted NEXT pages as NEXT; prove-t2 counts them.
+    - **In place (reported only):** 12 / 12 `button_unknown` with both sets.
+    - Enter on the highlighted CLOSE closed the dialog (`npc_close_click` 1).
+    - **Installed** 14:38: `data/ui_anchors/npc_dialog/npc_dialog_close_hi.npy`, sha256
+      `1995cabbaf9a7d9144bd7005e28ab4c05764833b2e9b301fe4ba9750cfff67fc`, read back equal.
+      `talk1.TEMPLATES` loads both highlighted looks.
+    - Next: the prontera arm resumes (segment 3).
 
 ### 3.33 The GM's IMMUNITY: a test condition for the visual-diversity block (pre-registered 2026-10-09 ~14:05 ICT / 07:05 UTC, BEFORE the check; Batt: "keep gl_prison; a GM doesn't need to fear monsters. Make the GM safe without changing what the bot sees")
 **The condition, PRIMARY:** rAthena's `@monsterignore`, granted to the GM's group 20 (`groups.yml`,
