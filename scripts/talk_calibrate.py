@@ -76,6 +76,10 @@ S = 1_000_000_000
 CURRENT = Path("/dev/shm/poring-lab-tmp/talk-cal/current.json")
 STEPS_FILE = "talk_cal.json"
 FRAMES_DIR = "frames"
+# The `hover` step's frames, the cursor ON the element: kept as evidence, NEVER labelled. T2 is
+# only ever read with the cursor parked (talk1.LiveIo.observe parks first), so a frame with the
+# cursor over a button is outside the reader's use (2026-10-13: the NEXT_HI proof, attempt 1).
+IN_PLACE_DIR = "in_place"
 SETTLE_MS = 600
 HOVER_SETTLE_S = 0.8  # the hover step: the client draws its cursor ~0.4-0.8 s after the 2nd motion
 HOLDOUT_EVERY = 3
@@ -653,14 +657,15 @@ def _doc() -> dict[str, Any]:
 
 def grab_frames(io: talk1.LiveIo, doc: dict[str, Any], n: int, gap_s: float = 0.25,
                 park: bool = True) -> list[Any]:  # fmt: skip
-    """Park the cursor away from the windows (unless ``park`` is False: the `hover` step keeps it
-    on the element), then ``n`` frames (decoded after the last step)."""
+    """Park the cursor away from the windows, then ``n`` frames (decoded after the last step) into
+    the labelled frames. ``park`` False (the `hover` step keeps the cursor on the element): the
+    frames go to IN_PLACE_DIR instead, evidence that is never labelled."""
     import ro_agent as r
 
     if park:
         io.park()
     out = []
-    fdir = Path(doc["dir"]) / FRAMES_DIR
+    fdir = Path(doc["dir"]) / (FRAMES_DIR if park else IN_PLACE_DIR)
     k = len(list(fdir.glob("*.png"))) if fdir.exists() else 0
     after = doc["steps"][-1]["t"] if doc["steps"] else None
     for _ in range(n):
@@ -670,7 +675,7 @@ def grab_frames(io: talk1.LiveIo, doc: dict[str, Any], n: int, gap_s: float = 0.
         out.append(np.ascontiguousarray(img[..., :3]))
         k += 1
         time.sleep(gap_s)
-    doc["frames"] = k
+    doc["frames" if park else "in_place"] = k
     return out
 
 

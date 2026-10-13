@@ -3448,6 +3448,52 @@ their causes; the measured footprints per job; which fix (5.7) each result point
       records of the prontera click arm were read by v3.
     - The scorer reports the two segments apart. The resume command is unchanged otherwise
       (`--resume 20261010T001818-demo-npc-click-click-prontera`); then the church click arm.
+  - ➡️ **THE NEXT_HI PROOF, ATTEMPT 1 (2026-10-13 12:58-13:08 ICT, RDP, the GM; NOT installed): FAIL,
+    104 / 110.** The candidate set = the installed T2 set (data/ui_anchors/npc_dialog, cut 10-09)
+    + `npc_dialog_next_hi.npy` (sha256 `695a0e0d406352f7...`, cut from the 10-10 00:23 stop frame).
+    `talk_calibrate.py prove-t2` (its rule unchanged: >= 50 labelled frames, EVERY one agreeing with
+    the packets, >= 1 frame of each class) on two FRESH sessions, never used by any cut:
+    - `20261013T125826-demo-talk-cal-guide`: `drive --npc guide --first 2`, 60 frames; T4 / T5 PASS;
+    - `20261013T130007-demo-talk-cal-guide`: the same dialog by single steps, with `hover next --n 4`
+      (the cursor ON the button, no click) and then parked frames on each of the two NEXT pages;
+      52 frames; T4 / T5 PASS.
+
+    | set | labelled | agree | the disagreements |
+    |---|---|---|---|
+    | installed | 110 | 94 | the 10 PARKED frames after a hover: the button stays blue with the cursor ~800 px away -> `button_unknown` (the 10-10 stop, REPRODUCED twice) + the 6 below |
+    | **candidate (+ NEXT_HI)** | 110 | **104** | **6, all IN-PLACE hover frames** (0009-0011, 0027-0029): the cursor itself drawn over the button -> `button_unknown` |
+
+    - Every PARKED frame agrees with the candidate (104 / 104), the 10 highlighted ones included.
+    - **The finding:** the highlight is sticky. A hover leaves NEXT blue after the cursor goes
+      (both pages); a menu step clears it. That is how the 10-10 click arm stopped.
+    - **Why the 6 do not reach the live reader** (a fact of the code, found after the result, so it
+      changes nothing above): T2 is only read with the cursor parked (`talk1.LiveIo.observe` parks
+      before every read, `scripts/talk1.py:579-581`; the UI gate parks too). The in-place frames were
+      my own addition today (`hover`, 2d2223e), and 10-09's proof had none. They fail closed (an
+      unknown button presses nothing).
+    - The result stays a FAIL. The template is NOT installed on it.
+  - **THE NEXT_HI PROOF, ATTEMPT 2: PRE-REGISTERED 2026-10-13 ~13:20 ICT, before its data.**
+    - **The change, stated before the data:** the `hover` step's in-place frames go to `in_place/`.
+      They are kept as evidence and never labelled (`talk_calibrate.grab_frames`, IN_PLACE_DIR;
+      test_talk_calibrate). Parked frames are labelled exactly as before. The candidate set and
+      prove-t2's rule are unchanged.
+    - **FRESH sessions** (the client's UI judged on a screenshot before each):
+      - S1 `talk_calibrate.py drive --npc guide --first 3` (the other allowed first option);
+      - S2 `contact --npc guide`. On each NEXT page: `frames --n 4`, `hover next --n 4` (in place),
+        `frames --n 6`, then `key Enter --n 4`. Menus by keys to the same options as `drive --first
+        2`. CLOSE by Enter, `frames --n 6`, then `collect`.
+    - **PASS:** prove-t2 PASS on S1 + S2 with the candidate set, AND >= 8 labelled frames that the
+      installed set reads `button_unknown` and the candidate reads NEXT. Fewer than 8 =
+      INCONCLUSIVE: the highlight did not show, so nothing is proven.
+    - **Reported only:** the installed set's result on the same frames, and the candidate's reads
+      of the in-place frames.
+    - **On PASS:** `npc_dialog_next_hi.npy` is copied into data/ui_anchors/npc_dialog/ and its
+      sha256 read back. Then the click arms resume, per the amendment above.
+      - The template feeds every T2 reader (talk@1, npc-click, the UI gate).
+      - The UI gate still STOPS on any dialog showing NEXT. A highlighted NEXT only turns its
+        `button_unknown` stop into a NEXT stop.
+    - **On FAIL or INCONCLUSIVE:** nothing is installed. Stop and report to Batt; the click arms
+      wait.
 
 ### 3.33 The GM's IMMUNITY: a test condition for the visual-diversity block (pre-registered 2026-10-09 ~14:05 ICT / 07:05 UTC, BEFORE the check; Batt: "keep gl_prison; a GM doesn't need to fear monsters. Make the GM safe without changing what the bot sees")
 **The condition, PRIMARY:** rAthena's `@monsterignore`, granted to the GM's group 20 (`groups.yml`,

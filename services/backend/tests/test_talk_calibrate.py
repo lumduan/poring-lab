@@ -363,3 +363,39 @@ def test_attach_waits_for_a_persons_dialog_then_the_lease(tc: Any) -> None:
                               sleep=sleep) == "no_dialog"  # fmt: skip
     assert tc.wait_for_person(None, grab=lambda: opened, health=lambda: {"lease_active": True},
                               clock=clock, sleep=sleep) == "lease_active"  # fmt: skip
+
+
+def test_hover_frames_are_kept_apart_and_never_labelled(
+    tc: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The `hover` step's frames (the cursor ON the element) go to in_place/, never to the
+    labelled frames: T2 is only read with the cursor parked (2026-10-13, NEXT_HI attempt 1)."""
+    fake = ModuleType("ro_agent")
+    clock = iter(range(1, 100))
+    fake.grab_after = lambda screen, region, after: np.zeros((4, 4, 4), np.uint8)  # type: ignore[attr-defined]
+    fake.game_region = lambda: (0, 0, 4, 4)  # type: ignore[attr-defined]
+    fake.ns = lambda: next(clock) * S  # type: ignore[attr-defined]
+
+    def to_png(img: Any, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"x")
+
+    fake.to_png = to_png  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "ro_agent", fake)
+
+    class Io:
+        screen = None
+        parks = 0
+
+        def park(self) -> None:
+            self.parks += 1
+
+    io, doc = Io(), {"dir": str(tmp_path), "steps": []}
+    tc.grab_frames(io, doc, 2, gap_s=0)
+    tc.grab_frames(io, doc, 3, gap_s=0, park=False)
+    tc.grab_frames(io, doc, 1, gap_s=0)
+    assert io.parks == 2
+    assert doc["frames"] == 3 and doc["in_place"] == 3
+    assert len(list((tmp_path / tc.FRAMES_DIR).glob("*.png"))) == 3
+    assert len(list((tmp_path / tc.IN_PLACE_DIR).glob("*.png"))) == 3
+    assert len(tc.frames_of(tmp_path)) == 3  # labelled() reads frames_of: the in-place ones never
