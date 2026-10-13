@@ -3528,7 +3528,7 @@ their causes; the measured footprints per job; which fix (5.7) each result point
     - **DECIDED (Batt, 2026-10-13 ~14:10):** "Yes, prove then resume". A highlighted-CLOSE
       template (CLOSE_HI) is built, pre-registered and proven like NEXT_HI, then the arm resumes
       with it. A person closes YuNA's dialog first.
-  - **THE CLOSE_HI PROOF: PRE-REGISTERED 2026-10-13 ~14:17 ICT, before its data** (code 74533e9;
+  - **THE CLOSE_HI PROOF: PRE-REGISTERED 2026-10-13 14:15 ICT (a69f518), before its data** (code 74533e9;
     the method of NEXT_HI attempt 2, unchanged):
     - **Candidate set:** the installed T2 set (NEXT_HI included) + `npc_dialog_close_hi.npy`,
       sha256 `1995cabbaf9a7d9144bd7005e28ab4c05764833b2e9b301fe4ba9750cfff67fc`. It was cut from the
