@@ -3528,6 +3528,28 @@ their causes; the measured footprints per job; which fix (5.7) each result point
     - **DECIDED (Batt, 2026-10-13 ~14:10):** "Yes, prove then resume". A highlighted-CLOSE
       template (CLOSE_HI) is built, pre-registered and proven like NEXT_HI, then the arm resumes
       with it. A person closes YuNA's dialog first.
+  - **THE CLOSE_HI PROOF: PRE-REGISTERED 2026-10-13 ~14:17 ICT, before its data** (code 74533e9;
+    the method of NEXT_HI attempt 2, unchanged):
+    - **Candidate set:** the installed T2 set (NEXT_HI included) + `npc_dialog_close_hi.npy`,
+      sha256 `1995cabbaf9a7d9144bd7005e28ab4c05764833b2e9b301fe4ba9750cfff67fc`. It was cut from the
+      stop frame (`shots/q3-click-stop.png`, dialog origin (201,101)).
+    - **FRESH sessions** (a judged screenshot before each; the hover's in-place frames are kept
+      apart, never labelled):
+      - S1 `talk_calibrate.py drive --npc henson --first 2`;
+      - S2 the guide by single steps, as NEXT_HI attempt 2's S2:
+        - on each NEXT page: `frames --n 4`, `hover next --n 4`, `frames --n 6`, `key Enter --n 4`;
+        - menus by keys as `drive --first 2`;
+        - on the CLOSE page: `frames --n 4`, `hover close --n 4`, `frames --n 10`, `key Enter
+          --n 6`;
+        - then `collect`.
+    - **PASS:** prove-t2 PASS on S1 + S2 with the candidate set, AND >= 8 labelled frames that the
+      installed set reads `button_unknown` and the candidate reads CLOSE. Fewer than 8 =
+      INCONCLUSIVE. NEXT_HI's highlighted frames in S2 must still read NEXT; prove-t2 counts them.
+    - **Reported only:** the installed set's result; the candidate's reads of the in-place frames.
+    - **On PASS:** install, read the sha256 back, then resume the prontera arm (`--resume
+      20261010T001818-demo-npc-click-click-prontera`, unchanged). The scorer reports its THREE
+      segments apart: v3; robust2 + NEXT_HI; robust2 + NEXT_HI + CLOSE_HI.
+    - **On FAIL or INCONCLUSIVE:** nothing is installed; report to Batt.
 
 ### 3.33 The GM's IMMUNITY: a test condition for the visual-diversity block (pre-registered 2026-10-09 ~14:05 ICT / 07:05 UTC, BEFORE the check; Batt: "keep gl_prison; a GM doesn't need to fear monsters. Make the GM safe without changing what the bot sees")
 **The condition, PRIMARY:** rAthena's `@monsterignore`, granted to the GM's group 20 (`groups.yml`,
