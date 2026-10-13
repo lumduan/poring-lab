@@ -4290,7 +4290,8 @@ sheets are labelled.
 | B3 sword, prt_fild08 | `20261013T172633-demo-cursor-probe-sword` | 17:26-18:12 | 30 trials, 367 crops | 0 / 0 / 0 / 0 |
 | A3 alberta | `20261013T182009-demo-npc-click-probe-alberta` | 18:20-19:33 | 1,495 | 0 / 0 / 0 / 0 |
 | A3 prontera | `20261013T193638-demo-npc-click-probe-prontera` | 19:36-20:52 | 1,498 | 0 / 0 / 0 / 0 |
-| A3 prt_church | running (started 20:54, a judged screenshot first) | | | |
+| A3 prt_church | `20261013T205443-demo-npc-click-probe-prt-church` | 20:54-21:22 | 566 | 0 / 0 / 0 / 0 |
+| morocc pilot (never scored) | running (started 21:34, a judged screenshot first) | | | |
 
 **Truth (fixed BEFORE any bar is computed):**
 - `scripts/cursor2_truth.py sheets --judged robust3 --item-seed 20261205 --strip-seed 20261206` at
