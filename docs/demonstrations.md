@@ -4335,6 +4335,57 @@ sheets are labelled.
 - **Two blind agent labellers**, briefed with 3.36's brief (paths moved to cursor3/; the page and
   item counts and a no-delete note added), in OPPOSITE page orders: A started 22:55, B 22:55.
 
+**➡️ RESULT (2026-10-14 00:21 ICT; scored ONCE as written, `cursor2_score.py --judged robust3
+--gate robust2 --sword-gain -0.02` run at 70b1bf5, the scorer byte-identical to 5f2f0ef; rc 1):
+FAIL on bars 3 and 4. The SAFETY bars are MET on fresh data, held-out included. The windmill fix
+did NOT help alberta: robust3 reads alberta WORSE than robust2. As pre-registered: no switch; the
+live gate stays robust2.**
+- **Truth:** the labellers agree on **10,175 / 10,175 images** (walk 5,211, talk 3,748, noentry
+  850, sword 366; no pickup, warp, none or unclear) and **3,524 / 3,524 series** (yes 384,
+  no 3,140). A took 56 min (22:55-23:51); B 1 h 25 min (22:55-00:20).
+  - Labeller B, as in 3.36, used FLAGGERS (red-pixel counts, a 7-nearest-neighbour vote over its own
+    labels, an outlier pick) only to choose tiles to re-view by eye (~1,000). It changed 75 labels,
+    by its account all typing slips. The brief allows this; it is reported because a red-pixel count
+    resembles the cue under test. Labeller A used no such check. Both agree on every item.
+- **The bars** (robust3 judged; robust2 = the live gate):
+
+| bar | robust3 | robust2 | v3 (`current`) | |
+|---|---|---|---|---|
+| 1a per image: cross-shape / WALK on another label | 0 / 0 (8,179 reads) | 0 / 0 (8,473) | 0 / 0 (7,605) | MET |
+| 1b per series: WALK on a no-entry series | 0 of 1,762 WALK series (0 unclear) | | | MET |
+| 1c as written (reported) | 9 (1 sword->walk, sword arm; 8 walk->noentry) | 8 (the same 8 walk->noentry) | 4 | |
+| 2 TALK (>= 0.85) | **0.895** (1,188 / 1,328) | 0.925 | 0.773 | MET |
+| 3 SWORD (>= 0.40, >= robust2 - 0.02) | **0.610** (114 / 187) | 0.663 | 0.096 | FAIL (< 0.643) |
+| 4 WALK (>= 0.95, >= robust2 - 0.02) | **0.867** (1,085 / 1,252; CI 0.847-0.884) | 0.883 | 0.811 | FAIL (< 0.95) |
+| NO-ENTRY (reported) | 0.923 (661 / 716) | 0.980 | 0.120 | |
+
+- **Per map** (robust3 / robust2):
+  - **alberta, the question this version answers:** WALK **0.626 / 0.667** (372), TALK 0.700 /
+    0.791 (440), NO-ENTRY 0.793 / 0.947 (265). robust3 is lower on every class.
+  - prontera: identical (WALK 0.967, TALK 0.982, NO-ENTRY 1.0). prt_church: identical (WALK 0.955,
+    TALK 1.0, NO-ENTRY 1.0).
+  - **morocc, HELD-OUT:** identical and perfect: WALK 270 / 270, TALK 272 / 272, NO-ENTRY 174 / 174
+    (v3: 0.967 / 0.838 / 0.213).
+  - sword arm: SWORD 0.610 / 0.663; its walk controls 0.900 / 0.956 (90).
+- **The morocc sensitivity (reported, not a bar):** without the 188 displaced records, morocc reads
+  WALK 232 / 232, TALK 272 / 272 and NO-ENTRY 96 / 96 for both readers. Pooled WALK becomes 0.862
+  (robust3) / 0.879 (robust2), and the verdict is unchanged.
+- **Why alberta fell (reported, not a bar; the definitions are Claude's, chosen after the result):**
+  the crops keep robust3's region only in the 64-px window around each hover; the full-view size
+  was not recorded.
+  - In 4 of alberta's 13 views (the windmill views: stands (108,54), (115,57), (116,48), (124,56)),
+    the 2.4 s cycle region covers a median **82-100 %** of that window. In every other view of every
+    map it covers 0 %, so there robust3 reads exactly as robust2.
+  - **Of robust3's 139 alberta WALK misses, 108 had the hotspot pixel inside its masked area; of its
+    233 hits, 0.** For robust2: 28 of 124 misses, 1 of 248 hits.
+  - So the region masks the cursor ITSELF where the sails sweep: the risk named under "Expected".
+    Those reads fail closed to UNKNOWN; that is safe, and it is a recall loss.
+  - Masking the windmill's whole sweep removes the cursor with it. A different fix would compare
+    against a background at the SAME point of the sails' cycle. That is Claude's reading, not a
+    pre-registration.
+- Outputs: `/dev/shm/poring-lab-tmp/cursor3/` (result.json, result-nodisp.json, live/, truth/,
+  the labels in c3-labeller{A,B}/; local, client pixels).
+
 **Truth (fixed BEFORE any bar is computed):**
 - `scripts/cursor2_truth.py sheets --judged robust3 --item-seed 20261205 --strip-seed 20261206` at
   5f2f0ef (cursor_anim 223fa82, its scoring deebcaa):
