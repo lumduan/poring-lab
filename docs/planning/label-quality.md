@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [../benchmarks/v1b-vs-v1.md, ../benchmarks/v1-vs-v0png.md, ../phase3-plan.md, labels-v2-plan.md]
-next_action: "Batt: choose which fixes of section 6 go into the next training (G1 first: exclude dead-GM frames, as labels v2 already does), and whether v1's gold predictions are re-made to finish section 4.1's model split. Nothing has been changed, trained or run."
+next_action: "Batt: choose which fixes of section 6 go into the next training (G1 first: exclude dead-GM frames, as labels v2 already does). Nothing has been changed, trained or run."
 title: "Label quality: the auto-labels against Batt's gold convention, gap by gap"
 date: 2026-10-13
 owner: Batt
@@ -34,9 +34,9 @@ training data it touches.** The what-ifs (section 5) are in-sample upper bounds.
 
 | # | gap | the v1 LABELS on gold (26 position errors: 17 FN + 9 FP) | the trained MODELS on gold | training frames touched (1 s grid, 3,795) | proposed fix |
 |---|---|---|---|---|---|
-| G1 | **a dead GM whose position the packets got wrong:** for the rest of the span every label sits ~4 cells off its unit | none (the gold's dead frames are not affected) | **every model finds 0 of the 12 monsters in the 2 dead-GM gold frames and draws 9-10 boxes ~(+95..+98, -96..-101) px away** | indoor-b: 608 frames (16 %), every label displaced | exclude dead-GM frames (labels v2's `self_dead` already does) |
-| G2 | **our own walk: the camera lags the packets** by ~100-125 ms, so the whole frame's labels shift | **16 of 26** (8 FN + 8 FP, 2 frames); NPCs 8 of 8 | v1b misses 2 | 157 frames (4.1 %) shifted > 20 px | delay OUR position only, by a constant measured WITHOUT the gold set |
-| G3 | **the UI-window rule drops visible units:** the chat window is translucent; prt_church draws no minimap; the small top window is not where the rule has it | **7 FN** (chat 4, minimap 2, top window 1) | **every model misses the 3 such units on the 25 alive frames** (chat 2, top window 1); none misses the minimap ones | chat 629 units in 543 frames (14 %); minimap 121; top window 29; notifier 93 | a measured UI layout per session; the chat window translucent except its input bar |
+| G1 | **a dead GM whose position the packets got wrong:** for the rest of the span every label sits ~4 cells off its unit | none (the gold's dead frames are not affected) | **all 7 detectors scored (v0 to v1b, ONNX included) find at most 1 of the 12 monsters in the 2 dead-GM gold frames and draw 8-10 boxes ~(+95..+100, -96..-101) px away** | indoor-b: 608 frames (16 %), every label displaced | exclude dead-GM frames (labels v2's `self_dead` already does) |
+| G2 | **our own walk: the camera lags the packets** by ~100-125 ms, so the whole frame's labels shift | **16 of 26** (8 FN + 8 FP, 2 frames); NPCs 8 of 8 | v1 misses 0, v1b 2 | 157 frames (4.1 %) shifted > 20 px | delay OUR position only, by a constant measured WITHOUT the gold set |
+| G3 | **the UI-window rule drops visible units:** the chat window is translucent; prt_church draws no minimap; the small top window is not where the rule has it | **7 FN** (chat 4, minimap 2, top window 1) | **every detector misses the chat unit of frame 240; v1b and the v0 models also miss the chat unit of frame 180 and the top-window unit of frame 260** (v1 and v1-ONNX find those two); none misses the minimap ones | chat 629 units in 543 frames (14 %); minimap 121; top window 29; notifier 93 | a measured UI layout per session; the chat window translucent except its input bar |
 | G4 | **the edge rule:** a unit less than half on screen gets no box; a person boxes its visible part | 1 FN | none | 567 units in 491 frames (13 %) | box the visible part, with a minimum visible size |
 | G5 | **box size (the IoU metric only):** v1 boxes are 1.34 x wider and 1.45 x taller than the gold's 44 x 40 | no position error; **48 of the IoU metric's 110 errors** | (not measured) | every monster box | write the box convention first (§5f), then label to it |
 
@@ -48,9 +48,16 @@ position errors). One species only (Poring, 1002): per-species size is not measu
 **The largest finding is G1, and it is in the TRAINING data, not in the gold set.** In the training
 session indoor-b our GM lay dead from 586 s to the end of the recording (608 of its 1,161 grid frames,
 52 %), and for that whole span the labels sit about 4 cells from the units (looked at on two decoded
-frames, 700 s and 1,150 s). Every detector trained on it learned to put boxes on the empty floor under the restart window: on the gold set's 2 dead-GM
-frames, v0-baseline, v0-JPEG, v0-PNG and v1b all find **none** of the 12 monsters. On the 25 other gold
-frames v1b scores **79 / 0 / 9 (P 1.000, R 0.898)**, against 79 / 10 / 21 overall.
+frames, 700 s and 1,150 s). Every detector trained on it learned to put boxes on the empty floor under
+the restart window: on the gold set's 2 dead-GM frames, v0-baseline, v0-JPEG, v0-PNG, v1, v1-ONNX and v1b find **none** of the 12 monsters (v0-ONNX
+finds 1). On the 25 other gold frames v1 scores **83 / 1 / 5 (P 0.988, R 0.943)**, the live v1-ONNX
+**83 / 0 / 5**, v1b 79 / 0 / 9.
+
+**v1b against v1 (decision 11's question), box by box (section 4.8):** v1b's 4 fewer hits are NOT in the
+dead-GM frames. It misses 6 units v1 finds, all on alive frames, and 4 of the 6 are units the training
+labels get wrong: frame 180's 2 units shifted by our own walk (G2) and its chat-window unit (G3), and the
+top-window unit of frame 260 (G3). It finds 2 that v1 misses. Most of what the extra epochs lost (4 of 6
+units) is where the labels are systematically wrong; a small sample, one run each.
 
 ## 1. What was compared
 
@@ -144,14 +151,17 @@ unit position 3 (idle 2, walk 1), minimap 2, top window 1; FP 10 = own walk 7, u
   its unit, on empty floor (looked at by eye; the pixels stay in /dev/shm). If the camera stayed where that
   walk started, the labels carry **(+107.5, -131.7) px** at our cell (census `dead_spans`).
 - **The models learned it.** On the gold set's 2 dead-GM frames, whose labels are right (section 3), every
-  detector misses all 12 monsters and draws boxes this far from the nearest real one (median):
+  detector misses 11 or 12 of the 12 monsters and draws boxes this far from the nearest real one (median):
 
-  | model | dead-GM frames TP / FP / FN | false box offset dx / dy (px) | the other 25 frames TP / FP / FN (P / R) |
-  |---|---|---|---|
-  | v1b (`v1b-20261011`) | 0 / 10 / 12 | +97.9 / -96.0 | **79 / 0 / 9** (1.000 / 0.898) |
-  | v0-PNG (`v0png-20261006`) | 0 / 10 / 12 | +95.9 / -100.5 | 78 / 3 / 10 (0.963 / 0.886) |
-  | v0-JPEG (`v0jpg-20261007`) | 0 / 9 / 12 | +95.0 / -101.0 | 74 / 2 / 14 (0.974 / 0.841) |
-  | v0-baseline (`v0-baseline-20261004`) | 0 / 9 / 12 | +95.0 / -98.9 | 76 / 5 / 12 (0.938 / 0.864) |
+  | model | all 27 frames TP / FP / FN | dead-GM frames TP / FP / FN | false box offset dx / dy (px) | the other 25 frames TP / FP / FN (P / R) |
+  |---|---|---|---|---|
+  | v1 (`v1png-20261008`, last.pt) | 83 / 9 / 17 | 0 / 8 / 12 | +99.6 / -99.2 | **83 / 1 / 5** (0.988 / 0.943) |
+  | v1-ONNX (CPU, 736 x 1280: the live detector) | 83 / 8 / 17 | 0 / 8 / 12 | +99.6 / -99.2 | **83 / 0 / 5** (1.000 / 0.943) |
+  | v1b (`v1b-20261011`) | 79 / 10 / 21 | 0 / 10 / 12 | +97.9 / -96.0 | 79 / 0 / 9 (1.000 / 0.898) |
+  | v0-PNG (`v0png-20261006`) | 78 / 13 / 22 | 0 / 10 / 12 | +95.9 / -100.5 | 78 / 3 / 10 (0.963 / 0.886) |
+  | v0-ONNX (CPU, v0png best.pt) | 79 / 12 / 21 | 1 / 9 / 11 | +95.3 / -101.1 | 78 / 3 / 10 (0.963 / 0.886) |
+  | v0-JPEG (`v0jpg-20261007`) | 74 / 11 / 26 | 0 / 9 / 12 | +95.0 / -101.0 | 74 / 2 / 14 (0.974 / 0.841) |
+  | v0-baseline (`v0-baseline-20261004`) | 76 / 14 / 24 | 0 / 9 / 12 | +95.0 / -98.9 | 76 / 5 / 12 (0.938 / 0.864) |
 
   The detectors' learned offset points the same way as the labels' displacement in indoor-b, at a similar
   size: they learned "restart window => boxes up and to the right".
@@ -163,8 +173,8 @@ unit position 3 (idle 2, walk 1), minimap 2, top window 1; FP 10 = own walk 7, u
   of a hit on us) flags 2 of the 12 dead spans of the 10 sessions: indoor-b's (displaced) and 054429's at
   581 s (the walk 1,908 ms before the death, 638 ms after the hit; NOT displaced at 595 s). **A candidate,
   not a detector: pixels decide.**
-- **Cost:** none for the labels on gold; for the models, 12 FN + 9-10 FP of each one's gold errors (v1b:
-  22 of its 31).
+- **Cost:** none for the labels on gold; for the models, 11-12 FN + 8-10 FP of each one's gold errors
+  (v1: 20 of its 26; v1b: 22 of its 31).
 
 ### 4.2 G2: our own walk, the camera lags the packets
 - **What:** in the 2 gold frames where our GM walks (70, 180) every label, monster and NPC alike, is
@@ -174,7 +184,7 @@ unit position 3 (idle 2, walk 1), minimap 2, top window 1; FP 10 = own walk 7, u
   ms). Both frames agree; it rests on 2 frames.
 - **Cost on gold:** 16 of v1's 26 position errors and all 8 of the NPCs'. What-if at 125 ms: monsters
   91 / 1 / 9, all 8 units of the 2 frames found, no new false box; NPC errors -5. The detectors are hardly
-  affected (v1b misses 2 of those units): they read pixels.
+  affected (v1 misses none of those units, v1b 2): they read pixels.
 - **How common:** our GM walks in 166 training grid frames (4.4 %); at 125 ms the labels move > 20 px in
   157; per session, the median shift while walking is 21-36 px.
 
@@ -196,8 +206,9 @@ unit position 3 (idle 2, walk 1), minimap 2, top window 1; FP 10 = own walk 7, u
   found too; 3 new false boxes: one at (29.9, 616.6), near the chat's input bar, that Batt did not box;
   one in the walking frame 180, where the whole frame is shifted; one at (680.2, 19.7), next to Batt's box
   at (705, 22)).
-- **The models:** on the 25 alive frames every detector misses the units of frames 180 and 240 (chat) and
-  260 (top window); none misses the minimap-area units.
+- **The models:** on the 25 alive frames every detector misses the chat-window unit of frame 240; v1b and
+  the four v0 detectors also miss the chat-window unit of frame 180 and the top-window unit of frame 260,
+  which v1 and v1-ONNX find; none misses the minimap-area units.
 - **How common (train):** chat 629 monster units in 543 frames (14 %); minimap 121 units in 111 frames
   (indoor-b only); top window 29; notifier 93; against 10,524 monster labels kept.
 
@@ -244,6 +255,22 @@ unit position 3 (idle 2, walk 1), minimap 2, top window 1; FP 10 = own walk 7, u
 
 outdoor-a (train, 1,202 frames) has no monster at all.
 
+### 4.8 v1b against v1, box by box (the question behind decision 11)
+`label_quality.py models` with v1 first: every hand box one model finds and the other misses.
+
+| | boxes | in the dead-GM frames | which (frame / hand box: the training label's problem there) |
+|---|---|---|---|
+| v1b misses, v1 finds | 6 | 0 | 180/0, 180/2 (our own walk shifted the labels: G2); 180/3 (behind the chat window: G3); 260/6 (top-window rectangle: G3); 250/6, 270/2 (labels right) |
+| v1b finds, v1 misses | 2 | 0 | 140/0, 210/2 (labels right) |
+| false boxes | v1b +1 | +2 in dead frames | -1 on alive frames |
+
+- So the net -4 hits are on ALIVE frames, and 4 of the 6 lost units are units the training labels drop or
+  shift (G2, G3). This is consistent with the reading in v1b-vs-v1.md (the extra epochs fit v1's labels
+  more closely), in a specific form: the lost units are mostly ones the labels get WRONG. Not proven: 6
+  units, one run each.
+- **v1-ONNX (the live detector since 11:47) against v1:** the same misses exactly (0 more, 0 fewer) and 1
+  false box fewer (an alive frame).
+
 ## 5. The what-ifs (each gap closed alone; v1, monsters, IN-SAMPLE)
 
 | what-if | fitted on gold? | position TP / FP / FN | errors removed | IoU TP / FP / FN | errors removed | mean IoU | NPC position errors removed |
@@ -278,7 +305,7 @@ of training frames), G4, then G5 (it needs a decision before any code).
    - Pre-registration sketch: the next model trains on the same frames minus the dead-GM spans, its recipe
      otherwise v1's; scored ONCE on the gold set split by GM alive / dead (`label_quality.py models`).
      Bars: on the 2 dead frames, recall above 0 / 12 and fewer than 9 false boxes; on the 25 alive frames,
-     precision AND recall >= v1's on the same frames (v1's predictions re-made first, section 7).
+     precision AND recall >= v1's on the same frames (83 / 1 / 5: P 0.988, R 0.943).
 2. **G3: a measured UI layout per session, the chat window translucent.**
    - Per session, find which windows are drawn and where (the UI gate's templates already find the
      client's windows: `poring_env.ui_sets`); drop a unit only under an OPAQUE drawn window; treat the
@@ -300,24 +327,22 @@ of training frames), G4, then G5 (it needs a decision before any code).
    convention is the measurement (Batt's call, §5f).
 
 ## 7. What could not be determined
-- **v1's own gold predictions are missing:** `data/train/eval/gold/<session>/pred-v1png-20261008.json`,
-  which v1-vs-v0png.md and v1b-vs-v1.md cite, is not in that directory (checked 2026-10-13 ~12:10; it
-  holds v0-baseline, v0-JPEG, v0-PNG, v1b and a v0 ONNX file written 11:44 today). So section 4.1's split
-  could not be made for v1, and whether v1b's 4 extra misses fall in the dead-GM frames is not known.
-  Re-making v1's predictions (GPU, guarded) answers it.
+- ~~v1's own gold predictions are missing~~ ➡️ **CORRECTED 2026-10-13 ~12:30: they were never missing.**
+  `pred-v1png-20261008.json` (and today's `pred-v1onnx-cpu.json`) are in the main checkout's
+  `data/train/eval/gold/<session>/`; an `ls | head` cut the listing at 10 lines and hid them. v1's split
+  is now in section 4.1 and the v1b-vs-v1 answer in section 4.8.
 - **Why indoor-b's walk was never shown on screen:** the census's signature (a walk acknowledged inside a
   hit's damage motion) is a candidate, not a detector (section 4.1).
 - **G2's lag** rests on 2 frames and 11 units.
 - **Per-species size and anchor:** the gold set has one species.
-- **Whether v1b lost to v1 BECAUSE of these gaps** is not tested (it needs v1's predictions). On the 25
-  alive frames v1b has no false box at all; 5 of its 9 misses there are units the labels themselves miss
-  (own walk 2, chat 2, top window 1).
+- **Whether v1b lost to v1 BECAUSE of these gaps** is suggested, not proven (section 4.8: 4 of its 6
+  extra misses are units the labels get wrong; 6 units is a small sample, and one run each).
 - v1b's 14 misses where the label was right (10 in the dead-GM frames) have no detection within 40 px at
   all: missed detections, not misplaced boxes.
 
 ## 8. Reproduce
 Outputs go to /dev/shm (client-derived numbers and pixels; never committed). From a checkout with
-`data/` (the hand check, the KB) and the generated map caches, at commit f7da9ce or later (the census
+`data/` (the hand check, the KB) and the generated map caches, at commit 7e3a3fc or later (the census
 below ran at a7fea33, whose census code f7da9ce keeps; a second run reproduced every total):
 
     S=/dev/shm/poring-lab-tmp/label-quality G=data/train/eval/gold/20261004T103815-console-s2-indoor-v2
@@ -325,8 +350,9 @@ below ran at a7fea33, whose census code f7da9ce keeps; a second run reproduced e
     uv run python scripts/label_quality.py cache $S/dump.json \
         /mnt/poring-lab-datasets/.framecache/v1png-20261008/shard-000046.tar
     uv run python scripts/label_quality.py report $S/dump.json > $S/report.json
-    uv run python scripts/label_quality.py models $S/dump.json $G/pred-v1b-20261011.json \
-        $G/pred-v0png-20261006.json $G/pred-v0jpg-20261007.json $G/pred-v0-baseline-20261004.json
+    uv run python scripts/label_quality.py models $S/dump.json $G/pred-v1png-20261008.json \
+        $G/pred-v1b-20261011.json $G/pred-v1onnx-cpu.json $G/pred-v0png-20261006.json \
+        $G/pred-v0onnx-cpu.json $G/pred-v0jpg-20261007.json $G/pred-v0-baseline-20261004.json
     uv run python scripts/label_quality.py census \
         /mnt/poring-lab-datasets/.framecache/v1png-20261008/manifest.json > $S/census.json
     uv run python scripts/label_quality.py peek 20261004T141832-console-p3-indoor-b 700 $S/peek.png

@@ -111,11 +111,13 @@ boxes.
   - One reading (not tested): the extra epochs fit v1's label convention more closely, and that
     convention is not exactly what a person marks.
     ➡️ **Measured 2026-10-13 ([label-quality.md](../planning/label-quality.md) §4.1), not a verdict:**
-    22 of v1b's 31 gold errors (12 FN + 10 FP) are in the 2 dead-GM frames, where every detector so far
-    (v0-baseline, v0-JPEG, v0-PNG, v1b) finds none of the 12 monsters and draws boxes up and to the right
-    of them (v1b: median +97.9, -96.0 px): the training session indoor-b's dead-GM span carries labels
-    displaced that way. On the 25
-    other frames v1b is 79 / 0 / 9. v1's own split waits for its gold predictions (missing on disk).
+    22 of v1b's 31 gold errors (12 FN + 10 FP) are in the 2 dead-GM frames, where every detector scored
+    (v0-baseline, v0-JPEG, v0-PNG, v1, v1-ONNX, v1b; v0-ONNX finds 1) finds none of the 12 monsters and draws boxes up and to the right
+    of them (v1b: median +97.9, -96.0 px; v1: 0 / 8 / 12 there): the training session indoor-b's dead-GM
+    span carries labels displaced that way. On the 25 other frames v1 is 83 / 1 / 5 and v1b
+    79 / 0 / 9. **Box by box (§4.8): v1b misses 6 units v1 finds, none in the dead-GM frames, and 4 of
+    the 6 are units the training labels get wrong** (our own walk 2, chat window 1, top window 1); it
+    finds 2 that v1 misses.
   - The gold set is small: 100 monster boxes, so 4 boxes move recall by 0.04.
   - Neither is decided here. The pre-registered primary decides, and it says v1 stays.
 - **Outputs:** `/dev/shm/poring-lab-tmp/gpu-day/c17/` (local); predictions
