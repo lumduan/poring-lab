@@ -315,6 +315,31 @@ def collect(
     return uses
 
 
+def measure_extra(doc: dict[str, Any], maps: Iterable[str]) -> dict[str, tuple[int, ...]]:
+    """MEASUREMENT ONLY (npc-render.md): every drawn NPC sprite on ``maps`` (the portal and the
+    hidden classes excluded), so a measurement can render a whole view. Never N1's own scope."""
+    portal_like = {45}
+    out: dict[str, tuple[int, ...]] = {}
+    for m in maps:
+        npcs = doc["maps"].get(m, {}).get("npcs", [])
+        out[m] = tuple(sorted({int(n["sprite"]) for n in npcs if n.get("drawn") is True
+                               and n.get("sprite_class") != "hidden"
+                               and int(n["sprite"]) not in portal_like}))  # fmt: skip
+    return out
+
+
+def in_kb_dir(path: Path) -> bool:
+    """Is ``path`` inside any checkout's data/kb (the main one or a worktree's)?"""
+    return any(p.name == "kb" and p.parent.name == "data" for p in path.resolve().parents)
+
+
+def merge_extra(
+    a: dict[str, tuple[int, ...]], b: dict[str, tuple[int, ...]]
+) -> dict[str, tuple[int, ...]]:
+    keys = sorted(set(a) | set(b))
+    return {k: tuple(sorted(set(a.get(k, ())) | set(b.get(k, ())))) for k in keys}
+
+
 def extra_problems(
     uses: dict[int, list[dict[str, Any]]], extra: dict[str, tuple[int, ...]]
 ) -> list[str]:
@@ -531,6 +556,9 @@ def main(argv: list[str] | None = None) -> int:
     pb.add_argument("--out", type=Path, default=OUT)
     pb.add_argument("--no-extra", action="store_true",
                     help="the route scope alone (without Batt's 2026-10-13 EXTRA set)")  # fmt: skip
+    pb.add_argument("--measure-map", action="append", default=[],
+                    help="MEASUREMENT ONLY (npc-render.md): also every drawn NPC sprite on this "
+                         "map; refused unless --out is outside data/kb")  # fmt: skip
     ps = sub.add_parser("summary")
     ps.add_argument("--table", type=Path, default=OUT)
     pm = sub.add_parser("mob-names", help="monster ids -> the client's sprite stems")
@@ -560,11 +588,20 @@ def main(argv: list[str] | None = None) -> int:
     from poring_dataset import mapcache
 
     doc = json.loads(a.kb.read_text())
+    extra = {} if a.no_extra else dict(EXTRA)
+    if a.measure_map:
+        if in_kb_dir(a.out):
+            print("--measure-map widens N1 beyond Batt's scope: write it outside data/kb "
+                  "(e.g. /dev/shm), never into the KB", file=sys.stderr)  # fmt: skip
+            return 2
+        extra = merge_extra(extra, measure_extra(doc, a.measure_map))
     grids = mapcache.load(a.mapcache_dir) if a.mapcache_dir else mapcache.load()
     npc_hpp = Src(SRC, doc.get("rathena_ref")).read(NPC_HPP)
     with a.grf.open("rb") as f:
         arc = Archive.open(f)
-        table = build(doc, arc, grids, npc_hpp, a.dest or DESTS, {} if a.no_extra else None)
+        table = build(doc, arc, grids, npc_hpp, a.dest or DESTS, extra)
+    if a.measure_map:
+        table["extra_scope"]["measurement_only_maps"] = list(a.measure_map)
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(table, ensure_ascii=False, indent=1) + "\n")
     print(json.dumps(summary(table), indent=1))

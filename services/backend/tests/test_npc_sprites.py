@@ -2,6 +2,7 @@
 built here (never a client asset or rAthena data, CLAUDE.md rule 4)."""
 
 import importlib.util
+import json
 import struct
 import sys
 import zlib
@@ -384,3 +385,28 @@ def test_summary_reports_the_extra_set(ns: ModuleType) -> None:
     assert s["extra_check"]["909"] == {**agree, "class": "npc", "uses": 2, "problems": 0}
     assert s["extra_check"]["4001"]["class"] == "player_job" and s["composite"] == [4001]
     assert s["merchant_route_per_map"] == {}
+
+
+# --- the measurement-only scope (npc-render.md): never written into data/kb ---
+
+
+def test_measure_extra_takes_every_drawn_npc_sprite_of_a_map(ns: ModuleType) -> None:
+    doc = kb()
+    doc["maps"]["c"] = {"npcs": [npc("c:1", 5, 5, 71), npc("c:2", 6, 6, 45),
+                                 npc("c:3", 7, 7, 111, sprite_class="hidden", drawn=False),
+                                 npc("c:4", 8, 8, 705, drawn="conditional"),
+                                 npc("c:5", 9, 9, 79), npc("c:6", 9, 2, 71)]}  # fmt: skip
+    assert ns.measure_extra(doc, ["c", "nowhere"]) == {"c": (71, 79), "nowhere": ()}
+    assert ns.merge_extra({"c": (79, 60)}, {"c": (71,), "d": (1,)}) == {"c": (60, 71, 79),
+                                                                         "d": (1,)}  # fmt: skip
+
+
+def test_a_measurement_scope_is_refused_inside_any_data_kb(ns: ModuleType, tmp_path: Path) -> None:
+    assert ns.in_kb_dir(tmp_path / "data" / "kb" / "npc_sprites.json")
+    assert ns.in_kb_dir(Path("/home/x/repo/data/kb/sub/t.json"))
+    assert not ns.in_kb_dir(tmp_path / "npc-render" / "n1-measure.json")
+    kbfile = tmp_path / "first_workflow.json"
+    kbfile.write_text(json.dumps(kb()))
+    out = tmp_path / "data" / "kb" / "npc_sprites.json"
+    rc = ns.main(["build", "--kb", str(kbfile), "--out", str(out), "--measure-map", "c"])
+    assert rc == 2 and not out.exists()  # refused before anything is read or written
