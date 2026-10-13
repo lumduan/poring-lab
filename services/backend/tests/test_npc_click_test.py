@@ -135,6 +135,36 @@ def test_the_plan_is_seeded() -> None:
     assert a == b and a != c
 
 
+def test_a_plan_that_stands_or_walks_in_a_warp_span_is_refused_never_filtered(
+    plan: dict, tmp_path: Path
+) -> None:
+    stand, click, ctl = plan["npcs"][0]["stands"][0], plan["clicks"][0]["cell"], plan["control"]
+
+    def hits(what: str, cell: Any, w: dict) -> bool:
+        return any(c.startswith(f"{what} {tuple(cell)} ") for c in nct.warp_conflicts(plan, [w]))
+
+    def portal(x: int, y: int, sx: int = 0, sy: int = 0) -> dict:
+        return {"x": x, "y": y, "span_x": sx, "span_y": sy, "name": "p1", "to_map": "elsewhere"}
+
+    # the trigger area is |dx| <= span_x and |dy| <= span_y: its edge counts, one past it does not
+    assert hits("stand", stand, portal(stand[0] + 1, stand[1], sx=1))
+    assert not hits("stand", stand, portal(stand[0] + 2, stand[1], sx=1))
+    assert not hits("stand", stand, portal(stand[0], stand[1] + 2, sy=1))
+    assert hits("click", click, portal(*click)) and hits("control", ctl, portal(*ctl))
+    assert f"stand {tuple(stand)} in p1 -> elsewhere" in nct.warp_conflicts(plan, [portal(*stand)])
+    # the check REFUSES; it never changes the plan
+    before = json.dumps(plan, sort_keys=True)
+    (tmp_path / "route.json").write_text(json.dumps({"warps": {"town": [portal(*stand)]}}))
+    with pytest.raises(SystemExit, match="inside a warp span"):
+        nct.check_warps("town", plan, tmp_path)
+    assert json.dumps(plan, sort_keys=True) == before
+    # clear -> no refusal; a map L3 does not list -> refused (unknown is not clear)
+    (tmp_path / "route.json").write_text(json.dumps({"warps": {"town": []}}))
+    nct.check_warps("town", plan, tmp_path)
+    with pytest.raises(SystemExit, match="lists no warps"):
+        nct.check_warps("elsewhere", plan, tmp_path)
+
+
 def test_warp_lines_type_only_changes_of_stand() -> None:
     assert nct.warp_lines("m", [[1, 2], [1, 2], [3, 4], [1, 2]]) == [
         "@warp m 1 2",

@@ -26,6 +26,9 @@ gets STANDS stand cells 3-5 cells away (seeded), from which:
   with the windows gone -> STOP FOR A PERSON (exit 7; --resume continues the session).
 GM commands only through ro_agent.gm (the typing guard applies): @warp to a known stand cell, never
 /where (Batt's typing policy). Consecutive @warp lines always differ (the stands alternate).
+A plan that would STAND or WALK inside a warp's trigger span (L3 route.json), or on a map whose
+warps L3 does not list, is REFUSED before any input (check_warps; never filtered, so a plan that
+passes is unchanged).
 Pixels in, input out: packets are never read here; npc_click_score.py judges the session offline.
 """
 
@@ -247,6 +250,44 @@ def control_stand(walkable: Any, npc_cells: Sequence[Cell], around: Cell | None,
     return rng.choice(cands) if cands else None
 
 
+def load_warps(map_name: str, kb_dir: Path = nc.KB_DIR) -> list[dict[str, Any]] | None:
+    """The map's warp portals from L3 (route.json: cell + span; GPL-derived, local only); None when
+    the KB does not list the map (unknown: the plan check then refuses)."""
+    p = kb_dir / "route.json"
+    if not p.exists():
+        return None
+    warps = json.loads(p.read_text()).get("warps", {})
+    return list(warps[map_name]) if map_name in warps else None
+
+
+def warp_conflicts(plan: dict[str, Any], warps: Sequence[dict[str, Any]]) -> list[str]:
+    """Every planned cell the GM would STAND on or WALK to that lies inside a warp's trigger span
+    (|dx| <= span_x and |dy| <= span_y): an @warp onto it, or a walk into it, changes the map
+    (2026-10-13: a stand inside prt_church's (100,56) portal span sent the GM to prontera). Stands,
+    the control stand and the click arm's cells; empty = clear."""
+    cells: list[tuple[str, Sequence[int]]] = [
+        *(("stand", s) for n in plan["npcs"] for s in n["stands"]),
+        *((("control", plan["control"]),) if plan.get("control") else ()),
+        *(("click", c["cell"]) for c in plan["clicks"]),
+    ]
+    out = []
+    for what, c in cells:
+        for w in warps:
+            if abs(c[0] - w["x"]) <= w["span_x"] and abs(c[1] - w["y"]) <= w["span_y"]:
+                out.append(f"{what} {tuple(c)} in {w.get('name', '?')} -> {w.get('to_map', '?')}")
+    return sorted(set(out))
+
+
+def check_warps(map_name: str, plan: dict[str, Any], kb_dir: Path = nc.KB_DIR) -> None:
+    """REFUSE a plan that would stand or walk into a warp span, or a map whose warps L3 does not
+    list. A refusal, never a filter: a plan that passes is exactly the plan without the check."""
+    warps = load_warps(map_name, kb_dir)
+    if warps is None:
+        raise SystemExit(f"L3 lists no warps for {map_name}: the plan cannot be checked (refused)")
+    if bad := warp_conflicts(plan, warps):
+        raise SystemExit(f"the plan stands or walks inside a warp span: {bad[:5]} (refused)")
+
+
 def warp_lines(map_name: str, stands: Sequence[Sequence[int]]) -> list[str]:
     """The @warp lines a sequence of stands types: one per CHANGE of stand."""
     out: list[str] = []
@@ -410,6 +451,7 @@ def run(
     )  # fmt: skip
     if not plan["npcs"]:
         raise SystemExit(f"no L3 NPC with two stands on {map_name} (coverage {cov})")
+    check_warps(map_name, plan)
     layer = nc.NoClickLayer(npcs)
     templates = nd.load_templates(talk1.TEMPLATES)  # T2: the dialog policy needs it (fails closed)
     missing = [*templates.missing, *([] if nd.CLOSE in templates.images else [nd.CLOSE])]
@@ -613,7 +655,10 @@ def main() -> int:
             near_radius=a.near_radius,
         )
         lines = warp_lines(a.map, [p["stand"] for p in plan["probes"]])
-        print(json.dumps({"coverage": cov, "npcs": plan["npcs"], "probes": len(plan["probes"]),
+        warps = load_warps(a.map)
+        print(json.dumps({"coverage": cov,
+                          "warp_conflicts": None if warps is None else warp_conflicts(plan, warps),
+                          "npcs": plan["npcs"], "probes": len(plan["probes"]),
                           "clicks": len(plan["clicks"]), "probe_warps": len(lines),
                           "click_warps_ok": no_identical_in_a_row(click_warps(a.map,
                                                                               plan["clicks"]))},
