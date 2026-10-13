@@ -3624,7 +3624,7 @@ their causes; the measured footprints per job; which fix (5.7) each result point
       after; the two stop frames' reads (design checks).
     - **On PASS:** it is offered to Batt. It goes live only with his OK (a merge), and the
       prontera arm then resumes as segment 4. **On FAIL:** not offered; reported.
-  - ➡️ **THE BORDER FIX'S PROOF, RESULT (scored 14:55-15:05): FAIL as pre-registered, on rule 1
+  - ➡️ **THE BORDER FIX'S PROOF, RESULT (scored 14:53-15:03: proof.json 14:58, proof2.json 15:03 with rule 3 coded as written): FAIL as pre-registered, on rule 1
     ONLY.** It is NOT offered as proven. Batt decides.
     - 598 labelled frames from 11 sessions (no window 56, NEXT 214, menu 268, CLOSE 60).
     - **Rule 1: FAIL.** 6 frames disagree with BOTH readers identically (`button_unknown`): S2
