@@ -3643,6 +3643,41 @@ their causes; the measured footprints per job; which fix (5.7) each result point
     - **What it means:** on banked frames the fix is inert. It only acts on a codec-shifted
       border like the third stop's. Whether to adopt it, or to re-prove it on a corrected set,
       is Batt's call. Until then the prontera arm stays parked.
+  - ➡️ **The church click arm, scored `20261013T151312` (15:13-15:24; the pilot `20261013T150450`
+    first: 26 clicks, 21 moves, 0 contacts, 0 safety events, no stop, no harness fix): STOPPED
+    FOR A PERSON at record 38.**
+    - Click 37 at (103,77), beside Garnet (`prontera.txt:532`, cell (103,76)). The series read
+      walk 5 / 6, then `npc_contact`. Her first page (NEXT) opened, and T2 read it
+      `npc_dialog_uncertain`: edge 0.1516, the SAME codec border shift.
+    - **The border fix (669a8d3) reads this frame as NEXT** (edge 0.0081). The frame came at 15:24,
+      AFTER the fix was committed, so it was not a design frame.
+    - Up to the stop: 38 records (33 moves, 2 contacts; 1 TALK and 1 unknown not clicked; 1 without
+      a safe point). Safety: 0 attack_request, 0 GM act normal / pickup.
+    - L3 layer (recorded, not applied): it refuses 2 / 2 contacts. 0 of the 26 clicks it allows
+      became a contact. The cost: 7 / 33 moves refused.
+    - **DECIDED (Batt, 2026-10-13 ~15:27): "Re-prove on a fresh set first."** Both arms stay
+      parked until then. Batt closes Garnet's dialog.
+  - **THE BORDER FIX, ATTEMPT 2: PRE-REGISTERED (__TIME__, before its data).** Code: 669a8d3,
+    unchanged.
+    - **FRESH data:** RDP talk-cal sessions recorded AFTER this commit. Their in-place hover frames
+      are kept apart by code since 4d4666b. At least:
+      - `talk_calibrate.py drive --npc merchant --first 2` (the queued merchant decline drive);
+      - `drive --npc guide --first 3`;
+      - `drive --npc henson --first 3`.
+      - It needs >= 150 labelled frames with every class, else INCONCLUSIVE.
+    - **PASS** (all three, on the fresh frames, with the installed templates):
+      1. prove-t2's rule with the FIXED reader: every labelled frame agrees, >= 1 frame of each class;
+      2. no regression: every frame the current reader reads correctly reads identically with the
+         fixed one;
+      3. no `present` dialog on a frame whose label has none.
+    - **Reported, not bars:**
+      - attempt 1's banked set with the 6 in-place frames of `130007` excluded. These frames are
+        identified BY STEP KIND: the frames the `hover` step itself grabbed. The numbers are
+        already known (592 / 592, 0 changes), so they are not fresh;
+      - the click-arm stop frames: the 14:42 YuNA frame (a design frame) and the 15:24 Garnet frame
+        (fresh), plus any later one, each with both readers' reads.
+    - **On PASS:** the fix is merged (T2 live on RDP). The prontera arm resumes as segment 4, and the
+      church arm resumes. **On FAIL / INCONCLUSIVE:** not merged; reported to Batt.
 
 ### 3.33 The GM's IMMUNITY: a test condition for the visual-diversity block (pre-registered 2026-10-09 ~14:05 ICT / 07:05 UTC, BEFORE the check; Batt: "keep gl_prison; a GM doesn't need to fear monsters. Make the GM safe without changing what the bot sees")
 **The condition, PRIMARY:** rAthena's `@monsterignore`, granted to the GM's group 20 (`groups.yml`,
