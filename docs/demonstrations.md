@@ -3624,6 +3624,25 @@ their causes; the measured footprints per job; which fix (5.7) each result point
       after; the two stop frames' reads (design checks).
     - **On PASS:** it is offered to Batt. It goes live only with his OK (a merge), and the
       prontera arm then resumes as segment 4. **On FAIL:** not offered; reported.
+  - ➡️ **THE BORDER FIX'S PROOF, RESULT (scored 14:55-15:05): FAIL as pre-registered, on rule 1
+    ONLY.** It is NOT offered as proven. Batt decides.
+    - 598 labelled frames from 11 sessions (no window 56, NEXT 214, menu 268, CLOSE 60).
+    - **Rule 1: FAIL.** 6 frames disagree with BOTH readers identically (`button_unknown`): S2
+      0009-0011 and 0027-0029 of `20261013T130007`.
+      - These are NEXT_HI attempt 1's IN-PLACE hover frames (the cursor on the button). They sit
+        in that session's labelled `frames/` because the in-place split came after it.
+      - Including that session was MY error in the proof set. The rule is kept as written, so the
+        result stays FAIL.
+    - **Rule 2: 0 regressions.** The fix changes the verdict on **0 of 598** frames.
+    - **Rule 3: 0 false `present`** on frames whose label has no dialog. The first scoring script
+      tested "menu" frames as menu-only; a guide menu shows the dialog too. The script was fixed
+      to the written rule (the label's dialog flag) BEFORE this number, and rule 1's result is
+      unchanged.
+    - **Design checks (not evidence):** the third stop's frame reads NEXT (edge 0.0046 instead of
+      0.0868); the second stop's reads CLOSE.
+    - **What it means:** on banked frames the fix is inert. It only acts on a codec-shifted
+      border like the third stop's. Whether to adopt it, or to re-prove it on a corrected set,
+      is Batt's call. Until then the prontera arm stays parked.
 
 ### 3.33 The GM's IMMUNITY: a test condition for the visual-diversity block (pre-registered 2026-10-09 ~14:05 ICT / 07:05 UTC, BEFORE the check; Batt: "keep gl_prison; a GM doesn't need to fear monsters. Make the GM safe without changing what the bot sees")
 **The condition, PRIMARY:** rAthena's `@monsterignore`, granted to the GM's group 20 (`groups.yml`,
