@@ -4088,6 +4088,101 @@ result.
 - **The risk:** on a view with much animated scenery (crowds, a busy fountain), a large region masks
   the cursor itself and lowers recall there. Reported per view.
 
+### 3.38 npc-render@1 -- every static NPC drawn from GAME DATA: its rendered position against packet truth, and its NO-CLICK region against live hovers (pre-registered 2026-10-13 ~14:00 ICT at commit, BEFORE any of its data; Batt 2026-10-13: "use the GAME DATA, not the detector ... This is the 'N1-N3 sprite path' in labels-v2: make it the first NPC step, with a pre-registered check of the rendered positions/masks against packet truth and live hovers")
+**The design, built and measured on design data only:**
+[docs/planning/npc-render.md](planning/npc-render.md) (PROPOSED; merged 974bdd7; code
+`scripts/npc_render.py`, `scripts/npc_render_measure.py`). For a map, our cell and the camera
+path, every L3 NPC that is drawn is rendered from its script line (cell, FACING, sprite) through
+`predict_sprite`:
+- the MASK is the union of the idle animation frames;
+- the envelope is its box.
+- Fail closed: unsupported NPCs are listed, never guessed; NPCs beyond the server's 14-cell view
+  area are not drawn.
+
+**What the design data already says** (section 3 there; these sessions are NEVER used below):
+- **Positions:** outdoor median 1.4 px, indoor 4.1 px. The indoor error is a linear field that grows
+  toward the screen edges.
+- **Identity:** 3,214 / 3,214 sightings agree with the packets on cell, sprite and facing.
+- **The drawn MASK is NOT the clickable area:** it holds 479 / 1,225 = 0.391 of cursor@2's
+  TALK-labelled hovers.
+  - The client answers TALK up to ~+-34 px from the feet and ~14 px below them.
+  - So Batt's "NO-CLICK region = the rendered sprite's pixel mask, not a box or a cell guess",
+    measured against item 5's probes as he asked, would leave ~61 % of the TALK points clickable.
+  - The region under test is therefore the **mask OR a PROVISIONAL hit box** (|u - feet_u| <= 42
+    px, from 8 px above the envelope's top to 16 px below the feet). It was fitted IN-SAMPLE (0.985
+    TALK inside, 0.118 other).
+  - A box-shaped part departs from Batt's design. **Adopting it is Batt's decision**, open below.
+
+**Fixed now** (changed only by a new pre-registration):
+- the code at the commit that adds this section;
+- k = 0.14; search radius 24 px; a match counts at NCC >= 0.5; at most 15 frames per session;
+- the hit box: HIT_HALF_W 42, HIT_TOP 8, HIT_BELOW 16 (screen px);
+- the pixel camera rule PIXEL_MIN_SCORE 0.5 / PIXEL_MAX_OFFSET 12 / PIXEL_MIN_SEEN 2 (its verdicts
+  reported only);
+- **sprites:** ONE measurement table built before the first run:
+  `npc_sprites.py build --measure-map prontera --measure-map alberta_in --measure-map new_1-2
+  --out /dev/shm/...` (never data/kb), its sha256 in the run record. An NPC it does not cover is
+  reported, never rendered.
+
+**A. Positions vs packet truth** (offline, on FRESH sessions: every banked session recorded AFTER
+this commit that stands our GM on maps with drawn NPCs):
+- **n:** >= 300 confident matches outdoor and >= 100 indoor, from >= 3 sessions each. Fewer =
+  INCONCLUSIVE.
+- **A1 (identity, hard):** every rendered NPC the packets show agrees on cell, sprite and facing.
+  One disagreement FAILS A.
+- **A2 (outdoor):** >= 95 % of matches within 6 px, and the median <= 2 px.
+- **A3 (indoor):** >= 95 % within 12 px. The indoor camera is NOT refitted first; a refit is its own
+  pre-registration.
+- **A4 (k):** k 0.14 scores above 0.1333 on >= 75 % of paired matches (reported per map).
+
+**B. Live hovers** (fresh `npc_click_test.py probe` runs: hover only, nothing clicked; the UI
+gate and a judged screenshot before each run; the spots fixed by offline `plan` BEFORE this
+commit):
+- **B1: prontera `--near 70,356 --seed 20261190`**: 5 NPCs (733 x2, 734 x3), 1,316 probes.
+  - The draft's `--near 150,100` planned 1 NPC / 312 probes, short of the 150-TALK floor. It was
+    replaced by the densest prontera group in L3 away from cursor@2's spot and from the 722 flags.
+    That was decided on the plan alone, before any data.
+- **B2: alberta_in `--near 53,43 --seed 20261191`**: 2 NPCs (86, 59), 490 probes. Indoor, no design
+  probe.
+- **B3: new_1-2 `--seed 20261192`**: 6 NPCs (117, 726, 105, 84, 90, 92), 1,554 probes. The training
+  grounds; no `--near`, the seed fixes the choice.
+- **B4 (a positive case for the camera rule; REPORTED, not a bar):** a few frames after a
+  deliberate right-drag rotation and after a zoom. ONLY Batt rotates or zooms. A map change follows.
+  The input-log guard must say rotated / zoomed; the pixel rule's verdicts are reported.
+- **Truth:** cursor@2's labelling. `cursor2_truth.py sheets` on the B sessions, two blind labellers,
+  truth = agreement, grab 0 of every probe.
+- **n:** >= 600 TALK-labelled points in total and >= 150 per run. Fewer = INCONCLUSIVE.
+- **Bars** (`npc_render_measure.py click` at this commit; points within 60 px of an UNRENDERED NPC
+  are reported apart, not counted):
+  - **B-SAFETY (hard):** TALK points OUTSIDE the NO-CLICK region <= 1 % overall and <= 2 % in every
+    run;
+  - **B-COST:** other points (walk / noentry / sword) inside the region <= 20 % overall.
+  - **Reported, not bars:**
+    - the drawn MASK's own TALK share (Batt's design, as asked);
+    - the box's share;
+    - the dilation curve;
+    - per sprite, the TALK points outside the region with their offsets from the feet.
+- **Order in the client queue:** after cursor@3 (3.37). A judged screenshot before each run; a run
+  that exits early is re-run unchanged with its seed, its partial session kept and never scored.
+
+**What PASS would unlock, if Batt adopts it** (each adoption is his decision; nothing changes on a
+PASS alone):
+- the walk gate's NO-CLICK region = the rendered region on maps where the render is `complete`
+  (L3's PROVISIONAL footprint stays elsewhere);
+- labels v2 NPC boxes rendered per frame for sprites whose N3 reading is `fit`;
+- occlusion checks (expected vs observed pixels).
+
+**FAIL:** the region is not used. The failing points (offset, sprite, map) are reported, and a new
+hit-box model is pre-registered.
+
+**Not decided here (Batt):**
+- the hit box itself (a box, against "not a box or a cell guess");
+- decoding MIXCRYPT sprites at RUN time. Claude reads "the client's sprite files (decoded
+  locally, never committed)" in Batt's note as the OK; he confirms;
+- the indoor camera refit (npc-render.md 3.5);
+- widening N1 beyond his scope (46 sprites; the measurement table covers more);
+- 909's class.
+
 ### 3.34 learn_skill@1 -- spend skill points in the skill window (DESIGN 2026-10-09 ~19:50; NOT pre-registered; Batt ~19:30: "add the new skill the job change needs: allocating skill points (Basic Skill > 8) via the skill window, as an L1 concept with its own alone-test")
 > ➡️ **DECIDED (Batt, 2026-10-13, decision 5):** "@streset / @skreset for GM group 20 (lab)".
 > They are added to `groups.yml` in place and apply at the next guarded rathena recreate (as
