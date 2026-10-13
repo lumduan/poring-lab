@@ -1,7 +1,7 @@
 ---
 doc_type: roadmap
 status: LIVING
-last_reviewed: 2026-10-13
+last_reviewed: 2026-10-14
 ---
 
 # poring-lab roadmap
@@ -138,10 +138,13 @@ flowchart TD
   the target; demonstrations.md 3.36 ADOPTION). ➡️ cursor@3 PRE-REGISTERED 2026-10-13 (3.37: robust3 = robust2 + the per-view animated
   region + a fresh background; alberta targeted, morocc held out); ~~its runs follow the S2 session~~
   ➡️ ALL RUNS DONE 2026-10-13 17:26-22:43 (B3, A3 alberta / prontera / prt_church, the morocc pilot,
-  the held-out morocc; safety 0 in every session). Blind labelling and scoring are in progress
-  (3.37). The held-out run had 2 of 9 @warps refused by the server (client GAT vs server map
-  cache), so 188 of its 990 records came from displaced positions: it is scored as written, with
-  the rest reported beside it.
+  the held-out morocc; safety 0 in every session). ~~Blind labelling and scoring are in progress~~
+  ➡️ **RESULT 2026-10-14 00:21: FAIL on bars 3 and 4** (SWORD 0.610, WALK 0.867). SAFETY is MET,
+  and the held-out morocc is perfect for both readers. **On alberta robust3 is WORSE than robust2**
+  (WALK 0.626 vs 0.667): its cycle region masks the cursor itself in the windmill views. **No
+  switch: the live gate stays robust2.** The held-out run had 2 of 9 @warps refused by the server
+  (client GAT vs server map cache); its displaced records change no verdict. The windmill needs a
+  different idea (a background at the same point of the sails' cycle?); that is for Batt.
 - **Detector:** v1 REPLACES v0 live: ➡️ DONE 2026-10-13 (deployment parity PASS on the gold set: v1 ONNX P 0.912 / R 0.830 vs v0 ONNX 0.868 / 0.790; `unit_detector.MODEL`). **Next training:**
   LABEL QUALITY toward Batt's gold convention (auto-label boxes vs gold, the systematic gaps) before
   labels v2; no more epochs on v1. ➡️ The analysis: [label-quality.md](planning/label-quality.md)
