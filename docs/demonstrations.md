@@ -3657,7 +3657,7 @@ their causes; the measured footprints per job; which fix (5.7) each result point
       became a contact. The cost: 7 / 33 moves refused.
     - **DECIDED (Batt, 2026-10-13 ~15:27): "Re-prove on a fresh set first."** Both arms stay
       parked until then. Batt closes Garnet's dialog.
-  - **THE BORDER FIX, ATTEMPT 2: PRE-REGISTERED (__TIME__, before its data).** Code: 669a8d3,
+  - **THE BORDER FIX, ATTEMPT 2: PRE-REGISTERED (2026-10-13 15:26 ICT, commit 37b78e5, before its data).** Code: 669a8d3,
     unchanged.
     - **FRESH data:** RDP talk-cal sessions recorded AFTER this commit. Their in-place hover frames
       are kept apart by code since 4d4666b. At least:
