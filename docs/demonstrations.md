@@ -3472,7 +3472,7 @@ their causes; the measured footprints per job; which fix (5.7) each result point
       my own addition today (`hover`, 2d2223e), and 10-09's proof had none. They fail closed (an
       unknown button presses nothing).
     - The result stays a FAIL. The template is NOT installed on it.
-  - **THE NEXT_HI PROOF, ATTEMPT 2: PRE-REGISTERED 2026-10-13 ~13:20 ICT, before its data.**
+  - **THE NEXT_HI PROOF, ATTEMPT 2: PRE-REGISTERED 2026-10-13 13:09 ICT (commit 4d4666b), before its data (S1 started 13:09:27).**
     - **The change, stated before the data:** the `hover` step's in-place frames go to `in_place/`.
       They are kept as evidence and never labelled (`talk_calibrate.grab_frames`, IN_PLACE_DIR;
       test_talk_calibrate). Parked frames are labelled exactly as before. The candidate set and
@@ -3494,7 +3494,7 @@ their causes; the measured footprints per job; which fix (5.7) each result point
         `button_unknown` stop into a NEXT stop.
     - **On FAIL or INCONCLUSIVE:** nothing is installed. Stop and report to Batt; the click arms
       wait.
-  - ➡️ **ATTEMPT 2 RESULT (2026-10-13 13:09-13:16 ICT; scored ~13:20): PASS. INSTALLED.**
+  - ➡️ **ATTEMPT 2 RESULT (2026-10-13 13:09-13:13 ICT; scored 13:14): PASS. INSTALLED.**
     - Sessions: S1 `20261013T130927-demo-talk-cal-guide` (drive `--first 3`, 78 frames) and S2
       `20261013T131115-demo-talk-cal-guide` (single steps; 50 labelled + 8 in place). T4 and T5
       PASS on both.
@@ -3508,7 +3508,7 @@ their causes; the measured footprints per job; which fix (5.7) each result point
       the candidate reads NEXT (needed >= 8). They are S2 0008-0013 and 0028-0033: both NEXT pages,
       after their hovers.
     - **In place (reported only):** 8 / 8 `button_unknown` with both sets (fail closed).
-    - **Installed** 13:2x: `data/ui_anchors/npc_dialog/npc_dialog_next_hi.npy`, sha256
+    - **Installed** ~13:15: `data/ui_anchors/npc_dialog/npc_dialog_next_hi.npy`, sha256
       `695a0e0d406352f76446ae11fc240b3f5fc2f2cf4dccdaa6443cd165e98d57c9`, read back equal.
       `talk1.TEMPLATES` loads it.
     - Next, per the amendment: the prontera click arm resumes, then the church click arm.
