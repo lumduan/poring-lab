@@ -1098,9 +1098,10 @@ def resized_box(
     rw: float = 1.0,
     rh: float = 1.0,
     dy: float = 0.0,
+    dx: float = 0.0,
 ) -> Callable[[dict[str, Any]], Rect | None]:
-    """A v1 monster box with its centre kept (moved by ``dy``) and its size set to w x h, or
-    scaled by rw x rh."""
+    """A v1 monster box with its centre kept (moved by ``dx``, ``dy``) and its size set to w x h,
+    or scaled by rw x rh."""
 
     def box(e: dict[str, Any]) -> Rect | None:
         p = e.get("v1_pred")
@@ -1109,7 +1110,7 @@ def resized_box(
         cx, cy = centre(tuple(p["box"]))
         bw = w if w is not None else (p["box"][2] - p["box"][0]) * rw
         bh = h if h is not None else (p["box"][3] - p["box"][1]) * rh
-        return cx - bw / 2, cy + dy - bh / 2, cx + bw / 2, cy + dy + bh / 2
+        return cx + dx - bw / 2, cy + dy - bh / 2, cx + dx + bw / 2, cy + dy + bh / 2
 
     return box
 
@@ -1128,7 +1129,7 @@ def what_ifs(
     source: str,
     lag: int,
     batt_ratio: tuple[float, float],
-    dy_lofo: dict[int, float],
+    lofo: dict[str, dict[int, float]],
 ) -> list[WhatIf]:
     """The single-gap what-ifs for ``source`` (v1 gets the monster-box ones too)."""
     out = [
@@ -1184,10 +1185,18 @@ def what_ifs(
             ),
             WhatIf(
                 "centre_dy_lofo",
-                "vertical anchor",
+                "anchor offset",
                 True,
                 lambda f: relabel(
-                    f, source, monster_box=resized_box(dy=dy_lofo.get(f["frame_id"], 0.0))
+                    f, source, monster_box=resized_box(dy=lofo["dy"].get(f["frame_id"], 0.0))
+                ),
+            ),
+            WhatIf(
+                "centre_dx_lofo",
+                "anchor offset",
+                True,
+                lambda f: relabel(
+                    f, source, monster_box=resized_box(dx=lofo["dx"].get(f["frame_id"], 0.0))
                 ),
             ),
             WhatIf(
@@ -1280,22 +1289,25 @@ def run_what_ifs(frames: Sequence[dict[str, Any]], ifs: Sequence[WhatIf]) -> lis
     return rows
 
 
-def lofo_dy(pairs: Sequence[dict[str, Any]]) -> tuple[dict[int, float], float | None]:
-    """The vertical centre offset (hand minus v1, px) from Batt's MOVED boxes of idle units while
-    our character stands: for every frame, the median over the OTHER frames (leave-one-frame-out,
-    so no frame is corrected with its own boxes); plus the all-frame median (reported only)."""
+def lofo_offset(
+    pairs: Sequence[dict[str, Any]], axis: str = "dy", states: Sequence[str] = ("idle",)
+) -> tuple[dict[int, float], float | None]:
+    """A centre offset (hand minus v1, px, ``axis`` dx or dy) from Batt's MOVED boxes of units in
+    ``states`` while our character stands: for every frame, the median over the OTHER frames
+    (leave-one-frame-out, so no frame is corrected with its own boxes); plus the all-frame median
+    (reported only). The moved boxes are the ones Batt found off: selected on their error."""
     use = [
         p
         for p in pairs
-        if p["provenance"] == "moved" and p["state"] == "idle" and not p["self_moving"]
+        if p["provenance"] == "moved" and p["state"] in states and not p["self_moving"]
     ]
     frames = sorted({p["frame_id"] for p in pairs})
     out = {}
     for fid in frames:
-        rest = [-p["dy"] for p in use if p["frame_id"] != fid]
+        rest = [-p[axis] for p in use if p["frame_id"] != fid]
         if rest:
             out[fid] = statistics.median(rest)
-    return out, (statistics.median(-p["dy"] for p in use) if use else None)
+    return out, (statistics.median(-p[axis] for p in use) if use else None)
 
 
 def _envelope(frames: Sequence[dict[str, Any]]) -> dict[str, Any]:
@@ -1480,12 +1492,16 @@ def report(d: dict[str, Any]) -> dict[str, Any]:
     out["causes_rows_v1_position"] = causes(frames, "v1", "position")["rows"]
     r_w = statistics.median(p["w_ratio"] for p in drawn) if drawn else 1.0
     r_h = statistics.median(p["h_ratio"] for p in drawn) if drawn else 1.0
-    lofo, dy_all = lofo_dy(pairs["v1"])
+    lofo_y, dy_all = lofo_offset(pairs["v1"], "dy", ("idle",))
+    lofo_x, dx_all = lofo_offset(pairs["v1"], "dx", ("idle", "walk"))
+    lofo = {"dx": lofo_x, "dy": lofo_y}
     out["what_if_constants"] = {
         "self_lag_ms": best["lag_ms"],
         "batt_drawn_scale": [round(1 / r_w, 3), round(1 / r_h, 3)],
         "centre_dy_all_frames": None if dy_all is None else round(dy_all, 2),
-        "centre_dy_lofo": describe(lofo.values()),
+        "centre_dy_lofo": describe(lofo_y.values()),
+        "centre_dx_all_frames": None if dx_all is None else round(dx_all, 2),
+        "centre_dx_lofo": describe(lofo_x.values()),
     }
     out["what_ifs"] = {
         s: run_what_ifs(frames, what_ifs(frames, s, int(best["lag_ms"]), (1 / r_w, 1 / r_h), lofo))

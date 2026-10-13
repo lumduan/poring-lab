@@ -230,7 +230,7 @@ def test_lofo_never_corrects_a_frame_with_its_own_boxes(lq: ModuleType) -> None:
         {"frame_id": fid, "provenance": "moved", "state": "idle", "self_moving": False, "dy": -dy}
         for fid, dy in ((1, 2.0), (2, 4.0), (3, 9.0))
     ]
-    per, all_ = lq.lofo_dy(pairs)
+    per, all_ = lq.lofo_offset(pairs, "dy")
     assert per == {1: 6.5, 2: 5.5, 3: 3.0}
     assert all_ == 4.0
 
