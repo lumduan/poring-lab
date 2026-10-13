@@ -364,3 +364,22 @@ def test_decline_all_cancels_an_unread_menu_and_ignores_no_dialog(talk1: Any) ->
     assert c.closed_by == "cancel"  # a menu is cancelled without reading its rows
     c2 = FakeClient(MENU7, opens=False)
     assert talk1.decline_all(c2, reader(c2)).outcome is None and c2.clicks == []  # nothing open
+
+
+def test_the_approach_is_walk17_with_its_own_relocalisation_and_no_ex(talk1: Any) -> None:
+    """Batt 2026-10-13 (decision 4): approach with the minimap-first walk (walk@17), no /ex. The
+    defaults are walk17 + its relocalisation; where@2's contact fix (an /ex separator) is refused
+    with walk17, and the relocalise fix is walk@17's only."""
+    import inspect
+
+    talk1.approach_options("walk17", "relocalise")
+    talk1.approach_options("walk17", "none")
+    talk1.approach_options("walk15", "where")  # the old pre-registered option, kept for history
+    with pytest.raises(SystemExit, match="types /ex"):
+        talk1.approach_options("walk17", "where")
+    with pytest.raises(SystemExit, match="walk@17's relocalisation"):
+        talk1.approach_options("walk15", "relocalise")
+    src = inspect.getsource(talk1.main)
+    assert 'default="walk17"' in src and 'default="relocalise"' in src
+    rig_src = inspect.getsource(talk1.rig_up)
+    assert "walk.use_map(mapname, walk.WALK)" in rig_src and "walk.reset_where()" in rig_src

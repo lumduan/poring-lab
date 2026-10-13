@@ -2620,6 +2620,17 @@ packets, the same instruments as tuning) per map, then `walk_readiness.py` on ea
 > ➡️ **DECIDED (Batt, 2026-10-13, decision 4):** "talk@1: approach with the minimap-first walk
 > (walk@17 design), no /ex." talk@1's approach step no longer calls walk@15 (it types "/ex" + /where,
 > refused by the typing policy). The rework is pre-registered before any scored trial.
+> ➡️ **AMENDMENT, BUILT 2026-10-13, before any scored trial** (`talk1.py`; `test_talk1.py`):
+> - **The approach:** `--walk walk17` is the default. It is walk@17's route, with B (warp areas)
+>   loaded for the map, its /where state reset, and a run budget of (WHERE_PER_ROUTE + 1) x n opened
+>   in the typing guard.
+> - **The contact fix:** `--contact-fix relocalise` is the default. It is walk@17's own
+>   relocalisation: the minimap readout first, /where (where@3) once per need, never "/ex".
+> - where@2's fix (`--contact-fix where`) is REFUSED with walk17. `walk15` / `walk16` stay selectable
+>   only as the old options.
+> - **Stated for the scoring:** walk@17's own tuning runs have not run yet (its readiness is unknown),
+>   so talk@1 reports approach failures apart from contact and dialog failures, as 3.30 already
+>   does. Everything else in 3.30 is unchanged.
 **What it verifies:** the L1 concepts `npc.talk`, `npc.next`, `npc.choose` and `npc.close` on RDP.
 When talk@1 PASSES, the /flows blocks `talk_npc`, `next_page`, `choose_menu` and `close_dialog`
 become "verified RDP" (the L1 entries' `verified_on` gets the RDP session). The S2 re-test comes

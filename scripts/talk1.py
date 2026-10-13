@@ -671,6 +671,9 @@ def rig_up(agent: Any, screen: Any, mapname: str, walk_name: str, templates: nd.
     from poring_env import selfpos
 
     walk = importlib.import_module(walk_name)
+    if walk_name == "walk17":  # B: the map's warp areas (an unlisted map fails closed); A: /where
+        walk.use_map(mapname, walk.WALK)
+        walk.reset_where()
     gat = gatmod.parse((cam.GAT_DIR / f"{mapname}.gat").read_bytes())
     cj = json.loads((r.ROOT / "packages/poring_dataset/src/poring_dataset/camera_rdp.json")
                     .read_text())  # fmt: skip
@@ -763,7 +766,13 @@ def run_trial(rig: Rig, plan: dict[str, Any], first_on_map: bool, info: dict[str
         trial["t_end"] = r.ns()
         trial["result_runtime"] = "approach"
         return trial
-    if rig.contact_fix == "where":
+    if rig.contact_fix == "relocalise":  # walk@17's: the minimap first, /where once per need
+        got = rig.relocalise(agent, screen, rig.w, rig.noentry, rig.band)
+        trial["contact_fix"] = {k: got.get(k) for k in ("ok", "method", "reason", "to", "rejects")}
+        if got.get("method") == "where":
+            bench.close_chat(agent, screen)
+            r.activate_client(agent, screen)
+    elif rig.contact_fix == "where":
         got = wf.fix_v2(agent, screen, rig.where_templates, rig.w.position, rig.w.walkable)
         trial["contact_fix"] = {"xy": got["xy"], "rejects": got["rejects"]}
         if got["xy"] is not None:
@@ -788,6 +797,20 @@ def run_trial(rig: Rig, plan: dict[str, Any], first_on_map: bool, info: dict[str
 
 def _terminate(signum: int, frame: FrameType | None) -> None:
     raise KeyboardInterrupt(f"signal {signal.Signals(signum).name}")
+
+
+def approach_options(walk_name: str, contact_fix: str) -> None:
+    """Batt 2026-10-13 (decision 4): walk@17's approach types no "/ex". Its contact fix is the
+    rule's own relocalisation (`relocalise`: the minimap first, /where once per need); where@2
+    (`where`: an "/ex" separator, then /where) is refused with it, as the typing guard would."""
+    if walk_name == "walk17" and contact_fix == "where":
+        raise SystemExit(
+            "talk@1: --contact-fix where types /ex (where@2): use relocalise with walk17"
+        )
+    if contact_fix == "relocalise" and walk_name != "walk17":
+        raise SystemExit(
+            "talk@1: --contact-fix relocalise is walk@17's relocalisation (--walk walk17)"
+        )
 
 
 def run(mode: str, scene: str, n: int, seed: int, walk_name: str, contact_fix: str) -> int:
@@ -826,6 +849,11 @@ def run(mode: str, scene: str, n: int, seed: int, walk_name: str, contact_fix: s
     print(json.dumps({"session": sid, "rule": RULE, "mode": mode, "scene": scene, "n": n,
                       "seed": seed, "walk": walk_name}), flush=True)  # fmt: skip
     t_first = r.ns()
+    if walk_name == "walk17":  # the run's /where budget (A): an approach start + a contact fix
+        import chat_guard
+        import walk17
+
+        chat_guard.start_run(sid, (walk17.WHERE_PER_ROUTE + 1) * n)
     trials: list[dict[str, Any]] = []
     ended, code, why = "complete", 0, ""
     plan_tok = route_plan.enable(f"{RULE}-{scene}-{seed}", mapname)
@@ -880,12 +908,14 @@ def main() -> int:
     ap.add_argument("--scene", choices=sorted(SCENES), required=True)
     ap.add_argument("--n", type=int)
     ap.add_argument("--seed", type=int, help="default: 3.30's (run) / the pilot's own (pilot)")
-    ap.add_argument("--walk", choices=("walk15", "walk16"), default="walk15")
-    ap.add_argument("--contact-fix", choices=("where", "none"), default="where")
+    # Batt 2026-10-13 (decision 4): "approach with the minimap-first walk (walk@17 design), no /ex"
+    ap.add_argument("--walk", choices=("walk17", "walk15", "walk16"), default="walk17")
+    ap.add_argument("--contact-fix", choices=("relocalise", "where", "none"), default="relocalise")
     a = ap.parse_args()
     n = a.n if a.n is not None else (3 if a.mode == "pilot" else 50)
     seed = a.seed if a.seed is not None else (
         PILOT_SEEDS[a.scene] if a.mode == "pilot" else SCENES[a.scene][1])  # fmt: skip
+    approach_options(a.walk, a.contact_fix)  # fails closed before anything runs
     signal.signal(signal.SIGTERM, _terminate)
     return run(a.mode, a.scene, n, seed, a.walk, a.contact_fix)
 
