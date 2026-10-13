@@ -3600,6 +3600,30 @@ their causes; the measured footprints per job; which fix (5.7) each result point
       36 clicks it allows became a contact (Wilson 95 % up to 0.096). The cost: 25 / 61 moves
       refused (0.41).
     - A click the walk gate allowed became `npc_contact`: 9 / 71 = 0.127 (0.068-0.224).
+  - **THE T2 BORDER FIX: ITS PROOF, PRE-REGISTERED (__TIME__, before it is scored).** Code:
+    branch `feat/t2-border-offset` 669a8d3, NOT live.
+    - **The change:** `npc_dialog.edge_share`. On the four border lines, the running median of
+      (frame - template) over 15 px, clipped to +-12 grey levels, is removed before the 6-level
+      test. The window rules are otherwise unchanged.
+    - **Its design frames are NOT evidence:** the two stop frames and two clear screenshots were
+      looked at while building it.
+    - **The proof set:** every banked talk-cal session NOT used by the cut. The installed templates
+      (NEXT_HI + CLOSE_HI) are used.
+      - 10-09, on the NAS: `20261009T153202-…-garnet`, `154531-…-garnet`, `154601-…-henson`,
+        `154802-…-guide`, `160329-…-guide`;
+      - 10-13, in /dev/shm: `20261013T125826`, `130007`, `130927`, `131115`, `143147-…-henson`,
+        `143410`.
+    - **PASS** (all three):
+      1. `prove-t2`'s rule with the FIXED reader: every labelled frame agrees with the packets, with
+         >= 1 frame of each class.
+      2. **No regression:** every labelled frame the CURRENT reader reads correctly, the fixed
+         reader reads identically (dialog / menu verdict and button).
+      3. **The edge test keeps its job:** no frame labelled no-window or menu-only gets a
+         `present` dialog from the fixed reader. Rule 1 counts this; it is reported apart.
+    - **Reported:** per session, how many frames change their verdict, and the edge share before and
+      after; the two stop frames' reads (design checks).
+    - **On PASS:** it is offered to Batt. It goes live only with his OK (a merge), and the
+      prontera arm then resumes as segment 4. **On FAIL:** not offered; reported.
 
 ### 3.33 The GM's IMMUNITY: a test condition for the visual-diversity block (pre-registered 2026-10-09 ~14:05 ICT / 07:05 UTC, BEFORE the check; Batt: "keep gl_prison; a GM doesn't need to fear monsters. Make the GM safe without changing what the bot sees")
 **The condition, PRIMARY:** rAthena's `@monsterignore`, granted to the GM's group 20 (`groups.yml`,
