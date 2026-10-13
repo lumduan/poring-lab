@@ -136,7 +136,12 @@ flowchart TD
 2026-10-10 list below is now history for items it names):
 - **Cursor:** the live gate SWITCHED to robust2 (safety-driven, departs from 3.36's bar 4, which stays
   the target; demonstrations.md 3.36 ADOPTION). ➡️ cursor@3 PRE-REGISTERED 2026-10-13 (3.37: robust3 = robust2 + the per-view animated
-  region + a fresh background; alberta targeted, morocc held out); its runs follow the S2 session.
+  region + a fresh background; alberta targeted, morocc held out); ~~its runs follow the S2 session~~
+  ➡️ ALL RUNS DONE 2026-10-13 17:26-22:43 (B3, A3 alberta / prontera / prt_church, the morocc pilot,
+  the held-out morocc; safety 0 in every session). Blind labelling and scoring are in progress
+  (3.37). The held-out run had 2 of 9 @warps refused by the server (client GAT vs server map
+  cache), so 188 of its 990 records came from displaced positions: it is scored as written, with
+  the rest reported beside it.
 - **Detector:** v1 REPLACES v0 live: ➡️ DONE 2026-10-13 (deployment parity PASS on the gold set: v1 ONNX P 0.912 / R 0.830 vs v0 ONNX 0.868 / 0.790; `unit_detector.MODEL`). **Next training:**
   LABEL QUALITY toward Batt's gold convention (auto-label boxes vs gold, the systematic gaps) before
   labels v2; no more epochs on v1. ➡️ The analysis: [label-quality.md](planning/label-quality.md)
@@ -146,7 +151,11 @@ flowchart TD
   built and merged (974bdd7, [npc-render.md](planning/npc-render.md)). Its check is PRE-REGISTERED
   ([demonstrations.md](demonstrations.md) 3.38) and runs after cursor@3. On the design data the
   drawn mask holds only 39 % of TALK hovers, so the region under test adds a PROVISIONAL hit box;
-  that box is Batt's decision.
+  that box is Batt's decision. ➡️ B1 STOPPED 2026-10-13 22:55 at its first stand: the stand is
+  inside a hidden script NPC's TOUCH area (prontera `#tour`), and its dialog opened on arrival.
+  **The dialog is left open for Batt; the client queue (B2, B3) waits on it.** A replacement B1'
+  (prontera --near 148,326) is PROPOSED for Batt. npc_click_test now refuses warp spans, touch
+  areas and server-NOPASS cells.
 - **Labels v2:** ~~the S2 UI-gate session is scheduled with Batt (~15 min of his clicks)~~ ➡️
   attempt 1 (2026-10-13 16:00-17:02) entered the room and banked phase A steps 1-3, but no NPC
   click came. It ended cleanly; Sunshine's revert is UNVERIFIED (a person checks). The runbook gaps
