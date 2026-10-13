@@ -97,7 +97,9 @@ def plan_cmd(box: Sequence[float]) -> list[dict[str, Any]]:
     return usable(sword_points(box, loot1.ATTACK_POINTS), loot1.in_ui)
 
 
-def run_sword(n: int, seed: int, per: int = PER_TRIAL) -> int:  # pragma: no cover - live
+def run_sword(
+    n: int, seed: int, per: int = PER_TRIAL, anim: bool = False
+) -> int:  # pragma: no cover - live
     import bench
     import gm_state
     import loot1
@@ -121,13 +123,18 @@ def run_sword(n: int, seed: int, per: int = PER_TRIAL) -> int:  # pragma: no cov
     log.start(backend=str(lock.backend), lock_seq=lock.seq, server="lab-rathena", rule=RULE,
               account="gm", mode="sword", n=n, seed=seed, map=loot1.MAP, per=per,
               spots=[list(s) for s in plan], read_grabs=nct.READ_GRABS,
-              classifier_live="walk6.CursorRefs v3 (reads only; nothing is clicked)")  # fmt: skip
+              classifier_live="walk6.CursorRefs v3 (reads only; nothing is clicked)",
+              probe_prober="ProberAnim (cursor@3)" if anim else "Prober9")  # fmt: skip
     print(json.dumps({"session": sid, "rule": RULE, "n": n, "seed": seed}), flush=True)
     t_first = r.ns()
     crops = 0
     trials: list[dict[str, Any]] = []
     with r.session(f"rule:{RULE}") as (agent, screen):
         rig = loot1.rig_up(agent, screen)
+        if anim:  # cursor@3: the animated region + a fresh background (reads only)
+            import cursor_anim
+
+            rig.pr = cursor_anim.prober_anim(agent, screen, rig.pr.refs)
         try:
             for k, spot in enumerate(plan):
                 trial: dict[str, Any] = {"k": k, "spot": list(spot), "t_start": r.ns(),
@@ -137,6 +144,8 @@ def run_sword(n: int, seed: int, per: int = PER_TRIAL) -> int:  # pragma: no cov
                             f"@warp {loot1.MAP} {spot[0]} {spot[1]}"):  # fmt: skip
                     r.gm(agent, screen, cmd)
                 time.sleep(rr.SCENE_ENTRY_S)
+                if hasattr(rig.pr, "set_view"):  # cursor@3: one animated region per spot
+                    rig.pr.set_view((loot1.MAP, spot[0], spot[1]))
                 trial["gm_state"] = gm_state.ensure_fixed(agent, screen, why=f"{RULE}:trial{k}",
                                                           out_dir=log.dir / "gm_state")  # fmt: skip
                 r.gm(agent, screen, f"@monster {loot1.PORING} 1")
@@ -229,6 +238,7 @@ def main() -> int:
     ap.add_argument("--n", type=int, default=10)
     ap.add_argument("--seed", type=int)
     ap.add_argument("--per", type=int, default=PER_TRIAL)
+    ap.add_argument("--anim", action="store_true", help="cursor@3's prober (reads only)")
     a = ap.parse_args()
     if a.mode == "plan":
         box = [float(x) for x in a.box.split(",")]
@@ -236,7 +246,7 @@ def main() -> int:
         return 0
     if a.seed is None:
         raise SystemExit("--seed is required (pre-registered)")
-    return run_sword(a.n, a.seed, a.per)
+    return run_sword(a.n, a.seed, a.per, a.anim)
 
 
 if __name__ == "__main__":

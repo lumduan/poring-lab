@@ -31,7 +31,7 @@ ITEM_SEED = 20261185
 STRIP_SEED = 20261186
 PER_PAGE, COLS, ZOOM = 50, 10, 2
 STRIPS_PER_PAGE = 10
-READERS = ("current", "robust")
+READERS = ("current", "robust", "robust3")  # those present: their read grabs are labelled
 
 
 def read_grabs(shapes: list[str]) -> list[int]:
@@ -50,19 +50,21 @@ def image_items(lives: dict[str, dict[str, Any]], seed: int = ITEM_SEED) -> list
         need: set[tuple[str, int]] = set()
         for r in live["rows"]:
             need.add((r["crop"], 0))
-            for name in READERS:
+            for name in (x for x in READERS if x in r):
                 need.update((r["crop"], g) for g in read_grabs(r[name]["shapes"]))
         items += [[ses, c, g] for c, g in sorted(need)]
     random.Random(seed).shuffle(items)
     return items
 
 
-def strip_items(lives: dict[str, dict[str, Any]], seed: int = STRIP_SEED) -> list[list[Any]]:
-    """Every robust2 WALK series + an equal seeded sample of the others, shuffled."""
+def strip_items(lives: dict[str, dict[str, Any]], seed: int = STRIP_SEED,
+                judged: str = "robust2") -> list[list[Any]]:  # fmt: skip
+    """Every WALK series of the ``judged`` reader + an equal seeded sample of the others, shuffled
+    (cursor@2: robust2; cursor@3: robust3)."""
     walk, other = [], []
     for ses, live in sorted(lives.items()):
         for r in live["rows"]:
-            (walk if r["robust2"]["twice"] == "walk" else other).append([ses, r["crop"]])
+            (walk if r[judged]["twice"] == "walk" else other).append([ses, r["crop"]])
     rng = random.Random(seed)
     sample = rng.sample(other, min(len(walk), len(other)))
     items = walk + sample
@@ -112,6 +114,9 @@ def main() -> int:
     ap.add_argument("mode", choices=("sheets",))
     ap.add_argument("--live", type=Path, required=True, help="cursor_eval.py live --out DIR")
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--judged", default="robust2", help="cursor@3: robust3")
+    ap.add_argument("--item-seed", type=int, default=ITEM_SEED)
+    ap.add_argument("--strip-seed", type=int, default=STRIP_SEED)
     ap.add_argument("sessions", nargs="+", type=Path)
     a = ap.parse_args()
     lives = {s.name: json.loads((a.live / f"live-{s.name}.json").read_text()) for s in a.sessions}
@@ -119,7 +124,8 @@ def main() -> int:
     if len(roots) != 1:
         print("cursor2_truth: the sessions must share one root", file=sys.stderr)
         return 2
-    items, strips = image_items(lives), strip_items(lives)
+    items = image_items(lives, a.item_seed)
+    strips = strip_items(lives, a.strip_seed, a.judged)
     a.out.mkdir(parents=True, exist_ok=True)
     (a.out / "items.json").write_text(json.dumps(items))
     (a.out / "strips.json").write_text(json.dumps(strips))

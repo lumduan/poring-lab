@@ -472,3 +472,42 @@ def test_live_reports_robust2_and_a_blink_series_is_noentry(mods: tuple, tmp_pat
     row = json.loads((tmp_path / "out" / "live-ses.json").read_text())["rows"][0]
     assert row["robust2"]["why"] == "ring"
     assert sum(r >= cr.RING_MIN for r in row["robust2"]["rings"]) == 3
+
+
+def test_live_scores_robust3_beside_robust2_on_a_windmill_crop(mods: tuple, tmp_path: Path) -> None:
+    """cursor@3's probe saves robust2's own inputs (b2 / anim2: the park background and its 0.25 s
+    map) beside its fresh background and cycle region. A sail that moved after the park floods
+    robust2's mask (UNKNOWN); robust3's mask, from the fresh background, reads the arrow."""
+    import argparse
+    import json
+
+    cr, w6, ce = mods
+    a, m, cls = [], [], []
+    for s in SPRITES:
+        for k in range(3):
+            b = floor(k)
+            h = draw(b, s)
+            a.append(h)
+            m.append(w6.cursor_mask(h, b))
+            cls.append(s)
+    refs = tmp_path / "refs.npz"
+    np.savez_compressed(refs, a=np.array(a), m=np.array(m), cls=np.array(cls),
+                        src=np.array([f"syn/{i}" for i in range(len(cls))]))  # fmt: skip
+    ses = tmp_path / "ses"
+    (ses / "crops").mkdir(parents=True)
+    fresh = floor(9)
+    stale = fresh.copy()
+    stale[:, 30:] = (235, 235, 240)  # the park frame: a white sail over the right half
+    h = draw(fresh, "walk")
+    region = np.zeros((64, 64), bool)  # the sail's sweep lies elsewhere in this view
+    np.savez_compressed(ses / "crops" / "00000.npz", a=h, a_series=np.stack([h] * 6),
+                        mask_series=np.stack([w6.cursor_mask(h, fresh)] * 6), b=fresh,
+                        anim=region, b2=stale, anim2=np.zeros((64, 64), bool),
+                        region=region)  # fmt: skip
+    rec = {"outcome": {"evidence": {"crop": "crops/00000.npz", "kind": "cell"}}}
+    (ses / "demo.jsonl").write_text(json.dumps(rec) + "\n")
+    args = argparse.Namespace(summary=ses, labels=None, refs=refs, out=tmp_path / "out",
+                              verdict="")  # fmt: skip
+    res = ce.cmd_live(args)
+    assert res["robust2"]["twice"]["cell"] == {"unknown": 1}
+    assert res["robust3"]["twice"]["cell"] == {"walk": 1}

@@ -617,6 +617,15 @@ def series_verdicts(shapes: Sequence[str], grabs: int = 3) -> tuple[str, str]:
     return first, again
 
 
+def ring_verdict(shapes: Sequence[str], a_series: Any, masks: Sequence[Any]) -> dict[str, Any]:
+    """robust2's series verdict for per-grab ``shapes`` read on these grabs and masks."""
+    rings = [cr.ring_pixels(a, m) for a, m in zip(a_series, masks, strict=True)]
+    v, why = cr.series_verdict(list(shapes), rings)
+    first = next((x for x in shapes[:3] if x != "unknown"), "unknown")
+    return {"shapes": list(shapes), "rings": rings, "first": "noentry" if why == "ring" else first,
+            "twice": v, "why": why}  # fmt: skip
+
+
 def cmd_live(args: argparse.Namespace) -> dict[str, Any]:
     """A LIVE session's saved crops (npc_click_test.py probe, cursor_probe.py sword): both
     classifiers on every grab of every series, offline. Per probe kind: the first read's shape
@@ -635,21 +644,31 @@ def cmd_live(args: argparse.Namespace) -> dict[str, Any]:
         z = np.load(ses / ev["crop"])
         out: dict[str, Any] = {"crop": ev["crop"], "kind": ev.get("kind", "?"),
                                "label": labels.get(ev["crop"])}  # fmt: skip
+        a_series = z["a_series"]
+        masks = list(z["mask_series"])  # the masks the probe's own prober computed
+        masks3 = None
+        if "b2" in z.files:  # a cursor@3 probe (ProberAnim): masks = robust3's (fresh B + region);
+            # robust2's own masks are recomputed from Prober9's background and 0.25 s map
+            import walk6 as w6
+
+            masks3 = masks
+            b2, an2 = z["b2"], z["anim2"].astype(bool)
+            masks = [w6.cursor_mask(a, np.where(an2[..., None], a, b2)) for a in a_series]
         for name, clf in (("current", current), ("robust", robust)):
-            shapes = [clf.match(a, m)["shape"] for a, m in
-                      zip(z["a_series"], z["mask_series"], strict=True)]  # fmt: skip
+            shapes = [clf.match(a, m)["shape"] for a, m in zip(a_series, masks, strict=True)]
             first, again = series_verdicts(shapes)
             out[name] = {"shapes": shapes, "first": first, "twice": first if first == again
                          else "unknown"}  # fmt: skip
         # robust2 (cursor@2): robust's per-grab shapes + the no-entry ring over the series
-        rings = [cr.ring_pixels(a, m) for a, m in zip(z["a_series"], z["mask_series"], strict=True)]
-        v2, why2 = cr.series_verdict(out["robust"]["shapes"], rings)
-        out["robust2"] = {"shapes": out["robust"]["shapes"], "rings": rings,
-                          "first": "noentry" if why2 == "ring" else out["robust"]["first"],
-                          "twice": v2, "why": why2}  # fmt: skip
+        out["robust2"] = ring_verdict(out["robust"]["shapes"], a_series, masks)
+        if masks3 is not None:  # robust3 (cursor@3): robust2 on ProberAnim's masks
+            shapes3 = [robust.match(a, m)["shape"] for a, m in zip(a_series, masks3, strict=True)]
+            out["robust3"] = ring_verdict(shapes3, a_series, masks3)
         rows.append(out)
     res: dict[str, Any] = {"session": ses.name, "probes": len(rows)}
-    for name in ("current", "robust", "robust2"):
+    for name in ("current", "robust", "robust2", "robust3"):
+        if not any(name in r for r in rows):
+            continue
         by: dict[str, Counter[str]] = defaultdict(Counter)
         twice: dict[str, Counter[str]] = defaultdict(Counter)
         for r in rows:

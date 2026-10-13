@@ -32,7 +32,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-READERS = ("current", "robust", "robust2")
+READERS = ("current", "robust", "robust2", "robust3")  # those present in the live rows are scored
 TALK_BAR, SWORD_BAR, SWORD_GAIN, WALK_BAR, WALK_SLACK = 0.85, 0.40, 0.25, 0.95, 0.02
 TALK_MIN_N, SWORD_MIN_N = 200, 100
 
@@ -76,7 +76,11 @@ def rate(rows: list[dict[str, Any]], reader: str, want: str) -> dict[str, Any]:
 
 
 def score(lives: dict[str, dict[str, Any]], img: dict[tuple[Any, ...], str],
-          ser: dict[tuple[Any, ...], str], sword: str) -> dict[str, Any]:  # fmt: skip
+          ser: dict[tuple[Any, ...], str], sword: str, judged: str = "robust2",
+          gate: str = "current", sword_gain: float = SWORD_GAIN) -> dict[str, Any]:  # fmt: skip
+    """``judged``: the reader the bars judge (cursor@2: robust2; cursor@3: robust3); ``gate``: the
+    reader bars 3-4 compare with (cursor@2: v3 = "current"; cursor@3: the live robust2), with
+    ``sword_gain`` (cursor@2: +0.25 over v3; cursor@3: -0.02, not below robust2)."""
     res: dict[str, Any] = {"images": dict(Counter(img.values())),
                            "series": dict(Counter(ser.values()))}  # fmt: skip
     groups: dict[str, dict[str, list[dict[str, Any]]]] = {}
@@ -97,8 +101,9 @@ def score(lives: dict[str, dict[str, Any]], img: dict[tuple[Any, ...], str],
                     g["walk"].append(r)
             if t0 == "noentry":
                 g["noentry"].append(r)
-    for reader in READERS:
-        cross, walk_other, judged, unclear = [], 0, 0, 0
+    present = [x for x in READERS if all(x in r for lv in lives.values() for r in lv["rows"])]
+    for reader in present:
+        cross, walk_other, n_judged, unclear = [], 0, 0, 0
         as_written = []
         series_err, series_unclear, walk_series = [], [], 0
         for ses, live in sorted(lives.items()):
@@ -109,7 +114,7 @@ def score(lives: dict[str, dict[str, Any]], img: dict[tuple[Any, ...], str],
                     if t in (None, "unclear"):
                         unclear += 1
                         continue
-                    judged += 1
+                    n_judged += 1
                     if sh[g] != t:
                         cross.append(f"{ses[:15]} {r['crop']} g{g} {t}->{sh[g]}")
                         walk_other += sh[g] == "walk"
@@ -117,7 +122,7 @@ def score(lives: dict[str, dict[str, Any]], img: dict[tuple[Any, ...], str],
                 v = r[reader]["twice"]
                 if t0 not in (None, "unclear") and v not in ("unknown", t0):
                     as_written.append(f"{ses[:15]} {r['crop']} {t0}->{v}")
-                if reader == "robust2" and v == "walk":
+                if reader == judged and v == "walk":
                     walk_series += 1
                     s = ser.get((ses, r["crop"]))
                     if s == "yes":
@@ -125,11 +130,11 @@ def score(lives: dict[str, dict[str, Any]], img: dict[tuple[Any, ...], str],
                     elif s != "no":
                         series_unclear.append(f"{ses[:15]} {r['crop']} {s}")
         out: dict[str, Any] = {
-            "1a": {"cross_shape": cross, "walk_on_other": walk_other, "reads_judged": judged,
+            "1a": {"cross_shape": cross, "walk_on_other": walk_other, "reads_judged": n_judged,
                    "reads_on_unclear": unclear},
             "1c_as_written": as_written,
         }  # fmt: skip
-        if reader == "robust2":
+        if reader == judged:
             out["1b"] = {"walk_series": walk_series, "errors": series_err,
                          "unclear": series_unclear}  # fmt: skip
         pooled: dict[str, list[dict[str, Any]]] = {"talk": [], "sword": [], "walk": [],
@@ -142,13 +147,15 @@ def score(lives: dict[str, dict[str, Any]], img: dict[tuple[Any, ...], str],
         out["pooled"] = {k: rate(v, reader, k) for k, v in pooled.items()}
         out["per_map"] = per_map
         res[reader] = out
-    res["verdict"], res["why"] = verdict(res)
+    res["judged"], res["gate"] = judged, gate
+    res["verdict"], res["why"] = verdict(res, judged, gate, sword_gain)
     return res
 
 
-def verdict(res: dict[str, Any]) -> tuple[str, list[str]]:
-    r2, gate = res["robust2"], res["current"]
-    p, pg = r2["pooled"], gate["pooled"]
+def verdict(res: dict[str, Any], judged: str = "robust2", gate: str = "current",
+            sword_gain: float = SWORD_GAIN) -> tuple[str, list[str]]:  # fmt: skip
+    r2, g = res[judged], res[gate]
+    p, pg = r2["pooled"], g["pooled"]
     fail, inconclusive = [], []
     if r2["1a"]["cross_shape"] or r2["1a"]["walk_on_other"]:
         fail.append("1a: a read differs from its image's label")
@@ -163,9 +170,9 @@ def verdict(res: dict[str, Any]) -> tuple[str, list[str]]:
             fail.append("2: TALK below 0.85")
         if (
             p["sword"]["rate"] < SWORD_BAR
-            or p["sword"]["rate"] < (pg["sword"]["rate"] or 0) + SWORD_GAIN
+            or p["sword"]["rate"] < (pg["sword"]["rate"] or 0) + sword_gain
         ):
-            fail.append("3: SWORD below 0.40 or under the gate + 0.25")
+            fail.append(f"3: SWORD below 0.40 or under the gate {sword_gain:+.2f}")
     if (
         p["walk"]["n"] == 0
         or p["walk"]["rate"] < WALK_BAR
@@ -187,6 +194,9 @@ def main() -> int:
     for k in ("labels-a", "labels-b", "strips-a", "strips-b"):
         ap.add_argument(f"--{k}", type=Path, required=True)
     ap.add_argument("--sword", required=True, help="arm B's session name")
+    ap.add_argument("--judged", default="robust2", help="cursor@3: robust3")
+    ap.add_argument("--gate", default="current", help="cursor@3: robust2 (the live gate)")
+    ap.add_argument("--sword-gain", type=float, default=SWORD_GAIN, help="cursor@3: -0.02")
     ap.add_argument("sessions", nargs="+")
     a = ap.parse_args()
     lives = {s: json.loads((a.live / f"live-{s}.json").read_text()) for s in a.sessions}
@@ -199,7 +209,7 @@ def main() -> int:
 
     img = agree(items, load(a.labels_a), load(a.labels_b))
     ser = agree(strips, load(a.strips_a), load(a.strips_b))
-    res = score(lives, img, ser, a.sword)
+    res = score(lives, img, ser, a.sword, a.judged, a.gate, a.sword_gain)
     print(json.dumps(res, indent=1))
     return {"PASS": 0, "FAIL": 1, "INCONCLUSIVE": 2}[res["verdict"]]
 
