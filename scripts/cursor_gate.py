@@ -33,7 +33,7 @@ import ro_agent as r  # noqa: E402
 
 REFS = r.ROOT / "data/walk6/cursor_refs_rdp_v3.npz"
 WALK_ONLY = ("walk",)
-CLASSIFIERS = ("robust2", "v3")
+CLASSIFIERS = ("robust2", "robust3", "v3")  # robust3 = cursor@3 (cursor_anim.py), not live
 DEFAULT_CLASSIFIER = "robust2"  # Batt 2026-10-13 (decision 3); "v3" only by name
 SERIES_GRABS, SERIES_GAP_S = 6, 0.1  # cursor@2: npc_click_test.READ_GRABS / READ_GAP_S
 
@@ -43,12 +43,13 @@ class GateUnavailable(RuntimeError):
 
 
 def prober(agent: Any, screen: Any, refs_path: Path = REFS, backend: str | None = None,
-           classifier: str = DEFAULT_CLASSIFIER) -> Any:  # fmt: skip
+           classifier: str | None = DEFAULT_CLASSIFIER) -> Any:  # fmt: skip
     """A walk@9-reader prober (park, two-motion hover, animated pixels excluded) on the v3
     references, read by `classifier` (robust2 by default), for the RDP path only."""
     import walk6 as w6
     import walk10 as w10
 
+    classifier = classifier or DEFAULT_CLASSIFIER
     if classifier not in CLASSIFIERS:
         raise GateUnavailable(f"unknown cursor classifier {classifier!r} (one of {CLASSIFIERS})")
     if backend is None:
@@ -64,7 +65,12 @@ def prober(agent: Any, screen: Any, refs_path: Path = REFS, backend: str | None 
     else:
         import cursor_robust as cr
 
-        pr = w10.Prober9(agent, screen, cr.RobustRefs.load(refs_path))
+        if classifier == "robust3":
+            import cursor_anim
+
+            pr = cursor_anim.prober_anim(agent, screen, cr.RobustRefs.load(refs_path))
+        else:
+            pr = w10.Prober9(agent, screen, cr.RobustRefs.load(refs_path))
     pr.classifier = classifier
     return pr
 
@@ -103,7 +109,7 @@ def gated_click(pr: Any, u: float, v: float, allow: tuple[str, ...] = WALK_ONLY)
         return {"clicked": False, "why": "stale_background", "shape": None}
     pr.hover(u, v)
     extra: dict[str, Any] = {}
-    if getattr(pr, "classifier", "v3") == "robust2" and "walk" in allow:
+    if getattr(pr, "classifier", "v3") in ("robust2", "robust3") and "walk" in allow:
         import cursor_robust as cr
 
         shapes, rings = read_series(pr, u, v)

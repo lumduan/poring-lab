@@ -77,7 +77,8 @@ class FakeRobustProber(FakeProber):
 
 
 def test_the_default_reader_is_robust2_and_v3_only_by_name(cg: ModuleType) -> None:
-    assert cg.DEFAULT_CLASSIFIER == "robust2" and set(cg.CLASSIFIERS) == {"robust2", "v3"}
+    assert cg.DEFAULT_CLASSIFIER == "robust2"
+    assert set(cg.CLASSIFIERS) == {"robust2", "robust3", "v3"}  # robust3 = cursor@3, not live
     with pytest.raises(cg.GateUnavailable, match="unknown cursor classifier"):
         cg.prober(None, None, backend="rdp", classifier="v4")
 

@@ -324,6 +324,12 @@ def read_series(pr: Any, u: float, v: float, n: int = READ_GRABS, gap: float = R
         mm.append(mask)
     arrays = {"a": aa[0], "mask": mm[0], "a_series": np.stack(aa), "mask_series": np.stack(mm),
               "b": b, "anim": anim, "big": big0}  # fmt: skip
+    # cursor@3 (ProberAnim): b / anim above are its fresh background and its cycle region;
+    # robust2's own inputs are kept beside them
+    if getattr(pr, "park_background", None) is not None:
+        arrays["b2"] = pr._crop(pr.park_background, u, v, 32)
+        arrays["anim2"] = pr._crop(pr.anim_short[..., None].astype(np.uint8), u, v, 32)[..., 0] > 0
+        arrays["region"] = pr._crop(pr.region[..., None].astype(np.uint8), u, v, 32)[..., 0] > 0
     return reads, arrays
 
 
@@ -383,6 +389,7 @@ def run(
     near: Cell | None = None,
     near_radius: int = 12,
     reps: int = REPS,
+    anim: bool = False,
 ) -> int:
     import bench
     import cursor_gate
@@ -419,7 +426,8 @@ def run(
                   mode=kind, map=map_name, seed=seed, near=near, npcs=plan["npcs"],
                   l3_coverage=cov,
                   footprint=nc.PROVISIONAL.source, read_grabs=READ_GRABS, reps=reps,
-                  account="gm")  # fmt: skip
+                  account="gm", probe_prober="ProberAnim (cursor@3)" if anim else "Prober9",
+                  gate_classifier=cursor_gate.DEFAULT_CLASSIFIER)  # fmt: skip
     # the packets at the end cover the WHOLE session, a resumed one included (the first t0 wins)
     ses.t_first = int(json.loads((ses.dir / "manifest.json").read_text())["t0_mono_ns"])
     det = unit_detector.UnitDetector() if kind == "probe" else None
@@ -430,7 +438,15 @@ def run(
         io = talk1.LiveIo(agent, screen, templates)
         if (why := _ui_clear(io)) != "none":
             raise SystemExit(f"the client's UI is not clear before the run ({why}): a person first")
-        pr = cursor_gate.prober(agent, screen)
+        # The PROBE arm only reads (every reader is scored offline on the saved crops); its live log
+        # (npc_click_score.explain) needs walk6.CursorRefs' arrays, so it keeps the v3 references
+        # (2026-10-13: the gate's default became robust2). The CLICK arm clicks through the gate's
+        # default reader (robust2; demonstrations.md 3.32a amendment).
+        pr = cursor_gate.prober(agent, screen, classifier="v3" if kind == "probe" else None)
+        if kind == "probe" and anim:  # cursor@3: the animated region + a fresh background
+            import cursor_anim
+
+            pr = cursor_anim.prober_anim(agent, screen, pr.refs)
         here: list[int] | None = None
         first = True
 
@@ -439,6 +455,8 @@ def run(
             if here == list(stand):
                 return
             r.gm(agent, screen, f"@warp {map_name} {stand[0]} {stand[1]}")
+            if hasattr(pr, "set_view"):  # cursor@3: one animated region per view
+                pr.set_view((map_name, stand[0], stand[1]))
             time.sleep(rr.SCENE_ENTRY_S if first else rr.WARP_SETTLE_S)
             bench.close_chat(agent, screen)
             r.activate_client(agent, screen)
@@ -573,6 +591,11 @@ def main() -> int:
     ap.add_argument("--near", help="X,Y: the pre-registered spot (NPCs within --near-radius)")
     ap.add_argument("--near-radius", type=int, default=12)
     ap.add_argument("--resume", help="a stopped click session's id: continue its plan")
+    ap.add_argument(
+        "--anim",
+        action="store_true",
+        help="probe only: cursor@3's prober (the animated region + a fresh background)",
+    )
     a = ap.parse_args()
     near = None if not a.near else (int(a.near.split(",")[0]), int(a.near.split(",")[1]))
     if a.mode == "plan":
@@ -596,7 +619,9 @@ def main() -> int:
                                                                               plan["clicks"]))},
                          indent=1))  # fmt: skip
         return 0
-    return run(a.mode, a.map, a.seed, a.npcs, a.resume, near, a.near_radius, a.reps)
+    if a.anim and a.mode != "probe":
+        raise SystemExit("--anim is a probe-arm option (cursor@3)")
+    return run(a.mode, a.map, a.seed, a.npcs, a.resume, near, a.near_radius, a.reps, a.anim)
 
 
 if __name__ == "__main__":
