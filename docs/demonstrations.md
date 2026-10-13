@@ -4280,6 +4280,18 @@ result.
 - A run that exits early is re-run unchanged with its seed; the partial session is kept and not
   scored.
 
+**Runs** (RDP, the GM; times ICT from the manifests; safety = the session's own banked packets
+through `replay_safety.judge` over the manifest window: attack_request / npc_contact / act normal /
+act pickup from the GM). NOT SCORED: no bar is computed until every arm has run and the truth
+sheets are labelled.
+
+| arm | session | time | records | safety |
+|---|---|---|---|---|
+| B3 sword, prt_fild08 | `20261013T172633-demo-cursor-probe-sword` | 17:26-18:12 | 30 trials, 367 crops | 0 / 0 / 0 / 0 |
+| A3 alberta | `20261013T182009-demo-npc-click-probe-alberta` | 18:20-19:33 | 1,495 | 0 / 0 / 0 / 0 |
+| A3 prontera | `20261013T193638-demo-npc-click-probe-prontera` | 19:36-20:52 | 1,498 | 0 / 0 / 0 / 0 |
+| A3 prt_church | running (started 20:54, a judged screenshot first) | | | |
+
 **Truth (fixed BEFORE any bar is computed):**
 - `scripts/cursor2_truth.py sheets --judged robust3 --item-seed 20261205 --strip-seed 20261206` at
   5f2f0ef (cursor_anim 223fa82, its scoring deebcaa):
