@@ -4088,7 +4088,7 @@ result.
 - **The risk:** on a view with much animated scenery (crowds, a busy fountain), a large region masks
   the cursor itself and lowers recall there. Reported per view.
 
-### 3.38 npc-render@1 -- every static NPC drawn from GAME DATA: its rendered position against packet truth, and its NO-CLICK region against live hovers (pre-registered 2026-10-13 ~14:00 ICT at commit, BEFORE any of its data; Batt 2026-10-13: "use the GAME DATA, not the detector ... This is the 'N1-N3 sprite path' in labels-v2: make it the first NPC step, with a pre-registered check of the rendered positions/masks against packet truth and live hovers")
+### 3.38 npc-render@1 -- every static NPC drawn from GAME DATA: its rendered position against packet truth, and its NO-CLICK region against live hovers (pre-registered 2026-10-13 13:53 ICT at commit 3f8831d, BEFORE any of its data; Batt 2026-10-13: "use the GAME DATA, not the detector ... This is the 'N1-N3 sprite path' in labels-v2: make it the first NPC step, with a pre-registered check of the rendered positions/masks against packet truth and live hovers")
 **The design, built and measured on design data only:**
 [docs/planning/npc-render.md](planning/npc-render.md) (PROPOSED; merged 974bdd7; code
 `scripts/npc_render.py`, `scripts/npc_render_measure.py`). For a map, our cell and the camera

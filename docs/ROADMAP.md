@@ -142,6 +142,11 @@ flowchart TD
   labels v2; no more epochs on v1. ➡️ The analysis: [label-quality.md](planning/label-quality.md)
   (PROPOSED, offline; five gaps ranked, the largest a dead-GM span of indoor-b whose labels sit ~4
   cells off, which every detector learned; fixes for Batt to choose).
+- **NPCs from GAME DATA (Batt 2026-10-13; the first NPC step of labels v2):** the render path is
+  built and merged (974bdd7, [npc-render.md](planning/npc-render.md)). Its check is PRE-REGISTERED
+  ([demonstrations.md](demonstrations.md) 3.38) and runs after cursor@3. On the design data the
+  drawn mask holds only 39 % of TALK hovers, so the region under test adds a PROVISIONAL hit box;
+  that box is Batt's decision.
 - **Labels v2:** the S2 UI-gate session is scheduled with Batt (~15 min of his clicks). Warp readings
   accepted provisionally; prt_church (100,56) to be read with more frames; N1 extends to 909 and the
   church's off-route sprites.

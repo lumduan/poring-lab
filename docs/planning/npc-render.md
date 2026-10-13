@@ -1,6 +1,6 @@
 ---
 title: "The NPC render path: every static NPC drawn from game data (L3 + the client's sprites + the camera), its design measurements, and a DRAFT pre-registration"
-status: PROPOSED
+status: PROPOSED (its check PRE-REGISTERED: demonstrations.md 3.38)
 date: 2026-10-13
 owner: Batt
 extends: docs/planning/labels-v2-plan.md
@@ -335,6 +335,11 @@ packet truth and live hovers."
     person, and 909 (an NPC drawn as a Poring) needs a class decision.
 
 ## 6. DRAFT pre-registration (for the parent to review and commit to docs/demonstrations.md; it binds nothing until then)
+
+> ➡️ **SUPERSEDED 2026-10-13 13:53: COMMITTED as [demonstrations.md](../demonstrations.md) 3.38**, which
+> is the binding version. One change was made before any data: B1's spot moved from `--near 150,100` (1 NPC,
+> 312 probes) to `--near 70,356` (5 NPCs). B2 / B3's spots were fixed from offline plans: alberta_in
+> `--near 53,43`; new_1-2 without `--near`. The draft below is kept as written.
 
 **Claim:** for every drawn, supported NPC in view, (A) its rendered sprite sits where the client
 draws it, and (B) the NO-CLICK region (the rendered mask OR the PROVISIONAL hit box, fixed below)
