@@ -4297,7 +4297,8 @@ sheets are labelled.
 - **A harness change between the pilot and A3 morocc (860871f, merged 21:44:31 by the reflog):** `npc_click_test.py` now
   REFUSES a plan that stands or walks inside a warp's trigger span, or on a map whose warps L3
   does not list (after a (100,56) banking stand warped the GM to prontera, 63e310e). It is a refusal, never a
-  filter: a plan that passes is unchanged, so morocc's spots are as pre-registered.
+  filter: a plan that passes is unchanged, so morocc's spots are as pre-registered. 85019f8 then
+  limited the click cells to the click arm (a probe arm never walks to them).
 
 **Truth (fixed BEFORE any bar is computed):**
 - `scripts/cursor2_truth.py sheets --judged robust3 --item-seed 20261205 --strip-seed 20261206` at
@@ -4394,6 +4395,11 @@ commit):
   probe.
 - **B3: new_1-2 `--seed 20261192`**: 6 NPCs (117, 726, 105, 84, 90, 92), 1,554 probes. The training
   grounds; no `--near`, the seed fixes the choice.
+- ➡️ **Warp spans, checked offline 2026-10-13 21:46 (the plans unchanged):** no B stand or control
+  stand lies inside a warp's trigger span (B2 has one stand, (65,34), one cell outside alb16-1's
+  edge). One B3 CLICK cell, (124,104), is inside newwarp6003a; the B runs only hover, so it is never
+  walked to. The harness now refuses a span conflict before any input (860871f; click cells in the
+  click arm only, 85019f8).
 - **B4 (a positive case for the camera rule; REPORTED, not a bar):** a few frames after a
   deliberate right-drag rotation and after a zoom. ONLY Batt rotates or zooms. A map change follows.
   The input-log guard must say rotated / zoomed; the pixel rule's verdicts are reported.
