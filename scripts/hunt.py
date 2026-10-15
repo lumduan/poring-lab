@@ -70,11 +70,18 @@ VERSIONS = {1: "search (coverage plan, look while walking, memory, continuous wa
             2: "FRESH selection after the stop (the target chosen on a frame captured after the "
                "GM stands, the engagement starts from that box) + stricter death (5 frames, "
                "2.5 s) + 120 s / 20 clicks + a settle fallback + 60 px / 2-frame walk clearance "
-               "+ no per-engagement UI check"}  # fmt: skip
+               "+ no per-engagement UI check",
+            3: "PARK-FIRST hover: park at the selection (the background holds the target), "
+               "hover at once while the target stays at its parked position, re-park only when "
+               "it moved (v2's first reads came ~2 s after the box) + a 2-frame stable, >= 16 px "
+               "selection + a wider re-acquire (200 px after 0.5 s, lost after 5 s)"}  # fmt: skip
 PARAMS = {1: {"engage_max_s": 60.0, "max_clicks": 10, "gone_frames": 3, "gone_s": 1.5,
               "unit_clear_px": 40.0, "clear_frames": 1},
           2: {"engage_max_s": 120.0, "max_clicks": 20, "gone_frames": 5, "gone_s": 2.5,
-              "unit_clear_px": 60.0, "clear_frames": 2}}  # fmt: skip
+              "unit_clear_px": 60.0, "clear_frames": 2},
+          3: {"engage_max_s": 120.0, "max_clicks": 20, "gone_frames": 5, "gone_s": 2.5,
+              "unit_clear_px": 60.0, "clear_frames": 2, "lost_s": 5.0, "park_first": True,
+              "stable_frames": 2, "min_box_px": 16.0}}  # fmt: skip
 
 
 def start_cell(area: Any, seed: int, near: Cell = START, within: int = 25) -> Cell:
@@ -286,6 +293,8 @@ def run(version: int, minutes: float, seed: int) -> int:
                         continue
                     if f1.native_size(b, scale) > f1.MAX_NATIVE_PX:
                         continue
+                    if min(b.x1 - b.x0, b.y1 - b.y0) < PARAMS[version].get("min_box_px", 0):
+                        continue  # v3: a floor item, not a monster (v2 engagement 25)
                     if loot1.in_ui(*f1.centre(b)):
                         continue
                     if any(t_mono - td < DROP_S and max(abs(dc[0] - c[0]), abs(dc[1] - c[1])) <= 2
@@ -390,13 +399,19 @@ def run(version: int, minutes: float, seed: int) -> int:
                         # FRESH selection: a frame captured after the GM stands, cells from the
                         # settled position (v1 kept a cell reckoned while walking: 15 / 28 failed)
                         t_stop = r.ns()
-                        end_w = time.monotonic() + 1.5
+                        need = PARAMS[version].get("stable_frames", 1)
+                        end_w = time.monotonic() + 1.0 + 0.6 * need
                         fresh: list[Any] = []
                         while time.monotonic() < end_w:
-                            got_f = [f for f in sampler.since(max(0, len(sampler.frames) - 3))
+                            got_f = [f for f in sampler.since(max(0, len(sampler.frames) - 4))
                                      if f[0] > t_stop]  # fmt: skip
-                            if got_f:
+                            if len(got_f) >= need:
                                 fresh = got_f[-1][1]
+                                if need > 1:  # v3: only boxes seen in the frame before as well
+                                    prev = got_f[-2][1]
+                                    fresh = [b for b in fresh if any(
+                                        np.hypot(*(np.array(f1.foot(b)) - f1.foot(q))) < 30
+                                        for q in prev)]  # fmt: skip
                                 break
                             time.sleep(0.05)
                         tg2 = targets_in(fresh, pos, time.monotonic())
@@ -562,6 +577,9 @@ def engage(k: int, tcell: Cell, here: Cell, version: int, sampler: Any, pr: Any,
     clicks = 0
     gx, gy, _, _ = r.game_region()
     result = "timeout"
+    park_at: tuple[float, float] | None = None
+    if prm.get("park_first") and box0 is not None and pr.park():
+        park_at = f1.foot(box0)  # parked at the selection: the background holds the target
     while True:
         new = sampler.since(kf)
         kf += len(new)
@@ -573,8 +591,8 @@ def engage(k: int, tcell: Cell, here: Cell, version: int, sampler: Any, pr: Any,
             sightings.append(dcm.Sighting(t, None if b is None else (b.x0, b.y0, b.x1, b.y1)))
             if got:
                 fo.gate = WIDE_PX if t_first is not None else f1.FOCUS_PX
-            elif fo.seen and (t - fo.seen[-1][0]) / 1e9 > 1.0:
-                fo.gate = WIDE_PX  # unseen 1 s: look wider before calling it lost
+            elif fo.seen and (t - fo.seen[-1][0]) / 1e9 > (0.5 if prm.get("lost_s") else 1.0):
+                fo.gate = WIDE_PX  # unseen: look wider before calling it lost
         now = r.ns()
         if (
             t_first is not None
@@ -588,8 +606,9 @@ def engage(k: int, tcell: Cell, here: Cell, version: int, sampler: Any, pr: Any,
             result = "timeout"
             break
         unseen = fo.unseen_s(now)
-        if t_first is None and ((not fo.seen and (now - t_sel) / 1e9 > LOST_S)
-                                or (unseen is not None and unseen > LOST_S)):  # fmt: skip
+        lost_s = prm.get("lost_s", LOST_S)
+        if t_first is None and ((not fo.seen and (now - t_sel) / 1e9 > lost_s)
+                                or (unseen is not None and unseen > lost_s)):  # fmt: skip
             result = "lost"
             break
         if t_first is None:
@@ -604,7 +623,18 @@ def engage(k: int, tcell: Cell, here: Cell, version: int, sampler: Any, pr: Any,
             if b is not None:
                 u, v = f1.centre(b)
                 t_try = r.ns()
-                if not loot1.in_ui(u, v) and pr.park():
+                parked_ok = True
+                if prm.get("park_first"):
+                    # v3: hover at once while the target is where the parked background shows
+                    # it; re-park only when it moved since
+                    fb = f1.foot(b)
+                    if park_at is None or np.hypot(fb[0] - park_at[0], fb[1] - park_at[1]) \
+                            >= f1.STILL_PX:  # fmt: skip
+                        parked_ok = pr.park()
+                        park_at = fb
+                else:
+                    parked_ok = pr.park()
+                if not loot1.in_ui(u, v) and parked_ok:
                     pr.hover(u, v)
                     shape = pr.read(u, v)["shape"]
                     age = round((r.ns() - fo.seen[-1][0]) / 1e6)
@@ -620,6 +650,7 @@ def engage(k: int, tcell: Cell, here: Cell, version: int, sampler: Any, pr: Any,
                         t_last = tc
                         fo.gate = WIDE_PX
                         pr.park()
+                        park_at = None  # the GM walks up: the scene scrolls, the background ages
                         split.to("fighting", time.monotonic())
                         note(f"SWORD -> attack click {clicks}", [b])
                     else:

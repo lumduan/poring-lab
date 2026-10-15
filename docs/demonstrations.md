@@ -5879,6 +5879,30 @@ failure cause, the selection. Small fixes for the others:
     - `chat_guard.start_run` per run;
     - the run stops if the start warp did not land within 3 cells.
   - Attempt 2: seed 20261104.
+- ➡️ **Attempt 2 (`20261015T224153-demo-hunt2`, 22:41:53-23:17:47, the full 35-min box):
+  engagement success 29 / 42 = 69.0 % (Wilson 54.0-80.9 %): FAIL** (and n < 60).
+  - Failures: no unit at the selected cell 6, hit but not killed 5, never hit 2.
+  - The GM's cell at every selection now matches the packets. The main failure is a STALE HOVER:
+    the first read came ~2.0-2.5 s after its box (park + two-motion hover + the client's ~0.8 s
+    cursor draw), read WALK because the monster had moved, and the target was then lost. One
+    selection was a floor item (two PICKUP reads).
+  - kills 31 (Poring 20, Lunatic 7, Drops 3, Pupa 1) = 51.8 / h; 69.5 s per kill; time to first
+    target 6.7 s; 11.7 targets / 10 min; coverage 32.9k cells; EXP 96 / 45.
+  - Time split: searching 816 s, fighting 585 s, looting 361 s, engaging 253 s, stopping 104 s,
+    checks 35 s. Walk clicks: 144 cursor-gated, 111 map+units.
+  - **Safety:** NPC contacts 0, dialogs 0, map changes 0, non-target hits 0, acts onto the GM 0;
+    unintended attack requests 1.
+
+**3.39.3 hunt@3 (pre-registered 2026-10-15 ~23:22, before its run).**
+- **MAIN, the PARK-FIRST HOVER.** The cursor is parked at the selection, so the background holds
+  the target where it stands. While the target stays within 6 px of that position, the hover goes
+  out at once (~1 s, not ~2 s). It re-parks only when the target moved, and after each attack
+  click (the GM walks up).
+- The selection takes only boxes seen in TWO consecutive frames after the stop (within 30 px),
+  and skips boxes under 16 px (floor items).
+- Before the first click, the target is looked for within 200 px once unseen 0.5 s, and is lost
+  after 5 s (was 3).
+- Seed 20261105, 40 min (more room for >= 60 engagements).
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,

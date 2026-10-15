@@ -107,15 +107,19 @@ def measure(sid: str, rec: Path | None) -> dict[str, Any]:
         if by["swing"] and by["idle"]:
             j = tp / len(by["swing"]) - fp / len(by["idle"])
             if best is None or j > best[0]:
-                best = (j, float(thr), tp, fp)
+                best = (float(j), float(thr), int(tp), int(fp))
     q = {lab: (np.percentile(v, [5, 25, 50, 75, 95]).round(2).tolist() if v else None)
          for lab, v in by.items()}  # fmt: skip
     out = {"session": sid, "frames": len(frames), "pairs": len(rows), "still_pairs": len(still),
            "n": {k: len(v) for k, v in by.items()}, "quantiles": q,
            "best_youden": None if best is None else {"j": round(best[0], 3), "thr": best[1],
                                                      "tp": best[2], "fp": best[3]}}  # fmt: skip
-    (d / "cue.json").write_text(json.dumps({**out, "rows": rows}))
+    (d / "cue.json").write_text(json.dumps({**out, "rows": rows}, default=_plain))
     return out
+
+
+def _plain(o: Any) -> Any:
+    return o.item() if hasattr(o, "item") else str(o)
 
 
 def main() -> int:
@@ -126,7 +130,7 @@ def main() -> int:
     m.add_argument("session")
     m.add_argument("--rec", type=Path)
     a = ap.parse_args()
-    print(json.dumps(measure(a.session, a.rec), indent=1))
+    print(json.dumps(measure(a.session, a.rec), indent=1, default=_plain))
     return 0
 
 
