@@ -5867,6 +5867,18 @@ failure cause, the selection. Small fixes for the others:
 - Continuous walk clicks need the last TWO detector frames clear by 60 px (was one frame, 40 px).
 - The per-engagement UI check is dropped. The 30-second check stays.
 - Seed 20261103, 35 min.
+- ➡️ **Attempt 1 (`20261015T223844-demo-hunt2`, 22:38:44) STOPPED at 42 s before any engagement:
+  kept, not scored.**
+  - The typing guard SKIPPED the start line `@warp prt_fild08 268 107` (the 3rd identical line in
+    a row across the runs), so the GM stayed at (122,78). The minimap cannot read there, and /where
+    was refused: the runs shared one /where budget, because hunt never called
+    `chat_guard.start_run`.
+  - Fixed, bug fixes within the version:
+    - a seeded start cell (within 25 of 268,107), so the line differs run to run, honestly, never
+      as a filler;
+    - `chat_guard.start_run` per run;
+    - the run stops if the start warp did not land within 3 cells.
+  - Attempt 2: seed 20261104.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,

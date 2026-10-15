@@ -77,6 +77,18 @@ PARAMS = {1: {"engage_max_s": 60.0, "max_clicks": 10, "gone_frames": 3, "gone_s"
               "unit_clear_px": 60.0, "clear_frames": 2}}  # fmt: skip
 
 
+def start_cell(area: Any, seed: int, near: Cell = START, within: int = 25) -> Cell:
+    """A seeded search-area cell within ``within`` of ``near`` (the open field)."""
+    import random
+
+    rng = random.Random(seed)
+    for _ in range(10_000):
+        c = (near[0] + rng.randint(-within, within), near[1] + rng.randint(-within, within))
+        if area[c[1], c[0]]:
+            return c
+    raise SystemExit("no start cell in the search area")
+
+
 def run(version: int, minutes: float, seed: int) -> int:
     import multiprocessing as mp
 
@@ -119,8 +131,8 @@ def run(version: int, minutes: float, seed: int) -> int:
     keep = [(w["x"], w["y"], w["span_x"], w["span_y"]) for w in warps]
     keep += [(n["x"], n["y"], 1, 1) for n in npcs]
     area = hc.search_area(ok, keep)
-    if not area[START[1], START[0]]:
-        raise f0.FarmStop(f"the start cell {START} is outside the search area")
+    start = start_cell(area, seed)  # a seeded cell: the @warp line differs run to run (the
+    # typing guard skips a 3rd identical line, and a filler line is never typed: hunt@2 attempt 1)
     cj = json.loads((r.ROOT / "packages/poring_dataset/src/poring_dataset/camera_rdp.json")
                     .read_text())  # fmt: skip
     camera = cam.camera_from_json(cj["camera"])
@@ -137,6 +149,7 @@ def run(version: int, minutes: float, seed: int) -> int:
     (out / "frames").mkdir(parents=True, exist_ok=True)
     log.start(backend=str(lock.backend), lock_seq=lock.seq, server="lab-rathena",
               rule=f"{RULE}@{version}", account="gm", map=MAP, minutes=minutes, seed=seed,
+              start=list(start),
               change=VERSIONS[version], area_cells=int(area.sum()), footprint=len(offsets),
               scored=True, immunity=why_imm, rec_dir=str(out))  # fmt: skip
     print(json.dumps({"session": sid, "version": version, "start": time.strftime("%H:%M:%S")}),
@@ -177,7 +190,7 @@ def run(version: int, minutes: float, seed: int) -> int:
             digits = selfpos.load_digit_templates()
             relocalise = w15.where_relocalise(wf.load_templates(wf.TEMPLATES_V2))
             band, noentry = rr.ec_band(), np.load(w5.NOENTRY_MASK)
-            world = w5.World(camera, gat, START)
+            world = w5.World(camera, gat, start)
             rig = loot1.Rig(agent, screen, pr, det, camera, gat, gat.walkable(), digits,
                             wt.load_weight_glyphs(r.ROOT / wt.DEFAULT_TEMPLATES),
                             loot1.chat_cue.load_cues(), operator_hud.sender())  # fmt: skip
@@ -263,7 +276,7 @@ def run(version: int, minutes: float, seed: int) -> int:
                     else:
                         pub.clear()
 
-            pos_box: list[Cell] = [START]  # the last believed cell, for /where's search
+            pos_box: list[Cell] = [start]  # the last believed cell, for /where's search
 
             def targets_in(boxes: Any, here: Cell, t_mono: float) -> list[tuple[Any, Cell]]:
                 out_ = []
@@ -284,7 +297,10 @@ def run(version: int, minutes: float, seed: int) -> int:
                 return out_
 
             # --- start ------------------------------------------------------------------------
-            r.gm(agent, screen, f"@warp {MAP} {START[0]} {START[1]}")
+            import chat_guard
+
+            chat_guard.start_run(f"hunt{version}-{sid}")  # this run's own /where budget
+            r.gm(agent, screen, f"@warp {MAP} {start[0]} {start[1]}")
             time.sleep(rr.SCENE_ENTRY_S)
             bench.close_chat(agent, screen)
             r.activate_client(agent, screen)
@@ -294,7 +310,9 @@ def run(version: int, minutes: float, seed: int) -> int:
             ev({"kind": "gm_state_before", **f0._brief(before)})
             sampler = loot1.Sampler(det)
             sampler.start()
-            pos = settle() or START
+            pos = settle() or start
+            if max(abs(pos[0] - start[0]), abs(pos[1] - start[1])) > 3:
+                raise f0.FarmStop(f"the start @warp did not land: at {pos}, not {start}")
             reck = hc.Reckoner(ms_cell)
             deadline = time.monotonic() + minutes * 60
             t_run0 = time.monotonic()
