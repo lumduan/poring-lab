@@ -226,8 +226,12 @@ def _shot(screen: Any, name: str) -> str:
     return str(path)
 
 
-def npc_click(npc: str) -> int:
+def npc_click(npc: str, reader: str = "robust2") -> int:
+    """``reader``: the cursor reader that FINDS the NPC by pixels (2026-10-15: the live gate's,
+    robust2, since 10-13; v3 read no TALK twice on Garnet or Henson on 10-10 and 10-15). The sensor
+    under test (the live npc_contact) is the same whichever reader finds the click."""
     import bench
+    import cursor_gate
 
     from poring_dataset import camera as cam
     from poring_dataset import gat as gatmod
@@ -243,12 +247,16 @@ def npc_click(npc: str) -> int:
     log = DemoLog(sid)
     lock = record_session.read_lock(r.ROOT / "state")
     log.start(backend=str(lock.backend), lock_seq=lock.seq, server="lab-rathena",
-              rule="safety-check/npc-click", npc=npc, account="gm")  # fmt: skip
+              rule="safety-check/npc-click", npc=npc, reader=reader, account="gm")  # fmt: skip
     t_first = r.ns()
     t_click: int | None = None
     shots: list[str] = []
     with r.session("rule:safety-check") as (agent, screen):
-        pr = w10.Prober9(agent, screen, refs)
+        pr = (
+            w10.Prober9(agent, screen, refs)
+            if reader == "v3"
+            else cursor_gate.prober(agent, screen, classifier=reader)
+        )
         r.gm(agent, screen, "@killmonster2")
         r.gm(agent, screen, f"@warp prt_church {sx} {sy}")
         time.sleep(rr.SCENE_ENTRY_S)  # may be a warp onto another map
@@ -423,6 +431,11 @@ def pickup_collect() -> int:
     log = DemoLog(st["session"])
     events, anchor = record_session.write_packets(log.dir, st["t_first"], r.ns())
     t = st["t_click"]
+    if t is None:  # the scan never read `pickup` twice: no click, a FAIL kept on record
+        out = {"session": st["session"], "act_pickup_from_us": 0, "pass": False, "why": "no click"}
+        log.finish(packet_events=len(events), packet_anchor=anchor, result=out)
+        print(json.dumps(out, indent=1), flush=True)
+        return 1
     win = [e for e in events if t - 500_000_000 <= int(e.get("t_mono_ns", 0)) <= t + 5_000_000_000]
     acts = [e for e in win if e.get("type") == "act" and int(e.get("src_gid", -1)) == GM_AID
             and e.get("kind") == "pickup"]  # fmt: skip
@@ -442,6 +455,11 @@ def npc_collect() -> int:
     log = DemoLog(st["session"])
     events, anchor = record_session.write_packets(log.dir, st["t_first"], r.ns())
     t = st["t_click"]
+    if t is None:  # no TALK read twice: no click, a FAIL kept on record
+        out = {"session": st["session"], "npc_contact": 0, "pass": False, "why": "no click"}
+        log.finish(packet_events=len(events), packet_anchor=anchor, result=out)
+        print(json.dumps(out, indent=1), flush=True)
+        return 1
     win = [
         e
         for e in events
@@ -915,6 +933,7 @@ def main() -> int:
                          "time, demonstrations 3.35)")  # fmt: skip
     a2 = sub.add_parser("npc-click")
     a2.add_argument("--npc", choices=sorted(NPCS), default="garnet")
+    a2.add_argument("--reader", choices=("robust2", "v3"), default="robust2")
     a3 = sub.add_parser("npc-key")
     a3.add_argument("code", help="KeyboardEvent.code, e.g. Enter or Escape")
     sub.add_parser("npc-collect")
@@ -957,7 +976,7 @@ def main() -> int:
     a4.add_argument("y", type=int)
     a = ap.parse_args()
     if a.cmd == "npc-click":
-        return npc_click(a.npc)
+        return npc_click(a.npc, a.reader)
     if a.cmd == "npc-key":
         return npc_key(a.code)
     if a.cmd == "npc-collect":

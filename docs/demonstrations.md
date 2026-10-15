@@ -86,6 +86,24 @@ the GM's auto re-login OK at 02:51:57):
 | `pickup_request` + `act` from us (`pickup`) | `20261010T031556-demo-safety-check-pickup` (an `@item` Knife dropped by an inventory drag, clicked where the cursor read pickup twice) | `pickup_request` 1, `pickup_result` 1, `floor_item_vanish` 1, 1 pickup act → **PASS** |
 | `npc_contact` | `20261010T031924-demo-npc-click-click-prontera` (npc-click@1's prontera CLICK pilot re-run, unscored; `safety_signal_check.py npc-click` got no TALK read twice on Garnet or Henson, the v3 colour weakness of 3.30 / 3.35) | **4 contacts**, each declined (4 `npc_choose` cancels, 19 `npc_say`), 0 attack → **PASS** |
 
+**Re-proven after the 2026-10-15 recreates** (Batt decision 7):
+- rathena: `recreate:rathena@120` 13:42:57-13:45:09 ICT (group 20's resetstat / resetskill; groups.yml
+  verified in the container). Worst capture stall 4.7 %.
+- sniffer: `recreate:sniffer@30` 13:45:24-13:46:39 (ADR-0007 Amendment C: the decoder CODE from the
+  host, `SNIFFER_COMMIT` 0b6fb16; the start-time self-test gates the start). Worst stall 6.2 %.
+  guarded_build's auto GM re-login was OK, and the interlock was green at 13:46:39.
+
+| signal | positive case | result |
+|---|---|---|
+| the scrub itself | `scrub_check.py --since` the sniffer recreate (1 capture file) | user **NOT FOUND**, password **NOT FOUND**; controls: character name FOUND, 1 `login_accepted` → **PASS** |
+| `attack_request` + `act` from us (`normal`) | `20261015T134754-demo-safety-check-monster-click --species red_plant` | 1 request, the GM's acts on the same target (gid 110015745) → **PASS** |
+| `pickup_request` + `act` from us (`pickup`) | attempt 1 `20261015T135025-demo-safety-check-pickup`: **no click**. The Knife landed 2 cells off (102,115) and EXPIRED after the server's 60 s floor-item lifetime, before the 24-cell scan (~2.3 s a cell, started ~19 s after the drop) reached it. Kept. Attempt 2 `20261015T135425-demo-safety-check-pickup`: drag, close and scan back to back | `pickup_request` 1, `pickup_result` 1, `act` pickup 1, `floor_item_vanish` → **PASS** |
+| `npc_contact` | `20261015T135559-demo-safety-check-npc-garnet` with the v3 reader: no TALK read twice, **no click** (the 10-10 weakness). Kept. `20261015T135734-demo-safety-check-npc-garnet` with the LIVE gate's reader (robust2, `--reader`, new) | **1 contact** (gid 110000895); the dialog closed by talk@1's safe decline (NEXT, NEXT, the menu cancelled, CLOSE: `npc_choose` 1 = the cancel, `npc_close_click` 1) → **PASS** |
+
+- Two instrument fixes, the same day: `pickup-collect` / `npc-collect` recorded a no-click attempt
+  as a crash; it is now a FAIL kept with `why: no click`. And `npc-click --reader` (default
+  robust2).
+
 - `demo_verify.py` prints `safety.our_acts` / `unsafe_acts` per session and labels the request counts
   with the instrument's history (63873bc).
 - ~~Still open: the banked-capture replay for the walk runs of 2026-10-07/08~~ ➡️ done 07:47–07:52

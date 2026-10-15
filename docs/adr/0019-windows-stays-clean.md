@@ -7,7 +7,7 @@ verdict_date: 2026-10-06
 verdict_ticket: null
 supersedes: null
 related: [ADR-0013, ADR-0016, ADR-0009, ADR-0014, ADR-0006, ADR-0004]
-next_action: "Principle in force (Batt, 2026-10-06). Part B and Part C DEFERRED (may never be built); the ADR-0013 indicator: server-side alternatives only. Watch retirement criteria ACCEPTED. Cleanup DONE 2026-10-06 (Part 1 17:31, Part 2 18:55; read back: 2 firewall rules = the 2 exes present, Sunshine backup gone). Pending: AVC policies revert at the next reboot that happens anyway; 2026-11-05 review (archive the needed _kro_exes_NEVER_RUN originals to the NAS with sha256, delete that folder, re-decide the other revert material); fix ro_agent's proof bar for the conhost admin console before the next elevated step. 2026-10-15: Smart App Control OFF (Batt; Operator changes): the read-back to 0 is pending, then the Sunshine restart check."
+next_action: "Principle in force (Batt, 2026-10-06). Part B and Part C DEFERRED (may never be built); the ADR-0013 indicator: server-side alternatives only. Watch retirement criteria ACCEPTED. Cleanup DONE 2026-10-06 (Part 1 17:31, Part 2 18:55; read back: 2 firewall rules = the 2 exes present, Sunshine backup gone). Pending: AVC policies revert at the next reboot that happens anyway; 2026-11-05 review (archive the needed _kro_exes_NEVER_RUN originals to the NAS with sha256, delete that folder, re-decide the other revert material); fix ro_agent's proof bar for the conhost admin console before the next elevated step. 2026-10-15: Smart App Control OFF (Batt; Operator changes): read back 0 at 13:40:02, the client launches again; the Sunshine restart check is Batt's at Friday's 17:00 S2 session."
 ---
 
 # ADR-0019: Windows stays clean
@@ -300,8 +300,14 @@ first rows on 2026-10-06 at 17:31. The table is the audit as found.
   - 11:06 ICT: `VerifiedAndReputablePolicyState` still 1. One launch at 11:07 was refused again
     (3033 at 11:07:07).
   - 12:16:27 ICT: still 1.
-  - SAC was NOT yet off at those times. The confirming read-back (0) and the next launch are
-    recorded here when they happen.
+  - SAC was NOT yet off at those times.
+  - ➡️ Batt then switched the "Smart App Control settings" subpage. **13:40:02 ICT:
+    `VerifiedAndReputablePolicyState` = 0 (OFF).**
+    - One launch at 13:40:46 reached the login screen in 6 s.
+    - The GM logged in at 13:41:25 (interlock green).
+    - guarded_build's auto re-login after the sniffer recreate launched it again, OK (13:46:13).
+    - **SAC is OFF, read back.** Sunshine's restart check is Batt's, at the start of the S2
+      session on Fri 2026-10-16 17:00.
 - **What it affects:** the lab client, Sunshine's next start, and any other unsigned exe on the
   PC. Batt's community client is not touched by the lab (ADR-0006).
 - **Sunshine survival check:** the standard user cannot restart `SunshineService` (its ACL gives
