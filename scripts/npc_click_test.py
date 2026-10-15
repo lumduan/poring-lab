@@ -26,11 +26,12 @@ gets STANDS stand cells 3-5 cells away (seeded), from which:
   with the windows gone -> STOP FOR A PERSON (exit 7; --resume continues the session).
 GM commands only through ro_agent.gm (the typing guard applies): @warp to a known stand cell, never
 /where (Batt's typing policy). Consecutive @warp lines always differ (the stands alternate).
-A plan that would STAND or WALK inside a warp's trigger span (L3 route.json), inside a script
-NPC's TOUCH area (L3 first_workflow.json), or onto a cell the SERVER's map cache does not let the
-GM stand on (the plan is built on the client's GAT; @warp tests the server's), or on a map any of
-those sources lacks, is REFUSED before any input (check_warps; never filtered, so a plan that
-passes is unchanged).
+The plan is drawn on the cells walkable in BOTH the client's GAT and the SERVER's map cache
+(Batt's decision 4, 2026-10-15: poring_dataset.walkable.both; a map the server's cache lacks is
+refused). A plan that would STAND or WALK inside a warp's trigger span (L3 route.json), inside a
+script NPC's TOUCH area (L3 first_workflow.json), or onto a cell the SERVER's map cache does not
+let the GM stand on (@warp tests the server's), or on a map any of those sources lacks, is REFUSED
+before any input (check_warps; never filtered, so a plan that passes is unchanged).
 Pixels in, input out: packets are never read here; npc_click_score.py judges the session offline.
 """
 
@@ -252,6 +253,20 @@ def control_stand(walkable: Any, npc_cells: Sequence[Cell], around: Cell | None,
     return rng.choice(cands) if cands else None
 
 
+def walk_mask(map_name: str, gat: Any, server: Any = None) -> Any:
+    """The plan's walkable cells (Batt's decision 4, 2026-10-15): walkable in BOTH the client's
+    GAT and the server's map cache (poring_dataset.walkable.both). ``server``: the server's grids
+    by map (default: rAthena's pre-renewal map cache). A map the server's cache lacks is REFUSED
+    (fail closed), as check_warps refuses it."""
+    from poring_dataset import walkable as wk
+
+    try:
+        grid = wk.server_grid(map_name) if server is None else server.get(map_name)
+        return wk.both(gat, grid)
+    except wk.MapSourceError as exc:
+        raise SystemExit(f"{map_name}: {exc} (refused)") from None
+
+
 def load_warps(map_name: str, kb_dir: Path = nc.KB_DIR) -> list[dict[str, Any]] | None:
     """The map's warp portals from L3 (route.json: cell + span; GPL-derived, local only); None when
     the KB does not list the map (unknown: the plan check then refuses)."""
@@ -310,9 +325,11 @@ def load_touch_areas(map_name: str, kb_dir: Path = nc.KB_DIR) -> list[dict[str, 
 def server_conflicts(plan: dict[str, Any], nopass: Callable[[int, int], bool],
                      clicks: bool = True) -> list[str]:  # fmt: skip
     """Every plan cell the SERVER does not let the GM stand on (its map cache's CELL_CHKNOPASS).
-    The plan is built on the CLIENT's GAT, and the two differ (alberta ~5,100 cells, morocc ~7,000):
-    @warp to such a cell says "Invalid coordinates" and puts the GM on a random free cell nearby
-    (2026-10-13, cursor@3's morocc: 131,116 -> 133,120 and 158,125 -> 154,118); empty = clear."""
+    The client's GAT and the server's cache differ on some maps (per map: scripts/map_agreement.py,
+    data/kb/map_agreement.json): @warp to such a cell says "Invalid coordinates" and puts the GM on
+    a random free cell nearby (2026-10-13, cursor@3's morocc: 131,116 -> 133,120 and 158,125 ->
+    154,118). Since decision 4 (2026-10-15) the plan is drawn on both sources (walk_mask), so this
+    is the guard on that draw, kept as a refusal; empty = clear."""
     cells = plan_cells(plan, clicks)
     return sorted({f"{what} {tuple(c)}" for what, c in cells if nopass(c[0], c[1])})
 
@@ -506,7 +523,7 @@ def run(
     camera, gat = ncs.load_map(map_name)
     npcs, cov = nc.load_l3_npcs(map_name)
     plan = make_plan(
-        map_name, npcs, gat.walkable(), camera, gat, seed, k, reps, near=near,
+        map_name, npcs, walk_mask(map_name, gat), camera, gat, seed, k, reps, near=near,
         near_radius=near_radius,
     )  # fmt: skip
     if not plan["npcs"]:
@@ -709,7 +726,7 @@ def main() -> int:
         plan = make_plan(
             a.map,
             npcs,
-            gat.walkable(),
+            walk_mask(a.map, gat),
             camera,
             gat,
             a.seed,

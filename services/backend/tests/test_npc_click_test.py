@@ -184,8 +184,9 @@ def test_a_plan_that_stands_or_walks_in_a_warp_span_is_refused_never_filtered(
 
 
 def test_a_plan_cell_the_server_will_not_stand_on_is_refused(plan: dict, tmp_path: Path) -> None:
-    # the plan is built on the client's GAT; @warp tests the SERVER's map cache (cursor@3's morocc,
-    # 2026-10-13: two stands walkable on the client were "Invalid coordinates" on the server)
+    # @warp tests the SERVER's map cache (cursor@3's morocc, 2026-10-13: two stands walkable on
+    # the client were "Invalid coordinates" on the server). Since decision 4 (2026-10-15) the plan
+    # is drawn on both sources (walk_mask); this refusal stays, the guard on that draw.
     stand, click, ctl = plan["npcs"][0]["stands"][0], plan["clicks"][0]["cell"], plan["control"]
     (tmp_path / "route.json").write_text(json.dumps({"warps": {"town": []}}))
     s_cells = {tuple(s) for n in plan["npcs"] for s in n["stands"]} | {tuple(ctl)}
@@ -202,6 +203,34 @@ def test_a_plan_cell_the_server_will_not_stand_on_is_refused(plan: dict, tmp_pat
             nct.check_warps("town", plan, tmp_path, clicks=True, server=bad, touch=[])
     with pytest.raises(SystemExit, match="map cache lacks"):
         nct.check_warps("town", plan, tmp_path, server={}, touch=[])
+
+
+def server_grid(nopass: set[tuple[int, int]], size: int = 120) -> Any:
+    """A real mapcache.MapGrid: walkable but for ``nopass`` (type 1) and its own last row/column."""
+    from poring_dataset import mapcache
+
+    types = np.zeros((size, size), np.uint8)
+    for x, y in nopass:
+        types[y, x] = 1
+    return mapcache.MapGrid("town", size, size, types.tobytes())
+
+
+def test_the_plan_is_drawn_on_cells_walkable_in_both_sources() -> None:
+    """Batt's decision 4 (2026-10-15): the client's GAT AND the server's map cache. A cell the
+    server refuses is never a stand, a control or a click; where the two agree the plan is the
+    plan on the client's GAT alone; a map the server's cache lacks is refused."""
+    g = flat_gat()
+    same = nct.make_plan("town", NPCS, nct.walk_mask("town", g, {"town": server_grid(set())}),
+                         camera(), g, 20261160, k=3)  # fmt: skip
+    assert same == nct.make_plan("town", NPCS, g.walkable(), camera(), g, 20261160, k=3)
+    taken = {tuple(c) for _, c in nct.plan_cells(same)}
+    grid = server_grid(taken)  # the server refuses every cell that plan stands on or clicks
+    mask = nct.walk_mask("town", g, {"town": grid})
+    assert not any(mask[y, x] for x, y in taken) and mask[60, 60] and not mask[119, 60]
+    other = nct.make_plan("town", NPCS, mask, camera(), g, 20261160, k=3)
+    assert other["clicks"] and nct.server_conflicts(other, grid.nopass) == []
+    with pytest.raises(SystemExit, match="lacks.*refused"):
+        nct.walk_mask("town", g, {})
 
 
 def test_a_stand_inside_an_npc_touch_area_is_refused(plan: dict, tmp_path: Path) -> None:
