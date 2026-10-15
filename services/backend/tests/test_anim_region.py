@@ -33,10 +33,72 @@ def test_lattice_stands_are_unique() -> None:
 
 def test_refine_stands_skips_measured_and_stays_in_radius() -> None:
     ok = np.ones((40, 40), dtype=bool)
-    out = ar.refine_stands([(20, 20)], ok, done=[(20, 20)], step=3, radius=6)
-    assert (20, 20) not in out
+    out = ar.refine_stands([(20, 20)], ok, done=[(19, 19)], step=3, radius=6, origin=(1, 1))
+    assert (19, 19) not in out
     assert all(max(abs(x - 20), abs(y - 20)) <= 6 for x, y in out)
-    assert (23, 20) in out and (14, 26) in out  # aligned to the stand
+    assert (22, 16) in out and (16, 25) in out  # ONE lattice for the map (x, y = 1 mod 3)
+    assert all(x % 3 == 1 and y % 3 == 1 for x, y in out)
+
+
+def test_refine_stands_overlapping_squares_share_one_lattice() -> None:
+    # amendment 3c: per-stand alignment never merged overlaps (prt_church: 851 stands)
+    ok = np.ones((60, 60), dtype=bool)
+    one = ar.refine_stands([(20, 20)], ok, done=[], step=3, radius=12)
+    two = ar.refine_stands([(20, 20), (21, 22)], ok, done=[], step=3, radius=12)
+    # the default origin (4, 4): x, y = 1 mod 3; [8, 32] holds 8 points per axis
+    assert len(one) == 64
+    # (21, 22) widens the union to x 8-33, y 8-34: one more row, not a second square's 64
+    assert len(two) == 8 * 9 and len(set(two)) == len(two)
+
+
+def test_refine_stands_stays_on_ok_cells() -> None:
+    ok = np.zeros((40, 40), dtype=bool)
+    ok[:, :20] = True  # the scope: the left half only
+    out = ar.refine_stands([(19, 20)], ok, done=[], step=3, radius=12, move_within=0)
+    assert out and all(x < 20 for x, _ in out)
+
+
+def test_unconfirmed_is_an_animated_view_measured_once() -> None:
+    hot, cold = np.ones((2, 2), dtype=bool), np.zeros((2, 2), dtype=bool)
+    assert ar.unconfirmed([hot]) and not ar.unconfirmed([cold])
+    assert not ar.unconfirmed([hot, hot]) and not ar.unconfirmed([hot, cold])
+
+
+def test_pass1_from_keeps_views_animated_in_both_measurements(tmp_path: Path) -> None:
+    import json
+
+    (tmp_path / "views").mkdir()
+    shape = (720, 1280)
+
+    def view(name: str, box: tuple[int, int, int, int] | None) -> None:
+        m = np.zeros(shape, dtype=bool)
+        if box:
+            m[box[1] : box[3], box[0] : box[2]] = True
+        np.savez_compressed(tmp_path / name, mask=np.packbits(m), shape=np.array(shape))
+
+    recs = []
+    for i, (stand, phase, box) in enumerate(
+        [
+            ((10, 10), "pass1", (700, 600, 720, 620)),  # animated ...
+            ((20, 20), "pass1", (900, 600, 920, 620)),  # animated once only (a transient)
+            ((30, 30), "pass1", None),  # still
+            ((10, 10), "pass1-recheck", (700, 600, 720, 620)),  # ... and again: kept
+            ((20, 20), "pass1-recheck", None),
+        ]
+    ):
+        view(f"views/{i:05d}.npz", box)
+        ev = {
+            "stand": list(stand),
+            "phase": phase,
+            "view": f"views/{i:05d}.npz",
+            "feet": [640.0, 400.0],
+            "windows": {},
+            "unsettled": False,
+        }
+        recs.append({"rule": ar.RULE, "outcome": {"evidence": ev}})
+    (tmp_path / "demo.jsonl").write_text("\n".join(json.dumps(r) for r in recs) + "\n")
+    stands, kept = ar.pass1_from(tmp_path)
+    assert stands == [(10, 10), (20, 20), (30, 30)] and kept == [(10, 10)]
 
 
 def test_exclusion_covers_self_park_and_windows() -> None:

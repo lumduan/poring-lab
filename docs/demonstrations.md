@@ -3428,6 +3428,31 @@ there, the strict count reported.
 >      - A dry re-count of the stopped views with the corrected boxes (fixed-state window
 >        positions; not used) keeps counted pixels in 29 of 38. Most views are therefore rechecked,
 >        and pass 2 will be large where a portal is in view.
+>      - ➡️ The re-run at a516b88 (`20261015T173259`) locates basic_info, hotbar and chat on every
+>        view. With the locate a stand takes **19.9 s** (18.6-20.2; ~3.3 s of template matching),
+>        so **pass 1 = 406.0 min ≈ 6.8 h** for the 11 maps (`plan`). Its pass 1: 39 stands, 0
+>        unsettled, 29 rechecked, **29 kept**.
+>    - ➡️ **3c. Pass 2 corrected before it ran (2026-10-15 17:55-18:10).** The re-run printed
+>      **pass 2 = 851 stands** for prt_church (~4.7 h plus rechecks). There were two defects:
+>      - each kept stand got its OWN step-3 lattice, aligned to itself, so overlapping squares
+>        never merged ("<= 81 stands around each such view before overlap" assumed they would);
+>      - pass 2 ran on every stand cell, not the scope's.
+>      - **Fixed:** pass 2 is ONE map-wide step-3 lattice (the same origin as pass 1) over the
+>        union of the radius-12 squares, on the scope's stand cells only. The squares choose the
+>        lattice POINTS; a point moves (<= 3 cells) only onto a stand cell.
+>      - **Reproduced offline from the session:** kept 29 of 39 (as live); the old rule 851 (as
+>        live); **the corrected rule 190 stands**, nearly the whole 1,325-cell scope at step 3,
+>        because the portals are seen from almost everywhere.
+>      - The run was STOPPED at 17:55:54 by SIGINT inside a grab, after 4 pass-2 views. Nothing was
+>        typed or held, and the client was judged clean afterwards. Its pass 1 and rechecks are
+>        complete and are USED.
+>      - **`measure --pass2-from SID`** runs pass 2 (and its rechecks) from an earlier session's
+>        complete pass 1 (refused when a kept view lacks its recheck).
+>      - **`--max-pass2 N`** ends a run after pass 1 when pass 2 would exceed N stands, so the count
+>        and the time reach Batt before a large pass 2. The pass-2 line now prints its estimate.
+>      - **`build` fails closed on unconfirmed views:** a view with counted pixels that was
+>        measured once (its recheck never ran, as in a stopped run) is dropped as `unconfirmed`. Its
+>        cells count neither as animated nor as measured. Before this, they counted as measured.
 > 4. **Client GAT ∩ server map cache** (Batt, decision 4: "every walk rule and planner uses only cells
 >    walkable in BOTH sources (intersection)").
 >    - walk@17's planner blocks, its harness hides, and its click step refuses

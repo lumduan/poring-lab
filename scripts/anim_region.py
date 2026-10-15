@@ -67,9 +67,10 @@ PARK = (1250, 380)  # client-area px: talk1 / walk6's rest point (right of the d
 PARK_HALF = 40  # the parked cursor animates too (the WALK arrow turns): its box is excluded
 SELF_HALF_W, SELF_UP, SELF_DOWN = 32, 120, 16  # the GM's own sprite around its projected feet
 UI_MARGIN = 4
-# MEASURED 2026-10-15 (prt_church, 37 stands: median 16.1 s, 15.8-16.6): the @warp line through
-# the UI gate and the typing guard costs ~9 s more than the 7 s first assumed (3.32 amendment 3a)
-SECONDS_PER_STAND = 16.1
+# MEASURED 2026-10-15 on prt_church: 16.1 s per stand without the window locate (37 stands), 19.9
+# s with it (session 20261015T173259, 39 stands, 18.6-20.2): the @warp line through the UI gate
+# and the typing guard, the settle, the park, 13 grabs, then ~3.3 s of window template matching
+SECONDS_PER_STAND = 19.9
 # The GM's fixed state always shows these (gm_state): a view that locates either one NOT is a UI
 # the exclusion cannot see, so the run stops for a person (fail closed; 2026-10-15, the prt_church
 # session 20261015T171004 located no window at all: the registry had no templates).
@@ -100,11 +101,13 @@ COVER_STRIDE = 8  # px: the measured-AREA sample grid of a view (a cell is ~30 p
 
 def lattice(ok: Any, step: int = STEP, move_within: int = MOVE_WITHIN,
             origin: tuple[int, int] | None = None,
-            bounds: tuple[int, int, int, int] | None = None) -> dict[str, list[Any]]:  # fmt: skip
+            bounds: tuple[int, int, int, int] | None = None,
+            where: Any = None) -> dict[str, list[Any]]:  # fmt: skip
     """Lattice points every ``step`` cells (first at step // 2, or aligned to ``origin``) inside
-    ``bounds`` (x0, y0, x1, y1, exclusive ends; default the whole grid). A point on an ``ok`` cell
-    is a stand; otherwise the nearest ok cell within ``move_within`` (Chebyshev; ties by y, x) is,
-    and the point is listed as moved; with none it is dropped. Stands are unique, in scan order."""
+    ``bounds`` (x0, y0, x1, y1, exclusive ends; default the whole grid) and, when given, on
+    ``where`` cells. A point on an ``ok`` cell is a stand; otherwise the nearest ok cell within
+    ``move_within`` (Chebyshev; ties by y, x) is, and the point is listed as moved; with none it is
+    dropped. Stands are unique, in scan order."""
     grid = np.asarray(ok, dtype=bool)
     h, w = grid.shape
     x0, y0, x1, y1 = bounds or (0, 0, w, h)
@@ -118,6 +121,8 @@ def lattice(ok: Any, step: int = STEP, move_within: int = MOVE_WITHIN,
     dropped: list[Cell] = []
     for y in ys:
         for x in xs:
+            if where is not None and not where[y, x]:
+                continue
             got = _nearest_ok(grid, x, y, move_within)
             if got is None:
                 dropped.append((x, y))
@@ -143,24 +148,24 @@ def _nearest_ok(grid: Any, x: int, y: int, within: int) -> Cell | None:
 
 def refine_stands(around: Iterable[Cell], ok: Any, done: Iterable[Cell],
                   step: int = REFINE_STEP, radius: int = RADIUS,
-                  move_within: int = MOVE_WITHIN) -> list[Cell]:  # fmt: skip
-    """Pass 2: a lattice every ``step`` cells within ``radius`` of each stand in ``around``
-    (aligned to that stand), minus the stands already measured. Unique, in order."""
-    seen = set(done)
-    out: list[Cell] = []
+                  move_within: int = MOVE_WITHIN,
+                  origin: tuple[int, int] = (STEP // 2, STEP // 2)) -> list[Cell]:  # fmt: skip
+    """Pass 2: ONE lattice every ``step`` cells, aligned to ``origin`` for the whole map, over
+    the union of the squares within ``radius`` of each stand in ``around``, on ``ok`` cells (the
+    caller passes the scope's), minus the stands already measured. Unique, in scan order.
+    (Amendment 3c, 2026-10-15: a lattice aligned to EACH stand never merged where the squares
+    overlap, so prt_church's pass 2 came to 851 stands; and it left the scope.)"""
+    grid = np.asarray(ok, dtype=bool)
+    h, w = grid.shape
+    area = np.zeros_like(grid)
     for sx, sy in around:
-        got = lattice(
-            ok,
-            step,
-            move_within,
-            origin=(sx, sy),
-            bounds=(sx - radius, sy - radius, sx + radius + 1, sy + radius + 1),
-        )
-        for c in got["stands"]:
-            if c not in seen:
-                seen.add(c)
-                out.append(c)
-    return out
+        area[max(0, sy - radius) : min(h, sy + radius + 1),
+             max(0, sx - radius) : min(w, sx + radius + 1)] = True  # fmt: skip
+    if not area.any():
+        return []
+    seen = set(done)  # the squares choose the POINTS; a point moves only onto an ok cell
+    got = lattice(grid, step, move_within, origin=origin, where=area)["stands"]
+    return [c for c in got if c not in seen]
 
 
 def exclusion(shape: tuple[int, int], feet: tuple[float, float] | None,
@@ -191,6 +196,12 @@ def windows_missing(found: Mapping[str, Any], names: Iterable[str] = ALWAYS_WIND
     """The always-open windows a view did not locate (or a registry has no template for);
     [] = the exclusion sees them all."""
     return [n for n in names if n not in found]
+
+
+def unconfirmed(masks: Sequence[Any]) -> bool:
+    """A stand measured ONCE whose view kept counted pixels: its recheck never ran, so it can
+    neither confirm animation nor count as measured (build drops it; fail closed)."""
+    return len(masks) == 1 and bool(np.asarray(masks[0]).any())
 
 
 def counted(mask: Any, excl: Any) -> Any:
@@ -377,7 +388,8 @@ def plan(map_name: str, step: int, routes: Mapping[str, set[Cell]] | None = None
             "est_minutes_pass1": round(n * SECONDS_PER_STAND / 60, 1)}  # fmt: skip
 
 
-def measure(map_name: str, step: int, refine_step: int, radius: int) -> int:
+def measure(map_name: str, step: int, refine_step: int, radius: int,
+            pass2_from: str | None = None, max_pass2: int | None = None) -> int:  # fmt: skip
     import bench
     import cursor_anim as ca
     import npc_click_score as ncs
@@ -400,6 +412,19 @@ def measure(map_name: str, step: int, refine_step: int, radius: int) -> int:
     if not sc.any():
         raise SystemExit(f"{map_name} is outside the pre-registered scope: refused")
     lat = lattice(ok & sc, step)
+    src: tuple[list[Cell], list[Cell]] | None = None
+    if pass2_from is not None:  # amendment 3c: pass 2 from an earlier session's complete pass 1
+        from poring_env.demo import DEMO_ROOT
+
+        src_dir = DEMO_ROOT / pass2_from
+        if json.loads((src_dir / "manifest.json").read_text()).get("map") != map_name:
+            raise SystemExit(f"{pass2_from} is not a {map_name} measurement")
+        src = pass1_from(src_dir)
+        views = [v for v in _views(src_dir) if v["phase"] == "pass1"]
+        again = {tuple(v["stand"]) for v in _views(src_dir) if v["phase"] == "pass1-recheck"}
+        if missing := [v["stand"] for v in views if not v["unsettled"] and v["counted"].any()
+                       and tuple(v["stand"]) not in again]:  # fmt: skip
+            raise SystemExit(f"{pass2_from}'s pass 1 is incomplete (no recheck at {missing[:5]})")
     # the UI gate's template set for the lock's path (rdp / a proven s2): a registry WITHOUT
     # templates locates nothing, and the window exclusion would silently be off
     reg = ug._registry(ug._require_ready())
@@ -411,7 +436,8 @@ def measure(map_name: str, step: int, refine_step: int, radius: int) -> int:
     (log.dir / "views").mkdir(exist_ok=True)
     log.start(rule=RULE, map=map_name, step=step, refine_step=refine_step, radius=radius,
               scope=why, route_problems=problems, stands=len(lat["stands"]), moved=lat["moved"],
-              dropped=lat["dropped"], commit=_commit(), park=list(PARK))  # fmt: skip
+              dropped=lat["dropped"], commit=_commit(), park=list(PARK),
+              pass2_from=pass2_from, max_pass2=max_pass2)  # fmt: skip
     t_first = r.ns()
     templates = nd.load_templates(talk1.TEMPLATES)
     ended, code, k = "complete", 0, 0
@@ -473,19 +499,29 @@ def measure(map_name: str, step: int, refine_step: int, radius: int) -> int:
             return {**ev, "mask": np.asarray(mask, dtype=bool), "counted": cnt}
 
         try:
-            first_pass: dict[Cell, dict[str, Any]] = {}
-            for s in lat["stands"]:
-                first_pass[s] = one(tuple(s), "pass1")
-            confirmed = _recheck(first_pass, one, "pass1-recheck")
-            keep = [s for s, m in confirmed.items() if m.any()]
-            more = refine_stands(keep, ok, first_pass, refine_step, radius)
+            if src is None:
+                first_pass: dict[Cell, dict[str, Any]] = {}
+                for s in lat["stands"]:
+                    first_pass[s] = one(tuple(s), "pass1")
+                confirmed = _recheck(first_pass, one, "pass1-recheck")
+                done, keep = list(first_pass), [s for s, m in confirmed.items() if m.any()]
+                views = first_pass.values()
+                stats = {"pass1": len(first_pass),
+                         "unsettled": sum(bool(v["unsettled"]) for v in views),
+                         "rechecked": sum(not v["unsettled"] and bool(v["counted"].any())
+                                          for v in views)}  # fmt: skip
+            else:
+                done, keep = src
+                stats = {"pass1_from": pass2_from, "pass1": len(done)}
+            # pass 2 stays inside the scope (amendment 3c), one lattice for the map
+            more = refine_stands(keep, ok & sc, done, refine_step, radius)
             # amendment 3a: the pass-2 count is reported after pass 1, BEFORE pass 2 runs
-            views = first_pass.values()
-            print(json.dumps({"map": map_name, "pass1": len(first_pass),
-                              "unsettled": sum(bool(v["unsettled"]) for v in views),
-                              "rechecked": sum(not v["unsettled"] and bool(v["counted"].any())
-                                               for v in views),
-                              "kept": len(keep), "pass2": len(more)}), flush=True)  # fmt: skip
+            print(json.dumps({"map": map_name, **stats, "kept": len(keep), "pass2": len(more),
+                              "est_minutes": round(len(more) * SECONDS_PER_STAND / 60, 1)}),
+                  flush=True)  # fmt: skip
+            if max_pass2 is not None and len(more) > max_pass2:
+                ended = f"complete:pass1_only (pass 2 = {len(more)} stands > {max_pass2})"
+                more = []
             second: dict[Cell, dict[str, Any]] = {}
             for s in more:
                 second[s] = one(s, "pass2")
@@ -498,6 +534,34 @@ def measure(map_name: str, step: int, refine_step: int, radius: int) -> int:
             log.finish(ended=ended, packet_events=len(events), packet_anchor=anchor)
     print(json.dumps({"session": sid, "ended": ended}))
     return code
+
+
+def _views(session_dir: Path) -> list[dict[str, Any]]:
+    """A session's measurements (evidence + its counted pixels, recomputed exactly as live)."""
+    recs = [json.loads(x) for x in (session_dir / "demo.jsonl").read_text().splitlines() if x]
+    out = []
+    sizes = _sizes()
+    for r in recs:
+        if r.get("rule") != RULE:
+            continue
+        m = r["outcome"]["evidence"]
+        z = np.load(session_dir / m["view"])
+        shape = tuple(int(v) for v in z["shape"])
+        mask = np.unpackbits(z["mask"])[: shape[0] * shape[1]].reshape(shape).astype(bool)
+        excl = exclusion(shape, tuple(m["feet"]), m["windows"], sizes)
+        out.append({**m, "counted": counted(mask, excl), "excl": excl})
+    return out
+
+
+def pass1_from(session_dir: Path) -> tuple[list[Cell], list[Cell]]:
+    """(the pass-1 stands, the KEPT ones) of an earlier session: a settled pass-1 view whose
+    counted pixels survive its pass1-recheck (the same rule as the live run's _recheck)."""
+    views = _views(session_dir)
+    first = {tuple(v["stand"]): v for v in views if v["phase"] == "pass1"}
+    again = {tuple(v["stand"]): v for v in views if v["phase"] == "pass1-recheck"}
+    kept = [s for s, v in first.items() if not v["unsettled"] and s in again
+            and bool((v["counted"] & again[s]["counted"]).any())]  # fmt: skip
+    return list(first), kept
 
 
 def _recheck(views: Mapping[Cell, Mapping[str, Any]], one: Callable[[Cell, str], dict[str, Any]],
@@ -549,6 +613,8 @@ def build(map_name: str, sessions: Sequence[str], out_dir: Path = OUT_DIR) -> di
 
     camera, gat = ncs.load_map(map_name)
     by_stand: dict[Cell, list[Any]] = {}
+    excls: dict[Cell, list[Any]] = {}
+    where: dict[Cell, list[dict[str, str]]] = {}
     measured: set[Cell] = set()
     dropped: list[dict[str, Any]] = []
     for sid in sessions:
@@ -568,14 +634,21 @@ def build(map_name: str, sessions: Sequence[str], out_dir: Path = OUT_DIR) -> di
             mask = np.unpackbits(z["mask"])[: shape[0] * shape[1]].reshape(shape).astype(bool)
             excl = exclusion(shape, tuple(m["feet"]), m["windows"], _sizes())
             by_stand.setdefault(tuple(m["stand"]), []).append(counted(mask, excl))
+            excls.setdefault(tuple(m["stand"]), []).append(excl)
+            where.setdefault(tuple(m["stand"]), []).append({"session": sid, "view": m["view"]})
+    for stand, masks in by_stand.items():
+        if unconfirmed(masks):  # animated once, never rechecked (a stopped run): fail closed
+            dropped += [{**w, "stand": list(stand), "why": "unconfirmed"} for w in where[stand]]
+            continue
 
-            def pick_here(px: Any, s: Cell = tuple(m["stand"])) -> Any:
-                return pick_cells(camera, gat, s, px)
+        def pick_here(px: Any, s: Cell = stand) -> Any:
+            return pick_cells(camera, gat, s, px)
 
-            measured |= coverage(pick_here, tuple(m["stand"]), excl)
+        for excl in excls[stand]:
+            measured |= coverage(pick_here, stand, excl)
     views: dict[Cell, set[Cell]] = {}
     for stand, masks in by_stand.items():
-        if len(masks) < 2:  # a view without animation was measured once: nothing to confirm
+        if len(masks) < 2:  # measured once: no animation (or unconfirmed, dropped above)
             continue
         both = masks[0] & masks[1]
 
@@ -653,6 +726,8 @@ def main() -> int:
     ap.add_argument("--map", help="the map (plan: omit it for every map in the scope)")
     ap.add_argument("--step", type=int, default=STEP)
     ap.add_argument("--refine-step", type=int, default=REFINE_STEP)
+    ap.add_argument("--pass2-from", help="measure: pass 2 only, from this session's pass 1")
+    ap.add_argument("--max-pass2", type=int, help="measure: stop after pass 1 above N stands")
     ap.add_argument("--radius", type=int, default=RADIUS)
     ap.add_argument("--session", action="append", default=[])
     ap.add_argument("--out", type=Path, default=OUT_DIR)
@@ -673,7 +748,7 @@ def main() -> int:
     if not a.map:
         raise SystemExit(f"{a.mode} needs --map")
     if a.mode == "measure":
-        return measure(a.map, a.step, a.refine_step, a.radius)
+        return measure(a.map, a.step, a.refine_step, a.radius, a.pass2_from, a.max_pass2)
     if a.mode == "build":
         if not a.session:
             raise SystemExit("build needs --session (the measure run's session ids)")
