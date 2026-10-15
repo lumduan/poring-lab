@@ -6095,7 +6095,7 @@ NOT USED** (`scripts/hp_bar.py`, on hunt@2 attempt 2's 10,837 recorded frames ag
     `lost` (engagement 4) was killed by a later engagement and still counts as killed: its gid
     died with our acts.
 
-**3.39.6 hunt@6 (pre-registered 2026-10-16 02:36, before its run): the SAFETY FIX for hunt@5's
+**3.39.6 hunt@6 (pre-registered 2026-10-16 02:30, the commit time 92c7b92, before its run): the SAFETY FIX for hunt@5's
 non-target hit**, built on hunt@5.
 - **MAIN, the focus stays on what could have been selected.**
   - The engagement's focus takes only boxes that pass the selection's pixel gates: the native
