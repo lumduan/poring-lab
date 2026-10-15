@@ -6040,6 +6040,30 @@ judge.
 - The bot's own box-to-cell projection was checked against mobs standing still: 68 of 95 exact
   (the rest within a few cells, mostly mobs that had moved).
 
+**A second attack-started cue, the monster HP BAR: MEASURED 2026-10-16 01:25-01:55, NOT PROVEN,
+NOT USED** (`scripts/hp_bar.py`, on hunt@2 attempt 2's 10,837 recorded frames against the packets).
+- Found in a hunt@2 frame: this client draws a bar under a monster once it has taken damage.
+  - It is 5 px tall and ~45-60 px wide: a dark border, a navy inside, the HP left as a fill
+    from the left (magenta; yellow when low).
+  - The GM's own HP / SP bars (green / blue) are told apart by colour.
+- Within 3 cells of the GM:
+  - in frames after our first act on the selected unit while it lives, a bar is found in 46.6 %
+    of them (958 of 2,060 frames);
+  - in frames before any act, a bar is found in 0.3 % of them (3 of 1,036);
+  - Youden J 0.46.
+- Per engagement, coverage runs from 0 / 81 to 114 / 119 frames. The first bar after the first
+  act came 0.04-22.7 s later (median ~2 s).
+  - Frames show the bar hidden behind the GM's sprite when the monster stands north of it
+    (likely; not measured separately).
+- **Verdict:**
+  - not usable as an attack-started gate (a bar is seen within 3 s in about half the
+    engagements);
+  - a candidate ALIVE signal: a bar next to the GM almost never shows without a damaged monster
+    there. That needs its own pre-registered measurement before any use.
+- The finder's colour rules were fixed twice on this same session before these numbers (the
+  magenta border, then the GM's own bar). So this is a development measurement, not a held-out
+  one.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
