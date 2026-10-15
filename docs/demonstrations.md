@@ -6127,7 +6127,7 @@ non-target hit**, built on hunt@5.
       client turned into attacks (+1,686 s cursor-gated, +1,898 s map+units). The known
       walk-click class (walk@10), about 1-2 per run in every version.
 
-**3.39.7 hunt@7 (pre-registered 2026-10-16 03:13, before its run).** The top time-loser: the
+**3.39.7 hunt@7 (pre-registered 2026-10-16 03:12, the commit time 60cd081, before its run).** The top time-loser: the
 search (53-69 % of every run).
 - **MAIN: dead reckoning at the GM's MEASURED speed, 150 ms a cell (was 200).**
   - hunt@5's move packets give 150 ms a cell, rAthena's default walk speed. Consecutive moves
