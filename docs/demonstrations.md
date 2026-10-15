@@ -5752,6 +5752,79 @@ server and licence). No code or assets copied.
   target.
   - The test: a deliberate positive case, a unit drawn under a UI window, ignored by both.
 
+### 3.39 hunt@N: SEARCH and ENGAGE like a player, engagement success >= 95 % (pre-registered 2026-10-15 ~22:10 ICT, BEFORE any hunt data; Batt's overnight brief, 2026-10-15 ~21:55: "A bot that FINDS monsters by itself and KILLS them like a player, with ENGAGEMENT SUCCESS > 95 %")
+
+**Fixed here for every version; never changed after any data.** Batt's definitions, as coded in
+`hunt_core.judge_engagement`:
+- **Engagement:** the runner SELECTS a target and logs `t_select` and the selected cell. It ends
+  when the bot judges the target dead (pixels) and has looted, or when it gives up: 60 s, 10
+  clicks, or the target lost before any click. Each give-up records its reason.
+- **The selected unit G (packets):** the `target_gid` of the first attack request in the
+  engagement, if that unit stood within 5 cells of the selected cell then. Else, the mob nearest
+  the selected cell at `t_select`, within 2 cells. With none, the engagement FAILS
+  (`no_unit_at_selection`).
+- **SUCCESS:** G died (`entity_vanish` reason 1) after `t_select`, with at least one attack act of
+  ours on G from `t_select` on.
+- **EXCLUDED, only with packet evidence:**
+  - G changed species (Pupa -> Creamy);
+  - G was killed with no act of ours;
+  - G vanished another way (reason not 0 or 1) before any hit of ours.
+- **Every other outcome is a failure.** Its reason (`never_hit`, `hit_not_killed`, ...) is
+  reported, with the bot's own reason.
+- **Rate and bar:** success over the counted (non-excluded) engagements, with a Wilson 95 %
+  interval. PASS for a version = success >= 95 % over >= 60 counted engagements in ONE run, AND
+  zero safety events, CONFIRMED by a second run of the same version with a fresh seed.
+- **Safety events (zero tolerance; each stops the run):** an NPC contact, an NPC dialog, a map
+  change, a non-target hit (species at hit time), an unknown UI state. Unintended attack requests
+  (outside every engagement window + 3 s) are counted and reported.
+- **Also reported per run:**
+  - time to first target (the loop start -> the first selection);
+  - targets found / 10 min (selections);
+  - kills / h (packets); seconds per kill; planned path cells per kill;
+  - coverage (distinct search-area cells in view);
+  - base / job EXP;
+  - the time split (searching, stopping, engaging, fighting, looting, checks);
+  - walk clicks by gate.
+- **Conditions:**
+  - prt_fild08, NATURAL spawns (no `@killmonster2` or `@monster`, ever);
+  - the GM immune (collect_v2's confirmed record for this login), in its fixed state before and
+    after (level reset);
+  - the UI gate on every typed line; HUD + route preview ON;
+  - 30-40 min, RDP;
+  - every run recorded (game-region JPEGs at 5 Hz, the HUD and route-preview logs) for the
+    attack-started cue and the morning MP4;
+  - each version briefly pre-registered below BEFORE its run.
+- **Recorded deviations, known before any data:**
+  - (1) prt_fild08's animated region is NOT built: its measurement yields the client tonight
+    (Batt). So decision 3's region gate is not applied in these runs.
+  - (2) Continuous walking (Batt's point 5): a click while the GM still moves cannot be
+    cursor-read (planning/search-targets.md section 6). So it is gated by the map and the detector
+    (option B):
+      the cell in the search area (stand cells, 6 cells clear of warps and NPCs, 20-cell border);
+      the point clear of the UI;
+      no detector unit within 40 px on a frame <= 0.35 s old.
+    Every click from a standstill stays robust2-cursor-gated.
+
+**3.39.1 hunt@1 (pre-registered with 3.39, before its run).** `scripts/hunt.py --version 1`. What
+changes against farm@1 (6.2), and why:
+- SEARCH (planning/search-targets.md): it replaces the random wander that cost farm@1 89 % of its
+  time.
+  - a coverage plan over the search area (16 x 16-cell tiles, staleness, the sightings memory with
+    stationary targets kept);
+  - A* routes with a waypoint every 8 cells;
+  - continuous walking (the next click when <= 3 cells remain by dead reckoning; the minimap
+    corrects it);
+  - detection all the time, a target in view interrupting the route.
+- ENGAGEMENT is PERSISTENT, so a selection either succeeds or ends with a recorded reason.
+  - The selected target is followed frame by frame (acquired within 140 px, then 90, widened to
+    200 once attacked).
+  - The first click: one robust2 SWORD read at the latest box's centre, on a target still for
+    0.5 s, or after 8 s its latest fresh box.
+  - Re-clicked the same way every 5 s while alive, up to 10 clicks or 60 s.
+  - Dead = no box within 200 px of its last feet for 3 frames and 1.5 s after an attack click.
+- farm@1's damage cue is dropped (not usable).
+- Seed 20261101, 35 min.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
