@@ -5835,6 +5835,38 @@ changes against farm@1 (6.2), and why:
   - An offline simulation on the real map, camera and footprint (no engagements): 49k area cells
     covered in 10 min, 83k of 89k in 30 min, nothing stuck.
   - Attempt 2 runs the same version, seed 20261102.
+  - ➡️ **Attempt 2 (`20261015T221003-demo-hunt1`, 22:10:03-22:34:39): STOPPED at 24.2 min (our
+    cell unknown).**
+    - The minimap reader fails at (122,78) with `uncovered_ink`, and /where failed too.
+    - **Engagement success 24 / 52 = 46.2 % (Wilson 33.3-59.5 %): FAIL.**
+    - The failures, by the packets: no unit at the selected cell 15, never hit 7, hit but not
+      killed 6. 24 of the 28 failures never got a click: the bot "lost" the target before hovering.
+      For no-unit-at-selection, the nearest mob was 3-20 cells from the selected cell (mostly 4-7).
+      The cell had been reckoned while walking and was projected after the stop to where nothing
+      stood. Hit-but-not-killed was mostly Pupas (427 HP): the 60 s limit, or a false pixel death.
+    - kills 22 (Poring 12, Lunatic 6, Pupa 2, Drops 2) = **54.5 kills / h** (farm@1: 6.0);
+      66 s per kill; time to first target 21.5 s; targets 21.5 / 10 min; coverage 23.8k cells;
+      EXP 72 / 41.
+    - Time split: fighting 446 s, searching 383 s, looting 271 s, engaging 247 s, checks 56 s,
+      stopping 52 s. Walk clicks: 69 cursor-gated, 40 map+units.
+    - **Safety:** NPC contacts 0, dialogs 0, map changes 0, non-target hits 0, acts onto the GM 0.
+      **1 unintended attack request**: 0.8 s after a map+units walk click (1 in 40), on a mob the
+      detector frame did not show. A target species; reported.
+
+**3.39.2 hunt@2 (pre-registered 2026-10-15 ~22:50, before its run).** One main change: the top
+failure cause, the selection. Small fixes for the others:
+- **MAIN, a FRESH SELECTION after the stop.** A monster seen while walking only stops the GM. The
+  target is then SELECTED on a detector frame captured after the GM stands (two equal minimap
+  reads), with cells from that settled position. The engagement starts from that box itself (no
+  re-projection). A stop with no target in that frame resumes the search and is not an
+  engagement (definition unchanged: an engagement is a selection).
+- Death needs 5 frames AND 2.5 s unseen (was 3 / 1.5).
+- 120 s / 20 clicks per engagement (was 60 / 10): Pupas.
+- **The settle fallback:** if the minimap cannot read while standing, the reckoned cell is used
+  when a good fix is under 60 s old; /where only after that.
+- Continuous walk clicks need the last TWO detector frames clear by 60 px (was one frame, 40 px).
+- The per-engagement UI check is dropped. The 30-second check stays.
+- Seed 20261103, 35 min.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,

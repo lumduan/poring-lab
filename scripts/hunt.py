@@ -53,12 +53,9 @@ OUT = Path("/dev/shm/poring-lab-tmp/hunt")
 REC_HZ = 5.0
 CHECK_EVERY_S = 30.0
 FRESH_S = 0.35
-UNIT_CLEAR_PX = 40.0
 MINIMAP_EVERY_S = 0.3
 DRIFT_CELLS = 3
 RECLICK_S = 5.0
-ENGAGE_MAX_S = 60.0
-MAX_CLICKS = 10
 MOVING_AFTER_S = 8.0
 LOST_S = 3.0
 REACQ_PX = 140.0
@@ -69,7 +66,15 @@ Cell = tuple[int, int]
 
 # what each version changes (pre-registered in demonstrations.md 3.39.N before its run)
 VERSIONS = {1: "search (coverage plan, look while walking, memory, continuous walking) + "
-               "persistent engagement (re-click every 5 s, bounded)"}  # fmt: skip
+               "persistent engagement (re-click every 5 s, bounded)",
+            2: "FRESH selection after the stop (the target chosen on a frame captured after the "
+               "GM stands, the engagement starts from that box) + stricter death (5 frames, "
+               "2.5 s) + 120 s / 20 clicks + a settle fallback + 60 px / 2-frame walk clearance "
+               "+ no per-engagement UI check"}  # fmt: skip
+PARAMS = {1: {"engage_max_s": 60.0, "max_clicks": 10, "gone_frames": 3, "gone_s": 1.5,
+              "unit_clear_px": 40.0, "clear_frames": 1},
+          2: {"engage_max_s": 120.0, "max_clicks": 20, "gone_frames": 5, "gone_s": 2.5,
+              "unit_clear_px": 60.0, "clear_frames": 2}}  # fmt: skip
 
 
 def run(version: int, minutes: float, seed: int) -> int:
@@ -196,7 +201,13 @@ def run(version: int, minutes: float, seed: int) -> int:
                     time.sleep(0.3)
                     b = read_position()
                     if a is not None and a == b and ok[a[1], a[0]]:
+                        last_fix[0] = time.monotonic()
                         return a
+                if version >= 2 and time.monotonic() - last_fix[0] < 60.0:
+                    # the minimap cannot read here (2026-10-15 22:34: "uncovered_ink" at
+                    # 122,78): the reckoned cell, when a good fix is under a minute old
+                    ev({"kind": "reckoned_fix", "cell": list(pos_box[0])})
+                    return pos_box[0]
                 world.position = pos_box[0]
                 got = relocalise(agent, screen, world, noentry, band)
                 bench.close_chat(agent, screen)
@@ -206,6 +217,7 @@ def run(version: int, minutes: float, seed: int) -> int:
                 raise f0.FarmStop("our cell is unknown (minimap and /where both failed)")
 
             last_check = [0.0]
+            last_fix = [0.0]
 
             def check(where: str) -> None:
                 prev = split._cat
@@ -322,6 +334,7 @@ def run(version: int, minutes: float, seed: int) -> int:
                     if mm is not None and ok[mm[1], mm[0]]:
                         if max(abs(mm[0] - pos[0]), abs(mm[1] - pos[1])) <= DRIFT_CELLS:
                             mm_off = 0
+                            last_fix[0] = time.monotonic()
                             if not moving:
                                 pos = mm
                         else:
@@ -354,9 +367,32 @@ def run(version: int, minutes: float, seed: int) -> int:
                         note(f"target at {tcell[0]},{tcell[1]}: stopping to engage", [box])
                         pos = settle(timeout=4.0) or pos
                         moving, path, pi = False, [], 0
-                    check(f"engagement {k}")
+                    box0 = None
+                    if version >= 2:
+                        # FRESH selection: a frame captured after the GM stands, cells from the
+                        # settled position (v1 kept a cell reckoned while walking: 15 / 28 failed)
+                        t_stop = r.ns()
+                        end_w = time.monotonic() + 1.5
+                        fresh: list[Any] = []
+                        while time.monotonic() < end_w:
+                            got_f = [f for f in sampler.since(max(0, len(sampler.frames) - 3))
+                                     if f[0] > t_stop]  # fmt: skip
+                            if got_f:
+                                fresh = got_f[-1][1]
+                                break
+                            time.sleep(0.05)
+                        tg2 = targets_in(fresh, pos, time.monotonic())
+                        if not tg2:
+                            ev({"kind": "no_target_after_stop", "seen": list(tcell)})
+                            split.to("searching", time.monotonic())
+                            continue
+                        box0, tcell = min(
+                            tg2, key=lambda bc: max(abs(bc[1][0] - pos[0]), abs(bc[1][1] - pos[1]))
+                        )
+                    else:
+                        check(f"engagement {k}")
                     eng = engage(k, tcell, pos, version, sampler, pr, rig, world, split, note,
-                                 frame, cell_of, settle, ev)  # fmt: skip
+                                 frame, cell_of, settle, ev, box0)  # fmt: skip
                     k += 1
                     engagements.append(eng)
                     if eng["result"] != "dead":
@@ -418,9 +454,13 @@ def run(version: int, minutes: float, seed: int) -> int:
                 elif reck.remaining(now) <= hc.LEAD_CELLS and pi < len(path) - 1:
                     cur = reck.where(now + 0.15) or pos
                     j, (u, v) = step_target(path, pi, cur)
-                    clear = (j is not None and fr and (r.ns() - fr[-1][0]) / 1e9 <= FRESH_S
+                    prm = PARAMS[version]
+                    recent = sampler.since(max(0, len(sampler.frames) - prm["clear_frames"]))
+                    clear = (j is not None and len(recent) >= prm["clear_frames"]
+                             and (r.ns() - recent[-1][0]) / 1e9 <= FRESH_S
                              and all(np.hypot(*(np.array(f1.centre(b)) - (u, v)))
-                                     > UNIT_CLEAR_PX for b in fr[-1][1]))  # fmt: skip
+                                     > prm["unit_clear_px"]
+                                     for _t, bs in recent for b in bs))  # fmt: skip
                     if clear and j is not None:
                         t_c = r.ns()
                         agent.click(gx0 + round(u), gy0 + round(v))
@@ -473,7 +513,7 @@ def run(version: int, minutes: float, seed: int) -> int:
 
 def engage(k: int, tcell: Cell, here: Cell, version: int, sampler: Any, pr: Any, rig: Any,
            world: Any, split: Any, note: Any, frame: Any, cell_of: Any, settle: Any,
-           ev: Any) -> dict[str, Any]:  # fmt: skip
+           ev: Any, box0: Any = None) -> dict[str, Any]:  # fmt: skip
     """ONE engagement, from the selection to the death (pixels) or a bounded give-up.
     The target is followed frame by frame: acquired within REACQ_PX of its projected cell, then
     within FOCUS_PX per frame, widened to WIDE_PX once attacked (the camera scrolls while the client
@@ -487,10 +527,15 @@ def engage(k: int, tcell: Cell, here: Cell, version: int, sampler: Any, pr: Any,
     t_sel = r.ns()
     eng: dict[str, Any] = {"k": k, "t_select": t_sel, "target_cell": list(tcell),
                            "here": list(here), "hovers": []}  # fmt: skip
+    prm = PARAMS[version]
     world.position = here
-    u0, v0 = (float(c) for c in world.project([tcell])[0])
-    fo = f1.Focus((u0, v0))
-    fo.gate = REACQ_PX
+    if box0 is not None:  # v2: the selected box itself, on a frame taken after the stop
+        fo = f1.Focus(f1.foot(box0))
+        fo.gate = f1.FOCUS_PX
+    else:
+        u0, v0 = (float(c) for c in world.project([tcell])[0])
+        fo = f1.Focus((u0, v0))
+        fo.gate = REACQ_PX
     sightings: list[Any] = []
     kf = max(0, len(sampler.frames) - 2)
     t_first: int | None = None
@@ -515,13 +560,13 @@ def engage(k: int, tcell: Cell, here: Cell, version: int, sampler: Any, pr: Any,
         now = r.ns()
         if (
             t_first is not None
-            and f1._gone(sightings, now)
+            and gone(sightings, now, prm["gone_frames"], prm["gone_s"])
             and fo.seen
             and fo.seen[-1][0] > t_first
         ):
             result = "dead"
             break
-        if (now - t_sel) / 1e9 > ENGAGE_MAX_S:
+        if (now - t_sel) / 1e9 > prm["engage_max_s"]:
             result = "timeout"
             break
         unseen = fo.unseen_s(now)
@@ -533,7 +578,7 @@ def engage(k: int, tcell: Cell, here: Cell, version: int, sampler: Any, pr: Any,
             due = t_try is None or (now - t_try) / 1e9 > RETRY_S
         else:
             due = (now - (t_last or 0)) / 1e9 > RECLICK_S and (now - (t_try or 0)) / 1e9 > 1.5
-        if due and clicks < MAX_CLICKS and fo.seen:
+        if due and clicks < prm["max_clicks"] and fo.seen:
             b = fo.still(now)
             if b is None and (now - fo.seen[-1][0]) / 1e9 <= FRESH_S and (
                     t_first is not None or (now - t_sel) / 1e9 > MOVING_AFTER_S):  # fmt: skip
@@ -581,6 +626,17 @@ def engage(k: int, tcell: Cell, here: Cell, version: int, sampler: Any, pr: Any,
     print(json.dumps({k_: eng.get(k_) for k_ in ("k", "result", "clicks", "target_cell")}),
           flush=True)  # fmt: skip
     return eng
+
+
+def gone(sightings: Any, now_ns: int, frames: int, secs: float) -> bool:
+    """Unseen ``frames`` frames AND ``secs`` seconds after the last sighting."""
+    tail, last_seen = 0, None
+    for s_ in reversed(sightings):
+        if s_.box is not None:
+            last_seen = s_.t_ns
+            break
+        tail += 1
+    return last_seen is not None and tail >= frames and (now_ns - last_seen) / 1e9 >= secs
 
 
 def judge(sid: str) -> dict[str, Any]:

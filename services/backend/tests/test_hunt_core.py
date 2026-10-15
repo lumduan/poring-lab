@@ -108,3 +108,15 @@ def test_judge_failures_and_exclusions() -> None:
     hit = walked + [_ev(3, type="act", src_gid=2000002, target_gid=7, kind="normal")]
     assert hc.judge_engagement(eng, hit)["why"] == "hit_not_killed"
     assert hc.judge_engagement(eng, [])["why"] == "no_unit_at_selection"
+
+
+def test_hunt_gone_needs_both_frames_and_time() -> None:
+    import hunt
+
+    from poring_dataset import deathcell as dcm
+
+    seen = [dcm.Sighting(0, (0, 0, 1, 1))]
+    miss = [dcm.Sighting(k * S // 2, None) for k in range(1, 6)]  # 5 frames, up to 2.5 s
+    assert not hunt.gone(seen + miss[:4], 3 * S, 5, 2.5)  # 4 frames only
+    assert not hunt.gone(seen + miss, 2 * S, 5, 2.5)  # 5 frames, 2.0 s
+    assert hunt.gone(seen + miss, 3 * S, 5, 2.5)
