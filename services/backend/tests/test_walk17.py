@@ -598,7 +598,7 @@ def test_b_the_harness_never_draws_a_start_inside_a_warp_area(mods: Any, warps: 
     assert w17.w5.PLAN_MAX == 48 and w17.PLAN_MAX == 48  # every other name is walk5's
 
 
-# --- amendment 3 (Batt 2026-10-15, decision 4): the server's NOPASS cells -----------------------
+# --- amendment 4 (Batt 2026-10-15, decision 4): the server's NOPASS cells -----------------------
 
 
 def test_3_every_plan_avoids_a_server_nopass_cell_the_portals_too(mods: Any, warps: Any) -> None:

@@ -47,7 +47,7 @@ C. LONG WALKS: chained legs through waypoints (Batt 13:42, tour@1).
 D. The HARNESS as on main (3.29a): walk@11's run with @killmonster2 only when CLEAN needs it, the
    typing guard, open_chat's re-check, the portal target fix, and the detector's batch log
    (detections.jsonl in the session).
-AMENDMENT 3 (Batt 2026-10-15, decision 4: "Client GAT vs server map cache: every walk rule and
+AMENDMENT 4 (Batt 2026-10-15, decision 4: "Client GAT vs server map cache: every walk rule and
 planner uses only cells walkable in BOTH sources (intersection)"): the cells the client's GAT calls
 walkable but the SERVER's map cache does not let a character stand on (poring_dataset.walkable;
 its last row and column included) join B's mechanisms, for EVERY intent:
@@ -120,7 +120,7 @@ SPENT = ("guard:where_budget", "guard:repeat")  # guard refusals that hold for t
 
 # B: warp areas
 ROUTE_KB = r.ROOT / "data/kb/route.json"  # L3 warps (local, never committed)
-# "nopass" (amendment 3): the cells the client calls walkable and the SERVER's map cache does not
+# "nopass" (amendment 4): the cells the client calls walkable and the SERVER's map cache does not
 WARPS: dict[str, Any] = {"map": None, "areas": [], "cells": frozenset(), "intent": WALK,
                          "nopass": frozenset()}  # fmt: skip
 ROUTE: dict[str, Any] = {"active": False, "intent": WALK}  # set while a route (leg) runs
@@ -280,7 +280,7 @@ def warp_areas(mapname: str, kb: Path | None = None) -> list[dict[str, Any]]:
 
 
 def server_nopass(mapname: str) -> frozenset[tuple[int, int]]:
-    """Amendment 3 (decision 4): the cells the client's GAT calls walkable but the SERVER's map
+    """Amendment 4 (decision 4): the cells the client's GAT calls walkable but the SERVER's map
     cache does not let a character stand on (poring_dataset.walkable.both False there). A map
     either source lacks fails CLOSED."""
     from poring_dataset import walkable as wk
@@ -288,7 +288,7 @@ def server_nopass(mapname: str) -> frozenset[tuple[int, int]]:
     try:
         gat, both = wk.load_both(mapname)
     except wk.MapSourceError as exc:
-        raise SystemExit(f"walk@17: {exc} -- amendment 3 cannot hold") from None
+        raise SystemExit(f"walk@17: {exc} -- amendment 4 cannot hold") from None
     ys, xs = np.nonzero(np.asarray(gat.walkable(), dtype=bool) & ~both)
     return frozenset(zip(xs.tolist(), ys.tolist(), strict=True))
 
@@ -314,7 +314,7 @@ def plan_intent() -> str:
 
 def warp_blocked(goal: Sequence[int]) -> frozenset[tuple[int, int]]:
     """B: the cells a plan to ``goal`` may not enter -- every warp area, except, for the portal
-    intent only, the area(s) holding the goal; and (amendment 3) every server-NOPASS cell, for
+    intent only, the area(s) holding the goal; and (amendment 4) every server-NOPASS cell, for
     every intent."""
     if WARPS["map"] is None:
         raise RuntimeError("walk@17: no map's warp areas are loaded (use_map): fail closed")
@@ -346,7 +346,7 @@ class _Walk5:
     world's `walkable` grid offers no warp-area cell, so walk@11's seeded start draw (a walkable
     cell within +-8 of the scene's start, no plan check) can never land inside a trigger area. The
     planner's grid is untouched (B blocks those cells already); the portal scene's world is
-    unchanged (its start search plans TO the portal). AMENDMENT 3 (decision 4): in EVERY scene the
+    unchanged (its start search plans TO the portal). AMENDMENT 4 (decision 4): in EVERY scene the
     world offers no server-NOPASS cell either."""
 
     def __getattr__(self, name: str) -> Any:
@@ -412,7 +412,7 @@ def click_step(pr: Any, w: Any, end: tuple[int, int], expect: str = WALK,
     """walk@15's click step (it notes where we stand, E). Before it, three refusals, all
     "no_safe_point" for walk@15's route loop (the next point; the cell re-planned around):
     B: a walk click whose cell lies inside a warp area (the portal click is the portal's);
-    amendment 3: a click (any intent) on a cell the SERVER does not let a character stand on;
+    amendment 4: a click (any intent) on a cell the SERVER does not let a character stand on;
     C: a cell farther than CLICK_MAX_SAFE server steps."""
     if expect == WALK and (area := warp_area_of(end)) is not None:
         VISITED.add((int(w.position[0]), int(w.position[1])))
@@ -570,7 +570,7 @@ _run12 = _rebind(w12.run)
 def run(scene: str, condition: str, n: int, seed: int, label: str, crowd: int,
         fix: str = "where") -> int:  # fmt: skip
     """walk@12's run (every exit finishes the session) with walk@15's unit memory, the map's warp
-    areas (B; an unlisted map refuses to start), its server-NOPASS cells (amendment 3; a map
+    areas (B; an unlisted map refuses to start), its server-NOPASS cells (amendment 4; a map
     either source lacks refuses to start) and a fresh /where state (A)."""
     if fix != "where":
         raise SystemExit("walk@17 relocalises by the minimap and where@3 only (fix='where')")
