@@ -67,6 +67,18 @@ PARK = (1250, 380)  # client-area px: talk1 / walk6's rest point (right of the d
 PARK_HALF = 40  # the parked cursor animates too (the WALK arrow turns): its box is excluded
 SELF_HALF_W, SELF_UP, SELF_DOWN = 32, 120, 16  # the GM's own sprite around its projected feet
 UI_MARGIN = 4
+# MEASURED 2026-10-15 (prt_church, 37 stands: median 16.1 s, 15.8-16.6): the @warp line through
+# the UI gate and the typing guard costs ~9 s more than the 7 s first assumed (3.32 amendment 3a)
+SECONDS_PER_STAND = 16.1
+# The GM's fixed state always shows these (gm_state): a view that locates either one NOT is a UI
+# the exclusion cannot see, so the run stops for a person (fail closed; 2026-10-15, the prt_church
+# session 20261015T171004 located no window at all: the registry had no templates).
+ALWAYS_WINDOWS = ("basic_info", "chat")
+# A window's EXCLUDED box is the window as drawn. The registry's basic_info anchor is its top
+# 220 x 140; the GM's fixed state shows it with the menu expanded below (the 4 x 5 icon panel,
+# measured to client x 218 / y 326 on 2026-10-15's prt_church frames), and an icon there blinks
+# (the inventory bag after new items): the stopped prt_church session shows it in every view.
+DRAWN_SIZE = {"basic_info": (220, 328)}
 OUT_DIR = ROOT / "data" / "kb" / "anim_regions"
 KB_FIRST_WORKFLOW = ROOT / "data" / "kb" / "first_workflow.json"
 Cell = tuple[int, int]
@@ -173,6 +185,12 @@ def exclusion(shape: tuple[int, int], feet: tuple[float, float] | None,
         sw, sh = sizes.get(name, (0, 0))
         box(ox - UI_MARGIN, oy - UI_MARGIN, ox + sw + UI_MARGIN, oy + sh + UI_MARGIN)
     return ex
+
+
+def windows_missing(found: Mapping[str, Any], names: Iterable[str] = ALWAYS_WINDOWS) -> list[str]:
+    """The always-open windows a view did not locate (or a registry has no template for);
+    [] = the exclusion sees them all."""
+    return [n for n in names if n not in found]
 
 
 def counted(mask: Any, excl: Any) -> Any:
@@ -356,7 +374,7 @@ def plan(map_name: str, step: int, routes: Mapping[str, set[Cell]] | None = None
     n = len(lat["stands"])
     return {"map": map_name, "scope": why, "scope_cells": int((ok & sc).sum()), "step": step,
             "stands": n, "moved": len(lat["moved"]),
-            "est_minutes_pass1": round(n * 7.0 / 60, 1)}  # fmt: skip
+            "est_minutes_pass1": round(n * SECONDS_PER_STAND / 60, 1)}  # fmt: skip
 
 
 def measure(map_name: str, step: int, refine_step: int, radius: int) -> int:
@@ -368,9 +386,9 @@ def measure(map_name: str, step: int, refine_step: int, radius: int) -> int:
     import ro_agent as r
     import rule_run as rr
     import talk1
+    import ui_gate as ug
 
     from poring_env import npc_dialog as nd
-    from poring_env import ui_anchors as ua
     from poring_env.demo import Action, DemoLog, DemoRecord, Intended, Outcome, new_session_id
 
     camera, gat = ncs.load_map(map_name)
@@ -382,8 +400,12 @@ def measure(map_name: str, step: int, refine_step: int, radius: int) -> int:
     if not sc.any():
         raise SystemExit(f"{map_name} is outside the pre-registered scope: refused")
     lat = lattice(ok & sc, step)
-    reg = ua.default_registry()
-    sizes = {n: s.size for n, s in reg.windows.items()}
+    # the UI gate's template set for the lock's path (rdp / a proven s2): a registry WITHOUT
+    # templates locates nothing, and the window exclusion would silently be off
+    reg = ug._registry(ug._require_ready())
+    if lost := windows_missing(reg.templates):
+        raise SystemExit(f"no window template for {lost}: the UI exclusion cannot run")
+    sizes = window_sizes(reg.windows)
     sid = new_session_id(f"anim-region-{map_name}")
     log = DemoLog(sid)
     (log.dir / "views").mkdir(exist_ok=True)
@@ -424,6 +446,9 @@ def measure(map_name: str, step: int, refine_step: int, radius: int) -> int:
                 t0 = r.ns()
                 mask, frames = ca.measure(grab)
                 windows = reg.locate(np.ascontiguousarray(frames[0][..., :3]))
+                if lost := windows_missing(windows):
+                    raise SystemExit(f"view at {stand}: {lost} not located, the UI exclusion "
+                                     "would miss it: a person first")  # fmt: skip
                 feet = tuple(float(v) for v in ncs.project_feet(camera, gat, stand, [stand])[0])
                 cnt = counted(mask, exclusion(mask.shape, feet, windows, sizes))
                 share = float(np.asarray(mask).mean())
@@ -454,6 +479,13 @@ def measure(map_name: str, step: int, refine_step: int, radius: int) -> int:
             confirmed = _recheck(first_pass, one, "pass1-recheck")
             keep = [s for s, m in confirmed.items() if m.any()]
             more = refine_stands(keep, ok, first_pass, refine_step, radius)
+            # amendment 3a: the pass-2 count is reported after pass 1, BEFORE pass 2 runs
+            views = first_pass.values()
+            print(json.dumps({"map": map_name, "pass1": len(first_pass),
+                              "unsettled": sum(bool(v["unsettled"]) for v in views),
+                              "rechecked": sum(not v["unsettled"] and bool(v["counted"].any())
+                                               for v in views),
+                              "kept": len(keep), "pass2": len(more)}), flush=True)  # fmt: skip
             second: dict[Cell, dict[str, Any]] = {}
             for s in more:
                 second[s] = one(s, "pass2")
@@ -569,10 +601,15 @@ def build(map_name: str, sessions: Sequence[str], out_dir: Path = OUT_DIR) -> di
     }
 
 
+def window_sizes(specs: Mapping[str, Any]) -> dict[str, tuple[int, int]]:
+    """Each window's excluded size: the registry's, or its drawn size (DRAWN_SIZE)."""
+    return {n: DRAWN_SIZE.get(n, tuple(spec.size)) for n, spec in specs.items()}
+
+
 def _sizes() -> dict[str, tuple[int, int]]:
     from poring_env import ui_anchors as ua
 
-    return {n: s.size for n, s in ua.default_registry().windows.items()}
+    return window_sizes(ua.default_registry().windows)  # sizes only: no templates needed
 
 
 def load_region(map_name: str, out_dir: Path = OUT_DIR) -> set[Cell] | None:

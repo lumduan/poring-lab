@@ -56,6 +56,24 @@ def test_counted_drops_excluded_pixels() -> None:
     assert int(ar.counted(m, ex).sum()) == 12
 
 
+def test_windows_missing_names_the_always_open_windows_a_view_did_not_locate() -> None:
+    # the fail-closed check: a registry without templates locates nothing (prt_church, 10-15)
+    assert ar.windows_missing({}) == ["basic_info", "chat"]
+    assert ar.windows_missing({"basic_info": (0, 0)}) == ["chat"]
+    assert ar.windows_missing({"basic_info": (0, 0), "chat": (0, 531), "hotbar": (230, 0)}) == []
+
+
+def test_window_sizes_use_the_drawn_basic_info_with_its_menu() -> None:
+    class Spec:
+        def __init__(self, size: tuple[int, int]) -> None:
+            self.size = size
+
+    got = ar.window_sizes({"basic_info": Spec((220, 140)), "chat": Spec((597, 93))})
+    assert got == {"basic_info": (220, 328), "chat": (597, 93)}
+    ex = ar.exclusion((720, 1280), None, {"basic_info": (0, 0)}, got)
+    assert ex[300, 100] and not ex[340, 100]  # the icon panel is out, the scene below it is in
+
+
 def test_view_cells_back_projects_sampled_pixels() -> None:
     mask = np.zeros((10, 10), dtype=bool)
     mask[2, 2] = mask[2, 3] = mask[4, 6] = True  # (3, 2) is off the stride-2 grid

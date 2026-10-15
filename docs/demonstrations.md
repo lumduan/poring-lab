@@ -3390,6 +3390,44 @@ there, the strict count reported.
 >      - Expected: about 3 to 4 h of client time in all. The pass-2 count is reported after each
 >        map's pass 1, before pass 2 runs.
 >      - The full-map version would have needed ~10 h of pass 1.
+>      - ➡️ **CORRECTED 2026-10-15 17:30, from the first live run: ~7 s per stand was wrong. It is
+>        16.1 s** (prt_church, 37 stands: median 16.1 s, range 15.8-16.6). The `@warp` line through the
+>        UI gate and the typing guard costs ~9 s more than assumed. **Pass 1 = 328.4 min ≈ 5.5 h**
+>        for the 11 maps (`anim_region.py plan` now uses the measured figure; per map: prt_church
+>        10.5, prt_fild08 75.1, new_1-1 51.5, new_1-2 28.2, new_1-3 44.8, new_1-4 53.9, alberta_in
+>        4.3, alberta 11.3, prontera 21.2, geffen 24.4, geffen_in 3.2 min). Each recheck also costs
+>        16.1 s. The "3 to 4 h in all" above is superseded: pass 1 alone is 5.5 h, and the rechecks
+>        and pass 2 come on top, known per map after its pass 1.
+>    - ➡️ **3b. Corrections before any USED measurement (2026-10-15 17:20-17:35; the method is
+>      otherwise unchanged):**
+>      - **The UI-window exclusion was OFF in the first run.** `measure` built its registry WITHOUT
+>        templates (`ui_anchors.default_registry()`), so it located no window on any view. That
+>        session (`20261015T171004-demo-anim-region-prt-church`, 38 pass-1 views) was STOPPED at
+>        17:20:40 by SIGINT inside the 13-grab phase (nothing typed or held). It is KEPT and NOT
+>        USED; its manifest says `stopped:KeyboardInterrupt`. The client was judged clean
+>        afterwards.
+>        - Fixed: the registry is the UI gate's own template set for the lock's path
+>          (`ui_gate._registry(ui_gate._require_ready())`).
+>        - Fail closed: a run refuses to start without templates for `basic_info` and `chat`.
+>          Both are always open in the GM's fixed state, so every view must locate both, or the run
+>          stops for a person. On 2026-10-15's frames the fixed registry locates basic_info (0,0),
+>          hotbar (230,0), chat (0,531) and, outdoors, the minimap.
+>      - **A window's excluded box is the window AS DRAWN.** The registry's basic_info anchor is its
+>        top 220 x 140. The fixed state shows it with the menu expanded, a 4 x 5 icon panel down to
+>        client y 326. One icon there (the inventory bag, at ~(94-123, 154-183)) changes in every
+>        stopped view at the same screen spot. So basic_info's box is 220 x 328 (`DRAWN_SIZE`).
+>      - **The pass-2 count is now printed BEFORE pass 2 runs** (`pass1 / unsettled / rechecked /
+>        kept / pass2`), as written above. The first code printed nothing between the passes.
+>      - **Checked, NOT changed: the big blobs are real animation, not a warp transient.** The
+>        largest stopped view (172,108; 48,211 px) is a WARP PORTAL's effect, the blue ring and its
+>        pulsing glow. A diagnostic `@warp` there (17:27:43, one typed line through the gate) then
+>        13-grab measurements WITHOUT re-warping counted 25,031 / 23,567 / 25,046 / 25,742 / 26,087
+>        px at +6 / 30 / 60 / 120 / 180 s. So re-warping for the recheck does not manufacture them.
+>        The screen-space union of the views looks huge only because the camera follows the GM:
+>        the same portal is drawn at a different place in each view.
+>      - A dry re-count of the stopped views with the corrected boxes (fixed-state window
+>        positions; not used) keeps counted pixels in 29 of 38. Most views are therefore rechecked,
+>        and pass 2 will be large where a portal is in view.
 > 4. **Client GAT ∩ server map cache** (Batt, decision 4: "every walk rule and planner uses only cells
 >    walkable in BOTH sources (intersection)").
 >    - walk@17's planner blocks, its harness hides, and its click step refuses
@@ -4751,6 +4789,33 @@ plans need (733, 734, 86, 59, 117, 726, 105, 84, 90, 92), and 0 problems. sha256
 | run | session | time | records | safety |
 |---|---|---|---|---|
 | B1 prontera `--near 70,356 --seed 20261190` | `20261013T225520-demo-npc-click-probe-prontera` | 22:51-22:55 | **0: STOPPED FOR A PERSON at the first stand** (below) | 0 / 0 / 0 / 0 |
+| B1' prontera `--near 148,326 --seed 20261190` | `20261015T140725-demo-npc-click-probe-prontera` | 10-15 14:07-14:55 | 1,000 of 1,000, `complete` | 0 / 0 / 0 / 0 |
+| B2 alberta_in `--near 53,43 --seed 20261191` | `20261015T151857-demo-npc-click-probe-alberta-in` | 10-15 15:18-15:42 | 479 of 490, `complete` (11 probes skipped by the harness's stale-park rule) | 0 / 0 / 0 / 0 |
+| B3 new_1-2 `--seed 20261192` | `20261015T154644-demo-npc-click-probe-new-1-2` | 10-15 15:46-17:01 | 1,554 of 1,554, `complete` | 0 / 0 / 0 / 0 |
+
+- Safety = attack_request / npc_contact / our act normal / our act pickup over each manifest's
+  window (`replay_safety.judge`), and no npc_say / wait / menu in it either. Every typed `@warp`
+  (9 / 5 / 13) has its map_change on the planned stand. A judged screenshot came before each run.
+- ➡️ **The truth step, 2026-10-15** (as fixed at 14:10 below; NOT SCORED until both labellers are
+  in):
+  - `cursor_eval.py live` on each session (B3's 17:01-17:09), then the ONE sheet set at 17:10:34:
+    `cursor2_truth.py sheets --judged robust2 --item-seed 20261208 --strip-seed 20261209` over the
+    three: **6,396 images on 128 pages** (and 2,056 strips on 206 pages, built, not labelled).
+  - The four scripts are unchanged since 3f8831d (`git log 3f8831d..HEAD` on them: 0 commits), and
+    so is `labels_v2.py`, which the scorer imports. In `poring_dataset`, f0ff35c only ADDS
+    `walkable.py`, which nothing in the scorer imports.
+  - Two blind labellers (cursor@3's brief, images only; A ascending, B descending) started
+    17:12 and 17:15.
+  - **The scorer's sprite inputs, made precise BEFORE any label exists** (the 14:10 note says
+    "`--sprites` the pre-built table"; `npc_render_measure.py click` takes the table's sprites as
+    two arguments):
+    - `--names`: the pre-built table's job -> file stem, restricted to its 77 jobs:
+      `/dev/shm/poring-lab-tmp/npc-render/names-3.38.json`, 76 jobs, sha256 `429a6f310a98...`.
+      722 (the guild flag) has no SPR / ACT and stays unsupported, as the table says.
+    - `--sprites`: the decoded files in `/dev/shm/poring-lab-tmp/sprites/data/sprite/npc`, from
+      the design decode (npc-render.md section 2; `n2-measure-names.json`). Its stems agree with
+      the table's client sprite for every shared job, and both files exist for all 76.
+    - So an NPC outside the table is reported, never rendered, as fixed.
 
 - ➡️ **B1 STOPPED (22:55), nothing hovered, nothing typed after the stop.** The first @warp put the
   GM on (73,348), inside the TOUCH area of a hidden script NPC (`#tour`, knight_skills.txt, at
