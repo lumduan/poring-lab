@@ -4824,6 +4824,21 @@ plans need (733, 734, 86, 59, 117, 726, 105, 84, 90, 92), and 0 problems. sha256
 
   - Decision 3's animated-region avoidance does NOT change these plans: they are cursor
     measurement probes (3.32 amendment 3, Claude's reading, for Batt to correct).
+- ➡️ **The truth step, fixed 2026-10-15 at 14:10 while B1' runs, before any B sheet exists** (3.38
+  says "cursor@2's labelling ... grab 0 of every probe"; these are the details it left open):
+  - `cursor_eval.py live` on each B session, then ONE sheet set over all three:
+    `cursor2_truth.py sheets --judged robust2 --item-seed 20261208 --strip-seed 20261209`.
+    Both seeds are unused before this.
+  - Two blind labellers with cursor@3's brief label the IMAGE pages only. B's bars use grab 0 of
+    every probe; the series pages are built by the tool but not labelled or used.
+  - Truth = the images both labellers agree on. The scorer's `--labels` is a merged file holding
+    ONLY the agreed indices; a disagreement is unclear and is left out. Their count is reported.
+  - The scorer: `npc_render_measure.py click --sprites` the pre-built table (sha256
+    `690537890ad2...`, re-checked 13:59 before B1').
+  - `npc_render_measure.py`, `npc_render.py`, `cursor2_truth.py` and `cursor_eval.py` are
+    unchanged since 3f8831d (git log).
+  - Reported apart (decision 3, (b)): B2's and B3's hovers inside a measured animated region, once
+    those maps are measured. B1' (prontera 148,326) lies outside the measurement scope.
 
 **Not decided here (Batt):**
 - the hit box itself (a box, against "not a box or a cell guess");
