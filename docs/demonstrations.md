@@ -3232,8 +3232,10 @@ there, the strict count reported.
 >        amendment 4). Each stand must pass npc_click_test's three checks (no warp span, no touch
 >        area, server-walkable). A lattice point that fails moves to the nearest cell that passes,
 >        within 3 cells, or is dropped (logged).
->      - **Per stand (cursor@3's measurement, unchanged):** `@warp`, a 2 s settle, the cursor parked by
->        two motions, then 13 grabs 0.2 s apart. `cursor_anim.animated_region`: a pixel differs from
+>      - **Per stand (cursor@3's measurement, unchanged):** `@warp`, ~~a 2 s settle~~ ➡️ the
+>        harness's settle (rule_run: 2.5 s, 7 s for the first warp onto the map; corrected
+>        2026-10-15 before any measurement), the cursor parked by two motions, then 13 grabs 0.2 s
+>        apart. `cursor_anim.animated_region`: a pixel differs from
 >        the first grab by more than 60 (summed BGR) in any later grab; grown 2 px.
 >      - **Excluded before back-projection:** the GM's own sprite box around the stand's projected
 >        point (fixed in the tool before its first run); the client's UI rectangles at their L2

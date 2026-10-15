@@ -7,7 +7,7 @@ verdict_date: 2026-10-06
 verdict_ticket: null
 supersedes: null
 related: [ADR-0013, ADR-0016, ADR-0009, ADR-0014, ADR-0006, ADR-0004]
-next_action: "Principle in force (Batt, 2026-10-06). Part B and Part C DEFERRED (may never be built); the ADR-0013 indicator: server-side alternatives only. Watch retirement criteria ACCEPTED. Cleanup DONE 2026-10-06 (Part 1 17:31, Part 2 18:55; read back: 2 firewall rules = the 2 exes present, Sunshine backup gone). Pending: AVC policies revert at the next reboot that happens anyway; 2026-11-05 review (archive the needed _kro_exes_NEVER_RUN originals to the NAS with sha256, delete that folder, re-decide the other revert material); fix ro_agent's proof bar for the conhost admin console before the next elevated step."
+next_action: "Principle in force (Batt, 2026-10-06). Part B and Part C DEFERRED (may never be built); the ADR-0013 indicator: server-side alternatives only. Watch retirement criteria ACCEPTED. Cleanup DONE 2026-10-06 (Part 1 17:31, Part 2 18:55; read back: 2 firewall rules = the 2 exes present, Sunshine backup gone). Pending: AVC policies revert at the next reboot that happens anyway; 2026-11-05 review (archive the needed _kro_exes_NEVER_RUN originals to the NAS with sha256, delete that folder, re-decide the other revert material); fix ro_agent's proof bar for the conhost admin console before the next elevated step. 2026-10-15: Smart App Control OFF (Batt; Operator changes): the read-back to 0 is pending, then the Sunshine restart check."
 ---
 
 # ADR-0019: Windows stays clean
@@ -104,7 +104,8 @@ Two sources, both read-only:
   places cannot be read from that shell.
 
 The PC is an **OptiPlex 3090**, Windows 11 26H2 build 26300.9457, with Smart App Control ON
-(LIVE).
+(LIVE). ➡️ Batt switched SAC OFF on 2026-10-15 ("Operator changes" below; the read-back was still
+pending when that entry was written).
 
 ### (1) Essential for streaming
 
@@ -278,7 +279,34 @@ first rows on 2026-10-06 at 17:31. The table is the audit as found.
 | thai-data-experiment.md: "the main client has no such override" | superseded the same day (both clients have it); pointer added |
 | ADR-0006: "Thai data.grf first" | measured: Thai first crashes the exe; Thai LAST works; pointer added |
 | environments.yaml `official-ro-thai` comment: the th-exe block rule as layer 1 | that rule was removed 2026-10-06 (the exe-scoped group replaced it); comment updated |
-| Smart App Control "irreversible" vs "re-enabling supported" (two docs) | not resolved: SAC is ON (LIVE), and nobody plans to switch it |
+| Smart App Control "irreversible" vs "re-enabling supported" (two docs) | not resolved: SAC is ON (LIVE), and nobody plans to switch it. ➡️ 2026-10-15: SAC refused the lab client, and Batt switched it OFF ("Operator changes" below). The re-enable question stays open (rathena-client.md: supported from 26200.8117 on, by Microsoft's FAQ) |
+
+## Operator changes
+
+### 2026-10-15: Smart App Control OFF (Batt)
+- **The change** (Batt, at the Dell): Windows Security > App & browser control > Smart App
+  Control: Off. Microsoft Defender stays on.
+- **The reason:** SAC blocked the unsigned lab client. Two launches from the desktop shortcut
+  (10:21, 10:28 ICT) started nothing. Code Integrity logged event 3033 at each: `cmd.exe` "attempted
+  to load ...\RO-rAthena\client\PoringLab.exe that did not meet the Enterprise signing level
+  requirements". Sunshine's exes are unsigned too (`Get-AuthenticodeSignature`: NotSigned), so its
+  next start was at the same risk (the S2 path).
+- **Correction to the reason as first stated** ("SAC's evaluation mode switched to enforcement"):
+  the record shows SAC ON (enforce, state 1) since at least 2026-09-30 (rathena-client.md; this
+  ADR's audit). The same exe (12,896,256 B, 2026-09-30) ran under it until 2026-10-13. SAC decides
+  by per-file-hash cloud reputation, so the likely trigger is a changed reputation verdict, not a
+  mode switch. Claude's first report made the mode-switch guess; it was wrong.
+- **Read-back (from the agent's standard shell):**
+  - 11:06 ICT: `VerifiedAndReputablePolicyState` still 1. One launch at 11:07 was refused again
+    (3033 at 11:07:07).
+  - SAC was NOT yet off at that time. The confirming read-back (0) and the next launch are recorded
+    here when they happen.
+- **What it affects:** the lab client, Sunshine's next start, and any other unsigned exe on the
+  PC. Batt's community client is not touched by the lab (ADR-0006).
+- **Sunshine survival check:** the standard user cannot restart `SunshineService` (its ACL gives
+  interactive users no start/stop right). The check is Batt's restart from his elevated console at
+  a safe moment (no stream running), then a read-back from the agent's shell: service Running, the
+  process up, no new 3033. A stream follows in the next S2 session.
 
 ## The `poring-lab watch` task: lab-only, and its retirement criteria (ACCEPTED, Batt 2026-10-06)
 

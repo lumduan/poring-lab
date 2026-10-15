@@ -37,6 +37,18 @@ standard Windows account, and no sleep or screen lock. See "Optional" below.
   and HKCU settings. The full recipe is in
   [docs/client/rathena-client.md](client/rathena-client.md).
 - Launch it **without elevation**.
+- **Smart App Control (Windows 11) must not block it.**
+  - SAC decides by each exe's cloud reputation (per file hash). The client exe and Sunshine's exes
+    are unsigned.
+  - The lab's client ran under SAC (ON, enforce) from 2026-09-30 to 2026-10-13. It was refused
+    from 2026-10-15: Code Integrity event 3033, "did not meet the Enterprise signing level
+    requirements". Nothing starts and no window opens.
+  - The lab's setting: **SAC OFF** (Batt, 2026-10-15; Microsoft Defender stays on). See ADR-0019,
+    "Operator changes".
+  - Read it back (a standard user can):
+    `(Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\CI\Policy').VerifiedAndReputablePolicyState`.
+    0 = off, 1 = on (enforce), 2 = evaluation.
+  - When a launch starts nothing, read `Microsoft-Windows-CodeIntegrity/Operational` first.
 
 ## 2. Its one-time config (static files; nothing runs)
 

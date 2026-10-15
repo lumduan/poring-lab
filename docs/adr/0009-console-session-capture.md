@@ -157,7 +157,10 @@ If S1 fails on input but passes on video, S2 is the next step. If video fails, V
   threat today; Batt's call.
 - **Paste and files are weaker in console mode** (typed paste only, no file transfer).
 - **Smart App Control is ON** on the PC. Unsigned installers (possibly the VNC servers) are blocked,
-  and switching SAC off is irreversible, so it is not planned for.
+  and switching SAC off is irreversible, so it is not planned for. ➡️ SUPERSEDED: re-enabling is
+  supported on this build (rathena-client.md, 2026-09-30), and on 2026-10-15 Batt switched SAC OFF
+  after it refused the unsigned lab client (ADR-0019 "Operator changes"). Sunshine's exes are
+  unsigned too.
 - The Phase 0 baselines are RDP-path numbers. Console mode needs its own.
 
 ## Alternatives considered

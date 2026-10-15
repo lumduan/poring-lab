@@ -82,7 +82,9 @@ kept. WARP output is deterministic: same session, same hash.
   2026-10-06: still On, build 26300.9457, 26H2, ADR-0019). It blocks new
   unsigned exes: WARP variants other than the first `PoringLab.exe` were refused (Code Integrity
   3033). ➡️ SUPERSEDED 2026-09-30: turning SAC off is **no longer** irreversible on this build. See
-  "UI text and Smart App Control" below.
+  "UI text and Smart App Control" below. ➡️ **2026-10-15: SAC refused the main `PoringLab.exe` too**
+  (3033 at each launch; it had run since 09-30), and Batt switched SAC OFF (ADR-0019 "Operator
+  changes"; read-back pending at the time of writing).
 
 ## Render performance (2026-09-30)
 
