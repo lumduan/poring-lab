@@ -96,6 +96,20 @@ skill_tree:
     cancel: [739, 396, 41, 20]
 camera:
   projection: {rdp: camera_rdp.json, s2: camera_console.json, status: unverified}
+map:
+  # Batt 2026-10-15 (decision 4): "Client GAT vs server map cache: every walk rule and planner uses
+  # only cells walkable in BOTH sources (intersection); record the mismatch per map as L2/L3
+  # knowledge." This build's own walkability is the map's GAT (read from the client's GRF into
+  # /dev/shm at run time, never committed; cell types 1 wall and 5 cliff are not walkable). A walk
+  # never uses it alone: it intersects it with the SERVER's map cache (L3 map.walkability, source
+  # client∩server; poring_dataset.walkable.both). Where they differ is server-specific, so the
+  # per-map counts live in L3 (scripts/kb_bindings.py) and the cells in data/kb/map_agreement.json
+  # (scripts/map_agreement.py build). Compared offline, file against file; no live demonstration.
+  walkability:
+    source: gat
+    not_walkable_types: [1, 5]
+    walk_uses: L3.map.walkability  # client AND server: never this source alone
+    status: unverified
 cue:
   # The walk marker drawn under a hovered walkable cell. The client draws it only on a SECOND
   # motion event at the spot (2026-10-07: one jump 0/18, a second move 18/18). An open chat does

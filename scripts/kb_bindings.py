@@ -5,7 +5,10 @@
 
 Writes data/kb/bindings/<server>.json, which poring_skills.resolve reads for the L3 keys an L1
 concept needs:
-- map.walkability: the GAT source (client data in /dev/shm);
+- map.walkability: client∩server (Batt's decision 4, 2026-10-15): a walk uses only cells walkable
+  in BOTH the client's GAT (client data in /dev/shm) and the server's map cache; per map, the two
+  sources' agreement counts (map_agreement.py; its cell lists stay in data/kb/map_agreement.json)
+  and the maps either source lacks;
 - warp.cells;
 - mob.stats;
 - skill.tree;
@@ -33,6 +36,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import kb_build  # noqa: E402
 import kb_route  # noqa: E402
+import map_agreement  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 KAFRA_FUNCS = "npc/kafras/functions_kafras.txt"
@@ -131,13 +135,42 @@ def leaf(**kw: Any) -> dict[str, Any]:
     return {"status": "generated", **kw}
 
 
+def walkability(gat_dir: Path, mapcache_dir: Path, kb: Path) -> dict[str, Any]:
+    """L3 map.walkability (decision 4): the source is client∩server, with the agreement counts of
+    every map that has BOTH a GAT and a server cache entry (no cell lists here) and the maps that
+    lack either (the GAT directory's and L3's maps)."""
+    doc = map_agreement.build(gat_dir, mapcache_dir, kb, cells=False)
+    return leaf(
+        source="client∩server",
+        decision=map_agreement.DECISION,
+        helper="poring_dataset.walkable.both",
+        counted=map_agreement.COUNTED,
+        dir=str(kb_route.ROOT / "data"),
+        gat_dir=str(gat_dir),
+        mapcache_dir=str(mapcache_dir),
+        mapcache_ref=doc["mapcache_ref"],
+        by_map=doc["maps"],
+        missing=doc["missing"],
+        cells="data/kb/map_agreement.json (scripts/map_agreement.py build; local)",
+    )
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     ap.add_argument("--server", default="lab-rathena")
     ap.add_argument("--out", type=Path, default=ROOT / "data" / "kb" / "bindings")
+    ap.add_argument("--gat-dir", type=Path, default=None,
+                    help="the client's GATs (default: poring_dataset.camera.GAT_DIR)")  # fmt: skip
+    ap.add_argument("--mapcache-dir", type=Path, default=None,
+                    help="the server map cache (default: poring_dataset _generated)")  # fmt: skip
     a = ap.parse_args()
+    from poring_dataset import mapcache
+    from poring_dataset.camera import GAT_DIR
+
+    a.gat_dir = a.gat_dir or GAT_DIR
+    mapcache_dir = a.mapcache_dir or mapcache.GENERATED
     ref = json.loads(kb_build.LOCK.read_text())["rathena_ref"]
     route = json.loads((ROOT / "data" / "kb" / "route.json").read_text())
     if route["ref"] != ref:
@@ -159,8 +192,8 @@ def main() -> int:
         "server": a.server, "rathena_ref": ref, "mode": route["mode"],
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         "never_commit": "GPL-derived (rAthena)",
-        "server_": {}, "map": {"walkability": leaf(source="gat", dir=str(kb_route.ROOT / "data"),
-                                                   gat_dir="/dev/shm/poring-lab-tmp/gat/data")},
+        "server_": {},
+        "map": {"walkability": walkability(a.gat_dir, mapcache_dir, ROOT / "data" / "kb")},
         "warp": {"cells": leaf(by_map=route["warps"])},
         "mob": {"stats": leaf(source="data/kb/mobs.json")},
         "skill": {"tree": leaf(by_job=route["skill_trees"])},
@@ -183,9 +216,12 @@ def main() -> int:
     a.out.mkdir(parents=True, exist_ok=True)
     path = a.out / f"{a.server}.json"
     path.write_text(json.dumps(out, indent=1, ensure_ascii=False))
+    walk = out["map"]["walkability"]
     print(json.dumps({"out": str(path), "npcs": len(npcs), "kafra_npcs": len(kafra_npcs),
                       "kafra_towns": len(towns), "kafra_menu_types": len(kmenus),
-                      "quiz_selects": len(quiz)}))  # fmt: skip
+                      "quiz_selects": len(quiz), "walkability_maps": len(walk["by_map"]),
+                      "walkability_missing": {k: len(v) for k, v in walk["missing"].items()}}
+                     ))  # fmt: skip
     return 0
 
 

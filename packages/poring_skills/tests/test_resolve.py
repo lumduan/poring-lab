@@ -59,3 +59,19 @@ def test_l4_has_no_resolver_yet_and_says_so(tmp_path: Path) -> None:
     (tmp_path / "lab-rathena.json").write_text(json.dumps({"npc": {"kafra": {"status": "g"}}}))
     with pytest.raises(Unsupported, match="L3 binding L3.kafra.destinations|L4"):
         resolve("nav.kafra_teleport", LAB, {"destination": "x"}, l3_root=tmp_path)
+
+
+def test_walkability_is_the_gat_here_and_both_sources_for_a_walk(tmp_path: Path) -> None:
+    """Batt's decision 4 (2026-10-15): L2 says this build's walkability is its GAT and that a walk
+    takes it AND the server's (L3 map.walkability: client∩server, per-map counts)."""
+    l2 = load_l2("kro-20211103-prere")["map"]["walkability"]
+    assert l2["source"] == "gat" and l2["walk_uses"] == "L3.map.walkability"
+    leaf = {
+        "status": "generated",
+        "source": "client∩server",
+        "by_map": {"m": {"client_only": 3, "both": 9}},
+        "missing": {"client_gat": []},
+    }
+    (tmp_path / "lab-rathena.json").write_text(json.dumps({"map": {"walkability": leaf}}))
+    got = resolve("nav.walk_to", LAB, l3_root=tmp_path)["L3.map.walkability"]
+    assert got["source"] == "client∩server" and got["by_map"]["m"]["client_only"] == 3
