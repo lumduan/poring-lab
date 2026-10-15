@@ -176,3 +176,26 @@ def test_walk_positions_step_along_the_walk_and_stop_where_stopped() -> None:
     eng = {"t_select": int(1.3 * S), "t_end": 10 * S, "target_cell": [13, 12]}
     assert hc.judge_engagement(eng, walk)["gid"] is not None  # the destination: within 2
     assert hc.judge_engagement(eng, walk, along_walk=True)["gid"] == 7  # at (13, 12) by then
+
+
+def test_hunt_fight_zone_is_an_ellipse_in_cells_around_the_gm() -> None:
+    from dataclasses import dataclass
+
+    import hunt
+
+    @dataclass
+    class B:
+        x0: float
+        y0: float
+        x1: float
+        y1: float
+
+    zone = (np.array([640.0, 362.0]), 34.0, 21.5, 2.5)  # the GM's feet; one cell's px
+
+    def box_at(u: float, v: float) -> B:  # feet = bottom centre
+        return B(u - 10, v - 30, u + 10, v)
+
+    assert hunt.in_zone(box_at(640 + 34, 362), zone)  # one cell east
+    assert hunt.in_zone(box_at(640, 362 + 2 * 21.5), zone)  # two cells south
+    assert not hunt.in_zone(box_at(640 + 3 * 34, 362), zone)  # three cells east
+    assert not hunt.in_zone(box_at(640 + 2 * 34, 362 + 2 * 21.5), zone)  # 2.8 cells diagonal

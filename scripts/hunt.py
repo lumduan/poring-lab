@@ -647,6 +647,14 @@ def engage(k: int, tcell: Cell, here: Cell, version: int, sampler: Any, pr: Any,
                            "here": list(here), "hovers": []}  # fmt: skip
     prm = PARAMS[version]
     world.position = here
+    zone = None
+    if prm.get("fight_zone"):  # v6: the GM's feet and one cell's px, for the fight gate
+        g0, ge, gs = (
+            np.asarray(q, dtype=float)
+            for q in world.project([here, (here[0] + 1, here[1]), (here[0], here[1] - 1)])
+        )
+        zone = (g0, float(abs(ge[0] - g0[0])), float(abs(gs[1] - g0[1])), prm["fight_zone"])
+    arrived = False
     if box0 is not None:  # v2: the selected box itself, on a frame taken after the stop
         fo = f1.Focus(f1.foot(box0))
         fo.gate = f1.FOCUS_PX
@@ -674,6 +682,18 @@ def engage(k: int, tcell: Cell, here: Cell, version: int, sampler: Any, pr: Any,
         new = sampler.since(kf)
         kf += len(new)
         for t, boxes in new:
+            if zone is not None and t_first is not None and t > t_first:
+                near_gm = [b_ for b_ in boxes if in_zone(b_, zone)]
+                if not arrived and any(
+                    np.hypot(f1.foot(b_)[0] - fo.last[0], f1.foot(b_)[1] - fo.last[1])
+                    <= f1.FOCUS_PX
+                    for b_ in near_gm
+                ):
+                    # v6: the GM reached the target: from now the target is the box next to the
+                    # GM (a click that never brought the GM there keeps v5's wide gate)
+                    arrived = True
+                if arrived:
+                    boxes = near_gm
             n0 = len(fo.seen)
             fo.update(t, boxes)
             got = len(fo.seen) > n0
@@ -817,6 +837,14 @@ def engage(k: int, tcell: Cell, here: Cell, version: int, sampler: Any, pr: Any,
     print(json.dumps({k_: eng.get(k_) for k_ in ("k", "result", "clicks", "target_cell")}),
           flush=True)  # fmt: skip
     return eng
+
+
+def in_zone(b: Any, zone: Any) -> bool:
+    """v6: the box's feet within ``zone[3]`` cells of the GM's feet (an ellipse in screen px:
+    one cell is zone[1] px across and zone[2] px down at the screen centre)."""
+    g0, cu, cv, cells = zone
+    fu, fv = f1.foot(b)
+    return bool(((fu - g0[0]) / cu) ** 2 + ((fv - g0[1]) / cv) ** 2 <= cells**2)
 
 
 def reacquire(sampler: Any, pick: Any, last_foot: Any, sel: Cell,
