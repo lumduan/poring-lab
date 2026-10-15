@@ -442,6 +442,7 @@ def run(minutes: float, seed: int) -> int:
             with contextlib.suppress(r.Stop):
                 after = _brief(gm_state.ensure_fixed(agent, screen, why=f"{RULE}:after",
                                                      out_dir=log.dir / "gm_state"))  # fmt: skip
+                bench.close_chat(agent, screen)  # the restore lines leave the chat input open
         ev({"kind": "gm_state_after", **after})
     events_f.close()
     events, anchor = record_session.write_packets(log.dir, t_first, r.ns())
@@ -516,26 +517,40 @@ def _fight(rig: Any, pr: Any, sampler: Any, track: Any, split: Split, note: Any,
 # --- the offline report (packets judge; nothing here acts) ----------------------------------------
 
 GM_AID = 2000002
+# the EXP a level needs, ONLY as the packets showed it (var22, 2026-10-15: Lv 1 needs 9 at the
+# fixed-state reset, Lv 2 needs 16 after farm@1's level-up). The server sends a level's need only
+# AFTER the level-up, so the first level-up's old need is taken from here. No job level-up seen yet.
+BASE_NEED_PRE_RE = {1: 9, 2: 16}
+JOB_NEED_NOVICE: dict[int, int] = {}
 EXP_VARS = {"base": ("base_exp", "var22"), "job": ("job_exp", "var23")}  # value, next-level need
 
 
-def exp_gained(stats: Sequence[dict[str, Any]], which: str) -> int:
+def exp_gained(stats: Sequence[dict[str, Any]], which: str, start: int | None = 0,
+               needs: dict[int, int] | None = None) -> int:  # fmt: skip
     """EXP gained from the stat_change stream (time order): positive deltas, and across a level-up
-    (the counter drops to the remainder) the rest of the old level's need plus the remainder."""
+    (the counter drops to the remainder) the rest of the old level's need plus the remainder.
+    ``start``: the counter before the first change (0 = the GM began in its fixed state, Lv 1 with
+    no EXP; None = count from the first value seen). ``needs``: level -> the EXP that level needs,
+    for a level-up whose need was never sent before it (the server sends the NEW need after)."""
     name, need_name = EXP_VARS[which]
-    cur: int | None = None
+    lvl_name = {"base": "base_level", "job": "job_level"}[which]
+    cur: int | None = start
     need: int | None = None
+    level: int | None = None
     gained = 0
     for e in stats:
         if e.get("name") == need_name:
             need = int(e["value"])
+        elif e.get("name") == lvl_name:
+            level = int(e["value"])
         elif e.get("name") == name:
             v = int(e["value"])
             if cur is not None:
                 if v >= cur:
                     gained += v - cur
-                elif need is not None:
-                    gained += max(0, need - cur) + v
+                else:
+                    old = need if need is not None else (needs or {}).get((level or 2) - 1)
+                    gained += max(0, (old or cur) - cur) + v
             cur = v
     return gained
 
@@ -552,7 +567,12 @@ def kills_from_packets(events: Sequence[dict[str, Any]]) -> dict[str, Any]:
         t = e.get("type")
         if t == "entity_appear":
             job[int(e["gid"])] = int(e.get("job", -1))
-        elif t == "act" and int(e.get("src_gid", -1)) == GM_AID and e.get("target_gid"):
+        elif (
+            t == "act"
+            and int(e.get("src_gid", -1)) == GM_AID
+            and e.get("target_gid")
+            and e.get("kind") != "pickup"
+        ):  # a pickup act's target is the FLOOR ITEM's id
             hit.add(int(e["target_gid"]))
             hit_job.setdefault(int(e["target_gid"]), job.get(int(e["target_gid"]), -1))
         elif t == "act" and int(e.get("target_gid", -1)) == GM_AID:
@@ -590,7 +610,9 @@ def report(sid: str) -> dict[str, Any]:
         "session": sid, "ended": man.get("ended"), "run_s": run_s,
         "kills_packets": k, "kills_per_hour": per_hour(k["kills"], run_s),
         "kills_pixels": man.get("kills"), "results": man.get("results"),
-        "exp": {"base": exp_gained(stats, "base"), "job": exp_gained(stats, "job")},
+        "exp": {"base": exp_gained(stats, "base", needs=BASE_NEED_PRE_RE),
+                "job": exp_gained(stats, "job", needs=JOB_NEED_NOVICE),
+                "assumes": "the GM began at Lv 1 with 0 EXP (its fixed state)"},
         "split_ranked_s": man.get("split"), "stops": man.get("stops"),
         "safety": {**replay_safety.judge(pk, int(t0), int(t1)),
                    "npc_dialog_events": sum(e.get("type") in ("npc_say", "npc_wait", "npc_menu")

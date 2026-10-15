@@ -360,6 +360,7 @@ def run(minutes: float, seed: int) -> int:
             with contextlib.suppress(r.Stop):
                 after = f0._brief(gm_state.ensure_fixed(agent, screen, why=f"{RULE}:after",
                                                         out_dir=log.dir / "gm_state"))  # fmt: skip
+                bench.close_chat(agent, screen)  # the restore lines leave the chat input open
         ev({"kind": "gm_state_after", **after})
     events_f.close()
     events, anchor = record_session.write_packets(log.dir, t_first, r.ns())

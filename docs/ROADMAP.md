@@ -276,7 +276,7 @@ install list; the RDP delivery ceiling was removed on 2026-10-01, Arm C.)
    watches live: HUD + route preview on, Watch only, time-boxed, unscored, the GM immune, safety
    from packets. Its report ranks what slowed it down BY TIME LOST, so the next improvements follow
    what Batt sees (CLAUDE.md "How we work"). **First: farm@0, 2026-10-15 evening** (prt_fild08:
-   detector -> walk@15 -> robust2 SWORD twice -> attack -> death from pixels -> PICKUP loot; 30 min).
+   detector -> walk@15 -> robust2 SWORD twice -> attack -> death from pixels -> PICKUP loot; 30 min). ➡️ **farm@0 (20:10) stopped at 11 min, 0 kills** (stale targets: it walked to where a Poring had been). **farm@1 (20:32, "engage like a player") ran 30 min: 3 kills = 6 / h**, safety 0 (demonstrations.md 6.1 / 6.2). Its losses, ranked: an empty field (89 % of the time spent finding a monster), the first click only walking (~30 s per kill), a false attack cue.
 
 ## Phases (exit gates are proposals; adjust as the research sharpens)
 

@@ -88,7 +88,8 @@ def test_exp_gained_counts_across_a_level_up() -> None:
         {"name": "job_exp", "value": 3},
     ]
     assert farm0.exp_gained(st, "base") == 15
-    assert farm0.exp_gained(st, "job") == 2
+    assert farm0.exp_gained(st, "job") == 3  # from the fixed state's 0: 1 then +2
+    assert farm0.exp_gained(st, "job", start=None) == 2
 
 
 def test_kills_from_packets_needs_our_hit_and_a_death() -> None:
@@ -117,3 +118,20 @@ def test_kills_from_packets_keeps_the_species_at_hit_time() -> None:
     ]
     k = farm0.kills_from_packets(ev)
     assert k["non_target_jobs_hit"] == [] and k["species_changed_after_hit"] == [(1008, 1018)]
+
+
+def test_exp_gained_takes_the_old_need_from_the_table_when_it_came_after() -> None:
+    # farm@1 (packets): 2, 4, then a level-up with only the NEW need (16) sent after it
+    st = [
+        {"name": "base_exp", "value": 2},
+        {"name": "base_exp", "value": 4},
+        {"name": "base_level", "value": 2},
+        {"name": "base_exp", "value": 1},
+        {"name": "var22", "value": 16},
+    ]
+    assert farm0.exp_gained(st, "base", needs=farm0.BASE_NEED_PRE_RE) == 2 + 2 + (9 - 4) + 1
+
+
+def test_pickup_acts_are_not_hits() -> None:
+    ev = [{"type": "act", "src_gid": farm0.GM_AID, "target_gid": 46, "kind": "pickup"}]
+    assert farm0.kills_from_packets(ev)["units_hit"] == 0

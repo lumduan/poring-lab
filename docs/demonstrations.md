@@ -5945,6 +5945,50 @@ and passes nothing, and its numbers only point at what to improve next.
   apart agree, up to 5 s), at each start and after every walk (wanders only).
 - Tests: `services/backend/tests/test_farm1.py` (focus stillness / hop / window, the size gate,
   the damage cue, the death rule) and test_farm0's metamorphosis case.
+- ➡️ **RAN 2026-10-15 20:32:31-21:02:44 (`20261015T203231-demo-farm1`): the full 30-minute box,
+  3 kills by the packets (2 Poring, 1 Lunatic) = 6.0 kills / h; base / job EXP 10 / 4.**
+  - The GM reached Base Lv 2 at 20:56:26 and was reset to Lv 1 at 21:03:09. Job EXP 4 remains:
+    `@joblevelup` cannot go below Lv 1.
+  - 3 items picked up (weight 818 -> 822; the inventory icon shows its new-items badge).
+  - The restore left the chat input open. It was closed by its known step, and the runner now
+    closes it.
+
+  | | farm@0 (650 s, reconstructed) | farm@1 (1,813 s, instrumented) |
+  |---|---|---|
+  | kills (packets) | 0 | 3 (2 Poring, 1 Lunatic) |
+  | kills / h | 0 | 6.0 |
+  | base / job EXP | 0 / 0 | 10 / 4 |
+  | engagements -> kills | 16 -> 0 | 6 -> 3 (2 hopped, 1 lost) |
+  | walking | >= 440 s (68 %) | 1,142 s (63 %), all wandering to find a monster |
+  | finding / re-acquiring | ~140 s (22 %) | 473 s (26 %) |
+  | checks (the UI gate's pixel check, ~2.4 s a cycle) | ~50 s (8 %) | 94 s (5 %) |
+  | fighting | ~10 s | 48 s |
+  | looting | ~8 s | 37 s |
+  | cursor (hover + read) | ~0 | 14 s (6 SWORD, 3 unknown) |
+  | focusing (waiting for a still target) | - | 5 s |
+
+  **What slowed farm@1 down, ranked by time lost:**
+  1. **An empty field: 1,615 s (89 %) went on finding a monster.** 78 of 84 cycles found no monster
+     and wandered. The packets put NO monster within 14 cells (the server's view) at the start of 76
+     of those 78. So it was scarcity, not detector misses. Each wander is walk@15 at its pace
+     (~15 s for 8-12 cells), inside a 61 x 56-cell box.
+  2. **The first click never attacked: ~30 s lost per kill.** One robust2 SWORD read and the click
+     at once made the client WALK to a cell next to the target (a `self_move_request` to an adjacent
+     cell) with no attack, 3 times out of 3. Each attack came only from the re-engage click 10-20 s
+     later. 2 of those 3 sent an `attack_request` within 3 s; the third kill's EXP arrived 1 s after
+     its click.
+  3. **The "attack started" cue (new white pixels above the box) was FALSE 3 / 3.** It fired
+     1.3-2.6 s after the first click, while the packets show no attack then. It is not a usable
+     signal as built.
+  4. The per-cycle UI check: 94 s.
+  - "Is one SWORD read enough?" No click went to a non-target or an NPC: 6 reads, 6 clicks, every
+    hit a target species. But a single read did not make the click an attack (point 2).
+  - **Safety (packets):** NPC contacts 0, NPC dialogs 0, acts onto the GM 0, non-target units hit 0,
+    species changes after a hit 0, map changes 0. 10 attack requests and 3 pickups, all on targets
+    and their drops. The size gate skipped nothing.
+  - The report's earlier "non-target hit" was the PICKUP acts: their target id is the floor item's.
+    Fixed: only attack acts count as hits. The EXP count now holds across a level-up, with the old
+    need taken from the needs the packets showed.
 
 ## Results
 
