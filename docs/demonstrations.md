@@ -4541,15 +4541,18 @@ plans need (733, 734, 86, 59, 117, 726, 105, 84, 90, 92), and 0 problems. sha256
   (73,348), then npc_say x4 + npc_wait, and NO npc_contact: the server ran it; we sent nothing.
   - **The dialog is LEFT OPEN for Batt.** The gate says "a person"; Claude does not close it. Its
     script (read from the pinned source) is two NEXT pages, then CLOSE, with no menu. Its only
-    state change is KNGT_SK 1 -> 2, for a character on that quest step.
+    state change is KNGT_SK 1 -> 2, for a character on that quest step. ➡️ **Gone since Batt
+    CLOSED THE CLIENT** (reported 2026-10-15 10:17 ICT), never clicked through. Nothing changed:
+    the GM has no KNGT_SK (DB, 2026-10-15).
   - **B1 cannot be re-run unchanged:** all 5 of its NPCs (72-78 x 352-358) sit in or beside that
     area, and the seeded stands land inside it. The harness now REFUSES such a plan (1d78ee5:
     stands and walked cells inside an L3 touch area). The stopped session's manifest said
     `ended: complete` (a bookkeeping bug, fixed in the same commit); it is KEPT and not scored.
   - **B2 (alberta_in) and B3 (new_1-2) are unaffected:** L3 lists no touch area on either map.
     B1's replacement is Batt's call; a proposal follows when it is planned.
-- ➡️ **PROPOSED amendment (NOT accepted; Batt decides): B1' = prontera `--near 148,326 --seed
-  20261190`** (B1's seed kept). Chosen on the PLAN ALONE, before any B1 hover (B1 has none), by
+- ➡️ ~~PROPOSED amendment (NOT accepted; Batt decides):~~ ➡️ **ACCEPTED by Batt 2026-10-15 10:17
+  ICT ("B1' accepted, then B2, B3"): B1' = prontera `--near 148,326 --seed 20261190`** (B1's seed
+  kept). It runs FIRST, then B2 and B3, unchanged. Chosen on the PLAN ALONE, before any B1 hover (B1 has none), by
   B1's own rule: the densest prontera L3 group away from cursor@2/@3's spot (156,191; Chebyshev
   >= 20) and from the 722 flags (> 12). Every candidate (73: each drawn L3 NPC's cell as --near) was
   planned with B1's seed, and those failing any of the three refusals were dropped.
@@ -4560,6 +4563,33 @@ plans need (733, 734, 86, 59, 117, 726, 105, 84, 90, 92), and 0 problems. sha256
   - The runners-up (816-814 probes): (29,200), (282,208). (55,350), 812 probes, is refused: one of
     its stands is inside #tour.
   - Search: `/dev/shm/poring-lab-tmp/warpcheck/b1_search.py` (local), 23:04-23:11.
+- ➡️ **2026-10-15 10:17-10:45 ICT: the client CANNOT BE RELAUNCHED; the B runs wait for Batt.**
+  Nothing was hovered, clicked or typed in game.
+  - **Before the launch:**
+    - a judged screenshot showed a bare desktop;
+    - ASSIST was on, and the interlock was red `no_session`, as expected with no client.
+    - The GM's saved cell is prontera (58,361) (DB `last_x/last_y`; last GM login 10-10 02:51 ICT),
+      not (73,348).
+    - That cell passes the three stand checks (`npc_click_test.check_warps`) and lies 6 cells
+      outside #tour's edge. So no touch dialog was expected at login, and the scoped close
+      Batt allowed (talk1.decline_all on #tour only) was never needed.
+  - **Two launches from the "Ragnarok Offline" shortcut (`ro_agent.py launch`, 10:21 and 10:28,
+    the second after the shell was minimised) started nothing.**
+    - No client process; the lab watcher killed nothing (0 KILLED lines). No Application error.
+    - The Code Integrity log has event 3033 at both moments: `cmd.exe` "attempted to load
+      ...\RO-rAthena\client\PoringLab.exe that did not meet the Enterprise signing level
+      requirements". These are the only such blocks in 5 days.
+    - **Smart App Control is ON** (`HKLM\...\CI\Policy VerifiedAndReputablePolicyState = 1`).
+    - `PoringLab.exe` is NotSigned (12,896,256 B, 2026-09-30). `sunshine.exe` is NotSigned too: it is
+      running now, but its next start is likely refused the same way, which would stop the S2 path.
+  - **A Windows setting, so a person's decision** (ADR-0019; the agent never changes Windows
+    security settings or works around them). No further launch was attempted.
+  - Deferred with it, because each ends in a GM login: the guarded `restart:rathena` (group 20,
+    decision 5) and `recreate:sniffer` (Amendment C). The sniffer shares rathena's network
+    namespace, so a rathena restart needs the sniffer step, and that step re-logs the GM by itself.
+    The §2a positive cases follow them.
+  - Read-only evidence: `/dev/shm/poring-lab-tmp/shots/relaunch-*.png` and
+    `/dev/shm/poring-lab-tmp/relaunch/diag*_crop.png`.
 
 **Not decided here (Batt):**
 - the hit box itself (a box, against "not a box or a cell guess");
