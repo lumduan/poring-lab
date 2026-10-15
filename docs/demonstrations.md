@@ -6216,6 +6216,54 @@ search (53-69 % of every run).
   - fewer no-unit failures;
   - engagements on still targets succeed more often than on moving ones;
   - throughput within ~10 % of hunt@8.
+- ➡️ **Result (`20261016T043716-demo-hunt9`, 04:37:16-05:17:58, the full 40-min box): success
+  19 / 28 = 67.9 % (Wilson 49.3-82.1 %): FAIL. The main prediction FAILED:** still 5 no-unit
+  failures, as in hunt@8.
+  - The still preference was taken on 24 of 28 engagements: 17 / 24 succeeded, against 2 / 4 on
+    moving targets. That is in the predicted direction, but the moving sample is far too small to
+    tell.
+  - Throughput: 28 engagements (hunt@8: 32, 12.5 % fewer: just outside the predicted 10 %).
+    no_target_after_stop rose to 16 (hunt@8: 5): the still wait finds fewer targets.
+  - Failures: no unit at the selected cell 5 (4 of them `lost` before any click), never hit 2,
+    hit but not killed 2. The secondary measure: 20 / 28 = 71.4 %.
+  - Bot results: dead 20, lost 7, timeout 1.
+  - kills 20 (Poring 13, Lunatic 6, Drops 1) = 30.0 / h; 120 s per kill; time to first target
+    137 s; 7.0 targets / 10 min; coverage 35.3k cells. Unfollowed clicks 8, drift stops 25.
+  - Time split: searching 1,389 s, fighting 392 s, engaging 244 s, looting 243 s, stopping 89 s,
+    checks 46 s.
+  - **Safety:** NPC contacts 0, dialogs 0, map changes 0, non-target hits 0.
+    - Unintended attack requests 2, on a Drops (a target species), after walk clicks.
+  - The GM was restored to its fixed state by the run (`gm_state_after`: restored, fixed). The
+    client was judged clean at 05:18, and nothing ran on it after.
+
+**3.39.10 The night in one place (2026-10-16 05:20, Claude; the numbers are the 3.39 judge's,
+`scripts/hunt.py judge SESSION`).**
+- **95 % was NOT reached, and nothing was confirmed.** No run reached 60 engagements: the most
+  was hunt@1's 52 at 46 %, and 12-42 per 40-min run after it.
+  - The best clean run is hunt@4 attempt 3: 23 / 29 = 79.3 % (Wilson 61.6-90.1 %).
+  - hunt@5's 14 / 14 had a safety event (a non-target hit), so it is not a candidate.
+- **What still fails, ranked** (hunt@4 attempt 3 through hunt@9, the 3.39 judge):
+  1. no unit at the selected cell: 21. Targets selected mid-walk. The bot killed most of them;
+     the secondary measure rescues 3 of 3, 1 of 3, 1 of 3, 4 of 5, 1 of 5 per run.
+  2. hit but not killed: 9. Lost or false pixel deaths; some were killed later by another
+     engagement.
+  3. never hit: 7. Lost before the first click: hidden, or walked out of reach.
+- **What costs the time, ranked** (hunt@8, the latest run without a new selection rule):
+  searching 51 %, looting 17 %, fighting 16 %, engaging 10 %, stopping 3 %.
+  - hunt@5-7's stuck loops (up to 13.5 min a run) are fixed by hunt@8's unstick.
+  - The field is the limit behind the search: 20-33 monsters entered the client's sight per
+    10 min. 60 engagements in 40 min would mean engaging about three quarters of them.
+- **Safety, all nine versions:** NPC contacts 0, dialogs 0, map changes 0.
+  - One non-target hit: hunt@5, a Creamy, one miss. The cause was understood (the focus took
+    any monster), fixed in hunt@6, and zero since (hunt@6-9).
+  - Unintended attack requests: 0-3 per run, all on target species, all from walk clicks the
+    client turned into attacks. That is the walk@10 class, not fixed tonight.
+- **The attack-started cue is NOT proven.** Two candidates were measured: the GM's swing (J
+  0.60-0.65) and the monster HP bar (J 0.46). Re-engagement stays the bounded SWORD-gated
+  re-click every 5 s.
+- **Held-out:** not due (no version passed twice). It also could not run: no other field in the
+  local KB's 59 spawn maps has only v1's five species. The nearest, pay_fild03 / prt_fild04 /
+  prt_fild06, each have 3 species outside them.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
