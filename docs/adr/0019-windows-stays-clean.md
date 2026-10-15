@@ -299,8 +299,9 @@ first rows on 2026-10-06 at 17:31. The table is the audit as found.
 - **Read-back (from the agent's standard shell):**
   - 11:06 ICT: `VerifiedAndReputablePolicyState` still 1. One launch at 11:07 was refused again
     (3033 at 11:07:07).
-  - SAC was NOT yet off at that time. The confirming read-back (0) and the next launch are recorded
-    here when they happen.
+  - 12:16:27 ICT: still 1.
+  - SAC was NOT yet off at those times. The confirming read-back (0) and the next launch are
+    recorded here when they happen.
 - **What it affects:** the lab client, Sunshine's next start, and any other unsigned exe on the
   PC. Batt's community client is not touched by the lab (ADR-0006).
 - **Sunshine survival check:** the standard user cannot restart `SunshineService` (its ACL gives
