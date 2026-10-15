@@ -6064,6 +6064,55 @@ NOT USED** (`scripts/hp_bar.py`, on hunt@2 attempt 2's 10,837 recorded frames ag
   magenta border, then the GM's own bar). So this is a development measurement, not a held-out
   one.
 
+- ➡️ **hunt@5 (`20261016T014714-demo-hunt5`, 01:47:14-02:27:48, the full 40-min box): success
+  14 / 14 = 100 % (Wilson 78.5-100 %), but n = 14, and A SAFETY EVENT: FAIL.**
+  - Bot results: dead 12, lost 1, timeout 1; every engagement killed its selected unit.
+  - **Safety: NON-TARGET HIT 1**, a Creamy (job 1018, gid 110019365; a Pupa that had
+    metamorphosed in an earlier run). One attack request and one act, damage 0 (a miss), inside
+    engagement 8. Also NPC contacts 0, dialogs 0, map changes 0; unintended attack requests 2.
+    The run did not stop: safety is counted from the packets afterwards, not live.
+  - **The cause (understood, from the packets and the engagement log):**
+    - Engagement 8's Poring died at +665.8 s, and the bot did not see it.
+    - After the first attack click the focus takes the nearest box of ANY monster within
+      200 px. It passes none of the selection's gates (no size gate: a Creamy is 51 x 53
+      native, over the 45 px gate).
+    - The Creamy walked into that radius. The focus moved onto it and kept the target "seen",
+      so no death was detected.
+    - At +672.9 s the periodic re-click read SWORD (any monster gives one) and clicked it:
+      attack request +674.7 s, a miss +674.8 s. The Creamy left our sight at +676.0 s.
+  - **The 2 unintended attack requests** (+1,086.6 / +1,087.8 s, a Lunatic) came from an APPROACH
+    walk click.
+    - The approach route ends ON the monster's cell, so its click went 2 cells from it. The
+      cursor read WALK; the monster moved in, and the client attacked.
+    - A target species, so not a stop event, but avoidable.
+  - kills 14 (Poring 9, Lunatic 5) = 21.0 / h; 171 s per kill; time to first target 85.5 s;
+    3.5 targets / 10 min; coverage only 18.5k cells (hunt@4 attempt 3: 46.9k).
+    - The search churned: 220 minimap drift corrections, each one stopping the GM (hunt@4
+      attempt 3: 92), and 272 re-plans.
+  - Time split: searching 1,654 s, fighting 357 s, stopping 162 s, looting 102 s, engaging 77 s,
+    checks 48 s. Detector ~3.6 fps.
+  - The re-acquisition (v5's main change) left no record of firing in the run's log. The one
+    `lost` (engagement 4) was killed by a later engagement and still counts as killed: its gid
+    died with our acts.
+
+**3.39.6 hunt@6 (pre-registered 2026-10-16 02:36, before its run): the SAFETY FIX for hunt@5's
+non-target hit**, built on hunt@5.
+- **MAIN, the focus stays on what could have been selected.**
+  - The engagement's focus takes only boxes that pass the selection's pixel gates: the native
+    size gate (45 px), the 16 px minimum, off the UI.
+  - Once the GM has reached its target (a target box within 2.5 cells of the GM's feet, near
+    the focus), only boxes within 2.5 cells of the GM count. A target that dies is then
+    "gone", and the hover confirmation decides, instead of the focus moving to the next
+    monster.
+- **An approach route stops 3 cells short of the monster's cell**, so its walk clicks never aim
+  at the monster.
+- Everything else is hunt@5's.
+- Seed 20261111, 40 min.
+- Prediction, written before the run:
+  - no non-target hit;
+  - engagements that end on the target's death (no hop);
+  - fewer re-clicks after a death.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.

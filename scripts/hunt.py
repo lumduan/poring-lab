@@ -74,24 +74,32 @@ def cheb(a: Any, b: Any) -> int:
 
 
 # what each version changes (pre-registered in demonstrations.md 3.39.N before its run)
-VERSIONS = {1: "search (coverage plan, look while walking, memory, continuous walking) + "
-               "persistent engagement (re-click every 5 s, bounded)",
-            2: "FRESH selection after the stop (the target chosen on a frame captured after the "
-               "GM stands, the engagement starts from that box) + stricter death (5 frames, "
-               "2.5 s) + 120 s / 20 clicks + a settle fallback + 60 px / 2-frame walk clearance "
-               "+ no per-engagement UI check",
-            3: "PARK-FIRST hover: park at the selection (the background holds the target), "
-               "hover at once while the target stays at its parked position, re-park only when "
-               "it moved (v2's first reads came ~2 s after the box) + a 2-frame stable, >= 16 px "
-               "selection + a wider re-acquire (200 px after 0.5 s, lost after 5 s)",
-            4: "SELECT WITHIN 7 CELLS (v2/v3: ~90 % success under 8 cells, ~50 % beyond): a "
-               "farther target is APPROACHED (a route to its cell, detection all the way) and "
-               "selected once within 7 + the death confirmed by a hover",
-            5: "STAY ON THE TARGET before the first click: unseen > 1 s (under a tree canopy, "
-               "behind the GM, a hop), the nearest target box within 4 cells of the SELECTED "
-               "cell takes the focus (up to 3 re-acquisitions); lost only after 10 s unseen "
-               "with none (was 5 s) + a give-up after 8 non-SWORD reads before the first "
-               "click"}  # fmt: skip
+VERSIONS = {
+    1: "search (coverage plan, look while walking, memory, continuous walking) + "
+    "persistent engagement (re-click every 5 s, bounded)",
+    2: "FRESH selection after the stop (the target chosen on a frame captured after the "
+    "GM stands, the engagement starts from that box) + stricter death (5 frames, "
+    "2.5 s) + 120 s / 20 clicks + a settle fallback + 60 px / 2-frame walk clearance "
+    "+ no per-engagement UI check",
+    3: "PARK-FIRST hover: park at the selection (the background holds the target), "
+    "hover at once while the target stays at its parked position, re-park only when "
+    "it moved (v2's first reads came ~2 s after the box) + a 2-frame stable, >= 16 px "
+    "selection + a wider re-acquire (200 px after 0.5 s, lost after 5 s)",
+    4: "SELECT WITHIN 7 CELLS (v2/v3: ~90 % success under 8 cells, ~50 % beyond): a "
+    "farther target is APPROACHED (a route to its cell, detection all the way) and "
+    "selected once within 7 + the death confirmed by a hover",
+    5: "STAY ON THE TARGET before the first click: unseen > 1 s (under a tree canopy, "
+    "behind the GM, a hop), the nearest target box within 4 cells of the SELECTED "
+    "cell takes the focus (up to 3 re-acquisitions); lost only after 10 s unseen "
+    "with none (was 5 s) + a give-up after 8 non-SWORD reads before the first "
+    "click",
+    6: "SAFETY FIX after hunt@5's non-target hit: the engagement's focus takes only boxes "
+    "that pass the selection's gates (size, small box, UI) and, once the GM reached "
+    "the target, only boxes within 2.5 cells of the GM (it hopped 200 px to a Creamy "
+    "after its Poring died, and the 5 s re-click hit it) + an approach route stops 3 "
+    "cells short of the monster (a walk click 2 cells from it became an attack)",
+}
+# fmt: skip
 PARAMS = {1: {"engage_max_s": 60.0, "max_clicks": 10, "gone_frames": 3, "gone_s": 1.5,
               "unit_clear_px": 40.0, "clear_frames": 1},
           2: {"engage_max_s": 120.0, "max_clicks": 20, "gone_frames": 5, "gone_s": 2.5,
@@ -107,7 +115,13 @@ PARAMS = {1: {"engage_max_s": 60.0, "max_clicks": 10, "gone_frames": 3, "gone_s"
               "unit_clear_px": 60.0, "clear_frames": 2, "lost_s": 10.0, "park_first": True,
               "stable_frames": 2, "min_box_px": 16.0, "select_within": 7,
               "confirm_death": True, "persist": True, "reacquire_max": 3, "reacq_cells": 4,
-              "unseen_reacq_s": 1.0, "max_misreads": 8}}  # fmt: skip
+              "unseen_reacq_s": 1.0, "max_misreads": 8},
+          6: {"engage_max_s": 120.0, "max_clicks": 20, "gone_frames": 5, "gone_s": 2.5,
+              "unit_clear_px": 60.0, "clear_frames": 2, "lost_s": 10.0, "park_first": True,
+              "stable_frames": 2, "min_box_px": 16.0, "select_within": 7,
+              "confirm_death": True, "persist": True, "reacquire_max": 3, "reacq_cells": 4,
+              "unseen_reacq_s": 1.0, "max_misreads": 8, "focus_gates": True,
+              "fight_zone": 2.5, "approach_short": 3}}  # fmt: skip
 
 
 def start_cell(area: Any, seed: int, near: Cell = START, within: int = 25) -> Cell:
@@ -297,6 +311,15 @@ def run(version: int, minutes: float, seed: int) -> int:
 
             dropped: list[tuple[float, Cell]] = []
 
+            def box_ok(b: Any, here: Cell) -> bool:
+                """v6: the selection's PIXEL gates on one box (size, small box, UI)."""
+                c, scale = cell_of(b, here)
+                if c is None or f1.native_size(b, scale) > f1.MAX_NATIVE_PX:
+                    return False
+                if min(b.x1 - b.x0, b.y1 - b.y0) < PARAMS[version].get("min_box_px", 0):
+                    return False
+                return not loot1.in_ui(*f1.centre(b))
+
             def rp(cmd: str, *a: Any) -> None:
                 """The route preview (display only, never raises)."""
                 pub = route_plan.publisher()
@@ -426,6 +449,9 @@ def run(version: int, minutes: float, seed: int) -> int:
                             # it is selected once within ``sw`` cells (a player's approach)
                             fcell = min(far, key=lambda bc: cheb(bc[1], here_fr))[1]
                             ap = hc.astar(area, pos, fcell) if area[pos[1], pos[0]] else None
+                            short = PARAMS[version].get("approach_short", 0)
+                            if ap is not None and short and len(ap) > short + 2:
+                                ap = ap[:-short]  # v6: never walk-click onto the monster's cell
                             if ap is not None and len(ap) > 2:
                                 ev({"kind": "approach", "to": list(fcell), "cells": len(ap)})
                                 note(f"monster at {fcell[0]},{fcell[1]}: approaching")
@@ -502,7 +528,8 @@ def run(version: int, minutes: float, seed: int) -> int:
                     sel_still_v = sel_still if version >= 2 else None
                     eng = engage(k, tcell, pos, version, sampler, pr, rig, world, split, note,
                                  frame, cell_of, settle, ev, box0,
-                                 pick=lambda bs, h=here_sel: targets_in(bs, h, time.monotonic())
+                                 pick=lambda bs, h=here_sel: targets_in(bs, h, time.monotonic()),
+                                 gate_box=lambda b_, h=here_sel: box_ok(b_, h)
                                  )  # fmt: skip
                     eng["selected_still"] = sel_still_v
                     k += 1
@@ -650,7 +677,8 @@ def run(version: int, minutes: float, seed: int) -> int:
 
 def engage(k: int, tcell: Cell, here: Cell, version: int, sampler: Any, pr: Any, rig: Any,
            world: Any, split: Any, note: Any, frame: Any, cell_of: Any, settle: Any,
-           ev: Any, box0: Any = None, pick: Any = None) -> dict[str, Any]:  # fmt: skip
+           ev: Any, box0: Any = None, pick: Any = None,
+           gate_box: Any = None) -> dict[str, Any]:  # fmt: skip
     """ONE engagement, from the selection to the death (pixels) or a bounded give-up.
     The target is followed frame by frame: acquired within REACQ_PX of its projected cell, then
     within FOCUS_PX per frame, widened to WIDE_PX once attacked (the camera scrolls while the client
@@ -701,6 +729,10 @@ def engage(k: int, tcell: Cell, here: Cell, version: int, sampler: Any, pr: Any,
         new = sampler.since(kf)
         kf += len(new)
         for t, boxes in new:
+            if prm.get("focus_gates") and gate_box is not None:
+                # v6: the focus follows only what the selection could have chosen (hunt@5 hit
+                # a Creamy: the focus took any monster box within 200 px)
+                boxes = [b_ for b_ in boxes if gate_box(b_)]
             if zone is not None and t_first is not None and t > t_first:
                 near_gm = [b_ for b_ in boxes if in_zone(b_, zone)]
                 if not arrived and any(
