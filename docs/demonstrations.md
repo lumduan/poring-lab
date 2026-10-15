@@ -3035,8 +3035,10 @@ map, seeded):
   - "the GAT" above means the cells walkable in BOTH the client's GAT and the server's map cache
     (alberta: 4,836 client-walkable cells are server-NOPASS);
   - neither cell lies in the map's measured ANIMATED region.
-  - Both change the alberta block's draws only. The draws are re-made with the same seeds, and
-    the new tour list is recorded here before the block runs.
+  - Decision 4 binds only alberta's draws: the other tour maps have no client-walkable /
+    server-NOPASS cells. The animated region binds each map as measured. No tour has been drawn yet (the draw script is still to be
+    written), so the seeds are unchanged. Each map's tour list is recorded here before its block
+    runs.
 
 **Maps and n:**
 - **30 tours per map:** prt_fild08 (field), prontera (town), alberta (a workflow town) and iz_dun00
