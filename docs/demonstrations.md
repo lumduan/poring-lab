@@ -5972,17 +5972,22 @@ and passes nothing, and its numbers only point at what to improve next.
      and wandered. The packets put NO monster within 14 cells (the server's view) at the start of 76
      of those 78. So it was scarcity, not detector misses. Each wander is walk@15 at its pace
      (~15 s for 8-12 cells), inside a 61 x 56-cell box.
-  2. **The first click never attacked: ~30 s lost per kill.** One robust2 SWORD read and the click
-     at once made the client WALK to a cell next to the target (a `self_move_request` to an adjacent
-     cell) with no attack, 3 times out of 3. Each attack came only from the re-engage click 10-20 s
-     later. 2 of those 3 sent an `attack_request` within 3 s; the third kill's EXP arrived 1 s after
-     its click.
-  3. **The "attack started" cue (new white pixels above the box) was FALSE 3 / 3.** It fired
-     1.3-2.6 s after the first click, while the packets show no attack then. It is not a usable
-     signal as built.
+  2. ~~**The first click never attacked: ~30 s lost per kill.**~~ ➡️ **CORRECTED 2026-10-15
+     ~21:45 (Claude's error, from reading only the FIRST packet after each click): the first click
+     DID attack, 3 / 3.**
+     - The client walked to a cell next to the target (`self_move_request`) and then sent its own
+       `attack_request` ("repeat") 0.4-2.4 s after the click, followed by damaging hits.
+     - The re-engage clicks 10 s later were redundant; harmless, since the attack was already on.
+     - Fighting took ~16 s per kill: the Novice Lv 1 GM hits for 0-14 every ~1.3 s, and a Poring
+       has 50 HP.
+  3. **The "attack started" cue (new white pixels above the box) is not usable:** it fired 0.46 s
+     after the first damaging hit once, and 0.7 s and 2.5 s BEFORE any damage twice.
   4. The per-cycle UI check: 94 s.
-  - "Is one SWORD read enough?" No click went to a non-target or an NPC: 6 reads, 6 clicks, every
-    hit a target species. But a single read did not make the click an attack (point 2).
+  - "Is one SWORD read enough?" On this sample, yes: 3 single-read first clicks, 3 attacks on target
+    species (6 reads, 6 clicks, no non-target, no NPC).
+  - Each first hover read a box ~2 s old (`age_ms` 2,017-2,077). The park, the two-motion hover and
+    the read take ~1.7 s after the still-check, so "re-detect right before the hover" is not met
+    yet. The targets had stayed put.
   - **Safety (packets):** NPC contacts 0, NPC dialogs 0, acts onto the GM 0, non-target units hit 0,
     species changes after a hit 0, map changes 0. 10 attack requests and 3 pickups, all on targets
     and their drops. The size gate skipped nothing.
