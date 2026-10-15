@@ -5991,7 +5991,7 @@ failure cause, the selection. Small fixes for the others:
   40-min box, seed 20261109. The only change is the recording (the NAS, q80): nothing that
   decides.
 
-**3.39.5 hunt@5 (pre-registered 2026-10-16 01:22, before its run and before hunt@4 attempt 3's
+**3.39.5 hunt@5 (pre-registered 2026-10-16 01:16, before its run and before hunt@4 attempt 3's
 result).** Why: across hunt@2-4, 22 of 28 failures ended `lost` with NO click.
 - Recorded frames of four of them show three causes:
   - far selections walking out of view (hunt@4's approach already addresses those);
@@ -6010,7 +6010,7 @@ result).** Why: across hunt@2-4, 22 of 28 failures ended `lost` with NO click.
   death, robust2 SWORD reads.
 - Seed 20261110, 40 min.
 
-**A SECONDARY measure, pre-registered at the same time (01:22, before hunt@5's data).** It is
+**A SECONDARY measure, pre-registered at the same time (01:16, before hunt@5's data).** It is
 reported beside the 3.39 judge for every run and NEVER replaces it: verdicts stay with the 3.39
 judge.
 - `hunt_core.walk_positions`: a mob's cell along its walk. A move entry gives one cell step per

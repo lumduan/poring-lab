@@ -297,7 +297,7 @@ def unit_positions(events: Sequence[Mapping[str, Any]]) -> dict[int, list[tuple[
 
 
 def walk_positions(events: Sequence[Mapping[str, Any]]) -> dict[int, list[tuple[int, Cell, int]]]:
-    """The SECONDARY position model (pre-registered 2026-10-16 ~01:20, before hunt@5's data; a
+    """The SECONDARY position model (pre-registered 2026-10-16 01:16, before hunt@5's data; a
     sensitivity measure beside the 3.39 judge, never its replacement): a mob's cell ALONG its
     walk. A move entry (x0,y0 -> x1,y1, speed ms/cell) yields one point per cell step at its
     arrival time (Chebyshev steps: diagonal first, then straight), and ZC_STOPMOVE
