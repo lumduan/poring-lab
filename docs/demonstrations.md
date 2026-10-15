@@ -5958,6 +5958,18 @@ failure cause, the selection. Small fixes for the others:
   last box once (twice at most). A SWORD read means alive: back to engaging. v2/v3 had pixel
   deaths of live targets.
 - Seed 20261107, 40 min.
+- ➡️ **Attempt 1 (`20261016T003110-demo-hunt4`, 00:31:10-00:35:00) CRASHED after 2
+  engagements: kept, not scored.**
+  - The death confirmation appended a "still alive" sighting stamped NOW; later detector frames
+    with earlier capture times followed it, and `deathcell` refused the out-of-order list
+    (ValueError).
+  - The crash also skipped writing the session. Its packets and manifest were written by hand
+    afterwards.
+  - Fixed, bug fixes within the version:
+    - the confirmation keeps its own marker for the gone check, and the capture-ordered sightings
+      stay untouched;
+    - a crash now writes the session (packets, manifest) before it is re-raised.
+  - Attempt 2: seed 20261108.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,

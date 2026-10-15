@@ -186,6 +186,7 @@ def run(version: int, minutes: float, seed: int) -> int:
     cov = hc.Coverage(area)
     mem = hc.Memory()
     ended, run_s, t_run0 = "time_box", 0.0, time.monotonic()
+    crashed: BaseException | None = None
     t_first = r.ns()
     ctx = mp.get_context("spawn")
     stop_rec = ctx.Event()
@@ -573,7 +574,7 @@ def run(version: int, minutes: float, seed: int) -> int:
             ended = f"stopped:{type(exc).__name__}: {str(exc)[:200]}"
             run_s = time.monotonic() - t_run0
             if not isinstance(exc, (r.Stop, KeyboardInterrupt)):
-                raise
+                crashed = exc  # re-raised AFTER the session is written (hunt@4 attempt 1)
         finally:
             stop_rec.set()
             if rec.is_alive():
@@ -602,6 +603,8 @@ def run(version: int, minutes: float, seed: int) -> int:
                "stationary_remembered": len(mem.stationary)}  # fmt: skip
     log.finish(ended=ended, packet_events=len(events), packet_anchor=anchor, **summary)
     print(json.dumps({"session": sid, "ended": ended, **summary}, default=str), flush=True)
+    if crashed is not None:
+        raise crashed
     return 0 if ended == "time_box" else 3
 
 
@@ -640,6 +643,7 @@ def engage(k: int, tcell: Cell, here: Cell, version: int, sampler: Any, pr: Any,
     result = "timeout"
     park_at: tuple[float, float] | None = None
     confirms = 0
+    alive_at = 0
     if prm.get("park_first") and box0 is not None and pr.park():
         park_at = f1.foot(box0)  # parked at the selection: the background holds the target
     while True:
@@ -658,7 +662,12 @@ def engage(k: int, tcell: Cell, here: Cell, version: int, sampler: Any, pr: Any,
         now = r.ns()
         if (
             t_first is not None
-            and gone(sightings, now, prm["gone_frames"], prm["gone_s"])
+            and gone(
+                [q for q in sightings if q.t_ns > alive_at] or sightings[-1:],
+                now,
+                prm["gone_frames"],
+                prm["gone_s"],
+            )  # fmt: skip
             and fo.seen
             and fo.seen[-1][0] > t_first
         ):
@@ -674,8 +683,7 @@ def engage(k: int, tcell: Cell, here: Cell, version: int, sampler: Any, pr: Any,
                     alive = pr.read(cu, cv)["shape"] == "sword"
                 eng.setdefault("death_checks", []).append({"t": r.ns(), "alive": alive})
                 if alive:
-                    sightings.append(dcm.Sighting(r.ns(), (lb.x0, lb.y0, lb.x1, lb.y1)))
-                    fo.seen.append((r.ns(), f1.foot(lb), lb))
+                    alive_at = r.ns()  # the gone check counts only frames after this read
                     t_last = None if clicks < prm["max_clicks"] else t_last  # re-click soon
                     note("the cursor still reads SWORD there: not dead, engaging again")
                     continue
