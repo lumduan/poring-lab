@@ -101,6 +101,12 @@ VERSIONS = {
     7: "DEAD RECKONING AT THE GM'S MEASURED SPEED, 150 ms a cell (was 200): hunt@5 stopped "
     "220 times for a minimap drift, 211 of them with the minimap AHEAD of the reckoning; "
     "the slow reckoning also delayed every continuous click",
+    8: "UNSTICK: a cursor-gated walk click the GM does not follow (the next drift stop finds "
+    "it within 1 cell of where it clicked) takes the clicked cell and its neighbours out of "
+    "the search area for the run, so the next route goes around (radius 1, growing to 3 on "
+    "repeats from the same cell). hunt@7 looped 87 times at (344,71): the client showed the "
+    "NO-ENTRY cursor at the click point, robust2's series read WALK, no move was sent, and "
+    "every drift stop re-planned the same route",
 }
 # fmt: skip
 PARAMS = {1: {"engage_max_s": 60.0, "max_clicks": 10, "gone_frames": 3, "gone_s": 1.5,
@@ -130,7 +136,14 @@ PARAMS = {1: {"engage_max_s": 60.0, "max_clicks": 10, "gone_frames": 3, "gone_s"
               "stable_frames": 2, "min_box_px": 16.0, "select_within": 7,
               "confirm_death": True, "persist": True, "reacquire_max": 3, "reacq_cells": 4,
               "unseen_reacq_s": 1.0, "max_misreads": 8, "focus_gates": True,
-              "fight_zone": 2.5, "approach_short": 3, "ms_cell": 150.0}}  # fmt: skip
+              "fight_zone": 2.5, "approach_short": 3, "ms_cell": 150.0},
+          8: {"engage_max_s": 120.0, "max_clicks": 20, "gone_frames": 5, "gone_s": 2.5,
+              "unit_clear_px": 60.0, "clear_frames": 2, "lost_s": 10.0, "park_first": True,
+              "stable_frames": 2, "min_box_px": 16.0, "select_within": 7,
+              "confirm_death": True, "persist": True, "reacquire_max": 3, "reacq_cells": 4,
+              "unseen_reacq_s": 1.0, "max_misreads": 8, "focus_gates": True,
+              "fight_zone": 2.5, "approach_short": 3, "ms_cell": 150.0,
+              "unstick": True}}  # fmt: skip
 
 
 def start_cell(area: Any, seed: int, near: Cell = START, within: int = 25) -> Cell:
@@ -413,6 +426,9 @@ def run(version: int, minutes: float, seed: int) -> int:
 
             moving = False
             bad_tiles: list[Cell] = []
+            click_from: Cell | None = None  # v8: where the last cursor-gated walk click was made
+            click_cell: Cell | None = None
+            unfollowed: dict[Cell, int] = {}
             last_mm, mm_off = 0.0, 0
             k = 0
             split.to("searching", time.monotonic())
@@ -437,6 +453,24 @@ def run(version: int, minutes: float, seed: int) -> int:
                             mm_off += 1
                             if mm_off >= 2:  # the reckoning drifted: stop, settle, re-plan
                                 ev({"kind": "drift", "reck": list(pos), "minimap": list(mm)})
+                                if (PARAMS[version].get("unstick") and click_from is not None
+                                        and click_cell is not None
+                                        and cheb(mm, click_from) <= 1):  # fmt: skip
+                                    # v8: the GM never left: that click was not followed
+                                    n_u = unfollowed.get(click_from, 0)
+                                    unfollowed[click_from] = n_u + 1
+                                    rad = 1 + min(2, n_u)
+                                    cx, cy = click_cell
+                                    blk = np.zeros_like(area)
+                                    blk[max(0, cy - rad) : cy + rad + 1,
+                                        max(0, cx - rad) : cx + rad + 1] = True  # fmt: skip
+                                    fx, fy = click_from
+                                    blk[max(0, fy - 1) : fy + 2, max(0, fx - 1) : fx + 2] = False
+                                    area[blk] = False
+                                    ev({"kind": "unfollowed_click", "from": list(click_from),
+                                        "to": list(click_cell), "radius": rad})  # fmt: skip
+                                    note(f"click to {cx},{cy} not followed: routing around it")
+                                    click_from = click_cell = None
                                 split.to("stopping", time.monotonic())
                                 pos = settle() or mm
                                 moving, path, pi = False, [], 0
@@ -607,6 +641,7 @@ def run(version: int, minutes: float, seed: int) -> int:
                             path, pi, refused = [], 0, 0
                         continue
                     refused = 0
+                    click_from, click_cell = pos, path[j]
                     seg = path[pi : j + 1]
                     reck.go(seg, time.monotonic())
                     rp("walk", pos, seg, int(got["t_click"]))

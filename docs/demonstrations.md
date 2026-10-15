@@ -6142,6 +6142,50 @@ search (53-69 % of every run).
   - far fewer drift stops (hunt@6: 102, hunt@5: 220);
   - more coverage and more engagements in 40 min;
   - the success rate unchanged within noise.
+- ➡️ **Result (`20261016T031319-demo-hunt7`, 03:13:19-03:53:59, the full 40-min box): success
+  7 / 12 = 58.3 % (Wilson 31.9-80.7 %): FAIL. THE PREDICTION FAILED:** 206 drift stops, more than
+  hunt@6's 102, and only 12 engagements.
+  - Failures: no unit at the selected cell 3, hit but not killed 2. The secondary measure:
+    8 / 12 = 66.7 %.
+  - kills 10 = 15.0 / h; 240 s per kill; time to first target 23.3 s; 3.0 targets / 10 min;
+    coverage 40.8k cells.
+  - Time split: searching 1,838 s (77 %), fighting 149 s, looting 127 s, stopping 119 s,
+    engaging 117 s, checks 53 s.
+  - **Safety:** NPC contacts 0, dialogs 0, map changes 0, non-target hits 0, unintended attack
+    requests 0.
+  - **The real cause of the drift stops, found during this run: a STUCK LOOP, not the reckoning
+    speed.** The "minimap ahead" reading under 3.39.7 was a flawed analysis: it projected each
+    drift on the last move's direction, and a GM standing at the end of that move reads "ahead".
+    - At (344,71) the bot's route clicked (344,79) 8 cells north.
+    - The recorded frames show the client's NO-ENTRY cursor (the red ring) blinking at that
+      point. robust2's 6-grab series read WALK and clicked.
+    - The client sent NO move request (the live packets: no `self_move_request` after the
+      click).
+    - The reckoning "walked" anyway, the minimap disagreed, the drift stop settled at the same
+      cell, and the same route was planned again.
+  - 87 drift stops at (344,71) alone. Time in such loops (consecutive drift stops at the same
+    minimap cell, < 15 s apart): hunt@2 0.1 min, hunt@3 1.0, hunt@4 attempt 3 2.5, hunt@5 12.6,
+    hunt@6 3.6, hunt@7 13.5. Repeated pairs show a 6-cell y offset at the same spots: hunt@5
+    (278,123) / (278,117) 120 times, hunt@6 (342,77) / (342,71) 30 times.
+  - The 150 ms reckoning stays: it is the measured speed. It was not the time-loser.
+
+**3.39.8 hunt@8 (pre-registered 2026-10-16 ~03:55, before its run; the time is corrected to the
+commit time below).** The top time-loser: the stuck loops (up to 13.5 of 40 min).
+- **MAIN, UNSTICK.**
+  - A cursor-gated walk click that the GM does not follow is detected: the next drift stop finds
+    it within 1 cell of where it clicked.
+  - The clicked cell and its neighbours leave the search area for the rest of the run: radius 1,
+    growing to 3 on repeats from the same cell, never the GM's own 3 x 3.
+  - The next route goes around them. Each such event is logged (`unfollowed_click`).
+  - The robust2 misread itself (no-entry read as WALK at that spot) is recorded for the cursor
+    work. It is not changed here: robust2 stays the live gate.
+- Everything else is hunt@7's (150 ms reckoning, the safety fix).
+- Seed 20261113, 40 min.
+- Prediction, written before the run:
+  - repeated drift stops at one cell: at most 3 per spot;
+  - loop time under 1 min;
+  - more engagements than hunt@7 (12);
+  - the success rate unchanged within noise.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
