@@ -199,3 +199,26 @@ def test_hunt_fight_zone_is_an_ellipse_in_cells_around_the_gm() -> None:
     assert hunt.in_zone(box_at(640, 362 + 2 * 21.5), zone)  # two cells south
     assert not hunt.in_zone(box_at(640 + 3 * 34, 362), zone)  # three cells east
     assert not hunt.in_zone(box_at(640 + 2 * 34, 362 + 2 * 21.5), zone)  # 2.8 cells diagonal
+
+
+def test_hunt_still_boxes_need_the_whole_span_within_px() -> None:
+    from dataclasses import dataclass
+
+    import hunt
+
+    @dataclass
+    class B:
+        x0: float
+        y0: float
+        x1: float
+        y1: float
+
+    still, walker = B(100, 100, 120, 130), B(300, 100, 320, 130)
+
+    def moved(b: B, dx: float) -> B:
+        return B(b.x0 + dx, b.y0, b.x1 + dx, b.y1)
+
+    frames = [(int(k * 0.15 * S), [moved(still, 1), moved(walker, 8 * k)]) for k in range(5)]
+    got = hunt.still_boxes(frames, 0.5, 6.0)
+    assert len(got) == 1 and got[0].x0 == 101  # the walker moved 8 px a frame
+    assert hunt.still_boxes(frames[:2], 0.5, 6.0) == []  # 0.15 s: too short a span

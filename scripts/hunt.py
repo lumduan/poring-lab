@@ -476,16 +476,35 @@ def run(version: int, minutes: float, seed: int) -> int:
                             ev({"kind": "no_target_after_stop", "seen": list(tcell)})
                             split.to("searching", time.monotonic())
                             continue
+                        sel_still = None
+                        if PARAMS[version].get("select_still"):
+                            # v6: prefer a target STANDING STILL (feet < STILL_PX over >= STILL_S
+                            # on the frames after the stop); a moving one only after the wait
+                            end_s = time.monotonic() + PARAMS[version]["still_wait_s"]
+                            while True:
+                                got_s = [f for f in sampler.since(max(0, len(sampler.frames) - 12))
+                                         if f[0] > t_stop]  # fmt: skip
+                                st = still_boxes(got_s, f1.STILL_S, f1.STILL_PX)
+                                tg_s = [bc for bc in targets_in(st, pos, time.monotonic())
+                                        if sw2 is None or cheb(bc[1], pos) <= sw2]  # fmt: skip
+                                if tg_s or time.monotonic() > end_s:
+                                    break
+                                time.sleep(0.05)
+                            sel_still = bool(tg_s)
+                            if tg_s:
+                                tg2 = tg_s
                         box0, tcell = min(
                             tg2, key=lambda bc: max(abs(bc[1][0] - pos[0]), abs(bc[1][1] - pos[1]))
                         )
                     else:
                         check(f"engagement {k}")
                     here_sel = pos
+                    sel_still_v = sel_still if version >= 2 else None
                     eng = engage(k, tcell, pos, version, sampler, pr, rig, world, split, note,
                                  frame, cell_of, settle, ev, box0,
                                  pick=lambda bs, h=here_sel: targets_in(bs, h, time.monotonic())
                                  )  # fmt: skip
+                    eng["selected_still"] = sel_still_v
                     k += 1
                     engagements.append(eng)
                     approaching = False
@@ -837,6 +856,24 @@ def engage(k: int, tcell: Cell, here: Cell, version: int, sampler: Any, pr: Any,
     print(json.dumps({k_: eng.get(k_) for k_ in ("k", "result", "clicks", "target_cell")}),
           flush=True)  # fmt: skip
     return eng
+
+
+def still_boxes(frames: Any, span_s: float, px: float) -> list[Any]:
+    """v6: the latest frame's boxes whose feet stayed within ``px`` on every frame of the last
+    ``span_s`` seconds (the frames must cover that span)."""
+    if not frames:
+        return []
+    t_last, last = frames[-1]
+    span = [f for f in frames if (t_last - f[0]) / 1e9 <= span_s + 0.25]
+    if (t_last - span[0][0]) / 1e9 < span_s:
+        return []
+    out = []
+    for b in last:
+        fx, fy = f1.foot(b)
+        if all(any(np.hypot(f1.foot(q)[0] - fx, f1.foot(q)[1] - fy) < px for q in boxes)
+               for _t, boxes in span):  # fmt: skip
+            out.append(b)
+    return out
 
 
 def in_zone(b: Any, zone: Any) -> bool:

@@ -161,7 +161,7 @@ def measure(sid: str, frames_dir: Path | None) -> dict[str, Any]:
         t_act = ours[0] if ours else None
         t_death = j.get("t_death")
         lo, hi = np.searchsorted(ts, t_sel), np.searchsorted(ts, t_end)
-        first_bar, early = None, 0
+        first_bar, early, hit_n, hit_y = None, 0, 0, 0
         for k in range(lo, hi):
             t, f = frames[k]
             img = np.asarray(Image.open(f).convert("RGB"))
@@ -171,12 +171,15 @@ def measure(sid: str, frames_dir: Path | None) -> dict[str, Any]:
                 early += bool(bars)
             elif j.get("success") and t_death is not None and t_act + 0.5e9 <= t < t_death:
                 per_frame["hit"].append(bool(bars))
+                hit_n += 1
+                hit_y += bool(bars)
             if bars and t_act is not None and t >= t_act and first_bar is None:
                 first_bar = t
         rows.append({"k": e["k"], "why": j["why"], "act": t_act is not None,
                      "act_to_bar_s": None if first_bar is None or t_act is None
                      else round((first_bar - t_act) / 1e9, 2),
-                     "bars_before_act": early})  # fmt: skip
+                     "bars_before_act": early, "hit_frames": hit_n, "hit_with_bar": hit_y,
+                     "job": j.get("job")})  # fmt: skip
     hit, fresh = per_frame["hit"], per_frame["fresh"]
     tpr = float(np.mean(hit)) if hit else None
     fpr = float(np.mean(fresh)) if fresh else None
