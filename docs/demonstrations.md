@@ -3031,6 +3031,12 @@ map, seeded):
   straight octile steps) ≥ 1.25; the rest are drawn freely in 60–150;
 - neither cell within 3 cells of an L3 warp trigger area or an L3 NPC;
 - the start reached by `@warp`, CLEAN (3.29a's harness: `@killmonster2` only when needed).
+- ➡️ **Amended 2026-10-15, before any tour** (Batt decisions 3 and 4; 3.32 amendments 3 and 4):
+  - "the GAT" above means the cells walkable in BOTH the client's GAT and the server's map cache
+    (alberta: 4,836 client-walkable cells are server-NOPASS);
+  - neither cell lies in the map's measured ANIMATED region.
+  - Both change the alberta block's draws only. The draws are re-made with the same seeds, and
+    the new tour list is recorded here before the block runs.
 
 **Maps and n:**
 - **30 tours per map:** prt_fild08 (field), prontera (town), alberta (a workflow town) and iz_dun00
@@ -3213,6 +3219,93 @@ there, the strict count reported.
 >    - The portal scene's world is unchanged.
 >    - walk@15's code objects are reused exactly as before (`test_walk17.py`, including the
 >      identity test).
+>
+> ➡️ **AMENDMENTS (2026-10-15, Batt decisions 3 and 4; PRE-REGISTERED 2026-10-15 BEFORE any tuning
+> run; the code and the measurements follow, each recorded here before a run uses it):**
+> 3. **Avoid moving scenery** (Batt, decision 3: "don't read through moving scenery, AVOID it. The
+>    walk rule (and any hover/click planner) never picks a point inside a measured per-map ANIMATED
+>    region; pick another point on the polyline. robust2 stays the live gate. Pre-register the
+>    avoidance as part of walk@17, with its effect on Alberta.")
+>    - **The region is MEASURED per map**, live, by `scripts/anim_region.py measure --map M` (RDP, the
+>      GM, hover-free: only `@warp` lines are typed, through the UI gate and the typing guard).
+>      - **Stands, pass 1:** a lattice every 8 cells over the map's walkable cells (client ∩ server,
+>        amendment 4). Each stand must pass npc_click_test's three checks (no warp span, no touch
+>        area, server-walkable). A lattice point that fails moves to the nearest cell that passes,
+>        within 3 cells, or is dropped (logged).
+>      - **Per stand (cursor@3's measurement, unchanged):** `@warp`, a 2 s settle, the cursor parked by
+>        two motions, then 13 grabs 0.2 s apart. `cursor_anim.animated_region`: a pixel differs from
+>        the first grab by more than 60 (summed BGR) in any later grab; grown 2 px.
+>      - **Excluded before back-projection:** the GM's own sprite box around the stand's projected
+>        point (fixed in the tool before its first run); the client's UI rectangles at their L2
+>        default places (basic info, minimap, chat); pixels that pick no map cell.
+>      - **Transients removed:** a view with any animated pixel is measured AGAIN at least 60 s
+>        later. Only pixels animated in BOTH measurements count. The lab towns have no other players.
+>        Animated idle NPCs stay in: they animate both times.
+>      - **Each counted pixel becomes the cell the client picks there** (`poring_dataset.picking`, the
+>        view's camera). A view's animated cells are those cells.
+>      - **Pass 2:** a lattice every 3 cells within 12 cells of every stand whose view kept animated
+>        cells, measured the same way.
+>      - **The map's region:** the UNION of every view's animated cells, grown by 1 cell
+>        (8-neighbour). It is saved locally (`data/kb/anim_regions/<map>.json`, gitignored: it is
+>        derived from client pixels), with its stands, times, per-view counts and the tool's commit.
+>      - Why cells, not pixels: the camera follows the GM, so a screen region is one view's. The
+>        rule needs one region per map. The client's click on a cell's safe point picks that cell,
+>        so "the point is inside the animated region" is "the cell is in the region".
+>    - **The rule (walk@17):**
+>      - **The click step** refuses a WALK click whose target cell is in the map's region:
+>        `no_safe_point` with `animated_region`. walk@15's route loop then takes the next candidate
+>        on the polyline, as for B's warp areas. Every refusal is logged.
+>      - **The harness never draws a start or a goal in the region.** The `_Walk5` proxy World hides
+>        those cells, as amendment 2 hides warp areas. tour@1's endpoint draw excludes them too.
+>      - **The PLANNER's grid is unchanged:** a path may cross the region. Only clicking or hovering
+>        there is avoided.
+>      - **Fail closed:** a walk@17 run on a map with no measured region refuses to start, as
+>        route.json's warps do.
+>      - The portal click (an intended warp) is not refused; when its cell is in the region, that
+>        is logged.
+>      - The cursor reader and the gate are unchanged: **robust2 stays the live gate**.
+>    - **Other planners (Claude's reading, stated so Batt can correct it before they run):**
+>      - Planners that ACT inherit the rule: talk@1 on walk@17's approach, and any future walk
+>        user. A TALK contact click on an L3 NPC is NOT refused by the region. Its NPC rules
+>        (the NO-CLICK layer, T2) govern it, because an animated idle NPC would otherwise never be
+>        talked to.
+>      - The cursor MEASUREMENT probes pre-registered before this decision keep their plans:
+>        npc-render 3.38's B runs (B1', B2, B3). Their hover points that fall inside a measured
+>        region are reported apart, and B's bars are unchanged.
+>    - **Order:** prt_church and prt_fild08 are measured before walk@17's tuning runs. Each held-out
+>      or tour map is measured before its block.
+>    - **Its effect on Alberta:**
+>      - **Reported now, from data already scored** (cursor@3's alberta probe session, both
+>        labellers agreeing, WALK truth). The "inside" flag is the same 13 x 0.2 s cycle region
+>        at the hotspot. NOT a bar.
+>
+>        | alberta WALK hovers | n | robust2 (live gate) | robust3 |
+>        |---|---|---|---|
+>        | all | 372 | 0.667 (248) | 0.626 (233) |
+>        | inside the region (the 4 windmill views) | 108 (29 %) | 12 | 0 |
+>        | **outside** (what avoidance leaves) | 264 | **0.894 (236)** | 0.883 (233) |
+>
+>      - prontera, prt_church and morocc have 0 such hovers, so avoidance changes nothing there.
+>      - robust2's 28 misses outside the region are mostly not the sails: 13 of them are in ONE view,
+>        (123,68), 13 of its 22. That view is a separate question.
+>      - **Computed after alberta's region is measured, BEFORE tour@1's alberta block** (3.31, seed
+>        20261142), recorded here:
+>        - the region's size;
+>        - tours whose start or goal falls in it (re-drawn by the rule);
+>        - click candidates refused along each tour's A* path;
+>        - routes left without a clickable point.
+> 4. **Client GAT ∩ server map cache** (Batt, decision 4: "every walk rule and planner uses only cells
+>    walkable in BOTH sources (intersection)").
+>    - walk@17's planner blocks, its harness hides, and its click step refuses
+>      (`no_safe_point`, `server_nopass`) every cell the client's GAT calls walkable and the server's
+>      map cache calls NOPASS. This is the same mechanism as B and amendment 2.
+>    - **Inert on every tuning and held-out map:** prt_church, prt_fild08, alberta_in, prontera and
+>      iz_dun00 have 0 such cells (prontera's 46 disagreements are server-walkable / client-not,
+>      which the client never offers).
+>    - **It acts in tour@1's alberta block:** 4,836 such cells on alberta (and 4,482 on morocc, which
+>      walk@17 does not use).
+>    - Built on `feat/map-agreement` (a shared `poring_dataset.walkable`). Its proofs are recorded
+>      here when it merges.
 
 **Expected** (Claude's reading of walk@15's four tuning sessions, re-read offline 14:25 ICT; NOT a
 bar):
@@ -4593,8 +4686,9 @@ plans need (733, 734, 86, 59, 117, 726, 105, 84, 90, 92), and 0 problems. sha256
 
 **Not decided here (Batt):**
 - the hit box itself (a box, against "not a box or a cell guess");
-- decoding MIXCRYPT sprites at RUN time. Claude reads "the client's sprite files (decoded
-  locally, never committed)" in Batt's note as the OK; he confirms;
+- ~~decoding MIXCRYPT sprites at RUN time. Claude reads "the client's sprite files (decoded
+  locally, never committed)" in Batt's note as the OK; he confirms;~~ ➡️ **DECIDED 2026-10-15
+  (Batt, decision 7): "MIXCRYPT at run time: OK, local only, never committed."**
 - the indoor camera refit (npc-render.md 3.5);
 - widening N1 beyond his scope (46 sprites; the measurement table covers more);
 - 909's class.
