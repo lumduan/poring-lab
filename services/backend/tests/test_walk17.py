@@ -160,8 +160,9 @@ def warps(mods: Any) -> Any:
     w17 = mods[0]
     saved, route = dict(w17.WARPS), dict(w17.ROUTE)
 
-    def use(*areas: dict[str, Any], intent: str = "walk") -> None:
-        w17.use_map("synthetic", intent, list(areas))
+    def use(*areas: dict[str, Any], intent: str = "walk",
+            nopass: frozenset[tuple[int, int]] = frozenset()) -> None:  # fmt: skip
+        w17.use_map("synthetic", intent, list(areas), nopass)
 
     yield use
     w17.WARPS.clear()
@@ -595,3 +596,89 @@ def test_b_the_harness_never_draws_a_start_inside_a_warp_area(mods: Any, warps: 
     warps(a, intent="warp")
     assert w17.w5.World(None, FlatGat(), (10, 10)).walkable.all()
     assert w17.w5.PLAN_MAX == 48 and w17.PLAN_MAX == 48  # every other name is walk5's
+
+
+# --- amendment 3 (Batt 2026-10-15, decision 4): the server's NOPASS cells -----------------------
+
+
+def test_3_every_plan_avoids_a_server_nopass_cell_the_portals_too(mods: Any, warps: Any) -> None:
+    w17 = mods[0]
+    wall = frozenset((20, y) for y in range(5, 16))  # client-walkable, server-NOPASS
+    warps(nopass=wall)
+    w = Flat((10, 10))
+    assert any(c in wall for c in sys.modules["walk6"].plan(w, (30, 10), set()))
+    path = w17.w6.plan(w, (30, 10), set())
+    assert path and path[-1] == (30, 10) and not set(path) & wall
+    assert w17.w6.plan(w, (20, 10), set()) is None  # never a goal
+    portal = area(30, 10, 1, 1)
+    warps(portal, nopass=wall | {(30, 10)})
+    with w17._route("warp"):
+        assert w17.w6.plan(w, (30, 10), set()) is None  # the portal's own plan: blocked too
+        path = w17.w6.plan(w, (31, 10), set())
+        assert path and not set(path) & (wall | {(30, 10)})
+        assert w17.full_path(w, (31, 10)) and not set(w17.full_path(w, (31, 10))) & wall
+
+
+def test_3_the_harness_world_never_offers_a_server_nopass_cell(mods: Any, warps: Any) -> None:
+    w17 = mods[0]
+    a, off = area(15, 15, 1, 1), frozenset({(3, 4), (25, 26)})
+    for intent in ("walk", "warp"):  # every scene, the portal's included
+        warps(a, intent=intent, nopass=off)
+        world = w17.w5.World(None, FlatGat(), (10, 10))
+        assert not world.walkable[4, 3] and not world.walkable[26, 25]
+        hidden = len(off) + (len(a["cells"]) if intent == "walk" else 0)
+        assert int(world.walkable.sum()) == 900 - hidden
+    warps(a, intent="warp")  # nothing to hide: the portal scene's world as before
+    assert w17.w5.World(None, FlatGat(), (10, 10)).walkable.all()
+
+
+def test_3_the_click_step_refuses_a_server_nopass_cell(mods: Any, warps: Any,
+                                                      monkeypatch: pytest.MonkeyPatch
+                                                      ) -> None:  # fmt: skip
+    w17, w15, w14 = mods[0], mods[1], mods[2]
+    warps(nopass=frozenset({(12, 10)}))
+    calls: list[Any] = []
+    monkeypatch.setattr(w14, "click_step", lambda *a, **k: calls.append(a) or {
+        "clicked": True, "outcome": "confirmed", "target": []})  # fmt: skip
+    w = Flat((10, 10))
+    for expect in ("walk", "warp"):
+        got = w17.click_step(None, w, (12, 10), expect)
+        assert got["outcome"] == "no_safe_point" and got["server_nopass"] == [12, 10], expect
+        assert "warp_area" not in got and not calls
+    assert (10, 10) in w15.VISITED
+    assert w17.click_step(None, w, (13, 10))["clicked"] and len(calls) == 1
+
+
+def test_3_server_nopass_comes_from_both_sources_and_fails_closed(
+    mods: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    w17 = mods[0]
+    from poring_dataset import walkable as wk
+
+    gat = SimpleNamespace(walkable=lambda: np.ones((4, 5), dtype=bool))
+    mask = np.ones((4, 5), dtype=bool)
+    mask[1, 2] = mask[3, :] = mask[:, 4] = False  # a cliff + the server's last row / column
+    monkeypatch.setattr(wk, "load_both", lambda name: (gat, mask))
+    got = w17.server_nopass("syn")
+    assert (2, 1) in got and (0, 3) in got and (4, 0) in got and len(got) == 1 + 5 + 3
+
+    def lacks(name: str) -> Any:
+        raise wk.MapSourceError(f"the server's map cache lacks {name}")
+
+    monkeypatch.setattr(wk, "load_both", lacks)
+    with pytest.raises(SystemExit, match="lacks syn"):
+        w17.server_nopass("syn")
+    with pytest.raises(SystemExit, match="lacks syn"):
+        w17.use_map("syn", "walk", [])  # the run refuses to start
+
+
+def test_3_the_manifest_records_the_walkable_source(mods: Any, monkeypatch: pytest.MonkeyPatch,
+                                                   tmp_path: Path, warps: Any) -> None:  # fmt: skip
+    w17 = mods[0]
+    monkeypatch.setattr(w17.chat_guard, "start_run", lambda rid, b: None)
+    monkeypatch.setattr(w17.chat_guard, "policy", lambda: {"where_retry_s": 60})
+    warps(nopass=frozenset({(1, 1), (2, 2)}))
+    sid = "20261015T120000-demo-walk17-alone-clean-indoor"
+    w17.SessionLog(sid, root=tmp_path).start(n=1, rule="walk@17")
+    man = json.loads((tmp_path / sid / "manifest.json").read_text())
+    assert man["walkable"] == "client∩server" and man["server_nopass_cells"] == 2
