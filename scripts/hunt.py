@@ -189,7 +189,9 @@ def run(version: int, minutes: float, seed: int) -> int:
         return 0 <= u < gw and 0 <= v < gh and not loot1.in_ui(u, v)
 
     offsets = hc.footprint(lambda o: camera.project(o, np.zeros(len(o))), in_view)
-    ms_cell = 200.0  # walk11.map_ms_per_cell(prt_fild08); the GM's speed
+    # the GM's speed for dead reckoning. 200 until hunt@6; hunt@5's packets measured 150 ms a
+    # cell (rAthena's default walk speed): 211 of its 220 drift stops had the minimap AHEAD
+    ms_cell = float(PARAMS[version].get("ms_cell", 200.0))
     sid = new_session_id(f"hunt{version}")
     log = DemoLog(sid)
     out = OUT / sid
