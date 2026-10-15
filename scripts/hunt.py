@@ -801,7 +801,7 @@ def engage(k: int, tcell: Cell, here: Cell, version: int, sampler: Any, pr: Any,
         time.sleep(0.03)
     eng.update(result=result, clicks=clicks, t_end=r.ns(), t_first_click=t_first, reacq=reacq,
                misreads=misreads)  # fmt: skip
-    if result == "dead":
+    if result == "dead" and prm.get("loot", True):
         split.to("looting", time.monotonic())
         here2 = settle() or here
         track = loot1.Track(fo.last)
