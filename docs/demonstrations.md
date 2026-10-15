@@ -4816,6 +4816,38 @@ plans need (733, 734, 86, 59, 117, 726, 105, 84, 90, 92), and 0 problems. sha256
       the design decode (npc-render.md section 2; `n2-measure-names.json`). Its stems agree with
       the table's client sprite for every shared job, and both files exist for all 76.
     - So an NPC outside the table is reported, never rendered, as fixed.
+    - Smoke check of these inputs on the DESIGN data only (cursor@2's three probe sessions and their
+      published labels, not B): rc 0. 943 design probes are `target_unsupported` with the
+      restricted names, against 691 with the 90-job design names: NPCs outside the table are
+      excluded, not rendered.
+- ➡️ **A. Positions vs packet truth, computed 2026-10-15 17:36-17:37: INCONCLUSIVE (n short).
+  Every measured bar is met.**
+  - `npc_render_measure.py align` at the fixed defaults (k 0.14 beside 0.1333, radius 24, NCC >= 0.5,
+    <= 15 frames per session), with the scorer's sprite inputs above.
+  - **Sessions:** every session recorded after 3f8831d up to B3, 38 in all
+    (`/dev/shm/poring-lab-tmp/npc-render/partA-sessions.txt`). The NAS holds none of that age.
+    - 23 RDP sessions were read.
+    - **15 were EXCLUDED:** talk-cal garnet, 10-13 16:13-16:58, 4 frames each, recorded on the
+      CONSOLE path during S2 attempt 1. The fixed code has no frame-timing benchmark for
+      `('console', None, 'x11')` and stops ("pass --offset-ms"), and `align` takes no offset. The
+      code is unchanged.
+  - **n:** outdoor **107** confident matches from 7 sessions; indoor **82** from 7. The floor is
+    300 / 100, so **INCONCLUSIVE**.
+    - Outdoor: alberta 51 (cursor@3), new_1-2 27 (B3), prontera 15 (B1' 9, cursor@3's A3 3, the 10-13 warp-frames session 3), morocc 14.
+    - Indoor: prt_church 62 (talk-cal henson 15 + 15, npc-click click 15 + 15, cursor@3's A3 2), alberta_in 20 (talk-cal
+      merchant 15, B2 5).
+    - Excluded sightings: near UI 264, NPC partly off screen 170, NPC overlapping a unit 147, near
+      an unsupported NPC 162, no frames 7. Matches at the search edge: 0.
+  - **A1 (identity, hard): met.** 1,242 rendered NPCs against the packets: cell, sprite and facing
+    agree on all 1,242, 0 disagreements.
+  - **A2 (outdoor): met.** 100 % within 6 px (p95 2.2, max 3.6 px); median 1.0 px.
+  - **A3 (indoor): met.** 100 % within 12 px (p95 5.1, max 9.4 px). The indoor camera was not
+    refitted.
+  - **A4 (k): met on every map.** k 0.14 scores above 0.1333 on 189 of 189 paired matches
+    (prt_church 62/62, alberta 51/51, new_1-2 27/27, alberta_in 20/20, prontera 15/15, morocc
+    14/14); median NCC 0.69 against 0.48.
+  - Reaching n needs more banked RDP frames with drawn NPCs in view: ~190 more outdoors, ~20 more
+    indoors. No collection is planned; that is Batt's call.
 
 - ➡️ **B1 STOPPED (22:55), nothing hovered, nothing typed after the stop.** The first @warp put the
   GM on (73,348), inside the TOUCH area of a hidden script NPC (`#tour`, knight_skills.txt, at

@@ -169,7 +169,7 @@ flowchart TD
   the client launched. Recreates + §2a done 13:42-13:58; the B runs follow. ➡️ **All three B runs
   are IN (2026-10-15 14:07-17:01): B1' 1,000 / B2 479 (11 skipped stale parks) / B3 1,554 probes,
   safety 0 on all.** The truth sheets were built at 17:10 (6,396 images). Two blind labellers are
-  at work; scoring follows their merge (3.38's truth step, as fixed at 14:10).
+  at work; scoring follows their merge (3.38's truth step, as fixed at 14:10). ➡️ **Part A (17:37): INCONCLUSIVE on n** (107 / 300 outdoor, 82 / 100 indoor; 15 console-path sessions excluded because the fixed code has no timing benchmark for them). Every measured bar is met: A1 0 disagreements of 1,242; A2 100 % within 6 px (median 1 px); A3 100 % within 12 px; A4 k 0.14 above 0.1333 on 189 / 189.
 - **Labels v2:** ~~the S2 UI-gate session is scheduled with Batt (~15 min of his clicks)~~ ➡️
   attempt 1 (2026-10-13 16:00-17:02) entered the room and banked phase A steps 1-3, but no NPC
   click came. It ended cleanly; Sunshine's revert is UNVERIFIED (a person checks). The runbook gaps
