@@ -5903,6 +5903,22 @@ failure cause, the selection. Small fixes for the others:
 - Before the first click, the target is looked for within 200 px once unseen 0.5 s, and is lost
   after 5 s (was 3).
 - Seed 20261105, 40 min (more room for >= 60 engagements).
+- ➡️ **Attempt 1 (`20261015T232130-demo-hunt3`, 23:21:30) STOPPED by Claude at 23:45 after
+  23.5 min, kept, not scored: STUCK, with 0 engagements.**
+  - About a minute in, a continuous click left the GM at (218,22). That is 3 cells past its target
+    (215,24), INSIDE the 6-cell keep-away margin of the south warp to moc_fild01 (x 221-245,
+    y 15-17), outside the search area.
+  - A* needs its start inside the area, so every plan failed. The bad-tile list reset at 40, and
+    the loop sat silently for 21 min: no click, no input, the 30 s UI check passing.
+  - No map change: safety intact. But it came closer to a warp than intended.
+  - Fixed, bug and safety fixes within the version:
+    - a GM outside the area is routed back over stand cells (cursor-gated) to the nearest area
+      cell before any plan;
+    - a WATCHDOG stops the run after 60 s with no route, click or engagement (fail safe);
+    - the keep-away margin around warps and NPCs is 10 cells (was 6).
+  - An offline re-simulation: 85.9k of 87.9k area cells in 35 min, 2 failed plans. From (218,22)
+    the way back is (218,28).
+  - Attempt 2: seed 20261106 (start 284,85).
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,

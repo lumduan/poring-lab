@@ -99,6 +99,19 @@ class Coverage:
         return out
 
 
+def nearest_in(area: Any, ok: Any, pos: Cell, reach: int = 20) -> Cell | None:
+    """The search-area cell nearest ``pos`` (Chebyshev rings, then Euclid) within ``reach``."""
+    a = np.asarray(area, dtype=bool)
+    h, w = a.shape
+    for r_ in range(1, reach + 1):
+        ring = [(pos[0] + dx, pos[1] + dy) for dy in range(-r_, r_ + 1)
+                for dx in range(-r_, r_ + 1) if max(abs(dx), abs(dy)) == r_]  # fmt: skip
+        hits = [c for c in ring if 0 <= c[0] < w and 0 <= c[1] < h and a[c[1], c[0]]]
+        if hits:
+            return min(hits, key=lambda c: (c[0] - pos[0]) ** 2 + (c[1] - pos[1]) ** 2)
+    return None
+
+
 def tile_cell(area: Any, origin: Cell) -> Cell | None:
     """The tile's area cell nearest its centre."""
     tx, ty = origin

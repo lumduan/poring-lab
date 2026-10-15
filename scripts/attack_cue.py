@@ -60,12 +60,14 @@ def grey(img: Any) -> Any:
     return g[..., :3].mean(axis=2) if g.ndim == 3 else g
 
 
+SHIFT_BAND = (320, 10, 1270, 250)  # x0, y0, x1, y1: above the GM, right of the UI column
+
+
 def masked(g: Any) -> Any:
-    m = g.copy()
-    x0, y0, x1, y1 = GM_BOX
-    m[y0:y1, x0:x1] = 0
-    m[:, :300] = 0  # basic_info + chat column
-    return m
+    """The band the scene shift is measured on: no zeroed rectangles (their fixed edges pinned
+    the phase correlation at (0, 0): the first measurement called 95 % of pairs still)."""
+    x0, y0, x1, y1 = SHIFT_BAND
+    return g[y0:y1, x0:x1]
 
 
 def measure(sid: str, rec: Path | None) -> dict[str, Any]:

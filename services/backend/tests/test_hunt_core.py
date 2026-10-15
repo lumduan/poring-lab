@@ -120,3 +120,10 @@ def test_hunt_gone_needs_both_frames_and_time() -> None:
     assert not hunt.gone(seen + miss[:4], 3 * S, 5, 2.5)  # 4 frames only
     assert not hunt.gone(seen + miss, 2 * S, 5, 2.5)  # 5 frames, 2.0 s
     assert hunt.gone(seen + miss, 3 * S, 5, 2.5)
+
+
+def test_nearest_in_finds_the_closest_area_cell() -> None:
+    area = np.zeros((30, 30), dtype=bool)
+    area[10:20, 10:20] = True
+    assert hc.nearest_in(area, area, (5, 15)) == (10, 15)
+    assert hc.nearest_in(np.zeros((5, 5), dtype=bool), None, (2, 2)) is None

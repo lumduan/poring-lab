@@ -62,6 +62,7 @@ REACQ_PX = 140.0
 WIDE_PX = 200.0
 RETRY_S = 0.5
 DROP_S = 30.0
+STUCK_S = 60.0  # no route, click or engagement this long: stop (fail safe)
 Cell = tuple[int, int]
 
 # what each version changes (pre-registered in demonstrations.md 3.39.N before its run)
@@ -137,7 +138,7 @@ def run(version: int, minutes: float, seed: int) -> int:
     npcs = json.loads((kb / "npc_cells.json").read_text())["maps"].get(MAP, {}).get("npcs", [])
     keep = [(w["x"], w["y"], w["span_x"], w["span_y"]) for w in warps]
     keep += [(n["x"], n["y"], 1, 1) for n in npcs]
-    area = hc.search_area(ok, keep)
+    area = hc.search_area(ok, keep, margin=10)  # 10 (was 6): hunt@3 attempt 1 drifted 3 cells
     start = start_cell(area, seed)  # a seeded cell: the @warp line differs run to run (the
     # typing guard skips a 3rd identical line, and a filler line is never typed: hunt@2 attempt 1)
     cj = json.loads((r.ROOT / "packages/poring_dataset/src/poring_dataset/camera_rdp.json")
@@ -329,16 +330,20 @@ def run(version: int, minutes: float, seed: int) -> int:
             path: list[Cell] = []
             pi = 0
             refused = 0
+            grid_now: Any = area
+            last_progress = [time.monotonic()]
 
-            def step_target(pth: list[Cell], from_i: int,
-                            at: Cell) -> tuple[int | None, tuple[float, float]]:  # fmt: skip
+            def step_target(
+                pth: list[Cell], from_i: int, at: Cell, grid: Any = None
+            ) -> tuple[int | None, tuple[float, float]]:
                 """The farthest path index in (from_i, from_i + WP_CELLS] whose screen point,
                 seen from ``at``, is in view and off the UI; (None, (0, 0)) when none is."""
                 world.position = at
                 hi = min(len(pth) - 1, from_i + hc.WP_CELLS)
                 for jj in range(hi, from_i, -1):
                     uu, vv = (float(c) for c in world.project([pth[jj]])[0])
-                    if in_view(uu, vv) and area[pth[jj][1], pth[jj][0]]:
+                    g = area if grid is None else grid
+                    if in_view(uu, vv) and g[pth[jj][1], pth[jj][0]]:
                         return jj, (uu, vv)
                 return None, (0.0, 0.0)
 
@@ -428,6 +433,7 @@ def run(version: int, minutes: float, seed: int) -> int:
                                  frame, cell_of, settle, ev, box0)  # fmt: skip
                     k += 1
                     engagements.append(eng)
+                    last_progress[0] = time.monotonic()
                     if eng["result"] != "dead":
                         dropped.append((time.monotonic(), tcell))
                     mem.forget(tcell)
@@ -437,8 +443,23 @@ def run(version: int, minutes: float, seed: int) -> int:
                 # search: plan, first click from a standstill, then continuous clicks. A click
                 # goes to the FARTHEST path cell <= WP_CELLS ahead whose point is in view and off
                 # the UI from where the GM is (or will be): west / south the view is short.
+                if now - last_progress[0] > STUCK_S:
+                    raise f0.FarmStop(f"no progress for {STUCK_S:.0f} s at {pos}: stopped")
                 if not moving:
-                    if pi >= len(path) - 1:
+                    if pi >= len(path) - 1 and not area[pos[1], pos[0]]:
+                        # outside the search area (a drift past the margin): back to its nearest
+                        # cell over stand cells, cursor-gated, before any plan (hunt@3 attempt 1
+                        # planned from outside it, failed every plan and sat 21 min)
+                        back = hc.nearest_in(area, ok, pos)
+                        got_path = None if back is None else hc.astar(ok, pos, back)
+                        if got_path is None or len(got_path) < 2:
+                            raise f0.FarmStop(f"outside the search area at {pos}, no way back")
+                        path, pi, grid_now = got_path, 0, ok
+                        ev({"kind": "route", "from": list(pos), "goal": list(back),
+                            "cells": len(path), "return": True})  # fmt: skip
+                        last_progress[0] = now
+                    elif pi >= len(path) - 1:
+                        grid_now = area
                         goal = hc.choose_goal(cov, pos, now, mem.bonus(now), bad_tiles)
                         got_path = None if goal is None else hc.astar(area, pos, goal)
                         if got_path is None or len(got_path) < 2:
@@ -450,17 +471,19 @@ def run(version: int, minutes: float, seed: int) -> int:
                             pos = settle(timeout=2.0) or pos
                             continue
                         path, pi = got_path, 0
+                        last_progress[0] = now
                         rp("route", pos, hc.waypoints(path))
                         ev({"kind": "route", "from": list(pos), "goal": list(goal),
                             "cells": len(path)})  # fmt: skip
                         note(f"search: route to {goal[0]},{goal[1]} ({len(path)} cells)")
-                    j, (u, v) = step_target(path, pi, pos)
+                    j, (u, v) = step_target(path, pi, pos, grid_now)
                     if j is None:
                         bad_tiles.append((path[-1][0] - path[-1][0] % hc.TILE,
                                           path[-1][1] - path[-1][1] % hc.TILE))  # fmt: skip
                         path, pi = [], 0
                         continue
                     got = cursor_gate.gated_click(pr, u, v, allow=("walk",))
+                    last_progress[0] = time.monotonic()
                     ev({"kind": "walk_click", "gate": "cursor", "to": list(path[j]),
                         "clicked": got["clicked"], "why": got["why"]})  # fmt: skip
                     if not got["clicked"]:
@@ -486,7 +509,7 @@ def run(version: int, minutes: float, seed: int) -> int:
                         pi = path.index(pos)
                 elif reck.remaining(now) <= hc.LEAD_CELLS and pi < len(path) - 1:
                     cur = reck.where(now + 0.15) or pos
-                    j, (u, v) = step_target(path, pi, cur)
+                    j, (u, v) = step_target(path, pi, cur, grid_now)
                     prm = PARAMS[version]
                     recent = sampler.since(max(0, len(sampler.frames) - prm["clear_frames"]))
                     clear = (j is not None and len(recent) >= prm["clear_frames"]
@@ -501,6 +524,7 @@ def run(version: int, minutes: float, seed: int) -> int:
                         seg = path[ci : j + 1] if ci < j else [cur, path[j]]
                         reck.go(seg, time.monotonic())
                         rp("walk", cur, seg, t_c)
+                        last_progress[0] = time.monotonic()
                         ev({"kind": "walk_click", "gate": "map+units", "to": list(path[j]),
                             "from": list(cur)})  # fmt: skip
                         pi = j
