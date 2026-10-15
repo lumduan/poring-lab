@@ -5991,6 +5991,38 @@ failure cause, the selection. Small fixes for the others:
   40-min box, seed 20261109. The only change is the recording (the NAS, q80): nothing that
   decides.
 
+**3.39.5 hunt@5 (pre-registered 2026-10-16 01:22, before its run and before hunt@4 attempt 3's
+result).** Why: across hunt@2-4, 22 of 28 failures ended `lost` with NO click.
+- Recorded frames of four of them show three causes:
+  - far selections walking out of view (hunt@4's approach already addresses those);
+  - targets hidden under a tree canopy or behind the GM's sprite for a few seconds;
+  - two `unknown` reads while the client drew the monster's name under the cursor, then the
+    target moved.
+- The engagement ended 5 s after the last sighting.
+- **MAIN, STAY ON THE TARGET before the first click.**
+  - When the target is unseen for over 1 s, the newest fresh detector frame is searched for a
+    target box (the same species, size, UI and area gates) within 4 cells of the SELECTED cell.
+    The one nearest the target's last feet takes the focus, up to 3 re-acquisitions.
+  - The engagement is lost only after 10 s unseen with none found (was 5 s).
+- **A bounded give-up, recorded:** 8 non-SWORD reads before the first click end the engagement
+  as `no_sword`.
+- Everything else is hunt@4 unchanged: select within 7 cells, the approach, the hover-confirmed
+  death, robust2 SWORD reads.
+- Seed 20261110, 40 min.
+
+**A SECONDARY measure, pre-registered at the same time (01:22, before hunt@5's data).** It is
+reported beside the 3.39 judge for every run and NEVER replaces it: verdicts stay with the 3.39
+judge.
+- `hunt_core.walk_positions`: a mob's cell along its walk. A move entry gives one cell step per
+  `speed` ms, diagonal first; a stop packet pins the cell where it stopped.
+- The 3.39 judge puts a walking mob at its walk's DESTINATION at once, so a target selected
+  mid-walk can read 3-6 cells away.
+- Applied post hoc to hunt@1-4 (labelled as such): it moves 0-2 engagements per run, e.g.
+  hunt@2 69.0 % -> 73.8 %, hunt@3 68.6 % -> 68.6 %. **So the failures are real, not a judge
+  artefact.**
+- The bot's own box-to-cell projection was checked against mobs standing still: 68 of 95 exact
+  (the rest within a few cells, mostly mobs that had moved).
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.

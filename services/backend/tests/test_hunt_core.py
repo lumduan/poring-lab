@@ -127,3 +127,52 @@ def test_nearest_in_finds_the_closest_area_cell() -> None:
     area[10:20, 10:20] = True
     assert hc.nearest_in(area, area, (5, 15)) == (10, 15)
     assert hc.nearest_in(np.zeros((5, 5), dtype=bool), None, (2, 2)) is None
+
+
+def test_hunt_reacquire_takes_the_box_nearest_the_last_feet_near_the_selection() -> None:
+    from dataclasses import dataclass
+
+    import hunt
+    import ro_agent as r
+
+    @dataclass
+    class B:
+        x0: float
+        y0: float
+        x1: float
+        y1: float
+
+    class Samp:
+        def __init__(self, frames: list[tuple[int, list[B]]]) -> None:
+            self.frames = frames
+
+        def since(self, k: int) -> list[tuple[int, list[B]]]:
+            return self.frames[k:]
+
+    near_last, near_sel, far = B(100, 100, 120, 120), B(200, 100, 220, 120), B(400, 100, 420, 120)
+    cells = {id(near_last): (12, 10), id(near_sel): (10, 10), id(far): (30, 10)}
+
+    def pick(bs: list[B]) -> list[tuple[B, tuple[int, int]]]:
+        return [(b, cells[id(b)]) for b in bs]
+
+    now = r.ns()
+    three = Samp([(now, [far, near_sel, near_last])])
+    got = hunt.reacquire(three, pick, (110.0, 120.0), (10, 10), 4)
+    assert got is not None and got[1] is near_last  # nearest the feet, within 4 of the selection
+    assert hunt.reacquire(Samp([(now, [far])]), pick, (110.0, 120.0), (10, 10), 4) is None
+    stale = Samp([(now - 5 * S, [near_last])])
+    assert hunt.reacquire(stale, pick, (110.0, 120.0), (10, 10), 4) is None  # an old frame
+
+
+def test_walk_positions_step_along_the_walk_and_stop_where_stopped() -> None:
+    walk = [_ev(0, type="entity_appear", objtype=5, gid=7, x=10, y=10, x1=14, y1=12, speed=400,
+                job=1002)]  # fmt: skip
+    pos = hc.walk_positions(walk)[7]
+    cells = [c for _t, c, _j in pos]
+    assert cells == [(10, 10), (11, 11), (12, 12), (13, 12), (14, 12)]  # diagonal first
+    assert pos[2][0] == int(0.8 * S)  # two steps at 400 ms
+    stopped = hc.walk_positions(walk + [_ev(0.5, type="entity_stop", gid=7, x=11, y=11)])[7]
+    assert [c for _t, c, _j in stopped] == [(10, 10), (11, 11), (11, 11)]
+    eng = {"t_select": int(1.3 * S), "t_end": 10 * S, "target_cell": [13, 12]}
+    assert hc.judge_engagement(eng, walk)["gid"] is not None  # the destination: within 2
+    assert hc.judge_engagement(eng, walk, along_walk=True)["gid"] == 7  # at (13, 12) by then

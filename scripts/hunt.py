@@ -86,7 +86,12 @@ VERSIONS = {1: "search (coverage plan, look while walking, memory, continuous wa
                "selection + a wider re-acquire (200 px after 0.5 s, lost after 5 s)",
             4: "SELECT WITHIN 7 CELLS (v2/v3: ~90 % success under 8 cells, ~50 % beyond): a "
                "farther target is APPROACHED (a route to its cell, detection all the way) and "
-               "selected once within 7 + the death confirmed by a hover"}  # fmt: skip
+               "selected once within 7 + the death confirmed by a hover",
+            5: "STAY ON THE TARGET before the first click: unseen > 1 s (under a tree canopy, "
+               "behind the GM, a hop), the nearest target box within 4 cells of the SELECTED "
+               "cell takes the focus (up to 3 re-acquisitions); lost only after 10 s unseen "
+               "with none (was 5 s) + a give-up after 8 non-SWORD reads before the first "
+               "click"}  # fmt: skip
 PARAMS = {1: {"engage_max_s": 60.0, "max_clicks": 10, "gone_frames": 3, "gone_s": 1.5,
               "unit_clear_px": 40.0, "clear_frames": 1},
           2: {"engage_max_s": 120.0, "max_clicks": 20, "gone_frames": 5, "gone_s": 2.5,
@@ -97,7 +102,12 @@ PARAMS = {1: {"engage_max_s": 60.0, "max_clicks": 10, "gone_frames": 3, "gone_s"
           4: {"engage_max_s": 120.0, "max_clicks": 20, "gone_frames": 5, "gone_s": 2.5,
               "unit_clear_px": 60.0, "clear_frames": 2, "lost_s": 5.0, "park_first": True,
               "stable_frames": 2, "min_box_px": 16.0, "select_within": 7,
-              "confirm_death": True}}  # fmt: skip
+              "confirm_death": True},
+          5: {"engage_max_s": 120.0, "max_clicks": 20, "gone_frames": 5, "gone_s": 2.5,
+              "unit_clear_px": 60.0, "clear_frames": 2, "lost_s": 10.0, "park_first": True,
+              "stable_frames": 2, "min_box_px": 16.0, "select_within": 7,
+              "confirm_death": True, "persist": True, "reacquire_max": 3, "reacq_cells": 4,
+              "unseen_reacq_s": 1.0, "max_misreads": 8}}  # fmt: skip
 
 
 def start_cell(area: Any, seed: int, near: Cell = START, within: int = 25) -> Cell:
@@ -471,8 +481,11 @@ def run(version: int, minutes: float, seed: int) -> int:
                         )
                     else:
                         check(f"engagement {k}")
+                    here_sel = pos
                     eng = engage(k, tcell, pos, version, sampler, pr, rig, world, split, note,
-                                 frame, cell_of, settle, ev, box0)  # fmt: skip
+                                 frame, cell_of, settle, ev, box0,
+                                 pick=lambda bs, h=here_sel: targets_in(bs, h, time.monotonic())
+                                 )  # fmt: skip
                     k += 1
                     engagements.append(eng)
                     approaching = False
@@ -606,7 +619,9 @@ def run(version: int, minutes: float, seed: int) -> int:
                "dead_pixels": sum(e["result"] == "dead" for e in engagements),
                "results": dict(Counter(e["result"] for e in engagements)),
                "split": split.ranked(), "coverage_cells": cov.first_seen,
-               "stationary_remembered": len(mem.stationary)}  # fmt: skip
+               "stationary_remembered": len(mem.stationary),
+               "det_fps": None if sampler is None or not run_s
+               else round(len(sampler.frames) / run_s, 2)}  # fmt: skip
     log.finish(ended=ended, packet_events=len(events), packet_anchor=anchor, **summary)
     print(json.dumps({"session": sid, "ended": ended, **summary}, default=str), flush=True)
     if crashed is not None:
@@ -616,7 +631,7 @@ def run(version: int, minutes: float, seed: int) -> int:
 
 def engage(k: int, tcell: Cell, here: Cell, version: int, sampler: Any, pr: Any, rig: Any,
            world: Any, split: Any, note: Any, frame: Any, cell_of: Any, settle: Any,
-           ev: Any, box0: Any = None) -> dict[str, Any]:  # fmt: skip
+           ev: Any, box0: Any = None, pick: Any = None) -> dict[str, Any]:  # fmt: skip
     """ONE engagement, from the selection to the death (pixels) or a bounded give-up.
     The target is followed frame by frame: acquired within REACQ_PX of its projected cell, then
     within FOCUS_PX per frame, widened to WIDE_PX once attacked (the camera scrolls while the client
@@ -650,6 +665,9 @@ def engage(k: int, tcell: Cell, here: Cell, version: int, sampler: Any, pr: Any,
     park_at: tuple[float, float] | None = None
     confirms = 0
     alive_at = 0
+    reacq = 0  # v5: re-acquisitions before the first click
+    misreads = 0  # v5: non-SWORD reads before the first click
+    t_acq = t_sel
     if prm.get("park_first") and box0 is not None and pr.park():
         park_at = f1.foot(box0)  # parked at the selection: the background holds the target
     while True:
@@ -700,9 +718,38 @@ def engage(k: int, tcell: Cell, here: Cell, version: int, sampler: Any, pr: Any,
             break
         unseen = fo.unseen_s(now)
         lost_s = prm.get("lost_s", LOST_S)
-        if t_first is None and ((not fo.seen and (now - t_sel) / 1e9 > lost_s)
+        if (
+            t_first is None
+            and prm.get("persist")
+            and pick is not None
+            and reacq < prm["reacquire_max"]
+            and (
+                (unseen is not None and unseen > prm["unseen_reacq_s"])
+                or (not fo.seen and (now - t_acq) / 1e9 > prm["unseen_reacq_s"])
+            )
+        ):
+            # v5: hidden (a canopy, the GM's sprite) or hopped: the nearest target box near the
+            # SELECTED cell takes the focus; the engagement is not dropped
+            got_r = reacquire(sampler, pick, fo.last, tcell, prm["reacq_cells"])
+            if got_r is not None:
+                t_r, nb = got_r
+                reacq += 1
+                fo = f1.Focus(f1.foot(nb))
+                fo.seen.append((t_r, f1.foot(nb), nb))
+                fo.gate = f1.FOCUS_PX
+                park_at = None
+                t_acq = now
+                eng.setdefault("reacquired", []).append(
+                    {"t": now, "at": [round(float(q), 1) for q in f1.foot(nb)]}
+                )
+                note(f"target unseen: re-acquired near the selection ({reacq})", [nb])
+                continue
+        if t_first is None and ((not fo.seen and (now - t_acq) / 1e9 > lost_s)
                                 or (unseen is not None and unseen > lost_s)):  # fmt: skip
             result = "lost"
+            break
+        if t_first is None and misreads >= prm.get("max_misreads", 10**6):
+            result = "no_sword"  # v5: a bounded give-up, recorded
             break
         if t_first is None:
             due = t_try is None or (now - t_try) / 1e9 > RETRY_S
@@ -749,9 +796,11 @@ def engage(k: int, tcell: Cell, here: Cell, version: int, sampler: Any, pr: Any,
                     else:
                         note(f"read {shape}: no click")
                         if t_first is None:
+                            misreads += 1
                             fo.seen = fo.seen[-1:]  # stillness is measured afresh
         time.sleep(0.03)
-    eng.update(result=result, clicks=clicks, t_end=r.ns(), t_first_click=t_first)
+    eng.update(result=result, clicks=clicks, t_end=r.ns(), t_first_click=t_first, reacq=reacq,
+               misreads=misreads)  # fmt: skip
     if result == "dead":
         split.to("looting", time.monotonic())
         here2 = settle() or here
@@ -768,6 +817,22 @@ def engage(k: int, tcell: Cell, here: Cell, version: int, sampler: Any, pr: Any,
     print(json.dumps({k_: eng.get(k_) for k_ in ("k", "result", "clicks", "target_cell")}),
           flush=True)  # fmt: skip
     return eng
+
+
+def reacquire(sampler: Any, pick: Any, last_foot: Any, sel: Cell,
+              cells: int) -> tuple[int, Any] | None:  # fmt: skip
+    """v5: on the newest fresh detector frame, the target box (``pick``: species, size, UI and
+    area gates with its cell) within ``cells`` of the SELECTED cell nearest the focus's last
+    feet, with that frame's time; None when there is none."""
+    fr = sampler.since(max(0, len(sampler.frames) - 1))
+    if not fr or (r.ns() - fr[-1][0]) / 1e9 > FRESH_S * 2:
+        return None
+    cand = [bc for bc in pick(fr[-1][1]) if cheb(bc[1], sel) <= cells]
+    if not cand:
+        return None
+    lx, ly = float(last_foot[0]), float(last_foot[1])
+    b = min(cand, key=lambda bc: float(np.hypot(f1.foot(bc[0])[0] - lx, f1.foot(bc[0])[1] - ly)))
+    return fr[-1][0], b[0]
 
 
 def gone(sightings: Any, now_ns: int, frames: int, secs: float) -> bool:
@@ -806,6 +871,15 @@ def judge(sid: str) -> dict[str, Any]:
     counted = [x for x in rows if not x["excluded"]]
     ok_n = sum(x["success"] for x in counted)
     lo, hi = hc.wilson(ok_n, len(counted))
+    # the SECONDARY measure (pre-registered before hunt@5's data): mob cells along their walk
+    rows2 = [hc.judge_engagement({**e, "t_end": e.get("t_loot_end") or e["t_end"]}, win,
+                                 along_walk=True) for e in engs]  # fmt: skip
+    counted2 = [x for x in rows2 if not x["excluded"]]
+    ok2 = sum(x["success"] for x in counted2)
+    secondary = {"engagements": len(counted2), "success": ok2,
+                 "success_rate": round(ok2 / len(counted2), 4) if counted2 else None,
+                 "wilson95": [round(v, 4) for v in hc.wilson(ok2, len(counted2))],
+                 "why": dict(Counter(x["why"] for x in rows2))}  # fmt: skip
     run_s = float(man.get("run_s") or 0)
     k = f0.kills_from_packets(win)
     stats = [e for e in win if e.get("type") == "stat_change"]
@@ -824,6 +898,7 @@ def judge(sid: str) -> dict[str, Any]:
         "success": ok_n, "success_rate": round(ok_n / len(counted), 4) if counted else None,
         "wilson95": [round(lo, 4), round(hi, 4)],
         "why": dict(Counter(x["why"] for x in rows)),
+        "secondary_along_walk": secondary,
         "kills_packets": k, "kills_per_hour": f0.per_hour(k["kills"], run_s),
         "time_to_first_target_s": None if first_sel is None else round((first_sel - t0) / 1e9, 1),
         "targets_per_10min": round(len(rows) / (run_s / 600), 2) if run_s else None,

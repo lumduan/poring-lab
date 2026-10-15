@@ -296,9 +296,47 @@ def unit_positions(events: Sequence[Mapping[str, Any]]) -> dict[int, list[tuple[
     return out
 
 
+def walk_positions(events: Sequence[Mapping[str, Any]]) -> dict[int, list[tuple[int, Cell, int]]]:
+    """The SECONDARY position model (pre-registered 2026-10-16 ~01:20, before hunt@5's data; a
+    sensitivity measure beside the 3.39 judge, never its replacement): a mob's cell ALONG its
+    walk. A move entry (x0,y0 -> x1,y1, speed ms/cell) yields one point per cell step at its
+    arrival time (Chebyshev steps: diagonal first, then straight), and ZC_STOPMOVE
+    (entity_stop) pins the cell where it stopped. unit_positions jumps to the destination at
+    once, so a walking mob can read 3-6 cells from where it was drawn."""
+    out: dict[int, list[tuple[int, Cell, int]]] = {}
+    job: dict[int, int] = {}
+    for e in events:
+        t = int(e.get("t_mono_ns", 0))
+        if e.get("type") == "entity_appear" and e.get("objtype") == 5:
+            g = int(e["gid"])
+            job[g] = int(e.get("job", -1))
+            x, y = int(e["x"]), int(e["y"])
+            # a new entry replaces what is left of an earlier walk
+            out[g] = [q for q in out.get(g, []) if q[0] <= t] + [(t, (x, y), job[g])]
+            if e.get("x1") is not None:
+                x1, y1 = int(e["x1"]), int(e["y1"])
+                ms = max(1, int(e.get("speed") or 200))
+                k = 0
+                while (x, y) != (x1, y1):
+                    k += 1
+                    x += (x1 > x) - (x1 < x)
+                    y += (y1 > y) - (y1 < y)
+                    out[g].append((t + k * ms * 10**6, (x, y), job[g]))
+        elif e.get("type") == "entity_stop" and int(e.get("gid", -1)) in out:
+            g = int(e["gid"])
+            # a stop cancels the rest of the walk: drop the later planned steps
+            out[g] = [q for q in out[g] if q[0] <= t] + [(t, (int(e["x"]), int(e["y"])), job[g])]
+        elif e.get("type") == "entity_vanish" and int(e.get("gid", -1)) in out:
+            g = int(e["gid"])
+            out[g] = [q for q in out[g] if q[0] <= t]
+    for g in out:
+        out[g].sort(key=lambda q: q[0])
+    return out
+
+
 def judge_engagement(eng: Mapping[str, Any], events: Sequence[Mapping[str, Any]],
                      gm_aid: int = 2000002, targets: Iterable[int] = (1002, 1063, 1008, 1113),
-                     near: int = 2) -> dict[str, Any]:  # fmt: skip
+                     near: int = 2, along_walk: bool = False) -> dict[str, Any]:  # fmt: skip
     """Batt's definitions (3.39, fixed before any data):
     - the SELECTED unit G: our first attack request after the selection, if its unit stood within
       ``near`` cells of the selected cell at that time; else the mob nearest the selected cell at
@@ -308,7 +346,8 @@ def judge_engagement(eng: Mapping[str, Any], events: Sequence[Mapping[str, Any]]
       never hit it (reason != 1 and not out of sight), or G was killed with no act of ours."""
     t_sel, t_end = int(eng["t_select"]), int(eng["t_end"])
     sel = tuple(eng["target_cell"])
-    pos = unit_positions([e for e in events if int(e.get("t_mono_ns", 0)) <= t_end + 60 * 10**9])
+    upto = [e for e in events if int(e.get("t_mono_ns", 0)) <= t_end + 60 * 10**9]
+    pos = walk_positions(upto) if along_walk else unit_positions(upto)
 
     def at(g: int, t: int) -> tuple[Cell, int] | None:
         last = None
