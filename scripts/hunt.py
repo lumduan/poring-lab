@@ -49,7 +49,10 @@ import ro_agent as r  # noqa: E402
 RULE = "hunt"
 MAP = "prt_fild08"
 START = (268, 107)
-OUT = Path("/dev/shm/poring-lab-tmp/hunt")
+OUT = Path("/dev/shm/poring-lab-tmp/hunt")  # logs (small)
+# the 5 Hz frames go to the NAS (not /dev/shm: four runs filled it on 2026-10-16)
+REC_ROOT = Path("/mnt/poring-lab-datasets/hunt-recordings")
+REC_QUALITY = 80
 REC_HZ = 5.0
 CHECK_EVERY_S = 30.0
 FRESH_S = 0.35
@@ -166,12 +169,15 @@ def run(version: int, minutes: float, seed: int) -> int:
     sid = new_session_id(f"hunt{version}")
     log = DemoLog(sid)
     out = OUT / sid
-    (out / "frames").mkdir(parents=True, exist_ok=True)
+    out.mkdir(parents=True, exist_ok=True)
+    frames_dir = REC_ROOT / sid / "frames"
+    frames_dir.mkdir(parents=True, exist_ok=True)
     log.start(backend=str(lock.backend), lock_seq=lock.seq, server="lab-rathena",
               rule=f"{RULE}@{version}", account="gm", map=MAP, minutes=minutes, seed=seed,
               start=list(start),
               change=VERSIONS[version], area_cells=int(area.sum()), footprint=len(offsets),
-              scored=True, immunity=why_imm, rec_dir=str(out))  # fmt: skip
+              scored=True, immunity=why_imm, rec_dir=str(out),
+              frames_dir=str(frames_dir))  # fmt: skip
     print(json.dumps({"session": sid, "version": version, "start": time.strftime("%H:%M:%S")}),
           flush=True)  # fmt: skip
     events_f = (log.dir / "events.jsonl").open("a")
@@ -191,8 +197,8 @@ def run(version: int, minutes: float, seed: int) -> int:
     ctx = mp.get_context("spawn")
     stop_rec = ctx.Event()
     region = (gx0, gy0, gw, gh)
-    rec = ctx.Process(target=route_demo._record, args=(str(out / "frames"), region, stop_rec,
-                                                       REC_HZ), daemon=True)  # fmt: skip
+    rec = ctx.Process(target=route_demo._record, args=(str(frames_dir), region, stop_rec, REC_HZ,
+                                                       REC_QUALITY), daemon=True)  # fmt: skip
     plan_tok = route_plan.enable(f"hunt{version}-{sid}", MAP, log_path=str(out / "live.jsonl"))
     with r.session(f"rule:{RULE}@{version}") as (agent, screen):
         f0.stop_on_takeover(agent)

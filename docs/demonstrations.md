@@ -5970,6 +5970,26 @@ failure cause, the selection. Small fixes for the others:
       stay untouched;
     - a crash now writes the session (packets, manifest) before it is re-raised.
   - Attempt 2: seed 20261108.
+- ➡️ **Attempt 2 (`20261016T003626-demo-hunt4`, 00:36:26-00:51, 14.7 min) CRASHED: `OSError: No
+  space left on device`, kept, judged as a partial, not a verdict.**
+  - The cause is Claude's sizing error, not the version: the 5 Hz q92 recordings of the night's
+    runs (~4 GB per 40-min run) filled /dev/shm (24 G, 100 %). Claude stopped the run (SIGINT) and
+    finalised the session by hand.
+  - The recordings were moved to the NAS (`hunt-recordings/<session>/`, rsync, bandwidth-capped).
+    From attempt 3 on, the recorder writes the NAS directly at JPEG quality 80, and it stops
+    itself (only the recording) under 2 GB free.
+  - **Partial: 6 / 10 = 60 % (Wilson 31.3-83.2 %).** Failures: hit but not killed 3, no unit at
+    the selected cell 1.
+    - Two of the hit-but-not-killed were LOST before or between clicks; the same gid was attacked
+      or killed later, by a LATER engagement.
+    - One was a FALSE PIXEL DEATH that the hover confirmation did not catch: the hover read no
+      SWORD, the run moved on, and the unit left our sight alive 16 s later.
+  - kills 10 (packets) = 40.8 / h; time to first target 194 s; 6.8 targets / 10 min.
+  - **Safety:** NPC contacts 0, dialogs 0, map changes 0, non-target hits 0; unintended attack
+    requests 1.
+- **Attempt 3 (pre-registered 2026-10-16 ~01:08, before its run):** the same version, the full
+  40-min box, seed 20261109. The only change is the recording (the NAS, q80): nothing that
+  decides.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,

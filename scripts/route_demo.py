@@ -45,17 +45,34 @@ REC_HZ = 10.0
 MATCH_NS = 200_000_000  # the console draws a live message only within 200 ms of the frame
 
 
-def _record(out: str, region: tuple[int, int, int, int], stop: Any, hz: float) -> None:
-    """The recorder process: the game region as JPEGs named <k>-<t_mono_ns>.jpg."""
+def _record(
+    out: str,
+    region: tuple[int, int, int, int],
+    stop: Any,
+    hz: float,
+    quality: int = 92,
+    min_free_gb: float = 2.0,
+) -> None:
+    """The recorder process: the game region as JPEGs named <k>-<t_mono_ns>.jpg. It stops itself
+    (only the recording, never the run) when its filesystem has under `min_free_gb` free: on
+    2026-10-16 four 40-min runs at 5 Hz filled /dev/shm (~4 GB each)."""
+    import os
+
     from PIL import Image
 
     screen = r.Screen()
     k = 0
     while not stop.is_set():
         t0 = time.monotonic()
+        if k % 50 == 0:
+            st = os.statvfs(out)
+            if st.f_bavail * st.f_frsize < min_free_gb * 1e9:
+                print(f"recorder: under {min_free_gb} GB free in {out}, recording stopped",
+                      flush=True)  # fmt: skip
+                return
         t, img = screen.grab(*region)
         Image.fromarray(np.ascontiguousarray(img[..., 2::-1])).save(
-            Path(out) / f"{k:05d}-{t}.jpg", quality=92
+            Path(out) / f"{k:05d}-{t}.jpg", quality=quality
         )
         k += 1
         time.sleep(max(0.0, 1.0 / hz - (time.monotonic() - t0)))
