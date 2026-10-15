@@ -1,7 +1,7 @@
 ---
 doc_type: roadmap
 status: LIVING
-last_reviewed: 2026-10-15
+last_reviewed: 2026-10-16
 ---
 
 # poring-lab roadmap
@@ -276,7 +276,7 @@ install list; the RDP delivery ceiling was removed on 2026-10-01, Arm C.)
    watches live: HUD + route preview on, Watch only, time-boxed, unscored, the GM immune, safety
    from packets. Its report ranks what slowed it down BY TIME LOST, so the next improvements follow
    what Batt sees (CLAUDE.md "How we work"). **First: farm@0, 2026-10-15 evening** (prt_fild08:
-   detector -> walk@15 -> robust2 SWORD twice -> attack -> death from pixels -> PICKUP loot; 30 min). ➡️ **farm@0 (20:10) stopped at 11 min, 0 kills** (stale targets: it walked to where a Poring had been). **farm@1 (20:32, "engage like a player") ran 30 min: 3 kills = 6 / h**, safety 0 (demonstrations.md 6.1 / 6.2). Its losses, ranked: an empty field (89 % of the time spent finding a monster), ~~the first click only walking~~ (CORRECTED 21:45: the first click did attack, 3 / 3; the client walks up and attacks by itself), a cue that is not usable (1 of 3 consistent). Batt 21:40: farm@2 adds a SEARCH skill, designed then pre-registered as its own test.
+   detector -> walk@15 -> robust2 SWORD twice -> attack -> death from pixels -> PICKUP loot; 30 min). ➡️ **farm@0 (20:10) stopped at 11 min, 0 kills** (stale targets: it walked to where a Poring had been). **farm@1 (20:32, "engage like a player") ran 30 min: 3 kills = 6 / h**, safety 0 (demonstrations.md 6.1 / 6.2). Its losses, ranked: an empty field (89 % of the time spent finding a monster), ~~the first click only walking~~ (CORRECTED 21:45: the first click did attack, 3 / 3; the client walks up and attacks by itself), a cue that is not usable (1 of 3 consistent). Batt 21:40: farm@2 adds a SEARCH skill, designed then pre-registered as its own test. ➡️ **Overnight 2026-10-15/16 (Batt's brief: search + engage like a player, engagement success >= 95 % over >= 60 engagements, confirmed twice): hunt@1..8 on prt_fild08, natural spawns, each pre-registered, every result kept** (demonstrations.md 3.39; the per-run table is produced by `scripts/hunt.py judge`). **95 % NOT reached**; best clean runs ~79 %. Throughput is the binding limit: 12-42 engagements per 40-min run, against the 60 the bar needs. The run-time cues measured tonight (the GM's swing, the monster HP bar) are NOT proven. One safety event (hunt@5, a non-target hit) was fixed in hunt@6.
 
 ## Phases (exit gates are proposals; adjust as the research sharpens)
 
