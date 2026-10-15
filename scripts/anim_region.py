@@ -3,7 +3,7 @@
 read through moving scenery, AVOID it. The walk rule (and any hover/click planner) never picks a
 point inside a measured per-map ANIMATED region"; docs/demonstrations.md 3.32 amendment 3).
 
-    anim_region.py plan    --map M [--step 8]          offline: the stands, refusals, the time
+    anim_region.py plan    [--map M] [--step 8]        offline: the scope's stands and the time
     anim_region.py measure --map M [--step 8]          LIVE (RDP, the GM, ASSIST): pass 1, its
                        [--refine-step 3 --radius 12]     rechecks, pass 2 around animated views
     anim_region.py build   --map M --session SID ...   offline: packets audit -> the region file
@@ -68,7 +68,19 @@ PARK_HALF = 40  # the parked cursor animates too (the WALK arrow turns): its box
 SELF_HALF_W, SELF_UP, SELF_DOWN = 32, 120, 16  # the GM's own sprite around its projected feet
 UI_MARGIN = 4
 OUT_DIR = ROOT / "data" / "kb" / "anim_regions"
+KB_FIRST_WORKFLOW = ROOT / "data" / "kb" / "first_workflow.json"
 Cell = tuple[int, int]
+
+# THE SCOPE (Batt 2026-10-15, amending 3.32 amendment 3 before any measurement): "scope each map to
+# the FIRST WORKFLOW's areas (training grounds' 4 layouts, the route to alberta/alberta_in,
+# prontera's and geffen/geffen_in's delivery paths) plus prt_church and prt_fild08's tuning areas;
+# clicks outside a measured area are refused (fail closed)".
+TUNING_ANCHORS: dict[str, Cell] = {"prt_church": (104, 122), "prt_fild08": (268, 107)}  # SCENES8
+# walk@11's harness: a warp start within +-8 of the anchor every 5th route, the 4 routes between
+# start where the last ended, each goal within +-12 of its start: 8 + 5 x 12 = 68 cells of reach.
+TUNING_REACH = 68
+CORRIDOR = 6  # cells around a workflow route's path cells where stands are placed
+COVER_STRIDE = 8  # px: the measured-AREA sample grid of a view (a cell is ~30 px across)
 
 
 # --- pure parts (tested) ------------------------------------------------------------------------
@@ -185,6 +197,28 @@ def view_cells(mask: Any, pick: Callable[[Any], Any], stand: Cell,
     return {(int(stand[0] + dx), int(stand[1] + dy)) for dx, dy in rel[hit]}
 
 
+def coverage(pick: Callable[[Any], Any], stand: Cell, excl: Any,
+             stride: int = COVER_STRIDE) -> set[Cell]:  # fmt: skip
+    """The view's MEASURED cells: those the client picks anywhere in the view's counted pixels
+    (every pixel not excluded), sampled every ``stride`` pixels. A click is judged only on a
+    cell some measured view saw."""
+    return view_cells(~np.asarray(excl, dtype=bool), pick, stand, stride)
+
+
+def scope_mask(shape: tuple[int, int], *, anchors: Iterable[Cell] = (), reach: int = TUNING_REACH,
+               route: Iterable[Cell] = (), corridor: int = CORRIDOR,
+               whole: bool = False) -> Any:  # fmt: skip
+    """The cells a map's stands are drawn in: the whole map, or the union of a box of ``reach``
+    around each tuning anchor and ``corridor`` cells around each route path cell."""
+    h, w = shape
+    m = np.full((h, w), whole, dtype=bool)
+    for ax, ay in anchors:
+        m[max(0, ay - reach) : ay + reach + 1, max(0, ax - reach) : ax + reach + 1] = True
+    for x, y in route:
+        m[max(0, y - corridor) : y + corridor + 1, max(0, x - corridor) : x + corridor + 1] = True
+    return m
+
+
 def grow_cells(cells: Iterable[Cell], n: int = GROW_CELLS) -> set[Cell]:
     out = set(cells)
     for _ in range(n):
@@ -240,14 +274,88 @@ def stand_grid(map_name: str, gat: Any) -> Any:
     return ok
 
 
-def plan(map_name: str, step: int) -> dict[str, Any]:
+class _BothGrid:
+    """A ``nopass`` view of client ∩ server walkability (decision 4) for npc_sprites' paths."""
+
+    def __init__(self, mask: Any) -> None:
+        self.m = np.asarray(mask, dtype=bool)
+
+    def nopass(self, x: int, y: int) -> bool:
+        h, w = self.m.shape
+        return not (0 <= x < w and 0 <= y < h and bool(self.m[y, x]))
+
+
+def workflow_routes(kb: Path = KB_FIRST_WORKFLOW) -> tuple[dict[str, set[Cell]], list[str]]:
+    """{map: path cells} of the first workflow's Merchant round trips to its two supported
+    destinations (npc_sprites.DESTS: prontera, geffen_in): the graduation arrival in alberta_in,
+    the job changer, the storehouse, the KB's walk_kafra legs (alberta, the Kafra hops) to the
+    destination NPC and back. Shortest 8-neighbour paths (npc_sprites.route_cells) on client ∩
+    server walkability. A map either source lacks is a problem (listed), never guessed."""
+    import npc_sprites as ns
+
+    from poring_dataset import walkable as wk
+
+    doc = json.loads(kb.read_text())
+    out: dict[str, set[Cell]] = {}
+    problems: list[str] = []
+    grids: dict[str, Any] = {}
+    for dest in ns.DESTS:
+        stops = ns.route_stops(doc, dest)
+        for m in {s["map"] for s in stops}:
+            if m not in grids:
+                try:
+                    grids[m] = _BothGrid(wk.load_both(m)[1])
+                except wk.MapSourceError as exc:
+                    problems.append(str(exc))
+        cells, why = ns.route_cells(stops, grids)
+        problems += [f"{dest}: {w}" for w in why]
+        for m, c in cells.items():
+            out.setdefault(m, set()).update(c)
+    return out, problems
+
+
+def clone_groups(kb: Path = KB_FIRST_WORKFLOW) -> dict[str, list[str]]:
+    """{representative: its group's maps}: the training grounds' 4 layouts (the KB's clone groups,
+    identical cells; the copies' RSW/GND/textures were checked identical in map prep, 748260d).
+    The representative (the group's first map by name) is measured; its region serves the group."""
+    doc = json.loads(kb.read_text())
+    return {sorted(g["maps"])[0]: sorted(g["maps"]) for g in doc["clone_groups"]}
+
+
+def scope_for(map_name: str, shape: tuple[int, int],
+              routes: Mapping[str, set[Cell]] | None = None) -> tuple[Any, list[str]]:  # fmt: skip
+    """(the map's scope mask, why): a clone-group representative is whole; a tuning map gets its
+    anchors' boxes; a workflow map its route corridor. A map with none of these is OUT of scope:
+    an empty mask (its clicks are all refused until a pre-registration measures it)."""
+    why: list[str] = []
+    whole = map_name in clone_groups()
+    if whole:
+        why.append("training-grounds layout (whole map)")
+    anchors = [TUNING_ANCHORS[map_name]] if map_name in TUNING_ANCHORS else []
+    if anchors:
+        why.append(f"tuning area +-{TUNING_REACH} of {anchors[0]}")
+    route = sorted((routes or {}).get(map_name, set()))
+    if route:
+        why.append(f"workflow route corridor +-{CORRIDOR} ({len(route)} path cells)")
+    return scope_mask(shape, anchors=anchors, route=route, whole=whole), why
+
+
+def scoped_maps(routes: Mapping[str, set[Cell]]) -> list[str]:
+    return sorted({*clone_groups(), *TUNING_ANCHORS, *routes})
+
+
+def plan(map_name: str, step: int, routes: Mapping[str, set[Cell]] | None = None) -> dict[str, Any]:
     import npc_click_score as ncs
 
+    if routes is None:
+        routes, _ = workflow_routes()
     _, gat = ncs.load_map(map_name)
-    lat = lattice(stand_grid(map_name, gat), step)
+    ok = stand_grid(map_name, gat)
+    sc, why = scope_for(map_name, ok.shape, routes)
+    lat = lattice(ok & sc, step)
     n = len(lat["stands"])
-    return {"map": map_name, "step": step, "stands": n, "moved": len(lat["moved"]),
-            "dropped": len(lat["dropped"]),
+    return {"map": map_name, "scope": why, "scope_cells": int((ok & sc).sum()), "step": step,
+            "stands": n, "moved": len(lat["moved"]),
             "est_minutes_pass1": round(n * 7.0 / 60, 1)}  # fmt: skip
 
 
@@ -267,15 +375,21 @@ def measure(map_name: str, step: int, refine_step: int, radius: int) -> int:
 
     camera, gat = ncs.load_map(map_name)
     ok = stand_grid(map_name, gat)
-    lat = lattice(ok, step)
+    if any(map_name in g and map_name != rep for rep, g in clone_groups().items()):
+        raise SystemExit(f"{map_name} is a clone-group copy: measure its representative")
+    routes, problems = workflow_routes()
+    sc, why = scope_for(map_name, ok.shape, routes)
+    if not sc.any():
+        raise SystemExit(f"{map_name} is outside the pre-registered scope: refused")
+    lat = lattice(ok & sc, step)
     reg = ua.default_registry()
     sizes = {n: s.size for n, s in reg.windows.items()}
     sid = new_session_id(f"anim-region-{map_name}")
     log = DemoLog(sid)
     (log.dir / "views").mkdir(exist_ok=True)
     log.start(rule=RULE, map=map_name, step=step, refine_step=refine_step, radius=radius,
-              stands=len(lat["stands"]), moved=lat["moved"], dropped=lat["dropped"],
-              commit=_commit(), park=list(PARK))  # fmt: skip
+              scope=why, route_problems=problems, stands=len(lat["stands"]), moved=lat["moved"],
+              dropped=lat["dropped"], commit=_commit(), park=list(PARK))  # fmt: skip
     t_first = r.ns()
     templates = nd.load_templates(talk1.TEMPLATES)
     ended, code, k = "complete", 0, 0
@@ -403,6 +517,7 @@ def build(map_name: str, sessions: Sequence[str], out_dir: Path = OUT_DIR) -> di
 
     camera, gat = ncs.load_map(map_name)
     by_stand: dict[Cell, list[Any]] = {}
+    measured: set[Cell] = set()
     dropped: list[dict[str, Any]] = []
     for sid in sessions:
         d = DEMO_ROOT / sid
@@ -421,6 +536,11 @@ def build(map_name: str, sessions: Sequence[str], out_dir: Path = OUT_DIR) -> di
             mask = np.unpackbits(z["mask"])[: shape[0] * shape[1]].reshape(shape).astype(bool)
             excl = exclusion(shape, tuple(m["feet"]), m["windows"], _sizes())
             by_stand.setdefault(tuple(m["stand"]), []).append(counted(mask, excl))
+
+            def pick_here(px: Any, s: Cell = tuple(m["stand"])) -> Any:
+                return pick_cells(camera, gat, s, px)
+
+            measured |= coverage(pick_here, tuple(m["stand"]), excl)
     views: dict[Cell, set[Cell]] = {}
     for stand, masks in by_stand.items():
         if len(masks) < 2:  # a view without animation was measured once: nothing to confirm
@@ -432,16 +552,20 @@ def build(map_name: str, sessions: Sequence[str], out_dir: Path = OUT_DIR) -> di
 
         views[stand] = view_cells(both, pick, stand)
     region = sorted(region_of(views))
+    group = clone_groups().get(map_name, [map_name])
     doc = {"map": map_name, "rule": RULE, "sessions": list(sessions), "built_at":
            time.strftime("%Y-%m-%dT%H:%M:%S%z"), "commit": _commit(), "grow_cells": GROW_CELLS,
            "stands_measured": len(by_stand), "views_with_cells": len(views),
            "per_view": {f"{s[0]},{s[1]}": len(c) for s, c in sorted(views.items())},
            "dropped": dropped, "cells": [list(c) for c in region],
-           "never_commit": "derived from client pixels"}  # fmt: skip
+           "measured": [list(c) for c in sorted(measured)], "measured_on": map_name,
+           "serves": group, "never_commit": "derived from client pixels"}  # fmt: skip
     out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / f"{map_name}.json").write_text(json.dumps(doc))
-    return {k: v for k, v in doc.items() if k not in ("cells", "per_view")} | {
-        "region_cells": len(region)
+    for m in group:  # a clone group's copies share the representative's measurement
+        (out_dir / f"{m}.json").write_text(json.dumps({**doc, "map": m}))
+    return {k: v for k, v in doc.items() if k not in ("cells", "per_view", "measured")} | {
+        "region_cells": len(region),
+        "measured_cells": len(measured),
     }
 
 
@@ -454,17 +578,42 @@ def _sizes() -> dict[str, tuple[int, int]]:
 def load_region(map_name: str, out_dir: Path = OUT_DIR) -> set[Cell] | None:
     """The map's measured region (cells), or None when it was never measured (callers fail
     closed)."""
+    got = load_measurement(map_name, out_dir)
+    return None if got is None else got[0]
+
+
+def load_measurement(map_name: str,
+                     out_dir: Path = OUT_DIR) -> tuple[set[Cell], set[Cell]] | None:  # fmt: skip
+    """(the region, the measured AREA) of a map, or None when it was never measured. A click is
+    allowed only on a measured cell outside the region (Batt 2026-10-15: "clicks outside a
+    measured area are refused (fail closed)")."""
     p = out_dir / f"{map_name}.json"
     if not p.exists():
         return None
-    return {(int(c[0]), int(c[1])) for c in json.loads(p.read_text())["cells"]}
+    doc = json.loads(p.read_text())
+    cells = {(int(c[0]), int(c[1])) for c in doc["cells"]}
+    return cells, {(int(c[0]), int(c[1])) for c in doc.get("measured", [])}
+
+
+def click_allowed(
+    cell: Sequence[int], measurement: tuple[set[Cell], set[Cell]] | None
+) -> str | None:
+    """None when a WALK click on ``cell`` is allowed; else why not: "no_measurement" (the map was
+    never measured), "not_measured" (outside every measured view), "animated_region"."""
+    if measurement is None:
+        return "no_measurement"
+    region, measured = measurement
+    c = (int(cell[0]), int(cell[1]))
+    if c not in measured:
+        return "not_measured"
+    return "animated_region" if c in region else None
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)  # fmt: skip
     ap.add_argument("mode", choices=("plan", "measure", "build", "show"))
-    ap.add_argument("--map", required=True)
+    ap.add_argument("--map", help="the map (plan: omit it for every map in the scope)")
     ap.add_argument("--step", type=int, default=STEP)
     ap.add_argument("--refine-step", type=int, default=REFINE_STEP)
     ap.add_argument("--radius", type=int, default=RADIUS)
@@ -472,8 +621,20 @@ def main() -> int:
     ap.add_argument("--out", type=Path, default=OUT_DIR)
     a = ap.parse_args()
     if a.mode == "plan":
-        print(json.dumps(plan(a.map, a.step)))
+        routes, problems = workflow_routes()
+        maps = [a.map] if a.map else [rep for rep in scoped_maps(routes)
+                                      if not any(rep in g and rep != r0
+                                                 for r0, g in clone_groups().items())]  # fmt: skip
+        total = 0.0
+        for m in maps:
+            row = plan(m, a.step, routes)
+            total += row["est_minutes_pass1"]
+            print(json.dumps(row))
+        print(json.dumps({"maps": len(maps), "est_minutes_pass1_total": round(total, 1),
+                          "route_problems": problems}))  # fmt: skip
         return 0
+    if not a.map:
+        raise SystemExit(f"{a.mode} needs --map")
     if a.mode == "measure":
         return measure(a.map, a.step, a.refine_step, a.radius)
     if a.mode == "build":

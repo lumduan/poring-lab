@@ -154,6 +154,13 @@ def area(cx: int, cy: int, sx: int, sy: int) -> dict[str, Any]:
     return {"cell": (cx, cy), "span": (sx, sy), "to_map": "elsewhere", "cells": cells}
 
 
+class Everywhere:
+    """A measured AREA that holds every cell (amendment 3 inert in tests about other changes)."""
+
+    def __contains__(self, cell: object) -> bool:
+        return True
+
+
 @pytest.fixture
 def warps(mods: Any) -> Any:
     """walk@17's map state for one test (restored after)."""
@@ -161,8 +168,10 @@ def warps(mods: Any) -> Any:
     saved, route = dict(w17.WARPS), dict(w17.ROUTE)
 
     def use(*areas: dict[str, Any], intent: str = "walk",
-            nopass: frozenset[tuple[int, int]] = frozenset()) -> None:  # fmt: skip
-        w17.use_map("synthetic", intent, list(areas), nopass)
+            nopass: frozenset[tuple[int, int]] = frozenset(),
+            anim: tuple[Any, Any] | None = None) -> None:  # fmt: skip
+        meas = (frozenset(), Everywhere()) if anim is None else anim
+        w17.use_map("synthetic", intent, list(areas), nopass, meas)
 
     yield use
     w17.WARPS.clear()
@@ -682,3 +691,62 @@ def test_3_the_manifest_records_the_walkable_source(mods: Any, monkeypatch: pyte
     w17.SessionLog(sid, root=tmp_path).start(n=1, rule="walk@17")
     man = json.loads((tmp_path / sid / "manifest.json").read_text())
     assert man["walkable"] == "client∩server" and man["server_nopass_cells"] == 2
+
+
+# --- amendment 3 (Batt 2026-10-15, decision 3): the measured ANIMATED region and AREA ------------
+
+
+def test_3a_the_click_step_refuses_region_and_unmeasured_cells(mods: Any, warps: Any,
+                                                               monkeypatch: pytest.MonkeyPatch,
+                                                               ) -> None:  # fmt: skip
+    w17 = mods[0]
+    w = types.SimpleNamespace(position=(5, 5), walkable=np.ones((20, 20), dtype=bool))
+    warps(anim=(frozenset({(7, 5)}), frozenset({(6, 5), (7, 5)})))
+    monkeypatch.setattr(w17, "server_steps", lambda w, end: 1)
+    monkeypatch.setattr(w17.w15, "click_step", lambda *a, **k: {"clicked": True})
+    got = w17.click_step(None, w, (7, 5))
+    assert got["outcome"] == "no_safe_point" and got["animated"] == "animated_region"
+    got = w17.click_step(None, w, (8, 5))
+    assert got["outcome"] == "no_safe_point" and got["animated"] == "not_measured"
+    assert w17.click_step(None, w, (6, 5)) == {"clicked": True}
+    # the portal click (an intended warp) is not refused, only logged
+    assert w17.click_step(None, w, (7, 5), expect="warp") == {
+        "clicked": True,
+        "portal_animated": "animated_region",
+    }
+
+
+def test_3a_the_harness_never_draws_an_unclickable_goal_but_routes_still_cross(
+        mods: Any, warps: Any) -> None:  # fmt: skip
+    w17 = mods[0]
+    w = types.SimpleNamespace(position=(1, 1), walkable=np.ones((12, 12), dtype=bool))
+    region = frozenset((x, y) for x in range(4, 7) for y in range(0, 12))  # a band across the map
+    warps(anim=(region, Everywhere()))
+    assert w17.w6.plan(w, (5, 5), set()) is None  # the harness's goal draw: no plan to it
+    assert w17.w6.plan(w, (10, 1), set()) is not None  # beyond the band: a plan
+    with w17._route(w17.WALK):  # a route's own plan to the same goal is unchanged
+        path = w17.w6.plan(w, (10, 1), set())
+        assert path is not None and any(c in region for c in path)  # it crosses the band
+        assert w17.w6.plan(w, (5, 5), set()) is not None
+
+
+def test_3a_a_map_never_measured_refuses_to_start(
+        mods: Any, warps: Any, monkeypatch: pytest.MonkeyPatch) -> None:  # fmt: skip
+    w17 = mods[0]
+    import anim_region
+
+    monkeypatch.setattr(anim_region, "load_measurement", lambda name: None)
+    with pytest.raises(SystemExit, match="no measured animated region"):
+        w17.use_map("syn", "walk", [], frozenset())
+
+
+def test_3a_the_manifest_records_the_measurement(mods: Any, monkeypatch: pytest.MonkeyPatch,
+                                                 tmp_path: Path, warps: Any) -> None:  # fmt: skip
+    w17 = mods[0]
+    monkeypatch.setattr(w17.chat_guard, "start_run", lambda rid, b: None)
+    monkeypatch.setattr(w17.chat_guard, "policy", lambda: {"where_retry_s": 60})
+    warps(anim=(frozenset({(1, 1)}), frozenset({(1, 1), (2, 2), (3, 3)})))
+    sid = "20261015T130000-demo-walk17-alone-clean-indoor"
+    w17.SessionLog(sid, root=tmp_path).start(n=1, rule="walk@17")
+    man = json.loads((tmp_path / sid / "manifest.json").read_text())
+    assert man["anim_region_cells"] == 1 and man["anim_measured_cells"] == 3

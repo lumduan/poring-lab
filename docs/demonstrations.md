@@ -3259,8 +3259,10 @@ there, the strict count reported.
 >      - **The click step** refuses a WALK click whose target cell is in the map's region:
 >        `no_safe_point` with `animated_region`. walk@15's route loop then takes the next candidate
 >        on the polyline, as for B's warp areas. Every refusal is logged.
->      - **The harness never draws a start or a goal in the region.** The `_Walk5` proxy World hides
->        those cells, as amendment 2 hides warp areas. tour@1's endpoint draw excludes them too.
+>      - ~~**The harness never draws a start or a goal in the region.** The `_Walk5` proxy World hides
+>        those cells, as amendment 2 hides warp areas.~~ ➡️ CORRECTED in 3a below (hiding cells in
+>        the World would also block PATHS through the region). tour@1's endpoint draw excludes
+>        them.
 >      - **The PLANNER's grid is unchanged:** a path may cross the region. Only clicking or hovering
 >        there is avoided.
 >      - **Fail closed:** a walk@17 run on a map with no measured region refuses to start, as
@@ -3268,7 +3270,9 @@ there, the strict count reported.
 >      - The portal click (an intended warp) is not refused; when its cell is in the region, that
 >        is logged.
 >      - The cursor reader and the gate are unchanged: **robust2 stays the live gate**.
->    - **Other planners (Claude's reading, stated so Batt can correct it before they run):**
+>    - **Other planners** (Claude's reading; ➡️ CONFIRMED by Batt 2026-10-15 13:08: "(a) an
+>      intended TALK contact click on an L3 NPC is not refused by the region; (b) 3.38's B runs
+>      keep their plans; report their hovers inside a region separately"):
 >      - Planners that ACT inherit the rule: talk@1 on walk@17's approach, and any future walk
 >        user. A TALK contact click on an L3 NPC is NOT refused by the region. Its NPC rules
 >        (the NO-CLICK layer, T2) govern it, because an animated idle NPC would otherwise never be
@@ -3298,6 +3302,76 @@ there, the strict count reported.
 >        - tours whose start or goal falls in it (re-drawn by the rule);
 >        - click candidates refused along each tour's A* path;
 >        - routes left without a clickable point.
+> 3a. **SCOPED, before any measurement** (Batt 2026-10-15 13:08: "amend BEFORE any measurement
+>    ... scope each map to the FIRST WORKFLOW's areas (training grounds' 4 layouts, the route to
+>    alberta/alberta_in, prontera's and geffen/geffen_in's delivery paths) plus prt_church and
+>    prt_fild08's tuning areas; clicks outside a measured area are refused (fail closed). Report
+>    the client time it needs."). Replaces "a lattice ... over the map's walkable cells" above;
+>    everything else in amendment 3 stands.
+>    - **The scope** (`anim_region.py`, `scope_for`), the stands' lattice drawn only inside it:
+>      - **the training grounds' 4 layouts:** each layout's WHOLE walkable map, measured on its
+>        clone group's first map (new_1-1 .. new_1-4). The region serves the group's 5 copies:
+>        the KB's clone groups have identical cells, and map prep (748260d) checked the copies'
+>        RSW/GND/textures identical;
+>      - **the workflow routes:** the Merchant round trips to the two supported destinations
+>        (prontera, geffen_in; decision 4): `npc_sprites.route_stops` / `route_cells` (the
+>        arrival in alberta_in, the job changer, the storehouse, alberta, the Kafra hops, the
+>        destination and back), shortest paths on client ∩ server walkability, plus a corridor
+>        of 6 cells. 0 route problems;
+>      - **the tuning areas:** prt_church and prt_fild08, within 68 cells of walk@11's scene
+>        anchors (104,122) and (268,107). The harness warps within ±8 every 5th route, and each
+>        goal lies within ±12 of its start: 8 + 5 x 12 = 68.
+>    - **The measured AREA:** the union over the measured, position-audited, settled views of the
+>      cells the client picks anywhere in the view's counted pixels (`coverage`, every 8 px).
+>      **A WALK click on a cell outside it is refused** (`no_safe_point`, `"animated":
+>      "not_measured"`), as is one in the region (`"animated_region"`). A map never measured
+>      refuses to start.
+>      - So every block outside this scope fails closed until its own measurement is
+>        pre-registered with it: walk@17's held-out town (prontera 156,180), dungeon (iz_dun00)
+>        and portal (prt_fild08 170,368, beyond the tuning box), and tour@1's tours.
+>      - The guild scene (alberta_in 60,40) lies near the workflow corridor (the job changer is
+>        at 53,43): its coverage decides.
+>      - For 3.38's B runs (hovers reported, never refused): B2 (alberta_in 53,43) and B3
+>        (new_1-2) lie inside the scope. B1' (prontera 148,326) does not, so it gets no region
+>        to report against.
+>    - **The harness, CORRECTED** (amendment 3 said the World hides region cells; walk6's planner
+>      plans on that same grid, so hiding would also block paths THROUGH the region, against
+>      "pick another point on the polyline"):
+>      - while no route runs, i.e. during walk@11's GOAL draw, walk@17's planner has no plan to a
+>        goal in the region or outside the measured area, so the harness draws another;
+>      - a route's own plans and the planner's grid are unchanged;
+>      - starts are warp targets, never clicked, and stay walk@11's draw.
+>    - **Built, tested, before any measurement:**
+>      - `anim_region.py`: `plan` / `measure` scoped, `build` writes the region, the measured
+>        area and the clone copies (13 tests);
+>      - `walk17.py` amendment 3: the click step, the harness goal, fail closed, the manifest's
+>        `anim_region_cells` / `anim_measured_cells` (4 new tests in `test_walk17.py`).
+>      - walk@15's module is untouched.
+>    - **The client time it needs** (`anim_region.py plan`, 13:16:22-13:16:30; pass 1 at ~7 s per stand:
+>      `@warp` + settle + park + 2.6 s of grabs):
+>
+>      | map | scope | scope cells | stands | pass 1 |
+>      |---|---|---|---|---|
+>      | new_1-1 (layout 1, serves 5) | whole | 8,355 | 192 | 22.4 min |
+>      | new_1-2 (layout 2) | whole | 3,930 | 105 | 12.2 min |
+>      | new_1-3 (layout 3) | whole | 8,464 | 167 | 19.5 min |
+>      | new_1-4 (layout 4) | whole | 10,825 | 201 | 23.4 min |
+>      | alberta_in | route ± 6 | 399 | 16 | 1.9 min |
+>      | alberta | route ± 6 | 1,543 | 42 | 4.9 min |
+>      | prontera | route ± 6 | 3,029 | 79 | 9.2 min |
+>      | geffen | route ± 6 | 3,025 | 91 | 10.6 min |
+>      | geffen_in | route ± 6 | 349 | 12 | 1.4 min |
+>      | prt_church | tuning ± 68 | 1,325 | 39 | 4.5 min |
+>      | prt_fild08 | tuning ± 68 | 15,546 | 280 | 32.7 min |
+>      | **total, 11 measured maps (24 served)** | | | **1,224** | **142.7 min ≈ 2.4 h** |
+>
+>      - On top come the RECHECKS (+~7 s for each view that kept animated pixels, at most
+>        doubling pass 1) and PASS 2 (≤ 81 stands around each such view before overlap).
+>      - Both depend on how many views animate, known only after pass 1. cursor@3 found 4 of 13
+>        alberta views animated (the windmill).
+>      - Expected: about 3 to 4 h of client time in all. The pass-2 count is reported after each
+>        map's pass 1, before pass 2 runs.
+>      - The full-map version would have needed ~10 h of pass 1.
 > 4. **Client GAT ∩ server map cache** (Batt, decision 4: "every walk rule and planner uses only cells
 >    walkable in BOTH sources (intersection)").
 >    - walk@17's planner blocks, its harness hides, and its click step refuses
@@ -4502,7 +4576,14 @@ live gate stays robust2.**
     Those reads fail closed to UNKNOWN; that is safe, and it is a recall loss.
   - Masking the windmill's whole sweep removes the cursor with it. A different fix would compare
     against a background at the SAME point of the sails' cycle. That is Claude's reading, not a
-    pre-registration.
+    pre-registration. ➡️ **Batt 2026-10-15 (decision 3): AVOID moving scenery instead; robust2
+    stays the live gate.** See 3.32 amendments 3 / 3a. On this session's data, robust2 reads 236
+    of the 264 alberta WALK hovers outside the cycle region (0.894).
+  - ➡️ **PARKED for a later cursor version (Batt 2026-10-15): a reader-CONTRAST question.** Of
+    robust2's 28 alberta WALK misses outside the region, 13 are in ONE view, (123,68), out of its
+    22 WALK hovers there. The tiles show a clear arrow on PALE GREY COBBLESTONES, and both the
+    animated map and the region are empty there: low contrast, not motion. Avoidance does not
+    touch it.
 - Outputs: `/dev/shm/poring-lab-tmp/cursor3/` (result.json, result-nodisp.json, live/, truth/,
   the labels in c3-labeller{A,B}/; local, client pixels).
 

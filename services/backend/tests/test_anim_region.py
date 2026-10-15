@@ -86,3 +86,37 @@ def test_load_region_is_none_when_never_measured(tmp_path: Path) -> None:
     assert ar.load_region("nowhere", tmp_path) is None
     (tmp_path / "m.json").write_text('{"cells": [[1, 2], [3, 4]]}')
     assert ar.load_region("m", tmp_path) == {(1, 2), (3, 4)}
+
+
+def test_scope_is_the_union_of_tuning_boxes_and_route_corridors() -> None:
+    m = ar.scope_mask((50, 50), anchors=[(10, 10)], reach=2, route=[(40, 40)], corridor=1)
+    assert m[8, 8] and m[12, 12] and not m[13, 13]
+    assert m[39, 39] and m[41, 41] and not m[42, 41]
+    assert int(m.sum()) == 25 + 9
+    assert ar.scope_mask((4, 4), whole=True).all()
+    assert not ar.scope_mask((4, 4)).any()  # out of scope: nothing measured, every click refused
+
+
+def test_coverage_counts_every_unexcluded_pixel() -> None:
+    excl = np.zeros((10, 10), dtype=bool)
+    excl[:, 5:] = True
+
+    def pick(px: np.ndarray) -> np.ndarray:
+        return np.array([[int(u) // 4, int(v) // 4] for u, v in px])
+
+    assert ar.coverage(pick, (0, 0), excl, stride=4) == {(0, 0), (1, 0), (0, 1), (1, 1),
+                                                          (0, 2), (1, 2)}  # fmt: skip
+
+
+def test_click_allowed_fails_closed() -> None:
+    meas = ({(1, 1)}, {(1, 1), (2, 2)})
+    assert ar.click_allowed((2, 2), meas) is None
+    assert ar.click_allowed((1, 1), meas) == "animated_region"
+    assert ar.click_allowed((3, 3), meas) == "not_measured"
+    assert ar.click_allowed((2, 2), None) == "no_measurement"
+
+
+def test_load_measurement_reads_region_and_area(tmp_path: Path) -> None:
+    (tmp_path / "m.json").write_text('{"cells": [[1, 1]], "measured": [[1, 1], [2, 2]]}')
+    assert ar.load_measurement("m", tmp_path) == ({(1, 1)}, {(1, 1), (2, 2)})
+    assert ar.load_measurement("absent", tmp_path) is None

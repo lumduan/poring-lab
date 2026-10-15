@@ -58,6 +58,19 @@ its last row and column included) join B's mechanisms, for EVERY intent:
    On the tuning maps it changes nothing: prt_church has no such cell; prt_fild08's 799 all lie on
    the server's last row / column, none 8-adjacent to a client-walkable cell off that row / column
    (no plan from the map's interior can reach them).
+AMENDMENT 3 (Batt 2026-10-15, decision 3: "don't read through moving scenery, AVOID it ... never
+picks a point inside a measured per-map ANIMATED region; pick another point on the polyline";
+scoped the same day: "clicks outside a measured area are refused (fail closed)"):
+   - the map's measured region and area come from anim_region.py (data/kb/anim_regions/, local);
+     a map never measured fails CLOSED: the run refuses to start;
+   - the CLICK STEP refuses a WALK click on a region cell or a cell outside the measured area
+     (no_safe_point, "animated"), so the route loop takes the next point on the polyline; the
+     portal click is not refused, only logged ("portal_animated");
+   - the HARNESS never draws a goal no click could reach: while no route runs, the planner has no
+     plan to such a goal (walk@11's goal draw then draws another). A route's own plans and the
+     planner's grid are unchanged: a path may cross the region. Starts are warp targets, never
+     clicked, and stay walk@11's draw;
+   - robust2 stays the live gate (the reader is untouched).
 NOT carried: walk@16's F (Batt 2026-10-09 ~14:00: "no measurable effect beyond run-to-run noise;
 fewer rules"). Everything else is walk@15's, the same code rebound here: walk@14's route loop,
 walk@15's NPC clearance (D) and side cells never where the route stood (E), walk@13's click step.
@@ -121,8 +134,9 @@ SPENT = ("guard:where_budget", "guard:repeat")  # guard refusals that hold for t
 # B: warp areas
 ROUTE_KB = r.ROOT / "data/kb/route.json"  # L3 warps (local, never committed)
 # "nopass" (amendment 4): the cells the client calls walkable and the SERVER's map cache does not
+# "anim" (amendment 3): the map's measured ANIMATED region and measured AREA (anim_region.py)
 WARPS: dict[str, Any] = {"map": None, "areas": [], "cells": frozenset(), "intent": WALK,
-                         "nopass": frozenset()}  # fmt: skip
+                         "nopass": frozenset(), "anim": None}  # fmt: skip
 ROUTE: dict[str, Any] = {"active": False, "intent": WALK}  # set while a route (leg) runs
 
 # C: long walks
@@ -293,14 +307,39 @@ def server_nopass(mapname: str) -> frozenset[tuple[int, int]]:
     return frozenset(zip(xs.tolist(), ys.tolist(), strict=True))
 
 
+def anim_measurement(mapname: str) -> tuple[Any, Any]:
+    """Amendment 3 (Batt 2026-10-15, decision 3, scoped the same day): the map's measured ANIMATED
+    region and measured AREA (anim_region.py build). A map never measured fails CLOSED."""
+    import anim_region
+
+    got = anim_region.load_measurement(mapname)
+    if got is None:
+        raise SystemExit(f"walk@17: {mapname} has no measured animated region "
+                         "(anim_region.py measure + build) -- amendment 3 cannot hold")  # fmt: skip
+    return got
+
+
 def use_map(mapname: str, intent: str = WALK, areas: list[dict[str, Any]] | None = None,
-            nopass: frozenset[tuple[int, int]] | None = None) -> None:  # fmt: skip
-    """The run's map (its warp areas, the server's NOPASS cells) and the harness's own plan intent
-    ("warp" only for the portal scene, whose start search plans TO the portal)."""
+            nopass: frozenset[tuple[int, int]] | None = None,
+            anim: tuple[Any, Any] | None = None) -> None:  # fmt: skip
+    """The run's map (its warp areas, the server's NOPASS cells, its measured animated region and
+    area) and the harness's own plan intent ("warp" only for the portal scene, whose start search
+    plans TO the portal)."""
     got = warp_areas(mapname) if areas is None else areas
     off = server_nopass(mapname) if nopass is None else frozenset(nopass)
-    WARPS.update(map=mapname, areas=got, intent=intent, nopass=off,
+    meas = anim_measurement(mapname) if anim is None else anim
+    WARPS.update(map=mapname, areas=got, intent=intent, nopass=off, anim=meas,
                  cells=frozenset().union(*(a["cells"] for a in got)))  # fmt: skip
+
+
+def anim_refusal(cell: Sequence[int]) -> str | None:
+    """Amendment 3: why a WALK click (or a harness goal) may not be ``cell`` -- "animated_region"
+    (inside the measured region), "not_measured" (outside every measured view) -- else None."""
+    import anim_region
+
+    if WARPS["anim"] is None:
+        raise RuntimeError("walk@17: no measured animated region is loaded (use_map): fail closed")
+    return anim_region.click_allowed(cell, WARPS["anim"])
 
 
 def warp_area_of(cell: Sequence[int]) -> dict[str, Any] | None:
@@ -333,7 +372,13 @@ class _Walk6:
 
     @staticmethod
     def plan(w: Any, goal: tuple[int, int], blocked: set[tuple[int, int]]) -> Any:
-        """walk6.plan with every warp area blocked (B), unless this plan's intent is the portal."""
+        """walk6.plan with every warp area blocked (B), unless this plan's intent is the portal.
+        Amendment 3: while no route runs (the HARNESS's goal draw), a goal no walk click could
+        reach -- in the animated region or outside the measured area -- has no plan, so the
+        harness draws another; a route's own plans are never changed (the path may cross the
+        region; only its click points are refused)."""
+        if not ROUTE["active"] and plan_intent() != "warp" and anim_refusal(goal) is not None:
+            return None
         return _walk6.plan(w, goal, set(blocked) | warp_blocked(goal))
 
 
@@ -409,10 +454,14 @@ def server_steps(w: Any, end: Sequence[int]) -> int | None:
 
 def click_step(pr: Any, w: Any, end: tuple[int, int], expect: str = WALK,
                accept_unnamed: bool = False) -> dict[str, Any]:  # fmt: skip
-    """walk@15's click step (it notes where we stand, E). Before it, three refusals, all
-    "no_safe_point" for walk@15's route loop (the next point; the cell re-planned around):
+    """walk@15's click step (it notes where we stand, E). Before it, four refusals, all
+    "no_safe_point" for walk@15's route loop (the next point on the polyline; the cell re-planned
+    around):
     B: a walk click whose cell lies inside a warp area (the portal click is the portal's);
     amendment 4: a click (any intent) on a cell the SERVER does not let a character stand on;
+    amendment 3: a walk click on a cell in the map's measured ANIMATED region, or outside its
+    measured area ("animated": "animated_region" / "not_measured"); the portal click is not
+    refused, only logged ("portal_animated");
     C: a cell farther than CLICK_MAX_SAFE server steps."""
     if expect == WALK and (area := warp_area_of(end)) is not None:
         VISITED.add((int(w.position[0]), int(w.position[1])))
@@ -422,11 +471,19 @@ def click_step(pr: Any, w: Any, end: tuple[int, int], expect: str = WALK,
         VISITED.add((int(w.position[0]), int(w.position[1])))
         return {"clicked": False, "outcome": "no_safe_point", "target": [], "tier": "none",
                 "server_nopass": [int(end[0]), int(end[1])]}  # fmt: skip
+    why = anim_refusal(end)
+    if expect == WALK and why is not None:
+        VISITED.add((int(w.position[0]), int(w.position[1])))
+        return {"clicked": False, "outcome": "no_safe_point", "target": [], "tier": "none",
+                "animated": why, "cell": [int(end[0]), int(end[1])]}  # fmt: skip
     if server_steps(w, end) is None:
         VISITED.add((int(w.position[0]), int(w.position[1])))
         return {"clicked": False, "outcome": "no_safe_point", "target": [], "tier": "none",
                 "beyond_click_max": CLICK_MAX_SAFE}  # fmt: skip
-    return dict(w15.click_step(pr, w, end, expect, accept_unnamed))
+    step = dict(w15.click_step(pr, w, end, expect, accept_unnamed))
+    if why is not None:  # the portal click (an intended warp) is not refused: logged (amendment 3)
+        step["portal_animated"] = why
+    return step
 
 
 # --- C: long walks, chained legs ------------------------------------------------------------------
@@ -550,6 +607,10 @@ class SessionLog(w15.SessionLog):
         super().start(**meta, minimap_first=True, where_run=self.session, where_budget=budget,
                       where_retry_s=WHERE["retry_s"], warp_map=WARPS["map"], warp_areas=areas,
                       walkable="client∩server", server_nopass_cells=len(WARPS["nopass"]),
+                      anim_region_cells=len(WARPS["anim"][0]) if WARPS["anim"] else None,
+                      anim_measured_cells=(len(WARPS["anim"][1])
+                                           if WARPS["anim"] and hasattr(WARPS["anim"][1], "__len__")
+                                           else None),  # fmt: skip
                       plan_max=PLAN_MAX, leg_steps=LEG_STEPS, click_max_safe=CLICK_MAX_SAFE,
                       npc_envelope_substitute=False)  # fmt: skip
 
@@ -571,7 +632,8 @@ def run(scene: str, condition: str, n: int, seed: int, label: str, crowd: int,
         fix: str = "where") -> int:  # fmt: skip
     """walk@12's run (every exit finishes the session) with walk@15's unit memory, the map's warp
     areas (B; an unlisted map refuses to start), its server-NOPASS cells (amendment 4; a map
-    either source lacks refuses to start) and a fresh /where state (A)."""
+    either source lacks refuses to start), its measured animated region and area (amendment 3; a
+    map never measured refuses to start) and a fresh /where state (A)."""
     if fix != "where":
         raise SystemExit("walk@17 relocalises by the minimap and where@3 only (fix='where')")
     use_map(SCENES8[scene][0], "warp" if scene == "portal" else WALK)
