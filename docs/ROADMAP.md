@@ -168,8 +168,8 @@ flowchart TD
   The read-back at 11:06 was still 1 and the 11:07 launch was refused; ➡️ 13:40:02 it read 0 and
   the client launched. Recreates + §2a done 13:42-13:58; the B runs follow. ➡️ **All three B runs
   are IN (2026-10-15 14:07-17:01): B1' 1,000 / B2 479 (11 skipped stale parks) / B3 1,554 probes,
-  safety 0 on all.** The truth sheets were built at 17:10 (6,396 images). Two blind labellers are
-  at work; scoring follows their merge (3.38's truth step, as fixed at 14:10). ➡️ **Part A (17:37): INCONCLUSIVE on n** (107 / 300 outdoor, 82 / 100 indoor; 15 console-path sessions excluded because the fixed code has no timing benchmark for them). Every measured bar is met: A1 0 disagreements of 1,242; A2 100 % within 6 px (median 1 px); A3 100 % within 12 px; A4 k 0.14 above 0.1333 on 189 / 189.
+  safety 0 on all.** The truth sheets were built at 17:10 (6,396 images). ~~Two blind labellers are
+  at work; scoring follows their merge (3.38's truth step, as fixed at 14:10).~~ ➡️ **SCORED 17:50: B FAILS on B-SAFETY**: TALK outside the region is 3.56 % against <= 1 % (prontera 6.9 %, new_1-2 2.06 %, alberta_in 0 %). B-COST is met (9.2 %), and n is met (1,404 TALK). The labellers agreed on all 6,396 images. **So the region is NOT used.** The failing points are reported (3.38): prontera's 734 / 112 pair answers TALK in the gap between them, and new_1-2's 105 answers down to 26 px below its feet. Next: a new hit-box model, pre-registered; its form is Batt's decision. ➡️ **Part A (17:37): INCONCLUSIVE on n** (107 / 300 outdoor, 82 / 100 indoor; 15 console-path sessions excluded because the fixed code has no timing benchmark for them). Every measured bar is met: A1 0 disagreements of 1,242; A2 100 % within 6 px (median 1 px); A3 100 % within 12 px; A4 k 0.14 above 0.1333 on 189 / 189.
 - **Labels v2:** ~~the S2 UI-gate session is scheduled with Batt (~15 min of his clicks)~~ ➡️
   attempt 1 (2026-10-13 16:00-17:02) entered the room and banked phase A steps 1-3, but no NPC
   click came. It ended cleanly; Sunshine's revert is UNVERIFIED (a person checks). The runbook gaps

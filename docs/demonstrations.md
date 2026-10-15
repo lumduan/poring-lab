@@ -4681,6 +4681,13 @@ live gate stays robust2.**
   the cursor itself and lowers recall there. Reported per view.
 
 ### 3.38 npc-render@1 -- every static NPC drawn from GAME DATA: its rendered position against packet truth, and its NO-CLICK region against live hovers (pre-registered 2026-10-13 13:53 ICT at commit 3f8831d, BEFORE any of its data; Batt 2026-10-13: "use the GAME DATA, not the detector ... This is the 'N1-N3 sprite path' in labels-v2: make it the first NPC step, with a pre-registered check of the rendered positions/masks against packet truth and live hovers")
+
+> ➡️ **RESULT, scored 2026-10-15 17:50 ICT: B FAILS on B-SAFETY (TALK outside the region 3.56 %
+> against <= 1 %; prontera 6.9 %, new_1-2 2.06 %, alberta_in 0 %). B-COST is met (9.2 %), and n is
+> met (1,404 TALK).** A is INCONCLUSIVE on n, with every measured bar met. As written, the region
+> is NOT used. The failing points are reported below ("B. scored"). A new hit-box model is to be
+> pre-registered; the box's form stays Batt's decision ("Not decided here").
+
 **The design, built and measured on design data only:**
 [docs/planning/npc-render.md](planning/npc-render.md) (PROPOSED; merged 974bdd7; code
 `scripts/npc_render.py`, `scripts/npc_render_measure.py`). For a map, our cell and the camera
@@ -4820,6 +4827,51 @@ plans need (733, 734, 86, 59, 117, 726, 105, 84, 90, 92), and 0 problems. sha256
       published labels, not B): rc 0. 943 design probes are `target_unsupported` with the
       restricted names, against 691 with the 90-job design names: NPCs outside the table are
       excluded, not rendered.
+- ➡️ **B. scored 2026-10-15 17:50 (`npc_render_measure.py click` at the fixed code, the three B
+  sessions, merged labels, the sprite inputs above): FAIL on B-SAFETY.**
+  - **The labels.** A (17:12-17:48, ascending) and B (17:14-17:39, descending) labelled all 6,396
+    images, with 0 unclear on either side. They **agree on all 6,396**: walk 3,015, talk 2,773,
+    noentry 604, warp 4, and no sword, pickup or none. So `merged.json` holds every index
+    (sha256 `7dfa9b3527a3...`). cursor@2's labellers also agreed on all of theirs (8,190).
+    - Each labeller logged its own fixes by index: A, 3 re-recorded pages + 32 tiles; B, 4 tiles.
+    - **Independence check:** B finished at 17:38:41. The last 64 MB of A's transcript (one
+      allowed byte range, 17:37:46-17:48:26) has no tool call on B's directory: 274 path uses, all
+      `labellerA`. B's working record was last read at 17:39:09, by B's own final copy.
+    - The earlier part of A's transcript (208 MB on the shared disk) was not read: the big-file
+      rule allows byte ranges, not a chunked whole-file read. A's first pass was complete at
+      17:32:28, before B's labels file existed.
+  - **n: met.** 3,033 probes, all usable: no unsupported target, no moving GM, 0 points near an
+    unrendered NPC. **TALK 1,404** (>= 600): prontera 522, alberta_in 201, new_1-2 681 (each >= 150).
+  - **B-SAFETY (hard): FAIL.** TALK points OUTSIDE the region (mask OR hit box): **50 / 1,404 =
+    3.56 %** (bar <= 1 %). Per run: prontera **36 / 522 = 6.90 %**, new_1-2 **14 / 681 = 2.06 %**,
+    alberta_in 0 / 201 = 0 % (bar <= 2 %).
+  - **B-COST: met.** Other points inside the region: **149 / 1,625 = 9.17 %** (walk 89, noentry 60;
+    bar <= 20 %). The scorer's own "other" set adds warp: 149 / 1,629 = 9.15 %.
+  - **Reported, not bars:**
+    - The drawn MASK alone (Batt's design) holds **37.4 %** of TALK (525 / 1,404); the envelope
+      box 53.2 %; the region (mask OR hit box) 96.4 %.
+    - Mask dilation, TALK / other share at d px: 0: 0.374 / 0.004; 4: 0.473 / 0.008; 8: 0.587 /
+      0.022; 12: 0.644 / 0.042; 16: 0.748 / 0.101; 20: 0.863 / 0.125; 24: 0.947 / 0.175; 32: 0.984 /
+      0.297.
+    - Box dilation: 0: 0.533 / 0.005; 8: 0.692 / 0.039; 16: 0.916 / 0.144; 20: 0.966 / 0.188; 24:
+      0.980 / 0.253; 32: 0.984 / 0.396.
+    - TALK outside the mask: 879. Their distance to it: median 14.2 px, p90 23.2, max 46.4.
+  - **The failing TALK points, per map and target sprite** (offset from the target's feet, du / dv
+    screen px; probes repeat some points):
+
+    | map | sprite | TALK | outside | the outside points (du, dv) |
+    |---|---|---|---|---|
+    | prontera | 734 | 135 | 18 | (32,25) (51,-14) (60,-21) (60,0) (61,23) (62,-26) (63,-2) (66,24) |
+    | prontera | 112 | 146 | 18 | (-76,1) (-74,23) (-72,-27) (-71,-23) (-71,0) (-51,-14) (-40,23) (0,-98) |
+    | new_1-2 | 105 | 128 | 12 | (-6,26) (-4,26) (0,24) (30,26) (32,26) |
+    | new_1-2 | 117 | 111 | 2 | (109,77) |
+    | the other 7 (alberta_in 59 / 86; new_1-2 84 / 90 / 92 / 726; prontera 105) | | 884 | 0 | |
+
+    - prontera's 734 (148,326) and 112 (152,326) stand 4 cells apart. Their failing points mostly
+      lie in the gap between the two (734 at du +51..+66, 112 at du -71..-76): the client answers
+      TALK there, outside both regions.
+    - new_1-2's 105 answers down to 24-26.5 px below its feet; the box stops at 16.
+    - This is reported, not explained. Explaining it would be a new measurement.
 - ➡️ **A. Positions vs packet truth, computed 2026-10-15 17:36-17:37: INCONCLUSIVE (n short).
   Every measured bar is met.**
   - `npc_render_measure.py align` at the fixed defaults (k 0.14 beside 0.1333, radius 24, NCC >= 0.5,

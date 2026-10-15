@@ -1,6 +1,6 @@
 ---
 title: "The NPC render path: every static NPC drawn from game data (L3 + the client's sprites + the camera), its design measurements, and a DRAFT pre-registration"
-status: PROPOSED (its check PRE-REGISTERED: demonstrations.md 3.38)
+status: PROPOSED (its check PRE-REGISTERED: demonstrations.md 3.38) -- SCORED 2026-10-15: B FAILS on B-SAFETY (TALK outside 3.56 % vs <= 1 %), A INCONCLUSIVE on n; the region is not used
 date: 2026-10-13
 owner: Batt
 extends: docs/planning/labels-v2-plan.md
