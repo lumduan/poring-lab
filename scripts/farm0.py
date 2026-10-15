@@ -446,13 +446,13 @@ def run(minutes: float, seed: int) -> int:
     events_f.close()
     events, anchor = record_session.write_packets(log.dir, t_first, r.ns())
     kills = sum(c.get("result") == "kill" for c in cycles)
-    summary = {"ended": ended, "run_s": round(run_s, 1), "cycles": len(cycles), "kills": kills,
+    summary = {"run_s": round(run_s, 1), "cycles": len(cycles), "kills": kills,
                "kills_per_hour": per_hour(kills, run_s), "split": split.ranked(),
                "results": dict(Counter(str(c.get("result")) for c in cycles)),
                "stops": stops}  # fmt: skip
     (log.dir / "cycles.json").write_text(json.dumps(cycles, default=str))
     log.finish(ended=ended, packet_events=len(events), packet_anchor=anchor, **summary)
-    print(json.dumps({"session": sid, **summary}, default=str), flush=True)
+    print(json.dumps({"session": sid, "ended": ended, **summary}, default=str), flush=True)
     return 0 if ended == "time_box" else 3
 
 
@@ -545,6 +545,7 @@ def kills_from_packets(events: Sequence[dict[str, Any]]) -> dict[str, Any]:
     species from its last entity_appear; and every act from a monster onto the GM."""
     job: dict[int, int] = {}
     hit: set[int] = set()
+    hit_job: dict[int, int] = {}  # the species WHEN hit (a Pupa can metamorphose into a Creamy)
     died: list[int] = []
     on_gm = 0
     for e in events:
@@ -553,14 +554,17 @@ def kills_from_packets(events: Sequence[dict[str, Any]]) -> dict[str, Any]:
             job[int(e["gid"])] = int(e.get("job", -1))
         elif t == "act" and int(e.get("src_gid", -1)) == GM_AID and e.get("target_gid"):
             hit.add(int(e["target_gid"]))
+            hit_job.setdefault(int(e["target_gid"]), job.get(int(e["target_gid"]), -1))
         elif t == "act" and int(e.get("target_gid", -1)) == GM_AID:
             on_gm += 1
         elif t == "entity_vanish" and int(e.get("reason", -1)) == 1 and int(e["gid"]) in hit:
             died.append(int(e["gid"]))
-    species = Counter(TARGETS.get(job.get(g, -1), f"OTHER:{job.get(g)}") for g in died)
-    other_hit = sorted({job.get(g, -1) for g in hit if job.get(g, -1) not in TARGETS})
+    species = Counter(TARGETS.get(hit_job.get(g, -1), f"OTHER:{hit_job.get(g)}") for g in died)
+    other_hit = sorted({hit_job.get(g, -1) for g in hit if hit_job.get(g, -1) not in TARGETS})
+    changed = sorted({(hit_job[g], job[g]) for g in hit if g in job and job[g] != hit_job[g]})
     return {"kills": len(died), "by_species": dict(species), "units_hit": len(hit),
-            "non_target_jobs_hit": other_hit, "acts_onto_gm": on_gm}  # fmt: skip
+            "non_target_jobs_hit": other_hit, "acts_onto_gm": on_gm,
+            "species_changed_after_hit": changed}  # fmt: skip
 
 
 def report(sid: str) -> dict[str, Any]:

@@ -106,3 +106,14 @@ def test_kills_from_packets_needs_our_hit_and_a_death() -> None:
     k = farm0.kills_from_packets(ev)
     assert k["kills"] == 1 and k["by_species"] == {"Poring": 1}
     assert k["non_target_jobs_hit"] == [1184] and k["acts_onto_gm"] == 1
+
+
+def test_kills_from_packets_keeps_the_species_at_hit_time() -> None:
+    # farm@0: a Pupa hit 23 times metamorphosed into a Creamy (same gid) before it left the view
+    ev = [
+        {"type": "entity_appear", "gid": 7, "job": 1008},
+        {"type": "act", "src_gid": farm0.GM_AID, "target_gid": 7},
+        {"type": "entity_appear", "gid": 7, "job": 1018},
+    ]
+    k = farm0.kills_from_packets(ev)
+    assert k["non_target_jobs_hit"] == [] and k["species_changed_after_hit"] == [(1008, 1018)]

@@ -5896,6 +5896,55 @@ and passes nothing, and its numbers only point at what to improve next.
 - **Tests:** `services/backend/tests/test_farm0.py` (target choice, approach and wander goals, the
   time split, the takeover stop, EXP across a level-up, kills from packets). The live loop was not
   run before Batt's session.
+- ➡️ **RAN 2026-10-15 20:10:35-20:21:46 (`20261015T201035-demo-farm0`): STOPPED after 11 min, 0
+  kills by the packets.**
+  - The stop: "our cell is unknown". walk@15 returned `arrived` while the GM was still walking; the
+    two minimap reads differed and /where failed.
+  - 21 cycles: 16 engagements, 4 wanders, 1 stopped.
+  - **Every engagement but one failed as a STALE TARGET** (15 / 15 failures). In 12 the monster had
+    hopped 3-11 cells by the time it was looked for again (packets); 2 had left the view; 1 had
+    moved 1 cell and was still lost. Cycles 10-14 chased one Poring hop after hop. Batt's
+    recording (20:17): the box lagged the Poring by a body width.
+  - Not still: 0. UNKNOWN reads: 0 (no SWORD probe was made on a lost target). Walks interrupted: 0
+    (17 / 17 arrived). The hovers at the stale spot were walk@15's own click-point probes.
+  - **The one "kill" was FALSE.** A Pupa took 23 hits (162 damage of its 427 HP). Then it
+    METAMORPHOSED into a Creamy (1018, same gid: Pupa's IDLE skill NPC_METAMORPHOSIS, rate 10) and
+    the pixel track lost it. The GM never hit the Creamy (its last hit was at 20:13:00; the Creamy
+    shows at 20:15:52). Base / job EXP gained: 0 / 0.
+  - Time split (reconstructed from the event times; the in-run split was lost to a crash writing
+    the manifest, now fixed): walking >= 440 s of 650 (68 %), finding / re-acquiring / other
+    ~140 s, checks ~50 s, fighting ~10 s, looting ~8 s, cursor waits ~0.
+  - Safety (packets): attack requests 1 (the Pupa), NPC contacts 0, NPC dialogs 0, our pickups 0,
+    acts onto the GM 0, map changes 0. The fixed state was NOT restored after the stop (nothing is
+    typed after a stop); the GM stayed Base / Job Lv 1 (no EXP).
+
+### 6.2 farm@1 (Batt 2026-10-15 ~20:25: "engage like a player"; planned before the run)
+
+`scripts/farm1.py`, the same frame as farm@0, with Batt's five points:
+1. **No walk first:** the monster itself is clicked; the client walks to it and attacks.
+2. **Fresh + still:** while engaging, every detector frame (full frame, ~3-4 Hz) is focused on the
+   target (only boxes within 90 px of its last feet). The hover waits until its feet moved < 6 px
+   across detections spanning >= 0.5 s, the latest <= 0.35 s old, and aims at that box's CENTRE.
+   - A true crop at a higher rate needs a model re-exported for a small input. v1's ONNX is fixed
+     at 1280 x 736, so a crop costs a full frame (180 ms at 8 threads).
+3. **ONE robust2 SWORD read -> click at once.** Each click is judged from the packets afterwards:
+   an attack request, or a walk (a misread there only walks).
+4. **Re-acquire:** a target that hops (> 30 px between frames) or is unseen 1.5 s is dropped and
+   the next one found fresh; a stale box is never chased.
+5. **After the click:**
+   - the cursor parks off the monster (its name label would fake the cue);
+   - "attack started" = new near-white pixels above the box (the damage numbers), a logged cue;
+     no cue in 4 s, or none for 8 s, re-engages the still target;
+   - the death from pixels (unseen 3 frames AND 1.5 s, was 1.0);
+   - then loot@1's scan as farm@0.
+- **New: a SIZE GATE against Creamy.** Pupa metamorphoses into Creamy, which is not a target, and
+  the detector has no species. Creamy flies (51 x 53 native px); the targets are <= 37. So a box
+  larger than 45 native px, at the camera's scale for its cell, is skipped. Each hit's species is
+  checked from the packets AT HIT TIME (the report now keeps the species a gid had when hit).
+- Also fixed from farm@0: the GM's cell is read only once it STANDS (two minimap reads 0.3 s
+  apart agree, up to 5 s), at each start and after every walk (wanders only).
+- Tests: `services/backend/tests/test_farm1.py` (focus stillness / hop / window, the size gate,
+  the damage cue, the death rule) and test_farm0's metamorphosis case.
 
 ## Results
 
