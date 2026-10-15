@@ -6112,6 +6112,36 @@ non-target hit**, built on hunt@5.
   - no non-target hit;
   - engagements that end on the target's death (no hop);
   - fewer re-clicks after a death.
+- ➡️ **Result (`20261016T023113-demo-hunt6`, 02:31:13-03:11:49, the full 40-min box): success
+  18 / 23 = 78.3 % (Wilson 58.1-90.3 %): FAIL** (and n < 60). **The safety fix held: no
+  non-target hit.**
+  - Failures: no unit at the selected cell 3, hit but not killed 1, never hit 1. The secondary
+    measure: 19 / 23 = 82.6 %.
+  - Bot results: dead 19, lost 3, timeout 1.
+  - kills 25 (Poring 18, Lunatic 4, Drops 3) = 37.5 / h; 96.1 s per kill; time to first target
+    54.4 s; 5.7 targets / 10 min; coverage 47.0k cells. Detector ~3.5 fps.
+  - Time split: searching 1,326 s, fighting 521 s, looting 183 s, engaging 183 s, stopping
+    143 s, checks 47 s.
+  - **Safety:** NPC contacts 0, dialogs 0, map changes 0, non-target hits 0.
+    - Unintended attack requests 2, both on Porings (a target species): walk clicks that the
+      client turned into attacks (+1,686 s cursor-gated, +1,898 s map+units). The known
+      walk-click class (walk@10), about 1-2 per run in every version.
+
+**3.39.7 hunt@7 (pre-registered 2026-10-16 03:13, before its run).** The top time-loser: the
+search (53-69 % of every run).
+- **MAIN: dead reckoning at the GM's MEASURED speed, 150 ms a cell (was 200).**
+  - hunt@5's move packets give 150 ms a cell, rAthena's default walk speed. Consecutive moves
+    give at most 160-180 ms with the click delays included.
+  - 211 of hunt@5's 220 drift stops had the minimap AHEAD of the reckoning. Each stop settles,
+    re-plans and starts again with a cursor-gated click.
+  - The slow reckoning also delayed every continuous click: "<= 3 cells remain" came late, so
+    the GM stood between legs.
+- Everything else is hunt@6's, the safety fix included.
+- Seed 20261112, 40 min.
+- Prediction, written before the run:
+  - far fewer drift stops (hunt@6: 102, hunt@5: 220);
+  - more coverage and more engagements in 40 min;
+  - the success rate unchanged within noise.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,

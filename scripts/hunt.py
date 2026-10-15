@@ -98,6 +98,9 @@ VERSIONS = {
     "the target, only boxes within 2.5 cells of the GM (it hopped 200 px to a Creamy "
     "after its Poring died, and the 5 s re-click hit it) + an approach route stops 3 "
     "cells short of the monster (a walk click 2 cells from it became an attack)",
+    7: "DEAD RECKONING AT THE GM'S MEASURED SPEED, 150 ms a cell (was 200): hunt@5 stopped "
+    "220 times for a minimap drift, 211 of them with the minimap AHEAD of the reckoning; "
+    "the slow reckoning also delayed every continuous click",
 }
 # fmt: skip
 PARAMS = {1: {"engage_max_s": 60.0, "max_clicks": 10, "gone_frames": 3, "gone_s": 1.5,
@@ -121,7 +124,13 @@ PARAMS = {1: {"engage_max_s": 60.0, "max_clicks": 10, "gone_frames": 3, "gone_s"
               "stable_frames": 2, "min_box_px": 16.0, "select_within": 7,
               "confirm_death": True, "persist": True, "reacquire_max": 3, "reacq_cells": 4,
               "unseen_reacq_s": 1.0, "max_misreads": 8, "focus_gates": True,
-              "fight_zone": 2.5, "approach_short": 3}}  # fmt: skip
+              "fight_zone": 2.5, "approach_short": 3},
+          7: {"engage_max_s": 120.0, "max_clicks": 20, "gone_frames": 5, "gone_s": 2.5,
+              "unit_clear_px": 60.0, "clear_frames": 2, "lost_s": 10.0, "park_first": True,
+              "stable_frames": 2, "min_box_px": 16.0, "select_within": 7,
+              "confirm_death": True, "persist": True, "reacquire_max": 3, "reacq_cells": 4,
+              "unseen_reacq_s": 1.0, "max_misreads": 8, "focus_gates": True,
+              "fight_zone": 2.5, "approach_short": 3, "ms_cell": 150.0}}  # fmt: skip
 
 
 def start_cell(area: Any, seed: int, near: Cell = START, within: int = 25) -> Cell:
