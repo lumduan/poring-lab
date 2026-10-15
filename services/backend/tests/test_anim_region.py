@@ -200,3 +200,16 @@ def test_load_measurement_reads_region_and_area(tmp_path: Path) -> None:
     (tmp_path / "m.json").write_text('{"cells": [[1, 1]], "measured": [[1, 1], [2, 2]]}')
     assert ar.load_measurement("m", tmp_path) == ({(1, 1)}, {(1, 1), (2, 2)})
     assert ar.load_measurement("absent", tmp_path) is None
+
+
+def test_resume_plan_reuses_measured_stands_and_keeps_their_rechecks() -> None:
+    a, b = np.array([True, False]), np.array([True, True])
+    views = [
+        {"stand": [1, 1], "phase": "pass1", "counted": b},
+        {"stand": [2, 1], "phase": "pass1", "counted": b},
+        {"stand": [1, 1], "phase": "pass1-recheck", "counted": a},
+    ]
+    first, done, todo = ar.resume_plan(views, [(1, 1), (2, 1), (3, 1), (4, 1)])
+    assert set(first) == {(1, 1), (2, 1)}
+    assert list(done) == [(1, 1)] and done[(1, 1)].tolist() == [True, False]  # counted in BOTH
+    assert todo == [(3, 1), (4, 1)]  # scan order, measured stands skipped

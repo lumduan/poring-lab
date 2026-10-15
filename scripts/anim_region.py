@@ -389,8 +389,22 @@ def plan(map_name: str, step: int, routes: Mapping[str, set[Cell]] | None = None
             "est_minutes_pass1": round(n * SECONDS_PER_STAND / 60, 1)}  # fmt: skip
 
 
+def resume_plan(views: Sequence[Mapping[str, Any]], stands: Sequence[Cell]
+                ) -> tuple[dict[Cell, Mapping[str, Any]], dict[Cell, Any], list[Cell]]:  # fmt: skip
+    """A stopped pass 1, resumed (Batt 2026-10-15 overnight: "stop it cleanly in a grab phase and
+    resume it after 06:00"): (the earlier pass-1 views by stand, the stands already rechecked ->
+    their pixels counted in BOTH, the lattice stands still to measure, in scan order). The
+    earlier views still to recheck are rechecked in the resumed run, as `_recheck` does."""
+    first = {tuple(v["stand"]): v for v in views if v["phase"] == "pass1"}
+    again = {tuple(v["stand"]): v for v in views if v["phase"] == "pass1-recheck"}
+    done = {s: first[s]["counted"] & again[s]["counted"] for s in again if s in first}
+    todo = [tuple(s) for s in stands if tuple(s) not in first]
+    return first, done, todo
+
+
 def measure(map_name: str, step: int, refine_step: int, radius: int,
-            pass2_from: str | None = None, max_pass2: int | None = None) -> int:  # fmt: skip
+            pass2_from: str | None = None, max_pass2: int | None = None,
+            resume_from: str | None = None) -> int:  # fmt: skip
     import bench
     import cursor_anim as ca
     import npc_click_score as ncs
@@ -426,6 +440,16 @@ def measure(map_name: str, step: int, refine_step: int, radius: int,
         if missing := [v["stand"] for v in views if not v["unsettled"] and v["counted"].any()
                        and tuple(v["stand"]) not in again]:  # fmt: skip
             raise SystemExit(f"{pass2_from}'s pass 1 is incomplete (no recheck at {missing[:5]})")
+    resumed: tuple[dict[Cell, Mapping[str, Any]], dict[Cell, Any], list[Cell]] | None = None
+    if resume_from is not None:  # a stopped pass 1, continued on the SAME lattice
+        from poring_env.demo import DEMO_ROOT
+
+        rdir = DEMO_ROOT / resume_from
+        rman = json.loads((rdir / "manifest.json").read_text())
+        if rman.get("map") != map_name or rman.get("step") != step \
+                or rman.get("stands") != len(lat["stands"]):  # fmt: skip
+            raise SystemExit(f"{resume_from} is not this map's lattice (map, step, stands)")
+        resumed = resume_plan(_views(rdir), [tuple(x) for x in lat["stands"]])
     # the UI gate's template set for the lock's path (rdp / a proven s2): a registry WITHOUT
     # templates locates nothing, and the window exclusion would silently be off
     reg = ug._registry(ug._require_ready())
@@ -438,7 +462,8 @@ def measure(map_name: str, step: int, refine_step: int, radius: int,
     log.start(rule=RULE, map=map_name, step=step, refine_step=refine_step, radius=radius,
               scope=why, route_problems=problems, stands=len(lat["stands"]), moved=lat["moved"],
               dropped=lat["dropped"], commit=_commit(), park=list(PARK),
-              pass2_from=pass2_from, max_pass2=max_pass2)  # fmt: skip
+              pass2_from=pass2_from, max_pass2=max_pass2, resume_from=resume_from,
+              resumed_stands=None if resumed is None else len(resumed[0]))  # fmt: skip
     t_first = r.ns()
     templates = nd.load_templates(talk1.TEMPLATES)
     ended, code, k = "complete", 0, 0
@@ -503,10 +528,16 @@ def measure(map_name: str, step: int, refine_step: int, radius: int,
 
         try:
             if src is None:
-                first_pass: dict[Cell, dict[str, Any]] = {}
-                for s in lat["stands"]:
+                first_pass: dict[Cell, Any] = {}
+                done_before: dict[Cell, Any] = {}
+                todo = [tuple(x) for x in lat["stands"]]
+                if resumed is not None:
+                    first_pass, done_before, todo = dict(resumed[0]), resumed[1], resumed[2]
+                for s in todo:
                     first_pass[s] = one(tuple(s), "pass1")
-                confirmed = _recheck(first_pass, one, "pass1-recheck")
+                confirmed = {**done_before, **_recheck(
+                    {s_: v for s_, v in first_pass.items() if s_ not in done_before}, one,
+                    "pass1-recheck")}  # fmt: skip
                 done, keep = list(first_pass), [s for s, m in confirmed.items() if m.any()]
                 views = first_pass.values()
                 stats = {"pass1": len(first_pass),
@@ -576,7 +607,8 @@ def _recheck(views: Mapping[Cell, Mapping[str, Any]], one: Callable[[Cell, str],
         if v["unsettled"] or not v["counted"].any():
             out[s] = np.zeros_like(v["counted"])
             continue
-        wait = RECHECK_S - (time.monotonic_ns() - int(v["t0"])) / 1e9
+        # clamped: a resumed view's t0 comes from an earlier run (another boot's clock, maybe)
+        wait = min(RECHECK_S, RECHECK_S - (time.monotonic_ns() - int(v["t0"])) / 1e9)
         if wait > 0:
             time.sleep(wait)
         again = one(s, phase)
@@ -731,6 +763,7 @@ def main() -> int:
     ap.add_argument("--refine-step", type=int, default=REFINE_STEP)
     ap.add_argument("--pass2-from", help="measure: pass 2 only, from this session's pass 1")
     ap.add_argument("--max-pass2", type=int, help="measure: stop after pass 1 above N stands")
+    ap.add_argument("--resume-from", help="measure: continue this session's stopped pass 1")
     ap.add_argument("--radius", type=int, default=RADIUS)
     ap.add_argument("--session", action="append", default=[])
     ap.add_argument("--out", type=Path, default=OUT_DIR)
@@ -751,7 +784,8 @@ def main() -> int:
     if not a.map:
         raise SystemExit(f"{a.mode} needs --map")
     if a.mode == "measure":
-        return measure(a.map, a.step, a.refine_step, a.radius, a.pass2_from, a.max_pass2)
+        return measure(a.map, a.step, a.refine_step, a.radius, a.pass2_from, a.max_pass2,
+                       a.resume_from)  # fmt: skip
     if a.mode == "build":
         if not a.session:
             raise SystemExit("build needs --session (the measure run's session ids)")
