@@ -60,7 +60,7 @@ def grey(img: Any) -> Any:
     return g[..., :3].mean(axis=2) if g.ndim == 3 else g
 
 
-SHIFT_BAND = (320, 10, 1270, 250)  # x0, y0, x1, y1: above the GM, right of the UI column
+SHIFT_BAND = (540, 10, 1120, 250)  # x0, y0, x1, y1: above the GM, off every UI window
 
 
 def masked(g: Any) -> Any:

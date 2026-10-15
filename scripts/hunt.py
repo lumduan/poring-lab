@@ -65,6 +65,11 @@ DROP_S = 30.0
 STUCK_S = 60.0  # no route, click or engagement this long: stop (fail safe)
 Cell = tuple[int, int]
 
+
+def cheb(a: Any, b: Any) -> int:
+    return max(abs(int(a[0]) - int(b[0])), abs(int(a[1]) - int(b[1])))
+
+
 # what each version changes (pre-registered in demonstrations.md 3.39.N before its run)
 VERSIONS = {1: "search (coverage plan, look while walking, memory, continuous walking) + "
                "persistent engagement (re-click every 5 s, bounded)",
@@ -75,14 +80,21 @@ VERSIONS = {1: "search (coverage plan, look while walking, memory, continuous wa
             3: "PARK-FIRST hover: park at the selection (the background holds the target), "
                "hover at once while the target stays at its parked position, re-park only when "
                "it moved (v2's first reads came ~2 s after the box) + a 2-frame stable, >= 16 px "
-               "selection + a wider re-acquire (200 px after 0.5 s, lost after 5 s)"}  # fmt: skip
+               "selection + a wider re-acquire (200 px after 0.5 s, lost after 5 s)",
+            4: "SELECT WITHIN 7 CELLS (v2/v3: ~90 % success under 8 cells, ~50 % beyond): a "
+               "farther target is APPROACHED (a route to its cell, detection all the way) and "
+               "selected once within 7 + the death confirmed by a hover"}  # fmt: skip
 PARAMS = {1: {"engage_max_s": 60.0, "max_clicks": 10, "gone_frames": 3, "gone_s": 1.5,
               "unit_clear_px": 40.0, "clear_frames": 1},
           2: {"engage_max_s": 120.0, "max_clicks": 20, "gone_frames": 5, "gone_s": 2.5,
               "unit_clear_px": 60.0, "clear_frames": 2},
           3: {"engage_max_s": 120.0, "max_clicks": 20, "gone_frames": 5, "gone_s": 2.5,
               "unit_clear_px": 60.0, "clear_frames": 2, "lost_s": 5.0, "park_first": True,
-              "stable_frames": 2, "min_box_px": 16.0}}  # fmt: skip
+              "stable_frames": 2, "min_box_px": 16.0},
+          4: {"engage_max_s": 120.0, "max_clicks": 20, "gone_frames": 5, "gone_s": 2.5,
+              "unit_clear_px": 60.0, "clear_frames": 2, "lost_s": 5.0, "park_first": True,
+              "stable_frames": 2, "min_box_px": 16.0, "select_within": 7,
+              "confirm_death": True}}  # fmt: skip
 
 
 def start_cell(area: Any, seed: int, near: Cell = START, within: int = 25) -> Cell:
@@ -330,6 +342,7 @@ def run(version: int, minutes: float, seed: int) -> int:
             path: list[Cell] = []
             pi = 0
             refused = 0
+            approaching = False
             grid_now: Any = area
             last_progress = [time.monotonic()]
 
@@ -387,6 +400,25 @@ def run(version: int, minutes: float, seed: int) -> int:
                     t_fr = fr[-1][0]
                     here_fr = (reck.where(now - (r.ns() - t_fr) / 1e9) if moving else pos) or pos
                     tg = targets_in(fr[-1][1], here_fr, now)
+                    sw = PARAMS[version].get("select_within")
+                    if sw is not None:
+                        far = [bc for bc in tg if cheb(bc[1], here_fr) > sw]
+                        tg = [bc for bc in tg if cheb(bc[1], here_fr) <= sw]
+                        if far and not tg and not approaching:
+                            # v4: walk toward the nearest far target, detecting all the way;
+                            # it is selected once within ``sw`` cells (a player's approach)
+                            fcell = min(far, key=lambda bc: cheb(bc[1], here_fr))[1]
+                            ap = hc.astar(area, pos, fcell) if area[pos[1], pos[0]] else None
+                            if ap is not None and len(ap) > 2:
+                                ev({"kind": "approach", "to": list(fcell), "cells": len(ap)})
+                                note(f"monster at {fcell[0]},{fcell[1]}: approaching")
+                                if not moving:
+                                    path, pi, grid_now = ap, 0, area
+                                else:  # keep walking; the next click follows the new path
+                                    path, grid_now = ap, area
+                                    pi = 0
+                                approaching = True
+                                last_progress[0] = now
                     for _b, c in tg:
                         mem.add(now, c)
                 if tg:
@@ -420,6 +452,9 @@ def run(version: int, minutes: float, seed: int) -> int:
                                 break
                             time.sleep(0.05)
                         tg2 = targets_in(fresh, pos, time.monotonic())
+                        sw2 = PARAMS[version].get("select_within")
+                        if sw2 is not None:
+                            tg2 = [bc for bc in tg2 if cheb(bc[1], pos) <= sw2]
                         if not tg2:
                             ev({"kind": "no_target_after_stop", "seen": list(tcell)})
                             split.to("searching", time.monotonic())
@@ -433,6 +468,7 @@ def run(version: int, minutes: float, seed: int) -> int:
                                  frame, cell_of, settle, ev, box0)  # fmt: skip
                     k += 1
                     engagements.append(eng)
+                    approaching = False
                     last_progress[0] = time.monotonic()
                     if eng["result"] != "dead":
                         dropped.append((time.monotonic(), tcell))
@@ -505,6 +541,7 @@ def run(version: int, minutes: float, seed: int) -> int:
                     if pi >= len(path) - 1:
                         rp("clear")
                         path, pi = [], 0
+                        approaching = False
                     elif pos in path:
                         pi = path.index(pos)
                 elif reck.remaining(now) <= hc.LEAD_CELLS and pi < len(path) - 1:
@@ -602,6 +639,7 @@ def engage(k: int, tcell: Cell, here: Cell, version: int, sampler: Any, pr: Any,
     gx, gy, _, _ = r.game_region()
     result = "timeout"
     park_at: tuple[float, float] | None = None
+    confirms = 0
     if prm.get("park_first") and box0 is not None and pr.park():
         park_at = f1.foot(box0)  # parked at the selection: the background holds the target
     while True:
@@ -624,6 +662,23 @@ def engage(k: int, tcell: Cell, here: Cell, version: int, sampler: Any, pr: Any,
             and fo.seen
             and fo.seen[-1][0] > t_first
         ):
+            if prm.get("confirm_death") and confirms < 2:
+                # the proven cursor read decides: a SWORD at its last box = still alive (v2's
+                # pixel deaths were false twice: the detector lost a fighting target)
+                confirms += 1
+                lb = fo.seen[-1][2]
+                cu, cv = f1.centre(lb)
+                alive = False
+                if not loot1.in_ui(cu, cv) and pr.park():
+                    pr.hover(cu, cv)
+                    alive = pr.read(cu, cv)["shape"] == "sword"
+                eng.setdefault("death_checks", []).append({"t": r.ns(), "alive": alive})
+                if alive:
+                    sightings.append(dcm.Sighting(r.ns(), (lb.x0, lb.y0, lb.x1, lb.y1)))
+                    fo.seen.append((r.ns(), f1.foot(lb), lb))
+                    t_last = None if clicks < prm["max_clicks"] else t_last  # re-click soon
+                    note("the cursor still reads SWORD there: not dead, engaging again")
+                    continue
             result = "dead"
             break
         if (now - t_sel) / 1e9 > prm["engage_max_s"]:

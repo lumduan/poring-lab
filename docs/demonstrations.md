@@ -5919,6 +5919,45 @@ failure cause, the selection. Small fixes for the others:
   - An offline re-simulation: 85.9k of 87.9k area cells in 35 min, 2 failed plans. From (218,22)
     the way back is (218,28).
   - Attempt 2: seed 20261106 (start 284,85).
+- ➡️ **Attempt 2 (`20261015T234745-demo-hunt3`, 23:47:45-00:28:57, the full 40-min box):
+  success 24 / 35 counted = 68.6 % (Wilson 52.0-81.5 %): FAIL.**
+  - 2 excluded by the packets: a Pupa that METAMORPHOSED into a Creamy after selection.
+  - Failures: no unit at the selected cell 7, hit but not killed 4.
+  - kills 26 (Poring 18, Lunatic 8) = 38.6 / h; 93 s per kill; time to first target 96 s;
+    9.2 targets / 10 min; coverage 38.4k cells.
+  - Time split: searching 1,285 s (53 %), fighting 408 s, engaging 251 s, looting 234 s,
+    stopping 196 s, checks 50 s.
+  - **Safety:** NPC contacts 0, dialogs 0, map changes 0, non-target hits 0; unintended attack
+    requests 1.
+  - **The park-first hover did not move the rate.** The failures sit in the DISTANCE at selection:
+
+    | GM -> target | hunt@2 success | hunt@3 success |
+    |---|---|---|
+    | 0-3 cells | 7 / 8 | 3 / 3 |
+    | 4-7 | 8 / 10 | 10 / 11 |
+    | 8-11 | 9 / 18 | 7 / 15 |
+    | 12+ | 5 / 6 | 4 / 8 |
+
+    The far selections fail as no unit at the cell (the box-to-cell estimate degrades with
+    distance, or the box is a false positive) and as targets lost before any read.
+- **The attack-started cue, MEASURED, NOT PROVEN, NOT USED** (`scripts/attack_cue.py`, on hunt@1
+  attempt 2's 7,345 recorded frames against our attack acts).
+  - The candidate: the GM's own sprite changing while the scene stays still.
+  - Per frame, swing vs idle: Youden J 0.60 (96 % of swings over the threshold, 36 % of idle
+    frames too).
+  - Over 2-second windows: J 0.65 (94.5 % / 29 %).
+  - Not usable as a gate: re-engagement stays the bounded SWORD-gated re-click every 5 s.
+  - The first two measurements counted 95-99 % of frame pairs as still; that was a defect of the
+    scene-shift band, which held static UI edges. Fixed before the numbers above.
+
+**3.39.4 hunt@4 (pre-registered 2026-10-16 ~00:40, before its run).**
+- **MAIN, SELECT WITHIN 7 CELLS, like a player.** A target farther than 7 cells is APPROACHED: a
+  route to its cell, continuous walking, detection all the way. It is selected (the engagement
+  starts) only once a target is within 7 cells, on the fresh frame after the stop.
+- **The death is confirmed by a hover.** When the pixels say gone, the bot hovers the target's
+  last box once (twice at most). A SWORD read means alive: back to engaging. v2/v3 had pixel
+  deaths of live targets.
+- Seed 20261107, 40 min.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
