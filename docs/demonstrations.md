@@ -6202,8 +6202,7 @@ search (53-69 % of every run).
     - Unintended attack requests 3, on a Poring (twice) and a Lunatic: continuous map+units walk
       clicks the client turned into attacks (the walk-click class).
 
-**3.39.9 hunt@9 (pre-registered 2026-10-16 ~04:37, before its run; the time is set from its
-commit below).** The top failure cause now: no unit at the selected cell (5 of hunt@8's 10).
+**3.39.9 hunt@9 (pre-registered 2026-10-16 04:36, the commit time e42e92c, before its run).** The top failure cause now: no unit at the selected cell (5 of hunt@8's 10).
 - In every such case read so far, the target was selected mid-walk. The bot killed it, and the
   3.39 judge places a walking mob at its walk's destination.
 - **MAIN, SELECT A TARGET STANDING STILL.** After the stop, a target whose feet stayed within
