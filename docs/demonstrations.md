@@ -5824,6 +5824,17 @@ changes against farm@1 (6.2), and why:
   - Dead = no box within 200 px of its last feet for 3 frames and 1.5 s after an attack click.
 - farm@1's damage cue is dropped (not usable).
 - Seed 20261101, 35 min.
+- ➡️ **Attempt 1 (`20261015T220633-demo-hunt1`, 22:06:33) ABORTED at 36 s, kept, not scored: a
+  bug.**
+  - The route's first fixed waypoint (8 cells south-west) projected under the chat window. "Not in
+    view" reset the route, and the same route was re-planned ~15 times a second with no click and
+    no input. Stopped by SIGINT. The client was judged clean.
+  - Fixed, an implementation fix that keeps the design: each click goes to the FARTHEST path cell
+    <= 8 ahead whose point is in view and off the UI, from where the GM is (or will be). Three
+    refused cursor clicks give the tile up.
+  - An offline simulation on the real map, camera and footprint (no engagements): 49k area cells
+    covered in 10 min, 83k of 89k in 30 min, nothing stuck.
+  - Attempt 2 runs the same version, seed 20261102.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,

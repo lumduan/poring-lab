@@ -287,8 +287,22 @@ def run(version: int, minutes: float, seed: int) -> int:
             deadline = time.monotonic() + minutes * 60
             t_run0 = time.monotonic()
             ev({"kind": "loop_start"})
-            wp: list[Cell] = []
-            wi = 0
+            path: list[Cell] = []
+            pi = 0
+            refused = 0
+
+            def step_target(pth: list[Cell], from_i: int,
+                            at: Cell) -> tuple[int | None, tuple[float, float]]:  # fmt: skip
+                """The farthest path index in (from_i, from_i + WP_CELLS] whose screen point,
+                seen from ``at``, is in view and off the UI; (None, (0, 0)) when none is."""
+                world.position = at
+                hi = min(len(pth) - 1, from_i + hc.WP_CELLS)
+                for jj in range(hi, from_i, -1):
+                    uu, vv = (float(c) for c in world.project([pth[jj]])[0])
+                    if in_view(uu, vv) and area[pth[jj][1], pth[jj][0]]:
+                        return jj, (uu, vv)
+                return None, (0.0, 0.0)
+
             moving = False
             bad_tiles: list[Cell] = []
             last_mm, mm_off = 0.0, 0
@@ -316,7 +330,7 @@ def run(version: int, minutes: float, seed: int) -> int:
                                 ev({"kind": "drift", "reck": list(pos), "minimap": list(mm)})
                                 split.to("stopping", time.monotonic())
                                 pos = settle() or mm
-                                moving, wp, wi = False, [], 0
+                                moving, path, pi = False, [], 0
                                 mm_off = 0
                                 split.to("searching", time.monotonic())
                 pos_box[0] = pos
@@ -339,7 +353,7 @@ def run(version: int, minutes: float, seed: int) -> int:
                         split.to("stopping", time.monotonic())
                         note(f"target at {tcell[0]},{tcell[1]}: stopping to engage", [box])
                         pos = settle(timeout=4.0) or pos
-                        moving, wp, wi = False, [], 0
+                        moving, path, pi = False, [], 0
                     check(f"engagement {k}")
                     eng = engage(k, tcell, pos, version, sampler, pr, rig, world, split, note,
                                  frame, cell_of, settle, ev)  # fmt: skip
@@ -351,68 +365,72 @@ def run(version: int, minutes: float, seed: int) -> int:
                     pos = settle() or pos
                     split.to("searching", time.monotonic())
                     continue
-                # search: plan, first click from a standstill, then continuous clicks
+                # search: plan, first click from a standstill, then continuous clicks. A click
+                # goes to the FARTHEST path cell <= WP_CELLS ahead whose point is in view and off
+                # the UI from where the GM is (or will be): west / south the view is short.
                 if not moving:
-                    if wi >= len(wp):
+                    if pi >= len(path) - 1:
                         goal = hc.choose_goal(cov, pos, now, mem.bonus(now), bad_tiles)
-                        path = None if goal is None else hc.astar(area, pos, goal)
-                        if path is None:
+                        got_path = None if goal is None else hc.astar(area, pos, goal)
+                        if got_path is None or len(got_path) < 2:
                             if goal is not None:
                                 bad_tiles.append((goal[0] - goal[0] % hc.TILE,
                                                   goal[1] - goal[1] % hc.TILE))  # fmt: skip
-                            pos = settle(timeout=2.0) or pos
                             if goal is None or len(bad_tiles) > 40:
                                 bad_tiles = []
+                            pos = settle(timeout=2.0) or pos
                             continue
-                        wp, wi = hc.waypoints(path), 0
-                        rp("route", pos, wp)
+                        path, pi = got_path, 0
+                        rp("route", pos, hc.waypoints(path))
                         ev({"kind": "route", "from": list(pos), "goal": list(goal),
                             "cells": len(path)})  # fmt: skip
                         note(f"search: route to {goal[0]},{goal[1]} ({len(path)} cells)")
-                    world.position = pos
-                    u, v = (float(c) for c in world.project([wp[wi]])[0])
-                    if not in_view(u, v):
-                        wp, wi = [], 0
+                    j, (u, v) = step_target(path, pi, pos)
+                    if j is None:
+                        bad_tiles.append((path[-1][0] - path[-1][0] % hc.TILE,
+                                          path[-1][1] - path[-1][1] % hc.TILE))  # fmt: skip
+                        path, pi = [], 0
                         continue
                     got = cursor_gate.gated_click(pr, u, v, allow=("walk",))
-                    ev({"kind": "walk_click", "gate": "cursor", "to": list(wp[wi]),
+                    ev({"kind": "walk_click", "gate": "cursor", "to": list(path[j]),
                         "clicked": got["clicked"], "why": got["why"]})  # fmt: skip
                     if not got["clicked"]:
-                        wi += 1  # try the next waypoint from here
-                        if wi >= len(wp):
-                            wp, wi = [], 0
+                        refused += 1
+                        if refused >= 3:  # three refusals on this route: give the tile up
+                            bad_tiles.append((path[-1][0] - path[-1][0] % hc.TILE,
+                                              path[-1][1] - path[-1][1] % hc.TILE))  # fmt: skip
+                            path, pi, refused = [], 0, 0
                         continue
-                    seg = hc.astar(ok, pos, wp[wi]) or [pos, wp[wi]]
+                    refused = 0
+                    seg = path[pi : j + 1]
                     reck.go(seg, time.monotonic())
                     rp("walk", pos, seg, int(got["t_click"]))
-                    moving = True
+                    pi, moving = j, True
                 elif reck.remaining(now) == 0:  # stopped: the next click is cursor-gated again
                     moving = False
                     pos = settle(timeout=3.0) or pos
                     rp("snap", pos)
-                    wi += 1
-                    if wi >= len(wp):
+                    if pi >= len(path) - 1:
                         rp("clear")
-                        wp, wi = [], 0
-                elif reck.remaining(now) <= hc.LEAD_CELLS:
-                    if wi + 1 < len(wp):
-                        cur = reck.where(now + 0.15) or pos
-                        world.position = cur
-                        nxt = wp[wi + 1]
-                        u, v = (float(c) for c in world.project([nxt])[0])
-                        clear = (in_view(u, v) and area[nxt[1], nxt[0]] and fr
-                                 and (r.ns() - fr[-1][0]) / 1e9 <= FRESH_S
-                                 and all(np.hypot(*(np.array(f1.centre(b)) - (u, v)))
-                                         > UNIT_CLEAR_PX for b in fr[-1][1]))  # fmt: skip
-                        if clear:
-                            t_c = r.ns()
-                            agent.click(gx0 + round(u), gy0 + round(v))
-                            wi += 1
-                            seg = hc.astar(ok, cur, nxt) or [cur, nxt]
-                            reck.go(seg, time.monotonic())
-                            rp("walk", cur, seg, t_c)
-                            ev({"kind": "walk_click", "gate": "map+units", "to": list(nxt),
-                                "from": list(cur)})  # fmt: skip
+                        path, pi = [], 0
+                    elif pos in path:
+                        pi = path.index(pos)
+                elif reck.remaining(now) <= hc.LEAD_CELLS and pi < len(path) - 1:
+                    cur = reck.where(now + 0.15) or pos
+                    j, (u, v) = step_target(path, pi, cur)
+                    clear = (j is not None and fr and (r.ns() - fr[-1][0]) / 1e9 <= FRESH_S
+                             and all(np.hypot(*(np.array(f1.centre(b)) - (u, v)))
+                                     > UNIT_CLEAR_PX for b in fr[-1][1]))  # fmt: skip
+                    if clear and j is not None:
+                        t_c = r.ns()
+                        agent.click(gx0 + round(u), gy0 + round(v))
+                        ci = path.index(cur) if cur in path else pi
+                        seg = path[ci : j + 1] if ci < j else [cur, path[j]]
+                        reck.go(seg, time.monotonic())
+                        rp("walk", cur, seg, t_c)
+                        ev({"kind": "walk_click", "gate": "map+units", "to": list(path[j]),
+                            "from": list(cur)})  # fmt: skip
+                        pi = j
                 time.sleep(0.03)
             split.to(None, time.monotonic())
             run_s = time.monotonic() - t_run0
