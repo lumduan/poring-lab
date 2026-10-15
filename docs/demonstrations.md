@@ -6243,11 +6243,11 @@ search (53-69 % of every run).
   - The best clean run is hunt@4 attempt 3: 23 / 29 = 79.3 % (Wilson 61.6-90.1 %).
   - hunt@5's 14 / 14 had a safety event (a non-target hit), so it is not a candidate.
 - **What still fails, ranked** (hunt@4 attempt 3 through hunt@9, the 3.39 judge):
-  1. no unit at the selected cell: 21. Targets selected mid-walk. The bot killed most of them;
+  1. no unit at the selected cell: 19 (3 + 0 + 3 + 3 + 5 + 5). Targets selected mid-walk. The bot killed most of them;
      the secondary measure rescues 3 of 3, 1 of 3, 1 of 3, 4 of 5, 1 of 5 per run.
-  2. hit but not killed: 9. Lost or false pixel deaths; some were killed later by another
+  2. hit but not killed: 9 (1 + 0 + 1 + 2 + 3 + 2). Lost or false pixel deaths; some were killed later by another
      engagement.
-  3. never hit: 7. Lost before the first click: hidden, or walked out of reach.
+  3. never hit: 7 (2 + 0 + 1 + 0 + 2 + 2). Lost before the first click: hidden, or walked out of reach.
 - **What costs the time, ranked** (hunt@8, the latest run without a new selection rule):
   searching 51 %, looting 17 %, fighting 16 %, engaging 10 %, stopping 3 %.
   - hunt@5-7's stuck loops (up to 13.5 min a run) are fixed by hunt@8's unstick.
