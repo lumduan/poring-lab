@@ -308,7 +308,8 @@ def test_the_conversation_and_the_decision() -> None:
     conv = conv.add(run("give-prontera/1", set(conv.context or ())))
     assert (conv.variant, conv.reason) == ("prontera/1", "ok")
     assert conv.add(run("dest-geffen_in")).reason == "conflict_destination"
-    assert [dv.decide(v) for v in ("prontera/2", "morocc_in/1", "geffen_in/1", "izlu2dun/2",
+    # Batt 2026-10-15 (decision 4): geffen_in replaces morocc_in among the acted-on destinations
+    assert [dv.decide(v) for v in ("prontera/2", "geffen_in/1", "morocc_in/1", "izlu2dun/2",
                                    None, "alberta/1")] == ["act", "act", "hand_over", "hand_over",
                                                            "stop", "stop"]  # fmt: skip
 

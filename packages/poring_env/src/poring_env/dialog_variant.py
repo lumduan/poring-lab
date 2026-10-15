@@ -86,9 +86,13 @@ COLOUR_CODE = re.compile(r"\^([0-9A-Fa-f]{6})")
 SPACE: Tok = (" ", None)
 
 # Batt's c (2026-10-09): only the two easiest destinations are acted on; the other two are
-# classified so the hand-over can say which, then the workflow stops.
-ACT_DESTINATIONS = frozenset({"prontera", "morocc_in"})
-HAND_OVER_DESTINATIONS = frozenset({"geffen_in", "izlu2dun"})
+# classified so the hand-over can say which, then the workflow stops. Batt 2026-10-15 (decision 4):
+# morocc_in is DROPPED (morocc's client GAT and server map cache disagree on 4,482 cells); its
+# replacement by the same criteria (Kafra hops, map agreement) is geffen_in: 4 Kafra hops, and
+# prontera / geffen / geffen_in agree except 8 geffen cells 14+ cells off the delivery walk
+# (izlu2dun's routes all cross izlude, whose client map is another size). labels-v2-plan 7.7.
+ACT_DESTINATIONS = frozenset({"prontera", "geffen_in"})
+HAND_OVER_DESTINATIONS = frozenset({"morocc_in", "izlu2dun"})
 
 
 def render_rgb(code: str) -> RGB:
@@ -672,8 +676,9 @@ class Conversation:
 
 
 def decide(variant: str | None) -> Decision:
-    """Batt's c: act on the prontera and morocc_in variants; hand the geffen_in and izlu2dun ones
-    over to a person (the hand-over names the variant); stop on anything else."""
+    """Batt's c, as amended 2026-10-15 (decision 4): act on the prontera and geffen_in variants;
+    hand the morocc_in and izlu2dun ones over to a person (the hand-over names the variant); stop on
+    anything else."""
     if variant is None:
         return "stop"
     d = destination_of(variant)

@@ -4,7 +4,7 @@ first workflow's NPCs ALONG THE ROUTE (Batt 2026-10-09: "NPC sprites only along 
 Batt's EXPLICIT extra set of 2026-10-13 (EXTRA, below).
 
     npc_sprites.py build [--kb data/kb/first_workflow.json] [--grf PATH] [--mapcache-dir DIR]
-                         [--dest prontera --dest morocc_in] [--out data/kb/npc_sprites.json]
+                         [--dest prontera --dest geffen_in] [--out data/kb/npc_sprites.json]
                          [--no-extra]
     npc_sprites.py summary [--table data/kb/npc_sprites.json]      ids and counts only
 
@@ -13,12 +13,13 @@ Which NPCs (the scope, derived from the KB, not listed by hand):
     sprites). The portal (the `warp` class, 1.3) and the classes the client never draws are not
     sprites here;
   * the Merchant route for the supported destinations (Batt 7.7 item 3: the two easiest first,
-    prontera and morocc_in): the graduation arrival in alberta_in, the job changer, the storehouse,
-    the KB's `walk_kafra` legs to the destination NPC and back, the storehouse and the job changer
-    again. Each map's walk between those stops is a shortest 8-neighbour path on the SERVER's
-    walkability grid (10 / 14, no corner cutting). An NPC is "along the route" when its cell is
-    within AREA_SIZE (14) cells, Chebyshev, of a path cell: the server sends a unit to the client
-    only within that range, so an NPC farther from every path cell is never drawn on this route.
+    prontera and geffen_in since 2026-10-15; morocc_in before): the graduation arrival in
+    alberta_in, the job changer, the storehouse, the KB's `walk_kafra` legs to the destination NPC
+    and back, the storehouse and the job changer again. Each map's walk between those stops is a
+    shortest 8-neighbour path on the SERVER's walkability grid (10 / 14, no corner cutting). An NPC
+    is "along the route" when its cell is within AREA_SIZE (14) cells, Chebyshev, of a path cell:
+    the server sends a unit to the client only within that range, so an NPC farther from every path
+    cell is never drawn on this route.
   * an EXPLICIT extra set beside that rule (EXTRA; the rule above is unchanged): Batt 2026-10-13,
     decision 9, "Extend N1 to prt_fild08's 909 and the church's off-route sprites", i.e. the eight
     sprites labels-v2-plan 4a's dry run over v1's NAS sessions found unsized (npc_unsized):
@@ -58,7 +59,9 @@ from map_identity import DEFAULT_GRF, Archive  # noqa: E402
 KB = REPO / "data" / "kb" / "first_workflow.json"
 OUT = REPO / "data" / "kb" / "npc_sprites.json"
 AREA_SIZE = 14  # rAthena battle_config.area_size: a unit is sent to clients within this range
-DESTS = ("prontera", "morocc_in")  # Batt 2026-10-09 7.7 item 3: the two easiest first
+# Batt 2026-10-09 7.7 item 3: the two easiest first; 2026-10-15 (decision 4): morocc_in dropped
+# (morocc's client/server maps disagree), geffen_in in its place (labels-v2-plan 7.7)
+DESTS = ("prontera", "geffen_in")
 # Batt 2026-10-13 (decision 9; labels-v2-plan 1.3 / 4a): an EXPLICIT extra set beside the route
 # scope, whose rule stays as it is. map -> the sprite ids to list there (every drawn use).
 EXTRA: dict[str, tuple[int, ...]] = {

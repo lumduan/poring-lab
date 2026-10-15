@@ -926,7 +926,11 @@ Read from the pinned merchant.txt (local; no script text or serial is committed 
   lines (`dialog_variants.py cut`), not T3's file as it stands.
 - **Batt's c (2 easiest first):** only the prontera and morocc_in variants (4 of 8) are acted on;
   the geffen_in and izlu2dun variants are classified too (so the hand-over says which), then STOP
-  before the storehouse's serial input and before any fare.
+  before the storehouse's serial input and before any fare. ➡️ **Amended 2026-10-15 (Batt,
+  decision 4; 7.7 item 3):** prontera and **geffen_in** are acted on, and morocc_in joins
+  izlu2dun in the hand-over (`dialog_variant.ACT_DESTINATIONS`, `npc_sprites.DESTS`). The N1
+  sprite table for geffen / geffen_in is still to be built (`npc_sprites.py build`); the prontera
+  rows stand.
 - **The live verification needs a dialog on screen.** Two ways, both for Batt:
   (a) the agent account's own application, in the workflow (the real fee, once);
   (b) the GM applying first (needs Job Lv 10 + Basic Skill 9, which learn_skill@1 builds, and 500 or
@@ -946,7 +950,8 @@ What exists:
   - `Conversation`: folds the pages of one talk (a destination page gives the context the
     assignment's serial page needs; pages that disagree = `conflict_*`);
   - `decide`: prontera / morocc_in variants -> `act`, geffen_in / izlu2dun -> `hand_over`, None ->
-    `stop` (Batt's c).
+    `stop` (Batt's c). ➡️ Since 2026-10-15 (decision 4): prontera / **geffen_in** -> `act`,
+    **morocc_in** / izlu2dun -> `hand_over`.
   - Results: `ok` (a variant), `destination_only`, `no_variant_info` (a page every variant shows).
     Fail-closed reasons: `glyph_missing:<chars>` (checked before reading), `lineK:<unknown_glyph |
     ambiguous_glyph | unexplained_gap | mixed_colour | coloured_text | foreign_pixels |
@@ -1097,7 +1102,10 @@ labels_v2.difficulty (all "normal" here).
     - **Counts:**
       - training grounds: the 15 sprites of 7.3;
       - the Merchant route: 29 sprites (alberta 12, alberta_in 5, morocc 7, morocc_in 5,
-        prontera 8), 6 of them shared with the training grounds;
+        prontera 8), 6 of them shared with the training grounds; ➡️ this was the morocc_in scope
+        (as built 2026-10-09/13). Since 2026-10-15 the second destination is geffen_in (7.7 item 3);
+        the geffen / geffen_in rows are built at the next `npc_sprites.py build`, and these counts
+        then change;
       - **38 distinct sprites** in total, against 120 for whole towns (7.5).
     - **Three sources agree on all 38:**
       - rAthena's constant (npc.hpp);
@@ -1509,7 +1517,25 @@ to each.
 3. **Deliveries:** "support the 2 easiest destinations first; on any other, stop safely and hand
    over to a person (before paying anything irreversible). Extend later."
    - By the 7.4 table, the two easiest are prontera (2 Kafra hops) and morocc_in (2 hops + internal
-     portals).
+     portals). ➡️ **SUPERSEDED 2026-10-15 (Batt, decision 4): morocc_in is DROPPED; the second
+     supported destination is geffen_in.**
+     - Why: morocc's client GAT and server map cache disagree on 4,482 cells (client-walkable,
+       server-NOPASS), and every walk now uses only cells both sources call walkable.
+     - Batt asked for the replacement by the same criteria (Kafra hops, map agreement). The
+       candidates, measured 2026-10-15 (client-walkable/server-NOPASS cells, edge excluded):
+
+       | destination | Kafra hops | maps walked | disagreeing cells |
+       |---|---|---|---|
+       | **geffen_in (chosen)** | 4 | prontera, geffen, geffen_in | 0 / 8 / 0 |
+       | izlu2dun, fewest moves | 0 (boats, 900 z) | alberta, izlude, izlu2dun | 4,836 / 8,936 / 0 |
+       | izlu2dun, least zeny | 4 (+ a 150 z boat) | izlude, izlu2dun, payon | 8,936 / 0 / 0 |
+
+     - izlude's client map is 268 x 300 and the server's 268 x 268: different maps. Both izlu2dun
+       routes cross it.
+     - geffen's 8 cells lie 14 to 31 cells from the delivery walk: Kafra arrival (120,39) -> door
+       (61,180) -> the Kafra at (120,62). Their A* paths are identical on the server grid and on
+       client ∩ server.
+     - alberta (4,836 cells) is common to every delivery. Its walks use the intersection.
    - Check before building: the fee may be paid BEFORE the random assignment is known. Then "before
      anything irreversible" means before the serial is typed and before any fare.
 4. **Map prep per LAYOUT (4),** "after verifying the copies are visually identical too
