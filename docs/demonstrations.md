@@ -6169,8 +6169,7 @@ search (53-69 % of every run).
     (278,123) / (278,117) 120 times, hunt@6 (342,77) / (342,71) 30 times.
   - The 150 ms reckoning stays: it is the measured speed. It was not the time-loser.
 
-**3.39.8 hunt@8 (pre-registered 2026-10-16 ~03:55, before its run; the time is corrected to the
-commit time below).** The top time-loser: the stuck loops (up to 13.5 of 40 min).
+**3.39.8 hunt@8 (pre-registered 2026-10-16 03:54, the commit time fc1b82c, before its run).** The top time-loser: the stuck loops (up to 13.5 of 40 min).
 - **MAIN, UNSTICK.**
   - A cursor-gated walk click that the GM does not follow is detected: the next drift stop finds
     it within 1 cell of where it clicked.
