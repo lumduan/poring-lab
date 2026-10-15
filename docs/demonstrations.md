@@ -3309,7 +3309,25 @@ there, the strict count reported.
 >    - **It acts in tour@1's alberta block:** 4,836 such cells on alberta (and 4,482 on morocc, which
 >      walk@17 does not use).
 >    - Built on `feat/map-agreement` (a shared `poring_dataset.walkable`). Its proofs are recorded
->      here when it merges.
+>      here when it merges. ➡️ **MERGED 2026-10-15 12:11:30 ICT (f0ff35c..8846a4c), before any tuning
+>      run:**
+>      - every plan blocks those cells, for every intent (portal plans too); the harness's world
+>        hides them in every scene; the click step refuses one (`no_safe_point`,
+>        `"server_nopass": [x, y]`), the portal click too; a map either source lacks refuses the
+>        run; the manifest records `walkable: client∩server` and `server_nopass_cells`
+>        (`test_walk17.py`, 30 tests, 5 of them new);
+>      - **inert on the tuning maps, proven:** prt_church gains 0 blocked cells. prt_fild08 gains
+>        799, all on the server's last row / column (always NOPASS on the server) and none
+>        8-adjacent to an interior walkable cell. The harness's seeded draws and every route's
+>        plan and leg split, simulated for this section's seeds 20261150-57 (56 routes each), are
+>        IDENTICAL before and after in all eight runs;
+>      - nearly every client GAT marks the server's last row and column walkable. iz_dun00 has 4
+>        such edge cells that touch interior walkable cells, so there it can act; its simulated
+>        held-out run was identical too;
+>      - `bytecode_proof.py walk15` (main vs the change): **PASS**, 1,092 items, 0 changed. walk5,
+>        6, 11-14, 16, rule_run, where_run and the other frozen tools: PASS, 0 changed;
+>      - the per-map counts are L3 `map.walkability` (`kb_bindings.py`); the cells are in
+>        `data/kb/map_agreement.json` (`scripts/map_agreement.py build`, local).
 
 **Expected** (Claude's reading of walk@15's four tuning sessions, re-read offline 14:25 ICT; NOT a
 bar):
@@ -4406,7 +4424,12 @@ sheets are labelled.
   - **Why:** the plan is built on the CLIENT's GAT; @warp tests the SERVER's map cache
     (CELL_CHKNOPASS), and on morocc they disagree on ~7,000 cells beyond the edge row and column
     (alberta ~5,100, prontera 46, prt_church 0). Both cells are walkable on the client and not on
-    the server. collect_v2 already used both sources; npc_click_test did not.
+    the server. collect_v2 already used both sources; npc_click_test did not. ➡️ Read precisely
+    (2026-10-15, `scripts/map_agreement.py build`, edge row and column excluded): those totals count
+    BOTH directions. Client-walkable / server-NOPASS (the direction that refuses a click or a
+    stand): morocc 4,482, alberta 4,836, prontera 0. The reverse: morocc 2,517, alberta 255,
+    prontera 46. Since Batt's decision 4 (2026-10-15) every live planner, npc_click_test included,
+    draws on cells walkable in both.
   - **Every other @warp today landed where typed:** 202 of the 204 @warps in today's 33 banked
     sessions (each @warp line against the map_change that answered it). Among them: B3 30,
     A3 alberta 13, A3 prontera 13, A3 prt_church 5, the morocc pilot 3, and the npc-click church
@@ -4687,6 +4710,21 @@ plans need (733, 734, 86, 59, 117, 726, 105, 84, 90, 92), and 0 problems. sha256
     The §2a positive cases follow them.
   - Read-only evidence: `/dev/shm/poring-lab-tmp/shots/relaunch-*.png` and
     `/dev/shm/poring-lab-tmp/relaunch/diag*_crop.png`.
+- ➡️ **2026-10-15, Batt's decision 4 ("every walk rule and planner uses only cells walkable in
+  BOTH sources"): `npc_click_test.py` DRAWS its plans on the client's GAT AND the server's map
+  cache** (836cc8b; a map the server's cache lacks is refused). The refusals above stay.
+  - **B1', B2 and B3's plans are BYTE-IDENTICAL before and after.** Both the `plan` output and
+    the full `make_plan` value were compared, main c7e9c72 against the change. sha256 (first 8
+    characters):
+
+    | run | `plan` output | full plan |
+    |---|---|---|
+    | B1' prontera `--near 148,326 --seed 20261190` | `93ebf840` | `c25f9386` |
+    | B2 alberta_in `--near 53,43 --seed 20261191` | `6950c067` | `d0313060` |
+    | B3 new_1-2 `--seed 20261192` | `e8a5eb6b` | `4ec64d80` |
+
+  - Decision 3's animated-region avoidance does NOT change these plans: they are cursor
+    measurement probes (3.32 amendment 3, Claude's reading, for Batt to correct).
 
 **Not decided here (Batt):**
 - the hit box itself (a box, against "not a box or a cell guess");
