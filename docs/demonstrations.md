@@ -5848,6 +5848,55 @@ Event → fields (cs = our request, sc = the server):
     then SE, W, N, SE, ... (a cell holding a char or pet moves that one to a free neighbour), at
     once on the lab server (`delay_battle_damage` yes).
 
+## 6. Playable demos (end-to-end, supervised, UNSCORED)
+
+Batt's standing rule (2026-10-15; CLAUDE.md "How we work"): every 2-3 days, or whenever a new skill
+passes, the VERIFIED pieces are assembled into a short loop Batt watches live. The setup:
+- HUD (perception + decision layers) and the route preview ON; Batt in Watch only;
+- time-boxed, unscored, the GM immune, safety from packets.
+
+The report ranks what slowed it down BY TIME LOST. A demo is not a skill verification: it has no bar
+and passes nothing, and its numbers only point at what to improve next.
+
+### 6.1 farm@0 (planned 2026-10-15 ~19:35 ICT, before the run; Batt's request, verbatim in the session)
+
+- **Map:** prt_fild08. Its spawn table is exactly the target list: Poring 70, Lunatic 40, Pupa 20,
+  Drops 10 (`data/kb/spawns.json`). The detector (v1) knows all four. It has no species classes,
+  so a target = a detector MONSTER box on this map; players and NPCs never. Each kill's species is
+  checked afterwards from the packets (`farm0.py report`: a hit by the GM on any other mob id is a
+  safety finding). Not the training grounds: v1 cannot see Chonchon or 1184 there.
+- **Character:** the GM (2000002), immune. `@monsterignore` is confirmed for THIS login through
+  collect_v2's record (immune-on, a screenshot read, immune-confirm); the script refuses
+  otherwise and never types the toggle. Its fixed state is restored before, and after a clean end
+  (the levels the kills gain are reset). 2000001 is untouched.
+- **The loop** (`scripts/farm0.py`, proven pieces only):
+  1. find: the CPU unit detector on every frame it can (loot@1's sampler); the nearest monster by
+     cell, inside a farm box (240-300 x 80-135) away from every warp;
+  2. walk: walk@15's own route loop, unchanged, to a stand cell within 2 of the target when it is
+     farther than 3 cells; no target for 6 s -> walk@15 to a seeded cell 8-12 cells away. Stand
+     cells = client GAT AND server map cache, outside warp spans and touch areas (the three
+     checks; prt_fild08's two maps agree on every cell but the server's NOPASS edge);
+  3. attack: the live gate's robust2 reader, SWORD on the hover read and a no-motion re-read,
+     then the click (cursor_gate.gated_click); again after 8 s while the target lives;
+  4. death from pixels (loot@1's Track: unseen 3 frames and 1 s after an attack);
+  5. loot: loot@1's PICKUP hover-scan of the 3 x 3 around the death cell, read by robust2 twice,
+     walk@11's unit gate, one click, the weight / chat check;
+  6. repeat until the 30-minute box.
+- **Stops (each one reported, never retried):**
+  - any client state but "clear" (the UI gate's pixel check every cycle, nothing closed);
+  - the HP bar below 75 % (an immune GM never loses HP);
+  - Batt's takeover: a human lease makes the run raise where ro_agent would wait;
+  - the mux leaving ASSIST;
+  - an unknown own cell.
+  - After a stop nothing more is typed. The level reset then waits for a judged screen.
+- **Report:** kills / hour (packets); base / job EXP gained (packets' stat_change, across
+  level-ups); the time split (finding, walking, cursor waits, fighting, looting, checks), ranked;
+  every stop and why; safety from packets (replay_safety's counts, NPC dialog events, non-target
+  mob ids hit, acts onto the GM, map changes).
+- **Tests:** `services/backend/tests/test_farm0.py` (target choice, approach and wander goals, the
+  time split, the takeover stop, EXP across a level-up, kills from packets). The live loop was not
+  run before Batt's session.
+
 ## Results
 
 ### login@1, RDP: **PASS, 50 / 50 verified** (2026-10-07 12:13–12:45 ICT / 05:13–05:45 UTC)

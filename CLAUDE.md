@@ -563,6 +563,20 @@ pnpm, ruff and mypy are not installed on the host. Use `corepack pnpm` (the vers
   time (`await connection()`), never baked in at build.
 - **ADRs:** in `docs/adr/`, with the `research-doc-metadata` frontmatter.
 
+## How we work
+
+- **End-to-end playable demos are a REGULAR milestone** (Batt, 2026-10-15). They do not wait for
+  every piece to be perfect.
+  - When: every 2-3 days, or whenever a new skill passes.
+  - What: the VERIFIED pieces assembled into a short supervised loop Batt can watch live.
+  - How: HUD (perception + decision layers) and the route preview ON; Batt in Watch only;
+    time-boxed; unscored; the GM immune (`@monsterignore`) with its fixed state restored before
+    and after; the UI gate on every typed line; safety counted from packets.
+  - Report: what slowed it down most, RANKED BY TIME LOST, so the next improvements follow what
+    Batt actually sees.
+  - The first one is farm@0 (2026-10-15 evening, prt_fild08). Each demo is recorded in
+    `docs/demonstrations.md` §6 "Playable demos".
+
 ## Docs to keep in sync
 
 - `README.md`: ports, services, troubleshooting, when any of them change.

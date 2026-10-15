@@ -271,6 +271,12 @@ install list; the RDP delivery ceiling was removed on 2026-10-01, Arm C.)
    ➡️ In parallel since 2026-10-07: rules proven alone ([demonstrations.md](demonstrations.md)), and
    since 2026-10-08 ADR-0020's flow IR and editor, offline. Both feed Phase 4.
 6. **Phase 4**, then **Phases 5 and 6** in parallel.
+7. **STANDING MILESTONE: an end-to-end PLAYABLE DEMO every 2-3 days, or whenever a new skill
+   passes** (Batt, 2026-10-15). The verified pieces are assembled into a short supervised loop Batt
+   watches live: HUD + route preview on, Watch only, time-boxed, unscored, the GM immune, safety
+   from packets. Its report ranks what slowed it down BY TIME LOST, so the next improvements follow
+   what Batt sees (CLAUDE.md "How we work"). **First: farm@0, 2026-10-15 evening** (prt_fild08:
+   detector -> walk@15 -> robust2 SWORD twice -> attack -> death from pixels -> PICKUP loot; 30 min).
 
 ## Phases (exit gates are proposals; adjust as the research sharpens)
 
