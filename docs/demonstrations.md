@@ -5990,6 +5990,23 @@ failure cause, the selection. Small fixes for the others:
 - **Attempt 3 (pre-registered 2026-10-16 ~01:08, before its run):** the same version, the full
   40-min box, seed 20261109. The only change is the recording (the NAS, q80): nothing that
   decides.
+- ➡️ **Attempt 3 (`20261016T010454-demo-hunt4`, 01:04:54-01:46:08, the full 40-min box):
+  success 23 / 29 = 79.3 % (Wilson 61.6-90.1 %): FAIL** (and n < 60). The best so far.
+  - Failures: no unit at the selected cell 3, never hit 2 (both `lost` before a click), hit but
+    not killed 1.
+  - The three no-unit failures all ended with the bot's kill, on targets selected mid-walk. The
+    secondary measure (3.39.5, along the walk) counts 26 / 29 = 89.7 %.
+  - Bot results: dead 26, lost 2, timeout 1 (a fight past 120 s).
+  - kills 26 (Poring 18, Lunatic 5, Drops 3) = 38.8 / h; 92.9 s per kill; time to first target
+    32.4 s; 7.2 targets / 10 min; planned path 151 cells per kill; coverage 46.9k cells;
+    EXP 78 / 36.
+  - Time split: searching 1,281 s (53 %), fighting 492 s, looting 269 s, stopping 166 s,
+    engaging 162 s, checks 46 s.
+  - **Safety:** NPC contacts 0, dialogs 0, map changes 0, non-target hits 0, **unintended attack
+    requests 0**.
+  - Selecting within 7 cells removed most of the `lost` failures (hunt@3: 9 of 37 engagements;
+    here 2 of 29). It also lowered throughput: 29 engagements in 40 min, against the 60 the bar
+    needs.
 
 **3.39.5 hunt@5 (pre-registered 2026-10-16 01:16, before its run and before hunt@4 attempt 3's
 result).** Why: across hunt@2-4, 22 of 28 failures ended `lost` with NO click.

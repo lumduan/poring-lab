@@ -2,8 +2,9 @@
 """The monster HP BAR as a pixel cue, measured against packet truth (Batt 2026-10-15 overnight:
 "verify the attack started (a PROVEN signal: build and validate the pixel cue against packets
 first)"). Found 2026-10-16 01:25 in a hunt@2 frame: this 2021 client draws a bar under a monster
-once it has taken damage (a Pupa hit earlier still showed one), 5 px tall, ~60 px wide: a
-near-black border, a navy inside, the HP left as a bright fill from the left.
+once it has taken damage (a Pupa hit earlier still showed one), 5 px tall, ~45-60 px wide: a
+dark border, a navy inside, the HP left as a saturated fill from the left (magenta; yellow when
+low). A character's own bars (the GM's HP green / SP blue, under it) are not monster bars.
 
     hp_bar.py measure SESSION [--frames DIR]    per-engagement timing + per-frame separation
 
@@ -38,12 +39,12 @@ MIN_INSIDE = 0.6  # the inside row: at least this share navy or fill (not just d
 
 
 def _border(a: Any) -> Any:
-    """Near-black border pixels (not green-dominant shadowed grass; over the fill the border is a
-    dark yellow, e.g. (50, 41, 0))."""
+    """Dark border pixels (not green-dominant shadowed grass). Over the fill the border is the
+    fill's dark shade: dark yellow (50, 41, 0), dark magenta (90, 0, 105)."""
     a = a.astype(np.int16)
     mx = a.max(axis=-1)
     green = (a[..., 1] > a[..., 0] + 10) & (a[..., 1] > a[..., 2] + 10)
-    return (mx < 75) & ~green
+    return (mx < 115) & ~green
 
 
 def zone_roi(cells: float = ZONE_CELLS) -> tuple[int, int, int, int]:
@@ -54,12 +55,17 @@ def zone_roi(cells: float = ZONE_CELLS) -> tuple[int, int, int, int]:
 
 
 def _inside(a: Any) -> Any:
-    """Navy (unfilled) or a bright fill."""
+    """Navy (unfilled) or a saturated fill (yellow, magenta, ...; sand is not saturated enough)."""
+    a = a.astype(np.int16)
+    mx = a.max(axis=-1)
+    navy = (mx < 125) & (a[..., 2] >= a[..., 1] - 6) & (a[..., 2] >= a[..., 0] - 12)
+    return navy | _fill(a)
+
+
+def _fill(a: Any) -> Any:
     a = a.astype(np.int16)
     mx, mn = a.max(axis=-1), a.min(axis=-1)
-    navy = (mx < 125) & (a[..., 2] >= a[..., 1] - 6) & (a[..., 2] >= a[..., 0] - 12)
-    fill = (mx > 150) & (mn < 150)
-    return navy | fill
+    return (mx > 150) & (mx - mn > 110)
 
 
 def find_bars(rgb: Any, roi: tuple[int, int, int, int] | None = None
@@ -93,13 +99,20 @@ def find_bars(rgb: Any, roi: tuple[int, int, int, int] | None = None
             if x1 - x0 + 1 < BAR_MIN_W:
                 continue
             mid = a[y + 2, x0 : x1 + 1].astype(np.int16)
-            fill = (mid.max(axis=-1) > 150) & (mid.min(axis=-1) < 150)
+            fill = _fill(mid)
             if float(ins[y + 2, x0 : x1 + 1].mean()) < MIN_INSIDE:
                 continue  # mostly dark inside: a shadow or a UI edge, not a bar
             # exactly 5 px tall: the rows just outside are not border over most columns
             if (float(b[y - 1, x0 : x1 + 1].mean()) > 0.5
                     or float(b[y + 5, x0 : x1 + 1].mean()) > 0.5):  # fmt: skip
                 continue
+            if fill.any():
+                fc = mid[fill]
+                gb = ((fc[:, 1] > fc[:, 0] + 40) & (fc[:, 1] > fc[:, 2] + 40)) | (
+                    (fc[:, 2] > fc[:, 0] + 40) & (fc[:, 2] > fc[:, 1] + 40)
+                )
+                if float(gb.mean()) > 0.5:
+                    continue  # a green / blue fill: a CHARACTER's HP / SP bar (the GM's own)
             frac = float(fill.mean())
             if any(abs(int(y) - oy) <= 2 and min(x1, ox1) - max(x0, ox0) > 10
                    for ox0, ox1, oy, _ in out):  # fmt: skip
