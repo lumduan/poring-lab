@@ -6185,6 +6185,38 @@ search (53-69 % of every run).
   - loop time under 1 min;
   - more engagements than hunt@7 (12);
   - the success rate unchanged within noise.
+- ➡️ **Result (`20261016T035516-demo-hunt8`, 03:55:16-04:35:56, the full 40-min box): success
+  21 / 31 = 67.7 % (Wilson 50.1-81.4 %): FAIL** (and n < 60). **The prediction held:**
+  - repeated drift stops: at most 1 per spot (28 in all; hunt@7: 206);
+  - time in loops: 0.0 min (hunt@7: 13.5);
+  - 32 engagements (hunt@7: 12), the most since hunt@2.
+  - 10 unfollowed clicks were caught, each once, and routed around. That includes (343,72),
+    hunt@7's 87-stop spot.
+  - Failures: no unit at the selected cell 5, hit but not killed 3, never hit 2; excluded 1 (a
+    Pupa that metamorphosed). The secondary measure: 25 / 31 = 80.7 %.
+  - kills 29 (Poring 23, Lunatic 4, Drops 2) = 43.5 / h; 82.8 s per kill; time to first target
+    37.9 s; 8.0 targets / 10 min; planned path 105 cells per kill; coverage 44.9k cells.
+  - Time split: searching 1,232 s, looting 411 s, fighting 392 s, engaging 244 s, stopping 77 s,
+    checks 46 s.
+  - **Safety:** NPC contacts 0, dialogs 0, map changes 0, non-target hits 0.
+    - Unintended attack requests 3, on a Poring (twice) and a Lunatic: continuous map+units walk
+      clicks the client turned into attacks (the walk-click class).
+
+**3.39.9 hunt@9 (pre-registered 2026-10-16 ~04:37, before its run; the time is set from its
+commit below).** The top failure cause now: no unit at the selected cell (5 of hunt@8's 10).
+- In every such case read so far, the target was selected mid-walk. The bot killed it, and the
+  3.39 judge places a walking mob at its walk's destination.
+- **MAIN, SELECT A TARGET STANDING STILL.** After the stop, a target whose feet stayed within
+  6 px for 0.5 s on the detector frames is preferred (waiting up to 1.5 s). A moving one is taken
+  only when none is still.
+- Each engagement records whether its target was still (`selected_still`).
+- Everything else is hunt@8's.
+- Seed 20261114, 40 min. The last client run of the night: it ends ~05:20, and nothing runs
+  on the client after it.
+- Prediction, written before the run:
+  - fewer no-unit failures;
+  - engagements on still targets succeed more often than on moving ones;
+  - throughput within ~10 % of hunt@8.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,

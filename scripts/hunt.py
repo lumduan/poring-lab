@@ -107,6 +107,10 @@ VERSIONS = {
     "repeats from the same cell). hunt@7 looped 87 times at (344,71): the client showed the "
     "NO-ENTRY cursor at the click point, robust2's series read WALK, no move was sent, and "
     "every drift stop re-planned the same route",
+    9: "SELECT A TARGET STANDING STILL: after the stop, a target whose feet stayed within 6 px "
+    "for 0.5 s is preferred (waiting up to 1.5 s); a moving one only when none is still (the "
+    "no-unit failures of hunt@4 attempt 3, hunt@6 and hunt@7 were targets selected mid-walk; "
+    "the bot killed them, the 3.39 judge places a walking mob at its walk's destination)",
 }
 # fmt: skip
 PARAMS = {1: {"engage_max_s": 60.0, "max_clicks": 10, "gone_frames": 3, "gone_s": 1.5,
@@ -143,7 +147,14 @@ PARAMS = {1: {"engage_max_s": 60.0, "max_clicks": 10, "gone_frames": 3, "gone_s"
               "confirm_death": True, "persist": True, "reacquire_max": 3, "reacq_cells": 4,
               "unseen_reacq_s": 1.0, "max_misreads": 8, "focus_gates": True,
               "fight_zone": 2.5, "approach_short": 3, "ms_cell": 150.0,
-              "unstick": True}}  # fmt: skip
+              "unstick": True},
+          9: {"engage_max_s": 120.0, "max_clicks": 20, "gone_frames": 5, "gone_s": 2.5,
+              "unit_clear_px": 60.0, "clear_frames": 2, "lost_s": 10.0, "park_first": True,
+              "stable_frames": 2, "min_box_px": 16.0, "select_within": 7,
+              "confirm_death": True, "persist": True, "reacquire_max": 3, "reacq_cells": 4,
+              "unseen_reacq_s": 1.0, "max_misreads": 8, "focus_gates": True,
+              "fight_zone": 2.5, "approach_short": 3, "ms_cell": 150.0, "unstick": True,
+              "select_still": True, "still_wait_s": 1.5}}  # fmt: skip
 
 
 def start_cell(area: Any, seed: int, near: Cell = START, within: int = 25) -> Cell:
