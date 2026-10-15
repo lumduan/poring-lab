@@ -108,12 +108,9 @@ def run_sword(
     import ro_agent as r
     import rule_run as rr
 
-    from poring_dataset import camera as cam
-    from poring_dataset import gat as gatmod
     from poring_env.demo import Action, DemoLog, DemoRecord, Intended, Outcome, new_session_id
 
-    gat = gatmod.parse((cam.GAT_DIR / f"{loot1.MAP}.gat").read_bytes())
-    plan = loot1.spots(gat.walkable(), seed, n)
+    plan = loot1.spots(loot1.spot_cells(), seed, n)  # both sources (decision 4)
     if len(plan) < n:
         raise SystemExit(f"only {len(plan)} spots of {n} fit the region")
     sid = new_session_id("cursor-probe-sword")

@@ -6,7 +6,8 @@ or the "item obtained" chat cue (P5).
     loot1.py p3  --n 10 --seed 20261110    P3's positive case: the pixel death cell of each kill
     loot1.py run --n 40 --seed 20261111    the trials; the first 20 DROP trials are scored offline
 
-One trial, on prt_fild08 at a fresh spot (a seeded list of open cells >= 6 apart):
+One trial, on prt_fild08 at a fresh spot (a seeded list of open cells >= 6 apart, walkable in
+both the client's GAT and the server's map cache: Batt's decision 4, 2026-10-15):
   1. @killmonster2, @alive, @heal, @warp to the spot, @monster Poring 1 beside the GM.
   2. A sampler thread detects units on every frame it can (the CPU detector) until the target
      vanishes; the target is the monster nearest the GM's feet, then tracked frame to frame.
@@ -114,6 +115,18 @@ def spots(walkable: Any, seed: int, n: int, region: tuple[int, int, int, int] = 
             if len(out) == n:
                 break
     return out
+
+
+def spot_cells(map_name: str = MAP) -> Any:
+    """The grid spots() draws on (Batt's decision 4, 2026-10-15): cells walkable in BOTH the
+    client's GAT and the server's map cache (poring_dataset.walkable); a map either source lacks
+    is refused (fail closed)."""
+    from poring_dataset import walkable as wk
+
+    try:
+        return wk.load_both(map_name)[1]
+    except wk.MapSourceError as exc:
+        raise SystemExit(f"{RULE}: {exc}") from None
 
 
 def foot_of(box: Any) -> tuple[float, float]:
@@ -529,11 +542,7 @@ def rig_up(agent: Any, screen: Any) -> Rig:
 def run(mode: str, n: int, seed: int) -> int:
     import bench
 
-    from poring_dataset import camera as cam
-    from poring_dataset import gat as gatmod
-
-    gat = gatmod.parse((cam.GAT_DIR / f"{MAP}.gat").read_bytes())
-    plan = spots(gat.walkable(), seed, n)
+    plan = spots(spot_cells(), seed, n)
     if len(plan) < n:
         raise SystemExit(f"only {len(plan)} spots of {n} fit the region")
     sid = new_session_id(f"loot1-{mode}")

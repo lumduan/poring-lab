@@ -47,6 +47,26 @@ def test_spots_are_open_apart_seeded_and_fresh(loot1: Any) -> None:
     assert len(loot1.spots(walk, 7, 10_000)) < 10_000  # fewer when the region cannot hold n
 
 
+def test_spots_draw_on_cells_walkable_in_both_sources(
+    loot1: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Batt's decision 4 (2026-10-15): spots() gets the client GAT AND the server's map cache
+    (poring_dataset.walkable.load_both); a map either source lacks is refused."""
+    from poring_dataset import walkable as wk
+
+    both = np.ones((200, 300), dtype=bool)
+    asked: list[str] = []
+    monkeypatch.setattr(wk, "load_both", lambda name: (asked.append(name), both))  # (gat, mask)
+    assert loot1.spot_cells() is both and asked == [loot1.MAP]
+
+    def lacks(name: str) -> Any:
+        raise wk.MapSourceError(f"the server's map cache lacks {name}")
+
+    monkeypatch.setattr(wk, "load_both", lacks)
+    with pytest.raises(SystemExit, match="lacks prt_fild08"):
+        loot1.spot_cells()
+
+
 def test_the_track_follows_the_nearest_box_and_misses_far_ones(loot1: Any) -> None:
     t = loot1.Track((640.0, 400.0))
     t.update(1 * S, [box(650, 405), box(900, 400)])

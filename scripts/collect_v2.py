@@ -10,8 +10,9 @@ cursor at a fixed rest point and closes a window by its chord) and the chat inpu
 
     collect_v2.py plan --map M --seed S [--spots K] [--blocks ID ...] [--count 8]
                        [--dwell-s T] [--block-s B] [--portal-dwell-s P] [--kb DIR] [--gat-dir DIR]
-        OFFLINE. K dwell spots: walkable cells (the GAT; the server's map cache too when it is on
-        this host) OUTSIDE every L3 warp area (route.json; a map it does not list fails closed),
+        OFFLINE. K dwell spots: cells walkable in BOTH the GAT and the server's map cache (Batt's
+        decision 4, 2026-10-15; a map either lacks fails closed) OUTSIDE every L3 warp area
+        (route.json; a map it does not list fails closed),
         >= NPC_MIN_CELLS from EVERY L3 NPC (npc_cells.json, drawn or not, + route.json's groups;
         a map not declared complete fails closed), >= SPOT_SPACING apart, seeded. The portal-pass
         cells (a walkable cell PORTAL_RING cells beside each warp area, outside every area). The
@@ -152,7 +153,7 @@ class MapData:
     npcs: list[Cell]  # EVERY L3 NPC cell (drawn, hidden, conditional)
     spawns: list[dict[str, Any]]  # first_workflow.json rows: id, amount, delay1_ms, ...
     mapflags: list[str]
-    server_checked: bool = False  # the server's map cache agreed on the walkable cells
+    server_checked: bool = False  # walkable = the GAT AND the server's map cache (decision 4)
 
 
 def _load(path: Path, what: str) -> Any:
@@ -162,8 +163,13 @@ def _load(path: Path, what: str) -> Any:
 
 
 def load_map(name: str, kb: Path = KB_DIR, gat_dirs: Sequence[Path] = GAT_DIRS,
-             mapcache_dir: Path | None = None) -> MapData:  # fmt: skip
-    """Everything the plan needs for ``name``; SystemExit when any source does not cover it."""
+             mapcache_dir: Path | None = None, server: Any = None) -> MapData:  # fmt: skip
+    """Everything the plan needs for ``name``; SystemExit when any source does not cover it. The
+    walkable cells are the GAT's AND the server map cache's (Batt's decision 4, 2026-10-15:
+    poring_dataset.walkable.both; ``server``: the grids by map, default the lock-checked cache in
+    ``mapcache_dir``, default poring_dataset's _generated). Where the two sizes match this is the
+    intersection collect@1 always took when the cache was present; a missing cache or map, or a
+    different size, now fails closed / intersects instead of falling back to the GAT alone."""
     from poring_dataset import gat as gatmod
 
     route = _load(kb / "route.json", "route.json")
@@ -190,31 +196,20 @@ def load_map(name: str, kb: Path = KB_DIR, gat_dirs: Sequence[Path] = GAT_DIRS,
     if gat_path is None:
         raise SystemExit(f"collect@1: no GAT for {name} in {[str(d) for d in gat_dirs]} "
                          "(map_identity.py gat); fail closed")  # fmt: skip
-    walkable = np.asarray(gatmod.parse(gat_path.read_bytes()).walkable(), dtype=bool)
-    server_checked = False
-    if mapcache_dir is not None and mapcache_dir.exists():
-        with contextlib.suppress(Exception):  # the server cache is an extra check, when present
-            from poring_dataset import mapcache
+    gat = gatmod.parse(gat_path.read_bytes())
+    from poring_dataset import mapcache
+    from poring_dataset import walkable as wk
 
-            grid = mapcache.load(mapcache_dir, prere=True).get(name)
-            if grid is not None and (grid.ys, grid.xs) == walkable.shape:
-                srv = server_walkable(grid.cells, grid.xs, grid.ys, mapcache.NOT_WALKABLE)
-                walkable = walkable & srv
-                server_checked = True
+    try:
+        grid = (server.get(name) if server is not None
+                else wk.server_grid(name, mapcache_dir or mapcache.GENERATED))  # fmt: skip
+        walkable = np.asarray(wk.both(gat, grid), dtype=bool)
+    except (wk.MapSourceError, mapcache.MapCacheError) as exc:
+        raise SystemExit(f"collect@1: {name}: {exc}; fail closed") from None
     return MapData(name=name, walkable=walkable, warps=list(route["warps"][name]),
                    npcs=sorted(npcs), spawns=list(m.get("spawns") or []),
                    mapflags=[str(f.get("flag")) for f in m.get("mapflags") or []],
-                   server_checked=server_checked)  # fmt: skip
-
-
-def server_walkable(cells: bytes, xs: int, ys: int, not_walkable: frozenset[int]) -> np.ndarray:
-    """The SERVER's walkability (what @warp's CELL_CHKNOPASS tests, mapcache.MapGrid.nopass): the
-    cell types, and the last row and column never passable."""
-    t = np.frombuffer(cells, dtype=np.uint8).reshape(ys, xs)
-    ok = ~np.isin(t, list(not_walkable))
-    ok[-1, :] = False
-    ok[:, -1] = False
-    return np.asarray(ok, dtype=bool)
+                   server_checked=True)  # fmt: skip
 
 
 # --- the plan (pure) -----------------------------------------------------------------------------

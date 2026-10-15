@@ -197,12 +197,22 @@ def kb(tmp_path: Path, *, warps: bool = True, complete: bool = True, fw: bool = 
     return k, g
 
 
+def server(xs: int = 40, ys: int = 40, nopass: tuple[tuple[int, int], ...] = ()) -> dict:
+    """The server's map cache for syn_3 (a real MapGrid): walkable but for ``nopass`` (type 1)."""
+    from poring_dataset import mapcache
+
+    types = np.zeros((ys, xs), np.uint8)
+    for x, y in nopass:
+        types[y, x] = 1
+    return {"syn_3": mapcache.MapGrid("syn_3", xs, ys, types.tobytes())}
+
+
 def test_load_map_reads_every_npc_and_the_gat(cv: ModuleType, tmp_path: Path) -> None:
     k, g = kb(tmp_path)
-    md = cv.load_map("syn_3", k, [g])
+    md = cv.load_map("syn_3", k, [g], server=server())
     assert md.walkable.shape == (40, 40) and md.walkable[5, 5] and not md.walkable[0, 0]
     assert md.npcs == [(20, 20), (50, 50)]  # npc_cells (undrawn too) + route.json's groups
-    assert md.warps == [] and md.mapflags == ["noteleport"] and not md.server_checked
+    assert md.warps == [] and md.mapflags == ["noteleport"] and md.server_checked
 
 
 @pytest.mark.parametrize(("kw", "match"), [
@@ -213,14 +223,25 @@ def test_load_map_fails_closed(cv: ModuleType, tmp_path: Path, kw: dict[str, boo
                                match: str) -> None:  # fmt: skip
     k, g = kb(tmp_path, **kw)
     with pytest.raises(SystemExit, match=match):
-        cv.load_map("syn_3", k, [g])
+        cv.load_map("syn_3", k, [g], server=server())
 
 
-def test_server_walkability_closes_the_last_row_and_column(cv: ModuleType) -> None:
-    cells = bytes([0, 0, 0, 1, 0, 0, 0, 0, 5, 0, 0, 0])  # 4 x 3, types 1 and 5 not walkable
-    ok = cv.server_walkable(cells, 4, 3, frozenset({1, 5}))
-    assert ok.tolist() == [[True, True, True, False], [True, True, True, False],
-                           [False, False, False, False]]  # fmt: skip
+def test_load_map_takes_cells_walkable_in_both_sources(cv: ModuleType, tmp_path: Path) -> None:
+    """Batt's decision 4 (2026-10-15): the GAT AND the server's map cache, the server's last row
+    and column never passable; a map the server's cache lacks fails closed (it used to fall back
+    to the GAT alone)."""
+    k, g = kb(tmp_path)
+    md = cv.load_map("syn_3", k, [g], server=server(nopass=((5, 5), (7, 9))))
+    assert md.walkable[6, 5] and not md.walkable[5, 5] and not md.walkable[9, 7]
+    assert not md.walkable[39, :].any() and not md.walkable[:, 39].any()
+    gat_only = grid(40, 40)  # write_gat's grid: the GAT alone
+    assert int(md.walkable.sum()) == int(gat_only.sum()) - 2  # the GAT's own border is a wall
+    taller = cv.load_map("syn_3", k, [g], server=server(ys=30))  # a different size: intersected
+    assert taller.walkable.shape == (40, 40) and not taller.walkable[29:, :].any()
+    with pytest.raises(SystemExit, match="syn_3: the server's map cache lacks this map"):
+        cv.load_map("syn_3", k, [g], server={})
+    with pytest.raises(SystemExit, match="fail closed"):
+        cv.load_map("syn_3", k, [g], mapcache_dir=tmp_path / "no-cache")  # no cache files
 
 
 # --- immunity: a toggle, tied to the GM's login ---------------------------------------------------

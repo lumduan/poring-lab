@@ -7,8 +7,10 @@ the dialog.
     options: --walk walk15|walk16 (3.29's READY version; default walk15), --contact-fix where|none
 
 One trial (3.30):
-  1. @warp to a seeded start cell 4-8 cells (Chebyshev) from the target: GAT-walkable, every other
-     L3 NPC of the map >= 3 cells away. prt_church alternates Garnet / Henson; prontera: the guide.
+  1. @warp to a seeded start cell 4-8 cells (Chebyshev) from the target: walkable in BOTH the
+     client's GAT and the server's map cache (Batt's decision 4, 2026-10-15; a map either lacks is
+     refused), every other L3 NPC of the map >= 3 cells away. prt_church alternates Garnet /
+     Henson; prontera: the guide.
   2. APPROACH with the READY walk rule (its route, its gates, its NPC clearance and substitutes):
      the goal is a seeded walkable cell 2-3 cells from the NPC, on our side (nearer the start than
      the NPC is), reachable from the start, never next to another L3 NPC.
@@ -826,8 +828,7 @@ def run(mode: str, scene: str, n: int, seed: int, walk_name: str, contact_fix: s
     import walk11 as w11
     import walk12 as w12
 
-    from poring_dataset import camera as cam
-    from poring_dataset import gat as gatmod
+    from poring_dataset import walkable as wk
     from poring_dataset.walk import walk_path
     from poring_env.demo import DemoLog, new_session_id
 
@@ -836,8 +837,10 @@ def run(mode: str, scene: str, n: int, seed: int, walk_name: str, contact_fix: s
     info = {k: l3_target(l3, TARGETS[k]) for k in keys}
     templates, glyphs = load_readers(info)
     mapname = TARGETS[keys[0]].map
-    gat = gatmod.parse((cam.GAT_DIR / f"{mapname}.gat").read_bytes())
-    walkable = gat.walkable()
+    try:  # the draws' cells: walkable in BOTH sources (decision 4); either lacking: refused
+        _, walkable = wk.load_both(mapname)
+    except wk.MapSourceError as exc:
+        raise SystemExit(f"talk@1: {exc}") from None
 
     def reachable(a: Cell, b: Cell) -> bool:
         return walk_path(w6.Grid(walkable, set()), a[0], a[1], b[0], b[1], max_len=48) is not None
