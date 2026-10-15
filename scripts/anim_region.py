@@ -71,6 +71,7 @@ UI_MARGIN = 4
 # s with it (session 20261015T173259, 39 stands, 18.6-20.2): the @warp line through the UI gate
 # and the typing guard, the settle, the park, 13 grabs, then ~3.3 s of window template matching
 SECONDS_PER_STAND = 19.9
+LOCATE_WORKERS = 9  # the windows matched in threads: the same answer, ~2.35 -> ~0.5 s a view
 # The GM's fixed state always shows these (gm_state): a view that locates either one NOT is a UI
 # the exclusion cannot see, so the run stops for a person (fail closed; 2026-10-15, the prt_church
 # session 20261015T171004 located no window at all: the registry had no templates).
@@ -471,7 +472,9 @@ def measure(map_name: str, step: int, refine_step: int, radius: int,
                 park()
                 t0 = r.ns()
                 mask, frames = ca.measure(grab)
-                windows = reg.locate(np.ascontiguousarray(frames[0][..., :3]))
+                windows = reg.locate(
+                    np.ascontiguousarray(frames[0][..., :3]), workers=LOCATE_WORKERS
+                )
                 if lost := windows_missing(windows):
                     raise SystemExit(f"view at {stand}: {lost} not located, the UI exclusion "
                                      "would miss it: a person first")  # fmt: skip

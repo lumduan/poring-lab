@@ -52,6 +52,21 @@ def test_windows_are_found_wherever_they_are_moved(origin: tuple[int, int]) -> N
     assert anchors.resolve("bar", found) == (x + 60, y + 35)  # moves with its window
 
 
+def test_locate_in_threads_gives_the_serial_answer() -> None:
+    rng = np.random.default_rng(5)
+    frame, win = scene(rng), window_image(rng)
+    other = window_image(np.random.default_rng(6))
+    frame[40:100, 30:150] = win
+    frame[200:260, 400:520] = other
+    anchors = registry(win)
+    anchors.windows = {**anchors.windows, "v": WindowSpec("v", size=(120, 60))}
+    anchors.templates["v"] = to_gray(other[:12])
+    serial = anchors.locate(frame)
+    assert serial == {"w": (30, 40), "v": (400, 200)}
+    assert anchors.locate(frame, workers=4) == serial
+    assert anchors.locate(scene(rng), workers=4) == {}
+
+
 def test_a_missing_window_resolves_to_none() -> None:
     rng = np.random.default_rng(2)
     anchors = registry(window_image(rng))

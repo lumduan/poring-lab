@@ -156,15 +156,30 @@ class UiAnchors:
     templates: dict[str, Gray] = field(default_factory=dict)  # window name / icon element name
     masks: dict[str, Gray] = field(default_factory=dict)  # optional: 1 = a pixel stable in play
 
-    def locate(self, frame_bgr: npt.NDArray[np.uint8]) -> dict[str, tuple[int, int]]:
-        """Origins (client-area pixels) of every registered window visible in this frame."""
+    def locate(
+        self, frame_bgr: npt.NDArray[np.uint8], workers: int = 1
+    ) -> dict[str, tuple[int, int]]:
+        """Origins (client-area pixels) of every registered window visible in this frame.
+
+        ``workers`` > 1 matches the windows in threads (numpy's FFT runs outside the GIL): the
+        same answer, ~4x faster on a full client frame (anim_region, 2026-10-15). The default
+        stays serial."""
         gray = to_gray(frame_bgr)
+        names = [n for n in self.windows if self.templates.get(n) is not None]
+
+        def one(name: str) -> Match | None:
+            return match_template(gray, self.templates[name], self.masks.get(name))
+
+        if workers > 1 and len(names) > 1:
+            from concurrent.futures import ThreadPoolExecutor
+
+            with ThreadPoolExecutor(min(workers, len(names))) as pool:
+                matches = list(pool.map(one, names))
+        else:
+            matches = [one(n) for n in names]
         found: dict[str, tuple[int, int]] = {}
-        for name, spec in self.windows.items():
-            template = self.templates.get(name)
-            if template is None:
-                continue
-            m = match_template(gray, template, self.masks.get(name))
+        for name, m in zip(names, matches, strict=True):
+            spec = self.windows[name]
             if m is not None and m.distance <= spec.max_distance:
                 ox, oy = spec.template_offset
                 found[name] = (m.origin[0] - ox, m.origin[1] - oy)
