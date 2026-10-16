@@ -118,3 +118,36 @@ def test_human_clicks_are_left_downs_of_source_human_in_client_px() -> None:
 def test_idle_is_the_share_of_the_window_not_moving() -> None:
     _, moving = fj.gm_track([ev(0.0, "self_move", x0=0, y0=0, x1=10, y1=0)])
     assert abs(fj.moving_share(moving, 0, 3 * S) - 0.5) < 1e-9
+
+
+def test_a_reused_gid_keeps_every_life() -> None:
+    """rAthena reuses a dead mob's id for a later spawn (Batt's demo, 110019414)."""
+    events = [appear(0.0, MOB, 5, 5), ev(10.0, "entity_vanish", gid=MOB, reason=1),
+              appear(50.0, MOB, 9, 9)]  # fmt: skip
+    life = fj.alive(events)
+    assert fj.present(life, MOB, int(5 * S)) and not fj.present(life, MOB, int(20 * S))
+    assert fj.present(life, MOB, int(60 * S))
+    assert fj.died_before(life, MOB, int(10.3 * S), 0.5)
+    assert not fj.died_before(life, MOB, int(11 * S), 0.5)
+
+
+def test_the_primary_bar_allows_re_clicks_within_w() -> None:
+    other = MOB + 1
+    events = base() + [appear(0.0, other, 30, 30),
+                       ev(2.3, "attack_request", target_gid=MOB),
+                       ev(6.5, "act", src_gid=fj.GM, target_gid=MOB, damage=182),
+                       ev(10.3, "attack_request", target_gid=other),
+                       ev(16.0, "act", src_gid=fj.GM, target_gid=other, damage=182)]  # fmt: skip
+    engs = [{"k": 0, "t_first_click": int(2.0 * S), "pred_cell": [15, 10]},
+            {"k": 1, "t_first_click": int(10.0 * S), "pred_cell": [30, 30]},
+            {"k": 2, "t_first_click": int(20.0 * S), "pred_cell": [60, 60]}]  # fmt: skip
+    out = fj.bot_engagements(events, engs)
+    assert [r["why"] for r in out["rows"]] == ["hit", "hit_late", "no_unit"]
+    assert out["rows"][0]["t_hit_s"] == 4.5 and out["hit_within_w"] == 1 and out["counted"] == 3
+
+
+def test_a_unit_killed_by_another_hand_is_excluded() -> None:
+    events = base() + [ev(3.0, "entity_vanish", gid=MOB, reason=1)]
+    out = fj.bot_engagements(events, [{"k": 0, "t_first_click": int(2.0 * S),
+                                       "pred_cell": [15, 10]}])  # fmt: skip
+    assert out["rows"][0]["why"] == "excluded:killed_by_other" and out["counted"] == 0

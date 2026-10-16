@@ -55,6 +55,12 @@ ALLOWED = {
                            "the detector (no unit within 60 px on the last 2 fresh frames): "
                            "3.39's recorded deviation (2), option B. A click from a standstill is "
                            "cursor-gated (GATED below)"),
+    "scripts/hunt_flow.py": (2, "hunt-flow@N (3.41): the attack / re-click after ONE robust2 SWORD "
+                                "read on the target's newest box, only at the stop with the target "
+                                "<= 3 cells (as hunt@6's click); and the CONTINUOUS walk click "
+                                "while the GM moves, gated by the map and the detector (no unit "
+                                "within 60 px on the last 2 fresh frames): 3.39's deviation (2), "
+                                "option B. A click from a standstill is cursor-gated (GATED)"),
     "scripts/gm_state.py": (1, "UI only: an inventory TAB label inside the open window, after two "
                                "motions (clear_loot, Batt 2026-10-16: the GM test state's loot "
                                "rule); the loot leaves by agent.drag onto open ground + Enter on "
@@ -79,6 +85,8 @@ GATED = {
                                      "rules' own gate); probes never click"),
     "scripts/farm0.py": (1, "farm@0 (6.1): the attack click, SWORD read twice"),
     "scripts/hunt.py": (1, "hunt@N's walk click from a standstill: WALK by robust2's series"),
+    "scripts/hunt_flow.py": (1, "hunt-flow@N's walk click from a standstill (search or steer): "
+                                "WALK by robust2's series"),
 }  # fmt: skip
 
 

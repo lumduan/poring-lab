@@ -6422,8 +6422,12 @@ analysis. They are binding for the human baseline and for every hunt-flow versio
     - 9 on monsters walking or just arrived, 3-6 cells from the picked ground cell. Each was hit
       by a re-click 1.3-4.6 s later.
     - 2 on monsters that died 0.07-0.1 s before (the death animation still drawn).
-    - 1 unexplained: a Poring-like sprite at the click, and no mob in the packets near it
-      (none within +-4 s).
+    - ~~1 unexplained: a Poring-like sprite at the click, and no mob in the packets near it
+      (none within +-4 s).~~ ➡️ **CORRECTED 2026-10-16 ~11:30: a JUDGE BUG, not a mystery.**
+      rAthena reuses a dead mob's id for a later spawn. `flow_judge.alive()` kept only an id's
+      last life, so a mob alive at 509 s looked absent. Fixed: every life of an id is kept
+      (`test_a_reused_gid_keeps_every_life`). The Poring in the frame was real. The trial
+      numbers above do not change.
     - 1 `walk_only` on a walking mob.
   - By target motion, when the click resolved: standing 33 / 33, walking 20 / 21. Most
     unresolved clicks were on WALKING monsters.
@@ -6466,7 +6470,7 @@ analysis. They are binding for the human baseline and for every hunt-flow versio
   - walk clicks ~6 cells ahead, re-aimed every ~0.6-1 s while walking;
   - no looting.
 
-### 3.41 hunt-flow@1 (pre-registered 2026-10-16 ~11:05 ICT, BEFORE its code and any of its data; Batt ~10:10: "the human baseline changes the goal")
+### 3.41 hunt-flow@1 (pre-registered 2026-10-16 10:59 ICT, the commit time eef21d6, BEFORE its code and any of its data; Batt ~10:10: "the human baseline changes the goal")
 
 **THE PRIMARY BAR (Batt): HIT WITHIN W OF THE FIRST ATTACK CLICK, RE-CLICKS ALLOWED.**
 - **ENGAGEMENT:** the bot's FIRST attack click on a tracked target. Later attack clicks on that
@@ -6489,10 +6493,13 @@ analysis. They are binding for the human baseline and for every hunt-flow versio
   - Out of sight (reason 0) is a failure.
 - **PASS:** >= 95 % over >= 60 engagements, pooled over runs of THIS version with fresh seeds,
   and safety events 0 (NPC contact, dialog, map change, a non-target hit, an unknown UI state).
-- **Batt on the same definition (the reference, no bar):** 63 / 64 = 98.4 %.
-  - His 53 first-click hits, plus his 10 re-hits (<= 4.6 s).
+- ~~**Batt on the same definition (the reference, no bar):** 63 / 64 = 98.4 %.~~ ➡️
+  **CORRECTED by `flow_judge.py human` (11:30, after the id-reuse fix above): 64 / 64 = 100 %
+  (Wilson 94.3-100 %).**
+  - His 53 first-click hits, plus 11 re-hits within W.
   - 2 excluded: clicks on monsters that had just died.
-  - 1 failure: the unexplained click at 509 s.
+  - The 509 s click was the judge bug, not a failure. The hand count in this paragraph was
+    written before the code existed.
 - **Reported beside, NEVER the bar:**
   - the first-click-lands rate, 3.40's trial HIT RATE (Batt 80.3 %);
   - FIRST-CLASS results after every run, in one bot-vs-Batt table:

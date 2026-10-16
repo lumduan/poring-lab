@@ -43,6 +43,8 @@ SEEN_BACK = 30.0
 FOLLOW = 3.0
 VIEW = 14
 NS = 10**9
+W_S = 5.0  # 3.41: the hit must land within W of the FIRST attack click (Batt's re-hit p90 + 0.7 s)
+REHIT_NEAR = 6  # the human reference: a failed click's unit, within this of the picked cell
 
 
 @dataclass
@@ -134,16 +136,21 @@ def mob_at(pos: Mapping[int, Sequence[tuple[int, Cell, int]]], g: int, t: int) -
     return last
 
 
-def alive(events: Sequence[Mapping[str, Any]]) -> dict[int, tuple[int, int | None, int | None]]:
-    """gid -> (first appear t, vanish t or None, vanish reason) for mobs (objtype 5)."""
-    out: dict[int, tuple[int, int | None, int | None]] = {}
+def alive(events: Sequence[Mapping[str, Any]]
+          ) -> dict[int, list[tuple[int, int | None, int | None]]]:  # fmt: skip
+    """gid -> EVERY life [(appear t, vanish t or None, vanish reason)] of mobs (objtype 5).
+    rAthena reuses a dead mob's block id for a later spawn (found 2026-10-16: 110019414 died at
+    Batt's t0+214 s and a new Poring had the id at t0+271 s), so one gid can have several lives."""
+    out: dict[int, list[tuple[int, int | None, int | None]]] = {}
     for e in events:
         g = gid_of(e)
+        t = int(e["t_mono_ns"])
         if e.get("type") == "entity_appear" and e.get("objtype") == 5:
-            first = out[g][0] if g in out and out[g][1] is None else int(e["t_mono_ns"])
-            out[g] = (first, None, None)
-        elif e.get("type") == "entity_vanish" and g in out and out[g][1] is None:
-            out[g] = (out[g][0], int(e["t_mono_ns"]), int(e.get("reason", -1)))
+            lives = out.setdefault(g, [])
+            if not lives or lives[-1][1] is not None:
+                lives.append((t, None, None))
+        elif e.get("type") == "entity_vanish" and out.get(g) and out[g][-1][1] is None:
+            out[g][-1] = (out[g][-1][0], t, int(e.get("reason", -1)))
     return out
 
 
@@ -153,11 +160,16 @@ def gid_of(e: Mapping[str, Any], key: str = "gid") -> int:
     return -1 if v is None else int(v)
 
 
-def present(life: Mapping[int, tuple[int, int | None, int | None]], g: int, t: int) -> bool:
-    if g not in life:
-        return False
-    t0, t1, _ = life[g]
-    return t0 <= t and (t1 is None or t < t1)
+def present(life: Mapping[int, Sequence[tuple[int, int | None, int | None]]], g: int,
+            t: int) -> bool:  # fmt: skip
+    return any(a <= t and (b is None or t < b) for a, b, _ in life.get(g, ()))
+
+
+def died_before(life: Mapping[int, Sequence[tuple[int, int | None, int | None]]], g: int, t: int,
+                within_s: float) -> bool:  # fmt: skip
+    """``g`` died (reason 1) in the ``within_s`` before ``t``."""
+    return any(b is not None and r_ == 1 and 0 <= t - b <= within_s * NS
+               for _a, b, r_ in life.get(g, ()))  # fmt: skip
 
 
 def moving_share(moving: Sequence[tuple[int, int]], w0: int, w1: int) -> float:
@@ -329,7 +341,8 @@ def judge(events: Sequence[Mapping[str, Any]], clicks: Sequence[Click],
                 tr.rank = 1 + sum(1 for d in vis if d < tr.range_cells)
             tr.t_seen = first_seen(frames, track, pos, g, c.t, pick)
         tr.info = {"request": f["request"] is not None, "box": box is not None,
-                   "moving": is_moving(moving, c.t)}  # fmt: skip
+                   "moving": is_moving(moving, c.t),
+                   "picked": None if picked is None else list(picked)}  # fmt: skip
         recent = [p for p in trials if c.t - FOLLOW * NS <= p.t < c.t and p.gid not in (None, g)
                   and present(life, p.gid, c.t)]  # fmt: skip
         tr.switch = bool(recent)
@@ -357,6 +370,137 @@ def first_seen(frames: Sequence[tuple[int, list[list[Any]]]], track: Sequence[tu
                 seen, last = tf, tf
                 break
     return seen
+
+
+def damaging(ours: Sequence[Mapping[str, Any]], g: int, t0: int, t1: int) -> int | None:
+    """The first act of ours on ``g`` with damage > 0 in (t0, t1], or None."""
+    for a in ours:
+        ta = int(a["t_mono_ns"])
+        if (t0 < ta <= t1 and int(a["target_gid"]) == g
+                and int(a.get("damage", 0)) + int(a.get("damage2", 0)) > 0):  # fmt: skip
+            return ta
+    return None
+
+
+def bot_engagements(events: Sequence[Mapping[str, Any]], engs: Sequence[Mapping[str, Any]],
+                    w_s: float = W_S) -> dict[str, Any]:  # fmt: skip
+    """3.41's PRIMARY bar per engagement (the bot's first attack click on a track): G = the unit
+    of the first attack request (<= T_REQ) when it stood within 3 cells of the predicted cell,
+    else the mob nearest that cell within NEAR; SUCCESS = our damaging act on G within w_s;
+    EXCLUDED: a species change, a death with no act of ours, a vanish (not 0/1) before our act."""
+    import hunt_core as hc
+
+    events = sorted(events, key=lambda e: int(e["t_mono_ns"]))
+    pos = hc.walk_positions(events)
+    life = alive(events)
+    ours = [e for e in events if e.get("type") == "act" and gid_of(e, "src_gid") == GM
+            and e.get("kind") != "pickup"]  # fmt: skip
+    rows = []
+    for e in engs:
+        t1 = int(e["t_first_click"])
+        pc = (int(round(e["pred_cell"][0])), int(round(e["pred_cell"][1])))
+        req = next((x for x in events if x.get("type") == "attack_request"
+                    and t1 <= int(x["t_mono_ns"]) <= t1 + int(T_REQ * NS)), None)  # fmt: skip
+        g = None
+        if req is not None:
+            rc = mob_at(pos, int(req["target_gid"]), int(req["t_mono_ns"]))
+            if rc is not None and cheb(rc, pc) <= 3:
+                g = int(req["target_gid"])
+        if g is None:
+            cands = [(cheb(pc, mc), gg) for gg in pos if present(life, gg, t1)
+                     and (mc := mob_at(pos, gg, t1)) is not None]  # fmt: skip
+            cands = [x for x in cands if x[0] <= NEAR]
+            g = min(cands)[1] if cands else None
+        row: dict[str, Any] = {"k": e.get("k"), "gid": g, "bot": e.get("result"),
+                               "clicks": e.get("clicks")}  # fmt: skip
+        if g is None:
+            row["why"] = "no_unit"
+        else:
+            th = damaging(ours, g, t1, t1 + int(w_s * NS))
+            jobs = {int(x.get("job", -1)) for x in events if x.get("type") == "entity_appear"
+                    and gid_of(x) == g and int(x["t_mono_ns"]) >= t1}  # fmt: skip
+            first = {int(x.get("job", -1)) for x in events if x.get("type") == "entity_appear"
+                     and gid_of(x) == g and int(x["t_mono_ns"]) < t1}  # fmt: skip
+            van = next((x for x in events if x.get("type") == "entity_vanish" and gid_of(x) == g
+                        and int(x["t_mono_ns"]) >= t1), None)  # fmt: skip
+            acted = any(int(a["target_gid"]) == g and int(a["t_mono_ns"]) >= t1 for a in ours)
+            if th is not None:
+                row.update(why="hit", t_hit_s=round((th - t1) / NS, 2))
+            elif first and jobs and not jobs <= first:
+                row["why"] = "excluded:species_changed"
+            elif van is not None and int(van.get("reason", -1)) == 1 and not acted:
+                row["why"] = "excluded:killed_by_other"
+            elif (van is not None and int(van.get("reason", -1)) not in (0, 1)
+                  and not any(int(a["target_gid"]) == g and int(a["t_mono_ns"]) < int(
+                      van["t_mono_ns"]) for a in ours)):  # fmt: skip
+                row["why"] = "excluded:vanished"
+            else:
+                row["why"] = "hit_late" if acted else "never_hit"
+        rows.append(row)
+    return engagement_summary(rows)
+
+
+def engagement_summary(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    counted = [x for x in rows if not str(x["why"]).startswith("excluded")]
+    ok = sum(1 for x in counted if x["why"] == "hit")
+    why: dict[str, int] = {}
+    for x in rows:
+        why[x["why"]] = why.get(x["why"], 0) + 1
+    t_hit = [x["t_hit_s"] for x in rows if x.get("t_hit_s") is not None]
+    return {"engagements": len(rows), "counted": len(counted), "hit_within_w": ok,
+            "rate": round(ok / len(counted), 4) if counted else None,
+            "wilson95": wilson(ok, len(counted)), "why": why,
+            "first_click_to_hit_p50_p90": [pct(t_hit, 0.5), pct(t_hit, 0.9)],
+            "rows": list(rows)}  # fmt: skip
+
+
+def human_engagements(events: Sequence[Mapping[str, Any]], trials: Sequence[Mapping[str, Any]],
+                      t0: int, w_s: float = W_S) -> dict[str, Any]:  # fmt: skip
+    """3.41's reference for a HUMAN (no bar): every trial is an engagement. A hit is a success;
+    a failed click's unit = the mob nearest its picked cell within REHIT_NEAR (or one that died
+    <= 0.5 s before: EXCLUDED, the target was already dead); success if our damaging act on it
+    lands within w_s of the click; none -> no_unit."""
+    import hunt_core as hc
+
+    events = sorted(events, key=lambda e: int(e["t_mono_ns"]))
+    pos = hc.walk_positions(events)
+    life = alive(events)
+    ours = [e for e in events if e.get("type") == "act" and gid_of(e, "src_gid") == GM
+            and e.get("kind") != "pickup"]  # fmt: skip
+    rows = []
+    for tr in trials:
+        t = t0 + int(round(tr["t_s"] * NS))
+        if tr["outcome"] == "hit":
+            rows.append({"t_s": tr["t_s"], "why": "hit", "t_hit_s": tr["click_to_hit"]})
+            continue
+        pk = tr.get("picked")
+        best = None
+        for g in pos:
+            dying = died_before(life, g, t, 0.5)
+            if not present(life, g, t) and not dying:
+                continue
+            mc = mob_at(pos, g, t)
+            if pk is None or mc is None:
+                continue
+            d = cheb(tuple(pk), mc)
+            if d <= REHIT_NEAR and (best is None or d < best[0]):
+                best = (d, g, dying)
+        if best is None:
+            rows.append({"t_s": tr["t_s"], "why": "no_unit"})
+        elif best[2]:
+            rows.append({"t_s": tr["t_s"], "why": "excluded:already_dead"})
+        else:
+            th = damaging(ours, best[1], t, t + int(w_s * NS))
+            rows.append({"t_s": tr["t_s"], "why": "hit" if th is not None else "never_hit",
+                         "t_hit_s": None if th is None else round((th - t) / NS, 2)})  # fmt: skip
+    return engagement_summary(rows)
+
+
+def sight_per_10min(events: Sequence[Mapping[str, Any]], t0: int, w1: int) -> float:
+    """Distinct mobs that entered sight in [t0, w1), per 10 minutes."""
+    g = {gid_of(e) for e in events if e.get("type") == "entity_appear" and e.get("objtype") == 5
+         and t0 <= int(e["t_mono_ns"]) < w1}  # fmt: skip
+    return round(len(g) * 600 / max(1e-9, (w1 - t0) / NS), 1)
 
 
 def pct(xs: Sequence[float], q: float) -> float | None:
@@ -512,8 +656,55 @@ def human(sid: str) -> dict[str, Any]:
     out = judge(events, clicks, frames, t0, picker(man.get("map", "prt_fild08")), loot1.in_ui)
     out.update({"session": sid, "actor": "human", "t0_from_armed_s":
                 round((t0 - int(man["t_armed_ns"])) / NS, 1)})  # fmt: skip
+    out["engagements_w"] = human_engagements(events, out["trial_rows"], t0)
+    out["sight_per_10min"] = sight_per_10min(events, t0, t0 + int(WINDOW_S * NS))
     (d / "flow_judge.json").write_text(json.dumps(out, indent=1))
     return out
+
+
+def bot(sid: str) -> dict[str, Any]:
+    """A hunt-flow run: clicks from the runner's clicks.jsonl, the engagements it logged, the
+    sampler's boxes; the window from our first move after the loop start to the run's end."""
+    import loot1
+
+    d, man, events, frames = _session(sid)
+    clicks = [Click(int(x["t"]), float(x["u"]), float(x["v"]), str(x.get("kind", "")))
+              for x in map(json.loads, (d / "clicks.jsonl").read_text().splitlines())]  # fmt: skip
+    loop0 = next((int(x["t_ns"]) for x in map(json.loads, (d / "events.jsonl").read_text()
+                                              .splitlines()) if x.get("kind") == "loop_start"),
+                 int(man["t0_mono_ns"]))  # fmt: skip
+    t0 = t0_of(events, loop0)
+    if t0 is None:
+        raise SystemExit("no movement after the loop start: nothing to judge")
+    window = (min(int(man.get("t1_mono_ns", t0)), max(c.t for c in clicks) + 5 * NS) - t0) / NS
+    out = judge(events, clicks, frames, t0, picker(man.get("map", "prt_fild08")), loot1.in_ui,
+                window_s=window)  # fmt: skip
+    engs = json.loads((d / "engagements.json").read_text())
+    out["engagements_w"] = bot_engagements(events, engs)
+    out["sight_per_10min"] = sight_per_10min(events, t0, t0 + int(window * NS))
+    out.update({"session": sid, "actor": "bot", "rule": man.get("rule")})
+    (d / "flow_judge.json").write_text(json.dumps(out, indent=1))
+    return out
+
+
+def row(o: Mapping[str, Any]) -> dict[str, str]:
+    e = o["engagements_w"]
+    rx = o["reaction_s"]
+    return {
+        "hit within 5 s of 1st click": f"{e['hit_within_w']}/{e['counted']} = "
+        f"{100 * (e['rate'] or 0):.1f} %",
+        "Wilson 95": f"{100 * e['wilson95'][0]:.1f}-{100 * e['wilson95'][1]:.1f} %",
+        "1st click lands (not the bar)": f"{o['hits']}/{o['trials']} = "
+        f"{100 * (o['hit_rate'] or 0):.1f} %",
+        "kills / h": f"{o['kills_per_hour']}",
+        "seen -> click p50/p90 s": f"{rx['seen_to_click'][0]} / {rx['seen_to_click'][1]}",
+        "click -> hit p50/p90 s": f"{rx['click_to_hit'][0]} / {rx['click_to_hit'][1]}",
+        "monsters in sight / 10 min": f"{o['sight_per_10min']}",
+        "idle %": f"{o['idle_pct']}",
+        "walk clicks / min": f"{o['walk_clicks']['per_min']}",
+        "range at click p50/p90": f"{o['range_cells']['p50']} / {o['range_cells']['p90']}",
+        "window min": f"{round(o['window_s'] / 60, 1)}",
+    }  # fmt: skip
 
 
 def main() -> int:
@@ -522,9 +713,13 @@ def main() -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     h = sub.add_parser("human")
     h.add_argument("session")
+    b = sub.add_parser("bot")
+    b.add_argument("session")
     a = ap.parse_args()
-    out = human(a.session)
-    print(json.dumps({k: v for k, v in out.items() if k != "trial_rows"}, indent=1))
+    out = human(a.session) if a.cmd == "human" else bot(a.session)
+    brief = {k: v for k, v in out.items() if k != "trial_rows"}
+    brief["engagements_w"] = {k: v for k, v in out["engagements_w"].items() if k != "rows"}
+    print(json.dumps(brief, indent=1))
     return 0
 
 
