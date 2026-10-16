@@ -7683,6 +7683,71 @@ only separator, so that bar may fail again.
 - engaged kills / h >= 100;
 - hit_late below v11's 64 (per hour).
 
+**Run 1 RESULT (2026-10-16 20:30:39-21:07:47, session 20261016T203039-demo-hunt-flow12, seed
+20261218): STOPPED by Batt's lease at 37.1 min.** The runner stopped as designed: "a human lease
+is active, nothing sent". This was the SECOND lease today (17:12, now ~21:08); Batt was told.
+- **Engagements:** 184, all dead. Attack clicks: 183 direct / 1 read (low_conf).
+- **Kills:** engaged 79 (~128 / h; v11 101); 30 more from walk clicks; 33 unintended requests.
+- **Bursts (183):**
+  - ends: arrow 69 (38 %), gone 96 (52 %: the box vanished before the 0.6 s re-click, mostly the
+    one-hit kill or the cursor over the sprite), risky 18;
+  - clicks per burst p50 1;
+  - click -> arrow p50 0.45 / p90 0.66 s;
+  - burst duration p50 0.64 s.
+- **Landing within W per engagement, by species:**
+  - Poring 52 / 82 = 63 %;
+  - Lunatic 23 / 38 = 61 %;
+  - Drops 5 / 10 = 50 %;
+  - outcomes: hit 81, no_unit 50, hit_late 35, never_hit 16.
+- **The aim error measured here is an ARTIFACT** (Poring p50 36 px). It was computed AFTER the
+  burst, on a frame where the monster had moved or died. Fixed for the next runs: it is now
+  measured before the burst.
+- **HARD BAR FAILED again:** a Creamy, through the size gate. The name tag is in the queue.
+- **Selection:** the nearest at selection 74 %, distance p50 4.
+- **Pre-emptions:** 18 / min.
+- **Timing:** box age at click p50 565 / p90 778 ms.
+- **The LATENCY BUDGET** (the same stages on v11; `latency_budget.py`, scratch):
+  - selection -> click p50 0.67 s;
+  - in range -> click p50 1.09 s;
+  - click -> attack request p50 0.56 s;
+  - click -> server kill p50 1.64 s;
+  - **server kill -> the bot's "dead" p50 -0.45 s.** The bot declares the kill BEFORE the server:
+    its rule (box unseen 0.6 s, >= 1 s after the click) fires while the monster is hidden under
+    the GM or the cursor. The next selection's click can then cancel the attack (the late and
+    never hits).
+- **vs the prediction:**
+  - Poring >= 85 % / Lunatic >= 80 %: NO (63 / 61);
+  - clicks per landing <= 2: YES (1);
+  - bursts on the arrow >= 60 %: NO (38 %);
+  - engaged kills / h >= 100: YES (~128);
+  - hit_late per hour below v11's 64: YES (35 in 37 min = 57 / h).
+
+### 3.55 hunt-flow@13: PRE-EMPTION HYSTERESIS (pre-registered 2026-10-16 __TIME__ ICT, the commit time __SHA__, BEFORE its run; Batt 20:5x, his order A1)
+
+**Batt:** "switch only if the new target is clearly better (e.g. >= 2 cells closer, or the current
+one left the zone) AND stays better for >= ~0.5 s; never switch during a burst. Report
+pre-emptions/min and landing."
+
+**The ONE main change (`preempt_hyst`, `preempt_better`):**
+- A target within 4 cells replaces the current one only when it is CLEARLY better: there is no
+  current target, the current one is > 4 cells away (left the zone), or the new one is >= 2
+  cells closer.
+- It must stay so for >= 0.5 s (a candidate timer, reset when it stops being better).
+- A burst runs inside the strike call, so no pre-emption can interrupt it.
+
+**Also in (a measurement fix, no behaviour change):** the aim error is measured before the
+burst. v12 measured it after the burst: an artifact.
+
+**Run:** 60 min, seed 20261219, the same test state, nice 10, detector on the CPU (GPU freeze). It
+starts after the takeover quiet period (>= 10 min without human input).
+
+**Prediction, written before the run:**
+- pre-emptions <= 5 / min (v11 / v12: 18);
+- landing within W per engagement >= 75 % for Poring and Lunatic (v12: 63 / 61);
+- engaged kills / h >= 120 (v12 ~128);
+- the nearest at selection >= 80 % (v12 74 %);
+- hard bars: the Creamy risk remains until the species check (v14).
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.

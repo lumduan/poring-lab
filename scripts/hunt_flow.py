@@ -1486,9 +1486,6 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 ref_img = screen.grab(gx0, gy0, gw, gh)[1] if burst_ else None  # v12: the arrow's
                 tc = r.ns()
                 agent.click(gx0 + round(u), gy0 + round(v))
-                if burst_:  # v12: BURST until the client draws the arrow on the target
-                    bst = run_burst(tr, here, u, v, ref_img)
-                    hov["burst"] = bst
                 cmd_hist.append((int(tc), (int(round(pc[0])), int(round(pc[1])))))
                 del cmd_hist[:-40]
                 hov["clicked"] = tc
@@ -1506,6 +1503,9 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         hov["aim_px"] = round(float(np.hypot(u - cx_, v - cy_)), 1)
                 if in_range_since.get(tr.tid) is not None:
                     hov["in_range_to_click_s"] = round(tc / 1e9 - in_range_since[tr.tid], 2)
+                if burst_:  # v12: BURST until the client draws the arrow (after the aim error:
+                    # v12 run 1 measured the aim after the burst, an artifact)
+                    hov["burst"] = run_burst(tr, here, u, v, ref_img)
                 ptr[0] = (u, v)
                 if prm.get("strike_lean"):
                     # v8 attempt 2: the pointer OFF the monster at once (no park, no wait). The
