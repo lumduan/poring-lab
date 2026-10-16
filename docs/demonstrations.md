@@ -8020,6 +8020,25 @@ walk clicks.
 - hard bars: zero NPC contact, zero map change; the non-target bar PASSES unless a Creamy is
   hit through one of the 3 / 17 cases the guard missed offline.
 
+**Attempt 1 (2026-10-17 01:35:09, session 20261017T013509-demo-hunt-flow16, seed 20261226):
+STOPPED at 26.7 min, 40 engagements (all dead).**
+- **Stop:** the backend refused an input ("greater_than_equal:agent_input.events.0.mouse_move.y":
+  a pointer move above the desktop). Nothing outside the game was clicked.
+- **Cause:** the focus aim (v16's main change) was checked only against the client's windows,
+  not against the frame. A target near the top edge, led by its velocity, put the strike point
+  above the screen (y < 0).
+- **Fix (a bug fix):**
+  - every focus aim (the strike, a burst re-click, the tag follow) must lie inside the game frame,
+    else the box is used;
+  - a burst point off the frame ends the burst (`off_view`);
+  - a final check before every strike click refuses a point outside the frame
+    (`strike_off_view`);
+  - the pointer-off fallback after a click goes 90 px down instead of up near the top edge.
+- The walk guard's verdicts in its 26.7 min: ok 1091, pink 398, near_gm 751 (48 % refused,
+  above the predicted <= 35 %).
+- Attempt 2 runs v16 with this fix and a fresh seed; the two attempts are judged separately and
+  pooled for the >= 60 engagements.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.

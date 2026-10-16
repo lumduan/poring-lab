@@ -1693,7 +1693,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     time.sleep(0.1)
                     if follow_ and tid is not None:
                         fa_ = focus.aim(tid, r.ns(), 0.0, prm["focus_max_age_s"])
-                        if (fa_ is not None and not loot1.in_ui(fa_[0], fa_[1])
+                        if (fa_ is not None and in_view(fa_[0], fa_[1])
                                 and math.hypot(fa_[0] - u, fa_[1] - v)
                                 > prm["tag_follow_px"]):  # fmt: skip
                             u, v = fa_[0], fa_[1]
@@ -1827,9 +1827,14 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         fa_b = focus.aim(tr.tid, r.ns(), prm["focus_lead_s"],
                                          prm["focus_max_age_s"])  # fmt: skip
                         if fa_b is not None:  # v16: the fresh tracked centre + the same jitter
-                            ua += fa_b[0] - (b_b.x0 + b_b.x1) / 2
-                            va += fa_b[1] - (b_b.y0 + b_b.y1) / 2
-                            out["focus"] = out.get("focus", 0) + 1
+                            ub_ = ua + fa_b[0] - (b_b.x0 + b_b.x1) / 2
+                            vb_ = va + fa_b[1] - (b_b.y0 + b_b.y1) / 2
+                            if in_view(ub_, vb_):  # v16 run 1: a lead off the top edge (y < 0)
+                                ua, va = ub_, vb_
+                                out["focus"] = out.get("focus", 0) + 1
+                    if not in_view(ua, va):
+                        out["end"] = "off_view"
+                        break
                     if loot1.in_ui(ua, va):
                         out["end"] = "ui"
                         break
@@ -1871,8 +1876,9 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 aim_src = "box"
                 if prm.get("focus") and direct_:
                     fa_ = focus.aim(tr.tid, r.ns(), prm["focus_lead_s"], prm["focus_max_age_s"])
-                    if fa_ is not None and not loot1.in_ui(fa_[0], fa_[1]):
+                    if fa_ is not None and in_view(fa_[0], fa_[1]):
                         # v16: the target tracked on every frame, led by its velocity
+                        # (in the frame: run 1 stopped on a lead above the top edge, y < 0)
                         u, v, aim_src = fa_[0], fa_[1], f"focus:{round(fa_[2] * 1000)}"
                 if (prm.get("still_gate") and ok_park and tr.box is not None
                         and b is not tr.box and float(np.hypot(*(np.array(f1.centre(b))
@@ -1968,6 +1974,11 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         eng["hovers"].append(hov)
                     split.to(prev, time.monotonic())
                     return False
+                if not in_view(u, v):  # v16 run 1: never a click outside the game frame
+                    ev({"kind": "strike_off_view", "track": tr.tid, "u": round(u, 1),
+                        "v": round(v, 1)})  # fmt: skip
+                    split.to(prev, time.monotonic())
+                    return False
                 burst_ = bool(prm.get("burst") and direct_)
                 ref_img = screen.grab(gx0, gy0, gw, gh)[1] if burst_ else None  # v12: the arrow's
                 tc = r.ns()
@@ -2000,7 +2011,10 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     import fast_read as fread
 
                     cs2 = [f1.centre(x) for x in (fr[-1][1] if fr else []) if x is not b]
-                    off_ = fread.blink_point(u, v, cs2, in_view) or (u, v - 90.0)
+                    off_ = fread.blink_point(u, v, cs2, in_view) or (
+                        u,
+                        v - 90.0 if v >= 90.0 else v + 90.0,
+                    )
                     agent.move(gx0 + round(off_[0]), gy0 + round(off_[1]))
                     ptr[0] = off_
                 elif not fast_:
