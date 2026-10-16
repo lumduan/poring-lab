@@ -206,7 +206,8 @@ PARAMS[11] = {**PARAMS[10], "opportunistic": True, "opp_cells": 4, "risk_targets
 PARAMS[12] = {**PARAMS[11], "burst": True, "burst_interval_s": 0.6, "burst_max_clicks": 4,
               "burst_max_s": 3.0}  # fmt: skip
 PARAMS[13] = {**PARAMS[12], "preempt_hyst": True, "preempt_margin": 2.0, "preempt_hold_s": 0.5}
-PARAMS[14] = {**PARAMS[13], "name_tag": True, "tag_wait_s": 1.2, "tag_harvest": True}
+PARAMS[14] = {**PARAMS[13], "name_tag": True, "tag_wait_s": 1.2, "tag_harvest": True,
+              "walk_clear_unconfirmed": True}  # fmt: skip
 PARAMS[15] = {**PARAMS[14], "zone": True, "zone_radius": 7, "zone_radius_walking": 4}
 PARAMS[16] = {**PARAMS[15], "sweep": True, "lane_w": 12, "rev_penalty": 4.0}
 PARAMS[17] = {**PARAMS[16], "retarget": True, "retarget_margin": 2.0, "retarget_commit_s": 1.0}
@@ -1291,6 +1292,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
             import nametag
 
             tag_templates = nametag.load_templates() if prm.get("name_tag") else {}
+            confirmed: dict[int, tuple[str, float]] = {}  # v14: track -> (its tag, when)
             if prm.get("name_tag") and not tag_templates:
                 raise f0.FarmStop("hunt-flow refused: no name-tag templates (nametag.py build)")
 
@@ -1455,6 +1457,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     # v12: the client's own species label must read a TARGET before a direct click
                     # (the size gate let a Creamy, a non-target, pass as a Poring: v11 +527 s)
                     tag_, tag_ms = read_tag(u, v, b)
+                    if tag_ in nametag.TARGET_NAMES:
+                        confirmed[tr.tid] = (tag_, time.monotonic())
                     if tag_ not in nametag.TARGET_NAMES:
                         reads += 1 if tag_ is None else prm["max_reads"]
                         ev({"kind": "tag_refused", "track": tr.tid, "tag": tag_, "ms": tag_ms})
@@ -1876,7 +1880,12 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     if not fr_:
                         return True
                     boxes_ = [b for b in fr_[-1][1] if b.cls == "monster"]
-                    if prm.get("box_clear_nontarget_only"):  # v11: targets are fine to click
+                    if prm.get("walk_clear_unconfirmed"):
+                        # v14: only a box whose track's tag READ a target is clickable around;
+                        # an unconfirmed box may be a Creamy (v10: a walk click turned attack)
+                        ok_ids = {id(t_.box) for t_ in tracks_now() if t_.tid in confirmed}
+                        boxes_ = [b for b in boxes_ if id(b) not in ok_ids]
+                    elif prm.get("box_clear_nontarget_only"):  # v11: targets are fine to click
                         boxes_ = [b for b in boxes_ if (lambda cs: cs[0] is None or f1.native_size(
                             b, cs[1]) > f1.MAX_NATIVE_PX)(cell_of(b, pos))]  # fmt: skip
                     return all(

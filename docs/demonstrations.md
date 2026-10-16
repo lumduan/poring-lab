@@ -7776,6 +7776,48 @@ starts after the takeover quiet period (>= 10 min without human input).
   - engaged kills / h >= 120: YES (141);
   - the nearest at selection >= 80 %: YES (84 %).
 
+### 3.56 hunt-flow@14: SPECIES IDENTITY by the client's NAME TAG (pre-registered 2026-10-16 __TIME__ ICT, the commit time __SHA__, BEFORE its run; Batt 19:5x + 20:5x A2)
+
+**Why:** the non-target hard bar failed in v7, v10, v11 and v12, each time on a CREAMY.
+
+**Every species cue we have, measured on today's recordings, fails to separate a Creamy:**
+- the detector box: a Creamy measured 39 x 36 px, Porings 38-41 x 36-39;
+- colour from the decoded sprites: 3 / 38 Creamy samples classed Creamy, 32 as Pupa;
+- the "airborne" shadow gap: 3 / 36 Creamies flagged, and 15 / 190 targets flagged falsely.
+
+The only cue that identifies the species is the client's own NAME TAG: dark text with a light
+outline under the sprite, ~0.5 s after the pointer stops on it (the 20:3x hover probe).
+
+**Templates** (`scripts/nametag.py`; data/nametags, gitignored):
+- They come from no-click cut sessions (hover only, raw live frames; 20:22 + 21:19 at (268,107) mostly Lunatics; 22:29 at (290,350) and 22:35 at (200,330): 181 more cuts).
+- Each cut is labelled by the packets (the species of the live mob at the hovered cell).
+- Per species, the majority of the aligned letter masks: Poring 149, Lunatic 16, Drops 10 words; no Pupa (rare): a Pupa has no target tag and is skipped.
+- Leave-one-out check: Poring 144 / 149 matched (5 unmatched), Lunatic 15 / 16 (1 unmatched), Drops 10 / 10; ZERO cross-species confusions. A Creamy tag (v11 +527 s, JPEG) scores IoU 0.22-0.35 against the target templates, far below the 0.72 acceptance.
+
+**The ONE main change (`name_tag`):**
+- Before every DIRECT attack click (first or burst), the pointer rests on the target and the tag
+  band under its box is read every 0.1 s, for up to 1.2 s.
+- Only Poring / Lunatic / Pupa / Drops is clicked.
+- Another word, or no tag in time, means NO click: logged `tag_refused`, and a non-target word
+  drops and bans the target.
+- The read path (risky contexts) is unchanged.
+- The live tag band is HARVESTED at each burst's arrow, for more templates labelled by the packets
+  after the run.
+
+**The same identity for WALK clicks:** a track becomes CONFIRMED once its tag reads a target
+name. Walk clicks keep v11's 12-px clearance around every monster box NOT confirmed, because an
+unknown box may be a Creamy (v10's walk click turned attack). Nearby targets are still struck
+through the opportunistic strike.
+
+**Run:** 60 min, a fresh seed, the same test state, nice 10, detector on the CPU (GPU freeze).
+
+**Prediction, written before the run:**
+- zero direct-click hits on a non-target;
+- the tag read before a direct click p50 <= 0.6 s;
+- tag_refused <= 15 % of strike calls;
+- engaged kills / h >= 100 (the read costs ~0.5 s an engagement);
+- landing within W per engagement reported by species (v13 is the reference).
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
