@@ -43,7 +43,11 @@ FADE_S = 0.4
 # The client's always-on UI windows at the frozen 1280x720 layout (client px: x0, y0, x1, y1): basic
 # info + its menu icons, the hotbar, the small top window, the minimap (outdoors), the chat window
 UI_WINDOWS = ((0, 0, 220, 326), (230, 0, 520, 132), (750, 0, 828, 36), (1135, 14, 1266, 162),
-              (0, 532, 600, 626))  # fmt: skip
+              (0, 532, 600, 626),
+              # the client's NOTICE icons (2026-10-16): the skill-point "up" icon bottom-left and
+              # the level-up icon bottom-right (gm_state.ICON_BOX). hunt-flow@4's walk click at
+              # (9.5, 713.8) opened the Skill Tree from the "up" icon: the UI check stopped the run
+              (0, 668, 50, 720), (1228, 668, 1280, 720))  # fmt: skip
 # The HP/SP bar the client draws under our character, relative to the feet (client px). Measured on
 # the 2026-10-08 12:34 recording at rest: bar centre (640.0, 384.5), the camera model's feet
 # (640.75, 361.89).

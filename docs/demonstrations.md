@@ -6772,6 +6772,41 @@ the top safety item is the same gate (15 walk clicks turned attacks across the t
   - unintended attack requests under 5;
   - range at the click p50 >= 4;
   - the bar >= 90 %.
+- ➡️ **hunt-flow@4 run 1 (`20261016T125731-demo-hunt-flow4`, 12:57:31-13:18): STOPPED BY ITS UI
+  CHECK after 18.3 min.** The client showed the Skill Tree.
+  - **The cause, understood:** the GM had reached Job Lv 2 from its kills, so the client drew its
+    skill-point "up" icon at the bottom-left. A map+units walk click at client (9.5, 713.8)
+    landed on it, because the static UI exclusion (`route_preview.UI_WINDOWS`) did not hold the
+    client's corner NOTICE icons.
+  - The run stopped as designed (only a clear UI may continue). The Skill Tree was closed by its
+    known chord, and the hunt-flow state restored (Job Lv 2 -> 1).
+  - **Fixed:** `UI_WINDOWS` / `work_zone.WINDOW_NAMES` gain `notice_left` (0,668)-(50,720) and
+    `notice_right` (1228,668)-(1280,720), the level-up icon of `gm_state.ICON_BOX`. Every runner
+    uses this mask.
+  - Also seen: 1 pickup, a walk click on a floor item.
+  - **THE BAR 10 / 12 = 83.3 % (Wilson 55.2-95.3 %).** Both failures are `no_unit`, yet each
+    landed a hit on the unit the client attacked (0.17 s and 0.6 s after the click). What
+    failed was the bot's own cell estimate:
+    - one predicted cell was 4 cells from the attacked unit (the definition allows 3);
+    - in the other, the bot believed it stood ~18 cells from where it was.
+    - So POSITION TRACKING, not the strike.
+  - **Beside it:**
+    - seen -> click **3.33 / 6.53 s** (v3 17.8; Batt 1.11 / 4.79);
+    - death -> next click 3.35 / 5.44 s;
+    - engagements 12 in 18.3 min (~39 / h; v3 ~26 / h);
+    - kills / h 39.3, every kill now from an engagement;
+    - range at the click p50 4 / p90 7 (Batt 4 / 7);
+    - idle 70.9 %; walk clicks 14.5 / min, 38 % while walking;
+    - hit-through 61 %.
+  - **The prediction:**
+    - seen -> click under 8 s: MET;
+    - range p50 >= 4: MET;
+    - unintended attack requests under 5: MET (0);
+    - kills / h above 60: not met;
+    - steering under half of v3's: not met (~385 s per 30 min);
+    - the bar >= 90 %: not met (n 12, both failures position estimates).
+  - **Safety (packets, the loop):** NPC contacts 0, dialogs 0, map changes 0, non-target hits 0,
+    unintended attack requests 0. The UI stop above is the run's one safety stop.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,

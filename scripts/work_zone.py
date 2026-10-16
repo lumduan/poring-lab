@@ -21,7 +21,8 @@ from route_preview import UI_WINDOWS  # noqa: E402
 
 MARGIN_PX = 12.0  # around every window (the walk@12 proposal; the unit gate's margin is also 12 px)
 GAME_W, GAME_H = 1280, 720  # the frozen client layout (client px)
-WINDOW_NAMES = ("basic_info", "hotbar", "top", "minimap", "chat")  # UI_WINDOWS, in its order
+# UI_WINDOWS, in its order
+WINDOW_NAMES = ("basic_info", "hotbar", "top", "minimap", "chat", "notice_left", "notice_right")
 
 
 def ui_window_at(u: float, v: float, margin: float = MARGIN_PX) -> str | None:
