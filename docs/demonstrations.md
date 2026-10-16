@@ -8098,6 +8098,50 @@ STOPPED at 23.3 min by the stuck guard ("no progress for 60 s at (186, 128)"), 2
   - engaged kills / h >= 0.8 x v15's: NO (66 against 76.7);
   - hard bars: attempt 1 FAILED, attempt 3 PASSED.
 
+### 3.59 hunt-flow@17: LOOT EVERYTHING (pre-registered 2026-10-17 __TIME__ ICT, the commit time __SHA__, BEFORE its run; Batt 20:3x, the overnight order item 6)
+
+**Batt's demo, measured by the same judge (`flow_judge.loot_metrics`, 0f520bf):**
+- he picked up 62 of the 64 items that fell around his kills;
+- 1.0 pickup request per item picked;
+- kill -> the last pickup of its items, p50 1.56 s.
+
+The bot so far picked items only through walk clicks the client turned into pickups (v14: 8 of
+269).
+
+**The ONE main change (`loot`, `loot_sweep`, built in ff0e21f):**
+- After each kill the bot sweeps the drop area: the death cell, the server's drop pattern
+  (SE / W / N), then the 3 x 3 around it.
+- One park per sweep and one cursor read per cell.
+- On the HAND cursor (PICKUP, read twice) and a clear unit check (walk@11's rule, loot@1's), it
+  clicks, then confirms by the weight readout or the chat line.
+- It sweeps again until a whole sweep shows no hand, bounded at 6 s and 8 clicks a kill.
+- A monster inside the drop area skips the loot (the risk rule).
+- The click census counts the loot click (hunt_flow.py: 4 direct clicks, with its reason).
+
+**Kept from v16:** focus tracking and the walk guard (safety layer). From this version the guard
+leaves the client's static windows out of its pink count (77269f0): in v16's first 200 checks,
+30 % of the candidates were refused as pink, many beside the red icons of the chat window and
+the skill bar, which are not sprites. Also kept: v16's safety fixes (the name tag on EVERY
+attack click, the read path's too; the tag cache 3 s within 60 px; every aim inside the frame).
+
+**v16 as the reference (pooled attempts 1 + 3, 3.58):** the bar 83.3 %, engaged 66 kills / h, tag
+reads refused 40.7-58.5 %, walk-click attacks 18 / h, loot picked by walk clicks 5 of 87 items.
+Attempt 3 passed the hard bars.
+
+**Also from this run (a bug fix):** the stall breaker plans on the walkable grid before any
+refusal, trying the cells the GM walked first (3.58 attempt 3).
+
+**Run:** 60 min, a fresh seed, the same test state (the loot is cleared at the restore; mid-run
+above 40 % weight), nice 10, detector on the CPU (GPU freeze).
+
+**Prediction, written before the run:**
+- picked / items >= 80 % (Batt 97 %);
+- pickup requests per item picked <= 1.5 (Batt 1.0);
+- kill -> last pickup p50 <= 2.5 s (Batt 1.56 s);
+- no loot click becomes an attack: zero attack requests within 0.5 s after a loot click;
+- engaged kills / h >= 0.75 x v16's 66, i.e. >= 50 (looting takes time; Batt looted at 300 kills / h);
+- hard bars: zero NPC contact, zero map change, zero non-target hit.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
