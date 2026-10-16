@@ -204,9 +204,9 @@ def cut(minutes: float, warp: tuple[int, int] | None) -> int:
     return 0
 
 
-def build() -> int:
-    """Label every cut by the packets (the species of the live mob nearest the hovered cell), then
-    a template per species: the majority of its aligned letter masks."""
+def labelled_words() -> dict[str, list[Any]]:
+    """Every cut labelled by the packets (the species of the live mob nearest the hovered cell):
+    {species: [its word's letter mask]}."""
     import flow_judge as fj
     import hunt_core as hc
     import record_session as rs
@@ -256,16 +256,44 @@ def build() -> int:
         wb = word_box(m)
         if wb is not None and wb[2] - wb[0] >= MIN_WORD_W:  # not the cursor's tip
             by.setdefault(sp, []).append(m[wb[1] : wb[3], wb[0] : wb[2]])
-    tpl = {}
-    for sp, words in by.items():
-        h = max(w.shape[0] for w in words)
-        w_ = max(w.shape[1] for w in words)
-        acc = np.zeros((h, w_), float)
-        for w in words:
-            acc[: w.shape[0], : w.shape[1]] += w
-        tpl[sp] = acc / len(words) >= 0.5
+    return by
+
+
+def template_of(words: list[Any]) -> Any:
+    """PURE: the majority of the letter masks, top-left aligned."""
+    h = max(w.shape[0] for w in words)
+    w_ = max(w.shape[1] for w in words)
+    acc = np.zeros((h, w_), float)
+    for w in words:
+        acc[: w.shape[0], : w.shape[1]] += w
+    return acc / len(words) >= 0.5
+
+
+def build() -> int:
+    """A template per species from the packet-labelled cuts."""
+    import ro_agent as r
+
+    by = labelled_words()
+    tpl = {sp: template_of(v) for sp, v in by.items()}
     np.savez(r.ROOT / "data" / "nametags" / "templates.npz", **tpl)
     print(json.dumps({sp: len(v) for sp, v in by.items()}))
+    return 0
+
+
+def check() -> int:
+    """Leave one out: each labelled word matched against templates built without it."""
+    by = labelled_words()
+    conf: dict[str, dict[str, int]] = {}
+    for sp, words in by.items():
+        for k, w in enumerate(words):
+            tpl = {s2: template_of([x for j2, x in enumerate(v) if not (s2 == sp and j2 == k)])
+                   for s2, v in by.items() if len(v) - (1 if s2 == sp else 0) > 0}  # fmt: skip
+            m = np.zeros((w.shape[0] + 10, w.shape[1] + 10), bool)
+            m[5 : 5 + w.shape[0], 5 : 5 + w.shape[1]] = w
+            name, _iou = match(m, tpl)
+            conf.setdefault(sp, {})
+            conf[sp][str(name)] = conf[sp].get(str(name), 0) + 1
+    print(json.dumps(conf))
     return 0
 
 
@@ -277,9 +305,12 @@ def main() -> int:
     c.add_argument("--minutes", type=float, default=6.0)
     c.add_argument("--warp", type=int, nargs=2, default=None)
     sub.add_parser("build")
+    sub.add_parser("check")
     a = ap.parse_args()
     if a.cmd == "cut":
         return cut(a.minutes, tuple(a.warp) if a.warp else None)
+    if a.cmd == "check":
+        return check()
     return build()
 
 
