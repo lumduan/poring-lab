@@ -8216,6 +8216,67 @@ cells, monsters in sight 16.7 / 10 min, engaged 86 kills / h, the bar 88.5 %, ha
 - engaged kills / h >= 86 (v17);
 - hard bars: zero NPC contact, zero map change, zero non-target hit.
 
+**Run 1 RESULT (2026-10-17 03:39:15-04:39:15, session 20261017T033914-demo-hunt-flow18, seed
+20261230; the full hour; judged by `flow_judge.bot` after 04:41):**
+- **HARD BARS PASSED** (the third clean run in a row: v16 attempt 3, v17, v18).
+- **Engagements:** 111, all dead. Attack clicks: 131 direct / 0 read.
+- **Kills:** kills / h 98.0; engaged 94 / h. Walk-click attacks 3.
+- **The bar:** 93 / 111 = 83.8 % (Wilson 75.8-89.5). Landing: Poring 62 / 67, Lunatic 25 / 33,
+  Drops 6 / 6.
+- **MOVEMENT:**
+  - reversals 5.25 / min (v17 7.71); above 135 deg 3.85 / min (v17 5.58);
+  - straight runs 11.9 cells (v17 10.4);
+  - leg-to-leg turns <= 45 / <= 90 / <= 135 / > 135 deg: 1164 / 297 / 215 / 231 (v17 1164 / 370 /
+    275 / 335);
+  - heading goals: 1661, mostly keeping the heading. The stall breaker fired twice.
+  - Batt's demo: 3.6 / 2.4 / min and runs of 16.9 cells.
+- **Monsters in sight:** 13.5 / 10 min (v17 16.7).
+- **Loot:** 41 / 145 items picked (28 %); kill -> last pickup p50 6.46 s; 60 sweeps.
+- **The name tag:** refused 172 reads (52 %).
+- **vs the prediction:**
+  - reversals <= 5 / min: NO (5.25);
+  - > 135 deg <= 3.5 / min: NO (3.85);
+  - straight runs >= 13 cells: NO (11.9);
+  - sight >= 16.7: NO (13.5);
+  - engaged kills / h >= 86: YES (94);
+  - hard bars: PASSED.
+  - All three movement numbers moved Batt's way from v17, but none reached its bar.
+
+### 3.61 hunt-flow@20: TAG FOLLOW, the top loser (pre-registered 2026-10-17 __TIME__ ICT, the commit time __SHA__, BEFORE its run; the overnight order item 8, "iterate on the top loser")
+
+**Why this one:**
+- v14's name tag stopped every non-target attack click, but its reads are slow. Refused reads
+  (no tag within 1.2 s) were 46.7 % in v14, 40.4 % in v15, and 40.7 % / 58.5 % in v16.
+- Each refusal costs ~1.3 s, and three drop the target. "In range -> click" p50 rose from
+  0.61 s (v13) to 1.67-2.11 s.
+- **The cause, measured on v14's frames:** only 7 of 66 sampled refused reads show a matchable
+  tag anywhere around the GM, against 31 of 40 before a clicked strike. The pointer was OFF the
+  sprite (the target hopped, or the aim was stale), so the client drew no tag.
+- v16's focus aim put the pointer on the tracked centre at the start of the read, but the
+  pointer then stayed still for the read's 1.2 s while the target moved.
+
+**The ONE main change (`tag_follow`, built in 3d856aa; rebased on v18 in da4cd90):**
+- During the read, every 0.1 s, the pointer follows the focused target's fresh centre (<= 0.35 s
+  old), whenever it is > 10 px from the pointer.
+- The tag is searched under the detector box AND under the pointer. The client draws the tag
+  only under the HOVERED sprite, so a tag in either band names what the pointer is on.
+- The click goes where the pointer ended, i.e. where the tag was read.
+- v20 builds on v18, NOT v19 (re-target, built and never run), so it is one change against the
+  last version run.
+
+**v18 as the reference (3.60):** the bar 83.8 %, engaged 94 kills / h, tag reads refused 52 %, hard
+bars passed.
+
+**Run:** 60 min, a fresh seed, the same test state, nice 10, detector on the CPU (GPU freeze).
+
+**Prediction, written before the run:**
+- tag reads refused <= 25 % (v16 40.7 / 58.5 %);
+- in range -> click p50 <= 1.2 s;
+- the bar >= 83.8 % (v18);
+- engaged kills / h >= 94 (v18);
+- hard bars: zero NPC contact, zero map change, zero non-target hit (the tag still gates every
+  attack click; the follow only moves the pointer, and the tag must read under it).
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
