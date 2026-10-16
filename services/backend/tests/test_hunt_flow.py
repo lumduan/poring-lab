@@ -89,3 +89,12 @@ def test_a_walk_click_keeps_clear_of_where_tracked_monsters_will_be() -> None:
                       box=_Box(405, 260, 435, 300), box_t=int(1.2 * S))  # fmt: skip
     # where it WILL be in 1 s (16.5, 10): refused although no box is there now
     assert not hf.track_clear(16.5 * 30, 280, [walker], int(1.2 * S), 1.0, 60, project)
+
+
+def test_a_target_whose_track_was_restarted_is_carried_on_by_the_nearest_new_one() -> None:
+    old = hf.Track(0, [(0, (10, 10))])
+    near = hf.Track(5, [(int(0.5 * S), (12, 10))])
+    far = hf.Track(6, [(int(0.5 * S), (20, 10))])
+    assert hf.reacquire_target(old, [far, near], int(0.5 * S), 3.0) is near
+    assert hf.reacquire_target(old, [far], int(0.5 * S), 3.0) is None
+    assert hf.reacquire_target(old, [near], int(0.5 * S), 3.0, exclude=[5]) is None  # a dead one

@@ -6710,6 +6710,40 @@ the top safety item is the same gate (15 walk clicks turned attacks across the t
   - kills / h above v1's 40.3;
   - unintended attack requests at most 2 per 30 minutes;
   - the bar unchanged.
+- ➡️ **hunt-flow@3 run 1 (`20261016T122251-demo-hunt-flow3`, 12:22:51-12:53:58, the full
+  30-minute box): THE BAR 12 / 13 = 92.3 % (Wilson 66.7-98.6 %)**; 1 failure: no unit.
+  - **Beside it:**
+    - first click lands 20 / 22;
+    - kills 20 = 40.0 / h;
+    - seen -> click 17.8 / 29.8 s;
+    - click -> hit 0.58 / 1.22 s;
+    - in sight 7.3 / 10 min;
+    - idle 73.5 %;
+    - walk clicks 14.2 / min, 30 % sent while walking;
+    - death -> next click 5.22 / 8.34 s;
+    - queue hit-through 89 / 146 = 61 %;
+    - 13 engagements, the most of any version.
+  - **The prediction:**
+    - walk clicks while walking 30 % (v2 ~25 %): up, not "well over";
+    - idle 73.5 %, not under 65 %;
+    - kills / h 40.0, not above 40.3;
+    - unintended attack requests 8, not <= 2.
+    - **FAILED**, except the bar.
+  - **Safety (packets, the loop):** NPC contacts 0, dialogs 0, map changes 0, non-target hits 0.
+    **Unintended attack requests 8**, all target species: 7 after map+units walk clicks, 1 after
+    a cursor-gated one.
+  - **Why the new gate did not stop them** (each case read against the packets and the
+    detector log):
+    - in 7 of 8, the monster the client attacked stood 0-3 cells from the clicked cell;
+    - the detector had NO box within 80 px of the click point for the whole second before it;
+    - so these are DETECTOR MISSES (under trees, or next to the GM's own sprite), which neither
+      the frame nor the track gate can see.
+    - Any walk click sent without a cursor read (3.39 deviation (2), option B) carries that risk:
+      here ~7 in 84-110 such clicks a run.
+  - A bug seen (no stall): right after a kill, the dead monster's track (kept 2 s) was
+    re-dispatched from the queue until the planner refreshed: 494 `target_dropped` records,
+    ~0.1 s a kill. The SWORD read gates every strike, so nothing was clicked. Fixed for the next
+    version (finished tracks and dropped spots are never dispatched).
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,

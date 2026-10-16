@@ -77,6 +77,10 @@ VERSIONS = {
     "old (was the last 2 <= 0.4 s: the detector's ~0.3 s latency made it refuse most clicks, idle "
     "~80 %) AND adds the tracked monsters' predicted positions over the next second (60 px), "
     "also before a cursor-gated walk click; legs 8 cells ahead (was 6)",
+    4: "TARGET CONTINUITY: when the target's track drops (the tracker restarts an id for the same "
+    "monster while the GM walks), the live track nearest its predicted cell within 3 cells "
+    "carries it on (was: target lost, a new dispatch); bug fixes: a finished target's track and "
+    "a dropped target's spot are never dispatched again",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -92,6 +96,8 @@ PARAMS: dict[int, dict[str, Any]] = {
 }  # fmt: skip
 PARAMS[3] = {**PARAMS[2], "ahead": 8, "short": 3, "gate_frames_s": 1.0, "track_clear": True,
              "track_clear_s": 1.0, "track_clear_px": 60.0}  # fmt: skip
+PARAMS[4] = {**PARAMS[3], "reacquire": True, "reacquire_cells": 3.0,
+             "dispatch_fixes": True}  # fmt: skip
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -228,6 +234,22 @@ def plan_queue(tracks: Sequence[Track], start: Sequence[float], t_ns: int, depth
         out.append(tr)
         at = p
     return out
+
+
+def reacquire_target(target: Track, live: Sequence[Track], t_ns: int, within: float,
+                     exclude: Sequence[int] = ()) -> Track | None:  # fmt: skip
+    """PURE (v4): the target's track was dropped (the tracker started a new id for the same
+    monster: the cell estimate shifts while the GM walks). The live track nearest the target's
+    predicted cell within ``within`` cells carries it on, else None (lost)."""
+    p = target.predict(t_ns)
+    best = None
+    for tr in live:
+        if tr.tid == target.tid or tr.tid in exclude:
+            continue
+        d = cheb(tr.predict(t_ns), p)
+        if d <= within and (best is None or d < best[0]):
+            best = (d, tr)
+    return None if best is None else best[1]
 
 
 def track_clear(u: float, v: float, tracks: Sequence[Track], t_ns: int, horizon_s: float,
@@ -704,9 +726,12 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 last_progress[0] = time.monotonic()
                 return True
 
+            done_ids: set[int] = set()  # v4: engaged tracks never dispatched again
+
             def end_engagement(result: str) -> None:
                 nonlocal eng, target
                 if eng is not None:
+                    done_ids.add(int(eng["track"]))
                     eng.update(result=result, t_end=r.ns())
                     engagements.append(eng)
                     brief = {k_: eng.get(k_) for k_ in ("k", "track", "result", "clicks")}
@@ -878,10 +903,26 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         # dispatch: queue[0], revalidated on the freshest frame
                         if target is not None and not valid_at_dispatch(
                                 target, live, t_now, prm["track_drop_s"]):  # fmt: skip
-                            ev({"kind": "target_lost", "track": target.tid})
-                            target = None
+                            nt = None
+                            if prm.get("reacquire"):  # v4: the same monster under a new id
+                                nt = reacquire_target(target, live, t_now,
+                                                      prm["reacquire_cells"],
+                                                      list(done_ids))  # fmt: skip
+                            if nt is not None:
+                                ev({"kind": "target_reacquired", "track": target.tid,
+                                    "as": nt.tid})  # fmt: skip
+                                target = nt
+                            else:
+                                ev({"kind": "target_lost", "track": target.tid})
+                                target = None
                         if target is None and q:
                             for rank, cand in enumerate(q):
+                                if prm.get("dispatch_fixes") and (
+                                        cand.tid in done_ids or any(
+                                            now - tb < prm["drop_target_s"]
+                                            and cheb(cand.predict(t_now), cb) <= 2
+                                            for tb, cb in banned)):  # fmt: skip
+                                    continue  # v4: a finished or dropped target, not again
                                 ok_ = valid_at_dispatch(cand, live, t_now, prm["dispatch_fresh_s"])
                                 if (cand.tid, ok_) not in dispatched:  # one record per candidate
                                     dispatched.add((cand.tid, ok_))
