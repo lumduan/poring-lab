@@ -6994,7 +6994,7 @@ On v5 attempt 2 (its fixes included), the changes:
 - **Top loser:** the ~0.5 s position lag (3.47). It costs both the lost / overshot approaches and
   the unintended attacks. The slow strike read (in range -> click 3.56 s) comes next.
 
-### 3.47 hunt-flow@7: LEAD-COMPENSATED WALK CLICKS (pre-registered 2026-10-16 __TIME__ ICT, the commit time __SHA__, BEFORE its run; Batt 15:00)
+### 3.47 hunt-flow@7: LEAD-COMPENSATED WALK CLICKS (pre-registered 2026-10-16 15:17 ICT, the commit time 65681b1, BEFORE its run; Batt 15:00)
 
 **Batt (15:00):** "Build and pre-register the next hunt-flow version with the two changes already
 asked: target continuity via the measured floor motion, and MOUSE FOLLOWS THE TARGET (pointer on
