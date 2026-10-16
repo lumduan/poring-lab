@@ -6466,6 +6466,96 @@ analysis. They are binding for the human baseline and for every hunt-flow versio
   - walk clicks ~6 cells ahead, re-aimed every ~0.6-1 s while walking;
   - no looting.
 
+### 3.41 hunt-flow@1 (pre-registered 2026-10-16 ~11:05 ICT, BEFORE its code and any of its data; Batt ~10:10: "the human baseline changes the goal")
+
+**THE PRIMARY BAR (Batt): HIT WITHIN W OF THE FIRST ATTACK CLICK, RE-CLICKS ALLOWED.**
+- **ENGAGEMENT:** the bot's FIRST attack click on a tracked target. Later attack clicks on that
+  track are re-clicks. A target dropped before any attack click is not an engagement; those
+  are reported apart (count and why).
+- **G:**
+  - the unit our first attack request (within 1.5 s of the first click) targets, when it stood
+    within 3 cells of the bot's predicted cell for the target at the click;
+  - else the mob nearest that cell within 2 (the along-walk model);
+  - else `no_unit`, a failure.
+- **SUCCESS:** a damaging act of ours (damage > 0) on G within **W = 5.0 s** of the first
+  attack click.
+- **Why W = 5.0 s:** Batt's re-hit times after a failed first click (3.40.1) were 1.3, 1.9,
+  1.9, 2.1, 2.5, 2.9, 3.3, 3.6, 4.3 and 4.6 s. That is p90 4.3 s (nearest rank), max 4.6 s, so
+  W = p90 + 0.7 s margin, above his maximum.
+- **EXCLUDED, packets only:**
+  - G changed species;
+  - G died with no act of ours;
+  - G vanished another way (reason not 0 or 1) before our first act.
+  - Out of sight (reason 0) is a failure.
+- **PASS:** >= 95 % over >= 60 engagements, pooled over runs of THIS version with fresh seeds,
+  and safety events 0 (NPC contact, dialog, map change, a non-target hit, an unknown UI state).
+- **Batt on the same definition (the reference, no bar):** 63 / 64 = 98.4 %.
+  - His 53 first-click hits, plus his 10 re-hits (<= 4.6 s).
+  - 2 excluded: clicks on monsters that had just died.
+  - 1 failure: the unexplained click at 509 s.
+- **Reported beside, NEVER the bar:**
+  - the first-click-lands rate, 3.40's trial HIT RATE (Batt 80.3 %);
+  - FIRST-CLASS results after every run, in one bot-vs-Batt table:
+    - kills / h (Batt 300);
+    - seen -> click p50 / p90 (Batt 1.11 / 4.79 s);
+    - click -> hit (Batt 0.61 / 1.48 s);
+    - monsters in sight / 10 min (Batt 44);
+    - idle % (Batt 45.9);
+    - walk clicks / min (Batt 44);
+    - range at the click (Batt p50 4).
+
+**THE DESIGN (`scripts/hunt_flow.py`, version 1; parameters from Batt's play, 3.40.1):**
+- **State:** the GM's `hunt-flow` profile: immune (confirmed for the login), Base Lv 70,
+  Job Lv 1, STR 99, the loot rule. prt_fild08, natural spawns, hunt's search area (stand
+  cells, 10 cells clear of warps and NPCs, the Poring War Recruiter included). RDP, the UI
+  gate, HUD + route preview ON. 30 minutes a run.
+- **WALK CONTINUOUSLY:**
+  - a coverage route as hunt's;
+  - while walking, a click every ~0.8 s to the path cell ~6 cells ahead of the reckoned
+    position (in view, off the UI, gated by the map and the detector: 3.39 deviation (2)
+    option B);
+  - a click from a standstill is cursor-gated (robust2 WALK);
+  - the GM never stands to search.
+- **TRACK:** every fresh detector frame -> boxes through hunt@6's selection gates (size, >= 16
+  px, off the UI, in the area) -> cells from the reckoned position at the frame's time ->
+  tracks.
+  - A box joins the track whose predicted cell is within 2 cells; the velocity comes from its
+    last sightings.
+  - A track is dropped after 2 s unseen.
+  - Each track keeps its first-seen time.
+- **QUEUE AND STEER:**
+  - the nearest track first (Batt: the nearest 52 / 54);
+  - the route is re-aimed every ~0.8 s to a cell 2 cells short of the target's predicted cell,
+    so its last walk point is <= 3 cells from it.
+- **STRIKE:** at the brief moment the walk ends (the GM at its last walk point, never waiting),
+  if the target's predicted cell is <= 3 cells away:
+  - park, hover the target's newest box (a fresh frame), read robust2 ONCE;
+  - SWORD -> the attack click at that box (as hunt@6). Not SWORD -> up to 2 more reads on
+    the newest box, else steer again.
+  - The SWORD read before every attack click is the only separator from an NPC that looks
+    like a monster.
+- **AFTER THE CLICK:**
+  - dead (pixels) = no target box within 1.5 cells of its last position for 0.6 s -> the next
+    target, or the route, at once;
+  - still seen after 2.0 s -> a re-click (a new SWORD read);
+  - give up at 8 s.
+  - NO LOOTING.
+- **Logged:**
+  - `clicks.jsonl`: every click with its time, client px, kind (strike / walk), gate and track;
+  - `engagements.json`: track, first-seen, the clicks with predicted cells, the result;
+  - `events.jsonl`; the frames on the NAS (5 Hz, q80).
+- **Safety unchanged:**
+  - every attack click after a SWORD read;
+  - walk clicks gated;
+  - the UI gate on every typed line plus the 30 s client check;
+  - packets judge offline only;
+  - the weight rule (clear above 40 % between engagements).
+- **Prediction, written before the run:**
+  - the primary rate well above hunt@4 attempt 3's 79.3 % kill-success (a different metric;
+    one-hit kills);
+  - kills / h several times hunt@8's 43.5;
+  - seen -> click slower than Batt's 1.11 s (the cursor read alone takes ~1.2-1.6 s).
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
