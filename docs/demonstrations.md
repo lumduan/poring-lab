@@ -8171,7 +8171,7 @@ above 40 % weight), nice 10, detector on the CPU (GPU freeze).
   - engaged kills / h >= 50: YES (86);
   - hard bars: PASSED.
 
-### 3.60 hunt-flow@18: MOVEMENT by a remembered SEARCH HEADING (pre-registered 2026-10-17 __TIME__ ICT, the commit time __SHA__, BEFORE its run; Batt 21:31 + 18:2x, the overnight order item 7)
+### 3.60 hunt-flow@18: MOVEMENT by a remembered SEARCH HEADING (pre-registered 2026-10-17 03:38 ICT, the commit time 0d41ae7, BEFORE its run; Batt 21:31 + 18:2x, the overnight order item 7)
 
 **Batt (21:31):** "read the player arrow on the minimap ... keep a remembered SEARCH HEADING ...
 turns are small ... +-45 degrees first, then +-90; a reversal (> ~135 degrees) only at a real
