@@ -8171,6 +8171,51 @@ above 40 % weight), nice 10, detector on the CPU (GPU freeze).
   - engaged kills / h >= 50: YES (86);
   - hard bars: PASSED.
 
+### 3.60 hunt-flow@18: MOVEMENT by a remembered SEARCH HEADING (pre-registered 2026-10-17 __TIME__ ICT, the commit time __SHA__, BEFORE its run; Batt 21:31 + 18:2x, the overnight order item 7)
+
+**Batt (21:31):** "read the player arrow on the minimap ... keep a remembered SEARCH HEADING ...
+turns are small ... +-45 degrees first, then +-90; a reversal (> ~135 degrees) only at a real
+dead end ... RESUME the remembered search heading after engagements".
+
+**Batt's demo, by the same judge (heading-change histogram added in 1d0eacb):**
+- 3.6 reversals / min (> 120 deg), 2.4 / min above 135 deg;
+- mean straight run 16.9 cells;
+- leg-to-leg turns <= 45 / <= 90 / <= 135 / > 135 deg: 367 / 51 / 25 / 24.
+
+The bot (v14): 9.5 reversals / min, 7.0 above 135 deg, runs of 9.1 cells.
+
+**The ONE main change (`heading_search`, 1d0eacb; with the ENGAGEMENT ZONE, `zone`):**
+- The planner keeps a remembered heading (the first one is the longest of the 8 compass rays
+  from the start).
+- The next search goal is the ray's end along that heading, kept while the ray runs >= 8 cells.
+  On 30 % of re-plans the heading drifts by <= 20 deg.
+- When blocked, it turns +-45 deg first, then +-90, then +-135, taking the side with the longer
+  run. It reverses only at a real dead end.
+- After every engagement the search path is re-planned from where the GM is, ALONG THE SAME
+  HEADING (resume).
+- The minimap arrow is read and LOGGED beside each heading goal, not used to steer. On v14's
+  frames the arrow reader agreed within 45 deg with the arrow's own motion in 69 % of straight
+  stretches, and that ground truth is coarse.
+- The ENGAGEMENT ZONE plans one path into the attack range, re-planned only when the target
+  leaves the zone.
+- Offline, on the real prt_fild08 search area (3 seeds, 150 legs each), legs averaged ~30 cells.
+  Turns > 90 deg were 9, 3 and 10 of the 150 heading changes.
+
+**Kept from v17:** focus, loot, the walk guard (UI windows left out), and the safety fixes
+(the tag on every attack click; aims inside the frame; the stall breaker; the liveness probe).
+
+**v17 as the reference (run 1, 3.59):** reversals 7.7 / min (> 135 deg 5.6), straight runs 10.4
+cells, monsters in sight 16.7 / 10 min, engaged 86 kills / h, the bar 88.5 %, hard bars passed.
+
+**Run:** 60 min, a fresh seed, the same test state, nice 10, detector on the CPU (GPU freeze).
+
+**Prediction, written before the run:**
+- reversals (> 120 deg) <= 5 / min and > 135 deg <= 3.5 / min (v17 7.7 / 5.6; Batt 3.6 / 2.4);
+- mean straight run >= 13 cells (v17 10.4; Batt 16.9);
+- monsters in sight / 10 min >= 16.7 (v17; longer runs see more ground);
+- engaged kills / h >= 86 (v17);
+- hard bars: zero NPC contact, zero map change, zero non-target hit.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
