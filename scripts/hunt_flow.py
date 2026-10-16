@@ -207,7 +207,8 @@ PARAMS[13] = {**PARAMS[12], "preempt_hyst": True, "preempt_margin": 2.0, "preemp
 PARAMS[14] = {**PARAMS[13], "name_tag": True, "tag_wait_s": 1.2, "tag_harvest": True,
               "walk_clear_unconfirmed": True}  # fmt: skip
 PARAMS[15] = {**PARAMS[14], "reclick_s": 1.0, "dead_min_s": 1.4, "dead_gone_s": 0.8,
-              "burst_hold": True, "burst_hold_s": 1.2, "tag_cache_s": 10.0}  # fmt: skip
+              "burst_hold": True, "burst_hold_s": 1.2, "tag_cache_s": 10.0,
+              "burst_same_track": True}  # fmt: skip
 # 16 focus tracking, 17 loot: built next; 18 = movement (Batt's heading method + the zone)
 PARAMS[18] = {**PARAMS[15], "zone": True, "zone_radius": 7, "zone_radius_walking": 4}
 PARAMS[19] = {**PARAMS[18], "retarget": True, "retarget_margin": 2.0, "retarget_commit_s": 1.0}
@@ -1380,11 +1381,16 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     if time.monotonic() - t_last < prm["burst_interval_s"]:
                         continue
                     fr_b = sampler.since(max(0, len(sampler.frames) - 1))
+                    # v15 (burst_same_track): the SAME track's box only, <= 35 px of its newest
+                    # box -- a neighbour within 60 px of the aim may be an unconfirmed Creamy
+                    same_ = bool(prm.get("burst_same_track") and tr.box is not None)
+                    ref_c = f1.centre(tr.box) if same_ else (ua, va)
+                    lim_ = 35.0 if same_ else 60.0
                     near_b = [
                         x
                         for x in (fr_b[-1][1] if fr_b else [])
                         if x.cls == "monster"
-                        and float(np.hypot(*(np.array(f1.centre(x)) - (ua, va)))) <= 60
+                        and float(np.hypot(*(np.array(f1.centre(x)) - ref_c))) <= lim_
                     ]
                     if not near_b and prm.get("burst_hold") and tr.box is not None and (
                             r.ns() - tr.box_t) / 1e9 <= prm["burst_hold_s"] and (
