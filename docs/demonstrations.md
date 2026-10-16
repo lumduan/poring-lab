@@ -6639,6 +6639,18 @@ bar.
   - more engagements and kills per hour than v1;
   - queue hit-through above 70 %;
   - the bar's rate unchanged within noise (the strike is v1's).
+- ➡️ **Attempt 1 (`20261016T114032-demo-hunt-flow2`, 11:40:32-11:46:41) STOPPED by Claude
+  after 334 s (Batt 11:46: "why you struck here for long time if char can't move you should be
+  click in avalible feild in map"): 0 engagements. Kept, not scored.**
+  - The GM stood on a ledge at (199,127). The waypoint's next click point (194,128) showed the
+    client's NO-ENTRY cursor. The gate refused it 108 times, correctly, and nothing chose
+    another point: v2's waypoint branch lacked the refusal rule that v1 and hunt@N have.
+  - A second defect: a stale queue[0] was logged as a "dispatch" on every loop pass (9 in 0.2 s
+    for one monster), which would have counted the hit-through wrongly.
+  - **Fixed, bug fixes within the version (attempt 2, same design):**
+    - a NO-ENTRY read blocks that spot (radius 1) at once, any other refusal after 2; the cells
+      leave the area and the stand grid, and the planner re-plans;
+    - one dispatch record per candidate.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,

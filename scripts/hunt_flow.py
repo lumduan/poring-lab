@@ -549,6 +549,28 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
             k = 0
             split.to("searching", time.monotonic())
 
+            import threading
+
+            plock = threading.Lock()
+            plan: dict[str, Any] = {"queue": [], "goal_path": None, "t_goal": 0.0}
+            refusals: dict[Cell, int] = {}
+
+            def refuse(to: Cell, why: str) -> None:
+                """v2 attempt 2 (Batt 11:46, the GM stuck on a ledge: "if char can't move you
+                should click in available field in map"): a NO-ENTRY read blocks that spot at once,
+                any other refusal after 2; the blocked cells (radius 1) leave the area and the stand
+                grid, and the planner re-plans. v2 attempt 1 retried (194,128) 108 times."""
+                n_ = refusals.get(to, 0) + 1
+                refusals[to] = n_
+                if "noentry" in why or n_ >= 2:
+                    x_, y_ = to
+                    area[max(0, y_ - 1) : y_ + 2, max(0, x_ - 1) : x_ + 2] = False
+                    ok[max(0, y_ - 1) : y_ + 2, max(0, x_ - 1) : x_ + 2] = False
+                    ev({"kind": "spot_blocked", "cell": list(to), "why": why, "refusals": n_})
+                    if prm.get("pipelined"):
+                        with plock:
+                            plan["goal_path"] = None
+
             def walk_click(u: float, v: float, to: Cell, seg: list[Cell], gate: str,
                            why: str) -> bool:  # fmt: skip
                 """One walk click: cursor-gated from a standstill, map+units while moving."""
@@ -559,6 +581,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     if not got["clicked"]:
                         ev({"kind": "walk_click", "gate": gate, "to": list(to), "clicked": False,
                             "why": got["why"]})  # fmt: skip
+                        refuse(to, str(got["why"]))
                         return False
                     t_c = int(got["t_click"])
                     click_from, click_cell = seg[0], to
@@ -640,12 +663,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 target = None
 
             # --- v2: PIPELINED (Batt ~11:30): perception + planner threads, the executor below --
-            import threading
-
             halt = threading.Event()
-            plock = threading.Lock()
             pstate: dict[str, Any] = {"tracks": [], "next_id": 0}
-            plan: dict[str, Any] = {"queue": [], "goal_path": None, "t_goal": 0.0}
             world_p = w5.World(camera, gat, start)  # the perception thread's own camera model
 
             def tracks_now() -> list[Track]:
@@ -714,6 +733,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 nonlocal click_from, click_cell
                 ths = [_start_thread(perception, "perception"), _start_thread(planner, "planner")]
                 gp_i = 0
+                dispatched: set[tuple[int, bool]] = set()
                 try:
                     while time.monotonic() < deadline:
                         now = time.monotonic()
@@ -809,10 +829,12 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         if target is None and q:
                             for rank, cand in enumerate(q):
                                 ok_ = valid_at_dispatch(cand, live, t_now, prm["dispatch_fresh_s"])
-                                pc_ = cand.predict(t_now)
-                                ev({"kind": "dispatch", "track": cand.tid, "rank": rank,
-                                    "q_len": len(q), "valid": ok_,
-                                    "cell": [round(pc_[0], 1), round(pc_[1], 1)]})  # fmt: skip
+                                if (cand.tid, ok_) not in dispatched:  # one record per candidate
+                                    dispatched.add((cand.tid, ok_))
+                                    pc_ = cand.predict(t_now)
+                                    ev({"kind": "dispatch", "track": cand.tid, "rank": rank,
+                                        "q_len": len(q), "valid": ok_,
+                                        "cell": [round(pc_[0], 1), round(pc_[1], 1)]})  # fmt: skip
                                 if ok_:
                                     target, reads = cand, 0
                                     break
