@@ -7599,6 +7599,90 @@ cluster and walks to a far target near the wall ... Fix as one pre-registered ch
 - the bar is reported, not expected to reach 90 %: v10's misses are late re-clicks on hopping
   targets, which this change does not address.
 
+**Run 1 RESULT (2026-10-16 19:20:14-20:20:14, session 20261016T192014-demo-hunt-flow11, seed
+20261217; the full hour; judged ~20:23):**
+- **Engagements:** 242, all dead (v10 131). Attack clicks 242 direct / 0 read.
+- **Kills:** engaged 101 / h (v10 99.9); 37 more from walk clicks; 40 unintended attack requests.
+- **Selection:** the nearest at selection 86 % (v10 72 %); distance at selection p50 4 / p90 8
+  (v10 5 / 9).
+- **Landing within W per engagement, by species:**
+  - Poring 71 / 107 = 66 % (v10 78 %);
+  - Lunatic 26 / 49 = 53 % (v10 75 %);
+  - Drops 8 / 20 = 40 % (v10 75 %);
+  - outcomes: hit 106, hit_late 64, no_unit 63, never_hit 7.
+- **Pre-emption FLAPS:** 1,085 pre-emptions for 242 engagements. The nearest within 4 cells flips
+  between neighbours as their predicted cells jitter, so more first clicks land on stale or
+  just-flipped targets (no_unit 63).
+- **HARD BAR FAILED:** a Creamy, by a DIRECT strike (+527 s). Its box was 39 x 36 px, inside the
+  size gate: Poring boxes measure 38-41 x 36-39. The size gate cannot tell them apart; the next
+  versions add the name tag (Batt chose it 19:5x).
+- **Heading:** reversals 10.97 / min, straight runs 9.9 cells.
+- **Timing:** in range -> click p50 0.78 s.
+- **vs the prediction:**
+  - the nearest at selection >= 85 %: YES (86);
+  - distance p50 <= 4: YES (4);
+  - engaged kills / h >= 100: YES (101);
+  - seen -> click p50 <= 5 s: see the table;
+  - hard bars 0 / 0 / 0: NO (the Creamy).
+
+### 3.54 hunt-flow@12: the BURST STRIKE (pre-registered 2026-10-16 __TIME__ ICT, the commit time __SHA__, BEFORE its run; Batt 19:4x / 20:0x)
+
+**Batt:** "he CLICKS REPEATEDLY until the client draws the ARROW marker on the monster ... Do the
+BURST strike first (as asked), tuned for small targets."
+
+**Measured first, on his demo** (input log + packets; scratch analyses):
+- He mostly clicks ONCE per engagement. Clicks per attack: 1 in 43 / 52, 2 in 7, 3 in 2.
+- When he re-clicks, the interval is p50 0.6-0.8 s.
+- First click -> his attack_request: p50 0.54 s, p90 1.47 s. 55 of his 63 attack clicks first
+  produced a WALK request (the client walks in, then sends the attack).
+- His last click is p50 0.5 s BEFORE the request, so the arrow he waits for is drawn client-side
+  at the click.
+
+**The arrow, proven on v10's recordings** (5 Hz JPEG, every strike click; a new small white
+down-pointing blob 15-80 px above the clicked point, within 1.2 s):
+- P(arrow | our attack_request within 2 s) = 0.71 (n 92);
+- P(arrow | none) = 0.08 (n 39);
+- arrow -> registered in 65 / 68;
+- first seen p50 0.44 s (p90 0.85) after the click.
+- The live raw frames (10-30 fps) are re-validated after this run against its packets.
+
+**Aim, measured on v10's direct clicks** (species from the packets):
+- first click landed: Poring 83 %, Lunatic 79 %, Drops 86 %;
+- landed and missed clicks sat at the SAME offset in the box (p50 0), so the misses are the
+  target MOVING between the ~0.5-1 s old frame and the click, not the aim point inside the box.
+
+**The ONE main change (`burst`):**
+- After a direct attack click, raw frames are watched for a NEW arrow above the aim point: a
+  reference grab is taken just before the first click (`arrow_new`).
+- With no arrow after 0.6 s (Batt's re-click interval), the next click goes to the FRESHEST box
+  near the last aim (<= 60 px). It aims at the box's body centre plus a jitter of a fraction of
+  THAT box: 0, +0.18 h, -0.18 w, +0.18 w, -0.15 h. A Lunatic's 33 x 27 box gets a tighter
+  pattern than a Poring's 40 x 38.
+- The burst stops on the arrow, at 4 clicks or 3 s, when no box is near ("gone"), when the risk
+  gate turns ("risky"), or at the UI.
+- Every burst click re-checks the risk gate. Each burst is logged: clicks, duration, arrow time,
+  end.
+
+**Measured beside the bar:**
+- landing per engagement BY SPECIES (v10: Poring 78 %, Lunatic 75 %, Drops 75 %);
+- clicks per landing;
+- the aim error;
+- the burst ends;
+- the bot-vs-Batt table.
+
+**Hard bars unchanged.** The Creamy risk stays until the name tag (v13): the size gate is the
+only separator, so that bar may fail again.
+
+**Run:** 60 min, seed 20261218, prt_fild08, GM immune Lv 70 / STR 99, nice 10, detector on the CPU
+(GPU freeze).
+
+**Prediction, written before the run:**
+- landing within W per engagement: Poring >= 85 %, Lunatic >= 80 % (v10 78 / 75; v11 66 / 53);
+- clicks per landing p50 <= 2;
+- bursts ending on the arrow >= 60 %;
+- engaged kills / h >= 100;
+- hit_late below v11's 64 (per hour).
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
