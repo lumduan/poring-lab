@@ -8242,7 +8242,7 @@ cells, monsters in sight 16.7 / 10 min, engaged 86 kills / h, the bar 88.5 %, ha
   - hard bars: PASSED.
   - All three movement numbers moved Batt's way from v17, but none reached its bar.
 
-### 3.61 hunt-flow@20: TAG FOLLOW, the top loser (pre-registered 2026-10-17 __TIME__ ICT, the commit time __SHA__, BEFORE its run; the overnight order item 8, "iterate on the top loser")
+### 3.61 hunt-flow@20: TAG FOLLOW, the top loser (pre-registered 2026-10-17 04:41 ICT, the commit time c9b9725, BEFORE its run; the overnight order item 8, "iterate on the top loser")
 
 **Why this one:**
 - v14's name tag stopped every non-target attack click, but its reads are slow. Refused reads
