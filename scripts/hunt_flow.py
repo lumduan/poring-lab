@@ -150,6 +150,11 @@ VERSIONS = {
     "of its detector box, is tracked by NCC on every frame-bus frame (~10-20 Hz); the attack "
     "click and every burst re-click aim at its fresh centre (<= 0.35 s old) led by its velocity "
     "x (age + 0.15 s), instead of the detector box (p50 0.57 s old)",
+    17: "LOOT EVERYTHING (Batt 20:3x): after each kill, sweep the drop area (the death cell, the "
+    "server's drop pattern SE / W / N, then the 3 x 3) with one park per sweep and one cursor read "
+    "per cell; on the HAND (PICKUP read twice) and a clear unit check, click, confirm by the "
+    "weight or the chat cue, and sweep again until a sweep shows no hand (<= 6 s, <= 8 clicks); a "
+    "monster in the area skips the loot (the risk rule)",
     18: "ENGAGEMENT ZONE (Batt 18:2x) -- to be joined by Batt's heading method (21:31): one path "
     "into the attack range, re-planned only when the target leaves the zone",
     19: "RE-TARGET WHILE STEERING (Batt's change 2: detection -> dispatch, v7 p50 2.85 s, was the "
@@ -214,8 +219,10 @@ PARAMS[15] = {**PARAMS[14], "reclick_s": 1.0, "dead_min_s": 1.4, "dead_gone_s": 
               "burst_hold": True, "burst_hold_s": 1.2, "tag_cache_s": 10.0,
               "burst_same_track": True}  # fmt: skip
 PARAMS[16] = {**PARAMS[15], "focus": True, "focus_lead_s": 0.15, "focus_max_age_s": 0.35}
-# 17 loot: built next; 18 = movement (Batt's heading method + the zone)
-PARAMS[18] = {**PARAMS[15], "zone": True, "zone_radius": 7, "zone_radius_walking": 4}
+PARAMS[17] = {**PARAMS[16], "loot": True, "loot_sweep": True, "loot_max_s": 6.0,
+              "loot_max_clicks": 8}  # fmt: skip
+# 18 = movement (Batt's heading method + the zone)
+PARAMS[18] = {**PARAMS[17], "zone": True, "zone_radius": 7, "zone_radius_walking": 4}
 PARAMS[19] = {**PARAMS[18], "retarget": True, "retarget_margin": 2.0, "retarget_commit_s": 1.0}
 
 
@@ -1366,9 +1373,74 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     eng_["death"] = {"cell": None if dead_.cell is None else list(dead_.cell),
                                      "reason": dead_.reason}  # fmt: skip
                     if dead_.cell is not None and dead_.gone_ns is not None:
-                        loot1.loot(rig, here2, dead_, eng_)
+                        if prm.get("loot_sweep"):
+                            loot_sweep(eng_, here2, dead_.cell)
+                        else:
+                            loot1.loot(rig, here2, dead_, eng_)
                 finally:
                     split.to(prev_, time.monotonic())
+
+            def loot_sweep(eng_: dict[str, Any], here2: Cell, dcell: Cell) -> None:
+                """v17 (Batt 20:3x, LOOT EVERYTHING): sweep the drop area -- the death cell, then
+                the server's drop pattern (SE, W, N), then the rest of the 3 x 3 -- with ONE park
+                per sweep and one cursor read per cell; on the HAND (PICKUP, read twice) and a
+                clear unit check, click it, confirm (weight / chat cue), and sweep again; done
+                when a whole sweep shows no hand, or at loot_max_s / loot_max_clicks."""
+                from poring_dataset import deathcell as dcm_
+
+                t_l0 = time.monotonic()
+                out: dict[str, Any] = {"cell": list(dcell), "sweeps": 0, "clicks": 0, "picked": 0}
+                w_l = w5.World(camera, gat, here2)
+                fr_l = sampler.since(max(0, len(sampler.frames) - 1))
+                risky_l = [x for x, c in (sightings_in(fr_l[-1][1], here2) if fr_l else [])
+                           if cheb(c, dcell) <= 1.5]  # fmt: skip
+                if risky_l:
+                    out["skip"] = "monster_in_area"  # the risk rule: a click could attack it
+                    eng_["loot"] = out
+                    ev({"kind": "loot", **out})
+                    return
+                while (time.monotonic() - t_l0 < prm["loot_max_s"]
+                       and out["clicks"] < prm["loot_max_clicks"]):  # fmt: skip
+                    if not pr.park():
+                        out["end"] = "stale_park"
+                        break
+                    out["sweeps"] += 1
+                    found = False
+                    for cell in dcm_.scan_order(dcell, 1):
+                        if time.monotonic() - t_l0 >= prm["loot_max_s"]:
+                            break
+                        if not w_l.walkable[cell[1], cell[0]]:
+                            continue
+                        u_l, v_l = (float(c_) for c_ in w_l.project([cell])[0])
+                        if loot1.in_ui(u_l, v_l) or not in_view(u_l, v_l):
+                            continue
+                        pr.hover(u_l, v_l)
+                        if pr.read(u_l, v_l)["shape"] != "pickup":
+                            continue
+                        if pr.read(u_l, v_l)["shape"] != "pickup":
+                            continue
+                        ok_u, _env = w11.unit_check(pr, w_l, u_l, v_l)
+                        if not ok_u:
+                            continue
+                        before_l = loot1.frame_bgr(rig)
+                        before_w = loot1.weight_now(rig)
+                        t_lc = r.ns()
+                        agent.click(gx0 + round(u_l), gy0 + round(v_l))  # the LOOT click
+                        out["clicks"] += 1
+                        trial_l: dict[str, Any] = {}
+                        loot1.check(rig, before_l, before_w, t_lc, trial_l)
+                        if (trial_l.get("runtime") or {}).get("obtained"):
+                            out["picked"] += 1
+                        click_log({"t": t_lc, "u": round(u_l, 1), "v": round(v_l, 1),
+                                   "kind": "loot", "cell": list(cell)})  # fmt: skip
+                        found = True
+                        break  # the GM walked: the background is stale -> park, sweep again
+                    if not found:
+                        out["end"] = "no_hand"
+                        break
+                out["s"] = round(time.monotonic() - t_l0, 2)
+                eng_["loot"] = out
+                ev({"kind": "loot", **out})
 
             def gate_risks(tr: Track, here: Cell) -> list[str]:
                 """v10: the target's box on the FRESHEST frame and the strict rule's inputs."""

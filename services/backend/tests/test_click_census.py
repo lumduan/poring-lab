@@ -55,7 +55,7 @@ ALLOWED = {
                            "the detector (no unit within 60 px on the last 2 fresh frames): "
                            "3.39's recorded deviation (2), option B. A click from a standstill is "
                            "cursor-gated (GATED below)"),
-    "scripts/hunt_flow.py": (3, "hunt-flow@N (3.41): the attack / re-click after ONE robust2 SWORD "
+    "scripts/hunt_flow.py": (4, "hunt-flow@N (3.41): the attack / re-click after ONE robust2 SWORD "
                                 "read on the target's newest box, only at the stop with the target "
                                 "<= 3 cells (as hunt@6's click); and the CONTINUOUS walk click "
                                 "while the GM moves, gated by the map and the detector (no unit "
@@ -68,7 +68,10 @@ ALLOWED = {
                                 "attack click logs its branch; hard bars: zero NPC contact, zero "
                                 "non-target hit, zero map change. hunt-flow@12+ (Batt 2026-10-16 "
                                 "19:4x): the BURST re-click on the freshest box until the client's "
-                                "arrow, each one re-checked by the risk gate, bounded 4 / 3 s"),
+                                "arrow, each one re-checked by the risk gate, bounded 4 / 3 s. "
+                                "hunt-flow@17+ (Batt 20:3x): the LOOT click of the sweep -- the "
+                                "cursor read PICKUP twice + walk@11's unit check (loot@1's rule), "
+                                "one per sweep, <= 8 per kill"),
     "scripts/gm_state.py": (1, "UI only: an inventory TAB label inside the open window, after two "
                                "motions (clear_loot, Batt 2026-10-16: the GM test state's loot "
                                "rule); the loot leaves by agent.drag onto open ground + Enter on "
