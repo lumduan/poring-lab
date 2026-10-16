@@ -6921,7 +6921,7 @@ The GM stops ONLY to attack and to pick up."
   - The clip of run 1's densest 3.25 min (from 23:00; HUD on; no route line, the gap fixed in
     attempt 2) was sent to Batt: `hunt-flow5-best-3min-phone.mp4` (/dev/shm, local).
 
-### 3.46 hunt-flow@6: ENGAGE LIKE A PLAYER, AND LOOT (pre-registered 2026-10-16 ~14:55 ICT, BEFORE its run; Batt 14:40 + 14:39)
+### 3.46 hunt-flow@6: ENGAGE LIKE A PLAYER, AND LOOT (pre-registered 2026-10-16 14:42 ICT, the commit time 0c386fa, BEFORE its run; Batt 14:40 + 14:39)
 
 **Batt (14:40):** "walking is much better, but the ENGAGEMENT still stops and misses. In the frames
 a Poring stays 2-5 cells from the GM for ~27 s while the cursor sits 30-60 px off its sprite
