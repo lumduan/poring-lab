@@ -130,15 +130,19 @@ VERSIONS = {
     "risk rule: overlap is risky only with a NON-target box, the GM check is occlusion only (its "
     "sprite hides >= 50 % of the box); the stand wait only on the read path; the walk-click "
     "clearance (12 px) only around non-target boxes (the Creamy hits)",
-    12: "ENGAGEMENT ZONE (Batt 18:2x: a Poring circled the GM ~15 s while it re-aimed at every "
+    12: "NAME-TAG CHECK (Batt 19:5x; the size gate let a Creamy -- pink, 39 x 36 px like a Poring "
+    "-- pass as a target, v11 +527 s): before a direct attack click the pointer rests on the "
+    "target until the client's own name tag under it reads (<= 1.2 s); only Poring / Lunatic / "
+    "Pupa / Drops are clicked; another name bans the target; no tag = no click",
+    13: "ENGAGEMENT ZONE (Batt 18:2x: a Poring circled the GM ~15 s while it re-aimed at every "
     "hop): once a target is chosen, ONE path to the nearest walkable cell within the attack-click "
     "range of it (7 cells, 4 for a walking target: Batt's p90 / p50), re-planned only when the "
     "target leaves that zone; inside the zone the GM strikes (the risk gate) once it stands",
-    13: "NO BACK-AND-FORTH (Batt 18:2x; Batt 3.6 reversals / min and 16.9-cell straight runs, the "
+    14: "NO BACK-AND-FORTH (Batt 18:2x; Batt 3.6 reversals / min and 16.9-cell straight runs, the "
     "bot 5.9-7.8 and 10-11): the search walks LAWNMOWER LANES (east / west to the area's edge or a "
     "dead end, a 12-cell shift, the next lane back), with no time-based re-pick of the goal; the "
     "target queue's first pick costs +4 cells when it needs a turn of > 120 deg",
-    14: "RE-TARGET WHILE STEERING (Batt's change 2: detection -> dispatch, v7 p50 2.85 s, was the "
+    15: "RE-TARGET WHILE STEERING (Batt's change 2: detection -> dispatch, v7 p50 2.85 s, was the "
     "bot steering to ANOTHER target that then failed, 19 / 32): after >= 1 s on a target, the "
     "planner's queue[0] replaces it when it is valid and cheaper by >= 2 cells (Chebyshev to the "
     "predicted cell, +2 for a walking one)",
@@ -191,9 +195,10 @@ PARAMS[10] = {**PARAMS[9], "freeze_guard": True, "risk_gate": True, "gate_near_g
 PARAMS[11] = {**PARAMS[10], "opportunistic": True, "opp_cells": 4, "risk_targets_ok": True,
               "still_read_only": True, "box_clear_px": 12.0,
               "box_clear_nontarget_only": True}  # fmt: skip
-PARAMS[12] = {**PARAMS[11], "zone": True, "zone_radius": 7, "zone_radius_walking": 4}
-PARAMS[13] = {**PARAMS[12], "sweep": True, "lane_w": 12, "rev_penalty": 4.0}
-PARAMS[14] = {**PARAMS[13], "retarget": True, "retarget_margin": 2.0, "retarget_commit_s": 1.0}
+PARAMS[12] = {**PARAMS[11], "name_tag": True, "tag_wait_s": 1.2}
+PARAMS[13] = {**PARAMS[12], "zone": True, "zone_radius": 7, "zone_radius_walking": 4}
+PARAMS[14] = {**PARAMS[13], "sweep": True, "lane_w": 12, "rev_penalty": 4.0}
+PARAMS[15] = {**PARAMS[14], "retarget": True, "retarget_margin": 2.0, "retarget_commit_s": 1.0}
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -1208,6 +1213,30 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 return gate_reasons(b0, others, GM_SPRITE_PX, prm["gate_near_gm_px"],
                                     prm["gate_min_conf"], npc_near, ignore_near)  # fmt: skip
 
+            import nametag
+
+            tag_templates = nametag.load_templates() if prm.get("name_tag") else {}
+            if prm.get("name_tag") and not tag_templates:
+                raise f0.FarmStop("hunt-flow refused: no name-tag templates (nametag.py build)")
+
+            def read_tag(u: float, v: float, b: Any) -> tuple[str | None, int]:
+                """v12: rest the pointer on (u, v) and read the name tag under ``b`` until one
+                matches (<= tag_wait_s); the pointer is left on the target for the click."""
+                t_a = time.monotonic()
+                agent.move(gx0 + round(u) - 12, gy0 + round(v) - 12)  # two motions: drawn
+                time.sleep(0.06)
+                agent.move(gx0 + round(u), gy0 + round(v))
+                ptr[0] = (u, v)
+                name_: str | None = None
+                while time.monotonic() - t_a < prm["tag_wait_s"]:
+                    time.sleep(0.1)
+                    img_ = screen.grab(gx0, gy0, gw, gh)[1]
+                    name_, _iou = nametag.match(nametag.letter_mask(nametag.band(img_, b)),
+                                                tag_templates)  # fmt: skip
+                    if name_ is not None:
+                        break
+                return name_, round((time.monotonic() - t_a) * 1000)
+
             def strike(tr: Track, here: Cell, again: bool) -> bool:
                 """Park, hover the target's newest box, ONE robust2 read; SWORD -> the attack
                 click there. True when it clicked."""
@@ -1251,6 +1280,17 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 t_read0 = r.ns()
                 path_ = "std"
                 reads_why: list[list[Any]] = []  # v9: each read's shape / why / best
+                tag_ = None
+                if direct_ and prm.get("name_tag"):
+                    # v12: the client's own species label must read a TARGET before a direct click
+                    # (the size gate let a Creamy, a non-target, pass as a Poring: v11 +527 s)
+                    tag_, tag_ms = read_tag(u, v, b)
+                    if tag_ not in nametag.TARGET_NAMES:
+                        reads += 1 if tag_ is None else prm["max_reads"]
+                        ev({"kind": "tag_refused", "track": tr.tid, "tag": tag_, "ms": tag_ms})
+                        note(f"tag {tag_}: no click")
+                        split.to(prev, time.monotonic())
+                        return False
                 if direct_:
                     shape, path_ = "direct", "direct"  # v10: no risk -> the fresh detection
                 elif fast_:
@@ -1346,7 +1386,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                            "aim_px": hov.get("aim_px"), "read_ms": hov.get("read_ms"),
                            "in_range_to_click_s": hov.get("in_range_to_click_s"),
                            "read_path": path_, "branch": "direct" if direct_ else "read",
-                           "risk": gate_why})  # fmt: skip
+                           "risk": gate_why, "tag": tag_})  # fmt: skip
                 eng_tracks[tr.tid] = tr  # v6: the death cell and the loot read its boxes
                 if eng is None or eng["track"] != tr.tid:
                     eng = {"k": k, "track": tr.tid, "t_seen": tr.t_first, "t_first_click": tc,
