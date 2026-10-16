@@ -373,6 +373,46 @@ def commanded_lead(at: Sequence[float], cmds: Sequence[tuple[int, Cell]], t_now:
     return x, y
 
 
+def main_component(area: Any) -> Any:
+    """PURE (v8 bug fix): the largest 8-connected component of ``area``. v7 attempt 2 walked onto
+    a ledge strip of the area from which no goal had a path, and sat there 12.7 min."""
+    from collections import deque
+
+    a = np.asarray(area, dtype=bool)
+    h, w = a.shape
+    lab = np.zeros((h, w), np.int32)
+    n, best = 0, (0, 0)
+    for y0, x0 in zip(*np.nonzero(a), strict=True):
+        if lab[y0, x0]:
+            continue
+        n += 1
+        lab[y0, x0] = n
+        q, size = deque([(int(y0), int(x0))]), 0
+        while q:
+            y, x = q.popleft()
+            size += 1
+            for dy in (-1, 0, 1):
+                for dx in (-1, 0, 1):
+                    yy, xx = y + dy, x + dx
+                    if 0 <= yy < h and 0 <= xx < w and a[yy, xx] and not lab[yy, xx]:
+                        lab[yy, xx] = n
+                        q.append((yy, xx))
+        if size > best[0]:
+            best = (size, n)
+    return lab == best[1]
+
+
+def escape_cells(main: Any, here: Cell, reach: int = 30, k: int = 5) -> list[Cell]:
+    """PURE (v8 bug fix): up to ``k`` cells of the main component nearest ``here`` (Chebyshev,
+    within ``reach``), nearest first: where to walk when no goal has a path."""
+    h, w = main.shape
+    x0, y0 = max(0, here[0] - reach), max(0, here[1] - reach)
+    ys, xs = np.nonzero(main[y0 : min(h, here[1] + reach + 1), x0 : min(w, here[0] + reach + 1)])
+    cells = sorted(((int(x) + x0, int(y) + y0) for y, x in zip(ys, xs, strict=True)),
+                   key=lambda c: (cheb(c, here), c))  # fmt: skip
+    return [c for c in cells if c != here][:k]
+
+
 def frac_project(world: Any, origin: Sequence[float], cell: Sequence[float]) -> tuple[float, float]:
     """(v7) The screen pixel of ``cell`` with the camera centred on the FRACTIONAL ``origin``:
     the World stands on the rounded cell and the cell moves by the fraction instead (the GAT
@@ -1015,6 +1055,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     if not new_:
                         time.sleep(0.02)
 
+            main_area = main_component(area) if prm.get("escape_after_s") else None
+
             def planner() -> None:
                 """The queue (chained, standing first) every plan_every_s, and the next exploration
                 waypoint (the coverage plan's stalest tile) always held."""
@@ -1045,8 +1087,22 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             p_ = None if back is None else hc.astar(ok, here_, back)
                         if p_ is not None and len(p_) >= 2:
                             gp = p_
+                            plan["t_fail"] = None
                             with plock:
                                 plan["t_goal"] = now_
+                        elif main_area is not None:
+                            # v8 bug fix: no goal has a path from here (a ledge strip) -> after
+                            # escape_after_s walk the full walkable grid to the main area
+                            plan["t_fail"] = plan.get("t_fail") or now_
+                            if now_ - plan["t_fail"] > prm["escape_after_s"]:
+                                for c_ in escape_cells(main_area, here_):
+                                    p_ = hc.astar(ok, here_, c_)
+                                    if p_ is not None and len(p_) >= 2:
+                                        gp, plan["t_fail"] = p_, None
+                                        ev({"kind": "escape", "from": list(here_), "to": list(c_)})
+                                        with plock:
+                                            plan["t_goal"] = now_
+                                        break
                     with plock:
                         plan["queue"], plan["goal_path"] = q, gp
                     time.sleep(prm["plan_every_s"])
@@ -1198,7 +1254,19 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         mode_ = m_
                         ev({"kind": "mode", "mode": m_})
 
-                def cont_click(route: list[Cell], grid: Any, why: str) -> bool:
+                def boxes_clear(u: float, v: float) -> bool:
+                    """v8 plan B: (u, v) is outside every monster box of the NEWEST frame grown by
+                    box_clear_px (the sprite is what the client picks, not its centre)."""
+                    px_ = prm.get("box_clear_px")
+                    if px_ is None:
+                        return True
+                    fr_ = sampler.since(max(0, len(sampler.frames) - 1))
+                    return not fr_ or all(
+                        not (b.x0 - px_ <= u <= b.x1 + px_ and b.y0 - px_ <= v <= b.y1 + px_)
+                        for b in fr_[-1][1] if b.cls == "monster")  # fmt: skip
+
+                def cont_click(route: list[Cell], grid: Any, why: str,
+                               avoid: tuple[float, float] | None = None) -> bool:  # fmt: skip
                     """v5: the first candidate ahead of where we ARE that passes the gates on the
                     freshest frames; no standstill needed."""
                     cur = measured_pos() or (float(pos[0]), float(pos[1]))
@@ -1220,8 +1288,11 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         else:
                             uu, vv = (float(x) for x in world.project([c_])[0])
                             gu, gv = uu, vv
+                        if avoid is not None and prm.get("steer_clear_cells") and cheb(
+                                c_, avoid) < prm["steer_clear_cells"]:  # fmt: skip
+                            continue  # v8 plan B: never a steering click onto the target
                         if (in_view(uu, vv) and in_view(gu, gv) and grid[c_[1], c_[0]]
-                                and units_clear(gu, gv)
+                                and units_clear(gu, gv) and boxes_clear(gu, gv)
                                 and (not cont or walk_ok(c_))):  # fmt: skip
                             extra_ = None
                             if lead_ is not None:
@@ -1245,6 +1316,9 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 try:
                     while time.monotonic() < deadline:
                         now = time.monotonic()
+                        if (prm.get("escape_after_s") and eng is None
+                                and now - last_progress[0] > STUCK_S):  # fmt: skip
+                            raise f0.FarmStop(f"no progress for {STUCK_S:.0f} s at {pos}: stopped")
                         if prm.get("bg_check"):
                             with plock:
                                 vd = dict(ui_verdict)
@@ -1467,7 +1541,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                         banned.append((now, (int(round(tcell[0])),
                                                              int(round(tcell[1])))))  # fmt: skip
                                         target = None
-                                    elif cont_click(ap, ok, "steer"):
+                                    elif cont_click(ap, ok, "steer", tcell):
                                         stop_since = None
                                     elif not moving:
                                         stop_since = stop_since or now

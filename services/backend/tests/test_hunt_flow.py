@@ -182,3 +182,18 @@ def test_v7a2_a_new_command_turns_the_replay_and_arrival_stops_it() -> None:
     x, _y = hf.commanded_lead(at, [(0, (102, 50))], int(2.0 * S), 0.6)
     assert abs(x - 101.5) < 0.1  # arrived (within half a cell): it stops
     assert hf.commanded_lead(at, [], int(2.0 * S), 0.6) == at  # nothing commanded: as measured
+
+
+def test_v8_the_main_component_leaves_a_ledge_strip_out() -> None:
+    area = np.zeros((10, 20), bool)
+    area[1:9, 1:12] = True  # the big field
+    area[2:4, 15:18] = True  # a ledge strip, not connected
+    main = hf.main_component(area)
+    assert main[5, 5] and not main[3, 16] and int(main.sum()) == 8 * 11
+
+
+def test_v8_escape_cells_are_the_nearest_main_cells() -> None:
+    main = np.zeros((10, 20), bool)
+    main[1:9, 1:12] = True
+    assert hf.escape_cells(main, (16, 3), reach=10, k=2) == [(11, 1), (11, 2)]
+    assert hf.escape_cells(main, (16, 3), reach=2) == []

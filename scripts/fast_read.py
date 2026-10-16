@@ -94,7 +94,8 @@ def read(pr: Any, agent: Any, screen: Any, origin: tuple[int, int], u: float, v:
 # --- the no-click check ---------------------------------------------------------------------------
 
 
-def check(n_mon: int, n_ground: int, npc: bool, minutes: float) -> int:
+def check(n_mon: int, n_ground: int, npc: bool, minutes: float,
+          warp: tuple[int, int] | None = None) -> int:  # fmt: skip
     import cursor_gate
     import farm0 as f0
     import farm1 as f1
@@ -117,6 +118,9 @@ def check(n_mon: int, n_ground: int, npc: bool, minutes: float) -> int:
         f0.stop_on_takeover(agent)
         pr = cursor_gate.prober(agent, screen)
         det = unit_detector.UnitDetector()
+        if warp is not None:  # a stand cell (the caller checks it) where monsters roam
+            r.gm(agent, screen, f"@warp prt_fild08 {warp[0]} {warp[1]}")
+            time.sleep(2.5)
         here = [(gw / 2, gh / 2)]
 
         def boxes() -> list[Any]:
@@ -252,8 +256,9 @@ def main() -> int:
     c.add_argument("--ground", type=int, default=10)
     c.add_argument("--npc", action="store_true")
     c.add_argument("--minutes", type=float, default=10.0)
+    c.add_argument("--warp", type=int, nargs=2, default=None)
     a = ap.parse_args()
-    return check(a.monsters, a.ground, a.npc, a.minutes)
+    return check(a.monsters, a.ground, a.npc, a.minutes, tuple(a.warp) if a.warp else None)
 
 
 if __name__ == "__main__":
