@@ -6423,7 +6423,7 @@ analysis. They are binding for the human baseline and for every hunt-flow versio
       by a re-click 1.3-4.6 s later.
     - 2 on monsters that died 0.07-0.1 s before (the death animation still drawn).
     - ~~1 unexplained: a Poring-like sprite at the click, and no mob in the packets near it
-      (none within +-4 s).~~ ➡️ **CORRECTED 2026-10-16 ~11:30: a JUDGE BUG, not a mystery.**
+      (none within +-4 s).~~ ➡️ **CORRECTED 2026-10-16 11:08 (62035a5): a JUDGE BUG, not a mystery.**
       rAthena reuses a dead mob's id for a later spawn. `flow_judge.alive()` kept only an id's
       last life, so a mob alive at 509 s looked absent. Fixed: every life of an id is kept
       (`test_a_reused_gid_keeps_every_life`). The Poring in the frame was real. The trial
@@ -6494,7 +6494,7 @@ analysis. They are binding for the human baseline and for every hunt-flow versio
 - **PASS:** >= 95 % over >= 60 engagements, pooled over runs of THIS version with fresh seeds,
   and safety events 0 (NPC contact, dialog, map change, a non-target hit, an unknown UI state).
 - ~~**Batt on the same definition (the reference, no bar):** 63 / 64 = 98.4 %.~~ ➡️
-  **CORRECTED by `flow_judge.py human` (11:30, after the id-reuse fix above): 64 / 64 = 100 %
+  **CORRECTED by `flow_judge.py human` (11:08, 62035a5, after the id-reuse fix above): 64 / 64 = 100 %
   (Wilson 94.3-100 %).**
   - His 53 first-click hits, plus 11 re-hits within W.
   - 2 excluded: clicks on monsters that had just died.
