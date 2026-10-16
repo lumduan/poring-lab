@@ -7276,6 +7276,56 @@ CPU (GPU freeze).
   walkable grid.
 - Everything else is as pre-registered. 60 min, seed 20261212.
 
+**Attempt 2 RESULT (2026-10-16 16:50:30-17:12:57, session 20261016T165030-demo-hunt-flow8, seed
+20261212): STOPPED BY BATT'S TAKEOVER at 21.7 min.** The runner stopped correctly: "a human
+lease is active, nothing sent". Nothing was restarted for the 10-min back-off.
+- **The bar:** 7 / 10, with 2 never hit and 1 late.
+- **Kills:** engaged 7, 19.4 / h (v7 47.9); 14 more from walk clicks.
+- **In range -> click:** p50 4.46 s (v7 6.74).
+- **Moving walk clicks within 1 cell:** 79 %.
+- **The escape fired once;** no further stall.
+- **Death -> next click:** p50 3.21 s.
+- **THE STRIKE READ IS THE TOP LOSER.** Of 111 strike calls only 10 read SWORD: 63 unknown, 32
+  WALK, 6 pickup. 15 targets were dropped as no_sword, and 10 parks were stale.
+  - The lean strike made a strike cheaper (call p50 3.2 s), not more successful.
+- **vs the prediction:**
+  - in range -> click under 4.0 s: NO (4.46);
+  - striking under 20 %: NO (375 of 1,302 s = 29 %);
+  - engaged kills / h above 47.9: NO (19.4);
+  - the bar >= 90 %: NO (70 %);
+  - no idle stretch over 60 s: YES.
+
+### 3.50 hunt-flow@9: STRIKE A STANDING TARGET ONLY (pre-registered 2026-10-16 __TIME__ ICT, the commit time __SHA__, BEFORE its run)
+
+**From v8:** 9 % of strike reads were SWORD.
+- The WALK reads (32) are the target having LEFT the aimed spot. The aim comes from a frame
+  ~0.5 s old, and the park plus hover add ~1.6 s.
+- Porings hop: the 17:00 frames show one 1-2 cells off the pointer at read time.
+- Why the unknowns (63) happen is not logged.
+
+**The ONE main change (`still_gate`):**
+- **No read until the target STANDS.** Its boxes from the frames of the last 1.2 s (at least 3)
+  must all sit within 8 px of the newest. Until then, the pointer keeps following it.
+- **A target that never stands within 8 s** is dropped as no_still.
+- **After the park,** a newest box more than 8 px off the aimed one calls the read off
+  (`strike_moved`; no read is counted, and the gate waits again).
+- **Instrumentation:** every read's shape / why / best is logged in `strike_call`, so the
+  unknowns can be attributed next.
+
+Everything else is v8 attempt 2: the lean strike, the pointer off after the click, the
+commanded-path lead, the trail escape, no looting.
+
+**Run:** 60 min, seed 20261213. It starts only after the takeover back-off, with no human input
+for >= 10 min.
+
+**Prediction, written before the run:**
+- SWORD on more than 25 % of strike calls (v8: 9 %);
+- WALK on fewer than 10 % (v8: 29 %);
+- engaged kills / h above v8's 19.4, and at least v7's 47.9 as the goal;
+- the bar >= 90 %;
+- in range -> click p50 under 6 s (the wait for a stand is in it);
+- unintended attacks not above v7's (19 per 30 min).
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.

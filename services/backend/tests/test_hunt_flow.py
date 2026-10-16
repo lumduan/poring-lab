@@ -208,3 +208,20 @@ def test_v8a2_the_escape_retreats_along_cells_we_walked() -> None:
     main = np.zeros((10, 20), bool)
     main[1:9, 1:12] = True
     assert all(hf.cheb(c, (12, 5)) >= 6 for c in hf.escape_cells(main, (12, 5), near=6))
+
+
+class _B:
+    def __init__(self, x: float, y: float) -> None:
+        self.x0, self.y0, self.x1, self.y1 = x - 10, y - 10, x + 10, y + 10
+
+
+def test_v9_a_target_stands_when_its_recent_boxes_agree() -> None:
+    still = [(int(t * S), _B(500 + (t % 2), 300)) for t in (9.2, 9.5, 9.8, 10.0)]
+    assert hf.box_still(still, int(10.1 * S), 0.9, 8.0)
+    hop = [
+        (int(9.4 * S), _B(470, 300)),
+        (int(9.7 * S), _B(485, 300)),
+        (int(10.0 * S), _B(500, 300)),
+    ]
+    assert not hf.box_still(hop, int(10.1 * S), 0.9, 8.0)
+    assert not hf.box_still(still[-2:], int(10.1 * S), 0.9, 8.0)  # too few frames to say

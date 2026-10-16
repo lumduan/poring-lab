@@ -108,6 +108,12 @@ VERSIONS = {
     "showed at the park point in 1.5 s) counts as a failed read instead of parking again at "
     "once; every strike call is logged with its park and call time. Bug fixes in: the "
     "stuck-search escape (v7 attempt 2 sat 12.7 min) and a no-progress stop",
+    9: "STRIKE A STANDING TARGET ONLY (v8: 19 of 21 strike reads failed, 11 WALK -- a hopping "
+    "Poring had left the aimed spot by read time, ~1-1.5 s after the frame): no read until the "
+    "target's boxes of the last 1.2 s (>= 3 frames) all sit within 8 px of the newest; the "
+    "pointer keeps following meanwhile; a target that never stands in 8 s is dropped "
+    "(no_still); after the park, a newest box > 8 px off the aimed one calls the read off "
+    "(none counted)",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -142,6 +148,8 @@ PARAMS[7] = {**PARAMS[6], "loot": False, "click_lead_s": 0.50, "lead_window_s": 
              # own walk / attack commands replayed from the measured cell over the last 0.6 s
              "lead_from": "commands", "click_lead_s_commands": 0.6}  # fmt: skip
 PARAMS[8] = {**PARAMS[7], "strike_lean": True, "escape_after_s": 3.0}
+PARAMS[9] = {**PARAMS[8], "still_gate": True, "still_s": 1.2, "still_px": 8.0,
+             "still_wait_s": 8.0}  # fmt: skip
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -419,6 +427,18 @@ def escape_cells(main: Any, here: Cell, reach: int = 30, k: int = 5, near: int =
     cells = sorted(((int(x) + x0, int(y) + y0) for y, x in zip(ys, xs, strict=True)),
                    key=lambda c: (cheb(c, here), c))  # fmt: skip
     return [c for c in cells if c != here and cheb(c, here) >= near][:k]
+
+
+def box_still(boxes: Sequence[tuple[int, Any]], t_now: int, window_s: float, px: float,
+              min_n: int = 3) -> bool:  # fmt: skip
+    """PURE (v9): the target STANDS -- at least ``min_n`` of its boxes from frames of the last
+    ``window_s`` (frame time), every centre within ``px`` of the newest. v8: 19 of 21 strike reads
+    failed (WALK 11): a hopping Poring had left the aimed spot by read time (~1-1.5 s later)."""
+    rec = [(t, b) for t, b in boxes if (t_now - t) / 1e9 <= window_s]
+    if len(rec) < min_n:
+        return False
+    cx, cy = (rec[-1][1].x0 + rec[-1][1].x1) / 2, (rec[-1][1].y0 + rec[-1][1].y1) / 2
+    return all(math.hypot((b.x0 + b.x1) / 2 - cx, (b.y0 + b.y1) / 2 - cy) <= px for _t, b in rec)
 
 
 def trail_cells(trail: Sequence[tuple[float, Cell]], here: Cell, now: float, near: int = 6,
@@ -938,6 +958,14 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         b = min(near_, key=lambda x: np.hypot(*(np.array(f1.foot(x))
                                                                  - f1.foot(tr.box))))  # fmt: skip
                 u, v = f1.centre(b)
+                if (prm.get("still_gate") and ok_park and tr.box is not None
+                        and b is not tr.box and float(np.hypot(*(np.array(f1.centre(b))
+                                                               - f1.centre(tr.box))))
+                        > prm["still_px"]):  # fmt: skip
+                    # v9: it moved during the park -- no read now (none counted); the gate waits
+                    ev({"kind": "strike_moved", "track": tr.tid})
+                    split.to(prev, time.monotonic())
+                    return False
                 if not ok_park or loot1.in_ui(u, v):
                     if prm.get("strike_lean") and not ok_park:
                         # v8: a STALE park (the drawn cursor never showed at the park point in
@@ -948,6 +976,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     return False
                 t_read0 = r.ns()
                 path_ = "std"
+                reads_why: list[list[Any]] = []  # v9: each read's shape / why / best
                 if fast_:
                     # v8: the FAST read -- the pointer is on the sprite (it follows), grab, blink
                     # it away, two background grabs, robust2 on |A - B|; unknown -> the proven read
@@ -977,10 +1006,14 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                    gy0 + round(pv + (v - pv) * i_ / 6))  # fmt: skip
                         time.sleep(0.012)
                     time.sleep(prm["hover_settle_s"])
-                    shape = pr.read(u, v)["shape"]
+                    rd_ = pr.read(u, v)
+                    shape = rd_["shape"]
+                    reads_why.append([shape, rd_.get("why"), rd_.get("best")])
                     if shape != "sword":
                         pr.hover(u, v)
-                        shape = pr.read(u, v)["shape"]
+                        rd_ = pr.read(u, v)
+                        shape = rd_["shape"]
+                        reads_why.append([shape, rd_.get("why"), rd_.get("best")])
                 else:
                     pr.hover(u, v)
                     shape = pr.read(u, v)["shape"]
@@ -990,7 +1023,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                        "age_ms": round((r.ns() - tr.box_t) / 1e6),
                        "pred_cell": [round(pc[0], 2), round(pc[1], 2)]}  # fmt: skip
                 ev({"kind": "strike_call", "track": tr.tid, "read": shape, "path": path_,
-                    "park_ms": park_ms, "call_ms": hov["call_ms"], "again": again})  # fmt: skip
+                    "park_ms": park_ms, "call_ms": hov["call_ms"], "again": again,
+                    "reads": reads_why, "age_ms": hov["age_ms"]})  # fmt: skip
                 if shape != "sword":
                     reads += 1
                     note(f"read {shape}: no click")
@@ -1292,6 +1326,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 route_shown: list[Any] = [None]
                 gp_i = 0
                 follow_t = [0]  # v6: the last box time the pointer followed
+                still_wait: dict[int, float] = {}  # v9: track -> since when waiting for it to stand
                 dispatched: set[tuple[int, bool]] = set()
                 stop_since: float | None = None  # v5: since when standing with no click
                 last_click: dict[str, Any] = {}  # v5: the last walk click (unfollowed check)
@@ -1571,6 +1606,20 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             if cheb(pos, tcell) <= s_range:
                                 in_range_since.setdefault(target.tid, time.monotonic())
                             if strike_due(moving, pos, tcell, s_range):
+                                if prm.get("still_gate") and not box_still(
+                                        target.boxes, r.ns(), prm["still_s"],
+                                        prm["still_px"]):  # fmt: skip
+                                    # v9: no read until the target STANDS (the pointer keeps
+                                    # following it); dropped when it never does in still_wait_s
+                                    t_w = still_wait.setdefault(target.tid, now)
+                                    if now - t_w > prm["still_wait_s"]:
+                                        banned.append((now, (int(round(tcell[0])),
+                                                             int(round(tcell[1])))))  # fmt: skip
+                                        ev({"kind": "target_dropped", "track": target.tid,
+                                            "why": "no_still"})  # fmt: skip
+                                        target = None
+                                    time.sleep(0.02)
+                                    continue
                                 if (not strike(target, pos, again=False)
                                         and reads >= prm["max_reads"]):  # fmt: skip
                                     banned.append((now, (int(round(tcell[0])),
