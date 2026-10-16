@@ -7483,7 +7483,7 @@ and strike_call.
 **HARD BARS:** zero NPC contact, zero non-target hit, zero map change. Any one fails the run,
 whatever else it shows. A live dialog or a map change also stops the run, as before.
 
-**Amendment (recorded 2026-10-16 ~18:08, BEFORE its run; a safety guard, not the main change):**
+**Amendment (recorded 2026-10-16 18:07, the commit time 9ab4c2d, BEFORE its run; a safety guard, not the main change):**
 the FREEZE GUARD. If the game picture stays pixel-identical for > 3 s after a walk click, the run
 stops: "the picture froze". A commanded walk always scrolls the camera, so a frozen picture can
 only be a frozen client display. The motion thread compares consecutive frames. This came from
