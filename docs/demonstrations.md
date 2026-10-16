@@ -6745,7 +6745,7 @@ the top safety item is the same gate (15 walk clicks turned attacks across the t
     ~0.1 s a kill. The SWORD read gates every strike, so nothing was clicked. Fixed for the next
     version (finished tracks and dropped spots are never dispatched).
 
-### 3.44 hunt-flow@4: STRIKE A STANDING TARGET FROM <= 7 CELLS (pre-registered 2026-10-16 ~12:58 ICT, BEFORE its run; Batt's choice 12:56)
+### 3.44 hunt-flow@4: STRIKE A STANDING TARGET FROM <= 7 CELLS (pre-registered 2026-10-16 12:56 ICT, the commit time 59ff567, BEFORE its run; Batt's choice 12:56)
 
 - **Batt's choice (AskUserQuestion, 12:56): "Strike from <= 7 cells".** The options were:
   - strike from <= 7 cells;
