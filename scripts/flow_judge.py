@@ -496,6 +496,35 @@ def human_engagements(events: Sequence[Mapping[str, Any]], trials: Sequence[Mapp
     return engagement_summary(rows)
 
 
+def idle_between_kills(events: Sequence[Mapping[str, Any]], clicks: Sequence[Click], t0: int,
+                       w1: int) -> dict[str, Any]:  # fmt: skip
+    """Batt 2026-10-16 ~11:30: the idle time between kills = a death (reason 1) of a unit we
+    acted on -> our next click of any kind (human: any left click in the game region)."""
+    acted = {gid_of(a, "target_gid") for a in events if a.get("type") == "act"
+             and gid_of(a, "src_gid") == GM and a.get("kind") != "pickup"}  # fmt: skip
+    deaths = sorted(int(e["t_mono_ns"]) for e in events if e.get("type") == "entity_vanish"
+                    and int(e.get("reason", -1)) == 1 and gid_of(e) in acted
+                    and t0 <= int(e["t_mono_ns"]) < w1)  # fmt: skip
+    ts = sorted(c.t for c in clicks)
+    gaps = []
+    for td in deaths:
+        nxt = next((t for t in ts if t > td), None)
+        if nxt is not None and nxt < w1:
+            gaps.append(round((nxt - td) / NS, 2))
+    return {"n": len(gaps), "p50": pct(gaps, 0.5), "p90": pct(gaps, 0.9)}
+
+
+def queue_hit_through(lines: Iterable[str]) -> dict[str, Any]:
+    """v2: how often the planner's queue[0] was still valid at dispatch (events.jsonl)."""
+    n = ok = 0
+    for line in lines:
+        x = json.loads(line)
+        if x.get("kind") == "dispatch" and x.get("rank") == 0:
+            n += 1
+            ok += bool(x.get("valid"))
+    return {"dispatches": n, "valid": ok, "rate": round(ok / n, 4) if n else None}
+
+
 def sight_per_10min(events: Sequence[Mapping[str, Any]], t0: int, w1: int) -> float:
     """Distinct mobs that entered sight in [t0, w1), per 10 minutes."""
     g = {gid_of(e) for e in events if e.get("type") == "entity_appear" and e.get("objtype") == 5
@@ -658,6 +687,7 @@ def human(sid: str) -> dict[str, Any]:
                 round((t0 - int(man["t_armed_ns"])) / NS, 1)})  # fmt: skip
     out["engagements_w"] = human_engagements(events, out["trial_rows"], t0)
     out["sight_per_10min"] = sight_per_10min(events, t0, t0 + int(WINDOW_S * NS))
+    out["idle_between_kills"] = idle_between_kills(events, clicks, t0, t0 + int(WINDOW_S * NS))
     (d / "flow_judge.json").write_text(json.dumps(out, indent=1))
     return out
 
@@ -682,6 +712,8 @@ def bot(sid: str) -> dict[str, Any]:
     engs = json.loads((d / "engagements.json").read_text())
     out["engagements_w"] = bot_engagements(events, engs)
     out["sight_per_10min"] = sight_per_10min(events, t0, t0 + int(window * NS))
+    out["idle_between_kills"] = idle_between_kills(events, clicks, t0, t0 + int(window * NS))
+    out["queue_hit_through"] = queue_hit_through((d / "events.jsonl").read_text().splitlines())
     out.update({"session": sid, "actor": "bot", "rule": man.get("rule")})
     (d / "flow_judge.json").write_text(json.dumps(out, indent=1))
     return out
@@ -703,6 +735,13 @@ def row(o: Mapping[str, Any]) -> dict[str, str]:
         "idle %": f"{o['idle_pct']}",
         "walk clicks / min": f"{o['walk_clicks']['per_min']}",
         "range at click p50/p90": f"{o['range_cells']['p50']} / {o['range_cells']['p90']}",
+        "death -> next click p50/p90 s": "{} / {}".format(
+            *(o.get("idle_between_kills") or {}).get("p50_p90", [
+                (o.get("idle_between_kills") or {}).get("p50"),
+                (o.get("idle_between_kills") or {}).get("p90")])),
+        "queue[0] valid at dispatch": "-" if not (o.get("queue_hit_through") or {}).get(
+            "dispatches") else "{valid}/{dispatches}".format(**o["queue_hit_through"]),
+        "engagements (1st clicks)": f"{o['engagements_w']['engagements']}",
         "window min": f"{round(o['window_s'] / 60, 1)}",
     }  # fmt: skip
 

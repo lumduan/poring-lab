@@ -151,3 +151,19 @@ def test_a_unit_killed_by_another_hand_is_excluded() -> None:
     out = fj.bot_engagements(events, [{"k": 0, "t_first_click": int(2.0 * S),
                                        "pred_cell": [15, 10]}])  # fmt: skip
     assert out["rows"][0]["why"] == "excluded:killed_by_other" and out["counted"] == 0
+
+
+def test_idle_between_kills_is_a_death_to_our_next_click() -> None:
+    events = base() + [ev(2.5, "act", src_gid=fj.GM, target_gid=MOB, damage=182),
+                       ev(3.0, "entity_vanish", gid=MOB, reason=1)]  # fmt: skip
+    clicks = [fj.Click(int(2.0 * S), 0, 0), fj.Click(int(3.8 * S), 0, 0)]
+    out = fj.idle_between_kills(events, clicks, 0, int(100 * S))
+    assert out == {"n": 1, "p50": 0.8, "p90": 0.8}
+
+
+def test_the_queue_hit_through_counts_rank_0_dispatches() -> None:
+    lines = [json.dumps({"kind": "dispatch", "rank": 0, "valid": True}),
+             json.dumps({"kind": "dispatch", "rank": 0, "valid": False}),
+             json.dumps({"kind": "dispatch", "rank": 1, "valid": True}),
+             json.dumps({"kind": "walk_click"})]  # fmt: skip
+    assert fj.queue_hit_through(lines) == {"dispatches": 2, "valid": 1, "rate": 0.5}

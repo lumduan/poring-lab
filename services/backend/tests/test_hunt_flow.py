@@ -51,3 +51,22 @@ def test_the_approach_stops_short_of_the_monster_and_the_strike_waits_for_the_st
     assert hf.strike_due(False, (13, 5), (15.4, 5.2), 3)
     assert not hf.strike_due(True, (13, 5), (15.0, 5.0), 3)  # never while walking
     assert not hf.strike_due(False, (5, 5), (15.0, 5.0), 3)
+
+
+def test_the_queue_is_a_chained_path_with_standing_targets_first() -> None:
+    a = hf.Track(0, [(0, (12, 10))])  # 2 from us
+    b = hf.Track(1, [(0, (22, 10))])  # 2 from c, 10 from a
+    c = hf.Track(2, [(0, (20, 10))])  # 8 from a
+    q = hf.plan_queue([b, c, a], (10, 10), 0, depth=3)
+    assert [t.tid for t in q] == [0, 2, 1]  # each next nearest to the previous one
+    walker = hf.Track(3, [(0, (11, 10)), (int(0.4 * S), (11, 12)), (int(1.0 * S), (11, 13))])
+    q = hf.plan_queue([walker, a], (10, 10), int(1.0 * S), depth=1)
+    assert [t.tid for t in q] == [0]  # the walker (3 away + 2) loses to the standing one (2)
+    assert hf.plan_queue([a, b], (10, 10), 0, depth=3, banned=[(0.0, (12, 10))], now_s=1.0)[0] is b
+
+
+def test_a_planned_target_is_dispatched_only_while_tracked_and_fresh() -> None:
+    a = hf.Track(0, [(0, (12, 10))], box="b", box_t=0)
+    assert hf.valid_at_dispatch(a, [a], int(0.3 * S), 0.4)
+    assert not hf.valid_at_dispatch(a, [a], int(0.5 * S), 0.4)  # stale
+    assert not hf.valid_at_dispatch(a, [], int(0.1 * S), 0.4)  # the tracker dropped it

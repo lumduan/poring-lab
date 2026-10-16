@@ -66,12 +66,25 @@ VERSIONS = {
     "track every monster box; the nearest first; steer to 2 cells short of its predicted cell; "
     "at the brief moment the walk ends, <= 3 cells: ONE robust2 SWORD read on its newest box -> "
     "the attack click; dead from pixels -> the next target at once; no looting",
+    2: "PIPELINED (Batt 2026-10-16 ~11:30): PERCEPTION (detector + tracker) and the PLANNER (a "
+    "2-4 deep queue by the shortest CHAINED path, standing targets first, re-scored every "
+    "frame; the next exploration waypoint always held) run in their own threads; the EXECUTOR "
+    "only clicks and never waits for them. At a death it takes queue[0] (or the waypoint) at "
+    "once, revalidated on the freshest frame, with the SWORD read before every attack click. "
+    "A walk click goes to the farthest path point that passes the gates (v1 gave up when the "
+    "one point it tried was within 60 px of a unit)",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
         "track_drop_s": 2.0, "dead_gone_s": 0.6, "dead_near_cells": 1.5, "reclick_s": 2.0,
         "give_up_s": 8.0, "dead_min_s": 1.0, "max_reads": 3, "fresh_s": 0.4, "min_box_px": 16.0,
         "unit_clear_px": 60.0, "clear_frames": 2, "drop_target_s": 15.0},
+    2: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
+        "track_drop_s": 2.0, "dead_gone_s": 0.6, "give_up_s": 8.0, "dead_min_s": 1.0,
+        "max_reads": 3, "fresh_s": 0.4, "min_box_px": 16.0, "unit_clear_px": 60.0,
+        "clear_frames": 2, "drop_target_s": 15.0, "reclick_s": 2.0, "pipelined": True,
+        "queue_depth": 3, "moving_penalty": 2.0, "plan_every_s": 0.1, "waypoint_every_s": 3.0,
+        "dispatch_fresh_s": 1.0},
 }  # fmt: skip
 
 
@@ -185,6 +198,71 @@ def strike_due(moving: bool, here: Cell, target: tuple[float, float], strike_cel
     """PURE: Batt's 'attack from a standing GM': the brief moment the walk has ended, the target
     within ``strike_cells``."""
     return not moving and cheb(here, target) <= strike_cells
+
+
+def plan_queue(tracks: Sequence[Track], start: Sequence[float], t_ns: int, depth: int,
+               banned: Sequence[tuple[float, Cell]] = (), now_s: float = 0.0,
+               ban_s: float = 15.0, moving_penalty: float = 2.0) -> list[Track]:  # fmt: skip
+    """PURE (v2's planner): up to ``depth`` targets by the shortest CHAINED path -- each next one
+    nearest to the previous one's predicted cell, starting from ``start`` (our cell) -- with a
+    walking monster costing ``moving_penalty`` cells more (standing targets first: Batt's misses
+    were on walking ones). Cells a dropped target left within ``ban_s`` are skipped."""
+    left = []
+    for tr in tracks:
+        p = tr.predict(t_ns)
+        if any(now_s - tb < ban_s and cheb(p, cb) <= 2 for tb, cb in banned):
+            continue
+        vx, vy = tr.velocity()
+        left.append((tr, p, moving_penalty if (vx or vy) else 0.0))
+    out: list[Track] = []
+    at = (float(start[0]), float(start[1]))
+    while left and len(out) < depth:
+        i = min(range(len(left)), key=lambda j: cheb(at, left[j][1]) + left[j][2])
+        tr, p, _pen = left.pop(i)
+        out.append(tr)
+        at = p
+    return out
+
+
+def valid_at_dispatch(tr: Track, live: Sequence[Track], t_ns: int, fresh_s: float) -> bool:
+    """PURE: a planned target is dispatched only if the tracker still holds it and its newest
+    box is from a frame <= ``fresh_s`` old (then the SWORD read decides)."""
+    return any(x.tid == tr.tid for x in live) and (t_ns - tr.box_t) / 1e9 <= fresh_s
+
+
+class PositionModel:
+    """Our cell, shared by the executor (it writes) and the perception thread (it reads)."""
+
+    def __init__(self, ms_cell: float, pos: Cell) -> None:
+        import threading
+
+        self.lock = threading.Lock()
+        self.reck = hc.Reckoner(ms_cell)
+        self.moving = False
+        self.pos = pos
+
+    def go(self, seg: Sequence[Cell], t0: float) -> None:
+        with self.lock:
+            self.reck.go(seg, t0)
+            self.moving = True
+
+    def stop(self, pos: Cell) -> None:
+        with self.lock:
+            self.moving, self.pos = False, pos
+
+    def at(self, t: float) -> Cell:
+        with self.lock:
+            if self.moving:
+                return self.reck.where(t) or self.pos
+            return self.pos
+
+
+def _start_thread(target: Any, name: str) -> Any:
+    import threading
+
+    th = threading.Thread(target=target, name=name, daemon=True)
+    th.start()
+    return th
 
 
 # --- the run --------------------------------------------------------------------------------------
@@ -355,26 +433,27 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     raise f0.FarmStop(f"HP {hp:.2f} at {where}: an immune GM lost HP")
                 split.to(prev, time.monotonic())
 
-            def cell_of(b: Any, here: Cell) -> tuple[Cell | None, float]:
+            def cell_of(b: Any, here: Cell, w: Any = None) -> tuple[Cell | None, float]:
+                w_ = world if w is None else w  # v2: the perception thread has its own World
                 fu, fv = f1.foot(b)
                 off = picking.pick_cells(camera, gat, here,
                                          np.array([[fu, fv - loot1.FOOT_LIFT]]))[0]  # fmt: skip
                 if abs(int(off[0])) > 1000:
                     return None, 1.0
                 c = (here[0] + int(off[0]), here[1] + int(off[1]))
-                world.position = here
-                p = world.project([c, (c[0] + 1, c[1])])
-                p0 = world.project([here, (here[0] + 1, here[1])])
+                w_.position = here
+                p = w_.project([c, (c[0] + 1, c[1])])
+                p0 = w_.project([here, (here[0] + 1, here[1])])
                 px0 = float(np.hypot(*(p0[1] - p0[0])))
                 return c, (float(np.hypot(*(p[1] - p[0]))) / px0 if px0 > 0 else 1.0)
 
-            def sightings_in(boxes: Any, here: Cell) -> list[tuple[Any, Cell]]:
+            def sightings_in(boxes: Any, here: Cell, w: Any = None) -> list[tuple[Any, Cell]]:
                 """hunt@6's selection gates on one frame's boxes."""
                 got_ = []
                 for b in boxes:
                     if b.cls != "monster":
                         continue
-                    c, scale = cell_of(b, here)
+                    c, scale = cell_of(b, here, w)
                     if c is None or not (0 <= c[0] < area.shape[1] and 0 <= c[1] < area.shape[0]):
                         continue
                     if f1.native_size(b, scale) > f1.MAX_NATIVE_PX:
@@ -402,16 +481,18 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         pub.clear()
 
             def step_target(pth: list[Cell], from_i: int, at: Cell, ahead: int,
-                            grid: Any = None
+                            grid: Any = None, need_clear: bool = False
                             ) -> tuple[int | None, tuple[float, float]]:  # fmt: skip
                 """The farthest path index in (from_i, from_i + ahead] whose point is in view,
-                off the UI and on ``grid`` (the search area by default), seen from ``at``."""
+                off the UI and on ``grid`` (the search area by default), seen from ``at``; with
+                ``need_clear`` (v2, a click while moving) also clear of units (option B)."""
                 g_ = area if grid is None else grid
                 world.position = at
                 hi = min(len(pth) - 1, from_i + ahead)
                 for jj in range(hi, from_i, -1):
                     uu, vv = (float(c) for c in world.project([pth[jj]])[0])
-                    if in_view(uu, vv) and g_[pth[jj][1], pth[jj][0]]:
+                    if in_view(uu, vv) and g_[pth[jj][1], pth[jj][0]] and (
+                            not need_clear or units_clear(uu, vv)):  # fmt: skip
                         return jj, (uu, vv)
                 return None, (0.0, 0.0)
 
@@ -442,6 +523,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
             if cheb(pos, start) > 3:
                 raise f0.FarmStop(f"the start @warp did not land: at {pos}, not {start}")
             reck = hc.Reckoner(MS_CELL)
+            posm = PositionModel(MS_CELL, pos)  # v2: shared with the perception thread
             deadline = time.monotonic() + minutes * 60
             t_run0 = time.monotonic()
             ev({"kind": "loop_start"})
@@ -486,6 +568,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                            "gate": gate, "to": list(to), "why": why})  # fmt: skip
                 ev({"kind": "walk_click", "gate": gate, "to": list(to), "why": why})
                 reck.go(seg, time.monotonic())
+                posm.go(seg, time.monotonic())
                 rp("walk", seg[0], seg, t_c)
                 moving = True
                 last_walk = time.monotonic()
@@ -556,7 +639,244 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 eng = None
                 target = None
 
-            while time.monotonic() < deadline:
+            # --- v2: PIPELINED (Batt ~11:30): perception + planner threads, the executor below --
+            import threading
+
+            halt = threading.Event()
+            plock = threading.Lock()
+            pstate: dict[str, Any] = {"tracks": [], "next_id": 0}
+            plan: dict[str, Any] = {"queue": [], "goal_path": None, "t_goal": 0.0}
+            world_p = w5.World(camera, gat, start)  # the perception thread's own camera model
+
+            def tracks_now() -> list[Track]:
+                with plock:
+                    return list(pstate["tracks"])
+
+            def perception() -> None:
+                """Every detector frame into the tracks, on the frame's own time and our cell
+                then (the shared position model)."""
+                kf_ = 0
+                while not halt.is_set():
+                    new_ = sampler.since(kf_)
+                    kf_ += len(new_)
+                    for t_fr, boxes in new_:
+                        age = (r.ns() - t_fr) / 1e9
+                        here_fr = posm.at(time.monotonic() - age)
+                        sts = sightings_in(boxes, here_fr, world_p)
+                        with plock:
+                            pstate["tracks"], pstate["next_id"] = update_tracks(
+                                pstate["tracks"], t_fr, sts, pstate["next_id"],
+                                prm["track_near"], prm["track_drop_s"])  # fmt: skip
+                    if not new_:
+                        time.sleep(0.02)
+
+            def planner() -> None:
+                """The queue (chained, standing first) every plan_every_s, and the next exploration
+                waypoint (the coverage plan's stalest tile) always held."""
+                while not halt.is_set():
+                    now_, t_ = time.monotonic(), r.ns()
+                    here_ = posm.at(now_)
+                    q = plan_queue(tracks_now(), here_, t_, prm["queue_depth"], list(banned),
+                                   now_, prm["drop_target_s"], prm["moving_penalty"])  # fmt: skip
+                    gp = plan["goal_path"]
+                    if (gp is None or now_ - plan["t_goal"] > prm["waypoint_every_s"]
+                            or cheb(here_, gp[-1]) <= 2):  # fmt: skip
+                        p_ = None
+                        if area[here_[1], here_[0]]:
+                            goal = hc.choose_goal(cov, here_, now_, {}, list(bad_tiles))
+                            p_ = None if goal is None else hc.astar(area, here_, goal)
+                            if (p_ is None or len(p_) < 2) and goal is not None:
+                                bad_tiles.append((goal[0] - goal[0] % hc.TILE,
+                                                  goal[1] - goal[1] % hc.TILE))  # fmt: skip
+                                if len(bad_tiles) > 40:
+                                    bad_tiles.clear()
+                        else:
+                            back = hc.nearest_in(area, ok, here_)
+                            p_ = None if back is None else hc.astar(ok, here_, back)
+                        if p_ is not None and len(p_) >= 2:
+                            gp = p_
+                            with plock:
+                                plan["t_goal"] = now_
+                    with plock:
+                        plan["queue"], plan["goal_path"] = q, gp
+                    time.sleep(prm["plan_every_s"])
+
+            def quick_fix() -> Cell:
+                """Our cell at a hand-off: one minimap read near where we were (no settle wait),
+                else the settle."""
+                mm_ = read_position()
+                if mm_ is not None and ok[mm_[1], mm_[0]] and cheb(mm_, pos) <= 4:
+                    return mm_
+                return settle(timeout=1.5) or pos
+
+            def pipelined_loop() -> None:  # noqa: PLR0915
+                nonlocal pos, moving, path, pi, target, reads, last_mm, mm_off, last_weight
+                nonlocal click_from, click_cell
+                ths = [_start_thread(perception, "perception"), _start_thread(planner, "planner")]
+                gp_i = 0
+                try:
+                    while time.monotonic() < deadline:
+                        now = time.monotonic()
+                        if eng is None and now - last_check[0] > CHECK_EVERY_S:
+                            check("v2")
+                        if eng is None and not moving and now - last_weight > WEIGHT_EVERY_S:
+                            last_weight = now
+                            wnow = gm_state._weight(gm_state._frames(screen))
+                            if gm_state.weight_action(wnow, at_restore=False) == "clear":
+                                ev({"kind": "weight_clear", "weight": wnow})
+                                gm_state.clear_loot(agent, screen, why="hunt-flow:mid-run",
+                                                    out_dir=log.dir / "gm_state")  # fmt: skip
+                        if moving and reck.remaining(now) == 0:
+                            moving = False
+                            pos = reck.path[-1] if reck.path else pos
+                            posm.stop(pos)
+                            rp("snap", pos)
+                        est = reck.where(now) if moving else pos
+                        if est is not None:
+                            pos = est
+                        if now - last_mm > MINIMAP_EVERY_S:
+                            last_mm = now
+                            mm = read_position()
+                            if mm is not None and ok[mm[1], mm[0]]:
+                                if cheb(mm, pos) <= DRIFT_CELLS:
+                                    mm_off = 0
+                                    last_fix[0] = time.monotonic()
+                                    if not moving:
+                                        pos = mm
+                                        posm.stop(pos)
+                                else:
+                                    mm_off += 1
+                                    if mm_off >= 2:
+                                        ev({"kind": "drift", "reck": list(pos),
+                                            "minimap": list(mm)})  # fmt: skip
+                                        if (click_from is not None and click_cell is not None
+                                                and cheb(mm, click_from) <= 1
+                                                and eng is None):  # fmt: skip
+                                            n_u = unfollowed.get(click_from, 0)
+                                            unfollowed[click_from] = n_u + 1
+                                            rad = 1 + min(2, n_u)
+                                            cx, cy = click_cell
+                                            blk = np.zeros_like(area)
+                                            blk[max(0, cy - rad) : cy + rad + 1,
+                                                max(0, cx - rad) : cx + rad + 1] = True  # fmt: skip
+                                            fx, fy = click_from
+                                            blk[max(0, fy - 1) : fy + 2,
+                                                max(0, fx - 1) : fx + 2] = False  # fmt: skip
+                                            area[blk] = False
+                                            ev({"kind": "unfollowed_click",
+                                                "from": list(click_from),
+                                                "to": list(click_cell), "radius": rad})  # fmt: skip
+                                            click_from = click_cell = None
+                                        pos = settle() or mm
+                                        posm.stop(pos)
+                                        moving, path, pi = False, [], 0
+                                        mm_off = 0
+                        pos_box[0] = pos
+                        cov.mark(pos, now, offsets)
+                        t_now = r.ns()
+                        live = tracks_now()
+                        # the engagement in progress: dead -> HAND-OFF at once; re-click; give up
+                        if eng is not None:
+                            tr = next((x for x in live if x.tid == eng["track"]), None)
+                            since_first = (t_now - eng["t_first_click"]) / 1e9
+                            since_last = (t_now - eng["t_last_click"]) / 1e9
+                            unseen = (t_now - tr.t_last) / 1e9 if tr is not None else 99.0
+                            done = None
+                            if since_last >= prm["dead_min_s"] and unseen >= prm["dead_gone_s"]:
+                                done = "dead"
+                            elif since_first > prm["give_up_s"]:
+                                banned.append((now, tuple(int(x) for x in eng["pred_cell"])))
+                                done = "gave_up"
+                            if done is None:
+                                if since_last >= prm["reclick_s"] and tr is not None and not moving:
+                                    strike(tr, pos, again=True)
+                                time.sleep(0.02)
+                                continue
+                            end_engagement(done)
+                            ev({"kind": "hand_off", "after": done})
+                            pos = quick_fix()
+                            posm.stop(pos)
+                            moving, path, pi = False, [], 0
+                            live = tracks_now()
+                            t_now = r.ns()
+                        with plock:
+                            q, gp = list(plan["queue"]), plan["goal_path"]
+                        # dispatch: queue[0], revalidated on the freshest frame
+                        if target is not None and not valid_at_dispatch(
+                                target, live, t_now, prm["track_drop_s"]):  # fmt: skip
+                            ev({"kind": "target_lost", "track": target.tid})
+                            target = None
+                        if target is None and q:
+                            for rank, cand in enumerate(q):
+                                ok_ = valid_at_dispatch(cand, live, t_now, prm["dispatch_fresh_s"])
+                                pc_ = cand.predict(t_now)
+                                ev({"kind": "dispatch", "track": cand.tid, "rank": rank,
+                                    "q_len": len(q), "valid": ok_,
+                                    "cell": [round(pc_[0], 1), round(pc_[1], 1)]})  # fmt: skip
+                                if ok_:
+                                    target, reads = cand, 0
+                                    break
+                        if target is not None:
+                            split.to("steering", time.monotonic())
+                            tcell = target.predict(t_now)
+                            if strike_due(moving, pos, tcell, prm["strike_cells"]):
+                                if (not strike(target, pos, again=False)
+                                        and reads >= prm["max_reads"]):  # fmt: skip
+                                    banned.append((now, (int(round(tcell[0])),
+                                                         int(round(tcell[1])))))  # fmt: skip
+                                    ev({"kind": "target_dropped", "track": target.tid,
+                                        "why": "no_sword", "reads": reads})  # fmt: skip
+                                    target = None
+                                continue
+                            if cheb(pos, tcell) <= prm["strike_cells"]:
+                                time.sleep(0.02)  # walking, about to arrive: the strike is next
+                                continue
+                            if not moving or now - last_walk >= prm["walk_every_s"]:
+                                ap = approach_path(ok, pos, tcell, prm["short"])
+                                if ap is None:
+                                    ev({"kind": "target_dropped", "track": target.tid,
+                                        "why": "no_path"})  # fmt: skip
+                                    banned.append((now, (int(round(tcell[0])),
+                                                         int(round(tcell[1])))))  # fmt: skip
+                                    target = None
+                                    continue
+                                path, pi = ap, 0
+                                j, (u, v) = step_target(path, 0, pos, prm["ahead"], ok,
+                                                        need_clear=moving)  # fmt: skip
+                                if j is not None:
+                                    gate_ = "map+units" if moving else "cursor"
+                                    walk_click(u, v, path[j], path[: j + 1], gate_, "steer")
+                                    pi = j
+                            time.sleep(0.02)
+                            continue
+                        # no target: the planner's waypoint, the GM never standing
+                        split.to("searching", time.monotonic())
+                        if gp is None:
+                            time.sleep(0.02)
+                            continue
+                        if not moving or now - last_walk >= prm["walk_every_s"]:
+                            cur = (reck.where(now + 0.15) or pos) if moving else pos
+                            ci = gp.index(cur) if cur in gp else (gp_i if gp_i < len(gp) else 0)
+                            if not moving and cur not in gp:
+                                # the plan was made from another cell: walk to its nearest point
+                                ci = min(range(len(gp)), key=lambda i_: cheb(gp[i_], cur))
+                            j, (u, v) = step_target(gp, ci, cur, prm["ahead"],
+                                                    need_clear=moving)  # fmt: skip
+                            if j is not None and j > ci:
+                                seg = gp[ci : j + 1] if cur in gp else [cur, gp[j]]
+                                gate_ = "map+units" if moving else "cursor"
+                                if walk_click(u, v, gp[j], seg, gate_, "search"):
+                                    gp_i = j
+                            elif not moving:
+                                with plock:
+                                    plan["goal_path"] = None  # nothing clickable: re-plan
+                        time.sleep(0.02)
+                finally:
+                    halt.set()
+                    for th in ths:
+                        th.join(timeout=3)
+
+            while not prm.get("pipelined") and time.monotonic() < deadline:
                 now = time.monotonic()
                 if eng is None and now - last_check[0] > CHECK_EVERY_S:
                     check("searching")
@@ -736,6 +1056,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         walk_click(u, v, path[j], path[ci : j + 1], "map+units", "search")
                         pi = j
                 time.sleep(0.03)
+            if prm.get("pipelined"):
+                pipelined_loop()
             if eng is not None:
                 end_engagement("time_box")
             split.to(None, time.monotonic())

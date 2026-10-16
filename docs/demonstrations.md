@@ -6563,6 +6563,46 @@ analysis. They are binding for the human baseline and for every hunt-flow versio
   - kills / h several times hunt@8's 43.5;
   - seen -> click slower than Batt's 1.11 s (the cursor read alone takes ~1.2-1.6 s).
 
+### 3.42 hunt-flow@2: PIPELINED (pre-registered 2026-10-16 ~11:34 ICT, BEFORE its run; Batt ~11:30: "hunting is still serial (find -> walk -> hit -> think again). Make it PIPELINED, like a player who plans the next target while hitting the current one")
+
+hunt-flow@1 was pre-registered (3.41) and was running when this came, so this is version 2.
+`scripts/hunt_flow.py --version 2`. Everything else is 3.41: the state, the gates, no looting, the
+bar.
+- **Three concurrent loops** on the monotonic clock:
+  - PERCEPTION, its own thread: the detector sampler plus a tracker that turns every frame
+    into tracks. It reads our cell at the frame's time from a shared position model and has
+    its own camera model.
+  - PLANNER, its own thread, every 0.1 s:
+    - the TARGET QUEUE, 3 deep, by the shortest CHAINED path: each next target nearest to the
+      previous one's predicted cell, not only to the GM;
+    - a walking monster costs 2 cells more, so standing targets come first;
+    - spots a dropped target left are skipped for 15 s;
+    - the NEXT EXPLORATION WAYPOINT, always held: the coverage plan's stalest tile and its A*
+      path, re-planned every 3 s or when reached.
+  - EXECUTOR, the main loop: it only clicks, and never waits for the planner (it reads the
+    latest queue).
+- **HAND-OFF:** the instant the target is dead by pixels (or given up), queue[0] or the
+  waypoint is taken at once. Our cell comes from ONE minimap read near the last one; there is
+  no settle wait unless that read fails.
+- **REVALIDATE AT DISPATCH:** queue[0] is dispatched only if the tracker still holds it with a
+  box <= 1.0 s old, else the next queued one. The strike then re-checks a box <= 0.4 s old and
+  needs the SWORD read before its click. Planning never bypasses a gate.
+- **A walk click while walking** goes to the FARTHEST path point (<= 6 ahead) that passes the
+  map and unit gates. v1 tried one point and gave up when it was within 60 px of a unit, which
+  stopped the GM near every target.
+- **Measured, beside the 3.41 bar (bot vs Batt, one table after every run):**
+  - IDLE BETWEEN KILLS = a death (packets) -> our next click of any kind (Batt p50 1.24 /
+    p90 1.80 s, n 50);
+  - kills / h (Batt 300);
+  - seen -> click (Batt 1.11 / 4.79 s);
+  - QUEUE HIT-THROUGH = queue[0] still valid at dispatch / queue[0] dispatches (bot log; Batt
+    has no queue).
+- **Prediction, written before the run:**
+  - idle between kills well under v1's;
+  - more engagements and kills per hour than v1;
+  - queue hit-through above 70 %;
+  - the bar's rate unchanged within noise (the strike is v1's).
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
