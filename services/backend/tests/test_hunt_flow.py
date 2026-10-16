@@ -425,3 +425,14 @@ def test_the_stall_breaker_walks_to_a_reachable_cell_away_from_the_pocket() -> N
     for c in got:
         assert grid[c[1], c[0]] and hf.cheb(c, (2, 20)) >= 6
     assert hf.unstall_cells(np.zeros((5, 5), bool), (2, 2), random.Random(1)) == []
+
+
+def test_walk_guard_from_v17_leaves_the_client_windows_out_of_the_pink_count() -> None:
+    crop = np.zeros((200, 200, 3), np.uint8)
+    crop[...] = (50, 140, 60)  # grass (BGR)
+    crop[150:160, 10:20] = (40, 40, 220)  # a red window icon at client (510-520, 550-560)
+    share = hf.pink_share(crop, (500, 400), 560.0, 500.0, 80, hf.GUARD_EXCLUDE)
+    assert share > 0.001
+    ui = [(0.0, 532.0, 600.0, 626.0)]  # the chat window
+    assert hf.pink_share(crop, (500, 400), 560.0, 500.0, 80, hf.GUARD_EXCLUDE, ui) == 0.0
+    assert hf.PARAMS[17]["guard_ui_mask"] and not hf.PARAMS[16].get("guard_ui_mask")
