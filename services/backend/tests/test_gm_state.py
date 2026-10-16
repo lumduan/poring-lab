@@ -263,3 +263,47 @@ def test_the_notices_label_parser(gs: Any) -> None:
     for bad in ("", "badge,grass", "all"):
         with pytest.raises(ValueError):
             gs.parse_notices(bad)
+
+
+# --- the loot rule (Batt 2026-10-16: the GM test state only) ---------------------------------
+
+
+def test_the_weight_rule_clears_at_restore_from_50_and_mid_run_from_40(gs: Any) -> None:
+    assert gs.weight_action([1052, 2030], at_restore=True) == "clear"  # 51.8 % (the 10-16 state)
+    assert gs.weight_action([130, 2030], at_restore=True) == "ok"
+    assert gs.weight_action([900, 2030], at_restore=True) == "ok"  # 44 %: under 50 %
+    assert gs.weight_action([900, 2030], at_restore=False) == "clear"  # a run clears from 40 %
+    assert gs.weight_action([700, 2030], at_restore=False) == "ok"
+    assert gs.weight_action(None, at_restore=True) == "unknown"
+    assert gs.weight_share([0, 0]) is None
+
+
+def test_icons_are_matched_exactly_and_unknown_icons_stay(gs: Any) -> None:
+    rng = np.random.default_rng(1)
+    shape = (gs.INV_ICON_BOX[3] - gs.INV_ICON_BOX[1], gs.INV_ICON_BOX[2] - gs.INV_ICON_BOX[0])
+    loot, kept, other = (rng.uniform(0, 255, shape).astype(np.float32) for _ in range(3))
+    refs = {"jellopy": ("loot", loot), "fly_wing": ("kept", kept)}
+    assert gs.classify_icon(loot + 1.0, refs)[:2] == ("loot", "jellopy")
+    assert gs.classify_icon(kept, refs)[:2] == ("kept", "fly_wing")
+    assert gs.classify_icon(other, refs)[0] == "unknown"  # never dropped
+
+
+def test_only_loot_slots_are_dropped_and_kept_ones_are_skipped(gs: Any) -> None:
+    assert gs.next_loot(["kept", "loot", "loot", "empty"]) == 1  # the Fly Wing stays in slot 0
+    assert gs.next_loot(["kept", "unknown", "empty"]) is None
+    assert gs.next_loot([]) is None
+
+
+def test_the_icon_crop_never_reaches_the_count_digits(gs: Any) -> None:
+    """The count is drawn right of and below the slot centre: the icon box stays left / above."""
+    x0, y0, x1, y1 = gs.INV_ICON_BOX
+    assert x1 <= 0 and y1 <= 0 and x1 - x0 >= 12 and y1 - y0 >= 12
+    frame = np.zeros((720, 1280, 3), np.uint8)
+    assert gs.icon_crop(frame, 6, 5).shape == (y1 - y0, x1 - x0)
+
+
+def test_the_hunt_flow_profile_never_lowers_the_base_level(gs: Any) -> None:
+    hf = gs.PROFILES["hunt-flow"]["restore"]
+    assert not any(c.startswith("@baselevelup") for c in hf)  # STR's points stay
+    assert "@joblevelup -49" in hf and "@heal" in hf
+    assert gs.PROFILES["standard"]["restore"] == gs.RESTORE

@@ -28,6 +28,9 @@ dir). The packets judge offline: after a restore the server sends the new levels
     gm_state.py restore   ensure_fixed once (types the restore lines only when the check fails)
     gm_state.py cut       cut the Lv 1 / 1 template from the CURRENT frame (a person has checked
                           the screen shows Base Lv. 1 and Job Lv. 1)
+    gm_state.py cut-hunt-flow   the hunt-flow profile's Lv 70 / 1 lines, same standard (no input)
+    gm_state.py cut-loot SPEC   OFFLINE: the loot / kept / empty icon references (below)
+    gm_state.py clear-loot      LIVE: drop the loot by the inventory's known path
 
 PER PATH (2026-10-09, poring_env.ui_sets; as ui_gate): the lock picks the template set. rdp ->
 data/ui_anchors/gm_state/ (unchanged); console -> data/ui_anchors/s2/gm_state/, used ONLY while
@@ -86,6 +89,14 @@ PROVE_MIN_NOTICES = 3  # held-out frames showing both notices, and showing none
 DIFF_LEVEL = 60.0  # gray levels
 MATCH = 4  # at most this many strongly differing pixels
 RESTORE = ("@baselevelup -98", "@joblevelup -49", "@heal")
+# PROFILES (2026-10-16): the standard state (Base Lv 1 / Job Lv 1) and hunt-flow's test state
+# (Batt, 2026-10-16: "raise the GM's STR ... so one hit kills"; "lv 70 it ok"): Base Lv 70,
+# Job Lv 1, STR 99 by the status window. Its restore never changes the base level (that would
+# take back the status points STR was raised with): only Job Lv and HP / SP. RDP set only.
+PROFILES: dict[str, dict[str, Any]] = {
+    "standard": {"file": "levels_1_1.npy", "restore": RESTORE},
+    "hunt-flow": {"file": "levels_70_1.npy", "restore": ("@joblevelup -49", "@heal")},
+}
 SETTLE_S = 2.0
 # The client's NOTICES after a level change (either way): a badge on the first shortcut icon and the
 # level-up icon in the corner. Opening the status window clears both (2026-10-09 16:53, checked on a
@@ -153,7 +164,11 @@ def _root(path: str) -> Path:
     return ui_sets.set_root(r.ROOT / "data" / "ui_anchors", path)
 
 
-def _template_path(path: str) -> Path:
+def _template_path(path: str, profile: str = "standard") -> Path:
+    if profile != "standard":
+        if path != "rdp":
+            raise r.Stop(f"gm_state: the {profile} profile has an RDP template only")
+        return TEMPLATE.parent / PROFILES[profile]["file"]
     return TEMPLATE if path == "rdp" else _root(path) / LEVELS_REL
 
 
@@ -169,14 +184,15 @@ def _require_proven(path: str, needs: tuple[str, ...]) -> None:
                      "docs/operations/s2-gate-templates.md)")  # fmt: skip
 
 
-def _template(path: str | None = None) -> Any:
+def _template(path: str | None = None, profile: str = "standard") -> Any:
     from poring_env import ui_sets
 
     path = path if path is not None else _path()
     _require_proven(path, ui_sets.GM_LEVELS_NEEDS)
-    tp = _template_path(path)
+    tp = _template_path(path, profile)
     if not tp.exists():
-        raise r.Stop(f"gm_state: no Lv 1 / 1 template ({tp}): run `gm_state.py cut` first")
+        what = "Lv 1 / 1" if profile == "standard" else f"{profile} level"
+        raise r.Stop(f"gm_state: no {what} template ({tp}): run `gm_state.py cut` first")
     return np.load(tp)
 
 
@@ -195,8 +211,8 @@ def require_ready() -> str:
     return path
 
 
-def check(screen: Any) -> dict[str, Any]:
-    t = _template()
+def check(screen: Any, profile: str = "standard") -> dict[str, Any]:
+    t = _template(profile=profile)
     a, b = _frames(screen)
     d1, d2 = distance(a, t), distance(b, t)
     return {"decision": decide(d1, d2), "dist": [round(d1, 2), round(d2, 2)], "frames": (a, b)}
@@ -260,31 +276,42 @@ def clear_notices(agent: Any, screen: Any, *, why: str) -> dict[str, Any]:
     return {"notices": seen, "cleared": True}
 
 
-def ensure_fixed(agent: Any, screen: Any, *, why: str,
-                 out_dir: Path | None = None) -> dict[str, Any]:  # fmt: skip
-    """The fixed state, restored by GM command when the level lines differ; else r.Stop."""
-    rec: dict[str, Any] = {"why": why, "t_ns": r.ns(), "restored": False}
-    got = check(screen)
+def ensure_fixed(agent: Any, screen: Any, *, why: str, out_dir: Path | None = None,
+                 profile: str = "standard", loot: bool = True) -> dict[str, Any]:  # fmt: skip
+    """The fixed state, restored by GM command when the level lines differ; else r.Stop.
+    ``loot`` (Batt 2026-10-16): the loot is cleared (clear_loot) and the weight must then read
+    under WEIGHT_MAX. Off only where dropped items would spoil the measurement (loot@1)."""
+    prof = PROFILES[profile]
+    rec: dict[str, Any] = {"why": why, "t_ns": r.ns(), "restored": False, "profile": profile}
+    got = check(screen, profile)
     if got["decision"] == "unstable":
         time.sleep(0.5)
-        got = check(screen)
+        got = check(screen, profile)
     rec["before"] = got["dist"]
     if got["decision"] != "fixed":
-        for cmd in RESTORE:
+        for cmd in prof["restore"]:
             r.gm(agent, screen, cmd)
         time.sleep(SETTLE_S)
         rec["restored"] = True
-        got = check(screen)
+        got = check(screen, profile)
         rec["after"] = got["dist"]
         if got["decision"] != "fixed":
-            raise r.Stop(f"gm_state ({why}): the GM is not at Base Lv 1 / Job Lv 1 after "
+            raise r.Stop(f"gm_state ({why}): the GM is not in the {profile} state after "
                          f"the restore (differing px {got['dist']}, match <= {MATCH})")  # fmt: skip
     rec["notices"] = clear_notices(agent, screen, why=why)
-    got = check(screen)  # the level lines again, after the status window came and went
+    got = check(screen, profile)  # the level lines again, after the status window came and went
     if got["decision"] != "fixed":
         raise r.Stop(f"gm_state ({why}): the level lines changed after the notices step")
     frame = got["frames"][1]
     rec["weight"] = _weight(got["frames"])
+    if loot:
+        rec["loot"] = clear_loot(agent, screen, why=why, out_dir=out_dir)
+        got = check(screen, profile)
+        rec["weight"] = _weight(got["frames"])
+        if weight_action(rec["weight"], at_restore=True) != "ok":
+            raise r.Stop(f"gm_state ({why}): the weight reads {rec['weight']} after clearing the "
+                         f"loot (must be under {WEIGHT_MAX:.0%}): a person first")  # fmt: skip
+        frame = got["frames"][1]
     if out_dir is not None:
         out_dir.mkdir(parents=True, exist_ok=True)
         x, y, w, h = BASIC_INFO_BOX
@@ -293,6 +320,194 @@ def ensure_fixed(agent: Any, screen: Any, *, why: str,
         rec["basic_info_crop"] = str(path)
     rec["fixed"] = True
     return rec
+
+
+# --- loot (Batt 2026-10-16: the GM TEST state only; 2000001's loot is sold, never thrown) ---------
+# "The GM is over 50 % weight: natural regen stops, and at 90 % it can't attack. ... getting rid
+# of LOOT ONLY. Never touch the equipped/kept items." No group-20 command removes items
+# (`@delitem` exists in the pinned source but group 20 lacks it, and it does not check whether an
+# item is equipped), so the inventory's known path is used: open it by its chord, drag a slot onto
+# open ground, confirm the quantity prompt with Enter, close it by its chord. Proven by hand
+# 2026-10-16 09:23-09:27 (1052 -> 130 weight, the Fly Wings untouched).
+# Only icons on the LOOT allowlist are dropped (cut from that morning's inventory, client pixels in
+# data/, never committed); anything else stays and is reported. Equipped items are not in the
+# inventory list at all.
+WEIGHT_MAX = 0.50  # every restore must read below this share (natural regen stops at 50 %)
+WEIGHT_CLEAR_AT = 0.40  # a long run clears its loot at the next safe moment above this share
+LOOT_DIR = TEMPLATE.parent / "loot_icons"
+INV_SLOT1 = (57, 157)  # client px: slot (0, 0) with the inventory at its home (0, 120)
+INV_PITCH = 32
+INV_COLS, INV_ROWS = 7, 6
+INV_TABS = {"etc": (10, 274), "use": (10, 165), "eqp": (10, 220)}  # each tab's label, client px
+INV_ICON_BOX = (-16, -16, -2, 0)  # x0, y0, x1, y1 from a slot's centre: the icon, not its count
+ICON_MATCH = 3.0  # mean grey difference: the same icon reads 0.0-0.07 across frames, the
+# closest two different references (an empty slot, Fluff) 9.2 (2026-10-16 frames)
+PROMPT_OK_BOX = (644, 312, 47, 23)  # client px: the quantity prompt's OK button (09:23 frame)
+PROMPT_MATCH = 12.0
+DROP_AT = (900, 470)  # client px: open ground right of the GM (the items land beside it)
+MAX_DROPS = 60
+
+
+def weight_share(w: Any) -> float | None:
+    """PURE: the weight readout [now, max] as a share, or None."""
+    if not w or len(w) != 2 or not w[1]:
+        return None
+    return float(w[0]) / float(w[1])
+
+
+def weight_action(w: Any, *, at_restore: bool) -> str:
+    """PURE: "ok", "clear" (a restore at or over WEIGHT_MAX, a run over WEIGHT_CLEAR_AT) or
+    "unknown" (no readout: a restore treats it as not ok)."""
+    share = weight_share(w)
+    if share is None:
+        return "unknown"
+    return "clear" if share >= (WEIGHT_MAX if at_restore else WEIGHT_CLEAR_AT) else "ok"
+
+
+def slot_centre(c: int, row: int) -> tuple[int, int]:
+    return INV_SLOT1[0] + INV_PITCH * c, INV_SLOT1[1] + INV_PITCH * row
+
+
+def icon_crop(frame: Any, c: int, row: int) -> Any:
+    """The slot's icon (grey), from a game-region frame with the inventory at its home."""
+    x, y = slot_centre(c, row)
+    x0, y0, x1, y1 = INV_ICON_BOX
+    return to_gray(frame)[y + y0 : y + y1, x + x0 : x + x1]
+
+
+def classify_icon(icon: Any, refs: dict[str, tuple[str, Any]]) -> tuple[str, str, float]:
+    """PURE: (kind, name, distance): kind "loot" | "kept" | "empty" from the nearest reference
+    within ICON_MATCH, else ("unknown", "", nearest distance). ``refs``: name -> (kind, icon)."""
+    best = ("unknown", "", float("inf"))
+    for name, (kind, ref) in refs.items():
+        if ref.shape != icon.shape:
+            continue
+        d = float(np.abs(icon.astype(np.float32) - ref).mean())
+        if d < best[2]:
+            best = (kind, name, d)
+    return best if best[2] <= ICON_MATCH else ("unknown", "", best[2])
+
+
+def next_loot(kinds: list[str]) -> int | None:
+    """PURE: the first LOOT slot (reading order) of a tab, or None. A drop shifts the later
+    stacks left, so the tab is read again after every drop."""
+    return next((i for i, k in enumerate(kinds) if k == "loot"), None)
+
+
+def load_loot_refs(d: Path = LOOT_DIR) -> dict[str, tuple[str, Any]]:
+    """name -> (kind, icon) from data/ui_anchors/gm_state/loot_icons/<kind>-<name>.npy."""
+    out: dict[str, tuple[str, Any]] = {}
+    for f in sorted(d.glob("*.npy")):
+        kind, _, name = f.stem.partition("-")
+        if kind in ("loot", "kept", "empty") and f.stem != "prompt_ok":
+            out[name] = (kind, np.load(f))
+    return out
+
+
+def _tab(agent: Any, screen: Any, name: str) -> None:
+    x, y = r.at(*INV_TABS[name])
+    agent.move(x + 3, y + 3)
+    time.sleep(0.15)
+    agent.move(x, y)
+    time.sleep(0.6)  # a cold-jump UI click is ignored: two motions first
+    agent.click(x, y)
+    time.sleep(0.8)
+
+
+def clear_loot(agent: Any, screen: Any, *, why: str, out_dir: Path | None = None) -> dict[str, Any]:
+    """Drop every LOOT stack of the inventory by its known path; r.Stop on anything unexpected
+    (a prompt that stays, a slot that does not change). Returns what was dropped and what stayed."""
+    import ui_gate
+
+    refs = load_loot_refs()
+    prompt = LOOT_DIR / "prompt_ok.npy"
+    if not refs or not prompt.exists():
+        raise r.Stop(f"gm_state ({why}): no loot icons in {LOOT_DIR} (gm_state.py cut-loot)")
+    ok_ref = np.load(prompt)
+    region = r.game_region()
+    out: dict[str, Any] = {"dropped": [], "unknown": 0, "kept": []}
+
+    def frame() -> Any:
+        return np.ascontiguousarray(r.grab_after(screen, region, r.ns())[..., :3])
+
+    def prompt_shown(f: Any) -> bool:
+        x, y, w, h = PROMPT_OK_BOX
+        return float(np.abs(to_gray(f)[y : y + h, x : x + w] - ok_ref).mean()) <= PROMPT_MATCH
+
+    r.activate_client(agent, screen)
+    agent.chord(*ui_gate.window_keys("inventory"))
+    time.sleep(1.0)
+    try:
+        drops = 0
+        for tab in INV_TABS:
+            _tab(agent, screen, tab)
+            fails = 0
+            while drops < MAX_DROPS:
+                f = frame()
+                got = [classify_icon(icon_crop(f, i % INV_COLS, i // INV_COLS), refs)
+                       for i in range(INV_COLS * INV_ROWS)]  # fmt: skip
+                i = next_loot([k for k, _n, _d in got])
+                if i is None:
+                    out["unknown"] += sum(k == "unknown" for k, _n, _d in got)
+                    out["kept"] += [n for k, n, _d in got if k == "kept"]
+                    break
+                before = icon_crop(f, i % INV_COLS, i // INV_COLS)
+                cx, cy = slot_centre(i % INV_COLS, i // INV_COLS)
+                x1, y1 = r.at(cx, cy)
+                x2, y2 = r.at(*DROP_AT)
+                agent.move(x1 + 3, y1 + 3)
+                time.sleep(0.15)
+                agent.move(x1, y1)
+                time.sleep(0.6)
+                agent.drag(x1, y1, x2, y2, steps=12)
+                time.sleep(1.0)
+                f2 = frame()
+                if prompt_shown(f2):
+                    r.activate_client(agent, screen)
+                    agent.chord("Enter")
+                    time.sleep(1.0)
+                    f2 = frame()
+                    if prompt_shown(f2):
+                        raise r.Stop(f"gm_state ({why}): the quantity prompt stayed open")
+                after = icon_crop(f2, i % INV_COLS, i // INV_COLS)
+                if float(np.abs(after - before).mean()) < 1.0:
+                    fails += 1
+                    if fails >= 2:
+                        raise r.Stop(f"gm_state ({why}): slot {i} of {tab} did not drop twice")
+                    continue
+                drops += 1
+                out["dropped"].append({"tab": tab, "slot": i, "item": got[i][1]})
+    finally:
+        r.activate_client(agent, screen)
+        agent.chord(*ui_gate.window_keys("inventory"))
+        time.sleep(1.0)
+        ui_gate.ensure_clear(agent, screen, why=f"{why}:loot")
+    if out_dir is not None:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / f"loot-{r.ns()}.json").write_text(json.dumps(out))
+    return out
+
+
+def cut_loot(spec: Path) -> dict[str, Any]:
+    """OFFLINE: icon references from full-desktop PNGs. ``spec`` (JSON): {"origin": [gx, gy],
+    "icons": [{"png", "col", "row", "kind", "name"}], "prompt": {"png"}} -- the slots a person
+    (or Claude, on a judged screenshot) identified. Writes LOOT_DIR (data/: never committed)."""
+    from PIL import Image
+
+    sp = json.loads(spec.read_text())
+    gx, gy = sp["origin"]
+    LOOT_DIR.mkdir(parents=True, exist_ok=True)
+    out = []
+    for it in sp["icons"]:
+        rgb = np.asarray(Image.open(it["png"]).convert("RGB"))[gy:, gx:]
+        f = np.ascontiguousarray(rgb[..., ::-1])
+        np.save(LOOT_DIR / f"{it['kind']}-{it['name']}.npy", icon_crop(f, it["col"], it["row"]))
+        out.append(f"{it['kind']}-{it['name']}")
+    rgb = np.asarray(Image.open(sp["prompt"]["png"]).convert("RGB"))[gy:, gx:]
+    x, y, w, h = PROMPT_OK_BOX
+    grey = to_gray(np.ascontiguousarray(rgb[..., ::-1]))
+    np.save(LOOT_DIR / "prompt_ok.npy", grey[y : y + h, x : x + w])
+    return {"cut": out, "prompt": True, "dir": str(LOOT_DIR)}
 
 
 # --- the S2 set: bank (live, no input), cut and prove (offline) -----------------------------------
@@ -524,7 +739,21 @@ def main() -> int:
     cmd = sys.argv[1:]
     if cmd and (cmd[0] in S2_COMMANDS or (cmd[0] == "cut" and len(cmd) > 1)):
         return _main_s2(cmd)
-    if cmd not in (["check"], ["restore"], ["cut"]):
+    if cmd[:1] == ["cut-loot"] and len(cmd) == 2:
+        print(json.dumps(cut_loot(Path(cmd[1]))))
+        return 0
+    if cmd[:1] == ["cut-hunt-flow"]:  # the Lv 70 / 1 level lines from the CURRENT frame
+        screen = r.Screen()
+        try:
+            frame = np.ascontiguousarray(r.grab_after(screen, r.game_region(), r.ns())[..., :3])
+        finally:
+            screen.close()
+        tp = _template_path("rdp", "hunt-flow")
+        np.save(tp, crop(frame))
+        r.to_png(np.ascontiguousarray(frame[:140, :220]), tp.with_suffix(".png"))
+        print(json.dumps({"cut": str(tp), "check": str(tp.with_suffix(".png"))}))
+        return 0
+    if cmd not in (["check"], ["restore"], ["cut"], ["clear-loot"]):
         print(__doc__)
         return 2
     if cmd == ["cut"] and _path() != "rdp":
@@ -543,6 +772,8 @@ def main() -> int:
             got = check(screen)
             got.pop("frames")
             print(json.dumps(got))
+        elif cmd == ["clear-loot"]:
+            print(json.dumps(clear_loot(agent, screen, why="cli")))
         else:
             rec = ensure_fixed(agent, screen, why="cli")
             print(json.dumps(rec))

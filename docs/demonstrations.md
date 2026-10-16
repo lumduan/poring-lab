@@ -6326,6 +6326,32 @@ Job Lv 1, weight < 50 %. Set 2026-10-16 09:33-09:38 by `@baselevelup 98`, STR ra
 window's arrow, then `@baselevelup -29` (the pinned source keeps the stats when enough points
 remain: 82 left).
 
+**The GM's weight rule (Batt 2026-10-16 ~09:20; `gm_state.py`, the GM TEST state only: 2000001's
+loot is sold at the shop, never thrown).**
+- Every restore (`ensure_fixed`) clears the loot. The weight must then read under 50 % on the
+  pixel readout, or the run stops for a person.
+- A long run clears it at its next safe moment once the weight passes 40 %.
+- No group-20 command removes items:
+  - `@delitem` exists in the pinned source, but group 20 lacks it, and it does not check whether
+    an item is equipped;
+  - `@storeall` and `@dropall` unequip first.
+- So `clear_loot` takes the inventory's known path: its chord, a tab, a drag of the slot onto
+  open ground, Enter on the quantity prompt (only when the prompt's OK button matches), and the
+  chord to close it.
+- Only icons on a LOOT allowlist are dropped: 10 icons cut from the 09:22-09:25 inventory
+  (data/, never committed). The Fly Wing is KEPT; anything unknown stays and is reported.
+  - The same icon reads 0.0-0.07 across frames; the closest two different references read 9.2;
+    the match bar is 3.0.
+- loot@1's trials opt out: dropped items would lie on the floor a pickup trial reads.
+- Proven:
+  - by hand, 09:23-09:27: 1052 -> 130;
+  - live by `gm_state.py clear-loot`, 10:56-10:57: 8 stacks dropped, 246 -> 172 / 4970, the Fly
+    Wing kept, 2 unknown stacks left;
+  - tests in `test_gm_state.py`.
+- `gm_state` PROFILES: `hunt-flow` = Base Lv 70 / Job Lv 1 (its template was cut 10:56 from a
+  judged frame). Its restore is `@joblevelup -49` and `@heal` only, never the base level, so
+  STR's points stay.
+
 **The human baseline:** Batt played 10 minutes himself, recorded as
 `20261016T093835-demo-human-demo`:
 - armed 09:38:35; his first input at 09:40:34; the time box ended 09:51:35;

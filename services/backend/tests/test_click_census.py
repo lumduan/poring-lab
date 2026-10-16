@@ -55,6 +55,10 @@ ALLOWED = {
                            "the detector (no unit within 60 px on the last 2 fresh frames): "
                            "3.39's recorded deviation (2), option B. A click from a standstill is "
                            "cursor-gated (GATED below)"),
+    "scripts/gm_state.py": (1, "UI only: an inventory TAB label inside the open window, after two "
+                               "motions (clear_loot, Batt 2026-10-16: the GM test state's loot "
+                               "rule); the loot leaves by agent.drag onto open ground + Enter on "
+                               "the quantity prompt, matched to its OK button first"),
 }  # fmt: skip
 
 

@@ -567,8 +567,10 @@ def run(mode: str, n: int, seed: int) -> int:
                 time.sleep(rr.SCENE_ENTRY_S)
                 # the GM's FIXED TEST STATE (Batt 2026-10-09 ~16:00): a kill levels the GM up, so
                 # every trial starts at Base / Job Lv 1, checked from pixels and recorded
+                # loot=False: dropped items would lie on the floor this trial reads (pickups)
                 trial["gm_state"] = gm_state.ensure_fixed(agent, screen, why=f"{RULE}:trial{k}",
-                                                          out_dir=log.dir / "gm_state")  # fmt: skip
+                                                          out_dir=log.dir / "gm_state",
+                                                          loot=False)  # fmt: skip
                 hud(rig, f"trial {k}: spot {spot[0]},{spot[1]} ({mode})")
                 track, here = kill(rig, spot, trial)
                 if track is None or trial.get("kill") != "vanished" or here is None:
