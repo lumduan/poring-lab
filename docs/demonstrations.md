@@ -7748,6 +7748,34 @@ starts after the takeover quiet period (>= 10 min without human input).
 - the nearest at selection >= 80 % (v12 74 %);
 - hard bars: the Creamy risk remains until the species check (v14).
 
+**Run 1 RESULT (2026-10-16 21:25:55-22:25:58, session 20261016T212555-demo-hunt-flow13, seed
+20261219; the full hour; judged 22:28):**
+- **Engagements:** 262, all dead. Attack clicks: 265 direct / 1 read.
+- **Kills:** kills / h 171.9; engaged 141 / h; 31 more from walk clicks; 36 unintended
+  requests.
+- **The bar:** 134 / 257 = 52.1 % (Wilson 46.1-58.2). Outcomes: hit 134, hit_late 58, no_unit 53,
+  never_hit 12.
+- **Landing within W by species:** Poring 81 / 119 = 68 %, Lunatic 33 / 59 = 56 %, Drops 20 / 25 =
+  80 %.
+- **Pre-emptions:** 9.8 / min (v12 18).
+- **Timing:**
+  - seen -> click p50 3.19 s;
+  - death -> next click p50 0.62 s;
+  - box age at click p50 574 / p90 934 ms.
+- **Bursts:** ends gone 150 (57 %), arrow 98, risky 17; click -> arrow p50 0.38 s.
+  - **"Gone" is the landing loser:** right after the click the detector loses the box (the
+    cursor over a small sprite, or the monster stepping > 60 px), so the burst stops without a
+    re-click, and a miss waits for the 2-s re-click (the late hits).
+- **Selection:** the nearest at selection 84 %, distance p50 5.
+- **Heading:** reversals 9.5 / min, straight runs 9.7 cells.
+- **Monsters in sight:** 18.5 / 10 min.
+- **HARD BAR FAILED again:** a Creamy, through the size gate. The species identity is next.
+- **vs the prediction:**
+  - pre-emptions <= 5 / min: NO (9.8);
+  - landing >= 75 % for Poring and Lunatic: NO (68 / 56);
+  - engaged kills / h >= 120: YES (141);
+  - the nearest at selection >= 80 %: YES (84 %).
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
