@@ -6309,6 +6309,75 @@ re-read data that was already judged. No verdict changes, and nothing here was p
     `anim_region.py measure --map prt_fild08 --max-pass2 300 --resume-from 20261015T210808-demo-anim-region-prt-fild08`.
   - Its result is recorded here when it ends. Until then the region is not built and not used.
 
+### 3.40 hunt-flow: CLICK -> WALK IN -> HIT LANDS (Batt 2026-10-16 ~09:20; supersedes kill success as the goal)
+
+Batt's words: "the skill is CLICK -> WALK IN -> HIT LANDS, fast and never missing. Killing doesn't
+matter. On a community server other bots compete for monsters, so reaction speed is the point."
+
+**The test state (recorded for these runs):** the GM, immune (`@monsterignore`, confirmed for the
+login), Base Lv 70 (Batt 09:36: "remove lv99 ... lv 70 it ok"), STR 99 (status window), ATK 197,
+HIT 71. One hit kills Poring (50 HP), Lunatic (60) and Drops (55); a Pupa (427, immobile) takes ~3.
+Job Lv 1, weight < 50 %. Set 2026-10-16 09:33-09:38 by `@baselevelup 98`, STR raised by the status
+window's arrow, then `@baselevelup -29` (the pinned source keeps the stats when enough points
+remain: 82 left).
+
+**The human baseline:** Batt played 10 minutes himself, recorded as
+`20261016T093835-demo-human-demo`:
+- armed 09:38:35; his first input at 09:40:34; the time box ended 09:51:35;
+- quiet (60 s without his input) at 09:51:52;
+- 3,888 frames (NAS `human-demos/`, q80), 2,504 detector frames, 2,197 packet events and
+  14,827 input events of his, all local (never committed).
+- Recorded by `scripts/human_demo.py`, which holds no input path (tested).
+
+**THE METRICS, pre-registered 2026-10-16 09:57, after the demo was banked and BEFORE any of its
+analysis. They are binding for the human baseline and for every hunt-flow version alike;
+`scripts/flow_judge.py`.**
+- **Clock and positions:** the host's CLOCK_MONOTONIC throughout. Positions come from
+  `hunt_core.walk_positions` (the along-walk model) for every mob and for our GM. Packets are
+  offline ground truth only.
+- **Window:** [t0, t0 + 600 s]. t0 = our first `self_move_request` after arming (the human)
+  or after the loop start (the bot). Nothing before t0 counts.
+- **CLICK:**
+  - human: an accepted left `mouse_button` down of source=human, inside the game region, not
+    on the fixed UI (`loot1.in_ui`);
+  - bot: every click the runner logs.
+- **ATTACK CLICK:** a click followed by our `attack_request` within 1.5 s and before the next
+  click. For the bot, every SWORD-gated attack click counts, whatever follows.
+- **ATTEMPT:** a click whose point lies inside a detector monster box (expanded by 6 px) on the
+  newest detector frame captured <= 0.5 s before it. An attempt with no attack request is a
+  `walk_only` miss.
+- **TARGET G:**
+  - the attack request's `target_gid`;
+  - for an attempt with no request, the mob nearest the click's picked cell
+    (`picking.pick_cells` from our cell at the click), within 2 cells; else `no_unit`.
+  - When a mob other than the request's target is nearest the picked cell (within 2) and the
+    request's target is not within 2, the click is `other_unit`.
+- **TRIAL:** an attack click or an attempt, unless we already acted on its G in the 3 s before
+  it (a follow-up click while attacking: reported, not a trial).
+- **HIT RATE** = trials with a damaging act of ours (damage > 0) on G within T = 3.0 s / trials.
+  - Failures: `walk_only`, `request_no_act`, `miss_only` (acts with damage 0 only),
+    `other_unit`, `no_unit`, `no_response`.
+  - **Bar for the bot:** > 95 % over >= 60 trials pooled over same-version runs, safety events
+    0. The Wilson 95 % interval is reported.
+- **REACTION** (p50 / p90, trials that hit):
+  - first seen = the earliest detector frame, going back from the click with no gap over 2 s,
+    with a monster box whose picked cell lies within 1.5 cells of G's cell then;
+  - reported: seen -> click, click -> first damaging act, seen -> hit.
+- **Range:** the Chebyshev distance in cells from our GM to G at each trial's click.
+- **IDLE %:** the share of the window in which our GM is not moving (the walk model).
+  - It is split into idle within 1.5 s after one of our acts (attacking) and idle otherwise.
+- **WALK CLICKS:** clicks followed by a `self_move_request` (and no attack request) within
+  1.0 s.
+  - spacing = Chebyshev cells from our cell to the requested destination;
+  - cadence = the interval between consecutive walk clicks;
+  - the share sent while we were still moving.
+- **TARGET CHOICE:** at each trial, G's rank by distance among the mobs within 14 cells (1 =
+  nearest).
+  - A SWITCH = a trial on G' while another G was clicked or hit in the 3 s before and is still
+    alive.
+- **KILLS / H:** deaths (reason 1) of units we acted on, in the window. Pickups are reported
+  (time spent).
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
