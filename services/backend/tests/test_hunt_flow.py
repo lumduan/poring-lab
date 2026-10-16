@@ -400,3 +400,15 @@ def test_walk_guard_refuses_near_the_gm_and_near_pink_and_ignores_the_gm_hair() 
     rgb = np.zeros((200, 200, 3), np.uint8)
     rgb[...] = (230, 120, 140)  # pink given as RGB reads as blue-ish in BGR: not pink
     assert hf.pink_share(rgb, (600, 400), 700.0, 500.0, 80, hf.GUARD_EXCLUDE) == 0.0
+
+
+def test_the_opportunistic_strike_skips_a_target_dropped_here_within_the_ban() -> None:
+    near = hf.Track(0, [(0, (12, 10))], box="b", box_t=0)
+    other = hf.Track(1, [(0, (13, 12))], box="b", box_t=0)
+    assert hf.nearest_close([near, other], (10, 10), 0, 4, 1.0) is near
+    banned = [(100.0, (12, 10))]  # v15 run 1: near was dropped (three refused tag reads)
+    got = hf.nearest_close([near], (10, 10), 0, 4, 1.0, (), banned, 105.0, 15.0)
+    assert got is None
+    assert hf.nearest_close([near], (10, 10), 0, 4, 1.0, (), banned, 116.0, 15.0) is near
+    far_ban = [(100.0, (30, 30))]
+    assert hf.nearest_close([near], (10, 10), 0, 4, 1.0, (), far_ban, 105.0, 15.0) is near

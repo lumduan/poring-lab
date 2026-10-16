@@ -7889,6 +7889,21 @@ landing, engaged 131.9 kills / h, tag reads refused 46.7 %.
   and v15 does not change walk clicks. A walk-click guard is measured offline during this run
   and will be pre-registered on its own.
 
+**Attempt 1 (2026-10-16 23:50:00, session 20261016T235000-demo-hunt-flow15, seed 20261221):
+STOPPED at 12.6 min by the stuck guard ("no progress for 60 s at (127, 114)"), 25 engagements.**
+- **Cause:** a LOOP the opportunistic strike made with v14's tag reads.
+  - The target, track 290, was a Pupa (1008; the packets put it at (125, 115)). It is immobile
+    and has no tag template, so every read is refused.
+  - After three refused reads it was dropped and its cell banned for 15 s. But v11's
+    `nearest_close` never looked at the bans, so it PRE-EMPTED it again at once: 14 cycles in
+    60 s.
+  - The stuck guard stopped the run as designed. No input was sent after the stop; the GM was not
+    restored by the runner, which skips the restore on a stop (checked before attempt 2).
+- **Fix (a bug fix, not a play change):** `nearest_close` skips the cells of targets dropped within
+  `drop_target_s`, as `choose` always did (test: `test_the_opportunistic_strike_skips_a_target_
+  dropped_here_within_the_ban`). Attempt 2 runs v15 with this fix and a fresh seed; nothing
+  else changes.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.

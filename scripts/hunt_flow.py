@@ -767,14 +767,21 @@ def gate_reasons_hunt(
 
 
 def nearest_close(tracks: Sequence[Track], here: Sequence[float], t_ns: int, cells: float,
-                  fresh_s: float, exclude: Sequence[int] = ()) -> Track | None:  # fmt: skip
+                  fresh_s: float, exclude: Sequence[int] = (),
+                  banned: Sequence[tuple[float, Cell]] = (), now_s: float = 0.0,
+                  ban_s: float = 15.0) -> Track | None:  # fmt: skip
     """PURE (v11, the OPPORTUNISTIC strike): the nearest tracked target within ``cells``
-    (Chebyshev, predicted) whose newest box is <= ``fresh_s`` old; None if there is none."""
+    (Chebyshev, predicted) whose newest box is <= ``fresh_s`` old; None if there is none. It skips
+    the cells a DROPPED target left within ``ban_s``, as ``choose`` does (v15 run 1: a target
+    dropped after three refused tag reads was pre-empted again at once, 60 s, the stuck stop)."""
     best = None
     for tr in tracks:
         if tr.tid in exclude or (t_ns - tr.box_t) / 1e9 > fresh_s:
             continue
-        d = cheb(here, tr.predict(t_ns))
+        p = tr.predict(t_ns)
+        if any(now_s - tb < ban_s and cheb(p, cb) <= 2 for tb, cb in banned):
+            continue
+        d = cheb(here, p)
         if d <= cells and (best is None or d < best[0]):
             best = (d, tr)
     return None if best is None else best[1]
@@ -2594,8 +2601,10 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         if prm.get("opportunistic") and eng is None:
                             # v11: a target within strike range PRE-EMPTS the plan at once (Batt
                             # 19:0x: Porings around the GM while it walked to a far one)
-                            nc_ = nearest_close(live, pos, t_now, prm["opp_cells"],
-                                                prm["gate_fresh_s"], list(done_ids))  # fmt: skip
+                            nc_ = nearest_close(
+                                live, pos, t_now, prm["opp_cells"], prm["gate_fresh_s"],
+                                list(done_ids), list(banned), now, prm["drop_target_s"],
+                            )  # fmt: skip
                             do_ = nc_ is not None and (target is None or nc_.tid != target.tid)
                             if do_ and prm.get("preempt_hyst") and nc_ is not None:
                                 # v13: only a CLEARLY better one, and only once it has stayed
