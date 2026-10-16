@@ -7975,7 +7975,7 @@ click)"), 12 engagements.**
   - tag refusals below v14's and > 15 %: YES (40.4 %);
   - the non-target bar failed: as predicted.
 
-### 3.58 hunt-flow@16: FOCUS TRACKING + the WALK GUARD safety layer (pre-registered 2026-10-17 __TIME__ ICT, the commit time __SHA__, BEFORE its run; Batt B2 / B4, the overnight order item 5)
+### 3.58 hunt-flow@16: FOCUS TRACKING + the WALK GUARD safety layer (pre-registered 2026-10-17 01:34 ICT, the commit time e6b9a94, BEFORE its run; Batt B2 / B4, the overnight order item 5)
 
 **The ONE main change (`focus`, built in 3f1a47b):**
 - The chosen target's sprite crop is cut from the very frame of its detector box.
