@@ -636,6 +636,55 @@ def heading_metrics(events: Sequence[Mapping[str, Any]], t0: int, w1: int) -> di
             "cells_walked_per_min": round(walked / mins, 1)}  # fmt: skip
 
 
+def selection_metrics(events: Sequence[Mapping[str, Any]], lines: Iterable[str],
+                      rows: Sequence[Mapping[str, Any]], engs: Sequence[Mapping[str, Any]],
+                      view: tuple[int, int] = (12, 9)) -> dict[str, Any]:  # fmt: skip
+    """Batt 19:0x: per engagement, at its SELECTION (the earliest dispatch / pre-emption of the
+    engaged track's re-acquire chain), the distance GM -> the engaged mob (packets, cells) and
+    whether it was the NEAREST live mob in view. ``rows`` = bot_engagements rows (k, gid)."""
+    import hunt_core as hc
+
+    recs = [json.loads(x) for x in lines]
+    pred: dict[int, list[int]] = {}
+    sel_t: dict[int, list[int]] = {}
+    for x in recs:
+        if x.get("kind") == "target_reacquired":
+            pred.setdefault(int(x["as"]), []).append(int(x["track"]))
+        elif (x.get("kind") == "dispatch" and x.get("valid")) or x.get("kind") == "preempt":
+            tid = int(x["track"] if x.get("kind") == "dispatch" else x["to"])
+            sel_t.setdefault(tid, []).append(int(x["t_ns"]))
+    pos = hc.walk_positions(events)
+    life = alive(events)
+    track, _mv = gm_track(events)
+    gid_by_k = {int(r_["k"]): r_.get("gid") for r_ in rows if r_.get("gid") is not None}
+    dists, nearest = [], 0
+    for e in engs:
+        g = gid_by_k.get(int(e["k"]))
+        if g is None:
+            continue
+        chain, todo = set(), [int(e["track"])]
+        while todo:
+            t_ = todo.pop()
+            if t_ not in chain:
+                chain.add(t_)
+                todo += pred.get(t_, [])
+        ts = [t for c in chain for t in sel_t.get(c, []) if t <= int(e["t_first_click"])]
+        t_sel = min(ts) if ts else int(e["t_first_click"])
+        gm, mc = at(track, t_sel), mob_at(pos, g, t_sel)
+        if gm is None or mc is None:
+            continue
+        d = cheb(gm, mc)
+        dists.append(d)
+        others = [cheb(gm, c) for g2 in pos if g2 != g and present(life, g2, t_sel)
+                  and (c := mob_at(pos, g2, t_sel)) is not None
+                  and abs(c[0] - gm[0]) <= view[0] and abs(c[1] - gm[1]) <= view[1]]  # fmt: skip
+        nearest += all(d <= o for o in others)
+    n = len(dists)
+    return {"n": n, "nearest_share": round(nearest / n, 3) if n else None,
+            "dist_p50": pct([float(x) for x in dists], 0.5),
+            "dist_p90": pct([float(x) for x in dists], 0.9)}  # fmt: skip
+
+
 def hard_bars(events: Sequence[Mapping[str, Any]], t0: int, w1: int,
               targets: Mapping[int, str]) -> dict[str, Any]:  # fmt: skip
     """v10's HARD BARS (Batt): NPC contacts, map changes after the start, and units of a non-target
@@ -913,6 +962,8 @@ def bot(sid: str) -> dict[str, Any]:
 
     out["hard_bars"] = hard_bars(events, t0, w1, farm0.TARGETS)
     out["heading"] = heading_metrics(events, t0, w1)
+    out["selection"] = selection_metrics(events, (d / "events.jsonl").read_text().splitlines(),
+                                         out["engagements_w"]["rows"], engs)  # fmt: skip
     strikes_ = [x for x in map(json.loads, (d / "clicks.jsonl").read_text().splitlines())
                 if x.get("kind") == "strike" and t0 <= int(x["t"]) < w1]  # fmt: skip
     out["gate"] = {
@@ -971,6 +1022,10 @@ def row(o: Mapping[str, Any]) -> dict[str, str]:
             p=100 * o["walk_click_accuracy"]["moving"]["within_1"],
             a=o["walk_click_accuracy"]["moving"]["along_p50"] or 0.0),
         "pickups per kill": f"{o.get('pickups_per_kill', '-')}",
+        "engaged the nearest (at selection)": "-" if not (o.get("selection") or {}).get("n")
+        else f"{100 * o['selection']['nearest_share']:.0f} %",
+        "distance at selection p50/p90": "-" if not (o.get("selection") or {}).get("n")
+        else f"{o['selection']['dist_p50']} / {o['selection']['dist_p90']}",
         "reversals / min": "-" if not o.get("heading") else f"{o['heading']['reversals_per_min']}",
         "mean straight run (cells)": "-" if not o.get("heading")
         else f"{o['heading']['mean_straight_run']}",

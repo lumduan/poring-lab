@@ -62,6 +62,7 @@ MINIMAP_IMG = (1138, 21, 124, 120)  # v9 attempt 2: the minimap's picture (clien
 MAP_SAME_MAX = 20.0  # median summed |diff| of the picture: the same map stays far below
 FREEZE_S = 3.0  # v10: identical frames this long after a walk click = a frozen client display
 GM_SPRITE_PX = (640.0, 340.0)  # v10: the GM's sprite centre (client px; the camera centres on it)
+GM_SPRITE_BOX = (620.0, 285.0, 660.0, 375.0)  # v11: the GM's drawn sprite (x0, y0, x1, y1)
 DRIFT_CELLS = 3
 STUCK_S = 60.0
 MS_CELL = 150.0  # the GM's measured walk speed (hunt@5's packets)
@@ -124,15 +125,20 @@ VERSIONS = {
     "the attack click goes straight to the fresh detection (no park, no read). Every attack "
     "click logs its branch and reasons; hard bars: zero NPC contact, zero non-target hit, zero "
     "map change",
-    11: "ENGAGEMENT ZONE (Batt 18:2x: a Poring circled the GM ~15 s while it re-aimed at every "
+    11: "OPPORTUNISTIC STRIKE (Batt 19:0x: Porings around the GM while it walked to a far one): "
+    "any tracked target within 4 cells PRE-EMPTS the plan at once (nearest first); the hunting "
+    "risk rule: overlap is risky only with a NON-target box, the GM check is occlusion only (its "
+    "sprite hides >= 50 % of the box); the stand wait only on the read path; the walk-click "
+    "clearance (12 px) only around non-target boxes (the Creamy hits)",
+    12: "ENGAGEMENT ZONE (Batt 18:2x: a Poring circled the GM ~15 s while it re-aimed at every "
     "hop): once a target is chosen, ONE path to the nearest walkable cell within the attack-click "
     "range of it (7 cells, 4 for a walking target: Batt's p90 / p50), re-planned only when the "
     "target leaves that zone; inside the zone the GM strikes (the risk gate) once it stands",
-    12: "NO BACK-AND-FORTH (Batt 18:2x; Batt 3.6 reversals / min and 16.9-cell straight runs, the "
+    13: "NO BACK-AND-FORTH (Batt 18:2x; Batt 3.6 reversals / min and 16.9-cell straight runs, the "
     "bot 5.9-7.8 and 10-11): the search walks LAWNMOWER LANES (east / west to the area's edge or a "
     "dead end, a 12-cell shift, the next lane back), with no time-based re-pick of the goal; the "
     "target queue's first pick costs +4 cells when it needs a turn of > 120 deg",
-    13: "RE-TARGET WHILE STEERING (Batt's change 2: detection -> dispatch, v7 p50 2.85 s, was the "
+    14: "RE-TARGET WHILE STEERING (Batt's change 2: detection -> dispatch, v7 p50 2.85 s, was the "
     "bot steering to ANOTHER target that then failed, 19 / 32): after >= 1 s on a target, the "
     "planner's queue[0] replaces it when it is valid and cheaper by >= 2 cells (Chebyshev to the "
     "predicted cell, +2 for a walking one)",
@@ -182,14 +188,12 @@ PARAMS[10] = {**PARAMS[9], "freeze_guard": True, "risk_gate": True, "gate_near_g
               # boxes arrive 0.3-0.65 s after their frame; v9's stand gate holds it still 1.2 s)
               "gate_fresh_s": 1.0}  # fmt: skip
 # v11 = Batt's ENGAGEMENT ZONE (18:2x); the re-target build waits (it re-aims, the zone commits)
-PARAMS[11] = {**PARAMS[10], "zone": True, "zone_radius": 7, "zone_radius_walking": 4,
-              # SAFETY amendment (a hard bar failed: v7 attempt 2 and v10 attempt 2 hit a Creamy
-              # through WALK clicks the client turned into attacks): a walk click never lands in a
-              # monster box (grown 12 px) of the newest frame, nor a steer click < 3 cells from
-              # the target
-              "box_clear_px": 12.0, "steer_clear_cells": 3}  # fmt: skip
-PARAMS[12] = {**PARAMS[11], "sweep": True, "lane_w": 12, "rev_penalty": 4.0}
-PARAMS[13] = {**PARAMS[12], "retarget": True, "retarget_margin": 2.0, "retarget_commit_s": 1.0}
+PARAMS[11] = {**PARAMS[10], "opportunistic": True, "opp_cells": 4, "risk_targets_ok": True,
+              "still_read_only": True, "box_clear_px": 12.0,
+              "box_clear_nontarget_only": True}  # fmt: skip
+PARAMS[12] = {**PARAMS[11], "zone": True, "zone_radius": 7, "zone_radius_walking": 4}
+PARAMS[13] = {**PARAMS[12], "sweep": True, "lane_w": 12, "rev_penalty": 4.0}
+PARAMS[14] = {**PARAMS[13], "retarget": True, "retarget_margin": 2.0, "retarget_commit_s": 1.0}
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -596,6 +600,50 @@ def gate_reasons(b: Any, others: Sequence[Any], gm_px: Sequence[float], near_gm_
     if ignore_near:
         why.append("ignore_species")
     return why
+
+
+def gate_reasons_hunt(
+    b: Any,
+    nontargets: Sequence[Any],
+    gm_box: Sequence[float],
+    min_conf: float,
+    npc_near: bool,
+    ignore_near: bool,
+    hide_frac: float = 0.5,
+) -> list[str]:
+    """PURE (v11, Batt 19:0x, the HUNTING risk rule): overlap is risky only with a NON-target box
+    (a Creamy-sized one); a cluster of targets is not (a misclick still hits a target). The GM
+    check is OCCLUSION only: the GM's sprite box hides >= ``hide_frac`` of the target's box.
+    Low confidence, an L3 NPC near, a non-target species near stay risky."""
+    why: list[str] = []
+    if any(not (o.x1 < b.x0 or o.x0 > b.x1 or o.y1 < b.y0 or o.y0 > b.y1) for o in nontargets):
+        why.append("intersect_nontarget")
+    ix = max(0.0, min(b.x1, gm_box[2]) - max(b.x0, gm_box[0]))
+    iy = max(0.0, min(b.y1, gm_box[3]) - max(b.y0, gm_box[1]))
+    area = max(1e-9, (b.x1 - b.x0) * (b.y1 - b.y0))
+    if ix * iy / area >= hide_frac:
+        why.append("gm_hides")
+    if float(b.score) < min_conf:
+        why.append("low_conf")
+    if npc_near:
+        why.append("npc_near")
+    if ignore_near:
+        why.append("ignore_species")
+    return why
+
+
+def nearest_close(tracks: Sequence[Track], here: Sequence[float], t_ns: int, cells: float,
+                  fresh_s: float, exclude: Sequence[int] = ()) -> Track | None:  # fmt: skip
+    """PURE (v11, the OPPORTUNISTIC strike): the nearest tracked target within ``cells``
+    (Chebyshev, predicted) whose newest box is <= ``fresh_s`` old; None if there is none."""
+    best = None
+    for tr in tracks:
+        if tr.tid in exclude or (t_ns - tr.box_t) / 1e9 > fresh_s:
+            continue
+        d = cheb(here, tr.predict(t_ns))
+        if d <= cells and (best is None or d < best[0]):
+            best = (d, tr)
+    return None if best is None else best[1]
 
 
 def map_same(ref: Any, cur: Any, max_median: float = MAP_SAME_MAX) -> bool:
@@ -1135,6 +1183,12 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 b0 = min(near0, key=lambda x: float(np.hypot(*(np.array(f1.foot(x))
                                                                 - f1.foot(tr.box)))))  # fmt: skip
                 others = [o for o in fr0[-1][1] if o is not b0]
+                nontargets = []
+                if prm.get("risk_targets_ok"):  # v11: only non-target boxes make overlap risky
+                    for o in others:
+                        c_o, sc_o = cell_of(o, here)
+                        if c_o is None or f1.native_size(o, sc_o) > f1.MAX_NATIVE_PX:
+                            nontargets.append(o)
                 pc0 = tr.predict(r.ns())
                 npc_near = any(cheb(pc0, (int(n_["x"]), int(n_["y"]))) <= prm["gate_npc_cells"]
                                for n_ in npcs)  # fmt: skip
@@ -1148,6 +1202,9 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     c_o, sc_o = cell_of(o, here)
                     if c_o is not None and f1.native_size(o, sc_o) > f1.MAX_NATIVE_PX:
                         ignore_near = True  # a Creamy (no target) next to it
+                if prm.get("risk_targets_ok"):
+                    return gate_reasons_hunt(b0, nontargets, GM_SPRITE_BOX, prm["gate_min_conf"],
+                                             npc_near, ignore_near)  # fmt: skip
                 return gate_reasons(b0, others, GM_SPRITE_PX, prm["gate_near_gm_px"],
                                     prm["gate_min_conf"], npc_near, ignore_near)  # fmt: skip
 
@@ -1600,9 +1657,15 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     if px_ is None:
                         return True
                     fr_ = sampler.since(max(0, len(sampler.frames) - 1))
-                    return not fr_ or all(
+                    if not fr_:
+                        return True
+                    boxes_ = [b for b in fr_[-1][1] if b.cls == "monster"]
+                    if prm.get("box_clear_nontarget_only"):  # v11: targets are fine to click
+                        boxes_ = [b for b in boxes_ if (lambda cs: cs[0] is None or f1.native_size(
+                            b, cs[1]) > f1.MAX_NATIVE_PX)(cell_of(b, pos))]  # fmt: skip
+                    return all(
                         not (b.x0 - px_ <= u <= b.x1 + px_ and b.y0 - px_ <= v <= b.y1 + px_)
-                        for b in fr_[-1][1] if b.cls == "monster")  # fmt: skip
+                        for b in boxes_)  # fmt: skip
 
                 def cont_click(route: list[Cell], grid: Any, why: str,
                                avoid: tuple[float, float] | None = None) -> bool:  # fmt: skip
@@ -1849,6 +1912,17 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             else:
                                 ev({"kind": "target_lost", "track": target.tid})
                                 target = None
+                        if prm.get("opportunistic") and eng is None:
+                            # v11: a target within strike range PRE-EMPTS the plan at once (Batt
+                            # 19:0x: Porings around the GM while it walked to a far one)
+                            nc_ = nearest_close(live, pos, t_now, prm["opp_cells"],
+                                                prm["gate_fresh_s"], list(done_ids))  # fmt: skip
+                            if nc_ is not None and (target is None or nc_.tid != target.tid):
+                                ev({"kind": "preempt", "to": nc_.tid,
+                                    "from": None if target is None else target.tid,
+                                    "d": round(cheb(pos, nc_.predict(t_now)), 1)})  # fmt: skip
+                                target, reads = nc_, 0
+                                t_target[0] = now
                         if (prm.get("retarget") and target is not None and eng is None and q
                                 and now - t_target[0] >= prm["retarget_commit_s"]):  # fmt: skip
                             # v11: while steering, switch to the planner's better queue[0]
@@ -1910,7 +1984,10 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             if in_rng:
                                 in_range_since.setdefault(target.tid, time.monotonic())
                             if not moving and in_rng:
-                                if prm.get("still_gate") and not box_still(
+                                need_still = bool(prm.get("still_gate")) and (
+                                    not prm.get("still_read_only")
+                                    or bool(gate_risks(target, pos)))  # fmt: skip
+                                if need_still and not box_still(
                                         target.boxes, r.ns(), prm["still_s"],
                                         prm["still_px"]):  # fmt: skip
                                     # v9: no read until the target STANDS (the pointer keeps

@@ -241,3 +241,18 @@ def test_heading_metrics_count_reversals_and_straight_runs() -> None:
     out = fj.heading_metrics(events, 0, int(60 * S))
     assert out["reversals_per_min"] == 1.0
     assert out["mean_straight_run"] == round((10 + 5 + 5) / 3, 1)
+
+
+def test_selection_metrics_measure_distance_and_nearest_at_the_dispatch() -> None:
+    near, far = MOB + 1, MOB + 2
+    events = [ev(0.0, "self_move", x0=10, y0=10, x1=10, y1=10),
+              appear(0.0, near, 12, 10), appear(0.0, far, 17, 10)]  # fmt: skip
+    lines = [
+        json.dumps({"t_ns": int(1.0 * S), "kind": "dispatch", "track": 7, "valid": True}),
+        json.dumps({"t_ns": int(2.0 * S), "kind": "target_reacquired", "track": 7, "as": 9}),
+    ]
+    engs = [{"k": 0, "track": 9, "t_first_click": int(3.0 * S)}]
+    out = fj.selection_metrics(events, lines, [{"k": 0, "gid": far}], engs)
+    assert out == {"n": 1, "nearest_share": 0.0, "dist_p50": 7.0, "dist_p90": 7.0}
+    out = fj.selection_metrics(events, lines, [{"k": 0, "gid": near}], engs)
+    assert out["nearest_share"] == 1.0 and out["dist_p50"] == 2.0
