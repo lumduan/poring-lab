@@ -7409,7 +7409,7 @@ first-click rate):**
   - one on a floor item picks it up (looting is off: counted as unintended pickups);
   - both are counted, and neither is a hard bar.
 
-### 3.52 hunt-flow@10: the RISK-BASED cursor gate (pre-registered 2026-10-16 __TIME__ ICT, the commit time __SHA__, BEFORE its run; Batt approved 3.51's STRICT rule, 2026-10-16 ~17:37)
+### 3.52 hunt-flow@10: the RISK-BASED cursor gate (pre-registered 2026-10-16 17:39 ICT, the commit time dec80c0, BEFORE its run; Batt approved 3.51's STRICT rule, 2026-10-16 ~17:37)
 
 **Batt:** "Approved: the RISK-BASED cursor gate with the STRICT rule ... Otherwise click the fresh
 detection directly. Pre-register it as the next version with your logged branch/reason per attack
