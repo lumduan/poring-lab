@@ -7948,7 +7948,7 @@ click)"), 12 engagements.**
 - Attempt 5 runs v15 with all the fixes and a fresh seed.
 
 **Attempt 5 = RUN 1 RESULT (2026-10-17 00:31:05-01:31:06, session
-20261017T003105-demo-hunt-flow15, seed 20261225; the full hour; judged 01:3x by `flow_judge.bot`):**
+20261017T003105-demo-hunt-flow15, seed 20261225; the full hour; judged by `flow_judge.bot` before 01:34, b207cdc):**
 - **Engagements:** 120 (119 dead, 1 gave up). Attack clicks: 154 direct / 1 read.
 - **Kills:** kills / h 142.9; engaged 95.9 / h; 47 more from walk clicks.
   - Monsters in sight were 14.2 / 10 min (v14 19.8). The run spent its first ~15 min in the sparse
@@ -7974,6 +7974,51 @@ click)"), 12 engagements.**
   - the bar >= 78 %: YES, at the edge (78.1 %);
   - tag refusals below v14's and > 15 %: YES (40.4 %);
   - the non-target bar failed: as predicted.
+
+### 3.58 hunt-flow@16: FOCUS TRACKING + the WALK GUARD safety layer (pre-registered 2026-10-17 __TIME__ ICT, the commit time __SHA__, BEFORE its run; Batt B2 / B4, the overnight order item 5)
+
+**The ONE main change (`focus`, built in 3f1a47b):**
+- The chosen target's sprite crop is cut from the very frame of its detector box.
+- It is tracked by a fast NCC on every frame-bus frame (~10-20 Hz).
+- The attack click and every burst re-click aim at the fresh centre (<= 0.35 s old), led by
+  its velocity x (age + 0.15 s). Otherwise they aim at the detector box (p50 0.52-0.57 s old).
+- The pointer that rests for the name-tag read is at that point too.
+
+**Plus a SAFETY layer, not a play change (`walk_guard`, cdf4b2b), from this version on:**
+- **Why:** v14's six Creamy hits (the hard bar) were all WALK clicks the client turned into
+  attacks, on a sprite the detector cannot see (3.56).
+- **The rule:** a walk click is refused when its pixel is within 120 px of the GM's sprite, or
+  when a fresh grab shows pink pixels within 80 px of it. Pink means R over G by > 51 and B not
+  under G by > 10: a Poring's or a Creamy's colours, never the ground's. The GM's own sprite box
+  is excluded.
+- A refused candidate falls back to the next point on the route. If none passes, there is no
+  walk click this cycle.
+- **Measured before the run:**
+  - offline, on v10-v14's recordings (the nearest 5-Hz frame <= 0.25 s before the click), it
+    covers 14 of 17 Creamy walk-attacks and flags 25 % of the normal walk clicks;
+  - live, read-only, on two grabs at 00:00, it flagged only points near a Poring, a Lunatic and
+    the UI's red icons, not the ground, the trees or the GM.
+- Its verdicts are counted in the run summary (`walk_guard`: ok / near_gm / pink).
+
+**Kept from v15:** its miss path and its three bug fixes (the opportunistic strike respects
+dropped targets; the stall breaker, counting idle search time only).
+
+**v15 as the reference (attempt 5 = run 1, 3.57):** bar 78.1 %, engaged 95.9 kills / h (monsters in
+sight 14.2 / 10 min), tag reads refused 40.4 %, seen -> click p50 4.20 s, 2 Creamy hits through
+walk clicks.
+
+**Run:** 60 min, a fresh seed, the same test state, nice 10, detector on the CPU (GPU freeze).
+
+**Prediction, written before the run:**
+- focus: >= 50 % of the direct attack clicks aim from the tracker (`aim_src` focus:*);
+- the bar (landing within W per engagement) >= 78 % (v15 78.1 %);
+- tag reads refused <= 35 % of reads (v15 40.4 %, v14 46.7 %): the pointer rests on the tracked
+  sprite;
+- the guard: Creamy attack requests <= 1 in the hour (v14 6, v13 4); attack requests from walk
+  clicks <= half of v14's; the guard refuses <= 35 % of the candidates it checks;
+- engaged kills / h >= 0.8 x v15's 95.9 (the guard costs some walk clicks);
+- hard bars: zero NPC contact, zero map change; the non-target bar PASSES unless a Creamy is
+  hit through one of the 3 / 17 cases the guard missed offline.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
