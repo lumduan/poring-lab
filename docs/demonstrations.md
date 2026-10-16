@@ -7519,6 +7519,86 @@ within the version):** the gate's box may be up to 1.0 s old (`gate_fresh_s`, th
 freshness). v9's stand gate already holds the target still over the last 1.2 s, so a <= 1 s box
 is where it stands. 60 min, seed 20261216.
 
+**Attempt 2 RESULT (2026-10-16 18:16:16-19:16:16, session 20261016T181616-demo-hunt-flow10, seed
+20261216; the full hour; judged 19:18):**
+- **THE GATE WORKED.** Attack clicks: 127 direct / 4 read. The reasons on the reads: intersect 2,
+  low_conf 2.
+- **Kills:**
+  - engagements 131, all dead;
+  - engaged kills 99.9 / h (v7 47.9, v9 12.3);
+  - kills / h 135.9 in all.
+- **Timing:**
+  - seen -> click p50 5.14 / p90 13.17 s (v7 11.85);
+  - in range -> click p50 0.66 s (v7 6.74);
+  - death -> next click p50 0.94 s (Batt 1.24).
+- **Split:** striking 168 s (5 %, from ~30 %), steering 1,843 s (51 %), searching 1,496 s (42 %).
+- **The bar:** 93 / 131 = 71.0 % (Wilson 62.7-78.1). First click lands 139 / 193 = 72 %.
+  - Of the 38 misses: 23 hit LATE (the 2-s re-click after a direct click that only walked onto
+    a hopping sprite), 11 found no unit, 4 never hit.
+  - Trial why: walk_only 27, no_unit 21, request_no_act 6.
+- **HARD BAR FAILED: a non-target hit (Creamy 1018), from a WALK click turned attack** (+1,663.6 s,
+  a click 2 cells from it). The direct clicks were clean. The same cause hit v7 attempt 2
+  (corrected above).
+- **Unintended attack requests:** 41.
+- **Selection:** the nearest at selection 72 %; distance p50 5 / p90 9.
+- **Heading:** reversals 9.58 / min (Batt 3.6); straight runs 9.8 cells (Batt 16.9).
+- **Walk clicks:** moving within 1 cell 76 %.
+- **NPC contacts and map changes:** 0 / 0.
+- **Batt's 18:53 clip (this run):** Porings around the GM while it walked to a far box by the
+  wall. The log shows two causes:
+  - Hopping Porings churn their track ids, so the queue's nearest entry (rank 0) was often "not
+    valid" at dispatch, and a farther, steady box (rank 1-2) was dispatched.
+  - 93 no_path drops in the run, many for cells by the wall.
+  - The zone and the clearance were not in v10, and the risk rule was not involved (all direct).
+- **vs the prediction:**
+  - direct >= 60 %: YES (97 %);
+  - in range -> click < 2 s: YES (0.66);
+  - seen -> click < 8 s: YES (5.14);
+  - engaged kills / h >= 60: YES (99.9);
+  - the bar >= 90 %: NO (71.0);
+  - hard bars 0 / 0 / 0: NO (a Creamy, via a walk click).
+
+### 3.53 hunt-flow@11: the OPPORTUNISTIC STRIKE (pre-registered 2026-10-16 __TIME__ ICT, the commit time __SHA__, BEFORE its run; Batt 19:0x)
+
+**Batt (19:0x, his 18:53 clip):** "4-6 Porings cluster around the GM ... yet the GM leaves the
+cluster and walks to a far target near the wall ... Fix as one pre-registered change
+('opportunistic strike')."
+
+**The ONE main change:**
+1. **PRE-EMPTION.** Any tracked target with a box <= 1.0 s old, within 4 cells (Chebyshev,
+   predicted), replaces the current target at once, the nearest first (`nearest_close`, logged
+   `preempt`). The planner's queue resumes after the engagement. "Target" means a box that passes
+   the size gate, so a Creamy never qualifies.
+2. **THE HUNTING RISK RULE** (`gate_reasons_hunt`):
+   - Overlap is risky only with a NON-target box: a Creamy-sized box, or one whose cell cannot be
+     placed. A cluster of targets is NOT risky, because a misclick still hits a target.
+   - The GM check is OCCLUSION only: the GM's sprite box (client 620-660 x 285-375) hides >= 50 %
+     of the target's box.
+   - Low confidence, an L3 NPC within 12 cells, and a Creamy within 150 px stay risky.
+3. **The stand wait (v9) applies only on the read path.** A direct click does not wait for a
+   hopping target to stand.
+4. **The walk-click clearance** (the newest frame's boxes grown 12 px) covers NON-target boxes
+   only: the Creamy hits. Around target boxes a misclick hits a target.
+
+**Measured beside the bar:**
+- the nearest at selection (v10 72 %) and the distance at selection (v10 p50 5; Batt's p50 4 at
+  the click);
+- preemptions per engagement;
+- the bot-vs-Batt table, with the reversals and straight-run columns.
+
+**Hard bars unchanged:** zero NPC contact, zero non-target hit, zero map change.
+
+**Run:** 60 min, seed 20261217, prt_fild08, GM immune Lv 70 / STR 99, nice 10, detector on the CPU
+(GPU freeze).
+
+**Prediction, written before the run:**
+- the nearest at selection >= 85 %, distance at selection p50 <= 4;
+- engaged kills / h >= 100 (v10 99.9);
+- seen -> click p50 <= 5 s;
+- hard bars 0 / 0 / 0, with the Creamy now kept out by the non-target clearance;
+- the bar is reported, not expected to reach 90 %: v10's misses are late re-clicks on hopping
+  targets, which this change does not address.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
