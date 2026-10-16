@@ -7346,6 +7346,44 @@ STOPPED BY ITSELF at 6.1 min by the map-change guard. A FALSE STOP.**
 - A different picture still stops the run as a map change.
 - 60 min, seed 20261214.
 
+**Attempt 2 RESULT (2026-10-16 17:35:42-18:01:03, session 20261016T173542-demo-hunt-flow9, seed
+20261214): STOPPED BY ITSELF at 25.3 min, after a CLIENT DISPLAY FREEZE.**
+- **The freeze.** From +1,402 s (17:59:04) every recorded frame was pixel-identical (mean diff
+  0.0).
+  - The game client stopped redrawing, but it still took input. The packets show the GM walking
+    on our clicks from (124,84) to (119,40) and back to (126,96).
+  - The taskbar clock still updated: the RDP stream was live, only the game picture froze.
+  - The bot clicked BLIND on the stale picture for ~60 s until the no-progress stop. Its
+    measured cell sat at (124,82).
+  - In that window: no attack request, no NPC contact, no map change (packets).
+  - /health showed no alarm: the frame bus heart-beats on a still picture.
+- **Recovery (18:04-18:06):**
+  - `ro_agent.py recover gm --retries 0`: Alt+F4, relaunch, GM login. The client came back with
+    the GM at (125,96), the server's cell.
+  - Then `collect_v2.py immune-on`; its screenshot read "You are now immune to attacks."; then
+    `immune-confirm` (18:06:03).
+- **Judged window: 24.4 min, to the freeze.**
+  - The bar: 5 / 7.
+  - Kills: engaged 5 (12 / h); 22 more from walk clicks (23 unintended attack requests).
+  - In range -> click: p50 5.38 s.
+  - Seen -> click: p50 7.26 s.
+  - Hard bars: 0 / 0 / 0.
+- **Strike reads:** 56 calls -> 7 SWORD (12.5 %), 8 WALK (14 %; v8 29 %), 40 unknown, 1 pickup.
+  - Per read: no_match 45, no_cursor 38, low_score 13.
+  - The standing-target gate halved the WALK reads. The proven read itself fails ~70 % of the
+    time in the field (no_match / no_cursor). This favours 3.52's direct clicks.
+  - no_still drops: 9; park stale: 9.
+- **The "Your participation is appreciated." chat line is explained:** it is the tail of a
+  server-wide broadcast, "Currently, the Dungeon Teleport Service Provider Election is being held
+  in all major cities." It is not an NPC contact.
+- **vs the prediction:**
+  - SWORD > 25 %: NO (12.5 %);
+  - WALK < 10 %: NO (14 %);
+  - engaged kills / h above 19.4: NO (12);
+  - the bar >= 90 %: NO (71 %);
+  - in range -> click < 6 s: YES (5.38);
+  - unintended attacks not above v7's: NO (23 in 24.4 min).
+
 ### 3.51 PROPOSAL (design only, awaiting Batt's decision; nothing built): a RISK-BASED cursor gate for hunting attack clicks
 
 **Batt (17:2x):** "REQUIRE the SWORD read when there is real risk ... Otherwise CLICK the fresh
@@ -7444,6 +7482,12 @@ and strike_call.
 
 **HARD BARS:** zero NPC contact, zero non-target hit, zero map change. Any one fails the run,
 whatever else it shows. A live dialog or a map change also stops the run, as before.
+
+**Amendment (recorded 2026-10-16 ~18:08, BEFORE its run; a safety guard, not the main change):**
+the FREEZE GUARD. If the game picture stays pixel-identical for > 3 s after a walk click, the run
+stops: "the picture froze". A commanded walk always scrolls the camera, so a frozen picture can
+only be a frozen client display. The motion thread compares consecutive frames. This came from
+v9 attempt 2's blind 60 s.
 
 **Run:** 60 min, a fresh seed, prt_fild08, GM immune Lv 70 / STR 99, no looting, nice 10, detector
 on the CPU (GPU freeze).

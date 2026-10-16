@@ -60,6 +60,7 @@ MINIMAP_EVERY_S = 0.3
 JUMP_CELLS = 12  # v7: a minimap read this far from the measured cell, twice: a map change
 MINIMAP_IMG = (1138, 21, 124, 120)  # v9 attempt 2: the minimap's picture (client px)
 MAP_SAME_MAX = 20.0  # median summed |diff| of the picture: the same map stays far below
+FREEZE_S = 3.0  # v10: identical frames this long after a walk click = a frozen client display
 GM_SPRITE_PX = (640.0, 340.0)  # v10: the GM's sprite centre (client px; the camera centres on it)
 DRIFT_CELLS = 3
 STUCK_S = 60.0
@@ -166,8 +167,8 @@ PARAMS[9] = {**PARAMS[8], "still_gate": True, "still_s": 1.2, "still_px": 8.0,
 # v9 attempt 2 (2026-10-16 17:35, 8d4a780, before its run): a position jump on the SAME map (the
 # minimap picture unchanged) re-anchors on the minimap instead of stopping (run 1: a 14-cell lag)
 PARAMS[9]["jump_reanchor"] = True
-PARAMS[10] = {**PARAMS[9], "risk_gate": True, "gate_near_gm_px": 45.0, "gate_min_conf": 0.6,
-              "gate_npc_cells": 12, "gate_ignore_px": 150.0}  # fmt: skip
+PARAMS[10] = {**PARAMS[9], "freeze_guard": True, "risk_gate": True, "gate_near_gm_px": 45.0,
+              "gate_min_conf": 0.6, "gate_npc_cells": 12, "gate_ignore_px": 150.0}  # fmt: skip
 PARAMS[11] = {**PARAMS[10], "retarget": True, "retarget_margin": 2.0, "retarget_commit_s": 1.0}
 
 
@@ -1307,6 +1308,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         t_, img_ = scr.grab(gx0, gy0, gw, gh)
                         img3 = np.ascontiguousarray(np.asarray(img_)[..., :3])
                         g_ = rp_.gray(img3)
+                        if prev_g is None or bool(np.any(g_ != prev_g)):
+                            mstate["changed_t"] = time.monotonic()  # v10: the picture is live
                         if prev_g is not None:
                             off_ = rp_.scene_shift(prev_img, img3)
                             c_ = np.array(posm.at(time.monotonic()), dtype=float)
@@ -1500,6 +1503,16 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 try:
                     while time.monotonic() < deadline:
                         now = time.monotonic()
+                        ch_t = mstate.get("changed_t")
+                        if (prm.get("freeze_guard") and ch_t is not None
+                                and now - ch_t > FREEZE_S and last_walk > ch_t + 0.5):  # fmt: skip
+                            # v10 safety (v9 attempt 2, 17:59: the client stopped redrawing while
+                            # it still took input; the bot clicked blind 60 s): no input on a
+                            # stale picture
+                            raise f0.FarmStop(
+                                f"the picture froze ({now - ch_t:.1f} s identical "
+                                f"after a walk click): a frozen client display"
+                            )
                         if (prm.get("escape_after_s") and eng is None
                                 and now - last_progress[0] > STUCK_S):  # fmt: skip
                             raise f0.FarmStop(f"no progress for {STUCK_S:.0f} s at {pos}: stopped")
