@@ -103,6 +103,11 @@ VERSIONS = {
     "velocity x 0.50 s (v5's per-click lag p50, 1,074 clicks, IQR 0.40-0.60), fractional, and "
     "the ahead candidates count from there; the unit-clearance gate stays on the frame's own "
     "pixel. No looting (Batt 15:00)",
+    8: "LEAN STRIKE (v7: striking was 33 % of the judged run, in range -> click p50 6.74 s): no "
+    "park after the attack click (nothing used it), and a STALE park (the drawn cursor never "
+    "showed at the park point in 1.5 s) counts as a failed read instead of parking again at "
+    "once; every strike call is logged with its park and call time. Bug fixes in: the "
+    "stuck-search escape (v7 attempt 2 sat 12.7 min) and a no-progress stop",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -136,6 +141,7 @@ PARAMS[7] = {**PARAMS[6], "loot": False, "click_lead_s": 0.50, "lead_window_s": 
              # lead along the motion was p50 +0.5 cells vs the lag's +3.8); the lead is now our
              # own walk / attack commands replayed from the measured cell over the last 0.6 s
              "lead_from": "commands", "click_lead_s_commands": 0.6}  # fmt: skip
+PARAMS[8] = {**PARAMS[7], "strike_lean": True, "escape_after_s": 3.0}
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -903,8 +909,10 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 nonlocal eng, k, reads
                 prev = split._cat
                 split.to("striking", time.monotonic())
+                t_call0 = time.monotonic()
                 fast_ = bool(prm.get("fast_read"))
-                ok_park = True if fast_ else pr.park()  # v8: no park before the fast read
+                ok_park = True if fast_ else pr.park()  # (fast_read: no park before it)
+                park_ms = round((time.monotonic() - t_call0) * 1000)
                 fr = sampler.since(max(0, len(sampler.frames) - 1))
                 b = tr.box
                 if fr and (r.ns() - fr[-1][0]) / 1e9 <= prm["fresh_s"]:
@@ -915,6 +923,11 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                                                  - f1.foot(tr.box))))  # fmt: skip
                 u, v = f1.centre(b)
                 if not ok_park or loot1.in_ui(u, v):
+                    if prm.get("strike_lean") and not ok_park:
+                        # v8: a STALE park (the drawn cursor never showed at the park point in
+                        # 1.5 s) counts as a failed read; v7 parked again at once, unbounded
+                        reads += 1
+                        ev({"kind": "park_stale", "track": tr.tid, "park_ms": park_ms})
                     split.to(prev, time.monotonic())
                     return False
                 t_read0 = r.ns()
@@ -957,8 +970,11 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     shape = pr.read(u, v)["shape"]
                 pc = tr.predict(r.ns())
                 hov = {"t": r.ns(), "at": [round(u, 1), round(v, 1)], "read": shape, "path": path_,
+                       "park_ms": park_ms, "call_ms": round((time.monotonic() - t_call0) * 1000),
                        "age_ms": round((r.ns() - tr.box_t) / 1e6),
                        "pred_cell": [round(pc[0], 2), round(pc[1], 2)]}  # fmt: skip
+                ev({"kind": "strike_call", "track": tr.tid, "read": shape, "path": path_,
+                    "park_ms": park_ms, "call_ms": hov["call_ms"], "again": again})  # fmt: skip
                 if shape != "sword":
                     reads += 1
                     note(f"read {shape}: no click")
@@ -986,8 +1002,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 if in_range_since.get(tr.tid) is not None:
                     hov["in_range_to_click_s"] = round(tc / 1e9 - in_range_since[tr.tid], 2)
                 ptr[0] = (u, v)
-                if not fast_:
-                    pr.park()
+                if not fast_ and not prm.get("strike_lean"):
+                    pr.park()  # v8 strike_lean: no park after the click (nothing used it)
                 click_log({"t": tc, "u": round(u, 1), "v": round(v, 1), "kind": "strike",
                            "track": tr.tid, "pred_cell": hov["pred_cell"], "again": again,
                            "aim_px": hov.get("aim_px"), "read_ms": hov.get("read_ms"),

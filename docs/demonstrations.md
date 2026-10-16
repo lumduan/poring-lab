@@ -7103,6 +7103,60 @@ estimator):**
   1-cell bar of >= 40 % stands; the offline ceiling is ~68 %.
 - 60 min, seed 20261210.
 
+**Attempt 2 RESULT (2026-10-16 15:26:57-16:18:59, session 20261016T152657-demo-hunt-flow7, seed
+20261210; judged 16:20).**
+- **Stopped by me at 51.5 min.** From +38.8 min it had sat idle for 12.7 min on a ledge strip
+  near (97,144), where no goal had a path from the GM's cell; the pipelined loop had no
+  no-progress guard. The judge's window ends at the last click (38.9 min).
+- **THE CHANGE WORKED: moving walk clicks within 1 cell 588 / 752 = 78 %**, along the motion
+  +0.0 (v6: 5 %, +3.54). Standing: 77 %.
+- **The bar:** 29 / 32 = 90.6 % (Wilson 75.8-96.8). First click lands 54 / 61.
+- **Kills:**
+  - engagements 32, all dead;
+  - engaged kills 47.9 / h (v6 38.2);
+  - kills / h 80.3 in all, with 21 other kills;
+  - unintended attack requests 25 (v6 39; v5 16-19 per 30 min).
+- **Timing:**
+  - seen -> click p50 11.85 s (Batt 1.11);
+  - in range -> click p50 6.74 / p90 17.16 s;
+  - read p50 1.85 s;
+  - aim error p50 1.5 / p90 32.1 px;
+  - death -> next click p50 2.05 s (Batt 1.24).
+- **Movement:**
+  - monsters in sight 12.4 / 10 min in the judged window; the packet funnel over the full run
+    counts 115 lives in view, 22 / 10 min;
+  - moving share of search 74 %;
+  - walk clicks while moving 57.9 %, interval p50 0.96 s.
+- **Split:** searching 1,589 s (762 of them the stuck end), striking 777 s, steering 721 s.
+- **Striking was the largest fixable sink.**
+  - 17 targets were dropped after 3 failed reads, each read behind a park that waits up to 1.5 s
+    for the drawn cursor.
+  - A stale park returns without counting a read, so it parks again.
+- **Funnel** (packets, every monster life in view):
+  - killed by an engagement 26 % (v6 15 %);
+  - killed by a walk click 19 % (v6 28 %);
+  - dispatched then dropped 23 %;
+  - never dispatched (in view p50 2 s) 28 %.
+- **The 22 unintended kills:** 19 were STEERING clicks that landed within 1-3 cells of the target
+  (14 within 1; perception's monster cell is p50 1.3 cells off), and 3 were search clicks.
+- **Also:**
+  - 2 floor items were picked up by walk clicks (looting is off): a Carrot and a Jellopy.
+  - The chat showed "Your participation is appreciated." No npc_* packet appears in the run.
+  - The job level rose 1 -> 4 from the kills; the restore resets it.
+- **Safety:** no NPC contact, no dialog, no map change after the start warp, HP intact.
+- **vs the prediction:**
+  - moving clicks within 1 cell >= 40 %: YES (78 %);
+  - along error within +-1: YES (0.0);
+  - unintended attacks per 30 min below v5's and v6's: NO (19 per 30 min = v5's);
+  - lost targets below v6's: YES, 205 in 38.8 min = 5.3 / min vs 6.4;
+  - engaged kills / h above 38: YES (47.9);
+  - the bar >= 90 %: YES (90.6);
+  - stops per engagement not above v6's 24.9: YES (16.5).
+- **Bug fixes for the next version (63529b6):**
+  - the stuck-search ESCAPE: with no goal path for 3 s, walk the full walkable grid to the main
+    component of the search area;
+  - a no-progress stop in the pipelined loop (60 s).
+
 ### 3.48 fast-read@1: the FAST cursor read vs the proven one, no clicks (pre-registered 2026-10-16 15:46 ICT, the commit time 162aea0, BEFORE it runs)
 
 **Why.** In hunt-flow@6 the proven cursor gate (Prober9 + robust2) cost p50 3.56 s between "in
@@ -7147,6 +7201,53 @@ The read times (fast vs proven, p50) are reported beside the rule.
   in the same call (so a fast read never decides alone in doubt). The parks before and after the
   click go.
 - FAIL: the fast read gates nothing. hunt-flow@8 takes the next loser instead.
+
+**fast-read@1 RESULT (2026-10-16 16:22:02-16:23:48, `data/fast_read/check-20261016T162202.jsonl`):
+FAIL. The fast read gates nothing.**
+- 18 comparisons. Stopped by me once the rule could not be met.
+- **Every fast read was "unknown":** "cursor not left", |A - B2| = 0 px at the target in 16 of
+  18. The client had NOT drawn its cursor on the target 0.25 s after the glide.
+  - This agrees with walk@6's measurement: the drawn cursor appears 0.41-0.82 s after the last
+    motion (HOVER6_S 0.55).
+  - The "~0.15-0.2 s behind during continuous travel" of 13:24 does not hold for a stop.
+- **No SWORD on either side.** The proven read on the "standing" monsters was unknown or walk:
+  the monsters wandered off during the ~2.5 s pair, 4 of 6 flagged as moved.
+- **Times:** fast 0.66 s vs proven 1.93 s, p50.
+- **What it teaches:** a fast read needs ~0.6 s of pointer rest before A and ~0.8 s after the
+  blink. That is ~1.5 s against the proven read's ~1.9 s, a small gain. The waste around the
+  proven read is the bigger one (3.49).
+
+### 3.49 hunt-flow@8: LEAN STRIKE (pre-registered 2026-10-16 __TIME__ ICT, the commit time __SHA__, BEFORE its run)
+
+**From v7 attempt 2:** striking was 777 s, 33 % of the judged run, and in range -> click was
+p50 6.74 s, with read time only p50 1.85 s. The rest was waste around the proven read.
+- **A park after EVERY attack click** (~1-1.8 s) whose background nothing used. The next read
+  always parks first.
+- **A STALE park returned without counting a read.** A stale park is one where the drawn cursor
+  never showed at the park point within 1.5 s. The loop called the strike again at once and
+  parked again, with no bound. 777 s over ~84 strike calls is ~9 s a call.
+
+**The ONE main change (`strike_lean`):**
+- no park after the attack click;
+- a stale park counts as a failed read, so 3 of them drop the target like any no_sword;
+- every strike call is logged as `strike_call`, with its read, park time and call time.
+
+**Also in (bug fixes from v7 attempt 2, 63529b6):**
+- **the stuck-search ESCAPE:** when no goal has had a path for 3 s, walk the full walkable grid
+  to the nearest cells of the search area's main component;
+- **a no-progress stop** in the pipelined loop: 60 s without a click outside an engagement.
+- Everything else is v7 attempt 2: the commanded-path lead, no looting, the map-change stop.
+
+**Run:** 60 min, seed 20261211, prt_fild08, GM immune Lv 70 / STR 99, nice 10, detector on the
+CPU (GPU freeze).
+
+**Prediction, written before the run:**
+- in range -> click p50 under 4.0 s (v7 6.74);
+- striking under 20 % of the run (v7 33 %);
+- engaged kills / h above v7's 47.9;
+- the bar (hit within 5 s) >= 90 %;
+- unintended attacks not above v7's (19 per 30 min);
+- no idle stretch over 60 s: escape events logged, and the no-progress stop never fires.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
