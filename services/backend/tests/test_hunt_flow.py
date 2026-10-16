@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import sys
 from pathlib import Path
 
@@ -324,3 +325,47 @@ def test_v16_ncc_finds_the_template_where_it_was_moved() -> None:
     x, y, sc = hf.ncc_search(moved, tpl)
     assert (x, y) == (63, 55) and sc > 0.99
     assert hf.ncc_search(moved[:10, :10], tpl)[2] == -1.0
+
+
+def test_v18_the_heading_holds_then_turns_45_before_90_and_reverses_last() -> None:
+    area = np.zeros((60, 60), bool)
+    area[5:55, 5:55] = True
+    st: dict = {"ang": 0.0}
+    assert hf.heading_goal(area, (10, 30), st, None) == (50, 30) and st["turn"] == 0.0
+    # a block ahead, open diagonals: +-45 deg first
+    blocked = np.ones((60, 80), bool)
+    blocked[28:33, 56:58] = False  # a short wall ahead
+    st45: dict = {"ang": 0.0}
+    g = hf.heading_goal(blocked, (50, 30), st45, None)
+    assert abs(abs(st45["turn"]) - 45) < 1e-9 and g is not None
+    # at the area's east edge the diagonals leave at once too: +-90 deg
+    hf.heading_goal(area, (54, 30), st, None)
+    assert abs(abs(st["turn"]) - 90) < 1e-9
+    corridor = np.zeros((20, 60), bool)
+    corridor[10, 5:55] = True  # a dead-end corridor: nothing but back
+    st2: dict = {"ang": 0.0}
+    hf.heading_goal(corridor, (54, 10), st2, None)
+    assert st2["turn"] == 180.0
+
+
+def test_v18_the_first_heading_is_the_longest_compass_ray() -> None:
+    area = np.zeros((60, 60), bool)
+    area[28:33, 5:55] = True  # a wide east-west corridor
+    assert hf.start_heading(area, (10, 30)) == 0.0  # east: 44 cells
+    assert abs(hf.start_heading(area, (50, 30)) - math.pi) < 1e-9  # west
+
+
+def test_v18_the_minimap_arrow_points_to_its_narrow_tip_not_its_prongs() -> None:
+    def arrow(rot: int) -> np.ndarray:
+        img = np.zeros((40, 40, 3), np.uint8)
+        for i in range(8):  # an arrowhead pointing +x: prongs at the back, a notch, a tip at x=27
+            half = (7 - i) // 2
+            img[20 - half : 21 + half, 20 + i] = 255
+        img[20, 20:22] = 0  # the notch between the prongs
+        return np.rot90(img, rot).copy()
+
+    for rot, want in ((0, 0.0), (1, -math.pi / 2), (2, math.pi), (3, math.pi / 2)):
+        ang = hf.minimap_heading(arrow(rot))
+        assert ang is not None
+        assert abs((ang - want + math.pi) % (2 * math.pi) - math.pi) < 0.3, (rot, ang)
+    assert hf.minimap_heading(np.zeros((40, 40, 3), np.uint8)) is None

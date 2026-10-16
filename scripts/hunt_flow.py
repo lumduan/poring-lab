@@ -155,8 +155,11 @@ VERSIONS = {
     "per cell; on the HAND (PICKUP read twice) and a clear unit check, click, confirm by the "
     "weight or the chat cue, and sweep again until a sweep shows no hand (<= 6 s, <= 8 clicks); a "
     "monster in the area skips the loot (the risk rule)",
-    18: "ENGAGEMENT ZONE (Batt 18:2x) -- to be joined by Batt's heading method (21:31): one path "
-    "into the attack range, re-planned only when the target leaves the zone",
+    18: "MOVEMENT (Batt 21:31 + 18:2x): a remembered SEARCH HEADING -- keep it while its ray runs "
+    ">= 8 cells (a <= 20 deg drift on 30 % of re-plans), turn +-45 deg first, then +-90, then "
+    "+-135, reverse only at a real dead end, and RESUME it after every engagement; the minimap "
+    "arrow is logged beside it. Plus the ENGAGEMENT ZONE: one path into the attack range, "
+    "re-planned only when the target leaves the zone",
     19: "RE-TARGET WHILE STEERING (Batt's change 2: detection -> dispatch, v7 p50 2.85 s, was the "
     "bot steering to ANOTHER target that then failed, 19 / 32): after >= 1 s on a target, the "
     "planner's queue[0] replaces it when it is valid and cheaper by >= 2 cells (Chebyshev to the "
@@ -222,7 +225,8 @@ PARAMS[16] = {**PARAMS[15], "focus": True, "focus_lead_s": 0.15, "focus_max_age_
 PARAMS[17] = {**PARAMS[16], "loot": True, "loot_sweep": True, "loot_max_s": 6.0,
               "loot_max_clicks": 8}  # fmt: skip
 # 18 = movement (Batt's heading method + the zone)
-PARAMS[18] = {**PARAMS[17], "zone": True, "zone_radius": 7, "zone_radius_walking": 4}
+PARAMS[18] = {**PARAMS[17], "zone": True, "zone_radius": 7, "zone_radius_walking": 4,
+              "heading_search": True, "heading_min_run": 8, "heading_drift_p": 0.3}  # fmt: skip
 PARAMS[19] = {**PARAMS[18], "retarget": True, "retarget_margin": 2.0, "retarget_commit_s": 1.0}
 
 
@@ -590,6 +594,95 @@ def sweep_goal(area: Any, here: Cell, st: dict[str, Any], lane_w: int = 12, max_
         return (here[0] + st["h"][0] * run, here[1] + st["h"][1] * run) if run >= min_run else None
     st["phase"] = "lane"  # the shift is done: the next lane
     return sweep_goal(area, here, st, lane_w, max_len, min_run)
+
+
+def ray_run_angle(area: Any, start: Cell, ang: float, max_len: int) -> tuple[int, Cell]:
+    """PURE (v18): how far a ray at angle ``ang`` (radians, x right / y down) runs inside
+    ``area`` from ``start`` (in Chebyshev cells) and the last cell it reaches."""
+    h, w = area.shape
+    dx, dy = math.cos(ang), math.sin(ang)
+    k = max(abs(dx), abs(dy))
+    dx, dy = dx / k, dy / k  # one Chebyshev cell per step
+    last = start
+    n = 0
+    for i in range(1, max_len + 1):
+        c = (int(round(start[0] + dx * i)), int(round(start[1] + dy * i)))
+        if not (0 <= c[0] < w and 0 <= c[1] < h) or not area[c[1], c[0]]:
+            break
+        last, n = c, i
+    return n, last
+
+
+def heading_goal(area: Any, here: Cell, st: dict[str, Any], rng: Any, max_len: int = 40,
+                 min_run: int = 8, drift_deg: float = 20.0, drift_p: float = 0.3
+                 ) -> Cell | None:  # fmt: skip
+    """PURE (v18, Batt 21:31): the next search goal along the remembered SEARCH HEADING
+    (st["ang"]): keep it while its ray runs >= ``min_run`` cells (sometimes drifting <= +-20 deg);
+    when blocked, turn +-45 deg first, then +-90, then +-135 -- the side with the longer run --
+    and reverse only at a real dead end. Updates st["ang"] and st["turn"] (the turn taken)."""
+    ang = float(st.setdefault("ang", 0.0))
+    if rng is not None and rng.random() < drift_p:
+        a2 = ang + math.radians(rng.uniform(-drift_deg, drift_deg))
+        n2, c2 = ray_run_angle(area, here, a2, max_len)
+        if n2 >= min_run:
+            st.update(ang=a2, turn=round(math.degrees(a2 - ang), 1))
+            return c2
+    n, c = ray_run_angle(area, here, ang, max_len)
+    if n >= min_run:
+        st["turn"] = 0.0
+        return c
+    for deg in (45, 90, 135):
+        best = None
+        for sgn in (1, -1):
+            a2 = ang + sgn * math.radians(deg)
+            n2, c2 = ray_run_angle(area, here, a2, max_len)
+            if n2 >= min_run and (best is None or n2 > best[0]):
+                best = (n2, c2, a2, sgn * deg)
+        if best is not None:
+            st.update(ang=best[2], turn=float(best[3]))
+            return best[1]
+    a2 = ang + math.pi  # a real dead end: the only reversal
+    n2, c2 = ray_run_angle(area, here, a2, max_len)
+    st.update(ang=a2, turn=180.0)
+    return c2 if n2 >= 2 else None
+
+
+def start_heading(area: Any, here: Cell, max_len: int = 40) -> float:
+    """PURE (v18): the first search heading -- the longest of the 8 compass rays from ``here``."""
+    angs = [k * math.pi / 4 for k in range(8)]
+    return max(angs, key=lambda a: ray_run_angle(area, here, a, max_len)[0])
+
+
+def minimap_heading(img: Any) -> float | None:
+    """PURE (v18, Batt: "the heading from the game"): the player ARROW on the minimap picture (the
+    only white pixels on it, 4-60 of them: an arrowhead with two prongs and a notch at the back)
+    -> its mirror-symmetry axis through the centroid (36 axes, the most pixels mapped onto the
+    set), pointing to the NARROW end (the tip; the back is the prongs' spread). The angle in
+    radians (x right / y down), or None. On v14's frames it agrees within 45 deg with the arrow's
+    own motion over 2.4 s in 69 % of straight stretches (that ground truth is coarse: ~0.3 px a
+    cell)."""
+    a = np.asarray(img)[..., :3].astype(np.int16)
+    ys, xs = np.nonzero(a.min(-1) >= 215)
+    if not 4 <= len(xs) <= 60:
+        return None
+    cx, cy = float(xs.mean()), float(ys.mean())
+    dx, dy = xs - cx, ys - cy
+    have = set(zip(xs.tolist(), ys.tolist(), strict=True))
+    best = (-1, 0.0)
+    for k in range(36):
+        t = k * math.pi / 36
+        c, s_ = math.cos(t), math.sin(t)
+        p, q = dx * c + dy * s_, -dx * s_ + dy * c
+        rx = np.rint(cx + p * c + q * s_).astype(int)  # the mirror image: q -> -q
+        ry = np.rint(cy + p * s_ - q * c).astype(int)
+        sc = sum((u, v) in have for u, v in zip(rx.tolist(), ry.tolist(), strict=True))
+        if sc > best[0]:
+            best = (sc, t)
+    t = best[1]
+    p = dx * math.cos(t) + dy * math.sin(t)
+    q = -dx * math.sin(t) + dy * math.cos(t)
+    hi, lo = p >= np.percentile(p, 80), p <= np.percentile(p, 20)
+    return t if float(np.ptp(q[hi])) < float(np.ptp(q[lo])) else t + math.pi
 
 
 def reversal_penalty(here: Sequence[float], target: Sequence[float],
@@ -1836,6 +1929,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     brief = {k_: eng.get(k_) for k_ in ("k", "track", "result", "clicks")}
                     ev({"kind": "engagement", **brief})
                     print(json.dumps(brief), flush=True)
+                    if prm.get("heading_search"):  # v18: RESUME the search heading from here
+                        plan["goal_path"] = None
                 eng = None
                 target = None
 
@@ -1874,6 +1969,11 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
 
             main_area = main_component(area) if prm.get("escape_after_s") else None
             sweep_st: dict[str, Any] = {}  # v12: the lawnmower's heading / side / phase
+            import random as random_
+
+            heading_st: dict[str, Any] = {"ang": start_heading(area, start)}  # v18
+            arrow_last: list[float | None] = [None]  # v18: the minimap arrow (deg), logged only
+            heading_rng = random_.Random(seed)
             trail: list[tuple[float, Cell]] = []  # v8 attempt 2: (mono s, cell) we stood on
 
             def planner() -> None:
@@ -1905,7 +2005,21 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                          and sweep_st.get("phase") == "shift"))):  # fmt: skip
                         p_ = None
                         goal = None
-                        if prm.get("sweep") and area[here_[1], here_[0]]:
+                        if prm.get("heading_search") and area[here_[1], here_[0]]:
+                            # v18 (Batt 21:31): along the remembered SEARCH HEADING; small turns
+                            goal = heading_goal(area, here_, heading_st, heading_rng,
+                                                min_run=prm["heading_min_run"],
+                                                drift_p=prm["heading_drift_p"])  # fmt: skip
+                            if goal is not None:
+                                p_ = hc.astar(area, here_, goal)
+                                if p_ is not None and len(p_) >= 2:
+                                    ev({"kind": "heading_goal", "goal": list(goal),
+                                        "ang": round(math.degrees(heading_st["ang"]) % 360, 1),
+                                        "turn": heading_st.get("turn"),
+                                        "arrow": arrow_last[0]})  # fmt: skip
+                                else:
+                                    goal = None
+                        elif prm.get("sweep") and area[here_[1], here_[0]]:
                             goal = sweep_goal(area, here_, sweep_st, prm["lane_w"])
                             if goal is not None:
                                 p_ = hc.astar(area, here_, goal)
@@ -2228,6 +2342,11 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                 t_mm = r.ns()
                                 mm = read_position()
                                 mp0_ = measured_pos()
+                                if prm.get("heading_search"):  # v18: the arrow, logged only
+                                    ah_ = minimap_heading(mm_crop())
+                                    arrow_last[0] = (
+                                        None if ah_ is None else round(math.degrees(ah_) % 360, 1)
+                                    )
                                 if (prm.get("click_lead_s") and mm is not None and mp0_ is not None
                                         and cheb(mm, mp0_) > JUMP_CELLS):  # fmt: skip
                                     # v7: a position JUMP (a map change, a warp): two reads agree

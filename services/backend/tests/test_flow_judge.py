@@ -241,6 +241,8 @@ def test_heading_metrics_count_reversals_and_straight_runs() -> None:
     out = fj.heading_metrics(events, 0, int(60 * S))
     assert out["reversals_per_min"] == 1.0
     assert out["mean_straight_run"] == round((10 + 5 + 5) / 3, 1)
+    assert out["turn_hist_45"] == [0, 1, 0, 1]  # 90 deg, then 180 deg (Batt 21:31)
+    assert out["reversals135_per_min"] == 1.0
 
 
 def test_selection_metrics_measure_distance_and_nearest_at_the_dispatch() -> None:

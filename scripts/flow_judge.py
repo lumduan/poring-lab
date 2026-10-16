@@ -606,10 +606,13 @@ def heading_metrics(events: Sequence[Mapping[str, Any]], t0: int, w1: int) -> di
     """Batt 18:2x (no back-and-forth): from the server's walk, each self_move is one leg (its start
     to where the GM got before the next leg). A REVERSAL is a heading change > 120 deg between
     consecutive legs of >= 2 cells. A straight run merges legs that turn <= 45 deg; its length is
-    the cells walked. Batt's demo: 3.6 reversals / min, runs of 16.9 cells (mean)."""
+    the cells walked. Batt's demo: 3.6 reversals / min, runs of 16.9 cells (mean). Batt 21:31
+    adds the HEADING-CHANGE histogram (<= 45 / <= 90 / <= 135 / > 135 deg between consecutive
+    legs of >= 2 cells) and reversals > 135 deg per minute."""
     track, _mv = gm_track(events)
     moves = [e for e in events if e.get("type") == "self_move" and t0 <= int(e["t_mono_ns"]) < w1]
     rev, runs, cur, prev_h, walked = 0, [], 0, None, 0
+    hist = [0, 0, 0, 0]
     for a, b in zip(moves, [*moves[1:], None], strict=True):
         tb = int(b["t_mono_ns"]) if b is not None else w1
         p0 = (int(a["x0"]), int(a["y0"]))
@@ -621,6 +624,7 @@ def heading_metrics(events: Sequence[Mapping[str, Any]], t0: int, w1: int) -> di
         h = math.atan2(p1[1] - p0[1], p1[0] - p0[0])
         if n >= 2 and prev_h is not None:
             d = abs((h - prev_h + math.pi) % (2 * math.pi) - math.pi)
+            hist[min(3, max(0, math.ceil(round(math.degrees(d), 6) / 45) - 1))] += 1
             if d > math.radians(120):
                 rev += 1
             if d > math.radians(45):
@@ -632,6 +636,8 @@ def heading_metrics(events: Sequence[Mapping[str, Any]], t0: int, w1: int) -> di
     runs.append(cur)
     mins = max(1e-9, (w1 - t0) / 60 / NS)
     return {"reversals_per_min": round(rev / mins, 2),
+            "reversals135_per_min": round(hist[3] / mins, 2),
+            "turn_hist_45": hist,
             "mean_straight_run": round(sum(runs) / len(runs), 1) if runs else None,
             "cells_walked_per_min": round(walked / mins, 1)}  # fmt: skip
 
