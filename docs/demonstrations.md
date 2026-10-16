@@ -7558,7 +7558,7 @@ is where it stands. 60 min, seed 20261216.
   - the bar >= 90 %: NO (71.0);
   - hard bars 0 / 0 / 0: NO (a Creamy, via a walk click).
 
-### 3.53 hunt-flow@11: the OPPORTUNISTIC STRIKE (pre-registered 2026-10-16 __TIME__ ICT, the commit time __SHA__, BEFORE its run; Batt 19:0x)
+### 3.53 hunt-flow@11: the OPPORTUNISTIC STRIKE (pre-registered 2026-10-16 19:19 ICT, the commit time bf20830, BEFORE its run; Batt 19:0x)
 
 **Batt (19:0x, his 18:53 clip):** "4-6 Porings cluster around the GM ... yet the GM leaves the
 cluster and walks to a far target near the wall ... Fix as one pre-registered change
