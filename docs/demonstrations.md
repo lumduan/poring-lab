@@ -7852,7 +7852,7 @@ through the opportunistic strike.
   - engaged kills / h >= 100: YES (131.9);
   - landing by species: above v13 for Poring (76 vs 68 %) and Lunatic (82 vs 56 %).
 
-### 3.57 hunt-flow@15: the LATENCY BUDGET's miss path (pre-registered 2026-10-16 __TIME__ ICT, the commit time __SHA__, BEFORE its run; Batt B1, the overnight order item 4)
+### 3.57 hunt-flow@15: the LATENCY BUDGET's miss path (pre-registered 2026-10-16 23:48 ICT, the commit time c962c46, BEFORE its run; Batt B1, the overnight order item 4)
 
 **Why (v13's latency budget, 262 engagements, from the runner's events and the packets):**
 - Only 4 of 262 engagements were ever re-clicked: a missed first click waited for the 2.0-s
