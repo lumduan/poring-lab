@@ -270,3 +270,19 @@ def test_v11_the_zone_path_ends_at_the_nearest_cell_within_range() -> None:
     assert hf.zone_path(grid, (15, 12), (20, 10), 7) == [(15, 12)]  # already inside
     grid[:, 10] = False  # a wall between
     assert hf.zone_path(grid, (5, 10), (20, 10), 7) is None
+
+
+def test_v12_the_sweep_runs_a_lane_shifts_then_comes_back() -> None:
+    area = np.zeros((40, 60), bool)
+    area[5:35, 5:55] = True
+    st: dict = {}
+    assert hf.sweep_goal(area, (10, 10), st) == (50, 10)  # the lane east to the edge (40 max)
+    assert hf.sweep_goal(area, (54, 10), st) == (54, 22) and st["phase"] == "shift"
+    assert hf.sweep_goal(area, (54, 22), st) == (14, 22) and st["h"] == (-1, 0)  # back west
+    assert hf.ray_run(area, (54, 10), (1, 0), 40) == 0
+
+
+def test_v12_a_turn_back_costs_a_penalty() -> None:
+    assert hf.reversal_penalty((10, 10), (2, 10), (1, 0), 4.0) == 4.0  # behind: 180 deg
+    assert hf.reversal_penalty((10, 10), (10, 2), (1, 0), 4.0) == 0.0  # 90 deg: no penalty
+    assert hf.reversal_penalty((10, 10), (2, 10), None, 4.0) == 0.0

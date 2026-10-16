@@ -128,7 +128,11 @@ VERSIONS = {
     "hop): once a target is chosen, ONE path to the nearest walkable cell within the attack-click "
     "range of it (7 cells, 4 for a walking target: Batt's p90 / p50), re-planned only when the "
     "target leaves that zone; inside the zone the GM strikes (the risk gate) once it stands",
-    12: "RE-TARGET WHILE STEERING (Batt's change 2: detection -> dispatch, v7 p50 2.85 s, was the "
+    12: "NO BACK-AND-FORTH (Batt 18:2x; Batt 3.6 reversals / min and 16.9-cell straight runs, the "
+    "bot 5.9-7.8 and 10-11): the search walks LAWNMOWER LANES (east / west to the area's edge or a "
+    "dead end, a 12-cell shift, the next lane back), with no time-based re-pick of the goal; the "
+    "target queue's first pick costs +4 cells when it needs a turn of > 120 deg",
+    13: "RE-TARGET WHILE STEERING (Batt's change 2: detection -> dispatch, v7 p50 2.85 s, was the "
     "bot steering to ANOTHER target that then failed, 19 / 32): after >= 1 s on a target, the "
     "planner's queue[0] replaces it when it is valid and cheaper by >= 2 cells (Chebyshev to the "
     "predicted cell, +2 for a walking one)",
@@ -179,7 +183,8 @@ PARAMS[10] = {**PARAMS[9], "freeze_guard": True, "risk_gate": True, "gate_near_g
               "gate_fresh_s": 1.0}  # fmt: skip
 # v11 = Batt's ENGAGEMENT ZONE (18:2x); the re-target build waits (it re-aims, the zone commits)
 PARAMS[11] = {**PARAMS[10], "zone": True, "zone_radius": 7, "zone_radius_walking": 4}
-PARAMS[12] = {**PARAMS[11], "retarget": True, "retarget_margin": 2.0, "retarget_commit_s": 1.0}
+PARAMS[12] = {**PARAMS[11], "sweep": True, "lane_w": 12, "rev_penalty": 4.0}
+PARAMS[13] = {**PARAMS[12], "retarget": True, "retarget_margin": 2.0, "retarget_commit_s": 1.0}
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -308,7 +313,9 @@ def strike_due(moving: bool, here: Cell, target: tuple[float, float], strike_cel
 
 def plan_queue(tracks: Sequence[Track], start: Sequence[float], t_ns: int, depth: int,
                banned: Sequence[tuple[float, Cell]] = (), now_s: float = 0.0,
-               ban_s: float = 15.0, moving_penalty: float = 2.0) -> list[Track]:  # fmt: skip
+               ban_s: float = 15.0, moving_penalty: float = 2.0,
+               heading: Sequence[float] | None = None,
+               rev_penalty: float = 0.0) -> list[Track]:  # fmt: skip
     """PURE (v2's planner): up to ``depth`` targets by the shortest CHAINED path -- each next one
     nearest to the previous one's predicted cell, starting from ``start`` (our cell) -- with a
     walking monster costing ``moving_penalty`` cells more (standing targets first: Batt's misses
@@ -322,8 +329,17 @@ def plan_queue(tracks: Sequence[Track], start: Sequence[float], t_ns: int, depth
         left.append((tr, p, moving_penalty if (vx or vy) else 0.0))
     out: list[Track] = []
     at = (float(start[0]), float(start[1]))
+    first = True
     while left and len(out) < depth:
-        i = min(range(len(left)), key=lambda j: cheb(at, left[j][1]) + left[j][2])
+        i = min(
+            range(len(left)),
+            key=lambda j: (
+                cheb(at, left[j][1])
+                + left[j][2]
+                + (reversal_penalty(at, left[j][1], heading, rev_penalty) if first else 0.0)
+            ),
+        )
+        first = False
         tr, p, _pen = left.pop(i)
         out.append(tr)
         at = p
@@ -496,6 +512,59 @@ def zone_path(grid: Any, here: Cell, center: Sequence[float], radius: int, reach
             return out[::-1]
         level = nxt
     return None
+
+
+def ray_run(area: Any, start: Cell, d: Cell, max_len: int) -> int:
+    """PURE (v12): how many cells along direction ``d`` from ``start`` stay inside ``area``."""
+    h, w = area.shape
+    n = 0
+    x, y = start
+    while n < max_len:
+        x, y = x + d[0], y + d[1]
+        if not (0 <= x < w and 0 <= y < h) or not area[y, x]:
+            break
+        n += 1
+    return n
+
+
+def sweep_goal(area: Any, here: Cell, st: dict[str, Any], lane_w: int = 12, max_len: int = 40,
+               min_run: int = 6) -> Cell | None:  # fmt: skip
+    """PURE (v12, Batt 18:2x: "long sweeps, lawnmower-like lanes; keep the heading until a dead
+    end, the area edge, or a target"): the next search goal, updating ``st`` (h = the lane heading,
+    +-x; side = the shift direction, +-y; phase lane / shift). A lane runs to the area's edge or a
+    dead end; then a shift of ``lane_w`` sideways (the same side until it can't, then the other);
+    then the next lane back the other way. No shift and no lane -> None (the caller falls back)."""
+    st.setdefault("h", (1, 0))
+    st.setdefault("side", (0, 1))
+    st.setdefault("phase", "lane")
+    if st["phase"] == "lane":
+        run = ray_run(area, here, st["h"], max_len)
+        if run >= min_run:
+            return (here[0] + st["h"][0] * run, here[1] + st["h"][1] * run)
+        for side in (st["side"], (-st["side"][0], -st["side"][1])):
+            sr = ray_run(area, here, side, lane_w)
+            if sr >= max(2, lane_w // 2):
+                st.update(side=side, phase="shift", h=(-st["h"][0], -st["h"][1]))
+                return (here[0] + side[0] * sr, here[1] + side[1] * sr)
+        st["h"] = (-st["h"][0], -st["h"][1])  # a dead end with no shift: the lane back
+        run = ray_run(area, here, st["h"], max_len)
+        return (here[0] + st["h"][0] * run, here[1] + st["h"][1] * run) if run >= min_run else None
+    st["phase"] = "lane"  # the shift is done: the next lane
+    return sweep_goal(area, here, st, lane_w, max_len, min_run)
+
+
+def reversal_penalty(here: Sequence[float], target: Sequence[float],
+                     heading: Sequence[float] | None, penalty: float,
+                     angle_deg: float = 120.0) -> float:  # fmt: skip
+    """PURE (v12): ``penalty`` cells when going to ``target`` turns the GM by more than
+    ``angle_deg`` from its current ``heading`` (a unit-ish vector; None = no heading yet)."""
+    if heading is None or (heading[0] == 0 and heading[1] == 0):
+        return 0.0
+    dx, dy = target[0] - here[0], target[1] - here[1]
+    if dx == 0 and dy == 0:
+        return 0.0
+    cosv = (dx * heading[0] + dy * heading[1]) / (math.hypot(dx, dy) * math.hypot(*heading))
+    return penalty if cosv < math.cos(math.radians(angle_deg)) else 0.0
 
 
 def target_cost(tr: Track, here: Sequence[float], t_ns: int, moving_penalty: float) -> float:
@@ -1279,6 +1348,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         time.sleep(0.02)
 
             main_area = main_component(area) if prm.get("escape_after_s") else None
+            sweep_st: dict[str, Any] = {}  # v12: the lawnmower's heading / side / phase
             trail: list[tuple[float, Cell]] = []  # v8 attempt 2: (mono s, cell) we stood on
 
             def planner() -> None:
@@ -1287,18 +1357,41 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 while not halt.is_set():
                     now_, t_ = time.monotonic(), r.ns()
                     here_ = posm.at(now_)
+                    head_ = None
+                    if prm.get("sweep"):  # v12: our heading over the last ~2 s (the trail)
+                        with plock:
+                            tr2_ = [c_ for t_c, c_ in trail if now_ - t_c <= 2.0]
+                        if tr2_ and cheb(tr2_[0], here_) >= 2:
+                            head_ = (here_[0] - tr2_[0][0], here_[1] - tr2_[0][1])
                     q = plan_queue(tracks_now(), here_, t_, prm["queue_depth"], list(banned),
-                                   now_, prm["drop_target_s"], prm["moving_penalty"])  # fmt: skip
+                                   now_, prm["drop_target_s"], prm["moving_penalty"], head_,
+                                   prm.get("rev_penalty", 0.0))  # fmt: skip
                     gp = plan["goal_path"]
                     left_ = 999
                     if gp and prm.get("replan_left"):  # v5: never walk off the route's end
                         ci_ = min(range(len(gp)), key=lambda i_: cheb(gp[i_], here_))
                         left_ = len(gp) - 1 - ci_
-                    if (gp is None or now_ - plan["t_goal"] > prm["waypoint_every_s"]
+                    stale_ = (not prm.get("sweep")  # v12: no time-based re-pick (hysteresis)
+                              and now_ - plan["t_goal"] > prm["waypoint_every_s"])  # fmt: skip
+                    if (gp is None or stale_
                             or cheb(here_, gp[-1]) <= 2
-                            or left_ < prm.get("replan_left", -1)):  # fmt: skip
+                            or (left_ < prm.get("replan_left", -1)
+                                and not (prm.get("sweep")
+                                         and sweep_st.get("phase") == "shift"))):  # fmt: skip
                         p_ = None
-                        if area[here_[1], here_[0]]:
+                        goal = None
+                        if prm.get("sweep") and area[here_[1], here_[0]]:
+                            goal = sweep_goal(area, here_, sweep_st, prm["lane_w"])
+                            if goal is not None:
+                                p_ = hc.astar(area, here_, goal)
+                                if p_ is not None and len(p_) >= 2:
+                                    ev({"kind": "sweep_goal", "goal": list(goal),
+                                        "phase": sweep_st.get("phase")})  # fmt: skip
+                                else:
+                                    goal = None
+                        if goal is not None:
+                            pass  # v12: the lane / shift path is p_
+                        elif area[here_[1], here_[0]]:
                             goal = hc.choose_goal(cov, here_, now_, {}, list(bad_tiles))
                             p_ = None if goal is None else hc.astar(area, here_, goal)
                             if (p_ is None or len(p_) < 2) and goal is not None:
