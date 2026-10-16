@@ -7818,6 +7818,40 @@ through the opportunistic strike.
 - engaged kills / h >= 100 (the read costs ~0.5 s an engagement);
 - landing within W per engagement reported by species (v13 is the reference).
 
+**Run 1 RESULT (2026-10-16 22:41:22-23:41:22, session 20261016T224122-demo-hunt-flow14, seed
+20261220; the full hour; judged 23:4x by `flow_judge.bot`):**
+- **Engagements:** 176, all dead. Attack clicks: 173 direct / 4 read (low conf).
+- **Kills:** kills / h 164.9; engaged 131.9 / h; 33 more from walk clicks; 45 unintended
+  attack requests.
+- **The bar:** 129 / 174 = 74.1 % (Wilson 67.2-80.1; v13 52.1 %). Outcomes: hit 129, hit_late 30,
+  no_unit 9, never_hit 6.
+- **Landing within W by species:** Poring 77 / 101 = 76 %, Lunatic 42 / 51 = 82 %, Drops 7 / 10.
+- **The name tag:**
+  - every direct click carried a target tag: Poring 107, Lunatic 54, Drops 12;
+  - the read before a direct click took p50 366 / p90 780 ms;
+  - 169 reads were REFUSED (no tag in 1.2 s; never another word): 46.7 % of 362 strike calls;
+  - why: in the recorded frames, only 7 of 66 sampled refused reads show a matchable tag
+    anywhere around the GM, against 31 of 40 before a clicked strike. The pointer was mostly
+    OFF the sprite (a hop, the 0.5-s-old box), so the client drew no tag.
+- **Timing:** seen -> click p50 5.67 s (v13 3.19: the refusals); death -> next click p50 0.66 s;
+  box age at click p50 524 ms.
+- **Bursts:** ends arrow 100, gone 57 (33 %; v13 57 %), risky 16.
+- **Selection:** the nearest at selection 84 %, distance p50 4; pre-emptions 13.5 / min.
+- **Heading:** reversals 9.5 / min (> 135 deg: 7.0), straight runs 9.1 cells.
+- **HARD BAR FAILED: a non-target hit, through WALK clicks, not attack clicks.**
+  - Six attack requests on Creamies (1018), seven damaging acts.
+  - Each one came 0.2-1.5 s after a WALK click; no attack click was within 1.6 s of any of them.
+  - The detector cannot see a Creamy: it is a flying, butterfly-like sprite, and at the six
+    click points the v1 detector, re-run at conf 0.03, put no box on it. So v14's walk
+    clearance (12 px around unconfirmed boxes) had nothing to clear.
+  - In one case the Creamy flew onto the GM, where the walk click had landed.
+- **vs the prediction:**
+  - zero direct-click hits on a non-target: YES (0; every non-target hit was a walk click);
+  - the tag read p50 <= 0.6 s: YES (366 ms);
+  - tag_refused <= 15 %: NO (46.7 %);
+  - engaged kills / h >= 100: YES (131.9);
+  - landing by species: above v13 for Poring (76 vs 68 %) and Lunatic (82 vs 56 %).
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
