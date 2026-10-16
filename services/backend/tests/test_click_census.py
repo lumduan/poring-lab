@@ -45,6 +45,16 @@ ALLOWED = {
                                    "refused outside the box it names: Basic Skill's icon, APPLY, "
                                    "RESET (the skill window found at home), the confirm modal's "
                                    "OK / CANCEL (the modal read on stable frames); no world click"),
+    "scripts/farm1.py": (2, "farm@1 (6.2, Batt's 'engage like a player' point 3): the attack "
+                            "click after ONE robust2 SWORD read at the target's latest box, and "
+                            "the re-click after another SWORD read; no walk click of its own"),
+    "scripts/hunt.py": (2, "hunt@N (3.39): the attack / re-click after ONE robust2 SWORD read (as "
+                           "farm@1; from hunt@6 only on boxes passing the selection's gates, near "
+                           "the GM once it reached the target), and the CONTINUOUS walk click "
+                           "while the GM moves, gated by the map (search-area stand cells) and "
+                           "the detector (no unit within 60 px on the last 2 fresh frames): "
+                           "3.39's recorded deviation (2), option B. A click from a standstill is "
+                           "cursor-gated (GATED below)"),
 }  # fmt: skip
 
 
@@ -63,6 +73,8 @@ GATED = {
     "scripts/npc_click_test.py": (1, "walk@17 item 5's targeted test: a deliberate click beside "
                                      "an NPC, ONLY where the cursor reads WALK twice (the walk "
                                      "rules' own gate); probes never click"),
+    "scripts/farm0.py": (1, "farm@0 (6.1): the attack click, SWORD read twice"),
+    "scripts/hunt.py": (1, "hunt@N's walk click from a standstill: WALK by robust2's series"),
 }  # fmt: skip
 
 
