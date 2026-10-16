@@ -8142,6 +8142,35 @@ above 40 % weight), nice 10, detector on the CPU (GPU freeze).
 - engaged kills / h >= 0.75 x v16's 66, i.e. >= 50 (looting takes time; Batt looted at 300 kills / h);
 - hard bars: zero NPC contact, zero map change, zero non-target hit.
 
+**Run 1 RESULT (2026-10-17 02:35:00-03:35:00, session 20261017T023500-demo-hunt-flow17, seed
+20261229; the full hour; judged by `flow_judge.bot` after 03:37):**
+- **HARD BARS PASSED for the full hour:** zero NPC contact, zero map change, zero non-target hit.
+- **Engagements:** 96, all dead. Attack clicks: 104 direct / 1 read.
+- **Kills:** kills / h 94.9; engaged 86 / h. Walk-click attacks only 9 (v15 50).
+- **The bar:** 85 / 96 = 88.5 % (Wilson 80.6-93.5), the night's best. Landing: Poring 44 / 50,
+  Lunatic 36 / 39, Drops 5 / 5.
+- **LOOT:**
+  - 25 of the 136 items that fell around our kills were picked up (18.4 %; Batt 97 %);
+  - 1.0 request per pickup;
+  - kill -> last pickup p50 5.04 s (Batt 1.56 s);
+  - 49 sweeps for 96 kills (the rest skipped: a monster in the drop area). They ended no_hand
+    40, stale_park 2, done 7, with 18 loot clicks, every one answered by a pickup request,
+    none by an attack request. The sweep took p50 6.4 s: its bound.
+  - So the sweep's cursor reads mostly found NO hand over cells where items lay. This is the loot
+    loser to look at.
+- **The name tag:** refused 159 reads (55 %).
+- **Timing:** seen -> click p50 5.27 s; looting 281 s of the hour.
+- **Heading:** reversals 7.7 / min (> 135 deg 5.6), straight runs 10.4 cells.
+- **The walk guard (UI windows left out):** ok 2066, near_gm 1668, pink 345. Pink refusals fell
+  to 8 % (v16 19-21 %).
+- **vs the prediction:**
+  - picked / items >= 80 %: NO (18.4 %);
+  - requests per pickup <= 1.5: YES (1.0);
+  - kill -> last pickup <= 2.5 s: NO (5.04 s);
+  - no loot click became an attack: YES (0 of 18);
+  - engaged kills / h >= 50: YES (86);
+  - hard bars: PASSED.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
