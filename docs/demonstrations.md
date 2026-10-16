@@ -7920,6 +7920,16 @@ STOPPED at 7.3 min by the stuck guard ("no progress for 60 s at (28, 75)"), 11 e
   - The stuck guard (60 s) stays the backstop.
 - Attempt 3 runs v15 with both fixes and a fresh seed.
 
+**Attempt 3 (2026-10-17 00:17:29, session 20261017T001729-demo-hunt-flow15, seed 20261223):
+STOPPED BY ME at 2.8 min (SIGINT, a clean stop), 3 engagements.**
+- The stall breaker fired three times, every time right after an engagement or at the start,
+  never in a stall. It counted the time since the last WALK click, which includes engagements:
+  a long strike (3.5 s in a read) plus the fight passed 8 s. So it replaced the planner's
+  search path with a random walk after every long engagement, a play change.
+- **Fix:** it counts only idle SEARCH time, from the last walk click, the last moment with a
+  target or an engagement, or its own last firing, whichever is latest.
+- Attempt 4 runs v15 with the three fixes and a fresh seed.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.

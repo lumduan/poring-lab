@@ -2321,7 +2321,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 still_wait: dict[int, float] = {}  # v9: track -> since when waiting for it to stand
                 t_target = [0.0]  # v11: when the current target was set
                 pre_cand: dict[str, Any] = {}  # v13: the pre-emption candidate and since when
-                last_unstall = [0.0]  # the stall breaker's last firing (mono s)
+                last_unstall = [time.monotonic()]  # the stall breaker's last firing (mono s)
+                busy_t = [time.monotonic()]  # the last moment with a target or an engagement
                 unstall_rng = random_.Random(seed + 7)
                 zone_st: dict[str, Any] = {}  # v11: the engagement zone (tid, center, radius, path)
                 dispatched: set[tuple[int, bool]] = set()
@@ -2427,6 +2428,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 try:
                     while time.monotonic() < deadline:
                         now = time.monotonic()
+                        if target is not None or eng is not None:
+                            busy_t[0] = now  # the stall breaker counts idle SEARCH time only
                         ch_t = mstate.get("changed_t")
                         if (prm.get("freeze_guard") and ch_t is not None
                                 and now - ch_t > FREEZE_S and last_walk > ch_t + 0.5):  # fmt: skip
@@ -2820,10 +2823,12 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         # no target: the planner's waypoint, the GM never standing
                         split.to("searching", time.monotonic())
                         if (cont and prm.get("unstall_s") and not moving
-                                and now - last_walk > prm["unstall_s"]
-                                and now - last_unstall[0] > prm["unstall_s"]):  # fmt: skip
+                                and now - max(last_walk, busy_t[0], last_unstall[0])
+                                > prm["unstall_s"]):  # fmt: skip
                             # the STALL BREAKER (v15 attempt 2): no walk click for unstall_s while
-                            # standing -> settle our cell, walk to a reachable cell 6-14 away
+                            # standing with NO target (attempt 3: engagements had counted, so it
+                            # fired after every long strike) -> settle our cell, walk to a
+                            # reachable cell 6-14 away
                             last_unstall[0] = now
                             pos = settle(timeout=1.5) or pos
                             for c_ in unstall_cells(ok, pos, unstall_rng):
