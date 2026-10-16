@@ -12,24 +12,24 @@ import nametag as nt  # noqa: E402
 
 
 def _word(img: np.ndarray, x: int, y: int, pattern: list[str]) -> None:
-    """Draw letters: '#' = white core with a dark outline around it."""
+    """Draw letters as the client does: '#' = a DARK core with a light outline around it."""
     for dy, row in enumerate(pattern):
         for dx, ch in enumerate(row):
             if ch == "#":
-                img[y + dy - 1 : y + dy + 2, x + dx - 1 : x + dx + 2] = (20, 20, 20)
+                img[y + dy - 1 : y + dy + 2, x + dx - 1 : x + dx + 2] = (235, 235, 235)
     for dy, row in enumerate(pattern):
         for dx, ch in enumerate(row):
             if ch == "#":
-                img[y + dy, x + dx] = (250, 250, 250)
+                img[y + dy, x + dx] = (15, 15, 15)
 
 
 PAT = ["#.#.###.#..", "#.#.#...#..", "###.##..#..", "#.#.#...#..", "#.#.###.###",
        "#.#.#...#..", "#.#.###.###"]  # fmt: skip
 
 
-def test_the_letter_mask_needs_an_outline_and_the_word_box_finds_the_word() -> None:
+def test_the_letter_mask_needs_a_light_outline_and_the_word_box_finds_the_word() -> None:
     img = np.full((60, 140, 3), (90, 140, 60), np.uint8)  # grass
-    img[5:15, 5:30] = (245, 245, 245)  # white scenery without an outline
+    img[5:15, 5:30] = (20, 20, 20)  # a dark shadow without a light rim
     _word(img, 40, 30, PAT)
     m = nt.letter_mask(img)
     assert not m[8, 10] and m[30, 40]

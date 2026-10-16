@@ -3,7 +3,7 @@
 monster -- the species check for hunting attack clicks (Batt 2026-10-16 ~19:50: the size gate
 cannot tell a Creamy, a non-target, from a Poring; both measure ~39 x 36 px).
 
-The tag is white text with a dark outline, centred under the sprite, ~20-50 px below the box's
+The tag is dark text with a light outline, centred under the sprite, ~20-50 px below the box's
 bottom; it appears ~0.4-0.8 s after the pointer stops on the monster. Templates are cut from RAW
 live frames (the recordings are JPEG q80: thin outlined letters break), labelled by the packets
 (the species of the mob nearest the hovered cell), and kept in data/nametags (gitignored: client
@@ -27,28 +27,29 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-WHITE_MIN = 225  # a letter's core: every channel at least this
-DARK_MAX = 70  # its outline: every channel at most this
+DARK_MAX = 60  # a letter's core: every channel at most this (the tag is DARK text, 20:3x probe)
+LIGHT_MIN = 150  # its outline: every channel at least this, within 2 px
 TAG_BELOW = (-6, 55)  # the search band below the box's bottom (px)
 TAG_HALF_W = 70  # half the band's width around the box centre
-HOVER_S = 0.9  # the client draws the tag ~0.4-0.8 s after the pointer stops
+HOVER_S = 0.6  # the tag showed 0.5 s after the pointer stopped (20:3x probe)
 MATCH_MIN = 0.72  # template agreement (IoU of the letter cores) to accept a name
 TARGET_NAMES = ("Poring", "Lunatic", "Pupa", "Drops")  # prt_fild08's spawn table (farm0.TARGETS)
 
 
 def letter_mask(a: Any) -> Any:
-    """PURE: the tag's letter cores -- white pixels with a dark pixel within 2 px (the outline);
-    white scenery without an outline (a Lunatic's fur, sun on sand) does not count."""
+    """PURE: the tag's letter cores -- DARK pixels with a light pixel within 2 px (the client draws
+    monster names as dark text with a light outline: the 20:3x hover probe); dark scenery without
+    a light rim (shadows, tree trunks) does not count."""
     a = np.asarray(a)[..., :3].astype(np.int16)
-    white = a.min(-1) >= WHITE_MIN
     dark = a.max(-1) <= DARK_MAX
-    pad = np.pad(dark, 2)
-    near = np.zeros_like(dark)
-    h, w = dark.shape
+    light = a.min(-1) >= LIGHT_MIN
+    pad = np.pad(light, 2)
+    near = np.zeros_like(light)
+    h, w = light.shape
     for dy in range(-2, 3):
         for dx in range(-2, 3):
             near |= pad[2 + dy : 2 + dy + h, 2 + dx : 2 + dx + w]
-    return white & near
+    return dark & near
 
 
 def word_box(mask: Any) -> tuple[int, int, int, int] | None:
@@ -166,7 +167,7 @@ def cut(minutes: float, warp: tuple[int, int] | None) -> int:
             if not boxes:
                 time.sleep(0.5)
                 continue
-            for b in boxes[:3]:
+            for b in boxes[:4]:
                 u, v = f1.centre(b)
                 agent.move(gx0 + round(u) - 12, gy0 + round(v) - 12)  # two motions: drawn
                 time.sleep(0.08)
