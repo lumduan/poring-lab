@@ -7103,7 +7103,7 @@ estimator):**
   1-cell bar of >= 40 % stands; the offline ceiling is ~68 %.
 - 60 min, seed 20261210.
 
-### 3.48 fast-read@1: the FAST cursor read vs the proven one, no clicks (pre-registered 2026-10-16 __TIME__ ICT, the commit time __SHA__, BEFORE it runs)
+### 3.48 fast-read@1: the FAST cursor read vs the proven one, no clicks (pre-registered 2026-10-16 15:46 ICT, the commit time 162aea0, BEFORE it runs)
 
 **Why.** In hunt-flow@6 the proven cursor gate (Prober9 + robust2) cost p50 3.56 s between "in
 range" and the attack click. Most of that is its PARK:
