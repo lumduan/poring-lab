@@ -7722,7 +7722,7 @@ is active, nothing sent". This was the SECOND lease today (17:12, now ~21:08); B
   - engaged kills / h >= 100: YES (~128);
   - hit_late per hour below v11's 64: YES (35 in 37 min = 57 / h).
 
-### 3.55 hunt-flow@13: PRE-EMPTION HYSTERESIS (pre-registered 2026-10-16 __TIME__ ICT, the commit time __SHA__, BEFORE its run; Batt 20:5x, his order A1)
+### 3.55 hunt-flow@13: PRE-EMPTION HYSTERESIS (pre-registered 2026-10-16 21:10 ICT, the commit time 1cd4579, BEFORE its run; Batt 20:5x, his order A1)
 
 **Batt:** "switch only if the new target is clearly better (e.g. >= 2 cells closer, or the current
 one left the zone) AND stays better for >= ~0.5 s; never switch during a burst. Report
