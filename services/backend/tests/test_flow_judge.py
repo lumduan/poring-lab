@@ -256,3 +256,18 @@ def test_selection_metrics_measure_distance_and_nearest_at_the_dispatch() -> Non
     assert out == {"n": 1, "nearest_share": 0.0, "dist_p50": 7.0, "dist_p90": 7.0}
     out = fj.selection_metrics(events, lines, [{"k": 0, "gid": near}], engs)
     assert out["nearest_share"] == 1.0 and out["dist_p50"] == 2.0
+
+
+def test_landing_is_reported_by_species_with_clicks_per_landing() -> None:
+    luna = MOB + 3
+    events = base() + [appear(0.0, luna, 14, 10, job=1063)]
+    rows = [{"k": 0, "gid": MOB, "why": "hit"}, {"k": 1, "gid": luna, "why": "hit_late"}]
+    engs = [{"k": 0, "t_first_click": int(2 * S), "t_end": int(3 * S),
+             "hovers": [{"clicked": 1, "aim_px": 4.0}]},
+            {"k": 1, "t_first_click": int(5 * S), "t_end": int(9 * S), "hovers": []}]  # fmt: skip
+    clicks = [{"t": int(2 * S), "kind": "strike"}, {"t": int(2.6 * S), "kind": "strike_burst"},
+              {"t": int(5 * S), "kind": "strike"}]  # fmt: skip
+    out = fj.species_landing(events, rows, engs, clicks)
+    assert out["Poring"] == {"n": 1, "landed": 1, "rate": 1.0, "clicks_per_landing": 2.0,
+                             "aim_px_p50": 4.0}  # fmt: skip
+    assert out["Lunatic"]["landed"] == 0 and out["Lunatic"]["rate"] == 0.0

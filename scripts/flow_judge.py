@@ -685,6 +685,43 @@ def selection_metrics(events: Sequence[Mapping[str, Any]], lines: Iterable[str],
             "dist_p90": pct([float(x) for x in dists], 0.9)}  # fmt: skip
 
 
+SPECIES = {1002: "Poring", 1063: "Lunatic", 1008: "Pupa", 1113: "Drops", 1018: "Creamy"}
+
+
+def species_landing(events: Sequence[Mapping[str, Any]], rows: Sequence[Mapping[str, Any]],
+                    engs: Sequence[Mapping[str, Any]], clicks: Sequence[Mapping[str, Any]]
+                    ) -> dict[str, Any]:  # fmt: skip
+    """Batt 20:0x, BY SPECIES (packets: the engaged gid's species): the landing rate per engagement
+    (hit within W), the attack clicks per landed engagement (first + burst clicks from its first
+    click to its end), and the aim error p50 of its first click (px)."""
+    job: dict[int, int] = {}
+    for e in events:
+        if e.get("type") == "entity_appear":
+            job.setdefault(gid_of(e), int(e.get("job", -1)))
+    eng_by_k = {int(e["k"]): e for e in engs}
+    att = [c for c in clicks if c.get("kind") in ("strike", "strike_burst")]
+    out: dict[str, dict[str, Any]] = {}
+    for r_ in rows:
+        e = eng_by_k.get(int(r_["k"]))
+        g = r_.get("gid")
+        if e is None or g is None or str(r_.get("why", "")).startswith("excluded"):
+            continue
+        sp = SPECIES.get(job.get(int(g), -1), str(job.get(int(g), -1)))
+        d = out.setdefault(sp, {"n": 0, "landed": 0, "clicks_landed": [], "aim_px": []})
+        d["n"] += 1
+        t0, t1 = int(e["t_first_click"]), int(e.get("t_end") or e["t_first_click"])
+        if r_.get("why") == "hit":
+            d["landed"] += 1
+            d["clicks_landed"].append(sum(1 for c in att if t0 <= int(c["t"]) <= t1))
+        h0 = next((h for h in e.get("hovers", []) if h.get("clicked")), {})
+        if h0.get("aim_px") is not None:
+            d["aim_px"].append(float(h0["aim_px"]))
+    return {sp: {"n": d["n"], "landed": d["landed"],
+                 "rate": round(d["landed"] / d["n"], 3) if d["n"] else None,
+                 "clicks_per_landing": pct([float(x) for x in d["clicks_landed"]], 0.5),
+                 "aim_px_p50": pct(d["aim_px"], 0.5)} for sp, d in out.items()}  # fmt: skip
+
+
 def hard_bars(events: Sequence[Mapping[str, Any]], t0: int, w1: int,
               targets: Mapping[int, str]) -> dict[str, Any]:  # fmt: skip
     """v10's HARD BARS (Batt): NPC contacts, map changes after the start, and units of a non-target
@@ -962,6 +999,16 @@ def bot(sid: str) -> dict[str, Any]:
 
     out["hard_bars"] = hard_bars(events, t0, w1, farm0.TARGETS)
     out["heading"] = heading_metrics(events, t0, w1)
+    all_clicks = [x for x in map(json.loads, (d / "clicks.jsonl").read_text().splitlines())]
+    out["species"] = species_landing(events, out["engagements_w"]["rows"], engs, all_clicks)
+    bursts = [x for x in map(json.loads, (d / "events.jsonl").read_text().splitlines())
+              if x.get("kind") == "burst"]  # fmt: skip
+    if bursts:
+        out["bursts"] = {"n": len(bursts),
+                         "clicks_p50": pct([float(b["clicks"]) for b in bursts], 0.5),
+                         "ends": dict(Counter(b.get("end") for b in bursts)),
+                         "arrow_s_p50": pct([float(b["arrow_s"]) for b in bursts
+                                             if b.get("arrow_s") is not None], 0.5)}  # fmt: skip
     out["selection"] = selection_metrics(events, (d / "events.jsonl").read_text().splitlines(),
                                          out["engagements_w"]["rows"], engs)  # fmt: skip
     strikes_ = [x for x in map(json.loads, (d / "clicks.jsonl").read_text().splitlines())
@@ -1026,6 +1073,11 @@ def row(o: Mapping[str, Any]) -> dict[str, str]:
         else f"{100 * o['selection']['nearest_share']:.0f} %",
         "distance at selection p50/p90": "-" if not (o.get("selection") or {}).get("n")
         else f"{o['selection']['dist_p50']} / {o['selection']['dist_p90']}",
+        "landing / engagement by species": "-" if not o.get("species")
+        else ", ".join(f"{sp} {v['landed']}/{v['n']}" for sp, v in sorted(
+            o["species"].items(), key=lambda kv: -kv[1]["n"]) if v["n"]),
+        "bursts: clicks p50, ends": "-" if not o.get("bursts")
+        else f"{o['bursts']['clicks_p50']} | {o['bursts']['ends']}",
         "reversals / min": "-" if not o.get("heading") else f"{o['heading']['reversals_per_min']}",
         "mean straight run (cells)": "-" if not o.get("heading")
         else f"{o['heading']['mean_straight_run']}",

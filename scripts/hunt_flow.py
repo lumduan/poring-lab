@@ -130,19 +130,24 @@ VERSIONS = {
     "risk rule: overlap is risky only with a NON-target box, the GM check is occlusion only (its "
     "sprite hides >= 50 % of the box); the stand wait only on the read path; the walk-click "
     "clearance (12 px) only around non-target boxes (the Creamy hits)",
-    12: "NAME-TAG CHECK (Batt 19:5x; the size gate let a Creamy -- pink, 39 x 36 px like a Poring "
+    12: "BURST STRIKE (Batt 19:4x / 20:0x: he clicks until the client draws the ARROW on the "
+    "monster): after a direct attack click, the client's arrow is watched on raw frames; with "
+    "none after 0.6 s (Batt's re-click interval) the next click goes to the FRESHEST box's body "
+    "centre with a jitter scaled to that sprite (tighter on a Lunatic); stop on the arrow, at 4 "
+    "clicks or 3 s, when the box is gone, or when the risk gate turns; logged per burst",
+    13: "NAME-TAG CHECK (Batt 19:5x; the size gate let a Creamy -- pink, 39 x 36 px like a Poring "
     "-- pass as a target, v11 +527 s): before a direct attack click the pointer rests on the "
     "target until the client's own name tag under it reads (<= 1.2 s); only Poring / Lunatic / "
     "Pupa / Drops are clicked; another name bans the target; no tag = no click",
-    13: "ENGAGEMENT ZONE (Batt 18:2x: a Poring circled the GM ~15 s while it re-aimed at every "
+    14: "ENGAGEMENT ZONE (Batt 18:2x: a Poring circled the GM ~15 s while it re-aimed at every "
     "hop): once a target is chosen, ONE path to the nearest walkable cell within the attack-click "
     "range of it (7 cells, 4 for a walking target: Batt's p90 / p50), re-planned only when the "
     "target leaves that zone; inside the zone the GM strikes (the risk gate) once it stands",
-    14: "NO BACK-AND-FORTH (Batt 18:2x; Batt 3.6 reversals / min and 16.9-cell straight runs, the "
+    15: "NO BACK-AND-FORTH (Batt 18:2x; Batt 3.6 reversals / min and 16.9-cell straight runs, the "
     "bot 5.9-7.8 and 10-11): the search walks LAWNMOWER LANES (east / west to the area's edge or a "
     "dead end, a 12-cell shift, the next lane back), with no time-based re-pick of the goal; the "
     "target queue's first pick costs +4 cells when it needs a turn of > 120 deg",
-    15: "RE-TARGET WHILE STEERING (Batt's change 2: detection -> dispatch, v7 p50 2.85 s, was the "
+    16: "RE-TARGET WHILE STEERING (Batt's change 2: detection -> dispatch, v7 p50 2.85 s, was the "
     "bot steering to ANOTHER target that then failed, 19 / 32): after >= 1 s on a target, the "
     "planner's queue[0] replaces it when it is valid and cheaper by >= 2 cells (Chebyshev to the "
     "predicted cell, +2 for a walking one)",
@@ -195,10 +200,12 @@ PARAMS[10] = {**PARAMS[9], "freeze_guard": True, "risk_gate": True, "gate_near_g
 PARAMS[11] = {**PARAMS[10], "opportunistic": True, "opp_cells": 4, "risk_targets_ok": True,
               "still_read_only": True, "box_clear_px": 12.0,
               "box_clear_nontarget_only": True}  # fmt: skip
-PARAMS[12] = {**PARAMS[11], "name_tag": True, "tag_wait_s": 1.2}
-PARAMS[13] = {**PARAMS[12], "zone": True, "zone_radius": 7, "zone_radius_walking": 4}
-PARAMS[14] = {**PARAMS[13], "sweep": True, "lane_w": 12, "rev_penalty": 4.0}
-PARAMS[15] = {**PARAMS[14], "retarget": True, "retarget_margin": 2.0, "retarget_commit_s": 1.0}
+PARAMS[12] = {**PARAMS[11], "burst": True, "burst_interval_s": 0.6, "burst_max_clicks": 4,
+              "burst_max_s": 3.0}  # fmt: skip
+PARAMS[13] = {**PARAMS[12], "name_tag": True, "tag_wait_s": 1.2}
+PARAMS[14] = {**PARAMS[13], "zone": True, "zone_radius": 7, "zone_radius_walking": 4}
+PARAMS[15] = {**PARAMS[14], "sweep": True, "lane_w": 12, "rev_penalty": 4.0}
+PARAMS[16] = {**PARAMS[15], "retarget": True, "retarget_margin": 2.0, "retarget_commit_s": 1.0}
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -649,6 +656,63 @@ def nearest_close(tracks: Sequence[Track], here: Sequence[float], t_ns: int, cel
         if d <= cells and (best is None or d < best[0]):
             best = (d, tr)
     return None if best is None else best[1]
+
+
+def arrow_blobs(region: Any) -> list[tuple[float, float]]:
+    """PURE (v12, the ARROW marker): small white down-pointing blobs (every channel >= 215; 6-45
+    px; 5-15 x 2-9; the top row wider than the bottom) in ``region``: (x, y) centres. On v10's
+    recordings, after a strike click: P(arrow | our attack registered) 0.71, P(arrow | not) 0.08,
+    first seen p50 0.44 s after the click."""
+    from collections import deque
+
+    w = np.asarray(region)[..., :3].astype(np.int16).min(-1) >= 215
+    h_, w_ = w.shape
+    lab = np.zeros(w.shape, np.int32)
+    out: list[tuple[float, float]] = []
+    n = 0
+    for y0, x0 in zip(*np.nonzero(w), strict=True):
+        if lab[y0, x0]:
+            continue
+        n += 1
+        q = deque([(int(y0), int(x0))])
+        lab[y0, x0] = n
+        pts: list[tuple[int, int]] = []
+        while q:
+            y, x = q.popleft()
+            pts.append((y, x))
+            for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                yy, xx = y + dy, x + dx
+                if 0 <= yy < h_ and 0 <= xx < w_ and w[yy, xx] and not lab[yy, xx]:
+                    lab[yy, xx] = n
+                    q.append((yy, xx))
+        ys = [p[0] for p in pts]
+        xs = [p[1] for p in pts]
+        bw, bh = max(xs) - min(xs) + 1, max(ys) - min(ys) + 1
+        if 6 <= len(pts) <= 45 and 5 <= bw <= 15 and 2 <= bh <= 9 and bw >= bh:
+            top = sum(1 for y in ys if y == min(ys))
+            bot = sum(1 for y in ys if y == max(ys))
+            if top > bot:
+                out.append((min(xs) + bw / 2, min(ys) + bh / 2))
+    return out
+
+
+def arrow_new(ref: Any, cur: Any, near_px: float = 4.0) -> bool:
+    """PURE (v12): an arrow blob in ``cur`` that was not in ``ref`` (the same region before the
+    first click): a scenery blob that was already there never counts."""
+    old = arrow_blobs(ref)
+    return any(all(math.hypot(x - a, y - b) > near_px for a, b in old)
+               for x, y in arrow_blobs(cur))  # fmt: skip
+
+
+BURST_JITTER = ((0.0, 0.0), (0.0, 0.18), (-0.18, 0.0), (0.18, 0.0), (0.0, -0.15))
+
+
+def burst_aim(box: Any, k: int) -> tuple[float, float]:
+    """PURE (v12): the k-th burst click on ``box`` (x0, y0, x1, y1): its centre (the drawn body)
+    plus a jitter of a fraction of ITS size, so a small Lunatic gets a tighter pattern."""
+    jx, jy = BURST_JITTER[k % len(BURST_JITTER)]
+    w, h = box.x1 - box.x0, box.y1 - box.y0
+    return (box.x0 + box.x1) / 2 + jx * w, (box.y0 + box.y1) / 2 + jy * h
 
 
 def map_same(ref: Any, cur: Any, max_median: float = MAP_SAME_MAX) -> bool:
@@ -1237,6 +1301,64 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         break
                 return name_, round((time.monotonic() - t_a) * 1000)
 
+            def above(img_: Any, u_: float, v_: float) -> Any:
+                """v12: the region where the client draws the attack arrow above a target."""
+                a_ = np.asarray(img_)
+                return a_[max(0, int(v_) - 80) : max(0, int(v_) - 15),
+                          max(0, int(u_) - 45) : max(0, int(u_) + 45), :3]  # fmt: skip
+
+            def run_burst(
+                tr: Track, here: Cell, u: float, v: float, ref_img: Any
+            ) -> dict[str, Any]:
+                """v12 (Batt 19:4x): after the first attack click, click again on the FRESHEST box
+                every burst_interval_s (a jitter within the sprite's own size) until the arrow
+                appears above it; bounded; every click re-checks the risk gate."""
+                t_c0 = time.monotonic()
+                t_last = t_c0
+                ua, va = u, v
+                out: dict[str, Any] = {"clicks": 1, "arrow_s": None, "end": None}
+                while True:
+                    time.sleep(0.07)
+                    img_b = screen.grab(gx0, gy0, gw, gh)[1]
+                    if arrow_new(above(ref_img, ua, va), above(img_b, ua, va)):
+                        out.update(arrow_s=round(time.monotonic() - t_c0, 2), end="arrow")
+                        break
+                    if (time.monotonic() - t_c0 > prm["burst_max_s"]
+                            or out["clicks"] >= prm["burst_max_clicks"]):  # fmt: skip
+                        out["end"] = "bound"
+                        break
+                    if time.monotonic() - t_last < prm["burst_interval_s"]:
+                        continue
+                    fr_b = sampler.since(max(0, len(sampler.frames) - 1))
+                    near_b = [
+                        x
+                        for x in (fr_b[-1][1] if fr_b else [])
+                        if x.cls == "monster"
+                        and float(np.hypot(*(np.array(f1.centre(x)) - (ua, va)))) <= 60
+                    ]
+                    if not near_b:
+                        out["end"] = "gone"
+                        break
+                    if prm.get("risk_gate") and gate_risks(tr, here):
+                        out["end"] = "risky"  # no more direct clicks
+                        break
+                    b_b = min(near_b, key=lambda x: float(np.hypot(*(np.array(f1.centre(x))
+                                                                      - (ua, va)))))  # fmt: skip
+                    ua, va = burst_aim(b_b, out["clicks"])
+                    if loot1.in_ui(ua, va):
+                        out["end"] = "ui"
+                        break
+                    tb_ = r.ns()
+                    agent.click(gx0 + round(ua), gy0 + round(va))
+                    t_last = time.monotonic()
+                    out["clicks"] += 1
+                    click_log({"t": tb_, "u": round(ua, 1), "v": round(va, 1),
+                               "kind": "strike_burst", "track": tr.tid,
+                               "n": out["clicks"]})  # fmt: skip
+                out["dur_s"] = round(time.monotonic() - t_c0, 2)
+                ev({"kind": "burst", "track": tr.tid, **out})
+                return out
+
             def strike(tr: Track, here: Cell, again: bool) -> bool:
                 """Park, hover the target's newest box, ONE robust2 read; SWORD -> the attack
                 click there. True when it clicked."""
@@ -1349,8 +1471,13 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         eng["hovers"].append(hov)
                     split.to(prev, time.monotonic())
                     return False
+                burst_ = bool(prm.get("burst") and direct_)
+                ref_img = screen.grab(gx0, gy0, gw, gh)[1] if burst_ else None  # v12: the arrow's
                 tc = r.ns()
                 agent.click(gx0 + round(u), gy0 + round(v))
+                if burst_:  # v12: BURST until the client draws the arrow on the target
+                    bst = run_burst(tr, here, u, v, ref_img)
+                    hov["burst"] = bst
                 cmd_hist.append((int(tc), (int(round(pc[0])), int(round(pc[1])))))
                 del cmd_hist[:-40]
                 hov["clicked"] = tc

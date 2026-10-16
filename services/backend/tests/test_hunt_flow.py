@@ -286,3 +286,23 @@ def test_v12_a_turn_back_costs_a_penalty() -> None:
     assert hf.reversal_penalty((10, 10), (2, 10), (1, 0), 4.0) == 4.0  # behind: 180 deg
     assert hf.reversal_penalty((10, 10), (10, 2), (1, 0), 4.0) == 0.0  # 90 deg: no penalty
     assert hf.reversal_penalty((10, 10), (2, 10), None, 4.0) == 0.0
+
+
+def test_v12_a_new_down_arrow_counts_and_an_old_one_does_not() -> None:
+    reg = np.full((60, 90, 3), (90, 140, 60), np.uint8)
+    cur = reg.copy()
+    for i, row in enumerate(range(30, 34)):  # a down-pointing triangle, 9 px wide at the top
+        cur[row, 40 + i : 49 - i] = 250
+    assert hf.arrow_blobs(cur) and not hf.arrow_blobs(reg)
+    assert hf.arrow_new(reg, cur)
+    assert not hf.arrow_new(cur, cur)  # it was already there
+    up = reg.copy()
+    for i, row in enumerate(range(30, 34)):  # pointing up: not the marker
+        up[row, 44 - i : 45 + i] = 250
+    assert not hf.arrow_blobs(up)
+
+
+def test_v12_the_burst_jitter_scales_with_the_sprite() -> None:
+    lunatic, poring = _Bx(100, 100, 133, 127), _Bx(100, 100, 140, 138)
+    assert hf.burst_aim(lunatic, 0) == (116.5, 113.5)
+    assert hf.burst_aim(lunatic, 1)[1] - 113.5 < hf.burst_aim(poring, 1)[1] - 119.0
