@@ -7103,6 +7103,51 @@ estimator):**
   1-cell bar of >= 40 % stands; the offline ceiling is ~68 %.
 - 60 min, seed 20261210.
 
+### 3.48 fast-read@1: the FAST cursor read vs the proven one, no clicks (pre-registered 2026-10-16 __TIME__ ICT, the commit time __SHA__, BEFORE it runs)
+
+**Why.** In hunt-flow@6 the proven cursor gate (Prober9 + robust2) cost p50 3.56 s between "in
+range" and the attack click. Most of that is its PARK:
+- two motions to the far right;
+- 0.3 s;
+- up to 1.5 s for the drawn cursor to show there;
+- a second frame 0.25 s later;
+- then the hover, 0.55 s, and a further park after the click.
+
+Batt (15:00): "click the instant SWORD is read within range, no dwell stop".
+
+**The candidate (`scripts/fast_read.py`).** The pointer is already on the target (hunt-flow's
+pointer follows it), so:
+1. Grab A, with the cursor drawn there; the pointer has rested >= 0.25 s.
+2. Blink the pointer 90 px away in 4 small moves, to a point >= 70 px from every unit box.
+3. Grab B1 0.25 s later and B2 0.12 s after that.
+4. Run robust2's match, with its own floors and margins, on |A - B2| minus the pixels that
+   changed between B1 and B2 (animation).
+
+It is valid only if the cursor LEFT the target: a cursor-sized |A - B2|, the park's own
+60-1,200 px test. Otherwise the read is "unknown".
+
+**The check (`fast_read.py check --npc`; NO clicks, pointer moves and one typed @warp through the
+UI gate).** On prt_fild08 with the immune GM:
+- every target is read the FAST way, then the PROVEN way (park, hover, read);
+- STANDING monsters: a box that moved <= 6 px over 0.3 s; a pair is excluded when the monster
+  moved off its spot by the end;
+- GROUND points: no box within 100 px;
+- the Poring War Recruiter NPC (159,371, Poring-looking): reached by @warp to a legal stand cell
+  ~5 south (outside warp spans and touch areas), and read 5 times on its sprite.
+
+**PASS rule (written before it runs):**
+- **Zero false SWORD:** never fast = SWORD where the proven read is not SWORD.
+- **At least 10 proven-SWORD monster reads**, and fast = SWORD on >= 80 % of them.
+- **The NPC never reads SWORD** the fast way.
+
+The read times (fast vs proven, p50) are reported beside the rule.
+
+**Use.**
+- PASS: hunt-flow@8's strike reads the fast way, and any "unknown" falls back to the proven read
+  in the same call (so a fast read never decides alone in doubt). The parks before and after the
+  click go.
+- FAIL: the fast read gates nothing. hunt-flow@8 takes the next loser instead.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.

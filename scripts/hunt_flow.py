@@ -790,6 +790,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             plan["goal_path"] = None
 
             cmd_hist: list[tuple[int, Cell]] = []  # v7 attempt 2: (t_ns, cell) we clicked
+            ptr: list[tuple[float, float]] = [(gw / 2, gh / 2)]  # v8: where the pointer is
 
             def walk_click(u: float, v: float, to: Cell, seg: list[Cell], gate: str,
                            why: str, extra: dict[str, Any] | None = None) -> bool:  # fmt: skip
@@ -811,6 +812,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     click_from, click_cell = seg[0], to
                 else:
                     agent.click(gx0 + round(u), gy0 + round(v))
+                ptr[0] = (u, v)
                 click_log({"t": t_c, "u": round(u, 1), "v": round(v, 1), "kind": "walk",
                            "gate": gate, "to": list(to), "why": why, **(extra or {})})  # fmt: skip
                 ev({"kind": "walk_click", "gate": gate, "to": list(to), "why": why,
@@ -861,7 +863,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 nonlocal eng, k, reads
                 prev = split._cat
                 split.to("striking", time.monotonic())
-                ok_park = pr.park()
+                fast_ = bool(prm.get("fast_read"))
+                ok_park = True if fast_ else pr.park()  # v8: no park before the fast read
                 fr = sampler.since(max(0, len(sampler.frames) - 1))
                 b = tr.box
                 if fr and (r.ns() - fr[-1][0]) / 1e9 <= prm["fresh_s"]:
@@ -875,7 +878,25 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     split.to(prev, time.monotonic())
                     return False
                 t_read0 = r.ns()
-                if prm.get("short_read"):
+                path_ = "std"
+                if fast_:
+                    # v8: the FAST read -- the pointer is on the sprite (it follows), grab, blink
+                    # it away, two background grabs, robust2 on |A - B|; unknown -> the proven read
+                    import fast_read as fread
+
+                    cs_ = [f1.centre(x) for x in (fr[-1][1] if fr else []) if x is not b]
+                    bp_ = fread.blink_point(u, v, cs_, in_view)
+                    shape = "unknown"
+                    if bp_ is not None:
+                        fread.glide(agent, (gx0, gy0), ptr[0], (u, v))
+                        time.sleep(fread.SETTLE_S)
+                        fres = fread.read(pr, agent, screen, (gx0, gy0), u, v, bp_)
+                        shape, path_ = str(fres["shape"]), "fast"
+                        ptr[0] = bp_
+                    if shape == "unknown" and pr.park():
+                        pr.hover(u, v)
+                        shape, path_ = pr.read(u, v)["shape"], "fast>std"
+                elif prm.get("short_read"):
                     # v6: back from the park in small moves (the client draws its cursor during
                     # continuous travel, ~0.15-0.2 s behind: 13:24's test), a short settle, the
                     # proven read; anything but SWORD -> the standard hover, read once more
@@ -895,7 +916,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     pr.hover(u, v)
                     shape = pr.read(u, v)["shape"]
                 pc = tr.predict(r.ns())
-                hov = {"t": r.ns(), "at": [round(u, 1), round(v, 1)], "read": shape,
+                hov = {"t": r.ns(), "at": [round(u, 1), round(v, 1)], "read": shape, "path": path_,
                        "age_ms": round((r.ns() - tr.box_t) / 1e6),
                        "pred_cell": [round(pc[0], 2), round(pc[1], 2)]}  # fmt: skip
                 if shape != "sword":
@@ -924,11 +945,14 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         hov["aim_px"] = round(float(np.hypot(u - cx_, v - cy_)), 1)
                 if in_range_since.get(tr.tid) is not None:
                     hov["in_range_to_click_s"] = round(tc / 1e9 - in_range_since[tr.tid], 2)
-                pr.park()
+                ptr[0] = (u, v)
+                if not fast_:
+                    pr.park()
                 click_log({"t": tc, "u": round(u, 1), "v": round(v, 1), "kind": "strike",
                            "track": tr.tid, "pred_cell": hov["pred_cell"], "again": again,
                            "aim_px": hov.get("aim_px"), "read_ms": hov.get("read_ms"),
-                           "in_range_to_click_s": hov.get("in_range_to_click_s")})  # fmt: skip
+                           "in_range_to_click_s": hov.get("in_range_to_click_s"),
+                           "read_path": path_})  # fmt: skip
                 eng_tracks[tr.tid] = tr  # v6: the death cell and the loot read its boxes
                 if eng is None or eng["track"] != tr.tid:
                     eng = {"k": k, "track": tr.tid, "t_seen": tr.t_first, "t_first_click": tc,
@@ -1416,6 +1440,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                 fu_, fv_ = f1.centre(target.box)
                                 if not loot1.in_ui(fu_, fv_):
                                     agent.move(gx0 + round(fu_), gy0 + round(fv_))
+                                    ptr[0] = (fu_, fv_)
                                 follow_t[0] = target.box_t
                             if cheb(pos, tcell) <= s_range:
                                 in_range_since.setdefault(target.tid, time.monotonic())
