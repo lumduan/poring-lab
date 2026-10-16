@@ -131,7 +131,7 @@ PARAMS[5] = {**PARAMS[4], "continuous": True, "walk_every_s": 0.6, "ahead": 6,
 PARAMS[6] = {**PARAMS[5], "frame_cells": True, "reacquire": True, "follow_mouse": True,
              "short_read": True, "hover_settle_s": 0.25, "loot": True}  # fmt: skip
 PARAMS[7] = {**PARAMS[6], "loot": False, "click_lead_s": 0.50, "lead_window_s": 0.3,
-             # attempt 2 (2026-10-16 15:30, recorded before its run): attempt 1's velocity lead
+             # attempt 2 (2026-10-16 15:26, 7f13bfb, before its run): attempt 1's velocity lead
              # pointed along the OLD direction (the frames show the motion of 0.5 s ago; the
              # lead along the motion was p50 +0.5 cells vs the lag's +3.8); the lead is now our
              # own walk / attack commands replayed from the measured cell over the last 0.6 s

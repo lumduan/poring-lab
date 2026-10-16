@@ -7093,7 +7093,7 @@ what still breaks them: the position the runner measures LAGS the GM.
   - These runs used the ACTUAL destinations, read offline. Live, the cells we click ARE the
     destinations once the clicks land.
 
-**Attempt 2 (recorded 2026-10-16 ~15:31, before its run; the same main change, a different
+**Attempt 2 (recorded 2026-10-16 15:26, the commit time 7f13bfb, before its run; the same main change, a different
 estimator):**
 - The lead is OUR OWN commands, replayed from the measured cell over the last 0.6 s:
   `commanded_lead`, with walk clicks plus attack clicks (the client walks toward the monster).
