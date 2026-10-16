@@ -7819,7 +7819,7 @@ through the opportunistic strike.
 - landing within W per engagement reported by species (v13 is the reference).
 
 **Run 1 RESULT (2026-10-16 22:41:22-23:41:22, session 20261016T224122-demo-hunt-flow14, seed
-20261220; the full hour; judged 23:4x by `flow_judge.bot`):**
+20261220; the full hour; judged by `flow_judge.bot` before 23:48, 4f24232):**
 - **Engagements:** 176, all dead. Attack clicks: 173 direct / 4 read (low conf).
 - **Kills:** kills / h 164.9; engaged 131.9 / h; 33 more from walk clicks; 45 unintended
   attack requests.
@@ -7851,6 +7851,43 @@ through the opportunistic strike.
   - tag_refused <= 15 %: NO (46.7 %);
   - engaged kills / h >= 100: YES (131.9);
   - landing by species: above v13 for Poring (76 vs 68 %) and Lunatic (82 vs 56 %).
+
+### 3.57 hunt-flow@15: the LATENCY BUDGET's miss path (pre-registered 2026-10-16 __TIME__ ICT, the commit time __SHA__, BEFORE its run; Batt B1, the overnight order item 4)
+
+**Why (v13's latency budget, 262 engagements, from the runner's events and the packets):**
+- Only 4 of 262 engagements were ever re-clicked: a missed first click waited for the 2.0-s
+  re-click, which the early "dead" decision usually pre-empted.
+- The bot's "dead" decision came p50 0.38 s BEFORE the server's kill: it gave up on a target the
+  server still had alive.
+- Bursts ended "gone" 57 %: the detector lost the box right after the click (the cursor over a
+  small sprite, or a hop > 60 px), so the burst stopped without a re-click.
+
+**The ONE main change (the miss path, built in 82235c9 + a05e08a; the run adds nothing else):**
+- The re-click comes after 1.0 s, not 2.0 s.
+- A burst whose box vanished keeps clicking the track's LAST box while it is <= 1.2 s old, only
+  on a tag-confirmed track (v14's identity).
+- Burst re-clicks go only on the SAME track's box: within 35 px of its newest box.
+- "Dead" needs >= 1.4 s after the last click AND 0.8 s unseen.
+- A track's confirmed tag is reused for 10 s (no second read for a burst or a re-click).
+
+**v14 as the reference (run 1, 3.56):** bar 74.1 %, bursts ending gone 33 %, Poring 76 % / Lunatic 82 %
+landing, engaged 131.9 kills / h, tag reads refused 46.7 %.
+
+**Run:** 60 min, a fresh seed, the same test state, nice 10, detector on the CPU (GPU freeze).
+
+**Prediction, written before the run:**
+- bursts ending "gone" <= 20 % (v13 57 %, v14 33 %): a vanished box no longer ends the burst;
+- engagements with a re-click >= 10 % (v13 1.5 %);
+- the bot's "dead" p50 at or after the server's kill (v13 -0.38 s);
+- the bar (landing within W per engagement) >= 78 % (v14 74.1 %);
+- tag_refused share of strike calls BELOW v14's (the cache), still > 15 %: the tag only shows
+  while the pointer is ON the sprite, and v14's refusals were mostly the pointer off it (7 / 66
+  refused reads show a matchable tag anywhere in the recorded frames, against 31 / 40 before a
+  clicked strike). The aim is v16's change;
+- hard bars: zero NPC contact and zero map change expected. The non-target bar is expected to
+  FAIL again: v14's six Creamy hits came through WALK clicks on a sprite the detector cannot see,
+  and v15 does not change walk clicks. A walk-click guard is measured offline during this run
+  and will be pre-registered on its own.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
