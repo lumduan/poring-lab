@@ -206,7 +206,7 @@ PARAMS[11] = {**PARAMS[10], "opportunistic": True, "opp_cells": 4, "risk_targets
 PARAMS[12] = {**PARAMS[11], "burst": True, "burst_interval_s": 0.6, "burst_max_clicks": 4,
               "burst_max_s": 3.0}  # fmt: skip
 PARAMS[13] = {**PARAMS[12], "preempt_hyst": True, "preempt_margin": 2.0, "preempt_hold_s": 0.5}
-PARAMS[14] = {**PARAMS[13], "name_tag": True, "tag_wait_s": 1.2}
+PARAMS[14] = {**PARAMS[13], "name_tag": True, "tag_wait_s": 1.2, "tag_harvest": True}
 PARAMS[15] = {**PARAMS[14], "zone": True, "zone_radius": 7, "zone_radius_walking": 4}
 PARAMS[16] = {**PARAMS[15], "sweep": True, "lane_w": 12, "rev_penalty": 4.0}
 PARAMS[17] = {**PARAMS[16], "retarget": True, "retarget_margin": 2.0, "retarget_commit_s": 1.0}
@@ -1318,6 +1318,41 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 return a_[max(0, int(v_) - 80) : max(0, int(v_) - 15),
                           max(0, int(u_) - 45) : max(0, int(u_) + 45), :3]  # fmt: skip
 
+            harvest_n = [0]
+
+            def harvest_tag(img_: Any, ua: float, va: float) -> None:
+                """v14+: the raw tag band under the struck target (the client shows its name
+                after the click), saved for nametag.py build (labelled by the packets later)."""
+                fr_h = sampler.since(max(0, len(sampler.frames) - 1))
+                near_h = [
+                    x
+                    for x in (fr_h[-1][1] if fr_h else [])
+                    if x.cls == "monster"
+                    and float(np.hypot(*(np.array(f1.centre(x)) - (ua, va)))) <= 60
+                ]
+                if not near_h:
+                    return
+                bh = min(near_h, key=lambda x: float(np.hypot(*(np.array(f1.centre(x))
+                                                                 - (ua, va)))))  # fmt: skip
+                d_h = r.ROOT / "data" / "nametags" / "cuts"
+                d_h.mkdir(parents=True, exist_ok=True)
+                harvest_n[0] += 1
+                name_h = f"live-{sid}-{harvest_n[0]:04d}"
+                np.save(d_h / f"{name_h}.npy", np.asarray(nametag.band(img_, bh)))
+                with (d_h / f"cuts-live-{sid}.jsonl").open("a") as fh_:
+                    fh_.write(
+                        json.dumps(
+                            {
+                                "name": name_h,
+                                "t": r.ns(),
+                                "u": round(ua, 1),
+                                "v": round(va, 1),
+                                "box": [bh.x0, bh.y0, bh.x1, bh.y1],
+                            }
+                        )
+                        + "\n"
+                    )
+
             def run_burst(
                 tr: Track, here: Cell, u: float, v: float, ref_img: Any
             ) -> dict[str, Any]:
@@ -1333,6 +1368,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     img_b = screen.grab(gx0, gy0, gw, gh)[1]
                     if arrow_new(above(ref_img, ua, va), above(img_b, ua, va)):
                         out.update(arrow_s=round(time.monotonic() - t_c0, 2), end="arrow")
+                        if prm.get("tag_harvest"):
+                            harvest_tag(img_b, ua, va)
                         break
                     if (time.monotonic() - t_c0 > prm["burst_max_s"]
                             or out["clicks"] >= prm["burst_max_clicks"]):  # fmt: skip

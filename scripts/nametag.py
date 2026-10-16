@@ -31,6 +31,7 @@ DARK_MAX = 60  # a letter's core: every channel at most this (the tag is DARK te
 LIGHT_MIN = 150  # its outline: every channel at least this, within 2 px
 TAG_BELOW = (-6, 55)  # the search band below the box's bottom (px)
 TAG_HALF_W = 70  # half the band's width around the box centre
+MIN_WORD_W = 25  # a name is wider than the cursor tip that can enter the band (14 px)
 HOVER_S = 0.6  # the tag showed 0.5 s after the pointer stopped (20:3x probe)
 MATCH_MIN = 0.72  # template agreement (IoU of the letter cores) to accept a name
 TARGET_NAMES = ("Poring", "Lunatic", "Pupa", "Drops")  # prt_fild08's spawn table (farm0.TARGETS)
@@ -150,7 +151,8 @@ def cut(minutes: float, warp: tuple[int, int] | None) -> int:
     out = r.ROOT / "data" / "nametags" / "cuts"
     out.mkdir(parents=True, exist_ok=True)
     gx0, gy0, gw, gh = r.game_region()
-    log = (out / f"cuts-{time.strftime('%Y%m%dT%H%M%S')}.jsonl").open("a")
+    stamp = time.strftime("%Y%m%dT%H%M%S")
+    log = (out / f"cuts-{stamp}.jsonl").open("a")
     n = 0
     with r.session("rule:nametag-cut@1") as (agent, screen):
         f0.stop_on_takeover(agent)
@@ -180,7 +182,7 @@ def cut(minutes: float, warp: tuple[int, int] | None) -> int:
                 if wb is None:
                     continue
                 n += 1
-                name = f"cut-{n:04d}"
+                name = f"cut-{stamp}-{n:04d}"  # unique per session (20:22's were overwritten)
                 np.save(out / f"{name}.npy", np.asarray(reg))
                 log.write(
                     json.dumps(
@@ -252,7 +254,7 @@ def build() -> int:
             continue
         m = letter_mask(np.load(d / f"{x['name']}.npy"))
         wb = word_box(m)
-        if wb is not None:
+        if wb is not None and wb[2] - wb[0] >= MIN_WORD_W:  # not the cursor's tip
             by.setdefault(sp, []).append(m[wb[1] : wb[3], wb[0] : wb[2]])
     tpl = {}
     for sp, words in by.items():
