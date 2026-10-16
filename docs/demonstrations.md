@@ -6958,6 +6958,117 @@ On v5 attempt 2 (its fixes included), the changes:
   - kills / h above v5 run 2's 72, by engagements alone above 50 (looting costs time);
   - unintended attack requests not above v5's (16-19).
 
+**Run 1 RESULT (2026-10-16 14:43:21-15:13:21, session 20261016T144321-demo-hunt-flow6, seed
+20261208; judged 15:16, `flow_judge.py bot`):**
+- **Engagements:** 20, all dead.
+  - The bar (hit within 5 s of the first click): 17 / 20 = 85.0 % (Wilson 64.0-94.8).
+  - First click lands: 54 / 62.
+- **Kills: 112.7 / h, but 37 of the 56 kills were NOT from engagements.**
+  - They came from walk clicks the client turned into attacks (no SWORD read): 39 unintended
+    attack requests, against 16-19 in v5.
+  - Engaged kills: 19, which is **38 / h**.
+- **Timing:**
+  - seen -> click p50 6.3 s (Batt 1.11);
+  - in range -> click p50 3.56 / p90 7.84 s;
+  - read time p50 1.9 s (the short read, then usually the fallback);
+  - aim error p50 6.9 / p90 38.6 px;
+  - death -> next click p50 3.57 s (Batt 1.24).
+- **Lost targets** (target_lost 191, 6.4 / min; v5 run 1: 6.8) took 666 s, 37 % of the run. The
+  re-acquire carried 134 on. no_path dropped 63, no_sword 10.
+- **Movement:**
+  - moving share of search 80 % (v5 48-57 %);
+  - walk clicks while moving 61.9 %;
+  - interval p50 0.96 s.
+- **Moving walk clicks within 1 cell of the cell meant: 31 / 639 = 5 %**, along the motion
+  +3.54 cells. The lag below is unchanged: v6 fixed the perception side, not the clicks.
+- **Loot:** 0.07 pickups per kill. The death-cell step rarely found the cell; 39 s in total.
+- **Safety:** no stop, no NPC or dialog, HP intact. The unintended attacks above are the open
+  safety cost.
+- **vs the prediction:**
+  - aim error p50 under 15 px: YES (6.9);
+  - in range -> click under 1.5 s: NO (3.56);
+  - the bar >= 90 %: NO (85.0);
+  - pickups per kill > 0.5: NO (0.07);
+  - kills / h above 72: YES (112.7), but by engagements alone above 50: NO (38);
+  - unintended attacks not above v5's: NO (39).
+- **Top loser:** the ~0.5 s position lag (3.47). It costs both the lost / overshot approaches and
+  the unintended attacks. The slow strike read (in range -> click 3.56 s) comes next.
+
+### 3.47 hunt-flow@7: LEAD-COMPENSATED WALK CLICKS (pre-registered 2026-10-16 __TIME__ ICT, the commit time __SHA__, BEFORE its run; Batt 15:00)
+
+**Batt (15:00):** "Build and pre-register the next hunt-flow version with the two changes already
+asked: target continuity via the measured floor motion, and MOUSE FOLLOWS THE TARGET (pointer on
+the sprite every fresh frame during the approach, click the instant SWORD is read within range, no
+dwell stop). Continuous walking stays as is. Then run LONG sessions back to back (60-90 min each,
+fresh seeds, GM immune + high STR, no looting, natural spawns on prt_fild08), iterating one main
+change at a time on the top loser, until Batt says stop." Also a **GPU FREEZE** (Batt is testing
+another model): nothing of ours on the GPU; the detector stays ONNX on the CPU, niced.
+
+**Both changes are already in v6 (3.46).** v6 run 1's result above and the measurement below show
+what still breaks them: the position the runner measures LAGS the GM.
+
+**Measured 2026-10-16 15:00-15:08** on v5's banked packets and frames (scratch analyses, no run):
+- **Walk clicks while moving land ~3 cells beyond the cell meant.**
+  - Moving: p50 3 cells off (p90 4); only 4-6 % within 1 cell. v4's reckoning had 52 %.
+  - Standing: p50 2; 48 % within 1. v4 had 81 %.
+- **The error lies ALONG the GM's motion:** p50 +3.0 / +3.5 cells AHEAD (p10 +2, p90 +5), and
+  ~0 across.
+- **Per click, it is a LAG:** the along error divided by the GM's speed is p50 0.50 s (IQR
+  0.40-0.60, n = 1,074 moving clicks, both v5 runs).
+- **Its source: the frames show the GM ~0.45 s behind the server's walk.**
+  - A walk start reaches the frames p50 434 ms after the server's move.
+  - The minimap readout lags the server the same way: the best fit is 450-500 ms, mean error 0.50
+    cell (2.1 at 0 lag).
+  - So the measured position (minimap + floor odometry, both read from frames) agrees with the
+    frames, and perception may track in that "frame time".
+  - But it is BEHIND where the client walks the GM when a click lands, and the client resolves a
+    click from where the GM really is.
+- **Consequences in v5/v6:**
+  - Every continuous walk click went ~3 cells beyond where it was meant.
+  - The cell the client actually took was one the unit gate never checked. That fits the
+    unintended attacks (~1 in 50 walk clicks) and the unfollowed clicks.
+  - Approaches overshoot.
+- **Lost targets were association, not detection.** In 177 of v5 run 1's 205 lost targets, the
+  detector had monster boxes on the frames of the 2 s before the loss.
+
+**The ONE main change:**
+- Each continuous walk click is projected from where the client will resolve it: the measured
+  position + the measured floor velocity (the odometry's newest 0.3 s) x 0.50 s.
+  - It is fractional: the camera sits on a fractional cell (`frac_project`).
+  - The ahead candidates (6,5,7,4,8,3) count from there.
+- The unit-clearance gate keeps the frame's own pixel of the same cell, because the boxes are in
+  frame time.
+- Standing (velocity 0) changes nothing.
+
+**Also in this version:**
+- **NO looting** (Batt 15:00): a test condition, not a design change. v6's PICKUP step is off;
+  the weight rule stays at restore.
+- **A map-change stop** (Batt: stop on any map change). Two agreeing minimap reads more than 12
+  cells from the measured position stop the run as a map change or a warp. A minimap read off
+  the grid no longer raises.
+- **Logged per walk click:** the measured cell and the lead (cells), so the lead can be checked
+  after the run.
+- **New judge columns** (`flow_judge.py`, tested):
+  - moving walk clicks within 1 cell, with the along error p50;
+  - stops per engagement: the GM came to a standstill inside the steer / engaged windows.
+
+**Run:**
+- 60 min on prt_fild08, natural spawns;
+- a fresh seed;
+- GM immune, Lv 70 / STR 99;
+- `nice -n 10`, detector on the CPU.
+
+**Prediction, written before the run:**
+- moving walk clicks within 1 cell >= 40 % (v5 4-6 %), with the along error p50 within +-1 cell
+  (v5 +3.0 / +3.5);
+- unintended attack requests per 30 min below v5's 16-19 and below v6 run 1's 39;
+- lost targets per minute below v6 run 1's 6.4;
+- ENGAGED kills / h (kills by a SWORD-read engagement) above v6 run 1's 38. TOTAL kills / h may
+  FALL below v6's 112.7: two thirds of v6's kills were unintended walk-click attacks, which this
+  change removes;
+- the bar (hit within 5 s of the first click) >= 90 %;
+- stops per engagement not above v6 run 1's 24.9.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.

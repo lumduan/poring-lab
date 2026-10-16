@@ -56,6 +56,7 @@ REC_HZ = 5.0
 CHECK_EVERY_S = 30.0
 WEIGHT_EVERY_S = 120.0
 MINIMAP_EVERY_S = 0.3
+JUMP_CELLS = 12  # v7: a minimap read this far from the measured cell, twice: a map change
 DRIFT_CELLS = 3
 STUCK_S = 60.0
 MS_CELL = 150.0  # the GM's measured walk speed (hunt@5's packets)
@@ -94,6 +95,13 @@ VERSIONS = {
     "the GM's stop within range a SHORT read (park blink, a fast return, robust2) and the click at "
     "once; the attack click is the approach (standing <= 7); after a kill the DROPS are picked up "
     "(loot@1's PICKUP scan) before the next target",
+    7: "LEAD-COMPENSATED WALK CLICKS (measured 2026-10-16 15:05 on v5's packets: a walk click sent "
+    "while moving landed +3.0-3.5 cells AHEAD of the cell meant, ~0 across; the frames and the "
+    "minimap show the GM ~0.45 s behind the server, and the client resolves a click where it "
+    "really is): each walk click is projected from the measured position + the measured floor "
+    "velocity x 0.50 s (v5's per-click lag p50, 1,074 clicks, IQR 0.40-0.60), fractional, and "
+    "the ahead candidates count from there; the unit-clearance gate stays on the frame's own "
+    "pixel. No looting (Batt 15:00)",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -121,6 +129,7 @@ PARAMS[5] = {**PARAMS[4], "continuous": True, "walk_every_s": 0.6, "ahead": 6,
              "stall_s": 2.0, "bg_check": True, "publish_route": True}  # fmt: skip
 PARAMS[6] = {**PARAMS[5], "frame_cells": True, "reacquire": True, "follow_mouse": True,
              "short_read": True, "hover_settle_s": 0.25, "loot": True}  # fmt: skip
+PARAMS[7] = {**PARAMS[6], "loot": False, "click_lead_s": 0.50, "lead_window_s": 0.3}
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -305,6 +314,40 @@ def odo_at(hist: Sequence[tuple[int, Any]], t_ns: int) -> Any:
             break
         best = v
     return best
+
+
+def odo_velocity(hist: Sequence[tuple[int, Any]], window_s: float) -> tuple[float, float]:
+    """PURE (v7): the measured floor velocity (cells / s) over the newest ``window_s`` of the
+    odometry; 0 with too little history."""
+    if len(hist) < 2:
+        return 0.0, 0.0
+    t1, o1 = hist[-1]
+    t0, o0 = hist[0]
+    for t, v in hist:  # the last sample at or before t1 - window
+        if t > t1 - int(window_s * 1e9):
+            break
+        t0, o0 = t, v
+    if t1 <= t0:
+        return 0.0, 0.0
+    dt = (t1 - t0) / 1e9
+    return float(o1[0] - o0[0]) / dt, float(o1[1] - o0[1]) / dt
+
+
+def lead_origin(here: Sequence[float], vel: Sequence[float], lead_s: float
+                ) -> tuple[float, float]:  # fmt: skip
+    """PURE (v7): where the client will resolve a click from: the measured cell + velocity x lead
+    (the frames show the GM ~0.5 s behind where the client walks it)."""
+    return float(here[0]) + float(vel[0]) * lead_s, float(here[1]) + float(vel[1]) * lead_s
+
+
+def frac_project(world: Any, origin: Sequence[float], cell: Sequence[float]) -> tuple[float, float]:
+    """(v7) The screen pixel of ``cell`` with the camera centred on the FRACTIONAL ``origin``:
+    the World stands on the rounded cell and the cell moves by the fraction instead (the GAT
+    altitude is bilinear in fractional offsets)."""
+    r0 = (int(round(origin[0])), int(round(origin[1])))
+    world.position = r0
+    p = world.project([(cell[0] - (origin[0] - r0[0]), cell[1] - (origin[1] - r0[1]))])[0]
+    return float(p[0]), float(p[1])
 
 
 def palette_mask(a: Any) -> Any:
@@ -714,7 +757,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             plan["goal_path"] = None
 
             def walk_click(u: float, v: float, to: Cell, seg: list[Cell], gate: str,
-                           why: str) -> bool:  # fmt: skip
+                           why: str, extra: dict[str, Any] | None = None) -> bool:  # fmt: skip
                 """One walk click: cursor-gated from a standstill, map+units while moving."""
                 nonlocal moving, click_from, click_cell, last_walk
                 t_c = r.ns()
@@ -734,8 +777,9 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 else:
                     agent.click(gx0 + round(u), gy0 + round(v))
                 click_log({"t": t_c, "u": round(u, 1), "v": round(v, 1), "kind": "walk",
-                           "gate": gate, "to": list(to), "why": why})  # fmt: skip
-                ev({"kind": "walk_click", "gate": gate, "to": list(to), "why": why})
+                           "gate": gate, "to": list(to), "why": why, **(extra or {})})  # fmt: skip
+                ev({"kind": "walk_click", "gate": gate, "to": list(to), "why": why,
+                    **(extra or {})})  # fmt: skip
                 reck.go(seg, time.monotonic())
                 posm.go(seg, time.monotonic())
                 rp("walk", seg[0], seg, t_c)
@@ -1076,6 +1120,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     ths += [_start_thread(ui_watch, "ui_watch")]
                 pos_changed: dict[str, Any] = {"t": time.monotonic(), "cell": pos}
                 recent_clicks: list[Cell] = []
+                jumps: list[Cell] = []  # v7: minimap reads far from the measured cell
                 route_shown: list[Any] = [None]
                 gp_i = 0
                 follow_t = [0]  # v6: the last box time the pointer followed
@@ -1094,14 +1139,29 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     """v5: the first candidate ahead of where we ARE that passes the gates on the
                     freshest frames; no standstill needed."""
                     cur = measured_pos() or (float(pos[0]), float(pos[1]))
-                    at_ = (int(round(cur[0])), int(round(cur[1])))
+                    lead_ = None
+                    if prm.get("click_lead_s"):  # v7: where the client really is
+                        vel_ = odo_velocity(hist_now(), prm["lead_window_s"])
+                        lead_ = lead_origin(cur, vel_, prm["click_lead_s"])
+                    src_ = lead_ or cur
+                    at_ = (int(round(src_[0])), int(round(src_[1])))
                     world.position = at_
-                    for j_ in ahead_candidates(route, cur, prm["ahead_order"]):
+                    for j_ in ahead_candidates(route, src_, prm["ahead_order"]):
                         c_ = route[j_]
-                        uu, vv = (float(x) for x in world.project([c_])[0])
-                        if (in_view(uu, vv) and grid[c_[1], c_[0]] and units_clear(uu, vv)
+                        if lead_ is not None:
+                            uu, vv = frac_project(world, lead_, c_)  # the click
+                            gu, gv = frac_project(world, cur, c_)  # the frames' own pixel
+                        else:
+                            uu, vv = (float(x) for x in world.project([c_])[0])
+                            gu, gv = uu, vv
+                        if (in_view(uu, vv) and in_view(gu, gv) and grid[c_[1], c_[0]]
+                                and units_clear(gu, gv)
                                 and (not cont or walk_ok(c_))):  # fmt: skip
-                            if walk_click(uu, vv, c_, [at_, c_], "map+units", why):
+                            extra_ = None
+                            if lead_ is not None:
+                                d_ = [round(lead_[0] - cur[0], 2), round(lead_[1] - cur[1], 2)]
+                                extra_ = {"at": [round(cur[0], 2), round(cur[1], 2)], "lead": d_}
+                            if walk_click(uu, vv, c_, [at_, c_], "map+units", why, extra_):
                                 last_click.update(t=time.monotonic(), cell=c_, frm=at_)
                                 recent_clicks.append(c_)
                                 if prm.get("publish_route") and route_shown[0] is not route:
@@ -1144,7 +1204,19 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                 last_mm = now
                                 t_mm = r.ns()
                                 mm = read_position()
-                                if mm is not None and ok[mm[1], mm[0]]:
+                                mp0_ = measured_pos()
+                                if (prm.get("click_lead_s") and mm is not None and mp0_ is not None
+                                        and cheb(mm, mp0_) > JUMP_CELLS):  # fmt: skip
+                                    # v7: a position JUMP (a map change, a warp): two reads agree
+                                    jumps.append(mm)
+                                    if len(jumps) >= 2 and jumps[-1] == jumps[-2]:
+                                        raise f0.FarmStop(f"position jump {mp0_} -> {mm}: a map "
+                                                          f"change or a warp? stopped")  # fmt: skip
+                                    continue
+                                jumps.clear()
+                                on_ = mm is not None and 0 <= mm[1] < ok.shape[0] and (
+                                    0 <= mm[0] < ok.shape[1])  # fmt: skip
+                                if on_ and ok[mm[1], mm[0]]:
                                     mstate["anchor"] = (mm, odo_at(hist_now(), t_mm))
                                     last_fix[0] = time.monotonic()
                             moving = moving_meas()

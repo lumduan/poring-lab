@@ -15,6 +15,7 @@ cadence, target choice and switches, kills / h.
 from __future__ import annotations
 
 import argparse
+import bisect
 import gzip
 import json
 import math
@@ -554,6 +555,87 @@ def search_moving_share(lines: Iterable[str], moving: Sequence[tuple[int, int]],
     return round(mv / tot, 4)
 
 
+def engagement_stops(lines: Iterable[str], moving: Sequence[tuple[int, int]], n_engagements: int,
+                     t0: int, w1: int) -> dict[str, Any]:  # fmt: skip
+    """Batt 15:00: STOPS DURING ENGAGEMENTS -- the GM came to a standstill (a packet moving
+    interval ended) inside the runner's steer / engaged windows; per engagement. One stop per
+    engagement is the strike itself (a standing GM at the last walk point)."""
+    marks = [(int(x["t_ns"]), x["mode"]) for x in map(json.loads, lines)
+             if x.get("kind") == "mode"]  # fmt: skip
+    wins = []
+    for (ta, m), (tb, _m2) in zip(marks, [*marks[1:], (w1, "")], strict=True):
+        if m in ("steer", "engaged"):
+            a, b = max(ta, t0), min(tb, w1)
+            if b > a:
+                wins.append((a, b))
+    stops = sum(1 for _x, y in moving if any(a <= y < b for a, b in wins))
+    return {
+        "stops": stops,
+        "engagements": n_engagements,
+        "per_engagement": round(stops / n_engagements, 2) if n_engagements else None,
+    }
+
+
+def kills_by_origin(events: Sequence[Mapping[str, Any]], engs: Sequence[Mapping[str, Any]],
+                    t0: int, w1: int) -> dict[str, int]:  # fmt: skip
+    """v6's finding: a kill is ENGAGED when our last attack request on that mob fell inside an
+    engagement window (a SWORD-read attack click), else UNINTENDED (a walk click the client turned
+    into an attack). A kill = the mob vanished (reason 1) <= 1.5 s after our damaging act."""
+    win = [(int(e["t_first_click"]) - int(0.2 * NS), int(e.get("t_end") or e["t_first_click"])
+            + int(3 * NS)) for e in engs]  # fmt: skip
+    last_req: dict[int, int] = {}
+    hit: dict[int, int] = {}
+    out = {"engaged": 0, "unintended": 0}
+    for e in events:
+        t = int(e["t_mono_ns"])
+        typ = e.get("type")
+        if typ == "attack_request":
+            last_req[gid_of(e, "target_gid")] = t
+        elif typ == "act" and gid_of(e, "src_gid") == GM and int(e.get("damage") or 0) > 0:
+            hit[gid_of(e, "target_gid")] = t
+        elif (typ == "entity_vanish" and int(e.get("reason", -1)) == 1 and t0 <= t < w1
+              and t - hit.get(gid_of(e), -(10**18)) <= int(1.5 * NS)):  # fmt: skip
+            rq = last_req.get(gid_of(e))
+            ok = rq is not None and any(a <= rq <= b for a, b in win)
+            out["engaged" if ok else "unintended"] += 1
+    return out
+
+
+def walk_click_accuracy(events: Sequence[Mapping[str, Any]], walks: Sequence[Mapping[str, Any]],
+                        moving: Sequence[tuple[int, int]]) -> dict[str, Any]:  # fmt: skip
+    """v7: each walk click's intended cell (clicks.jsonl ``to``) vs the cell the client asked
+    the server for (the next self_move_request <= 0.5 s later), split by whether the GM was
+    moving at the click: the share within 1 cell, and the error ALONG the GM's motion (cells,
+    + = the click landed ahead of the cell meant; v5: +3.0-3.5)."""
+    req = [(int(e["t_mono_ns"]), (int(e["x"]), int(e["y"]))) for e in events
+           if e.get("type") == "self_move_request"]  # fmt: skip
+    rt = [t for t, _ in req]
+    track, _mv = gm_track(events)
+    out: dict[str, Any] = {}
+    rows: dict[bool, list[tuple[int, float | None]]] = {False: [], True: []}
+    for w in walks:
+        t = int(w["t"])
+        i = bisect.bisect_left(rt, t)
+        if not (i < len(req) and req[i][0] - t < 0.5 * NS):
+            continue
+        got, to = req[i][1], (int(w["to"][0]), int(w["to"][1]))
+        mv = is_moving(moving, t)
+        along = None
+        a, b = at(track, t - int(0.3 * NS)), at(track, t)
+        if mv and a is not None and b is not None and a != b:
+            dx, dy = b[0] - a[0], b[1] - a[1]
+            along = ((got[0] - to[0]) * dx + (got[1] - to[1]) * dy) / math.hypot(dx, dy)
+        rows[mv].append((cheb(got, to), along))
+    for mv, rs in rows.items():
+        al = [x for _d, x in rs if x is not None]
+        out["moving" if mv else "standing"] = {
+            "n": len(rs),
+            "within_1": round(sum(d <= 1 for d, _x in rs) / len(rs), 3) if rs else None,
+            "along_p50": None if not al else round(pct(al, 0.5) or 0.0, 2),
+        }
+    return out
+
+
 def sight_per_10min(events: Sequence[Mapping[str, Any]], t0: int, w1: int) -> float:
     """Distinct mobs that entered sight in [t0, w1), per 10 minutes."""
     g = {gid_of(e) for e in events if e.get("type") == "entity_appear" and e.get("objtype") == 5
@@ -758,6 +840,12 @@ def bot(sid: str) -> dict[str, Any]:
     _track, mv_ = gm_track(events)
     out["search_moving_share"] = search_moving_share(
         (d / "events.jsonl").read_text().splitlines(), mv_, t0, w1)  # fmt: skip
+    out["engagement_stops"] = engagement_stops(
+        (d / "events.jsonl").read_text().splitlines(), mv_, len(engs), t0, w1)  # fmt: skip
+    walks = [x for x in map(json.loads, (d / "clicks.jsonl").read_text().splitlines())
+             if x.get("kind") == "walk" and t0 <= int(x["t"]) < w1]  # fmt: skip
+    out["walk_click_accuracy"] = walk_click_accuracy(events, walks, mv_)
+    out["kills_by_origin"] = kills_by_origin(events, engs, t0, w1)
     out.update({"session": sid, "actor": "bot", "rule": man.get("rule")})
     (d / "flow_judge.json").write_text(json.dumps(out, indent=1))
     return out
@@ -773,6 +861,9 @@ def row(o: Mapping[str, Any]) -> dict[str, str]:
         "1st click lands (not the bar)": f"{o['hits']}/{o['trials']} = "
         f"{100 * (o['hit_rate'] or 0):.1f} %",
         "kills / h": f"{o['kills_per_hour']}",
+        "kills / h by engagements (SWORD read)": "-" if not o.get("kills_by_origin")
+        else f"{round(o['kills_by_origin']['engaged'] * 3600 / o['window_s'], 1)}"
+        f" ({o['kills_by_origin']['unintended']} other kills)",
         "seen -> click p50/p90 s": f"{rx['seen_to_click'][0]} / {rx['seen_to_click'][1]}",
         "click -> hit p50/p90 s": f"{rx['click_to_hit'][0]} / {rx['click_to_hit'][1]}",
         "monsters in sight / 10 min": f"{o['sight_per_10min']}",
@@ -795,6 +886,16 @@ def row(o: Mapping[str, Any]) -> dict[str, str]:
         else "{p50} / {p90}".format(**o["aim_px"]),
         "in range -> click s p50/p90": "-" if not (o.get("in_range_to_click_s") or {}).get("n")
         else "{p50} / {p90}".format(**o["in_range_to_click_s"]),
+        "stops / engagement": "-" if not (o.get("engagement_stops") or {}).get("engagements")
+        else f"{o['engagement_stops']['per_engagement']}",
+        "moving walk clicks within 1 cell": "-" if not ((o.get("walk_click_accuracy") or {})
+                                                        .get("moving") or {}).get("n")
+        else "{}/{n} = {p:.0f} % (along {a:+})".format(
+            round(o["walk_click_accuracy"]["moving"]["within_1"]
+                  * o["walk_click_accuracy"]["moving"]["n"]),
+            n=o["walk_click_accuracy"]["moving"]["n"],
+            p=100 * o["walk_click_accuracy"]["moving"]["within_1"],
+            a=o["walk_click_accuracy"]["moving"]["along_p50"] or 0.0),
         "pickups per kill": f"{o.get('pickups_per_kill', '-')}",
         "window min": f"{round(o['window_s'] / 60, 1)}",
     }  # fmt: skip

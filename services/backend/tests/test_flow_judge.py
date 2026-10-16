@@ -182,3 +182,41 @@ def test_the_moving_share_counts_search_windows_only() -> None:
              json.dumps({"kind": "mode", "mode": "search", "t_ns": int(20 * S)})]  # fmt: skip
     moving = [(int(5 * S), int(25 * S))]
     assert fj.search_moving_share(lines, moving, 0, int(30 * S)) == 0.5  # (5 + 5) / (10 + 10)
+
+
+def test_stops_during_engagements_count_standstills_in_steer_and_engaged_windows() -> None:
+    lines = [json.dumps({"kind": "mode", "mode": "search", "t_ns": 0}),
+             json.dumps({"kind": "mode", "mode": "steer", "t_ns": int(10 * S)}),
+             json.dumps({"kind": "mode", "mode": "engaged", "t_ns": int(14 * S)}),
+             json.dumps({"kind": "mode", "mode": "search", "t_ns": int(20 * S)})]  # fmt: skip
+    moving = [(0, int(5 * S)), (int(9 * S), int(12 * S)), (int(13 * S), int(15 * S)),
+              (int(21 * S), int(25 * S))]  # fmt: skip
+    out = fj.engagement_stops(lines, moving, 1, 0, int(30 * S))
+    assert out == {"stops": 2, "engagements": 1, "per_engagement": 2.0}
+
+
+def test_walk_click_accuracy_splits_moving_clicks_and_signs_the_error_along_the_motion() -> None:
+    events = [
+        ev(0.0, "self_move", x0=0, y0=0, x1=20, y1=0),  # east, 150 ms a cell
+        ev(1.0, "self_move_request", x=13, y=0),  # meant 10: landed 3 AHEAD
+        ev(4.0, "self_move_request", x=31, y=1),
+    ]  # standing at 20, meant 30: 1 off
+    walks = [{"t": int(0.95 * S), "to": [10, 0]}, {"t": int(3.95 * S), "to": [30, 0]},
+             {"t": int(9.0 * S), "to": [5, 5]}]  # the last one never answered  # fmt: skip
+    _pts, moving = fj.gm_track(events[:1])
+    out = fj.walk_click_accuracy(events, walks, moving)
+    assert out["moving"] == {"n": 1, "within_1": 0.0, "along_p50": 3.0}
+    assert out["standing"] == {"n": 1, "within_1": 1.0, "along_p50": None}
+
+
+def test_kills_split_by_whether_a_sword_read_engagement_asked_for_them() -> None:
+    other = MOB + 1
+    events = base() + [appear(0.0, other, 20, 10),
+                       ev(2.3, "attack_request", target_gid=MOB),
+                       ev(2.5, "act", src_gid=fj.GM, target_gid=MOB, damage=182),
+                       ev(2.6, "entity_vanish", gid=MOB, reason=1),
+                       ev(9.0, "attack_request", target_gid=other),  # a walk click turned attack
+                       ev(9.4, "act", src_gid=fj.GM, target_gid=other, damage=182),
+                       ev(9.5, "entity_vanish", gid=other, reason=1)]  # fmt: skip
+    engs = [{"t_first_click": int(2.0 * S), "t_end": int(3.0 * S)}]
+    assert fj.kills_by_origin(events, engs, 0, int(20 * S)) == {"engaged": 1, "unintended": 1}

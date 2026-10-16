@@ -132,3 +132,32 @@ def test_the_shadow_palette_keeps_cursor_colours_not_grass() -> None:
     a[0, 3] = (60, 140, 70)  # grass
     m = hf.palette_mask(a)
     assert m[0, 0] and m[0, 1] and m[0, 2] and not m[0, 3]
+
+
+def test_v7_the_floor_velocity_is_measured_over_the_newest_window() -> None:
+    hist = [(int(t * S), np.array([4.0 * t, -2.0 * t])) for t in (0.0, 0.1, 0.2, 0.3, 0.4, 0.5)]
+    vx, vy = hf.odo_velocity(hist, 0.3)
+    assert abs(vx - 4.0) < 1e-9 and abs(vy + 2.0) < 1e-9
+    assert hf.odo_velocity(hist[:1], 0.3) == (0.0, 0.0)
+    still = [(int(t * S), np.array([7.0, 7.0])) for t in (0.0, 0.1, 0.2, 0.3)]
+    assert hf.odo_velocity(still, 0.3) == (0.0, 0.0)
+
+
+def test_v7_a_walk_click_leads_by_velocity_times_the_measured_lag() -> None:
+    # v5's packets: clicks landed ~3.3 cells ahead at ~6.7 cells/s -> 0.5 s
+    assert hf.lead_origin((100.0, 50.0), (6.6, 0.0), 0.5) == (103.3, 50.0)
+    assert hf.lead_origin((100.0, 50.0), (0.0, 0.0), 0.5) == (100.0, 50.0)  # standing: none
+
+
+def test_v7_projects_from_a_fractional_origin_by_moving_the_cell() -> None:
+    class FlatWorld:  # 32 px a cell, the camera on ``position``
+        position: tuple[int, int] = (0, 0)
+
+        def project(self, cells: object) -> np.ndarray:
+            c = np.asarray(cells, dtype=float) - np.asarray(self.position, dtype=float)
+            return c * 32.0 + (640.0, 360.0)
+
+    w = FlatWorld()
+    u, v = hf.frac_project(w, (10.25, 20.0), (12, 20))
+    assert w.position == (10, 20) and (u, v) == (640.0 + 1.75 * 32, 360.0)
+    assert hf.frac_project(w, (10.0, 20.0), (12, 20)) == (640.0 + 2 * 32, 360.0)
