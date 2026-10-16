@@ -6808,7 +6808,7 @@ the top safety item is the same gate (15 walk clicks turned attacks across the t
   - **Safety (packets, the loop):** NPC contacts 0, dialogs 0, map changes 0, non-target hits 0,
     unintended attack requests 0. The UI stop above is the run's one safety stop.
 
-### 3.45 hunt-flow@5: CONTINUOUS MOVEMENT (pre-registered 2026-10-16 ~14:05 ICT, after v4's result, BEFORE its run; Batt ~13:10)
+### 3.45 hunt-flow@5: CONTINUOUS MOVEMENT (pre-registered 2026-10-16 13:34 ICT, the commit time 05edb79, after v4's result, BEFORE its run; Batt ~13:10)
 
 Batt: "the GM still walks, STOPS, then gets the next click. Make movement continuous, as in his
 demo (73 % of his walk clicks were sent while still walking, one every ~0.6 s, ~6 cells ahead).
