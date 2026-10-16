@@ -142,15 +142,13 @@ VERSIONS = {
     "-- pass as a target, v11 +527 s): before a direct attack click the pointer rests on the "
     "target until the client's own name tag under it reads (<= 1.2 s); only Poring / Lunatic / "
     "Pupa / Drops are clicked; another name bans the target; no tag = no click",
-    15: "ENGAGEMENT ZONE (Batt 18:2x: a Poring circled the GM ~15 s while it re-aimed at every "
-    "hop): once a target is chosen, ONE path to the nearest walkable cell within the attack-click "
-    "range of it (7 cells, 4 for a walking target: Batt's p90 / p50), re-planned only when the "
-    "target leaves that zone; inside the zone the GM strikes (the risk gate) once it stands",
-    16: "NO BACK-AND-FORTH (Batt 18:2x; Batt 3.6 reversals / min and 16.9-cell straight runs, the "
-    "bot 5.9-7.8 and 10-11): the search walks LAWNMOWER LANES (east / west to the area's edge or a "
-    "dead end, a 12-cell shift, the next lane back), with no time-based re-pick of the goal; the "
-    "target queue's first pick costs +4 cells when it needs a turn of > 120 deg",
-    17: "RE-TARGET WHILE STEERING (Batt's change 2: detection -> dispatch, v7 p50 2.85 s, was the "
+    15: "LATENCY BUDGET on the miss path (Batt B1; v13: 4 of 262 engagements ever re-clicked, the "
+    "bot's 'dead' p50 0.38 s BEFORE the server's kill, bursts ended 'gone' 57 %): re-click 2.0 -> "
+    "1.0 s; a burst whose box vanished keeps clicking the track's last box (<= 1.2 s old, "
+    "tag-confirmed only); 'dead' needs >= 1.4 s after the last click and 0.8 s unseen",
+    18: "ENGAGEMENT ZONE (Batt 18:2x) -- to be joined by Batt's heading method (21:31): one path "
+    "into the attack range, re-planned only when the target leaves the zone",
+    19: "RE-TARGET WHILE STEERING (Batt's change 2: detection -> dispatch, v7 p50 2.85 s, was the "
     "bot steering to ANOTHER target that then failed, 19 / 32): after >= 1 s on a target, the "
     "planner's queue[0] replaces it when it is valid and cheaper by >= 2 cells (Chebyshev to the "
     "predicted cell, +2 for a walking one)",
@@ -208,9 +206,11 @@ PARAMS[12] = {**PARAMS[11], "burst": True, "burst_interval_s": 0.6, "burst_max_c
 PARAMS[13] = {**PARAMS[12], "preempt_hyst": True, "preempt_margin": 2.0, "preempt_hold_s": 0.5}
 PARAMS[14] = {**PARAMS[13], "name_tag": True, "tag_wait_s": 1.2, "tag_harvest": True,
               "walk_clear_unconfirmed": True}  # fmt: skip
-PARAMS[15] = {**PARAMS[14], "zone": True, "zone_radius": 7, "zone_radius_walking": 4}
-PARAMS[16] = {**PARAMS[15], "sweep": True, "lane_w": 12, "rev_penalty": 4.0}
-PARAMS[17] = {**PARAMS[16], "retarget": True, "retarget_margin": 2.0, "retarget_commit_s": 1.0}
+PARAMS[15] = {**PARAMS[14], "reclick_s": 1.0, "dead_min_s": 1.4, "dead_gone_s": 0.8,
+              "burst_hold": True, "burst_hold_s": 1.2, "tag_cache_s": 10.0}  # fmt: skip
+# 16 focus tracking, 17 loot: built next; 18 = movement (Batt's heading method + the zone)
+PARAMS[18] = {**PARAMS[15], "zone": True, "zone_radius": 7, "zone_radius_walking": 4}
+PARAMS[19] = {**PARAMS[18], "retarget": True, "retarget_margin": 2.0, "retarget_commit_s": 1.0}
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -1386,6 +1386,14 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         if x.cls == "monster"
                         and float(np.hypot(*(np.array(f1.centre(x)) - (ua, va)))) <= 60
                     ]
+                    if not near_b and prm.get("burst_hold") and tr.box is not None and (
+                            r.ns() - tr.box_t) / 1e9 <= prm["burst_hold_s"] and (
+                            not prm.get("name_tag") or tr.tid in confirmed):  # fmt: skip
+                        # v15: the box is gone from the freshest frame (the cursor over a small
+                        # sprite hides it; v13: 57 % of bursts ended "gone"): keep clicking the
+                        # track's last box -- a tag-confirmed target only
+                        near_b = [tr.box]
+                        out["held"] = out.get("held", 0) + 1
                     if not near_b:
                         out["end"] = "gone"
                         break
@@ -1453,7 +1461,11 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 path_ = "std"
                 reads_why: list[list[Any]] = []  # v9: each read's shape / why / best
                 tag_ = None
-                if direct_ and prm.get("name_tag"):
+                cached_ = confirmed.get(tr.tid)
+                if (direct_ and prm.get("name_tag") and prm.get("tag_cache_s") and cached_
+                        and time.monotonic() - cached_[1] <= prm["tag_cache_s"]):  # fmt: skip
+                    tag_ = cached_[0]  # v15: this track's tag read a target <= 10 s ago
+                elif direct_ and prm.get("name_tag"):
                     # v12: the client's own species label must read a TARGET before a direct click
                     # (the size gate let a Creamy, a non-target, pass as a Poring: v11 +527 s)
                     tag_, tag_ms = read_tag(u, v, b)
