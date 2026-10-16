@@ -7500,6 +7500,19 @@ on the CPU (GPU freeze).
 - the bar (hit within 5 s of the first click) >= 90 %;
 - the hard bars: 0 / 0 / 0.
 
+**Attempt 1 (2026-10-16 18:08:03-18:14:47, session 20261016T180803-demo-hunt-flow10, seed
+20261215): STOPPED by me at 6.4 min, on a mid-run check.**
+- **The gate never went direct:** 15 / 15 strike calls took the read, all for "stale_box".
+- The CPU detector delivers a box 0.3-0.65 s after its frame. The target's box age at the strike
+  was p50 ~0.52 s (377-3,130 ms), so the 0.4 s freshness limit rejected nearly every box.
+- In effect the run was v9: 3 engagements; reads 3 SWORD / 3 WALK / 9 unknown.
+- Hard bars 0 / 0 / 0 (live packets).
+
+**Attempt 2 (recorded 2026-10-16 __TIME__, the commit time __SHA__, before its run; a bug fix
+within the version):** the gate's box may be up to 1.0 s old (`gate_fresh_s`, the dispatch
+freshness). v9's stand gate already holds the target still over the last 1.2 s, so a <= 1 s box
+is where it stands. 60 min, seed 20261216.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
