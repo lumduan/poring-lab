@@ -8305,6 +8305,20 @@ bars passed.
   - engaged kills / h >= 94: YES (133);
   - hard bars: FAILED (one walk-click Creamy).
 
+**Run 2 = a CONFIRMATION BLOCK (pre-registered 2026-10-17 05:4x, the commit time below, BEFORE
+it):**
+- The same build, a fresh seed, 45 min (it ends before 07:00, when nothing of ours may run). No
+  change.
+- **Why:** v20 is the night's best version (engaged 133 kills / h, the bar 85.2 %). One block
+  cannot say whether its walk-click Creamy is rare.
+- **Prediction:**
+  - the bar >= 80 %;
+  - engaged kills / h >= 110;
+  - tag refusals <= 40 %;
+  - reversals <= 5 / min;
+  - zero NPC contact and zero map change;
+  - a walk-click Creamy is possible: about one in 1-2 h at v20's rate.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
