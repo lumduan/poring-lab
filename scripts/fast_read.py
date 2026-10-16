@@ -96,6 +96,7 @@ def read(pr: Any, agent: Any, screen: Any, origin: tuple[int, int], u: float, v:
 
 def check(n_mon: int, n_ground: int, npc: bool, minutes: float,
           warp: tuple[int, int] | None = None) -> int:  # fmt: skip
+    import bench
     import cursor_gate
     import farm0 as f0
     import farm1 as f1
@@ -121,6 +122,7 @@ def check(n_mon: int, n_ground: int, npc: bool, minutes: float,
         if warp is not None:  # a stand cell (the caller checks it) where monsters roam
             r.gm(agent, screen, f"@warp prt_fild08 {warp[0]} {warp[1]}")
             time.sleep(2.5)
+            bench.close_chat(agent, screen)  # the typed line left the chat input open (16:25)
         here = [(gw / 2, gh / 2)]
 
         def boxes() -> list[Any]:
@@ -181,6 +183,7 @@ def check_npc(agent: Any, screen: Any, pr: Any, det: Any, both: Any, boxes: Any,
               region: tuple[int, int, int, int]) -> None:  # fmt: skip
     """The Poring War Recruiter (prt_fild08 159,371; it looks like a Poring): @warp to a legal
     stand cell ~5 south of it (outside warp spans and touch areas), then 5 reads on its sprite."""
+    import bench
     import farm1 as f1
     import ro_agent as r
     import walk5 as w5
@@ -199,6 +202,7 @@ def check_npc(agent: Any, screen: Any, pr: Any, det: Any, both: Any, boxes: Any,
         return
     r.gm(agent, screen, f"@warp prt_fild08 {stand[0]} {stand[1]}")
     time.sleep(2.5)
+    bench.close_chat(agent, screen)
     gx0, gy0, gw, gh = region
     xy = selfpos.read_minimap_xy(np.asarray(screen.grab(gx0, gy0, gw, gh)[1])[..., :3].copy(),
                                  selfpos.load_digit_templates())  # fmt: skip
