@@ -6685,7 +6685,7 @@ bar.
   - Batt re-clicks 6 cells ahead every ~0.6 s and his walks never end (73 % of his clicks are
     sent while walking).
 
-### 3.43 hunt-flow@3: CONTINUOUS WALKING THAT HOLDS (pre-registered 2026-10-16 ~12:25 ICT, BEFORE its run)
+### 3.43 hunt-flow@3: CONTINUOUS WALKING THAT HOLDS (pre-registered 2026-10-16 12:22 ICT, the commit time f6c50b8, BEFORE its run)
 
 The top time-loser of v1 and v2 is idle time (~80 %). Its cause is the walk gate's freshness, and
 the top safety item is the same gate (15 walk clicks turned attacks across the two runs).
