@@ -135,19 +135,22 @@ VERSIONS = {
     "none after 0.6 s (Batt's re-click interval) the next click goes to the FRESHEST box's body "
     "centre with a jitter scaled to that sprite (tighter on a Lunatic); stop on the arrow, at 4 "
     "clicks or 3 s, when the box is gone, or when the risk gate turns; logged per burst",
-    13: "NAME-TAG CHECK (Batt 19:5x; the size gate let a Creamy -- pink, 39 x 36 px like a Poring "
+    13: "PRE-EMPTION HYSTERESIS (Batt 20:5x; v11: 1,085 pre-emptions in 242 engagements, landing "
+    "within 5 s 44 %): a nearer target replaces the current one only if it is >= 2 cells closer "
+    "(or the current one left the 4-cell zone) AND stays so for >= 0.5 s; never during a burst",
+    14: "NAME-TAG CHECK (Batt 19:5x; the size gate let a Creamy -- pink, 39 x 36 px like a Poring "
     "-- pass as a target, v11 +527 s): before a direct attack click the pointer rests on the "
     "target until the client's own name tag under it reads (<= 1.2 s); only Poring / Lunatic / "
     "Pupa / Drops are clicked; another name bans the target; no tag = no click",
-    14: "ENGAGEMENT ZONE (Batt 18:2x: a Poring circled the GM ~15 s while it re-aimed at every "
+    15: "ENGAGEMENT ZONE (Batt 18:2x: a Poring circled the GM ~15 s while it re-aimed at every "
     "hop): once a target is chosen, ONE path to the nearest walkable cell within the attack-click "
     "range of it (7 cells, 4 for a walking target: Batt's p90 / p50), re-planned only when the "
     "target leaves that zone; inside the zone the GM strikes (the risk gate) once it stands",
-    15: "NO BACK-AND-FORTH (Batt 18:2x; Batt 3.6 reversals / min and 16.9-cell straight runs, the "
+    16: "NO BACK-AND-FORTH (Batt 18:2x; Batt 3.6 reversals / min and 16.9-cell straight runs, the "
     "bot 5.9-7.8 and 10-11): the search walks LAWNMOWER LANES (east / west to the area's edge or a "
     "dead end, a 12-cell shift, the next lane back), with no time-based re-pick of the goal; the "
     "target queue's first pick costs +4 cells when it needs a turn of > 120 deg",
-    16: "RE-TARGET WHILE STEERING (Batt's change 2: detection -> dispatch, v7 p50 2.85 s, was the "
+    17: "RE-TARGET WHILE STEERING (Batt's change 2: detection -> dispatch, v7 p50 2.85 s, was the "
     "bot steering to ANOTHER target that then failed, 19 / 32): after >= 1 s on a target, the "
     "planner's queue[0] replaces it when it is valid and cheaper by >= 2 cells (Chebyshev to the "
     "predicted cell, +2 for a walking one)",
@@ -202,10 +205,11 @@ PARAMS[11] = {**PARAMS[10], "opportunistic": True, "opp_cells": 4, "risk_targets
               "box_clear_nontarget_only": True}  # fmt: skip
 PARAMS[12] = {**PARAMS[11], "burst": True, "burst_interval_s": 0.6, "burst_max_clicks": 4,
               "burst_max_s": 3.0}  # fmt: skip
-PARAMS[13] = {**PARAMS[12], "name_tag": True, "tag_wait_s": 1.2}
-PARAMS[14] = {**PARAMS[13], "zone": True, "zone_radius": 7, "zone_radius_walking": 4}
-PARAMS[15] = {**PARAMS[14], "sweep": True, "lane_w": 12, "rev_penalty": 4.0}
-PARAMS[16] = {**PARAMS[15], "retarget": True, "retarget_margin": 2.0, "retarget_commit_s": 1.0}
+PARAMS[13] = {**PARAMS[12], "preempt_hyst": True, "preempt_margin": 2.0, "preempt_hold_s": 0.5}
+PARAMS[14] = {**PARAMS[13], "name_tag": True, "tag_wait_s": 1.2}
+PARAMS[15] = {**PARAMS[14], "zone": True, "zone_radius": 7, "zone_radius_walking": 4}
+PARAMS[16] = {**PARAMS[15], "sweep": True, "lane_w": 12, "rev_penalty": 4.0}
+PARAMS[17] = {**PARAMS[16], "retarget": True, "retarget_margin": 2.0, "retarget_commit_s": 1.0}
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -713,6 +717,13 @@ def burst_aim(box: Any, k: int) -> tuple[float, float]:
     jx, jy = BURST_JITTER[k % len(BURST_JITTER)]
     w, h = box.x1 - box.x0, box.y1 - box.y0
     return (box.x0 + box.x1) / 2 + jx * w, (box.y0 + box.y1) / 2 + jy * h
+
+
+def preempt_better(d_new: float, d_cur: float | None, zone_cells: float, margin: float) -> bool:
+    """PURE (v13, Batt 20:5x): a pre-emption candidate is CLEARLY better -- there is no current
+    target, the current one left the zone (> ``zone_cells``), or the new one is >= ``margin``
+    cells closer."""
+    return d_cur is None or d_cur > zone_cells or d_new + margin <= d_cur
 
 
 def map_same(ref: Any, cur: Any, max_median: float = MAP_SAME_MAX) -> bool:
@@ -1805,6 +1816,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 follow_t = [0]  # v6: the last box time the pointer followed
                 still_wait: dict[int, float] = {}  # v9: track -> since when waiting for it to stand
                 t_target = [0.0]  # v11: when the current target was set
+                pre_cand: dict[str, Any] = {}  # v13: the pre-emption candidate and since when
                 zone_st: dict[str, Any] = {}  # v11: the engagement zone (tid, center, radius, path)
                 dispatched: set[tuple[int, bool]] = set()
                 stop_since: float | None = None  # v5: since when standing with no click
@@ -2084,12 +2096,30 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             # 19:0x: Porings around the GM while it walked to a far one)
                             nc_ = nearest_close(live, pos, t_now, prm["opp_cells"],
                                                 prm["gate_fresh_s"], list(done_ids))  # fmt: skip
-                            if nc_ is not None and (target is None or nc_.tid != target.tid):
+                            do_ = nc_ is not None and (target is None or nc_.tid != target.tid)
+                            if do_ and prm.get("preempt_hyst") and nc_ is not None:
+                                # v13: only a CLEARLY better one, and only once it has stayed
+                                # better for preempt_hold_s (v11: 1,085 flips in 242 engagements)
+                                d_n = cheb(pos, nc_.predict(t_now))
+                                d_c = None if target is None else cheb(pos, target.predict(t_now))
+                                if preempt_better(d_n, d_c, prm["opp_cells"],
+                                                  prm["preempt_margin"]):  # fmt: skip
+                                    if pre_cand.get("tid") != nc_.tid:
+                                        pre_cand.update(tid=nc_.tid, since=now)
+                                    do_ = (
+                                        target is None
+                                        or now - pre_cand["since"] >= prm["preempt_hold_s"]
+                                    )
+                                else:
+                                    pre_cand.clear()
+                                    do_ = False
+                            if do_ and nc_ is not None:
                                 ev({"kind": "preempt", "to": nc_.tid,
                                     "from": None if target is None else target.tid,
                                     "d": round(cheb(pos, nc_.predict(t_now)), 1)})  # fmt: skip
                                 target, reads = nc_, 0
                                 t_target[0] = now
+                                pre_cand.clear()
                         if (prm.get("retarget") and target is not None and eng is None and q
                                 and now - t_target[0] >= prm["retarget_commit_s"]):  # fmt: skip
                             # v11: while steering, switch to the planner's better queue[0]

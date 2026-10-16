@@ -1001,8 +1001,13 @@ def bot(sid: str) -> dict[str, Any]:
     out["heading"] = heading_metrics(events, t0, w1)
     all_clicks = [x for x in map(json.loads, (d / "clicks.jsonl").read_text().splitlines())]
     out["species"] = species_landing(events, out["engagements_w"]["rows"], engs, all_clicks)
-    bursts = [x for x in map(json.loads, (d / "events.jsonl").read_text().splitlines())
-              if x.get("kind") == "burst"]  # fmt: skip
+    evl = [x for x in map(json.loads, (d / "events.jsonl").read_text().splitlines())]
+    out["preempts_per_min"] = round(sum(1 for x in evl if x.get("kind") == "preempt")
+                                    / max(1e-9, window / 60), 2)  # fmt: skip
+    ages = [float(x["age_ms"]) for x in evl if x.get("kind") == "strike_call"
+            and x.get("read") in ("sword", "direct") and x.get("age_ms") is not None]  # fmt: skip
+    out["box_age_ms"] = {"n": len(ages), "p50": pct(ages, 0.5), "p90": pct(ages, 0.9)}
+    bursts = [x for x in evl if x.get("kind") == "burst"]
     if bursts:
         out["bursts"] = {"n": len(bursts),
                          "clicks_p50": pct([float(b["clicks"]) for b in bursts], 0.5),
@@ -1078,6 +1083,10 @@ def row(o: Mapping[str, Any]) -> dict[str, str]:
             o["species"].items(), key=lambda kv: -kv[1]["n"]) if v["n"]),
         "bursts: clicks p50, ends": "-" if not o.get("bursts")
         else f"{o['bursts']['clicks_p50']} | {o['bursts']['ends']}",
+        "pre-emptions / min": "-" if o.get("preempts_per_min") is None
+        else f"{o['preempts_per_min']}",
+        "box age at click ms p50/p90": "-" if not (o.get("box_age_ms") or {}).get("n")
+        else "{p50} / {p90}".format(**o["box_age_ms"]),
         "reversals / min": "-" if not o.get("heading") else f"{o['heading']['reversals_per_min']}",
         "mean straight run (cells)": "-" if not o.get("heading")
         else f"{o['heading']['mean_straight_run']}",

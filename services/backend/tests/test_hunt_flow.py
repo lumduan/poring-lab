@@ -306,3 +306,10 @@ def test_v12_the_burst_jitter_scales_with_the_sprite() -> None:
     lunatic, poring = _Bx(100, 100, 133, 127), _Bx(100, 100, 140, 138)
     assert hf.burst_aim(lunatic, 0) == (116.5, 113.5)
     assert hf.burst_aim(lunatic, 1)[1] - 113.5 < hf.burst_aim(poring, 1)[1] - 119.0
+
+
+def test_v13_only_a_clearly_better_target_preempts() -> None:
+    assert hf.preempt_better(3.0, None, 4, 2.0)  # no current target
+    assert hf.preempt_better(1.0, 3.0, 4, 2.0)  # 2 cells closer
+    assert not hf.preempt_better(2.0, 3.0, 4, 2.0)  # 1 cell closer: a neighbour, no flip
+    assert hf.preempt_better(3.0, 5.0, 4, 2.0)  # the current one left the zone
