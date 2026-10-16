@@ -2323,6 +2323,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 pre_cand: dict[str, Any] = {}  # v13: the pre-emption candidate and since when
                 last_unstall = [time.monotonic()]  # the stall breaker's last firing (mono s)
                 busy_t = [time.monotonic()]  # the last moment with a target or an engagement
+                stuck_cell: list[Cell | None] = [None]  # attempt 4: the cell we have stood on ...
+                stuck_t = [time.monotonic()]  # ... since (walk clicks the client refuses)
                 unstall_rng = random_.Random(seed + 7)
                 zone_st: dict[str, Any] = {}  # v11: the engagement zone (tid, center, radius, path)
                 dispatched: set[tuple[int, bool]] = set()
@@ -2435,11 +2437,33 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                 and now - ch_t > FREEZE_S and last_walk > ch_t + 0.5):  # fmt: skip
                             # v10 safety (v9 attempt 2, 17:59: the client stopped redrawing while
                             # it still took input; the bot clicked blind 60 s): no input on a
-                            # stale picture
-                            raise f0.FarmStop(
-                                f"the picture froze ({now - ch_t:.1f} s identical "
-                                f"after a walk click): a frozen client display"
-                            )
+                            # stale picture. v15 attempt 4: a STILL scene (the GM on a ledge, its
+                            # walk clicks refused, nothing in view) looked the same -> first a
+                            # LIVENESS probe: the pointer moves (two motions, no click); a live
+                            # client redraws its own cursor, which changes the picture
+                            t_pr = time.monotonic()
+                            pu_, pv_ = ptr[0]
+                            qu_ = pu_ + (70.0 if pu_ < gw / 2 else -70.0)
+                            agent.move(gx0 + round(qu_) - 12, gy0 + round(pv_) - 12)
+                            time.sleep(0.06)
+                            agent.move(gx0 + round(qu_), gy0 + round(pv_))
+                            ptr[0] = (qu_, pv_)
+                            alive_ = False
+                            while time.monotonic() - t_pr < 1.5:
+                                time.sleep(0.05)
+                                if (mstate.get("changed_t") or 0.0) > t_pr:
+                                    alive_ = True
+                                    break
+                            if not alive_:
+                                raise f0.FarmStop(
+                                    f"the picture froze ({now - ch_t:.1f} s identical "
+                                    f"after a walk click, and a pointer probe drew nothing): "
+                                    f"a frozen client display"
+                                )
+                            ev({"kind": "freeze_probe", "alive": True,
+                                "still_s": round(now - ch_t, 1)})  # fmt: skip
+                            stuck_t[0] = 0.0  # a still scene after walk clicks: break the stall
+                            continue
                         if (prm.get("escape_after_s") and eng is None
                                 and now - last_progress[0] > STUCK_S):  # fmt: skip
                             raise f0.FarmStop(f"no progress for {STUCK_S:.0f} s at {pos}: stopped")
@@ -2607,6 +2631,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                 loot_after(eng, here_l)
                             end_engagement(done)
                             ev({"kind": "hand_off", "after": done})
+                            busy_t[0] = time.monotonic()  # the loot sweep was busy time too
                             pos = quick_fix()
                             posm.stop(pos)
                             moving, path, pi = False, [], 0
@@ -2822,9 +2847,11 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             continue
                         # no target: the planner's waypoint, the GM never standing
                         split.to("searching", time.monotonic())
+                        if pos != stuck_cell[0]:
+                            stuck_cell[0], stuck_t[0] = pos, now
                         if (cont and prm.get("unstall_s") and not moving
-                                and now - max(last_walk, busy_t[0], last_unstall[0])
-                                > prm["unstall_s"]):  # fmt: skip
+                                and now - max(min(last_walk, stuck_t[0]), busy_t[0],
+                                              last_unstall[0]) > prm["unstall_s"]):  # fmt: skip
                             # the STALL BREAKER (v15 attempt 2): no walk click for unstall_s while
                             # standing with NO target (attempt 3: engagements had counted, so it
                             # fired after every long strike) -> settle our cell, walk to a

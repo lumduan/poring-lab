@@ -7930,6 +7930,23 @@ STOPPED BY ME at 2.8 min (SIGINT, a clean stop), 3 engagements.**
   target or an engagement, or its own last firing, whichever is latest.
 - Attempt 4 runs v15 with the three fixes and a fresh seed.
 
+**Attempt 4 (2026-10-17 00:22:01, session 20261017T002201-demo-hunt-flow15, seed 20261224):
+STOPPED at 5.5 min by the freeze guard ("the picture froze (3.6 s identical after a walk
+click)"), 12 engagements.**
+- **Not a frozen client.** A screenshot and the /health frame bus (writing, 14 fps) showed it
+  live. The GM stood on a ledge at (53-55, 90); the client refused its walk clicks (a no-entry
+  cursor), and nothing in view moved. A still scene after a walk click is what the guard reads as
+  a freeze.
+- The stall breaker never fired: it waited for 8 s WITHOUT a walk click, and the refused walk
+  clicks kept going out.
+- **Fixes (bug fixes, not play changes):**
+  - the freeze guard first PROBES liveness: the pointer moves (two motions, no click), and a live
+    client redraws its own cursor, which changes the picture. Only a picture that stays identical
+    for 1.5 s after the probe stops the run;
+  - the stall breaker also fires after 8 s of target-free search WITHOUT MOTION (the measured cell
+    unchanged), even while walk clicks go out. The loot sweep counts as busy time.
+- Attempt 5 runs v15 with all the fixes and a fresh seed.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
