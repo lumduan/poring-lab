@@ -8277,6 +8277,34 @@ bars passed.
 - hard bars: zero NPC contact, zero map change, zero non-target hit (the tag still gates every
   attack click; the follow only moves the pointer, and the tag must read under it).
 
+**Run 1 RESULT (2026-10-17 04:42:22-05:42:22, session 20261017T044222-demo-hunt-flow20, seed
+20261231; the full hour; judged by `flow_judge.bot` after 05:44):**
+- **Engagements:** 142 (138 dead, 4 gave up). Attack clicks: 157 direct / 2 read. Every one
+  carried a target tag: Poring 100, Lunatic 55, Drops 4. Focus aimed 128 of 159.
+- **Kills:** kills / h 140.9; engaged 133 / h (v18 94), the night's best.
+- **The bar:** 121 / 142 = 85.2 % (Wilson 78.5-90.1). Landing: Poring 74 / 83, Lunatic 43 / 45,
+  Drops 4 / 4.
+- **The name tag:** refused 118 reads (36.5 %; v18 52 %).
+- **Timing:**
+  - in range -> click p50 1.23 s (v18 1.83);
+  - selection -> click p50 2.04 s (v18 3.06);
+  - seen -> click p50 4.94 s.
+- **Movement:** reversals 3.96 / min (> 135 deg 2.93), straight runs 12.5 cells. Batt's demo:
+  3.6 / 2.4 / 16.9.
+- **Loot:** 41 / 218 picked (19 %).
+- **HARD BAR FAILED: one Creamy, through a WALK click.**
+  - The walk click was 173 px from the GM and passed the guard (no pink within 80 px on the
+    fresh grab).
+  - 0.69 s later the client sent an attack request on a Creamy, and the GM hit it once (180).
+  - It is one of the cases the guard was expected to miss (3 / 17 offline); the rest of the
+    hour had 8 walk-click attacks, all on targets.
+- **vs the prediction:**
+  - tag refusals <= 25 %: NO (36.5 %);
+  - in range -> click <= 1.2 s: NO, at the edge (1.23 s);
+  - the bar >= 83.8 %: YES (85.2 %);
+  - engaged kills / h >= 94: YES (133);
+  - hard bars: FAILED (one walk-click Creamy).
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
