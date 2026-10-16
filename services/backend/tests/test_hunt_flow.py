@@ -197,3 +197,14 @@ def test_v8_escape_cells_are_the_nearest_main_cells() -> None:
     main[1:9, 1:12] = True
     assert hf.escape_cells(main, (16, 3), reach=10, k=2) == [(11, 1), (11, 2)]
     assert hf.escape_cells(main, (16, 3), reach=2) == []
+
+
+def test_v8a2_the_escape_retreats_along_cells_we_walked() -> None:
+    trail = [(float(t), (100 - t, 50)) for t in range(30)]  # walked west, 1 cell a second
+    here = (71, 50)  # now, at t = 30
+    got = hf.trail_cells(trail, here, 30.0, near=6, far=20, min_age_s=3.0, k=3)
+    assert got == [(77, 50), (78, 50), (79, 50)]  # the most recent that are >= 6 away
+    assert hf.trail_cells(trail, here, 30.0, near=40) == []
+    main = np.zeros((10, 20), bool)
+    main[1:9, 1:12] = True
+    assert all(hf.cheb(c, (12, 5)) >= 6 for c in hf.escape_cells(main, (12, 5), near=6))

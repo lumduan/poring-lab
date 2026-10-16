@@ -408,15 +408,31 @@ def main_component(area: Any) -> Any:
     return lab == best[1]
 
 
-def escape_cells(main: Any, here: Cell, reach: int = 30, k: int = 5) -> list[Cell]:
+def escape_cells(main: Any, here: Cell, reach: int = 30, k: int = 5, near: int = 0
+                 ) -> list[Cell]:  # fmt: skip
     """PURE (v8 bug fix): up to ``k`` cells of the main component nearest ``here`` (Chebyshev,
-    within ``reach``), nearest first: where to walk when no goal has a path."""
+    ``near``..``reach``), nearest first: where to walk when no goal has a path. v8 run 1: the
+    nearest (1 step away) read NO-ENTRY, and every other candidate was adjacent too."""
     h, w = main.shape
     x0, y0 = max(0, here[0] - reach), max(0, here[1] - reach)
     ys, xs = np.nonzero(main[y0 : min(h, here[1] + reach + 1), x0 : min(w, here[0] + reach + 1)])
     cells = sorted(((int(x) + x0, int(y) + y0) for y, x in zip(ys, xs, strict=True)),
                    key=lambda c: (cheb(c, here), c))  # fmt: skip
-    return [c for c in cells if c != here][:k]
+    return [c for c in cells if c != here and cheb(c, here) >= near][:k]
+
+
+def trail_cells(trail: Sequence[tuple[float, Cell]], here: Cell, now: float, near: int = 6,
+                far: int = 20, min_age_s: float = 3.0, k: int = 5) -> list[Cell]:  # fmt: skip
+    """PURE (v8 attempt 2): cells WE WALKED (``trail``: (mono s, cell), oldest first), most recent
+    first, ``near``..``far`` cells from ``here`` and at least ``min_age_s`` old: proven reachable,
+    unlike a map cell the client may refuse (v8 run 1's escape read NO-ENTRY)."""
+    out: list[Cell] = []
+    for t, c in reversed(trail):
+        if now - t >= min_age_s and near <= cheb(c, here) <= far and c not in out:
+            out.append(c)
+            if len(out) >= k:
+                break
+    return out
 
 
 def frac_project(world: Any, origin: Sequence[float], cell: Sequence[float]) -> tuple[float, float]:
@@ -1002,8 +1018,18 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 if in_range_since.get(tr.tid) is not None:
                     hov["in_range_to_click_s"] = round(tc / 1e9 - in_range_since[tr.tid], 2)
                 ptr[0] = (u, v)
-                if not fast_ and not prm.get("strike_lean"):
-                    pr.park()  # v8 strike_lean: no park after the click (nothing used it)
+                if prm.get("strike_lean"):
+                    # v8 attempt 2: the pointer OFF the monster at once (no park, no wait). The
+                    # park after the click had a hidden job: attempt 1 left the drawn cursor on
+                    # the sprite, the detector lost it, and "dead" fired 1.0 s after each click
+                    import fast_read as fread
+
+                    cs2 = [f1.centre(x) for x in (fr[-1][1] if fr else []) if x is not b]
+                    off_ = fread.blink_point(u, v, cs2, in_view) or (u, v - 90.0)
+                    agent.move(gx0 + round(off_[0]), gy0 + round(off_[1]))
+                    ptr[0] = off_
+                elif not fast_:
+                    pr.park()
                 click_log({"t": tc, "u": round(u, 1), "v": round(v, 1), "kind": "strike",
                            "track": tr.tid, "pred_cell": hov["pred_cell"], "again": again,
                            "aim_px": hov.get("aim_px"), "read_ms": hov.get("read_ms"),
@@ -1072,6 +1098,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         time.sleep(0.02)
 
             main_area = main_component(area) if prm.get("escape_after_s") else None
+            trail: list[tuple[float, Cell]] = []  # v8 attempt 2: (mono s, cell) we stood on
 
             def planner() -> None:
                 """The queue (chained, standing first) every plan_every_s, and the next exploration
@@ -1104,6 +1131,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         if p_ is not None and len(p_) >= 2:
                             gp = p_
                             plan["t_fail"] = None
+                            plan["escape"] = False
                             with plock:
                                 plan["t_goal"] = now_
                         elif main_area is not None:
@@ -1111,10 +1139,15 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             # escape_after_s walk the full walkable grid to the main area
                             plan["t_fail"] = plan.get("t_fail") or now_
                             if now_ - plan["t_fail"] > prm["escape_after_s"]:
-                                for c_ in escape_cells(main_area, here_):
+                                with plock:
+                                    tr_ = list(trail)
+                                cands_ = [*trail_cells(tr_, here_, now_),
+                                          *escape_cells(main_area, here_, near=6)]  # fmt: skip
+                                for c_ in cands_:
                                     p_ = hc.astar(ok, here_, c_)
                                     if p_ is not None and len(p_) >= 2:
                                         gp, plan["t_fail"] = p_, None
+                                        plan["escape"] = True  # clicked on the walkable grid
                                         ev({"kind": "escape", "from": list(here_), "to": list(c_)})
                                         with plock:
                                             plan["t_goal"] = now_
@@ -1392,6 +1425,9 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             if cheb(pos, pos_changed["cell"]) >= 1:
                                 pos_changed.update(t=now, cell=pos)
                                 recent_clicks.clear()
+                                with plock:
+                                    trail.append((now, pos))
+                                    del trail[:-400]
                             elif (prm.get("stall_s") and eng is None and len(recent_clicks) >= 2
                                     and now - pos_changed["t"] > prm["stall_s"]):  # fmt: skip
                                 # attempt 2: clicks went out and the GM did not move: block them
@@ -1596,14 +1632,16 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         if cont:  # v5: the MOVEMENT QUEUE, ~6 ahead of where we are
                             set_mode("search")
                             due = now - last_walk >= (prm["walk_every_s"] if moving else 0.3)
+                            grid_s = ok if plan.get("escape") else area  # v8 attempt 2
                             if due:
-                                if cont_click(gp, area, "search"):
+                                if cont_click(gp, grid_s, "search"):
                                     stop_since = None
                                 elif not moving:
                                     stop_since = stop_since or now
                                     if now - stop_since > prm["stop_after_s"]:
                                         ci_ = min(range(len(gp)), key=lambda i_: cheb(gp[i_], pos))
-                                        j, (u, v) = step_target(gp, ci_, pos, prm["ahead"])
+                                        j, (u, v) = step_target(gp, ci_, pos, prm["ahead"],
+                                                                grid_s)  # fmt: skip
                                         if j is not None and j > ci_:
                                             walk_click(u, v, gp[j], [pos, gp[j]], "cursor",
                                                        "search")  # fmt: skip

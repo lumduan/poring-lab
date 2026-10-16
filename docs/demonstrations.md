@@ -7249,6 +7249,33 @@ CPU (GPU freeze).
 - unintended attacks not above v7's (19 per 30 min);
 - no idle stretch over 60 s: escape events logged, and the no-progress stop never fires.
 
+**Attempt 1 (2026-10-16 16:25:46-16:37:22, session 20261016T162546-demo-hunt-flow8, seed
+20261211): STOPPED BY ITSELF at 11.6 min.** The no-progress stop fired: "no progress for 60 s at
+(33,75)".
+- **The escape misfired.** It picked (32,74), the nearest main-area cell, 1 step away. The
+  cursor read NO-ENTRY there; every other candidate was adjacent too. And the search branch
+  only clicks cells inside the search area, so an escape route over the walkable grid could not
+  be clicked at all.
+- **The lean strike broke death detection.**
+  - All 6 engagements ended "dead" 1.0-1.1 s after the first click.
+  - The packets judge: 1 hit within 5 s, 2 late, 2 never, 1 excluded. The bar is 1 / 5.
+  - Engaged kills 1; 6 more kills came from walk clicks.
+  - The park after the click had a HIDDEN job: it moved the pointer off the monster. Without it
+    the drawn cursor covered the sprite, the detector lost the monster, and "unseen 0.6 s" fired
+    "dead". The bot walked off and the client cancelled the attack.
+- **The lean strike's own aim was met:** in range -> click p50 2.89 s (v7 6.74).
+- Strike calls: 38 at 10.6 min, 20 of them read WALK. The target was off the pointer by read
+  time: the frames lag ~0.5 s, and the park and hover add ~1.6 s.
+- Moving walk clicks within 1 cell: 70 %.
+
+**Attempt 2 (recorded 2026-10-16 ~16:52, before its run; bug fixes within the version):**
+- **After the attack click, the pointer moves ~90 px off the monster at once:** one move, no
+  park, no wait.
+- **The escape retreats along OUR OWN TRAIL:** the cells we stood on, 6-20 cells away and >= 3 s
+  old, most recent first. Then come main-area cells >= 6 away. The escape route is clicked on the
+  walkable grid.
+- Everything else is as pre-registered. 60 min, seed 20261212.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
