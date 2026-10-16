@@ -7326,6 +7326,69 @@ for >= 10 min.
 - in range -> click p50 under 6 s (the wait for a stand is in it);
 - unintended attacks not above v7's (19 per 30 min).
 
+### 3.51 PROPOSAL (design only, awaiting Batt's decision; nothing built): a RISK-BASED cursor gate for hunting attack clicks
+
+**Batt (17:2x):** "REQUIRE the SWORD read when there is real risk ... Otherwise CLICK the fresh
+detection directly, like Batt (a miss only walks); verify the hit from pixels and re-click as now.
+Report how many attack clicks went each way, and keep zero NPC contacts / non-target hits as hard
+bars. Give me the expected effect on seen->click and kills/h from v7/v8's logs before building
+it."
+
+**Why.** The client draws its cursor 0.4-0.8 s after the pointer stops (fast-read@1). With the
+park, the proven read costs ~3 s a call:
+- in range -> click p50 6.6 s in v7 and 4.15 s in v8;
+- in v8 only 10 of 111 calls read SWORD;
+- striking took 777 s of v7's 2,334 s, and 375 s of v8's 1,302 s.
+
+**The gate (a decision table per attack click).** The read is REQUIRED when any of these holds:
+- (a) an L3 NPC within 12 cells of the target's cell (prt_fild08: 159,371 and 175,374; the
+  search area already keeps 10 cells off them);
+- (b) an ignore-list species in view: on prt_fild08 only Creamy, which the size gate already
+  excludes as a target;
+- (c) an unclear detection:
+  - the target's box intersects another box;
+  - or the target is within 45 px of the GM's sprite;
+  - or detector confidence < 0.6;
+  - or the box was not seen on >= 2 of the last 3 frames (occlusion, canopy);
+- (d) any non-hunting workflow, always.
+
+**Otherwise:**
+- The attack click goes straight to the target's newest box centre, as soon as the GM stands
+  within range. There is no park and no read.
+- The hit is verified from pixels (the target's box, then its vanishing) and from the swing,
+  with a re-click as now.
+- Every attack click is logged with its branch: `direct` or `read`, plus the reason.
+
+**Hard bars** (packets, per run): zero npc_contact, zero non-target hits, zero map changes. Any
+one of them stops the run.
+
+**Measured on the logs** (offline, v6 / v7 / v8 attempt 2):
+- Risky share of the engaged targets at their click: 16 / 62 = 26 % under the strict rule above
+  (near the GM 10, low confidence 7, intersecting 0, NPC 0). A broad rule (another box within
+  60 px) gives 33 / 62 = 53 %.
+- Seen -> click splits as follows (bot side, v7): seen -> in range p50 ~2.4 s, then in range ->
+  click 6.6 s.
+- Judge side, v7: 11.85 s. A direct click takes one fresh frame plus the click, ~0.35 s.
+
+**Expected effect (the risky share kept at the read; a direct click lands 80 %, Batt's own
+first-click rate):**
+- **seen -> click p50:**
+  - v7 11.85 s -> ~5.6 s for direct clicks (bot side 8.95 -> ~2.7 s);
+  - the run's p50 ~6 s at r = 0.26, and ~7-9 s at r = 0.53. Batt: 1.11 s.
+- **Engaged kills / h on v7's basis: 47.9 -> ~64-71.** The direct share saves ~6.2 s an
+  engagement, and ~12 no_sword targets become engagements.
+- **On v8 attempt 2's basis: 19.3 -> ~40-56.**
+- **The rest of the gap to Batt's 300 / h is search and approach,** about two thirds of the time:
+  - searching 36 % and steering 31 % of v7;
+  - first detection -> dispatch ~2.9 s;
+  - seen -> in range ~2.4 s.
+  - A gate change does not touch them. A direct click from a MOVING GM at <= 7 cells (aimed with
+    the commanded-path lead plus the target's velocity) would be the next step.
+- **New risks:**
+  - a direct click on a false detection walks;
+  - one on a floor item picks it up (looting is off: counted as unintended pickups);
+  - both are counted, and neither is a hard bar.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
