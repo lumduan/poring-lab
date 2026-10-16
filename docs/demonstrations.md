@@ -6563,7 +6563,44 @@ analysis. They are binding for the human baseline and for every hunt-flow versio
   - kills / h several times hunt@8's 43.5;
   - seen -> click slower than Batt's 1.11 s (the cursor read alone takes ~1.2-1.6 s).
 
-### 3.42 hunt-flow@2: PIPELINED (pre-registered 2026-10-16 ~11:34 ICT, BEFORE its run; Batt ~11:30: "hunting is still serial (find -> walk -> hit -> think again). Make it PIPELINED, like a player who plans the next target while hitting the current one")
+- ➡️ **hunt-flow@1 run 1 (`20261016T110837-demo-hunt-flow1`, 11:08:37-11:39:47, the full
+  30-minute box; judged by `flow_judge.py bot`): THE BAR 10 / 11 = 90.9 % (Wilson
+  62.3-98.4 %).** 1 failure: no unit. n is far below 60.
+  - **Beside it:**
+    - first click lands 20 / 23 = 87.0 %;
+    - kills 20 = 40.3 / h;
+    - seen -> click p50 8.9 / p90 25.4 s;
+    - click -> hit 0.71 / 0.99 s;
+    - monsters in sight 7.0 / 10 min;
+    - idle 77.9 %;
+    - walk clicks 14.1 / min, only 18 % sent while walking;
+    - range at the click p50 3 / p90 6;
+    - death -> next click 6.68 / 8.64 s.
+  - **Batt (3.40.1):**
+    - 64 / 64;
+    - 300 kills / h;
+    - seen -> click 1.11 s;
+    - 44 in sight;
+    - idle 45.9 %;
+    - 44 walk clicks / min;
+    - death -> next click 1.24 s.
+  - **Time split (the runner):** searching 884 s, steering 624 s, striking 222 s, checks 44 s,
+    stopping 20 s, fighting 7 s. Detector 3.1 fps.
+  - **What it showed:** most walk clicks went out from a STANDSTILL (cursor-gated, ~1.2 s read
+    each). The one map+units point v1 tried while walking was usually within 60 px of the target
+    it steered to, so the GM stopped near every target.
+  - **Safety (packets):** NPC contacts 0, dialogs 0, non-target hits 0. The one map change is
+    the start `@warp`.
+    - **UNINTENDED ATTACK REQUESTS 10**, all on target species (Poring, Lunatic, Drops): the
+      client turned our WALK clicks into attacks 0.4-0.9 s after them (8 map+units, 2
+      cursor-gated). They are attacks without a SWORD read.
+    - They are not a stop event under 3.41 (counted and reported, as 3.39). They also account
+      for 10 of the 20 kills: only 11 came from engagements.
+    - The hunt runs had 0-3 a run. Steering puts walk clicks next to monsters, and the 60 px
+      detector gate on frames 0.3-0.6 s old misses a monster walking into the clicked spot.
+    - The next version's first item.
+
+### 3.42 hunt-flow@2: PIPELINED (pre-registered 2026-10-16 11:33 ICT, the commit time 97442cc, BEFORE its run; Batt ~11:30: "hunting is still serial (find -> walk -> hit -> think again). Make it PIPELINED, like a player who plans the next target while hitting the current one")
 
 hunt-flow@1 was pre-registered (3.41) and was running when this came, so this is version 2.
 `scripts/hunt_flow.py --version 2`. Everything else is 3.41: the state, the gates, no looting, the
