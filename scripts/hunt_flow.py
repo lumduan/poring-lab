@@ -27,6 +27,7 @@ Packets are never read here (rule 1): flow_judge.py reads them afterwards.
 from __future__ import annotations
 
 import argparse
+import bisect
 import contextlib
 import json
 import math
@@ -129,7 +130,12 @@ PARAMS[5] = {**PARAMS[4], "continuous": True, "walk_every_s": 0.6, "ahead": 6,
              "stall_s": 2.0, "bg_check": True, "publish_route": True}  # fmt: skip
 PARAMS[6] = {**PARAMS[5], "frame_cells": True, "reacquire": True, "follow_mouse": True,
              "short_read": True, "hover_settle_s": 0.25, "loot": True}  # fmt: skip
-PARAMS[7] = {**PARAMS[6], "loot": False, "click_lead_s": 0.50, "lead_window_s": 0.3}
+PARAMS[7] = {**PARAMS[6], "loot": False, "click_lead_s": 0.50, "lead_window_s": 0.3,
+             # attempt 2 (2026-10-16 15:30, recorded before its run): attempt 1's velocity lead
+             # pointed along the OLD direction (the frames show the motion of 0.5 s ago; the
+             # lead along the motion was p50 +0.5 cells vs the lag's +3.8); the lead is now our
+             # own walk / attack commands replayed from the measured cell over the last 0.6 s
+             "lead_from": "commands", "click_lead_s_commands": 0.6}  # fmt: skip
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -338,6 +344,33 @@ def lead_origin(here: Sequence[float], vel: Sequence[float], lead_s: float
     """PURE (v7): where the client will resolve a click from: the measured cell + velocity x lead
     (the frames show the GM ~0.5 s behind where the client walks it)."""
     return float(here[0]) + float(vel[0]) * lead_s, float(here[1]) + float(vel[1]) * lead_s
+
+
+def commanded_lead(at: Sequence[float], cmds: Sequence[tuple[int, Cell]], t_now: int,
+                   lead_s: float, ms_cell: float = MS_CELL, step_s: float = 0.01
+                   ) -> tuple[float, float]:  # fmt: skip
+    """PURE (v7 attempt 2): where the client IS now. The frames (so ``at``, measured from them)
+    show it ~``lead_s`` late, and in that time it walked toward the cells we had clicked
+    (``cmds``: (t_ns, cell), oldest first): replay those commands from ``at`` over the last
+    ``lead_s``, 8 directions, ``ms_cell`` a cell, x1.4 on a diagonal, stopping on arrival.
+    Measured on v7 attempt 1's packets: the client at a click's arrival is the server's cell at
+    the click time (95 % within 1), the measured cell the server's ~0.6 s earlier."""
+    x, y = float(at[0]), float(at[1])
+    ts = [t for t, _ in cmds]
+    t = t_now - int(lead_s * 1e9)
+    while t < t_now:
+        i = bisect.bisect_right(ts, t) - 1
+        if i >= 0:
+            dx, dy = cmds[i][1][0] - x, cmds[i][1][1] - y
+            if max(abs(dx), abs(dy)) > 0.5:
+                diag = abs(dx) > 0.5 and abs(dy) > 0.5
+                sp = step_s / (ms_cell / 1000.0 * (1.4 if diag else 1.0))
+                if abs(dx) > 0.5:
+                    x += math.copysign(min(sp, abs(dx)), dx)
+                if abs(dy) > 0.5:
+                    y += math.copysign(min(sp, abs(dy)), dy)
+        t += int(step_s * 1e9)
+    return x, y
 
 
 def frac_project(world: Any, origin: Sequence[float], cell: Sequence[float]) -> tuple[float, float]:
@@ -756,6 +789,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         with plock:
                             plan["goal_path"] = None
 
+            cmd_hist: list[tuple[int, Cell]] = []  # v7 attempt 2: (t_ns, cell) we clicked
+
             def walk_click(u: float, v: float, to: Cell, seg: list[Cell], gate: str,
                            why: str, extra: dict[str, Any] | None = None) -> bool:  # fmt: skip
                 """One walk click: cursor-gated from a standstill, map+units while moving."""
@@ -780,6 +815,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                            "gate": gate, "to": list(to), "why": why, **(extra or {})})  # fmt: skip
                 ev({"kind": "walk_click", "gate": gate, "to": list(to), "why": why,
                     **(extra or {})})  # fmt: skip
+                cmd_hist.append((int(t_c), (int(to[0]), int(to[1]))))  # v7: the client's commands
+                del cmd_hist[:-40]
                 reck.go(seg, time.monotonic())
                 posm.go(seg, time.monotonic())
                 rp("walk", seg[0], seg, t_c)
@@ -870,6 +907,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     return False
                 tc = r.ns()
                 agent.click(gx0 + round(u), gy0 + round(v))
+                cmd_hist.append((int(tc), (int(round(pc[0])), int(round(pc[1])))))
+                del cmd_hist[:-40]
                 hov["clicked"] = tc
                 hov["read_ms"] = round((tc - t_read0) / 1e6)
                 # v6: the AIM ERROR -- the click point to the target's sprite centre on the
@@ -1140,7 +1179,10 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     freshest frames; no standstill needed."""
                     cur = measured_pos() or (float(pos[0]), float(pos[1]))
                     lead_ = None
-                    if prm.get("click_lead_s"):  # v7: where the client really is
+                    if prm.get("lead_from") == "commands":  # v7 attempt 2: our own commands
+                        lead_ = commanded_lead(cur, list(cmd_hist), r.ns(),
+                                               prm["click_lead_s_commands"])  # fmt: skip
+                    elif prm.get("click_lead_s"):  # v7 attempt 1: the measured velocity
                         vel_ = odo_velocity(hist_now(), prm["lead_window_s"])
                         lead_ = lead_origin(cur, vel_, prm["click_lead_s"])
                     src_ = lead_ or cur

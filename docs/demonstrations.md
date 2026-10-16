@@ -7069,6 +7069,40 @@ what still breaks them: the position the runner measures LAGS the GM.
 - the bar (hit within 5 s of the first click) >= 90 %;
 - stops per engagement not above v6 run 1's 24.9.
 
+**Attempt 1 (2026-10-16 15:18:46-15:23:27, session 20261016T151846-demo-hunt-flow7, seed
+20261209): STOPPED at 4.1 min by me, on a mid-run check.**
+- **The check:** the sniffer's archive read-only, against the per-click `at` / `lead` the run
+  logged.
+- **The defect: the velocity lead pointed along the OLD direction.**
+  - Along the motion, the lead was p50 +0.5 cells, against a lag of +3.8; some leads pointed
+    backwards.
+  - Moving clicks within 1 cell rose only to 22 %, still +2.8 cells ahead.
+  - The cause: the frames show the motion of ~0.5 s ago, and each walk click turns the GM, so
+    the new direction is not in any frame yet.
+- **Result:** 3 engagements, all dead.
+
+**Measured on attempt 1's packets (133 walk clicks with the logged `at` and lead):**
+- The client's cell when a click arrives is the SERVER's cell at the click time: 95 % within 1.
+- The measured cell is the server's cell ~0.6 s earlier: 83 % within 1 at 0.6 s, 81 % at 0.5,
+  14 % at 0.
+- Replaying the walk destinations from the measured cell over the last L s (8 directions, 150 ms
+  a cell, x1.4 diagonal):
+  - at L = 0.6: within 1 cell 68 %, within 2 89 %, along error 0.00;
+  - at L = 0.5: 67 %, along +0.60;
+  - at L = 0: 14 %, along +3.84.
+  - These runs used the ACTUAL destinations, read offline. Live, the cells we click ARE the
+    destinations once the clicks land.
+
+**Attempt 2 (recorded 2026-10-16 ~15:31, before its run; the same main change, a different
+estimator):**
+- The lead is OUR OWN commands, replayed from the measured cell over the last 0.6 s:
+  `commanded_lead`, with walk clicks plus attack clicks (the client walks toward the monster).
+- This is a reckoning of only the latency gap, which no frame can show yet. The measured cell
+  remains the anchor, so nothing accumulates.
+- Everything else is as pre-registered: no looting, the map-change stop, the predictions. The
+  1-cell bar of >= 40 % stands; the offline ceiling is ~68 %.
+- 60 min, seed 20261210.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.

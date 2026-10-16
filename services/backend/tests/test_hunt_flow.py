@@ -161,3 +161,24 @@ def test_v7_projects_from_a_fractional_origin_by_moving_the_cell() -> None:
     u, v = hf.frac_project(w, (10.25, 20.0), (12, 20))
     assert w.position == (10, 20) and (u, v) == (640.0 + 1.75 * 32, 360.0)
     assert hf.frac_project(w, (10.0, 20.0), (12, 20)) == (640.0 + 2 * 32, 360.0)
+
+
+def test_v7a2_the_client_is_where_our_commands_walked_it_since_the_frame() -> None:
+    at = (100.0, 50.0)
+    cmds = [(int(1.0 * S), (110, 50))]  # east, clicked before the window
+    x, y = hf.commanded_lead(at, cmds, int(2.0 * S), 0.6)
+    assert abs(x - 104.0) < 0.1 and y == 50.0  # 0.6 s at 150 ms a cell
+    diag = [(int(1.0 * S), (110, 60))]
+    dx, dy = hf.commanded_lead(at, diag, int(2.0 * S), 0.6)
+    assert abs(dx - 100.0 - 0.6 / 0.21) < 0.1 and abs(dy - 50.0 - 0.6 / 0.21) < 0.1
+
+
+def test_v7a2_a_new_command_turns_the_replay_and_arrival_stops_it() -> None:
+    at = (100.0, 50.0)
+    cmds = [(int(1.0 * S), (110, 50)), (int(1.7 * S), (101, 40))]  # north after 0.3 s
+    x, y = hf.commanded_lead(at, cmds, int(2.0 * S), 0.6)
+    # 0.3 s east (2 cells), then diagonal until x is within half a cell (0.1 s), then north
+    assert abs(x - 101.5) < 0.1 and abs(y - 48.2) < 0.15
+    x, _y = hf.commanded_lead(at, [(0, (102, 50))], int(2.0 * S), 0.6)
+    assert abs(x - 101.5) < 0.1  # arrived (within half a cell): it stops
+    assert hf.commanded_lead(at, [], int(2.0 * S), 0.6) == at  # nothing commanded: as measured
