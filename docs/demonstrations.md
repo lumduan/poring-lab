@@ -6651,6 +6651,65 @@ bar.
     - a NO-ENTRY read blocks that spot (radius 1) at once, any other refusal after 2; the cells
       leave the area and the stand grid, and the planner re-plans;
     - one dispatch record per candidate.
+- ➡️ **Attempt 2 (`20261016T114836-demo-hunt-flow2`, 11:48:36-12:19:41, the full 30-minute box):
+  THE BAR 8 / 8 = 100 % (Wilson 67.6-100 %); n is far below 60.**
+  - **Beside it (bot vs Batt):**
+    - first click lands 13 / 13;
+    - kills 13 = 26.0 / h (v1 40.3; Batt 300);
+    - seen -> click p50 16.9 / p90 29.7 s (Batt 1.11);
+    - click -> hit 0.64 / 1.33 s;
+    - in sight 10.3 / 10 min (Batt 44);
+    - idle 79.8 % (Batt 45.9);
+    - walk clicks 12.0 / min;
+    - death -> next click 5.35 / 7.71 s (v1 6.68; Batt 1.24);
+    - **queue hit-through 76 / 118 = 64 %**.
+  - **The prediction:**
+    - idle between kills fell, but not "well under" (5.35 vs 6.68 s);
+    - FEWER engagements and kills than v1 (8 vs 11);
+    - hit-through 64 %, under the predicted 70 %;
+    - the bar unchanged. **Mostly FAILED.**
+  - **Time split:** searching 1,187 s (66 %), steering 422 s, striking 141 s, checks 48 s.
+    Coverage 37.5k cells (v1 26k).
+  - **Safety (packets):** NPC contacts 0, dialogs 0, non-target hits 0.
+    - The 2 map changes are our own `@warp`s BEFORE the loop: this attempt's start, and attempt
+      1's start (the packet window's anchor).
+    - **Unintended attack requests 5**, all target species (3 after map+units walk clicks, 2
+      after cursor-gated ones).
+  - 5 spots were blocked by the no-entry rule. No stall.
+- **Why speed did not move (v1 and v2):** IDLE ~80 %.
+  - Only ~1 walk click in 4 goes out WHILE walking. The map+units gate wants a detector frame
+    <= 0.4 s old, but the detector gives a frame every ~0.32 s with ~0.3 s of latency, so the
+    newest frame is usually older.
+  - So the next click is refused, the walk ends, and the GM stands. Each restart then costs a
+    cursor read (~1.2 s) several times per target.
+  - Batt re-clicks 6 cells ahead every ~0.6 s and his walks never end (73 % of his clicks are
+    sent while walking).
+
+### 3.43 hunt-flow@3: CONTINUOUS WALKING THAT HOLDS (pre-registered 2026-10-16 ~12:25 ICT, BEFORE its run)
+
+The top time-loser of v1 and v2 is idle time (~80 %). Its cause is the walk gate's freshness, and
+the top safety item is the same gate (15 walk clicks turned attacks across the two runs).
+- **MAIN, one change: the walk gate while moving.**
+  - The detector part accepts frames <= 1.0 s old (was the last 2 frames <= 0.4 s): no unit box
+    within 60 px of the point on any frame of that second.
+  - It ADDS a tracked-monster part (`hunt_flow.track_clear`): no tracked monster's predicted
+    drawing position, now, in 0.5 s and in 1.0 s, within 60 px of the point. Tracks outlive a
+    detector miss (a canopy) and carry the walking direction.
+  - The same tracked part is applied BEFORE a cursor-gated (standstill) walk click.
+  - Legs go 8 cells ahead (was 6; Batt's spacing p90 is 9), so a leg lasts long enough for the
+    next click to go out before it ends.
+  - The gate applies from a standstill too, as a search for the farthest path point that passes
+    it.
+  - The steer endpoint stops 3 cells short of the target (was 2): with the new tracked part, a
+    point 2 cells from the target is within 60 px of it, and from a standstill the bot would retry
+    it forever. 3 cells is still inside the strike range.
+- Everything else is v2 attempt 2's: the pipeline, the strike, the bar, no looting.
+- **Prediction, written before the run:**
+  - walk clicks sent while walking: well over v2's ~25 %;
+  - idle under 65 %;
+  - kills / h above v1's 40.3;
+  - unintended attack requests at most 2 per 30 minutes;
+  - the bar unchanged.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,

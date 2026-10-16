@@ -73,6 +73,10 @@ VERSIONS = {
     "once, revalidated on the freshest frame, with the SWORD read before every attack click. "
     "A walk click goes to the farthest path point that passes the gates (v1 gave up when the "
     "one point it tried was within 60 px of a unit)",
+    3: "CONTINUOUS WALKING THAT HOLDS: the walk gate while moving accepts detector frames <= 1.0 s "
+    "old (was the last 2 <= 0.4 s: the detector's ~0.3 s latency made it refuse most clicks, idle "
+    "~80 %) AND adds the tracked monsters' predicted positions over the next second (60 px), "
+    "also before a cursor-gated walk click; legs 8 cells ahead (was 6)",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -86,6 +90,8 @@ PARAMS: dict[int, dict[str, Any]] = {
         "queue_depth": 3, "moving_penalty": 2.0, "plan_every_s": 0.1, "waypoint_every_s": 3.0,
         "dispatch_fresh_s": 1.0},
 }  # fmt: skip
+PARAMS[3] = {**PARAMS[2], "ahead": 8, "short": 3, "gate_frames_s": 1.0, "track_clear": True,
+             "track_clear_s": 1.0, "track_clear_px": 60.0}  # fmt: skip
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -222,6 +228,27 @@ def plan_queue(tracks: Sequence[Track], start: Sequence[float], t_ns: int, depth
         out.append(tr)
         at = p
     return out
+
+
+def track_clear(u: float, v: float, tracks: Sequence[Track], t_ns: int, horizon_s: float,
+                px: float, project: Any) -> bool:  # fmt: skip
+    """PURE (v3, the walk-click safety: hunt-flow@1 had 10 walk clicks turned attacks): the click
+    point is more than ``px`` from where every TRACKED monster is predicted to be drawn over the
+    next ``horizon_s`` (now, half way, the end). ``project(cell) -> (u, v)`` gives a cell's feet
+    point; the monster is drawn at its newest box's offset from its feet. Tracks outlive a
+    detector miss (a canopy), which the frame gate does not."""
+    for tr in tracks:
+        b = tr.box
+        off = (0.0, 0.0)
+        if b is not None:
+            cx, cy = (b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2
+            off = (cx - (b.x0 + b.x1) / 2, cy - b.y1)
+        for k in (0.0, 0.5, 1.0):
+            pc = tr.predict(t_ns + int(k * horizon_s * 1e9))
+            fu, fv = project(pc)
+            if math.hypot(u - (fu + off[0]), v - (fv + off[1])) <= px:
+                return False
+    return True
 
 
 def valid_at_dispatch(tr: Track, live: Sequence[Track], t_ns: int, fresh_s: float) -> bool:
@@ -496,9 +523,31 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         return jj, (uu, vv)
                 return None, (0.0, 0.0)
 
+            def tracked_clear(u: float, v: float) -> bool:
+                """v3: no tracked monster predicted within track_clear_px over track_clear_s."""
+                if not prm.get("track_clear"):
+                    return True
+                here_ = pos_box[0]
+
+                def project(c: Any) -> tuple[float, float]:
+                    world.position = here_
+                    q = world.project([c])[0]
+                    return float(q[0]), float(q[1])
+
+                return track_clear(u, v, tracks_now(), r.ns(), prm["track_clear_s"],
+                                   prm["track_clear_px"], project)  # fmt: skip
+
             def units_clear(u: float, v: float) -> bool:
                 """3.39 deviation (2) option B: no detector unit within unit_clear_px of the
-                point on the last clear_frames fresh frames."""
+                point on the last clear_frames fresh frames; v3: on every frame of the last
+                gate_frames_s, and no tracked monster predicted there (tracked_clear)."""
+                if prm.get("gate_frames_s"):
+                    t_min = r.ns() - int(prm["gate_frames_s"] * 1e9)
+                    k_ = len(sampler.frames)
+                    rec_ = [f for f in sampler.since(max(0, k_ - 8)) if f[0] >= t_min]
+                    return (bool(rec_) and all(
+                        np.hypot(*(np.array(f1.centre(b)) - (u, v))) > prm["unit_clear_px"]
+                        for _t, bs in rec_ for b in bs) and tracked_clear(u, v))  # fmt: skip
                 rec_ = sampler.since(max(0, len(sampler.frames) - prm["clear_frames"]))
                 return (len(rec_) >= prm["clear_frames"]
                         and (r.ns() - rec_[-1][0]) / 1e9 <= prm["fresh_s"]
@@ -577,6 +626,10 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 nonlocal moving, click_from, click_cell, last_walk
                 t_c = r.ns()
                 if gate == "cursor":
+                    if prm.get("track_clear") and not tracked_clear(u, v):
+                        ev({"kind": "walk_click", "gate": gate, "to": list(to), "clicked": False,
+                            "why": "tracked_monster_near"})  # fmt: skip
+                        return False
                     got = cursor_gate.gated_click(pr, u, v, allow=("walk",))
                     if not got["clicked"]:
                         ev({"kind": "walk_click", "gate": gate, "to": list(to), "clicked": False,
@@ -795,6 +848,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         cov.mark(pos, now, offsets)
                         t_now = r.ns()
                         live = tracks_now()
+                        need_c = moving or bool(prm.get("track_clear"))  # v3: the gate everywhere
                         # the engagement in progress: dead -> HAND-OFF at once; re-click; give up
                         if eng is not None:
                             tr = next((x for x in live if x.tid == eng["track"]), None)
@@ -864,7 +918,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                     continue
                                 path, pi = ap, 0
                                 j, (u, v) = step_target(path, 0, pos, prm["ahead"], ok,
-                                                        need_clear=moving)  # fmt: skip
+                                                        need_clear=need_c)  # fmt: skip
                                 if j is not None:
                                     gate_ = "map+units" if moving else "cursor"
                                     walk_click(u, v, path[j], path[: j + 1], gate_, "steer")
@@ -883,7 +937,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                 # the plan was made from another cell: walk to its nearest point
                                 ci = min(range(len(gp)), key=lambda i_: cheb(gp[i_], cur))
                             j, (u, v) = step_target(gp, ci, cur, prm["ahead"],
-                                                    need_clear=moving)  # fmt: skip
+                                                    need_clear=need_c)  # fmt: skip
                             if j is not None and j > ci:
                                 seg = gp[ci : j + 1] if cur in gp else [cur, gp[j]]
                                 gate_ = "map+units" if moving else "cursor"

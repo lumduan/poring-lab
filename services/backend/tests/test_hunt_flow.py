@@ -70,3 +70,22 @@ def test_a_planned_target_is_dispatched_only_while_tracked_and_fresh() -> None:
     assert hf.valid_at_dispatch(a, [a], int(0.3 * S), 0.4)
     assert not hf.valid_at_dispatch(a, [a], int(0.5 * S), 0.4)  # stale
     assert not hf.valid_at_dispatch(a, [], int(0.1 * S), 0.4)  # the tracker dropped it
+
+
+class _Box:
+    def __init__(self, x0: float, y0: float, x1: float, y1: float) -> None:
+        self.x0, self.y0, self.x1, self.y1 = x0, y0, x1, y1
+
+
+def test_a_walk_click_keeps_clear_of_where_tracked_monsters_will_be() -> None:
+    def project(c: tuple[float, float]) -> tuple[float, float]:  # 30 px a cell, feet at the cell
+        return c[0] * 30.0, c[1] * 30.0
+
+    standing = hf.Track(0, [(0, (10, 10))], box=_Box(285, 260, 315, 300), box_t=0)
+    # drawn centred 20 px above its feet (300 px): a click there is refused, 3 cells away is fine
+    assert not hf.track_clear(300, 280, [standing], 0, 1.0, 60, project)
+    assert hf.track_clear(390, 300, [standing], 0, 1.0, 60, project)
+    walker = hf.Track(1, [(0, (10, 10)), (int(0.4 * S), (12, 10)), (int(1.2 * S), (14, 10))],
+                      box=_Box(405, 260, 435, 300), box_t=int(1.2 * S))  # fmt: skip
+    # where it WILL be in 1 s (16.5, 10): refused although no box is there now
+    assert not hf.track_clear(16.5 * 30, 280, [walker], int(1.2 * S), 1.0, 60, project)
