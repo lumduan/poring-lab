@@ -6862,6 +6862,38 @@ The GM stops ONLY to attack and to pick up."
   - unintended attack requests at most 5 (more clicks while walking raise the detector-miss
     risk, 3.43);
   - the bar >= 90 %.
+- ➡️ **hunt-flow@5 run 1 (`20261016T133443-demo-hunt-flow5`, 13:34:43-14:05:57, the full
+  30-minute box): THE BAR 28 / 30 = 93.3 % (Wilson 78.7-98.2 %).** Failures: 1 no unit, 1 never
+  hit. **30 engagements**, more than twice any earlier version.
+  - **Beside it (Batt in parentheses):**
+    - first click lands 46 / 53;
+    - kills 47 = 94.0 / h (300). Only 30 are from engagements, so 60 / h; the rest followed
+      unintended attacks (below);
+    - seen -> click 7.51 / 29.4 s (1.11 / 4.79);
+    - click -> hit 0.70 / 1.19 s;
+    - **in sight 22.7 / 10 min** (44);
+    - **idle 52.5 %** (45.9);
+    - **walk clicks 32.8 / min, 63.2 % sent while walking** (44, 72.7 %), interval p50 0.95 s
+      (0.6);
+    - **death -> next click 1.75 / 6.33 s** (1.24 / 1.80);
+    - moving share of SEARCH time 57 %;
+    - range at the click p50 4 / p90 6;
+    - hit-through 58 %;
+    - coverage 69.7k cells.
+  - **The prediction:**
+    - walk clicks while walking >= 60 %: MET;
+    - in sight >= 15: MET;
+    - kills / h above 60: MET (94; 60 from engagements alone);
+    - the bar >= 90 %: MET;
+    - search moving share >= 80 %: NOT MET (57 %);
+    - unintended attack requests <= 5: NOT MET (**19**).
+  - **Safety (packets, the loop):** NPC contacts 0, dialogs 0, map changes 0, non-target hits 0.
+    - **Unintended attack requests 19**, all target species: about 1 in 50 of the 983 walk
+      clicks sent without a cursor read became an attack (3.43's detector misses, at a higher
+      click rate).
+    - 2 pickups from walk clicks.
+  - **The shadow cursor read:** 1,457 of 1,458 reads were `unknown`. The colour-mask reader does
+    not work on live frames either; it stays out of every decision.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
