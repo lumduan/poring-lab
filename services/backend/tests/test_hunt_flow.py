@@ -313,3 +313,14 @@ def test_v13_only_a_clearly_better_target_preempts() -> None:
     assert hf.preempt_better(1.0, 3.0, 4, 2.0)  # 2 cells closer
     assert not hf.preempt_better(2.0, 3.0, 4, 2.0)  # 1 cell closer: a neighbour, no flip
     assert hf.preempt_better(3.0, 5.0, 4, 2.0)  # the current one left the zone
+
+
+def test_v16_ncc_finds_the_template_where_it_was_moved() -> None:
+    rng = np.random.default_rng(3)
+    frame = rng.uniform(0, 255, (120, 140))
+    tpl = frame[40:72, 50:84].copy()  # a 32 x 34 sprite crop at (50, 40)
+    moved = rng.uniform(0, 255, (120, 140))
+    moved[55:87, 63:97] = tpl  # it moved to (63, 55)
+    x, y, sc = hf.ncc_search(moved, tpl)
+    assert (x, y) == (63, 55) and sc > 0.99
+    assert hf.ncc_search(moved[:10, :10], tpl)[2] == -1.0

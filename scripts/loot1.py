@@ -240,6 +240,7 @@ class Sampler(threading.Thread):
         self.lock = threading.Lock()
         self.halt = threading.Event()
         self.error: str | None = None
+        self.last_img: tuple[int, Any] | None = None  # hunt-flow@16: the detected frame itself
 
     def run(self) -> None:
         screen = r.Screen()
@@ -249,6 +250,7 @@ class Sampler(threading.Thread):
                 boxes = [b for b in self.det.detect(img) if b.cls == "monster"]
                 with self.lock:
                     self.frames.append((t, boxes))
+                    self.last_img = (t, np.array(img, copy=True))
         except Exception as exc:  # noqa: BLE001 -- reported, never silent
             self.error = f"{type(exc).__name__}: {exc}"
         finally:

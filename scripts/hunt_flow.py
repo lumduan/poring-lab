@@ -146,6 +146,10 @@ VERSIONS = {
     "bot's 'dead' p50 0.38 s BEFORE the server's kill, bursts ended 'gone' 57 %): re-click 2.0 -> "
     "1.0 s; a burst whose box vanished keeps clicking the track's last box (<= 1.2 s old, "
     "tag-confirmed only); 'dead' needs >= 1.4 s after the last click and 0.8 s unseen",
+    16: "FOCUS TRACKING (Batt B2 / B4): the chosen target's sprite crop, cut from the very frame "
+    "of its detector box, is tracked by NCC on every frame-bus frame (~10-20 Hz); the attack "
+    "click and every burst re-click aim at its fresh centre (<= 0.35 s old) led by its velocity "
+    "x (age + 0.15 s), instead of the detector box (p50 0.57 s old)",
     18: "ENGAGEMENT ZONE (Batt 18:2x) -- to be joined by Batt's heading method (21:31): one path "
     "into the attack range, re-planned only when the target leaves the zone",
     19: "RE-TARGET WHILE STEERING (Batt's change 2: detection -> dispatch, v7 p50 2.85 s, was the "
@@ -209,7 +213,8 @@ PARAMS[14] = {**PARAMS[13], "name_tag": True, "tag_wait_s": 1.2, "tag_harvest": 
 PARAMS[15] = {**PARAMS[14], "reclick_s": 1.0, "dead_min_s": 1.4, "dead_gone_s": 0.8,
               "burst_hold": True, "burst_hold_s": 1.2, "tag_cache_s": 10.0,
               "burst_same_track": True}  # fmt: skip
-# 16 focus tracking, 17 loot: built next; 18 = movement (Batt's heading method + the zone)
+PARAMS[16] = {**PARAMS[15], "focus": True, "focus_lead_s": 0.15, "focus_max_age_s": 0.35}
+# 17 loot: built next; 18 = movement (Batt's heading method + the zone)
 PARAMS[18] = {**PARAMS[15], "zone": True, "zone_radius": 7, "zone_radius_walking": 4}
 PARAMS[19] = {**PARAMS[18], "retarget": True, "retarget_margin": 2.0, "retarget_commit_s": 1.0}
 
@@ -726,6 +731,122 @@ def preempt_better(d_new: float, d_cur: float | None, zone_cells: float, margin:
     target, the current one left the zone (> ``zone_cells``), or the new one is >= ``margin``
     cells closer."""
     return d_cur is None or d_cur > zone_cells or d_new + margin <= d_cur
+
+
+def ncc_search(window: Any, tpl: Any) -> tuple[int, int, float]:
+    """PURE (v16, FOCUS TRACKING): the template's best match in ``window`` (both grey, 2-D) by
+    normalised cross-correlation -- the FFT for the correlation, integral images for the local
+    means / norms (Lewis' fast NCC). Returns (x, y) of the template's top-left, and the score
+    (-1..1); (0, 0, -1.0) when the window is smaller than the template."""
+    w = np.asarray(window, np.float64)
+    t = np.asarray(tpl, np.float64)
+    H, W = w.shape
+    h, w_ = t.shape
+    if h > H or w_ > W:
+        return 0, 0, -1.0
+    t0 = t - t.mean()
+    tn = float(np.sqrt((t0 * t0).sum()))
+    if tn < 1e-6:
+        return 0, 0, -1.0
+    sh = (H + h - 1, W + w_ - 1)
+    num_full = np.fft.irfft2(np.fft.rfft2(w, sh) * np.conj(np.fft.rfft2(t0, sh)), sh)
+    num = num_full[: H - h + 1, : W - w_ + 1]
+    ii = np.pad(w, ((1, 0), (1, 0))).cumsum(0).cumsum(1)
+    ii2 = np.pad(w * w, ((1, 0), (1, 0))).cumsum(0).cumsum(1)
+    s1 = ii[h:, w_:] - ii[:-h, w_:] - ii[h:, :-w_] + ii[:-h, :-w_]
+    s2 = ii2[h:, w_:] - ii2[:-h, w_:] - ii2[h:, :-w_] + ii2[:-h, :-w_]
+    var = np.maximum(s2 - s1 * s1 / (h * w_), 1e-9)
+    score = num / (np.sqrt(var) * tn)
+    y, x = np.unravel_index(int(np.argmax(score)), score.shape)
+    return int(x), int(y), float(score[y, x])
+
+
+def grey(img: Any) -> Any:
+    a = np.asarray(img)[..., :3].astype(np.float32)
+    return 0.114 * a[..., 0] + 0.587 * a[..., 1] + 0.299 * a[..., 2]
+
+
+class Focus:
+    """v16 (Batt B2, FOCUS TRACKING like an FPS aimbot): once a target is chosen, its sprite crop
+    (cut from the very frame its detector box came from) is tracked by NCC on EVERY frame-bus
+    frame, so the aim is ~0.1 s old instead of the detector's ~0.57 s. Thread-safe."""
+
+    def __init__(self, search_px: int = 70, min_score: float = 0.45) -> None:
+        import threading
+
+        self.lock = threading.Lock()
+        self.search_px, self.min_score = search_px, min_score
+        self.tid: int | None = None
+        self.tpl: Any = None
+        self.pos: tuple[float, float] | None = None  # the crop's CENTRE (client px)
+        self.vel = (0.0, 0.0)  # px / s
+        self.t = 0
+        self.score = 0.0
+        self.misses = 0
+
+    def start(self, tid: int, box: Any, img_t: int, img: Any) -> None:
+        g = grey(img)
+        x0, y0 = max(0, int(box.x0)), max(0, int(box.y0))
+        x1, y1 = min(g.shape[1], int(box.x1)), min(g.shape[0], int(box.y1))
+        if x1 - x0 < 8 or y1 - y0 < 8:
+            return
+        with self.lock:
+            self.tid, self.tpl = tid, g[y0:y1, x0:x1].copy()
+            self.pos, self.vel, self.t, self.score, self.misses = (
+                ((x0 + x1) / 2, (y0 + y1) / 2),
+                (0.0, 0.0),
+                int(img_t),
+                1.0,
+                0,
+            )
+
+    def stop(self) -> None:
+        with self.lock:
+            self.tid = None
+
+    def update(self, t: int, img: Any) -> None:
+        with self.lock:
+            if self.tid is None or self.pos is None:
+                return
+            tpl, pos, vel, t0 = self.tpl, self.pos, self.vel, self.t
+        dt = max(0.0, (t - t0) / 1e9)
+        px, py = pos[0] + vel[0] * dt, pos[1] + vel[1] * dt
+        h, w = tpl.shape
+        X0 = int(max(0, px - w / 2 - self.search_px))
+        Y0 = int(max(0, py - h / 2 - self.search_px))
+        a = np.asarray(img)
+        win = grey(a[Y0 : int(py + h / 2 + self.search_px), X0 : int(px + w / 2 + self.search_px)])
+        x, y, sc = ncc_search(win, tpl)
+        with self.lock:
+            if self.tid is None:
+                return
+            if sc < self.min_score:
+                self.misses += 1
+                if self.misses >= 6:
+                    self.tid = None  # lost: the detector's boxes take over
+                return
+            npos = (X0 + x + w / 2, Y0 + y + h / 2)
+            if sc >= 0.6:  # follow the sprite's animation (a Poring bounces): blend the match in
+                cur = win[y : y + h, x : x + w]
+                if cur.shape == self.tpl.shape:
+                    self.tpl = 0.8 * self.tpl + 0.2 * cur
+            if dt > 0:
+                nv = ((npos[0] - pos[0]) / dt, (npos[1] - pos[1]) / dt)
+                self.vel = (0.5 * vel[0] + 0.5 * nv[0], 0.5 * vel[1] + 0.5 * nv[1])
+            self.pos, self.t, self.score, self.misses = npos, int(t), sc, 0
+
+    def aim(self, tid: int, now_ns: int, lead_s: float, max_age_s: float
+            ) -> tuple[float, float, float] | None:  # fmt: skip
+        """(u, v, age_s): the tracked centre led by the velocity over the frame's age + lead_s;
+        None if this track is not focused or the fix is too old."""
+        with self.lock:
+            if self.tid != tid or self.pos is None:
+                return None
+            age = (now_ns - self.t) / 1e9
+            if age > max_age_s:
+                return None
+            k = age + lead_s
+            return self.pos[0] + self.vel[0] * k, self.pos[1] + self.vel[1] * k, age
 
 
 def map_same(ref: Any, cur: Any, max_median: float = MAP_SAME_MAX) -> bool:
@@ -1356,6 +1477,26 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         + "\n"
                     )
 
+            focus = Focus()
+
+            def focus_loop() -> None:
+                """v16: the focused target updated on every frame-bus frame (its own grab)."""
+                scr_f = r.Screen()
+                last_t = 0
+                try:
+                    while not halt.is_set():
+                        if focus.tid is None:
+                            time.sleep(0.03)
+                            continue
+                        t_f, img_f = scr_f.grab(gx0, gy0, gw, gh)
+                        if int(t_f) != last_t:
+                            last_t = int(t_f)
+                            focus.update(int(t_f), img_f)
+                        else:
+                            time.sleep(0.01)
+                finally:
+                    scr_f.close()
+
             def run_burst(
                 tr: Track, here: Cell, u: float, v: float, ref_img: Any
             ) -> dict[str, Any]:
@@ -1409,6 +1550,13 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     b_b = min(near_b, key=lambda x: float(np.hypot(*(np.array(f1.centre(x))
                                                                       - (ua, va)))))  # fmt: skip
                     ua, va = burst_aim(b_b, out["clicks"])
+                    if prm.get("focus"):
+                        fa_b = focus.aim(tr.tid, r.ns(), prm["focus_lead_s"],
+                                         prm["focus_max_age_s"])  # fmt: skip
+                        if fa_b is not None:  # v16: the fresh tracked centre + the same jitter
+                            ua += fa_b[0] - (b_b.x0 + b_b.x1) / 2
+                            va += fa_b[1] - (b_b.y0 + b_b.y1) / 2
+                            out["focus"] = out.get("focus", 0) + 1
                     if loot1.in_ui(ua, va):
                         out["end"] = "ui"
                         break
@@ -1447,6 +1595,12 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         b = min(near_, key=lambda x: np.hypot(*(np.array(f1.foot(x))
                                                                  - f1.foot(tr.box))))  # fmt: skip
                 u, v = f1.centre(b)
+                aim_src = "box"
+                if prm.get("focus") and direct_:
+                    fa_ = focus.aim(tr.tid, r.ns(), prm["focus_lead_s"], prm["focus_max_age_s"])
+                    if fa_ is not None and not loot1.in_ui(fa_[0], fa_[1]):
+                        # v16: the target tracked on every frame, led by its velocity
+                        u, v, aim_src = fa_[0], fa_[1], f"focus:{round(fa_[2] * 1000)}"
                 if (prm.get("still_gate") and ok_park and tr.box is not None
                         and b is not tr.box and float(np.hypot(*(np.array(f1.centre(b))
                                                                - f1.centre(tr.box))))
@@ -1583,7 +1737,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                            "aim_px": hov.get("aim_px"), "read_ms": hov.get("read_ms"),
                            "in_range_to_click_s": hov.get("in_range_to_click_s"),
                            "read_path": path_, "branch": "direct" if direct_ else "read",
-                           "risk": gate_why, "tag": tag_})  # fmt: skip
+                           "risk": gate_why, "tag": tag_, "aim_src": aim_src})  # fmt: skip
                 eng_tracks[tr.tid] = tr  # v6: the death cell and the loot read its boxes
                 if eng is None or eng["track"] != tr.tid:
                     eng = {"k": k, "track": tr.tid, "t_seen": tr.t_first, "t_first_click": tc,
@@ -1854,6 +2008,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 nonlocal pos, moving, path, pi, target, reads, last_mm, mm_off, last_weight
                 nonlocal click_from, click_cell
                 ths = [_start_thread(perception, "perception"), _start_thread(planner, "planner")]
+                if prm.get("focus"):
+                    ths += [_start_thread(focus_loop, "focus")]
                 cont = bool(prm.get("continuous"))
                 if cont:
                     ths += [_start_thread(motion, "motion")]
@@ -2222,6 +2378,14 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                     target, reads = cand, 0
                                     t_target[0] = now
                                     break
+                        if prm.get("focus"):
+                            if target is None and eng is None:
+                                focus.stop()
+                            elif target is not None and focus.tid != target.tid:
+                                li_ = sampler.last_img
+                                same_fr = li_ is not None and int(li_[0]) == int(target.box_t)
+                                if same_fr and li_ is not None and target.box is not None:
+                                    focus.start(target.tid, target.box, li_[0], li_[1])
                         if target is not None:
                             split.to("steering", time.monotonic())
                             tcell = target.predict(t_now)
