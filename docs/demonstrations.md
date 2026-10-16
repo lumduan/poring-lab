@@ -7217,7 +7217,7 @@ FAIL. The fast read gates nothing.**
   blink. That is ~1.5 s against the proven read's ~1.9 s, a small gain. The waste around the
   proven read is the bigger one (3.49).
 
-### 3.49 hunt-flow@8: LEAN STRIKE (pre-registered 2026-10-16 __TIME__ ICT, the commit time __SHA__, BEFORE its run)
+### 3.49 hunt-flow@8: LEAN STRIKE (pre-registered 2026-10-16 16:24 ICT, the commit time e5d7ae9, BEFORE its run)
 
 **From v7 attempt 2:** striking was 777 s, 33 % of the judged run, and in range -> click was
 p50 6.74 s, with read time only p50 1.85 s. The rest was waste around the proven read.
