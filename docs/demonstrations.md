@@ -7144,6 +7144,12 @@ estimator):**
   - The chat showed "Your participation is appreciated." No npc_* packet appears in the run.
   - The job level rose 1 -> 4 from the kills; the restore resets it.
 - **Safety:** no NPC contact, no dialog, no map change after the start warp, HP intact.
+  - ➡️ **CORRECTED 2026-10-16 ~18:50:** the run DID hit a NON-TARGET.
+    - A Creamy (1018) took hits at +1,248 s and +2,015 s, both from WALK clicks the client turned
+      into attacks: one search click, one steer click.
+    - The judge had no non-target count then. `flow_judge.hard_bars` (3.52) finds it.
+    - The same cause recurred in hunt-flow@10 attempt 2. The fix is v11's walk-click safety
+      amendment (3.53).
 - **vs the prediction:**
   - moving clicks within 1 cell >= 40 %: YES (78 %);
   - along error within +-1: YES (0.0);

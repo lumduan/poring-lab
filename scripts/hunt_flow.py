@@ -182,7 +182,12 @@ PARAMS[10] = {**PARAMS[9], "freeze_guard": True, "risk_gate": True, "gate_near_g
               # boxes arrive 0.3-0.65 s after their frame; v9's stand gate holds it still 1.2 s)
               "gate_fresh_s": 1.0}  # fmt: skip
 # v11 = Batt's ENGAGEMENT ZONE (18:2x); the re-target build waits (it re-aims, the zone commits)
-PARAMS[11] = {**PARAMS[10], "zone": True, "zone_radius": 7, "zone_radius_walking": 4}
+PARAMS[11] = {**PARAMS[10], "zone": True, "zone_radius": 7, "zone_radius_walking": 4,
+              # SAFETY amendment (a hard bar failed: v7 attempt 2 and v10 attempt 2 hit a Creamy
+              # through WALK clicks the client turned into attacks): a walk click never lands in a
+              # monster box (grown 12 px) of the newest frame, nor a steer click < 3 cells from
+              # the target
+              "box_clear_px": 12.0, "steer_clear_cells": 3}  # fmt: skip
 PARAMS[12] = {**PARAMS[11], "sweep": True, "lane_w": 12, "rev_penalty": 4.0}
 PARAMS[13] = {**PARAMS[12], "retarget": True, "retarget_margin": 2.0, "retarget_commit_s": 1.0}
 
