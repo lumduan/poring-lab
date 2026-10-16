@@ -7295,7 +7295,7 @@ lease is active, nothing sent". Nothing was restarted for the 10-min back-off.
   - the bar >= 90 %: NO (70 %);
   - no idle stretch over 60 s: YES.
 
-### 3.50 hunt-flow@9: STRIKE A STANDING TARGET ONLY (pre-registered 2026-10-16 __TIME__ ICT, the commit time __SHA__, BEFORE its run)
+### 3.50 hunt-flow@9: STRIKE A STANDING TARGET ONLY (pre-registered 2026-10-16 17:14 ICT, the commit time b975eac, BEFORE its run)
 
 **From v8:** 9 % of strike reads were SWORD.
 - The WALK reads (32) are the target having LEFT the aimed spot. The aim comes from a frame
