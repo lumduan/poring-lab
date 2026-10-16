@@ -7625,7 +7625,7 @@ cluster and walks to a far target near the wall ... Fix as one pre-registered ch
   - seen -> click p50 <= 5 s: see the table;
   - hard bars 0 / 0 / 0: NO (the Creamy).
 
-### 3.54 hunt-flow@12: the BURST STRIKE (pre-registered 2026-10-16 __TIME__ ICT, the commit time __SHA__, BEFORE its run; Batt 19:4x / 20:0x)
+### 3.54 hunt-flow@12: the BURST STRIKE (pre-registered 2026-10-16 20:23 ICT, the commit time 133818d, BEFORE its run; Batt 19:4x / 20:0x)
 
 **Batt:** "he CLICKS REPEATEDLY until the client draws the ARROW marker on the monster ... Do the
 BURST strike first (as asked), tuned for small targets."
