@@ -88,6 +88,12 @@ VERSIONS = {
     "tracked monsters' predicted positions); only when none passes for 1 s does the GM stop "
     "(then a cursor-gated click); the planner re-plans before the route runs out; the cursor "
     "shape at each walk click is read in SHADOW (logged, never deciding: not proven)",
+    6: "ENGAGE LIKE A PLAYER (Batt 14:40 + 14:39): tracks from the MEASURED position at each "
+    "frame's time (fractional cells: identity and velocity hold while the camera scrolls), the "
+    "continuity re-acquire on; the POINTER FOLLOWS the target's sprite on every fresh frame; at "
+    "the GM's stop within range a SHORT read (park blink, a fast return, robust2) and the click at "
+    "once; the attack click is the approach (standing <= 7); after a kill the DROPS are picked up "
+    "(loot@1's PICKUP scan) before the next target",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -113,6 +119,8 @@ PARAMS[5] = {**PARAMS[4], "continuous": True, "walk_every_s": 0.6, "ahead": 6,
              # the route re-planned; run 1 sat 255 s at (75,86)), the UI check in the background
              # (it blocked the executor ~2 s every 30 s), and the route preview published
              "stall_s": 2.0, "bg_check": True, "publish_route": True}  # fmt: skip
+PARAMS[6] = {**PARAMS[5], "frame_cells": True, "reacquire": True, "follow_mouse": True,
+             "short_read": True, "hover_settle_s": 0.25, "loot": True}  # fmt: skip
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -130,6 +138,7 @@ class Track:
     seen: list[tuple[int, Cell]] = field(default_factory=list)  # (t_ns, cell)
     box: Any = None  # the newest box (client px)
     box_t: int = 0
+    boxes: list[tuple[int, Any]] = field(default_factory=list)  # v6: (t_ns, box) per sighting
 
     @property
     def t_first(self) -> int:
@@ -184,6 +193,8 @@ def update_tracks(tracks: list[Track], t_ns: int, sightings: Sequence[tuple[Any,
             free.remove(tr)
         tr.seen.append((t_ns, cell))
         tr.box, tr.box_t = box, t_ns
+        tr.boxes.append((t_ns, box))
+        del tr.boxes[:-60]
     keep = [tr for tr in tracks if (t_ns - tr.t_last) / 1e9 <= drop_s]
     return keep, next_id
 
@@ -450,7 +461,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
         clicks_f.flush()
 
     split = f0.Split(dict.fromkeys(("searching", "steering", "striking", "fighting", "stopping",
-                                    "checks"), 0.0))  # fmt: skip
+                                    "checks", "looting"), 0.0))  # fmt: skip
     engagements: list[dict[str, Any]] = []
     cov = hc.Coverage(area)
     ended, run_s, t_run0 = "time_box", 0.0, time.monotonic()
@@ -551,8 +562,12 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 px0 = float(np.hypot(*(p0[1] - p0[0])))
                 return c, (float(np.hypot(*(p[1] - p[0]))) / px0 if px0 > 0 else 1.0)
 
-            def sightings_in(boxes: Any, here: Cell, w: Any = None) -> list[tuple[Any, Cell]]:
-                """hunt@6's selection gates on one frame's boxes."""
+            def sightings_in(boxes: Any, here: Cell, w: Any = None,
+                             frac: tuple[float, float] = (0.0, 0.0)
+                             ) -> list[tuple[Any, Any]]:  # fmt: skip
+                """hunt@6's selection gates on one frame's boxes; v6: ``frac`` = our measured
+                fractional offset from ``here`` at the frame (the camera centres on it), so the
+                cells are fractional and hold still while the camera scrolls."""
                 got_ = []
                 for b in boxes:
                     if b.cls != "monster":
@@ -566,7 +581,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         continue  # a floor item
                     if loot1.in_ui(*f1.centre(b)) or not area[c[1], c[0]]:
                         continue
-                    got_.append((b, c))
+                    got_.append((b, c if frac == (0.0, 0.0)
+                                 else (c[0] + frac[0], c[1] + frac[1])))  # fmt: skip
                 return got_
 
             def rp(cmd: str, *a: Any) -> None:
@@ -728,6 +744,36 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 last_progress[0] = time.monotonic()
                 return True
 
+            in_range_since: dict[int, float] = {}  # v6: track -> when it came in range (mono s)
+            eng_tracks: dict[int, Track] = {}
+
+            def loot_after(eng_: dict[str, Any], here2: Cell) -> None:
+                """v6 (Batt 14:39: "wait for check item drop before continue next queue"): the death
+                cell from the target's boxes on the sampler's frames, then loot@1's PICKUP scan."""
+                from poring_dataset import deathcell as dcm_
+
+                tr_ = eng_tracks.get(int(eng_["track"]))
+                if tr_ is None or tr_.box is None:
+                    eng_["death"] = {"cell": None, "reason": "no_track"}
+                    return
+                prev_ = split._cat
+                split.to("looting", time.monotonic())
+                try:
+                    bx = dict(tr_.boxes)
+                    t_from = int(eng_["t_first_click"]) - int(2e9)
+                    sights = [dcm_.Sighting(int(t_), None if (b_ := bx.get(int(t_))) is None
+                                            else (b_.x0, b_.y0, b_.x1, b_.y1))
+                              for t_, _bs in sampler.since(0) if int(t_) >= t_from]  # fmt: skip
+                    lt = loot1.Track(f1.foot(tr_.box))
+                    lt.sightings = sights
+                    dead_ = loot1.death_of(rig, lt, here2)
+                    eng_["death"] = {"cell": None if dead_.cell is None else list(dead_.cell),
+                                     "reason": dead_.reason}  # fmt: skip
+                    if dead_.cell is not None and dead_.gone_ns is not None:
+                        loot1.loot(rig, here2, dead_, eng_)
+                finally:
+                    split.to(prev_, time.monotonic())
+
             def strike(tr: Track, here: Cell, again: bool) -> bool:
                 """Park, hover the target's newest box, ONE robust2 read; SWORD -> the attack
                 click there. True when it clicked."""
@@ -747,8 +793,26 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 if not ok_park or loot1.in_ui(u, v):
                     split.to(prev, time.monotonic())
                     return False
-                pr.hover(u, v)
-                shape = pr.read(u, v)["shape"]
+                t_read0 = r.ns()
+                if prm.get("short_read"):
+                    # v6: back from the park in small moves (the client draws its cursor during
+                    # continuous travel, ~0.15-0.2 s behind: 13:24's test), a short settle, the
+                    # proven read; anything but SWORD -> the standard hover, read once more
+                    import walk6 as w6_
+
+                    pu, pv = w6_.PARKS[pr.parked]
+                    for i_ in range(1, 7):
+                        agent.move(gx0 + round(pu + (u - pu) * i_ / 6),
+                                   gy0 + round(pv + (v - pv) * i_ / 6))  # fmt: skip
+                        time.sleep(0.012)
+                    time.sleep(prm["hover_settle_s"])
+                    shape = pr.read(u, v)["shape"]
+                    if shape != "sword":
+                        pr.hover(u, v)
+                        shape = pr.read(u, v)["shape"]
+                else:
+                    pr.hover(u, v)
+                    shape = pr.read(u, v)["shape"]
                 pc = tr.predict(r.ns())
                 hov = {"t": r.ns(), "at": [round(u, 1), round(v, 1)], "read": shape,
                        "age_ms": round((r.ns() - tr.box_t) / 1e6),
@@ -763,10 +827,26 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 tc = r.ns()
                 agent.click(gx0 + round(u), gy0 + round(v))
                 hov["clicked"] = tc
+                hov["read_ms"] = round((tc - t_read0) / 1e6)
+                # v6: the AIM ERROR -- the click point to the target's sprite centre on the
+                # freshest frame (px), and the time from "in range" to this click
+                fr2 = sampler.since(max(0, len(sampler.frames) - 1))
+                if fr2:
+                    near2 = prm["track_near"] + 1
+                    cand_ = [x for x, c in sightings_in(fr2[-1][1], here)
+                             if cheb(c, tr.predict(fr2[-1][0])) <= near2]  # fmt: skip
+                    if cand_:
+                        cx_, cy_ = f1.centre(min(cand_, key=lambda x: float(np.hypot(
+                            *(np.array(f1.centre(x)) - (u, v))))))  # fmt: skip
+                        hov["aim_px"] = round(float(np.hypot(u - cx_, v - cy_)), 1)
+                if in_range_since.get(tr.tid) is not None:
+                    hov["in_range_to_click_s"] = round(tc / 1e9 - in_range_since[tr.tid], 2)
                 pr.park()
                 click_log({"t": tc, "u": round(u, 1), "v": round(v, 1), "kind": "strike",
-                           "track": tr.tid, "pred_cell": hov["pred_cell"],
-                           "again": again})  # fmt: skip
+                           "track": tr.tid, "pred_cell": hov["pred_cell"], "again": again,
+                           "aim_px": hov.get("aim_px"), "read_ms": hov.get("read_ms"),
+                           "in_range_to_click_s": hov.get("in_range_to_click_s")})  # fmt: skip
+                eng_tracks[tr.tid] = tr  # v6: the death cell and the loot read its boxes
                 if eng is None or eng["track"] != tr.tid:
                     eng = {"k": k, "track": tr.tid, "t_seen": tr.t_first, "t_first_click": tc,
                            "here": list(here), "pred_cell": hov["pred_cell"], "hovers": [],
@@ -814,7 +894,13 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     for t_fr, boxes in new_:
                         age = (r.ns() - t_fr) / 1e9
                         here_fr = posm.at(time.monotonic() - age)
-                        sts = sightings_in(boxes, here_fr, world_p)
+                        frac_ = (0.0, 0.0)
+                        if prm.get("frame_cells"):  # v6: MEASURED at the frame's own time
+                            fp = pos_at_frame(int(t_fr))
+                            if fp is not None:
+                                here_fr = (int(round(fp[0])), int(round(fp[1])))
+                                frac_ = (fp[0] - here_fr[0], fp[1] - here_fr[1])
+                        sts = sightings_in(boxes, here_fr, world_p, frac_)
                         with plock:
                             pstate["tracks"], pstate["next_id"] = update_tracks(
                                 pstate["tracks"], t_fr, sts, pstate["next_id"],
@@ -910,6 +996,16 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 d_ = h_[-1][1] - a_[1]
                 return a_[0][0] + float(d_[0]), a_[0][1] + float(d_[1])
 
+            def pos_at_frame(t_ns: int) -> tuple[float, float] | None:
+                """v6: our measured cell at ``t_ns`` (the minimap anchor + odometry then)."""
+                a_, h_ = mstate["anchor"], hist_now()
+                if a_ is None or not h_ or a_[1] is None:
+                    return None
+                o_ = odo_at(h_, t_ns)
+                if o_ is None:
+                    return None
+                return a_[0][0] + float(o_[0] - a_[1][0]), a_[0][1] + float(o_[1] - a_[1][1])
+
             def moving_meas() -> bool:
                 h_ = hist_now()
                 if len(h_) < 2:
@@ -982,6 +1078,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 recent_clicks: list[Cell] = []
                 route_shown: list[Any] = [None]
                 gp_i = 0
+                follow_t = [0]  # v6: the last box time the pointer followed
                 dispatched: set[tuple[int, bool]] = set()
                 stop_since: float | None = None  # v5: since when standing with no click
                 last_click: dict[str, Any] = {}  # v5: the last walk click (unfollowed check)
@@ -1147,6 +1244,11 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                     strike(tr, pos, again=True)
                                 time.sleep(0.02)
                                 continue
+                            if done == "dead" and prm.get("loot"):
+                                time.sleep(0.4)  # the frames after the death (gone frames)
+                                here_l = quick_fix()
+                                posm.stop(here_l)
+                                loot_after(eng, here_l)
                             end_engagement(done)
                             ev({"kind": "hand_off", "after": done})
                             pos = quick_fix()
@@ -1193,6 +1295,16 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             split.to("steering", time.monotonic())
                             tcell = target.predict(t_now)
                             s_range = strike_range(target, prm)
+                            fresh_box = (t_now - target.box_t) / 1e9 <= prm["fresh_s"]
+                            if (prm.get("follow_mouse") and target.box_t > follow_t[0]
+                                    and fresh_box):  # fmt: skip
+                                # v6: the POINTER FOLLOWS the sprite on every fresh frame
+                                fu_, fv_ = f1.centre(target.box)
+                                if not loot1.in_ui(fu_, fv_):
+                                    agent.move(gx0 + round(fu_), gy0 + round(fv_))
+                                follow_t[0] = target.box_t
+                            if cheb(pos, tcell) <= s_range:
+                                in_range_since.setdefault(target.tid, time.monotonic())
                             if strike_due(moving, pos, tcell, s_range):
                                 if (not strike(target, pos, again=False)
                                         and reads >= prm["max_reads"]):  # fmt: skip

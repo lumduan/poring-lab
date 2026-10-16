@@ -745,6 +745,16 @@ def bot(sid: str) -> dict[str, Any]:
     out["queue_hit_through"] = queue_hit_through((d / "events.jsonl").read_text().splitlines())
     w1 = t0 + int(window * NS)
     out["unintended_attacks"] = unintended_attacks(events, engs, t0, w1)
+    # v6: per attack attempt -- the aim error (px), the time from "in range" to the click, the read
+    strikes = [x for x in map(json.loads, (d / "clicks.jsonl").read_text().splitlines())
+               if x.get("kind") == "strike"]  # fmt: skip
+    for key in ("aim_px", "in_range_to_click_s", "read_ms"):
+        xs = [float(x[key]) for x in strikes if x.get(key) is not None]
+        out[key] = {"n": len(xs), "p50": pct(xs, 0.5), "p90": pct(xs, 0.9)}
+    picks = sum(1 for e in events if e.get("type") == "pickup_result" and e.get("ok")
+                and t0 <= int(e["t_mono_ns"]) < w1)  # fmt: skip
+    out["pickups_ok"] = picks
+    out["pickups_per_kill"] = round(picks / out["kills"], 2) if out["kills"] else None
     _track, mv_ = gm_track(events)
     out["search_moving_share"] = search_moving_share(
         (d / "events.jsonl").read_text().splitlines(), mv_, t0, w1)  # fmt: skip
@@ -781,6 +791,11 @@ def row(o: Mapping[str, Any]) -> dict[str, str]:
         "moving share of SEARCH time": "-" if o.get("search_moving_share") is None
         else f"{100 * o['search_moving_share']:.0f} %",
         "unintended attack requests": f"{o.get('unintended_attacks', '-')}",
+        "aim error px p50/p90": "-" if not (o.get("aim_px") or {}).get("n")
+        else "{p50} / {p90}".format(**o["aim_px"]),
+        "in range -> click s p50/p90": "-" if not (o.get("in_range_to_click_s") or {}).get("n")
+        else "{p50} / {p90}".format(**o["in_range_to_click_s"]),
+        "pickups per kill": f"{o.get('pickups_per_kill', '-')}",
         "window min": f"{round(o['window_s'] / 60, 1)}",
     }  # fmt: skip
 

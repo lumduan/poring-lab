@@ -6909,6 +6909,54 @@ The GM stops ONLY to attack and to pick up."
     the route preview is ON.
   - In run 1, 303 s of the 420 s of idle time in search came from 6 stalls of >= 3 s; the 255 s
     one was this bug.
+- ➡️ **hunt-flow@5 run 2 (`20261016T140731-demo-hunt-flow5`, 14:07:31-14:38:41, the full box;
+  the run-1 code): THE BAR 20 / 22 = 90.9 %**; failures: 1 never hit, 1 hit late.
+  - 22 engagements; 72.0 kills / h;
+  - unintended attack requests 16;
+  - walk clicks 65.2 % sent while walking; search moving 47.6 %;
+  - seen -> click 5.55 / 15.2 s; death -> next click 2.37 / 7.34 s; idle 56.6 %.
+  - It shows the same stall pattern (a 29-click same-spot streak).
+  - **v5 POOLED (runs 1 + 2): 48 / 52 = 92.3 % (Wilson 81.8-97.0 %).** Under 60 engagements, so
+    no verdict.
+  - The clip of run 1's densest 3.25 min (from 23:00; HUD on; no route line, the gap fixed in
+    attempt 2) was sent to Batt: `hunt-flow5-best-3min-phone.mp4` (/dev/shm, local).
+
+### 3.46 hunt-flow@6: ENGAGE LIKE A PLAYER, AND LOOT (pre-registered 2026-10-16 ~14:55 ICT, BEFORE its run; Batt 14:40 + 14:39)
+
+**Batt (14:40):** "walking is much better, but the ENGAGEMENT still stops and misses. In the frames
+a Poring stays 2-5 cells from the GM for ~27 s while the cursor sits 30-60 px off its sprite
+(right, left, below), and the GM stops/starts near it. It's aiming error, not detection."
+**Batt (14:39):** "when you kill monster please wait for check item drop before continue next
+queue; if you walk after kill you will can't keep item drop".
+
+On v5 attempt 2 (its fixes included), the changes:
+1. **TARGET CONTINUITY:** perception places every box with our MEASURED position at THAT FRAME'S
+   time (the minimap anchor plus the floor odometry then), in fractional cells, so a monster
+   keeps its identity and a true velocity while the camera scrolls. The prepared continuity
+   re-acquire is on (a dropped track's nearest new track within 3 cells carries it on).
+2. **THE POINTER FOLLOWS THE TARGET:** once chosen, the pointer moves to the target's sprite
+   centre on every fresh frame (<= 0.4 s; the latest box, no extrapolation).
+   - **The SWORD read still needs a still scene**: robust2 is the only proven reader, and both
+     background-free readers failed today (62 / 200; 0 / 1,453).
+   - So at the GM's natural stop within range comes a SHORT read: a park blink for the
+     background, the pointer back in 6 small moves (the client draws its cursor during
+     continuous travel, ~0.15-0.2 s behind: 13:24's test), a 0.25 s settle, robust2, and the
+     click at once. Anything but SWORD gets the standard hover and one more read.
+3. **THE ATTACK CLICK IS THE APPROACH:** standing targets from <= 7 cells, walking <= 3 (v4).
+4. **LOOT AFTER EACH KILL:** the death cell from the target's own boxes on the sampler's frames
+   (loot@1's `death_of`), then loot@1's PICKUP scan and clicks (`loot1.loot`), before the next
+   target. Weight above 40 % is cleared between engagements (the weight rule).
+- **Measured, per attack attempt:** the AIM ERROR (the click point to the target's sprite centre
+  on the freshest frame, px), the time from "in range" to the click, the read time.
+- **Beside the bar:** first-click lands, hit within W, kills / h, pickups per kill, stops, the
+  bot-vs-Batt table.
+- **Prediction, written before the run:**
+  - aim error p50 under 15 px;
+  - in range -> click p50 under 1.5 s;
+  - the bar >= 90 %;
+  - pickups per kill > 0.5;
+  - kills / h above v5 run 2's 72, by engagements alone above 50 (looting costs time);
+  - unintended attack requests not above v5's (16-19).
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
