@@ -6265,6 +6265,50 @@ search (53-69 % of every run).
   local KB's 59 spawn maps has only v1's five species. The nearest, pay_fild03 / prt_fild04 /
   prt_fild06, each have 3 species outside them.
 
+**3.39.11 After the night: two post-hoc analyses and the anim resume (2026-10-16 08:50, Claude).** These
+re-read data that was already judged. No verdict changes, and nothing here was pre-registered.
+- **The first click DID attack, now on every run** (Batt's step 1, "first-click diagnosis"):
+  - 215 first attack clicks across the ten scored runs, hunt@1 attempt 2 to hunt@9 (packets, 4 s
+    after each click):
+    - 190 (88 %): the client walked up first (`self_move_request`), then sent its own
+      `attack_request`;
+    - 20 (9 %): an attack request at once (already in range);
+    - 5 (2 %): a walk only, with no attack request within 4 s. Three of these were attacked by a
+      re-click 4-13 s later and killed. Two had no attack request after the click: one was still
+      judged killed, one was hit but not killed.
+  - From the click to the attack request: p50 1.09 s, p90 2.14 s, max 3.39 s.
+  - Where the 210 requests went:
+    - 188 on the judge's selected unit G;
+    - 18 in engagements where the judge found no G;
+    - 4 on another unit of a target species.
+  - farm@1's corrected reading (6.2) holds at n = 215. The client walks up and attacks by
+    itself, so "the first click only walked" is not a failure cause.
+- **The 19 no-unit failures (hunt@4 attempt 3 to hunt@9), one by one:**
+  - 13 got an attack click. 14 had an attack request of ours inside the engagement (one came from
+    a walk click). Every one of those 14 attacked units died by our hits.
+  - 6 were `lost` before any click, and 5 of those had no attack request at all.
+  - The along-walk model re-reads 9 of the 19 as killed, 1 as hit not killed and 1 as never hit.
+    8 stay no-unit:
+    - 4 were attacked and killed by us. By the walk model, the unit we attacked stood 3-7 cells
+      from the selected cell at selection (the judge allows 2 there, and 5 at the first request).
+      Either the cell estimate was off or the target kept walking; the two are not separated here.
+    - 4 were lost with no click. The nearest mob at selection was 5, 6, 15 and 25 cells from the
+      selected cell. In the last two, no mob stood anywhere near a cell within 7 cells of the GM,
+      so they were most likely detector false positives (NOT checked on the frames).
+  - So "no unit at selection" does NOT mean "the target was gone at click time": in 14 of 19 the
+    bot attacked and killed a unit. Three things share the label:
+    - the judge's destination model (9);
+    - the attacked unit 3-7 cells from the selected cell (4);
+    - selections with no unit near them (4 to 6).
+- **The prt_fild08 animated-region measurement, resumed** (Batt: "resume it after 06:00 or later").
+  - The first session, `20261015T210808-demo-anim-region-prt-fild08`, ran 21:08:08-21:57:30. It
+    was stopped by SIGINT in a grab phase with 178 of the lattice's 280 pass-1 views, and no
+    rechecks yet.
+  - The resume started at 08:45:56 (client judged clean at 08:45, the known fixed-state UI) as
+    `20261016T084603-demo-anim-region-prt-fild08`:
+    `anim_region.py measure --map prt_fild08 --max-pass2 300 --resume-from 20261015T210808-demo-anim-region-prt-fild08`.
+  - Its result is recorded here when it ends. Until then the region is not built and not used.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
