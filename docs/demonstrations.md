@@ -8059,6 +8059,45 @@ STOPPED at 26.7 min, 40 engagements (all dead).**
   was read at. A track can take over another sprite's box.
 - Attempt 3 runs v16 with it, and attempts 1 + 3 are pooled.
 
+**Attempt 3 (2026-10-17 02:07:34, session 20261017T020734-demo-hunt-flow16, seed 20261228):
+STOPPED at 23.3 min by the stuck guard ("no progress for 60 s at (186, 128)"), 26 engagements.**
+- **HARD BARS PASSED:** zero NPC contact, zero map change, zero non-target hit. It is the first
+  hunt-flow run without a non-target hit.
+- **Results:**
+  - the bar 21 / 26 = 81 % (Wilson 62-91);
+  - engaged kills 21 in 23.3 min; monsters in sight only 9.9 / 10 min;
+  - attack clicks 29 direct, 0 read; focus aimed 23 of 29;
+  - tag reads refused 58.5 %;
+  - only 2 walk clicks turned into attacks (both Porings);
+  - the walk guard: ok 974, pink 534, near_gm 918 (60 % refused).
+- **The stop:** the GM stood on a raised path at a cliff edge (screenshot), and its walk clicks
+  into the field below read no-entry.
+  - Each refusal carves its cell (radius 1) out of the walkable grid, so the grid around the GM
+    was cut shut.
+  - The stall breaker then found no path ("unstall ... to: null", 8 times) until the stuck guard
+    stopped the run.
+- **Fix (a bug fix, from v17's run on):** the stall breaker plans on the walkable grid as it was
+  BEFORE any refusal. It tries first the cells the GM WALKED in the last minutes (the client
+  took them), then random reachable cells. The walk clicks along that path use the same grid.
+
+**v16 POOLED (attempts 1 + 3: 66 engagements, 50.0 min):**
+- the bar 55 / 66 = 83.3 % (v15 78.1 %);
+- engaged kills 55, 66 / h (v15 95.9 / h; sight 9.9-16.1 / 10 min against v15's 14.2);
+- focus aimed 72 of 83 direct strikes;
+- tag reads refused 40.7 % / 58.5 %;
+- walk clicks turned into attacks 15 in 50 min (18 / h; v14 49 / h, v15 50 / h), none on a
+  Creamy;
+- one non-target hit, through the read path, in attempt 1 (fixed for attempt 3).
+- **vs the prediction:**
+  - focus >= 50 %: YES (87 %);
+  - the bar >= 78 %: YES (83.3 %);
+  - tag refusals <= 35 %: NO (40.7 / 58.5 %);
+  - Creamy hits <= 1: 1 (attempt 1, through the read path, not the walk clicks);
+  - walk-click attacks <= half of v14's: YES (18 / h against 49 / h);
+  - the guard refuses <= 35 %: NO (48 % / 60 %);
+  - engaged kills / h >= 0.8 x v15's: NO (66 against 76.7);
+  - hard bars: attempt 1 FAILED, attempt 3 PASSED.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.

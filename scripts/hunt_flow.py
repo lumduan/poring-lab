@@ -1203,6 +1203,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
         raise f0.FarmStop(f"hunt-flow refused: RDP-only cursor references (lock {lock.backend})")
     gat = gatmod.parse((cam.GAT_DIR / f"{MAP}.gat").read_bytes())
     ok = stand_grid(MAP, gat)
+    ok0 = ok.copy()  # the walkable grid before any refusal carves it (the stall breaker's)
     kb = r.ROOT / "data" / "kb"
     warps = json.loads((kb / "warps.json").read_text()).get(MAP, [])
     npcs = json.loads((kb / "npc_cells.json").read_text())["maps"].get(MAP, {}).get("npcs", [])
@@ -2909,11 +2910,20 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             # reachable cell 6-14 away
                             last_unstall[0] = now
                             pos = settle(timeout=1.5) or pos
-                            for c_ in unstall_cells(ok, pos, unstall_rng):
-                                p_ = hc.astar(ok, pos, c_)
+                            # v16 attempt 3: refusals had carved `ok` shut around the GM ->
+                            # first the cells WE WALKED (the client took them), then random
+                            # cells, both on the walkable grid as it was before any refusal
+                            g0_ = ok0.copy()
+                            g0_[pos[1], pos[0]] = True
+                            with plock:
+                                tr_u = list(trail)
+                            cands_u = [*trail_cells(tr_u, pos, now, near=4, far=25, min_age_s=2.0),
+                                       *unstall_cells(g0_, pos, unstall_rng, k=6)]  # fmt: skip
+                            for c_ in cands_u:
+                                p_ = hc.astar(g0_, pos, c_)
                                 if p_ is not None and len(p_) >= 2:
                                     with plock:
-                                        plan.update(goal_path=p_, escape=True, t_goal=now)
+                                        plan.update(goal_path=p_, escape="unstall", t_goal=now)
                                     gp = p_
                                     ev({"kind": "unstall", "at": list(pos), "to": list(c_)})
                                     break
@@ -2925,7 +2935,13 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         if cont:  # v5: the MOVEMENT QUEUE, ~6 ahead of where we are
                             set_mode("search")
                             due = now - last_walk >= (prm["walk_every_s"] if moving else 0.3)
-                            grid_s = ok if plan.get("escape") else area  # v8 attempt 2
+                            grid_s = (
+                                ok0
+                                if plan.get("escape") == "unstall"  # its own grid
+                                else ok
+                                if plan.get("escape")
+                                else area
+                            )  # v8 attempt 2
                             if due:
                                 if cont_click(gp, grid_s, "search"):
                                     stop_since = None
