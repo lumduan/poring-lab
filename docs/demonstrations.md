@@ -7508,7 +7508,7 @@ on the CPU (GPU freeze).
 - In effect the run was v9: 3 engagements; reads 3 SWORD / 3 WALK / 9 unknown.
 - Hard bars 0 / 0 / 0 (live packets).
 
-**Attempt 2 (recorded 2026-10-16 __TIME__, the commit time __SHA__, before its run; a bug fix
+**Attempt 2 (recorded 2026-10-16 18:15, the commit time 0a515f7, before its run; a bug fix
 within the version):** the gate's box may be up to 1.0 s old (`gate_fresh_s`, the dispatch
 freshness). v9's stand gate already holds the target still over the last 1.2 s, so a <= 1 s box
 is where it stands. 60 min, seed 20261216.

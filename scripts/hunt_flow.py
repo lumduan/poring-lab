@@ -169,9 +169,9 @@ PARAMS[9] = {**PARAMS[8], "still_gate": True, "still_s": 1.2, "still_px": 8.0,
 PARAMS[9]["jump_reanchor"] = True
 PARAMS[10] = {**PARAMS[9], "freeze_guard": True, "risk_gate": True, "gate_near_gm_px": 45.0,
               "gate_min_conf": 0.6, "gate_npc_cells": 12, "gate_ignore_px": 150.0,
-              # attempt 2 (2026-10-16 ~18:16, before its run): the gate's box may be <= 1.0 s old
-              # (attempt 1: 15 / 15 calls "stale_box" at 0.4 s; the CPU detector delivers boxes
-              # 0.3-0.65 s after their frame; v9's stand gate holds the target still >= 1.2 s)
+              # attempt 2 (2026-10-16 18:15, 0a515f7, before its run): the gate's box may be
+              # <= 1.0 s old (attempt 1: 15 / 15 calls "stale_box" at 0.4 s; the CPU detector's
+              # boxes arrive 0.3-0.65 s after their frame; v9's stand gate holds it still 1.2 s)
               "gate_fresh_s": 1.0}  # fmt: skip
 PARAMS[11] = {**PARAMS[10], "retarget": True, "retarget_margin": 2.0, "retarget_commit_s": 1.0}
 
