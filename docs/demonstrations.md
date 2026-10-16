@@ -7947,6 +7947,34 @@ click)"), 12 engagements.**
     unchanged), even while walk clicks go out. The loot sweep counts as busy time.
 - Attempt 5 runs v15 with all the fixes and a fresh seed.
 
+**Attempt 5 = RUN 1 RESULT (2026-10-17 00:31:05-01:31:06, session
+20261017T003105-demo-hunt-flow15, seed 20261225; the full hour; judged 01:3x by `flow_judge.bot`):**
+- **Engagements:** 120 (119 dead, 1 gave up). Attack clicks: 154 direct / 1 read.
+- **Kills:** kills / h 142.9; engaged 95.9 / h; 47 more from walk clicks.
+  - Monsters in sight were 14.2 / 10 min (v14 19.8). The run spent its first ~15 min in the sparse
+    west, where the stall breaker fired once and the liveness probe once (alive).
+- **The bar:** 93 / 119 = 78.1 % (Wilson 69.9-84.6; v14 74.1 %). Landing: Poring 62 / 77,
+  Lunatic 26 / 30, Drops 5 / 5.
+- **The miss path:**
+  - engagements with a re-click 26.7 % (v14 0.6 %, v13 1.5 %);
+  - bursts end gone 20 (13 %), risky 67, arrow 67. The "gone" ends became "risky" ones: a
+    vanished box now holds, and the hold's re-check finds `no_box`;
+  - the server's kill -> the bot's "dead" p50 +0.52 s (v13 -0.38 s: no more early "dead"), at a
+    cost: "dead" -> next selection p90 9.9 s.
+- **The name tag:** refused 127 of 314 reads (40.4 %; v14 46.7 %).
+- **Timing:** seen -> click p50 4.20 s; in range -> click p50 1.67 s; selection -> click
+  p50 2.25 s.
+- **Heading:** reversals 8.8 / min (> 135 deg 6.8), straight runs 10.1 cells.
+- **Hard bars:** zero NPC contact, zero map change. Non-target FAILED as pre-registered: 2 walk
+  clicks turned into attacks on Creamies. v15 has no walk guard; v16 carries it.
+- **vs the prediction:**
+  - bursts gone <= 20 %: YES (13 %);
+  - re-clicked engagements >= 10 %: YES (26.7 %);
+  - "dead" at or after the server's kill: YES (+0.52 s p50);
+  - the bar >= 78 %: YES, at the edge (78.1 %);
+  - tag refusals below v14's and > 15 %: YES (40.4 %);
+  - the non-target bar failed: as predicted.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
