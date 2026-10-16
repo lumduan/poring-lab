@@ -8038,6 +8038,26 @@ STOPPED at 26.7 min, 40 engagements (all dead).**
   above the predicted <= 35 %).
 - Attempt 2 runs v16 with this fix and a fresh seed; the two attempts are judged separately and
   pooled for the >= 60 engagements.
+- **Attempt 1's judge (`flow_judge.bot`):**
+  - the bar 34 / 40 = 85 % (Wilson 70.9-92.9);
+  - engaged 76 kills / h over its 26.7 min (34 engaged kills);
+  - focus aimed 49 of the 54 direct strikes;
+  - tag reads refused 40.7 %;
+  - walk clicks turned into attacks 13, none on a Creamy.
+  - **The non-target bar FAILED anyway, through the READ path.** Track 359 was tag-confirmed as
+    a Poring 4.5 s earlier. A later strike in a risky context (near the GM) took the read path:
+    SWORD read, click at the box (675, 370). The client attacked a Creamy (two acts, 168 / 177).
+    The read path never asked for the tag: the SWORD read says "a monster", not which.
+
+**Attempt 2 (02:04:33, session 20261017T020433-demo-hunt-flow16): STOPPED BY ME at 45 s
+(SIGINT), to add the safety fix below before an hour ran without it.**
+
+**Safety fix from attempt 3 (`tag_every_click`, `tag_cache_s` 3, `tag_cache_px` 60):**
+- EVERY attack click needs a target tag, the read path's too: after its SWORD read, the tag is
+  read at the click point.
+- The tag cache (v15: 10 s per track) is reused only within 3 s AND within 60 px of the point it
+  was read at. A track can take over another sprite's box.
+- Attempt 3 runs v16 with it, and attempts 1 + 3 are pooled.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,

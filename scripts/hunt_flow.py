@@ -228,10 +228,12 @@ PARAMS[15] = {**PARAMS[14], "reclick_s": 1.0, "dead_min_s": 1.4, "dead_gone_s": 
               "burst_hold": True, "burst_hold_s": 1.2, "tag_cache_s": 10.0,
               "burst_same_track": True, "unstall_s": 8.0}  # fmt: skip
 # 16 also carries the WALK GUARD, a safety layer (not a play change) for every later version: v14's
-# six Creamy hits were walk clicks on a sprite the detector cannot see (3.56)
+# six Creamy hits were walk clicks on a sprite the detector cannot see (3.56); and from its
+# attempt 3 the tag on EVERY attack click, the read path too, and the cache only near its point
 PARAMS[16] = {**PARAMS[15], "focus": True, "focus_lead_s": 0.15, "focus_max_age_s": 0.35,
               "walk_guard": True, "guard_gm_px": 120.0, "guard_pink_r": 80,
-              "guard_pink_max": 0.001}  # fmt: skip
+              "guard_pink_max": 0.001, "tag_every_click": True, "tag_cache_s": 3.0,
+              "tag_cache_px": 60.0}  # fmt: skip
 PARAMS[17] = {**PARAMS[16], "loot": True, "loot_sweep": True, "loot_max_s": 6.0,
               "loot_max_clicks": 8, "guard_ui_mask": True}  # fmt: skip
 # 18 = movement (Batt's heading method + the zone)
@@ -1672,7 +1674,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
             import nametag
 
             tag_templates = nametag.load_templates() if prm.get("name_tag") else {}
-            confirmed: dict[int, tuple[str, float]] = {}  # v14: track -> (its tag, when)
+            # v14: track -> (its tag, when, the client px it was read at)
+            confirmed: dict[int, tuple[str, float, tuple[float, float]]] = {}
             if prm.get("name_tag") and not tag_templates:
                 raise f0.FarmStop("hunt-flow refused: no name-tag templates (nametag.py build)")
 
@@ -1900,20 +1903,33 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 path_ = "std"
                 reads_why: list[list[Any]] = []  # v9: each read's shape / why / best
                 tag_ = None
-                cached_ = confirmed.get(tr.tid)
-                if (direct_ and prm.get("name_tag") and prm.get("tag_cache_s") and cached_
-                        and time.monotonic() - cached_[1] <= prm["tag_cache_s"]):  # fmt: skip
-                    tag_ = cached_[0]  # v15: this track's tag read a target <= 10 s ago
-                elif direct_ and prm.get("name_tag"):
-                    # v12: the client's own species label must read a TARGET before a direct click
-                    # (the size gate let a Creamy, a non-target, pass as a Poring: v11 +527 s)
-                    tag_, tag_ms, (u, v) = read_tag(u, v, b, tr.tid)
-                    if tag_ in nametag.TARGET_NAMES:
-                        confirmed[tr.tid] = (tag_, time.monotonic())
-                    if tag_ not in nametag.TARGET_NAMES:
-                        reads += 1 if tag_ is None else prm["max_reads"]
-                        ev({"kind": "tag_refused", "track": tr.tid, "tag": tag_, "ms": tag_ms})
-                        note(f"tag {tag_}: no click")
+
+                def tag_gate(u_: float, v_: float) -> tuple[bool, str | None, float, float]:
+                    """v14: the client's own species label must read a TARGET before an attack
+                    click (the size gate let a Creamy, a non-target, pass as a Poring). v15: a
+                    track's tag read <= tag_cache_s ago is reused; from v16 attempt 3 only near
+                    the point it was read at (tag_cache_px: a track can take over another
+                    sprite's box)."""
+                    nonlocal reads
+                    c_ = confirmed.get(tr.tid)
+                    if (prm.get("tag_cache_s") and c_
+                            and time.monotonic() - c_[1] <= prm["tag_cache_s"]
+                            and math.hypot(u_ - c_[2][0], v_ - c_[2][1])
+                            <= prm.get("tag_cache_px", 1e9)):  # fmt: skip
+                        return True, c_[0], u_, v_
+                    t_, ms_, (u_, v_) = read_tag(u_, v_, b, tr.tid)
+                    if t_ in nametag.TARGET_NAMES:
+                        confirmed[tr.tid] = (t_, time.monotonic(), (u_, v_))
+                        return True, t_, u_, v_
+                    reads += 1 if t_ is None else prm["max_reads"]
+                    ev({"kind": "tag_refused", "track": tr.tid, "tag": t_, "ms": ms_,
+                        "branch": "direct" if direct_ else "read"})  # fmt: skip
+                    note(f"tag {t_}: no click")
+                    return False, t_, u_, v_
+
+                if direct_ and prm.get("name_tag"):
+                    ok_t, tag_, u, v = tag_gate(u, v)
+                    if not ok_t:
                         split.to(prev, time.monotonic())
                         return False
                 if direct_:
@@ -1974,6 +1990,13 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         eng["hovers"].append(hov)
                     split.to(prev, time.monotonic())
                     return False
+                if not direct_ and prm.get("name_tag") and prm.get("tag_every_click"):
+                    # v16 attempt 1: the READ path (a risky context) clicked a Creamy -- the
+                    # SWORD read says "a monster", not which. The tag, at the click point, now
+                    ok_t, tag_, u, v = tag_gate(u, v)
+                    if not ok_t:
+                        split.to(prev, time.monotonic())
+                        return False
                 if not in_view(u, v):  # v16 run 1: never a click outside the game frame
                     ev({"kind": "strike_off_view", "track": tr.tid, "u": round(u, 1),
                         "v": round(v, 1)})  # fmt: skip

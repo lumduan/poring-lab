@@ -436,3 +436,10 @@ def test_walk_guard_from_v17_leaves_the_client_windows_out_of_the_pink_count() -
     ui = [(0.0, 532.0, 600.0, 626.0)]  # the chat window
     assert hf.pink_share(crop, (500, 400), 560.0, 500.0, 80, hf.GUARD_EXCLUDE, ui) == 0.0
     assert hf.PARAMS[17]["guard_ui_mask"] and not hf.PARAMS[16].get("guard_ui_mask")
+
+
+def test_from_v16_every_attack_click_needs_the_tag_and_the_cache_is_short_and_local() -> None:
+    p = hf.PARAMS[16]
+    assert p["name_tag"] and p["tag_every_click"]  # v16 attempt 1: the read path hit a Creamy
+    assert p["tag_cache_s"] <= 3.0 and p["tag_cache_px"] <= 60.0
+    assert hf.PARAMS[20]["tag_every_click"] and not hf.PARAMS[15].get("tag_every_click")
