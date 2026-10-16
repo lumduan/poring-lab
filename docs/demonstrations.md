@@ -8305,7 +8305,7 @@ bars passed.
   - engaged kills / h >= 94: YES (133);
   - hard bars: FAILED (one walk-click Creamy).
 
-**Run 2 = a CONFIRMATION BLOCK (pre-registered 2026-10-17 05:4x, the commit time below, BEFORE
+**Run 2 = a CONFIRMATION BLOCK (pre-registered 2026-10-17 05:47, the commit time d55342c, BEFORE
 it):**
 - The same build, a fresh seed, 45 min (it ends before 07:00, when nothing of ours may run). No
   change.
