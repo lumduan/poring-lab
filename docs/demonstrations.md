@@ -7339,7 +7339,7 @@ STOPPED BY ITSELF at 6.1 min by the map-change guard. A FALSE STOP.**
   - The unknowns are mostly a mask that matches no cursor prototype, not a missing cursor.
 - Drops: no_path 5, no_sword 1, no_still 1.
 
-**Attempt 2 (recorded 2026-10-16 ~17:40, before its run; a bug fix within the version):**
+**Attempt 2 (recorded 2026-10-16 17:35, the commit time 8d4a780, before its run; a bug fix within the version):**
 - A position jump re-anchors on the minimap when the minimap PICTURE is still the run's map. The
   picture is compared with the crop taken at the loop start: the median summed |diff| must stay
   <= 20, while the GM arrow moves over ~2 % of it.

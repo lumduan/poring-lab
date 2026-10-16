@@ -152,7 +152,7 @@ PARAMS[7] = {**PARAMS[6], "loot": False, "click_lead_s": 0.50, "lead_window_s": 
 PARAMS[8] = {**PARAMS[7], "strike_lean": True, "escape_after_s": 3.0}
 PARAMS[9] = {**PARAMS[8], "still_gate": True, "still_s": 1.2, "still_px": 8.0,
              "still_wait_s": 8.0}  # fmt: skip
-# v9 attempt 2 (2026-10-16 ~17:40, before its run): a position jump on the SAME map (the minimap
+# v9 attempt 2 (2026-10-16 17:35, 8d4a780, before its run): a position jump on the SAME map (the minimap
 # picture unchanged) re-anchors on the minimap instead of stopping (run 1: a 14-cell odometry lag)
 PARAMS[9]["jump_reanchor"] = True
 
