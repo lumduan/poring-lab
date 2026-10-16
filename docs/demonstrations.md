@@ -8319,6 +8319,26 @@ it):**
   - zero NPC contact and zero map change;
   - a walk-click Creamy is possible: about one in 1-2 h at v20's rate.
 
+**Run 2 RESULT (2026-10-17 05:55:12-06:40:12, session 20261017T055512-demo-hunt-flow20, seed
+20270102; the full 45 min; judged by `flow_judge.bot` after 06:42):**
+- **HARD BARS PASSED.**
+- **Engagements:** 91 (90 dead). The bar 70 / 91 = 76.9 % (Wilson 67.3-84.4). Engaged kills 78,
+  ~105 / h.
+- **The name tag:** refused 34 %.
+- **Movement:** reversals 4.70 / min (> 135 deg 3.21), straight runs 12.6 cells. Sight
+  18.9 / 10 min.
+- Walk-click attacks 4, all on targets. Loot 20 / 140.
+- **vs the prediction:**
+  - the bar >= 80 %: NO (76.9 %);
+  - engaged kills / h >= 110: NO (~105);
+  - tag refusals <= 40 %: YES (34 %);
+  - reversals <= 5 / min: YES (4.70);
+  - zero NPC contact and zero map change: YES. No walk-click Creamy this time.
+- **v20 pooled (runs 1 + 2, 233 engagements, 105 min):**
+  - the bar 191 / 233 = 82.0 %;
+  - engaged ~121 kills / h;
+  - one non-target hit (run 1's walk-click Creamy).
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
