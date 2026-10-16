@@ -602,6 +602,52 @@ def kills_by_origin(events: Sequence[Mapping[str, Any]], engs: Sequence[Mapping[
     return out
 
 
+def loot_metrics(events: Sequence[Mapping[str, Any]], t0: int, w1: int,
+                 before_s: float = 0.6, after_s: float = 1.5) -> dict[str, Any]:  # fmt: skip
+    """Batt 20:3x (LOOT EVERYTHING), from the packets: the items that FELL around one of our kills
+    in [t0, w1) (a mob vanishing, reason 1, <= 1.5 s after our damaging act; the server sends the
+    drop ~0.25 s BEFORE the vanish, so an item counts from ``before_s`` before to ``after_s``
+    after), how many of them WE picked up (our pickup_request on its floor id, answered ok),
+    pickup requests per item picked, and kill -> the LAST pickup of that kill's items (s)."""
+    hit: dict[int, int] = {}
+    kills: list[int] = []
+    falls: list[tuple[int, int]] = []
+    picked: dict[int, int] = {}
+    pending: int | None = None
+    n_req = 0
+    for e in events:
+        t = int(e["t_mono_ns"])
+        typ = e.get("type")
+        if typ == "act" and gid_of(e, "src_gid") == GM and int(e.get("damage") or 0) > 0:
+            hit[gid_of(e, "target_gid")] = t
+        elif (typ == "entity_vanish" and int(e.get("reason", -1)) == 1 and t0 <= t < w1
+              and t - hit.get(gid_of(e), -(10**18)) <= int(1.5 * NS)):  # fmt: skip
+            kills.append(t)
+        elif typ == "floor_item_appear" and e.get("kind") == "fall":
+            falls.append((t, int(e["floor_id"])))
+        elif typ == "pickup_request" and t0 <= t:
+            n_req += 1
+            pending = int(e["floor_id"])
+        elif typ == "pickup_result" and pending is not None:
+            if e.get("ok"):
+                picked.setdefault(pending, t)
+            pending = None
+    item_kill: dict[int, int] = {}
+    for tf, fid in falls:
+        near = [k for k in kills if -before_s * NS <= tf - k <= after_s * NS]
+        if near:
+            item_kill[fid] = min(near, key=lambda k: abs(tf - k))
+    mine = [f for f in item_kill if f in picked]
+    last: dict[int, int] = {}
+    for f in mine:
+        last[item_kill[f]] = max(last.get(item_kill[f], 0), picked[f] - item_kill[f])
+    lag = sorted(v / NS for v in last.values())
+    return {"items": len(item_kill), "picked": len(mine),
+            "share": round(len(mine) / len(item_kill), 3) if item_kill else None,
+            "requests_per_pickup": round(n_req / len(picked), 2) if picked else None,
+            "kill_to_last_pickup_p50": round(lag[len(lag) // 2], 2) if lag else None}  # fmt: skip
+
+
 def heading_metrics(events: Sequence[Mapping[str, Any]], t0: int, w1: int) -> dict[str, Any]:
     """Batt 18:2x (no back-and-forth): from the server's walk, each self_move is one leg (its start
     to where the GM got before the next leg). A REVERSAL is a heading change > 120 deg between
@@ -954,6 +1000,7 @@ def human(sid: str) -> dict[str, Any]:
     out["sight_per_10min"] = sight_per_10min(events, t0, t0 + int(WINDOW_S * NS))
     out["idle_between_kills"] = idle_between_kills(events, clicks, t0, t0 + int(WINDOW_S * NS))
     out["heading"] = heading_metrics(events, t0, t0 + int(WINDOW_S * NS))
+    out["loot"] = loot_metrics(events, t0, t0 + int(WINDOW_S * NS))
     (d / "flow_judge.json").write_text(json.dumps(out, indent=1))
     return out
 
@@ -1005,6 +1052,7 @@ def bot(sid: str) -> dict[str, Any]:
 
     out["hard_bars"] = hard_bars(events, t0, w1, farm0.TARGETS)
     out["heading"] = heading_metrics(events, t0, w1)
+    out["loot"] = loot_metrics(events, t0, w1)
     all_clicks = [x for x in map(json.loads, (d / "clicks.jsonl").read_text().splitlines())]
     out["species"] = species_landing(events, out["engagements_w"]["rows"], engs, all_clicks)
     evl = [x for x in map(json.loads, (d / "events.jsonl").read_text().splitlines())]
@@ -1096,6 +1144,16 @@ def row(o: Mapping[str, Any]) -> dict[str, str]:
         "reversals / min": "-" if not o.get("heading") else f"{o['heading']['reversals_per_min']}",
         "mean straight run (cells)": "-" if not o.get("heading")
         else f"{o['heading']['mean_straight_run']}",
+        "reversals > 135 deg / min": "-" if not (o.get("heading") or {}).get("turn_hist_45")
+        else f"{o['heading']['reversals135_per_min']}",
+        "turns <=45/<=90/<=135/>135": "-" if not (o.get("heading") or {}).get("turn_hist_45")
+        else "/".join(str(x) for x in o["heading"]["turn_hist_45"]),
+        "loot picked / items": "-" if not (o.get("loot") or {}).get("items")
+        else "{picked} / {items}".format(**o["loot"]),
+        "loot requests / pickup": "-" if not (o.get("loot") or {}).get("requests_per_pickup")
+        else f"{o['loot']['requests_per_pickup']}",
+        "kill -> last pickup s p50": "-" if not (o.get("loot") or {}).get("kill_to_last_pickup_p50")
+        else f"{o['loot']['kill_to_last_pickup_p50']}",
         "attack clicks direct / read": "-" if not (o.get("gate") or {}).get("direct")
         and not (o.get("gate") or {}).get("read")
         else "{direct} / {read}".format(**o["gate"]),

@@ -245,6 +245,30 @@ def test_heading_metrics_count_reversals_and_straight_runs() -> None:
     assert out["reversals135_per_min"] == 1.0
 
 
+def test_loot_metrics_count_our_kills_drops_and_our_pickups() -> None:
+    mob, other = MOB + 1, MOB + 2
+    events = [
+        ev(1.0, "act", src_gid=fj.GM, target_gid=mob, damage=182),
+        ev(1.15, "floor_item_appear", kind="fall", floor_id=7),  # ~0.25 s BEFORE the vanish
+        ev(1.15, "floor_item_appear", kind="fall", floor_id=8),
+        ev(1.4, "entity_vanish", gid=mob, reason=1),
+        ev(1.5, "floor_item_appear", kind="fall", floor_id=9),
+        ev(2.0, "entity_vanish", gid=other, reason=1),  # not our kill
+        ev(9.0, "floor_item_appear", kind="fall", floor_id=10),  # nobody's kill of ours
+        ev(2.5, "pickup_request", floor_id=7),
+        ev(2.6, "pickup_result", ok=False),
+        ev(2.8, "pickup_request", floor_id=7),
+        ev(2.9, "pickup_result", ok=True),
+        ev(3.4, "pickup_request", floor_id=8),
+        ev(3.5, "pickup_result", ok=True),
+    ]
+    events.sort(key=lambda e: e["t_mono_ns"])
+    out = fj.loot_metrics(events, 0, int(60 * S))
+    assert (out["items"], out["picked"]) == (3, 2)
+    assert out["requests_per_pickup"] == 1.5  # 3 requests, 2 pickups
+    assert out["kill_to_last_pickup_p50"] == 2.1  # 1.4 -> 3.5
+
+
 def test_selection_metrics_measure_distance_and_nearest_at_the_dispatch() -> None:
     near, far = MOB + 1, MOB + 2
     events = [ev(0.0, "self_move", x0=10, y0=10, x1=10, y1=10),
