@@ -6251,8 +6251,13 @@ search (53-69 % of every run).
 - **What costs the time, ranked** (hunt@8, the latest run without a new selection rule):
   searching 51 %, looting 17 %, fighting 16 %, engaging 10 %, stopping 3 %.
   - hunt@5-7's stuck loops (up to 13.5 min a run) are fixed by hunt@8's unstick.
-  - The field is the limit behind the search: 20-33 monsters entered the client's sight per
-    10 min. 60 engagements in 40 min would mean engaging about three quarters of them.
+  - ~~The field is the limit behind the search: 20-33 monsters entered the client's sight per
+    10 min. 60 engagements in 40 min would mean engaging about three quarters of them.~~
+    ➡️ **SUPERSEDED 2026-10-16 ~10:10 by Batt's human demonstration (3.40): the BOT's movement
+    capped it, not the field.** On the same map:
+    - Batt (never stopping, one-hit kills) had 44 distinct monsters enter sight in 10 minutes and
+      killed 50;
+    - hunt@4 attempt 3, hunt@8 and hunt@9 had 6-22 per 10 min (distinct gids).
 - **Safety, all nine versions:** NPC contacts 0, dialogs 0, map changes 0.
   - One non-target hit: hunt@5, a Creamy, one miss. The cause was understood (the focus took
     any monster), fixed in hunt@6, and zero since (hunt@6-9).
@@ -6329,7 +6334,7 @@ remain: 82 left).
   14,827 input events of his, all local (never committed).
 - Recorded by `scripts/human_demo.py`, which holds no input path (tested).
 
-**THE METRICS, pre-registered 2026-10-16 09:57, after the demo was banked and BEFORE any of its
+**THE METRICS, pre-registered 2026-10-16 09:54 (the commit a47b91f), after the demo was banked and BEFORE any of its
 analysis. They are binding for the human baseline and for every hunt-flow version alike;
 `scripts/flow_judge.py`.**
 - **Clock and positions:** the host's CLOCK_MONOTONIC throughout. Positions come from
@@ -6377,6 +6382,63 @@ analysis. They are binding for the human baseline and for every hunt-flow versio
     alive.
 - **KILLS / H:** deaths (reason 1) of units we acted on, in the window. Pickups are reported
   (time spent).
+
+**3.40.1 THE HUMAN BASELINE: Batt, 10 minutes (`20261016T093835-demo-human-demo`; judged by
+`flow_judge.py human`, 2026-10-16 ~10:00, the definitions above unchanged).**
+- **Window:** t0 = his first move at 09:40:36.5 (121.6 s after arming; his first input 09:40:34),
+  to t0 + 600 s. His input: 587 left clicks in the game region and mouse moves; no keys, no
+  right-drag, no wheel, so the camera stayed at its default and click -> cell holds.
+- **HIT RATE: 53 / 66 trials = 80.3 % (Wilson 69.2-88.1 %).** Failures: `no_unit` 12,
+  `walk_only` 1.
+  - **Every click that resolved to a unit landed: 53 / 54**, at every range 1-8+ cells.
+  - The 13 failures are clicks on a monster's sprite that the client resolved to the ground, so
+    it WALKED there. Frames and packets, one by one:
+    - 9 on monsters walking or just arrived, 3-6 cells from the picked ground cell. Each was hit
+      by a re-click 1.3-4.6 s later.
+    - 2 on monsters that died 0.07-0.1 s before (the death animation still drawn).
+    - 1 unexplained: a Poring-like sprite at the click, and no mob in the packets near it
+      (none within +-4 s).
+    - 1 `walk_only` on a walking mob.
+  - By target motion, when the click resolved: standing 33 / 33, walking 20 / 21. Most
+    unresolved clicks were on WALKING monsters.
+  - Clicking while his GM was still moving landed 5 / 9; from a standstill, 48 / 57.
+- **REACTION** (p50 / p90):
+  - first seen -> click 1.11 / 4.79 s;
+  - click -> first hit 0.61 / 1.48 s;
+  - seen -> hit 2.39 / 5.56 s (50 of 53 hits had a detector first-seen).
+  - Click -> hit by range (p50): 1 cell 0.02 s, 2: 0.34, 3: 0.46, 4: 0.58, 5: 0.76, 6: 1.03,
+    7: 1.12. That is ~0.15 s a cell, the GM's walk.
+- **Range at the click:** p50 4 cells, p90 7.
+  - Histogram: 1:2, 2:9, 3:12, 4:9, 5:5, 6:5, 7:7, 9:2, 10:2, 11:1.
+- **Target choice:** the nearest visible mob 52 of 54 times; 2 switches.
+- **IDLE 45.9 %** of the window, 15.0 % of it attacking. The rest: 62 pickups (he looted
+  everything) and pauses.
+- **Walk clicks:**
+  - 440 = 44 a minute;
+  - spacing p50 6 / p90 9 cells; interval p50 0.6 / p90 3.4 s;
+  - 72.7 % sent while still walking. He re-aims about 6 cells ahead several times a second.
+- **Kills 50 = 300 / h;** 44 distinct monsters entered sight in the 10 minutes.
+  - He roamed the whole map: y 58 to 371, far north of the bot's usual area.
+- **Safety, informative (a human):**
+  - He clicked the Poring-looking quest NPC "Poring War Recruiter#wo" (159,371) at t0+144 s: a
+    dialog, cancelled at its menu. A bot must never do that; the detector sees it as a monster,
+    and only the cursor read (TALK, not SWORD) tells them apart. It is in the KB, and the search
+    area keeps 10 cells from it.
+  - No map change in the window.
+- **Restored after** (60 s without his input, 09:51:52):
+  - Job Lv 5 -> 1 (`@joblevelup -49`); `@heal`;
+  - Base Lv 70 / STR 99 kept for hunt-flow;
+  - weight 246 / 4970 (5 %): no loot cleared;
+  - the client's new-item and skill-point badges remain.
+- **hunt-flow@1's parameters, derived from this (to be pre-registered with hunt-flow@1):**
+  - attack click at <= 3 cells (Batt's proposal 2-3; his p50 is 4, and 3 cells cost ~0.46 s of
+    walk-in);
+  - from a STANDING GM (his moving-GM clicks landed 5 / 9);
+  - on the target's predicted position, preferring a standing target (his misses were on
+    walking ones);
+  - the nearest target first;
+  - walk clicks ~6 cells ahead, re-aimed every ~0.6-1 s while walking;
+  - no looting.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
