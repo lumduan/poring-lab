@@ -6745,6 +6745,34 @@ the top safety item is the same gate (15 walk clicks turned attacks across the t
     ~0.1 s a kill. The SWORD read gates every strike, so nothing was clicked. Fixed for the next
     version (finished tracks and dropped spots are never dispatched).
 
+### 3.44 hunt-flow@4: STRIKE A STANDING TARGET FROM <= 7 CELLS (pre-registered 2026-10-16 ~12:58 ICT, BEFORE its run; Batt's choice 12:56)
+
+- **Batt's choice (AskUserQuestion, 12:56): "Strike from <= 7 cells".** The options were:
+  - strike from <= 7 cells;
+  - keep <= 3 and fix target churn;
+  - safety first, with no walk clicks without a cursor read.
+- **Why:**
+  - v1-v3 spent most time walking up to targets in short legs; seen -> click was 9-18 s against
+    Batt's 1.1 s;
+  - their walk clicks next to monsters became 5-10 attacks a run without a SWORD read (detector
+    misses, 3.43's result);
+  - Batt's own play (3.40.1): every click that resolved to a unit landed, at every range 1-8+
+    (p50 4, p90 7), at ~0.15 s of walk-in a cell.
+- **MAIN, one change:** a STANDING target (no displacement over 0.4-1.5 s beyond a cell's noise)
+  is struck from <= 7 cells, and the client walks in by itself. A WALKING target keeps <= 3
+  (Batt's misses were on walking ones).
+- **Bug fix:** a finished engagement's track, and a dropped target's spot (15 s), are never
+  dispatched again (3.43's re-dispatch spam).
+- Everything else is v3's: the pipeline, the walk gate, legs of 8, steering 3 short, the strike's
+  single SWORD read, no looting, the bar (3.41).
+- **Prediction, written before the run:**
+  - seen -> click p50 under 8 s;
+  - steering time under half of v3's 528 s;
+  - kills / h above 60;
+  - unintended attack requests under 5;
+  - range at the click p50 >= 4;
+  - the bar >= 90 %.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.

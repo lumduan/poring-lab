@@ -98,3 +98,12 @@ def test_a_target_whose_track_was_restarted_is_carried_on_by_the_nearest_new_one
     assert hf.reacquire_target(old, [far, near], int(0.5 * S), 3.0) is near
     assert hf.reacquire_target(old, [far], int(0.5 * S), 3.0) is None
     assert hf.reacquire_target(old, [near], int(0.5 * S), 3.0, exclude=[5]) is None  # a dead one
+
+
+def test_v4_strikes_a_standing_target_from_7_cells_and_a_walking_one_from_3() -> None:
+    standing = hf.Track(0, [(0, (17, 10)), (int(1.0 * S), (17, 10))])
+    walking = hf.Track(1, [(0, (10, 10)), (int(0.4 * S), (12, 10)), (int(1.2 * S), (14, 10))])
+    assert hf.strike_range(standing, hf.PARAMS[4]) == 7
+    assert hf.strike_range(walking, hf.PARAMS[4]) == 3
+    assert hf.strike_range(standing, hf.PARAMS[3]) == 3  # earlier versions unchanged
+    assert hf.strike_due(False, (10, 10), standing.predict(int(1.0 * S)), 7)

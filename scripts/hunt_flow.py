@@ -77,10 +77,10 @@ VERSIONS = {
     "old (was the last 2 <= 0.4 s: the detector's ~0.3 s latency made it refuse most clicks, idle "
     "~80 %) AND adds the tracked monsters' predicted positions over the next second (60 px), "
     "also before a cursor-gated walk click; legs 8 cells ahead (was 6)",
-    4: "TARGET CONTINUITY: when the target's track drops (the tracker restarts an id for the same "
-    "monster while the GM walks), the live track nearest its predicted cell within 3 cells "
-    "carries it on (was: target lost, a new dispatch); bug fixes: a finished target's track and "
-    "a dropped target's spot are never dispatched again",
+    4: "STRIKE A STANDING TARGET FROM <= 7 CELLS (Batt 12:56, from his play: every click that "
+    "resolved to a monster landed, p50 4 / p90 7 cells, ~0.15 s walk-in a cell): the client walks "
+    "in itself, so most steering walk clicks next to monsters go; a WALKING target keeps <= 3. "
+    "Bug fix: a finished target's track and a dropped target's spot are never dispatched again",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -96,8 +96,8 @@ PARAMS: dict[int, dict[str, Any]] = {
 }  # fmt: skip
 PARAMS[3] = {**PARAMS[2], "ahead": 8, "short": 3, "gate_frames_s": 1.0, "track_clear": True,
              "track_clear_s": 1.0, "track_clear_px": 60.0}  # fmt: skip
-PARAMS[4] = {**PARAMS[3], "reacquire": True, "reacquire_cells": 3.0,
-             "dispatch_fixes": True}  # fmt: skip
+PARAMS[4] = {**PARAMS[3], "strike_cells_standing": 7, "dispatch_fixes": True,
+             "reacquire": False, "reacquire_cells": 3.0}  # fmt: skip
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -204,6 +204,15 @@ def approach_path(grid: Any, here: Cell, target: tuple[float, float], short: int
     if path is None or len(path) <= short + 1:
         return None
     return path[: len(path) - short]
+
+
+def strike_range(tr: Track, prm: dict[str, Any]) -> int:
+    """PURE (v4): STANDING targets from ``strike_cells_standing`` (Batt's p90, 7), WALKING ones
+    from ``strike_cells`` (3); before v4 always ``strike_cells``."""
+    vx, vy = tr.velocity()
+    if prm.get("strike_cells_standing") and not (vx or vy):
+        return int(prm["strike_cells_standing"])
+    return int(prm["strike_cells"])
 
 
 def strike_due(moving: bool, here: Cell, target: tuple[float, float], strike_cells: int) -> bool:
@@ -936,7 +945,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         if target is not None:
                             split.to("steering", time.monotonic())
                             tcell = target.predict(t_now)
-                            if strike_due(moving, pos, tcell, prm["strike_cells"]):
+                            s_range = strike_range(target, prm)
+                            if strike_due(moving, pos, tcell, s_range):
                                 if (not strike(target, pos, again=False)
                                         and reads >= prm["max_reads"]):  # fmt: skip
                                     banned.append((now, (int(round(tcell[0])),
@@ -945,7 +955,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                         "why": "no_sword", "reads": reads})  # fmt: skip
                                     target = None
                                 continue
-                            if cheb(pos, tcell) <= prm["strike_cells"]:
+                            if cheb(pos, tcell) <= s_range:
                                 time.sleep(0.02)  # walking, about to arrive: the strike is next
                                 continue
                             if not moving or now - last_walk >= prm["walk_every_s"]:
