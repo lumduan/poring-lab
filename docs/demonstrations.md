@@ -8098,7 +8098,7 @@ STOPPED at 23.3 min by the stuck guard ("no progress for 60 s at (186, 128)"), 2
   - engaged kills / h >= 0.8 x v15's: NO (66 against 76.7);
   - hard bars: attempt 1 FAILED, attempt 3 PASSED.
 
-### 3.59 hunt-flow@17: LOOT EVERYTHING (pre-registered 2026-10-17 __TIME__ ICT, the commit time __SHA__, BEFORE its run; Batt 20:3x, the overnight order item 6)
+### 3.59 hunt-flow@17: LOOT EVERYTHING (pre-registered 2026-10-17 02:34 ICT, the commit time 9e4cabb, BEFORE its run; Batt 20:3x, the overnight order item 6)
 
 **Batt's demo, measured by the same judge (`flow_judge.loot_metrics`, 0f520bf):**
 - he picked up 62 of the 64 items that fell around his kills;
