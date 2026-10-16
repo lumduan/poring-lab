@@ -164,6 +164,11 @@ VERSIONS = {
     "bot steering to ANOTHER target that then failed, 19 / 32): after >= 1 s on a target, the "
     "planner's queue[0] replaces it when it is valid and cheaper by >= 2 cells (Chebyshev to the "
     "predicted cell, +2 for a walking one)",
+    20: "TAG FOLLOW (the top loser after v14: 59 of 138 tag reads timed out, and only 7 / 66 of "
+    "the refused reads show a matchable tag anywhere in the recorded frames -- the pointer was OFF "
+    "the sprite, so the client drew no tag): during the read the pointer follows the focused "
+    "target's fresh centre when it is > 10 px away, the tag is searched under the box AND under "
+    "the pointer, and the click goes where the tag was read",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -228,6 +233,7 @@ PARAMS[17] = {**PARAMS[16], "loot": True, "loot_sweep": True, "loot_max_s": 6.0,
 PARAMS[18] = {**PARAMS[17], "zone": True, "zone_radius": 7, "zone_radius_walking": 4,
               "heading_search": True, "heading_min_run": 8, "heading_drift_p": 0.3}  # fmt: skip
 PARAMS[19] = {**PARAMS[18], "retarget": True, "retarget_margin": 2.0, "retarget_commit_s": 1.0}
+PARAMS[20] = {**PARAMS[19], "tag_follow": True, "tag_follow_px": 10.0}
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -949,6 +955,18 @@ class Focus:
             return self.pos[0] + self.vel[0] * k, self.pos[1] + self.vel[1] * k, age
 
 
+def tag_boxes(b: Any, ptr: tuple[float, float], around_ptr: bool) -> list[Any]:
+    """PURE (v20): the boxes whose bands may hold the name tag -- the detector box, and with
+    ``around_ptr`` a sprite-sized box centred on the pointer: the client draws the tag only under
+    the HOVERED sprite, so a tag in either band names what the pointer is on."""
+    from types import SimpleNamespace
+
+    out = [b]
+    if around_ptr:
+        out.append(SimpleNamespace(x0=ptr[0] - 20, y0=ptr[1] - 18, x1=ptr[0] + 20, y1=ptr[1] + 18))
+    return out
+
+
 def map_same(ref: Any, cur: Any, max_median: float = MAP_SAME_MAX) -> bool:
     """PURE (v9 attempt 2): the minimap PICTURE is still the run's map -- the median per-pixel
     summed |diff| against the start's crop is small (the GM arrow moves over ~2 % of it). v9 run 1
@@ -1583,23 +1601,38 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
             if prm.get("name_tag") and not tag_templates:
                 raise f0.FarmStop("hunt-flow refused: no name-tag templates (nametag.py build)")
 
-            def read_tag(u: float, v: float, b: Any) -> tuple[str | None, int]:
+            def read_tag(u: float, v: float, b: Any, tid: int | None = None
+                         ) -> tuple[str | None, int, tuple[float, float]]:  # fmt: skip
                 """v12: rest the pointer on (u, v) and read the name tag under ``b`` until one
-                matches (<= tag_wait_s); the pointer is left on the target for the click."""
+                matches (<= tag_wait_s); the pointer is left on the target for the click. v20
+                (tag_follow): the pointer follows the focused target, the tag is also searched
+                under the pointer, and the returned point is where the pointer ended."""
                 t_a = time.monotonic()
                 agent.move(gx0 + round(u) - 12, gy0 + round(v) - 12)  # two motions: drawn
                 time.sleep(0.06)
                 agent.move(gx0 + round(u), gy0 + round(v))
                 ptr[0] = (u, v)
                 name_: str | None = None
+                follow_ = bool(prm.get("tag_follow") and tid is not None)
                 while time.monotonic() - t_a < prm["tag_wait_s"]:
                     time.sleep(0.1)
+                    if follow_ and tid is not None:
+                        fa_ = focus.aim(tid, r.ns(), 0.0, prm["focus_max_age_s"])
+                        if (fa_ is not None and not loot1.in_ui(fa_[0], fa_[1])
+                                and math.hypot(fa_[0] - u, fa_[1] - v)
+                                > prm["tag_follow_px"]):  # fmt: skip
+                            u, v = fa_[0], fa_[1]
+                            agent.move(gx0 + round(u), gy0 + round(v))
+                            ptr[0] = (u, v)
                     img_ = screen.grab(gx0, gy0, gw, gh)[1]
-                    name_, _iou = nametag.match(nametag.letter_mask(nametag.band(img_, b)),
-                                                tag_templates)  # fmt: skip
+                    for bb_ in tag_boxes(b, (u, v), follow_):
+                        name_, _iou = nametag.match(nametag.letter_mask(nametag.band(img_, bb_)),
+                                                    tag_templates)  # fmt: skip
+                        if name_ is not None:
+                            break
                     if name_ is not None:
                         break
-                return name_, round((time.monotonic() - t_a) * 1000)
+                return name_, round((time.monotonic() - t_a) * 1000), (u, v)
 
             def above(img_: Any, u_: float, v_: float) -> Any:
                 """v12: the region where the client draws the attack arrow above a target."""
@@ -1793,7 +1826,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 elif direct_ and prm.get("name_tag"):
                     # v12: the client's own species label must read a TARGET before a direct click
                     # (the size gate let a Creamy, a non-target, pass as a Poring: v11 +527 s)
-                    tag_, tag_ms = read_tag(u, v, b)
+                    tag_, tag_ms, (u, v) = read_tag(u, v, b, tr.tid)
                     if tag_ in nametag.TARGET_NAMES:
                         confirmed[tr.tid] = (tag_, time.monotonic())
                     if tag_ not in nametag.TARGET_NAMES:

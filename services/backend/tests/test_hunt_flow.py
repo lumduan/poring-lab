@@ -369,3 +369,13 @@ def test_v18_the_minimap_arrow_points_to_its_narrow_tip_not_its_prongs() -> None
         assert ang is not None
         assert abs((ang - want + math.pi) % (2 * math.pi) - math.pi) < 0.3, (rot, ang)
     assert hf.minimap_heading(np.zeros((40, 40, 3), np.uint8)) is None
+
+
+def test_v20_the_tag_is_also_searched_under_the_pointer() -> None:
+    from types import SimpleNamespace
+
+    b = SimpleNamespace(x0=100, y0=100, x1=140, y1=136)
+    assert hf.tag_boxes(b, (300.0, 200.0), False) == [b]
+    got = hf.tag_boxes(b, (300.0, 200.0), True)
+    assert got[0] is b and (got[1].x0, got[1].y0, got[1].x1, got[1].y1) == (280, 182, 320, 218)
+    assert hf.PARAMS[20]["tag_follow"] and hf.PARAMS[20]["focus"] and hf.PARAMS[20]["name_tag"]
