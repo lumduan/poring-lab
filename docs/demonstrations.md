@@ -7268,7 +7268,7 @@ CPU (GPU freeze).
   time: the frames lag ~0.5 s, and the park and hover add ~1.6 s.
 - Moving walk clicks within 1 cell: 70 %.
 
-**Attempt 2 (recorded 2026-10-16 ~16:52, before its run; bug fixes within the version):**
+**Attempt 2 (recorded 2026-10-16 16:49, the commit time b05f05b, before its run; bug fixes within the version):**
 - **After the attack click, the pointer moves ~90 px off the monster at once:** one move, no
   park, no wait.
 - **The escape retreats along OUR OWN TRAIL:** the cells we stood on, 6-20 cells away and >= 3 s
