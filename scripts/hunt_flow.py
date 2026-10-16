@@ -58,6 +58,8 @@ CHECK_EVERY_S = 30.0
 WEIGHT_EVERY_S = 120.0
 MINIMAP_EVERY_S = 0.3
 JUMP_CELLS = 12  # v7: a minimap read this far from the measured cell, twice: a map change
+MINIMAP_IMG = (1138, 21, 124, 120)  # v9 attempt 2: the minimap's picture (client px)
+MAP_SAME_MAX = 20.0  # median summed |diff| of the picture: the same map stays far below
 DRIFT_CELLS = 3
 STUCK_S = 60.0
 MS_CELL = 150.0  # the GM's measured walk speed (hunt@5's packets)
@@ -150,6 +152,9 @@ PARAMS[7] = {**PARAMS[6], "loot": False, "click_lead_s": 0.50, "lead_window_s": 
 PARAMS[8] = {**PARAMS[7], "strike_lean": True, "escape_after_s": 3.0}
 PARAMS[9] = {**PARAMS[8], "still_gate": True, "still_s": 1.2, "still_px": 8.0,
              "still_wait_s": 8.0}  # fmt: skip
+# v9 attempt 2 (2026-10-16 ~17:40, before its run): a position jump on the SAME map (the minimap
+# picture unchanged) re-anchors on the minimap instead of stopping (run 1: a 14-cell odometry lag)
+PARAMS[9]["jump_reanchor"] = True
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -427,6 +432,17 @@ def escape_cells(main: Any, here: Cell, reach: int = 30, k: int = 5, near: int =
     cells = sorted(((int(x) + x0, int(y) + y0) for y, x in zip(ys, xs, strict=True)),
                    key=lambda c: (cheb(c, here), c))  # fmt: skip
     return [c for c in cells if c != here and cheb(c, here) >= near][:k]
+
+
+def map_same(ref: Any, cur: Any, max_median: float = MAP_SAME_MAX) -> bool:
+    """PURE (v9 attempt 2): the minimap PICTURE is still the run's map -- the median per-pixel
+    summed |diff| against the start's crop is small (the GM arrow moves over ~2 % of it). v9 run 1
+    stopped as a "map change" on a 14-cell odometry lag on a slope; no map_change in the packets."""
+    a = np.asarray(ref)[..., :3].astype(np.int16)
+    b = np.asarray(cur)[..., :3].astype(np.int16)
+    if a.shape != b.shape:
+        return False
+    return float(np.median(np.abs(a - b).sum(-1))) <= max_median
 
 
 def box_still(boxes: Sequence[tuple[int, Any]], t_now: int, window_s: float, px: float,
@@ -1323,6 +1339,12 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 pos_changed: dict[str, Any] = {"t": time.monotonic(), "cell": pos}
                 recent_clicks: list[Cell] = []
                 jumps: list[Cell] = []  # v7: minimap reads far from the measured cell
+
+                def mm_crop() -> Any:
+                    mx, my, mw, mh = MINIMAP_IMG
+                    return np.asarray(frame())[my : my + mh, mx : mx + mw, :3].copy()
+
+                mm_ref = mm_crop() if prm.get("jump_reanchor") else None  # the run's map
                 route_shown: list[Any] = [None]
                 gp_i = 0
                 follow_t = [0]  # v6: the last box time the pointer followed
@@ -1434,8 +1456,20 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                     # v7: a position JUMP (a map change, a warp): two reads agree
                                     jumps.append(mm)
                                     if len(jumps) >= 2 and jumps[-1] == jumps[-2]:
-                                        raise f0.FarmStop(f"position jump {mp0_} -> {mm}: a map "
-                                                          f"change or a warp? stopped")  # fmt: skip
+                                        same_ = mm_ref is not None and map_same(
+                                            mm_ref, mm_crop())  # fmt: skip
+                                        if not prm.get("jump_reanchor") or not same_:
+                                            raise f0.FarmStop(
+                                                f"position jump {mp0_} -> {mm}: a map change or "
+                                                f"a warp? (minimap picture same: {same_}) stopped"
+                                            )
+                                        # v9 attempt 2: the same map -> the odometry lagged;
+                                        # the minimap is right: re-anchor on it
+                                        ev({"kind": "reanchor", "from": [round(mp0_[0], 1),
+                                                                         round(mp0_[1], 1)],
+                                            "to": list(mm)})  # fmt: skip
+                                        mstate["anchor"] = (mm, odo_at(hist_now(), t_mm))
+                                        jumps.clear()
                                     continue
                                 jumps.clear()
                                 on_ = mm is not None and 0 <= mm[1] < ok.shape[0] and (

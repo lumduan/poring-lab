@@ -225,3 +225,14 @@ def test_v9_a_target_stands_when_its_recent_boxes_agree() -> None:
     ]
     assert not hf.box_still(hop, int(10.1 * S), 0.9, 8.0)
     assert not hf.box_still(still[-2:], int(10.1 * S), 0.9, 8.0)  # too few frames to say
+
+
+def test_v9a2_the_minimap_picture_tells_a_map_change_from_a_moved_arrow() -> None:
+    rng = np.random.default_rng(1)
+    ref = rng.integers(0, 255, (120, 124, 3), dtype=np.uint8)
+    moved = ref.copy()
+    moved[50:62, 60:72] = 255  # the GM arrow somewhere else
+    assert hf.map_same(ref, moved)
+    other = rng.integers(0, 255, (120, 124, 3), dtype=np.uint8)
+    assert not hf.map_same(ref, other)
+    assert not hf.map_same(ref, other[:100])

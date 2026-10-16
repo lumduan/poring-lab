@@ -7326,6 +7326,26 @@ for >= 10 min.
 - in range -> click p50 under 6 s (the wait for a stand is in it);
 - unintended attacks not above v7's (19 per 30 min).
 
+**Run 1 (2026-10-16 17:23:42-17:29:47, session 20261016T172342-demo-hunt-flow9, seed 20261213):
+STOPPED BY ITSELF at 6.1 min by the map-change guard. A FALSE STOP.**
+- The guard said "position jump (122.0, 85.9) -> (122, 72)".
+- The packets have no map_change after the start warp. The GM really walked north fast, from
+  (122,86) to (121,69) in 5 s, past the (122,85) it was clicked to: a slope, where the client
+  picks raised tops.
+- The floor odometry fell 14 cells behind, and two agreeing minimap reads 14 cells off tripped the
+  guard.
+- In those 6 min: 1 engagement; 9 strike calls (1 SWORD, 8 unknown).
+  - The logged read reasons: no_match 10, no_cursor 4, low_score 3.
+  - The unknowns are mostly a mask that matches no cursor prototype, not a missing cursor.
+- Drops: no_path 5, no_sword 1, no_still 1.
+
+**Attempt 2 (recorded 2026-10-16 ~17:40, before its run; a bug fix within the version):**
+- A position jump re-anchors on the minimap when the minimap PICTURE is still the run's map. The
+  picture is compared with the crop taken at the loop start: the median summed |diff| must stay
+  <= 20, while the GM arrow moves over ~2 % of it.
+- A different picture still stops the run as a map change.
+- 60 min, seed 20261214.
+
 ### 3.51 PROPOSAL (design only, awaiting Batt's decision; nothing built): a RISK-BASED cursor gate for hunting attack clicks
 
 **Batt (17:2x):** "REQUIRE the SWORD read when there is real risk ... Otherwise CLICK the fresh
