@@ -525,6 +525,35 @@ def queue_hit_through(lines: Iterable[str]) -> dict[str, Any]:
     return {"dispatches": n, "valid": ok, "rate": round(ok / n, 4) if n else None}
 
 
+def unintended_attacks(events: Sequence[Mapping[str, Any]], engs: Sequence[Mapping[str, Any]],
+                       t0: int, w1: int) -> int:  # fmt: skip
+    """Our attack requests outside every engagement window (first click - 0.2 s .. end + 3 s): the
+    client turned a walk click into an attack (no SWORD read). 3.39's count."""
+    win = [(int(e["t_first_click"]) - int(0.2 * NS), int(e.get("t_end") or e["t_first_click"])
+            + int(3 * NS)) for e in engs]  # fmt: skip
+    return sum(1 for e in events if e.get("type") == "attack_request"
+               and t0 <= int(e["t_mono_ns"]) < w1
+               and not any(a <= int(e["t_mono_ns"]) <= b for a, b in win))  # fmt: skip
+
+
+def search_moving_share(lines: Iterable[str], moving: Sequence[tuple[int, int]], t0: int,
+                        w1: int) -> float | None:  # fmt: skip
+    """v5: the share of SEARCH time (the runner's `mode` search windows) the GM moved (packets)."""
+    marks = [(int(x["t_ns"]), x["mode"]) for x in map(json.loads, lines)
+             if x.get("kind") == "mode"]  # fmt: skip
+    wins = []
+    for (ta, m), (tb, _m2) in zip(marks, [*marks[1:], (w1, "")], strict=True):
+        if m == "search":
+            a, b = max(ta, t0), min(tb, w1)
+            if b > a:
+                wins.append((a, b))
+    tot = sum(b - a for a, b in wins)
+    if not tot:
+        return None
+    mv = sum(max(0, min(b, y) - max(a, x)) for a, b in wins for x, y in moving)
+    return round(mv / tot, 4)
+
+
 def sight_per_10min(events: Sequence[Mapping[str, Any]], t0: int, w1: int) -> float:
     """Distinct mobs that entered sight in [t0, w1), per 10 minutes."""
     g = {gid_of(e) for e in events if e.get("type") == "entity_appear" and e.get("objtype") == 5
@@ -714,6 +743,11 @@ def bot(sid: str) -> dict[str, Any]:
     out["sight_per_10min"] = sight_per_10min(events, t0, t0 + int(window * NS))
     out["idle_between_kills"] = idle_between_kills(events, clicks, t0, t0 + int(window * NS))
     out["queue_hit_through"] = queue_hit_through((d / "events.jsonl").read_text().splitlines())
+    w1 = t0 + int(window * NS)
+    out["unintended_attacks"] = unintended_attacks(events, engs, t0, w1)
+    _track, mv_ = gm_track(events)
+    out["search_moving_share"] = search_moving_share(
+        (d / "events.jsonl").read_text().splitlines(), mv_, t0, w1)  # fmt: skip
     out.update({"session": sid, "actor": "bot", "rule": man.get("rule")})
     (d / "flow_judge.json").write_text(json.dumps(out, indent=1))
     return out
@@ -742,6 +776,11 @@ def row(o: Mapping[str, Any]) -> dict[str, str]:
         "queue[0] valid at dispatch": "-" if not (o.get("queue_hit_through") or {}).get(
             "dispatches") else "{valid}/{dispatches}".format(**o["queue_hit_through"]),
         "engagements (1st clicks)": f"{o['engagements_w']['engagements']}",
+        "walk clicks sent while moving": f"{o['walk_clicks']['while_moving_pct']} %",
+        "walk click interval p50/p90 s": "{} / {}".format(*o["walk_clicks"]["interval_p50_p90_s"]),
+        "moving share of SEARCH time": "-" if o.get("search_moving_share") is None
+        else f"{100 * o['search_moving_share']:.0f} %",
+        "unintended attack requests": f"{o.get('unintended_attacks', '-')}",
         "window min": f"{round(o['window_s'] / 60, 1)}",
     }  # fmt: skip
 

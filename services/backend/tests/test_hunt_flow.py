@@ -107,3 +107,28 @@ def test_v4_strikes_a_standing_target_from_7_cells_and_a_walking_one_from_3() ->
     assert hf.strike_range(walking, hf.PARAMS[4]) == 3
     assert hf.strike_range(standing, hf.PARAMS[3]) == 3  # earlier versions unchanged
     assert hf.strike_due(False, (10, 10), standing.predict(int(1.0 * S)), 7)
+
+
+def test_v5_tries_points_about_6_ahead_of_where_the_gm_is() -> None:
+    path = [(10 + i, 10) for i in range(20)]
+    assert hf.ahead_candidates(path, (13.4, 10.2), (6, 5, 7)) == [9, 8, 10]  # nearest index 3
+    assert hf.ahead_candidates(path, (27.0, 10.0), (6, 5, 7)) == []  # off the end: re-plan
+    assert hf.ahead_candidates([], (0, 0), (6,)) == []
+
+
+def test_v5_odometry_is_read_at_the_minimap_read_time() -> None:
+    hist = [(0, np.array([0.0, 0.0])), (int(0.1 * S), np.array([0.5, 0.0])),
+            (int(0.2 * S), np.array([1.0, 0.0]))]  # fmt: skip
+    assert hf.odo_at(hist, int(0.15 * S))[0] == 0.5
+    assert hf.odo_at(hist, int(5 * S))[0] == 1.0
+    assert hf.odo_at([], 0) is None
+
+
+def test_the_shadow_palette_keeps_cursor_colours_not_grass() -> None:
+    a = np.zeros((4, 4, 3), np.uint8)
+    a[0, 0] = (224, 224, 224)  # the arrow's light fill
+    a[0, 1] = (20, 20, 20)  # its outline
+    a[0, 2] = (0, 0, 224)  # the no-entry ring's red (BGR)
+    a[0, 3] = (60, 140, 70)  # grass
+    m = hf.palette_mask(a)
+    assert m[0, 0] and m[0, 1] and m[0, 2] and not m[0, 3]

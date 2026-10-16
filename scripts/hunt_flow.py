@@ -81,6 +81,13 @@ VERSIONS = {
     "resolved to a monster landed, p50 4 / p90 7 cells, ~0.15 s walk-in a cell): the client walks "
     "in itself, so most steering walk clicks next to monsters go; a WALKING target keeps <= 3. "
     "Bug fix: a finished target's track and a dropped target's spot are never dispatched again",
+    5: "CONTINUOUS MOVEMENT (Batt 13:10): every ~0.6 s WHILE THE GM STILL WALKS, a click ~6 cells "
+    "ahead of its MEASURED position (the minimap's cell + route_preview's floor odometry since "
+    "that read, no reckoning) along the route; no gate needs a standstill: the candidates "
+    "6,5,7,4,8,3 ahead are tried on the freshest frames (map, UI, units of the last second, "
+    "tracked monsters' predicted positions); only when none passes for 1 s does the GM stop "
+    "(then a cursor-gated click); the planner re-plans before the route runs out; the cursor "
+    "shape at each walk click is read in SHADOW (logged, never deciding: not proven)",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -98,6 +105,9 @@ PARAMS[3] = {**PARAMS[2], "ahead": 8, "short": 3, "gate_frames_s": 1.0, "track_c
              "track_clear_s": 1.0, "track_clear_px": 60.0}  # fmt: skip
 PARAMS[4] = {**PARAMS[3], "strike_cells_standing": 7, "dispatch_fixes": True,
              "reacquire": False, "reacquire_cells": 3.0}  # fmt: skip
+PARAMS[5] = {**PARAMS[4], "continuous": True, "walk_every_s": 0.6, "ahead": 6,
+             "ahead_order": (6, 5, 7, 4, 8, 3), "stop_after_s": 1.0, "motion_hz": 10.0,
+             "moving_cells": 0.15, "replan_left": 10, "shadow_cursor": True}  # fmt: skip
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -259,6 +269,37 @@ def reacquire_target(target: Track, live: Sequence[Track], t_ns: int, within: fl
         if d <= within and (best is None or d < best[0]):
             best = (d, tr)
     return None if best is None else best[1]
+
+
+def ahead_candidates(path: Sequence[Cell], here: Sequence[float], order: Sequence[int]
+                     ) -> list[int]:  # fmt: skip
+    """PURE (v5): path indices to try for the next walk click, ``order`` cells ahead of the path
+    cell nearest to where we ARE (measured), the first in range first."""
+    if not path:
+        return []
+    ci = min(range(len(path)), key=lambda i: cheb(path[i], here))
+    return [ci + k for k in order if 0 < ci + k < len(path)]
+
+
+def odo_at(hist: Sequence[tuple[int, Any]], t_ns: int) -> Any:
+    """PURE (v5): the odometry total at ``t_ns`` (the last sample at or before it)."""
+    best = hist[0][1] if hist else None
+    for t, v in hist:
+        if t > t_ns:
+            break
+        best = v
+    return best
+
+
+def palette_mask(a: Any) -> Any:
+    """v5 SHADOW (not proven): the cursor's own pixels by colour, with no parked background --
+    light low-saturation fill, a dark outline, red (BGR). Offline vs robust2 (2026-10-16, 5 Hz
+    JPEG): 62 / 200 agree; logged only, never a gate."""
+    a = np.asarray(a)[..., :3].astype(np.int16)
+    b, g, r_ = a[..., 0], a[..., 1], a[..., 2]
+    mx, mn = a.max(-1), a.min(-1)
+    red = (r_ >= 150) & (r_ - np.maximum(g, b) >= 60)
+    return ((mn >= 165) & (mx - mn <= 55)) | (mx <= 45) | red
 
 
 def track_clear(u: float, v: float, tracks: Sequence[Track], t_ns: int, horizon_s: float,
@@ -785,8 +826,13 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     q = plan_queue(tracks_now(), here_, t_, prm["queue_depth"], list(banned),
                                    now_, prm["drop_target_s"], prm["moving_penalty"])  # fmt: skip
                     gp = plan["goal_path"]
+                    left_ = 999
+                    if gp and prm.get("replan_left"):  # v5: never walk off the route's end
+                        ci_ = min(range(len(gp)), key=lambda i_: cheb(gp[i_], here_))
+                        left_ = len(gp) - 1 - ci_
                     if (gp is None or now_ - plan["t_goal"] > prm["waypoint_every_s"]
-                            or cheb(here_, gp[-1]) <= 2):  # fmt: skip
+                            or cheb(here_, gp[-1]) <= 2
+                            or left_ < prm.get("replan_left", -1)):  # fmt: skip
                         p_ = None
                         if area[here_[1], here_[0]]:
                             goal = hc.choose_goal(cov, here_, now_, {}, list(bad_tiles))
@@ -815,12 +861,132 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     return mm_
                 return settle(timeout=1.5) or pos
 
+            # --- v5: MEASURED motion (route_preview's floor odometry) + the shadow cursor read ----
+            mstate: dict[str, Any] = {"hist": [], "anchor": None}
+
+            def motion() -> None:
+                """~motion_hz frames: the camera's move from the floor patches, summed (cells)."""
+                import route_preview as rp_
+
+                core = rp_.PreviewCore(camera, gat, (gx0, gy0, gw, gh), r.desktop())
+                scr = r.Screen()
+                prev_img = prev_g = None
+                odo = np.zeros(2)
+                try:
+                    while not halt.is_set():
+                        t_, img_ = scr.grab(gx0, gy0, gw, gh)
+                        img3 = np.ascontiguousarray(np.asarray(img_)[..., :3])
+                        g_ = rp_.gray(img3)
+                        if prev_g is not None:
+                            off_ = rp_.scene_shift(prev_img, img3)
+                            c_ = np.array(posm.at(time.monotonic()), dtype=float)
+                            d_, _n = core.camera_move(prev_g, g_, c_, off_)
+                            if d_ is None:
+                                d_ = -core.jinv @ np.array(off_)
+                            odo = odo + d_
+                            with plock:
+                                mstate["hist"].append((int(t_), odo.copy()))
+                                if len(mstate["hist"]) > 300:
+                                    del mstate["hist"][:150]
+                        prev_img, prev_g = img3, g_
+                        time.sleep(max(0.0, 1.0 / prm["motion_hz"] - 0.03))
+                finally:
+                    scr.close()
+
+            def hist_now() -> list[tuple[int, Any]]:
+                with plock:
+                    return list(mstate["hist"])
+
+            def measured_pos() -> tuple[float, float] | None:
+                """v5: the minimap's last cell + the floor odometry since that read."""
+                a_, h_ = mstate["anchor"], hist_now()
+                if a_ is None or not h_ or a_[1] is None:
+                    return None
+                d_ = h_[-1][1] - a_[1]
+                return a_[0][0] + float(d_[0]), a_[0][1] + float(d_[1])
+
+            def moving_meas() -> bool:
+                h_ = hist_now()
+                if len(h_) < 2:
+                    return False
+                old = odo_at(h_, h_[-1][0] - int(0.3e9))
+                return old is not None and float(np.abs(h_[-1][1] - old).max()) > prm[
+                    "moving_cells"]  # fmt: skip
+
+            shadow_q: list[tuple[int, float, float]] = []
+
+            def shadow() -> None:
+                """v5 SHADOW (never deciding): the cursor shape drawn at each walk click's point
+                ~0.2 s later, by colour (palette_mask) and robust2's matcher; logged only."""
+                import walk6 as w6_
+
+                scr = r.Screen()
+                try:
+                    while not halt.is_set():
+                        if not shadow_q:
+                            time.sleep(0.02)
+                            continue
+                        t_c, u_, v_ = shadow_q.pop(0)
+                        wait_ = 0.2 - (r.ns() - t_c) / 1e9
+                        if wait_ > 0:
+                            time.sleep(wait_)
+                        x_, y_ = int(round(u_)), int(round(v_))
+                        _t, crop_ = scr.grab(gx0 + x_ - 32, gy0 + y_ - 32, 64, 64)
+                        a_ = np.ascontiguousarray(np.asarray(crop_)[..., :3])
+                        if a_.shape[:2] != (64, 64):
+                            continue
+                        pal = palette_mask(a_)
+                        b_ = a_.copy()
+                        b_[pal] = 255 - a_[pal]
+                        got_ = pr.refs.match(a_, w6_.cursor_mask(a_, b_))
+                        ev({"kind": "shadow_read", "t_click": t_c, "shape": got_.get("shape"),
+                            "at": [round(u_, 1), round(v_, 1)]})  # fmt: skip
+                finally:
+                    scr.close()
+
             def pipelined_loop() -> None:  # noqa: PLR0915
                 nonlocal pos, moving, path, pi, target, reads, last_mm, mm_off, last_weight
                 nonlocal click_from, click_cell
                 ths = [_start_thread(perception, "perception"), _start_thread(planner, "planner")]
+                cont = bool(prm.get("continuous"))
+                if cont:
+                    ths += [_start_thread(motion, "motion")]
+                    if prm.get("shadow_cursor"):
+                        ths += [_start_thread(shadow, "shadow")]
                 gp_i = 0
                 dispatched: set[tuple[int, bool]] = set()
+                stop_since: float | None = None  # v5: since when standing with no click
+                last_click: dict[str, Any] = {}  # v5: the last walk click (unfollowed check)
+                mode_ = ""
+
+                def set_mode(m_: str) -> None:
+                    nonlocal mode_
+                    if m_ != mode_:
+                        mode_ = m_
+                        ev({"kind": "mode", "mode": m_})
+
+                def cont_click(route: list[Cell], grid: Any, why: str) -> bool:
+                    """v5: the first candidate ahead of where we ARE that passes the gates on the
+                    freshest frames; no standstill needed."""
+                    cur = measured_pos() or (float(pos[0]), float(pos[1]))
+                    at_ = (int(round(cur[0])), int(round(cur[1])))
+                    world.position = at_
+                    for j_ in ahead_candidates(route, cur, prm["ahead_order"]):
+                        c_ = route[j_]
+                        uu, vv = (float(x) for x in world.project([c_])[0])
+                        if (in_view(uu, vv) and grid[c_[1], c_[0]] and units_clear(uu, vv)
+                                and (not cont or walk_ok(c_))):  # fmt: skip
+                            if walk_click(uu, vv, c_, [at_, c_], "map+units", why):
+                                last_click.update(t=time.monotonic(), cell=c_, frm=at_)
+                                if prm.get("shadow_cursor"):
+                                    shadow_q.append((r.ns(), uu, vv))
+                                return True
+                            world.position = at_
+                    return False
+
+                def walk_ok(c_: Cell) -> bool:
+                    return not refusals.get(c_, 0) >= 2
+
                 try:
                     while time.monotonic() < deadline:
                         now = time.monotonic()
@@ -833,15 +999,38 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                 ev({"kind": "weight_clear", "weight": wnow})
                                 gm_state.clear_loot(agent, screen, why="hunt-flow:mid-run",
                                                     out_dir=log.dir / "gm_state")  # fmt: skip
-                        if moving and reck.remaining(now) == 0:
+                        if cont:
+                            # v5: MEASURED -- the minimap's cell + the floor odometry since it
+                            if now - last_mm > MINIMAP_EVERY_S:
+                                last_mm = now
+                                t_mm = r.ns()
+                                mm = read_position()
+                                if mm is not None and ok[mm[1], mm[0]]:
+                                    mstate["anchor"] = (mm, odo_at(hist_now(), t_mm))
+                                    last_fix[0] = time.monotonic()
+                            moving = moving_meas()
+                            mp_ = measured_pos()
+                            if mp_ is not None:
+                                pos = (int(round(mp_[0])), int(round(mp_[1])))
+                            posm.stop(pos)
+                            # a walk click the client did not follow (no motion 1.2 s later)
+                            if (last_click and not moving and now - last_click["t"] > 1.2
+                                    and cheb(pos, last_click["frm"]) <= 1):  # fmt: skip
+                                ev({"kind": "unfollowed_click", "from": list(last_click["frm"]),
+                                    "to": list(last_click["cell"])})  # fmt: skip
+                                refuse(last_click["cell"], "unfollowed")
+                                last_click.clear()
+                            elif last_click and moving:
+                                last_click.clear()
+                        if not cont and moving and reck.remaining(now) == 0:
                             moving = False
                             pos = reck.path[-1] if reck.path else pos
                             posm.stop(pos)
                             rp("snap", pos)
-                        est = reck.where(now) if moving else pos
+                        est = reck.where(now) if (moving and not cont) else pos
                         if est is not None:
                             pos = est
-                        if now - last_mm > MINIMAP_EVERY_S:
+                        if not cont and now - last_mm > MINIMAP_EVERY_S:
                             last_mm = now
                             mm = read_position()
                             if mm is not None and ok[mm[1], mm[0]]:
@@ -885,6 +1074,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         need_c = moving or bool(prm.get("track_clear"))  # v3: the gate everywhere
                         # the engagement in progress: dead -> HAND-OFF at once; re-click; give up
                         if eng is not None:
+                            if cont:
+                                set_mode("engaged")
                             tr = next((x for x in live if x.tid == eng["track"]), None)
                             since_first = (t_now - eng["t_first_click"]) / 1e9
                             since_last = (t_now - eng["t_last_click"]) / 1e9
@@ -958,6 +1149,30 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             if cheb(pos, tcell) <= s_range:
                                 time.sleep(0.02)  # walking, about to arrive: the strike is next
                                 continue
+                            if cont:  # v5: steer continuously, no standstill gate
+                                set_mode("steer")
+                                due = now - last_walk >= (prm["walk_every_s"] if moving else 0.3)
+                                if due:
+                                    ap = approach_path(ok, pos, tcell, prm["short"])
+                                    if ap is None:
+                                        ev({"kind": "target_dropped", "track": target.tid,
+                                            "why": "no_path"})  # fmt: skip
+                                        banned.append((now, (int(round(tcell[0])),
+                                                             int(round(tcell[1])))))  # fmt: skip
+                                        target = None
+                                    elif cont_click(ap, ok, "steer"):
+                                        stop_since = None
+                                    elif not moving:
+                                        stop_since = stop_since or now
+                                        if now - stop_since > prm["stop_after_s"]:
+                                            # none passed for 1 s: the GM stops; cursor-gated
+                                            j, (u, v) = step_target(ap, 0, pos, prm["ahead"], ok)
+                                            if j is not None:
+                                                walk_click(u, v, ap[j], ap[: j + 1], "cursor",
+                                                           "steer")  # fmt: skip
+                                            stop_since = None
+                                time.sleep(0.02)
+                                continue
                             if not moving or now - last_walk >= prm["walk_every_s"]:
                                 ap = approach_path(ok, pos, tcell, prm["short"])
                                 if ap is None:
@@ -979,6 +1194,26 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         # no target: the planner's waypoint, the GM never standing
                         split.to("searching", time.monotonic())
                         if gp is None:
+                            time.sleep(0.02)
+                            continue
+                        if cont:  # v5: the MOVEMENT QUEUE, ~6 ahead of where we are
+                            set_mode("search")
+                            due = now - last_walk >= (prm["walk_every_s"] if moving else 0.3)
+                            if due:
+                                if cont_click(gp, area, "search"):
+                                    stop_since = None
+                                elif not moving:
+                                    stop_since = stop_since or now
+                                    if now - stop_since > prm["stop_after_s"]:
+                                        ci_ = min(range(len(gp)), key=lambda i_: cheb(gp[i_], pos))
+                                        j, (u, v) = step_target(gp, ci_, pos, prm["ahead"])
+                                        if j is not None and j > ci_:
+                                            walk_click(u, v, gp[j], [pos, gp[j]], "cursor",
+                                                       "search")  # fmt: skip
+                                        else:
+                                            with plock:
+                                                plan["goal_path"] = None  # re-plan
+                                        stop_since = None
                             time.sleep(0.02)
                             continue
                         if not moving or now - last_walk >= prm["walk_every_s"]:

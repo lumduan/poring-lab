@@ -167,3 +167,18 @@ def test_the_queue_hit_through_counts_rank_0_dispatches() -> None:
              json.dumps({"kind": "dispatch", "rank": 1, "valid": True}),
              json.dumps({"kind": "walk_click"})]  # fmt: skip
     assert fj.queue_hit_through(lines) == {"dispatches": 2, "valid": 1, "rate": 0.5}
+
+
+def test_unintended_attacks_are_requests_outside_every_engagement() -> None:
+    events = [ev(1.0, "attack_request", target_gid=MOB), ev(10.0, "attack_request", target_gid=MOB),
+              ev(30.0, "attack_request", target_gid=MOB)]  # fmt: skip
+    engs = [{"t_first_click": int(0.9 * S), "t_end": int(2.0 * S)}]
+    assert fj.unintended_attacks(events, engs, 0, int(20 * S)) == 1  # 10 s; 30 s is outside
+
+
+def test_the_moving_share_counts_search_windows_only() -> None:
+    lines = [json.dumps({"kind": "mode", "mode": "search", "t_ns": 0}),
+             json.dumps({"kind": "mode", "mode": "engaged", "t_ns": int(10 * S)}),
+             json.dumps({"kind": "mode", "mode": "search", "t_ns": int(20 * S)})]  # fmt: skip
+    moving = [(int(5 * S), int(25 * S))]
+    assert fj.search_moving_share(lines, moving, 0, int(30 * S)) == 0.5  # (5 + 5) / (10 + 10)

@@ -6808,6 +6808,61 @@ the top safety item is the same gate (15 walk clicks turned attacks across the t
   - **Safety (packets, the loop):** NPC contacts 0, dialogs 0, map changes 0, non-target hits 0,
     unintended attack requests 0. The UI stop above is the run's one safety stop.
 
+### 3.45 hunt-flow@5: CONTINUOUS MOVEMENT (pre-registered 2026-10-16 ~14:05 ICT, after v4's result, BEFORE its run; Batt ~13:10)
+
+Batt: "the GM still walks, STOPS, then gets the next click. Make movement continuous, as in his
+demo (73 % of his walk clicks were sent while still walking, one every ~0.6 s, ~6 cells ahead).
+The GM stops ONLY to attack and to pick up."
+
+**ONE main change, continuous movement:**
+1. **THE MOVEMENT QUEUE:**
+   - the planner's coverage route (client ∩ server stand cells, the search area) is re-planned
+     before fewer than 10 cells remain, so the GM never reaches its end;
+   - every 0.6 s WHILE THE GM WALKS, a click goes to the route point ~6 cells ahead of its
+     MEASURED position.
+2. **MEASURED, NOT RECKONED:**
+   - the position is the minimap's last cell (read every 0.3 s) plus route_preview's floor
+     odometry since that read (the floor patches' camera move, at ~10 Hz on the frames);
+   - "moving" means the odometry moved more than 0.15 cells in 0.3 s.
+   - Evidence: route_preview's own validation (2026-10-08) was 0.12 cell a step; today, on
+     v3's 5 Hz JPEG recording, rest to rest, a median of 0.52 cells (68 % within 1; n 19).
+3. **NEVER STOP TO CHECK:**
+   - the candidates 6, 5, 7, 4, 8, 3 cells ahead are tried at once on the freshest frames:
+     in view, off the UI (now with the corner notices), on the route's grid, no unit box within
+     60 px on the last second of frames, no tracked monster predicted there over the next
+     second;
+   - a spot the client refused twice is skipped;
+   - only when none passes for 1 s does the GM stop, and that click is cursor-gated (robust2,
+     as before);
+   - a click the client did not follow (no motion 1.2 s later) counts as a refusal of that spot;
+   - the target branch steers the same way.
+4. **TARGETS INTERRUPT:** v2-v4's pipeline, the queue, the strike (standing <= 7, walking <= 3,
+   ONE SWORD read), no looting. After a kill the movement queue resumes at once.
+5. **THE FAST CURSOR READ ON THE WAY: SHADOW ONLY, not a gate.** It is not proven. Evidence:
+   - LIVE 13:24, moves only: the client DOES draw its cursor during continuous travel, ~0.15-0.2
+     s behind the pointer;
+   - but a background-free reader (a colour mask + robust2's matcher) agreed with robust2's
+     labelled reads on only 62 / 200 recorded frames (5 Hz JPEG), and read 2 SWORDs as WALK.
+   - So v5 logs that read at every walk click (`shadow_read`, ~0.2 s after it), to be validated
+     against the packets (did the click become an attack?), and never decides with it.
+- **Measured beside the bar (bot vs Batt):**
+  - walk clicks sent while moving (Batt 73 %);
+  - walk-click interval p50 (Batt 0.6 s);
+  - the MOVING SHARE OF SEARCH TIME (the runner's `mode` windows vs the packets' motion;
+    target >= 90 %);
+  - monsters in sight / 10 min (Batt 44);
+  - kills / h (Batt 300);
+  - unintended attack requests;
+  - plus 3.41's table.
+- **Prediction, written before the run:**
+  - walk clicks while moving >= 60 %;
+  - search moving share >= 80 %;
+  - in sight >= 15 / 10 min;
+  - kills / h above 60;
+  - unintended attack requests at most 5 (more clicks while walking raise the detector-miss
+    risk, 3.43);
+  - the bar >= 90 %.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
