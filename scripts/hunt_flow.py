@@ -165,7 +165,8 @@ VERSIONS = {
     "bot steering to ANOTHER target that then failed, 19 / 32): after >= 1 s on a target, the "
     "planner's queue[0] replaces it when it is valid and cheaper by >= 2 cells (Chebyshev to the "
     "predicted cell, +2 for a walking one)",
-    20: "TAG FOLLOW (the top loser after v14: 59 of 138 tag reads timed out, and only 7 / 66 of "
+    20: "TAG FOLLOW, on v18 (not v19) (the top loser after v14: 59 of 138 tag reads timed out, "
+    "and only 7 / 66 of "
     "the refused reads show a matchable tag anywhere in the recorded frames -- the pointer was OFF "
     "the sprite, so the client drew no tag): during the read the pointer follows the focused "
     "target's fresh centre when it is > 10 px away, the tag is searched under the box AND under "
@@ -240,7 +241,9 @@ PARAMS[17] = {**PARAMS[16], "loot": True, "loot_sweep": True, "loot_max_s": 6.0,
 PARAMS[18] = {**PARAMS[17], "zone": True, "zone_radius": 7, "zone_radius_walking": 4,
               "heading_search": True, "heading_min_run": 8, "heading_drift_p": 0.3}  # fmt: skip
 PARAMS[19] = {**PARAMS[18], "retarget": True, "retarget_margin": 2.0, "retarget_commit_s": 1.0}
-PARAMS[20] = {**PARAMS[19], "tag_follow": True, "tag_follow_px": 10.0}
+# 20 builds on 18, NOT 19 (2026-10-17 02:3x): the night's last slot goes to the top loser (the tag
+# reads: 40-58 % refused in v15-v16), one change against the last version run; v19 is built, unrun
+PARAMS[20] = {**PARAMS[18], "tag_follow": True, "tag_follow_px": 10.0}
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------

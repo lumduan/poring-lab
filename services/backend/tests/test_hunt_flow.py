@@ -379,6 +379,7 @@ def test_v20_the_tag_is_also_searched_under_the_pointer() -> None:
     got = hf.tag_boxes(b, (300.0, 200.0), True)
     assert got[0] is b and (got[1].x0, got[1].y0, got[1].x1, got[1].y1) == (280, 182, 320, 218)
     assert hf.PARAMS[20]["tag_follow"] and hf.PARAMS[20]["focus"] and hf.PARAMS[20]["name_tag"]
+    assert not hf.PARAMS[20].get("retarget")  # one change against v18 (v19 built, not run)
 
 
 def test_walk_guard_refuses_near_the_gm_and_near_pink_and_ignores_the_gm_hair() -> None:
