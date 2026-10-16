@@ -123,6 +123,10 @@ VERSIONS = {
     "the attack click goes straight to the fresh detection (no park, no read). Every attack "
     "click logs its branch and reasons; hard bars: zero NPC contact, zero non-target hit, zero "
     "map change",
+    11: "RE-TARGET WHILE STEERING (Batt's change 2: detection -> dispatch, v7 p50 2.85 s, was the "
+    "bot steering to ANOTHER target that then failed, 19 / 32): after >= 1 s on a target, the "
+    "planner's queue[0] replaces it when it is valid and cheaper by >= 2 cells (Chebyshev to the "
+    "predicted cell, +2 for a walking one)",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -164,6 +168,7 @@ PARAMS[9] = {**PARAMS[8], "still_gate": True, "still_s": 1.2, "still_px": 8.0,
 PARAMS[9]["jump_reanchor"] = True
 PARAMS[10] = {**PARAMS[9], "risk_gate": True, "gate_near_gm_px": 45.0, "gate_min_conf": 0.6,
               "gate_npc_cells": 12, "gate_ignore_px": 150.0}  # fmt: skip
+PARAMS[11] = {**PARAMS[10], "retarget": True, "retarget_margin": 2.0, "retarget_commit_s": 1.0}
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -441,6 +446,13 @@ def escape_cells(main: Any, here: Cell, reach: int = 30, k: int = 5, near: int =
     cells = sorted(((int(x) + x0, int(y) + y0) for y, x in zip(ys, xs, strict=True)),
                    key=lambda c: (cheb(c, here), c))  # fmt: skip
     return [c for c in cells if c != here and cheb(c, here) >= near][:k]
+
+
+def target_cost(tr: Track, here: Sequence[float], t_ns: int, moving_penalty: float) -> float:
+    """PURE (v11): the planner's cost of a target from ``here`` -- Chebyshev cells to its predicted
+    cell, plus ``moving_penalty`` when it walks (standing targets first, as plan_queue)."""
+    vx, vy = tr.velocity()
+    return cheb(here, tr.predict(t_ns)) + (moving_penalty if (vx or vy) else 0.0)
 
 
 def gate_reasons(b: Any, others: Sequence[Any], gm_px: Sequence[float], near_gm_px: float,
@@ -1414,6 +1426,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 gp_i = 0
                 follow_t = [0]  # v6: the last box time the pointer followed
                 still_wait: dict[int, float] = {}  # v9: track -> since when waiting for it to stand
+                t_target = [0.0]  # v11: when the current target was set
                 dispatched: set[tuple[int, bool]] = set()
                 stop_since: float | None = None  # v5: since when standing with no click
                 last_click: dict[str, Any] = {}  # v5: the last walk click (unfollowed check)
@@ -1671,6 +1684,25 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             else:
                                 ev({"kind": "target_lost", "track": target.tid})
                                 target = None
+                        if (prm.get("retarget") and target is not None and eng is None and q
+                                and now - t_target[0] >= prm["retarget_commit_s"]):  # fmt: skip
+                            # v11: while steering, switch to the planner's better queue[0]
+                            # (v7: the unit was in sight p50 2.85 s before its dispatch, in
+                            # 19 / 32 while the bot steered to ANOTHER target that then failed)
+                            q0 = next((c_ for c_ in q if c_.tid not in done_ids and not any(
+                                now - tb < prm["drop_target_s"] and cheb(c_.predict(t_now), cb) <= 2
+                                for tb, cb in banned)), None)  # fmt: skip
+                            if (
+                                q0 is not None
+                                and q0.tid != target.tid
+                                and valid_at_dispatch(q0, live, t_now, prm["dispatch_fresh_s"])
+                                and target_cost(q0, pos, t_now, prm["moving_penalty"])
+                                + prm["retarget_margin"]
+                                <= target_cost(target, pos, t_now, prm["moving_penalty"])
+                            ):
+                                ev({"kind": "retarget", "from": target.tid, "to": q0.tid})
+                                target, reads = q0, 0
+                                t_target[0] = now
                         if target is None and q:
                             for rank, cand in enumerate(q):
                                 if prm.get("dispatch_fixes") and (
@@ -1688,6 +1720,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                         "cell": [round(pc_[0], 1), round(pc_[1], 1)]})  # fmt: skip
                                 if ok_:
                                     target, reads = cand, 0
+                                    t_target[0] = now
                                     break
                         if target is not None:
                             split.to("steering", time.monotonic())

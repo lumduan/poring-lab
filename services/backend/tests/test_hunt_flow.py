@@ -254,3 +254,10 @@ def test_v10_the_strict_gate_reads_only_where_there_is_risk() -> None:
     assert hf.gate_reasons(near, [], gm, 45.0, 0.6, False, False) == ["near_gm"]
     assert hf.gate_reasons(_Bx(800, 300, 830, 330, 0.55), [], gm, 45.0, 0.6, True, True) == [
         "low_conf", "npc_near", "ignore_species"]  # fmt: skip
+
+
+def test_v11_target_cost_is_distance_plus_a_walking_penalty() -> None:
+    standing = hf.Track(0, [(0, (10, 10)), (int(1.0 * S), (10, 10))])
+    walking = hf.Track(1, [(0, (10, 10)), (int(1.0 * S), (13, 10))])
+    assert hf.target_cost(standing, (4, 10), int(1.0 * S), 2.0) == 6.0
+    assert hf.target_cost(walking, (4, 10), int(1.0 * S), 2.0) == 9.0 + 2.0
