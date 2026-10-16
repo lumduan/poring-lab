@@ -379,3 +379,24 @@ def test_v20_the_tag_is_also_searched_under_the_pointer() -> None:
     got = hf.tag_boxes(b, (300.0, 200.0), True)
     assert got[0] is b and (got[1].x0, got[1].y0, got[1].x1, got[1].y1) == (280, 182, 320, 218)
     assert hf.PARAMS[20]["tag_follow"] and hf.PARAMS[20]["focus"] and hf.PARAMS[20]["name_tag"]
+
+
+def test_walk_guard_refuses_near_the_gm_and_near_pink_and_ignores_the_gm_hair() -> None:
+    crop = np.zeros((200, 200, 3), np.uint8)
+    crop[...] = (70, 130, 150)  # the dirt road (yellow-brown, BGR): never pink
+    share = hf.pink_share(crop, (600, 400), 700.0, 500.0, 80, hf.GUARD_EXCLUDE)
+    assert share == 0.0
+    crop[90:100, 120:130] = (140, 120, 230)  # a Poring's / Creamy's pink (BGR), 20 px away
+    share = hf.pink_share(crop, (600, 400), 700.0, 500.0, 80, hf.GUARD_EXCLUDE)
+    assert share > 0.001
+    assert hf.walk_guard_why(700.0, 500.0, share, 120.0, 0.001) == "pink"
+    assert hf.walk_guard_why(700.0, 500.0, 0.0, 120.0, 0.001) is None
+    assert hf.walk_guard_why(700.0, 400.0, 0.0, 120.0, 0.001) == "near_gm"  # 85 px from the GM
+    gm = np.zeros((200, 200, 3), np.uint8)
+    gm[...] = (50, 140, 60)  # grass (BGR)
+    gm[30:60, 80:100] = (120, 90, 220)  # the GM's red-pink hair (BGR) inside its own box
+    assert hf.pink_share(gm, (560, 260), 640.0, 340.0, 80, hf.GUARD_EXCLUDE) == 0.0
+    assert hf.PARAMS[16]["walk_guard"] and not hf.PARAMS[15].get("walk_guard")
+    rgb = np.zeros((200, 200, 3), np.uint8)
+    rgb[...] = (230, 120, 140)  # pink given as RGB reads as blue-ish in BGR: not pink
+    assert hf.pink_share(rgb, (600, 400), 700.0, 500.0, 80, hf.GUARD_EXCLUDE) == 0.0

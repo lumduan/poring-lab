@@ -63,6 +63,7 @@ MAP_SAME_MAX = 20.0  # median summed |diff| of the picture: the same map stays f
 FREEZE_S = 3.0  # v10: identical frames this long after a walk click = a frozen client display
 GM_SPRITE_PX = (640.0, 340.0)  # v10: the GM's sprite centre (client px; the camera centres on it)
 GM_SPRITE_BOX = (620.0, 285.0, 660.0, 375.0)  # v11: the GM's drawn sprite (x0, y0, x1, y1)
+GUARD_EXCLUDE = (605.0, 270.0, 675.0, 390.0)  # v16's walk guard: the GM sprite + hair
 DRIFT_CELLS = 3
 STUCK_S = 60.0
 MS_CELL = 150.0  # the GM's measured walk speed (hunt@5's packets)
@@ -226,7 +227,11 @@ PARAMS[14] = {**PARAMS[13], "name_tag": True, "tag_wait_s": 1.2, "tag_harvest": 
 PARAMS[15] = {**PARAMS[14], "reclick_s": 1.0, "dead_min_s": 1.4, "dead_gone_s": 0.8,
               "burst_hold": True, "burst_hold_s": 1.2, "tag_cache_s": 10.0,
               "burst_same_track": True}  # fmt: skip
-PARAMS[16] = {**PARAMS[15], "focus": True, "focus_lead_s": 0.15, "focus_max_age_s": 0.35}
+# 16 also carries the WALK GUARD, a safety layer (not a play change) for every later version: v14's
+# six Creamy hits were walk clicks on a sprite the detector cannot see (3.56)
+PARAMS[16] = {**PARAMS[15], "focus": True, "focus_lead_s": 0.15, "focus_max_age_s": 0.35,
+              "walk_guard": True, "guard_gm_px": 120.0, "guard_pink_r": 80,
+              "guard_pink_max": 0.001}  # fmt: skip
 PARAMS[17] = {**PARAMS[16], "loot": True, "loot_sweep": True, "loot_max_s": 6.0,
               "loot_max_clicks": 8}  # fmt: skip
 # 18 = movement (Batt's heading method + the zone)
@@ -955,6 +960,37 @@ class Focus:
             return self.pos[0] + self.vel[0] * k, self.pos[1] + self.vel[1] * k, age
 
 
+def pink_share(crop: Any, origin: tuple[int, int], u: float, v: float, radius: int,
+               exclude: tuple[float, float, float, float]) -> float:  # fmt: skip
+    """PURE (the walk guard, from v16): the share of PINK pixels -- R over G by > 51, B not under
+    G by > 10, not dark: a Poring's or a Creamy's colours, never the ground's yellow-brown or
+    green -- within ``radius`` px of the click pixel (u, v), outside ``exclude`` (the GM's own
+    sprite: its red hair). ``crop`` is the frame region whose top-left is ``origin`` (client px),
+    BGR(A) as Screen.grab returns it."""
+    a = np.asarray(crop)[..., :3].astype(np.int16)
+    h, w = a.shape[:2]
+    yy, xx = np.mgrid[origin[1] : origin[1] + h, origin[0] : origin[0] + w]
+    m = (xx - u) ** 2 + (yy - v) ** 2 <= radius * radius
+    m &= ~((xx >= exclude[0]) & (xx <= exclude[2]) & (yy >= exclude[1]) & (yy <= exclude[3]))
+    b_, g_, r_ = a[..., 0], a[..., 1], a[..., 2]
+    pk = (r_ - g_ > 51) & (b_ - g_ >= -10) & (a.max(-1) > 89)
+    n = int(m.sum())
+    return float((pk & m).sum() / n) if n else 0.0
+
+
+def walk_guard_why(u: float, v: float, share: float, gm_px: float, pink_max: float) -> str | None:
+    """PURE (the walk guard, from v16): why a WALK click at (u, v) is refused, or None. The client
+    turns a walk click into an attack when it lands on a sprite; on v10-v14's recordings the walk
+    clicks it turned into attacks sat near the GM (5-8 % of clicks within 100 px, 0.5 % beyond 150)
+    or near pink pixels, and "within 120 px or any pink within 80 px" covered 14 of 17 Creamy hits
+    (the detector sees none of them) at 25 % of the normal clicks."""
+    if math.hypot(u - GM_SPRITE_PX[0], v - GM_SPRITE_PX[1]) < gm_px:
+        return "near_gm"
+    if share > pink_max:
+        return "pink"
+    return None
+
+
 def tag_boxes(b: Any, ptr: tuple[float, float], around_ptr: bool) -> list[Any]:
     """PURE (v20): the boxes whose bands may hold the name tag -- the detector box, and with
     ``around_ptr`` a sprite-sized box centred on the pointer: the client draws the tag only under
@@ -1182,6 +1218,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
     plan_tok = route_plan.enable(f"hunt-flow{version}-{sid}", MAP,
                                  log_path=str(out / "live.jsonl"))  # fmt: skip
     sampler = None
+    guard_n: Counter[str] = Counter()  # v16+: the walk guard's verdicts (in the summary)
     with r.session(f"rule:{RULE}@{version}") as (agent, screen):
         f0.stop_on_takeover(agent)
         hud_tok = operator_hud.enable(f"hunt-flow@{version}", agent=agent,
@@ -2285,6 +2322,25 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         not (b.x0 - px_ <= u <= b.x1 + px_ and b.y0 - px_ <= v <= b.y1 + px_)
                         for b in boxes_)  # fmt: skip
 
+                def guard_ok(u: float, v: float) -> bool:
+                    """v16+ (a safety layer): no walk click near the GM's sprite or near pink
+                    pixels on a FRESH grab (the client picks what its display shows there)."""
+                    if not prm.get("walk_guard"):
+                        return True
+                    rg_ = int(prm["guard_pink_r"])
+                    x0_, y0_ = max(0, int(u) - rg_), max(0, int(v) - rg_)
+                    x1_, y1_ = min(gw, int(u) + rg_ + 1), min(gh, int(v) + rg_ + 1)
+                    share_ = 0.0
+                    if x1_ > x0_ and y1_ > y0_:
+                        crop_ = screen.grab(gx0 + x0_, gy0 + y0_, x1_ - x0_, y1_ - y0_)[1]
+                        share_ = pink_share(crop_, (x0_, y0_), u, v, rg_, GUARD_EXCLUDE)
+                    why_ = walk_guard_why(u, v, share_, prm["guard_gm_px"],
+                                          prm["guard_pink_max"])  # fmt: skip
+                    guard_n[why_ or "ok"] += 1
+                    if sum(guard_n.values()) % 200 == 0:
+                        ev({"kind": "walk_guard", **guard_n})
+                    return why_ is None
+
                 def cont_click(route: list[Cell], grid: Any, why: str,
                                avoid: tuple[float, float] | None = None) -> bool:  # fmt: skip
                     """v5: the first candidate ahead of where we ARE that passes the gates on the
@@ -2313,7 +2369,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             continue  # v8 plan B: never a steering click onto the target
                         if (in_view(uu, vv) and in_view(gu, gv) and grid[c_[1], c_[0]]
                                 and units_clear(gu, gv) and boxes_clear(gu, gv)
-                                and (not cont or walk_ok(c_))):  # fmt: skip
+                                and (not cont or walk_ok(c_)) and guard_ok(uu, vv)):  # fmt: skip
                             extra_ = None
                             if lead_ is not None:
                                 d_ = [round(lead_[0] - cur[0], 2), round(lead_[1] - cur[1], 2)]
@@ -2997,7 +3053,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                "results": dict(Counter(e["result"] for e in engagements)),
                "split": split.ranked(), "coverage_cells": cov.first_seen,
                "det_fps": None if sampler is None or not run_s
-               else round(len(sampler.frames) / run_s, 2)}  # fmt: skip
+               else round(len(sampler.frames) / run_s, 2), "walk_guard": dict(guard_n)}  # fmt: skip
     log.finish(ended=ended, packet_events=len(events), packet_anchor=anchor, **summary)
     print(json.dumps({"session": sid, "ended": ended, **summary}, default=str), flush=True)
     if crashed is not None:
