@@ -412,3 +412,16 @@ def test_the_opportunistic_strike_skips_a_target_dropped_here_within_the_ban() -
     assert hf.nearest_close([near], (10, 10), 0, 4, 1.0, (), banned, 116.0, 15.0) is near
     far_ban = [(100.0, (30, 30))]
     assert hf.nearest_close([near], (10, 10), 0, 4, 1.0, (), far_ban, 105.0, 15.0) is near
+
+
+def test_the_stall_breaker_walks_to_a_reachable_cell_away_from_the_pocket() -> None:
+    import random
+
+    grid = np.zeros((40, 40), bool)
+    grid[20, 2:6] = True  # a pocket at the west edge ...
+    grid[10:30, 6:30] = True  # ... opening onto the field
+    got = hf.unstall_cells(grid, (2, 20), random.Random(1), 6, 14, 4)
+    assert len(got) == 4
+    for c in got:
+        assert grid[c[1], c[0]] and hf.cheb(c, (2, 20)) >= 6
+    assert hf.unstall_cells(np.zeros((5, 5), bool), (2, 2), random.Random(1)) == []

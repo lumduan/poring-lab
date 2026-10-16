@@ -7904,6 +7904,22 @@ STOPPED at 12.6 min by the stuck guard ("no progress for 60 s at (127, 114)"), 2
   dropped_here_within_the_ban`). Attempt 2 runs v15 with this fix and a fresh seed; nothing
   else changes.
 
+**Attempt 2 (2026-10-17 00:06:04, session 20261017T000604-demo-hunt-flow15, seed 20261222):
+STOPPED at 7.3 min by the stuck guard ("no progress for 60 s at (28, 75)"), 11 engagements.**
+- **Cause:** the GM stood in a cliff pocket at the map's west edge (frames: cliffs on three sides,
+  a no-entry cursor ring).
+  - The planner's v8 escape fired once (to (38, 83)).
+  - The cursor-gated walk click from the standstill was refused (`robust2_noentry:ring`).
+  - After that no walk click passed for 53 s, until the stuck guard stopped the run.
+  - The reckoned cell (31, 77) disagreed with the minimap's (28, 75).
+- **Fix (a bug fix, not a play change; `unstall_s` 8 s, from v15 on):** the STALL BREAKER.
+  - While standing with no target, if no walk click went out for 8 s, settle the cell (two
+    minimap reads).
+  - Then walk the walkable grid to a reachable cell 6-14 steps away, drawn at random
+    (`unstall_cells`; logged `unstall`).
+  - The stuck guard (60 s) stays the backstop.
+- Attempt 3 runs v15 with both fixes and a fresh seed.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.

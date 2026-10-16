@@ -226,7 +226,7 @@ PARAMS[14] = {**PARAMS[13], "name_tag": True, "tag_wait_s": 1.2, "tag_harvest": 
               "walk_clear_unconfirmed": True}  # fmt: skip
 PARAMS[15] = {**PARAMS[14], "reclick_s": 1.0, "dead_min_s": 1.4, "dead_gone_s": 0.8,
               "burst_hold": True, "burst_hold_s": 1.2, "tag_cache_s": 10.0,
-              "burst_same_track": True}  # fmt: skip
+              "burst_same_track": True, "unstall_s": 8.0}  # fmt: skip
 # 16 also carries the WALK GUARD, a safety layer (not a play change) for every later version: v14's
 # six Creamy hits were walk clicks on a sprite the detector cannot see (3.56)
 PARAMS[16] = {**PARAMS[15], "focus": True, "focus_lead_s": 0.15, "focus_max_age_s": 0.35,
@@ -527,6 +527,32 @@ def escape_cells(main: Any, here: Cell, reach: int = 30, k: int = 5, near: int =
     cells = sorted(((int(x) + x0, int(y) + y0) for y, x in zip(ys, xs, strict=True)),
                    key=lambda c: (cheb(c, here), c))  # fmt: skip
     return [c for c in cells if c != here and cheb(c, here) >= near][:k]
+
+
+def unstall_cells(grid: Any, here: Cell, rng: Any, min_steps: int = 6, max_steps: int = 14,
+                  k: int = 4) -> list[Cell]:  # fmt: skip
+    """PURE (the stall breaker, v15 attempt 2: the GM stood 53 s in a cliff pocket at the map's
+    west edge, every walk candidate refused): up to ``k`` cells reachable on ``grid`` from
+    ``here`` in ``min_steps``..``max_steps`` 8-connected steps, drawn at random (``rng``), the
+    deepest band first -- somewhere clearly away from the pocket."""
+    h, w = grid.shape
+    depth: dict[Cell, int] = {here: 0}
+    level = [here]
+    for d in range(1, max_steps + 1):
+        nxt: list[Cell] = []
+        for x, y in level:
+            for dx in (-1, 0, 1):
+                for dy in (-1, 0, 1):
+                    c = (x + dx, y + dy)
+                    if (0 <= c[0] < w and 0 <= c[1] < h and grid[c[1], c[0]]
+                            and c not in depth):  # fmt: skip
+                        depth[c] = d
+                        nxt.append(c)
+        level = nxt
+    band = [c for c, d in depth.items() if d >= min_steps]
+    rng.shuffle(band)
+    band.sort(key=lambda c: -depth[c] // 4)  # stable: the deepest quarter-band first
+    return band[:k]
 
 
 def zone_path(grid: Any, here: Cell, center: Sequence[float], radius: int, reach: int = 45
@@ -2295,6 +2321,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 still_wait: dict[int, float] = {}  # v9: track -> since when waiting for it to stand
                 t_target = [0.0]  # v11: when the current target was set
                 pre_cand: dict[str, Any] = {}  # v13: the pre-emption candidate and since when
+                last_unstall = [0.0]  # the stall breaker's last firing (mono s)
+                unstall_rng = random_.Random(seed + 7)
                 zone_st: dict[str, Any] = {}  # v11: the engagement zone (tid, center, radius, path)
                 dispatched: set[tuple[int, bool]] = set()
                 stop_since: float | None = None  # v5: since when standing with no click
@@ -2791,6 +2819,23 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             continue
                         # no target: the planner's waypoint, the GM never standing
                         split.to("searching", time.monotonic())
+                        if (cont and prm.get("unstall_s") and not moving
+                                and now - last_walk > prm["unstall_s"]
+                                and now - last_unstall[0] > prm["unstall_s"]):  # fmt: skip
+                            # the STALL BREAKER (v15 attempt 2): no walk click for unstall_s while
+                            # standing -> settle our cell, walk to a reachable cell 6-14 away
+                            last_unstall[0] = now
+                            pos = settle(timeout=1.5) or pos
+                            for c_ in unstall_cells(ok, pos, unstall_rng):
+                                p_ = hc.astar(ok, pos, c_)
+                                if p_ is not None and len(p_) >= 2:
+                                    with plock:
+                                        plan.update(goal_path=p_, escape=True, t_goal=now)
+                                    gp = p_
+                                    ev({"kind": "unstall", "at": list(pos), "to": list(c_)})
+                                    break
+                            else:
+                                ev({"kind": "unstall", "at": list(pos), "to": None})
                         if gp is None:
                             time.sleep(0.02)
                             continue
