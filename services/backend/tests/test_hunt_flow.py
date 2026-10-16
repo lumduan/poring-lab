@@ -261,3 +261,12 @@ def test_v11_target_cost_is_distance_plus_a_walking_penalty() -> None:
     walking = hf.Track(1, [(0, (10, 10)), (int(1.0 * S), (13, 10))])
     assert hf.target_cost(standing, (4, 10), int(1.0 * S), 2.0) == 6.0
     assert hf.target_cost(walking, (4, 10), int(1.0 * S), 2.0) == 9.0 + 2.0
+
+
+def test_v11_the_zone_path_ends_at_the_nearest_cell_within_range() -> None:
+    grid = np.ones((30, 40), bool)
+    p = hf.zone_path(grid, (5, 10), (20, 10), 7)
+    assert p is not None and p[0] == (5, 10) and p[-1] == (13, 10) and len(p) == 9
+    assert hf.zone_path(grid, (15, 12), (20, 10), 7) == [(15, 12)]  # already inside
+    grid[:, 10] = False  # a wall between
+    assert hf.zone_path(grid, (5, 10), (20, 10), 7) is None

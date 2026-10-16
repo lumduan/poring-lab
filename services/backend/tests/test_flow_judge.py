@@ -232,3 +232,12 @@ def test_the_hard_bars_count_npc_contacts_map_changes_and_non_target_species() -
     out = fj.hard_bars(events, int(2 * S), int(10 * S), {1002: "Poring"})
     assert out == {"npc_contacts": 1, "map_changes": 0, "non_target_jobs_hit": [1018],
                    "pass": False}  # fmt: skip
+
+
+def test_heading_metrics_count_reversals_and_straight_runs() -> None:
+    events = [ev(0.0, "self_move", x0=0, y0=0, x1=10, y1=0),  # east 10
+              ev(2.0, "self_move", x0=10, y0=0, x1=10, y1=-5),  # a 90 deg turn: a new run
+              ev(3.0, "self_move", x0=10, y0=-5, x1=10, y1=0)]  # back: a reversal  # fmt: skip
+    out = fj.heading_metrics(events, 0, int(60 * S))
+    assert out["reversals_per_min"] == 1.0
+    assert out["mean_straight_run"] == round((10 + 5 + 5) / 3, 1)

@@ -602,6 +602,40 @@ def kills_by_origin(events: Sequence[Mapping[str, Any]], engs: Sequence[Mapping[
     return out
 
 
+def heading_metrics(events: Sequence[Mapping[str, Any]], t0: int, w1: int) -> dict[str, Any]:
+    """Batt 18:2x (no back-and-forth): from the server's walk, each self_move is one leg (its start
+    to where the GM got before the next leg). A REVERSAL is a heading change > 120 deg between
+    consecutive legs of >= 2 cells. A straight run merges legs that turn <= 45 deg; its length is
+    the cells walked. Batt's demo: 3.6 reversals / min, runs of 16.9 cells (mean)."""
+    track, _mv = gm_track(events)
+    moves = [e for e in events if e.get("type") == "self_move" and t0 <= int(e["t_mono_ns"]) < w1]
+    rev, runs, cur, prev_h, walked = 0, [], 0, None, 0
+    for a, b in zip(moves, [*moves[1:], None], strict=True):
+        tb = int(b["t_mono_ns"]) if b is not None else w1
+        p0 = (int(a["x0"]), int(a["y0"]))
+        p1 = at(track, tb - 1) or (int(a["x1"]), int(a["y1"]))
+        n = cheb(p0, p1)
+        if n < 1:
+            continue
+        walked += n
+        h = math.atan2(p1[1] - p0[1], p1[0] - p0[0])
+        if n >= 2 and prev_h is not None:
+            d = abs((h - prev_h + math.pi) % (2 * math.pi) - math.pi)
+            if d > math.radians(120):
+                rev += 1
+            if d > math.radians(45):
+                runs.append(cur)
+                cur = 0
+        cur += n
+        if n >= 2:
+            prev_h = h
+    runs.append(cur)
+    mins = max(1e-9, (w1 - t0) / 60 / NS)
+    return {"reversals_per_min": round(rev / mins, 2),
+            "mean_straight_run": round(sum(runs) / len(runs), 1) if runs else None,
+            "cells_walked_per_min": round(walked / mins, 1)}  # fmt: skip
+
+
 def hard_bars(events: Sequence[Mapping[str, Any]], t0: int, w1: int,
               targets: Mapping[int, str]) -> dict[str, Any]:  # fmt: skip
     """v10's HARD BARS (Batt): NPC contacts, map changes after the start, and units of a non-target
@@ -827,6 +861,7 @@ def human(sid: str) -> dict[str, Any]:
     out["engagements_w"] = human_engagements(events, out["trial_rows"], t0)
     out["sight_per_10min"] = sight_per_10min(events, t0, t0 + int(WINDOW_S * NS))
     out["idle_between_kills"] = idle_between_kills(events, clicks, t0, t0 + int(WINDOW_S * NS))
+    out["heading"] = heading_metrics(events, t0, t0 + int(WINDOW_S * NS))
     (d / "flow_judge.json").write_text(json.dumps(out, indent=1))
     return out
 
@@ -877,6 +912,7 @@ def bot(sid: str) -> dict[str, Any]:
     import farm0
 
     out["hard_bars"] = hard_bars(events, t0, w1, farm0.TARGETS)
+    out["heading"] = heading_metrics(events, t0, w1)
     strikes_ = [x for x in map(json.loads, (d / "clicks.jsonl").read_text().splitlines())
                 if x.get("kind") == "strike" and t0 <= int(x["t"]) < w1]  # fmt: skip
     out["gate"] = {
@@ -935,6 +971,9 @@ def row(o: Mapping[str, Any]) -> dict[str, str]:
             p=100 * o["walk_click_accuracy"]["moving"]["within_1"],
             a=o["walk_click_accuracy"]["moving"]["along_p50"] or 0.0),
         "pickups per kill": f"{o.get('pickups_per_kill', '-')}",
+        "reversals / min": "-" if not o.get("heading") else f"{o['heading']['reversals_per_min']}",
+        "mean straight run (cells)": "-" if not o.get("heading")
+        else f"{o['heading']['mean_straight_run']}",
         "attack clicks direct / read": "-" if not (o.get("gate") or {}).get("direct")
         and not (o.get("gate") or {}).get("read")
         else "{direct} / {read}".format(**o["gate"]),

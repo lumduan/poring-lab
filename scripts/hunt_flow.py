@@ -124,7 +124,11 @@ VERSIONS = {
     "the attack click goes straight to the fresh detection (no park, no read). Every attack "
     "click logs its branch and reasons; hard bars: zero NPC contact, zero non-target hit, zero "
     "map change",
-    11: "RE-TARGET WHILE STEERING (Batt's change 2: detection -> dispatch, v7 p50 2.85 s, was the "
+    11: "ENGAGEMENT ZONE (Batt 18:2x: a Poring circled the GM ~15 s while it re-aimed at every "
+    "hop): once a target is chosen, ONE path to the nearest walkable cell within the attack-click "
+    "range of it (7 cells, 4 for a walking target: Batt's p90 / p50), re-planned only when the "
+    "target leaves that zone; inside the zone the GM strikes (the risk gate) once it stands",
+    12: "RE-TARGET WHILE STEERING (Batt's change 2: detection -> dispatch, v7 p50 2.85 s, was the "
     "bot steering to ANOTHER target that then failed, 19 / 32): after >= 1 s on a target, the "
     "planner's queue[0] replaces it when it is valid and cheaper by >= 2 cells (Chebyshev to the "
     "predicted cell, +2 for a walking one)",
@@ -173,7 +177,9 @@ PARAMS[10] = {**PARAMS[9], "freeze_guard": True, "risk_gate": True, "gate_near_g
               # <= 1.0 s old (attempt 1: 15 / 15 calls "stale_box" at 0.4 s; the CPU detector's
               # boxes arrive 0.3-0.65 s after their frame; v9's stand gate holds it still 1.2 s)
               "gate_fresh_s": 1.0}  # fmt: skip
-PARAMS[11] = {**PARAMS[10], "retarget": True, "retarget_margin": 2.0, "retarget_commit_s": 1.0}
+# v11 = Batt's ENGAGEMENT ZONE (18:2x); the re-target build waits (it re-aims, the zone commits)
+PARAMS[11] = {**PARAMS[10], "zone": True, "zone_radius": 7, "zone_radius_walking": 4}
+PARAMS[12] = {**PARAMS[11], "retarget": True, "retarget_margin": 2.0, "retarget_commit_s": 1.0}
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -451,6 +457,45 @@ def escape_cells(main: Any, here: Cell, reach: int = 30, k: int = 5, near: int =
     cells = sorted(((int(x) + x0, int(y) + y0) for y, x in zip(ys, xs, strict=True)),
                    key=lambda c: (cheb(c, here), c))  # fmt: skip
     return [c for c in cells if c != here and cheb(c, here) >= near][:k]
+
+
+def zone_path(grid: Any, here: Cell, center: Sequence[float], radius: int, reach: int = 45
+              ) -> list[Cell] | None:  # fmt: skip
+    """PURE (Batt 18:2x, the ENGAGEMENT ZONE): the shortest 8-connected path on ``grid`` from
+    ``here`` to a cell within ``radius`` (Chebyshev) of ``center``; among the zone cells first
+    reached at the same depth, the one nearest the centre (a straight approach, no diagonal
+    detour). [here] when already inside; None when no zone cell is reachable within ``reach``."""
+    cx, cy = float(center[0]), float(center[1])
+
+    def inside(c: Cell) -> bool:
+        return max(abs(c[0] - cx), abs(c[1] - cy)) <= radius
+
+    if inside(here):
+        return [here]
+    h, w = grid.shape
+    prev: dict[Cell, Cell | None] = {here: None}
+    level = [here]
+    while level:
+        nxt: list[Cell] = []
+        for c in level:
+            for dx in (-1, 0, 1):
+                for dy in (-1, 0, 1):
+                    n = (c[0] + dx, c[1] + dy)
+                    if (n in prev or not (0 <= n[0] < w and 0 <= n[1] < h)
+                            or not grid[n[1], n[0]]
+                            or max(abs(n[0] - here[0]), abs(n[1] - here[1])) > reach):  # fmt: skip
+                        continue
+                    prev[n] = c
+                    nxt.append(n)
+        hits = [n for n in nxt if inside(n)]
+        if hits:
+            end = min(hits, key=lambda n: (math.hypot(n[0] - cx, n[1] - cy), n))
+            out = [end]
+            while prev[out[-1]] is not None:
+                out.append(prev[out[-1]])  # type: ignore[arg-type]
+            return out[::-1]
+        level = nxt
+    return None
 
 
 def target_cost(tr: Track, here: Sequence[float], t_ns: int, moving_penalty: float) -> float:
@@ -1438,6 +1483,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 follow_t = [0]  # v6: the last box time the pointer followed
                 still_wait: dict[int, float] = {}  # v9: track -> since when waiting for it to stand
                 t_target = [0.0]  # v11: when the current target was set
+                zone_st: dict[str, Any] = {}  # v11: the engagement zone (tid, center, radius, path)
                 dispatched: set[tuple[int, bool]] = set()
                 stop_since: float | None = None  # v5: since when standing with no click
                 last_click: dict[str, Any] = {}  # v5: the last walk click (unfollowed check)
@@ -1756,9 +1802,16 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                     agent.move(gx0 + round(fu_), gy0 + round(fv_))
                                     ptr[0] = (fu_, fv_)
                                 follow_t[0] = target.box_t
-                            if cheb(pos, tcell) <= s_range:
+                            # v11: inside the ENGAGEMENT ZONE counts as in range (the zone keeps
+                            # its centre while the target stays in it: no re-aim at small hops)
+                            in_zone = bool(prm.get("zone") and zone_st.get("tid") == target.tid
+                                           and cheb(pos, zone_st["center"]) <= zone_st["radius"]
+                                           and cheb(tcell, zone_st["center"])
+                                           <= zone_st["radius"])  # fmt: skip
+                            in_rng = cheb(pos, tcell) <= s_range or in_zone
+                            if in_rng:
                                 in_range_since.setdefault(target.tid, time.monotonic())
-                            if strike_due(moving, pos, tcell, s_range):
+                            if not moving and in_rng:
                                 if prm.get("still_gate") and not box_still(
                                         target.boxes, r.ns(), prm["still_s"],
                                         prm["still_px"]):  # fmt: skip
@@ -1781,14 +1834,35 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                         "why": "no_sword", "reads": reads})  # fmt: skip
                                     target = None
                                 continue
-                            if cheb(pos, tcell) <= s_range:
+                            if in_rng:
                                 time.sleep(0.02)  # walking, about to arrive: the strike is next
                                 continue
                             if cont:  # v5: steer continuously, no standstill gate
                                 set_mode("steer")
                                 due = now - last_walk >= (prm["walk_every_s"] if moving else 0.3)
-                                if due:
+                                if due and prm.get("zone"):
+                                    # v11: ONE path into the zone; re-planned only when the
+                                    # target leaves it (or a new target)
+                                    if (zone_st.get("tid") != target.tid
+                                            or cheb(tcell, zone_st["center"])
+                                            > zone_st["radius"]):  # fmt: skip
+                                        rz_ = (prm["zone_radius_walking"] if strike_range(
+                                            target, prm) < prm["zone_radius"]
+                                            else prm["zone_radius"])  # fmt: skip
+                                        same_ = zone_st.get("tid") == target.tid
+                                        pz_ = zone_path(ok, pos, tcell, rz_)
+                                        zone_st.clear()
+                                        zone_st.update(tid=target.tid, center=tuple(tcell),
+                                                       radius=rz_, path=pz_)  # fmt: skip
+                                        ev({"kind": "zone_plan", "track": target.tid,
+                                            "replan": same_, "radius": rz_,
+                                            "len": None if pz_ is None else len(pz_)})  # fmt: skip
+                                    ap = zone_st.get("path")
+                                elif due:
                                     ap = approach_path(ok, pos, tcell, prm["short"])
+                                if due and ap is not None and len(ap) <= 1:
+                                    pass  # v11: inside the zone already: the strike comes next
+                                elif due:
                                     if ap is None:
                                         ev({"kind": "target_dropped", "track": target.tid,
                                             "why": "no_path"})  # fmt: skip
