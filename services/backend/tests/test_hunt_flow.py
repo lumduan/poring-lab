@@ -236,3 +236,21 @@ def test_v9a2_the_minimap_picture_tells_a_map_change_from_a_moved_arrow() -> Non
     other = rng.integers(0, 255, (120, 124, 3), dtype=np.uint8)
     assert not hf.map_same(ref, other)
     assert not hf.map_same(ref, other[:100])
+
+
+class _Bx:
+    def __init__(self, x0: float, y0: float, x1: float, y1: float, score: float = 0.9) -> None:
+        self.x0, self.y0, self.x1, self.y1, self.score = x0, y0, x1, y1, score
+
+
+def test_v10_the_strict_gate_reads_only_where_there_is_risk() -> None:
+    gm = (640.0, 340.0)
+    b = _Bx(800, 300, 830, 330)
+    assert hf.gate_reasons(b, [], gm, 45.0, 0.6, False, False) == []  # click it directly
+    assert hf.gate_reasons(b, [_Bx(825, 320, 860, 350)], gm, 45.0, 0.6, False, False) == [
+        "intersect"]  # fmt: skip
+    assert hf.gate_reasons(b, [_Bx(835, 300, 860, 330)], gm, 45.0, 0.6, False, False) == []
+    near = _Bx(645, 320, 675, 350)  # centre 660,335: 20 px from the GM's sprite
+    assert hf.gate_reasons(near, [], gm, 45.0, 0.6, False, False) == ["near_gm"]
+    assert hf.gate_reasons(_Bx(800, 300, 830, 330, 0.55), [], gm, 45.0, 0.6, True, True) == [
+        "low_conf", "npc_near", "ignore_species"]  # fmt: skip

@@ -60,6 +60,7 @@ MINIMAP_EVERY_S = 0.3
 JUMP_CELLS = 12  # v7: a minimap read this far from the measured cell, twice: a map change
 MINIMAP_IMG = (1138, 21, 124, 120)  # v9 attempt 2: the minimap's picture (client px)
 MAP_SAME_MAX = 20.0  # median summed |diff| of the picture: the same map stays far below
+GM_SPRITE_PX = (640.0, 340.0)  # v10: the GM's sprite centre (client px; the camera centres on it)
 DRIFT_CELLS = 3
 STUCK_S = 60.0
 MS_CELL = 150.0  # the GM's measured walk speed (hunt@5's packets)
@@ -116,6 +117,12 @@ VERSIONS = {
     "pointer keeps following meanwhile; a target that never stands in 8 s is dropped "
     "(no_still); after the park, a newest box > 8 px off the aimed one calls the read off "
     "(none counted)",
+    10: "RISK-BASED CURSOR GATE (Batt 17:4x, the STRICT rule of 3.51): the SWORD read only when "
+    "the target's box intersects another, is <= 45 px from the GM's sprite, has confidence < 0.6, "
+    "an L3 NPC is within 12 cells, or a Creamy-sized box (no target) is within 150 px; otherwise "
+    "the attack click goes straight to the fresh detection (no park, no read). Every attack "
+    "click logs its branch and reasons; hard bars: zero NPC contact, zero non-target hit, zero "
+    "map change",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -152,9 +159,11 @@ PARAMS[7] = {**PARAMS[6], "loot": False, "click_lead_s": 0.50, "lead_window_s": 
 PARAMS[8] = {**PARAMS[7], "strike_lean": True, "escape_after_s": 3.0}
 PARAMS[9] = {**PARAMS[8], "still_gate": True, "still_s": 1.2, "still_px": 8.0,
              "still_wait_s": 8.0}  # fmt: skip
-# v9 attempt 2 (2026-10-16 17:35, 8d4a780, before its run): a position jump on the SAME map (the minimap
-# picture unchanged) re-anchors on the minimap instead of stopping (run 1: a 14-cell odometry lag)
+# v9 attempt 2 (2026-10-16 17:35, 8d4a780, before its run): a position jump on the SAME map (the
+# minimap picture unchanged) re-anchors on the minimap instead of stopping (run 1: a 14-cell lag)
 PARAMS[9]["jump_reanchor"] = True
+PARAMS[10] = {**PARAMS[9], "risk_gate": True, "gate_near_gm_px": 45.0, "gate_min_conf": 0.6,
+              "gate_npc_cells": 12, "gate_ignore_px": 150.0}  # fmt: skip
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -432,6 +441,25 @@ def escape_cells(main: Any, here: Cell, reach: int = 30, k: int = 5, near: int =
     cells = sorted(((int(x) + x0, int(y) + y0) for y, x in zip(ys, xs, strict=True)),
                    key=lambda c: (cheb(c, here), c))  # fmt: skip
     return [c for c in cells if c != here and cheb(c, here) >= near][:k]
+
+
+def gate_reasons(b: Any, others: Sequence[Any], gm_px: Sequence[float], near_gm_px: float,
+                 min_conf: float, npc_near: bool, ignore_near: bool) -> list[str]:  # fmt: skip
+    """PURE (v10, Batt's risk-based gate, the STRICT rule approved 2026-10-16): why this attack
+    click still needs the SWORD read; [] = click the fresh detection directly."""
+    why: list[str] = []
+    if any(not (o.x1 < b.x0 or o.x0 > b.x1 or o.y1 < b.y0 or o.y0 > b.y1) for o in others):
+        why.append("intersect")
+    cx, cy = (b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2
+    if math.hypot(cx - gm_px[0], cy - gm_px[1]) <= near_gm_px:
+        why.append("near_gm")
+    if float(b.score) < min_conf:
+        why.append("low_conf")
+    if npc_near:
+        why.append("npc_near")
+    if ignore_near:
+        why.append("ignore_species")
+    return why
 
 
 def map_same(ref: Any, cur: Any, max_median: float = MAP_SAME_MAX) -> bool:
@@ -955,6 +983,34 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 finally:
                     split.to(prev_, time.monotonic())
 
+            def gate_risks(tr: Track, here: Cell) -> list[str]:
+                """v10: the target's box on the FRESHEST frame and the strict rule's inputs."""
+                fr0 = sampler.since(max(0, len(sampler.frames) - 1))
+                if not fr0 or (r.ns() - fr0[-1][0]) / 1e9 > prm["fresh_s"] or tr.box is None:
+                    return ["stale_box"]
+                near0 = [x for x, c in sightings_in(fr0[-1][1], here)
+                         if cheb(c, tr.predict(fr0[-1][0])) <= prm["track_near"]]  # fmt: skip
+                if not near0:
+                    return ["no_box"]
+                b0 = min(near0, key=lambda x: float(np.hypot(*(np.array(f1.foot(x))
+                                                                - f1.foot(tr.box)))))  # fmt: skip
+                others = [o for o in fr0[-1][1] if o is not b0]
+                pc0 = tr.predict(r.ns())
+                npc_near = any(cheb(pc0, (int(n_["x"]), int(n_["y"]))) <= prm["gate_npc_cells"]
+                               for n_ in npcs)  # fmt: skip
+                ignore_near = False
+                for o in others:
+                    if o.cls != "monster":
+                        continue
+                    if float(np.hypot(*(np.array(f1.centre(o)) - f1.centre(b0)))) > prm[
+                            "gate_ignore_px"]:  # fmt: skip
+                        continue
+                    c_o, sc_o = cell_of(o, here)
+                    if c_o is not None and f1.native_size(o, sc_o) > f1.MAX_NATIVE_PX:
+                        ignore_near = True  # a Creamy (no target) next to it
+                return gate_reasons(b0, others, GM_SPRITE_PX, prm["gate_near_gm_px"],
+                                    prm["gate_min_conf"], npc_near, ignore_near)  # fmt: skip
+
             def strike(tr: Track, here: Cell, again: bool) -> bool:
                 """Park, hover the target's newest box, ONE robust2 read; SWORD -> the attack
                 click there. True when it clicked."""
@@ -963,7 +1019,12 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 split.to("striking", time.monotonic())
                 t_call0 = time.monotonic()
                 fast_ = bool(prm.get("fast_read"))
-                ok_park = True if fast_ else pr.park()  # (fast_read: no park before it)
+                gate_why: list[str] = []
+                direct_ = False
+                if prm.get("risk_gate"):  # v10: the read only where there is real risk
+                    gate_why = gate_risks(tr, here)
+                    direct_ = not gate_why
+                ok_park = True if (fast_ or direct_) else pr.park()
                 park_ms = round((time.monotonic() - t_call0) * 1000)
                 fr = sampler.since(max(0, len(sampler.frames) - 1))
                 b = tr.box
@@ -993,7 +1054,9 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 t_read0 = r.ns()
                 path_ = "std"
                 reads_why: list[list[Any]] = []  # v9: each read's shape / why / best
-                if fast_:
+                if direct_:
+                    shape, path_ = "direct", "direct"  # v10: no risk -> the fresh detection
+                elif fast_:
                     # v8: the FAST read -- the pointer is on the sprite (it follows), grab, blink
                     # it away, two background grabs, robust2 on |A - B|; unknown -> the proven read
                     import fast_read as fread
@@ -1040,8 +1103,9 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                        "pred_cell": [round(pc[0], 2), round(pc[1], 2)]}  # fmt: skip
                 ev({"kind": "strike_call", "track": tr.tid, "read": shape, "path": path_,
                     "park_ms": park_ms, "call_ms": hov["call_ms"], "again": again,
-                    "reads": reads_why, "age_ms": hov["age_ms"]})  # fmt: skip
-                if shape != "sword":
+                    "reads": reads_why, "age_ms": hov["age_ms"],
+                    "branch": "direct" if direct_ else "read", "risk": gate_why})  # fmt: skip
+                if shape != "sword" and not direct_:
                     reads += 1
                     note(f"read {shape}: no click")
                     if eng is not None:
@@ -1084,7 +1148,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                            "track": tr.tid, "pred_cell": hov["pred_cell"], "again": again,
                            "aim_px": hov.get("aim_px"), "read_ms": hov.get("read_ms"),
                            "in_range_to_click_s": hov.get("in_range_to_click_s"),
-                           "read_path": path_})  # fmt: skip
+                           "read_path": path_, "branch": "direct" if direct_ else "read",
+                           "risk": gate_why})  # fmt: skip
                 eng_tracks[tr.tid] = tr  # v6: the death cell and the loot read its boxes
                 if eng is None or eng["track"] != tr.tid:
                     eng = {"k": k, "track": tr.tid, "t_seen": tr.t_first, "t_first_click": tc,

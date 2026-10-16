@@ -60,7 +60,13 @@ ALLOWED = {
                                 "<= 3 cells (as hunt@6's click); and the CONTINUOUS walk click "
                                 "while the GM moves, gated by the map and the detector (no unit "
                                 "within 60 px on the last 2 fresh frames): 3.39's deviation (2), "
-                                "option B. A click from a standstill is cursor-gated (GATED)"),
+                                "option B. A click from a standstill is cursor-gated (GATED). "
+                                "hunt-flow@10+ (Batt 2026-10-16, demonstrations 3.51 / 3.52): the "
+                                "RISK-BASED gate -- the attack click skips the SWORD read unless "
+                                "the strict rule finds a risk (box overlap, near the GM, conf < "
+                                "0.6, an NPC within 12 cells, a non-target species near); every "
+                                "attack click logs its branch; hard bars: zero NPC contact, zero "
+                                "non-target hit, zero map change"),
     "scripts/gm_state.py": (1, "UI only: an inventory TAB label inside the open window, after two "
                                "motions (clear_loot, Batt 2026-10-16: the GM test state's loot "
                                "rule); the loot leaves by agent.drag onto open ground + Enter on "

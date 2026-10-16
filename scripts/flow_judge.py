@@ -20,6 +20,7 @@ import gzip
 import json
 import math
 import sys
+from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -601,6 +602,33 @@ def kills_by_origin(events: Sequence[Mapping[str, Any]], engs: Sequence[Mapping[
     return out
 
 
+def hard_bars(events: Sequence[Mapping[str, Any]], t0: int, w1: int,
+              targets: Mapping[int, str]) -> dict[str, Any]:  # fmt: skip
+    """v10's HARD BARS (Batt): NPC contacts, map changes after the start, and units of a non-target
+    species our GM hit (its species when hit, farm0's rule), in [t0, w1)."""
+    job: dict[int, int] = {}
+    hit_job: dict[int, int] = {}
+    npc = maps = 0
+    for e in events:
+        t = int(e["t_mono_ns"])
+        typ = e.get("type")
+        if typ == "entity_appear":
+            job[gid_of(e)] = int(e.get("job", -1))
+        if not t0 <= t < w1:
+            continue
+        if typ == "npc_contact":
+            npc += 1
+        elif typ == "map_change":
+            maps += 1
+        elif (typ == "act" and gid_of(e, "src_gid") == GM and e.get("target_gid")
+              and e.get("kind") != "pickup" and int(e.get("damage") or 0) > 0):  # fmt: skip
+            g = gid_of(e, "target_gid")
+            hit_job.setdefault(g, job.get(g, -1))
+    other = sorted({j for j in hit_job.values() if j not in targets})
+    return {"npc_contacts": npc, "map_changes": maps, "non_target_jobs_hit": other,
+            "pass": npc == 0 and maps == 0 and not other}  # fmt: skip
+
+
 def walk_click_accuracy(events: Sequence[Mapping[str, Any]], walks: Sequence[Mapping[str, Any]],
                         moving: Sequence[tuple[int, int]]) -> dict[str, Any]:  # fmt: skip
     """v7: each walk click's intended cell (clicks.jsonl ``to``) vs the cell the client asked
@@ -846,6 +874,16 @@ def bot(sid: str) -> dict[str, Any]:
              if x.get("kind") == "walk" and t0 <= int(x["t"]) < w1]  # fmt: skip
     out["walk_click_accuracy"] = walk_click_accuracy(events, walks, mv_)
     out["kills_by_origin"] = kills_by_origin(events, engs, t0, w1)
+    import farm0
+
+    out["hard_bars"] = hard_bars(events, t0, w1, farm0.TARGETS)
+    strikes_ = [x for x in map(json.loads, (d / "clicks.jsonl").read_text().splitlines())
+                if x.get("kind") == "strike" and t0 <= int(x["t"]) < w1]  # fmt: skip
+    out["gate"] = {
+        "direct": sum(x.get("branch") == "direct" for x in strikes_),
+        "read": sum(x.get("branch") == "read" for x in strikes_),
+        "reasons": dict(Counter(r_ for x in strikes_ for r_ in x.get("risk") or [])),
+    }
     out.update({"session": sid, "actor": "bot", "rule": man.get("rule")})
     (d / "flow_judge.json").write_text(json.dumps(out, indent=1))
     return out
@@ -897,6 +935,12 @@ def row(o: Mapping[str, Any]) -> dict[str, str]:
             p=100 * o["walk_click_accuracy"]["moving"]["within_1"],
             a=o["walk_click_accuracy"]["moving"]["along_p50"] or 0.0),
         "pickups per kill": f"{o.get('pickups_per_kill', '-')}",
+        "attack clicks direct / read": "-" if not (o.get("gate") or {}).get("direct")
+        and not (o.get("gate") or {}).get("read")
+        else "{direct} / {read}".format(**o["gate"]),
+        "hard bars (NPC / map / non-target)": "-" if not o.get("hard_bars")
+        else "{} / {} / {}".format(o["hard_bars"]["npc_contacts"], o["hard_bars"]["map_changes"],
+                                   len(o["hard_bars"]["non_target_jobs_hit"])),
         "window min": f"{round(o['window_s'] / 60, 1)}",
     }  # fmt: skip
 

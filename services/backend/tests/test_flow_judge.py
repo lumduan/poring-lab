@@ -220,3 +220,15 @@ def test_kills_split_by_whether_a_sword_read_engagement_asked_for_them() -> None
                        ev(9.5, "entity_vanish", gid=other, reason=1)]  # fmt: skip
     engs = [{"t_first_click": int(2.0 * S), "t_end": int(3.0 * S)}]
     assert fj.kills_by_origin(events, engs, 0, int(20 * S)) == {"engaged": 1, "unintended": 1}
+
+
+def test_the_hard_bars_count_npc_contacts_map_changes_and_non_target_species() -> None:
+    creamy = MOB + 7
+    events = base() + [appear(0.0, creamy, 18, 10, job=1018),
+                       ev(1.0, "map_change", map="prt_fild08.gat", x=1, y=1),  # before t0
+                       ev(3.0, "act", src_gid=fj.GM, target_gid=MOB, damage=182),
+                       ev(4.0, "act", src_gid=fj.GM, target_gid=creamy, damage=182),
+                       ev(5.0, "npc_contact", npc_gid=5)]  # fmt: skip
+    out = fj.hard_bars(events, int(2 * S), int(10 * S), {1002: "Poring"})
+    assert out == {"npc_contacts": 1, "map_changes": 0, "non_target_jobs_hit": [1018],
+                   "pass": False}  # fmt: skip

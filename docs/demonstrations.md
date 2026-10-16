@@ -7409,6 +7409,53 @@ first-click rate):**
   - one on a floor item picks it up (looting is off: counted as unintended pickups);
   - both are counted, and neither is a hard bar.
 
+### 3.52 hunt-flow@10: the RISK-BASED cursor gate (pre-registered 2026-10-16 __TIME__ ICT, the commit time __SHA__, BEFORE its run; Batt approved 3.51's STRICT rule, 2026-10-16 ~17:37)
+
+**Batt:** "Approved: the RISK-BASED cursor gate with the STRICT rule ... Otherwise click the fresh
+detection directly. Pre-register it as the next version with your logged branch/reason per attack
+click and the hard bars (zero NPC contact, zero non-target hit, zero map change)."
+
+**The ONE main change (`risk_gate`, `gate_reasons` / `gate_risks`).** At every attack click
+(first or re-click), the target's box is taken on the FRESHEST frame (<= 0.4 s). The read stays
+REQUIRED when any of these holds:
+- **intersect:** the box intersects any other box of that frame;
+- **near_gm:** its centre is <= 45 px from the GM's sprite centre (client 640,340);
+- **low_conf:** detector confidence < 0.6;
+- **npc_near:** an L3 NPC (data/kb/npc_cells.json, prt_fild08: 159,371 and 175,374) within 12
+  cells of the target's predicted cell;
+- **ignore_species:** a Creamy-sized box (the size gate's non-target) within 150 px;
+- **stale_box / no_box:** no fresh box of the target;
+- (and any non-hunting workflow, which never runs this code).
+
+**Otherwise (`direct`):**
+- The attack click goes to the box centre at once: no park, no read.
+- The pointer then moves off the sprite (v8 attempt 2).
+- The rest is unchanged: the hit is verified from pixels (the box gone = dead), with a re-click
+  after 2 s through the same gate.
+- v9's standing-target gate stays, as inherited.
+
+**Logged per attack click:** the `branch` (direct / read) and the `risk` reasons, in clicks.jsonl
+and strike_call.
+
+**Judge (`flow_judge.py`):**
+- `gate` = attack clicks per branch, plus the reason counts;
+- `hard_bars` = npc_contact, map_change after the start, and non-target species hit (farm0.TARGETS:
+  Poring, Lunatic, Pupa, Drops).
+
+**HARD BARS:** zero NPC contact, zero non-target hit, zero map change. Any one fails the run,
+whatever else it shows. A live dialog or a map change also stops the run, as before.
+
+**Run:** 60 min, a fresh seed, prt_fild08, GM immune Lv 70 / STR 99, no looting, nice 10, detector
+on the CPU (GPU freeze).
+
+**Prediction, written before the run (3.51's estimate):**
+- direct attack clicks >= 60 % of attack clicks (strict rule: 74 % offline);
+- in range -> click p50 under 2 s (v7 6.6, v8 4.15);
+- seen -> click p50 under 8 s (v7 11.85);
+- engaged kills / h >= 60 (v7 47.9; estimate 64-71);
+- the bar (hit within 5 s of the first click) >= 90 %;
+- the hard bars: 0 / 0 / 0.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
