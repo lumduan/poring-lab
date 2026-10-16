@@ -7776,7 +7776,7 @@ starts after the takeover quiet period (>= 10 min without human input).
   - engaged kills / h >= 120: YES (141);
   - the nearest at selection >= 80 %: YES (84 %).
 
-### 3.56 hunt-flow@14: SPECIES IDENTITY by the client's NAME TAG (pre-registered 2026-10-16 __TIME__ ICT, the commit time __SHA__, BEFORE its run; Batt 19:5x + 20:5x A2)
+### 3.56 hunt-flow@14: SPECIES IDENTITY by the client's NAME TAG (pre-registered 2026-10-16 22:40 ICT, the commit time d38f871, BEFORE its run; Batt 19:5x + 20:5x A2)
 
 **Why:** the non-target hard bar failed in v7, v10, v11 and v12, each time on a CREAMY.
 
