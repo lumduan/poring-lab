@@ -107,7 +107,12 @@ PARAMS[4] = {**PARAMS[3], "strike_cells_standing": 7, "dispatch_fixes": True,
              "reacquire": False, "reacquire_cells": 3.0}  # fmt: skip
 PARAMS[5] = {**PARAMS[4], "continuous": True, "walk_every_s": 0.6, "ahead": 6,
              "ahead_order": (6, 5, 7, 4, 8, 3), "stop_after_s": 1.0, "motion_hz": 10.0,
-             "moving_cells": 0.15, "replan_left": 10, "shadow_cursor": True}  # fmt: skip
+             "moving_cells": 0.15, "replan_left": 10, "shadow_cursor": True,
+             # attempt 2 (bug fixes within v5, 2026-10-16 ~14:30): a STALL guard (clicks going out
+             # while the measured cell has not changed for stall_s: those cells are blocked and
+             # the route re-planned; run 1 sat 255 s at (75,86)), the UI check in the background
+             # (it blocked the executor ~2 s every 30 s), and the route preview published
+             "stall_s": 2.0, "bg_check": True, "publish_route": True}  # fmt: skip
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -913,6 +918,24 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 return old is not None and float(np.abs(h_[-1][1] - old).max()) > prm[
                     "moving_cells"]  # fmt: skip
 
+            ui_verdict: dict[str, Any] = {}
+
+            def ui_watch() -> None:
+                """v5 attempt 2: the UI gate's pixel check + the HP check every CHECK_EVERY_S on
+                its own frames (no input: park=False), never blocking the executor."""
+                scr = r.Screen()
+                try:
+                    while not halt.is_set():
+                        st = f0.client_state(agent, scr)
+                        hp_ = gm_vitals.hp_fraction(
+                            np.asarray(scr.grab(gx0, gy0, gw, gh)[1])[..., :3])  # fmt: skip
+                        with plock:
+                            ui_verdict.update(t=time.monotonic(), decision=st["decision"],
+                                              frame=st["frame"], hp=hp_)  # fmt: skip
+                        halt.wait(CHECK_EVERY_S)
+                finally:
+                    scr.close()
+
             shadow_q: list[tuple[int, float, float]] = []
 
             def shadow() -> None:
@@ -953,6 +976,11 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     ths += [_start_thread(motion, "motion")]
                     if prm.get("shadow_cursor"):
                         ths += [_start_thread(shadow, "shadow")]
+                if prm.get("bg_check"):
+                    ths += [_start_thread(ui_watch, "ui_watch")]
+                pos_changed: dict[str, Any] = {"t": time.monotonic(), "cell": pos}
+                recent_clicks: list[Cell] = []
+                route_shown: list[Any] = [None]
                 gp_i = 0
                 dispatched: set[tuple[int, bool]] = set()
                 stop_since: float | None = None  # v5: since when standing with no click
@@ -978,6 +1006,10 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                 and (not cont or walk_ok(c_))):  # fmt: skip
                             if walk_click(uu, vv, c_, [at_, c_], "map+units", why):
                                 last_click.update(t=time.monotonic(), cell=c_, frm=at_)
+                                recent_clicks.append(c_)
+                                if prm.get("publish_route") and route_shown[0] is not route:
+                                    route_shown[0] = route
+                                    rp("route", at_, hc.waypoints(route))
                                 if prm.get("shadow_cursor"):
                                     shadow_q.append((r.ns(), uu, vv))
                                 return True
@@ -990,7 +1022,17 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 try:
                     while time.monotonic() < deadline:
                         now = time.monotonic()
-                        if eng is None and now - last_check[0] > CHECK_EVERY_S:
+                        if prm.get("bg_check"):
+                            with plock:
+                                vd = dict(ui_verdict)
+                            if vd and vd["decision"]["do"] != "clear":
+                                stop_png = log.dir / f"stop-{len(engagements)}.png"
+                                shot = r.to_png(vd["frame"], stop_png)
+                                raise f0.FarmStop(f"client state (background check): "
+                                                  f"{vd['decision']} (frame {shot})")  # fmt: skip
+                            if vd and vd["hp"] < f0.HP_STOP:
+                                raise f0.FarmStop(f"HP {vd['hp']:.2f}: an immune GM lost HP")
+                        elif eng is None and now - last_check[0] > CHECK_EVERY_S:
                             check("v2")
                         if eng is None and not moving and now - last_weight > WEIGHT_EVERY_S:
                             last_weight = now
@@ -1022,6 +1064,20 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                 last_click.clear()
                             elif last_click and moving:
                                 last_click.clear()
+                            if cheb(pos, pos_changed["cell"]) >= 1:
+                                pos_changed.update(t=now, cell=pos)
+                                recent_clicks.clear()
+                            elif (prm.get("stall_s") and eng is None and len(recent_clicks) >= 2
+                                    and now - pos_changed["t"] > prm["stall_s"]):  # fmt: skip
+                                # attempt 2: clicks went out and the GM did not move: block them
+                                ev({"kind": "stall", "at": list(pos),
+                                    "cells": [list(c_) for c_ in recent_clicks[-8:]]})  # fmt: skip
+                                for c_ in set(recent_clicks):
+                                    refuse(c_, "stall_noentry")
+                                recent_clicks.clear()
+                                pos_changed.update(t=now, cell=pos)
+                                with plock:
+                                    plan["goal_path"] = None
                         if not cont and moving and reck.remaining(now) == 0:
                             moving = False
                             pos = reck.path[-1] if reck.path else pos

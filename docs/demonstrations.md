@@ -6894,6 +6894,21 @@ The GM stops ONLY to attack and to pick up."
     - 2 pickups from walk clicks.
   - **The shadow cursor read:** 1,457 of 1,458 reads were `unknown`. The colour-mask reader does
     not work on live frames either; it stays out of every decision.
+- **hunt-flow@5 ATTEMPT 2 (pre-registered 2026-10-16 ~14:20 ICT, before its runs): bug fixes within
+  the version, against 3.45's own text.** The strike, the queue, the gates and the bar are
+  unchanged, so its runs pool with runs 1-2 for the bar.
+  - **A STALL guard.** Run 1 sat **255 s** at (75,86) sending walk clicks to (70,90)/(71,90)
+    every 0.6-1 s that the client ignored. The unfollowed-click guard waited 1.2 s after the
+    LAST click, and every new click reset it; run 2 shows the same pattern (a 29-click streak).
+    Now: clicks going out while the MEASURED cell has not changed for 2 s block those cells and
+    re-plan the route.
+  - **The UI check in the background.** It blocked the executor ~2 s every 30 s, which went
+    against "never stop to check". It now runs on its own frames (the gate's pixel check with
+    park=False, no input, plus the HP check), and any verdict but clear stops the run as before.
+  - **The route preview published again.** v2-v5 sent no route line; the pre-registration says
+    the route preview is ON.
+  - In run 1, 303 s of the 420 s of idle time in search came from 6 stalls of >= 3 s; the 255 s
+    one was this bug.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
