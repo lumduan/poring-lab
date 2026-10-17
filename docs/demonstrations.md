@@ -9363,7 +9363,7 @@ the live hard-bar monitor.
 - **Hard bars:** zero NPC contact, zero map change, zero non-Creamy non-target hit (Creamy
   counted).
 
-### 3.75 hunt-flow@35: THE SPECIES CHECK ON THE BOX'S OWN FRAME, interleaved per engagement (pre-registered 2026-10-17, the commit time quoted in the next commit, BEFORE its run; Batt's decision 1: cut the "species unsure" fallbacks)
+### 3.75 hunt-flow@35: THE SPECIES CHECK ON THE BOX'S OWN FRAME, interleaved per engagement (pre-registered 2026-10-17 23:34 ICT, the commit time 235d4c4, BEFORE its run; Batt's decision 1: cut the "species unsure" fallbacks)
 
 **Why:** arm C, the default strike, falls back to A when the pixel species check is unsure. v32:
 species unsure on 26.9-37.7 % of strikes (`arm_judge.py species`).
