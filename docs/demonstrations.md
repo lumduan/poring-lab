@@ -8841,7 +8841,7 @@ STOPPED ITSELF at 39.8 min: "no progress for 60 s".**
   a click rose). But the run is the cleanest and the most accurate of the day. The pointer rest
   is the likely cause of the clean hard bars; 40 min is too short to call it proven.
 
-### 3.68 hunt-flow@27: BATTLESHIP, the belief map of hidden monsters (pre-registered 2026-10-17 __TIME__ ICT, the commit time __SHA__, BEFORE its run; Batt's "Battleship" idea; round 7 of docs/competition.md)
+### 3.68 hunt-flow@27: BATTLESHIP, the belief map of hidden monsters (pre-registered 2026-10-17 16:08 ICT, the commit time 76442b0, BEFORE its run; Batt's "Battleship" idea; round 7 of docs/competition.md)
 
 **Batt's idea (2026-10-17):**
 - a grid of walkable cells; detections -> cells -> tracks with their last-seen time;
