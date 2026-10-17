@@ -9194,6 +9194,80 @@ live hard-bar monitor on. A Creamy hit is counted, not a stop.
 - landing within 5 s >= 80 % overall (arm C default);
 - hard bars: zero NPC contact, zero map change, zero non-Creamy non-target hit.
 
+**Run log (written during the runs, before any judging):**
+- **Run 1** (21:50:36, seed 20271301, session `20261017T215036-demo-hunt-flow32`) STOPPED ITSELF
+  at 10.6 min, 21 engagements, all dead, on the runner's jump guard: "position jump (298.3, 52.7)
+  -> (311, 44): a map change or a warp? (minimap picture same: False)".
+  - Packets: NO map change and no warp. The GM walked 298,53 -> 311,44 during ONE loot step (10
+    clicks, 4.1 s).
+  - The loot clicks kept the same screen pixels (~670-742, 370-412) because the odometry froze.
+    Each click sent the GM ~2 cells SE again: a TREADMILL.
+  - The live monitor: no hard bar, Creamy 0.
+  - The 10.6 min STAY IN THE POOL (the stop is a guard working, not a fault of the change under
+    test).
+- **The same pattern in earlier runs** (`arm_judge.py stray`, the GM's server destinations
+  >= 4 cells off the death cell during a loot step): v28 100 / 156 steps, v29 87 / 140, v30
+  82 / 116, v31 59 / 77. It is a loot-wide defect, fixed in v33 as a base fix (3.73); v32 keeps
+  its code unchanged.
+- **Run 2** (22:09:55, seed 20271401, session `20261017T220855-demo-hunt-flow32`), 60 min.
+- The judgement pools run 1 (10.6 min) + run 2.
+
+### 3.73 hunt-flow@33: LOOT IS A RACE, interleaved per loot step (pre-registered 2026-10-17, the commit time quoted in the next commit, BEFORE its run; Batt's decision 3 on the 21:33 report)
+
+**Batt's decision 3:**
+- loot FIRST and IMMEDIATELY after a confirmed kill;
+- items first inside the 3 x 3 (item_icons);
+- the death cell = the target's box at our hit (v31's `anim`, kept);
+- a looter that steps onto our pile is killed, then we loot;
+- report items lost to looters vs picked.
+
+**Why:** loot is 49-62 % picked, and looters take about as many of our drops as we pick (v24 +
+v31 pooled, `arm_judge.py loot`: 230 items, 101 picked, 52 lost to a looter, 77 gone otherwise).
+
+**The ONE main change (`loot_race`, interleaved by `loot_race_ab`): odd loot steps are the RACE
+arm, even ones the PLAIN arm (v32's fixed 3 x 3).**
+- **Items first:** one fresh grab around the death cell, `item_icons.find_items` on it (radius
+  110 px; only our own pointer excluded, the configuration its offline eval measured: recall@15
+  ~0.39, 0.15 false a kill). Each match is clicked FIRST at its own pixel, nearest the GM first;
+  then the whole fixed 3 x 3 as before.
+- **The looter chain:** during the step, a monster box that blocks a click (the 70 px unit rule)
+  and stands within 2 cells of the death cell, when the species check is SURE it is a target and
+  no other box crowds it, STOPS the step. The main loop engages it at once (arm C), and ITS loot
+  step covers its own 3 x 3 plus our cells still unclicked. At most one chained looter per kill.
+  An unsure or non-target box is skipped as before.
+- Each kill logs `loot_arm` (race / plain / race_chain); the step logs `icons`, `icon_ms`,
+  `looter`, `refix`.
+
+**Base, the same in both arms (not under test):**
+- v32 = arm C the default strike, `anim` death cell.
+- The DEAD RULE is one rule for the whole run, set by 3.72's verdict before v33's first run:
+  fast for all if 3.72's first two predictions hold (fast-arm kill -> loot start p50 <= 1.2 s,
+  false deaths <= slow + 5 points), else v15's rule for all. Never two parity arms at once:
+  loot steps follow engagements, so the arms would be confounded (a test pins it).
+- **The loot-treadmill fix (`loot_refix`, 3.72's run log):** before each loot click, the
+  minimap readout from a grab of its own rect (4 ms). More than 1.5 cells off the odometry ->
+  re-anchor on it and project from it. More than 12 cells -> end the step and leave the jump
+  guard to the main loop.
+
+**Reference:** v32 (3.72, pooled) and v31 (3.71: loot 58.5 %).
+
+**Runs:** two 60-min runs pooled (seeds 20271501, 20271601), the hunting fixed state restored
+and the weight cleared between runs, nice 10, detector on the CPU (GPU frozen), the live
+hard-bar monitor (`scripts/hardbar_live.py watch 33`). A Creamy hit is counted, not a stop.
+
+**Prediction, written before the runs:**
+- **Primary (per arm, pooled, `arm_judge.py loot`; the race arm counts its chained looter's
+  step):**
+  - items picked / items dropped at our kills: race >= plain + 10 points;
+  - items lost to looters: race <= half of plain's share.
+- **The base fix (`arm_judge.py stray`):** loot steps sending the GM >= 4 cells off the death
+  cell <= 10 % in BOTH arms (v28-v31: 62-77 %).
+- **Overall:** loot picked / dropped >= 70 % (M1's bar is 80 %).
+- **Looter chains:** reported (count, killed, items recovered); zero hits on a non-target from
+  a chain.
+- **Cost:** kill -> last loot click p50: race <= plain + 0.3 s (the matcher costs ~60 ms).
+- **Hard bars:** zero NPC contact, zero map change, zero non-Creamy non-target hit.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.

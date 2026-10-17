@@ -354,7 +354,11 @@ PARAMS[32] = {**PARAMS[31], "abc_arm": "C", "fast_dead": True, "fast_dead_ab": T
 # matcher's floor items at their own pixels, then the 3 x 3) + the LOOTER CHAIN (a confident target
 # whose box stands within looter_cells of the death cell stops the loot, is engaged at once, and its
 # own loot step covers the cells still to click; at most one a kill). Interleaved per loot step
-PARAMS[33] = {**PARAMS[32], "loot_icons": True, "loot_race": True, "loot_race_ab": True,
+# fast_dead_ab is OFF: the dead rule is ONE rule for the whole run, set by 3.72's verdict before
+# v33's first run (fast for all if it passed, v15's for all if not) -- loot steps follow
+# engagements, so two parity-interleaved arms would be confounded
+PARAMS[33] = {**PARAMS[32], "fast_dead_ab": False,
+              "loot_icons": True, "loot_race": True, "loot_race_ab": True,
               "looter_chain": True, "looter_cells": 2, "looter_pending_s": 12.0,
               "looter_match_px": 40.0,
               # a BASE fix in both arms (not the change under test): the loot step's position
