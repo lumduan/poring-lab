@@ -712,3 +712,9 @@ def test_v34_paces_input_in_alternating_blocks() -> None:
     # the helpers that TYPE keep the default pacing (/where, the pipelined loop's weight clear;
     # the non-pipelined loop never paces: pace_tick runs only in the pipelined one)
     assert src.count("with typing_pace():") == 2 and src.count("pace_tick(now)") == 1
+
+
+def test_v35_reads_the_species_on_the_boxs_own_frame() -> None:
+    p = hf.PARAMS[35]
+    assert p["species_own"] and not hf.PARAMS[34].get("species_own") and 35 in hf.VERSIONS
+    assert p["send_gap_s"] and p["loot_race"]  # on v34 until its pre-registration sets the base

@@ -241,6 +241,7 @@ class Sampler(threading.Thread):
         self.halt = threading.Event()
         self.error: str | None = None
         self.last_img: tuple[int, Any] | None = None  # hunt-flow@16: the detected frame itself
+        self.imgs: list[tuple[int, Any]] = []  # the last few detected frames (the stale box)
 
     def run(self) -> None:
         screen = r.Screen()
@@ -251,6 +252,7 @@ class Sampler(threading.Thread):
                 with self.lock:
                     self.frames.append((t, boxes))
                     self.last_img = (t, np.array(img, copy=True))
+                    self.imgs = [*self.imgs[-3:], self.last_img]  # ~1.3 s at ~3 fps, ~15 MB
         except Exception as exc:  # noqa: BLE001 -- reported, never silent
             self.error = f"{type(exc).__name__}: {exc}"
         finally:
@@ -259,6 +261,16 @@ class Sampler(threading.Thread):
     def since(self, k: int) -> list[tuple[int, list[Any]]]:
         with self.lock:
             return self.frames[k:]
+
+    def frame_of(self, box: Any) -> tuple[int, Any] | None:
+        """(t, the detected frame) that ``box`` (the object itself) came from, while it is one
+        of the last few; else None."""
+        with self.lock:
+            imgs = {t: im for t, im in self.imgs}
+            for t, boxes in reversed(self.frames[-len(imgs) - 1 :]):
+                if t in imgs and any(o is box for o in boxes):
+                    return t, imgs[t]
+        return None
 
     def stop(self) -> None:
         self.halt.set()

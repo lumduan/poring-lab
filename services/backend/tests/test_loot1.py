@@ -229,3 +229,20 @@ def test_the_hud_is_display_only_and_never_raises(loot1: Any) -> None:
     loot1.hud(SimpleNamespace(hud=None), "nothing to send")  # no HUD: no-op
     hit = {"tried": [[1.0, 2.0, "unknown", None], [1.0, 3.0, "sword", "sword"]]}
     assert loot1._reads(hit) == "unknown sword/sword"
+
+
+def test_sampler_frame_of_finds_the_boxs_own_frame(loot1: Any) -> None:
+    """hunt-flow v35 (species_own): the species check classifies a box on the frame it came
+    from, by the box OBJECT, while that frame is one of the last few held."""
+    s = loot1.Sampler(det=None)
+    imgs = [np.full((4, 4, 4), k, np.uint8) for k in range(6)]
+    frames = [(10 + k, [box(50 + k, 60)]) for k in range(6)]
+    for (t, bs), im in zip(frames, imgs, strict=True):  # what run() does per detected frame
+        s.frames.append((t, bs))
+        s.last_img = (t, im)
+        s.imgs = [*s.imgs[-3:], s.last_img]
+    got = s.frame_of(frames[4][1][0])
+    assert got is not None and got[0] == 14 and got[1] is imgs[4]
+    assert s.frame_of(frames[5][1][0])[0] == 15
+    assert s.frame_of(frames[1][1][0]) is None  # no longer held
+    assert s.frame_of(box(51, 60)) is None  # an equal box, not the same object
