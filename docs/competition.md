@@ -58,7 +58,7 @@ non-target hit, map change) apply to every session.
 | landing <= 5 s | 64/64 | 4/5 | 16/20 | 27/30 | 121/142 |
 | seen -> click p50 / p90 s | 1.11 / 4.79 | 19.64 / 21.68 | 4.3 / 8.87 | 7.28 / 22.11 | 4.94 / 18.58 |
 | death -> next click s | 1.24 / 1.8 | 27.2 / 39.9 | 1.75 / 9.53 | 4.32 / 7.56 | 4.27 / 9.34 |
-| monsters in sight / 10 min | 44 | 10.3 | 27 | 32 | 16 |
+| monsters in sight / 10 min | 44 | 10.3 | 27 | 32 | 16 (whole-run ruler; per window 28-30.5) |
 | loot picked / dropped | 62 / 64 | 6 / 14 | 2 / 30 | 10 / 57 | 41 / 218 |
 | kill -> last pickup s | 1.56 | 57.1 | 0.88 | 0.74 | 5.77 |
 | walk clicks while moving | 72.7 % | 0 % | 55.1 % | 52.5 % | 57.4 % |
@@ -110,6 +110,35 @@ non-target hit, map change) apply to every session.
   - a loot click right before a walk click can be cancelled by the walk;
   - the walk guard counted the client's own red no-entry cursor as pink. The agent tool and the
     bot from v21 now leave the pointer out.
+
+## The search gap (bot work order item 2; offline study, `scripts/search_gap.py`, merged f70b417)
+
+**Batt's question:** why does the bot see 13-19 monsters per 10 min where he saw 44?
+
+**Answer:**
+- **Half of it was the ruler, not the bot.**
+  - rAthena keeps a spawn slot's block id across respawns. So the bot's whole-run count of
+    distinct gids, divided by 6, stops growing at the 82-103 mobs met.
+  - Per 10-min window (Batt's own basis) the bot meets 27.5 (median; 24-30.5 per run, best
+    windows 40-46).
+  - The judge now reports the windowed median (`flow_judge.sight_windowed`, 7114e00).
+- **Of what is left (x0.62):**
+  - **area swept per 10 min: x0.63.** Moving share x0.85; ground swept per cell walked x0.78
+    (Batt 22.1, the bot 17.2: more overlap, turning back, shorter net displacement: 59 cells net a
+    minute vs Batt's 91). The walk speed is the same.
+  - density met per swept cell: x1.07, a wash.
+  - **detector recall: no part of it.** Mobs boxed at least once per window 91 % (Batt's session
+    98 %); recall is flat by ring. But CREAMY recall is 11 %: a safety point, not a sight one.
+- **Where the time goes:**
+  - Batt's standing is fighting and looting (0.22 + 0.17).
+  - The bot's standing is dead time: next to a mob 0.29 vs 0.11, with nothing in view 0.14 vs
+    0.04. It is reads, parks and loot sweeps that pick nothing up.
+- **So the search change is sweep GEOMETRY + less non-fight standing:**
+  - long straight legs;
+  - targets taken in passing;
+  - resume the heading without walking back;
+  - a coverage memory of the bot's own path, to head away from ground swept in the last minutes;
+  - turn rather than reverse at obstacles.
 
 ## The next bot change
 
