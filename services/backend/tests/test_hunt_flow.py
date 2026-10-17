@@ -674,6 +674,7 @@ def test_v33_races_the_loot_items_first_and_chains_one_looter() -> None:
     assert not hf.PARAMS[32].get("loot_refix")
     # never two parity-interleaved arms at once (loot steps follow engagements: confounded)
     assert not (p.get("fast_dead_ab") and p["loot_race_ab"])
+    assert not p["fast_dead"]  # 3.72's verdict: the fast arm missed its 1.2 s bar (3.73's rule)
 
 
 def test_items_first_puts_the_matched_items_first_nearest_the_gm() -> None:

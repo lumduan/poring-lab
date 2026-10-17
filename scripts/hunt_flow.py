@@ -364,7 +364,9 @@ PARAMS[32] = {**PARAMS[31], "abc_arm": "C", "fast_dead": True, "fast_dead_ab": T
 # fast_dead_ab is OFF: the dead rule is ONE rule for the whole run, set by 3.72's verdict before
 # v33's first run (fast for all if it passed, v15's for all if not) -- loot steps follow
 # engagements, so two parity-interleaved arms would be confounded
-PARAMS[33] = {**PARAMS[32], "fast_dead_ab": False,
+# 3.72's verdict (23:2x): the fast arm's kill -> loot start p50 1.23 s missed its pre-registered
+# <= 1.2 s (bootstrap 95 % 1.10-1.49) -> by 3.73's rule v15's dead rule for ALL (fast_dead off)
+PARAMS[33] = {**PARAMS[32], "fast_dead": False, "fast_dead_ab": False,
               "loot_icons": True, "loot_race": True, "loot_race_ab": True,
               "looter_chain": True, "looter_cells": 2, "looter_pending_s": 12.0,
               "looter_match_px": 40.0,

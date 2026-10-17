@@ -9212,6 +9212,42 @@ live hard-bar monitor on. A Creamy hit is counted, not a stop.
 - **Run 2** (22:09:55, seed 20271401, session `20261017T220855-demo-hunt-flow32`), 60 min.
 - The judgement pools run 1 (10.6 min) + run 2.
 
+**RESULT (judged 2026-10-17 23:1x; `arm_judge.py dead|loot|stray`, `flow_judge.bot`):**
+
+| run | min | engagements | landing (5 s) | kills / h | seen -> click p50 | loot picked / fell | sight / 10 min |
+|---|---|---|---|---|---|---|---|
+| 1 (stopped, treadmill) | 10.6 | 21 | 18 / 21 = 85.7 % | 101.3 | 5.6 s | 17 / 23 = 73.9 % | 20.6 |
+| 2 (time box) | 60.1 | 155 | 125 / 155 = 80.6 % (Wilson 73.7-86.1) | **148.7** | 4.2 s | 125 / 227 = 55.1 % | 15.3 |
+| pooled | 70.8 | 176 | 143 / 176 = 81.3 % | 141.6 | | | |
+
+- Run 2 is the best full hour so far (v24 146.9, v28 141.9).
+- Hard bars: 0 NPC contacts, 0 map changes, 0 non-target hits, 0 Creamy hits (monitor and judge).
+- 6 unintended kills in run 2: all targets.
+
+| per arm (pooled) | fast (odd k) | slow (even k, v15's rule) |
+|---|---|---|
+| server kill -> loot start p50 / p90 | **1.23 s** / 2.24 (bootstrap 95 % of p50: 1.10-1.49) | 2.50 s / 5.85 (2.29-3.31) |
+| false deaths | 8 / 87 = 9.9 % | 12 / 86 = 14.5 % |
+| death -> next engagement p50 | 15.6 s | 17.4 s |
+| loot picked / fell | 60 / 93 = 64.5 % (looters 14) | 70 / 113 = 61.9 % (looters 24) |
+
+**Against the predictions:**
+1. fast kill -> loot start p50 <= 1.2 s: **MISSED** (1.23 s). It halved the slow arm's 2.50 s;
+   48 % of fast-arm kills started their loot within 1.2 s (slow: 3 %).
+2. false deaths fast <= slow + 5 points: **PASS** (9.9 % vs 14.5 %).
+3. death -> next click lower in the fast arm: **PASS** (15.6 vs 17.4 s).
+4. loot fast >= slow: **PASS** (64.5 vs 61.9 %).
+5. landing >= 80 % overall: **PASS** (81.3 %).
+6. hard bars: **PASS**.
+
+**Consequence, by 3.73's pre-registered rule:** prediction 1 missed, so v33 runs v15's dead rule
+for ALL engagements (`fast_dead` off). The fast rule was better on every measured axis, and missed
+only its own bar, by 0.03 s. Re-adopting it is a decision for Batt (or a later pre-registered
+version); the rule is not bent here.
+
+The loot treadmill showed in both runs (`arm_judge.py stray`): 13 / 21 and 87 / 152 loot steps sent
+the GM >= 4 cells off the death cell (57-62 %). v33 fixes it.
+
 ### 3.73 hunt-flow@33: LOOT IS A RACE, interleaved per loot step (pre-registered 2026-10-17 22:13 ICT, the commit time b5cceb6, BEFORE its run; Batt's decision 3 on the 21:33 report)
 
 **Batt's decision 3:**
