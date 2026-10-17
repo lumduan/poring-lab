@@ -518,3 +518,21 @@ def test_shifted_crop_is_the_region_zero_outside() -> None:
     assert (c == img[2:4, 1:4]).all()
     c = hf.shifted_crop(img, -1, -1, 3, 3)  # one row and one column outside
     assert (c[0] == 0).all() and (c[:, 0] == 0).all() and (c[1:, 1:] == img[0:2, 0:2]).all()
+
+
+def test_v24_loots_around_the_last_strike_or_beside_the_gm() -> None:
+    p = hf.PARAMS[24]
+    assert p["loot_death"] == "hybrid" and p["loot_fixed"] and not hf.PARAMS[23].get("loot_death")
+    assert p["loot_interval_s"] < hf.PARAMS[23]["loot_interval_s"]
+    assert hf.death_cell_hybrid((101, 50), (100, 50)) == (101, 50)  # beside the GM: as clicked
+    assert hf.death_cell_hybrid((100, 50), (100, 50)) == (100, 50)
+    assert hf.death_cell_hybrid((104, 47), (100, 50)) == (101, 49)  # far: the GM's neighbour
+    assert hf.death_cell_hybrid((100, 56), (100, 50)) == (100, 51)
+
+
+def test_nearest_cell_inverts_a_projection() -> None:
+    def proj(c: tuple[int, int]) -> tuple[float, float]:
+        return 640 + 32 * (c[0] - 100) - 0.0, 360 - 24 * (c[1] - 50)
+
+    assert hf.nearest_cell(proj, (100, 50), 640 + 64 + 5, 360 - 24 * 3 + 4) == (102, 53)
+    assert hf.nearest_cell(proj, (100, 50), 640, 360) == (100, 50)

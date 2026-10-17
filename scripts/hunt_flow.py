@@ -189,6 +189,10 @@ VERSIONS = {
     "skipped only near a monster / NPC box, an NPC, a Creamy's NEW pink (> 100 px within 40 px: "
     "an Apple holds 64), the UI or off the frame; plus the pixel species check logged in SHADOW "
     "beside each tag read",
+    24: "THE FIXED LOOT'S DEATH CELL, on v23 (offline on v21 / v22 / v23: v23's death cell put the "
+    "first loot click 50 px from the nearest drop, p50; the last strike click 10-16 px): the cell "
+    "under the last strike click when it is within 1 cell of the GM, else the GM's neighbour in "
+    "its direction; and the cadence v23 registered (0.05 s sleep: ~0.4 s a click, 0.66 s as built)",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -271,6 +275,10 @@ PARAMS[23] = {**PARAMS[22], "loot_fixed": True, "loot_center_clicks": 2, "loot_r
               "loot_interval_s": 0.3, "loot_fixed_max_s": 4.0,
               "loot_pink_r": 40, "loot_pink_max_px": 100, "species_shadow": True,
               "icon_radius": 110, "blob_gm_px": 70.0}  # fmt: skip
+# 24 = v23's fixed loot at the RIGHT death cell (the last strike click's cell, else the GM's
+# neighbour toward it) and at the cadence v23 registered (0.3 s was 0.66 s as built)
+PARAMS[24] = {**PARAMS[23], "loot_death": "hybrid", "loot_interval_s": 0.05,
+              "loot_fixed_max_s": 4.5}  # fmt: skip
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -1169,6 +1177,39 @@ def new_pink_px(after: Any, before: Any | None, u: float, v: float, radius: int,
     return int((pk & m).sum())
 
 
+LOOT_FOOT_PX = (3.0, 9.0)  # v24: a strike click aims at the body; the drops lie ~9 px lower
+
+
+def death_cell_hybrid(click_cell: Cell, gm_cell: Cell) -> Cell:
+    """PURE (v24): the fixed loot's death cell. A melee kill dies next to the GM: the cell under
+    the last strike click when it is within 1 cell of the GM, else the GM's neighbour in that
+    click's direction (offline on v21 / v22 / v23, 340 drops: 63 % in its 3 x 3, 87 % within 2
+    cells, against 61 % / 79 % for the click's cell alone)."""
+    if max(abs(click_cell[0] - gm_cell[0]), abs(click_cell[1] - gm_cell[1])) <= 1:
+        return click_cell
+
+    def sgn(a: int) -> int:
+        return (a > 0) - (a < 0)
+
+    return (gm_cell[0] + sgn(click_cell[0] - gm_cell[0]),
+            gm_cell[1] + sgn(click_cell[1] - gm_cell[1]))  # fmt: skip
+
+
+def nearest_cell(project: Any, origin: Cell, u: float, v: float, radius: int = 9) -> Cell:
+    """PURE (v24): the cell within ``radius`` of ``origin`` whose projection (``project(cell)`` ->
+    (u, v)) lies nearest the pixel (u, v)."""
+    best: tuple[float, Cell] | None = None
+    for dx in range(-radius, radius + 1):
+        for dy in range(-radius, radius + 1):
+            c = (origin[0] + dx, origin[1] + dy)
+            pu, pv = project(c)
+            d = (pu - u) ** 2 + (pv - v) ** 2
+            if best is None or d < best[0]:
+                best = (d, c)
+    assert best is not None
+    return best[1]
+
+
 def shifted_crop(img: Any, x0: int, y0: int, w: int, h: int) -> Any:
     """PURE (v23): the w x h region of ``img`` whose top-left is (x0, y0), zero where it falls
     outside ``img``."""
@@ -1389,7 +1430,11 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
         events_f.write(json.dumps({"t_ns": r.ns(), **rec}, default=str) + "\n")
         events_f.flush()
 
+    last_strike: dict[int, tuple[int, float, float]] = {}  # v24: track -> (t_ns, u, v)
+
     def click_log(rec: dict[str, Any]) -> None:
+        if rec.get("kind") in ("strike", "strike_burst") and rec.get("track") is not None:
+            last_strike[int(rec["track"])] = (int(rec["t"]), float(rec["u"]), float(rec["v"]))
         clicks_f.write(json.dumps(rec, default=str) + "\n")
         clicks_f.flush()
 
@@ -1715,6 +1760,24 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         # last tracked cell -- death_of's cell when it has one, else the
                         # track's last cell (attempt 1: death_of's gate looted 5 of 11 kills)
                         dc_ = dead_.cell
+                        ls_ = last_strike.get(int(eng_["track"]))
+                        if prm.get("loot_death") == "hybrid" and ls_ is not None:
+                            # v24: the cell under the LAST strike click (found in the frame the
+                            # click was aimed in), then the hybrid rule against where we stand now
+                            mp_c = pos_at_frame(ls_[0]) or measured_pos()
+                            mp_n = measured_pos()
+                            if mp_c is not None and mp_n is not None:
+                                w_c = w5.World(camera, gat, here2)
+                                o_c = (int(round(mp_c[0])), int(round(mp_c[1])))
+                                ck_ = nearest_cell(lambda c_: frac_project(w_c, mp_c, c_), o_c,
+                                                   ls_[1] + LOOT_FOOT_PX[0],
+                                                   ls_[2] + LOOT_FOOT_PX[1])  # fmt: skip
+                                g_n = (int(round(mp_n[0])), int(round(mp_n[1])))
+                                dc_ = death_cell_hybrid(ck_, g_n)
+                                eng_["death"]["fixed_from"] = (
+                                    "click" if dc_ == ck_ else "adjacent")  # fmt: skip
+                                eng_["death"]["click_cell"] = list(ck_)
+                                eng_["death"]["gm_cell"] = list(g_n)
                         if dc_ is None and tr_.seen:
                             c_t = tr_.seen[-1][1]
                             dc_ = (int(round(c_t[0])), int(round(c_t[1])))
@@ -2278,14 +2341,20 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         # validate it live (JPEG-trained) before it may ever skip a tag read
                         import species_check as sc_
 
-                        img_s = screen.grab(gx0, gy0, gw, gh)[1]
+                        # v24: a crop around the box, not the whole frame (it delayed every
+                        # tag read); crowded = ANOTHER monster box (not this one, not the GM)
+                        sx0_, sy0_ = max(0, int(b.x0) - 40), max(0, int(b.y0) - 40)
+                        sx1_, sy1_ = min(gw, int(b.x1) + 41), min(gh, int(b.y1) + 41)
+                        img_s = screen.grab(gx0 + sx0_, gy0 + sy0_, sx1_ - sx0_, sy1_ - sy0_)[1]
                         sp_, cf_ = sc_.species_of(img_s, species_model,
-                                                  (b.x0, b.y0, b.x1, b.y1, b.score),
+                                                  (b.x0 - sx0_, b.y0 - sy0_, b.x1 - sx0_,
+                                                   b.y1 - sy0_, b.score),
                                                   order="bgr")  # fmt: skip
                         fr_s = sampler.since(max(0, len(sampler.frames) - 1))
+                        cb_ = np.array(f1.centre(b))
                         crowd_ = any(
-                            o is not b and math.hypot(*(np.array(f1.centre(o))
-                                                        - f1.centre(b))) < 50
+                            o.cls == "monster"
+                            and 8 < math.hypot(*(np.array(f1.centre(o)) - cb_)) < 50
                             for o in (fr_s[-1][1] if fr_s else []))  # fmt: skip
                         ev({"kind": "species_shadow", "track": tr.tid, "tag": t_,
                             "species": sp_, "conf": round(float(cf_), 4),
