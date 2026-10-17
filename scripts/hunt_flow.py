@@ -2683,6 +2683,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
             bel_: Any = None
             bel_k = [0]  # the sampler frames already fed
             dead_cells_: list[tuple[float, Cell]] = []  # (mono s, death cell) of our kills
+            bel_off: list[int] = []  # non-empty: the belief map failed once and is off
             offs_arr = np.array(offsets, dtype=int).reshape(-1, 2)
             if prm.get("belief"):
                 import belief_map as bm_
@@ -2734,11 +2735,21 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                    prm.get("rev_penalty", 0.0))  # fmt: skip
                     gp = plan["goal_path"]
                     g_bel = None
-                    if bel_ is not None:
-                        feed_belief()
-                        g_bel = belief_ghost(bel_, t_, list(dead_cells_), now_, "nl",
-                                             tuple(prm["belief_unseen"]),
-                                             prm["belief_min_mass"])  # fmt: skip
+                    if bel_ is not None and not bel_off:
+                        try:
+                            feed_belief()
+                            g_bel = belief_ghost(bel_, t_, list(dead_cells_), now_, "nl",
+                                                 tuple(prm["belief_unseen"]),
+                                                 prm["belief_min_mass"])  # fmt: skip
+                        except Exception as exc_b:  # noqa: BLE001 -- never kill the planner
+                            bel_off.append(1)
+                            ev(
+                                {
+                                    "kind": "belief_error",
+                                    "error": f"{type(exc_b).__name__}: {exc_b}",
+                                }
+                            )
+                            g_bel = None
                     left_ = 999
                     if gp and prm.get("replan_left"):  # v5: never walk off the route's end
                         ci_ = min(range(len(gp)), key=lambda i_: cheb(gp[i_], here_))
