@@ -9060,7 +9060,7 @@ round 8 to give the pooled test its hours). The same test state, nice 10, detect
   Hard bars stay: NPC contact, map change, unknown UI state, a hit on any other non-target.
 - **The agent's rounds continue** (decision 4), alternating around the bot's runs.
 
-### 3.71 hunt-flow@31: THE DEATH CELL WHERE THE HIT LANDED (pre-registered 2026-10-17 __TIME__ ICT, the commit time __SHA__, BEFORE its run; Batt's decision 1 at 18:3x; round 10 of docs/competition.md)
+### 3.71 hunt-flow@31: THE DEATH CELL WHERE THE HIT LANDED (pre-registered 2026-10-17 20:28 ICT, the commit time 2c4d8ae, BEFORE its run; Batt's decision 1 at 18:3x; round 10 of docs/competition.md)
 
 **Batt (18:3x):** "the LAST STRIKE CLICK is NOT the death cell (a hit monster can still walk away;
 we follow and click again elsewhere). Use where the monster actually was when OUR HIT LANDED ...
