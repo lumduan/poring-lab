@@ -367,20 +367,52 @@ def serve(a: argparse.Namespace) -> int:  # noqa: PLR0915
                 time.sleep(0.06)
                 agent.move(gx0 + round(u), gy0 + round(v))
 
-            def read_tag(u: float, v: float) -> tuple[str | None, int]:
+            def read_tag(u: float, v: float) -> tuple[str | None, int, float, float]:
+                """The tag under the pointer within TAG_WAIT_S; the pointer FOLLOWS the nearest
+                fresh detector box (> 10 px away) while it hops (R0 attempt 1: a hopping Poring
+                left a still pointer, 6 of 7 reads empty). Returns where the pointer ended."""
                 t_a = time.monotonic()
                 move(u, v)
                 while time.monotonic() - t_a < TAG_WAIT_S:
                     time.sleep(0.1)
-                    img = frame()
                     b = nearest_box(boxes_now(), u, v, 60.0)
+                    if b is not None:
+                        cu, cv = (b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2
+                        if math.hypot(cu - u, cv - v) > 10 and in_view(cu, cv):
+                            u, v = cu, cv
+                            agent.move(gx0 + round(u), gy0 + round(v))
+                    img = frame()
                     bands = hf.tag_boxes(b, (u, v), True)[0 if b is not None else 1 :]
                     for bb in bands:
                         name, _iou = nametag.match(nametag.letter_mask(nametag.band(img, bb)),
                                                    templates)  # fmt: skip
                         if name is not None:
-                            return name, round((time.monotonic() - t_a) * 1000)
-                return None, round((time.monotonic() - t_a) * 1000)
+                            return name, round((time.monotonic() - t_a) * 1000), u, v
+                return None, round((time.monotonic() - t_a) * 1000), u, v
+
+            def resolve(q: dict[str, Any]) -> tuple[float, float] | None:
+                """The aim point NOW (the agent decides seconds earlier): a monster by its packet
+                gid -> its projected cell -> the nearest detector box there; a floor item by its
+                floor id (cell + sub offset); a cell; else the given client px."""
+                snap = live.snapshot(r.ns())
+                if q.get("gid") is not None:
+                    m = next((x for x in snap["mobs"] if x["gid"] == int(q["gid"])), None)
+                    p = None if m is None else project(m["cell"])
+                    if p is None:
+                        return None
+                    b = nearest_box(boxes_now(), p[0], p[1] - 10, 70.0)
+                    return ((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2) if b else (p[0], p[1] - 10)
+                if q.get("fid") is not None:
+                    it = next((x for x in snap["items"] if x["floor_id"] == int(q["fid"])), None)
+                    if it is None:
+                        return None
+                    ox, oy = item_px_offset(it["sub"])
+                    return project((it["cell"][0] + ox, it["cell"][1] + oy))
+                if q.get("cx") is not None:
+                    return project((float(q["cx"]), float(q["cy"])))
+                if q.get("u") is None:
+                    return None
+                return float(q["u"]), float(q["v"])
 
             def above(img: Any, u: float, v: float) -> Any:
                 a_ = np.asarray(img)
@@ -395,11 +427,14 @@ def serve(a: argparse.Namespace) -> int:  # noqa: PLR0915
                     ev({"kind": "loop_start"})
 
             def do_attack(q: dict[str, Any]) -> dict[str, Any]:
-                u, v = float(q["u"]), float(q["v"])
+                p = resolve(q)
+                if p is None:
+                    return {"clicked": False, "why": "gone"}
+                u, v = p
                 if not in_view(u, v):
-                    return {"clicked": False, "why": "off_view"}
+                    return {"clicked": False, "why": "off_view", "u": round(u), "v": round(v)}
                 first_move()
-                tag, ms = read_tag(u, v)
+                tag, ms, u, v = read_tag(u, v)
                 if tag not in nametag.TARGET_NAMES:
                     ev({"kind": "tag_refused", "tag": tag, "ms": ms, "u": u, "v": v,
                         "why": q.get("why"), "fact": q.get("fact")})  # fmt: skip
@@ -425,7 +460,7 @@ def serve(a: argparse.Namespace) -> int:  # noqa: PLR0915
                         break
                     if n == BURST_MAX:
                         break
-                    tag2, _ = read_tag(u, v)
+                    tag2, _, u, v = read_tag(u, v)
                     if tag2 not in nametag.TARGET_NAMES:
                         break
                     tb = r.ns()
@@ -443,7 +478,15 @@ def serve(a: argparse.Namespace) -> int:  # noqa: PLR0915
                 return {"clicked": True, "tag": tag, "tag_ms": ms, "clicks": n, "arrow_s": arrow_s}
 
             def do_walk(q: dict[str, Any]) -> dict[str, Any]:
-                u, v = float(q["u"]), float(q["v"])
+                p = resolve(q)
+                if p is None:
+                    return {"clicked": False, "why": "no_point"}
+                u, v = p
+                if not in_view(u, v) and q.get("cx") is not None:
+                    # a far cell: the same direction, 260 px from the GM's sprite
+                    du, dv = u - hf.GM_SPRITE_PX[0], v - hf.GM_SPRITE_PX[1]
+                    k = 260.0 / max(1e-6, math.hypot(du, dv))
+                    u, v = hf.GM_SPRITE_PX[0] + du * k, hf.GM_SPRITE_PX[1] + dv * k
                 if not in_view(u, v):
                     return {"clicked": False, "why": "off_view"}
                 rg = 80
@@ -474,7 +517,10 @@ def serve(a: argparse.Namespace) -> int:  # noqa: PLR0915
                 return {"clicked": True, "gate": "guard+units" if moving else "cursor"}
 
             def do_loot(q: dict[str, Any]) -> dict[str, Any]:
-                u, v = float(q["u"]), float(q["v"])
+                p = resolve(q)
+                if p is None:
+                    return {"clicked": False, "why": "gone"}
+                u, v = p
                 if not in_view(u, v):
                     return {"clicked": False, "why": "off_view"}
                 if nearest_box(boxes_now(), u, v, LOOT_UNIT_PX) is not None:
@@ -600,7 +646,8 @@ def serve(a: argparse.Namespace) -> int:  # noqa: PLR0915
                             out["cmd_ms"] = round((time.monotonic() - t_c) * 1000)
                             if cmd != "look":
                                 ev({"kind": f"agent_{cmd}", **{k: q.get(k) for k in
-                                                               ("u", "v", "gid", "why", "fact")},
+                                                               ("u", "v", "gid", "fid", "cx",
+                                                                "cy", "why", "fact")},
                                     "result": out})  # fmt: skip
                         else:
                             out = {"error": f"unknown command {cmd!r}"}
@@ -671,9 +718,13 @@ def main() -> int:
     sub.add_parser("look")
     for name in ("strike", "walk", "loot"):
         p = sub.add_parser(name)
-        p.add_argument("u", type=float)
-        p.add_argument("v", type=float)
-        p.add_argument("--gid", type=int)
+        p.add_argument("u", type=float, nargs="?")
+        p.add_argument("v", type=float, nargs="?")
+        p.add_argument(
+            "--gid", type=int, help="a monster, by its packet gid (resolved at run time)"
+        )
+        p.add_argument("--fid", type=int, help="a floor item, by its packet floor id")
+        p.add_argument("--cell", type=float, nargs=2, metavar=("X", "Y"))
         p.add_argument("--why")
         p.add_argument("--fact")
     w = sub.add_parser("wait")
@@ -684,9 +735,11 @@ def main() -> int:
     if a.cmd == "serve":
         return serve(a)
     req: dict[str, Any] = {"cmd": a.cmd}
-    for k in ("u", "v", "gid", "why", "fact", "s"):
+    for k in ("u", "v", "gid", "fid", "why", "fact", "s"):
         if getattr(a, k, None) is not None:
             req[k] = getattr(a, k)
+    if getattr(a, "cell", None):
+        req["cx"], req["cy"] = a.cell
     print(json.dumps(send(req), default=str))
     return 0
 
