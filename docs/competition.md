@@ -48,7 +48,8 @@ non-target hit, map change) apply to every session.
 | R4 (bot v24) | (fixed) | 62.0 / 10 of 10 / 10 of 20 / pass | 138 / 63 % / 5 of 34 / pass | 180 / 89 % / 19 of 35 / pass | 146.9 / 77.4 % / 83 of 219 / **1 non-target (Creamy)** |
 | R5 (bot v25) | (fixed) | 40.1 / 6 of 6 / 7 of 14 / pass | 108 / 76 % / 15 of 23 / pass | 132 / 80 % / 14 of 23 / pass | 109.9 / 70.9 % / 81 of 131 / **1 non-target (Creamy)** |
 | R6 (bot v26) | (fixed) | 40.0 / 6 of 6 / 3 of 7 / pass | 120 / 87 % / 20 of 26 / pass | 126 / 83 % / 18 of 40 / pass | 129.1 / 85.4 % / 68 of 122 / **pass** (39.8 min) |
-| R7 (bot v27) | (fixed) | 8 engagements (judging) | pending | pending | pending |
+| R7 (bot v27) | (fixed) | 41.5 / 6 of 8 / 6 of 8 / pass | 78 / 67 % / 8 of 11 / **1 non-target** (2 windows: the lower) | 168 / 79 % / 21 of 38 / pass | 141.7 / 75.7 % / 52 of 109 / **1 non-target (Creamy)** (28.8 min) |
+| R8 (bot v28) | (fixed) | pending | pending | pending | pending |
 
 ## Round 0 (bot v20 from 2026-10-17 04:42 + 05:55; agent 07:55)
 
@@ -278,7 +279,40 @@ non-target hit, map change) apply to every session.
   killed it (round 1's packet fact again). It also stayed away from a **warp portal** that the
   packets showed near the map edge.
 
-## What the agent's play taught (rounds 0-6)
+## Round 7 (agent first, 16:09; then bot v27, 16:21)
+
+- **Sessions:**
+  - AGENT `20261017T160915-demo-agent-demo` (seed 20270801, 10 min): 6 kills, 6 of 8 drops,
+    clean.
+  - BOT v27 `20261017T162100-demo-hunt-flow27` (the same seed; Battleship, demonstrations 3.68).
+    I stopped it at 28.8 min: my live monitor saw a Creamy hit.
+
+| metric | BATT | AGENT R7 (packet-assisted) | BOT v27 lower 10' | BOT best 10' | BOT full (28.8 min) |
+|---|---|---|---|---|---|
+| kills / h | 300 | 41.5 | 78 | 168 | 141.7 |
+| landing <= 5 s | 64/64 | 6/8 | 12/18 | 23/29 | 56/74 |
+| seen -> click p50 / p90 s | 1.11 / 4.79 | 18.64 / 29.84 | 3.39 / 10.96 | 2.26 / 7.82 | 3.13 / 10.96 |
+| death -> next click s | 1.24 / 1.8 | 15.4 / 17.9 | 3.77 / 6.0 | 2.35 / 4.26 | 2.48 / 5.44 |
+| monsters in sight / 10 min | 44 | 8.1 | 18 | 30 | 24 (windowed) |
+| loot picked / dropped | 62 / 64 | 6 / 8 | 8 / 11 | 21 / 38 | 52 / 109 |
+| kill -> last pickup s | 1.56 | 35.3 | 3.38 | 3.88 | 4.09 |
+| walk clicks while moving | 72.7 % | 32.1 % | 52.7 % | 49.6 % | 48.4 % |
+| click cadence s | 0.6 / 3.44 | 11.6 / 47.0 | 1.01 / 1.48 | 1.0 / 3.61 | 1.01 / 2.86 |
+| reversals / min | 3.6 | 0.92 | 5.8 | 6.8 | 6.15 |
+| straight run cells | 16.9 | 22.4 | 14.3 | 11.3 | 12.6 |
+| unintended attack requests | - | 0 | 1 | 1 | 2 |
+| hard bars (NPC / map / non-target) | - | 0/0/0 | 0/0/1 | 0/0/0 | **0/0/1** |
+
+- **The Creamy's cause, found:** one pointer jump never moves the CLIENT's own cursor (two
+  motions do). So v26 / v27's pointer rest was inert: the client's cursor stayed on the walk
+  click's point, a Creamy flew under it, and the client attacked it. v28 rests in two motions.
+- **Battleship (v27):** 380 distinct belief goals in 28.8 min; 12 % led to a kill near the goal.
+  The map is live and cheap, but as a search goal it fires too often. v28 chases each ghost once.
+- **The agent, a packet fact:** a Creamy was 11 cells away next to a Poring. The agent chose the
+  other Poring, away from it. The bot has no such fact: the detector boxes a Creamy 8-11 % of
+  the time.
+
+## What the agent's play taught (rounds 0-7)
 
 - **The agent's own limit is its decision loop.**
   - Each step is a screenshot, a thought and a command: ~10-20 s.
