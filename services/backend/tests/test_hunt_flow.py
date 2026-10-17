@@ -453,3 +453,10 @@ def test_walk_guard_from_v21_leaves_our_own_drawn_cursor_out() -> None:
     assert hf.pink_share(crop, (500, 400), 640.0, 500.0, 80, hf.GUARD_EXCLUDE) > 0.001
     got = hf.pink_share(crop, (500, 400), 640.0, 500.0, 80, hf.GUARD_EXCLUDE, (), (598.0, 498.0))
     assert got == 0.0
+
+
+def test_v21_loots_by_frame_difference_on_v20() -> None:
+    p = hf.PARAMS[21]
+    assert p["loot_blobs"] and p["guard_ptr_mask"] and p["tag_follow"] and p["loot_sweep"]
+    assert 1.0 <= p["loot_before_s"] <= 2.5
+    assert not hf.PARAMS[20].get("loot_blobs")

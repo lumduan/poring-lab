@@ -171,6 +171,12 @@ VERSIONS = {
     "the sprite, so the client drew no tag): during the read the pointer follows the focused "
     "target's fresh centre when it is > 10 px away, the tag is searched under the box AND under "
     "the pointer, and the click goes where the tag was read",
+    21: "LOOT BY FRAME DIFFERENCE, on v20 (Batt 2026-10-17, the competition's order item 1): "
+    "after a kill, drop_blobs compares the death spot ~1.8 s before the 'dead' decision with now "
+    "and +0.4 s; each new small blob becomes a floor cell (+ its sub-cell pixel residual), "
+    "re-projected as the GM moves, hovered, and clicked on the HAND read twice + walk@11's unit "
+    "check; the v17 sweep only when no blob was clicked; plus the walk guard leaving our own "
+    "cursor out",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -244,6 +250,7 @@ PARAMS[19] = {**PARAMS[18], "retarget": True, "retarget_margin": 2.0, "retarget_
 # 20 builds on 18, NOT 19 (2026-10-17 02:3x): the night's last slot goes to the top loser (the tag
 # reads: 40-58 % refused in v15-v16), one change against the last version run; v19 is built, unrun
 PARAMS[20] = {**PARAMS[18], "tag_follow": True, "tag_follow_px": 10.0}
+PARAMS[21] = {**PARAMS[20], "loot_blobs": True, "loot_before_s": 1.8, "guard_ptr_mask": True}
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -1571,12 +1578,105 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     eng_["death"] = {"cell": None if dead_.cell is None else list(dead_.cell),
                                      "reason": dead_.reason}  # fmt: skip
                     if dead_.cell is not None and dead_.gone_ns is not None:
-                        if prm.get("loot_sweep"):
+                        if prm.get("loot_blobs"):
+                            loot_blobs_run(eng_, here2, dead_.cell, tr_)
+                        elif prm.get("loot_sweep"):
                             loot_sweep(eng_, here2, dead_.cell)
                         else:
                             loot1.loot(rig, here2, dead_, eng_)
                 finally:
                     split.to(prev_, time.monotonic())
+
+            def loot_blobs_run(eng_: dict[str, Any], here2: Cell, dcell: Cell, tr_: Any) -> None:
+                """v21 (Batt 2026-10-17, LOOT by frame difference): the drops as NEW small blobs
+                around the death spot -- BEFORE from the frame ring ~loot_before_s before this
+                'dead' (v15: 'dead' comes ~0.8 s after the death is drawn), AFTER now, LATER
+                +0.4 s (drop_blobs, offline recall@20 ~0.5, ~0.65 false blobs a kill: every blob
+                is only a hover candidate). Each blob becomes a floor cell (+ its sub-cell pixel
+                residual), re-projected from where the GM is now (it walks onto each item), and is
+                clicked only on the HAND read twice + walk@11's unit check, as v17's sweep. The
+                v17 sweep only when no blob got a click; bounded by loot_max_s / loot_max_clicks
+                as v17."""
+                import drop_blobs as db_
+
+                t_l0 = time.monotonic()
+                out: dict[str, Any] = {"cell": list(dcell), "blobs": 0, "clicks": 0, "picked": 0,
+                                       "no_hand": 0}  # fmt: skip
+                w_l = w5.World(camera, gat, here2)
+                fr_l = sampler.since(max(0, len(sampler.frames) - 1))
+                risky_l = [x for x, c in (sightings_in(fr_l[-1][1], here2) if fr_l else [])
+                           if cheb(c, dcell) <= 1.5]  # fmt: skip
+                if risky_l:
+                    out["skip"] = "monster_in_area"  # the risk rule: a click could attack it
+                    eng_["loot"] = out
+                    ev({"kind": "loot", **out})
+                    return
+                with plock:
+                    ring_ = list(ring_frames)
+                old_ = [f for f in ring_ if f[0] <= t_l0 - prm["loot_before_s"]]
+                blobs: list[Any] = []
+                if old_ and tr_.box is not None:
+                    before_ = old_[-1][1]
+                    after_ = np.ascontiguousarray(np.asarray(frame())[..., :3])
+                    time.sleep(0.4)
+                    later_ = np.ascontiguousarray(np.asarray(frame())[..., :3])
+                    pu_, pv_ = ptr[0]  # our own drawn cursor is not a drop
+                    ys_ = slice(max(0, int(pv_) - 26), max(0, int(pv_) + 40))
+                    xs_ = slice(max(0, int(pu_) - 26), max(0, int(pu_) + 40))
+                    after_[ys_, xs_] = before_[ys_, xs_]
+                    later_[ys_, xs_] = before_[ys_, xs_]
+                    blobs = db_.drop_blobs(before_, after_, f1.centre(tr_.box), later=later_)
+                    out["before_age_s"] = round(t_l0 - old_[-1][0], 2)
+                else:
+                    out["no_before"] = True
+                out["blobs"] = len(blobs)
+                targets: list[tuple[Cell, tuple[float, float]]] = []
+                for bl in blobs:
+                    off_ = picking.pick_cells(camera, gat, here2, np.array([[bl.u, bl.v]]))[0]
+                    if abs(int(off_[0])) > 1000:
+                        continue
+                    c_b = (here2[0] + int(off_[0]), here2[1] + int(off_[1]))
+                    w_l.position = here2
+                    p0_ = w_l.project([c_b])[0]
+                    targets.append((c_b, (bl.u - float(p0_[0]), bl.v - float(p0_[1]))))
+                targets.sort(key=lambda t_: cheb(t_[0], here2))
+                for c_b, res_ in targets:
+                    if (time.monotonic() - t_l0 >= prm["loot_max_s"]
+                            or out["clicks"] >= prm["loot_max_clicks"]):  # fmt: skip
+                        break
+                    mp_ = measured_pos() or (float(here2[0]), float(here2[1]))
+                    pu2, pv2 = frac_project(w_l, mp_, c_b)
+                    u_l, v_l = pu2 + res_[0], pv2 + res_[1]
+                    if loot1.in_ui(u_l, v_l) or not in_view(u_l, v_l):
+                        continue
+                    if not pr.park():
+                        out["end"] = "stale_park"
+                        break
+                    pr.hover(u_l, v_l)
+                    if (pr.read(u_l, v_l)["shape"] != "pickup"
+                            or pr.read(u_l, v_l)["shape"] != "pickup"):  # fmt: skip
+                        out["no_hand"] += 1
+                        continue
+                    w_l.position = (int(round(mp_[0])), int(round(mp_[1])))
+                    ok_u, _env = w11.unit_check(pr, w_l, u_l, v_l)
+                    if not ok_u:
+                        continue
+                    before_l = loot1.frame_bgr(rig)
+                    before_w = loot1.weight_now(rig)
+                    t_lc = r.ns()
+                    agent.click(gx0 + round(u_l), gy0 + round(v_l))  # the LOOT click (a blob)
+                    out["clicks"] += 1
+                    trial_l: dict[str, Any] = {}
+                    loot1.check(rig, before_l, before_w, t_lc, trial_l)
+                    if (trial_l.get("runtime") or {}).get("obtained"):
+                        out["picked"] += 1
+                    click_log({"t": t_lc, "u": round(u_l, 1), "v": round(v_l, 1),
+                               "kind": "loot", "cell": list(c_b), "src": "blob"})  # fmt: skip
+                out["s"] = round(time.monotonic() - t_l0, 2)
+                eng_["loot"] = out
+                ev({"kind": "loot_blobs", **out})
+                if out["clicks"] == 0 and time.monotonic() - t_l0 < prm["loot_max_s"]:
+                    loot_sweep(eng_, here2, dcell)  # the short sweep as the fallback
 
             def loot_sweep(eng_: dict[str, Any], here2: Cell, dcell: Cell) -> None:
                 """v17 (Batt 20:3x, LOOT EVERYTHING): sweep the drop area -- the death cell, then
@@ -2234,6 +2334,9 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
 
             # --- v5: MEASURED motion (route_preview's floor odometry) + the shadow cursor read ----
             mstate: dict[str, Any] = {"hist": [], "anchor": None}
+            from collections import deque as deque_
+
+            ring_frames: Any = deque_(maxlen=24)  # v21: (mono s, BGR frame) at ~5 Hz, ~4.8 s
 
             def motion() -> None:
                 """~motion_hz frames: the camera's move from the floor patches, summed (cells)."""
@@ -2262,6 +2365,11 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                 if len(mstate["hist"]) > 300:
                                     del mstate["hist"][:150]
                         prev_img, prev_g = img3, g_
+                        if prm.get("loot_blobs") and (
+                            not ring_frames or time.monotonic() - ring_frames[-1][0] >= 0.18
+                        ):
+                            with plock:  # v21: BEFORE for the drop detector
+                                ring_frames.append((time.monotonic(), img3.copy()))
                         time.sleep(max(0.0, 1.0 / prm["motion_hz"] - 0.03))
                 finally:
                     scr.close()
