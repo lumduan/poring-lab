@@ -55,7 +55,7 @@ ALLOWED = {
                            "the detector (no unit within 60 px on the last 2 fresh frames): "
                            "3.39's recorded deviation (2), option B. A click from a standstill is "
                            "cursor-gated (GATED below)"),
-    "scripts/hunt_flow.py": (5, "hunt-flow@N (3.41): the attack / re-click after ONE robust2 SWORD "
+    "scripts/hunt_flow.py": (6, "hunt-flow@N (3.41): the attack / re-click after ONE robust2 SWORD "
                                 "read on the target's newest box, only at the stop with the target "
                                 "<= 3 cells (as hunt@6's click); and the CONTINUOUS walk click "
                                 "while the GM moves, gated by the map and the detector (no unit "
@@ -72,7 +72,12 @@ ALLOWED = {
                                 "hunt-flow@17+ (Batt 20:3x): the LOOT click of the sweep -- the "
                                 "cursor read PICKUP twice + walk@11's unit check (loot@1's rule), "
                                 "one per sweep, <= 8 per kill. hunt-flow@21+ (Batt 2026-10-17): "
-                                "the LOOT click on a frame-difference blob, by the same rule"),
+                                "the LOOT click on a frame-difference blob, by the same rule. "
+                                "hunt-flow@23+ (Batt 2026-10-17, his FIXED loot workflow): the "
+                                "loot burst on the death cell, then the 3 x 3 -- NO cursor read "
+                                "(an empty cell only steps the GM); skipped near any monster or "
+                                "NPC box (30 px), within 2 cells of an NPC, on NEW pink pixels, "
+                                "on the UI or off the frame; <= 10 clicks / 4 s a kill"),
     "scripts/agent_play.py": (3, "agent-demo@1 (Batt 2026-10-17, the agent's competition round): "
                                  "the attack click and its burst re-clicks, each only after the "
                                  "client's NAME TAG read a target under the pointer (hunt-flow@16 "

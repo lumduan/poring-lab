@@ -182,10 +182,12 @@ VERSIONS = {
     "search remembers the ground in our own view (+-12 cells, 3 min) and scores keep / +-45 / "
     "+-90 / +-135 by run x (0.25 + the fresh share at the ray's end), keeping the heading while it "
     "scores >= 0.8x the best",
-    23: "LOOT BY ITEM SPRITES, on v22 (the competition's loot, iterated: v21's frame difference "
-    "picked 21.8 %, its hovers mostly on the GM's own sprite): item_icons (packet-labelled floor "
-    "item templates, held-out recall@15 0.35-0.39 at 0.12-0.16 false a kill) finds the drops "
-    "around the death spot FIRST; drop_blobs' blobs only off the GM's sprite (> 70 px)",
+    23: "BATT'S FIXED LOOT WORKFLOW, on v22 (Batt 2026-10-17 11:0x; it replaces the blob / icon "
+    "analysis, whose item-sprite version stays built and unrun): after every kill, burst-click the "
+    "death cell (2), then click through the 3 x 3 in the drop pattern's order (1 each), 0.3 s "
+    "apart, each click re-projected from where the GM is; no item detection, no cursor read; "
+    "skipped only near a monster box, an NPC, NEW pink pixels, the UI or off the frame; plus the "
+    "pixel species check logged in SHADOW beside each tag read",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -262,8 +264,11 @@ PARAMS[20] = {**PARAMS[18], "tag_follow": True, "tag_follow_px": 10.0}
 PARAMS[21] = {**PARAMS[20], "loot_blobs": True, "loot_before_s": 1.8, "guard_ptr_mask": True}
 PARAMS[22] = {**PARAMS[21], "heading_cov": True, "cov_recent_s": 180.0, "cov_half": 12,
               "cov_keep": 0.8}  # fmt: skip
-PARAMS[23] = {**PARAMS[22], "loot_icons": True, "icon_radius": 110, "blob_gm_px": 70.0,
-              "species_shadow": True}  # fmt: skip
+# 23 = Batt's FIXED loot workflow (2026-10-17 11:0x); the item-sprite loot (loot_icons, b1289b2)
+# stays built and UNRUN: Batt replaced it before its run
+PARAMS[23] = {**PARAMS[22], "loot_fixed": True, "loot_center_clicks": 2, "loot_ring_clicks": 1,
+              "loot_interval_s": 0.3, "loot_fixed_max_s": 4.0, "species_shadow": True,
+              "icon_radius": 110, "blob_gm_px": 70.0}  # fmt: skip
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -1100,6 +1105,65 @@ def walk_guard_why(u: float, v: float, share: float, gm_px: float, pink_max: flo
     return None
 
 
+LOOT_JITTER = ((-6.0, 3.0), (6.0, -4.0), (0.0, 0.0))  # v23: px around a cell's click point
+
+
+def loot_plan(
+    dcell: Cell, center_clicks: int, ring_clicks: int
+) -> list[tuple[Cell, tuple[float, float]]]:
+    """PURE (v23, Batt 2026-10-17, his looting as a FIXED workflow): the death cell first (a
+    short burst of ``center_clicks``), then the 8 cells of the 3 x 3 in the server's drop
+    pattern order (SE, W, N, then the rest: deathcell.scan_order), ``ring_clicks`` each; every
+    click a (cell, pixel jitter) -- the jitter (the item sprites' measured bias, -6 / +3 px, then
+    the other side) covers the sub-cell offsets an item lands at."""
+    from poring_dataset.deathcell import scan_order
+
+    plan: list[tuple[Cell, tuple[float, float]]] = []
+    for i, c in enumerate(scan_order(dcell, 1)):
+        for k in range(center_clicks if i == 0 else ring_clicks):
+            plan.append((c, LOOT_JITTER[k % len(LOOT_JITTER)]))
+    return plan
+
+
+def new_pink_share(after: Any, before: Any | None, u: float, v: float, radius: int,
+                   grow: int = 6) -> float:  # fmt: skip
+    """PURE (v23): the share of PINK pixels within ``radius`` of (u, v) in ``after`` that were NOT
+    pink (within ``grow`` px) in ``before`` -- the same full-frame region, BGR. A Poring's pink
+    corpse, already there before the death, does not block the loot; a Creamy flying in does.
+    No ``before``: plain pink."""
+    a = np.asarray(after)[..., :3].astype(np.int16)
+    h, w = a.shape[:2]
+    y0, y1, x0, x1 = (
+        max(0, int(v) - radius),
+        min(h, int(v) + radius + 1),
+        max(0, int(u) - radius),
+        min(w, int(u) + radius + 1),
+    )
+    if y1 <= y0 or x1 <= x0:
+        return 0.0
+
+    def pinkm(img: Any) -> Any:
+        c = np.asarray(img)[y0:y1, x0:x1, :3].astype(np.int16)
+        b_, g_, r_ = c[..., 0], c[..., 1], c[..., 2]
+        return (r_ - g_ > 51) & (b_ - g_ >= -10) & (c.max(-1) > 89)
+
+    pk = pinkm(after)
+    if before is not None:
+        old = pinkm(before)
+        for _ in range(grow):  # a small dilation: the camera may have moved a few px
+            o2 = old.copy()
+            o2[1:, :] |= old[:-1, :]
+            o2[:-1, :] |= old[1:, :]
+            o2[:, 1:] |= old[:, :-1]
+            o2[:, :-1] |= old[:, 1:]
+            old = o2
+        pk &= ~old
+    yy, xx = np.mgrid[y0:y1, x0:x1]
+    m = (xx - u) ** 2 + (yy - v) ** 2 <= radius * radius
+    n = int(m.sum())
+    return float((pk & m).sum() / n) if n else 0.0
+
+
 def tag_boxes(b: Any, ptr: tuple[float, float], around_ptr: bool) -> list[Any]:
     """PURE (v20): the boxes whose bands may hold the name tag -- the detector box, and with
     ``around_ptr`` a sprite-sized box centred on the pointer: the client draws the tag only under
@@ -1631,7 +1695,9 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     eng_["death"] = {"cell": None if dead_.cell is None else list(dead_.cell),
                                      "reason": dead_.reason}  # fmt: skip
                     if dead_.cell is not None and dead_.gone_ns is not None:
-                        if prm.get("loot_blobs"):
+                        if prm.get("loot_fixed"):
+                            loot_fixed_run(eng_, here2, dead_.cell)
+                        elif prm.get("loot_blobs"):
                             loot_blobs_run(eng_, here2, dead_.cell, tr_)
                         elif prm.get("loot_sweep"):
                             loot_sweep(eng_, here2, dead_.cell)
@@ -1639,6 +1705,58 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             loot1.loot(rig, here2, dead_, eng_)
                 finally:
                     split.to(prev_, time.monotonic())
+
+            def loot_fixed_run(eng_: dict[str, Any], here2: Cell, dcell: Cell) -> None:
+                """v23 (Batt 2026-10-17): his looting as a FIXED workflow after every kill -- no
+                item detection, no cursor read: burst-click the death cell, then click through
+                the 3 x 3 (loot_plan), each click re-projected from where the GM is now (each one
+                steps the GM or picks an item up). SAFETY only: a click is skipped near any
+                monster box, within 2 cells of an NPC, on NEW pink pixels (a Creamy; the corpse
+                was there before), on the UI or off the frame. Then hunting resumes at once."""
+                t_l0 = time.monotonic()
+                out: dict[str, Any] = {"cell": list(dcell), "clicks": 0, "skipped": {}}
+                w_l = w5.World(camera, gat, here2)
+                with plock:
+                    ring_ = list(ring_frames)
+                old_ = [f for f in ring_ if f[0] <= t_l0 - prm["loot_before_s"]]
+                before_ = old_[-1][1] if old_ else None
+                npc_c = [(int(n_["x"]), int(n_["y"])) for n_ in npcs]
+                for c_l, (jx_, jy_) in loot_plan(dcell, prm["loot_center_clicks"],
+                                                 prm["loot_ring_clicks"]):  # fmt: skip
+                    if time.monotonic() - t_l0 >= prm["loot_fixed_max_s"]:
+                        break
+                    why_ = None
+                    if any(cheb(c_l, nc_) <= 2 for nc_ in npc_c):
+                        why_ = "npc"
+                    else:
+                        mp_ = measured_pos() or (float(here2[0]), float(here2[1]))
+                        u_l, v_l = frac_project(w_l, mp_, c_l)
+                        u_l, v_l = u_l + jx_, v_l + jy_
+                        if not in_view(u_l, v_l):
+                            why_ = "view"
+                        else:
+                            fr_l = sampler.since(max(0, len(sampler.frames) - 1))
+                            if any(x_.cls in ("monster", "npc")  # not the GM's own box
+                                   and x_.x0 - 30 <= u_l <= x_.x1 + 30
+                                   and x_.y0 - 30 <= v_l <= x_.y1 + 30
+                                   for x_ in (fr_l[-1][1] if fr_l else [])):  # fmt: skip
+                                why_ = "unit"
+                            elif new_pink_share(np.asarray(frame())[..., :3], before_, u_l, v_l,
+                                                30) > 0.02:  # fmt: skip
+                                why_ = "pink"
+                    if why_ is not None:
+                        out["skipped"][why_] = out["skipped"].get(why_, 0) + 1
+                        continue
+                    t_lc = r.ns()
+                    agent.click(gx0 + round(u_l), gy0 + round(v_l))  # the LOOT click (fixed)
+                    ptr[0] = (u_l, v_l)
+                    out["clicks"] += 1
+                    click_log({"t": t_lc, "u": round(u_l, 1), "v": round(v_l, 1),
+                               "kind": "loot", "cell": list(c_l), "src": "fixed"})  # fmt: skip
+                    time.sleep(prm["loot_interval_s"])
+                out["s"] = round(time.monotonic() - t_l0, 2)
+                eng_["loot"] = out
+                ev({"kind": "loot_fixed", **out})
 
             def loot_blobs_run(eng_: dict[str, Any], here2: Cell, dcell: Cell, tr_: Any) -> None:
                 """v21 (Batt 2026-10-17, LOOT by frame difference): the drops as NEW small blobs

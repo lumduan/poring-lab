@@ -477,8 +477,23 @@ def test_v22_the_heading_turns_away_from_ground_we_swept() -> None:
     assert hf.PARAMS[22]["heading_cov"] and hf.PARAMS[22]["loot_blobs"]
 
 
-def test_v23_loots_by_item_sprites_first_on_v22() -> None:
+def test_v23_is_batts_fixed_loot_workflow_on_v22() -> None:
     p = hf.PARAMS[23]
-    assert p["loot_icons"] and p["loot_blobs"] and p["heading_cov"]
-    assert p["blob_gm_px"] >= 60 and 80 <= p["icon_radius"] <= 160
-    assert not hf.PARAMS[22].get("loot_icons")
+    assert p["loot_fixed"] and p["heading_cov"] and p["species_shadow"]
+    assert not p.get("loot_icons")  # the item-sprite version stays built and unrun
+    assert not hf.PARAMS[22].get("loot_fixed")
+    plan = hf.loot_plan((100, 50), p["loot_center_clicks"], p["loot_ring_clicks"])
+    assert [c for c, _ in plan[:3]] == [(100, 50), (100, 50), (101, 49)]  # burst, then SE
+    assert len(plan) == p["loot_center_clicks"] + 8 * p["loot_ring_clicks"] == 10
+    assert {c for c, _ in plan} == {(100 + dx, 50 + dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1)}
+    assert len(plan) * p["loot_interval_s"] <= p["loot_fixed_max_s"]
+
+
+def test_new_pink_ignores_pink_that_was_there_before() -> None:
+    before = np.zeros((100, 100, 3), np.uint8)
+    before[40:60, 40:60] = (180, 90, 230)  # BGR pink: a Poring's corpse splat
+    after = before.copy()
+    assert hf.new_pink_share(after, before, 50, 50, 20) == 0.0
+    assert hf.new_pink_share(after, None, 50, 50, 20) > 0.2
+    after[70:90, 70:90] = (180, 90, 230)  # something pink flew in (a Creamy)
+    assert hf.new_pink_share(after, before, 80, 80, 15) > 0.5
