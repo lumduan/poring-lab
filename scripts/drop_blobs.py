@@ -11,27 +11,30 @@ NEW pixels = changed vs the registered BEFORE (max channel > 40, min over a 1-px
 not a GROUND colour (the crop's unchanged colours), not a VANISHED colour (BEFORE's changed,
 non-ground colours: the dying monster -- its corpse splat lingers 3-5 s in its own colours --, the
 GM's previous pose, HP bars). Components of 10-500 px, <= 34 px a side, not a thin bar, >= 30 %
-still there in LATER (+0.4 s), centre outside the GM's sprite box.
+of their pixels within 5 px of NEW content in LATER (+0.4 s; a settling item may still move),
+centre outside the GM's sprite box.
 
 THE EVALUATION (packets are ground truth OFFLINE only, never a detector input): our kills
 (entity_vanish reason 1 of a monster our GM damaged) and their drops (floor_item_appear 'fall'
 -1.5..+0.5 s of the vanish, <= 2 cells from the monster's last cell). BEFORE = the last frame
-0.4 s before the vanish; AFTER = the first frame DELAY after it; LATER = AFTER + 0.4 s. Projection:
-the camera centred on the GM's fractional cell at the frame time - 0.5 s (the display lag), the
-item at cell - 0.5 + sub / 12 (sub_x, sub_y are 3, 6, 9 or 12). Recall@R = items with a blob
-within R px; false blobs = blobs with no item within R, per kill (no-drop kills included).
+0.4 s before the vanish; AFTER = the first frame DELAY after it (5 Hz frames: up to +0.2 s);
+LATER = AFTER + 0.4 s. Projection: the camera centred on the GM's fractional cell at the frame
+time - 0.5 s (the display lag), the item at cell - 0.5 + sub / 12 (sub_x, sub_y are 3, 6, 9 or
+12). Recall@R = items with a blob within R px; false blobs = blobs with no item within R, per kill
+(no-drop kills included).
 
 MEASURED 2026-10-17 (hunt-flow17/18/20/20 recordings, 416 kills, 633 drops; centre = the item
-cells' centroid | the dead monster's last cell):
-  delay 0.3 s  recall@20 0.17 | 0.18   false/kill 0.82 | 0.85
-  delay 0.5 s  recall@20 0.25 | 0.25   false/kill 0.82 | 0.88
-  delay 0.8 s  recall@20 0.36 | 0.35   false/kill 0.67 | 0.72
-  delay 1.0 s  recall@20 0.46 | 0.44   false/kill 0.66 | 0.76   (@15: 0.40 | 0.40; GM still: 0.54)
-  delay 1.5 s  recall@20 0.42 | 0.44   false/kill 1.01 | 1.11
+cells' centroid | the dead monster's last cell; the gates were tuned on flow17 / flow18 / flow20
+04:42 at delay 1.0; flow20 05:55, never used for tuning: items@1.0 recall@20 0.43, 0.66 false/kill):
+  delay 0.3 s  recall@20 0.19 | 0.21   false/kill 0.82 | 0.82
+  delay 0.5 s  recall@20 0.28 | 0.29   false/kill 0.79 | 0.90
+  delay 0.8 s  recall@20 0.40 | 0.39   false/kill 0.66 | 0.67
+  delay 1.0 s  recall@20 0.50 | 0.48   false/kill 0.64 | 0.75   (@15: 0.44 | 0.43; GM still: 0.57)
+  delay 1.5 s  recall@20 0.51 | 0.51   false/kill 0.99 | 1.11
 A PROTOTYPE, not a gate: about half the drops are found. Misses: items ON the corpse splat or in
 the dying monster's colours (white items from a white Lunatic), green items (Clover) on grass, items
 at the GM's feet / HP bars, the bot's own hand cursor over the spot, projection error while the GM
-walks (nearest blob p50 9-10 px, p90 22-26 px).
+walks (nearest blob p50 9-10 px, p90 21-25 px).
 """
 
 from __future__ import annotations
@@ -214,6 +217,7 @@ def candidates(  # noqa: PLR0913
     *,
     after_centre_uv: tuple[float, float] | None = None,
     later: Any = None,
+    later_centre_uv: tuple[float, float] | None = None,
     radius_px: int = 70,
     max_shift: int = 12,
     diff_thr: int = 40,
@@ -223,6 +227,8 @@ def candidates(  # noqa: PLR0913
     vanished_grow: int = 1,
     grow_px: int = 1,
     persist_thr: int = 45,
+    persist_mode: str = "new",
+    persist_px: int = 5,
 ) -> list[Blob]:
     """PURE: every component of NEW pixels around the death spot, with its features (no size or
     colour gate yet; ``drop_blobs`` applies them). See ``drop_blobs`` for the arguments."""
@@ -257,9 +263,16 @@ def candidates(  # noqa: PLR0913
     new = fresh & ~vanished[bins_a]  # ... and not the dying monster's (or the GM's old) colours
     stable = None
     if later is not None:
-        lc, _, _ = _crop(_rgb3(later), au, av, big)
+        lu, lv = later_centre_uv if later_centre_uv is not None else (au, av)
+        lc, _, _ = _crop(_rgb3(later), lu, lv, big)
         ly, lx = phase_shift(ca.mean(-1), lc.mean(-1), max_shift)
-        stable = _min_diff(ca, _shift(lc, ly, lx)) <= persist_thr
+        lr = _shift(lc, ly, lx)
+        if persist_mode == "same":  # LATER looks like AFTER there
+            stable = _min_diff(ca, lr) <= persist_thr
+        else:  # "new": LATER still shows new content within persist_px (a settling item moves)
+            new_l = (_min_diff(lr, cbr) > diff_thr) & ~ground[_bins(lr, q)]
+            new_l &= ~vanished[_bins(lr, q)]
+            stable = _dilate(new_l, persist_px)
     out: list[Blob] = []
     if not new.any():
         return out
@@ -306,8 +319,9 @@ def drop_blobs(before: Any, after: Any, centre_uv: tuple[float, float], **kw: An
     is invariant to the order (max-channel differences, grey = channel mean, colour sets built
     and used on the same image order), so RGB recordings and BGR(A) mss grabs both work.
 
-    ``centre_uv`` is the death spot in BEFORE's pixels; ``after_centre_uv`` the same ground point in
-    AFTER's pixels when the camera scrolled (the GM moved; default: unchanged). The remaining
+    ``centre_uv`` is the death spot in BEFORE's pixels; ``after_centre_uv`` (``later_centre_uv``)
+    the same ground point in AFTER's (LATER's) pixels when the camera scrolled (the GM moved; the
+    bot knows it from its own odometry; default: unchanged). The remaining
     scroll (<= ``max_shift`` px) is registered away by phase correlation. Only a square of half
     side ``radius_px`` around the spot is searched.
 
@@ -586,6 +600,8 @@ class Case:
     gm_moved: float  # cells between the two frames' origins
     centre: tuple[float, float]  # AFTER's pixels
     centre_before: tuple[float, float]
+    later: str = ""
+    centre_later: tuple[float, float] = (0.0, 0.0)
 
 
 def _nearest(p: Sequence[float], blobs: Sequence[tuple[float, float, int]]) -> float:
@@ -625,6 +641,7 @@ def eval_session(sid: str, delays: Sequence[float], variants: Sequence[str], bef
             if ob is None or oa is None:
                 continue
             fl = None if later_s is None else frame_at(frames, fa[0] + int(later_s * NS))
+            ol = None if fl is None else pos.gm_at(fl[0] - int(lag_s * NS))
             items = [tuple(map(float, p)) for p in proj.project(oa, cells)] if cells else []
             for var in variants:
                 if var == "items" and cells:
@@ -636,11 +653,14 @@ def eval_session(sid: str, delays: Sequence[float], variants: Sequence[str], bef
                     c = k.cell
                 cb = proj.project(ob, [c])[0]
                 ca = proj.project(oa, [c])[0]
+                cl = ca if ol is None else proj.project(ol, [c])[0]
                 gates = {x: prm[x] for x in KEEP_ARGS if x in prm}
                 rest = {x: v for x, v in prm.items() if x not in KEEP_ARGS}
                 cand = candidates(img(fb[1]), img(fa[1]), (float(cb[0]), float(cb[1])),
                                   after_centre_uv=(float(ca[0]), float(ca[1])),
-                                  later=None if fl is None else img(fl[1]), **rest)  # fmt: skip
+                                  later=None if fl is None else img(fl[1]),
+                                  later_centre_uv=(float(cl[0]), float(cl[1])),
+                                  **rest)  # fmt: skip
                 blobs = [x for x in cand if keep(x, **gates)]
                 out.append(
                     Case(
@@ -658,6 +678,8 @@ def eval_session(sid: str, delays: Sequence[float], variants: Sequence[str], bef
                         math.hypot(oa[0] - ob[0], oa[1] - ob[1]),
                         (float(ca[0]), float(ca[1])),
                         (float(cb[0]), float(cb[1])),
+                        "" if fl is None else fl[1].name,
+                        (float(cl[0]), float(cl[1])),
                     )
                 )
     return out
