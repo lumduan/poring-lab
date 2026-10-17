@@ -92,7 +92,14 @@ clean target boxes, 85 Creamy, 427 other, 128 corpses), thr 0.999, NCC gate 0.5,
 per session (0.6 s; own / stale / re-centred / own+gate): flow28 0.752 / 0.367 / 0.563 / 0.666,
 flow29 0.710 / 0.318 / 0.567 / 0.637, flow30 0.760 / 0.358 / 0.633 / 0.664, flow31 0.717 /
 0.311 / 0.533 / 0.625. The stale crop is not only unsure: its 11 wrong-species accepts (and a
-Creamy) are another monster that walked into the old box.
+Creamy) are another monster that walked into the old box. NOT THE MODEL: retrained on 40
+sessions (the 34 + hunt-flow23..27) it scores the same at 0.999 (own 0.734, re-centred 0.587,
+own gated 0.647); with 4 jittered copies per training crop (+-JITTER_PX, +-JITTER_SCALE;
+``crops --jitter 4``) it is WORSE (own 0.680, re-centred 0.558, 2 / 4 wrong species). The
+threshold is the other lever (the deployed model, these 4 sessions, NCC 0.5): thr 0.995 own
+0.829 / gated 0.733, thr 0.99 own 0.863 / gated 0.762, Creamy accepted 0/85 at both (other ->
+target 36 / 40 of 429, from 29) -- not changed here: the CV above counted Creamy-labelled
+accepts from 0.995 down. An NCC gate of 0.4 instead of 0.5: own gated 0.692, 0 Creamy.
 """
 
 from __future__ import annotations
