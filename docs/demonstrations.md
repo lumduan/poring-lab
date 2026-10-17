@@ -8641,6 +8641,104 @@ detector on the CPU (GPU freeze), judged on the full run and on 10-min windows.
 - engaged kills / h >= v23's - 10 %;
 - hard bars: zero NPC contact, zero map change, zero non-target hit.
 
+**RUN 1 RESULT (2026-10-17 12:30:18-13:30:18, session 20261017T123018-demo-hunt-flow24, seed
+20270501; the full hour):**
+- **HARD BARS FAILED: one NON-TARGET HIT, a Creamy (1018), from a WALK click.** No NPC contact, no
+  map change.
+  - **What happened (the packets, the input log and the frames):**
+    - the bot sent a walk click (in-guard: no pink within 80 px, no box within 60 px);
+    - a fast Creamy flew in from the right and passed under the resting pointer;
+    - 0.66 s after the button-up, with no further click from us, the client itself sent a
+      continuous attack request (action 7) on it, and the GM hit it twice (176, 172).
+  - This client sends EVERY attack request as action 7, p50 0.63 s after the click: it walks to a
+    clicked monster first. So the walk click was resolved by the client as a click on the
+    Creamy.
+  - **A second Creamy was hit by a LOOT click's attack request** (0.05 s after the click), but with
+    no damage. That Creamy flew low and dark (shaded purple, not pink), so the loot's pink check
+    could not see it.
+  - **The walk guard (v16) has had this hole since it was built** (v20 run 1: one non-target hit
+    too).
+- **Unintended attack requests: 25** (judge: 14 unintended kills).
+  - 10 after LOOT clicks, 0.05-0.34 s later. The nearest detector box edge was 19-81 px from the
+    click (p50 42), on boxes 0.1-0.4 s old: v24's 30 px margin was too small (v25: 70 px).
+  - 15 after WALK clicks, 0.35-1.45 s later. Mostly NO box near the click: the detector had
+    missed the monster.
+- **Engagements:** 147 (144 dead). The bar 113 / 146 = 77.4 % (Wilson 70.0-83.4).
+- **Kills:** 146.9 / h; engaged 133.9 / h.
+- **Loot:** 83 of 219 items (37.9 %; v23 30.9 %; v22 18.7 %); kill -> last pickup p50 3.63 s.
+  - The first loot click lay within 40 px of a drop for 48 of 98 kills (v23 2 of 5); p50 44.7 px.
+  - The loot step took 666 s of the hour.
+- **Search / reaction:** seen -> click p50 4.21 s; in range -> click p50 1.63 s; sight 37 per
+  10-min window; reversals 6.94 / min; straight runs 11.3.
+- **FrameGuard** refused 19 clicks: the setup helpers' own clicks outside the game region (both
+  GM-state restores still read fixed). Fixed in 248d182: the helpers get the raw agent.
+- **vs the prediction:**
+  - loot >= 50 %: NO (37.9 %);
+  - the first loot click within 40 px for >= 60 %: NO (49 %);
+  - kill -> last pickup <= 3 s: NO (3.63 s);
+  - loot clicks that became an attack <= 2: NO (10, one on a Creamy without damage);
+  - engaged kills / h >= 130.7: YES (133.9);
+  - hard bars: **FAILED** (a non-target hit, from a walk click).
+- **Reading:** the death cell helped (first click within 40 px: 49 % vs v23's 40 %; loot +7 points),
+  but the blind 3 x 3 is near its ceiling (63 % offline). The loot clicks hit monsters that walk
+  through the loot area. **The Creamy is the open safety problem of every blind click:** it is
+  boxed 8-11 % of the time and is not always pink.
+
+### 3.66 hunt-flow@25: THE NAME TAG ONLY WHEN AMBIGUOUS (pre-registered 2026-10-17 __TIME__ ICT, the commit time __SHA__, BEFORE its run; Batt's competition work order item 3; round 5 of docs/competition.md)
+
+**Why:** the name-tag step costs time and fails often.
+- v22: 41 % of the strike calls were refused because the tag read NOTHING (121 of 174). v23: 44
+  of the 140 tag reads read nothing.
+- The strike waits for the GM to stop. v22: in range -> click p50 1.55 s (260 s an hour);
+  selection -> click p50 2.74 s.
+- Batt clicks a monster from ~4 cells while walking (72.7 % of his walk clicks are sent while
+  moving): seen -> click 1.11 s, against the bot's 3.6-7.3 s.
+
+**The species check (`scripts/species_check.py`, feea60d), validated live in SHADOW in v23:**
+- 156 tag reads in v23 attempts 1 and 2: the check was sure on 57 (37 %; offline 78 %, trained
+  on JPEG recordings).
+- Where the tag also read a name: 37 of 38 agreed. The one miss was the tag Lunatic vs the check
+  Drops at confidence 1.0, both targets.
+- 19 times the check was sure where the tag read nothing.
+- No Creamy appeared in the shadow (the detector rarely boxes one); offline, zero Creamy accepts
+  at the operating threshold 0.999 on the held-out session.
+
+**The ONE main change (Batt's item 3, the NAME TAG, 05c3dff), on v24:**
+1. **The tag only when ambiguous:** before the tag read, the check runs on a fresh crop of the
+   target's box. When it is sure of a TARGET (Poring, Lunatic, Drops, Pupa) and no other monster
+   box lies within 50 px, the tag is not read and the click goes (`species_skip`). Otherwise the
+   tag is read, exactly as v24.
+2. **Start while walking in:** in range while the GM WALKS (it used to wait for the stop), with no
+   risk from the risk gate and a sure, uncrowded check, the strike goes now (`strike_moving`). The
+   click makes the client walk in and attack, as Batt does.
+- Everything else as v24 (the risk gate and its read path, the burst, the fixed loot at the
+  hybrid death cell).
+
+**Also (safety-layer fixes from v24's run, no decision of the main change):**
+- the loot skips a cell with a monster box within **70 px** (was 30; 6752a24). v24's 10 loot clicks
+  that became attacks had the nearest box edge 19-81 px away;
+- the loot's pink check leaves the GM's own sprite out (795f896). v24 skipped 1-3 loot cells a kill
+  as "pink"; likely the GM's red hair, which stays at the screen centre while BEFORE is shifted by
+  the ground move;
+- the setup helpers get the raw agent (248d182), so FrameGuard guards only the hunt's world inputs.
+- **Not fixed: the Creamy hole of walk and loot clicks** (3.65). No cheap pixel fix is known. This
+  run measures it again.
+
+**v24 as the reference (3.65):** loot 83 / 219 (37.9 %), kill -> last pickup p50 3.63 s, seen -> click p50 4.21 s, in range -> click p50 1.63 s, the bar 77.4 %, engaged 133.9 kills / h, 25 unintended attack requests, HARD BARS FAILED (a Creamy hit from a walk click).
+
+**Run:** 60 min, round 5's seed 20270601 (the agent first this round), the same test state,
+nice 10, detector on the CPU (GPU freeze), judged on the full run and on 10-min windows.
+
+**Prediction, written before the run:**
+- seen -> click p50 below v24's by >= 20 %;
+- in range -> click p50 <= 1.0 s (v22 1.55 s);
+- tag skips on >= 30 % of the strike calls; tag reads that read nothing fewer than v24's;
+- the bar (landing within 5 s) >= v24's - 3 points;
+- engaged kills / h >= v24's;
+- **hard bars: zero NPC contact, zero map change, zero NON-TARGET HIT.** A skipped tag on a Creamy
+  would be a non-target hit. The bot is pixels only, so this is judged from the packets after the
+  run, as for every run. If it happens, the tag skip is withdrawn before the next version.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
