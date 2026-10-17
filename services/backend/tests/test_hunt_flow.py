@@ -731,6 +731,8 @@ def test_v36_retries_unit_skipped_loot_cells_once() -> None:
     assert p["loot_retry"] and p["loot_retry_ab"] and p["loot_retry_wait_s"] == 0.6
     assert 36 in hf.VERSIONS and not hf.PARAMS[35].get("loot_retry")
     assert not (p["species_own_ab"] and p["loot_retry_ab"])  # never two parity arms at once
+    assert not p["species_own"]  # 3.75's verdict: the stale-box check for all (landing fell)
+    assert p["send_gap_s"] and not p["send_gap_ab"]  # paced for the whole run (3.74)
     step = ((10, 20), (0.0, 0.0), None)
     got = hf.loot_retry_of(step, "unit", True, 100.0, 0.6)
     assert got == ((10, 20), (0.0, 0.0), None, 100.6)

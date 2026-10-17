@@ -9535,6 +9535,54 @@ between runs, nice 10, detector on the CPU, the live hard-bar monitor.
   packet-assisted, 10 min).
 - **Run 1** (03:58:55, seed 20271901, `20261018T035855-demo-hunt-flow35`), after a judged
   screenshot (03:58: no dialog, the fixed-state windows, the weight cleared).
+  - The full 60-min box: 173 engagements, all dead. No stop, 0 Creamy hits, 0 non-target hits.
+- **Run 2** (05:00:51, seed 20272001, `20261018T050051-demo-hunt-flow35`), after a judged
+  screenshot (05:00).
+  - The full 60-min box: 153 engagements, 150 dead, 2 gave up, 1 cut by the time box. No stop,
+    0 Creamy hits, 0 non-target hits.
+
+**RESULT (judged 2026-10-18 06:0x; run 1 + run 2 pooled):**
+
+| run | min | engagements | landing (5 s) | kills / h | seen -> click p50 | loot picked / fell | sight / 10 min | reversals / min |
+|---|---|---|---|---|---|---|---|---|
+| run 1 | 60.0 | 173 | 135 / 173 = 78.0 % (Wilson 71.3-83.6) | **159.8** (the night's best hour) | 3.74 s | 104 / 232 = 44.8 % | 15.2 | 6.39 |
+| run 2 | 60.0 | 153 | 100 / 153 = 65.4 % (57.5-72.4) | 120.9 | 3.29 s | 83 / 158 = 52.5 % | 12.7 | 7.74 |
+
+| per parity (`arm_judge.py species`, pooled) | own frame (odd k) | stale box (even k, as v32-v34) |
+|---|---|---|
+| strikes | 159 | 161 |
+| fell back as "species unsure" | 25 = **15.7 %** | 44 = 27.3 % |
+| fell back as "pink near" | **22** | 2 |
+| effective arm C | 108 = 67.9 % | 111 = 68.9 % |
+| landing within 5 s | **103 / 162 = 63.6 %** | 132 / 164 = 80.5 % |
+| the effective C strikes: hit / no unit under the click / hit late | 63 / 17 / 26 of 108 (58 % hit) | 89 / 7 / 14 of 111 (80 % hit) |
+| strike call, mean | 723 ms | 610 ms (run 1 p50: 210 vs 112 ms) |
+
+**Against the predictions:**
+1. **Primary**, "species unsure" own <= stale - 10 points: **PASS** (15.7 vs 27.3 %, -11.6).
+2. effective arm C own >= stale + 10 points: **FAIL** (67.9 vs 68.9 %).
+3. landing own >= stale - 5 points: **FAIL** (63.6 vs 80.5 %, -16.9).
+4. safety: **PASS**. No non-target hit and no Creamy attack request in either arm; hard bars zero.
+
+**Consequence:** the own-frame check is NOT adopted. v36's base runs the stale-box check for ALL
+engagements (`species_own` off), as v32-v34 did.
+
+**Read: the stale crop had been a "still there" gate.**
+- The fresh crop at the old box says "sure" only when the sprite is still where the box says.
+  When it has moved, the crop misses, the answer is "unsure", and the strike falls back to the tag
+  read.
+- The own-frame check also says "sure" for a sprite that has moved: `recentre` finds it up to
+  120 px away. The arm C click still goes to the OLD box (the re-centred box is not used for the
+  aim).
+- Effects of that:
+  - "no unit under the click" 17 against 7;
+  - aim error p90 56 px against 33 (run 1);
+  - the target's own displaced pink sprite reads as "pink near" (22 against 2), so the
+    effective C share did not rise.
+- The check also costs ~100 ms (a ±120 px grab plus the NCC search) before every click.
+- A next step, if the species fallbacks matter again: aim at the re-centred box, or say "sure"
+  only when the re-centre shift is small. That is a new pre-registration, not this one.
+- Kills / h follows the density again: run 1 had the night's densest field (15.2 / 10 min).
 
 ### 3.76 hunt-flow@35 on prt_fild06: THE HELD-OUT MAP TEST (pre-registered 2026-10-18 04:03 ICT, the commit time a522a59, BEFORE its run; Batt 2026-10-17 21:5x)
 
@@ -9621,6 +9669,72 @@ hunting fixed state restored and the weight cleared before, nice 10, the detecto
 **Report:** side by side with v35 on prt_fild08 (kills / h, landing, seen -> click, loot picked /
 fell / lost to looters, reversals, monsters seen / 10 min + density, unknown-species hits, the
 technique that broke), plus a short phone clip.
+
+**Run log:** started 06:03:44 (`20261018T060344-demo-hunt-flow35`).
+- Before it: a judged screenshot on prt_fild08 (06:02, clean). Then `ro_agent.py gm "@warp
+  prt_fild06 175 184"`, which left the chat input line open. `bench.close_chat` closed it by its
+  known steps, and a judged screenshot on prt_fild06 followed (06:03): no dialog, the fixed-state
+  windows, readout 175 184, HP full.
+
+### 3.77 hunt-flow@36: THE LOOT RETRY, interleaved per kill (pre-registered 2026-10-18 06:1x ICT, the commit time below, BEFORE its run)
+
+**Why this change, and not the time-loser order:** the plan attacks the latency budget's top
+loser. v34's two runs (s / h):
+- dead -> next selection: 570;
+- selection -> click: 570. Of this, the walk into range is ~350 and in range -> click ~225-255
+  (`latency_budget.py`; v34 engagements);
+- server kill -> "dead": 415.
+
+Neither of the top two has a ready, safe single change:
+- **The search is density-bound.** At 67-75 % of engagement ends, no target species stood within
+  14 cells (packets).
+- **In range -> click** takes ~1.1 s for moving and standstill strikes alike, so a tag read while
+  walking would gain only ~20-30 s / h.
+- **The species fallbacks** were 3.75's target, and its own-frame check failed on landing.
+
+So v36 takes M1's LARGEST gap instead, the loot.
+- v34 picked 66.6 % of the items at our kills, against the 80 % bar.
+- Loot is a race (Batt's decision 3).
+
+**Found (v34 run 1, `20261018T013812-demo-hunt-flow34`):** 40 of 143 loot steps skipped >= 6 of
+their clicks for "a unit near".
+- In 23, another live monster stood within 4 cells (packets): a correct skip, but that monster
+  may walk on.
+- In 15, no live monster stood within 6 cells. The recorded frames show what the detector boxed:
+  - mostly the target's own dying sprite beside the GM. The corpse match (v34) missed it: the
+    track's last box was > 30 px from where the sprite died, since the track is lost when the
+    target overlaps the GM;
+  - twice, our own hand pointer.
+- A skipped click is never tried again, so a fully blocked step ends in ~0.6 s and leaves its
+  items behind.
+
+**The ONE main change (`loot_retry`, interleaved by `loot_retry_ab`; `loot_retry_of` is pure and
+tested):**
+- **Odd k (the retry arm):** a loot cell skipped for "a unit near" is queued ONCE more at the end
+  of the step, not before `loot_retry_wait_s` (0.6 s) after its skip. By then the dying sprite
+  has faded or the passer-by has moved.
+- The SAME checks decide it again: a unit within 70 px, new pink, an NPC within 2 cells, the view.
+  The same step cap applies (`loot_fixed_max_s` 4.5 s).
+- A retry skipped again is counted apart and never queued again. Pink / NPC / view skips are never
+  retried.
+- **Even k:** as v35.
+
+**Base:** v35 with 3.75's verdict applied: the STALE-box species check for all engagements
+(`species_own` off, `species_own_ab` off), paced input for the whole run (3.74), the plain 3 x 3
+(3.73), v15's dead rule.
+
+**Run:** one 60-min run, seed 20272201, prt_fild08, after the held-out run. The hunting fixed state
+restored and the weight cleared before, nice 10, the detector on the CPU, and the live hard-bar
+monitor (`hardbar_live.py watch 36`).
+
+**Prediction, written before the run (per parity; `arm_judge.py retry`):**
+- **Primary (mechanical):** loot clicks made per step, retry >= none + 1.0.
+- the share of first-pass unit skips that a retry then clicked: >= 30 %;
+- loot step time p50: retry <= none + 0.8 s (the cost);
+- items picked / fell at our kills: retry >= none. This is secondary: ~75 items an arm cannot
+  resolve a small gain;
+- **safety:** zero non-target hits (Creamy counted apart), no rise of Creamy attack requests in
+  the retry arm, hard bars zero.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,

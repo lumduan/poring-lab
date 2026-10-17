@@ -391,13 +391,14 @@ PARAMS[34] = {**PARAMS[33], "loot_race": False, "loot_icons": False, "looter_cha
 # "v33"). Base: v34 PACED for the whole run (3.74's verdict 2026-10-18 03:46, fef68d9: the loot step
 # 1.02 s faster, the input still registered)
 PARAMS[35] = {**PARAMS[34], "send_gap_ab": False, "species_own": True, "species_own_ab": True}
-# 36 = the LOOT RETRY (2026-10-18 04:3x, staged; its base is set at its pre-registration by 3.75's
-# verdict): a loot cell skipped for "a unit near" is queued once more at the end of the step, not
-# before 0.6 s, under the same checks. v34 run 1: 40 of 143 steps skipped >= 6 of their clicks;
-# in 15 no live monster stood within 6 cells (packets) -- the target's own dying sprite beside
-# the GM (the corpse match missed: its last tracked box was > 30 px off) or our own hand pointer
-PARAMS[36] = {**PARAMS[35], "species_own_ab": False, "loot_retry": True, "loot_retry_ab": True,
-              "loot_retry_wait_s": 0.6}  # fmt: skip
+# 36 = the LOOT RETRY: a loot cell skipped for "a unit near" is queued once more at the end of
+# the step, not before 0.6 s, under the same checks. v34 run 1: 40 of 143 steps skipped >= 6 of
+# their clicks; in 15 no live monster stood within 6 cells (packets) -- the target's own dying
+# sprite beside the GM (the corpse match missed: its last tracked box was > 30 px off) or our own
+# hand pointer. Base: v35 with the STALE-box species check for all (3.75's verdict 2026-10-18
+# 06:0x: the own frame cut "unsure" 27 -> 16 % but landing fell 80.5 -> 63.6 %)
+PARAMS[36] = {**PARAMS[35], "species_own": False, "species_own_ab": False, "loot_retry": True,
+              "loot_retry_ab": True, "loot_retry_wait_s": 0.6}  # fmt: skip
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
