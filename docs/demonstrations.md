@@ -9155,6 +9155,45 @@ stop (Batt 18:3x).
   Batt looks first, then clicks only the items he sees. Not run in this version: item recognition
   (item_icons, built) as the ORDER of the 3 x 3 clicks, items first.
 
+### 3.72 hunt-flow@32: FAST DEAD, interleaved, with arm C the default (pre-registered 2026-10-17 __TIME__ ICT, the commit time __SHA__, BEFORE its run; Batt's decisions on the 21:33 report; the overnight run 17-18 Oct)
+
+**Batt's decisions (after the 21:33 report):**
+1. arm C (the nudge, then a burst to the lock arrow) is the DEFAULT strike for confident targets,
+   with A the fallback;
+2. fast dead: yes, pre-registered.
+
+C is ADOPTED, not tested here (3.70: 0.89 s arrival -> attack, 86 % landing, pooled n 71).
+
+**Why fast dead:** v28's latency budget ranks "server kill -> the bot's dead, including the loot"
+first (807 s an hour). Server kill -> the loot step's start was p50 2.41 s (v24), 3.02 s (v28) and
+2.37 s (v31); Batt's WHOLE loot takes 1.56 s. Every kill is one hit at STR 99.
+
+**The ONE main change (`fast_dead`, interleaved by `fast_dead_ab`), on v31 + C:**
+- On ODD engagements (k % 2 == 1), once the engagement's burst ended on the client's lock arrow
+  (proven against packets, 3.70) or the target vanished during it, the death is 0.5 s after the
+  last click with 0.35 s unseen (one missed detector frame at ~3 fps). The loot then starts with
+  no 0.4 s wait.
+- EVEN engagements keep v15's rule (>= 1.4 s after the click and 0.8 s unseen, then the 0.4 s
+  wait).
+- Each engagement logs `dead_rule` (its arm) and `dead_by` (which rule fired).
+
+**v31 as the reference (3.71):** 45 min, seed 20271201: 101.3 kills / h (engaged 98.6), the bar
+84.6 %, loot 58.5 %, server kill -> loot start p50 2.37 s, false deaths 14.7 %, sight 22.5 per
+window.
+
+**Runs:** two 60-min runs pooled (seeds 20271301, 20271401), the hunt-flow test state rebuilt
+21:44-21:47 (Base Lv 70, STR 99, template fixed), nice 10, detector on the CPU (GPU frozen), my
+live hard-bar monitor on. A Creamy hit is counted, not a stop.
+
+**Prediction, written before the runs (per arm, pooled):**
+- server kill -> loot start p50 <= 1.2 s in the fast arm (the slow arm about v31's 2.4 s);
+- false deaths (an engagement called dead with no server vanish of its target within 3 s,
+  `dead_check`): the fast arm no more than the slow arm + 5 points;
+- death -> next click p50: fast below slow;
+- loot picked / dropped: fast >= slow (an earlier loot races the looters);
+- landing within 5 s >= 80 % overall (arm C default);
+- hard bars: zero NPC contact, zero map change, zero non-Creamy non-target hit.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
