@@ -44,7 +44,8 @@ non-target hit, map change) apply to every session.
 | R0 (bot v20) | 300 / 100 % / 62 of 64 / - | 24.6 / 4 of 5 / 6 of 14 / pass | 120 / 80 % / 2 of 30 / pass | 192 / 90 % / 10 of 57 / pass | 140.9 / 85.2 % / 41 of 218 / 1 non-target |
 | R1 (bot v21) | (fixed) | 38.3 / 4 of 5 / 4 of 6 / pass | 96 / 81 % / 4 of 25 / pass | 120 / 76 % / 6 of 30 / pass | 100.8 / 78.8 % / 34 of 156 / pass |
 | R2 (bot v22) | (fixed) | 12.3 / 2 of 2 / 0 of 2 / pass | 126 / 75 % / 4 of 30 / pass | 138 / 84 % / 9 of 37 / pass | 123.5 / 80.0 % / 34 of 182 / pass |
-| R3 (bot v23) | (fixed) | 25.6 / 4 of 4 / 5 of 13 / pass | pending | pending | pending |
+| R3 (bot v23) | (fixed) | 25.6 / 4 of 4 / 5 of 13 / pass | 126 / 83 % / 9 of 19 / pass (2 windows: the lower) | 162 / 69 % / 11 of 55 / pass | 145.2 / 76.8 % / 29 of 94 / pass (25.7 min) |
+| R4 (bot v24) | (fixed) | pending | pending | pending | pending |
 
 ## Round 0 (bot v20 from 2026-10-17 04:42 + 05:55; agent 07:55)
 
@@ -136,15 +137,47 @@ non-target hit, map change) apply to every session.
   - The bot's ~1 s cadence and continuous walking are worth ~10x more ground than the agent's
     judgment here.
 
-## Round 3 (agent first, 11:37; then bot v23)
+## Round 3 (agent first, 11:37; then bot v23, 11:57)
 
 - **Sessions:**
-  - AGENT `20261017T113727-demo-agent-demo` (seed 20270401, 10 min): 4 kills, 4 of 4 landed,
-    loot 5 of 13, hard bars passed. 25.6 kills / h.
-  - BOT v23 (Batt's fixed loot workflow, demonstrations 3.64):
+  - AGENT `20261017T113727-demo-agent-demo` (seed 20270401, 10 min).
+  - BOT v23 (Batt's fixed loot workflow, demonstrations 3.64), the same seed:
     - attempt 1 `20261017T114911-demo-hunt-flow23`, stopped by me at 296 s (5 of 11 kills looted,
       0.7 s a click; fixed in fc41aa5);
-    - attempt 2 (11:57, the same seed, 60 min) is running.
+    - attempt 2 `20261017T115719-demo-hunt-flow23` stopped ITSELF at 25.7 min: a pre-existing
+      off-frame pointer move (read_tag's pre-motion at the top edge). Fixed in v24 (f4a8ebe).
+      Two full 10-min windows.
+
+| metric | BATT | AGENT R3 (packet-assisted) | BOT v23 lower 10' | BOT best 10' | BOT full (25.7 min) |
+|---|---|---|---|---|---|
+| kills / h | 300 | 25.6 | 126 | 162 | 145.2 |
+| landing <= 5 s | 64/64 | 4/4 | 19/23 | 22/32 | 53/69 |
+| seen -> click p50 / p90 s | 1.11 / 4.79 | 19.47 / 23.29 | 4.17 / 13.3 | 12.61 / 27.81 | 7.3 / 23.56 |
+| death -> next click s | 1.24 / 1.8 | 16.0 / 36.3 | 0.53 / 2.6 | 0.61 / 2.61 | 0.56 / 2.84 |
+| monsters in sight / 10 min | 44 | 7.5 | 38 | 33 | 35.5 (windowed) |
+| loot picked / dropped | 62 / 64 | 5 / 13 | 9 / 19 | 11 / 55 | 29 / 94 |
+| kill -> last pickup s | 1.56 | 50.9 | 1.98 | 2.23 | 2.79 |
+| walk clicks while moving | 72.7 % | 7.4 % | 55.7 % | 49.4 % | 48.1 % |
+| click cadence s | 0.6 / 3.44 | 13.2 / 33.3 | 0.96 / 3.84 | 0.97 / 4.8 | 0.97 / 5.2 |
+| reversals / min | 3.6 | 0.32 | 6.8 | 6.9 | 6.56 |
+| straight run cells | 16.9 | 34.8 | 12.8 | 10.3 | 11.2 |
+| unintended attack requests | - | 0 | 0 | 0 | 0 |
+| hard bars (NPC / map / non-target) | - | 0/0/0 | 0/0/0 | 0/0/0 | 0/0/0 |
+
+- "death -> next click" now counts v23's loot clicks as the next click, so it is not comparable
+  with earlier rounds.
+- **What the agent did vs the bot (round 3):**
+  - **Loot:** after a Drops kill the agent SAW 4+ items at the GM's feet and picked 4 by clicking
+    them. v23's blind fixed clicks went to the wrong death cell: offline, its first loot click
+    lay p50 50 px from the nearest drop, while the bot's own last strike click lay 10-16 px from
+    it. That is v24's change.
+  - **Landing:** the agent struck only targets standing next to the GM (4 of 4). The bot strikes
+    from up to 7 cells at a 0.55 s-old box (76.8 %).
+  - **Sight:** the agent met 7.5 monsters per 10 min, the bot 35.5. The agent's slow steps and
+    two dead ends (a cliff pocket, a plateau) cost it most of its 10 minutes again.
+- **Bot v23 vs v22:** best window 162 kills / h (the bot's best so far); 0 unintended attacks
+  (v22 10); loot 30.9 % (v22 18.7 %); kill -> last pickup 2.79 s (v22 7.39 s). But seen ->
+  click got slower (7.3 s vs 3.58 s): monsters seen during the 4 s loot step wait for it.
 
 ## What the agent's play taught (rounds 0-3)
 
@@ -230,13 +263,21 @@ non-target hit, map change) apply to every session.
 
 ## The next bot change
 
-**v23: Batt's FIXED loot workflow** (his message 11:0x; demonstrations 3.64), on v22.
-- After every confirmed kill: burst-click the death cell, then click through the 3 x 3 in the
-  drop pattern's order, 0.3 s apart.
-- No item detection, no cursor read. Safety skips only.
-- Bars: loot picked >= 60 % (M1's bar 80 %), kill -> last pickup <= 3 s.
+**v24 (running, round 4): the fixed loot's DEATH CELL** (demonstrations 3.65).
+- The cell under the last strike click when it is beside the GM, else the GM's neighbour toward
+  it. Offline (340 drops): 63 % of drops in its 3 x 3, 87 % within 2 cells.
+- Plus the cadence v23 registered (~0.4 s a click) and `FrameGuard` (no input off the frame).
 
-**Then (work order item 3, the NAME TAG):** the pixel species check is logged in shadow beside
-every tag read in v23. If it agrees with the tag live (and never accepts a Creamy), v24 skips the
-tag read when the species check is sure, and starts the read while walking in. The Battleship
-belief map (merged 8268666) follows as its own version.
+**Then (work order item 3, the NAME TAG):**
+- v23's species shadow was sure on 37 % of the tag reads, agreed with the tag on 37 of 38, and
+  disagreed once, on a CROWDED box (the tag Lunatic, the check Drops).
+- 19 times it was sure where the tag read nothing.
+- **v25 candidate:** skip the tag when the check is sure AND no other monster box is within
+  50 px, and start the read while walking in.
+
+**Measured top losers (v22, seconds per hour):**
+- server kill -> the bot's "dead", including the loot step: 508;
+- selection -> click: 423;
+- "dead" -> the next selection: 337;
+- in range -> click: 260;
+- click -> server kill: 250.
