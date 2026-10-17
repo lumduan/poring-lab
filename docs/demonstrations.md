@@ -8739,6 +8739,78 @@ nice 10, detector on the CPU (GPU freeze), judged on the full run and on 10-min 
   would be a non-target hit. The bot is pixels only, so this is judged from the packets after the
   run, as for every run. If it happens, the tag skip is withdrawn before the next version.
 
+**RUN 1 RESULT (2026-10-17 14:02:28-15:02:28, session 20261017T140228-demo-hunt-flow25, seed
+20270601; the full hour):**
+- **HARD BARS FAILED again: one non-target hit, a Creamy, from a WALK click** (gate map+units,
+  while moving). The client's own continuous attack came 0.74 s after the click, and the GM hit
+  it twice.
+  - **Not from the tag skip:** no strike or skip was near it. It is v24's walk-click hole.
+  - Under this pre-registration's rule, the tag skip stays: the hit was not the skip's.
+- **The name tag (the main change):**
+  - 87 tag decisions were skipped by a sure, uncrowded species check (of 200);
+  - tag reads that read nothing fell to 59 of 188 strike calls (24 %; v22 41 %);
+  - 26 strikes went while walking in;
+  - in range -> click p50 1.25 s (v24 1.63 s); seen -> click p50 4.26 s (v24 4.21 s).
+- **Engagements:** 128 (127 dead). The bar 90 / 127 = 70.9 % (v24 77.4 %).
+- **Kills:** 109.9 / h; engaged 98.9 / h (v24 133.9). Sight 30 per 10-min window (v24 37: a
+  sparser seed).
+- **Loot (v24's safety fixes):** 81 of 131 items (61.8 %; v24 37.9 %); kill -> last pickup p50
+  4.08 s.
+  - Loot clicks that became an attack: 2 (v24 10). The 70 px margin works.
+- **Unintended attack requests:** walk 13 (v24 15), loot 2, all but one on targets.
+- **vs the prediction:**
+  - seen -> click p50 >= 20 % below v24's: NO (4.26 vs 4.21 s);
+  - in range -> click <= 1.0 s: NO (1.25 s, but -23 %);
+  - tag skips >= 30 % of strike calls: YES (87 of 188 calls, 46 %);
+  - fewer empty tag reads than v24: YES (24 % of calls);
+  - the bar >= v24's - 3 points: NO (70.9 vs 77.4 %);
+  - engaged kills / h >= v24's: NO (98.9 vs 133.9; a sparser seed, sight 30 vs 37);
+  - hard bars: FAILED (a walk-click Creamy, not the skip).
+
+### 3.67 hunt-flow@26: RE-TARGET WHILE STEERING (pre-registered 2026-10-17 __TIME__ ICT, the commit time __SHA__, BEFORE its run; Batt's competition work order item 4; round 6 of docs/competition.md)
+
+**Why:** the bot commits to a target and steers to it even when a cheaper one appears.
+- v22's latency budget: selection -> click p50 2.74 s, 423 s an hour, the second-largest stage.
+- v7's study: a unit in sight was dispatched p50 2.85 s after it was first seen, and in 19 of 32
+  cases the bot was then steering to ANOTHER target, which then failed.
+
+**The ONE main change (`retarget`, v19's code, built 2026-10-17 02:2x and never run), on v25:**
+- After >= 1 s on a target, and before its engagement starts, the planner's queue[0] replaces it
+  when queue[0] is valid on the freshest frame (not done, not dropped) and cheaper by >= 2 cells
+  (Chebyshev to the predicted cell, +2 for a walking target). Each switch is logged
+  (`retarget`).
+- Everything else as v25.
+
+**Also (a safety layer, 49e5d51), against the hard bar of v24 AND v25: `ptr_rest_ui`.**
+- After every walk click and every loot step, the pointer moves to REST over the Basic
+  Information window's HP bar, (110, 66).
+- **Why:** both Creamy hits came from walk clicks while moving.
+  - The client's own continuous attack came 0.66-0.74 s after the click, with no click of ours
+    between.
+  - In v24's frames, the Creamy was not within 160 px of the click point on the frame before the
+    click; it flew in under the RESTING pointer.
+  - Of v24's 15 walk-click attacks, all came 0.35-1.45 s after the click, mostly with no detector
+    box near the click point.
+  - **Hypothesis:** this client attacks a monster that comes under the resting pointer after a
+    walk click. Over the UI, no monster can.
+- Checked live before this run: resting there keeps the UI gate "clear" and the HP read 1.0, with
+  no tooltip.
+- **Measured:** walk-click attack requests per hour (v24 15, v25 13).
+
+**v25 as the reference (3.66):** seen -> click p50 4.26 s, in range -> click p50 1.25 s, the bar 70.9 %, engaged 98.9 kills / h (sight 30 per window), loot 61.8 %, walk-click attack requests 13, HARD BARS FAILED (a walk-click Creamy).
+
+**Run:** 60 min, round 6's seed 20270701 (bot first this round), the same test state, nice 10,
+detector on the CPU (GPU freeze), judged on the full run and on 10-min windows.
+
+**Prediction, written before the run:**
+- selection -> click p50 below v25's by >= 15 %;
+- seen -> click p50 <= v25's;
+- the bar (landing within 5 s) >= v25's - 3 points;
+- engaged kills / h >= v25's;
+- re-targets < 1 per engagement (no flip-flopping);
+- **the pointer rest: walk-click attack requests <= 5 in the hour (v24 15, v25 13)**;
+- hard bars: zero NPC contact, zero map change, zero non-target hit.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
