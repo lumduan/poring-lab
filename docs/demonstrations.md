@@ -9445,7 +9445,7 @@ the live hard-bar monitor.
   - The full 60-min box: 153 engagements, 150 dead, 3 gave up. No stop; 1 Creamy hit (counted
     apart), 150 attack requests on targets.
 
-**RESULT (judged 2026-10-18 03:4x; run 1 + run 2 pooled, attempt 1 excluded):**
+**RESULT (judged 2026-10-18 03:46, fef68d9; run 1 + run 2 pooled, attempt 1 excluded):**
 
 | run | min | engagements | landing (5 s) | kills / h | seen -> click p50 | loot picked / fell | sight / 10 min | reversals / min |
 |---|---|---|---|---|---|---|---|---|
@@ -9517,7 +9517,7 @@ species unsure on 26.9-37.7 % of strikes (`arm_judge.py species`).
 **Base:** v34, with its pacing decided by 3.74's verdict before v35's first run: paced for the
 whole run (`send_gap_ab` off) if 3.74's primary prediction and its three "still registers"
 predictions hold, else the default for the whole run. 3.73's loot decision kept; v15's dead rule.
-- ➡️ **Decided by 3.74's RESULT (2026-10-18 03:4x):** all four held, so **PACED for the whole
+- ➡️ **Decided by 3.74's RESULT (2026-10-18 03:46, fef68d9):** all four held, so **PACED for the whole
   run** (`PARAMS[35]`: `send_gap_ab` False).
 
 **Runs:** two 60-min runs pooled (seeds 20271901, 20272001), the hunting fixed state restored
@@ -9536,7 +9536,7 @@ between runs, nice 10, detector on the CPU, the live hard-bar monitor.
 - **Run 1** (03:58:55, seed 20271901, `20261018T035855-demo-hunt-flow35`), after a judged
   screenshot (03:58: no dialog, the fixed-state windows, the weight cleared).
 
-### 3.76 hunt-flow@35 on prt_fild06: THE HELD-OUT MAP TEST (pre-registered 2026-10-18 04:1x ICT, the commit time below, BEFORE its run; Batt 2026-10-17 21:5x)
+### 3.76 hunt-flow@35 on prt_fild06: THE HELD-OUT MAP TEST (pre-registered 2026-10-18 04:03 ICT, the commit time a522a59, BEFORE its run; Batt 2026-10-17 21:5x)
 
 **Batt:** do the techniques (walking, striking, looting) carry over to another map? One run of the
 CURRENT BEST version, UNCHANGED (a MAP parameter only), with nothing tuned on that map.
