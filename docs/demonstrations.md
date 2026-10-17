@@ -8811,6 +8811,83 @@ detector on the CPU (GPU freeze), judged on the full run and on 10-min windows.
 - **the pointer rest: walk-click attack requests <= 5 in the hour (v24 15, v25 13)**;
 - hard bars: zero NPC contact, zero map change, zero non-target hit.
 
+**RUN 1 RESULT (2026-10-17 15:06:35, session 20261017T150635-demo-hunt-flow26, seed 20270701). It
+STOPPED ITSELF at 39.8 min: "no progress for 60 s".**
+- **The stop:** a steering deadlock. The zone's one path ran into a spot that two cursor reads
+  refused (`stale_background`), and no click came for 60 s. It is a pre-existing hole of v11's
+  zone, and the safety stop worked as designed.
+  - Fixed for v27 (23a72aa): a target is dropped after 10 s of steering with no click.
+- **HARD BARS PASSED: no NPC contact, no map change, no non-target hit.** This is the first clean
+  run since v23.
+- **The pointer rest:** walk-click attack requests 5 in 39.8 min (~7.5 / h; v24 15, v25 13);
+  loot-click attack requests 2.
+- **Engagements:** 89 (88 dead). **The bar 76 / 89 = 85.4 %** (Wilson 76.6-91.3; the best of
+  the day).
+- **Kills:** 129.1 / h; engaged 124.5 / h. Sight 30 per 10-min window.
+- **Reaction:** seen -> click p50 3.16 s (v25 4.26 s); in range -> click p50 1.48 s.
+- **Loot:** 68 of 122 items (55.7 %); kill -> last pickup p50 4.31 s.
+- **The re-target (the main change):** 103 re-targets in 89 engagements (1.16 each);
+  selection -> click p50 2.92 s (v25 1.95 s).
+- **vs the prediction:**
+  - selection -> click >= 15 % below v25's: NO (2.92 vs 1.95 s);
+  - seen -> click <= v25's: YES (3.16 vs 4.26 s);
+  - the bar >= v25's - 3 points: YES (85.4 vs 70.9 %);
+  - engaged kills / h >= v25's: YES (124.5 vs 98.9; another seed);
+  - re-targets < 1 per engagement: NO (1.16: it flip-flops);
+  - walk-click attack requests <= 5 in the hour: NO by the hour rate (~7.5 / h), but half of
+    v24 / v25;
+  - hard bars: PASSED.
+- **Reading:** the re-target itself did not do what it was meant to (it flips, and the time to
+  a click rose). But the run is the cleanest and the most accurate of the day. The pointer rest
+  is the likely cause of the clean hard bars; 40 min is too short to call it proven.
+
+### 3.68 hunt-flow@27: BATTLESHIP, the belief map of hidden monsters (pre-registered 2026-10-17 __TIME__ ICT, the commit time __SHA__, BEFORE its run; Batt's "Battleship" idea; round 7 of docs/competition.md)
+
+**Batt's idea (2026-10-17):**
+- a grid of walkable cells; detections -> cells -> tracks with their last-seen time;
+- PREDICT a random-walk spread at the species' speed, with a time cap;
+- NEGATIVE EVIDENCE: a cell in view, not occluded, with no monster lowers the belief;
+- PROBE the most probable cells; USE it for hidden targets, off-screen targets, identity through
+  dropouts and the search bias.
+
+**Built and validated offline first (`scripts/belief_map.py`, merged 8268666, a subagent):**
+- 5 sessions, 53,302 detector frames, scored leave-one-session-out against the packets' true
+  cells.
+- Hidden = alive, inside the 14-cell AOI, unboxed >= 1 s.
+- Spaced top-3 probes within 1 cell, the best variant (negative evidence + walk-on lead):
+  66 / 54 / 26 / 19 % at 1-2 / 2-5 / 5-10 / > 10 s hidden; off screen 82 / 70 / 36 / 25 %.
+- Occluder maps add -1 to +2 points: the hidden monsters are mostly detector dropouts and
+  off-screen walks, not static cover. They are not used.
+- Expected gain, conservative: +1.2-2.2 kills per 10 min (+6-11 %).
+
+**The ONE main change (`belief`, wired fef14c7 + f8d2e0e), on v26:**
+- The planner feeds the map from every new detector frame: our sightings' cells (with the
+  selection's gates: no Creamy, no floor item, no UI) and the cells in view as negative evidence,
+  each at our measured position at that frame.
+- A monster unseen 1-10 s, seen at least twice, whose existence mass after the negative evidence
+  is >= 0.3, and not within 2 cells of one of our kills in the last 30 s, is a GHOST.
+- The best ghost's most probable reachable cell becomes the SEARCH GOAL, ahead of the heading
+  search (`belief_goal`). When the detector sees the monster again, the normal engagement takes
+  over.
+- Batt's hover PROBE (SWORD / tag on the probable cells) is NOT in this version: the name tag
+  needs ~0.5 s to show, and the probes' hit rate on screen was 57 / 49 % at 1-5 s offline. This
+  version tests the walk-toward use first.
+- An error in the map logs `belief_error` once and turns the map off; it never stops the run.
+- **Also (a safety fix, 23a72aa):** a target is dropped after 10 s of steering with no click
+  (v26's stop).
+
+**v26 as the reference (3.67):** 39.8 min (stopped on a steering deadlock, now fixed): 129.1 kills / h (engaged 124.5), the bar 85.4 %, seen -> click p50 3.16 s, sight 30 per 10-min window, loot 55.7 %, hard bars PASSED.
+
+**Run:** 60 min, round 7's seed 20270801 (the agent first this round), the same test state,
+nice 10, detector on the CPU (GPU freeze), judged on the full run and on 10-min windows.
+
+**Prediction, written before the run:**
+- belief goals >= 20 an hour, and >= 25 % of them followed within 10 s by an engagement of a
+  monster within 3 cells of the goal ("hidden kills");
+- monsters in sight per 10-min window (median) >= v26's;
+- engaged kills / h >= v26's;
+- hard bars: zero NPC contact, zero map change, zero non-target hit.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
