@@ -8339,6 +8339,44 @@ it):**
   - engaged ~121 kills / h;
   - one non-target hit (run 1's walk-click Creamy).
 
+### 3.62 hunt-flow@21: LOOT BY FRAME DIFFERENCE (pre-registered 2026-10-17 __TIME__ ICT, the commit time __SHA__, BEFORE its run; Batt's competition order item 1; round 1 of docs/competition.md)
+
+**Why:** loot is the top time loser. In v20, the post-kill wait including the sweep was 574 s / h,
+and the sweep picked 14-28 % of the drops (Batt: 62 / 64). The v17 sweep hovers CELL CENTRES and
+mostly reads no hand: items lie at sub-cell offsets and appear after a fall.
+
+**The detector (`scripts/drop_blobs.py`, merged 5490329; built offline by a subagent):**
+- NEW small compact blobs around the death spot, between a frame before the death and ~1 s after
+  it, persisting 0.4 s later.
+- Offline on the hunt-flow17/18/20/20 recordings (416 kills, 633 drops):
+  - recall within 20 px ~0.50 at 1.0 s after the vanish (0.43 on the session never used for
+    tuning);
+  - ~0.65 false blobs a kill.
+- Every blob is only a HOVER CANDIDATE, and the client's own hand cursor decides.
+
+**The ONE main change (`loot_blobs`, 8db5afa), on v20:**
+- After the bot's "dead" (~0.8 s after the death is drawn, v15), BEFORE comes from a ~5 Hz frame
+  ring, 1.8 s back. AFTER is now, LATER +0.4 s. Our own cursor's box is masked.
+- Each blob becomes a floor cell plus its sub-cell pixel residual. It is re-projected from the
+  GM's measured position, since the GM walks onto each item.
+- A blob is clicked only on the HAND read twice plus walk@11's unit check (loot@1's rule, as
+  v17), nearest first.
+- The v17 sweep runs only when no blob got a click. Bounds as v17: 6 s, 8 clicks. A monster in
+  the drop area skips the loot.
+
+**Also from this version (a safety-layer fix):** the walk guard leaves our own drawn cursor out
+of its pink count. The agent's round 1 showed walks refused beside the client's red no-entry ring.
+
+**Run:** 60 min, seed 20270201 (the agent's round 1 start area), the same test state, nice 10,
+detector on the CPU (GPU freeze). It is judged on the full run and on 10-min windows.
+
+**Prediction, written before the run:**
+- loot picked / dropped >= 50 % (v20 19 %; Batt's bar 80 %);
+- kill -> last pickup p50 <= 4 s (v20 5.8 s; Batt's bar 3 s);
+- no loot click becomes an attack (zero attack requests <= 0.5 s after a loot click);
+- engaged kills / h >= 0.85 x v20's 133;
+- hard bars: zero NPC contact, zero map change, zero non-target hit.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
