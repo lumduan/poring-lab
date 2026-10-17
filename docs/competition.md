@@ -497,10 +497,48 @@ non-target hit, map change) apply to every session.
 - in range -> click: 250;
 - click -> server kill: 234.
 
-**Next, in Batt's order:**
+**Next, in Batt's order:** *(➡️ re-numbered overnight: C + fast dead = v32, the loot race =
+v33, paced input = v34; see "Overnight 17-18 Oct" below)*
 1. **v32: arm C as the default** for confident targets, with A as the fallback.
 2. **v33: fast dead** (built and staged as v32's code path, PARAMS[32]: the burst's arrow or
    vanish -> dead after one missed frame). Re-number it after C.
 3. **The loot:** items first (item_icons ordering the 3 x 3 clicks), since monsters take our drops.
 4. **Immunity OFF** is Batt's call. At STR 99 every kill is one hit, so "stand and fight" could not
    be observed, and 19 % of hit targets had started a walk before they vanished.
+
+## Overnight 17-18 Oct (Batt resting; the 12-hour run, 21:45 -> 09:45)
+
+**Batt's decisions on the 21:33 report:**
+1. arm C is the default strike (A the fallback); then cut the "species unsure" fallbacks;
+2. fast dead: pre-registered (3.72);
+3. LOOT IS A RACE (3.73);
+4. measure the UI windows' cover, test a compact layout only if it pays;
+5. immunity stays ON;
+6. the GPU stays FROZEN.
+
+**Found during the night (each with its evidence):**
+- **The loot TREADMILL** (22:0x, `arm_judge.py stray`). The loot step blocks the main loop's
+  0.3 s minimap re-anchor; when the floor odometry freezes, every loot click lands at the same
+  screen pixels and the GM walks off its pile.
+  - v28-v31: 62-77 % of loot steps sent the GM >= 4 cells off the death cell.
+  - v32 run 1 stopped on it (a 13-cell "position jump"; packets: no map change).
+  - Fixed in v33 (both arms): the minimap readout before each loot click.
+- **The agent link's dead wait** (22:2x). `ro_agent.Agent.send()` drained the socket for a full
+  50 ms before EVERY input. The backend logs each input 51-57 ms after the agent made it.
+  - A click is 3 sends, so ~150 ms of a ~0.3 s click was waiting; every pointer move paid 50 ms.
+  - v34 tests paced sends: the old 50 ms minimum gap between inputs is kept, the dead wait
+    after other work goes. Alternating 10-min blocks within each run.
+- **The UI windows' cover** (`scripts/ui_cover.py`, v28-v31 pooled, packets + camera):
+  - 10.2 % of in-view monster-seconds lie under a window (targets 10.0 %);
+  - the shortcut bar 4.5 %, the chat 4.0 %, basic info + menu 1.6 %;
+  - the chat window carries the `/where` read and the typed-line gate, so only the shortcut bar
+    (<= 4.5 %) is free to shrink, and two runs cannot resolve a change that small in
+    sightings per 10 min. The layout trial is PARKED and the windows stay as they are.
+- **The held-out map** (offline pick, read-only): prt_fild06.
+  - Poring 60 + Lunatic 60 + Pupa 20 of 185 spawns (76 % targets). Unknown: Thief Bug Egg 20,
+    Thief Bug 10, Green Plant 15, all passive.
+  - 2 warps, 0 NPCs, one connected search area of 44,104 cells; client and server walkability
+    agree exactly; the same Prontera grass tileset.
+  - Target density is about 2x prt_fild08's, so per-engagement rates are the primary measures.
+  - Prep done offline: its GAT in RAM, L3 touch areas (34 maps; the 33 others identical), the NPC
+    block, `hunt_flow.py run --map`, the monitor's `--apart` set for its unknown species.
