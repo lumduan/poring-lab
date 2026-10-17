@@ -649,3 +649,9 @@ def test_belief_ghost_skips_probed_tracks() -> None:
     assert hf.belief_ghost(bel, 3 * ns, [], 100.0, "nl", skip={g["tid"]}) is None
     assert hf.PARAMS[28]["belief_probe_once"] and not hf.PARAMS[27].get("belief_probe_once")
     assert set(hf.VERSIONS) >= {28, 29, 30, 32}
+
+
+def test_v31_loots_around_the_targets_last_box() -> None:
+    p = hf.PARAMS[31]
+    assert p["loot_death"] == "anim" and p["abc"] and not p["belief"]
+    assert hf.PARAMS[30]["loot_death"] == "hybrid"

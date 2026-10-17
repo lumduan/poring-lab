@@ -219,6 +219,10 @@ VERSIONS = {
     "target (species check or tag cache) with no pink other than the target within 60 px",
     30: "v29 WITH THE BELIEF MAP OFF (Batt 18:3x, decision 2): the A / B / C strike test "
     "continues, pooled with v29's runs",
+    31: "THE DEATH CELL WHERE THE HIT LANDED, on v30 (Batt 18:3x): the fixed loot's 3 x 3 centres "
+    "on the target's own last box (the hit / death animation), turned into a cell with our "
+    "measured position at that frame (offline vs packets: 86-90 % of drops inside its 3 x 3; "
+    "the last strike click 54 %); the A / B / C strike test keeps running",
     32: "FAST DEAD (v24: server kill -> loot start p50 2.41 s): once the burst ended on the "
     "client's attack arrow or the target vanished, 0.35 s unseen (one detector frame) and 0.5 s "
     "after the click is the death, and the loot starts with no 0.4 s wait",
@@ -334,6 +338,9 @@ PARAMS[29] = {**PARAMS[28], "abc": True}
 # not pay -- ~11 % of goals led to a kill; the code stays, inert). The A / B / C test continues in
 # v30's runs, pooled with v29's (its arms are interleaved within each run)
 PARAMS[30] = {**PARAMS[29], "belief": False}
+# 31 = the fixed loot's death cell from the target's own LAST box (Batt 18:3x, decision 1), on v30
+# (the A / B / C test keeps running inside it)
+PARAMS[31] = {**PARAMS[30], "loot_death": "anim"}
 # FAST DEAD (the latency budget's top loser: server kill -> the bot's "dead"), staged for later
 PARAMS[32] = {**PARAMS[30], "abc": False, "fast_dead": True, "fast_dead_min_s": 0.5,
               "fast_dead_gone_s": 0.35}  # fmt: skip
@@ -1909,7 +1916,23 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         # track's last cell (attempt 1: death_of's gate looted 5 of 11 kills)
                         dc_ = dead_.cell
                         ls_ = last_strike.get(int(eng_["track"]))
-                        if prm.get("loot_death") == "hybrid" and ls_ is not None:
+                        if prm.get("loot_death") == "anim" and tr_.boxes:
+                            # v31 (Batt 18:3x, decision 1): where the target WAS when our hit
+                            # landed -- its own LAST box (the hit / the death animation; every kill
+                            # is one hit at STR 99), turned into a cell with OUR measured position
+                            # at THAT frame (offline vs packets: 86-90 % of drops in its 3 x 3, the
+                            # last strike click 54 %)
+                            bt_, bb_ = tr_.boxes[-1]
+                            mp_a = pos_at_frame(int(bt_)) or measured_pos()
+                            if mp_a is not None:
+                                g_a = (int(round(mp_a[0])), int(round(mp_a[1])))
+                                w_a = w5.World(camera, gat, g_a)
+                                dc_ = nearest_cell(lambda c_: frac_project(w_a, mp_a, c_), g_a,
+                                                   (bb_.x0 + bb_.x1) / 2,
+                                                   bb_.y1 - loot1.FOOT_LIFT)  # fmt: skip
+                                eng_["death"]["fixed_from"] = "anim"
+                                eng_["death"]["box_age_s"] = round((r.ns() - int(bt_)) / 1e9, 2)
+                        elif prm.get("loot_death") == "hybrid" and ls_ is not None:
                             # v24: the cell under the LAST strike click (found in the frame the
                             # click was aimed in), then the hybrid rule against where we stand now
                             mp_c = pos_at_frame(ls_[0]) or measured_pos()
