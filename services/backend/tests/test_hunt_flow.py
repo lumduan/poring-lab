@@ -623,9 +623,11 @@ def test_v26_rests_the_pointer_on_the_ui() -> None:
     assert x0 + 20 <= hf.REST_PX[0] <= x1 - 20 and y0 + 20 <= hf.REST_PX[1] <= y1 - 20
 
 
-def test_v28_fast_dead_is_staged_on_v27() -> None:
-    p = hf.PARAMS[28]
-    assert p["fast_dead"] and p["belief"] and not hf.PARAMS[27].get("fast_dead")
+def test_v28_rests_in_two_motions_and_v29_is_fast_dead() -> None:
+    assert hf.PARAMS[28]["ptr_rest_two"] and hf.PARAMS[28]["ptr_rest_ui"]
+    assert not hf.PARAMS[27].get("ptr_rest_two") and not hf.PARAMS[28].get("fast_dead")
+    p = hf.PARAMS[29]
+    assert p["fast_dead"] and p["belief"] and p["ptr_rest_two"]
     assert p["fast_dead_gone_s"] < p["dead_gone_s"] and p["fast_dead_min_s"] < p["dead_min_s"]
 
 
@@ -645,3 +647,4 @@ def test_belief_ghost_skips_probed_tracks() -> None:
     assert g is not None
     assert hf.belief_ghost(bel, 3 * ns, [], 100.0, "nl", skip={g["tid"]}) is None
     assert hf.PARAMS[28]["belief_probe_once"] and not hf.PARAMS[27].get("belief_probe_once")
+    assert set(hf.VERSIONS) >= {28, 29}

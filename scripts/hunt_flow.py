@@ -209,7 +209,11 @@ VERSIONS = {
     "walkable grid, a fitted random-walk kernel, negative evidence from the cells in view, a "
     "walk-on lead); a monster unseen 1-10 s that the map still believes in becomes the search "
     "goal, at its most probable cell",
-    28: "FAST DEAD (v24: server kill -> loot start p50 2.41 s): once the burst ended on the "
+    28: "THE POINTER REST THE CLIENT DRAWS, on v27: two motions to the HP bar after every walk "
+    "click and loot step (one jump never moved the client's own cursor: v26 / v27's rest was "
+    "inert, and v27's Creamy flew under the cursor left on the world); + each belief ghost is "
+    "chased once",
+    29: "FAST DEAD (v24: server kill -> loot start p50 2.41 s): once the burst ended on the "
     "client's attack arrow or the target vanished, 0.35 s unseen (one detector frame) and 0.5 s "
     "after the click is the death, and the loot starts with no 0.4 s wait",
 }
@@ -315,8 +319,11 @@ PARAMS[27] = {**PARAMS[26], "belief": True, "belief_pd": 0.2, "belief_lead": 0.5
               "steer_stuck_s": 10.0}  # fmt: skip
 # 28 = FAST DEAD (the top loser after loot: server kill -> the bot's "dead" + loot start), staged;
 # its base is decided by v26 / v27's results and pre-registered then
-PARAMS[28] = {**PARAMS[27], "fast_dead": True, "fast_dead_min_s": 0.5, "fast_dead_gone_s": 0.35,
-              "belief_probe_once": True}  # fmt: skip
+# 28 = the pointer rest the client ACTUALLY draws (two motions; v26 / v27's one jump never moved
+# the client's cursor, and v27's walk-click Creamy hit came from it), + each belief ghost once
+PARAMS[28] = {**PARAMS[27], "ptr_rest_two": True, "belief_probe_once": True}
+# 29 = FAST DEAD (the top loser after loot: server kill -> the bot's "dead" + loot start), staged
+PARAMS[29] = {**PARAMS[28], "fast_dead": True, "fast_dead_min_s": 0.5, "fast_dead_gone_s": 0.35}
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -1810,6 +1817,17 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
             cmd_hist: list[tuple[int, Cell]] = []  # v7 attempt 2: (t_ns, cell) we clicked
             ptr: list[tuple[float, float]] = [(gw / 2, gh / 2)]  # v8: where the pointer is
 
+            def rest_ptr() -> None:
+                """v26 / v28: the pointer to REST_PX. From v28 in TWO motions: the client draws
+                its own cursor (and resolves what is under it) only where a second motion leaves
+                it -- one jump left the drawn cursor on the world spot (checked live 2026-10-17
+                16:5x), and v27's Creamy flew under that cursor and was attacked."""
+                if prm.get("ptr_rest_two"):
+                    agent.move(gx0 + round(REST_PX[0]) + 12, gy0 + round(REST_PX[1]) + 12)
+                    time.sleep(0.06)
+                agent.move(gx0 + round(REST_PX[0]), gy0 + round(REST_PX[1]))
+                ptr[0] = REST_PX
+
             def walk_click(u: float, v: float, to: Cell, seg: list[Cell], gate: str,
                            why: str, extra: dict[str, Any] | None = None) -> bool:  # fmt: skip
                 """One walk click: cursor-gated from a standstill, map+units while moving."""
@@ -1832,8 +1850,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     agent.click(gx0 + round(u), gy0 + round(v))
                 ptr[0] = (u, v)
                 if prm.get("ptr_rest_ui"):  # v26: the pointer never rests on the world
-                    agent.move(gx0 + round(REST_PX[0]), gy0 + round(REST_PX[1]))
-                    ptr[0] = REST_PX
+                    rest_ptr()
                 click_log({"t": t_c, "u": round(u, 1), "v": round(v, 1), "kind": "walk",
                            "gate": gate, "to": list(to), "why": why, **(extra or {})})  # fmt: skip
                 ev({"kind": "walk_click", "gate": gate, "to": list(to), "why": why,
@@ -1989,8 +2006,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                "kind": "loot", "cell": list(c_l), "src": "fixed"})  # fmt: skip
                     time.sleep(prm["loot_interval_s"])
                 if prm.get("ptr_rest_ui") and out["clicks"]:  # v26: off the world after the step
-                    agent.move(gx0 + round(REST_PX[0]), gy0 + round(REST_PX[1]))
-                    ptr[0] = REST_PX
+                    rest_ptr()
                 out["s"] = round(time.monotonic() - t_l0, 2)
                 out["death"] = eng_.get("death")
                 eng_["loot"] = out
