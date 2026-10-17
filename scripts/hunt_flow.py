@@ -238,6 +238,8 @@ VERSIONS = {
     35: "THE SPECIES CHECK ON THE BOX'S OWN FRAME (the stale-box study), gated by re-centring the "
     "sprite in a fresh grab: arm C's 'species unsure' fallbacks came from a ~0.6 s old box "
     "cropped on a newer frame",
+    36: "THE LOOT RETRY: a loot cell skipped for a unit near is queued once more at the end of "
+    "the step (>= 0.6 s later, the same checks); interleaved per kill",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -389,6 +391,13 @@ PARAMS[34] = {**PARAMS[33], "loot_race": False, "loot_icons": False, "looter_cha
 # "v33"). Base: v34 PACED for the whole run (3.74's verdict 2026-10-18 03:46, fef68d9: the loot step
 # 1.02 s faster, the input still registered)
 PARAMS[35] = {**PARAMS[34], "send_gap_ab": False, "species_own": True, "species_own_ab": True}
+# 36 = the LOOT RETRY (2026-10-18 04:3x, staged; its base is set at its pre-registration by 3.75's
+# verdict): a loot cell skipped for "a unit near" is queued once more at the end of the step, not
+# before 0.6 s, under the same checks. v34 run 1: 40 of 143 steps skipped >= 6 of their clicks;
+# in 15 no live monster stood within 6 cells (packets) -- the target's own dying sprite beside
+# the GM (the corpse match missed: its last tracked box was > 30 px off) or our own hand pointer
+PARAMS[36] = {**PARAMS[35], "species_own_ab": False, "loot_retry": True, "loot_retry_ab": True,
+              "loot_retry_wait_s": 0.6}  # fmt: skip
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -1320,6 +1329,17 @@ def items_first(
     return [(c, (0.0, 0.0), px) for c, px in first] + [(c, j, None) for c, j in plan]
 
 
+def loot_retry_of(
+    step: Sequence[Any], why: str, retry_on: bool, now: float, wait_s: float
+) -> tuple[Any, ...] | None:
+    """PURE (v36, the LOOT RETRY): the retry entry for a loot step just skipped -- only for a
+    "unit" skip (never pink / npc / view), only in the retry arm, and never for a retry itself (a
+    4-tuple carries its not-before time): ``(cell, jitter, pixel, now + wait_s)``."""
+    if why != "unit" or not retry_on or len(step) > 3:
+        return None
+    return (step[0], step[1], step[2], now + wait_s)
+
+
 def new_pink_px(after: Any, before: Any | None, u: float, v: float, radius: int, grow: int = 6,
                 shift: tuple[float, float] = (0.0, 0.0),
                 exclude: tuple[float, float, float, float] | None = None) -> int:  # fmt: skip
@@ -2229,8 +2249,24 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             icons_l.append((ci_, pi_))
                     out["icons"] = len(icons_l)
                     out["icon_ms"] = round((time.monotonic() - t_l0) * 1e3)
-                steps_ = items_first(plan_l, icons_l) if mp_g0 is not None else []
-                for i_s, (c_l, (jx_, jy_), px_) in enumerate(steps_):
+                steps_: list[Any] = (items_first(plan_l, icons_l) if mp_g0 is not None
+                                     else [])  # fmt: skip
+                # v36 (the LOOT RETRY): a cell skipped for a unit near is queued ONCE more at the
+                # end of the step, not before loot_retry_wait_s (the dying sprite fades, a
+                # passer-by walks on); the same checks decide it again. Odd kills, A/B.
+                retry_on = bool(prm.get("loot_retry")) and (
+                    not prm.get("loot_retry_ab") or int(eng_.get("k", 0)) % 2 == 1
+                )
+                if prm.get("loot_retry"):
+                    out["retry_arm"] = retry_on
+                for i_s, st_ in enumerate(steps_):  # v36: grows by the retries it queues
+                    c_l, (jx_, jy_), px_ = st_[0], st_[1], st_[2]
+                    nb_ = st_[3] if len(st_) > 3 else None  # a retry's not-before time
+                    if nb_ is not None:
+                        if max(time.monotonic(), nb_) - t_l0 >= prm["loot_fixed_max_s"]:
+                            break
+                        if nb_ > time.monotonic():
+                            time.sleep(nb_ - time.monotonic())
                     if time.monotonic() - t_l0 >= prm["loot_fixed_max_s"]:
                         break
                     why_ = None
@@ -2291,7 +2327,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                         sp_l, cf_l, cr_l = species_now(blk_)
                                         if sp_l in nametag.TARGET_NAMES and not cr_l:
                                             pend_: list[list[int]] = []
-                                            for c2_, _j2, _p2 in steps_[i_s:]:
+                                            for st2_ in steps_[i_s:]:
+                                                c2_ = st2_[0]
                                                 if list(c2_) not in pend_:
                                                     pend_.append([int(c2_[0]), int(c2_[1])])
                                             out["looter"] = {
@@ -2329,15 +2366,27 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                 if n_pk > prm["loot_pink_max_px"]:
                                     why_ = "pink"
                     if why_ is not None:
+                        if nb_ is not None:  # v36: a retry skipped again (counted apart)
+                            rs_ = out.setdefault("retry_skipped", {})
+                            rs_[why_] = rs_.get(why_, 0) + 1
+                            continue
                         out["skipped"][why_] = out["skipped"].get(why_, 0) + 1
+                        rt_ = loot_retry_of(st_, why_, retry_on, time.monotonic(),
+                                            float(prm.get("loot_retry_wait_s", 0.6)))  # fmt: skip
+                        if rt_ is not None:
+                            steps_.append(rt_)
+                            out["retry_queued"] = out.get("retry_queued", 0) + 1
                         continue
                     t_lc = r.ns()
                     agent.click(gx0 + round(u_l), gy0 + round(v_l))  # the LOOT click (fixed)
                     ptr[0] = (u_l, v_l)
                     out["clicks"] += 1
+                    if nb_ is not None:
+                        out["retry_clicks"] = out.get("retry_clicks", 0) + 1
                     click_log({"t": t_lc, "u": round(u_l, 1), "v": round(v_l, 1),
                                "kind": "loot", "cell": list(c_l),
-                               "src": "icon" if px_ is not None else "fixed"})  # fmt: skip
+                               "src": "icon" if px_ is not None else "fixed",
+                               **({"retry": True} if nb_ is not None else {})})  # fmt: skip
                     time.sleep(prm["loot_interval_s"])
                 if prm.get("ptr_rest_ui") and out["clicks"]:  # v26: off the world after the step
                     rest_ptr()

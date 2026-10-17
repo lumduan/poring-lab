@@ -13,6 +13,8 @@ engagements.json, clicks.jsonl, and flow_judge.json -- run `flow_judge.bot(sid)`
                                         cell (the TREADMILL), by the loot arm
     arm_judge.py blocks SID [SID ...]   v34: the paced / default 10-min blocks (send_gap events)
     arm_judge.py species SID [SID ...]  v35: own-frame (odd k) vs stale-box (even k) species check
+    arm_judge.py retry SID [SID ...]    v36: the loot retry (odd k) vs none (even k): item fates at
+                                        our kills + the loot steps' clicks / skips / time
 
 Packets are offline ground truth here (ADR-0007); nothing in this module runs during play.
 """
@@ -465,10 +467,54 @@ def species_table(sessions: Iterable[dict[str, Any]]) -> dict[str, Any]:
     return out
 
 
+def retry_table(sessions: Iterable[dict[str, Any]]) -> dict[str, Any]:
+    """v36: per engagement parity (odd k = the LOOT RETRY arm, even k = none): the fates of the
+    items that fell at OUR kills (as ``loot_table``) and the loot steps themselves -- clicks,
+    unit skips, retries queued / clicked / skipped again, step time."""
+    import flow_judge as fj
+    import hunt_core as hc
+
+    agg: dict[str, Counter[str]] = defaultdict(Counter)
+    step_s: dict[str, list[float]] = defaultdict(list)
+    for s in sessions:
+        pos = hc.walk_positions(s["packets"])
+        items = item_fates(s["packets"], pos, fj.mob_at)
+        kills = dict((g, t) for t, g in kills_of(s["packets"]))
+        for x in s["engagements"]:
+            arm = "retry" if int(x["k"]) % 2 == 1 else "none"
+            a = agg[arm]
+            lo = x.get("loot") or {}
+            if lo:
+                a["steps"] += 1
+                a["clicks"] += int(lo.get("clicks") or 0)
+                a["unit_skips"] += int((lo.get("skipped") or {}).get("unit", 0))
+                a["retry_queued"] += int(lo.get("retry_queued") or 0)
+                a["retry_clicks"] += int(lo.get("retry_clicks") or 0)
+                a["retry_skipped"] += sum((lo.get("retry_skipped") or {}).values())
+                a["steps_ge6_unit_skips"] += int((lo.get("skipped") or {}).get("unit", 0)) >= 6
+                if lo.get("s") is not None:
+                    step_s[arm].append(float(lo["s"]))
+            g = s["gid_by_k"].get(int(x["k"]))
+            if x.get("result") != "dead" or g is None or g not in kills:
+                continue
+            t_k = kills[g]
+            a["kills"] += 1
+            for f in drops_of_kill(items, t_k, fj.mob_at(pos, g, t_k - 1)):
+                a["items"] += 1
+                a[f"item_{items[f]['fate']}"] += 1
+    out: dict[str, Any] = {}
+    for arm, a in sorted(agg.items()):
+        out[arm] = {**dict(sorted(a.items())),
+                    "picked_share": round(a["item_picked"] / a["items"], 3) if a["items"] else None,
+                    "step_s_p50": q(step_s[arm], 0.5)}  # fmt: skip
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)  # fmt: skip
-    ap.add_argument("what", choices=("strike", "dead", "loot", "stray", "blocks", "species"))
+    ap.add_argument("what", choices=("strike", "dead", "loot", "stray", "blocks", "species",
+                                     "retry"))  # fmt: skip
     ap.add_argument("sessions", nargs="+")
     a = ap.parse_args()
     sessions = [load(s) for s in a.sessions]
@@ -479,6 +525,7 @@ def main() -> int:
         "stray": stray_table,
         "blocks": blocks_table,
         "species": species_table,
+        "retry": retry_table,
     }[a.what]
     print(json.dumps(fn(sessions), indent=1, default=str))
     return 0

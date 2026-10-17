@@ -726,6 +726,25 @@ def test_v35_reads_the_species_on_the_boxs_own_frame() -> None:
     assert not p["send_gap_ab"]  # 3.74's verdict: paced for the whole run, no blocks
 
 
+def test_v36_retries_unit_skipped_loot_cells_once() -> None:
+    p = hf.PARAMS[36]
+    assert p["loot_retry"] and p["loot_retry_ab"] and p["loot_retry_wait_s"] == 0.6
+    assert 36 in hf.VERSIONS and not hf.PARAMS[35].get("loot_retry")
+    assert not (p["species_own_ab"] and p["loot_retry_ab"])  # never two parity arms at once
+    step = ((10, 20), (0.0, 0.0), None)
+    got = hf.loot_retry_of(step, "unit", True, 100.0, 0.6)
+    assert got == ((10, 20), (0.0, 0.0), None, 100.6)
+    assert hf.loot_retry_of(step, "unit", False, 100.0, 0.6) is None  # the plain arm
+    for why in ("pink", "npc", "view"):  # only a unit near is worth waiting for
+        assert hf.loot_retry_of(step, why, True, 100.0, 0.6) is None
+    assert hf.loot_retry_of(got, "unit", True, 101.0, 0.6) is None  # never a retry's retry
+    src = Path(hf.__file__).read_text()
+    body = src[src.index("def loot_fixed_run(") : src.index("def loot_blobs_run(")]
+    # the retry runs through the SAME loop body: one loot click, one unit / pink / npc check
+    assert body.count("agent.click(") == 1 and body.count('why_ = "unit"') == 1
+    assert body.count('why_ = "pink"') == 1 and body.count('why_ = "npc"') == 1
+
+
 def test_nearest_cell_frac_equals_the_per_cell_loop() -> None:
     import json as json_
     import random

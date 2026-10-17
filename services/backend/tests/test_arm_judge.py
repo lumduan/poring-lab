@@ -136,8 +136,26 @@ def test_every_table_is_reachable_from_the_command_line() -> None:
     import inspect
 
     src = inspect.getsource(aj.main)
-    for name in ("strike", "dead", "loot", "stray", "blocks", "species"):
+    for name in ("strike", "dead", "loot", "stray", "blocks", "species", "retry"):
         assert f'"{name}": {name}_table' in src
+
+
+def test_retry_table_splits_a_real_run_without_losing_an_item() -> None:
+    """v36's judge on a REAL session (v34 run 1, before any retry existed): the two parities
+    together hold exactly the items and kills of ``loot_table``'s "all", and no retry counts."""
+    import pytest
+
+    sid = "20261018T013812-demo-hunt-flow34"
+    if not (aj.DEMO / sid / "flow_judge.json").exists():
+        pytest.skip("the v34 session is not banked on this host")
+    s = aj.load(sid)
+    rt = aj.retry_table([s])
+    al = aj.loot_table([s])["all"]
+    assert rt["retry"]["items"] + rt["none"]["items"] == al["items"]
+    assert rt["retry"]["kills"] + rt["none"]["kills"] == al["kills"]
+    assert rt["retry"]["item_picked"] + rt["none"]["item_picked"] == al["picked"]
+    assert rt["retry"]["steps"] + rt["none"]["steps"] == 143
+    assert not any(rt[a].get("retry_queued") or rt[a].get("retry_clicks") for a in rt)
 
 
 def test_loot_stray_clicks_ignores_the_next_search_walk() -> None:

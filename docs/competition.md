@@ -53,6 +53,7 @@ non-target hit, map change) apply to every session.
 | R8b (bot v29, A/B/C run 1) | (fixed) | - (bot only) | 132 (median of 6) | 156 | 131.9 / 73.6 % / 47 % / pass (full hour) |
 | R9 (bot v30, A/B/C run 2) | (fixed) | **66.5 / 10 of 10 / 11 of 20 / pass** (the agent's best) | 114 | 144 | 105.0 / 78.0 % / 49 % / pass (full hour) |
 | R10 (bot v31, death cell + A/B/C run 3) | (fixed) | 33.7 / 4 of 4 / 2 of 2 / pass | 99 | 114 | 101.3 / 84.6 % / 58.5 % / pass (45 min) |
+| R11 (bot v34 run 2, paced-input blocks; overnight) | (fixed) | 37.2 / 6 of 6 / 5 of 6 / pass | 135 (median of 6 blocks) | 156.5 | 133.6 / 76.5 % / 63.0 % / pass (1 Creamy counted apart) |
 
 ## Round 0 (bot v20 from 2026-10-17 04:42 + 05:55; agent 07:55)
 
@@ -395,6 +396,16 @@ non-target hit, map change) apply to every session.
   landing 84.6 %, loot 58.5 %, clean.
 - **AGENT R10** `20261017T211621-demo-agent-demo` (seed 20271201): 33.7 kills / h, 4 of 4,
   clean. A sparse area (5.6 in sight).
+
+## Round 11 (overnight: 03:46 agent, between bot v34 and v35)
+
+- **AGENT R11** `20261018T034638-demo-agent-demo` (seed 20271301): 37.2 kills / h, 6 of 6
+  landed, 5 of 6 drops picked, clean (0.21 reversals / min, straight runs of 26.6 cells).
+  - A very sparse start: 4.1 monsters in sight per 10 min; the first 2.5 min found one Poring.
+  - Seen -> click p50 13.4 s (the decision loop again). Each walk from a standstill costs the
+    agent ~3 s (robust2's walk series reads twice).
+- **BOT v34 run 2** (`20261018T024036-demo-hunt-flow34`, seed 20271802): 133.6 kills / h,
+  landing 76.5 %, loot 63.0 %, one Creamy hit counted apart (3.74).
 
 ## What the agent's play taught (rounds 0-10)
 
