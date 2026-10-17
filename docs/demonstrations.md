@@ -8554,6 +8554,93 @@ STOPPED BY ME after 296 s (SIGINT), 11 engagements, all dead.**
   - each step logs its death record.
 - Attempt 2 runs the fix on the same seed.
 
+**Attempt 2 = RUN 1 RESULT (2026-10-17 11:57:19, session 20261017T115719-demo-hunt-flow23, seed
+20270401). It STOPPED ITSELF at 25.7 min (1540 s): "no input_ack within 3 s".**
+- **Cause (a pre-existing bug, not v23's loot):** read_tag's first motion goes 12 px up-left of
+  the target. A target at the frame's top edge gave y < 0, which the backend's protocol check
+  drops unanswered (`/health` `dropped_messages`: `mouse_move.y`).
+  - **Fixed in v24 (f4a8ebe):** `FrameGuard`. Every pointer move is clamped into the game frame;
+    a click off it is refused and counted.
+- **HARD BARS PASSED.** 69 engagements (68 dead). The bar 53 / 69 = 76.8 % (Wilson 65.6-85.2).
+- **Kills:** 145.2 kills / h, all engaged; 0 unintended attacks. Two full 10-min windows: 126 and
+  162.
+- **Loot:** 29 of 94 items (30.9 %; v22 18.7 %); kill -> last pickup p50 2.79 s (v22 7.39 s).
+  - Every kill got a step (189.5 s of looting in 25.7 min).
+  - The clicks came 0.66 s apart, not 0.3 s: 0.15 s of click holds plus the checks. So a 4 s step
+    made 6-7 of its 10 clicks.
+- **Offline against the packets: the death cell was the loser.**
+  - v23's first loot click lay p50 50 px from the nearest drop (attempt 1).
+  - The bot's LAST STRIKE CLICK lay 10-16 px from it (v22 and v23).
+  - So the clicks went to the wrong place; the pickups came where a click happened to land on an
+    item (all picked items had a click within 40 px).
+- **Reaction:** seen -> click p50 7.3 s (v22 3.58 s). Monsters seen during the 4 s loot step wait
+  for it.
+- **Search:** sight 35.5 per 10-min window (median), reversals 6.56 / min, straight runs 11.2.
+- **Species shadow (156 reads in both attempts):**
+  - the check was sure on 57 (37 %; offline 78 %);
+  - where both read, 37 agreed and **1 DISAGREED**: the tag read Lunatic, the check said Drops at
+    confidence 1.0, crowded;
+  - 19 times the check was sure where the tag read nothing.
+  - So a tag skip must exclude crowded boxes. (v23's crowded flag was always true: it compared a
+    box with itself; fixed in v24.)
+- **vs the prediction:**
+  - loot >= 60 %: NO (30.9 %);
+  - kill -> last pickup <= 3 s: YES (2.79 s);
+  - step <= 4 s and <= 10 clicks: YES, by construction (6-7 clicks);
+  - loot clicks that became an attack <= 2: YES (0 unintended attack requests in the run);
+  - engaged kills / h >= 102: YES (145.2, but a different seed and only 25.7 min);
+  - hard bars: PASSED.
+
+### 3.65 hunt-flow@24: THE FIXED LOOT'S DEATH CELL (pre-registered 2026-10-17 __TIME__ ICT, the commit time __SHA__, BEFORE its run; Batt's loot workflow, iterated; round 4 of docs/competition.md)
+
+**Why: v23 put its fixed loot in the wrong place** (3.64).
+- On the packets, v23's first loot click (its death cell) lay p50 50 px from the nearest dropped
+  item. 2 of 5 were within 40 px (attempt 1).
+- The bot's LAST STRIKE CLICK on the same kill lay p50 10-16 px from the nearest drop (v22: 61
+  of 93 kills within 40 px; v23 attempt 1: 8 of 9). The strike aims at the body; the drops lie
+  ~9 px lower.
+- A melee kill dies next to the GM. Our drops lay within 2 cells of the GM's server cell for 85 %
+  (v22) / 84 % (v21) / 91 % (Batt).
+- Offline, the drops inside a 3 x 3 around each candidate death cell (v21 + v22 + v23 attempt 1,
+  340 drops):
+
+  | death cell | in its 3 x 3 | within 2 cells |
+  |---|---|---|
+  | the cell under the last strike click | 61 % | 79 % |
+  | the GM's neighbour toward that click | 63 % | 87 % |
+  | **hybrid: the click's cell when beside the GM, else the neighbour** | **63 %** | **87 %** |
+  | the GM's own cell | 60 % | 85 % |
+
+**The ONE main change (`loot_death: hybrid`, 677b6fa), on v23 (+ the input fix `FrameGuard`,
+f4a8ebe, which changes no decision):**
+- The death cell is the cell under the track's last strike / burst click (+3, +9 px), found in
+  the frame the click was aimed in (our measured position at that click). It is used when it lies
+  within 1 cell of where we stand now; else the GM's neighbour in its direction.
+- **Also the cadence v23 registered:** "0.3 s apart" was 0.66 s as built (0.15 s of click holds
+  plus the checks), so a 4 s step gave 6-7 of its 10 clicks. The sleep is now 0.05 s (about
+  0.4 s a click); the bound is 4.5 s. Batt's click -> pickup request was p90 0.27 s, so this does
+  not cut a pickup short.
+- Everything else as v23: the same plan order, the same safety skips (monster / NPC boxes,
+  NPCs, a Creamy's new pink, the UI, off the frame), no cursor read, no item detection.
+
+**Also (measurement only):** the species shadow now grabs a crop around the box, not the whole
+frame (that grab delayed every tag read in v23), and counts only OTHER monster boxes as crowding
+(v23's flag compared a box with itself).
+
+**v23 as the reference (3.64, attempt 2):** loot 29 / 94 (30.9 %), kill -> last pickup p50 2.79 s, its death cell p50 50 px from the nearest drop, 145.2 engaged kills / h (25.7 min, seed 20270401), the bar 76.8 %, 0 unintended attacks, hard bars passed.
+
+**Run:** 60 min, round 4's seed 20270501 (bot first this round), the same test state, nice 10,
+detector on the CPU (GPU freeze), judged on the full run and on 10-min windows.
+
+**Prediction, written before the run:**
+- loot picked / dropped >= 50 % (v23 30.9 %; the 3 x 3's ceiling offline 63 %; Batt 97 %);
+- the first loot click within 40 px of a drop for >= 60 % of kills with drops (v23 2 of 5 in
+  attempt 1);
+- kill -> last pickup p50 <= 3 s;
+- loot clicks that become an attack <= 2 in the hour, none on a non-target;
+- engaged kills / h >= v23's - 10 %;
+- hard bars: zero NPC contact, zero map change, zero non-target hit.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
