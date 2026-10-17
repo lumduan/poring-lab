@@ -427,6 +427,9 @@ def serve(a: argparse.Namespace) -> int:  # noqa: PLR0915
                     ev({"kind": "loop_start"})
 
             def do_attack(q: dict[str, Any]) -> dict[str, Any]:
+                t_s = time.monotonic()  # R0: every empty tag read was while the GM walked
+                while self_moving(live.me, r.ns()) and time.monotonic() - t_s < 1.5:
+                    time.sleep(0.1)
                 p = resolve(q)
                 if p is None:
                     return {"clicked": False, "why": "gone"}
@@ -511,8 +514,12 @@ def serve(a: argparse.Namespace) -> int:  # noqa: PLR0915
                 if moving:
                     tc = r.ns()
                     agent.click(gx0 + round(u), gy0 + round(v))
+                to_ = None
+                if q.get("cx") is not None:
+                    to_ = [round(float(q["cx"])), round(float(q["cy"]))]
                 click_log({"t": tc, "u": round(u, 1), "v": round(v, 1), "kind": "walk",
                            "gate": "guard+units" if moving else "cursor",
+                           **({"to": to_} if to_ else {}),
                            "why": q.get("why"), "fact": q.get("fact")})  # fmt: skip
                 return {"clicked": True, "gate": "guard+units" if moving else "cursor"}
 
