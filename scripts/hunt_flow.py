@@ -227,6 +227,10 @@ VERSIONS = {
     "the burst ended on the client's attack arrow or the target vanished, 0.35 s unseen (one "
     "detector frame) and 0.5 s after the click is the death, and the loot starts with no 0.4 s "
     "wait (odd engagements; even ones keep v15's rule)",
+    33: "LOOT IS A RACE (Batt, decision 3), on v32: the floor items the matcher sees (item_icons) "
+    "are clicked FIRST at their own pixels, nearest first, then the fixed 3 x 3; a target that "
+    "steps onto our pile is killed first (one a kill) and our cells looted with its own; "
+    "interleaved per kill (odd loot steps: the race; even: v32's plain 3 x 3)",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -346,6 +350,13 @@ PARAMS[31] = {**PARAMS[30], "loot_death": "anim"}
 # change, interleaved per engagement (odd k: fast; even k: v15's rule), on v31
 PARAMS[32] = {**PARAMS[31], "abc_arm": "C", "fast_dead": True, "fast_dead_ab": True,
               "fast_dead_min_s": 0.5, "fast_dead_gone_s": 0.35}  # fmt: skip
+# 33 = LOOT IS A RACE (Batt, after the 21:33 report, decision 3), on v32: items first (the
+# matcher's floor items at their own pixels, then the 3 x 3) + the LOOTER CHAIN (a confident target
+# whose box stands within looter_cells of the death cell stops the loot, is engaged at once, and its
+# own loot step covers the cells still to click; at most one a kill). Interleaved per loot step
+PARAMS[33] = {**PARAMS[32], "loot_icons": True, "loot_race": True, "loot_race_ab": True,
+              "looter_chain": True, "looter_cells": 2, "looter_pending_s": 12.0,
+              "looter_match_px": 40.0}  # fmt: skip
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -1239,6 +1250,34 @@ def loot_plan(
     return plan
 
 
+def loot_union_plan(
+    dcell: Cell, extra: Sequence[Sequence[int]], center_clicks: int, ring_clicks: int
+) -> list[tuple[Cell, tuple[float, float]]]:
+    """PURE (v33, the looter chain): ``loot_plan`` around ``dcell`` (the looter's own death cell),
+    then each ``extra`` cell (the first kill's cells still unclicked when the looter came) outside
+    that 3 x 3, once, in the given order; no cell twice."""
+    plan = loot_plan(dcell, center_clicks, ring_clicks)
+    seen = {c for c, _j in plan}
+    for e in extra:
+        c = (int(e[0]), int(e[1]))
+        if c not in seen:
+            seen.add(c)
+            plan.append((c, LOOT_JITTER[0]))
+    return plan
+
+
+def items_first(
+    plan: Sequence[tuple[Cell, tuple[float, float]]],
+    icons: Sequence[tuple[Cell, tuple[float, float]]],
+    gm_px: Sequence[float] = GM_SPRITE_PX,
+) -> list[tuple[Cell, tuple[float, float], tuple[float, float] | None]]:
+    """PURE (v33, LOOT IS A RACE): the matcher's floor items (cell, sprite pixel) FIRST, nearest
+    the GM first (within pickup reach the client picks at once), each clicked at its own pixel;
+    then the whole fixed plan (the matcher's recall is ~0.4: the 3 x 3 still catches the rest)."""
+    first = sorted(icons, key=lambda i: math.hypot(i[1][0] - gm_px[0], i[1][1] - gm_px[1]))
+    return [(c, (0.0, 0.0), px) for c, px in first] + [(c, j, None) for c, j in plan]
+
+
 def new_pink_px(after: Any, before: Any | None, u: float, v: float, radius: int, grow: int = 6,
                 shift: tuple[float, float] = (0.0, 0.0),
                 exclude: tuple[float, float, float, float] | None = None) -> int:  # fmt: skip
@@ -1895,6 +1934,23 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 cell from the target's boxes on the sampler's frames, then loot@1's PICKUP scan."""
                 from poring_dataset import deathcell as dcm_
 
+                extra_: list[Any] = []
+                if prm.get("loot_race"):
+                    # v33: the arm per loot step; the looter's own step carries our cells
+                    if (
+                        looter_pend.get("tid") == int(eng_["track"])
+                        and time.monotonic() - looter_pend["t"] <= prm["looter_pending_s"]
+                    ):
+                        eng_["loot_arm"] = "race_chain"
+                        eng_["looter_of"] = looter_pend["k"]
+                        extra_ = list(looter_pend["cells"])
+                    else:
+                        if looter_pend:
+                            ev({"kind": "looter_pending_dropped", **looter_pend})
+                        race_n = not prm.get("loot_race_ab") or loot_n[0] % 2 == 1
+                        eng_["loot_arm"] = "race" if race_n else "plain"
+                        loot_n[0] += 1
+                    looter_pend.clear()
                 tr_ = eng_tracks.get(int(eng_["track"]))
                 if tr_ is None or tr_.box is None:
                     eng_["death"] = {"cell": None, "reason": "no_track"}
@@ -1958,7 +2014,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         if dc_ is not None:
                             dead_cells_.append((time.monotonic(), dc_))  # v27: not a ghost
                             del dead_cells_[:-40]
-                            loot_fixed_run(eng_, here2, dc_)
+                            loot_fixed_run(eng_, here2, dc_, extra_)
                     elif dead_.cell is not None and dead_.gone_ns is not None:
                         if prm.get("loot_blobs"):
                             loot_blobs_run(eng_, here2, dead_.cell, tr_)
@@ -1969,15 +2025,23 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 finally:
                     split.to(prev_, time.monotonic())
 
-            def loot_fixed_run(eng_: dict[str, Any], here2: Cell, dcell: Cell) -> None:
+            def loot_fixed_run(eng_: dict[str, Any], here2: Cell, dcell: Cell,
+                               extra: Sequence[Any] = ()) -> None:  # fmt: skip
                 """v23 (Batt 2026-10-17): his looting as a FIXED workflow after every kill -- no
                 item detection, no cursor read: burst-click the death cell, then click through
                 the 3 x 3 (loot_plan), each click re-projected from where the GM is now (each one
                 steps the GM or picks an item up). SAFETY only: a click is skipped near any
                 monster box, within 2 cells of an NPC, on NEW pink pixels (a Creamy; the corpse
-                was there before), on the UI or off the frame. Then hunting resumes at once."""
+                was there before), on the UI or off the frame. Then hunting resumes at once.
+                v33 (LOOT IS A RACE, the "race" arms): the matcher's floor items first, each at
+                its own pixel (items_first), and a confident target standing within looter_cells
+                of the death cell STOPS the step (eng_["loot"]["looter"]: the main loop kills it
+                and its own step covers the cells still unclicked, ``extra``)."""
                 t_l0 = time.monotonic()
                 out: dict[str, Any] = {"cell": list(dcell), "clicks": 0, "skipped": {}}
+                race_ = eng_.get("loot_arm") in ("race", "race_chain")
+                if eng_.get("loot_arm"):
+                    out["arm"] = eng_["loot_arm"]
                 w_l = w5.World(camera, gat, here2)
                 with plock:
                     ring_ = list(ring_frames)
@@ -1985,8 +2049,38 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 before_ = old_[-1][1] if old_ else None
                 mp_b = pos_at_frame(int(old_[-1][0] * 1e9)) if old_ else None
                 npc_c = [(int(n_["x"]), int(n_["y"])) for n_ in npcs]
-                for c_l, (jx_, jy_) in loot_plan(dcell, prm["loot_center_clicks"],
-                                                 prm["loot_ring_clicks"]):  # fmt: skip
+                plan_l = loot_union_plan(dcell, extra, prm["loot_center_clicks"],
+                                         prm["loot_ring_clicks"])  # fmt: skip
+                icons_l: list[tuple[Cell, tuple[float, float]]] = []
+                mp_g = measured_pos() or (float(here2[0]), float(here2[1]))
+                if race_ and icon_templates:
+                    # v33: ONE fresh grab around the death cell, the matcher on it (~60 ms);
+                    # only our own drawn pointer is excluded (the evaluated configuration)
+                    import item_icons as ii_
+
+                    ud_, vd_ = frac_project(w_l, mp_g, dcell)
+                    r_i = int(prm["icon_radius"]) + 24
+                    x0_, y0_ = max(0, int(ud_) - r_i), max(0, int(vd_) - r_i)
+                    x1_, y1_ = min(gw, int(ud_) + r_i + 1), min(gh, int(vd_) + r_i + 1)
+                    if x1_ - x0_ >= 48 and y1_ - y0_ >= 48:
+                        img_i = screen.grab(gx0 + x0_, gy0 + y0_, x1_ - x0_, y1_ - y0_)[1]
+                        img_i = np.ascontiguousarray(img_i[..., :3])
+                        pu_, pv_ = ptr[0]
+                        found_ = ii_.find_items(
+                            img_i, (ud_ - x0_, vd_ - y0_), int(prm["icon_radius"]),
+                            icon_templates, order="BGR",
+                            exclude=[(pu_ - 26 - x0_, pv_ - 26 - y0_,
+                                      pu_ + 40 - x0_, pv_ + 40 - y0_)],
+                        )  # fmt: skip
+                        for iu_, iv_, _id, _sc in found_:
+                            pi_ = (float(iu_) + x0_, float(iv_) + y0_)
+                            ci_ = nearest_cell(lambda c_: frac_project(w_l, mp_g, c_), dcell,
+                                               pi_[0], pi_[1], radius=4)  # fmt: skip
+                            icons_l.append((ci_, pi_))
+                    out["icons"] = len(icons_l)
+                    out["icon_ms"] = round((time.monotonic() - t_l0) * 1e3)
+                steps_ = items_first(plan_l, icons_l)
+                for i_s, (c_l, (jx_, jy_), px_) in enumerate(steps_):
                     if time.monotonic() - t_l0 >= prm["loot_fixed_max_s"]:
                         break
                     why_ = None
@@ -1994,18 +2088,46 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         why_ = "npc"
                     else:
                         mp_ = measured_pos() or (float(here2[0]), float(here2[1]))
-                        u_l, v_l = frac_project(w_l, mp_, c_l)
-                        u_l, v_l = u_l + jx_, v_l + jy_
+                        if px_ is not None:  # v33: the item's own pixel, moved with the ground
+                            a_i = frac_project(w_l, mp_g, c_l)
+                            b_i = frac_project(w_l, mp_, c_l)
+                            u_l, v_l = px_[0] + b_i[0] - a_i[0], px_[1] + b_i[1] - a_i[1]
+                        else:
+                            u_l, v_l = frac_project(w_l, mp_, c_l)
+                            u_l, v_l = u_l + jx_, v_l + jy_
                         if not in_view(u_l, v_l):
                             why_ = "view"
                         else:
                             fr_l = sampler.since(max(0, len(sampler.frames) - 1))
                             mu_ = float(prm.get("loot_unit_px", 30.0))  # v25: 70 (see PARAMS)
-                            if any(x_.cls in ("monster", "npc")  # not the GM's own box
-                                   and x_.x0 - mu_ <= u_l <= x_.x1 + mu_
-                                   and x_.y0 - mu_ <= v_l <= x_.y1 + mu_
-                                   for x_ in (fr_l[-1][1] if fr_l else [])):  # fmt: skip
+                            blk_ = next((x_ for x_ in (fr_l[-1][1] if fr_l else [])
+                                         if x_.cls in ("monster", "npc")  # not the GM's box
+                                         and x_.x0 - mu_ <= u_l <= x_.x1 + mu_
+                                         and x_.y0 - mu_ <= v_l <= x_.y1 + mu_), None)  # fmt: skip
+                            if blk_ is not None:
                                 why_ = "unit"
+                                if (race_ and prm.get("looter_chain")
+                                        and not eng_.get("looter_of") and blk_.cls == "monster"
+                                        and species_model is not None):  # fmt: skip
+                                    # v33: a looter ON our pile -> kill it first (Batt)
+                                    ub_ = (blk_.x0 + blk_.x1) / 2
+                                    vb_ = blk_.y1 - loot1.FOOT_LIFT
+                                    cb_ = nearest_cell(lambda c_, m_=mp_: frac_project(w_l, m_, c_),
+                                                       dcell, ub_, vb_, radius=4)  # fmt: skip
+                                    if cheb(cb_, dcell) <= prm["looter_cells"]:
+                                        sp_l, cf_l, cr_l = species_now(blk_)
+                                        if sp_l in nametag.TARGET_NAMES and not cr_l:
+                                            pend_: list[list[int]] = []
+                                            for c2_, _j2, _p2 in steps_[i_s:]:
+                                                if list(c2_) not in pend_:
+                                                    pend_.append([int(c2_[0]), int(c2_[1])])
+                                            out["looter"] = {
+                                                "u": round(ub_, 1), "v": round(vb_, 1),
+                                                "cell": list(cb_), "species": sp_l,
+                                                "conf": round(cf_l, 3), "pending": pend_,
+                                            }  # fmt: skip
+                                            break
+                                        out["looter_unsure"] = out.get("looter_unsure", 0) + 1
                             else:
                                 dx_, dy_ = 0, 0
                                 if mp_b is not None:  # the ground's move since BEFORE
@@ -2041,7 +2163,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     ptr[0] = (u_l, v_l)
                     out["clicks"] += 1
                     click_log({"t": t_lc, "u": round(u_l, 1), "v": round(v_l, 1),
-                               "kind": "loot", "cell": list(c_l), "src": "fixed"})  # fmt: skip
+                               "kind": "loot", "cell": list(c_l),
+                               "src": "icon" if px_ is not None else "fixed"})  # fmt: skip
                     time.sleep(prm["loot_interval_s"])
                 if prm.get("ptr_rest_ui") and out["clicks"]:  # v26: off the world after the step
                     rest_ptr()
@@ -2824,6 +2947,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
             bel_: Any = None
             bel_k = [0]  # the sampler frames already fed
             dead_cells_: list[tuple[float, Cell]] = []  # (mono s, death cell) of our kills
+            looter_pend: dict[str, Any] = {}  # v33: the looter to kill + our unclicked cells
+            loot_n = [0]  # v33: loot steps so far (the race arm on odd ones)
             bel_off: list[int] = []  # non-empty: the belief map failed once and is off
             bel_done: set[int] = set()  # v28: ghosts whose probe was reached
             offs_arr = np.array(offsets, dtype=int).reshape(-1, 2)
@@ -3511,12 +3636,15 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                     strike(tr, pos, again=True)
                                 time.sleep(0.02)
                                 continue
+                            looter_ = None
                             if done == "dead" and prm.get("loot"):
                                 if eng.get("dead_rule") != "fast":  # v28: the hybrid death cell
                                     time.sleep(0.4)  # needs no gone frames (v32: per arm)
                                 here_l = quick_fix()
                                 posm.stop(here_l)
                                 loot_after(eng, here_l)
+                                looter_ = (eng.get("loot") or {}).get("looter")
+                            k_done = int(eng["k"])
                             end_engagement(done)
                             ev({"kind": "hand_off", "after": done})
                             busy_t[0] = time.monotonic()  # the loot sweep was busy time too
@@ -3525,6 +3653,39 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             moving, path, pi = False, [], 0
                             live = tracks_now()
                             t_now = r.ns()
+                            if looter_ is not None:
+                                # v33: the LOOTER on our pile is the next target, at once; its
+                                # own loot step covers our cells still unclicked
+                                fresh_l = [
+                                    x
+                                    for x in live
+                                    if x.box is not None
+                                    and x.tid not in done_ids
+                                    and (t_now - x.box_t) / 1e9 <= prm["fresh_s"] + 0.4
+                                ]
+                                tl_ = min(fresh_l, default=None, key=lambda x: math.hypot(
+                                    f1.centre(x.box)[0] - looter_["u"],
+                                    x.box.y1 - loot1.FOOT_LIFT - looter_["v"]))  # fmt: skip
+                                d_l = None if tl_ is None else math.hypot(
+                                    f1.centre(tl_.box)[0] - looter_["u"],
+                                    tl_.box.y1 - loot1.FOOT_LIFT - looter_["v"])  # fmt: skip
+                                if tl_ is not None and d_l is not None and (
+                                        d_l <= prm["looter_match_px"]):  # fmt: skip
+                                    looter_pend.update(tid=tl_.tid, cells=looter_["pending"],
+                                                       t=time.monotonic(), k=k_done)  # fmt: skip
+                                    target, reads = tl_, 0
+                                    t_target[0] = time.monotonic()
+                                    ev({"kind": "looter_engage", "track": tl_.tid, "k": k_done,
+                                        "d_px": round(d_l, 1),
+                                        "pending": len(looter_["pending"])})  # fmt: skip
+                                else:
+                                    ev(
+                                        {
+                                            "kind": "looter_lost",
+                                            "k": k_done,
+                                            "d_px": None if d_l is None else round(d_l, 1),
+                                        }
+                                    )
                         with plock:
                             q, gp = list(plan["queue"]), plan["goal_path"]
                         # dispatch: queue[0], revalidated on the freshest frame

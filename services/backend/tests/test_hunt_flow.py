@@ -660,3 +660,29 @@ def test_v31_loots_around_the_targets_last_box() -> None:
     p = hf.PARAMS[31]
     assert p["loot_death"] == "anim" and p["abc"] and not p["belief"]
     assert hf.PARAMS[30]["loot_death"] == "hybrid"
+
+
+def test_v33_races_the_loot_items_first_and_chains_one_looter() -> None:
+    p = hf.PARAMS[33]
+    assert p["loot_race"] and p["loot_race_ab"] and p["loot_icons"] and p["looter_chain"]
+    assert p["abc_arm"] == "C" and p["loot_death"] == "anim" and not hf.PARAMS[32].get("loot_race")
+    assert 1 <= p["looter_cells"] <= 2 and p["looter_pending_s"] > p["give_up_s"]
+    assert 33 in hf.VERSIONS
+
+
+def test_items_first_puts_the_matched_items_first_nearest_the_gm() -> None:
+    plan = hf.loot_plan((10, 10), 2, 1)
+    far, near = ((12, 9), (700.0, 300.0)), ((10, 11), (650.0, 350.0))
+    steps = hf.items_first(plan, [far, near])
+    assert [s[0] for s in steps[:2]] == [(10, 11), (12, 9)]
+    assert steps[0][2] == (650.0, 350.0) and steps[0][1] == (0.0, 0.0)
+    assert [(c, j) for c, j, px in steps[2:]] == plan and all(px is None for *_x, px in steps[2:])
+    assert hf.items_first(plan, []) == [(c, j, None) for c, j in plan]
+
+
+def test_loot_union_plan_adds_the_first_kills_cells_once() -> None:
+    plan = hf.loot_plan((10, 10), 2, 1)
+    got = hf.loot_union_plan((10, 10), [[11, 11], [13, 10], [13, 10], (9, 12)], 2, 1)
+    assert got[: len(plan)] == plan
+    assert [c for c, _j in got[len(plan) :]] == [(13, 10), (9, 12)]  # (11, 11) is in the 3 x 3
+    assert hf.loot_union_plan((10, 10), [], 2, 1) == plan
