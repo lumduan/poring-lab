@@ -520,7 +520,9 @@ v33, paced input = v34; see "Overnight 17-18 Oct" below)*
 - **The loot TREADMILL** (22:0x, `arm_judge.py stray`). The loot step blocks the main loop's
   0.3 s minimap re-anchor; when the floor odometry freezes, every loot click lands at the same
   screen pixels and the GM walks off its pile.
-  - v28-v31: 62-77 % of loot steps sent the GM >= 4 cells off the death cell.
+  - v28-v31: 62-77 % of loot steps sent the GM >= 4 cells off the death cell. ➡️ **Overstated,
+    corrected 2026-10-18 00:33:** the judge's window also caught the next search walk. By the loot
+    clicks' own destinations it is 29-48 % (v28 31 %, v31 48 %, v32 29-32 %).
   - v32 run 1 stopped on it (a 13-cell "position jump"; packets: no map change).
   - Fixed in v33 (both arms): the minimap readout before each loot click.
 - **The agent link's dead wait** (22:2x). `ro_agent.Agent.send()` drained the socket for a full

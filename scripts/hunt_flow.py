@@ -1768,8 +1768,10 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
             def refix_now() -> str | None:
                 """v33 (the loot TREADMILL fix): re-anchor on the readout when the odometry is >
                 loot_refix_cells off it -> "refix"; "jump" when > JUMP_CELLS (the main loop's
-                guard decides); None when they agree or nothing reads. v28-v31: 62-77 % of loot
-                steps sent the GM >= 4 cells off the death cell -- a stale odometry re-projects
+                guard decides); None when they agree or nothing reads. v28-v32: 29-48 % of loot
+                steps sent the GM >= 4 cells off the death cell (by the loot clicks' own
+                destinations; first stated 62-77 %, a judge window that overstated) -- a stale
+                odometry re-projects
                 every click to the same screen pixels and the GM walks a treadmill (v32 run 1:
                 13 cells, a jump stop)."""
                 mp_r = measured_pos()

@@ -9209,6 +9209,11 @@ live hard-bar monitor on. A Creamy hit is counted, not a stop.
   >= 4 cells off the death cell during a loot step): v28 100 / 156 steps, v29 87 / 140, v30
   82 / 116, v31 59 / 77. It is a loot-wide defect, fixed in v33 as a base fix (3.73); v32 keeps
   its code unchanged.
+  - ➡️ **OVERSTATED -- corrected 2026-10-18 00:33.** The window (the step + 0.5 s) also caught
+    the bot's NEXT search walk, sent right after the step. Counting only the destinations that
+    answer the step's own LOOT clicks (`arm_judge.py stray`, the "clicks (corrected)" column):
+    v28 48 / 156 (31 %), v31 37 / 77 (48 %). The treadmill is real (run 1 above), about half as
+    frequent as first stated.
 - **Run 2** (22:09:55, seed 20271401, session `20261017T220855-demo-hunt-flow32`), 60 min.
 - The judgement pools run 1 (10.6 min) + run 2.
 
@@ -9246,7 +9251,9 @@ only its own bar, by 0.03 s. Re-adopting it is a decision for Batt (or a later p
 version); the rule is not bent here.
 
 The loot treadmill showed in both runs (`arm_judge.py stray`): 13 / 21 and 87 / 152 loot steps sent
-the GM >= 4 cells off the death cell (57-62 %). v33 fixes it.
+the GM >= 4 cells off the death cell (57-62 %). v33 fixes it. ➡️ **Corrected 00:33:** by the loot
+clicks' own destinations, 6 / 21 and 48 / 152 (29-32 %); the window also caught the next search
+walk (see the run log above).
 
 ### 3.73 hunt-flow@33: LOOT IS A RACE, interleaved per loot step (pre-registered 2026-10-17 22:13 ICT, the commit time b5cceb6, BEFORE its run; Batt's decision 3 on the 21:33 report)
 
@@ -9318,6 +9325,9 @@ hard-bar monitor (`scripts/hardbar_live.py watch 33`). A Creamy hit is counted, 
   - items lost to looters: race <= half of plain's share.
 - **The base fix (`arm_judge.py stray`):** loot steps sending the GM >= 4 cells off the death
   cell <= 10 % in BOTH arms (v28-v31: 62-77 %).
+  - ➡️ *Note added 00:33, after attempt 2, before judging:* that instrument's window overstates
+    (3.72's run log). The pre-registered window column is judged as written, with the corrected
+    "clicks" column reported beside it (v28-v32: 29-48 %).
 - **Overall:** loot picked / dropped >= 70 % (M1's bar is 80 %).
 - **Looter chains:** reported (count, killed, items recovered); zero hits on a non-target from
   a chain.

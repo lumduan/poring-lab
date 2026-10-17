@@ -296,6 +296,47 @@ def loot_stray(loot_steps: Iterable[Mapping[str, Any]],
             "max_p50": worst[len(worst) // 2] if worst else None}  # fmt: skip
 
 
+def loot_stray_clicks(
+    loot_steps: Iterable[Mapping[str, Any]],
+    clicks: Sequence[Mapping[str, Any]],
+    packets: Sequence[Mapping[str, Any]],
+    far: int = 4,
+) -> dict[str, Any]:
+    """PURE (the CORRECTED treadmill measure, 2026-10-18 00:33): per loot step, the farthest
+    server destination that answers one of ITS LOOT CLICKS (the first self_move <= 0.6 s after
+    the click and before our next click) from the death cell. ``loot_stray``'s window (the step
+    + 0.5 s) also caught the bot's NEXT search / steer walk, sent right after the step: it
+    overstated the treadmill (v28-v31 62-77 % by the window, 31-48 % by the clicks)."""
+    mv = [(int(e["t_mono_ns"]), (int(e["x1"]), int(e["y1"])))
+          for e in packets if e.get("type") == "self_move"]  # fmt: skip
+    mt = [t for t, _p in mv]
+    cl = sorted(clicks, key=lambda c: int(c["t"]))
+    ct = [int(c["t"]) for c in cl]
+    n = strays = 0
+    worst_all: list[int] = []
+    for e in loot_steps:
+        t1 = int(e["t_ns"])
+        t0 = t1 - int(float(e.get("s") or 0.0) * 1e9)
+        dc = e["cell"]
+        worst = -1
+        for i in range(bisect.bisect_left(ct, t0), bisect.bisect_right(ct, t1)):
+            if cl[i].get("kind") != "loot":
+                continue
+            nxt = ct[i + 1] if i + 1 < len(ct) else 1 << 62
+            j = bisect.bisect_left(mt, ct[i])
+            if j < len(mv) and mv[j][0] - ct[i] <= 600_000_000 and mv[j][0] < nxt:
+                d = mv[j][1]
+                worst = max(worst, max(abs(d[0] - dc[0]), abs(d[1] - dc[1])))
+        n += 1
+        if worst >= 0:
+            worst_all.append(worst)
+            strays += worst >= far
+    worst_all.sort()
+    return {"steps": n, f"stray_ge_{far}": strays,
+            "share": round(strays / n, 3) if n else None,
+            "max_p50": worst_all[len(worst_all) // 2] if worst_all else None}  # fmt: skip
+
+
 def stray_table(sessions: Iterable[dict[str, Any]]) -> dict[str, Any]:
     out: dict[str, Any] = {}
     for s in sessions:
@@ -305,7 +346,10 @@ def stray_table(sessions: Iterable[dict[str, Any]]) -> dict[str, Any]:
         for e in ev:
             if e.get("kind") == "loot_fixed":
                 by[str(e.get("arm") or "all")].append(e)
-        out[s["sid"]] = {arm: loot_stray(st, s["packets"]) for arm, st in sorted(by.items())}
+        out[s["sid"]] = {arm: {"clicks (corrected)": loot_stray_clicks(st, s["clicks"],
+                                                                        s["packets"]),
+                               "window (pre-registered, overstated)": loot_stray(st, s["packets"])}
+                         for arm, st in sorted(by.items())}  # fmt: skip
     return out
 
 

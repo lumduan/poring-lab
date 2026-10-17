@@ -138,3 +138,16 @@ def test_every_table_is_reachable_from_the_command_line() -> None:
     src = inspect.getsource(aj.main)
     for name in ("strike", "dead", "loot", "stray", "blocks", "species"):
         assert f'"{name}": {name}_table' in src
+
+
+def test_loot_stray_clicks_ignores_the_next_search_walk() -> None:
+    ns = 1_000_000_000
+    steps = [{"t_ns": 10 * ns, "s": 4.0, "cell": [300, 51]}]
+    clicks = [{"t": 7 * ns, "kind": "loot"}, {"t": 8 * ns, "kind": "loot"},
+              {"t": 10 * ns + ns // 5, "kind": "walk"}]  # fmt: skip
+    pk = [{"type": "self_move", "t_mono_ns": 7 * ns + ns // 10, "x1": 301, "y1": 51},
+          {"type": "self_move", "t_mono_ns": 8 * ns + ns // 10, "x1": 300, "y1": 52},
+          {"type": "self_move", "t_mono_ns": 10 * ns + ns // 4, "x1": 320, "y1": 60}]  # fmt: skip
+    assert aj.loot_stray(steps, pk)["stray_ge_4"] == 1  # the window caught the search walk
+    got = aj.loot_stray_clicks(steps, clicks, pk)
+    assert got["stray_ge_4"] == 0 and got["max_p50"] == 1
