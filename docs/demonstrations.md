@@ -8981,7 +8981,7 @@ a non-target hit stops the run.
   the first full hour with zero non-target hits since v23. One hour is not proof (v26 passed by
   luck), so the live monitor stays on.
 
-### 3.70 hunt-flow@29: BATT'S INTERLEAVED A / B / C STRIKE TEST (pre-registered 2026-10-17 __TIME__ ICT, the commit time __SHA__, BEFORE its run; Batt 17:3x; rounds 9+ of docs/competition.md)
+### 3.70 hunt-flow@29: BATT'S INTERLEAVED A / B / C STRIKE TEST (pre-registered 2026-10-17 17:59 ICT, the commit time 361021b, BEFORE its run; Batt 17:3x; rounds 9+ of docs/competition.md)
 
 **Batt's test (17:3x), following the two-motion cursor finding (3.68):**
 - burst-click at once when the pointer reaches the monster, until the client's LOCK ARROW appears
