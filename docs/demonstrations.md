@@ -9155,7 +9155,7 @@ stop (Batt 18:3x).
   Batt looks first, then clicks only the items he sees. Not run in this version: item recognition
   (item_icons, built) as the ORDER of the 3 x 3 clicks, items first.
 
-### 3.72 hunt-flow@32: FAST DEAD, interleaved, with arm C the default (pre-registered 2026-10-17 __TIME__ ICT, the commit time __SHA__, BEFORE its run; Batt's decisions on the 21:33 report; the overnight run 17-18 Oct)
+### 3.72 hunt-flow@32: FAST DEAD, interleaved, with arm C the default (pre-registered 2026-10-17 21:50 ICT, the commit time 1eb0ed9, BEFORE its run; Batt's decisions on the 21:33 report; the overnight run 17-18 Oct)
 
 **Batt's decisions (after the 21:33 report):**
 1. arm C (the nudge, then a burst to the lock arrow) is the DEFAULT strike for confident targets,
