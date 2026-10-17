@@ -185,7 +185,14 @@ def stop_on_takeover(agent: Any) -> None:
     resumes; for this run a lease, or the mux leaving ASSIST, raises instead, before any input."""
 
     def no_wait(max_wait_s: float = 0.0) -> None:
-        agent._drain(0.05)
+        # the agent's own pre-send step: the default 50 ms drain, or its PACED sends
+        # (hunt-flow v34, min_send_gap_s) -- this override drained 50 ms itself, which left
+        # v34's first run with no paced arm at all (2026-10-18 01:36)
+        pre = getattr(agent, "_pre_send", None)
+        if pre is not None:
+            pre()
+        else:
+            agent._drain(0.05)
         lease = agent.status.get("lease_until_ns")
         if agent.status.get("mode") != "ASSIST":
             raise FarmStop(f"mux left ASSIST ({agent.status.get('mode')}): stopped")

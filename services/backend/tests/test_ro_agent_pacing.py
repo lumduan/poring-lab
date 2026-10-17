@@ -90,3 +90,27 @@ def test_paced_sends_still_wait_out_a_human_lease(ro: ModuleType) -> None:
     with pytest.raises(ro.Stop, match="left ASSIST"):
         move(a)
     assert len(a.ws.sent) == 1
+
+
+def test_stop_on_takeover_keeps_the_pacing_and_still_stops_on_a_lease(ro: ModuleType) -> None:
+    import sys
+
+    sys.path.insert(0, str(SCRIPTS))
+    import farm0
+
+    a = agent(ro, 0.05)
+    farm0.stop_on_takeover(a)
+    time.sleep(0.06)
+    t0 = time.monotonic()
+    move(a)
+    assert a.ws.sent[0] - t0 < 0.03  # paced: no dead 50 ms wait (the override had one)
+    b = agent(ro, None)
+    farm0.stop_on_takeover(b)
+    t1 = time.monotonic()
+    move(b)
+    assert b.ws.sent[0] - t1 >= 0.049  # the default still drains 50 ms
+    a.ws.q.append(json.dumps({"type": "status", "mode": "ASSIST",
+                              "lease_until_ns": ro.ns() + int(5e9)}))  # fmt: skip
+    with pytest.raises(farm0.FarmStop, match="took over"):
+        move(a)
+    assert len(a.ws.sent) == 1  # nothing sent under the lease

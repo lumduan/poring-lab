@@ -9340,7 +9340,7 @@ hard-bar monitor (`scripts/hardbar_live.py watch 33`). A Creamy hit is counted, 
 - No hard bar. Creamy counted apart: 1 hit in attempt 1, 1 in attempt 2, 3 in run 2 (the judge
   shows them as engagements whose target was a Creamy).
 
-**RESULT (judged 2026-10-18 01:3x; attempt 2 + run 2 pooled, attempt 1 apart):**
+**RESULT (judged 2026-10-18 01:32, ca21d70; attempt 2 + run 2 pooled, attempt 1 apart):**
 
 | run | min | engagements | landing (5 s) | kills / h | seen -> click p50 | loot picked / fell | sight / 10 min | reversals / min |
 |---|---|---|---|---|---|---|---|---|
@@ -9423,6 +9423,18 @@ the live hard-bar monitor.
   p50 paced <= default.
 - **Hard bars:** zero NPC contact, zero map change, zero non-Creamy non-target hit (Creamy
   counted).
+
+**Run log (written during the runs, before any judging):**
+- **Attempt 1** (01:32:26, seed 20271701, `20261018T013226-demo-hunt-flow34`): STOPPED BY ME at
+  3.9 min (10 engagements, all dead, no hard bar). The paced arm was INERT.
+  - The input log still showed every input ~51 ms after its creation, and press / release
+    ~105 ms apart, in a block marked paced.
+  - Cause: `farm0.stop_on_takeover` (the runner's "stop on Batt's takeover") replaces
+    `wait_for_human` with its own `no_wait`, which drained 50 ms itself and so bypassed the
+    agent's pacing.
+  - Fixed 01:37 (before attempt 2): `no_wait` calls the agent's own pre-send step, so the default
+    still drains 50 ms, the paced mode paces, and a lease still stops (tested).
+  - Attempt 1 is excluded: both its blocks ran the default.
 
 ### 3.75 hunt-flow@35: THE SPECIES CHECK ON THE BOX'S OWN FRAME, interleaved per engagement (pre-registered 2026-10-17 23:34 ICT, the commit time 235d4c4, BEFORE its run; Batt's decision 1: cut the "species unsure" fallbacks)
 
