@@ -64,6 +64,11 @@ FREEZE_S = 3.0  # v10: identical frames this long after a walk click = a frozen 
 GM_SPRITE_PX = (640.0, 340.0)  # v10: the GM's sprite centre (client px; the camera centres on it)
 GM_SPRITE_BOX = (620.0, 285.0, 660.0, 375.0)  # v11: the GM's drawn sprite (x0, y0, x1, y1)
 GUARD_EXCLUDE = (605.0, 270.0, 675.0, 390.0)  # v16's walk guard: the GM sprite + hair
+# v26: where the pointer RESTS after a walk click / a loot step -- over the Basic Information
+# window's HP bar (route_preview.UI_WINDOWS[0]): no monster can come under it there. v24's 15 walk
+# clicks that became attacks came 0.35-1.45 s after the click, with no box near the click point
+# then (the Creamy hard bar: it flew under the resting pointer and the client attacked it)
+REST_PX = (110.0, 66.0)
 DRIFT_CELLS = 3
 STUCK_S = 60.0
 MS_CELL = 150.0  # the GM's measured walk speed (hunt@5's packets)
@@ -298,7 +303,8 @@ PARAMS[24] = {**PARAMS[23], "loot_death": "hybrid", "loot_interval_s": 0.05,
 PARAMS[25] = {**PARAMS[24], "species_skip": True, "strike_moving": True,
               "loot_pink_gm_exclude": True, "loot_unit_px": 70.0}  # fmt: skip
 # 26 = Batt's item 4: v19's RE-TARGET (built 2026-10-17 02:2x, never run), on v25
-PARAMS[26] = {**PARAMS[25], "retarget": True, "retarget_margin": 2.0, "retarget_commit_s": 1.0}
+PARAMS[26] = {**PARAMS[25], "retarget": True, "retarget_margin": 2.0, "retarget_commit_s": 1.0,
+              "ptr_rest_ui": True}  # fmt: skip
 # 27 = Batt's "Battleship": the belief map's most probable cell of a HIDDEN monster as the search
 # goal (belief_map, merged 8268666: ne + lead, the offline eval's best variant), on v26
 PARAMS[27] = {**PARAMS[26], "belief": True, "belief_pd": 0.2, "belief_lead": 0.5,
@@ -1813,6 +1819,9 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 else:
                     agent.click(gx0 + round(u), gy0 + round(v))
                 ptr[0] = (u, v)
+                if prm.get("ptr_rest_ui"):  # v26: the pointer never rests on the world
+                    agent.move(gx0 + round(REST_PX[0]), gy0 + round(REST_PX[1]))
+                    ptr[0] = REST_PX
                 click_log({"t": t_c, "u": round(u, 1), "v": round(v, 1), "kind": "walk",
                            "gate": gate, "to": list(to), "why": why, **(extra or {})})  # fmt: skip
                 ev({"kind": "walk_click", "gate": gate, "to": list(to), "why": why,
@@ -1967,6 +1976,9 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     click_log({"t": t_lc, "u": round(u_l, 1), "v": round(v_l, 1),
                                "kind": "loot", "cell": list(c_l), "src": "fixed"})  # fmt: skip
                     time.sleep(prm["loot_interval_s"])
+                if prm.get("ptr_rest_ui") and out["clicks"]:  # v26: off the world after the step
+                    agent.move(gx0 + round(REST_PX[0]), gy0 + round(REST_PX[1]))
+                    ptr[0] = REST_PX
                 out["s"] = round(time.monotonic() - t_l0, 2)
                 out["death"] = eng_.get("death")
                 eng_["loot"] = out

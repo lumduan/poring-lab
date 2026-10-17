@@ -613,3 +613,11 @@ def test_v26_retargets_and_v27_adds_the_belief_map() -> None:
 
 def test_v25_widens_the_loot_unit_margin() -> None:
     assert hf.PARAMS[25]["loot_unit_px"] >= 60 and "loot_unit_px" not in hf.PARAMS[24]
+
+
+def test_v26_rests_the_pointer_on_the_ui() -> None:
+    import route_preview
+
+    assert hf.PARAMS[26]["ptr_rest_ui"] and not hf.PARAMS[25].get("ptr_rest_ui")
+    x0, y0, x1, y1 = route_preview.UI_WINDOWS[0]  # the Basic Information window
+    assert x0 + 20 <= hf.REST_PX[0] <= x1 - 20 and y0 + 20 <= hf.REST_PX[1] <= y1 - 20
