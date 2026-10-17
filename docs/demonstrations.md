@@ -9324,6 +9324,45 @@ hard-bar monitor (`scripts/hardbar_live.py watch 33`). A Creamy hit is counted, 
 - **Cost:** kill -> last loot click p50: race <= plain + 0.3 s (the matcher costs ~60 ms).
 - **Hard bars:** zero NPC contact, zero map change, zero non-Creamy non-target hit.
 
+### 3.74 hunt-flow@34: PACED INPUT, in alternating 10-min blocks (pre-registered 2026-10-17, the commit time quoted in the next commit, BEFORE its run; the speed-first order, Batt 18:3x)
+
+**Why:** found 22:2x. `ro_agent.Agent.send()` called `wait_for_human()`, whose first step drains
+the socket for a FULL 50 ms before every input.
+- The backend's input log stamps each input 51-57 ms after the agent created it.
+- A click is 3 sends (move, press, release), so ~150 ms of a ~0.3 s click was this wait. The
+  loot step's clicks came every 0.39 s instead of the registered 0.05 s interval plus the click.
+- Every pointer move (follow, nudge, rest) paid 50 ms too.
+- v32's latency budget: server kill -> the bot's dead, including the 4.1 s loot step, is the top
+  loser; selection -> click is second.
+
+**The ONE main change (`send_gap_s` 0.05, `ro_agent.Agent.min_send_gap_s`):**
+- The status messages already queued are read without blocking.
+- A send waits only until 50 ms after the previous send, so no two inputs come closer than the
+  old drain allowed. Only the dead wait after other work goes.
+- A human lease is still waited out, and a mode change still stops (tested).
+- `/where` and the weight clear (they TYPE) keep the default.
+- **Interleaved in 10-min blocks within each run** (the input path is global, so not per
+  engagement). Odd seeds start paced, even seeds start default; logged as `send_gap` events.
+
+**Base:** v33, with its loot arm decided by 3.73's verdict before v34's first run: the race for
+all if 3.73's two primary predictions hold, else the plain 3 x 3 for all. v15's dead rule for all
+(3.72). The death-cell speed fix and the loot re-anchor are kept.
+
+**Runs:** two 60-min runs pooled (seeds 20271601 = paced first, 20271702 = default first), the
+hunting fixed state restored and the weight cleared between runs, nice 10, detector on the CPU,
+the live hard-bar monitor.
+
+**Prediction, written before the runs (per arm, pooled over blocks; `arm_judge.py blocks`):**
+- **Primary (mechanical, low noise):** the loot step's time p50 paced <= default - 1.0 s.
+- **The input still registers:**
+  - walk clicks the client followed within 1 s: paced >= default - 3 points;
+  - landing within 5 s: paced >= default - 5 points;
+  - loot picked / fell: paced >= default - 5 points.
+- **Secondary (density-confounded, reported):** kills / h paced > default; first click -> hit
+  p50 paced <= default.
+- **Hard bars:** zero NPC contact, zero map change, zero non-Creamy non-target hit (Creamy
+  counted).
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
