@@ -8414,7 +8414,7 @@ seed 20270201; the full hour; judged by `flow_judge.bot` after 10:00):**
 - **Next for loot:** recognise the item SPRITES themselves (a subagent is building item-icon
   templates from the packet-labelled recordings), instead of the frame difference near the GM.
 
-### 3.63 hunt-flow@22: SEARCH GEOMETRY (pre-registered 2026-10-17 __TIME__ ICT, the commit time __SHA__, BEFORE its run; Batt's competition order item 2; round 2 of docs/competition.md)
+### 3.63 hunt-flow@22: SEARCH GEOMETRY (pre-registered 2026-10-17 10:01 ICT, the commit time 60f10f3, BEFORE its run; Batt's competition order item 2; round 2 of docs/competition.md)
 
 **Why: the search-gap study** (`scripts/search_gap.py`, merged f70b417; docs/competition.md).
 - Half of "13-19 vs Batt's 44 monsters in sight / 10 min" was the ruler: whole-run gids. Per
