@@ -328,6 +328,7 @@ def blocks_table(sessions: Iterable[dict[str, Any]]) -> dict[str, Any]:
 
     agg: dict[str, Counter[str]] = defaultdict(Counter)
     hits: dict[str, list[float]] = defaultdict(list)
+    loot_s: dict[str, list[float]] = defaultdict(list)
     for s in sessions:
         ev = [json.loads(x) for x in (DEMO / s["sid"] / "events.jsonl").read_text().splitlines()
               if x]  # fmt: skip
@@ -341,6 +342,8 @@ def blocks_table(sessions: Iterable[dict[str, Any]]) -> dict[str, Any]:
         }
         pos = hc.walk_positions(s["packets"])
         items = item_fates(s["packets"], pos, fj.mob_at)
+        req_t = sorted(int(e["t_mono_ns"]) for e in s["packets"]
+                       if e.get("type") == "self_move_request")  # fmt: skip
         for t0, t1, on in spans:
             a = agg["paced" if on else "default"]
             a["seconds"] += (t1 - t0) // NS
@@ -355,6 +358,13 @@ def blocks_table(sessions: Iterable[dict[str, Any]]) -> dict[str, Any]:
             for c in s["clicks"]:
                 if t0 <= int(c["t"]) < t1:
                     a[f"clicks_{c.get('kind')}"] += 1
+                    if c.get("kind") == "walk":  # did the client act on it within 1 s?
+                        j = bisect.bisect_left(req_t, int(c["t"]))
+                        a["walk_followed"] += j < len(req_t) and req_t[j] - int(c["t"]) <= NS
+            for e in ev:
+                if e.get("kind") == "loot_fixed" and t0 <= int(e["t_ns"]) < t1:
+                    loot_s["paced" if on else "default"].append(float(e["s"]))
+                    a["loot_clicks"] += int(e.get("clicks") or 0)
             for it in items.values():
                 if t0 <= int(it["t_fall"]) < t1:
                     a["items"] += 1
@@ -372,6 +382,10 @@ def blocks_table(sessions: Iterable[dict[str, Any]]) -> dict[str, Any]:
             "clicks_per_min": {k[7:]: round(v / mins, 1) for k, v in sorted(a.items())
                                if k.startswith("clicks_") and mins},
             "loot": f"{a['picked']}/{a['items']}",
+            "loot_step_s_p50": q(loot_s[arm], 0.5),
+            "loot_s_per_click": (round(sum(loot_s[arm]) / a["loot_clicks"], 3)
+                                 if a["loot_clicks"] else None),
+            "walk_followed": f"{a['walk_followed']}/{a['clicks_walk']}",
         }  # fmt: skip
     return out
 
