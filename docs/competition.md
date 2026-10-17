@@ -31,7 +31,8 @@ next_action: "Update after every round: the leaderboard, the round's table, what
   - It is compared on its full run AND on its 10-min windows (`flow_judge.bot_windows`: the
     median and the best by kills / h).
 
-The order alternates between rounds (round 0: bot first; round 1: agent first).
+The order alternates between rounds (round 0: bot first; round 1: agent first; round 2: bot
+first; round 3: agent first).
 
 **The judge is the same for all:** `flow_judge` from the packets offline. Hard bars (NPC contact,
 non-target hit, map change) apply to every session.
@@ -42,7 +43,8 @@ non-target hit, map change) apply to every session.
 |---|---|---|---|---|---|
 | R0 (bot v20) | 300 / 100 % / 62 of 64 / - | 24.6 / 4 of 5 / 6 of 14 / pass | 120 / 80 % / 2 of 30 / pass | 192 / 90 % / 10 of 57 / pass | 140.9 / 85.2 % / 41 of 218 / 1 non-target |
 | R1 (bot v21) | (fixed) | 38.3 / 4 of 5 / 4 of 6 / pass | 96 / 81 % / 4 of 25 / pass | 120 / 76 % / 6 of 30 / pass | 100.8 / 78.8 % / 34 of 156 / pass |
-| R2 (bot v22) | (fixed) | pending | pending | pending | pending |
+| R2 (bot v22) | (fixed) | 12.3 / 2 of 2 / 0 of 2 / pass | 126 / 75 % / 4 of 30 / pass | 138 / 84 % / 9 of 37 / pass | 123.5 / 80.0 % / 34 of 182 / pass |
+| R3 (bot v23) | (fixed) | 25.6 / 4 of 4 / 5 of 13 / pass | pending | pending | pending |
 
 ## Round 0 (bot v20 from 2026-10-17 04:42 + 05:55; agent 07:55)
 
@@ -102,7 +104,49 @@ non-target hit, map change) apply to every session.
     walking so they came out. The bot loses them.
   - The bot clicks ~10x faster, at a ~1 s cadence, from a moving GM.
 
-## What the agent's play taught (both rounds)
+## Round 2 (bot v22 first, 10:02; then the agent, 11:22)
+
+- **Sessions:**
+  - BOT v22 `20261017T100214-demo-hunt-flow22` (seed 20270301, 60 min; demonstrations 3.63).
+  - AGENT `20261017T112240-demo-agent-demo` (the same seed, 10 min).
+
+| metric | BATT | AGENT R2 (packet-assisted) | BOT v22 median 10' | BOT best 10' | BOT full |
+|---|---|---|---|---|---|
+| kills / h | 300 | 12.3 | 126 | 138 | 123.5 |
+| landing <= 5 s | 64/64 | 2/2 | 15/20 | 21/25 | 108/135 |
+| seen -> click p50 / p90 s | 1.11 / 4.79 | 19.53 / 20.77 | 2.69 / 9.65 | 3.46 / 19.78 | 3.58 / 11.37 |
+| death -> next click s | 1.24 / 1.8 | 19.0 / 19.0 | 2.32 / 10.69 | 3.46 / 7.93 | 3.86 / 10.03 |
+| monsters in sight / 10 min | 44 | 3.1 | 24 | 32 | 29 (windowed) |
+| loot picked / dropped | 62 / 64 | 0 / 2 | 4 / 30 | 9 / 37 | 34 / 182 |
+| kill -> last pickup s | 1.56 | - | 11.12 | 4.66 | 7.39 |
+| walk clicks while moving | 72.7 % | 7.1 % | 53.9 % | 55.2 % | 56.5 % |
+| click cadence s | 0.6 / 3.44 | 11.2 / 28.6 | 0.97 / 3.17 | 0.97 / 2.93 | 0.97 / 5.14 |
+| reversals / min | 3.6 | 0.61 | 6.5 | 4.0 | 5.6 |
+| straight run cells | 16.9 | 35.0 | 13.6 | 14.8 | 13.5 |
+| unintended attack requests | - | 0 | 5 | 1 | 10 |
+| hard bars (NPC / map / non-target) | - | 0/0/0 | 0/0/0 | 0/0/0 | 0/0/0 |
+
+- **What the agent did vs the bot (round 2):**
+  - **The agent met almost nothing: 3.1 monsters in sight per 10 min, against the bot's 24-32
+    per window on the same seed.**
+    - It moves far slower: every walk click from a standstill waits ~3 s for the cursor gate,
+      and its steps are 10-20 s apart.
+    - It walked into two dead ends (a cliff pocket and a plateau edge) and spent ~2 min getting
+      out.
+  - The bot's ~1 s cadence and continuous walking are worth ~10x more ground than the agent's
+    judgment here.
+
+## Round 3 (agent first, 11:37; then bot v23)
+
+- **Sessions:**
+  - AGENT `20261017T113727-demo-agent-demo` (seed 20270401, 10 min): 4 kills, 4 of 4 landed,
+    loot 5 of 13, hard bars passed. 25.6 kills / h.
+  - BOT v23 (Batt's fixed loot workflow, demonstrations 3.64):
+    - attempt 1 `20261017T114911-demo-hunt-flow23`, stopped by me at 296 s (5 of 11 kills looted,
+      0.7 s a click; fixed in fc41aa5);
+    - attempt 2 (11:57, the same seed, 60 min) is running.
+
+## What the agent's play taught (rounds 0-3)
 
 - **The agent's own limit is its decision loop.**
   - Each step is a screenshot, a thought and a command: ~10-20 s.
@@ -126,6 +170,24 @@ non-target hit, map change) apply to every session.
        7dfc469. The agent looted by EYE instead: the dropped items are small sprites right next
        to the GM, clearly visible.
      - From pixels: yes. That is the bot's next change, v21, loot by frame difference.
+  5. **(R2) Our OWN cell from packets lags during walks.**
+     - The packets' "me" moves only with the walk packets, so a projected monster pixel was off
+       by several cells while the GM walked. The agent struck a Lunatic from the SCREEN instead.
+     - From pixels: the bot's position (minimap + floor odometry) does not have this lag. The
+       packet edge is the monster positions, not ours.
+  6. **(R2, R3) A monster just below or behind the view** (a Poring 14 cells south; a Drops and a
+     Lunatic left behind while the GM walked on).
+     - Packets kept their cells, and the agent turned back for them.
+     - From pixels: the belief map (merged 8268666) keeps a track that left the view. Offline,
+       its off-screen belief is within 1 cell 70-82 % of the time at 1-5 s: a walk-toward target.
+  7. **(R3) Drops at the GM's feet.** A Drops' kill left 4+ items next to the GM. The tool's
+     packet item list showed fewer than were there, and the agent looted by EYE: 4 picked, by
+     clicking what lay at the feet.
+     - This is Batt's method, and v23's fixed loot does it blind on the 3 x 3.
+  8. **(R3) A monster hopped INTO the drop pile.** Its box made the agent's loot clicks refuse
+     (`unit_near`). The agent killed it first, then looted.
+     - The bot's v23 rule is the same: a loot cell near a monster box is skipped, and the monster
+       becomes the next engagement.
 - **What the bot does that the agent could not:**
   - it clicks while moving, at ~1 s cadence;
   - it reacts in ~4 s;
@@ -168,8 +230,13 @@ non-target hit, map change) apply to every session.
 
 ## The next bot change
 
-**v21: loot by frame difference** (Batt's work order item 1).
-- Compare the area around the death spot just before the death and ~0.5-1 s after: new small
-  blobs are the drops.
-- Hover each blob centre, and click while the cursor is the HAND.
-- **Bars:** picked >= 80 % of the drops (packets), kill -> last pickup <= 3 s.
+**v23: Batt's FIXED loot workflow** (his message 11:0x; demonstrations 3.64), on v22.
+- After every confirmed kill: burst-click the death cell, then click through the 3 x 3 in the
+  drop pattern's order, 0.3 s apart.
+- No item detection, no cursor read. Safety skips only.
+- Bars: loot picked >= 60 % (M1's bar 80 %), kill -> last pickup <= 3 s.
+
+**Then (work order item 3, the NAME TAG):** the pixel species check is logged in shadow beside
+every tag read in v23. If it agrees with the tag live (and never accepts a Creamy), v24 skips the
+tag read when the species check is sure, and starts the read while walking in. The Battleship
+belief map (merged 8268666) follows as its own version.
