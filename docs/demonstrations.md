@@ -8448,6 +8448,96 @@ CPU (GPU freeze), judged on the full run and on 10-min windows.
 - engaged kills / h >= 93.9 (v21);
 - hard bars: zero NPC contact, zero map change, zero non-target hit.
 
+**RUN 1 RESULT (2026-10-17 10:02:14-11:02:14, session 20261017T100214-demo-hunt-flow22, seed
+20270301; the full hour; judged by `flow_judge.bot` + `search_gap.py analyse` after 11:04):**
+- **HARD BARS PASSED.**
+- **Engagements:** 135. The bar 108 / 135 = 80.0 % (Wilson 72.5-85.9).
+- **Kills:** kills / h 123.5; engaged 113.6 / h (v21 93.9). 10 walk clicks turned into attacks
+  (Lunatic 6, Poring 3, Drops 1): no non-target.
+- **10-min windows:** kills / h 138, 138, 96, 138, 126, 108 (median 126, best 138).
+- **Reaction:** seen -> click p50 / p90 3.58 / 11.37 s (v21 4.93 / 13.19).
+- **Search (`search_gap.py`, v22 vs v21, medians of the 10-min windows):**
+  - swept view cells per cell walked 19.35 vs 16.55 (Batt 22.1);
+  - net cells moved per 60 s 58.5 vs 58.4 (Batt 91);
+  - monsters in sight per 10-min window 29 vs 28.5 (Batt 44);
+  - reversals / min 5.6 vs 4.93 (flow_judge); mean straight run 13.5 vs 12.3 cells.
+- **Loot (unchanged from v21):** 34 of 182 items (18.7 %); kill -> last pickup p50 7.39 s.
+- **vs the prediction:**
+  - sight per window >= 31: NO (29);
+  - swept view cells per cell walked above v21: YES (19.35 vs 16.55);
+  - net cells per minute above v21: NO, flat (58.5 vs 58.4);
+  - reversals <= 4.5 / min: NO (5.6);
+  - engaged kills / h >= 93.9: YES (113.6). This run had a fresh seed (start area), so the rise is
+    not attributable to `heading_cov` alone;
+  - hard bars: PASSED.
+- **Reading:** the coverage memory makes each cell walked sweep more new ground, but the bot does
+  not get farther a minute: it turns more (reversals up). The sight gap to Batt stays. Loot stays
+  the top loser (Batt replaced the loot approach at 11:0x: 3.64).
+
+### 3.64 hunt-flow@23: BATT'S FIXED LOOT WORKFLOW (pre-registered 2026-10-17 11:2x ICT, the commit time __SHA__, BEFORE its run; Batt 11:0x; round 3 of docs/competition.md)
+
+**Why:** loot is still the top loser. v21's frame difference (21.8 %) and v22 (18.7 %) pick about
+one drop in five; Batt picks 62 of 64. The item-sprite detector (`loot_icons`, b1289b2) was built
+for v23 but **replaced by Batt before its run**. It stays in the code, unrun.
+
+**Batt's method (his words, 11:0x):** "a FIXED WORKFLOW after every kill... no item detection, no
+cursor reads":
+1. take the death cell (the target's last tracked cell);
+2. burst-click the death cell first, then click through the 8 cells of the 3 x 3 around it, on
+   screen positions from the camera / floor model on the freshest frame;
+3. no analysis and no waiting for the cursor: empty ground just steps the GM, items pick up;
+4. safety only: skip a cell near a NON-target box, the pink walk guard, an NPC, a UI window; never
+   outside the game frame;
+5. then hunt on at once.
+
+**Tuned from his demo (`20261016T093835-demo-human-demo`, input log + packets):**
+- clicks per loot p50 1 (mean 2.38), 5-16 px from the death cell's projection;
+- click interval during loot p50 0.74 s (p25-75 0.53-1.16);
+- **his click -> pickup request p50 0.03 s (p90 0.27 s)**: the items lie within pickup range, so
+  the server takes the item at once;
+- kill -> last pickup p50 1.56 s.
+
+**The ONE main change (`loot_fixed`, e37bfb1 + the pink fix bcb126a), on v22:**
+- After the bot's "dead", `loot_plan`: the death cell twice (jitter (-6, +3) px, then (+6, -4): the
+  item sprites' measured bias), then the other 8 cells once each in the server's drop-pattern order
+  (SE, W, N, then the rest; `deathcell.scan_order`). That is 10 clicks.
+- **0.3 s apart, bounded at 4 s.** This deviates from Batt's 0.74 s: he aims 2.38 clicks at
+  items he sees, while the fixed plan clicks 10 cells blind; at 0.74 s it would take 7.4 s a kill
+  against his 1.56 s. His click -> pickup request p90 of 0.27 s says 0.3 s does not cut a pickup
+  short.
+- Each click point is re-projected from the GM's measured position at that moment (the GM steps
+  with every click).
+- **Skips (safety only, no cursor read):**
+  - within 30 px of any monster or NPC box (the latest detector frame; the GM's own box is not
+    one);
+  - within 2 cells of a known NPC cell;
+  - **Batt's "pink walk guard", for loot:** > 100 NEW pink pixels within 40 px of the click point.
+    NEW = not pink in the frame ~1.8 s before the death, camera-aligned by the GM's measured move
+    (a Poring's corpse does not count). It is a count, not the walk guard's "any pink pixel",
+    because the drops themselves are pinkish-red: an Apple's sprite holds 64 such pixels, a Red
+    Herb's 33, a Creamy's wings far more;
+  - on a UI window or outside the game frame.
+- Every click is logged (`kind: loot, src: fixed`); every step as `loot_fixed` (clicks, skips by
+  reason, seconds). Then the hunt resumes at once.
+
+**Also logged (measurement only, no decision; 5f182f8):** the pixel SPECIES CHECK in shadow beside
+every name-tag read (`species_shadow`). It skips no tag read in this version.
+
+**v22 as the reference (3.63):** loot 34 / 182 (18.7 %), kill -> last pickup p50 7.39 s, engaged
+113.6 kills / h, the bar 80.0 %, 10 walk clicks turned attack, hard bars passed.
+
+**Run:** 60 min, round 3's seed 20270401 (the agent's round-3 start area), the same test state,
+nice 10, detector on the CPU (GPU freeze), judged on the full run and on 10-min windows.
+
+**Prediction, written before the run:**
+- loot picked / dropped >= 60 % (v22 18.7 %, v21 21.8 %; Batt 97 %; M1's bar 80 %);
+- kill -> last pickup p50 <= 3 s (v22 7.39 s; Batt 1.56 s);
+- the loot step <= 4 s a kill (by construction) and clicks per loot p50 <= 10;
+- loot clicks that become an attack (an attack request <= 0.5 s after a loot click): <= 2 in the
+  hour, none on a non-target;
+- engaged kills / h >= 102 (v22's 113.6 - 10 %);
+- hard bars: zero NPC contact, zero map change, zero non-target hit.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
