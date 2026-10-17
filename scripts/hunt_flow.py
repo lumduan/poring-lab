@@ -209,6 +209,9 @@ VERSIONS = {
     "walkable grid, a fitted random-walk kernel, negative evidence from the cells in view, a "
     "walk-on lead); a monster unseen 1-10 s that the map still believes in becomes the search "
     "goal, at its most probable cell",
+    28: "FAST DEAD (v24: server kill -> loot start p50 2.41 s): once the burst ended on the "
+    "client's attack arrow or the target vanished, 0.35 s unseen (one detector frame) and 0.5 s "
+    "after the click is the death, and the loot starts with no 0.4 s wait",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -309,6 +312,9 @@ PARAMS[26] = {**PARAMS[25], "retarget": True, "retarget_margin": 2.0, "retarget_
 # goal (belief_map, merged 8268666: ne + lead, the offline eval's best variant), on v26
 PARAMS[27] = {**PARAMS[26], "belief": True, "belief_pd": 0.2, "belief_lead": 0.5,
               "belief_unseen": (1.0, 10.0), "belief_min_mass": 0.3}  # fmt: skip
+# 28 = FAST DEAD (the top loser after loot: server kill -> the bot's "dead" + loot start), staged;
+# its base is decided by v26 / v27's results and pre-registered then
+PARAMS[28] = {**PARAMS[27], "fast_dead": True, "fast_dead_min_s": 0.5, "fast_dead_gone_s": 0.35}
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -3348,7 +3354,17 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             since_last = (t_now - eng["t_last_click"]) / 1e9
                             unseen = (t_now - tr.t_last) / 1e9 if tr is not None else 99.0
                             done = None
-                            if since_last >= prm["dead_min_s"] and unseen >= prm["dead_gone_s"]:
+                            # v28 (FAST DEAD): one hit kills at STR 99 -- once the burst ended on
+                            # the client's attack arrow (or the target vanished during it), the
+                            # first missed detector frame is the death (v24: server kill -> loot
+                            # start p50 2.41 s, 360 s an hour; Batt's whole loot takes 1.56 s)
+                            landed_ = prm.get("fast_dead") and any(
+                                (h_.get("burst") or {}).get("end") in ("arrow", "gone")
+                                for h_ in eng.get("hovers", []))  # fmt: skip
+                            fast_ = landed_ and (since_last >= prm["fast_dead_min_s"]
+                                                 and unseen >= prm["fast_dead_gone_s"])  # fmt: skip
+                            slow_ = since_last >= prm["dead_min_s"] and unseen >= prm["dead_gone_s"]
+                            if fast_ or slow_:
                                 done = "dead"
                             elif since_first > prm["give_up_s"]:
                                 banned.append((now, tuple(int(x) for x in eng["pred_cell"])))
@@ -3359,7 +3375,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                 time.sleep(0.02)
                                 continue
                             if done == "dead" and prm.get("loot"):
-                                time.sleep(0.4)  # the frames after the death (gone frames)
+                                if not prm.get("fast_dead"):  # v28: the hybrid death cell needs
+                                    time.sleep(0.4)  # no gone frames (the frames after the death)
                                 here_l = quick_fix()
                                 posm.stop(here_l)
                                 loot_after(eng, here_l)
