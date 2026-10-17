@@ -563,3 +563,13 @@ def test_frame_guard_clamps_moves_and_refuses_clicks_off_the_frame() -> None:
     assert g.send([]) == "passed"  # everything else passes through
     g.wait_for_human = "hook"  # an attribute set on the guard lands on the real agent
     assert g._a.wait_for_human == "hook"
+
+
+def test_v25_skips_the_tag_only_when_sure_and_strikes_walking_in() -> None:
+    p = hf.PARAMS[25]
+    assert p["species_skip"] and p["strike_moving"] and p["name_tag"] and p["risk_gate"]
+    assert p["loot_death"] == "hybrid"  # on v24
+    assert not hf.PARAMS[24].get("species_skip") and not hf.PARAMS[24].get("strike_moving")
+    import nametag
+
+    assert "Creamy" not in nametag.TARGET_NAMES  # a sure Creamy never skips the tag

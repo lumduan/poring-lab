@@ -193,6 +193,10 @@ VERSIONS = {
     "first loot click 50 px from the nearest drop, p50; the last strike click 10-16 px): the cell "
     "under the last strike click when it is within 1 cell of the GM, else the GM's neighbour in "
     "its direction; and the cadence v23 registered (0.05 s sleep: ~0.4 s a click, 0.66 s as built)",
+    25: "THE NAME TAG ONLY WHEN AMBIGUOUS, on v24 (Batt's work order item 3): no tag read when the "
+    "pixel species check is sure of a target and no other monster box is within 50 px (v23's "
+    "shadow: sure on 37 %, 37 of 38 agreed, the one miss crowded), and then the strike already "
+    "while walking in (in range, no risk) instead of waiting for the GM to stop",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -279,6 +283,9 @@ PARAMS[23] = {**PARAMS[22], "loot_fixed": True, "loot_center_clicks": 2, "loot_r
 # neighbour toward it) and at the cadence v23 registered (0.3 s was 0.66 s as built)
 PARAMS[24] = {**PARAMS[23], "loot_death": "hybrid", "loot_interval_s": 0.05,
               "loot_fixed_max_s": 4.5}  # fmt: skip
+# 25 = Batt's item 3, the NAME TAG: the tag only when the pixel species check is unsure or crowded,
+# and the strike already while walking in when it is sure
+PARAMS[25] = {**PARAMS[24], "species_skip": True, "strike_moving": True}
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -2309,6 +2316,24 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 ev({"kind": "burst", "track": tr.tid, **out})
                 return out
 
+            def species_now(b: Any) -> tuple[str | None, float, bool]:
+                """v24/v25: the pixel species check on a FRESH crop around box ``b`` -> (species
+                or None when unsure, confidence, crowded = another monster box within 50 px)."""
+                import species_check as sc_
+
+                sx0_, sy0_ = max(0, int(b.x0) - 40), max(0, int(b.y0) - 40)
+                sx1_, sy1_ = min(gw, int(b.x1) + 41), min(gh, int(b.y1) + 41)
+                img_s = screen.grab(gx0 + sx0_, gy0 + sy0_, sx1_ - sx0_, sy1_ - sy0_)[1]
+                sp_, cf_ = sc_.species_of(img_s, species_model,
+                                          (b.x0 - sx0_, b.y0 - sy0_, b.x1 - sx0_, b.y1 - sy0_,
+                                           b.score), order="bgr")  # fmt: skip
+                fr_s = sampler.since(max(0, len(sampler.frames) - 1))
+                cb_ = np.array(f1.centre(b))
+                crowd_ = any(
+                    o.cls == "monster" and 8 < math.hypot(*(np.array(f1.centre(o)) - cb_)) < 50
+                    for o in (fr_s[-1][1] if fr_s else []))  # fmt: skip
+                return sp_, float(cf_), bool(crowd_)
+
             def strike(tr: Track, here: Cell, again: bool) -> bool:
                 """Park, hover the target's newest box, ONE robust2 read; SWORD -> the attack
                 click there. True when it clicked."""
@@ -2374,29 +2399,22 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             and math.hypot(u_ - c_[2][0], v_ - c_[2][1])
                             <= prm.get("tag_cache_px", 1e9)):  # fmt: skip
                         return True, c_[0], u_, v_
+                    sp_ = cf_ = crowd_ = None
+                    if species_model is not None and b is not None:
+                        sp_, cf_, crowd_ = species_now(b)
+                        if (prm.get("species_skip") and sp_ in nametag.TARGET_NAMES
+                                and not crowd_):  # fmt: skip
+                            # v25 (Batt's item 3): the pixel check is sure of a TARGET and no
+                            # other monster box is within 50 px -> no tag read (v23's shadow:
+                            # 37 of 38 agreed; the one miss was crowded)
+                            confirmed[tr.tid] = (sp_, time.monotonic(), (u_, v_))
+                            ev({"kind": "species_skip", "track": tr.tid, "species": sp_,
+                                "conf": round(float(cf_ or 0.0), 4)})  # fmt: skip
+                            return True, sp_, u_, v_
                     t_, ms_, (u_, v_) = read_tag(u_, v_, b, tr.tid)
                     if species_model is not None and b is not None:
-                        # v23 SHADOW (no decision): the pixel species check beside the tag, to
-                        # validate it live (JPEG-trained) before it may ever skip a tag read
-                        import species_check as sc_
-
-                        # v24: a crop around the box, not the whole frame (it delayed every
-                        # tag read); crowded = ANOTHER monster box (not this one, not the GM)
-                        sx0_, sy0_ = max(0, int(b.x0) - 40), max(0, int(b.y0) - 40)
-                        sx1_, sy1_ = min(gw, int(b.x1) + 41), min(gh, int(b.y1) + 41)
-                        img_s = screen.grab(gx0 + sx0_, gy0 + sy0_, sx1_ - sx0_, sy1_ - sy0_)[1]
-                        sp_, cf_ = sc_.species_of(img_s, species_model,
-                                                  (b.x0 - sx0_, b.y0 - sy0_, b.x1 - sx0_,
-                                                   b.y1 - sy0_, b.score),
-                                                  order="bgr")  # fmt: skip
-                        fr_s = sampler.since(max(0, len(sampler.frames) - 1))
-                        cb_ = np.array(f1.centre(b))
-                        crowd_ = any(
-                            o.cls == "monster"
-                            and 8 < math.hypot(*(np.array(f1.centre(o)) - cb_)) < 50
-                            for o in (fr_s[-1][1] if fr_s else []))  # fmt: skip
                         ev({"kind": "species_shadow", "track": tr.tid, "tag": t_,
-                            "species": sp_, "conf": round(float(cf_), 4),
+                            "species": sp_, "conf": round(float(cf_ or 0.0), 4),
                             "crowded": bool(crowd_)})  # fmt: skip
                     if t_ in nametag.TARGET_NAMES:
                         confirmed[tr.tid] = (t_, time.monotonic(), (u_, v_))
@@ -2728,7 +2746,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
 
             ring_frames: Any = deque_(maxlen=24)  # v21: (mono s, BGR frame) at ~5 Hz, ~4.8 s
             species_model: Any = None
-            if prm.get("species_shadow"):  # v23: SHADOW only -- logged beside each tag read
+            if prm.get("species_shadow") or prm.get("species_skip"):  # v23 shadow, v25 skip
                 import species_check as sc_
 
                 species_model = sc_.load_model()
@@ -3350,6 +3368,23 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                     target = None
                                 continue
                             if in_rng:
+                                if (prm.get("strike_moving") and species_model is not None
+                                        and fresh_box and target.box is not None
+                                        and not gate_risks(target, pos)):  # fmt: skip
+                                    # v25 (Batt's item 3, "start the read while walking in"):
+                                    # in range while WALKING -> strike now when the pixel check
+                                    # is sure of a target with no other box near (the click
+                                    # makes the client walk in and attack, as Batt does)
+                                    sp_m, _cf, cr_m = species_now(target.box)
+                                    if sp_m in nametag.TARGET_NAMES and not cr_m:
+                                        ev({"kind": "strike_moving", "track": target.tid,
+                                            "species": sp_m})  # fmt: skip
+                                        if (not strike(target, pos, again=False)
+                                                and reads >= prm["max_reads"]):  # fmt: skip
+                                            tc_m = (int(round(tcell[0])), int(round(tcell[1])))
+                                            banned.append((now, tc_m))
+                                            target = None
+                                        continue
                                 time.sleep(0.02)  # walking, about to arrive: the strike is next
                                 continue
                             if cont:  # v5: steer continuously, no standstill gate
