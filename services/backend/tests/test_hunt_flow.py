@@ -627,3 +627,7 @@ def test_v28_fast_dead_is_staged_on_v27() -> None:
     p = hf.PARAMS[28]
     assert p["fast_dead"] and p["belief"] and not hf.PARAMS[27].get("fast_dead")
     assert p["fast_dead_gone_s"] < p["dead_gone_s"] and p["fast_dead_min_s"] < p["dead_min_s"]
+
+
+def test_v27_drops_a_deadlocked_steer() -> None:
+    assert 5.0 <= hf.PARAMS[27]["steer_stuck_s"] <= 20.0 and not hf.PARAMS[26].get("steer_stuck_s")

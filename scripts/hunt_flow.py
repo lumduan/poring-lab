@@ -311,7 +311,8 @@ PARAMS[26] = {**PARAMS[25], "retarget": True, "retarget_margin": 2.0, "retarget_
 # 27 = Batt's "Battleship": the belief map's most probable cell of a HIDDEN monster as the search
 # goal (belief_map, merged 8268666: ne + lead, the offline eval's best variant), on v26
 PARAMS[27] = {**PARAMS[26], "belief": True, "belief_pd": 0.2, "belief_lead": 0.5,
-              "belief_unseen": (1.0, 10.0), "belief_min_mass": 0.3}  # fmt: skip
+              "belief_unseen": (1.0, 10.0), "belief_min_mass": 0.3,
+              "steer_stuck_s": 10.0}  # fmt: skip
 # 28 = FAST DEAD (the top loser after loot: server kill -> the bot's "dead" + loot start), staged;
 # its base is decided by v26 / v27's results and pre-registered then
 PARAMS[28] = {**PARAMS[27], "fast_dead": True, "fast_dead_min_s": 0.5, "fast_dead_gone_s": 0.35}
@@ -3482,6 +3483,18 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                 same_fr = li_ is not None and int(li_[0]) == int(target.box_t)
                                 if same_fr and li_ is not None and target.box is not None:
                                     focus.start(target.tid, target.box, li_[0], li_[1])
+                        if (target is not None and eng is None and prm.get("steer_stuck_s")
+                                and now - max(last_progress[0], t_target[0])
+                                > prm["steer_stuck_s"]):  # fmt: skip
+                            # v27: a steering DEADLOCK (v26 stopped on "no progress for 60 s": the
+                            # zone's one path ran into a blocked spot and no click came again) --
+                            # drop the target, forget the zone; the planner moves on
+                            tc_s = target.predict(t_now)
+                            banned.append((now, (int(round(tc_s[0])), int(round(tc_s[1])))))
+                            ev({"kind": "target_dropped", "track": target.tid,
+                                "why": "steer_stuck"})  # fmt: skip
+                            zone_st.clear()
+                            target = None
                         if target is not None:
                             split.to("steering", time.monotonic())
                             tcell = target.predict(t_now)
