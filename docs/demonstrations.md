@@ -8474,7 +8474,7 @@ CPU (GPU freeze), judged on the full run and on 10-min windows.
   not get farther a minute: it turns more (reversals up). The sight gap to Batt stays. Loot stays
   the top loser (Batt replaced the loot approach at 11:0x: 3.64).
 
-### 3.64 hunt-flow@23: BATT'S FIXED LOOT WORKFLOW (pre-registered 2026-10-17 11:2x ICT, the commit time __SHA__, BEFORE its run; Batt 11:0x; round 3 of docs/competition.md)
+### 3.64 hunt-flow@23: BATT'S FIXED LOOT WORKFLOW (pre-registered 2026-10-17 11:22 ICT, the commit time 4748057, BEFORE its run; Batt 11:0x; round 3 of docs/competition.md)
 
 **Why:** loot is still the top loser. v21's frame difference (21.8 %) and v22 (18.7 %) pick about
 one drop in five; Batt picks 62 of 64. The item-sprite detector (`loot_icons`, b1289b2) was built
