@@ -9249,7 +9249,7 @@ arm, even ones the PLAIN arm (v32's fixed 3 x 3).**
   it. More than 12 cells -> no further loot click, and the jump guard of the main loop decides.
   - It is read before each loot click and before the death cell is computed.
   - The matched item pixels use the same re-anchored position as reference.
-  - *(Amended 22:3x, before any v33 run: the first two places were added after b5cceb6.)*
+  - *(Amended 22:24, commit 2eef8a2, before any v33 run: the first two places were added after b5cceb6.)*
 
 **Reference:** v32 (3.72, pooled) and v31 (3.71: loot 58.5 %).
 

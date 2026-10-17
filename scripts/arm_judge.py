@@ -11,6 +11,7 @@ engagements.json, clicks.jsonl, and flow_judge.json -- run `flow_judge.bot(sid)`
                                         by the loot arm (eng["loot_arm"], v33+) or "all"
     arm_judge.py stray SID [SID ...]    per loot step: the GM walked >= 4 cells off the death
                                         cell (the TREADMILL), by the loot arm
+    arm_judge.py blocks SID [SID ...]   v34: the paced / default 10-min blocks (send_gap events)
 
 Packets are offline ground truth here (ADR-0007); nothing in this module runs during play.
 """
@@ -307,10 +308,78 @@ def stray_table(sessions: Iterable[dict[str, Any]]) -> dict[str, Any]:
     return out
 
 
+def arm_spans(events: Sequence[Mapping[str, Any]]) -> list[tuple[int, int, bool]]:
+    """PURE (v34): the run's paced / default spans [(t0, t1, paced)] from its ``send_gap``
+    events, the last one closed by the last event."""
+    marks = [(int(e["t_ns"]), bool(e["on"])) for e in events if e.get("kind") == "send_gap"]
+    if not marks:
+        return []
+    t_end = int(events[-1]["t_ns"])
+    return [(t, marks[i + 1][0] if i + 1 < len(marks) else t_end, on)
+            for i, (t, on) in enumerate(marks)]  # fmt: skip
+
+
+def blocks_table(sessions: Iterable[dict[str, Any]]) -> dict[str, Any]:
+    """v34's time-blocked arms (paced / default): minutes, server kills (ours) per hour,
+    engagements, landing within the judge's window, first click -> hit p50, clicks per minute by
+    kind, loot items picked / fell."""
+    import flow_judge as fj
+    import hunt_core as hc
+
+    agg: dict[str, Counter[str]] = defaultdict(Counter)
+    hits: dict[str, list[float]] = defaultdict(list)
+    for s in sessions:
+        ev = [json.loads(x) for x in (DEMO / s["sid"] / "events.jsonl").read_text().splitlines()
+              if x]  # fmt: skip
+        spans = arm_spans(ev)
+        kills = [t for t, _g in kills_of(s["packets"])]
+        rows = {
+            int(r_["k"]): r_
+            for r_ in json.loads((DEMO / s["sid"] / "flow_judge.json").read_text())[
+                "engagements_w"
+            ]["rows"]
+        }
+        pos = hc.walk_positions(s["packets"])
+        items = item_fates(s["packets"], pos, fj.mob_at)
+        for t0, t1, on in spans:
+            a = agg["paced" if on else "default"]
+            a["seconds"] += (t1 - t0) // NS
+            a["kills"] += sum(t0 <= t < t1 for t in kills)
+            for x in s["engagements"]:
+                if t0 <= int(x["t_first_click"]) < t1:
+                    a["engagements"] += 1
+                    r_ = rows.get(int(x["k"])) or {}
+                    a["landed"] += r_.get("why") == "hit"
+                    if r_.get("why") == "hit" and r_.get("t_hit_s") is not None:
+                        hits["paced" if on else "default"].append(float(r_["t_hit_s"]))
+            for c in s["clicks"]:
+                if t0 <= int(c["t"]) < t1:
+                    a[f"clicks_{c.get('kind')}"] += 1
+            for it in items.values():
+                if t0 <= int(it["t_fall"]) < t1:
+                    a["items"] += 1
+                    a["picked"] += it["fate"] == "picked"
+    out: dict[str, Any] = {}
+    for arm, a in sorted(agg.items()):
+        mins = a["seconds"] / 60.0
+        hs = sorted(hits[arm])
+        out[arm] = {
+            "minutes": round(mins, 1), "kills": a["kills"],
+            "kills_per_hour": round(a["kills"] * 60.0 / mins, 1) if mins else None,
+            "engagements": a["engagements"],
+            "landed": f"{a['landed']}/{a['engagements']}",
+            "click_to_hit_p50": hs[len(hs) // 2] if hs else None,
+            "clicks_per_min": {k[7:]: round(v / mins, 1) for k, v in sorted(a.items())
+                               if k.startswith("clicks_") and mins},
+            "loot": f"{a['picked']}/{a['items']}",
+        }  # fmt: skip
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)  # fmt: skip
-    ap.add_argument("what", choices=("strike", "dead", "loot", "stray"))
+    ap.add_argument("what", choices=("strike", "dead", "loot", "stray", "blocks"))
     ap.add_argument("sessions", nargs="+")
     a = ap.parse_args()
     sessions = [load(s) for s in a.sessions]

@@ -122,3 +122,11 @@ def test_ui_cover_tallies_in_view_seconds_under_each_window() -> None:
     assert got["targets_covered_share"] == 0.5
     assert got["per_window_share"] == {"basic_info+menu": 0.3333, "shortcut_bar": 0.3333}
     assert uc.window_of(520, 132, wins) == 1 and uc.window_of(521, 50, wins) is None
+
+
+def test_arm_spans_split_a_run_into_its_paced_and_default_blocks() -> None:
+    ev = [{"t_ns": 0, "kind": "loop_start"}, {"t_ns": 5, "kind": "send_gap", "on": True},
+          {"t_ns": 50, "kind": "x"}, {"t_ns": 65, "kind": "send_gap", "on": False},
+          {"t_ns": 90, "kind": "y"}]  # fmt: skip
+    assert aj.arm_spans(ev) == [(5, 65, True), (65, 90, False)]
+    assert aj.arm_spans([{"t_ns": 1, "kind": "loop_start"}]) == []
