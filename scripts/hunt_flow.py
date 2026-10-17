@@ -1600,7 +1600,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     return pos_box[0]
                 world.position = pos_box[0]
                 got = relocalise(agent, screen, world, noentry, band)
-                bench.close_chat(agent, screen)
+                bench.close_chat(agent_raw, screen)
                 ev({"kind": "where_fix", "ok": bool(got.get("ok")), "to": list(world.position)})
                 if got.get("ok"):
                     return tuple(world.position)  # type: ignore[return-value]
@@ -1724,14 +1724,14 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
             import chat_guard
 
             chat_guard.start_run(f"hunt-flow{version}-{sid}")
-            before = gm_state.ensure_fixed(agent, screen, why=f"hunt-flow@{version}:before",
+            before = gm_state.ensure_fixed(agent_raw, screen, why=f"hunt-flow@{version}:before",
                                            out_dir=log.dir / "gm_state", profile="hunt-flow",
                                            loot=True)  # fmt: skip
             ev({"kind": "gm_state_before", **f0._brief(before)})
-            r.gm(agent, screen, f"@warp {MAP} {start[0]} {start[1]}")
+            r.gm(agent_raw, screen, f"@warp {MAP} {start[0]} {start[1]}")
             time.sleep(rr.SCENE_ENTRY_S)
-            bench.close_chat(agent, screen)
-            r.activate_client(agent, screen)
+            bench.close_chat(agent_raw, screen)
+            r.activate_client(agent_raw, screen)
             sampler = loot1.Sampler(det)
             sampler.start()
             pos = settle() or start
@@ -3191,7 +3191,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             wnow = gm_state._weight(gm_state._frames(screen))
                             if gm_state.weight_action(wnow, at_restore=False) == "clear":
                                 ev({"kind": "weight_clear", "weight": wnow})
-                                gm_state.clear_loot(agent, screen, why="hunt-flow:mid-run",
+                                gm_state.clear_loot(agent_raw, screen, why="hunt-flow:mid-run",
                                                     out_dir=log.dir / "gm_state")  # fmt: skip
                         if cont:
                             # v5: MEASURED -- the minimap's cell + the floor odometry since it
@@ -3664,7 +3664,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     wnow = gm_state._weight((fa, fb))
                     if gm_state.weight_action(wnow, at_restore=False) == "clear":
                         ev({"kind": "weight_clear", "weight": wnow})
-                        gm_state.clear_loot(agent, screen, why="hunt-flow:mid-run",
+                        gm_state.clear_loot(agent_raw, screen, why="hunt-flow:mid-run",
                                             out_dir=log.dir / "gm_state")  # fmt: skip
                 # where we are: reckoned while moving, corrected by the minimap
                 if moving and reck.remaining(now) == 0:
@@ -3864,11 +3864,11 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
         after: dict[str, Any] = {"skipped": ended}
         if ended == "time_box":
             with contextlib.suppress(r.Stop):
-                after = f0._brief(gm_state.ensure_fixed(agent, screen,
+                after = f0._brief(gm_state.ensure_fixed(agent_raw, screen,
                                                         why=f"hunt-flow@{version}:after",
                                                         out_dir=log.dir / "gm_state",
                                                         profile="hunt-flow"))  # fmt: skip
-                bench.close_chat(agent, screen)
+                bench.close_chat(agent_raw, screen)
         ev({"kind": "gm_state_after", **after})
     events_f.close()
     clicks_f.close()
