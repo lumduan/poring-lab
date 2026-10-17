@@ -708,6 +708,7 @@ def test_area_centre_is_an_area_cell_nearest_the_centroid() -> None:
 def test_v34_paces_input_in_alternating_blocks() -> None:
     p = hf.PARAMS[34]
     assert p["send_gap_s"] == 0.05 and p["send_gap_ab_min"] >= 5.0  # the old drain's minimum
+    assert p["send_gap_ab"]  # alternating blocks in v34 itself
     assert not hf.PARAMS[33].get("send_gap_s") and 34 in hf.VERSIONS
     src = (Path(hf.__file__)).read_text()
     # the helpers that TYPE keep the default pacing (/where, the pipelined loop's weight clear;
@@ -718,6 +719,8 @@ def test_v34_paces_input_in_alternating_blocks() -> None:
 def test_v35_reads_the_species_on_the_boxs_own_frame() -> None:
     p = hf.PARAMS[35]
     assert p["species_own"] and not hf.PARAMS[34].get("species_own") and 35 in hf.VERSIONS
+    assert p["species_own_ab"]  # interleaved per engagement (odd k: the own frame)
+    assert not (p.get("fast_dead_ab") and p["species_own_ab"])  # never two parity arms at once
     assert p["send_gap_s"] and p["loot_race"]  # on v34 until its pre-registration sets the base
 
 

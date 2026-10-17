@@ -376,13 +376,13 @@ PARAMS[33] = {**PARAMS[32], "fast_dead": False, "fast_dead_ab": False,
 # 34 = PACED INPUT (the agent link's dead 50 ms wait before every send), interleaved in 10-min
 # blocks within each run (the input path is global, so not per engagement): odd seeds start
 # paced. Its base (v33 as is, or with its loot arm decided) is set at its pre-registration
-PARAMS[34] = {**PARAMS[33], "send_gap_s": 0.05, "send_gap_ab_min": 10.0}
+PARAMS[34] = {**PARAMS[33], "send_gap_s": 0.05, "send_gap_ab": True, "send_gap_ab_min": 10.0}
 # 35 = the species check on the box's OWN frame, gated by finding the sprite again in a fresh grab
 # (the species-crop study, species_check.py THE STALE BOX: coverage 0.34 -> 0.65 at a 0.6 s old
 # box, wrong species 11 -> 0, Creamy accepted 1/85 -> 0/85, offline on hunt-flow28..31): to cut
 # arm C's "species unsure" fallbacks (Batt's decision 1). Ported from 69a1293 (proposed there as
 # "v33"); its base is set at its pre-registration
-PARAMS[35] = {**PARAMS[34], "species_own": True}
+PARAMS[35] = {**PARAMS[34], "species_own": True, "species_own_ab": True}
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -1717,7 +1717,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
             blk_ = int((now_ - pace["t0"]) / (60.0 * prm["send_gap_ab_min"]))
             if blk_ == pace["block"]:
                 return
-            on_ = (blk_ + seed) % 2 == 1
+            on_ = not prm.get("send_gap_ab") or (blk_ + seed) % 2 == 1  # off: paced all run
             pace.update(block=blk_, on=on_)
             agent_raw.min_send_gap_s = float(prm["send_gap_s"]) if on_ else None
             ev({"kind": "send_gap", "block": blk_, "on": on_})
@@ -2726,7 +2726,10 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 RECENTRE_MIN, within RECENTRE_WIDE px); its frame no longer held: the old way."""
                 import species_check as sc_
 
-                own_ = sampler.frame_of(b) if prm.get("species_own") else None
+                # v35: interleaved per engagement (odd k, the engagement about to start: own frame)
+                own_on = bool(prm.get("species_own")) and (
+                    not prm.get("species_own_ab") or k % 2 == 1)  # fmt: skip
+                own_ = sampler.frame_of(b) if own_on else None
                 r_s = sc_.RECENTRE_WIDE if own_ is not None else 40
                 sx0_, sy0_ = max(0, int(b.x0) - r_s), max(0, int(b.y0) - r_s)
                 sx1_, sy1_ = min(gw, int(b.x1) + r_s + 1), min(gh, int(b.y1) + r_s + 1)
