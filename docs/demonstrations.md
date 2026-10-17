@@ -8390,6 +8390,64 @@ STOPPED BY ME at 24 min (SIGINT), 60 engagements.**
   difference of two projections). Every hovered blob and its cursor read is now logged (`tried`).
 - Attempt 2 runs v21 with the fix, the same seed (the agent's round-1 start area).
 
+**Attempt 2 = RUN 1 RESULT (2026-10-17 08:58:19-09:58:19, session 20261017T085819-demo-hunt-flow21,
+seed 20270201; the full hour; judged by `flow_judge.bot` after 10:00):**
+- **HARD BARS PASSED.**
+- **Engagements:** 113 (112 dead). The bar 89 / 113 = 78.8 % (Wilson 70.3-85.3).
+- **Kills:** kills / h 100.8; engaged 93.9 / h (v20 run 1 133).
+- **Loot:** 34 of 156 items (21.8 %; v20 19 %); kill -> last pickup p50 6.2 s.
+  - 49 blob steps found 103 blobs. Of the 82 hovered, the cursor read 23 pickup, 48 walk,
+    7 sword and 4 unknown. 20 clicks, 20 picked.
+  - The fallback sweeps added 7 picks.
+  - The blob steps took 243 s of the hour.
+  - Offline against the packets: the hovered "walk" blobs sit ON the GM's own animated sprite
+    (21-48 px from its centre). The real items in melee lie at the GM's feet, where the
+    detector finds nothing.
+- **Search:** sight per 10-min window 28.5 (median); reversals 4.93 / min; straight runs 12.3.
+- **vs the prediction:**
+  - loot >= 50 %: NO (21.8 %);
+  - kill -> last pickup <= 4 s: NO (6.2 s);
+  - no loot click became an attack: YES (the unit check and the reads; 7 sword reads were not
+    clicked);
+  - engaged kills / h >= 0.85 x 133 = 113: NO (93.9);
+  - hard bars: PASSED.
+- **Next for loot:** recognise the item SPRITES themselves (a subagent is building item-icon
+  templates from the packet-labelled recordings), instead of the frame difference near the GM.
+
+### 3.63 hunt-flow@22: SEARCH GEOMETRY (pre-registered 2026-10-17 __TIME__ ICT, the commit time __SHA__, BEFORE its run; Batt's competition order item 2; round 2 of docs/competition.md)
+
+**Why: the search-gap study** (`scripts/search_gap.py`, merged f70b417; docs/competition.md).
+- Half of "13-19 vs Batt's 44 monsters in sight / 10 min" was the ruler: whole-run gids. Per
+  10-min window the bot meets 27.5 (median).
+- Of the remaining x0.62, almost all is AREA SWEPT per 10 min (x0.63):
+  - the bot sweeps 17.2 view cells per cell walked against Batt's 22.1;
+  - it moves 59 cells net a minute against his 91 (overlap, turning back, short net legs);
+  - the walk speed is the same, and the detector is not the limit.
+
+**The ONE main change (`heading_cov`, bc44f3f), on v21:**
+- v18's heading search gets a memory of the ground in OUR OWN view: a grid stamped +-12 cells
+  around our measured cell each planner cycle. It is the bot's own estimate, pixels only.
+- The current heading and the +-45 / +-90 / +-135 turns that run >= 8 cells each score
+  run x (0.25 + the share of fresh ground around the ray's end). Fresh means not in our view for
+  3 min.
+- The heading is KEPT while it scores >= 0.8 x the best; otherwise the smallest turn scoring that
+  much wins. A reversal only at a real dead end, as v18.
+- Offline on the real prt_fild08 area (3 seeds, 200 legs of 12 cells): swept view cells per cell
+  walked 13.3 / 23.1 / 24.5 against v18's 17.8 / 18.4 / 14.7 (means 20.3 vs 17.0; Batt 22.1).
+
+**v21 as the reference (3.62, attempt 2):** sight per 10-min window 28.5 (median), reversals
+4.93 / min, straight runs 12.3 cells, engaged 93.9 kills / h, the bar 78.8 %, hard bars passed.
+
+**Run:** 60 min, a fresh seed (round 2's start area), the same test state, nice 10, detector on the
+CPU (GPU freeze), judged on the full run and on 10-min windows.
+
+**Prediction, written before the run:**
+- monsters in sight per 10-min window (median) >= 31 (v20 / v21 ~27.5; Batt 44);
+- net cells moved per minute and swept view cells per cell walked above v21's (`search_gap.py`);
+- reversals <= 4.5 / min;
+- engaged kills / h >= 93.9 (v21);
+- hard bars: zero NPC contact, zero map change, zero non-target hit.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
