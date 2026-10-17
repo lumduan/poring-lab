@@ -177,6 +177,11 @@ VERSIONS = {
     "re-projected as the GM moves, hovered, and clicked on the HAND read twice + walk@11's unit "
     "check; the v17 sweep only when no blob was clicked; plus the walk guard leaving our own "
     "cursor out",
+    22: "SEARCH GEOMETRY, on v21 (Batt's competition order item 2; the search-gap study: the bot "
+    "swept 0.63x Batt's ground per 10 min -- overlap, turning back, short net legs): the heading "
+    "search remembers the ground in our own view (+-12 cells, 3 min) and scores keep / +-45 / "
+    "+-90 / +-135 by run x (0.25 + the fresh share at the ray's end), keeping the heading while it "
+    "scores >= 0.8x the best",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -251,6 +256,8 @@ PARAMS[19] = {**PARAMS[18], "retarget": True, "retarget_margin": 2.0, "retarget_
 # reads: 40-58 % refused in v15-v16), one change against the last version run; v19 is built, unrun
 PARAMS[20] = {**PARAMS[18], "tag_follow": True, "tag_follow_px": 10.0}
 PARAMS[21] = {**PARAMS[20], "loot_blobs": True, "loot_before_s": 1.8, "guard_ptr_mask": True}
+PARAMS[22] = {**PARAMS[21], "heading_cov": True, "cov_recent_s": 180.0, "cov_half": 12,
+              "cov_keep": 0.8}  # fmt: skip
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -694,6 +701,46 @@ def heading_goal(area: Any, here: Cell, st: dict[str, Any], rng: Any, max_len: i
     n2, c2 = ray_run_angle(area, here, a2, max_len)
     st.update(ang=a2, turn=180.0)
     return c2 if n2 >= 2 else None
+
+
+def fresh_share(swept: Any, now: float, cell: Sequence[int], half: int, recent_s: float) -> float:
+    """PURE (v22): the share of cells within ``half`` (Chebyshev) of ``cell`` NOT swept in the last
+    ``recent_s`` (``swept`` = the last time each cell was in our view; very negative = never)."""
+    h, w = swept.shape
+    x0, x1 = max(0, int(cell[0]) - half), min(w, int(cell[0]) + half + 1)
+    y0, y1 = max(0, int(cell[1]) - half), min(h, int(cell[1]) + half + 1)
+    win = swept[y0:y1, x0:x1]
+    return float((win < now - recent_s).mean()) if win.size else 0.0
+
+
+def heading_goal_cov(area: Any, here: Cell, st: dict[str, Any], swept: Any, now: float,
+                     recent_s: float = 180.0, half: int = 12, keep: float = 0.8,
+                     max_len: int = 40, min_run: int = 8) -> Cell | None:  # fmt: skip
+    """PURE (v22, the SEARCH GAP: the bot swept 0.63x Batt's ground per 10 min -- overlap, turning
+    back, short net legs): v18's heading search with a memory of the bot's OWN swept ground.
+    The current heading and the +-45 / +-90 / +-135 deg turns that run >= ``min_run`` cells each
+    score run x (0.25 + the FRESH share around the ray's end: ground not in our view for
+    ``recent_s``). The heading is KEPT while it scores >= ``keep`` x the best; otherwise the
+    smallest turn scoring that much wins. A reversal only at a real dead end, as v18."""
+    ang = float(st.setdefault("ang", 0.0))
+    cands = []
+    for deg, sgn in ((0, 1), (45, 1), (45, -1), (90, 1), (90, -1), (135, 1), (135, -1)):
+        a2 = ang + sgn * math.radians(deg)
+        n2, c2 = ray_run_angle(area, here, a2, max_len)
+        if n2 < min_run:
+            continue
+        f2 = fresh_share(swept, now, c2, half, recent_s)
+        cands.append((n2 * (0.25 + f2), deg, sgn, a2, c2, f2))
+    if not cands:
+        a2 = ang + math.pi  # a real dead end: the only reversal
+        n2, c2 = ray_run_angle(area, here, a2, max_len)
+        st.update(ang=a2, turn=180.0, fresh=None)
+        return c2 if n2 >= 2 else None
+    top = max(c[0] for c in cands)
+    ok_ = [c for c in cands if c[0] >= keep * top]
+    pick = min(ok_, key=lambda c: (c[1], -c[0]))  # the smallest turn among the good ones
+    st.update(ang=pick[3], turn=float(pick[2] * pick[1]), fresh=round(pick[5], 2))
+    return pick[4]
 
 
 def start_heading(area: Any, here: Cell, max_len: int = 40) -> float:
@@ -2233,6 +2280,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
             import random as random_
 
             heading_st: dict[str, Any] = {"ang": start_heading(area, start)}  # v18
+            swept_grid = np.full(area.shape, -1e9, dtype=np.float64)  # v22: last time in view
             arrow_last: list[float | None] = [None]  # v18: the minimap arrow (deg), logged only
             heading_rng = random_.Random(seed)
             trail: list[tuple[float, Cell]] = []  # v8 attempt 2: (mono s, cell) we stood on
@@ -2243,6 +2291,10 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 while not halt.is_set():
                     now_, t_ = time.monotonic(), r.ns()
                     here_ = posm.at(now_)
+                    if prm.get("heading_cov"):  # v22: the ground in our view now (+-cov_half)
+                        hx_, hy_, hc_ = int(here_[0]), int(here_[1]), int(prm["cov_half"])
+                        swept_grid[max(0, hy_ - hc_): hy_ + hc_ + 1,
+                                   max(0, hx_ - hc_): hx_ + hc_ + 1] = now_  # fmt: skip
                     head_ = None
                     if prm.get("sweep"):  # v12: our heading over the last ~2 s (the trail)
                         with plock:
@@ -2267,16 +2319,31 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         p_ = None
                         goal = None
                         if prm.get("heading_search") and area[here_[1], here_[0]]:
-                            # v18 (Batt 21:31): along the remembered SEARCH HEADING; small turns
-                            goal = heading_goal(area, here_, heading_st, heading_rng,
-                                                min_run=prm["heading_min_run"],
-                                                drift_p=prm["heading_drift_p"])  # fmt: skip
+                            # v18 (Batt 21:31): along the remembered SEARCH HEADING; small turns;
+                            # v22: away from the ground we swept in the last minutes
+                            if prm.get("heading_cov"):
+                                goal = heading_goal_cov(
+                                    area,
+                                    here_,
+                                    heading_st,
+                                    swept_grid,
+                                    now_,
+                                    prm["cov_recent_s"],
+                                    prm["cov_half"],
+                                    prm["cov_keep"],
+                                    min_run=prm["heading_min_run"],
+                                )
+                            else:
+                                goal = heading_goal(area, here_, heading_st, heading_rng,
+                                                    min_run=prm["heading_min_run"],
+                                                    drift_p=prm["heading_drift_p"])  # fmt: skip
                             if goal is not None:
                                 p_ = hc.astar(area, here_, goal)
                                 if p_ is not None and len(p_) >= 2:
                                     ev({"kind": "heading_goal", "goal": list(goal),
                                         "ang": round(math.degrees(heading_st["ang"]) % 360, 1),
                                         "turn": heading_st.get("turn"),
+                                        "fresh": heading_st.get("fresh"),
                                         "arrow": arrow_last[0]})  # fmt: skip
                                 else:
                                     goal = None

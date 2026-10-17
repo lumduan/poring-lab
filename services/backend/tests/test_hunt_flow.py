@@ -460,3 +460,18 @@ def test_v21_loots_by_frame_difference_on_v20() -> None:
     assert p["loot_blobs"] and p["guard_ptr_mask"] and p["tag_follow"] and p["loot_sweep"]
     assert 1.0 <= p["loot_before_s"] <= 2.5
     assert not hf.PARAMS[20].get("loot_blobs")
+
+
+def test_v22_the_heading_turns_away_from_ground_we_swept() -> None:
+    area = np.ones((80, 80), bool)
+    swept = np.full(area.shape, -1e9)
+    st: dict = {"ang": 0.0}  # heading east
+    g = hf.heading_goal_cov(area, (40, 40), st, swept, 1000.0)
+    assert st["turn"] == 0.0 and g is not None and g[0] > 40  # all fresh: keep the heading
+    swept[:, 41:] = 990.0  # the east was in our view 10 s ago
+    st2: dict = {"ang": 0.0}
+    hf.heading_goal_cov(area, (40, 40), st2, swept, 1000.0)
+    assert abs(st2["turn"]) in (90.0, 135.0) and st2["fresh"] > 0.5  # turn toward fresh ground
+    assert hf.fresh_share(swept, 1000.0, (20, 40), 5, 180.0) == 1.0
+    assert hf.fresh_share(swept, 1000.0 + 200.0, (60, 40), 5, 180.0) == 1.0  # swept long ago
+    assert hf.PARAMS[22]["heading_cov"] and hf.PARAMS[22]["loot_blobs"]
