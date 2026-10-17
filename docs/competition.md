@@ -50,8 +50,9 @@ non-target hit, map change) apply to every session.
 | R6 (bot v26) | (fixed) | 40.0 / 6 of 6 / 3 of 7 / pass | 120 / 87 % / 20 of 26 / pass | 126 / 83 % / 18 of 40 / pass | 129.1 / 85.4 % / 68 of 122 / **pass** (39.8 min) |
 | R7 (bot v27) | (fixed) | 41.5 / 6 of 8 / 6 of 8 / pass | 78 / 67 % / 8 of 11 / **1 non-target** (2 windows: the lower) | 168 / 79 % / 21 of 38 / pass | 141.7 / 75.7 % / 52 of 109 / **1 non-target (Creamy)** (28.8 min) |
 | R8 (bot v28) | (fixed) | 19.2 / 3 of 4 / 1 of 2 / pass | 144 / 80 % / 19 of 40 / pass | 156 / 72 % / 15 of 31 / pass | **141.9 / 75.3 % / 95 of 179 / pass (full hour)** |
-| R8b (bot v29, A/B/C run 1) | (fixed) | - (bot only) | see the A/B/C section | | 131.9 / 73.6 % / pass (full hour) |
-| R9 (bot v30, A/B/C run 2) | (fixed) | **66.5 / 10 of 10 / 11 of 20 / pass** (the agent's best) | pending | pending | pending |
+| R8b (bot v29, A/B/C run 1) | (fixed) | - (bot only) | 132 (median of 6) | 156 | 131.9 / 73.6 % / 47 % / pass (full hour) |
+| R9 (bot v30, A/B/C run 2) | (fixed) | **66.5 / 10 of 10 / 11 of 20 / pass** (the agent's best) | 114 | 144 | 105.0 / 78.0 % / 49 % / pass (full hour) |
+| R10 (bot v31, death cell + A/B/C run 3) | (fixed) | 33.7 / 4 of 4 / 2 of 2 / pass | 99 | 114 | 101.3 / 84.6 % / 58.5 % / pass (45 min) |
 
 ## Round 0 (bot v20 from 2026-10-17 04:42 + 05:55; agent 07:55)
 
@@ -369,8 +370,33 @@ non-target hit, map change) apply to every session.
 
   - B and C fall back to A when the species check is unsure or crowded (~45 % of planned B / C).
     So B and C pool more slowly; runs 2+ continue.
+- **Final, pooled over 3 runs (337 engagements, all runs clean, 0 Creamy hits):**
 
-## What the agent's play taught (rounds 0-9)
+| arm | n | arrival -> attack request p50 / p90 | landing <= 5 s | first click: target / other / ground | arrival -> kill p50 |
+|---|---|---|---|---|---|
+| A (confirm first) | 194 | 1.42 / 2.17 s | 77 % | 143 / 11 / 40 | 2.46 s |
+| B (click at once) | 69 | 0.79 / 1.49 s | 71 % | 46 / 0 / 23 | 1.79 s |
+| **C (B + nudge)** | 71 | 0.89 / 1.77 s | **86 %** | 52 / 0 / 19 | 1.88 s |
+
+  - **C wins:** as fast as B (0.5 s faster than A to the attack), the best landing, fewer ground
+    misclicks than B, and no click ever went to another unit.
+  - So the old-cursor effect Batt suspected is weakly supported. C is the next default for
+    confident targets.
+
+## Rounds 9-10 (19:14 agent, 19:26 bot v30; 20:29 bot v31, 21:16 agent)
+
+- **AGENT R9** `20261017T191408-demo-agent-demo` (seed 20271101): **66.5 kills / h**, 10 of 10
+  landed, 11 of 20 drops, clean. The agent's best, in a dense start area.
+  - **Packet fact:** two monsters in a row walked onto our drop pile, a Poring and then a Drops,
+    and took it. Killing each dropped the pile again, with their own.
+- **BOT v30** (A/B/C run 2, belief off, seed 20271101): 105.0 kills / h, landing 78 %, loot 49 %,
+  clean full hour.
+- **BOT v31** (the death cell where the hit landed, seed 20271201, 45 min): 101.3 kills / h,
+  landing 84.6 %, loot 58.5 %, clean.
+- **AGENT R10** `20261017T211621-demo-agent-demo` (seed 20271201): 33.7 kills / h, 4 of 4,
+  clean. A sparse area (5.6 in sight).
+
+## What the agent's play taught (rounds 0-10)
 
 - **The agent's own limit is its decision loop.**
   - Each step is a screenshot, a thought and a command: ~10-20 s.
@@ -452,23 +478,29 @@ non-target hit, map change) apply to every session.
   - a coverage memory of the bot's own path, to head away from ground swept in the last minutes;
   - turn rather than reverse at obstacles.
 
-## The next bot change
+## Where the day ended (21:30) and the next bot change
 
-**v24 (running, round 4): the fixed loot's DEATH CELL** (demonstrations 3.65).
-- The cell under the last strike click when it is beside the GM, else the GM's neighbour toward
-  it. Offline (340 drops): 63 % of drops in its 3 x 3, 87 % within 2 cells.
-- Plus the cadence v23 registered (~0.4 s a click) and `FrameGuard` (no input off the frame).
+**Best bot runs, all pixels only:**
+- **v28** (16:54): 141.9 kills / h, a clean full hour, 159 engagements;
+- **v24** (12:30): 146.9 kills / h, the highest, but with a Creamy hit; its best window was 180 / h;
+- **v29 run 1** (18:11): one 2-min stretch of 11 kills, a 330 / h pace (the phone clip).
 
-**Then (work order item 3, the NAME TAG):**
-- v23's species shadow was sure on 37 % of the tag reads, agreed with the tag on 37 of 38, and
-  disagreed once, on a CROWDED box (the tag Lunatic, the check Drops).
-- 19 times it was sure where the tag read nothing.
-- **v25 candidate:** skip the tag when the check is sure AND no other monster box is within
-  50 px, and start the read while walking in.
+**Milestones:** none met.
+- M1 needs seen -> click <= 2.2 s (best p50 3.13 s), landing >= 90 % (best 86 % in arm C),
+  loot >= 80 % (best 61.8 %), reversals <= 5 / min (best 5.6). The hard bars have been clean
+  since v28.
 
-**Measured top losers (v22, seconds per hour):**
-- server kill -> the bot's "dead", including the loot step: 508;
-- selection -> click: 423;
-- "dead" -> the next selection: 337;
-- in range -> click: 260;
-- click -> server kill: 250.
+**Top losers, v28's latency budget (seconds per hour):**
+- server kill -> the bot's "dead", including the loot: 807;
+- selection -> click: 552;
+- "dead" -> the next selection: 483;
+- in range -> click: 250;
+- click -> server kill: 234.
+
+**Next, in Batt's order:**
+1. **v32: arm C as the default** for confident targets, with A as the fallback.
+2. **v33: fast dead** (built and staged as v32's code path, PARAMS[32]: the burst's arrow or
+   vanish -> dead after one missed frame). Re-number it after C.
+3. **The loot:** items first (item_icons ordering the 3 x 3 clicks), since monsters take our drops.
+4. **Immunity OFF** is Batt's call. At STR 99 every kill is one hit, so "stand and fight" could not
+   be observed, and 19 % of hit targets had started a walk before they vanished.

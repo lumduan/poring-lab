@@ -9060,6 +9060,29 @@ round 8 to give the pooled test its hours). The same test state, nice 10, detect
   Hard bars stay: NPC contact, map change, unknown UI state, a hit on any other non-target.
 - **The agent's rounds continue** (decision 4), alternating around the bot's runs.
 
+**RESULT (pooled over 3 runs: v29 18:11 60 min, v30 19:26 60 min, v31 20:29 45 min; 337
+engagements; every run's hard bars passed; 0 Creamy hits; `abc.py`):**
+
+| arm (effective) | n | arrival -> click | arrival -> our attack request p50 / p90 | clicks per lock (mean) | landing <= 5 s | first click: target / other unit / ground | non-target | arrival -> kill p50 |
+|---|---|---|---|---|---|---|---|---|
+| A (confirm first) | 194 | 0.62 s | 1.42 / 2.17 s | 1.08 | 149 / 194 = 77 % | 143 / 11 / 40 | 0 | 2.46 s |
+| B (click at once) | 69 | 0.02 s | **0.79** / 1.49 s | 1.13 | 49 / 69 = 71 % | 46 / 0 / 23 | 0 | **1.79 s** |
+| C (B + nudge) | 71 | 0.11 s | 0.89 / 1.77 s | 1.16 | **61 / 71 = 86 %** | 52 / 0 / 19 | 0 | 1.88 s |
+
+- Planned arms were 111 / 111 / 112. B and C fell back to A on 42 and 41 engagements, mostly
+  "species unsure" (the pixel check's coverage).
+- **vs the prediction:**
+  - B and C at least 0.3 s faster to the request than A: YES (0.63 and 0.53 s faster);
+  - clicks per lock C <= B: NO (1.16 vs 1.13, the same within noise);
+  - misclicks C below B: YES (ground first clicks 27 % vs 33 %; neither ever clicked another unit,
+    A 6 %). This supports the old-cursor hypothesis, but weakly at n ~70;
+  - landing B and C >= A - 5 points: C YES (86 vs 77 %), B NO (71 %, -6);
+  - non-target hits: zero in every arm: YES;
+  - hard bars: PASSED in all three runs.
+- **Verdict:** **C** (the second small motion, then burst to the lock arrow) is as fast as B and
+  lands best. It is the candidate for the next version's default strike on confident targets. A
+  stays the fallback for an unsure or crowded species.
+
 ### 3.71 hunt-flow@31: THE DEATH CELL WHERE THE HIT LANDED (pre-registered 2026-10-17 20:28 ICT, the commit time 2c4d8ae, BEFORE its run; Batt's decision 1 at 18:3x; round 10 of docs/competition.md)
 
 **Batt (18:3x):** "the LAST STRIKE CLICK is NOT the death cell (a hit monster can still walk away;
@@ -9110,6 +9133,27 @@ stop (Batt 18:3x).
 - engaged kills / h >= v30's - 10 %;
 - hard bars: zero NPC contact, zero map change, zero hit on a non-target other than a Creamy
   (Creamy hits reported apart).
+
+**RUN 1 RESULT (2026-10-17 20:29:27-21:14:27, session 20261017T202927-demo-hunt-flow31, seed
+20271201; 45 min; my live monitor on, none found):**
+- **HARD BARS PASSED**; 0 Creamy hits.
+- **Loot:** 48 of 82 items (58.5 %; v30 49 %, v28 53 %); kill -> last pickup p50 3.32 s. All 77
+  loot steps used the hit-landed cell (`fixed_from: anim`).
+- **Engagements:** 78 (77 dead). The bar 66 / 78 = 84.6 %.
+- **Kills:** 101.3 / h; engaged 98.6 / h. Windows 102, 114, 84, 96. A sparse seed: sight 22.5
+  per window.
+- server kill -> loot start p50 2.37 s; false deaths 14.7 %.
+- **vs the prediction:**
+  - loot >= 70 %: NO (58.5 %), but the best of the comparable fixed-loot runs after v25;
+  - kill -> last pickup <= 3.0 s: NO (3.32 s);
+  - engaged kills / h >= v30's - 10 %: YES (98.6 vs 99.0);
+  - hard bars: PASSED.
+- **Reading:** the cell is now right more often (offline 90 % of drops in its 3 x 3), but loot
+  stays far below Batt's 97 %. The remaining losers are the blind clicks' share and speed:
+  - monsters (Porings, Drops) pick our drops up first;
+  - the 3 x 3 takes ~4 s.
+  Batt looks first, then clicks only the items he sees. Not run in this version: item recognition
+  (item_icons, built) as the ORDER of the 3 x 3 clicks, items first.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
