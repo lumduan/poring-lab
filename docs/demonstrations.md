@@ -8339,7 +8339,7 @@ it):**
   - engaged ~121 kills / h;
   - one non-target hit (run 1's walk-click Creamy).
 
-### 3.62 hunt-flow@21: LOOT BY FRAME DIFFERENCE (pre-registered 2026-10-17 __TIME__ ICT, the commit time __SHA__, BEFORE its run; Batt's competition order item 1; round 1 of docs/competition.md)
+### 3.62 hunt-flow@21: LOOT BY FRAME DIFFERENCE (pre-registered 2026-10-17 08:32 ICT, the commit time a171003, BEFORE its run; Batt's competition order item 1; round 1 of docs/competition.md)
 
 **Why:** loot is the top time loser. In v20, the post-kill wait including the sweep was 574 s / h,
 and the sweep picked 14-28 % of the drops (Batt: 62 / 64). The v17 sweep hovers CELL CENTRES and
