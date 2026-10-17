@@ -89,3 +89,14 @@ def test_hardbar_live_stops_on_other_non_targets_but_counts_creamy() -> None:
         "npc_contact": 1,
         "map_change": 1,
     }
+
+
+def test_loot_stray_flags_a_treadmill_but_not_a_3x3_loot() -> None:
+    ns = 1_000_000_000
+    steps = [{"t_ns": 10 * ns, "s": 4.0, "cell": [300, 51]},
+             {"t_ns": 30 * ns, "s": 4.0, "cell": [100, 100]}]  # fmt: skip
+    pk = [{"type": "self_move", "t_mono_ns": t * ns, "x1": x, "y1": y}
+          for t, x, y in ((7, 300, 51), (8, 304, 49), (9, 311, 44),   # the v32 run 1 treadmill
+                          (27, 101, 100), (28, 99, 101))]  # fmt: skip
+    got = aj.loot_stray(steps, pk)
+    assert got == {"steps": 2, "stray_ge_4": 1, "share": 0.5, "max_p50": 11}

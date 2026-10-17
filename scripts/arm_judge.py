@@ -9,6 +9,8 @@ engagements.json, clicks.jsonl, and flow_judge.json -- run `flow_judge.bot(sid)`
     arm_judge.py dead SID [SID ...]     v32+ fast / slow dead rule (eng["dead_rule"])
     arm_judge.py loot SID [SID ...]     per kill: items picked / lost to LOOTERS / expired,
                                         by the loot arm (eng["loot_arm"], v33+) or "all"
+    arm_judge.py stray SID [SID ...]    per loot step: the GM walked >= 4 cells off the death
+                                        cell (the TREADMILL), by the loot arm
 
 Packets are offline ground truth here (ADR-0007); nothing in this module runs during play.
 """
@@ -267,14 +269,54 @@ def loot_table(sessions: Iterable[dict[str, Any]]) -> dict[str, Any]:
     return {arm: dict(c) for arm, c in sorted(arms.items())}
 
 
+def loot_stray(loot_steps: Iterable[Mapping[str, Any]],
+               packets: Sequence[Mapping[str, Any]], far: int = 4) -> dict[str, Any]:  # fmt: skip
+    """PURE (the loot TREADMILL, 2026-10-17 22:0x): per loot step (a ``loot_fixed`` event: its end
+    ``t_ns``, its duration ``s``, its death ``cell``) the farthest server destination of the GM's
+    walks (self_move x1 / y1) from the death cell during the step (+ 0.5 s). A 3 x 3 loot never
+    needs >= 2; >= ``far`` cells means the clicks walked the GM off its pile."""
+    mv = [(int(e["t_mono_ns"]), (int(e["x1"]), int(e["y1"])))
+          for e in packets if e.get("type") == "self_move"]  # fmt: skip
+    n = strays = 0
+    worst: list[int] = []
+    for e in loot_steps:
+        t1 = int(e["t_ns"])
+        t0 = t1 - int(float(e.get("s") or 0.0) * 1e9)
+        c = e["cell"]
+        ds = [max(abs(p[0] - c[0]), abs(p[1] - c[1])) for t, p in mv if t0 <= t <= t1 + 500_000_000]
+        n += 1
+        if ds:
+            worst.append(max(ds))
+            strays += max(ds) >= far
+    worst.sort()
+    return {"steps": n, f"stray_ge_{far}": strays,
+            "share": round(strays / n, 3) if n else None,
+            "max_p50": worst[len(worst) // 2] if worst else None}  # fmt: skip
+
+
+def stray_table(sessions: Iterable[dict[str, Any]]) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for s in sessions:
+        ev = [json.loads(x) for x in (DEMO / s["sid"] / "events.jsonl").read_text().splitlines()
+              if x]  # fmt: skip
+        by: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for e in ev:
+            if e.get("kind") == "loot_fixed":
+                by[str(e.get("arm") or "all")].append(e)
+        out[s["sid"]] = {arm: loot_stray(st, s["packets"]) for arm, st in sorted(by.items())}
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)  # fmt: skip
-    ap.add_argument("what", choices=("strike", "dead", "loot"))
+    ap.add_argument("what", choices=("strike", "dead", "loot", "stray"))
     ap.add_argument("sessions", nargs="+")
     a = ap.parse_args()
     sessions = [load(s) for s in a.sessions]
-    fn = {"strike": strike_table, "dead": dead_table, "loot": loot_table}[a.what]
+    fn = {"strike": strike_table, "dead": dead_table, "loot": loot_table, "stray": stray_table}[
+        a.what
+    ]
     print(json.dumps(fn(sessions), indent=1, default=str))
     return 0
 

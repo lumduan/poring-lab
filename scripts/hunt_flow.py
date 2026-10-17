@@ -356,7 +356,10 @@ PARAMS[32] = {**PARAMS[31], "abc_arm": "C", "fast_dead": True, "fast_dead_ab": T
 # own loot step covers the cells still to click; at most one a kill). Interleaved per loot step
 PARAMS[33] = {**PARAMS[32], "loot_icons": True, "loot_race": True, "loot_race_ab": True,
               "looter_chain": True, "looter_cells": 2, "looter_pending_s": 12.0,
-              "looter_match_px": 40.0}  # fmt: skip
+              "looter_match_px": 40.0,
+              # a BASE fix in both arms (not the change under test): the loot step's position
+              # from the minimap readout whenever the odometry is > 1.5 cells off it
+              "loot_refix": True, "loot_refix_cells": 1.5}  # fmt: skip
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -1670,6 +1673,18 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 xy = selfpos.read_minimap_xy(frame()[:, :, :3], digits)
                 return None if xy is None else (int(xy[0]), int(xy[1]))
 
+            mm_rect = selfpos.default_rect()
+
+            def read_position_quick() -> Cell | None:
+                """v33: the same readout from a grab of ITS rect only (the loot step's check
+                before each click: the main loop's 0.3 s re-anchor waits behind the step)."""
+                x_, y_, w_, h_ = mm_rect
+                img_ = np.ascontiguousarray(
+                    np.asarray(screen.grab(gx0 + x_, gy0 + y_, w_, h_)[1])[..., :3]
+                )
+                xy = selfpos.read_rect(selfpos.to_gray(img_), digits).xy
+                return None if xy is None else (int(xy[0]), int(xy[1]))
+
             last_fix = [0.0]
             pos_box: list[Cell] = [start]
 
@@ -2088,6 +2103,20 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         why_ = "npc"
                     else:
                         mp_ = measured_pos() or (float(here2[0]), float(here2[1]))
+                        if prm.get("loot_refix"):
+                            # v33 (both arms): the readout before each click. v28-v31: 60-77 %
+                            # of loot steps sent the GM >= 4 cells off the death cell -- a stale
+                            # odometry re-projects every click to the same screen pixels and
+                            # the GM walks a TREADMILL (v32 run 1: 13 cells, a jump stop)
+                            t_rf = r.ns()
+                            mm_l = read_position_quick()
+                            if mm_l is not None and cheb(mm_l, mp_) > JUMP_CELLS:
+                                out["stop"] = "jump"  # the main loop's guard decides
+                                break
+                            if mm_l is not None and cheb(mm_l, mp_) > prm["loot_refix_cells"]:
+                                out["refix"] = out.get("refix", 0) + 1
+                                mstate["anchor"] = (mm_l, odo_at(hist_now(), t_rf))
+                                mp_ = (float(mm_l[0]), float(mm_l[1]))
                         if px_ is not None:  # v33: the item's own pixel, moved with the ground
                             a_i = frac_project(w_l, mp_g, c_l)
                             b_i = frac_project(w_l, mp_, c_l)

@@ -668,6 +668,10 @@ def test_v33_races_the_loot_items_first_and_chains_one_looter() -> None:
     assert p["abc_arm"] == "C" and p["loot_death"] == "anim" and not hf.PARAMS[32].get("loot_race")
     assert 1 <= p["looter_cells"] <= 2 and p["looter_pending_s"] > p["give_up_s"]
     assert 33 in hf.VERSIONS
+    # the base fix (both arms): the readout re-anchors a loot step before a stray cell, far
+    # below the jump guard's threshold
+    assert p["loot_refix"] and 1.0 <= p["loot_refix_cells"] < hf.JUMP_CELLS
+    assert not hf.PARAMS[32].get("loot_refix")
 
 
 def test_items_first_puts_the_matched_items_first_nearest_the_gm() -> None:
