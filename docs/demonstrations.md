@@ -8684,7 +8684,7 @@ detector on the CPU (GPU freeze), judged on the full run and on 10-min windows.
   through the loot area. **The Creamy is the open safety problem of every blind click:** it is
   boxed 8-11 % of the time and is not always pink.
 
-### 3.66 hunt-flow@25: THE NAME TAG ONLY WHEN AMBIGUOUS (pre-registered 2026-10-17 __TIME__ ICT, the commit time __SHA__, BEFORE its run; Batt's competition work order item 3; round 5 of docs/competition.md)
+### 3.66 hunt-flow@25: THE NAME TAG ONLY WHEN AMBIGUOUS (pre-registered 2026-10-17 14:02 ICT, the commit time 3b5d3a1, BEFORE its run; Batt's competition work order item 3; round 5 of docs/competition.md)
 
 **Why:** the name-tag step costs time and fails often.
 - v22: 41 % of the strike calls were refused because the tag read NOTHING (121 of 174). v23: 44
