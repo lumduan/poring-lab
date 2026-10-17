@@ -9363,6 +9363,38 @@ the live hard-bar monitor.
 - **Hard bars:** zero NPC contact, zero map change, zero non-Creamy non-target hit (Creamy
   counted).
 
+### 3.75 hunt-flow@35: THE SPECIES CHECK ON THE BOX'S OWN FRAME, interleaved per engagement (pre-registered 2026-10-17, the commit time quoted in the next commit, BEFORE its run; Batt's decision 1: cut the "species unsure" fallbacks)
+
+**Why:** arm C, the default strike, falls back to A when the pixel species check is unsure. v32:
+species unsure on 26.9-37.7 % of strikes (`arm_judge.py species`).
+- The species-crop study (bca353e, 6967427; hunt-flow28-31 held out) found the cause: the box is
+  ~0.6 s old, and the check cropped a NEWER frame at the old coordinates. The sprite had moved
+  (p50 6 px, p90 68 px).
+- On the box's own frame, gated by finding the sprite again in a fresh grab (NCC >= 0.5 within
+  +-120 px): coverage 0.341 -> 0.651, wrong species 11 -> 0, Creamy accepted 1/85 -> 0/85.
+- The model is not the limit (retrained on 40 sessions: the same).
+
+**The ONE main change (`species_own`, interleaved by `species_own_ab`):**
+- **Odd engagements:** `species_now(b)` classifies the box on the detected frame it came from
+  (`loot1.Sampler.frame_of`, the last 4 held), and only when `species_check.recentre` finds the
+  sprite again in a fresh grab. Otherwise the answer is None, i.e. read the tag (arm A).
+- **Even engagements:** the fresh crop at the stale box, as v32-v34.
+- It feeds `tag_gate` (species_skip), arm C's eligibility, and strike_moving.
+
+**Base:** v34, with its pacing decided by 3.74's verdict before v35's first run: paced for the
+whole run (`send_gap_ab` off) if 3.74's primary prediction and its three "still registers"
+predictions hold, else the default for the whole run. 3.73's loot decision kept; v15's dead rule.
+
+**Runs:** two 60-min runs pooled (seeds 20271901, 20272001), the hunting fixed state restored
+between runs, nice 10, detector on the CPU, the live hard-bar monitor.
+
+**Prediction, written before the runs (per parity, pooled; `arm_judge.py species`):**
+- **Primary:** the share of strikes falling back as "species unsure": own <= stale - 10 points.
+- effective arm C share: own >= stale + 10 points;
+- landing within 5 s: own >= stale - 5 points;
+- **safety:** zero non-target hits (Creamy counted apart) and no rise of Creamy attack requests
+  in the own arm; hard bars zero.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
