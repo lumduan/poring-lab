@@ -723,6 +723,7 @@ def test_v35_reads_the_species_on_the_boxs_own_frame() -> None:
     assert p["species_own_ab"]  # interleaved per engagement (odd k: the own frame)
     assert not (p.get("fast_dead_ab") and p["species_own_ab"])  # never two parity arms at once
     assert p["send_gap_s"] and not p["loot_race"]  # on v34 (its base set at its pre-registration)
+    assert not p["send_gap_ab"]  # 3.74's verdict: paced for the whole run, no blocks
 
 
 def test_nearest_cell_frac_equals_the_per_cell_loop() -> None:

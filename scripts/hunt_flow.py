@@ -386,8 +386,9 @@ PARAMS[34] = {**PARAMS[33], "loot_race": False, "loot_icons": False, "looter_cha
 # (the species-crop study, species_check.py THE STALE BOX: coverage 0.34 -> 0.65 at a 0.6 s old
 # box, wrong species 11 -> 0, Creamy accepted 1/85 -> 0/85, offline on hunt-flow28..31): to cut
 # arm C's "species unsure" fallbacks (Batt's decision 1). Ported from 69a1293 (proposed there as
-# "v33"); its base is set at its pre-registration
-PARAMS[35] = {**PARAMS[34], "species_own": True, "species_own_ab": True}
+# "v33"). Base: v34 PACED for the whole run (3.74's verdict 2026-10-18 03:4x: the loot step
+# 1.02 s faster, the input still registered)
+PARAMS[35] = {**PARAMS[34], "send_gap_ab": False, "species_own": True, "species_own_ab": True}
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------

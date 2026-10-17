@@ -9442,6 +9442,59 @@ the live hard-bar monitor.
   - The live monitor: no stop, 0 Creamy hits, 138 attack requests, all on targets.
 - **Run 2** (02:40:36, seed 20271802, default first, `20261018T024036-demo-hunt-flow34`), after a
   judged screenshot (02:40, no dialog, the fixed-state windows, weight 334 / 4970).
+  - The full 60-min box: 153 engagements, 150 dead, 3 gave up. No stop; 1 Creamy hit (counted
+    apart), 150 attack requests on targets.
+
+**RESULT (judged 2026-10-18 03:4x; run 1 + run 2 pooled, attempt 1 excluded):**
+
+| run | min | engagements | landing (5 s) | kills / h | seen -> click p50 | loot picked / fell | sight / 10 min | reversals / min |
+|---|---|---|---|---|---|---|---|---|
+| run 1 (attempt 2) | 60.0 | 143 | 109 / 143 = 76.2 % (Wilson 68.6-82.5) | 128.9 | 3.28 s | 80 / 148 = 54.1 % | 13.2 | 6.58 |
+| run 2 | 60.0 | 153 | 117 / 153 = 76.5 % (69.2-82.5) | 133.6 | 3.41 s | 104 / 165 = 63.0 % | 12.1 | 6.45 |
+
+| per pacing arm (`arm_judge.py blocks`, 6 blocks each) | paced | default |
+|---|---|---|
+| minutes | 60.0 | 59.9 |
+| loot step p50 | **2.42 s** (0.284 s a click) | 3.44 s (0.452 s a click) |
+| walk clicks the client followed within 1 s | 2103 / 2141 = 98.2 % | 1404 / 1441 = 97.4 % |
+| landing within 5 s | 111 / 144 = 77.1 % | 115 / 152 = 75.7 % |
+| loot picked / fell | 83 / 133 = 62.4 % | 101 / 180 = 56.1 % |
+| kills / h | 117.9 | 144.2 |
+| first click -> hit p50 | 0.81 s | 0.92 s |
+| walk clicks / min | 35.7 | 24.1 |
+| sight / 10 min, per block (packets) | 25.9, 22.0, 21.0, 30.0, 21.9, 27.9 (mean 24.8) | 28.0, 37.0, 34.0, 19.0, 33.0, 31.1 (mean 30.4) |
+| reversals / min, per block | 7.28, 5.8, 5.7, 6.39, 8.47, 7.48 | 7.61, 5.5, 7.49, 5.7, 5.9, 4.52 |
+
+**Against the predictions:**
+1. **Primary**, loot step p50 paced <= default - 1.0 s: **PASS** (2.42 vs 3.44 s, -1.02 s).
+2. walk clicks followed, paced >= default - 3 points: **PASS** (98.2 vs 97.4 %).
+3. landing, paced >= default - 5 points: **PASS** (77.1 vs 75.7 %).
+4. loot picked, paced >= default - 5 points: **PASS** (62.4 vs 56.1 %).
+5. Secondary, kills / h paced > default: **FAIL** (117.9 vs 144.2). First click -> hit p50 paced
+   <= default: **PASS** (0.81 vs 0.92 s).
+6. Hard bars: **PASS** (no NPC contact, no map change; 1 Creamy hit in run 2, counted apart).
+
+**Consequence, by 3.75's pre-registered rule:** v35's base is PACED for the whole run
+(`send_gap_ab` off).
+
+**Read:**
+- The kills / h gap follows the density. The paced blocks saw fewer monsters (24.8 vs 30.4 per
+  10 min), and kills per sighting were the same: 117.9 / 24.8 = 4.75 and 144.2 / 30.4 = 4.75.
+  - In run 2 alone the arms were 127.7 vs 138.2 kills / h.
+  - The paced blocks did not walk less: 172-210 cells / min against 137-169.
+- Paced search clicks came every 0.89 s instead of 1.14 s (`walk_every_s` 0.6 plus the click's own
+  cost), 35.7 against 24.1 walk clicks a minute. Reversals were a little higher paced in run 2
+  (6.4-8.5 vs 4.5-5.9 / min) and not in run 1; this was not a pre-registered measure.
+- Loot over both runs, at our kills (`arm_judge.py loot`): 199 / 299 = 66.6 % picked, 36 lost to
+  looters (12.0 %), 62 gone (vanished early, no monster near: mostly the GM walking out of view),
+  2 expired. v33 was 47.7-49.2 %. The corpse fix (the base) and the faster step both act here.
+- The loot treadmill stayed fixed: 12.6 % and 14.7 % of steps >= 4 cells off by the loot clicks'
+  own destinations (v32 29-32 %).
+- The corpse fix cut the unit skips from 3.8-4.1 to 3.05 a step (run 1). 40 steps still skipped
+  >= 6 of their clicks.
+  - In 23 of them, another live monster stood within 4 cells (packets), so the skip was right.
+  - In 15, no live monster stood within 6 cells. Those boxes were stale: either the death cell was
+    not fixed (`gap_too_short`, no corpse to exclude), or the box was more than 2.5 s old.
 
 ### 3.75 hunt-flow@35: THE SPECIES CHECK ON THE BOX'S OWN FRAME, interleaved per engagement (pre-registered 2026-10-17 23:34 ICT, the commit time 235d4c4, BEFORE its run; Batt's decision 1: cut the "species unsure" fallbacks)
 
@@ -9464,6 +9517,8 @@ species unsure on 26.9-37.7 % of strikes (`arm_judge.py species`).
 **Base:** v34, with its pacing decided by 3.74's verdict before v35's first run: paced for the
 whole run (`send_gap_ab` off) if 3.74's primary prediction and its three "still registers"
 predictions hold, else the default for the whole run. 3.73's loot decision kept; v15's dead rule.
+- ➡️ **Decided by 3.74's RESULT (2026-10-18 03:4x):** all four held, so **PACED for the whole
+  run** (`PARAMS[35]`: `send_gap_ab` False).
 
 **Runs:** two 60-min runs pooled (seeds 20271901, 20272001), the hunting fixed state restored
 between runs, nice 10, detector on the CPU, the live hard-bar monitor.
