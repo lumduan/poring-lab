@@ -8888,6 +8888,75 @@ nice 10, detector on the CPU (GPU freeze), judged on the full run and on 10-min 
 - engaged kills / h >= v26's;
 - hard bars: zero NPC contact, zero map change, zero non-target hit.
 
+**RUN 1 RESULT (2026-10-17 16:21:00, session 20261017T162100-demo-hunt-flow27, seed 20270801).
+STOPPED BY ME at 28.8 min:** my live hard-bar monitor (read-only packets, never fed to the bot)
+showed a Creamy hit at 28.5 min.
+- **HARD BARS FAILED: one non-target hit, a Creamy, from a WALK click** (gate map+units).
+  - **The cause, found and checked live:** the input log shows our pointer moving to the rest spot
+    0.63 s before the client's attack request. But the recorded frame 0.8 s after the click still
+    shows the client's own cursor ON the click point, with the Creamy's name tag under it.
+  - Checked live at 16:5x: **one pointer jump never moves the client's drawn cursor; two motions
+    do** (the "walk marker needs two motions" trait, now for the cursor itself).
+  - So v26 / v27's pointer rest was INERT. The Creamy flew under the cursor left on the world,
+    and the client attacked it.
+  - v26's clean hard bars were luck, not the rest. 3.67's reading is corrected by this.
+  - **Fixed in v28 (da581ca):** the rest goes in two motions.
+- **The belief map (the main change):**
+  - 1,899 `belief_goal` events, 380 distinct goals (a new ghost or a new probe cell): ~13 a
+    minute;
+  - 44 of the 380 (12 %) were followed within 10 s by an engagement of a target within 3 cells of
+    the goal, all 44 dead;
+  - at the goal time, a live monster was within 1 cell of the goal for 58 (15 %) (packets);
+  - **a re-plan loop:** at a probe exactly 2 cells away, the planner re-planned the same ghost
+    every 0.1 s until negative evidence dropped its mass below 0.3 (~2 s standing). Fixed for v28:
+    each ghost is chased once.
+- **Engagements:** 75 (all dead). The bar 56 / 74 = 75.7 % (Wilson 64.8-84.0).
+- **Kills:** 141.7 / h; engaged 139.6 / h (v26 124.5). Sight 24 per 10-min window (v26 30).
+- **Loot:** 52 of 109 (47.7 %); kill -> last pickup p50 4.09 s.
+- **vs the prediction:**
+  - belief goals >= 20 an hour: YES (790 an hour: far too many);
+  - >= 25 % followed by an engagement near the goal: NO (12 %);
+  - sight per window >= v26's: NO (24 vs 30);
+  - engaged kills / h >= v26's: YES (139.6 vs 124.5; another seed, 28.8 min);
+  - hard bars: FAILED (the inert pointer rest; not the belief map).
+
+### 3.69 hunt-flow@28: THE POINTER REST THE CLIENT DRAWS (pre-registered 2026-10-17 __TIME__ ICT, the commit time __SHA__, BEFORE its run; the Creamy hard bar's cause; round 8 of docs/competition.md)
+
+**Why:** the Creamy hard bar of v24, v25 and v27 came from WALK clicks. v27's evidence (3.68):
+- the client's continuous attack request came 0.66-0.85 s after a walk click, with no click of
+  ours in between;
+- the client's own drawn cursor stayed ON the click point, while our pointer had "moved" to the
+  rest spot;
+- a Creamy flew under that cursor.
+
+Checked live (16:5x, no clicks):
+- one pointer jump does not move the client's drawn cursor;
+- two motions (a move 12 px off, 0.06 s, then the target) do.
+The v26 / v27 rest was one jump: inert.
+
+**The ONE main change (`ptr_rest_two`, da581ca), on v27:** the pointer rest after every walk
+click and every loot step goes in TWO motions to the HP bar. The client's cursor then really
+leaves the world.
+
+**Also (a fix of v27's belief loop, 9962af9):** each belief ghost is chased once. A ghost whose
+probe the GM reached is not a goal again.
+
+**v27 as the reference (3.68):** 28.8 min: engaged 139.6 kills / h, the bar 75.7 %, seen -> click
+p50 3.13 s, loot 47.7 %, walk-click attack requests (counted after the run), HARD BARS FAILED (a
+walk-click Creamy).
+
+**Run:** 60 min, round 8's seed 20270901 (bot first this round), the same test state, nice 10,
+detector on the CPU (GPU freeze). My read-only live monitor checks the hard bars every ~15 min;
+a non-target hit stops the run.
+
+**Prediction, written before the run:**
+- **zero non-target hits** (v24, v25, v27: one each);
+- walk-click attack requests <= 3 in the hour (v24 15, v25 13, v26 ~7.5 / h);
+- engaged kills / h >= v27's - 10 %;
+- distinct belief goals below v27's rate (each ghost once), and >= 20 % of them followed by an
+  engagement near the goal;
+- hard bars: zero NPC contact, zero map change, zero non-target hit.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
