@@ -93,15 +93,31 @@ class LiveWorld:
         self.last_t = 0
         self.t0: int | None = None
         self.bars: list[str] = []
+        # R3/R4 (2026-10-17): the sniffer's shards come in batches, so a later poll brings OLDER
+        # events too; a single "newer than the last" cutoff dropped them (mobs re-entering the view
+        # and floor items went missing). Each event is applied once (its identity), and an entity's
+        # event only when it is newer than that entity's last one (a late appear never resurrects
+        # an item that already vanished).
+        self._seen: set[tuple[Any, ...]] = set()
+        self._ent_t: dict[tuple[str, int], int] = {}
 
     def feed(self, events: Iterable[dict[str, Any]]) -> None:
         for e in events:
             t = int(e.get("t_mono_ns", 0))
-            if t <= self.last_t:
-                continue
-            self.last_t = t
             typ = e.get("type")
             gid = e.get("gid")
+            key = (t, typ, gid, e.get("floor_id"), e.get("target_gid"), e.get("src_gid"))
+            if key in self._seen:
+                continue
+            self._seen.add(key)
+            ent = (("item", int(e["floor_id"])) if e.get("floor_id") is not None
+                   else ("unit", int(gid)) if gid is not None
+                   else ("self", 0) if typ in ("self_move", "map_change") else None)  # fmt: skip
+            if ent is not None:
+                if t < self._ent_t.get(ent, -1):
+                    continue  # older than what we already applied for this entity
+                self._ent_t[ent] = t
+            self.last_t = max(self.last_t, t)
             if typ == "entity_appear" and gid is not None and int(gid) != GM_GID:
                 moving = e.get("x1") is not None
                 self.mobs[int(gid)] = {

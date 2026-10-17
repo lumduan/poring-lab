@@ -46,8 +46,11 @@ def test_the_live_world_tracks_mobs_us_items_deaths_and_the_hard_bars() -> None:
     snap = w.snapshot(int(3 * S))
     assert [d["gid"] for d in snap["deaths"]] == [7]
     assert snap["bars"] == ["non_target_hit:1018"]
-    w.feed([ev(2.4, "npc_contact")])  # older than the last event: ignored
-    assert w.bars == ["non_target_hit:1018"]
+    # R3/R4: a LATE event (another shard, older than the last applied) still counts -- once; a
+    # hard bar must never be missed for arriving late
+    w.feed([ev(2.4, "npc_contact")])
+    w.feed([ev(2.4, "npc_contact")])
+    assert w.bars == ["non_target_hit:1018", "npc_contact"]
 
 
 def test_nearest_box_and_the_item_offset() -> None:
@@ -65,3 +68,19 @@ def test_the_bot_never_imports_the_agents_packet_view() -> None:
                           "services/vision", "services/backend/src"], cwd=ROOT,
                          capture_output=True, text=True).stdout.split()  # fmt: skip
     assert set(out) <= {"scripts/agent_play.py"}, out
+
+
+def test_live_world_takes_late_older_events_once_and_never_resurrects() -> None:
+    w = ap.LiveWorld()
+    w.feed([{"t_mono_ns": 100, "type": "entity_appear", "gid": 7, "job": 1002, "x": 10, "y": 10}])
+    # a later poll brings an OLDER floor item (another shard) and the same appear again
+    w.feed(
+        [
+            {"t_mono_ns": 90, "type": "floor_item_appear", "floor_id": 5, "x": 11, "y": 10},
+            {"t_mono_ns": 100, "type": "entity_appear", "gid": 7, "job": 1002, "x": 10, "y": 10},
+        ]
+    )
+    assert 5 in w.items and 7 in w.mobs
+    w.feed([{"t_mono_ns": 120, "type": "floor_item_vanish", "floor_id": 5}])
+    w.feed([{"t_mono_ns": 95, "type": "floor_item_appear", "floor_id": 5, "x": 11, "y": 10}])
+    assert 5 not in w.items  # a late appear older than its vanish is ignored
