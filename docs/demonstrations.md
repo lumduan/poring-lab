@@ -9051,6 +9051,15 @@ as it takes):
 round 8 to give the pooled test its hours). The same test state, nice 10, detector on the CPU
 (GPU freeze).
 
+**Amendment (written 2026-10-17 18:5x, before run 2; Batt's decisions at 18:3x):**
+- **Run 2 onward runs v30 = v29 with the Battleship belief map OFF** (decision 2: as a search goal
+  it does not pay). The arms are interleaved within each run, so the per-arm comparison is
+  unaffected; the runs are pooled per arm. Run 1 (v29, belief on) counts too.
+- **A Creamy hit is no longer a hard bar** until a Creamy-aware detector is trained (decision 3).
+  It no longer stops a run or vetoes a version; it is counted and reported separately per arm.
+  Hard bars stay: NPC contact, map change, unknown UI state, a hit on any other non-target.
+- **The agent's rounds continue** (decision 4), alternating around the bot's runs.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
