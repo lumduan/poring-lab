@@ -60,6 +60,8 @@ def main() -> int:
         src = next((p for p in (rec / name, nas / name) if p.exists()), None)
         if src is not None and not (out / name).exists():
             (out / name).symlink_to(src)
+    if not (out / "live.jsonl").exists():  # an agent-demo session publishes no route preview
+        (out / "live.jsonl").write_text("")
     route_demo.render(out)
     mp4 = out.parent / f"{out.name}.mp4"
     shutil.move(str(out / "route-demo.mp4"), mp4)
