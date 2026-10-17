@@ -1630,31 +1630,37 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 else:
                     out["no_before"] = True
                 out["blobs"] = len(blobs)
+                # each blob keeps ITS OWN pixel, moved only by how far the GM moved since AFTER
+                # (attempt 1 re-projected from the fractional position against a residual taken
+                # on the integer cell: hovers up to ~30 px off, 26 of 43 read no hand)
+                mp0_ = measured_pos() or (float(here2[0]), float(here2[1]))
                 targets: list[tuple[Cell, tuple[float, float]]] = []
                 for bl in blobs:
                     off_ = picking.pick_cells(camera, gat, here2, np.array([[bl.u, bl.v]]))[0]
                     if abs(int(off_[0])) > 1000:
                         continue
                     c_b = (here2[0] + int(off_[0]), here2[1] + int(off_[1]))
-                    w_l.position = here2
-                    p0_ = w_l.project([c_b])[0]
-                    targets.append((c_b, (bl.u - float(p0_[0]), bl.v - float(p0_[1]))))
-                targets.sort(key=lambda t_: cheb(t_[0], here2))
-                for c_b, res_ in targets:
+                    targets.append((c_b, (bl.u, bl.v)))
+                targets.sort(key=lambda t_: math.hypot(t_[1][0] - GM_SPRITE_PX[0],
+                                                       t_[1][1] - GM_SPRITE_PX[1]))  # fmt: skip
+                for c_b, px_ in targets:
                     if (time.monotonic() - t_l0 >= prm["loot_max_s"]
                             or out["clicks"] >= prm["loot_max_clicks"]):  # fmt: skip
                         break
-                    mp_ = measured_pos() or (float(here2[0]), float(here2[1]))
-                    pu2, pv2 = frac_project(w_l, mp_, c_b)
-                    u_l, v_l = pu2 + res_[0], pv2 + res_[1]
+                    mp_ = measured_pos() or mp0_
+                    a_ = frac_project(w_l, mp0_, c_b)
+                    b_ = frac_project(w_l, mp_, c_b)
+                    u_l, v_l = px_[0] + b_[0] - a_[0], px_[1] + b_[1] - a_[1]
                     if loot1.in_ui(u_l, v_l) or not in_view(u_l, v_l):
                         continue
                     if not pr.park():
                         out["end"] = "stale_park"
                         break
                     pr.hover(u_l, v_l)
-                    if (pr.read(u_l, v_l)["shape"] != "pickup"
-                            or pr.read(u_l, v_l)["shape"] != "pickup"):  # fmt: skip
+                    sh1_ = pr.read(u_l, v_l)["shape"]
+                    sh2_ = pr.read(u_l, v_l)["shape"] if sh1_ == "pickup" else None
+                    out.setdefault("tried", []).append([round(u_l), round(v_l), sh1_])
+                    if sh1_ != "pickup" or sh2_ != "pickup":
                         out["no_hand"] += 1
                         continue
                     w_l.position = (int(round(mp_[0])), int(round(mp_[1])))

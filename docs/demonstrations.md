@@ -8377,6 +8377,19 @@ detector on the CPU (GPU freeze). It is judged on the full run and on 10-min win
 - engaged kills / h >= 0.85 x v20's 133;
 - hard bars: zero NPC contact, zero map change, zero non-target hit.
 
+**Attempt 1 (2026-10-17 08:32:32, session 20261017T083232-demo-hunt-flow21, seed 20270201):
+STOPPED BY ME at 24 min (SIGINT), 60 engagements.**
+- The loot was not working:
+  - 20 blob runs found 43 blobs, but 26 hovers read NO hand and only 2 items were picked (the
+    sweep fallback 2 more);
+  - the blob step took p50 3.4 s.
+- **Cause (a bug):** each blob's sub-cell residual was taken against the projection from the
+  GM's INTEGER cell, but its hover was re-projected from the FRACTIONAL measured position. Before
+  the GM had even moved, a hover could land up to ~30 px off the item.
+- **Fix:** each blob keeps its own pixel, shifted only by how far the GM moved since AFTER (the
+  difference of two projections). Every hovered blob and its cursor read is now logged (`tried`).
+- Attempt 2 runs v21 with the fix, the same seed (the agent's round-1 start area).
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
