@@ -631,3 +631,17 @@ def test_v28_fast_dead_is_staged_on_v27() -> None:
 
 def test_v27_drops_a_deadlocked_steer() -> None:
     assert 5.0 <= hf.PARAMS[27]["steer_stuck_s"] <= 20.0 and not hf.PARAMS[26].get("steer_stuck_s")
+
+
+def test_belief_ghost_skips_probed_tracks() -> None:
+    import belief_map as bm
+
+    ok = np.ones((60, 60), bool)
+    bel = bm.BeliefMap(ok, bm.Kernel.default(), [bm.Variant("nl", pd=0.2, lead=0.5)])
+    ns = 10**9
+    bel.update(0, [(20.0, 20.0)])
+    bel.update(ns // 2, [(20.0, 20.0)])
+    g = hf.belief_ghost(bel, 3 * ns, [], 100.0, "nl")
+    assert g is not None
+    assert hf.belief_ghost(bel, 3 * ns, [], 100.0, "nl", skip={g["tid"]}) is None
+    assert hf.PARAMS[28]["belief_probe_once"] and not hf.PARAMS[27].get("belief_probe_once")

@@ -315,7 +315,8 @@ PARAMS[27] = {**PARAMS[26], "belief": True, "belief_pd": 0.2, "belief_lead": 0.5
               "steer_stuck_s": 10.0}  # fmt: skip
 # 28 = FAST DEAD (the top loser after loot: server kill -> the bot's "dead" + loot start), staged;
 # its base is decided by v26 / v27's results and pre-registered then
-PARAMS[28] = {**PARAMS[27], "fast_dead": True, "fast_dead_min_s": 0.5, "fast_dead_gone_s": 0.35}
+PARAMS[28] = {**PARAMS[27], "fast_dead": True, "fast_dead_min_s": 0.5, "fast_dead_gone_s": 0.35,
+              "belief_probe_once": True}  # fmt: skip
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -1291,7 +1292,8 @@ def nearest_cell(project: Any, origin: Cell, u: float, v: float, radius: int = 9
 def belief_ghost(bel: Any, t_ns: int, dead: Sequence[tuple[float, Cell]], now_s: float,
                  variant: str, unseen_s: tuple[float, float] = (1.0, 10.0),
                  min_mass: float = 0.3, min_n: int = 2, dead_cells: float = 2.0,
-                 dead_s: float = 30.0) -> dict[str, Any] | None:  # fmt: skip
+                 dead_s: float = 30.0,
+                 skip: Sequence[int] | set[int] = ()) -> dict[str, Any] | None:  # fmt: skip
     """PURE on a belief_map.BeliefMap (v27, Batt's "Battleship"): the HIDDEN track worth a probe
     -- seen >= ``min_n`` times, unseen for ``unseen_s`` (the offline eval: within 1 cell 66 / 54 /
     26 % at 1-2 / 2-5 / 5-10 s), its existence mass after negative evidence >= ``min_mass``, and
@@ -1299,7 +1301,10 @@ def belief_ghost(bel: Any, t_ns: int, dead: Sequence[tuple[float, Cell]], now_s:
     lingers). The best by mass, then recency: {tid, probes (top-3 spaced cells), mass, unseen_s,
     last}; None when there is none."""
     best: tuple[float, float, Any] | None = None
+    skip_ = set(skip)
     for tr in bel.tracks.values():
+        if tr.tid in skip_:
+            continue  # v28: its probe was reached already
         u_s = (t_ns - tr.t) / 1e9
         if tr.n < min_n or not (unseen_s[0] <= u_s <= unseen_s[1]):
             continue
@@ -2703,6 +2708,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
             bel_k = [0]  # the sampler frames already fed
             dead_cells_: list[tuple[float, Cell]] = []  # (mono s, death cell) of our kills
             bel_off: list[int] = []  # non-empty: the belief map failed once and is off
+            bel_done: set[int] = set()  # v28: ghosts whose probe was reached
             offs_arr = np.array(offsets, dtype=int).reshape(-1, 2)
             if prm.get("belief"):
                 import belief_map as bm_
@@ -2757,9 +2763,16 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     if bel_ is not None and not bel_off:
                         try:
                             feed_belief()
+                            if (prm.get("belief_probe_once") and plan.get("bel_goal")
+                                    and cheb(here_, plan["bel_goal"][1]) <= 2):  # fmt: skip
+                                # v28: the probe was reached -- that ghost is not chased again
+                                # (v27 re-planned the same ghost every cycle at the probe)
+                                bel_done.add(int(plan["bel_goal"][0]))
+                                plan["bel_goal"] = None
                             g_bel = belief_ghost(bel_, t_, list(dead_cells_), now_, "nl",
                                                  tuple(prm["belief_unseen"]),
-                                                 prm["belief_min_mass"])  # fmt: skip
+                                                 prm["belief_min_mass"],
+                                                 skip=bel_done)  # fmt: skip
                         except Exception as exc_b:  # noqa: BLE001 -- never kill the planner
                             bel_off.append(1)
                             ev(
@@ -2797,6 +2810,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                         break
                             plan["bel_tid"] = g_bel["tid"]
                             if bel_p is not None and goal is not None:
+                                plan["bel_goal"] = (g_bel["tid"], goal)
                                 ev({"kind": "belief_goal", "track": g_bel["tid"],
                                     "probe": list(goal),
                                     "probes": [list(c_) for c_ in g_bel["probes"]],
