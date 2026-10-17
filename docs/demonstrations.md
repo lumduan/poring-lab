@@ -8591,7 +8591,7 @@ STOPPED BY ME after 296 s (SIGINT), 11 engagements, all dead.**
   - engaged kills / h >= 102: YES (145.2, but a different seed and only 25.7 min);
   - hard bars: PASSED.
 
-### 3.65 hunt-flow@24: THE FIXED LOOT'S DEATH CELL (pre-registered 2026-10-17 __TIME__ ICT, the commit time __SHA__, BEFORE its run; Batt's loot workflow, iterated; round 4 of docs/competition.md)
+### 3.65 hunt-flow@24: THE FIXED LOOT'S DEATH CELL (pre-registered 2026-10-17 12:29 ICT, the commit time 4ccf083, BEFORE its run; Batt's loot workflow, iterated; round 4 of docs/competition.md)
 
 **Why: v23 put its fixed loot in the wrong place** (3.64).
 - On the packets, v23's first loot click (its death cell) lay p50 50 px from the nearest dropped
