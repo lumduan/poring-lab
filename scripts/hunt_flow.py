@@ -262,7 +262,8 @@ PARAMS[20] = {**PARAMS[18], "tag_follow": True, "tag_follow_px": 10.0}
 PARAMS[21] = {**PARAMS[20], "loot_blobs": True, "loot_before_s": 1.8, "guard_ptr_mask": True}
 PARAMS[22] = {**PARAMS[21], "heading_cov": True, "cov_recent_s": 180.0, "cov_half": 12,
               "cov_keep": 0.8}  # fmt: skip
-PARAMS[23] = {**PARAMS[22], "loot_icons": True, "icon_radius": 110, "blob_gm_px": 70.0}
+PARAMS[23] = {**PARAMS[22], "loot_icons": True, "icon_radius": 110, "blob_gm_px": 70.0,
+              "species_shadow": True}  # fmt: skip
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -2108,6 +2109,23 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             <= prm.get("tag_cache_px", 1e9)):  # fmt: skip
                         return True, c_[0], u_, v_
                     t_, ms_, (u_, v_) = read_tag(u_, v_, b, tr.tid)
+                    if species_model is not None and b is not None:
+                        # v23 SHADOW (no decision): the pixel species check beside the tag, to
+                        # validate it live (JPEG-trained) before it may ever skip a tag read
+                        import species_check as sc_
+
+                        img_s = screen.grab(gx0, gy0, gw, gh)[1]
+                        sp_, cf_ = sc_.species_of(img_s, species_model,
+                                                  (b.x0, b.y0, b.x1, b.y1, b.score),
+                                                  order="bgr")  # fmt: skip
+                        fr_s = sampler.since(max(0, len(sampler.frames) - 1))
+                        crowd_ = any(
+                            o is not b and math.hypot(*(np.array(f1.centre(o))
+                                                        - f1.centre(b))) < 50
+                            for o in (fr_s[-1][1] if fr_s else []))  # fmt: skip
+                        ev({"kind": "species_shadow", "track": tr.tid, "tag": t_,
+                            "species": sp_, "conf": round(float(cf_), 4),
+                            "crowded": bool(crowd_)})  # fmt: skip
                     if t_ in nametag.TARGET_NAMES:
                         confirmed[tr.tid] = (t_, time.monotonic(), (u_, v_))
                         return True, t_, u_, v_
@@ -2437,6 +2455,11 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
             from collections import deque as deque_
 
             ring_frames: Any = deque_(maxlen=24)  # v21: (mono s, BGR frame) at ~5 Hz, ~4.8 s
+            species_model: Any = None
+            if prm.get("species_shadow"):  # v23: SHADOW only -- logged beside each tag read
+                import species_check as sc_
+
+                species_model = sc_.load_model()
             icon_templates: list[Any] = []
             if prm.get("loot_icons"):  # v23: the floor items' own sprites (data/item_icons)
                 import item_icons as ii_
