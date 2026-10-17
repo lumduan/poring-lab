@@ -36,7 +36,8 @@ def main() -> int:
     man = json.loads((d / "manifest.json").read_text())
     import hunt
 
-    rec = Path(man["rec_dir"])
+    # an agent-demo session (agent_play.py) has no rec_dir: its frames are at frames_dir
+    rec = Path(man["rec_dir"]) if man.get("rec_dir") else d
     nas = hunt.REC_ROOT / a.session
     cands = [Path(man["frames_dir"])] if man.get("frames_dir") else []
     cands += [rec / "frames", nas / "frames"]
