@@ -573,3 +573,12 @@ def test_v25_skips_the_tag_only_when_sure_and_strikes_walking_in() -> None:
     import nametag
 
     assert "Creamy" not in nametag.TARGET_NAMES  # a sure Creamy never skips the tag
+
+
+def test_new_pink_leaves_the_gm_sprite_out_when_asked() -> None:
+    after = np.zeros((200, 200, 3), np.uint8)
+    after[50:70, 90:110] = (180, 90, 230)  # the GM's hair, "new" against a shifted BEFORE
+    before = np.zeros_like(after)
+    assert hf.new_pink_px(after, before, 100, 80, 40) == 400
+    assert hf.new_pink_px(after, before, 100, 80, 40, exclude=(85.0, 45.0, 115.0, 75.0)) == 0
+    assert hf.PARAMS[25]["loot_pink_gm_exclude"] and not hf.PARAMS[24].get("loot_pink_gm_exclude")

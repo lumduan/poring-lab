@@ -285,7 +285,8 @@ PARAMS[24] = {**PARAMS[23], "loot_death": "hybrid", "loot_interval_s": 0.05,
               "loot_fixed_max_s": 4.5}  # fmt: skip
 # 25 = Batt's item 3, the NAME TAG: the tag only when the pixel species check is unsure or crowded,
 # and the strike already while walking in when it is sure
-PARAMS[25] = {**PARAMS[24], "species_skip": True, "strike_moving": True}
+PARAMS[25] = {**PARAMS[24], "species_skip": True, "strike_moving": True,
+              "loot_pink_gm_exclude": True}  # fmt: skip
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -1180,7 +1181,8 @@ def loot_plan(
 
 
 def new_pink_px(after: Any, before: Any | None, u: float, v: float, radius: int, grow: int = 6,
-                shift: tuple[float, float] = (0.0, 0.0)) -> int:  # fmt: skip
+                shift: tuple[float, float] = (0.0, 0.0),
+                exclude: tuple[float, float, float, float] | None = None) -> int:  # fmt: skip
     """PURE (v23): how many PINK pixels (the walk guard's rule) within ``radius`` of (u, v) in
     ``after`` were NOT pink (within ``grow`` px) in ``before`` -- both full game-region frames, BGR.
     ``shift`` = how far the ground moved on screen since ``before`` (the camera follows the GM): the
@@ -1218,6 +1220,9 @@ def new_pink_px(after: Any, before: Any | None, u: float, v: float, radius: int,
         pk &= ~old
     yy, xx = np.mgrid[y0:y1, x0:x1]
     m = (xx - u) ** 2 + (yy - v) ** 2 <= radius * radius
+    if exclude is not None:  # v25: the GM's own sprite (its red hair stays at the screen centre
+        # while BEFORE is shifted by the ground: v24 skipped 1-3 loot cells a kill as "pink")
+        m &= ~((xx >= exclude[0]) & (xx <= exclude[2]) & (yy >= exclude[1]) & (yy <= exclude[3]))
     return int((pk & m).sum())
 
 
@@ -1895,7 +1900,12 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                 if before_ is not None:
                                     hh_, ww_ = crop_.shape[:2]
                                     bcrop_ = shifted_crop(before_, x0_ - dx_, y0_ - dy_, ww_, hh_)
-                                n_pk = new_pink_px(crop_, bcrop_, u_l - x0_, v_l - y0_, r_p)
+                                ex_ = None
+                                if prm.get("loot_pink_gm_exclude"):
+                                    ge_ = GUARD_EXCLUDE
+                                    ex_ = (ge_[0] - x0_, ge_[1] - y0_, ge_[2] - x0_, ge_[3] - y0_)
+                                n_pk = new_pink_px(crop_, bcrop_, u_l - x0_, v_l - y0_, r_p,
+                                                   exclude=ex_)  # fmt: skip
                                 if n_pk > prm["loot_pink_max_px"]:
                                     why_ = "pink"
                     if why_ is not None:
