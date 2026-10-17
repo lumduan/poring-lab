@@ -213,7 +213,11 @@ VERSIONS = {
     "click and loot step (one jump never moved the client's own cursor: v26 / v27's rest was "
     "inert, and v27's Creamy flew under the cursor left on the world); + each belief ghost is "
     "chased once",
-    29: "FAST DEAD (v24: server kill -> loot start p50 2.41 s): once the burst ended on the "
+    29: "BATT'S A / B / C STRIKE TEST, interleaved per engagement on v28: A = pointer on the "
+    "target, the name tag (or its cache) confirms, then the click; B = click at once and burst "
+    "until the lock arrow; C = B after a second small motion (1-2 px); B / C only for a confident "
+    "target (species check or tag cache) with no pink other than the target within 60 px",
+    30: "FAST DEAD (v24: server kill -> loot start p50 2.41 s): once the burst ended on the "
     "client's attack arrow or the target vanished, 0.35 s unseen (one detector frame) and 0.5 s "
     "after the click is the death, and the loot starts with no 0.4 s wait",
 }
@@ -322,8 +326,10 @@ PARAMS[27] = {**PARAMS[26], "belief": True, "belief_pd": 0.2, "belief_lead": 0.5
 # 28 = the pointer rest the client ACTUALLY draws (two motions; v26 / v27's one jump never moved
 # the client's cursor, and v27's walk-click Creamy hit came from it), + each belief ghost once
 PARAMS[28] = {**PARAMS[27], "ptr_rest_two": True, "belief_probe_once": True}
-# 29 = FAST DEAD (the top loser after loot: server kill -> the bot's "dead" + loot start), staged
-PARAMS[29] = {**PARAMS[28], "fast_dead": True, "fast_dead_min_s": 0.5, "fast_dead_gone_s": 0.35}
+# 29 = Batt's INTERLEAVED A / B / C strike test (2026-10-17 17:3x), on v28
+PARAMS[29] = {**PARAMS[28], "abc": True}
+# 30 = FAST DEAD (the top loser after loot: server kill -> the bot's "dead" + loot start), staged
+PARAMS[30] = {**PARAMS[28], "fast_dead": True, "fast_dead_min_s": 0.5, "fast_dead_gone_s": 0.35}
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -2433,6 +2439,40 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     for o in (fr_s[-1][1] if fr_s else []))  # fmt: skip
                 return sp_, float(cf_), bool(crowd_)
 
+            def abc_ineligible(tr: Track, b: Any, u: float, v: float) -> str | None:
+                """v29: why B / C may NOT skip the confirmation for this target (None = they may):
+                the species must be a confident target (the pixel check sure and uncrowded, or
+                the track's tag within the cache rule), and no pink other than the target's own
+                sprite within 60 px of the click (a Creamy, or another Poring: A then). The risk
+                gate (non-target species, NPCs, overlap, near the GM) already chose the direct
+                path."""
+                c_ = confirmed.get(tr.tid)
+                cache_ok = bool(c_ and time.monotonic() - c_[1] <= prm["tag_cache_s"]
+                                and math.hypot(u - c_[2][0], v - c_[2][1])
+                                <= prm.get("tag_cache_px", 1e9))  # fmt: skip
+                if not cache_ok:
+                    if species_model is None or b is None:
+                        return "no_species_check"
+                    sp_, _cf, cr_ = species_now(b)
+                    if sp_ not in nametag.TARGET_NAMES:
+                        return "species_unsure"
+                    if cr_:
+                        return "crowded"
+                r_p = 60
+                x0_, y0_ = max(0, int(u) - r_p), max(0, int(v) - r_p)
+                x1_, y1_ = min(gw, int(u) + r_p + 1), min(gh, int(v) + r_p + 1)
+                crop_ = np.array(
+                    screen.grab(gx0 + x0_, gy0 + y0_, x1_ - x0_, y1_ - y0_)[1][..., :3]
+                )
+                gx_a, gy_a, gx_b, gy_b = GUARD_EXCLUDE  # the GM's sprite
+                crop_[max(0, int(gy_a) - y0_) : max(0, int(gy_b) - y0_),
+                      max(0, int(gx_a) - x0_) : max(0, int(gx_b) - x0_)] = 0  # fmt: skip
+                ex_ = None if b is None else (b.x0 - 8 - x0_, b.y0 - 8 - y0_, b.x1 + 8 - x0_,
+                                              b.y1 + 8 - y0_)  # fmt: skip
+                if new_pink_px(crop_, None, u - x0_, v - y0_, r_p, exclude=ex_) > 30:
+                    return "pink_near"
+                return None
+
             def strike(tr: Track, here: Cell, again: bool) -> bool:
                 """Park, hover the target's newest box, ONE robust2 read; SWORD -> the attack
                 click there. True when it clicked."""
@@ -2485,7 +2525,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 reads_why: list[list[Any]] = []  # v9: each read's shape / why / best
                 tag_ = None
 
-                def tag_gate(u_: float, v_: float) -> tuple[bool, str | None, float, float]:
+                def tag_gate(u_: float, v_: float, no_skip: bool = False
+                             ) -> tuple[bool, str | None, float, float]:  # fmt: skip
                     """v14: the client's own species label must read a TARGET before an attack
                     click (the size gate let a Creamy, a non-target, pass as a Poring). v15: a
                     track's tag read <= tag_cache_s ago is reused; from v16 attempt 3 only near
@@ -2501,8 +2542,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     sp_ = cf_ = crowd_ = None
                     if species_model is not None and b is not None:
                         sp_, cf_, crowd_ = species_now(b)
-                        if (prm.get("species_skip") and sp_ in nametag.TARGET_NAMES
-                                and not crowd_):  # fmt: skip
+                        if (prm.get("species_skip") and not no_skip
+                                and sp_ in nametag.TARGET_NAMES and not crowd_):  # fmt: skip
                             # v25 (Batt's item 3): the pixel check is sure of a TARGET and no
                             # other monster box is within 50 px -> no tag read (v23's shadow:
                             # 37 of 38 agreed; the one miss was crowded)
@@ -2524,11 +2565,35 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     note(f"tag {t_}: no click")
                     return False, t_, u_, v_
 
+                # v29 (Batt 2026-10-17 17:3x): the INTERLEAVED A / B / C test, per engagement
+                # (k % 3), so spawns, map area and time are matched. A = the pointer on the
+                # target, the client's confirmation (the name tag; the tag cache counts), then the
+                # click. B = click at once and burst until the lock arrow. C = B after a second
+                # small motion (the client draws -- and resolves -- its cursor only where a second
+                # motion leaves it). B / C only for a confident target with no risk near: else A.
+                arm_: str | None = None
+                arm_why: str | None = None
+                t_arrive = r.ns()
+                if prm.get("abc") and direct_ and prm.get("name_tag") and not again and (
+                        eng is None or eng["track"] != tr.tid):  # fmt: skip
+                    arm_ = "ABC"[k % 3]
+                    if arm_ != "A":
+                        arm_why = abc_ineligible(tr, b, u, v)
+                hov_arm = {"arm": arm_, "arm_eff": "A" if arm_why else arm_,
+                           "fallback": arm_why}  # fmt: skip
                 if direct_ and prm.get("name_tag"):
-                    ok_t, tag_, u, v = tag_gate(u, v)
-                    if not ok_t:
-                        split.to(prev, time.monotonic())
-                        return False
+                    if arm_ in ("B", "C") and arm_why is None:
+                        tag_ = f"skip:{arm_}"
+                        t_arrive = r.ns()
+                        if arm_ == "C":  # the nudge: a second small motion onto the target
+                            agent.move(gx0 + round(u) + 2, gy0 + round(v) + 1)
+                            time.sleep(0.03)
+                    else:
+                        t_arrive = r.ns()
+                        ok_t, tag_, u, v = tag_gate(u, v, no_skip=arm_ is not None)
+                        if not ok_t:
+                            split.to(prev, time.monotonic())
+                            return False
                 if direct_:
                     shape, path_ = "direct", "direct"  # v10: no risk -> the fresh detection
                 elif fast_:
@@ -2607,6 +2672,10 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 del cmd_hist[:-40]
                 hov["clicked"] = tc
                 hov["read_ms"] = round((tc - t_read0) / 1e6)
+                if prm.get("abc") and hov_arm.get("arm"):
+                    hov.update(hov_arm, t_arrive=t_arrive)  # v29: the arm + pointer arrival
+                    ev({"kind": "abc", "track": tr.tid, "k": k, **hov_arm,
+                        "arrive_to_click_ms": round((tc - t_arrive) / 1e6)})  # fmt: skip
                 # v6: the AIM ERROR -- the click point to the target's sprite centre on the
                 # freshest frame (px), and the time from "in range" to this click
                 fr2 = sampler.since(max(0, len(sampler.frames) - 1))
