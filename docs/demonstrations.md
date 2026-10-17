@@ -8767,7 +8767,7 @@ nice 10, detector on the CPU (GPU freeze), judged on the full run and on 10-min 
   - engaged kills / h >= v24's: NO (98.9 vs 133.9; a sparser seed, sight 30 vs 37);
   - hard bars: FAILED (a walk-click Creamy, not the skip).
 
-### 3.67 hunt-flow@26: RE-TARGET WHILE STEERING (pre-registered 2026-10-17 __TIME__ ICT, the commit time __SHA__, BEFORE its run; Batt's competition work order item 4; round 6 of docs/competition.md)
+### 3.67 hunt-flow@26: RE-TARGET WHILE STEERING (pre-registered 2026-10-17 15:06 ICT, the commit time 5beef01, BEFORE its run; Batt's competition work order item 4; round 6 of docs/competition.md)
 
 **Why:** the bot commits to a target and steers to it even when a cheaper one appears.
 - v22's latency budget: selection -> click p50 2.74 s, 423 s an hour, the second-largest stage.
