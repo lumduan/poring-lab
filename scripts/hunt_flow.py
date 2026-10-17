@@ -1487,6 +1487,22 @@ def trail_cells(trail: Sequence[tuple[float, Cell]], here: Cell, now: float, nea
     return out
 
 
+def nearest_cell_frac(world: Any, origin: Sequence[float], center: Cell, u: float, v: float,
+                      radius: int = 9) -> Cell:  # fmt: skip
+    """``nearest_cell`` over ``frac_project`` (the camera on the FRACTIONAL ``origin``) in ONE
+    projection call -- the same cell, the same tie order (v33 speed fix, 2026-10-17 23:3x: one
+    frac_project costs ~3 ms, so the per-cell loop took ~1 s at radius 9 on EVERY kill's death
+    cell and ~0.3 s per matched item at radius 4)."""
+    r0 = (int(round(origin[0])), int(round(origin[1])))
+    fx, fy = origin[0] - r0[0], origin[1] - r0[1]
+    cells = [(center[0] + dx, center[1] + dy)
+             for dx in range(-radius, radius + 1) for dy in range(-radius, radius + 1)]  # fmt: skip
+    world.position = r0
+    p = np.asarray(world.project([(c[0] - fx, c[1] - fy) for c in cells]), dtype=float)
+    d = (p[:, 0] - u) ** 2 + (p[:, 1] - v) ** 2
+    return cells[int(np.argmin(d))]
+
+
 def frac_project(world: Any, origin: Sequence[float], cell: Sequence[float]) -> tuple[float, float]:
     """(v7) The screen pixel of ``cell`` with the camera centred on the FRACTIONAL ``origin``:
     the World stands on the rounded cell and the cell moves by the fraction instead (the GAT
@@ -2091,7 +2107,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             if mp_a is not None:
                                 g_a = (int(round(mp_a[0])), int(round(mp_a[1])))
                                 w_a = w5.World(camera, gat, g_a)
-                                dc_ = nearest_cell(lambda c_: frac_project(w_a, mp_a, c_), g_a,
+                                dc_ = nearest_cell_frac(w_a, mp_a, g_a,
                                                    (bb_.x0 + bb_.x1) / 2,
                                                    bb_.y1 - loot1.FOOT_LIFT)  # fmt: skip
                                 eng_["death"]["fixed_from"] = "anim"
@@ -2104,7 +2120,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             if mp_c is not None and mp_n is not None:
                                 w_c = w5.World(camera, gat, here2)
                                 o_c = (int(round(mp_c[0])), int(round(mp_c[1])))
-                                ck_ = nearest_cell(lambda c_: frac_project(w_c, mp_c, c_), o_c,
+                                ck_ = nearest_cell_frac(w_c, mp_c, o_c,
                                                    ls_[1] + LOOT_FOOT_PX[0],
                                                    ls_[2] + LOOT_FOOT_PX[1])  # fmt: skip
                                 g_n = (int(round(mp_n[0])), int(round(mp_n[1])))
@@ -2195,7 +2211,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         )  # fmt: skip
                         for iu_, iv_, _id, _sc in found_:
                             pi_ = (float(iu_) + x0_, float(iv_) + y0_)
-                            ci_ = nearest_cell(lambda c_: frac_project(w_l, mp_g, c_), dcell,
+                            ci_ = nearest_cell_frac(w_l, mp_g, dcell,
                                                pi_[0], pi_[1], radius=4)  # fmt: skip
                             icons_l.append((ci_, pi_))
                     out["icons"] = len(icons_l)
@@ -2237,7 +2253,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                     # v33: a looter ON our pile -> kill it first (Batt)
                                     ub_ = (blk_.x0 + blk_.x1) / 2
                                     vb_ = blk_.y1 - loot1.FOOT_LIFT
-                                    cb_ = nearest_cell(lambda c_, m_=mp_: frac_project(w_l, m_, c_),
+                                    cb_ = nearest_cell_frac(w_l, mp_,
                                                        dcell, ub_, vb_, radius=4)  # fmt: skip
                                     if cheb(cb_, dcell) <= prm["looter_cells"]:
                                         sp_l, cf_l, cr_l = species_now(blk_)

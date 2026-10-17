@@ -719,3 +719,32 @@ def test_v35_reads_the_species_on_the_boxs_own_frame() -> None:
     p = hf.PARAMS[35]
     assert p["species_own"] and not hf.PARAMS[34].get("species_own") and 35 in hf.VERSIONS
     assert p["send_gap_s"] and p["loot_race"]  # on v34 until its pre-registration sets the base
+
+
+def test_nearest_cell_frac_equals_the_per_cell_loop() -> None:
+    import json as json_
+    import random
+
+    import pytest
+
+    from poring_dataset import camera as cam
+    from poring_dataset import gat as gatmod
+
+    gp = cam.GAT_DIR / "prt_fild08.gat"
+    if not gp.exists():
+        pytest.skip("prt_fild08.gat not in GAT_DIR (client-derived, RAM only)")
+    import ro_agent as r
+    import walk5 as w5
+
+    gat = gatmod.parse(gp.read_bytes())
+    cj = json_.loads((r.ROOT / "packages/poring_dataset/src/poring_dataset/camera_rdp.json")
+                     .read_text())  # fmt: skip
+    w = w5.World(cam.camera_from_json(cj["camera"]), gat, (250, 139))
+    rng = random.Random(7)
+    for _ in range(12):
+        mp = (rng.uniform(200, 300), rng.uniform(100, 180))
+        c0 = (int(mp[0]) + rng.randint(-3, 3), int(mp[1]) + rng.randint(-3, 3))
+        u, v = rng.uniform(300, 1000), rng.uniform(150, 600)
+        for rad in (2, 4, 9):
+            slow = hf.nearest_cell(lambda c_, m_=mp: hf.frac_project(w, m_, c_), c0, u, v, rad)
+            assert hf.nearest_cell_frac(w, mp, c0, u, v, rad) == slow
