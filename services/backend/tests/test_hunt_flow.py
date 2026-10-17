@@ -601,3 +601,11 @@ def test_belief_ghost_picks_a_hidden_live_track_and_skips_our_kills() -> None:
     assert g2 is not None and hf.cheb(g2["last"], (40, 40)) <= 1
     assert hf.belief_ghost(bel, t, [(99.0, (20, 20)), (99.0, (40, 40))], 100.0, "nl") is None
     assert hf.belief_ghost(bel, 20 * ns, [], 100.0, "nl") is None  # unseen too long
+
+
+def test_v26_retargets_and_v27_adds_the_belief_map() -> None:
+    p26, p27 = hf.PARAMS[26], hf.PARAMS[27]
+    assert p26["retarget"] and p26["species_skip"] and not hf.PARAMS[25].get("retarget")
+    assert p27["belief"] and p27["retarget"] and not p26.get("belief")
+    assert p27["belief_unseen"] == (1.0, 10.0) and 0 < p27["belief_pd"] < 1
+    assert set(hf.VERSIONS) >= {24, 25, 26, 27}

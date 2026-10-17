@@ -197,6 +197,13 @@ VERSIONS = {
     "pixel species check is sure of a target and no other monster box is within 50 px (v23's "
     "shadow: sure on 37 %, 37 of 38 agreed, the one miss crowded), and then the strike already "
     "while walking in (in range, no risk) instead of waiting for the GM to stop",
+    26: "RE-TARGET WHILE STEERING, on v25 (Batt's work order item 4; v19's change, built and never "
+    "run): after >= 1 s on a target, the planner's queue[0] replaces it when it is valid and "
+    "cheaper by >= 2 cells",
+    27: "BATTLESHIP, on v26 (Batt 2026-10-17): the belief map of HIDDEN monsters (tracks on the "
+    "walkable grid, a fitted random-walk kernel, negative evidence from the cells in view, a "
+    "walk-on lead); a monster unseen 1-10 s that the map still believes in becomes the search "
+    "goal, at its most probable cell",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -287,6 +294,12 @@ PARAMS[24] = {**PARAMS[23], "loot_death": "hybrid", "loot_interval_s": 0.05,
 # and the strike already while walking in when it is sure
 PARAMS[25] = {**PARAMS[24], "species_skip": True, "strike_moving": True,
               "loot_pink_gm_exclude": True}  # fmt: skip
+# 26 = Batt's item 4: v19's RE-TARGET (built 2026-10-17 02:2x, never run), on v25
+PARAMS[26] = {**PARAMS[25], "retarget": True, "retarget_margin": 2.0, "retarget_commit_s": 1.0}
+# 27 = Batt's "Battleship": the belief map's most probable cell of a HIDDEN monster as the search
+# goal (belief_map, merged 8268666: ne + lead, the offline eval's best variant), on v26
+PARAMS[27] = {**PARAMS[26], "belief": True, "belief_pd": 0.2, "belief_lead": 0.5,
+              "belief_unseen": (1.0, 10.0), "belief_min_mass": 0.3}  # fmt: skip
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -1864,6 +1877,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             dc_ = (int(round(c_t[0])), int(round(c_t[1])))
                             eng_["death"]["fixed_from"] = "track"
                         if dc_ is not None:
+                            dead_cells_.append((time.monotonic(), dc_))  # v27: not a ghost
+                            del dead_cells_[:-40]
                             loot_fixed_run(eng_, here2, dc_)
                     elif dead_.cell is not None and dead_.gone_ns is not None:
                         if prm.get("loot_blobs"):
@@ -2660,6 +2675,40 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
             heading_rng = random_.Random(seed)
             trail: list[tuple[float, Cell]] = []  # v8 attempt 2: (mono s, cell) we stood on
 
+            # v27 (Batt's "Battleship"): the belief map, fed from the planner thread only
+            bel_: Any = None
+            bel_k = [0]  # the sampler frames already fed
+            dead_cells_: list[tuple[float, Cell]] = []  # (mono s, death cell) of our kills
+            offs_arr = np.array(offsets, dtype=int).reshape(-1, 2)
+            if prm.get("belief"):
+                import belief_map as bm_
+
+                bel_ = bm_.BeliefMap(ok, bm_.Kernel.default(),
+                                     [bm_.Variant("nl", pd=prm["belief_pd"],
+                                                  lead=prm["belief_lead"])])  # fmt: skip
+            w_bel = w5.World(camera, gat, start)
+
+            def feed_belief() -> None:
+                """v27: the detector's new frames -> the belief map: our sightings' fractional
+                cells (sightings_in's gates: no Creamy, no floor item, no UI) and the cells in
+                view as negative evidence, each at our measured position at that frame."""
+                fr_b = sampler.since(bel_k[0])
+                bel_k[0] += len(fr_b)
+                h_g, w_g = ok.shape
+                for t_f, boxes_f in fr_b[-10:]:
+                    mp_f = pos_at_frame(int(t_f))
+                    if mp_f is None:
+                        continue
+                    h_f = (int(round(mp_f[0])), int(round(mp_f[1])))
+                    frac_f = (mp_f[0] - h_f[0], mp_f[1] - h_f[1])
+                    dets_ = [(float(c_[0]), float(c_[1]))
+                             for _b, c_ in sightings_in(boxes_f, h_f, w_bel, frac_f)]  # fmt: skip
+                    vis_ = np.zeros(ok.shape, dtype=bool)
+                    xs_, ys_ = offs_arr[:, 0] + h_f[0], offs_arr[:, 1] + h_f[1]
+                    in_ = (xs_ >= 0) & (xs_ < w_g) & (ys_ >= 0) & (ys_ < h_g)
+                    vis_[ys_[in_], xs_[in_]] = True
+                    bel_.update(int(t_f), dets_, vis_)
+
             def planner() -> None:
                 """The queue (chained, standing first) every plan_every_s, and the next exploration
                 waypoint (the coverage plan's stalest tile) always held."""
@@ -2680,20 +2729,50 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                    now_, prm["drop_target_s"], prm["moving_penalty"], head_,
                                    prm.get("rev_penalty", 0.0))  # fmt: skip
                     gp = plan["goal_path"]
+                    g_bel = None
+                    if bel_ is not None:
+                        feed_belief()
+                        g_bel = belief_ghost(bel_, t_, list(dead_cells_), now_, "nl",
+                                             tuple(prm["belief_unseen"]),
+                                             prm["belief_min_mass"])  # fmt: skip
                     left_ = 999
                     if gp and prm.get("replan_left"):  # v5: never walk off the route's end
                         ci_ = min(range(len(gp)), key=lambda i_: cheb(gp[i_], here_))
                         left_ = len(gp) - 1 - ci_
                     stale_ = (not prm.get("sweep")  # v12: no time-based re-pick (hysteresis)
                               and now_ - plan["t_goal"] > prm["waypoint_every_s"])  # fmt: skip
-                    if (gp is None or stale_
+                    new_ghost = g_bel is not None and plan.get("bel_tid") != g_bel["tid"]
+                    if (gp is None or stale_ or new_ghost
                             or cheb(here_, gp[-1]) <= 2
                             or (left_ < prm.get("replan_left", -1)
                                 and not (prm.get("sweep")
                                          and sweep_st.get("phase") == "shift"))):  # fmt: skip
                         p_ = None
                         goal = None
-                        if prm.get("heading_search") and area[here_[1], here_[0]]:
+                        bel_p: list[Cell] | None = None
+                        if g_bel is not None:
+                            # v27: a HIDDEN monster's most probable cell first (the belief map:
+                            # last seen 1-10 s ago, not ruled out by the cells we see empty)
+                            hg_, wg_ = ok.shape
+                            for pc_ in g_bel["probes"]:
+                                inb_ = 0 <= pc_[0] < wg_ and 0 <= pc_[1] < hg_
+                                if inb_ and ok[pc_[1], pc_[0]] and cheb(pc_, here_) >= 2:
+                                    pb_ = hc.astar(ok, here_, pc_)
+                                    if pb_ is not None and len(pb_) >= 2:
+                                        bel_p, goal = pb_, pc_
+                                        break
+                            plan["bel_tid"] = g_bel["tid"]
+                            if bel_p is not None and goal is not None:
+                                ev({"kind": "belief_goal", "track": g_bel["tid"],
+                                    "probe": list(goal),
+                                    "probes": [list(c_) for c_ in g_bel["probes"]],
+                                    "mass": round(float(g_bel["mass"]), 3),
+                                    "unseen_s": round(float(g_bel["unseen_s"]), 2),
+                                    "last": [round(float(g_bel["last"][0]), 2),
+                                             round(float(g_bel["last"][1]), 2)]})  # fmt: skip
+                        if bel_p is not None:
+                            p_ = bel_p
+                        elif prm.get("heading_search") and area[here_[1], here_[0]]:
                             # v18 (Batt 21:31): along the remembered SEARCH HEADING; small turns;
                             # v22: away from the ground we swept in the last minutes
                             if prm.get("heading_cov"):
