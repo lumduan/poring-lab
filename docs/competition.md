@@ -49,7 +49,8 @@ non-target hit, map change) apply to every session.
 | R5 (bot v25) | (fixed) | 40.1 / 6 of 6 / 7 of 14 / pass | 108 / 76 % / 15 of 23 / pass | 132 / 80 % / 14 of 23 / pass | 109.9 / 70.9 % / 81 of 131 / **1 non-target (Creamy)** |
 | R6 (bot v26) | (fixed) | 40.0 / 6 of 6 / 3 of 7 / pass | 120 / 87 % / 20 of 26 / pass | 126 / 83 % / 18 of 40 / pass | 129.1 / 85.4 % / 68 of 122 / **pass** (39.8 min) |
 | R7 (bot v27) | (fixed) | 41.5 / 6 of 8 / 6 of 8 / pass | 78 / 67 % / 8 of 11 / **1 non-target** (2 windows: the lower) | 168 / 79 % / 21 of 38 / pass | 141.7 / 75.7 % / 52 of 109 / **1 non-target (Creamy)** (28.8 min) |
-| R8 (bot v28) | (fixed) | pending | pending | pending | pending |
+| R8 (bot v28) | (fixed) | 19.2 / 3 of 4 / 1 of 2 / pass | 144 / 80 % / 19 of 40 / pass | 156 / 72 % / 15 of 31 / pass | **141.9 / 75.3 % / 95 of 179 / pass (full hour)** |
+| R9+ (bot v29, A/B/C) | (fixed) | (bot only from here: Batt's A/B/C test) | pending | pending | pending |
 
 ## Round 0 (bot v20 from 2026-10-17 04:42 + 05:55; agent 07:55)
 
@@ -312,7 +313,36 @@ non-target hit, map change) apply to every session.
   other Poring, away from it. The bot has no such fact: the detector boxes a Creamy 8-11 % of
   the time.
 
-## What the agent's play taught (rounds 0-7)
+## Round 8 (bot v28 first, 16:54; then the agent, 18:00)
+
+- **Sessions:**
+  - BOT v28 `20261017T165431-demo-hunt-flow28` (seed 20270901; demonstrations 3.69).
+  - AGENT `20261017T175957-demo-agent-demo` (the same seed, 10 min).
+
+| metric | BATT | AGENT R8 (packet-assisted) | BOT v28 median 10' | BOT best 10' | BOT full |
+|---|---|---|---|---|---|
+| kills / h | 300 | 19.2 | 144 | 156 | 141.9 |
+| landing <= 5 s | 64/64 | 3/4 | 20/25 | 21/29 | 119/158 |
+| seen -> click p50 / p90 s | 1.11 / 4.79 | 9.78 / 19.79 | 3.0 / 6.75 | 2.28 / 10.6 | 3.47 / 13.4 |
+| death -> next click s | 1.24 / 1.8 | 22.5 / 22.5 | 3.4 / 6.91 | 2.38 / 6.03 | 2.38 / 6.19 |
+| monsters in sight / 10 min | 44 | 5.3 | 37 | 36 | 33.5 (windowed) |
+| loot picked / dropped | 62 / 64 | 1 / 2 | 19 / 40 | 15 / 31 | 95 / 179 |
+| kill -> last pickup s | 1.56 | 17.6 | 3.59 | 2.36 | 3.22 |
+| walk clicks while moving | 72.7 % | 10.5 % | 34.4 % | 38.6 % | 38.7 % |
+| click cadence s | 0.6 / 3.44 | 11.9 / 29.8 | 1.12 / 3.27 | 0.8 / 3.58 | 1.13 / 3.77 |
+| reversals / min | 3.6 | 0.43 | 6.4 | 6.4 | 6.21 |
+| straight run cells | 16.9 | 26.5 | 12.0 | 10.6 | 11.5 |
+| unintended attack requests | - | 0 | 2 | 1 | 7 |
+| hard bars (NPC / map / non-target) | - | 0/0/0 | 0/0/0 | 0/0/0 | **0/0/0** |
+
+- **The bot's first clean full hour since v23, after the Creamy cause was fixed** (the two-motion
+  pointer rest). It also had the most engagements of the day (159).
+- The rest costs walking: walk clicks sent while moving fell from ~50 % to 38.7 %, and the cadence
+  rose to 1.13 s.
+- **The agent:** 3 kills. Its start area held little, and it spent minutes at the map's southern
+  edge, by the warp portal (kept away from it) and in the palm grove.
+
+## What the agent's play taught (rounds 0-8)
 
 - **The agent's own limit is its decision loop.**
   - Each step is a screenshot, a thought and a command: ~10-20 s.
