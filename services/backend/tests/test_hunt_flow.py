@@ -609,3 +609,7 @@ def test_v26_retargets_and_v27_adds_the_belief_map() -> None:
     assert p27["belief"] and p27["retarget"] and not p26.get("belief")
     assert p27["belief_unseen"] == (1.0, 10.0) and 0 < p27["belief_pd"] < 1
     assert set(hf.VERSIONS) >= {24, 25, 26, 27}
+
+
+def test_v25_widens_the_loot_unit_margin() -> None:
+    assert hf.PARAMS[25]["loot_unit_px"] >= 60 and "loot_unit_px" not in hf.PARAMS[24]

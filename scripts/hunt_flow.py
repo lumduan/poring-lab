@@ -292,8 +292,11 @@ PARAMS[24] = {**PARAMS[23], "loot_death": "hybrid", "loot_interval_s": 0.05,
               "loot_fixed_max_s": 4.5}  # fmt: skip
 # 25 = Batt's item 3, the NAME TAG: the tag only when the pixel species check is unsure or crowded,
 # and the strike already while walking in when it is sure
+# (+ two loot safety fixes from v24's run: the GM's sprite out of the pink count, and a monster box
+# within 70 px skips a loot cell -- v24's 10 loot clicks that became attacks had the nearest box
+# edge 19-81 px away, p50 42, on boxes 0.1-0.4 s old)
 PARAMS[25] = {**PARAMS[24], "species_skip": True, "strike_moving": True,
-              "loot_pink_gm_exclude": True}  # fmt: skip
+              "loot_pink_gm_exclude": True, "loot_unit_px": 70.0}  # fmt: skip
 # 26 = Batt's item 4: v19's RE-TARGET (built 2026-10-17 02:2x, never run), on v25
 PARAMS[26] = {**PARAMS[25], "retarget": True, "retarget_margin": 2.0, "retarget_commit_s": 1.0}
 # 27 = Batt's "Battleship": the belief map's most probable cell of a HIDDEN monster as the search
@@ -1921,9 +1924,10 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             why_ = "view"
                         else:
                             fr_l = sampler.since(max(0, len(sampler.frames) - 1))
+                            mu_ = float(prm.get("loot_unit_px", 30.0))  # v25: 70 (see PARAMS)
                             if any(x_.cls in ("monster", "npc")  # not the GM's own box
-                                   and x_.x0 - 30 <= u_l <= x_.x1 + 30
-                                   and x_.y0 - 30 <= v_l <= x_.y1 + 30
+                                   and x_.x0 - mu_ <= u_l <= x_.x1 + mu_
+                                   and x_.y0 - mu_ <= v_l <= x_.y1 + mu_
                                    for x_ in (fr_l[-1][1] if fr_l else [])):  # fmt: skip
                                 why_ = "unit"
                             else:
