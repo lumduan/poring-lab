@@ -182,6 +182,10 @@ VERSIONS = {
     "search remembers the ground in our own view (+-12 cells, 3 min) and scores keep / +-45 / "
     "+-90 / +-135 by run x (0.25 + the fresh share at the ray's end), keeping the heading while it "
     "scores >= 0.8x the best",
+    23: "LOOT BY ITEM SPRITES, on v22 (the competition's loot, iterated: v21's frame difference "
+    "picked 21.8 %, its hovers mostly on the GM's own sprite): item_icons (packet-labelled floor "
+    "item templates, held-out recall@15 0.35-0.39 at 0.12-0.16 false a kill) finds the drops "
+    "around the death spot FIRST; drop_blobs' blobs only off the GM's sprite (> 70 px)",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -258,6 +262,7 @@ PARAMS[20] = {**PARAMS[18], "tag_follow": True, "tag_follow_px": 10.0}
 PARAMS[21] = {**PARAMS[20], "loot_blobs": True, "loot_before_s": 1.8, "guard_ptr_mask": True}
 PARAMS[22] = {**PARAMS[21], "heading_cov": True, "cov_recent_s": 180.0, "cov_half": 12,
               "cov_keep": 0.8}  # fmt: skip
+PARAMS[23] = {**PARAMS[22], "loot_icons": True, "icon_radius": 110, "blob_gm_px": 70.0}
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -1677,20 +1682,42 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 else:
                     out["no_before"] = True
                 out["blobs"] = len(blobs)
+                points: list[tuple[float, float, str]] = []
+                cen_ = f1.centre(tr_.box) if tr_.box is not None else GM_SPRITE_PX
+                if icon_templates:
+                    # v23: the item SPRITES first (few false matches); then only the blobs off
+                    # the GM's own animated sprite (v21: 48 of 82 blob hovers read walk there)
+                    import item_icons as ii_
+
+                    img_i = np.ascontiguousarray(np.asarray(frame())[..., :3])
+                    pu_, pv_ = ptr[0]
+                    icons_ = ii_.find_items(img_i, cen_, prm["icon_radius"], icon_templates,
+                                            order="BGR",
+                                            exclude=[(pu_ - 26, pv_ - 26, pu_ + 40,
+                                                      pv_ + 40)])  # fmt: skip
+                    out["icons"] = len(icons_)
+                    points += [(float(iu), float(iv), "icon") for iu, iv, _id, _sc in icons_]
+                    blobs = [bl for bl in blobs
+                             if math.hypot(bl.u - GM_SPRITE_PX[0], bl.v - GM_SPRITE_PX[1])
+                             > prm["blob_gm_px"]
+                             and all(math.hypot(bl.u - pu2_, bl.v - pv2_) > 15
+                                     for pu2_, pv2_, _s in points)]  # fmt: skip
+                points += [(bl.u, bl.v, "blob") for bl in blobs]
                 # each blob keeps ITS OWN pixel, moved only by how far the GM moved since AFTER
                 # (attempt 1 re-projected from the fractional position against a residual taken
                 # on the integer cell: hovers up to ~30 px off, 26 of 43 read no hand)
                 mp0_ = measured_pos() or (float(here2[0]), float(here2[1]))
-                targets: list[tuple[Cell, tuple[float, float]]] = []
-                for bl in blobs:
-                    off_ = picking.pick_cells(camera, gat, here2, np.array([[bl.u, bl.v]]))[0]
+                targets: list[tuple[Cell, tuple[float, float], str]] = []
+                for pu3_, pv3_, src_ in points:
+                    off_ = picking.pick_cells(camera, gat, here2, np.array([[pu3_, pv3_]]))[0]
                     if abs(int(off_[0])) > 1000:
                         continue
                     c_b = (here2[0] + int(off_[0]), here2[1] + int(off_[1]))
-                    targets.append((c_b, (bl.u, bl.v)))
-                targets.sort(key=lambda t_: math.hypot(t_[1][0] - GM_SPRITE_PX[0],
-                                                       t_[1][1] - GM_SPRITE_PX[1]))  # fmt: skip
-                for c_b, px_ in targets:
+                    targets.append((c_b, (pu3_, pv3_), src_))
+                if not icon_templates:  # v21: nearest the GM first
+                    targets.sort(key=lambda t_: math.hypot(t_[1][0] - GM_SPRITE_PX[0],
+                                                           t_[1][1] - GM_SPRITE_PX[1]))  # fmt: skip
+                for c_b, px_, src_ in targets:
                     if (time.monotonic() - t_l0 >= prm["loot_max_s"]
                             or out["clicks"] >= prm["loot_max_clicks"]):  # fmt: skip
                         break
@@ -1706,7 +1733,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     pr.hover(u_l, v_l)
                     sh1_ = pr.read(u_l, v_l)["shape"]
                     sh2_ = pr.read(u_l, v_l)["shape"] if sh1_ == "pickup" else None
-                    out.setdefault("tried", []).append([round(u_l), round(v_l), sh1_])
+                    out.setdefault("tried", []).append([round(u_l), round(v_l), sh1_, src_])
                     if sh1_ != "pickup" or sh2_ != "pickup":
                         out["no_hand"] += 1
                         continue
@@ -1724,7 +1751,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     if (trial_l.get("runtime") or {}).get("obtained"):
                         out["picked"] += 1
                     click_log({"t": t_lc, "u": round(u_l, 1), "v": round(v_l, 1),
-                               "kind": "loot", "cell": list(c_b), "src": "blob"})  # fmt: skip
+                               "kind": "loot", "cell": list(c_b), "src": src_})  # fmt: skip
                 out["s"] = round(time.monotonic() - t_l0, 2)
                 eng_["loot"] = out
                 ev({"kind": "loot_blobs", **out})
@@ -2410,6 +2437,11 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
             from collections import deque as deque_
 
             ring_frames: Any = deque_(maxlen=24)  # v21: (mono s, BGR frame) at ~5 Hz, ~4.8 s
+            icon_templates: list[Any] = []
+            if prm.get("loot_icons"):  # v23: the floor items' own sprites (data/item_icons)
+                import item_icons as ii_
+
+                icon_templates = ii_.load_templates()
 
             def motion() -> None:
                 """~motion_hz frames: the camera's move from the floor patches, summed (cells)."""

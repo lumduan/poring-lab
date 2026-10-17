@@ -475,3 +475,10 @@ def test_v22_the_heading_turns_away_from_ground_we_swept() -> None:
     assert hf.fresh_share(swept, 1000.0, (20, 40), 5, 180.0) == 1.0
     assert hf.fresh_share(swept, 1000.0 + 200.0, (60, 40), 5, 180.0) == 1.0  # swept long ago
     assert hf.PARAMS[22]["heading_cov"] and hf.PARAMS[22]["loot_blobs"]
+
+
+def test_v23_loots_by_item_sprites_first_on_v22() -> None:
+    p = hf.PARAMS[23]
+    assert p["loot_icons"] and p["loot_blobs"] and p["heading_cov"]
+    assert p["blob_gm_px"] >= 60 and 80 <= p["icon_radius"] <= 160
+    assert not hf.PARAMS[22].get("loot_icons")
