@@ -18,6 +18,9 @@ next_action: "➡️ 2026-10-10 02:50: the image carrying LoginScrub (f36276e, l
 - Deciders: Batt
 - ➡️ 2026-10-09: Amendment C (PROPOSED, at the end) would change Acceptance decision 2 in dev
   mode: the sniffer's code from a read-only source mount, no image build for a code change.
+- ➡️ 2026-10-17: [Amendment D](#amendment-d-accepted-batt-2026-10-17-packet-assisted-agent-demo-sessions)
+  (ACCEPTED, Batt): a SCOPED exception for `agent-demo` sessions only. The agent may READ packets
+  during play, on the lab rAthena only, passively; never the bot.
 - ➡️ 2026-10-09: [ADR-0021](0021-external-servers.md) (PROPOSED) would add, for an allowed
   EXTERNAL server: nothing is captured there ~~by design~~ ➡️ BY DEFAULT (Batt, 2026-10-09
   ~15:20: only where that server's own rules permit it, recorded in Settings; ADR-0021 4.5);
@@ -221,3 +224,37 @@ instead of a build (the 2026-10-09 bursts), so a security fix no longer waits fo
 
 **Decision needed from Batt:** accept / change / reject. Until then the sniffer stays on the image
 path and tonight's option D build is the way the scrub goes live.
+
+## Amendment D (ACCEPTED, Batt 2026-10-17): packet-assisted AGENT-DEMO sessions
+
+**Context.** On 2026-10-17 Batt set up a three-way competition: Batt vs the agent vs the bot.
+- In each round the agent (Claude) plays a 10-minute reference session itself, step by step from
+  screenshots, through the bot's own input path and gates.
+- Batt grants the agent, and only the agent, a handicap: it may read packets during play.
+- This moves a packet read into a live decision loop, which Decision 4 and CLAUDE.md hard rule 1
+  forbid. Hence this scoped exception.
+
+**Ruling (Batt's words, tightly scoped):**
+1. **Only `agent-demo` sessions** (`scripts/agent_play.py`) may read packets during play:
+   monster positions, ids and species, our position, hits, deaths, drops.
+   - They read the sniffer's own archive, read-only: the same path `record_session` uses
+     offline.
+   - Passive capture only: no injection, no new capture path, nothing sent to any server.
+2. **Only on the self-hosted rAthena lab.** The tool refuses unless the interlock attests the
+   `lab-rathena` environment. Never the community server, never an external server
+   (ADR-0006 / ADR-0021).
+3. **Never the bot.** `hunt_flow.py`, `poring_env` and vision stay pixels-only, exactly as before.
+   - Decision 4's agent-path isolation is unchanged: no `Packet*` model on agent schemas, and
+     vision without `poring_packets`.
+   - A test pins that the bot's code never imports the agent's packet view.
+4. **Labelled "packet-assisted" everywhere.** This covers the session manifest
+   (`packet_assisted: true`), the leaderboard, the clips and the docs.
+5. **Purpose: learning.** Each round records which packet facts changed the agent's decisions
+   (e.g. a monster behind a tree, the exact drop cells, a target already dying), and whether the
+   bot could get the same fact from PIXELS. Those become candidate bot changes.
+
+**Consequences.**
+- The agent's numbers are NOT a pixels-only reference. Batt's recorded demo stays the human
+  pixels-only reference.
+- Hard bars apply to agent-demo sessions as to every session, judged from packets offline.
+

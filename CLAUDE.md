@@ -14,6 +14,12 @@ ports, quickstart) and `docs/adr/`.
    - The agent perceives only through `Env.grab()` and acts only through `Env.send_input()`.
    - No memory reading, no packet injection, and no packet data at decision time.
    - Packet capture (the `sniffer` service) is **offline ground truth only**.
+   - Scoped exception (Batt 2026-10-17, ADR-0007 Amendment D):
+     - `agent-demo` sessions (`scripts/agent_play.py`, the agent playing a competition round)
+       may READ the sniffer's archive during play;
+     - lab rAthena only, passive only;
+     - never the bot or its code;
+     - results labelled "packet-assisted".
 2. **One Windows session, one display path at a time** (ADR-0001; amended 2026-10-02 with Batt's OK,
    ADR-0009). Windows client editions allow a single interactive session.
    - The path is the RDP session, OR the console-mode stream (Sunshine -> the `gamestream` client:
