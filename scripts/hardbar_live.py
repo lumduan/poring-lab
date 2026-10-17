@@ -1,0 +1,118 @@
+#!/usr/bin/env python3
+"""The EXPERIMENTER's live hard-bar monitor for a running hunt-flow version (Batt 2026-10-17:
+"the live hard-bar monitor stays on"). It is not part of the bot: it reads the sniffer's archive
+READ-ONLY (record_session's path) and only ever STOPS a run (SIGINT, the runner's own clean stop) on
+a hard bar. No packet fact reaches a bot decision (CLAUDE.md rule 1).
+
+Hard bars (Batt 18:3x): an NPC contact, a map change, our damaging hit on a NON-TARGET other than a
+Creamy. A Creamy hit is COUNTED and reported apart, never a stop, until a Creamy-aware detector is
+trained. (An unknown UI state is the runner's own ui_watch stop.)
+
+    hardbar_live.py check SID          one reading of a session so far
+    hardbar_live.py watch VERSION      every 180 s while `hunt_flow.py run --version VERSION` runs
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import signal
+import subprocess
+import sys
+import time
+from collections import Counter
+from collections.abc import Iterable, Mapping
+from pathlib import Path
+from typing import Any
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+DEMO = Path("/dev/shm/poring-lab-demo")
+GM = 2000002
+TARGETS = {1002, 1063, 1113, 1008}  # farm0.TARGETS (prt_fild08)
+CREAMY = 1018
+EVERY_S = 180.0
+
+
+def bars(packets: Iterable[Mapping[str, Any]], targets: set[int] = TARGETS) -> dict[str, Any]:
+    """PURE: the hard bars in time-ordered packets -> {"stop": [...], "creamy_hits": n,
+    "attack_requests": {"target": n, ...}}."""
+    job: dict[int, Any] = {}
+    stop: Counter[str] = Counter()
+    creamy = 0
+    reqs: Counter[str] = Counter()
+    for e in packets:
+        typ = e.get("type")
+        if typ == "entity_appear" and e.get("gid") is not None:
+            job[int(e["gid"])] = e.get("job")
+        elif typ == "act" and e.get("src_gid") == GM and int(e.get("damage") or 0) > 0:
+            j = job.get(int(e.get("target_gid") or -1))
+            if j is not None and int(j) == CREAMY:
+                creamy += 1
+            elif j is not None and int(j) not in targets:
+                stop[f"non_target_hit:{j}"] += 1
+        elif typ == "attack_request":
+            j = job.get(int(e.get("target_gid") or -1))
+            reqs["target" if j is None or int(j) in targets else f"other:{j}"] += 1
+        elif typ == "npc_contact":
+            stop["npc_contact"] += 1
+        elif typ == "map_change":
+            stop["map_change"] += 1
+    return {"stop": dict(stop), "creamy_hits": creamy, "attack_requests": dict(reqs)}
+
+
+def check(sid: str) -> dict[str, Any]:
+    import record_session as rs
+    import ro_agent as r
+
+    ev = [json.loads(x) for x in (DEMO / sid / "events.jsonl").read_text().splitlines() if x]
+    t0 = next(e["t_ns"] for e in ev if e["kind"] == "loop_start")
+    now = r.ns()
+    pk = sorted(rs._events_since(t0, 60.0, t0, now), key=lambda e: int(e["t_mono_ns"]))
+    return {"min": round((now - t0) / 60e9, 1), **bars(pk)}
+
+
+def runner_pid(version: int) -> int | None:
+    out = subprocess.run(["ps", "-eo", "pid,args"], capture_output=True, text=True).stdout
+    for line in out.splitlines():
+        if f"hunt_flow.py run --version {version} " in line + " " and "uv run" not in line:
+            return int(line.split()[0])
+    return None
+
+
+def watch(version: int) -> int:
+    time.sleep(60.0)
+    while True:
+        pid = runner_pid(version)
+        if pid is None:
+            print(time.strftime("%T"), "runner gone: watch ends", flush=True)
+            return 0
+        sids = sorted(p.name for p in DEMO.glob(f"*-demo-hunt-flow{version}"))
+        try:
+            got = check(sids[-1])
+        except (StopIteration, FileNotFoundError, IndexError) as exc:  # the loop not started yet
+            got = {"waiting": type(exc).__name__}
+        print(time.strftime("%T"), json.dumps(got), flush=True)
+        if got.get("stop"):
+            print(time.strftime("%T"), f"HARD BAR -> SIGINT {pid}", flush=True)
+            os.kill(pid, signal.SIGINT)
+            return 0
+        time.sleep(EVERY_S)
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)  # fmt: skip
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("check").add_argument("sid")
+    sub.add_parser("watch").add_argument("version", type=int)
+    a = ap.parse_args()
+    if a.cmd == "check":
+        print(json.dumps(check(a.sid)))
+        return 0
+    return watch(a.version)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
