@@ -536,3 +536,30 @@ def test_nearest_cell_inverts_a_projection() -> None:
 
     assert hf.nearest_cell(proj, (100, 50), 640 + 64 + 5, 360 - 24 * 3 + 4) == (102, 53)
     assert hf.nearest_cell(proj, (100, 50), 640, 360) == (100, 50)
+
+
+def test_frame_guard_clamps_moves_and_refuses_clicks_off_the_frame() -> None:
+    from collections import Counter
+
+    sent: list[tuple[str, int, int]] = []
+
+    class Fake:
+        def move(self, x: int, y: int) -> None:
+            sent.append(("move", x, y))
+
+        def click(self, x: int, y: int, button: str = "left") -> None:
+            sent.append(("click", x, y))
+
+        def send(self, ev: list[dict[str, object]]) -> str:
+            return "passed"
+
+    n: Counter[str] = Counter()
+    g = hf.FrameGuard(Fake(), (8, 30, 1280, 720), n)
+    g.move(700, 18)  # v23 attempt 2: a pre-motion above the frame
+    g.click(700, 20)
+    g.click(700, 300)
+    assert sent == [("move", 700, 30), ("click", 700, 300)]
+    assert n == Counter({"clamped": 1, "refused": 1})
+    assert g.send([]) == "passed"  # everything else passes through
+    g.wait_for_human = "hook"  # an attribute set on the guard lands on the real agent
+    assert g._a.wait_for_human == "hook"

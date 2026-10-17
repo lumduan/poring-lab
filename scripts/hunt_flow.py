@@ -288,6 +288,43 @@ def cheb(a: Sequence[float], b: Sequence[float]) -> float:
     return max(abs(a[0] - b[0]), abs(a[1] - b[1]))
 
 
+class FrameGuard:
+    """(v24) Every hunt-flow pointer input passes here (Batt: never a click outside the game
+    frame). A MOVE is clamped into the game region: read_tag's pre-motion, 12 px up-left of a
+    target at the top edge, gave y < 0, which the backend drops unanswered, and the run stopped on
+    the missing ack (v23 attempt 2, 25.7 min). A CLICK outside the region is refused. Both are
+    counted in ``n`` ("clamped" / "refused"); everything else passes through to the agent."""
+
+    def __init__(self, agent: Any, region: tuple[int, int, int, int], n: Counter[str]) -> None:
+        self._a, self._r, self.n = agent, region, n
+
+    def inside(self, x: float, y: float) -> bool:
+        x0, y0, w, h = self._r
+        return x0 <= x < x0 + w and y0 <= y < y0 + h
+
+    def move(self, x: int, y: int) -> None:
+        x0, y0, w, h = self._r
+        cx, cy = min(max(x, x0), x0 + w - 1), min(max(y, y0), y0 + h - 1)
+        if (cx, cy) != (x, y):
+            self.n["clamped"] += 1
+        self._a.move(cx, cy)
+
+    def click(self, x: int, y: int, button: str = "left") -> None:
+        if not self.inside(x, y):
+            self.n["refused"] += 1
+            return
+        self._a.click(x, y, button)  # the pass-through: every hunt-flow click comes here
+
+    def __getattr__(self, k: str) -> Any:
+        return getattr(self._a, k)
+
+    def __setattr__(self, k: str, v: Any) -> None:
+        if k in ("_a", "_r", "n"):
+            object.__setattr__(self, k, v)
+        else:  # e.g. farm0.stop_on_takeover's hook must land on the real agent
+            setattr(self._a, k, v)
+
+
 @dataclass
 class Track:
     """One monster, by its cells over time (constant velocity), and its newest box."""
@@ -1454,8 +1491,10 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                  log_path=str(out / "live.jsonl"))  # fmt: skip
     sampler = None
     guard_n: Counter[str] = Counter()  # v16+: the walk guard's verdicts (in the summary)
-    with r.session(f"rule:{RULE}@{version}") as (agent, screen):
-        f0.stop_on_takeover(agent)
+    fg_n: Counter[str] = Counter()
+    with r.session(f"rule:{RULE}@{version}") as (agent_raw, screen):
+        f0.stop_on_takeover(agent_raw)  # on the REAL agent: its send() calls the hook
+        agent = FrameGuard(agent_raw, r.game_region(), fg_n)  # v24: no input off the frame
         hud_tok = operator_hud.enable(f"hunt-flow@{version}", agent=agent,
                                       log_path=str(out / "hud.jsonl"))  # fmt: skip
         det = unit_detector.UnitDetector()
@@ -2104,7 +2143,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 (tag_follow): the pointer follows the focused target, the tag is also searched
                 under the pointer, and the returned point is where the pointer ended."""
                 t_a = time.monotonic()
-                agent.move(gx0 + round(u) - 12, gy0 + round(v) - 12)  # two motions: drawn
+                agent.move(gx0 + max(0, round(u) - 12), gy0 + max(0, round(v) - 12))  # 2 motions
                 time.sleep(0.06)
                 agent.move(gx0 + round(u), gy0 + round(v))
                 ptr[0] = (u, v)
@@ -2975,7 +3014,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             t_pr = time.monotonic()
                             pu_, pv_ = ptr[0]
                             qu_ = pu_ + (70.0 if pu_ < gw / 2 else -70.0)
-                            agent.move(gx0 + round(qu_) - 12, gy0 + round(pv_) - 12)
+                            agent.move(gx0 + max(0, round(qu_) - 12), gy0 + max(0, round(pv_) - 12))
                             time.sleep(0.06)
                             agent.move(gx0 + round(qu_), gy0 + round(pv_))
                             ptr[0] = (qu_, pv_)
@@ -3685,7 +3724,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                "results": dict(Counter(e["result"] for e in engagements)),
                "split": split.ranked(), "coverage_cells": cov.first_seen,
                "det_fps": None if sampler is None or not run_s
-               else round(len(sampler.frames) / run_s, 2), "walk_guard": dict(guard_n)}  # fmt: skip
+               else round(len(sampler.frames) / run_s, 2), "walk_guard": dict(guard_n),
+               "frame_guard": dict(fg_n)}  # fmt: skip
     log.finish(ended=ended, packet_events=len(events), packet_anchor=anchor, **summary)
     print(json.dumps({"session": sid, "ended": ended, **summary}, default=str), flush=True)
     if crashed is not None:
