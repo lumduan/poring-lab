@@ -702,3 +702,13 @@ def test_area_centre_is_an_area_cell_nearest_the_centroid() -> None:
     assert a[c[1], c[0]]
     assert hf.area_centre(hf.main_component(a)) == (23, 15)  # the larger block, ties row-first
     assert hf.MAP == "prt_fild08"  # the default; `run --map` replaces it
+
+
+def test_v34_paces_input_in_alternating_blocks() -> None:
+    p = hf.PARAMS[34]
+    assert p["send_gap_s"] == 0.05 and p["send_gap_ab_min"] >= 5.0  # the old drain's minimum
+    assert not hf.PARAMS[33].get("send_gap_s") and 34 in hf.VERSIONS
+    src = (Path(hf.__file__)).read_text()
+    # the helpers that TYPE keep the default pacing (/where, the pipelined loop's weight clear;
+    # the non-pipelined loop never paces: pace_tick runs only in the pipelined one)
+    assert src.count("with typing_pace():") == 2 and src.count("pace_tick(now)") == 1

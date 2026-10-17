@@ -231,6 +231,10 @@ VERSIONS = {
     "are clicked FIRST at their own pixels, nearest first, then the fixed 3 x 3; a target that "
     "steps onto our pile is killed first (one a kill) and our cells looted with its own; "
     "interleaved per kill (odd loot steps: the race; even: v32's plain 3 x 3)",
+    34: "PACED INPUT, on v33: ro_agent drained 50 ms before EVERY send (a click's three sends "
+    "waited 150 ms of ~0.3 s); paced sends read the queued status without blocking and keep "
+    "only the old minimum gap (50 ms) since the previous send; 10-min blocks alternate paced / "
+    "default within each run",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -364,6 +368,10 @@ PARAMS[33] = {**PARAMS[32], "fast_dead_ab": False,
               # a BASE fix in both arms (not the change under test): the loot step's position
               # from the minimap readout whenever the odometry is > 1.5 cells off it
               "loot_refix": True, "loot_refix_cells": 1.5}  # fmt: skip
+# 34 = PACED INPUT (the agent link's dead 50 ms wait before every send), interleaved in 10-min
+# blocks within each run (the input path is global, so not per engagement): odd seeds start
+# paced. Its base (v33 as is, or with its loot arm decided) is set at its pre-registration
+PARAMS[34] = {**PARAMS[33], "send_gap_s": 0.05, "send_gap_ab_min": 10.0}
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -1659,6 +1667,34 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
     with r.session(f"rule:{RULE}@{version}") as (agent_raw, screen):
         f0.stop_on_takeover(agent_raw)  # on the REAL agent: its send() calls the hook
         agent = FrameGuard(agent_raw, r.game_region(), fg_n)  # v24: no input off the frame
+        pace: dict[str, Any] = {"block": None, "on": False, "t0": None}
+
+        @contextlib.contextmanager
+        def typing_pace() -> Any:
+            """v34: a helper that TYPES (/where, the weight clear) keeps the default pacing (the
+            50 ms drain before every send); only the hunt's own pointer input is paced."""
+            old_ = agent_raw.min_send_gap_s
+            agent_raw.min_send_gap_s = None
+            try:
+                yield
+            finally:
+                agent_raw.min_send_gap_s = old_
+
+        def pace_tick(now_: float) -> None:
+            """v34: the paced / default block at ``now_`` (10-min blocks; odd seeds start
+            paced); logged at each change."""
+            if not prm.get("send_gap_s"):
+                return
+            if pace["t0"] is None:
+                pace["t0"] = now_
+            blk_ = int((now_ - pace["t0"]) / (60.0 * prm["send_gap_ab_min"]))
+            if blk_ == pace["block"]:
+                return
+            on_ = (blk_ + seed) % 2 == 1
+            pace.update(block=blk_, on=on_)
+            agent_raw.min_send_gap_s = float(prm["send_gap_s"]) if on_ else None
+            ev({"kind": "send_gap", "block": blk_, "on": on_})
+
         hud_tok = operator_hud.enable(f"hunt-flow@{version}", agent=agent,
                                       log_path=str(out / "hud.jsonl"))  # fmt: skip
         det = unit_detector.UnitDetector()
@@ -1741,8 +1777,9 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     ev({"kind": "reckoned_fix", "cell": list(pos_box[0])})
                     return pos_box[0]
                 world.position = pos_box[0]
-                got = relocalise(agent, screen, world, noentry, band)
-                bench.close_chat(agent_raw, screen)
+                with typing_pace():  # v34: /where is TYPED
+                    got = relocalise(agent, screen, world, noentry, band)
+                    bench.close_chat(agent_raw, screen)
                 ev({"kind": "where_fix", "ok": bool(got.get("ok")), "to": list(world.position)})
                 if got.get("ok"):
                     return tuple(world.position)  # type: ignore[return-value]
@@ -3504,6 +3541,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 try:
                     while time.monotonic() < deadline:
                         now = time.monotonic()
+                        pace_tick(now)  # v34
                         if target is not None or eng is not None:
                             busy_t[0] = now  # the stall breaker counts idle SEARCH time only
                         ch_t = mstate.get("changed_t")
@@ -3558,8 +3596,9 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             wnow = gm_state._weight(gm_state._frames(screen))
                             if gm_state.weight_action(wnow, at_restore=False) == "clear":
                                 ev({"kind": "weight_clear", "weight": wnow})
-                                gm_state.clear_loot(agent_raw, screen, why="hunt-flow:mid-run",
-                                                    out_dir=log.dir / "gm_state")  # fmt: skip
+                                with typing_pace():  # v34: the clear TYPES
+                                    gm_state.clear_loot(agent_raw, screen, why="hunt-flow:mid-run",
+                                                        out_dir=log.dir / "gm_state")  # fmt: skip
                         if cont:
                             # v5: MEASURED -- the minimap's cell + the floor odometry since it
                             if now - last_mm > MINIMAP_EVERY_S:

@@ -608,6 +608,13 @@ class Agent:
                  "version": "1"}  # fmt: skip
         self.ws.send(json.dumps(hello))
         self.status: dict[str, Any] = {}
+        # hunt-flow v34 (2026-10-17 22:3x): None = the DEFAULT, a blocking 50 ms drain before every
+        # send (each click's three sends waited 150 ms on it, half of a ~0.3 s click). A number =
+        # PACED sends: the status messages already queued are read without blocking, and a send
+        # waits only until this long after the previous one (the old drain's minimum spacing kept
+        # at 0.05: no two inputs closer than today; only the dead wait after other work goes).
+        self.min_send_gap_s: float | None = None
+        self._last_send = 0.0
         self._drain(1.5, want="status")
         if self.status.get("mode") != "ASSIST":
             self.ws.close()
@@ -660,11 +667,34 @@ class Agent:
                 return dict(msg)
         return None
 
+    def _drain_ready(self) -> None:
+        """Every message already received, without blocking (status / error handled as _drain)."""
+        while True:
+            try:
+                msg = json.loads(self.ws.recv(timeout=0))
+            except TimeoutError:
+                return
+            if msg.get("type") == "status":
+                self.status = msg
+            if msg.get("type") == "error":
+                raise Stop(f"backend error reply: {msg.get('reason')}")
+
+    def _pre_send(self) -> None:
+        """Before a send: the default 50 ms drain, or (``min_send_gap_s``) the queued messages
+        plus the rest of the minimum gap since the previous send, draining meanwhile."""
+        if self.min_send_gap_s is None:
+            self._drain(0.05)
+            return
+        self._drain_ready()
+        rest = self.min_send_gap_s - (time.monotonic() - self._last_send)
+        if rest > 0:
+            self._drain(rest)
+
     def wait_for_human(self, max_wait_s: float = 600.0) -> None:
         """Batt holds the ASSIST lease: wait (never fight), up to max_wait_s, then stop."""
         end = time.monotonic() + max_wait_s
         while True:
-            self._drain(0.05)
+            self._pre_send()
             lease = self.status.get("lease_until_ns")
             if self.status.get("mode") != "ASSIST":
                 raise Stop(f"mux left ASSIST ({self.status.get('mode')}): stopping")
@@ -682,6 +712,7 @@ class Agent:
             msg = {"type": "agent_input", "t_mono_ns": ns(), "frame_id": -1, "t_capture_ns": ns(),
                    "events": chunk, "sensitive": sensitive}  # fmt: skip
             self.ws.send(json.dumps(msg))
+            self._last_send = time.monotonic()
             ack = self._drain(3.0, want="input_ack")
             if ack is None:
                 raise Stop("no input_ack within 3 s")
