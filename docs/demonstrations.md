@@ -8838,8 +8838,9 @@ STOPPED ITSELF at 39.8 min: "no progress for 60 s".**
     v24 / v25;
   - hard bars: PASSED.
 - **Reading:** the re-target itself did not do what it was meant to (it flips, and the time to
-  a click rose). But the run is the cleanest and the most accurate of the day. The pointer rest
-  is the likely cause of the clean hard bars; 40 min is too short to call it proven.
+  a click rose). But the run is the cleanest and the most accurate of the day. ~~The pointer rest
+  is the likely cause of the clean hard bars~~ ➡️ **SUPERSEDED at 16:5x (3.68): the rest was
+  INERT (one jump never moves the client's cursor), so the clean hard bars were luck.**
 
 ### 3.68 hunt-flow@27: BATTLESHIP, the belief map of hidden monsters (pre-registered 2026-10-17 16:08 ICT, the commit time 76442b0, BEFORE its run; Batt's "Battleship" idea; round 7 of docs/competition.md)
 
@@ -8920,7 +8921,7 @@ showed a Creamy hit at 28.5 min.
   - engaged kills / h >= v26's: YES (139.6 vs 124.5; another seed, 28.8 min);
   - hard bars: FAILED (the inert pointer rest; not the belief map).
 
-### 3.69 hunt-flow@28: THE POINTER REST THE CLIENT DRAWS (pre-registered 2026-10-17 __TIME__ ICT, the commit time __SHA__, BEFORE its run; the Creamy hard bar's cause; round 8 of docs/competition.md)
+### 3.69 hunt-flow@28: THE POINTER REST THE CLIENT DRAWS (pre-registered 2026-10-17 16:54 ICT, the commit time 0dc6cb0, BEFORE its run; the Creamy hard bar's cause; round 8 of docs/competition.md)
 
 **Why:** the Creamy hard bar of v24, v25 and v27 came from WALK clicks. v27's evidence (3.68):
 - the client's continuous attack request came 0.66-0.85 s after a walk click, with no click of
