@@ -41,7 +41,8 @@ non-target hit, map change) apply to every session.
 | round | BATT (human, pixels) | AGENT (packet-assisted) | BOT median 10' | BOT best 10' | BOT full run |
 |---|---|---|---|---|---|
 | R0 (bot v20) | 300 / 100 % / 62 of 64 / - | 24.6 / 4 of 5 / 6 of 14 / pass | 120 / 80 % / 2 of 30 / pass | 192 / 90 % / 10 of 57 / pass | 140.9 / 85.2 % / 41 of 218 / 1 non-target |
-| R1 (bot v21) | (fixed) | 38.3 / 4 of 5 / 4 of 6 / pass | pending | pending | pending |
+| R1 (bot v21) | (fixed) | 38.3 / 4 of 5 / 4 of 6 / pass | 96 / 81 % / 4 of 25 / pass | 120 / 76 % / 6 of 30 / pass | 100.8 / 78.8 % / 34 of 156 / pass |
+| R2 (bot v22) | (fixed) | pending | pending | pending | pending |
 
 ## Round 0 (bot v20 from 2026-10-17 04:42 + 05:55; agent 07:55)
 
@@ -68,13 +69,38 @@ non-target hit, map change) apply to every session.
 | unintended attack requests | - | 0 | 2 | 0 | 9 |
 | hard bars (NPC / map / non-target) | - | 0/0/0 | 0/0/0 | 0/0/0 | 0/0/1 |
 
-## Round 1 (agent first, 08:12; bot v21 next)
+## Round 1 (agent first, 08:12; then bot v21, 08:58)
 
-- AGENT `20261017T081204-demo-agent-demo` (seed 20270201, 10 min):
-  - 6 kills (38.3 / h), landing 4/5;
-  - seen -> click 9.8 / 15.9 s;
-  - loot 4 of 6 picked;
-  - reversals 0.11 / min, straight runs 26.8 cells; hard bars passed.
+- **Sessions:**
+  - AGENT `20261017T081204-demo-agent-demo` (seed 20270201, 10 min).
+  - BOT v21 `20261017T085819-demo-hunt-flow21` (the same seed, 60 min; its attempt 1 was
+    stopped at 24 min for a loot bug, demonstrations 3.62).
+
+| metric | BATT | AGENT R1 (packet-assisted) | BOT v21 median 10' | BOT best 10' | BOT full |
+|---|---|---|---|---|---|
+| kills / h | 300 | 38.3 | 96 | 120 | 100.8 |
+| landing <= 5 s | 64/64 | 4/5 | 13/16 | 16/21 | 89/113 |
+| seen -> click p50 / p90 s | 1.11 / 4.79 | 9.77 / 15.89 | 5.46 / 12.14 | 3.74 / 8.34 | 4.93 / 13.19 |
+| death -> next click s | 1.24 / 1.8 | 26.2 / 30.2 | 3.11 / 11.68 | 5.32 / 12.1 | 4.42 / 11.26 |
+| monsters in sight / 10 min | 44 | 11.7 | 29 | 30 | 28.5 (windowed) |
+| loot picked / dropped | 62 / 64 | 4 / 6 | 4 / 25 | 6 / 30 | 34 / 156 |
+| kill -> last pickup s | 1.56 | 26.3 | 0.93 | 5.52 | 6.22 |
+| walk clicks while moving | 72.7 % | 11.5 % | 63.2 % | 44.7 % | 58.8 % |
+| click cadence s | 0.6 / 3.44 | 11.4 / 55.9 | 0.97 / 2.74 | 1.0 / 6.33 | 0.97 / 4.22 |
+| reversals / min | 3.6 | 0.11 | 8.2 | 3.7 | 4.93 |
+| straight run cells | 16.9 | 26.8 | 11.8 | 10.9 | 12.3 |
+| unintended attack requests | - | 1 | 1 | 3 | 8 |
+| hard bars (NPC / map / non-target) | - | 0/0/0 | 0/0/0 | 0/0/0 | 0/0/0 |
+
+- **What the agent did that the bot did not, and the reverse (round 1):**
+  - **Looted what it SAW**, at the GM's feet, by hovering the visible item sprites (4 of 6).
+    v21's frame difference missed exactly those (melee drops land at the GM's feet, and its false
+    blobs sit on the GM's own animated sprite).
+    - **Candidate:** recognise the item sprites themselves (a subagent is building item-icon
+      templates from packet-labelled recordings).
+  - **Uncovered monsters under the UI windows** (a Lunatic under the inventory window, twice) by
+    walking so they came out. The bot loses them.
+  - The bot clicks ~10x faster, at a ~1 s cadence, from a moving GM.
 
 ## What the agent's play taught (both rounds)
 
