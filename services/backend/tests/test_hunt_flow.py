@@ -628,8 +628,13 @@ def test_v28_rests_in_two_motions_v29_is_abc_v30_drops_the_belief() -> None:
     assert not hf.PARAMS[27].get("ptr_rest_two") and not hf.PARAMS[28].get("fast_dead")
     assert hf.PARAMS[29]["abc"] and not hf.PARAMS[28].get("abc") and hf.PARAMS[29]["ptr_rest_two"]
     assert hf.PARAMS[30]["abc"] and not hf.PARAMS[30]["belief"] and hf.PARAMS[29]["belief"]
+
+
+def test_v32_strikes_with_arm_c_and_tests_fast_dead_per_engagement() -> None:
     p = hf.PARAMS[32]
-    assert p["fast_dead"] and not p["belief"] and p["ptr_rest_two"] and not p.get("abc")
+    assert p["abc"] and p["abc_arm"] == "C" and p["loot_death"] == "anim"
+    assert p["fast_dead"] and p["fast_dead_ab"] and not hf.PARAMS[31].get("fast_dead")
+    assert p["fast_dead_gone_s"] < p["dead_gone_s"] and p["fast_dead_min_s"] < p["dead_min_s"]
 
 
 def test_v27_drops_a_deadlocked_steer() -> None:

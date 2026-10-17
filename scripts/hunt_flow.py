@@ -223,9 +223,10 @@ VERSIONS = {
     "on the target's own last box (the hit / death animation), turned into a cell with our "
     "measured position at that frame (offline vs packets: 86-90 % of drops inside its 3 x 3; "
     "the last strike click 54 %); the A / B / C strike test keeps running",
-    32: "FAST DEAD (v24: server kill -> loot start p50 2.41 s): once the burst ended on the "
-    "client's attack arrow or the target vanished, 0.35 s unseen (one detector frame) and 0.5 s "
-    "after the click is the death, and the loot starts with no 0.4 s wait",
+    32: "FAST DEAD, interleaved per engagement, with arm C the default strike (Batt), on v31: once "
+    "the burst ended on the client's attack arrow or the target vanished, 0.35 s unseen (one "
+    "detector frame) and 0.5 s after the click is the death, and the loot starts with no 0.4 s "
+    "wait (odd engagements; even ones keep v15's rule)",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -341,9 +342,10 @@ PARAMS[30] = {**PARAMS[29], "belief": False}
 # 31 = the fixed loot's death cell from the target's own LAST box (Batt 18:3x, decision 1), on v30
 # (the A / B / C test keeps running inside it)
 PARAMS[31] = {**PARAMS[30], "loot_death": "anim"}
-# FAST DEAD (the latency budget's top loser: server kill -> the bot's "dead"), staged for later
-PARAMS[32] = {**PARAMS[30], "abc": False, "fast_dead": True, "fast_dead_min_s": 0.5,
-              "fast_dead_gone_s": 0.35}  # fmt: skip
+# 32 = arm C the DEFAULT strike (Batt, after the A/B/C test; A the fallback) + FAST DEAD, the main
+# change, interleaved per engagement (odd k: fast; even k: v15's rule), on v31
+PARAMS[32] = {**PARAMS[31], "abc_arm": "C", "fast_dead": True, "fast_dead_ab": True,
+              "fast_dead_min_s": 0.5, "fast_dead_gone_s": 0.35}  # fmt: skip
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -2606,7 +2608,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 t_arrive = r.ns()
                 if prm.get("abc") and direct_ and prm.get("name_tag") and not again and (
                         eng is None or eng["track"] != tr.tid):  # fmt: skip
-                    arm_ = "ABC"[k % 3]
+                    arm_ = prm.get("abc_arm") or "ABC"[k % 3]  # v32: C (Batt), A the fallback
                     if arm_ != "A":
                         arm_why = abc_ineligible(tr, b, u, v)
                 hov_arm = {"arm": arm_, "arm_eff": "A" if arm_why else arm_,
@@ -3488,7 +3490,10 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             # the client's attack arrow (or the target vanished during it), the
                             # first missed detector frame is the death (v24: server kill -> loot
                             # start p50 2.41 s, 360 s an hour; Batt's whole loot takes 1.56 s)
-                            landed_ = prm.get("fast_dead") and any(
+                            # v32: interleaved per engagement -- the fast rule on odd k only
+                            fast_arm = bool(prm.get("fast_dead")) and (
+                                not prm.get("fast_dead_ab") or int(eng["k"]) % 2 == 1)  # fmt: skip
+                            landed_ = fast_arm and any(
                                 (h_.get("burst") or {}).get("end") in ("arrow", "gone")
                                 for h_ in eng.get("hovers", []))  # fmt: skip
                             fast_ = landed_ and (since_last >= prm["fast_dead_min_s"]
@@ -3496,6 +3501,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             slow_ = since_last >= prm["dead_min_s"] and unseen >= prm["dead_gone_s"]
                             if fast_ or slow_:
                                 done = "dead"
+                                eng["dead_rule"] = "fast" if fast_arm else "slow"
+                                eng["dead_by"] = "fast" if (fast_ and not slow_) else "slow"
                             elif since_first > prm["give_up_s"]:
                                 banned.append((now, tuple(int(x) for x in eng["pred_cell"])))
                                 done = "gave_up"
@@ -3505,8 +3512,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                 time.sleep(0.02)
                                 continue
                             if done == "dead" and prm.get("loot"):
-                                if not prm.get("fast_dead"):  # v28: the hybrid death cell needs
-                                    time.sleep(0.4)  # no gone frames (the frames after the death)
+                                if eng.get("dead_rule") != "fast":  # v28: the hybrid death cell
+                                    time.sleep(0.4)  # needs no gone frames (v32: per arm)
                                 here_l = quick_fix()
                                 posm.stop(here_l)
                                 loot_after(eng, here_l)
