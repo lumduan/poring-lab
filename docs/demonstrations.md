@@ -8958,6 +8958,99 @@ a non-target hit stops the run.
   engagement near the goal;
 - hard bars: zero NPC contact, zero map change, zero non-target hit.
 
+**RUN 1 RESULT (2026-10-17 16:54:31-17:54:31, session 20261017T165431-demo-hunt-flow28, seed
+20270901; the full hour; my live monitor checked every 3 min, none found):**
+- **HARD BARS PASSED** for the full hour.
+- **Engagements:** 159 (156 dead), the most of the day. The bar 119 / 158 = 75.3 % (Wilson
+  68.1-81.4).
+- **Kills:** 141.9 / h; engaged 134.9 / h. 10-min windows: 144, 156, 156, 132, 120, 144 (median
+  144, best 156).
+- **Reaction:** seen -> click p50 3.47 s. Sight 33.5 per 10-min window (median).
+- **Loot:** 95 of 179 (53.1 %); kill -> last pickup p50 3.22 s.
+- **Attack requests after blind clicks:** after walk clicks 7, after loot clicks 7, all on
+  targets.
+- **Belief:** 621 distinct goals (v27: 380 in 28.8 min, i.e. 790 / h); 71 (11 %) were followed
+  by an engagement near the goal.
+- **vs the prediction:**
+  - zero non-target hits: YES;
+  - walk-click attack requests <= 3: NO (7, all on targets);
+  - engaged kills / h >= v27's - 10 %: YES (134.9 vs 139.6);
+  - fewer belief goals and >= 20 % followed: fewer, NO (11 %);
+  - hard bars: PASSED.
+- **Reading:** the two-motion rest removes the cursor the client had left on the world. This is
+  the first full hour with zero non-target hits since v23. One hour is not proof (v26 passed by
+  luck), so the live monitor stays on.
+
+### 3.70 hunt-flow@29: BATT'S INTERLEAVED A / B / C STRIKE TEST (pre-registered 2026-10-17 __TIME__ ICT, the commit time __SHA__, BEFORE its run; Batt 17:3x; rounds 9+ of docs/competition.md)
+
+**Batt's test (17:3x), following the two-motion cursor finding (3.68):**
+- burst-click at once when the pointer reaches the monster, until the client's LOCK ARROW appears
+  on it, without waiting for a confirmation;
+- **why beyond speed:** if one pointer jump does not update the client's cursor, a click right
+  after the jump may be resolved at the OLD cursor spot. That would be another cause of our misses,
+  so one arm adds a second small motion.
+
+**The lock arrow, PROVEN from pixels against packets first** (`arrowproof.py`; v24-v27, 290
+bursts that ended on the arrow; our attack request on the engagement's gid within 3.5 s of the
+click):
+- in 257 the request came on that target; in 15 the target was already dying from an earlier
+  hit; together 93.8 % mean "the target is locked";
+- in 8 the request went to ANOTHER unit (2.8 %), and in 10 only a walk followed (3.4 %, a false
+  arrow);
+- **timing: the arrow appears BEFORE the request** (arrow - request p10 / p50 / p90 -1.04 /
+  -0.36 / +0.52 s). The client locks the target at the click, walks in, then sends the request.
+  So the arrow is the EARLIER stop signal;
+- recall: 257 of the 350 bursts with a request ended on the arrow (73 %). The other bursts end on
+  the bound (4 clicks / 3 s) or when the box is gone, as before;
+- click -> our attack request p10 / p50 / p90 0.22 / 0.74 / 1.32 s.
+
+**The ONE main change (`abc`, 578a14b), on v28 (3.69: hard bars passed for the full hour,
+141.9 kills / h): three arms INTERLEAVED per engagement** (arm =
+k % 3 of the engagement counter, so spawns, map area and time are matched):
+- **A (confirm first):** the pointer on the target (two motions, read_tag), the client's
+  confirmation, then the click. On the direct path the confirmation is the NAME TAG (it shows
+  only for a unit under the pointer, and names its species); the tag cache (3 s / 60 px) counts as
+  "where required". The species check does NOT skip the tag in A.
+- **B (Batt):** the click at once (one pointer move + click), then the burst until the lock arrow
+  (or the bound).
+- **C (B + nudge):** a second small motion first (to +2 / +1 px, 0.03 s), then the click and the
+  same burst.
+- The burst after the first click is the same in all arms (0.6 s apart, <= 4 clicks / 3 s, ends
+  on the arrow).
+- **Safety: B / C only for a confident target with nothing risky near; otherwise the engagement
+  falls back to A** (logged with its reason).
+  - Confident = the pixel species check sure and uncrowded, or the track's tag within the cache
+    rule.
+  - The risk gate chose the direct path: no non-target species box, no NPC within 12 cells, no
+    overlap, not under the GM.
+  - No pink other than the target's own sprite within 60 px of the click (a Creamy, or another
+    Poring).
+- Every first click logs its planned arm, its effective arm, the fallback reason, and the pointer
+  arrival time.
+- Hard bars unchanged. My read-only live hard-bar monitor stays on; a non-target hit stops a run.
+
+**Measured per arm** (`abc.py`, pooled to >= 60 engagements per effective arm, over as many runs
+as it takes):
+- pointer arrival -> our attack request on the target (p50 / p90);
+- clicks per lock;
+- landing within 5 s;
+- misclicks: a strike click resolved to the ground (a walk request and no attack request
+  <= 1.5 s) or to another unit (an attack request on another gid);
+- non-target hits; dead share; arrival -> the target's death; the run's kills / h.
+
+**Prediction, written before the run:**
+- arrival -> attack request p50: B and C at least 0.3 s below A;
+- clicks per lock: C <= B;
+- misclicks (ground + other): C below B (the old-cursor hypothesis); if C == B, the hypothesis is
+  not supported for strike clicks;
+- landing within 5 s: B and C >= A - 5 points;
+- non-target hits: zero in every arm;
+- hard bars: zero NPC contact, zero map change, zero non-target hit.
+
+**Run:** 60 min per run, seeds 20271001, 20271101, ... (bot only: the agent's rounds end at
+round 8 to give the pooled test its hours). The same test state, nice 10, detector on the CPU
+(GPU freeze).
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
