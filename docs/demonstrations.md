@@ -9286,7 +9286,7 @@ arm, even ones the PLAIN arm (v32's fixed 3 x 3).**
   - It is read before each loot click and before the death cell is computed.
   - The matched item pixels use the same re-anchored position as reference.
   - *(Amended 22:24, commit 2eef8a2, before any v33 run: the first two places were added after b5cceb6.)*
-- **The death-cell speed fix (`nearest_cell_frac`, amended 23:2x, after attempt 1, before
+- **The death-cell speed fix (`nearest_cell_frac`, amended 23:24, commit bb10f45, after attempt 1, before
   attempt 2):** the cell nearest a pixel was found by ~3 ms projections one cell at a time. That
   took ~1 s at radius 9 on EVERY kill's death cell (v31+'s `anim`, both arms, likely most of
   v32's 1.23 s fast-arm kill -> loot start), and ~0.3 s per matched item at radius 4. All cells
