@@ -9435,6 +9435,13 @@ the live hard-bar monitor.
   - Fixed 01:37 (before attempt 2): `no_wait` calls the agent's own pre-send step, so the default
     still drains 50 ms, the paced mode paces, and a lease still stops (tested).
   - Attempt 1 is excluded: both its blocks ran the default.
+- **Attempt 2 = run 1** (01:38:12-02:38:12, seed 20271701, paced first,
+  `20261018T013812-demo-hunt-flow34`): the full 60-min box, 143 engagements, all dead.
+  - Pacing checked live in its first paced block: the input log stamps each input ~1 ms after its
+    creation, sends ~55 ms apart, a 10-click loot step 2.6-2.7 s.
+  - The live monitor: no stop, 0 Creamy hits, 138 attack requests, all on targets.
+- **Run 2** (02:40:36, seed 20271802, default first, `20261018T024036-demo-hunt-flow34`), after a
+  judged screenshot (02:40, no dialog, the fixed-state windows, weight 334 / 4970).
 
 ### 3.75 hunt-flow@35: THE SPECIES CHECK ON THE BOX'S OWN FRAME, interleaved per engagement (pre-registered 2026-10-17 23:34 ICT, the commit time 235d4c4, BEFORE its run; Batt's decision 1: cut the "species unsure" fallbacks)
 
