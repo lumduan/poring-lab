@@ -218,3 +218,10 @@ def test_cover_map_scales_between_floor_and_cover(bmod: ModuleType) -> None:
     vis = bmod.cover_map(n, s)
     assert vis[11, 11] == 0.0 and vis[25, 25] == 1.0
     assert bmod.cover_map(np.zeros((5, 5)), np.zeros((5, 5))).min() == 1.0
+
+
+def test_default_kernel_is_a_kernel(bmod: ModuleType) -> None:
+    k = bmod.Kernel.default()
+    assert k.mass.shape == (len(bmod.KERNEL_T), bmod.RADIUS + 1)
+    assert k.ring(3.0).sum() == pytest.approx(1.0)
+    assert k.quantile(1.0, 0.5) < k.quantile(10.0, 0.5)

@@ -49,7 +49,26 @@ THE MODEL (pure parts, numpy only)
             PACKET (an offline artefact, comparison only): the detector's recall of the packets'
               true monsters per cell.
   PROBES    the top-k cells of a hidden track's posterior, SPACED (each >= 2 cells from the
-            others, so the 1-cell hover tolerance does not overlap).
+            others, so the 1-cell hover tolerance does not overlap); HOVER probes = the same
+            restricted to the cells drawn on screen now (only those can show the SWORD).
+
+MEASURED 2026-10-17 (``eval``, leave-one-session-out: kernel and occluders fitted on the OTHER
+sessions; hunt-flow18 / 20 / 20 / 21 / 22 on prt_fild08, 53,302 detector frames; "hidden" = alive,
+in the 14-cell AOI, unboxed >= 1 s; "tracked" = a track carries its gid; hit = within 1 cell):
+  - box -> cell: 91-92 % of labelled boxes within 1 cell of the true cell (p50 0, p90 1).
+  - spaced top-3 hit, of tracked hidden samples, pooled (kernel -> ne+lead): 1-2 s 58 -> 66 %,
+    2-5 s 45 -> 54 %, 5-10 s 22 -> 26 %, > 10 s 21 -> 19 %. The WALK-ON component is the biggest
+    gain (+6 / +10 / +5 points at 1-2 / 2-5 / 5-10 s); negative evidence adds +5 at 1-2 s and helps
+    most for monsters that left the screen (off-screen 1-2 s 71 -> 82 %), PD 0.2 > 0.4 > 0.7.
+  - on-screen hidden (the hover case), ne+lead with HOVER probes: 57 / 49 / 29 / 23 % (1-2 / 2-5 /
+    5-10 / > 10 s).
+  - occluders change the hit rate by -1 to +2 points: PACKET route (the offline upper bound) +1-2,
+    FRAME route -1 to +1, BOX RATE -1 to +1. The frame route's covered cells are real (recall 0.51-
+    0.56 at vis < 0.5 vs 0.79 at vis = 1) but few (156 of 4,540 well-observed cells): the hidden
+    samples are mostly detector dropouts and off-screen walks, not static cover.
+  - identity through a dropout: 66 % kept, 8 % swapped, 11 % a new track (the old one dropped).
+  - cost per frame, one variant, this host at nice 15: update p50 0.26 ms (p95 2.7: the geodesic
+    on a new sighting), probes for every hidden track p50 0.27 ms, the full 400 x 400 map 0.40 ms.
 """
 
 from __future__ import annotations
@@ -87,6 +106,36 @@ LEAD_W = 0.5
 HALF_LIFE_S = 2.0  # the log-miss map's half-life
 LM_FLOOR = -30.0
 KERNEL_T = (0.33, 0.67, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0, 7.0, 10.0, 15.0, 20.0, 30.0)
+# K(t, d) fitted 2026-10-17 (``belief_map.py occluders``, pooled): the detector's labelled sightings
+# -> the packets' true cell at later frames, hunt-flow18 / 20 / 20 / 21 / 22 on prt_fild08 (each
+# eval session is re-fitted WITHOUT itself). Rows = KERNEL_T, columns = d 0..RADIUS cells.
+DEFAULT_MASS = (
+    (0.6817, 0.2821, 0.0336, 0.0015, 0, 0, 0, 0.0012, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+    (0.6048, 0.3032, 0.0701, 0.013, 0.0056, 0, 0, 0.0013, 0.002, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+     0),
+    (0.531, 0.2797, 0.1364, 0.0386, 0.0104, 0.0034, 0.0005, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+     0, 0),
+    (0.4608, 0.2202, 0.1658, 0.0963, 0.0365, 0.0128, 0.0046, 0.0012, 0.0008, 0.0004, 0.0004, 0,
+     0, 0, 0, 0, 0, 0, 0, 0, 0),
+    (0.3908, 0.1988, 0.135, 0.1213, 0.0896, 0.0435, 0.0121, 0.0075, 0.0003, 0.001, 0, 0, 0, 0, 0,
+     0, 0, 0, 0, 0, 0),
+    (0.2793, 0.1849, 0.133, 0.1128, 0.1053, 0.0961, 0.0571, 0.0265, 0.0042, 0.0005, 0.0003, 0, 0,
+     0, 0, 0, 0, 0, 0, 0, 0),
+    (0.1429, 0.1496, 0.1455, 0.1277, 0.1227, 0.1207, 0.1044, 0.0665, 0.0115, 0.0056, 0.0026,
+     0.0003, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+    (0.0239, 0.1067, 0.1409, 0.1557, 0.1404, 0.1379, 0.1485, 0.1011, 0.0167, 0.0143, 0.0059,
+     0.0057, 0.0016, 0.0007, 0, 0, 0, 0, 0, 0, 0),
+    (0.0038, 0.034, 0.0908, 0.1152, 0.1444, 0.1519, 0.2027, 0.1611, 0.0394, 0.0211, 0.0103,
+     0.011, 0.0081, 0.0033, 0.0015, 0.0006, 0.0006, 0, 0, 0, 0),
+    (0.0032, 0.0301, 0.0577, 0.0768, 0.1096, 0.1293, 0.154, 0.1532, 0.0911, 0.062, 0.0478,
+     0.0301, 0.0289, 0.0129, 0.0057, 0.0047, 0.0009, 0.0005, 0.0009, 0.0005, 0),
+    (0.0048, 0.0313, 0.051, 0.0767, 0.0833, 0.1102, 0.0885, 0.1057, 0.1034, 0.0844, 0.0747,
+     0.0553, 0.0479, 0.0282, 0.0173, 0.014, 0.0103, 0.0052, 0.0036, 0.003, 0.0013),
+    (0.0029, 0.0277, 0.0447, 0.0538, 0.0704, 0.0712, 0.0821, 0.1086, 0.0986, 0.0786, 0.0752,
+     0.0597, 0.057, 0.0479, 0.0298, 0.0253, 0.0186, 0.0119, 0.0066, 0.0066, 0.0229),
+    (0.0013, 0.0288, 0.0347, 0.0586, 0.0594, 0.0663, 0.0894, 0.0785, 0.0741, 0.0701, 0.0637,
+     0.0726, 0.051, 0.0385, 0.0459, 0.0258, 0.026, 0.0237, 0.0148, 0.0074, 0.0693),
+)  # fmt: skip
 OCC_PRIOR = 5.0  # occluder shrinkage: pseudo-hits at the map mean rate
 HIDDEN_S = 1.0
 UNSEEN_BINS = ((1.0, 2.0), (2.0, 5.0), (5.0, 10.0), (10.0, 1e9))
@@ -184,6 +233,12 @@ class Kernel:
     @classmethod
     def from_json(cls, d: Mapping[str, Any]) -> Kernel:
         return cls(tuple(d["times"]), np.asarray(d["mass"], dtype=float))
+
+    @classmethod
+    def default(cls) -> Kernel:
+        """The pooled prt_fild08 fit (DEFAULT_MASS), rows renormalised."""
+        m = np.asarray(DEFAULT_MASS, dtype=float)
+        return cls(KERNEL_T, m / m.sum(axis=1, keepdims=True))
 
 
 def fit_kernel(samples: Iterable[tuple[float, float]], times: Sequence[float] = KERNEL_T,
@@ -805,6 +860,10 @@ def run(prep: Mapping[str, Any], ok: Any, kernel: Kernel, variants: Sequence[Var
     shape = prep["shape"]
     names = [v.name for v in variants]
     hits: dict[tuple[str, str, int, int, bool], int] = Counter()  # (variant, bin, k, r, spaced)
+    n_where: Counter[tuple[str, str]] = Counter()  # (bin, in | off screen)
+    n_where_t: Counter[tuple[str, str]] = Counter()
+    where3: Counter[tuple[str, str, str]] = Counter()  # spaced top-3 <= 1 cell, by where
+    hover: Counter[tuple[str, str, str]] = Counter()  # the same with on-screen probes only
     n_hidden: Counter[str] = Counter()
     n_tracked: Counter[str] = Counter()
     never_seen = 0
@@ -865,7 +924,7 @@ def run(prep: Mapping[str, Any], ok: Any, kernel: Kernel, variants: Sequence[Var
         for g in list(episodes):
             if g not in alive_now or g in r["boxed"]:
                 done_eps.append(episodes.pop(g))
-        for g, p in r["truth"]:
+        for (g, p), inview in zip(r["truth"], r["tview"], strict=True):
             if g in r["boxed"]:
                 continue
             lb = last_boxed.get(g)
@@ -876,16 +935,34 @@ def run(prep: Mapping[str, Any], ok: Any, kernel: Kernel, variants: Sequence[Var
             if unseen < HIDDEN_S:
                 continue
             b = _bin(unseen)
+            wh = "in" if inview else "off"  # the true feet on screen, the body clear of the UI
             n_hidden[b] += 1
+            n_where[(b, wh)] += 1
             tr = by_label.get(g)
-            ep = episodes.setdefault(g, {"g": g, "t0": t, "t1": t, "hit": {}, "mode": {}})
+            ep = episodes.setdefault(g, {"g": g, "t0": t, "t1": t, "hit": {}, "mode": {},
+                                         "hover": {}, "hover_mode": {}})  # fmt: skip
             ep["t1"] = t
             if tr is None:
                 continue
             n_tracked[b] += 1
+            n_where_t[(b, wh)] += 1
             true = (int(round(p[0])), int(round(p[1])))
+            ys = slice(tr.y0, tr.y0 + tr.dist.shape[0])
+            xs = slice(tr.x0, tr.x0 + tr.dist.shape[1])
             for v in names:
                 post, _m = bm.posterior(tr, t, v)
+                # HOVER probes: the spaced top-3 among the cells drawn on screen right now
+                sc = top_cells(post * visible[ys, xs], 3, True, (tr.x0, tr.y0))
+                sd = min((max(abs(c[0] - true[0]), abs(c[1] - true[1])) for c in sc), default=99)
+                if sd <= 1:
+                    hover[(v, b, wh)] += 1
+                    if v not in ep["hover"]:
+                        ep["hover"][v] = t
+                        ep["hover_mode"][v] = _mode_at(modes, t)
+                any3 = min((max(abs(c[0] - true[0]), abs(c[1] - true[1]))
+                            for c in top_cells(post, 3, True, (tr.x0, tr.y0))),
+                           default=99)  # fmt: skip
+                where3[(v, b, wh)] += any3 <= 1
                 for spaced in (False, True):
                     cells = top_cells(post, max(ks), spaced, (tr.x0, tr.y0))
                     dd = [max(abs(c[0] - true[0]), abs(c[1] - true[1])) for c in cells]
@@ -930,26 +1007,33 @@ def run(prep: Mapping[str, Any], ok: Any, kernel: Kernel, variants: Sequence[Var
     opp: dict[str, dict[str, float]] = {}
     eng = prep["engaged"]
     for v in names:
-        n_all = n_never = n_search = 0
+        n_all = n_never = n_search = n_hover = n_hover_search = 0
         for ep in done_eps:
-            th = ep["hit"].get(v)
-            if th is None:
-                continue
             ts = eng.get(ep["g"], [])
-            engaged_in = any(ep["t0"] - NS <= x <= ep["t1"] + 2 * NS for x in ts)
-            if engaged_in:
+            if any(ep["t0"] - NS <= x <= ep["t1"] + 2 * NS for x in ts):  # engaged in it
+                continue
+            if ep["hover"].get(v) is not None:
+                n_hover += 1
+                n_hover_search += ep["hover_mode"].get(v) == "search"
+            if ep["hit"].get(v) is None:
                 continue
             n_all += 1
             n_never += not any(x >= ep["t0"] for x in ts)
             n_search += ep["mode"].get(v) == "search"
         opp[v] = {"per10": round(n_all * per10, 1),
                   "never_engaged_per10": round(n_never * per10, 1),
-                  "in_search_mode_per10": round(n_search * per10, 1)}  # fmt: skip
+                  "in_search_mode_per10": round(n_search * per10, 1),
+                  "hover_per10": round(n_hover * per10, 1),
+                  "hover_in_search_per10": round(n_hover_search * per10, 1)}  # fmt: skip
     return {
         "sid": prep["sid"], "span_s": round(span_s, 1), "frames": len(rows),
         "kills": prep["kills"], "offset_px": prep["offset_px"],
         "hits": {"|".join(map(str, k)): v for k, v in hits.items()},
         "n_hidden": dict(n_hidden), "n_tracked": dict(n_tracked), "never_seen": never_seen,
+        "n_where": {"|".join(k): v for k, v in n_where.items()},
+        "n_where_t": {"|".join(k): v for k, v in n_where_t.items()},
+        "where3": {"|".join(k): v for k, v in where3.items()},
+        "hover": {"|".join(k): v for k, v in hover.items()},
         "identity": dict(ident), "false": false_mass, "opportunity": opp,
         "episodes": len(done_eps),
         "cost_ms": {"update_p50": float(np.median(cost_ms)),
@@ -1045,6 +1129,28 @@ def tables(results: Sequence[Mapping[str, Any]], names: Sequence[str]) -> str:
                 c = "/".join(f"{100 * h(k, 1, True) / n_t:.0f}" for k in (1, 3, 5))
                 row.append(f"{a:>9s} | {c:>8s} [{100 * h(3, 1, True) / n_h:.0f}]".rjust(27))
             out.append(f"  {v:12s} " + "  ".join(row))
+    out.append("\nON SCREEN vs OFF: tracked hidden samples whose true feet are drawn (body clear "
+               "of the UI) = in, else off (off screen / under a window); spaced top-3 <= 1 cell "
+               "with probes anywhere | HOVER probes (on-screen cells only; in only)")  # fmt: skip
+    for lab, rs in sets:
+        nw: Counter[str] = Counter()
+        w3: Counter[str] = Counter()
+        hv: Counter[str] = Counter()
+        for r in rs:
+            nw.update(r["n_where_t"])
+            w3.update(r["where3"])
+            hv.update(r["hover"])
+        cnt = "  ".join(f"{b} in {nw[f'{b}|in']} off {nw[f'{b}|off']}" for b in bins)
+        out.append(f"  {lab}: tracked samples {cnt}")
+        for v in names:
+            row = []
+            for b in bins:
+                ni, no = nw[f"{b}|in"], nw[f"{b}|off"]
+                i3 = 100 * w3[f"{v}|{b}|in"] / ni if ni else float("nan")
+                o3 = 100 * w3[f"{v}|{b}|off"] / no if no else float("nan")
+                hh = 100 * hv[f"{v}|{b}|in"] / ni if ni else float("nan")
+                row.append(f"{b} in {i3:3.0f}|{hh:3.0f} off {o3:3.0f}")
+            out.append(f"    {v:16s} " + "   ".join(row))
     out.append("\nIDENTITY through a dropout (a labelled box after its gid was unboxed >= 1 s)")
     for lab, rs in sets:
         c = _sum(rs, "identity")
@@ -1053,14 +1159,16 @@ def tables(results: Sequence[Mapping[str, Any]], names: Sequence[str]) -> str:
                                                        for k, v in sorted(c.items())))  # fmt: skip
     out.append("\nOPPORTUNITY / 10 min: hidden episodes the spaced top-3 found within 1 cell, "
                "the bot never engaging that gid in the episode (+ never later; + found in "
-               "search mode)")  # fmt: skip
+               "search mode); hover = found by on-screen probes (+ in search mode)")  # fmt: skip
     for lab, rs in sets:
         row = []
         for v in names:
             a = np.mean([r["opportunity"][v]["per10"] for r in rs])
             b = np.mean([r["opportunity"][v]["never_engaged_per10"] for r in rs])
             c = np.mean([r["opportunity"][v]["in_search_mode_per10"] for r in rs])
-            row.append(f"{v} {a:.1f}/{b:.1f}/{c:.1f}")
+            hv = np.mean([r["opportunity"][v]["hover_per10"] for r in rs])
+            hs = np.mean([r["opportunity"][v]["hover_in_search_per10"] for r in rs])
+            row.append(f"{v} {a:.1f}/{b:.1f}/{c:.1f} hover {hv:.1f}/{hs:.1f}")
         k10 = np.mean([r["kills"] * 600 / r["span_s"] for r in rs])
         out.append(f"  {lab:22s} kills/10min {k10:.1f} | " + "  ".join(row))
     out.append("\nFALSE BELIEF (hidden tracks, mass inside the AOI): on cells with no true monster "
@@ -1098,6 +1206,8 @@ def cmd_eval(a: argparse.Namespace) -> int:
             cov = [frame_cover_counts(p["sid"], p) for p in rest]
             fr = cover_map(sum(c[0] for c in cov), sum(c[1] for c in cov))
         vs = variants_for(px, pk, fr, a.sweep)
+        if a.only:
+            vs = [v for v in vs if v.name in a.only.split(",")]
         names = [v.name for v in vs]
         t0 = time.time()
         r = run(preps[sid], ok, kern, vs)
@@ -1139,6 +1249,7 @@ def main() -> int:
     e.add_argument("--frames", action="store_true",
                    help="also the FRAME route occluder (reads the NAS hunt-recordings once)"
                    )  # fmt: skip
+    e.add_argument("--only", help="comma-separated variant names to keep")
     e.add_argument("--json")
     e.set_defaults(func=cmd_eval)
     o = sub.add_parser("occluders", help="pooled occluder maps + kernel -> data/belief/")
