@@ -46,7 +46,8 @@ non-target hit, map change) apply to every session.
 | R2 (bot v22) | (fixed) | 12.3 / 2 of 2 / 0 of 2 / pass | 126 / 75 % / 4 of 30 / pass | 138 / 84 % / 9 of 37 / pass | 123.5 / 80.0 % / 34 of 182 / pass |
 | R3 (bot v23) | (fixed) | 25.6 / 4 of 4 / 5 of 13 / pass | 126 / 83 % / 9 of 19 / pass (2 windows: the lower) | 162 / 69 % / 11 of 55 / pass | 145.2 / 76.8 % / 29 of 94 / pass (25.7 min) |
 | R4 (bot v24) | (fixed) | 62.0 / 10 of 10 / 10 of 20 / pass | 138 / 63 % / 5 of 34 / pass | 180 / 89 % / 19 of 35 / pass | 146.9 / 77.4 % / 83 of 219 / **1 non-target (Creamy)** |
-| R5 (bot v25) | (fixed) | 6 kills (judging) | pending | pending | pending |
+| R5 (bot v25) | (fixed) | 40.1 / 6 of 6 / 7 of 14 / pass | 108 / 76 % / 15 of 23 / pass | 132 / 80 % / 14 of 23 / pass | 109.9 / 70.9 % / 81 of 131 / **1 non-target (Creamy)** |
+| R6 (bot v26) | (fixed) | pending | pending | pending | pending |
 
 ## Round 0 (bot v20 from 2026-10-17 04:42 + 05:55; agent 07:55)
 
@@ -213,7 +214,37 @@ non-target hit, map change) apply to every session.
     - From pixels: items that vanish while a Poring sits on them. For the bot, the lesson is loot
       speed.
 
-## What the agent's play taught (rounds 0-4)
+## Round 5 (agent first, 13:50; then bot v25, 14:02)
+
+- **Sessions:**
+  - AGENT `20261017T135011-demo-agent-demo` (seed 20270601, 10 min): 6 kills, 6 of 6 landed,
+    7 of 14 drops, hard bars passed.
+  - BOT v25 `20261017T140228-demo-hunt-flow25` (the same seed, 60 min; demonstrations 3.66).
+
+| metric | BATT | AGENT R5 (packet-assisted) | BOT v25 median 10' | BOT best 10' | BOT full |
+|---|---|---|---|---|---|
+| kills / h | 300 | 40.1 | 108 | 132 | 109.9 |
+| landing <= 5 s | 64/64 | 6/6 | 16/21 | 16/20 | 90/127 |
+| seen -> click p50 / p90 s | 1.11 / 4.79 | 13.5 / 29.6 | 2.45 / 8.04 | 3.18 / 8.5 | 4.26 / 11.04 |
+| death -> next click s | 1.24 / 1.8 | 20.8 / 21.9 | 3.33 / 6.45 | 2.32 / 4.72 | 2.51 / 6.02 |
+| monsters in sight / 10 min | 44 | 7.8 | 29 | 37 | 30 (windowed) |
+| loot picked / dropped | 62 / 64 | 7 / 14 | 15 / 23 | 14 / 23 | 81 / 131 |
+| kill -> last pickup s | 1.56 | 24.6 | 4.94 | 3.45 | 4.08 |
+| walk clicks while moving | 72.7 % | 16.7 % | 58.2 % | 53.2 % | 50.5 % |
+| click cadence s | 0.6 / 3.44 | 11.5 / 37.4 | 0.96 / 2.14 | 0.96 / 2.45 | 0.96 / 2.59 |
+| reversals / min | 3.6 | 0.56 | 7.1 | 6.7 | 6.96 |
+| straight run cells | 16.9 | 21.6 | 12.8 | 14.2 | 12.9 |
+| unintended attack requests | - | 0 | 1 | 5 | 13 |
+| hard bars (NPC / map / non-target) | - | 0/0/0 | 0/0/0 | 0/0/0 | **0/0/1** |
+
+- **The bot's loot reached 61.8 %** (v24 37.9 %). Loot clicks that became an attack fell from 10
+  to 2 with the 70 px margin.
+- **Another Creamy from a walk click** (not from v25's tag skip). v26 rests the pointer on the
+  UI after every walk click: the hypothesis is that the client attacks a monster that comes
+  under the RESTING pointer.
+- **The agent:** 6 kills. Again its movement is the limit (7.8 monsters in sight per 10 min).
+
+## What the agent's play taught (rounds 0-5)
 
 - **The agent's own limit is its decision loop.**
   - Each step is a screenshot, a thought and a command: ~10-20 s.
