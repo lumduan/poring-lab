@@ -9324,7 +9324,7 @@ hard-bar monitor (`scripts/hardbar_live.py watch 33`). A Creamy hit is counted, 
 - **Cost:** kill -> last loot click p50: race <= plain + 0.3 s (the matcher costs ~60 ms).
 - **Hard bars:** zero NPC contact, zero map change, zero non-Creamy non-target hit.
 
-### 3.74 hunt-flow@34: PACED INPUT, in alternating 10-min blocks (pre-registered 2026-10-17 23:30 ICT, the commit time 14485b0, BEFORE its run; the speed-first order, Batt 18:3x; seeds corrected 23:3x, before any v34 run: 3.73 owns 20271601)
+### 3.74 hunt-flow@34: PACED INPUT, in alternating 10-min blocks (pre-registered 2026-10-17 23:30 ICT, the commit time 14485b0, BEFORE its run; the speed-first order, Batt 18:3x; seeds corrected 23:31, bcc49d5, before any v34 run: 3.73 owns 20271601)
 
 **Why:** found 22:2x. `ro_agent.Agent.send()` called `wait_for_human()`, whose first step drains
 the socket for a FULL 50 ms before every input.
