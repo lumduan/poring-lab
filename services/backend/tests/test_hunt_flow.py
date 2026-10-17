@@ -582,3 +582,22 @@ def test_new_pink_leaves_the_gm_sprite_out_when_asked() -> None:
     assert hf.new_pink_px(after, before, 100, 80, 40) == 400
     assert hf.new_pink_px(after, before, 100, 80, 40, exclude=(85.0, 45.0, 115.0, 75.0)) == 0
     assert hf.PARAMS[25]["loot_pink_gm_exclude"] and not hf.PARAMS[24].get("loot_pink_gm_exclude")
+
+
+def test_belief_ghost_picks_a_hidden_live_track_and_skips_our_kills() -> None:
+    import belief_map as bm
+
+    ok = np.ones((60, 60), bool)
+    bel = bm.BeliefMap(ok, bm.Kernel.default(), [bm.Variant("nl", pd=0.2, lead=0.5)])
+    ns = 10**9
+    bel.update(0, [(20.0, 20.0), (40.0, 40.0)])
+    bel.update(ns // 2, [(20.0, 20.0), (40.0, 40.0)])  # two sightings each
+    t = 3 * ns  # both unseen 2.5 s
+    g = hf.belief_ghost(bel, t, [], 100.0, "nl")
+    assert g is not None and g["probes"] and 2.4 <= g["unseen_s"] <= 2.6
+    assert hf.cheb(g["probes"][0], g["last"]) <= 2
+    # one of them is where we just killed something: only the other is a ghost
+    g2 = hf.belief_ghost(bel, t, [(99.0, (20, 20))], 100.0, "nl")
+    assert g2 is not None and hf.cheb(g2["last"], (40, 40)) <= 1
+    assert hf.belief_ghost(bel, t, [(99.0, (20, 20)), (99.0, (40, 40))], 100.0, "nl") is None
+    assert hf.belief_ghost(bel, 20 * ns, [], 100.0, "nl") is None  # unseen too long

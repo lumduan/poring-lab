@@ -1259,6 +1259,36 @@ def nearest_cell(project: Any, origin: Cell, u: float, v: float, radius: int = 9
     return best[1]
 
 
+def belief_ghost(bel: Any, t_ns: int, dead: Sequence[tuple[float, Cell]], now_s: float,
+                 variant: str, unseen_s: tuple[float, float] = (1.0, 10.0),
+                 min_mass: float = 0.3, min_n: int = 2, dead_cells: float = 2.0,
+                 dead_s: float = 30.0) -> dict[str, Any] | None:  # fmt: skip
+    """PURE on a belief_map.BeliefMap (v27, Batt's "Battleship"): the HIDDEN track worth a probe
+    -- seen >= ``min_n`` times, unseen for ``unseen_s`` (the offline eval: within 1 cell 66 / 54 /
+    26 % at 1-2 / 2-5 / 5-10 s), its existence mass after negative evidence >= ``min_mass``, and
+    not within ``dead_cells`` of one of our kills in the last ``dead_s`` (a dead monster's track
+    lingers). The best by mass, then recency: {tid, probes (top-3 spaced cells), mass, unseen_s,
+    last}; None when there is none."""
+    best: tuple[float, float, Any] | None = None
+    for tr in bel.tracks.values():
+        u_s = (t_ns - tr.t) / 1e9
+        if tr.n < min_n or not (unseen_s[0] <= u_s <= unseen_s[1]):
+            continue
+        if any(now_s - td <= dead_s and cheb(tr.cell, dc) <= dead_cells for td, dc in dead):
+            continue
+        _p, m = bel.posterior(tr, t_ns, variant)
+        if m < min_mass:
+            continue
+        key = (m, -u_s, tr)
+        if best is None or key[:2] > best[:2]:
+            best = key
+    if best is None:
+        return None
+    tr = best[2]
+    return {"tid": tr.tid, "probes": bel.probes(tr, t_ns, variant, 3, True), "mass": best[0],
+            "unseen_s": -best[1], "last": tr.cell}  # fmt: skip
+
+
 def shifted_crop(img: Any, x0: int, y0: int, w: int, h: int) -> Any:
     """PURE (v23): the w x h region of ``img`` whose top-left is (x0, y0), zero where it falls
     outside ``img``."""
