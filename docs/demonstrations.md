@@ -9212,7 +9212,7 @@ live hard-bar monitor on. A Creamy hit is counted, not a stop.
 - **Run 2** (22:09:55, seed 20271401, session `20261017T220855-demo-hunt-flow32`), 60 min.
 - The judgement pools run 1 (10.6 min) + run 2.
 
-### 3.73 hunt-flow@33: LOOT IS A RACE, interleaved per loot step (pre-registered 2026-10-17, the commit time quoted in the next commit, BEFORE its run; Batt's decision 3 on the 21:33 report)
+### 3.73 hunt-flow@33: LOOT IS A RACE, interleaved per loot step (pre-registered 2026-10-17 22:13 ICT, the commit time b5cceb6, BEFORE its run; Batt's decision 3 on the 21:33 report)
 
 **Batt's decision 3:**
 - loot FIRST and IMMEDIATELY after a confirmed kill;
@@ -9244,10 +9244,12 @@ arm, even ones the PLAIN arm (v32's fixed 3 x 3).**
   fast for all if 3.72's first two predictions hold (fast-arm kill -> loot start p50 <= 1.2 s,
   false deaths <= slow + 5 points), else v15's rule for all. Never two parity arms at once:
   loot steps follow engagements, so the arms would be confounded (a test pins it).
-- **The loot-treadmill fix (`loot_refix`, 3.72's run log):** before each loot click, the
-  minimap readout from a grab of its own rect (4 ms). More than 1.5 cells off the odometry ->
-  re-anchor on it and project from it. More than 12 cells -> end the step and leave the jump
-  guard to the main loop.
+- **The loot-treadmill fix (`loot_refix`, 3.72's run log):** the minimap readout from a grab of
+  its own rect (4 ms). More than 1.5 cells off the odometry -> re-anchor on it and project from
+  it. More than 12 cells -> no further loot click, and the jump guard of the main loop decides.
+  - It is read before each loot click and before the death cell is computed.
+  - The matched item pixels use the same re-anchored position as reference.
+  - *(Amended 22:3x, before any v33 run: the first two places were added after b5cceb6.)*
 
 **Reference:** v32 (3.72, pooled) and v31 (3.71: loot 58.5 %).
 

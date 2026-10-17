@@ -1702,6 +1702,27 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 xy = selfpos.read_rect(selfpos.to_gray(img_), digits).xy
                 return None if xy is None else (int(xy[0]), int(xy[1]))
 
+            def refix_now() -> str | None:
+                """v33 (the loot TREADMILL fix): re-anchor on the readout when the odometry is >
+                loot_refix_cells off it -> "refix"; "jump" when > JUMP_CELLS (the main loop's
+                guard decides); None when they agree or nothing reads. v28-v31: 62-77 % of loot
+                steps sent the GM >= 4 cells off the death cell -- a stale odometry re-projects
+                every click to the same screen pixels and the GM walks a treadmill (v32 run 1:
+                13 cells, a jump stop)."""
+                mp_r = measured_pos()
+                if mp_r is None:
+                    return None
+                t_rf = r.ns()
+                mm_l = read_position_quick()
+                if mm_l is None:
+                    return None
+                if cheb(mm_l, mp_r) > JUMP_CELLS:
+                    return "jump"
+                if cheb(mm_l, mp_r) > prm["loot_refix_cells"]:
+                    mstate["anchor"] = (mm_l, odo_at(hist_now(), t_rf))
+                    return "refix"
+                return None
+
             last_fix = [0.0]
             pos_box: list[Cell] = [start]
 
@@ -2006,6 +2027,11 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         # track's last cell (attempt 1: death_of's gate looted 5 of 11 kills)
                         dc_ = dead_.cell
                         ls_ = last_strike.get(int(eng_["track"]))
+                        if prm.get("loot_refix"):  # v33: the death cell from a fresh anchor too
+                            rf_ = refix_now()
+                            eng_["death"]["refix"] = rf_
+                            if rf_ == "jump":
+                                return  # no loot: the main loop's jump guard decides
                         if prm.get("loot_death") == "anim" and tr_.boxes:
                             # v31 (Batt 18:3x, decision 1): where the target WAS when our hit
                             # landed -- its own LAST box (the hit / the death animation; every kill
@@ -2084,8 +2110,23 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 plan_l = loot_union_plan(dcell, extra, prm["loot_center_clicks"],
                                          prm["loot_ring_clicks"])  # fmt: skip
                 icons_l: list[tuple[Cell, tuple[float, float]]] = []
-                mp_g = measured_pos() or (float(here2[0]), float(here2[1]))
-                if race_ and icon_templates:
+
+                def pos_l() -> tuple[float, float] | None:
+                    """Our position for a loot click, re-anchored first (v33, ``refix_now``);
+                    None = a jump."""
+                    if prm.get("loot_refix"):
+                        st_ = refix_now()
+                        if st_ == "jump":
+                            return None
+                        if st_ == "refix":
+                            out["refix"] = out.get("refix", 0) + 1
+                    return measured_pos() or (float(here2[0]), float(here2[1]))
+
+                mp_g0 = pos_l()  # the item pixels' reference: the SAME estimator as each click
+                mp_g = mp_g0 or (float(here2[0]), float(here2[1]))
+                if mp_g0 is None:
+                    out["stop"] = "jump"
+                if race_ and icon_templates and mp_g0 is not None:
                     # v33: ONE fresh grab around the death cell, the matcher on it (~60 ms);
                     # only our own drawn pointer is excluded (the evaluated configuration)
                     import item_icons as ii_
@@ -2111,7 +2152,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             icons_l.append((ci_, pi_))
                     out["icons"] = len(icons_l)
                     out["icon_ms"] = round((time.monotonic() - t_l0) * 1e3)
-                steps_ = items_first(plan_l, icons_l)
+                steps_ = items_first(plan_l, icons_l) if mp_g0 is not None else []
                 for i_s, (c_l, (jx_, jy_), px_) in enumerate(steps_):
                     if time.monotonic() - t_l0 >= prm["loot_fixed_max_s"]:
                         break
@@ -2119,21 +2160,11 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     if any(cheb(c_l, nc_) <= 2 for nc_ in npc_c):
                         why_ = "npc"
                     else:
-                        mp_ = measured_pos() or (float(here2[0]), float(here2[1]))
-                        if prm.get("loot_refix"):
-                            # v33 (both arms): the readout before each click. v28-v31: 60-77 %
-                            # of loot steps sent the GM >= 4 cells off the death cell -- a stale
-                            # odometry re-projects every click to the same screen pixels and
-                            # the GM walks a TREADMILL (v32 run 1: 13 cells, a jump stop)
-                            t_rf = r.ns()
-                            mm_l = read_position_quick()
-                            if mm_l is not None and cheb(mm_l, mp_) > JUMP_CELLS:
-                                out["stop"] = "jump"  # the main loop's guard decides
-                                break
-                            if mm_l is not None and cheb(mm_l, mp_) > prm["loot_refix_cells"]:
-                                out["refix"] = out.get("refix", 0) + 1
-                                mstate["anchor"] = (mm_l, odo_at(hist_now(), t_rf))
-                                mp_ = (float(mm_l[0]), float(mm_l[1]))
+                        mp_n = pos_l()
+                        if mp_n is None:
+                            out["stop"] = "jump"  # the main loop's guard decides
+                            break
+                        mp_ = mp_n
                         if px_ is not None:  # v33: the item's own pixel, moved with the ground
                             a_i = frac_project(w_l, mp_g, c_l)
                             b_i = frac_project(w_l, mp_, c_l)
