@@ -9060,6 +9060,57 @@ round 8 to give the pooled test its hours). The same test state, nice 10, detect
   Hard bars stay: NPC contact, map change, unknown UI state, a hit on any other non-target.
 - **The agent's rounds continue** (decision 4), alternating around the bot's runs.
 
+### 3.71 hunt-flow@31: THE DEATH CELL WHERE THE HIT LANDED (pre-registered 2026-10-17 __TIME__ ICT, the commit time __SHA__, BEFORE its run; Batt's decision 1 at 18:3x; round 10 of docs/competition.md)
+
+**Batt (18:3x):** "the LAST STRIKE CLICK is NOT the death cell (a hit monster can still walk away;
+we follow and click again elsewhere). Use where the monster actually was when OUR HIT LANDED ...
+or where its death animation plays. Build it from pixels ... Validate offline against packets ...
+Bar: loot >= 80 %."
+
+**Offline validation against packets** (`deathcells.py`; v24, v25, v26, v28; dead engagements;
+"3 x 3" = the share of the kill's dropped items inside the 3 x 3 around the candidate; the
+packets' death cell is biased by the walk model, so the drops are the reference):
+
+| candidate death cell | exact / <= 1 cell from the death cell | drops inside its 3 x 3 | n |
+|---|---|---|---|
+| the last strike click (v24-v30) | 31 % / 48 % | 54 % | 476 |
+| the target's box at our first hit | 61 % / 86 % | **90 %** | 83 |
+| the target's box at our last hit | 61 % / 86 % | 90 % | 83 |
+| the death animation (its last box) | 66 % / 87 % | 86 % | 83 |
+| (packets: its cell at our hit) | 62 % / 76 % | 86 % | 476 |
+
+- Every kill at STR 99 is ONE hit, so the first and last hit are the same moment. The hit cell
+  and the death animation agree with the packets' own position at the hit (86-90 %).
+- n 83: offline, a box was matched to the target near the hit frame only when it lay within
+  60 px of the last strike click. The live bot has its own track of the target, so live coverage
+  is higher.
+- **Wandering (Batt's question, the GM immune):**
+  - every kill was a single hit, so "stand and fight" cannot be observed at STR 99;
+  - 19 % of the targets had started a walk between our hit and their vanish;
+  - 24 % lay >= 2 cells from where our hit found them. Their walk position is the server's
+    model, so that is an upper bound.
+
+**The ONE main change (`loot_death: anim`, 531cbb8), on v30:**
+- The fixed loot's 3 x 3 centres on the target's own LAST box (the hit / the death animation).
+- Its foot (bottom centre, 4 px up) becomes a cell with OUR measured position at THAT frame's time
+  (`pos_at_frame`), not where we stand at the loot step.
+- The hybrid cell (v24) only when the track has no box.
+- The A / B / C strike test keeps running inside it (3.70), and is pooled.
+
+**v30 as the reference:** v30 run (20261017T192601-demo-hunt-flow30, seed 20271101, the full hour, hard bars passed): 105.0 kills / h (engaged 99.0), the bar 78.0 %, seen -> click p50 3.26 s, sight 25.5 per window, loot 63 / 128 (49 %), kill -> last pickup p50 3.34 s.
+
+**Run:** 45 min (so the agent's round 10 and the day's wrap-up fit before 22:00), round 10's seed 20271201 (bot first this round), the same test state, nice 10,
+detector on the CPU (GPU freeze); my live hard-bar monitor on. A Creamy hit is counted, not a
+stop (Batt 18:3x).
+
+**Prediction, written before the run:**
+- loot picked / dropped >= 70 % (v28 53 %, v25 62 %; Batt's bar 80 %);
+- the loot step's death cell within 1 cell of the packets' death cell for >= 70 % of kills;
+- kill -> last pickup p50 <= 3.0 s;
+- engaged kills / h >= v30's - 10 %;
+- hard bars: zero NPC contact, zero map change, zero hit on a non-target other than a Creamy
+  (Creamy hits reported apart).
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
