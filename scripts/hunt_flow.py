@@ -48,7 +48,7 @@ import hunt_core as hc  # noqa: E402
 import ro_agent as r  # noqa: E402
 
 RULE = "hunt-flow"
-MAP = "prt_fild08"
+MAP = "prt_fild08"  # `run --map` replaces it (the HELD-OUT map test, Batt 2026-10-17 21:5x)
 START = (268, 107)
 OUT = Path("/dev/shm/poring-lab-tmp/hunt-flow")  # logs (small)
 REC_ROOT = Path("/mnt/poring-lab-datasets/hunt-recordings")  # the 5 Hz frames (NAS, q80)
@@ -647,6 +647,16 @@ def commanded_lead(at: Sequence[float], cmds: Sequence[tuple[int, Cell]], t_now:
                     y += math.copysign(min(sp, abs(dy)), dy)
         t += int(step_s * 1e9)
     return x, y
+
+
+def area_centre(area: Any) -> Cell:
+    """PURE (the held-out map test): the area cell nearest the area's centroid -- a start anchor
+    derived from the map alone (prt_fild08 keeps hunt.START, its tuned open field)."""
+    ys, xs = np.nonzero(np.asarray(area, dtype=bool))
+    if not len(xs):
+        raise SystemExit("an empty search area")
+    i = int(np.argmin((xs - xs.mean()) ** 2 + (ys - ys.mean()) ** 2))
+    return int(xs[i]), int(ys[i])
 
 
 def main_component(area: Any) -> Any:
@@ -1588,7 +1598,10 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
     keep = [(w["x"], w["y"], w["span_x"], w["span_y"]) for w in warps]
     keep += [(n["x"], n["y"], 1, 1) for n in npcs]
     area = hc.search_area(ok, keep, margin=10)
-    start = hunt.start_cell(area, seed)
+    if MAP == "prt_fild08":
+        start = hunt.start_cell(area, seed)
+    else:  # a held-out map: an anchor from the map alone, nothing tuned there
+        start = hunt.start_cell(area, seed, near=area_centre(main_component(area)))
     cj = json.loads((r.ROOT / "packages/poring_dataset/src/poring_dataset/camera_rdp.json")
                     .read_text())  # fmt: skip
     camera = cam.camera_from_json(cj["camera"])
@@ -4275,6 +4288,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
 
 
 def main() -> int:
+    global MAP
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)  # fmt: skip
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -4282,7 +4296,9 @@ def main() -> int:
     rn.add_argument("--version", type=int, required=True)
     rn.add_argument("--minutes", type=float, default=30.0)
     rn.add_argument("--seed", type=int, default=20261201)
+    rn.add_argument("--map", default=MAP, help="a held-out map (its GAT in GAT_DIR, L3, npc_cells)")
     a = ap.parse_args()
+    MAP = a.map
     return run(a.version, a.minutes, a.seed)
 
 

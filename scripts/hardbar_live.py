@@ -6,10 +6,12 @@ a hard bar. No packet fact reaches a bot decision (CLAUDE.md rule 1).
 
 Hard bars (Batt 18:3x): an NPC contact, a map change, our damaging hit on a NON-TARGET other than a
 Creamy. A Creamy hit is COUNTED and reported apart, never a stop, until a Creamy-aware detector is
-trained. (An unknown UI state is the runner's own ui_watch stop.)
+trained. (An unknown UI state is the runner's own ui_watch stop.) On a HELD-OUT map (Batt 21:5x)
+the species the bot never learned are counted apart too (``--apart``), not a stop.
 
-    hardbar_live.py check SID          one reading of a session so far
-    hardbar_live.py watch VERSION      every 180 s while `hunt_flow.py run --version VERSION` runs
+    hardbar_live.py check SID [--targets J,..] [--apart J,..]      one reading of a session so far
+    hardbar_live.py watch VERSION [--targets J,..] [--apart J,..]  every 180 s while
+                                                    `hunt_flow.py run --version VERSION` runs
 """
 
 from __future__ import annotations
@@ -35,11 +37,13 @@ CREAMY = 1018
 EVERY_S = 180.0
 
 
-def bars(packets: Iterable[Mapping[str, Any]], targets: set[int] = TARGETS) -> dict[str, Any]:
-    """PURE: the hard bars in time-ordered packets -> {"stop": [...], "creamy_hits": n,
-    "attack_requests": {"target": n, ...}}."""
+def bars(packets: Iterable[Mapping[str, Any]], targets: set[int] = TARGETS,
+         apart: set[int] = frozenset()) -> dict[str, Any]:  # fmt: skip
+    """PURE: the hard bars in time-ordered packets -> {"stop": {...}, "creamy_hits": n,
+    "apart_hits": {job: n} (``apart``: counted, never a stop), "attack_requests": {...}}."""
     job: dict[int, Any] = {}
     stop: Counter[str] = Counter()
+    apart_n: Counter[str] = Counter()
     creamy = 0
     reqs: Counter[str] = Counter()
     for e in packets:
@@ -50,6 +54,8 @@ def bars(packets: Iterable[Mapping[str, Any]], targets: set[int] = TARGETS) -> d
             j = job.get(int(e.get("target_gid") or -1))
             if j is not None and int(j) == CREAMY:
                 creamy += 1
+            elif j is not None and int(j) in apart:
+                apart_n[str(j)] += 1
             elif j is not None and int(j) not in targets:
                 stop[f"non_target_hit:{j}"] += 1
         elif typ == "attack_request":
@@ -59,10 +65,13 @@ def bars(packets: Iterable[Mapping[str, Any]], targets: set[int] = TARGETS) -> d
             stop["npc_contact"] += 1
         elif typ == "map_change":
             stop["map_change"] += 1
-    return {"stop": dict(stop), "creamy_hits": creamy, "attack_requests": dict(reqs)}
+    out = {"stop": dict(stop), "creamy_hits": creamy, "attack_requests": dict(reqs)}
+    if apart:
+        out["apart_hits"] = dict(apart_n)
+    return out
 
 
-def check(sid: str) -> dict[str, Any]:
+def check(sid: str, targets: set[int] = TARGETS, apart: set[int] = frozenset()) -> dict[str, Any]:
     import record_session as rs
     import ro_agent as r
 
@@ -70,7 +79,7 @@ def check(sid: str) -> dict[str, Any]:
     t0 = next(e["t_ns"] for e in ev if e["kind"] == "loop_start")
     now = r.ns()
     pk = sorted(rs._events_since(t0, 60.0, t0, now), key=lambda e: int(e["t_mono_ns"]))
-    return {"min": round((now - t0) / 60e9, 1), **bars(pk)}
+    return {"min": round((now - t0) / 60e9, 1), **bars(pk, targets, apart)}
 
 
 def runner_pid(version: int) -> int | None:
@@ -81,7 +90,7 @@ def runner_pid(version: int) -> int | None:
     return None
 
 
-def watch(version: int) -> int:
+def watch(version: int, targets: set[int] = TARGETS, apart: set[int] = frozenset()) -> int:
     time.sleep(60.0)
     while True:
         pid = runner_pid(version)
@@ -90,7 +99,7 @@ def watch(version: int) -> int:
             return 0
         sids = sorted(p.name for p in DEMO.glob(f"*-demo-hunt-flow{version}"))
         try:
-            got = check(sids[-1])
+            got = check(sids[-1], targets, apart)
         except (StopIteration, FileNotFoundError, IndexError) as exc:  # the loop not started yet
             got = {"waiting": type(exc).__name__}
         print(time.strftime("%T"), json.dumps(got), flush=True)
@@ -105,13 +114,18 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)  # fmt: skip
     sub = ap.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("check").add_argument("sid")
-    sub.add_parser("watch").add_argument("version", type=int)
+    for name, arg, typ in (("check", "sid", str), ("watch", "version", int)):
+        sp = sub.add_parser(name)
+        sp.add_argument(arg, type=typ)
+        sp.add_argument("--targets", default=",".join(map(str, sorted(TARGETS))))
+        sp.add_argument("--apart", default="", help="jobs counted apart, never a stop")
     a = ap.parse_args()
+    tg = {int(x) for x in a.targets.split(",") if x}
+    apart = {int(x) for x in a.apart.split(",") if x}
     if a.cmd == "check":
-        print(json.dumps(check(a.sid)))
+        print(json.dumps(check(a.sid, tg, apart)))
         return 0
-    return watch(a.version)
+    return watch(a.version, tg, apart)
 
 
 if __name__ == "__main__":

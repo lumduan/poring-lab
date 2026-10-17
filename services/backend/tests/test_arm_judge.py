@@ -100,3 +100,25 @@ def test_loot_stray_flags_a_treadmill_but_not_a_3x3_loot() -> None:
                           (27, 101, 100), (28, 99, 101))]  # fmt: skip
     got = aj.loot_stray(steps, pk)
     assert got == {"steps": 2, "stray_ge_4": 1, "share": 0.5, "max_p50": 11}
+
+
+def test_hardbar_live_counts_a_held_out_maps_unknown_species_apart() -> None:
+    import hardbar_live as hb
+
+    ev = [{"type": "entity_appear", "gid": 4, "job": 1048},
+          {"type": "act", "src_gid": 2000002, "target_gid": 4, "damage": 50}]  # fmt: skip
+    assert hb.bars(ev)["stop"] == {"non_target_hit:1048": 1}  # prt_fild08: a hard bar
+    got = hb.bars(ev, {1002, 1063, 1008}, {1048, 1051, 1080})
+    assert got["stop"] == {} and got["apart_hits"] == {"1048": 1}
+
+
+def test_ui_cover_tallies_in_view_seconds_under_each_window() -> None:
+    import ui_cover as uc
+
+    wins = ((0, 0, 220, 326), (230, 0, 520, 132))
+    pts = [(100, 100, True), (300, 50, False), (640, 340, True), (2000, 10, True), (640, 800, True)]
+    got = uc.tally(pts, wins)
+    assert got["in_view_s"] == 3 and got["covered_s"] == 2 and got["targets_in_view_s"] == 2
+    assert got["targets_covered_share"] == 0.5
+    assert got["per_window_share"] == {"basic_info+menu": 0.3333, "shortcut_bar": 0.3333}
+    assert uc.window_of(520, 132, wins) == 1 and uc.window_of(521, 50, wins) is None

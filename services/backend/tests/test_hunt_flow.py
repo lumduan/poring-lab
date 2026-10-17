@@ -692,3 +692,13 @@ def test_loot_union_plan_adds_the_first_kills_cells_once() -> None:
     assert got[: len(plan)] == plan
     assert [c for c, _j in got[len(plan) :]] == [(13, 10), (9, 12)]  # (11, 11) is in the 3 x 3
     assert hf.loot_union_plan((10, 10), [], 2, 1) == plan
+
+
+def test_area_centre_is_an_area_cell_nearest_the_centroid() -> None:
+    a = np.zeros((20, 30), bool)
+    a[2:6, 2:6] = True
+    a[14:18, 20:28] = True  # the centroid falls between the blocks: the nearest area cell
+    c = hf.area_centre(a)
+    assert a[c[1], c[0]]
+    assert hf.area_centre(hf.main_component(a)) == (23, 15)  # the larger block, ties row-first
+    assert hf.MAP == "prt_fild08"  # the default; `run --map` replaces it
