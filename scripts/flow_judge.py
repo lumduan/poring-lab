@@ -543,6 +543,8 @@ def search_moving_share(lines: Iterable[str], moving: Sequence[tuple[int, int]],
     """v5: the share of SEARCH time (the runner's `mode` search windows) the GM moved (packets)."""
     marks = [(int(x["t_ns"]), x["mode"]) for x in map(json.loads, lines)
              if x.get("kind") == "mode"]  # fmt: skip
+    if not marks:  # a session without the runner's modes (the agent's, 2026-10-17)
+        return None
     wins = []
     for (ta, m), (tb, _m2) in zip(marks, [*marks[1:], (w1, "")], strict=True):
         if m == "search":
@@ -563,6 +565,8 @@ def engagement_stops(lines: Iterable[str], moving: Sequence[tuple[int, int]], n_
     engagement is the strike itself (a standing GM at the last walk point)."""
     marks = [(int(x["t_ns"]), x["mode"]) for x in map(json.loads, lines)
              if x.get("kind") == "mode"]  # fmt: skip
+    if not marks:  # a session without the runner's modes (the agent's, 2026-10-17)
+        marks = [(t0, "")]
     wins = []
     for (ta, m), (tb, _m2) in zip(marks, [*marks[1:], (w1, "")], strict=True):
         if m in ("steer", "engaged"):
@@ -1054,7 +1058,7 @@ def bot(
     out["engagement_stops"] = engagement_stops(
         (d / "events.jsonl").read_text().splitlines(), mv_, len(engs), t0, w1)  # fmt: skip
     walks = [x for x in map(json.loads, (d / "clicks.jsonl").read_text().splitlines())
-             if x.get("kind") == "walk" and t0 <= int(x["t"]) < w1]  # fmt: skip
+             if x.get("kind") == "walk" and t0 <= int(x["t"]) < w1 and "to" in x]  # fmt: skip
     out["walk_click_accuracy"] = walk_click_accuracy(events, walks, mv_)
     out["kills_by_origin"] = kills_by_origin(events, engs, t0, w1)
     import farm0
