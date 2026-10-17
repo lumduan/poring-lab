@@ -47,7 +47,8 @@ non-target hit, map change) apply to every session.
 | R3 (bot v23) | (fixed) | 25.6 / 4 of 4 / 5 of 13 / pass | 126 / 83 % / 9 of 19 / pass (2 windows: the lower) | 162 / 69 % / 11 of 55 / pass | 145.2 / 76.8 % / 29 of 94 / pass (25.7 min) |
 | R4 (bot v24) | (fixed) | 62.0 / 10 of 10 / 10 of 20 / pass | 138 / 63 % / 5 of 34 / pass | 180 / 89 % / 19 of 35 / pass | 146.9 / 77.4 % / 83 of 219 / **1 non-target (Creamy)** |
 | R5 (bot v25) | (fixed) | 40.1 / 6 of 6 / 7 of 14 / pass | 108 / 76 % / 15 of 23 / pass | 132 / 80 % / 14 of 23 / pass | 109.9 / 70.9 % / 81 of 131 / **1 non-target (Creamy)** |
-| R6 (bot v26) | (fixed) | pending | pending | pending | pending |
+| R6 (bot v26) | (fixed) | 40.0 / 6 of 6 / 3 of 7 / pass | 120 / 87 % / 20 of 26 / pass | 126 / 83 % / 18 of 40 / pass | 129.1 / 85.4 % / 68 of 122 / **pass** (39.8 min) |
+| R7 (bot v27) | (fixed) | 8 engagements (judging) | pending | pending | pending |
 
 ## Round 0 (bot v20 from 2026-10-17 04:42 + 05:55; agent 07:55)
 
@@ -244,7 +245,40 @@ non-target hit, map change) apply to every session.
   under the RESTING pointer.
 - **The agent:** 6 kills. Again its movement is the limit (7.8 monsters in sight per 10 min).
 
-## What the agent's play taught (rounds 0-5)
+## Round 6 (bot v26 first, 15:06; then the agent, 15:56)
+
+- **Sessions:**
+  - BOT v26 `20261017T150635-demo-hunt-flow26` (seed 20270701; demonstrations 3.67). It stopped
+    itself at 39.8 min on a steering deadlock (fixed for v27).
+  - AGENT `20261017T155609-demo-agent-demo` (the same seed, 10 min). Its first two starts were
+    stopped safely before any input: **the game client had frozen** (no redraw on pointer moves;
+    the chat input would not open). Recovered with `ro_agent.py recover gm` at 15:54; immunity
+    re-sent and confirmed for the new login (15:55).
+
+| metric | BATT | AGENT R6 (packet-assisted) | BOT v26 median 10' | BOT best 10' | BOT full (39.8 min) |
+|---|---|---|---|---|---|
+| kills / h | 300 | 40.0 | 120 | 126 | 129.1 |
+| landing <= 5 s | 64/64 | 6/6 | 20/23 | 19/23 | 76/89 |
+| seen -> click p50 / p90 s | 1.11 / 4.79 | 12.28 / 20.04 | 2.32 / 13.84 | 2.69 / 11.04 | 3.16 / 11.22 |
+| death -> next click s | 1.24 / 1.8 | 21.9 / 28.1 | 2.59 / 5.83 | 2.79 / 5.49 | 2.59 / 5.7 |
+| monsters in sight / 10 min | 44 | 7.8 | 28 | 30 | 30 (windowed) |
+| loot picked / dropped | 62 / 64 | 3 / 7 | 20 / 26 | 18 / 40 | 68 / 122 |
+| kill -> last pickup s | 1.56 | 18.0 | 3.68 | 4.59 | 4.31 |
+| walk clicks while moving | 72.7 % | 7.7 % | 38.4 % | 48.2 % | 46.5 % |
+| click cadence s | 0.6 / 3.44 | 11.9 / 44.4 | 1.01 / 4.31 | 1.01 / 2.29 | 1.01 / 2.77 |
+| reversals / min | 3.6 | 0.44 | 5.6 | 6.9 | 7.12 |
+| straight run cells | 16.9 | 22.2 | 12.7 | 12.9 | 12.2 |
+| unintended attack requests | - | 0 | 1 | 2 | 4 |
+| hard bars (NPC / map / non-target) | - | 0/0/0 | 0/0/0 | 0/0/0 | **0/0/0** |
+
+- **The bot's first clean run since v23**, with the best landing of the day (85.4 %). Its median
+  10-min window has 20 of 26 drops picked (77 %).
+- The pointer rest (v26) halved the walk-click attacks. 40 minutes do not prove it.
+- **The agent:** a Poring hopped under the chat window; the agent walked so it came out, then
+  killed it (round 1's packet fact again). It also stayed away from a **warp portal** that the
+  packets showed near the map edge.
+
+## What the agent's play taught (rounds 0-6)
 
 - **The agent's own limit is its decision loop.**
   - Each step is a screenshot, a thought and a command: ~10-20 s.
