@@ -1000,14 +1000,17 @@ class Focus:
 
 def pink_share(crop: Any, origin: tuple[int, int], u: float, v: float, radius: int,
                exclude: tuple[float, float, float, float],
-               ui_rects: Sequence[tuple[float, float, float, float]] = ()) -> float:  # fmt: skip
+               ui_rects: Sequence[tuple[float, float, float, float]] = (),
+               pointer: tuple[float, float] | None = None) -> float:  # fmt: skip
     """PURE (the walk guard, from v16): the share of PINK pixels -- R over G by > 51, B not under
     G by > 10, not dark: a Poring's or a Creamy's colours, never the ground's yellow-brown or
     green -- within ``radius`` px of the click pixel (u, v), outside ``exclude`` (the GM's own
     sprite: its red hair). ``crop`` is the frame region whose top-left is ``origin`` (client px),
     BGR(A) as Screen.grab returns it. From v17, ``ui_rects`` (the client's static windows) are
     left out too: their red icons are not sprites (v16 run 1: 30 % of the first 200 candidates
-    refused as pink, many beside the chat window and the skill bar)."""
+    refused as pink, many beside the chat window and the skill bar). From v21, ``pointer`` (where
+    our pointer rests) leaves out the client's own drawn CURSOR: its red no-entry ring read as pink
+    (the agent's round 1, 2026-10-17: walks refused beside a ring the last click left)."""
     a = np.asarray(crop)[..., :3].astype(np.int16)
     h, w = a.shape[:2]
     yy, xx = np.mgrid[origin[1] : origin[1] + h, origin[0] : origin[0] + w]
@@ -1015,6 +1018,9 @@ def pink_share(crop: Any, origin: tuple[int, int], u: float, v: float, radius: i
     m &= ~((xx >= exclude[0]) & (xx <= exclude[2]) & (yy >= exclude[1]) & (yy <= exclude[3]))
     for x0, y0, x1, y1 in ui_rects:
         m &= ~((xx >= x0) & (xx <= x1) & (yy >= y0) & (yy <= y1))
+    if pointer is not None:
+        pu, pv = pointer
+        m &= ~((xx >= pu - 26) & (xx <= pu + 40) & (yy >= pv - 26) & (yy <= pv + 40))
     b_, g_, r_ = a[..., 0], a[..., 1], a[..., 2]
     pk = (r_ - g_ > 51) & (b_ - g_ >= -10) & (a.max(-1) > 89)
     n = int(m.sum())
@@ -2426,7 +2432,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     if x1_ > x0_ and y1_ > y0_:
                         crop_ = screen.grab(gx0 + x0_, gy0 + y0_, x1_ - x0_, y1_ - y0_)[1]
                         share_ = pink_share(crop_, (x0_, y0_), u, v, rg_, GUARD_EXCLUDE,
-                                            guard_ui)  # fmt: skip
+                                            guard_ui, ptr[0] if prm.get("guard_ptr_mask")
+                                            else None)  # fmt: skip
                     why_ = walk_guard_why(u, v, share_, prm["guard_gm_px"],
                                           prm["guard_pink_max"])  # fmt: skip
                     guard_n[why_ or "ok"] += 1

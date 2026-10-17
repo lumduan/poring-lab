@@ -444,3 +444,12 @@ def test_from_v16_every_attack_click_needs_the_tag_and_the_cache_is_short_and_lo
     assert p["name_tag"] and p["tag_every_click"]  # v16 attempt 1: the read path hit a Creamy
     assert p["tag_cache_s"] <= 3.0 and p["tag_cache_px"] <= 60.0
     assert hf.PARAMS[20]["tag_every_click"] and not hf.PARAMS[15].get("tag_every_click")
+
+
+def test_walk_guard_from_v21_leaves_our_own_drawn_cursor_out() -> None:
+    crop = np.zeros((200, 200, 3), np.uint8)
+    crop[...] = (50, 140, 60)  # grass (BGR)
+    crop[95:105, 95:105] = (40, 40, 220)  # the no-entry cursor's red ring where our pointer rests
+    assert hf.pink_share(crop, (500, 400), 640.0, 500.0, 80, hf.GUARD_EXCLUDE) > 0.001
+    got = hf.pink_share(crop, (500, 400), 640.0, 500.0, 80, hf.GUARD_EXCLUDE, (), (598.0, 498.0))
+    assert got == 0.0

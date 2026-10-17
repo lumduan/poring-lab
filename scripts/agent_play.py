@@ -313,8 +313,11 @@ def serve(a: argparse.Namespace) -> int:  # noqa: PLR0915
         while not halt.is_set():
             with contextlib.suppress(Exception):
                 t_ = r.ns()
-                live.feed(record_session._events_since(t_first - 120_000_000_000, 125.0,
-                                                       t_first - 120_000_000_000, t_))  # fmt: skip
+                evs_ = record_session._events_since(t_first - 120_000_000_000, 125.0,
+                                                    t_first - 120_000_000_000, t_)  # fmt: skip
+                # R1: the shards come unordered; LiveWorld skips anything older than its last
+                # event, so an unsorted feed dropped mobs and floor items
+                live.feed(sorted(evs_, key=lambda e: int(e.get("t_mono_ns", 0))))
             halt.wait(POLL_S)
 
     ctx = mp.get_context("spawn")
@@ -366,6 +369,7 @@ def serve(a: argparse.Namespace) -> int:  # noqa: PLR0915
                 agent.move(gx0 + round(u) - 12, gy0 + round(v) - 12)  # two motions: drawn
                 time.sleep(0.06)
                 agent.move(gx0 + round(u), gy0 + round(v))
+                state["ptr"] = (u, v)
 
             def read_tag(u: float, v: float) -> tuple[str | None, int, float, float]:
                 """The tag under the pointer within TAG_WAIT_S; the pointer FOLLOWS the nearest
@@ -496,7 +500,9 @@ def serve(a: argparse.Namespace) -> int:  # noqa: PLR0915
                 x0, y0 = max(0, int(u) - rg), max(0, int(v) - rg)
                 x1, y1 = min(gw, int(u) + rg + 1), min(gh, int(v) + rg + 1)
                 crop = screen.grab(gx0 + x0, gy0 + y0, x1 - x0, y1 - y0)[1]
-                share = hf.pink_share(crop, (x0, y0), u, v, rg, hf.GUARD_EXCLUDE, ui_rects)
+                share = hf.pink_share(
+                    crop, (x0, y0), u, v, rg, hf.GUARD_EXCLUDE, ui_rects, state.get("ptr")
+                )  # not our own drawn cursor
                 why = hf.walk_guard_why(u, v, share, 120.0, 0.001)
                 if why is not None:
                     return {"clicked": False, "why": f"guard_{why}"}
@@ -514,6 +520,7 @@ def serve(a: argparse.Namespace) -> int:  # noqa: PLR0915
                 if moving:
                     tc = r.ns()
                     agent.click(gx0 + round(u), gy0 + round(v))
+                state["ptr"] = (u, v)
                 to_ = None
                 if q.get("cx") is not None:
                     to_ = [round(float(q["cx"])), round(float(q["cy"]))]
