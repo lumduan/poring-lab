@@ -35,8 +35,8 @@ of the seeded windows gives a first template + mask, then each crop is re-aligne
 own ground (its border ring's median colour) in >= 60 % of the crops, AND agreeing across crops
 (MAD <= 40) when that keeps >= half of it. The ANCHOR = the median offset of the sprite centre from
 the projected ground point (the eval's truth = projection + anchor). The thresholds are TUNED per
-template on training kills (``tune``: true - 2 x false); a template that cannot beat zero is
-switched off (ncc_min = OFF).
+template on training kills (``tune``: true - false, delays 1.5 + 2.5 s); a template that cannot
+beat zero is switched off (ncc_min = OFF).
 
 THE EVALUATION (offline, ``eval``): drop_blobs' kills (our kills and their 'fall' drops); on the
 first frame ``delay`` s after the death, the matcher searches a 200 x 200 square around the dead
@@ -842,7 +842,7 @@ def tune(templates: Sequence[IconTemplate], cases: Sequence[KillCase], r: float 
          ncc_grid: Sequence[float] = (0.3, 0.5, 0.6, 0.7, 0.8),
          rms_grid: Sequence[float] = (35, 45, 60, 90),
          inl_grid: Sequence[float] = (0.4, 0.5, 0.6, 0.7, 0.8, 0.9),
-         false_cost: float = 2.0) -> None:  # fmt: skip
+         false_cost: float = 1.0) -> None:  # fmt: skip
     """Per template, the (ncc_min, rms_max, inl_min) maximising its true detections -
     ``false_cost`` x its false ones on ``cases`` (training kills): a detection is true when a
     floor item of the same id lies within ``r``, false when no floor item at all does. A template
@@ -892,7 +892,7 @@ def cmd_build(a: argparse.Namespace) -> int:
     if a.tune:
         cases: list[KillCase] = []
         for sid in a.tune:
-            cases += [c for c in eval_session(sid, tpls, [a.delay]) if c.delay == a.delay]
+            cases += eval_session(sid, tpls, [float(x) for x in a.tune_delays.split(",")])
         tune(tpls, cases)
     save_templates(tpls, Path(a.out), {"sessions": a.sids, "tuned_on": a.tune,
                                        "every_s": a.every, "per_instance": a.per_instance,
@@ -966,12 +966,12 @@ def main() -> int:
     b.add_argument("--every", type=float, default=0.4, help="frame sampling (s)")
     b.add_argument("--per-instance", type=int, default=PER_INSTANCE)
     b.add_argument("--tune", nargs="*", default=[], help="sessions to tune the thresholds on")
-    b.add_argument("--delay", type=float, default=1.5)
+    b.add_argument("--tune-delays", default="1.5,2.5", help="kill delays the tuning scores")
     b.add_argument("--refresh", action="store_true", help="re-read the NAS (ignore the cache)")
     e = sub.add_parser("eval")
     e.add_argument("sids", nargs="+")
     e.add_argument("--icons", default=str(ICONS_DIR))
-    e.add_argument("--delays", default="1.0,1.5,2.5")
+    e.add_argument("--delays", default="1.0,1.5,2.5,4.0")
     e.add_argument("--radius", type=int, default=100)
     e.add_argument("--json", default="")
     s = sub.add_parser("sheet")
