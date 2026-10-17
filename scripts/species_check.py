@@ -9,6 +9,7 @@ answer is ambiguous (None).
     species_check.py crops SID [SID ...]           OFFLINE: cut the labelled crops (NAS frames)
     species_check.py eval [--hold SID] [--json O]  OFFLINE: session-grouped CV + held-out
     species_check.py train [--thr T] [--hold SID]  write data/species/model.npz (gitignored)
+    species_check.py stale SID [SID ...]           OFFLINE: own frame vs stale box vs re-centred
     species_check.py sheet OUT --what label|bad    OFFLINE: a montage of chosen crops (debug)
 
 THE CLASSIFIER (PURE, numpy only; ``species_of``): the box crop -> RGB (the colour order is an
@@ -68,6 +69,30 @@ RGB or BGRA).
 Failure cases: flow20 05:55 04920-933939011771891.jpg (a teleport pillar -> Lunatic 1.0), flow21
 08:58 06109-945164366734849.jpg (a Poring with a Creamy touching it -> Poring 1.0), flow21 08:32
 06372-943670145140183.jpg (a grass box labelled Creamy -> Pupa 0.995: rejected at 0.999).
+
+THE STALE BOX (2026-10-17 evening, ``stale``; Batt: "reduce the 37 % species-unsure fallbacks").
+Live, hunt_flow.species_now crops a FRESH grab at the detector's newest box, and that box is
+~0.6 s old (strike_call age_ms p50 ~0.6 s, p75 ~0.77 s): the monster walks and the camera
+scrolls while the GM walks -- vs the detector's own box on the later frame the sprite moved
+p50 6 / p90 68 px in 0.6 s, p50 36 / p90 135 px in 1 s -- so the crop misses it, and at 0.999
+the classifier is that sensitive to alignment (flow31, the box shifted on its own frame:
+coverage 0.717 at 0 px, 0.636 at 3 px, 0.600 at 4 px, 0.517 at 6 px; 1.1x larger 0.506).
+``recentre`` finds the sprite in the later grab: the box's own patch matched by NCC within
++-RECENTRE_WIDE px on 4 x 4 blocks, then +-5 px at full res (error vs the detector's box p50
+1.4 px, <= 4 px for 79 % at 0.6 s; ~3-4 ms on the loaded host); under RECENTRE_MIN it is "not
+found" (a Creamy's flapping sprite scores 0.1-0.35: without the gate one Creamy box moved onto a
+target and was accepted). MEASURED on 4 sessions the model never saw (hunt-flow28..31: 2676
+clean target boxes, 85 Creamy, 427 other, 128 corpses), thr 0.999, NCC gate 0.5, pooled:
+                         0.6 s later                         1.0 s later
+  own frame               0.735, 1 wrong species, Creamy 0  (the same)
+  stale box (= live now)  0.341, 11 wrong, Creamy 1/85      0.251, 12 wrong, Creamy 1/85
+  re-centred +-40 px      0.478, 0 wrong, Creamy 0          0.352, 1 wrong, Creamy 0
+  re-centred (wide)       0.575, 0 wrong, Creamy 0          0.508, 4 wrong, Creamy 0
+  own frame, gated by it  0.651, 0 wrong, Creamy 0          0.583, 0 wrong, Creamy 0
+per session (0.6 s; own / stale / re-centred / own+gate): flow28 0.752 / 0.367 / 0.563 / 0.666,
+flow29 0.710 / 0.318 / 0.567 / 0.637, flow30 0.760 / 0.358 / 0.633 / 0.664, flow31 0.717 /
+0.311 / 0.533 / 0.625. The stale crop is not only unsure: its 11 wrong-species accepts (and a
+Creamy) are another monster that walked into the old box.
 """
 
 from __future__ import annotations
@@ -230,6 +255,107 @@ def species_of(img: Any, model: Mapping[str, Any], box: Sequence[float] | None =
     f = features(thumbnail(rgb), float(w), float(h), score)
     p = probabilities(f, model)[0]
     return decide(p, model["classes"], float(model["thr"] if thr is None else thr))
+
+
+DIRECT_MACS = 600_000  # ncc_search: below this many multiply-adds the direct sum beats the FFT
+RECENTRE_PX = 40  # how far the sprite may have moved since its box's frame (each axis)
+
+
+def grey(img: Any, order: str) -> Any:
+    """Luma x 256 (uint16, 2-D: 77 R + 150 G + 29 B, integer arithmetic, ~0.4 ms for a 285 px
+    square) of an RGB / BGR(A) uint8 image (``order`` as in ``to_rgb``)."""
+    a = to_rgb(img, order)
+    return (a[..., 0] * np.uint16(77) + a[..., 1] * np.uint16(150)
+            + a[..., 2] * np.uint16(29))  # fmt: skip
+
+
+def coarse_grey(img: Any, order: str, k: int) -> Any:
+    """One luma per k x k block: the sum of its pixels at offsets {0, k // 2} on each axis (a
+    2 x 2 sample of the block: most of a block mean's anti-aliasing at ~1/4 of its cost; plain
+    subsampling lost 4 points of coverage and matched a Creamy's box onto a target)."""
+    a = np.asarray(img)
+    H, W = a.shape[0] // k, a.shape[1] // k
+    offs = sorted({0, k // 2})
+    out = np.zeros((H, W), np.uint32)
+    for oy in offs:
+        for ox in offs:
+            out += grey(a[oy::k, ox::k][:H, :W], order)
+    return out
+
+
+def ncc_search(window: Any, tpl: Any) -> tuple[int, int, float]:
+    """PURE: the template's best match in ``window`` (both 2-D grey) by normalised cross-correlation
+    (Lewis' fast NCC: the FFT -- or, for few positions, a direct sum -- for the correlation,
+    integral images for the local means and norms; hunt_flow.ncc_search's maths, kept here
+    import-free). (x, y) of the template's top-left and the score (-1..1); (0, 0, -1.0) when
+    the window is smaller than the template or the template is flat."""
+    w = np.asarray(window, np.float64)
+    t = np.asarray(tpl, np.float64)
+    H, W = w.shape
+    h, w_ = t.shape
+    if h > H or w_ > W:
+        return 0, 0, -1.0
+    t0 = t - t.mean()
+    tn = float(np.sqrt((t0 * t0).sum()))
+    if tn < 1e-6:
+        return 0, 0, -1.0
+    if (H - h + 1) * (W - w_ + 1) * h * w_ <= DIRECT_MACS:  # few positions: direct is faster
+        # einsum's own loops, not BLAS: a multi-threaded BLAS call took 6-23 ms on the loaded host
+        num = np.einsum("ijkl,kl->ij", np.lib.stride_tricks.sliding_window_view(w, (h, w_)), t0)
+    else:
+        sh = (H + h - 1, W + w_ - 1)
+        num = np.fft.irfft2(np.fft.rfft2(w, sh) * np.conj(np.fft.rfft2(t0, sh)), sh)
+        num = num[: H - h + 1, : W - w_ + 1]
+    ii = np.pad(w, ((1, 0), (1, 0))).cumsum(0).cumsum(1)
+    ii2 = np.pad(w * w, ((1, 0), (1, 0))).cumsum(0).cumsum(1)
+    s1 = ii[h:, w_:] - ii[:-h, w_:] - ii[h:, :-w_] + ii[:-h, :-w_]
+    s2 = ii2[h:, w_:] - ii2[:-h, w_:] - ii2[h:, :-w_] + ii2[:-h, :-w_]
+    score = num / (np.sqrt(np.maximum(s2 - s1 * s1 / (h * w_), 1e-9)) * tn)
+    y, x = np.unravel_index(int(np.argmax(score)), score.shape)
+    return int(x), int(y), float(score[y, x])
+
+
+def recentre(prev_img: Any, box: Sequence[Any], cur_img: Any, *, order: str,
+             cur_origin: tuple[int, int] = (0, 0), max_shift: int = RECENTRE_PX,
+             coarse: int = 1) -> tuple[list[Any], float]:  # fmt: skip
+    """PURE: where the sprite of ``box`` (x0, y0, x1, y1[, score, ...] in ``prev_img``'s pixels:
+    the detector's box on ITS OWN frame) is in ``cur_img`` (a later grab whose top-left is
+    ``cur_origin`` in those pixels: the whole frame, or a patch around the box). The box's patch
+    is matched by NCC within +-``max_shift`` px. Returns (the box moved there, extra fields kept;
+    the NCC score). Unmovable (window smaller than the patch, a flat patch): (the box, -1.0)."""
+    p = np.asarray(prev_img)
+    ph, pw = p.shape[:2]
+    x0, y0 = max(0, int(math.floor(float(box[0])))), max(0, int(math.floor(float(box[1]))))
+    x1, y1 = min(pw, int(math.ceil(float(box[2])))), min(ph, int(math.ceil(float(box[3]))))
+    out = list(box)
+    if x1 - x0 < 4 or y1 - y0 < 4:
+        return out, -1.0
+    tpl = grey(p[y0:y1, x0:x1], order)
+    c = np.asarray(cur_img)
+    ch, cw = c.shape[:2]
+    ox, oy = int(cur_origin[0]), int(cur_origin[1])
+    wx0, wy0 = max(0, x0 - max_shift - ox), max(0, y0 - max_shift - oy)
+    wx1, wy1 = min(cw, x1 + max_shift - ox), min(ch, y1 + max_shift - oy)
+    if wx1 - wx0 < x1 - x0 or wy1 - wy0 < y1 - y0:
+        return out, -1.0
+    if coarse > 1:  # a wide search on coarse x coarse blocks, then +-(coarse + 1) px at full res
+        xq, yq, sq = ncc_search(coarse_grey(c[wy0:wy1, wx0:wx1], order, coarse),
+                                coarse_grey(p[y0:y1, x0:x1], order, coarse))  # fmt: skip
+        if sq <= -1.0:
+            return out, -1.0
+        r_ = coarse + 1
+        fx0, fy0 = max(wx0, wx0 + xq * coarse - r_), max(wy0, wy0 + yq * coarse - r_)
+        fx1 = min(wx1, wx0 + xq * coarse + (x1 - x0) + r_)
+        fy1 = min(wy1, wy0 + yq * coarse + (y1 - y0) + r_)
+        x, y, s = ncc_search(grey(c[fy0:fy1, fx0:fx1], order), tpl)
+        x, y = x + fx0 - wx0, y + fy0 - wy0
+    else:
+        x, y, s = ncc_search(grey(c[wy0:wy1, wx0:wx1], order), tpl)
+    if s <= -1.0:
+        return out, -1.0
+    dx, dy = wx0 + ox + x - x0, wy0 + oy + y - y0
+    out[:4] = [float(box[0]) + dx, float(box[1]) + dy, float(box[2]) + dx, float(box[3]) + dy]
+    return out, s
 
 
 def load_model(path: Path = MODEL_PATH) -> dict[str, Any]:
@@ -542,6 +668,26 @@ def select_rows(rows: Sequence[dict[str, Any]], n_exact: int, seed: int) -> list
     return out
 
 
+JITTER_PX = 4.0  # the re-centred box's error (NCC vs the detector's own box): p75 ~3.4 px
+JITTER_SCALE = 0.1
+
+
+def jittered(box: Sequence[float], n: int, rng: Any) -> list[tuple[list[float], list[float]]]:
+    """``n`` copies of the box moved by up to +-JITTER_PX and scaled by 1 +- JITTER_SCALE per
+    axis about its centre (a live crop is never exactly the detector's box on its own frame:
+    the box is ~0.6 s old and re-centred). [(box, [dx, dy, sx, sy])]."""
+    out = []
+    cx, cy = (box[0] + box[2]) / 2, (box[1] + box[3]) / 2
+    w, h = box[2] - box[0], box[3] - box[1]
+    for _ in range(n):
+        dx, dy = rng.uniform(-JITTER_PX, JITTER_PX, 2)
+        sx, sy = rng.uniform(1 - JITTER_SCALE, 1 + JITTER_SCALE, 2)
+        jb = [cx + dx - w * sx / 2, cy + dy - h * sy / 2, cx + dx + w * sx / 2,
+              cy + dy + h * sy / 2]  # fmt: skip
+        out.append((jb, [round(float(v), 2) for v in (dx, dy, sx, sy)]))
+    return out
+
+
 def cmd_crops(a: argparse.Namespace) -> int:
     from drop_blobs import read_rgb
 
@@ -559,6 +705,7 @@ def cmd_crops(a: argparse.Namespace) -> int:
                  for n in os.listdir(REC_ROOT / sid / "frames") if n.endswith(".jpg")}  # fmt: skip
         thumbs, feats, meta = [], [], []
         t0 = time.monotonic()
+        rng = np.random.default_rng(a.seed)
         for t_rec in sorted(by_rec):
             img = read_rgb(REC_ROOT / sid / "frames" / names[t_rec])
             for r in by_rec[t_rec]:
@@ -574,6 +721,14 @@ def cmd_crops(a: argparse.Namespace) -> int:
                 thumbs.append(th.astype(np.uint8))
                 feats.append(features(th, bx[2] - bx[0], bx[3] - bx[1], r["score"]))
                 meta.append({**r, "frame": names[t_rec]})
+                for jb, jit in jittered(bx, a.jitter, rng):  # training only (eval_rows skips)
+                    try:
+                        th = thumbnail(crop_box(img, jb, "rgb"))
+                    except ValueError:
+                        continue
+                    thumbs.append(th.astype(np.uint8))
+                    feats.append(features(th, jb[2] - jb[0], jb[3] - jb[1], r["score"]))
+                    meta.append({**r, "frame": names[t_rec], "jitter": jit})
         tmp = out.with_suffix(".tmp.npz")
         np.savez(tmp, thumbs=np.asarray(thumbs, np.uint8), feats=np.asarray(feats, np.float32),
                  meta=np.asarray([json.dumps(m) for m in meta]))  # fmt: skip
@@ -634,7 +789,7 @@ def train_model(feats: Any, meta: Sequence[Mapping[str, Any]], idx: Sequence[int
 def eval_rows(meta: Sequence[Mapping[str, Any]]) -> list[int]:
     """What a held-out session is scored on: every labelled box except "unsure" ones (corpses
     and boxes next to another monster included: the live bot meets them)."""
-    return [i for i, m in enumerate(meta) if m["label"] != "unsure"]
+    return [i for i, m in enumerate(meta) if m["label"] != "unsure" and not m.get("jitter")]
 
 
 def sweep(p: Any, meta: Sequence[Mapping[str, Any]], idx: Sequence[int],
@@ -758,6 +913,177 @@ def cmd_train(a: argparse.Namespace) -> int:
     return 0
 
 
+# --- offline: the stale box (the live failure mode) ----------------------------------------------
+
+STALE_DELTAS = (0.6, 1.0)  # live box age at the check: strike_call age_ms p50 ~0.6 s, p75 ~0.77 s
+RECENTRE_WIDE = 120  # live: the camera scrolls up to ~140 px in 1 s while the GM walks
+RECENTRE_COARSE = 4
+RECENTRE_MIN = 0.5  # NCC below this = not found (a Creamy's flapping sprite scores 0.1-0.35)
+
+
+def _stale_probs(img: Any, box: Sequence[float], model: Mapping[str, Any]) -> list[float] | None:
+    try:
+        rgb = crop_box(img, box, "rgb")
+    except ValueError:
+        return None
+    f = features(thumbnail(rgb), box[2] - box[0], box[3] - box[1], float(box[4]))
+    return [round(float(x), 6) for x in probabilities(f, model)[0]]
+
+
+def stale_rows(sid: str, model: Mapping[str, Any], deltas: Sequence[float] = STALE_DELTAS
+               ) -> list[dict[str, Any]]:  # fmt: skip
+    """Per exact-frame labelled box (not "unsure"): class probabilities of the box on ITS OWN
+    frame ("own"), and on the recording frame ``delta`` s later (within 150 ms) of the same box
+    coordinates ("stale_<d>": the live case), the box moved there by ``recentre`` (wide:
+    "recentred_<d>", +-40 px: "c40_<d>"; each with its NCC score "_s" and shift "_d"), and the
+    detector's own box of the same monster when that later frame is a detector frame
+    ("ref_<d>" = its shift from the old box, "det_<d>" = its probabilities)."""
+    from drop_blobs import read_rgb
+
+    lab = WORK / "labels" / f"{sid}.jsonl"
+    rows = ([json.loads(x) for x in lab.read_text().splitlines()] if lab.exists()
+            else label_session(sid))  # fmt: skip
+    names = {int(n[:-4].split("-")[1]): n
+             for n in os.listdir(REC_ROOT / sid / "frames") if n.endswith(".jpg")}  # fmt: skip
+    rec = sorted(names)
+    by_t: dict[int, list[dict[str, Any]]] = defaultdict(list)
+    for r in rows:
+        by_t[r["t"]].append(r)
+    cache: dict[int, Any] = {}
+
+    def frame(t: int) -> Any:
+        if t not in cache:
+            if len(cache) > 64:
+                cache.pop(next(iter(cache)))
+            cache[t] = read_rgb(REC_ROOT / sid / "frames" / names[t])
+        return cache[t]
+
+    out = []
+    for r in rows:
+        if r["dt_ms"] != 0 or r["label"] == "unsure":
+            continue
+        box = [*r["box"], r["score"]]
+        f0 = frame(r["t"])
+        o: dict[str, Any] = {k: r.get(k) for k in ("t", "label", "clean", "dead", "gid",
+                                                   "creamy_near", "box", "score")}  # fmt: skip
+        o["sid"] = sid
+        o["own"] = _stale_probs(f0, box, model)
+        for d in deltas:
+            want = r["t"] + int(d * NS)
+            i = bisect.bisect_left(rec, want)
+            t1 = min((rec[k] for k in (i - 1, i) if 0 <= k < len(rec)),
+                     key=lambda t: abs(t - want))  # fmt: skip
+            if abs(t1 - want) > 0.15 * NS:
+                continue
+            f1, key = frame(t1), f"{d:g}"
+            o[f"stale_{key}"] = _stale_probs(f1, box, model)
+            for name, kw in (("recentred", {"max_shift": RECENTRE_WIDE, "coarse": RECENTRE_COARSE}),
+                             ("c40", {"max_shift": 40})):  # fmt: skip
+                nb, s = recentre(f0, box, f1, order="rgb", **kw)
+                o[f"{name}_{key}"] = _stale_probs(f1, nb, model)
+                o[f"{name}_{key}_s"] = round(s, 4)
+                o[f"{name}_{key}_d"] = [round(nb[0] - box[0], 1), round(nb[1] - box[1], 1)]
+            same = [x for x in by_t.get(t1, ()) if r.get("gid") is not None
+                    and x.get("gid") == r["gid"]]  # fmt: skip
+            if same:
+                b1 = [*same[0]["box"], same[0]["score"]]
+                o[f"ref_{key}"] = [round(b1[0] - box[0], 1), round(b1[1] - box[1], 1)]
+                o[f"det_{key}"] = _stale_probs(f1, b1, model)
+        out.append(o)
+    return out
+
+
+def stale_score(rows: Sequence[Mapping[str, Any]], key: str, thr: float,
+                min_ncc: float = RECENTRE_MIN) -> dict[str, Any]:  # fmt: skip
+    """One variant's numbers: coverage of clean live targets (and wrong-species accepts), Creamy
+    accepted as a target (all / clean labels), Creamy said Creamy, other / corpses accepted. A
+    re-centred variant whose NCC is under ``min_ncc`` answers None; "own+<variant>" is the own
+    frame's answer, None when that variant's re-centre is under ``min_ncc``."""
+    c: Counter[str] = Counter()
+    gate = key.split("+", 1)[1] if key.startswith("own+") else None
+    for r in rows:
+        if gate is not None:
+            if gate not in r:
+                continue
+            p = r["own"] if r.get(gate + "_s", -1.0) >= min_ncc else None
+        else:
+            if key not in r:
+                continue
+            p = r[key]
+            if (key + "_s") in r and r[key + "_s"] < min_ncc:
+                p = None
+        name = None if p is None else decide(np.asarray(p), CLASSES, thr)[0]
+        live = not r.get("dead")
+        if r["label"] in TARGETS and live and r.get("clean"):
+            c["targets"] += 1
+            c["accepted"] += name in TARGETS
+            c["wrong_species"] += name in TARGETS and name != r["label"]
+        if r["label"] == "Creamy" and live:
+            c["creamy"] += 1
+            c["creamy_as_target"] += name in TARGETS
+            c["creamy_as_target_clean"] += name in TARGETS and bool(r.get("clean"))
+            c["creamy_said_creamy"] += name == "Creamy"
+        if r["label"] == "other":
+            c["other"] += 1
+            c["other_as_target"] += name in TARGETS
+        if r.get("dead"):
+            c["corpse"] += 1
+            c["corpse_as_target"] += name in TARGETS
+    return {"key": key, **c, "coverage": round(c["accepted"] / max(1, c["targets"]), 3)}
+
+
+def recentre_error(rows: Sequence[Mapping[str, Any]], key: str, delta: str
+                   ) -> dict[str, Any]:  # fmt: skip
+    """The re-centred box's distance (px) from the detector's own box on the later frame, and
+    the stale box's, over the live monsters that have one."""
+    rs = [r for r in rows if f"ref_{delta}" in r and r["label"] in SPECIES.values()
+          and not r.get("dead")]  # fmt: skip
+    if not rs:
+        return {"n": 0}
+    ref = np.array([r[f"ref_{delta}"] for r in rs], float)
+    got = np.array([r[f"{key}_{delta}_d"] for r in rs], float)
+    e, b = np.hypot(*(got - ref).T), np.hypot(*ref.T)
+    return {"n": len(rs), "stale_p50_p90": np.percentile(b, [50, 90]).round(1).tolist(),
+            "err_p50_p90": np.percentile(e, [50, 90]).round(1).tolist(),
+            "within_4px": round(float((e <= 4).mean()), 3),
+            "stale_within_4px": round(float((b <= 4).mean()), 3)}  # fmt: skip
+
+
+def cmd_stale(a: argparse.Namespace) -> int:
+    model = load_model(Path(a.model))
+    deltas = [float(x) for x in a.delta.split(",")]
+    out_dir = WORK / "stale"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    pooled: list[dict[str, Any]] = []
+    for sid in a.sids:
+        cache = out_dir / f"{sid}.{Path(a.model).stem}.jsonl"
+        if cache.exists() and not a.force:
+            rows = [json.loads(x) for x in cache.read_text().splitlines()]
+        else:
+            rows = stale_rows(sid, model, deltas)
+            cache.write_text("".join(json.dumps(r) + "\n" for r in rows))
+        pooled += rows
+    keys = ["own"] + [f"{v}_{d:g}" for d in deltas
+                      for v in ("stale", "c40", "recentred", "own+recentred")]  # fmt: skip
+    for title, rs in [*((s, [r for r in pooled if r["sid"] == s]) for s in a.sids),
+                      ("POOLED", pooled)]:  # fmt: skip
+        print(f"== {title}  thr {a.thr}  min NCC {a.min_ncc}")
+        for k in keys:
+            s = stale_score(rs, k, a.thr, a.min_ncc)
+            print(f"  {k:22s} cov {s['coverage']:.3f} ({s.get('accepted', 0)}/"
+                  f"{s.get('targets', 0)}, wrong species {s.get('wrong_species', 0)}) | Creamy->"
+                  f"target {s.get('creamy_as_target', 0)}/{s.get('creamy', 0)} (clean "
+                  f"{s.get('creamy_as_target_clean', 0)}), said Creamy "
+                  f"{s.get('creamy_said_creamy', 0)} | other->target {s.get('other_as_target', 0)}"
+                  f"/{s.get('other', 0)} | corpse->target {s.get('corpse_as_target', 0)}/"
+                  f"{s.get('corpse', 0)}")  # fmt: skip
+        for d in deltas:
+            for v in ("c40", "recentred"):
+                err = recentre_error(rs, v, f"{d:g}")
+                print(f"  error vs the detector's box, {v} {d:g} s: {err}")
+    return 0
+
+
 def cmd_sheet(a: argparse.Namespace) -> int:
     from PIL import Image
 
@@ -793,6 +1119,7 @@ def main() -> int:
     p = sp.add_parser("crops")
     p.add_argument("sids", nargs="+")
     p.add_argument("--n-exact", type=int, default=200)
+    p.add_argument("--jitter", type=int, default=0, help="extra jittered training crops per box")
     p.add_argument("--seed", type=int, default=20261017)
     p.add_argument("--force", action="store_true")
     for name in ("eval", "train"):
@@ -806,6 +1133,13 @@ def main() -> int:
         else:
             p.add_argument("--thr", type=float, default=DEFAULT_THR)
             p.add_argument("--model", default=str(MODEL_PATH))
+    p = sp.add_parser("stale")
+    p.add_argument("sids", nargs="+")
+    p.add_argument("--model", default=str(MODEL_PATH))
+    p.add_argument("--delta", default=",".join(f"{d:g}" for d in STALE_DELTAS))
+    p.add_argument("--thr", type=float, default=DEFAULT_THR)
+    p.add_argument("--min-ncc", type=float, default=RECENTRE_MIN)
+    p.add_argument("--force", action="store_true")
     p = sp.add_parser("sheet")
     p.add_argument("out")
     p.add_argument("--what", choices=("label", "bad"), default="label")
@@ -816,7 +1150,7 @@ def main() -> int:
     p.add_argument("--n", type=int, default=128)
     a = ap.parse_args()
     return {"labels": cmd_labels, "crops": cmd_crops, "eval": cmd_eval, "train": cmd_train,
-            "sheet": cmd_sheet}[a.cmd](a)  # fmt: skip
+            "stale": cmd_stale, "sheet": cmd_sheet}[a.cmd](a)  # fmt: skip
 
 
 if __name__ == "__main__":
