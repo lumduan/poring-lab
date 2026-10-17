@@ -378,7 +378,9 @@ PARAMS[33] = {**PARAMS[32], "fast_dead": False, "fast_dead_ab": False,
 # paced. Its base (v33 as is, or with its loot arm decided) is set at its pre-registration
 # + a BASE fix (amended before v34's first run): the loot's unit check ignores the target's own
 # dying sprite for 2.5 s (the speed fix made loot start 0.63 s after the kill, under the corpse)
-PARAMS[34] = {**PARAMS[33], "send_gap_s": 0.05, "send_gap_ab": True, "send_gap_ab_min": 10.0,
+# 3.73's verdict (01:3x): the race failed both primary predictions -> the plain 3 x 3 for all
+PARAMS[34] = {**PARAMS[33], "loot_race": False, "loot_icons": False, "looter_chain": False,
+              "send_gap_s": 0.05, "send_gap_ab": True, "send_gap_ab_min": 10.0,
               "loot_corpse": True, "loot_corpse_s": 2.5, "loot_corpse_px": 30.0}  # fmt: skip
 # 35 = the species check on the box's OWN frame, gated by finding the sprite again in a fresh grab
 # (the species-crop study, species_check.py THE STALE BOX: coverage 0.34 -> 0.65 at a 0.6 s old

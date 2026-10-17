@@ -9334,6 +9334,50 @@ hard-bar monitor (`scripts/hardbar_live.py watch 33`). A Creamy hit is counted, 
 - **Cost:** kill -> last loot click p50: race <= plain + 0.3 s (the matcher costs ~60 ms).
 - **Hard bars:** zero NPC contact, zero map change, zero non-Creamy non-target hit.
 
+**Run log, continued:**
+- **Attempt 2** (23:25:01, seed 20271501, `20261017T232501-demo-hunt-flow33`) and **run 2**
+  (00:28:03, seed 20271601, `20261018T002803-demo-hunt-flow33`): both 60 min on the time box.
+- No hard bar. Creamy counted apart: 1 hit in attempt 1, 1 in attempt 2, 3 in run 2 (the judge
+  shows them as engagements whose target was a Creamy).
+
+**RESULT (judged 2026-10-18 01:3x; attempt 2 + run 2 pooled, attempt 1 apart):**
+
+| run | min | engagements | landing (5 s) | kills / h | seen -> click p50 | loot picked / fell | sight / 10 min | reversals / min |
+|---|---|---|---|---|---|---|---|---|
+| attempt 1 (stopped by me) | 9.0 | 27 | 20 / 27 = 74.1 % | 140.5 | 3.02 s | | | |
+| attempt 2 | 60.0 | 134 | 107 / 134 = 79.9 % (Wilson 72.3-85.8) | 117.9 | 3.22 s | 75 / 148 = 50.7 % | 13.8 | 6.1 |
+| run 2 | 60.1 | 144 | 119 / 144 = 82.6 % (75.6-88.0) | 133.8 | 3.24 s | 80 / 186 = 43.0 % | 12.6 | 7.2 |
+
+| per loot arm (pooled) | race (+ its 3 chained looter steps) | plain |
+|---|---|---|
+| items picked / fell at our kills | 84 / 176 = 47.7 % | 96 / 195 = 49.2 % |
+| lost to looters (a monster within 1 cell at the vanish) | 26 / 176 = 14.8 % | 17 / 195 = 8.7 % |
+| loot step p50 | 3.08 s (6.0 clicks, 63 matched items in 137 steps) | 2.33 s (5.3 clicks) |
+| loot-click destinations >= 4 cells off (corrected / window) | 25-31 % / 57-71 % | 13-14 % / 50-59 % |
+| looter chains | 7 engaged, 10 lost (no live track within 40 px), 3 chained steps | - |
+
+- server kill -> loot start p50 0.72 s (v15's rule for all; v32's slow arm was 2.50 s): the
+  death-cell speed fix.
+- False deaths 12.8 %.
+
+**Against the predictions:**
+1. race picked >= plain + 10 points: **FAIL** (47.7 vs 49.2 %).
+2. lost to looters, race <= half of plain: **FAIL** (14.8 vs 8.7 %).
+3. the base fix, >= 4 cells off <= 10 % in both arms: **FAIL**, by the pre-registered window
+   (50-71 %) and by the corrected clicks measure (13-31 %). The plain arm fell from v32's
+   29-32 % to 13-14 % by the corrected measure.
+4. overall loot >= 70 %: **FAIL** (48.5 %).
+5. kill -> last loot click, race <= plain + 0.3 s: **FAIL** by the step time (+0.75 s).
+6. hard bars: **PASS** (Creamy counted apart: 4 in the two judged runs).
+
+**Consequence, by 3.74's pre-registered rule:** the plain 3 x 3 for all in v34 (`loot_race`,
+`loot_icons` and `looter_chain` off).
+
+**Read:** loot fell (v32 55 %, v33 43-51 %) while the loot started ~1.8 s sooner. In v32 the
+earlier loot (fast arm) skipped 4.0 of 10 clicks a step for "a monster near", against 2.48 for the
+later loot. The dying target's own sprite is the likeliest unit there; v34's base adds the corpse
+fix (3.74's amendment).
+
 ### 3.74 hunt-flow@34: PACED INPUT, in alternating 10-min blocks (pre-registered 2026-10-17 23:30 ICT, the commit time 14485b0, BEFORE its run; the speed-first order, Batt 18:3x; seeds corrected 23:31, bcc49d5, before any v34 run: 3.73 owns 20271601)
 
 **Why:** found 22:2x. `ro_agent.Agent.send()` called `wait_for_human()`, whose first step drains
