@@ -1005,9 +1005,13 @@ def human(sid: str) -> dict[str, Any]:
     return out
 
 
-def bot(sid: str) -> dict[str, Any]:
+def bot(
+    sid: str, from_s: float | None = None, length_s: float | None = None, write: bool = True
+) -> dict[str, Any]:
     """A hunt-flow run: clicks from the runner's clicks.jsonl, the engagements it logged, the
-    sampler's boxes; the window from our first move after the loop start to the run's end."""
+    sampler's boxes; the window from our first move after the loop start to the run's end. Batt
+    2026-10-17 (the competition): ``from_s`` / ``length_s`` judge one window of the run (from that
+    offset after the first move, that long) on the same terms as a 10-min human demo."""
     import loot1
 
     d, man, events, frames = _session(sid)
@@ -1020,9 +1024,14 @@ def bot(sid: str) -> dict[str, Any]:
     if t0 is None:
         raise SystemExit("no movement after the loop start: nothing to judge")
     window = (min(int(man.get("t1_mono_ns", t0)), max(c.t for c in clicks) + 5 * NS) - t0) / NS
+    engs = json.loads((d / "engagements.json").read_text())
+    if from_s is not None:
+        t0 += int(from_s * NS)
+        window = max(0.0, min(length_s or window, window - from_s))
+        engs = [e for e in engs if t0 <= int(e["t_first_click"]) < t0 + int(window * NS)]
+        clicks = [c for c in clicks if t0 <= c.t < t0 + int(window * NS)] or clicks[:0]
     out = judge(events, clicks, frames, t0, picker(man.get("map", "prt_fild08")), loot1.in_ui,
                 window_s=window)  # fmt: skip
-    engs = json.loads((d / "engagements.json").read_text())
     out["engagements_w"] = bot_engagements(events, engs)
     out["sight_per_10min"] = sight_per_10min(events, t0, t0 + int(window * NS))
     out["idle_between_kills"] = idle_between_kills(events, clicks, t0, t0 + int(window * NS))
@@ -1077,9 +1086,25 @@ def bot(sid: str) -> dict[str, Any]:
         "read": sum(x.get("branch") == "read" for x in strikes_),
         "reasons": dict(Counter(r_ for x in strikes_ for r_ in x.get("risk") or [])),
     }
-    out.update({"session": sid, "actor": "bot", "rule": man.get("rule")})
-    (d / "flow_judge.json").write_text(json.dumps(out, indent=1))
+    out.update({"session": sid, "actor": man.get("actor", "bot"), "rule": man.get("rule"),
+                "packet_assisted": bool(man.get("packet_assisted"))})  # fmt: skip
+    if from_s is not None:
+        out["window"] = {"from_s": from_s, "length_s": round(window, 1)}
+    if write:
+        (d / "flow_judge.json").write_text(json.dumps(out, indent=1))
     return out
+
+
+def bot_windows(sid: str, length_s: float = 600.0) -> dict[str, Any]:
+    """Batt 2026-10-17: a bot run cut into back-to-back ``length_s`` windows from its first move,
+    each judged like a 10-min human demo; the MEDIAN window and the BEST by kills / h."""
+    full = bot(sid, write=False)
+    n = int(full["window_s"] // length_s)
+    wins = [bot(sid, k * length_s, length_s, write=False) for k in range(n)]
+    order = sorted(range(n), key=lambda k: wins[k]["kills_per_hour"])
+    return {"n": n, "median": wins[order[(n - 1) // 2]] if n else None,
+            "best": wins[order[-1]] if n else None,
+            "kills_per_hour": [w["kills_per_hour"] for w in wins]}  # fmt: skip
 
 
 def row(o: Mapping[str, Any]) -> dict[str, str]:

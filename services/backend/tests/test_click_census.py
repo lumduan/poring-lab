@@ -72,6 +72,12 @@ ALLOWED = {
                                 "hunt-flow@17+ (Batt 20:3x): the LOOT click of the sweep -- the "
                                 "cursor read PICKUP twice + walk@11's unit check (loot@1's rule), "
                                 "one per sweep, <= 8 per kill"),
+    "scripts/agent_play.py": (3, "agent-demo@1 (Batt 2026-10-17, the agent's competition round): "
+                                 "the attack click and its burst re-clicks, each only after the "
+                                 "client's NAME TAG read a target under the pointer (hunt-flow@16 "
+                                 "rule); the walk click while the GM walks, after the walk guard "
+                                 "and a 40-px unit check (the bot's moving rule; from a standstill "
+                                 "the cursor gate, GATED)"),
     "scripts/gm_state.py": (1, "UI only: an inventory TAB label inside the open window, after two "
                                "motions (clear_loot, Batt 2026-10-16: the GM test state's loot "
                                "rule); the loot leaves by agent.drag onto open ground + Enter on "
@@ -96,6 +102,8 @@ GATED = {
                                      "rules' own gate); probes never click"),
     "scripts/farm0.py": (1, "farm@0 (6.1): the attack click, SWORD read twice"),
     "scripts/hunt.py": (1, "hunt@N's walk click from a standstill: WALK by robust2's series"),
+    "scripts/agent_play.py": (2, "agent-demo@1: the walk click from a standstill (WALK by "
+                                 "robust2's series) and the loot click (PICKUP read twice)"),
     "scripts/hunt_flow.py": (1, "hunt-flow@N's walk click from a standstill (search or steer): "
                                 "WALK by robust2's series"),
 }  # fmt: skip
