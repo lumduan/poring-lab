@@ -9357,6 +9357,13 @@ the socket for a FULL 50 ms before every input.
 **Base:** v33, with its loot arm decided by 3.73's verdict before v34's first run: the race for
 all if 3.73's two primary predictions hold, else the plain 3 x 3 for all. v15's dead rule for all
 (3.72). The death-cell speed fix and the loot re-anchor are kept.
+- *Amended 00:35, before any v34 run:* **the loot corpse fix** (`loot_corpse`) is added to the base.
+  - For 2.5 s after the target's last box, a monster box within 30 px of that box (moved with the
+    camera) is the target's own dying sprite, not a unit, and no longer skips a loot click.
+  - Why: a loot that starts earlier lands under the corpse. v32's fast arm (1.23 s) skipped 4.0
+    clicks a step, its slow arm (2.50 s) 2.48. v33 attempt 2 (0.63 s, the speed fix) skipped
+    3.8 of its 10.
+  - Both pacing arms get it.
 
 **Runs:** two 60-min runs pooled (seeds 20271701 = paced first, 20271802 = default first), the
 hunting fixed state restored and the weight cleared between runs, nice 10, detector on the CPU,

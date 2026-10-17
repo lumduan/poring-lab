@@ -751,3 +751,12 @@ def test_nearest_cell_frac_equals_the_per_cell_loop() -> None:
         for rad in (2, 4, 9):
             slow = hf.nearest_cell(lambda c_, m_=mp: hf.frac_project(w, m_, c_), c0, u, v, rad)
             assert hf.nearest_cell_frac(w, mp, c0, u, v, rad) == slow
+
+
+def test_v34_base_ignores_the_targets_own_corpse_briefly() -> None:
+    p = hf.PARAMS[34]
+    assert p["loot_corpse"] and 1.0 <= p["loot_corpse_s"] <= 3.0 and p["loot_corpse_px"] <= 40
+    assert not hf.PARAMS[33].get("loot_corpse")
+    src = Path(hf.__file__).read_text()
+    # only monster boxes ON the corpse spot are dropped; an NPC box always blocks
+    assert 'or x_.cls != "monster"]' in src

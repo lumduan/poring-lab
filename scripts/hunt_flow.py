@@ -376,7 +376,10 @@ PARAMS[33] = {**PARAMS[32], "fast_dead": False, "fast_dead_ab": False,
 # 34 = PACED INPUT (the agent link's dead 50 ms wait before every send), interleaved in 10-min
 # blocks within each run (the input path is global, so not per engagement): odd seeds start
 # paced. Its base (v33 as is, or with its loot arm decided) is set at its pre-registration
-PARAMS[34] = {**PARAMS[33], "send_gap_s": 0.05, "send_gap_ab": True, "send_gap_ab_min": 10.0}
+# + a BASE fix (amended before v34's first run): the loot's unit check ignores the target's own
+# dying sprite for 2.5 s (the speed fix made loot start 0.63 s after the kill, under the corpse)
+PARAMS[34] = {**PARAMS[33], "send_gap_s": 0.05, "send_gap_ab": True, "send_gap_ab_min": 10.0,
+              "loot_corpse": True, "loot_corpse_s": 2.5, "loot_corpse_px": 30.0}  # fmt: skip
 # 35 = the species check on the box's OWN frame, gated by finding the sprite again in a fresh grab
 # (the species-crop study, species_check.py THE STALE BOX: coverage 0.34 -> 0.65 at a 0.6 s old
 # box, wrong species 11 -> 0, Creamy accepted 1/85 -> 0/85, offline on hunt-flow28..31): to cut
@@ -2093,6 +2096,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         # track's last cell (attempt 1: death_of's gate looted 5 of 11 kills)
                         dc_ = dead_.cell
                         ls_ = last_strike.get(int(eng_["track"]))
+                        corpse_: tuple[float, float, tuple[float, float], int] | None = None
                         if prm.get("loot_refix"):  # v33: the death cell from a fresh anchor too
                             rf_ = refix_now()
                             eng_["death"]["refix"] = rf_
@@ -2114,6 +2118,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                                    bb_.y1 - loot1.FOOT_LIFT)  # fmt: skip
                                 eng_["death"]["fixed_from"] = "anim"
                                 eng_["death"]["box_age_s"] = round((r.ns() - int(bt_)) / 1e9, 2)
+                                corpse_ = ((bb_.x0 + bb_.x1) / 2, (bb_.y0 + bb_.y1) / 2,
+                                           (float(mp_a[0]), float(mp_a[1])), int(bt_))  # fmt: skip
                         elif prm.get("loot_death") == "hybrid" and ls_ is not None:
                             # v24: the cell under the LAST strike click (found in the frame the
                             # click was aimed in), then the hybrid rule against where we stand now
@@ -2138,7 +2144,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         if dc_ is not None:
                             dead_cells_.append((time.monotonic(), dc_))  # v27: not a ghost
                             del dead_cells_[:-40]
-                            loot_fixed_run(eng_, here2, dc_, extra_)
+                            loot_fixed_run(eng_, here2, dc_, extra_, corpse_)
                     elif dead_.cell is not None and dead_.gone_ns is not None:
                         if prm.get("loot_blobs"):
                             loot_blobs_run(eng_, here2, dead_.cell, tr_)
@@ -2150,7 +2156,9 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     split.to(prev_, time.monotonic())
 
             def loot_fixed_run(eng_: dict[str, Any], here2: Cell, dcell: Cell,
-                               extra: Sequence[Any] = ()) -> None:  # fmt: skip
+                               extra: Sequence[Any] = (),
+                               corpse: tuple[float, float, tuple[float, float], int] | None = None,
+                               ) -> None:  # fmt: skip
                 """v23 (Batt 2026-10-17): his looting as a FIXED workflow after every kill -- no
                 item detection, no cursor read: burst-click the death cell, then click through
                 the 3 x 3 (loot_plan), each click re-projected from where the GM is now (each one
@@ -2243,10 +2251,29 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         else:
                             fr_l = sampler.since(max(0, len(sampler.frames) - 1))
                             mu_ = float(prm.get("loot_unit_px", 30.0))  # v25: 70 (see PARAMS)
-                            blk_ = next((x_ for x_ in (fr_l[-1][1] if fr_l else [])
-                                         if x_.cls in ("monster", "npc")  # not the GM's box
-                                         and x_.x0 - mu_ <= u_l <= x_.x1 + mu_
-                                         and x_.y0 - mu_ <= v_l <= x_.y1 + mu_), None)  # fmt: skip
+                            near_ = [x_ for x_ in (fr_l[-1][1] if fr_l else [])
+                                     if x_.cls in ("monster", "npc")  # not the GM's box
+                                     and x_.x0 - mu_ <= u_l <= x_.x1 + mu_
+                                     and x_.y0 - mu_ <= v_l <= x_.y1 + mu_]  # fmt: skip
+                            if (near_ and corpse is not None and prm.get("loot_corpse")
+                                    and (fr_l[-1][0] - corpse[3]) / 1e9
+                                    <= prm["loot_corpse_s"]):  # fmt: skip
+                                # v34 base (2026-10-18 00:3x): the TARGET'S OWN dying sprite is
+                                # not a unit -- a box on its last box (moved with the camera)
+                                # within loot_corpse_s of that box. v32: a loot starting at
+                                # 1.23 s skipped 4.0 clicks a step, at 2.5 s 2.48 (v33 att 2,
+                                # 0.63 s: 3.8). Every kill is one hit at STR 99
+                                sh0_ = frac_project(w_l, corpse[2], dcell)
+                                sh1_ = frac_project(w_l, mp_, dcell)
+                                cu_ = corpse[0] + sh1_[0] - sh0_[0]
+                                cv_ = corpse[1] + sh1_[1] - sh0_[1]
+                                keep_ = [x_ for x_ in near_ if math.hypot(
+                                    (x_.x0 + x_.x1) / 2 - cu_, (x_.y0 + x_.y1) / 2 - cv_)
+                                    > prm["loot_corpse_px"] or x_.cls != "monster"]  # fmt: skip
+                                if len(keep_) < len(near_):
+                                    out["corpse"] = out.get("corpse", 0) + 1
+                                near_ = keep_
+                            blk_ = near_[0] if near_ else None
                             if blk_ is not None:
                                 why_ = "unit"
                                 if (race_ and prm.get("looter_chain")
