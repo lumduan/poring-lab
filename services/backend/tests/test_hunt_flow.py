@@ -623,13 +623,13 @@ def test_v26_rests_the_pointer_on_the_ui() -> None:
     assert x0 + 20 <= hf.REST_PX[0] <= x1 - 20 and y0 + 20 <= hf.REST_PX[1] <= y1 - 20
 
 
-def test_v28_rests_in_two_motions_v29_is_abc_and_v30_fast_dead() -> None:
+def test_v28_rests_in_two_motions_v29_is_abc_v30_drops_the_belief() -> None:
     assert hf.PARAMS[28]["ptr_rest_two"] and hf.PARAMS[28]["ptr_rest_ui"]
     assert not hf.PARAMS[27].get("ptr_rest_two") and not hf.PARAMS[28].get("fast_dead")
     assert hf.PARAMS[29]["abc"] and not hf.PARAMS[28].get("abc") and hf.PARAMS[29]["ptr_rest_two"]
-    p = hf.PARAMS[30]
-    assert p["fast_dead"] and p["belief"] and p["ptr_rest_two"] and not p.get("abc")
-    assert p["fast_dead_gone_s"] < p["dead_gone_s"] and p["fast_dead_min_s"] < p["dead_min_s"]
+    assert hf.PARAMS[30]["abc"] and not hf.PARAMS[30]["belief"] and hf.PARAMS[29]["belief"]
+    p = hf.PARAMS[32]
+    assert p["fast_dead"] and not p["belief"] and p["ptr_rest_two"] and not p.get("abc")
 
 
 def test_v27_drops_a_deadlocked_steer() -> None:
@@ -648,4 +648,4 @@ def test_belief_ghost_skips_probed_tracks() -> None:
     assert g is not None
     assert hf.belief_ghost(bel, 3 * ns, [], 100.0, "nl", skip={g["tid"]}) is None
     assert hf.PARAMS[28]["belief_probe_once"] and not hf.PARAMS[27].get("belief_probe_once")
-    assert set(hf.VERSIONS) >= {28, 29, 30}
+    assert set(hf.VERSIONS) >= {28, 29, 30, 32}

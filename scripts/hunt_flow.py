@@ -217,7 +217,9 @@ VERSIONS = {
     "target, the name tag (or its cache) confirms, then the click; B = click at once and burst "
     "until the lock arrow; C = B after a second small motion (1-2 px); B / C only for a confident "
     "target (species check or tag cache) with no pink other than the target within 60 px",
-    30: "FAST DEAD (v24: server kill -> loot start p50 2.41 s): once the burst ended on the "
+    30: "v29 WITH THE BELIEF MAP OFF (Batt 18:3x, decision 2): the A / B / C strike test "
+    "continues, pooled with v29's runs",
+    32: "FAST DEAD (v24: server kill -> loot start p50 2.41 s): once the burst ended on the "
     "client's attack arrow or the target vanished, 0.35 s unseen (one detector frame) and 0.5 s "
     "after the click is the death, and the loot starts with no 0.4 s wait",
 }
@@ -328,8 +330,13 @@ PARAMS[27] = {**PARAMS[26], "belief": True, "belief_pd": 0.2, "belief_lead": 0.5
 PARAMS[28] = {**PARAMS[27], "ptr_rest_two": True, "belief_probe_once": True}
 # 29 = Batt's INTERLEAVED A / B / C strike test (2026-10-17 17:3x), on v28
 PARAMS[29] = {**PARAMS[28], "abc": True}
-# 30 = FAST DEAD (the top loser after loot: server kill -> the bot's "dead" + loot start), staged
-PARAMS[30] = {**PARAMS[28], "fast_dead": True, "fast_dead_min_s": 0.5, "fast_dead_gone_s": 0.35}
+# 30 = v29 with the Battleship belief map OFF (Batt 18:3x, decision 2: as a search goal it does
+# not pay -- ~11 % of goals led to a kill; the code stays, inert). The A / B / C test continues in
+# v30's runs, pooled with v29's (its arms are interleaved within each run)
+PARAMS[30] = {**PARAMS[29], "belief": False}
+# FAST DEAD (the latency budget's top loser: server kill -> the bot's "dead"), staged for later
+PARAMS[32] = {**PARAMS[30], "abc": False, "fast_dead": True, "fast_dead_min_s": 0.5,
+              "fast_dead_gone_s": 0.35}  # fmt: skip
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
