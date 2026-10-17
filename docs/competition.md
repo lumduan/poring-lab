@@ -45,7 +45,8 @@ non-target hit, map change) apply to every session.
 | R1 (bot v21) | (fixed) | 38.3 / 4 of 5 / 4 of 6 / pass | 96 / 81 % / 4 of 25 / pass | 120 / 76 % / 6 of 30 / pass | 100.8 / 78.8 % / 34 of 156 / pass |
 | R2 (bot v22) | (fixed) | 12.3 / 2 of 2 / 0 of 2 / pass | 126 / 75 % / 4 of 30 / pass | 138 / 84 % / 9 of 37 / pass | 123.5 / 80.0 % / 34 of 182 / pass |
 | R3 (bot v23) | (fixed) | 25.6 / 4 of 4 / 5 of 13 / pass | 126 / 83 % / 9 of 19 / pass (2 windows: the lower) | 162 / 69 % / 11 of 55 / pass | 145.2 / 76.8 % / 29 of 94 / pass (25.7 min) |
-| R4 (bot v24) | (fixed) | pending | pending | pending | pending |
+| R4 (bot v24) | (fixed) | 62.0 / 10 of 10 / 10 of 20 / pass | 138 / 63 % / 5 of 34 / pass | 180 / 89 % / 19 of 35 / pass | 146.9 / 77.4 % / 83 of 219 / **1 non-target (Creamy)** |
+| R5 (bot v25) | (fixed) | 6 kills (judging) | pending | pending | pending |
 
 ## Round 0 (bot v20 from 2026-10-17 04:42 + 05:55; agent 07:55)
 
@@ -179,7 +180,40 @@ non-target hit, map change) apply to every session.
   (v22 10); loot 30.9 % (v22 18.7 %); kill -> last pickup 2.79 s (v22 7.39 s). But seen ->
   click got slower (7.3 s vs 3.58 s): monsters seen during the 4 s loot step wait for it.
 
-## What the agent's play taught (rounds 0-3)
+## Round 4 (bot v24 first, 12:30; then the agent, 13:37)
+
+- **Sessions:**
+  - BOT v24 `20261017T123018-demo-hunt-flow24` (seed 20270501, 60 min; demonstrations 3.65).
+  - AGENT `20261017T133721-demo-agent-demo` (the same seed, 10 min).
+
+| metric | BATT | AGENT R4 (packet-assisted) | BOT v24 median 10' | BOT best 10' | BOT full |
+|---|---|---|---|---|---|
+| kills / h | 300 | 62.0 | 138 | 180 | 146.9 |
+| landing <= 5 s | 64/64 | 10/10 | 12/19 | 25/28 | 113/146 |
+| seen -> click p50 / p90 s | 1.11 / 4.79 | 12.04 / 14.24 | 5.89 / 17.94 | 3.63 / 11.15 | 4.21 / 14.18 |
+| death -> next click s | 1.24 / 1.8 | 15.8 / 23.4 | 2.18 / 3.83 | 2.56 / 5.67 | 2.39 / 5.67 |
+| monsters in sight / 10 min | 44 | 11.4 | 32 | 40 | 37 (windowed) |
+| loot picked / dropped | 62 / 64 | 10 / 20 | 5 / 34 | 19 / 35 | 83 / 219 |
+| kill -> last pickup s | 1.56 | 32.2 | 2.8 | 3.56 | 3.63 |
+| walk clicks while moving | 72.7 % | 0 % | 55.3 % | 46.7 % | 50.3 % |
+| click cadence s | 0.6 / 3.44 | 28.2 / 81.2 | 0.96 / 3.98 | 0.96 / 5.45 | 0.96 / 4.14 |
+| reversals / min | 3.6 | 0.62 | 7.5 | 6.3 | 6.94 |
+| straight run cells | 16.9 | 17.6 | 11.8 | 10.8 | 11.3 |
+| unintended attack requests | - | 0 | 5 | 2 | 14 |
+| hard bars (NPC / map / non-target) | - | 0/0/0 | 0/0/0 | 0/0/0 | **0/0/1** |
+
+- **The bot's hard bar:** a fast Creamy flew under the resting pointer just as a walk click was
+  sent, and the client resolved the walk click as an attack on it (demonstrations 3.65).
+  - The walk guard (no pink within 80 px, no box within 60 px) saw nothing.
+  - Blind clicks (walk and loot) cannot see an unboxed, unpink Creamy. This is the open safety
+    problem.
+- **The agent's best round:** 10 kills, 10 of 10 landed, and 10 of 20 drops picked by eye.
+  - **A new packet fact: Porings LOOT.** A Poring hopped onto two of our drops and they vanished;
+    killing it dropped them again with its own.
+    - From pixels: items that vanish while a Poring sits on them. For the bot, the lesson is loot
+      speed.
+
+## What the agent's play taught (rounds 0-4)
 
 - **The agent's own limit is its decision loop.**
   - Each step is a screenshot, a thought and a command: ~10-20 s.
