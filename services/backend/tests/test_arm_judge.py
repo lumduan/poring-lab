@@ -130,3 +130,11 @@ def test_arm_spans_split_a_run_into_its_paced_and_default_blocks() -> None:
           {"t_ns": 90, "kind": "y"}]  # fmt: skip
     assert aj.arm_spans(ev) == [(5, 65, True), (65, 90, False)]
     assert aj.arm_spans([{"t_ns": 1, "kind": "loop_start"}]) == []
+
+
+def test_every_table_is_reachable_from_the_command_line() -> None:
+    import inspect
+
+    src = inspect.getsource(aj.main)
+    for name in ("strike", "dead", "loot", "stray", "blocks", "species"):
+        assert f'"{name}": {name}_table' in src

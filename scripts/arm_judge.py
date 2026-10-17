@@ -12,6 +12,7 @@ engagements.json, clicks.jsonl, and flow_judge.json -- run `flow_judge.bot(sid)`
     arm_judge.py stray SID [SID ...]    per loot step: the GM walked >= 4 cells off the death
                                         cell (the TREADMILL), by the loot arm
     arm_judge.py blocks SID [SID ...]   v34: the paced / default 10-min blocks (send_gap events)
+    arm_judge.py species SID [SID ...]  v35: own-frame (odd k) vs stale-box (even k) species check
 
 Packets are offline ground truth here (ADR-0007); nothing in this module runs during play.
 """
@@ -390,16 +391,51 @@ def blocks_table(sessions: Iterable[dict[str, Any]]) -> dict[str, Any]:
     return out
 
 
+def species_table(sessions: Iterable[dict[str, Any]]) -> dict[str, Any]:
+    """v35: per engagement parity (odd k = the species check on the box's OWN frame, even k =
+    the fresh crop at the stale box): arm C's eligibility (the ``abc`` events: effective arm,
+    fallback reasons) and landing within the judge's window."""
+    agg: dict[str, Counter[str]] = defaultdict(Counter)
+    for s in sessions:
+        ev = [json.loads(x) for x in (DEMO / s["sid"] / "events.jsonl").read_text().splitlines()
+              if x]  # fmt: skip
+        for e in ev:
+            if e.get("kind") != "abc":
+                continue
+            a = agg["own" if int(e["k"]) % 2 == 1 else "stale"]
+            a["strikes"] += 1
+            a[f"arm_{e.get('arm_eff')}"] += 1
+            if e.get("fallback"):
+                a[f"fallback_{e['fallback']}"] += 1
+        for k, why in s["why_by_k"].items():
+            a = agg["own" if k % 2 == 1 else "stale"]
+            a["engagements"] += 1
+            a["landed"] += why == "hit"
+    out: dict[str, Any] = {}
+    for arm, a in sorted(agg.items()):
+        n = a["strikes"]
+        out[arm] = {**dict(sorted(a.items())),
+                    "effective_C_share": round(a["arm_C"] / n, 3) if n else None,
+                    "unsure_share": round(a["fallback_species_unsure"] / n, 3) if n else None,
+                    "landing": f"{a['landed']}/{a['engagements']}"}  # fmt: skip
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)  # fmt: skip
-    ap.add_argument("what", choices=("strike", "dead", "loot", "stray", "blocks"))
+    ap.add_argument("what", choices=("strike", "dead", "loot", "stray", "blocks", "species"))
     ap.add_argument("sessions", nargs="+")
     a = ap.parse_args()
     sessions = [load(s) for s in a.sessions]
-    fn = {"strike": strike_table, "dead": dead_table, "loot": loot_table, "stray": stray_table}[
-        a.what
-    ]
+    fn = {
+        "strike": strike_table,
+        "dead": dead_table,
+        "loot": loot_table,
+        "stray": stray_table,
+        "blocks": blocks_table,
+        "species": species_table,
+    }[a.what]
     print(json.dumps(fn(sessions), indent=1, default=str))
     return 0
 
