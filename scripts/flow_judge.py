@@ -847,6 +847,20 @@ def sight_per_10min(events: Sequence[Mapping[str, Any]], t0: int, w1: int) -> fl
     return round(len(g) * 600 / max(1e-9, (w1 - t0) / NS), 1)
 
 
+def sight_windowed(events: Sequence[Mapping[str, Any]], t0: int, w1: int,
+                   win_s: float = 600.0) -> float:  # fmt: skip
+    """The SAME ruler for a long run as for a 10-min demo (the search-gap study, 2026-10-17):
+    rAthena keeps a spawn slot's block id across respawns, so distinct gids over a whole 60-min run
+    stop growing at the mobs met (82-103) and ``sight_per_10min`` under-counts by ~1.65x. This is
+    the MEDIAN over back-to-back ``win_s`` windows (the plain figure when the run is shorter)."""
+    n = int((w1 - t0) / NS // win_s)
+    if n < 2:
+        return sight_per_10min(events, t0, w1)
+    vals = sorted(sight_per_10min(events, t0 + int(k * win_s * NS), t0 + int((k + 1) * win_s * NS))
+                  for k in range(n))  # fmt: skip
+    return vals[(n - 1) // 2] if n % 2 else round((vals[n // 2 - 1] + vals[n // 2]) / 2, 1)
+
+
 def pct(xs: Sequence[float], q: float) -> float | None:
     if not xs:
         return None
@@ -1038,6 +1052,7 @@ def bot(
                 window_s=window)  # fmt: skip
     out["engagements_w"] = bot_engagements(events, engs)
     out["sight_per_10min"] = sight_per_10min(events, t0, t0 + int(window * NS))
+    out["sight_per_10min_win"] = sight_windowed(events, t0, t0 + int(window * NS))
     out["idle_between_kills"] = idle_between_kills(events, clicks, t0, t0 + int(window * NS))
     out["queue_hit_through"] = queue_hit_through((d / "events.jsonl").read_text().splitlines())
     w1 = t0 + int(window * NS)
@@ -1126,7 +1141,9 @@ def row(o: Mapping[str, Any]) -> dict[str, str]:
         f" ({o['kills_by_origin']['unintended']} other kills)",
         "seen -> click p50/p90 s": f"{rx['seen_to_click'][0]} / {rx['seen_to_click'][1]}",
         "click -> hit p50/p90 s": f"{rx['click_to_hit'][0]} / {rx['click_to_hit'][1]}",
-        "monsters in sight / 10 min": f"{o['sight_per_10min']}",
+        "monsters in sight / 10 min": f"{o.get('sight_per_10min_win', o['sight_per_10min'])}"
+        + ("" if o.get("sight_per_10min_win") in (None, o["sight_per_10min"])
+           else f" (whole run {o['sight_per_10min']})"),
         "idle %": f"{o['idle_pct']}",
         "walk clicks / min": f"{o['walk_clicks']['per_min']}",
         "range at click p50/p90": f"{o['range_cells']['p50']} / {o['range_cells']['p90']}",

@@ -297,3 +297,15 @@ def test_landing_is_reported_by_species_with_clicks_per_landing() -> None:
     assert out["Poring"] == {"n": 1, "landed": 1, "rate": 1.0, "clicks_per_landing": 2.0,
                              "aim_px_p50": 4.0}  # fmt: skip
     assert out["Lunatic"]["landed"] == 0 and out["Lunatic"]["rate"] == 0.0
+
+
+def test_sight_is_judged_per_10_min_window_on_long_runs() -> None:
+    """The search-gap study: gids survive respawns, so a whole-run count under-counts."""
+    events = []
+    for k in range(3):  # three 10-min windows, the same 5 gids met again in each
+        for g in range(5):
+            events.append(ev(k * 600 + 10 + g, "entity_appear", gid=MOB + g, objtype=5))
+    events.sort(key=lambda e: e["t_mono_ns"])
+    assert fj.sight_per_10min(events, 0, int(1800 * S)) == round(5 * 600 / 1800, 1)
+    assert fj.sight_windowed(events, 0, int(1800 * S)) == 5.0
+    assert fj.sight_windowed(events, 0, int(600 * S)) == fj.sight_per_10min(events, 0, int(600 * S))
