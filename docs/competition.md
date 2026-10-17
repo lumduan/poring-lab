@@ -50,7 +50,8 @@ non-target hit, map change) apply to every session.
 | R6 (bot v26) | (fixed) | 40.0 / 6 of 6 / 3 of 7 / pass | 120 / 87 % / 20 of 26 / pass | 126 / 83 % / 18 of 40 / pass | 129.1 / 85.4 % / 68 of 122 / **pass** (39.8 min) |
 | R7 (bot v27) | (fixed) | 41.5 / 6 of 8 / 6 of 8 / pass | 78 / 67 % / 8 of 11 / **1 non-target** (2 windows: the lower) | 168 / 79 % / 21 of 38 / pass | 141.7 / 75.7 % / 52 of 109 / **1 non-target (Creamy)** (28.8 min) |
 | R8 (bot v28) | (fixed) | 19.2 / 3 of 4 / 1 of 2 / pass | 144 / 80 % / 19 of 40 / pass | 156 / 72 % / 15 of 31 / pass | **141.9 / 75.3 % / 95 of 179 / pass (full hour)** |
-| R9+ (bot v29, A/B/C) | (fixed) | (bot only from here: Batt's A/B/C test) | pending | pending | pending |
+| R8b (bot v29, A/B/C run 1) | (fixed) | - (bot only) | see the A/B/C section | | 131.9 / 73.6 % / pass (full hour) |
+| R9 (bot v30, A/B/C run 2) | (fixed) | **66.5 / 10 of 10 / 11 of 20 / pass** (the agent's best) | pending | pending | pending |
 
 ## Round 0 (bot v20 from 2026-10-17 04:42 + 05:55; agent 07:55)
 
@@ -342,7 +343,34 @@ non-target hit, map change) apply to every session.
 - **The agent:** 3 kills. Its start area held little, and it spent minutes at the map's southern
   edge, by the warp portal (kept away from it) and in the palm grove.
 
-## What the agent's play taught (rounds 0-8)
+## Batt's decisions at 18:3x (after the 18:00 update)
+
+1. **The loot's death cell** comes from where the target was when OUR HIT LANDED (or its death
+   animation), not the last strike click. Validated offline (3.71): the hit cell has 90 % of drops
+   in its 3 x 3, the click 54 %. That is v31.
+2. **Battleship off** (inert code): as a search goal ~11 % of goals led to a kill. Off from v30.
+3. **A Creamy hit is not a hard bar** until a Creamy-aware detector is trained (GPU frozen). It is
+   counted and reported apart. Hard bars stay: NPC contact, map change, unknown UI state, any
+   other non-target.
+4. **Speed first**, toward 300 kills / h and seen -> click 1.1 s: the A / B / C strike test (3.70),
+   then the death-cell loot fix, then the latency budget's top loser. Agent rounds continue.
+
+## Batt's A / B / C strike test (3.70, interleaved per engagement; pooled over runs)
+
+- **The lock arrow, proven against packets:** 93.8 % of arrow-ended bursts mean "the target is
+  locked"; 3.4 % false. The arrow comes 0.36 s BEFORE our attack request (p50).
+- **Run 1 (v29, 18:11, 141 engagements, hard bars passed):**
+
+| arm | n | arrival -> click | arrival -> attack request p50 / p90 | landing <= 5 s | first click: target / other unit / ground | arrival -> kill p50 |
+|---|---|---|---|---|---|---|
+| A (confirm first) | 77 | 0.64 s | 1.41 / 1.97 s | 71 % | 55 / 8 / 14 | 2.42 s |
+| B (click at once) | 29 | 0.02 s | 0.81 / 1.17 s | 69 % | 20 / 0 / 9 | 1.83 s |
+| C (B + nudge) | 32 | 0.11 s | 1.02 / 2.12 s | 81 % | 20 / 0 / 12 | 2.09 s |
+
+  - B and C fall back to A when the species check is unsure or crowded (~45 % of planned B / C).
+    So B and C pool more slowly; runs 2+ continue.
+
+## What the agent's play taught (rounds 0-9)
 
 - **The agent's own limit is its decision loop.**
   - Each step is a screenshot, a thought and a command: ~10-20 s.
