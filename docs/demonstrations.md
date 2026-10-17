@@ -8538,6 +8538,22 @@ nice 10, detector on the CPU (GPU freeze), judged on the full run and on 10-min 
 - engaged kills / h >= 102 (v22's 113.6 - 10 %);
 - hard bars: zero NPC contact, zero map change, zero non-target hit.
 
+**Attempt 1 (2026-10-17 11:49:11, session 20261017T114911-demo-hunt-flow23, seed 20270401):
+STOPPED BY ME after 296 s (SIGINT), 11 engagements, all dead.**
+- Two implementation defects against the design above:
+  - **only 5 of the 11 kills got the loot step.** The old `death_of` gate (a death cell AND a
+    seen vanish) still stood in front of it. Batt's rule is every confirmed kill, at the target's
+    last tracked cell;
+  - **~0.7 s a click, not 0.3 s:** each pink check grabbed the whole frame. So a step gave 6
+    clicks in 4.1 s instead of 10.
+- Live packets for the 4.2 min: 7 pickups.
+- **Fix (fc41aa5):**
+  - every confirmed kill is looted, at `death_of`'s cell when it has one, else the track's last
+    cell (`fixed_from: track` in the log);
+  - the pink check grabs only a crop around the click point;
+  - each step logs its death record.
+- Attempt 2 runs the fix on the same seed.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
