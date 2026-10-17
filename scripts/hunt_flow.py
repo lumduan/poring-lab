@@ -396,7 +396,7 @@ PARAMS[35] = {**PARAMS[34], "send_gap_ab": False, "species_own": True, "species_
 # their clicks; in 15 no live monster stood within 6 cells (packets) -- the target's own dying
 # sprite beside the GM (the corpse match missed: its last tracked box was > 30 px off) or our own
 # hand pointer. Base: v35 with the STALE-box species check for all (3.75's verdict 2026-10-18
-# 06:0x: the own frame cut "unsure" 27 -> 16 % but landing fell 80.5 -> 63.6 %)
+# 06:08, 6c95acf: the own frame cut "unsure" 27 -> 16 % but landing fell 80.5 -> 63.6 %)
 PARAMS[36] = {**PARAMS[35], "species_own": False, "species_own_ab": False, "loot_retry": True,
               "loot_retry_ab": True, "loot_retry_wait_s": 0.6}  # fmt: skip
 

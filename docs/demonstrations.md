@@ -9541,7 +9541,7 @@ between runs, nice 10, detector on the CPU, the live hard-bar monitor.
   - The full 60-min box: 153 engagements, 150 dead, 2 gave up, 1 cut by the time box. No stop,
     0 Creamy hits, 0 non-target hits.
 
-**RESULT (judged 2026-10-18 06:0x; run 1 + run 2 pooled):**
+**RESULT (judged 2026-10-18 06:08, 6c95acf; run 1 + run 2 pooled):**
 
 | run | min | engagements | landing (5 s) | kills / h | seen -> click p50 | loot picked / fell | sight / 10 min | reversals / min |
 |---|---|---|---|---|---|---|---|---|
@@ -9676,7 +9676,7 @@ technique that broke), plus a short phone clip.
   known steps, and a judged screenshot on prt_fild06 followed (06:03): no dialog, the fixed-state
   windows, readout 175 184, HP full.
 
-### 3.77 hunt-flow@36: THE LOOT RETRY, interleaved per kill (pre-registered 2026-10-18 06:1x ICT, the commit time below, BEFORE its run)
+### 3.77 hunt-flow@36: THE LOOT RETRY, interleaved per kill (pre-registered 2026-10-18 06:08 ICT, the commit time 6c95acf, BEFORE its run)
 
 **Why this change, and not the time-loser order:** the plan attacks the latency budget's top
 loser. v34's two runs (s / h):
