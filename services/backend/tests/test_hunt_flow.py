@@ -510,3 +510,11 @@ def test_new_pink_counts_only_pink_that_was_not_there_before() -> None:
     assert (
         0 < hf.new_pink_px(apple, before * 0, 100, 100, p["loot_pink_r"]) <= p["loot_pink_max_px"]
     )
+
+
+def test_shifted_crop_is_the_region_zero_outside() -> None:
+    img = np.arange(5 * 6 * 3, dtype=np.int32).reshape(5, 6, 3)
+    c = hf.shifted_crop(img, 1, 2, 3, 2)
+    assert (c == img[2:4, 1:4]).all()
+    c = hf.shifted_crop(img, -1, -1, 3, 3)  # one row and one column outside
+    assert (c[0] == 0).all() and (c[:, 0] == 0).all() and (c[1:, 1:] == img[0:2, 0:2]).all()

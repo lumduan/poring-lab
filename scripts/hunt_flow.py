@@ -1169,6 +1169,17 @@ def new_pink_px(after: Any, before: Any | None, u: float, v: float, radius: int,
     return int((pk & m).sum())
 
 
+def shifted_crop(img: Any, x0: int, y0: int, w: int, h: int) -> Any:
+    """PURE (v23): the w x h region of ``img`` whose top-left is (x0, y0), zero where it falls
+    outside ``img``."""
+    a = np.asarray(img)[..., :3]
+    out = np.zeros((h, w, 3), a.dtype)
+    cx0, cy0, cx1, cy1 = max(0, x0), max(0, y0), min(a.shape[1], x0 + w), min(a.shape[0], y0 + h)
+    if cx1 > cx0 and cy1 > cy0:
+        out[cy0 - y0 : cy1 - y0, cx0 - x0 : cx1 - x0] = a[cy0:cy1, cx0:cx1]
+    return out
+
+
 def tag_boxes(b: Any, ptr: tuple[float, float], around_ptr: bool) -> list[Any]:
     """PURE (v20): the boxes whose bands may hold the name tag -- the detector box, and with
     ``around_ptr`` a sprite-sized box centred on the pointer: the client draws the tag only under
@@ -1699,10 +1710,19 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     dead_ = loot1.death_of(rig, lt, here2)
                     eng_["death"] = {"cell": None if dead_.cell is None else list(dead_.cell),
                                      "reason": dead_.reason}  # fmt: skip
-                    if dead_.cell is not None and dead_.gone_ns is not None:
-                        if prm.get("loot_fixed"):
-                            loot_fixed_run(eng_, here2, dead_.cell)
-                        elif prm.get("loot_blobs"):
+                    if prm.get("loot_fixed"):
+                        # v23 attempt 2: Batt's rule is EVERY confirmed kill, at the target's
+                        # last tracked cell -- death_of's cell when it has one, else the
+                        # track's last cell (attempt 1: death_of's gate looted 5 of 11 kills)
+                        dc_ = dead_.cell
+                        if dc_ is None and tr_.seen:
+                            c_t = tr_.seen[-1][1]
+                            dc_ = (int(round(c_t[0])), int(round(c_t[1])))
+                            eng_["death"]["fixed_from"] = "track"
+                        if dc_ is not None:
+                            loot_fixed_run(eng_, here2, dc_)
+                    elif dead_.cell is not None and dead_.gone_ns is not None:
+                        if prm.get("loot_blobs"):
                             loot_blobs_run(eng_, here2, dead_.cell, tr_)
                         elif prm.get("loot_sweep"):
                             loot_sweep(eng_, here2, dead_.cell)
@@ -1748,15 +1768,25 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                    for x_ in (fr_l[-1][1] if fr_l else [])):  # fmt: skip
                                 why_ = "unit"
                             else:
-                                sh_ = (0.0, 0.0)
+                                dx_, dy_ = 0, 0
                                 if mp_b is not None:  # the ground's move since BEFORE
-                                    p1_, p0_ = (
-                                        frac_project(w_l, mp_, c_l),
-                                        frac_project(w_l, mp_b, c_l),
-                                    )
-                                    sh_ = (p1_[0] - p0_[0], p1_[1] - p0_[1])
-                                n_pk = new_pink_px(np.asarray(frame())[..., :3], before_, u_l, v_l,
-                                                   prm["loot_pink_r"], shift=sh_)  # fmt: skip
+                                    p1_ = frac_project(w_l, mp_, c_l)
+                                    p0_ = frac_project(w_l, mp_b, c_l)
+                                    dx_ = int(round(p1_[0] - p0_[0]))
+                                    dy_ = int(round(p1_[1] - p0_[1]))
+                                # attempt 2: a FRESH crop around the click point only (attempt
+                                # 1 grabbed the whole frame per click: ~0.7 s a click)
+                                r_p = int(prm["loot_pink_r"])
+                                x0_, y0_ = max(0, int(u_l) - r_p), max(0, int(v_l) - r_p)
+                                x1_ = min(gw, int(u_l) + r_p + 1)
+                                y1_ = min(gh, int(v_l) + r_p + 1)
+                                crop_ = screen.grab(gx0 + x0_, gy0 + y0_, x1_ - x0_, y1_ - y0_)[1]
+                                crop_ = np.ascontiguousarray(crop_[..., :3])
+                                bcrop_ = None
+                                if before_ is not None:
+                                    hh_, ww_ = crop_.shape[:2]
+                                    bcrop_ = shifted_crop(before_, x0_ - dx_, y0_ - dy_, ww_, hh_)
+                                n_pk = new_pink_px(crop_, bcrop_, u_l - x0_, v_l - y0_, r_p)
                                 if n_pk > prm["loot_pink_max_px"]:
                                     why_ = "pink"
                     if why_ is not None:
@@ -1770,6 +1800,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                "kind": "loot", "cell": list(c_l), "src": "fixed"})  # fmt: skip
                     time.sleep(prm["loot_interval_s"])
                 out["s"] = round(time.monotonic() - t_l0, 2)
+                out["death"] = eng_.get("death")
                 eng_["loot"] = out
                 ev({"kind": "loot_fixed", **out})
 
