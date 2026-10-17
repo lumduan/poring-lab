@@ -9530,6 +9530,98 @@ between runs, nice 10, detector on the CPU, the live hard-bar monitor.
 - **safety:** zero non-target hits (Creamy counted apart) and no rise of Creamy attack requests
   in the own arm; hard bars zero.
 
+**Run log (written during the runs, before any judging):**
+- Agent round R11 ran between v34 and v35 (03:46-03:57, `20261018T034638-demo-agent-demo`,
+  packet-assisted, 10 min).
+- **Run 1** (03:58:55, seed 20271901, `20261018T035855-demo-hunt-flow35`), after a judged
+  screenshot (03:58: no dialog, the fixed-state windows, the weight cleared).
+
+### 3.76 hunt-flow@35 on prt_fild06: THE HELD-OUT MAP TEST (pre-registered 2026-10-18 04:1x ICT, the commit time below, BEFORE its run; Batt 2026-10-17 21:5x)
+
+**Batt:** do the techniques (walking, striking, looting) carry over to another map? One run of the
+CURRENT BEST version, UNCHANGED (a MAP parameter only), with nothing tuned on that map.
+
+**The map: prt_fild06**, picked offline, read-only, before any run there:
+- The most v1-known targets: Poring 60 + Lunatic 60 + Pupa 20 of 185 spawns (76 %). Poring and
+  Lunatic are the best-trained species and the only ones with name-tag templates.
+- The fewest and least risky unknown species: Thief Bug Egg 20 (a Pupa look-alike), Thief Bug
+  10, Green Plant 15, all passive.
+- Client and server walkability agree exactly (0 cells either way). 2 warps, 0 NPCs, one
+  connected search area of 44,104 cells. The same Prontera grass tileset, so the test isolates
+  layout and density, not scenery.
+- Low prep: offline only.
+- Rejected:
+  - prt_fild05: 8 warps, 4 NPCs;
+  - pay_fild03: no Pupa name-tag template, 50 Pupa, Payon forest scenery (a harder second
+    held-out);
+  - prt_fild01: Fabre + Thief Bug;
+  - prt_fild04: Rocker 70, Creamy 40;
+  - pay_fild04: aggressive Poring look-alikes.
+- Caveat: target density is ~2x prt_fild08's (3.17 vs 1.59 targets per 1000 search cells), so
+  kills / h is NOT comparable. Per-engagement rates are the primary measures.
+
+**Prep (safety only, no parameter tuned):**
+- its GAT in GAT_DIR;
+- the L3 touch areas (first_workflow: 34 maps; the 33 others identical, 0 problems);
+- the npc_cells block (complete, 0 NPCs);
+- the warps from warps.json (2);
+- the stand_grid and the search area (44,104 cells);
+- `hunt_flow.py run --map prt_fild06`. The start anchor is the search area's centre cell, from
+  the map alone: (170, 192). Seed 20272101 gives the start cell (175, 184); the warps are at
+  (23, 193) and (277, 320).
+- No animated regions are needed: hunt_flow uses only stand_grid.
+- **The fixed-state UI checks THERE:** just before the run, `ro_agent.py gm "@warp prt_fild06 175
+  184"` (through the UI gate), a judged screenshot on prt_fild06 (no dialog, the fixed-state
+  windows, the minimap and position readout), then the run.
+
+**Version: v35, unchanged** (paced input for the whole run, the species check interleaved per
+engagement exactly as on prt_fild08). Why it is the current best:
+- It carries every change adopted by a pre-registered verdict or by Batt:
+  - arm C as the default strike;
+  - the loot re-anchor per click and the death-cell speed fix (the v33 base);
+  - the plain 3 x 3 (3.73);
+  - the corpse fix (the v34 base);
+  - paced input (3.74).
+- Kills / h between versions follows the density (sight 12.1-15.3 per 10 min across the night's
+  full runs), so it does not rank them.
+- Running it exactly as on prt_fild08 makes the side-by-side compare like with like: its two
+  prt_fild08 runs (3.75), pooled.
+- v32 (the night's highest kills / h, 148.7) has the loot treadmill that stopped its run 1 on a
+  13-cell "position jump". That is a stop risk on a new map, and v33 fixed it.
+
+**Run:** one 60-min run, seed 20272101, prt_fild06, natural spawns, the GM immune at STR 99, the
+hunting fixed state restored and the weight cleared before, nice 10, the detector on the CPU:
+
+        nice -n 10 uv run python scripts/hunt_flow.py run --version 35 --minutes 60 --seed 20272101 --map prt_fild06
+        nice -n 10 uv run python scripts/hardbar_live.py watch 35 --targets 1002,1063,1008 --apart 1048,1051,1080
+
+**Bars:**
+- The hard bars are unchanged: NPC contact, map change, an unknown UI state (the runner's own
+  stop).
+- A hit on Creamy (always) or on an UNKNOWN species (1048 Thief Bug Egg, 1051 Thief Bug, 1080
+  Green Plant) is COUNTED APART, not a stop.
+- Hunt only the v1-known species (the targets 1002, 1063, 1008).
+
+**Prediction, vs v35 pooled on prt_fild08 (3.75's two runs):**
+- landing within 5 s: within 10 points of prt_fild08's;
+- seen -> click p50: within +0.5 s;
+- loot picked / fell: within 15 points (Thief Bugs and Porings are looters, not 1:1);
+- reversals / min: within +2;
+- kills / h: >= prt_fild08's (2x density); reported, not evidence;
+- unknown-species hits: <= 3 (the Thief Bug Egg vs Pupa risk);
+- hard bars: zero.
+
+**Which technique broke, if any, is read from:**
+- heading / turns: reversals, steer_stuck;
+- cliffs / stalls: stall events, the share of non-walkable cells;
+- strike: landing, arm fallbacks;
+- loot: picked, stray;
+- detector misses: unknown-species hits, walk-click hits.
+
+**Report:** side by side with v35 on prt_fild08 (kills / h, landing, seen -> click, loot picked /
+fell / lost to looters, reversals, monsters seen / 10 min + density, unknown-species hits, the
+technique that broke), plus a short phone clip.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
