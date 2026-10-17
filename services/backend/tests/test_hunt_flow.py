@@ -489,11 +489,24 @@ def test_v23_is_batts_fixed_loot_workflow_on_v22() -> None:
     assert len(plan) * p["loot_interval_s"] <= p["loot_fixed_max_s"]
 
 
-def test_new_pink_ignores_pink_that_was_there_before() -> None:
-    before = np.zeros((100, 100, 3), np.uint8)
-    before[40:60, 40:60] = (180, 90, 230)  # BGR pink: a Poring's corpse splat
+def test_new_pink_counts_only_pink_that_was_not_there_before() -> None:
+    pink = (180, 90, 230)  # BGR: a Poring's (or a Creamy's) colours
+    before = np.zeros((200, 200, 3), np.uint8)
+    before[90:110, 90:110] = pink  # the corpse splat, there before the death
     after = before.copy()
-    assert hf.new_pink_share(after, before, 50, 50, 20) == 0.0
-    assert hf.new_pink_share(after, None, 50, 50, 20) > 0.2
-    after[70:90, 70:90] = (180, 90, 230)  # something pink flew in (a Creamy)
-    assert hf.new_pink_share(after, before, 80, 80, 15) > 0.5
+    assert hf.new_pink_px(after, before, 100, 100, 40) == 0
+    assert hf.new_pink_px(after, None, 100, 100, 40) == 400
+    # the camera followed the GM: the ground (and the corpse) moved 30 px left on screen
+    moved = np.zeros_like(before)
+    moved[90:110, 60:80] = pink
+    assert hf.new_pink_px(moved, before, 70, 100, 40, shift=(-30.0, 0.0)) == 0
+    assert hf.new_pink_px(moved, before, 70, 100, 40) > 100  # unaligned it would block the loot
+    moved[130:150, 130:150] = pink  # a Creamy flies in: 400 new pink pixels
+    p = hf.PARAMS[23]
+    assert hf.new_pink_px(moved, before, 140, 140, p["loot_pink_r"],
+                          shift=(-30.0, 0.0)) > p["loot_pink_max_px"]  # fmt: skip
+    apple = np.zeros_like(before)
+    apple[95:103, 95:103] = (40, 30, 200)  # an Apple-sized red sprite: 64 px, not a Creamy
+    assert (
+        0 < hf.new_pink_px(apple, before * 0, 100, 100, p["loot_pink_r"]) <= p["loot_pink_max_px"]
+    )
