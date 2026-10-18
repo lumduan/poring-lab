@@ -927,3 +927,62 @@ Also: false "dead" calls on 16.9 % of engagements (0.38 s per kill of looting no
 - Fix the false "dead" calls.
 - Fewer species-unsure fallbacks and empty tag reads.
 - The detector (0.51 s per kill) waits for the GPU.
+
+## Overnight 18-19 Oct (Batt asleep; his 22:2x plan, until Monday 07:00)
+
+Batt's plan:
+1. v39: finish runs 2-4, verdict.
+2. v40, the false-dead fix: 4 runs, verdict.
+3. Then the next top cause, each as its own version, re-ranked after every verdict on the
+   bot-vs-Batt table.
+4. A version that passes becomes the base; one that fails reverts. Never stack unjudged changes.
+
+The client is kept busy by `scripts/hunt_chain.py`: it queues the CURRENT version's remaining
+pre-registered runs only, each time-boxed with the live hard-bar monitor. Judging and
+pre-registering stay with the agent.
+
+**v39 (the continuous approach, 3.80): NOT ADOPTED** (pooled read 02:20, 7dd9524):
+- Steer moving share: tail 0.370 vs base 0.367 (the primary needed >= 1.15 x).
+- Approach: 5.14 vs 4.71 s (needed <= 0.90 x). Landing 74.9 vs 77.1 % (the guard passed).
+- Hard bars 0 / 0 / 0 in all 4 runs.
+- **The finding:** the picker now finds a point, but on a short route the tail cells lie within
+  120 px of the GM's sprite. There the WALK GUARD refuses them (4,477 refusals vs 385): v16's
+  Creamy layer. The GM still stands until the 1-s standstill fallback.
+- So the approach's remaining cause is a gate, and gates are Batt's call.
+- The 5th check ("none" <= 0.10 x) failed its bound; the residual is the design's own arrival
+  case (3.80 RESULT).
+
+**The bot against Batt, on the current best base** (v38's base; measured by v39's 4 runs, whose
+tail arm changed nothing on the primary):
+
+| measure | Batt | bot (v39, 4 runs) |
+|---|---|---|
+| kills / h | 300 | 151.1 (130.9-179.8) |
+| monsters seen / 10 min (windowed) | 44 | 31.9 |
+| kills per sighting | 6.82 | 4.73 |
+| s per kill | 12.0 | 23.8 |
+| free targets attacked within 10 s | 78 % | 40.5 % (n 741) |
+| steer moving share | 92 % | 35-39 % |
+| seen -> click (p50) | 1.11 s | 3.47 s |
+| death -> next (p50) | 1.24 s | 0.71 s |
+| landing within 5 s | 100 % | 76.0 % (517 / 680) |
+| loot picked / dropped | 97 % | 56.9 % (444 / 780; 103 lost to looters) |
+| reversals / min | 3.6 | 7.77 |
+| dead calls without a real death | - | 24.5 % (165 / 674) |
+| Creamy hits (requests) | - | 12 (10) |
+| hard bars | - | 0 / 0 / 0 |
+
+- Milestones: M1 (seen -> click <= 2.2 s, landing >= 90 %, loot >= 80 %, reversals <= 5 / min,
+  hard bars clean) is NOT met: only the hard bars pass. M2 and the stretch are not met.
+- The best 2-min stretch of the night so far: v39 run 1, minutes 21-23, 14 kills (a 420 / h
+  pace). The phone clip is on the NAS: `hunt-recordings/v39r1-best2min-phone.mp4`.
+
+**Re-ranked after v39** (seconds per kill vs Batt, conversion study):
+1. The approach, +3.22. Its remaining cause is the walk guard: Batt's decision.
+2. Never attacked, +1.96. Walkers are the largest group (1.19 + 0.84 idle s per kill) ->
+   **v41, walking targets struck from 7 cells** (3.82, pre-registered 02:31, 61cf81d). The
+   aim stays arm C's on the detector box; it is not the velocity-led point of the earlier
+   candidate below. It runs in Batt's next block: v40's four runs fill the night.
+3. Within 3 cells -> click, +0.50 (species-unsure fallbacks, empty tag reads).
+4. Dead calls without a real death, 24.5 % of dead calls -> **v40, the false-dead fix** (3.81),
+   running since 02:26:49.
