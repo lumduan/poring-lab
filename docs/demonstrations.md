@@ -9675,6 +9675,58 @@ technique that broke), plus a short phone clip.
   prt_fild06 175 184"`, which left the chat input line open. `bench.close_chat` closed it by its
   known steps, and a judged screenshot on prt_fild06 followed (06:03): no dialog, the fixed-state
   windows, readout 175 184, HP full.
+- The full 60-min box (06:03:44-07:03:44): 248 engagements, 244 dead, 4 gave up. No stop.
+  - The live monitor (`--apart 1048,1051,1080`) counted: 231 attack requests on targets; 1
+    Creamy hit; unknown-species hits Thief Bug 16, Green Plant 8, Thief Bug Egg 2.
+
+**RESULT (judged 2026-10-18 07:1x; side by side with v35's two prt_fild08 runs, 3.75):**
+
+| measure | v35 on prt_fild08 (2 runs) | v35 on prt_fild06 (HELD-OUT) | prediction | verdict |
+|---|---|---|---|---|
+| kills / h | 140.4 (159.8, 120.9) | **220.8** | >= prt_fild08's (reported, not evidence) | PASS |
+| landing within 5 s | 235 / 326 = 72.1 % | 174 / 247 = 70.5 % | within 10 points | **PASS** (-1.6) |
+| seen -> click p50 (pooled trials) | 3.57 s (run p50s 3.74, 3.29) | 4.41 s (run p50 4.16) | within +0.5 s | **FAIL** (+0.84) |
+| loot picked / fell (session) | 187 / 390 = 47.9 % | 123 / 309 = 39.8 % | within 15 points | **PASS** (-8.1) |
+| at our kills: picked / to looters / left behind | 44.1 % / 18.8 % / 36.8 % (383 items) | 35.7 % / **47.6 %** / 16.7 % (294 items) | - | - |
+| reversals / min | 6.39, 7.74 | 8.04 | within +2 | **PASS** (+0.3 to +1.65) |
+| monsters seen / 10 min (windowed; whole run) | 29.0, 26.5; 15.2, 12.7 | **69.0**; 34.8 | - | 2.5x the density |
+| targets / 1000 search cells (spawn table) | 1.59 | 3.17 | - | - |
+| unknown-species hits | none on the map | **26** (Thief Bug 16, Green Plant 8, Thief Bug Egg 2) + Creamy 1 | <= 3 | **FAIL** |
+| hard bars (NPC contact, map change, UI stop) | 0 | 0 | 0 | **PASS** |
+| stall events | 11, 14 | 1 | - | - |
+| loot clicks >= 4 cells off (the treadmill) | 7.5 %, 8.0 % | 7.0 % | - | - |
+| time split, searching / steering | 1467-1616 / 993-1014 s | 706 / 1309 s | - | - |
+
+**Which technique broke:**
+1. **The DETECTOR (the species it never learned), and with it every check built on its boxes.**
+   - Thief Bug, Green Plant and Thief Bug Egg are not in the detector's training, so they get no
+     box. The loot click's unit check (a monster box within 70 px) and the walk click's units
+     gate cannot see them.
+   - Of the 32 attack requests on non-targets (`apartwhy.py`, packets offline):
+     - 22 came from LOOT clicks (Thief Bug 15, Green Plant 3, Creamy 2, Thief Bug Egg 2);
+     - 6 from walk clicks (search / steer);
+     - 4 from strikes.
+   - Thief Bugs are looters: they walk onto our drop piles. That is also why looters took 47.6 %
+     of the drops (prt_fild08: 18.8 %).
+2. **The strike: mostly held.** Landing 70.5 % against 72.1 %. 4 of its strikes hit non-targets:
+   a Green Plant read as a Poring by the pixel species check twice (arm C, no tag read), one
+   Creamy, one Thief Bug on a re-strike.
+3. **Walking / heading / cliffs: held.** Reversals +1.0 / min, 1 stall against 11-14, the loot
+   treadmill stayed fixed (7 %).
+4. **Loot mechanics: held** (stray 7 %). The losses were looters, i.e. item 1.
+5. **Seen -> click rose 0.84 s on the denser map.** More monsters were in view than the bot
+   engages, and the walk into range dominated (steering 1309 s against searching 706 s).
+
+**Read:** the walking, strike and loot techniques carry over to an unseen layout with the same
+tileset. What does not carry over is the detector's closed species list. Every safety check that
+asks "is a monster box near this click?" is blind to a species with no box. On prt_fild08 there
+was none to miss.
+- Next (a decision for Batt): before any map with untrained species, either train them (a GPU
+  step, frozen now) or add a non-detector unit check at loot / walk click points (e.g. the cursor
+  shape under the pointer, which the client draws as a SWORD over ANY monster).
+- Kills / h (220.8) passed 200 here only because of the 2.5x density, and M1 is not met.
+- The clip: `hunt-recordings/clips/heldout-prt_fild06-v35-2min-phone.mp4` on the NAS (minute
+  8.69-10.69: 14 kills, and a Thief Bug hit at 9.79).
 
 ### 3.77 hunt-flow@36: THE LOOT RETRY, interleaved per kill (pre-registered 2026-10-18 06:08 ICT, the commit time 6c95acf, BEFORE its run)
 
