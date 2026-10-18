@@ -10386,6 +10386,131 @@ on for all (no blocks), switched in a commit before run 1 and recorded in this r
   - It ends on any run that does not end on its time box.
   - Runs 2-4 load code 9574245 or later. That code adds the false-dead candidate (ffdc791), inert
     in v39: no `false_dead_fix` in PARAMS[39] (tested).
+- **Run 1 ended** 23:01:59 on its time box (3600.3 s), with 194 engagements: 193 dead, 1 gave up.
+  It is the night's best hour so far.
+  - Standard row (`run_row.py`): landing within 5 s 153 / 194 = 78.9 % (72.6-84.0),
+    179.8 kills / h, 5.29 per sighting, 20.0 s per kill, sight 34.0 / 10 min, free targets
+    attacked <= 10 s 38 % (n 173), steer moving share 35 %, seen -> click 3.61 s,
+    death -> next 0.67 s.
+  - Dead calls without a real death 43 / 193 = 22.3 %; loot 123 / 222 = 55 % (51 lost to
+    looters); reversals 7.29 / min.
+  - Creamy: 0 hits (1 attack request). Hard bars 0 / 0 / 0.
+  - **Per arm, ONE run (not the decision):**
+
+    | measure | tail | base |
+    |---|---|---|
+    | steer moving share | 0.351 | 0.341 |
+    | approach s (mean) | 4.78 | 4.99 |
+    | -> 3 cells (mean) | 3.67 | 4.72 |
+    | steer s per engagement | 6.39 | 7.53 |
+    | landing | 69 / 97 | 84 / 97 |
+    | steer walk clicks turned into attacks: target / other | 1 / 0 | 3 / 0 |
+
+  - **Why the moving share barely moved (`cont_fail`):**
+    - The tail arm's failed calls fall from 4,406 to 1,305.
+    - Their "none" falls from 4,157 to 539 (0.13 x; the 5th check needs <= 0.10). The 539 left
+      are arrivals, the lead on the route's last cell, as designed.
+    - But the cells the tail now offers are refused by the WALK GUARD (944 times): no walk click
+      within 120 px of the GM's sprite (v16's Creamy safety layer: the client turned walk clicks
+      near the GM into attacks).
+    - On a short route the tail cells are inside that radius, so the GM still stands until the
+      1-s standstill fallback.
+    - The picker now finds a point. A gate refuses it, and gates are Batt's call.
+  - `dead_probe` (the 3.80 amendment): 193 probes, 0 errors. After a risky last burst, re-acquire
+    fired on 4 / 12 still-alive targets and 6 / 28 real kills; a box near the predicted pixel on
+    1 / 12 and 1 / 28. Too weak for the false-dead fix.
+    - The death-cell fix's verdict separates instead. After a risky burst "ok" meant 12 real
+      kills and 0 alive targets; any other reason 16 real and 12 alive. So v40 is built on it
+      (3.81).
+- **Run 2** (23:02:51, seed 20280202, `20261018T230251-demo-hunt-flow39`, started by the chain,
+  code 6430068). The chain's screenshot (`pre-v39-20280202.jpg`) was judged
+  23:03: no dialog, the standard windows, the GM standing in its hunting state, a Poring beside
+  it, a warp light on the screen's edge. Health: ASSIST, no lease.
+
+### 3.81 hunt-flow@40: THE FALSE-DEAD FIX, interleaved per engagement (PRE-REGISTERED: the commit time of this entry, BEFORE its runs; Batt's order 2026-10-18 16:2x and his night plan 22:2x: "v40 (false-dead fix): set its thresholds from v39's probe data, pre-register as 3.81, run 4 runs, verdict")
+
+**Why:**
+- Dead calls without a real death run at 17-31 % a run (v36-v39). Most are a target still ALIVE.
+- 10-21 a run follow a burst that ended "risky": the risk gate stopped the re-clicks, then the
+  slow dead rule (1.4 s since the last click, the box unseen 0.8 s) called a death.
+- The cost of each: a loot step on nothing (~1-1.5 s), and the live target abandoned. Its track
+  enters `done_ids` and is never dispatched again; the target comes back only under a new track
+  id (v39 run 1: killed later, ~12-15 s after).
+
+**The signal, chosen from data BEFORE this entry (no threshold tuned):**
+- The probe's own candidates (3.80 amendment, v39 run 1) are too weak. After a risky burst,
+  re-acquire fired on 4 / 12 alive vs 6 / 28 real; a box near the predicted pixel on 1 / 12 vs
+  1 / 28.
+- The death-cell fix's existing verdict (`loot1.death_of` on the track's own sightings)
+  separates them. After a risky last burst, on 6 banked runs (v36 x2, v37 B, v38 x2, v39 run 1):
+  - "ok": a real death 93 times, the target alive twice;
+  - any other reason (gap_too_short / still_visible / unstable): 93 real, 71 alive or otherwise
+    not dead.
+
+**The ONE main change (code c64c06f; PARAMS[40], committed before run 1), at the hand-off:**
+- After a RISKY last burst, the runner computes the death-cell verdict (the same inputs as the
+  loot step's), after the dead rule's usual 0.4-s wait.
+- **"ok" -> the dead call stands** (loot, as now).
+- **Anything else -> `skipped_risky`** (Batt: "mark it 'skipped: risky' explicitly, never
+  'dead'"):
+  - no loot step;
+  - the track is NOT added to `done_ids`, so the normal selection re-dispatches it while it is
+    seen: the re-engagement, with no new click path.
+- Any other last burst: unchanged.
+- Interleaved per engagement: odd k = fix, even k = base.
+- No new click; every gate unchanged; the click census unchanged.
+
+**Base:**
+- If v39 is ADOPTED by 3.80's rule: v39 with the tail on for every engagement
+  (`steer_tail_ab` False).
+- Else: v38's base (the steer's old picker).
+- PARAMS[40] is committed after v39's verdict and before run 1, and recorded in this run log.
+- `dead_probe` stays on (log-only).
+
+**Runs:**
+- 4 x 60 min on prt_fild08, seeds 20290101, 20290202, 20290303, 20290404, after v39's run 4.
+- `hunt_chain.py` after the agent's judged start of run 1 (Batt: never queue an unjudged NEXT
+  version).
+- Nice 10, the detector on the CPU, the hunting state kept, the live hard-bar monitor beside
+  each run.
+- After run 4: the standard Lv 1 state (end_state.py), route_previewd stopped, bot_agents [];
+  by 07:00 Monday.
+
+**What 4 run-hours can resolve (measured BEFORE this entry, `arm_judge.py falsedead`, c707a77):**
+- No-change splits (parity and pairs) of 5 banked runs (v38 x4, v39 run 1).
+- Dead calls after a risky burst with the target alive, per arm: 27 vs 35 and 30 vs 32 (ratio
+  0.77-0.94).
+- Loot at our kills (all our kills, a skipped one included): 0.567 vs 0.585 and 0.577 vs 0.575
+  (+-2 points).
+- Landing within 5 s: 77.4 vs 75.7 % and 77.2 vs 75.9 %.
+- Time from the last click to our kill of an alive target: 14.7 vs 12.3 s and 14.2 vs 12.2 s,
+  n 17-24 an arm. A difference under ~3 s is NOT resolvable.
+
+**Prediction, written before the runs (pooled over the 4 runs, `arm_judge.py falsedead`):**
+1. **Primary (the mechanism):** dead calls after a risky last burst with the target still alive
+   (packets), fix <= 0.25 x base.
+2. **Guard (the loot of real kills it skips):** loot picked / dropped at OUR kills, fix >= base -
+   8 points.
+   - Expected about -4 to -5: ~7 real kills an arm-hour end as skipped.
+3. **Guard:** landing within 5 s, fix >= base - 5 points.
+4. **Hard bars:** zero NPC contact, zero map change, zero non-Creamy non-target hit. A Creamy hit
+   is counted, not a stop.
+5. **Reported, not deciding:**
+   - the skipped count and how many were real kills;
+   - the time from the last click to our kill of an alive target (expected shorter; not
+     resolvable under ~3 s);
+   - dead calls without a real death per run (the standard column);
+   - the standard run row for every run;
+   - kills / h against v39's runs as context only.
+- The expected speed gain is SMALL: ~12 false calls an hour, each ~1-1.5 s of empty loot plus
+  an earlier re-engagement. This fix is mainly about the dead calls being TRUE.
+
+**Decision rule:**
+- ADOPT if 1, 2, 3 and 4 pass.
+- If 1 fails, the code did not do what it was built for: NOT adopted, reported as a fault.
+- If 2 or 3 fails, it is NOT adopted: it costs more loot or landing than it frees.
+
+**Run log (written during the runs):**
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
