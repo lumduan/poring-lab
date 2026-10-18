@@ -606,6 +606,60 @@ def kills_by_origin(events: Sequence[Mapping[str, Any]], engs: Sequence[Mapping[
     return out
 
 
+def dead_calls(events: Sequence[Mapping[str, Any]], engs: Sequence[Mapping[str, Any]],
+               rows: Sequence[Mapping[str, Any]], t0: int, w1: int) -> dict[str, Any]:  # fmt: skip
+    """PURE (Batt 2026-10-18, a standard column from now on): the engagements the runner ended
+    "dead" (first click in [t0, w1)), against the server. REAL = the attacked gid
+    (``bot_engagements``' join, ``rows``) died (vanish reason 1) between the first click and
+    the engagement's end + 1 s. WITHOUT a real death, by why:
+    - "no_unit": the join found no unit (the clicks met none);
+    - "other_killed": we killed another monster in that span (reason 1 <= 1.5 s after our
+      damaging act);
+    - "target_alive": the attacked gid was still alive at the engagement's end;
+    - "target_gone": it had left (not killed) by then.
+    ``after_risky``: of those, the ones whose LAST burst ended "risky" (the risk gate stopped the
+    re-clicks: the case Batt's false-dead fix targets)."""
+    gid_by_k = {int(r["k"]): r.get("gid") for r in rows if r.get("k") is not None}
+    deaths: dict[int, list[int]] = {}
+    hit: dict[int, int] = {}
+    kills: list[int] = []
+    for e in sorted(events, key=lambda x: int(x["t_mono_ns"])):
+        t = int(e["t_mono_ns"])
+        if e.get("type") == "act" and gid_of(e, "src_gid") == GM and int(e.get("damage") or 0):
+            hit[gid_of(e, "target_gid")] = t
+        elif e.get("type") == "entity_vanish" and int(e.get("reason", -1)) == 1:
+            deaths.setdefault(gid_of(e), []).append(t)
+            if t - hit.get(gid_of(e), -(10**18)) <= int(1.5 * NS):
+                kills.append(t)
+    life = alive(events)
+    why: Counter[str] = Counter()
+    called = real = risky = 0
+    for x in engs:
+        fc = int(x["t_first_click"])
+        if x.get("result") != "dead" or not t0 <= fc < w1:
+            continue
+        called += 1
+        te = int(x.get("t_end") or x.get("t_last_click") or fc) + NS
+        g = gid_by_k.get(int(x["k"]))
+        if g is not None and any(fc <= d <= te for d in deaths.get(int(g), ())):
+            real += 1
+            continue
+        if g is None:
+            why["no_unit"] += 1
+        elif any(fc <= k <= te for k in kills):
+            why["other_killed"] += 1
+        elif present(life, int(g), te - NS):
+            why["target_alive"] += 1
+        else:
+            why["target_gone"] += 1
+        ends = [(h.get("burst") or {}).get("end") for h in x.get("hovers", []) if h.get("burst")]
+        risky += bool(ends) and ends[-1] == "risky"
+    n_ = called - real
+    return {"called": called, "real": real, "without_death": n_,
+            "share": round(n_ / called, 3) if called else None, "why": dict(why),
+            "after_risky": risky}  # fmt: skip
+
+
 def loot_metrics(events: Sequence[Mapping[str, Any]], t0: int, w1: int,
                  before_s: float = 0.6, after_s: float = 1.5) -> dict[str, Any]:  # fmt: skip
     """Batt 20:3x (LOOT EVERYTHING), from the packets: the items that FELL around one of our kills
@@ -1057,6 +1111,7 @@ def bot(
     out["queue_hit_through"] = queue_hit_through((d / "events.jsonl").read_text().splitlines())
     w1 = t0 + int(window * NS)
     out["unintended_attacks"] = unintended_attacks(events, engs, t0, w1)
+    out["dead_calls"] = dead_calls(events, engs, out["engagements_w"]["rows"], t0, w1)
     # v6: per attack attempt -- the aim error (px), the time from "in range" to the click, the read
     strikes = [x for x in map(json.loads, (d / "clicks.jsonl").read_text().splitlines())
                if x.get("kind") == "strike"]  # fmt: skip
@@ -1215,6 +1270,10 @@ def row(o: Mapping[str, Any]) -> dict[str, str]:
         "attack clicks direct / read": "-" if not (o.get("gate") or {}).get("direct")
         and not (o.get("gate") or {}).get("read")
         else "{direct} / {read}".format(**o["gate"]),
+        "dead calls without a real death": "-" if not (o.get("dead_calls") or {}).get("called")
+        else "{without_death}/{called} = {p:.1f} % ({w}; after a risky burst {after_risky})".format(
+            **o["dead_calls"], p=100 * o["dead_calls"]["share"],
+            w=", ".join(f"{k} {v}" for k, v in sorted(o["dead_calls"]["why"].items())) or "-"),
         "hard bars (NPC / map / non-target)": "-" if not o.get("hard_bars")
         else "{} / {} / {}".format(o["hard_bars"]["npc_contacts"], o["hard_bars"]["map_changes"],
                                    len(o["hard_bars"]["non_target_jobs_hit"])),

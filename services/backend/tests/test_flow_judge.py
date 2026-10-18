@@ -317,3 +317,67 @@ def test_kills_per_sighting_is_a_standard_column() -> None:
     long_run = {"kills_per_hour": 188.8, "sight_per_10min": 16.8, "sight_per_10min_win": 40.0}
     assert fj.kills_per_sighting(long_run) == 4.72  # the windowed ruler, not the whole run's
     assert fj.kills_per_sighting({"kills_per_hour": 10.0, "sight_per_10min": 0}) is None
+
+
+def test_dead_calls_without_a_real_death_is_a_standard_column() -> None:
+    """Batt 2026-10-18: every engagement the runner ended "dead" against the server's deaths --
+    real (the attacked gid died by the engagement's end + 1 s), else no unit / another monster
+    killed / the target still alive / gone; and how many followed a burst that ended risky."""
+    gm = fj.GM
+    events = [appear(0.0, MOB + k, 15 + k, 10) for k in range(5)]
+    events += [  # k 0: real; k 1: alive (no hit); k 2: we killed MOB + 4 instead; k 4: left view
+        ev(2.0, "act", src_gid=gm, target_gid=MOB, damage=50),
+        ev(2.5, "entity_vanish", gid=MOB, reason=1),
+        ev(22.0, "act", src_gid=gm, target_gid=MOB + 4, damage=50),
+        ev(22.4, "entity_vanish", gid=MOB + 4, reason=1),
+        ev(41.0, "entity_vanish", gid=MOB + 3, reason=0),
+    ]
+    events.sort(key=lambda e: e["t_mono_ns"])
+
+    def eng(k: int, t: float, end: str | None = "arrow") -> dict:
+        return {"k": k, "t_first_click": int(t * S), "t_end": int((t + 3) * S),
+                "result": "dead", "hovers": [{"burst": {"end": end}}] if end else []}  # fmt: skip
+
+    engs = [eng(0, 1.0), eng(1, 10.0, "risky"), eng(2, 20.0, "risky"), eng(3, 30.0, None),
+            eng(4, 40.0), {**eng(5, 50.0), "result": "gave_up"}]  # fmt: skip
+    rows = [{"k": 0, "gid": MOB}, {"k": 1, "gid": MOB + 1}, {"k": 2, "gid": MOB + 2},
+            {"k": 3, "gid": None}, {"k": 4, "gid": MOB + 3}]  # fmt: skip
+    out = fj.dead_calls(events, engs, rows, 0, int(60 * S))
+    assert out["called"] == 5 and out["real"] == 1 and out["without_death"] == 4
+    assert out["why"] == {"target_alive": 1, "other_killed": 1, "no_unit": 1, "target_gone": 1}
+    assert out["after_risky"] == 2 and out["share"] == 0.8
+    assert fj.dead_calls(events, engs, rows, int(5 * S), int(60 * S))["called"] == 4  # window
+    row = fj.row({**_row_base(), "dead_calls": out})["dead calls without a real death"]
+    assert row.startswith("4/5 = 80.0 % (no_unit 1, other_killed 1, target_alive 1")
+
+
+def test_dead_calls_on_a_real_run() -> None:
+    """The column on v38 run 1 (a positive case from a REAL session): 47 of 150 dead calls had
+    no real death (17 no unit, 3 another kill, 27 the target alive), 21 after a risky burst."""
+    import pytest
+
+    sid = "20261018T141820-demo-hunt-flow38"
+    d = Path("/dev/shm/poring-lab-demo") / sid
+    if not (d / "flow_judge.json").exists():
+        pytest.skip("the v38 session is not banked on this host")
+    _d, man, events, _frames = fj._session(sid)
+    o = json.loads((d / "flow_judge.json").read_text())
+    evl = [json.loads(x) for x in (d / "events.jsonl").read_text().splitlines() if x]
+    loop0 = next(int(x["t_ns"]) for x in evl if x.get("kind") == "loop_start")
+    t0 = fj.t0_of(events, loop0)
+    assert t0 is not None
+    out = fj.dead_calls(events, json.loads((d / "engagements.json").read_text()),
+                        o["engagements_w"]["rows"], t0, t0 + int(o["window_s"] * S))  # fmt: skip
+    assert (out["called"], out["real"], out["after_risky"]) == (150, 103, 21)
+    assert out["why"] == {"no_unit": 17, "other_killed": 3, "target_alive": 27}
+
+
+def _row_base() -> dict:
+    """The fewest keys ``fj.row`` needs (a judged run's shape)."""
+    return {"engagements_w": {"hit_within_w": 1, "counted": 2, "rate": 0.5,
+                              "wilson95": [0.1, 0.9], "engagements": 2},
+            "reaction_s": {"seen_to_click": [1, 2], "click_to_hit": [1, 2]},
+            "hits": 1, "trials": 2, "hit_rate": 0.5, "kills_per_hour": 1.0, "window_s": 60.0,
+            "sight_per_10min": 1.0, "idle_pct": 1.0,
+            "walk_clicks": {"per_min": 1, "while_moving_pct": 1, "interval_p50_p90_s": [1, 2]},
+            "range_cells": {"p50": 1, "p90": 2}}  # fmt: skip
