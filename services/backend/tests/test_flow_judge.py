@@ -309,3 +309,11 @@ def test_sight_is_judged_per_10_min_window_on_long_runs() -> None:
     assert fj.sight_per_10min(events, 0, int(1800 * S)) == round(5 * 600 / 1800, 1)
     assert fj.sight_windowed(events, 0, int(1800 * S)) == 5.0
     assert fj.sight_windowed(events, 0, int(600 * S)) == fj.sight_per_10min(events, 0, int(600 * S))
+
+
+def test_kills_per_sighting_is_a_standard_column() -> None:
+    """Batt 2026-10-18: kills / h per monster seen / 10 min, on the windowed ruler (his 6.8)."""
+    assert fj.kills_per_sighting({"kills_per_hour": 300.0, "sight_per_10min": 44.0}) == 6.82
+    long_run = {"kills_per_hour": 188.8, "sight_per_10min": 16.8, "sight_per_10min_win": 40.0}
+    assert fj.kills_per_sighting(long_run) == 4.72  # the windowed ruler, not the whole run's
+    assert fj.kills_per_sighting({"kills_per_hour": 10.0, "sight_per_10min": 0}) is None

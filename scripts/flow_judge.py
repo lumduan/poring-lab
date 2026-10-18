@@ -1126,6 +1126,16 @@ def bot_windows(sid: str, length_s: float = 600.0) -> dict[str, Any]:
             "kills_per_hour": [w["kills_per_hour"] for w in wins]}  # fmt: skip
 
 
+def kills_per_sighting(o: Mapping[str, Any]) -> float | None:
+    """PURE (Batt 2026-10-18, a standard column from now on): kills / h per monster seen per
+    10 min, on the windowed ruler (the same for a 10-min demo and a 60-min run). Batt's demo:
+    300 / 44 = 6.8; the bot v34-v36 ~4.75."""
+    sight = o.get("sight_per_10min_win", o.get("sight_per_10min"))
+    if not sight or o.get("kills_per_hour") is None:
+        return None
+    return round(float(o["kills_per_hour"]) / float(sight), 2)
+
+
 def row(o: Mapping[str, Any]) -> dict[str, str]:
     e = o["engagements_w"]
     rx = o["reaction_s"]
@@ -1144,6 +1154,8 @@ def row(o: Mapping[str, Any]) -> dict[str, str]:
         "monsters in sight / 10 min": f"{o.get('sight_per_10min_win', o['sight_per_10min'])}"
         + ("" if o.get("sight_per_10min_win") in (None, o["sight_per_10min"])
            else f" (whole run {o['sight_per_10min']})"),
+        "kills / h per monster seen / 10 min": "-" if kills_per_sighting(o) is None
+        else f"{kills_per_sighting(o)}",
         "idle %": f"{o['idle_pct']}",
         "walk clicks / min": f"{o['walk_clicks']['per_min']}",
         "range at click p50/p90": f"{o['range_cells']['p50']} / {o['range_cells']['p90']}",
