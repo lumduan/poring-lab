@@ -10657,6 +10657,41 @@ on for all (no blocks), switched in a commit before run 1 and recorded in this r
   at 03:28:30). The screenshot `pre-v40-20290202.jpg` was judged 03:29: no dialog, the standard
   windows, the GM standing in its hunting state (Lv 70, HP full, weight 452 / 4970), a Poring and
   a Drops in view. Health: ASSIST, no lease.
+- **Run 2 ended** on its time box (3600.3 s; the chain logged rc 0 at 04:30:00), with 179
+  engagements: 161 dead, 11 skipped_risky, 7 gave up.
+  - Standard row: landing 137 / 179 = 76.5 % (69.8-82.2), 152.9 kills / h, 4.56 per sighting,
+    23.5 s per kill, sight 33.5 / 10 min, free targets attacked <= 10 s 43 % (n 213), steer
+    moving 38 %, seen -> click 3.94 s, death -> next 0.80 s.
+  - Dead calls without a real death 39 / 161 = 24.2 %; loot 127 / 191 = 66 % (18 to looters);
+    reversals 6.93 / min. Creamy 1 hit (1 request, 0.12 s after a loot click). Hard bars
+    0 / 0 / 0.
+- **Run 3** (04:30:04, seed 20290303, `20261019T043004-demo-hunt-flow40`, started by the chain at
+  04:30:02). Its screenshot `pre-v40-20290303.jpg` was judged afterwards, at 05:53 (the agent's
+  turn had stalled 04:30-05:52; the chain kept the client working, as designed): no dialog, the
+  standard windows, the GM in its hunting state (Lv 70, HP full, weight 456 / 4970 after the
+  weight clear, the dropped items at its feet). Health: ASSIST, no lease.
+- **Run 3 ended** on its time box (the chain logged rc 0 at 05:31:2x), with 156 engagements: 136
+  dead, 17 skipped_risky, 2 gave up, 1 cut by the time box.
+  - Standard row: landing 105 / 156 = 67.3 % (59.6-74.2), 121.9 kills / h, 3.93 per sighting,
+    29.5 s per kill, sight 31.0 / 10 min, free targets attacked <= 10 s 36 % (n 184), steer
+    moving 37 %, seen -> click 2.98 s, death -> next 0.66 s.
+  - Dead calls without a real death 40 / 136 = 29.4 %; loot 90 / 162 = 56 % (23 to looters);
+    reversals 7.36 / min. Creamy 1 hit (1 request, 0.08 s after a loot click). Hard bars
+    0 / 0 / 0.
+- **Run 4** (05:31:31, seed 20290404, `20261019T053131-demo-hunt-flow40`, started by the chain).
+  Its screenshot `pre-v40-20290404.jpg` was judged at 05:53: no dialog, the standard windows, the
+  GM in its hunting state (Lv 70, HP full, weight 460 / 4970). Health: ASSIST, no lease.
+  - Found at 05:52: the agent's own monitor for run 1 (`hardbar_live.py watch 40`, started
+    02:27) had not exited. Each chained runner started within its 180-s cadence, so it kept
+    watching run 2, run 3 and run 4 beside the chain's own monitor. It was harmless (no hard bar
+    fired), but a second SIGINT could interrupt a stopping runner. Ended by PID at 05:52; the
+    chain's monitor watches run 4 alone. Later chains: start no extra monitor beside the chain.
+- **INTERIM, runs 1-3 pooled (not the decision; v40-final.py):**
+  - called dead with the target alive: fix 2 vs base 22 (the primary needs <= 0.25 x);
+  - loot at our kills: 123 / 225 = 0.547 vs 139 / 248 = 0.560 (the guard: >= base - 8 points);
+  - landing within 5 s: 188 / 250 = 75.2 % vs 177 / 251 = 70.5 % (the guard: >= base - 5);
+  - skipped 38 (21 of them real kills); a skipped target re-engaged and killed within 20 s:
+    73 % of those alive at the end (base 64 %).
 
 ### 3.82 hunt-flow@41: WALKING TARGETS STRUCK FROM FURTHER, interleaved per engagement (pre-registered 2026-10-19 02:31 ICT, the commit time 61cf81d, BEFORE its runs; Batt's night plan 22:2x, item 3: "the next top cause from the conversion study (the 0.5 s later turn, the walk into range, arm C fallbacks / 'species unsure', click -> hit), each as its own version. Re-rank after every verdict")
 
