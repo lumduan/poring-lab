@@ -762,6 +762,15 @@ AGE-WEIGHTED SEARCH HEADING.**
 
 4. Decisions keep reading 4-run pooled results, against the measured null spread.
 
+**v38 (the age-weighted search heading, 3.79): NOT ADOPTED** (pooled read 22:00):
+- Re-swept within 120 s: age 0.49 vs cov 0.47 (the primary needed <= 0.90 x).
+- Kills / h: 126.6 vs 143.1 (the guard failed: -11.5 %, inside the +-18 % null but the wrong
+  way).
+- Equal density across the arms (sight 32.3 vs 31.8).
+- Without block 0, the same answer.
+- The search stays on v22's coverage heading. v39 (3.80) started at 22:01, after a 3.5-h gap
+  (the agent's turn after v38's run 4 failed, and Batt retried it).
+
 ## Conversion study (2026-10-18 afternoon, Batt's decision 3; offline packets + the bot's logs)
 
 Two judges, merged 3c6180d and 767ee6e, each with real-session positive cases:
