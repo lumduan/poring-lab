@@ -9788,6 +9788,49 @@ monitor (`hardbar_live.py watch 36`).
 - **safety:** zero non-target hits (Creamy counted apart), no rise of Creamy attack requests in
   the retry arm, hard bars zero.
 
+**Run log:** 07:05:58, seed 20272201 (`20261018T070558-demo-hunt-flow36`), after a judged
+screenshot (07:05, on prt_fild06 after the held-out run; the run warped to prt_fild08 261 82).
+- At 15.5 min the arm was checked as live, not inert (the v34 attempt 1 lesson): 36 retry-arm
+  steps had queued 128 retries and clicked 39; the other arm had 0.
+- The full 60-min box: 216 engagements, 214 dead, 2 gave up. No stop, 0 Creamy hits, 208 attack
+  requests, all on targets.
+
+**RESULT (judged 2026-10-18 08:2x; one run):**
+
+| run | min | engagements | landing (5 s) | kills / h | seen -> click p50 | loot picked / fell | sight / 10 min | reversals / min |
+|---|---|---|---|---|---|---|---|---|
+| run 1 | 60.0 | 216 | 176 / 215 = 81.9 % (Wilson 76.2-86.4) | **188.8** (the night's best prt_fild08 hour) | 3.79 s | 131 / 214 = 61.2 % | 16.8 | 7.29 |
+
+| per parity (`arm_judge.py retry`) | retry (odd k) | none (even k) |
+|---|---|---|
+| loot steps | 108 | 106 |
+| loot clicks per step | **7.77** (839) | 7.06 (748) |
+| first-pass unit skips / retried / retry clicked / skipped again | 313 / 313 / **107** / 206 | 276 / - / - / - |
+| steps with >= 6 first-pass unit skips | 25 | 21 |
+| loot step p50 | 2.65 s | 2.46 s |
+| items at our kills: picked / to looters / left behind | **70 / 97 = 72.2 %** / 7 / 20 | 78 / 125 = 62.4 % / 20 / 27 |
+
+**Against the predictions:**
+1. **Primary**, loot clicks per step retry >= none + 1.0: **FAIL** (+0.71).
+2. first-pass unit skips a retry then clicked >= 30 %: **PASS** (107 / 313 = 34.2 %).
+3. step time p50 retry <= none + 0.8 s: **PASS** (+0.19 s).
+4. items picked at our kills retry >= none: **PASS** (72.2 vs 62.4 %). This is the secondary;
+   ~100 items an arm cannot resolve it.
+5. safety: **PASS**. No non-target hit, no Creamy attack request; hard bars zero.
+
+**Consequence:** the primary failed, so v36's loot retry is NOT adopted by this run. It is a
+candidate for a confirmation run, and only Batt adopts it.
+
+**Read:**
+- The retry clicked a third of the cells it re-queued. Two thirds were still blocked 0.6 s later,
+  so the blocks are mostly live units or stay boxed longer than 0.6 s.
+- The loot gain (+9.8 points picked, looters 7 vs 20) fits more items reached, but one run cannot
+  separate it from noise.
+- Kills / h 188.8 came from the night's densest prt_fild08 field (16.8 / 10 min); the landing of
+  81.9 % had the stale-box species check for all (3.75's verdict).
+- v36's latency budget (s / h): selection -> click 728, server kill -> "dead" 623, dead -> next
+  selection 592, click -> server kill 422, in range -> click 339.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.

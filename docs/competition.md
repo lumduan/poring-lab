@@ -54,6 +54,7 @@ non-target hit, map change) apply to every session.
 | R9 (bot v30, A/B/C run 2) | (fixed) | **66.5 / 10 of 10 / 11 of 20 / pass** (the agent's best) | 114 | 144 | 105.0 / 78.0 % / 49 % / pass (full hour) |
 | R10 (bot v31, death cell + A/B/C run 3) | (fixed) | 33.7 / 4 of 4 / 2 of 2 / pass | 99 | 114 | 101.3 / 84.6 % / 58.5 % / pass (45 min) |
 | R11 (bot v34 run 2, paced-input blocks; overnight) | (fixed) | 37.2 / 6 of 6 / 5 of 6 / pass | 135 (median of 6 blocks) | 156.5 | 133.6 / 76.5 % / 63.0 % / pass (1 Creamy counted apart) |
+| R12 (bot v36, loot retry; overnight) | (fixed) | 19.1 / 3 of 3 / 5 of 6 / pass | - | 12 kills in the best 2 min | 188.8 / 81.9 % / 61.2 % / pass |
 
 ## Round 0 (bot v20 from 2026-10-17 04:42 + 05:55; agent 07:55)
 
@@ -407,6 +408,15 @@ non-target hit, map change) apply to every session.
 - **BOT v34 run 2** (`20261018T024036-demo-hunt-flow34`, seed 20271802): 133.6 kills / h,
   landing 76.5 %, loot 63.0 %, one Creamy hit counted apart (3.74).
 
+## Round 12 (overnight: 08:08 agent, after bot v36)
+
+- **AGENT R12** `20261018T080801-demo-agent-demo` (seed 20272201, v36's start cell): 19.1 kills / h,
+  3 of 3 landed, 5 of 6 drops picked, clean, 0.11 reversals / min.
+  - Again a sparse start: 5.3 monsters in sight per 10 min, the first target after 2.6 min. A
+    Poring hopping away took ~2 min of chasing (two "gone" and two off-view strikes).
+- **BOT v36** (`20261018T070558-demo-hunt-flow36`, the same seed): 188.8 kills / h, landing 81.9 %,
+  loot 61.2 %, clean (3.77).
+
 ## What the agent's play taught (rounds 0-10)
 
 - **The agent's own limit is its decision loop.**
@@ -555,3 +565,71 @@ v33, paced input = v34; see "Overnight 17-18 Oct" below)*
   - Target density is about 2x prt_fild08's, so per-engagement rates are the primary measures.
   - Prep done offline: its GAT in RAM, L3 touch areas (34 maps; the 33 others identical), the NPC
     block, `hunt_flow.py run --map`, the monitor's `--apart` set for its unknown species.
+
+### Overnight results (17-18 Oct, 21:50 -> 08:23 the last run's end)
+
+**Every bot run** (prt_fild08 unless noted; judge_run / flow_judge; landing = hit within 5 s of
+the first click; loot = items picked / fell in the session; Creamy counted apart, Batt 18:3x):
+
+| run | session | seed | min | eng | landing | kills / h | seen -> click p50 | loot | sight / 10 min | rev / min | non-target hits | note |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| v32 run 1 | 20261017T215036 | 20271301 | 10.6 | 21 | 18 / 21 = 85.7 % | 101.3 | 5.6 s | 17 / 23 | 20.6 | 6.66 | 0 | stopped: position jump (the loot TREADMILL) |
+| v32 run 2 | 20261017T220855 | 20271401 | 60 | 155 | 125 / 155 = 80.6 % | 148.7 | 4.2 s | 125 / 227 = 55.1 % | 15.3 | 5.62 | 0 | |
+| v33 att 1 | 20261017T231438 | 20271501 | 9.0 | 27 | 20 / 27 = 74.1 % | 140.5 | 3.02 s | 24 / 34 | 32.3 | 7.81 | Creamy 1 | stopped by me: the death-cell speed fix |
+| v33 run 1 | 20261017T232501 | 20271501 | 60 | 134 | 107 / 134 = 79.9 % | 117.9 | 3.22 s | 75 / 148 = 50.7 % | 13.8 | 6.10 | Creamy 1 | |
+| v33 run 2 | 20261018T002803 | 20271601 | 60 | 144 | 119 / 144 = 82.6 % | 133.8 | 3.24 s | 80 / 186 = 43.0 % | 12.6 | 7.20 | Creamy 3 | |
+| v34 att 1 | 20261018T013226 | 20271701 | 3.9 | 10 | - | - | - | - | - | - | 0 | excluded: the paced arm was inert (farm0) |
+| v34 run 1 | 20261018T013812 | 20271701 | 60 | 143 | 109 / 143 = 76.2 % | 128.9 | 3.28 s | 80 / 148 = 54.1 % | 13.2 | 6.58 | 0 | |
+| v34 run 2 | 20261018T024036 | 20271802 | 60 | 153 | 117 / 153 = 76.5 % | 133.6 | 3.41 s | 104 / 165 = 63.0 % | 12.1 | 6.45 | Creamy 1 | |
+| v35 run 1 | 20261018T035855 | 20271901 | 60 | 173 | 135 / 173 = 78.0 % | **159.8** | 3.74 s | 104 / 232 = 44.8 % | 15.2 | 6.39 | 0 | the night's best hour |
+| v35 run 2 | 20261018T050051 | 20272001 | 60 | 153 | 100 / 153 = 65.4 % | 120.9 | 3.29 s | 83 / 158 = 52.5 % | 12.7 | 7.74 | 0 | |
+| v35 HELD-OUT | 20261018T060344 (**prt_fild06**) | 20272101 | 60 | 248 | 174 / 247 = 70.5 % | 220.8 | 4.16 s | 123 / 309 = 39.8 % | 34.8 | 8.04 | Creamy 1 + unknown species 26 (counted apart) | 3.76: 2.5x the density |
+| v36 run 1 | 20261018T070558 | 20272201 | 60 | 216 | 176 / 215 = 81.9 % | **188.8** | 3.79 s | 131 / 214 = 61.2 % | 16.8 | 7.29 | 0 | the best prt_fild08 hour (densest field) |
+
+**Agent rounds:** R11 (03:46, seed 20271301): 37.2 kills / h, 6 of 6, 5 of 6 drops, clean.
+R12 (08:08, seed 20272201 = v36's start): 19.1 kills / h, 3 of 3, 5 of 6 drops, clean (5.3 monsters seen / 10 min).
+
+**Verdicts (each pre-registered before its run):**
+- 3.72 v32, FAST DEAD: kill -> loot start 1.23 s against <= 1.2 s, so FAIL by its rule (the slow
+  `nearest_cell` was the likely cause). v15's rule was kept, and with the speed fix it reaches
+  0.72 s anyway.
+- 3.73 v33, LOOT RACE (items first, looter chain): FAIL on both primaries. Race picked 47.7 % vs
+  plain 49.2 %; lost to looters 14.8 vs 8.7 %. The plain 3 x 3 was kept.
+- 3.74 v34, PACED INPUT: PASS. The loot step was 1.02 s faster, and the walk, landing and loot
+  still registered. Paced for the whole run from v35. Kills / h paced 117.9 vs 144.2 followed the
+  density (the same 4.75 kills per sighting).
+- 3.75 v35, SPECIES ON THE BOX'S OWN FRAME: the primary PASSED (unsure 27 -> 16 %), but landing
+  FAILED (80.5 -> 63.6 %): the stale crop had been a "still there" gate. Not adopted.
+- 3.76 the HELD-OUT map (prt_fild06, v35 unchanged): walking, strike and loot CARRY OVER.
+  - Landing was 70.5 vs 72.1 %, loot 39.8 vs 47.9 %, reversals +1.0, 1 stall against 11-14.
+  - The DETECTOR's closed species list does NOT. 26 unknown-species hits (Thief Bug 16, Green
+    Plant 8, Thief Bug Egg 2) were counted apart.
+  - 21 of the 29 non-target attack requests came from loot clicks, whose unit check sees only
+    detector boxes. Looters took 47.6 % of the drops.
+  - Seen -> click was +0.84 s on the 2.5x denser field.
+  - Kills / h 220.8 (density).
+- 3.77 v36, LOOT RETRY: the primary FAILED (loot clicks per step +0.71 against +1.0). The rest
+  passed: 34 % of retried cells were clicked, +0.19 s a step, items picked 72.2 vs 62.4 % (one
+  run, underpowered), looters 7 vs 20, safety clean. Not adopted; a confirmation-run candidate.
+
+**Leaderboard (kills / h, full hours):** Batt 300 | held-out v35 on prt_fild06 220.8 (2.5x density) |
+bot v36 188.8 (best on prt_fild08) | v35 run 1 159.8 | v32 run 2 148.7 | v24 146.9 | v28 141.9 |
+agent best 66.5 (R9). Kills / h follows the field's density (sight / 10 min), so it ranks fields
+as much as versions.
+
+**Milestones:** none reached. M1 needs seen -> click <= 2.2 s (best 3.02-3.22 s), landing >= 90 %
+(best full hour 82.6 %, v36 81.9 %), loot >= 80 % (best 66.6 % at our kills, v34), reversals <= 5 / min (best
+5.62). Hard bars were clean in every run (no NPC contact, no map change, no non-Creamy non-target
+hit on prt_fild08).
+
+**Top time losers (v34, s / h; v36 in brackets: selection -> click 728, kill -> dead 623, dead -> next 592):**
+1. dead -> next selection 570: the search. 67-75 % of engagement ends had no target within 14
+   cells (packets).
+2. selection -> click 570: the walk into range ~350, in range -> click ~225-255.
+3. server kill -> "dead", including the loot, 415 (665 in v32).
+4. click -> server kill 264.
+5. in range -> click 224.
+
+**Open:** v35's loot fell to 44 % picked at our kills (v34 67 %) with the same step mechanics
+(clicks, unit skips, step time). More items went to looters (18.8 vs 12 %) and more were left
+behind (36.8 vs 20.7 %). It holds in both species parities; the cause is not found.
