@@ -633,3 +633,61 @@ hit on prt_fild08).
 **Open:** v35's loot fell to 44 % picked at our kills (v34 67 %) with the same step mechanics
 (clicks, unit skips, step time). More items went to looters (18.8 vs 12 %) and more were left
 behind (36.8 vs 20.7 %). It holds in both species parities; the cause is not found.
+
+## Search study (2026-10-18, Batt's decision 3; `scripts/search_study.py`, offline packets)
+
+Batt's demo (`20261016T093835-demo-human-demo`, 10 min) against the bot's six full hours on
+prt_fild08 (v32-v36). The same ruler is used for both (10-min windows). Numbers come from
+`search_study.py compare` (4fdb91e; its tests include real-session positive cases).
+
+**The premise, corrected.**
+- On the same ruler the bot sees 66 % as many monsters as Batt (29.0 vs 44.0 per 10 min), not
+  35 %. The 35 % compared the bot's whole-run count (12-17), which under-counts ~1.65x
+  (`flow_judge.sight_windowed`).
+- Kills per sighting (now a standard judge column): Batt 6.82; the bot pooled 5.06, 4.45-5.83 per
+  run.
+- Kills / h ratio 0.49 = sight ratio 0.66 x kills-per-sighting ratio 0.74.
+
+**Where the gap is.** Per kill, Batt spends 12.0 s and the bot 24.5 s. The 12.5 s splits into:
+- 39 % search speed: the bot's no-target stretches average 10.5 s, Batt's 6.3 s;
+- 17 % extra no-target stretches: 1.15 vs 0.82 per kill;
+- 45 % CONVERSION: 12.4 vs 6.8 s per kill with a target in view. The bot attacks 43 % of free
+  targets within 10 s of their entering the view, Batt 78 %. It turns toward them about as often,
+  ~0.5 s later.
+
+**Why the bot's search is slower.**
+- It re-views ground it has already hunted. 43 % of its newly viewed cells were in view within the
+  last 120 s (Batt 27 %).
+- Its own kills emptied that ground: a killed mob respawns at a random cell anywhere on the map.
+- Target yield per 1000 newly viewed cells:
+    never seen 1.26 (Batt 1.28)
+    seen <= 10 min ago 0.40-0.47
+    10-20 min 0.63
+    > 20 min 1.02
+- Batt did NOT pick denser regions: all prt_fild08 target spawns are whole-map random; the density
+  of his ground was 0.80, the bots' 0.80-0.88.
+- He walks no faster (176 cells / min vs 158-184). He turns back half as often (3.6 vs 5.6-7.7
+  reversals / min), his straight runs are longer (16.9 vs 11-14 cells), and 73 % of his new ground
+  is fresh (bot 57 %).
+- At engagement ends, 52 % had no target within 14 cells (at the server kill ~62 %; Batt 56 % at
+  his kills). The earlier "67-75 %" was at the kill. The difference is the wait for the next
+  target: Batt p50 5.75 s, bot 7.75-13 s.
+- After a none-end the bot kept its old search heading 91 % of the time.
+
+**The proposed search change (the study's; a candidate v38, not yet pre-registered): the
+AGE-WEIGHTED SEARCH HEADING.**
+- Score each candidate heading (keep, +-45, +-90, +-135 deg) by the ground it would bring into
+  the bot's own camera footprint along a 40-cell ray.
+- Weight each cell by how long since the bot last saw it: <= 10 min 0.32, 10-20 min 0.5,
+  > 20 min 0.82, never 1.0. Divide by walking time (a diagonal step 1.4x).
+- Remember the swept ground for the whole run (now 180 s).
+- Re-score at every re-plan, including when the search resumes after an engagement.
+- Expected: encounters per no-target minute +15 % (+10 to +27 %), kills / h +5 to +12 %. Kills per
+  sighting is unchanged: that is conversion.
+- The study's caution: even Batt's own encounter rate would give ~183 kills / h. The larger lever
+  is conversion.
+- Testing it needs >= 4 run-hours, interleaved in 10-min blocks within runs: the field drifts
+  between runs. v36 run 1 saw 13 Pupas vs 0-1 in the other runs, and its fresh-ground yield was
+  2.11 vs 1.07-1.21, so part of its 188.8 kills / h is the field.
+- Safety: only the search goal changes. Every click keeps its gates, and the memory is built from
+  the bot's own measured position (no packets).
