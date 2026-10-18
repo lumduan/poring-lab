@@ -10619,6 +10619,18 @@ on for all (no blocks), switched in a commit before run 1 and recorded in this r
 
   - Same shape as the 6 runs: "ok" almost never leaves the target alive. About half of the other
     verdicts are real kills: those are the loot cost the guard (2) watches.
+- **Base:** v39 NOT adopted (3.80's RESULT, 7dd9524, 02:20). So PARAMS[40] = PARAMS[39] with the
+  tail off (`steer_tail` / `steer_tail_ab` False: v38's base, the steer's old picker),
+  `false_dead_fix` + `false_dead_ab` on, `dead_probe` kept. Committed **9afbbcc at 02:24:59**,
+  before run 1; census + targeted safety tests 300 passed.
+- **Run 1** (02:26:49, seed 20290101, `20261019T022649-demo-hunt-flow40`, code 9afbbcc), started
+  by the agent.
+  - Before it: the screenshot `pre-v40-20290101.jpg` judged at 02:26: prt_fild08, no dialog, the
+    standard windows, the GM standing in its hunting state (Lv 70, HP full, weight 492 / 4970
+    after the weight clear). Health: ASSIST, no lease.
+  - `hardbar_live.py watch 40` beside it. The first engagement ended dead at 02:29.
+- **Runs 2-4 are QUEUED:** `hunt_chain.py --version 40 --seeds 20290202,20290303,20290404` started
+  detached at 02:27:00 (the control file says "run"); it waits for run 1 to end.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
