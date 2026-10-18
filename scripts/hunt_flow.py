@@ -624,12 +624,18 @@ def approach_path(grid: Any, here: Cell, target: tuple[float, float], short: int
     return path[: len(path) - short]
 
 
-def strike_range(tr: Track, prm: dict[str, Any]) -> int:
+def strike_range(tr: Track, prm: dict[str, Any], k: int | None = None) -> int:
     """PURE (v4): STANDING targets from ``strike_cells_standing`` (Batt's p90, 7), WALKING ones
-    from ``strike_cells`` (3); before v4 always ``strike_cells``."""
+    from ``strike_cells`` (3); before v4 always ``strike_cells``. v41 candidate (STAGED): WALKING
+    ones from ``strike_cells_walking`` too (the client walks up by itself after an attack click,
+    as Batt plays; v39 run 1: the 120-px walk guard refuses the steer's clicks inside ~3 cells, so
+    a walker's 3-cell range left the GM standing), on odd ``k`` when ``strike_walking_ab``."""
     vx, vy = tr.velocity()
     if prm.get("strike_cells_standing") and not (vx or vy):
         return int(prm["strike_cells_standing"])
+    if prm.get("strike_cells_walking") and (
+            not prm.get("strike_walking_ab") or (k is not None and k % 2 == 1)):  # fmt: skip
+        return int(prm["strike_cells_walking"])
     return int(prm["strike_cells"])
 
 
@@ -4429,7 +4435,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         if target is not None:
                             split.to("steering", time.monotonic())
                             tcell = target.predict(t_now)
-                            s_range = strike_range(target, prm)
+                            s_range = strike_range(target, prm, k)
                             fresh_box = (t_now - target.box_t) / 1e9 <= prm["fresh_s"]
                             if (prm.get("follow_mouse") and target.box_t > follow_t[0]
                                     and fresh_box):  # fmt: skip
@@ -4504,7 +4510,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                             or cheb(tcell, zone_st["center"])
                                             > zone_st["radius"]):  # fmt: skip
                                         rz_ = (prm["zone_radius_walking"] if strike_range(
-                                            target, prm) < prm["zone_radius"]
+                                            target, prm, k) < prm["zone_radius"]
                                             else prm["zone_radius"])  # fmt: skip
                                         same_ = zone_st.get("tid") == target.tid
                                         pz_ = zone_path(ok, pos, tcell, rz_)

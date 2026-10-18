@@ -970,3 +970,28 @@ def test_v40_candidate_risky_dead_call_stands_only_on_a_clean_death_cell() -> No
         assert bad not in dr[: dr.index("return str(")], bad
     ee = src[src.index("def end_engagement(") :][:500]
     assert 'if result != "skipped_risky":' in ee and "done_ids.add(" in ee
+
+
+def test_v41_candidate_walkers_struck_from_further_only_when_set() -> None:
+    """STAGED (not pre-registered): a WALKING target's strike range from strike_cells_walking (7)
+    on odd k; standing targets and every current version unchanged."""
+
+    class T:
+        def __init__(self, v: tuple[float, float]) -> None:
+            self.v = v
+
+        def velocity(self) -> tuple[float, float]:
+            return self.v
+
+    walker, still = T((1.0, 0.0)), T((0.0, 0.0))
+    base = {"strike_cells": 3, "strike_cells_standing": 7}
+    assert hf.strike_range(walker, base, 1) == 3 and hf.strike_range(still, base, 1) == 7
+    on = {**base, "strike_cells_walking": 7, "strike_walking_ab": True}
+    assert hf.strike_range(walker, on, 1) == 7 and hf.strike_range(walker, on, 2) == 3
+    assert hf.strike_range(walker, on) == 3  # no k: the base arm
+    assert hf.strike_range(walker, {**on, "strike_walking_ab": False}, 2) == 7
+    assert hf.strike_range(still, on, 2) == 7
+    for n in (38, 39):
+        assert not hf.PARAMS[n].get("strike_cells_walking")
+    src = Path(hf.__file__).read_text()
+    assert src.count("strike_range(target, prm, k)") == 1 and "target, prm, k) <" in src
