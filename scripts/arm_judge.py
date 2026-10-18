@@ -15,6 +15,9 @@ engagements.json, clicks.jsonl, and flow_judge.json -- run `flow_judge.bot(sid)`
     arm_judge.py species SID [SID ...]  v35: own-frame (odd k) vs stale-box (even k) species check
     arm_judge.py retry SID [SID ...]    v36: the loot retry (odd k) vs none (even k): item fates at
                                         our kills + the loot steps' clicks / skips / time
+    arm_judge.py sword SID [SID ...]    v37: the cursor's SWORD check (odd k) vs none (even k):
+                                        its verdicts and time, loot / walk clicks it stopped,
+                                        non-target attack requests by the arm of the click before
 
 Packets are offline ground truth here (ADR-0007); nothing in this module runs during play.
 """
@@ -510,11 +513,65 @@ def retry_table(sessions: Iterable[dict[str, Any]]) -> dict[str, Any]:
     return out
 
 
+def sword_table(sessions: Iterable[dict[str, Any]],
+                targets: Iterable[int] = TARGET_JOBS) -> dict[str, Any]:  # fmt: skip
+    """v37: per arm ("sword" = odd k, the cursor check on; "none" = even k). From the clicks' own
+    ``sw`` flag (loot and moving walk clicks) and the ``cursor_sword`` events: the checks'
+    verdicts and ms, the loot steps (time, clicks, cursor skips), the walk clicks it refused, and
+    the attack requests on NON-targets by the arm of the click just before (apart_why)."""
+    import apart_why as aw
+
+    agg: dict[str, Counter[str]] = defaultdict(Counter)
+    ms: dict[str, list[float]] = defaultdict(list)
+    step_s: dict[str, list[float]] = defaultdict(list)
+    for s in sessions:
+        ev = [json.loads(x) for x in (DEMO / s["sid"] / "events.jsonl").read_text().splitlines()
+              if x]  # fmt: skip
+        for x in s["engagements"]:
+            arm = "sword" if int(x["k"]) % 2 == 1 else "none"
+            a = agg[arm]
+            a["engagements"] += 1
+            a["landed"] += s["why_by_k"].get(int(x["k"])) == "hit"
+            lo = x.get("loot") or {}
+            if lo:
+                a["loot_steps"] += 1
+                a["loot_clicks"] += int(lo.get("clicks") or 0)
+                for why, n in (lo.get("skipped") or {}).items():
+                    a[f"loot_skip_{why}"] += int(n)
+                if lo.get("s") is not None:
+                    step_s[arm].append(float(lo["s"]))
+        for e in ev:
+            if e.get("kind") == "cursor_sword":
+                a = agg["sword"]
+                a[f"check_{e['where']}_{e['verdict']}"] += 1
+                ms[f"{e['where']}"].append(float(e["ms"]))
+            elif (e.get("kind") == "walk_click" and e.get("clicked") is False
+                  and str(e.get("why", "")).startswith("cursor_")):  # fmt: skip
+                agg["sword"]["walk_refused_" + str(e["why"])] += 1
+        for c in s["clicks"]:
+            if "sw" in c and c.get("kind") in ("walk", "loot"):
+                agg["sword" if c["sw"] else "none"][f"clicks_{c['kind']}"] += 1
+        for row in aw.classify(s["packets"], s["clicks"], targets):
+            i = bisect.bisect_right([int(c["t"]) for c in s["clicks"]], row["t"]) - 1
+            c = s["clicks"][i] if i >= 0 else {}
+            arm = "sword" if c.get("sw") else "none" if "sw" in c else "other"
+            agg[arm][f"nontarget_{row['job']}_{row['kind']}"] += 1
+            agg[arm]["nontarget_requests"] += 1
+    out: dict[str, Any] = {}
+    for arm, a in sorted(agg.items()):
+        out[arm] = {**dict(sorted(a.items())),
+                    "landing": f"{a['landed']}/{a['engagements']}",
+                    "loot_step_s_p50": q(step_s[arm], 0.5)}  # fmt: skip
+    out["check_ms"] = {w: {"n": len(v), "p50": q(v, 0.5), "p90": q(v, 0.9)}
+                       for w, v in sorted(ms.items())}  # fmt: skip
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)  # fmt: skip
     ap.add_argument("what", choices=("strike", "dead", "loot", "stray", "blocks", "species",
-                                     "retry"))  # fmt: skip
+                                     "retry", "sword"))  # fmt: skip
     ap.add_argument("sessions", nargs="+")
     a = ap.parse_args()
     sessions = [load(s) for s in a.sessions]
@@ -526,6 +583,7 @@ def main() -> int:
         "blocks": blocks_table,
         "species": species_table,
         "retry": retry_table,
+        "sword": sword_table,
     }[a.what]
     print(json.dumps(fn(sessions), indent=1, default=str))
     return 0

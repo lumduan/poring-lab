@@ -783,3 +783,20 @@ def test_v34_base_ignores_the_targets_own_corpse_briefly() -> None:
     src = Path(hf.__file__).read_text()
     # only monster boxes ON the corpse spot are dropped; an NPC box always blocks
     assert 'or x_.cls != "monster"]' in src
+
+
+def test_v37_reads_the_cursor_before_loot_and_moving_walk_clicks() -> None:
+    p = hf.PARAMS[37]
+    assert p["cursor_sword"] and p["cursor_sword_ab"] and p["cursor_sword_wait_s"] == 0.35
+    assert not p["loot_retry"] and not p["loot_retry_ab"]  # not adopted (3.77): Batt's call
+    assert not p["species_own_ab"] and not p.get("fast_dead_ab")  # one parity arm only
+    assert 37 in hf.VERSIONS and not hf.PARAMS[36].get("cursor_sword")
+    src = Path(hf.__file__).read_text()
+    loot = src[src.index("def loot_fixed_run(") : src.index("def loot_blobs_run(")]
+    # after every existing check, before the one loot click; a non-clear verdict skips it
+    assert loot.index('why_ = "pink"') < loot.index('sword_verdict(u_l, v_l, "loot")')
+    assert loot.index('sword_verdict(u_l, v_l, "loot")') < loot.index("agent.click(")
+    walk = src[src.index("def walk_click(") : src.index('click_log({"t": t_c')]
+    moving = walk[walk.index("else:") :]
+    assert moving.index('sword_verdict(u, v, "walk")') < moving.index("agent.click(")
+    assert "return False" in moving[: moving.index("agent.click(")]

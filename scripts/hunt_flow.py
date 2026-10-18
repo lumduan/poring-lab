@@ -240,6 +240,9 @@ VERSIONS = {
     "cropped on a newer frame",
     36: "THE LOOT RETRY: a loot cell skipped for a unit near is queued once more at the end of "
     "the step (>= 0.6 s later, the same checks); interleaved per kill",
+    37: "THE CURSOR'S SWORD at every loot click and every moving walk click: the pointer there in "
+    "two motions, the client's own cursor read; SWORD or unknown = no click (cursor_sword); "
+    "interleaved per engagement",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -399,6 +402,13 @@ PARAMS[35] = {**PARAMS[34], "send_gap_ab": False, "species_own": True, "species_
 # 06:08, 6c95acf: the own frame cut "unsure" 27 -> 16 % but landing fell 80.5 -> 63.6 %)
 PARAMS[36] = {**PARAMS[35], "species_own": False, "species_own_ab": False, "loot_retry": True,
               "loot_retry_ab": True, "loot_retry_wait_s": 0.6}  # fmt: skip
+# 37 = THE CURSOR'S SWORD at loot and moving-walk click points (Batt 2026-10-18, decision 2,
+# option b; cursor_sword): on prt_fild06 (3.76) the detector had no box for the species it never
+# learned, so 21 of the 29 non-target attack requests came from loot clicks and 5 from walk clicks.
+# Interleaved per engagement. Base: v36's adopted base -- the loot retry is NOT in it (3.77: run
+# 1's primary failed; adoption is Batt's)
+PARAMS[37] = {**PARAMS[36], "loot_retry": False, "loot_retry_ab": False, "cursor_sword": True,
+              "cursor_sword_ab": True, "cursor_sword_wait_s": 0.35}  # fmt: skip
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -1999,6 +2009,31 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
             eng: dict[str, Any] | None = None
             k = 0
             split.to("searching", time.monotonic())
+            # v37 (Batt 2026-10-18, decision 2 option b): the client's own SWORD cursor checked at
+            # every loot click and every walk click made while the GM moves -- a unit check that
+            # does not need the detector to know the species (cursor_sword)
+            sword_refs: Any = None
+            if prm.get("cursor_sword"):
+                import cursor_sword as csw_
+
+                sword_refs = csw_.SwordRefs.load()
+
+            def sword_on(k_: int) -> bool:
+                """v37: the cursor check's arm for engagement ``k_`` (odd k when A/B)."""
+                return sword_refs is not None and (
+                    not prm.get("cursor_sword_ab") or k_ % 2 == 1
+                )  # fmt: skip
+
+            def sword_verdict(u_: float, v_: float, where: str) -> str:
+                """v37: the pointer to (u_, v_) in two motions, the cursor read there: "clear"
+                (click), "sword" or "unknown" (no click). Moves only."""
+                res_ = csw_.check(agent, screen, sword_refs, gx0, gy0, u_, v_,
+                                  wait_s=float(prm["cursor_sword_wait_s"]))  # fmt: skip
+                ptr[0] = (u_, v_)
+                ev({"kind": "cursor_sword", "where": where, "u": round(u_, 1),
+                    "v": round(v_, 1), "verdict": res_["verdict"], "ms": res_["ms"],
+                    "reads": len(res_["reads"]), "rec": res_["rec"]})  # fmt: skip
+                return str(res_["verdict"])
 
             import threading
 
@@ -2055,12 +2090,22 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     t_c = int(got["t_click"])
                     click_from, click_cell = seg[0], to
                 else:
+                    sw_ = sword_on(k)
+                    if sw_:  # v37: no walk click where the client draws the SWORD
+                        vd_ = sword_verdict(u, v, "walk")
+                        if vd_ != "clear":
+                            ev({"kind": "walk_click", "gate": gate, "to": list(to),
+                                "clicked": False, "why": f"cursor_{vd_}"})  # fmt: skip
+                            return False
+                        t_c = r.ns()
                     agent.click(gx0 + round(u), gy0 + round(v))
                 ptr[0] = (u, v)
                 if prm.get("ptr_rest_ui"):  # v26: the pointer never rests on the world
                     rest_ptr()
+                sw_log = {"sw": sword_on(k)} if sword_refs is not None else {}
                 click_log({"t": t_c, "u": round(u, 1), "v": round(v, 1), "kind": "walk",
-                           "gate": gate, "to": list(to), "why": why, **(extra or {})})  # fmt: skip
+                           "gate": gate, "to": list(to), "why": why, **sw_log,
+                           **(extra or {})})  # fmt: skip
                 ev({"kind": "walk_click", "gate": gate, "to": list(to), "why": why,
                     **(extra or {})})  # fmt: skip
                 cmd_hist.append((int(t_c), (int(to[0]), int(to[1]))))  # v7: the client's commands
@@ -2379,6 +2424,13 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             steps_.append(rt_)
                             out["retry_queued"] = out.get("retry_queued", 0) + 1
                         continue
+                    sw_l = sword_on(int(eng_.get("k", 0)))
+                    if sw_l:  # v37: no loot click where the client draws the SWORD
+                        vd_l = sword_verdict(u_l, v_l, "loot")
+                        if vd_l != "clear":
+                            out["skipped"][f"cursor_{vd_l}"] = (
+                                out["skipped"].get(f"cursor_{vd_l}", 0) + 1)  # fmt: skip
+                            continue
                     t_lc = r.ns()
                     agent.click(gx0 + round(u_l), gy0 + round(v_l))  # the LOOT click (fixed)
                     ptr[0] = (u_l, v_l)
@@ -2388,7 +2440,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     click_log({"t": t_lc, "u": round(u_l, 1), "v": round(v_l, 1),
                                "kind": "loot", "cell": list(c_l),
                                "src": "icon" if px_ is not None else "fixed",
-                               **({"retry": True} if nb_ is not None else {})})  # fmt: skip
+                               **({"retry": True} if nb_ is not None else {}),
+                               **({"sw": sw_l} if sword_refs is not None else {})})  # fmt: skip
                     time.sleep(prm["loot_interval_s"])
                 if prm.get("ptr_rest_ui") and out["clicks"]:  # v26: off the world after the step
                     rest_ptr()

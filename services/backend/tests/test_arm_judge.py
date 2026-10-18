@@ -136,7 +136,7 @@ def test_every_table_is_reachable_from_the_command_line() -> None:
     import inspect
 
     src = inspect.getsource(aj.main)
-    for name in ("strike", "dead", "loot", "stray", "blocks", "species", "retry"):
+    for name in ("strike", "dead", "loot", "stray", "blocks", "species", "retry", "sword"):
         assert f'"{name}": {name}_table' in src
 
 
