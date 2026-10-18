@@ -873,3 +873,22 @@ def test_the_sword_check_is_loot_only_on_untrained_species_maps_from_v38() -> No
     # the refusal comes before any input (before the immunity read and the first grab)
     assert body.index("sword_active(prm, MAP)") < body.index("f0.immunity_confirmed()")
     assert 'sword_on(k, "walk")' in body and 'sword_on(int(eng_.get("k", 0)), "loot")' in body
+
+
+def test_cont_fail_logging_keeps_the_gates_order_and_short_circuit() -> None:
+    """3.79 amendment (log-only): cont_click's gates stay in their old order as an if / elif
+    chain (short-circuited like the old `a and b and ...`), only the first failing one counted;
+    the click itself is untouched."""
+    assert hf.CONT_GATES == ("view", "grid", "units", "boxes", "refused", "guard")
+    src = Path(hf.__file__).read_text()
+    body = src[src.index("def cont_click(") : src.index("def cont_fail_note(")]
+    chain = body[body.index("fail_: str | None = None") : body.index("if fail_ is not None:")]
+    tests = ["if not (in_view(uu, vv) and in_view(gu, gv)):", "elif not grid[c_[1], c_[0]]:",
+             "elif not units_clear(gu, gv):", "elif not boxes_clear(gu, gv):",
+             "elif cont and not walk_ok(c_):", "elif not guard_ok(uu, vv):"]  # fmt: skip
+    pos = [chain.index(x) for x in tests]
+    assert pos == sorted(pos)
+    names = [chain[chain.index("fail_ = ", p_) + 9 :].split('"')[0] for p_ in pos]
+    assert tuple(names) == hf.CONT_GATES
+    assert body.count("walk_click(") == 1 and '"map+units", why, extra_' in body
+    assert 'ev({"kind": "cont_fail", "counts": dict(acc_)})' in src

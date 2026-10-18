@@ -10115,6 +10115,18 @@ So the cov arm is exactly v37 run B's none arm.
   - a read without block 0;
   - kills per sighting as the standard column.
 
+**AMENDMENT (14:17 ICT, before run 1; LOG-ONLY, no behaviour change):**
+- The conversion study (competition.md "Conversion study") found the approach to be the largest
+  loss. While steering, the GM stands between walk legs (~0.8 s), in ~5-s stalls, and ~2 s before
+  each strike. The continuous walk click (`cont_click`) fails without logging why.
+- So each failure is now counted, with the first failing gate per candidate cell or "none" (no
+  candidate ahead on the route), by purpose and by moving / standing.
+  - The counts go out as one `cont_fail` event per 10 s.
+  - The steer fallback that finds no step is counted too.
+- The gates keep their order and short-circuit, and the click is unchanged (tested).
+- Census + targeted safety tests: 329 passed.
+- These counts inform the next change's design. They do not decide v38.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.

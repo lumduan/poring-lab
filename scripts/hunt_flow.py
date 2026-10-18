@@ -461,6 +461,10 @@ def sword_check_wanted(prm: dict[str, Any], map_name: str, where: str, k: int) -
     return not prm.get("cursor_sword_ab") or k % 2 == 1
 
 
+# 3.79 amendment (log-only): the continuous walk click's gates, in the order cont_click checks them
+CONT_GATES = ("view", "grid", "units", "boxes", "refused", "guard")
+
+
 def cheb(a: Sequence[float], b: Sequence[float]) -> float:
     return max(abs(a[0] - b[0]), abs(a[1] - b[1]))
 
@@ -3856,6 +3860,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     src_ = lead_ or cur
                     at_ = (int(round(src_[0])), int(round(src_[1])))
                     world.position = at_
+                    fails_: Counter[str] = Counter()  # 3.79 amendment: log-only (cont_fail)
                     for j_ in ahead_candidates(route, src_, prm["ahead_order"]):
                         c_ = route[j_]
                         if lead_ is not None:
@@ -3866,10 +3871,26 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             gu, gv = uu, vv
                         if avoid is not None and prm.get("steer_clear_cells") and cheb(
                                 c_, avoid) < prm["steer_clear_cells"]:  # fmt: skip
+                            fails_["steer_clear"] += 1
                             continue  # v8 plan B: never a steering click onto the target
-                        if (in_view(uu, vv) and in_view(gu, gv) and grid[c_[1], c_[0]]
-                                and units_clear(gu, gv) and boxes_clear(gu, gv)
-                                and (not cont or walk_ok(c_)) and guard_ok(uu, vv)):  # fmt: skip
+                        # the gates in their old order (CONT_GATES), short-circuited as the old
+                        # `a and b and ...` chain; the first failing one is only counted
+                        fail_: str | None = None
+                        if not (in_view(uu, vv) and in_view(gu, gv)):
+                            fail_ = "view"
+                        elif not grid[c_[1], c_[0]]:
+                            fail_ = "grid"
+                        elif not units_clear(gu, gv):
+                            fail_ = "units"
+                        elif not boxes_clear(gu, gv):
+                            fail_ = "boxes"
+                        elif cont and not walk_ok(c_):
+                            fail_ = "refused"
+                        elif not guard_ok(uu, vv):
+                            fail_ = "guard"
+                        if fail_ is not None:
+                            fails_[fail_] += 1
+                        else:
                             extra_ = None
                             if lead_ is not None:
                                 d_ = [round(lead_[0] - cur[0], 2), round(lead_[1] - cur[1], 2)]
@@ -3883,8 +3904,29 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                 if prm.get("shadow_cursor"):
                                     shadow_q.append((r.ns(), uu, vv))
                                 return True
+                            fails_["click_refused"] += 1
                             world.position = at_
+                    cont_fail_note(why, fails_, len(route))
                     return False
+
+                cf_acc: dict[str, Any] = {"t": time.monotonic(), "n": Counter()}
+
+                def cont_fail_note(why: str, fails: Counter[str], route_len: int) -> None:
+                    """3.79 amendment (log-only, no behaviour change): why a continuous walk
+                    click found no candidate -- the first failing gate per candidate cell, or
+                    "none" (no candidate ahead on the route) -- by purpose and by whether the GM
+                    was measured moving; one ``cont_fail`` event per 10 s with the counts."""
+                    st_ = "moving" if moving else "standing"
+                    acc_ = cf_acc["n"]
+                    acc_[f"{why}:{st_}:calls"] += 1
+                    if not fails:
+                        acc_[f"{why}:{st_}:none"] += 1
+                        acc_[f"{why}:{st_}:none_route_len_le3"] += route_len <= 3
+                    for k_, n_ in fails.items():
+                        acc_[f"{why}:{st_}:{k_}"] += n_
+                    if time.monotonic() - cf_acc["t"] >= 10.0:
+                        ev({"kind": "cont_fail", "counts": dict(acc_)})
+                        cf_acc.update(t=time.monotonic(), n=Counter())
 
                 def walk_ok(c_: Cell) -> bool:
                     return not refusals.get(c_, 0) >= 2
@@ -4369,6 +4411,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                             if j is not None:
                                                 walk_click(u, v, ap[j], ap[: j + 1], "cursor",
                                                            "steer")  # fmt: skip
+                                            else:  # 3.79 amendment: log-only
+                                                cf_acc["n"]["steer:fallback_no_step"] += 1
                                             stop_since = None
                                 time.sleep(0.02)
                                 continue
