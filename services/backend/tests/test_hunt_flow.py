@@ -800,3 +800,47 @@ def test_v37_reads_the_cursor_before_loot_and_moving_walk_clicks() -> None:
     moving = walk[walk.index("else:") :]
     assert moving.index('sword_verdict(u, v, "walk")') < moving.index("agent.click(")
     assert "return False" in moving[: moving.index("agent.click(")]
+
+
+def test_v38_age_weighted_heading_prefers_ground_not_seen_for_long() -> None:
+    """The search study's proposal (staged): the score per walking second of the ground a heading
+    brings into OUR view, by how long since we saw it (search_study's curve, pinned here)."""
+    import math as m
+
+    import search_study as ss
+
+    ages = np.array([0.0, 30.0, 600.0, 601.0, 1200.0, 1201.0, np.inf])
+    assert np.allclose(hf.rel_yield(ages), ss.rel_yield(ages))
+    area = np.ones((80, 80), dtype=bool)
+    offs = [(dx, dy) for dy in range(-6, 7) for dx in range(-10, 11)]  # a small screen
+    seen = np.full(area.shape, -1e9)
+    seen[:, 40:] = 1000.0  # east was seen 10 s ago; west never
+    east = hf.band_score_age(area, (40, 40), 0.0, seen, 1010.0, offs)
+    west = hf.band_score_age(area, (40, 40), m.pi, seen, 1010.0, offs)
+    assert east is not None and west is not None and west[0] > 2.5 * east[0]
+    st = {"ang": 0.0}  # heading east, over ground seen 10 s ago: turn toward the never-seen west
+    goal = hf.heading_goal_age(area, (40, 40), st, seen, 1010.0, offs)
+    assert goal is not None and goal[0] < 40 and st["turn"] != 0.0
+    # all ground never seen: a DIAGONAL brings the most new cells per walking second (a wide
+    # screen gains both edges; Batt walks diagonally 49 % of steps, the bot 43 %): from east the
+    # rule turns 45 deg, and on a diagonal it keeps it
+    st2 = {"ang": 0.0}
+    hf.heading_goal_age(area, (40, 40), st2, np.full(area.shape, -1e9), 1010.0, offs)
+    assert abs(st2["turn"]) == 45.0
+    st2b = {"ang": m.pi / 4}
+    hf.heading_goal_age(area, (40, 40), st2b, np.full(area.shape, -1e9), 1010.0, offs)
+    assert st2b["turn"] == 0.0
+    walled = np.zeros((80, 80), dtype=bool)
+    walled[40, 35:42] = True  # a dead end everywhere but back west
+    st3 = {"ang": 0.0}
+    hf.heading_goal_age(walled, (41, 40), st3, seen, 1010.0, offs)
+    assert st3["turn"] == 180.0  # the only reversal: a real dead end
+
+
+def test_v38_is_staged_with_blocks_and_its_own_memory() -> None:
+    p = hf.PARAMS[38]
+    assert p["heading_age"] and p["heading_age_ab"] and p["heading_age_block_min"] == 10.0
+    assert not p.get("cursor_sword_ab") and not p["loot_retry_ab"]  # one A/B at a time
+    src = Path(hf.__file__).read_text()
+    assert "seen_grid[fy_[in_], fx_[in_]] = now_" in src  # the camera footprint, whole run
+    assert "if age_on(now_):" in src and 'elif prm.get("heading_cov"):' in src

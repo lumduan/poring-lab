@@ -243,6 +243,9 @@ VERSIONS = {
     37: "THE CURSOR'S SWORD at every loot click and every moving walk click: the pointer there in "
     "two motions, the client's own cursor read; SWORD or unknown = no click (cursor_sword); "
     "interleaved per engagement",
+    38: "THE AGE-WEIGHTED SEARCH HEADING: each heading scored by the ground it brings into our own "
+    "view, weighted by how long since we last saw it, per walking second (the search study); "
+    "10-min blocks",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -409,6 +412,11 @@ PARAMS[36] = {**PARAMS[35], "species_own": False, "species_own_ab": False, "loot
 # 1's primary failed; adoption is Batt's)
 PARAMS[37] = {**PARAMS[36], "loot_retry": False, "loot_retry_ab": False, "cursor_sword": True,
               "cursor_sword_ab": True, "cursor_sword_wait_s": 0.35}  # fmt: skip
+# 38 = THE AGE-WEIGHTED SEARCH HEADING (the search study's proposal, competition.md "Search study";
+# STAGED, not pre-registered: it needs >= 4 run-hours and Batt's go). Interleaved in 10-min blocks
+# within each run (the field drifts between runs). Its base is set at its pre-registration
+PARAMS[38] = {**PARAMS[36], "loot_retry": False, "loot_retry_ab": False, "heading_age": True,
+              "heading_age_ab": True, "heading_age_block_min": 10.0}  # fmt: skip
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -938,6 +946,95 @@ def heading_goal_cov(area: Any, here: Cell, st: dict[str, Any], swept: Any, now:
     ok_ = [c for c in cands if c[0] >= keep * top]
     pick = min(ok_, key=lambda c: (c[1], -c[0]))  # the smallest turn among the good ones
     st.update(ang=pick[3], turn=float(pick[2] * pick[1]), fresh=round(pick[5], 2))
+    return pick[4]
+
+
+# v38 candidate (the SEARCH study, 2026-10-18, scripts/search_study.py): the yield of ground by how
+# long since WE last saw it, relative to ground never seen this run. The bot's own kills deplete the
+# ground it covers; a killed mob respawns anywhere on the map (prt_fild08: all spawns whole-map).
+# Measured over v32-v36 (6 h): <= 10 min 0.40-0.47 of never-seen, 10-20 min 0.63, > 20 min 1.02.
+AGE_REL = ((600.0, 0.32), (1200.0, 0.5), (math.inf, 0.82))
+NEVER_REL = 1.0
+SEEN_NEVER = -1e8  # a last-seen grid value below this = never seen this run
+
+
+def rel_yield(age_s: Any) -> Any:
+    """PURE (v38): the relative yield of ground last seen ``age_s`` ago (inf = never): AGE_REL;
+    the same as search_study.rel_yield (a test pins it)."""
+    a = np.asarray(age_s, dtype=float)
+    out = np.full(a.shape, NEVER_REL)
+    fin = np.isfinite(a)
+    lo = 0.0
+    for hi, v in AGE_REL:
+        out[fin & (a > lo) & (a <= hi)] = v
+        lo = hi
+    out[fin & (a <= 0)] = AGE_REL[0][1]
+    return out
+
+
+def band_score_age(area: Any, here: Cell, ang: float, last_seen: Any, now: float,
+                   offsets: Sequence[Cell], max_len: int = 40, min_run: int = 8,
+                   ms_cell: float = MS_CELL) -> tuple[float, int, Cell] | None:  # fmt: skip
+    """PURE (v38): a heading's expected yield per walking second -- the cells our on-screen
+    ``offsets`` would bring into view along the ray (and do not cover from ``here``), each
+    weighted by rel_yield of its age (``last_seen``: monotonic s, < SEEN_NEVER = never), over the
+    ray's walk time (a diagonal step 1.4x). None when the ray runs < ``min_run`` cells. Returns
+    (score, cells, the ray's last cell). search_study.band_score with the bot's own clock."""
+    h, w = np.asarray(area).shape
+    dx, dy = math.cos(ang), math.sin(ang)
+    k = max(abs(dx), abs(dy))
+    dx, dy = dx / k, dy / k
+    cells = [here]
+    for i in range(1, max_len + 1):
+        c = (int(round(here[0] + dx * i)), int(round(here[1] + dy * i)))
+        if not (0 <= c[0] < w and 0 <= c[1] < h) or not area[c[1], c[0]]:
+            break
+        cells.append(c)
+    if len(cells) - 1 < min_run:
+        return None
+    offs = np.asarray(offsets, dtype=int).reshape(-1, 2)
+    pad = int(np.abs(offs).max()) + 1
+    xs, ys = [c[0] for c in cells], [c[1] for c in cells]
+    gx0, gy0 = max(0, min(xs) - pad), max(0, min(ys) - pad)
+    gx1, gy1 = min(w, max(xs) + pad + 1), min(h, max(ys) + pad + 1)
+    band = np.zeros((gy1 - gy0, gx1 - gx0), dtype=bool)
+    now_view = np.zeros_like(band)
+    for i, c in enumerate(cells):
+        px, py = offs[:, 0] + c[0] - gx0, offs[:, 1] + c[1] - gy0
+        ok = (px >= 0) & (px < band.shape[1]) & (py >= 0) & (py < band.shape[0])
+        (now_view if i == 0 else band)[py[ok], px[ok]] = True
+    band &= ~now_view & np.asarray(area, dtype=bool)[gy0:gy1, gx0:gx1]
+    ls = np.asarray(last_seen, dtype=float)[gy0:gy1, gx0:gx1][band]
+    ages = np.where(ls < SEEN_NEVER, np.inf, now - ls)
+    walk_s = sum((1.4 if (a[0] != b[0] and a[1] != b[1]) else 1.0)
+                 for a, b in zip(cells, cells[1:], strict=False)) * ms_cell / 1000  # fmt: skip
+    return float(rel_yield(ages).sum()) / walk_s, int(band.sum()), cells[-1]
+
+
+def heading_goal_age(area: Any, here: Cell, st: dict[str, Any], last_seen: Any, now: float,
+                     offsets: Sequence[Cell], keep: float = 0.8, max_len: int = 40,
+                     min_run: int = 8) -> Cell | None:  # fmt: skip
+    """PURE (v38 candidate, the search study's proposal): v22's heading rule (keep the heading
+    while it scores >= ``keep`` x the best, else the smallest turn that does; a reversal only at a
+    real dead end) with the AGE-WEIGHTED score per walking second (band_score_age) in place of
+    run x fresh share."""
+    ang = float(st.setdefault("ang", 0.0))
+    cands = []
+    for deg, sgn in ((0, 1), (45, 1), (45, -1), (90, 1), (90, -1), (135, 1), (135, -1)):
+        a2 = ang + sgn * math.radians(deg)
+        got = band_score_age(area, here, a2, last_seen, now, offsets, max_len, min_run)
+        if got is not None:
+            cands.append((got[0], deg, sgn, a2, got[2]))
+    if not cands:
+        a2 = ang + math.pi  # a real dead end: the only reversal
+        n2, c2 = ray_run_angle(area, here, a2, max_len)
+        st.update(ang=a2, turn=180.0, fresh=None)
+        return c2 if n2 >= 2 else None
+    top = max(c[0] for c in cands)
+    ok_ = [c for c in cands if c[0] >= keep * top]
+    pick = min(ok_, key=lambda c: (c[1], -c[0]))
+    st.update(ang=pick[3], turn=float(pick[2] * pick[1]),
+              fresh=round(pick[0] / top, 2) if top else None)  # fmt: skip
     return pick[4]
 
 
@@ -3233,6 +3330,25 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
 
             heading_st: dict[str, Any] = {"ang": start_heading(area, start)}  # v18
             swept_grid = np.full(area.shape, -1e9, dtype=np.float64)  # v22: last time in view
+            # v38 candidate: the WHOLE run's memory of the cells our own screen showed (the camera
+            # footprint at the measured position), for the age-weighted heading; v22's grid stays
+            seen_grid = np.full(area.shape, -1e9, dtype=np.float64)
+            offs_arr = np.asarray(offsets, dtype=int).reshape(-1, 2)
+            head_blk: dict[str, Any] = {"t0": None, "block": None, "on": False}
+
+            def age_on(now_s: float) -> bool:
+                """v38: the age-weighted heading's arm -- 10-min blocks (odd seeds start on)."""
+                if not prm.get("heading_age"):
+                    return False
+                if head_blk["t0"] is None:
+                    head_blk["t0"] = now_s
+                blk_ = int((now_s - head_blk["t0"]) / (60.0 * prm["heading_age_block_min"]))
+                if blk_ != head_blk["block"]:
+                    on_ = not prm.get("heading_age_ab") or (blk_ + seed) % 2 == 1
+                    head_blk.update(block=blk_, on=on_)
+                    ev({"kind": "heading_arm", "block": blk_, "on": on_})
+                return bool(head_blk["on"])
+
             arrow_last: list[float | None] = [None]  # v18: the minimap arrow (deg), logged only
             heading_rng = random_.Random(seed)
             trail: list[tuple[float, Cell]] = []  # v8 attempt 2: (mono s, cell) we stood on
@@ -3285,6 +3401,12 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         hx_, hy_, hc_ = int(here_[0]), int(here_[1]), int(prm["cov_half"])
                         swept_grid[max(0, hy_ - hc_): hy_ + hc_ + 1,
                                    max(0, hx_ - hc_): hx_ + hc_ + 1] = now_  # fmt: skip
+                    if prm.get("heading_age"):  # v38: the cells our screen shows now
+                        fx_ = offs_arr[:, 0] + int(here_[0])
+                        fy_ = offs_arr[:, 1] + int(here_[1])
+                        in_ = ((fx_ >= 0) & (fx_ < area.shape[1]) & (fy_ >= 0)
+                               & (fy_ < area.shape[0]))  # fmt: skip
+                        seen_grid[fy_[in_], fx_[in_]] = now_
                     head_ = None
                     if prm.get("sweep"):  # v12: our heading over the last ~2 s (the trail)
                         with plock:
@@ -3359,7 +3481,11 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         elif prm.get("heading_search") and area[here_[1], here_[0]]:
                             # v18 (Batt 21:31): along the remembered SEARCH HEADING; small turns;
                             # v22: away from the ground we swept in the last minutes
-                            if prm.get("heading_cov"):
+                            if age_on(now_):  # v38: the age-weighted score per walking second
+                                goal = heading_goal_age(area, here_, heading_st, seen_grid, now_,
+                                                        offsets, prm["cov_keep"],
+                                                        min_run=prm["heading_min_run"])  # fmt: skip
+                            elif prm.get("heading_cov"):
                                 goal = heading_goal_cov(
                                     area,
                                     here_,
@@ -3382,7 +3508,9 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                         "ang": round(math.degrees(heading_st["ang"]) % 360, 1),
                                         "turn": heading_st.get("turn"),
                                         "fresh": heading_st.get("fresh"),
-                                        "arrow": arrow_last[0]})  # fmt: skip
+                                        "arrow": arrow_last[0],
+                                        **({"age": bool(head_blk["on"])}
+                                           if prm.get("heading_age") else {})})  # fmt: skip
                                 else:
                                     goal = None
                         elif prm.get("sweep") and area[here_[1], here_[0]]:
