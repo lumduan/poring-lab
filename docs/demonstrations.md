@@ -9679,7 +9679,7 @@ technique that broke), plus a short phone clip.
   - The live monitor (`--apart 1048,1051,1080`) counted: 231 attack requests on targets; 1
     Creamy hit; unknown-species hits Thief Bug 16, Green Plant 8, Thief Bug Egg 2.
 
-**RESULT (judged 2026-10-18 07:1x; side by side with v35's two prt_fild08 runs, 3.75):**
+**RESULT (judged 2026-10-18 07:11, 1b6c21b; side by side with v35's two prt_fild08 runs, 3.75):**
 
 | measure | v35 on prt_fild08 (2 runs) | v35 on prt_fild06 (HELD-OUT) | prediction | verdict |
 |---|---|---|---|---|
@@ -9702,15 +9702,15 @@ technique that broke), plus a short phone clip.
    - Thief Bug, Green Plant and Thief Bug Egg are not in the detector's training, so they get no
      box. The loot click's unit check (a monster box within 70 px) and the walk click's units
      gate cannot see them.
-   - Of the 32 attack requests on non-targets (`apartwhy.py`, packets offline):
-     - 22 came from LOOT clicks (Thief Bug 15, Green Plant 3, Creamy 2, Thief Bug Egg 2);
-     - 6 from walk clicks (search / steer);
-     - 4 from strikes.
+   - Of the 29 attack requests on non-targets (`scripts/apart_why.py`, packets offline; each
+     target's species taken at the request):
+     - 21 came from LOOT clicks (Thief Bug 16, Green Plant 3, Creamy 1, Thief Bug Egg 1);
+     - 5 from walk clicks (search / steer);
+     - 3 from strikes.
    - Thief Bugs are looters: they walk onto our drop piles. That is also why looters took 47.6 %
      of the drops (prt_fild08: 18.8 %).
-2. **The strike: mostly held.** Landing 70.5 % against 72.1 %. 4 of its strikes hit non-targets:
-   a Green Plant read as a Poring by the pixel species check twice (arm C, no tag read), one
-   Creamy, one Thief Bug on a re-strike.
+2. **The strike: mostly held.** Landing 70.5 % against 72.1 %. 3 of its clicks hit non-targets:
+   a Green Plant twice (a strike and its burst; arm C, no tag read) and a Thief Bug on a strike.
 3. **Walking / heading / cliffs: held.** Reversals +1.0 / min, 1 stall against 11-14, the loot
    treadmill stayed fixed (7 %).
 4. **Loot mechanics: held** (stray 7 %). The losses were looters, i.e. item 1.

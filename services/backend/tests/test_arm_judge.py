@@ -169,3 +169,23 @@ def test_loot_stray_clicks_ignores_the_next_search_walk() -> None:
     assert aj.loot_stray(steps, pk)["stray_ge_4"] == 1  # the window caught the search walk
     got = aj.loot_stray_clicks(steps, clicks, pk)
     assert got["stray_ge_4"] == 0 and got["max_p50"] == 1
+
+
+def test_apart_why_names_the_click_behind_each_non_target_attack() -> None:
+    """3.76's classifier: a synthetic case, then the REAL held-out run (21 of 29 via loot)."""
+    import apart_why as aw
+    import pytest
+
+    pk = [{"type": "entity_appear", "gid": 7, "job": 1051, "t_mono_ns": 0},
+          {"type": "entity_appear", "gid": 8, "job": 1002, "t_mono_ns": 0},
+          {"type": "attack_request", "target_gid": 8, "t_mono_ns": 5},
+          {"type": "attack_request", "target_gid": 7, "t_mono_ns": 20}]  # fmt: skip
+    cl = [{"t": 3, "kind": "strike", "track": 1}, {"t": 18, "kind": "loot", "src": "fixed"}]
+    rows = aw.classify(pk, cl)
+    assert [(r["job"], r["kind"], r["via"]) for r in rows] == [(1051, "loot", "fixed")]
+    sid = "20261018T060344-demo-hunt-flow35"
+    if not (aw.DEMO / sid / "packets.jsonl.gz").exists():
+        pytest.skip("the held-out session is not banked on this host")
+    s = aw.summary(aw.classify(*aw.load(sid)))
+    assert s["requests"] == 29 and s["by_kind"]["loot"] == 21 and s["by_kind"]["walk"] == 5
+    assert s["by_job"]["1051"] == 19  # Thief Bug, the looter on our piles
