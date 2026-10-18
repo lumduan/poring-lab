@@ -10127,6 +10127,14 @@ So the cov arm is exactly v37 run B's none arm.
 - Census + targeted safety tests: 329 passed.
 - These counts inform the next change's design. They do not decide v38.
 
+**Run log (written during the runs):**
+- **Run 1** (14:18:20, seed 20272701, `20261018T141820-demo-hunt-flow38`, code 9d78aec).
+  - Before it: a judged screenshot (14:17: prt_fild08, no dialog, chat closed, Lv 1).
+  - The runner rebuilt the hunting state itself (14:18:27-14:20:04: the GM lines, then
+    `fixed`). Block 0 = age (`heading_arm` on).
+- From run 2 the runner loads 9c75f36: v39 is staged there, but v38's behaviour is identical (the
+  new options are off in PARAMS[38]; tested).
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.

@@ -855,7 +855,8 @@ Also: false "dead" calls on 16.9 % of engagements (0.38 s per kill of looting no
   per engagement today. Upper bound kills / h +8-12 %. It should also help the walkers that are
   never reached.
 - Interleaved per engagement. Measured by the steer moving share, turn -> 3 cells, and kills / h.
-- Its design uses the `cont_fail` counts banked during the v38 runs. It needs Batt's go.
+- STAGED 9c75f36 (PARAMS[39], tested, not run). Its design uses the `cont_fail` counts banked
+  during the v38 runs. It needs Batt's go.
 
 **Next candidates:**
 - Strike WALKING targets from 7 cells at a velocity-led aim point (the misses judge's proposal,
