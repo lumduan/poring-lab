@@ -189,3 +189,19 @@ def test_apart_why_names_the_click_behind_each_non_target_attack() -> None:
     s = aw.summary(aw.classify(*aw.load(sid)))
     assert s["requests"] == 29 and s["by_kind"]["loot"] == 21 and s["by_kind"]["walk"] == 5
     assert s["by_job"]["1051"] == 19  # Thief Bug, the looter on our piles
+
+
+def test_sword_precision_on_the_real_held_out_run() -> None:
+    """3.78's offline check of the cursor's SWORD (run A, prt_fild06): what stood at each checked
+    point (packets). A SWORD verdict mostly had a mob within 1-2 cells (the undetected Thief Bugs);
+    a CLEAR walk point almost never did."""
+    import pytest
+
+    sid = "20261018T101834-demo-hunt-flow37"
+    if not (aj.DEMO / sid / "packets.jsonl.gz").exists():
+        pytest.skip("the v37 run A session is not banked on this host")
+    got = aj.sword_precision(aj.load(sid))
+    ls, wc = got["loot_sword"], got["walk_clear"]
+    assert ls["n"] == 46 and ls["mob_within_1"] >= 0.7 * ls["n"] and ls["job_1051"] >= 30
+    assert wc["n"] == 336 and wc["mob_within_1"] <= 5
+    assert got["walk_sword"]["mob_within_2"] == got["walk_sword"]["n"]
