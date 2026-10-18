@@ -718,3 +718,22 @@ AGE-WEIGHTED SEARCH HEADING.**
    ruler. The age-weighted heading is STAGED as v38 (PARAMS[38], 5a0870f) and needs >= 4
    run-hours. Kills per sighting is a standard judge column (Batt 6.82; the bot 3.2-5.8).
 4. nvtop and the /dev/shm cleanup are Batt's. The GPU stays frozen.
+
+## Sunday 18 Oct, afternoon (Batt's decisions on the series report, received 13:29)
+
+1. **Loot retry: NOT adopted for now** (the pooled primary passed, but the loot gain is not shown
+   and each step costs +0.39 s; speed is the priority). It stays staged (PARAMS[36]).
+2. **The cursor's SWORD check: option (a).**
+   - Loot clicks only, with a 0.6 s wait, and only on maps with species the detector was not
+     trained on; walk clicks unchanged.
+   - Built 0d4cacb: `UNTRAINED_SPECIES` per map (prt_fild06 on, prt_fild08 off; an unlisted map
+     refuses). In the base from v38.
+   - Not yet measured live at 0.6 s.
+3. **Conversion first, then v38.**
+   - A conversion study like the search study (offline, banked sessions + Batt's demo): split the
+     extra time into notice -> turn -> in range -> click -> hit -> kill, and say why the bot
+     attacks only 43 % of free targets within 10 s (Batt 78 %). Rank the causes and propose the
+     next change.
+   - Then v38 (the age-weighted heading) for >= 4 run-hours, interleaved: pre-registered as 3.79
+     (13:46, c46dc16).
+4. nvtop and the /dev/shm cleanup are Batt's. The GPU stays frozen.
