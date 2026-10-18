@@ -10375,6 +10375,17 @@ on for all (no blocks), switched in a commit before run 1 and recorded in this r
     prt_fild08, no dialog, the standard windows, the GM standing in its hunting state, ASSIST,
     no lease).
   - The route preview daemon had exited while idle (bot_agents []); the runner starts it.
+- **Runs 2-4 are QUEUED** (Batt's night order, 22:2x: "queue the remaining pre-registered runs of
+  the CURRENT version with a chain script ... never queue an unjudged NEXT version").
+  - `scripts/hunt_chain.py` (9574245) was started detached at 22:27:07 with seeds 20280202,
+    20280303, 20280404. It waits for run 1 to end.
+  - Per run, it checks the control file and /health (ASSIST, no lease), saves the pre-run
+    screenshot (`pre-v39-<seed>.jpg`, judged by the agent afterwards; the runner's own start
+    check refuses an unknown UI state), then runs the runner niced with the live hard-bar
+    monitor beside it.
+  - It ends on any run that does not end on its time box.
+  - Runs 2-4 load code 9574245 or later. That code adds the false-dead candidate (ffdc791), inert
+    in v39: no `false_dead_fix` in PARAMS[39] (tested).
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
