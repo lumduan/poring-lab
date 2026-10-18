@@ -9967,6 +9967,67 @@ see only detector boxes.
     pre-registration).
 - **Run B** (11:20:36, prt_fild08, seed 20272601, `20261018T112036-demo-hunt-flow37`), after a
   judged screenshot (11:20).
+  - 161 engagements, 160 dead. No stop, 0 Creamy, 0 non-target hits.
+
+**RESULT (judged 2026-10-18 12:2x):**
+
+| run | engagements | landing (5 s) | kills / h | kills per sighting | loot picked / fell | sight / 10 min (windowed) | reversals / min |
+|---|---|---|---|---|---|---|---|
+| A, prt_fild06 | 200 | 147 / 200 = 73.5 % | 190.8 | 3.21 | 97 / 386 = 25.1 % | 59.5 | 5.44 |
+| B, prt_fild08 | 161 | 132 / 161 = 82.0 % | 141.0 | 4.62 | 107 / 194 = 55.2 % | 30.5 | 5.35 |
+
+| per arm (`arm_judge.py sword` / `retry` / `sword-precision`) | A: sword | A: none | B: sword | B: none |
+|---|---|---|---|---|
+| engagements / kills at our hand | 100 / 88 | 100 / 92 | 80 / 75 | 81 / 77 |
+| non-target attack requests from loot / walk clicks | **4** (TB loot 4) | **20** (TB loot 14, TB walk 5, GP walk 1) | 0 | 0 |
+| non-target from strikes (no check: an intended SWORD) | 7 (both arms) | | 0 | |
+| landing within 5 s | 73 / 100 | 74 / 100 | 63 / 80 = 78.8 % | 69 / 81 = 85.2 % |
+| loot step p50 | 3.14 s | 1.76 s | 4.13 s | 2.47 s |
+| items picked at our kills | 30.4 % | 33.9 % | 60.6 % | 62.6 % |
+| loot checks: clear / sword / unknown | 219 / 46 / 342 | - | 212 / 13 / 341 | - |
+| moving walk checks: clear / sword / unknown | 336 / 17 / 1035 | - | 510 / 2 / 1827 | - |
+| check ms p50 (loot / walk) | 363 / 378 | - | 367 / 380 | - |
+
+What stood at the checked points (packets, offline; the GM ~0.45 s earlier, as the frames lag):
+- SWORD at loot points: a mob within 1 cell 36 / 46 (A, Thief Bugs 39) and 12 / 13 (B, Pupas
+  on the pile);
+- SWORD at walk points: within 2 cells 17 / 17 and 2 / 2;
+- CLEAR at walk points: a mob within 1 cell 3 / 336 and 0 / 510;
+- UNKNOWN: a mob within 1 cell at only 14 % / 4 % (loot) and 2 % / 0.2 % (walk). An UNKNOWN is
+  the client not yet drawing its cursor at the point, not a hidden monster.
+
+**Against the predictions:**
+1. **Primary (prt_fild06):** non-target attacks from loot / walk clicks, sword <= 25 % of none and
+   <= 4: **PASS** (4 vs 20).
+2. Time cost:
+   - check ms p50 <= 300: **FAIL** (363-380 on both maps);
+   - loot step p50 sword <= none + 2.0 s: **PASS** (+1.38 s, +1.66 s);
+   - checks ending UNKNOWN <= 15 %: **FAIL** (loot 56-60 %, walk 75-78 %).
+3. Still hunting:
+   - landing: A **PASS** (-1), B **FAIL** (-6.4 points);
+   - loot picked: **PASS** on both (-3.5, -2.0).
+4. prt_fild08, Creamy attacks from loot / walk: **PASS** (0 vs 0).
+5. Hard bars: **PASS** (no NPC contact, no map change; on prt_fild08 no non-target hit).
+
+**Read:**
+- The client's SWORD is a real, detector-independent unit check. Where it decided, it was right:
+  it cut the untrained-species attacks from loot and walk clicks five-fold on the held-out map,
+  and it also caught target species standing on piles that the box check missed (Pupas).
+- But in motion it often cannot decide in 0.35 s. While the camera scrolls, the client draws its
+  cursor at the new point only after ~0.35-0.4 s (the recorded frames), so most checks end
+  UNKNOWN. Failing closed then costs:
+  - +1.4-1.7 s per loot step;
+  - 2,862 refused moving walk clicks (the walker fell back to its gated clicks; the walk-click
+    count stayed the same);
+  - landing -6.4 points on prt_fild08 (one run).
+- Not adopted as is. The next step is a design choice for Batt:
+  - (a) loot clicks only (21 of the 29 held-out non-target attacks), with a longer wait (~0.6 s);
+  - (b) both, with the wait raised to ~0.6 s and its cost measured;
+  - (c) pipelining: the pointer goes to the next walk point while the current leg still runs, so
+    the read waits on the walk, not on the click (but the pointer then rests on the world, which
+    v26 / v28 avoided).
+  Strikes (7 held-out non-target attacks) are untouched by this check: they intend a SWORD; the
+  species there is the tag / pixel check's job.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
