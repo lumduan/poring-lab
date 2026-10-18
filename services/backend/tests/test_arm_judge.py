@@ -140,6 +140,7 @@ def test_every_table_is_reachable_from_the_command_line() -> None:
         assert f'"{name}": {name}_table' in src
     assert '"heading"' in src and "heading_table(a.sessions)" in src  # v38: its own loader
     assert '"approach"' in src and "approach_table(a.sessions)" in src  # v39: the same
+    assert '"deadprobe"' in src and "deadprobe_table(a.sessions)" in src  # 3.80 amendment
 
 
 def test_retry_table_splits_a_real_run_without_losing_an_item() -> None:
@@ -316,3 +317,12 @@ def test_approach_table_counts_the_creamy_a_steer_walk_click_became() -> None:
         pytest.skip("the v38 session is not banked on this host")
     out = aj.approach_table([sid])
     assert out["tail"]["walk_to_attack_other"] + out["base"]["walk_to_attack_other"] == 1
+
+
+def test_deadprobe_table_counts_every_dead_call_of_a_run_without_probes() -> None:
+    """The 3.80 amendment's judge on v38 run 1 (before the probe existed): every dead call is
+    covered by the truth (150, flow_judge.dead_call_truth), none probed, no table rows."""
+    sid = "20261018T141820-demo-hunt-flow38"
+    if not (aj.DEMO / sid / "flow_judge.json").exists():
+        pytest.skip("the v38 session is not banked on this host")
+    assert aj.deadprobe_table([sid]) == {"coverage": {"dead_calls": 150}}

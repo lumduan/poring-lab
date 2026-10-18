@@ -27,6 +27,10 @@ engagements.json, clicks.jsonl, and flow_judge.json -- run `flow_judge.bot(sid)`
                                         GM's moving share while steering, its stops, steer s per
                                         engagement, the approach (steer start -> first click /
                                         -> within 3 cells), landing
+    arm_judge.py deadprobe SID [SID ...] v39's log-only dead_probe against packets: per dead
+                                        call's truth and last burst, the would-be "still there"
+                                        signals (same monster under a new id, a box near the
+                                        predicted pixel) -- the false-dead fix's design (3.81)
 
 Packets are offline ground truth here (ADR-0007); nothing in this module runs during play.
 """
@@ -753,6 +757,42 @@ def _approach_rel(arms: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def deadprobe_table(sids: Iterable[str], radii: Sequence[int] = (30, 45, 60)) -> dict[str, Any]:
+    """v39's log-only ``dead_probe`` (the 3.80 amendment) against the server: every probed dead
+    call by its truth (flow_judge.dead_call_truth: real / target_alive / target_gone / no_unit /
+    other_killed) and its last burst ("risky" or other), with the probe's would-be signals --
+    the same monster under a new id (``reacq``), the freshest monster box within r px of the
+    engaged track's predicted pixel (``box<=r``), the track still live. For the false-dead fix
+    (3.81): how many still-alive targets a signal catches, and how many real kills it would
+    hold back."""
+    import flow_judge as fj
+    import search_study as ss
+
+    agg: dict[str, Counter[str]] = defaultdict(Counter)
+    cover: Counter[str] = Counter()
+    for sid in sids:
+        sess = ss.load_session(sid)
+        rows = json.loads((DEMO / sid / "flow_judge.json").read_text())["engagements_w"]["rows"]
+        truth = fj.dead_call_truth(sess.events, sess.engagements, rows, sess.t0, sess.w1)
+        cover["dead_calls"] += len(truth)
+        for p in sess.bot_events:
+            if p.get("kind") == "dead_probe_error":
+                cover["probe_errors"] += 1
+            if p.get("kind") != "dead_probe" or int(p["k"]) not in truth:
+                continue
+            cover["probed"] += 1
+            why, _last = truth[int(p["k"])]
+            grp = "risky" if p.get("last_burst") == "risky" else "other"
+            a = agg[f"{grp}/{why}"]
+            a["n"] += 1
+            a["reacq"] += p.get("reacq") is not None
+            a["track_live"] += bool(p.get("track_live"))
+            bp = p.get("box_px")
+            for r_ in radii:
+                a[f"box<={r_}"] += bp is not None and float(bp) <= r_
+    return {"coverage": dict(cover), **{k: dict(v) for k, v in sorted(agg.items())}}
+
+
 def species_table(sessions: Iterable[dict[str, Any]]) -> dict[str, Any]:
     """v35: per engagement parity (odd k = the species check on the box's OWN frame, even k =
     the fresh crop at the stale box): arm C's eligibility (the ``abc`` events: effective arm,
@@ -949,7 +989,7 @@ def main() -> int:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)  # fmt: skip
     ap.add_argument("what", choices=("strike", "dead", "loot", "stray", "blocks", "species",
                                      "retry", "sword", "sword-precision", "heading",
-                                     "approach"))  # fmt: skip
+                                     "approach", "deadprobe"))  # fmt: skip
     ap.add_argument("sessions", nargs="+")
     a = ap.parse_args()
     if a.what == "heading":  # its own loader (search_study's windows and field)
@@ -957,6 +997,9 @@ def main() -> int:
         return 0
     if a.what == "approach":  # search_study's loader too
         print(json.dumps(approach_table(a.sessions), indent=1, default=str))
+        return 0
+    if a.what == "deadprobe":  # the same
+        print(json.dumps(deadprobe_table(a.sessions), indent=1, default=str))
         return 0
     sessions = [load(s) for s in a.sessions]
     if a.what == "sword-precision":

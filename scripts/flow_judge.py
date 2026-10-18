@@ -606,19 +606,15 @@ def kills_by_origin(events: Sequence[Mapping[str, Any]], engs: Sequence[Mapping[
     return out
 
 
-def dead_calls(events: Sequence[Mapping[str, Any]], engs: Sequence[Mapping[str, Any]],
-               rows: Sequence[Mapping[str, Any]], t0: int, w1: int) -> dict[str, Any]:  # fmt: skip
-    """PURE (Batt 2026-10-18, a standard column from now on): the engagements the runner ended
-    "dead" (first click in [t0, w1)), against the server. REAL = the attacked gid
-    (``bot_engagements``' join, ``rows``) died (vanish reason 1) between the first click and
-    the engagement's end + 1 s. WITHOUT a real death, by why:
-    - "no_unit": the join found no unit (the clicks met none);
-    - "other_killed": we killed another monster in that span (reason 1 <= 1.5 s after our
-      damaging act);
-    - "target_alive": the attacked gid was still alive at the engagement's end;
-    - "target_gone": it had left (not killed) by then.
-    ``after_risky``: of those, the ones whose LAST burst ended "risky" (the risk gate stopped the
-    re-clicks: the case Batt's false-dead fix targets)."""
+def dead_call_truth(events: Sequence[Mapping[str, Any]], engs: Sequence[Mapping[str, Any]],
+                    rows: Sequence[Mapping[str, Any]], t0: int,
+                    w1: int) -> dict[int, tuple[str, str | None]]:  # fmt: skip
+    """PURE: per engagement the runner ended "dead" (first click in [t0, w1)): k -> (truth, the
+    last burst's end). Truth: "real" = the attacked gid (``bot_engagements``' join, ``rows``)
+    died (vanish reason 1) between the first click and the engagement's end + 1 s; else
+    "no_unit" (the join found no unit), "other_killed" (we killed another monster in that span:
+    reason 1 <= 1.5 s after our damaging act), "target_alive" (still alive at the end) or
+    "target_gone" (it had left, not killed)."""
     gid_by_k = {int(r["k"]): r.get("gid") for r in rows if r.get("k") is not None}
     deaths: dict[int, list[int]] = {}
     hit: dict[int, int] = {}
@@ -632,28 +628,40 @@ def dead_calls(events: Sequence[Mapping[str, Any]], engs: Sequence[Mapping[str, 
             if t - hit.get(gid_of(e), -(10**18)) <= int(1.5 * NS):
                 kills.append(t)
     life = alive(events)
-    why: Counter[str] = Counter()
-    called = real = risky = 0
+    out: dict[int, tuple[str, str | None]] = {}
     for x in engs:
         fc = int(x["t_first_click"])
         if x.get("result") != "dead" or not t0 <= fc < w1:
             continue
-        called += 1
         te = int(x.get("t_end") or x.get("t_last_click") or fc) + NS
         g = gid_by_k.get(int(x["k"]))
-        if g is not None and any(fc <= d <= te for d in deaths.get(int(g), ())):
-            real += 1
-            continue
-        if g is None:
-            why["no_unit"] += 1
-        elif any(fc <= k <= te for k in kills):
-            why["other_killed"] += 1
-        elif present(life, int(g), te - NS):
-            why["target_alive"] += 1
-        else:
-            why["target_gone"] += 1
         ends = [(h.get("burst") or {}).get("end") for h in x.get("hovers", []) if h.get("burst")]
-        risky += bool(ends) and ends[-1] == "risky"
+        if g is not None and any(fc <= d <= te for d in deaths.get(int(g), ())):
+            why = "real"
+        elif g is None:
+            why = "no_unit"
+        elif any(fc <= k <= te for k in kills):
+            why = "other_killed"
+        elif present(life, int(g), te - NS):
+            why = "target_alive"
+        else:
+            why = "target_gone"
+        out[int(x["k"])] = (why, ends[-1] if ends else None)
+    return out
+
+
+def dead_calls(events: Sequence[Mapping[str, Any]], engs: Sequence[Mapping[str, Any]],
+               rows: Sequence[Mapping[str, Any]], t0: int, w1: int) -> dict[str, Any]:  # fmt: skip
+    """PURE (Batt 2026-10-18, a standard column from now on): the engagements the runner ended
+    "dead", against the server (``dead_call_truth``): how many had a REAL death, and the rest by
+    why (no unit / another monster killed / the target still alive / gone); ``after_risky``: of
+    those, the ones whose LAST burst ended "risky" (the risk gate stopped the re-clicks: the
+    case Batt's false-dead fix targets)."""
+    truth = dead_call_truth(events, engs, rows, t0, w1)
+    why = Counter(w for w, _e in truth.values() if w != "real")
+    called = len(truth)
+    real = called - sum(why.values())
+    risky = sum(1 for w, e in truth.values() if w != "real" and e == "risky")
     n_ = called - real
     return {"called": called, "real": real, "without_death": n_,
             "share": round(n_ / called, 3) if called else None, "why": dict(why),
