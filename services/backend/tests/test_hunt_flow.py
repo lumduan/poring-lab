@@ -901,6 +901,21 @@ def test_v39_the_steer_may_click_the_routes_tail() -> None:
     assert hf.ahead_candidates(path, (11.2, 10.0), (6, 5, 7, 4, 8, 3)) == []  # the old: none
     assert hf.ahead_candidates(path, (11.2, 10.0), (6, 5, 7, 4, 8, 3), tail=True) == [3, 2]
     assert hf.ahead_candidates(path, (13.0, 10.0), (3,), tail=True) == []  # at the end: none
+    # Batt 16:2x: never "none" while the lead is off the end -- past it, or short of it
+    assert hf.ahead_candidates(path, (14.6, 10.0), (6, 5, 3), tail=True) == [3]  # lead past it
+    assert hf.ahead_candidates(path, (12.6, 10.0), (6, 5, 3), tail=True) == []  # its own cell
+    assert hf.ahead_candidates(path, (14.6, 10.0), (6, 5, 3)) == []  # v38: unchanged
+    assert hf.ahead_candidates([(10, 10)], (10.0, 10.0), (3,), tail=True) == []  # in the zone
+    import random as rnd
+
+    rg = rnd.Random(7)
+    for _ in range(300):  # any route, any lead: empty only on the last cell or a 1-cell route
+        n = rg.randint(1, 12)
+        rt = [(10 + i, 10 + rg.choice((0, 0, 1))) for i in range(n)]
+        lead = (rg.uniform(8, 25), rg.uniform(8, 13))
+        got = hf.ahead_candidates(rt, lead, (6, 5, 7, 4, 8, 3), tail=True)
+        assert got or n == 1 or (int(round(lead[0])), int(round(lead[1]))) == rt[-1], (rt, lead)
+        assert all(0 < j < n for j in got) and len(set(got)) == len(got)
     long_ = [(x, 10) for x in range(10, 30)]  # a long route: the order first, then the tail
     got = hf.ahead_candidates(long_, (10.0, 10.0), (6, 5, 3), tail=True)
     assert got[:3] == [6, 5, 3] and got[3] == 19 and 6 not in got[3:] and 0 not in got

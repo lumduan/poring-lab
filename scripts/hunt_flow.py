@@ -252,8 +252,10 @@ VERSIONS = {
     "view, weighted by how long since we last saw it, per walking second (the search study); "
     "10-min blocks. Base: the cursor's SWORD at loot clicks on untrained-species maps only",
     39: "THE CONTINUOUS APPROACH: the steer's walk click may take the route's tail when nothing "
-    "lies >= 3 cells ahead, and the standstill fallback steps from the route point nearest the GM "
-    "(the conversion study: the GM stood while closing in); interleaved per engagement",
+    "lies >= 3 cells ahead, and the route's end when even that is empty (Batt 16:2x: the steer "
+    "always finds a point on the route; only the gates refuse), and the standstill fallback steps "
+    "from the route point nearest the GM (the conversion study: the GM stood while closing in); "
+    "interleaved per engagement (odd k)",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -437,8 +439,10 @@ PARAMS[38] = {**PARAMS[36], "loot_retry": False, "loot_retry_ab": False, "headin
 # the steer's continuous walk click may take the route's TAIL when nothing lies >= 3 cells ahead
 # of the lead (cont_fail, 3.79: "none" in most failed steer calls, routes <= 3 cells), and the
 # standstill fallback steps from the route point NEAREST the GM, not the route's start. Every walk
-# gate unchanged. STAGED, not pre-registered (Batt's go); interleaved per engagement. Its base
-# (v38 adopted or not) is set at its pre-registration
+# gate unchanged. Batt's go 2026-10-18 16:2x ("the steer must always find a click point on the
+# route ... fix the point picker, not the gates"): also the route's END when nothing else is
+# left. Pre-registered as 3.80; interleaved per engagement (odd k). Its base: the coverage heading
+# (v38's age heading only if v38 is adopted by its rule, switched in a commit before run 1)
 PARAMS[39] = {**PARAMS[38], "heading_age": False, "heading_age_ab": False, "steer_tail": True,
               "steer_tail_ab": True}  # fmt: skip
 
@@ -691,13 +695,21 @@ def ahead_candidates(path: Sequence[Cell], here: Sequence[float], order: Sequenc
     """PURE (v5): path indices to try for the next walk click, ``order`` cells ahead of the path
     cell nearest to where we ARE (measured), the first in range first. ``tail`` (v39, the
     continuous approach): then the route's remaining cells beyond that nearest one, its END
-    first -- near the end of a short route ``order`` (>= 3 ahead) has none, and the GM stood."""
+    first -- near the end of a short route ``order`` (>= 3 ahead) has none, and the GM stood.
+    And when even that is empty (the nearest cell IS the end), the end itself unless ``here``
+    lies on it (Batt 2026-10-18 16:2x: the steer always finds a point on the route; only the
+    gates may refuse it). So with ``tail`` the list is empty only for a one-cell route or when
+    ``here`` is the route's last cell: the walk already ends there."""
     if not path:
         return []
     ci = min(range(len(path)), key=lambda i: cheb(path[i], here))
     out = [ci + k for k in order if 0 < ci + k < len(path)]
     if tail:
         out += [j for j in range(len(path) - 1, ci, -1) if j > 0 and j not in out]
+        end = len(path) - 1
+        at_ = (int(round(here[0])), int(round(here[1])))
+        if not out and end > 0 and at_ != tuple(path[end]):
+            out.append(end)
     return out
 
 

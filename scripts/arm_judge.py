@@ -618,7 +618,10 @@ def approach_table(sids: Iterable[str], on_of: Any = None,
     - per engagement: the APPROACH = the start of the last steer span after the previous
       engagement's end -> its first click, and -> our GM within 3 cells (Chebyshev, packet
       cells) of the attacked gid (flow_judge's join), with the moving share over that stretch;
-      landing (flow_judge's why == "hit") and kills.
+      landing (flow_judge's why == "hit") and kills;
+    - the steer's walk clicks and those the client turned into an attack (the first request
+      after it, before our next click, <= 3 s), on a target species or ANOTHER unit (v39 clicks
+      nearer the target: the safety side).
     ``on_of(k)`` replaces the arm rule (a null split of older runs). Per run: the arms'
     relative differences (tail - base) / mean."""
     import conversion_phases as cp
@@ -648,6 +651,28 @@ def approach_table(sids: Iterable[str], on_of: Any = None,
                 c["samples"] += len(mv)
                 c["moving"] += sum(mv)
                 c["stops"] += sum(1 for i in range(1, len(mv)) if mv[i - 1] and not mv[i])
+        # steer walk clicks the client turned into an attack: the first attack request after
+        # the click, before our next click of any kind and <= 3 s (the client walks up first and
+        # asks only in reach: v38 run 2's Creamy came 1.1 s after), by the unit's job
+        cl = sorted((json.loads(x_) for x_ in (DEMO / sid / "clicks.jsonl").read_text()
+                     .splitlines() if x_), key=lambda c_: int(c_["t"]))  # fmt: skip
+        reqs = [(int(e["t_mono_ns"]), int(e.get("target_gid") or -1)) for e in sess.events
+                if e.get("type") == "attack_request"]  # fmt: skip
+        rq_t = [t_ for t_, _g in reqs]
+        for ci_, c_ in enumerate(cl):
+            t_ = int(c_["t"])
+            if c_.get("kind") != "walk" or c_.get("why") != "steer" or not (
+                    sess.t0 <= t_ < sess.w1):  # fmt: skip
+                continue
+            arm = "tail" if on(k_at(fcs, t_)) else "base"
+            nxt = int(cl[ci_ + 1]["t"]) if ci_ + 1 < len(cl) else t_ + 3 * NS
+            j_ = bisect.bisect_right(rq_t, t_)
+            turned = j_ < len(reqs) and reqs[j_][0] <= min(nxt, t_ + 3 * NS)
+            for c in (rt[arm], tot[arm]):
+                c["steer_walk_clicks"] += 1
+                if turned:
+                    tgt_ = fld.job.get(reqs[j_][1], -1) in TARGET_JOBS
+                    c["walk_to_attack_target" if tgt_ else "walk_to_attack_other"] += 1
         for i, x in enumerate(engs):
             fc, k = fcs[i], int(x["k"])
             if not sess.t0 <= fc < sess.w1:
@@ -708,6 +733,9 @@ def _approach_arms(tot: Mapping[str, Counter[str]],
             "to3_s_p50": q(ls.get("to3_s", []), 0.5),
             "to3_s_mean": mean(ls.get("to3_s", [])),
             "moving_to3_mean": mean(ls.get("moving_to3", [])),
+            "steer_walk_clicks": c["steer_walk_clicks"],
+            "walk_to_attack_target": c["walk_to_attack_target"],
+            "walk_to_attack_other": c["walk_to_attack_other"],
         }  # fmt: skip
     return out
 

@@ -304,3 +304,15 @@ def test_approach_table_splits_a_real_run_without_losing_an_engagement() -> None
         assert 0.3 < o["landing_share"] < 1.0
     run = out["per_run"][sid]
     assert set(run["arms"]) == {"tail", "base"} and "rel_steer_moving_share" in run
+    assert sum(out[a]["steer_walk_clicks"] for a in ("tail", "base")) > 300
+
+
+def test_approach_table_counts_the_creamy_a_steer_walk_click_became() -> None:
+    """The safety side's POSITIVE case from a real run: v38 run 2's one Creamy attack request
+    (gid 110054292, 1.1 s after a steer walk click: the client walked up first) is counted as a
+    steer walk click turned into an attack on ANOTHER unit, in the arm of that moment."""
+    sid = "20261018T152216-demo-hunt-flow38"
+    if not (aj.DEMO / sid / "flow_judge.json").exists():
+        pytest.skip("the v38 session is not banked on this host")
+    out = aj.approach_table([sid])
+    assert out["tail"]["walk_to_attack_other"] + out["base"]["walk_to_attack_other"] == 1
