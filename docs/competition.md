@@ -857,6 +857,35 @@ Also: false "dead" calls on 16.9 % of engagements (0.38 s per kill of looting no
 - Interleaved per engagement. Measured by the steer moving share, turn -> 3 cells, and kills / h.
 - STAGED 9c75f36 (PARAMS[39], tested, not run). Its design uses the `cont_fail` counts banked
   during the v38 runs. It needs Batt's go.
+- **Evidence from v38 run 1** (log-only `cont_fail`, 3.79):
+  - 8,617 steer walk-click calls found nothing to click (6,408 while moving), and 96 % of them
+    had NO candidate on the route at all;
+  - half of those were routes <= 3 cells; on the other half the 0.6-s lead point already lay
+    past every candidate;
+  - the gates refused little (view 339, guard 216, units 118).
+  - So the standing comes from the candidate rule, which is what the tail changes.
+- **Its judge is ready (99592bd):** `arm_judge.py approach SID...`, per engagement parity (odd k =
+  tail). Each steer span counts for the k the runner holds then: the steer always works toward
+  the next engagement. It reports:
+  - the GM's moving share while steering, and its stops per steer minute;
+  - steer seconds per engagement;
+  - the approach (steer start -> first click, and -> within 3 cells, from packets);
+  - landing.
+- **Null spread** (22 no-change splits of 11 banked runs, 95 % range of a 4-run pooled
+  difference; the splits share runs, so this is a rough ruler):
+
+    | measure | 95 % null range |
+    |---|---|
+    | steer moving share | -8 % .. +6 % |
+    | steer s per engagement | -14 % .. +11 % |
+    | approach s (mean) | -8 % .. +11 % |
+    | steer start -> 3 cells (mean) | -9 % .. +14 % |
+    | landing within 5 s | -6 % .. +14 % |
+
+  The bot moves ~37 % of steer time, and Batt 92 %. So a real fix should show far beyond these
+  ranges in 4 run-hours. v38 run 1's parity split alone gave landing 76 % vs 54 % (z ~ 2.9) with
+  nothing behind it, which is why the decision would read the pooled runs, never one.
+- The tail arm logs its own `cont_fail` keys (`steer+tail:...`); the base keeps v38's.
 
 **Next candidates:**
 - Strike WALKING targets from 7 cells at a velocity-led aim point (the misses judge's proposal,
