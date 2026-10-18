@@ -892,3 +892,24 @@ def test_cont_fail_logging_keeps_the_gates_order_and_short_circuit() -> None:
     assert tuple(names) == hf.CONT_GATES
     assert body.count("walk_click(") == 1 and '"map+units", why, extra_' in body
     assert 'ev({"kind": "cont_fail", "counts": dict(acc_)})' in src
+
+
+def test_v39_the_steer_may_click_the_routes_tail() -> None:
+    """The conversion study: near the end of a short route the order (>= 3 ahead) had no
+    candidate and the GM stood; v39 then tries the route's remaining cells, its end first."""
+    path = [(10, 10), (11, 10), (12, 10), (13, 10)]
+    assert hf.ahead_candidates(path, (11.2, 10.0), (6, 5, 7, 4, 8, 3)) == []  # the old: none
+    assert hf.ahead_candidates(path, (11.2, 10.0), (6, 5, 7, 4, 8, 3), tail=True) == [3, 2]
+    assert hf.ahead_candidates(path, (13.0, 10.0), (3,), tail=True) == []  # at the end: none
+    long_ = [(x, 10) for x in range(10, 30)]  # a long route: the order first, then the tail
+    got = hf.ahead_candidates(long_, (10.0, 10.0), (6, 5, 3), tail=True)
+    assert got[:3] == [6, 5, 3] and got[3] == 19 and 6 not in got[3:] and 0 not in got
+    p = hf.PARAMS[39]
+    assert p["steer_tail"] and p["steer_tail_ab"] and not p["heading_age_ab"]
+    assert 39 in hf.VERSIONS and not hf.PARAMS[38].get("steer_tail")
+    src = Path(hf.__file__).read_text()
+    assert 'cont_click(ap, ok, "steer", tcell,\n' in src and "tail=steer_tail_on(k)" in src
+    # search clicks keep the old candidates (only the steer passes tail)
+    assert src.count("tail=steer_tail_on(k)") == 1
+    fb = src[src.index("v39: from the route point nearest the GM") :][:600]
+    assert "if steer_tail_on(k) else 0" in fb and "step_target(ap, i0_, pos" in fb

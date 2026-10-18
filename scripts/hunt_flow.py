@@ -251,6 +251,9 @@ VERSIONS = {
     38: "THE AGE-WEIGHTED SEARCH HEADING: each heading scored by the ground it brings into our own "
     "view, weighted by how long since we last saw it, per walking second (the search study); "
     "10-min blocks. Base: the cursor's SWORD at loot clicks on untrained-species maps only",
+    39: "THE CONTINUOUS APPROACH: the steer's walk click may take the route's tail when nothing "
+    "lies >= 3 cells ahead, and the standstill fallback steps from the route point nearest the GM "
+    "(the conversion study: the GM stood while closing in); interleaved per engagement",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -429,6 +432,15 @@ PARAMS[38] = {**PARAMS[36], "loot_retry": False, "loot_retry_ab": False, "headin
               "heading_age_ab": True, "heading_age_block_min": 10.0,
               "cursor_sword": True, "cursor_sword_ab": False, "cursor_sword_where": ("loot",),
               "cursor_sword_maps": "untrained", "cursor_sword_wait_s": 0.6}  # fmt: skip
+# 39 = THE CONTINUOUS APPROACH (the conversion study, competition.md "Conversion study": the
+# approach is the largest loss, +3.22 s / kill; in steer mode the GM moves 37-38 % of the time):
+# the steer's continuous walk click may take the route's TAIL when nothing lies >= 3 cells ahead
+# of the lead (cont_fail, 3.79: "none" in most failed steer calls, routes <= 3 cells), and the
+# standstill fallback steps from the route point NEAREST the GM, not the route's start. Every walk
+# gate unchanged. STAGED, not pre-registered (Batt's go); interleaved per engagement. Its base
+# (v38 adopted or not) is set at its pre-registration
+PARAMS[39] = {**PARAMS[38], "heading_age": False, "heading_age_ab": False, "steer_tail": True,
+              "steer_tail_ab": True}  # fmt: skip
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -674,14 +686,19 @@ def reacquire_target(target: Track, live: Sequence[Track], t_ns: int, within: fl
     return None if best is None else best[1]
 
 
-def ahead_candidates(path: Sequence[Cell], here: Sequence[float], order: Sequence[int]
-                     ) -> list[int]:  # fmt: skip
+def ahead_candidates(path: Sequence[Cell], here: Sequence[float], order: Sequence[int],
+                     tail: bool = False) -> list[int]:  # fmt: skip
     """PURE (v5): path indices to try for the next walk click, ``order`` cells ahead of the path
-    cell nearest to where we ARE (measured), the first in range first."""
+    cell nearest to where we ARE (measured), the first in range first. ``tail`` (v39, the
+    continuous approach): then the route's remaining cells beyond that nearest one, its END
+    first -- near the end of a short route ``order`` (>= 3 ahead) has none, and the GM stood."""
     if not path:
         return []
     ci = min(range(len(path)), key=lambda i: cheb(path[i], here))
-    return [ci + k for k in order if 0 < ci + k < len(path)]
+    out = [ci + k for k in order if 0 < ci + k < len(path)]
+    if tail:
+        out += [j for j in range(len(path) - 1, ci, -1) if j > 0 and j not in out]
+    return out
 
 
 def odo_at(hist: Sequence[tuple[int, Any]], t_ns: int) -> Any:
@@ -2162,6 +2179,14 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 import cursor_sword as csw_
 
                 sword_refs = csw_.SwordRefs.load()
+
+            def steer_tail_on(k_: int) -> bool:
+                """v39 (the continuous approach): the steer's walk click may take the route's
+                tail, and its standstill fallback steps from the nearest route point; odd k when
+                A/B (interleaved per engagement)."""
+                return bool(prm.get("steer_tail")) and (
+                    not prm.get("steer_tail_ab") or k_ % 2 == 1
+                )  # fmt: skip
 
             def sword_on(k_: int, where: str) -> bool:
                 """The cursor check for a ``where`` click of engagement ``k_``
@@ -3846,7 +3871,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     return why_ is None
 
                 def cont_click(route: list[Cell], grid: Any, why: str,
-                               avoid: tuple[float, float] | None = None) -> bool:  # fmt: skip
+                               avoid: tuple[float, float] | None = None,
+                               tail: bool = False) -> bool:  # fmt: skip
                     """v5: the first candidate ahead of where we ARE that passes the gates on the
                     freshest frames; no standstill needed."""
                     cur = measured_pos() or (float(pos[0]), float(pos[1]))
@@ -3861,7 +3887,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     at_ = (int(round(src_[0])), int(round(src_[1])))
                     world.position = at_
                     fails_: Counter[str] = Counter()  # 3.79 amendment: log-only (cont_fail)
-                    for j_ in ahead_candidates(route, src_, prm["ahead_order"]):
+                    for j_ in ahead_candidates(route, src_, prm["ahead_order"], tail=tail):
                         c_ = route[j_]
                         if lead_ is not None:
                             uu, vv = frac_project(world, lead_, c_)  # the click
@@ -4401,13 +4427,20 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                         banned.append((now, (int(round(tcell[0])),
                                                              int(round(tcell[1])))))  # fmt: skip
                                         target = None
-                                    elif cont_click(ap, ok, "steer", tcell):
+                                    elif cont_click(ap, ok, "steer", tcell,
+                                                    tail=steer_tail_on(k)):  # fmt: skip
                                         stop_since = None
                                     elif not moving:
                                         stop_since = stop_since or now
                                         if now - stop_since > prm["stop_after_s"]:
-                                            # none passed for 1 s: the GM stops; cursor-gated
-                                            j, (u, v) = step_target(ap, 0, pos, prm["ahead"], ok)
+                                            # none passed for 1 s: the GM stops; cursor-gated.
+                                            # v39: from the route point nearest the GM (the old
+                                            # index 0 is a start the GM has walked past)
+                                            i0_ = (min(range(len(ap)),
+                                                       key=lambda i_: cheb(ap[i_], pos))
+                                                   if steer_tail_on(k) else 0)  # fmt: skip
+                                            j, (u, v) = step_target(ap, i0_, pos, prm["ahead"],
+                                                                    ok)  # fmt: skip
                                             if j is not None:
                                                 walk_click(u, v, ap[j], ap[: j + 1], "cursor",
                                                            "steer")  # fmt: skip
