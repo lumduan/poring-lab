@@ -9969,7 +9969,7 @@ see only detector boxes.
   judged screenshot (11:20).
   - 161 engagements, 160 dead. No stop, 0 Creamy, 0 non-target hits.
 
-**RESULT (judged 2026-10-18 12:2x):**
+**RESULT (judged 2026-10-18 12:24, b4a97bd):**
 
 | run | engagements | landing (5 s) | kills / h | kills per sighting | loot picked / fell | sight / 10 min (windowed) | reversals / min |
 |---|---|---|---|---|---|---|---|

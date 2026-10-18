@@ -691,3 +691,30 @@ AGE-WEIGHTED SEARCH HEADING.**
   2.11 vs 1.07-1.21, so part of its 188.8 kills / h is the field.
 - Safety: only the search goal changes. Every click keeps its gates, and the memory is built from
   the bot's own measured position (no packets).
+
+## Sunday 18 Oct (Batt's four decisions on the overnight report; 08:57 -> 12:25)
+
+| run | session | map, seed | eng | landing | kills / h | kills per sighting | loot | sight / 10 min (win) | rev / min | non-target |
+|---|---|---|---|---|---|---|---|---|---|---|
+| v36 run 2 (confirmation) | 20261018T090851 | prt_fild08, 20272301 | 146 | 104 / 144 = 72.2 % | 114.8 | - | 79 / 132 = 59.8 % | 11.8 (whole run) | 7.55 | 0 |
+| v37 run A (held-out rules) | 20261018T101834 | prt_fild06, 20272501 | 200 | 147 / 200 = 73.5 % | 190.8 | 3.21 | 97 / 386 = 25.1 % | 59.5 | 5.44 | unknown species 30 (counted apart) |
+| v37 run B | 20261018T112036 | prt_fild08, 20272601 | 161 | 132 / 161 = 82.0 % | 141.0 | 4.62 | 107 / 194 = 55.2 % | 30.5 | 5.35 | 0 |
+
+1. **The loot retry's confirmation** (3.77):
+   - The primary passes pooled (+1.14 clicks / step); items picked +3.0 points pooled (runs +9.8 /
+     -7.0: unresolved).
+   - Run 1's FAIL stands. Adoption is Batt's.
+   - **The runner now rebuilds the hunting state itself** (`gm_state.ensure_hunting`: STR from the
+     weight cap, STR's '+' in the status window). The hunting state is kept between runs; the
+     standard Lv 1 state only at a series' end (done 12:25).
+2. **The cursor's SWORD at loot / walk clicks** (3.78, v37):
+   - Held-out non-target attacks from loot / walk clicks dropped 20 -> 4. It was right when it
+     decided.
+   - But in motion the client draws its cursor at the new point only after ~0.35-0.4 s, so 56-78 %
+     of checks ended UNKNOWN (fail closed).
+   - The time-cost predictions failed; landing on prt_fild08 was -6.4 points. Not adopted as is;
+     the options are in 3.78.
+3. **The search study** (above): the premise is corrected to 66 % of Batt's sightings on the same
+   ruler. The age-weighted heading is STAGED as v38 (PARAMS[38], 5a0870f) and needs >= 4
+   run-hours. Kills per sighting is a standard judge column (Batt 6.82; the bot 3.2-5.8).
+4. nvtop and the /dev/shm cleanup are Batt's. The GPU stays frozen.
