@@ -10631,6 +10631,32 @@ on for all (no blocks), switched in a commit before run 1 and recorded in this r
   - `hardbar_live.py watch 40` beside it. The first engagement ended dead at 02:29.
 - **Runs 2-4 are QUEUED:** `hunt_chain.py --version 40 --seeds 20290202,20290303,20290404` started
   detached at 02:27:00 (the control file says "run"); it waits for run 1 to end.
+- **Run 1 ended** on its time box (3600.3 s), with 166 engagements: 152 dead, 10 skipped_risky,
+  4 gave up.
+  - Standard row: landing 123 / 166 = 74.1 % (66.9-80.2), 140.9 kills / h, 4.03 per sighting,
+    25.5 s per kill, sight 35.0 / 10 min, free targets attacked <= 10 s 41 % (n 217), steer
+    moving 39 %, seen -> click 4.02 s, death -> next 0.78 s.
+  - Dead calls without a real death 35 / 152 = 23.0 %; loot 83 / 158 = 53 % (22 to looters);
+    reversals 7.68 / min. Creamy 0 (0). Hard bars 0 / 0 / 0.
+  - **Per arm, ONE run (not the decision; `arm_judge.py falsedead`):**
+
+    | measure | fix | base |
+    |---|---|---|
+    | risky-ended dead calls | 15 | 26 |
+    | called dead with the target alive | 0 | 6 |
+    | skipped (of them real kills) | 10 (5) | 0 |
+    | loot at our kills | 51 / 77 = 0.662 | 39 / 76 = 0.513 |
+    | landing within 5 s | 65 / 83 = 78.3 % | 58 / 83 = 69.9 % |
+    | last click -> our kill of an alive target | 11.4 s (n 5) | 14.9 s (n 3) |
+
+  - The fix fired only on odd k: 10 `fd_skipped`, all odd (the code ran as built).
+  - Gave up 4 (v39's runs: 0-2): 3 fix, 1 base, none on a re-engaged skipped track. A skipped
+    track was re-engaged twice (k 74 after k 73, k 150 after k 149), both killed. Watched over
+    runs 2-4.
+- **Run 2** (03:28:32, seed 20290202, `20261019T032832-demo-hunt-flow40`, started by the chain
+  at 03:28:30). The screenshot `pre-v40-20290202.jpg` was judged 03:29: no dialog, the standard
+  windows, the GM standing in its hunting state (Lv 70, HP full, weight 452 / 4970), a Poring and
+  a Drops in view. Health: ASSIST, no lease.
 
 ### 3.82 hunt-flow@41: WALKING TARGETS STRUCK FROM FURTHER, interleaved per engagement (pre-registered 2026-10-19 02:31 ICT, the commit time 61cf81d, BEFORE its runs; Batt's night plan 22:2x, item 3: "the next top cause from the conversion study (the 0.5 s later turn, the walk into range, arm C fallbacks / 'species unsure', click -> hit), each as its own version. Re-rank after every verdict")
 
