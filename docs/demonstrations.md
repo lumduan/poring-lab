@@ -9839,6 +9839,16 @@ candidate for a confirmation run, and only Batt adopts it.
 - The two runs pooled are judged by the SAME five predictions and reported as a CONFIRMATION read,
   labelled as such. The usual standard is two runs pooled; one run left the secondary unresolved.
 - After it: the GM back to the standard Lv 1 state (as at 08:23).
+- ➡️ **NOT RUN (08:27).** `20261018T082649-demo-hunt-flow36` stopped itself 13.5 s in, before
+  any engagement: "gm_state (hunt-flow@36:before): the GM is not in the hunt-flow state after
+  the restore".
+  - The GM had already been returned to the standard Lv 1 state (08:23, @resetstat). The
+    runner's restore cannot rebuild Base Lv 70 / STR 99 from there: the STR points need the
+    status-window steps.
+  - A 60-min run could not have fitted before the 09:45 report anyway. The confirmation run is
+    left for a later session, and run 1's verdict above is the only one.
+  - The GM was checked back in the standard state (08:34: the template check "fixed", Base / Job
+    Lv 1, the chat line closed).
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
