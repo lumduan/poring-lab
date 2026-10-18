@@ -10277,6 +10277,24 @@ on for all (no blocks), switched in a commit before run 1 and recorded in this r
     30 false).
   - The fix needs its own pixel signal; the candidate is the same monster under a new track id
     near the last aim point. It is sized offline during v39's runs and pre-registered as 3.81.
+- **Sized offline before the amendment below** (16:4x, the same 5 runs, last burst "risky"):
+  - The target's TRUE position (packets) projected into the frame: the detector showed a box
+    there within 0.4 s of the dead call for 44 / 61 still-alive targets (72 %), and for 41 / 158
+    real kills (26 %, the dying sprite).
+  - The last aim point instead: 1 / 61 and 5 / 158 (the camera has moved by then): no signal.
+  - The bot cannot use packets. Its own version is the engaged track's PREDICTED cell, projected:
+    measured live by the amendment below.
+
+**AMENDMENT (16:43 ICT, c2bba5a, before run 1; LOG-ONLY, no behaviour change):**
+- At every dead call, one `dead_probe` event carries:
+  - the last burst's end;
+  - whether `reacquire_target` finds the same monster under a new id near the engaged track's
+    prediction (its distance and age);
+  - the freshest frame's monster box nearest the predicted cell's pixel (bottom centre, px).
+- It is guarded so it can never stop a run (an error is logged as `dead_probe_error`). It sends
+  no input and changes no state (tested), and it is on in v39 only.
+- Judged offline against packets, it designs 3.81. It does not decide v39.
+- Census + targeted safety tests + judges: 378 passed.
 
 **Run log (written during the runs):**
 
