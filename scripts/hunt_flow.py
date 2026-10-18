@@ -1959,9 +1959,10 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
             import chat_guard
 
             chat_guard.start_run(f"hunt-flow{version}-{sid}")
-            before = gm_state.ensure_fixed(agent_raw, screen, why=f"hunt-flow@{version}:before",
-                                           out_dir=log.dir / "gm_state", profile="hunt-flow",
-                                           loot=True)  # fmt: skip
+            # Batt 2026-10-18: the runner REBUILDS the hunting state itself when it is not there
+            # (Base Lv 70, STR 99 by the status window; gm_state.ensure_hunting), and keeps it
+            before = gm_state.ensure_hunting(agent_raw, screen, why=f"hunt-flow@{version}:before",
+                                             out_dir=log.dir / "gm_state", loot=True)  # fmt: skip
             ev({"kind": "gm_state_before", **f0._brief(before)})
             r.gm(agent_raw, screen, f"@warp {MAP} {start[0]} {start[1]}")
             time.sleep(rr.SCENE_ENTRY_S)

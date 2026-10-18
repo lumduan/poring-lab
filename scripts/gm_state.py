@@ -322,6 +322,143 @@ def ensure_fixed(agent: Any, screen: Any, *, why: str, out_dir: Path | None = No
     return rec
 
 
+# --- the HUNTING state, rebuilt by the runner itself (Batt 2026-10-18: "make the runner able to
+# rebuild the hunting state itself (scripted status-window steps)"; "keep it between runs; restore
+# the standard Lv 1 state ONLY at the true end of a series") --------------------------------------
+# The hunt-flow profile's check reads the LEVEL lines only, so STR is read from the weight readout:
+# a Novice's weight cap is 2000 + 30 x STR (pre-renewal), 4970 at STR 99 (every v32-v36 run) and
+# 2030 at STR 1 (2026-10-18 08:23, after @resetstat). The recipe is the one used 2026-10-17 21:4x
+# (scratch str_open / str_click / str_finish): every status point free at Base Lv 99, STR's '+' in
+# the status window, then Base Lv 70 (lowering takes back only the points STR did not use).
+HUNT_STR = 99
+NOVICE_WEIGHT_BASE = 2000
+HUNT_WEIGHT_MAX = NOVICE_WEIGHT_BASE + 30 * HUNT_STR  # 4970
+# STR's '+' from the status window's origin: at its home (185, 300) the '+' is at (267, 330)
+STATUS_STR_PLUS = (82, 30)
+STATUS_SIZE = (280, 141)  # ui_anchors.WINDOWS["status"].size: every click lands INSIDE the window
+STR_CLICKS = 98  # STR 1 -> 99; a '+' past 99 or past the points changes nothing
+STR_CLICK_S = 0.12
+REBUILD_UP = ("@resetstat", "@baselevelup -98", "@baselevelup 98")  # all points free at Lv 99
+REBUILD_DOWN = ("@baselevelup -29",)  # Base Lv 70: the profile's level
+
+
+def str_of_weight_max(wmax: int | None) -> int | None:
+    """PURE: a Novice's STR from the weight cap (2000 + 30 x STR), or None when it is not one."""
+    if wmax is None or (wmax - NOVICE_WEIGHT_BASE) % 30:
+        return None
+    s = (wmax - NOVICE_WEIGHT_BASE) // 30
+    return s if 1 <= s <= 99 else None
+
+
+def hunting_ok(levels: str, weight: list[int] | None) -> bool:
+    """PURE: the hunt-flow state = the Lv 70 / 1 level lines AND STR 99 (the weight cap)."""
+    return levels == "fixed" and bool(weight) and str_of_weight_max(weight[1]) == HUNT_STR
+
+
+def status_plus_at(origin: tuple[int, int]) -> tuple[int, int]:
+    """PURE: STR's '+' (client px) for the status window at ``origin``; always inside it."""
+    u, v = origin[0] + STATUS_STR_PLUS[0], origin[1] + STATUS_STR_PLUS[1]
+    assert 0 < STATUS_STR_PLUS[0] < STATUS_SIZE[0] and 0 < STATUS_STR_PLUS[1] < STATUS_SIZE[1]
+    return u, v
+
+
+def status_origin(frame: Any, reg: Any) -> tuple[int, int] | None:
+    """The status window's origin when it, and none of the gate's other three windows, shows at
+    its home (ui_gate's own match and threshold); else None."""
+    import ui_gate
+
+    from poring_env import ui_anchors as ua
+
+    if ui_gate.windows_at_home(frame, reg) != ["status"]:
+        return None
+    spec, tmpl = reg.windows["status"], reg.templates["status"]
+    hx, hy = ua.CAPTURE_ORIGINS["status"]
+    tx, ty = hx + spec.template_offset[0], hy + spec.template_offset[1]
+    th, tw = tmpl.shape
+    x0, y0 = max(0, tx - ui_gate.HOME_PX), max(0, ty - ui_gate.HOME_PX)
+    gray = ua.to_gray(frame)
+    box = gray[y0 : ty + th + ui_gate.HOME_PX, x0 : tx + tw + ui_gate.HOME_PX]
+    m = ua.match_template(box, tmpl, reg.masks.get("status"))
+    if m is None or m.distance > spec.max_distance:
+        return None
+    return (x0 + m.origin[0] - spec.template_offset[0], y0 + m.origin[1] - spec.template_offset[1])
+
+
+def rebuild_hunting(agent: Any, screen: Any, *, why: str) -> dict[str, Any]:
+    """The hunting state from ANY state, by GM command + the status window's own '+' (RDP set).
+    Every typed line passes the UI gate (r.gm); the STR clicks go only after two fresh frames show
+    the status window alone at its home, and land inside it; it is closed by its own chord."""
+    import bench
+    import ui_gate
+
+    if _path() != "rdp":
+        raise r.Stop("gm_state: the hunting rebuild has an RDP status-window place only")
+    rec: dict[str, Any] = {"why": why, "t_ns": r.ns(), "typed": []}
+    for cmd in REBUILD_UP:
+        r.gm(agent, screen, cmd)
+        rec["typed"].append(cmd)
+    time.sleep(SETTLE_S)
+    bench.close_chat(agent, screen)
+    ui_gate.ensure_clear(agent, screen, why=f"{why}:rebuild")  # none of the four windows open
+    r.activate_client(agent, screen)
+    agent.chord(*ui_gate.window_keys("status"))
+    time.sleep(ui_gate.SETTLE_S + 0.6)
+    reg = ui_gate._registry("rdp")
+    a, b = _frames(screen)
+    o1, o2 = status_origin(a, reg), status_origin(b, reg)
+    if o1 is None or o1 != o2:
+        raise r.Stop(f"gm_state ({why}): the status window is not alone at its home ({o1}, "
+                     f"{o2}): no STR click; a person first")  # fmt: skip
+    u, v = status_plus_at(o1)
+    gx0, gy0, _gw, _gh = r.game_region()
+    agent.move(gx0 + u + 4, gy0 + v + 3)  # two motions: a cold jump's click is ignored
+    time.sleep(0.06)
+    agent.move(gx0 + u, gy0 + v)
+    time.sleep(0.15)
+    for _ in range(STR_CLICKS):
+        agent.click(gx0 + u, gy0 + v)
+        time.sleep(STR_CLICK_S)
+    time.sleep(0.6)
+    a, _b = _frames(screen)
+    if status_origin(a, reg) != o1:
+        raise r.Stop(f"gm_state ({why}): the status window moved during the STR clicks")
+    agent.chord(*ui_gate.window_keys("status"))  # its own toggle
+    time.sleep(ui_gate.SETTLE_S)
+    ui_gate.ensure_clear(agent, screen, why=f"{why}:rebuild-closed")
+    for cmd in REBUILD_DOWN:
+        r.gm(agent, screen, cmd)
+        rec["typed"].append(cmd)
+    time.sleep(SETTLE_S)
+    rec.update(status_origin=list(o1), str_plus=[u, v], str_clicks=STR_CLICKS)
+    return rec
+
+
+def ensure_hunting(agent: Any, screen: Any, *, why: str, out_dir: Path | None = None,
+                   loot: bool = True) -> dict[str, Any]:  # fmt: skip
+    """The hunt-flow state (Base Lv 70, Job Lv 1, STR 99), rebuilt when the level lines or the
+    weight cap say otherwise, then ensure_fixed's hunt-flow restore (notices, loot, weight).
+    Stop unless the weight then reads STR 99."""
+    got = check(screen, "hunt-flow")
+    if got["decision"] == "unstable":
+        time.sleep(0.5)
+        got = check(screen, "hunt-flow")
+    w = _weight(got["frames"])
+    if w is None:
+        raise r.Stop(f"gm_state ({why}): the weight readout is unreadable: STR unknown")
+    pre = {"levels": got["decision"], "dist": got["dist"], "weight": w,
+           "str": str_of_weight_max(w[1])}  # fmt: skip
+    rebuilt = None
+    if not hunting_ok(got["decision"], w):
+        rebuilt = rebuild_hunting(agent, screen, why=why)
+    rec = ensure_fixed(agent, screen, why=why, out_dir=out_dir, profile="hunt-flow", loot=loot)
+    wt_ = rec.get("weight")
+    if not wt_ or str_of_weight_max(wt_[1]) != HUNT_STR:
+        raise r.Stop(f"gm_state ({why}): the weight cap reads {wt_} after the hunting restore "
+                     f"(STR {HUNT_STR} = {HUNT_WEIGHT_MAX}): a person first")  # fmt: skip
+    rec["hunting"] = {"before": pre, "rebuilt": rebuilt}
+    return rec
+
+
 # --- loot (Batt 2026-10-16: the GM TEST state only; 2000001's loot is sold, never thrown) ---------
 # "The GM is over 50 % weight: natural regen stops, and at 90 % it can't attack. ... getting rid
 # of LOOT ONLY. Never touch the equipped/kept items." No group-20 command removes items

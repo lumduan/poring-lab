@@ -307,3 +307,60 @@ def test_the_hunt_flow_profile_never_lowers_the_base_level(gs: Any) -> None:
     assert not any(c.startswith("@baselevelup") for c in hf)  # STR's points stay
     assert "@joblevelup -49" in hf and "@heal" in hf
     assert gs.PROFILES["standard"]["restore"] == gs.RESTORE
+
+
+def test_str_is_read_from_the_novices_weight_cap(gs: Any) -> None:
+    """Batt 2026-10-18: the runner rebuilds the hunting state itself. The level lines say nothing
+    of STR, so the weight cap does: 2000 + 30 x STR (4970 all of v32-v36; 2030 after @resetstat)."""
+    assert gs.str_of_weight_max(4970) == 99 and gs.HUNT_WEIGHT_MAX == 4970
+    assert gs.str_of_weight_max(2030) == 1
+    assert gs.str_of_weight_max(2000) is None and gs.str_of_weight_max(4971) is None
+    assert gs.str_of_weight_max(None) is None
+    assert gs.hunting_ok("fixed", [355, 4970])
+    assert not gs.hunting_ok("fixed", [355, 2030])  # Lv 70 lines but STR 1: rebuild
+    assert not gs.hunting_ok("restore", [355, 4970])  # STR 99 but another level
+    assert not gs.hunting_ok("fixed", None)
+
+
+def test_the_rebuild_frees_every_point_then_lands_on_lv_70(gs: Any) -> None:
+    assert gs.REBUILD_UP == ("@resetstat", "@baselevelup -98", "@baselevelup 98")
+    assert gs.REBUILD_DOWN == ("@baselevelup -29",)  # 1 + 98 - 29 = 70, the profile's level
+    assert 1 + 98 - 29 == 70 and gs.STR_CLICKS == gs.HUNT_STR - 1
+
+
+def test_the_str_clicks_land_inside_the_status_window_only_after_it_is_found(gs: Any) -> None:
+    from poring_env import ui_anchors as ua
+
+    home = ua.CAPTURE_ORIGINS["status"]
+    assert gs.status_plus_at(home) == (267, 330)  # the '+' the 2026-10-17 rebuild clicked
+    assert tuple(ua.WINDOWS["status"].size) == gs.STATUS_SIZE
+    src = Path(gs.__file__).read_text()
+    body = src[src.index("def rebuild_hunting(") : src.index("def ensure_hunting(")]
+    assert body.index("status_origin(a, reg), status_origin(b, reg)") < body.index("agent.click(")
+    assert body.count("agent.click(") == 1  # the '+' only
+    assert body.index("agent.click(") < body.index('agent.chord(*ui_gate.window_keys("status"))  #')
+
+
+def test_status_origin_finds_the_window_at_its_home_and_nothing_else(gs: Any) -> None:
+    import ui_gate
+
+    from poring_env import ui_anchors as ua
+
+    if not (ui_gate.r.ROOT / "data" / "ui_anchors" / "status.npy").exists():
+        pytest.skip("no status template on this host (client pixels, gitignored)")
+    reg = ui_gate._registry("rdp")
+    blank = np.full((720, 1280, 3), 60, np.uint8)
+    assert gs.status_origin(blank, reg) is None
+    spec, tmpl = reg.windows["status"], reg.templates["status"]
+    hx, hy = ua.CAPTURE_ORIGINS["status"]
+    tx, ty = hx + spec.template_offset[0], hy + spec.template_offset[1]
+    frame = blank.copy()
+    g = np.clip(tmpl, 0, 255).astype(np.uint8)
+    frame[ty : ty + g.shape[0], tx : tx + g.shape[1]] = g[..., None]
+    assert gs.status_origin(frame, reg) == (hx, hy)
+
+
+def test_the_runner_rebuilds_the_hunting_state_before_a_run() -> None:
+    src = (SCRIPTS / "hunt_flow.py").read_text()
+    assert "gm_state.ensure_hunting(agent_raw, screen" in src
+    assert 'why=f"hunt-flow@{version}:before"' in src
