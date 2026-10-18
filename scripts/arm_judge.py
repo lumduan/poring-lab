@@ -18,6 +18,11 @@ engagements.json, clicks.jsonl, and flow_judge.json -- run `flow_judge.bot(sid)`
     arm_judge.py sword SID [SID ...]    v37: the cursor's SWORD check (odd k) vs none (even k):
                                         its verdicts and time, loot / walk clicks it stopped,
                                         non-target attack requests by the arm of the click before
+    arm_judge.py heading SID [SID ...]  v38: the age-weighted search heading's 10-min blocks
+                                        (heading_arm events) vs the v22 coverage heading:
+                                        kills / h, kills per sighting, the search (search_study's
+                                        ruler: no-target time, encounters per no-target minute,
+                                        re-swept ground), landing, reversals; per-run differences
 
 Packets are offline ground truth here (ADR-0007); nothing in this module runs during play.
 """
@@ -440,6 +445,142 @@ def blocks_table(sessions: Iterable[dict[str, Any]]) -> dict[str, Any]:
     return out
 
 
+def heading_spans(events: Sequence[Mapping[str, Any]],
+                  block_min: float = 10.0) -> list[tuple[int, int, bool]]:  # fmt: skip
+    """PURE (v38): the run's 10-min CLOCK blocks [(t0, t1, age_on)]. The runner sets the block
+    clock at its first ``heading_arm`` event (block 0) and logs each block's arm at the first
+    re-plan inside it, so block b is [T0 + b L, T0 + (b + 1) L); a block without its own event
+    takes the alternation (the arm flips every block). The last block ends at the last event."""
+    marks = [(int(e["t_ns"]), int(e["block"]), bool(e["on"])) for e in events
+             if e.get("kind") == "heading_arm"]  # fmt: skip
+    if not marks:
+        return []
+    t_a, b_a, on_a = marks[0]
+    if b_a != 0:
+        raise ValueError(f"the first heading_arm is block {b_a}, not 0")
+    on_by = {b: on for _t, b, on in marks}
+    for b, on in on_by.items():
+        if on != (on_a if b % 2 == 0 else not on_a):
+            raise ValueError(f"block {b}: arm {on} breaks the alternation")
+    span = int(block_min * 60 * NS)
+    t_end = int(events[-1]["t_ns"])
+    out = []
+    b = 0
+    while t_a + b * span < t_end:
+        out.append((t_a + b * span, min(t_a + (b + 1) * span, t_end),
+                    on_a if b % 2 == 0 else not on_a))  # fmt: skip
+        b += 1
+    return out
+
+
+def slice_scan(sc: Any, a: int, z: int, kills: int) -> Any:
+    """search_study.Scan's samples in [a, z) of ONE whole-run scan (so re-sweeps across blocks
+    keep their history); the age tables are not sliced."""
+    import search_study as ss
+
+    m = (sc.t >= a) & (sc.t < z)
+    return ss.Scan(t=sc.t[m], x=sc.x[m], y=sc.y[m], moving=sc.moving[m],
+                   n_targets=sc.n_targets[m], new=sc.new[m], reswept=sc.reswept[m],
+                   dt_s=sc.dt_s, kills=kills)  # fmt: skip
+
+
+def heading_table(sids: Iterable[str], spans_of: Any = None) -> dict[str, Any]:
+    """v38 per arm ("age" = the age-weighted heading, "cov" = v22's): the arm's minutes, our
+    server kills per hour, monsters in sight per 10 min (each block is a 10-min window: the
+    duration-weighted mean, the windowed ruler), KILLS PER SIGHTING, the search (presence /
+    sweep on one whole-run scan sliced by block), reversals per minute, landing within the
+    judge's window (by first click); and per run the relative block difference (age - cov) /
+    the run's mean, for kills / h and encounters per no-target minute. ``spans_of(session)``
+    replaces the blocks (a test's, or a null split of an older run)."""
+    import flow_judge as fj
+    import search_study as ss
+
+    by: dict[str, dict[str, Any]] = {
+        arm: {"secs": 0.0, "kills": 0, "sight_w": 0.0, "scans": [], "rev": 0, "walked": 0,
+              "eng": 0, "landed": 0, "blocks": 0}
+        for arm in ("age", "cov")
+    }  # fmt: skip
+    per_run: dict[str, Any] = {}
+    for sid in sids:
+        sess = ss.load_session(sid)
+        spans = spans_of(sess) if spans_of is not None else heading_spans(sess.bot_events)
+        fld = ss.Field(sess.events)
+        whole = ss.scan(fld, sess.t0, sess.w1, ss.load_walkable(sess.map_name))
+        fjr = json.loads((DEMO / sid / "flow_judge.json").read_text())
+        rows = {int(r_["k"]): r_ for r_ in fjr["engagements_w"]["rows"]}
+        blk: dict[str, list[dict[str, float]]] = {"age": [], "cov": []}
+        for t0, t1, on in spans:
+            a, z = max(t0, sess.t0), min(t1, sess.w1)
+            if z - a < 60 * NS:  # under a minute inside the judged window
+                continue
+            arm = "age" if on else "cov"
+            g = by[arm]
+            secs = (z - a) / NS
+            kills = len(ss.kill_times(sess.events, a, z))
+            sight = fj.sight_per_10min(sess.events, a, z)
+            g["secs"] += secs
+            g["kills"] += kills
+            g["blocks"] += 1
+            g["sight_w"] += sight * secs
+            sl = slice_scan(whole, a, z, kills)
+            g["scans"].append(sl)
+            _runs, rev, walked = ss.straight_runs(fld, a, z)
+            g["rev"] += rev
+            g["walked"] += walked
+            for x in sess.engagements:
+                if a <= int(x["t_first_click"]) < z:
+                    g["eng"] += 1
+                    g["landed"] += (rows.get(int(x["k"])) or {}).get("why") == "hit"
+            swb = ss.sweep_summary(sl)
+            blk[arm].append({
+                "block": (t0 - spans[0][0]) // (600 * NS), "kills_per_hour": kills * 3600 / secs,
+                "sight_per_10min": sight,
+                "encounters_per_none_min": ss.presence_summary([sl])["encounters_per_none_min"],
+                "reswept_120s": swb["reswept_share"]["<=120s"],
+                "fresh_per_min": float(swb["fresh_per_min"])})  # fmt: skip
+        names = ("kills_per_hour", "sight_per_10min", "encounters_per_none_min", "reswept_120s",
+                 "fresh_per_min")  # fmt: skip
+        run: dict[str, Any] = {"block_rows": sorted(
+            ({"arm": arm, **{k_: round(v_, 3) for k_, v_ in r_.items()}}
+             for arm, rs in blk.items() for r_ in rs), key=lambda r_: r_["block"])}  # fmt: skip
+        for name in names:
+            on_ = [r_[name] for r_ in blk["age"]]
+            off = [r_[name] for r_ in blk["cov"]]
+            if on_ and off:
+                mean = sum(on_ + off) / len(on_ + off)
+                run[name] = {"age": round(sum(on_) / len(on_), 3),
+                             "cov": round(sum(off) / len(off), 3),
+                             "rel_diff": round((sum(on_) / len(on_) - sum(off) / len(off))
+                                               / max(1e-9, mean), 3)}  # fmt: skip
+        run["blocks"] = {arm: len(v) for arm, v in blk.items()}
+        per_run[sid] = run
+    out: dict[str, Any] = {"per_run": per_run}
+    for arm, g in by.items():
+        if not g["secs"]:
+            continue
+        mins = g["secs"] / 60
+        kph = g["kills"] * 3600 / g["secs"]
+        sight = g["sight_w"] / g["secs"]
+        pres = ss.presence_summary(g["scans"])
+        sw = ss.sweep_summary(ss.merge_scans(g["scans"]))
+        out[arm] = {
+            "blocks": g["blocks"], "minutes": round(mins, 1), "kills": g["kills"],
+            "kills_per_hour": round(kph, 1), "sight_per_10min": round(sight, 1),
+            "kills_per_sighting": ss.kills_per_sighting(kph, sight),
+            "encounters_per_none_min": pres["encounters_per_none_min"],
+            "none_s_per_kill": pres["none_s_per_kill"],
+            "some_s_per_kill": pres["some_s_per_kill"],
+            "stretch_mean_s": pres["stretch_mean_s"],
+            "stretches_per_kill": pres["stretches_per_kill"],
+            "reswept_120s": sw["reswept_share"]["<=120s"], "fresh_per_min": sw["fresh_per_min"],
+            "reversals_per_min": round(g["rev"] / mins, 2),
+            "cells_walked_per_min": round(g["walked"] / mins, 1),
+            "landing": f"{g['landed']}/{g['eng']}",
+            "landing_share": round(g["landed"] / g["eng"], 3) if g["eng"] else None,
+        }  # fmt: skip
+    return out
+
+
 def species_table(sessions: Iterable[dict[str, Any]]) -> dict[str, Any]:
     """v35: per engagement parity (odd k = the species check on the box's OWN frame, even k =
     the fresh crop at the stale box): arm C's eligibility (the ``abc`` events: effective arm,
@@ -635,9 +776,12 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)  # fmt: skip
     ap.add_argument("what", choices=("strike", "dead", "loot", "stray", "blocks", "species",
-                                     "retry", "sword", "sword-precision"))  # fmt: skip
+                                     "retry", "sword", "sword-precision", "heading"))  # fmt: skip
     ap.add_argument("sessions", nargs="+")
     a = ap.parse_args()
+    if a.what == "heading":  # its own loader (search_study's windows and field)
+        print(json.dumps(heading_table(a.sessions), indent=1, default=str))
+        return 0
     sessions = [load(s) for s in a.sessions]
     if a.what == "sword-precision":
         print(json.dumps({s["sid"]: sword_precision(s) for s in sessions}, indent=1))

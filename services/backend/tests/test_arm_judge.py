@@ -138,6 +138,7 @@ def test_every_table_is_reachable_from_the_command_line() -> None:
     src = inspect.getsource(aj.main)
     for name in ("strike", "dead", "loot", "stray", "blocks", "species", "retry", "sword"):
         assert f'"{name}": {name}_table' in src
+    assert '"heading"' in src and "heading_table(a.sessions)" in src  # v38: its own loader
 
 
 def test_retry_table_splits_a_real_run_without_losing_an_item() -> None:
@@ -205,3 +206,60 @@ def test_sword_precision_on_the_real_held_out_run() -> None:
     assert ls["n"] == 46 and ls["mob_within_1"] >= 0.7 * ls["n"] and ls["job_1051"] >= 30
     assert wc["n"] == 336 and wc["mob_within_1"] <= 5
     assert got["walk_sword"]["mob_within_2"] == got["walk_sword"]["n"]
+
+
+def test_heading_spans_are_clock_blocks_from_the_first_heading_arm() -> None:
+    """v38: block b = [T0 + b * 10 min, ...), T0 = block 0's event; a block without its own event
+    takes the alternation; a broken alternation or a missing block 0 refuses."""
+    m = 60 * S
+    ev = [{"t_ns": 5 * S, "kind": "loop_start"},
+          {"t_ns": 100 * S, "kind": "heading_arm", "block": 0, "on": True},
+          {"t_ns": 100 * S + 10 * m + 37 * S, "kind": "heading_arm", "block": 1, "on": False},
+          # block 2 never re-planned (a long engagement): no event of its own
+          {"t_ns": 100 * S + 34 * m, "kind": "walk_click"}]  # fmt: skip
+    sp = aj.heading_spans(ev)
+    assert [(a - 100 * S, b - 100 * S, on) for a, b, on in sp] == [
+        (0, 10 * m, True), (10 * m, 20 * m, False), (20 * m, 30 * m, True),
+        (30 * m, 34 * m, False)]  # fmt: skip
+    bad = [*ev[:2], {"t_ns": 100 * S + 11 * m, "kind": "heading_arm", "block": 1, "on": True}]
+    with pytest.raises(ValueError, match="alternation"):
+        aj.heading_spans(bad)
+    with pytest.raises(ValueError, match="block 1"):
+        aj.heading_spans([{"t_ns": 0, "kind": "heading_arm", "block": 1, "on": True}])
+    assert aj.heading_spans([{"t_ns": 0, "kind": "loop_start"}]) == []
+
+
+def test_heading_table_splits_a_real_run_without_losing_a_kill() -> None:
+    """The v38 judge on a REAL session (v37 run B, before v38 existed), with a NULL split (odd
+    10-min blocks called "age"): the two arms hold exactly the run's kills in the judged window,
+    its six blocks, and every engagement; the search measures come out for both arms."""
+    import search_study as ss
+
+    sid = "20261018T112036-demo-hunt-flow37"
+    if not (aj.DEMO / sid / "flow_judge.json").exists():
+        pytest.skip("the v37 session is not banked on this host")
+
+    def null(sess):  # noqa: ANN001, ANN202
+        b, out = 0, []
+        while sess.t0 + b * 600 * S < sess.w1:
+            out.append((sess.t0 + b * 600 * S, min(sess.t0 + (b + 1) * 600 * S, sess.w1),
+                        b % 2 == 1))  # fmt: skip
+            b += 1
+        return out
+
+    out = aj.heading_table([sid], spans_of=null)
+    sess = ss.load_session(sid)
+    kept = [(a, z) for a, z, _on in null(sess) if z - a >= 60 * S]
+    assert out["age"]["blocks"] + out["cov"]["blocks"] == len(kept) == 6
+    assert out["age"]["kills"] + out["cov"]["kills"] == sum(
+        len(ss.kill_times(sess.events, a, z)) for a, z in kept)  # fmt: skip
+    n_eng = sum(int(x["t_first_click"]) >= kept[0][0] and int(x["t_first_click"]) < kept[-1][1]
+                for x in sess.engagements)  # fmt: skip
+    assert sum(int(out[a]["landing"].split("/")[1]) for a in ("age", "cov")) == n_eng
+    for arm in ("age", "cov"):
+        o = out[arm]
+        assert 0.2 < o["reswept_120s"] < 0.8 and o["encounters_per_none_min"] > 0
+        assert 10 < o["sight_per_10min"] < 80 and o["kills_per_sighting"] is not None
+    rows = out["per_run"][sid]["block_rows"]
+    assert [r["block"] for r in rows] == [0, 1, 2, 3, 4, 5]
+    assert [r["arm"] for r in rows] == ["cov", "age"] * 3

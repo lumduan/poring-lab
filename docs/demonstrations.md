@@ -9890,6 +9890,11 @@ run 1's verdict above stands as recorded):**
 - Run 1's verdict (FAIL) stands as recorded. This pooled read is labelled a confirmation.
   ADOPTION IS BATT'S CALL.
 
+**➡️ BATT'S DECISION (received 2026-10-18 13:29 ICT): NOT ADOPTED for now.** "Pooled primary passed,
+but the loot gain isn't shown and each step costs +0.39 s; speed is the priority. Keep it staged."
+The code stays (PARAMS[36], `loot_retry`); every later base has `loot_retry: False` (PARAMS[37],
+PARAMS[38]).
+
 ### 3.78 hunt-flow@37: THE CURSOR'S SWORD at loot and moving-walk click points, interleaved per engagement (pre-registered 2026-10-18 10:17 ICT, the commit time e815b95, BEFORE its runs; Batt's decision 2, option b)
 
 **Batt (2026-10-18):** "a detector-independent check at loot and walk click points: the client's
@@ -10028,6 +10033,17 @@ What stood at the checked points (packets, offline; the GM ~0.45 s earlier, as t
     v26 / v28 avoided).
   Strikes (7 held-out non-target attacks) are untouched by this check: they intend a SWORD; the
   species there is the tag / pixel check's job.
+
+**➡️ BATT'S DECISION (received 2026-10-18 13:29 ICT): option (a).** "LOOT clicks only, with the ~0.6 s
+wait, and ONLY on maps with species the detector wasn't trained on (a per-map flag; on for
+prt_fild06, off for prt_fild08). Walk clicks unchanged."
+- Built 0d4cacb (13:33): `hunt_flow.UNTRAINED_SPECIES` (prt_fild06 True, prt_fild08 False; a map
+  missing from it refuses a run that asks for the check by map, before any input) and
+  `sword_check_wanted` (pure, tested). In the base of every version from v38: loot clicks only,
+  every engagement, a 0.6 s wait. Inert on prt_fild08. Census + targeted safety tests: 328 passed.
+- NOT yet measured live at the 0.6 s wait. Prediction for its first prt_fild06 run, from 3.78: the
+  loot check's UNKNOWN share well under 56 % (the client drew its cursor at ~0.35-0.4 s while the
+  camera scrolled), and held-out non-target attacks from loot clicks <= 4 an hour.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
