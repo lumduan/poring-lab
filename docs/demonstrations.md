@@ -9849,6 +9849,14 @@ candidate for a confirmation run, and only Batt adopts it.
     left for a later session, and run 1's verdict above is the only one.
   - The GM was checked back in the standard state (08:34: the template check "fixed", Base / Job
     Lv 1, the chat line closed).
+- ➡️ **RUN after all (Batt's decision 1, 2026-10-18 ~09:00: "run the CONFIRMATION").** It follows
+  the 08:26 pre-registration unchanged (seed 20272301, the same five predictions, run 1's verdict
+  stands).
+  - The runner now rebuilds the hunting state itself (`gm_state.ensure_hunting`, 02ec79b +
+    9ba3299). Its first live rebuild (09:06-09:07) gave Base Lv 70, STR 99 (weight cap 4970) and
+    the status window found at its home.
+  - From here the hunting state is kept between runs; the standard Lv 1 state comes only at the
+    true end of a series.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
