@@ -10134,6 +10134,33 @@ So the cov arm is exactly v37 run B's none arm.
     `fixed`). Block 0 = age (`heading_arm` on).
 - From run 2 the runner loads 9c75f36: v39 is staged there, but v38's behaviour is identical (the
   new options are off in PARAMS[38]; tested).
+- **Run 1 ended** 15:20:23 on its time box (3600.3 s), with 151 engagements: 150 dead, 1 gave up.
+  - Hard bars: 0 NPC contact, 0 map change, 0 non-target hit, 0 Creamy (packets; the live monitor
+    agreed, no stop).
+  - Whole run: 126.0 kills / h, landing within 5 s 98 / 151 = 64.9 %, sight 34.0 / 10 min
+    (windowed; whole run 15.7), kills per sighting 3.71, reversals 7.28 / min.
+  - **Per arm, ONE run only (not a decision; the rule reads the 4 runs pooled):**
+
+    | arm | blocks | kills / h | sight / 10 min | encounters / no-target min | re-swept <= 120 s | fresh / min |
+    |---|---|---|---|---|---|---|
+    | age | 0, 2, 4 | 114.3 | 31.7 | 4.44 | 0.49 | 3,308 |
+    | cov | 1, 3, 5 | 138.0 | 34.0 | 7.47 | 0.47 | 3,347 |
+
+    So far the mechanism has not moved: re-swept age / cov = 1.04, where the primary needs <= 0.90.
+    Encounters (-51 %) are outside the null's +-18 %, but this is one run.
+  - `cont_fail`, run 1 (211 notes), STEER:
+    - 8,617 failed walk-click calls (6,408 moving, 2,209 standing);
+    - 8,272 of them (96 %) had NO candidate cell ahead on the route;
+    - 4,213 of those were routes <= 3 cells, so the other ~half were longer routes whose
+      commanded lead point lies past every candidate;
+    - gate failures were few: view 339, guard 216, units 118.
+    - SEARCH is different: 634 failed calls, by guard 1,470 and view 1,034 candidate rejections;
+      "none" only 14.
+    - So the steer's standing comes from the candidate rule, not from the gates: the case v39's
+      tail is built for (staged, not pre-registered).
+- **Run 2** (15:22:16, seed 20272802, `20261018T152216-demo-hunt-flow38`, code 11b786c, v38
+  identical). Before it, a judged screenshot (15:22: prt_fild08, no dialog, the standard windows,
+  the GM standing in its hunting state, ASSIST, no lease). Block 0 = cov.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
