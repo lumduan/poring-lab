@@ -10161,6 +10161,34 @@ So the cov arm is exactly v37 run B's none arm.
 - **Run 2** (15:22:16, seed 20272802, `20261018T152216-demo-hunt-flow38`, code 11b786c, v38
   identical). Before it, a judged screenshot (15:22: prt_fild08, no dialog, the standard windows,
   the GM standing in its hunting state, ASSIST, no lease). Block 0 = cov.
+- **Run 2 ended** 16:22:56 on its time box (3600.7 s), with 164 engagements: 163 dead, 1 gave up.
+  - Hard bars: 0 NPC contact, 0 map change, 0 non-Creamy non-target hit.
+  - **One Creamy was attacked** (gid 110054292, only ever job 1018: a real Creamy, not a
+    metamorphosis): one attack request, 2 hits. A steer walk click 1.1 s before it was resolved
+    by the client onto the flying sprite the detector misses. It is counted, not a stop (Batt's
+    rule); the live monitor showed `creamy_hits 2`.
+  - Whole run: 146.9 kills / h, landing within 5 s 132 / 162 = 81.5 %, sight 32.5 / 10 min
+    (windowed; whole run 15.8), kills per sighting 4.52, reversals 7.55 / min.
+  - **Per arm, run 2 alone:**
+
+    | arm | blocks | kills / h | sight / 10 min | encounters / no-target min | re-swept <= 120 s | fresh / min |
+    |---|---|---|---|---|---|---|
+    | age | 1, 3, 5 | 148.0 | 34.3 | 8.34 | 0.51 | 3,346 |
+    | cov | 0, 2, 4 | 146.2 | 33.4 | 7.34 | 0.44 | 3,657 |
+
+  - **INTERIM, runs 1-2 pooled (not the decision, which reads all 4):**
+    - re-swept <= 120 s: age 0.51 vs cov 0.46 (age / cov 1.11; the primary needs <= 0.90);
+    - kills / h 131.1 vs 142.1;
+    - encounters / no-target min 6.08 vs 7.38;
+    - fresh ground / min 3,327 vs 3,502;
+    - landing 115 / 150 vs 115 / 165.
+    So far the age-weighted heading re-sweeps MORE ground, not less.
+  - `cont_fail`, run 2, STEER: 9,079 failed calls, 8,571 (94 %) with no candidate (4,327 of
+    them on routes <= 3 cells); gates: view 499, guard 344, units 26. Same picture as run 1.
+- **Run 3** (16:24:02, seed 20272901, `20261018T162402-demo-hunt-flow38`, code 4ec6675). That code
+  adds only a log key for v39's tail arm; v38's keys and behaviour are unchanged (tested). Before
+  it, a judged screenshot (16:23: no dialog, the standard windows, the GM standing in its hunting
+  state beside the run-end weight drop, ASSIST, no lease). Block 0 = age.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
