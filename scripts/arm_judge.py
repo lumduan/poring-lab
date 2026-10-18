@@ -31,6 +31,9 @@ engagements.json, clicks.jsonl, and flow_judge.json -- run `flow_judge.bot(sid)`
                                         call's truth and last burst, the would-be "still there"
                                         signals (same monster under a new id, a box near the
                                         predicted pixel) -- the false-dead fix's design (3.81)
+    arm_judge.py falsedead SID [SID ...] v40: the risky-burst dead calls per arm (fix = odd k):
+                                        called dead with the target alive, skipped, alive targets
+                                        killed within 20 s after, loot at our kills, landing
 
 Packets are offline ground truth here (ADR-0007); nothing in this module runs during play.
 """
@@ -793,6 +796,98 @@ def deadprobe_table(sids: Iterable[str], radii: Sequence[int] = (30, 45, 60)) ->
     return {"coverage": dict(cover), **{k: dict(v) for k, v in sorted(agg.items())}}
 
 
+def falsedead_table(sids: Iterable[str], on_of: Any = None,
+                    after_s: float = 20.0) -> dict[str, Any]:  # fmt: skip
+    """v40 per arm ("fix" = odd k: after a RISKY last burst the dead call stands only on the
+    death-cell fix's "ok", else "skipped_risky"; "base" = even k), from packets on flow_judge's
+    window. Over the engagements the runner ended "dead" or "skipped_risky" whose last burst
+    ended "risky": how many were called DEAD with the target still alive (the false dead calls
+    the fix targets), how many skipped, and -- of those whose target was alive at the
+    engagement's end -- how many we killed within ``after_s`` (re-engaged) and the time from the
+    engagement's last click to our kill of it (<= 30 s); plus landing and the loot at our kills
+    per arm (the drops of OUR kill inside each engagement, whatever the runner called it: a
+    skipped real kill's loot counts as not picked). ``on_of(k)`` replaces the arm rule."""
+    import flow_judge as fj
+    import hunt_core as hc
+    import search_study as ss
+
+    on = on_of or (lambda k_: k_ % 2 == 1)
+    agg: dict[str, Counter[str]] = {a_: Counter() for a_ in ("fix", "base")}
+    lst: dict[str, list[float]] = {a_: [] for a_ in ("fix", "base")}
+    per_run: dict[str, Any] = {}
+    for sid in sids:
+        sess = ss.load_session(sid)
+        lst_run: dict[str, list[float]] = {a_: [] for a_ in ("fix", "base")}
+        rows = {int(r_["k"]): r_ for r_ in json.loads(
+            (DEMO / sid / "flow_judge.json").read_text())["engagements_w"]["rows"]}  # fmt: skip
+        deaths: dict[int, list[int]] = defaultdict(list)
+        for e in sess.events:
+            if e.get("type") == "entity_vanish" and int(e.get("reason", -1)) == 1:
+                deaths[fj.gid_of(e)].append(int(e["t_mono_ns"]))
+        our_k: dict[int, list[int]] = defaultdict(list)
+        for t_, g_ in kills_of(sess.events):
+            our_k[g_].append(t_)
+        life = fj.alive(sess.events)
+        pos = hc.walk_positions(sess.events)
+        items = item_fates(sess.events, pos, fj.mob_at)
+        rc: dict[str, Counter[str]] = {a_: Counter() for a_ in ("fix", "base")}
+        for x in sess.engagements:
+            fc, k = int(x["t_first_click"]), int(x["k"])
+            if not sess.t0 <= fc < sess.w1:
+                continue
+            arm = "fix" if on(k) else "base"
+            row = rows.get(k) or {}
+            g = row.get("gid")
+            for c in (rc[arm], agg[arm]):
+                c["engagements"] += 1
+                c["landed"] += row.get("why") == "hit"
+            te_ = int(x.get("t_end") or fc) + NS
+            tk_ = None if g is None else next(
+                (t_ for t_ in our_k.get(int(g), ()) if fc <= t_ <= te_), None)  # fmt: skip
+            if tk_ is not None:  # OUR kill in this engagement, whatever the runner called it
+                for f in drops_of_kill(items, tk_, fj.mob_at(pos, g, tk_ - 1)):
+                    for c in (rc[arm], agg[arm]):
+                        c["items"] += 1
+                        c["picked"] += items[f]["fate"] == "picked"
+            ends = [(h.get("burst") or {}).get("end") for h in x.get("hovers", [])
+                    if h.get("burst")]  # fmt: skip
+            if x.get("result") not in ("dead", "skipped_risky") or not ends or ends[-1] != "risky":
+                continue
+            te = int(x.get("t_end") or fc)
+            real = g is not None and any(fc <= d <= te + NS for d in deaths.get(int(g), ()))
+            alive_end = g is not None and not real and fj.present(life, int(g), te)
+            later = g is not None and any(te < t_ <= te + int(after_s * NS)
+                                          for t_ in our_k.get(int(g), ()))  # fmt: skip
+            tl_ = int(x.get("t_last_click") or fc)
+            nxt = next((t_ for t_ in sorted(our_k.get(int(g), ())) if tl_ < t_ <= tl_ + 30 * NS),
+                       None) if alive_end else None  # fmt: skip
+            if nxt is not None:
+                lst[arm].append((nxt - tl_) / NS)
+                lst_run[arm].append((nxt - tl_) / NS)
+            for c in (rc[arm], agg[arm]):
+                c["risky_ended"] += 1
+                c["skipped"] += x.get("result") == "skipped_risky"
+                c["skipped_real"] += x.get("result") == "skipped_risky" and real
+                c["dead_called_alive"] += x.get("result") == "dead" and alive_end
+                c["dead_called_real"] += x.get("result") == "dead" and real
+                c["alive_at_end"] += alive_end
+                c["alive_killed_after"] += alive_end and later
+        per_run[sid] = {a_: {**dict(c), "alive_to_kill_s": [round(v, 2) for v in lst_run[a_]]}
+                        for a_, c in rc.items()}  # fmt: skip
+    out: dict[str, Any] = {"per_run": per_run}
+    for arm, c in agg.items():
+        tk = lst[arm]
+        out[arm] = {**dict(sorted(c.items())),
+                    "alive_to_kill_n": len(tk),
+                    "alive_to_kill_s_mean": round(sum(tk) / len(tk), 2) if tk else None,
+                    "landing_share": round(c["landed"] / c["engagements"], 3)
+                    if c["engagements"] else None,
+                    "loot_share": round(c["picked"] / c["items"], 3) if c["items"] else None,
+                    "re_engaged_share": round(c["alive_killed_after"] / c["alive_at_end"], 3)
+                    if c["alive_at_end"] else None}  # fmt: skip
+    return out
+
+
 def species_table(sessions: Iterable[dict[str, Any]]) -> dict[str, Any]:
     """v35: per engagement parity (odd k = the species check on the box's OWN frame, even k =
     the fresh crop at the stale box): arm C's eligibility (the ``abc`` events: effective arm,
@@ -989,7 +1084,7 @@ def main() -> int:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)  # fmt: skip
     ap.add_argument("what", choices=("strike", "dead", "loot", "stray", "blocks", "species",
                                      "retry", "sword", "sword-precision", "heading",
-                                     "approach", "deadprobe"))  # fmt: skip
+                                     "approach", "deadprobe", "falsedead"))  # fmt: skip
     ap.add_argument("sessions", nargs="+")
     a = ap.parse_args()
     if a.what == "heading":  # its own loader (search_study's windows and field)
@@ -1000,6 +1095,9 @@ def main() -> int:
         return 0
     if a.what == "deadprobe":  # the same
         print(json.dumps(deadprobe_table(a.sessions), indent=1, default=str))
+        return 0
+    if a.what == "falsedead":  # the same
+        print(json.dumps(falsedead_table(a.sessions), indent=1, default=str))
         return 0
     sessions = [load(s) for s in a.sessions]
     if a.what == "sword-precision":

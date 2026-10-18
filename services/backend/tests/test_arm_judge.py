@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -141,6 +142,7 @@ def test_every_table_is_reachable_from_the_command_line() -> None:
     assert '"heading"' in src and "heading_table(a.sessions)" in src  # v38: its own loader
     assert '"approach"' in src and "approach_table(a.sessions)" in src  # v39: the same
     assert '"deadprobe"' in src and "deadprobe_table(a.sessions)" in src  # 3.80 amendment
+    assert '"falsedead"' in src and "falsedead_table(a.sessions)" in src  # v40
 
 
 def test_retry_table_splits_a_real_run_without_losing_an_item() -> None:
@@ -326,3 +328,27 @@ def test_deadprobe_table_counts_every_dead_call_of_a_run_without_probes() -> Non
     if not (aj.DEMO / sid / "flow_judge.json").exists():
         pytest.skip("the v38 session is not banked on this host")
     assert aj.deadprobe_table([sid]) == {"coverage": {"dead_calls": 150}}
+
+
+def test_falsedead_table_splits_a_real_run_without_losing_an_engagement() -> None:
+    """v40's judge on v38 run 1 (no fix: a parity null): the arms hold every engagement and
+    every risky-ended dead call; nothing skipped; each false dead call there had its target
+    alive at the end (flow_judge.dead_call_truth agrees on the run's 27 "target alive")."""
+    import flow_judge as fj
+    import search_study as ss
+
+    sid = "20261018T141820-demo-hunt-flow38"
+    if not (aj.DEMO / sid / "flow_judge.json").exists():
+        pytest.skip("the v38 session is not banked on this host")
+    out = aj.falsedead_table([sid])
+    f, b = out["fix"], out["base"]
+    assert f["engagements"] + b["engagements"] == 151
+    assert f.get("skipped", 0) + b.get("skipped", 0) == 0
+    sess = ss.load_session(sid)
+    rows = json.loads((aj.DEMO / sid / "flow_judge.json").read_text())["engagements_w"]["rows"]
+    tr = fj.dead_call_truth(sess.events, sess.engagements, rows, sess.t0, sess.w1)
+    risky = [w for w, e in tr.values() if e == "risky"]
+    assert f["risky_ended"] + b["risky_ended"] == len(risky)
+    alive = sum(w == "target_alive" for w in risky)
+    assert f["dead_called_alive"] + b["dead_called_alive"] == alive
+    assert 0.3 < f["loot_share"] < 0.9 and 0.3 < b["loot_share"] < 0.9
