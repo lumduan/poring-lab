@@ -9857,6 +9857,38 @@ candidate for a confirmation run, and only Batt adopts it.
     the status window found at its home.
   - From here the hunting state is kept between runs; the standard Lv 1 state comes only at the
     true end of a series.
+- **Run 2** (09:08:51-10:08:51, seed 20272301, `20261018T090851-demo-hunt-flow36`), after a judged
+  screenshot (09:08: Lv 70, weight cap 4970, no dialog).
+  - 146 engagements, all dead. No stop, 0 Creamy, 0 non-target hits.
+  - Landing 104 / 144 = 72.2 %, 114.8 kills / h, loot 79 / 132 = 59.8 %.
+  - A sparse field: 11.8 seen per 10 min (whole run), reversals 7.55 / min.
+
+**CONFIRMATION READ (judged 2026-10-18 10:1x; run 1 + run 2 pooled; the SAME five predictions;
+run 1's verdict above stands as recorded):**
+
+| per parity (`arm_judge.py retry`) | retry, pooled | none, pooled | run 2 alone (retry / none) |
+|---|---|---|---|
+| loot steps | 181 | 179 | 73 / 73 |
+| loot clicks per step | **7.98** | 6.84 | 8.29 / 6.53 |
+| retries clicked / queued | 179 / 497 = **36.0 %** | - | 72 / 184 = 39 % |
+| loot step p50 | 2.66 s | 2.27 s | 2.68 / 2.19 s |
+| items picked at our kills | 112 / 168 = **66.7 %** | 121 / 190 = 63.7 % | 59.2 / 66.2 % |
+| items to looters | 20 / 168 | 27 / 190 | 13 / 7 |
+
+1. **Primary**, loot clicks per step retry >= none + 1.0: pooled **+1.14, PASS** (run 1 +0.71 FAIL,
+   run 2 +1.75).
+2. retries clicked >= 30 %: **PASS** (36.0 %).
+3. step time retry <= none + 0.8 s: **PASS** (+0.39 s).
+4. items picked retry >= none: **PASS** pooled (+3.0 points). Run 1 was +9.8, run 2 -7.0: the
+   loot outcome is NOT resolved by two runs.
+5. safety: **PASS** (no non-target hit, no Creamy request in either run).
+
+**Read:**
+- Pooled, the mechanism works: more clicks reach the pile, at +0.4 s a step.
+- Whether it picks more items is not shown: +3 points pooled, with the two runs on opposite
+  sides.
+- Run 1's verdict (FAIL) stands as recorded. This pooled read is labelled a confirmation.
+  ADOPTION IS BATT'S CALL.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
