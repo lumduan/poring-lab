@@ -737,3 +737,130 @@ AGE-WEIGHTED SEARCH HEADING.**
    - Then v38 (the age-weighted heading) for >= 4 run-hours, interleaved: pre-registered as 3.79
      (13:46, c46dc16).
 4. nvtop and the /dev/shm cleanup are Batt's. The GPU stays frozen.
+
+## Conversion study (2026-10-18 afternoon, Batt's decision 3; offline packets + the bot's logs)
+
+Two judges, merged 3c6180d and 767ee6e, each with real-session positive cases:
+- `scripts/conversion_phases.py`: the timeline per free target (Batt vs the bot on one ruler);
+- `scripts/conversion_misses.py`: why a free target is not attacked within 10 s.
+Data: Batt's 10-min demo vs the bot's 10 full hours on prt_fild08 (v32-v37). Both reproduce
+search_study's cohort exactly (free entries: Batt 40, the bot 1801).
+- Attacked within 10 s: Batt 0.78; the bot 0.40 pooled over these 10 runs (0.28-0.54). The 43 %
+  quoted earlier was the search study's pool.
+- **Correction:** frames show the server's state ~0.6 s old (measured; it was ~0.5 s).
+
+**Where the targets drop out (share of free entries reaching each step within 10 s):**
+
+| | noticed | turned toward | clicked | hit | killed |
+|---|---|---|---|---|---|
+| Batt | 0.80 (pointer proxy) | 0.82 | 0.72 | 0.78 | 0.75 |
+| the bot | 0.76 | 0.85 | 0.40 | 0.38 | 0.34 |
+
+The bot notices and turns about as often as Batt. The loss is between the turn and the click.
+
+**The time with a target in view, per kill, split so that it sums (Batt 6.80 s, the bot 13.08 s):**
+
+| label (outcome of the deciding target) | Batt | bot | gap |
+|---|---|---|---|
+| killed: turn -> within 3 cells (the approach) | 2.23 | 5.45 | **+3.22** |
+| never attacked | 0.49 | 2.45 | **+1.96** |
+| killed: within 3 cells -> click | 0.81 | 1.31 | +0.50 |
+| killed: noticed -> turn | 0.00 | 0.36 | +0.36 |
+| killed: click -> hit, the client's walk-up | 0.55 | 0.87 | +0.32 |
+| killed: unnoticed | 0.82 | 1.09 | +0.27 |
+| attacked, not killed | 0.00 | 0.08 | +0.08 |
+| killed: click -> hit at reach | 0.09 | 0.12 | +0.03 |
+| killed: hit -> kill | 1.14 | 0.97 | -0.17 |
+| loot after a kill | 0.68 | 0.37 | -0.31 |
+
+- Hit -> kill is the same behaviour: 0.91 s p50, 1.30 s between hits, the same character state.
+- Both walk up to about 3 cells before clicking. The client sends the attack request only near
+  reach (attack request -> melee p50 0.08 s), so the CLICK is the decision.
+
+**1. The approach (+3.22 s per kill): the bot stands still while closing in.**
+- Both start ~13 cells away. Batt closes at 3.89 cells / s p50 with his GM moving 92 % of the
+  time; the bot closes at 2.05 cells / s, moving 52 %.
+- In steer mode (~20 min of every hour) the GM moves only 37-38 % of the time.
+- Each GM stop in steer mode, by the click that ended it (v35-v36, 3 runs, per engagement):
+
+| the stop ended by | stop -> click p50 | seconds per engagement |
+|---|---|---|
+| the strike (the GM stops at 4-7 cells, then the strike) | 1.9-2.2 s | 2.1-2.3 |
+| the next walk leg (map + units gate) | 0.8 s | 1.3-2.6 |
+| the standstill fallback (cursor gate) | 5.1-5.2 s | 1.0-2.0 |
+
+- Why (the code, and since 14:17 the log-only `cont_fail` counts, 3.79 amendment):
+  - The steer walks a ONE-TIME path into a zone around the target: 7 cells for a standing
+    target, 4 for a walking one.
+  - The continuous click takes candidates only 3-8 cells ahead of the lead point (0.6 s of our
+    own commands). Near the path's end there is none, so the GM walks out its leg and stops.
+  - The standstill fallback steps from the path's START, which the GM has passed, so it often
+    finds no step and waits again.
+  - Run 1's first minutes: "no candidate" in 32 of 35 moving steer calls; 38 of 38 standing calls
+    had a path <= 3 cells.
+
+**2. Targets never attacked (+1.96 s per kill).**
+
+| cause group | free entries | idle s per kill (sessions) |
+|---|---|---|
+| walker not reached (late / steering / gone) | 11.8 % | 1.19 (0.72-1.86) |
+| strike on a walker missed or landed late | 6.6 % | 0.84 (0.60-1.22) |
+| detector: never boxed / lost undetected | 6.9 % | 0.51 (0.27-1.35) |
+| selection: never attended / retarget away | 5.2 % | 0.35 (0.12-0.72) |
+| lost off screen / other | 2.6 % | 0.26 |
+| busy (fight / loot / dead wait) | 10.6 % | 0.17 |
+| off screen (edge flicker at 14 cells) | 15.9 % | 0.09 |
+| selection gates | 0.2 % | 0.01 |
+
+- "Idle s" = seconds the target was in view while the bot was not converting another mob, per bot
+  kill. It is a different ruler from the decomposition above, so do not add the two.
+- Walkers: the bot was still 7-9 cells away 10 s after the entry. Its zone and tracker kept
+  restarting: 2.9 zone plans and 0.95 target losses per entry, vs 1.8 and 0.5 for targets it
+  took.
+- First strike click landing (an attack request within 1.5 s):
+
+| GM / target | strikes | landed |
+|---|---|---|
+| standing / still | 911 | 84 % |
+| standing / walking | 312 | 60 % |
+| walking / still | 292 | 77 % |
+| walking / walking | 42 | 24 % |
+
+- **False "dead" calls: 16.9 %** of joined engagements (260 / 1540; checked again: 16.5 % and
+  15.7 % on two runs). The target was alive, mostly after a strike that never landed. That cost
+  0.38 s per kill of loot steps on nothing.
+- Batt's 9 misses were all targets out of his reach (off screen, or gone within seconds). None
+  came while he was busy with another target.
+
+**3. Within 3 cells -> click (+0.50 s per kill).**
+- The bot's in range -> click: p50 1.07 s, mean 1.52 s.
+- Arm C (the nudge) is 62 % of strikes, p50 0.77 s; arm A for "species unsure" is 33 %, p50
+  1.41 s (+0.42 s per kill over arm C).
+- Empty name-tag reads cost 0.60-0.77 s per kill, partly inside the rows above. Mostly on still
+  mobs, so not a walker effect.
+
+**RANKING (seconds per kill vs Batt) and the proposed next change**
+1. The approach: +3.22 (the GM stands between legs, in ~5-s stalls, and ~2 s before each strike).
+2. Never attacked: +1.96 (walkers 2.03 idle s / kill; detector 0.51; selection 0.35).
+3. Within 3 cells -> click: +0.50 (species-unsure fallbacks, empty tag reads).
+4. Notice -> turn +0.36, client walk-up +0.32, unnoticed +0.27.
+Also: false "dead" calls on 16.9 % of engagements (0.38 s per kill of looting nothing).
+
+**Proposed v39: THE CONTINUOUS APPROACH.** The GM keeps walking until it is in strike range.
+- When the route ahead has no candidate, the steer re-plans from where the GM will be and may
+  click the route's tail.
+- The standstill fallback steps from the route point nearest the GM.
+- No new click kind, and every walk gate is unchanged.
+- Expected: it removes most of the ~0.8-s leg stops and the ~5-s stalls, 2.3-4.6 s of standing
+  per engagement today. Upper bound kills / h +8-12 %. It should also help the walkers that are
+  never reached.
+- Interleaved per engagement. Measured by the steer moving share, turn -> 3 cells, and kills / h.
+- Its design uses the `cont_fail` counts banked during the v38 runs. It needs Batt's go.
+
+**Next candidates:**
+- Strike WALKING targets from 7 cells at a velocity-led aim point (the misses judge's proposal,
+  +4-8 %). Riskier: the led point is not on a detector box, so the Creamy guard must be evaluated
+  there.
+- Fix the false "dead" calls.
+- Fewer species-unsure fallbacks and empty tag reads.
+- The detector (0.51 s per kill) waits for the GPU.
