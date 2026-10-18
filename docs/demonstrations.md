@@ -10189,6 +10189,25 @@ So the cov arm is exactly v37 run B's none arm.
   adds only a log key for v39's tail arm; v38's keys and behaviour are unchanged (tested). Before
   it, a judged screenshot (16:23: no dialog, the standard windows, the GM standing in its hunting
   state beside the run-end weight drop, ASSIST, no lease). Block 0 = age.
+- **Run 3 ended** 17:24:50 on its time box (3600.5 s), with 154 engagements: 153 dead, 1 gave up.
+  - Hard bars: 0 NPC contact, 0 map change, 0 non-Creamy non-target hit.
+  - **One Creamy was attacked** (gid 110054288, only ever job 1018): one attack request 0.81 s
+    after a SEARCH walk click. Counted, not a stop; the monitor showed `creamy_hits 1`.
+  - Whole run: 131.9 kills / h, landing within 5 s 116 / 154 = 75.3 %, sight 31.5 / 10 min
+    (windowed; whole run 13.8), kills per sighting 4.19, reversals 7.16 / min.
+  - Dead calls without a real death: 36 / 153 = 23.5 % (no unit 13, target alive 23; after a
+    risky burst 14).
+  - **Per arm, run 3 alone:** age (blocks 0, 2, 4) 134.0 kills / h, sight 32.0, encounters 5.89,
+    re-swept 0.477, fresh 3,616 / min; cov (1, 3, 5) 130.0, 28.0, 5.04, 0.517, 2,943.
+  - **INTERIM, runs 1-3 pooled (not the decision):**
+    - re-swept <= 120 s: age 0.49 vs cov 0.48 (ratio 1.02; the primary needs <= 0.90);
+    - kills / h 132.1 vs 138.1;
+    - encounters / no-target min 6.01 vs 6.32;
+    - landing 176 / 232 vs 170 / 237.
+- **Run 4** (17:26:05, seed 20273002, `20261018T172605-demo-hunt-flow38`, code 32d3469). It carries
+  v39's picker and probe, both off in PARAMS[38]; v38's behaviour is unchanged (tested). Before
+  it, a judged screenshot (17:25: no dialog, the standard windows, the GM standing in its hunting
+  state, ASSIST, no lease). Block 0 = cov.
 
 ### 3.80 hunt-flow@39: THE CONTINUOUS APPROACH, interleaved per engagement (pre-registered 2026-10-18 16:37 ICT, the commit time a89d93a, BEFORE its runs; Batt's go 2026-10-18 16:2x: "Order after v38's 4 runs: v39 (continuous approach: the steer must always find a click point on the route; never stop because no route cell qualified; fix the point picker, not the gates)")
 
