@@ -10426,6 +10426,23 @@ on for all (no blocks), switched in a commit before run 1 and recorded in this r
   code 6430068). The chain's screenshot (`pre-v39-20280202.jpg`) was judged
   23:03: no dialog, the standard windows, the GM standing in its hunting state, a Poring beside
   it, a warp light on the screen's edge. Health: ASSIST, no lease.
+- **Run 2 ended** 00:03:3x on its time box (3600.4 s), with 155 engagements, all dead. The chain
+  logged rc 0 at 00:07:16. Its monitor's 180-s cadence held the next start for ~3 min; fixed for
+  later chains (b1b7b5b).
+  - Standard row: landing 115 / 155 = 74.2 % (66.8-80.4), 130.9 kills / h, 4.44 per sighting,
+    27.5 s per kill, sight 29.5 / 10 min, free targets attacked <= 10 s 39 % (n 195), steer
+    moving 39 %, seen -> click 3.16 s, death -> next 0.79 s.
+  - Dead calls without a real death 42 / 155 = 27.1 %; loot 85 / 169 = 50 % (16 to looters);
+    reversals 8.71 / min.
+  - Creamy 0 (0). Hard bars 0 / 0 / 0.
+  - **INTERIM, runs 1-2 pooled (not the decision):**
+    - steer moving share tail 0.368 vs base 0.367 (the primary needs >= 1.15 x);
+    - approach mean 4.72 vs 4.57 s;
+    - landing 123 / 174 = 70.7 % vs 145 / 175 = 82.9 % (the guard needs >= base - 5 points);
+    - steer walk clicks turned into attacks: target 3 vs 6, other 0 vs 0.
+- **Run 3** (00:07:18, seed 20280303, started by the chain, code b1b7b5b or earlier [its file was
+  loaded at the start]). The screenshot `pre-v39-20280303.jpg` was judged 00:08: no dialog, the
+  standard windows, the GM standing in its hunting state, ASSIST, no lease.
 
 ### 3.81 hunt-flow@40: THE FALSE-DEAD FIX, interleaved per engagement (pre-registered 2026-10-18 23:13 ICT, the commit time b871eff, BEFORE its runs; Batt's order 2026-10-18 16:2x and his night plan 22:2x: "v40 (false-dead fix): set its thresholds from v39's probe data, pre-register as 3.81, run 4 runs, verdict")
 
