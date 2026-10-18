@@ -690,23 +690,15 @@ def reacquire_target(target: Track, live: Sequence[Track], t_ns: int, within: fl
     return None if best is None else best[1]
 
 
-def false_dead_verdict(last_burst: str | None, reacq_age_s: float | None, box_px: float | None,
-                       frame_age_s: float | None, prm: dict[str, Any]) -> str | None:  # fmt: skip
+def risky_unproven(last_burst: str | None, death_reason: str | None) -> bool:
     """PURE (v40 candidate, Batt 2026-10-18 16:2x: "a burst ending 'risky' must not let the dead
     rule abandon a target that is still visible / alive; re-engage it, or mark it 'skipped:
-    risky' explicitly, never 'dead'"). At a dead call after a RISKY last burst: "rebind" when the
-    same monster shows under a new track id seen <= fd_reacq_age_s ago (re-engage it); else
-    "skipped" when the freshest frame (<= fd_frame_age_s old) has a monster box within fd_box_px
-    of the engaged track's predicted pixel (still visible: end without loot, the track stays
-    selectable); else None (the dead rule stands). Any other last burst: None."""
-    if last_burst != "risky":
-        return None
-    if reacq_age_s is not None and reacq_age_s <= prm["fd_reacq_age_s"]:
-        return "rebind"
-    if (box_px is not None and box_px <= prm["fd_box_px"] and frame_age_s is not None
-            and frame_age_s <= prm["fd_frame_age_s"]):  # fmt: skip
-        return "skipped"
-    return None
+    risky' explicitly, never 'dead'"). After a RISKY last burst the dead call stands only when the
+    death-cell fix (loot1.death_of on the track's own sightings) says "ok": a clean
+    disappearance. Measured before (6 banked runs, v36-v39): after a risky burst "ok" was a real
+    death 93 times and a target still alive twice; any other reason 93 real vs 71 not. Any other
+    last burst: the dead rule stands (False)."""
+    return last_burst == "risky" and death_reason != "ok"
 
 
 def ahead_candidates(path: Sequence[Cell], here: Sequence[float], order: Sequence[int],
@@ -4020,31 +4012,24 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             out_["frame_age_s"] = round((r.ns() - int(fr_[-1][0])) / 1e9, 2)
                     ev(out_)
 
-                def still_there(eng_: dict[str, Any], live_: Sequence[Track],
-                                t_now_: int) -> tuple[str | None, Track | None]:  # fmt: skip
-                    """v40 candidate: false_dead_verdict's inputs at a dead call, as the probe
-                    reads them (the same monster under a new id; the freshest box nearest the
-                    engaged track's predicted pixel) -> (verdict, the new track or None)."""
-                    tl_ = eng_tracks.get(int(eng_["track"]))
-                    ends_ = [(h_.get("burst") or {}).get("end") for h_ in eng_.get("hovers", [])
-                             if h_.get("burst")]  # fmt: skip
-                    last_ = ends_[-1] if ends_ else None
-                    if tl_ is None or last_ != "risky":
-                        return None, None
-                    nt_ = reacquire_target(tl_, live_, t_now_, prm["reacquire_cells"],
-                                           list(done_ids) + [tl_.tid])  # fmt: skip
-                    age_ = None if nt_ is None else (t_now_ - nt_.t_last) / 1e9
-                    cur_ = measured_pos() or (float(pos[0]), float(pos[1]))
-                    pu_, pv_ = frac_project(world, cur_, tl_.predict(t_now_))
-                    fr_ = sampler.since(max(0, len(sampler.frames) - 1))
-                    bpx_ = fage_ = None
-                    if fr_:
-                        bx_ = [float(np.hypot((b_.x0 + b_.x1) / 2 - pu_, b_.y1 - pv_))
-                               for b_ in fr_[-1][1] if b_.cls == "monster"]  # fmt: skip
-                        bpx_ = min(bx_) if bx_ else None
-                        fage_ = (r.ns() - int(fr_[-1][0])) / 1e9
-                    v_ = false_dead_verdict(last_, age_, bpx_, fage_, prm)
-                    return v_, (nt_ if v_ == "rebind" else None)
+                def death_reason_now(eng_: dict[str, Any], here2: Cell) -> str | None:
+                    """v40 candidate: loot_after's death-cell verdict (loot1.death_of on the
+                    engaged track's sightings since 2 s before the first click), computed before
+                    the loot step; the same inputs as loot_after's (kept apart so v39's loot
+                    step is untouched)."""
+                    from poring_dataset import deathcell as dcm_
+
+                    tr_ = eng_tracks.get(int(eng_["track"]))
+                    if tr_ is None or tr_.box is None:
+                        return "no_track"
+                    bx = dict(tr_.boxes)
+                    t_from = int(eng_["t_first_click"]) - int(2e9)
+                    sights = [dcm_.Sighting(int(t_), None if (b_ := bx.get(int(t_))) is None
+                                            else (b_.x0, b_.y0, b_.x1, b_.y1))
+                              for t_, _bs in sampler.since(0) if int(t_) >= t_from]  # fmt: skip
+                    lt = loot1.Track(f1.foot(tr_.box))
+                    lt.sightings = sights
+                    return str(loot1.death_of(rig, lt, here2).reason)
 
                 def walk_ok(c_: Cell) -> bool:
                     return not refusals.get(c_, 0) >= 2
@@ -4260,25 +4245,6 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                         dead_probe(eng, tr, unseen, live, t_now)
                                     except Exception as e_:  # noqa: BLE001
                                         ev({"kind": "dead_probe_error", "err": repr(e_)[:200]})
-                                if prm.get("false_dead_fix") and (
-                                        not prm.get("false_dead_ab")
-                                        or int(eng["k"]) % 2 == 1):  # fmt: skip
-                                    # v40 candidate (Batt 16:2x): never "dead" for a target
-                                    # still there after a risky burst
-                                    fd_, nt_ = still_there(eng, live, t_now)
-                                    if (fd_ == "rebind" and nt_ is not None
-                                            and int(eng.get("rebinds", 0))
-                                            < prm["fd_max_rebinds"]):  # fmt: skip
-                                        ev({"kind": "fd_rebind", "k": int(eng["k"]),
-                                            "from": int(eng["track"]), "to": nt_.tid})  # fmt: skip
-                                        eng["rebinds"] = int(eng.get("rebinds", 0)) + 1
-                                        eng["track"] = nt_.tid
-                                        eng_tracks[nt_.tid] = nt_
-                                        done = None
-                                    elif fd_ is not None:
-                                        ev({"kind": "fd_skipped", "k": int(eng["k"]),
-                                            "track": int(eng["track"]), "why": fd_})  # fmt: skip
-                                        done = "skipped_risky"
                             elif since_first > prm["give_up_s"]:
                                 banned.append((now, tuple(int(x) for x in eng["pred_cell"])))
                                 done = "gave_up"
@@ -4293,8 +4259,25 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                     time.sleep(0.4)  # needs no gone frames (v32: per arm)
                                 here_l = quick_fix()
                                 posm.stop(here_l)
-                                loot_after(eng, here_l)
-                                looter_ = (eng.get("loot") or {}).get("looter")
+                                ends_ = [(h_.get("burst") or {}).get("end")
+                                         for h_ in eng.get("hovers", [])
+                                         if h_.get("burst")]  # fmt: skip
+                                if prm.get("false_dead_fix") and (
+                                        not prm.get("false_dead_ab")
+                                        or int(eng["k"]) % 2 == 1):  # fmt: skip
+                                    # v40 candidate (Batt 16:2x): a risky burst's dead call
+                                    # stands only on a clean death-cell verdict
+                                    eng["fd_arm"] = True
+                                    rs_ = (death_reason_now(eng, here_l)
+                                           if ends_ and ends_[-1] == "risky" else None)  # fmt: skip
+                                    if risky_unproven(ends_[-1] if ends_ else None, rs_):
+                                        eng["death"] = {"reason": rs_, "skipped": True}
+                                        ev({"kind": "fd_skipped", "k": int(eng["k"]),
+                                            "track": int(eng["track"]), "reason": rs_})  # fmt: skip
+                                        done = "skipped_risky"
+                                if done == "dead":
+                                    loot_after(eng, here_l)
+                                    looter_ = (eng.get("loot") or {}).get("looter")
                             k_done = int(eng["k"])
                             end_engagement(done)
                             ev({"kind": "hand_off", "after": done})

@@ -950,29 +950,23 @@ def test_v39_dead_probe_is_log_only() -> None:
     assert hf.PARAMS[39]["dead_probe"] and not hf.PARAMS[38].get("dead_probe")
 
 
-def test_v40_candidate_false_dead_verdict_and_inert_until_set() -> None:
-    """Batt 16:2x: after a RISKY last burst, a target still there is re-engaged (the same monster
-    under a new id) or skipped explicitly (a box near its predicted pixel), never "dead"; any
-    other burst end leaves the dead rule alone. Inert in v38 / v39 (no params)."""
-    prm = {"fd_reacq_age_s": 0.6, "fd_box_px": 45.0, "fd_frame_age_s": 0.8}
-    v = hf.false_dead_verdict
-    assert v("arrow", 0.1, 5.0, 0.2, prm) is None  # not after a risky burst: the rule stands
-    assert v(None, 0.1, 5.0, 0.2, prm) is None
-    assert v("risky", 0.3, None, None, prm) == "rebind"
-    assert v("risky", 0.9, 30.0, 0.5, prm) == "skipped"  # the new id too old; a box near
-    assert v("risky", None, 30.0, 0.9, prm) is None  # the frame too old
-    assert v("risky", None, 60.0, 0.2, prm) is None  # no box near: dead as before
-    assert v("risky", None, None, 0.2, prm) is None
+def test_v40_candidate_risky_dead_call_stands_only_on_a_clean_death_cell() -> None:
+    """Batt 16:2x: after a RISKY last burst the dead call stands only when the death-cell fix
+    says "ok"; otherwise the engagement ends "skipped_risky" -- no loot step, the track stays
+    selectable (re-engaged by the normal selection), never "dead". Inert in v38 / v39."""
+    u = hf.risky_unproven
+    assert u("risky", "gap_too_short") and u("risky", "still_visible") and u("risky", None)
+    assert not u("risky", "ok")
+    assert not u("arrow", "gap_too_short") and not u(None, None) and not u("gone", "unstable")
     for n in (38, 39):
         assert not hf.PARAMS[n].get("false_dead_fix")
     src = Path(hf.__file__).read_text()
-    blk = src[src.index('if prm.get("false_dead_fix") and (') :][:1800]
-    assert 'done = "skipped_risky"' in blk and "done = None" in blk and ".click(" not in blk
-    assert 'prm["fd_max_rebinds"]' in blk
-    st = src[src.index("def still_there(") : src.index("def walk_ok(")]
+    blk = src[src.index('if prm.get("false_dead_fix") and (') :][:1700]
+    assert 'done = "skipped_risky"' in blk and ".click(" not in blk
+    assert 'if done == "dead":\n' in blk and "loot_after(eng, here_l)" in blk  # no loot if skipped
+    dr = src[src.index("def death_reason_now(") :][:1400]
+    assert "loot1.death_of(rig, lt, here2).reason" in dr
     for bad in (".click(", "walk_click(", "agent.move(", "strike(", "done ="):
-        assert bad not in st, bad
+        assert bad not in dr[: dr.index("return str(")], bad
     ee = src[src.index("def end_engagement(") :][:500]
     assert 'if result != "skipped_risky":' in ee and "done_ids.add(" in ee
-    loot = src[src.index("looter_ = None\n") :][:200]
-    assert 'if done == "dead" and prm.get("loot"):' in loot  # no loot step for a skipped one
