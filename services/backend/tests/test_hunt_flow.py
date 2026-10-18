@@ -844,3 +844,32 @@ def test_v38_is_staged_with_blocks_and_its_own_memory() -> None:
     src = Path(hf.__file__).read_text()
     assert "seen_grid[fy_[in_], fx_[in_]] = now_" in src  # the camera footprint, whole run
     assert "if age_on(now_):" in src and 'elif prm.get("heading_cov"):' in src
+
+
+def test_the_sword_check_is_loot_only_on_untrained_species_maps_from_v38() -> None:
+    """Batt 2026-10-18, decision 2 option a: the cursor's SWORD at LOOT clicks only, with a
+    0.6 s wait, and only on a map holding species the detector never learned (a per-map flag)."""
+    p = hf.PARAMS[38]
+    assert p["cursor_sword_where"] == ("loot",) and p["cursor_sword_wait_s"] == 0.6
+    assert hf.UNTRAINED_SPECIES == {"prt_fild08": False, "prt_fild06": True}
+    for k in (0, 1, 2, 3):  # every engagement, no A/B
+        assert hf.sword_check_wanted(p, "prt_fild06", "loot", k)
+        assert not hf.sword_check_wanted(p, "prt_fild06", "walk", k)  # walk clicks unchanged
+        assert not hf.sword_check_wanted(p, "prt_fild08", "loot", k)  # inert on prt_fild08
+    assert not hf.sword_active(p, "prt_fild08") and hf.sword_active(p, "prt_fild06")
+    try:
+        hf.sword_active(p, "pay_fild03")  # unlisted: refused, someone decides the flag
+        raise AssertionError("an unlisted map must refuse")
+    except ValueError as e:
+        assert "UNTRAINED_SPECIES" in str(e)
+    # v37 as it ran (3.78): both kinds, odd k only, on any map
+    v37 = hf.PARAMS[37]
+    assert hf.sword_check_wanted(v37, "prt_fild08", "walk", 1)
+    assert hf.sword_check_wanted(v37, "prt_fild08", "loot", 1)
+    assert not hf.sword_check_wanted(v37, "prt_fild06", "loot", 2)
+    assert not hf.sword_active(hf.PARAMS[36], "prt_fild06")
+    src = Path(hf.__file__).read_text()
+    body = src[src.index("def run(") :]
+    # the refusal comes before any input (before the immunity read and the first grab)
+    assert body.index("sword_active(prm, MAP)") < body.index("f0.immunity_confirmed()")
+    assert 'sword_on(k, "walk")' in body and 'sword_on(int(eng_.get("k", 0)), "loot")' in body

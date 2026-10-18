@@ -49,6 +49,11 @@ import ro_agent as r  # noqa: E402
 
 RULE = "hunt-flow"
 MAP = "prt_fild08"  # `run --map` replaces it (the HELD-OUT map test, Batt 2026-10-17 21:5x)
+# Per map: does the field hold species the detector was never trained on? (Batt 2026-10-18,
+# decision 2 option a: the cursor's SWORD check at LOOT clicks only, and ONLY on such maps; 3.78:
+# on prt_fild06 the untrained Thief Bugs were 21 of 29 non-target attacks, from loot clicks.) A map
+# missing here refuses a run whose params ask for the check by map (fail closed: someone decides).
+UNTRAINED_SPECIES = {"prt_fild08": False, "prt_fild06": True}
 START = (268, 107)
 OUT = Path("/dev/shm/poring-lab-tmp/hunt-flow")  # logs (small)
 REC_ROOT = Path("/mnt/poring-lab-datasets/hunt-recordings")  # the 5 Hz frames (NAS, q80)
@@ -245,7 +250,7 @@ VERSIONS = {
     "interleaved per engagement",
     38: "THE AGE-WEIGHTED SEARCH HEADING: each heading scored by the ground it brings into our own "
     "view, weighted by how long since we last saw it, per walking second (the search study); "
-    "10-min blocks",
+    "10-min blocks. Base: the cursor's SWORD at loot clicks on untrained-species maps only",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -415,11 +420,45 @@ PARAMS[37] = {**PARAMS[36], "loot_retry": False, "loot_retry_ab": False, "cursor
 # 38 = THE AGE-WEIGHTED SEARCH HEADING (the search study's proposal, competition.md "Search study";
 # STAGED, not pre-registered: it needs >= 4 run-hours and Batt's go). Interleaved in 10-min blocks
 # within each run (the field drifts between runs). Its base is set at its pre-registration
+# + Batt's decision 2, option a (2026-10-18), in the base of every version from here: the cursor's
+# SWORD check at LOOT clicks only (walk clicks unchanged), with a 0.6 s wait (3.78: the client
+# redraws its cursor ~0.35-0.4 s in while the camera scrolls), on every engagement, ONLY on a map
+# UNTRAINED_SPECIES flags (prt_fild06 yes, prt_fild08 no: inert there). Loot retry staged, not in
+# (Batt's decision 1: the loot gain is not shown and each step costs +0.39 s)
 PARAMS[38] = {**PARAMS[36], "loot_retry": False, "loot_retry_ab": False, "heading_age": True,
-              "heading_age_ab": True, "heading_age_block_min": 10.0}  # fmt: skip
+              "heading_age_ab": True, "heading_age_block_min": 10.0,
+              "cursor_sword": True, "cursor_sword_ab": False, "cursor_sword_where": ("loot",),
+              "cursor_sword_maps": "untrained", "cursor_sword_wait_s": 0.6}  # fmt: skip
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
+
+
+def untrained_map(map_name: str) -> bool:
+    """UNTRAINED_SPECIES for ``map_name``; a map it does not list raises (fail closed)."""
+    if map_name not in UNTRAINED_SPECIES:
+        raise ValueError(f"{map_name}: not in UNTRAINED_SPECIES (does it hold species the "
+                         "detector never learned? decide and add it)")  # fmt: skip
+    return UNTRAINED_SPECIES[map_name]
+
+
+def sword_active(prm: dict[str, Any], map_name: str) -> bool:
+    """PURE: is the cursor's SWORD check used at all in this run? v37: on any map. From v38
+    (``cursor_sword_maps`` "untrained"): only on a map UNTRAINED_SPECIES flags."""
+    if not prm.get("cursor_sword"):
+        return False
+    return prm.get("cursor_sword_maps") != "untrained" or untrained_map(map_name)
+
+
+def sword_check_wanted(prm: dict[str, Any], map_name: str, where: str, k: int) -> bool:
+    """PURE: does the ``where`` click ("loot" | "walk", the latter only while moving) of
+    engagement ``k`` get the SWORD check? v37: both kinds, odd k when A/B. From v38 (Batt's
+    decision 2, option a): loot only, every engagement, on flagged maps only."""
+    if not sword_active(prm, map_name):
+        return False
+    if where not in prm.get("cursor_sword_where", ("loot", "walk")):
+        return False
+    return not prm.get("cursor_sword_ab") or k % 2 == 1
 
 
 def cheb(a: Sequence[float], b: Sequence[float]) -> float:
@@ -1752,6 +1791,10 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
     if version not in VERSIONS:
         raise SystemExit(f"unknown version {version}")
     prm = PARAMS[version]
+    try:
+        sword_active(prm, MAP)  # an unlisted map refuses before any input (UNTRAINED_SPECIES)
+    except ValueError as e:
+        raise f0.FarmStop(f"hunt-flow refused: {e}") from None
     ok_imm, why_imm = f0.immunity_confirmed()
     if not ok_imm:
         raise f0.FarmStop(f"hunt-flow refused: the GM is not confirmed immune ({why_imm})")
@@ -2109,17 +2152,17 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
             # v37 (Batt 2026-10-18, decision 2 option b): the client's own SWORD cursor checked at
             # every loot click and every walk click made while the GM moves -- a unit check that
             # does not need the detector to know the species (cursor_sword)
+            # From v38 (Batt's decision 2, option a): loot clicks only, on flagged maps only
             sword_refs: Any = None
-            if prm.get("cursor_sword"):
+            if sword_active(prm, MAP):
                 import cursor_sword as csw_
 
                 sword_refs = csw_.SwordRefs.load()
 
-            def sword_on(k_: int) -> bool:
-                """v37: the cursor check's arm for engagement ``k_`` (odd k when A/B)."""
-                return sword_refs is not None and (
-                    not prm.get("cursor_sword_ab") or k_ % 2 == 1
-                )  # fmt: skip
+            def sword_on(k_: int, where: str) -> bool:
+                """The cursor check for a ``where`` click of engagement ``k_``
+                (sword_check_wanted)."""
+                return sword_refs is not None and sword_check_wanted(prm, MAP, where, k_)
 
             def sword_verdict(u_: float, v_: float, where: str) -> str:
                 """v37: the pointer to (u_, v_) in two motions, the cursor read there: "clear"
@@ -2187,7 +2230,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     t_c = int(got["t_click"])
                     click_from, click_cell = seg[0], to
                 else:
-                    sw_ = sword_on(k)
+                    sw_ = sword_on(k, "walk")
                     if sw_:  # v37: no walk click where the client draws the SWORD
                         vd_ = sword_verdict(u, v, "walk")
                         if vd_ != "clear":
@@ -2199,7 +2242,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 ptr[0] = (u, v)
                 if prm.get("ptr_rest_ui"):  # v26: the pointer never rests on the world
                     rest_ptr()
-                sw_log = {"sw": sword_on(k)} if sword_refs is not None else {}
+                sw_log = {"sw": sword_on(k, "walk")} if sword_refs is not None else {}
                 click_log({"t": t_c, "u": round(u, 1), "v": round(v, 1), "kind": "walk",
                            "gate": gate, "to": list(to), "why": why, **sw_log,
                            **(extra or {})})  # fmt: skip
@@ -2521,7 +2564,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             steps_.append(rt_)
                             out["retry_queued"] = out.get("retry_queued", 0) + 1
                         continue
-                    sw_l = sword_on(int(eng_.get("k", 0)))
+                    sw_l = sword_on(int(eng_.get("k", 0)), "loot")
                     if sw_l:  # v37: no loot click where the client draws the SWORD
                         vd_l = sword_verdict(u_l, v_l, "loot")
                         if vd_l != "clear":
