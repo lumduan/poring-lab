@@ -9863,7 +9863,7 @@ candidate for a confirmation run, and only Batt adopts it.
   - Landing 104 / 144 = 72.2 %, 114.8 kills / h, loot 79 / 132 = 59.8 %.
   - A sparse field: 11.8 seen per 10 min (whole run), reversals 7.55 / min.
 
-**CONFIRMATION READ (judged 2026-10-18 10:1x; run 1 + run 2 pooled; the SAME five predictions;
+**CONFIRMATION READ (judged 2026-10-18 10:12, 5494c40; run 1 + run 2 pooled; the SAME five predictions;
 run 1's verdict above stands as recorded):**
 
 | per parity (`arm_judge.py retry`) | retry, pooled | none, pooled | run 2 alone (retry / none) |
@@ -9889,6 +9889,71 @@ run 1's verdict above stands as recorded):**
   sides.
 - Run 1's verdict (FAIL) stands as recorded. This pooled read is labelled a confirmation.
   ADOPTION IS BATT'S CALL.
+
+### 3.78 hunt-flow@37: THE CURSOR'S SWORD at loot and moving-walk click points, interleaved per engagement (pre-registered 2026-10-18 10:2x ICT, the commit time below, BEFORE its runs; Batt's decision 2, option b)
+
+**Batt (2026-10-18):** "a detector-independent check at loot and walk click points: the client's
+own cursor shows the SWORD over ANY monster. Use the two-motion nudge so the cursor updates fast;
+if the cursor at the click point is SWORD on a cell we didn't intend to strike, don't click there.
+Measure its time cost and unknown-species hits on prt_fild06 (held-out rules) and prt_fild08."
+
+**Why:** on prt_fild06 (3.76) the detector had no box for the species it never learned. Of the
+29 non-target attack requests, 21 came from loot clicks and 5 from walk clicks: their unit checks
+see only detector boxes.
+
+**The ONE main change (`cursor_sword`, 4325f49; in hunt_flow b53f18b):**
+- Before every loot click and every walk click made while the GM moves, the pointer goes to the
+  click point in two motions. The client's own cursor there is read from one 64 x 64 grab per
+  read, 30 ms apart, for up to 0.35 s.
+- The read is a background-free colour recall against the SWORD / WALK / PICKUP references.
+  - SWORD on any read: no click.
+  - A drawn arrow or hand: CLEAR, then the click at the same point.
+  - Nothing decided by 0.35 s: UNKNOWN, no click (fail closed).
+- Strike clicks are unchanged (they intend the SWORD). Walk clicks from a standstill keep the
+  robust2 gate.
+- **Interleaved per engagement:** odd k = the check on, even k = off. Every loot and moving walk
+  click logs its arm (`sw`), so each non-target attack request is assigned to the arm of the click
+  just before it (`arm_judge.py sword`, `apart_why.py`).
+
+**Evidence before the runs:**
+- Offline, leave-one-out on the 645 references: all 26 SWORD crops read sword; no other crop read
+  sword; the hand read clear 9 / 9; walk read clear 468 / 491 (the rest unknown).
+- Live positive case (10:13-10:16, moves only, `calib_auto.py`, GM lines through the UI gate):
+  - on a pink blob (a Poring) 9 / 10 read SWORD, first at 195-309 ms. The 10th read clear: most
+    likely not a Poring (a pink drop shows the hand), but unverified: no frame was saved;
+  - open ground read clear 10 / 10, first at 196-252 ms, never sword.
+- Not tested before the runs: a read while the camera scrolls. The runs' own unknown share
+  measures it.
+
+**Base:** v36's adopted base.
+- The loot retry is NOT in it: 3.77 run 1 FAILED; its pooled confirmation passed, but adoption is
+  Batt's.
+- The stale-box species check for all, paced input, the plain 3 x 3 with the corpse fix, v15's
+  dead rule.
+- The hunting state is rebuilt by the runner itself (`gm_state.ensure_hunting`).
+
+**Runs:**
+- **Run A: prt_fild06**, held-out rules (3.76): 60 min, seed 20272501.
+  - Before it: a manual `@warp prt_fild06 175 184` and a judged screenshot there.
+  - Monitor: `hardbar_live.py watch 37 --targets 1002,1063,1008 --apart 1048,1051,1080`.
+- **Run B: prt_fild08**: 60 min, seed 20272601, monitor `watch 37`.
+- Nice 10, the detector on the CPU, the hunting state kept between the runs.
+
+**Prediction, written before the runs (per arm; `arm_judge.py sword`):**
+- **Primary (prt_fild06, safety):** non-target attack requests answering a loot or moving walk
+  click, sword arm <= 25 % of the none arm's count (and <= 4).
+- **Time cost (each map):**
+  - the check's ms p50 <= 300 for loot and walk;
+  - loot step p50 sword <= none + 2.0 s;
+  - the share of checks that end UNKNOWN <= 15 %.
+- **Still hunting:** landing sword >= none - 5 points; loot picked / fell sword >= none - 10
+  points (each map).
+- **prt_fild08:** non-target (Creamy) attack requests from loot / walk clicks, sword <= none.
+- **Reported:** kills / h and kills per sighting per map; moving walk clicks per minute per arm;
+  the check's precision offline: its SWORD verdicts with a mob (any job) within 1 cell of the
+  point's cell (packets).
+- **Hard bars:** zero NPC contact and zero map change. On prt_fild08 zero non-Creamy non-target
+  hits. On prt_fild06 unknown species are counted apart (3.76's rule).
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
