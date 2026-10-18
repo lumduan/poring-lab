@@ -256,6 +256,10 @@ VERSIONS = {
     "always finds a point on the route; only the gates refuse), and the standstill fallback steps "
     "from the route point nearest the GM (the conversion study: the GM stood while closing in); "
     "interleaved per engagement (odd k)",
+    40: "THE FALSE-DEAD FIX: after a RISKY last burst the dead call stands only when the "
+    "death-cell fix says ok; otherwise the engagement ends skipped_risky (no loot step, the "
+    "track stays selectable: the normal selection re-engages it), never dead; interleaved per "
+    "engagement (odd k). Base: v38's (v39 not adopted, 3.80)",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -445,6 +449,14 @@ PARAMS[38] = {**PARAMS[36], "loot_retry": False, "loot_retry_ab": False, "headin
 # (v38's age heading only if v38 is adopted by its rule, switched in a commit before run 1)
 PARAMS[39] = {**PARAMS[38], "heading_age": False, "heading_age_ab": False, "steer_tail": True,
               "steer_tail_ab": True, "dead_probe": True}  # fmt: skip
+# 40 = THE FALSE-DEAD FIX (Batt 16:2x: "a burst ending risky must not let the dead rule abandon a
+# target that is still visible/alive ... mark it skipped: risky explicitly, never dead"), on the
+# death-cell verdict (3.81: after a risky last burst "ok" = 93 real / 2 alive, other = 93 / 71 on 6
+# banked runs; held out on v39 runs 2-3: 20 / 2 vs 24 / 21). Pre-registered as 3.81 (b871eff);
+# interleaved per engagement (odd k). Its base (3.81): v39 NOT adopted (3.80, 7dd9524) -> v38's
+# base, the steer's old picker (no tail); the log-only dead_probe stays on
+PARAMS[40] = {**PARAMS[39], "steer_tail": False, "steer_tail_ab": False, "false_dead_fix": True,
+              "false_dead_ab": True}  # fmt: skip
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------

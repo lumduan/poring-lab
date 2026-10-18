@@ -960,6 +960,13 @@ def test_v40_candidate_risky_dead_call_stands_only_on_a_clean_death_cell() -> No
     assert not u("arrow", "gap_too_short") and not u(None, None) and not u("gone", "unstable")
     for n in (38, 39):
         assert not hf.PARAMS[n].get("false_dead_fix")
+    # v40 (3.81, base set by 3.80's verdict 7dd9524: v39 NOT adopted -> the old picker)
+    p = hf.PARAMS[40]
+    assert p["false_dead_fix"] and p["false_dead_ab"] and p["dead_probe"] and 40 in hf.VERSIONS
+    assert not p["steer_tail"] and not p["steer_tail_ab"] and not p["heading_age"]
+    moved = ("false_dead_fix", "false_dead_ab", "steer_tail", "steer_tail_ab")
+    same = {k: v for k, v in p.items() if k not in moved}
+    assert same == {k: v for k, v in hf.PARAMS[39].items() if k not in moved}
     src = Path(hf.__file__).read_text()
     blk = src[src.index('if prm.get("false_dead_fix") and (') :][:1700]
     assert 'done = "skipped_risky"' in blk and ".click(" not in blk
@@ -991,7 +998,7 @@ def test_v41_candidate_walkers_struck_from_further_only_when_set() -> None:
     assert hf.strike_range(walker, on) == 3  # no k: the base arm
     assert hf.strike_range(walker, {**on, "strike_walking_ab": False}, 2) == 7
     assert hf.strike_range(still, on, 2) == 7
-    for n in (38, 39):
+    for n in (38, 39, 40):
         assert not hf.PARAMS[n].get("strike_cells_walking")
     src = Path(hf.__file__).read_text()
     assert src.count("strike_range(target, prm, k)") == 1 and "target, prm, k) <" in src
