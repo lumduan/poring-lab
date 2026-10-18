@@ -10632,7 +10632,7 @@ on for all (no blocks), switched in a commit before run 1 and recorded in this r
 - **Runs 2-4 are QUEUED:** `hunt_chain.py --version 40 --seeds 20290202,20290303,20290404` started
   detached at 02:27:00 (the control file says "run"); it waits for run 1 to end.
 
-### 3.82 hunt-flow@41: WALKING TARGETS STRUCK FROM FURTHER, interleaved per engagement (pre-registered 2026-10-19, the commit time below, BEFORE its runs; Batt's night plan 22:2x, item 3: "the next top cause from the conversion study (the 0.5 s later turn, the walk into range, arm C fallbacks / 'species unsure', click -> hit), each as its own version. Re-rank after every verdict")
+### 3.82 hunt-flow@41: WALKING TARGETS STRUCK FROM FURTHER, interleaved per engagement (pre-registered 2026-10-19 02:31 ICT, the commit time 61cf81d, BEFORE its runs; Batt's night plan 22:2x, item 3: "the next top cause from the conversion study (the 0.5 s later turn, the walk into range, arm C fallbacks / 'species unsure', click -> hit), each as its own version. Re-rank after every verdict")
 
 **Why, re-ranked after v39's verdict (3.80, 02:20):**
 - **The approach (+3.22 s per kill vs Batt) is still first.** But v39 showed its remaining cause
