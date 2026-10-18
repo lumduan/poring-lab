@@ -10045,7 +10045,7 @@ prt_fild06, off for prt_fild08). Walk clicks unchanged."
   loot check's UNKNOWN share well under 56 % (the client drew its cursor at ~0.35-0.4 s while the
   camera scrolled), and held-out non-target attacks from loot clicks <= 4 an hour.
 
-### 3.79 hunt-flow@38: THE AGE-WEIGHTED SEARCH HEADING, interleaved in 10-min blocks (pre-registered 2026-10-18, the commit time of this entry, BEFORE its runs; Batt's go 13:29: "Conversion first, v38 after ... run v38 for >= 4 run-hours interleaved")
+### 3.79 hunt-flow@38: THE AGE-WEIGHTED SEARCH HEADING, interleaved in 10-min blocks (pre-registered 2026-10-18 13:46 ICT, the commit time c46dc16, BEFORE its runs; Batt's go 13:29: "Conversion first, v38 after ... run v38 for >= 4 run-hours interleaved")
 
 **Why (the search study, competition.md "Search study"):**
 - 39 % of the bot's per-kill gap to Batt is search speed. The bot re-views ground it has already
