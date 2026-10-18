@@ -10692,8 +10692,45 @@ on for all (no blocks), switched in a commit before run 1 and recorded in this r
   - landing within 5 s: 188 / 250 = 75.2 % vs 177 / 251 = 70.5 % (the guard: >= base - 5);
   - skipped 38 (21 of them real kills); a skipped target re-engaged and killed within 20 s:
     73 % of those alive at the end (base 64 %).
+- **Run 4 ended** on its time box (3600.5 s; the chain logged rc 0 and "chain done" at 06:32:57),
+  with 112 engagements: 102 dead, 9 skipped_risky, 1 gave up.
+  - Standard row: landing 82 / 111 = 73.9 % (65.0-81.2), 94.0 kills / h, 3.36 per sighting,
+    38.3 s per kill, sight 28.0 / 10 min (the night's thinnest field: 1,996 s searching), free
+    targets attacked <= 10 s 38 % (n 137), steer moving 38 %, seen -> click 3.23 s,
+    death -> next 0.74 s.
+  - Dead calls without a real death 23 / 102 = 22.5 %; loot 68 / 106 = 64 % (18 to looters);
+    reversals 5.92 / min. Creamy 2 hits (2 requests: 0.93 s after a search walk click, 1.54 s
+    after a strike-burst click). Hard bars 0 / 0 / 0.
+- **End state (06:38-06:41):** `end_state.py` (@resetstat + the standard restore): Base Lv 1 /
+  Job Lv 1, HP 40 / 40, weight 466 / 2030, `fixed: true`; the chat input it left open closed by
+  `bench.close_chat`; route_previewd stopped; /health ASSIST, no lease, bot_agents []; no
+  runner, monitor, chain or detector process.
 
-### 3.82 hunt-flow@41: WALKING TARGETS STRUCK FROM FURTHER, interleaved per engagement (pre-registered 2026-10-19 02:31 ICT, the commit time 61cf81d, BEFORE its runs; Batt's night plan 22:2x, item 3: "the next top cause from the conversion study (the 0.5 s later turn, the walk into range, arm C fallbacks / 'species unsure', click -> hit), each as its own version. Re-rank after every verdict")
+**RESULT (read 06:39, 4 runs pooled, `arm_judge.py falsedead`; v40-final.py's checks):**
+
+| # | check | fix | base | bar | verdict |
+|---|---|---|---|---|---|
+| 1 | risky-burst dead calls with the target alive (primary) | 2 | 28 | fix <= 0.25 x base | pass (0.07 x) |
+| 2 | loot at our kills | 156 / 286 = 0.545 | 163 / 293 = 0.556 | >= base - 8 pts | pass (-1.1) |
+| 3 | landing within 5 s | 231 / 306 = 75.5 % | 216 / 307 = 70.4 % | >= base - 5 pts | pass (+5.1) |
+| 4 | hard bars (4 runs) | 0 / 0 / 0 | | zero | pass |
+
+- **Reported, not deciding:**
+  - risky-ended dead calls 75 vs 90; skipped 47, of them 23 real kills (as expected: the loot
+    guard's -1.1 is that cost);
+  - targets alive at the engagement's end, killed by us within 20 s: 17 / 22 = 77 % vs
+    16 / 28 = 57 %;
+  - last click -> our kill of an alive target: 11.5 vs 12.7 s (n 18 each; not resolvable under
+    ~3 s, as measured before);
+  - dead calls without a real death per run: 23.0, 24.2, 29.4, 22.5 % (v39's: 21.3-27.5 %; the
+    fix covers odd k only, and this column counts every cause, "no unit" and "other killed"
+    included);
+  - kills / h 140.9, 152.9, 121.9, 94.0 (mean 127.4; v39's 151.1; sight 35.0, 33.5, 31.0, 28.0;
+    context only, not interleaved: run 4's field was the thinnest of the night);
+  - gave up 4, 7, 2, 1 (v39: 0-2), none on a re-engaged skipped track in run 1.
+- **Verdict: ADOPTED** (decision rule: 1-4 pass). The false-dead fix joins the base for every
+  engagement (`false_dead_ab` False) from the next version on: 3.82's base.
+ hunt-flow@41: WALKING TARGETS STRUCK FROM FURTHER, interleaved per engagement (pre-registered 2026-10-19 02:31 ICT, the commit time 61cf81d, BEFORE its runs; Batt's night plan 22:2x, item 3: "the next top cause from the conversion study (the 0.5 s later turn, the walk into range, arm C fallbacks / 'species unsure', click -> hit), each as its own version. Re-rank after every verdict")
 
 **Why, re-ranked after v39's verdict (3.80, 02:20):**
 - **The approach (+3.22 s per kill vs Batt) is still first.** But v39 showed its remaining cause

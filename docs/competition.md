@@ -986,3 +986,22 @@ tail arm changed nothing on the primary):
 3. Within 3 cells -> click, +0.50 (species-unsure fallbacks, empty tag reads).
 4. Dead calls without a real death, 24.5 % of dead calls -> **v40, the false-dead fix** (3.81),
    running since 02:26:49.
+
+**v40 (the false-dead fix, 3.81): ADOPTED** (pooled read 06:39):
+- After a risky last burst, dead calls with the target still alive: fix 2 vs base 28 (needed
+  <= 0.25 x).
+- Loot at our kills 0.545 vs 0.556 (the guard -8 passed, -1.1); landing 75.5 vs 70.4 %.
+- Hard bars 0 / 0 / 0 in all 4 runs. 47 engagements skipped as "skipped_risky", 23 of them real
+  kills.
+- The fix joins the base for every engagement from v41 (3.82) on.
+- Kills / h 140.9, 152.9, 121.9, 94.0 (mean 127.4; sight 35.0 -> 28.0 / 10 min over the night).
+
+**End of the night (06:41):** nothing runs on the client; the GM is at the standard Lv 1 state;
+route_previewd is stopped; /health bot_agents [].
+
+**Decisions for Batt:**
+1. The 120-px walk guard near the GM blocks the approach's remaining fix (v39). Loosen it for
+   steer clicks only, or keep it: v39 runs 3-4 had 12 Creamy hits through walk / loot / strike
+   clicks with the guard ON.
+2. v41 (3.82, walkers struck from 7 cells) is pre-registered on v40's base; it needs a 4-run-hour
+   block.
