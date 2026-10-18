@@ -23,6 +23,10 @@ engagements.json, clicks.jsonl, and flow_judge.json -- run `flow_judge.bot(sid)`
                                         kills / h, kills per sighting, the search (search_study's
                                         ruler: no-target time, encounters per no-target minute,
                                         re-swept ground), landing, reversals; per-run differences
+    arm_judge.py approach SID [SID ...] v39: the steer's route tail (odd k) vs none (even k): the
+                                        GM's moving share while steering, its stops, steer s per
+                                        engagement, the approach (steer start -> first click /
+                                        -> within 3 cells), landing
 
 Packets are offline ground truth here (ADR-0007); nothing in this module runs during play.
 """
@@ -581,6 +585,146 @@ def heading_table(sids: Iterable[str], spans_of: Any = None) -> dict[str, Any]:
     return out
 
 
+def mode_spans(events: Sequence[Mapping[str, Any]], mode: str, w0: int,
+               w1: int) -> list[tuple[int, int]]:  # fmt: skip
+    """PURE: the [a, b) spans the runner spent in ``mode`` (its ``mode`` events; a span ends at
+    the next one, or at w1), clipped to [w0, w1); empty spans dropped."""
+    ms = sorted((int(e["t_ns"]), str(e["mode"])) for e in events if e.get("kind") == "mode")
+    out = []
+    for i, (t, m) in enumerate(ms):
+        if m != mode:
+            continue
+        a, b = max(t, w0), min(ms[i + 1][0] if i + 1 < len(ms) else w1, w1)
+        if b > a:
+            out.append((a, b))
+    return out
+
+
+def k_at(first_clicks: Sequence[int], t: int) -> int:
+    """PURE: the engagement the bot works toward at t = the engagements created (their first
+    clicks, sorted) before t. The runner creates engagement k at its first attack click and the
+    engaged branch never steers, so every steer belongs to the next engagement's k."""
+    return bisect.bisect_left(first_clicks, t)
+
+
+def approach_table(sids: Iterable[str], on_of: Any = None,
+                   sample_s: float = 0.1) -> dict[str, Any]:  # fmt: skip
+    """v39 per arm ("tail" = odd k: the steer's walk click may take the route's tail, the
+    standstill fallback steps from the nearest route point; "base" = even k), from packets
+    (search_study.Field) on flow_judge's window:
+    - STEER time (the runner's ``mode`` spans), each span by ``k_at`` its start: seconds, the
+      GM's MOVING share (``sample_s`` samples), its stops (moving -> standing) per steer minute,
+      steer seconds per engagement;
+    - per engagement: the APPROACH = the start of the last steer span after the previous
+      engagement's end -> its first click, and -> our GM within 3 cells (Chebyshev, packet
+      cells) of the attacked gid (flow_judge's join), with the moving share over that stretch;
+      landing (flow_judge's why == "hit") and kills.
+    ``on_of(k)`` replaces the arm rule (a null split of older runs). Per run: the arms'
+    relative differences (tail - base) / mean."""
+    import conversion_phases as cp
+    import search_study as ss
+
+    on = on_of or (lambda k_: k_ % 2 == 1)
+    dt = int(sample_s * NS)
+    arms = ("tail", "base")
+    tot: dict[str, Counter[str]] = {arm: Counter() for arm in arms}
+    lst: dict[str, dict[str, list[float]]] = {arm: defaultdict(list) for arm in arms}
+    per_run: dict[str, Any] = {}
+    for sid in sids:
+        sess = ss.load_session(sid)
+        fld = ss.Field(sess.events)
+        engs = sorted(sess.engagements, key=lambda x: int(x["t_first_click"]))
+        fcs = [int(x["t_first_click"]) for x in engs]
+        rows = {int(r_["k"]): r_ for r_ in json.loads(
+            (DEMO / sid / "flow_judge.json").read_text())["engagements_w"]["rows"]}  # fmt: skip
+        spans = mode_spans(sess.bot_events, "steer", sess.t0, sess.w1)
+        rt: dict[str, Counter[str]] = {arm: Counter() for arm in arms}
+        rl: dict[str, dict[str, list[float]]] = {arm: defaultdict(list) for arm in arms}
+        for a, b in spans:
+            arm = "tail" if on(k_at(fcs, a)) else "base"
+            mv = [fld.is_moving(t) for t in range(a, b, dt)]
+            for c in (rt[arm], tot[arm]):
+                c["steer_ns"] += b - a
+                c["samples"] += len(mv)
+                c["moving"] += sum(mv)
+                c["stops"] += sum(1 for i in range(1, len(mv)) if mv[i - 1] and not mv[i])
+        for i, x in enumerate(engs):
+            fc, k = fcs[i], int(x["k"])
+            if not sess.t0 <= fc < sess.w1:
+                continue
+            arm = "tail" if on(k) else "base"
+            prev = int(engs[i - 1].get("t_end") or fcs[i - 1]) if i else sess.t0
+            row = rows.get(k) or {}
+            got: dict[str, float] = {}
+            st = [a for a, _b in spans if prev <= a < fc]
+            if st:
+                s0 = st[-1]
+                got["approach_s"] = (fc - s0) / NS
+                g = row.get("gid")
+                t3 = (None if g is None
+                      else cp.first_within(fld, int(g), s0, fc + 5 * NS, 3))  # fmt: skip
+                if t3 is not None:
+                    got["to3_s"] = (t3 - s0) / NS
+                    if t3 - s0 >= dt:
+                        ts_ = range(s0, t3, dt)
+                        got["moving_to3"] = sum(fld.is_moving(t) for t in ts_) / len(ts_)
+            for c in (rt[arm], tot[arm]):
+                c["eng"] += 1
+                c["landed"] += row.get("why") == "hit"
+                c["kills"] += x.get("result") == "dead"
+                c["no_steer"] += not st
+            for name, v in got.items():
+                rl[arm][name].append(v)
+                lst[arm][name].append(v)
+        per_run[sid] = _approach_rel(_approach_arms(rt, rl))
+    out: dict[str, Any] = {"per_run": per_run, **_approach_arms(tot, lst)}
+    return out
+
+
+def _approach_arms(tot: Mapping[str, Counter[str]],
+                   lst: Mapping[str, Mapping[str, list[float]]]) -> dict[str, Any]:  # fmt: skip
+    out: dict[str, Any] = {}
+    for arm, c in tot.items():
+        if not c["eng"] and not c["samples"]:
+            continue
+        steer_min = c["steer_ns"] / NS / 60
+        ls = lst[arm]
+
+        def mean(v: Sequence[float]) -> float | None:
+            return round(sum(v) / len(v), 3) if v else None
+
+        out[arm] = {
+            "steer_min": round(steer_min, 1),
+            "steer_moving_share": round(c["moving"] / c["samples"], 3) if c["samples"] else None,
+            "stops_per_steer_min": round(c["stops"] / steer_min, 2) if steer_min else None,
+            "steer_s_per_engagement": (round(c["steer_ns"] / NS / c["eng"], 2)
+                                       if c["eng"] else None),
+            "engagements": c["eng"], "kills": c["kills"], "no_steer": c["no_steer"],
+            "landing": f"{c['landed']}/{c['eng']}",
+            "landing_share": round(c["landed"] / c["eng"], 3) if c["eng"] else None,
+            "approach_s_p50": q(ls.get("approach_s", []), 0.5),
+            "approach_s_mean": mean(ls.get("approach_s", [])),
+            "to3_n": len(ls.get("to3_s", [])),
+            "to3_s_p50": q(ls.get("to3_s", []), 0.5),
+            "to3_s_mean": mean(ls.get("to3_s", [])),
+            "moving_to3_mean": mean(ls.get("moving_to3", [])),
+        }  # fmt: skip
+    return out
+
+
+def _approach_rel(arms: dict[str, Any]) -> dict[str, Any]:
+    """Per run: the arms and (tail - base) / their mean for the deciding measures."""
+    out: dict[str, Any] = {"arms": arms}
+    t, b = arms.get("tail"), arms.get("base")
+    if t and b:
+        for name in ("steer_moving_share", "steer_s_per_engagement", "approach_s_mean",
+                     "to3_s_mean", "landing_share"):  # fmt: skip
+            x, y = t.get(name), b.get(name)
+            if x is not None and y is not None and x + y:
+                out[f"rel_{name}"] = round((x - y) / ((x + y) / 2), 3)
+    return out
+
+
 def species_table(sessions: Iterable[dict[str, Any]]) -> dict[str, Any]:
     """v35: per engagement parity (odd k = the species check on the box's OWN frame, even k =
     the fresh crop at the stale box): arm C's eligibility (the ``abc`` events: effective arm,
@@ -776,11 +920,15 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)  # fmt: skip
     ap.add_argument("what", choices=("strike", "dead", "loot", "stray", "blocks", "species",
-                                     "retry", "sword", "sword-precision", "heading"))  # fmt: skip
+                                     "retry", "sword", "sword-precision", "heading",
+                                     "approach"))  # fmt: skip
     ap.add_argument("sessions", nargs="+")
     a = ap.parse_args()
     if a.what == "heading":  # its own loader (search_study's windows and field)
         print(json.dumps(heading_table(a.sessions), indent=1, default=str))
+        return 0
+    if a.what == "approach":  # search_study's loader too
+        print(json.dumps(approach_table(a.sessions), indent=1, default=str))
         return 0
     sessions = [load(s) for s in a.sessions]
     if a.what == "sword-precision":

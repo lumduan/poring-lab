@@ -913,3 +913,5 @@ def test_v39_the_steer_may_click_the_routes_tail() -> None:
     assert src.count("tail=steer_tail_on(k)") == 1
     fb = src[src.index("v39: from the route point nearest the GM") :][:600]
     assert "if steer_tail_on(k) else 0" in fb and "step_target(ap, i0_, pos" in fb
+    # the tail arm's cont_fail counts go apart; without the tail the keys are v38's
+    assert 'cont_fail_note(why + ("+tail" if tail else ""), fails_, len(route))' in src

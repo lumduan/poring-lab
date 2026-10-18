@@ -139,6 +139,7 @@ def test_every_table_is_reachable_from_the_command_line() -> None:
     for name in ("strike", "dead", "loot", "stray", "blocks", "species", "retry", "sword"):
         assert f'"{name}": {name}_table' in src
     assert '"heading"' in src and "heading_table(a.sessions)" in src  # v38: its own loader
+    assert '"approach"' in src and "approach_table(a.sessions)" in src  # v39: the same
 
 
 def test_retry_table_splits_a_real_run_without_losing_an_item() -> None:
@@ -263,3 +264,43 @@ def test_heading_table_splits_a_real_run_without_losing_a_kill() -> None:
     rows = out["per_run"][sid]["block_rows"]
     assert [r["block"] for r in rows] == [0, 1, 2, 3, 4, 5]
     assert [r["arm"] for r in rows] == ["cov", "age"] * 3
+
+
+def test_mode_spans_and_the_engagement_a_moment_belongs_to() -> None:
+    """v39's arm of a steer span = the k the runner holds then: the engagements created (first
+    clicks) before it. Spans end at the next mode event, clipped to the judged window."""
+    ev = [{"t_ns": 10, "kind": "mode", "mode": "search"},
+          {"t_ns": 20, "kind": "mode", "mode": "steer"},
+          {"t_ns": 25, "kind": "walk_click"},
+          {"t_ns": 30, "kind": "mode", "mode": "engaged"},
+          {"t_ns": 40, "kind": "mode", "mode": "steer"}]  # fmt: skip
+    assert aj.mode_spans(ev, "steer", 0, 100) == [(20, 30), (40, 100)]
+    assert aj.mode_spans(ev, "steer", 22, 50) == [(22, 30), (40, 50)]
+    assert aj.mode_spans(ev, "steer", 31, 39) == []
+    fcs = [28, 55]  # engagement 0's first click at 28, engagement 1's at 55
+    assert [aj.k_at(fcs, t) for t in (20, 28, 29, 40, 55, 60)] == [0, 0, 1, 1, 1, 2]
+
+
+def test_approach_table_splits_a_real_run_without_losing_an_engagement() -> None:
+    """The v39 judge on a REAL session (v38 run 1, no per-engagement change: a parity null):
+    the arms hold every engagement in the judged window and every steer second; the measures
+    come out for both arms."""
+    import search_study as ss
+
+    sid = "20261018T141820-demo-hunt-flow38"
+    if not (aj.DEMO / sid / "flow_judge.json").exists():
+        pytest.skip("the v38 session is not banked on this host")
+    out = aj.approach_table([sid])
+    sess = ss.load_session(sid)
+    n_eng = sum(sess.t0 <= int(x["t_first_click"]) < sess.w1 for x in sess.engagements)
+    assert out["tail"]["engagements"] + out["base"]["engagements"] == n_eng == 151
+    steer_s = sum(b - a for a, b in aj.mode_spans(sess.bot_events, "steer", sess.t0,
+                                                  sess.w1)) / S  # fmt: skip
+    assert abs(out["tail"]["steer_min"] + out["base"]["steer_min"] - steer_s / 60) < 0.2
+    for arm in ("tail", "base"):
+        o = out[arm]
+        assert 0.1 < o["steer_moving_share"] < 0.9 and o["stops_per_steer_min"] > 0
+        assert o["to3_n"] > 30 and 0 < o["to3_s_p50"] <= o["approach_s_p50"] + 5
+        assert 0.3 < o["landing_share"] < 1.0
+    run = out["per_run"][sid]
+    assert set(run["arms"]) == {"tail", "base"} and "rel_steer_moving_share" in run

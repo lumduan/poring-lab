@@ -3932,7 +3932,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                 return True
                             fails_["click_refused"] += 1
                             world.position = at_
-                    cont_fail_note(why, fails_, len(route))
+                    # v39: the tail arm's counts apart ("steer+tail"); v38's keys unchanged
+                    cont_fail_note(why + ("+tail" if tail else ""), fails_, len(route))
                     return False
 
                 cf_acc: dict[str, Any] = {"t": time.monotonic(), "n": Counter()}
