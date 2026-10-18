@@ -34,6 +34,10 @@ engagements.json, clicks.jsonl, and flow_judge.json -- run `flow_judge.bot(sid)`
     arm_judge.py falsedead SID [SID ...] v40: the risky-burst dead calls per arm (fix = odd k):
                                         called dead with the target alive, skipped, alive targets
                                         killed within 20 s after, loot at our kills, landing
+    arm_judge.py walkers SID [SID ...]  v41: walking targets struck from further (fix = odd k):
+                                        per target class (a WALKER: its cell changed around the
+                                        GM's first moment within 7 cells), near -> first click,
+                                        the approach, landing
 
 Packets are offline ground truth here (ADR-0007); nothing in this module runs during play.
 """
@@ -760,6 +764,106 @@ def _approach_rel(arms: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def walker_table(sids: Iterable[str], on_of: Any = None, near: int = 7,
+                 walk_win_s: float = 0.6, sample_s: float = 0.1) -> dict[str, Any]:  # fmt: skip
+    """v41 per arm ("fix" = odd k: a WALKING target struck from ``strike_cells_walking`` cells;
+    "base" = even k), from packets on flow_judge's window. Per engagement (its attacked gid,
+    flow_judge's join), from ``a`` = the start of the last steer span after the previous
+    engagement's end (else that end):
+    - ``t_near``: the first sample in [a, first click] with our GM within ``near`` cells of it;
+    - a WALKER = its cell changed within +-``walk_win_s`` of ``t_near`` (the moment the strike
+      range starts to matter in either arm, so the class does not depend on the arm);
+    - per class: engagements, near -> first click (s), approach (a -> first click), landing
+      (flow_judge's why == "hit"), kills; ``beyond_near`` = clicked before ever within ``near``.
+    ``on_of(k)`` replaces the arm rule (a null split of older runs). Per run: (fix - base) / mean
+    of the walkers' near -> click mean and landing share."""
+    import conversion_phases as cp
+    import search_study as ss
+
+    on = on_of or (lambda k_: k_ % 2 == 1)
+    dt, win = int(sample_s * NS), int(walk_win_s * NS)
+    arms = ("fix", "base")
+    tot: dict[str, Counter[str]] = {arm: Counter() for arm in arms}
+    lst: dict[str, dict[str, list[float]]] = {arm: defaultdict(list) for arm in arms}
+    per_run: dict[str, Any] = {}
+    for sid in sids:
+        sess = ss.load_session(sid)
+        fld = ss.Field(sess.events)
+        engs = sorted(sess.engagements, key=lambda x: int(x["t_first_click"]))
+        rows = {int(r_["k"]): r_ for r_ in json.loads(
+            (DEMO / sid / "flow_judge.json").read_text())["engagements_w"]["rows"]}  # fmt: skip
+        spans = mode_spans(sess.bot_events, "steer", sess.t0, sess.w1)
+        rt: dict[str, Counter[str]] = {arm: Counter() for arm in arms}
+        rl: dict[str, dict[str, list[float]]] = {arm: defaultdict(list) for arm in arms}
+        for i, x in enumerate(engs):
+            fc, k = int(x["t_first_click"]), int(x["k"])
+            if not sess.t0 <= fc < sess.w1:
+                continue
+            arm = "fix" if on(k) else "base"
+            prev = int(engs[i - 1].get("t_end") or engs[i - 1]["t_first_click"]) if i else sess.t0
+            st = [a_ for a_, _b in spans if prev <= a_ < fc]
+            a = st[-1] if st else prev
+            row = rows.get(k) or {}
+            g = row.get("gid")
+            cls = "unjoined"
+            got: dict[str, float] = {}
+            if g is not None:
+                tn = cp.first_within(fld, int(g), a, fc, near, sample_s)
+                if tn is None:
+                    cls = "beyond_near"
+                else:
+                    cells = {fld.mob(int(g), t) for t in range(tn - win, tn + win + 1, dt)}
+                    cls = "walker" if len(cells - {None}) > 1 else "still"
+                    got["near_to_click_s"] = (fc - tn) / NS
+                got["approach_s"] = (fc - a) / NS
+            for c in (rt[arm], tot[arm]):
+                c[f"{cls}:eng"] += 1
+                c[f"{cls}:landed"] += row.get("why") == "hit"
+                c[f"{cls}:kills"] += x.get("result") == "dead"
+                c["all:eng"] += 1
+                c["all:landed"] += row.get("why") == "hit"
+            for name, v in got.items():
+                for d_ in (rl[arm], lst[arm]):
+                    d_[f"{cls}:{name}"].append(v)
+        per_run[sid] = _walker_rel(_walker_arms(rt, rl))
+    return {"per_run": per_run, **_walker_arms(tot, lst)}
+
+
+def _walker_arms(tot: Mapping[str, Counter[str]],
+                 lst: Mapping[str, Mapping[str, list[float]]]) -> dict[str, Any]:  # fmt: skip
+    out: dict[str, Any] = {}
+    for arm, c in tot.items():
+        o: dict[str, Any] = {}
+        for cls in ("walker", "still", "beyond_near", "unjoined", "all"):
+            n = c[f"{cls}:eng"]
+            if not n:
+                continue
+            o[cls] = {"engagements": n, "landing": f"{c[f'{cls}:landed']}/{n}",
+                      "landing_share": round(c[f"{cls}:landed"] / n, 3)}  # fmt: skip
+            if cls != "all":
+                o[cls]["kills"] = c[f"{cls}:kills"]
+            for name in ("near_to_click_s", "approach_s"):
+                v = sorted(lst[arm].get(f"{cls}:{name}", []))
+                if v:
+                    o[cls][f"{name}_n"] = len(v)
+                    o[cls][f"{name}_p50"] = round(v[len(v) // 2], 2)
+                    o[cls][f"{name}_mean"] = round(sum(v) / len(v), 3)
+        out[arm] = o
+    return out
+
+
+def _walker_rel(arms: dict[str, Any]) -> dict[str, Any]:
+    """Per run: the arms and (fix - base) / their mean for the walkers' deciding measures."""
+    out: dict[str, Any] = {"arms": arms}
+    f, b = (arms.get(a_, {}).get("walker") for a_ in ("fix", "base"))
+    if f and b:
+        for name in ("near_to_click_s_mean", "approach_s_mean", "landing_share"):
+            x, y = f.get(name), b.get(name)
+            if x is not None and y is not None and x + y:
+                out[f"rel_walker_{name}"] = round((x - y) / ((x + y) / 2), 3)
+    return out
+
+
 def deadprobe_table(sids: Iterable[str], radii: Sequence[int] = (30, 45, 60)) -> dict[str, Any]:
     """v39's log-only ``dead_probe`` (the 3.80 amendment) against the server: every probed dead
     call by its truth (flow_judge.dead_call_truth: real / target_alive / target_gone / no_unit /
@@ -1084,7 +1188,7 @@ def main() -> int:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)  # fmt: skip
     ap.add_argument("what", choices=("strike", "dead", "loot", "stray", "blocks", "species",
                                      "retry", "sword", "sword-precision", "heading",
-                                     "approach", "deadprobe", "falsedead"))  # fmt: skip
+                                     "approach", "deadprobe", "falsedead", "walkers"))  # fmt: skip
     ap.add_argument("sessions", nargs="+")
     a = ap.parse_args()
     if a.what == "heading":  # its own loader (search_study's windows and field)
@@ -1098,6 +1202,9 @@ def main() -> int:
         return 0
     if a.what == "falsedead":  # the same
         print(json.dumps(falsedead_table(a.sessions), indent=1, default=str))
+        return 0
+    if a.what == "walkers":  # the same
+        print(json.dumps(walker_table(a.sessions), indent=1, default=str))
         return 0
     sessions = [load(s) for s in a.sessions]
     if a.what == "sword-precision":

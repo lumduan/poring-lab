@@ -321,6 +321,32 @@ def test_approach_table_counts_the_creamy_a_steer_walk_click_became() -> None:
     assert out["tail"]["walk_to_attack_other"] + out["base"]["walk_to_attack_other"] == 1
 
 
+def test_walker_table_classes_every_engagement_of_a_real_run() -> None:
+    """v41's judge on v38 run 1 (no per-engagement change: a parity null): every engagement in
+    the judged window lands in exactly one class per arm; walkers are a real share (the
+    conversion study: ~40 %); near -> click is never negative; flow_judge's landing agrees."""
+    import search_study as ss
+
+    sid = "20261018T141820-demo-hunt-flow38"
+    if not (aj.DEMO / sid / "flow_judge.json").exists():
+        pytest.skip("the v38 session is not banked on this host")
+    out = aj.walker_table([sid])
+    sess = ss.load_session(sid)
+    n_eng = sum(sess.t0 <= int(x["t_first_click"]) < sess.w1 for x in sess.engagements)
+    assert out["fix"]["all"]["engagements"] + out["base"]["all"]["engagements"] == n_eng == 151
+    for arm in ("fix", "base"):
+        o = out[arm]
+        assert sum(o[c]["engagements"] for c in o if c != "all") == o["all"]["engagements"]
+        assert o["walker"]["near_to_click_s_n"] == o["walker"]["engagements"]
+        assert 0 <= o["walker"]["near_to_click_s_p50"] <= o["walker"]["approach_s_p50"] + 1e-9
+    walkers = out["fix"]["walker"]["engagements"] + out["base"]["walker"]["engagements"]
+    assert walkers == 60  # 28 + 32
+    rows = json.loads((aj.DEMO / sid / "flow_judge.json").read_text())["engagements_w"]["rows"]
+    landed = sum(int(out[a]["all"]["landing"].split("/")[0]) for a in ("fix", "base"))
+    assert len(rows) == n_eng and landed == sum(r["why"] == "hit" for r in rows)
+    assert "rel_walker_near_to_click_s_mean" in out["per_run"][sid]
+
+
 def test_deadprobe_table_counts_every_dead_call_of_a_run_without_probes() -> None:
     """The 3.80 amendment's judge on v38 run 1 (before the probe existed): every dead call is
     covered by the truth (150, flow_judge.dead_call_truth), none probed, no table rows."""
