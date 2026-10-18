@@ -9795,7 +9795,7 @@ screenshot (07:05, on prt_fild06 after the held-out run; the run warped to prt_f
 - The full 60-min box: 216 engagements, 214 dead, 2 gave up. No stop, 0 Creamy hits, 208 attack
   requests, all on targets.
 
-**RESULT (judged 2026-10-18 08:2x; one run):**
+**RESULT (judged 2026-10-18 08:25, 9466a71; one run):**
 
 | run | min | engagements | landing (5 s) | kills / h | seen -> click p50 | loot picked / fell | sight / 10 min | reversals / min |
 |---|---|---|---|---|---|---|---|---|
