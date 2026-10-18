@@ -10632,6 +10632,92 @@ on for all (no blocks), switched in a commit before run 1 and recorded in this r
 - **Runs 2-4 are QUEUED:** `hunt_chain.py --version 40 --seeds 20290202,20290303,20290404` started
   detached at 02:27:00 (the control file says "run"); it waits for run 1 to end.
 
+### 3.82 hunt-flow@41: WALKING TARGETS STRUCK FROM FURTHER, interleaved per engagement (pre-registered 2026-10-19, the commit time below, BEFORE its runs; Batt's night plan 22:2x, item 3: "the next top cause from the conversion study (the 0.5 s later turn, the walk into range, arm C fallbacks / 'species unsure', click -> hit), each as its own version. Re-rank after every verdict")
+
+**Why, re-ranked after v39's verdict (3.80, 02:20):**
+- **The approach (+3.22 s per kill vs Batt) is still first.** But v39 showed its remaining cause
+  is a GATE: the 120-px walk guard refuses the steer's clicks inside ~3 cells (tail arm: 4,477
+  refusals). Gates are Batt's call, so the approach is not the next version's change.
+- **Next: never-attacked targets (+1.96 s per kill).** Walkers are its largest group:
+  - not reached: 11.8 % of free entries, 1.19 idle s per kill;
+  - a strike on a walker missed or landed late: 6.6 %, 0.84 idle s per kill.
+- The bot strikes a WALKING target only within 3 cells (`strike_cells`), inside a 4-cell zone
+  (`zone_radius_walking`); a STANDING one within 7 (`strike_cells_standing`, Batt's p90). The
+  last cells to a walker are exactly the ones the walk guard blocks.
+- Measured on banked runs (`arm_judge.py walkers`, dd08869):
+  - walkers are ~40 % of engagements (v38 run 1: 60 / 151);
+  - from the GM's first moment within 7 cells of a walker to the first click takes 3.2-4.0 s on
+    average.
+- Batt plays a walker from where he sees it: one attack click, and the client walks up by itself
+  (conversion study: the click is the decision; the attack request comes only near reach).
+- It also goes around the walk guard without loosening it: the walk clicks the guard refuses are
+  not needed when the strike comes earlier.
+
+**The ONE main change (code 36b9b23, staged and inert in v38-v40, tested; PARAMS[41]):**
+- `strike_range(target, prm, k)`: a WALKING target (the tracker's velocity non-zero) gets
+  `strike_cells_walking` = 7 cells on odd k, as a standing one.
+- The steer's zone for it follows: `zone_radius` (7) instead of `zone_radius_walking` (4), since
+  the zone radius is chosen by the same `strike_range` call.
+- Unchanged:
+  - the strike itself: arm C, the same reads, the same risks, the still gate on risky reads, the
+    burst;
+  - the strike still fires only when the GM stands and the target is in range;
+  - every walk gate, the walk guard included; the click census (no new click site).
+- Interleaved per engagement: odd k = fix, even k = base. Every steer moment belongs to the
+  engagement it leads to (`k_at`), as in v39.
+
+**Base:** the base v40's verdict leaves:
+- if v40 is ADOPTED by 3.81's rule: v40 with the false-dead fix on every engagement
+  (`false_dead_ab` False);
+- else v40's own base (PARAMS[39] with the tail off).
+- PARAMS[41] is committed after v40's verdict and before run 1, and recorded in this run log.
+
+**Runs:**
+- 4 x 60 min on prt_fild08, seeds 20300101, 20300202, 20300303, 20300404.
+- Not tonight: v40's four runs end ~06:46, and the night ends at 07:00 (Batt's end state). They
+  start in Batt's next block, at his go.
+- Nice 10, the detector on the CPU, the hunting state rebuilt and kept, a judged screenshot
+  before run 1, `hunt_chain.py` for runs 2-4 after the agent's judged start of run 1, the live
+  hard-bar monitor beside each.
+
+**What 4 run-hours can resolve (measured BEFORE this entry, `arm_judge.py walkers`,
+`walker_null.py` in scratch):**
+- No-change splits of two banked 4-run pools, 9 distinct splits:
+  - v38 x 4 (nothing per engagement): parity + 4 others;
+  - v39 x 4 (the tail on odd k): only the 4 splits balanced over parity.
+- 95 % range (the splits share runs: a rough ruler):
+
+    | measure | null range |
+    |---|---|
+    | walkers: near (7 cells) -> first click, mean | -20 % .. +14 % |
+    | walkers: the approach (steer start -> first click), mean | -22 % .. +12 % |
+    | walkers: landing within 5 s | -4.5 .. +8.6 points |
+    | all engagements: landing within 5 s | -7.9 .. +7.1 points |
+    | still targets: landing within 5 s | -11.3 .. +4.2 points |
+
+- About 120 walkers an arm in 4 runs.
+- All-engagement landing alone swings to -7.9 points, so this entry's landing guard is -8 (3.80
+  and 3.81 used -5 on a ruler that reached -6).
+
+**Prediction, written before the runs (pooled over the 4 runs, `arm_judge.py walkers`):**
+1. **Primary (the mechanism):** walkers' near (7 cells) -> first click, mean, fix <= 0.70 x base.
+2. **Guard:** walkers' landing within 5 s, fix >= base - 10 points. A click from 7 cells on a
+   moving sprite may land worse: the client walks up while the target moves.
+3. **Guard:** all engagements' landing within 5 s, fix >= base - 8 points.
+4. **Hard bars:** zero NPC contact, zero map change, zero non-Creamy non-target hit. A Creamy hit
+   is counted, not a stop.
+5. **Reported, not deciding:**
+   - walkers' approach time and kills; still targets' landing (unchanged by design);
+   - the standard run row for every run, including dead calls without a real death;
+   - kills / h against v40's runs as context only.
+
+**Decision rule:**
+- ADOPT if 1, 2, 3 and 4 pass.
+- If 1 fails, NOT adopted: the strike did not start earlier.
+- If 2 or 3 fails, NOT adopted: it clicks sooner but lands worse.
+
+**Run log (written during the runs):**
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
