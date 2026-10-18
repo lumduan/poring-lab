@@ -10427,7 +10427,7 @@ on for all (no blocks), switched in a commit before run 1 and recorded in this r
   23:03: no dialog, the standard windows, the GM standing in its hunting state, a Poring beside
   it, a warp light on the screen's edge. Health: ASSIST, no lease.
 
-### 3.81 hunt-flow@40: THE FALSE-DEAD FIX, interleaved per engagement (PRE-REGISTERED: the commit time of this entry, BEFORE its runs; Batt's order 2026-10-18 16:2x and his night plan 22:2x: "v40 (false-dead fix): set its thresholds from v39's probe data, pre-register as 3.81, run 4 runs, verdict")
+### 3.81 hunt-flow@40: THE FALSE-DEAD FIX, interleaved per engagement (pre-registered 2026-10-18 23:13 ICT, the commit time b871eff, BEFORE its runs; Batt's order 2026-10-18 16:2x and his night plan 22:2x: "v40 (false-dead fix): set its thresholds from v39's probe data, pre-register as 3.81, run 4 runs, verdict")
 
 **Why:**
 - Dead calls without a real death run at 17-31 % a run (v36-v39). Most are a target still ALIVE.
