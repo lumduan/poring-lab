@@ -9955,6 +9955,19 @@ see only detector boxes.
 - **Hard bars:** zero NPC contact and zero map change. On prt_fild08 zero non-Creamy non-target
   hits. On prt_fild06 unknown species are counted apart (3.76's rule).
 
+**Run log (written during the runs):**
+- **Run A** (10:18:34-11:18:34, prt_fild06, seed 20272501, `20261018T101834-demo-hunt-flow37`),
+  after the warp and a judged screenshot there (10:18).
+  - 200 engagements, 199 dead. No stop.
+  - The live monitor: 175 target attack requests; unknown-species hits Thief Bug 24, Green Plant
+    5, Thief Bug Egg 1; 0 Creamy.
+  - Seen 2 min in: the arm was live, but most checks at MOVING walk points ended UNKNOWN (15 of
+    17). The recorded frames show the arrow drawn at the point only ~340-410 ms after the check
+    began, so the 0.35 s wait is short while the camera scrolls. Not changed mid-run (the
+    pre-registration).
+- **Run B** (11:20:36, prt_fild08, seed 20272601, `20261018T112036-demo-hunt-flow37`), after a
+  judged screenshot (11:20).
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.

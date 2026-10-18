@@ -567,14 +567,81 @@ def sword_table(sessions: Iterable[dict[str, Any]],
     return out
 
 
+def sword_precision(s: dict[str, Any], lag_s: float = 0.45) -> dict[str, Any]:
+    """v37, OFFLINE: what was really at each cursor check's point. The point's cell (the camera on
+    the GM's packet cell ``lag_s`` earlier: the frames lag the server ~0.5 s), and the nearest
+    mob of ANY job then (packets). Per (where, verdict): n, a mob within 1 / 2 cells, and the jobs
+    within 1 cell. A SWORD with no mob within 2 cells is a false sword; a CLEAR with a mob within
+    1 cell a possible miss (the cursor resolves the sprite, not the cell)."""
+    import flow_judge as fj
+    import hunt_core as hc
+    import hunt_flow as hf
+    import walk5 as w5
+
+    from poring_dataset import camera as cam
+    from poring_dataset import gat as gatmod
+
+    man = json.loads((DEMO / s["sid"] / "manifest.json").read_text())
+    gat = gatmod.parse((cam.GAT_DIR / f"{man.get('map', 'prt_fild08')}.gat").read_bytes())
+    cj = json.loads((hf.r.ROOT / "packages/poring_dataset/src/poring_dataset/camera_rdp.json")
+                    .read_text())  # fmt: skip
+    camera = cam.camera_from_json(cj["camera"])
+    pos = hc.walk_positions(s["packets"])
+    gm_pts, _mv = fj.gm_track(s["packets"])  # our GM (self_move), not in walk_positions
+    seen_at: dict[int, list[tuple[int, bool]]] = defaultdict(list)  # (t, visible from then on)
+    for p_ in s["packets"]:
+        if p_.get("gid") is None or p_.get("type") not in ("entity_appear", "entity_vanish"):
+            continue
+        seen_at[int(p_["gid"])].append((int(p_["t_mono_ns"]), p_["type"] == "entity_appear"))
+
+    def visible(gid: int, t: int) -> bool:
+        st = [v for tt, v in seen_at.get(gid, ()) if tt <= t]
+        return bool(st) and st[-1]
+
+    ev = [json.loads(x) for x in (DEMO / s["sid"] / "events.jsonl").read_text().splitlines()
+          if x]  # fmt: skip
+    agg: dict[str, Counter[str]] = defaultdict(Counter)
+    for e in ev:
+        if e.get("kind") != "cursor_sword":
+            continue
+        t = int(e["t_ns"]) - int(e.get("ms", 0) * 1e6) - int(lag_s * NS)
+        gm = fj.at(gm_pts, t)
+        if gm is None:
+            continue
+        g = (int(round(gm[0])), int(round(gm[1])))
+        w = w5.World(camera, gat, g)
+        c = hf.nearest_cell_frac(w, (float(gm[0]), float(gm[1])), g, float(e["u"]), float(e["v"]))
+        best, jobs = 99, []
+        for gid, tr in pos.items():
+            if gid == fj.GM or not visible(gid, t):
+                continue
+            m = fj.mob_at(pos, gid, t)
+            if m is None:
+                continue
+            d = max(abs(m[0] - c[0]), abs(m[1] - c[1]))
+            if d <= 1:
+                jobs.append(tr[-1][2])
+            best = min(best, d)
+        a = agg[f"{e['where']}_{e['verdict']}"]
+        a["n"] += 1
+        a["mob_within_1"] += best <= 1
+        a["mob_within_2"] += best <= 2
+        for j in jobs:
+            a[f"job_{j}"] += 1
+    return {k: dict(v) for k, v in sorted(agg.items())}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)  # fmt: skip
     ap.add_argument("what", choices=("strike", "dead", "loot", "stray", "blocks", "species",
-                                     "retry", "sword"))  # fmt: skip
+                                     "retry", "sword", "sword-precision"))  # fmt: skip
     ap.add_argument("sessions", nargs="+")
     a = ap.parse_args()
     sessions = [load(s) for s in a.sessions]
+    if a.what == "sword-precision":
+        print(json.dumps({s["sid"]: sword_precision(s) for s in sessions}, indent=1))
+        return 0
     fn = {
         "strike": strike_table,
         "dead": dead_table,
