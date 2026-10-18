@@ -738,6 +738,30 @@ AGE-WEIGHTED SEARCH HEADING.**
      (13:46, c46dc16).
 4. nvtop and the /dev/shm cleanup are Batt's. The GPU stays frozen.
 
+## Sunday 18 Oct, 16:2x (Batt's order after v38's first two runs)
+
+1. **After v38's 4 runs: v39, the continuous approach.**
+   - The steer must always find a click point on the route and never stop because no route cell
+     qualified. Fix the point picker, not the gates.
+   - Built fffb751: the route's end is the last resort when even the tail is empty.
+   - Pre-registered as 3.80 (16:37, a89d93a): per engagement, 4 x 60 min, the primary is the
+     GM's moving share while steering (tail >= 1.15 x base).
+2. **Then the FALSE DEAD fix.**
+   - A burst ending "risky" must not let the dead rule abandon a target that is still visible /
+     alive: re-engage it, or mark it "skipped: risky" explicitly, never "dead".
+   - Its first measure: after a "risky" last burst the target really died 58-76 % of the time,
+     so the fix needs a pixel signal of "still there" (3.81, sized during v39).
+3. **"Dead calls without a real death" per run is a standard column** (flow_judge, 0815c41).
+
+   | run | without death | no unit | target alive | other kill | after a risky burst |
+   |---|---|---|---|---|---|
+   | v36 run 1 | 42 / 214 = 19.6 % | 8 | 29 (+3 gone) | 2 | 18 |
+   | v37 run B | 31 / 160 = 19.4 % | 7 | 22 (+1 gone) | 1 | 10 |
+   | v38 run 1 | 47 / 150 = 31.3 % | 17 | 27 | 3 | 21 |
+   | v38 run 2 | 28 / 163 = 17.2 % | 12 | 15 | 1 | 11 |
+
+4. Decisions keep reading 4-run pooled results, against the measured null spread.
+
 ## Conversion study (2026-10-18 afternoon, Batt's decision 3; offline packets + the bot's logs)
 
 Two judges, merged 3c6180d and 767ee6e, each with real-session positive cases:

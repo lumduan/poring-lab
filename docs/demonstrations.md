@@ -10190,7 +10190,7 @@ So the cov arm is exactly v37 run B's none arm.
   it, a judged screenshot (16:23: no dialog, the standard windows, the GM standing in its hunting
   state beside the run-end weight drop, ASSIST, no lease). Block 0 = age.
 
-### 3.80 hunt-flow@39: THE CONTINUOUS APPROACH, interleaved per engagement (PRE-REGISTERED: the commit time of this entry, BEFORE its runs; Batt's go 2026-10-18 16:2x: "Order after v38's 4 runs: v39 (continuous approach: the steer must always find a click point on the route; never stop because no route cell qualified; fix the point picker, not the gates)")
+### 3.80 hunt-flow@39: THE CONTINUOUS APPROACH, interleaved per engagement (pre-registered 2026-10-18 16:37 ICT, the commit time a89d93a, BEFORE its runs; Batt's go 2026-10-18 16:2x: "Order after v38's 4 runs: v39 (continuous approach: the steer must always find a click point on the route; never stop because no route cell qualified; fix the point picker, not the gates)")
 
 **Why (competition.md "Conversion study"):**
 - The approach is the largest loss against Batt: +3.22 s per kill.
