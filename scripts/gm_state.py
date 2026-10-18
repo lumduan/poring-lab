@@ -418,7 +418,13 @@ def rebuild_hunting(agent: Any, screen: Any, *, why: str) -> dict[str, Any]:
     for _ in range(STR_CLICKS):
         agent.click(gx0 + u, gy0 + v)
         time.sleep(STR_CLICK_S)
-    time.sleep(0.6)
+    # the pointer off the window first: hovering the '+' draws a tooltip over the window's title
+    # strip, and the check then cannot find it (2026-10-18 09:05, the first live rebuild)
+    px_, py_ = ui_gate.PARK[0]
+    agent.move(gx0 + px_ - 12, gy0 + py_ - 12)
+    time.sleep(0.06)
+    agent.move(gx0 + px_, gy0 + py_)
+    time.sleep(0.8)
     a, _b = _frames(screen)
     if status_origin(a, reg) != o1:
         raise r.Stop(f"gm_state ({why}): the status window moved during the STR clicks")

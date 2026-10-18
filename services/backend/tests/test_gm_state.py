@@ -339,6 +339,10 @@ def test_the_str_clicks_land_inside_the_status_window_only_after_it_is_found(gs:
     assert body.index("status_origin(a, reg), status_origin(b, reg)") < body.index("agent.click(")
     assert body.count("agent.click(") == 1  # the '+' only
     assert body.index("agent.click(") < body.index('agent.chord(*ui_gate.window_keys("status"))  #')
+    # the re-check after the clicks reads the window with the pointer parked OFF it (the '+''s
+    # tooltip covers the title strip: the first live rebuild stopped on it, 09:05)
+    after = body[body.index("agent.click(") :]
+    assert after.index("ui_gate.PARK[0]") < after.index("status_origin(a, reg) != o1")
 
 
 def test_status_origin_finds_the_window_at_its_home_and_nothing_else(gs: Any) -> None:
