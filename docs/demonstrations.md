@@ -10208,6 +10208,58 @@ So the cov arm is exactly v37 run B's none arm.
   v39's picker and probe, both off in PARAMS[38]; v38's behaviour is unchanged (tested). Before
   it, a judged screenshot (17:25: no dialog, the standard windows, the GM standing in its hunting
   state, ASSIST, no lease). Block 0 = cov.
+- **Run 4 ended** 18:26:48 on its time box (3602.9 s), with 142 engagements: 138 dead, 4 gave up.
+  - Hard bars: 0 NPC contact, 0 map change, 0 non-target hit, 0 Creamy.
+  - Whole run: 133.8 kills / h, landing within 5 s 117 / 142 = 82.4 %, sight 34.0 / 10 min
+    (windowed; whole run 14.0), kills per sighting 3.94, reversals 7.27 / min.
+  - Dead calls without a real death: 23 / 138 = 16.7 % (no unit 7, another kill 2, target alive
+    14; after a risky burst 13).
+  - Per arm, run 4 alone: age (blocks 1, 3, 5) 110.0 kills / h, re-swept 0.49, encounters 5.96;
+    cov (0, 2, 4) 158.1, 0.437, 7.27.
+- **The standard Lv 1 state was NOT restored after run 4.** Batt's 16:2x order chains v39 straight
+  after v38, so the hunting state is kept for v39 (3.80) and the restore follows v39's run 4.
+- **A gap of 3.5 h before v39** (18:27 -> 22:01): the agent's turn after run 4 failed, and Batt
+  had to retry it three times. Nothing ran in between; at 22:00 the lease was free, the mode
+  ASSIST, and the client unchanged. Batt had moved the mouse over the console by accident while
+  refreshing the page; it took no lease.
+
+**RESULT (pooled over the 4 runs, `arm_judge.py heading`, read 22:00 ICT; scratch
+`/dev/shm/poring-lab-tmp/v38/final1234.json`):**
+
+| measure | age (12 blocks, 119.9 min) | cov (12 blocks, 119.9 min) | prediction | verdict |
+|---|---|---|---|---|
+| 1. re-swept <= 120 s (PRIMARY) | 0.49 | 0.47 | age <= 0.90 x cov | **FAIL** (1.04 x) |
+| 2. kills / h (guard) | 126.6 | 143.1 | age >= cov | **FAIL** (-11.5 %) |
+| 3. encounters / no-target min | 5.86 | 6.56 | age >= cov | fail |
+| 4. fresh ground / min | 3,405 | 3,483 | age >= 1.10 x cov | fail |
+| 5. kills per sighting | 3.92 | 4.49 | within +-15 % | pass (-12.7 %) |
+| 6a. landing within 5 s | 224 / 294 = 76.2 % | 239 / 317 = 75.4 % | age >= cov - 5 pts | pass |
+| 6b. reversals / min | 7.40 | 7.21 | age <= cov + 1.0 | pass |
+| 7. hard bars | 0 NPC, 0 map, 0 non-Creamy | (2 Creamy hits counted, runs 2-3) | all zero | pass |
+
+- Sight per 10 min (windowed): age 32.3, cov 31.8, so the density was equal across the arms.
+- **Without block 0** (10 blocks each): re-swept age 0.50 vs cov 0.48; kills / h 124.2 vs 141.0;
+  encounters 6.03 vs 6.42. Same answer.
+- **Per run** (age - cov) / mean:
+
+  | run | kills / h | encounters / no-target min | re-swept | fresh / min |
+  |---|---|---|---|---|
+  | 1 | -18.8 % | -50.8 % | +3.5 % | -1.2 % |
+  | 2 | +1.3 % | +21.0 % | +14.6 % | -8.9 % |
+  | 3 | +3.1 % | +15.5 % | -8.1 % | +20.5 % |
+  | 4 | -35.9 % | -19.8 % | +11.5 % | -17.3 % |
+
+  Only run 3 went the predicted way on re-sweeping.
+- **Dead calls without a real death** (standard column): runs 1-4 = 31.3 %, 17.2 %, 23.5 %, 16.7 %.
+
+**DECISION (by the pre-registered rule): NOT ADOPTED.** The primary failed, so the mechanism did
+not work: the age-weighted heading did not re-sweep less ground. The outcome guard also failed:
+-11.5 % kills / h, inside the null's +-18 %, but the wrong way. v39 runs on v22's coverage heading,
+as staged.
+- A diagnosis, not tested: the age arm re-planned its heading 1.3-2.8 x as often and kept its
+  heading more (85-92 % of re-plans vs 75-83 %). One reading is that once every direction looks
+  equally stale, the "keep >= 0.8 x the best" rule holds a straight line too long. Recorded for
+  any later search work; nothing is queued on it.
 
 ### 3.80 hunt-flow@39: THE CONTINUOUS APPROACH, interleaved per engagement (pre-registered 2026-10-18 16:37 ICT, the commit time a89d93a, BEFORE its runs; Batt's go 2026-10-18 16:2x: "Order after v38's 4 runs: v39 (continuous approach: the steer must always find a click point on the route; never stop because no route cell qualified; fix the point picker, not the gates)")
 
@@ -10316,6 +10368,13 @@ on for all (no blocks), switched in a commit before run 1 and recorded in this r
 - Census + targeted safety tests + judges: 378 passed.
 
 **Run log (written during the runs):**
+- v38 was NOT adopted (3.79's RESULT, read 22:00), so the base keeps the coverage heading, as
+  staged; no switch commit.
+- **Run 1** (22:01:17, seed 20280101, `20261018T220117-demo-hunt-flow39`, code af56fb8).
+  - Before it: a judged screenshot (21:59 and again 22:00 after Batt's accidental mouse move:
+    prt_fild08, no dialog, the standard windows, the GM standing in its hunting state, ASSIST,
+    no lease).
+  - The route preview daemon had exited while idle (bot_agents []); the runner starts it.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
