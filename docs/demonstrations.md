@@ -9890,7 +9890,7 @@ run 1's verdict above stands as recorded):**
 - Run 1's verdict (FAIL) stands as recorded. This pooled read is labelled a confirmation.
   ADOPTION IS BATT'S CALL.
 
-### 3.78 hunt-flow@37: THE CURSOR'S SWORD at loot and moving-walk click points, interleaved per engagement (pre-registered 2026-10-18 10:2x ICT, the commit time below, BEFORE its runs; Batt's decision 2, option b)
+### 3.78 hunt-flow@37: THE CURSOR'S SWORD at loot and moving-walk click points, interleaved per engagement (pre-registered 2026-10-18 10:17 ICT, the commit time e815b95, BEFORE its runs; Batt's decision 2, option b)
 
 **Batt (2026-10-18):** "a detector-independent check at loot and walk click points: the client's
 own cursor shows the SWORD over ANY monster. Use the two-motion nudge so the cursor updates fast;
