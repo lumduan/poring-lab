@@ -9831,6 +9831,15 @@ candidate for a confirmation run, and only Batt adopts it.
 - v36's latency budget (s / h): selection -> click 728, server kill -> "dead" 623, dead -> next
   selection 592, click -> server kill 422, in range -> click 339.
 
+**Amendment (2026-10-18 08:2x, AFTER run 1's verdict and BEFORE run 2): a confirmation run.**
+- One more 60-min run of v36, unchanged: seed 20272301, prt_fild08, the same procedure and the
+  same monitor.
+- **Run 1's verdict above STANDS as recorded** (primary FAIL). The amendment comes after seeing
+  that result, so the pooled read cannot overturn it.
+- The two runs pooled are judged by the SAME five predictions and reported as a CONFIRMATION read,
+  labelled as such. The usual standard is two runs pooled; one run left the secondary unresolved.
+- After it: the GM back to the standard Lv 1 state (as at 08:23).
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
