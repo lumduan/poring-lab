@@ -130,10 +130,13 @@ def main() -> int:
                      "watch", str(a.version)], cwd=ROOT, stdout=fm,
                     stderr=subprocess.STDOUT)  # fmt: skip
                 rc = run.wait()
+                # the monitor only ever stops a RUNNING runner: done with it at once (its own
+                # 180-s cadence would leave the client idle for minutes between runs)
+                mon.terminate()
                 try:
-                    mon.wait(timeout=300)
+                    mon.wait(timeout=30)
                 except subprocess.TimeoutExpired:
-                    mon.terminate()
+                    mon.kill()
         tail = (OUT / f"v{a.version}-{seed}.out").read_text()[-400:].strip().splitlines()
         log(a.version, f"seed {seed}: runner rc {rc}; last line {tail[-1][:300] if tail else '-'}")
         if rc != 0:
