@@ -9831,7 +9831,7 @@ candidate for a confirmation run, and only Batt adopts it.
 - v36's latency budget (s / h): selection -> click 728, server kill -> "dead" 623, dead -> next
   selection 592, click -> server kill 422, in range -> click 339.
 
-**Amendment (2026-10-18 08:2x, AFTER run 1's verdict and BEFORE run 2): a confirmation run.**
+**Amendment (2026-10-18 08:26, f75ede7, AFTER run 1's verdict and BEFORE run 2): a confirmation run.**
 - One more 60-min run of v36, unchanged: seed 20272301, prt_fild08, the same procedure and the
   same monitor.
 - **Run 1's verdict above STANDS as recorded** (primary FAIL). The amendment comes after seeing
