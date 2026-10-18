@@ -930,3 +930,20 @@ def test_v39_the_steer_may_click_the_routes_tail() -> None:
     assert "if steer_tail_on(k) else 0" in fb and "step_target(ap, i0_, pos" in fb
     # the tail arm's cont_fail counts go apart; without the tail the keys are v38's
     assert 'cont_fail_note(why + ("+tail" if tail else ""), fails_, len(route))' in src
+
+
+def test_v39_dead_probe_is_log_only() -> None:
+    """3.80 amendment (before v39's runs): at every dead call the probe logs what the false-dead
+    fix could see -- and nothing else: no click, no state change, guarded so it never stops a
+    run; on in v39 only."""
+    src = Path(hf.__file__).read_text()
+    body = src[src.index("def dead_probe(") : src.index("def walk_ok(")]
+    bads = (".click(", "walk_click(", "agent.move(", "done =", "eng_[", "eng =", "target =",
+            "banned", "strike(")  # fmt: skip
+    for bad in bads:
+        assert bad not in body.replace('eng_["track"]', "").replace('eng_["k"]', ""), bad
+    assert body.rstrip().endswith("ev(out_)")
+    call = src[src.index('if prm.get("dead_probe"):') :][:400]
+    assert "try:" in call and "dead_probe(eng, tr, unseen, live, t_now)" in call
+    assert "except Exception" in call and "dead_probe_error" in call
+    assert hf.PARAMS[39]["dead_probe"] and not hf.PARAMS[38].get("dead_probe")

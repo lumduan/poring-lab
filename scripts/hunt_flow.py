@@ -444,7 +444,7 @@ PARAMS[38] = {**PARAMS[36], "loot_retry": False, "loot_retry_ab": False, "headin
 # left. Pre-registered as 3.80; interleaved per engagement (odd k). Its base: the coverage heading
 # (v38's age heading only if v38 is adopted by its rule, switched in a commit before run 1)
 PARAMS[39] = {**PARAMS[38], "heading_age": False, "heading_age_ab": False, "steer_tail": True,
-              "steer_tail_ab": True}  # fmt: skip
+              "steer_tail_ab": True, "dead_probe": True}  # fmt: skip
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -3967,6 +3967,39 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         ev({"kind": "cont_fail", "counts": dict(acc_)})
                         cf_acc.update(t=time.monotonic(), n=Counter())
 
+                def dead_probe(eng_: dict[str, Any], tr_: Track | None, unseen_: float,
+                               live_: Sequence[Track], t_now_: int) -> None:  # fmt: skip
+                    """3.80 amendment (log-only, no behaviour change): at every dead call, what
+                    the false-dead fix (3.81) could see -- the last burst's end, the same monster
+                    under a new id (reacquire_target near the engaged track's prediction), and
+                    the freshest frame's monster box nearest the predicted cell's pixel (bottom
+                    centre, px). One ``dead_probe`` event; judged offline against packets."""
+                    tl_ = eng_tracks.get(int(eng_["track"]))
+                    ends_ = [(h_.get("burst") or {}).get("end") for h_ in eng_.get("hovers", [])
+                             if h_.get("burst")]  # fmt: skip
+                    out_: dict[str, Any] = {"kind": "dead_probe", "k": int(eng_["k"]),
+                                            "last_burst": ends_[-1] if ends_ else None,
+                                            "unseen_s": round(unseen_, 2),
+                                            "track_live": tr_ is not None}  # fmt: skip
+                    if tl_ is not None:
+                        nt_ = reacquire_target(tl_, live_, t_now_, prm["reacquire_cells"],
+                                               list(done_ids) + [tl_.tid])  # fmt: skip
+                        pc_ = tl_.predict(t_now_)
+                        if nt_ is not None:
+                            d_r = round(cheb(nt_.predict(t_now_), pc_), 2)
+                            a_r = round((t_now_ - nt_.t_last) / 1e9, 2)
+                            out_["reacq"] = {"tid": nt_.tid, "d": d_r, "age_s": a_r}
+                        cur_ = measured_pos() or (float(pos[0]), float(pos[1]))
+                        pu_, pv_ = frac_project(world, cur_, pc_)
+                        fr_ = sampler.since(max(0, len(sampler.frames) - 1))
+                        if fr_:
+                            bx_ = [float(np.hypot((b_.x0 + b_.x1) / 2 - pu_, b_.y1 - pv_))
+                                   for b_ in fr_[-1][1] if b_.cls == "monster"]  # fmt: skip
+                            out_["pred_px"] = [round(pu_, 1), round(pv_, 1)]
+                            out_["box_px"] = round(min(bx_), 1) if bx_ else None
+                            out_["frame_age_s"] = round((r.ns() - int(fr_[-1][0])) / 1e9, 2)
+                    ev(out_)
+
                 def walk_ok(c_: Cell) -> bool:
                     return not refusals.get(c_, 0) >= 2
 
@@ -4176,6 +4209,11 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                 done = "dead"
                                 eng["dead_rule"] = "fast" if fast_arm else "slow"
                                 eng["dead_by"] = "fast" if (fast_ and not slow_) else "slow"
+                                if prm.get("dead_probe"):  # 3.80 amendment: log-only
+                                    try:  # a log-only probe never stops a run
+                                        dead_probe(eng, tr, unseen, live, t_now)
+                                    except Exception as e_:  # noqa: BLE001
+                                        ev({"kind": "dead_probe_error", "err": repr(e_)[:200]})
                             elif since_first > prm["give_up_s"]:
                                 banned.append((now, tuple(int(x) for x in eng["pred_cell"])))
                                 done = "gave_up"
