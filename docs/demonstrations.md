@@ -10443,6 +10443,33 @@ on for all (no blocks), switched in a commit before run 1 and recorded in this r
 - **Run 3** (00:07:18, seed 20280303, started by the chain, code b1b7b5b or earlier [its file was
   loaded at the start]). The screenshot `pre-v39-20280303.jpg` was judged 00:08: no dialog, the
   standard windows, the GM standing in its hunting state, ASSIST, no lease.
+- **Run 3 ended** on its time box (3601.7 s; the chain logged rc 0 at 01:11:46), with 174
+  engagements: 172 dead, 1 gave up, 1 cut by the time box.
+  - Standard row: landing 125 / 174 = 71.8 % (64.7-78.0), 153.0 kills / h, 4.5 per sighting,
+    23.5 s per kill, sight 34.0 / 10 min, free targets attacked <= 10 s 45 % (n 177), steer
+    moving 38 %, seen -> click 3.97 s, death -> next 0.69 s.
+  - Dead calls without a real death 47 / 171 = 27.5 %; loot 134 / 226 = 59 % (18 to looters);
+    reversals 7.5 / min. Hard bars 0 / 0 / 0.
+  - **Creamy: 8 hits from 7 attack requests** (runs 1-2: 0 hits). Counted, not a stop (Batt's
+    rule). Each request is the client turning one of our clicks into an attack on a Creamy that
+    flew over the clicked spot. By the click before each request (`clicks.jsonl`):
+    - 3 walk clicks: 2 steer, 1 search, the request 0.46-0.74 s later. One belongs to a tail
+      steer, one to a base steer, one to the search: not the arm.
+    - 2 loot clicks, the request 0.08-0.17 s later.
+    - 2 during engagement k 21's strike, the request 2.2 and 4.3 s after its one strike click (the
+      burst's re-clicks at the lock arrow are not in `clicks.jsonl`).
+    - The known class (hunt-lessons: the detector misses the flying sprite), not a v39 effect.
+  - **INTERIM, runs 1-3 pooled (not the decision):**
+    - steer moving share tail 0.374 vs base 0.371 (the primary needs >= 1.15 x);
+    - approach mean 4.92 vs 4.78 s;
+    - landing 189 / 261 = 72.4 % vs 203 / 261 = 77.8 % (the guard needs >= base - 5 points);
+    - `cont_fail` "none": tail 2,441 vs base 12,207 (0.20 x; the 5th check needs <= 0.10). The
+      tail's failed calls are now mostly the walk guard (3,202 vs base 309) and units (564 vs
+      242).
+- **Run 4** (01:11:50, seed 20280404, started by the chain at 01:11:48,
+  `20261019T011150-demo-hunt-flow39`). The screenshot `pre-v39-20280404.jpg` was judged 01:12:
+  no dialog, the standard windows, the GM standing in its hunting state (Lv 70, weight 450 /
+  4970 after the weight clear), a Poring in view. Health: ASSIST, no lease.
 
 ### 3.81 hunt-flow@40: THE FALSE-DEAD FIX, interleaved per engagement (pre-registered 2026-10-18 23:13 ICT, the commit time b871eff, BEFORE its runs; Batt's order 2026-10-18 16:2x and his night plan 22:2x: "v40 (false-dead fix): set its thresholds from v39's probe data, pre-register as 3.81, run 4 runs, verdict")
 
@@ -10528,6 +10555,17 @@ on for all (no blocks), switched in a commit before run 1 and recorded in this r
 - If 2 or 3 fails, it is NOT adopted: it costs more loot or landing than it frees.
 
 **Run log (written during the runs):**
+- **Held-out check of the signal (01:2x, before PARAMS[40]; context only, nothing changed).**
+  v39 runs 2-3 started after this entry, so they are outside the 6 runs above.
+  - Last burst "risky", by the death-cell verdict:
+
+    | verdict | real deaths | target alive | no unit | other killed |
+    |---|---|---|---|---|
+    | "ok" | 20 | 2 | 4 | 0 |
+    | anything else | 24 | 21 | 5 | 1 |
+
+  - Same shape as the 6 runs: "ok" almost never leaves the target alive. About half of the other
+    verdicts are real kills: those are the loot cost the guard (2) watches.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
