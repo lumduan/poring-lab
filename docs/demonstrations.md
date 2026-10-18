@@ -10470,6 +10470,59 @@ on for all (no blocks), switched in a commit before run 1 and recorded in this r
   `20261019T011150-demo-hunt-flow39`). The screenshot `pre-v39-20280404.jpg` was judged 01:12:
   no dialog, the standard windows, the GM standing in its hunting state (Lv 70, weight 450 /
   4970 after the weight clear), a Poring in view. Health: ASSIST, no lease.
+- **Run 4 ended** on its time box (3601.3 s; the chain logged rc 0 and "chain done" at 02:16:16),
+  with 157 engagements: 155 dead, 2 gave up.
+  - Standard row: landing 124 / 157 = 79.0 % (72.0-84.6), 140.8 kills / h, 4.69 per sighting,
+    25.6 s per kill, sight 30.0 / 10 min, free targets attacked <= 10 s 40 % (n 196), steer
+    moving 36 %, seen -> click 3.13 s, death -> next 0.67 s.
+  - Dead calls without a real death 33 / 155 = 21.3 %; loot 102 / 163 = 63 % (18 to looters);
+    reversals 7.57 / min. Creamy 4 hits (2 requests). Hard bars 0 / 0 / 0.
+- The standard Lv 1 state is NOT restored after run 4: v40 follows at once with the hunting state
+  kept (3.81), and the night's end state (Lv 1 by 07:00, Batt's night plan) does it, as for v38.
+
+**RESULT (read 02:2x, 4 runs pooled, `arm_judge.py approach`; v39-final.py's checks):**
+
+| # | check | tail | base | bar | verdict |
+|---|---|---|---|---|---|
+| 1 | steer moving share (primary) | 0.370 | 0.367 | tail >= 1.15 x base | **FAIL** (1.01 x; null -8..+6 %) |
+| 2 | approach, steer start -> first click (mean) | 5.14 s | 4.71 s | tail <= 0.90 x base | **FAIL** (1.09 x; null -8..+11 %) |
+| 3 | landing within 5 s | 254 / 339 = 74.9 % | 262 / 340 = 77.1 % | >= base - 5 pts | pass (-2.2) |
+| 4 | hard bars (4 runs) | 0 / 0 / 0 | | zero | pass |
+| 5 | `cont_fail` "none" (the code ran as built) | 3,520 | 15,909 | tail <= 0.10 x base | **FAIL** (0.22 x) |
+
+- **Reported, not deciding:**
+  - steer s per engagement 7.42 vs 7.49; stops per steer minute 18.9 vs 18.7;
+  - steer start -> within 3 cells (mean) 4.40 vs 4.13 s; the moving share over that stretch
+    0.459 vs 0.440;
+  - steer walk clicks 759 vs 694; turned into an attack on a target 6 vs 7, on another unit (a
+    Creamy) 1 vs 1;
+  - per run (tail - base) / mean, moving share: +0.03, -0.03, +0.02, +0.01;
+  - kills / h 179.8, 130.9, 153.0, 140.8 (mean 151.1; v38's four: 126.0-146.9, mean 134.7;
+    context only, not interleaved; sight 31.9 vs 32.3 / 10 min).
+- **Verdict: NOT ADOPTED** (decision rule: 1 fails).
+- **Check 5 is reported as a FAULT, as the rule says, and the fault is in its BOUND, not the
+  code:**
+  - The picker has no silent skip: every candidate either clicks or is counted under its gate.
+  - So with the tail on, "none" means `ahead_candidates` returned nothing. By construction (and
+    the 300-random-route test) that happens only on a one-cell route or when the lead point
+    already lies on the route's last cell: the design's own exception (written in this entry:
+    "the picker is empty only for a one-cell route ... or when the commanded walk already ends
+    at the route's last cell").
+  - The 0.10 bound guessed how often that happens without measuring it. It happens 0.22 x as
+    often as the old "none": 2,780 calls while moving, 740 standing.
+  - The tail cells WERE produced and judged: the tail arm's gate refusals rose, walk guard
+    4,477 vs 385 and units 671 vs 285.
+- **Why the GM still stands (the finding for Batt):**
+  - The picker now finds a point. On a short route the tail cells lie within 120 px of the GM's
+    sprite, and the WALK GUARD refuses them: v16's Creamy safety layer, after the client turned
+    walk clicks near the GM into attacks.
+  - So the GM stands until the 1-s standstill fallback, as before.
+  - Moving the steer further needs a gate change, and gates are Batt's call ("fix the point
+    picker, not the gates"). The candidates on the table:
+    - a smaller guard radius for steer clicks only;
+    - or v41's walkers struck from 7 cells (the click the guard blocks is not needed when the
+      strike comes earlier).
+  - Run 3's 8 Creamy hits (above) are the reason not to loosen that guard lightly.
 
 ### 3.81 hunt-flow@40: THE FALSE-DEAD FIX, interleaved per engagement (pre-registered 2026-10-18 23:13 ICT, the commit time b871eff, BEFORE its runs; Batt's order 2026-10-18 16:2x and his night plan 22:2x: "v40 (false-dead fix): set its thresholds from v39's probe data, pre-register as 3.81, run 4 runs, verdict")
 
