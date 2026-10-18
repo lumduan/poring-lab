@@ -10045,6 +10045,76 @@ prt_fild06, off for prt_fild08). Walk clicks unchanged."
   loot check's UNKNOWN share well under 56 % (the client drew its cursor at ~0.35-0.4 s while the
   camera scrolled), and held-out non-target attacks from loot clicks <= 4 an hour.
 
+### 3.79 hunt-flow@38: THE AGE-WEIGHTED SEARCH HEADING, interleaved in 10-min blocks (pre-registered 2026-10-18, the commit time of this entry, BEFORE its runs; Batt's go 13:29: "Conversion first, v38 after ... run v38 for >= 4 run-hours interleaved")
+
+**Why (the search study, competition.md "Search study"):**
+- 39 % of the bot's per-kill gap to Batt is search speed. The bot re-views ground it has already
+  hunted: 43 % of its newly viewed cells were in view within the last 120 s (Batt 27 %).
+- Its own kills empty that ground, since a killed mob respawns anywhere on the map. Ground seen
+  <= 10 min ago yields 0.40-0.47 of never-seen ground.
+
+**The ONE main change (staged 5a0870f; PARAMS[38]):**
+- At every search re-plan, each candidate heading (keep, +-45, +-90, +-135 deg) is scored by the
+  ground it would bring into the bot's own camera footprint along a 40-cell ray.
+- Each cell is weighted by how long since the bot last saw it: <= 10 min 0.32, 10-20 min 0.5,
+  > 20 min 0.82, never 1.0. The score is divided by walking time (a diagonal step 1.4x).
+- The memory covers the whole run and is built from the bot's own measured position (no packets).
+- The other arm is v22's coverage heading (`heading_goal_cov`, the current base).
+- **Interleaved in 10-min CLOCK blocks within each run:** block 0 starts at the first re-plan;
+  odd (block + seed) = age-weighted. Every block logs `heading_arm`.
+- **Seeds alternate parity** so each arm gets block 0 (the start) in two runs, and the order
+  trend cancels.
+
+**Base:** v36's adopted base: the stale-box species check, paced input, the plain 3 x 3 loot with
+the corpse fix, v15's dead rule. Also in it:
+- the loot retry stays OUT (Batt's decision 1, 13:29);
+- the cursor's SWORD at loot clicks only on untrained-species maps (Batt's decision 2, option a;
+  0d4cacb). It is inert on prt_fild08.
+So the cov arm is exactly v37 run B's none arm.
+
+**Runs:**
+- 4 x 60 min on prt_fild08, seeds 20272701, 20272802, 20272901, 20273002 (block 0: age, cov, age,
+  cov).
+- Nice 10, the detector on the CPU.
+- The hunting state is rebuilt by the runner before run 1 (`gm_state.ensure_hunting`) and kept
+  between the runs. The standard Lv 1 state is restored after run 4.
+- A judged screenshot before each run; the monitor `hardbar_live.py watch 38` beside each run.
+
+**What 4 run-hours can resolve (measured BEFORE the runs, 83f4d11):**
+- `arm_judge.py heading` on the 10 banked full-hour prt_fild08 runs (v32-v37), with a NULL split
+  (odd vs even blocks, no change).
+- 95 % range of the arm difference over balanced 4-run designs:
+    kills / h                        +-18 %
+    sight / 10 min                   +-21 %
+    encounters per no-target minute  +-18 %
+    fresh ground / min               +-15 %
+    re-swept within 120 s            +-7 % (relative)
+- The study's expected gains (kills / h +5 to +12 %, encounters +15 %) are below what 4 hours can
+  show. Only the mechanism (re-sweeping) is resolvable. So kills / h is a guard against harm
+  here, not a proof of gain.
+
+**Prediction, written before the runs (pooled over the 4 runs, `arm_judge.py heading`):**
+1. **Primary (the mechanism):** the share of newly viewed cells that were in view within the last
+   120 s, age <= 0.90 x cov (a >= 10 % relative drop, beyond the null's 7 %).
+2. **Outcome guard:** kills / h age >= cov.
+3. encounters per no-target minute, age >= cov (predicted +15 %, the null +-18 %).
+4. fresh ground per minute, age >= 1.10 x cov.
+5. Kills per sighting: age within +-15 % of cov (conversion should not change).
+6. Landing within 5 s: age >= cov - 5 points. Reversals per minute: age <= cov + 1.0.
+7. **Hard bars:** zero NPC contact, zero map change, zero non-Creamy non-target hit (Creamy
+   counted, not a stop).
+
+**Decision rule:**
+- ADOPT the age-weighted heading into the base if 1, 2 and 7 pass.
+- If 1 passes and 2 fails, it is NOT adopted: the mechanism works but did not pay in 4 hours.
+  Whether to extend the test is Batt's call.
+- If 1 fails, it is NOT adopted.
+- 3-6 are reported and do not decide.
+- Also reported:
+  - per run, the block differences;
+  - a read without block 0;
+  - kills per sighting as the standard column.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
