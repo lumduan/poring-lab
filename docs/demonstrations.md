@@ -10190,6 +10190,96 @@ So the cov arm is exactly v37 run B's none arm.
   it, a judged screenshot (16:23: no dialog, the standard windows, the GM standing in its hunting
   state beside the run-end weight drop, ASSIST, no lease). Block 0 = age.
 
+### 3.80 hunt-flow@39: THE CONTINUOUS APPROACH, interleaved per engagement (PRE-REGISTERED: the commit time of this entry, BEFORE its runs; Batt's go 2026-10-18 16:2x: "Order after v38's 4 runs: v39 (continuous approach: the steer must always find a click point on the route; never stop because no route cell qualified; fix the point picker, not the gates)")
+
+**Why (competition.md "Conversion study"):**
+- The approach is the largest loss against Batt: +3.22 s per kill.
+- While steering, the GM moves 37-38 % of the time (Batt 92 %).
+- v38's log-only `cont_fail` (3.79, runs 1-2): 94-96 % of the steer's failed walk-click calls
+  had NO candidate cell on the route; the gates refused little.
+  - About half were routes <= 3 cells.
+  - On the rest, the 0.6-s commanded lead point lay past every candidate the picker allowed (it
+    takes only cells >= 3 ahead of it).
+
+**The ONE main change (code fffb751 on 9c75f36; PARAMS[39]), in the POINT PICKER only:**
+- `ahead_candidates(..., tail=True)`: the old order (6, 5, 7, 4, 8, 3 cells ahead of the lead
+  point) first.
+- Then the route's remaining cells beyond the lead's nearest cell, its END first.
+- Then, when even that is empty, the route's end itself unless the lead point lies on it.
+- So the picker is empty only for a one-cell route (inside the zone: the strike comes next) or
+  when the commanded walk already ends at the route's last cell. Tested on 300 random routes and
+  leads.
+- The standstill fallback (after 1 s with no click) steps from the route point NEAREST the GM,
+  not from the route's start.
+- **Every gate unchanged and in its order:** view, grid, units, boxes, refused, guard; the steer's
+  clear radius; the cursor gate on the standstill click. The click census is unchanged (no new
+  click site).
+- **Interleaved per engagement:** odd k = tail, even k = base (v38's picker). A steer always works
+  toward the next engagement: the runner creates engagement k at its first attack click, and the
+  engaged branch never steers. So every steer moment belongs to exactly one arm (`k_at`).
+
+**Base:** v38's base, with the coverage heading. Only if v38 is ADOPTED by its rule, the age heading
+on for all (no blocks), switched in a commit before run 1 and recorded in this run log. Also:
+- the loot retry out;
+- the SWORD check inert on prt_fild08.
+
+**Runs:**
+- 4 x 60 min on prt_fild08, seeds 20280101, 20280202, 20280303, 20280404, after v38's run 4.
+- Nice 10, the detector on the CPU, the hunting state kept from v38 (the runner checks it).
+- A judged screenshot before each run; `hardbar_live.py watch 39` beside each.
+- After run 4: the standard Lv 1 state (end_state.py), route_previewd stopped, bot_agents [].
+
+**What 4 run-hours can resolve (measured BEFORE the runs, 99592bd):**
+- `arm_judge.py approach` on 22 no-change splits of 11 banked runs.
+- 95 % range of a 4-run pooled difference (the splits share runs: a rough ruler):
+
+    | measure | 95 % null range |
+    |---|---|
+    | steer moving share | -8 % .. +6 % |
+    | steer s per engagement | -14 % .. +11 % |
+    | approach s (steer start -> first click, mean) | -8 % .. +11 % |
+    | steer start -> within 3 cells (mean) | -9 % .. +14 % |
+    | landing within 5 s | -6 % .. +14 % |
+
+- v38 run 1's parity split alone gave landing 76 % vs 54 % with nothing behind it. So only the
+  pooled 4 runs decide.
+
+**Prediction, written before the runs (pooled over the 4 runs, `arm_judge.py approach`):**
+1. **Primary (the mechanism):** the GM's moving share while steering, tail >= 1.15 x base.
+2. **Outcome:** the approach time (steer start -> first click, mean), tail <= 0.90 x base.
+3. **Guard:** landing within 5 s, tail >= base - 5 points.
+4. **Hard bars:** zero NPC contact, zero map change, zero non-Creamy non-target hit. A Creamy
+   hit is counted, not a stop.
+5. **The code ran as built (a positive check, not a result):** the tail arm's `cont_fail`
+   "none" calls (`steer+tail:*:none`) <= 0.10 x the base arm's (`steer:*:none`).
+6. **Reported, not deciding:**
+   - steer s per engagement, stops per steer minute, steer start -> 3 cells;
+   - the steer walk clicks turned into attacks per arm, on targets and on OTHER units (the tail
+     clicks nearer the target);
+   - per run: kills / h, kills per sighting, and "dead calls without a real death" (Batt's
+     standard column, 0815c41);
+   - kills / h against v38's four runs as context only (not interleaved).
+
+**Decision rule:**
+- ADOPT the continuous approach into the base if 1, 2, 3 and 4 pass.
+- If 1 passes and 2 fails, it is NOT adopted: the GM moves more but does not arrive sooner.
+  Extending the test is Batt's call.
+- If 1 fails, it is NOT adopted.
+- If 5 fails, the code did not run as built. That is reported as a fault, not a result.
+
+**Next (Batt's order, 16:2x), after v39:**
+- **The FALSE DEAD fix.** A burst ending "risky" must not let the dead rule abandon a target that
+  is still visible / alive: re-engage it, or mark it "skipped: risky" explicitly, never "dead".
+- Measured before its design (5 banked runs: v36 x2, v37 B, v38 x2):
+  - When the last burst ended "risky", the target really died 58-76 % of the time (158 real vs
+    74 not). So skipping every risky-ended engagement would drop two-thirds of real kills' loot.
+  - The death-cell fixer's own pixel reason does not separate them (`still_visible`: 94 real,
+    30 false).
+  - The fix needs its own pixel signal; the candidate is the same monster under a new track id
+    near the last aim point. It is sized offline during v39's runs and pre-registered as 3.81.
+
+**Run log (written during the runs):**
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
