@@ -11211,6 +11211,53 @@ After run 4: the standard layout (`client_layout.py ensure standard`), then the 
   18:43:02). Its screenshot `pre-v43-20320404.jpg` was judged at 18:44: the hunting layout, no
   dialog, Lv 70, weight 493 / 4970, two Porings in view; ASSIST, no lease. The live logger is
   beside it.
+- **Run 4 STOPPED** at 19:37:46 after 3,235.9 s (53.9 min), rc 3: the runner's fail-closed stop
+  "no input_ack within 3 s". 155 engagements: 116 dead, 38 skipped_risky, 1 gave up.
+  - The backend's /health counted one bot message DROPPED by validation:
+    `agent_input.events.0.mouse_move.y` failed its ">= 0" bound. A pointer move ABOVE the
+    desktop's top edge was refused, never acknowledged, and the runner stopped (safe).
+  - Likely cause (a v43-exposed bug, to fix before v42): with the hotbar on one row, targets show
+    at the very top of the screen, and a pointer helper (a follow or a tag-read move) offset from
+    such a box can land above the desktop. The last events: a dead call, two preempts, then
+    13 s with no event. Fix candidate: clamp or skip pointer moves outside the game region in
+    the runner's pointer helpers.
+  - Its 53.9 minutes stay in the pool (as v41 run 3's; decided before reading its layout
+    measures).
+  - Standard row: landing 120 / 155 = 77.4 % (70.2-83.3), 147.0 kills / h, 4.32 per sighting,
+    24.5 s per kill, sight 34.0 / 10 min, free targets attacked <= 10 s 38 % (n 187), steer
+    moving 35 %, seen -> click 3.17 s, death -> next 0.67 s; dead calls without a real death
+    19 / 116 = 16.4 %; loot 51 / 122 = 42 % (9 to looters); reversals 6.75 / min, outside loot
+    6.18; Creamy 0; hard bars 0 / 0 / 0.
+- **End state (19:40-19:43):** `client_layout.ensure standard` (F12 x 3, the arrow, the Regular
+  Chat tab; read back: 4 rows, expanded, Regular Chat), then @resetstat + the standard restore
+  (Base / Job Lv 1, HP 40 / 40, weight 539 / 2030, "fixed"); route_previewd stopped; /health
+  ASSIST, no lease, bot_agents []; no runner, monitor, chain or logger left.
+
+**RESULT (read 19:4x; runs 1, 2, 3 and run 4's 54 minutes, `layout_judge.py` + run_row; v43-final.py):**
+
+| # | check | v43 (4 runs) | the 12 standard-layout runs | bar | verdict |
+|---|---|---|---|---|---|
+| 1 | first detections in the uncovered area | 0.180 | 0.018 | >= 0.05 | pass |
+| 2 | detected share (boxed lives / lives on screen) | 906 / 958 = 0.946 | 3,920 / 4,303 = 0.911 | >= 1.03 x = 0.938 | pass (+3.8 %; null +2.2 %) |
+| 3 | landing within 5 s | 337 / 444 = 75.9 % | 75.2 % | >= 67.2 % | pass |
+| 4 | hard bars (4 runs) | 0 / 0 / 0 | | zero | pass |
+
+- Per run: uncovered-area detections 0.173, 0.121, 0.212, 0.167; detected share 0.934, 0.917,
+  0.942, 0.964.
+- **Reported, not deciding:**
+  - bot-seen / 10 min 48.0, 0.0 (run 2's stall), 43.0, 53.0 (mean 36.0; the 12 runs' 55.2: a thin
+    field today and the stall; density-confounded, as the entry warned);
+  - kills / h 128.0, 16.0, 112.0, 147.0;
+  - loot 50, 50, 35, 42 %, with more items lost to looters (run 3: 25 % of our kills' drops vs v41
+    run 4's 9 %). The loot step itself did not change (clicks and skips per step equal); not
+    interleaved, so not attributable to the layout;
+  - reversals outside loot 6.37, 13.65, 5.89, 6.18 / min (Batt 4.28); the ping-pong fix:
+    0 dead-end escapes needed (no 180 dead end); run 2's stall was a POCKET (fixed with v42);
+  - three start-up stops (the chat left open + translucent tabs; the notice badge under the weight
+    digits) and run 4's off-screen pointer move: all fail-closed, the first two fixed today.
+- **Verdict: ADOPTED** (decision rule: 1-4 pass). The hunting layout becomes the hunting fixed
+  state: the runner applies it at its start (`client_layout.ensure hunt`), and the session end
+  restores the standard layout. The next version (v42) runs on it.
 
 ### 3.85 hunt-flow@45: THE LOCKED-POINTER WALK (Batt's search walking), interleaved in 10-min blocks (pre-registered 2026-10-19 16:28 ICT, the commit time 8376ae6, BEFORE its runs; Batt 16:0x: "pre-register Batt's method as the search-walking change, LOCKED-POINTER WALK"; 16:2x: "Keep the locked-pointer walk (3.85) in the queue ... Report its effect on click accuracy too"; it runs after v44)
 

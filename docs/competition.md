@@ -1167,3 +1167,21 @@ kills, 72 pickups; species Poring 79, Lunatic 39, Drops 7):
 - One session so far: these figures are confirmed only once runs 2-4 agree. Nothing is wired into
   a decision; using it is a pre-registered version of its own (Batt's order: the version after
   v42).
+
+## Day run 2026-10-19 (Batt's decisions ~07:00, until 20:00): results
+
+- **v41** (walkers struck from 7 cells, 3.82): NOT ADOPTED (near -> click 0.77 x, needed 0.70;
+  walker landing -8.3 points).
+- **v43** (Batt's hunting UI layout, 3.84): ADOPTED. Detections in the uncovered area 0.180 (vs
+  0.018); detected share 0.946 (vs 0.911, +3.8 %); landing 75.9 %; hard bars clean. The play area
+  went from 79.0 % to 86.4 % of the frame. It is restored by `scripts/client_layout.py`.
+- **Found and fixed on the way** (all fail-closed stops):
+  - the chat left open + the translucent tabs (the tab is read by its white top border);
+  - the notice badge under the weight digits (`poring_env.weight.unbadge`).
+- **Found, to fix before v42:**
+  - run 4's pointer move above the desktop (dropped by the backend's validation; the runner
+    stopped safely);
+  - the search POCKET (run 2's 53 min): the fix is built and tested offline and rides with v42.
+- **Queue (all pre-registered):** v42 (steer guard + tail + the pocket escape) -> v44 (dead = the
+  Battle Log's EXP line, 3.87) -> v45 (commit to a target like a player, 3.86) -> v46 (the
+  locked-pointer walk, 3.85).
