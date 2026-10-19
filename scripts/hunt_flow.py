@@ -754,6 +754,108 @@ def risky_unproven(last_burst: str | None, death_reason: str | None) -> bool:
     return last_burst == "risky" and death_reason != "ok"
 
 
+def exp_dead_on(prm: dict[str, Any], k: int) -> bool:
+    """PURE (3.87, hunt-flow@44): does engagement ``k`` take its dead call from the Battle Log's
+    base EXP line? ``exp_dead`` on; with ``exp_dead_ab`` only odd k (the fix arm)."""
+    return bool(prm.get("exp_dead")) and (not prm.get("exp_dead_ab") or k % 2 == 1)
+
+
+def exp_line_for(lines: Sequence[dict[str, Any]], t_from: int, used: set[int]
+                 ) -> dict[str, Any] | None:  # fmt: skip
+    """PURE (3.87): the first BASE EXP record (battle_log.Reader's) that first showed AFTER
+    ``t_from`` (the engagement's first attack click, the same CLOCK_MONOTONIC ns) and is not in
+    ``used`` (its ``t_ns``: each line confirms one death only). A job EXP line never counts."""
+    for rec in sorted(lines, key=lambda x: int(x["t_ns"])):
+        t_ = int(rec["t_ns"])
+        if rec.get("type") == "base_exp" and t_ > t_from and t_ not in used:
+            return rec
+    return None
+
+
+def checked_fallback(death_reason: str | None) -> str:
+    """PURE (3.87, approved by Batt ~19:5x): the pixel dead call with no EXP line within
+    ``exp_wait_s`` stands only on the death-cell verdict "ok" (v40's signal, here after every
+    burst); otherwise the engagement ends ``skipped_unconfirmed`` (no loot step, the track stays
+    selectable, as v40's skipped_risky)."""
+    return "dead" if death_reason == "ok" else "skipped_unconfirmed"
+
+
+SKIPPED_SELECTABLE = ("skipped_risky", "skipped_unconfirmed")  # the track stays selectable
+
+
+class BattleLogTail:
+    """3.87: the Battle Log reader for the runner -- battle_log.py's validated LIVE reader in its
+    OWN process (nice 10; its numpy/Python work never holds the runner's GIL), writing the
+    session's ``battle_log_live.jsonl`` as the log-only runs did; a thread here tails that file
+    and keeps the records. Pixels only: the reader reads the client's chat window from frames."""
+
+    def __init__(self, out: Path, owner_pid: int, hz: float = 10.0) -> None:
+        import subprocess
+        import threading
+
+        self.out, self.owner_pid, self.hz = out, owner_pid, hz
+        self.lines: list[dict[str, Any]] = []
+        self.used: set[int] = set()
+        self.lock = threading.Lock()
+        self.halt = threading.Event()
+        self.restarts = 0
+        self._sp = subprocess
+        self.proc = self._spawn()
+        self.th = threading.Thread(target=self._tail, name="battle-log-tail", daemon=True)
+        self.th.start()
+
+    def _spawn(self) -> Any:
+        log_ = (self.out.parent / "battle_log_live.out").open("a")
+        return self._sp.Popen(["nice", "-n", "10", sys.executable,
+                               str(Path(__file__).with_name("battle_log.py")), "live",
+                               "--out", str(self.out), "--hz", str(self.hz),
+                               "--until-pid", str(self.owner_pid)],
+                              stdout=log_, stderr=self._sp.STDOUT)  # fmt: skip
+
+    def _tail(self) -> None:
+        while not self.out.exists() and not self.halt.is_set():
+            time.sleep(0.05)
+        with contextlib.suppress(FileNotFoundError), self.out.open() as fh:
+            buf = ""
+            while not self.halt.is_set():
+                chunk = fh.readline()
+                if not chunk:
+                    time.sleep(0.03)
+                    continue
+                buf += chunk
+                if not buf.endswith("\n"):
+                    continue
+                with contextlib.suppress(ValueError):
+                    rec = json.loads(buf)
+                    with self.lock:
+                        self.lines.append(rec)
+                buf = ""
+
+    def alive(self) -> bool:
+        """The reader process runs; restarted ONCE if it exited (False after a second exit)."""
+        if self.proc.poll() is None:
+            return True
+        if self.restarts >= 1:
+            return False
+        self.restarts += 1
+        self.proc = self._spawn()
+        return True
+
+    def take_base_exp(self, t_from: int) -> dict[str, Any] | None:
+        with self.lock:
+            rec = exp_line_for(self.lines, t_from, self.used)
+            if rec is not None:
+                self.used.add(int(rec["t_ns"]))
+            return rec
+
+    def stop(self) -> None:
+        self.halt.set()
+        with contextlib.suppress(Exception):
+            self.proc.terminate()
+            self.proc.wait(timeout=10)
+        self.th.join(timeout=3)
+
+
 def ahead_candidates(path: Sequence[Cell], here: Sequence[float], order: Sequence[int],
                      tail: bool = False) -> list[int]:  # fmt: skip
     """PURE (v5): path indices to try for the next walk click, ``order`` cells ahead of the path
@@ -2066,6 +2168,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
     plan_tok = route_plan.enable(f"hunt-flow{version}-{sid}", MAP,
                                  log_path=str(out / "live.jsonl"))  # fmt: skip
     sampler = None
+    bl_tail: BattleLogTail | None = None  # 3.87: the Battle Log reader (exp_dead only)
     guard_n: Counter[str] = Counter()  # v16+: the walk guard's verdicts (in the summary)
     fg_n: Counter[str] = Counter()
     with r.session(f"rule:{RULE}@{version}") as (agent_raw, screen):
@@ -2340,6 +2443,14 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
             r.activate_client(agent_raw, screen)
             sampler = loot1.Sampler(det)
             sampler.start()
+            if prm.get("exp_dead"):
+                # 3.87: the reader needs the Battle Log tab shown (the hunting layout)
+                if prm.get("ui_layout") != "hunt":
+                    raise f0.FarmStop("exp_dead needs ui_layout 'hunt' (the Battle Log tab)")
+                import os
+
+                bl_tail = BattleLogTail(log.dir / "battle_log_live.jsonl", os.getpid())
+                ev({"kind": "battle_log_reader", "pid": bl_tail.proc.pid})
             pos = settle() or start
             if cheb(pos, start) > 3:
                 raise f0.FarmStop(f"the start @warp did not land: at {pos}, not {start}")
@@ -3559,7 +3670,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
             def end_engagement(result: str) -> None:
                 nonlocal eng, target
                 if eng is not None:
-                    if result != "skipped_risky":  # v40: a skipped target stays selectable
+                    if result not in SKIPPED_SELECTABLE:  # v40/3.87: a skipped target stays
                         done_ids.add(int(eng["track"]))
                     eng.update(result=result, t_end=r.ns())
                     engagements.append(eng)
@@ -4477,7 +4588,45 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             fast_ = landed_ and (since_last >= prm["fast_dead_min_s"]
                                                  and unseen >= prm["fast_dead_gone_s"])  # fmt: skip
                             slow_ = since_last >= prm["dead_min_s"] and unseen >= prm["dead_gone_s"]
-                            if fast_ or slow_:
+                            exp_arm = exp_dead_on(prm, int(eng["k"]))  # 3.87: odd k
+                            line_ = None
+                            if exp_arm:
+                                eng["exp_arm"] = True
+                                assert bl_tail is not None
+                                if not bl_tail.alive():  # a fault, not a result: never blind
+                                    raise f0.FarmStop("the Battle Log reader exited twice")
+                                line_ = bl_tail.take_base_exp(int(eng["t_first_click"]))
+                            if line_ is not None:
+                                # 3.87: DEAD = a new base EXP line since our first attack click
+                                done = "dead"
+                                eng["dead_rule"] = "exp"
+                                eng["dead_by"] = ("exp_after_pixel" if eng.get("pix_dead_t")
+                                                  else "exp")  # fmt: skip
+                                eng["exp_line"] = {"t_ns": int(line_["t_ns"]),
+                                                   "t_emit_ns": int(line_.get("t_emit_ns")
+                                                                    or line_["t_ns"]),
+                                                   "n": line_.get("n")}  # fmt: skip
+                                ev({"kind": "exp_dead", "k": int(eng["k"]),
+                                    "track": int(eng["track"]), "line_t_ns": int(line_["t_ns"]),
+                                    "since_first_s": round((int(line_["t_ns"])
+                                                            - int(eng["t_first_click"])) / 1e9, 3),
+                                    "lag_s": round((t_now - int(line_["t_ns"])) / 1e9, 3),
+                                    "pixel_waited": eng.get("pix_dead_t") is not None})  # fmt: skip
+                            elif exp_arm and (fast_ or slow_):
+                                # 3.87 the CHECKED fallback: the pixel call waits exp_wait_s for
+                                # an EXP line (no re-click meanwhile), then stands only on the
+                                # death-cell verdict (below, before the loot step)
+                                if eng.get("pix_dead_t") is None:
+                                    eng["pix_dead_t"] = t_now
+                                    eng["dead_by"] = "fast" if (fast_ and not slow_) else "slow"
+                                    ev({"kind": "pix_dead_wait", "k": int(eng["k"]),
+                                        "track": int(eng["track"])})  # fmt: skip
+                                if (t_now - int(eng["pix_dead_t"])) / 1e9 < prm["exp_wait_s"]:
+                                    time.sleep(0.02)
+                                    continue
+                                done = "dead"
+                                eng["dead_rule"] = "pixel_checked"
+                            elif fast_ or slow_:
                                 done = "dead"
                                 eng["dead_rule"] = "fast" if fast_arm else "slow"
                                 eng["dead_by"] = "fast" if (fast_ and not slow_) else "slow"
@@ -4496,14 +4645,28 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                 continue
                             looter_ = None
                             if done == "dead" and prm.get("loot"):
-                                if eng.get("dead_rule") != "fast":  # v28: the hybrid death cell
-                                    time.sleep(0.4)  # needs no gone frames (v32: per arm)
+                                if eng.get("dead_rule") not in ("fast", "exp", "pixel_checked"):
+                                    time.sleep(0.4)  # v28: the hybrid death cell needs no gone
+                                    # frames (v32: per arm); 3.87: an EXP line is the death, and
+                                    # the checked fallback has waited exp_wait_s already
                                 here_l = quick_fix()
                                 posm.stop(here_l)
                                 ends_ = [(h_.get("burst") or {}).get("end")
                                          for h_ in eng.get("hovers", [])
                                          if h_.get("burst")]  # fmt: skip
-                                if prm.get("false_dead_fix") and (
+                                if eng.get("dead_rule") == "pixel_checked":
+                                    # 3.87: no EXP line within exp_wait_s -> the pixel call
+                                    # stands only on the death-cell verdict "ok" (every burst)
+                                    rs_ = death_reason_now(eng, here_l)
+                                    done = checked_fallback(rs_)
+                                    eng["death"] = {"reason": rs_,
+                                                    "skipped": done != "dead"}  # fmt: skip
+                                    ev({"kind": "pix_dead_checked", "k": int(eng["k"]),
+                                        "track": int(eng["track"]), "reason": rs_,
+                                        "result": done})  # fmt: skip
+                                elif eng.get("exp_arm"):
+                                    pass  # 3.87: the EXP line confirmed it (v40's check moot)
+                                elif prm.get("false_dead_fix") and (
                                         not prm.get("false_dead_ab")
                                         or int(eng["k"]) % 2 == 1):  # fmt: skip
                                     # v40 candidate (Batt 16:2x): a risky burst's dead call
@@ -5089,6 +5252,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
             stop_rec.set()
             if rec.is_alive():
                 rec.join(timeout=5)
+            if bl_tail is not None:
+                bl_tail.stop()
             if sampler is not None:
                 sampler.stop()
                 with (log.dir / "boxes.jsonl").open("w") as fh:  # the judge's first-seen
@@ -5118,7 +5283,10 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                "split": split.ranked(), "coverage_cells": cov.first_seen,
                "det_fps": None if sampler is None or not run_s
                else round(len(sampler.frames) / run_s, 2), "walk_guard": dict(guard_n),
-               "frame_guard": dict(fg_n)}  # fmt: skip
+               "frame_guard": dict(fg_n),
+               "battle_log": None if bl_tail is None else {
+                   "lines": len(bl_tail.lines), "base_exp_used": len(bl_tail.used),
+                   "restarts": bl_tail.restarts}}  # fmt: skip
     log.finish(ended=ended, packet_events=len(events), packet_anchor=anchor, **summary)
     print(json.dumps({"session": sid, "ended": ended, **summary}, default=str), flush=True)
     if crashed is not None:

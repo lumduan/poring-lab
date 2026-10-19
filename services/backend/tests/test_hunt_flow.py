@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import math
 import sys
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -976,7 +978,8 @@ def test_v40_candidate_risky_dead_call_stands_only_on_a_clean_death_cell() -> No
     for bad in (".click(", "walk_click(", "agent.move(", "strike(", "done ="):
         assert bad not in dr[: dr.index("return str(")], bad
     ee = src[src.index("def end_engagement(") :][:500]
-    assert 'if result != "skipped_risky":' in ee and "done_ids.add(" in ee
+    assert "if result not in SKIPPED_SELECTABLE:" in ee and "done_ids.add(" in ee
+    assert "skipped_risky" in hf.SKIPPED_SELECTABLE
 
 
 def test_v41_candidate_walkers_struck_from_further_only_when_set() -> None:
@@ -1116,7 +1119,6 @@ def test_pocket_escape_on_v43_run_2s_real_positions() -> None:
     normal run. Skipped where the sessions are not banked."""
     import gzip
     import json as json_
-    from typing import Any
 
     import hunt_core as hc
     import pytest
@@ -1210,3 +1212,73 @@ def test_v42_params_on_the_adopted_v43_base() -> None:
              "stuck_zone_r", "stuck_zone_s")  # fmt: skip
     same = {k: v for k, v in p.items() if k not in moved}
     assert same == {k: v for k, v in hf.PARAMS[43].items() if k not in moved}
+
+
+def test_exp_dead_pure_parts() -> None:
+    """3.87 (hunt-flow@44, 4d937b4; Batt approved the checked fallback ~19:5x): dead = a new BASE
+    EXP line since the engagement's first attack click (each line used once; a job EXP line never
+    counts); the pixel call with no line within exp_wait_s stands only on the death cell "ok"."""
+    on = {"exp_dead": True, "exp_dead_ab": True}
+    assert hf.exp_dead_on(on, 1) and hf.exp_dead_on(on, 3) and not hf.exp_dead_on(on, 2)
+    assert hf.exp_dead_on({**on, "exp_dead_ab": False}, 2)
+    assert not hf.exp_dead_on({}, 1)
+    lines = [{"t_ns": 900, "type": "base_exp", "n": 6},  # before the first click: not ours
+             {"t_ns": 1100, "type": "job_exp", "n": 3},  # a job line never counts
+             {"t_ns": 1200, "type": "damage", "n": 2000},
+             {"t_ns": 1300, "type": "base_exp", "n": 6}]  # fmt: skip
+    used: set[int] = set()
+    rec = hf.exp_line_for(lines, 1000, used)
+    assert rec is not None and rec["t_ns"] == 1300
+    assert hf.exp_line_for(lines, 1000, {1300}) is None  # used once only
+    assert hf.exp_line_for(lines, 1300, used) is None  # strictly after the first click
+    assert hf.checked_fallback("ok") == "dead"
+    for why in ("no_track", "never_seen", None, "jumped"):
+        assert hf.checked_fallback(why) == "skipped_unconfirmed"
+    assert set(hf.SKIPPED_SELECTABLE) == {"skipped_risky", "skipped_unconfirmed"}
+    for n in hf.PARAMS:
+        if n <= 43:
+            assert not hf.PARAMS[n].get("exp_dead")
+    src = Path(hf.__file__).read_text()
+    assert src.count('bl_tail.take_base_exp(int(eng["t_first_click"]))') == 1
+    assert "if result not in SKIPPED_SELECTABLE:" in src
+    assert src.count("done = checked_fallback(rs_)") == 1
+
+
+def test_battle_log_tail_reads_appended_records(tmp_path: Path, monkeypatch: Any) -> None:
+    """3.87: the runner's tail of the reader process's battle_log_live.jsonl -- partial lines wait
+    for their newline; take_base_exp consumes each base EXP line once."""
+    import time as _t
+
+    class _P:
+        pid = 4242
+
+        def poll(self) -> None:
+            return None
+
+        def terminate(self) -> None:
+            pass
+
+        def wait(self, timeout: float = 0) -> int:
+            return 0
+
+    monkeypatch.setattr(hf.BattleLogTail, "_spawn", lambda self: _P())
+    out = tmp_path / "battle_log_live.jsonl"
+    tail = hf.BattleLogTail(out, 1)
+    with out.open("a") as fh:
+        fh.write(json.dumps({"t_ns": 5, "type": "base_exp", "n": 6}) + "\n")
+        fh.write('{"t_ns": 9, "type": "base')
+        fh.flush()
+        end = _t.monotonic() + 3
+        while _t.monotonic() < end and len(tail.lines) < 1:
+            _t.sleep(0.02)
+        assert len(tail.lines) == 1  # the partial line waits
+        fh.write('_exp", "n": 4}\n')
+        fh.flush()
+    end = _t.monotonic() + 3
+    while _t.monotonic() < end and len(tail.lines) < 2:
+        _t.sleep(0.02)
+    assert [x["t_ns"] for x in tail.lines] == [5, 9]
+    assert tail.take_base_exp(0)["t_ns"] == 5 and tail.take_base_exp(0)["t_ns"] == 9
+    assert tail.take_base_exp(0) is None
+    assert tail.alive()
+    tail.stop()
