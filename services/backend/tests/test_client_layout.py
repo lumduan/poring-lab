@@ -37,7 +37,8 @@ def test_decide_reads_each_part_and_says_unknown_otherwise() -> None:
     std = cl.decide(_d(tabs_regular=1.0, arrow_expanded=0.0, row1=0.5, row2=0.0, row4=0.0))
     assert cl.matches(std, "standard") and not cl.matches(std, "hunt")
     assert cl.decide(_d(row1=95.0))["rows"] == 0  # hidden
-    assert cl.decide(_d(row1=1.0, row2=1.0, row4=99.0))["rows"] is None  # 2-3 rows: not a target
+    assert cl.decide(_d(row1=1.0, row2=1.0, row4=99.0))["rows"] == 2  # 2-3 rows: an F12 step
+    assert cl.decide(_d(row1=1.0, row4=1.0))["rows"] is None  # row 4 without row 2: no sense
     assert cl.decide(_d(tabs_battle=5.0, tabs_regular=6.0))["tab"] is None  # both near: unsure
     # the arrow under the hover cursor (25 vs 50, seen live) is not decisive
     assert cl.decide(_d(arrow_collapsed=25.3, arrow_expanded=50.0))["panel"] is None
@@ -52,6 +53,8 @@ def test_next_step_walks_to_the_target_and_never_acts_blind() -> None:
     assert cl.next_step({"rows": 1, "panel": "collapsed", "tab": "battle"}, "hunt") is None
     assert cl.next_step({**st, "tab": None}, "hunt") == "unknown"
     assert cl.next_step({**st, "rows": None}, "standard") == "unknown"
+    assert cl.next_step({**st, "rows": 2}, "standard") == "f12"  # on through the F12 cycle
+    assert cl.next_step({**st, "rows": 0}, "hunt") == "f12"
 
 
 def test_the_ui_rectangles_follow_the_selected_layout_of_the_process() -> None:

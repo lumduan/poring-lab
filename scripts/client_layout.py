@@ -103,7 +103,14 @@ def decide(d: Mapping[str, float]) -> dict[str, Any]:
     elif d["arrow_expanded"] <= MATCH["arrow"] and d["arrow_collapsed"] >= OTHER_MIN:
         panel = "expanded"
     r1, r2, r4 = (d[k] <= MATCH["row"] for k in ("row1", "row2", "row4"))
-    rows: int | None = 4 if (r1 and r2 and r4) else 1 if (r1 and not r2) else 0 if not r1 else None
+    # rows: 4; 2 = "2 or 3" (a step of the F12 cycle, seen live); 1; 0 = hidden; None = no sense
+    rows: int | None
+    if r1 and r2:
+        rows = 4 if r4 else 2
+    elif r1:
+        rows = None if r4 else 1
+    else:
+        rows = None if (r2 or r4) else 0
     return {"rows": rows, "panel": panel, "tab": tab}
 
 
