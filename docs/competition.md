@@ -1233,3 +1233,33 @@ block check of the layout (standard / hunting, the same seeds) is the way to set
    escape), v44, v45, v46, then v47 (P4).
 6. The Battle Log reader becomes language-independent: in progress (a subagent; English stays
    the validated path; Thai from Batt's lines, local only).
+
+## P1's offline item-fate check (Batt ~19:5x: "P1 offline item-fate check first, then propose")
+
+`p1_itemfates.py` (scratch) over today's 7 runs (v41 x 4, v43 runs 1, 3, 4). Each of our loot steps,
+and the items that fell at that kill within 2 cells of the bot's death cell: 710 items.
+- **Where the drops lie** (offset from the bot's death cell, share of the items): the centre 31 %,
+  (0, +1) 14 %, SE (+1, -1) 12 %, E 6 %, W 5 %, S 5 %, the corners 2-4 % each. 82 % lie inside the
+  3 x 3 the step clicks; 18 % outside it (the death cell's own error).
+- **Fates:** picked 410 (58 %), "gone" 201 (28 %: vanished early, no monster near; unexplained),
+  lost to looters 99 (14 %).
+- **Looter timing:** p25 0.16 s, p50 1.69 s, p75 4.47 s after the loot step's start. A quarter go
+  at once, before any order can matter.
+- **The order's counterfactual:** for the 72 looter-lost items inside the 3 x 3, the click that
+  would have reached their cell before the looter, assuming the step's measured ~0.36 s per click:
+
+  | order | looter-lost items reached first | already-picked items reached later / sooner |
+  |---|---|---|
+  | today's fixed order (centre x2, SE, W, N, the rest) | 36 | - |
+  | P1 ring tour (centre x2, the 8 ring cells in 1-cell steps from the GM's side) | 36 | 107 / 63 |
+  | the drops' own frequency (centre x2, (0, +1), SE, E, W, S, corners) | 35 | 86 / 87 |
+
+**Proposal:**
+- **Do NOT build P1 for item fates.** The click order inside the 3 x 3 changes nothing for looters
+  (36 / 36 / 35), and the ring tour reaches more of today's pickups later. Its only gain would be
+  the step's own back-and-forth (0.68 reversals / min); if Batt wants that, it would be a version
+  with reversals as the primary and loot as a guard.
+- The loot levers the data points to instead:
+  1. the 18 % of drops outside the clicked 3 x 3 (the death-cell estimate);
+  2. the 28 % "gone" (is it real, or our pickups the judge misses?: a judge check first);
+  3. the time to START the loot (v44, the EXP line, aims at it).
