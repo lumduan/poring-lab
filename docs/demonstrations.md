@@ -11145,6 +11145,21 @@ After run 4: the standard layout (`client_layout.py ensure standard`), then the 
   started by the agent after a judged screenshot (`pre-v43-20320202b.jpg`, 16:34: the hunting
   layout, the chat closed, no dialog, Lv 70, weight 491 / 4970; ASSIST, no lease). Its
   `client_layout`: "hunt", no step. Runs 3-4 queued (`hunt_chain.py`, 16:34:48).
+- **Run 2 attempt 2 and the chain's run 3 both STOPPED at their start** (16:34:53 and 16:35:08,
+  4 s each, `...163449-...` and `...163503-...`, no engagement): the runner's fail-closed stop
+  "gm_state (hunt-flow@43:before): the weight readout is unreadable: STR unknown".
+  - The client's red NOTICE BADGE ("N"): with the icon panel collapsed it is drawn on Basic Info's
+    bottom edge, right under the weight digits; the glyph reader called its ink "unexplained".
+    It was absent at run 1's start (15:28) and back at 16:3x.
+  - **Fix (52dbb72, 16:39, before attempt 3; the reader, not the measured behaviour):**
+    `poring_env.weight.unbadge` repaints the badge's red box white before reading (red = R -
+    max(G, B) >= 60; the window and its text are never red: no red, no change). Live: 491 / 4970
+    read again (raw: None). Unit test added; weight / gm_state / loot1 tests green.
+- **Run 2, attempt 3** (16:40:04, seed 20320202, `20261019T164004-demo-hunt-flow43`, code 52dbb72),
+  started by the agent after a judged screenshot (`pre-v43-20320202c.jpg`, 16:39: the hunting
+  layout, the chat closed, no dialog, the badge visible, Lv 70, weight 491 / 4970; ASSIST, no
+  lease). Its `client_layout` "hunt" and `gm_state_before` passed; first kill 16:42. Runs 3-4
+  queued (16:40:35). If run 3 ends after ~18:52, run 4 moves to Batt's next block (the 20:00 end).
 
 ### 3.85 hunt-flow@45: THE LOCKED-POINTER WALK (Batt's search walking), interleaved in 10-min blocks (pre-registered 2026-10-19 16:28 ICT, the commit time 8376ae6, BEFORE its runs; Batt 16:0x: "pre-register Batt's method as the search-walking change, LOCKED-POINTER WALK"; 16:2x: "Keep the locked-pointer walk (3.85) in the queue ... Report its effect on click accuracy too"; it runs after v44)
 
