@@ -3,7 +3,7 @@
 per hunt-flow run, beside Batt's demo, on the rulers the night's verdicts use. OFFLINE: packets
 are ground truth here (ADR-0007) and never a bot decision (rule 1).
 
-    run_row.py SID [SID ...] [--fresh] [--json]
+    run_row.py SID [SID ...] [--fresh] [--json] [--pool]
 
 Each run needs flow_judge.json (``--fresh`` writes it first: flow_judge.bot). The columns:
 - engagements; landing within 5 s of the 1st click (Wilson 95);
@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
@@ -188,6 +189,96 @@ def row(sid: str, fresh: bool = False) -> dict[str, Any]:
     }  # fmt: skip
 
 
+_FRAC = re.compile(r"^(\d+)/(\d+) = ")
+_PCT_N = re.compile(r"^(\d+) % \(n (\d+)\)$")
+_LOOT = re.compile(r"^(\d+)/(\d+) = \d+ % \((\d+)\)$")
+_KLS = re.compile(r"^([\d.]+) / ([\d.]+) \(n (\d+)\)$")
+_CREAMY = re.compile(r"^(\d+) \((\d+)\)$")
+_BARS = re.compile(r"^(\S+) / (\S+) / (\S+)$")
+
+
+def pool(rows_: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """PURE: the POOLED column of several runs (Batt's night report: "the bot-vs-Batt table for the
+    best base"). Counts are summed (landing, dead calls, loot, Creamy, hard bars: the fractions are
+    re-taken from the sums, landing with its Wilson 95); rates are the MEAN of the runs (kills / h,
+    per sighting, seen / 10 min, steer moving, reversals: the runs are equal time boxes); s per
+    kill is 3600 / that kills / h; free targets and kill -> loot start mean are n-weighted; the two
+    p50 columns are the mean of the runs' p50s ("p50" stays the runs' own ruler)."""
+    import hunt_core as hc
+
+    n = len(rows_)
+
+    def vals(k: str) -> list[float]:
+        return [float(r[k]) for r in rows_ if r.get(k) is not None]
+
+    def mean(k: str, nd: int = 2) -> float | None:
+        v = vals(k)
+        return round(sum(v) / len(v), nd) if v else None
+
+    def fracs(k: str, rx: re.Pattern[str]) -> list[tuple[int, ...]]:
+        out = []
+        for r in rows_:
+            m = rx.match(str(r.get(k) or ""))
+            if m:
+                out.append(tuple(int(g) for g in m.groups()))
+        return out
+
+    out: dict[str, Any] = {
+        "session": f"pooled ({n} runs)",
+        "engagements": sum(int(r.get("engagements") or 0) for r in rows_),
+    }
+    lk, ln = (sum(x) for x in zip(*fracs("landing within 5 s", _FRAC), strict=True)) if fracs(
+        "landing within 5 s", _FRAC) else (0, 0)  # fmt: skip
+    if ln:
+        lo, hi = hc.wilson(lk, ln)
+        out["landing within 5 s"] = (f"{lk}/{ln} = {100 * lk / ln:.1f} % "
+                                     f"({100 * lo:.1f}-{100 * hi:.1f})")  # fmt: skip
+    kph = mean("kills / h", 1)
+    out["kills / h"] = kph
+    out["kills per sighting"] = mean("kills per sighting")
+    out["s per kill"] = round(3600 / kph, 1) if kph else None
+    out["seen / 10 min"] = mean("seen / 10 min", 1)
+    ft = fracs("free targets attacked <= 10 s", _PCT_N)
+    if ft:
+        nn = sum(b for _a, b in ft)
+        out["free targets attacked <= 10 s"] = (f"{sum(a * b for a, b in ft) / nn:.0f} % "
+                                                f"(n {nn})")  # fmt: skip
+    sm = [float(str(r["steer moving share"]).rstrip(" %")) for r in rows_
+          if r.get("steer moving share")]  # fmt: skip
+    out["steer moving share"] = f"{sum(sm) / len(sm):.0f} %" if sm else None
+    out["seen -> click p50 s"] = mean("seen -> click p50 s")
+    out["death -> next p50 s"] = mean("death -> next p50 s")
+    dc = fracs("dead calls without a real death", _FRAC)
+    if dc:
+        a, b = sum(x[0] for x in dc), sum(x[1] for x in dc)
+        out["dead calls without a real death"] = f"{a}/{b} = {100 * a / max(1, b):.1f} %"
+    lt = fracs("loot picked / dropped (looters)", _LOOT)
+    if lt:
+        a, b, c = (sum(x[i] for x in lt) for i in range(3))
+        out["loot picked / dropped (looters)"] = f"{a}/{b} = {100 * a / max(1, b):.0f} % ({c})"
+    out["reversals / min"] = mean("reversals / min")
+    out["reversals outside loot / min"] = mean("reversals outside loot / min")
+    cr = fracs("Creamy hits (requests)", _CREAMY)
+    if cr:
+        out["Creamy hits (requests)"] = f"{sum(x[0] for x in cr)} ({sum(x[1] for x in cr)})"
+    out["Creamy hits / h"] = mean("Creamy hits / h")
+    bars = [_BARS.match(str(r.get("hard bars NPC / map / other") or "")) for r in rows_]
+    if all(bars):
+        tot = [sum(int(m.group(i)) for m in bars if m and m.group(i).isdigit()) for i in (1, 2, 3)]
+        out["hard bars NPC / map / other"] = " / ".join(str(t) for t in tot)
+    kl = [tuple(float(g) for g in _KLS.match(str(r.get("kill -> loot start mean / p50 s")))
+                .groups()) for r in rows_
+          if _KLS.match(str(r.get("kill -> loot start mean / p50 s") or ""))]  # fmt: skip
+    if kl:
+        nn = sum(x[2] for x in kl)
+        out["kill -> loot start mean / p50 s"] = (
+            f"{sum(x[0] * x[2] for x in kl) / nn:.2f} / {sum(x[1] for x in kl) / len(kl):.2f} "
+            f"(n {int(nn)})")  # fmt: skip
+    ends = [str(r.get("end reason") or "-") for r in rows_]
+    out["end reason"] = ", ".join(f"{e} x{ends.count(e)}" for e in dict.fromkeys(ends))[:60]
+    return out
+
+
 def box_table(cols: Sequence[tuple[str, Mapping[str, Any]]]) -> str:
     """PURE: a box-drawing table, one column per run (the metric names down the left)."""
     names = [k for k in BATT]
@@ -223,12 +314,21 @@ def main() -> int:
     ap.add_argument("sessions", nargs="+")
     ap.add_argument("--fresh", action="store_true", help="flow_judge.bot first (writes its json)")
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--pool", action="store_true", help="add the pooled column (run_row.pool)")
     a = ap.parse_args()
     rows_ = [row(s, a.fresh) for s in a.sessions]
+    if a.pool:
+        rows_.append(pool(rows_))
     if a.json:
         print(json.dumps(rows_, indent=1, default=str))
         return 0
-    cols = [("BATT demo", BATT)] + [(r_["session"][:15].replace("2026", ""), r_) for r_ in rows_]
+    cols = [("BATT demo", BATT)] + [
+        (
+            r_["session"][:15].replace("2026", "") if r_["session"][0].isdigit() else r_["session"],
+            r_,
+        )
+        for r_ in rows_
+    ]
     print(box_table(cols))
     return 0
 

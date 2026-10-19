@@ -95,3 +95,58 @@ def test_kill_to_loot_start_and_the_end_reason() -> None:
     r = rr.row(sid)
     assert r["kill -> loot start mean / p50 s"] == "0.91 / 0.46 (n 98)"
     assert r["end reason"] == "stopped:Stop: no input_ack within 3 s"
+
+
+def test_pool_sums_counts_and_averages_rates() -> None:
+    """The pooled column (the night report's bot-vs-Batt table): counts summed and fractions
+    re-taken from the sums, rates the mean of the runs, n-weighted kill -> loot start."""
+    a = {
+        "session": "A",
+        "engagements": 10,
+        "landing within 5 s": "8/10 = 80.0 % (49.0-94.3)",
+        "kills / h": 100.0,
+        "kills per sighting": 4.0,
+        "seen / 10 min": 25.0,
+        "free targets attacked <= 10 s": "30 % (n 10)",
+        "steer moving share": "40 %",
+        "seen -> click p50 s": 3.0,
+        "death -> next p50 s": 1.0,
+        "dead calls without a real death": "2/8 = 25.0 %",
+        "loot picked / dropped (looters)": "6/10 = 60 % (1)",
+        "reversals / min": 8.0,
+        "reversals outside loot / min": 7.0,
+        "Creamy hits (requests)": "1 (2)",
+        "Creamy hits / h": 1.0,
+        "hard bars NPC / map / other": "0 / 0 / 0",
+        "kill -> loot start mean / p50 s": "1.00 / 0.50 (n 10)",
+        "end reason": "time_box",
+    }
+    b = {
+        **a,
+        "session": "B",
+        "engagements": 30,
+        "landing within 5 s": "27/30 = 90.0 % (x)",
+        "kills / h": 200.0,
+        "free targets attacked <= 10 s": "50 % (n 30)",
+        "steer moving share": "60 %",
+        "seen -> click p50 s": 2.0,
+        "dead calls without a real death": "3/22 = 13.6 %",
+        "loot picked / dropped (looters)": "14/20 = 70 % (3)",
+        "Creamy hits (requests)": "0 (0)",
+        "Creamy hits / h": 0.0,
+        "kill -> loot start mean / p50 s": "2.00 / 1.50 (n 30)",
+        "end reason": "stopped:farmstop:x",
+    }
+    p = rr.pool([a, b])
+    assert p["session"] == "pooled (2 runs)" and p["engagements"] == 40
+    assert p["landing within 5 s"].startswith("35/40 = 87.5 % (")
+    assert p["kills / h"] == 150.0 and p["s per kill"] == 24.0
+    assert p["free targets attacked <= 10 s"] == "45 % (n 40)"
+    assert p["steer moving share"] == "50 %" and p["seen -> click p50 s"] == 2.5
+    assert p["dead calls without a real death"] == "5/30 = 16.7 %"
+    assert p["loot picked / dropped (looters)"] == "20/30 = 67 % (4)"
+    assert p["Creamy hits (requests)"] == "1 (2)" and p["Creamy hits / h"] == 0.5
+    assert p["hard bars NPC / map / other"] == "0 / 0 / 0"
+    assert p["kill -> loot start mean / p50 s"] == "1.75 / 1.00 (n 40)"
+    assert p["end reason"] == "time_box x1, stopped:farmstop:x x1"
+    assert "pooled (2 runs)" in rr.box_table([("BATT demo", rr.BATT), (p["session"], p)])
