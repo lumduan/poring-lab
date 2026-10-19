@@ -11066,6 +11066,25 @@ scratch, their rules now in the code's docstring and tests):**
   `stuck_walked` 80, `stuck_escape_min` 26, `stuck_zone_r` 22, `stuck_zone_s` 300; both arms).
   Nothing else moves (`test_v42_params_on_the_adopted_v43_base`). The click census + the targeted
   safety tests: 158 passed. Batt ~20:1x: watch the loot fate (picked / looters / gone) in v42.
+- **Run 1** (seed 20310101, session 20261019T202137, launched 20:21:34, loop 20:24:03, ended on its
+  time box 21:24; judged screenshot `pre-v42-1.png` before it: the standard layout, Lv 1, no
+  dialog; the runner applied the hunting layout and state itself):
+  - The row: 131 engagements, landing 100/131 = 76.3 % (68.4-82.8), 113.9 kills / h, 4.38 per
+    sighting, 31.6 s per kill, seen 26.0 / 10 min, free targets <= 10 s 31 %, steer moving 38 %,
+    seen -> click 3.36 s, death -> next 0.54 s, dead calls without a real death 23.2 %, kill ->
+    loot start 1.03 / 0.50 s, reversals 7.88 / min (outside loot 7.27), Creamy 1 hit (2 requests,
+    1.0 / h), hard bars 0 / 0 / 0.
+  - Loot (`loot_fates.py`, the fixed judge): 112 items, picked 61.6 %, looters 4.5 %, left behind
+    (out of sight) 33.9 %; in the 3 x 3 72.4 %; the death cell exact 34.4 %, <= 1 cell 64.5 %.
+  - Per arm (`arm_judge.py steerguard`), run 1 only, NOT deciding:
+
+    | arm | steer min | moving share | approach mean / p50 s | landing | steer walk clicks | walk -> attack other |
+    |---|---|---|---|---|---|---|
+    | fix (odd k) | 10.3 | 0.425 | 5.31 / 3.91 | 80.0 % | 300 | 0 |
+    | base (even k) | 10.1 | 0.333 | 5.57 / 4.21 | 72.7 % | 149 | 2 |
+
+  - As built (check 5): `near_gm_box` 192; the fix arm's guard refusals 19.7 per steer minute
+    (v39's tail arm: 106.8). The pocket escape never fired (0 `stuck_escape`).
 
 ### 3.84 hunt-flow@43: THE HUNTING UI LAYOUT (Batt's three spots), with the dead-end ping-pong fix (pre-registered 2026-10-19 15:03 ICT, the commit time 23d41f5, BEFORE its runs; Batt's order ~08:4x: "Batt's UI layout change for hunting ... Do it as its own pre-registered version at a run boundary ... between v41 and the steer-guard version"; 13:3x: the combat log tab; 14:0x: "keep the order: finish the LAYOUT version (v43) now"; the ping-pong bug: "fix it ... include it in the next version's pre-registration as a fix")
 
