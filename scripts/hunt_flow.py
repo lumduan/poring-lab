@@ -263,6 +263,10 @@ VERSIONS = {
     41: "WALKING TARGETS STRUCK FROM FURTHER: a walking target's strike range (and the steer's "
     "zone) from strike_cells_walking (7) on odd k, as a standing one's; the client walks up "
     "after the attack click. Base: v40 adopted (3.81), the false-dead fix on every engagement",
+    43: "THE HUNTING UI LAYOUT (Batt's three spots): the hotkey bar on one row, the menu icon "
+    "panel collapsed, the chat window's Battle Log tab shown; applied by the runner through the "
+    "client's own controls, the UI masks follow it; with the dead-end ping-pong fix "
+    "(dead_end_hyst_s). Base: v40's, the false-dead fix on every engagement (v41 not adopted)",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -467,6 +471,12 @@ PARAMS[40] = {**PARAMS[39], "steer_tail": False, "steer_tail_ab": False, "false_
 # ADOPTED (3.81, aed0fb4) -> the false-dead fix on every engagement (false_dead_ab False)
 PARAMS[41] = {**PARAMS[40], "false_dead_ab": False, "strike_cells_walking": 7,
               "strike_walking_ab": True}  # fmt: skip
+# 43 = THE HUNTING UI LAYOUT (3.84, pre-registered 23d41f5; Batt's order 2026-10-19 ~08:4x):
+# the client's layout reached at the run's start through its own controls (client_layout.ensure),
+# the run's UI rectangles follow it; the dead-end ping-pong FIX (Batt: a bug, fixed with this
+# version). Its base: v41 NOT adopted (3.82) -> v40's, the false-dead fix on every engagement
+PARAMS[43] = {**PARAMS[40], "false_dead_ab": False, "ui_layout": "hunt",
+              "dead_end_hyst_s": 10.0}  # fmt: skip
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------

@@ -94,6 +94,10 @@ ALLOWED = {
                                "'+' in the status window (rebuild_hunting, Batt 2026-10-18), after "
                                "two fresh frames show that window ALONE at its home; the '+' lies "
                                "inside it"),
+    "scripts/client_layout.py": (1, "UI only: the hunting layout's own controls (Batt 2026-10-19): "
+                                    "Basic Info's arrow and a chat TAB, two motions, each step "
+                                    "verified on pixels (the chat's message area is "
+                                    "click-through: only these solid elements)"),
 }  # fmt: skip
 
 

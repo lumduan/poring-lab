@@ -103,3 +103,53 @@ def test_the_runner_selects_the_layout_before_the_masks_and_applies_it() -> None
     w = run_[run_.index("hunt_tabs = prm.get") :][:700]
     assert 'cl.select_tab(agent_raw, screen, "regular")' in w and "finally:" in w
     assert 'cl.select_tab(agent_raw, screen, "battle")' in w
+
+
+def test_v43_params_the_hunting_layout_and_the_ping_pong_fix_on_v40s_base() -> None:
+    import hunt_flow as hf
+
+    p = hf.PARAMS[43]
+    assert p["ui_layout"] == "hunt" and p["dead_end_hyst_s"] == 10.0 and 43 in hf.VERSIONS
+    assert p["false_dead_fix"] and not p["false_dead_ab"] and not p.get("strike_cells_walking")
+    moved = ("false_dead_ab", "ui_layout", "dead_end_hyst_s")
+    assert {k: v for k, v in p.items() if k not in moved} == {
+        k: v for k, v in hf.PARAMS[40].items() if k not in moved
+    }
+    for n in (38, 39, 40, 41):
+        assert not hf.PARAMS[n].get("ui_layout")
+
+
+def test_layout_judge_on_a_real_standard_layout_run() -> None:
+    """The v43 judge on v41 run 4 (a REAL session, the standard layout): every detected life was
+    on screen at some point or boxed at the edge; the shares are proper; the uncovered area holds
+    few first detections under the standard layout (partly visible sprites only)."""
+    import layout_judge as lj
+
+    sid = "20261019T112949-demo-hunt-flow41"
+    if (
+        not (ROOT / "data").exists()
+        or not Path(f"/dev/shm/poring-lab-demo/{sid}/boxes.jsonl").exists()
+    ):
+        pytest.skip("the v41 session is not banked on this host")
+    r_ = lj.row(sid)
+    assert r_["detected"] == 294 and r_["onscreen"] == 322 and r_["detected_share"] == 0.913
+    assert r_["bot_seen_10min"] == 50.5 and 0 <= r_["uncovered_share"] < 0.05
+    assert lj.windowed_median([0, 1, 2], 0, int(3000e9)) == 0.0  # 5 windows: median of 0,0,0,0,3
+
+
+def test_the_layout_clicks_only_its_two_ui_controls_inside_the_ui_windows() -> None:
+    """Safety (the census's targeted test): client_layout clicks only Basic Info's arrow and the
+    chat tabs, and those points lie inside the UI windows of BOTH layouts (never the ground: the
+    agent's tab-strip drags of 2026-10-19 13:0x became walks)."""
+    src = (ROOT / "scripts/client_layout.py").read_text()
+    assert src.count(".click(") == 1 and src.count("_ui_click(agent, *") == 3
+    assert src.count("_ui_click(agent, *ARROW_PX)") == 1
+    assert src.count("_ui_click(agent, *TAB_PX[") == 2
+    assert ".drag(" not in src
+    import route_preview as rp
+
+    for name in ("standard", "hunt"):
+        rects = cl.RECTS[name]
+        for u, v in (cl.ARROW_PX, *cl.TAB_PX.values()):
+            assert any(x0 <= u <= x1 and y0 <= v <= y1 for x0, y0, x1, y1 in rects), (name, u, v)
+    assert cl.RECTS["standard"] == rp.UI_WINDOWS  # this test process: the standard set
