@@ -11488,7 +11488,7 @@ truer: NOT adopted (reported). If 3 fails: it costs loot: NOT adopted.
 - **Batt's approval (2026-10-19 ~19:5x):** "3.87's CHECKED pixel fallback: approved as you wrote it
   (pixel dead only with the death-cell 'ok', else 'skipped_unconfirmed')".
 
-### 3.88 hunt-flow@47: THE +-135 TURN ONLY WHEN BLOCKED (reversal fix P4), interleaved in 10-min blocks (pre-registered 2026-10-19, the commit time below, BEFORE its runs; Batt ~19:5x: "Reversal fixes: P4 yes (reverse only when 0/45/90 are all blocked; matches my rule) - pre-register it in the queue after v46")
+### 3.88 hunt-flow@47: THE +-135 TURN ONLY WHEN BLOCKED (reversal fix P4), interleaved in 10-min blocks (pre-registered 2026-10-19 20:07 ICT, the commit time cba01d6, BEFORE its runs; Batt ~19:5x: "Reversal fixes: P4 yes (reverse only when 0/45/90 are all blocked; matches my rule) - pre-register it in the queue after v46")
 
 **Why (competition.md "Reversals study"):**
 - Since v22 the coverage heading takes a +-135 turn whenever it scores >= 0.8 x the best heading;
