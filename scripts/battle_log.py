@@ -364,10 +364,29 @@ def read_lines(crop_rgb: np.ndarray, gl: Glyphs,
 COLOUR_GROUP = {"cyan": "blue", "teal": "blue"}
 SAME_MIN_SHARE = 0.7  # of the shorter line's runs that must sit at the same columns
 MAX_SOFT = 1  # letters (never digits) that may read differently in the same line
-QMARK_TOL_MIN, QMARK_TOL_FRAC = 3, 0.25  # two unread runs at the same columns: the same glyphs
+# two unread runs at the same columns are the same glyphs when at most this much ink of either
+# lies more than a pixel from the other's ink (_far)
+QMARK_TOL_MIN, QMARK_TOL_FRAC = 3, 0.15
 # an unpaired read run this small (a period, a quote) is not a difference: the RDP progressive
 # codec draws a new line coarse first, and its smallest glyphs come a frame later (frame 1048)
 SMALL_INK = 4
+
+
+def _dilate(m: np.ndarray) -> np.ndarray:
+    """3 x 3 dilation of a bool mask."""
+    p = np.pad(m, 1)
+    out = np.zeros_like(m)
+    h, w = m.shape
+    for dy in (0, 1, 2):
+        for dx in (0, 1, 2):
+            out |= p[dy : dy + h, dx : dx + w]
+    return out
+
+
+def _far(a: np.ndarray, b: np.ndarray) -> int:
+    """Ink of either mask more than one pixel from the other's ink: a JPEG-softened edge moves
+    a stroke by a pixel, a different glyph puts ink where the other has none."""
+    return int((a & ~_dilate(b)).sum() + (b & ~_dilate(a)).sum())
 
 
 def _groups(a: Sequence[tuple[int, int, str]], b: Sequence[tuple[int, int, str]]
@@ -391,8 +410,8 @@ def same_line(a: Line | None, b: Line | None) -> bool:
     is drawn at fixed columns, so the same text puts its runs at the same columns (+-1). The
     runs of both lines are grouped by column overlap; in each group:
     - one run a side: read characters must be equal; a read and an unread run pass (a speck or a
-      sprite can spoil one glyph in one frame); two unread runs must be within QMARK_TOL of each
-      other over their joint columns;
+      sprite can spoil one glyph in one frame); two unread runs (a Thai name) must agree within
+      QMARK_TOL, edge pixels forgiven (_far);
     - a split / merge (more runs on one side): passes when any run in it is unread, else the
       characters must be equal;
     - runs on one side only: an unread one is ignored (a sprite's highlights beside the text),
@@ -422,7 +441,7 @@ def same_line(a: Line | None, b: Line | None) -> bool:
             u0, u1 = min(ra[0][0], rb[0][0]), max(ra[0][1], rb[0][1])
             ga, gb = a.mask[:, u0:u1], b.mask[:, u0:u1]
             tol = max(QMARK_TOL_MIN, int(QMARK_TOL_FRAC * max(int(ga.sum()), int(gb.sum()))))
-            if int((ga ^ gb).sum()) > tol:
+            if _far(ga, gb) > tol:
                 return False
         elif "?" not in ca and "?" not in cb and ca != cb:
             if any(ch.isdigit() for ch in ca + cb):
@@ -673,7 +692,17 @@ class Reader:
             assert ln is not None
             new.append(self._record(t_ns, frame, i, ln, shift, ambiguous, overflow))
         self.vis = [*kept, *new]
-        self.prev = cur
+        # the reference for the next frame: per line still visible, the CLEANER of its two reads
+        # (fewer unread runs) -- a noisy frame is then compared with a clean read, not with the
+        # last noisy one (frames 5563-5583: a Thai name and a ')' that vary frame to frame)
+        old = [x for x in (self.prev or []) if x is not None]
+        merged = list(cur)
+        c_idx = [i for i, x in enumerate(cur) if x is not None]
+        for k, i in enumerate(c_idx[: max(0, len(old) - shift)]):
+            o, c = old[shift + k], cur[i]
+            if c is not None and o.text.count("?") < c.text.count("?"):
+                merged[i] = o
+        self.prev = merged
         out = [r for r in gone if r is not None and not r["_out"]]  # scrolled away unread
         for r in self.vis:
             if r is None or r["_out"]:

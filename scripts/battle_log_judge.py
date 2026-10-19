@@ -13,7 +13,8 @@ battle_log_frames.jsonl from `battle_log.py replay SID`):
 - BASE / JOB EXP lines <-> OUR kills (arm_judge.kills_of: the unit vanished dead <= 1.5 s after
   our damaging hit): the latency (line - the vanish), the share of kills with an EXP line and of
   EXP lines with a kill; N vs the base_exp / job_exp stat_change delta at the kill;
-- ITEM lines <-> our pickups (pickup_result ok): the count vs the packet's amount, the latency.
+- ITEM lines <-> our pickups (pickup_result ok): the count vs the packet's amount, the latency;
+- with engagements.json: the BASE EXP line as a dead signal against the bot's own dead call.
 A line is matched to the nearest unmatched truth event of its kind with truth in
 [line - MAX_LAT_S, line + LEAD_S] (frames are taken after the packet: the recorded frame shows
 the client ~0.5 s behind the server), the equal value first. Recall counts only truth inside
@@ -170,7 +171,9 @@ def _values(val: Sequence[tuple[Any, Any]]) -> dict[str, Any]:
     """Read value vs truth value over the matched pairs."""
     return {"read": sum(1 for a, _ in val if a is not None),
             "equal": sum(1 for a, b in val if a is not None and a == b),
-            "wrong": [(a, b) for a, b in val if a is not None and a != b][:10]}  # fmt: skip
+            "no_truth_value": sum(1 for a, b in val if a is not None and b is None),
+            "wrong": [(a, b) for a, b in val
+                      if a is not None and b is not None and a != b][:10]}  # fmt: skip
 
 
 def _rate(a: int, b: int) -> float | None:
@@ -252,6 +255,41 @@ def judge(packets: Sequence[Mapping[str, Any]], lines: Sequence[Mapping[str, Any
     return out
 
 
+def dead_vs_bot(engagements: Sequence[Mapping[str, Any]], kills: Sequence[Mapping[str, Any]],
+                lines: Sequence[Mapping[str, Any]]) -> dict[str, Any]:  # fmt: skip
+    """PURE: the BASE EXP line as a "dead" signal against the bot's own dead call. Per
+    engagement the bot called dead (its loot step's start: t_end - loot.s), the server kill of
+    ours just before it (<= 10 s) and the first BASE EXP line after that kill (<= MAX_LAT_S):
+    line - kill, bot call - kill, and how much earlier the line came than the bot's call."""
+    kts = sorted(int(k["t"]) for k in kills)
+    lts = sorted(int(x["t_ns"]) for x in lines if x["type"] == "base_exp")
+    line_lat, bot_lat, gain = [], [], []
+    false_dead = no_line = 0
+    for x in engagements:
+        loot = x.get("loot") or {}
+        if x.get("result") != "dead" or not x.get("t_end") or loot.get("s") is None:
+            continue
+        t_call = int(x["t_end"]) - int(float(loot["s"]) * NS)
+        i = bisect.bisect_right(kts, t_call) - 1
+        if i < 0 or t_call - kts[i] > 10 * NS:
+            false_dead += 1  # no kill of ours before the call: the bot's dead call was false
+            continue
+        tk = kts[i]
+        j = bisect.bisect_left(lts, tk - int(LEAD_S * NS))
+        if j >= len(lts) or lts[j] - tk > MAX_LAT_S * NS:
+            no_line += 1
+            continue
+        line_lat.append((lts[j] - tk) / NS)
+        bot_lat.append((t_call - tk) / NS)
+        gain.append((t_call - lts[j]) / NS)
+    return {"bot_dead_calls_with_kill": len(gain) + no_line, "bot_false_dead": false_dead,
+            "no_exp_line": no_line,
+            "line_after_kill_p50_p90_s": [q(line_lat, 0.5), q(line_lat, 0.9)],
+            "bot_call_after_kill_p50_p90_s": [q(bot_lat, 0.5), q(bot_lat, 0.9)],
+            "line_earlier_than_bot_p10_p50_p90_s": [q(gain, 0.1), q(gain, 0.5), q(gain, 0.9)],
+            "line_earlier_share": _rate(sum(1 for g in gain if g > 0), len(gain))}  # fmt: skip
+
+
 def load(sid: str, root: Path = DEMO) -> tuple[list[dict[str, Any]], list[dict[str, Any]],
                                                 list[dict[str, Any]]]:  # fmt: skip
     d = root / sid
@@ -293,7 +331,12 @@ def main() -> int:
     a = ap.parse_args()
     res = {}
     for sid in a.sids:
-        res[sid] = judge(*load(sid))
+        packets, lines, trace = load(sid)
+        res[sid] = judge(packets, lines, trace)
+        eng = DEMO / sid / "engagements.json"
+        if eng.exists():
+            res[sid]["dead_vs_bot"] = dead_vs_bot(json.loads(eng.read_text()),
+                                                  kills_with_exp(packets), lines)  # fmt: skip
     if len(res) > 1:
         res["pooled"] = pooled(v for k, v in res.items())
     print(json.dumps(res, indent=1, default=str))

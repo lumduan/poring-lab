@@ -5,6 +5,8 @@ frames or the local glyph templates are not on this host). The reader must NEVER
 
 from __future__ import annotations
 
+import gzip
+import json
 import re
 import sys
 from pathlib import Path
@@ -240,7 +242,7 @@ def test_live_reads_until_the_watched_process_exits(monkeypatch: pytest.MonkeyPa
     out = tmp_path / "live.jsonl"
     res = bl.live(out, hz=1000.0, grab=lambda: (next(clock) * NS, _crop()), max_frames=4)
     assert res["frames_read"] == 4
-    recs = [__import__("json").loads(x) for x in out.read_text().splitlines()]
+    recs = [json.loads(x) for x in out.read_text().splitlines()]
     assert [(r["type"], r["n"], r["t_ns"]) for r in recs] == [("damage", 186, 3 * NS)]
     res = bl.live(tmp_path / "none.jsonl", hz=1000.0, until_pid=2**22 + 12345,
                   grab=lambda: (0, _crop()))  # fmt: skip
@@ -327,10 +329,22 @@ def test_real_session_reads_a_lunatic_kill() -> None:
     assert got == [("damage", 193, "Lunatic"), ("base_exp", 6, None), ("job_exp", 2, None)]
     assert {r["frame"] for r in recs} == {293}
     pk = bl.DEMO / REAL_SID / "packets.jsonl.gz"
-    if pk.exists():
-        packets, _, _ = bj.load(REAL_SID) if (bl.DEMO / REAL_SID / "battle_log.jsonl").exists() \
-            else (None, None, None)  # fmt: skip
-        if packets:
-            hit = [h for h in bj.hits_of(packets)
-                   if 0 <= recs[0]["t_ns"] - h["t"] <= 3 * NS]  # fmt: skip
-            assert any(h["damage"] == 193 and h["species"] == "Lunatic" for h in hit)
+    if pk.exists():  # the packets agree: our hit on a Lunatic for 193, ~1.2 s before the line
+        with gzip.open(pk, "rt") as fh:
+            packets = sorted((json.loads(x) for x in fh), key=lambda e: int(e["t_mono_ns"]))
+        hit = [h for h in bj.hits_of(packets) if 0 <= recs[0]["t_ns"] - h["t"] <= 3 * NS]
+        assert any(h["damage"] == 193 and h["species"] == "Lunatic" for h in hit)
+
+
+def test_dead_vs_the_bots_own_call() -> None:
+    """The BASE EXP line against the bot's dead call (its loot step's start)."""
+    kills = [{"t": 10 * NS}, {"t": 40 * NS}]
+    lines = [{"t_ns": 10 * NS + 3 * NS // 10, "type": "base_exp"}]
+    eng = [{"result": "dead", "t_end": 14 * NS, "loot": {"s": 2.0}},  # called at 12 s
+           {"result": "dead", "t_end": 44 * NS, "loot": {"s": 1.0}},  # kill at 40, no line
+           {"result": "dead", "t_end": 30 * NS, "loot": {"s": 1.0}},  # no kill before: false
+           {"result": "gave_up", "t_end": 50 * NS, "loot": {"s": 1.0}}]  # fmt: skip
+    d = bj.dead_vs_bot(eng, kills, lines)
+    assert (d["bot_dead_calls_with_kill"], d["bot_false_dead"], d["no_exp_line"]) == (2, 1, 1)
+    assert d["line_after_kill_p50_p90_s"] == [0.3, 0.3]
+    assert d["line_earlier_than_bot_p10_p50_p90_s"] == [1.7, 1.7, 1.7]
