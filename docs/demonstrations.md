@@ -11036,7 +11036,7 @@ scratch, their rules now in the code's docstring and tests):**
     AFTER v43's verdict. Its base becomes the base v43's verdict leaves (v41's verdict, then
     v43's), recorded in this run log with PARAMS[42] before run 1.
   - Nothing else changes: the margin, the prediction, the decision rule.
-- **AMENDMENT 2 (2026-10-19 18:4x ICT, before any run of this version; Batt 18:0x: "'Stuck by
+- **AMENDMENT 2 (2026-10-19 18:37 ICT, the commit time 4d937b4, before any run of this version; Batt 18:0x: "'Stuck by
   displacement' (run 2 lost 53 min in the cliff/pond pocket): make it a BUG FIX riding with v42
   ... Test it on run 2's positions offline before the run"):**
   - The pocket escape (code 8d0d25b, inert until PARAMS[42]) rides with v42 as a bug fix, for
@@ -11269,7 +11269,7 @@ screenshot before run 1; the chain for runs 2-4.
   call), whatever the verdict.
 
 **Run log (written during the runs):**
-- **AMENDMENT (2026-10-19 18:4x ICT, before any run of this version):** renumbered to
+- **AMENDMENT (2026-10-19 18:37 ICT, the commit time 4d937b4, before any run of this version):** renumbered to
   **hunt-flow@46** (was @45). Batt's 18:0x queue change puts "EXP line = dead" (3.87, v44)
   right after v42; the run order is now v42 -> v44 (EXP-dead) -> v45 (the aborted-steer fix,
   3.86) -> v46 (the locked-pointer walk, 3.85). The base follows the previous version's verdict,
@@ -11358,13 +11358,13 @@ x 4 / v40 x 4 / v41 x 4):**
 - If 1 fails: NOT adopted.
 
 **Run log (written during the runs):**
-- **AMENDMENT (2026-10-19 18:4x ICT, before any run of this version):** renumbered to
+- **AMENDMENT (2026-10-19 18:37 ICT, the commit time 4d937b4, before any run of this version):** renumbered to
   **hunt-flow@45** (was @44). Batt's 18:0x queue change puts "EXP line = dead" (3.87, v44)
   right after v42; the run order is now v42 -> v44 (EXP-dead) -> v45 (the aborted-steer fix,
   3.86) -> v46 (the locked-pointer walk, 3.85). The base follows the previous version's verdict,
   as written; nothing else changes.
 
-### 3.87 hunt-flow@44: DEAD = THE BATTLE LOG'S EXP LINE, interleaved per engagement (pre-registered 2026-10-19, the commit time below, BEFORE its runs; Batt 18:0x: "'EXP line = dead' (Battle Log reader, validated ...): pre-register it as the version right after v42 (before v44). Dead = the EXP line for our target's engagement window (pixel fallback when no line within ~1 s). Primaries: kill -> loot start, dead calls without a real death; guards: loot picked, landing, hard bars")
+### 3.87 hunt-flow@44: DEAD = THE BATTLE LOG'S EXP LINE, interleaved per engagement (pre-registered 2026-10-19 18:37 ICT, the commit time 4d937b4, BEFORE its runs; Batt 18:0x: "'EXP line = dead' (Battle Log reader, validated ...): pre-register it as the version right after v42 (before v44). Dead = the EXP line for our target's engagement window (pixel fallback when no line within ~1 s). Primaries: kill -> loot start, dead calls without a real death; guards: loot picked, landing, hard bars")
 
 **Why (competition.md "The Battle Log reader"):**
 - The reader's base EXP line confirms a kill of ours: precision 0.986 and recall 0.986 on v43 runs
