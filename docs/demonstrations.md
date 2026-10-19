@@ -11740,6 +11740,29 @@ truer: NOT adopted (reported). If 3 fails: it costs loot: NOT adopted.
     19/116 = 16.4 % vs base 22/120 = 18.3 % (0.90 x; the bar is 0.55 x).
   - The reader: base EXP precision 114/116 = 0.983, recall 0.983, lag p50 0.32 / p90 0.45 s.
     Best 2 min: 10 kills from minute 0.0.
+- **Run 3** (seed 20350303, session 20261020T024555, started by the chain 02:45:53, ended on its
+  time box 03:42:30; screenshot `pre-v44-20350303.jpg` judged: the hunting layout, Lv 70, weight
+  571 / 4970, no dialog):
+  - The row: 78 engagements, landing 63/78 = 80.8 % (70.7-88.0), 76.3 kills / h, 3.81 per
+    sighting, 47.2 s per kill, seen 20.0 / 10 min (the sparsest field of the night: 2,072 s of
+    the 3,300 searching), free targets <= 10 s 44 % (n 132), steer moving 41 %, seen -> click
+    2.39 s, death -> next 0.63 s, dead calls without a real death 7/66 = 10.6 %, kill -> loot
+    start 1.13 / 0.57 s (n 59), reversals 6.99 / min (outside loot 6.73), Creamy 0, hard bars
+    0 / 0 / 0. Results: dead 66, skipped_risky 7, skipped_unconfirmed 5.
+  - Loot: 65 items, picked 64.6 %, looters 0, left behind 35.4 %; in the 3 x 3 75.0 %; the death
+    cell exact 45.8 %, <= 1 cell 72.9 %.
+  - Per arm, run 3 only, NOT deciding:
+
+    | arm | kill -> loot start mean (p50 / p90) | dead calls w/o a real death | loot picked | landing | dead by |
+    |---|---|---|---|---|---|
+    | fix (odd k) | 0.57 s (0.48 / 0.70) | 2/34 = 5.9 % | 25/43 = 58.1 % | 89.7 % | EXP line 15, line during the pixel wait 17, checked pixel 2; skipped_unconfirmed 5 (4 real kills) |
+    | base (even k) | 1.80 s (0.75 / 4.82) | 5/32 = 15.6 % | 27/39 = 69.2 % | 71.8 % | the base rule 32; skipped_risky 7 |
+
+  - The reader: base EXP precision 69/69 = 1.000, recall 0.986, lag p50 0.35 / p90 0.48 s. Best
+    2 min: 6 kills from minute 16.3.
+- **Run 4** started by the chain 03:42:32 (before the 03:50 start-by: v44 has its 4 runs);
+  screenshot `pre-v44-20350404.jpg` judged: the hunting layout, Lv 70, weight 536 / 4970, no
+  dialog.
 
 ### 3.88 hunt-flow@47: THE +-135 TURN ONLY WHEN BLOCKED (reversal fix P4), interleaved in 10-min blocks (pre-registered 2026-10-19 20:07 ICT, the commit time cba01d6, BEFORE its runs; Batt ~19:5x: "Reversal fixes: P4 yes (reverse only when 0/45/90 are all blocked; matches my rule) - pre-register it in the queue after v46")
 
