@@ -11132,6 +11132,55 @@ scratch, their rules now in the code's docstring and tests):**
 
   - As built: `near_gm_box` 263; the fix arm's guard refusals 26.7 per steer minute. No
     `stuck_escape` event.
+- **Run 4** (seed 20310404, session 20261019T232821, started by the chain 23:28:19, ended on its
+  time box 00:29:50; screenshot `pre-v42-20310404.jpg` judged: the hunting layout, Lv 70, weight
+  597 / 4970, no dialog):
+  - The row: 170 engagements, landing 122/169 = 72.2 % (65.0-78.4), 133.9 kills / h, 4.54 per
+    sighting, 26.9 s per kill, seen 29.5 / 10 min, free targets <= 10 s 37 % (n 186), steer
+    moving 40 %, seen -> click 2.96 s, death -> next 0.64 s, dead calls without a real death
+    33/140 = 23.6 %, kill -> loot start 1.16 / 0.59 s (n 111), reversals 7.93 / min (outside loot
+    7.18), Creamy 0, hard bars 0 / 0 / 0.
+  - Loot: 196 items, picked 55.1 %, looters 14.3 % (28), left behind (out of sight) 27.6 %,
+    expired 6; in the 3 x 3 64.6 %; the death cell exact 35.0 %, <= 1 cell 58.1 %.
+  - Per arm, run 4 only, NOT deciding:
+
+    | arm | steer min | moving share | approach mean / p50 s | landing | steer walk clicks | walk -> attack other |
+    |---|---|---|---|---|---|---|
+    | fix (odd k) | 11.8 | 0.461 | 5.44 / 4.14 | 72.9 % | 341 | 0 |
+    | base (even k) | 10.4 | 0.321 | 5.77 / 4.96 | 70.6 % | 154 | 0 |
+
+  - As built: `near_gm_box` 239; the fix arm's guard refusals 23.7 per steer minute. No
+    `stuck_escape` event.
+- **Pooled verdict (4 runs, `arm_judge.py steerguard S1 S2 S3 S4`, judged 2026-10-20 00:3x ICT):**
+
+  | check | fix (odd k) | base (even k) | bar | result |
+  |---|---|---|---|---|
+  | 1 steer moving share | 0.434 | 0.333 | fix >= 1.15 x base (1.30 x) | PASS |
+  | 2 approach mean | 5.29 s | 5.38 s | fix <= 0.90 x base (0.983 x) | **FAIL** |
+  | 3 landing within 5 s | 234/300 = 78.0 % | 231/301 = 76.7 % | fix >= base - 8 points | PASS |
+  | 4 hard bars | 0 / 0 / 0 in all 4 runs | | zero | PASS |
+  | 5 ran as built | `near_gm_box` 860; fix guard refusals 22.7 / steer min | | > 0; < 53.4 (half of v39's tail) | PASS |
+
+  - **Verdict: NOT ADOPTED** (decision rule: "If 1 passes and 2 fails, NOT adopted: the GM moves
+    more but does not arrive sooner"). The steer's box guard and the route tail revert; the base
+    stays v43's. The pocket escape (a bug fix in both arms, AMENDMENT 2) stays in the base.
+  - Reported, not deciding: the approach p50 is 3.93 vs 4.41 s (-11 %), but the mean moved only
+    -1.7 %, inside 3.80's no-change ruler (-8 % .. +11 %); steer start -> 3 cells 4.68 vs 4.76 s
+    (-1.6 %); steer s per engagement 8.37 vs 8.27; stops per steer minute 24.7 vs 17.9 (the fix arm
+    clicks twice as often: 1,180 steer walk clicks vs 624); walk -> attack on another unit 0 vs 2;
+    Creamy hits 2 over 4 h (0.5 / h; 1 / 0 / 1 / 0 per run).
+  - The version's pooled row (`run_row.py --pool`): 601 engagements, landing 465/599 = 77.6 %
+    (74.1-80.8), 129.9 kills / h, 4.35 per sighting, seen 30.0 / 10 min, free targets <= 10 s 37 %,
+    steer moving 38 %, seen -> click 3.41 s, death -> next 0.72 s, dead calls without a real death
+    98/503 = 19.5 %, loot 329/613 = 54 % (looters 82), reversals 7.62 / min (outside loot 6.99),
+    kill -> loot start 1.41 / 0.81 s, hard bars 0.
+  - Loot lost to looters per run (Batt ~20:1x, "whether the v43 drop repeats"): 4.5 % / 14.0 % /
+    17.4 % / 14.3 %. Run 1's low share did not repeat.
+  - The zone rule's gap (run 2) stays recorded for a later version; v44 keeps the pocket escape
+    unchanged.
+  - The Battle Log reader (log-only on all 4 runs; `battle_log_live.jsonl`): base EXP precision
+    112/112, 121/122, 147/148, 132/133; recall 0.982 / 0.992 / 0.980 / 0.985; lag p50 0.28-0.33 s,
+    p90 0.39-0.47 s.
 
 ### 3.84 hunt-flow@43: THE HUNTING UI LAYOUT (Batt's three spots), with the dead-end ping-pong fix (pre-registered 2026-10-19 15:03 ICT, the commit time 23d41f5, BEFORE its runs; Batt's order ~08:4x: "Batt's UI layout change for hunting ... Do it as its own pre-registered version at a run boundary ... between v41 and the steer-guard version"; 13:3x: the combat log tab; 14:0x: "keep the order: finish the LAYOUT version (v43) now"; the ping-pong bug: "fix it ... include it in the next version's pre-registration as a fix")
 
@@ -11617,6 +11666,14 @@ truer: NOT adopted (reported). If 3 fails: it costs loot: NOT adopted.
   - Nothing else changes: the seeds, the arms, the checks 1-5, the decision rule.
   - The chain gets `--start-by 2026-10-20T03:50` (ICT). If run 4 cannot start by then, v44 has 3
     runs tonight and its verdict WAITS for run 4 in the next block (no 3-run verdict).
+- **PARAMS[44] written (2026-10-20 00:3x ICT, before run 1):** v42 NOT adopted (3.83: check 2
+  failed) -> the base is v43's (the hunting UI layout, the ping-pong fix, the false-dead fix on
+  every engagement) + the pocket escape (both arms, unchanged: `stuck_window_s` 60, `stuck_extent`
+  18, `stuck_walked` 80, `stuck_escape_min` 26, `stuck_zone_r` 22, `stuck_zone_s` 300). The steer's
+  box guard and the route tail are off. PARAMS[44] = PARAMS[43] + the pocket escape + `exp_dead`
+  / `exp_dead_ab` (odd k) / `exp_wait_s` 1.0. Nothing else moves
+  (`test_v44_params_on_the_base_v42_left`). The hunting layout stays (v43 adopted), so the
+  Battle Log tab is shown by the runner's own layout step.
 
 ### 3.88 hunt-flow@47: THE +-135 TURN ONLY WHEN BLOCKED (reversal fix P4), interleaved in 10-min blocks (pre-registered 2026-10-19 20:07 ICT, the commit time cba01d6, BEFORE its runs; Batt ~19:5x: "Reversal fixes: P4 yes (reverse only when 0/45/90 are all blocked; matches my rule) - pre-register it in the queue after v46")
 
