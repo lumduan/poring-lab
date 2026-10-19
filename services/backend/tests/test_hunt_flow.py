@@ -1214,6 +1214,33 @@ def test_v42_params_on_the_adopted_v43_base() -> None:
     assert same == {k: v for k, v in hf.PARAMS[43].items() if k not in moved}
 
 
+def test_v44_params_on_the_base_v42_left() -> None:
+    """3.87 (4d937b4, amendment 2a00832): PARAMS[44] = the base v42's verdict leaves,
+    v43's (v42 not adopted, 3.83) + the pocket escape,
+    + the EXP-line dead rule on odd k with the checked fallback (1.0 s); nothing else moves."""
+    p = hf.PARAMS[44]
+    assert 44 in hf.VERSIONS
+    assert p["exp_dead"] and p["exp_dead_ab"] and p["exp_wait_s"] == 1.0
+    assert p["ui_layout"] == "hunt"  # the reader needs the Battle Log tab
+    assert p["stuck_window_s"] == 60.0 and p["stuck_escape_min"] == 26.0  # the pocket escape
+    assert p["false_dead_fix"] and not p["false_dead_ab"]
+    assert not p.get("commit_rules") and not p.get("cov_135_only_blocked")  # v45 / v47
+    assert not p.get("steer_guard_box_px") and not p.get("steer_tail")  # v42 reverted (3.83)
+    moved = (
+        "exp_dead",
+        "exp_dead_ab",
+        "exp_wait_s",
+        "stuck_window_s",
+        "stuck_extent",
+        "stuck_walked",
+        "stuck_escape_min",
+        "stuck_zone_r",
+        "stuck_zone_s",
+    )
+    same = {k: v for k, v in p.items() if k not in moved}
+    assert same == {k: v for k, v in hf.PARAMS[43].items() if k not in moved}
+
+
 def test_exp_dead_pure_parts() -> None:
     """3.87 (hunt-flow@44, 4d937b4; Batt approved the checked fallback ~19:5x): dead = a new BASE
     EXP line since the engagement's first attack click (each line used once; a job EXP line never

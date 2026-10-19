@@ -272,6 +272,11 @@ VERSIONS = {
     "route's tail; search and loot clicks keep the circle; interleaved per engagement. With the "
     "pocket escape (stuck by displacement: a 60-s spread <= 18 cells over >= 80 walked -> walk "
     "out >= 26 cells, the pocket blacklisted 5 min) as a bug fix in both arms. Base: v43 adopted",
+    44: "DEAD = THE BATTLE LOG'S EXP LINE: on odd k a new base EXP line (the Battle Log "
+    "reader, its own process) since the engagement's first attack click ends it dead at once; "
+    'the pixel dead call with no line within 1.0 s stands only on the death cell "ok", else '
+    "skipped_unconfirmed; interleaved per engagement. "
+    "Base: v43's (v42 not adopted, 3.83) + the pocket escape",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -492,6 +497,14 @@ PARAMS[42] = {**PARAMS[43], "steer_tail": True, "steer_tail_ab": True, "steer_gu
               "steer_guard_ab": True, "stuck_window_s": 60.0, "stuck_extent": 18.0,
               "stuck_walked": 80.0, "stuck_escape_min": 26.0, "stuck_zone_r": 22.0,
               "stuck_zone_s": 300.0}  # fmt: skip
+# 44 = DEAD = THE BATTLE LOG'S EXP LINE (3.87, pre-registered 4d937b4; amendment 2a00832:
+# 4 x 55 min; Batt approved the CHECKED pixel fallback ~19:5x): on odd k a new base EXP line
+# since the first attack click ends the engagement dead; the pixel call with no line within
+# 1.0 s stands only on the death cell "ok", else skipped_unconfirmed. Base: v43's (v42 NOT
+# adopted, 3.83: the steer's guard and tail revert) + the pocket escape (a bug fix, 3.87)
+PARAMS[44] = {**PARAMS[43], "stuck_window_s": 60.0, "stuck_extent": 18.0, "stuck_walked": 80.0,
+              "stuck_escape_min": 26.0, "stuck_zone_r": 22.0, "stuck_zone_s": 300.0,
+              "exp_dead": True, "exp_dead_ab": True, "exp_wait_s": 1.0}  # fmt: skip
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
