@@ -18,7 +18,9 @@ Each run needs flow_judge.json (``--fresh`` writes it first: flow_judge.bot). Th
   his demo's from packets, kill -> its last pickup request; his demo: 4.28 / min); Creamy (our
   damaging hits / attack requests on job 1018), and Creamy hits per hour of the judged window
   (Batt 2026-10-19: the steer walk-guard change's cost);
-- hard bars: NPC contacts / map changes / non-Creamy non-target jobs hit.
+- hard bars: NPC contacts / map changes / non-Creamy non-target jobs hit;
+- kill -> loot start (3.87's ruler: the kill's vanish packet -> the loot step's start, the
+  engagements the runner ended "dead"), mean / p50; the run's end reason (its manifest).
 BATT is the demo's fixed benchmark (competition.md; Batt's night order): 300 kills / h, 44 seen,
 6.82 per sighting, 12.0 s per kill, 78 % of free targets, steer moving 92 %, seen -> click 1.11 s,
 death -> next 1.24 s, landing 100 %, loot 97 %, reversals 3.6 / min.
@@ -48,7 +50,34 @@ BATT = {
     "reversals / min": "3.6", "reversals outside loot / min": "4.28",
     "Creamy hits (requests)": "-", "Creamy hits / h": "-",
     "hard bars NPC / map / other": "-",
+    "kill -> loot start mean / p50 s": "-", "end reason": "-",
 }  # fmt: skip
+
+
+def kill_to_loot_start(events: Iterable[Mapping[str, Any]],
+                       engagements: Iterable[Mapping[str, Any]],
+                       gid_by_k: Mapping[int, Any]) -> list[float]:  # fmt: skip
+    """PURE (3.87's ruler, expdead_null.py): per engagement the runner ended "dead" with a loot
+    step, the kill's first vanish (reason 1) of its gid from 1 s before its last click to 3 s after
+    its end -> the loot step's start (its end minus its duration), seconds."""
+    van: dict[int, list[int]] = {}
+    for e in events:
+        if e.get("type") == "entity_vanish" and int(e.get("reason", -1)) == 1:
+            van.setdefault(int(e.get("gid") or -1), []).append(int(e["t_mono_ns"]))
+    out = []
+    for x in engagements:
+        if x.get("result") != "dead":
+            continue
+        g = gid_by_k.get(int(x["k"]))
+        loot = x.get("loot") or {}
+        t_end = int(x.get("t_end") or 0)
+        if g is None or loot.get("s") is None or not t_end:
+            continue
+        t0 = int(x.get("t_last_click") or x["t_first_click"]) - NS
+        vs = sorted(t for t in van.get(int(g), []) if t0 <= t <= t_end + 3 * NS)
+        if vs:
+            out.append((t_end - vs[0]) / NS - float(loot["s"]))
+    return out
 
 
 def creamy(events: Iterable[Mapping[str, Any]], t0: int, w1: int) -> tuple[int, int]:
@@ -120,6 +149,12 @@ def row(sid: str, fresh: bool = False) -> dict[str, Any]:
         (o.get("idle_between_kills") or {}).get("p50")
     ]
     sm = steer_moving_share(fld, sess.bot_events, t0, w1)
+    kls = kill_to_loot_start(sess.events, sess.engagements,
+                             {int(r_["k"]): r_.get("gid") for r_ in ew["rows"]})  # fmt: skip
+    try:
+        man = json.loads((DEMO / sid / "manifest.json").read_text())
+    except (OSError, ValueError):
+        man = {}
     return {
         "session": sid,
         "engagements": ew["engagements"],
@@ -147,6 +182,9 @@ def row(sid: str, fresh: bool = False) -> dict[str, Any]:
         else None,
         "hard bars NPC / map / other": f"{hb.get('npc_contacts')} / {hb.get('map_changes')} / "
         f"{len(others)}",
+        "kill -> loot start mean / p50 s": None if not kls else
+        f"{sum(kls) / len(kls):.2f} / {sorted(kls)[len(kls) // 2]:.2f} (n {len(kls)})",
+        "end reason": str(man.get("ended") or "-")[:60],
     }  # fmt: skip
 
 

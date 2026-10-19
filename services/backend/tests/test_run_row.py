@@ -73,3 +73,25 @@ def test_creamy_hits_per_hour_positive_case() -> None:
     w = float(json.loads((rr.DEMO / sid / "flow_judge.json").read_text())["window_s"])
     assert r["Creamy hits (requests)"] == "8 (7)"
     assert r["Creamy hits / h"] == round(8 / (w / 3600), 2) and 7.5 < r["Creamy hits / h"] < 8.5
+
+
+def test_kill_to_loot_start_and_the_end_reason() -> None:
+    """Batt 2026-10-19 overnight's standard columns: kill -> loot start (3.87's ruler: the kill's
+    vanish packet -> the loot step's start) and the run's end reason. Synthetic, then a REAL
+    positive case: v43 run 4 (stopped on a lost input ack; 98 dead calls with a loot step)."""
+    S = rr.NS
+    ev = [{"type": "entity_vanish", "reason": 1, "gid": 7, "t_mono_ns": 10 * S},
+          {"type": "entity_vanish", "reason": 0, "gid": 8, "t_mono_ns": 10 * S}]  # fmt: skip
+    e1 = {"k": 1, "result": "dead", "t_first_click": 9 * S, "t_last_click": 9 * S,
+          "t_end": 13 * S, "loot": {"s": 2.0}}  # fmt: skip
+    e2 = {"k": 2, "result": "dead", "t_first_click": 9 * S, "t_end": 13 * S,
+          "loot": {"s": 1.0}}  # gid 8 did not die (reason 0)  # fmt: skip
+    e3 = {"k": 3, "result": "skipped_risky", "t_first_click": 9 * S, "t_end": 13 * S}
+    engs = [e1, e2, e3]
+    assert rr.kill_to_loot_start(ev, engs, {1: 7, 2: 8, 3: 7}) == [1.0]
+    sid = "20261019T184304-demo-hunt-flow43"
+    if not (rr.DEMO / sid / "flow_judge.json").exists():
+        pytest.skip("the v43 session is not banked on this host")
+    r = rr.row(sid)
+    assert r["kill -> loot start mean / p50 s"] == "0.91 / 0.46 (n 98)"
+    assert r["end reason"] == "stopped:Stop: no input_ack within 3 s"
