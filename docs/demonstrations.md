@@ -11198,6 +11198,19 @@ After run 4: the standard layout (`client_layout.py ensure standard`), then the 
   Its screenshot `pre-v43-20320303.jpg` was judged at 17:42: the hunting layout, no dialog, the GM
   in the pocket at (342, 73) (its start warps away), Lv 70, weight 496 / 4970; ASSIST, no lease.
   The live Battle Log logger is beside it.
+- **Run 3 ended** on its time box (3602.4 s, 18:43:01), with 127 engagements: 111 dead, 16
+  skipped_risky.
+  - Standard row: landing 95 / 125 = 76.0 % (67.8-82.6), 112.0 kills / h, 5.21 per sighting,
+    32.2 s per kill, sight 21.5 / 10 min (the field thinned through the day: 25.0, -, 21.5), free
+    targets attacked <= 10 s 46 % (n 123), steer moving 32 %, seen -> click 3.51 s, death -> next
+    0.71 s; dead calls without a real death 30 / 111 = 27.0 %; loot 55 / 155 = 35 % (31 lost to
+    looters: low, reported, not a 3.84 guard); reversals 6.50 / min, outside loot 5.89; Creamy 0;
+    hard bars 0 / 0 / 0.
+  - `layout_judge.py`: uncovered-area detections 0.212; detected share 0.942 (260 / 276).
+- **Run 4** (18:43:04, seed 20320404, `20261019T184304-demo-hunt-flow43`, started by the chain at
+  18:43:02). Its screenshot `pre-v43-20320404.jpg` was judged at 18:44: the hunting layout, no
+  dialog, Lv 70, weight 493 / 4970, two Porings in view; ASSIST, no lease. The live logger is
+  beside it.
 
 ### 3.85 hunt-flow@45: THE LOCKED-POINTER WALK (Batt's search walking), interleaved in 10-min blocks (pre-registered 2026-10-19 16:28 ICT, the commit time 8376ae6, BEFORE its runs; Batt 16:0x: "pre-register Batt's method as the search-walking change, LOCKED-POINTER WALK"; 16:2x: "Keep the locked-pointer walk (3.85) in the queue ... Report its effect on click accuracy too"; it runs after v44)
 
