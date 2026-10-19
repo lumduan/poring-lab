@@ -1072,3 +1072,93 @@ def test_dead_end_ping_pong_fix_no_second_reversal_within_the_hysteresis() -> No
     for n in hf.PARAMS:
         if n <= 41:
             assert not hf.PARAMS[n].get("dead_end_hyst_s")
+
+
+def test_pocket_escape_stuck_by_displacement_and_the_nearest_way_out() -> None:
+    """Batt 2026-10-19 (a BUG, fixed with v42): v43 run 2 spent 53 min in a cliff / pond pocket,
+    turning +-90 / +-135 (never the 180 of the ping-pong fix). stuck_pocket: mostly searching
+    for 60 s, every cell within 18 of their centre, >= 80 cells walked -> the centre; escape_goal:
+    the nearest cell reachable on the grid >= min_dist from it."""
+    import hunt_core as hc
+
+    lap = [(10, 10), (20, 10), (20, 20), (10, 20)]  # the corners of a 10-cell square
+    samples = [(2.0 * i, lap[i % 4], True) for i in range(32)]  # 64 s walking it: 310 cells
+    t = 64.0
+    pk = hf.stuck_pocket(samples, t - 2.0, 60.0, 18.0, 80.0)
+    assert pk is not None and abs(pk[0] - 15) < 2 and abs(pk[1] - 15) < 2
+    assert hf.stuck_pocket(samples[:10], 18.0, 60.0, 18.0, 80.0) is None  # too little history
+    engaged = [(x[0], x[1], False) for x in samples]
+    assert hf.stuck_pocket(engaged, t - 2.0, 60.0, 18.0, 80.0) is None  # not searching
+    line = [(2.0 * i, (10 + 2 * i, 10), True) for i in range(32)]
+    assert hf.stuck_pocket(line, 62.0, 60.0, 18.0, 80.0) is None  # a straight walk: not stuck
+    area = np.zeros((60, 60), dtype=bool)
+    area[5:25, 5:25] = True  # the pocket
+    area[24:26, 14:16] = True  # its narrow way out, south
+    area[26:58, 5:58] = True  # the open field
+    eg = hf.escape_goal(area, (15, 15), (15.0, 15.0), 26.0)
+    assert eg is not None and max(abs(eg[0] - 15), abs(eg[1] - 15)) >= 26 and area[eg[1], eg[0]]
+    assert hc.astar(area, (15, 15), eg) is not None
+    closed = area.copy()
+    closed[24:26, 14:16] = False
+    closed[25, :] = False  # no way out
+    assert hf.escape_goal(closed, (15, 15), (15.0, 15.0), 26.0) is None
+    for n in hf.PARAMS:
+        if n <= 43:
+            assert not hf.PARAMS[n].get("stuck_window_s")
+    src = Path(hf.__file__).read_text()
+    assert 'stuck_st["mode"] = m_' in src and '"kind": "stuck_escape"' in src
+
+
+def test_pocket_escape_on_v43_run_2s_real_positions() -> None:
+    """The fix's offline test on the REAL run (Batt: "test it on run 2's positions offline before
+    the run"): it fires at the stall's start, and the escape has a real path out; never on a
+    normal run. Skipped where the sessions are not banked."""
+    import gzip
+    import json as json_
+    from typing import Any
+
+    import hunt_core as hc
+    import pytest
+
+    root = Path("/dev/shm/poring-lab-demo")
+    stall, normal = "20261019T164004-demo-hunt-flow43", "20261019T152849-demo-hunt-flow43"
+    if not (
+        (root / stall / "packets.jsonl.gz").exists() and (root / normal / "events.jsonl").exists()
+    ):
+        pytest.skip("the v43 sessions are not banked on this host")
+    import arm_judge as aj
+    import flow_judge as fj
+    from anim_region import stand_grid
+
+    from poring_dataset import camera as cam
+    from poring_dataset import gat as gatmod
+
+    gat = gatmod.parse((cam.GAT_DIR / "prt_fild08.gat").read_bytes())
+    area = hc.search_area(stand_grid("prt_fild08", gat), [], margin=10)
+
+    def first_fire(sid: str) -> tuple[int, Any] | None:
+        with gzip.open(root / sid / "packets.jsonl.gz", "rt") as fh:
+            ev = sorted((json_.loads(x) for x in fh), key=lambda e: int(e["t_mono_ns"]))
+        bot = [json_.loads(x) for x in (root / sid / "events.jsonl").read_text().splitlines()]
+        t0 = next(int(e["t_ns"]) for e in bot if e["kind"] == "loop_start")
+        track, _ = fj.gm_track(ev)
+        srch = aj.mode_spans(bot, "search", t0, t0 + 3600 * 10**9)
+        hist: list[Any] = []
+        for s in range(0, 3600, 2):
+            t = t0 + s * 10**9
+            c = fj.at(track, t)
+            if c is None:
+                continue
+            hist = [x for x in hist if s - x[0] <= 62] + [(float(s), c, any(
+                a <= t < b for a, b in srch))]  # fmt: skip
+            pk = hf.stuck_pocket(hist, float(s), 60.0, 18.0, 80.0)
+            if pk is not None:
+                return s, (c, pk)
+        return None
+
+    got = first_fire(stall)
+    assert got is not None and 8 * 60 <= got[0] <= 10 * 60  # the stall began ~16:48 = minute 8
+    c, pk = got[1]
+    eg = hf.escape_goal(area, c, pk, 26.0)
+    assert eg is not None and hc.astar(area, c, eg) is not None
+    assert first_fire(normal) is None

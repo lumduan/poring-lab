@@ -1092,6 +1092,55 @@ def heading_goal_cov(area: Any, here: Cell, st: dict[str, Any], swept: Any, now:
     return pick[4]
 
 
+def stuck_pocket(samples: Sequence[tuple[float, Cell, bool]], now: float, window_s: float,
+                 extent: float, walked_min: float,
+                 search_share: float = 0.8) -> tuple[float, float] | None:  # fmt: skip
+    """PURE (Batt 2026-10-19, a BUG: v43 run 2 spent 53 min in a cliff / pond pocket, its search
+    turning +-90 / +-135 -- never the 180 the ping-pong fix watches): over the last ``window_s``
+    (2-s samples of (time, our cell, searching)), mostly searching, every cell within ``extent``
+    (Chebyshev) of their centre while >= ``walked_min`` cells were walked -> the pocket's centre;
+    else None. Sized on the run: 60 s / 18 cells / 80 cells fired at the stall's start (minute
+    9:00) and never on 4 normal runs (v43 run 1, v41 runs 1, 2, 4)."""
+    win = [x for x in samples if now - x[0] <= window_s]
+    if not win or now - win[0][0] < window_s - 2.5 or len(win) < 3:
+        return None
+    if sum(1 for x in win if x[2]) < search_share * len(win):
+        return None
+    cx = sum(c[0] for _t, c, _s in win) / len(win)
+    cy = sum(c[1] for _t, c, _s in win) / len(win)
+    if max(max(abs(c[0] - cx), abs(c[1] - cy)) for _t, c, _s in win) > extent:
+        return None
+    walked = sum(cheb(a[1], b[1]) for a, b in zip(win, win[1:], strict=False))
+    return (cx, cy) if walked >= walked_min else None
+
+
+def escape_goal(area: Any, here: Cell, centre: tuple[float, float], min_dist: float,
+                max_nodes: int = 40_000) -> Cell | None:  # fmt: skip
+    """PURE: the NEAREST cell reachable from ``here`` on the walkable grid (8-connected, breadth
+    first: real paths, not ray headings) that lies >= ``min_dist`` (Chebyshev) from ``centre``;
+    None when none is reachable within ``max_nodes``."""
+    from collections import deque
+
+    a = np.asarray(area, dtype=bool)
+    h, w = a.shape
+    start = (int(here[0]), int(here[1]))
+    if not (0 <= start[0] < w and 0 <= start[1] < h):
+        return None
+    seen = {start}
+    dq = deque([start])
+    while dq and len(seen) < max_nodes:
+        c = dq.popleft()
+        if max(abs(c[0] - centre[0]), abs(c[1] - centre[1])) >= min_dist:
+            return c
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                n_ = (c[0] + dx, c[1] + dy)
+                if n_ not in seen and 0 <= n_[0] < w and 0 <= n_[1] < h and a[n_[1], n_[0]]:
+                    seen.add(n_)
+                    dq.append(n_)
+    return None
+
+
 # v38 candidate (the SEARCH study, 2026-10-18, scripts/search_study.py): the yield of ground by how
 # long since WE last saw it, relative to ground never seen this run. The bot's own kills deplete the
 # ground it covers; a killed mob respawns anywhere on the map (prt_fild08: all spawns whole-map).
@@ -3603,12 +3652,25 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     vis_[ys_[in_], xs_[in_]] = True
                     bel_.update(int(t_f), dets_, vis_)
 
+            from collections import deque as deque_
+
+            # the pocket escape (a bug fix with v42): our cell every 2 s and the mode, the
+            # pockets left behind (centre, radius, until)
+            stuck_st: dict[str, Any] = {"hist": deque_(), "zones": [], "mode": ""}
+
             def planner() -> None:
                 """The queue (chained, standing first) every plan_every_s, and the next exploration
                 waypoint (the coverage plan's stalest tile) always held."""
                 while not halt.is_set():
                     now_, t_ = time.monotonic(), r.ns()
                     here_ = posm.at(now_)
+                    if prm.get("stuck_window_s"):
+                        sh_ = stuck_st["hist"]
+                        if not sh_ or now_ - sh_[-1][0] >= 2.0:
+                            sh_.append((now_, (int(here_[0]), int(here_[1])),
+                                        stuck_st["mode"] == "search"))  # fmt: skip
+                        while sh_ and now_ - sh_[0][0] > float(prm["stuck_window_s"]) + 4.0:
+                            sh_.popleft()
                     if prm.get("heading_cov"):  # v22: the ground in our view now (+-cov_half)
                         hx_, hy_, hc_ = int(here_[0]), int(here_[1]), int(prm["cov_half"])
                         swept_grid[max(0, hy_ - hc_): hy_ + hc_ + 1,
@@ -3727,6 +3789,38 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                            if prm.get("heading_age") else {})})  # fmt: skip
                                 else:
                                     goal = None
+                            if prm.get("stuck_window_s"):
+                                # the POCKET escape (a bug fix with v42): stuck by displacement,
+                                # or a heading goal inside a pocket left behind -> the nearest
+                                # reachable cell well outside it, by the grid's real paths
+                                zs_ = [z for z in stuck_st["zones"] if z[2] > now_]
+                                stuck_st["zones"] = zs_
+                                pk_ = stuck_pocket(list(stuck_st["hist"]), now_,
+                                                   float(prm["stuck_window_s"]),
+                                                   float(prm["stuck_extent"]),
+                                                   float(prm["stuck_walked"]))  # fmt: skip
+                                inz_ = next((z for z in zs_ if goal is not None and max(
+                                    abs(goal[0] - z[0][0]), abs(goal[1] - z[0][1])) < z[1]),
+                                    None)  # fmt: skip
+                                if pk_ is not None or inz_ is not None:
+                                    ctr_ = pk_ if pk_ is not None else inz_[0]
+                                    eg_ = escape_goal(area, here_, ctr_,
+                                                      float(prm["stuck_escape_min"]))  # fmt: skip
+                                    ep_ = None if eg_ is None else hc.astar(area, here_, eg_)
+                                    if eg_ is not None and ep_ is not None and len(ep_) >= 2:
+                                        goal, p_ = eg_, ep_
+                                        dy_, dx_ = eg_[1] - ctr_[1], eg_[0] - ctr_[0]
+                                        heading_st["ang"] = math.atan2(dy_, dx_)
+                                        if pk_ is not None:
+                                            stuck_st["zones"].append(
+                                                (pk_, float(prm["stuck_zone_r"]),
+                                                 now_ + float(prm["stuck_zone_s"])))  # fmt: skip
+                                            stuck_st["hist"].clear()
+                                    ev({"kind": "stuck_escape",
+                                        "why": "pocket" if pk_ is not None else "zone",
+                                        "centre": [round(ctr_[0], 1), round(ctr_[1], 1)],
+                                        "goal": None if eg_ is None else list(eg_),
+                                        "path": None if ep_ is None else len(ep_)})  # fmt: skip
                         elif prm.get("sweep") and area[here_[1], here_[0]]:
                             goal = sweep_goal(area, here_, sweep_st, prm["lane_w"])
                             if goal is not None:
@@ -3957,6 +4051,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
 
                 def set_mode(m_: str) -> None:
                     nonlocal mode_
+                    stuck_st["mode"] = m_  # the pocket escape reads it from the planner
                     if m_ != mode_:
                         mode_ = m_
                         ev({"kind": "mode", "mode": m_})
