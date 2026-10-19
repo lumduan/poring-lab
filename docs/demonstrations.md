@@ -11122,7 +11122,7 @@ After run 4: the standard layout (`client_layout.py ensure standard`), then the 
     2.9. `hardbar_live.py watch 43 --pid` bound to it.
   - Runs 2-4 queued: `hunt_chain.py --version 43 --seeds 20320202,20320303,20320404` (15:28:49).
 
-### 3.85 hunt-flow@45: THE LOCKED-POINTER WALK (Batt's search walking), interleaved in 10-min blocks (pre-registered 2026-10-19, the commit time below, BEFORE its runs; Batt 16:0x: "pre-register Batt's method as the search-walking change, LOCKED-POINTER WALK"; 16:2x: "Keep the locked-pointer walk (3.85) in the queue ... Report its effect on click accuracy too"; it runs after v44)
+### 3.85 hunt-flow@45: THE LOCKED-POINTER WALK (Batt's search walking), interleaved in 10-min blocks (pre-registered 2026-10-19 16:28 ICT, the commit time 8376ae6, BEFORE its runs; Batt 16:0x: "pre-register Batt's method as the search-walking change, LOCKED-POINTER WALK"; 16:2x: "Keep the locked-pointer walk (3.85) in the queue ... Report its effect on click accuracy too"; it runs after v44)
 
 **Why:**
 - 21 % of search walk clicks land more than 1 cell from the cell meant (v41's 4 runs: 1,071 of
