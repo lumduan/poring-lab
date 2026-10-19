@@ -54,11 +54,17 @@ RECTS: dict[str, tuple[tuple[int, int, int, int], ...]] = {
 TARGET = {"standard": {"rows": 4, "panel": "expanded", "tab": "regular"},
           "hunt": {"rows": 1, "panel": "collapsed", "tab": "battle"}}  # fmt: skip
 # template crops (x0, y0, x1, y1) and the click points of the client's own controls
-BOX = {"tabs": (2, 530, 160, 547), "arrow": (101, 132, 117, 145), "row1": (231, 3, 247, 22),
+# the arrow's crop leaves out the red notice badge drawn right of it (x >= 117: v43 run 2's start)
+BOX = {"tabs": (2, 530, 160, 547), "arrow": (102, 133, 114, 144), "row1": (231, 3, 247, 22),
        "row2": (232, 44, 246, 64), "row4": (232, 107, 246, 127)}  # fmt: skip
 ARROW_PX = (109, 138)
 TAB_PX = {"battle": (42, 538), "regular": (119, 538)}
-MATCH = {"tabs": 8.0, "arrow": 15.0, "row": 10.0}
+# The chat TABS are translucent (the ground shows through: a whole-strip template failed on v43
+# run 2's start); the SELECTED tab alone draws a white top border on row TAB_ROW over its span:
+# 253-255 grey vs 77-159 for the other, on every background seen. Its "distance" is 255 - that
+TAB_ROW = 529
+TAB_SPAN = {"battle": (12, 72), "regular": (88, 150)}
+MATCH = {"tabs": 25.0, "arrow": 15.0, "row": 10.0}
 OTHER_MIN = 25.0  # the arrow's other state must be at least this far
 
 
@@ -85,8 +91,7 @@ def _grey(img: Any, box: tuple[int, int, int, int]) -> Any:
 
 
 def load_templates(root: Path = TEMPLATES) -> dict[str, Any]:
-    names = ("tabs_battle", "tabs_regular", "arrow_collapsed", "arrow_expanded", "row1", "row2",
-             "row4")  # fmt: skip
+    names = ("arrow_collapsed", "arrow_expanded", "row1", "row2", "row4")
     return {n: np.load(root / f"{n}.npy") for n in names}
 
 
@@ -116,9 +121,11 @@ def decide(d: Mapping[str, float]) -> dict[str, Any]:
 
 def read(img_rgb: Any, tm: Mapping[str, Any]) -> dict[str, Any]:
     """The layout a game-region RGB frame shows (``decide`` on its template distances)."""
-    box = {"tabs_battle": "tabs", "tabs_regular": "tabs", "arrow_collapsed": "arrow",
-           "arrow_expanded": "arrow", "row1": "row1", "row2": "row2", "row4": "row4"}  # fmt: skip
+    box = {"arrow_collapsed": "arrow", "arrow_expanded": "arrow", "row1": "row1", "row2": "row2",
+           "row4": "row4"}  # fmt: skip
     d = {k: float(np.abs(_grey(img_rgb, BOX[b]) - tm[k]).mean()) for k, b in box.items()}
+    for tab, (x0, x1) in TAB_SPAN.items():
+        d[f"tabs_{tab}"] = 255.0 - float(_grey(img_rgb, (x0, TAB_ROW, x1, TAB_ROW + 1)).mean())
     return {**decide(d), "dist": {k: round(v, 1) for k, v in d.items()}}
 
 

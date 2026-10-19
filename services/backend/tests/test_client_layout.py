@@ -74,21 +74,23 @@ def test_the_ui_rectangles_follow_the_selected_layout_of_the_process() -> None:
 def test_read_on_frames_built_from_the_live_templates() -> None:
     """POSITIVE case on the live-cut templates (local data; skipped where absent): a frame carrying
     the hunting layout's crops reads as the hunting layout, the standard crops as standard."""
-    if not (cl.TEMPLATES / "tabs_battle.npy").exists():
+    if not (cl.TEMPLATES / "arrow_collapsed.npy").exists():
         pytest.skip("the layout templates are not on this host")
     tm = cl.load_templates()
 
-    def frame(parts: dict[str, str]) -> np.ndarray:
-        img = np.zeros((720, 1280, 3), np.float32)
+    def frame(parts: dict[str, str], tab: str) -> np.ndarray:
+        img = np.full((720, 1280, 3), 120.0, np.float32)  # some ground behind the tabs
         for name, box in parts.items():
             x0, y0, x1, y1 = cl.BOX[box]
             img[y0:y1, x0:x1, :] = tm[name][..., None]  # grey: R = G = B
+        x0, x1 = cl.TAB_SPAN[tab]
+        img[cl.TAB_ROW, x0:x1, :] = 254.0  # the selected tab's white top border
         return img
 
-    hunt = cl.read(frame({"tabs_battle": "tabs", "arrow_collapsed": "arrow", "row1": "row1"}), tm)
+    hunt = cl.read(frame({"arrow_collapsed": "arrow", "row1": "row1"}, "battle"), tm)
     assert cl.matches(hunt, "hunt"), hunt
-    std = cl.read(frame({"tabs_regular": "tabs", "arrow_expanded": "arrow", "row1": "row1",
-                         "row2": "row2", "row4": "row4"}), tm)  # fmt: skip
+    std = cl.read(frame({"arrow_expanded": "arrow", "row1": "row1", "row2": "row2",
+                         "row4": "row4"}, "regular"), tm)  # fmt: skip
     assert cl.matches(std, "standard"), std
 
 
@@ -98,6 +100,7 @@ def test_the_runner_selects_the_layout_before_the_masks_and_applies_it() -> None
     assert run_.index('cl.select(PARAMS[version].get("ui_layout") or "standard")') < run_.index(
         "import loot1")  # fmt: skip
     i_lay = run_.index('lay_ = cl.ensure(agent_raw, screen, prm["ui_layout"])')
+    assert run_.rindex("bench.close_chat(agent_raw, screen)", 0, i_lay) > i_lay - 400
     assert i_lay < run_.index("before = gm_state.ensure_hunting(")
     assert "except cl.LayoutError as exc:" in run_ and 'FarmStop(f"client layout: {exc}")' in run_
     w = run_[run_.index("hunt_tabs = prm.get") :][:700]

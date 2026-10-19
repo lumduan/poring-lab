@@ -2253,6 +2253,10 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
             if prm.get("ui_layout"):
                 # v43: the client's layout reached through its own controls (F12 / the Basic
                 # Info arrow / a chat tab), each step verified; unreadable -> stop (never blind)
+                # an open chat input draws the chat window as active and hides the tab templates
+                # (v43 run 2's start, after run 1's restore typed lines): closed first, by the UI
+                # gate's known step
+                bench.close_chat(agent_raw, screen)
                 try:
                     lay_ = cl.ensure(agent_raw, screen, prm["ui_layout"])
                 except cl.LayoutError as exc:
