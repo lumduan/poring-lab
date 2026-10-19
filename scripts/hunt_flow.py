@@ -1500,6 +1500,28 @@ def walk_guard_why(u: float, v: float, share: float, gm_px: float, pink_max: flo
     return None
 
 
+def box_dist(u: float, v: float, box: Sequence[float]) -> float:
+    """PURE: px from (u, v) to the box (x0, y0, x1, y1); 0 inside it."""
+    dx = max(box[0] - u, 0.0, u - box[2])
+    dy = max(box[1] - v, 0.0, v - box[3])
+    return math.hypot(dx, dy)
+
+
+def walk_guard_box_why(u: float, v: float, share: float, box: Sequence[float], margin: float,
+                       pink_max: float) -> str | None:  # fmt: skip
+    """PURE (v42 candidate, STAGED; Batt 2026-10-19 decision 1): the walk guard for STEER clicks
+    only -- refused within ``margin`` px of the GM's drawn sprite box (GM_SPRITE_BOX) instead of
+    the 120-px circle; the pink rule unchanged. Sized on hunt-flow1-15's pre-guard walk clicks:
+    the client turned 5 / 1,397 clicks within 60 px of the box into a Creamy attack (0.36 %),
+    11 / 18,869 beyond 100 px (0.06 %); box + 20 px refuses every 1-cell step and the cells behind
+    the sprite and frees 13 / 16 cells at 2 and 21 / 24 at 3 that the circle refuses."""
+    if box_dist(u, v, box) < margin:
+        return "near_gm_box"
+    if share > pink_max:
+        return "pink"
+    return None
+
+
 LOOT_JITTER = ((-6.0, 3.0), (6.0, -4.0), (0.0, 0.0))  # v23: px around a cell's click point
 
 
@@ -2237,6 +2259,14 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 A/B (interleaved per engagement)."""
                 return bool(prm.get("steer_tail")) and (
                     not prm.get("steer_tail_ab") or k_ % 2 == 1
+                )  # fmt: skip
+
+            def steer_box_on(k_: int) -> bool:
+                """v42 candidate (STAGED; Batt 2026-10-19 decision 1): the STEER's walk clicks
+                use the GM-box guard (``steer_guard_box_px``) instead of the 120-px circle; odd k
+                when A/B. Search walk clicks and loot clicks keep the current guard."""
+                return prm.get("steer_guard_box_px") is not None and (
+                    not prm.get("steer_guard_ab") or k_ % 2 == 1
                 )  # fmt: skip
 
             def sword_on(k_: int, where: str) -> bool:
@@ -3901,9 +3931,11 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     else []
                 )  # v17+: the client's static windows are not sprites
 
-                def guard_ok(u: float, v: float) -> bool:
+                def guard_ok(u: float, v: float, near_box: bool = False) -> bool:
                     """v16+ (a safety layer): no walk click near the GM's sprite or near pink
-                    pixels on a FRESH grab (the client picks what its display shows there)."""
+                    pixels on a FRESH grab (the client picks what its display shows there).
+                    ``near_box`` (v42 candidate, steer clicks only): the GM's drawn box +
+                    ``steer_guard_box_px`` instead of the ``guard_gm_px`` circle."""
                     if not prm.get("walk_guard"):
                         return True
                     rg_ = int(prm["guard_pink_r"])
@@ -3915,8 +3947,13 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         share_ = pink_share(crop_, (x0_, y0_), u, v, rg_, GUARD_EXCLUDE,
                                             guard_ui, ptr[0] if prm.get("guard_ptr_mask")
                                             else None)  # fmt: skip
-                    why_ = walk_guard_why(u, v, share_, prm["guard_gm_px"],
-                                          prm["guard_pink_max"])  # fmt: skip
+                    if near_box:
+                        why_ = walk_guard_box_why(u, v, share_, GM_SPRITE_BOX,
+                                                  float(prm["steer_guard_box_px"]),
+                                                  prm["guard_pink_max"])  # fmt: skip
+                    else:
+                        why_ = walk_guard_why(u, v, share_, prm["guard_gm_px"],
+                                              prm["guard_pink_max"])  # fmt: skip
                     guard_n[why_ or "ok"] += 1
                     if sum(guard_n.values()) % 200 == 0:
                         ev({"kind": "walk_guard", **guard_n})
@@ -3924,7 +3961,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
 
                 def cont_click(route: list[Cell], grid: Any, why: str,
                                avoid: tuple[float, float] | None = None,
-                               tail: bool = False) -> bool:  # fmt: skip
+                               tail: bool = False, near_box: bool = False) -> bool:  # fmt: skip
                     """v5: the first candidate ahead of where we ARE that passes the gates on the
                     freshest frames; no standstill needed."""
                     cur = measured_pos() or (float(pos[0]), float(pos[1]))
@@ -3964,7 +4001,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             fail_ = "boxes"
                         elif cont and not walk_ok(c_):
                             fail_ = "refused"
-                        elif not guard_ok(uu, vv):
+                        elif not guard_ok(uu, vv, near_box):
                             fail_ = "guard"
                         if fail_ is not None:
                             fails_[fail_] += 1
@@ -3985,7 +4022,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             fails_["click_refused"] += 1
                             world.position = at_
                     # v39: the tail arm's counts apart ("steer+tail"); v38's keys unchanged
-                    cont_fail_note(why + ("+tail" if tail else ""), fails_, len(route))
+                    cont_fail_note(why + ("+tail" if tail else "") + ("+box" if near_box else ""),
+                                   fails_, len(route))  # fmt: skip
                     return False
 
                 cf_acc: dict[str, Any] = {"t": time.monotonic(), "n": Counter()}
@@ -4555,7 +4593,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                                              int(round(tcell[1])))))  # fmt: skip
                                         target = None
                                     elif cont_click(ap, ok, "steer", tcell,
-                                                    tail=steer_tail_on(k)):  # fmt: skip
+                                                    tail=steer_tail_on(k),
+                                                    near_box=steer_box_on(k)):  # fmt: skip
                                         stop_since = None
                                     elif not moving:
                                         stop_since = stop_since or now

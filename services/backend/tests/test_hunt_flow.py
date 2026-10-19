@@ -885,7 +885,7 @@ def test_cont_fail_logging_keeps_the_gates_order_and_short_circuit() -> None:
     chain = body[body.index("fail_: str | None = None") : body.index("if fail_ is not None:")]
     tests = ["if not (in_view(uu, vv) and in_view(gu, gv)):", "elif not grid[c_[1], c_[0]]:",
              "elif not units_clear(gu, gv):", "elif not boxes_clear(gu, gv):",
-             "elif cont and not walk_ok(c_):", "elif not guard_ok(uu, vv):"]  # fmt: skip
+             "elif cont and not walk_ok(c_):", "elif not guard_ok(uu, vv, near_box):"]  # fmt: skip
     pos = [chain.index(x) for x in tests]
     assert pos == sorted(pos)
     names = [chain[chain.index("fail_ = ", p_) + 9 :].split('"')[0] for p_ in pos]
@@ -929,7 +929,7 @@ def test_v39_the_steer_may_click_the_routes_tail() -> None:
     fb = src[src.index("v39: from the route point nearest the GM") :][:600]
     assert "if steer_tail_on(k) else 0" in fb and "step_target(ap, i0_, pos" in fb
     # the tail arm's cont_fail counts go apart; without the tail the keys are v38's
-    assert 'cont_fail_note(why + ("+tail" if tail else ""), fails_, len(route))' in src
+    assert 'cont_fail_note(why + ("+tail" if tail else "") + ("+box" if near_box else ""),' in src
 
 
 def test_v39_dead_probe_is_log_only() -> None:
@@ -1009,3 +1009,37 @@ def test_v41_candidate_walkers_struck_from_further_only_when_set() -> None:
     assert same == {k: v for k, v in hf.PARAMS[40].items() if k not in moved}
     src = Path(hf.__file__).read_text()
     assert src.count("strike_range(target, prm, k)") == 1 and "target, prm, k) <" in src
+
+
+def test_v42_candidate_steer_walk_guard_from_the_gm_box_only_when_set() -> None:
+    """STAGED (Batt 2026-10-19 decision 1): the STEER's walk clicks refused within
+    ``steer_guard_box_px`` of the GM's drawn box instead of the 120-px circle (the pink rule
+    unchanged); search and loot clicks keep the circle; inert in v38-v41."""
+    box = hf.GM_SPRITE_BOX
+    assert hf.box_dist(640, 330, box) == 0.0 and hf.box_dist(600, 330, box) == 20.0
+    w = hf.walk_guard_box_why
+    assert w(640, 330, 0.0, box, 20.0, 0.001) == "near_gm_box"  # on the sprite
+    assert w(605, 330, 0.0, box, 20.0, 0.001) == "near_gm_box"  # 15 px off its side
+    assert w(595, 330, 0.0, box, 20.0, 0.001) is None  # 25 px off: the circle refused it
+    assert hf.walk_guard_why(595, 330, 0.0, 120.0, 0.001) == "near_gm"
+    assert w(595, 330, 0.01, box, 20.0, 0.001) == "pink"  # the pink rule unchanged
+    # on the camera's projection: every 1-cell step stays refused, most cells at 2-3 are freed
+    import conversion_phases as cp
+
+    proj = cp.camera_projector()
+    for ring, refused_max in ((1, 8), (2, 3), (3, 3)):
+        offs = [(dx, dy) for dx in range(-ring, ring + 1) for dy in range(-ring, ring + 1)
+                if max(abs(dx), abs(dy)) == ring]  # fmt: skip
+        px = proj(offs)
+        n = sum(w(float(u), float(v), 0.0, box, 20.0, 0.001) is not None for u, v in px)
+        assert n == 8 if ring == 1 else n <= refused_max, (ring, n)
+        assert all(hf.walk_guard_why(float(u), float(v), 0.0, 120.0, 0.001) for u, v in px
+                   ) or ring == 3  # fmt: skip
+    for n in (38, 39, 40, 41):
+        assert hf.PARAMS[n].get("steer_guard_box_px") is None
+    src = Path(hf.__file__).read_text()
+    assert src.count("near_box=steer_box_on(k)") == 1  # the steer's call only
+    assert 'cont_click(gp, grid_s, "search")' in src  # search: the circle, as before
+    g = src[src.index("def guard_ok(") :][:2400]
+    assert "if near_box:" in g and "walk_guard_box_why(" in g and "walk_guard_why(" in g
+    assert "elif not guard_ok(uu, vv, near_box):" in src
