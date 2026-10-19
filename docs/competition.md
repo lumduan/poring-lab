@@ -1172,6 +1172,9 @@ kills, 72 pickups; species Poring 79, Lunatic 39, Drops 7):
   121/122, 147/148, 132/133; recall (kills of ours with a line within 2 s) 0.982 / 0.992 / 0.980 /
   0.985; delay after the kill p50 0.28-0.33 s, p90 0.39-0.47 s. Wired into a decision first by
   v44 (3.87, from 2026-10-20 00:52).
+  ➡️ v44 NOT ADOPTED (2026-10-20 04:4x): the EXP line was sure and fast (kill -> loot start
+  0.38 x), but its checked pixel fallback failed the truth check (0.72 x) and cost loot (-12.2
+  points). See the overnight section below.
 
 ## Day run 2026-10-19 (Batt's decisions ~07:00, until 20:00): results
 
@@ -1431,3 +1434,48 @@ runner, a judged screenshot before each run. Full rows and per-arm tables: demon
 00:52** (amendment 2a00832; the chain's `--start-by` 03:50). The first start (00:44) stopped in the
 runner's loot clear on two identical equipment items in a row, a false "did not drop"; fixed in
 `gm_state.tab_changed` (ee2dec5, tested) before run 1.
+
+| run | kills / h | landing <= 5 s | seen / 10 min | seen -> click p50 | dead calls w/o a death | loot picked (looters) | reversals / min | kill -> loot start mean / p50 | hard bars |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 (00:52) | 134.0 | 83.8 % | 26.0 | 2.74 s | 13.0 % | 54 % (9) | 7.14 | 1.35 / 0.57 s | 0 |
+| 2 (01:49) | 126.6 | 70.3 % | 28.0 | 4.05 s | 21.5 % | 58 % (29) | 6.97 | 0.96 / 0.53 s | 0 |
+| 3 (02:45) | 76.3 | 80.8 % | 20.0 | 2.39 s | 10.6 % | 65 % (0) | 6.99 | 1.13 / 0.57 s | 0 |
+| 4 (03:42) | 70.8 | 73.8 % | 16.0 | 3.17 s | 22.7 % | 63 % (6) | 7.21 | 1.39 / 0.66 s | 0 (Creamy 7) |
+| pooled | 101.9 | 77.1 % | 22.5 | 3.09 s | 17.1 % | 59 % (44) | 7.08 | 1.20 / 0.58 s | 0 (Creamy 7) |
+
+**v44 verdict (04:4x, 4 runs pooled, `arm_judge.py expdead`): NOT ADOPTED.**
+- Check 1 PASS: kill -> loot start mean, fix 0.668 s vs base 1.763 s (0.38 x; bar <= 0.60 x).
+- Check 2 FAIL: dead calls without a real death, fix 14.3 % vs base 19.9 % (0.72 x; bar <= 0.55
+  x; inside the null).
+- Check 3 FAIL: loot picked at our kills, fix 50.2 % vs base 62.4 % (-12.2 points; bar -5).
+- Check 4 PASS (landing 78.4 vs 75.8 %); check 5 PASS (hard bars 0).
+- The rule: faster but not truer, and it costs loot. The EXP line itself is a sure, fast death
+  (precision 369/372 on the night; lag p50 0.27-0.35 s). What failed is the CHECKED pixel
+  fallback beside it:
+  - its death-cell "ok" passed live targets;
+  - its 1.0-s wait skipped 24 real kills whose loot was then lost.
+- **The base stays v43's + the pocket escape.**
+- Kills / h followed the field: runs 3-4 had the sparsest fields of the night (seen 20 and 16 /
+  10 min).
+
+**Gap to Batt re-ranked on v44's 4 runs** (`search_study.py` + `conversion_phases.py compare`;
+35.3 vs 12.0 s per kill = 23.3 s; v42's split in brackets):
+
+| cause | s per kill | share | v42 |
+|---|---|---|---|
+| search speed: no-target stretch mean 16.3 vs 6.3 s, x 1.36 stretches per kill | +13.6 | 58 % | +6.7 (43 %) |
+| conversion (target-in-view s per kill 13.2 vs 6.8) | +6.4 | 27 % | +6.4 (41 %) |
+| extra no-target stretches (1.36 vs 0.82 per kill) x 6.3 s | +3.4 | 15 % | +2.7 (17 %) |
+
+- Conversion is the same as v42's to 0.02 s. Its parts: approach (turn -> in range) +3.57,
+  never attacked +2.11, in range -> click +0.47, client walk-up +0.35, notice -> turn +0.31,
+  unnoticed +0.14, attacked not killed +0.10, hit -> kill -0.22, loot -0.50.
+- Search grew with the sparse fields. Re-swept <= 120 s 47 % vs Batt 27 %; fresh cells / s in
+  no-target time 79 vs 102; reversals 7.1 vs 3.6 / min; free targets attacked <= 10 s 40 % vs
+  78 %.
+
+**End state (04:41):** the chain done at 04:39:00. Then:
+- the standard layout and Base Lv 1 / Job Lv 1 (`@resetstat`, the GM's fixed state confirmed);
+- route_previewd stopped;
+- a judged screenshot; `/health` ASSIST, no lease, bot_agents [];
+- no runner, monitor or chain process.

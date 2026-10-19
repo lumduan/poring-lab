@@ -11760,9 +11760,70 @@ truer: NOT adopted (reported). If 3 fails: it costs loot: NOT adopted.
 
   - The reader: base EXP precision 69/69 = 1.000, recall 0.986, lag p50 0.35 / p90 0.48 s. Best
     2 min: 6 kills from minute 16.3.
-- **Run 4** started by the chain 03:42:32 (before the 03:50 start-by: v44 has its 4 runs);
-  screenshot `pre-v44-20350404.jpg` judged: the hunting layout, Lv 70, weight 536 / 4970, no
-  dialog.
+- **Run 4** (seed 20350404, session 20261020T034234, started by the chain 03:42:32, before the
+  03:50 start-by, so v44 has its 4 runs; ended on its time box 04:39:00; screenshot
+  `pre-v44-20350404.jpg` judged: the hunting layout, Lv 70, weight 536 / 4970, no dialog):
+  - The row: 80 engagements, landing 59/80 = 73.8 % (63.2-82.1), 70.8 kills / h, 4.42 per
+    sighting, 50.8 s per kill, seen 16.0 / 10 min (sparser still than run 3: 2,221 s of the 3,300
+    searching), free targets <= 10 s 44 % (n 94), steer moving 39 %, seen -> click 3.17 s, death
+    -> next 0.76 s, dead calls without a real death 15/66 = 22.7 %, kill -> loot start 1.39 /
+    0.66 s (n 52), reversals 7.21 / min (outside loot 6.99), Creamy 7 hits (5 attack requests;
+    counted apart, not a bar), hard bars 0 / 0 / 0. Results: dead 66, skipped_unconfirmed 8,
+    skipped_risky 6.
+  - Loot: 86 items, picked 62.8 %, looters 7.0 % (6), left behind 30.2 %; in the 3 x 3 77.2 %;
+    the death cell exact 44.6 %, <= 1 cell 75.0 %.
+  - Per arm, run 4 only, NOT deciding:
+
+    | arm | kill -> loot start mean (p50 / p90) | dead calls w/o a real death | loot picked | landing | dead by |
+    |---|---|---|---|---|---|
+    | fix (odd k) | 0.89 s (0.58 / 2.15) | 5/32 = 15.6 % | 19/36 = 52.8 % | 75.0 % | EXP line 15, line during the pixel wait 13, checked pixel 4; skipped_unconfirmed 8 (3 real kills) |
+    | base (even k) | 1.93 s (2.25 / 4.57) | 10/34 = 29.4 % | 27/41 = 65.9 % | 72.5 % | the base rule 34; skipped_risky 6 |
+
+  - The reader: base EXP precision 65/65 = 1.000, recall 1.000, lag p50 0.27 / p90 0.46 s. Best
+    2 min: 8 kills from minute 26.8.
+- **After run 4:** the chain ended ("chain done", 04:39:00). The night's end state was applied
+  at 04:40:26-04:41:23 (`night_end.sh`, the agent's call; the 04:56 fallback timer then had
+  nothing to do): the standard layout (4 shortcut rows, panel expanded, Regular Chat tab),
+  `@resetstat`, Base Lv 1 / Job Lv 1, `@heal`, the GM's fixed state confirmed, route_previewd
+  stopped. A screenshot at 04:41 was judged: Base Lv 1 / Job Lv 1, HP 40 / 40, the standard
+  layout, no dialog. `/health`: ASSIST, no lease, bot_agents [].
+
+**RESULT (read 2026-10-20 04:4x ICT; 4 runs pooled, `arm_judge.py expdead` on the 4 sessions; the
+pooled row `run_row.py --pool`):**
+
+| check | fix arm (odd k) | base arm (even k) | ratio / difference | bar | |
+|---|---|---|---|---|---|
+| 1 kill -> loot start, mean (p50 / p90) | 0.668 s (0.50 / 1.81) | 1.763 s (0.80 / 4.51) | 0.38 x (null -23.7 % .. +17.6 %) | <= 0.60 x | PASS |
+| 2 dead calls without a real death | 26/182 = 14.3 % | 37/186 = 19.9 % | 0.72 x (inside the null 0.59 .. 1.41) | <= 0.55 x | **FAIL** |
+| 3 loot picked / dropped at our kills | 115/229 = 50.2 % | 138/221 = 62.4 % | -12.2 points | >= base - 5 | **FAIL** |
+| 4 landing within 5 s | 174/222 = 78.4 % | 169/223 = 75.8 % | +2.6 points | >= base - 8 | PASS |
+| 5 hard bars (NPC / map / non-Creamy non-target) | 0 / 0 / 0 | | | zero | PASS |
+
+- **Reported, not deciding:**
+  - The fix arm's dead calls by what made them: the EXP line 86, the line during the pixel wait
+    71, the checked pixel fallback 25. It ended 40 engagements skipped_unconfirmed, 24 of them
+    real kills whose loot was never picked up. The base arm had 36 skipped_risky and 1 gave_up.
+  - Items lost to looters: fix 28, base 23 (expected fewer in the fix arm: not seen).
+  - Death -> next engagement p50: fix 18.8 s, base 20.2 s.
+  - The reader's live precision: 369 of 372 base EXP lines had a kill of ours behind them; recall
+    0.983-1.000 per run; lag p50 0.27-0.35 s.
+  - Kills / h per run 134.0, 126.6, 76.3, 70.8: they track the field's density (seen 26.0, 28.0,
+    20.0, 16.0 / 10 min), the same arms in every run.
+- **Decision (the rule as written): NOT ADOPTED.** Check 1 passes and check 2 fails: faster, but
+  not truer. Check 3 fails too: it costs loot.
+  - The EXP line is a sure and fast death (check 1 is far outside its null). What fails is the
+    pixel fallback beside it, in both directions:
+    - its death-cell "ok" passed calls on live targets (run 2: 8 of the 10 not-real calls);
+    - its 1.0-s wait gave up on targets the client was still killing (24 real kills skipped,
+      their loot lost).
+  - **The base stays v43's** (the hunting UI layout, the ping-pong fix, the false-dead fix on every
+    engagement) + the pocket escape (a bug fix in both arms, 3.87's base).
+  - PARAMS[44] stays in the code as this version's record. The next version is built on the
+    base, not on PARAMS[44].
+- **For a later version (a note, not a pre-registration):**
+  - the EXP line on its own, with the fallback that KEEPS the target (no skip) when no line came;
+  - the run-1 timing says such a fallback must wait for the line until the target's sprite is
+    gone: 12 of 14 late lines came 0.01-2.92 s after the 1.0-s check.
 
 ### 3.88 hunt-flow@47: THE +-135 TURN ONLY WHEN BLOCKED (reversal fix P4), interleaved in 10-min blocks (pre-registered 2026-10-19 20:07 ICT, the commit time cba01d6, BEFORE its runs; Batt ~19:5x: "Reversal fixes: P4 yes (reverse only when 0/45/90 are all blocked; matches my rule) - pre-register it in the queue after v46")
 
