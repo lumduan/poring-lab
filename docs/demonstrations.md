@@ -11580,9 +11580,10 @@ truer: NOT adopted (reported). If 3 fails: it costs loot: NOT adopted.
     05:00, Tuesday is a market day). v42's last run ends ~00:30, so v44 run 1 can start ~00:45.
     A run takes its time box + ~2.5 min of start (layout, state, checks). Four 60-min runs end
     ~04:55, too late for the end state.
-  - The null was RE-MEASURED on the same 12 banked runs truncated to the first N minutes (the
-    script of the original null, an engagement kept only if its first click falls in the first
-    N minutes; the 60-min run reproduces the table above exactly):
+  - The null was RE-MEASURED on the same 12 banked runs truncated to the first N minutes
+    (`scripts/expdead_null.py --max-min N`, the original null's script, committed with this
+    amendment; an engagement is kept only if its first click falls in the first N minutes; the
+    60-min run reproduces the table above exactly):
 
     | runs truncated to | kill -> loot start: pooled mean, n | its null | dead calls without a real death: pooled | its null (ratio) |
     |---|---|---|---|---|
