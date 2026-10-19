@@ -15,44 +15,49 @@ frames (ro_agent.Screen().grab of the chat window's rows of the game region, as 
 recorder does) and nothing else (test_battle_log.py checks the source).
 
 The chat window of the hunting layout (measured on 20261019T152849-demo-hunt-flow43's frames,
-client px): the tab strip at y 530..547 ("Battle Log" selected = client_layout's tabs_battle
-template), THREE message lines on a 14 px pitch, line k's band at rows 551 + 14 k .. 564 + 14 k
-(x-height rows 555..561 of line 0, ascenders from 552, descenders to 563), the text from x 8
-(a line that starts with a space, the damage line, from x 12) to at most x 580; the scrollbar is
-right of x 584 and the input box below y 596. The newest line is the BOTTOM one; a new line
-scrolls the others up by one band.
+client px): the tab strip at y 529..545, THREE message lines on a 14 px pitch, line k's band at
+rows 551 + 14 k .. 564 + 14 k (x-height rows 555..561 of line 0, ascenders from 552, descenders
+to 563), the text from x 8 (the damage line starts with a space: x 12) to at most x 580; the
+scrollbar is right of x 584 and the input box below y 596. The newest line is the BOTTOM one; a
+new line scrolls the others up by one band. Battle Log is the SELECTED tab when the window's top
+border (row 545, opaque) runs under Regular Chat and not under Battle Log; both tabs are
+translucent, so a template of their fill fails over dark grass, the border does not.
 
 Reading (pure functions):
-- a line's ink = LUMA > LUMA_MIN in its band: the client's flat bitmap font is bright on the
-  darkened, translucent window (the background stays under ~110 luma; yellow text ~235, cyan
-  ~180). Luma, not a colour mask: JPEG (the recorded frames are q80) subsamples the chroma, and a
-  cyan mask lost whole strokes (2026-10-19 design probe); the luma plane is full resolution;
+- a line's ink = LUMA > LUMA_MIN in its band, minus PINK (a Poring behind the translucent window
+  passes the luma bar), then only the pixels of the line's colour: the client's flat bitmap font
+  is bright on the darkened window (background under ~110 luma; yellow text ~235, cyan ~180).
+  Luma, not a colour mask: the recorded frames are JPEG q80, the chroma is subsampled and a cyan
+  mask lost whole strokes; the luma plane is full resolution;
 - glyph runs = column runs of ink split on empty columns; a gap of >= SPACE_COLS columns is a
   space. Each run is matched to the nearest glyph template (Hamming over the full band height, so
   a quote and a comma differ by row; width +-1), within a tolerance and a margin over the next
   other character; a run that matches nothing is tried as two touching glyphs (a JPEG speck
   bridges a gap), else it reads '?'. Thai item names read as '?'s, never as text;
 - the line's colour = its ink's mean RGB (yellow / cyan / teal / white / red / green);
-- the type by the decoded text: DAMAGE `[<name>] receives '<N>' damage points.`, BASE / JOB EXP
-  `'<N>' Base|Job Experience acquired.`, ITEM `You got <...> (<count>).`, else OTHER. A '?' in a
-  fixed word still matches it (a speck must not turn a damage line into OTHER); a number is read
-  only when every digit matched, else its field is None;
+- the type by the decoded text's SHAPE with fuzzy fixed words (classify): DAMAGE
+  `[<name>] receives '<N>' damage points.`, BASE / JOB EXP `'<N>' Base|Job Experience
+  acquired.`, ITEM `You got <...> (<count>).`, else OTHER (drops, broadcasts). A spoiled glyph
+  in a fixed word does not change the type; a number is read only when every digit matched,
+  else its field is None (the line is not "clean");
 - the monster NAME = the bracketed text, mapped to the species vocabulary (exact, or the one
-  name the readable letters fit); species name templates (`cut-names`, labelled by packets)
-  answer when a letter of the name is unknown.
+  name the read letters fit, '?' = 1-2 letters); species name templates (`cut-names`, labelled
+  by packets) answer when that fails.
 
 NEW lines (lines carry no timestamps): the visible lines of a frame are compared with the last
-frame's (the Battle Log shown in both; frames with another tab are skipped and the comparison
-resumes against the last Battle Log frame). The smallest shift s (0..3) with this frame's first
-3 - s lines EQUAL to the last frame's lines s.. is taken; the bottom s lines are new. Equal =
-same colour and the same decoded text, or, when either holds a '?', ink bitmaps within
-SAME_TOL. Identical consecutive lines (two kills with the same EXP) are therefore counted right
-whenever the scroll is SEEN: [dmg, base 2, job 1] -> [base 2, job 1, dmg'] is s = 1 even though
-the old and the new lines repeat; what cannot be seen is a scroll that brings back exactly the
-lines it pushed out (all three, or a period of the pattern) within one frame interval -- the
-smallest shift is taken (an undercount), and the record says ``ambiguous`` when a larger shift
-fitted as well. s = 3 means no overlap: >= 3 new lines, and any beyond 3 were never visible
-(``overflow``).
+frame's (frames with another tab are skipped; the comparison resumes against the last Battle
+Log frame). The smallest shift s (0..3) with this frame's first 3 - s lines EQUAL to the last
+frame's lines s.. is taken; the bottom s lines are new. Equal (same_line) = the same colour
+group and the glyph runs aligned column by column: read glyphs must agree, an unread glyph
+matches anything (one spoiled glyph does not make a line new), an extra unread run (a sprite's
+highlight) is ignored, an extra read run or a different digit is a difference. Identical
+consecutive lines (two kills with the same EXP) are therefore counted right whenever the scroll
+is SEEN: [dmg, base 2, job 1] -> [base 2, job 1, dmg'] is s = 1 even though the old and the new
+lines repeat. What cannot be seen is a scroll that brings back exactly the lines it pushed out
+(all three, or a period of the pattern) within one frame interval: the smallest shift is taken
+(an undercount) and the frame counts as ``ambiguous``. s = 3 is no overlap: >= 3 new lines, any
+beyond 3 never visible (``overflow``). Reader (below) adds a one-frame hold for a no-overlap
+jump that looks like a misread, and the refinement of a line read unclean on its first frame.
 
 Templates are client pixels: data/ui_anchors/battle_log/ (gitignored), never committed.
 """
@@ -88,6 +93,7 @@ TAB_EDGE_Y, BATTLE_SPAN, REGULAR_SPAN, TAB_EDGE_LUMA = 545, (6, 76), (86, 156), 
 LINE_Y0, LINE_PITCH, N_LINES = 551, 14, 3
 TEXT_X0, TEXT_X1 = 4, 580
 LUMA_MIN = 140
+LUMA_REL, LUMA_FLOOR = 0.68, 120  # the colour pass: 0.68 x the line's median ink luma, >= 120
 SPACE_COLS = 3
 MIN_INK = 2  # a run of fewer ink pixels is a speck
 # glyph match: the nearest template within max(MATCH_MIN, MATCH_FRAC x its ink) pixels and at
@@ -126,21 +132,24 @@ def band_of(crop_rgb: np.ndarray, k: int) -> np.ndarray:
     return np.asarray(crop_rgb)[y0 - CROP[1] : y1 - CROP[1], TEXT_X0 - CROP[0] : TEXT_X1 - CROP[0]]
 
 
-def ink_of(band_rgb: np.ndarray, colour: str | None = None) -> np.ndarray:
+def ink_of(band_rgb: np.ndarray, colour: str | None = None, luma_min: float = LUMA_MIN
+           ) -> np.ndarray:  # fmt: skip
     """Bright pixels that are not a SPRITE behind the translucent window: a Poring's highlights
     pass the luma bar at about (172, 142, 132) -- r - g +20..+40, b - g -20..0 -- while yellow
     text sits at r - g ~ +4, b - g ~ -113 and cyan at r - g ~ -90 (20261019T152849 frames
     370-383). With ``colour`` known, only pixels of that colour are kept (yellow: b - g < -45;
-    cyan / teal: r - g < -20)."""
+    cyan: r - g < -20; teal: r - g < 0)."""
     a = np.asarray(band_rgb)[..., :3].astype(np.int16)
     r, g, b = a[..., 0], a[..., 1], a[..., 2]
-    m = luma(band_rgb) > LUMA_MIN
+    m = luma(band_rgb) > luma_min
     pink = (r - g > 15) & (r - g < 70) & (b - g > -45)
     m &= ~pink
     if colour == "yellow":
         m &= b - g < -45
-    elif colour in ("cyan", "teal"):
+    elif colour == "cyan":
         m &= r - g < -20
+    elif colour == "teal":  # broadcasts: r - g -55..-14 (10th..90th percentile)
+        m &= r - g < 0
     return m
 
 
@@ -326,7 +335,11 @@ def read_line(band_rgb: np.ndarray, gl: Glyphs,
     if int(m0.sum()) < 4:
         return None
     colour = colour_of(band_rgb, m0)
-    m = ink_of(band_rgb, colour)
+    # a dimmer text colour (teal / cyan, ~180-190 luma) loses its JPEG-softened stroke edges
+    # under LUMA_MIN: its bar follows the line's own brightness (frames 280-292: a broadcast
+    # read as '?'s); the colour test keeps the background out
+    bar = float(np.clip(LUMA_REL * float(np.median(luma(band_rgb)[m0])), LUMA_FLOOR, LUMA_MIN))
+    m = ink_of(band_rgb, colour, bar)
     if int(m.sum()) < 4:
         return None
     key = m.tobytes()
@@ -350,67 +363,75 @@ def read_lines(crop_rgb: np.ndarray, gl: Glyphs,
 
 COLOUR_GROUP = {"cyan": "blue", "teal": "blue"}
 SAME_MIN_SHARE = 0.7  # of the shorter line's runs that must sit at the same columns
+MAX_SOFT = 1  # letters (never digits) that may read differently in the same line
 QMARK_TOL_MIN, QMARK_TOL_FRAC = 3, 0.25  # two unread runs at the same columns: the same glyphs
 # an unpaired read run this small (a period, a quote) is not a difference: the RDP progressive
 # codec draws a new line coarse first, and its smallest glyphs come a frame later (frame 1048)
 SMALL_INK = 4
 
 
-def _pair(p: tuple[int, int, str], parts: Sequence[tuple[int, int, str]]) -> int | None:
-    """The index of the run of ``parts`` at the same columns as ``p``: overlapping by at least
-    half the narrower one (a JPEG speck widens a run by a column now and then)."""
-    best, best_ov = None, 0
-    for j, (x0, x1, _) in enumerate(parts):
-        ov = min(x1, p[1]) - max(x0, p[0])
-        if ov > best_ov and ov * 2 >= min(x1 - x0, p[1] - p[0]):
-            best, best_ov = j, ov
-    return best
+def _groups(a: Sequence[tuple[int, int, str]], b: Sequence[tuple[int, int, str]]
+            ) -> list[tuple[list[int], list[int]]]:  # fmt: skip
+    """The runs of two lines grouped by column overlap (transitively): [(a indices, b
+    indices)], left to right."""
+    ev = sorted([(x0, x1, 0, i) for i, (x0, x1, _) in enumerate(a)]
+                + [(x0, x1, 1, i) for i, (x0, x1, _) in enumerate(b)])  # fmt: skip
+    out: list[tuple[list[int], list[int]]] = []
+    end = -1
+    for x0, x1, side, i in ev:
+        if not out or x0 >= end:
+            out.append(([], []))
+        out[-1][side].append(i)
+        end = max(end, x1) if x0 < end else x1
+    return out
 
 
 def same_line(a: Line | None, b: Line | None) -> bool:
-    """The same line: the same colour group, and their glyph runs ALIGNED -- a line is drawn at
-    fixed columns, so the same text puts its runs at the same columns (+-1). Every run pair at
-    the same columns must agree (read characters equal; two unread runs within QMARK_TOL over
-    their joint columns; a read and an unread run pass: a speck or a sprite can spoil one glyph
-    in one frame), and at least SAME_MIN_SHARE of the shorter line's runs must pair up. A run
-    with no partner is ignored when unread (a sprite's highlights beside the text) and is a
-    difference when read (real text where the other line has none)."""
+    """The same line (symmetric): the same colour group, and their glyph runs ALIGNED -- a line
+    is drawn at fixed columns, so the same text puts its runs at the same columns (+-1). The
+    runs of both lines are grouped by column overlap; in each group:
+    - one run a side: read characters must be equal; a read and an unread run pass (a speck or a
+      sprite can spoil one glyph in one frame); two unread runs must be within QMARK_TOL of each
+      other over their joint columns;
+    - a split / merge (more runs on one side): passes when any run in it is unread, else the
+      characters must be equal;
+    - runs on one side only: an unread one is ignored (a sprite's highlights beside the text),
+      so is a read one of <= SMALL_INK pixels (a period or a quote drawn a frame late); a larger
+      read one is real text the other line lacks: a difference.
+    At least SAME_MIN_SHARE of the shorter line's runs must sit in two-sided groups. Up to
+    MAX_SOFT LETTERS may read differently (a damaged 'r' reads as 'i': 20261019T152849 frame
+    3208); a differing DIGIT never passes, and different words differ in many letters."""
     if a is None or b is None:
         return a is b
     if COLOUR_GROUP.get(a.colour, a.colour) != COLOUR_GROUP.get(b.colour, b.colour):
         return False
     if a.text == b.text and "?" not in a.text:
         return True
-    paired = 0
-    for x0, x1, c in a.parts:
-        j = _pair((x0, x1, c), b.parts)
-        if j is None:
-            if "?" not in c and not _covered((x0, x1, c), b.parts) \
-                    and int(a.mask[:, x0:x1].sum()) > SMALL_INK:  # fmt: skip
-                return False
+    paired = soft = 0
+    for ia, ib in _groups(a.parts, b.parts):
+        ra, rb = [a.parts[i] for i in ia], [b.parts[i] for i in ib]
+        if not ra or not rb:
+            line, runs_ = (a, ra) if ra else (b, rb)
+            for x0, x1, c in runs_:
+                if "?" not in c and int(line.mask[:, x0:x1].sum()) > SMALL_INK:
+                    return False
             continue
-        bx0, bx1, cb = b.parts[j]
-        paired += 1
-        if "?" in c and "?" in cb:
-            u0, u1 = min(x0, bx0), max(x1, bx1)
+        paired += min(len(ra), len(rb))
+        ca, cb = "".join(r[2] for r in ra), "".join(r[2] for r in rb)
+        if len(ra) == 1 and len(rb) == 1 and "?" in ca and "?" in cb:
+            u0, u1 = min(ra[0][0], rb[0][0]), max(ra[0][1], rb[0][1])
             ga, gb = a.mask[:, u0:u1], b.mask[:, u0:u1]
             tol = max(QMARK_TOL_MIN, int(QMARK_TOL_FRAC * max(int(ga.sum()), int(gb.sum()))))
             if int((ga ^ gb).sum()) > tol:
                 return False
-        elif "?" not in c and "?" not in cb and c != cb:
-            return False
-    for x0, x1, c in b.parts:
-        if "?" not in c and _pair((x0, x1, c), a.parts) is None \
-                and not _covered((x0, x1, c), a.parts) \
-                and int(b.mask[:, x0:x1].sum()) > SMALL_INK:  # fmt: skip
-            return False
+        elif "?" not in ca and "?" not in cb and ca != cb:
+            if any(ch.isdigit() for ch in ca + cb):
+                return False  # a number differs: never the same line
+            soft += 1  # a letter read as another (an 'r' that lost its hook reads 'i')
+            if soft > MAX_SOFT:
+                return False
     shorter = min(len(a.parts), len(b.parts))
     return shorter == 0 or paired >= SAME_MIN_SHARE * shorter
-
-
-def _covered(p: tuple[int, int, str], parts: Sequence[tuple[int, int, str]]) -> bool:
-    """A read run that overlaps an UNREAD run of the other line (a glyph merged with a speck)."""
-    return any("?" in c and x0 < p[1] and p[0] < x1 for x0, x1, c in parts)
 
 
 def new_lines(prev: Sequence[Line | None], cur: Sequence[Line | None]
@@ -637,7 +658,7 @@ class Reader:
                 shift: int, ambiguous: bool, t_now: int) -> list[dict[str, Any]]:  # fmt: skip
         n_vis = _count(cur)
         overflow = bool(idx) and len(idx) == n_vis and n_vis == N_LINES
-        self.stats["ambiguous"] += int(ambiguous and bool(idx))
+        self.stats["ambiguous"] += int(ambiguous)  # frames where a hidden scroll could hide
         self.stats["overflow"] += int(overflow)
         gone, kept = self.vis[:shift], self.vis[shift:]
         lines = [x for x in cur if x is not None]
