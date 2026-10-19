@@ -11122,6 +11122,77 @@ After run 4: the standard layout (`client_layout.py ensure standard`), then the 
     2.9. `hardbar_live.py watch 43 --pid` bound to it.
   - Runs 2-4 queued: `hunt_chain.py --version 43 --seeds 20320202,20320303,20320404` (15:28:49).
 
+### 3.85 hunt-flow@45: THE LOCKED-POINTER WALK (Batt's search walking), interleaved in 10-min blocks (pre-registered 2026-10-19, the commit time below, BEFORE its runs; Batt 16:0x: "pre-register Batt's method as the search-walking change, LOCKED-POINTER WALK"; 16:2x: "Keep the locked-pointer walk (3.85) in the queue ... Report its effect on click accuracy too"; it runs after v44)
+
+**Why:**
+- 21 % of search walk clicks land more than 1 cell from the cell meant (v41's 4 runs: 1,071 of
+  5,131); misplaced walk clicks start 16 % of reversals (competition.md "Pointer diagnosis").
+- 93 % of search walk clicks come right after a pointer jump from >= 150 px away (a park, a read
+  elsewhere); the jump itself did not raise the miss rate, but a still pointer gives what the
+  jump cannot: the client's cursor shape is current on every frame, so a cursor-shape gate can
+  check every click.
+- Batt walks with the pointer held still in front of the GM and clicks at ~0.6 s: the camera keeps
+  the GM at screen centre, so a fixed offset from centre stays "in front".
+
+**The ONE main change (search walking only):**
+- **Locked pointer:** while searching, the pointer is held still at the screen offset of the cell
+  `lock_cells` ahead along the search heading, and clicks are repeated at `lock_cadence_s` 0.6 s
+  (Batt's cadence; a faster setting is a later version). No rest moves while searching; the
+  two-motion rule only after the pointer moves.
+- **The offset by terrain:** from the client AND server walkable grid along the heading: the run
+  length n of the heading's ray; `lock_cells` = min(6, n - 1) in open ground; 1-2 cells where the
+  perpendicular clearance is <= 2 cells (narrow ground). Never past the ray's last walkable cell.
+- **Turning:** the existing heading rules decide (keep, +-45, +-90 when blocked, a reversal only at
+  a dead end, the ping-pong fix); a turn moves the pointer around the GM to the new offset (two
+  motions), then it is held again.
+- **CURSOR-SHAPE GATE on every click:** with the pointer still, the client's cursor shape is read
+  on the newest frame before each click (cursor_gate's reader): WALK -> click; SWORD (a monster
+  under it, ANY species, Creamy and untrained ones included), TALK (an NPC), NO-ENTRY -> no click:
+  rotate the heading +-45 (as when blocked) or wait one beat. A detector-independent safety check.
+- Targets interrupt the walk as now (the strike, arm C); after the engagement the locked walk
+  resumes on the remembered heading.
+- Interleaved in 10-min blocks (odd blocks = locked), as v38 and v44. The census changes (a new
+  walk-click site), with targeted safety tests.
+
+**Base:** the base v44's verdict leaves; PARAMS[45] is committed after it and before run 1.
+
+**Runs:** 4 x 60 min on prt_fild08, seeds 20340101, 20340202, 20340303, 20340404; a judged
+screenshot before run 1; the chain for runs 2-4.
+
+**What 4 run-hours can resolve (measured BEFORE this entry, `locked_null.py`, 12 banked runs,
+10-min block splits, 12 splits):**
+
+| measure (search walking, per arm) | pooled base | 95 % null range | Batt |
+|---|---|---|---|
+| search walk clicks within 1 cell of the cell meant | 79.8 % | -2.3 .. +2.2 points | - |
+| walk clicks made while the GM moves | 59 % | -4.2 .. +3.1 points | 73 % |
+| mean straight run of legs starting in search | 18.5 cells | -7 % .. +14 % | 16.9 (all walking) |
+| search click cadence, p50 | 0.89 s | - | ~0.6 s |
+
+**Prediction, written before the runs (4 runs pooled, per arm):**
+1. **Primary (click accuracy):** search walk clicks within 1 cell, locked >= base + 5 points.
+2. **Primary (walking like Batt):** walk clicks made while the GM moves, locked >= base + 8
+   points.
+3. **Guard:** reversals outside loot steps per minute, locked <= 1.05 x base (the walk must not
+   add turning).
+4. **Guard:** kills per hour, locked >= 0.90 x base; landing within 5 s >= base - 8 points.
+5. **Hard bars:** zero NPC contact, zero map change, zero non-Creamy non-target hit. A Creamy hit
+   is counted, not a stop.
+6. **Reported, not deciding:**
+   - how often the cursor-shape gate refuses a click, by shape (SWORD / TALK / NO-ENTRY), and what
+     it refused (packets: the unit under it, its species);
+   - Creamy hits / h and unknown-species hits per arm (expected to drop);
+   - reversals outside loot (Batt 4.28), mean straight run, click cadence, monsters seen / 10 min,
+     kills / h.
+
+**Decision rule:**
+- ADOPT if 1, 2, 3, 4 and 5 pass.
+- If 1 and 2 pass but a guard fails: NOT adopted; reported.
+- If the cursor-shape gate alone shows a clear Creamy drop, it may be proposed on its own (Batt's
+  call), whatever the verdict.
+
+**Run log (written during the runs):**
+
 ### 3.86 hunt-flow@44: COMMIT TO A TARGET LIKE A PLAYER (the aborted-steer fix), interleaved in 10-min blocks (pre-registered 2026-10-19 16:26 ICT, the commit time 1a6e139, BEFORE its runs; Batt 16:2x: "Rank the ABORTED-STEER fix right after v42, ahead of the locked-pointer walk (it's the largest reversal source: 41 %). Design it from the data ... then commit rules like a player ... Pre-register with 'aborted steers per min' and 'reversals outside loot' as primaries")
 
 **Why (competition.md "Pointer diagnosis"; v41's 4 runs, measured before this entry):**
