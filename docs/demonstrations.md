@@ -10730,7 +10730,8 @@ on for all (no blocks), switched in a commit before run 1 and recorded in this r
   - gave up 4, 7, 2, 1 (v39: 0-2), none on a re-engaged skipped track in run 1.
 - **Verdict: ADOPTED** (decision rule: 1-4 pass). The false-dead fix joins the base for every
   engagement (`false_dead_ab` False) from the next version on: 3.82's base.
- hunt-flow@41: WALKING TARGETS STRUCK FROM FURTHER, interleaved per engagement (pre-registered 2026-10-19 02:31 ICT, the commit time 61cf81d, BEFORE its runs; Batt's night plan 22:2x, item 3: "the next top cause from the conversion study (the 0.5 s later turn, the walk into range, arm C fallbacks / 'species unsure', click -> hit), each as its own version. Re-rank after every verdict")
+
+### 3.82 hunt-flow@41: WALKING TARGETS STRUCK FROM FURTHER, interleaved per engagement (pre-registered 2026-10-19 02:31 ICT, the commit time 61cf81d, BEFORE its runs; Batt's night plan 22:2x, item 3: "the next top cause from the conversion study (the 0.5 s later turn, the walk into range, arm C fallbacks / 'species unsure', click -> hit), each as its own version. Re-rank after every verdict")
 
 **Why, re-ranked after v39's verdict (3.80, 02:20):**
 - **The approach (+3.22 s per kill vs Batt) is still first.** But v39 showed its remaining cause
@@ -10815,6 +10816,22 @@ on for all (no blocks), switched in a commit before run 1 and recorded in this r
 - If 2 or 3 fails, NOT adopted: it clicks sooner but lands worse.
 
 **Run log (written during the runs):**
+- **Batt's GO** (2026-10-19, received ~07:00: "v41 (walkers struck from 7 cells, 3.82): GO. Base =
+  v40 with the false-dead fix on every engagement; commit PARAMS[41] before run 1").
+- **Base:** v40 ADOPTED (3.81, aed0fb4). PARAMS[41] = PARAMS[40] + `false_dead_ab` False +
+  `strike_cells_walking` 7 + `strike_walking_ab` True. Committed **7150e9c at 07:28:54**, before
+  run 1; census + targeted safety tests 301 passed.
+- The live monitor is now bound to ONE runner pid (ab4dae9, Batt's decision 4). Its live positive
+  case at run 1's start: given the `uv run` wrapper's pid, it bound to the python runner's pid.
+- **Run 1** (07:29:26, seed 20300101, `20261019T072926-demo-hunt-flow41`, code 7150e9c), started
+  by the agent.
+  - Before it: the screenshot `pre-v41-20300101.jpg` judged at 07:29: prt_fild08, no dialog, the
+    standard windows, the GM standing at the standard Lv 1 state (the runner rebuilds the hunting
+    state itself: @resetstat, STR 99, Lv 70, immunity), a Poring in view. Health: ASSIST, no
+    lease, bot_agents [].
+  - `hardbar_live.py watch 41 --pid <run 1>` beside it.
+- **Runs 2-4 are QUEUED:** `hunt_chain.py --version 41 --seeds 20300202,20300303,20300404` started
+  detached at 07:29:34; it waits for run 1 to end, and binds each run's monitor to that run.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
