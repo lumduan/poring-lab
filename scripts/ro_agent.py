@@ -770,10 +770,29 @@ class Agent:
             time.sleep(0.03)
 
     def move(self, x: int, y: int) -> None:
+        """A pointer move, CLAMPED into the desktop (2026-10-19, hunt-flow@43 run 4: a move above
+        the desktop was dropped by the backend's validation, never acknowledged, and the run
+        stopped on the missing ack). A clamp is logged with its caller, to find the source."""
+        w, h = desktop()
+        cx, cy = min(max(int(x), 0), w - 1), min(max(int(y), 0), h - 1)
+        if (cx, cy) != (int(x), int(y)):
+            import traceback
+
+            fr = traceback.extract_stack(limit=3)[0]
+            log(f"pointer move ({x}, {y}) clamped into the desktop, from "
+                f"{Path(fr.filename).name}:{fr.lineno} {fr.name}")  # fmt: skip
         self.send([{"type": "mouse_move", "t_mono_ns": ns(), "frame_id": -1,
-                    "x": x / desktop()[0], "y": y / desktop()[1]}])  # fmt: skip
+                    "x": cx / w, "y": cy / h}])  # fmt: skip
+
+    def _on_desktop(self, x: float, y: float, what: str) -> None:
+        """A press outside the desktop is never sent (clamping it would press whatever lies at
+        the desktop's edge): a clear Stop naming the point, not a dropped message."""
+        w, h = desktop()
+        if not (0 <= x < w and 0 <= y < h):
+            raise Stop(f"{what} outside the desktop at ({x}, {y}): not sent")
 
     def click(self, x: int, y: int, button: str = "left") -> None:
+        self._on_desktop(x, y, "click")
         w, h = desktop()
         nx, ny = x / w, y / h
         self.move(x, y)
@@ -789,6 +808,8 @@ class Agent:
         """Press at (x1, y1), move to (x2, y2) in `steps` paced moves, release. RO's camera
         (right-drag) reads motion spread over frames while the button is held, so the moves are
         30 ms apart, never one batch; the button is released even if a move is refused."""
+        self._on_desktop(x1, y1, "drag start")
+        self._on_desktop(x2, y2, "drag end")
         w, h = desktop()
         self.move(x1, y1)
         time.sleep(HOLD_S)
