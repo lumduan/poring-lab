@@ -10897,7 +10897,7 @@ on for all (no blocks), switched in a commit before run 1 and recorded in this r
   stay in the pooled read (its data is valid up to the stop), and run 4 runs as planned. The
   pooled read covers 3 h 37 min, not 4 h. A re-run of seed 20300303 would cost the hour that the
   UI layout version (3.84) needs today.
-- **Run 4** (11:29:47, seed 20300404, `20261019T112947-demo-hunt-flow41`), started by the agent
+- **Run 4** (11:29:47, seed 20300404, `20261019T112949-demo-hunt-flow41`), started by the agent
   after a judged screenshot (`pre-v41-20300404.jpg`, 11:29: no dialog, the standard windows, the
   GM standing at the ravine where run 3 stopped, Lv 70 / Job 5 (the runner's start restores Job
   1), weight 567 / 4970; ASSIST, no lease). `hardbar_live.py watch 41 --pid` bound to it.
