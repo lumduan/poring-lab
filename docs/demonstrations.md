@@ -10901,6 +10901,37 @@ on for all (no blocks), switched in a commit before run 1 and recorded in this r
   after a judged screenshot (`pre-v41-20300404.jpg`, 11:29: no dialog, the standard windows, the
   GM standing at the ravine where run 3 stopped, Lv 70 / Job 5 (the runner's start restores Job
   1), weight 567 / 4970; ASSIST, no lease). `hardbar_live.py watch 41 --pid` bound to it.
+- **Run 4 ended** on its time box (3600.3 s, 12:33), with 149 engagements: 120 dead, 27
+  skipped_risky, 2 gave up.
+  - Standard row: landing 117 / 148 = 79.0 % (71.8-84.8), 134.9 kills / h, 4.22 per sighting,
+    26.7 s per kill, sight 32.0 / 10 min, free targets attacked <= 10 s 40 % (n 201), steer
+    moving 36 %, seen -> click 3.26 s, death -> next 0.64 s; dead calls without a real death
+    20 / 120 = 16.7 %; loot 83 / 164 = 51 % (23 to looters); reversals 6.88 / min; Creamy 0;
+    hard bars 0 / 0 / 0.
+
+**RESULT (read 12:3x; runs 1, 2, 4 and run 3's 37 minutes pooled, `arm_judge.py walkers`;
+v41-final.py's checks):**
+
+| # | check | fix | base | bar | verdict |
+|---|---|---|---|---|---|
+| 1 | walkers: near (7 cells) -> first click, mean (primary) | 3.02 s (n 139) | 3.94 s (n 120) | fix <= 0.70 x base | **FAIL** (0.77 x; null -20 .. +14 %) |
+| 2 | walkers: landing within 5 s | 117 / 139 = 84.2 % | 111 / 120 = 92.5 % | >= base - 10 pts | pass (-8.3) |
+| 3 | all: landing within 5 s | 232 / 313 = 74.1 % | 248 / 316 = 78.5 % | >= base - 8 pts | pass (-4.4) |
+| 4 | hard bars (4 runs) | 0 / 0 / 0 | | zero | pass |
+
+- **Reported, not deciding:**
+  - per run, walkers' near -> click (fix - base) / mean: -0.17, -0.38, -0.25, -0.21 (every run the
+    same way);
+  - walkers' approach (steer start -> first click) mean 4.98 vs 5.24 s;
+  - still targets (unchanged by design): landing 80.2 vs 83.2 %, near -> click 2.52 vs 2.96 s;
+  - kills / h 142.8, 179.0, 133.3 (37 min), 134.9; Creamy 2, 0, 0, 0 hits (2.0, 0, 0, 0 / h);
+  - dead calls without a real death 17.4, 21.7, 22.9, 16.7 % (the false-dead fix on every
+    engagement; v40's runs 22.5-29.4 %).
+- **Verdict: NOT ADOPTED** (decision rule: 1 fails). The strike on a walker does start earlier,
+  -23 %, just beyond the ruler's -20 %, but not by the -30 % predicted, and walkers land 8 points
+  worse.
+- The base for the next version: v40 adopted, so PARAMS[41] without the walkers' change
+  (PARAMS[40] + `false_dead_ab` False). The UI layout version (3.84, v43) is built on it.
 
 ### 3.83 hunt-flow@42: THE STEER'S WALK GUARD FROM THE GM'S BOX, with the route tail, interleaved per engagement (pre-registered 2026-10-19 07:46 ICT, the commit time e3fc195, BEFORE its runs; Batt's decision 1, 2026-10-19 ~07:00: "WALK GUARD (the #1 cause): approve a smaller radius for STEER clicks only (the walk-in toward a chosen target): from 120 px to the GM sprite's own box + a small margin (propose the value from data). Search walk clicks and loot clicks keep the current guard. Creamy hits are counted, not a stop (my rule); report Creamy hits per hour as this change's cost. Pre-register it as its own version after v41 (one change at a time), with steer moving share as the primary (Batt 92 %)")
 
