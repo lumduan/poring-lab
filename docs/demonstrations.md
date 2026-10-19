@@ -11085,6 +11085,33 @@ scratch, their rules now in the code's docstring and tests):**
 
   - As built (check 5): `near_gm_box` 192; the fix arm's guard refusals 19.7 per steer minute
     (v39's tail arm: 106.8). The pocket escape never fired (0 `stuck_escape`).
+- **Run 2** (seed 20310202, session 20261019T212511, started by the chain 21:25:09 after fresh
+  start checks, ended on its time box 22:26:45; judged screenshot `pre-v42-20310202.jpg`: the
+  hunting layout, Lv 70, no dialog):
+  - The row: 138 engagements, landing 113/138 = 81.9 % (74.6-87.4), 121.9 kills / h, 4.43 per
+    sighting, 29.5 s per kill, seen 27.5 / 10 min, free targets <= 10 s 36 % (n 161), steer
+    moving 40 %, seen -> click 3.56 s, death -> next 0.99 s, dead calls without a real death
+    18/114 = 15.8 %, kill -> loot start 1.75 / 1.17 s (n 98), reversals 7.91 / min (outside loot
+    7.37), Creamy 0, hard bars 0 / 0 / 0.
+  - Loot: 121 items, picked 44.6 %, looters 14.0 % (17), left behind (out of sight) 36.4 %,
+    expired 6; in the 3 x 3 63.0 %; the death cell exact 42.7 %, <= 1 cell 65.6 %. The looters'
+    share is back near v43's level (run 1: 4.5 %).
+  - Per arm, run 2 only, NOT deciding:
+
+    | arm | steer min | moving share | approach mean / p50 s | landing | steer walk clicks | walk -> attack other |
+    |---|---|---|---|---|---|---|
+    | fix (odd k) | 9.4 | 0.457 | 4.76 / 3.52 | 78.3 % | 269 | 0 |
+    | base (even k) | 9.3 | 0.346 | 4.95 / 4.09 | 85.5 % | 149 | 0 |
+
+  - As built: `near_gm_box` 166; the fix arm's guard refusals 20.1 per steer minute.
+  - **The pocket escape fired once** (t 416 s, `pocket`, centre (342.6, 77.8), a 24-cell path
+    out), then logged 17 `zone` events up to t 715 s. **16 of them did nothing:** the GM was
+    already more than `stuck_escape_min` (26) cells from the centre, so `escape_goal` returned
+    the GM's own cell (path 1), the `len >= 2` test failed, and the heading goal inside the zone
+    stood. Only the zone event at t 635.8 s (a 7-cell path) acted. The GM did not get stuck
+    there again. Not a safety issue, and the same in both arms (the escape is in both). A gap in
+    the zone rule, recorded for a later version (when the GM is already outside, turn the
+    heading away from the centre instead); NOT changed mid-version.
 
 ### 3.84 hunt-flow@43: THE HUNTING UI LAYOUT (Batt's three spots), with the dead-end ping-pong fix (pre-registered 2026-10-19 15:03 ICT, the commit time 23d41f5, BEFORE its runs; Batt's order ~08:4x: "Batt's UI layout change for hunting ... Do it as its own pre-registered version at a run boundary ... between v41 and the steer-guard version"; 13:3x: the combat log tab; 14:0x: "keep the order: finish the LAYOUT version (v43) now"; the ping-pong bug: "fix it ... include it in the next version's pre-registration as a fix")
 
