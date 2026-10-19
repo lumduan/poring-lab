@@ -6,7 +6,7 @@
     battle_log.py live --out FILE [--hz 5] [--until-pid PID] [--lang L]
                         the LIVE frames, read-only
     battle_log.py formats-init en [--force]          write <anchors>/en/formats.json
-    battle_log.py clusters [SID] [--every 2] [--images IMG ...] [--lang L] [--out DIR]
+    battle_log.py clusters [SID] [--every 2] [--images IMG ...] [--lang L] [--min-count 5]
                                                      design time: the glyph runs, clustered
     battle_log.py cut CLUSTERS.npz LABELS.json [--lang L]   design time: <lang>/glyphs.npz
     battle_log.py cut-names SID [--lang L]           design time: <lang>/names.npz, labelled by
@@ -669,6 +669,9 @@ def lang_from_formats(fm: Mapping[str, Any], glyphs: Glyphs | None = None,
         raise ValueError(f"unknown event types {sorted(unknown)}")
     render = Render(**{k: v for k, v in (fm.get("render") or {}).items()
                        if k in Render.__dataclass_fields__})  # fmt: skip
+    if glyphs is not None and glyphs.bitmaps and glyphs.bitmaps[0].shape[0] != render.band_h:
+        raise ValueError(f"glyph templates are {glyphs.bitmaps[0].shape[0]} rows tall, the "
+                         f"language's band {render.band_h}: cut them with its render")  # fmt: skip
     return Lang(code=str(fm.get("lang", "?")),
                 events={t: parse_pattern(e["pattern"]) for t, e in ev.items()},
                 colours={t: str(e["colour"]) for t, e in ev.items() if e.get("colour")},
@@ -1412,6 +1415,7 @@ def main() -> int:
     cl.add_argument("--out", type=Path, default=Path("/dev/shm/poring-lab-tmp/battle_log"))
     cl.add_argument("--lang", default=None)
     cl.add_argument("--frames", type=Path, default=None)
+    cl.add_argument("--min-count", type=int, default=5, help="print clusters seen this often")
     cl.add_argument("--images", type=Path, nargs="*", default=None,
                     help="game-region images (a screenshot) instead of a recording")  # fmt: skip
     ct = sub.add_parser("cut")
@@ -1445,7 +1449,7 @@ def main() -> int:
         arrays = {f"g{i}": g.astype(np.uint8) for i, (_, g) in enumerate(reps)}
         np.savez_compressed(a.out / "clusters.npz", n=len(reps),
                             counts=np.array([c for c, _ in reps]), **arrays)  # fmt: skip
-        print(ascii_grid(reps))
+        print(ascii_grid(reps, a.min_count))
     elif a.cmd == "cut-names":
         lg = load_lang(a.lang)
         print(json.dumps(cut_names(a.sid, lg, lang_dir(lg.code) / "names.npz")))

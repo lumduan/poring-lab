@@ -196,6 +196,13 @@ def test_a_format_file_is_checked() -> None:
         bl.lang_from_formats({"events": {"explosion": {"pattern": [{"lit": "boom"}]}}})
 
 
+def test_glyphs_must_be_cut_for_the_languages_band() -> None:
+    """Templates cut at another band height (another language's render) are refused."""
+    with pytest.raises(ValueError):
+        bl.lang_from_formats(ALT_FORMATS, _gl())  # ALT bands are 5 rows taller
+    assert bl.lang_from_formats(SYN_FORMATS, _gl()).glyphs is not None
+
+
 def test_the_english_file_is_generated_and_parses(monkeypatch: pytest.MonkeyPatch,
                                                   tmp_path: Path) -> None:  # fmt: skip
     """formats-init en writes the four events; a line spelled FROM the generated words parses
@@ -227,7 +234,8 @@ def test_stacked_marks_get_taller_bands_and_join_their_glyph() -> None:
 
 
 def test_auto_picks_the_language_whose_words_fit(monkeypatch: pytest.MonkeyPatch) -> None:
-    syn, alt = _syn(), bl.lang_from_formats(ALT_FORMATS, _gl())
+    tall = bl.Glyphs(["1"], [np.zeros((bl.LINE_PITCH + 5, 3), bool)])
+    syn, alt = _syn(), bl.lang_from_formats(ALT_FORMATS, tall)
     lines = {
         id(syn.render): ["'2' Flim Flamtastic gotten.", "XQ '3' gainz"],
         id(alt.render): ["'2' Flim Flamtastic gotten.", "Jx XQ '6' gainz", "XQ '3' gainz"],
