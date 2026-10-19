@@ -11434,6 +11434,20 @@ x 4 / v40 x 4 / v41 x 4):**
   right after v42; the run order is now v42 -> v44 (EXP-dead) -> v45 (the aborted-steer fix,
   3.86) -> v46 (the locked-pointer walk, 3.85). The base follows the previous version's verdict,
   as written; nothing else changes.
+- **Build notes (2026-10-19 20:41, code 45e3974, staged and inert; before any run of this
+  version; how the pre-registered rules were built):**
+  - The edge rule acts wherever a target is SET: the dispatch (a deferred candidate is skipped and
+    the next one in the queue may go), the opportunistic pre-emption and the retarget. "Boxed in
+    >= 3 frames" = the track's boxed sightings. One `edge_deferred` event per track.
+  - The hold starts at the `target_lost` moment (the tracker no longer holds the track, or its
+    newest box is > 2.0 s old, and no live track within 3 cells carries it on); `hold_s` 1.5 counts
+    from there. The re-acquisition radius grows 3 -> 6 cells (+1 per 0.5 s held). The target is
+    dropped after 1.5 s held, or when its predicted cell's pixel leaves the view, or leaves the
+    zone it was steered in.
+  - While a target is held, an in-range GM does not strike (a strike needs a fresh box, as
+    written): it waits for the re-acquisition or the drop.
+  - Blocks: 10 min from the loop's first iteration; ODD blocks (1, 3, 5) are the rules' arm, as
+    written ("odd blocks = the rules"); one `commit_arm` event per block.
 
 ### 3.87 hunt-flow@44: DEAD = THE BATTLE LOG'S EXP LINE, interleaved per engagement (pre-registered 2026-10-19 18:37 ICT, the commit time 4d937b4, BEFORE its runs; Batt 18:0x: "'EXP line = dead' (Battle Log reader, validated ...): pre-register it as the version right after v42 (before v44). Dead = the EXP line for our target's engagement window (pixel fallback when no line within ~1 s). Primaries: kill -> loot start, dead calls without a real death; guards: loot picked, landing, hard bars")
 
@@ -11494,6 +11508,26 @@ truer: NOT adopted (reported). If 3 fails: it costs loot: NOT adopted.
 **Run log (written during the runs):**
 - **Batt's approval (2026-10-19 ~19:5x):** "3.87's CHECKED pixel fallback: approved as you wrote it
   (pixel dead only with the death-cell 'ok', else 'skipped_unconfirmed')".
+- **Build notes (2026-10-19 20:34, code 1b733ec + the reader merge 02d3881, before any run of this
+  version; how the pre-registered rule was built, nothing in it changed):**
+  - The reader is battle_log.py's LIVE reader in its OWN process (nice 10, 10 Hz), started by the
+    runner at its loop start, writing the session's `battle_log_live.jsonl` as the log-only runs
+    did; a thread in the runner tails that file. Its numpy / Python work never holds the
+    runner's GIL. It is the merged language-independent reader (English formats; the fake-triple
+    fix: v43 run 2's replay back to precision 1.000; English records identical on runs 1-2).
+  - "A new BASE EXP line after our first damaging strike" = a base EXP record whose first frame
+    is after the engagement's FIRST ATTACK CLICK (the same CLOCK_MONOTONIC); each line confirms
+    one engagement only; a job EXP line never counts.
+  - An EXP-line death skips the base rule's 0.4-s wait before the loot step (the line is the
+    death). The checked fallback has waited 1.0 s already, so it skips it too. During the 1.0-s
+    wait the target is not re-clicked.
+  - The fix arm's dead calls skip v40's risky-burst check: an EXP line confirms the death, and the
+    fallback's death-cell check covers every burst (v40's covered risky bursts only).
+  - The reader process exiting is restarted once; a second exit stops the run (a fault, not a
+    result: the fix arm would silently become the fallback alone).
+  - The judge: `arm_judge.py expdead` (deace3b), the arms by k parity, the checks 1-5 as written;
+    the loot guard counts the drops of EVERY engagement whose target died by our hit (a skipped
+    real kill loses its loot, as the guard's reason says).
 
 ### 3.88 hunt-flow@47: THE +-135 TURN ONLY WHEN BLOCKED (reversal fix P4), interleaved in 10-min blocks (pre-registered 2026-10-19 20:07 ICT, the commit time cba01d6, BEFORE its runs; Batt ~19:5x: "Reversal fixes: P4 yes (reverse only when 0/45/90 are all blocked; matches my rule) - pre-register it in the queue after v46")
 
