@@ -327,6 +327,24 @@ def read_rect(gray: Gray, glyphs: WeightGlyphs, *, allow_incomplete: bool = Fals
     return WeightReading(value, "ok", float(conf), used, (lx, ly))
 
 
+BADGE_RED = 60  # R - max(G, B) of the client's red notice badge (the window and the text: < 20)
+
+
+def unbadge(region_bgr: npt.NDArray[np.uint8]) -> npt.NDArray[np.uint8]:
+    """PURE (2026-10-19): the client's red NOTICE BADGE ("N") repainted white. With the menu icon
+    panel collapsed (the hunting layout) the client draws it on Basic Info's bottom edge, under the
+    weight digits (v43 run 2's start: "unexplained_ink"). Its red box's bounding box (its white
+    "N" inside) becomes the window's white; the dark text is never red. No red: unchanged."""
+    px = region_bgr[..., :3].astype(np.int16)
+    red = (px[..., 2] - np.maximum(px[..., 0], px[..., 1])) >= BADGE_RED
+    if not red.any():
+        return region_bgr
+    ys, xs = np.nonzero(red)
+    out = region_bgr.copy()
+    out[ys.min() : ys.max() + 1, xs.min() : xs.max() + 1, :3] = 255
+    return out
+
+
 def read_weight(
     game_region_bgr: npt.NDArray[np.uint8],
     glyphs: WeightGlyphs,
@@ -335,12 +353,12 @@ def read_weight(
     allow_incomplete: bool = False,
 ) -> WeightReading:
     """The readout with its reason and confidence. ``origin``: where ``basic_info`` sits (game
-    region pixels); default its measured origin."""
+    region pixels); default its measured origin. The notice badge is repainted first (unbadge)."""
     x, y, w, h = rect_at(origin)
     region = game_region_bgr[y : y + h, x : x + w]
     if region.shape[0] != h or region.shape[1] != w:
         return WeightReading(None, "rect_outside_frame")
-    return read_rect(to_gray(region), glyphs, allow_incomplete=allow_incomplete)
+    return read_rect(to_gray(unbadge(region)), glyphs, allow_incomplete=allow_incomplete)
 
 
 def tail_column(band: Gray, start: int) -> int | None:

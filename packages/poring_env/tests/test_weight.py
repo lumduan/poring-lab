@@ -245,3 +245,22 @@ def test_banked_frames_fit_on_some_and_read_the_others() -> None:
     if WITH_A_FIVE.exists():  # a REAL unseen digit: refused, never read as a shorter number
         r = wt.read_rect(_rect(str(WITH_A_FIVE)), t, allow_incomplete=True)
         assert r.value is None and r.label_at is not None and r.label_at[0] < 52, r
+
+
+def test_unbadge_repaints_the_red_notice_badge_and_nothing_else() -> None:
+    """2026-10-19 (the hunting layout): the client's red "N" badge drawn under the weight digits
+    is repainted white; dark text and a badge-free line are untouched."""
+    import numpy as np
+
+    from poring_env import weight as wt
+
+    line = np.full((20, 220, 3), 235, np.uint8)
+    line[4:15, 100:104] = 20  # a dark digit stroke
+    same = wt.unbadge(line)
+    assert same is line  # no red: unchanged
+    badged = line.copy()
+    badged[13:20, 117:127] = (30, 30, 220)  # BGR red box
+    badged[15:18, 120:123] = 255  # its white "N"
+    out = wt.unbadge(badged)
+    assert (out[13:20, 117:127] == 255).all()  # the badge's box is white
+    assert (out[4:15, 100:104] == 20).all()  # the digit stays
