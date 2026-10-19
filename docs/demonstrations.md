@@ -10859,6 +10859,21 @@ on for all (no blocks), switched in a commit before run 1 and recorded in this r
   items at its feet). Health: ASSIST, no lease.
   - Runs 2-4 load code 7b51fab or later: the v42 candidate's code (8917272) is in it, inert in
     v41 (no `steer_guard_box_px` in PARAMS[41]: tested).
+- **Run 2 ended** on its time box (3601.1 s; the chain logged rc 0 at 09:34:05), with 212
+  engagements: 166 dead, 44 skipped_risky (fix arm 26, base 18), 1 gave up, 1 cut by the time box.
+  - Standard row: landing 159 / 212 = 75.0 % (68.8-80.3), 179.0 kills / h, 4.97 per sighting,
+    20.1 s per kill, sight 36.0 / 10 min, free targets attacked <= 10 s 46 % (n 188), steer
+    moving 37 %, seen -> click 3.89 s, death -> next 0.72 s.
+  - Dead calls without a real death 36 / 166 = 21.7 %; loot 125 / 212 = 59 % (35 to looters);
+    reversals 6.70 / min. Creamy 0 = 0.0 / h. Hard bars 0 / 0 / 0.
+  - **INTERIM, runs 1-2 pooled (not the decision; v41-final.py):** walkers' near -> click 2.86 vs
+    3.87 s (0.74 x; the primary needs <= 0.70 x); walkers' landing 76 / 87 = 87.4 % vs 67 / 73 =
+    91.8 % (the guard: >= base - 10); all landing 144 / 188 = 76.6 % vs 148 / 189 = 78.3 % (the
+    guard: >= base - 8). Skipped_risky: fix 38 vs base 32.
+- **Run 3** (09:34:08, seed 20300303, `20261019T093408-demo-hunt-flow41`, started by the chain).
+  Its screenshot `pre-v41-20300303.jpg` was judged at 09:36: no dialog, the standard windows, the
+  GM in its hunting state (Lv 70, HP full, weight 521 / 4970 after the weight clear), a Poring in
+  view. Health: ASSIST, no lease. Run 2's monitor ended with its runner (one monitor running).
 
 ### 3.83 hunt-flow@42: THE STEER'S WALK GUARD FROM THE GM'S BOX, with the route tail, interleaved per engagement (pre-registered 2026-10-19 07:46 ICT, the commit time e3fc195, BEFORE its runs; Batt's decision 1, 2026-10-19 ~07:00: "WALK GUARD (the #1 cause): approve a smaller radius for STEER clicks only (the walk-in toward a chosen target): from 120 px to the GM sprite's own box + a small margin (propose the value from data). Search walk clicks and loot clicks keep the current guard. Creamy hits are counted, not a stop (my rule); report Creamy hits per hour as this change's cost. Pre-register it as its own version after v41 (one change at a time), with steer moving share as the primary (Batt 92 %)")
 
