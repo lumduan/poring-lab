@@ -11112,6 +11112,26 @@ scratch, their rules now in the code's docstring and tests):**
     there again. Not a safety issue, and the same in both arms (the escape is in both). A gap in
     the zone rule, recorded for a later version (when the GM is already outside, turn the
     heading away from the centre instead); NOT changed mid-version.
+- **Run 3** (seed 20310303, session 20261019T222648, started by the chain 22:26:46, ended on its
+  time box 23:28:18; screenshot `pre-v42-20310303.jpg` judged: the hunting layout, Lv 70, weight
+  551 / 4970, no dialog):
+  - The row: 162 engagements, landing 130/161 = 80.8 % (74.0-86.1), 149.9 kills / h, 4.05 per
+    sighting, 24.0 s per kill, seen 37.0 / 10 min (the densest field of the version), free
+    targets <= 10 s 42 % (n 183), steer moving 36 %, seen -> click 3.75 s, death -> next 0.71 s,
+    dead calls without a real death 21/137 = 15.3 %, kill -> loot start 1.64 / 0.97 s (n 115),
+    reversals 6.78 / min (outside loot 6.14), Creamy 1 hit (1 request, 1.0 / h), hard bars
+    0 / 0 / 0.
+  - Loot: 184 items, picked 53.3 %, looters 17.4 % (32), left behind (out of sight) 29.3 %; in
+    the 3 x 3 69.0 %; the death cell exact 42.0 %, <= 1 cell 65.5 %.
+  - Per arm, run 3 only, NOT deciding:
+
+    | arm | steer min | moving share | approach mean / p50 s | landing | steer walk clicks | walk -> attack other |
+    |---|---|---|---|---|---|---|
+    | fix (odd k) | 10.4 | 0.391 | 5.58 / 4.21 | 81.5 % | 270 | 0 |
+    | base (even k) | 11.6 | 0.332 | 5.25 / 4.33 | 79.0 % | 172 | 0 |
+
+  - As built: `near_gm_box` 263; the fix arm's guard refusals 26.7 per steer minute. No
+    `stuck_escape` event.
 
 ### 3.84 hunt-flow@43: THE HUNTING UI LAYOUT (Batt's three spots), with the dead-end ping-pong fix (pre-registered 2026-10-19 15:03 ICT, the commit time 23d41f5, BEFORE its runs; Batt's order ~08:4x: "Batt's UI layout change for hunting ... Do it as its own pre-registered version at a run boundary ... between v41 and the steer-guard version"; 13:3x: the combat log tab; 14:0x: "keep the order: finish the LAYOUT version (v43) now"; the ping-pong bug: "fix it ... include it in the next version's pre-registration as a fix")
 
