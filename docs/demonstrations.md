@@ -11674,6 +11674,16 @@ truer: NOT adopted (reported). If 3 fails: it costs loot: NOT adopted.
   / `exp_dead_ab` (odd k) / `exp_wait_s` 1.0. Nothing else moves
   (`test_v44_params_on_the_base_v42_left`). The hunting layout stays (v43 adopted), so the
   Battle Log tab is shown by the runner's own layout step.
+- **A start that stopped in the fixed-state step (2026-10-20 00:44:33, seed 20350101, session
+  20261020T004433; 0 engagements, 23 s, NOT a run of this version):** the runner's loot clear
+  stopped with "slot 2 of eqp did not drop twice". The Battle Log showed both drops happened: two
+  identical equipment items (non-stacking) sat in slots 2-3, so the copy slid into slot 2 and its
+  icon looked unchanged. A false stop in the setup tooling, safe by design (the screenshot after
+  it: no window open, the hunting layout). **Fix (gm_state.py `tab_changed`, before run 1, no
+  change to the version's rule or to either arm):** a drop counts when any slot from the dropped
+  one on changed (a drop shifts every later slot left); nothing changing is still a stop. Test:
+  `test_a_drop_counts_when_any_later_slot_changed`; census + gm_state tests green. Run 1 re-starts
+  on the same seed.
 
 ### 3.88 hunt-flow@47: THE +-135 TURN ONLY WHEN BLOCKED (reversal fix P4), interleaved in 10-min blocks (pre-registered 2026-10-19 20:07 ICT, the commit time cba01d6, BEFORE its runs; Batt ~19:5x: "Reversal fixes: P4 yes (reverse only when 0/45/90 are all blocked; matches my rule) - pre-register it in the queue after v46")
 

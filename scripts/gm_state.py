@@ -537,6 +537,16 @@ def next_loot(kinds: list[str]) -> int | None:
     return next((i for i, k in enumerate(kinds) if k == "loot"), None)
 
 
+def tab_changed(before: list[Any], after: list[Any], i: int) -> bool:
+    """PURE: did the drop at slot ``i`` change the tab? A drop shifts every later slot left, so
+    a non-stacking item (equipment) with an identical one behind it leaves slot i's icon as it
+    was: any slot from i on that changed counts (2026-10-20 00:44: v44 run 1's start stopped on
+    two identical equipment items in a row, both dropped). Slots before i never count."""
+    return any(
+        float(np.abs(a - b).mean()) >= 1.0 for a, b in zip(before[i:], after[i:], strict=True)
+    )
+
+
 def load_loot_refs(d: Path = LOOT_DIR) -> dict[str, tuple[str, Any]]:
     """name -> (kind, icon) from data/ui_anchors/gm_state/loot_icons/<kind>-<name>.npy."""
     out: dict[str, tuple[str, Any]] = {}
@@ -594,7 +604,8 @@ def clear_loot(agent: Any, screen: Any, *, why: str, out_dir: Path | None = None
                     out["unknown"] += sum(k == "unknown" for k, _n, _d in got)
                     out["kept"] += [n for k, n, _d in got if k == "kept"]
                     break
-                before = icon_crop(f, i % INV_COLS, i // INV_COLS)
+                n = INV_COLS * INV_ROWS
+                before = [icon_crop(f, c % INV_COLS, c // INV_COLS) for c in range(n)]
                 cx, cy = slot_centre(i % INV_COLS, i // INV_COLS)
                 x1, y1 = r.at(cx, cy)
                 x2, y2 = r.at(*DROP_AT)
@@ -612,8 +623,8 @@ def clear_loot(agent: Any, screen: Any, *, why: str, out_dir: Path | None = None
                     f2 = frame()
                     if prompt_shown(f2):
                         raise r.Stop(f"gm_state ({why}): the quantity prompt stayed open")
-                after = icon_crop(f2, i % INV_COLS, i // INV_COLS)
-                if float(np.abs(after - before).mean()) < 1.0:
+                after = [icon_crop(f2, c % INV_COLS, c // INV_COLS) for c in range(n)]
+                if not tab_changed(before, after, i):
                     fails += 1
                     if fails >= 2:
                         raise r.Stop(f"gm_state ({why}): slot {i} of {tab} did not drop twice")

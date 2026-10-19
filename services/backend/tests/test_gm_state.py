@@ -294,6 +294,17 @@ def test_only_loot_slots_are_dropped_and_kept_ones_are_skipped(gs: Any) -> None:
     assert gs.next_loot([]) is None
 
 
+def test_a_drop_counts_when_any_later_slot_changed(gs: Any) -> None:
+    """2026-10-20 00:44: two identical equipment items in slots 2-3; dropping slot 2 shifts the
+    copy into it (slot 2 unchanged) and empties slot 3. That is a drop; nothing changing is not."""
+    kept, sword, empty = (np.full((16, 14), v, np.float32) for v in (40.0, 90.0, 200.0))
+    before = [kept, kept, sword, sword, empty]
+    assert gs.tab_changed(before, [kept, kept, sword, empty, empty], 2)  # the copy slid left
+    assert gs.tab_changed(before, [kept, kept, empty, empty, empty], 2)  # a plain drop
+    assert not gs.tab_changed(before, list(before), 2)  # the drag did nothing: still a fail
+    assert not gs.tab_changed(before, [empty, kept, sword, sword, empty], 2)  # before i: no
+
+
 def test_the_icon_crop_never_reaches_the_count_digits(gs: Any) -> None:
     """The count is drawn right of and below the slot centre: the icon box stays left / above."""
     x0, y0, x1, y1 = gs.INV_ICON_BOX
