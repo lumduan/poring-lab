@@ -14,7 +14,8 @@ Each run needs flow_judge.json (``--fresh`` writes it first: flow_judge.bot). Th
 - seen -> click p50; death -> next click p50;
 - dead calls without a real death (flow_judge.dead_calls);
 - loot: items picked / dropped at our kills, and lost to looters (arm_judge.item_fates);
-- reversals / min; Creamy (our damaging hits / attack requests on job 1018);
+- reversals / min; Creamy (our damaging hits / attack requests on job 1018), and Creamy hits per
+  hour of the judged window (Batt 2026-10-19: the steer walk-guard change's cost);
 - hard bars: NPC contacts / map changes / non-Creamy non-target jobs hit.
 BATT is the demo's fixed benchmark (competition.md; Batt's night order): 300 kills / h, 44 seen,
 6.82 per sighting, 12.0 s per kill, 78 % of free targets, steer moving 92 %, seen -> click 1.11 s,
@@ -42,7 +43,8 @@ BATT = {
     "free targets attacked <= 10 s": "78 %", "steer moving share": "92 %",
     "seen -> click p50 s": "1.11", "death -> next p50 s": "1.24",
     "dead calls without a real death": "-", "loot picked / dropped (looters)": "97 %",
-    "reversals / min": "3.6", "Creamy hits (requests)": "-", "hard bars NPC / map / other": "-",
+    "reversals / min": "3.6", "Creamy hits (requests)": "-", "Creamy hits / h": "-",
+    "hard bars NPC / map / other": "-",
 }  # fmt: skip
 
 
@@ -136,6 +138,8 @@ def row(sid: str, fresh: bool = False) -> dict[str, Any]:
         f"{100 * loot['picked'] / max(1, loot['items']):.0f} % ({loot['looter']})",
         "reversals / min": (o.get("heading") or {}).get("reversals_per_min"),
         "Creamy hits (requests)": f"{hits} ({reqs})",
+        "Creamy hits / h": round(hits / (float(o["window_s"]) / 3600), 2) if o.get("window_s")
+        else None,
         "hard bars NPC / map / other": f"{hb.get('npc_contacts')} / {hb.get('map_changes')} / "
         f"{len(others)}",
     }  # fmt: skip
