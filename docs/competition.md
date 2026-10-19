@@ -1390,6 +1390,7 @@ case.
 | v41 (4 runs) | 456 | 648 | 57.9 % | 14.2 % | 27.8 % | 76.2 % | 41 / 70 % |
 | v43 runs 1, 3, 4 | 310 | 405 | 42.0 % | 15.1 % | 43.0 % | 64.8 % | 31 / 58 % |
 | v42 (4 runs, the same layout; 2026-10-19 20:21 -> 10-20 00:30) | 454 | 613 | 53.7 % | 13.4 % | 31.0 % | 67.1 % | 39 / 63 % |
+| v44 (4 x 55 min, the same layout, both arms; 2026-10-20 00:52 -> 04:39) | 339 | 404 | 58.9 % | 10.9 % | 29.7 % | 75.7 % | 42 / 69 % |
 
 - The v43 drop is NOT looters: it is items left behind, with a worse death cell, and so fewer drops
   inside the clicked 3 x 3.
@@ -1402,6 +1403,10 @@ case.
   (42.0 %; 58-60 %), looters 13.4 % (15.1 %; 13.5-14.2 %). Per run, looters 4.5 / 14.0 / 17.4 /
   14.3 %: run 1's low share did not repeat. The in-3x3 and death-cell shares are the runs' shares
   weighted by their loot steps. The death cell (exact 39 %) stays the lever named in section 2.
+- ➡️ **v44's 4 runs** (both arms; the fix arm's skipped real kills lost their loot, 3.87): looters
+  10.9 % (per run 8.0 / 20.7 / 0.0 / 7.0 %), left behind 29.7 %, in the 3 x 3 75.7 %, the death
+  cell exact 42 % / <= 1 cell 69 %. Looters swing with the field per run (0 to 21 %), not with
+  the version.
 
 
 ## Overnight 19-20 Oct (Batt resting; his brief, until Tuesday 05:00)
