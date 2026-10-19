@@ -11713,6 +11713,33 @@ truer: NOT adopted (reported). If 3 fails: it costs loot: NOT adopted.
     target rather than skip it); NOT changed mid-version.
   - The reader on this run: base EXP precision 121/122 = 0.992, recall 0.984, lag p50 0.32 /
     p90 0.45 s. Best 2 min: 9 kills from minute 23.3.
+- **Run 2** (seed 20350202, session 20261020T014914, started by the chain 01:49:12 after fresh
+  start checks, ended on its time box 02:45:52; screenshot `pre-v44-20350202.jpg` judged: the
+  hunting layout, Lv 70, weight 603 / 4970, no dialog, the runner's own drops on the floor):
+  - The row: 145 engagements, landing 102/145 = 70.3 % (62.5-77.2), 126.6 kills / h, 4.52 per
+    sighting, 28.4 s per kill, seen 28.0 / 10 min, free targets <= 10 s 34 % (n 151), steer
+    moving 37 %, seen -> click 4.05 s, death -> next 0.59 s, dead calls without a real death
+    26/121 = 21.5 %, kill -> loot start 0.96 / 0.53 s (n 93), reversals 6.97 / min (outside loot
+    6.09), Creamy 0, hard bars 0 / 0 / 0. Results: dead 121, skipped_unconfirmed 13, skipped_risky
+    11.
+  - Loot: 140 items, picked 57.9 %, looters 20.7 % (29), left behind 20.0 %, gone 2; in the 3 x 3
+    77.3 %; the death cell exact 45 %, <= 1 cell 70 %.
+  - Per arm, run 2 only, NOT deciding:
+
+    | arm | kill -> loot start mean (p50 / p90) | dead calls w/o a real death | loot picked | landing | dead by |
+    |---|---|---|---|---|---|
+    | fix (odd k) | 0.42 s (0.47 / 1.21) | 15/59 = 25.4 % | 35/72 = 48.6 % | 63.9 % | EXP line 23, line during the pixel wait 22, checked pixel 14; skipped_unconfirmed 13 (6 real kills) |
+    | base (even k) | 1.49 s (0.69 / 3.93) | 11/62 = 17.7 % | 42/69 = 60.9 % | 76.7 % | the base rule 62; skipped_risky 11 |
+
+  - **The fix arm's 15 dead calls without a real death, by what called them** (flow_judge's
+    truth): the checked pixel fallback 10 of its 14 (the death cell said "ok" with the target
+    alive 8, no unit 2); an EXP line 5 of 45 (no unit 4, another monster killed 1). Run 1 had 2
+    and 2. So on this run the death-cell check let most pixel calls through as "ok": a weak
+    verifier here. Reported, nothing changed.
+  - Runs 1-2 together (not a verdict; the pool is 4 runs): dead calls without a real death, fix
+    19/116 = 16.4 % vs base 22/120 = 18.3 % (0.90 x; the bar is 0.55 x).
+  - The reader: base EXP precision 114/116 = 0.983, recall 0.983, lag p50 0.32 / p90 0.45 s.
+    Best 2 min: 10 kills from minute 0.0.
 
 ### 3.88 hunt-flow@47: THE +-135 TURN ONLY WHEN BLOCKED (reversal fix P4), interleaved in 10-min blocks (pre-registered 2026-10-19 20:07 ICT, the commit time cba01d6, BEFORE its runs; Batt ~19:5x: "Reversal fixes: P4 yes (reverse only when 0/45/90 are all blocked; matches my rule) - pre-register it in the queue after v46")
 
