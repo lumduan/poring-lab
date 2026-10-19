@@ -11160,6 +11160,25 @@ After run 4: the standard layout (`client_layout.py ensure standard`), then the 
   layout, the chat closed, no dialog, the badge visible, Lv 70, weight 491 / 4970; ASSIST, no
   lease). Its `client_layout` "hunt" and `gm_state_before` passed; first kill 16:42. Runs 3-4
   queued (16:40:35). If run 3 ends after ~18:52, run 4 moves to Batt's next block (the 20:00 end).
+- **Run 2 ended** on its time box (3600.7 s, 17:41), with only 16 engagements (13 dead, 3
+  skipped_risky): the GM spent 16:48-17:41 in a POCKET.
+  - The pocket: a plateau around (335-360, 66-96) between the cliffs and the pond. The search
+    heading rules alternated goals inside it -- east (360, 74), south (336, 96) -- with +-90 /
+    +-135 turns (399 of the last 400 walk clicks were search clicks there; walk guard refusals).
+  - NOT the dead-end ping-pong: no 180 reversal, so the fix (dead_end_hyst_s) never fired. A
+    new failure mode: stuck by DISPLACEMENT, not by turn angle. The run was not stopped (a stall
+    is the version's real behaviour; stopping bad runs would bias the pool).
+  - Standard row: landing 13 / 16 = 81.2 %, 16.0 kills / h, seen / 10 min 0.0 (the windowed
+    median: no monster entered the view in most windows), reversals 13.64 / min (13.65 outside
+    loot), Creamy 0, hard bars 0 / 0 / 0.
+  - `layout_judge.py`: uncovered-area detections 0.121; detected share 0.917 (33 / 36).
+  - The Battle Log reader's held-out check on this run (the subagent): damage 16 / 16, EXP
+    16 / 16 (2 fake triples from garbled frames), items 9 / 9; the live logger ran beside it
+    from 17:19.
+- **Run 3** (17:41:22, seed 20320303, `20261019T174122-demo-hunt-flow43`, started by the chain).
+  Its screenshot `pre-v43-20320303.jpg` was judged at 17:42: the hunting layout, no dialog, the GM
+  in the pocket at (342, 73) (its start warps away), Lv 70, weight 496 / 4970; ASSIST, no lease.
+  The live Battle Log logger is beside it.
 
 ### 3.85 hunt-flow@45: THE LOCKED-POINTER WALK (Batt's search walking), interleaved in 10-min blocks (pre-registered 2026-10-19 16:28 ICT, the commit time 8376ae6, BEFORE its runs; Batt 16:0x: "pre-register Batt's method as the search-walking change, LOCKED-POINTER WALK"; 16:2x: "Keep the locked-pointer walk (3.85) in the queue ... Report its effect on click accuracy too"; it runs after v44)
 
