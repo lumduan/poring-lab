@@ -1032,7 +1032,8 @@ def fresh_share(swept: Any, now: float, cell: Sequence[int], half: int, recent_s
 
 def heading_goal_cov(area: Any, here: Cell, st: dict[str, Any], swept: Any, now: float,
                      recent_s: float = 180.0, half: int = 12, keep: float = 0.8,
-                     max_len: int = 40, min_run: int = 8) -> Cell | None:  # fmt: skip
+                     max_len: int = 40, min_run: int = 8,
+                     hyst_s: float = 0.0) -> Cell | None:  # fmt: skip
     """PURE (v22, the SEARCH GAP: the bot swept 0.63x Batt's ground per 10 min -- overlap, turning
     back, short net legs): v18's heading search with a memory of the bot's OWN swept ground.
     The current heading and the +-45 / +-90 / +-135 deg turns that run >= ``min_run`` cells each
@@ -1049,14 +1050,35 @@ def heading_goal_cov(area: Any, here: Cell, st: dict[str, Any], swept: Any, now:
         f2 = fresh_share(swept, now, c2, half, recent_s)
         cands.append((n2 * (0.25 + f2), deg, sgn, a2, c2, f2))
     if not cands:
+        if hyst_s and now - float(st.get("rev_t", -math.inf)) < hyst_s:
+            # the dead-end PING-PONG fix (Batt 2026-10-19, a bug: v39 run 2 flipped between two
+            # dead-end goals 52 times in ~110 s): a second dead end within ``hyst_s`` of the last
+            # reversal does not reverse again; the best of the 8 COMPASS headings by run x
+            # (0.25 + fresh), any run >= 2 -- an absolute choice, so repeated calls agree
+            best: tuple[float, float, Cell] | None = None
+            for k8 in range(8):
+                a8 = k8 * math.pi / 4
+                n8, c8 = ray_run_angle(area, here, a8, max_len)
+                if n8 < 2:
+                    continue
+                sc8 = n8 * (0.25 + fresh_share(swept, now, c8, half, recent_s))
+                if best is None or sc8 > best[0]:
+                    best = (sc8, a8, c8)
+            if best is None:
+                return None
+            d8 = (best[1] - ang + math.pi) % (2 * math.pi) - math.pi
+            st.update(ang=best[1], turn=round(math.degrees(d8), 1), fresh=None,
+                      dead_end_escape=True)  # fmt: skip
+            return best[2]
         a2 = ang + math.pi  # a real dead end: the only reversal
         n2, c2 = ray_run_angle(area, here, a2, max_len)
-        st.update(ang=a2, turn=180.0, fresh=None)
+        st.update(ang=a2, turn=180.0, fresh=None, rev_t=now, dead_end_escape=False)
         return c2 if n2 >= 2 else None
     top = max(c[0] for c in cands)
     ok_ = [c for c in cands if c[0] >= keep * top]
     pick = min(ok_, key=lambda c: (c[1], -c[0]))  # the smallest turn among the good ones
-    st.update(ang=pick[3], turn=float(pick[2] * pick[1]), fresh=round(pick[5], 2))
+    st.update(ang=pick[3], turn=float(pick[2] * pick[1]), fresh=round(pick[5], 2),
+              dead_end_escape=False)  # fmt: skip
     return pick[4]
 
 
@@ -1859,6 +1881,12 @@ def _start_thread(target: Any, name: str) -> Any:
 def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
     import multiprocessing as mp
 
+    import client_layout as cl
+
+    # v43 (Batt 2026-10-19): the run's UI rectangles follow its client layout -- selected BEFORE
+    # any mask module (route_preview / ui_mask / work_zone / loot1) is imported below
+    cl.select(PARAMS[version].get("ui_layout") or "standard")
+
     import bench
     import cursor_gate
     import gm_state
@@ -2077,9 +2105,16 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     ev({"kind": "reckoned_fix", "cell": list(pos_box[0])})
                     return pos_box[0]
                 world.position = pos_box[0]
-                with typing_pace():  # v34: /where is TYPED
-                    got = relocalise(agent, screen, world, noentry, band)
-                    bench.close_chat(agent_raw, screen)
+                hunt_tabs = prm.get("ui_layout") == "hunt"
+                if hunt_tabs:  # v43: /where's reply lands on Regular Chat, not on Battle Log
+                    cl.select_tab(agent_raw, screen, "regular")
+                try:
+                    with typing_pace():  # v34: /where is TYPED
+                        got = relocalise(agent, screen, world, noentry, band)
+                        bench.close_chat(agent_raw, screen)
+                finally:
+                    if hunt_tabs:
+                        cl.select_tab(agent_raw, screen, "battle")
                 ev({"kind": "where_fix", "ok": bool(got.get("ok")), "to": list(world.position)})
                 if got.get("ok"):
                     return tuple(world.position)  # type: ignore[return-value]
@@ -2205,6 +2240,15 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
             chat_guard.start_run(f"hunt-flow{version}-{sid}")
             # Batt 2026-10-18: the runner REBUILDS the hunting state itself when it is not there
             # (Base Lv 70, STR 99 by the status window; gm_state.ensure_hunting), and keeps it
+            if prm.get("ui_layout"):
+                # v43: the client's layout reached through its own controls (F12 / the Basic
+                # Info arrow / a chat tab), each step verified; unreadable -> stop (never blind)
+                try:
+                    lay_ = cl.ensure(agent_raw, screen, prm["ui_layout"])
+                except cl.LayoutError as exc:
+                    raise f0.FarmStop(f"client layout: {exc}") from exc
+                ev({"kind": "client_layout", "layout": lay_["layout"], "steps": lay_["steps"],
+                    "dist": lay_["state"].get("dist")})  # fmt: skip
             before = gm_state.ensure_hunting(agent_raw, screen, why=f"hunt-flow@{version}:before",
                                              out_dir=log.dir / "gm_state", loot=True)  # fmt: skip
             ev({"kind": "gm_state_before", **f0._brief(before)})
@@ -3650,6 +3694,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                     prm["cov_half"],
                                     prm["cov_keep"],
                                     min_run=prm["heading_min_run"],
+                                    hyst_s=float(prm.get("dead_end_hyst_s") or 0.0),
                                 )
                             else:
                                 goal = heading_goal(area, here_, heading_st, heading_rng,
@@ -3662,6 +3707,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                         "ang": round(math.degrees(heading_st["ang"]) % 360, 1),
                                         "turn": heading_st.get("turn"),
                                         "fresh": heading_st.get("fresh"),
+                                        "dead_end_escape": heading_st.get("dead_end_escape"),
                                         "arrow": arrow_last[0],
                                         **({"age": bool(head_blk["on"])}
                                            if prm.get("heading_age") else {})})  # fmt: skip

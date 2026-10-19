@@ -1043,3 +1043,32 @@ def test_v42_candidate_steer_walk_guard_from_the_gm_box_only_when_set() -> None:
     g = src[src.index("def guard_ok(") :][:2400]
     assert "if near_box:" in g and "walk_guard_box_why(" in g and "walk_guard_why(" in g
     assert "elif not guard_ok(uu, vv, near_box):" in src
+
+
+def test_dead_end_ping_pong_fix_no_second_reversal_within_the_hysteresis() -> None:
+    """Batt 2026-10-19 (a BUG, fixed): at a two-sided dead end the coverage heading reversed on
+    every call (v39 run 2: 52 flips in ~110 s). With ``hyst_s`` a second dead end within it takes
+    the best of the 8 compass headings instead -- and repeated calls agree; without it, the old
+    behaviour (every call reverses) is unchanged."""
+    area = np.zeros((40, 40), dtype=bool)
+    area[20, 14:27] = True  # a short east-west corridor: both ways run 6 cells (< min_run 8)
+    area[17:20, 20] = True  # a 3-cell stub north
+    here = (20, 20)
+    swept = np.full((40, 40), -1e9)
+
+    def flips(hyst: float) -> list[float]:
+        st: dict[str, object] = {"ang": 0.0}
+        out = []
+        for i in range(10):
+            hf.heading_goal_cov(area, here, st, swept, 100.0 + 0.5 * i, hyst_s=hyst)
+            out.append(float(st["turn"]))  # type: ignore[arg-type]
+        return out
+
+    old = flips(0.0)
+    assert old == [180.0] * 10  # the bug: a reversal on every call
+    new = flips(10.0)
+    assert new[0] == 180.0 and new.count(180.0) == 1  # one reversal, then the escape
+    assert all(t == 0.0 for t in new[2:])  # the escape's absolute choice holds
+    for n in hf.PARAMS:
+        if n <= 41:
+            assert not hf.PARAMS[n].get("dead_end_hyst_s")
