@@ -11109,6 +11109,18 @@ After run 4: the standard layout (`client_layout.py ensure standard`), then the 
   hard bar.
 
 **Run log (written during the runs):**
+- **PARAMS[43]** committed **416fdd5 at 15:28:18**, before run 1. Census + targeted safety tests
+  green (client_layout's two UI controls registered in the click census, with a targeted test that
+  they lie inside the UI windows of both layouts).
+- The guard's base (3): the 12 runs' pooled landing within 5 s = (517 + 447 + 480) / (680 + 612 +
+  627) = 1,444 / 1,919 = 75.2 % (run_row), so the guard is >= 67.2 %.
+- **Run 1** (15:28:50, seed 20320101, `20261019T152849-demo-hunt-flow43`, code 416fdd5), started
+  by the agent after a judged screenshot (`pre-v43-20320101.jpg`, 15:28: prt_fild08, the hunting
+  layout -- one-row bar, panel collapsed, Battle Log shown -- no dialog, the GM in its hunting
+  state, Lv 70, HP full, weight 489 / 4970; ASSIST, no lease, no bot agent).
+  - Its `client_layout` event: the layout was already "hunt" (no step), distances 1.4 / 1.7 /
+    2.9. `hardbar_live.py watch 43 --pid` bound to it.
+  - Runs 2-4 queued: `hunt_chain.py --version 43 --seeds 20320202,20320303,20320404` (15:28:49).
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
