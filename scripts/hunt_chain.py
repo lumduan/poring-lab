@@ -28,6 +28,9 @@ Per seed, in order:
    stop in a row (`after_run`). A stopped seed is not re-run by the chain (its partial run is
    kept); a re-run of a seed gets a letter suffix on its files.
 Every step is one line in ``OUT/chain-v<version>.log``.
+
+``--start-by YYYY-MM-DDTHH:MM`` (ICT, Asia/Bangkok): no seed starts after that moment (Batt
+2026-10-19 overnight: "By 05:00 ... nothing running on the client"); the chain ends instead.
 """
 
 from __future__ import annotations
@@ -116,6 +119,17 @@ def run_tag(out: Path, version: int, seed: int) -> str:
     return f"{seed}-{int(time.time())}"
 
 
+def too_late(now_epoch: float, start_by: str | None) -> bool:
+    """PURE: is it past ``start_by`` (an ICT local time, "YYYY-MM-DDTHH:MM"; None = never)?"""
+    if not start_by:
+        return False
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    dl = datetime.fromisoformat(start_by).replace(tzinfo=ZoneInfo("Asia/Bangkok"))
+    return now_epoch > dl.timestamp()
+
+
 def health() -> dict[str, object]:
     sys.path.insert(0, str(ROOT / "scripts"))
     import ro_agent as r
@@ -142,6 +156,7 @@ def main() -> int:
     ap.add_argument("--version", type=int, required=True)
     ap.add_argument("--seeds", required=True, help="comma-separated, in order")
     ap.add_argument("--minutes", type=float, default=60.0)
+    ap.add_argument("--start-by", default=None, help="ICT YYYY-MM-DDTHH:MM: no seed starts later")
     a = ap.parse_args()
     seeds = [int(x) for x in a.seeds.split(",") if x.strip()]
     OUT.mkdir(parents=True, exist_ok=True)
@@ -152,6 +167,9 @@ def main() -> int:
             time.sleep(10)
         if control() == "stop":
             log(a.version, f"control says stop: chain ends before seed {seed}")
+            return 0
+        if too_late(time.time(), a.start_by):
+            log(a.version, f"past --start-by {a.start_by}: chain ends before seed {seed}")
             return 0
         try:
             h = health()

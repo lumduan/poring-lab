@@ -100,3 +100,17 @@ def test_a_re_run_seed_gets_a_suffix(tmp_path) -> None:  # noqa: ANN001
     assert hc.run_tag(tmp_path, 42, 7) == "7"
     (tmp_path / "v42-7.out").write_text("")
     assert hc.run_tag(tmp_path, 42, 7) == "7b"
+
+
+def test_start_by_is_an_ict_deadline() -> None:
+    """Batt 2026-10-19 overnight ("By 05:00 ... nothing running on the client"): no seed starts
+    after --start-by, read as ICT whatever the host clock's zone."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    dl = datetime(2026, 10, 20, 3, 52, tzinfo=ZoneInfo("Asia/Bangkok")).timestamp()
+    assert not hc.too_late(dl - 60, "2026-10-20T03:52")
+    assert hc.too_late(dl + 1, "2026-10-20T03:52")
+    assert not hc.too_late(dl + 10**6, None)
+    src = Path(hc.__file__).read_text()
+    assert src.index("if too_late(time.time(), a.start_by):") < src.index("h = health()")
