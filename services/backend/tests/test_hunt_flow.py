@@ -1000,5 +1000,12 @@ def test_v41_candidate_walkers_struck_from_further_only_when_set() -> None:
     assert hf.strike_range(still, on, 2) == 7
     for n in (38, 39, 40):
         assert not hf.PARAMS[n].get("strike_cells_walking")
+    # v41 (3.82, Batt's GO 2026-10-19): on v40 adopted -- the false-dead fix on every engagement
+    p = hf.PARAMS[41]
+    assert p["strike_cells_walking"] == 7 and p["strike_walking_ab"] and 41 in hf.VERSIONS
+    assert p["false_dead_fix"] and not p["false_dead_ab"] and not p["steer_tail"]
+    moved = ("false_dead_ab", "strike_cells_walking", "strike_walking_ab")
+    same = {k: v for k, v in p.items() if k not in moved}
+    assert same == {k: v for k, v in hf.PARAMS[40].items() if k not in moved}
     src = Path(hf.__file__).read_text()
     assert src.count("strike_range(target, prm, k)") == 1 and "target, prm, k) <" in src

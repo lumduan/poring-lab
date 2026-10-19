@@ -260,6 +260,9 @@ VERSIONS = {
     "death-cell fix says ok; otherwise the engagement ends skipped_risky (no loot step, the "
     "track stays selectable: the normal selection re-engages it), never dead; interleaved per "
     "engagement (odd k). Base: v38's (v39 not adopted, 3.80)",
+    41: "WALKING TARGETS STRUCK FROM FURTHER: a walking target's strike range (and the steer's "
+    "zone) from strike_cells_walking (7) on odd k, as a standing one's; the client walks up "
+    "after the attack click. Base: v40 adopted (3.81), the false-dead fix on every engagement",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -457,6 +460,13 @@ PARAMS[39] = {**PARAMS[38], "heading_age": False, "heading_age_ab": False, "stee
 # base, the steer's old picker (no tail); the log-only dead_probe stays on
 PARAMS[40] = {**PARAMS[39], "steer_tail": False, "steer_tail_ab": False, "false_dead_fix": True,
               "false_dead_ab": True}  # fmt: skip
+# 41 = WALKING TARGETS STRUCK FROM FURTHER (3.82, pre-registered 61cf81d; Batt's GO 2026-10-19
+# 07:0x): a WALKING target's strike range from strike_cells_walking (7) on odd k, as a standing
+# one's (the conversion study: never-attacked walkers +1.96 s / kill; v39: the walk guard blocks
+# the steer's last cells). The zone radius follows the same strike_range call. Its base: v40
+# ADOPTED (3.81, aed0fb4) -> the false-dead fix on every engagement (false_dead_ab False)
+PARAMS[41] = {**PARAMS[40], "false_dead_ab": False, "strike_cells_walking": 7,
+              "strike_walking_ab": True}  # fmt: skip
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
