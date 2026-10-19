@@ -10874,6 +10874,33 @@ on for all (no blocks), switched in a commit before run 1 and recorded in this r
   Its screenshot `pre-v41-20300303.jpg` was judged at 09:36: no dialog, the standard windows, the
   GM in its hunting state (Lv 70, HP full, weight 521 / 4970 after the weight clear), a Poring in
   view. Health: ASSIST, no lease. Run 2's monitor ended with its runner (one monitor running).
+- **Run 3 STOPPED** at 10:11:46 after 2,219 s (37 min), rc 3: the runner's own fail-closed stop
+  "our cell is unknown (minimap and /where both failed)". Not a hard bar. 103 engagements: 83
+  dead, 19 skipped_risky, 1 gave up. The chain ended as designed.
+  - Standard row (its 37 min): landing 71 / 102 = 69.6 % (60.1-77.7), 133.3 kills / h, 4.76 per
+    sighting, 27.0 s per kill, sight 28.0 / 10 min, free targets attacked <= 10 s 24 % (n 119),
+    steer moving 34 %, seen -> click 4.70 s, death -> next 0.81 s; dead calls without a real
+    death 19 / 83 = 22.9 %; loot 62 / 96 = 65 % (16 to looters); reversals 7.80 / min; Creamy 0;
+    hard bars 0 / 0 / 0.
+  - **Why (diagnosed offline at 11:3x):**
+    - the GM stood at the ravine's edge, at (319, 219) by the packets, a cell walkable on both
+      grids;
+    - `settle` accepts a minimap cell only if two reads agree on a walkable cell. The readout
+      "319 219" is wide, and its last digit runs into the minimap's zoom button. A misread such as
+      (319, 210) is not walkable, so every read was refused;
+    - the reckoned cell (315, 213) went stale (11 `reckoned_fix`, 7 `unstall`), and after 60 s
+      without a fix the /where fallback also failed;
+    - the stop worked as designed. A minimap-digit fix is its own change, not made here.
+  - **The client stood idle 10:11 -> 11:29:** the agent's turn had stalled (Batt's "Try again").
+    The chain correctly ended on the stop; nothing restarted the client until the agent came back.
+- **Deviation (decided 11:29, before looking at run 3's per-arm results):** run 3's 37 minutes
+  stay in the pooled read (its data is valid up to the stop), and run 4 runs as planned. The
+  pooled read covers 3 h 37 min, not 4 h. A re-run of seed 20300303 would cost the hour that the
+  UI layout version (3.84) needs today.
+- **Run 4** (11:29:47, seed 20300404, `20261019T112947-demo-hunt-flow41`), started by the agent
+  after a judged screenshot (`pre-v41-20300404.jpg`, 11:29: no dialog, the standard windows, the
+  GM standing at the ravine where run 3 stopped, Lv 70 / Job 5 (the runner's start restores Job
+  1), weight 567 / 4970; ASSIST, no lease). `hardbar_live.py watch 41 --pid` bound to it.
 
 ### 3.83 hunt-flow@42: THE STEER'S WALK GUARD FROM THE GM'S BOX, with the route tail, interleaved per engagement (pre-registered 2026-10-19 07:46 ICT, the commit time e3fc195, BEFORE its runs; Batt's decision 1, 2026-10-19 ~07:00: "WALK GUARD (the #1 cause): approve a smaller radius for STEER clicks only (the walk-in toward a chosen target): from 120 px to the GM sprite's own box + a small margin (propose the value from data). Search walk clicks and loot clicks keep the current guard. Creamy hits are counted, not a stop (my rule); report Creamy hits per hour as this change's cost. Pre-register it as its own version after v41 (one change at a time), with steer moving share as the primary (Batt 92 %)")
 
