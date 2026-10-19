@@ -754,6 +754,47 @@ def risky_unproven(last_burst: str | None, death_reason: str | None) -> bool:
     return last_burst == "risky" and death_reason != "ok"
 
 
+def edge_deferred(tr: Track, gw: float, gh: float, margin: float, min_frames: int,
+                  ui_at: Any) -> bool:  # fmt: skip
+    """PURE (3.86, hunt-flow@45: commit late at the edge): a target whose box's bottom centre lies
+    within ``margin`` px of the screen's edge, or of a UI window (``ui_at(u, v, margin)``), is not
+    dispatched until its track holds ``min_frames`` boxed frames. Measured before (v41, resolved
+    targets): at selection 40 % of the aborted steers vs 13 % of the engaged ones lay within 80 px
+    of the edge; 49 % vs 38 % were boxed in <= 1 frame."""
+    if tr.box is None:
+        return False
+    u, v = f1.foot(tr.box)
+    near = (u < margin or v < margin or u > gw - margin or v > gh - margin
+            or bool(ui_at(u, v, margin)))  # fmt: skip
+    return near and len(tr.boxes) < min_frames
+
+
+def hold_radius(held_s: float, base: float, hold_s: float) -> float:
+    """PURE (3.86: keep through short dropouts): the re-acquisition radius while a lost target is
+    held -- ``base`` (reacquire_cells, 3) + 1 cell per 0.5 s held, up to the hold's end (3 -> 6)."""
+    return base + math.floor(min(max(held_s, 0.0), hold_s) / 0.5)
+
+
+def hold_drop(held_s: float, hold_s: float, pred_in_view: bool, pred_in_zone: bool) -> str | None:
+    """PURE (3.86): None keeps the held target (the steer goes on toward its PREDICTED cell; a
+    strike still needs a fresh box); else why it is dropped: held longer than ``hold_s`` since
+    the loss (the target_lost moment), or its prediction left the view or the zone."""
+    if held_s > hold_s:
+        return "hold_expired"
+    if not pred_in_view:
+        return "pred_out_of_view"
+    if not pred_in_zone:
+        return "pred_out_of_zone"
+    return None
+
+
+def block_on(t0: float, now_s: float, block_min: float) -> tuple[int, bool]:
+    """PURE (3.86 / 3.85: interleaved in 10-min blocks): (the block's index since ``t0``, True on
+    ODD blocks = the rules' arm, as pre-registered)."""
+    blk = int(max(0.0, now_s - t0) / (60.0 * block_min))
+    return blk, blk % 2 == 1
+
+
 def exp_dead_on(prm: dict[str, Any], k: int) -> bool:
     """PURE (3.87, hunt-flow@44): does engagement ``k`` take its dead call from the Battle Log's
     base EXP line? ``exp_dead`` on; with ``exp_dead_ab`` only odd k (the fix arm)."""
@@ -4176,6 +4217,39 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 unstall_rng = random_.Random(seed + 7)
                 zone_st: dict[str, Any] = {}  # v11: the engagement zone (tid, center, radius, path)
                 dispatched: set[tuple[int, bool]] = set()
+                hold_st: dict[str, Any] = {}  # 3.86: the lost target held (tid, t0)
+                edge_logged: set[int] = set()  # 3.86: one edge_deferred record per track
+                commit_blk: dict[str, Any] = {"t0": None, "block": None, "on": False}
+
+                def commit_on(now_s: float) -> bool:
+                    """3.86 (hunt-flow@45): the commit rules' arm -- 10-min blocks, odd = on
+                    (``commit_ab``); always on without it; off when ``commit_rules`` is unset."""
+                    if not prm.get("commit_rules"):
+                        return False
+                    if not prm.get("commit_ab"):
+                        return True
+                    if commit_blk["t0"] is None:
+                        commit_blk["t0"] = now_s
+                    blk_, on_ = block_on(commit_blk["t0"], now_s, prm["commit_block_min"])
+                    if blk_ != commit_blk["block"]:
+                        commit_blk.update(block=blk_, on=on_)
+                        ev({"kind": "commit_arm", "block": blk_, "on": on_})
+                    return bool(commit_blk["on"])
+
+                def edge_wait(tr_: Track, now_s: float) -> bool:
+                    """3.86: True = not dispatched yet (near the edge / a UI window, too few
+                    boxed frames); one ``edge_deferred`` record per track."""
+                    if not commit_on(now_s) or not edge_deferred(
+                            tr_, gw, gh, prm["edge_margin_px"], prm["edge_min_frames"],
+                            lambda u_, v_, m_: loot1.in_ui(u_, v_, pad=m_)):  # fmt: skip
+                        return False
+                    if tr_.tid not in edge_logged:
+                        edge_logged.add(tr_.tid)
+                        fu_, fv_ = f1.foot(tr_.box)
+                        ev({"kind": "edge_deferred", "track": tr_.tid, "frames": len(tr_.boxes),
+                            "foot": [round(fu_), round(fv_)]})  # fmt: skip
+                    return True
+
                 stop_since: float | None = None  # v5: since when standing with no click
                 last_click: dict[str, Any] = {}  # v5: the last walk click (unfollowed check)
                 mode_ = ""
@@ -4730,14 +4804,49 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         if target is not None and not valid_at_dispatch(
                                 target, live, t_now, prm["track_drop_s"]):  # fmt: skip
                             nt = None
+                            held_ = (now - float(hold_st["t0"])
+                                     if hold_st.get("tid") == target.tid else 0.0)  # fmt: skip
                             if prm.get("reacquire"):  # v4: the same monster under a new id
-                                nt = reacquire_target(target, live, t_now,
-                                                      prm["reacquire_cells"],
+                                rad_ = (hold_radius(held_, prm["reacquire_cells"], prm["hold_s"])
+                                        if hold_st.get("tid") == target.tid
+                                        else prm["reacquire_cells"])  # fmt: skip
+                                nt = reacquire_target(target, live, t_now, rad_,
                                                       list(done_ids))  # fmt: skip
                             if nt is not None:
                                 ev({"kind": "target_reacquired", "track": target.tid,
-                                    "as": nt.tid})  # fmt: skip
+                                    "as": nt.tid,
+                                    "held_s": round(held_, 2) if hold_st.get("tid") == target.tid
+                                    else None})  # fmt: skip
+                                hold_st.clear()
                                 target = nt
+                            elif prm.get("hold_s") and commit_on(now):
+                                # 3.86: KEEP a lost target through a short dropout -- the steer
+                                # goes on toward its predicted cell, re-acquired in a growing
+                                # radius; dropped after hold_s, or out of the view / the zone
+                                if hold_st.get("tid") != target.tid:
+                                    hold_st.clear()
+                                    hold_st.update(tid=target.tid, t0=now)
+                                    held_ = 0.0
+                                    ev({"kind": "target_hold", "track": target.tid})
+                                pc_h = target.predict(t_now)
+                                world.position = pos
+                                qh_ = world.project([(int(round(pc_h[0])),
+                                                      int(round(pc_h[1])))])[0]  # fmt: skip
+                                z_ok = (
+                                    zone_st.get("tid") != target.tid
+                                    or cheb(pc_h, zone_st["center"]) <= zone_st["radius"]
+                                )
+                                why_h = hold_drop(
+                                    held_,
+                                    prm["hold_s"],
+                                    in_view(float(qh_[0]), float(qh_[1])),
+                                    z_ok,
+                                )
+                                if why_h is not None:
+                                    ev({"kind": "target_lost", "track": target.tid,
+                                        "held_s": round(held_, 2), "why": why_h})  # fmt: skip
+                                    hold_st.clear()
+                                    target = None
                             else:
                                 ev({"kind": "target_lost", "track": target.tid})
                                 target = None
@@ -4749,6 +4858,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                 list(done_ids), list(banned), now, prm["drop_target_s"],
                             )  # fmt: skip
                             do_ = nc_ is not None and (target is None or nc_.tid != target.tid)
+                            if do_ and nc_ is not None and edge_wait(nc_, now):
+                                do_ = False  # 3.86: committed late at the edge
                             if do_ and prm.get("preempt_hyst") and nc_ is not None:
                                 # v13: only a CLEARLY better one, and only once it has stayed
                                 # better for preempt_hold_s (v11: 1,085 flips in 242 engagements)
@@ -4784,6 +4895,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                 q0 is not None
                                 and q0.tid != target.tid
                                 and valid_at_dispatch(q0, live, t_now, prm["dispatch_fresh_s"])
+                                and not edge_wait(q0, now)
                                 and target_cost(q0, pos, t_now, prm["moving_penalty"])
                                 + prm["retarget_margin"]
                                 <= target_cost(target, pos, t_now, prm["moving_penalty"])
@@ -4806,6 +4918,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                     ev({"kind": "dispatch", "track": cand.tid, "rank": rank,
                                         "q_len": len(q), "valid": ok_,
                                         "cell": [round(pc_[0], 1), round(pc_[1], 1)]})  # fmt: skip
+                                if ok_ and edge_wait(cand, now):
+                                    continue  # 3.86: committed late at the edge
                                 if ok_:
                                     target, reads = cand, 0
                                     t_target[0] = now
@@ -4852,6 +4966,9 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             in_rng = cheb(pos, tcell) <= s_range or in_zone
                             if in_rng:
                                 in_range_since.setdefault(target.tid, time.monotonic())
+                            if not moving and in_rng and hold_st.get("tid") == target.tid:
+                                time.sleep(0.02)  # 3.86: a strike needs a fresh box (re-acquired)
+                                continue
                             if not moving and in_rng:
                                 need_still = bool(prm.get("still_gate")) and (
                                     not prm.get("still_read_only")

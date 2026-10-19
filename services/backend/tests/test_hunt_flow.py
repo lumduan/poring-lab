@@ -1282,3 +1282,45 @@ def test_battle_log_tail_reads_appended_records(tmp_path: Path, monkeypatch: Any
     assert tail.take_base_exp(0) is None
     assert tail.alive()
     tail.stop()
+
+
+def test_v45_commit_rules_pure_parts() -> None:
+    """3.86 (hunt-flow@45, 1a6e139): commit late at the edge (a target within 80 px of the
+    screen's edge or a UI window waits for 3 boxed frames) and keep a lost target through a short
+    dropout (hold_s 1.5 from the loss; the re-acquire radius 3 -> 6; out of the view / the zone
+    drops it); 10-min blocks, odd = the rules. STAGED: inert in every PARAMS."""
+
+    class B:
+        def __init__(self, x0: float, y0: float, x1: float, y1: float) -> None:
+            self.x0, self.y0, self.x1, self.y1 = x0, y0, x1, y1
+
+    def tr_at(u: float, v: float, n: int) -> hf.Track:
+        t = hf.Track(1, [(0, (10, 10))])
+        t.box = B(u - 20, v - 40, u + 20, v)
+        t.boxes = [(i, t.box) for i in range(n)]
+        return t
+
+    no_ui = lambda u, v, m: False  # noqa: E731
+    assert hf.edge_deferred(tr_at(50, 400, 1), 1280, 720, 80, 3, no_ui)  # left edge, 1 frame
+    assert not hf.edge_deferred(tr_at(50, 400, 3), 1280, 720, 80, 3, no_ui)  # 3 frames: go
+    assert hf.edge_deferred(tr_at(640, 700, 2), 1280, 720, 80, 3, no_ui)  # bottom edge
+    assert not hf.edge_deferred(tr_at(640, 400, 1), 1280, 720, 80, 3, no_ui)  # inside: as now
+    assert hf.edge_deferred(tr_at(640, 400, 1), 1280, 720, 80, 3, lambda u, v, m: m == 80)
+    nobox = hf.Track(2, [(0, (1, 1))])
+    assert not hf.edge_deferred(nobox, 1280, 720, 80, 3, no_ui)
+    assert [hf.hold_radius(h, 3.0, 1.5) for h in (0.0, 0.49, 0.5, 1.0, 1.5, 9.0)] == [
+        3.0, 3.0, 4.0, 5.0, 6.0, 6.0]  # fmt: skip
+    assert hf.hold_drop(1.0, 1.5, True, True) is None
+    assert hf.hold_drop(1.6, 1.5, True, True) == "hold_expired"
+    assert hf.hold_drop(0.2, 1.5, False, True) == "pred_out_of_view"
+    assert hf.hold_drop(0.2, 1.5, True, False) == "pred_out_of_zone"
+    assert hf.block_on(100.0, 100.0, 10.0) == (0, False)
+    assert hf.block_on(100.0, 100.0 + 601, 10.0) == (1, True)  # odd blocks = the rules
+    assert hf.block_on(100.0, 100.0 + 1201, 10.0) == (2, False)
+    for n in hf.PARAMS:
+        assert not hf.PARAMS[n].get("commit_rules")
+    src = Path(hf.__file__).read_text()
+    assert src.count("edge_wait(") == 4  # the def + dispatch, preempt, retarget
+    assert "if ok_ and edge_wait(cand, now):" in src
+    assert 'if not moving and in_rng and hold_st.get("tid") == target.tid:' in src
+    assert src.count("hold_drop(") == 2 and src.count("hold_radius(") == 2
