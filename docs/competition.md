@@ -1167,6 +1167,11 @@ kills, 72 pickups; species Poring 79, Lunatic 39, Drops 7):
 - One session so far: these figures are confirmed only once runs 2-4 agree. Nothing is wired into
   a decision; using it is a pre-registered version of its own (Batt's order: the version after
   v42).
+- ➡️ **Confirmed LIVE on v42's 4 runs** (the merged language-independent reader in its own
+  process, 10 Hz, log-only; `battle_log_live.jsonl` against packets): base EXP precision 112/112,
+  121/122, 147/148, 132/133; recall (kills of ours with a line within 2 s) 0.982 / 0.992 / 0.980 /
+  0.985; delay after the kill p50 0.28-0.33 s, p90 0.39-0.47 s. Wired into a decision first by
+  v44 (3.87, from 2026-10-20 00:52).
 
 ## Day run 2026-10-19 (Batt's decisions ~07:00, until 20:00): results
 
@@ -1381,6 +1386,7 @@ case.
 | v40 (4 runs) | 500 | 617 | 59.6 % | 13.5 % | 26.7 % | 74.7 % | 41 / 69 % |
 | v41 (4 runs) | 456 | 648 | 57.9 % | 14.2 % | 27.8 % | 76.2 % | 41 / 70 % |
 | v43 runs 1, 3, 4 | 310 | 405 | 42.0 % | 15.1 % | 43.0 % | 64.8 % | 31 / 58 % |
+| v42 (4 runs, the same layout; 2026-10-19 20:21 -> 10-20 00:30) | 454 | 613 | 53.7 % | 13.4 % | 31.0 % | 67.1 % | 39 / 63 % |
 
 - The v43 drop is NOT looters: it is items left behind, with a worse death cell, and so fewer drops
   inside the clicked 3 x 3.
@@ -1388,4 +1394,40 @@ case.
 - It is not attributable (v43 was not interleaved). v42 has the same layout and will show whether
   it repeats: compare left behind %, in 3x3 % and death cell exact % with looters %
   (`loot_fates.py runs <SID> ...`).
+- ➡️ **v42's 4 runs (same layout, same loot step): the drop did NOT repeat at v43's size.** Left
+  behind 31.0 % (v43 43.0 %, v40-v41 27-28 %), in the 3 x 3 67.1 % (64.8 %; 75-76 %), picked 53.7 %
+  (42.0 %; 58-60 %), looters 13.4 % (15.1 %; 13.5-14.2 %). Per run, looters 4.5 / 14.0 / 17.4 /
+  14.3 %: run 1's low share did not repeat. The in-3x3 and death-cell shares are the runs' shares
+  weighted by their loot steps. The death cell (exact 39 %) stays the lever named in section 2.
 
+
+## Overnight 19-20 Oct (Batt resting; his brief, until Tuesday 05:00)
+
+Queue: v42 (3.83) -> v44 (3.87) -> v45 (3.86) if time remains. Every run on prt_fild08, natural
+spawns, the hunting layout and state applied by the runner, the hard-bar monitor bound to each
+runner, a judged screenshot before each run. Full rows and per-arm tables: demonstrations.md 3.83 /
+3.87 run logs.
+
+**v42 (3.83: the steer's walk guard from the GM's box + the route tail, with the pocket escape):
+4 x 60 min, NOT ADOPTED (check 2).**
+
+| run | kills / h | landing <= 5 s | seen / 10 min | seen -> click p50 | dead calls w/o a death | loot picked (looters) | reversals / min | hard bars |
+|---|---|---|---|---|---|---|---|---|
+| 1 (20:21) | 113.9 | 76.3 % | 26.0 | 3.36 s | 23.2 % | 62 % (5) | 7.88 | 0 |
+| 2 (21:25) | 121.9 | 81.9 % | 27.5 | 3.56 s | 15.8 % | 45 % (17) | 7.91 | 0 |
+| 3 (22:26) | 149.9 | 80.8 % | 37.0 | 3.75 s | 15.3 % | 53 % (32) | 6.78 | 0 |
+| 4 (23:28) | 133.9 | 72.2 % | 29.5 | 2.96 s | 23.6 % | 55 % (28) | 7.93 | 0 |
+| pooled | 129.9 | 77.6 % | 30.0 | 3.41 s | 19.5 % | 54 % (82) | 7.62 | 0 |
+
+- Per arm (pooled): the fix arm moves more while steering (0.434 vs 0.333, 1.30 x: check 1 passes)
+  but does not arrive sooner (approach mean 5.29 vs 5.38 s, 0.983 x; the bar was <= 0.90 x).
+  Landing 78.0 vs 76.7 %. It clicks twice as often (1,180 steer walk clicks vs 624).
+- The base stays v43's + the pocket escape (a bug fix in both arms). The zone rule's gap (run 2:
+  16 of 17 zone events did nothing once the GM was already outside) is recorded for a later
+  version.
+- Creamy hits 2 in 4 h (0.5 / h); hard bars 0 in every run.
+
+**v44 (3.87: dead = the Battle Log's EXP line, with the checked pixel fallback): 4 x 55 min from
+00:52** (amendment 2a00832; the chain's `--start-by` 03:50). The first start (00:44) stopped in the
+runner's loot clear on two identical equipment items in a row, a false "did not drop"; fixed in
+`gm_state.tab_changed` (ee2dec5, tested) before run 1.
