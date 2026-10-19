@@ -7,7 +7,11 @@ THIS SCRIPT NEVER SENDS INPUT. It holds no Agent and opens no ro_agent.session: 
 (ro_agent.Screen, the RDP frame bus) and the backend's /health only (test_human_demo.py checks the
 source).
 
-    human_demo.py arm [--minutes 10] [--margin 60]
+    human_demo.py arm [--minutes 10] [--margin 60] [--tag human-demo] [--end-quiet S]
+
+``--tag`` names the session and its rule (Batt 2026-10-19: "human-ui-setup", his own chat-window
+arrangement, recorded so the procedure is learnt). ``--end-quiet S`` also ends the recording S s
+after his last input (once he has started), besides the stop file and the time box.
 
 What it records (all on the host's CLOCK_MONOTONIC):
 - the game region as JPEGs at 5 Hz, q80, on the NAS (route_demo._record; it stops itself under
@@ -95,7 +99,9 @@ def _detect(path: str, region: tuple[int, int, int, int], stop: Any) -> None:
             fh.flush()
 
 
-def arm(minutes: float, margin_s: float) -> int:
+def arm(
+    minutes: float, margin_s: float, tag: str = "human-demo", end_quiet_s: float | None = None
+) -> int:
     import record_session
     import ro_agent as r
     import route_demo
@@ -111,13 +117,13 @@ def arm(minutes: float, margin_s: float) -> int:
     if env.get("state") != "green":
         raise SystemExit(f"refused: the interlock is {env.get('state')} ({env.get('reason')})")
     STOP_FILE.unlink(missing_ok=True)
-    sid = new_session_id("human-demo")
+    sid = new_session_id(tag)
     log = DemoLog(sid)
     frames_dir = HD_ROOT / sid / "frames"
     frames_dir.mkdir(parents=True, exist_ok=True)
     region = r.game_region()
     t_armed = r.ns()
-    log.start(type="human-demo", rule="human-demo@1", scored=False, actor="human:batt",
+    log.start(type=tag, rule=f"{tag}@1", scored=False, actor="human:batt",
               map="prt_fild08", account="gm", minutes=minutes, margin_s=margin_s,
               backend=str(lock.backend), lock_seq=lock.seq, t_armed_ns=t_armed,
               frames_dir=str(frames_dir), rec_hz=REC_HZ, rec_quality=REC_QUALITY,
@@ -152,6 +158,9 @@ def arm(minutes: float, margin_s: float) -> int:
             ended = "stopped:stop_file"
         elif t0_live is not None and now >= t0_live + int((minutes * 60 + margin_s) * 1e9):
             ended = "time_box"
+        elif (end_quiet_s is not None and t0_live is not None and h
+              and float(h.get("last_human_input_age_s") or 0.0) >= end_quiet_s):  # fmt: skip
+            ended = "quiet"
         elif t0_live is None and now - t_armed > int(NO_INPUT_CAP_S * 1e9):
             ended = "no_input"
         else:
@@ -200,8 +209,11 @@ def main() -> int:
     a = sub.add_parser("arm")
     a.add_argument("--minutes", type=float, default=10.0)
     a.add_argument("--margin", type=float, default=60.0)
+    a.add_argument("--tag", default="human-demo", help="the session's name and rule")
+    a.add_argument("--end-quiet", type=float, default=None,
+                   help="also end S s after the last human input (once started)")  # fmt: skip
     args = ap.parse_args()
-    return arm(args.minutes, args.margin)
+    return arm(args.minutes, args.margin, args.tag, args.end_quiet)
 
 
 if __name__ == "__main__":
