@@ -11122,7 +11122,7 @@ After run 4: the standard layout (`client_layout.py ensure standard`), then the 
     2.9. `hardbar_live.py watch 43 --pid` bound to it.
   - Runs 2-4 queued: `hunt_chain.py --version 43 --seeds 20320202,20320303,20320404` (15:28:49).
 
-### 3.86 hunt-flow@44: COMMIT TO A TARGET LIKE A PLAYER (the aborted-steer fix), interleaved in 10-min blocks (pre-registered 2026-10-19, the commit time below, BEFORE its runs; Batt 16:2x: "Rank the ABORTED-STEER fix right after v42, ahead of the locked-pointer walk (it's the largest reversal source: 41 %). Design it from the data ... then commit rules like a player ... Pre-register with 'aborted steers per min' and 'reversals outside loot' as primaries")
+### 3.86 hunt-flow@44: COMMIT TO A TARGET LIKE A PLAYER (the aborted-steer fix), interleaved in 10-min blocks (pre-registered 2026-10-19 16:26 ICT, the commit time 1a6e139, BEFORE its runs; Batt 16:2x: "Rank the ABORTED-STEER fix right after v42, ahead of the locked-pointer walk (it's the largest reversal source: 41 %). Design it from the data ... then commit rules like a player ... Pre-register with 'aborted steers per min' and 'reversals outside loot' as primaries")
 
 **Why (competition.md "Pointer diagnosis"; v41's 4 runs, measured before this entry):**
 - 1,019 steer spans (4.7 / min). 526 of them (52 %, 2.4 / min) end with no attack click; 443 of
