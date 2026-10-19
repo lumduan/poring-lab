@@ -167,23 +167,37 @@ def runs(mask: np.ndarray) -> list[tuple[int, int]]:
     return out
 
 
+COLOURS = ("yellow", "cyan", "teal", "red", "green", "white")
+
+
 def colour_of(band_rgb: np.ndarray, mask: np.ndarray) -> str:
-    """The text colour class from the ink's mean RGB (JPEG blurs the chroma towards the darkened
-    background, so the classes are coarse)."""
+    """The text colour class by the MAJORITY of the ink's pixels (a white cursor over a teal
+    line shifted a mean colour to white: Batt's setup session, frames 845-879). JPEG blurs the
+    chroma towards the darkened background, so the classes are coarse."""
     if int(mask.sum()) < 4:
         return "none"
-    r, g, b = (float(v) for v in np.asarray(band_rgb)[mask][:, :3].astype(np.float32).mean(0))
-    if r > 150 and g > 150 and b < 0.75 * min(r, g):
-        return "yellow"
-    if g > 150 and b > 150 and r < 0.7 * min(g, b):
-        return "cyan"
-    if g > 150 and b > 120 and r < 0.85 * g:
-        return "teal"
-    if r > 150 and g < 0.6 * r and b < 0.6 * r:
-        return "red"
-    if g > 150 and r < 0.75 * g and b < 0.75 * g:
-        return "green"
-    return "white" if min(r, g, b) > 150 else "other"
+    px = np.asarray(band_rgb)[mask][:, :3].astype(np.float32)
+    r, g, b = px[:, 0], px[:, 1], px[:, 2]
+    cls = np.full(len(px), len(COLOURS), np.int8)  # unclassified
+    rules = [
+        (r > 150) & (g > 150) & (b < 0.75 * np.minimum(r, g)),  # yellow
+        (g > 150) & (b > 150) & (r < 0.7 * np.minimum(g, b)),  # cyan
+        (g > 150) & (b > 120) & (r < 0.85 * g),  # teal
+        (r > 150) & (g < 0.6 * r) & (b < 0.6 * r),  # red
+        (g > 150) & (r < 0.75 * g) & (b < 0.75 * g),  # green
+        np.minimum(np.minimum(r, g), b) > 150,  # white
+    ]
+    for k in range(len(rules) - 1, -1, -1):  # the earlier rule wins where several hold
+        cls[rules[k]] = k
+    counts = np.bincount(cls, minlength=len(COLOURS) + 1)[: len(COLOURS)]
+    if int(counts.sum()) == 0:
+        return "other"
+    # a line has ONE colour; white pixels are mostly a cursor or a highlight on top of it: a
+    # coloured class with >= 20 % of the classified ink wins over white
+    coloured = counts[:-1]
+    if int(coloured.max()) >= 0.2 * int(counts.sum()):
+        return COLOURS[int(np.argmax(coloured))]
+    return COLOURS[int(np.argmax(counts))]
 
 
 # --- glyphs -------------------------------------------------------------------------------------
