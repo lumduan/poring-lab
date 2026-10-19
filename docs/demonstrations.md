@@ -10969,7 +10969,8 @@ scratch, their rules now in the code's docstring and tests):**
 - If 1 fails, NOT adopted. If 5 fails, the code did not run as built: a fault, not a result.
 
 **Run log (written during the runs):**
-- **AMENDMENT (2026-10-19 09:4x ICT, before any run of this version):**
+- **AMENDMENT (2026-10-19 11:24 ICT, the commit time ec4212d, before any run of this version;
+  first labelled 09:4x by mistake: the agent's turn had stalled, and the clock said 11:24):**
   - Batt confirmed the design: "keep the tail in v42, go ahead". The fix arm keeps the route tail
     (`steer_tail` on odd k) together with the box + 20 px guard.
   - ORDER: Batt's 08:4x order puts his UI layout change (3.84, hunt-flow@43) between v41 and this
