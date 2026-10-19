@@ -1219,3 +1219,17 @@ cause; fix it as a bug if it's the layout."
 **Conclusion:** not a layout bug as far as the code and the logs show, so nothing was changed. The
 loot share is watched in v42's runs (the same layout, the same loot step). If it stays low, a 10-min
 block check of the layout (standard / hunting, the same seeds) is the way to settle it.
+
+**Batt's decisions on the day report (~19:5x):**
+1. 3.87's checked pixel fallback: approved.
+2. The pocket rule with the 60-s spread: approved.
+3. Reversal fixes:
+   - P4 yes, pre-registered as 3.88 (v47, after v46);
+   - P1 (the loot ring tour): an offline item-fate check first, then a proposal;
+   - P2 no;
+   - P3 (heading-aware dispatch): an offline study only.
+4. The loot drop with the layout: checked, no dependency found (above).
+5. The off-screen pointer move: fixed first (ff67e2c). Then the queue in order: v42 (+ the pocket
+   escape), v44, v45, v46, then v47 (P4).
+6. The Battle Log reader becomes language-independent: in progress (a subagent; English stays
+   the validated path; Thai from Batt's lines, local only).

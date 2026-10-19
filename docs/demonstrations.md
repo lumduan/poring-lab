@@ -11055,6 +11055,10 @@ scratch, their rules now in the code's docstring and tests):**
     centre and a 35-cell A* path out; on v43 run 1 and v41 runs 1, 2, 4 it never fires. Tests:
     synthetic + the real-run case.
   - Reported with v42: stuck_escape events, and the minutes any run spends in a pocket.
+- **Batt's approval (2026-10-19 ~19:5x):** "The pocket rule with the 60-s spread: approved (yours fires
+  where mine didn't; tested on run 2 and 4 normal runs)".
+- **Before run 1 (Batt's decision 5, ~19:5x):** the off-screen pointer move that stopped v43 run 4
+  is fixed in ro_agent (ff67e2c: moves clamped into the desktop, presses outside it a clear Stop).
 
 ### 3.84 hunt-flow@43: THE HUNTING UI LAYOUT (Batt's three spots), with the dead-end ping-pong fix (pre-registered 2026-10-19 15:03 ICT, the commit time 23d41f5, BEFORE its runs; Batt's order ~08:4x: "Batt's UI layout change for hunting ... Do it as its own pre-registered version at a run boundary ... between v41 and the steer-guard version"; 13:3x: the combat log tab; 14:0x: "keep the order: finish the LAYOUT version (v43) now"; the ping-pong bug: "fix it ... include it in the next version's pre-registration as a fix")
 
@@ -11479,6 +11483,50 @@ splits: parity + 4 balanced, per 4-run pool):**
 
 **Decision rule:** ADOPT if 1, 2, 3, 4 and 5 pass. If 1 passes and 2 fails: faster but not
 truer: NOT adopted (reported). If 3 fails: it costs loot: NOT adopted.
+
+**Run log (written during the runs):**
+- **Batt's approval (2026-10-19 ~19:5x):** "3.87's CHECKED pixel fallback: approved as you wrote it
+  (pixel dead only with the death-cell 'ok', else 'skipped_unconfirmed')".
+
+### 3.88 hunt-flow@47: THE +-135 TURN ONLY WHEN BLOCKED (reversal fix P4), interleaved in 10-min blocks (pre-registered 2026-10-19, the commit time below, BEFORE its runs; Batt ~19:5x: "Reversal fixes: P4 yes (reverse only when 0/45/90 are all blocked; matches my rule) - pre-register it in the queue after v46")
+
+**Why (competition.md "Reversals study"):**
+- Since v22 the coverage heading takes a +-135 turn whenever it scores >= 0.8 x the best heading;
+  v18 took it only when 0 / 45 / 90 were all blocked.
+- A 135-deg turn is a reversal by the 120-deg rule: 0.46 / min in v39 + v40. Heading turns of
+  90 deg or more per search minute rose from 0.97 (v20) to 4.8 (v39 + v40).
+- Search-heading-turn reversals: 1.07 / min pooled over the 12 banked runs (768).
+
+**The ONE main change (code staged, inert; PARAMS[47]):** `cov_135_only_blocked`. The coverage
+heading drops its +-135 candidates whenever any heading within +-90 runs >= min_run cells; a
++-135 is taken only when nothing within +-90 runs. The reversal at a real dead end is unchanged
+(with the ping-pong fix and the pocket escape). Interleaved in 10-min blocks (odd blocks = P4).
+
+**Base:** the base v46's verdict leaves; PARAMS[47] is committed after it and before run 1.
+
+**Runs:** 4 x 60 min on prt_fild08, seeds 20360101, 20360202, 20360303, 20360404; a judged
+screenshot before run 1; the chain for runs 2-4.
+
+**What 4 run-hours can resolve (measured BEFORE this entry, `p4_null.py`, 12 banked runs, 10-min
+block splits, 12 splits; reversals_study's cause of the turning leg):**
+
+| measure (per arm, 4 runs pooled) | pooled base | 95 % null range |
+|---|---|---|
+| reversals at a search-heading turn (cause "search:turn") / min | 1.07 | -43 % .. +25 % |
+| reversals outside loot steps / min | 5.92 | -15 % .. +12 % |
+
+**Prediction, written before the runs:**
+1. **Primary (the mechanism):** search-heading-turn reversals per minute, P4 <= 0.50 x base.
+2. **Guard:** monsters seen / 10 min (windowed, packets), P4 >= 0.90 x base (the coverage heading
+   exists to sweep ground; fewer turns must not cost sighting).
+3. **Guard:** kills per hour, P4 >= 0.90 x base.
+4. **Hard bars:** zero NPC contact, zero map change, zero non-Creamy non-target hit. A Creamy hit
+   is counted, not a stop.
+5. **Reported, not deciding:** reversals outside loot (Batt 4.28 / min), mean straight run,
+   +-90 / +-135 turns per search minute, re-swept ground within 120 s.
+
+**Decision rule:** ADOPT if 1, 2, 3 and 4 pass. If 1 fails: NOT adopted (a fault: the rule did not
+remove the turns). If a guard fails: NOT adopted.
 
 **Run log (written during the runs):**
 
