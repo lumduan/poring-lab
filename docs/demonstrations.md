@@ -11122,6 +11122,90 @@ After run 4: the standard layout (`client_layout.py ensure standard`), then the 
     2.9. `hardbar_live.py watch 43 --pid` bound to it.
   - Runs 2-4 queued: `hunt_chain.py --version 43 --seeds 20320202,20320303,20320404` (15:28:49).
 
+### 3.86 hunt-flow@44: COMMIT TO A TARGET LIKE A PLAYER (the aborted-steer fix), interleaved in 10-min blocks (pre-registered 2026-10-19, the commit time below, BEFORE its runs; Batt 16:2x: "Rank the ABORTED-STEER fix right after v42, ahead of the locked-pointer walk (it's the largest reversal source: 41 %). Design it from the data ... then commit rules like a player ... Pre-register with 'aborted steers per min' and 'reversals outside loot' as primaries")
+
+**Why (competition.md "Pointer diagnosis"; v41's 4 runs, measured before this entry):**
+- 1,019 steer spans (4.7 / min). 526 of them (52 %, 2.4 / min) end with no attack click; 443 of
+  those last under 5 s (p50 2.1 s).
+- 627 of 1,542 reversals (41 %, 2.90 / min) have their turning leg inside an aborted steer or
+  within 2 s after it: the largest reversal source.
+- What ends them: `target_lost` in 520 of 526 (the tracker no longer holds the track, or its
+  newest box is > 2.0 s old, and no live track within 3 cells of its prediction carries it on).
+
+**The data behind the design (`abort_diag.py` in scratch):**
+- 198 of the 526 aborts resolve to a target unit (conversion_phases.bot_selections). At the loss,
+  by packets:
+
+    | the target at the loss | n | attacked by us within 20 s anyway |
+    |---|---|---|
+    | alive, on screen, inside (a detector / tracker DROPOUT) | 76 (38 %) | 30 |
+    | dead or vanished (really gone) | 61 (31 %) | 9 |
+    | alive, under the UI | 37 (19 %) | 14 |
+    | alive, at the screen's edge (< 80 px) | 12 (6 %) | 3 |
+    | off screen | 12 (6 %) | 4 |
+
+  - In 39 of the 76 dropouts the detector still had a box on the unit at the loss: the tracker
+    let it go while the monster was in plain view.
+- At SELECTION (the dispatch), aborted vs engaged steers (resolved targets):
+
+    | at selection | aborted (n 198) | engaged (n 393) |
+    |---|---|---|
+    | distance to the screen edge, p50 | 112 px | 162 px |
+    | within 80 px of the edge | 40 % | 13 % |
+    | boxed in <= 1 frame of the 1.5 s before | 49 % | 38 % |
+
+- The other 328 aborts did not resolve to a target unit: in 139 no target unit lay within 5 cells
+  of the dispatched cell (a false box, or a far target's cell error), and in 46 the nearest unit
+  was a Creamy (the bot steered at a Creamy, then let it go).
+
+**The ONE main change (two rules, one hypothesis: commit to a target as a player does):**
+- **Commit late at the edge:** a target whose box's bottom centre lies within `edge_margin_px` 80
+  of the screen edge (or of a UI window) is not dispatched until it has been boxed in >=
+  `edge_min_frames` 3 frames. Inside the margin, as now.
+- **Keep through short dropouts:** once dispatched, a lost target is kept for up to `hold_s` 1.5 s:
+  the steer goes on toward its PREDICTED cell, and re-acquisition looks within `reacquire_cells`
+  + 1 cell per 0.5 s held (3 -> 6). It is dropped when unseen for > `hold_s`, or when its
+  prediction leaves the view or the zone. A strike always needs a fresh box (unchanged).
+- Interleaved in 10-min blocks (odd blocks = the rules), within each run, as v38.
+- No new click site; every gate unchanged.
+
+**Base:** the base v42's verdict leaves (v42 runs after v43; v43's verdict sets v42's base).
+PARAMS[44] is committed after v42's verdict and before run 1, and recorded in the run log.
+
+**Runs:** 4 x 60 min on prt_fild08, seeds 20330101, 20330202, 20330303, 20330404; a judged
+screenshot before run 1; the chain for runs 2-4; the monitor bound to each run's pid.
+
+**What 4 run-hours can resolve (measured BEFORE this entry, `abort_null*.py`, 12 banked runs, v39
+x 4 / v40 x 4 / v41 x 4):**
+- Per-engagement parity splits are too noisy here (aborts come in bursts): aborted steers
+  -36 % .. +34 %, reversals outside loot -24 % .. +20 %.
+- 10-min block splits (4 per pool, 12 splits):
+
+    | measure (per arm, 4 runs pooled) | pooled base | 95 % null range |
+    |---|---|---|
+    | aborted steers / min | 2.28 | -22 % .. +17 % |
+    | reversals outside loot / min | 5.92 | -15 % .. +12 % |
+
+**Prediction, written before the runs (4 runs pooled, per arm):**
+1. **Primary:** aborted steers per minute, rules <= 0.70 x base.
+2. **Primary:** reversals outside loot steps per minute, rules <= 0.85 x base.
+3. **Guard:** landing within 5 s, rules >= base - 8 points.
+4. **Guard:** kills per hour, rules >= 0.90 x base (a later commitment must not cost kills).
+5. **Hard bars:** zero NPC contact, zero map change, zero non-Creamy non-target hit. A Creamy hit
+   is counted, not a stop.
+6. **Reported, not deciding:**
+   - the abort classes above per arm (dropout / gone / under UI / edge / unresolved);
+   - selections deferred by the edge rule, holds and their outcome (re-acquired / dropped / the
+     target attacked), the time held;
+   - seen -> click, free targets attacked <= 10 s, mean straight run, Creamy hits / h.
+
+**Decision rule:**
+- ADOPT if 1, 2, 3, 4 and 5 pass.
+- If 1 passes and 2 fails: fewer aborts but no fewer reversals: NOT adopted; reported.
+- If 1 fails: NOT adopted.
+
+**Run log (written during the runs):**
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
