@@ -1064,3 +1064,59 @@ by the agent on the run's own `heading_goal` events.
 - P4 coverage heading: +-135 only when 0 / 45 / 90 are blocked, or a turn penalty in the score.
 - P5 dead-end hysteresis: no second reversal within N s; on a two-sided dead end, the best of 8
   headings. Removes ping-pong episodes like v39 run 2's.
+
+## Pointer diagnosis (Batt's clip 15:53, 2026-10-19; offline: the mux input log + packets)
+
+Batt watched v43 run 1 at 15:53:
+- the route preview flipped direction every few seconds;
+- the pointer jumped around, once to the bottom-left corner;
+- the GM barely moved.
+
+His hypothesis: the pointer rests away (the HP bar, a corner), jumps back and clicks, and the
+click lands in the wrong place (the client's cursor not updated after one jump), so the GM walks
+back and forth.
+
+**1. Do clicks after a pointer jump land in the wrong place?** (v41's 4 runs, today's input log;
+`pointer_diag.py` in scratch). Each walk click's intended cell (clicks.jsonl `to`) vs the cell the
+client asked the server for (the next `self_move_request` within 0.5 s):
+
+| walk clicks | n | > 1 cell off | after a jump (pointer >= 150 px away in the last 1.5 s, one motion near the point) | no jump |
+|---|---|---|---|---|
+| search | 5,131 | 1,071 (20.9 %) | 4,766: 971 off (20.4 %) | 365: 100 off (27.4 %) |
+| steer | 1,340 | 205 (15.3 %) | 950: 166 off (17.5 %) | 390: 39 off (10.0 %) |
+
+- 93 % of search walk clicks follow a jump, but a jump does NOT raise the miss rate: 20.4 % vs
+  27.4 % without one.
+- The rest point is (110, 66), over the HP bar, reached in two motions.
+
+**2. How many reversals do misplaced clicks explain?** Of 1,542 reversals (7.13 / min), the click
+behind each turning leg (the latest click <= 1 s before it):
+- search walk 604, steer walk 526, loot 262, strike 130, strike burst 18, none 2;
+- a walk click more than 1 cell off: **250 (16 %)**, 208 of them after a jump.
+- So most walk-click reversals landed where the bot meant: the bot chose to go back.
+
+**3. What Batt saw at 15:53 (v43 run 1, minutes 23.5-25.5):**
+- The bottom-left jump was a SEARCH WALK click at (97, 693) at minute 24.94: the route's next
+  cell projected into the corner. It was not a rest, and the click was not misplaced.
+- The runner's mode flipped search <-> steer 8 times in 17 s (24.86 -> 25.13): a target picked,
+  dropped, picked again. Each flip redraws the route preview in another direction, and the GM
+  barely advances.
+- No /where in that run (the hunting layout's tab switch played no part); the search heading was
+  steady (minutes 22-27: 87 of 107 heading goals with no turn; no dead-end escape).
+
+**4. The cause it points to: ABORTED STEERS.**
+- v41's 4 runs: 1,019 steer spans (4.7 / min). 526 of them (52 %, 2.4 / min) ended with no attack
+  click by their end + 1 s; 443 of those were under 5 s long.
+- 627 of the 1,542 reversals (41 %, 2.90 / min) have their turning leg inside an aborted steer or
+  within 2 s after it.
+- This matches the reversals study (steer to a new target 1.89 / min, with the target behind
+  1.26 / min, p50 14.5 cells away at the view's edge; the search resume 1.62 / min).
+
+**Conclusion:**
+- The click-mismatch cause is NOT confirmed as the main one: misplaced walk clicks explain at most
+  16 % of reversals, and jumps do not make them worse.
+- So by Batt's rule the LOCKED-POINTER WALK does not jump ahead of v42; it follows v42 as the
+  search-walking change (pre-registered as 3.85).
+- The larger lever is the aborted steers (41 % of reversals): targets picked at the view's edge
+  and dropped. That is the next cause to size: why a steer is dropped (target lost / retarget /
+  preempt / gate), and what Batt does with a monster at the edge.
