@@ -11574,6 +11574,28 @@ truer: NOT adopted (reported). If 3 fails: it costs loot: NOT adopted.
   - The judge: `arm_judge.py expdead` (deace3b), the arms by k parity, the checks 1-5 as written;
     the loot guard counts the drops of EVERY engagement whose target died by our hit (a skipped
     real kill loses its loot, as the guard's reason says).
+- **AMENDMENT (2026-10-19 22:32 ICT, before any run of this version): the runs are 4 x 55 min,
+  not 4 x 60.**
+  - Why: the night ends at 05:00 (Batt's overnight brief: "nothing running on the client" by
+    05:00, Tuesday is a market day). v42's last run ends ~00:30, so v44 run 1 can start ~00:45.
+    A run takes its time box + ~2.5 min of start (layout, state, checks). Four 60-min runs end
+    ~04:55, too late for the end state.
+  - The null was RE-MEASURED on the same 12 banked runs truncated to the first N minutes (the
+    script of the original null, an engagement kept only if its first click falls in the first
+    N minutes; the 60-min run reproduces the table above exactly):
+
+    | runs truncated to | kill -> loot start: pooled mean, n | its null | dead calls without a real death: pooled | its null (ratio) |
+    |---|---|---|---|---|
+    | 60 min (as pre-registered) | 1.50 s, 1,327 | -26.3 % .. +15.6 % | 23.2 % | 0.638 .. 1.351 |
+    | 55 min (this amendment) | 1.50 s, 1,226 | -23.7 % .. +17.6 % | 23.3 % | 0.592 .. 1.405 |
+    | 50 min (rejected) | 1.49 s, 1,141 | -20.2 % .. +19.4 % | 23.2 % | 0.551 .. 1.389 |
+
+  - At 55 min both primary bars stay outside the null as written (0.60 x; 0.55 x). At 50 min
+    primary 2's bar would sit on the null's edge (0.551), so 50 min was rejected rather than
+    moving a bar.
+  - Nothing else changes: the seeds, the arms, the checks 1-5, the decision rule.
+  - The chain gets `--start-by 2026-10-20T03:50` (ICT). If run 4 cannot start by then, v44 has 3
+    runs tonight and its verdict WAITS for run 4 in the next block (no 3-run verdict).
 
 ### 3.88 hunt-flow@47: THE +-135 TURN ONLY WHEN BLOCKED (reversal fix P4), interleaved in 10-min blocks (pre-registered 2026-10-19 20:07 ICT, the commit time cba01d6, BEFORE its runs; Batt ~19:5x: "Reversal fixes: P4 yes (reverse only when 0/45/90 are all blocked; matches my rule) - pre-register it in the queue after v46")
 
