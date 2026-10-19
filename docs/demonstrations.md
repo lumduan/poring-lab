@@ -11684,6 +11684,35 @@ truer: NOT adopted (reported). If 3 fails: it costs loot: NOT adopted.
   one on changed (a drop shifts every later slot left); nothing changing is still a stop. Test:
   `test_a_drop_counts_when_any_later_slot_changed`; census + gm_state tests green. Run 1 re-starts
   on the same seed.
+- **Run 1** (seed 20350101, session 20261020T005228, launched 00:52:26 after a judged screenshot
+  `pre-v44-20350101b.jpg`: the hunting layout, Lv 70, weight 559 / 4970, no dialog; ended on its
+  55-min time box 01:49:06):
+  - The row: 142 engagements, landing 119/142 = 83.8 % (76.9-89.0), 134.0 kills / h, 5.15 per
+    sighting, 26.9 s per kill, seen 26.0 / 10 min, free targets <= 10 s 41 % (n 160), steer
+    moving 36 %, seen -> click 2.74 s, death -> next 0.59 s, dead calls without a real death
+    15/115 = 13.0 %, kill -> loot start 1.35 / 0.57 s (n 101), reversals 7.14 / min (outside
+    loot 6.23), Creamy 0, hard bars 0 / 0 / 0. Results: dead 115, skipped_unconfirmed 14,
+    skipped_risky 12, gave_up 1.
+  - Loot: 113 items, picked 54.0 %, looters 8.0 % (9), left behind (out of sight) 38.1 %; in the
+    3 x 3 73.7 %; the death cell exact 34 %, <= 1 cell 63 %.
+  - Per arm (`arm_judge.py expdead`), run 1 only, NOT deciding:
+
+    | arm | kill -> loot start mean (p50 / p90) | dead calls w/o a real death | loot picked | landing | dead by |
+    |---|---|---|---|---|---|
+    | fix (odd k) | 0.83 s (0.48 / 2.00) | 4/57 = 7 % | 36/78 = 46.2 % | 88.7 % | EXP line 33, line during the pixel wait 19, checked pixel 5; skipped_unconfirmed 14 (11 real kills) |
+    | base (even k) | 1.93 s (0.85 / 4.42) | 11/58 = 19 % | 42/72 = 58.3 % | 78.9 % | the base rule 58; skipped_risky 12 |
+
+    On run 1 alone, checks 1 (0.43 x), 2 (0.37 x), 4 and 5 pass and check 3 (loot) does not
+    (-12.1 points).
+  - **Why the skipped_unconfirmed were real kills (offline, the run's events + its reader log):**
+    in 12 of the 14 the pixel dead call came while the target was still alive, and its base EXP
+    line came 0.01-2.92 s AFTER the 1.0-s check had given up (one at 8.45 s, one never). The
+    client finished the kill after the bot had moved on, so the drops were never looted. None of
+    those late lines was claimed by the next engagement (each line confirms one engagement, after
+    its first attack click). Recorded for a later version (a pixel call with no line: keep the
+    target rather than skip it); NOT changed mid-version.
+  - The reader on this run: base EXP precision 121/122 = 0.992, recall 0.984, lag p50 0.32 /
+    p90 0.45 s. Best 2 min: 9 kills from minute 23.3.
 
 ### 3.88 hunt-flow@47: THE +-135 TURN ONLY WHEN BLOCKED (reversal fix P4), interleaved in 10-min blocks (pre-registered 2026-10-19 20:07 ICT, the commit time cba01d6, BEFORE its runs; Batt ~19:5x: "Reversal fixes: P4 yes (reverse only when 0/45/90 are all blocked; matches my rule) - pre-register it in the queue after v46")
 
