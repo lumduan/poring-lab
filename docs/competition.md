@@ -1005,3 +1005,62 @@ route_previewd is stopped; /health bot_agents [].
    clicks with the guard ON.
 2. v41 (3.82, walkers struck from 7 cells) is pre-registered on v40's base; it needs a 4-run-hour
    block.
+
+## Reversals study (Batt's decision 3, 2026-10-19; offline, `scripts/reversals_study.py`, e17d6c1)
+
+Batt: "Reversals rose back to ~7-8/min (v20 reached ~4). Find out why (engagement turns vs search
+heading) from banked runs and report; don't change anything yet." Nothing in the bot was changed.
+
+**The ruler:**
+- `reversals_study.py` replays `flow_judge.heading_metrics` one leg at a time and labels each
+  reversal by its second leg (the leg that turned):
+  - the bot's mode then;
+  - the click behind it (search walk, steer walk, strike, loot);
+  - the boundary (a new target, an engagement's end, a heading turn);
+  - whether the chosen place already pointed back.
+- It reconciles exactly with flow_judge on every banked run with a flow_judge.json (39 bot runs +
+  Batt's demo). The agent re-checked two runs itself: v20 run 1 238 = 238, v39 run 2 523 = 523,
+  and every split sums to the total.
+- Data: 42 runs, v20-v40, ~33 h.
+
+**Where the rise (v20 4.28 -> v39 + v40 7.37 / min, +3.09) came from:**
+
+| # | source | + reversals / min | share |
+|---|---|---|---|
+| 1 | the fixed loot step (v23, the 3 x 3 workflow) | +1.57 | 51 % |
+| 2 | the search heading (v22's coverage heading), incl. one ping-pong episode | +0.80 | 26 % |
+| 3 | more engagements per minute (2.21 -> 2.69) at the same 1.49 reversals each | +0.72 | 23 % |
+
+- Not the cause: time per mode (unchanged), more or shorter legs (Batt walks 46.8 legs / min and
+  reverses 0.077 per leg; the bot 38.3 and 0.192), position lag.
+- The steps: v20 -> v22 search-only reversals per search minute 2.25 -> 3.13 (coverage heading);
+  v22 -> v23 the loot step appears (+1.97 net); v23-v40 roughly flat.
+
+**Latest runs (v39 + v40, 8 runs), by the leg that turned:**
+
+| cause | / min | share | what it is |
+|---|---|---|---|
+| steer to a NEW target | 1.89 | 26 % | 1.26 / min the target was behind (p50 14.5 cells, at the view's edge; the planner held only that one target 79 % of the time) |
+| search RESUME after an engagement | 1.62 | 22 % | 1.38 / min the remembered heading points back (v18's resume rule) |
+| loot step | 1.47 | 20 % | entry from the strike 0.78; within the step 0.68 (the fixed order's SE -> W and NE -> NW hops reverse by design) |
+| search heading TURN | 1.21 | 16 % | the coverage heading takes +-135 deg whenever it scores >= 0.8 x the best; 90-deg+ turns per search minute 0.97 (v20) -> 4.8 |
+| strike (the client walks up) | 0.61 | 8 % | |
+| steer approach / replan | 0.42 | 6 % | |
+
+- Batt: 0.72 reversals per kill; the bot 3.18 (4.4 x).
+
+**A bug found (not fixed, as ordered):** v39 run 2, minutes 46.5-48.3: the search heading
+flipped between 135 and 315 deg (two dead-end goals) 52 times in ~110 s, all in search mode.
+That episode alone added ~47 reversals; the run's 8.71 / min drops to 7.93 without it. Confirmed
+by the agent on the run's own `heading_goal` events.
+
+**Fix proposals (none built; Batt's call, each its own pre-registered version):**
+- P1 loot as a ring tour: centre, then the 8 ring cells in 1-cell steps from the GM's side. It
+  costs the SE / W / N-first item order; check item fates offline first.
+- P2 resume: re-pick the heading from the GM's position, not the remembered angle (changes v18's
+  rule, which was Batt's).
+- P3 heading-aware dispatch: a turn cost, or skip targets > 120 deg behind and > ~10 cells while
+  searching. Needs an offline kills / h trade-off first.
+- P4 coverage heading: +-135 only when 0 / 45 / 90 are blocked, or a turn penalty in the score.
+- P5 dead-end hysteresis: no second reversal within N s; on a two-sided dead end, the best of 8
+  headings. Removes ping-pong episodes like v39 run 2's.
