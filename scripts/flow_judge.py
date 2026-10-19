@@ -714,7 +714,37 @@ def loot_metrics(events: Sequence[Mapping[str, Any]], t0: int, w1: int,
             "kill_to_last_pickup_p50": round(lag[len(lag) // 2], 2) if lag else None}  # fmt: skip
 
 
-def heading_metrics(events: Sequence[Mapping[str, Any]], t0: int, w1: int) -> dict[str, Any]:
+LOOT_FIRST_S, LOOT_GAP_S = 6.0, 3.0  # conversion_phases.loot_windows' rule (the same ruler)
+
+
+def loot_step_windows(events: Sequence[Mapping[str, Any]], t0: int, w1: int,
+                      first_s: float = LOOT_FIRST_S,
+                      gap_s: float = LOOT_GAP_S) -> list[tuple[int, int]]:  # fmt: skip
+    """PURE (Batt 2026-10-19, "reversals outside loot steps", the same ruler for the bot and his
+    demo, packets only): per kill of ours in [t0, w1) (a mob our GM acted on vanished with reason
+    1), the window from the kill to the last pickup request of the chain that starts <= ``first_s``
+    after it and continues <= ``gap_s`` apart (conversion_phases.loot_windows' rule)."""
+    acted = {gid_of(e, "target_gid") for e in events if e.get("type") == "act"
+             and gid_of(e, "src_gid") == GM and e.get("kind") != "pickup"
+             and t0 <= int(e["t_mono_ns"]) < w1}  # fmt: skip
+    kills = sorted(int(e["t_mono_ns"]) for e in events if e.get("type") == "entity_vanish"
+                   and int(e.get("reason", -1)) == 1 and gid_of(e) in acted
+                   and t0 <= int(e["t_mono_ns"]) < w1)  # fmt: skip
+    pt = sorted(int(e["t_mono_ns"]) for e in events if e.get("type") == "pickup_request")
+    out = []
+    for k in kills:
+        i = bisect.bisect_left(pt, k)
+        if i >= len(pt) or pt[i] - k > first_s * NS:
+            continue
+        j = i
+        while j + 1 < len(pt) and pt[j + 1] - pt[j] <= gap_s * NS:
+            j += 1
+        out.append((k, pt[j]))
+    return out
+
+
+def heading_metrics(events: Sequence[Mapping[str, Any]], t0: int, w1: int,
+                    loot: Sequence[tuple[int, int]] | None = None) -> dict[str, Any]:  # fmt: skip
     """Batt 18:2x (no back-and-forth): from the server's walk, each self_move is one leg (its start
     to where the GM got before the next leg). A REVERSAL is a heading change > 120 deg between
     consecutive legs of >= 2 cells. A straight run merges legs that turn <= 45 deg; its length is
@@ -723,6 +753,15 @@ def heading_metrics(events: Sequence[Mapping[str, Any]], t0: int, w1: int) -> di
     legs of >= 2 cells) and reversals > 135 deg per minute."""
     track, _mv = gm_track(events)
     moves = [e for e in events if e.get("type") == "self_move" and t0 <= int(e["t_mono_ns"]) < w1]
+    if loot is None:
+        loot = loot_step_windows(events, t0, w1)
+    ls_ = sorted(loot)
+
+    def in_loot(t: int) -> bool:
+        i = bisect.bisect_right(ls_, (t, 1 << 62)) - 1
+        return i >= 0 and ls_[i][0] <= t <= ls_[i][1]
+
+    rev_loot = 0
     rev, runs, cur, prev_h, walked = 0, [], 0, None, 0
     hist = [0, 0, 0, 0]
     for a, b in zip(moves, [*moves[1:], None], strict=True):
@@ -739,6 +778,7 @@ def heading_metrics(events: Sequence[Mapping[str, Any]], t0: int, w1: int) -> di
             hist[min(3, max(0, math.ceil(round(math.degrees(d), 6) / 45) - 1))] += 1
             if d > math.radians(120):
                 rev += 1
+                rev_loot += in_loot(int(a["t_mono_ns"]))  # the turning leg starts in a loot step
             if d > math.radians(45):
                 runs.append(cur)
                 cur = 0
@@ -747,7 +787,11 @@ def heading_metrics(events: Sequence[Mapping[str, Any]], t0: int, w1: int) -> di
             prev_h = h
     runs.append(cur)
     mins = max(1e-9, (w1 - t0) / 60 / NS)
+    loot_ns = sum(max(0, min(b, w1) - max(a, t0)) for a, b in ls_)
+    mins_out = max(1e-9, (w1 - t0 - loot_ns) / 60 / NS)
     return {"reversals_per_min": round(rev / mins, 2),
+            "reversals_outside_loot_per_min": round((rev - rev_loot) / mins_out, 2),
+            "loot_step_reversals": rev_loot, "loot_step_min": round(loot_ns / 60 / NS, 1),
             "reversals135_per_min": round(hist[3] / mins, 2),
             "turn_hist_45": hist,
             "mean_straight_run": round(sum(runs) / len(runs), 1) if runs else None,
@@ -1142,7 +1186,12 @@ def bot(
     import farm0
 
     out["hard_bars"] = hard_bars(events, t0, w1, farm0.TARGETS)
-    out["heading"] = heading_metrics(events, t0, w1)
+    import reversals_study as rs_
+
+    # the bot's loot steps from its own log (Batt 2026-10-19: its fixed workflow walks on after the
+    # last pickup, so the packet window would cut them short); his demo: the packet windows
+    evl_ = [json.loads(x) for x in (d / "events.jsonl").read_text().splitlines() if x]
+    out["heading"] = heading_metrics(events, t0, w1, loot=rs_.loot_spans(evl_))
     out["loot"] = loot_metrics(events, t0, w1)
     all_clicks = [x for x in map(json.loads, (d / "clicks.jsonl").read_text().splitlines())]
     out["species"] = species_landing(events, out["engagements_w"]["rows"], engs, all_clicks)

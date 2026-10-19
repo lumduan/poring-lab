@@ -381,3 +381,27 @@ def _row_base() -> dict:
             "sight_per_10min": 1.0, "idle_pct": 1.0,
             "walk_clicks": {"per_min": 1, "while_moving_pct": 1, "interval_p50_p90_s": [1, 2]},
             "range_cells": {"p50": 1, "p90": 2}}  # fmt: skip
+
+
+def test_reversals_outside_loot_steps_batts_demo_and_a_bot_run() -> None:
+    """Batt 2026-10-19: reversals outside loot steps (the loot step's normal back-and-forth is not
+    counted against search). His demo's loot steps from packets (kill -> its last pickup request),
+    the bot's from its own log (reversals_study.loot_spans). REAL sessions; skipped if absent."""
+    import pytest
+    import search_study as ss
+
+    root = Path("/dev/shm/poring-lab-demo")
+    demo = "20261016T093835-demo-human-demo"
+    if not (root / demo).exists():
+        pytest.skip("Batt's demo is not banked on this host")
+    sess = ss.load_session(demo)
+    h = fj.heading_metrics(sess.events, sess.t0, sess.w1)
+    assert h["reversals_per_min"] == 3.6 and h["reversals_outside_loot_per_min"] == 4.28
+    assert h["loot_step_reversals"] == 1 and h["loot_step_min"] == 1.8
+    bot_sid = "20261019T112949-demo-hunt-flow41"
+    if (root / bot_sid / "events.jsonl").exists():
+        hb = fj.bot(bot_sid, write=False)["heading"]
+        assert hb["reversals_per_min"] == 6.88 and hb["reversals_outside_loot_per_min"] == 6.42
+        assert hb["loot_step_reversals"] == 52
+    # pure: a reversal whose turning leg starts inside a loot window is counted apart
+    assert fj.loot_step_windows([], 0, 10) == []
