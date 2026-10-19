@@ -1263,3 +1263,54 @@ and the items that fell at that kill within 2 cells of the bot's death cell: 710
   1. the 18 % of drops outside the clicked 3 x 3 (the death-cell estimate);
   2. the 28 % "gone" (is it real, or our pickups the judge misses?: a judge check first);
   3. the time to START the loot (v44, the EXP line, aims at it).
+
+## P3's offline study: heading-aware dispatch (Batt ~19:5x: "P3: offline study only")
+
+`scripts/p3_dispatch_study.py` (offline; packets are ground truth, the bot never imports it), over
+11 banked runs: v40 x 4, v41 x 4, and v43 runs 1, 3, 4 (run 2's pocket stall left out). Totals:
+630 min, 1,419 kills, 4,376 reversals.
+
+**What it measures.** Every dispatch that SET a target while the runner was searching: 2,264.
+- The GM's heading = its last walk leg of >= 2 cells (the reversal ruler's own legs).
+- The target's angle from that heading, and its distance in cells.
+- The target's fate, followed through re-acquisitions:
+  - engaged;
+  - lost (target_lost);
+  - replaced (another target set first).
+- Its cost: dispatch -> the engagement's end, or -> the loss.
+- The reversals inside that span, and whether it became a real kill of ours (packets).
+- The counterfactual "skip it": its kills are lost; its time is regained at the runs' own pace
+  (26.6 s per kill).
+
+**Results:**
+
+| search dispatches | n | share | kills | s each | reversals (/ min of all; share) | skip -> kills / h |
+|---|---|---|---|---|---|---|
+| all | 2,264 | 100 % | 213 (9 %) | 2.9 | 1,113 (1.77; 25.4 %) | - |
+| **> 120 deg behind and > 10 cells (P3)** | **556** | **25 %** | **9 (2 %)** | 1.9 | **516 (0.82; 11.8 %)** | **+2.9** |
+| > 120 deg behind, <= 10 cells | 204 | 9 % | 6 (3 %) | 2.6 | 83 (0.13; 1.9 %) | +1.3 |
+| side, 60-120 deg | 661 | 29 % | 41 (6 %) | 2.8 | 344 (0.55; 7.9 %) | +2.6 |
+| ahead, <= 60 deg | 843 | 37 % | 157 (19 %) | 3.7 | 170 (0.27; 3.9 %) | -3.8 |
+| > 120 deg and > 6 cells | 737 | 33 % | 12 | 2.0 | 585 (0.93; 13.4 %) | +4.2 |
+| > 120 deg and > 14 cells | 232 | 10 % | 1 | 1.6 | 224 (0.36; 5.1 %) | +1.2 |
+| > 150 deg and > 10 cells | 347 | 15 % | 5 | 1.8 | 315 (0.50; 7.2 %) | +1.8 |
+
+- **Fates of P3's group: lost 345, replaced 199, engaged 12.** A target far behind almost never
+  becomes a kill: the GM turns, and the target leaves the view or the tracker before the GM
+  arrives.
+- **P3 as written would remove up to 0.82 reversals / min (11.8 % of all) at no measurable kill
+  cost:** 9 kills in 630 min; the estimate is +2.9 kills / h from the time regained.
+  - It is an UPPER bound on reversals: some of those turns would happen anyway.
+  - The kill estimate assumes the regained time hunts at the runs' average pace.
+- **It overlaps the aborted-steer problem** (3.86): 62 % of P3's group ends "lost". So 3.86's
+  HOLD (keep a lost target 1.5 s) would hold mostly targets that P3 says should not have been
+  taken. That is an interaction to watch in v45's report; it does not change v45's
+  pre-registration.
+
+**Proposal (Batt's call; nothing built):** P3 as its own pre-registered version, after v45 and v46:
+- while searching, skip a dispatch candidate > 120 deg behind the GM's walk and > 10 cells away
+  (the next candidate may go);
+- primaries: reversals outside loot / min and kills / h (>= 0.95 x);
+- 10-min blocks, as v45 / v46. The threshold stays at 10 cells (> 6 would gain a little more,
+  +4.2, but it reaches the near targets the GM can turn to).
+
