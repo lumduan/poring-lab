@@ -1185,3 +1185,37 @@ kills, 72 pickups; species Poring 79, Lunatic 39, Drops 7):
 - **Queue (all pre-registered):** v42 (steer guard + tail + the pocket escape) -> v44 (dead = the
   Battle Log's EXP line, 3.87) -> v45 (commit to a target like a player, 3.86) -> v46 (the
   locked-pointer walk, 3.85).
+
+## The loot drop with the hunting layout (Batt's decision 4, 2026-10-19 ~20:00; offline)
+
+Batt: "check the LOOT drop with the new layout (v43 42.3 % vs v41 57.9 %): does any loot step or cue
+depend on the Regular Chat tab ...? or the collapsed panel / masks near the loot area? Report the
+cause; fix it as a bug if it's the layout."
+
+**No dependency on the layout was found:**
+- **The chat tab:** the loot step the base runs (v23's fixed workflow, `loot_fixed_run`) reads
+  neither the "You got" chat cue nor the weight. The cue (`loot1.check`) lives only in the older
+  blob / sweep loot paths, which `loot_fixed` replaces. Showing Battle Log instead of Regular Chat
+  cannot change a loot click. (The "You got" lines do appear in the Battle Log tab: Item get/drop
+  is on there.)
+- **The masks:** the step skips a click near a monster box, near an NPC, on new pink pixels, or on
+  the UI (`loot1.in_ui`). The hunting layout's UI rectangles are SMALLER (the panel and three
+  hotbar rows gone; the chat unchanged), so they can only skip fewer clicks.
+- **The step's own counts, unchanged across the layouts:**
+
+  | run | loot steps | clicks | unit skips | pink skips | step s p50 |
+  |---|---|---|---|---|---|
+  | v41 r4 | 120 | 775 | 381 | 41 | 2.19 |
+  | v43 r1 | 121 | 781 | 374 | 47 | 2.28 |
+  | v43 r3 | 111 | 680 | 382 | 48 | 2.07 |
+
+**What did differ (not attributable: v43 was not interleaved with the standard layout):**
+- Items lost to looters, of the drops at our kills: v41 r4 9 %, v43 r1 18 %, v43 r3 25 %.
+- The death-cell verdict "ok": v41 55 / 50 / 49 % vs v43 42 / 41 / 32 %, with more
+  "still_visible". It does not move the loot clicks: the death cell comes from the target's box
+  at our hit ("anim") in every run. It feeds only the false-dead fix's "skipped_risky".
+- The field was thin today: sight 25.0 / 21.5 / 34.0 per 10 min in v43, against 28-36 in v41.
+
+**Conclusion:** not a layout bug as far as the code and the logs show, so nothing was changed. The
+loot share is watched in v42's runs (the same layout, the same loot step). If it stays low, a 10-min
+block check of the layout (standard / hunting, the same seeds) is the way to settle it.
