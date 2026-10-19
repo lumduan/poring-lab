@@ -425,15 +425,16 @@ def same_line(a: Line | None, b: Line | None) -> bool:
     runs of both lines are grouped by column overlap; in each group:
     - one run a side: read characters must be equal; a read and an unread run pass (a speck or a
       sprite can spoil one glyph in one frame); two unread runs (a Thai name) must agree within
-      QMARK_TOL, edge pixels forgiven (_far);
+      QMARK_TOL over the columns both cover, edge pixels forgiven (_far);
     - a split / merge (more runs on one side): passes when any run in it is unread, else the
       characters must be equal;
     - runs on one side only: an unread one is ignored (a sprite's highlights beside the text),
       so is a read one of <= SMALL_INK pixels (a period or a quote drawn a frame late); a larger
       read one is real text the other line lacks: a difference.
     At least SAME_MIN_SHARE of the shorter line's runs must sit in two-sided groups. Up to
-    MAX_SOFT LETTERS may read differently (a damaged 'r' reads as 'i': 20261019T152849 frame
-    3208); a differing DIGIT never passes, and different words differ in many letters."""
+    MAX_SOFT glyphs may differ -- a LETTER read as another (a damaged 'r' reads as 'i':
+    20261019T152849 frame 3208) or two unread runs out of tolerance (a spoiled Thai glyph); a
+    differing DIGIT never passes, and different words / names differ in many glyphs."""
     if a is None or b is None:
         return a is b
     if COLOUR_GROUP.get(a.colour, a.colour) != COLOUR_GROUP.get(b.colour, b.colour):
@@ -452,11 +453,16 @@ def same_line(a: Line | None, b: Line | None) -> bool:
         paired += min(len(ra), len(rb))
         ca, cb = "".join(r[2] for r in ra), "".join(r[2] for r in rb)
         if len(ra) == 1 and len(rb) == 1 and "?" in ca and "?" in cb:
-            u0, u1 = min(ra[0][0], rb[0][0]), max(ra[0][1], rb[0][1])
+            # over the columns BOTH runs cover: a run that grew into its neighbour (a Thai
+            # glyph merged with the '(' after it by a speck) is compared on its own glyph (v43
+            # run 2 frames 12191 / 17864: two fake [base, job, item] triples)
+            u0, u1 = max(ra[0][0], rb[0][0]), min(ra[0][1], rb[0][1])
             ga, gb = a.mask[:, u0:u1], b.mask[:, u0:u1]
             tol = max(QMARK_TOL_MIN, int(QMARK_TOL_FRAC * max(int(ga.sum()), int(gb.sum()))))
             if _far(ga, gb) > tol:
-                return False
+                soft += 1  # one spoiled glyph, as for letters (frame 12191: 4 px off of 24)
+                if soft > MAX_SOFT:
+                    return False
         elif "?" not in ca and "?" not in cb and ca != cb:
             if any(ch.isdigit() for ch in ca + cb):
                 return False  # a number differs: never the same line
