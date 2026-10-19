@@ -10969,6 +10969,14 @@ scratch, their rules now in the code's docstring and tests):**
 - If 1 fails, NOT adopted. If 5 fails, the code did not run as built: a fault, not a result.
 
 **Run log (written during the runs):**
+- **AMENDMENT (2026-10-19 09:4x ICT, before any run of this version):**
+  - Batt confirmed the design: "keep the tail in v42, go ahead". The fix arm keeps the route tail
+    (`steer_tail` on odd k) together with the box + 20 px guard.
+  - ORDER: Batt's 08:4x order puts his UI layout change (3.84, hunt-flow@43) between v41 and this
+    version, at a run boundary. This version keeps its number (v42, as Batt calls it) and runs
+    AFTER v43's verdict. Its base becomes the base v43's verdict leaves (v41's verdict, then
+    v43's), recorded in this run log with PARAMS[42] before run 1.
+  - Nothing else changes: the margin, the prediction, the decision rule.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
