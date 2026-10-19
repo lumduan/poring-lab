@@ -11059,6 +11059,13 @@ scratch, their rules now in the code's docstring and tests):**
   where mine didn't; tested on run 2 and 4 normal runs)".
 - **Before run 1 (Batt's decision 5, ~19:5x):** the off-screen pointer move that stopped v43 run 4
   is fixed in ro_agent (ff67e2c: moves clamped into the desktop, presses outside it a clear Stop).
+- **PARAMS[42] written (before run 1):** v41 NOT adopted (3.82), v43 ADOPTED (3.84) -> the base is
+  PARAMS[43] (the hunting UI layout, the ping-pong fix, the false-dead fix on every engagement).
+  PARAMS[42] = PARAMS[43] + `steer_tail` / `steer_tail_ab` + `steer_guard_box_px` 20 /
+  `steer_guard_ab` (odd k) + the pocket escape (`stuck_window_s` 60, `stuck_extent` 18,
+  `stuck_walked` 80, `stuck_escape_min` 26, `stuck_zone_r` 22, `stuck_zone_s` 300; both arms).
+  Nothing else moves (`test_v42_params_on_the_adopted_v43_base`). The click census + the targeted
+  safety tests: 158 passed. Batt ~20:1x: watch the loot fate (picked / looters / gone) in v42.
 
 ### 3.84 hunt-flow@43: THE HUNTING UI LAYOUT (Batt's three spots), with the dead-end ping-pong fix (pre-registered 2026-10-19 15:03 ICT, the commit time 23d41f5, BEFORE its runs; Batt's order ~08:4x: "Batt's UI layout change for hunting ... Do it as its own pre-registered version at a run boundary ... between v41 and the steer-guard version"; 13:3x: the combat log tab; 14:0x: "keep the order: finish the LAYOUT version (v43) now"; the ping-pong bug: "fix it ... include it in the next version's pre-registration as a fix")
 

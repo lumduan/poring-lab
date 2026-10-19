@@ -267,6 +267,11 @@ VERSIONS = {
     "panel collapsed, the chat window's Battle Log tab shown; applied by the runner through the "
     "client's own controls, the UI masks follow it; with the dead-end ping-pong fix "
     "(dead_end_hyst_s). Base: v40's, the false-dead fix on every engagement (v41 not adopted)",
+    42: "THE STEER'S WALK GUARD FROM THE GM'S BOX: on odd k the steer's walk clicks are refused "
+    "only within the GM's drawn box + 20 px (not the 120-px circle) and its picker may take the "
+    "route's tail; search and loot clicks keep the circle; interleaved per engagement. With the "
+    "pocket escape (stuck by displacement: a 60-s spread <= 18 cells over >= 80 walked -> walk "
+    "out >= 26 cells, the pocket blacklisted 5 min) as a bug fix in both arms. Base: v43 adopted",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -477,6 +482,16 @@ PARAMS[41] = {**PARAMS[40], "false_dead_ab": False, "strike_cells_walking": 7,
 # version). Its base: v41 NOT adopted (3.82) -> v40's, the false-dead fix on every engagement
 PARAMS[43] = {**PARAMS[40], "false_dead_ab": False, "ui_layout": "hunt",
               "dead_end_hyst_s": 10.0}  # fmt: skip
+# 42 = THE STEER'S WALK GUARD FROM THE GM'S BOX, with the route tail (3.83, pre-registered e3fc195;
+# Batt's decision 1, 2026-10-19 ~07:00; "keep the tail in v42, go ahead"): on odd k the steer's walk
+# clicks use the GM's drawn box + 20 px instead of the 120-px circle, and its picker may take the
+# route's tail. Search and loot clicks keep the circle. With the POCKET ESCAPE as a bug fix in both
+# arms (3.83 amendment 2, 4d937b4; Batt approved the 60-s spread ~19:5x). Its base: v43 ADOPTED
+# (3.84) -> the hunting UI layout + the ping-pong fix, the false-dead fix on every engagement
+PARAMS[42] = {**PARAMS[43], "steer_tail": True, "steer_tail_ab": True, "steer_guard_box_px": 20,
+              "steer_guard_ab": True, "stuck_window_s": 60.0, "stuck_extent": 18.0,
+              "stuck_walked": 80.0, "stuck_escape_min": 26.0, "stuck_zone_r": 22.0,
+              "stuck_zone_s": 300.0}  # fmt: skip
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------

@@ -1103,8 +1103,9 @@ def test_pocket_escape_stuck_by_displacement_and_the_nearest_way_out() -> None:
     closed[25, :] = False  # no way out
     assert hf.escape_goal(closed, (15, 15), (15.0, 15.0), 26.0) is None
     for n in hf.PARAMS:
-        if n <= 43:
+        if n <= 41 or n == 43:
             assert not hf.PARAMS[n].get("stuck_window_s")
+    assert hf.PARAMS[42]["stuck_window_s"] == 60.0  # v42 carries it (3.83 amendment 2)
     src = Path(hf.__file__).read_text()
     assert 'stuck_st["mode"] = m_' in src and '"kind": "stuck_escape"' in src
 
@@ -1188,3 +1189,24 @@ def test_p4_candidate_135_turns_only_when_0_45_90_are_blocked() -> None:
     assert abs(float(st3["turn"])) == 135.0  # blocked: the 135 is allowed
     for n in hf.PARAMS:
         assert not hf.PARAMS[n].get("cov_135_only_blocked")
+
+
+def test_v42_params_on_the_adopted_v43_base() -> None:
+    """3.83 (e3fc195, amendments ec4212d + 4d937b4): PARAMS[42] = v43's (ADOPTED, 3.84) + the
+    steer's box guard and route tail on odd k + the pocket escape in both arms; nothing else
+    moves."""
+    p = hf.PARAMS[42]
+    assert 42 in hf.VERSIONS
+    assert p["steer_guard_box_px"] == 20 and p["steer_guard_ab"]
+    assert p["steer_tail"] and p["steer_tail_ab"]
+    assert (p["stuck_window_s"], p["stuck_extent"], p["stuck_walked"]) == (60.0, 18.0, 80.0)
+    assert (p["stuck_escape_min"], p["stuck_zone_r"], p["stuck_zone_s"]) == (26.0, 22.0, 300.0)
+    assert p["ui_layout"] == "hunt" and p["dead_end_hyst_s"] == 10.0
+    assert p["false_dead_fix"] and not p["false_dead_ab"]
+    assert not p.get("strike_cells_walking")  # v41 not adopted (3.82)
+    assert not p.get("cov_135_only_blocked")  # P4 is v47's
+    moved = ("steer_tail", "steer_tail_ab", "steer_guard_box_px", "steer_guard_ab",
+             "stuck_window_s", "stuck_extent", "stuck_walked", "stuck_escape_min",
+             "stuck_zone_r", "stuck_zone_s")  # fmt: skip
+    same = {k: v for k, v in p.items() if k not in moved}
+    assert same == {k: v for k, v in hf.PARAMS[43].items() if k not in moved}
