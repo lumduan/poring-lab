@@ -992,6 +992,81 @@ def falsedead_table(sids: Iterable[str], on_of: Any = None,
     return out
 
 
+V39_TAIL_GUARD_PER_STEER_MIN = 4477 / 41.9  # 3.83 check 5: v39's tail arm, guard refusals
+
+
+def guard_refusals(events: Iterable[Mapping[str, Any]], prefix: str) -> int:
+    """PURE: the steer's continuous-click candidates refused by the walk guard, summed over the
+    runner's ``cont_fail`` events for the call key ``prefix`` ("steer+tail+box" = v42's fix arm,
+    "steer" = its base; moving and standing)."""
+    n = 0
+    for e in events:
+        if e.get("kind") != "cont_fail":
+            continue
+        for key, v in (e.get("counts") or {}).items():
+            parts = str(key).split(":")
+            if len(parts) == 3 and parts[0] == prefix and parts[2] == "guard":
+                n += int(v)
+    return n
+
+
+def steerguard_table(sids: Sequence[str]) -> dict[str, Any]:
+    """3.83 (hunt-flow@42, e3fc195): approach_table's arms ("tail" = odd k = the fix: the steer's
+    box + 20 px guard and route tail; "base" = even k) + the deciding checks 1-4 + check 5 (the
+    code ran as built: the box rule refused steer clicks, near_gm_box > 0; the fix arm's guard
+    refusals per steer minute < half of v39's tail arm, 4,477 / 41.9 min) + the pocket escape's
+    stuck_escape events per run (amendment 2)."""
+    out = approach_table(sids)
+    ref = {"fix": 0, "base": 0}
+    box_n = 0
+    pockets: dict[str, Any] = {}
+    for sid in sids:
+        bev = [json.loads(x) for x in (DEMO / sid / "events.jsonl").read_text().splitlines()
+               if x.strip()]  # fmt: skip
+        ref["fix"] += guard_refusals(bev, "steer+tail+box")
+        ref["base"] += guard_refusals(bev, "steer")
+        wg = [e for e in bev if e.get("kind") == "walk_guard"]
+        man = json.loads((DEMO / sid / "manifest.json").read_text())
+        box_n += int((man.get("walk_guard") or (wg[-1] if wg else {})).get("near_gm_box", 0))
+        pockets[sid] = [
+            {
+                "t_s": round((int(e["t_ns"]) - int(bev[0]["t_ns"])) / NS, 1),
+                **{k: e.get(k) for k in ("why", "centre", "goal", "path") if k in e},
+            }
+            for e in bev
+            if e.get("kind") == "stuck_escape"
+        ]
+    f, b = out.get("tail") or {}, out.get("base") or {}
+    per_min = (ref["fix"] / f["steer_min"]) if f.get("steer_min") else None
+    hard = {}
+    for sid in sids:
+        hb = json.loads((DEMO / sid / "flow_judge.json").read_text()).get("hard_bars") or {}
+        hard[sid] = [hb.get("npc_contacts"), hb.get("map_changes"),
+                     [j for j in hb.get("non_target_jobs_hit", []) if j != 1018]]  # fmt: skip
+
+    def ge(x: Any, y: Any, fac: float) -> bool | None:
+        return None if x is None or y is None else x >= fac * y
+
+    out["guard_refusals"] = {**ref, "fix_per_steer_min": None if per_min is None
+                             else round(per_min, 1), "near_gm_box": box_n}  # fmt: skip
+    out["stuck_escape"] = pockets
+    out["checks"] = {
+        "1 steer moving share fix >= 1.15 x base": ge(f.get("steer_moving_share"),
+                                                      b.get("steer_moving_share"), 1.15),
+        "2 approach mean fix <= 0.90 x base": None
+        if f.get("approach_s_mean") is None or b.get("approach_s_mean") is None
+        else f["approach_s_mean"] <= 0.90 * b["approach_s_mean"],
+        "3 landing fix >= base - 8 points": None
+        if f.get("landing_share") is None or b.get("landing_share") is None
+        else f["landing_share"] >= b["landing_share"] - 0.08,
+        "4 hard bars zero": all(v[0] == 0 and v[1] == 0 and not v[2] for v in hard.values()),
+        "5 ran as built (near_gm_box > 0, fix guard / steer min < half v39 tail)":
+        box_n > 0 and per_min is not None and per_min < V39_TAIL_GUARD_PER_STEER_MIN / 2,
+    }  # fmt: skip
+    out["hard_bars"] = hard
+    return out
+
+
 def exp_line_kills(
     lines: Sequence[Mapping[str, Any]],
     kill_ts: Sequence[int],
@@ -1344,7 +1419,7 @@ def main() -> int:
     ap.add_argument("what", choices=("strike", "dead", "loot", "stray", "blocks", "species",
                                      "retry", "sword", "sword-precision", "heading",
                                      "approach", "deadprobe", "falsedead", "walkers",
-                                     "expdead"))  # fmt: skip
+                                     "expdead", "steerguard"))  # fmt: skip
     ap.add_argument("sessions", nargs="+")
     a = ap.parse_args()
     if a.what == "heading":  # its own loader (search_study's windows and field)
@@ -1361,6 +1436,9 @@ def main() -> int:
         return 0
     if a.what == "walkers":  # the same
         print(json.dumps(walker_table(a.sessions), indent=1, default=str))
+        return 0
+    if a.what == "steerguard":  # 3.83's per-arm judge
+        print(json.dumps(steerguard_table(a.sessions), indent=1, default=str))
         return 0
     if a.what == "expdead":  # 3.87's per-arm judge
         print(json.dumps(expdead_table(a.sessions), indent=1, default=str))

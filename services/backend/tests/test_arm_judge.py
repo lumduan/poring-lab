@@ -403,3 +403,26 @@ def test_exp_line_kills_and_the_expdead_judge() -> None:
     assert o["arms"]["fix"]["engagements"] + o["arms"]["base"]["engagements"] == 127
     assert o["arms"]["fix"].get("exp_arm_flag", 0) == 0  # v43 had no EXP-dead arm
     assert o["checks"]["5 hard bars zero"] is True
+
+
+def test_steerguard_judge_counts_the_guard_by_arm() -> None:
+    """3.83's judge: the steer's guard refusals by call key (v42's fix arm "steer+tail+box", base
+    "steer"); check 5 fails on a run WITHOUT the box rule (a REAL negative case: v43 run 3)."""
+    ev = [{"kind": "cont_fail", "counts": {"steer+tail+box:moving:guard": 3,
+                                           "steer+tail+box:standing:guard": 2,
+                                           "steer:moving:guard": 7, "steer+tail:moving:guard": 9,
+                                           "search:moving:guard": 5,
+                                           "steer:moving:calls": 4}},
+          {"kind": "walk_guard", "near_gm_box": 1}]  # fmt: skip
+    assert aj.guard_refusals(ev, "steer+tail+box") == 5
+    assert aj.guard_refusals(ev, "steer") == 7
+    sid = "20261019T174122-demo-hunt-flow43"
+    if not (aj.DEMO / sid / "flow_judge.json").exists():
+        pytest.skip("the v43 session is not banked on this host")
+    o = aj.steerguard_table([sid])
+    assert o["guard_refusals"]["near_gm_box"] == 0 and o["guard_refusals"]["fix"] == 0
+    assert (
+        o["checks"]["5 ran as built (near_gm_box > 0, fix guard / steer min < half v39 tail)"]
+        is False
+    )
+    assert o["stuck_escape"] == {sid: []}
