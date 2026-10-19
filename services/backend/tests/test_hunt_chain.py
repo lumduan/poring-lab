@@ -36,7 +36,8 @@ def test_the_chain_sends_no_input_and_stops_on_any_non_time_box_end() -> None:
         assert bad not in src, bad
     assert '"nice", "-n", "10"' in src and '"hardbar_live.py"' not in src
     assert '"scripts/hardbar_live.py",\n                     "watch"' in src
-    assert "if rc != 0:" in src and "return 3" in src
+    assert 'if after_run(rc, ended, mon_stop, safe_in_row) != "next":' in src
+    assert "return 3" in src
     assert "while runner_running():" in src  # never two runners
     # the monitor is bound to THIS run's process (Batt 2026-10-19), never "any runner of V"
     assert '"watch", str(a.version), "--pid", str(run.pid)]' in src
@@ -70,3 +71,32 @@ def test_hardbar_monitor_binds_to_one_runner_and_never_re_binds() -> None:
     assert "def runner_pid(" not in src  # the version-wide lookup is gone
     w = src[src.index("def watch(") :]
     assert "if pick_runner(_ps(), pid, version) != pid:" in w and "os.kill(pid, signal.SIGINT)" in w
+
+
+def test_after_a_safe_stop_the_chain_goes_on_but_never_after_a_hard_bar() -> None:
+    """Batt 2026-10-19 overnight: after a SAFE runner stop the chain starts the next seed (fresh
+    start checks); a packet hard bar, a SIGINT, a lease, an HP loss, a crash or a 2nd safe stop
+    in a row end it."""
+    a = hc.after_run
+    assert a(0, "time_box", False, 0) == "next"
+    assert a(3, "stopped:FarmStop: our cell is unknown (minimap and /where both failed)",
+             False, 1) == "next"  # fmt: skip
+    assert a(3, "stopped:Stop: no input_ack within 3 s", False, 1) == "next"
+    assert a(3, "stopped:Stop: no input_ack within 3 s", True, 1) == "end"  # the monitor's
+    assert a(3, "stopped:KeyboardInterrupt: ", False, 1) == "end"
+    assert a(3, "stopped:Stop: human lease taken", False, 1) == "end"
+    assert a(3, "stopped:FarmStop: Batt took over (a human lease is active): stopped", False,
+             1) == "end"  # fmt: skip
+    assert a(3, "stopped:Stop: mux left ASSIST (HUMAN): stopping", False, 1) == "end"
+    assert a(3, "stopped:FarmStop: HP 0.80 at x: an immune GM lost HP", False, 1) == "end"
+    assert a(3, "stopped:FarmStop: our cell is unknown", False, 2) == "end"  # 2 in a row
+    assert a(1, "stopped:ValueError: x", False, 1) == "end"  # a crash
+    assert a(3, None, False, 1) == "end"
+    txt = 'x\n{"session": "s", "ended": "time_box", "run_s": 3600}\n'
+    assert hc.ended_of(txt) == "time_box" and hc.ended_of("nothing") is None
+
+
+def test_a_re_run_seed_gets_a_suffix(tmp_path) -> None:  # noqa: ANN001
+    assert hc.run_tag(tmp_path, 42, 7) == "7"
+    (tmp_path / "v42-7.out").write_text("")
+    assert hc.run_tag(tmp_path, 42, 7) == "7b"

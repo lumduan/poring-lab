@@ -18,8 +18,15 @@ Per seed, in order:
 5. the run (`nice -n 10`, its stdout to ``OUT/v<version>-<seed>.out``) with the live hard-bar
    monitor beside it (`hardbar_live.py watch V --pid <this run>`, bound to this runner only,
    which SIGINTs it on a hard bar);
-6. the runner's exit code: 0 (its time box) -> the next seed; anything else (a hard bar, a
-   lease, a UI stop, a crash) -> the chain ends.
+6. the runner's exit code: 0 (its time box) -> the next seed. A SAFE runner stop (Batt
+   2026-10-19 overnight: "After a safe runner stop, the chain starts the next pre-registered run
+   of the SAME version (fresh start checks) so a stalled turn doesn't idle the client") -> the
+   next seed too: the runner's own clean stop (rc 3, a FarmStop / Stop it raised itself: an
+   unreadable cell, layout or weight, a lost input ack, its UI gate refusing). The chain still
+   ENDS on a packet hard bar (the live monitor stopped it: NPC contact, map change, a non-target
+   hit), a SIGINT, a human lease / takeover, an immune GM losing HP, a crash, or the 2nd safe
+   stop in a row (`after_run`). A stopped seed is not re-run by the chain (its partial run is
+   kept); a re-run of a seed gets a letter suffix on its files.
 Every step is one line in ``OUT/chain-v<version>.log``.
 """
 
@@ -67,6 +74,48 @@ def health_ok(h: dict[str, object]) -> str | None:
     return None
 
 
+MAX_SAFE_IN_ROW = 2
+END_WORDS = ("keyboardinterrupt", "lease", "takeover", "took over", "human", "mux",
+             "lost hp")  # fmt: skip
+
+
+def after_run(rc: int, ended: str | None, monitor_stopped: bool, safe_in_row: int) -> str:
+    """PURE: what the chain does after a run -- "next" (the next seed: its time box, or a SAFE
+    stop) or "end". Safe = the runner's own clean stop (rc 3, ``ended`` "stopped:FarmStop: ..."
+    / "stopped:Stop: ..."), not a packet hard bar (``monitor_stopped``), not a SIGINT, a human
+    lease / takeover or an immune GM's HP loss, and fewer than MAX_SAFE_IN_ROW in a row
+    (``safe_in_row`` counts this one)."""
+    if rc == 0:
+        return "next"
+    if rc != 3 or not ended or monitor_stopped:
+        return "end"
+    low = ended.lower()
+    if not low.startswith(("stopped:farmstop:", "stopped:stop:")):
+        return "end"
+    if any(w in low for w in END_WORDS):
+        return "end"
+    return "next" if safe_in_row < MAX_SAFE_IN_ROW else "end"
+
+
+def ended_of(text: str) -> str | None:
+    """PURE: the runner's ``ended`` from its last JSON summary line in ``text`` (None if none)."""
+    for line in reversed(text.strip().splitlines()):
+        if line.startswith("{") and '"ended"' in line:
+            try:
+                return str(json.loads(line)["ended"])
+            except (ValueError, KeyError):
+                return None
+    return None
+
+
+def run_tag(out: Path, version: int, seed: int) -> str:
+    """The seed's file tag: the seed, or seed + b, c, ... when its files exist (a re-run)."""
+    for suf in ("", "b", "c", "d", "e", "f"):
+        if not (out / f"v{version}-{seed}{suf}.out").exists():
+            return f"{seed}{suf}"
+    return f"{seed}-{int(time.time())}"
+
+
 def health() -> dict[str, object]:
     sys.path.insert(0, str(ROOT / "scripts"))
     import ro_agent as r
@@ -97,6 +146,7 @@ def main() -> int:
     seeds = [int(x) for x in a.seeds.split(",") if x.strip()]
     OUT.mkdir(parents=True, exist_ok=True)
     log(a.version, f"chain start: v{a.version} seeds {seeds} x {a.minutes} min")
+    safe_in_row = 0
     for seed in seeds:
         while runner_running():
             time.sleep(10)
@@ -112,20 +162,21 @@ def main() -> int:
         if why is not None:
             log(a.version, f"{why}: chain ends before seed {seed} ({json.dumps(h)})")
             return 2
-        shot = OUT / f"pre-v{a.version}-{seed}.jpg"
+        tag = run_tag(OUT, a.version, seed)
+        shot = OUT / f"pre-v{a.version}-{tag}.jpg"
         try:
             screenshot(shot)
         except Exception as exc:  # noqa: BLE001
             log(a.version, f"screenshot failed ({exc!r:.120}): chain ends before seed {seed}")
             return 2
         log(a.version, f"seed {seed}: health {json.dumps(h)}, screenshot {shot.name}; run starts")
-        with open(OUT / f"v{a.version}-{seed}.out", "w") as fo:
+        with open(OUT / f"v{a.version}-{tag}.out", "w") as fo:
             run = subprocess.Popen(
                 ["nice", "-n", "10", "uv", "run", "python", "scripts/hunt_flow.py", "run",
                  "--version", str(a.version), "--minutes", str(a.minutes), "--seed", str(seed)],
                 cwd=ROOT, stdout=fo, stderr=subprocess.STDOUT)  # fmt: skip
             time.sleep(5)
-            with open(OUT / f"hardbar-v{a.version}-{seed}.log", "w") as fm:
+            with open(OUT / f"hardbar-v{a.version}-{tag}.log", "w") as fm:
                 # bound to THIS run's process (Batt 2026-10-19): it ends with this runner and
                 # can never latch onto the next one
                 mon = subprocess.Popen(
@@ -140,11 +191,19 @@ def main() -> int:
                     mon.wait(timeout=30)
                 except subprocess.TimeoutExpired:
                     mon.kill()
-        tail = (OUT / f"v{a.version}-{seed}.out").read_text()[-400:].strip().splitlines()
+        text = (OUT / f"v{a.version}-{tag}.out").read_text()
+        tail = text[-400:].strip().splitlines()
         log(a.version, f"seed {seed}: runner rc {rc}; last line {tail[-1][:300] if tail else '-'}")
-        if rc != 0:
-            log(a.version, f"seed {seed} did not end on its time box: chain ends")
+        mon_stop = "HARD BAR" in (OUT / f"hardbar-v{a.version}-{tag}.log").read_text()
+        ended = ended_of(text[-20000:])
+        safe_in_row = 0 if rc == 0 else safe_in_row + 1
+        if after_run(rc, ended, mon_stop, safe_in_row) != "next":
+            log(a.version, f"seed {seed} did not end on its time box ({ended!r:.160}; monitor "
+                f"stop {mon_stop}): chain ends")  # fmt: skip
             return 3
+        if rc != 0:
+            log(a.version, f"seed {seed}: a SAFE stop ({ended!r:.160}); the next seed starts "
+                "with fresh start checks")  # fmt: skip
     log(a.version, "chain done")
     return 0
 
