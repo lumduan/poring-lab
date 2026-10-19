@@ -16,7 +16,8 @@ Per seed, in order:
    experimenter; the runner's own start check -- client state, immunity, the hunting state --
    refuses an unknown UI state by itself);
 5. the run (`nice -n 10`, its stdout to ``OUT/v<version>-<seed>.out``) with the live hard-bar
-   monitor beside it (`hardbar_live.py watch`, which SIGINTs the runner on a hard bar);
+   monitor beside it (`hardbar_live.py watch V --pid <this run>`, bound to this runner only,
+   which SIGINTs it on a hard bar);
 6. the runner's exit code: 0 (its time box) -> the next seed; anything else (a hard bar, a
    lease, a UI stop, a crash) -> the chain ends.
 Every step is one line in ``OUT/chain-v<version>.log``.
@@ -125,9 +126,11 @@ def main() -> int:
                 cwd=ROOT, stdout=fo, stderr=subprocess.STDOUT)  # fmt: skip
             time.sleep(5)
             with open(OUT / f"hardbar-v{a.version}-{seed}.log", "w") as fm:
+                # bound to THIS run's process (Batt 2026-10-19): it ends with this runner and
+                # can never latch onto the next one
                 mon = subprocess.Popen(
                     ["nice", "-n", "10", "uv", "run", "python", "scripts/hardbar_live.py",
-                     "watch", str(a.version)], cwd=ROOT, stdout=fm,
+                     "watch", str(a.version), "--pid", str(run.pid)], cwd=ROOT, stdout=fm,
                     stderr=subprocess.STDOUT)  # fmt: skip
                 rc = run.wait()
                 # the monitor only ever stops a RUNNING runner: done with it at once (its own
