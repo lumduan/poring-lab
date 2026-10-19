@@ -11121,6 +11121,30 @@ After run 4: the standard layout (`client_layout.py ensure standard`), then the 
   - Its `client_layout` event: the layout was already "hunt" (no step), distances 1.4 / 1.7 /
     2.9. `hardbar_live.py watch 43 --pid` bound to it.
   - Runs 2-4 queued: `hunt_chain.py --version 43 --seeds 20320202,20320303,20320404` (15:28:49).
+- **Run 1 ended** on its time box (16:30), with 148 engagements: 121 dead, 27 skipped_risky.
+  - Standard row: landing 109 / 148 = 73.7 % (66.0-80.1), 128.0 kills / h, 5.12 per sighting,
+    28.1 s per kill, sight 25.0 / 10 min (the thinnest field of the 13 runs compared), free
+    targets attacked <= 10 s 39 % (n 183), steer moving 37 %, seen -> click 3.41 s,
+    death -> next 0.62 s; dead calls without a real death 22 / 121 = 18.2 %; loot 64 / 128 = 50 %
+    (14 to looters); reversals 6.77 / min, outside loot 6.37; Creamy 0; hard bars 0 / 0 / 0.
+  - `layout_judge.py` (ONE run, not the decision): first detections in the uncovered area 0.173
+    (the 12 standard-layout runs: 0.018); detected share 0.934 (0.911); bot-seen 48.0 / 10 min
+    against a server-seen 25.0 (1.92; the pool 1.725); on screen -> detected 0.79 s (0.78).
+- **Run 2, attempt 1 STOPPED at its start** (16:30:30, `20261019T163030-demo-hunt-flow43`, 3.6 s,
+  rc 3, no engagement): the runner's own fail-closed stop "client layout: unreadable".
+  - Two causes, both in the start-up read, not in the layout:
+    - run 1's end-of-run restore (typed GM lines, the weight clear) left the CHAT INPUT open;
+    - the chat TABS are translucent: the whole-strip template read 21.1 / 63.4 over the ravine's
+      rock (cut over grass). The arrow crop also caught the red notice badge drawn right of it
+      (16.8 vs 15).
+  - **Fix (4bb6681, 16:34, before attempt 2; start-up robustness, not the measured behaviour):**
+    the runner closes the chat (the UI gate's known step) before reading the layout; the selected
+    tab is read by its white top border (row 529: 253-255 vs 77-159 on every background seen);
+    the arrow crop leaves out the badge. Re-checked on 6 banked frames and live (2.2 / 177.8).
+- **Run 2, attempt 2** (16:34:49, seed 20320202, `20261019T163449-demo-hunt-flow43`, code 4bb6681),
+  started by the agent after a judged screenshot (`pre-v43-20320202b.jpg`, 16:34: the hunting
+  layout, the chat closed, no dialog, Lv 70, weight 491 / 4970; ASSIST, no lease). Its
+  `client_layout`: "hunt", no step. Runs 3-4 queued (`hunt_chain.py`, 16:34:48).
 
 ### 3.85 hunt-flow@45: THE LOCKED-POINTER WALK (Batt's search walking), interleaved in 10-min blocks (pre-registered 2026-10-19 16:28 ICT, the commit time 8376ae6, BEFORE its runs; Batt 16:0x: "pre-register Batt's method as the search-walking change, LOCKED-POINTER WALK"; 16:2x: "Keep the locked-pointer walk (3.85) in the queue ... Report its effect on click accuracy too"; it runs after v44)
 
