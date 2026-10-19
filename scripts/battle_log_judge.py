@@ -167,6 +167,11 @@ def miss_reason(t: int, trace: Sequence[Mapping[str, Any]], tts: Sequence[int],
     return "unseen"
 
 
+def _emit_delays(ls: Sequence[Mapping[str, Any]]) -> list[float | None]:
+    d = [(int(x["t_emit_ns"]) - int(x["t_ns"])) / NS for x in ls if x.get("t_emit_ns")]
+    return [q(d, 0.5), q(d, 0.9), round(max(d), 2) if d else None]
+
+
 def _values(val: Sequence[tuple[Any, Any]]) -> dict[str, Any]:
     """Read value vs truth value over the matched pairs."""
     return {"read": sum(1 for a, _ in val if a is not None),
@@ -207,6 +212,8 @@ def judge(packets: Sequence[Mapping[str, Any]], lines: Sequence[Mapping[str, Any
                "recall": _rate(len(inside) - len(missed), len(inside)),
                "latency_p50_p90_s": [q(lat, 0.5), q(lat, 0.9)],
                "latency_min_max_s": [round(min(lat), 2), round(max(lat), 2)] if lat else None,
+               # a live reader returns a line this long after its first frame (hold / refine)
+               "emit_delay_p50_p90_max_s": _emit_delays(ls),
                "miss_reasons": dict(reasons),
                "unmatched_lines": [{"t_ns": ls[i]["t_ns"], "frame": ls[i].get("frame"),
                                     "text": ls[i].get("text")} for i, j in pairs
@@ -249,7 +256,8 @@ def judge(packets: Sequence[Mapping[str, Any]], lines: Sequence[Mapping[str, Any
     tab["count"] = _values(val)
     out["item"] = tab
     out["other"] = {"n": sum(1 for x in lines if x["type"] == "other"),
-                    "drops_in_packets": len(drops_of(packets)),
+                    "drops_in_frames": sum(1 for d in drops_of(packets)
+                                           if t_lo <= int(d["t"]) <= t_hi),
                     "texts": Counter(str(x.get("text"))[:60] for x in lines
                                      if x["type"] == "other").most_common(12)}  # fmt: skip
     return out
@@ -259,7 +267,8 @@ def dead_vs_bot(engagements: Sequence[Mapping[str, Any]], kills: Sequence[Mappin
                 lines: Sequence[Mapping[str, Any]]) -> dict[str, Any]:  # fmt: skip
     """PURE: the BASE EXP line as a "dead" signal against the bot's own dead call. Per
     engagement the bot called dead (its loot step's start: t_end - loot.s), the server kill of
-    ours just before it (<= 10 s) and the first BASE EXP line after that kill (<= MAX_LAT_S):
+    ours nearest to it in [call - 10 s, call + 2 s] (none: ``no_kill_near`` -- the call was
+    false, or its kill came later) and the first BASE EXP line after that kill (<= MAX_LAT_S):
     line - kill, bot call - kill, and how much earlier the line came than the bot's call."""
     kts = sorted(int(k["t"]) for k in kills)
     lts = sorted(int(x["t_ns"]) for x in lines if x["type"] == "base_exp")
@@ -270,11 +279,11 @@ def dead_vs_bot(engagements: Sequence[Mapping[str, Any]], kills: Sequence[Mappin
         if x.get("result") != "dead" or not x.get("t_end") or loot.get("s") is None:
             continue
         t_call = int(x["t_end"]) - int(float(loot["s"]) * NS)
-        i = bisect.bisect_right(kts, t_call) - 1
-        if i < 0 or t_call - kts[i] > 10 * NS:
-            false_dead += 1  # no kill of ours before the call: the bot's dead call was false
+        near = [t for t in kts if t_call - 10 * NS <= t <= t_call + 2 * NS]
+        if not near:
+            false_dead += 1
             continue
-        tk = kts[i]
+        tk = min(near, key=lambda t: abs(t - t_call))
         j = bisect.bisect_left(lts, tk - int(LEAD_S * NS))
         if j >= len(lts) or lts[j] - tk > MAX_LAT_S * NS:
             no_line += 1
@@ -282,7 +291,7 @@ def dead_vs_bot(engagements: Sequence[Mapping[str, Any]], kills: Sequence[Mappin
         line_lat.append((lts[j] - tk) / NS)
         bot_lat.append((t_call - tk) / NS)
         gain.append((t_call - lts[j]) / NS)
-    return {"bot_dead_calls_with_kill": len(gain) + no_line, "bot_false_dead": false_dead,
+    return {"bot_dead_calls_with_kill": len(gain) + no_line, "no_kill_near": false_dead,
             "no_exp_line": no_line,
             "line_after_kill_p50_p90_s": [q(line_lat, 0.5), q(line_lat, 0.9)],
             "bot_call_after_kill_p50_p90_s": [q(bot_lat, 0.5), q(bot_lat, 0.9)],

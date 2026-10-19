@@ -342,9 +342,9 @@ def test_dead_vs_the_bots_own_call() -> None:
     lines = [{"t_ns": 10 * NS + 3 * NS // 10, "type": "base_exp"}]
     eng = [{"result": "dead", "t_end": 14 * NS, "loot": {"s": 2.0}},  # called at 12 s
            {"result": "dead", "t_end": 44 * NS, "loot": {"s": 1.0}},  # kill at 40, no line
-           {"result": "dead", "t_end": 30 * NS, "loot": {"s": 1.0}},  # no kill before: false
+           {"result": "dead", "t_end": 30 * NS, "loot": {"s": 1.0}},  # no kill near: false
            {"result": "gave_up", "t_end": 50 * NS, "loot": {"s": 1.0}}]  # fmt: skip
     d = bj.dead_vs_bot(eng, kills, lines)
-    assert (d["bot_dead_calls_with_kill"], d["bot_false_dead"], d["no_exp_line"]) == (2, 1, 1)
+    assert (d["bot_dead_calls_with_kill"], d["no_kill_near"], d["no_exp_line"]) == (2, 1, 1)
     assert d["line_after_kill_p50_p90_s"] == [0.3, 0.3]
     assert d["line_earlier_than_bot_p10_p50_p90_s"] == [1.7, 1.7, 1.7]
