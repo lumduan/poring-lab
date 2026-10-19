@@ -378,3 +378,28 @@ def test_falsedead_table_splits_a_real_run_without_losing_an_engagement() -> Non
     alive = sum(w == "target_alive" for w in risky)
     assert f["dead_called_alive"] + b["dead_called_alive"] == alive
     assert 0.3 < f["loot_share"] < 0.9 and 0.3 < b["loot_share"] < 0.9
+
+
+def test_exp_line_kills_and_the_expdead_judge() -> None:
+    """3.87's judge: each base EXP line is backed by at most one kill of ours (2 s before .. 0.2 s
+    after its first frame). REAL case: v43 run 3, the log-only live reader -- 110 base EXP lines,
+    108 with a kill of ours behind them; the arms split by k parity."""
+    S = aj.NS
+    lines = [
+        {"t_ns": 10 * S, "type": "base_exp"},
+        {"t_ns": 10 * S + 1, "type": "base_exp"},
+        {"t_ns": 20 * S, "type": "job_exp"},
+        {"t_ns": 30 * S, "type": "base_exp"},
+    ]
+    assert aj.exp_line_kills(lines, [int(9.5 * S)]) == (3, 1)  # one kill backs one line
+    assert aj.exp_line_kills(lines, [int(9.5 * S), int(9.9 * S), int(30.1 * S)]) == (3, 3)
+    assert aj.exp_line_kills(lines, [int(27 * S)]) == (3, 0)  # 3 s before: too early
+    sid = "20261019T174122-demo-hunt-flow43"
+    if not (aj.DEMO / sid / "battle_log_live.jsonl").exists():
+        pytest.skip("the v43 session is not banked on this host")
+    o = aj.expdead_table([sid])
+    assert o["per_run"][sid]["exp_lines"] == 110
+    assert o["per_run"][sid]["exp_lines_with_our_kill"] == 108
+    assert o["arms"]["fix"]["engagements"] + o["arms"]["base"]["engagements"] == 127
+    assert o["arms"]["fix"].get("exp_arm_flag", 0) == 0  # v43 had no EXP-dead arm
+    assert o["checks"]["5 hard bars zero"] is True

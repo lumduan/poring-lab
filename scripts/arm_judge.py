@@ -992,6 +992,161 @@ def falsedead_table(sids: Iterable[str], on_of: Any = None,
     return out
 
 
+def exp_line_kills(
+    lines: Sequence[Mapping[str, Any]],
+    kill_ts: Sequence[int],
+    before_s: float = 2.0,
+    after_s: float = 0.2,
+) -> tuple[int, int]:
+    """PURE (3.87's reported live precision): (base EXP lines, those with a kill of ours behind
+    them: a kill (``kill_ts``, arm_judge.kills_of) from ``before_s`` before the line's first frame
+    to ``after_s`` after it; each kill backs one line)."""
+    ks = sorted(int(t) for t in kill_ts)
+    used: set[int] = set()
+    n = ok = 0
+    for rec in sorted(lines, key=lambda x: int(x["t_ns"])):
+        if rec.get("type") != "base_exp":
+            continue
+        n += 1
+        t = int(rec["t_ns"])
+        i = bisect.bisect_left(ks, t - int(before_s * NS))
+        while i < len(ks) and ks[i] <= t + int(after_s * NS):
+            if i not in used:
+                used.add(i)
+                ok += 1
+                break
+            i += 1
+    return n, ok
+
+
+def expdead_table(sids: Iterable[str]) -> dict[str, Any]:
+    """3.87 (hunt-flow@44, 4d937b4): per arm -- "fix" = odd k (dead = the EXP line, the checked
+    fallback), "base" = even k -- over the engagements whose first click lies in flow_judge's
+    window, pooled over ``sids``:
+    1. kill -> loot start, mean (the kill's vanish -> the loot step's start; "dead" with a loot
+       step, as expdead_null.py measured the null);
+    2. dead calls without a real death (flow_judge.dead_call_truth, the engagements ended "dead");
+    3. loot picked / dropped at OUR kills: every engagement whose target died by our hit between
+       its first click - 1 s and its end + 3 s, whatever the runner called it (a skipped real
+       kill loses its loot);
+    4. landing within 5 s (flow_judge's rows, why "hit");
+    reported: items lost to looters, the skipped_unconfirmed count and how many were real kills,
+    the fix arm's dead_by, death -> the next engagement p50, and (per run) the live reader's base
+    EXP lines with / without a kill of ours behind them; the hard bars per run."""
+    import flow_judge as fj
+    import hunt_core as hc
+    import search_study as ss
+
+    arms: dict[str, dict[str, Any]] = {a: defaultdict(list) for a in ("fix", "base")}
+    cnt: dict[str, Counter[str]] = {a: Counter() for a in ("fix", "base")}
+    per_run: dict[str, Any] = {}
+    for sid in sids:
+        sess = ss.load_session(sid)
+        fjo = json.loads((DEMO / sid / "flow_judge.json").read_text())
+        rows = fjo["engagements_w"]["rows"]
+        by_k = {int(r["k"]): r for r in rows if r.get("k") is not None}
+        truth = fj.dead_call_truth(sess.events, sess.engagements, rows, sess.t0, sess.w1)
+        van: dict[int, list[int]] = defaultdict(list)
+        for e in sess.events:
+            if e.get("type") == "entity_vanish" and int(e.get("reason", -1)) == 1:
+                van[int(e.get("gid") or -1)].append(int(e["t_mono_ns"]))
+        kills = kills_of(sess.events)
+        kill_ts: dict[int, list[int]] = defaultdict(list)  # rAthena reuses a dead mob's gid
+        for t_k, g_k in kills:
+            kill_ts[g_k].append(t_k)
+        pos = hc.walk_positions(sess.events)
+        items = item_fates(sess.events, pos, fj.mob_at)
+        firsts = sorted(int(x["t_first_click"]) for x in sess.engagements)
+        for x in sess.engagements:
+            k = int(x["k"])
+            if not sess.t0 <= int(x["t_first_click"]) < sess.w1:
+                continue
+            arm = "fix" if k % 2 == 1 else "base"
+            m, c = arms[arm], cnt[arm]
+            c["engagements"] += 1
+            c["result:" + str(x.get("result"))] += 1
+            if arm == "fix":
+                c["dead_by:" + str(x.get("dead_by"))] += x.get("result") == "dead"
+                c["exp_arm_flag"] += bool(x.get("exp_arm"))
+            r_ = by_k.get(k) or {}
+            c["landing_counted"] += 1
+            c["landing_hit"] += r_.get("why") == "hit"
+            g = r_.get("gid")
+            t_end = int(x.get("t_end") or 0)
+            t_lo = int(x["t_first_click"]) - NS
+            t_kill = next((t_k for t_k in kill_ts.get(int(g), []) if t_lo <= t_k <= t_end + 3 * NS),
+                          None) if g is not None else None  # fmt: skip
+            died = t_kill is not None
+            if x.get("result") == "dead":
+                c["dead_calls"] += 1
+                tr_ = truth.get(k)
+                if tr_ is not None:
+                    c["dead_judged"] += 1
+                    c["dead_not_real"] += tr_[0] != "real"
+                loot = x.get("loot") or {}
+                t_l0 = int(x.get("t_last_click") or x["t_first_click"]) - NS
+                vs = sorted(t for t in van.get(int(g), []) if t_l0 <= t <= t_end + 3 * NS) if (
+                    g is not None) else []  # fmt: skip
+                if vs and loot.get("s") is not None and t_end:
+                    m["kill_to_loot_start"].append((t_end - vs[0]) / NS - float(loot["s"]))
+                    i = bisect.bisect_right(firsts, t_end)
+                    if i < len(firsts):
+                        m["death_to_next_engagement"].append((firsts[i] - vs[0]) / NS)
+            if x.get("result") == "skipped_unconfirmed":
+                c["skipped_unconfirmed"] += 1
+                c["skipped_unconfirmed_real"] += died
+            if t_kill is not None and g is not None:
+                c["our_kills"] += 1
+                for f in drops_of_kill(items, t_kill, fj.mob_at(pos, g, t_kill - 1)):
+                    c["items"] += 1
+                    c["picked"] += items[f]["fate"] == "picked"
+                    c["looter"] += items[f]["fate"] == "looter"
+        bl = DEMO / sid / "battle_log_live.jsonl"
+        lines = ([json.loads(x) for x in bl.read_text().splitlines() if x.strip()]
+                 if bl.exists() else [])  # fmt: skip
+        n_l, ok_l = exp_line_kills(lines, [t for t, _g in kills])
+        hb = fjo.get("hard_bars") or {}
+        per_run[sid] = {"exp_lines": n_l, "exp_lines_with_our_kill": ok_l,
+                        "hard_bars": [hb.get("npc_contacts"), hb.get("map_changes"),
+                                      [j for j in hb.get("non_target_jobs_hit", [])
+                                       if j != 1018]],
+                        "kills_per_hour": fjo.get("kills_per_hour")}  # fmt: skip
+    out: dict[str, Any] = {}
+    for arm in ("fix", "base"):
+        m, c = arms[arm], cnt[arm]
+        kl = m["kill_to_loot_start"]
+        out[arm] = {
+            **dict(sorted(c.items())),
+            "kill_to_loot_start_mean": round(sum(kl) / len(kl), 3) if kl else None,
+            "kill_to_loot_start_p50_p90": [q(kl, 0.5), q(kl, 0.9)],
+            "dead_not_real_share": round(c["dead_not_real"] / c["dead_judged"], 3)
+            if c["dead_judged"] else None,
+            "loot_picked_share": round(c["picked"] / c["items"], 3) if c["items"] else None,
+            "landing": round(c["landing_hit"] / c["landing_counted"], 3)
+            if c["landing_counted"] else None,
+            "death_to_next_engagement_p50": q(m["death_to_next_engagement"], 0.5),
+        }  # fmt: skip
+    f, b = out["fix"], out["base"]
+
+    checks = {
+        "1 kill -> loot start mean fix <= 0.60 x base": (
+            None if f["kill_to_loot_start_mean"] is None or not b["kill_to_loot_start_mean"]
+            else f["kill_to_loot_start_mean"] <= 0.60 * b["kill_to_loot_start_mean"]),
+        "2 dead calls without a real death fix <= 0.55 x base": (
+            None if f["dead_not_real_share"] is None or b["dead_not_real_share"] is None
+            else f["dead_not_real_share"] <= 0.55 * b["dead_not_real_share"]),
+        "3 loot picked fix >= base - 5 points": (
+            None if f["loot_picked_share"] is None or b["loot_picked_share"] is None
+            else f["loot_picked_share"] >= b["loot_picked_share"] - 0.05),
+        "4 landing fix >= base - 8 points": (
+            None if f["landing"] is None or b["landing"] is None
+            else f["landing"] >= b["landing"] - 0.08),
+        "5 hard bars zero": all(v["hard_bars"][0] == 0 and v["hard_bars"][1] == 0
+                                and not v["hard_bars"][2] for v in per_run.values()),
+    }  # fmt: skip
+    return {"arms": out, "checks": checks, "per_run": per_run}
+
+
 def species_table(sessions: Iterable[dict[str, Any]]) -> dict[str, Any]:
     """v35: per engagement parity (odd k = the species check on the box's OWN frame, even k =
     the fresh crop at the stale box): arm C's eligibility (the ``abc`` events: effective arm,
@@ -1188,7 +1343,8 @@ def main() -> int:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)  # fmt: skip
     ap.add_argument("what", choices=("strike", "dead", "loot", "stray", "blocks", "species",
                                      "retry", "sword", "sword-precision", "heading",
-                                     "approach", "deadprobe", "falsedead", "walkers"))  # fmt: skip
+                                     "approach", "deadprobe", "falsedead", "walkers",
+                                     "expdead"))  # fmt: skip
     ap.add_argument("sessions", nargs="+")
     a = ap.parse_args()
     if a.what == "heading":  # its own loader (search_study's windows and field)
@@ -1205,6 +1361,9 @@ def main() -> int:
         return 0
     if a.what == "walkers":  # the same
         print(json.dumps(walker_table(a.sessions), indent=1, default=str))
+        return 0
+    if a.what == "expdead":  # 3.87's per-arm judge
+        print(json.dumps(expdead_table(a.sessions), indent=1, default=str))
         return 0
     sessions = [load(s) for s in a.sessions]
     if a.what == "sword-precision":
