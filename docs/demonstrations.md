@@ -10833,6 +10833,101 @@ on for all (no blocks), switched in a commit before run 1 and recorded in this r
 - **Runs 2-4 are QUEUED:** `hunt_chain.py --version 41 --seeds 20300202,20300303,20300404` started
   detached at 07:29:34; it waits for run 1 to end, and binds each run's monitor to that run.
 
+### 3.83 hunt-flow@42: THE STEER'S WALK GUARD FROM THE GM'S BOX, with the route tail, interleaved per engagement (pre-registered 2026-10-19, the commit time below, BEFORE its runs; Batt's decision 1, 2026-10-19 ~07:00: "WALK GUARD (the #1 cause): approve a smaller radius for STEER clicks only (the walk-in toward a chosen target): from 120 px to the GM sprite's own box + a small margin (propose the value from data). Search walk clicks and loot clicks keep the current guard. Creamy hits are counted, not a stop (my rule); report Creamy hits per hour as this change's cost. Pre-register it as its own version after v41 (one change at a time), with steer moving share as the primary (Batt 92 %)")
+
+**Why (3.80's finding):**
+- The approach is the largest loss against Batt (+3.22 s per kill): while steering, the GM moves
+  35-39 % of the time (Batt 92 %).
+- v39's tail picker finds a point on short routes, but those cells lie within the walk guard's
+  120-px circle around the GM, which refused them 4,477 times (the base arm: 385). So the GM stood
+  until the 1-s standstill fallback, and v39 changed nothing (moving share 0.370 vs 0.367).
+
+**The margin, from data (measured before this entry; `guard_radius.py`, `guard_cells.py` in
+scratch, their rules now in the code's docstring and tests):**
+- Pre-guard walk clicks (hunt-flow1-15, 25 runs, no walk guard): the client turned 27 of 25,328
+  walk clicks into an attack on a non-target, all Creamy. By the click's distance to the GM's
+  drawn box (`GM_SPRITE_BOX`, 40 x 90 px):
+
+    | distance to the box | clicks | Creamy attacks | per click |
+    |---|---|---|---|
+    | 0-10 px | 278 | 2 | 0.72 % |
+    | 10-30 px | 392 | 0 | 0 % |
+    | 30-40 px | 256 | 3 | 1.17 % |
+    | 40-60 px | 1,215 | 0 | 0 % |
+    | 60-100 px | 4,318 | 11 | 0.25 % |
+    | > 100 px | 18,869 | 11 | 0.06 % |
+
+  The counts are small; within 60 px of the box the rate is 0.36 % per click, beyond 100 px
+  0.06 %.
+- The camera's projection of the cells around the GM (refused / all, by ring):
+
+    | ring (cells) | 120-px circle | box + 10 px | box + 20 px |
+    |---|---|---|---|
+    | 1 | 8 / 8 | 1 / 8 | 8 / 8 |
+    | 2 | 16 / 16 | 1 / 16 | 3 / 16 |
+    | 3 | 20 / 24 | 1 / 24 | 3 / 24 |
+    | 4 | 5 / 32 | 0 / 32 | 1 / 32 |
+
+- **Chosen: box + 20 px.** It still refuses every 1-cell step (a click one cell away is no
+  approach) and the cells behind the sprite. It frees 13 / 16 cells at 2 and 21 / 24 at 3: the
+  short routes' walk-in.
+
+**The change, and why it is tested WITH the route tail:**
+- Fix arm (odd k): the steer's walk clicks use the box + 20 px guard (`steer_guard_box_px` 20,
+  code 8917272), and the steer's picker takes the route's tail (v39's `steer_tail`, code
+  fffb751).
+- Base arm (even k): the old picker and the 120-px circle.
+- Search walk clicks and loot clicks keep the 120-px guard in both arms. The pink rule is
+  unchanged everywhere. No new click site.
+- **The tail is part of the fix arm because the guard alone cannot act on the old picker.** In
+  v39's base arm (the old picker), the steer's failed calls were 15,909 "no candidate at all"
+  against 385 refused by the guard. The near cells reach the guard only through the tail.
+- The tail itself was judged (3.80): inert and harmless alone (landing -2.2 points, hard bars
+  clean), not adopted. So this version tests ONE hypothesis, "the GM keeps walking when both
+  blocks are gone", with one new piece of code: the guard.
+- This bundling is the agent's design call, flagged to Batt before run 1. If Batt prefers the
+  guard alone, the fix arm drops `steer_tail` and the prediction below stands.
+
+**Base:** the base v41's verdict leaves:
+- if v41 is ADOPTED (3.82): PARAMS[41] with `strike_walking_ab` False (walkers struck from 7
+  cells for every engagement);
+- else PARAMS[41] without the walkers' change (PARAMS[40] + `false_dead_ab` False).
+- PARAMS[42] adds `steer_tail` + `steer_tail_ab` + `steer_guard_box_px` 20 + `steer_guard_ab`
+  (both on odd k). It is committed after v41's verdict and before run 1, and recorded in the run
+  log.
+
+**Runs:**
+- 4 x 60 min on prt_fild08, seeds 20310101, 20310202, 20310303, 20310404, after v41's run 4.
+- Nice 10, the detector on the CPU, the hunting state kept, a judged screenshot before run 1,
+  `hunt_chain.py` for runs 2-4 after the agent's judged start of run 1, each run's monitor bound
+  to its pid.
+
+**What 4 run-hours can resolve:** 3.80's ruler (22 no-change splits of 11 banked runs,
+`arm_judge.py approach`): steer moving share -8 % .. +6 %; approach mean -8 % .. +11 %; landing
+-6 % .. +14 %. Landing within 5 s on 9 splits (3.82): -7.9 .. +7.1 points.
+
+**Prediction, written before the runs (pooled over the 4 runs, `arm_judge.py approach`):**
+1. **Primary (the mechanism):** the GM's moving share while steering, fix >= 1.15 x base.
+2. **Outcome:** the approach (steer start -> first click, mean), fix <= 0.90 x base.
+3. **Guard:** landing within 5 s, fix >= base - 8 points.
+4. **Hard bars:** zero NPC contact, zero map change, zero non-Creamy non-target hit. A Creamy hit
+   is counted, not a stop.
+5. **The code ran as built (a positive check):** the fix arm's steer walk clicks are refused by
+   the box rule (`near_gm_box` in the `walk_guard` counts) and the fix arm's "guard" refusals per
+   steer minute fall below half of v39's tail arm's (4,477 over 41.9 steer minutes).
+6. **Reported, not deciding (Batt: the cost):**
+   - Creamy hits per hour per run (the run row's new column) and, per arm, the steer walk clicks
+     the client turned into an attack on a Creamy / another unit (`approach_table`'s
+     `walk_to_attack_other`);
+   - steer s per engagement, stops per steer minute, steer start -> 3 cells; kills / h.
+
+**Decision rule:**
+- ADOPT if 1, 2, 3 and 4 pass.
+- If 1 passes and 2 fails, NOT adopted: the GM moves more but does not arrive sooner.
+- If 1 fails, NOT adopted. If 5 fails, the code did not run as built: a fault, not a result.
+
+**Run log (written during the runs):**
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
