@@ -1120,3 +1120,50 @@ behind each turning leg (the latest click <= 1 s before it):
 - The larger lever is the aborted steers (41 % of reversals): targets picked at the view's edge
   and dropped. That is the next cause to size: why a steer is dropped (target lost / retarget /
   preempt / gate), and what Batt does with a monster at the edge.
+
+## The Battle Log reader (Batt's combat-log tab, 2026-10-19; `scripts/battle_log.py`, 8103c54)
+
+The hunting layout shows the chat window's Battle Log tab. Its lines, on the lab client (English
+UI; item names in Thai):
+- `[Poring] receives '179' damage points.` (yellow: our hit, with the monster's name)
+- `'2' Base Experience acquired.` and `'1' Job Experience acquired.` (yellow: a kill of ours)
+- `You got <item> (1).` (cyan: a pickup)
+
+**The reader** (built by a subagent, reviewed, tests green, no input path):
+- 3 message lines at a 14 px pitch (rows 551-592), the newest at the bottom.
+- Ink by luma; sprites behind the translucent window are dropped; each line keeps its own colour.
+- Glyphs are matched to templates. The digit templates cut from recorded JPEGs are pixel-identical
+  to where_fix's templates cut from live frames. Monster names are mapped to the species list.
+- New lines are found by line diffing: the smallest scroll that makes this frame's lines match
+  the last frame's. Item names are never read; the count only.
+- `battle_log.py replay SID` works on the recorded frames; `battle_log.py live` reads the live
+  frames read-only. From 17:19 it logs beside every v43 run at 10 Hz, log-only.
+
+**Validated against packets on v43 run 1** (`battle_log_judge.py`, 60 min, 18,076 frames, 128
+kills, 72 pickups; species Poring 79, Lunatic 39, Drops 7):
+
+| line | lines read | packet truth | precision | recall | delay after the packet, p50 / p90 | values right |
+|---|---|---|---|---|---|---|
+| DAMAGE | 125 | 128 hits | 1.000 | 0.977 | 1.17 / 1.34 s after the act | damage 125 / 125, name 125 / 125 |
+| BASE EXP | 126 | 128 kills | 1.000 | 0.984 | 0.33 / 0.47 s after the kill | 125 / 125 |
+| JOB EXP | 126 | 128 kills | 1.000 | 0.984 | 0.33 / 0.47 s after the kill | 121 / 121 |
+| ITEM | 73 | 72 pickups | 1.000 | 1.000 | 0.40 / 0.71 s after the pickup result | count 73 / 73 |
+
+- Misses (all 5 checked frame by frame):
+  - 2 identical repeats: the same damage and EXP as the kill before, nothing in between, so
+    nothing on screen changed;
+  - 1 overflow: 4 lines inside one 0.2 s frame interval;
+  - 1 EXP line "unseen", probably a repeat too.
+  The live logger runs at 10 Hz to halve the overflow window.
+- **As an authoritative "dead":**
+  - The base EXP line confirms a kill: 0 false lines in 126. It comes 0.33 s after the server's
+    vanish (p50), and its p90 is 0.48 s against the bot's own dead call's 3.51 s.
+  - It does not prove a target alive: 1.6 % of kills are invisible repeats. It also does not
+    name the unit: the damage line in the same frame gives the species only.
+- **As "landed" and the species struck:** the damage line is right after the fact (value and
+  name 125 / 125), but too late for a real-time "landed": 1.17 s after the hit (the client logs
+  it as applied). Hits that do not kill have not been seen yet (every hit killed at ATK 197).
+- **As the loot count:** the item lines are complete on run 1.
+- One session so far: these figures are confirmed only once runs 2-4 agree. Nothing is wired into
+  a decision; using it is a pre-registered version of its own (Batt's order: the version after
+  v42).
