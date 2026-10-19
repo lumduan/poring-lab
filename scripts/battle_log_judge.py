@@ -2,7 +2,7 @@
 """battle_log.py's lines against PACKETS, offline (Batt 2026-10-19). Packets are ground truth for
 JUDGING only (ADR-0007): nothing here reaches the bot.
 
-    battle_log_judge.py SID [SID ...] [--json]
+    battle_log_judge.py SID [SID ...]          (JSON on stdout; "pooled" sums several)
 
 Per session (/dev/shm/poring-lab-demo/SID/: packets.jsonl.gz, battle_log.jsonl and
 battle_log_frames.jsonl from `battle_log.py replay SID`):
@@ -15,14 +15,15 @@ battle_log_frames.jsonl from `battle_log.py replay SID`):
   EXP lines with a kill; N vs the base_exp / job_exp stat_change delta at the kill;
 - ITEM lines <-> our pickups (pickup_result ok): the count vs the packet's amount, the latency;
 - with engagements.json: the BASE EXP line as a dead signal against the bot's own dead call.
-A line is matched to the nearest unmatched truth event of its kind with truth in
-[line - MAX_LAT_S, line + LEAD_S] (frames are taken after the packet: the recorded frame shows
-the client ~0.5 s behind the server), the equal value first. Recall counts only truth inside
-the frames' span (first frame .. last frame - MAX_LAT_S). Every miss gets a reason from the
-reader's per-frame trace: other_tab (the chat showed another tab), frame_gap (no frame for
-> GAP_S around it), overflow (>= 3 new lines in one frame interval: any beyond 3 were never
-visible), garbage / held (a spoiled frame), misread (a line of another type at that time), or
-unseen.
+A line is matched to the EARLIEST unmatched truth event of its kind in [line - MAX_LAT_S,
+line + LEAD_S] (the log is in order; the recorded frame shows the client ~0.5 s behind the
+server), one with the equal value first. Recall counts only truth inside the frames' span
+(first frame .. last frame - MAX_LAT_S). Every miss gets a reason from the reader's per-frame
+trace: other_tab (the chat showed another tab), frame_gap (no frame for > GAP_S around it),
+overflow (>= 3 new lines in one frame interval: any beyond 3 were never visible), garbage (a
+spoiled frame), misread (an unclean or OTHER line at that time), identical_repeat (no line
+changed at all and the previous event of its kind had the same value: the scroll brought back
+exactly the lines it pushed out -- invisible to any reader of these 3 lines), or unseen.
 """
 
 from __future__ import annotations
@@ -144,7 +145,7 @@ def match(lines: Sequence[Mapping[str, Any]], truth: Sequence[Mapping[str, Any]]
 
 
 def miss_reason(t: int, trace: Sequence[Mapping[str, Any]], tts: Sequence[int],
-                lines: Sequence[Mapping[str, Any]]) -> str:  # fmt: skip
+                lines: Sequence[Mapping[str, Any]], same_as_prev: bool = False) -> str:  # fmt: skip
     """Why a truth event at ``t`` got no line: the reader's frames in [t - 0.5 s, t + MAX_LAT]."""
     lo = bisect.bisect_left(tts, t - NS // 2)
     hi = bisect.bisect_right(tts, t + int(MAX_LAT_S * NS))
@@ -164,6 +165,9 @@ def miss_reason(t: int, trace: Sequence[Mapping[str, Any]], tts: Sequence[int],
             and (x["type"] == "other" or not x.get("clean", True))]  # fmt: skip
     if near:
         return "misread"
+    seen = any(t - NS // 2 <= int(x["t_ns"]) <= t + int(MAX_LAT_S * NS) for x in lines)
+    if same_as_prev and not seen:
+        return "identical_repeat"
     return "unseen"
 
 
@@ -206,7 +210,10 @@ def judge(packets: Sequence[Mapping[str, Any]], lines: Sequence[Mapping[str, Any
         matched = {j for _, j in pairs if j is not None}
         inside = [k for k, x in enumerate(truth) if t_lo <= int(x["t"]) <= t_hi]
         missed = [k for k in inside if k not in matched]
-        reasons = Counter(miss_reason(int(truth[k]["t"]), trace, tts, lines) for k in missed)
+        reasons = Counter(miss_reason(int(truth[k]["t"]), trace, tts, lines,
+                                      k > 0 and tv is not None
+                                      and truth[k - 1].get(tv) == truth[k].get(tv))
+                          for k in missed)  # fmt: skip
         tab = {"n_lines": len(ls), "n_truth": len(inside),
                "precision": _rate(sum(1 for _, j in pairs if j is not None), len(ls)),
                "recall": _rate(len(inside) - len(missed), len(inside)),
