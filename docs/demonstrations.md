@@ -10832,6 +10832,33 @@ on for all (no blocks), switched in a commit before run 1 and recorded in this r
   - `hardbar_live.py watch 41 --pid <run 1>` beside it.
 - **Runs 2-4 are QUEUED:** `hunt_chain.py --version 41 --seeds 20300202,20300303,20300404` started
   detached at 07:29:34; it waits for run 1 to end, and binds each run's monitor to that run.
+- **Run 1 ended** on its time box (the chain logged run 2's start at 08:32:26), with 165
+  engagements: 138 dead, 26 skipped_risky, 1 gave up.
+  - Standard row: landing 133 / 165 = 80.6 % (73.9-85.9), 142.8 kills / h, 4.33 per sighting,
+    25.2 s per kill, sight 33.0 / 10 min, free targets attacked <= 10 s 38 % (n 224), steer
+    moving 39 %, seen -> click 3.43 s, death -> next 0.74 s.
+  - Dead calls without a real death 24 / 138 = 17.4 % (v40's runs: 22.5-29.4 %; the false-dead
+    fix now on every engagement); loot 105 / 176 = 60 % (15 to looters); reversals 7.42 / min.
+  - Creamy 2 hits (1 request) = 2.0 / h. Hard bars 0 / 0 / 0.
+  - **Per arm, ONE run (not the decision; `arm_judge.py walkers`):**
+
+    | measure | fix | base |
+    |---|---|---|
+    | walkers: engagements | 38 | 29 |
+    | walkers: near (7 cells) -> first click, mean | 2.86 s | 3.37 s |
+    | walkers: approach, mean | 5.57 s | 4.78 s |
+    | walkers: landing within 5 s | 30 / 38 = 78.9 % | 29 / 29 = 100 % |
+    | still targets: landing | 29 / 32 = 90.6 % | 37 / 46 = 80.4 % |
+    | all: landing | 63 / 82 = 76.8 % | 70 / 83 = 84.3 % |
+
+  - The run-1 monitor's live check of the pid binding: at 08:33:44 it logged "runner 1150363
+    gone: watch ends" while run 2's runner was already running. It did not latch onto run 2.
+- **Run 2** (08:32:28, seed 20300202, `20261019T083228-demo-hunt-flow41`, started by the chain).
+  Its screenshot `pre-v41-20300202.jpg` was judged at 08:34: no dialog, the standard windows, the
+  GM in its hunting state (Lv 70, HP full, weight 474 / 4970 after the weight clear, the dropped
+  items at its feet). Health: ASSIST, no lease.
+  - Runs 2-4 load code 7b51fab or later: the v42 candidate's code (8917272) is in it, inert in
+    v41 (no `steer_guard_box_px` in PARAMS[41]: tested).
 
 ### 3.83 hunt-flow@42: THE STEER'S WALK GUARD FROM THE GM'S BOX, with the route tail, interleaved per engagement (pre-registered 2026-10-19 07:46 ICT, the commit time e3fc195, BEFORE its runs; Batt's decision 1, 2026-10-19 ~07:00: "WALK GUARD (the #1 cause): approve a smaller radius for STEER clicks only (the walk-in toward a chosen target): from 120 px to the GM sprite's own box + a small margin (propose the value from data). Search walk clicks and loot clicks keep the current guard. Creamy hits are counted, not a stop (my rule); report Creamy hits per hour as this change's cost. Pre-register it as its own version after v41 (one change at a time), with steer moving share as the primary (Batt 92 %)")
 
