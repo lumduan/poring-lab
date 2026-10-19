@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -44,6 +45,74 @@ def test_item_fates_tell_picked_looted_gone_and_expired_apart() -> None:
     pos = {7: [(1 * S, (11, 11), 1002)]}
     fates = {f: it["fate"] for f, it in aj.item_fates(ev, pos, _mob_at).items()}
     assert fates == {1: "picked", 2: "looter", 3: "gone", 4: "expired"}
+
+
+def test_item_fates_tell_out_of_our_sight_apart_and_follow_an_item_back_into_view() -> None:
+    """2026-10-19: ZC_ITEM_DISAPPEAR also comes when OUR GM walks more than 14 cells away (rAthena
+    clif_outsight -> clif_clearflooritem, to our client only); the judge called those "gone"."""
+    gm = 2000002
+
+    def stop(t: float, x: int, y: int) -> dict[str, object]:
+        return {"t_mono_ns": int(t * S), "type": "entity_stop", "gid": gm, "x": x, "y": y}
+
+    def fall(f: int, x: int, y: int) -> dict[str, object]:
+        return {"t_mono_ns": 2 * S, "type": "floor_item_appear", "kind": "fall", "floor_id": f,
+                "x": x, "y": y}  # fmt: skip
+
+    def vanish(t: float, f: int) -> dict[str, object]:
+        return {"t_mono_ns": int(t * S), "type": "floor_item_vanish", "floor_id": f}
+
+    ev = [
+        stop(1, 10, 10), fall(1, 10, 10), fall(2, 11, 10), fall(3, 12, 10), fall(4, 13, 10),
+        fall(5, 14, 10),
+        stop(10, 10, 25), vanish(10, 1),  # 15 cells: out of our sight
+        stop(12, 13, 20), vanish(12, 2),  # 10 cells, nobody near: still "gone"
+        stop(20, 12, 24), vanish(20, 3),  # the track at 14 here ...
+        stop(20.1, 12, 25),  # ... and at 15 0.1 s later: out of sight (the track's lag)
+        stop(30, 13, 24), vanish(30, 4),  # at 14 and staying there: in sight, "gone"
+        {"t_mono_ns": 40 * S, "type": "floor_item_appear", "kind": "in_sight", "floor_id": 1,
+         "x": 10, "y": 10},  # item 1 back in our view, on its cell
+        {"t_mono_ns": 41 * S, "type": "pickup_request", "floor_id": 1},
+        {"t_mono_ns": 41 * S + 1, "type": "pickup_result", "ok": True},
+        vanish(41, 1),
+        stop(45, 14, 30), vanish(45, 5),  # out of sight ...
+        {"t_mono_ns": 50 * S, "type": "floor_item_appear", "kind": "in_sight", "floor_id": 5,
+         "x": 20, "y": 20},  # ... and its id back on ANOTHER cell: not the same item
+    ]  # fmt: skip
+    got = aj.item_fates(ev, {}, _mob_at)
+    want = {1: "picked", 2: "gone", 3: "out_of_sight", 4: "gone", 5: "out_of_sight"}
+    assert {f: it["fate"] for f, it in got.items()} == want
+    assert got[1]["t_out"] == 10 * S and got[1]["t_end"] == 41 * S
+    assert got[3]["t_out"] == 20 * S and got[2]["t_out"] is None
+    track = [(1 * S, (10, 10)), (10 * S, (10, 25))]
+    assert aj.out_of_sight(track, 10 * S, (10, 10)) and not aj.out_of_sight(track, 9 * S, (10, 10))
+    assert aj.out_of_sight(track, 10 * S - S // 5, (10, 10))  # 15 cells 0.2 s later
+
+
+V43_RUN1 = "20261019T152849-demo-hunt-flow43"
+
+
+@pytest.mark.skipif(not (aj.DEMO / V43_RUN1 / "packets.jsonl.gz").exists(),
+                    reason="the real session is local only")  # fmt: skip
+def test_item_fates_real_v43_run_items_that_left_our_sight_were_still_on_the_floor() -> None:
+    """v43 run 1 (a REAL session, judged before the fix): floor item 10960 fell at +352.03 s,
+    left our view at +367.11 (our GM 15 cells off), came back into it at +367.77 and +410.97, and
+    vanished at +412.03 -- 60.00 s after its fall, rAthena's floor-item lifetime: it lay there
+    all along (the old judge: "gone"). 11059 left our view at +2476.57, came back, and a Poring
+    took it at +2515.01. No vanish in this run is "gone" any more."""
+    import flow_judge as fj
+    import hunt_core as hc
+
+    s = aj.load(V43_RUN1)
+    t0 = json.loads((aj.DEMO / V43_RUN1 / "manifest.json").read_text())["t0_mono_ns"]
+    got = aj.item_fates(s["packets"], hc.walk_positions(s["packets"]), fj.mob_at)
+    it = got[10960]
+    assert it["fate"] == "expired"
+    assert (it["t_out"] - t0) / S == pytest.approx(367.11, abs=0.01)
+    assert (it["t_end"] - it["t_fall"]) / S == pytest.approx(60.0, abs=0.02)
+    assert got[11059]["fate"] == "looter" and got[11059]["t_out"] is not None
+    fates = Counter(x["fate"] for x in got.values())
+    assert fates["gone"] == 0 and fates["out_of_sight"] == 68
 
 
 def test_kills_and_their_drops() -> None:

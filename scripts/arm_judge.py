@@ -61,6 +61,15 @@ NS = 1_000_000_000
 TARGET_JOBS = (1002, 1063, 1113, 1008)  # prt_fild08's spawn table (farm0.TARGETS)
 EXPIRE_S = 55.0  # a floor item vanishing this long after it fell has expired (server: 60 s)
 LOOTER_CELLS = 1  # a monster within this Chebyshev distance at an item's vanish took it
+# rAthena AREA_SIZE: a client is sent the floor items within 14 cells (Chebyshev) of its char; one
+# that falls out of that square is cleared for THAT client only (clif_outsight ->
+# clif_clearflooritem), with the same ZC_ITEM_DISAPPEAR a pickup or an expiry sends to the area.
+SIGHT_CELLS = 14
+# flow_judge.gm_track replays our walk at GM_MS_CELL and runs up to ~0.2 s behind the server's own
+# step (2026-10-19: 65 of 718 out-of-sight vanishes over 12 runs had the track at 14 and at 15
+# <= 0.2 s later; of 1215 looter / pickup vanishes, 6 had it at 15 -- picked after coming back
+# into view, and 1 out-of-sight one the looter rule took -- and none within 2 s otherwise)
+SIGHT_LAG_S = 0.25
 
 
 def q(v: Sequence[float], p: float) -> float | None:
@@ -87,12 +96,40 @@ def load(sid: str) -> dict[str, Any]:
 # --- loot: where each dropped item went ----------------------------------------------------------
 
 
+def out_of_sight(track: Sequence[tuple[int, tuple[int, int]]], t: int, cell: tuple[int, int],
+                 ts: Sequence[int] | None = None) -> bool:  # fmt: skip
+    """PURE: our GM stood more than SIGHT_CELLS (Chebyshev) from ``cell`` at ``t`` or within
+    SIGHT_LAG_S after it (``track`` = flow_judge.gm_track(...)[0], time-sorted; ``ts`` its times,
+    when the caller has them): a floor item's vanish then is the server clearing it from OUR view,
+    not the item leaving the map."""
+    if ts is None:
+        ts = [p[0] for p in track]
+    i = max(0, bisect.bisect_right(ts, t) - 1)
+    j = bisect.bisect_right(ts, t + int(SIGHT_LAG_S * NS))
+    return any(max(abs(c[0] - cell[0]), abs(c[1] - cell[1])) > SIGHT_CELLS
+               for _t, c in track[i:j])  # fmt: skip
+
+
 def item_fates(packets: Sequence[Mapping[str, Any]], pos: Mapping[int, Sequence[Any]],
-               mob_at: Any) -> dict[int, dict[str, Any]]:  # fmt: skip
-    """PURE: floor_id -> {t_fall, cell, fate, t_end}. fate: "picked" (our pickup answered ok),
-    "looter" (vanished early, a monster within LOOTER_CELLS of it then), "gone" (vanished early,
-    no monster near: another cause), "expired" (>= EXPIRE_S after the fall), "left" (still there
-    at the end). ``pos`` / ``mob_at`` = hunt_core.walk_positions + flow_judge.mob_at."""
+               mob_at: Any, track: Sequence[tuple[int, tuple[int, int]]] | None = None,
+               ) -> dict[int, dict[str, Any]]:  # fmt: skip
+    """PURE: floor_id -> {t_fall, cell, fate, t_end, t_out}. fate: "picked" (our pickup answered
+    ok), "out_of_sight" (it left OUR view while still on the floor -- our GM walked more than
+    SIGHT_CELLS away -- and did not come back into it), "looter" (vanished early, a monster within
+    LOOTER_CELLS of it then), "gone" (vanished early IN sight, no monster near: another cause),
+    "expired" (>= EXPIRE_S after the fall), "left" (still there at the end). An out-of-sight item
+    that comes back into view (floor_item_appear kind "in_sight": the same floor id on the same
+    cell) is followed on: its next vanish decides; ``t_out`` keeps when it first left our view.
+    ``pos`` / ``mob_at`` = hunt_core.walk_positions + flow_judge.mob_at; ``track`` = our GM's
+    flow_judge.gm_track(packets)[0], computed here when None.
+    2026-10-19 (the judge check of P1's 28 % "gone"): before ``out_of_sight`` existed, ALL 718
+    "gone" items of 12 runs (v40, v41, v43) were out-of-sight vanishes -- our GM at 15 cells, or at
+    14 and at 15 <= 0.2 s later -- and none had a pickup request, a pickup act or a player near."""
+    if track is None:
+        import flow_judge as fj
+
+        track = fj.gm_track(packets)[0]
+    ts = [p[0] for p in track]
     items: dict[int, dict[str, Any]] = {}
     ours: set[int] = set()
     pend: int | None = None
@@ -106,7 +143,12 @@ def item_fates(packets: Sequence[Mapping[str, Any]], pos: Mapping[int, Sequence[
             alive.discard(int(e["gid"]))
         elif typ == "floor_item_appear" and e.get("kind") == "fall":
             items[int(e["floor_id"])] = {"t_fall": t, "cell": (int(e["x"]), int(e["y"])),
-                                         "fate": "left", "t_end": None}  # fmt: skip
+                                         "fate": "left", "t_end": None, "t_out": None}  # fmt: skip
+        elif typ == "floor_item_appear" and e.get("kind") == "in_sight":
+            it = items.get(int(e["floor_id"]))
+            if (it is not None and it["fate"] == "out_of_sight"
+                    and it["cell"] == (int(e["x"]), int(e["y"]))):  # fmt: skip
+                it["fate"], it["t_end"] = "left", None  # back in our view: follow it on
         elif typ == "pickup_request":
             pend = int(e["floor_id"])
         elif typ == "pickup_result" and pend is not None:
@@ -121,6 +163,10 @@ def item_fates(packets: Sequence[Mapping[str, Any]], pos: Mapping[int, Sequence[
             it["t_end"] = t
             if f in ours:
                 it["fate"] = "picked"
+            elif out_of_sight(track, t, it["cell"], ts):
+                it["fate"] = "out_of_sight"
+                if it["t_out"] is None:
+                    it["t_out"] = t
             elif (t - it["t_fall"]) / NS >= EXPIRE_S:
                 it["fate"] = "expired"
             else:
