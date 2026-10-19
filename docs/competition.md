@@ -1211,6 +1211,11 @@ cause; fix it as a bug if it's the layout."
 
 **What did differ (not attributable: v43 was not interleaved with the standard layout):**
 - Items lost to looters, of the drops at our kills: v41 r4 9 %, v43 r1 18 %, v43 r3 25 %.
+  ➡️ **SUPERSEDED 2026-10-19 21:16 (the loot-fate check below):** these three shares do not
+  reproduce, and their base was not recorded. On the fixed judge (`loot_fates.py runs`, the
+  drops of the engagements' kills) they are 14.0 / 12.5 / 20.0 %. Looters barely moved across the
+  layouts (v41 14.2 %, v43 15.1 % pooled). **v43's drop is in items LEFT BEHIND, out of our
+  sight (43.0 % vs 27.8 %), with a worse death cell (exact 31 % vs 41 %).**
 - The death-cell verdict "ok": v41 55 / 50 / 49 % vs v43 42 / 41 / 32 %, with more
   "still_visible". It does not move the loot clicks: the death cell comes from the target's box
   at our hit ("anim") in every run. It feeds only the false-dead fix's "skipped_risky".
@@ -1243,6 +1248,10 @@ and the items that fell at that kill within 2 cells of the bot's death cell: 710
   3 x 3 the step clicks; 18 % outside it (the death cell's own error).
 - **Fates:** picked 410 (58 %), "gone" 201 (28 %: vanished early, no monster near; unexplained),
   lost to looters 99 (14 %).
+  ➡️ **SUPERSEDED 2026-10-19 21:16 (the loot-fate check below; the judge fixed in 552401e):**
+  "gone" was the server clearing an item from OUR view when the GM walked more than 14 cells
+  away; the items were LEFT BEHIND on the floor. Without 4 items counted twice: 706 items, picked
+  410 (58.1 %), out_of_sight 200 (28.3 %), looters 96 (13.6 %), gone 0.
 - **Looter timing:** p25 0.16 s, p50 1.69 s, p75 4.47 s after the loot step's start. A quarter go
   at once, before any order can matter.
 - **The order's counterfactual:** for the 72 looter-lost items inside the 3 x 3, the click that
@@ -1261,7 +1270,10 @@ and the items that fell at that kill within 2 cells of the bot's death cell: 710
   with reversals as the primary and loot as a guard.
 - The loot levers the data points to instead:
   1. the 18 % of drops outside the clicked 3 x 3 (the death-cell estimate);
+     ➡️ ANSWERED 21:16 (below): 28.4 % on the kill base (P1's 2-cell window missed half), 76 % of
+     them because the bot's death cell was off;
   2. the 28 % "gone" (is it real, or our pickups the judge misses?: a judge check first);
+     ➡️ ANSWERED 21:16 (below): left behind out of our sight; the judge is fixed;
   3. the time to START the loot (v44, the EXP line, aims at it).
 
 ## P3's offline study: heading-aware dispatch (Batt ~19:5x: "P3: offline study only")
@@ -1313,4 +1325,67 @@ and the items that fell at that kill within 2 cells of the bot's death cell: 710
 - primaries: reversals outside loot / min and kills / h (>= 0.95 x);
 - 10-min blocks, as v45 / v46. The threshold stays at 10 cells (> 6 would gain a little more,
   +4.2, but it reaches the near targets the GM can turn to).
+
+## The loot-fate check (Batt's overnight brief, 2026-10-19; offline, a subagent, 20:44-21:15)
+
+Batt: "check the judge's unexplained 28 % 'gone' fate first, then size the 18 % of drops outside
+the clicked 3x3 ... Report only; no bot change tonight." Scorer: `scripts/loot_fates.py`
+(80c7f55); the judge fix in `arm_judge.item_fates` (552401e). Both are tested on a REAL v43 run 1
+case.
+
+**1. "Gone" was the judge's error: those items were LEFT BEHIND, out of our sight.**
+- The vanish packet has no reason field. rAthena sends it:
+  - to the area when an item is picked up or expires;
+  - to ONE client when its character walks more than 14 cells away from the item (AREA_SIZE).
+- The archive is our client's view, so it shows all three the same way.
+- Over 12 runs (v40, v41, v43; 1,979 drops), all 718 "gone" items had our GM at 15 cells at the
+  vanish, or at 14 and at 15 within 0.2 s.
+- 50 of P1's 201 came back into view later (the same floor id on the same cell). One fell at
+  +352 s and vanished at +412 s: rAthena's 60-s floor lifetime.
+- No missed pickups (887 pickup acts = the judge's 887 picked), no other player, no wide looter
+  (all 328 looter items had a Poring / Drops within 1 cell).
+- The fix: a new fate `out_of_sight`. "Gone" now means "vanished in sight, no monster near": 0
+  items in 12 runs. Picked counts are unchanged; looter +16 / -1 over 12 runs.
+- Why the step left them (P1's 200): 39 % lay outside the 3 x 3; 87 lay inside, on a cell the step
+  skipped (3.3 skips per step: units 3.0); 35 had their cell clicked with no pickup request
+  following; 17 fell after the step started. They left our view p50 5.8 s after the step's end.
+
+**2. The drops outside the clicked 3 x 3: 28.4 %, mostly the death cell's fault.**
+- The kill base: each loot step matched to its server kill, all the kill's drops; 957 items.
+  - Inside the 3 x 3: 71.6 % (picked 484 / 685).
+  - Ring 2: 14.4 % (picked 28 / 138).
+  - Beyond: 14.0 % (picked 6 / 134).
+- The bot's loot cell vs the server's death cell (n 712): exact 37 %, 1 off 28 %, 2 off 14 %, 3 off
+  9 %, 4-6 off 12 %.
+- 76 % of the outside items lie within 1 cell of the SERVER's death cell. The drops' own scatter is
+  tight: 85 % within 1 cell of the real death cell (centre 43 %, SE 17 %, N 9 %).
+- **The biggest lever is the death-cell estimate.** With the 3 x 3 on the true death cell, 85 % of
+  drops would be inside it instead of 71.6 %: about +14 items / h at today's in-3x3 pick rate, with
+  no extra click time. It is an upper bound: the server cell is itself a +-1-cell model.
+- Clicking extra cells costs kills. The time is measured at 0.274 s per click and 0.036 s per skip;
+  each kill is worth 0.728 items.
+
+  | option | items / h gained (in-sample / held-out) | s per step | kills / h | net items / h |
+  |---|---|---|---|---|
+  | 5 x 5 (16 ring-2 cells) | 7.4 / 7.7 | 2.25 | -9.0 | +0.9 / +1.1 |
+  | top 4 ring-2 cells | 4.2 / 2.6 | 0.78 | -3.1 | +1.9 / +0.3 |
+  | item icons outside the 3 x 3 (in-sample only, n 45) | ~5.0 | 0.15-0.33 | -0.6 .. -1.3 | ~+4 |
+
+  - No ring-2 cell is "hot": the outside offsets spread evenly and differ between versions.
+- Nothing was built (Batt: report only).
+
+**3. Items lost to looters, per run (the fixed judge; the drops of the engagements' kills):**
+
+| pool | kills | items | picked | looters | left behind | in 3x3 | death cell exact / <= 1 |
+|---|---|---|---|---|---|---|---|
+| v40 (4 runs) | 500 | 617 | 59.6 % | 13.5 % | 26.7 % | 74.7 % | 41 / 69 % |
+| v41 (4 runs) | 456 | 648 | 57.9 % | 14.2 % | 27.8 % | 76.2 % | 41 / 70 % |
+| v43 runs 1, 3, 4 | 310 | 405 | 42.0 % | 15.1 % | 43.0 % | 64.8 % | 31 / 58 % |
+
+- The v43 drop is NOT looters: it is items left behind, with a worse death cell, and so fewer drops
+  inside the clicked 3 x 3.
+- The pick rate inside the 3 x 3 is unchanged (70.8 % vs 70.6 %).
+- It is not attributable (v43 was not interleaved). v42 has the same layout and will show whether
+  it repeats: compare left behind %, in 3x3 % and death cell exact % with looters %
+  (`loot_fates.py runs <SID> ...`).
 
