@@ -11036,6 +11036,25 @@ scratch, their rules now in the code's docstring and tests):**
     AFTER v43's verdict. Its base becomes the base v43's verdict leaves (v41's verdict, then
     v43's), recorded in this run log with PARAMS[42] before run 1.
   - Nothing else changes: the margin, the prediction, the decision rule.
+- **AMENDMENT 2 (2026-10-19 18:4x ICT, before any run of this version; Batt 18:0x: "'Stuck by
+  displacement' (run 2 lost 53 min in the cliff/pond pocket): make it a BUG FIX riding with v42
+  ... Test it on run 2's positions offline before the run"):**
+  - The pocket escape (code 8d0d25b, inert until PARAMS[42]) rides with v42 as a bug fix, for
+    both arms: `stuck_window_s` 60, `stuck_extent` 18, `stuck_walked` 80, `stuck_escape_min` 26,
+    `stuck_zone_r` 22, `stuck_zone_s` 300.
+  - Stuck = over the last 60 s, mostly searching, every cell of ours within 18 of their centre
+    while >= 80 cells were walked. Escape = the nearest cell reachable on the grid (BFS) >= 26
+    cells from the pocket's centre, walked by A*; the pocket is blacklisted 5 min (a heading goal
+    inside it escapes again).
+  - Why a spread, not Batt's literal "net displacement over ~20-30 s under a few cells": in run
+    2's stall the GM kept crossing the ~25 x 30-cell pocket, and the net displacement over 25 s was
+    under 4 cells in only 9 % of its search samples (1.3 % in a normal run). The 60-s spread
+    (p50 15 cells in the stall vs 50 in normal search) separates them.
+  - Offline on the REAL runs (the bot's own grid, packets' positions): on v43 run 2 it fires at
+    minute 8:36, the stall's start, with an escape goal (327, 105) 27 cells from the pocket's
+    centre and a 35-cell A* path out; on v43 run 1 and v41 runs 1, 2, 4 it never fires. Tests:
+    synthetic + the real-run case.
+  - Reported with v42: stuck_escape events, and the minutes any run spends in a pocket.
 
 ### 3.84 hunt-flow@43: THE HUNTING UI LAYOUT (Batt's three spots), with the dead-end ping-pong fix (pre-registered 2026-10-19 15:03 ICT, the commit time 23d41f5, BEFORE its runs; Batt's order ~08:4x: "Batt's UI layout change for hunting ... Do it as its own pre-registered version at a run boundary ... between v41 and the steer-guard version"; 13:3x: the combat log tab; 14:0x: "keep the order: finish the LAYOUT version (v43) now"; the ping-pong bug: "fix it ... include it in the next version's pre-registration as a fix")
 
@@ -11250,6 +11269,11 @@ screenshot before run 1; the chain for runs 2-4.
   call), whatever the verdict.
 
 **Run log (written during the runs):**
+- **AMENDMENT (2026-10-19 18:4x ICT, before any run of this version):** renumbered to
+  **hunt-flow@46** (was @45). Batt's 18:0x queue change puts "EXP line = dead" (3.87, v44)
+  right after v42; the run order is now v42 -> v44 (EXP-dead) -> v45 (the aborted-steer fix,
+  3.86) -> v46 (the locked-pointer walk, 3.85). The base follows the previous version's verdict,
+  as written; nothing else changes.
 
 ### 3.86 hunt-flow@44: COMMIT TO A TARGET LIKE A PLAYER (the aborted-steer fix), interleaved in 10-min blocks (pre-registered 2026-10-19 16:26 ICT, the commit time 1a6e139, BEFORE its runs; Batt 16:2x: "Rank the ABORTED-STEER fix right after v42, ahead of the locked-pointer walk (it's the largest reversal source: 41 %). Design it from the data ... then commit rules like a player ... Pre-register with 'aborted steers per min' and 'reversals outside loot' as primaries")
 
@@ -11332,6 +11356,69 @@ x 4 / v40 x 4 / v41 x 4):**
 - ADOPT if 1, 2, 3, 4 and 5 pass.
 - If 1 passes and 2 fails: fewer aborts but no fewer reversals: NOT adopted; reported.
 - If 1 fails: NOT adopted.
+
+**Run log (written during the runs):**
+- **AMENDMENT (2026-10-19 18:4x ICT, before any run of this version):** renumbered to
+  **hunt-flow@45** (was @44). Batt's 18:0x queue change puts "EXP line = dead" (3.87, v44)
+  right after v42; the run order is now v42 -> v44 (EXP-dead) -> v45 (the aborted-steer fix,
+  3.86) -> v46 (the locked-pointer walk, 3.85). The base follows the previous version's verdict,
+  as written; nothing else changes.
+
+### 3.87 hunt-flow@44: DEAD = THE BATTLE LOG'S EXP LINE, interleaved per engagement (pre-registered 2026-10-19, the commit time below, BEFORE its runs; Batt 18:0x: "'EXP line = dead' (Battle Log reader, validated ...): pre-register it as the version right after v42 (before v44). Dead = the EXP line for our target's engagement window (pixel fallback when no line within ~1 s). Primaries: kill -> loot start, dead calls without a real death; guards: loot picked, landing, hard bars")
+
+**Why (competition.md "The Battle Log reader"):**
+- The reader's base EXP line confirms a kill of ours: precision 0.986 and recall 0.986 on v43 runs
+  1-2 (142 / 144), 0.33 s after the kill (p50; p90 0.47 s).
+- The bot's own dead call comes 0.50 s (p50) but 2.58-3.51 s (p90) after the kill; and 19.5-23 %
+  of its dead calls have no real death behind them.
+- A faster sure "dead" starts the loot sooner: the race against looters (89 items lost to
+  looters in v41's 4 runs).
+
+**The ONE main change (the dead decision, fix arm = odd k):**
+- The runner reads the Battle Log tab LIVE (battle_log.py's reader on the runner's own frames,
+  10 Hz; the hunting layout shows the tab).
+- **Dead = a new BASE EXP line** that first appears after our engagement's first damaging strike
+  and before its end: the engagement ends "dead" at once (the loot step starts).
+- **The fallback, CHECKED:** when the pixel dead rule calls dead and no EXP line appears within
+  1.0 s after it, the pixel call stands only if the death-cell verdict says "ok" (v40's signal,
+  here on every burst); otherwise the engagement ends "skipped_unconfirmed" (no loot step, the
+  track stays selectable, as v40's skipped_risky).
+  - Batt's wording was "pixel fallback when no line within ~1 s". An unchecked fallback would
+    call every still-alive target dead exactly as today (no EXP line for it), so primary 2 could
+    not move. The check is v40's adopted signal. This is the agent's design call, flagged to Batt
+    before the runs.
+- Base arm (even k): the dead rule as the base has it.
+- No new click site; every gate unchanged.
+
+**Base:** the base v42's verdict leaves (with the pocket escape); PARAMS[44] is committed after
+it and before run 1.
+
+**Runs:** 4 x 60 min on prt_fild08, seeds 20350101, 20350202, 20350303, 20350404, in the hunting
+layout (v43's verdict decides whether the layout stays; the reader needs the Battle Log tab
+shown, so a non-adopted v43 means this version restores the tab itself, recorded in its run log).
+
+**What 4 run-hours can resolve (measured BEFORE this entry, 12 banked runs v39-v41, per-engagement
+splits: parity + 4 balanced, per 4-run pool):**
+
+| measure | pooled base | 95 % null range |
+|---|---|---|
+| kill -> loot start, mean (packets: the kill, the loot step's start) | 1.50 s (p50 0.80, p90 4.41; n 1,327) | -26 % .. +16 % |
+| dead calls without a real death (flow_judge.dead_call_truth) | 23.2 % | ratio 0.64 .. 1.35 |
+
+**Prediction, written before the runs (4 runs pooled, per arm):**
+1. **Primary:** kill -> loot start, mean, fix <= 0.60 x base.
+2. **Primary:** dead calls without a real death, fix <= 0.55 x base.
+3. **Guard:** loot picked / dropped at our kills, fix >= base - 5 points (the skipped_unconfirmed
+   real kills lose their loot).
+4. **Guard:** landing within 5 s, fix >= base - 8 points.
+5. **Hard bars:** zero NPC contact, zero map change, zero non-Creamy non-target hit. A Creamy hit
+   is counted, not a stop.
+6. **Reported, not deciding:** items lost to looters per arm (expected fewer); the
+   skipped_unconfirmed count and how many were real kills; EXP lines with no kill of ours behind
+   them (the reader's live precision); kills / h; death -> next click.
+
+**Decision rule:** ADOPT if 1, 2, 3, 4 and 5 pass. If 1 passes and 2 fails: faster but not
+truer: NOT adopted (reported). If 3 fails: it costs loot: NOT adopted.
 
 **Run log (written during the runs):**
 
