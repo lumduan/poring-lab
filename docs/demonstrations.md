@@ -11037,6 +11037,79 @@ scratch, their rules now in the code's docstring and tests):**
     v43's), recorded in this run log with PARAMS[42] before run 1.
   - Nothing else changes: the margin, the prediction, the decision rule.
 
+### 3.84 hunt-flow@43: THE HUNTING UI LAYOUT (Batt's three spots), with the dead-end ping-pong fix (pre-registered 2026-10-19, the commit time below, BEFORE its runs; Batt's order ~08:4x: "Batt's UI layout change for hunting ... Do it as its own pre-registered version at a run boundary ... between v41 and the steer-guard version"; 13:3x: the combat log tab; 14:0x: "keep the order: finish the LAYOUT version (v43) now"; the ping-pong bug: "fix it ... include it in the next version's pre-registration as a fix")
+
+**The change (code 0b9da9d + the rows fix; PARAMS[43]):**
+- The client's HUNTING layout (docs/client/rathena-client.md "The hunting UI layout"): the hotkey
+  bar shows one row; the menu icon panel is collapsed; the chat window shows its Battle Log tab
+  (battle, EXP, item get/drop lines: Batt's category set).
+- It is applied by the runner at its start through the client's own controls
+  (`client_layout.ensure`, each step verified on pixels; unreadable -> stop), and the run's UI
+  rectangles follow it (`route_preview.UI_WINDOWS`: the panel and three hotbar rows are no longer
+  masked). The /where fallback switches to Regular Chat and back.
+- The UI covers 21.0 % of the game frame in the standard layout, 13.6 % in the hunting one: the
+  play area goes from 79.0 % to 86.4 %.
+- On v40's runs 1-2, 9.3 % of the in-view target seconds were under the UI (ui_cover.py): hotkey
+  bar 4.7 %, chat 2.9 %, Basic Info + panel 2.1 %. The hunting layout uncovers about 3.5 + 1.9 =
+  5.4 % of them (the chat stays).
+- **The fix (Batt: a bug, not a design change):** `dead_end_hyst_s` 10 -- a second dead end within
+  10 s of the last search-heading reversal does not reverse again; the best of the 8 compass
+  headings instead (test: a two-sided dead end reversed on every call before, once now). v39 run
+  2's episode alone added ~47 reversals.
+- Not interleaved: the layout cannot switch per engagement. Compared with the base's last 12 runs
+  in the standard layout (v39 x 4, v40 x 4, v41 x 4: the same base apart from the arms each tested,
+  none of them on perception).
+- The Battle Log reader is LOG-ONLY (Batt's decision 3): built from run 1's recorded frames, then
+  logged beside each run; it decides nothing in this version.
+
+**Base:** v41 NOT adopted (3.82, 5974260) -> PARAMS[40] with the false-dead fix on every
+engagement (`false_dead_ab` False). PARAMS[43] = that + `ui_layout` "hunt" + `dead_end_hyst_s` 10.
+
+**Runs:** 4 x 60 min on prt_fild08, seeds 20320101, 20320202, 20320303, 20320404. A judged
+screenshot before run 1; `hunt_chain.py` for runs 2-4 (each run's monitor bound to its pid).
+After run 4: the standard layout (`client_layout.py ensure standard`), then the standard Lv 1 state.
+
+**The ruler (`scripts/layout_judge.py`, measured BEFORE this entry on the 12 standard-layout runs;
+4-run pooled vs the 12-run pool, all 495 subsets):**
+
+| measure | 12-run pooled | 95 % range of a 4-run pool |
+|---|---|---|
+| bot-seen / 10 min (windowed: target lives the bot's own detector boxed) | 55.2 | -13.5 % .. +12.5 % |
+| bot-seen / server-seen (both windowed; density removed) | 1.725 | -10.4 % .. +10.2 % |
+| detected share (boxed lives / lives on screen) | 0.911 | -2.7 % .. +2.2 % |
+| first detections in the uncovered area | 0.018 | -56 % .. +62 % |
+| on screen -> detected, p50 | 0.78 s | -2.0 % .. +2.5 % |
+
+- Why not the standard "seen / 10 min": it counts monsters the SERVER sends into our view
+  (packets); a screen layout cannot change it. The bot-side measures above are its analogue.
+- A ~5 % gain in raw seen per 10 min is below what 4 run-hours resolve (+-10-13 %); the detected
+  share's ruler is tight enough.
+
+**Prediction, written before the runs (v43's 4 runs pooled vs the 12-run pool):**
+1. **Primary (the mechanism):** first detections in the uncovered area >= 0.05 (pooled 0.018; the
+   null's top 0.029).
+2. **Primary (the outcome, Batt's "monsters seen"):** the detected share >= 1.03 x the pool (0.911
+   -> >= 0.938; the null's top +2.2 %).
+3. **Guard:** landing within 5 s >= the pool - 8 points (the 12 runs' pooled landing, `run_row`).
+4. **Hard bars:** zero NPC contact, zero map change, zero non-Creamy non-target hit. A Creamy hit
+   is counted, not a stop.
+5. **Reported, not deciding:**
+   - bot-seen / 10 min and bot-seen / server-seen, with their rulers; kills per sighting; kills / h;
+   - the standard run row (with Creamy hits / h) for every run;
+   - dead-end reversals (heading turns of 180 within 10 s of the last) per run: expected ~0 (the
+     fix), and reversals / min, also outside loot steps (Batt's new column);
+   - the Battle Log reader's lines, log-only.
+
+**Decision rule:**
+- ADOPT if 1, 2, 3 and 4 pass: the hunting layout becomes the hunting fixed state.
+- If 1 fails, the layout did not show the bot anything new: NOT adopted (a fault to explain).
+- If 1 passes and 2 fails: the bot sees in the new area but not more overall: NOT adopted;
+  reported for Batt (the layout may still be kept for the combat log, his call).
+- The ping-pong fix is a bug fix: it stays in the base whatever the verdict, unless it breaks a
+  hard bar.
+
+**Run log (written during the runs):**
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.

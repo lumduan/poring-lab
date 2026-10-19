@@ -386,6 +386,71 @@ Batt's decision: a 1280×720 client area, **frozen for Phase 2** (docs/phase2-pl
   - secrets are re-verified every 4 characters;
   - measurements refuse to run with a console visible.
 
+## The hunting UI layout (2026-10-19, Batt's three spots; `scripts/client_layout.py`)
+
+Batt's order: "players do this; it uncovers play area". Changed only through the client's own UI
+(the mux, the UI gate on). No client file was edited. The client keeps it across sessions.
+
+**What it is (measured on the live client, 2026-10-19 14:3x):**
+
+| part | standard layout | hunting layout | the control |
+|---|---|---|---|
+| hotkey bar | 4 rows, (230, 0)-(520, 132) | row 1 only, (230, 0)-(520, 33); the Fly Wing stays in slot 1 | F12 cycles 4 rows -> hidden -> 1 -> 2 -> 3 -> 4 |
+| menu icon panel | under Basic Info, to y 326 | collapsed: Basic Info ends at y 143; HP / SP / levels / weight stay | Basic Info's own arrow at (109, 138) (up = expanded, down = collapsed) |
+| chat window | one window, (0, 531)-(600, 626) | the same place; tabs "Battle Log, Regular Chat"; Battle Log shown | a click on a tab: Battle Log (42, 538), Regular Chat (119, 538) |
+
+- The UI covers 21.0 % of the game frame in the standard layout and 13.6 % in the hunting one: the
+  play area goes from 79.0 % to 86.4 %.
+- The standard layout keeps the same chat window; only Regular Chat is shown there. The tab ORDER
+  changed (Battle Log is now first): see the chat window below.
+
+**The chat window (Batt arranged it himself, recorded: human-ui-setup `20261019T135848`; frames on
+the NAS `human-demos/`, his input log local only):**
+- It does NOT move by its tabs. Batt dragged the Battle Log tab up 66 px (t 4.3 s) and along the
+  strip 126 px (t 12.8 s): it stayed put. The agent's three drags from the tab strip did the same,
+  and each became a hold-to-walk: the chat's message area and the empty part of its tab strip are
+  CLICK-THROUGH (the press reaches the ground). Only the tabs and the icons are solid.
+- A tab dragged out of the window DETACHES into its own small window (the agent's drag of Regular
+  Chat, 2026-10-19 13:0x). Batt re-attached it:
+  1. a click on the detached window's body (187, 649) brings it in front (it was behind);
+  2. a drag of its tab from (50, 571) onto the main window's tab strip (136, 539): it joins as
+     the second tab.
+- The tab's settings: the round icon on the window's top right (537, 539) opens "<tab> message log
+  settings": a scrolled list of categories, each with an ON / OFF toggle, and an "all on" box.
+  Close with its x (993, 308).
+- **Battle Log's categories** (the agent's four, then Batt's; read from his frames):
+  - ON: Item get/drop, Equipment on/off, Abnormal status, Skill failure, Damaged equipment, Battle
+    message, Party member's battle message, Experience message, Battlefield message.
+  - OFF: Public, Public Chat, Whisper, Party Chat, Guild Chat, Party member's obtained item, Party
+    member's abnormal status, Party configuration, WOE Information, Quest information, Clan Chat,
+    Display Call messages.
+- Typed commands still go through the shared input row (the typing path re-proven: one GM line,
+  `chat_open` signature unchanged). Their replies land on Regular Chat; the hunting layout shows
+  Battle Log, so the runner switches to Regular Chat around /where and back.
+
+**Restore by script (live-proven both ways, 2026-10-19 14:58):**
+
+    uv run python scripts/client_layout.py read             # no input
+    uv run python scripts/client_layout.py ensure hunt      # F12 x2, the arrow, the Battle Log tab
+    uv run python scripts/client_layout.py ensure standard  # F12 x3, the arrow, the Regular Chat tab
+
+- Each step is verified on pixels (templates `data/ui_anchors/layout/*.npy`: client pixels, local
+  only). An unreadable state stops; it never acts blind.
+- The runner applies `PARAMS[v]["ui_layout"]` at its start (v43+), and its UI rectangles follow
+  the layout (`route_preview.UI_WINDOWS` from `client_layout.RECTS`).
+- The end of a session restores the standard layout first, then the standard Lv 1 state.
+
+**Re-proven in the hunting layout before any run (2026-10-19 14:1x-14:5x):**
+- the typing path (one GM line through the UI gate; `chat_open` 152.6 closed vs <= 6 open);
+- `ui_gate.py check` "clear"; `ui_gate.py prove-windows` PASS for status, skills, inventory,
+  equipment;
+- `gm_state.check(profile="hunt-flow")` "fixed" (0.0 / 0.0); the weight read twice 489 / 4970;
+- the chat tab switch both ways (Regular Chat shows the GM line's reply);
+- the run's UI masks (route_preview / ui_mask / work_zone / loot1) follow the layout (tests).
+- Not used at run time any more: the "You got" chat cue (the fixed loot workflow does not read it).
+  The badge `gm_state.BADGE_BOX` sits inside the icon panel: collapsed, it is not seen (the
+  standard restore expands the panel first).
+
 ## Server side (this repo)
 
 - PACKETVER 20211103 and **PRE-RENEWAL** (`RATHENA_PRERE=yes`).
