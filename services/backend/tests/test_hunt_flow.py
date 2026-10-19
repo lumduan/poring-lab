@@ -1162,3 +1162,29 @@ def test_pocket_escape_on_v43_run_2s_real_positions() -> None:
     eg = hf.escape_goal(area, c, pk, 26.0)
     assert eg is not None and hc.astar(area, c, eg) is not None
     assert first_fire(normal) is None
+
+
+def test_p4_candidate_135_turns_only_when_0_45_90_are_blocked() -> None:
+    """P4 (Batt 2026-10-19: "reverse only when 0/45/90 are all blocked; matches my rule"), STAGED:
+    with no135, the coverage heading takes +-135 only when no heading within +-90 runs; inert
+    unless PARAMS set cov_135_only_blocked."""
+    area = np.zeros((60, 60), dtype=bool)
+    area[30, 30:40] = True  # east: a short run (10 cells)
+    for k in range(1, 25):  # south-west at 135 deg from east: a long fresh run
+        area[30 + k, 30 - k] = True
+    here = (30, 30)
+    swept = np.full((60, 60), -1e9)
+    swept[28:33, 30:41] = 99.0  # the east run was just swept: low fresh share
+    st: dict[str, object] = {"ang": 0.0}
+    hf.heading_goal_cov(area, here, st, swept, 100.0, min_run=8)
+    assert abs(float(st["turn"])) == 135.0  # today: the long fresh 135 wins over the swept east
+    st2: dict[str, object] = {"ang": 0.0}
+    hf.heading_goal_cov(area, here, st2, swept, 100.0, min_run=8, no135=True)
+    assert float(st2["turn"]) == 0.0  # P4: east still runs >= 8, so no 135 turn
+    blocked = area.copy()
+    blocked[30, 31:40] = False  # now nothing within +-90 runs
+    st3: dict[str, object] = {"ang": 0.0}
+    hf.heading_goal_cov(blocked, here, st3, swept, 100.0, min_run=8, no135=True)
+    assert abs(float(st3["turn"])) == 135.0  # blocked: the 135 is allowed
+    for n in hf.PARAMS:
+        assert not hf.PARAMS[n].get("cov_135_only_blocked")

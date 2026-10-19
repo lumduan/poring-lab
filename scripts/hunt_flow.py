@@ -1043,7 +1043,7 @@ def fresh_share(swept: Any, now: float, cell: Sequence[int], half: int, recent_s
 def heading_goal_cov(area: Any, here: Cell, st: dict[str, Any], swept: Any, now: float,
                      recent_s: float = 180.0, half: int = 12, keep: float = 0.8,
                      max_len: int = 40, min_run: int = 8,
-                     hyst_s: float = 0.0) -> Cell | None:  # fmt: skip
+                     hyst_s: float = 0.0, no135: bool = False) -> Cell | None:  # fmt: skip
     """PURE (v22, the SEARCH GAP: the bot swept 0.63x Batt's ground per 10 min -- overlap, turning
     back, short net legs): v18's heading search with a memory of the bot's OWN swept ground.
     The current heading and the +-45 / +-90 / +-135 deg turns that run >= ``min_run`` cells each
@@ -1059,6 +1059,10 @@ def heading_goal_cov(area: Any, here: Cell, st: dict[str, Any], swept: Any, now:
             continue
         f2 = fresh_share(swept, now, c2, half, recent_s)
         cands.append((n2 * (0.25 + f2), deg, sgn, a2, c2, f2))
+    if no135 and any(c[1] <= 90 for c in cands):
+        # P4 (Batt 2026-10-19, "reverse only when 0/45/90 are all blocked; matches my rule"):
+        # the +-135 turns (a reversal by the 120-deg rule) only when nothing within +-90 runs
+        cands = [c for c in cands if c[1] <= 90]
     if not cands:
         if hyst_s and now - float(st.get("rev_t", -math.inf)) < hyst_s:
             # the dead-end PING-PONG fix (Batt 2026-10-19, a bug: v39 run 2 flipped between two
@@ -3771,6 +3775,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                     prm["cov_keep"],
                                     min_run=prm["heading_min_run"],
                                     hyst_s=float(prm.get("dead_end_hyst_s") or 0.0),
+                                    no135=bool(prm.get("cov_135_only_blocked")),
                                 )
                             else:
                                 goal = heading_goal(area, here_, heading_st, heading_rng,
