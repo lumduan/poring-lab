@@ -1730,3 +1730,38 @@ option B (v51: a later pass only on the HAND cells + their 8 neighbours; built d
     - N2 "nothing changed outside the dying monster": never fires. The corpse fade and the
       damage numbers change the monster's 3 x 3 and 2 cells above it, and 31 of 47 items lie on
       the monster's own cell.
+
+**v50's verdict (3.91, 2026-10-20 22:4x, 4 x 60 min pooled; demonstrations.md 3.91): ADOPTED as
+the base by BATT'S DECISION** (his overnight order: "if P1, P2, M3 and G5 pass, ADOPT v50 as the
+base even if G4 (the kills/h guard) fails").
+- **P1** completeness: his rule 179/225 = **79.6 %** vs the blind 3 x 3 112/202 = 55.4 %, **+24.1
+  points** (the null tops out at +6.3).
+- **P2** left behind: -23.8 points.
+- **M3** precision: 0.938. A cell's first click 0.988; burst re-clicks 0.667, since at 0.59 s the
+  re-read can still show a stale hand.
+- **G5** hard bars 0. **G4 FAILED:** +8.37 s engaged per kill (bar 6.95 s); the rule's step is
+  p50 12.1 s.
+- **Net of looter re-drops:** 86.5 % vs 58.6 %.
+- **Kill -> last pickup p50:** 2.87 s vs 1.16 s (Batt 1.56 s).
+- **The pooled row:** 91.2 kills / h on thin fields (seen 20.9 / 10 min); completeness 67.0 %
+  (net 71.8 %); hard bars 0; Creamy 0.
+- **Bot vs Batt, loot:** Batt 96.8 % (net 100 %); the bot's rule arm 79.6 % (net 86.5 %); the run
+  as a whole 67.0 % (net 71.8 %).
+- **Later passes (Batt's item 2):** 1 new item in 109 later passes over 166 steps, for 398 of
+  1732 s of step time (23 %). -> The next version is ONE PASS (3.92), not B.
+- **Option C, held out (`scripts/loot_sight.py`; settings fixed before runs 3-4: the frames timed
+  from the EXP line, before 0.45 s / stand 0.5 s, THR 0.04):**
+
+  | run | role | kills with the GM still / all | EMPTY cells a kill | s saved a pass | our items on EMPTY cells |
+  |---|---|---|---|---|---|
+  | 1 | THR set here | 76 / 89 | 12.0 | 2.1 | 0 / 69 |
+  | 2 | the before-offset chosen with run 1 | 56 / 70 | 12.1 | 2.1 | 0 / 63 |
+  | 3 | **held out** | 41 / 54 | 11.5 | 2.0 | **0 / 46** |
+  | 4 | **held out** | 78 / 95 | 12.4 | 2.2 | **0 / 70** |
+
+  - No item ever lay on a skipped cell (0 / 248 over the four runs).
+  - Live, the "GM still" gate must be the runner's odometry: on moved kills the diff alone lost 1
+    item in run 2.
+  - The matcher sees 24-42 % of our items: enough to ORDER the hovers, not to count them.
+  - The no-drop check fails (false skips 53-66 %).
+  - Not built into the bot (Batt: report tonight).
