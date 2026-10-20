@@ -1669,3 +1669,36 @@ decision at 14:58, overriding the rule (below).**
   - The standard run row now has "net of looter re-drops (recovered)" beside the gross figure.
   - The pre-registered bars (3.89, 3.90) stay on the gross figure as written; the net figure is
     reported beside them.
+
+**v49's verdict (3.90, 2026-10-20 18:2x, 4 x 60 min pooled; demonstrations.md 3.90): NOT
+ADOPTED.**
+- **P1 failed:** completeness HAND 178/343 = 51.9 % vs blind 156/360 = 43.3 %, **+8.6 points**
+  (bar +10; the null -5.4 .. +6.3). Per run: -2.4, +12.0, +7.7, +24.1.
+- **M2 failed:** 169/194 = 0.871 HAND clicks became a pickup request (bar 0.90).
+  - The 25 misses had a clearly drawn hand (PICKUP recall >= 0.997), so the reader is not at
+    fault.
+  - The misses are the aim (hand reads lie on the hovered cell only 42.8 %, within 1 cell
+    95.4 %) and our own next click closing the window (18 of 25).
+- **G3 failed:** the HAND step cost +4.80 s per kill (bar 4.62 s); its step p50 was 5.8 s
+  against 2.2 s.
+- G4 landing -4.6 points PASS; hard bars 0 PASS (Creamy 3, counted).
+- **The pooled row (4 runs):** 137.1 kills / h; seen 28.5 / 10 min; landing 75.8 %;
+  completeness 346/778 = 44.5 % (left behind 30 % / looters 24 % / expired 1 %); net of
+  looter re-drops 346/607 = 57.0 % (60 recovered).
+- **The bot-vs-Batt line now:** Batt 96.8 % (net 100 %); the bot 44.5 % gross / 57.0 % net, the
+  HAND arm 51.9 % gross.
+- **The base for what follows:** v48 (adopted) on every engagement; the blind 3 x 3 stays the
+  base's loot step.
+- **Batt (received 18:11 ICT): "Go with v50 (my rule) as staged, case A",** with his RHYTHM in
+  the burst:
+  - click at his demo's interval while the hand shows;
+  - re-read the GM cell and settle only between cells / passes;
+  - keep the 12-s cap;
+  - report the time per loot step beside his 1.56 s.
+  - Measured from his demo's input log (`20261016T093835-demo-human-demo`, his left presses
+    against the server's pickup requests):
+    - same-spot press-to-press inside a kill's loot: p50 0.59 s (n 9; 0.40-1.00 s);
+    - presses that moved to another spot: p50 1.02 s (n 26);
+    - his first loot press 1.23 s after the kill (p50);
+    - 1.48 presses per item picked.
+  - Pre-registered as 3.91.

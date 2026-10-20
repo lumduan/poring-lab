@@ -12466,9 +12466,95 @@ the scan misses items: NOT adopted, reported with the left-behind causes.
     48.3 % vs blind 121/275 = 44.0 % (+4.3 points); M2 0.872; engaged s per kill +4.76 s
     against G3's 0.176 x 26.05 = 4.58 s; landing 71.6 vs 75.0 %; hard bars 0. For P1 to pass
     pooled, run 4 alone would need about +27 points.
-- **Run 4** (seed 20370404, session 20261020T171325) was started by the chain at 17:13:22. Its
-  screenshot was judged: the hunting layout, Lv 70, Job Lv 1, weight 578 / 4970, HP full, no
-  dialog; the runner's own weight-clear drops beside the GM.
+- **Run 4** (seed 20370404, session 20261020T171325).
+  - Started by the chain at 17:13:22. Its screenshot was judged: the hunting layout, Lv 70, Job
+    Lv 1, weight 578 / 4970, HP full, no dialog; the runner's own weight-clear drops beside the
+    GM. It ended on its time box at 18:14:56; the chain ended there ("chain done").
+  - **The row:**
+    - 139 engagements; landing 117/139 = 84.2 % (77.2-89.3); 133.8 kills / h; 4.96 per
+      sighting; 26.9 s per kill; seen 27.0 / 10 min;
+    - free targets <= 10 s 42 % (n 172); steer moving 35 %; seen -> click 5.08 s; death -> next
+      1.71 s;
+    - dead calls without a real death 14/116 = 12.1 %;
+    - **LOOT COMPLETENESS 83/172 = 48.3 %** (left behind 36 % / looters 13 % / expired 3 %;
+      62 / 22 / 5 items); **net of looter re-drops 83/150 = 55.3 % (12 recovered)**; the older
+      column 70/120 = 58 % (1 looter);
+    - reversals 5.88 / min (outside loot 6.26); Creamy 1 (1 request); hard bars 0 / 0 / 0;
+      kill -> loot start 1.17 / 0.47 s (n 102);
+    - results: dead 116, skipped_risky 23.
+  - **Per arm, run 4 only:**
+
+    | arm | completeness | left behind / looters / expired | kills with no loot step | loot step p50 | engaged s per kill | landing |
+    |---|---|---|---|---|---|---|
+    | HAND (odd k) | 47/72 = 65.3 % | 23.6 / 8.3 / 2.8 % | 8/55 = 14.5 % | 5.67 s | 9.92 | 79.7 % |
+    | blind (even k) | 35/85 = 41.2 % | 49.4 / 9.4 / 0 % | 7/68 = 10.3 % | 2.18 s | 5.06 | 88.6 % |
+
+    - HAND - blind: completeness **+24.1 points**; engaged s per kill +4.86 s (0.176 x 26.9 =
+      4.73 s); kill -> loot start 0.88 x.
+    - The scan: 55 steps, ended no_hand 45 / cap 10; 63 extra cells.
+    - Hovers: empty 466, unknown 68, hand 53, sword 12, not still 8. HAND clicks 53, of which 46
+      became a pickup (0.868).
+    - `hand_truth.py`: hand reads with an item on the hovered cell 25 / 53, within 1 cell
+      51 / 53.
+  - Left-behind causes per arm:
+    - HAND: outside, near the death cell 10; no loot step 8; fell after the step 4; in the plan,
+      unclicked 2; outside 1;
+    - blind: outside, near the death cell 13; in the plan, unclicked 12; no loot step 12; fell
+      after the step 8; outside 5;
+    - kills that no engagement owned: no loot step 14.
+  - Best 2 min: 9 kills from minute 16.0.
+
+**VERDICT (2026-10-20 18:2x, 4 runs pooled: 1b, 2, 3, 4; `arm_judge.py handloot` over the four
+sessions): NOT ADOPTED. P1, M2 and G3 fail.**
+
+| check | pooled value | bar | result |
+|---|---|---|---|
+| P1 completeness, fix - base | **+8.6 points** (178/343 = 51.9 % vs 156/360 = 43.3 %) | >= +10 (null -5.4 .. +6.3) | **FAIL** |
+| M2 HAND clicks that became a pickup request | **169/194 = 0.871** | >= 0.90 | **FAIL** |
+| G3 engaged s per kill, fix - base | **+4.80 s** (10.37 vs 5.57) | <= 0.176 x 26.26 = 4.62 s | **FAIL** |
+| G4 landing, fix - base | -4.6 points (73.4 vs 78.0 %) | >= -8 | PASS |
+| G5 hard bars | 0 / 0 / 0 (Creamy 3, counted) | zero | PASS |
+
+- **The pooled row (4 runs):**
+  - 626 engagements; landing 474/625 = 75.8 % (72.3-79.0); 137.1 kills / h; 4.81 per
+    sighting; 26.3 s per kill; seen 28.5 / 10 min;
+  - dead calls without a real death 107/516 = 20.7 %;
+  - **LOOT COMPLETENESS 346/778 = 44.5 %** (left behind 30 % / looters 24 % / expired 1 %;
+    237 / 184 / 11 items); **net of looter re-drops 346/607 = 57.0 % (60 recovered)**; the
+    older column 321/632 = 51 % (123 looters);
+  - reversals 5.92 / min (outside loot 6.28); Creamy 3 (3 requests); hard bars 0 / 0 / 0;
+    kill -> loot start 1.09 / 0.56 s (n 412).
+  - Batt: 61/63 = 96.8 %, net 61/61 = 100 %.
+- **Reported, not deciding:**
+  - fates per arm: left behind 25.1 vs 36.9 %, looters 22.5 vs 18.3 %, expired 0.6 vs 1.4 %;
+  - kills with no loot step: 35/243 = 14.4 % vs 30/259 = 11.6 %;
+  - hovers: empty 2141, unknown 362, hand 194, sword 193, not still 38, view 15;
+  - the scan's end: no_hand 199 / cap 55; extra cells 297;
+  - loot step p50 5.82 vs 2.23 s (mean 6.07 vs 1.95 s);
+  - kills / h per run: 141.9, 118.9, 153.9, 133.8;
+  - left-behind causes per arm (4 runs):
+    - HAND: no loot step 44; outside, near the death cell 44; in the plan, unclicked 29; fell
+      after the step 28; outside 13; clicked, became a walk 7;
+    - blind: outside, near the death cell 63; in the plan, unclicked 61; no loot step 37; fell
+      after the step 25; outside 13; clicked, became a walk 5;
+    - kills that no engagement owned: no loot step 63;
+  - `hand_truth.py`, pooled: hand reads with an item on the hovered cell 83 / 194 = 42.8 %,
+    within 1 cell 185 / 194 = 95.4 %; empty reads with one on the cell 1 / 2141 (within 1:
+    73); sword 6 / 193; unknown 18 / 362.
+- **The rule's M2 branch, "the reader is the cause: reported with the hovers' recalls"**
+  (`/dev/shm/poring-lab-tmp/lc/m2_recalls.py`, offline):
+  - the 25 HAND clicks with no pickup request: the hover's PICKUP recall p50 1.000, min 0.997;
+  - the 169 that became one: p50 1.000, min 0.995;
+  - an item lay within 1 cell of the 25 in 23 (on the hovered cell 6);
+  - in 18 of the 25, our own next click came within 2 s, which closes M2's window.
+  - **Reading (not a re-decision):** the recalls do not show a reader fault: the hand was
+    clearly drawn every time. The misses sit in the aim (the belief 1 cell off, as
+    `hand_truth.py` shows) and in a window our own next click cut short. The verdict stands as
+    the rule gives it.
+- **The base for what follows:** v48 (adopted by Batt, 3.89) on every engagement; v49 NOT
+  adopted, so the base arm's loot step stays the blind 3 x 3. Batt chose v50 = his loot rule,
+  case A (2026-10-20, received 18:11 ICT): "Go with v50 (my rule) as staged, case A", with his
+  rhythm in the burst (3.91).
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
