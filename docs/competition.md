@@ -1499,6 +1499,8 @@ split); kills / h is a guard (>= 0.85 x base).
 - a looter's death drops every item it took.
 
 **The bot-vs-Batt loot line** (`loot_complete.py`, every kill of ours; Batt's demo 61 / 63):
+*(➡️ the line as of v51, 2026-10-21: 79.4 % (net 87.6 %) for the whole run; see "v51's verdict" at
+the end of this section. The table below is the v38-v44 starting point.)*
 
 | | completeness | left behind | looters | expired |
 |---|---|---|---|---|
@@ -1766,3 +1768,37 @@ base even if G4 (the kills/h guard) fails").
   - The matcher sees 24-42 % of our items: enough to ORDER the hovers, not to count them.
   - The no-drop check fails (false skips 53-66 %).
   - Not built into the bot (Batt: report tonight).
+
+**v51's verdict (3.92, 2026-10-21 02:5x, 4 x 60 min pooled; demonstrations.md 3.92): ADOPTED by
+its own rule.** ONE PASS (Batt's item 2, chosen from data) went into the base. Both arms ran Batt's
+rule: one pass on odd k, v50's up to 3 passes on even k.
+- **P1** loot step mean, one pass / v50: 7.72 / 10.11 s = **0.764 x** (bar <= 0.85; estimated
+  ~0.77 x from the later passes' 23 % share).
+- **P2** completeness: one pass 175/211 = **82.9 %** vs v50 173/218 = 79.4 %, **+3.6 points**
+  (bar >= -6). That is inside the null, so it shows no loss, and no gain either.
+- **M3** 339/386 = **0.878** over both arms' HAND clicks (a cell's first click 0.971, burst
+  re-clicks 0.500). **G5** hard bars 0; Creamy 4 (3 requests).
+- **Net of looter re-drops:** 89.6 % vs 88.3 %.
+- **Engaged s per kill:** 12.29 vs 14.42.
+- **Kill -> last pickup p50 / mean:** 2.80 / 3.41 s vs 2.38 / 3.07 s. It is not shorter, because
+  the items are picked in the first pass in both arms.
+- **The pooled row:** every engagement ran Batt's rule. 95.5 kills / h; seen 24.4 / 10 min;
+  landing 77.0 %; **completeness 79.4 % (net 87.6 %)**; left behind / looters / expired
+  11 / 9 / 0 %; **kill -> last pickup 2.51 / 3.19 s**; hard bars 0.
+- **Bot vs Batt, loot, as of v51** (it supersedes the v38-v44 line at the top of this section):
+
+  | | completeness (net) | left behind / looters / expired | kill -> last pickup p50 / mean | loot step mean |
+  |---|---|---|---|---|
+  | Batt's demo | 96.8 % (100 %) | 0 / 3.2 / 0 % | 1.56 / 2.53 s | - |
+  | bot v51, the one-pass arm | 82.9 % (89.6 %) | 10.4 / 6.6 / 0 % | 2.80 / 3.41 s | 7.72 s |
+  | bot v51, the whole run (4 h) | 79.4 % (87.6 %) | 11 / 9 / 0 % | 2.51 / 3.19 s | - |
+  | bot v50, the whole run (half the kills on the blind 3 x 3) | 67.0 % (71.8 %) | - | 1.91 / 2.57 s | - |
+  | bot v38-v44 | 46.2-53.5 % | 28.4-37.2 / 12.6-18.7 / 0-1.3 % | - | - |
+
+- **What is still lost (92 items over 4 h, looters' included):**
+  - in the plan but unclicked 27;
+  - no loot step 20;
+  - outside the 25-cell plan 31 (17 of them near the death cell);
+  - fell after the step 12;
+  - clicked but became a walk 2.
+  - The search took the GM away from 31 of them.

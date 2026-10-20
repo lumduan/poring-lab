@@ -574,8 +574,9 @@ PARAMS[50] = {**PARAMS[48], "exp_dead_ab": False, "loot_gm": True, "loot_gm_ab":
 # cell), then resume"; it replaces option B when pass >= 2 rarely finds a new item -- 3.91's four
 # runs: 1 HAND cell first seen in pass >= 2 in 109 later passes, those passes 398 s of 1732): his
 # loot rule on EVERY engagement (v50, ADOPTED by Batt 22:4x); on odd k ONE pass (gm_passes), even k
-# v50's up to 3
-PARAMS[51] = {**PARAMS[50], "loot_gm_ab": False, "loot_gm_one_pass": True,
+# v50's up to 3. ADOPTED 2026-10-21 02:5x (3.92: step mean 0.764 x, completeness +3.6 points, M3
+# 0.878, hard bars 0): the next version's base sets "loot_gm_one_pass_ab": False (one pass on all k)
+PARAMS[51] ={**PARAMS[50], "loot_gm_ab": False, "loot_gm_one_pass": True,
               "loot_gm_one_pass_ab": True}  # fmt: skip
 
 

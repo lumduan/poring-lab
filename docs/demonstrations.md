@@ -13186,6 +13186,97 @@ fails, the result goes to Batt.
 - **Run 4** (seed 20390404, session 20261021T014926) was started by the chain at 01:49:23. Its
   screenshot was judged: the hunting layout, Lv 70, Job Lv 1, weight 694 / 4970, HP 388 / 388,
   no dialog; the runner's weight-clear drops beside the GM (3 "You dropped" lines).
+  - It ended on its time box at 02:51:02 ("chain done"). A thin field: seen 20.5 / 10 min,
+    searching 2034 s of the hour.
+  - **The row:**
+    - 74 engagements; landing 56/74 = 75.7 % (64.8-84.0); 67.9 kills / h; 3.31 per sighting;
+      53.0 s per kill; seen 20.5 / 10 min;
+    - free targets <= 10 s 31 % (n 110); steer moving 36 %; seen -> click 2.93 s; death -> next
+      2.01 s;
+    - dead calls without a real death 3/60 = 5.0 %;
+    - **LOOT COMPLETENESS 60/70 = 85.7 %** (left behind 10 % / looters 4 % / expired 0 %;
+      7 / 3 / 0 items); **net 60/67 = 89.6 % (3 recovered)**; the older column 50/59 = 85 %
+      (3 looters);
+    - reversals 4.46 / min (outside loot 5.26); Creamy 1 (1 request); hard bars 0 / 0 / 0;
+      kill -> loot start 0.62 / 0.89 s (n 58); **kill -> last pickup p50 / mean 2.36 / 2.80 s
+      (n 44)** (Batt 1.56 / 2.53);
+    - results: dead 60, gone_no_line 14.
+  - **Per arm, run 4 only, NOT deciding:**
+
+    | arm | completeness (net) | left behind / looters / expired | loot step p50 / mean | kill -> last pickup p50 / mean | engaged s per kill | landing |
+    |---|---|---|---|---|---|---|
+    | ONE PASS (odd k) | 22/26 = 84.6 % (88.5 %) | 11.5 / 3.8 / 0 % | 7.71 / 7.58 s | 2.36 / 2.57 s (n 18) | 11.81 | 78.4 % |
+    | v50, up to 3 passes (even k) | 35/39 = 89.7 % (94.4 %) | 5.1 / 5.1 / 0 % | 12.11 / 10.65 s | 2.88 / 3.21 s (n 23) | 15.02 | 73.0 % |
+
+    - 3.92's bars, this run: P1 step mean fix / base **0.712** (<= 0.85); P2 completeness
+      **-5.1 points** (>= -6); M3 57/62 = **0.919** (first clicks 49/51 = 0.961, burst
+      re-clicks 8/11 = 0.727); G5 0.
+    - Engaged s per kill -3.21 s.
+    - The scan: fix 30 steps, ended one_pass 19 / no_hand 11, 30 passes; base 30 steps, ended
+      no_hand 28 / cap 2, 51 passes. Burst gap p50 0.59 s (n 11).
+    - `hand_truth.py`: hand reads with an item on the hovered cell 20 / 62, within 1 cell
+      58 / 62; empty reads with one on the cell 1 / 1811.
+  - Left-behind causes per arm (every unpicked item, looters' included):
+    - one pass: in the plan, unclicked 2; no loot step 2;
+    - v50: fell after the step 2; in the plan, unclicked 1; outside, near the death cell 1;
+    - no engagement: no loot step 2.
+    - What took the GM away: search 2, steer 1, no click before it left our view 1.
+  - Best 2 min: 6 kills from minute 0.0.
+
+**VERDICT (2026-10-21 02:5x, 4 runs pooled; `arm_judge.py gmloot` over the four sessions, 3.92's
+bars computed from its output): P1, P2, M3 and G5 PASS. ➡️ ADOPTED by 3.92's own rule ("ADOPT
+(one pass into the base) if P1, P2 and G5 pass").** The base for what follows is Batt's rule with
+ONE pass on every engagement (`loot_gm_one_pass` on, `loot_gm_one_pass_ab` off; set when the next
+version is built).
+
+| check | pooled value | bar | result |
+|---|---|---|---|
+| P1 loot step mean, fix / base | **7.72 / 10.11 s = 0.764 x** (predicted ~0.77 x) | <= 0.85 | PASS |
+| P2 completeness, fix - base | **+3.6 points** (175/211 = 82.9 % vs 173/218 = 79.4 %) | >= -6 (null -5.4 .. +6.3) | PASS |
+| M3 HAND clicks that became a pickup request | **339/386 = 0.878** | >= 0.85 | PASS |
+| G5 hard bars | 0 / 0 / 0 (Creamy 4, 3 requests: counted) | zero | PASS |
+
+- P2's +3.6 lies inside the null: ONE PASS loses nothing measurable; it does not show a gain.
+- P1 came in as estimated from 3.91's later-pass time share (23 % -> ~0.77 x).
+- **Batt's measures, per arm (4 runs pooled):**
+
+  | measure | ONE PASS (odd k) | v50, up to 3 passes (even k) | Batt's demo |
+  |---|---|---|---|
+  | loot completeness, gross | 175/211 = **82.9 %** | 173/218 = 79.4 % | 61/63 = 96.8 % |
+  | net of looter re-drops (recovered) | **89.6 % (13)** | 88.3 % (18) | 100 % (2) |
+  | left behind / looters / expired | 10.4 / 6.6 / 0 % | 10.1 / 10.6 / 0 % | 0 / 3 / 0 % |
+  | kills with no loot step | 5/181 = 2.8 % | 4/185 = 2.2 % | - |
+  | kill -> loot start, mean | 0.99 s | 0.87 s | - |
+  | HAND-click precision (first / burst re-click) | 0.878 over BOTH arms (0.971 / 0.500); not split by arm | (in the pooled figure) | - |
+  | loot step p50 / mean | **7.62 / 7.72 s** | 12.08 / 10.11 s | - |
+  | kill -> last pickup p50 / mean | 2.80 / 3.41 s (n 121) | 2.38 / 3.07 s (n 117) | 1.56 / 2.53 s |
+  | engaged s per kill | 12.29 | 14.42 | - |
+  | landing | 77.5 % | 76.5 % | 100 % |
+
+  - M3 is both arms' GM-scan HAND clicks together: `arm_judge`'s click loop files every
+    `gm_hand` click under "fix" (right for 3.91, where only odd k scanned; under 3.92 both arms
+    scan). So the per-run M3 figures above are both arms too. The bar is on the pooled clicks,
+    so the verdict stands.
+  - The step ends: one pass 111 / no hand 61 / the 12-s cap 5 (177 steps, 177 passes); v50
+    no hand 174 / cap 5 (179 steps, 295 passes). Burst gap p50 0.59 s (n 76).
+  - Kill -> last pickup is NOT shorter in the one-pass arm: the items are picked in the first
+    pass in both arms; what one pass saves is the time AFTER the last pickup (the later passes
+    found nothing).
+  - `hand_truth.py`, pooled: a hand read had its item on the hovered cell 92 / 390, within 1
+    cell 369 / 390; an empty read had one on its cell 4 / 10573.
+- **The pooled row (4 runs, every engagement on Batt's rule):** 95.5 kills / h; seen 24.4 / 10
+  min; landing 338/439 = 77.0 %; **completeness 354/446 = 79.4 % (net 354/404 = 87.6 %, 35
+  recovered)**; left behind / looters / expired 11 / 9 / 0 % (50 / 42 / 0); **kill -> last pickup
+  p50 / mean 2.51 / 3.19 s (n 244)** (Batt 1.56 / 2.53); hard bars 0; Creamy 4 (3 requests).
+- **Left-behind causes, pooled (all 92 unpicked items, looters' included):**
+  - in the plan, unclicked 27; no loot step 20; outside the plan, near the death cell 17;
+    outside the plan 14; fell after the step 12; clicked, became a walk 2;
+  - one pass: in the plan, unclicked 11; outside 9; no loot step 6; fell after the step 5;
+    outside, near the death cell 5;
+  - v50: in the plan, unclicked 16; outside, near the death cell 12; fell after the step 7;
+    outside 5; no loot step 3; clicked, became a walk 2;
+  - no engagement: no loot step 11.
+  - What took the GM away from them: search 31, steer 5, no click before it left our view 1.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
