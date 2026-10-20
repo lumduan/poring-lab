@@ -1635,3 +1635,37 @@ decision at 14:58, overriding the rule (below).**
   - Next: the loot memory (60-s budget), then looter recovery.
   - The later loot clicks' aim: after each pickup walk, re-anchor from the drawn GM position
     before the next hover, as the HAND scan should.
+
+**Batt's 15:05 clip and his loot rule (received ~15:3x).**
+- **The clip:** "after a kill with drops next to the GM, the GM walks away at once into the
+  trees; the items stay". It is most likely v49 run 1b's **k147**, a HAND-arm engagement:
+  - the base's pixel dead rule called it `skipped_risky` (`still_visible`), so NO loot step ran;
+  - the server's kill came at 15:05:08.30, and its item at (114, 162) left our view at
+    15:05:17.
+  - The next one, k148 (blind arm, 15:05:26), did run a 0.88-s step, 2 clicks around a cell 2
+    off the death cell; its item was left behind too.
+  - v49 runs on the pre-v48 base: its dead rule is the pixel rule, not v48's EXP line.
+- **Batt's loot rule, to be the DEFAULT after v49's verdict:**
+  1. dead = the EXP line;
+  2. STAND still ~500 ms (no walk click, no engagement, no search);
+  3. during the stand, scan the 3x3 (then the 5x5 edge) around the DRAWN GM, at the screen's
+     centre, not around the believed death cell;
+  4. on a HAND, burst-click until it's gone and re-hover; done when a full scan shows no HAND;
+  5. only then resume. (Ranged: scan around the target's last drawn position, later.)
+  - Measures: completeness, left behind, kill -> loot start, HAND-click precision, time per
+    loot step.
+  - v49 does not do exactly this (believed death cell, pixel dead rule, an odometry standstill,
+    one click per hand). It is v50 (3.91), built on `feat/loot-memory`, pre-registered at v49's
+    verdict.
+- **A measurement correction (`loot_complete.link_redrops`, 1b934ec).** A looter we kill drops
+  the items it took from us again, and completeness counted each such item TWICE: lost to the
+  looter, then dropped again by our kill.
+  - **Run 1b (a dense field):** 82 of its 251 items were such re-drops. Counted once,
+    completeness is 94/169 = **55.6 %**, not 37.5 %. 24 looted items were recovered by picking
+    their re-drop.
+  - **v48 run 4 (thin):** 52.6 -> 56.1 %.
+  - **Batt's demo nets to 61/61 = 100 %:** his 2 "looter" items were re-dropped by looters he
+    killed, and he picked both.
+  - The standard run row now has "net of looter re-drops (recovered)" beside the gross figure.
+  - The pre-registered bars (3.89, 3.90) stay on the gross figure as written; the net figure is
+    reported beside them.
