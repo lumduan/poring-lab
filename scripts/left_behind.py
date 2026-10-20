@@ -22,6 +22,10 @@ it left our view.
 A loot click's result: the first of our self_move_request / pickup_request within 0.6 s after it.
 
     left_behind.py SID [SID ...]        per run + pooled (JSON)
+    left_behind.py --aim SID [SID ...]  where the LOOT CLICKS land: each click that became a walk,
+                                        its walk request's cell against the cell the runner aimed
+                                        at (clicks.jsonl "cell"), split by the step's first click /
+                                        later ones and by our GM moving (packets) at the click
 """
 
 from __future__ import annotations
@@ -174,10 +178,50 @@ def pooled(per: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
     return out
 
 
+def aim(sids: Sequence[str]) -> dict[str, Any]:
+    """Loot clicks that became walks: exact / <= 1 cell from the aimed cell, by group."""
+    import gzip
+
+    import arm_judge as aj
+    import flow_judge as fj
+
+    agg: dict[str, Counter[str]] = {}
+    for sid in sids:
+        d = aj.DEMO / sid
+        clicks = sorted((json.loads(x) for x in (d / "clicks.jsonl").read_text().splitlines()
+                         if x), key=lambda c: int(c["t"]))  # fmt: skip
+        with gzip.open(d / "packets.jsonl.gz", "rt") as fh:
+            pk = sorted((json.loads(x) for x in fh), key=lambda e: int(e["t_mono_ns"]))
+        moving = fj.gm_track(pk)[1]
+        mv0 = [a_ for a_, _b in moving]
+        res = click_results(clicks, pk)
+        prev = None
+        for r in res:
+            first = prev is None or r["t"] - prev > int(1.5 * NS)  # the step's first click
+            prev = r["t"]
+            if r["what"] != "walk" or not r["cell"]:
+                continue
+            i = bisect.bisect_right(mv0, r["t"]) - 1
+            mv = i >= 0 and moving[i][0] <= r["t"] <= moving[i][1]
+            e = cheb(r["to"], r["cell"])
+            for g in ("all", "first click of a step" if first else "later clicks",
+                      "GM moving" if mv else "GM standing"):  # fmt: skip
+                c = agg.setdefault(g, Counter())
+                c["n"] += 1
+                c["exact"] += e == 0
+                c["within1"] += e <= 1
+    return {g: {"n": c["n"], "exact": round(c["exact"] / c["n"], 3),
+                "within1": round(c["within1"] / c["n"], 3)} for g, c in agg.items()}  # fmt: skip
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("--aim", action="store_true")
     ap.add_argument("sids", nargs="+")
     a = ap.parse_args()
+    if a.aim:
+        print(json.dumps(aim(a.sids), indent=1))
+        return 0
     per = {s: session(s) for s in a.sids}
     print(json.dumps({**per, "pooled": pooled(per)}, indent=1))
     return 0

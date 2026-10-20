@@ -1543,3 +1543,53 @@ was not picked gets the first cause that holds:
     part of the 6 % farther;
   - step 2's death-cell estimate addresses the 13 %;
   - v48 addresses the 11 % with no loot step.
+
+**Step 2's offline study: the death-cell cues** (`scripts/deathcell_cues.py`, read 2026-10-20
+~10:0x; v42 + v44, 8 runs, 659 kills of ours a loot step followed).
+- **Method:** the target is followed through the detector's per-frame boxes from the
+  engagement's last strike click, with no packets. Each cue's box foot becomes a cell with the
+  camera on our GM's cell at that frame (packets, interpolated, 0.65 s earlier). The client draws
+  the world behind the server: lags of 0 / 0.25 / 0.5 / 0.65 / 0.8 / 1.0 s were tried, and
+  0.65 s reproduces the runner's own death cell best (same cell 43 %, within 1 77 %).
+- **Results** against the server's death cell (Batt's HP-bar cue needs the recorded frames: not
+  in this version):
+
+  | cue | kills | exact | within 1 | drops in its 3 x 3 |
+  |---|---|---|---|---|
+  | box at our last damaging hit | 484 | 31.2 % | 61.0 % | 64.2 % |
+  | box at the kill | 637 | 41.0 % | 69.5 % | 75.7 % |
+  | median box cell, 0.6 s before the kill | 325 | 52.6 % | 78.8 % | 87.7 % |
+  | box at the EXP line | 606 | 42.9 % | 71.9 % | 76.1 % |
+  | box at the line + 0.5 s (v48's loot start) | 611 | 43.0 % | 72.3 % | 76.4 % |
+  | the followed box's LAST frame (today's "anim" rule) | 659 | 43.4 % | 72.4 % | 77.2 % |
+  | the runner's own loot cell (its own position) | 659 | 40.5 % | 66.5 % | 71.1 % |
+
+- **Paired, on the SAME kills:**
+  - The 325 kills with boxes before the kill: last box 61.8 % exact, 90.4 % of drops in its
+    3 x 3; the 0.6-s median 52.6 % and 87.7 %; the runner's cell 48.9 % and 77.7 %.
+  - All 659: last box 77.2 % against the runner's 71.1 %.
+- **Reading:**
+  - No box TIMING beats today's last-box rule, and the box at the last hit is the worst.
+  - What separates the runner from the same rule offline is the runner's belief of its OWN cell
+    (6 points of drops in the 3 x 3 over all kills, 13 on the kills it saw die).
+- **Where the loot clicks land** (`left_behind.py --aim`, the same 8 runs: each loot click that
+  became a walk, its walk request's cell against the aimed cell):
+
+  | loot clicks | n | exact | within 1 cell |
+  |---|---|---|---|
+  | the step's FIRST click | 538 | 48.5 % | 82.7 % |
+  | every later click | 4,510 | 10.8 % | 52.3 % |
+  | our GM walking at the click (packets) | 1,690 | 3.6 % | 28.4 % |
+  | our GM standing | 3,358 | 20.5 % | 69.2 % |
+  | all | 5,048 | 14.9 % | 55.6 % |
+
+- **The main defect is the aim of the step's LATER clicks, not the death cell.**
+  - The first click goes where the dying sprite was, in the frame the runner saw.
+  - Each click then walks the GM. The next click is aimed from a position belief that no longer
+    matches the drawn camera, which lags the server by ~0.65 s.
+  - This is the same mechanism as the steer's "clicks while moving land ahead".
+- **What it means for the order:** a death-cell version that changes the box timing has nothing
+  to gain. The lever is to aim each later loot click in the CURRENT frame:
+  - the items' own icons, or the HAND cursor (Batt's step 3), which the frame shows wherever the
+    GM is;
+  - or clicking only from a drawn standstill.
