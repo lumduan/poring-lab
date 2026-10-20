@@ -12289,6 +12289,48 @@ the scan misses items: NOT adopted, reported with the left-behind causes.
   - Started by the chain at 13:53:01, 51 s after the pre-registration commit (07d5147, 13:52:10).
   - The screenshot was judged, on a check shot before the launch and on the chain's own: the
     hunting layout, Lv 70, weight 622 / 4970, HP full, no dialog.
+  - **The live arm check FAILED at 9.4 min (14:03:06), so the run was STOPPED as the entry
+    says.**
+    - HAND clicks judged: 7 (gate >= 10); 6 became a pickup request (0.857; gate >= 0.90).
+    - Hovers: empty 63, hand 8, unknown 8, sword 6.
+    - The runner was stopped with SIGINT, its own clean stop, at 14:04:02 (rc 3, 620.8 s, 23
+      engagements: dead 17, skipped_risky 6). The chain ended on it, as designed. Hard bars
+      0 / 0 / 0.
+  - **The cause, recorded before anything else ran (14:0x): NOT a reader fault; the gate was
+    miscalibrated.**
+    - Packets, the whole stopped run: 8 HAND clicks.
+      - 7 became a pickup within 2 s: 5 at once (0.07-0.09 s), 2 after a 1-cell walk (0.31,
+        0.78 s).
+      - The 8th, on cell (102, 278) right after the GM's walk to the item before it, became a
+        walk to (102, 277), one cell off. The scan re-hovered that cell, read the hand again,
+        and that click picked the item 0.31 s later.
+      - Every HAND read lay on a real item: no HAND click hit an empty cell.
+    - The HAND arm (odd k, 9 kills, 11 items) picked 8. The other 3 were 2 items of kills with
+      no loot step and 1 outside the plan. **Every item inside a HAND step was picked.** The
+      base arm picked 6 / 13.
+    - The gate's count sat above what the field gives. Expected HAND clicks in the first 10
+      min, from v48's data (before this run):
+      - ~8-9 HAND-arm kills (~100 kills / h, half of them odd k);
+      - x 1.32 items per kill (493 / 374, both arms of v48);
+      - x ~0.7 inside a loot step's plan (no loot step ~12 %, outside ~17 %);
+      - = ~8.
+    - Its precision half (>= 0.90 on n ~ 8) fails on ONE miss. It duplicates M2, which decides
+      on four runs, with no power of its own.
+  - The stopped 10-min run is kept and reported, NOT pooled: the verdict pools four full runs.
+    Its per-arm numbers, for the record only: completeness 72.7 vs 46.2 %; M2 7/8 = 0.875;
+    the HAND step p50 5.09 s (base 2.66 s); its 8 HAND steps ended no_hand 6, cap 2, with 18
+    extra cells.
+- **Amendment 1 (14:05 ICT, the commit time, before the next run; the live gate only, every deciding bar
+  unchanged).**
+  - The live arm check, at ~10 min of the first full run (seed 20370101 re-run as 20370101b):
+    - >= 4 HAND clicks (an INERT reader shows ~0: half the expected ~8);
+    - >= 70 % of them followed by a pickup request within 2 s and before our next click (a
+      BROKEN reader clicks cells with no item: far below that; v37's blind follow-ups gave 83 %).
+  - Otherwise the run stops, as before.
+  - P1, M2 (>= 0.90, 4 runs pooled), G3, G4, G5, the runs (4 x 60 min: seeds 20370101b,
+    20370202, 20370303, 20370404) and the decision rule are unchanged.
+  - The gate's first version was the agent's calibration error. Flagged to Batt in the ~18:00
+    report.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
