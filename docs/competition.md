@@ -1594,3 +1594,15 @@ was not picked gets the first cause that holds:
   - the items' own icons, or the HAND cursor (Batt's step 3), which the frame shows wherever the
     GM is;
   - or clicking only from a drawn standstill.
+
+**Step 4's size: looter recovery** (offline, 2026-10-20 ~10:5x; v42 + v44, 8 runs; packets). For
+each of our items a looter took, the monster within 1 cell at the vanish is the looter.
+- **189 items:** the looter was killed by us later for 145 (77 %), and never for 44.
+- **Time from the take to that kill:** p25 3.0 s, p50 6.2 s, p75 320 s.
+- The looters were Poring 122, Drops 47, Lunatic 20; the last is a 1-cell attribution, not a
+  looter species.
+- **What it means:** the server drops every item a looter holds when it dies (mob.cpp:3243), so
+  most looted items come back onto the floor at the looter's death, as items of THAT kill.
+  - Step 4's gain is to kill the looter at once (not 6 s or 5 min later) and to loot its drop
+    completely.
+  - The HAND scan (step 3) is what makes the second part reliable.
