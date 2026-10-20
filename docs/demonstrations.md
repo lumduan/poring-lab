@@ -12717,6 +12717,24 @@ points.
   loot version builds on it. Otherwise the next loot versions (the loot memory, looter recovery)
   stack on it.
 
+**Run log (written during the runs):**
+- **Run 1** (seed 20380101, session 20261020T183131).
+  - Started by the chain at 18:31:29, 51 s after the pre-registration commit (be3ed57,
+    18:30:38). The screenshot was judged, on a check shot before the launch and on the chain's
+    own: the hunting layout, Lv 70, Job Lv 1, weight 582 / 4970, HP full, no dialog; the GM
+    under trees (the runner warps to its start).
+  - **The live arm check PASSED at 18:43:37 (11.5 min of the loop):** 10 HAND clicks of the GM
+    scan, 9 followed by a pickup request (0.90). Hovers: empty 401, sword 28, unknown 25, hand
+    10.
+  - **Seen live, reported, not deciding** (the first 12 steps of the rule):
+    - the burst's re-read of the pixel came 0.52-0.58 s after the click (0.85 s once, a slow
+      read); each of the 10 bursts ended on its first re-read (empty 9, sword 1): no re-click
+      yet;
+    - the step's time: p50 11.7 s, mean 9.5 s (the base arm's 1.8 / 1.7 s). It is the scan,
+      not the burst: 25 hovers a pass at 177 ms p50 (p90 429 ms) = ~4.5-5 s, and a step that
+      found a hand runs a second full pass (~10-12 s, the cap); a step with nothing to pick
+      still takes one full pass (4.3-7.2 s).
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
