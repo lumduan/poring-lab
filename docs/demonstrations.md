@@ -13146,6 +13146,46 @@ fails, the result goes to Batt.
 - **Run 3** (seed 20390303, session 20261021T004744) was started by the chain at 00:47:42. Its
   screenshot was judged: the hunting layout, Lv 70, Job Lv 1, weight 667 / 4970, HP 388 / 388,
   no dialog; the runner's weight-clear drops beside the GM (3 "You dropped" lines).
+  - It ended on its time box at 01:49:22.
+  - **The row:**
+    - 127 engagements; landing 96/127 = 75.6 % (67.4-82.2); 110.0 kills / h; 4.4 per sighting;
+      32.7 s per kill; seen 25.0 / 10 min;
+    - free targets <= 10 s 40 % (n 167); steer moving 39 %; seen -> click 3.24 s; death -> next
+      1.57 s;
+    - dead calls without a real death 5/103 = 4.9 %;
+    - **LOOT COMPLETENESS 108/137 = 78.8 %** (left behind 8 % / looters 13 % / expired 0 %;
+      11 / 18 / 0 items); **net 108/119 = 90.8 % (15 recovered)**; the older column
+      116/140 = 83 % (14 looters);
+    - reversals 4.37 / min (outside loot 5.82); Creamy 0; hard bars 0 / 0 / 0;
+      kill -> loot start 0.94 / 0.92 s (n 99); **kill -> last pickup p50 / mean 2.54 / 3.02 s
+      (n 69)** (Batt 1.56 / 2.53);
+    - results: dead 103, gone_no_line 24.
+  - **Per arm, run 3 only, NOT deciding:**
+
+    | arm | completeness (net) | left behind / looters / expired | loot step p50 / mean | kill -> last pickup p50 / mean | engaged s per kill | landing |
+    |---|---|---|---|---|---|---|
+    | ONE PASS (odd k) | 58/66 = 87.9 % (96.4 %) | 4.5 / 7.6 / 0 % | 7.55 / 7.61 s | 2.54 / 2.92 s (n 37) | 12.38 | 76.2 % |
+    | v50, up to 3 passes (even k) | 49/64 = 76.6 % (93.0 %) | 6.3 / 17.2 / 0 % | 12.10 / 10.07 s | 3.21 / 3.18 s (n 31) | 14.45 | 75.0 % |
+
+    - 3.92's bars, this run: P1 step mean fix / base **0.756** (<= 0.85); P2 completeness
+      **+11.3 points** (>= -6); M3 105/118 = **0.890** (first clicks 92/93 = 0.989, burst
+      re-clicks 13/25 = 0.52); G5 0.
+    - Engaged s per kill -2.07 s.
+    - The scan: fix 52 steps, ended one_pass 36 / no_hand 16, 52 passes; base 51 steps, ended
+      no_hand 51, 84 passes. Burst gap p50 0.59 s (n 25).
+    - `hand_truth.py`: hand reads with an item on the hovered cell 31 / 119, within 1 cell
+      111 / 119; empty reads with one on the cell 1 / 2972.
+  - Left-behind causes per arm (every unpicked item, looters' included):
+    - one pass: fell after the step 3; in the plan, unclicked 2; outside, near the death cell 2;
+      outside the plan 1;
+    - v50: in the plan, unclicked 5; outside the plan 5; outside, near the death cell 3; fell
+      after the step 1; no loot step 1;
+    - no engagement: no loot step 6.
+    - What took the GM away from the left-behind items: search 6, steer 1.
+  - Best 2 min: 8 kills from minute 24.33.
+- **Run 4** (seed 20390404, session 20261021T014926) was started by the chain at 01:49:23. Its
+  screenshot was judged: the hunting layout, Lv 70, Job Lv 1, weight 694 / 4970, HP 388 / 388,
+  no dialog; the runner's weight-clear drops beside the GM (3 "You dropped" lines).
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
