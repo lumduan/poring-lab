@@ -277,6 +277,12 @@ VERSIONS = {
     'the pixel dead call with no line within 1.0 s stands only on the death cell "ok", else '
     "skipped_unconfirmed; interleaved per engagement. "
     "Base: v43's (v42 not adopted, 3.83) + the pocket escape",
+    48: "DEAD = THE EXP LINE ALONE, THE TARGET KEPT: on odd k only a new base EXP line since "
+    "the first attack click ends the engagement dead (the loot step at once); a pixel dead call "
+    "with no line ends nothing -- the target is kept (no re-click while unseen) until its line "
+    "comes, or it has been unseen 6.0 s (14 s from the first click at most): gone_no_line, no "
+    "loot step, the track stays selectable; interleaved per engagement. Base: v43's + the "
+    "pocket escape (v44 not adopted, 3.87)",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -505,6 +511,17 @@ PARAMS[42] = {**PARAMS[43], "steer_tail": True, "steer_tail_ab": True, "steer_gu
 PARAMS[44] = {**PARAMS[43], "stuck_window_s": 60.0, "stuck_extent": 18.0, "stuck_walked": 80.0,
               "stuck_escape_min": 26.0, "stuck_zone_r": 22.0, "stuck_zone_s": 300.0,
               "exp_dead": True, "exp_dead_ab": True, "exp_wait_s": 1.0}  # fmt: skip
+# 48 = DEAD = THE EXP LINE ALONE, THE TARGET KEPT (3.89, Batt 2026-10-20 ~09:1x, the loot
+# block's first version): on odd k only the base EXP line ends the engagement dead; a pixel dead
+# call with no line keeps the target until the line, or until it has been unseen
+# exp_keep_gone_s (the engagement's own last sighting, past the tracker's 2-s drop) or
+# exp_keep_max_s from the first click: gone_no_line (no loot step, the track stays
+# selectable). v44's checked fallback (exp_wait_s) is not used. Base: v43's + the pocket
+# escape (v44 NOT adopted, 3.87) -> PARAMS[44] with exp_keep on
+# The loot step starts exp_loot_delay_s after the line's first frame: a step started < 0.7 s
+# after the kill loses 3-4 cells to the dying sprite (unit / pink skips; v42 + v44, 3.89's build)
+PARAMS[48] = {**PARAMS[44], "exp_keep": True, "exp_keep_gone_s": 6.0, "exp_keep_max_s": 14.0,
+              "exp_loot_delay_s": 0.5}  # fmt: skip
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -834,7 +851,22 @@ def checked_fallback(death_reason: str | None) -> str:
     return "dead" if death_reason == "ok" else "skipped_unconfirmed"
 
 
-SKIPPED_SELECTABLE = ("skipped_risky", "skipped_unconfirmed")  # the track stays selectable
+def keep_ends(t_now: int, t_seen: int, since_first_s: float, gone_s: float, max_s: float
+              ) -> bool:  # fmt: skip
+    """PURE (3.89, hunt-flow@48): does a KEPT target (a pixel dead call, no EXP line) end
+    gone_no_line now? Yes once it has been unseen ``gone_s`` since the engagement's own last
+    sighting ``t_seen`` (ns; it outlives the tracker's 2-s drop), or ``max_s`` after the first
+    click (the bound)."""
+    return (t_now - t_seen) / 1e9 >= gone_s or since_first_s > max_s
+
+
+SKIPPED_SELECTABLE = ("skipped_risky", "skipped_unconfirmed", "gone_no_line")  # stays selectable
+
+
+def exp_loot_wait_s(t_line: int, t_now: int, delay_s: float) -> float:
+    """PURE (3.89): how long the loot step still waits after an EXP-line death: until
+    ``delay_s`` after the line's first frame (ns, the same clock); 0 once that is past."""
+    return max(0.0, (t_line - t_now) / 1e9 + delay_s)
 
 
 class BattleLogTail:
@@ -4661,6 +4693,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             since_first = (t_now - eng["t_first_click"]) / 1e9
                             since_last = (t_now - eng["t_last_click"]) / 1e9
                             unseen = (t_now - tr.t_last) / 1e9 if tr is not None else 99.0
+                            if tr is not None:  # 3.89: the engagement's own last sighting
+                                eng["t_seen"] = max(int(eng.get("t_seen") or 0), int(tr.t_last))
                             done = None
                             # v28 (FAST DEAD): one hit kills at STR 99 -- once the burst ended on
                             # the client's attack arrow (or the target vanished during it), the
@@ -4699,6 +4733,30 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                                             - int(eng["t_first_click"])) / 1e9, 3),
                                     "lag_s": round((t_now - int(line_["t_ns"])) / 1e9, 3),
                                     "pixel_waited": eng.get("pix_dead_t") is not None})  # fmt: skip
+                            elif exp_arm and prm.get("exp_keep") and (fast_ or slow_):
+                                # 3.89: KEEP the target -- a pixel call is no death without its
+                                # line; no re-click while it is unseen (the client's own attack
+                                # goes on); seen again -> the normal path re-clicks it
+                                if eng.get("pix_dead_t") is None:
+                                    eng["pix_dead_t"] = t_now
+                                    ev({"kind": "pix_dead_hold", "k": int(eng["k"]),
+                                        "track": int(eng["track"])})  # fmt: skip
+                                t_seen_ = int(eng.get("t_seen") or eng["t_first_click"])
+                                if not keep_ends(
+                                    t_now,
+                                    t_seen_,
+                                    since_first,
+                                    prm["exp_keep_gone_s"],
+                                    prm["exp_keep_max_s"],
+                                ):
+                                    time.sleep(0.02)
+                                    continue
+                                done = "gone_no_line"
+                                eng["dead_rule"] = "gone_no_line"
+                                ev({"kind": "keep_gone", "k": int(eng["k"]),
+                                    "track": int(eng["track"]),
+                                    "unseen_s": round((t_now - t_seen_) / 1e9, 2),
+                                    "since_first_s": round(since_first, 2)})  # fmt: skip
                             elif exp_arm and (fast_ or slow_):
                                 # 3.87 the CHECKED fallback: the pixel call waits exp_wait_s for
                                 # an EXP line (no re-click meanwhile), then stands only on the
@@ -4736,6 +4794,15 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                     time.sleep(0.4)  # v28: the hybrid death cell needs no gone
                                     # frames (v32: per arm); 3.87: an EXP line is the death, and
                                     # the checked fallback has waited exp_wait_s already
+                                if eng.get("dead_rule") == "exp" and prm.get("exp_loot_delay_s"):
+                                    # 3.89: the loot step starts exp_loot_delay_s after the line's
+                                    # first frame -- the dying sprite still blocks 3-4 cells a step
+                                    # before ~0.7 s after the kill (v42 / v44: 6 clicks vs 8-9)
+                                    w_ = exp_loot_wait_s(int(eng["exp_line"]["t_ns"]), r.ns(),
+                                                         prm["exp_loot_delay_s"])  # fmt: skip
+                                    eng["exp_loot_wait_s"] = round(w_, 3)
+                                    if w_ > 0:
+                                        time.sleep(w_)
                                 here_l = quick_fix()
                                 posm.stop(here_l)
                                 ends_ = [(h_.get("burst") or {}).get("end")

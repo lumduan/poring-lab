@@ -1484,3 +1484,34 @@ runner's loot clear on two identical equipment items in a row, a false "did not 
 - route_previewd stopped;
 - a judged screenshot; `/health` ASSIST, no lease, bot_agents [];
 - no runner, monitor or chain process.
+
+## Loot block (Batt 2026-10-20 ~09:1x: LOOTING EVERY DROP; reports ~13:00 and ~18:00)
+
+Batt: "the walking and striking are good enough for now; the focus is LOOTING EVERY DROP ... if
+the rare item falls and the bot doesn't pick it up before it vanishes, the whole grind is wasted."
+The block's primary is LOOT COMPLETENESS (items picked / dropped by our kills, packets, fates
+split); kills / h is a guard (>= 0.85 x base).
+
+**The server's rules** (pinned rAthena e985006; demonstrations.md 3.89):
+- floor items vanish after 60 s;
+- the killer's priority is 3 s, then 2 + 2 s (boss / MVP 10 + 10 + 2), NOT ~30 s;
+- monster looters ignore the priority (loot_range 12, oldest first);
+- a looter's death drops every item it took.
+
+**The bot-vs-Batt loot line** (`loot_complete.py`, every kill of ours; Batt's demo 61 / 63):
+
+| | completeness | left behind | looters | expired |
+|---|---|---|---|---|
+| Batt's demo | 96.8 % | 0 % | 3.2 % | 0 % |
+| bot v38-v44 (4 runs each) | 46.2-53.5 % | 28.4-37.2 % | 12.6-18.7 % | 0-1.3 % |
+
+- On the kills the bot looted, 30-32 % of the items are still left behind.
+- Kills with no loot step hold 11-15 % of the items.
+- A loot step started < 0.7 s after the kill loses 3-4 of its 9 cells to the dying sprite.
+
+**Order:**
+1. v48 (3.89, pre-registered 09:37): dead = the EXP line alone, the target kept;
+2. the death-cell study, then a version;
+3. no item left behind (HAND cursor, loot memory), after a study of why items are left;
+4. looter recovery;
+5. v45, v46, P3, v47.

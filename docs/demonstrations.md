@@ -11867,6 +11867,171 @@ remove the turns). If a guard fails: NOT adopted.
 
 **Run log (written during the runs):**
 
+### 3.89 hunt-flow@48: DEAD = THE EXP LINE ALONE, THE TARGET KEPT (the loot block's first version), interleaved per engagement (pre-registered 2026-10-20 09:37 ICT, the commit time, BEFORE its runs; Batt ~09:1x: "v48: dead = the EXP line alone, KEEP the target until the line comes or the sprite is really gone (no skip). Loot starts sooner (before looters) and no real kill's loot is abandoned")
+
+**The block (Batt, 2026-10-20 ~09:1x): LOOTING EVERY DROP.** "A bot exists for repetitive work,
+e.g. grinding for a rare drop for 48 hours; if the rare item falls and the bot doesn't pick it up
+before it vanishes, the whole grind is wasted."
+- **The block's primary is LOOT COMPLETENESS:** items picked / items dropped by our kills
+  (packets, offline), with the fates split (picked, left behind, looter, expired). The target is
+  Batt's 97 %.
+- **Kills / h becomes a guard:** >= 0.85 x base.
+- **His order:**
+  1. v48 (this entry);
+  2. the death-cell estimate (an offline study first);
+  3. no item left behind (the HAND cursor; a loot memory);
+  4. looter recovery;
+  5. then v45, v46, P3, v47.
+
+**The server's rules (the pinned rAthena e985006, pre-re; `data/kb/server.json` and the source,
+read 2026-10-20 09:2x):**
+- **Floor items** vanish 60 s after the drop (`flooritem_lifetime: 60000`, drops.conf;
+  map.cpp:2067). Packets agree: one item fell at +352 s and vanished at +412 s.
+- **The killer's loot priority is 3 s, not ~30 s** (`item_first_get_time: 3000`): only the
+  top-damage player may pick it up. Then the top two for 2 s more, then the top three for 2 s
+  more; after 7 s anyone may.
+  - Boss and MVP drops: 10 + 10 + 2 s (`mvp_item_*_get_time`).
+  - Only players are checked (pc.cpp:6209-6243). The lab has one player, so the priority never
+    matters here.
+- **Monster looters ignore the priority.** `mob_ai_sub_hard_lootsearch` (mob.cpp:1412) has no
+  owner check.
+  - They search within `loot_range: 12` cells, the OLDEST item first
+    (`monster_loot_search_type: 1`).
+  - A looter holds up to 10 items (`LOOTITEM_SIZE`); with `monster_loot_type: 0` it consumes the
+    oldest when full.
+  - **When a looter dies, every item it holds drops at its cell** (mob.cpp:3243-3248, rate
+    10000). Looter recovery (step 4) can get them back.
+- **A kill's drops fall at once** (`delay_battle_damage: true`).
+- A client is sent the floor items within 14 cells (AREA_SIZE). Walking farther clears them from
+  OUR view only: the item stays on the floor until its 60 s run out.
+
+**The ruler: `scripts/loot_complete.py` (new, tested; a standard run_row column from now on).**
+- The base is every kill of ours in the judged window: a death vanish within 1.5 s of our
+  damaging act. That holds whatever the engagement made of it: dead, skipped, given up, or no
+  engagement at all.
+- Each kill counts all its drops, with arm_judge.item_fates' fates.
+- The older run_row column, "loot picked / dropped", counted only the engagements ended "dead".
+- **Positive case: Batt's demo (20261016T093835)** gives 61 / 63 = **96.8 %**: left behind 0,
+  looters 2, expired 0. That is his "97 %".
+
+| banked (4 runs each) | our kills | items | COMPLETENESS | left behind | looters | expired | kills with no loot step (their items) |
+|---|---|---|---|---|---|---|---|
+| v38 | 539 | 691 | 53.5 % | 31.1 % | 15.1 % | 0.3 % | 41 = 7.6 % (64) |
+| v39 | 605 | 793 | 53.5 % | 28.4 % | 16.8 % | 1.3 % | 52 = 8.6 % (90) |
+| v40 | 510 | 669 | 51.3 % | 30.9 % | 17.3 % | 0.4 % | 64 = 12.6 % (94) |
+| v41 | 537 | 740 | 46.2 % | 37.2 % | 16.5 % | 0.1 % | 101 = 18.8 % (132) |
+| v42 | 520 | 726 | 46.7 % | 33.3 % | 18.7 % | 1.2 % | 85 = 16.4 % (112) |
+| v44 (both arms) | 374 | 470 | 51.3 % | 36.0 % | 12.6 % | 0.0 % | 48 = 12.8 % (53) |
+| **Batt's demo** | 50 | 63 | **96.8 %** | 0 % | 3.2 % | 0 % | - |
+
+**Where the items go today (v42 and v44, measured before this entry):**
+- **Most of the loss is on kills the bot DID loot.** Their items: picked 314 / 614 (v42) and
+  233 / 417 (v44); left behind 186 and 133 (30 and 32 %); looters 105 and 50.
+- Kills with no loot step hold 15 % (v42) and 11 % (v44) of all items: skipped_risky,
+  skipped_unconfirmed, gave_up, plus 22-33 kills no engagement owned.
+- So v48, which addresses the abandoned kills and the start time, can move completeness by a
+  few points. The left-behind share is steps 2-3's.
+- **v44's fix arm on this ruler:** 46.3 % against the base's 61.4 % (-15.1 points; left behind
+  41.6 vs 27.4 %). Its EXP-line deaths started the loot step during the DYING SPRITE:
+  - the death cell's verdict was "still_visible" in 64 of its steps, against 31 in the base;
+  - pink skips were 128 against 27.
+
+  | kill -> loot step start | v44 fix: steps / unit + pink skips / clicks per step | v44 base | v42 (both arms) |
+  |---|---|---|---|
+  | < 0.4 s | 51 / 2.96 + 1.00 / 6.04 | 42 / 4.19 + 0.14 / 5.67 | 138 / 4.25 + 0.59 / 5.16 |
+  | 0.4-0.7 s | 76 / 2.91 + 0.80 / 6.29 | 27 / 2.96 + 0.44 / 6.59 | 67 / 3.00 + 0.58 / 6.42 |
+  | 0.7-1.0 s | 3 / 0.33 + 0.67 / 9.00 | 8 / 1.75 + 0.12 / 8.12 | 26 / 2.12 + 0.19 / 7.69 |
+  | 1.0-1.5 s | 6 / 2.50 + 1.33 / 6.17 | 5 / 0.60 + 0.00 / 9.40 | 22 / 2.00 + 0.55 / 7.45 |
+  | >= 1.5 s | 22 / 1.91 + 0.05 / 8.05 | 65 / 1.08 + 0.00 / 8.86 | 157 / 1.80 + 0.05 / 8.14 |
+
+  A step that starts within 0.7 s of the kill loses 3-4 of its 9 cells to the dying sprite.
+  "Loot starts sooner" has a floor: about 0.7-0.8 s after the kill.
+
+**The ONE main change: the dead decision and its hand-off to loot (fix arm = odd k).**
+- **Dead = a new base EXP line** after the engagement's first attack click. That is v44's reader
+  and rule, with each line confirming one engagement only.
+- **The loot step starts 0.5 s after the line's first frame** (`exp_loot_delay_s`; the line
+  comes 0.27-0.35 s after the kill at p50), so at about 0.8 s after the kill, past the dying
+  sprite (the table above).
+- **A pixel dead call with no line ends NOTHING: the target is KEPT.**
+  - There is no loot step and no hand-off.
+  - It is not re-clicked while unseen; the client's own attack goes on.
+  - If it is seen again, the normal path re-clicks it every 1.0 s.
+- **The hold ends:**
+  - when its line comes (dead, then the loot step as above);
+  - or when the target has been unseen `exp_keep_gone_s` = 6.0 s since the engagement's OWN last
+    sighting, which outlives the tracker's 2-s drop;
+  - or 14 s after the first click (`exp_keep_max_s`).
+  The last two end "gone_no_line": no loot step, and the track stays selectable.
+  - Why 6.0 s: v44's late lines came up to 3.6 s after its 1.0-s check (4.6 s after the pixel
+    call; unseen ~5.4 s if never seen again). No EXP-line death came later than 5.4 s after the
+    first click (n 157).
+- v44's checked fallback and v40's risky check are not on the fix arm's path.
+- **Base arm (even k):** the dead rule as the base has it (pixel rule, v40's false-dead fix, the
+  0.4-s wait).
+- No new click site; every gate unchanged. The census and the safety tests are green on this
+  build.
+
+**Base:** v43's (the hunting layout, the ping-pong fix, v40's false-dead fix on every engagement)
++ the pocket escape. v44 was NOT adopted (3.87). PARAMS[48] = PARAMS[44] + `exp_keep` /
+`exp_keep_gone_s` 6.0 / `exp_keep_max_s` 14.0 / `exp_loot_delay_s` 0.5; nothing else moves
+(`test_v48_params_keep_the_target_on_the_base`).
+
+**Runs:**
+- 4 x 60 min on prt_fild08, seeds 20360101, 20360202, 20360303, 20360404.
+- Natural spawns, the hunting layout and state applied by the runner, the weight cleared, a
+  judged screenshot before each run, the hard-bar monitor bound to each runner.
+- Chain-queued (`hunt_chain.py --version 48`).
+- Market day: CPU only (the detector on the CPU, nice 10), nothing disk-heavy at 09:30-10:15 or
+  14:00-14:45.
+
+**The null (measured BEFORE this entry; `loot_complete.py null` over 16 banked runs v38, v39, v41,
+v42 in 4-run pools x 5 k splits, parity + 4 balanced, n 20):**
+
+| measure | the arm difference with no change between the arms |
+|---|---|
+| completeness, fix - base | -5.4 .. +6.3 points |
+| kills with no loot step, fix - base | -5.1 .. +4.2 points |
+| kill -> loot start mean (3.87's null, 12 runs v39-v41) | -26.3 % .. +15.6 % |
+
+**Prediction, written before the runs (4 runs pooled, per arm; `arm_judge.py keepdead`, this
+commit; on v44's 4 runs it gives P1 -15.1 points, P2 -2.9, P3 0.38 x, G4 -1.64 s):**
+1. **P1, the block's primary:** completeness, fix - base >= **+6.5 points**.
+2. **P2, Batt's "no real kill's loot is abandoned":** kills of ours with no loot step, fix - base
+   <= **-5.5 points**.
+3. **P3, "loot starts sooner":** kill -> loot start mean, fix <= **0.70 x** base.
+4. **G4, the kills / h guard (>= 0.85 x):** engaged s per kill, fix - base <= 0.176 x the pooled
+   run's s per kill.
+   - Engaged s = the arm's engagements, first click -> end, loot step included; per kill of ours
+     the arm owns.
+   - If every engagement took the fix arm's cost, kills / h would be S / (S + d) >= 0.85.
+5. **G5:** landing within 5 s, fix >= base - 8 points.
+6. **G6:** hard bars zero (NPC contact, map change, non-Creamy non-target hit); a Creamy hit is
+   counted, not a stop.
+7. **Reported, not deciding:**
+   - the fate split per arm;
+   - gone_no_line, how many were real kills of ours and their items;
+   - the holds;
+   - the fix arm's dead_by;
+   - the reader's live precision;
+   - kills / h and death -> next.
+
+**Expected size (written so the read is honest):**
+- The fix arm's abandoned kills hold ~35 items of ~340 an arm; less than half of those would be
+  picked. The dying-sprite delay helps both arms' comparison only where the base starts sooner.
+- So P1's expected gain is about +3 .. +6 points, at or under its bar. **P1 may well miss with a
+  real effect underneath**; P2 and P3 are the mechanism.
+
+**Decision rule:**
+- **ADOPT** if P1, P2, P3, G4, G5 and G6 all pass.
+- **ADOPT AS THE BASE STEP** if P2, P3 and G4-G6 pass and P1 misses its bar with completeness fix
+  >= base. Steps 2-4 build on the EXP-line death and the kept target; the completeness gain is
+  reported as unproven.
+  - This second tier is the agent's design call, flagged to Batt with this entry.
+- Otherwise **NOT adopted**.
+
+**Run log (written during the runs):**
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.

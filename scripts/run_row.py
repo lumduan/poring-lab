@@ -13,7 +13,11 @@ Each run needs flow_judge.json (``--fresh`` writes it first: flow_judge.bot). Th
 - the GM's moving share while steering (the runner's steer spans, packets; arm_judge.mode_spans);
 - seen -> click p50; death -> next click p50;
 - dead calls without a real death (flow_judge.dead_calls);
-- loot: items picked / dropped at our kills, and lost to looters (arm_judge.item_fates);
+- LOOT COMPLETENESS (Batt 2026-10-20, the loot block's primary; loot_complete.py): items picked
+  / dropped by ALL our kills (packets), and the fates' split: left behind (out of our sight) /
+  looters / expired, with their counts; Batt's demo 61 / 63 = 96.8 %, 0 / 3 / 0 %;
+- loot: items picked / dropped at the kills of engagements ended "dead", and lost to looters
+  (arm_judge.item_fates; the older, narrower base);
 - reversals / min, and outside loot steps (Batt 2026-10-19: the bot's loot steps from its own log,
   his demo's from packets, kill -> its last pickup request; his demo: 4.28 / min); Creamy (our
   damaging hits / attack requests on job 1018), and Creamy hits per hour of the judged window
@@ -47,7 +51,10 @@ BATT = {
     "kills per sighting": "6.82", "s per kill": "12.0", "seen / 10 min": "44.0",
     "free targets attacked <= 10 s": "78 %", "steer moving share": "92 %",
     "seen -> click p50 s": "1.11", "death -> next p50 s": "1.24",
-    "dead calls without a real death": "-", "loot picked / dropped (looters)": "97 %",
+    "dead calls without a real death": "-",
+    "LOOT COMPLETENESS (all our kills)": "61/63 = 96.8 %",
+    "  left behind / looters / expired": "0 / 3 / 0 % (0 / 2 / 0)",
+    "loot picked / dropped (looters)": "97 %",
     "reversals / min": "3.6", "reversals outside loot / min": "4.28",
     "Creamy hits (requests)": "-", "Creamy hits / h": "-",
     "hard bars NPC / map / other": "-",
@@ -150,6 +157,10 @@ def row(sid: str, fresh: bool = False) -> dict[str, Any]:
         (o.get("idle_between_kills") or {}).get("p50")
     ]
     sm = steer_moving_share(fld, sess.bot_events, t0, w1)
+    import loot_complete as lc
+
+    lcs = lc.summary(lc.session_rows(sid, sess))
+    lc_c, lc_f = lc.cells(lcs)
     kls = kill_to_loot_start(sess.events, sess.engagements,
                              {int(r_["k"]): r_.get("gid") for r_ in ew["rows"]})  # fmt: skip
     try:
@@ -173,6 +184,8 @@ def row(sid: str, fresh: bool = False) -> dict[str, Any]:
         "death -> next p50 s": ibk[0] if ibk else None,
         "dead calls without a real death": f"{dc['without_death']}/{dc['called']} = "
         f"{100 * (dc['share'] or 0):.1f} %",
+        "LOOT COMPLETENESS (all our kills)": lc_c,
+        "  left behind / looters / expired": lc_f,
         "loot picked / dropped (looters)": f"{loot['picked']}/{loot['items']} = "
         f"{100 * loot['picked'] / max(1, loot['items']):.0f} % ({loot['looter']})",
         "reversals / min": (o.get("heading") or {}).get("reversals_per_min"),
@@ -192,6 +205,7 @@ def row(sid: str, fresh: bool = False) -> dict[str, Any]:
 _FRAC = re.compile(r"^(\d+)/(\d+) = ")
 _PCT_N = re.compile(r"^(\d+) % \(n (\d+)\)$")
 _LOOT = re.compile(r"^(\d+)/(\d+) = \d+ % \((\d+)\)$")
+_LCF = re.compile(r"^\d+ / \d+ / \d+ % \((\d+) / (\d+) / (\d+)\)$")
 _KLS = re.compile(r"^([\d.]+) / ([\d.]+) \(n (\d+)\)$")
 _CREAMY = re.compile(r"^(\d+) \((\d+)\)$")
 _BARS = re.compile(r"^(\S+) / (\S+) / (\S+)$")
@@ -252,6 +266,17 @@ def pool(rows_: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     if dc:
         a, b = sum(x[0] for x in dc), sum(x[1] for x in dc)
         out["dead calls without a real death"] = f"{a}/{b} = {100 * a / max(1, b):.1f} %"
+    lcp = fracs("LOOT COMPLETENESS (all our kills)", _FRAC)
+    lcf = fracs("  left behind / looters / expired", _LCF)
+    if lcp:
+        a, b = sum(x[0] for x in lcp), sum(x[1] for x in lcp)
+        out["LOOT COMPLETENESS (all our kills)"] = f"{a}/{b} = {100 * a / max(1, b):.1f} %"
+        if len(lcf) == len(lcp):
+            o_, l_, e_ = (sum(x[i] for x in lcf) for i in range(3))
+            nb = max(1, b)
+            out["  left behind / looters / expired"] = (
+                f"{100 * o_ / nb:.0f} / {100 * l_ / nb:.0f} / {100 * e_ / nb:.0f} % "
+                f"({o_} / {l_} / {e_})")  # fmt: skip
     lt = fracs("loot picked / dropped (looters)", _LOOT)
     if lt:
         a, b, c = (sum(x[i] for x in lt) for i in range(3))

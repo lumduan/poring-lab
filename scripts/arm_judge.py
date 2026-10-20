@@ -1268,6 +1268,102 @@ def expdead_table(sids: Iterable[str]) -> dict[str, Any]:
     return {"arms": out, "checks": checks, "per_run": per_run}
 
 
+def keepdead_table(sids: Sequence[str]) -> dict[str, Any]:
+    """3.89 (hunt-flow@48, Batt 2026-10-20: the loot block's first version): per arm -- "fix" =
+    odd k (dead = the EXP line alone, the target kept until its line or gone_no_line), "base" =
+    even k -- pooled over ``sids``:
+    P1. LOOT COMPLETENESS (loot_complete.py: items picked / items dropped by OUR kills, every kill
+        of ours owned by the arm's engagements), fix - base in points;
+    P2. abandoned kills (a kill of ours whose engagement ran no loot step), fix - base in points;
+    P3. kill -> loot start, mean (expdead_table's ruler);
+    G4. the kills / h guard: engaged s per kill (sum of the arm's engagements, first click -> end,
+        loot step included, / the arm's kills of ours), fix - base <= 0.176 x the pooled run's s
+        per kill (= kills / h >= 0.85 x base if every engagement took the fix arm's cost);
+    G5. landing within 5 s, fix >= base - 8 points; G6. hard bars zero.
+    Reported: the fate split per arm, gone_no_line and how many were real kills of ours (their
+    items), the fix arm's dead_by, the reader's live precision per run."""
+    import loot_complete as lc
+    import search_study as ss
+
+    ed = expdead_table(sids)
+    rows = {sid: lc.session_rows(sid) for sid in sids}
+    allr = [r for sid in sids for r in rows[sid]]
+    lca = lc.arms(allr)
+    eng_s = {"fix": 0.0, "base": 0.0}
+    window_s = 0.0
+    kills_all = 0
+    gone: Counter[str] = Counter()
+    for sid in sids:
+        sess = ss.load_session(sid)
+        fjo = json.loads((DEMO / sid / "flow_judge.json").read_text())
+        window_s += float(fjo["window_s"])
+        kills_all += int(fjo.get("kills") or 0)
+        for x in sess.engagements:
+            if not sess.t0 <= int(x["t_first_click"]) < sess.w1 or not x.get("t_end"):
+                continue
+            arm = "fix" if int(x["k"]) % 2 == 1 else "base"
+            eng_s[arm] += (int(x["t_end"]) - int(x["t_first_click"])) / NS
+            if x.get("result") == "gone_no_line":
+                gone["gone_no_line"] += 1
+        for r in rows[sid]:
+            if r["result"] == "gone_no_line":
+                gone["gone_no_line_real_kills"] += 1
+                gone["gone_no_line_items"] += len(r["fates"])
+                gone["gone_no_line_items_picked"] += r["fates"].count("picked")
+    run_s_per_kill = window_s / kills_all if kills_all else None
+    out = {}
+    for arm in ("fix", "base"):
+        a = lca[arm]
+        out[arm] = {**{k: a[k] for k in ("kills", "items", "picked", "out_of_sight", "looter",
+                                           "expired", "left", "gone", "completeness",
+                                           "out_of_sight_share", "looter_share", "expired_share",
+                                           "abandoned_kills", "abandoned_share",
+                                           "abandoned_items")},
+                    "engaged_s": round(eng_s[arm], 1),
+                    "engaged_s_per_kill": round(eng_s[arm] / a["kills"], 2) if a["kills"] else None,
+                    "kill_to_loot_start_mean": ed["arms"][arm]["kill_to_loot_start_mean"],
+                    "kill_to_loot_start_p50_p90": ed["arms"][arm]["kill_to_loot_start_p50_p90"],
+                    "landing": ed["arms"][arm]["landing"],
+                    "dead_not_real_share": ed["arms"][arm]["dead_not_real_share"],
+                    "results": {k[7:]: v for k, v in ed["arms"][arm].items()
+                                if k.startswith("result:")},
+                    "dead_by": {k[8:]: v for k, v in ed["arms"][arm].items()
+                                if k.startswith("dead_by:")}}  # fmt: skip
+    out["no_engagement"] = {k: lca["no_engagement"][k] for k in ("kills", "items", "picked",
+                                                                  "completeness")}  # fmt: skip
+    f, b = out["fix"], out["base"]
+
+    def pts(x: Any, y: Any) -> float | None:
+        return None if x is None or y is None else round(100 * (x - y), 1)
+
+    d_c = pts(f["completeness"], b["completeness"])
+    d_a = pts(f["abandoned_share"], b["abandoned_share"])
+    d_e = (None if f["engaged_s_per_kill"] is None or b["engaged_s_per_kill"] is None
+           else round(f["engaged_s_per_kill"] - b["engaged_s_per_kill"], 2))  # fmt: skip
+    kl_f, kl_b = f["kill_to_loot_start_mean"], b["kill_to_loot_start_mean"]
+    checks = {
+        "P1 completeness fix - base >= +6.5 points": None if d_c is None else d_c >= 6.5,
+        "P2 abandoned kills fix - base <= -5.5 points": None if d_a is None else d_a <= -5.5,
+        "P3 kill -> loot start mean fix <= 0.60 x base": (
+            None if kl_f is None or not kl_b else kl_f <= 0.60 * kl_b),
+        "G4 engaged s per kill fix - base <= 0.176 x run s per kill": (
+            None if d_e is None or run_s_per_kill is None else d_e <= 0.176 * run_s_per_kill),
+        "G5 landing fix >= base - 8 points": (
+            None if f["landing"] is None or b["landing"] is None
+            else f["landing"] >= b["landing"] - 0.08),
+        "G6 hard bars zero": ed["checks"]["5 hard bars zero"],
+        "completeness fix >= base (the base-step tier)": None if d_c is None else d_c >= 0,
+    }  # fmt: skip
+    return {"arms": out, "differences": {"completeness_points": d_c, "abandoned_points": d_a,
+                                         "engaged_s_per_kill": d_e,
+                                         "kill_to_loot_start_ratio": (
+                                             None if kl_f is None or not kl_b
+                                             else round(kl_f / kl_b, 3)),
+                                         "run_s_per_kill": None if run_s_per_kill is None
+                                         else round(run_s_per_kill, 2)},
+            "gone_no_line": dict(gone), "checks": checks, "per_run": ed["per_run"]}  # fmt: skip
+
+
 def species_table(sessions: Iterable[dict[str, Any]]) -> dict[str, Any]:
     """v35: per engagement parity (odd k = the species check on the box's OWN frame, even k =
     the fresh crop at the stale box): arm C's eligibility (the ``abc`` events: effective arm,
@@ -1465,7 +1561,7 @@ def main() -> int:
     ap.add_argument("what", choices=("strike", "dead", "loot", "stray", "blocks", "species",
                                      "retry", "sword", "sword-precision", "heading",
                                      "approach", "deadprobe", "falsedead", "walkers",
-                                     "expdead", "steerguard"))  # fmt: skip
+                                     "expdead", "steerguard", "keepdead"))  # fmt: skip
     ap.add_argument("sessions", nargs="+")
     a = ap.parse_args()
     if a.what == "heading":  # its own loader (search_study's windows and field)
@@ -1488,6 +1584,9 @@ def main() -> int:
         return 0
     if a.what == "expdead":  # 3.87's per-arm judge
         print(json.dumps(expdead_table(a.sessions), indent=1, default=str))
+        return 0
+    if a.what == "keepdead":  # 3.89's per-arm judge
+        print(json.dumps(keepdead_table(a.sessions), indent=1, default=str))
         return 0
     sessions = [load(s) for s in a.sessions]
     if a.what == "sword-precision":

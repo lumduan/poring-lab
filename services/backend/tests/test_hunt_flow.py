@@ -1214,6 +1214,33 @@ def test_v42_params_on_the_adopted_v43_base() -> None:
     assert same == {k: v for k, v in hf.PARAMS[43].items() if k not in moved}
 
 
+def test_v48_params_keep_the_target_on_the_base() -> None:
+    """3.89 (Batt 2026-10-20): PARAMS[48] = PARAMS[44] (v43's + the pocket escape + the EXP-line
+    rule on odd k) with the kept target (exp_keep, 6.0 s unseen, 14 s at most); nothing else
+    moves, and v44's checked fallback is not on the fix arm's path."""
+    p = hf.PARAMS[48]
+    assert 48 in hf.VERSIONS
+    assert p["exp_dead"] and p["exp_dead_ab"]  # odd k = the fix arm
+    assert p["exp_keep"] and p["exp_keep_gone_s"] == 6.0 and p["exp_keep_max_s"] == 14.0
+    assert p["exp_loot_delay_s"] == 0.5  # the dying sprite's fade before the loot step
+    assert p["false_dead_fix"] and not p["false_dead_ab"]  # the base arm's rule as the base has it
+    assert not p.get("steer_guard_box_px") and not p.get("steer_tail")
+    moved = ("exp_keep", "exp_keep_gone_s", "exp_keep_max_s", "exp_loot_delay_s")
+    assert {k: v for k, v in p.items() if k not in moved} == hf.PARAMS[44]
+
+
+def test_keep_ends_on_the_engagements_own_sighting() -> None:
+    """3.89: a kept target ends gone_no_line only once unseen 6.0 s since ITS last sighting (not
+    the tracker's, which drops a track after 2 s), or 14 s after the first click."""
+    s = 10**9
+    assert not hf.keep_ends(10 * s, 4 * s + 1, 7.0, 6.0, 14.0)  # unseen 5.999 s
+    assert hf.keep_ends(10 * s, 4 * s, 7.0, 6.0, 14.0)  # unseen 6.0 s
+    assert hf.keep_ends(10 * s, 9 * s, 14.01, 6.0, 14.0)  # the bound
+    assert "gone_no_line" in hf.SKIPPED_SELECTABLE  # the track stays selectable
+    assert abs(hf.exp_loot_wait_s(10 * s, 10 * s + s // 5, 0.5) - 0.3) < 1e-9  # 0.2 s late
+    assert hf.exp_loot_wait_s(10 * s, 11 * s, 0.5) == 0.0  # already past
+
+
 def test_v44_params_on_the_base_v42_left() -> None:
     """3.87 (4d937b4, amendment 2a00832): PARAMS[44] = the base v42's verdict leaves,
     v43's (v42 not adopted, 3.83) + the pocket escape,
@@ -1261,7 +1288,11 @@ def test_exp_dead_pure_parts() -> None:
     assert hf.checked_fallback("ok") == "dead"
     for why in ("no_track", "never_seen", None, "jumped"):
         assert hf.checked_fallback(why) == "skipped_unconfirmed"
-    assert set(hf.SKIPPED_SELECTABLE) == {"skipped_risky", "skipped_unconfirmed"}
+    assert set(hf.SKIPPED_SELECTABLE) == {
+        "skipped_risky",
+        "skipped_unconfirmed",
+        "gone_no_line",
+    }  # 3.89
     for n in hf.PARAMS:
         if n <= 43:
             assert not hf.PARAMS[n].get("exp_dead")
