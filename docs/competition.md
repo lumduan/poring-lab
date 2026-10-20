@@ -1706,3 +1706,27 @@ ADOPTED.**
     - his first loot press 1.23 s after the kill (p50);
     - 1.48 presses per item picked.
   - Pre-registered as 3.91.
+
+**Batt's decisions after 3.91 run 1 (received ~19:5x):** v50 runs all 4 runs; D (the loot memory)
+SKIPPED (~1 item in 58 under his rule), looter recovery only if the numbers ask for it; NEXT =
+option B (v51: a later pass only on the HAND cells + their 8 neighbours; built d3e3c78 on
+`feat/gm-pass2`, queued only after v50's verdict); then option C, measured offline first.
+- **Option C offline (`scripts/loot_sight.py`, 018daf5).**
+  - Per kill with the GM still, each of the 25 cells is classed:
+    - SEEN: the item matcher puts an item there;
+    - UNSURE: the GM's sprite covers it, or its patch changed since a frame 0.4 s before the
+      kill (registered first: the camera jitters 1-2 px);
+    - EMPTY: neither.
+  - Only EMPTY cells may be skipped. The threshold was set on 3.91 run 1 alone.
+
+  | run | kills (GM still) | EMPTY cells a kill | hover s saved a pass | items on EMPTY cells (the loss) | matcher sees our items |
+  |---|---|---|---|---|---|
+  | 3.91 run 1 (training) | 44 | 8.7 | 1.54 | 0 / 39 | 36 % |
+  | 3.91 run 2 (held out) | 46 | 8.8 | 1.57 | **0 / 55** (+3 others) | 42 % |
+
+  - **The no-drop check does not work with these signals:**
+    - N1 "the matcher sees nothing": skips all no-drop kills but would also skip 66 % / 53 % of
+      kills that dropped;
+    - N2 "nothing changed outside the dying monster": never fires. The corpse fade and the
+      damage numbers change the monster's 3 x 3 and 2 cells above it, and 31 of 47 items lie on
+      the monster's own cell.
