@@ -1802,3 +1802,53 @@ rule: one pass on odd k, v50's up to 3 passes on even k.
   - fell after the step 12;
   - clicked but became a walk 2.
   - The search took the GM away from 31 of them.
+
+**Top causes, re-ranked after v51 (2026-10-21 03:1x; the 4 v51 runs pooled, 4.0 h).**
+Sources:
+- the time from the runner's own phase split (`manifest.json`);
+- the pocket from `map_zone_candidates.py --sessions` over the four runs;
+- the loot losses from `left_behind.py` (its `cause_by_fate`).
+
+TIME (s per hour of the loop; per kill; Batt's comparable figure):
+1. **Searching 1491 s / h (41 %), 15.6 s per kill.** Seen 24.4 vs Batt 44 / 10 min. Free targets
+   attacked <= 10 s: 39 % vs 78 %.
+   - The pocket C1 (the SE room behind the 2-cell door at x 319-320 / y 89-91) took 374 s / h
+     on average (10.4 %), at 0.24 kills / min inside vs 1.72 outside.
+   - All of that came from runs 1 and 4: run 4 spent **1375 s (37.5 %) inside, longest stay
+     640 s, 6 kills**, and made 67.9 kills / h; run 1 spent 150 s; runs 2-3 spent 0.
+   - Batt's no-cross line at its door (the candidate list on the NAS) is the fix. It waits for
+     his file.
+2. **Steering 798 s / h (22 %), 8.4 s per kill.** Seen -> click p50 3.39 s vs 1.11 s; the steer
+   is moving 38 % of the time vs 92 %.
+3. **Looting 798 s / h (22 %), 8.4 s per kill.** Half of these steps were v50's 3 passes.
+   - With one pass on every kill: the step mean 7.72 s, ~690 s / h.
+   - Batt: kill -> last pickup mean 2.53 s.
+   - Option C (skip the cells whose image did not change, ~12 of 25) would save ~2.1 s more a
+     pass. Held out: no item ever lay on a skipped cell.
+4. Fighting 272 s / h (2.8 s per kill); striking 242 s / h (2.5 s per kill).
+
+LOOT (92 of 446 items not picked, 20.6 points; the fate in brackets):
+1. **Outside the 25-cell plan: 31 (7.0 points)**; 17 near the death cell (10 left out of sight, 7
+   to looters). The GM stands 1-2 cells off the death cell, and the drops scatter around the death
+   cell, not around the GM.
+2. **In the plan, unclicked: 27 (6.1 points). 17 of them went to LOOTERS** before the scan reached
+   their cell; 10 were left out of sight. The reader is not the cause: across 10573 empty reads,
+   4 had an item on the cell. So this is the race, and a shorter scan (C's skip and order) is
+   what moves it.
+3. No loot step: 20 (4.5 points); 11 kills with no engagement of ours.
+4. Fell after the step: 12 (2.7 points).
+5. Clicked, became a walk: 2.
+
+**The phone clip of the best loot stretch:** v51 run 2 (20261020T234607) from minute 43.0. Over 2 min,
+6 kills and 11 / 11 of their items picked, the most items picked at 100 % in any of the 8 runs of
+v50-v51 (`lc/loot_stretch.py`).
+- The file: `/mnt/poring-lab-datasets/hunt-recordings/clips/v51-best-loot-2min-T234607-m43-960.mp4`
+  (960 x 540, 120.5 s, 10.8 MB, sha256 013b1547..., read back).
+- The most items picked in any window was v50 run 4 from minute 28.83: 15 / 28 from 11 kills
+  (54 %). Not chosen, because it was not complete.
+
+**The night's end state (02:56, `ap/night_end.sh`):** the standard layout (F12 rows 4, the panel
+expanded, the Regular tab); @resetstat, Base / Job Lv 1, @heal (gm_state `fixed`); route_previewd
+stopped.
+- The judged screenshot shows HP 40 / 40, no dialog.
+- /health: ASSIST, no lease, bot_agents [].
