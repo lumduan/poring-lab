@@ -70,3 +70,13 @@ def test_summary_counts_the_loss_and_the_no_drop_rates() -> None:
     assert s["LOSS_ours_on_empty"] == 1 and s["ours_items"] == 2 and s["ours_seen_share"] == 0.5
     assert s["N1_FALSE_skip_on_drops"] == 1.0 and s["N2_skip_on_no_drop"] == 1.0
     assert s["N2_FALSE_skip_on_drops"] == 0.0
+
+
+def test_line_anchor_is_the_first_exp_line_after_the_kill() -> None:
+    """Live timing: the runner knows of a kill at the EXP line's first frame (p50 0.33 s later)."""
+    s = ls.NS
+    lines = [int(1.2 * s), int(5.3 * s), int(9.9 * s)]
+    assert ls.line_anchor(1 * s, lines) == int(1.2 * s)
+    assert ls.line_anchor(5 * s, lines) == int(5.3 * s)
+    assert ls.line_anchor(6 * s, lines) is None  # 3.9 s later: not this kill's line
+    assert ls.line_anchor(10 * s, lines) is None
