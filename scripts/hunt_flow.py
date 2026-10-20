@@ -3128,6 +3128,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 out["end"] = "cap"
                 passes = 0
                 k_g = int(eng_.get("k", 0))
+                given_up: set[Cell] = set()
 
                 def hover(c_: Cell, ref_: Cell, pass_: int, burst_: int) -> tuple[str, Any]:
                     u_, v_ = frac_project(w_l, (float(ref_[0]), float(ref_[1])), c_)
@@ -3162,6 +3163,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         c_g = queue_.pop(0)
                         if time.monotonic() - t_l0 >= prm["loot_gm_max_s"]:
                             break
+                        if c_g in given_up:
+                            continue
                         if any(cheb(c_g, nc_) <= 2 for nc_ in npc_c):
                             seen_c["npc"] += 1
                             continue
@@ -3174,6 +3177,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         if sn_g != "hand" or px_g is None:
                             continue
                         found = True
+                        moved_any = False
                         for b_ in range(int(prm["loot_gm_burst_max"])):
                             t_lc = r.ns()
                             # the LOOT click (Batt's rule): only on a HAND read at this pixel
@@ -3191,11 +3195,21 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             if rf2_ is None:
                                 out["stop"] = "jump"
                                 break
+                            moved_any = moved_any or rf2_[0] != ref
                             ref = rf2_[0]
                             sn_g, px_g = hover(c_g, ref, passes, b_ + 1)
                             seen_c["burst_" + sn_g] += 1
                             if sn_g != "hand" or px_g is None:
                                 break
+                        else:
+                            # the whole burst, the hand still there and the GM never moved: the
+                            # clicks may do nothing (v49 run 1b k129: 6 accepted clicks, no
+                            # request at all) -- the cell is given up for this step (a pickup
+                            # within 2 cells needs no walk, and a stack keeps its hand: so only
+                            # after the WHOLE burst)
+                            if not moved_any and not out.get("stop"):
+                                given_up.add(c_g)
+                                seen_c["given_up"] += 1
                         if out.get("stop"):
                             break
                     if out.get("stop"):
