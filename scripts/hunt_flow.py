@@ -571,9 +571,10 @@ PARAMS[50] = {**PARAMS[48], "exp_dead_ab": False, "loot_gm": True, "loot_gm_ab":
               "loot_gm_passes": 3, "loot_gm_max_s": 12.0, "loot_gm_edge": True}  # fmt: skip
 # 51 = ONE PASS (Batt 2026-10-20 ~21:0x, after his 21:01 / 21:03 clips: "one accurate pass is
 # enough ... hover each cell once, burst-click any HAND until it's gone (re-hovering only that
-# cell), then resume"; it replaces option B when pass >= 2 rarely finds a new item -- 3.91 runs
-# 1-2: 0 HAND cells first seen in pass >= 2 in 84 steps, those passes 212 s of 890): his loot
-# rule on EVERY engagement (v50's, the default); on odd k ONE pass (gm_passes), even k v50's up to 3
+# cell), then resume"; it replaces option B when pass >= 2 rarely finds a new item -- 3.91's four
+# runs: 1 HAND cell first seen in pass >= 2 in 109 later passes, those passes 398 s of 1732): his
+# loot rule on EVERY engagement (v50, ADOPTED by Batt 22:4x); on odd k ONE pass (gm_passes), even k
+# v50's up to 3
 PARAMS[51] = {**PARAMS[50], "loot_gm_ab": False, "loot_gm_one_pass": True,
               "loot_gm_one_pass_ab": True}  # fmt: skip
 

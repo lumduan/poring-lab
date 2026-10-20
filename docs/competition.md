@@ -1732,7 +1732,7 @@ option B (v51: a later pass only on the HAND cells + their 8 neighbours; built d
       the monster's own cell.
 
 **v50's verdict (3.91, 2026-10-20 22:4x, 4 x 60 min pooled; demonstrations.md 3.91): ADOPTED as
-the base by BATT'S DECISION** (his overnight order: "if P1, P2, M3 and G5 pass, ADOPT v50 as the
+the base by BATT'S DECISION** (his overnight order, received 21:24 ICT: "if P1, P2, M3 and G5 pass, ADOPT v50 as the
 base even if G4 (the kills/h guard) fails").
 - **P1** completeness: his rule 179/225 = **79.6 %** vs the blind 3 x 3 112/202 = 55.4 %, **+24.1
   points** (the null tops out at +6.3).

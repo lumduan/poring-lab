@@ -12903,7 +12903,7 @@ points.
 
 **VERDICT (2026-10-20 22:4x, 4 runs pooled; `arm_judge.py gmloot` over the four sessions):
 P1, P2, M3 and G5 PASS; G4 FAILS. ➡️ ADOPTED as the base by BATT'S DECISION (his overnight
-order, received ~21:3x): "if P1, P2, M3 and G5 pass, ADOPT v50 as the base even if G4 (the
+order, received 21:24 ICT): "if P1, P2, M3 and G5 pass, ADOPT v50 as the base even if G4 (the
 kills/h guard) fails; record that as my decision."** (3.91's own rule sent a G4 failure to Batt;
 he had answered in advance.)
 
@@ -12969,6 +12969,81 @@ he had answered in advance.)
 - **The base for what follows:** v50 (Batt's rule) on EVERY engagement (`loot_gm_ab` off),
   adopted by Batt's decision; with v48 (the EXP line, the kept target), v43's layout and the
   pocket escape.
+
+### 3.92 hunt-flow@51: ONE PASS -- each cell around the drawn GM hovered once, a HAND burst-clicked until gone, then resume; interleaved per engagement (pre-registered 2026-10-20 22:44 ICT, the commit time, BEFORE its runs; Batt's overnight order, received 2026-10-20 21:24 ICT: "The next loot version is chosen FROM DATA ... If pass >= 2 adds little (your call, state the numbers), the next version is ONE PASS: hover each cell once, burst-click any HAND until it's gone (re-hover only that cell), then resume. Otherwise run B (v51) as built.")
+
+**The data, measured before this entry (3.91's four runs, `lc/pass2_value.py`, offline):**
+| run | steps | with a later pass | HAND cells first seen in pass >= 2 | items picked there | later passes' time / all step time |
+|---|---|---|---|---|---|
+| 1 | 47 | 31 | 0 | 0 | 120.2 / 487.0 s |
+| 2 | 37 | 26 | 0 | 0 | 92.0 / 402.6 s |
+| 3 | 30 | 20 | 0 | 0 | 65.4 / 308.5 s |
+| 4 | 52 | 32 | 1 | 1 | 120.1 / 533.8 s |
+| pooled | 166 | 109 | **1** | **1** | **397.7 / 1731.8 s (23 %)**, 1925 hovers |
+- **The call:** pass >= 2 added ONE item in 109 later passes (~0.6 % of the 179 items the rule picked) for 23 % of its step time, ~3.6 s per step that ran one. That is little: ONE PASS.
+
+**Why not B:** B (option B, built d3e3c78 on `feat/gm-pass2`) narrows a later pass to the HAND
+cells and their neighbours. With no new item ever found in a later pass, its later pass is still
+pure cost.
+- ONE PASS removes that cost whole.
+- B stays on its branch, unmerged.
+
+**The ONE main change (fix arm = odd k, `loot_gm_one_pass` / `loot_gm_one_pass_ab`, `gm_passes`;
+built 3d9272c on `feat/gm-one-pass`):**
+- The scan around the drawn GM runs ONE pass: its own cell, the 3 x 3, the 5 x 5's edge, each
+  hovered once.
+- A HAND is burst-clicked in Batt's rhythm (0.59 s), re-hovering only that cell, until the hand
+  is gone.
+- Then the step ends (`end` "one_pass" when it found a hand, "no_hand" when not) and the hunt
+  resumes.
+- **Base arm (even k):** v50's rule as adopted, up to 3 passes.
+- Everything else as v50:
+  - the stand;
+  - the readout reference;
+  - HAND-only clicks;
+  - the settle and the GM re-read between cells;
+  - the give-up guard;
+  - the 12-s cap.
+- No new click site.
+
+**Base:** v50 = Batt's loot rule on EVERY engagement (`loot_gm_ab` off), ADOPTED by Batt's decision at
+3.91's verdict (P1, P2, M3, G5 passed; G4 failed and was waived by him); with v48 (the EXP line,
+the kept target), v43's layout and the pocket escape. `PARAMS[51] = {**PARAMS[50], "loot_gm_ab":
+False, "loot_gm_one_pass": True, "loot_gm_one_pass_ab": True}`; nothing else moves
+(`test_v51_params_one_pass_on_v50`). Merged in 6155a7d.
+- Unlike 3.91, BOTH arms scan around the GM, so the arms differ only in the later passes.
+- Option B (`feat/gm-pass2`, d3e3c78) and the map zones (`feat/map-zones`, 3ce8c49) are NOT in
+  this run's code (Batt: no bot change for the zones tonight).
+
+**Runs:** 4 x 60 min on prt_fild08, seeds 20390101, 20390202, 20390303, 20390404.
+- **The live check in run 1 at ~10 min** (3.90 amendment 1's gate; offline, packets, the agent's
+  judgment):
+  - >= 4 HAND clicks of the GM scan;
+  - >= 70 % of them followed by a pickup request within 2 s and before our next click.
+  - Otherwise the run stops: a fault, not a result.
+
+**The null (3.89's, 16 banked runs):** completeness fix - base -5.4 .. +6.3 points.
+
+**Predictions, written before the runs (4 runs pooled, per arm; `arm_judge.py gmloot`):**
+1. **P1, the change's purpose:** loot step time, mean, fix / base <= 0.85.
+   - The estimate: later passes took 23 % of the step time, so ~0.77 x.
+2. **P2, no loss:** completeness fix - base >= -6 points (beyond the null's lower edge).
+3. **M3:** HAND clicks that became a pickup request >= 0.85.
+4. **G5:** hard bars zero; a Creamy hit is counted, not a stop.
+5. **Reported, not deciding:**
+   - gross and net completeness per arm;
+   - left behind / looters / expired per arm;
+   - kill -> the last pickup p50 / mean per arm (Batt 1.56 / 2.53 s);
+   - the loot step's p50 / mean per arm;
+   - engaged s per kill per arm and kills / h;
+   - the HAND-click precision (first clicks / burst re-clicks);
+   - burst gaps;
+   - hovers by what they read;
+   - the left-behind causes per arm.
+
+**Decision rule:** ADOPT (one pass into the base) if P1, P2 and G5 pass. If P2 fails, the second
+pass did catch items the data missed: NOT adopted, reported with the left-behind causes. If M3
+fails, the result goes to Batt.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
