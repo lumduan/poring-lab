@@ -1798,6 +1798,16 @@ rule: one pass on odd k, v50's up to 3 passes on even k.
   | bot v50, the whole run (half the kills on the blind 3 x 3) | 67.0 % (71.8 %) | - | 1.91 / 2.57 s | - |
   | bot v38-v44 | 46.2-53.5 % | 28.4-37.2 / 12.6-18.7 / 0-1.3 % | - | - |
 
+- **Batt's ruler, split** (`lc/ruler_split.py`, packets; the pickup REQUEST of each picked item):
+
+  | | kill -> first pickup p50 / mean | first -> last pickup p50 / mean | kill -> last p50 / mean | picked items a kill |
+  |---|---|---|---|---|
+  | Batt's demo (n 39) | 1.45 / 1.79 s | 0.00 / 0.74 s | 1.56 / 2.52 s | 1.56 |
+  | bot v51, 4 runs (n 244) | **1.54** / 2.30 s | 0.00 / 0.88 s | 2.52 / 3.19 s | 1.45 |
+
+  - The bot's FIRST pickup is already at Batt's pace (p50 1.54 vs 1.45 s).
+  - It loses in the slow tail of first pickups (mean +0.51 s: items found late in the scan) and
+    between items (mean +0.14 s).
 - **What is still lost (92 items over 4 h, looters' included):**
   - in the plan but unclicked 27;
   - no loot step 20;
