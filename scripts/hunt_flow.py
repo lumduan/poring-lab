@@ -34,7 +34,7 @@ import math
 import sys
 import time
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -1858,6 +1858,76 @@ def items_first(
     return [(c, (0.0, 0.0), px) for c, px in first] + [(c, j, None) for c, j in plan]
 
 
+def hand_on(prm: dict[str, Any], k: int) -> bool:
+    """PURE (3.90, the HAND scan): does engagement ``k``'s loot step take the HAND scan?
+    ``loot_hand`` on; with ``loot_hand_ab`` only odd k (the fix arm)."""
+    return bool(prm.get("loot_hand")) and (not prm.get("loot_hand_ab") or k % 2 == 1)
+
+
+def hand_seen(verdict: str, rec: Mapping[str, float], pickup_min: float) -> str:
+    """PURE (3.90): one hover's cursor (cursor_sword.check) as the scan reads it: "sword" (a unit
+    under the pointer), "hand" (the PICKUP cursor: an item; recall >= ``pickup_min``), "empty"
+    (the WALK arrow drawn: nothing to pick there), "unknown" (no shape read in time)."""
+    if verdict == "sword":
+        return "sword"
+    if verdict == "clear":
+        return "hand" if float(rec.get("pickup", 0.0)) >= pickup_min else "empty"
+    return "unknown"
+
+
+HAND_TRIES = 2  # a SWORD (a unit on it) or an unread cursor: one more try, then given up
+HAND_RECHECK_MAX = 4  # items stacked on one cell: re-hovered after each pickup, at most this often
+HAND_EXTRA_MAX = 8  # cells added beyond the 3 x 3 (a HAND on its edge), at most
+
+
+def hand_next(order: Sequence[Cell], st: Mapping[Cell, Mapping[str, Any]], now: float
+              ) -> Cell | None:  # fmt: skip
+    """PURE (3.90, the HAND scan): the next cell to hover, in scan order -- one never hovered
+    ("todo"), one to re-hover after a pickup ("recheck"), or a SWORD / unread one whose retry time
+    has come (fewer than HAND_TRIES tries); None = the scan is done (no cell can show a HAND)."""
+    for c in order:
+        s = st.get(c) or {"state": "todo"}
+        if s["state"] in ("todo", "recheck"):
+            return c
+        if (s["state"] in ("sword", "unknown") and int(s.get("n", 0)) < HAND_TRIES
+                and now >= float(s.get("t_ok", 0.0))):  # fmt: skip
+            return c
+    return None
+
+
+def hand_update(st: dict[Cell, dict[str, Any]], c: Cell, seen: str, now: float,
+                retry_s: float) -> None:  # fmt: skip
+    """PURE: one hover's result into the scan state. ``seen``: "hand" (the PICKUP cursor; the
+    caller clicked it), "empty" (the WALK arrow drawn: nothing to pick), "sword" (a unit under
+    the pointer), "unknown" (no cursor read in time)."""
+    s = st.setdefault(c, {"state": "todo", "n": 0, "hands": 0})
+    if seen == "hand":
+        s["hands"] = int(s.get("hands", 0)) + 1
+        s["state"] = "recheck" if s["hands"] < HAND_RECHECK_MAX else "done"
+    elif seen == "empty":
+        s["state"] = "empty"
+    else:
+        s["state"] = seen
+        s["n"] = int(s.get("n", 0)) + 1
+        s["t_ok"] = now + retry_s
+
+
+def hand_extend(order: list[Cell], c: Cell, center: Cell, added: int) -> int:
+    """PURE: a HAND on the 3 x 3's EDGE (Chebyshev 1 from ``center``) adds the cells beyond it at
+    radius 2 that touch it (an edge cell 3, a corner 5), not already in ``order``, up to
+    HAND_EXTRA_MAX in all; returns the new total added."""
+    if max(abs(c[0] - center[0]), abs(c[1] - center[1])) != 1:
+        return added
+    for dy in (-1, 0, 1):
+        for dx in (-1, 0, 1):
+            n = (c[0] + dx, c[1] + dy)
+            if (max(abs(n[0] - center[0]), abs(n[1] - center[1])) == 2 and n not in order
+                    and added < HAND_EXTRA_MAX):  # fmt: skip
+                order.append(n)
+                added += 1
+    return added
+
+
 def loot_retry_of(
     step: Sequence[Any], why: str, retry_on: bool, now: float, wait_s: float
 ) -> tuple[Any, ...] | None:
@@ -2575,6 +2645,11 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 import cursor_sword as csw_
 
                 sword_refs = csw_.SwordRefs.load()
+            hand_refs: Any = None  # 3.90: the HAND scan's own (it never turns sword_on on)
+            if prm.get("loot_hand"):
+                import cursor_sword as csw_h
+
+                hand_refs = csw_h.SwordRefs.load()
 
             def steer_tail_on(k_: int) -> bool:
                 """v39 (the continuous approach): the steer's walk click may take the route's
@@ -2798,6 +2873,82 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 finally:
                     split.to(prev_, time.monotonic())
 
+            def hand_still(max_s: float) -> bool:
+                """3.90: wait until the DRAWN camera stands -- the floor odometry (its own
+                thread, from the frames) shows no move for loot_hand_still_s -- at most
+                ``max_s``; True when it stood. A loot click aimed while the camera still moves
+                lands off its cell (2026-10-20: later loot clicks 10.8 % exact, 3.6 % walking)."""
+                t_s = time.monotonic()
+                t_q: float | None = None
+                while time.monotonic() - t_s < max_s:
+                    if moving_meas():
+                        t_q = None
+                    elif t_q is None:
+                        t_q = time.monotonic()
+                    elif time.monotonic() - t_q >= prm["loot_hand_still_s"]:
+                        return True
+                    time.sleep(0.03)
+                return False
+
+            def loot_hand_steps(eng_: dict[str, Any], dcell: Cell, out: dict[str, Any],
+                                t_l0: float, w_l: Any, npc_c: Sequence[Cell],
+                                pos_l: Any) -> None:  # fmt: skip
+                """3.90 (Batt 2026-10-20, the loot block's step 3: "a loot step ends only when
+                the drop area shows no HAND cursor"): from a drawn standstill each cell of the
+                3 x 3 (the server's drop order first) is HOVERED -- moves only -- and clicked
+                only where the client draws its PICKUP hand; after a pickup the GM stands again
+                and that cell is hovered again (stacked items); a hand on the 3 x 3's edge adds
+                the cells beyond it; a unit under the pointer (SWORD) or no read is tried once
+                more after loot_hand_retry_s. The step ends when no cell can still show a hand,
+                or at loot_hand_max_s. Every hover is logged with its recalls."""
+                from poring_dataset import deathcell as dcm_h
+
+                order = list(dcm_h.scan_order(dcell))
+                st: dict[Cell, dict[str, Any]] = {}
+                added = 0
+                seen_c: Counter[str] = Counter()
+                out["end"] = "cap"
+                while time.monotonic() - t_l0 < prm["loot_hand_max_s"]:
+                    if not hand_still(float(prm["loot_hand_still_max_s"])):
+                        seen_c["not_still"] += 1
+                    c_h = hand_next(order, st, time.monotonic())
+                    if c_h is None:
+                        out["end"] = "no_hand"
+                        break
+                    if any(cheb(c_h, nc_) <= 2 for nc_ in npc_c):
+                        st[c_h] = {"state": "npc"}
+                        seen_c["npc"] += 1
+                        continue
+                    mp_h = pos_l()
+                    if mp_h is None:
+                        out["stop"] = "jump"  # the main loop's guard decides
+                        break
+                    u_h, v_h = frac_project(w_l, mp_h, c_h)
+                    if not in_view(u_h, v_h):
+                        st[c_h] = {"state": "view"}
+                        seen_c["view"] += 1
+                        continue
+                    res_h = csw_h.check(agent, screen, hand_refs, gx0, gy0, u_h, v_h,
+                                        wait_s=float(prm["loot_hand_wait_s"]))  # fmt: skip
+                    ptr[0] = (u_h, v_h)
+                    seen_h = hand_seen(str(res_h["verdict"]), res_h["rec"], csw_h.PICKUP_MIN)
+                    seen_c[seen_h] += 1
+                    ev({"kind": "hand_hover", "k": int(eng_.get("k", 0)), "cell": list(c_h),
+                        "seen": seen_h, "ms": res_h["ms"], "reads": len(res_h["reads"]),
+                        "rec": {k_: round(float(v_), 3)
+                                for k_, v_ in (res_h["rec"] or {}).items()}})  # fmt: skip
+                    if seen_h == "hand":
+                        t_lc = r.ns()
+                        agent.click(gx0 + round(u_h), gy0 + round(v_h))  # the LOOT click (HAND)
+                        out["clicks"] += 1
+                        click_log({"t": t_lc, "u": round(u_h, 1), "v": round(v_h, 1),
+                                   "kind": "loot", "cell": list(c_h), "src": "hand"})  # fmt: skip
+                        added = hand_extend(order, c_h, dcell, added)
+                    hand_update(st, c_h, seen_h, time.monotonic(),
+                                float(prm["loot_hand_retry_s"]))  # fmt: skip
+                out["hand"] = dict(seen_c)
+                out["extra_cells"] = added
+
             def loot_fixed_run(eng_: dict[str, Any], here2: Cell, dcell: Cell,
                                extra: Sequence[Any] = (),
                                corpse: tuple[float, float, tuple[float, float], int] | None = None,
@@ -2843,6 +2994,18 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 mp_g = mp_g0 or (float(here2[0]), float(here2[1]))
                 if mp_g0 is None:
                     out["stop"] = "jump"
+                if (hand_on(prm, int(eng_.get("k", 0))) and hand_refs is not None
+                        and mp_g0 is not None):  # fmt: skip
+                    # 3.90: the HAND scan instead of the blind 3 x 3 (odd k when A/B)
+                    out["arm"] = "hand"
+                    loot_hand_steps(eng_, dcell, out, t_l0, w_l, npc_c, pos_l)
+                    if prm.get("ptr_rest_ui") and out["clicks"]:
+                        rest_ptr()
+                    out["s"] = round(time.monotonic() - t_l0, 2)
+                    out["death"] = eng_.get("death")
+                    eng_["loot"] = out
+                    ev({"kind": "loot_fixed", **out})
+                    return
                 if race_ and icon_templates and mp_g0 is not None:
                     # v33: ONE fresh grab around the death cell, the matcher on it (~60 ms);
                     # only our own drawn pointer is excluded (the evaluated configuration)
