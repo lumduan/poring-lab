@@ -12285,6 +12285,10 @@ adopted, reported with the hovers' recalls. If P1 fails with M2 passing, the han
 the scan misses items: NOT adopted, reported with the left-behind causes.
 
 **Run log (written during the runs):**
+- **Run 1** (seed 20370101, session 20261020T135303).
+  - Started by the chain at 13:53:01, 51 s after the pre-registration commit (07d5147, 13:52:10).
+  - The screenshot was judged, on a check shot before the launch and on the chain's own: the
+    hunting layout, Lv 70, weight 622 / 4970, HP full, no dialog.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
