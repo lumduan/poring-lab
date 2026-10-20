@@ -12556,6 +12556,167 @@ sessions): NOT ADOPTED. P1, M2 and G3 fail.**
   case A (2026-10-20, received 18:11 ICT): "Go with v50 (my rule) as staged, case A", with his
   rhythm in the burst (3.91).
 
+### 3.91 hunt-flow@50: BATT'S LOOT RULE -- stand after the EXP line and scan around the DRAWN GM, interleaved per engagement (pre-registered 2026-10-20 18:30 ICT, the commit time, BEFORE its runs; Batt ~15:3x, after his 15:05 clip: "Batt's loot rule, simple and to be the DEFAULT after v49's verdict (pre-register it as the next loot version if v49 doesn't already do exactly this)"; Batt, received 18:11: "Go with v50 (my rule) as staged, case A. One change before you commit the pre-registration: match my RHYTHM")
+
+**Batt's rule, as he gave it:**
+1. Dead = the Battle Log's EXP line (v48).
+2. Then STAND STILL ~500 ms: no walk click, no next engagement, no search resume.
+3. During the stand, SCAN THE CELLS AROUND THE GM ON SCREEN: melee kills die next to the GM, and
+   the camera keeps the GM at the screen's centre. So scan the 3x3 (then the 5x5 edge) around the
+   drawn GM position, not around the believed death cell. That belief is wrong ~63 % of the
+   time, and the HAND shows 1 cell off it.
+4. Where the cursor shows the HAND, burst-click until it's gone and re-hover that cell. Done when
+   a full scan shows no HAND.
+5. Only then resume the search / next target. (Ranged attacks later: scan around the target's
+   last drawn position instead.)
+
+**Batt's change before this commit (received 18:11 ICT), verbatim:** "I burst-click while the hand
+shows (no wait between clicks) and only pause when the burst ends; I loot in ~1.56 s per kill.
+v49 showed slow scans let looters take more. So: inside a cell's burst, click at my demo's
+interval (measure it from my input log) until the hand is gone; re-read the GM cell and settle
+only between cells/passes, not after every click. Keep the 12-s cap as a bound, and add 'time
+per loot step' with my 1.56 s beside it as a reported measure. Everything else as you wrote."
+
+**His interval, measured before this entry** (`20261016T093835-demo-human-demo`: his left
+presses in the input log against the server's pickup requests; offline):
+- inside a kill's loot (the kill to its last pickup), presses on the SAME spot (<= 12 px):
+  press-to-press p50 **0.59 s** (n 9; 0.40, 0.44, 0.51, 0.53, 0.59, 0.67, 0.72, 0.86, 1.00 s);
+- presses that moved to another spot: p50 1.02 s (n 26);
+- his first loot press 1.23 s after the server's kill (p50); 1.48 presses per item picked;
+- kill -> the last pickup of its items p50 1.56 s (n 39; `loot_complete`, 1.563 s, his
+  `flow_judge.loot_metrics` figure).
+- The most items on ONE cell at once: 5 in his demo; 5, 3 and 2 in v49 runs 1b, 2 and 3.
+- On the same ruler, v49's arms (4 runs, before this entry): kill -> last pickup p50 HAND 2.38 s
+  vs blind 1.34 s.
+
+**Why v49 is not already this:** v49 (3.90) differs in four ways:
+- it scans around the BELIEVED death cell;
+- it runs on the pre-v48 pixel dead rule;
+- it waits for an odometry standstill, not a stand from the EXP line;
+- it clicks once per hand, then settles.
+
+Batt's 15:05 clip was k147 of v49's run 1b, a HAND-arm engagement:
+- the pixel dead rule called it skipped_risky (still_visible), so no loot step ran;
+- the item at (114, 162) was left behind.
+
+**The premise, checked on the packets before this entry** (the GM's server cell at each kill of
+ours against its items' cells):
+
+| sessions | items | within the 3 x 3 around the GM | within the 5 x 5 |
+|---|---|---|---|
+| v48 runs 1-4 | 531 | 54.1-66.9 % | 82.5-92.3 % |
+| v49 run 1b | 251 | 62.9 % | 93.2 % |
+| Batt's demo | 63 | 71.4 % | 90.5 % |
+
+- The kills' death cells against the GM: 1 cell away ~60 %, 2 cells away ~12 %, 3+ ~20 %.
+- So the 5 x 5's edge adds ~25-30 points over the 3 x 3 alone.
+- Also measured before this entry, on v49 run 1b:
+  - a looter we kill drops our items again: 82 of its 251 items were such re-drops, and only 24
+    were picked, mostly in piles of 5-11 items;
+  - a pile needs the burst and the repeated passes.
+
+**The ONE main change: the loot step (fix arm = odd k), `loot_gm_steps`:**
+- **The stand.** Nothing is sent until `loot_gm_stand_s` 0.5 s after the EXP line's first frame
+  (v48's `exp_loot_delay_s` already waits there). The loot step runs inside the main loop's
+  hand-off, so no walk click, no engagement and no search happen until it ends.
+- **The reference.** At a drawn standstill (the floor odometry still 0.15 s, waited at most 1.2 s)
+  the GM's own cell is read from the client's position readout; the odometry is re-anchored on
+  it.
+  - Every hover pixel is projected from that cell. So each cell's pixel is exact RELATIVE TO THE
+    DRAWN GM: the camera keeps it at the screen's centre, standing on a cell centre.
+  - The readout only names the cells.
+- **The cells.** The GM's own cell, the 3 x 3, then the 5 x 5's edge (25 in all). The believed
+  death cell only ORDERS each ring (nearest first); it is never the centre.
+- **Each cell** is hovered (two motions, no click). It is clicked only where the client draws its
+  PICKUP hand (cursor_sword pickup recall >= 0.90).
+  - **The burst, in Batt's rhythm:** the next click comes `loot_gm_burst_gap_s` **0.59 s** after
+    the last (his interval), only after a FRESH read of the same pixel shows the hand again.
+    - The read starts `loot_gm_read_lead_s` 0.2 s early (a decisive read takes ~0.18 s), so
+      the click lands on the interval.
+    - No settle, no standstill and no GM re-read between the clicks of a burst.
+    - It ends when a read shows no hand, after `loot_gm_burst_max` **6** clicks, or at the
+      step's 12-s cap.
+    - 6, not "no limit": it covers the largest pile measured on one cell (5) and still bounds
+      the give-up guard below.
+  - **Only when the burst ends:** `loot_gm_settle_s` 0.8 s (the server's answer and the display
+    lag), a drawn standstill, then the GM's cell is read again for the next cells (Batt: "re-read
+    the GM cell and settle only between cells/passes").
+  - A SWORD (a unit under the pointer) is never clicked. An unread cell is tried once more at
+    the pass's end.
+  - **A bound on a hand that never goes:** a cell whose hand stays through the WHOLE burst
+    (6 clicks) while the GM's cell, read after the burst, never changed is given up for the
+    step.
+    - v49 run 1b k129: 6 accepted HAND clicks on one item 2 cells away sent no request at all;
+      the cause is not proven (a short client stall is the best reading).
+    - A pickup within 2 cells needs no walk, and a stack keeps its hand, so only after the
+      whole burst.
+- **The end.** A pass that found a hand is followed by another pass around the GM's cell then.
+  The step ends when a full pass shows no hand, after `loot_gm_passes` 3, or at `loot_gm_max_s`
+  12 s. Only then does the hunt resume.
+- **Base arm (even k):** the base's loot step, unchanged (below).
+- The new click site is in the census (hunt_flow.py 8 -> 9). No other gate changes.
+
+**Base:** v48, ADOPTED by Batt (2026-10-20, received 14:58 ICT, overriding 3.89's rule), now on
+EVERY engagement: the base EXP line alone ends an engagement dead, the target is kept until it
+comes (`exp_keep`), and the loot step starts `exp_loot_delay_s` 0.5 s after the line's first
+frame; with v43's layout and the pocket escape. v49 NOT adopted (3.90's verdict, 18:2x: P1
++8.6 points against +10, M2 0.871, G3 +4.80 s): the base arm's loot step is the blind 3 x 3 as
+before.
+- `PARAMS[50] = {**PARAMS[48], "exp_dead_ab": False}` + the `loot_gm*` keys (and
+  `loot_hand_still_s` 0.15, the drawn standstill's quiet time, as v49's). Nothing else moves
+  (`test_v50_params_batts_loot_rule_on_v48`; the rhythm: `test_batts_loot_rule_bursts_in_his_rhythm`).
+- Built on `feat/loot-memory` (30ae305), merged in b853669; the judges in 3f23b88.
+- Unlike 3.89's runs, BOTH arms now die by the EXP line, so the arms differ only in the loot
+  step.
+
+**Runs:** 4 x 60 min on prt_fild08, seeds 20380101, 20380202, 20380303, 20380404; as 3.89.
+- **The arm checked live in run 1 at ~10 min** (3.90 amendment 1's gate; offline, packets, the
+  agent's judgment):
+  - >= 4 HAND clicks of the GM scan;
+  - >= 70 % of them followed by a pickup request within 2 s and before our next click.
+  - Otherwise the run stops: a fault, not a result.
+
+**The null (3.89's, measured over 16 banked runs):** completeness fix - base -5.4 .. +6.3
+points.
+
+**Batt's measures, reported per arm (4 runs pooled; `arm_judge.py gmloot` (3f23b88), `run_row.py`,
+`left_behind.py`, `hand_truth.py`):**
+1. **Loot completeness** (Batt 96.8 %), fix - base, gross (as 3.89 / 3.90) and NET of looter
+   re-drops (`loot_complete.link_redrops`, 1b934ec; Batt's demo net 61/61 = 100 %; a looter we
+   kill drops our item again, the same item counted once), with the items recovered so.
+2. **Left behind** (the share out of our sight while still on the floor), fix - base.
+3. **Kill -> loot start** (mean), fix / base.
+4. **HAND-click precision:** a pickup request within 2 s and before our next click.
+5. **Time per loot step:** the step's own duration, mean and p50; and BESIDE IT, on Batt's own
+   ruler, **kill -> the last pickup of its items, p50 (Batt 1.56 s)** and mean (Batt 2.53 s),
+   per arm (`loot_complete`, 3f23b88; the run row's new line "kill -> last pickup p50 / mean
+   s").
+
+**Predictions, written before the runs:**
+- **P1:** completeness fix - base >= +10 points.
+- **P2:** left behind fix - base <= -8 points.
+- **M3:** HAND-click precision >= 0.85.
+- **G4, the kills / h guard (>= 0.85 x):** engaged s per kill fix - base <= 0.176 x the pooled
+  run's s per kill.
+- **G5:** hard bars zero; a Creamy hit is counted, not a stop.
+- **Reported, not deciding:**
+  - the looters' share per arm;
+  - passes per step and hovers by what they read;
+  - the readout's share as the reference;
+  - `hand_truth.py`'s item-on-cell share for the hand reads (the rule's aim, against v49's pooled
+    83 / 194 = 42.8 %);
+  - the rhythm: precision of a cell's FIRST click vs its burst re-clicks (a re-click on a hand
+    the client has not yet redrawn would show here), the burst's click gaps (target 0.59 s), the
+    burst reads' time since the click;
+  - the left-behind causes per arm.
+
+**Decision rule:** Batt has decided this rule is the DEFAULT after v49's verdict (his message
+~15:3x).
+- The runs measure it, and the bars are predictions, reported pass / fail.
+- If G4 or G5 fails, or M3 fails (a reader or aim fault), the result goes to Batt before the next
+  loot version builds on it. Otherwise the next loot versions (the loot memory, looter recovery)
+  stack on it.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
