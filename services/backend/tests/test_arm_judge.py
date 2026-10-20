@@ -495,3 +495,22 @@ def test_steerguard_judge_counts_the_guard_by_arm() -> None:
         is False
     )
     assert o["stuck_escape"] == {sid: []}
+
+
+def test_burst_split_first_clicks_burst_re_clicks_and_their_gaps() -> None:
+    """3.91 (Batt's rhythm): the GM scan's HAND clicks split into a cell's first click and its
+    burst re-clicks, each judged by M2's rule (a pickup request within 2 s, before our next
+    click); the gaps between successive burst clicks on one cell (his demo: 0.59 s p50)."""
+    S = 10**9
+    clicks = [
+        {"t": 10 * S, "kind": "loot", "src": "gm_hand", "cell": [5, 5], "burst": 0},
+        {"t": int(10.6 * S), "kind": "loot", "src": "gm_hand", "cell": [5, 5], "burst": 1},
+        {"t": int(11.2 * S), "kind": "loot", "src": "gm_hand", "cell": [5, 5], "burst": 2},
+        {"t": 15 * S, "kind": "walk", "src": "search"},
+        {"t": 20 * S, "kind": "loot", "src": "gm_hand", "cell": [6, 5], "burst": 0},
+        {"t": 25 * S, "kind": "loot", "src": "blind", "cell": [6, 6]},
+    ]
+    preq = [int(10.05 * S), int(10.65 * S), int(20.1 * S), int(25.1 * S)]  # 11.2 s: none
+    out = aj.burst_split(clicks, preq)
+    assert out["first"] == [2, 2] and out["burst"] == [2, 1]
+    assert out["gaps_s"] == [0.6, 0.6]

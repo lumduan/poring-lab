@@ -79,9 +79,12 @@ def kill_rows(kills: Sequence[tuple[int, int]], items: Mapping[int, Mapping[str,
         e = owner_of(g, t, engs, gid_by_k)
         fids = aj.drops_of_kill(items, t, cell_of(g, t - 1))
         fs = [str(items[f]["fate"]) for f in fids]
+        t_p = [int(items[f]["t_end"]) for f in fids
+               if items[f]["fate"] == "picked" and items[f]["t_end"] is not None]  # fmt: skip
         out.append({"t": t, "gid": g, "k": None if e is None else int(e["k"]),
                     "result": None if e is None else e.get("result"),
-                    "looted": looted(e), "fates": fs, "drops": list(fids)})  # fmt: skip
+                    "looted": looted(e), "fates": fs, "drops": list(fids),
+                    "last_pick_s": round((max(t_p) - t) / NS, 3) if t_p else None})  # fmt: skip
     link_redrops(out, items)
     return out
 
@@ -141,6 +144,12 @@ def summary(rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
     out["redrops"] = rd
     out["recovered"] = sum(int(r.get("redrops_picked", 0)) for r in rows_)
     out["completeness_net"] = round(c["picked"] / (n - rd), 4) if n - rd > 0 else None
+    # Batt 18:11 (3.91): his loot time beside ours -- kill -> the LAST pickup of that kill's items,
+    # over the kills with a pickup (flow_judge.loot_metrics' ruler: his demo p50 1.56 s)
+    lp = sorted(float(r["last_pick_s"]) for r in rows_ if r.get("last_pick_s") is not None)
+    out["kill_to_last_pickup_n"] = len(lp)
+    out["kill_to_last_pickup_p50"] = lp[len(lp) // 2] if lp else None
+    out["kill_to_last_pickup_mean"] = round(sum(lp) / len(lp), 2) if lp else None
     return out
 
 

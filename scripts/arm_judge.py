@@ -1441,6 +1441,84 @@ def handloot_table(sids: Sequence[str]) -> dict[str, Any]:
             "checks": checks, "per_run": kd["per_run"]}  # fmt: skip
 
 
+BATT_LOOT = {"completeness": 0.968, "completeness_net": 1.0, "kill_to_last_pickup_p50": 1.56}
+
+
+def burst_split(clicks: Sequence[Mapping[str, Any]], preq: Sequence[int]) -> dict[str, Any]:
+    """PURE (3.91, Batt's rhythm): the GM scan's HAND clicks (src "gm_hand") split into a cell's
+    FIRST click (burst 0) and its burst re-clicks (burst >= 1) -- how many, and how many were
+    followed by a pickup request within 2 s and before our next click (M2's rule) -- and the
+    gaps between a burst's successive clicks on one cell (his demo: 0.59 s p50). ``clicks``
+    sorted by time; ``preq`` the sorted pickup-request times."""
+    cts = [int(c["t"]) for c in clicks]
+    out: dict[str, Any] = {"first": [0, 0], "burst": [0, 0], "gaps_s": []}
+    prev: Mapping[str, Any] | None = None
+    for i, c in enumerate(clicks):
+        if c.get("kind") != "loot" or c.get("src") != "gm_hand":
+            prev = None
+            continue
+        t_c = int(c["t"])
+        t_end = min(cts[i + 1] if i + 1 < len(cts) else t_c + 2 * NS, t_c + 2 * NS)
+        j = bisect.bisect_right(preq, t_c)
+        ok = j < len(preq) and preq[j] <= t_end
+        key = "burst" if int(c.get("burst") or 0) >= 1 else "first"
+        out[key][0] += 1
+        out[key][1] += ok
+        if (key == "burst" and prev is not None and prev.get("cell") == c.get("cell")
+                and int(prev.get("burst") or 0) == int(c["burst"]) - 1):  # fmt: skip
+            out["gaps_s"].append(round((t_c - int(prev["t"])) / NS, 3))
+        prev = c
+    return out
+
+
+def gmloot_table(sids: Sequence[str]) -> dict[str, Any]:
+    """3.91 (BATT'S LOOT RULE, v50): per arm -- "fix" = odd k (the scan around the DRAWN GM in
+    his rhythm), "base" = even k (the blind 3 x 3) -- pooled over ``sids``: handloot_table's
+    measures, plus loot_complete's NET completeness and kill -> the LAST pickup per arm (his
+    ruler: 1.56 s p50 in his demo), the first-click / burst re-click precision and the burst's
+    click gaps; 3.91's checks P1, P2, M3, G4, G5."""
+    import loot_complete as lc
+
+    hl = handloot_table(sids)
+    la = lc.arms([x for s in sids for x in lc.session_rows(s)])
+    bs: dict[str, Any] = {"first": [0, 0], "burst": [0, 0], "gaps_s": []}
+    for sid in sids:
+        d = DEMO / sid
+        clicks = sorted((json.loads(x) for x in (d / "clicks.jsonl").read_text().splitlines()
+                         if x), key=lambda c: int(c["t"]))  # fmt: skip
+        with gzip.open(d / "packets.jsonl.gz", "rt") as fh:
+            preq = sorted(int(e["t_mono_ns"]) for e in map(json.loads, fh)
+                          if e.get("type") == "pickup_request")  # fmt: skip
+        one = burst_split(clicks, preq)
+        for k_ in ("first", "burst"):
+            bs[k_] = [bs[k_][0] + one[k_][0], bs[k_][1] + one[k_][1]]
+        bs["gaps_s"] += one["gaps_s"]
+    f, b = hl["arms"]["fix"], hl["arms"]["base"]
+    d_c = hl["differences"]["completeness_points"]
+    d_l = (None if f["out_of_sight_share"] is None or b["out_of_sight_share"] is None
+           else round(100 * (f["out_of_sight_share"] - b["out_of_sight_share"]), 1))  # fmt: skip
+    d_e = hl["differences"]["engaged_s_per_kill"]
+    sk = hl["differences"]["run_s_per_kill"]
+    prec = hl["hand_click_pickup_precision"]
+    checks = {
+        "P1 completeness fix - base >= +10 points": None if d_c is None else d_c >= 10.0,
+        "P2 left behind fix - base <= -8 points": None if d_l is None else d_l <= -8.0,
+        "M3 HAND clicks that became a pickup request >= 0.85": None if prec is None
+        else prec >= 0.85,
+        "G4 engaged s per kill fix - base <= 0.176 x run s per kill": (
+            None if d_e is None or sk is None else d_e <= 0.176 * sk),
+        "G5 hard bars zero": hl["checks"]["G5 hard bars zero"],
+    }  # fmt: skip
+    keys = ("completeness", "completeness_net", "redrops", "recovered", "kill_to_last_pickup_n",
+            "kill_to_last_pickup_p50", "kill_to_last_pickup_mean")  # fmt: skip
+    per_arm = {a: {k_: la[a].get(k_) for k_ in keys} for a in ("fix", "base")}
+    split = {k_: {"n": v[0], "pickup": v[1], "share": round(v[1] / v[0], 3) if v[0] else None}
+             for k_, v in bs.items() if k_ != "gaps_s"}  # fmt: skip
+    return {**hl, "checks": checks, "left_behind_points": d_l, "loot_complete_arms": per_arm,
+            "batt": BATT_LOOT, "precision_first_vs_burst": split,
+            "burst_gap_s_p50": q(bs["gaps_s"], 0.5), "burst_gaps_n": len(bs["gaps_s"])}  # fmt: skip
+
+
 def species_table(sessions: Iterable[dict[str, Any]]) -> dict[str, Any]:
     """v35: per engagement parity (odd k = the species check on the box's OWN frame, even k =
     the fresh crop at the stale box): arm C's eligibility (the ``abc`` events: effective arm,
@@ -1639,7 +1717,7 @@ def main() -> int:
                                      "retry", "sword", "sword-precision", "heading",
                                      "approach", "deadprobe", "falsedead", "walkers",
                                      "expdead", "steerguard", "keepdead",
-                                     "handloot"))  # fmt: skip
+                                     "handloot", "gmloot"))  # fmt: skip
     ap.add_argument("sessions", nargs="+")
     a = ap.parse_args()
     if a.what == "heading":  # its own loader (search_study's windows and field)
@@ -1668,6 +1746,9 @@ def main() -> int:
         return 0
     if a.what == "handloot":  # 3.90's per-arm judge
         print(json.dumps(handloot_table(a.sessions), indent=1, default=str))
+        return 0
+    if a.what == "gmloot":  # 3.91's per-arm judge (Batt's loot rule)
+        print(json.dumps(gmloot_table(a.sessions), indent=1, default=str))
         return 0
     sessions = [load(s) for s in a.sessions]
     if a.what == "sword-precision":

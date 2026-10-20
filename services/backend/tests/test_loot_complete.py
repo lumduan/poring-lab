@@ -71,3 +71,21 @@ def test_a_looters_re_drop_of_our_item_is_counted_once() -> None:
     s = lc.summary(rows)
     assert s["items"] == 4 and s["picked"] == 2 and s["completeness"] == 0.5
     assert s["redrops"] == 1 and s["recovered"] == 1 and s["completeness_net"] == round(2 / 3, 4)
+
+
+def test_kill_to_the_last_pickup_is_batts_ruler() -> None:
+    """Batt 18:11 (3.91): his loot time beside ours -- kill -> the LAST pickup of that kill's
+    items, over the kills with a pickup. Real case: his demo (20261016T093835) gives p50 1.563 s
+    over 39 kills, his 1.56 s (flow_judge.loot_metrics)."""
+    items = {
+        1: {"t_fall": 0, "fate": "picked", "item_id": 1, "t_end": int(1.2 * S), "cell": (5, 5)},
+        2: {"t_fall": 0, "fate": "picked", "item_id": 2, "t_end": int(2.5 * S), "cell": (5, 6)},
+        3: {"t_fall": 10 * S, "fate": "looter", "item_id": 3, "t_end": 13 * S, "cell": (9, 9)},
+        4: {"t_fall": 20 * S, "fate": "picked", "item_id": 4, "t_end": 21 * S, "cell": (1, 1)},
+    }
+    rows = lc.kill_rows([(0, 7), (10 * S, 8), (20 * S, 9)], items, lambda g, t: None, [], {},
+                        0, 30 * S)  # fmt: skip
+    assert [r["last_pick_s"] for r in rows] == [2.5, None, 1.0]
+    s = lc.summary(rows)
+    assert s["kill_to_last_pickup_n"] == 2 and s["kill_to_last_pickup_p50"] == 2.5
+    assert s["kill_to_last_pickup_mean"] == 1.75

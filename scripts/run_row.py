@@ -62,7 +62,8 @@ BATT = {
     "reversals / min": "3.6", "reversals outside loot / min": "4.28",
     "Creamy hits (requests)": "-", "Creamy hits / h": "-",
     "hard bars NPC / map / other": "-",
-    "kill -> loot start mean / p50 s": "-", "end reason": "-",
+    "kill -> loot start mean / p50 s": "-",
+    "kill -> last pickup p50 / mean s": "1.56 / 2.53 (n 39)", "end reason": "-",
 }  # fmt: skip
 
 
@@ -205,6 +206,10 @@ def row(sid: str, fresh: bool = False) -> dict[str, Any]:
         f"{len(others)}",
         "kill -> loot start mean / p50 s": None if not kls else
         f"{sum(kls) / len(kls):.2f} / {sorted(kls)[len(kls) // 2]:.2f} (n {len(kls)})",
+        # Batt 18:11 (3.91): his loot time's ruler, kill -> the LAST pickup of its items
+        "kill -> last pickup p50 / mean s": None if not lcs.get("kill_to_last_pickup_n") else
+        f"{lcs['kill_to_last_pickup_p50']:.2f} / {lcs['kill_to_last_pickup_mean']:.2f} "
+        f"(n {lcs['kill_to_last_pickup_n']})",
         "end reason": str(man.get("ended") or "-")[:60],
     }  # fmt: skip
 
@@ -311,6 +316,14 @@ def pool(rows_: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         nn = sum(x[2] for x in kl)
         out["kill -> loot start mean / p50 s"] = (
             f"{sum(x[0] * x[2] for x in kl) / nn:.2f} / {sum(x[1] for x in kl) / len(kl):.2f} "
+            f"(n {int(nn)})")  # fmt: skip
+    lpk = [tuple(float(g) for g in _KLS.match(str(r.get("kill -> last pickup p50 / mean s")))
+                 .groups()) for r in rows_
+           if _KLS.match(str(r.get("kill -> last pickup p50 / mean s") or ""))]  # fmt: skip
+    if lpk:  # as kill -> loot start: the runs' p50s averaged, the mean weighted by n
+        nn = sum(x[2] for x in lpk)
+        out["kill -> last pickup p50 / mean s"] = (
+            f"{sum(x[0] for x in lpk) / len(lpk):.2f} / {sum(x[1] * x[2] for x in lpk) / nn:.2f} "
             f"(n {int(nn)})")  # fmt: skip
     ends = [str(r.get("end reason") or "-") for r in rows_]
     out["end reason"] = ", ".join(f"{e} x{ends.count(e)}" for e in dict.fromkeys(ends))[:60]
