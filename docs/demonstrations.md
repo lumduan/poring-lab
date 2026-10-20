@@ -12331,6 +12331,13 @@ the scan misses items: NOT adopted, reported with the left-behind causes.
     20370202, 20370303, 20370404) and the decision rule are unchanged.
   - The gate's first version was the agent's calibration error. Flagged to Batt in the ~18:00
     report.
+- **Run 1b** (seed 20370101 re-run, session 20261020T140632).
+  - Started by the restarted chain at 14:06:30, after amendment 1 (21b68cc, 14:05:51). The
+    screenshot was judged, on a check shot and on the chain's own: the hunting layout, Lv 70,
+    weight 581 / 4970, HP full, no dialog; the GM under trees (the runner warps to its start).
+    The runner rebuilt the hunting state itself (@resetstat, the level).
+  - **The live arm check PASSED (amendment 1's gate) at 14:17:08 (8.1 min of the loop):** 6
+    HAND clicks, all 6 followed by a pickup request (1.0). Hovers: empty 70, unknown 16, hand 6.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
