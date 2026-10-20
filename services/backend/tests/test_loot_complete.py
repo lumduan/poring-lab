@@ -48,3 +48,26 @@ def test_the_null_spans_every_pool_and_split() -> None:
     assert n["pools"] == 1 and n["n"] == len(lc.SPLITS)
     lo, hi = n["completeness_points"]
     assert lo <= hi and len(n["completeness_all"]) == len(lc.SPLITS)
+
+
+def test_a_looters_re_drop_of_our_item_is_counted_once() -> None:
+    """Step 4 (LOOTER RECOVERY): a looter that took our item drops it again at its death -- the
+    same item. Real case: v49 run 1b (20261020T140632, a dense field) had 82 such re-drops among
+    its 251 items; net completeness 55.6 % against the gross 37.5 %, 24 looted items recovered."""
+    items = {
+        1: {"t_fall": 0, "fate": "looter", "item_id": 909, "t_end": 5, "looter_gids": [77]},
+        2: {"t_fall": 0, "fate": "out_of_sight", "item_id": 909, "t_end": 9},
+        3: {"t_fall": 20, "fate": "picked", "item_id": 909, "t_end": 22},  # 77's re-drop of 1
+        4: {"t_fall": 20, "fate": "picked", "item_id": 512, "t_end": 22},  # its own drop
+    }
+    rows = [
+        {"t": 0, "gid": 10, "k": 1, "result": "dead", "looted": True,
+         "fates": ["looter", "out_of_sight"], "drops": [1, 2]},
+        {"t": 20, "gid": 77, "k": 3, "result": "dead", "looted": True,
+         "fates": ["picked", "picked"], "drops": [3, 4]},
+    ]  # fmt: skip
+    lc.link_redrops(rows, items)
+    assert rows[0]["redrops"] == 0 and rows[1]["redrops"] == 1 and rows[1]["redrops_picked"] == 1
+    s = lc.summary(rows)
+    assert s["items"] == 4 and s["picked"] == 2 and s["completeness"] == 0.5
+    assert s["redrops"] == 1 and s["recovered"] == 1 and s["completeness_net"] == round(2 / 3, 4)
