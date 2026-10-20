@@ -12389,9 +12389,44 @@ the scan misses items: NOT adopted, reported with the left-behind causes.
     step's 2.1 s, gave the looters time. The HAND arm lost 33.9 % of its items to looters,
     against 28.3 %. The stopped 10-min run (19.4 seen / 10 min) had read the other way.
   - Best 2 min: 15 kills from minute 39.2.
-- **Run 2** (seed 20370202, session 20261020T151005) was started by the chain at 15:10:03.
-  Its screenshot was judged: the hunting layout, Lv 70, Job Lv 1, weight 568 / 4970, HP full,
-  no dialog.
+- **Run 2** (seed 20370202, session 20261020T151005).
+  - Started by the chain at 15:10:03. Its screenshot was judged: the hunting layout, Lv 70, Job
+    Lv 1, weight 568 / 4970, HP full, no dialog. It ended on its time box at 16:11:34.
+  - **The row:**
+    - 140 engagements; landing 101/139 = 72.7 % (64.7-79.4); 118.9 kills / h; 4.32 per
+      sighting; 30.3 s per kill; seen 27.5 / 10 min;
+    - free targets <= 10 s 36 % (n 163); steer moving 32 %; seen -> click 3.16 s; death -> next
+      1.44 s;
+    - dead calls without a real death 26/112 = 23.2 %;
+    - **LOOT COMPLETENESS 78/155 = 50.3 %** (left behind 30 % / looters 19 % / expired 1 %;
+      46 / 29 / 2 items); **net of looter re-drops 78/129 = 60.5 % (9 recovered)**; the older
+      column 76/132 = 58 % (29 looters);
+    - reversals 5.89 / min (outside loot 6.26); Creamy 0 (1 request); hard bars 0 / 0 / 0;
+      kill -> loot start 0.93 / 0.56 s (n 87);
+    - results: dead 112, skipped_risky 28.
+  - **Per arm, run 2 only, NOT deciding:**
+
+    | arm | completeness | left behind / looters / expired | kills with no loot step | loot step p50 | engaged s per kill | landing |
+    |---|---|---|---|---|---|---|
+    | HAND (odd k) | 40/66 = 60.6 % | 27.3 / 12.1 / 0 % | 7/51 = 13.7 % | 5.97 s | 10.65 | 70.0 % |
+    | blind (even k) | 35/72 = 48.6 % | 33.3 / 15.3 / 2.8 % | 8/56 = 14.3 % | 2.32 s | 5.72 | 74.3 % |
+
+    - HAND - blind: completeness **+12.0 points**; engaged s per kill +4.93 s (G3's bar 0.176 x
+      30.28 = 5.33 s); kill -> loot start 0.72 x.
+    - The scan: 57 steps, ended no_hand 44 / cap 13; 57 extra cells.
+    - Hovers: empty 474, unknown 84, hand 46, sword 24, view 8. HAND clicks 46, of which 39
+      became a pickup (0.848).
+    - `hand_truth.py`: hand reads with an item on the hovered cell 19 / 46, within 1 cell
+      45 / 46.
+  - Left-behind causes per arm:
+    - HAND: no loot step 12; outside, near the death cell 10; fell after the step 2; outside 2;
+    - blind: in the plan, unclicked 12; outside, near the death cell 9; no loot step 8; fell
+      after the step 5; outside 2; clicked, became a walk 1;
+    - kills that no engagement owned: no loot step 14.
+  - Best 2 min: 9 kills from minute 14.2.
+- **Run 3** (seed 20370303, session 20261020T161139) was started by the chain at 16:11:36. Its
+  screenshot was judged: the hunting layout, Lv 70, Job Lv 1, weight 652 / 4970, HP full, no
+  dialog; the runner's own weight-clear drops beside the GM.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
