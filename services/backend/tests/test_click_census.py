@@ -81,9 +81,10 @@ ALLOWED = {
                                 "hunt-flow@24+: FrameGuard's pass-through -- every hunt-flow click "
                                 "goes through it and one OFF the game frame is refused (no click "
                                 "of its own)"
-                                " 3.90 (Batt 2026-10-20, staged): the HAND scan's loot click, only where "
-                                "the client drew its PICKUP cursor at the hovered point (cursor_sword "
-                                "pickup recall >= 0.90; a SWORD there is never clicked)"),
+                                " 3.90 (Batt 2026-10-20, staged): the HAND scan's loot click, "
+                                "only where the client drew its PICKUP cursor at the hovered "
+                                "point (cursor_sword pickup recall >= 0.90; a SWORD there is "
+                                "never clicked)"),
     "scripts/agent_play.py": (3, "agent-demo@1 (Batt 2026-10-17, the agent's competition round): "
                                  "the attack click and its burst re-clicks, each only after the "
                                  "client's NAME TAG read a target under the pointer (hunt-flow@16 "
