@@ -1515,3 +1515,31 @@ split); kills / h is a guard (>= 0.85 x base).
 3. no item left behind (HAND cursor, loot memory), after a study of why items are left;
 4. looter recovery;
 5. v45, v46, P3, v47.
+
+**Why items are left behind (step 3's question, `scripts/left_behind.py`, read 2026-10-20 ~09:5x;
+v42 + v44, 8 runs, every item of our kills: 1,196 items, picked 580 = 48.5 %).** Each item that
+was not picked gets the first cause that holds:
+
+| cause | items | of all items | its fate: left behind / looter / expired |
+|---|---|---|---|
+| in the step's 3 x 3, its cell never clicked (skipped: a unit, pink, the view; or the step's cap) | 193 | 16.1 % | 106 / 81 / 6 |
+| outside the 3 x 3, within 1 cell of the SERVER's death cell (the bot's death cell was off) | 159 | 13.3 % | 113 / 43 / 3 |
+| no loot step for its kill (skipped, given up, or no engagement owned it) | 132 | 11.0 % | 92 / 40 / 0 |
+| outside the 3 x 3, farther from the death cell | 74 | 6.2 % | 56 / 18 / 0 |
+| fell after its kill's loot step had ended | 51 | 4.3 % | 40 / 10 / 0 (1 gone) |
+| its cell clicked, but the click became a walk (no pickup) | 7 | 0.6 % | 4 / 3 / 0 |
+
+- **The answer: the loot step ends early or looks in the wrong cells.** It is NOT mostly the next
+  engagement pulling the GM away.
+  - Unclicked cells inside the plan and drops just outside it make 29.4 % of all items, 57 % of
+    those not picked.
+  - For the left-behind items of looted kills, the first non-loot click after the step was the
+    search 243 times, the next engagement's steer 62, and no click before the item left our view
+    14.
+- **Time:** they left our view p50 5.8-7.9 s after the step's end (p25 3.6-5.1 s). A loot memory
+  that returns within the 60-s lifetime has ~50 s.
+- **What this means for the order:**
+  - step 3's "end the step only when the drop area shows no item" addresses the 16 % unclicked and
+    part of the 6 % farther;
+  - step 2's death-cell estimate addresses the 13 %;
+  - v48 addresses the 11 % with no loot step.
