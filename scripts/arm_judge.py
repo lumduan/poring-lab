@@ -1371,10 +1371,8 @@ def handloot_table(sids: Sequence[str]) -> dict[str, Any]:
     """3.90 (the HAND scan, Batt's step 3): per arm -- "fix" = odd k (the HAND scan), "base" =
     even k (the blind 3 x 3) -- pooled over ``sids``: keepdead_table's completeness, fates,
     abandoned kills, engaged s per kill, landing and hard bars, plus the HAND scan's mechanics --
-    hovers by what they read (hand / empty / sword / unknown), HAND clicks and how many became a
-    pickup request within 0.6 s (left_behind.click_results), loot step s p50 per arm."""
-    import left_behind as lb
-
+    hovers by what they read (hand / empty / sword / unknown), HAND clicks and how many were
+    followed by a pickup request within 2 s and before our next click, loot step s p50 per arm."""
     kd = keepdead_table(sids)
     mech: dict[str, Counter[str]] = {"fix": Counter(), "base": Counter()}
     step_s: dict[str, list[float]] = {"fix": [], "base": []}
@@ -1398,16 +1396,21 @@ def handloot_table(sids: Sequence[str]) -> dict[str, Any]:
 
         with gzip.open(d / "packets.jsonl.gz", "rt") as fh:
             pk = sorted((json.loads(x) for x in fh), key=lambda e: int(e["t_mono_ns"]))
-        hand_ts = {
-            int(c["t"]) for c in clicks if c.get("kind") == "loot" and c.get("src") == "hand"
-        }
-        for r_ in lb.click_results(clicks, pk):
-            if r_["t"] in hand_ts:
-                mech["fix"]["hand_clicks"] += 1
-                mech["fix"]["hand_clicks_pickup"] += r_["what"] == "pickup"
-                mech["fix"]["hand_clicks_pickup_ok"] += bool(r_["what"] == "pickup"
-                                                             and r_.get("ok"))  # fmt: skip
-                mech["fix"]["hand_clicks_walk"] += r_["what"] == "walk"
+        # a HAND click "became a pickup" when a pickup request follows it within 2 s and before
+        # our next click: the client WALKS to an item first when it lies off our cell (v37's
+        # loot cursor reads, 2 runs: 21 of 35 HAND clicks whose first request was a walk sent
+        # the pickup 0.33 s later, p50; the other 14 were cut by the next blind click)
+        cts = [int(c["t"]) for c in clicks]
+        preq = [int(e["t_mono_ns"]) for e in pk if e.get("type") == "pickup_request"]
+        for c in clicks:
+            if c.get("kind") != "loot" or c.get("src") != "hand":
+                continue
+            t_c = int(c["t"])
+            i_n = bisect.bisect_right(cts, t_c)
+            t_end = min(cts[i_n] if i_n < len(cts) else t_c + 2 * NS, t_c + 2 * NS)
+            i_p = bisect.bisect_right(preq, t_c)
+            mech["fix"]["hand_clicks"] += 1
+            mech["fix"]["hand_clicks_pickup"] += i_p < len(preq) and preq[i_p] <= t_end
     hc_ = mech["fix"]["hand_clicks"]
     prec = round(mech["fix"]["hand_clicks_pickup"] / hc_, 3) if hc_ else None
     f, b = kd["arms"]["fix"], kd["arms"]["base"]
