@@ -12964,6 +12964,16 @@ he had answered in advance.)
     - blind: outside, near the death cell 46; in the plan, unclicked 29; outside 8; no loot
       step 3; fell after the step 2; clicked, became a walk 2;
     - no engagement: no loot step 10.
+    - ➡️ **POINTER (2026-10-21 03:10):** for Batt's rule, "in the plan" in these lines is
+      `left_behind.py`'s 3 x 3 around the BELIEVED DEATH CELL (`loot.cell`). The rule does not
+      scan that 3 x 3: it scans the 5 x 5 around the drawn GM. Measured against the rule's own
+      plan (`left_behind.py`'s `gm_causes`, added then), the rule's steps held 210 items, 32
+      not picked:
+      - outside the GM's 5 x 5: 14 (10 of them within 1 of the server's death cell; cells from
+        the GM: 3: 5, 4: 6, 5: 1, 6: 2);
+      - gone before its cell was hovered, all to looters: 10;
+      - fell after the step: 5;
+      - hovered, read SWORD (a looter on it): 1; planned, not hovered: 1; hovered, read empty: 1.
 - **What later passes added (Batt's overnight item 2; `lc/pass2_value.py`, offline):**
 
   | run | steps | with a later pass | HAND cells first seen in pass >= 2 | items picked there | later passes' time / all step time |
@@ -13277,6 +13287,34 @@ version is built).
     outside 5; no loot step 3; clicked, became a walk 2;
   - no engagement: no loot step 11.
   - What took the GM away from them: search 31, steer 5, no click before it left our view 1.
+- ➡️ **POINTER (2026-10-21 03:10): "in the plan" above, and in the run entries' cause lines, is
+  `left_behind.py`'s 3 x 3 around the BELIEVED DEATH CELL, not the rule's plan** (the 5 x 5
+  around the drawn GM). Against the rule's own plan (`left_behind.py`'s `gm_causes`, added
+  then), every v51 step was a rule step: 419 items, 347 picked, 72 not picked. The other 20
+  unpicked items are kills with no loot step.
+
+  | cause, against the rule's own plan | items | fate |
+  |---|---|---|
+  | outside the GM's 5 x 5, within 1 of the server's death cell | 21 | 17 out of sight, 4 looters |
+  | outside the GM's 5 x 5, farther | 14 | 10 out of sight, 4 looters |
+  | gone before its cell was hovered (the race) | 16 | 16 looters |
+  | fell after the step | 12 | 7 out of sight, 5 looters |
+  | hovered, read SWORD (a looter standing on it) | 3 | 3 looters |
+  | planned, never hovered | 3 | 2 out of sight, 1 looter |
+  | clicked, became a walk | 2 | 2 looters |
+  | hovered, read empty (the reader's miss) | 1 | out of sight |
+
+  - The 35 outside the GM's 5 x 5, by cells from the GM: 3: 15, 4: 8, 5: 6, 6: 2, 8: 2, 9: 1,
+    10: 1. The next ring (7 x 7's edge, 24 more hovers) would have held 15.
+  - The race: the hover came p50 1.61 s after the looter took the item (p25 0.72, p75 2.94).
+    Six of the 16 were the second cell hovered. Seven were gone within 0.1 s of the pass's first
+    hover or before it: a looter was already on the pile.
+  - Option C against the race (`lc/c_race.py`, offline; C's verdicts with the fixed settings):
+    - skipping the EMPTY cells would have reached 0 of the 16 in time;
+    - ordering C's "seen" cells first would have reached 2 of them (seen, and gone 0.80 / 1.22 s
+      after the first hover);
+    - 4 had no C read (the GM moved, or no EXP line).
+  - The reader's miss: 1 item in 72.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,

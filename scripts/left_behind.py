@@ -14,6 +14,21 @@ the first that holds:
                          click went to it (skipped: a unit, pink, the view; or the step's cap);
 6. ``outside_plan``      its cell lies outside that 3 x 3 (``near_death_cell``: within 1 cell of
                          the server's death cell, i.e. the bot's death cell was off).
+   ⚠️ Under BATT'S RULE (v50/v51 "gm" steps) the step's ``loot.cell`` is still the believed death
+   cell, but the rule scans the 5 x 5 around the DRAWN GM; so for those steps 5 and 6 do NOT say
+   whether the rule's plan held the item. ``gm_causes`` (below) does (added 2026-10-21 03:10, after
+   competition.md's v51 causes had read 5/6 as the rule's plan).
+
+BATT'S RULE'S OWN PLAN (``gm_causes``, only items of kills whose step was a gm step): the plan is
+every cell within GM_PLAN of a hover's ``ref`` (the GM's cell the scan used; the hand_hover log),
+and each unpicked item gets the first that holds:
+  fell_after_step | pickup_refused | clicked_walked   (as above)
+  gone_before_hover     its cell was hovered, but only after the item was gone (its fate's time):
+                        the race (looters)
+  hovered_read_<X>      hovered while it lay there; the first such read was X (hand, empty,
+                        unknown, sword, ...)
+  planned_not_hovered   within GM_PLAN of a ref, never hovered (the cap, out of view, the end)
+  outside_gm_plan[_near_death_cell]   farther than GM_PLAN from every ref
 For each such item: its fate (left behind = out of our sight; looter; expired), and, for the left
 behind, what took the GM away -- the first non-loot click after the step (``why`` of
 clicks.jsonl: search, steer / strike = the next engagement) -- and how long after the step's end
@@ -45,6 +60,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 NS = 1_000_000_000
 CLICK_RESULT_S = 0.6
+GM_PLAN = 2  # Batt's rule hovers the GM's cell, the 3 x 3 and the 5 x 5's edge (gm_scan_cells)
 CAUSES = ("no_loot_step", "fell_after_step", "pickup_refused", "clicked_walked",
           "in_plan_unclicked", "outside_plan")  # fmt: skip
 
@@ -111,6 +127,32 @@ def cause_of(item: Mapping[str, Any], fid: int, looted: bool, step: tuple[int, i
                              and cheb(cell, death_cell) <= 1 else "")  # fmt: skip
 
 
+def gm_cause_of(item: Mapping[str, Any], fid: int, step: tuple[int, int],
+                refs: Sequence[Sequence[int]], death_cell: Sequence[int] | None,
+                results: Sequence[Mapping[str, Any]], hovers: Sequence[Mapping[str, Any]]
+                ) -> str:  # fmt: skip
+    """PURE: the first cause that holds against BATT'S RULE'S OWN plan (module docstring), for an
+    unpicked item of a kill whose step was a gm step. ``hovers`` = that step's hand_hover events
+    (time order), ``refs`` = their GM cells."""
+    if int(item["t_fall"]) > step[1]:
+        return "fell_after_step"
+    cell = tuple(item["cell"])
+    if any(r["what"] == "pickup" and r.get("floor_id") == fid and not r.get("ok")
+           for r in results):  # fmt: skip
+        return "pickup_refused"
+    if any(r["what"] == "walk" and tuple(r.get("to") or ()) == cell for r in results):
+        return "clicked_walked"
+    on = [h for h in hovers if tuple(h["cell"]) == cell]
+    if on:
+        t_gone = item.get("t_end") or item.get("t_out")
+        first = next((h for h in on if t_gone is None or int(h["t_ns"]) < int(t_gone)), None)
+        return "gone_before_hover" if first is None else f"hovered_read_{first['seen']}"
+    if any(cheb(cell, r_) <= GM_PLAN for r_ in refs):
+        return "planned_not_hovered"
+    return "outside_gm_plan" + ("_near_death_cell" if death_cell is not None
+                                and cheb(cell, death_cell) <= 1 else "")  # fmt: skip
+
+
 def session(sid: str) -> dict[str, Any]:
     import arm_judge as aj
     import flow_judge as fj
@@ -130,6 +172,14 @@ def session(sid: str) -> dict[str, Any]:
     items = aj.item_fates(pk, pos, fj.mob_at)
     results = click_results(clicks, pk)
     rts = [r["t"] for r in results]
+    hov = [e for e in map(json.loads, filter(None, (d / "events.jsonl").read_text().splitlines()))
+           if e.get("kind") == "hand_hover" and e.get("arm") == "gm"]  # fmt: skip
+    hts = [int(h["t_ns"]) for h in hov]
+    gm_c: Counter[str] = Counter()
+    gm_arm: Counter[str] = Counter()
+    gm_fate: Counter[str] = Counter()
+    gm_dist: Counter[int] = Counter()
+    gm_items = gm_picked = 0
     cts = [int(c["t"]) for c in clicks]
     causes: Counter[str] = Counter()
     by_arm: Counter[str] = Counter()
@@ -148,12 +198,31 @@ def session(sid: str) -> dict[str, Any]:
             t_end = int(e["t_end"])
             step = (t_end - int(float(lo["s"]) * NS), t_end)
         dcell = fj.mob_at(pos, g, t_k - 1)
+        gm_step = step is not None and lo.get("arm") == "gm" and e is not None
+        hs: list[dict[str, Any]] = []
+        if gm_step and step is not None and e is not None:
+            hs = [h for h in hov[bisect.bisect_left(hts, step[0] - NS):
+                                 bisect.bisect_right(hts, step[1] + NS)]
+                  if int(h.get("k", -1)) == int(e["k"])]  # fmt: skip
+        refs = {tuple(h["ref"]) for h in hs if h.get("ref")}
         for f in aj.drops_of_kill(items, t_k, dcell):
             it = items[f]
             n_items += 1
+            gm_items += gm_step
             if it["fate"] == "picked":
                 picked += 1
+                gm_picked += gm_step
                 continue
+            if gm_step and step is not None:
+                res_g = results[
+                    bisect.bisect_left(rts, step[0]) : bisect.bisect_right(rts, step[1])
+                ]
+                c_g = gm_cause_of(it, f, step, sorted(refs), dcell, res_g, hs)
+                gm_c[c_g] += 1
+                gm_arm[f"{arm_of(e)}|{c_g}"] += 1
+                gm_fate[f"{c_g}|{it['fate']}"] += 1
+                if c_g.startswith("outside_gm_plan") and refs:
+                    gm_dist[min(cheb(it["cell"], r_) for r_ in refs)] += 1
             res = [] if step is None else results[bisect.bisect_left(rts, step[0]):
                                                   bisect.bisect_right(rts, step[1])]  # fmt: skip
             c = cause_of(it, f, looted, step, lo.get("cell"), dcell, res)
@@ -174,20 +243,27 @@ def session(sid: str) -> dict[str, Any]:
             "left_our_view_after_step_end_s": {
                 "n": len(s_), "p25": s_[len(s_) // 4] if s_ else None,
                 "p50": s_[len(s_) // 2] if s_ else None,
-                "p75": s_[3 * len(s_) // 4] if s_ else None}}  # fmt: skip
+                "p75": s_[3 * len(s_) // 4] if s_ else None},
+            "gm_items": gm_items, "gm_picked": gm_picked,
+            "gm_causes": dict(gm_c.most_common()), "gm_causes_by_arm": dict(sorted(gm_arm.items())),
+            "gm_cause_by_fate": dict(gm_fate.most_common()),
+            "gm_outside_cells_from_the_gm": {str(k): v
+                                             for k, v in sorted(gm_dist.items())}}  # fmt: skip
 
 
 def pooled(per: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
     """PURE: the runs' counts summed (the time quantiles are not pooled)."""
     out: dict[str, Any] = {"items": 0, "picked": 0, "not_picked": 0}
-    for k in ("causes", "causes_by_arm", "cause_by_fate", "left_behind_what_took_the_gm_away"):
+    for k in ("causes", "causes_by_arm", "cause_by_fate", "left_behind_what_took_the_gm_away",
+              "gm_causes", "gm_causes_by_arm", "gm_cause_by_fate",
+              "gm_outside_cells_from_the_gm"):  # fmt: skip
         c: Counter[str] = Counter()
         for v in per.values():
-            c.update(v[k])
+            c.update(v.get(k) or {})
         out[k] = dict(c.most_common())
     for v in per.values():
-        for k in ("items", "picked", "not_picked"):
-            out[k] += v[k]
+        for k in ("items", "picked", "not_picked", "gm_items", "gm_picked"):
+            out[k] = out.get(k, 0) + int(v.get(k) or 0)
     return out
 
 

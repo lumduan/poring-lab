@@ -1761,8 +1761,11 @@ base even if G4 (the kills/h guard) fails").
   | 2 | the before-offset chosen with run 1 | 56 / 70 | 12.1 | 2.1 | 0 / 63 |
   | 3 | **held out** | 41 / 54 | 11.5 | 2.0 | **0 / 46** |
   | 4 | **held out** | 78 / 95 | 12.4 | 2.2 | **0 / 70** |
+  | v51 1-4 (2026-10-21 03:04, NEW data, the same fixed settings) | **held out** | 259 / 320 | 11.6 | 2.05 at the hover p50 0.181 s; 2.42 at its mean 0.209 s | **0 / 266** |
 
-  - No item ever lay on a skipped cell (0 / 248 over the four runs).
+  - No item ever lay on a skipped cell: 0 / 248 over the four v50 runs, and 0 / 266 over v51's
+    four (514 items in all). On v51 the matcher saw 29.3 % of our items, and the no-drop check
+    still fails (N1 false skips 65.9 %).
   - Live, the "GM still" gate must be the runner's odometry: on moved kills the diff alone lost 1
     item in run 2.
   - The matcher sees 24-42 % of our items: enough to ORDER the hovers, not to count them.
@@ -1827,17 +1830,31 @@ TIME (s per hour of the loop; per kill; Batt's comparable figure):
      pass. Held out: no item ever lay on a skipped cell.
 4. Fighting 272 s / h (2.8 s per kill); striking 242 s / h (2.5 s per kill).
 
-LOOT (92 of 446 items not picked, 20.6 points; the fate in brackets):
-1. **Outside the 25-cell plan: 31 (7.0 points)**; 17 near the death cell (10 left out of sight, 7
-   to looters). The GM stands 1-2 cells off the death cell, and the drops scatter around the death
-   cell, not around the GM.
-2. **In the plan, unclicked: 27 (6.1 points). 17 of them went to LOOTERS** before the scan reached
-   their cell; 10 were left out of sight. The reader is not the cause: across 10573 empty reads,
-   4 had an item on the cell. So this is the race, and a shorter scan (C's skip and order) is
-   what moves it.
+LOOT (92 of 446 items not picked, 20.6 points). ➡️ **CORRECTED 03:10.** The first version of this
+block read `left_behind.py`'s "plan" (the 3 x 3 around the BELIEVED death cell) as the rule's
+25-cell plan, so its "outside the 25-cell plan 31" and "in the plan, unclicked 27 ... before the
+scan reached their cell" were wrong. Against the rule's own plan (the 5 x 5 around the drawn GM;
+`left_behind.py`'s `gm_causes`, demonstrations.md 3.92):
+1. **Outside the GM's 5 x 5: 35 (7.8 points);** 21 of them within 1 of the server's death cell.
+   - The fates: 27 left out of sight, 8 to looters.
+   - Cells from the GM: 3: 15, 4: 8, 5: 6, 6 or more: 6.
+   - The drops scatter around the death cell, which lies beyond the GM's 5 x 5 when the target
+     died 2+ cells away. The next ring would hold 15 of the 35, at 24 more hovers (~5 s). C's
+     skip could make that ring cheap: it would hover only the cells whose image changed.
+2. **The race with looters: 19 (4.3 points).**
+   - 16 were gone before the scan hovered their cell: the hover came p50 1.61 s late.
+   - 3 more read SWORD (the looter stood on them).
+   - 7 of the 16 were gone at or before the pass's first hover: a looter was already on the pile.
+   - Option C barely moves this: its skip reached 0 of the 16 in time, its seen-first order 2.
+     What would recover them is looter recovery, killing the looter so it re-drops. Batt
+     deferred it "only if the numbers ask"; here it is 19 items in 4 h, 4.3 points.
 3. No loot step: 20 (4.5 points); 11 kills with no engagement of ours.
 4. Fell after the step: 12 (2.7 points).
-5. Clicked, became a walk: 2.
+5. Planned but never hovered 3; clicked, became a walk 2; **the reader missed 1** (an empty read on
+   an item's cell).
+- ~~1. Outside the 25-cell plan: 31 ... 2. In the plan, unclicked: 27 (6.1 points). 17 of them went
+  to LOOTERS before the scan reached their cell ... a shorter scan (C's skip and order) is what
+  moves it.~~ ➡️ superseded by the list above (03:10).
 
 **The phone clip of the best loot stretch:** v51 run 2 (20261020T234607) from minute 43.0. Over 2 min,
 6 kills and 11 / 11 of their items picked, the most items picked at 100 % in any of the 8 runs of

@@ -47,3 +47,30 @@ def test_the_arm_of_a_kill_is_its_engagements_parity() -> None:
     assert lb.arm_of({"k": 3}) == "fix"
     assert lb.arm_of({"k": 4}) == "base"
     assert lb.arm_of(None) == "none"
+
+
+def test_batts_rule_is_judged_against_its_own_plan_the_5x5_around_the_drawn_gm() -> None:
+    """Under Batt's rule the plan is the 5 x 5 around the hovers' GM cell (``ref``), not the 3 x 3
+    around the believed death cell. The real case: v51 run 1 (20261020T224434), the item at
+    (229, 342), 3.0 s after its kill a looter took it, and the scan hovered its cell (the 10th of
+    pass 1) 0.87 s later: the race."""
+    t_k = 1255595191303636
+    it = {"t_fall": t_k, "cell": (229, 342), "t_end": 1255598156865514, "t_out": None}
+    step = (t_k + int(0.9 * S), t_k + int(9.0 * S))
+    ref = [(230, 340)]
+    late = {"t_ns": 1255599023933328, "cell": [229, 342], "ref": [230, 340], "seen": "empty"}
+    assert lb.gm_cause_of(it, 1, step, ref, None, [], [late]) == "gone_before_hover"
+    early = {**late, "t_ns": it["t_end"] - S, "seen": "sword"}  # a looter on the cell
+    assert lb.gm_cause_of(it, 1, step, ref, None, [], [early, late]) == "hovered_read_sword"
+    # never hovered: within 2 of the GM = planned, else outside (near the server's death cell?)
+    assert lb.gm_cause_of(it, 1, step, ref, None, [], []) == "planned_not_hovered"
+    far = {**it, "cell": (234, 342)}
+    assert lb.gm_cause_of(far, 1, step, ref, (233, 342), [], []) == (
+        "outside_gm_plan_near_death_cell"
+    )
+    assert lb.gm_cause_of(far, 1, step, ref, None, [], []) == "outside_gm_plan"
+    # the old 3 x 3 around a believed death cell 3 off would call the same item "outside_plan"
+    assert lb.cause_of(it, 1, True, step, (232, 342), None, []) == "outside_plan"
+    assert lb.gm_cause_of({**it, "t_fall": step[1] + 1}, 1, step, ref, None, [], []) == (
+        "fell_after_step"
+    )
