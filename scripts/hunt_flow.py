@@ -296,6 +296,10 @@ VERSIONS = {
     "no HAND (3 passes, 12 s); even k keeps the base's loot step; interleaved per engagement. "
     "Base: v48 (adopted by Batt, 3.89) on every engagement; v49 not adopted (3.90): the blind "
     "3 x 3",
+    51: "BATT'S OPTION B: his loot rule (v50) on every engagement; on odd k a pass after one that "
+    "found a HAND hovers only the cells that showed it and their 8 neighbours, not all 25; even k "
+    "keeps v50's full passes; interleaved per engagement. Base: v50's rule on every engagement "
+    "(its verdict, 3.91)",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -565,6 +569,13 @@ PARAMS[50] = {**PARAMS[48], "exp_dead_ab": False, "loot_gm": True, "loot_gm_ab":
               "loot_gm_still_max_s": 1.2, "loot_gm_settle_s": 0.8, "loot_gm_burst_max": 6,
               "loot_gm_burst_gap_s": 0.59, "loot_gm_read_lead_s": 0.2,
               "loot_gm_passes": 3, "loot_gm_max_s": 12.0, "loot_gm_edge": True}  # fmt: skip
+# 51 = BATT'S OPTION B (Batt 2026-10-20 ~19:5x, after v50 run 1: "Next version = B (pass 2 only on
+# cells that showed a HAND + their 8 neighbours). Build it now, queue it only after v50's
+# verdict"): his loot rule on EVERY engagement (loot_gm_ab off: v50's rule is the default, his
+# ~15:3x order); on odd k (loot_gm_local_ab) a pass after one that found a HAND hovers only those
+# cells and their 8 neighbours (gm_local_cells), not all 25; even k keeps v50's full passes
+PARAMS[51] = {**PARAMS[50], "loot_gm_ab": False, "loot_gm_local": True,
+              "loot_gm_local_ab": True}  # fmt: skip
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -1933,6 +1944,27 @@ def gm_scan_cells(gm: Cell, toward: Cell | None, edge: bool = True) -> list[Cell
     return out
 
 
+def gm_local_on(prm: dict[str, Any], k: int) -> bool:
+    """PURE (v51, Batt 2026-10-20 ~19:5x, his option B): after a pass that found a HAND, does
+    engagement ``k``'s next pass hover only the hand cells and their 8 neighbours?
+    ``loot_gm_local`` on; with ``loot_gm_local_ab`` only odd k (the fix arm)."""
+    return bool(prm.get("loot_gm_local")) and (not prm.get("loot_gm_local_ab") or k % 2 == 1)
+
+
+def gm_local_cells(hands: Sequence[Cell], gm: Cell) -> list[Cell]:
+    """PURE (v51, Batt's option B): a later pass's cells -- each cell that showed a HAND in the
+    pass before, and its 8 neighbours, once each; the hand cells first, then the rest; each group
+    nearest the GM's cell first, then a fixed order."""
+    hs = list(dict.fromkeys(hands))
+    nb = [(h[0] + dx, h[1] + dy) for h in hs for dy in (-1, 0, 1) for dx in (-1, 0, 1)]
+    rest = [c for c in dict.fromkeys(nb) if c not in hs]
+
+    def key(c: Cell) -> tuple[int, int, int]:
+        return max(abs(c[0] - gm[0]), abs(c[1] - gm[1])), c[1], c[0]
+
+    return sorted(hs, key=key) + sorted(rest, key=key)
+
+
 def hand_seen(verdict: str, rec: Mapping[str, float], pickup_min: float) -> str:
     """PURE (3.90): one hover's cursor (cursor_sword.check) as the scan reads it: "sword" (a unit
     under the pointer), "hand" (the PICKUP cursor: an item; recall >= ``pickup_min``), "empty"
@@ -3176,6 +3208,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                 for kk_, vv_ in (res_["rec"] or {}).items()}})  # fmt: skip
                     return sn_, (u_, v_)
 
+                hands_prev: list[Cell] = []
                 while (time.monotonic() - t_l0 < prm["loot_gm_max_s"]
                        and passes < int(prm["loot_gm_passes"])):  # fmt: skip
                     passes += 1
@@ -3187,7 +3220,14 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         break
                     ref, how_ = rf_
                     seen_c["ref_" + how_] += 1
-                    queue_ = gm_scan_cells(ref, dcell, bool(prm.get("loot_gm_edge", True)))
+                    if passes > 1 and hands_prev and gm_local_on(prm, k_g):
+                        # v51 (Batt's option B): a later pass hovers only the cells that showed
+                        # a HAND in the pass before and their 8 neighbours
+                        queue_ = gm_local_cells(hands_prev, ref)
+                        seen_c["local_pass"] += 1
+                    else:
+                        queue_ = gm_scan_cells(ref, dcell, bool(prm.get("loot_gm_edge", True)))
+                    hands_now: list[Cell] = []
                     retried: set[Cell] = set()
                     found = False
                     while queue_:
@@ -3208,6 +3248,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         if sn_g != "hand" or px_g is None:
                             continue
                         found = True
+                        hands_now.append(c_g)
                         exhausted = False
                         gap_ = float(prm["loot_gm_burst_gap_s"])
                         lead_ = float(prm["loot_gm_read_lead_s"])
@@ -3262,6 +3303,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     if not found:
                         out["end"] = "no_hand"
                         break
+                    hands_prev = hands_now
                 out["hand"] = dict(seen_c)
                 out["passes"] = passes
 

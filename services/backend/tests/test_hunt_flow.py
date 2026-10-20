@@ -1550,3 +1550,46 @@ def test_batts_loot_rule_scans_around_the_gm() -> None:
     p = {"loot_gm": True, "loot_gm_ab": True}
     assert hf.gm_on(p, 3) and not hf.gm_on(p, 4) and not hf.gm_on({}, 3)
     assert hf.gm_on({"loot_gm": True}, 4)
+
+
+def test_gm_local_cells_are_the_hand_cells_and_their_neighbours() -> None:
+    """v51 (Batt's option B): a later pass hovers the cells that showed a HAND and their 8
+    neighbours, each once, hand cells first, nearest the GM first; odd k when A/B."""
+    one = hf.gm_local_cells([(10, 10)], (9, 10))
+    assert one[0] == (10, 10) and len(one) == 9 and len(set(one)) == 9
+    assert all(max(abs(x - 10), abs(y - 10)) <= 1 for x, y in one)
+    assert one[1] in ((9, 9), (9, 10), (9, 11))  # nearest the GM after the hand cell
+    two = hf.gm_local_cells([(10, 10), (11, 10), (10, 10)], (10, 10))
+    assert two[:2] == [(10, 10), (11, 10)] and len(two) == 12 and len(set(two)) == 12
+    assert hf.gm_local_cells([], (5, 5)) == []
+    p = {"loot_gm_local": True, "loot_gm_local_ab": True}
+    assert hf.gm_local_on(p, 3) and not hf.gm_local_on(p, 4) and not hf.gm_local_on({}, 3)
+    assert hf.gm_local_on({"loot_gm_local": True}, 4)
+
+
+def test_v51_params_option_b_on_v50() -> None:
+    """Batt ~19:5x: PARAMS[51] = v50 (his rule) on EVERY engagement, option B on odd k; nothing
+    else moves."""
+    p = hf.PARAMS[51]
+    assert 51 in hf.VERSIONS
+    assert p["loot_gm"] and not p["loot_gm_ab"] and hf.gm_on(p, 1) and hf.gm_on(p, 2)
+    assert p["loot_gm_local"] and p["loot_gm_local_ab"]
+    assert hf.gm_local_on(p, 1) and not hf.gm_local_on(p, 2)
+    moved = ("loot_gm_ab", "loot_gm_local", "loot_gm_local_ab")
+    assert {k: v for k, v in p.items() if k not in moved} == {
+        k: v for k, v in hf.PARAMS[50].items() if k not in moved
+    }
+
+
+def test_option_b_narrows_only_a_later_pass_after_a_hand() -> None:
+    """v51: the first pass is always the full scan around the GM; a later pass is local only
+    when the pass before found a HAND and the arm says so; the hand cells are the ones whose
+    first hover read a hand."""
+    src = Path(hf.__file__).read_text()
+    body = src.split("def loot_gm_steps(")[1].split("def loot_fixed_run(")[0]
+    assert "if passes > 1 and hands_prev and gm_local_on(prm, k_g):" in body
+    i_l = body.index("queue_ = gm_local_cells(hands_prev, ref)")
+    assert "queue_ = gm_scan_cells(ref, dcell" in body[i_l : i_l + 300]
+    i_f = body.index("found = True")
+    assert "hands_now.append(c_g)" in body[i_f : i_f + 80]
+    assert "hands_prev = hands_now" in body
