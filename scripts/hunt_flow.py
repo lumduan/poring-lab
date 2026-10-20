@@ -2896,8 +2896,9 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 """3.90 (Batt 2026-10-20, the loot block's step 3: "a loot step ends only when
                 the drop area shows no HAND cursor"): from a drawn standstill each cell of the
                 3 x 3 (the server's drop order first) is HOVERED -- moves only -- and clicked
-                only where the client draws its PICKUP hand; after a pickup the GM stands again
-                and that cell is hovered again (stacked items); a hand on the 3 x 3's edge adds
+                only where the client draws its PICKUP hand; after a pickup (loot_hand_settle_s,
+                then a drawn standstill) the GM stands again and that cell is hovered again
+                (stacked items); a hand on the 3 x 3's edge adds
                 the cells beyond it; a unit under the pointer (SWORD) or no read is tried once
                 more after loot_hand_retry_s. The step ends when no cell can still show a hand,
                 or at loot_hand_max_s. Every hover is logged with its recalls."""
@@ -2944,6 +2945,10 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         click_log({"t": t_lc, "u": round(u_h, 1), "v": round(v_h, 1),
                                    "kind": "loot", "cell": list(c_h), "src": "hand"})  # fmt: skip
                         added = hand_extend(order, c_h, dcell, added)
+                        # the drawn camera starts to move only after the server's answer and the
+                        # ~0.65 s display lag (3.89's death-cell study): a standstill check right
+                        # after the click would pass before the walk to the item is drawn
+                        time.sleep(float(prm["loot_hand_settle_s"]))
                     hand_update(st, c_h, seen_h, time.monotonic(),
                                 float(prm["loot_hand_retry_s"]))  # fmt: skip
                 out["hand"] = dict(seen_c)
