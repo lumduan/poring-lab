@@ -45,6 +45,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import farm0 as f0  # noqa: E402
 import farm1 as f1  # noqa: E402
 import hunt_core as hc  # noqa: E402
+import map_zones as mz  # noqa: E402
 import ro_agent as r  # noqa: E402
 
 RULE = "hunt-flow"
@@ -2395,10 +2396,37 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
     keep = [(w["x"], w["y"], w["span_x"], w["span_y"]) for w in warps]
     keep += [(n["x"], n["y"], 1, 1) for n in npcs]
     area = hc.search_area(ok, keep, margin=10)
+    # MAP ZONES (Batt 2026-10-20 ~21:0x, map traps): his forbidden zones for this map, INERT
+    # without config/map_zones/<map>.yaml -- zones None: okr IS ok, area and ok0 untouched, no
+    # gate, no event. With them: `ok` stays the zone-free stand grid (where the GM may STAND: the
+    # minimap / settle checks), `okr` = ok minus both kinds (planned routes), `area` = area minus
+    # both (the planners'), ok0 (the stall breaker's) minus both. A broken file refuses the run.
+    try:
+        zones = mz.load(MAP, shape=ok.shape)
+    except mz.ZoneError as e:
+        raise f0.FarmStop(f"hunt-flow refused: map zones: {e}") from None
+    okr: Any = ok
+    z_seen: Any = None  # the zones' area cells, still seen (tracks, unit and risk checks)
+    z_free: Any = None  # the zone-free walkable grid: the client-route proxy's
+    z_info: dict[str, Any] = {}
+    if zones is not None:
+        if not prm.get("pipelined"):
+            raise f0.FarmStop("hunt-flow refused: map zones are enforced by the pipelined "
+                              "executor only (v2+)")  # fmt: skip
+        from poring_dataset import walkable as wk_z
+
+        z_free = np.asarray(wk_z.load_both(MAP)[1], dtype=bool)
+        z_info = mz.summary(zones, ok.shape, ok, area)
+        area0_ = area
+        area = mz.apply(ok, area, zones)[1]  # (its ok_z is the exit's grid: built per search)
+        z_seen = area0_ & ~area
+        okr = mz.route_grid(ok, zones)
+        ok0 = mz.route_grid(ok0, zones)
+    area_s = area if zones is None else main_component(area)  # map traps: no start in a sealed room
     if MAP == "prt_fild08":
-        start = hunt.start_cell(area, seed)
+        start = hunt.start_cell(area_s, seed)
     else:  # a held-out map: an anchor from the map alone, nothing tuned there
-        start = hunt.start_cell(area, seed, near=area_centre(main_component(area)))
+        start = hunt.start_cell(area_s, seed, near=area_centre(main_component(area)))
     cj = json.loads((r.ROOT / "packages/poring_dataset/src/poring_dataset/camera_rdp.json")
                     .read_text())  # fmt: skip
     camera = cam.camera_from_json(cj["camera"])
@@ -2428,6 +2456,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
         events_f.write(json.dumps({"t_ns": r.ns(), **rec}, default=str) + "\n")
         events_f.flush()
 
+    if zones is not None:  # map traps: the file this run enforces (its sha256, its counts)
+        ev({"kind": "map_zones", **z_info})
     last_strike: dict[int, tuple[int, float, float]] = {}  # v24: track -> (t_ns, u, v)
 
     def click_log(rec: dict[str, Any]) -> None:
@@ -2453,6 +2483,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
     sampler = None
     bl_tail: BattleLogTail | None = None  # 3.87: the Battle Log reader (exp_dead only)
     guard_n: Counter[str] = Counter()  # v16+: the walk guard's verdicts (in the summary)
+    zone_n: Counter[str] = Counter()  # map traps: the zones' refusals (in the summary, with zones)
     fg_n: Counter[str] = Counter()
     with r.session(f"rule:{RULE}@{version}") as (agent_raw, screen):
         f0.stop_on_takeover(agent_raw)  # on the REAL agent: its send() calls the hook
@@ -2630,8 +2661,9 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         continue  # Creamy (a metamorphosed Pupa) is no target
                     if min(b.x1 - b.x0, b.y1 - b.y0) < prm["min_box_px"]:
                         continue  # a floor item
-                    if loot1.in_ui(*f1.centre(b)) or not area[c[1], c[0]]:
-                        continue
+                    if loot1.in_ui(*f1.centre(b)) or not (area[c[1], c[0]] or (
+                            z_seen is not None and z_seen[c[1], c[0]])):  # fmt: skip
+                        continue  # (map traps: a monster in a zone is still SEEN, never engaged)
                     got_.append((b, c if frac == (0.0, 0.0)
                                  else (c[0] + frac[0], c[1] + frac[1])))  # fmt: skip
                 return got_
@@ -2827,6 +2859,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     x_, y_ = to
                     area[max(0, y_ - 1) : y_ + 2, max(0, x_ - 1) : x_ + 2] = False
                     ok[max(0, y_ - 1) : y_ + 2, max(0, x_ - 1) : x_ + 2] = False
+                    if okr is not ok:  # map traps: the route grid is its own array with zones
+                        okr[max(0, y_ - 1) : y_ + 2, max(0, x_ - 1) : x_ + 2] = False
                     ev({"kind": "spot_blocked", "cell": list(to), "why": why, "refusals": n_})
                     if prm.get("pipelined"):
                         with plock:
@@ -2846,10 +2880,40 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 agent.move(gx0 + round(REST_PX[0]), gy0 + round(REST_PX[1]))
                 ptr[0] = REST_PX
 
+            z_cache: dict[tuple[Cell, Cell, bool], str | None] = {}
+            z_logged: set[tuple[int, str]] = set()  # map traps: strike refusals logged once
+
+            def zone_why(frm: Sequence[float], to: Sequence[float], exit_ok: bool = False
+                         ) -> str | None:  # fmt: skip
+                """MAP TRAPS (Batt 2026-10-20 ~21:0x): why a click whose CLIENT walk goes frm ->
+                to breaks his zones (mz.walk_why: the destination, the straight line, the
+                client's own path proxied on the zone-free grid); None = it keeps them. No zones
+                file: None at once, nothing computed (INERT)."""
+                if zones is None:
+                    return None
+                a_ = (int(round(frm[0])), int(round(frm[1])))
+                b_ = (int(round(to[0])), int(round(to[1])))
+                key_ = (a_, b_, exit_ok)
+                if key_ not in z_cache:
+                    if len(z_cache) > 512:
+                        z_cache.clear()
+                    z_cache[key_] = mz.walk_why(zones, z_free, a_, b_, exit_ok)
+                return z_cache[key_]
+
             def walk_click(u: float, v: float, to: Cell, seg: list[Cell], gate: str,
                            why: str, extra: dict[str, Any] | None = None) -> bool:  # fmt: skip
                 """One walk click: cursor-gated from a standstill, map+units while moving."""
                 nonlocal moving, click_from, click_cell, last_walk
+                # map traps: the ZONE gate first, before any read -- from the click's origin
+                # (seg[0], the lead) AND the GM's measured cell (a lead overshoot never exempts an
+                # area); inside a no-enter area only the way out passes (exit_ok); refused -> no
+                # click, why "zone"
+                zw_ = zone_why(seg[0], to, exit_ok=True) or zone_why(pos_box[0], to, exit_ok=True)
+                if zw_ is not None:
+                    zone_n["walk"] += 1
+                    ev({"kind": "walk_click", "gate": gate, "to": list(to), "clicked": False,
+                        "why": "zone", "zone": zw_, "from": list(seg[0])})  # fmt: skip
+                    return False
                 t_c = r.ns()
                 if gate == "cursor":
                     if prm.get("track_clear") and not tracked_clear(u, v):
@@ -2995,6 +3059,12 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             loot_blobs_run(eng_, here2, dead_.cell, tr_)
                         elif prm.get("loot_sweep"):
                             loot_sweep(eng_, here2, dead_.cell)
+                        elif zones is not None and any(
+                                zone_why(here2, (dead_.cell[0] + dx_, dead_.cell[1] + dy_))
+                                for dx_ in (-1, 0, 1) for dy_ in (-1, 0, 1)):  # fmt: skip
+                            # map traps: loot@1's step clicks its own 3 x 3 -- skipped whole
+                            zone_n["loot"] += 1
+                            ev({"kind": "loot", "cell": list(dead_.cell), "skip": "zone"})
                         else:
                             loot1.loot(rig, here2, dead_, eng_)
                 finally:
@@ -3079,6 +3149,11 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     if mp_h is None:
                         out["stop"] = "jump"  # the main loop's guard decides
                         break
+                    if zone_why(mp_h, c_h) is not None:  # map traps: never hovered nor clicked
+                        st[c_h] = {"state": "zone"}
+                        seen_c["zone"] += 1
+                        zone_n["loot"] += 1
+                        continue
                     u_h, v_h = frac_project(w_l, mp_h, c_h)
                     if not in_view(u_h, v_h):
                         st[c_h] = {"state": "view"}
@@ -3198,6 +3273,10 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             continue
                         if any(cheb(c_g, nc_) <= 2 for nc_ in npc_c):
                             seen_c["npc"] += 1
+                            continue
+                        if zone_why(ref, c_g) is not None:  # map traps: never hovered nor clicked
+                            seen_c["zone"] += 1
+                            zone_n["loot"] += 1
                             continue
                         sn_g, px_g = hover(c_g, ref, passes, 0)
                         seen_c[sn_g] += 1
@@ -3398,6 +3477,9 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                             u_l, v_l = u_l + jx_, v_l + jy_
                         if not in_view(u_l, v_l):
                             why_ = "view"
+                        elif zone_why(mp_, c_l) is not None:  # map traps: in / across a zone
+                            why_ = "zone"
+                            zone_n["loot"] += 1
                         else:
                             fr_l = sampler.since(max(0, len(sampler.frames) - 1))
                             mu_ = float(prm.get("loot_unit_px", 30.0))  # v25: 70 (see PARAMS)
@@ -3602,6 +3684,9 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     u_l, v_l = px_[0] + b_[0] - a_[0], px_[1] + b_[1] - a_[1]
                     if loot1.in_ui(u_l, v_l) or not in_view(u_l, v_l):
                         continue
+                    if zone_why(mp_, c_b) is not None:  # map traps: in / across a zone
+                        zone_n["loot"] += 1
+                        continue
                     if not pr.park():
                         out["end"] = "stale_park"
                         break
@@ -3663,6 +3748,9 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         if time.monotonic() - t_l0 >= prm["loot_max_s"]:
                             break
                         if not w_l.walkable[cell[1], cell[0]]:
+                            continue
+                        if zone_why(here2, cell) is not None:  # map traps: in / across a zone
+                            zone_n["loot"] += 1
                             continue
                         u_l, v_l = (float(c_) for c_ in w_l.project([cell])[0])
                         if loot1.in_ui(u_l, v_l) or not in_view(u_l, v_l):
@@ -3906,6 +3994,9 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     if loot1.in_ui(ua, va):
                         out["end"] = "ui"
                         break
+                    if zone_why(here, tr.predict(r.ns())) is not None:  # map traps: as strike's
+                        out["end"] = "zone"
+                        break
                     tb_ = r.ns()
                     agent.click(gx0 + round(ua), gy0 + round(va))
                     t_last = time.monotonic()
@@ -3990,6 +4081,16 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 """Park, hover the target's newest box, ONE robust2 read; SWORD -> the attack
                 click there. True when it clicked."""
                 nonlocal eng, k, reads
+                if zones is not None:  # map traps: no attack click whose walk-in breaks a zone
+                    zs_ = zone_why(here, tr.predict(r.ns()))
+                    if zs_ is not None:
+                        if (tr.tid, zs_) not in z_logged:  # once per track and reason
+                            z_logged.add((tr.tid, zs_))
+                            zone_n["strike"] += 1
+                            ev({"kind": "strike_zone", "track": tr.tid, "zone": zs_,
+                                "again": again})  # fmt: skip
+                        time.sleep(0.02)  # the callers may retry at once: never a busy loop
+                        return False
                 prev = split._cat
                 split.to("striking", time.monotonic())
                 t_call0 = time.monotonic()
@@ -4364,6 +4465,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
             # the pocket escape (a bug fix with v42): our cell every 2 s and the mode, the
             # pockets left behind (centre, radius, until)
             stuck_st: dict[str, Any] = {"hist": deque_(), "zones": [], "mode": ""}
+            z_exit_memo: dict[str, Any] = {"at": None, "t": 0.0, "p": None}  # map traps
 
             def planner() -> None:
                 """The queue (chained, standing first) every plan_every_s, and the next exploration
@@ -4436,14 +4538,15 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         p_ = None
                         goal = None
                         bel_p: list[Cell] | None = None
+                        z_exit_ = False  # map traps: p_ is the way out of a zone
                         if g_bel is not None:
                             # v27: a HIDDEN monster's most probable cell first (the belief map:
                             # last seen 1-10 s ago, not ruled out by the cells we see empty)
                             hg_, wg_ = ok.shape
                             for pc_ in g_bel["probes"]:
                                 inb_ = 0 <= pc_[0] < wg_ and 0 <= pc_[1] < hg_
-                                if inb_ and ok[pc_[1], pc_[0]] and cheb(pc_, here_) >= 2:
-                                    pb_ = hc.astar(ok, here_, pc_)
+                                if inb_ and okr[pc_[1], pc_[0]] and cheb(pc_, here_) >= 2:
+                                    pb_ = hc.astar(okr, here_, pc_)
                                     if pb_ is not None and len(pb_) >= 2:
                                         bel_p, goal = pb_, pc_
                                         break
@@ -4548,13 +4651,26 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                                   goal[1] - goal[1] % hc.TILE))  # fmt: skip
                                 if len(bad_tiles) > 40:
                                     bad_tiles.clear()
+                        elif zones is not None:
+                            # map traps: outside the area (inside a no-enter one, say) -> the
+                            # SHORTEST way back, never across a line, into no other no-enter area;
+                            # its clicks are walked on `ok` (grid_s for a truthy escape). One
+                            # search per cell per 2 s (a sealed room re-plans every cycle)
+                            if z_exit_memo.get("at") != here_ or now_ - z_exit_memo["t"] > 2.0:
+                                pz_ = mz.exit_path(ok, area, here_, zones)
+                                z_exit_memo.update(at=here_, t=now_, p=pz_)
+                                ev({"kind": "zone_exit", "from": list(here_),
+                                    "to": None if pz_ is None else list(pz_[-1]),
+                                    "len": None if pz_ is None else len(pz_)})  # fmt: skip
+                            p_ = z_exit_memo["p"]
+                            z_exit_ = True
                         else:
                             back = hc.nearest_in(area, ok, here_)
                             p_ = None if back is None else hc.astar(ok, here_, back)
                         if p_ is not None and len(p_) >= 2:
                             gp = p_
                             plan["t_fail"] = None
-                            plan["escape"] = False
+                            plan["escape"] = "zone_exit" if z_exit_ else False
                             with plock:
                                 plan["t_goal"] = now_
                         elif main_area is not None:
@@ -4567,7 +4683,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                 cands_ = [*trail_cells(tr_, here_, now_),
                                           *escape_cells(main_area, here_, near=6)]  # fmt: skip
                                 for c_ in cands_:
-                                    p_ = hc.astar(ok, here_, c_)
+                                    p_ = hc.astar(okr, here_, c_)
                                     if p_ is not None and len(p_) >= 2:
                                         gp, plan["t_fail"] = p_, None
                                         plan["escape"] = True  # clicked on the walkable grid
@@ -5535,6 +5651,21 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                            and cheb(tcell, zone_st["center"])
                                            <= zone_st["radius"])  # fmt: skip
                             in_rng = cheb(pos, tcell) <= s_range or in_zone
+                            if zones is not None:
+                                # map traps: a target standing in a no-enter area is never
+                                # engaged; in strike range, nor one whose walk-in (the client's
+                                # own path from here) breaks a zone -- dropped, its spot banned
+                                tc_z = (int(round(tcell[0])), int(round(tcell[1])))
+                                tz_ = ("target_no_enter" if mz.in_no_enter(zones, tc_z)
+                                       else zone_why(pos, tcell) if in_rng else None)  # fmt: skip
+                                if tz_ is not None:
+                                    zone_n["target"] += 1
+                                    banned.append((now, tc_z))
+                                    ev({"kind": "target_dropped", "track": target.tid,
+                                        "why": "zone", "zone": tz_})  # fmt: skip
+                                    target = None
+                                    time.sleep(0.02)
+                                    continue
                             if in_rng:
                                 in_range_since.setdefault(target.tid, time.monotonic())
                             if not moving and in_rng and hold_st.get("tid") == target.tid:
@@ -5599,7 +5730,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                             target, prm, k) < prm["zone_radius"]
                                             else prm["zone_radius"])  # fmt: skip
                                         same_ = zone_st.get("tid") == target.tid
-                                        pz_ = zone_path(ok, pos, tcell, rz_)
+                                        pz_ = zone_path(okr, pos, tcell, rz_)
                                         zone_st.clear()
                                         zone_st.update(tid=target.tid, center=tuple(tcell),
                                                        radius=rz_, path=pz_)  # fmt: skip
@@ -5608,7 +5739,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                             "len": None if pz_ is None else len(pz_)})  # fmt: skip
                                     ap = zone_st.get("path")
                                 elif due:
-                                    ap = approach_path(ok, pos, tcell, prm["short"])
+                                    ap = approach_path(okr, pos, tcell, prm["short"])
                                 if due and ap is not None and len(ap) <= 1:
                                     pass  # v11: inside the zone already: the strike comes next
                                 elif due:
@@ -5618,7 +5749,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                         banned.append((now, (int(round(tcell[0])),
                                                              int(round(tcell[1])))))  # fmt: skip
                                         target = None
-                                    elif cont_click(ap, ok, "steer", tcell,
+                                    elif cont_click(ap, okr, "steer", tcell,
                                                     tail=steer_tail_on(k),
                                                     near_box=steer_box_on(k)):  # fmt: skip
                                         stop_since = None
@@ -5632,7 +5763,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                                        key=lambda i_: cheb(ap[i_], pos))
                                                    if steer_tail_on(k) else 0)  # fmt: skip
                                             j, (u, v) = step_target(ap, i0_, pos, prm["ahead"],
-                                                                    ok)  # fmt: skip
+                                                                    okr)  # fmt: skip
                                             if j is not None:
                                                 walk_click(u, v, ap[j], ap[: j + 1], "cursor",
                                                            "steer")  # fmt: skip
@@ -5642,7 +5773,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                 time.sleep(0.02)
                                 continue
                             if not moving or now - last_walk >= prm["walk_every_s"]:
-                                ap = approach_path(ok, pos, tcell, prm["short"])
+                                ap = approach_path(okr, pos, tcell, prm["short"])
                                 if ap is None:
                                     ev({"kind": "target_dropped", "track": target.tid,
                                         "why": "no_path"})  # fmt: skip
@@ -5651,7 +5782,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                     target = None
                                     continue
                                 path, pi = ap, 0
-                                j, (u, v) = step_target(path, 0, pos, prm["ahead"], ok,
+                                j, (u, v) = step_target(path, 0, pos, prm["ahead"], okr,
                                                         need_clear=need_c)  # fmt: skip
                                 if j is not None:
                                     gate_ = "map+units" if moving else "cursor"
@@ -5972,6 +6103,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                "det_fps": None if sampler is None or not run_s
                else round(len(sampler.frames) / run_s, 2), "walk_guard": dict(guard_n),
                "frame_guard": dict(fg_n),
+               **({"map_zones": dict(zone_n)} if zones is not None else {}),
                "battle_log": None if bl_tail is None else {
                    "lines": len(bl_tail.lines), "base_exp_used": len(bl_tail.used),
                    "restarts": bl_tail.restarts}}  # fmt: skip
