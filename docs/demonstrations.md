@@ -12100,8 +12100,38 @@ commit; on v44's 4 runs it gives P1 -15.1 points, P2 -2.9, P3 0.38 x, G4 -1.64 s
     30 times, the steer 7.
   - The reader: base EXP precision 103/104 = 0.990, recall 0.954, lag p50 0.31 / p90 0.43 s.
     Best 2 min: 10 kills from minute 7.7.
-- **Run 3** (seed 20360303) was started by the chain at 11:42:31. Its screenshot was judged: the
-  hunting layout, Lv 70, weight 552 / 4970, no dialog.
+- **Run 3** (seed 20360303, session 20261020T114234).
+  - Started by the chain at 11:42:31. The screenshot was judged: the hunting layout, Lv 70,
+    weight 552 / 4970, no dialog. It ended on its time box at 12:44:00.
+  - **The row:**
+    - 104 engagements; landing 82/104 = 78.8 % (70.0-85.6); 89.0 kills / h; 6.36 per sighting;
+      40.5 s per kill; seen 14.0 / 10 min (a thin field: run 1 25.0, run 2 21.5);
+    - free targets <= 10 s 45 % (n 137); steer moving 36 %; seen -> click 2.46 s; death -> next
+      0.97 s;
+    - dead calls without a real death 11/88 = 12.5 %;
+    - **LOOT COMPLETENESS 66/135 = 48.9 %** (left behind 41 % / looters 10 % / expired 1 %); the
+      older column 80/134 = 60 % (6 looters);
+    - reversals 6.2 / min (outside loot 5.83); Creamy 0; hard bars 0 / 0 / 0; kill -> loot start
+      0.95 / 0.81 s (n 79);
+    - results: dead 88, skipped_risky 7, gone_no_line 7, gave_up 2.
+  - **Per arm, run 3 only, NOT deciding:**
+
+    | arm | completeness | left behind / looters / expired | kills with no loot step | kill -> loot start | engaged s per kill | landing | dead calls not real |
+    |---|---|---|---|---|---|---|---|
+    | fix (odd k) | 37/58 = 63.8 % | 25.9 / 8.6 / 1.7 % | 2/46 = 4.3 % | 1.01 s | 6.25 | 80.8 % | 6.8 % |
+    | base (even k) | 29/68 = 42.6 % | 47.1 / 10.3 / 0 % | 2/38 = 5.3 % | 0.88 s | 6.12 | 76.9 % | 18.2 % |
+
+    - Fix - base: completeness +21.1 points, kills with no loot step -0.9 points, kill -> loot
+      start 1.14 x, engaged s per kill +0.13 s.
+    - The fix arm's deaths: EXP line 20, the line after a hold 24.
+    - gone_no_line 7, of which 2 were real kills of ours (1 item, not picked).
+  - Left-behind causes: in the plan, unclicked 23; outside, near the death cell 16; no loot step
+    14; fell after the step 8; outside 5; clicked, became a walk 3. Taken away by the search 35
+    times, the steer 7.
+  - The reader: base EXP precision 88/89 = 0.989, recall 0.989, lag p50 0.31 / p90 0.44 s.
+    Best 2 min: 10 kills from minute 50.3.
+- **Run 4** (seed 20360404) was started by the chain at 12:44:02. Its screenshot was judged: the
+  hunting layout, Lv 70, weight 556 / 4970, no dialog, the Battle Log tab in front.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
