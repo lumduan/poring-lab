@@ -12350,6 +12350,48 @@ the scan misses items: NOT adopted, reported with the left-behind causes.
     The runner rebuilt the hunting state itself (@resetstat, the level).
   - **The live arm check PASSED (amendment 1's gate) at 14:17:08 (8.1 min of the loop):** 6
     HAND clicks, all 6 followed by a pickup request (1.0). Hovers: empty 70, unknown 16, hand 6.
+  - It ended on its time box at 15:10:01.
+  - **The row:**
+    - 165 engagements; landing 116/165 = 70.3 % (62.9-76.8); **141.9 kills / h**; 5.16 per
+      sighting; 25.4 s per kill; **seen 27.5 / 10 min** (a dense field);
+    - free targets <= 10 s 38 % (n 156); steer moving 38 %; seen -> click 4.82 s; death -> next
+      1.19 s;
+    - dead calls without a real death 36/135 = 26.7 %;
+    - **LOOT COMPLETENESS 94/251 = 37.5 %** (left behind 25 % / **looters 36 %** / expired 1 %;
+      64 / 90 / 3 items); the older column 91/189 = 48 % (53 looters);
+    - reversals 6.11 / min (outside loot 6.41); Creamy 0; hard bars 0 / 0 / 0; kill -> loot
+      start 1.07 / 0.65 s (n 100);
+    - results: dead 135, skipped_risky 30.
+  - **Per arm, run 1b only, NOT deciding** (`arm_judge.py handloot`):
+
+    | arm | completeness | left behind / looters / expired | kills with no loot step | loot step p50 | engaged s per kill | landing |
+    |---|---|---|---|---|---|---|
+    | HAND (odd k) | 46/115 = 40.0 % | 26.1 / 33.9 / 0 % | 10/64 = 15.6 % | 6.37 s | 10.51 | 69.5 % |
+    | blind (even k) | 42/99 = 42.4 % | 27.3 / 28.3 / 2.0 % | 7/61 = 11.5 % | 2.10 s | 6.50 | 71.1 % |
+
+    - HAND - blind: completeness -2.4 points; engaged s per kill +4.01 s (G3's bar 0.176 x
+      25.37 = 4.46 s).
+    - The scan: 64 steps, ended no_hand 45 / cap 19; 91 extra cells.
+    - Hovers: empty 527, unknown 100, sword 98, hand 53. HAND clicks 53, of which 44 became a
+      pickup (0.83).
+    - Against the floor (`hand_truth.py`):
+      - hand reads: an item on the hovered cell 23 / 53, within 1 cell 50 / 53;
+      - sword reads: an item on the cell 6, within 1 cell 9 (a monster standing on our item);
+      - unknown reads: an item on the cell 7, within 1 cell 12;
+      - empty reads: an item on the cell 0, within 1 cell 25.
+  - Left-behind causes per arm:
+    - HAND: in the plan, unclicked 18; outside, near the death cell 17; no loot step 14; fell
+      after the step 11; clicked, became a walk 6; outside 3;
+    - blind: in the plan, unclicked 22; outside, near the death cell 18; no loot step 6;
+      outside 5; clicked, became a walk 4; fell after the step 2;
+    - kills that no engagement owned: no loot step 31.
+  - **Reading (not deciding):** on this dense field the HAND step's 6.4 s, against the blind
+    step's 2.1 s, gave the looters time. The HAND arm lost 33.9 % of its items to looters,
+    against 28.3 %. The stopped 10-min run (19.4 seen / 10 min) had read the other way.
+  - Best 2 min: 15 kills from minute 39.2.
+- **Run 2** (seed 20370202, session 20261020T151005) was started by the chain at 15:10:03.
+  Its screenshot was judged: the hunting layout, Lv 70, Job Lv 1, weight 568 / 4970, HP full,
+  no dialog.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
