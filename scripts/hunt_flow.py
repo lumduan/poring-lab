@@ -288,6 +288,14 @@ VERSIONS = {
     "pickup, edge hands extend it to radius 2, a SWORD / unread cell retried once, never "
     "clicked; 8 s at most); even k keeps the blind 3 x 3; interleaved per engagement. Base: "
     "v43's + the pocket escape (v48 not adopted, 3.89)",
+    50: "BATT'S LOOT RULE: dead = the EXP line on every engagement; on odd k the loot step "
+    "stands 0.5 s from the line and hovers the cells around the DRAWN GM (its own cell, the "
+    "3 x 3, the 5 x 5's edge; the client's readout as the reference), clicks only a HAND, "
+    "bursts in Batt's rhythm (a click every 0.59 s while a fresh read of the pixel shows the "
+    "HAND; the settle and the GM's cell only between cells), and repeats passes until one shows "
+    "no HAND (3 passes, 12 s); even k keeps the base's loot step; interleaved per engagement. "
+    "Base: v48 (adopted by Batt, 3.89) on every engagement; v49 not adopted (3.90): the blind "
+    "3 x 3",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -540,6 +548,22 @@ PARAMS[49] = {**PARAMS[44], "exp_dead": False, "exp_dead_ab": False, "loot_hand"
               "loot_hand_ab": True, "loot_hand_wait_s": 0.45, "loot_hand_still_s": 0.15,
               "loot_hand_still_max_s": 1.2, "loot_hand_retry_s": 0.6, "loot_hand_settle_s": 0.8,
               "loot_hand_max_s": 8.0}  # fmt: skip
+# 50 = BATT'S LOOT RULE (3.91, Batt 2026-10-20 ~15:3x, after his 15:05 clip): on odd k
+# (loot_gm_ab) the loot step STANDS loot_gm_stand_s after the EXP line and scans the cells around
+# the DRAWN GM (loot_gm_steps). Base: v48 ADOPTED by Batt (14:58, overriding 3.89's rule) -> the
+# EXP line + the kept target on EVERY engagement (exp_dead_ab off); v49 NOT adopted (3.90) -> the
+# blind 3 x 3 on even k. loot_hand_still_s: the drawn standstill's quiet time (hand_still), as v49's
+# BATT'S RHYTHM (his 18:11 order, before 3.91's commit): inside a cell's burst one click every
+# loot_gm_burst_gap_s 0.59 s = his demo's same-spot press-to-press gap inside a kill's loot (p50,
+# n 9, 0.40-1.00 s; 20261016T093835-demo-human-demo), each after a fresh read of the same pixel
+# started loot_gm_read_lead_s early; the settle and the GM's cell only when the burst ends.
+# loot_gm_burst_max 6: "until the hand is gone" over the largest pile on one cell measured (5:
+# v49 run 1b and his demo), still a bound for the give-up guard (k129)
+PARAMS[50] = {**PARAMS[48], "exp_dead_ab": False, "loot_gm": True, "loot_gm_ab": True,
+              "loot_gm_stand_s": 0.5, "loot_gm_wait_s": 0.45, "loot_hand_still_s": 0.15,
+              "loot_gm_still_max_s": 1.2, "loot_gm_settle_s": 0.8, "loot_gm_burst_max": 6,
+              "loot_gm_burst_gap_s": 0.59, "loot_gm_read_lead_s": 0.2,
+              "loot_gm_passes": 3, "loot_gm_max_s": 12.0, "loot_gm_edge": True}  # fmt: skip
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -3113,12 +3137,15 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 (its own cell, the 3 x 3, the 5 x 5's edge; gm_scan_cells), NOT around the
                 believed death cell (off ~63 % of the time; v49's HAND reads lay 1 cell off it).
                 Each cell is HOVERED (moves only); where the client draws its PICKUP hand it is
-                clicked, then -- after loot_gm_settle_s and a drawn standstill -- re-hovered at
-                its pixel from the GM's new cell, and clicked again while the hand stays (a
-                burst, a read before every click: a SWORD is never clicked). A pass that found a
-                hand is followed by another around the GM's cell then; the step ends when a full
-                pass shows no hand, after loot_gm_passes, or at loot_gm_max_s. Every hover is
-                logged with its recalls (``hand_hover``, arm "gm")."""
+                clicked, and clicked again in BATT'S RHYTHM (his 18:11 order) while the hand stays:
+                one click every loot_gm_burst_gap_s (his demo's same-spot press gap), each after
+                a fresh read of the same pixel (a burst, a read before every click: a SWORD is
+                never clicked), at most loot_gm_burst_max. Only when the burst ends: the settle,
+                a drawn standstill and the GM's cell again (for the next cells). A pass that found
+                a hand is followed by another around the GM's cell then; the step ends when a
+                full pass shows no hand, after loot_gm_passes, or at loot_gm_max_s. Every hover
+                is logged with its recalls (``hand_hover``, arm "gm"; a burst read with its time
+                since the click)."""
                 t_line = (eng_.get("exp_line") or {}).get("t_ns")
                 if t_line is not None:
                     w_s = (int(t_line) + int(float(prm["loot_gm_stand_s"]) * 1e9) - r.ns()) / 1e9
@@ -3130,7 +3157,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 k_g = int(eng_.get("k", 0))
                 given_up: set[Cell] = set()
 
-                def hover(c_: Cell, ref_: Cell, pass_: int, burst_: int) -> tuple[str, Any]:
+                def hover(c_: Cell, ref_: Cell, pass_: int, burst_: int,
+                          t_click: float | None = None) -> tuple[str, Any]:  # fmt: skip
                     u_, v_ = frac_project(w_l, (float(ref_[0]), float(ref_[1])), c_)
                     if not in_view(u_, v_):
                         return "view", None
@@ -3141,6 +3169,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     ev({"kind": "hand_hover", "arm": "gm", "k": k_g, "cell": list(c_),
                         "ref": list(ref_), "pass": pass_, "burst": burst_, "seen": sn_,
                         "ms": res_["ms"], "reads": len(res_["reads"]),
+                        "since_click_s": None if t_click is None
+                        else round(time.monotonic() - t_click, 3),
                         "rec": {kk_: round(float(vv_), 3)
                                 for kk_, vv_ in (res_["rec"] or {}).items()}})  # fmt: skip
                     return sn_, (u_, v_)
@@ -3177,41 +3207,55 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         if sn_g != "hand" or px_g is None:
                             continue
                         found = True
-                        moved_any = False
+                        exhausted = False
+                        gap_ = float(prm["loot_gm_burst_gap_s"])
+                        lead_ = float(prm["loot_gm_read_lead_s"])
                         for b_ in range(int(prm["loot_gm_burst_max"])):
-                            t_lc = r.ns()
+                            if b_ and time.monotonic() - t_l0 >= prm["loot_gm_max_s"]:
+                                break  # the step's cap bounds the burst too
+                            t_lc, t_cm = r.ns(), time.monotonic()
                             # the LOOT click (Batt's rule): only on a HAND read at this pixel
                             agent.click(gx0 + round(px_g[0]), gy0 + round(px_g[1]))
                             out["clicks"] += 1
                             click_log({"t": t_lc, "u": round(px_g[0], 1), "v": round(px_g[1], 1),
                                        "kind": "loot", "cell": list(c_g), "src": "gm_hand",
                                        "burst": b_})  # fmt: skip
-                            # the server's answer and the ~0.65 s display lag first: a pickup
-                            # walk is drawn late (3.89's death-cell study; v49's settle)
-                            time.sleep(float(prm["loot_gm_settle_s"]))
-                            if not hand_still(float(prm["loot_gm_still_max_s"])):
-                                seen_c["not_still"] += 1
-                            rf2_ = gm_ref()
-                            if rf2_ is None:
-                                out["stop"] = "jump"
-                                break
-                            moved_any = moved_any or rf2_[0] != ref
-                            ref = rf2_[0]
-                            sn_g, px_g = hover(c_g, ref, passes, b_ + 1)
+                            # BATT'S RHYTHM (18:11): the next click comes loot_gm_burst_gap_s
+                            # after this one (his demo's same-spot press gap) -- no settle, no
+                            # standstill, no GM re-read inside a burst; the re-read of THIS
+                            # pixel starts loot_gm_read_lead_s early (a decisive read ~0.18 s)
+                            w_r = t_cm + gap_ - lead_ - time.monotonic()
+                            if w_r > 0:
+                                time.sleep(w_r)
+                            sn_g, px_g = hover(c_g, ref, passes, b_ + 1, t_cm)
                             seen_c["burst_" + sn_g] += 1
                             if sn_g != "hand" or px_g is None:
                                 break
+                            w_c = t_cm + gap_ - time.monotonic()
+                            if w_c > 0:
+                                time.sleep(w_c)
                         else:
+                            exhausted = True  # every click of the burst, and the hand still there
+                        # the pause comes when the burst ends: the server's answer and the display
+                        # lag (a pickup walk is drawn late; v49's settle), a drawn standstill,
+                        # then the GM's cell again for the next cells
+                        time.sleep(float(prm["loot_gm_settle_s"]))
+                        if not hand_still(float(prm["loot_gm_still_max_s"])):
+                            seen_c["not_still"] += 1
+                        rf2_ = gm_ref()
+                        if rf2_ is None:
+                            out["stop"] = "jump"
+                            break
+                        moved_ = rf2_[0] != ref
+                        ref = rf2_[0]
+                        if exhausted and not moved_:
                             # the whole burst, the hand still there and the GM never moved: the
                             # clicks may do nothing (v49 run 1b k129: 6 accepted clicks, no
                             # request at all) -- the cell is given up for this step (a pickup
                             # within 2 cells needs no walk, and a stack keeps its hand: so only
-                            # after the WHOLE burst)
-                            if not moved_any and not out.get("stop"):
-                                given_up.add(c_g)
-                                seen_c["given_up"] += 1
-                        if out.get("stop"):
-                            break
+                            # after the WHOLE burst, longer than the largest pile on one cell)
+                            given_up.add(c_g)
+                            seen_c["given_up"] += 1
                     if out.get("stop"):
                         break
                     if not found:

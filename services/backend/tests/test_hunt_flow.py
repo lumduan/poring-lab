@@ -1250,6 +1250,30 @@ def test_v49_params_hand_scan_on_the_base() -> None:
         k: v for k, v in hf.PARAMS[44].items() if k not in moved}  # fmt: skip
 
 
+def test_v50_params_batts_loot_rule_on_v48() -> None:
+    """3.91 (Batt 2026-10-20 ~15:3x): PARAMS[50] = v48 adopted (the EXP line + the kept target on
+    EVERY engagement) with Batt's loot rule on odd k; v49 not adopted (the blind 3 x 3 on even
+    k); nothing else moves."""
+    p = hf.PARAMS[50]
+    assert 50 in hf.VERSIONS
+    assert p["exp_dead"] and not p["exp_dead_ab"] and p["exp_keep"]
+    assert hf.exp_dead_on(p, 1) and hf.exp_dead_on(p, 2)  # every engagement
+    assert p["exp_loot_delay_s"] == 0.5
+    assert p["loot_gm"] and p["loot_gm_ab"] and hf.gm_on(p, 1) and not hf.gm_on(p, 2)
+    assert not p.get("loot_hand") and not hf.hand_on(p, 1) and not hf.hand_on(p, 2)
+    assert p["loot_gm_stand_s"] == 0.5 and p["loot_gm_wait_s"] == 0.45
+    assert p["loot_gm_settle_s"] == 0.8 and p["loot_gm_burst_max"] == 6
+    assert p["loot_gm_burst_gap_s"] == 0.59 and p["loot_gm_read_lead_s"] == 0.2  # Batt's rhythm
+    assert p["loot_gm_passes"] == 3 and p["loot_gm_max_s"] == 12.0 and p["loot_gm_edge"]
+    assert p["loot_hand_still_s"] == 0.15 and p["loot_gm_still_max_s"] == 1.2
+    moved = ("exp_dead_ab", "loot_gm", "loot_gm_ab", "loot_gm_stand_s", "loot_gm_wait_s",
+             "loot_hand_still_s", "loot_gm_still_max_s", "loot_gm_settle_s",
+             "loot_gm_burst_max", "loot_gm_burst_gap_s", "loot_gm_read_lead_s",
+             "loot_gm_passes", "loot_gm_max_s", "loot_gm_edge")  # fmt: skip
+    assert {k: v for k, v in p.items() if k not in moved} == {
+        k: v for k, v in hf.PARAMS[48].items() if k not in moved}  # fmt: skip
+
+
 def test_keep_ends_on_the_engagements_own_sighting() -> None:
     """3.89: a kept target ends gone_no_line only once unseen 6.0 s since ITS last sighting (not
     the tracker's, which drops a track after 2 s), or 14 s after the first click."""
@@ -1459,8 +1483,29 @@ def test_batts_loot_rule_clicks_only_a_hand() -> None:
     i_click = body.index("agent.click(")
     assert 'if sn_g != "hand" or px_g is None:' in body[max(0, i_click - 900) : i_click]
     tail = body[i_click:]
-    i_re = tail.index("sn_g, px_g = hover(c_g, ref, passes, b_ + 1)")
+    i_re = tail.index("sn_g, px_g = hover(c_g, ref, passes, b_ + 1, t_cm)")
     assert 'if sn_g != "hand" or px_g is None:' in tail[i_re : i_re + 200]
+
+
+def test_batts_loot_rule_bursts_in_his_rhythm() -> None:
+    """Batt 18:11: inside a cell's burst the next click follows the last by loot_gm_burst_gap_s,
+    after a fresh read of the same pixel -- no settle, no standstill, no GM re-read between the
+    clicks; those come once, when the burst ends; the step's cap bounds the burst."""
+    src = Path(hf.__file__).read_text()
+    body = src.split("def loot_gm_steps(")[1].split("def loot_fixed_run(")[0]
+    i_click = body.index("agent.click(")
+    i_re = body.index("sn_g, px_g = hover(c_g, ref, passes, b_ + 1, t_cm)")
+    i_end = body.index("exhausted = True")
+    inside = body[i_click:i_end]
+    assert i_click < i_re < i_end
+    for slow in ("loot_gm_settle_s", "hand_still(", "gm_ref()"):
+        assert slow not in inside, slow
+    assert "t_cm + gap_ - lead_" in inside and "t_cm + gap_ - time.monotonic()" in inside
+    after = body[i_end : i_end + 1500]
+    assert after.index("loot_gm_settle_s") < after.index("gm_ref()")
+    assert "if exhausted and not moved_:" in after
+    burst = body[body.index('for b_ in range(int(prm["loot_gm_burst_max"])):') : i_click]
+    assert 'prm["loot_gm_max_s"]' in burst
 
 
 def test_loot_memory_pure_parts() -> None:
