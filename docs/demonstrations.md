@@ -13045,6 +13045,17 @@ False, "loot_gm_one_pass": True, "loot_gm_one_pass_ab": True}`; nothing else mov
 pass did catch items the data missed: NOT adopted, reported with the left-behind causes. If M3
 fails, the result goes to Batt.
 
+**Run log (written during the runs):**
+- **Run 1** (seed 20390101, session 20261020T224434).
+  - Started by the chain at 22:44:32, 30 s after the pre-registration commit (5325847,
+    22:44:02). The screenshot was judged, on a check shot before the launch and on the chain's
+    own: the hunting layout, Lv 70, Job Lv 1, weight 604 / 4970, HP full, no dialog.
+  - **The live arm check PASSED at 22:56:33 (11.4 min of the loop):** 12 HAND clicks of the GM
+    scan, 11 followed by a pickup request (0.917). Hovers: empty 539, unknown 25, hand 12, sword
+    5.
+  - Seen live: 17 GM-scan steps, ended no_hand 12 / one_pass 5. The fix arm runs 1 pass, the
+    base arm up to 3 (6 steps ran 2), as designed.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
