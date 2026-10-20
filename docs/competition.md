@@ -1803,7 +1803,7 @@ rule: one pass on odd k, v50's up to 3 passes on even k.
   - clicked but became a walk 2.
   - The search took the GM away from 31 of them.
 
-**Top causes, re-ranked after v51 (2026-10-21 03:1x; the 4 v51 runs pooled, 4.0 h).**
+**Top causes, re-ranked after v51 (2026-10-21 03:01, the commit time; the 4 v51 runs pooled, 4.0 h).**
 Sources:
 - the time from the runner's own phase split (`manifest.json`);
 - the pocket from `map_zone_candidates.py --sessions` over the four runs;
