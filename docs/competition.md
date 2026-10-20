@@ -1551,8 +1551,9 @@ was not picked gets the first cause that holds:
   camera on our GM's cell at that frame (packets, interpolated, 0.65 s earlier). The client draws
   the world behind the server: lags of 0 / 0.25 / 0.5 / 0.65 / 0.8 / 1.0 s were tried, and
   0.65 s reproduces the runner's own death cell best (same cell 43 %, within 1 77 %).
-- **Results** against the server's death cell (Batt's HP-bar cue needs the recorded frames: not
-  in this version):
+- **Results** against the server's death cell. Batt's HP-bar cue does not exist on this client:
+  a recorded frame of v44 run 4 (01544, a Lunatic under our strike) shows no monster HP bar,
+  only the hovered name tag; only our GM has a bar. It would need a client option (Batt's call).
 
   | cue | kills | exact | within 1 | drops in its 3 x 3 |
   |---|---|---|---|---|
