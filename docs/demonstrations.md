@@ -12031,6 +12031,45 @@ commit; on v44's 4 runs it gives P1 -15.1 points, P2 -2.9, P3 0.38 x, G4 -1.64 s
 - Otherwise **NOT adopted**.
 
 **Run log (written during the runs):**
+- **Run 1** (seed 20360101, session 20261020T093755).
+  - Started by the chain 09:37:53, 50 s after the pre-registration commit (24803fe, 09:37:03).
+    The screenshot was judged: the standard layout at Lv 1 (the runner rebuilt the hunting state
+    itself), no dialog. It ended on its time box at 10:40:53.
+  - The arm was checked as live at ~10 min: 4 holds, EXP-line deaths after a hold, 2
+    gone_no_line at 6.0 s unseen.
+  - **The row:**
+    - 127 engagements; landing 93/127 = 73.2 % (64.9-80.2); 110.0 kills / h; 4.40 per sighting;
+      32.7 s per kill; seen 25.0 / 10 min;
+    - free targets <= 10 s 39 % (n 183); steer moving 38 %; seen -> click 3.12 s; death -> next
+      0.96 s;
+    - dead calls without a real death 18/107 = 16.8 %;
+    - **LOOT COMPLETENESS 61/130 = 46.9 %** (left behind 35 % / looters 18 % / expired 0 %); the
+      older "dead" engagements' loot 44/117 = 38 % (23 looters);
+    - reversals 7.08 / min (outside loot 6.62); Creamy 0; hard bars 0 / 0 / 0; kill -> loot start
+      1.19 / 0.87 s (n 87);
+    - results: dead 107, gone_no_line 10, skipped_risky 10.
+  - **Per arm, run 1 only, NOT deciding** (`arm_judge.py keepdead`):
+
+    | arm | completeness | left behind / looters | kills with no loot step | kill -> loot start | engaged s per kill | landing |
+    |---|---|---|---|---|---|---|
+    | fix (odd k) | 34/59 = 57.6 % | 27.1 / 15.3 % | 0/51 = 0 % | 0.99 s | 6.74 | 76.2 % |
+    | base (even k) | 22/62 = 35.5 % | 43.5 / 21.0 % | 10/51 = 19.6 % | 1.46 s | 6.03 | 70.3 % |
+
+    - Fix - base: completeness +22.2 points, kills with no loot step -19.6 points, kill -> loot
+      start 0.68 x, engaged s per kill +0.71 s.
+    - The fix arm's deaths: EXP line 21, the line after a hold 32. gone_no_line 10, none of them
+      a real kill of ours. The base arm had skipped_risky 10.
+  - Left-behind causes (`left_behind.py`): in the plan, unclicked 22; outside, near the death
+    cell 20; no loot step 15; clicked, became a walk 4; fell after the step 4; outside 4. The GM
+    was taken away by the search 33 times, the steer 3.
+  - The reader: base EXP precision 108/111 = 0.973, recall 0.982, lag p50 0.30 / p90 0.43 s.
+    Best 2 min: 9 kills from minute 20.0.
+- **A judge correction (10:4x, before any verdict, nothing in the pre-registration changed):**
+  `arm_judge.py keepdead` checked P3 at 0.60 x. The entry above says **<= 0.70 x** (the bar
+  outside 3.87's null), so the judge now checks 0.70 x. gone_no_line counts of zero are now
+  printed as zeros.
+- **Run 2** (seed 20360202) was started by the chain at 10:40:55. Its screenshot was judged: the
+  hunting layout, Lv 70, weight 546 / 4970, no dialog, the runner's own drops on the floor.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,

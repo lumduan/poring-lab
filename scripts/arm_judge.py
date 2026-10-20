@@ -1275,7 +1275,8 @@ def keepdead_table(sids: Sequence[str]) -> dict[str, Any]:
     P1. LOOT COMPLETENESS (loot_complete.py: items picked / items dropped by OUR kills, every kill
         of ours owned by the arm's engagements), fix - base in points;
     P2. abandoned kills (a kill of ours whose engagement ran no loot step), fix - base in points;
-    P3. kill -> loot start, mean (expdead_table's ruler);
+    P3. kill -> loot start, mean (expdead_table's ruler), fix <= 0.70 x base (3.89 as written; the
+        judge first had 0.60, corrected 2026-10-20 10:4x before any verdict);
     G4. the kills / h guard: engaged s per kill (sum of the arm's engagements, first click -> end,
         loot step included, / the arm's kills of ours), fix - base <= 0.176 x the pooled run's s
         per kill (= kills / h >= 0.85 x base if every engagement took the fix arm's cost);
@@ -1292,7 +1293,9 @@ def keepdead_table(sids: Sequence[str]) -> dict[str, Any]:
     eng_s = {"fix": 0.0, "base": 0.0}
     window_s = 0.0
     kills_all = 0
-    gone: Counter[str] = Counter()
+    gone: Counter[str] = Counter({k: 0 for k in ("gone_no_line", "gone_no_line_real_kills",
+                                                  "gone_no_line_items",
+                                                  "gone_no_line_items_picked")})  # fmt: skip
     for sid in sids:
         sess = ss.load_session(sid)
         fjo = json.loads((DEMO / sid / "flow_judge.json").read_text())
@@ -1344,8 +1347,8 @@ def keepdead_table(sids: Sequence[str]) -> dict[str, Any]:
     checks = {
         "P1 completeness fix - base >= +6.5 points": None if d_c is None else d_c >= 6.5,
         "P2 abandoned kills fix - base <= -5.5 points": None if d_a is None else d_a <= -5.5,
-        "P3 kill -> loot start mean fix <= 0.60 x base": (
-            None if kl_f is None or not kl_b else kl_f <= 0.60 * kl_b),
+        "P3 kill -> loot start mean fix <= 0.70 x base": (
+            None if kl_f is None or not kl_b else kl_f <= 0.70 * kl_b),
         "G4 engaged s per kill fix - base <= 0.176 x run s per kill": (
             None if d_e is None or run_s_per_kill is None else d_e <= 0.176 * run_s_per_kill),
         "G5 landing fix >= base - 8 points": (
