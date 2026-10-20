@@ -12068,8 +12068,40 @@ commit; on v44's 4 runs it gives P1 -15.1 points, P2 -2.9, P3 0.38 x, G4 -1.64 s
   `arm_judge.py keepdead` checked P3 at 0.60 x. The entry above says **<= 0.70 x** (the bar
   outside 3.87's null), so the judge now checks 0.70 x. gone_no_line counts of zero are now
   printed as zeros.
-- **Run 2** (seed 20360202) was started by the chain at 10:40:55. Its screenshot was judged: the
-  hunting layout, Lv 70, weight 546 / 4970, no dialog, the runner's own drops on the floor.
+- **Run 2** (seed 20360202, session 20261020T104057).
+  - Started by the chain at 10:40:55. The screenshot was judged: the hunting layout, Lv 70,
+    weight 546 / 4970, no dialog, the runner's own drops on the floor. It ended on its time box
+    at 11:42:30.
+  - **The row:**
+    - 125 engagements; landing 99/125 = 79.2 % (71.3-85.4); 108.0 kills / h; 5.02 per sighting;
+      33.3 s per kill; seen 21.5 / 10 min;
+    - free targets <= 10 s 43 % (n 168); steer moving 38 %; seen -> click 3.00 s; death -> next
+      0.89 s;
+    - dead calls without a real death 12/104 = 11.5 %;
+    - **LOOT COMPLETENESS 76/152 = 50.0 %** (left behind 31 % / looters 19 % / expired 0 %); the
+      older column 62/137 = 45 % (28 looters);
+    - reversals 7.61 / min (outside loot 7.00); Creamy 0; hard bars 0 / 0 / 0; kill -> loot start
+      1.02 / 0.82 s (n 92);
+    - results: dead 104, gone_no_line 14, skipped_risky 7.
+  - **Per arm, run 2 only, NOT deciding:**
+
+    | arm | completeness | left behind / looters | kills with no loot step | kill -> loot start | engaged s per kill | landing |
+    |---|---|---|---|---|---|---|
+    | fix (odd k) | 39/69 = 56.5 % | 26.1 / 17.4 % | 2/50 = 4.0 % | 0.95 s | 6.94 | 77.4 % |
+    | base (even k) | 35/69 = 50.7 % | 36.2 / 13.0 % | 6/51 = 11.8 % | 1.09 s | 5.85 | 81.0 % |
+
+    - Fix - base: completeness +5.8 points, kills with no loot step -7.8 points, kill -> loot
+      start 0.87 x, engaged s per kill +1.09 s.
+    - The fix arm's deaths: EXP line 15, the line after a hold 33.
+    - gone_no_line 14, of which 2 were real kills of ours (2 items, none picked). The reader
+      missed their lines: recall 0.954 on this run.
+  - Left-behind causes: no loot step 22; in the plan, unclicked 21; outside, near the death cell
+    16; outside 10; fell after the step 5; clicked, became a walk 2. Taken away by the search
+    30 times, the steer 7.
+  - The reader: base EXP precision 103/104 = 0.990, recall 0.954, lag p50 0.31 / p90 0.43 s.
+    Best 2 min: 10 kills from minute 7.7.
+- **Run 3** (seed 20360303) was started by the chain at 11:42:31. Its screenshot was judged: the
+  hunting layout, Lv 70, weight 552 / 4970, no dialog.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
