@@ -55,7 +55,7 @@ ALLOWED = {
                            "the detector (no unit within 60 px on the last 2 fresh frames): "
                            "3.39's recorded deviation (2), option B. A click from a standstill is "
                            "cursor-gated (GATED below)"),
-    "scripts/hunt_flow.py": (7, "hunt-flow@N (3.41): the attack / re-click after ONE robust2 SWORD "
+    "scripts/hunt_flow.py": (8, "hunt-flow@N (3.41): the attack / re-click after ONE robust2 SWORD "
                                 "read on the target's newest box, only at the stop with the target "
                                 "<= 3 cells (as hunt@6's click); and the CONTINUOUS walk click "
                                 "while the GM moves, gated by the map and the detector (no unit "
@@ -80,7 +80,10 @@ ALLOWED = {
                                 "on the UI or off the frame; <= 10 clicks / 4 s a kill. "
                                 "hunt-flow@24+: FrameGuard's pass-through -- every hunt-flow click "
                                 "goes through it and one OFF the game frame is refused (no click "
-                                "of its own)"),
+                                "of its own)"
+                                " 3.90 (Batt 2026-10-20, staged): the HAND scan's loot click, only where "
+                                "the client drew its PICKUP cursor at the hovered point (cursor_sword "
+                                "pickup recall >= 0.90; a SWORD there is never clicked)"),
     "scripts/agent_play.py": (3, "agent-demo@1 (Batt 2026-10-17, the agent's competition round): "
                                  "the attack click and its burst re-clicks, each only after the "
                                  "client's NAME TAG read a target under the pointer (hunt-flow@16 "

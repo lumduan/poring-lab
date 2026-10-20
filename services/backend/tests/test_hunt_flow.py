@@ -1382,3 +1382,47 @@ def test_v45_commit_rules_pure_parts() -> None:
     assert "if ok_ and edge_wait(cand, now):" in src
     assert 'if not moving and in_rng and hold_st.get("tid") == target.tid:' in src
     assert src.count("hold_drop(") == 2 and src.count("hold_radius(") == 2
+
+
+def test_hand_scan_pure_parts() -> None:
+    """3.90 (the HAND scan, staged): the arm by k, the cursor read as the scan sees it, the next
+    cell in scan order, a pickup's re-hover, a SWORD's one retry, and the edge extension."""
+    assert hf.hand_on({"loot_hand": True, "loot_hand_ab": True}, 3)
+    assert not hf.hand_on({"loot_hand": True, "loot_hand_ab": True}, 2)
+    assert hf.hand_on({"loot_hand": True}, 2) and not hf.hand_on({}, 1)
+    assert hf.hand_seen("clear", {"pickup": 0.95, "walk": 0.2}, 0.90) == "hand"
+    assert hf.hand_seen("clear", {"pickup": 0.40, "walk": 0.97}, 0.90) == "empty"
+    assert hf.hand_seen("sword", {"pickup": 0.95}, 0.90) == "sword"
+    assert hf.hand_seen("unknown", {}, 0.90) == "unknown"
+    order = [(10, 10), (11, 9), (9, 10)]
+    st: dict[tuple[int, int], dict[str, object]] = {}
+    assert hf.hand_next(order, st, 0.0) == (10, 10)
+    hf.hand_update(st, (10, 10), "hand", 0.0, 0.6)  # picked: hovered again (stacked items)
+    assert hf.hand_next(order, st, 0.0) == (10, 10)
+    hf.hand_update(st, (10, 10), "empty", 0.1, 0.6)
+    assert hf.hand_next(order, st, 0.1) == (11, 9)
+    hf.hand_update(st, (11, 9), "sword", 0.2, 0.6)  # a unit: one retry, not before 0.8
+    assert hf.hand_next(order, st, 0.3) == (9, 10)
+    hf.hand_update(st, (9, 10), "empty", 0.4, 0.6)
+    assert hf.hand_next(order, st, 0.5) is None  # the retry's time has not come ...
+    assert hf.hand_next(order, st, 0.9) == (11, 9)  # ... now it has
+    hf.hand_update(st, (11, 9), "sword", 0.9, 0.6)
+    assert hf.hand_next(order, st, 5.0) is None  # HAND_TRIES used: given up, the scan is done
+    for _ in range(hf.HAND_RECHECK_MAX):
+        hf.hand_update(st, (10, 10), "hand", 6.0, 0.6)
+    assert st[(10, 10)]["state"] == "done"  # stacked items: bounded
+    o2 = [(10, 10)]
+    assert hf.hand_extend(o2, (10, 10), (10, 10), 0) == 0  # the centre adds nothing
+    assert hf.hand_extend(o2, (11, 10), (10, 10), 0) == 3  # an edge: the 3 cells beyond it
+    assert {(12, 9), (12, 10), (12, 11)} <= set(o2)
+    assert hf.hand_extend(o2, (11, 11), (10, 10), 3) == 3 + 3  # a corner: 5 beyond, 2 known
+    assert hf.hand_extend(o2, (9, 9), (10, 10), 7) == hf.HAND_EXTRA_MAX  # the bound
+
+
+def test_the_hand_scan_clicks_only_a_hand() -> None:
+    """3.90: in the HAND step the only click follows a "hand" read; hovers are moves only."""
+    src = Path(hf.__file__).read_text()
+    body = src.split("def loot_hand_steps(")[1].split("def loot_fixed_run(")[0]
+    assert body.count("agent.click(") == 1
+    i_click = body.index("agent.click(")
+    assert 'if seen_h == "hand":' in body[max(0, i_click - 200) : i_click]
