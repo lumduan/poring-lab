@@ -1229,6 +1229,27 @@ def test_v48_params_keep_the_target_on_the_base() -> None:
     assert {k: v for k, v in p.items() if k not in moved} == hf.PARAMS[44]
 
 
+def test_v49_params_hand_scan_on_the_base() -> None:
+    """3.90 (Batt 2026-10-20, step 3): PARAMS[49] = the base (v43's + the pocket escape: v48 NOT
+    adopted, so PARAMS[44] without the EXP-line rule) with the HAND scan on odd k; nothing else
+    moves."""
+    p = hf.PARAMS[49]
+    assert 49 in hf.VERSIONS
+    assert not p["exp_dead"] and not p["exp_dead_ab"] and not p.get("exp_keep")
+    assert p["loot_hand"] and p["loot_hand_ab"]  # odd k = the fix arm
+    assert hf.hand_on(p, 1) and not hf.hand_on(p, 2)
+    assert p["loot_hand_wait_s"] == 0.45 and p["loot_hand_still_s"] == 0.15
+    assert p["loot_hand_still_max_s"] == 1.2 and p["loot_hand_retry_s"] == 0.6
+    assert p["loot_hand_settle_s"] == 0.8 and p["loot_hand_max_s"] == 8.0
+    assert p["false_dead_fix"] and not p["false_dead_ab"]
+    assert not p.get("steer_guard_box_px") and not p.get("steer_tail")
+    moved = ("exp_dead", "exp_dead_ab", "loot_hand", "loot_hand_ab", "loot_hand_wait_s",
+             "loot_hand_still_s", "loot_hand_still_max_s", "loot_hand_retry_s",
+             "loot_hand_settle_s", "loot_hand_max_s")  # fmt: skip
+    assert {k: v for k, v in p.items() if k not in moved} == {
+        k: v for k, v in hf.PARAMS[44].items() if k not in moved}  # fmt: skip
+
+
 def test_keep_ends_on_the_engagements_own_sighting() -> None:
     """3.89: a kept target ends gone_no_line only once unseen 6.0 s since ITS last sighting (not
     the tracker's, which drops a track after 2 s), or 14 s after the first click."""

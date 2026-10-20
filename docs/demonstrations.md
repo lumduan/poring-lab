@@ -12196,6 +12196,96 @@ NOT ADOPTED. P3 fails (0.742 x against <= 0.70 x); both tiers of the rule requir
   `exp_dead`). Adopting v48 regardless of P3 is Batt's call; it was flagged in the ~13:00
   report.
 
+### 3.90 hunt-flow@49: LOOT BY THE HAND -- a HAND scan from a drawn standstill (Batt's step 3, first half), interleaved per engagement (pre-registered 2026-10-20 13:52 ICT, the commit time, BEFORE its runs; Batt ~09:1x: "NO ITEM LEFT BEHIND: a loot step ends only when the drop area shows no HAND cursor (bounded)")
+
+**Why (measured before this entry; docs/competition.md's loot block):**
+- **Why items are left behind** (`left_behind.py`, v42 + v44, 1,196 items):
+  - unclicked cells inside the step's 3 x 3: 16.1 %;
+  - drops just outside it (within 1 of the true death cell): 13.3 %;
+  - kills with no loot step: 11.0 %;
+  - the search resuming, not the next engagement, takes the GM away (76 %).
+- **Where the loot clicks land** (`left_behind.py --aim`): the step's first click is 48.5 % exact
+  and 82.7 % within 1 cell; every later click 10.8 % and 52.3 %; clicks while our GM walks 3.6 %
+  and 28.4 %. Each blind click walks the GM, and the next is aimed from a belief the drawn camera
+  no longer matches.
+- **The death cell** (`deathcell_cues.py`): no box timing beats today's last-box rule.
+- **v17's HAND sweep (3.59, 2026-10-17)** picked 18.4 %: "the cursor reads mostly found NO hand
+  over cells where items lay". This entry's reading: that sweep hovered cells from the same
+  drifting belief, with the older cursor references. Today's reader (cursor_sword, v3 refs) has
+  PICKUP recall >= 0.997 on the hand crops, <= 0.660 on every other shape. The run checks the arm
+  live (below), and every hover is logged with its recalls.
+- **The live positive case, measured before this entry** (v37's loot cursor reads, 2 runs on
+  prt_fild06 + prt_fild08, 1,173 reads, each followed by a blind loot click; packets offline):
+  - every click after a decisive read that became a pickup had read the HAND (48 of 48; 14
+    more after an unknown read);
+  - a HAND read was followed by a pickup request 69 of 83 times (83 %): 48 at once, and 21 after
+    the client first walked to the item (0.33 s later, p50);
+  - the other 14 were cut by v37's next blind click 0.27 s later, which this scan never does.
+
+**The ONE main change: the loot step (fix arm = odd k).**
+- From a DRAWN standstill each cell of the 3 x 3 around the death cell is HOVERED, in the
+  server's drop order (death cell, SE, W, N, then the rest).
+  - Standstill = the floor odometry (its own thread, from the frames) still for 0.15 s, waited
+    at most 1.2 s.
+  - The pointer reaches the cell in two motions (cursor_sword.check), with no click.
+- It is clicked ONLY where the client draws its PICKUP hand (recall >= 0.90). The click is at
+  the hovered point, with no further motion.
+  - After a pickup the GM stands again, the position is re-anchored (v33's refix), and that cell
+    is hovered again (stacked items, at most 4).
+  - A hand on the 3 x 3's EDGE adds the cells beyond it at radius 2 (an edge cell 3, a corner 5;
+    at most 8 extra).
+  - A SWORD (a unit under the pointer) or no read is tried once more after 0.6 s. A SWORD is never
+    clicked.
+- The step ends when no cell can still show a hand, or at 8.0 s.
+- **Base arm (even k):** the base's blind 3 x 3, unchanged.
+- The one new click site is in the census (hunt_flow.py 7 -> 8, the HAND click). No other gate
+  changes.
+
+**Base:** v43's + the pocket escape, unchanged: v48 was NOT adopted (3.89, 13:5x: P3 0.742 x against
+<= 0.70 x; its primary passed, +13.3 points). `PARAMS[49]` = `PARAMS[44]` without the EXP-line rule
+(`exp_dead` off), plus the scan's parameters, all fixed here:
+- `loot_hand` on, `loot_hand_ab` (odd k);
+- `loot_hand_wait_s` 0.45 (the hover's read wait), `loot_hand_still_s` 0.15 and
+  `loot_hand_still_max_s` 1.2 (the standstill);
+- `loot_hand_settle_s` 0.8 (after a HAND click, before the next standstill: the drawn walk starts
+  ~0.65 s late), `loot_hand_retry_s` 0.6, `loot_hand_max_s` 8.0.
+- Built and merged before this entry (61fdfc4, b9e225a; merge 57238bb); `arm_judge.py handloot`
+  (0e0dbc2, 6664e9b) is the judge.
+- If Batt adopts v48 after all, this entry is unaffected: its arms share one base.
+
+**Runs:** 4 x 60 min on prt_fild08, seeds 20370101, 20370202, 20370303, 20370404; as 3.89.
+- **The arm checked live in run 1 at ~10 min** (offline, packets, a judgment by the agent; the
+  bot never reads them). Its HAND clicks must be >= 10, and >= 90 % of them must have become a
+  pickup request.
+  - Otherwise the run stops: a fault (an inert or broken reader), not a result. The cause is
+    recorded before anything else runs.
+
+**The null (3.89's, measured over 16 banked runs):** completeness fix - base -5.4 .. +6.3
+points.
+
+**Prediction, written before the runs (4 runs pooled, per arm; `arm_judge.py handloot`):**
+1. **P1, the block's primary:** completeness, fix - base >= **+10 points**.
+2. **M2, the mechanism:** HAND clicks followed by a pickup request within 2 s and before our next
+   click >= 0.90.
+3. **G3, the kills / h guard (>= 0.85 x):** engaged s per kill, fix - base <= 0.176 x the pooled
+   run's s per kill.
+4. **G4:** landing within 5 s, fix >= base - 8 points.
+5. **G5:** hard bars zero; a Creamy hit is counted, not a stop.
+6. **Reported, not deciding:**
+   - the fates per arm (left behind, looters);
+   - hovers by what they read;
+   - the scan's end (no_hand / cap);
+   - extra cells;
+   - loot step s;
+   - kills / h;
+   - the left-behind causes per arm (`left_behind.py`).
+
+**Decision rule:** ADOPT if P1, M2, G3, G4 and G5 pass. If M2 fails, the reader is the cause: NOT
+adopted, reported with the hovers' recalls. If P1 fails with M2 passing, the hand is right but
+the scan misses items: NOT adopted, reported with the left-behind causes.
+
+**Run log (written during the runs):**
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.

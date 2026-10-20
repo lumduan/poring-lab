@@ -283,6 +283,11 @@ VERSIONS = {
     "comes, or it has been unseen 6.0 s (14 s from the first click at most): gone_no_line, no "
     "loot step, the track stays selectable; interleaved per engagement. Base: v43's + the "
     "pocket escape (v44 not adopted, 3.87)",
+    49: "LOOT BY THE HAND: on odd k the loot step hovers each cell of the 3 x 3 from a drawn "
+    "standstill and clicks only where the client draws its PICKUP hand (re-hovered after a "
+    "pickup, edge hands extend it to radius 2, a SWORD / unread cell retried once, never "
+    "clicked; 8 s at most); even k keeps the blind 3 x 3; interleaved per engagement. Base: "
+    "v43's + the pocket escape (v48 not adopted, 3.89)",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -522,6 +527,18 @@ PARAMS[44] = {**PARAMS[43], "stuck_window_s": 60.0, "stuck_extent": 18.0, "stuck
 # after the kill loses 3-4 cells to the dying sprite (unit / pink skips; v42 + v44, 3.89's build)
 PARAMS[48] = {**PARAMS[44], "exp_keep": True, "exp_keep_gone_s": 6.0, "exp_keep_max_s": 14.0,
               "exp_loot_delay_s": 0.5}  # fmt: skip
+# 49 = LOOT BY THE HAND (3.90, Batt 2026-10-20 ~09:1x, the loot block's step 3: "a loot step
+# ends only when the drop area shows no HAND cursor (bounded)"): on odd k (loot_hand_ab) the loot
+# step is the HAND scan (loot_hand_steps): from a drawn standstill (the floor odometry still for
+# loot_hand_still_s, waited at most loot_hand_still_max_s) each 3 x 3 cell is hovered and read
+# after loot_hand_wait_s; clicked only on the PICKUP hand; loot_hand_settle_s after a click before
+# the next standstill; a SWORD / unread cell retried after loot_hand_retry_s; loot_hand_max_s in
+# all. Base: v43's + the pocket escape (v48 NOT adopted, 3.89: P3 0.742 x) -> PARAMS[44] without
+# the EXP-line rule
+PARAMS[49] = {**PARAMS[44], "exp_dead": False, "exp_dead_ab": False, "loot_hand": True,
+              "loot_hand_ab": True, "loot_hand_wait_s": 0.45, "loot_hand_still_s": 0.15,
+              "loot_hand_still_max_s": 1.2, "loot_hand_retry_s": 0.6, "loot_hand_settle_s": 0.8,
+              "loot_hand_max_s": 8.0}  # fmt: skip
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
