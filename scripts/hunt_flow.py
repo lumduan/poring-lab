@@ -296,6 +296,10 @@ VERSIONS = {
     "no HAND (3 passes, 12 s); even k keeps the base's loot step; interleaved per engagement. "
     "Base: v48 (adopted by Batt, 3.89) on every engagement; v49 not adopted (3.90): the blind "
     "3 x 3",
+    51: "ONE PASS: Batt's loot rule (v50) on every engagement; on odd k the scan hovers each cell "
+    "once (own cell, 3 x 3, 5 x 5 edge), bursts on any HAND until it is gone (re-hovering only "
+    "that cell), then the hunt resumes -- no second pass; even k keeps v50's passes (up to 3); "
+    "interleaved per engagement. Base: v50's rule on every engagement (its verdict, 3.91)",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -565,6 +569,13 @@ PARAMS[50] = {**PARAMS[48], "exp_dead_ab": False, "loot_gm": True, "loot_gm_ab":
               "loot_gm_still_max_s": 1.2, "loot_gm_settle_s": 0.8, "loot_gm_burst_max": 6,
               "loot_gm_burst_gap_s": 0.59, "loot_gm_read_lead_s": 0.2,
               "loot_gm_passes": 3, "loot_gm_max_s": 12.0, "loot_gm_edge": True}  # fmt: skip
+# 51 = ONE PASS (Batt 2026-10-20 ~21:0x, after his 21:01 / 21:03 clips: "one accurate pass is
+# enough ... hover each cell once, burst-click any HAND until it's gone (re-hovering only that
+# cell), then resume"; it replaces option B when pass >= 2 rarely finds a new item -- 3.91 runs
+# 1-2: 0 HAND cells first seen in pass >= 2 in 84 steps, those passes 212 s of 890): his loot
+# rule on EVERY engagement (v50's, the default); on odd k ONE pass (gm_passes), even k v50's up to 3
+PARAMS[51] = {**PARAMS[50], "loot_gm_ab": False, "loot_gm_one_pass": True,
+              "loot_gm_one_pass_ab": True}  # fmt: skip
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -1907,6 +1918,15 @@ def hand_on(prm: dict[str, Any], k: int) -> bool:
     return bool(prm.get("loot_hand")) and (not prm.get("loot_hand_ab") or k % 2 == 1)
 
 
+def gm_passes(prm: dict[str, Any], k: int) -> int:
+    """PURE (v51, Batt 2026-10-20 ~21:0x, after his clips: "one accurate pass is enough"): how many
+    passes engagement ``k``'s scan may run -- ONE on the fix arm (``loot_gm_one_pass``, with
+    ``loot_gm_one_pass_ab`` only odd k), else ``loot_gm_passes``. A HAND's burst re-hovers only
+    its own cell either way (the burst is inside the pass)."""
+    one = bool(prm.get("loot_gm_one_pass")) and (not prm.get("loot_gm_one_pass_ab") or k % 2 == 1)
+    return 1 if one else int(prm["loot_gm_passes"])
+
+
 def gm_on(prm: dict[str, Any], k: int) -> bool:
     """PURE (Batt's loot rule, 2026-10-20 ~15:3x): does engagement ``k``'s loot step scan
     around the GM? ``loot_gm`` on; with ``loot_gm_ab`` only odd k (the fix arm)."""
@@ -3177,7 +3197,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     return sn_, (u_, v_)
 
                 while (time.monotonic() - t_l0 < prm["loot_gm_max_s"]
-                       and passes < int(prm["loot_gm_passes"])):  # fmt: skip
+                       and passes < gm_passes(prm, k_g)):  # fmt: skip
                     passes += 1
                     if not hand_still(float(prm["loot_gm_still_max_s"])):
                         seen_c["not_still"] += 1
@@ -3262,6 +3282,9 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     if not found:
                         out["end"] = "no_hand"
                         break
+                if (out["end"] == "cap" and gm_passes(prm, k_g) == 1 and passes == 1
+                        and time.monotonic() - t_l0 < prm["loot_gm_max_s"]):  # fmt: skip
+                    out["end"] = "one_pass"  # v51: the pass found a HAND; no second pass
                 out["hand"] = dict(seen_c)
                 out["passes"] = passes
 

@@ -1550,3 +1550,29 @@ def test_batts_loot_rule_scans_around_the_gm() -> None:
     p = {"loot_gm": True, "loot_gm_ab": True}
     assert hf.gm_on(p, 3) and not hf.gm_on(p, 4) and not hf.gm_on({}, 3)
     assert hf.gm_on({"loot_gm": True}, 4)
+
+
+def test_v51_params_one_pass_on_v50() -> None:
+    """Batt ~21:0x: PARAMS[51] = v50 (his rule) on EVERY engagement, ONE pass on odd k; nothing
+    else moves."""
+    p = hf.PARAMS[51]
+    assert 51 in hf.VERSIONS
+    assert p["loot_gm"] and not p["loot_gm_ab"] and hf.gm_on(p, 1) and hf.gm_on(p, 2)
+    assert p["loot_gm_one_pass"] and p["loot_gm_one_pass_ab"]
+    assert hf.gm_passes(p, 1) == 1 and hf.gm_passes(p, 2) == 3
+    assert hf.gm_passes(hf.PARAMS[50], 1) == 3  # v50 untouched
+    assert hf.gm_passes({"loot_gm_one_pass": True, "loot_gm_passes": 3}, 2) == 1  # no A/B: all
+    moved = ("loot_gm_ab", "loot_gm_one_pass", "loot_gm_one_pass_ab")
+    assert {k: v for k, v in p.items() if k not in moved} == {
+        k: v for k, v in hf.PARAMS[50].items() if k not in moved
+    }
+
+
+def test_one_pass_bounds_the_pass_loop_and_keeps_the_burst() -> None:
+    """v51: the pass loop's bound is gm_passes (one on the fix arm); the burst re-hovers only its
+    own cell inside the pass (unchanged)."""
+    src = Path(hf.__file__).read_text()
+    body = src.split("def loot_gm_steps(")[1].split("def loot_fixed_run(")[0]
+    assert "and passes < gm_passes(prm, k_g)):" in body
+    assert 'out["end"] = "one_pass"' in body
+    assert "sn_g, px_g = hover(c_g, ref, passes, b_ + 1, t_cm)" in body
