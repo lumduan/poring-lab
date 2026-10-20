@@ -1741,12 +1741,13 @@ base even if G4 (the kills/h guard) fails").
   re-read can still show a stale hand.
 - **G5** hard bars 0. **G4 FAILED:** +8.37 s engaged per kill (bar 6.95 s); the rule's step is
   p50 12.1 s.
-- **Net of looter re-drops:** 86.5 % vs 58.6 %.
+- **Net of looter re-drops:** ~~86.5 % vs 58.6 %~~ ➡️ **84.1 % vs 61.3 %** (corrected 23:4x: a
+  picked re-drop now counts in the arm of its ORIGINAL item; demonstrations.md 3.91).
 - **Kill -> last pickup p50:** 2.87 s vs 1.16 s (Batt 1.56 s).
 - **The pooled row:** 91.2 kills / h on thin fields (seen 20.9 / 10 min); completeness 67.0 %
   (net 71.8 %); hard bars 0; Creamy 0.
-- **Bot vs Batt, loot:** Batt 96.8 % (net 100 %); the bot's rule arm 79.6 % (net 86.5 %); the run
-  as a whole 67.0 % (net 71.8 %).
+- **Bot vs Batt, loot:** Batt 96.8 % (net 100 %); the bot's rule arm 79.6 % (net ~~86.5~~ ➡️ 84.1 %);
+  the run as a whole 67.0 % (net 71.8 %).
 - **Later passes (Batt's item 2):** 1 new item in 109 later passes over 166 steps, for 398 of
   1732 s of step time (23 %). -> The next version is ONE PASS (3.92), not B.
 - **Option C, held out (`scripts/loot_sight.py`; settings fixed before runs 3-4: the frames timed

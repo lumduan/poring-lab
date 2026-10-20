@@ -94,10 +94,17 @@ def link_redrops(rows: list[dict[str, Any]], items: Mapping[int, Mapping[str, An
     again when it dies (mob.cpp:3243). Such a RE-DROP -- an item of OUR later kill of that
     looter, the same item id as an item of ours it took before -- is the same physical item
     counted twice. Each row gets ``redrops`` (its drops linked to an earlier item of ours, each
-    original linked once) and ``redrops_picked``; ``summary`` turns them into the net
-    completeness (re-drops out of the denominator) and the recovered count."""
+    original linked once), ``redrops_picked``, and ``recovered_here`` (its OWN looted items whose
+    re-drop was picked, wherever that was); ``summary`` turns them into the net completeness
+    (re-drops out of the denominator) and the recovered count.
+    2026-10-20 23:4x (a correction): the pair is counted ONCE, in the row -- and so the arm -- of
+    the ORIGINAL item. Before, a picked re-drop was credited to the looter kill's row: per arm the
+    net could exceed 100 % (3.92 run 1's fix arm: 39 / 38); pooled over all rows it was exact."""
     ours = sorted({f for r in rows for f in r.get("drops", ())},
                   key=lambda f: int(items[f]["t_fall"]))  # fmt: skip
+    row_of = {f: r for r in rows for f in r.get("drops", ())}
+    for r in rows:
+        r["recovered_here"] = 0
     used: set[int] = set()
     for r in sorted(rows, key=lambda r_: int(r_["t"])):
         rd = rdp = 0
@@ -113,7 +120,9 @@ def link_redrops(rows: list[dict[str, Any]], items: Mapping[int, Mapping[str, An
                     continue
                 used.add(o)
                 rd += 1
-                rdp += items[f]["fate"] == "picked"
+                got = items[f]["fate"] == "picked"
+                rdp += got
+                row_of[o]["recovered_here"] += got
                 break
         r["redrops"], r["redrops_picked"] = rd, rdp
 
@@ -142,8 +151,14 @@ def summary(rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
     # denominator; "recovered" = our looted items picked again from their looter's drop
     rd = sum(int(r.get("redrops", 0)) for r in rows_)
     out["redrops"] = rd
-    out["recovered"] = sum(int(r.get("redrops_picked", 0)) for r in rows_)
-    out["completeness_net"] = round(c["picked"] / (n - rd), 4) if n - rd > 0 else None
+    out["recovered"] = sum(int(r.get("recovered_here", r.get("redrops_picked", 0)))
+                           for r in rows_)  # fmt: skip
+    # the pair (original, re-drop) counts once, in the original's row: a picked re-drop moves its
+    # credit from the looter kill's row to the original's (pooled over all rows: no change)
+    moved = sum(int(r.get("recovered_here", 0)) - int(r.get("redrops_picked", 0)) for r in rows_
+                if "recovered_here" in r)  # fmt: skip
+    pk_net = c["picked"] + moved
+    out["completeness_net"] = round(pk_net / (n - rd), 4) if n - rd > 0 else None
     # Batt 18:11 (3.91): his loot time beside ours -- kill -> the LAST pickup of that kill's items,
     # over the kills with a pickup (flow_judge.loot_metrics' ruler: his demo p50 1.56 s)
     lp = sorted(float(r["last_pick_s"]) for r in rows_ if r.get("last_pick_s") is not None)

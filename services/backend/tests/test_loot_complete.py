@@ -89,3 +89,28 @@ def test_kill_to_the_last_pickup_is_batts_ruler() -> None:
     s = lc.summary(rows)
     assert s["kill_to_last_pickup_n"] == 2 and s["kill_to_last_pickup_p50"] == 2.5
     assert s["kill_to_last_pickup_mean"] == 1.75
+
+
+def test_a_picked_re_drop_counts_in_the_arm_of_its_original() -> None:
+    """2026-10-20 23:4x correction: a looter's re-drop picked in one arm's kill credits the arm of
+    the ORIGINAL item (the pair counts once, there), so a per-arm net never exceeds 100 % (3.92 run
+    1's fix arm read 39 / 38 before). Pooled over all rows, nothing changes."""
+    items = {
+        1: {"t_fall": 0, "fate": "looter", "item_id": 909, "t_end": 5, "looter_gids": [77]},
+        2: {"t_fall": 0, "fate": "picked", "item_id": 512, "t_end": 3},
+        3: {"t_fall": 20, "fate": "picked", "item_id": 909, "t_end": 22},  # 77's re-drop of 1
+    }
+    rows = [
+        {"t": 0, "gid": 10, "k": 1, "result": "dead", "looted": True,
+         "fates": ["looter", "picked"], "drops": [1, 2]},
+        {"t": 20, "gid": 77, "k": 2, "result": "dead", "looted": True,
+         "fates": ["picked"], "drops": [3]},
+    ]  # fmt: skip
+    lc.link_redrops(rows, items)
+    assert rows[0]["recovered_here"] == 1 and rows[1]["redrops_picked"] == 1
+    a = lc.summary([rows[0]])  # the original's arm: 2 items, both now picked
+    b = lc.summary([rows[1]])  # the looter kill's arm: its 1 item is the re-drop, out
+    assert a["completeness_net"] == 1.0 and a["recovered"] == 1
+    assert b["completeness_net"] is None and b["recovered"] == 0
+    s = lc.summary(rows)
+    assert s["completeness_net"] == 1.0 and s["recovered"] == 1  # pooled: 2 of 2

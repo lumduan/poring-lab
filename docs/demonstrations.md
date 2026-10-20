@@ -12920,7 +12920,7 @@ he had answered in advance.)
   | measure | Batt's rule (odd k) | blind 3 x 3 (even k) | Batt's demo |
   |---|---|---|---|
   | loot completeness, gross | 179/225 = **79.6 %** | 112/202 = 55.4 % | 61/63 = 96.8 % |
-  | net of looter re-drops (recovered) | **86.5 %** (12) | 58.6 % (3) | 100 % (2) |
+  | net of looter re-drops (recovered) | ~~86.5 % (12)~~ ➡️ **84.1 % (7)** | ~~58.6 % (3)~~ ➡️ 61.3 % (8) | 100 % (2) |
   | left behind / looters / expired | 13.3 / 7.1 / 0 % | 37.1 / 7.4 / 0 % | 0 / 3 / 0 % |
   | kills with no loot step | 8/171 = 4.7 % | 6/178 = 3.4 % | - |
   | kill -> loot start, mean | 0.96 s | 1.04 s | - |
@@ -12930,6 +12930,16 @@ he had answered in advance.)
   | engaged s per kill | 15.02 | 6.65 | - |
   | landing | 72.8 % | 78.1 % | 100 % |
 
+- ➡️ **CORRECTED 23:4x (`loot_complete.link_redrops`, the per-arm net):** a picked re-drop was
+  credited to the arm of the kill of the LOOTER, while its original stayed in the other arm's
+  denominator. So per arm the net was biased; it could even exceed 100 % (3.92 run 1's fix arm,
+  39 / 38).
+  - The pair now counts once, in the arm of the ORIGINAL item.
+  - Corrected, 4 runs: his rule **84.1 %** (7 recovered) vs the blind 3 x 3 **61.3 %** (8).
+  - The per-arm "(net)" values in this section's run logs (87.3, 86.2, 73.0, 94.7 % ...) used
+    the old crediting.
+  - The runs' own net row (all kills pooled) and every gross figure were exact and are
+    unchanged. P1-P2 decide on the gross figure.
 - **The pooled row (4 runs):**
   - 428 engagements; landing 323/428 = 75.5 % (71.2-79.3); **91.2 kills / h**; 4.34 per
     sighting; 39.5 s per kill; seen 20.9 / 10 min (thin fields: 22.0, 20.5, 17.0, 24.0);
