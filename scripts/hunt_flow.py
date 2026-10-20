@@ -1945,6 +1945,64 @@ def hand_extend(order: list[Cell], c: Cell, center: Cell, added: int) -> int:
     return added
 
 
+LOOT_MEM_MAX = 6  # pending cells kept at most (the design note: bounded; a cell is tried once)
+
+
+def hand_pending(order: Sequence[Cell], st: Mapping[Cell, Mapping[str, Any]]) -> list[Cell]:
+    """PURE (the LOOT MEMORY, Batt 2026-10-20's step 3b): the cells a HAND scan could not settle
+    -- a SWORD (a unit on it) or an unread cursor at the end, out of view, or never reached /
+    still to re-hover when the step was cut (its cap, a jump). A cell read "empty" or picked to
+    the end ("done") is settled; so is one near an NPC (never clicked)."""
+    out: list[Cell] = []
+    for c in order:
+        s = st.get(c) or {"state": "todo"}
+        if s["state"] in ("todo", "recheck", "sword", "unknown", "view"):
+            out.append(c)
+    return out
+
+
+def mem_add(mem: list[dict[str, Any]], cells: Sequence[Cell], t_kill: float, k: int,
+            max_n: int = LOOT_MEM_MAX) -> list[dict[str, Any]]:  # fmt: skip
+    """PURE: pending cells into the loot memory -- one entry per cell (a newer kill's entry
+    replaces an older one on the same cell), the newest ``max_n`` kept."""
+    keep = [m for m in mem if tuple(m["cell"]) not in {tuple(c) for c in cells}]
+    keep += [{"cell": (int(c[0]), int(c[1])), "t_kill": float(t_kill), "k": int(k)}
+             for c in cells]  # fmt: skip
+    return sorted(keep, key=lambda m: m["t_kill"])[-max_n:]
+
+
+def mem_alive(mem: Sequence[Mapping[str, Any]], now: float, budget_s: float
+              ) -> list[dict[str, Any]]:  # fmt: skip
+    """PURE: the entries still worth a return: under ``budget_s`` since their kill (the server's
+    floor items vanish at 60 s: flooritem_lifetime)."""
+    return [dict(m) for m in mem if now - float(m["t_kill"]) < budget_s]
+
+
+def mem_next(mem: Sequence[Mapping[str, Any]], here: Sequence[float], now: float,
+             budget_s: float, max_cells: int) -> dict[str, Any] | None:  # fmt: skip
+    """PURE: the pending cell to return to -- alive, within ``max_cells`` (Chebyshev) of
+    ``here``; the nearest, then the oldest (the least time left)."""
+
+    def d(m: Mapping[str, Any]) -> float:
+        return max(abs(m["cell"][0] - here[0]), abs(m["cell"][1] - here[1]))
+
+    al = [m for m in mem_alive(mem, now, budget_s) if d(m) <= max_cells]
+    if not al:
+        return None
+    return min(al, key=lambda m: (d(m), m["t_kill"]))
+
+
+def mem_clear(mem: Sequence[Mapping[str, Any]], center: Cell, radius: int = 1
+              ) -> list[dict[str, Any]]:  # fmt: skip
+    """PURE: a return step scanned the 3 x 3 around ``center``: its pending cells are settled
+    (each cell is tried once)."""
+
+    def d(m: Mapping[str, Any]) -> int:
+        return max(abs(m["cell"][0] - center[0]), abs(m["cell"][1] - center[1]))
+
+    return [dict(m) for m in mem if d(m) > radius]
+
+
 def loot_retry_of(
     step: Sequence[Any], why: str, retry_on: bool, now: float, wait_s: float
 ) -> tuple[Any, ...] | None:

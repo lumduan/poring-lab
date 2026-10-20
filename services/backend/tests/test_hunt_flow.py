@@ -1447,3 +1447,31 @@ def test_the_hand_scan_clicks_only_a_hand() -> None:
     assert body.count("agent.click(") == 1
     i_click = body.index("agent.click(")
     assert 'if seen_h == "hand":' in body[max(0, i_click - 200) : i_click]
+
+
+def test_loot_memory_pure_parts() -> None:
+    """Batt 2026-10-20 step 3b (the LOOT MEMORY, 60-s budget): the cells a HAND scan could not
+    settle become pending; one entry per cell, the newest LOOT_MEM_MAX kept; a return goes to
+    the nearest alive cell within reach; a return step's 3 x 3 settles its cells."""
+    order = [(10, 10), (11, 10), (12, 10), (13, 10), (14, 10), (15, 10), (16, 10)]
+    st = {
+        (10, 10): {"state": "done"},
+        (11, 10): {"state": "empty"},
+        (12, 10): {"state": "sword", "n": 2},
+        (13, 10): {"state": "unknown", "n": 2},
+        (14, 10): {"state": "view"},
+        (15, 10): {"state": "npc"},
+    }  # (16, 10) never reached: the cap
+    assert hf.hand_pending(order, st) == [(12, 10), (13, 10), (14, 10), (16, 10)]
+    mem = hf.mem_add([], [(12, 10), (13, 10)], t_kill=100.0, k=3)
+    mem = hf.mem_add(mem, [(13, 10), (30, 30)], t_kill=110.0, k=5)
+    assert [(m["cell"], m["k"]) for m in mem] == [((12, 10), 3), ((13, 10), 5), ((30, 30), 5)]
+    many = hf.mem_add([], [(i, 0) for i in range(10)], t_kill=1.0, k=1)
+    assert len(many) == hf.LOOT_MEM_MAX
+    # alive under the budget; the nearest within reach first
+    assert hf.mem_next(mem, (20, 10), now=140.0, budget_s=50.0, max_cells=14)["cell"] == (13, 10)
+    assert hf.mem_next(mem, (20, 10), now=155.0, budget_s=50.0, max_cells=14)["cell"] == (13, 10)
+    assert hf.mem_next(mem, (20, 10), now=161.0, budget_s=50.0, max_cells=14) is None  # 51 s
+    assert hf.mem_next(mem, (60, 60), now=120.0, budget_s=50.0, max_cells=14) is None  # far
+    left = hf.mem_clear(mem, (12, 10))
+    assert [m["cell"] for m in left] == [(30, 30)]
