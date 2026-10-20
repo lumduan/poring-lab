@@ -1390,6 +1390,7 @@ def handloot_table(sids: Sequence[str]) -> dict[str, Any]:
             mech[arm]["steps"] += 1
             mech[arm]["end:" + str(lo.get("end"))] += lo.get("end") is not None
             mech[arm]["extra_cells"] += int(lo.get("extra_cells") or 0)
+            mech[arm]["passes"] += int(lo.get("passes") or 0)
         clicks = sorted((json.loads(x) for x in (d / "clicks.jsonl").read_text().splitlines()
                          if x), key=lambda c: int(c["t"]))  # fmt: skip
         import gzip
@@ -1403,8 +1404,8 @@ def handloot_table(sids: Sequence[str]) -> dict[str, Any]:
         cts = [int(c["t"]) for c in clicks]
         preq = [int(e["t_mono_ns"]) for e in pk if e.get("type") == "pickup_request"]
         for c in clicks:
-            if c.get("kind") != "loot" or c.get("src") != "hand":
-                continue
+            if c.get("kind") != "loot" or c.get("src") not in ("hand", "gm_hand"):
+                continue  # 3.90's HAND scan, Batt's loot rule's scan around the GM
             t_c = int(c["t"])
             i_n = bisect.bisect_right(cts, t_c)
             t_end = min(cts[i_n] if i_n < len(cts) else t_c + 2 * NS, t_c + 2 * NS)
@@ -1432,6 +1433,8 @@ def handloot_table(sids: Sequence[str]) -> dict[str, Any]:
             "mechanics": {a: dict(sorted(c.items())) for a, c in mech.items()},
             "hand_click_pickup_precision": prec,
             "loot_step_s_p50": {a: q(v, 0.5) for a, v in step_s.items()},
+            "loot_step_s_mean": {a: round(sum(v) / len(v), 2) if v else None
+                                 for a, v in step_s.items()},
             "checks": checks, "per_run": kd["per_run"]}  # fmt: skip
 
 
