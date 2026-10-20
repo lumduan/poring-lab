@@ -534,7 +534,8 @@ PARAMS[48] = {**PARAMS[44], "exp_keep": True, "exp_keep_gone_s": 6.0, "exp_keep_
 # after loot_hand_wait_s; clicked only on the PICKUP hand; loot_hand_settle_s after a click before
 # the next standstill; a SWORD / unread cell retried after loot_hand_retry_s; loot_hand_max_s in
 # all. Base: v43's + the pocket escape (v48 NOT adopted, 3.89: P3 0.742 x) -> PARAMS[44] without
-# the EXP-line rule
+# the EXP-line rule. ➡️ Batt ADOPTED v48 at 14:58 (overriding the rule, 3.89); v49's runs stayed on
+# this base by his instruction, and the next loot versions stack on v48 (+ v49 if it passes)
 PARAMS[49] = {**PARAMS[44], "exp_dead": False, "exp_dead_ab": False, "loot_hand": True,
               "loot_hand_ab": True, "loot_hand_wait_s": 0.45, "loot_hand_still_s": 0.15,
               "loot_hand_still_max_s": 1.2, "loot_hand_retry_s": 0.6, "loot_hand_settle_s": 0.8,
