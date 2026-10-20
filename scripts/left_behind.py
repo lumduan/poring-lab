@@ -21,7 +21,9 @@ it left our view.
 
 A loot click's result: the first of our self_move_request / pickup_request within 0.6 s after it.
 
-    left_behind.py SID [SID ...]        per run + pooled (JSON)
+    left_behind.py SID [SID ...]        per run + pooled (JSON); ``causes_by_arm`` splits the causes
+                                        by the owning engagement's arm (odd k "fix", even k "base",
+                                        no engagement "none"), for interleaved versions
     left_behind.py --aim SID [SID ...]  where the LOOT CLICKS land: each click that became a walk,
                                         its walk request's cell against the cell the runner aimed
                                         at (clicks.jsonl "cell"), split by the step's first click /
@@ -80,6 +82,14 @@ def click_results(clicks: Sequence[Mapping[str, Any]], packets: Sequence[Mapping
     return out
 
 
+def arm_of(eng: Mapping[str, Any] | None) -> str:
+    """PURE: the interleaved arm of the engagement that owned a kill -- odd k "fix", even k
+    "base", no owner "none"."""
+    if eng is None:
+        return "none"
+    return "fix" if int(eng["k"]) % 2 == 1 else "base"
+
+
 def cause_of(item: Mapping[str, Any], fid: int, looted: bool, step: tuple[int, int] | None,
              step_cell: Sequence[int] | None, death_cell: Sequence[int] | None,
              results: Sequence[Mapping[str, Any]]) -> str:  # fmt: skip
@@ -122,6 +132,7 @@ def session(sid: str) -> dict[str, Any]:
     rts = [r["t"] for r in results]
     cts = [int(c["t"]) for c in clicks]
     causes: Counter[str] = Counter()
+    by_arm: Counter[str] = Counter()
     by_fate: Counter[str] = Counter()
     away: Counter[str] = Counter()
     out_after: list[float] = []
@@ -147,6 +158,7 @@ def session(sid: str) -> dict[str, Any]:
                                                   bisect.bisect_right(rts, step[1])]  # fmt: skip
             c = cause_of(it, f, looted, step, lo.get("cell"), dcell, res)
             causes[c] += 1
+            by_arm[f"{arm_of(e)}|{c}"] += 1
             by_fate[f"{c}|{it['fate']}"] += 1
             if it["fate"] == "out_of_sight" and step is not None and it.get("t_out"):
                 out_after.append((int(it["t_out"]) - step[1]) / NS)
@@ -156,7 +168,8 @@ def session(sid: str) -> dict[str, Any]:
                 away[str((nxt or {}).get("why") or "no click before it left our view")] += 1
     s_ = sorted(out_after)
     return {"items": n_items, "picked": picked, "not_picked": sum(causes.values()),
-            "causes": dict(causes.most_common()), "cause_by_fate": dict(by_fate.most_common()),
+            "causes": dict(causes.most_common()), "causes_by_arm": dict(sorted(by_arm.items())),
+            "cause_by_fate": dict(by_fate.most_common()),
             "left_behind_what_took_the_gm_away": dict(away.most_common()),
             "left_our_view_after_step_end_s": {
                 "n": len(s_), "p25": s_[len(s_) // 4] if s_ else None,
@@ -167,7 +180,7 @@ def session(sid: str) -> dict[str, Any]:
 def pooled(per: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
     """PURE: the runs' counts summed (the time quantiles are not pooled)."""
     out: dict[str, Any] = {"items": 0, "picked": 0, "not_picked": 0}
-    for k in ("causes", "cause_by_fate", "left_behind_what_took_the_gm_away"):
+    for k in ("causes", "causes_by_arm", "cause_by_fate", "left_behind_what_took_the_gm_away"):
         c: Counter[str] = Counter()
         for v in per.values():
             c.update(v[k])

@@ -41,3 +41,9 @@ def test_the_first_cause_that_holds() -> None:
     assert lb.cause_of(it, 1, True, step, (11, 11), None, []) == "in_plan_unclicked"
     assert lb.cause_of(it, 1, True, step, (13, 10), (11, 10), []) == "outside_plan_near_death_cell"
     assert lb.cause_of(it, 1, True, step, (13, 10), (14, 14), []) == "outside_plan"
+
+
+def test_the_arm_of_a_kill_is_its_engagements_parity() -> None:
+    assert lb.arm_of({"k": 3}) == "fix"
+    assert lb.arm_of({"k": 4}) == "base"
+    assert lb.arm_of(None) == "none"
