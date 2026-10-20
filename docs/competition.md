@@ -1679,6 +1679,10 @@ ADOPTED.**
     fault.
   - The misses are the aim (hand reads lie on the hovered cell only 42.8 %, within 1 cell
     95.4 %) and our own next click closing the window (18 of 25).
+  - ➡️ **QUALIFIED (3.91 run 1, 19:3x):** with the readout as the reference, the hand still
+    lies on the item's cell only 15 / 51, mostly at the screen-vertical neighbour,
+    symmetrically. The item's sprite reaches the next cell, so the on-cell share is not a clean
+    aim measure. v49's extra x spread does point to its belief, in part.
 - **G3 failed:** the HAND step cost +4.80 s per kill (bar 4.62 s); its step p50 was 5.8 s
   against 2.2 s.
 - G4 landing -4.6 points PASS; hard bars 0 PASS (Creamy 3, counted).

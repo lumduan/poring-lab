@@ -12551,6 +12551,10 @@ sessions): NOT ADOPTED. P1, M2 and G3 fail.**
     clearly drawn every time. The misses sit in the aim (the belief 1 cell off, as
     `hand_truth.py` shows) and in a window our own next click cut short. The verdict stands as
     the rule gives it.
+    - ➡️ **QUALIFIED by 3.91 run 1 (19:3x):** with the client's readout as the reference, hand
+      reads still lie on the item's cell only 15 / 51, mostly at the screen-vertical
+      neighbour, symmetric. So "1 cell off" is largely the item's sprite reaching the next
+      cell, not all aim. v49's extra spread along x does point to its belief, in part.
 - **The base for what follows:** v48 (adopted by Batt, 3.89) on every engagement; v49 NOT
   adopted, so the base arm's loot step stays the blind 3 x 3. Batt chose v50 = his loot rule,
   case A (2026-10-20, received 18:11 ICT): "Go with v50 (my rule) as staged, case A", with his
@@ -12734,6 +12738,59 @@ points.
       not the burst: 25 hovers a pass at 177 ms p50 (p90 429 ms) = ~4.5-5 s, and a step that
       found a hand runs a second full pass (~10-12 s, the cap); a step with nothing to pick
       still takes one full pass (4.3-7.2 s).
+  - It ended on its time box at 19:33:06.
+  - **The row:**
+    - 114 engagements; landing 93/114 = 81.6 % (73.5-87.6); 98.9 kills / h; 4.5 per sighting;
+      36.4 s per kill; seen 22.0 / 10 min (a thin field);
+    - free targets <= 10 s 44 % (n 151); steer moving 35 %; seen -> click 2.59 s; death -> next
+      1.31 s;
+    - dead calls without a real death 5/98 = 5.1 %;
+    - **LOOT COMPLETENESS 79/122 = 64.8 %** (left behind 28 % / looters 7 % / expired 0 %;
+      34 / 9 / 0 items); **net of looter re-drops 79/113 = 69.9 % (4 recovered)**; the older
+      column 74/110 = 67 % (5 looters);
+    - reversals 5.08 / min (outside loot 5.5); Creamy 0; hard bars 0 / 0 / 0; kill -> loot
+      start 0.98 / 0.93 s (n 93); **kill -> last pickup p50 / mean 1.78 / 2.46 s (n 57)**
+      (Batt 1.56 / 2.53);
+    - results: dead 98, gone_no_line 15, gave_up 1.
+  - **Per arm, run 1 only, NOT deciding** (`arm_judge.py gmloot`):
+
+    | arm | completeness (net) | left behind / looters / expired | kills with no loot step | loot step p50 / mean | kill -> last pickup p50 / mean | engaged s per kill | landing |
+    |---|---|---|---|---|---|---|---|
+    | Batt's rule (odd k) | 48/58 = 82.8 % (87.3 %) | 6.9 / 10.3 / 0 % | 1/47 = 2.1 % | 12.09 / 10.36 s | 2.55 / 3.16 s (n 32) | 14.92 | 78.9 % |
+    | blind 3 x 3 (even k) | 30/62 = 48.4 % (53.6 %) | 46.8 / 4.8 / 0 % | 0/49 = 0 % | 2.48 / 2.02 s | 1.44 / 1.54 s (n 24) | 6.20 | 84.2 % |
+    | Batt's demo | 61/63 = 96.8 % (100 %) | 0 / 3 / 0 % | - | - | 1.56 / 2.53 s (n 39) | - | - |
+
+    - Fix - base: completeness **+34.4 points**; left behind **-39.9 points**; engaged s per
+      kill **+8.72 s** (G4's bar 0.176 x 36.39 = 6.40 s); kill -> loot start 0.86 x.
+    - M3: 48/51 = 0.941 HAND clicks became a pickup request; a cell's first click 43/44
+      (0.977), burst re-clicks 5/7 (0.714); burst click gap p50 0.77 s (n 7; target 0.59 s).
+    - The scan: 47 steps, ended no_hand 44 / cap 3; 78 passes; the readout as the reference
+      78 times. Hovers: empty 1644, unknown 121, hand 44, sword 27, not still 4; burst re-reads
+      empty 40, hand 7, unknown 3, sword 1.
+    - `hand_truth.py`: hand reads with an item on the hovered cell 15 / 51, within 1 cell
+      49 / 51; empty reads with one on the cell 0 / 1684 (within 1: 42); unknown 1 / 124; sword
+      1 / 28.
+  - **A reading on the hand's cell (offline, `lc/hand_offset_dir.py`; not deciding).** Even with
+    the client's readout as the reference, hand reads lie ON the item's cell only 15 / 51.
+    - The 34 off-cell ones lie mostly at the screen-VERTICAL neighbour: y - 1 11, y + 1 9; x 5;
+      diagonal 9.
+    - That is symmetric, so it is not an aim bias. It fits the item's sprite: drawn up from
+      its ground point at a sub-cell offset (`sub_x` / `sub_y` 3-12), it reaches the
+      neighbouring cell's centre on screen, where cells are shortest. The click picks what is
+      under the pointer (the first clicks 0.977).
+    - v49's off-cell hand reads (its belief as the reference) spread more along x: x 36, y 40,
+      diagonal 26, of 102. So the belief added an x error there, but the "1 cell off" share is
+      not all aim. The item-on-cell share is therefore not a clean aim measure (3.90's verdict
+      reading carries a pointer here).
+  - Left-behind causes per arm:
+    - Batt's rule: outside, near the death cell 5; in the plan, unclicked 4; no loot step 1;
+    - blind: outside, near the death cell 17; in the plan, unclicked 9; outside 4; clicked,
+      became a walk 2;
+    - kills that no engagement owned: no loot step 1.
+  - Best 2 min: 7 kills from minute 15.3.
+- **Run 2** (seed 20380202, session 20261020T193309) was started by the chain at 19:33:07. Its
+  screenshot was judged: the hunting layout, Lv 70, Job Lv 1, weight 590 / 4970, HP full, no
+  dialog; the runner's own weight-clear drops beside the GM.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
