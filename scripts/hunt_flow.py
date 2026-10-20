@@ -2907,6 +2907,24 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     time.sleep(0.03)
                 return False
 
+            def reanchor_still() -> str | None:
+                """Batt 2026-10-20 ~14:5x ("after each pickup walk, re-anchor from the drawn GM
+                position before the next hover, as the HAND scan should"): at a DRAWN standstill
+                the position is re-anchored on the client's own readout UNCONDITIONALLY, not
+                only when the odometry is > loot_refix_cells off it (``refix_now``). v49's
+                stopped run 1: all 8 HAND reads lay on an item 1 cell N / E of the hovered cell
+                (hand_truth.py) -- a drift under 1.5 cells was never corrected. "anchored";
+                "jump" past JUMP_CELLS (the main loop's guard decides); None = nothing read."""
+                mp_r = measured_pos()
+                t_rf = r.ns()
+                mm_l = read_position_quick()
+                if mm_l is None or mp_r is None:
+                    return None
+                if cheb(mm_l, mp_r) > JUMP_CELLS:
+                    return "jump"
+                mstate["anchor"] = (mm_l, odo_at(hist_now(), t_rf))
+                return "anchored"
+
             def loot_hand_steps(eng_: dict[str, Any], dcell: Cell, out: dict[str, Any],
                                 t_l0: float, w_l: Any, npc_c: Sequence[Cell],
                                 pos_l: Any) -> None:  # fmt: skip
@@ -2926,8 +2944,10 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 added = 0
                 seen_c: Counter[str] = Counter()
                 out["end"] = "cap"
+                need_anchor = True  # the first hover, then after each HAND click's walk
                 while time.monotonic() - t_l0 < prm["loot_hand_max_s"]:
-                    if not hand_still(float(prm["loot_hand_still_max_s"])):
+                    still_h = hand_still(float(prm["loot_hand_still_max_s"]))
+                    if not still_h:
                         seen_c["not_still"] += 1
                     c_h = hand_next(order, st, time.monotonic())
                     if c_h is None:
@@ -2937,6 +2957,14 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         st[c_h] = {"state": "npc"}
                         seen_c["npc"] += 1
                         continue
+                    if prm.get("loot_hand_reanchor") and need_anchor and still_h:
+                        ra_ = reanchor_still()
+                        if ra_ == "jump":
+                            out["stop"] = "jump"  # the main loop's guard decides
+                            break
+                        if ra_ == "anchored":
+                            need_anchor = False
+                            seen_c["reanchor"] += 1
                     mp_h = pos_l()
                     if mp_h is None:
                         out["stop"] = "jump"  # the main loop's guard decides
@@ -2962,6 +2990,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         click_log({"t": t_lc, "u": round(u_h, 1), "v": round(v_h, 1),
                                    "kind": "loot", "cell": list(c_h), "src": "hand"})  # fmt: skip
                         added = hand_extend(order, c_h, dcell, added)
+                        need_anchor = True  # a pickup walk: re-anchor at the next standstill
                         # the drawn camera starts to move only after the server's answer and the
                         # ~0.65 s display lag (3.89's death-cell study): a standstill check right
                         # after the click would pass before the walk to the item is drawn
