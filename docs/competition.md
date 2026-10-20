@@ -1808,13 +1808,16 @@ rule: one pass on odd k, v50's up to 3 passes on even k.
   - The bot's FIRST pickup is already at Batt's pace (p50 1.54 vs 1.45 s).
   - It loses in the slow tail of first pickups (mean +0.51 s: items found late in the scan) and
     between items (mean +0.14 s).
-- **What is still lost (92 items over 4 h, looters' included):**
-  - in the plan but unclicked 27;
-  - no loot step 20;
-  - outside the 25-cell plan 31 (17 of them near the death cell);
-  - fell after the step 12;
-  - clicked but became a walk 2.
+- **What is still lost (92 items over 4 h, looters' included):** ➡️ **CORRECTED 03:10.** The labels
+  first written here were `left_behind.py`'s, whose "plan" is the 3 x 3 around the BELIEVED death
+  cell, not the rule's 25 cells:
+  - ~~in the plan but unclicked 27; outside the 25-cell plan 31 (17 near the death cell)~~;
+  - against the rule's own plan (the GM's 5 x 5; `gm_causes`): outside the GM's 5 x 5 35 (21
+    near the death cell); gone before its cell was hovered (looters) 16; hovered, read SWORD 3;
+    planned, never hovered 3; hovered, read empty 1;
+  - unchanged: no loot step 20; fell after the step 12; clicked but became a walk 2.
   - The search took the GM away from 31 of them.
+  - The full list is under "Top causes, re-ranked after v51" below.
 
 **Top causes, re-ranked after v51 (2026-10-21 03:01, the commit time; the 4 v51 runs pooled, 4.0 h).**
 Sources:
