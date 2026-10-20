@@ -12164,6 +12164,8 @@ commit; on v44's 4 runs it gives P1 -15.1 points, P2 -2.9, P3 0.38 x, G4 -1.64 s
 
 **VERDICT (2026-10-20 13:5x, 4 runs pooled, `arm_judge.py keepdead` over the four sessions):
 NOT ADOPTED. P3 fails (0.742 x against <= 0.70 x); both tiers of the rule require it.**
+➡️ **ADOPTED by Batt's decision at 14:58, overriding the rule (the last bullet of this
+verdict).**
 
 | check | pooled value | bar | result |
 |---|---|---|---|
@@ -12192,9 +12194,17 @@ NOT ADOPTED. P3 fails (0.742 x against <= 0.70 x); both tiers of the rule requir
   change; the bar stands as written. Run 4's base arm had slow loot starts (1.92 s mean), which
   pulled the pooled ratio from 0.863 x (runs 1-3) to 0.742 x, still short of the bar and inside
   its null.
-- **The base for what follows:** v43's + the pocket escape (unchanged: PARAMS[44] without
-  `exp_dead`). Adopting v48 regardless of P3 is Batt's call; it was flagged in the ~13:00
-  report.
+- ~~**The base for what follows:** v43's + the pocket escape (unchanged: PARAMS[44] without
+  `exp_dead`).~~ ➡️ **SUPERSEDED: ADOPTED BY BATT'S DECISION (2026-10-20, received 14:58 ICT),
+  overriding the strict rule.** Batt: "FLAG 1: adopt v48 (EXP line alone, target kept). Loot
+  completeness is this block's primary and passed strongly (+15.9 pts, ~2.5x the null edge); P3
+  measured the wrong mechanism, as you found. Record it as my decision overriding the strict
+  rule."
+  - The rule's own verdict above stays as written (NOT adopted on P3). The adoption is Batt's.
+    (His +15.9 is the 3-run figure of the ~13:00 report; the 4-run pooled value is +13.3.)
+  - v49 (3.90), already running on the pre-v48 base, keeps its runs as they are: its arms are
+    interleaved, so the HAND scan's effect is still measured.
+  - The next loot versions stack on v48 + v49 (if v49 passes).
 
 ### 3.90 hunt-flow@49: LOOT BY THE HAND -- a HAND scan from a drawn standstill (Batt's step 3, first half), interleaved per engagement (pre-registered 2026-10-20 13:52 ICT, the commit time, BEFORE its runs; Batt ~09:1x: "NO ITEM LEFT BEHIND: a loot step ends only when the drop area shows no HAND cursor (bounded)")
 
@@ -12252,6 +12262,8 @@ NOT ADOPTED. P3 fails (0.742 x against <= 0.70 x); both tiers of the rule requir
 - Built and merged before this entry (61fdfc4, b9e225a; merge 57238bb); `arm_judge.py handloot`
   (0e0dbc2, 6664e9b) is the judge.
 - If Batt adopts v48 after all, this entry is unaffected: its arms share one base.
+- ➡️ (14:58, a pointer, not an amendment) Batt adopted v48 at 14:58. By his instruction this
+  entry's runs stay on the base above; the next loot versions stack on v48 + v49 (if v49 passes).
 
 **Runs:** 4 x 60 min on prt_fild08, seeds 20370101, 20370202, 20370303, 20370404; as 3.89.
 - **The arm checked live in run 1 at ~10 min** (offline, packets, a judgment by the agent; the

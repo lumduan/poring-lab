@@ -1511,7 +1511,7 @@ split); kills / h is a guard (>= 0.85 x base).
 
 **Order:**
 1. v48 (3.89, pre-registered 09:37): dead = the EXP line alone, the target kept;
-   ➡️ NOT ADOPTED 13:5x on P3 alone (below, "v48's verdict"); completeness +13.3 points;
+   ➡️ the rule said NOT ADOPTED 13:5x (P3 alone); ➡️ ADOPTED by Batt's decision 14:58 (below);
 2. the death-cell study, then a version;
    ➡️ studied (no cue beats the last box, below); no version proposed, flagged to Batt ~13:00;
 3. no item left behind (HAND cursor, loot memory), after a study of why items are left;
@@ -1609,8 +1609,9 @@ each of our items a looter took, the monster within 1 cell at the vanish is the 
     completely.
   - The HAND scan (step 3) is what makes the second part reliable.
 
-**v48's verdict (3.89, 2026-10-20 13:5x, 4 x 60 min pooled; demonstrations.md 3.89): NOT
-ADOPTED.** P3 failed and both tiers of the rule require it.
+**v48's verdict (3.89, 2026-10-20 13:5x, 4 x 60 min pooled; demonstrations.md 3.89): the rule
+said NOT ADOPTED** (P3 failed and both tiers of the rule require it). ➡️ **ADOPTED by Batt's
+decision at 14:58, overriding the rule (below).**
 - **The primary passed:** completeness fix 142/242 = 58.7 % vs base 114/251 = 45.4 %, **+13.3
   points** (the null -5.4 .. +6.3).
 - Kills with no loot step: 2.6 vs 13.3 %, -10.8 points (PASS).
@@ -1621,6 +1622,16 @@ ADOPTED.** P3 failed and both tiers of the rule require it.
 - **The pooled row (4 runs):** 99.7 kills / h; landing 77.2 %; completeness 263/531 = 49.5 %
   (left behind 36 % / looters 14 % / expired 1 %).
 - **The bot-vs-Batt line now:** Batt 96.8 %; the bot 49.5 % (both arms), the fix arm 58.7 %.
-- **The base stays:** v43's + the pocket escape. Adopting v48 regardless is Batt's call; it was
-  flagged in the ~13:00 report.
-- **Next:** v49 = the HAND scan (3.90), on that base.
+- ~~**The base stays:** v43's + the pocket escape.~~ ➡️ **ADOPTED BY BATT (received 14:58 ICT),
+  overriding the strict rule:** "Loot completeness is this block's primary and passed strongly
+  ... P3 measured the wrong mechanism". So the EXP line alone, with the target kept, is in the
+  base from here on.
+- **v49 = the HAND scan (3.90).** Its runs started on the pre-v48 base and are kept as they are
+  (interleaved arms). The next loot versions stack on v48 + v49 (if v49 passes).
+- **Batt, same message:**
+  - FLAG 4 (the HP bar): not now; the EXP line covers death.
+  - FLAG 2 (no death-cell version) was not raised; the order he gave goes straight to the loot
+    memory.
+  - Next: the loot memory (60-s budget), then looter recovery.
+  - The later loot clicks' aim: after each pickup walk, re-anchor from the drawn GM position
+    before the next hover, as the HAND scan should.
