@@ -1828,6 +1828,11 @@ TIME (s per hour of the loop; per kill; Batt's comparable figure):
    - Batt: kill -> last pickup mean 2.53 s.
    - Option C (skip the cells whose image did not change, ~12 of 25) would save ~2.1 s more a
      pass. Held out: no item ever lay on a skipped cell.
+   - ➡️ Measured at 03:16 on v51's real hovers (`lc/c_lastpick.py`, offline): C would cut the
+     step by p50 2.83 s / mean 3.07 s on the 180 kills with a C read. It would barely move
+     Batt's ruler: kill -> last pickup p50 2.53 -> 2.50 s, mean 3.20 -> 3.05 s (n 237). The items
+     are picked early in the scan (the GM's cell, the 3 x 3); the skipped hovers come after
+     them. So C is a TIME lever for the hour, not for his 1.56 s.
 4. Fighting 272 s / h (2.8 s per kill); striking 242 s / h (2.5 s per kill).
 
 LOOT (92 of 446 items not picked, 20.6 points). ➡️ **CORRECTED 03:10.** The first version of this
