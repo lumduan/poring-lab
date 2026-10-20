@@ -1881,6 +1881,32 @@ def hand_on(prm: dict[str, Any], k: int) -> bool:
     return bool(prm.get("loot_hand")) and (not prm.get("loot_hand_ab") or k % 2 == 1)
 
 
+def gm_on(prm: dict[str, Any], k: int) -> bool:
+    """PURE (Batt's loot rule, 2026-10-20 ~15:3x): does engagement ``k``'s loot step scan
+    around the GM? ``loot_gm`` on; with ``loot_gm_ab`` only odd k (the fix arm)."""
+    return bool(prm.get("loot_gm")) and (not prm.get("loot_gm_ab") or k % 2 == 1)
+
+
+def gm_scan_cells(gm: Cell, toward: Cell | None, edge: bool = True) -> list[Cell]:
+    """PURE (Batt's loot rule): the cells around the GM's DRAWN position (a melee kill dies next
+    to it; the camera keeps it at the screen's centre) -- its own cell, then the 3 x 3, then
+    the 5 x 5's edge; within each ring the cells nearest ``toward`` (the believed death cell,
+    an ORDER only, never the centre) first, then a fixed order."""
+
+    def ring(r: int) -> list[Cell]:
+        return [(gm[0] + dx, gm[1] + dy) for dy in range(-r, r + 1) for dx in range(-r, r + 1)
+                if max(abs(dx), abs(dy)) == r]  # fmt: skip
+
+    def key(c: Cell) -> tuple[int, int, int]:
+        d = 0 if toward is None else max(abs(c[0] - toward[0]), abs(c[1] - toward[1]))
+        return d, c[1], c[0]
+
+    out = [gm] + sorted(ring(1), key=key)
+    if edge:
+        out += sorted(ring(2), key=key)
+    return out
+
+
 def hand_seen(verdict: str, rec: Mapping[str, float], pickup_min: float) -> str:
     """PURE (3.90): one hover's cursor (cursor_sword.check) as the scan reads it: "sword" (a unit
     under the pointer), "hand" (the PICKUP cursor: an item; recall >= ``pickup_min``), "empty"
@@ -2721,7 +2747,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
 
                 sword_refs = csw_.SwordRefs.load()
             hand_refs: Any = None  # 3.90: the HAND scan's own (it never turns sword_on on)
-            if prm.get("loot_hand"):
+            if prm.get("loot_hand") or prm.get("loot_gm"):
                 import cursor_sword as csw_h
 
                 hand_refs = csw_h.SwordRefs.load()
@@ -3058,6 +3084,127 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 out["hand"] = dict(seen_c)
                 out["extra_cells"] = added
 
+            def gm_ref() -> tuple[Cell, str] | None:
+                """Batt's loot rule: the GM's own cell at a drawn standstill -- the client's
+                readout (re-anchoring the odometry on it), else the measured cell rounded. The
+                hover pixels are projected from it, so each cell's pixel is exact RELATIVE TO THE
+                DRAWN GM (the camera keeps it at the screen's centre, standing on a cell centre);
+                the readout only names the cells. None = a jump (the main loop's guard)."""
+                mp_r = measured_pos()
+                t_rf = r.ns()
+                mm_l = read_position_quick()
+                if mm_l is not None:
+                    if mp_r is not None and cheb(mm_l, mp_r) > JUMP_CELLS:
+                        return None
+                    if mp_r is not None:
+                        mstate["anchor"] = (mm_l, odo_at(hist_now(), t_rf))
+                    return mm_l, "readout"
+                if mp_r is not None:
+                    return (int(round(mp_r[0])), int(round(mp_r[1]))), "rounded"
+                return None
+
+            def loot_gm_steps(eng_: dict[str, Any], dcell: Cell, out: dict[str, Any],
+                              t_l0: float, w_l: Any, npc_c: Sequence[Cell]) -> None:  # fmt: skip
+                """BATT'S LOOT RULE (2026-10-20 ~15:3x, after his 15:05 clip: "after a kill with
+                drops next to the GM, the GM walks away at once"): dead = the EXP line (v48),
+                then the GM STANDS -- no walk click, no next engagement, no search -- at least
+                loot_gm_stand_s from the line while the cells AROUND THE DRAWN GM are scanned
+                (its own cell, the 3 x 3, the 5 x 5's edge; gm_scan_cells), NOT around the
+                believed death cell (off ~63 % of the time; v49's HAND reads lay 1 cell off it).
+                Each cell is HOVERED (moves only); where the client draws its PICKUP hand it is
+                clicked, then -- after loot_gm_settle_s and a drawn standstill -- re-hovered at
+                its pixel from the GM's new cell, and clicked again while the hand stays (a
+                burst, a read before every click: a SWORD is never clicked). A pass that found a
+                hand is followed by another around the GM's cell then; the step ends when a full
+                pass shows no hand, after loot_gm_passes, or at loot_gm_max_s. Every hover is
+                logged with its recalls (``hand_hover``, arm "gm")."""
+                t_line = (eng_.get("exp_line") or {}).get("t_ns")
+                if t_line is not None:
+                    w_s = (int(t_line) + int(float(prm["loot_gm_stand_s"]) * 1e9) - r.ns()) / 1e9
+                    if w_s > 0:
+                        time.sleep(w_s)  # the stand: the drops are drawn ~0.5 s after the kill
+                seen_c: Counter[str] = Counter()
+                out["end"] = "cap"
+                passes = 0
+                k_g = int(eng_.get("k", 0))
+
+                def hover(c_: Cell, ref_: Cell, pass_: int, burst_: int) -> tuple[str, Any]:
+                    u_, v_ = frac_project(w_l, (float(ref_[0]), float(ref_[1])), c_)
+                    if not in_view(u_, v_):
+                        return "view", None
+                    res_ = csw_h.check(agent, screen, hand_refs, gx0, gy0, u_, v_,
+                                       wait_s=float(prm["loot_gm_wait_s"]))  # fmt: skip
+                    ptr[0] = (u_, v_)
+                    sn_ = hand_seen(str(res_["verdict"]), res_["rec"], csw_h.PICKUP_MIN)
+                    ev({"kind": "hand_hover", "arm": "gm", "k": k_g, "cell": list(c_),
+                        "ref": list(ref_), "pass": pass_, "burst": burst_, "seen": sn_,
+                        "ms": res_["ms"], "reads": len(res_["reads"]),
+                        "rec": {kk_: round(float(vv_), 3)
+                                for kk_, vv_ in (res_["rec"] or {}).items()}})  # fmt: skip
+                    return sn_, (u_, v_)
+
+                while (time.monotonic() - t_l0 < prm["loot_gm_max_s"]
+                       and passes < int(prm["loot_gm_passes"])):  # fmt: skip
+                    passes += 1
+                    if not hand_still(float(prm["loot_gm_still_max_s"])):
+                        seen_c["not_still"] += 1
+                    rf_ = gm_ref()
+                    if rf_ is None:
+                        out["stop"] = "jump"  # the main loop's guard decides
+                        break
+                    ref, how_ = rf_
+                    seen_c["ref_" + how_] += 1
+                    queue_ = gm_scan_cells(ref, dcell, bool(prm.get("loot_gm_edge", True)))
+                    retried: set[Cell] = set()
+                    found = False
+                    while queue_:
+                        c_g = queue_.pop(0)
+                        if time.monotonic() - t_l0 >= prm["loot_gm_max_s"]:
+                            break
+                        if any(cheb(c_g, nc_) <= 2 for nc_ in npc_c):
+                            seen_c["npc"] += 1
+                            continue
+                        sn_g, px_g = hover(c_g, ref, passes, 0)
+                        seen_c[sn_g] += 1
+                        if sn_g == "unknown" and c_g not in retried:
+                            retried.add(c_g)
+                            queue_.append(c_g)  # an unread cell: once more at the pass's end
+                            continue
+                        if sn_g != "hand" or px_g is None:
+                            continue
+                        found = True
+                        for b_ in range(int(prm["loot_gm_burst_max"])):
+                            t_lc = r.ns()
+                            # the LOOT click (Batt's rule): only on a HAND read at this pixel
+                            agent.click(gx0 + round(px_g[0]), gy0 + round(px_g[1]))
+                            out["clicks"] += 1
+                            click_log({"t": t_lc, "u": round(px_g[0], 1), "v": round(px_g[1], 1),
+                                       "kind": "loot", "cell": list(c_g), "src": "gm_hand",
+                                       "burst": b_})  # fmt: skip
+                            # the server's answer and the ~0.65 s display lag first: a pickup
+                            # walk is drawn late (3.89's death-cell study; v49's settle)
+                            time.sleep(float(prm["loot_gm_settle_s"]))
+                            if not hand_still(float(prm["loot_gm_still_max_s"])):
+                                seen_c["not_still"] += 1
+                            rf2_ = gm_ref()
+                            if rf2_ is None:
+                                out["stop"] = "jump"
+                                break
+                            ref = rf2_[0]
+                            sn_g, px_g = hover(c_g, ref, passes, b_ + 1)
+                            seen_c["burst_" + sn_g] += 1
+                            if sn_g != "hand" or px_g is None:
+                                break
+                        if out.get("stop"):
+                            break
+                    if out.get("stop"):
+                        break
+                    if not found:
+                        out["end"] = "no_hand"
+                        break
+                out["hand"] = dict(seen_c)
+                out["passes"] = passes
+
             def loot_fixed_run(eng_: dict[str, Any], here2: Cell, dcell: Cell,
                                extra: Sequence[Any] = (),
                                corpse: tuple[float, float, tuple[float, float], int] | None = None,
@@ -3103,6 +3250,18 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 mp_g = mp_g0 or (float(here2[0]), float(here2[1]))
                 if mp_g0 is None:
                     out["stop"] = "jump"
+                if (gm_on(prm, int(eng_.get("k", 0))) and hand_refs is not None
+                        and mp_g0 is not None):  # fmt: skip
+                    # Batt's loot rule: the stand + the scan around the DRAWN GM (odd k, A/B)
+                    out["arm"] = "gm"
+                    loot_gm_steps(eng_, dcell, out, t_l0, w_l, npc_c)
+                    if prm.get("ptr_rest_ui") and out["clicks"]:
+                        rest_ptr()
+                    out["s"] = round(time.monotonic() - t_l0, 2)
+                    out["death"] = eng_.get("death")
+                    eng_["loot"] = out
+                    ev({"kind": "loot_fixed", **out})
+                    return
                 if (hand_on(prm, int(eng_.get("k", 0))) and hand_refs is not None
                         and mp_g0 is not None):  # fmt: skip
                     # 3.90: the HAND scan instead of the blind 3 x 3 (odd k when A/B)

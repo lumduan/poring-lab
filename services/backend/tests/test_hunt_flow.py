@@ -1443,10 +1443,24 @@ def test_hand_scan_pure_parts() -> None:
 def test_the_hand_scan_clicks_only_a_hand() -> None:
     """3.90: in the HAND step the only click follows a "hand" read; hovers are moves only."""
     src = Path(hf.__file__).read_text()
-    body = src.split("def loot_hand_steps(")[1].split("def loot_fixed_run(")[0]
+    body = src.split("def loot_hand_steps(")[1].split("def reanchor_still(")[0]
+    body = body.split("def gm_ref(")[0]
     assert body.count("agent.click(") == 1
     i_click = body.index("agent.click(")
     assert 'if seen_h == "hand":' in body[max(0, i_click - 200) : i_click]
+
+
+def test_batts_loot_rule_clicks_only_a_hand() -> None:
+    """Batt's loot rule: hovers are moves only; the one click site follows a "hand" read, and
+    each further burst click follows a fresh re-hover that read "hand" again."""
+    src = Path(hf.__file__).read_text()
+    body = src.split("def loot_gm_steps(")[1].split("def loot_fixed_run(")[0]
+    assert body.count("agent.click(") == 1
+    i_click = body.index("agent.click(")
+    assert 'if sn_g != "hand" or px_g is None:' in body[max(0, i_click - 900) : i_click]
+    tail = body[i_click:]
+    i_re = tail.index("sn_g, px_g = hover(c_g, ref, passes, b_ + 1)")
+    assert 'if sn_g != "hand" or px_g is None:' in tail[i_re : i_re + 200]
 
 
 def test_loot_memory_pure_parts() -> None:
@@ -1475,3 +1489,19 @@ def test_loot_memory_pure_parts() -> None:
     assert hf.mem_next(mem, (60, 60), now=120.0, budget_s=50.0, max_cells=14) is None  # far
     left = hf.mem_clear(mem, (12, 10))
     assert [m["cell"] for m in left] == [(30, 30)]
+
+
+def test_batts_loot_rule_scans_around_the_gm() -> None:
+    """Batt 2026-10-20 ~15:3x: the scan is centred on the DRAWN GM (its own cell, the 3 x 3,
+    then the 5 x 5's edge), the believed death cell only orders each ring; odd k when A/B."""
+    cells = hf.gm_scan_cells((100, 100), toward=(101, 100))
+    assert cells[0] == (100, 100) and len(cells) == 25 and len(set(cells)) == 25
+    ring1, ring2 = cells[1:9], cells[9:]
+    assert all(max(abs(x - 100), abs(y - 100)) == 1 for x, y in ring1)
+    assert all(max(abs(x - 100), abs(y - 100)) == 2 for x, y in ring2)
+    assert ring1[0] == (101, 100)  # the believed death cell first within its ring
+    assert ring2[0] in ((102, 99), (102, 100), (102, 101))
+    assert len(hf.gm_scan_cells((5, 5), None, edge=False)) == 9
+    p = {"loot_gm": True, "loot_gm_ab": True}
+    assert hf.gm_on(p, 3) and not hf.gm_on(p, 4) and not hf.gm_on({}, 3)
+    assert hf.gm_on({"loot_gm": True}, 4)
