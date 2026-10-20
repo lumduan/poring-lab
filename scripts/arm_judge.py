@@ -143,7 +143,8 @@ def item_fates(packets: Sequence[Mapping[str, Any]], pos: Mapping[int, Sequence[
             alive.discard(int(e["gid"]))
         elif typ == "floor_item_appear" and e.get("kind") == "fall":
             items[int(e["floor_id"])] = {"t_fall": t, "cell": (int(e["x"]), int(e["y"])),
-                                         "fate": "left", "t_end": None, "t_out": None}  # fmt: skip
+                                         "fate": "left", "t_end": None, "t_out": None,
+                                         "item_id": e.get("item_id")}  # fmt: skip
         elif typ == "floor_item_appear" and e.get("kind") == "in_sight":
             it = items.get(int(e["floor_id"]))
             if (it is not None and it["fate"] == "out_of_sight"
@@ -174,6 +175,8 @@ def item_fates(packets: Sequence[Mapping[str, Any]], pos: Mapping[int, Sequence[
                         and max(abs(c[0] - it["cell"][0]), abs(c[1] - it["cell"][1]))
                         <= LOOTER_CELLS]  # fmt: skip
                 it["fate"] = "looter" if near else "gone"
+                if near:
+                    it["looter_gids"] = sorted(near)  # step 4: whose death may re-drop it
     for f in ours:  # a pickup can be answered after the vanish line in the archive order
         if f in items:
             items[f]["fate"] = "picked"

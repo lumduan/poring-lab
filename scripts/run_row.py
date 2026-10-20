@@ -16,6 +16,9 @@ Each run needs flow_judge.json (``--fresh`` writes it first: flow_judge.bot). Th
 - LOOT COMPLETENESS (Batt 2026-10-20, the loot block's primary; loot_complete.py): items picked
   / dropped by ALL our kills (packets), and the fates' split: left behind (out of our sight) /
   looters / expired, with their counts; Batt's demo 61 / 63 = 96.8 %, 0 / 3 / 0 %;
+  and NET of looter re-drops (Batt 2026-10-20's step 4: a looter we kill drops our item again,
+  the same item counted once; loot_complete.link_redrops), with the items recovered so: his demo
+  61 / 61 = 100 % (2);
 - loot: items picked / dropped at the kills of engagements ended "dead", and lost to looters
   (arm_judge.item_fates; the older, narrower base);
 - reversals / min, and outside loot steps (Batt 2026-10-19: the bot's loot steps from its own log,
@@ -54,6 +57,7 @@ BATT = {
     "dead calls without a real death": "-",
     "LOOT COMPLETENESS (all our kills)": "61/63 = 96.8 %",
     "  left behind / looters / expired": "0 / 3 / 0 % (0 / 2 / 0)",
+    "  net of looter re-drops (recovered)": "61/61 = 100.0 % (2)",
     "loot picked / dropped (looters)": "97 %",
     "reversals / min": "3.6", "reversals outside loot / min": "4.28",
     "Creamy hits (requests)": "-", "Creamy hits / h": "-",
@@ -186,6 +190,9 @@ def row(sid: str, fresh: bool = False) -> dict[str, Any]:
         f"{100 * (dc['share'] or 0):.1f} %",
         "LOOT COMPLETENESS (all our kills)": lc_c,
         "  left behind / looters / expired": lc_f,
+        "  net of looter re-drops (recovered)": f"{lcs['picked']}/{lcs['items'] - lcs['redrops']}"
+        f" = {100 * lcs['picked'] / max(1, lcs['items'] - lcs['redrops']):.1f} % "
+        f"({lcs['recovered']})",
         "loot picked / dropped (looters)": f"{loot['picked']}/{loot['items']} = "
         f"{100 * loot['picked'] / max(1, loot['items']):.0f} % ({loot['looter']})",
         "reversals / min": (o.get("heading") or {}).get("reversals_per_min"),
@@ -206,6 +213,7 @@ _FRAC = re.compile(r"^(\d+)/(\d+) = ")
 _PCT_N = re.compile(r"^(\d+) % \(n (\d+)\)$")
 _LOOT = re.compile(r"^(\d+)/(\d+) = \d+ % \((\d+)\)$")
 _LCF = re.compile(r"^\d+ / \d+ / \d+ % \((\d+) / (\d+) / (\d+)\)$")
+_NET = re.compile(r"^(\d+)/(\d+) = [\d.]+ % \((\d+)\)$")
 _KLS = re.compile(r"^([\d.]+) / ([\d.]+) \(n (\d+)\)$")
 _CREAMY = re.compile(r"^(\d+) \((\d+)\)$")
 _BARS = re.compile(r"^(\S+) / (\S+) / (\S+)$")
@@ -277,6 +285,11 @@ def pool(rows_: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
             out["  left behind / looters / expired"] = (
                 f"{100 * o_ / nb:.0f} / {100 * l_ / nb:.0f} / {100 * e_ / nb:.0f} % "
                 f"({o_} / {l_} / {e_})")  # fmt: skip
+    nt = fracs("  net of looter re-drops (recovered)", _NET)
+    if nt:
+        a, b, c = (sum(x[i] for x in nt) for i in range(3))
+        out["  net of looter re-drops (recovered)"] = (
+            f"{a}/{b} = {100 * a / max(1, b):.1f} % ({c})")  # fmt: skip
     lt = fracs("loot picked / dropped (looters)", _LOOT)
     if lt:
         a, b, c = (sum(x[i] for x in lt) for i in range(3))

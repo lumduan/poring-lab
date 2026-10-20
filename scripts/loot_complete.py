@@ -77,11 +77,42 @@ def kill_rows(kills: Sequence[tuple[int, int]], items: Mapping[int, Mapping[str,
         if not t0 <= t <= w1:
             continue
         e = owner_of(g, t, engs, gid_by_k)
-        fs = [str(items[f]["fate"]) for f in aj.drops_of_kill(items, t, cell_of(g, t - 1))]
+        fids = aj.drops_of_kill(items, t, cell_of(g, t - 1))
+        fs = [str(items[f]["fate"]) for f in fids]
         out.append({"t": t, "gid": g, "k": None if e is None else int(e["k"]),
                     "result": None if e is None else e.get("result"),
-                    "looted": looted(e), "fates": fs})  # fmt: skip
+                    "looted": looted(e), "fates": fs, "drops": list(fids)})  # fmt: skip
+    link_redrops(out, items)
     return out
+
+
+def link_redrops(rows: list[dict[str, Any]], items: Mapping[int, Mapping[str, Any]]) -> None:
+    """PURE (Batt's step 4, LOOTER RECOVERY): a monster that took one of our items drops it
+    again when it dies (mob.cpp:3243). Such a RE-DROP -- an item of OUR later kill of that
+    looter, the same item id as an item of ours it took before -- is the same physical item
+    counted twice. Each row gets ``redrops`` (its drops linked to an earlier item of ours, each
+    original linked once) and ``redrops_picked``; ``summary`` turns them into the net
+    completeness (re-drops out of the denominator) and the recovered count."""
+    ours = sorted({f for r in rows for f in r.get("drops", ())},
+                  key=lambda f: int(items[f]["t_fall"]))  # fmt: skip
+    used: set[int] = set()
+    for r in sorted(rows, key=lambda r_: int(r_["t"])):
+        rd = rdp = 0
+        for f in r.get("drops", ()):
+            iid = items[f].get("item_id")
+            if iid is None:
+                continue
+            for o in ours:
+                io = items[o]
+                if (o in used or o == f or io["fate"] != "looter" or io.get("item_id") != iid
+                        or int(r["gid"]) not in (io.get("looter_gids") or ())
+                        or io["t_end"] is None or int(io["t_end"]) > int(r["t"])):  # fmt: skip
+                    continue
+                used.add(o)
+                rd += 1
+                rdp += items[f]["fate"] == "picked"
+                break
+        r["redrops"], r["redrops_picked"] = rd, rdp
 
 
 def summary(rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
@@ -89,7 +120,8 @@ def summary(rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
     items)."""
     c: Counter[str] = Counter()
     kills = abandoned = ab_items = 0
-    for r in rows:
+    rows_ = list(rows)
+    for r in rows_:
         kills += 1
         c.update(r["fates"])
         if not r["looted"]:
@@ -103,6 +135,12 @@ def summary(rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
     out["abandoned_kills"] = abandoned
     out["abandoned_share"] = round(abandoned / kills, 4) if kills else None
     out["abandoned_items"] = ab_items
+    # step 4: a looter's re-drop of our item is the same item (link_redrops) -- out of the
+    # denominator; "recovered" = our looted items picked again from their looter's drop
+    rd = sum(int(r.get("redrops", 0)) for r in rows_)
+    out["redrops"] = rd
+    out["recovered"] = sum(int(r.get("redrops_picked", 0)) for r in rows_)
+    out["completeness_net"] = round(c["picked"] / (n - rd), 4) if n - rd > 0 else None
     return out
 
 
