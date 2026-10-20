@@ -1364,6 +1364,71 @@ def keepdead_table(sids: Sequence[str]) -> dict[str, Any]:
             "gone_no_line": dict(gone), "checks": checks, "per_run": ed["per_run"]}  # fmt: skip
 
 
+def handloot_table(sids: Sequence[str]) -> dict[str, Any]:
+    """3.90 (the HAND scan, Batt's step 3): per arm -- "fix" = odd k (the HAND scan), "base" =
+    even k (the blind 3 x 3) -- pooled over ``sids``: keepdead_table's completeness, fates,
+    abandoned kills, engaged s per kill, landing and hard bars, plus the HAND scan's mechanics --
+    hovers by what they read (hand / empty / sword / unknown), HAND clicks and how many became a
+    pickup request within 0.6 s (left_behind.click_results), loot step s p50 per arm."""
+    import left_behind as lb
+
+    kd = keepdead_table(sids)
+    mech: dict[str, Counter[str]] = {"fix": Counter(), "base": Counter()}
+    step_s: dict[str, list[float]] = {"fix": [], "base": []}
+    for sid in sids:
+        d = DEMO / sid
+        for x in json.loads((d / "engagements.json").read_text()):
+            lo = x.get("loot") or {}
+            if not lo:
+                continue
+            arm = "fix" if int(x["k"]) % 2 == 1 else "base"
+            if lo.get("s") is not None:
+                step_s[arm].append(float(lo["s"]))
+            for k_, v_ in (lo.get("hand") or {}).items():
+                mech[arm]["hover:" + k_] += int(v_)
+            mech[arm]["steps"] += 1
+            mech[arm]["end:" + str(lo.get("end"))] += lo.get("end") is not None
+            mech[arm]["extra_cells"] += int(lo.get("extra_cells") or 0)
+        clicks = sorted((json.loads(x) for x in (d / "clicks.jsonl").read_text().splitlines()
+                         if x), key=lambda c: int(c["t"]))  # fmt: skip
+        import gzip
+
+        with gzip.open(d / "packets.jsonl.gz", "rt") as fh:
+            pk = sorted((json.loads(x) for x in fh), key=lambda e: int(e["t_mono_ns"]))
+        hand_ts = {
+            int(c["t"]) for c in clicks if c.get("kind") == "loot" and c.get("src") == "hand"
+        }
+        for r_ in lb.click_results(clicks, pk):
+            if r_["t"] in hand_ts:
+                mech["fix"]["hand_clicks"] += 1
+                mech["fix"]["hand_clicks_pickup"] += r_["what"] == "pickup"
+                mech["fix"]["hand_clicks_pickup_ok"] += bool(r_["what"] == "pickup"
+                                                             and r_.get("ok"))  # fmt: skip
+                mech["fix"]["hand_clicks_walk"] += r_["what"] == "walk"
+    hc_ = mech["fix"]["hand_clicks"]
+    prec = round(mech["fix"]["hand_clicks_pickup"] / hc_, 3) if hc_ else None
+    f, b = kd["arms"]["fix"], kd["arms"]["base"]
+    d_c = kd["differences"]["completeness_points"]
+    d_e = kd["differences"]["engaged_s_per_kill"]
+    sk = kd["differences"]["run_s_per_kill"]
+    checks = {
+        "P1 completeness fix - base >= +10 points": None if d_c is None else d_c >= 10.0,
+        "M2 HAND clicks that became a pickup request >= 0.90": None if prec is None
+        else prec >= 0.90,
+        "G3 engaged s per kill fix - base <= 0.176 x run s per kill": (
+            None if d_e is None or sk is None else d_e <= 0.176 * sk),
+        "G4 landing fix >= base - 8 points": (
+            None if f["landing"] is None or b["landing"] is None
+            else f["landing"] >= b["landing"] - 0.08),
+        "G5 hard bars zero": kd["checks"]["G6 hard bars zero"],
+    }  # fmt: skip
+    return {"arms": kd["arms"], "differences": kd["differences"],
+            "mechanics": {a: dict(sorted(c.items())) for a, c in mech.items()},
+            "hand_click_pickup_precision": prec,
+            "loot_step_s_p50": {a: q(v, 0.5) for a, v in step_s.items()},
+            "checks": checks, "per_run": kd["per_run"]}  # fmt: skip
+
+
 def species_table(sessions: Iterable[dict[str, Any]]) -> dict[str, Any]:
     """v35: per engagement parity (odd k = the species check on the box's OWN frame, even k =
     the fresh crop at the stale box): arm C's eligibility (the ``abc`` events: effective arm,
@@ -1561,7 +1626,8 @@ def main() -> int:
     ap.add_argument("what", choices=("strike", "dead", "loot", "stray", "blocks", "species",
                                      "retry", "sword", "sword-precision", "heading",
                                      "approach", "deadprobe", "falsedead", "walkers",
-                                     "expdead", "steerguard", "keepdead"))  # fmt: skip
+                                     "expdead", "steerguard", "keepdead",
+                                     "handloot"))  # fmt: skip
     ap.add_argument("sessions", nargs="+")
     a = ap.parse_args()
     if a.what == "heading":  # its own loader (search_study's windows and field)
@@ -1587,6 +1653,9 @@ def main() -> int:
         return 0
     if a.what == "keepdead":  # 3.89's per-arm judge
         print(json.dumps(keepdead_table(a.sessions), indent=1, default=str))
+        return 0
+    if a.what == "handloot":  # 3.90's per-arm judge
+        print(json.dumps(handloot_table(a.sessions), indent=1, default=str))
         return 0
     sessions = [load(s) for s in a.sessions]
     if a.what == "sword-precision":
