@@ -12826,8 +12826,45 @@ points.
       outside 2;
     - kills that no engagement owned: no loot step 2.
   - Best 2 min: 6 kills from minute 2.5.
-- **Run 3** (seed 20380303, session 20261020T203445) was started by the chain at 20:34:43. Its
-  screenshot was judged: the hunting layout, Lv 70, Job Lv 1, weight 638 / 4970, HP full, no
+- **Run 3** (seed 20380303, session 20261020T203445).
+  - Started by the chain at 20:34:43. Its screenshot was judged: the hunting layout, Lv 70, Job
+    Lv 1, weight 638 / 4970, HP full, no dialog; the runner's own weight-clear drops beside the
+    GM. It ended on its time box at 21:36:16.
+  - **The row:**
+    - 79 engagements; landing 58/79 = 73.4 % (62.8-81.9); 68.9 kills / h; 4.05 per sighting;
+      52.2 s per kill; seen 17.0 / 10 min (the thinnest field of the four);
+    - free targets <= 10 s 31 % (n 115); steer moving 39 %; seen -> click 3.03 s; death -> next
+      1.3 s;
+    - dead calls without a real death 4/62 = 6.5 %;
+    - **LOOT COMPLETENESS 48/87 = 55.2 %** (left behind 38 % / looters 7 % / expired 0 %;
+      33 / 6 / 0 items); **net 48/83 = 57.8 % (2 recovered)**; the older column 46/74 = 62 %
+      (3 looters);
+    - reversals 6.11 / min (outside loot 6.6); Creamy 0; hard bars 0 / 0 / 0; kill -> loot
+      start 1.12 / 0.90 s (n 58); **kill -> last pickup p50 / mean 2.64 / 2.70 s (n 35)**;
+    - results: dead 62, gone_no_line 15, gave_up 2.
+  - **Per arm, run 3 only, NOT deciding:**
+
+    | arm | completeness (net) | left behind / looters / expired | kills with no loot step | loot step p50 / mean | kill -> last pickup p50 / mean | engaged s per kill | landing |
+    |---|---|---|---|---|---|---|---|
+    | Batt's rule (odd k) | 27/39 = 69.2 % (73.0 %) | 25.6 / 5.1 / 0 % | 2/33 = 6.1 % | 12.10 / 10.28 s | 3.20 / 3.27 s (n 20) | 13.81 | 71.8 % |
+    | blind 3 x 3 (even k) | 20/45 = 44.4 % (46.5 %) | 48.9 / 6.7 / 0 % | 2/32 = 6.3 % | 1.91 / 1.79 s | 1.78 / 2.03 s (n 14) | 6.89 | 75.0 % |
+
+    - Fix - base: completeness **+24.8 points**; left behind **-23.2 points**; engaged s per
+      kill **+6.92 s** (G4's bar 0.176 x 52.22 = 9.19 s: passes on this run); kill -> loot
+      start 0.86 x.
+    - M3: 27/27 = 1.000 (first clicks 25/25, burst re-clicks 2/2); burst gap p50 0.59 s (n 2).
+    - The scan: 30 steps, all ended no_hand; 50 passes. Hovers: empty 976, unknown 91, hand 25,
+      sword 17; burst re-reads empty 23, hand 2.
+    - `hand_truth.py`: hand reads with an item on the hovered cell 4 / 27, within 1 cell 26 / 27;
+      empty reads with one on the cell 1 / 999.
+  - Left-behind causes per arm:
+    - Batt's rule: no loot step 5; outside, near the death cell 3; in the plan, unclicked 2;
+      fell after the step 1; outside 1;
+    - blind: outside, near the death cell 15; in the plan, unclicked 8; no loot step 2;
+    - kills that no engagement owned: no loot step 2.
+  - Best 2 min: 7 kills from minute 4.8.
+- **Run 4** (seed 20380404, session 20261020T213620) was started by the chain at 21:36:18. Its
+  screenshot was judged: the hunting layout, Lv 70, Job Lv 1, weight 600 / 4970, HP full, no
   dialog; the runner's own weight-clear drops beside the GM.
 
 ## 4. Labels from verified outcomes
