@@ -13065,6 +13065,44 @@ fails, the result goes to Batt.
     5.
   - Seen live: 17 GM-scan steps, ended no_hand 12 / one_pass 5. The fix arm runs 1 pass, the
     base arm up to 3 (6 steps ran 2), as designed.
+  - It ended on its time box at 23:46:03.
+  - **The row:**
+    - 107 engagements; landing 87/107 = 81.3 % (72.9-87.6); 93.0 kills / h; 3.88 per sighting;
+      38.7 s per kill; seen 24.0 / 10 min;
+    - free targets <= 10 s 44 % (n 149); steer moving 41 %; seen -> click 3.4 s; death -> next
+      2.3 s;
+    - dead calls without a real death 1/88 = 1.1 %;
+    - **LOOT COMPLETENESS 78/94 = 83.0 %** (left behind 12 % / looters 5 % / expired 0 %;
+      11 / 5 / 0 items); **net 78/89 = 87.6 % (5 recovered)**; the older column 99/116 = 85 %
+      (7 looters);
+    - reversals 4.98 / min (outside loot 6.33); Creamy 2 (1 request); hard bars 0 / 0 / 0;
+      kill -> loot start 1.02 / 0.92 s (n 87); **kill -> last pickup p50 / mean 2.62 / 2.90 s
+      (n 58)** (Batt 1.56 / 2.53);
+    - results: dead 88, gone_no_line 19.
+  - **Per arm, run 1 only, NOT deciding:**
+
+    | arm | completeness (net) | left behind / looters / expired | loot step p50 / mean | kill -> last pickup p50 / mean | engaged s per kill | landing |
+    |---|---|---|---|---|---|---|
+    | ONE PASS (odd k) | 39/42 = 92.9 % (94.7 %) | 4.8 / 2.4 / 0 % | 7.37 / 7.43 s | 2.92 / 2.71 s (n 29) | 11.77 | 81.1 % |
+    | v50, up to 3 passes (even k) | 39/50 = 78.0 % (81.6 %) | 18.0 / 4.0 / 0 % | 11.26 / 9.95 s | 2.35 / 3.10 s (n 29) | 13.54 | 81.5 % |
+
+    - 3.92's bars, this run: P1 step mean fix / base **0.747** (<= 0.85); P2 completeness
+      **+14.9 points** (>= -6); M3 75/79 = **0.949** (first clicks 68/69, burst re-clicks
+      7/10); G5 0.
+    - Engaged s per kill -1.77 s.
+    - The scan: fix 44 steps, ended one_pass 27 / no_hand 17, 44 passes; base 44 steps, 73
+      passes. Burst gap p50 0.59 s (n 10).
+    - `hand_truth.py`: hand reads with an item on the hovered cell 21 / 79, within 1 cell 75 / 79;
+      empty reads with one on the cell 0 / 2701.
+  - Left-behind causes per arm:
+    - one pass: in the plan, unclicked 2; fell after the step 1;
+    - v50: fell after the step 3; in the plan, unclicked 3; outside, near the death cell 3;
+      clicked, became a walk 1; no loot step 1;
+    - no engagement: no loot step 2.
+  - Best 2 min: 8 kills from minute 47.3.
+- **Run 2** (seed 20390202, session 20261020T234607) was started by the chain at 23:46:05. Its
+  screenshot was judged: the hunting layout, Lv 70, Job Lv 1, weight 617 / 4970, HP full, no
+  dialog; the runner's own weight-clear drops beside the GM.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
