@@ -1874,3 +1874,14 @@ expanded, the Regular tab); @resetstat, Base / Job Lv 1, @heal (gm_state `fixed`
 stopped.
 - The judged screenshot shows HP 40 / 40, no dialog.
 - /health: ASSIST, no lease, bot_agents [].
+
+**Next loot levers, measured offline on v51's 4 runs, for Batt's decision.** Nothing is built and
+nothing is pre-registered.
+
+| lever | what it would hold or save | cost | source |
+|---|---|---|---|
+| the plan = the GM's 5 x 5 PLUS the 3 x 3 around the bot's believed death cell | 13 of the 35 items outside the GM's 5 x 5 (up to +2.9 points) | 1.28 extra hovers a step on average (0 on 77 % of steps), ~0.26 s | `lc/union_plan.py` |
+| the next ring (the 7 x 7's edge) | 15 of the 35 (up to +3.4 points) | 24 hovers, ~5 s a pass, unless C skips most of them | `left_behind.py` gm_outside_cells_from_the_gm |
+| looter recovery (engage the looter on our pile; it re-drops) | the race: 19 items (4.3 points) | a new engagement type | `left_behind.py` gm_causes |
+| option C live (skip the EMPTY cells; needs an odometry "moved" gate) | the step -2.83 s p50 / -3.07 s mean, on 180 of 237 kills with picks; 0 / 514 items ever on a skipped cell | kill -> last pickup barely moves (2.53 -> 2.50 s p50) | `loot_sight.py`, `lc/c_lastpick.py` |
+| Batt's no-cross line at C1's door (his file) | C1 took 10.4 % of v51's hours, and 37.5 % of run 4's | his authoring | `map_zone_candidates.py`, the NAS package |
