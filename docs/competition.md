@@ -1511,7 +1511,9 @@ split); kills / h is a guard (>= 0.85 x base).
 
 **Order:**
 1. v48 (3.89, pre-registered 09:37): dead = the EXP line alone, the target kept;
+   ➡️ NOT ADOPTED 13:5x on P3 alone (below, "v48's verdict"); completeness +13.3 points;
 2. the death-cell study, then a version;
+   ➡️ studied (no cue beats the last box, below); no version proposed, flagged to Batt ~13:00;
 3. no item left behind (HAND cursor, loot memory), after a study of why items are left;
 4. looter recovery;
 5. v45, v46, P3, v47.
@@ -1606,3 +1608,19 @@ each of our items a looter took, the monster within 1 cell at the vanish is the 
   - Step 4's gain is to kill the looter at once (not 6 s or 5 min later) and to loot its drop
     completely.
   - The HAND scan (step 3) is what makes the second part reliable.
+
+**v48's verdict (3.89, 2026-10-20 13:5x, 4 x 60 min pooled; demonstrations.md 3.89): NOT
+ADOPTED.** P3 failed and both tiers of the rule require it.
+- **The primary passed:** completeness fix 142/242 = 58.7 % vs base 114/251 = 45.4 %, **+13.3
+  points** (the null -5.4 .. +6.3).
+- Kills with no loot step: 2.6 vs 13.3 %, -10.8 points (PASS).
+- **P3 failed:** the kill -> loot start mean was 0.742 x (bar <= 0.70 x).
+- Guards: engaged s per kill +0.34 s; landing +3.6 points; hard bars 0 (Creamy 1, counted).
+- The gain is that the kept target is LOOTED: no skip, and fewer false deaths (4.7 vs 20.6 %).
+  The loot does not start sooner: the line, then 0.5 s.
+- **The pooled row (4 runs):** 99.7 kills / h; landing 77.2 %; completeness 263/531 = 49.5 %
+  (left behind 36 % / looters 14 % / expired 1 %).
+- **The bot-vs-Batt line now:** Batt 96.8 %; the bot 49.5 % (both arms), the fix arm 58.7 %.
+- **The base stays:** v43's + the pocket escape. Adopting v48 regardless is Batt's call; it was
+  flagged in the ~13:00 report.
+- **Next:** v49 = the HAND scan (3.90), on that base.

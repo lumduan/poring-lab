@@ -12130,8 +12130,71 @@ commit; on v44's 4 runs it gives P1 -15.1 points, P2 -2.9, P3 0.38 x, G4 -1.64 s
     times, the steer 7.
   - The reader: base EXP precision 88/89 = 0.989, recall 0.989, lag p50 0.31 / p90 0.44 s.
     Best 2 min: 10 kills from minute 50.3.
-- **Run 4** (seed 20360404) was started by the chain at 12:44:02. Its screenshot was judged: the
-  hunting layout, Lv 70, weight 556 / 4970, no dialog, the Battle Log tab in front.
+- **Run 4** (seed 20360404, session 20261020T124405).
+  - Started by the chain at 12:44:02. The screenshot was judged: the hunting layout, Lv 70,
+    weight 556 / 4970, no dialog, the Battle Log tab in front. It ended on its time box at
+    13:45:36 (the chain's end).
+  - **The row:**
+    - 105 engagements; landing 82/105 = 78.1 % (69.3-84.9); 91.9 kills / h; 4.48 per sighting;
+      39.2 s per kill; seen 20.5 / 10 min;
+    - free targets <= 10 s 36 % (n 160); steer moving 37 %; seen -> click 3.27 s; death -> next
+      0.97 s;
+    - dead calls without a real death 8/85 = 9.4 %;
+    - **LOOT COMPLETENESS 60/114 = 52.6 %** (left behind 39 % / looters 6 % / expired 3 %); the
+      older column 69/112 = 62 % (0 looters);
+    - reversals 7.23 / min (outside loot 6.83); **Creamy 1 (1 request)**, counted, not a stop;
+      hard bars 0 / 0 / 0; kill -> loot start 1.37 / 0.89 s (n 77);
+    - results: dead 85, skipped_risky 12, gone_no_line 7, gave_up 1.
+  - **Per arm, run 4 only, NOT deciding:**
+
+    | arm | completeness | left behind / looters / expired | kills with no loot step | kill -> loot start | engaged s per kill | landing | dead calls not real |
+    |---|---|---|---|---|---|---|---|
+    | fix (odd k) | 32/56 = 57.1 % | 39.3 / 3.6 / 0 % | 1/47 = 2.1 % | 0.94 s | 5.95 | 82.7 % | 4.4 % |
+    | base (even k) | 28/52 = 53.8 % | 32.7 / 7.7 / 5.8 % | 6/40 = 15.0 % | 1.92 s | 6.68 | 73.6 % | 15.0 % |
+
+    - Fix - base: completeness +3.3 points, kills with no loot step -12.9 points, kill -> loot
+      start 0.49 x, engaged s per kill -0.73 s.
+    - The fix arm's deaths: EXP line 23, the line after a hold 22.
+    - gone_no_line 7, of which 1 was a real kill of ours (no item).
+  - Left-behind causes: no loot step 15; in the plan, unclicked 14; outside, near the death cell
+    10; outside 9; fell after the step 5; clicked, became a walk 1. Taken away by the search 27
+    times, the steer 5.
+  - The reader: base EXP precision 91/93 = 0.978, recall 0.989, lag p50 0.28 / p90 0.40 s.
+    Best 2 min: 8 kills from minute 9.3.
+
+**VERDICT (2026-10-20 13:5x, 4 runs pooled, `arm_judge.py keepdead` over the four sessions):
+NOT ADOPTED. P3 fails (0.742 x against <= 0.70 x); both tiers of the rule require it.**
+
+| check | pooled value | bar | result |
+|---|---|---|---|
+| P1 completeness, fix - base | **+13.3 points** (142/242 = 58.7 % vs 114/251 = 45.4 %) | >= +6.5 (null -5.4 .. +6.3) | PASS |
+| P2 kills with no loot step, fix - base | **-10.8 points** (5/194 = 2.6 % vs 24/180 = 13.3 %) | <= -5.5 (null -5.1 .. +4.2) | PASS |
+| P3 kill -> loot start mean, fix / base | **0.742 x** (0.97 vs 1.31 s) | <= 0.70 x (null 0.737 .. 1.156 x) | **FAIL** |
+| G4 engaged s per kill, fix - base | +0.34 s (6.48 vs 6.14) | <= 0.176 x 36.1 = 6.35 s | PASS |
+| G5 landing, fix - base | +3.6 points (79.0 vs 75.4 %) | >= -8 | PASS |
+| G6 hard bars | 0 / 0 / 0 (Creamy 1, counted) | zero | PASS |
+| tier 2: completeness fix >= base | yes | (needs P2, P3, G4-G6) | - |
+
+- **The pooled row (4 runs):** 461 engagements; landing 356/461 = 77.2 % (73.2-80.8); 99.7
+  kills / h; seen 20.2 / 10 min; dead calls without a real death 49/384 = 12.8 %;
+  **LOOT COMPLETENESS 263/531 = 49.5 %** (left behind 36 % / looters 14 % / expired 1 %; 192 /
+  72 / 4 items); Creamy 1; hard bars 0 / 0 / 0. Batt: 61/63 = 96.8 %.
+- **Reported, not deciding:**
+  - fates per arm: left behind 29.3 vs 40.2 %, looters 11.6 vs 13.2 %, expired 0.4 vs 1.2 %;
+  - dead calls without a real death, per arm: 4.7 vs 20.6 %;
+  - gone_no_line 38 in the fix arm, of which 5 were real kills of ours (3 items, none picked);
+  - left-behind causes, 4 runs (268 items not picked): in the plan, unclicked 80; no loot step
+    66; outside, near the death cell 62; outside 28; fell after the step 22; clicked, became a
+    walk 10. Taken away by the search 125 times, the steer 22.
+- **Reading (not a re-decision):** the fix arm's gain is that it LOOTS every real kill it keeps
+  (no-loot kills 2.6 vs 13.3 %) with far fewer false deaths, not that its loot starts sooner:
+  it waits for the line plus `exp_loot_delay_s` 0.5 s. P3 measured the wrong mechanism for this
+  change; the bar stands as written. Run 4's base arm had slow loot starts (1.92 s mean), which
+  pulled the pooled ratio from 0.863 x (runs 1-3) to 0.742 x, still short of the bar and inside
+  its null.
+- **The base for what follows:** v43's + the pocket escape (unchanged: PARAMS[44] without
+  `exp_dead`). Adopting v48 regardless of P3 is Batt's call; it was flagged in the ~13:00
+  report.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
