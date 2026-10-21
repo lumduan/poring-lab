@@ -30,6 +30,16 @@
 #                    atcommand.cpp ACMD_FUNC(resetstat) = pc_resetstate, ACMD_FUNC(resetskill) =
 #                    pc_resetskill(sd, 1). allocate_stat@1's restore (a stat point is otherwise
 #                    irreversible) and learn_skill@1's server-side restore.
+#   jobchange      lab only (Batt, 2026-10-21, on the day report: "Yes, add jobchange to group 20
+#                  (logged)"): the dedicated CRUSADER test character (a 2nd character on this account,
+#                  docs/planning/crusader-orcsdun01.md) goes Novice -> Swordman -> Crusader. Typed as
+#                  @job; pinned atcommand.cpp:1203 ACMD_FUNC(jobchange) -> pc_jobchange. Group 20 is per
+#                  ACCOUNT, so the Novice GM could be changed too: every such command checks the
+#                  character's name + job on Basic Info first and refuses on a mismatch.
+#   questskill     lab only (Batt, 2026-10-21: "GRANT them by GM command too ... add only that
+#                  permission to group 20, logged"): the Crusader's quest skills 144 Moving HP
+#                  Recovery, 145 Fatal Blow (Attack Weak Point), 146 Auto Berserk, 1002 Shrink.
+#                  Pinned atcommand.cpp:3819 ACMD_FUNC(questskill) -> pc_skill(..., ADDSKILL_PERMANENT).
 # LogCommands: every command lands in atcommandlog (offline audit). Inherits Player for the basics.
 # No permissions beyond Player's otherwise: no zeny/stat commands, no any_warp, no hide_session.
 Header:
@@ -60,3 +70,5 @@ Body:
       joblevelup: true
       resetstat: true
       resetskill: true
+      jobchange: true
+      questskill: true
