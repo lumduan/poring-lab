@@ -41,6 +41,11 @@ why: on them the diff alone still called ~5.5 cells a kill empty, and 1 of our i
 (run 2). The registration shift is NO "moved" signal: phase correlation returns (0, 0) when the
 true move exceeds its range, and a still GM's camera drifts 0-8 px.
 
+THE CLASSIFIER IS SHARED (2026-10-21, v54 "the fast scan"): ``classify`` (the 25 verdicts from
+the two frames, the projected cells and the matcher) is the ONE implementation -- this study and
+hunt_flow's live scan (``loot_fast_scan``) both call it; the runner passes its BGR grabs
+(``order="BGR"``), the recordings are RGB.
+
     loot_sight.py SID [SID ...] [--from-line] [--after 1.0] [--before 0.4] [--thr 0.04]
                   [--all-kills] [--json OUT]
 """
@@ -65,6 +70,8 @@ DIFF = 40  # a pixel CHANGED when a channel moved by more than this (JPEG q80 no
 # (20261020T183131, 44 kills with the GM still, 1100 cells): every cell holding an item changed by
 # >= 0.079 (n 39); THR = half of that. Runs 2-4 are held out.
 THR = 0.04
+MATCH_RADIUS = 110  # px: the matcher's square around the GM's projected cell (half side)
+GM_PAD = (10.0, 0.0, 10.0, 10.0)  # px around drop_blobs.GM_BOX: the GM's sprite "covers" a cell
 
 
 def patch(c_uv: Sequence[float], shape: Sequence[int]) -> tuple[int, int, int, int]:
@@ -152,6 +159,60 @@ def cells_of_points(pts: Iterable[Sequence[float]], cells: Sequence[tuple[int, i
     return out
 
 
+def five_by_five(own: Sequence[int]) -> list[tuple[int, int]]:
+    """PURE: the 25 cells around ``own`` (the drawn GM's cell), row by row (dy, then dx) -- index
+    12 is ``own`` itself."""
+    return [(int(own[0]) + dx, int(own[1]) + dy) for dy in (-2, -1, 0, 1, 2)
+            for dx in (-2, -1, 0, 1, 2)]  # fmt: skip
+
+
+def matcher_ground(img: Any, centre: Sequence[float], tpls: Sequence[Any], order: str = "RGB",
+                   radius: int = MATCH_RADIUS) -> list[tuple[float, float]]:  # fmt: skip
+    """PURE: the item matcher's hits (``item_icons.find_items``, its tuned thresholds) in the
+    square of half side ``radius`` around ``centre``, as GROUND points (the sprite centre minus
+    its template's anchor). ``order``: the frame's channel order ('RGB' recordings, 'BGR' live)."""
+    import item_icons as ii
+
+    anchors = {t.item_id: t.anchor for t in tpls}
+    out = []
+    for u, v, iid, *_ in ii.find_items(img, (float(centre[0]), float(centre[1])), radius, tpls,
+                                       order=order):  # fmt: skip
+        an = anchors.get(int(iid), (0.0, 0.0))
+        out.append((float(u) - an[0], float(v) - an[1]))
+    return out
+
+
+def classify(before: Any, after: Any, cells: Sequence[tuple[int, int]],
+             uv: Sequence[Sequence[float]], own: Sequence[int], ground: Iterable[Sequence[float]],
+             thr: float = THR, max_shift_px: int = 99, gm_box: Sequence[float] | None = None
+             ) -> dict[str, Any]:  # fmt: skip
+    """PURE -- OPTION C's per-cell classification, the ONE implementation (this study and
+    hunt_flow's v54 fast scan). ``before``: the frame ~0.45 s before the EXP line; ``after``: the
+    STAND frame; ``cells`` / ``uv``: the cells and their projected centres on ``after`` (the
+    camera on the drawn GM, standing on ``own``); ``ground``: the matcher's ground points
+    (``matcher_ground`` on ``after``). The before frame is registered onto the after frame
+    (``diff_map``, around ``own``'s pixel) and each cell's patch gets its changed share; a
+    registration shift above ``max_shift_px`` makes every cell changed. Returns {"verdicts":
+    cell -> "seen" | "unsure" | "empty" (``verdicts``), "changed": cell -> share, "covered": the
+    cells the GM's sprite covers (``own`` + any centre inside drop_blobs.GM_BOX + GM_PAD),
+    "shift": the registration (dy, dx)}."""
+    import drop_blobs as db
+
+    own_ = (int(own[0]), int(own[1]))
+    centre = next((p for c, p in zip(cells, uv, strict=True) if tuple(c) == own_), uv[0])
+    md, org, sh = diff_map(before, after, centre)
+    ch = {c: 1.0 for c in cells} if max(abs(sh[0]), abs(sh[1])) > max_shift_px else {}
+    if not ch:
+        ch = {c: changed_share(md, org, patch(p, after.shape))
+              for c, p in zip(cells, uv, strict=True)}  # fmt: skip
+    gb = db.GM_BOX if gm_box is None else gm_box
+    cov_box = (gb[0] - GM_PAD[0], gb[1] - GM_PAD[1], gb[2] + GM_PAD[2], gb[3] + GM_PAD[3])
+    covered = {c for c, p in zip(cells, uv, strict=True) if c == own_ or in_box(p, cov_box)}
+    seen = cells_of_points(ground, cells, uv)
+    return {"verdicts": verdicts(cells, ch, seen, covered, thr), "changed": ch,
+            "covered": covered, "shift": sh}  # fmt: skip
+
+
 def server_spans(events: Sequence[Mapping[str, Any]]) -> list[tuple[int, int, int, int, int, int]]:
     """PURE: each floor item's (floor_id, item_id, x, y, t_appear, t_vanish) on its SERVER cell
     (the cell the hover must hit; t_vanish a large number while still there at the end)."""
@@ -181,15 +242,18 @@ def line_anchor(kill_t: int, lines: Sequence[int], within_s: float = 3.0) -> int
 
 
 def session(sid: str, after_s: float, before_s: float, thr: float, lag_s: float = 0.5,
-            from_line: bool = False, still_only: bool = True, max_shift_px: int = 99
-            ) -> list[dict[str, Any]]:  # fmt: skip
+            from_line: bool = False, still_only: bool = True, max_shift_px: int = 99,
+            limit: int | None = None, bgr: bool = False) -> list[dict[str, Any]]:  # fmt: skip
     """One record per kill of ours with both frames and the GM still. ``from_line``: the frames
     are timed from the EXP line's first frame (as a live runner can: before = line - before_s,
     after = line + after_s), kills without a line skipped; else from the server's kill.
     ``still_only`` False keeps the kills where the GM moved between the frames (packets): a live
-    runner cannot tell, so its camera's move must turn the cells UNSURE by itself."""
+    runner cannot tell, so its camera's move must turn the cells UNSURE by itself. ``limit``: the
+    first records only (the tests); ``bgr``: the frames handed to ``classify`` in the LIVE
+    runner's channel order (BGR, the matcher told so) -- the same verdicts are expected."""
     import drop_blobs as db
     import item_icons as ii
+    import numpy as np
 
     ev = db.load_events(sid)
     lines: list[int] = []
@@ -201,10 +265,11 @@ def session(sid: str, after_s: float, before_s: float, thr: float, lag_s: float 
     proj = db.Projector()
     frames = db.load_frames(sid)
     tpls = ii.load_templates()
-    anchors = {t.item_id: t.anchor for t in tpls}
     items = server_spans(ev)
     out: list[dict[str, Any]] = []
     for k in db.kills_with_drops(ev, pos):
+        if limit is not None and len(out) >= limit:
+            break
         t_a = k.t
         if from_line:
             la = line_anchor(k.t, lines)
@@ -224,30 +289,16 @@ def session(sid: str, after_s: float, before_s: float, thr: float, lag_s: float 
             out.append({"sid": sid, "t": k.t, "moved": True})
             continue
         r0 = (round(o_a[0]), round(o_a[1]))
-        cells = [(r0[0] + dx, r0[1] + dy) for dy in (-2, -1, 0, 1, 2) for dx in (-2, -1, 0, 1, 2)]
+        cells = five_by_five(r0)
         uv = [tuple(float(x) for x in p) for p in proj.project(o_a, cells)]
         img_a, img_b = db.read_rgb(fa[1]), db.read_rgb(fb[1])
-        md, org, sh = diff_map(img_b, img_a, uv[12])
+        if bgr:  # as the runner grabs them
+            img_a, img_b = (np.ascontiguousarray(img_a[..., ::-1]),
+                            np.ascontiguousarray(img_b[..., ::-1]))  # fmt: skip
+        ground_ = matcher_ground(img_a, uv[12], tpls, order="BGR" if bgr else "RGB")
         # --max-shift: tried as a "camera moved" signal and NOT one (see the module doc)
-        ch = {c: 1.0 for c in cells} if max(abs(sh[0]), abs(sh[1])) > max_shift_px else {}
-        if not ch:
-            ch = {c: changed_share(md, org, patch(p, img_a.shape))
-                  for c, p in zip(cells, uv, strict=True)}  # fmt: skip
-        gm_box = db.GM_BOX
-        covered = {c for c, p in zip(cells, uv, strict=True)
-                   if c == r0 or in_box(p, (gm_box[0] - 10, gm_box[1], gm_box[2] + 10,
-                                            gm_box[3] + 10))}  # fmt: skip
-        strict_h = ii.find_items(img_a, uv[12], 110, tpls)
-
-        def ground(hs: Sequence[Any]) -> list[tuple[float, float]]:
-            res = []
-            for u, v, iid, *_ in hs:
-                an = anchors.get(int(iid), (0.0, 0.0))
-                res.append((float(u) - an[0], float(v) - an[1]))
-            return res
-
-        st_c = cells_of_points(ground(strict_h), cells, uv)
-        ver = verdicts(cells, ch, st_c, covered, thr)
+        cl_ = classify(img_b, img_a, cells, uv, r0, ground_, thr, max_shift_px)
+        ver, ch, covered, sh = cl_["verdicts"], cl_["changed"], cl_["covered"], cl_["shift"]
         ts = fa[0] - int(lag_s * NS)
         mine = {d.floor_id for d in k.drops}
         present = [((x, y), fid in mine, iid) for fid, iid, x, y, t0, t1 in items
@@ -262,7 +313,7 @@ def session(sid: str, after_s: float, before_s: float, thr: float, lag_s: float 
                 recs.append({"cell": list(c), "ours": ours, "item_id": iid, "verdict": ver[c]})
         out.append({"sid": sid, "t": k.t, "moved": False, "drops": len(k.drops),
                     "cells": Counter(ver.values()), "items": recs, "n1": n1, "n2": n2,
-                    "hits": len(strict_h), "gm_moved": moved, "shift": list(sh)})  # fmt: skip
+                    "hits": len(ground_), "gm_moved": moved, "shift": list(sh)})  # fmt: skip
     return out
 
 

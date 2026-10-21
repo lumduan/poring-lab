@@ -1601,3 +1601,94 @@ def test_v53_the_union_plan_adds_the_believed_death_cells_3x3_outside_the_gms_5x
     assert "union_ = gm_union_on(prm, k_g)" in body
     assert "(gm_union_cells if union_ else gm_scan_cells)(" in body
     assert '"union": c_ in extra_cells,' in body
+
+
+def test_v54_the_fast_scan_hovers_the_3x3_first_then_only_the_edge_cells_option_c_keeps() -> None:
+    """Batt 2026-10-21 ~16:4x: "hover the 3x3 around the drawn GM FIRST (death-cell side first),
+    then the 5x5 edge ONLY on cells whose image changed since before the kill"."""
+    gm, toward = (10, 10), (11, 10)  # the believed death cell east of the GM
+    inner = hf.gm_scan_cells(gm, toward, edge=False)
+    assert inner[0] == gm and inner[1] == toward  # its own cell, then the death cell's side
+    assert inner[1:5] == [(11, 10), (10, 9), (11, 9), (10, 11)]  # nearest the death cell first
+    edge = hf.gm_scan_cells(gm, toward)[9:]
+    ver = {c: "empty" for c in edge}
+    ver[(12, 12)] = "unsure"
+    ver[(8, 8)] = "unsure"  # the far side: kept, after the seen cells
+    ver[(12, 10)] = "seen"
+    del ver[(9, 12)]  # no verdict -> unsure (never skipped)
+    for c in inner:
+        ver[c] = "empty"  # the 3 x 3 is hovered whatever option C says
+    q, skipped = hf.fast_scan_cells(gm, toward, ver, full_edge=False)
+    assert q[:9] == inner
+    kept = [c for c in edge if c in ((12, 12), (8, 8), (9, 12))]  # the base's order
+    assert q[9:] == [(12, 10), *kept]  # the matcher's cell first, then the unsure ones
+    assert sorted(skipped) == sorted(c for c in edge if ver.get(c) == "empty")
+    assert len(skipped) == 12 and not set(skipped) & set(q) and len(set(q)) == len(q)
+    # the moved gate (or no classification): the whole edge, the base's cells in its order
+    assert hf.fast_scan_cells(gm, toward, ver, full_edge=True) == (hf.gm_scan_cells(gm, toward),
+                                                                   [])  # fmt: skip
+    assert hf.fast_scan_cells(gm, toward, {}, full_edge=False) == (hf.gm_scan_cells(gm, toward),
+                                                                   [])  # fmt: skip
+    assert hf.fast_scan_cells(gm, toward, ver, False, edge=False) == (inner, [])
+
+
+def test_v54_arms_odd_k_fast_even_k_the_v52_pass_unchanged() -> None:
+    p = hf.PARAMS[54]
+    knobs = ("loot_fast_scan", "loot_fast_scan_ab", "loot_fast_before_s", "loot_fast_before_max_s",
+             "loot_fast_moved_cells", "loot_fast_thr")  # fmt: skip
+    assert {k: v for k, v in p.items() if k not in knobs} == hf.PARAMS[52]  # v52's base, not v53
+    assert p["loot_fast_before_s"] == 0.45 and p["loot_fast_thr"] == 0.04  # loot_sight's preset
+    assert [hf.fast_scan_on(p, k) for k in (1, 2, 3, 4)] == [True, False, True, False]
+    assert not any(hf.fast_scan_on(hf.PARAMS[v], 1) for v in hf.PARAMS if v < 54)
+    assert not hf.gm_union_on(p, 1)  # v53's union stays off
+    src = Path(hf.__file__).read_text()
+    body = src.split("def loot_gm_steps(", 1)[1].split("def loot_fixed_run(", 1)[0]
+    # the fix arm plans with fast_plan; every other arm keeps v52's exact call
+    assert "fast_on = fast_scan_on(prm, k_g)" in body
+    assert "if fast_on:  # v54" in body and "queue_ = fast_plan(ref)" in body
+    v52_call = (
+        "queue_ = (gm_union_cells if union_ else gm_scan_cells)(\n"
+        '                            ref, dcell, bool(prm.get("loot_gm_edge", True)))'
+    )
+    assert v52_call in body
+    # the same hover / click code: one hover helper, one HAND click site, the arm logged
+    assert body.count("agent.click(") == 1 and body.count("csw_h.check(") == 1
+    assert '"fast_scan": fast_on, "cls": fast_cls.get(c_) if fast_on else None,' in body
+    # ONE classifier: the runner calls loot_sight's, it has none of its own
+    assert "ls_.classify(" in body and "ls_.matcher_ground(" in body and 'order="BGR"' in body
+    assert "def classify(" not in src and "changed_share(" not in src
+    assert 'ev({"kind": "fast_scan", "k": k_g, **rec_})' in body
+    assert 'out["fast"] = fast_out' in body
+    # the ring keeps each frame's grab time; it fills for the fast scan; the matcher is loaded
+    assert "ring_frames.append((time.monotonic(), img3.copy(), int(t_)))" in src
+    assert '(prm.get("loot_blobs") or prm.get("loot_fast_scan"))' in src
+    assert 'if prm.get("loot_icons") or prm.get("loot_fast_scan"):' in src
+
+
+def test_v54_the_before_frame_and_the_odometry_moved_gate() -> None:
+    prm = hf.PARAMS[54]
+    line = 100 * S
+    tgt = line - int(0.45 * S)
+    ring = [(0.0, "f0", tgt - int(0.9 * S)), (0.0, "f1", tgt - int(0.15 * S)),
+            (0.0, "f2", tgt + int(0.05 * S)), (0.0, "f3", line)]  # fmt: skip
+    assert hf.pick_before(ring, tgt, 0.4) == ("ok", tgt - int(0.15 * S), "f1")
+    assert hf.pick_before(ring[2:], tgt, 0.4) == ("none", None, None)
+    assert hf.pick_before([], tgt, 0.4) == ("none", None, None)
+    assert hf.pick_before([ring[0], ring[2]], tgt, 0.4) == ("old", tgt - int(0.9 * S), None)
+    assert hf.pick_before([(0.0, "old-format")], tgt, 0.4) == ("none", None, None)
+    t_st = line + int(0.7 * S)
+    still = [(tgt - int(0.5 * S), np.array([5.0, 5.0])), (tgt, np.array([5.05, 5.0])),
+             (t_st - int(0.05 * S), np.array([5.1, 4.95]))]  # fmt: skip
+    g = hf.fast_gate(line, ring, still, t_st, prm)
+    assert g["gate"] == "ok" and g["before"] == "f1" and g["before_age_s"] == 0.15
+    assert g["odo_cells"] == 0.1
+    walked = [*still[:2], (t_st - int(0.05 * S), np.array([6.0, 5.0]))]  # a cell between them
+    g = hf.fast_gate(line, ring, walked, t_st, prm)
+    assert g["gate"] == "moved" and g["before"] is None and g["odo_cells"] == 1.0
+    assert hf.fast_gate(None, ring, still, t_st, prm)["gate"] == "no_line"
+    assert hf.fast_gate(line, ring[2:], still, t_st, prm)["gate"] == "no_before"
+    assert hf.fast_gate(line, [ring[0], ring[3]], still, t_st, prm)["gate"] == "old_before"
+    # the odometry must cover both frames: none before the before frame, or a stalled thread
+    assert hf.fast_gate(line, ring, still[1:], t_st, prm)["gate"] == "no_odo"
+    assert hf.fast_gate(line, ring, still[:2], t_st, prm)["gate"] == "no_odo"
+    assert hf.odo_moved([], 0, 1) is None
