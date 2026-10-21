@@ -159,6 +159,49 @@ command: `LogCommands: true`).
   "1" only, learn_skill@1). The Swordman and Crusader trees need their own binding and digit
   references: a prove step on banked frames before any live click.
 
+### 2b. BUILT 2026-10-21 17:16-17:52 (the client; every GM line through `scripts/crusader.py`, bd68eec)
+
+- **The character:** `Crus4b7e2`, slot 2 of the GM account (account 2000002, group 20), char id
+  150003. Made by the client's own Make Character UI (Human, the default look = the Novice GM's).
+  The name is in `data/crusader/char.json` (gitignored).
+- **The steps** (frames under the NAS scratch-archive):
+  1. `@warp prt_fild08 170 375` (bench's outdoor stand);
+  2. `@joblevelup 9`, Basic Skill 9 by learn_skill@1's own rule;
+  3. `@job 1`, `@joblevelup 49`, the Swordman skills;
+  4. `@job 14` at Swordman Job 50, `@joblevelup 49`, the Crusader skills, Endure's 10th level;
+  5. `@questskill 144 / 145 / 146 / 1002`, `@baselevelup 59`;
+  6. the stats by the status window's '+' (146 clicks);
+  7. `@item` x 9, the 7 items equipped by double-clicks in the Eqp tab.
+- **The DB read-back (17:52, after the server's save):**
+  - class 14, Base 60 / Job 50;
+  - STR 45 AGI 60 VIT 25 INT 1 DEX 20 LUK 1, status points 15, skill points 1;
+  - MaxHP 5260, MaxSP 312;
+  - skills: NV_BASIC 9; SM_SWORD 10, SM_RECOVERY 10, SM_BASH 10, SM_PROVOKE 5, SM_MAGNUM 5,
+    SM_ENDURE 10; CR_TRUST 10, AL_CURE 1, AL_DP 10, AL_DEMONBANE 10, CR_AUTOGUARD 10,
+    KN_RIDING 1, KN_CAVALIERMASTERY 5; quest 144, 145, 146, 1002;
+  - equipped: Flamberge 1129, Shield 2105, Full Plate 2316, Helm 2228, Manteau 2505, Boots 2405,
+    Geek Glasses 2243;
+  - carried: White Potion 504 x 50, Fly Wing 601 x 20, the starter Knife and Cotton Shirt.
+- **The status window agrees with crusader-build.md's predictions:**
+  - ATK 232 + 0, DEF 31 + 32, HIT 83, FLEE 122 + 1, ASPD 163;
+  - HP 5260; weight 1820 / 4150 (43.9 %).
+- **What was met on the way (each is recorded, none was worked around):**
+  - `@job Swordman` answered "@job failed.": the permission WAS live (a refused command is said
+    as chat). The name lookup compares against the server's job names, which are localized.
+    `@job 1` / `@job 14` (the ids) worked.
+  - The warp's loading screen was still up when the next line was due: the identity check
+    refused (name crop 1,624 px off) and NOTHING was sent. A live negative case of the check.
+  - Skills reach the DB only at the server's save. So each skill was proven by the rule's own
+    points read (P -> P - n) and judged frames, and the DB confirmed all of them after the save.
+  - On the Crusader tab the modal reader's no-modal side read 0.85 (bar 0.85): the reference was
+    cut over the Novice tree. For that tab the read was made one-sided (the modal's own pixels:
+    >= 0.85 present, < 0.5 absent, else unknown), with the same clicks and the same points
+    check. It is noted in the scratch builder; learn_skill1.py is unchanged.
+  - Auto Guard shows a cast-level selector ("1 / 10"): the client casts level 1 unless it is
+    raised. S4 sets it to 10 before the hotkey is made.
+  - Two-hand / Spear skills were never touched; 1 skill point and 15 status points are left
+    (Batt's plan; the 15 are the DEX reserve for the re-spec loop).
+
 ## 3. The survival skills (build and test on prt_fild08, immunity OFF; each pre-registered)
 
 The test bed: the Crusader at its full build on prt_fild08 with immunity OFF. prt_fild08's own
