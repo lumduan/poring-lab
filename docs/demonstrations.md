@@ -13815,6 +13815,34 @@ thresholds (60 % / 25 % / 200 HP/s) are tuned only through a new pre-registratio
   - T-S2 / T-S3 keep 3.96's bars. They wait for S1b and S6b, since their rules read S1 and stop
     on S6.
 
+### 3.96b crusader-survival@1b: S1 and S6 re-registered after T-S6 trial 1 (pre-registered 2026-10-21 __TIME__ ICT, the commit time, BEFORE either fix is built or any trial runs; 3.96's decision rule: "One that fails is fixed and re-registered, never re-run under these bars")
+
+**What failed (3.96 run log):** S1, the bar's length (49.1 % of reads within 5 %); S6, the death
+dialog's 10-04 signature (distance 8.96 on this client's dialog, bar 6.0).
+
+**The fixes:**
+- **S1b, the HP read = Basic Info's PERCENT text** right of the HP bar ("95%" ... "1%"):
+  - black digits on the window's white, like the weight line;
+  - an integer 0-100;
+  - read by digit templates cut from frames whose true HP the packets give (the diagnostic death
+    `crusader/deathcap/`: 217 frames + packets);
+  - an unreadable or unstable read is None, and a rule does nothing on None;
+  - the bar's length is no longer used.
+- **S6b, the death dialog:** a new variant `dead_game_option@ko`, cut LIVE from this client's
+  dialog (the old one is kept as a variant). `ro_agent.is_state` matches either. The rule is
+  unchanged: stop, record, the known 2nd button, then `@alive`.
+
+**Bars (the same trials and packs as 3.96; amendment 1's stand 268,107):**
+1. **S1b:** |percent read / 100 - true HP / MaxHP| <= **2 %** on >= 95 % of reads with true HP
+   < 100 %, n >= 200, over the trials (the server's HP at the read time minus the frame offset).
+   Unreadable reads are reported, and must be <= 5 % of reads. Before any live trial, the reader
+   is proven on HELD-OUT diagnostic frames (every 2nd frame cuts the templates, the others test):
+   >= 98 % exact percent where the true percent is stable for +-0.5 s.
+2. **S6b:** in T-S6 (pack E, no keys) the runner stops within **2 s** of the server's death (our own
+   "died" vanish). It sends nothing after it, and the dialog is closed only by its known button.
+   One trial; if it fails, S6 goes to Batt.
+3. S2, S3, S4 keep 3.96's bars, now run on S1b's read.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
