@@ -194,3 +194,50 @@ def test_the_shared_classifier_reproduces_loot_sight_on_a_real_session() -> None
         # a positive case: our items lay on these cells, and none on an "empty" one
         assert sum(len(r["items"]) for r in recs) == 9  # 8 ours, 1 not ours
         assert not any(i["verdict"] == "empty" for r in recs for i in r["items"])
+
+
+def test_the_runners_fast_verdicts_give_the_same_classes_on_real_frames() -> None:
+    """POSITIVE CASE for the RUNNER's path (hunt_flow.fast_verdicts: BGR grabs, the matcher told
+    so, the cells projected by a callable, then the shared ``classify``) on the same real kills:
+    the same seen / unsure / empty counts, matcher hits and registration as loot_sight's."""
+    from collections import Counter
+
+    import drop_blobs as db
+    import hunt_flow as hf
+    import item_icons as ii
+
+    if not ((db.DEMO_ROOT / REAL_SID / "packets.jsonl.gz").exists()
+            and (db.REC_ROOT / REAL_SID / "frames").is_dir()
+            and (ii.ICONS_DIR / "index.json").exists()):  # fmt: skip
+        pytest.skip("the real session's packets / frames / item templates are not here")
+    import json
+
+    ev = db.load_events(REAL_SID)
+    bev = (db.DEMO_ROOT / REAL_SID / "events.jsonl").read_text().splitlines()
+    lines = sorted(int(e["line_t_ns"]) for e in map(json.loads, filter(None, bev))
+                   if e.get("kind") == "exp_dead" and e.get("line_t_ns"))  # fmt: skip
+    pos, proj, frames = db.Positions(ev), db.Projector(), db.load_frames(REAL_SID)
+    tpls = ii.load_templates()
+    want = {r[0]: r for r in REAL_12[:6]}
+    n = 0
+    for k in db.kills_with_drops(ev, pos):
+        if k.t not in want:
+            continue
+        la = ls.line_anchor(k.t, lines)
+        assert la is not None
+        fa = db.frame_at(frames, la + int(0.5 * ls.NS))
+        fb = db.frame_before(frames, la - int(0.45 * ls.NS))
+        assert fa is not None and fb is not None
+        o_a = pos.gm_at(fa[0] - int(0.5 * ls.NS))
+        assert o_a is not None
+        r0 = (round(o_a[0]), round(o_a[1]))
+        before = np.ascontiguousarray(db.read_rgb(fb[1])[..., ::-1])
+        stand = np.ascontiguousarray(db.read_rgb(fa[1])[..., ::-1])
+        ver, info = hf.fast_verdicts(before, stand, lambda cs, o=o_a: proj.project(o, cs), r0,
+                                     tpls, ls.THR)  # fmt: skip
+        c = Counter(ver.values())
+        w = want[k.t]
+        assert (c["seen"], c["unsure"], c["empty"]) == w[1:4], k.t
+        assert info["hits"] == w[5] and tuple(info["shift"]) == w[6]
+        n += 1
+    assert n == 6

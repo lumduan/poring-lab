@@ -2115,6 +2115,25 @@ def fast_gate(t_line: int | None, ring: Sequence[Sequence[Any]], hist: Sequence[
     return out
 
 
+def fast_verdicts(before: Any, stand: Any, project: Any, ref: Cell, templates: Sequence[Any],
+                  thr: float) -> tuple[dict[Cell, str], dict[str, Any]]:  # fmt: skip
+    """PURE given ``project`` (v54): option C's verdicts for the 25 cells around the drawn GM's cell
+    ``ref`` -- ``project`` maps absolute cells to their pixels on the STAND frame (the runner: the
+    World on ``ref``), the item matcher on the stand frame (BGR, as grabbed; no templates -> no
+    "seen"), then ``loot_sight.classify`` (the ONE classifier) against the BEFORE frame. Returns
+    (cell -> "seen" | "unsure" | "empty", {"shift", "hits"})."""
+    import loot_sight as ls_
+
+    cells = ls_.five_by_five(ref)
+    uv = [(float(p[0]), float(p[1]))
+          for p in project([(float(c[0]), float(c[1])) for c in cells])]  # fmt: skip
+    ground: list[tuple[float, float]] = []
+    if templates:
+        ground = ls_.matcher_ground(stand, uv[12], templates, order="BGR")
+    cl = ls_.classify(before, stand, cells, uv, ref, ground, thr)
+    return dict(cl["verdicts"]), {"shift": list(cl["shift"]), "hits": len(ground)}
+
+
 def hand_seen(verdict: str, rec: Mapping[str, float], pickup_min: float) -> str:
     """PURE (3.90): one hover's cursor (cursor_sword.check) as the scan reads it: "sword" (a unit
     under the pointer), "hand" (the PICKUP cursor: an item; recall >= ``pickup_min``), "empty"
@@ -3430,12 +3449,15 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 def fast_plan(ref_: Cell) -> list[Cell]:
                     """v54 (Batt 2026-10-21 ~16:4x, THE FAST SCAN): this pass's cells -- the
                     drawn GM's 3 x 3 first, then only the 5 x 5 edge cells option C does not call
-                    EMPTY (``loot_sight.classify``: the before frame from the ring against a fresh
+                    EMPTY (``fast_verdicts``: the before frame from the ring against a fresh
                     STAND frame, the cells projected on the drawn GM, the item matcher), the whole
                     edge when ``fast_gate`` fails (no EXP line, no / an old before frame, the
                     floor odometry moved between the two frames) or the classification fails.
                     Logged as ``fast_scan`` (and in the step's ``fast``)."""
-                    import loot_sight as ls_
+
+                    def proj_(cs_: Sequence[tuple[float, float]]) -> Any:
+                        w_l.position = (int(ref_[0]), int(ref_[1]))
+                        return w_l.project(cs_)
 
                     t_f0 = time.monotonic()
                     t_st, img_st = screen.grab(gx0, gy0, gw, gh)
@@ -3452,19 +3474,11 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                             "odo_cells": g_["odo_cells"]}  # fmt: skip
                     if gate_ == "ok":
                         try:
-                            cells_ = ls_.five_by_five(ref_)
-                            w_l.position = (int(ref_[0]), int(ref_[1]))
-                            uv_ = [(float(p_[0]), float(p_[1])) for p_ in w_l.project(
-                                [(float(c_[0]), float(c_[1])) for c_ in cells_])]  # fmt: skip
-                            gr_: list[tuple[float, float]] = []  # the matcher: "seen"
-                            if icon_templates:
-                                gr_ = ls_.matcher_ground(stand_, uv_[12], icon_templates,
-                                                         order="BGR")  # fmt: skip
-                            cl_ = ls_.classify(g_["before"], stand_, cells_, uv_, ref_, gr_,
-                                               float(prm["loot_fast_thr"]))  # fmt: skip
-                            fast_cls.update(cl_["verdicts"])
-                            rec_["shift"] = list(cl_["shift"])
-                            rec_["hits"] = len(gr_)
+                            ver_, inf_ = fast_verdicts(g_["before"], stand_, proj_, ref_,
+                                                       icon_templates,
+                                                       float(prm["loot_fast_thr"]))  # fmt: skip
+                            fast_cls.update(ver_)
+                            rec_.update(inf_)
                         except Exception as e_:  # noqa: BLE001 -- never skip a cell on a fault
                             gate_ = rec_["gate"] = "error"
                             rec_["err"] = repr(e_)[:200]

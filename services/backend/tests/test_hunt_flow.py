@@ -1655,7 +1655,9 @@ def test_v54_arms_odd_k_fast_even_k_the_v52_pass_unchanged() -> None:
     assert body.count("agent.click(") == 1 and body.count("csw_h.check(") == 1
     assert '"fast_scan": fast_on, "cls": fast_cls.get(c_) if fast_on else None,' in body
     # ONE classifier: the runner calls loot_sight's, it has none of its own
-    assert "ls_.classify(" in body and "ls_.matcher_ground(" in body and 'order="BGR"' in body
+    assert "ver_, inf_ = fast_verdicts(" in body
+    fv = src.split("def fast_verdicts(", 1)[1].split("\ndef ", 1)[0]
+    assert "ls_.classify(" in fv and "ls_.matcher_ground(" in fv and 'order="BGR"' in fv
     assert "def classify(" not in src and "changed_share(" not in src
     assert 'ev({"kind": "fast_scan", "k": k_g, **rec_})' in body
     assert 'out["fast"] = fast_out' in body
