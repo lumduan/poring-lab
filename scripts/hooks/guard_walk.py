@@ -11,7 +11,13 @@ A WALKER is
   --recursive/--dereference-recursive/-d recurse.
 Its ROOTS are its path operands (default "."), resolved against the command's cwd: ~, $HOME and
 $PWD are expanded; a glob is cut at its first wildcard (never expanded: listing /mnt/* would
-trigger the automounts); then realpath.
+trigger the automounts); then realpath (so a symlink is judged by where it leads: the /dev/shm
+archive links onto the shared disk are refused).
+The cwd FOLLOWS the command's own `cd` / `pushd` (2026-10-21, Batt's infra decision: a
+`cd /dev/shm/poring-lab-rathena-src && grep -r … .` walked the shared disk at 09:22, because the
+relative root was judged against the session's cwd, the repo). A `cd` the hook cannot resolve
+($VAR, `cd -`, `popd`) makes the cwd UNKNOWN, and a later relative walk is refused. Subshell
+scoping is not tracked: a `cd` inside `( … )` is taken to persist (the stricter reading).
 
 REFUSES (exit 2, reason on stderr) a walker whose root
   1. is / itself;
@@ -112,13 +118,15 @@ def inside(path: str, base: str) -> bool:
     return path == base or path.startswith(base.rstrip("/") + "/")
 
 
-def resolve(word: str, cwd: str) -> str | None:
-    """A root operand as a real path, or None when it is built at run time."""
+def resolve(word: str, cwd: str | None) -> str | None:
+    """A root operand as a real path, or None when it is built at run time (or relative to a cwd
+    the hook could not follow)."""
     home = os.path.expanduser("~")
     if word == "~" or word.startswith("~/"):
         word = home + word[1:]
     for var, value in (("${HOME}", home), ("$HOME", home), ("${PWD}", cwd), ("$PWD", cwd)):
-        word = word.replace(var, value)
+        if value is not None:
+            word = word.replace(var, value)
     if "$" in word or "`" in word:
         return None
     cut = min((i for i, c in enumerate(word) if c in "*?["), default=-1)
@@ -126,6 +134,8 @@ def resolve(word: str, cwd: str) -> str | None:
         word = word[:cut]
         word = word if word.endswith("/") else os.path.dirname(word) or "."
     if not os.path.isabs(word):
+        if cwd is None:
+            return None
         word = os.path.join(cwd, word)
     plain = os.path.normpath(word)
     if plain == "/" or inside(plain, "/mnt"):
@@ -239,14 +249,29 @@ def walk_roots(words: list[str]) -> list[str] | None:
     return pos or ["."]
 
 
-def classify_words(words: list[str], cwd: str, depth: int = 0) -> str | None:
+def cd_target(words: list[str], cwd: str | None) -> tuple[bool, str | None]:
+    """(is a cd, the new cwd or None when unknown) for one simple command."""
+    words = unwrap(words)
+    if not words or words[0] not in ("cd", "pushd", "popd"):
+        return False, cwd
+    args = [w for w in words[1:] if w not in ("-L", "-P", "-e", "-@", "--")]
+    if words[0] == "popd" or (args and args[0] == "-"):
+        return True, None
+    if not args:
+        return True, os.path.expanduser("~")
+    return True, resolve(args[0], cwd)
+
+
+def classify_words(words: list[str], cwd: str | None, depth: int = 0) -> str | None:
     words = unwrap(words)
     if not words:
         return None
     head = words[0].rsplit("/", 1)[-1]
     if head in SHELLS and "-c" in words[1:] and depth < 4:
         idx = words.index("-c", 1)
-        return classify(words[idx + 1], cwd, depth + 1) if idx + 1 < len(words) else None
+        if idx + 1 >= len(words):
+            return None
+        return classify(words[idx + 1], cwd, depth + 1, known=cwd is not None)
     roots = walk_roots(words)
     if roots is None:
         return None
@@ -254,26 +279,37 @@ def classify_words(words: list[str], cwd: str, depth: int = 0) -> str | None:
     for root in roots:
         real = resolve(root, cwd)
         if real is None:
-            return f"`{head}` walks from `{root}`, which is built at run time (a hook can't see it)"
+            return (
+                f"`{head}` walks from `{root}`, which is built at run time or relative to a "
+                "`cd` the hook could not follow (a hook can't see it)"
+            )
         why = root_reason(real, repo)
         if why:
             return f"`{head}` would walk {why}"
     return None
 
 
-def classify(command: str, cwd: str | None = None, depth: int = 0) -> str | None:
-    cwd = cwd or os.getcwd()
+def classify(
+    command: str, cwd: str | None = None, depth: int = 0, known: bool = True
+) -> str | None:
+    """The refusal reason, or None. ``known=False``: the caller's cwd is unknown (a `cd` it could
+    not follow), so relative roots are refused."""
+    here: str | None = (cwd or os.getcwd()) if known else None
     stripped, shell_bodies = strip_heredocs(command)
     try:
         simple = segments(stripped)
     except ValueError:
         return None  # unparsable: fail open (see FAIL DIRECTION)
     for words in simple:
-        reason = classify_words(words, cwd, depth)
+        is_cd, after = cd_target(words, here)
+        if is_cd:
+            here = after  # the command's own cd: later relative roots follow it
+            continue
+        reason = classify_words(words, here, depth)
         if reason:
             return reason
     for body in shell_bodies:
-        reason = classify(body, cwd, depth + 1)
+        reason = classify(body, cwd, depth + 1, known)
         if reason:
             return reason
     return None

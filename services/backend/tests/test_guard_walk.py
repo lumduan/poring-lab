@@ -107,6 +107,39 @@ def test_the_default_root_is_the_cwd(hook: ModuleType, paths: dict[str, str]) ->
     assert hook.classify("du -sh", paths["R"]) is None
 
 
+CD_REFUSED = [
+    # the command's own cd moves the cwd (2026-10-21: `cd <archive link> && grep -r … .` walked
+    # the shared disk because "." was judged against the session's cwd, the repo)
+    "cd {D} && grep -rn foo .", "cd {D}; rg foo", "cd {D}/sub && find . -name x",
+    "pushd {D} && du -sh .", "cd {D} && ls -R", "bash -c 'cd {D} && grep -r foo .'",
+    "cd {LINK} && grep -r foo .", "cd {LINK}/sub; rg foo sub2",
+    # a cd the hook cannot follow: later relative walks are refused, absolute ones still judged
+    "cd $SOMEWHERE && grep -r foo .", "cd - && rg foo", "popd; find . -name x",
+]  # fmt: skip
+CD_ALLOWED = [
+    "cd {M} && grep -r foo .", "cd {D} && grep foo sub/f.txt", "cd {D} && ls -la",
+    "cd {D} && cd {R} && rg foo", "cd $SOMEWHERE && rg foo {R}", "cd {D} && find {M} -name x",
+    "cd {R}/sub && grep -rn foo ..",
+]  # fmt: skip
+
+
+@pytest.mark.parametrize("command", CD_REFUSED)
+def test_a_walk_after_the_commands_own_cd_is_judged_from_there(
+    hook: ModuleType, paths: dict[str, str], tmp_path: Path, command: str
+) -> None:
+    link = tmp_path / "ram" / "link-to-disk"  # a RAM-side symlink onto the disk (the archive case)
+    if not link.exists():
+        link.symlink_to(paths["D"])
+    assert hook.classify(fill(command, {**paths, "LINK": str(link)}), paths["R"]) is not None
+
+
+@pytest.mark.parametrize("command", CD_ALLOWED)
+def test_a_cd_into_the_repo_or_ram_still_allows_the_walk(
+    hook: ModuleType, paths: dict[str, str], command: str
+) -> None:
+    assert hook.classify(fill(command, paths), paths["R"]) is None, command
+
+
 def test_home_and_pwd_are_expanded(
     hook: ModuleType, paths: dict[str, str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
