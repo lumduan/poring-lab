@@ -17,6 +17,8 @@ ALLOWED = {
     "scripts/ro_agent.py": (14, "UI only: the client's title bar, login / server / character "
                                 "screens, console tabs, the chat input, the operator's click CLI"),
     "scripts/dataset_activity.py": (1, "UI: the death dialog's return button (world clicks gated)"),
+    "scripts/survive.py": (1, "UI: the death dialog's return button, its known step (3.96 S6, "
+                              "the Crusader's survival trials; no world click)"),
     "scripts/safety_signal_check.py": (11, "deliberate positive cases: sword / talk / pickup "
                                            "read twice by pixels; dialog buttons by screenshot; "
                                            "the cancel measurement's, rec@0's (3.19) and rec@0b's "
