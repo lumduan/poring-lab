@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "A dedicated Crusader (Base 60 / Job 50, AGI-first, one-handed sword + shield, unmounted) hunting orcsdun01 with immunity OFF survives on pixel-read HP, potions, Fly Wing escapes and Auto Guard, using the hunt flow's striking, EXP-line dead, stand + one-pass HAND loot and heading search."
-status: "PROPOSED (plan + prep, 2026-10-21 16:1x). STOPPED for Batt's OK on the character creation and the one new permission (section 1). The dungeon run waits for the orcsdun01 detector to pass its pre-registered evaluation (../benchmarks/v2orc-vs-v1.md)."
+status: "ACCEPTED by Batt 2026-10-21 ~16:4x (character A + jobchange + questskill, all logged; LIVE since the guarded restart:rathena 16:45:35-16:47:46). The build and the survival skills on prt_fild08 proceed. The dungeon run waits for the orcsdun01 detector to pass its pre-registered evaluation (../benchmarks/v2orc-vs-v1.md)."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [orcsdun01-detector.md, crusader-build.md, crusader-orcsdun01-facts.md, ../benchmarks/v2orc-vs-v1.md, ../competition.md, ../demonstrations.md]
-next_action: "Batt: OK (or not) on section 1 (a 2nd character on the GM account via the client's own Make Character UI + `jobchange` for group 20). Then the build (section 2) and the survival skills on prt_fild08 (section 3), each pre-registered before its run."
+next_action: "The build (section 2, scripted, judged screenshots), then the survival skills S1-S6 on prt_fild08 (section 3), each pre-registered before its run; then tell Batt the orcsdun01 human demo (section 9) is ready to record."
 title: "A Crusader hunting Orc Dungeon F1 (orcsdun01) for real: the test character, the build, the survival skills and the order (plan)"
 date: 2026-10-21
 owner: Batt
@@ -85,28 +85,68 @@ command: `LogCommands: true`).
 - The character starts on **new_1-1 (53,111)** (pinned `start_point_pre`), the Novice training
   ground, which is NPC-dense. Its first action is `@warp` (mapmove) out. No world click happens
   there. Start items: Knife 1201 + Cotton Shirt 2301 (`start_items_pre`); start zeny 0.
-- **What Batt is asked:** (1) A, the 2nd character on the GM account; (2) `jobchange: true` in
-  group 20. Nothing is added before the answer.
+- ~~**What Batt is asked:** (1) A, the 2nd character on the GM account; (2) `jobchange: true` in
+  group 20.~~ ➡️ **ANSWERED (Batt, 2026-10-21 ~16:4x):** "1) Character A (2nd character on the GM
+  account, with the name+job check before every command). 2) Yes, add jobchange to group 20
+  (logged). 3) Quest skills: GRANT them by GM command too ... add only that permission to group
+  20, logged: Moving HP Recovery, Fatal Blow, Auto Berserk, Shrink. Moving HP Recovery matters: I
+  want to see whether HP regen keeps up while the bot walks and fights continuously."
+  - Applied: `jobchange` + `questskill` in group 20 (cc184ff, edited in place, logged). LIVE after
+    the guarded `restart:rathena@120` 16:45:35-16:47:46 (worst capture stall 10.4 %, 8 s above
+    10 %); the GM re-logged in 16:48:57 (`ro_agent recover gm`).
+  - The pinned `questskill` (atcommand.cpp:3819) grants by number, with no job check: 144 Moving HP
+    Recovery, 145 Fatal Blow (Attack Weak Point), 146 Auto Berserk, 1002 Shrink.
 
 ## 2. The build (verified numbers: crusader-build.md)
 
-### 2a. Verified so far (the parent's spot checks; the full build is PENDING in crusader-build.md)
+### 2a. The build (crusader-build.md, merged faca4a0; the parent re-checked the job bonus, base HP, ASPD, the prerequisites and the gear against the pinned files)
 
-- Status points at Base 60: **555** in all, 48 of them at Base 1 (pinned
-  `db/pre-re/statpoint.yml:36` and `:154`).
-- The raise cost, pre-renewal: **1 + (stat + 9) / 10** points to go from `stat` to `stat + 1`
-  (pinned `src/map/pc.cpp:8803`, the `#else` branch of `RENEWAL_STAT`).
-- Batt's estimate as BASE stats (before the job bonus): AGI 60 = 263 points, STR 45 = 164,
-  VIT 25 = 66, DEX 20 = 47, INT 1 and LUK 1 = 0. **540 of 555, so 15 are left.** The fit, the
-  job bonus, ASPD / FLEE / HIT / HP / SP and the alternatives: crusader-build.md.
-- The skill points: Batt's Swordman list sums to 50 (a Swordman at Job 50 has 49 points) and his
-  Crusader list to 47. That is 97 of 98 in all, "1 left", IF the Crusader's points may go into
-  Swordman skills. That rule is checked in crusader-build.md.
+- **Points:** 555 status points at Base 60 (48 at creation); the pre-re raise cost
+  1 + (stat + 9) / 10 (`pc.cpp:8803`). Skill points 9 + 49 + 49 = 107.
+- **Batt's skill lists fit with 1 point left:** Swordman 50 (49 earned + 1 Crusader point) +
+  Crusader 47 + Basic Skill 9 = 106 of 107.
+  - The Crusader tree inherits Swordman's (`skill_tree.yml:827-830`), so a Crusader point may buy
+    the 50th Swordman level.
+  - **The change Swordman -> Crusader must happen at Swordman Job 50**: `@joblevelup` to 50 BEFORE
+    `@job Crusader`.
+  - Hidden prerequisites, all inside Batt's lists: Divine Protection needs Cure 1, Cure needs
+    Faith 5, Demon Bane needs DP 3, Riding needs Endure 1.
+- **Stats (Batt's split read as ALLOCATED):** STR 45 / AGI 60 / VIT 25 / INT 1 / DEX 20 / LUK 1 =
+  540 of 555, **15 left**.
+  - The Crusader's Job 50 bonus is STR +7 AGI +2 VIT +7 INT +6 DEX +3 LUK +5 (`job_stats.yml`),
+    so the finals are 52 / 62 / 32 / 7 / 23 / 6.
+- **The numbers (Flamberge + Shield, unmounted):**
+  - ASPD 163.5 = amotion 365 (1H sword base 500, `job_aspd.yml`), an attack every 730 ms. The
+    shield costs no ASPD in pre-re.
+  - HIT 83, FLEE 122, MaxHP 5260 (2470 x 1.32 + Faith 2000), MaxSP 312.
+  - Hard DEF 31 (gear), soft DEF 32. Max weight 4150.
+- **The gear (by `@item`; the shop is named for the record):** Flamberge 1129 (1H sword, ATK 150,
+  elv 27, 60,000 z, Weapon Dealer#prt). The rest is at Armor Dealer#iz:
+  - Shield 2105 (DEF 6, 56,000 z);
+  - Full Plate 2316 (DEF 10, elv 40, 80,000 z);
+  - Helm 2228 (DEF 6, 44,000 z);
+  - Manteau 2505 (DEF 4, 32,000 z);
+  - Boots 2405 (DEF 4, 18,000 z);
+  - plus Geek Glasses 2243 (DEF 1, 20,000 z, Alberta).
+  - Every item is Crusader-wearable by its own Jobs key ("Swordman: true" alone would NOT cover
+    a Crusader).
+- **Potions:** Red 501 (50 z, the best HP per zeny); White 504 (1,200 z, the best per weight and
+  per press). There is no per-item delay, only `item_use_interval` 100 ms. Heals x2.64 at VIT 32 +
+  IRP 10. Fly Wing 601 (60 z).
+- **The hit rate (Batt's addendum) on orcsdun01:**
+  - the pinned formula is 80 + HIT - FLEE, capped 5..100 (`battle.cpp`). The highest FLEE there is
+    60 (Drainliar, Steel Chonchon), so **every split with HIT >= 80 hits every species 100 %**.
+    MAIN's HIT is 83.
+  - So the re-spec loop's primary is expected to read ~100 % from the start. The measurement
+    (hit_rate.py) is the check of that prediction.
+  - A DEX re-spec would buy damage (the minimum roll) and a quarter of AGI's ASPD per point, while
+    costing FLEE: the monsters' chance to hit rises 5-10 points.
 
 - How it is applied, all scripted, after Batt's OK:
-  1. `@job Swordman` at Job 10 Novice (Basic Skill 9 via `learn_skill`), `@joblevelup` to 50,
-     the Swordman skills in the skill window, `@job Crusader`, `@joblevelup` to 50, the Crusader
-     skills (+1 point into a Swordman skill if the tree allows: section 2a);
+  1. `@joblevelup` 9 + Basic Skill 9 (`learn_skill`), `@job Swordman`, `@joblevelup` to 50, the
+     Swordman skills in the skill window (49), `@job Crusader` (at Swordman Job 50), `@joblevelup`
+     to 50, the Crusader skills (47) + the 50th Swordman level; `@questskill 144 / 145 / 146 /
+     1002`. Every command first checks the name + job on Basic Info;
   2. `@baselevelup` to 60; the stats by the status window's `+` (the STR path exists:
      `gm_state.STATUS_STR_PLUS`; AGI / VIT / DEX need their own `+` offsets and a stat reader,
      cut from screenshots and proven offline first);
@@ -179,9 +219,45 @@ the server's status updates, item use, damage, deaths).
 
 ## 6. Orc Dungeon F1 against this Crusader (facts: crusader-orcsdun01-facts.md)
 
-PENDING: the 7 species against this Crusader (levels, elements, races, modes, damage vs DEF and
-FLEE, hit chances), the warps, the spawn spread and the dead ends / narrow passages are in
-crusader-orcsdun01-facts.md (a subagent, offline, running since 16:18).
+### 6a. The facts (crusader-orcsdun01-facts.md, merged 98503c8; the parent re-checked the 7 species in `mob_db.yml`)
+
+- **The threats, worst first:**
+  - Drainliar: HIT 102, so it lands 52 % of its hits even at FLEE 130; Blood Drain ignores FLEE.
+  - Orc Skeleton: ATK 190-236. Critical Slash always hits for its max and ignores FLEE, DEF and
+    Divine Protection.
+  - Orc Zombie: weaker, but 80 of the 135 units.
+  - Familiar and Steel Chonchon do little damage, but each one attacking raises the attacker
+    count.
+- **Our hit:** 100 % on every species from HIT 80 (section 2a).
+- **Their hit:** each attacker past 2 cuts our FLEE by 10 % (the pinned `agi_penalty_*`
+  defaults), and the cap is 5..100, not 95.
+  - At FLEE 130, an Orc Skeleton hits 8 % alone, 21 % with 3 attackers, 34 % with 4.
+- **Divine Protection 10 at Base 60** = +54 VIT DEF against the orcs (Undead element).
+  - Average per landed hit (DEF 20 / VIT 30): Orc Zombie 109 -> 55; Orc Skeleton 146 -> 92.
+- **Packs (HP/s at FLEE 130, with their skills):** 3 Orc Zombies 23.8; 3 OZ + 2 OS 103.8;
+  + a Drainliar 163.1; all 8 cells around us ~249.
+  - Times to death from ~5.2 k HP: ~50 s, ~32 s and ~21 s.
+  - Auto Guard 10 cuts these to ~0.7 x.
+- **The typical encounter:** 3.19 aggressive monsters in reach of a random cell (p90 4.68). A Fly
+  Wing lands among ~3.2 too, so **a Fly Wing swaps a heavy pack for a typical one, not for
+  safety**.
+- **Potions keep up:** a White heals ~584 at VIT 30 (949 with IRP 10). Holding the worst pack
+  needs ~16-26 a minute; stock, weight and our input rate limit it, not the server.
+- **The map:**
+  - a RING of wide corridors (5-15 cells) around a central rock;
+  - no <= 2-cell choke between areas;
+  - wide dead ends: the SE wing (holds the warp to F2), the N pocket and the NW entrance wing
+    (holds the exit warp and the arrival cell);
+  - pillars to circle around;
+  - monsters do not follow through warps.
+- **What this changes in section 3:** the HP rule keys on the ATTACKER COUNT, a Drainliar in the
+  pack and Blind, not on HP % alone.
+  - T_fly from the worst plausible pack's damage per second x (read latency + key + the client's
+    response) x a safety factor.
+  - The Fly Wing is for n >= 5, or a Drainliar + Blind.
+  - **The map's exit warp (orc01-1, NW wing) is a better escape than a Fly Wing** when it is near.
+  - The survival tests on prt_fild08 use the same species by `@monster`, so the thresholds are
+    measured against the real attackers.
 
 - Already known (orcsdun01-detector.md): 135 units of 7 species (pinned spawn lines); 200 x 200,
   9,356 walkable cells, one component; 2 warps; nomemo only, so **teleport (a Fly Wing) works
@@ -189,9 +265,9 @@ crusader-orcsdun01-facts.md (a subagent, offline, running since 16:18).
 
 ## 7. The order and the gates
 
-1. NOW (no client): this plan; the facts (two subagents, offline); the hit-rate judge.
-2. AFTER Batt's OK on section 1: the character, the build (section 2), each scripted step
-   judged on screenshots.
+1. DONE 16:2x-16:5x: this plan; the facts (two subagents, offline, merged); the hit-rate judge
+   (b3c5739); Batt's OK and the permissions (live 16:47).
+2. NOW: the character, the build (section 2), each scripted step judged on screenshots.
 3. The survival skills S1-S6 on prt_fild08, immunity OFF, each pre-registered, with its
    positive case.
 4. The dungeon run: only when the orcsdun01 detector PASSES its pre-registered evaluation
@@ -200,10 +276,24 @@ crusader-orcsdun01-facts.md (a subagent, offline, running since 16:18).
 - The client keeps alternating with the hunting work, as ordered. The GM's Novice baseline is
   never touched by this work.
 
-## 8. What Batt decides
+## 8. What Batt decided (2026-10-21 ~16:4x)
 
-1. Section 1: the character (A, proposed) and `jobchange` for group 20.
+1. ~~Section 1: the character (A, proposed) and `jobchange` for group 20.~~ ➡️ A, with the name +
+   job check before every command; `jobchange` added (logged).
 2. Riding: unmounted first (Batt's default). Mounting later needs `mount_peco` or the Peco Peco
-   renter NPC, plus re-cut sprite boxes.
-3. The quest skills (crusader-build.md section 2): by their NPC quests (talk + items by `@item`),
-   or skipped for the first test.
+   renter NPC (Peco Peco Breeder#cru prontera 232,318, 3,500 z), plus re-cut sprite boxes.
+3. ~~The quest skills: by their NPC quests or skipped~~ ➡️ GRANTED by `@questskill` (only that
+   permission added, logged). Moving HP Recovery is measured: does HP regen keep up while the bot
+   walks and fights continuously.
+
+## 9. Batt's human demo on orcsdun01 (Batt, 2026-10-21 ~16:4x)
+
+"When the Crusader is built, I will play a 10-min demo there as the comparison (same setup as my
+prt_fild08 demo: frames, mux log source=human, packets; immunity OFF; tell me when it's ready to
+record)."
+- The setup is the same as the 2026-10-16 human demo (`20261016T093835-demo-human-demo`):
+  - the frames, the mux's input log (source = human) and the packets;
+  - the Crusader at its full build;
+  - immunity OFF;
+  - the GM's Novice untouched.
+- The agent tells Batt when it is ready to record, and records nothing before he starts.
