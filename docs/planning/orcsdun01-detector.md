@@ -184,7 +184,7 @@ outside GM windows; 2,985 standing labels scored). The output is local:
   - Even the best view, pooled at 5.0 %, misses the 2 % bar. So a facing fix alone would not
     pass C1; occlusion (and White Plant's cause) must come with it.
 
-### 3b. THE LABEL FIX (pre-registered 2026-10-21 __TIME__ ICT, the commit time, BEFORE it is built or any check re-runs; Batt's decisions on the day report)
+### 3b. THE LABEL FIX (pre-registered 2026-10-21 16:52 ICT, the commit time of 3b's first commit, BEFORE it is built or any check re-runs; Batt's decisions on the day report)
 
 **Batt (verbatim, abridged):** "ORC DUNGEON labels (pre-register the fix, then re-run BOTH checks
 on col1 before any training): 0. Use the monster SPRITES (decoded client sprites, local only) as
