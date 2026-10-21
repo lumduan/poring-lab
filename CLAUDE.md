@@ -141,6 +141,10 @@ ports, quickstart) and `docs/adr/`.
    probe scripts and temporary compose overlays. Host `/tmp` itself is not reconfigured.
    - Keep test and tool caches off the disk too: `TMPDIR=/dev/shm/...`, `pytest --basetemp`,
      `mypy --cache-dir=/dev/null`, `ruff --no-cache` (see Commands).
+   - **Short-lived** (Batt, 2026-10-21): scratch and evidence go to the NAS
+     (`/mnt/poring-lab-datasets/scratch-archive/<date>/`) or are deleted, the SAME DAY their
+     verdict is recorded. Only run-time inputs (GAT, sprites, calibrations, chat guard) and what a
+     running job uses stay. Every report states /dev/shm usage.
 8. **Clipboard and file transfer are human-only** (ADR-0004):
    - never add a clipboard or file message to `AgentToBackend` / `InputEvent`;
    - never mount the `transfer` volume anywhere but desktop and backend;
