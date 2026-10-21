@@ -68,3 +68,18 @@ def test_the_first_cast_after_a_full_sp_start_counts() -> None:
     sp = [(10, 282), (20, 287)]  # the first packet already shows the cast's drop (312 -> 282)
     assert sj.sp_casts(sp, 30) == []
     assert sj.sp_casts(sp, 30, start=312) == [10]
+
+
+def test_the_recovery_truth_adds_the_regen_ticks_between_absolute_packets() -> None:
+    """3.96g (S1c): an IRP tick (ZC_RECOVERY, no absolute hp) moves the truth; capped at MaxHP."""
+    packets = [
+        pk(0.0, type="stat_change", name="max_hp", value=1000),
+        pk(0.0, type="stat_change", name="hp", value=800),
+        pk(5.0, type="recovery", name="hp", var=5, amount=155),
+        pk(9.0, type="recovery", name="hp", var=5, amount=155),  # capped at 1000
+        pk(12.0, type="stat_change", name="hp", value=700),
+    ]
+    ser = sj.hp_with_recovery(packets)
+    assert [(t // S, v) for t, v in ser] == [(0, 800), (5, 955), (9, 1000), (12, 700)]
+    assert sj.at(sj.series(packets, "hp"), 6 * S) == 800  # the absolute truth misses the tick
+    assert sj.at(ser, 6 * S) == 955

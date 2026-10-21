@@ -50,6 +50,35 @@ def series(packets: Sequence[Mapping[str, Any]], name: str) -> list[tuple[int, i
     return sorted(out)
 
 
+def hp_with_recovery(packets: Sequence[Mapping[str, Any]],
+                     max_hp: int | None = None) -> list[tuple[int, int]]:  # fmt: skip
+    """PURE (3.96g, S1c's truth): our HP over time = the last ABSOLUTE hp packet plus the
+    `recovery` hp amounts the server sent since (ZC_RECOVERY 0x0A27: Increase HP Recovery's ticks
+    carry no absolute value), capped at MaxHP (the max_hp packet in force, else ``max_hp``)."""
+    evs = sorted((e for e in packets if (e.get("type") == "stat_change"
+                                         and e.get("name") in ("hp", "max_hp"))
+                  or (e.get("type") == "recovery" and e.get("name") == "hp")),
+                 key=lambda e: int(e["t_mono_ns"]))  # fmt: skip
+    out: list[tuple[int, int]] = []
+    cur: int | None = None
+    cap = max_hp
+    for e in evs:
+        t = int(e["t_mono_ns"])
+        if e["type"] == "stat_change" and e["name"] == "max_hp":
+            cap = int(e.get("value") or 0) or cap
+            continue
+        if e["type"] == "stat_change":
+            cur = int(e.get("value") or 0)
+        elif cur is not None:
+            cur += int(e.get("amount") or 0)
+            if cap:
+                cur = min(cur, cap)
+        else:
+            continue
+        out.append((t, cur))
+    return out
+
+
 def at(ser: Sequence[tuple[int, int]], t: int) -> int | None:
     """PURE: the series' value at ``t`` (the last change at or before it), or None."""
     i = bisect.bisect_right([x[0] for x in ser], t)
@@ -81,10 +110,17 @@ def deaths_of(packets: Sequence[Mapping[str, Any]], aid: int = AID) -> list[int]
 
 
 def judge(events: Sequence[Mapping[str, Any]], packets: Sequence[Mapping[str, Any]],
-          offset_s: float = 0.376, max_hp: int | None = None) -> dict[str, Any]:  # fmt: skip
+          offset_s: float = 0.376, max_hp: int | None = None,
+          truth: str = "absolute") -> dict[str, Any]:  # fmt: skip
     """PURE: one trial's numbers for 3.96's bars. ``max_hp``: the fallback when no max_hp packet
-    is in force at the trial's start (the trial's manifest carries the verified MaxHP)."""
+    is in force at the trial's start (the trial's manifest carries the verified MaxHP).
+    ``truth``: "absolute" (the hp packets only: 3.96b's registered truth) or "recovery" (plus the
+    decoded regen ticks: 3.96g's S1c)."""
     hp, mx, sp = series(packets, "hp"), series(packets, "max_hp"), series(packets, "sp")
+    if truth == "recovery":
+        hp = hp_with_recovery(packets, max_hp)
+    elif truth != "absolute":
+        raise ValueError(f"truth {truth!r}")
     reads = [e for e in events if e.get("kind") == "hp_read"]
     off = int(offset_s * NS)
     t0 = int(reads[0]["t_ns"]) if reads else 0
@@ -159,12 +195,14 @@ def main() -> int:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)  # fmt: skip
     ap.add_argument("sids", nargs="+")
     ap.add_argument("--offset-s", type=float, default=0.12)
+    ap.add_argument("--truth", choices=("absolute", "recovery"), default="absolute",
+                    help="recovery: S1c (3.96g), the decoded regen ticks added")  # fmt: skip
     a = ap.parse_args()
     out = {}
     for sid in a.sids:
         man = json.loads((DEMO / sid / "manifest.json").read_text())
         mx_ = (man.get("thresholds") or {}).get("MAX_HP")
-        out[sid] = judge(*load(sid), offset_s=a.offset_s, max_hp=mx_)
+        out[sid] = judge(*load(sid), offset_s=a.offset_s, max_hp=mx_, truth=a.truth)
         try:  # the trial's ECONOMIC row (econ_row.py: costs only, the Crusader does not attack)
             import econ_row
 
