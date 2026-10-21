@@ -614,6 +614,24 @@ as we draw them.
   under a box, 0.70 clear.
 - **Only the White Plants under canopy are really hidden:** median 0.23 (half 1), 0.26 (both
   halves), against 0.76-0.78 clear.
+- **What each rule keeps** on col3: 3b's label fit with either facing, every 6th dwell frame, 1,543
+  frames (scratch `occl_options.py`, 22:19-22:29). Monster labels only: v2's other frame rules (NPC,
+  warp, ...) are not applied here.
+
+  | col3 | the frozen 1a facing | fix2 |
+  |---|---|---|
+  | labels fitted and kept (not under a box) | 4,501 | 5,088 |
+  | excluded under a model box (1c) | 5,285 | 5,266 |
+  | excluded unfit / crowd / UI | 815 | **248** |
+  | under a box, the fit passes (O3 would keep) | 4,337 (82 %) | 4,760 (90 %) |
+  | frames whole: the literal 1c | 87 (5.6 %; col1's 3c: 6.5 %) | 144 (9.3 %) |
+  | frames whole: O3 | 543 (35.2 %) | **980 (63.5 %)** |
+  | frames whole: no model test at all (the upper bound) | 936 (60.7 %) | 1,321 (85.6 %) |
+  | kept labels stacked (IoU >= 0.3 with another kept label; S3) | 85 | 109 |
+  | frames whole: O3 + S3 | 529 | 954 |
+
+  - With fix2 the fit itself fails 70 % less often (815 -> 248 labels).
+  - O3 with fix2 keeps 980 of the 1,543 frames whole, against 87 today.
 
 | option | what | cost | risk |
 |---|---|---|---|
@@ -634,9 +652,11 @@ orcs fitted to the rear one):**
   orcs.
   - Cost: trivial.
   - Risk: looser boxes (the labellers' "loose").
-- **S3 stacked orcs:** a label whose predicted box overlaps another monster's by IoU >= 0.3
+- **S3 stacked orcs:** a label whose fitted box overlaps another kept label's by IoU >= 0.3
   excludes its frame even when its fit passes. Today `crowd` counts only when the fit fails.
-  - Cost: trivial code, labels lost (not measured here).
+  - Cost: trivial code.
+  - On col3: 85 (frozen facing) / 109 (fix2) stacked labels of 4,501 / 5,088, so O3 + S3 keeps 529
+    / 954 frames whole against O3's 543 / 980. Not split per species here.
 - **S4 sample size:** at 30 crops one crop is 3.3 points, and D's 86.7 % is 26 / 30. A larger
   Orc Skeleton sample (e.g. 60) is only valid if fixed BEFORE the round.
 
@@ -655,6 +675,7 @@ orcs fitted to the rear one):**
   - `rows-half1.json`, `rows-half2.json` (every sample);
   - `score.json` (every rule, both halves, the three sample sets, the C1 estimate);
   - `classes.json` (the view classes);
+  - `occl_options_{frozen,fix2}.json` (the occlusion options);
   - `viz_axis.png` (the by-eye check);
   - `scratch/` (the exploration scripts).
 
