@@ -13421,6 +13421,22 @@ order.
     - 2 fell after the step;
     - 1 read HAND.
   - The density was low: 18.0 seen per 10 min, against v51's 24.4.
+- **Run 2** (seed 20400202, 1021T112438, 11:24:38 -> 12:26:23, time box):
+  - The judged screenshot before it: the hunting layout and Lv 70. The chat input, left open by
+    collection block col1, was closed by its known step first (`chat_open` read back False).
+
+  | kills / h | seen / 10 min | landing | completeness gross (net) | left / looters / expired % | kill -> last pickup p50 / mean | loot step p50 / mean (odd / even k) | HAND precision (first / burst) | time inside C1 | hard bars | Creamy |
+  |---|---|---|---|---|---|---|---|---|---|---|
+  | 153.9 | 37.0 | 77.6 % | 83.2 % (96.8 %) | 2 / 15 / 0 | 2.63 / 3.11 s | 7.90 / 7.84 s and 7.27 / 7.64 s | 0.836 (0.957 / 0.395) | **0 s** (C2 0 s) | 0 / 0 / 0 | 3 (2 requests) |
+
+  - **Zone refusals: none.** One `zone_exit`, (127,225) -> (127,224), the way back far from C1.
+  - Left behind, against the rule's own plan (`gm_causes`): 164 items, 140 picked. The rest:
+    - 10 gone before their cell was hovered (the race);
+    - 9 outside the GM's 5 x 5 (7 within 1 of the death cell);
+    - 3 planned, never hovered;
+    - 1 clicked but became a walk;
+    - 1 read HAND.
+  - A dense hour: 37.0 seen per 10 min, the most of any v50-v52 run. det_fps 2.77.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
