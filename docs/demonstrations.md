@@ -13789,7 +13789,8 @@ allows. An interim after each; the verdict after 4.
     - then `focus.aim` (the tracked target LED by its velocity) moved the click ~290 px up, to a
       pixel that is still `in_view`. Nothing re-checked the pixel actually clicked.
   - The NPC is in the KB (`npc_cells.json`, prt_fild08: 159,371 and 175,374). The GM was there
-    legitimately: the search area keeps 10 cells from NPCs, and 171,360 is 14 from the Bard.
+    legitimately: the search area keeps 11 cells from NPCs (half-span 1 + margin 10), and 171,360
+    is 14 from the Bard.
   - Afterwards: the dialog was never answered. The client was closed and relaunched by
     `ro_agent.py recover gm` (Alt+F4, the documented stuck-client path; the disconnect ends the
     script server-side) at 23:54-23:55. Nothing was pressed into the dialog: a NEXT dialog is a
@@ -14293,6 +14294,68 @@ frame was judged: the stand 268,107, full HP / SP, the UI gate clear, the screen
   so Auto Guard was never toggled off. The judge's g2 "uptime" of 59.9 % counts only casts made
   inside the trial; the real uptime was ~100 %.
 - 0 dark reads, 0 deaths, 0 escapes (none needed).
+
+### 3.97 hunt-flow@55: THE FAST SCAN RE-REGISTERED after v54's G3 failure, with its fix -- no press on an NPC's drawn sprite (pre-registered 2026-10-22, the commit time of 3.97's first commit, BEFORE its positive case and its runs; 3.95's decision rule: "One that fails is fixed and re-registered, never re-run under these bars"; Batt 2026-10-21 overnight: "LOOT 'FASTER SCAN' (v54) on prt_fild08: as many runs as fit; no verdict before 4 runs")
+
+**Why:**
+- v54 failed G3: in run 4 the STRIKE pressed the NPC Bard#brising's sprite (3.95 run log).
+- The cause is in both arms:
+  - the risk gate judges the TRACK's cell (13 cells from the NPC, `gate_npc_cells` 12);
+  - then `focus.aim`'s velocity lead moved the press ~290 px, onto the sprite.
+- The client resolves a press on the SPRITE, not on a cell. So the fix checks the PRESSED pixel.
+
+**The ONE change vs v54 (code 81de30f, `PARAMS[55] = {**PARAMS[54], "npc_px_guard": True}`):**
+- `FrameGuard.click` (every hunt-flow press passes there) refuses a press inside a KB NPC's
+  projected sprite area.
+  - The area: 100 px either side of the projected foot, 170 px above it, 70 px below
+    (`NPC_SPRITE_PX`). That is the sprite plus a 2-cell error of the GM's position.
+  - The GM's position is `measured_pos` (the minimap fix + the floor odometry).
+  - The NPC cells come from the KB (`data/kb/npc_cells.json`, static data, ADR-0015).
+- A refused press is counted (`frame_guard.npc_refused`) and logged (`npc_px_refused`: the NPC,
+  the pixel, the GM's cell). The caller is not told: the press simply does not happen.
+- The fast-scan A/B is 3.95's, unchanged: odd k the fast scan, even k the base's pass; the same
+  gate and knobs.
+- NOT changed: the focus aim's velocity lead (a 290-px lead is its own question, for Batt), and
+  `gate_npc_cells`.
+
+**Offline evidence (before this pre-registration):**
+- Over 55,419 presses of the v48-v54 runs (walk 43,335, loot 7,400, strike 3,291, burst 1,393),
+  with the GM at its packet track, the guard refuses exactly ONE: v54 run 4's press on the Bard.
+- Tests (`test_hunt_flow.py`):
+  - the incident with the GM up to 2 cells off;
+  - the hook on the guard;
+  - PARAMS[55];
+  - the run installs the hook;
+  - the real session's press: that one, 80 ms before the contact, and no other.
+
+**Live positive case (before run 1; the same path):**
+- The GM stands 8 cells south of the Bard (175,366), with the NPC on the screen.
+- A `FrameGuard` with the run's hook is asked to press the Bard's sprite (its projected foot,
+  50 px up).
+- It must be REFUSED (`npc_refused` 1, no click sent), with no `npc_contact` in the packets.
+- The sensor itself is §2a's proven `npc_contact` case (re-proven 2026-10-21 after the recreate).
+
+**Runs:**
+- prt_fild08, 60 min each, the hunt-flow fixed state, the GM immune, a judged screenshot before
+  each.
+- Fresh seeds 20420505, 20420606, 20420707, 20420808, in that order, in a chain of the current
+  version only.
+
+**Bars:** 3.95's, unchanged:
+- **P1:** loot-step mean fix / base <= 0.93 AND >= 3.0 edge cells skipped per fix step.
+- **P2:** completeness fix - base >= -6 points AND `gm_lost_on_skipped` <= 2 per 100 fix items.
+- **G3:** hard bars 0 (NPC contact, map change, unknown UI state, a non-Creamy non-target hit).
+  Creamy hits are counted apart.
+
+Reported, not deciding:
+- `npc_refused` presses per run (each one's pixel and cell);
+- 3.95's reported list.
+
+**Decision rule:**
+- ADOPT if P1, P2 and G3 pass after 4 runs that end on their time box.
+- Fewer than 4 runs: an interim, no verdict.
+- A G3 failure: NOT adopted, fixed and re-registered.
+- Tonight: as many runs as fit before ~05:05 ICT (the end state follows; nothing runs at 06:00).
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
