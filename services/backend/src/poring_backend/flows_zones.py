@@ -34,6 +34,13 @@ from typing import Any
 import yaml  # type: ignore[import-untyped]  # no stubs in the dev env
 
 MAX_ITEM_CELLS = 50_000  # per item in a reply (the preview grid shows every cell anyway)
+# The CHECK's own bounds on a HOSTILE text (the loader has none: a file is a person's): its polygon
+# test is O(n^2) in an item's points and its supercover scans each segment's box. Far above any real
+# zones file (prt_fild08: 2 lines of 2 points); a text past them is refused BEFORE the loader runs,
+# with a message that names the editor's limit (never passed off as the loader's).
+MAX_ITEMS = 200
+MAX_POINTS_PER_ITEM = 500
+MAX_BOX_CELLS = 4_000_000  # the sum over every segment of its box (dx + 3) * (dy + 3)
 MAX_DIFF_CHARS = 200_000
 MAX_GRID = 512 * 512  # as GET /flows/world's walk rows
 
@@ -100,7 +107,36 @@ def parse_text(e: Engine, text: str, map_name: str, shape: tuple[int, int] | Non
         data = yaml.safe_load(text)
     except yaml.YAMLError as exc:
         raise mz.ZoneError(f"{src}: not readable YAML ({exc})") from None
+    _within_limits(data, src, mz.ZoneError)
     return mz.parse(data, map_name, shape, source=src)
+
+
+def _within_limits(data: Any, src: str, error: type[Exception]) -> None:
+    """The check's bounds (MAX_* above), on the raw YAML data: only lists of [int, int] count;
+    anything else is left to the loader, which names it."""
+    if not isinstance(data, dict):
+        return
+    items = [
+        it for k in ("no_cross", "no_enter") if isinstance(data.get(k), list) for it in data[k]
+    ]
+    if len(items) > MAX_ITEMS:
+        raise error(f"{src}: {len(items)} items: the editor's check takes at most {MAX_ITEMS} "
+                    "(an editor limit, not the loader's: the CLI checks any file)")  # fmt: skip
+    box = 0
+    for it in items:
+        pts = it.get("points", it.get("polygon")) if isinstance(it, dict) else None
+        if not isinstance(pts, list):
+            continue
+        if len(pts) > MAX_POINTS_PER_ITEM:
+            raise error(f"{src}: an item with {len(pts)} points: the editor's check takes at most "
+                        f"{MAX_POINTS_PER_ITEM} (an editor limit, not the loader's)")  # fmt: skip
+        cells = [p for p in pts if isinstance(p, list) and len(p) == 2
+                 and all(type(c) is int for c in p)]  # fmt: skip
+        for a, b in zip(cells, cells[1:] + cells[:1], strict=True):
+            box += (abs(a[0] - b[0]) + 3) * (abs(a[1] - b[1]) + 3)
+    if box > MAX_BOX_CELLS:
+        raise error(f"{src}: the lines' boxes cover {box} cells: the editor's check takes at most "
+                    f"{MAX_BOX_CELLS} (an editor limit, not the loader's)")  # fmt: skip
 
 
 def _cells(mask: Any) -> list[list[int]]:

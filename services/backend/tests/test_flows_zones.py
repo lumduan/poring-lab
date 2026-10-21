@@ -409,3 +409,40 @@ def test_no_rule_index_no_rule_badges(tmp_path: Path) -> None:
         doc = c.get("/flows/catalogue", headers={"origin": ORIGIN}).json()
     assert doc["hunt_rules"] is None and doc["hunt_rules_error"].startswith("FileNotFoundError")
     assert "hunt" in doc["blocks"]
+
+
+def test_a_hostile_text_meets_the_checks_own_bounds_before_the_loader(tmp_path: Path) -> None:
+    """The loader's polygon test is O(n^2) and its supercover scans each segment's box: the check
+    refuses a text far past any real zones file BEFORE it runs, saying it is the editor's limit."""
+    head = 'map: fix_map\nreviewed_by: "batt"\nreviewed: 2026-10-21\n'
+    many = (
+        head
+        + "no_cross:\n"
+        + "".join(
+            f"  - id: n{i}\n    note: x\n    points: [[1, 1], [2, 2]]\n"
+            for i in range(flows_zones.MAX_ITEMS + 1)
+        )
+    )
+    long = (
+        head
+        + "no_enter:\n  - id: p\n    note: x\n    polygon: ["
+        + ", ".join(f"[{i}, {i % 7}]" for i in range(flows_zones.MAX_POINTS_PER_ITEM + 1))
+        + "]\n"
+    )
+    huge = (
+        head
+        + "no_cross:\n"
+        + "".join(
+            f"  - id: d{i}\n    note: x\n    points: [[0, 0], [1000, 1000], [0, 1000]]\n"
+            for i in range(4)
+        )
+    )
+    for text, why in ((many, "items"), (long, "points"), (huge, "boxes")):
+        r = flows_zones.check(ENG, text, "fix_map", None, tmp_path)
+        assert r["ok"] is False and why in r["error"] and "an editor limit" in r["error"], r[
+            "error"
+        ]
+    # a real file is far inside them: prt_fild08 and the corpus check as the loader says
+    z = flows_zones.check(ENG, (CONFIG_ZONES / "prt_fild08.yaml").read_text(), "prt_fild08",
+                          None, CONFIG_ZONES)  # fmt: skip
+    assert z["ok"] and z["committed"]["same"]
