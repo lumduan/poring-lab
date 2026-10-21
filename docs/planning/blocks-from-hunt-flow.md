@@ -52,7 +52,7 @@ merge chain it holds 209 keys (computed from the file on 2026-10-21, 0684d2c).
 
 | choice | today | adopted by | in the block |
 |---|---|---|---|
-| targets / ignore | hard-coded: `farm0.TARGETS`, `nametag.TARGET_NAMES` (mob 1002, 1063, 1008, 1113); 1018 counted apart (`hardbar_live.py`) | since v1 / v14 (3.41, 3.56) | the map node's `targets` / `ignore` (ADR-0020 13.3), by mob id |
+| targets / ignore | hard-coded: `farm0.TARGETS`, `nametag.TARGET_NAMES` (mob 1002, 1063, 1008, 1113); 1018 counted apart (`hardbar_live.py`) | since v1 / v14 (3.41, 3.56) | the map node's `targets` / `ignore` (ADR-0020 13.3), by mob id. With PER-SPECIES detector classes (Batt 2026-10-21, the orcsdun01 order, item 4: "the hunt code maps species -> monster + target/ignore lists, so the species check comes from the detector"), the lists name classes the detector itself outputs |
 | strike style | `abc_arm` C (A the fallback when unsure or crowded) | 3.70's verdict; the default from v32 (3.72) | `strike`: C, B or A |
 | engage on the way | `opportunistic`, `opp_cells`, `preempt_*`, `retarget*` | v11, v13, v26 (3.53, 3.55, 3.67), in the base since | `engage_on_the_way`: on / off |
 | dead rule | `exp_dead`, `exp_keep*`, `exp_loot_delay_s` (the Battle Log's EXP line; the target kept) | v48, ADOPTED by Batt 2026-10-20 14:58 (3.89) | `dead`: `exp_line@48` |
@@ -115,8 +115,9 @@ rule's own fallback when the scan cannot start.
   `config/map_zones` writable in the backend: a new mount, under the Settings rules.
 - **Who approves.** `reviewed_by` names a person. The editor never fills it, and the loader keeps
   refusing agent-like names. The agent never approves a zone on its own. A delegation (as on
-  2026-10-21 for prt_fild08) is Batt's explicit word, recorded in the file: who, when, the words
-  (D7: how).
+  2026-10-21 for prt_fild08) is Batt's explicit word, recorded in the file: the reviewer reads
+  exactly `agent (delegated by <person>, YYYY-MM-DD)` and a top-level `delegation:` note cites the
+  decision; the loader checks both (13e497d; D7 is answered).
 - **The IR reference.** The map node gets `zones: {map, sha256}` (optional; an IR version bump if
   the IR's versioning needs one).
   - Approval binds it: the IR hash covers the sha256.
@@ -250,8 +251,11 @@ the market-open windows, the census and safety tests on any click change.
    null. Or the offline equality check only?
 6. **D6 · Zones from the editor.** Export only first (a person commits), or a save route (a new
    writable mount of `config/map_zones` in the backend, under the Settings rules)?
-7. **D7 · The delegation record in a zones file.** A YAML comment (no code change), or a
-   `delegated:` key (by, at, words) that the loader checks?
+7. ~~**D7 · The delegation record in a zones file.** A YAML comment (no code change), or a
+   `delegated:` key (by, at, words) that the loader checks?~~ ➡️ **ANSWERED 2026-10-21 by
+   Batt's own decision 1** ("reviewed_by: "agent (delegated by batt, 2026-10-21)", plus a note
+   pointing to this decision; keep fail-closed loading"): built as a `delegation:` key the loader
+   checks, with the reviewer in that exact form (13e497d, `config/map_zones/README.md`).
 8. **D8 · Badges from hunting evidence.** May a pre-registered hunt verdict with the hard bars at 0
    over >= 4 h give the hunt block a "one path (RDP), prt_fild08" badge? Or does it stay unverified
    until an alone-test on both paths?

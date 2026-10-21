@@ -2184,7 +2184,7 @@ gate, the frame-age guard, packets as offline ground truth only, and Windows sta
 ## Amendment A (DRAFT, PROPOSED 2026-10-21, NOT accepted): behaviours as blocks; map zones as map-node data
 
 > **DRAFT for Batt's decision. NOT accepted; nothing in it is built.** The tables and the decisions
-> (D1-D9) are in the plan, [docs/planning/blocks-from-hunt-flow.md](../planning/blocks-from-hunt-flow.md).
+> (D1-D9; D7 answered by Batt 2026-10-21, 13e497d) are in the plan, [docs/planning/blocks-from-hunt-flow.md](../planning/blocks-from-hunt-flow.md).
 > Lettering: this ADR's earlier changes (section 13, the dated ➡️ markers) carry no letters, so
 > this is its first lettered amendment.
 
