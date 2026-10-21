@@ -13319,9 +13319,14 @@ version is built).
 ### 3.93 hunt-flow@52: MAP ZONES -- prt_fild08's zones file (C1 + C3 no-cross lines) on WHOLE runs, compared run-level with v51's runs (pre-registered 2026-10-21 09:27 ICT, the commit time, BEFORE its runs; Batt 2026-10-21, decision 1 on the overnight loot report: "Map zones: I DELEGATE the zone authoring to you ... Then merge feat/map-zones, load it, and pre-register a version: primary = time inside C1 per run-hour; guards = kills/h, loot completeness, hard bars"; Batt's day order, received ~09:1x: "Zones apply to whole runs (no per-engagement arms), so compare run-level against the v51 base runs with density reported beside it. Primary = time inside C1 per run-hour (should be ~0); guards = kills/h, loot completeness, hard bars. 3-4 runs as time allows.")
 
 **The ONE main change: `"map_zones": True`** (PARAMS[52]; the first version that loads the zones).
-- The runner loads `config/map_zones/prt_fild08.yaml` (13e497d, sha256 56e5230b... at that commit
-  -- the `map_zones` event at each run's start records the exact sha256). Batt delegated its
-  authoring in his decision 1, and the file records the delegation.
+- The runner loads `config/map_zones/prt_fild08.yaml` (13e497d, sha256 ~~56e5230b...~~ -- the
+  `map_zones` event at each run's start records the exact sha256). Batt delegated its authoring
+  in his decision 1, and the file records the delegation.
+  - ➡️ **CORRECTION 09:31 (a wrong hash, not a design change):** 56e5230b was the file's hash
+    before its two notes were edited. The committed file (13e497d) is **ce9f99d2...**, and run
+    1's `map_zones` event (09:30) says the same. The lines and their points are unchanged.
+    The proof re-run on ce9f99d2 at 09:31 is identical, item for item; the NAS JSON was replaced
+    with it.
 - Its lines:
   - `c1-door` (322,88)-(318,91) seals the south-east room C1;
   - `c3-door` (50,36)-(46,36) splits the island C3 (unreachable from the field anyway).
