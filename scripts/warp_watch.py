@@ -215,6 +215,7 @@ def cmd_plan(a: argparse.Namespace) -> int:
 def cmd_run(a: argparse.Namespace) -> int:  # noqa: PLR0915
     import multiprocessing as mp
 
+    import client_layout as cl
     import collect_v2 as cv
     import dataset_activity as act
     import gm_vitals as gv
@@ -241,7 +242,7 @@ def cmd_run(a: argparse.Namespace) -> int:  # noqa: PLR0915
     rec = ctx.Process(target=_recorder, args=(str(out / "frames"), region, stop_rec, REC_HZ,
                                               REC_QUALITY, SHARD_BYTES, MIN_FREE_GB),
                       daemon=True)  # fmt: skip
-    reason, t0, t1 = "not_started", r.ns(), 0
+    reason, t0, t1, layout = "not_started", r.ns(), 0, None
     with (out / "events.jsonl").open("a") as log, r.session("warp-watch") as (agent, screen):
 
         def note(event: str, **fields: Any) -> None:
@@ -274,10 +275,15 @@ def cmd_run(a: argparse.Namespace) -> int:  # noqa: PLR0915
         try:
             r.minimize_consoles(agent, screen)
             clean = ui_gate.ensure_clear(agent, screen, why="warp-watch:start")
+            # the UI layout, read from pixels (no input): the labels' UI rects follow it
+            lay = cl.read(cl._grab_rgb(screen), cl.load_templates())
+            layout = next((n for n in cl.LAYOUTS if cl.matches(lay, n)), None)
+            if layout is None:
+                raise r.Stop(f"warp-watch: the client's UI layout is neither of {cl.LAYOUTS}")
             rec.start()
             t0 = r.ns()
             note("run_start", plan={k: v for k, v in p.items() if k != "lines"}, preflight=pre,
-                 ui_gate=clean, sid=sid, region=list(region))  # fmt: skip
+                 ui_gate=clean, sid=sid, region=list(region), ui_layout=layout)  # fmt: skip
             d = cv.Driver(p, send=send, idle=agent.idle, vitals=vitals, note=note,
                           stopped=stopped, ns=r.ns, live_block=None)  # fmt: skip
             reason = d.run(False)
@@ -300,7 +306,8 @@ def cmd_run(a: argparse.Namespace) -> int:  # noqa: PLR0915
         packets = len(events)
     man = {"sid": sid, "map": a.map, "seed": a.seed, "label": a.label, "reason": reason,
            "t0_ns": t0, "t1_ns": t1, "packets": packets, "rec_hz": REC_HZ,
-           "quality": REC_QUALITY, "gm": counts, "dwell_s": a.dwell_s,
+           "quality": REC_QUALITY, "gm": counts, "dwell_s": a.dwell_s, "ui_layout": layout,
+           "backend": "rdp", "size": [int(region[2]), int(region[3])],
            "recorder": json.loads((out / "frames" / "recorder.json").read_text())
            if (out / "frames" / "recorder.json").exists() else None}  # fmt: skip
     (out / "manifest.json").write_text(json.dumps(man, indent=1))
