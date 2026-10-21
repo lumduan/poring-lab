@@ -575,6 +575,18 @@ pnpm, ruff and mypy are not installed on the host. Use `corepack pnpm` (the vers
 
 ## How we work
 
+- **Local disk = ACTIVE working sets only; long-term = the NAS only** (Batt, 2026-10-21).
+  - Long-term means datasets, recordings, session evidence, model weights, caches not in active
+    use, and archives. They live ONLY on the NAS (`/mnt/poring-lab-datasets/...`; old local items
+    under `archive/`, scratch under `scratch-archive/`).
+  - The local disk (repo, `data/`, Docker) holds only what is in use. Each item has a retention note
+    in `docs/operations/disk-audit.md` (e.g. `data/input_log`: the last 2 days).
+  - Move with `guarded_build.py archive:<src>=<dst>`: a paced rsync, a size+count check, then the
+    local delete, all under the IO guard. Measure with `measure:du=<path>` (one path a step) and
+    `measure:docker-df`.
+  - Never park /dev/shm overflow on the local disk. The 10-19/20 shm archive (4.1 GB, with
+    symlinks back into /dev/shm) did exactly that; it was moved on 2026-10-21.
+  - **Every report states our local disk footprint** (and /dev/shm's).
 - **End-to-end playable demos are a REGULAR milestone** (Batt, 2026-10-15). They do not wait for
   every piece to be perfect.
   - When: every 2-3 days, or whenever a new skill passes.

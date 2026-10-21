@@ -85,5 +85,39 @@ That is **≈ 4.5 % of the 474.6 GiB used**, and ≈ 3.5 % of the disk.
 
 ## Actions (audit 1)
 
-Filled in as they are done. Each move: a paced rsync to the NAS under the guard, a size+count
-verification (rsync dry-run, nothing to transfer), then the local delete under the guard.
+Each move was a paced rsync (20 MB/s) to the NAS under the guard, then a size+count verification
+(`rsync -n --itemize-changes` lists nothing; its positive case: a missing file and a changed size are
+both listed), then the local delete under the guard.
+
+| when (ICT) | what | to (NAS, `/mnt/poring-lab-datasets/`) | items | result |
+|---|---|---|---|---|
+| 20:45:46 | `poring-lab-kb` (stale copy) | `scratch-archive/2026-10-20-shm-archive/` | 1 | verified + deleted (the step's live positive case) |
+| 20:47-20:55 | the 37 archived demo sessions | the datasets root `<sid>/` (36), `scratch-archive/.../poring-lab-demo/` (1: `20261010T001818-demo-npc-click-click-prontera` already exists on the NAS in a DIFFERENT version, 162 differing entries; never overwritten, so both are kept) | 37 | all verified + deleted; worst stall 14.0 %, 6 s above 10 % |
+| 20:55-21:04 | the 35 archived scratch dirs + `pktgen` + `rathena-src` | `scratch-archive/2026-10-20-shm-archive/` | 37 | all verified + deleted; worst stall 6.8 % |
+| 21:04 | the /dev/shm symlinks into the archive | - | 72 | the 37 session links removed. Of the 35 scratch links: the 12 names code still writes or reads became REAL tmpfs dirs (refilled: sprites, labels-prep, walk5-cal's no-entry mask); 23 were dropped |
+| 21:05 | MANIFEST.tsv + move.log | `scratch-archive/2026-10-20-shm-archive/` | 2 | verified + deleted; `~/poring-lab-shm-archive` removed (empty) |
+| 21:05-21:10 | `data/input_log` 09-29 .. 10-19 (20 days), `data/metrics` (5 CSVs), `services/frontend/.qa-local` (7 bundles + index.json) | `archive/input_log/`, `archive/metrics/`, `archive/qa-bundles/` | 33 | all verified + deleted; worst stall **21.5 % on capture-streaming-pro, 6 s above 10 %** (inside the guard's limits; later moves get a lower pace) |
+
+- **Not done, listed for Batt:**
+  - `services/frontend/node_modules` (0.50 GB, regenerable, unused);
+  - `.mypy_cache` (0.02);
+  - `data/train` (0.32);
+  - `data/nametags` (0.20);
+  - `rathena-build:local` (0.48);
+  - the `db-th-data` volume + its exited container (0.16);
+  - the session transcript (1.39, live).
+- **Docker prune:** none. Our build-cache records share their bytes with our images (private
+  0.03 GB), and no dangling image is ours.
+- **To read a moved item:** `/mnt/poring-lab-datasets/archive/...`. `label_quality.py --bundles
+  /mnt/poring-lab-datasets/archive/qa-bundles`; the /qa page shows no bundle until one is
+  re-exported (`qa_export.py`) or copied back for a session.
+
+### After (21:10 ICT)
+
+| | before (20:34) | after (21:10) |
+|---|---|---|
+| root LV used | 474.6 GiB (81 %) | **464.8 GiB (80 %)**; ours moved ≈ 4.9 GiB of the 9.8 GiB drop, the other ≈ 4.9 GiB was freed by something not ours |
+| repo `data/` | 1.51 GB | 0.73 GB |
+| repo `services/` | 0.87 GB | 0.50 GB (node_modules, listed) |
+| `~/poring-lab-shm-archive` | 4.11 GB | gone |
+| ours in total | ≈ 23.0 GB (≈ 4.5 % of used) | **≈ 17.7 GB (≈ 3.5 % of the 464.8 GiB used; Docker ≈ 14.6 of it, the vision image 10.3)** |
