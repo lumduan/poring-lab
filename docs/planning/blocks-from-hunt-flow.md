@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [ADR-0020, ADR-0015, ADR-0002, ADR-0007, ADR-0016, ../demonstrations.md, ../competition.md, ../../config/map_zones/README.md, mw2-block-editor.md, adr0020-contradictions.md]
-next_action: "B1 and B3 MERGED (0919ce7). B2 (the editor) BUILT offline 2026-10-21 21:14-22:1x on feat/blocks-b2 (section 7b; not merged): the parent reviews and merges; its zones routes go live only after a guarded recreate:backend (the dev overlay's new read-only ./scripts mount), and Batt confirms the D8 evidence rows (config/flows/hunt/evidence.yaml) and 7b's open points. B4 waits for Batt to be present. Amendment A's text stays a DRAFT until Batt accepts it."
+next_action: "B1 and B3 MERGED (0919ce7). B2 (the editor) BUILT offline 2026-10-21 21:14-22:1x and MERGED (cea0c4c, section 7b); its zones routes go live only after a guarded recreate:backend (the dev overlay's new read-only ./scripts mount), and Batt confirms the D8 evidence rows (config/flows/hunt/evidence.yaml) and 7b's open points. B4 waits for Batt to be present. Amendment A's text stays a DRAFT until Batt accepts it."
 title: "Behaviours as blocks: hunt-flow's adopted rules become a hunt block in the map node; map zones become map-node data (plan)"
 date: 2026-10-21
 owner: Batt
@@ -24,7 +24,7 @@ until I approve."
 Status: PROPOSED. ~~Nothing here is built, run or pre-registered.~~ ➡️ **2026-10-21 18:2x: B1 and
 B3 are BUILT offline** (section 7a, branch feat/blocks-b1b3; merged 0919ce7); nothing is run live or
 pre-registered. ➡️ **2026-10-21 22:1x: B2 (the editor) is BUILT offline** (section 7b, branch
-feat/blocks-b2, not merged); SIMULATE only.
+feat/blocks-b2, ~~not merged~~ ➡️ merged in cea0c4c); SIMULATE only.
 The ADR side is
 [ADR-0020 Amendment A](../adr/0020-block-programming-flows.md#amendment-a-draft-proposed-2026-10-21-not-accepted-behaviours-as-blocks-map-zones-as-map-node-data)
 (DRAFT).
@@ -308,7 +308,7 @@ clean on poring_flow + poring_skills. The full suite was not run.
    free-text parameters until B2's lists.~~ ➡️ B2 (7b): `ir.ts` carries `zones`; the hunt block has
    its lists (a generic block only when the catalogue's lists are not there).
 
-### 7b. B2 RESULT (built 2026-10-21 21:14-22:1x, offline; branch feat/blocks-b2, NOT merged)
+### 7b. B2 RESULT (built 2026-10-21 21:14-22:1x, offline; branch feat/blocks-b2, ~~NOT merged~~ ➡️ merged in cea0c4c)
 
 Built by a subagent in a tmpfs worktree, on main 39da9e1 (B1 + B3 merged in 0919ce7): commits eb36002
 (backend), 8d5a803 (editor), 4fd3916 + 23e83bf (fixes), and this section's docs commit. SIMULATE
@@ -411,7 +411,7 @@ when I'm present."
   may run before walk / talk readiness, for that slice only (D9).
 - B1-B3 started 17:4x (offline, a subagent in a tmpfs worktree). B4 waits for Batt to be present.
   ➡️ B1 and B3 BUILT 18:2x (section 7a; merged 0919ce7); ~~B2 not started~~ ➡️ B2 BUILT 22:1x
-  offline (section 7b; not merged).
+  offline (section 7b; ~~not merged~~ ➡️ merged in cea0c4c).
 - ADR-0020 Amendment A stays a DRAFT until Batt accepts its text; these answers are its inputs.
 
 The questions as asked:
