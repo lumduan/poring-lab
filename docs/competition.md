@@ -1980,3 +1980,162 @@ parallel.
     odometry "moved" gate). Primary: the loot step time; guard: completeness. If the 5 x 5 edge
     holds almost nothing live, it is dropped. Its live test may move to orcsdun01.
 
+
+### Loot: v54 the fast scan (BUILT, not pre-registered)
+
+Batt's decision (~16:4x, on the day report, verbatim): "Next loot work = a FASTER SCAN, not more
+cells: hover the 3x3 around the drawn GM FIRST (death-cell side first), then the 5x5 edge ONLY on
+cells whose image changed since before the kill (option C, held out 0/514 items lost, + the
+odometry "moved" gate). Pre-register it with loot step time as primary and completeness as guard.
+(If the 5x5 edge turns out to hold almost nothing live, say so and we drop it.) Its live test can
+move to orcsdun01 later: monsters come to us there and drops are more frequent."
+
+- **His question first: the 5 x 5 edge is NOT nearly empty. Keep it.** On v52's 3 runs and v51's
+  4, 28.4 % of our items picked by gm steps lay on the edge (0.28 per kill). 112 of those 202
+  were picked by a click on an edge cell; the other 90 by a click on the 3 x 3. Dropping the
+  edge would lose up to ~16 % of the picks. The fast scan keeps the edge and skips only its
+  cells whose image did not change (the table below).
+- **Built** on `feat/loot-fast-scan` (5d683fc, 2d74a22, 57ebe34 + this doc). Not merged, not
+  pre-registered (the parent does that).
+
+**The design as built (`scripts/hunt_flow.py`):**
+- `PARAMS[54]` = `PARAMS[52]` (v52 ADOPTED; v53's union is not in it) plus:
+  - `loot_fast_scan`, `loot_fast_scan_ab`: odd k the fast scan, even k v52's pass, as v53's
+    arms (`fast_scan_on`);
+  - the knobs, logged in the manifest: `loot_fast_before_s` 0.45 (loot_sight's held-out
+    preset), `loot_fast_before_max_s` 0.4, `loot_fast_moved_cells` 0.25, `loot_fast_thr` 0.04
+    (loot_sight's THR).
+- **The fix arm's one pass** (`fast_scan_cells`):
+  1. the drawn GM's 3 x 3 first: its own cell, then the neighbours nearest the believed death
+     cell (`loot.cell`), ties by row then column;
+  2. then the 5 x 5's 16 edge cells that option C does NOT call empty: the item matcher's
+     "seen" cells first, then the "unsure" ones (changed since before the kill, or under the
+     GM's sprite); a cell with no verdict counts as unsure;
+  3. the whole edge, in the base's order, when the gate (`fast_gate`) is not "ok".
+  - ⚠️ v52's pass ALREADY hovers the 3 x 3 first, in exactly that order (`gm_scan_cells`: own
+    cell, ring 1 by distance to the death cell). So the two arms differ ONLY in the edge filter:
+    a one-factor A/B. The even-k arm is v52's call, byte for byte (tested).
+- **The gate** (`fast_gate`; any "not ok" hovers the whole edge):
+  - `no_line`: no EXP line, so the kill's time is unknown;
+  - `no_before` / `old_before`: the ring holds no frame grabbed at or before line - 0.45 s, or
+    that frame is > 0.4 s older than that (`pick_before`);
+  - `no_odo`: the motion thread's odometry does not cover both frames (`odo_moved`);
+  - `moved`: the runner's own floor odometry (the motion thread's `mstate["hist"]`, the same
+    sums `measured_pos` reads) moved more than 0.25 cells (Chebyshev) between the before frame's
+    grab and the stand frame's. The registration shift is NOT used (loot_sight's docstring).
+    0.25 cells is the registration's own range: +-8 px against ~34 px a cell east-west.
+  - `error`: the classification raised; logged, nothing skipped.
+- **The frames:**
+  - BEFORE: the ring the motion thread already keeps (`ring_frames`, ~5 Hz, 24 frames); each
+    entry now also carries its grab `t_ns`. The ring fills for `loot_fast_scan` too.
+  - STAND: one fresh grab of the game region at the pass start, after the drawn standstill and
+    the GM's cell (`gm_ref`), before any hover.
+- **The classifier is ONE implementation.** Option C's per-cell code moved out of
+  `loot_sight.session` into `loot_sight.classify` (+ `five_by_five`, `matcher_ground`). The
+  runner calls it through `fast_verdicts` (the BGR grabs, the matcher told so). The matcher's
+  templates load when `loot_fast_scan` is on.
+  - loot_sight's records on v52 run 1 (92 kills, `--from-line --after 0.5 --before 0.45
+    --all-kills --json`) were byte-identical before and after the move (sha256 4f665a61...),
+    and again with the frames in the runner's BGR order.
+- **Unchanged:** HAND-only clicks in Batt's rhythm, the zone and NPC checks, the 12-s cap, the
+  same hover and click code. No new click site (the click census is unchanged).
+- **Logged:**
+  - per pass, a `fast_scan` event: the gate, `before_age_s`, `odo_cells`, the edge cells
+    hovered / skipped (lists), the class counts, the registration shift, the matcher's hits and
+    the classification's ms; the same summary in the step's `loot_fixed` record (`fast`);
+  - per hover: `fast_scan` (the arm) and `cls` (seen / unsure / empty; the fix arm only).
+- **Its cost, offline:** the matcher 124 ms + the classification 73 ms p50 on real 1280 x 720
+  frames (nice 10, host load ~21): about one hover (p50 176 ms).
+
+**The measurement (`left_behind.py --edge`, 2d74a22).**
+- What counts: our items picked by a gm step (an ok pickup request from the step's start to 2 s
+  after its end), by their cell's ring around the drawn GM's cell at the step start (the
+  step's first hover `ref`).
+- Why the 2-s tail: an item 2 cells away is WALKED to first. Its request comes after the walk,
+  so `click_results` (the first request within 0.6 s) calls that click a walk. A first pass by
+  that rule found only 16 edge picks; it was wrong.
+
+| run | gm-step kills | our items picked | 3 x 3 (incl. own cell) | 5 x 5 EDGE | outside | edge per 100 picked | edge per kill | picked by an edge-cell click | edge hovers a step | edge hover s a step |
+|---|---|---|---|---|---|---|---|---|---|---|
+| v52 run 1 (T092850) | 95 | 105 | 66 | 32 | 7 | 30.5 | 0.34 | 19 | 16.8 | 3.41 |
+| v52 run 2 (T112438) | 138 | 143 | 87 | 44 | 12 | 30.8 | 0.32 | 26 | 16.7 | 3.32 |
+| v52 run 3 (T131746) | 132 | 120 | 82 | 31 | 7 | 25.8 | 0.23 | 10 | 16.7 | 3.33 |
+| v51 run 1 (T224434) | 91 | 75 | 47 | 18 | 10 | 24.0 | 0.20 | 17 | 16.8 | 3.38 |
+| v51 run 2 (T234607) | 104 | 102 | 70 | 24 | 8 | 23.5 | 0.23 | 15 | 16.8 | 3.42 |
+| v51 run 3 (T004744) | 102 | 108 | 71 | 32 | 5 | 29.6 | 0.31 | 14 | 16.8 | 3.38 |
+| v51 run 4 (T014926) | 60 | 59 | 36 | 21 | 2 | 35.6 | 0.35 | 11 | 16.8 | 3.56 |
+| **pooled (7 runs)** | **722** | **712** | **459** | **202** | **51** | **28.4** | **0.28** | **112** | **16.8** | **3.38** |
+
+- The step kill's OWN drops: 860, of which 210 lay on the edge (24.4 %), and 188 of those were
+  picked.
+- v53 run 1 (T150152; both arms scan the 5 x 5), for comparison: 27 of 131 (20.6 %), 0.19 a kill.
+- The edge's hovers: 16.8 a step (16 cells + unread retries), 176 ms p50 / ~200 ms mean each,
+  **3.38 s a step**. Pass 1's scan hovers only; burst re-reads are not counted.
+
+**Option C on the EDGE, and the moved gate, offline.** A scratch replay of the live timing:
+every kill with an EXP line, the before frame 0.45 s before the line, the stand frame 0.5 s
+after it. The floor odometry was recomputed from the recorded 5 Hz frames with the motion
+thread's own estimator (`PreviewCore.camera_move`). Over the same 7 runs: 645 kills; 516 had the
+GM still by packets, 129 had it moved.
+- **Option C is new data on v52** (loot_sight's preset, still kills, the 25 cells): 257 kills,
+  12.4 empty cells a kill, **2 of our 267 items on an "empty" cell**, both in run 2.
+  - One lay on the 3 x 3, which v54 hovers anyway.
+  - One lay on the EDGE: a Clover (705, green on grass; the matcher's Clover template is off),
+    2 cells from the GM on its own column ((248,310) vs (248,312)), at a changed share of
+    0.022-0.026 against THR 0.04.
+  - So the 0 / 514 of v50 + v51 is now 2 / 781.
+- **Our items on the edge at the stand frame: 196.** Option C called 67 of them seen, 124
+  unsure and 5 empty.
+  - 4 of the 5 empty ones were on kills where the GM moved by packets. The gate catches all 4 at
+    every threshold from 0.1 to 0.5 cells.
+  - The 5th is the Clover above, on a still kill. No gate can catch it.
+
+| moved gate (odometry, cells) | kills passing | moved kills passing | edge cells skipped a kill (all kills) | our items on skipped edge cells |
+|---|---|---|---|---|
+| no gate | 645 / 645 | 129 / 129 | -- | 5 |
+| 0.15 | 275 (43 %) | 2 / 129 | 4.60 | 1 |
+| **0.25 (as built)** | **370 (57 %)** | **4 / 129** | **6.10** | **1** |
+| 0.5 | 458 (71 %) | 12 / 129 | 7.23 | 1 |
+
+- **The odometry is not noise-free.** On kills still by packets it read p50 0.14 cells, but p90
+  0.65 and up to 1.98.
+  - Those large reads are real drawn moves: the two-frame measurement gives the same numbers
+    (p50 0.15, p90 0.64). The GM was still at the server but still walking on screen at the
+    before frame (the display lags 0.45-0.65 s).
+  - So the gate rightly refuses them, and ~43 % of kills hover the whole edge at 0.25.
+- ⚠️ **The live window is longer** (the stand frame comes after the drawn standstill and the
+  readout, not at +0.5 s), and the live odometry runs at ~10 Hz on raw frames, not 5 Hz JPEG.
+  So the live gate rate is a prediction only. The `fast_scan` log records `gate` and
+  `odo_cells` for every pass.
+- **The expected effect on a fix-arm step:**
+  - saved: 6.1 edge hovers x ~0.2 s ≈ 1.2 s;
+  - cost: the classification, ~0.2 s;
+  - net: **~1.0 s off v52's gm step** (mean 7.71 s, p50 7.58 s over its 3 runs; 376 steps).
+    That is about 0.87 x.
+  - The completeness cost offline: 1 of our items in 645 kills (the Clover).
+- A shorter before-offset (0.3 s: more kills still in loot_sight's 3.91 table) or a looser gate
+  (0.5) would skip more. Both are pre-registration choices, not built.
+
+**Tests:**
+- `test_hunt_flow.py` 105 (3 new):
+  - the order: the 3 x 3 first, then the kept edge cells, the matcher's first, the gate giving
+    the whole edge;
+  - the arms: odd k the fast scan, even k v52's call unchanged, PARAMS[54] = v52 + its knobs;
+  - the before frame and the moved gate.
+- `test_loot_sight.py` 13 (6 new):
+  - the classifier on synthetic frames: a changed patch is unsure, unchanged cells are empty,
+    the GM's sprite cells are unsure, a matcher point is seen, the jitter is registered, a big
+    shift makes every cell unsure, and the channel order does not matter;
+  - two REAL-session positive cases on v52 run 1: loot_sight's pre-move numbers for 12 kills,
+    with the frames in RGB and in BGR, 9 items on them and none on an "empty" cell; and the
+    runner's own `fast_verdicts` path on 6 kills, the same.
+  - Both skip when the session's packets, frames or templates are absent.
+- `test_left_behind.py` 8 (2 new). `test_click_census.py` 2 (unchanged: no new click site).
+
+**Where:** `scripts/hunt_flow.py` (`fast_scan_on`, `fast_scan_cells`, `pick_before`,
+`odo_moved`, `fast_gate`, `fast_verdicts`; `loot_gm_steps`' `fast_plan`); `scripts/loot_sight.py`
+(`classify`, `five_by_five`, `matcher_ground`); `scripts/left_behind.py --edge`.
+- The replay of the gate was a scratch, deleted at the task's end.
+- To re-derive it: for each kill, `loot_sight.line_anchor`, `drop_blobs.frame_before` /
+  `frame_at`, `loot_sight.classify` on the 5 x 5, and the sum of `route_preview.PreviewCore.
+  camera_move` over the recorded frames between the two.

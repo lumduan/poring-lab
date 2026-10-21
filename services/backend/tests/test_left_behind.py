@@ -103,3 +103,35 @@ def test_v53_p1_scores_both_arms_against_the_gms_5x5_alone() -> None:
     inside = {"t_fall": 100, "cell": [11, 10], "t_end": 150}
     hov_in = [{"t_ns": 120, "cell": [11, 10], "seen": "empty"}]
     assert lb.gm_cause_5x5(inside, 1, step, refs, (19, 10), [], hov_in) == "hovered_read_empty"
+
+
+def test_v54_ring_of_the_drawn_gm_and_the_ok_pickups() -> None:
+    """v54's measurement: an item's ring around the GM's cell at the step start; a pick = an ok
+    pickup request (an item 2 cells away is walked to first, so its request comes late)."""
+    assert [lb.ring_of(c, (10, 10)) for c in ((10, 10), (11, 9), (12, 10), (8, 12), (13, 10))] == [
+        "own", "3x3", "edge", "edge", "outside"]  # fmt: skip
+    pk = [
+        {"type": "pickup_request", "floor_id": 5, "t_mono_ns": 10},
+        {"type": "pickup_result", "ok": True, "t_mono_ns": 11},
+        {"type": "pickup_request", "floor_id": 6, "t_mono_ns": 20},
+        {"type": "pickup_result", "ok": False, "t_mono_ns": 21},
+        {"type": "pickup_result", "ok": True, "t_mono_ns": 22},  # no request pending: ignored
+    ]
+    assert lb.ok_pickups(pk) == [(10, 5)]
+
+
+def test_v54_edge_table_per_100_items_and_per_kill() -> None:
+    per = {
+        "a": {"gm_kills": 10, "gm_steps_with_hovers": 8, "edge_hovers_pass1": 130,
+              "edge_ms_sum": 26000.0,
+              "picked_by_item_cell": {"ours|own": 2, "ours|3x3": 5, "ours|edge": 3},
+              "picked_by_clicked_cell": {"ours|own": 6, "ours|edge": 2},
+              "this_kills_drops_by_ring_and_fate": {"edge|picked": 3, "edge|not_picked": 1,
+                                                    "3x3|picked": 7}},
+    }  # fmt: skip
+    t = lb.edge_table(per)
+    assert t["a"]["on_edge"] == 3 and t["a"]["on_3x3"] == 7 and t["a"]["ours_picked"] == 10
+    assert t["a"]["edge_per_100_items"] == 30.0 and t["a"]["edge_per_kill"] == 0.3
+    assert t["a"]["picked_by_an_edge_click"] == 2 and t["a"]["of_them_on_edge"] == 4
+    assert t["a"]["edge_hovers_per_step"] == 16.25 and t["a"]["edge_hover_s_per_step"] == 3.25
+    assert t["pooled"]["on_edge"] == 3

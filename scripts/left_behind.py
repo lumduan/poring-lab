@@ -44,6 +44,13 @@ A loot click's result: the first of our self_move_request / pickup_request withi
     left_behind.py SID [SID ...]        per run + pooled (JSON); ``causes_by_arm`` splits the causes
                                         by the owning engagement's arm (odd k "fix", even k "base",
                                         no engagement "none"), for interleaved versions
+    left_behind.py --edge SID [SID ...] v54 (Batt 2026-10-21 ~16:4x, "if the 5x5 edge turns out to
+                                        hold almost nothing live, say so"): the items PICKED by gm
+                                        steps' own loot clicks, by ring around the drawn GM's cell
+                                        at the step start (the step's first hover ``ref``): own
+                                        cell, 3 x 3, the 5 x 5 EDGE (Chebyshev 2), outside -- by
+                                        the item's server cell and by the clicked cell; and what
+                                        the edge's hovers cost a step (pass 1, scan hovers)
     left_behind.py --aim SID [SID ...]  where the LOOT CLICKS land: each click that became a walk,
                                         its walk request's cell against the cell the runner aimed
                                         at (clicks.jsonl "cell"), split by the step's first click /
@@ -280,6 +287,159 @@ def session(sid: str) -> dict[str, Any]:
                                              for k, v in sorted(gm_dist.items())}}  # fmt: skip
 
 
+def ring_of(cell: Sequence[int], ref: Sequence[int]) -> str:
+    """PURE (v54): a cell's ring around the drawn GM's cell ``ref``: "own", "3x3" (Chebyshev 1),
+    "edge" (2: the 5 x 5's edge), "outside"."""
+    d = cheb(cell, ref)
+    return "own" if d == 0 else "3x3" if d == 1 else "edge" if d == 2 else "outside"
+
+
+PICK_TAIL_S = 2.0  # a pickup request this long after a step's end still belongs to it (a walk)
+
+
+def ok_pickups(packets: Sequence[Mapping[str, Any]]) -> list[tuple[int, int]]:
+    """PURE: [(t of our pickup request, floor_id)] the server answered ok, in time order."""
+    out: list[tuple[int, int]] = []
+    pend: tuple[int, int] | None = None
+    for e in packets:
+        if e.get("type") == "pickup_request":
+            pend = (int(e["t_mono_ns"]), int(e["floor_id"]))
+        elif e.get("type") == "pickup_result" and pend is not None:
+            if e.get("ok"):
+                out.append(pend)
+            pend = None
+    return out
+
+
+def edge_session(sid: str) -> dict[str, Any]:
+    """v54's measurement (module docstring, ``--edge``): one session's gm steps. A pick = our
+    pickup request the server answered ok, from the step's start to PICK_TAIL_S after its end;
+    the clicked cell = the step's last loot click before it; "ours" = it fell for a kill of ours
+    (any, not only the step's own)."""
+    import arm_judge as aj
+    import flow_judge as fj
+    import hunt_core as hc
+    import loot_complete as lc
+    import search_study as ss
+
+    sess = ss.load_session(sid)
+    d = aj.DEMO / sid
+    engs = json.loads((d / "engagements.json").read_text())
+    rows = json.loads((d / "flow_judge.json").read_text())["engagements_w"]["rows"]
+    gid_by_k = {int(r["k"]): r.get("gid") for r in rows}
+    clicks = sorted((json.loads(x) for x in (d / "clicks.jsonl").read_text().splitlines() if x),
+                    key=lambda c: int(c["t"]))  # fmt: skip
+    pk = sess.events
+    pos = hc.walk_positions(pk)
+    items = aj.item_fates(pk, pos, fj.mob_at)
+    picks = ok_pickups(pk)
+    pts = [t for t, _f in picks]
+    lclicks = [c for c in clicks if c.get("kind") == "loot"]
+    lts = [int(c["t"]) for c in lclicks]
+    hov = [e for e in map(json.loads, filter(None, (d / "events.jsonl").read_text().splitlines()))
+           if e.get("kind") == "hand_hover" and e.get("arm") == "gm"]  # fmt: skip
+    hts = [int(h["t_ns"]) for h in hov]
+    kills = [(t, g) for t, g in aj.kills_of(pk) if sess.t0 <= t <= sess.w1]
+    ours_all = {f for t, g in aj.kills_of(pk)
+                for f in aj.drops_of_kill(items, t, fj.mob_at(pos, g, t - 1))}  # fmt: skip
+    by_item: Counter[str] = Counter()
+    by_click: Counter[str] = Counter()
+    own_kill: Counter[str] = Counter()
+    drops_ring: Counter[str] = Counter()
+    edge_n: list[int] = []
+    edge_ms: list[float] = []
+    all_ms: list[float] = []
+    steps = kills_gm = 0
+    for t_k, g in kills:
+        e = lc.owner_of(g, t_k, engs, gid_by_k)
+        lo = (e or {}).get("loot") or {}
+        if not (lc.looted(e) and e is not None and e.get("t_end") and lo.get("s") is not None
+                and lo.get("arm") == "gm"):  # fmt: skip
+            continue
+        kills_gm += 1
+        t_end = int(e["t_end"])
+        step = (t_end - int(float(lo["s"]) * NS), t_end)
+        hs = [h for h in hov[bisect.bisect_left(hts, step[0] - NS):
+                             bisect.bisect_right(hts, step[1] + NS)]
+              if int(h.get("k", -1)) == int(e["k"]) and h.get("ref")]  # fmt: skip
+        if not hs:
+            continue
+        steps += 1
+        ref0 = tuple(hs[0]["ref"])
+        scan1 = [h for h in hs if int(h.get("burst") or 0) == 0 and int(h.get("pass") or 1) == 1]
+        eh = [h for h in scan1 if cheb(h["cell"], ref0) == 2]  # the pass's planned edge
+        edge_n.append(len(eh))
+        edge_ms += [float(h["ms"]) for h in eh if h.get("ms") is not None]
+        all_ms += [float(h["ms"]) for h in scan1 if h.get("ms") is not None]
+        mine = set(aj.drops_of_kill(items, t_k, fj.mob_at(pos, g, t_k - 1)))
+        for f in mine:  # where the step's own kill's drops lay, whatever became of them
+            fate_ = "picked" if items[f]["fate"] == "picked" else "not_picked"
+            drops_ring[f"{ring_of(items[f]['cell'], ref0)}|{fate_}"] += 1
+        # the step's picks: an ok pickup request from the step's start to PICK_TAIL_S after its
+        # end (an item 2 cells away is WALKED to first: its request comes after the walk, so
+        # ``click_results`` -- the first request within 0.6 s -- calls that click a walk)
+        for t_p, f in picks[bisect.bisect_left(pts, step[0]):
+                            bisect.bisect_right(pts, step[1] + int(PICK_TAIL_S * NS))]:  # fmt: skip
+            if f not in items:
+                continue
+            tag = "ours" if f in ours_all else "other"
+            by_item[f"{tag}|{ring_of(items[f]['cell'], ref0)}"] += 1
+            j = bisect.bisect_right(lts, t_p) - 1  # the step's last loot click before it
+            if j >= 0 and lclicks[j]["t"] >= step[0] and lclicks[j].get("cell"):
+                by_click[f"{tag}|{ring_of(lclicks[j]['cell'], ref0)}"] += 1
+            if f in mine:
+                own_kill[ring_of(items[f]["cell"], ref0)] += 1
+    se = sorted(edge_ms)
+    return {"gm_kills": kills_gm, "gm_steps_with_hovers": steps,
+            "picked_by_item_cell": dict(sorted(by_item.items())),
+            "picked_by_clicked_cell": dict(sorted(by_click.items())),
+            "picked_this_kills_items_by_item_cell": dict(sorted(own_kill.items())),
+            "this_kills_drops_by_ring_and_fate": dict(sorted(drops_ring.items())),
+            "edge_hovers_pass1": sum(edge_n), "edge_hovers_per_step": round(sum(edge_n) / steps, 2)
+            if steps else None,
+            "edge_hover_ms_p50": se[len(se) // 2] if se else None,
+            "edge_hover_ms_mean": round(sum(se) / len(se), 1) if se else None,
+            "edge_ms_sum": round(sum(se), 1), "scan_ms_sum": round(sum(all_ms), 1)}  # fmt: skip
+
+
+def edge_table(per: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
+    """PURE (v54): per run and pooled -- our picked items on the 5 x 5 EDGE vs the 3 x 3 (own cell
+    included), per 100 of our picked items and per gm-step kill; the edge's hover seconds a
+    step."""
+    rows: dict[str, Any] = {}
+    tot: Counter[str] = Counter()
+    for sid, v in per.items():
+        bi = Counter(v["picked_by_item_cell"])
+        bc = Counter(v["picked_by_clicked_cell"])
+        dr = Counter(v.get("this_kills_drops_by_ring_and_fate") or {})
+        c = Counter({"kills": int(v["gm_kills"]), "steps": int(v["gm_steps_with_hovers"]),
+                     "drops": sum(dr.values()),
+                     "drops_edge": dr["edge|picked"] + dr["edge|not_picked"],
+                     "drops_edge_picked": dr["edge|picked"],
+                     "edge": bi["ours|edge"], "in3": bi["ours|own"] + bi["ours|3x3"],
+                     "out": bi["ours|outside"], "click_edge": bc["ours|edge"],
+                     "edge_hovers": int(v["edge_hovers_pass1"]),
+                     "edge_ms": int(round(float(v["edge_ms_sum"])))})  # fmt: skip
+        tot.update(c)
+        rows[sid] = c
+    rows["pooled"] = tot
+    out: dict[str, Any] = {}
+    for k, c in rows.items():
+        n = c["edge"] + c["in3"] + c["out"]
+        out[k] = {"gm_kills": c["kills"], "ours_picked": n, "on_3x3": c["in3"],
+                  "on_edge": c["edge"], "outside_5x5": c["out"],
+                  "edge_per_100_items": round(100 * c["edge"] / n, 1) if n else None,
+                  "edge_per_kill": round(c["edge"] / c["kills"], 3) if c["kills"] else None,
+                  "picked_by_an_edge_click": c["click_edge"],
+                  "step_kills_drops": c["drops"], "of_them_on_edge": c["drops_edge"],
+                  "of_them_on_edge_picked": c["drops_edge_picked"],
+                  "edge_hovers_per_step": round(c["edge_hovers"] / c["steps"], 2)
+                  if c["steps"] else None,
+                  "edge_hover_s_per_step": round(c["edge_ms"] / 1000 / c["steps"], 2)
+                  if c["steps"] else None}  # fmt: skip
+    return out
+
+
 def pooled(per: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
     """PURE: the runs' counts summed (the time quantiles are not pooled)."""
     out: dict[str, Any] = {"items": 0, "picked": 0, "not_picked": 0}
@@ -335,8 +495,13 @@ def aim(sids: Sequence[str]) -> dict[str, Any]:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--aim", action="store_true")
+    ap.add_argument("--edge", action="store_true")
     ap.add_argument("sids", nargs="+")
     a = ap.parse_args()
+    if a.edge:
+        per_e = {s: edge_session(s) for s in a.sids}
+        print(json.dumps({"per_run": per_e, "table": edge_table(per_e)}, indent=1))
+        return 0
     if a.aim:
         print(json.dumps(aim(a.sids), indent=1))
         return 0

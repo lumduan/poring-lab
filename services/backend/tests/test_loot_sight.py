@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
 
@@ -80,3 +81,163 @@ def test_line_anchor_is_the_first_exp_line_after_the_kill() -> None:
     assert ls.line_anchor(5 * s, lines) == int(5.3 * s)
     assert ls.line_anchor(6 * s, lines) is None  # 3.9 s later: not this kill's line
     assert ls.line_anchor(10 * s, lines) is None
+
+
+# --- the SHARED classifier (v54, the fast scan: hunt_flow calls the same ``classify``) ----------
+
+
+def _scene(seed: int = 7) -> np.ndarray:
+    """A textured 720 x 1280 ground (smooth blobs: phase correlation registers it)."""
+    rng = np.random.default_rng(seed)
+    small = rng.integers(0, 256, size=(90, 160, 3)).astype(np.uint8)
+    return np.ascontiguousarray(np.repeat(np.repeat(small, 8, axis=0), 8, axis=1))
+
+
+def _grid(own: tuple[int, int]) -> tuple[list[tuple[int, int]], list[tuple[float, float]]]:
+    """The 25 cells around ``own`` and synthetic centres: 40 px a column, 30 px a row, the GM's
+    own cell at (640, 340) -- only it and the cells right above / below it fall in the GM's box."""
+    cells = ls.five_by_five(own)
+    uv = [(640.0 + 40 * (c[0] - own[0]), 340.0 + 30 * (c[1] - own[1])) for c in cells]
+    return cells, uv
+
+
+def test_five_by_five_is_row_major_with_the_own_cell_at_12() -> None:
+    cells = ls.five_by_five((10, 20))
+    assert len(cells) == 25 and len(set(cells)) == 25 and cells[12] == (10, 20)
+    assert cells[0] == (8, 18) and cells[1] == (9, 18) and cells[24] == (12, 22)
+
+
+def test_classify_a_changed_patch_is_unsure_an_unchanged_one_empty() -> None:
+    own = (100, 100)
+    cells, uv = _grid(own)
+    before = _scene()
+    after = before.copy()
+    u, v = uv[cells.index((102, 100))]  # the east edge cell: an item drawn there
+    after[int(v) - 8 : int(v) + 8, int(u) - 10 : int(u) + 10] = (250, 30, 200)
+    got = ls.classify(before, after, cells, uv, own, ground=[])
+    ver = got["verdicts"]
+    assert ver[(102, 100)] == "unsure" and got["changed"][(102, 100)] > ls.THR
+    covered = {own, (100, 99), (100, 101)}  # the GM's own cell + the centres inside its sprite
+    assert got["covered"] == covered and all(ver[c] == "unsure" for c in covered)
+    others = [c for c in cells if c not in covered and c != (102, 100)]
+    assert others and all(ver[c] == "empty" for c in others)
+    # the matcher's ground point on a cell -> "seen" (hovered first), even with no change there
+    got2 = ls.classify(before, after, cells, uv, own, ground=[uv[cells.index((98, 98))]])
+    assert got2["verdicts"][(98, 98)] == "seen"
+
+
+def test_classify_registers_the_camera_jitter_and_a_big_shift_is_unsure() -> None:
+    own = (5, 5)
+    cells, uv = _grid(own)
+    before = _scene(11)
+    after = np.ascontiguousarray(np.roll(before, (3, -2), axis=(0, 1)))  # 1-3 px of jitter
+    got = ls.classify(before, after, cells, uv, own, ground=[])
+    assert got["shift"] != (0, 0)
+    assert sum(v == "empty" for v in got["verdicts"].values()) == 22  # all but the 3 covered
+    # --max-shift (loot_sight's study option): a shift above it makes every cell changed
+    got3 = ls.classify(before, after, cells, uv, own, ground=[], max_shift_px=1)
+    assert set(got3["verdicts"].values()) == {"unsure"}
+
+
+def test_classify_is_channel_order_agnostic() -> None:
+    """The runner hands BGR grabs; the recordings are RGB: the diff ignores the order."""
+    own = (40, 40)
+    cells, uv = _grid(own)
+    before = _scene(3)
+    after = before.copy()
+    after[330:350, 715:725] = (10, 240, 10)
+    a = ls.classify(before, after, cells, uv, own, ground=[])
+    b = ls.classify(before[..., ::-1].copy(), after[..., ::-1].copy(), cells, uv, own, ground=[])
+    assert a["verdicts"] == b["verdicts"]
+
+
+# A REAL session (v52 run 1, 3.93): loot_sight's records for its first 12 kills (--from-line,
+# before 0.45 s, stand 0.5 s, THR 0.04, --all-kills), taken from the run BEFORE the classifier was
+# moved into ``classify`` (2026-10-21): (kill t, seen / unsure / empty cells, the verdicts of the
+# floor items on the 25 cells -- "*" not ours --, the matcher's hits, the registration shift). The
+# whole session's records (92 kills) were byte-identical before / after the refactor.
+REAL_SID = "20261021T092850-demo-hunt-flow52"
+REAL_12 = [
+    (1291648282772284, 0, 14, 11, (), 0, (-1, 0)),
+    (1291687251608188, 3, 11, 11, ("seen*", "unsure"), 1, (0, 0)),
+    (1291734130565996, 0, 14, 11, ("unsure",), 0, (-6, 0)),
+    (1291815453243229, 2, 13, 10, (), 1, (0, 0)),
+    (1291828131217939, 0, 24, 1, ("unsure",), 0, (0, 0)),
+    (1291843220610309, 0, 15, 10, (), 0, (0, 0)),
+    (1291901771987115, 0, 14, 11, (), 0, (0, 0)),
+    (1291909561217290, 0, 11, 14, ("unsure", "unsure"), 0, (4, -7)),
+    (1291943542726067, 0, 13, 12, (), 0, (0, 0)),
+    (1291968780451532, 3, 4, 18, ("seen", "unsure"), 1, (0, 0)),
+    (1291981122255331, 0, 18, 7, (), 1, (0, 0)),
+    (1292000243774411, 0, 10, 15, ("unsure",), 0, (0, -6)),
+]
+
+
+def test_the_shared_classifier_reproduces_loot_sight_on_a_real_session() -> None:
+    """POSITIVE CASE (real frames, NAS + the session's packets): the shared ``classify`` gives
+    loot_sight's pre-refactor numbers, and the same on the frames in the runner's BGR order."""
+    import drop_blobs as db
+    import item_icons as ii
+
+    if not ((db.DEMO_ROOT / REAL_SID / "packets.jsonl.gz").exists()
+            and (db.REC_ROOT / REAL_SID / "frames").is_dir()
+            and (ii.ICONS_DIR / "index.json").exists()):  # fmt: skip
+        pytest.skip("the real session's packets / frames / item templates are not here")
+    for bgr in (False, True):
+        recs = ls.session(REAL_SID, 0.5, 0.45, ls.THR, from_line=True, still_only=False,
+                          limit=len(REAL_12), bgr=bgr)  # fmt: skip
+        got = [(int(r["t"]), r["cells"].get("seen", 0), r["cells"].get("unsure", 0),
+                r["cells"].get("empty", 0),
+                tuple(sorted(i["verdict"] + ("" if i["ours"] else "*") for i in r["items"])),
+                int(r["hits"]), tuple(r["shift"])) for r in recs]  # fmt: skip
+        assert got == REAL_12, f"bgr={bgr}"
+        # a positive case: our items lay on these cells, and none on an "empty" one
+        assert sum(len(r["items"]) for r in recs) == 9  # 8 ours, 1 not ours
+        assert not any(i["verdict"] == "empty" for r in recs for i in r["items"])
+
+
+def test_the_runners_fast_verdicts_give_the_same_classes_on_real_frames() -> None:
+    """POSITIVE CASE for the RUNNER's path (hunt_flow.fast_verdicts: BGR grabs, the matcher told
+    so, the cells projected by a callable, then the shared ``classify``) on the same real kills:
+    the same seen / unsure / empty counts, matcher hits and registration as loot_sight's."""
+    from collections import Counter
+
+    import drop_blobs as db
+    import hunt_flow as hf
+    import item_icons as ii
+
+    if not ((db.DEMO_ROOT / REAL_SID / "packets.jsonl.gz").exists()
+            and (db.REC_ROOT / REAL_SID / "frames").is_dir()
+            and (ii.ICONS_DIR / "index.json").exists()):  # fmt: skip
+        pytest.skip("the real session's packets / frames / item templates are not here")
+    import json
+
+    ev = db.load_events(REAL_SID)
+    bev = (db.DEMO_ROOT / REAL_SID / "events.jsonl").read_text().splitlines()
+    lines = sorted(int(e["line_t_ns"]) for e in map(json.loads, filter(None, bev))
+                   if e.get("kind") == "exp_dead" and e.get("line_t_ns"))  # fmt: skip
+    pos, proj, frames = db.Positions(ev), db.Projector(), db.load_frames(REAL_SID)
+    tpls = ii.load_templates()
+    want = {r[0]: r for r in REAL_12[:6]}
+    n = 0
+    for k in db.kills_with_drops(ev, pos):
+        if k.t not in want:
+            continue
+        la = ls.line_anchor(k.t, lines)
+        assert la is not None
+        fa = db.frame_at(frames, la + int(0.5 * ls.NS))
+        fb = db.frame_before(frames, la - int(0.45 * ls.NS))
+        assert fa is not None and fb is not None
+        o_a = pos.gm_at(fa[0] - int(0.5 * ls.NS))
+        assert o_a is not None
+        r0 = (round(o_a[0]), round(o_a[1]))
+        before = np.ascontiguousarray(db.read_rgb(fb[1])[..., ::-1])
+        stand = np.ascontiguousarray(db.read_rgb(fa[1])[..., ::-1])
+        ver, info = hf.fast_verdicts(before, stand, lambda cs, o=o_a: proj.project(o, cs), r0,
+                                     tpls, ls.THR)  # fmt: skip
+        c = Counter(ver.values())
+        w = want[k.t]
+        assert (c["seen"], c["unsure"], c["empty"]) == w[1:4], k.t
+        assert info["hits"] == w[5] and tuple(info["shift"]) == w[6]
+        n += 1
+    assert n == 6

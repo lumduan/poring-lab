@@ -308,6 +308,12 @@ VERSIONS = {
     53: "THE UNION PLAN: on odd k the one pass around the drawn GM (own cell, 3 x 3, 5 x 5 edge) "
     "also hovers the believed death cell's 3 x 3 cells outside the GM's 5 x 5, after it; even k "
     "the base's pass; interleaved per engagement. Base: 3.93's verdict",
+    54: "THE FAST SCAN: on odd k the one pass around the drawn GM hovers its 3 x 3 first (its own "
+    "cell, then the believed death cell's side), then ONLY the 5 x 5 edge cells whose image "
+    "changed since before the kill (option C: changed / under the GM's sprite / a matcher hit; "
+    "the item matcher's cells first) -- the whole edge when the runner's own floor odometry says "
+    "the GM moved between the two frames, or the before frame is missing or old; even k the "
+    "base's pass; interleaved per engagement. Base: v52 ADOPTED (3.93; v53 not adopted)",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -600,6 +606,20 @@ PARAMS[52] = {**PARAMS[51], "loot_gm_one_pass_ab": False, "map_zones": True}
 # (gm_union_cells), after the 5 x 5; even k the base's pass. Its base is fixed by 3.93's verdict
 # (pre-registered 3.94).
 PARAMS[53] = {**PARAMS[52], "loot_gm_union": True, "loot_gm_union_ab": True}
+# 54 = THE FAST SCAN (Batt 2026-10-21 ~16:4x, on the day report: "Next loot work = a FASTER SCAN,
+# not more cells: hover the 3x3 around the drawn GM FIRST (death-cell side first), then the 5x5
+# edge ONLY on cells whose image changed since before the kill (option C, held out 0/514 items
+# lost, + the odometry "moved" gate). Pre-register it with loot step time as primary and
+# completeness as guard."): on odd k the one pass is fast_scan_cells (the 3 x 3 in the base's own
+# order, then the edge cells option C did not call EMPTY; the whole edge when fast_gate fails);
+# even k v52's pass unchanged. On v52's ADOPTED base (v53's union not adopted). The knobs:
+# the before frame loot_fast_before_s before the EXP line's first frame (loot_sight's held-out
+# preset 0.45 s), at most loot_fast_before_max_s older than that (the ring's ~0.2 s stride);
+# "moved" = the floor odometry between the two frames > loot_fast_moved_cells (Chebyshev);
+# option C's THR (loot_sight.THR, set on 3.91 run 1). Built, NOT pre-registered.
+PARAMS[54] = {**PARAMS[52], "loot_fast_scan": True, "loot_fast_scan_ab": True,
+              "loot_fast_before_s": 0.45, "loot_fast_before_max_s": 0.4,
+              "loot_fast_moved_cells": 0.25, "loot_fast_thr": 0.04}  # fmt: skip
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -2002,6 +2022,118 @@ def gm_union_cells(gm: Cell, dcell: Cell | None, edge: bool = True) -> list[Cell
     return out
 
 
+def fast_scan_on(prm: Mapping[str, Any], k: int) -> bool:
+    """PURE (v54, Batt 2026-10-21 ~16:4x: "a FASTER SCAN, not more cells"): does engagement
+    ``k``'s one pass take the fast scan? ``loot_fast_scan`` on; with ``loot_fast_scan_ab`` only
+    odd k (the fix arm)."""
+    return bool(prm.get("loot_fast_scan")) and (not prm.get("loot_fast_scan_ab") or k % 2 == 1)
+
+
+def fast_scan_cells(gm: Cell, toward: Cell | None, verdicts: Mapping[Cell, str],
+                    full_edge: bool, edge: bool = True
+                    ) -> tuple[list[Cell], list[Cell]]:  # fmt: skip
+    """PURE (v54, the FAST SCAN): (the pass's cells in order, the EDGE cells skipped). The drawn
+    GM's 3 x 3 FIRST, in the base's own order (``gm_scan_cells``: its own cell, then the
+    neighbours nearest the believed death cell ``toward``, ties by row then column); then the
+    5 x 5's 16 edge cells -- ALL of them in the base's order when ``full_edge`` (the moved gate:
+    ``fast_gate`` not "ok"), else only those option C (``loot_sight.classify``) did not call
+    "empty": the matcher's "seen" cells first, then the "unsure" ones (changed since before the
+    kill, or under the GM's sprite), each group in the base's order. A cell with no verdict counts
+    as unsure (never skipped). ``edge`` False (``loot_gm_edge``): the 3 x 3 alone, as the base."""
+    inner = gm_scan_cells(gm, toward, edge=False)
+    if not edge:
+        return inner, []
+    ring2 = gm_scan_cells(gm, toward, edge=True)[len(inner) :]
+    if full_edge:
+        return inner + ring2, []
+    seen = [c for c in ring2 if verdicts.get(c) == "seen"]
+    unsure = [c for c in ring2 if verdicts.get(c, "unsure") not in ("seen", "empty")]
+    return inner + seen + unsure, [c for c in ring2 if verdicts.get(c) == "empty"]
+
+
+def pick_before(ring: Sequence[Sequence[Any]], t_target: int, max_age_s: float
+                ) -> tuple[str, int | None, Any]:  # fmt: skip
+    """PURE (v54): the BEFORE frame from the runner's frame ring (entries (mono s, BGR frame,
+    grab t_ns), oldest first): the newest frame grabbed at or before ``t_target`` (ns) --
+    ("ok", its t_ns, the frame); ("none", None, None) when the ring holds none that old (it was
+    empty, or starts later); ("old", t_ns, None) when that frame is more than ``max_age_s`` older
+    than ``t_target`` (a gap in the ring)."""
+    best = None
+    for f in ring:
+        if len(f) < 3:
+            continue
+        if int(f[2]) <= t_target:
+            best = f
+    if best is None:
+        return "none", None, None
+    if (t_target - int(best[2])) / 1e9 > max_age_s:
+        return "old", int(best[2]), None
+    return "ok", int(best[2]), best[1]
+
+
+def odo_moved(hist: Sequence[tuple[int, Any]], t0: int, t1: int, max_gap_s: float = 0.5
+              ) -> float | None:  # fmt: skip
+    """PURE (v54, the moved gate): how far the runner's own floor odometry (the motion thread's
+    ``mstate["hist"]``: (grab t_ns, summed camera move in cells)) moved between ``t0`` (the before
+    frame) and ``t1`` (the stand frame) -- the Chebyshev distance of the two totals (``odo_at``:
+    the last sample at or before each); None when the history does not cover both (no sample at
+    or before ``t0``, or its newest sample more than ``max_gap_s`` before ``t1``: the motion thread
+    stalled). The registration shift is NOT a moved signal (loot_sight.py's docstring)."""
+    if not hist or int(hist[0][0]) > t0 or (t1 - int(hist[-1][0])) / 1e9 > max_gap_s:
+        return None
+    a, b = odo_at(hist, t0), odo_at(hist, t1)
+    return float(max(abs(float(b[0]) - float(a[0])), abs(float(b[1]) - float(a[1]))))
+
+
+def fast_gate(t_line: int | None, ring: Sequence[Sequence[Any]], hist: Sequence[tuple[int, Any]],
+              t_stand: int, prm: Mapping[str, Any]) -> dict[str, Any]:  # fmt: skip
+    """PURE (v54): may this step's pass skip the EMPTY edge cells? {"gate": "ok" | why not,
+    "t_before", "before_age_s" (from the target time), "odo_cells", "before" (the frame, "ok"
+    only)}. Not "ok" -> the whole edge is hovered: "no_line" (no EXP line: the kill's time is
+    unknown), "no_before" / "old_before" (``pick_before``), "no_odo" (``odo_moved`` None),
+    "moved" (the odometry moved more than loot_fast_moved_cells between the two frames)."""
+    out: dict[str, Any] = {"gate": "no_line", "t_before": None, "before_age_s": None,
+                           "odo_cells": None, "before": None}  # fmt: skip
+    if t_line is None:
+        return out
+    t_target = int(t_line) - int(float(prm["loot_fast_before_s"]) * 1e9)
+    st, t_b, img = pick_before(ring, t_target, float(prm["loot_fast_before_max_s"]))
+    out["t_before"] = t_b
+    if t_b is not None:
+        out["before_age_s"] = round((t_target - t_b) / 1e9, 3)
+    if st != "ok" or t_b is None:
+        out["gate"] = "no_before" if st == "none" else "old_before"
+        return out
+    mv = odo_moved(hist, t_b, t_stand)
+    out["odo_cells"] = None if mv is None else round(mv, 3)
+    if mv is None:
+        out["gate"] = "no_odo"
+    elif mv > float(prm["loot_fast_moved_cells"]):
+        out["gate"] = "moved"
+    else:
+        out["gate"], out["before"] = "ok", img
+    return out
+
+
+def fast_verdicts(before: Any, stand: Any, project: Any, ref: Cell, templates: Sequence[Any],
+                  thr: float) -> tuple[dict[Cell, str], dict[str, Any]]:  # fmt: skip
+    """PURE given ``project`` (v54): option C's verdicts for the 25 cells around the drawn GM's cell
+    ``ref`` -- ``project`` maps absolute cells to their pixels on the STAND frame (the runner: the
+    World on ``ref``), the item matcher on the stand frame (BGR, as grabbed; no templates -> no
+    "seen"), then ``loot_sight.classify`` (the ONE classifier) against the BEFORE frame. Returns
+    (cell -> "seen" | "unsure" | "empty", {"shift", "hits"})."""
+    import loot_sight as ls_
+
+    cells = ls_.five_by_five(ref)
+    uv = [(float(p[0]), float(p[1]))
+          for p in project([(float(c[0]), float(c[1])) for c in cells])]  # fmt: skip
+    ground: list[tuple[float, float]] = []
+    if templates:
+        ground = ls_.matcher_ground(stand, uv[12], templates, order="BGR")
+    cl = ls_.classify(before, stand, cells, uv, ref, ground, thr)
+    return dict(cl["verdicts"]), {"shift": list(cl["shift"]), "hits": len(ground)}
+
+
 def hand_seen(verdict: str, rec: Mapping[str, float], pickup_min: float) -> str:
     """PURE (3.90): one hover's cursor (cursor_sword.check) as the scan reads it: "sword" (a unit
     under the pointer), "hand" (the PICKUP cursor: an item; recall >= ``pickup_min``), "empty"
@@ -3310,6 +3442,60 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 k_g = int(eng_.get("k", 0))
                 given_up: set[Cell] = set()
                 extra_cells: set[Cell] = set()  # v53: the hovers outside the GM's 5 x 5 (logged)
+                fast_on = fast_scan_on(prm, k_g)  # v54: the fix arm's fast scan
+                fast_cls: dict[Cell, str] = {}  # v54: option C's class per cell (logged)
+                fast_out: list[dict[str, Any]] = []  # v54: per pass, the plan's record
+
+                def fast_plan(ref_: Cell) -> list[Cell]:
+                    """v54 (Batt 2026-10-21 ~16:4x, THE FAST SCAN): this pass's cells -- the
+                    drawn GM's 3 x 3 first, then only the 5 x 5 edge cells option C does not call
+                    EMPTY (``fast_verdicts``: the before frame from the ring against a fresh
+                    STAND frame, the cells projected on the drawn GM, the item matcher), the whole
+                    edge when ``fast_gate`` fails (no EXP line, no / an old before frame, the
+                    floor odometry moved between the two frames) or the classification fails.
+                    Logged as ``fast_scan`` (and in the step's ``fast``)."""
+
+                    def proj_(cs_: Sequence[tuple[float, float]]) -> Any:
+                        w_l.position = (int(ref_[0]), int(ref_[1]))
+                        return w_l.project(cs_)
+
+                    t_f0 = time.monotonic()
+                    t_st, img_st = screen.grab(gx0, gy0, gw, gh)
+                    stand_ = np.ascontiguousarray(np.asarray(img_st)[..., :3])
+                    with plock:
+                        ring_f = list(ring_frames)
+                    t_ln = (eng_.get("exp_line") or {}).get("t_ns")
+                    g_ = fast_gate(None if t_ln is None else int(t_ln), ring_f, hist_now(),
+                                   int(t_st), prm)  # fmt: skip
+                    gate_ = str(g_["gate"])
+                    fast_cls.clear()
+                    rec_: dict[str, Any] = {"pass": passes, "ref": list(ref_), "gate": gate_,
+                                            "before_age_s": g_["before_age_s"],
+                                            "odo_cells": g_["odo_cells"]}  # fmt: skip
+                    if gate_ == "ok":
+                        try:
+                            ver_, inf_ = fast_verdicts(g_["before"], stand_, proj_, ref_,
+                                                       icon_templates,
+                                                       float(prm["loot_fast_thr"]))  # fmt: skip
+                            fast_cls.update(ver_)
+                            rec_.update(inf_)
+                        except Exception as e_:  # noqa: BLE001 -- never skip a cell on a fault
+                            gate_ = rec_["gate"] = "error"
+                            rec_["err"] = repr(e_)[:200]
+                            fast_cls.clear()
+                    q_, skip_ = fast_scan_cells(ref_, dcell, fast_cls, gate_ != "ok",
+                                                bool(prm.get("loot_gm_edge", True)))  # fmt: skip
+                    inner_n = len(gm_scan_cells(ref_, dcell, edge=False))
+                    rec_.update(edge_hovered=[list(c_) for c_ in q_[inner_n:]],
+                                edge_skipped=[list(c_) for c_ in skip_],
+                                cls=dict(Counter(fast_cls.values())),
+                                ms=round((time.monotonic() - t_f0) * 1e3))  # fmt: skip
+                    ev({"kind": "fast_scan", "k": k_g, **rec_})
+                    fast_out.append({k2_: v2_ for k2_, v2_ in rec_.items()
+                                     if k2_ not in ("edge_hovered", "edge_skipped")}
+                                    | {"edge_hovered": len(q_) - inner_n,
+                                       "edge_skipped": len(skip_)})  # fmt: skip
+                    return q_
 
                 def hover(c_: Cell, ref_: Cell, pass_: int, burst_: int,
                           t_click: float | None = None) -> tuple[str, Any]:  # fmt: skip
@@ -3323,6 +3509,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     ev({"kind": "hand_hover", "arm": "gm", "k": k_g, "cell": list(c_),
                         "ref": list(ref_), "pass": pass_, "burst": burst_, "seen": sn_,
                         "union": c_ in extra_cells,
+                        "fast_scan": fast_on, "cls": fast_cls.get(c_) if fast_on else None,
                         "ms": res_["ms"], "reads": len(res_["reads"]),
                         "since_click_s": None if t_click is None
                         else round(time.monotonic() - t_click, 3),
@@ -3342,9 +3529,12 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     ref, how_ = rf_
                     seen_c["ref_" + how_] += 1
                     union_ = gm_union_on(prm, k_g)  # v53: + the believed death cell's 3 x 3
-                    queue_ = (gm_union_cells if union_ else gm_scan_cells)(
-                        ref, dcell, bool(prm.get("loot_gm_edge", True)))  # fmt: skip
-                    if union_:
+                    if fast_on:  # v54: the 3 x 3 first, the edge only where the image changed
+                        queue_ = fast_plan(ref)
+                    else:
+                        queue_ = (gm_union_cells if union_ else gm_scan_cells)(
+                            ref, dcell, bool(prm.get("loot_gm_edge", True)))  # fmt: skip
+                    if union_ and not fast_on:
                         extra_cells |= set(queue_) - set(gm_scan_cells(ref, dcell, True))
                     retried: set[Cell] = set()
                     found = False
@@ -3431,6 +3621,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 out["passes"] = passes
                 if gm_union_on(prm, k_g):
                     out["union"] = len(extra_cells)  # v53: the extra cells this step planned
+                if fast_on:
+                    out["fast"] = fast_out  # v54: per pass, the gate and the edge kept / skipped
 
             def loot_fixed_run(eng_: dict[str, Any], here2: Cell, dcell: Cell,
                                extra: Sequence[Any] = (),
@@ -4795,14 +4987,16 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
             mstate: dict[str, Any] = {"hist": [], "anchor": None}
             from collections import deque as deque_
 
-            ring_frames: Any = deque_(maxlen=24)  # v21: (mono s, BGR frame) at ~5 Hz, ~4.8 s
+            # v21: (mono s, BGR frame, v54: its grab t_ns) at ~5 Hz, ~4.8 s
+            ring_frames: Any = deque_(maxlen=24)
             species_model: Any = None
             if prm.get("species_shadow") or prm.get("species_skip"):  # v23 shadow, v25 skip
                 import species_check as sc_
 
                 species_model = sc_.load_model()
             icon_templates: list[Any] = []
-            if prm.get("loot_icons"):  # v23: the floor items' own sprites (data/item_icons)
+            if prm.get("loot_icons") or prm.get("loot_fast_scan"):
+                # v23: the floor items' own sprites (data/item_icons); v54: option C's "seen"
                 import item_icons as ii_
 
                 icon_templates = ii_.load_templates()
@@ -4834,11 +5028,11 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                 if len(mstate["hist"]) > 300:
                                     del mstate["hist"][:150]
                         prev_img, prev_g = img3, g_
-                        if prm.get("loot_blobs") and (
+                        if (prm.get("loot_blobs") or prm.get("loot_fast_scan")) and (
                             not ring_frames or time.monotonic() - ring_frames[-1][0] >= 0.18
                         ):
-                            with plock:  # v21: BEFORE for the drop detector
-                                ring_frames.append((time.monotonic(), img3.copy()))
+                            with plock:  # v21: BEFORE for the drop detector (v54: + grab t_ns)
+                                ring_frames.append((time.monotonic(), img3.copy(), int(t_)))
                         time.sleep(max(0.0, 1.0 / prm["motion_hz"] - 0.03))
                 finally:
                     scr.close()
