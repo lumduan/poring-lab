@@ -14,7 +14,8 @@ files), never one file per frame on the shared disk. So:
   (freeze spans excluded) is kept;
 - labels come from qa_export's Labeler (the same as /qa and label_iou: the backend's camera, the
   packet->frame offset, GM-command windows skipped). Frames on any map other than the session's
-  scene maps (prt_fild08, prt_church) are skipped (p3-outdoor-b's stray minutes in prontera);
+  scene maps (prt_fild08, prt_church; orcsdun01 since 2026-10-21) are skipped (p3-outdoor-b's
+  stray minutes in prontera);
 - frames are written as JPEG q95: the default again since Batt's decision of 2026-10-09 (the
   matched-batch rerun found no detection gain for PNG's ~5x storage; docs/benchmarks/
   v0-png-vs-jpeg.md). ``--image png`` gives the lossless PNG of 2026-10-06..09, which v1png keeps
@@ -61,6 +62,27 @@ LABELS v2 (docs/planning/labels-v2-plan.md 3.3 step 1; PROPOSED plan, offline to
 - ``--dry-run`` (v2 only): no shard, no manifest, no directory; no image is read. Prints per
   session and per split: frames seen / kept / excluded by reason, boxes per class, per species
   and per NPC sprite (ids and counts only, never names or pixels).
+
+PER-SPECIES CLASSES (docs/planning/orcsdun01-detector.md section 4, Batt's default 2026-10-21):
+
+    build_frame_cache.py --labels v2 --classes species [--class-list JSON] --kb DIR
+                         [--warp-visibility JSON] ...
+
+- the sprite scale is v1's k 0.14 unless --k says otherwise (the camera check's k);
+- the class ids come from a COMMITTED list of ids only (config/detector/classes-v2orc.json: player
+  0, npc 1, warp 2, then one class per monster species in the list's order); the names written to
+  the cache manifest come from the local KB at run time (classes.json's aegis names);
+- v2's labels and exclusions unchanged, plus (every frame labelled completely or EXCLUDED):
+  ``species_unlisted:<job>`` (a monster of a species outside the list on screen),
+  ``monster_unsized:<job>`` (a monster of a listed species without its sprite: v0's constant box
+  would be wrong for it) and ``monster_unknown_species``;
+- the warp class: without ``--warp-visibility`` (a person's measurement, labels v2) the table is
+  EMPTY, so any frame with a drawn portal on screen is excluded (``warp_visibility_unknown``), never
+  half-labelled; ``warp`` keeps its id with no box.
+
+WARP-AND-WATCH sessions (scripts/warp_watch.py, JPEG tar shards; qa_export.is_warp_watch): every
+``--every-jpeg``-th frame (5 Hz recordings; default 3, ~1.7 fps, near v1's ~2 fps), their labels in
+the recorded UI layout's rectangles. orcsdun01 is a scene map of v0 / v1 too.
 """
 
 from __future__ import annotations
@@ -93,7 +115,7 @@ from poring_dataset.shards import encode_png, read_shard  # noqa: E402
 
 NAS = Path("/mnt/poring-lab-datasets")
 OUT = NAS / ".framecache"
-SCENE_MAPS = {"prt_fild08", "prt_church"}  # v0 / v1; v2's are the KB's maps (kb_maps)
+SCENE_MAPS = {"prt_fild08", "prt_church", "orcsdun01"}  # v0 / v1; v2's: the KB's maps (kb_maps)
 GOLD = "20261004T103815-console-s2-indoor-v2"
 DEMO = Path("/dev/shm/poring-lab-demo")  # banked demo sessions (tmpfs; v2 reads them too)
 V2_SIZE = (1280, 720)  # labels_v2.py's game region (scripts/labels_v2.py SIZE)
@@ -105,11 +127,19 @@ UNVERIFIED_GAT = frozenset({"alberta", "morocc"})
 # NPC sprite box no person has judged (labels-v2-plan 1.2's N3: "READY FOR A PERSON, not judged").
 HOLDS = ("gat_unverified", "npc_unchecked")
 NPC_REASONS = ("npc_unsized", "npc_unchecked", "npc_rejected")  # what N2 / N3 alone would admit
+# --classes species: the committed class list (ids only; orcsdun01-detector.md section 4)
+SPECIES_LIST = Path(__file__).resolve().parents[1] / "config" / "detector" / "classes-v2orc.json"
+EVERY_JPEG = 3  # warp_watch sessions are 5 Hz: ~1.7 fps kept (v1 kept ~2 fps of H.264)
+SPECIES_K = 0.14  # --classes species without --k: the v1 labels' k (M4; the camera check's)
 
 
 def session_frames(
-    session: Path, manifest: dict[str, Any], every: int, every_png: int
-) -> Iterator[tuple[Any, Any]]:
+    session: Path, manifest: dict[str, Any], every: int, every_png: int,
+    every_jpeg: int = EVERY_JPEG,
+) -> Iterator[tuple[Any, Any]]:  # fmt: skip
+    if qa_export.is_warp_watch(manifest):
+        yield from qa_export.jpeg_frames(session, manifest, every_jpeg)
+        return
     if (manifest.get("format") or "png") == "h264":
         from poring_dataset.h264 import H264Session
 
@@ -186,7 +216,7 @@ class ShardSink:
 
 
 RESUME_KEYS = ("labels", "k", "every", "every_png", "max_per_session", "shard_mb", "image",
-               "quality", "split", "every_demo", "v2")  # fmt: skip
+               "quality", "split", "every_demo", "every_jpeg", "v2")  # fmt: skip
 
 
 def write_json(directory: Path, name: str, doc: Any) -> None:
@@ -233,6 +263,85 @@ def kb_maps(kb: Path) -> frozenset[str]:
 
 
 @dataclass(frozen=True)
+class SpeciesClasses:
+    """``--classes species``: player / npc / warp at fixed ids, then one class per monster species
+    (mob id) in the committed list's order. Ids only in the list; names come from the KB."""
+
+    fixed: dict[str, int]
+    monsters: tuple[int, ...]
+    first: int
+    path: Path
+    sha256: str
+
+    @classmethod
+    def load(cls, path: Path) -> SpeciesClasses:
+        doc = json.loads(path.read_text())
+        fixed = {str(k): int(v) for k, v in doc["fixed"].items()}
+        monsters = tuple(int(m) for m in doc["monsters"])
+        first = int(doc["monster_first_id"])
+        ids = [*fixed.values(), *range(first, first + len(monsters))]
+        if (
+            set(fixed) != {"player", "npc", "warp"}
+            or len(set(ids)) != len(ids)
+            or (sorted(ids) != list(range(len(ids))))
+        ):
+            raise SystemExit(f"{path}: the class ids must be player / npc / warp + the monster "
+                             f"species, 0..n-1 without a gap or a repeat")  # fmt: skip
+        if len(set(monsters)) != len(monsters):
+            raise SystemExit(f"{path}: a monster species is listed twice")
+        return cls(fixed, monsters, first, path, sha256_of(path) or "")
+
+    @property
+    def index(self) -> dict[int, int]:
+        return {m: self.first + i for i, m in enumerate(self.monsters)}
+
+    def class_of(self, lab: lv.V2Label) -> int:
+        if lab.cls == "monster":
+            if lab.job is None or lab.job not in self.index:
+                raise KeyError(f"no class for monster species {lab.job}")  # reasons() excluded it
+            return self.index[lab.job]
+        return self.fixed[lab.cls]
+
+    def reasons(self, labels: Sequence[lv.V2Label]) -> list[str]:
+        """Why a frame cannot be labelled completely in this scheme (fail closed)."""
+        out = []
+        for lab in labels:
+            if lab.cls != "monster":
+                continue
+            if lab.job is None:
+                out.append("monster_unknown_species")
+            elif lab.job not in self.index:
+                out.append(f"species_unlisted:{lab.job}")
+            elif lab.kind == "v0":
+                out.append(f"monster_unsized:{lab.job}")  # no sprite: v0's 44 x 40 box
+        return list(dict.fromkeys(out))
+
+    def names(self, kb: Path) -> dict[int, str]:
+        """class id -> name; a monster's name is the KB's aegis name (classes.json, any map;
+        monster_sprite_names.json as a fallback), lower case. A listed species the KB cannot name
+        stops the build (the names are what the trainer reports)."""
+        aegis: dict[int, str] = {}
+        sprite_names = kb / "monster_sprite_names.json"
+        if sprite_names.exists():
+            rows = json.loads(sprite_names.read_text()).get("mobs") or {}
+            aegis.update({int(j): str(r["aegis"]) for j, r in rows.items() if r.get("aegis")})
+        if (kb / "classes.json").exists():
+            for rows in json.loads((kb / "classes.json").read_text()).values():
+                aegis.update({int(j): str(r["aegis"]) for j, r in rows.items() if r.get("aegis")})
+        missing = [m for m in self.monsters if m not in aegis]
+        if missing:
+            raise SystemExit(f"the KB ({kb}) has no name for listed species {missing}")
+        out = {v: k for k, v in self.fixed.items()}
+        out.update({self.index[m]: aegis[m].lower() for m in self.monsters})
+        return dict(sorted(out.items()))
+
+    def provenance(self) -> dict[str, Any]:
+        return {"mode": "species", "list": str(self.path), "sha256": self.sha256,
+                "fixed": self.fixed, "monster_first_id": self.first,
+                "monsters": list(self.monsters)}  # fmt: skip
+
+
+@dataclass(frozen=True)
 class V2Inputs:
     """Everything v2's labels depend on beyond the session (validated once, recorded in the
     progress file and the manifest: a resume with any other input is refused)."""
@@ -244,12 +353,18 @@ class V2Inputs:
     lifted: frozenset[str]
     k: float | None
     provenance: dict[str, Any]
+    classes: SpeciesClasses | None = None
 
     @classmethod
     def from_args(cls, a: argparse.Namespace) -> V2Inputs:
-        if a.kb is None or a.warp_visibility is None:
+        species = getattr(a, "classes", "v2") == "species"
+        if a.kb is None or (a.warp_visibility is None and not species):
             raise SystemExit("--labels v2 needs --kb DIR and --warp-visibility JSON (a person's "
                              "table; labels-v2-plan 1.3)")  # fmt: skip
+        classes = SpeciesClasses.load(getattr(a, "class_list", None) or SPECIES_LIST) if species \
+            else None  # fmt: skip
+        if classes is not None:
+            classes.names(a.kb)  # fail closed before any frame: every listed species has a name
         if (a.npc_sprites is None) != (a.npc_sprite_names is None):
             raise SystemExit("--npc-sprites and --npc-sprite-names go together")
         for p in (a.kb / "route.json", a.warp_visibility, a.npc_sprite_names, a.npc_extents,
@@ -273,8 +388,10 @@ class V2Inputs:
             "classes_sha256": sha256_of(a.kb / "classes.json")
             if (a.kb / "classes.json").exists() else None,
             "monster_sprites": str(qa_export.SPRITE_DIR),
-            "warp_visibility": str(a.warp_visibility),
+            "warp_visibility": None if a.warp_visibility is None else str(a.warp_visibility),
             "warp_visibility_sha256": sha256_of(a.warp_visibility),
+            "warp_rule": "table" if a.warp_visibility is not None else
+            "no table: a drawn portal on screen excludes the frame",
             "npc_sprites": None if a.npc_sprites is None else str(a.npc_sprites),
             "npc_sprite_names_sha256": sha256_of(a.npc_sprite_names),
             "npc_extents_sha256": sha256_of(a.npc_extents),
@@ -283,9 +400,15 @@ class V2Inputs:
             "holds_lifted": sorted(a.allow_hold), "unverified_gat": sorted(UNVERIFIED_GAT),
             "portal_shape": {"radius": shape.radius, "height": shape.height,
                              "measured": shape.measured, "source": shape.source},
-            "classes": lv.V2_CLASSES,
+            "classes": lv.V2_CLASSES if classes is None else classes.provenance(),
         }  # fmt: skip
-        return cls(ns, maps, gat_dir, checked, frozenset(a.allow_hold), a.k, provenance)
+        return cls(ns, maps, gat_dir, checked, frozenset(a.allow_hold), a.k, provenance, classes)
+
+    def class_names(self) -> dict[int, str]:
+        """The cache manifest's names: v2's four, or the species scheme's (KB names)."""
+        if self.classes is None:
+            return {v: k for k, v in lv.V2_CLASSES.items()}
+        return self.classes.names(self.ns.kb)
 
 
 def make_v2_session(path: Path, v2: V2Inputs) -> Any:
@@ -331,8 +454,16 @@ def npc_reasons(fr: lv.Frame, checked: dict[str, str], lifted: frozenset[str]) -
     return list(dict.fromkeys(out))
 
 
-def v2_yolo(labels: Sequence[lv.V2Label], size: tuple[int, int]) -> tuple[str, list[lv.V2Label]]:
-    """YOLO lines with V2_CLASSES ids, clipped to the frame (as yolo_lines); the labels written."""
+def v2_class(b: lv.V2Label) -> int:
+    return lv.V2_CLASSES[b.cls]
+
+
+def v2_yolo(
+    labels: Sequence[lv.V2Label], size: tuple[int, int],
+    class_of: Callable[[lv.V2Label], int] = v2_class,
+) -> tuple[str, list[lv.V2Label]]:  # fmt: skip
+    """YOLO lines with V2_CLASSES ids (or ``class_of``'s: --classes species), clipped to the frame
+    (as yolo_lines); the labels written."""
     w, h = size
     lines, written = [], []
     for b in labels:
@@ -340,7 +471,7 @@ def v2_yolo(labels: Sequence[lv.V2Label], size: tuple[int, int]) -> tuple[str, l
         x1, y1 = min(float(w), b.x1), min(float(h), b.y1)
         if x1 <= x0 or y1 <= y0:
             continue
-        lines.append(f"{lv.V2_CLASSES[b.cls]} {(x0 + x1) / 2 / w:.6f} {(y0 + y1) / 2 / h:.6f} "
+        lines.append(f"{class_of(b)} {(x0 + x1) / 2 / w:.6f} {(y0 + y1) / 2 / h:.6f} "
                      f"{(x1 - x0) / w:.6f} {(y1 - y0) / h:.6f}")  # fmt: skip
         written.append(b)
     return "\n".join(lines) + ("\n" if lines else ""), written
@@ -438,10 +569,16 @@ def demo_frames(session: Path, every: int) -> Iterator[tuple[int, int, dict[str,
 
 
 def recorded_times(
-    session: Path, manifest: dict[str, Any], every: int, every_png: int
-) -> Iterator[tuple[int, int]]:
+    session: Path, manifest: dict[str, Any], every: int, every_png: int,
+    every_jpeg: int = EVERY_JPEG,
+) -> Iterator[tuple[int, int]]:  # fmt: skip
     """(frame_id, t_ns) of exactly the frames ``session_frames`` decodes, WITHOUT decoding: the
-    H.264 index (usable frames, every n-th, as iter_every) or the PNG shards' json members."""
+    H.264 index (usable frames, every n-th, as iter_every), the PNG shards' json members, or a
+    warp_watch session's JPEG shard index."""
+    if qa_export.is_warp_watch(manifest):
+        for ref in qa_export.jpeg_index(session, manifest)[::every_jpeg]:
+            yield ref.frame_id, ref.t_mono_ns
+        return
     if (manifest.get("format") or "png") == "h264":
         from poring_dataset.h264 import H264Session
 
@@ -472,21 +609,51 @@ def v2_frames(
         for i, t, extra, load in demo_frames(session, a.every_demo):
             yield i, t, extra, (load if decode else None)
     elif decode:
-        for meta, img in session_frames(session, manifest, a.every, a.every_png):
+        for meta, img in session_frames(session, manifest, a.every, a.every_png, a.every_jpeg):
             fid = int(meta["frame_id"])
             yield fid, int(meta["t_mono_ns"]), {"frame_id": fid}, partial(np.asarray, img)
     else:
-        for fid, t in recorded_times(session, manifest, a.every, a.every_png):
+        for fid, t in recorded_times(session, manifest, a.every, a.every_png, a.every_jpeg):
             yield fid, t, {"frame_id": fid}, None
 
 
 def resolve_session(sid: str, a: argparse.Namespace) -> Path:
     """v2: a banked demo session under --demo-root (RAM) first, else the session under --datasets
-    (a recorded session, or a demo session dataset_ship already copied to the NAS)."""
-    for root in (a.demo_root, a.datasets):
+    (a recorded session, or a demo session dataset_ship already copied to the NAS), else under an
+    --also-datasets root (warp_watch's detector-collection/<map>: a combined cache)."""
+    roots = (a.demo_root, a.datasets, *(getattr(a, "also_datasets", None) or ()))
+    for root in roots:
         if (root / sid / "manifest.json").exists():
             return root / sid  # type: ignore[no-any-return]
-    raise SystemExit(f"{sid}: no manifest under {a.demo_root} or {a.datasets}")
+    raise SystemExit(f"{sid}: no manifest under {', '.join(str(r) for r in roots)}")
+
+
+def dataset_session(sid: str, a: argparse.Namespace) -> Path:
+    """v0 / v1: the session under --datasets, else under an --also-datasets root."""
+    for root in (a.datasets, *(getattr(a, "also_datasets", None) or ())):
+        if (root / sid / "manifest.json").exists():
+            return root / sid  # type: ignore[no-any-return]
+    return a.datasets / sid  # type: ignore[no-any-return]
+
+
+def decide(sess: Any, t: int, v2: V2Inputs) -> tuple[str, lv.Frame | None, list[str], str | None]:
+    """One candidate frame's fate: (outcome, the v2 frame, the exclusion reasons, its map key).
+    outcome: "ok" (labelled completely) | "excluded" (``reasons``: the map gates, labels_v2's,
+    N3's, and --classes species') | "gm_window" | "no_world". The cache, its dry run and the orc
+    label sheets (scripts/orc_label_sheets.py) share it."""
+    world = sess.world(t)
+    mk = map_key(world.map) if world.map else None
+    if world.map:
+        gate = map_reasons(world.map, v2)
+        if gate:
+            return "excluded", None, gate, mk
+    status, fr, _scene = sess.frame(t)
+    if fr is None:
+        return status, None, [], mk  # gm_window | no_world
+    reasons = [*fr.excluded, *npc_reasons(fr, v2.checked, v2.lifted)]
+    if v2.classes is not None:
+        reasons += v2.classes.reasons(fr.labels)
+    return ("excluded" if reasons else "ok"), fr, reasons, mk
 
 
 def v2_session(
@@ -500,27 +667,27 @@ def v2_session(
     if size != V2_SIZE:
         raise SystemExit(f"{sid}: game region {size}, labels_v2 labels {V2_SIZE}")
     tally = V2Tally()
-    row: dict[str, Any] = {"split": part, "path": str(path),
-                           "format": "demo" if manifest.get("kind") == "demo"
-                           else manifest.get("format") or "png", "shards": []}  # fmt: skip
+    fmt = (
+        "demo"
+        if manifest.get("kind") == "demo"
+        else "jpeg_shards"
+        if qa_export.is_warp_watch(manifest)
+        else manifest.get("format") or "png"
+    )
+    row: dict[str, Any] = {"split": part, "path": str(path), "format": fmt, "shards": []}
+    class_of = v2_class if v2.classes is None else v2.classes.class_of
     for kid, t, extra, load in v2_frames(path, manifest, a, decode=sink is not None):
         tally.seen += 1
-        world = sess.world(t)
-        if world.map:
-            tally.maps_seen[map_key(world.map)] += 1
-            gate = map_reasons(world.map, v2)
-            if gate:
-                tally.exclude(gate)
-                continue
-        status, fr, _scene = sess.frame(t)
-        if fr is None:
-            setattr(tally, status, getattr(tally, status) + 1)  # gm_window | no_world
+        outcome, fr, reasons, mk = decide(sess, t, v2)
+        if mk is not None:
+            tally.maps_seen[mk] += 1
+        if outcome in ("gm_window", "no_world"):
+            setattr(tally, outcome, getattr(tally, outcome) + 1)
             continue
-        reasons = [*fr.excluded, *npc_reasons(fr, v2.checked, v2.lifted)]
-        if reasons:
+        if outcome == "excluded" or fr is None:
             tally.exclude(reasons)
             continue
-        text, written = v2_yolo(fr.labels, V2_SIZE)
+        text, written = v2_yolo(fr.labels, V2_SIZE, class_of)
         tally.keep(fr, written)
         if sink is not None:
             assert load is not None
@@ -530,7 +697,7 @@ def v2_session(
                                  f"labels are {V2_SIZE[0]}x{V2_SIZE[1]}")  # fmt: skip
             info = {"session": sid, "t_mono_ns": t, "map": map_key(fr.map or ""), "labels": "v2",
                     **extra,
-                    "boxes": [[lv.V2_CLASSES[b.cls], b.job, b.kind] for b in written],
+                    "boxes": [[class_of(b), b.job, b.kind] for b in written],
                     "shadow": len(fr.shadow),
                     "cutin": None if fr.cutin.rect is None else list(fr.cutin.rect)}  # fmt: skip
             image = ({"png": encode_png(np.ascontiguousarray(img[:, :, :3]))}
@@ -568,14 +735,14 @@ def dry_run(a: argparse.Namespace, split: dict[str, list[str]], v2: V2Inputs) ->
 
 def v01_session(sid: str, part: str, a: argparse.Namespace, sink: ShardSink) -> dict[str, Any]:
     """One session, labels v0 / v1 (unchanged): qa_export.Labeler, v0 / v1's scene maps."""
-    path = a.datasets / sid
+    path = dataset_session(sid, a)
     manifest = json.loads((path / "manifest.json").read_text())
     labeler = qa_export.Labeler(path, labels=a.labels,
                                 **({"k": a.k} if a.k is not None else {}))  # fmt: skip
     w, h = labeler.size
     row = {"split": part, "format": manifest.get("format") or "png", "kept": 0,
            "gm_window": 0, "off_scene": 0, "boxes": 0, "shards": []}  # fmt: skip
-    for meta, img in session_frames(path, manifest, a.every, a.every_png):
+    for meta, img in session_frames(path, manifest, a.every, a.every_png, a.every_jpeg):
         t = int(meta["t_mono_ns"])
         world = labeler.timeline.frame_world(t - int(labeler.offset_ms * 1e6))
         world_map = (world.map or "").removesuffix(".gat")  # packets say prt_fild08.gat
@@ -613,8 +780,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument("--k", type=float, default=None, help="v1/v2: M4's k (default: nostalro)")
     ap.add_argument("--every", type=int, default=15)  # H.264 (~32 fps): ~2 fps kept
     ap.add_argument("--every-png", type=int, default=1)  # PNG sessions (~1 fps): every frame
+    ap.add_argument("--every-jpeg", type=int, default=EVERY_JPEG, help="warp_watch (5 Hz) sessions")
     ap.add_argument("--max-per-session", type=int, default=None)
     ap.add_argument("--datasets", type=Path, default=NAS)
+    ap.add_argument(
+        "--also-datasets",
+        type=Path,
+        nargs="*",
+        default=[],
+        help="more session roots, searched after --datasets (e.g. "
+        "/mnt/poring-lab-datasets/detector-collection/orcsdun01 for a combined cache)",
+    )
     ap.add_argument("--out", type=Path, default=OUT)
     ap.add_argument("--shard-mb", type=int, default=512)
     ap.add_argument(
@@ -679,6 +855,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="v2: lift a fail-closed hold once a person has decided it",
     )
     g.add_argument(
+        "--classes",
+        choices=("v2", "species"),
+        default="v2",
+        help="v2: player/monster/npc/warp; species: player/npc/warp + one class per monster "
+        "species (--class-list; orcsdun01-detector.md section 4)",
+    )
+    g.add_argument(
+        "--class-list",
+        type=Path,
+        default=SPECIES_LIST,
+        help="--classes species: the committed list of ids (names come from --kb)",
+    )
+    g.add_argument(
         "--dry-run",
         action="store_true",
         help="v2: count only; no directory, shard or manifest; no image read",
@@ -692,6 +881,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         raise SystemExit("a session is in two splits: the split is BY SESSION")
     if GOLD in a.train or GOLD in a.val:
         raise SystemExit(f"{GOLD} is the hand-checked gold set: test only")
+    if a.classes != "v2" and a.labels != "v2":
+        raise SystemExit("--classes species builds on --labels v2")
+    if a.classes == "species" and a.k is None:
+        a.k = SPECIES_K  # recorded as the build's k (args, manifest)
     v2 = V2Inputs.from_args(a) if a.labels == "v2" else None
     if a.dry_run:
         if v2 is None or a.resume:
@@ -703,7 +896,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "max_per_session": a.max_per_session, "shard_mb": a.shard_mb, "image": a.image,
             "quality": a.quality if a.image == "jpeg" else None, "split": split}  # fmt: skip
     if v2 is not None:  # v0 / v1 progress files keep their keys (a missing key resumes as None)
-        args.update({"every_demo": a.every_demo, "v2": v2.provenance})
+        args.update({"every_demo": a.every_demo, "every_jpeg": a.every_jpeg, "v2": v2.provenance})
     sessions: dict[str, Any] = {}
     shards: dict[str, Any] = {}
     if a.resume:
@@ -736,14 +929,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         "cache_id": cache_id, "labels": a.labels, "k": a.k, "every": a.every,
         "every_png": a.every_png,
         "image": a.image, "quality": a.quality if a.image == "jpeg" else None,
-        "names": {v: k for k, v in sorted((CLASSES if v2 is None else lv.V2_CLASSES).items(),
-                                          key=lambda kv: kv[1])},
+        "names": ({v: k for k, v in sorted(CLASSES.items(), key=lambda kv: kv[1])} if v2 is None
+                  else v2.class_names()),
         "split": split, "sessions": sessions, "shards": sink.done, "gold": GOLD,
         "built_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         "seconds": round(time.monotonic() - t0, 1),
     }  # fmt: skip
     if v2 is not None:
-        manifest.update({"every_demo": a.every_demo, "v2": v2.provenance})
+        manifest.update(
+            {"every_demo": a.every_demo, "every_jpeg": a.every_jpeg, "v2": v2.provenance}
+        )
     for name, doc in (("manifest.json", manifest), ("split.json", split)):
         write_json(directory, name, doc)
     print(json.dumps({"cache": str(directory), "frames": sum(r["kept"] for r in sessions.values()),

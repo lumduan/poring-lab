@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [labels-v2-plan.md, training-cost.md, ../benchmarks/v1-vs-v0png.md, ../phase3-plan.md, ../operations/vision-long-lived.md]
-next_action: "Collect in blocks that alternate with the hunt runs; run the camera check on the first block (bars below, fixed before its frames are read); build the labels; run the blind label check; pre-register the evaluation; train."
+next_action: "The camera check on the first block (col1) FAILED (section 3a: C1 34.7 % bad_label, C2 Black Mushroom); per section 3 no orcsdun01 label trains until the re-measure (M4-style) and Batt's call. The diagnostic points at the sprite's view (the open outdoor facing, phase3-plan 5d-ii), not the camera. The labels, contact sheets and blind pack are built (local) for that work."
 title: "orcsdun01 (Orc Dungeon F1): the facts, the collection, the camera check, the class scheme, the labels and the evaluation (plan)"
 date: 2026-10-21
 owner: Batt
@@ -123,6 +123,32 @@ measurement. The check:
 - **If C1 or C2 fails,** no orcsdun01 label trains. The camera / k is re-measured first, M4-style,
   and the result goes to Batt.
 
+### 3a. RESULT on the first block, col1 (`scripts/orc_camera_check.py`, run 2026-10-21 11:55 ICT): FAIL
+
+Session `20261021T103231-orcsdun01-col1` (80 dwells, 15,028 frames; every 5th frame inside a dwell,
+outside GM windows; 2,985 standing labels scored). The output is local:
+`/dev/shm/poring-lab-tmp/orc-labels/<session>/camera_check.json`.
+
+- **C1 FAILS:** `bad_label` 34.7 % pooled (bar < 2 %). Per species: Orc Zombie 36.1 %, Orc Skeleton
+  49.6 %, White Plant 12.0 %, Black Mushroom 69.2 %, Familiar 22.0 %, Steel Chonchon 43.9 %,
+  Drainliar 19.8 %.
+- **C2 FAILS on Black Mushroom only** (median |dx| 7.5, |dy| 9 px; bar 4). It passes for Orc Zombie
+  (2 / 2), Orc Skeleton (4 / 2), White Plant (1 / 1), Familiar (2 / 5), Steel Chonchon (4 / 3) and
+  Drainliar (1 / 3). Every species had >= 20 standing labels (101-1,573).
+- **Colour (reported):** the drawn Familiar is a dull grey-brown and the drawn Drainliar a saturated
+  red. On well-found bats: hue 53° (saturation 0.26) against 5° (0.69), a 48° gap; 84° in the
+  rendered sprites.
+- **Diagnostic, NOT a bar:** the sprite's VIEW, not the camera.
+  - With the best of the 8 headings, the low share falls from 34.7 % to 5.0 % pooled. The max over 8
+    is biased upward, so read it as an upper bound.
+  - The Timeline facing differs from the best view on 78 % of the labels, mostly by 45° (±1
+    heading), then 90°. 85 % of those facings were set by a walk.
+  - This is the outdoor facing that phase3-plan 5d-ii left OPEN: "a wrong view lowers the NCC".
+    The symmetric prt_fild08 sprites hid it; the asymmetric orc sprites show it, and their boxes
+    shift sideways with the view.
+  - The positive cases score 0.6-0.9 at offset (0, 0). Re-measuring decides what to change; this
+    diagnostic does not.
+
 ## 4. The class scheme (PROPOSED; Batt's default if he does not answer by the time the labels are ready)
 
 | id | class | from |
@@ -170,6 +196,16 @@ measurement. The check:
 
 - **Training** runs on the combined cache: v1's sessions re-labelled per species + the orcsdun01
   blocks (split by block).
+  - ⚠️ **Measured 2026-10-21 (a dry run, packets only):** `build_frame_cache.py --labels v2
+    --classes species` on v1's 10 sessions KEEPS 566 of 16,995 candidate frames (3.3 %). The rest
+    are excluded by labels v2's own rules:
+    - `npc_unchecked`, 15,560 frames: no person's N3 verdicts yet (prt_fild08's NPCs 51 and 909,
+      prt_church's);
+    - `warp_visibility_unknown`, 9,914: no warp table (prt_fild08 170,378 alone is 7,143);
+    - `self_dead`, 4,130.
+  - No species outside the class list appears in v1's data, and Creamy has 0 boxes.
+  - So the "not forgotten" half needs those inputs, or a decision on how v1's sessions are
+    re-labelled, before the combined cache is built.
   - The setup is v1's: `train-day.sh` in the long-lived vision worker, `MID_CKPT=1`, the adaptive
     duty cycle, the IO guard, VRAM 25 %, batch 2 / workers 1.
   - Cache building stays outside 09:30-10:15 and 14:00-14:45.

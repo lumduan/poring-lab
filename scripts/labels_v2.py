@@ -49,8 +49,11 @@ cache and build_frame_cache's v1 replay use 0.14),
 warp-measure's sheets; local, never committed).
 
 Sessions: a DEMO session (/dev/shm/poring-lab-demo/<id>: packets.jsonl.gz + snapshots referenced
-by demo.jsonl FrameRefs, and/or frames/<n>-<t_ns>.png), or a RECORDED H.264 session (manifest +
-stream.idx.csv + packets; every --every-th usable frame, read from the index only, never decoded).
+by demo.jsonl FrameRefs, and/or frames/<n>-<t_ns>.png), a RECORDED H.264 session (manifest +
+stream.idx.csv + packets; every --every-th usable frame, read from the index only, never decoded),
+or a WARP-AND-WATCH session (scripts/warp_watch.py: JPEG tar shards under frames/; every --every-th
+frame, its time from the shards' json members, no JPEG read; its labels use the recorded UI
+layout's rectangles, qa_export.ui_rects_for).
 
 Every number this prints is derived from packets + the camera model; no client pixels, names or
 menu text leave the machine through it (the scope's --names is stdout only).
@@ -203,6 +206,14 @@ def banked_frames(session: Path, every: int = 15) -> list[tuple[int, Path | None
     """(capture time t_ns, image or None) of every banked frame: frames/<n>-<t_ns>.png, the
     snapshots demo.jsonl references with a t_capture_ns, or a recorded H.264 session's index."""
     out: list[tuple[int, Path | None]] = []
+    mpath = session / "manifest.json"
+    if mpath.exists():
+        import qa_export
+
+        manifest = load_json(mpath)
+        if qa_export.is_warp_watch(manifest):  # JPEG shards: times only, no image path
+            refs = qa_export.jpeg_index(session, manifest)[::every]
+            return [(r.t_mono_ns, None) for r in refs]
     frames = session / "frames"
     if frames.is_dir():
         for p in sorted(frames.glob("*.png")):
@@ -299,8 +310,12 @@ class Session:
         self.events = load_events(path)
         # a RECORDED session (H.264, or PNG shards without an index: its manifest carries the game
         # region) has its own recording manifest; until 2026-10-10 a PNG one fell to the demo
-        # branch below, whose console offset lookup has no client name and failed
-        if (path / "stream.idx.csv").exists() or "game_region" in manifest:
+        # branch below, whose console offset lookup has no client name and failed. A warp_watch
+        # session too (its size, layout and backend; --offset-ms overrides the benchmark's)
+        if qa_export.is_warp_watch(manifest):
+            offset = "auto" if a.offset_ms is None else str(a.offset_ms)
+            self.labeler = qa_export.Labeler(path, offset, labels="v1")
+        elif (path / "stream.idx.csv").exists() or "game_region" in manifest:
             self.labeler = qa_export.Labeler(path, labels="v1")
         else:
             offset = a.offset_ms
@@ -363,14 +378,17 @@ class Session:
         scene = load_scene(lab.camera, world.map, world.self_pos, indoor_table=lab.indoor)
         jobs = {e.gid: e.job for e in world.entities}
         units = lv.from_v1(boxes, jobs)
+        rects = getattr(lab, "ui_rects", UI_RECTS)  # the recorded layout's (warp_watch sessions)
         hidden = [lv.V2Label(b.cls, b.x0, b.y0, b.x1, b.y1, gid=b.gid, job=jobs.get(b.gid),
                              kind="dropped")
-                  for b in labels_for(world, projector, SIZE, camera_yaw=yaw, keep_all=True)
+                  for b in labels_for(world, projector, SIZE, camera_yaw=yaw, keep_all=True,
+                                      ui_rects=rects)
                   if b.kind == "dropped" and b.cls != "npc"]  # fmt: skip
         npcs = lv.npc_labels(world, scene, SIZE, sheet=self.npc_sheet, measured=self.measured,
-                             k=lab.k)  # fmt: skip
+                             k=lab.k, ui_rects=rects)  # fmt: skip
         warps = lv.warp_labels(world, scene, SIZE, lv.l3_warps(self.route, world.map),
-                               visibility=self.visibility, shape=self.shape)  # fmt: skip
+                               visibility=self.visibility, shape=self.shape,
+                               ui_rects=rects)  # fmt: skip
         tw = t - self.offset_ns
         open_ = self.dialog_at(tw)
         key = None

@@ -34,7 +34,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from poring_dataset.render import SpritePrediction, SpriteSheet  # noqa: E402
 from poring_dataset.sprites import compose_frame  # noqa: E402
-from poring_dataset.ui_layout import covered_fraction  # noqa: E402
+from poring_dataset.ui_layout import UI_RECTS, covered_fraction  # noqa: E402
 
 MIN_PIXELS = 30  # fewer opaque pixels on screen than this: no score
 GREY = np.array([0.299, 0.587, 0.114])
@@ -92,13 +92,15 @@ def score(frame: npt.NDArray[np.uint8], sheet: SpriteSheet, pred: SpritePredicti
     return best
 
 
-def classify(box: tuple[float, float, float, float], others: list[tuple[float, float, float, float]]
-             ) -> str:  # fmt: skip
-    """Why a low-scoring label scored low (the order is the spec's)."""
+def classify(box: tuple[float, float, float, float],
+             others: list[tuple[float, float, float, float]],
+             rects: tuple[tuple[int, int, int, int], ...] = UI_RECTS) -> str:  # fmt: skip
+    """Why a low-scoring label scored low (the order is the spec's). ``rects``: the client's UI
+    windows (x, y, w, h) of the session's layout (default: the frozen standard set)."""
     for o in others:
         if min(box[2], o[2]) > max(box[0], o[0]) and min(box[3], o[3]) > max(box[1], o[1]):
             return "occluded"
-    if covered_fraction(box) > 0:
+    if covered_fraction(box, rects) > 0:
         return "ui_covered"
     return "bad_label"
 
