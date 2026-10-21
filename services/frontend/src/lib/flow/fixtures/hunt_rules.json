@@ -1,0 +1,409 @@
+{
+ "block": "hunt",
+ "adopted": 52,
+ "groups": [
+  {
+   "name": "engage",
+   "params": [
+    {
+     "name": "strike",
+     "choices": [
+      {
+       "id": "arm_c@32",
+       "known": true,
+       "values": {
+        "abc": true,
+        "abc_arm": "C"
+       },
+       "versions": [
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54
+       ],
+       "adopted": true,
+       "evidence": [
+        {
+         "entry": "3.91",
+         "version": 50,
+         "map": "prt_fild08",
+         "path": "rdp",
+         "hours": 4.0,
+         "verdict": "ADOPTED by Batt's decision (P1, P2, M3, G5 pass; G4 failed, waived by him)",
+         "gm": "immune (@monsterignore)"
+        },
+        {
+         "entry": "3.92",
+         "version": 51,
+         "map": "prt_fild08",
+         "path": "rdp",
+         "hours": 4.0,
+         "verdict": "ADOPTED by its own rule (P1, P2, M3, G5 pass)",
+         "gm": "immune (@monsterignore)"
+        }
+       ]
+      }
+     ],
+     "default": "arm_c@32"
+    },
+    {
+     "name": "engage_on_the_way",
+     "choices": [
+      {
+       "id": "on_the_way@19",
+       "known": true,
+       "values": {
+        "opportunistic": true,
+        "opp_cells": 4,
+        "preempt_hyst": true,
+        "preempt_margin": 2.0,
+        "preempt_hold_s": 0.5,
+        "retarget": true,
+        "retarget_margin": 2.0,
+        "retarget_commit_s": 1.0
+       },
+       "versions": [
+        19,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54
+       ],
+       "adopted": true,
+       "evidence": [
+        {
+         "entry": "3.91",
+         "version": 50,
+         "map": "prt_fild08",
+         "path": "rdp",
+         "hours": 4.0,
+         "verdict": "ADOPTED by Batt's decision (P1, P2, M3, G5 pass; G4 failed, waived by him)",
+         "gm": "immune (@monsterignore)"
+        },
+        {
+         "entry": "3.92",
+         "version": 51,
+         "map": "prt_fild08",
+         "path": "rdp",
+         "hours": 4.0,
+         "verdict": "ADOPTED by its own rule (P1, P2, M3, G5 pass)",
+         "gm": "immune (@monsterignore)"
+        }
+       ]
+      }
+     ],
+     "default": "on_the_way@19"
+    }
+   ]
+  },
+  {
+   "name": "dead_loot",
+   "params": [
+    {
+     "name": "dead",
+     "choices": [
+      {
+       "id": "exp_line@48",
+       "known": true,
+       "values": {
+        "exp_dead": true,
+        "exp_keep": true,
+        "exp_keep_gone_s": 6.0,
+        "exp_keep_max_s": 14.0,
+        "exp_loot_delay_s": 0.5
+       },
+       "versions": [
+        48,
+        50,
+        51,
+        52,
+        53,
+        54
+       ],
+       "adopted": true,
+       "evidence": [
+        {
+         "entry": "3.91",
+         "version": 50,
+         "map": "prt_fild08",
+         "path": "rdp",
+         "hours": 4.0,
+         "verdict": "ADOPTED by Batt's decision (P1, P2, M3, G5 pass; G4 failed, waived by him)",
+         "gm": "immune (@monsterignore)"
+        },
+        {
+         "entry": "3.92",
+         "version": 51,
+         "map": "prt_fild08",
+         "path": "rdp",
+         "hours": 4.0,
+         "verdict": "ADOPTED by its own rule (P1, P2, M3, G5 pass)",
+         "gm": "immune (@monsterignore)"
+        }
+       ]
+      }
+     ],
+     "default": "exp_line@48"
+    },
+    {
+     "name": "loot",
+     "choices": [
+      {
+       "id": "gm_scan_one_pass@51",
+       "known": true,
+       "values": {
+        "loot": true,
+        "loot_sweep": true,
+        "loot_max_s": 6.0,
+        "loot_max_clicks": 8,
+        "loot_blobs": true,
+        "loot_before_s": 1.8,
+        "loot_fixed": true,
+        "loot_center_clicks": 2,
+        "loot_ring_clicks": 1,
+        "loot_interval_s": 0.05,
+        "loot_fixed_max_s": 4.5,
+        "blob_gm_px": 70.0,
+        "loot_gm": true,
+        "loot_gm_stand_s": 0.5,
+        "loot_gm_wait_s": 0.45,
+        "loot_hand_still_s": 0.15,
+        "loot_gm_still_max_s": 1.2,
+        "loot_gm_settle_s": 0.8,
+        "loot_gm_burst_max": 6,
+        "loot_gm_burst_gap_s": 0.59,
+        "loot_gm_read_lead_s": 0.2,
+        "loot_gm_passes": 3,
+        "loot_gm_max_s": 12.0,
+        "loot_gm_edge": true,
+        "loot_gm_one_pass": true
+       },
+       "versions": [
+        51,
+        52
+       ],
+       "adopted": true,
+       "evidence": [
+        {
+         "entry": "3.92",
+         "version": 51,
+         "map": "prt_fild08",
+         "path": "rdp",
+         "hours": 4.0,
+         "verdict": "ADOPTED by its own rule (P1, P2, M3, G5 pass)",
+         "gm": "immune (@monsterignore)"
+        }
+       ]
+      },
+      {
+       "id": "gm_scan@50",
+       "known": true,
+       "values": {
+        "loot": true,
+        "loot_sweep": true,
+        "loot_max_s": 6.0,
+        "loot_max_clicks": 8,
+        "loot_blobs": true,
+        "loot_before_s": 1.8,
+        "loot_fixed": true,
+        "loot_center_clicks": 2,
+        "loot_ring_clicks": 1,
+        "loot_interval_s": 0.05,
+        "loot_fixed_max_s": 4.5,
+        "blob_gm_px": 70.0,
+        "loot_gm": true,
+        "loot_gm_stand_s": 0.5,
+        "loot_gm_wait_s": 0.45,
+        "loot_hand_still_s": 0.15,
+        "loot_gm_still_max_s": 1.2,
+        "loot_gm_settle_s": 0.8,
+        "loot_gm_burst_max": 6,
+        "loot_gm_burst_gap_s": 0.59,
+        "loot_gm_read_lead_s": 0.2,
+        "loot_gm_passes": 3,
+        "loot_gm_max_s": 12.0,
+        "loot_gm_edge": true
+       },
+       "versions": [
+        50
+       ],
+       "adopted": false,
+       "evidence": [
+        {
+         "entry": "3.91",
+         "version": 50,
+         "map": "prt_fild08",
+         "path": "rdp",
+         "hours": 4.0,
+         "verdict": "ADOPTED by Batt's decision (P1, P2, M3, G5 pass; G4 failed, waived by him)",
+         "gm": "immune (@monsterignore)"
+        }
+       ]
+      }
+     ],
+     "default": "gm_scan_one_pass@51"
+    }
+   ]
+  },
+  {
+   "name": "search",
+   "params": [
+    {
+     "name": "search",
+     "choices": [
+      {
+       "id": "heading_coverage@22",
+       "known": true,
+       "values": {
+        "heading_search": true,
+        "heading_min_run": 8,
+        "heading_drift_p": 0.3,
+        "heading_cov": true,
+        "cov_recent_s": 180.0,
+        "cov_half": 12,
+        "cov_keep": 0.8
+       },
+       "versions": [
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54
+       ],
+       "adopted": true,
+       "evidence": [
+        {
+         "entry": "3.91",
+         "version": 50,
+         "map": "prt_fild08",
+         "path": "rdp",
+         "hours": 4.0,
+         "verdict": "ADOPTED by Batt's decision (P1, P2, M3, G5 pass; G4 failed, waived by him)",
+         "gm": "immune (@monsterignore)"
+        },
+        {
+         "entry": "3.92",
+         "version": 51,
+         "map": "prt_fild08",
+         "path": "rdp",
+         "hours": 4.0,
+         "verdict": "ADOPTED by its own rule (P1, P2, M3, G5 pass)",
+         "gm": "immune (@monsterignore)"
+        }
+       ]
+      }
+     ],
+     "default": "heading_coverage@22"
+    }
+   ]
+  },
+  {
+   "name": "stop",
+   "params": [],
+   "note": "the enclosing loop: its condition (e.g. weight_percent()) and max_s (13.5)"
+  }
+ ],
+ "evidence": {
+  "badges": [
+   "one path (RDP), prt_fild08"
+  ],
+  "rule": "D8 (Batt 2026-10-21): a pre-registered hunt verdict, hard bars 0 / 0 / 0, >= 4 run-hours",
+  "verdicts": [
+   {
+    "entry": "3.91",
+    "version": 50,
+    "map": "prt_fild08",
+    "path": "rdp",
+    "hours": 4.0,
+    "hard_bars": [
+     0,
+     0,
+     0
+    ],
+    "verdict": "ADOPTED by Batt's decision (P1, P2, M3, G5 pass; G4 failed, waived by him)",
+    "gm": "immune (@monsterignore)",
+    "d8": true,
+    "why_not": ""
+   },
+   {
+    "entry": "3.92",
+    "version": 51,
+    "map": "prt_fild08",
+    "path": "rdp",
+    "hours": 4.0,
+    "hard_bars": [
+     0,
+     0,
+     0
+    ],
+    "verdict": "ADOPTED by its own rule (P1, P2, M3, G5 pass)",
+    "gm": "immune (@monsterignore)",
+    "d8": true,
+    "why_not": ""
+   }
+  ]
+ }
+}

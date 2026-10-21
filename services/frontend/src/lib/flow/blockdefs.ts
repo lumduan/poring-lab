@@ -22,6 +22,10 @@ export type BlockDef = {
   args2?: ArgDef[];
   message3?: string;
   args3?: ArgDef[];
+  message4?: string;
+  args4?: ArgDef[];
+  message5?: string;
+  args5?: ArgDef[];
   previousStatement?: null | string;
   nextStatement?: null | string;
   output?: null | string;
@@ -277,14 +281,15 @@ export const BLOCK_DEFS: BlockDef[] = [
 
 export const DEF_BY_TYPE: Record<string, BlockDef> = Object.fromEntries(BLOCK_DEFS.map((d) => [d.type, d]));
 
-/** Every field and input name a block type has (the converter's contract). */
-export function namesOf(type: string): { fields: Set<string>; saved: Set<string>; inputs: Set<string> } {
-  const d = DEF_BY_TYPE[type];
+/** Every field and input name a block type has (the converter's contract). `def`: a type built
+ * at run time from the catalogue (the hunt block, hunt.ts). */
+export function namesOf(type: string, def?: BlockDef): { fields: Set<string>; saved: Set<string>; inputs: Set<string> } {
+  const d = def ?? DEF_BY_TYPE[type];
   const fields = new Set<string>();
   const saved = new Set<string>();
   const inputs = new Set<string>();
   if (!d) return { fields, saved, inputs };
-  for (const args of [d.args0, d.args1, d.args2, d.args3]) {
+  for (const args of [d.args0, d.args1, d.args2, d.args3, d.args4, d.args5]) {
     for (const a of args ?? []) {
       if (a.type === "input_value" || a.type === "input_statement") inputs.add(a.name);
       else if (a.type !== "input_dummy") {
@@ -319,8 +324,14 @@ function rest(c: CatBlock) {
 
 const exprBlock = (t: string) => ({ block: { type: "pl_expr", fields: { TEXT: t } } });
 
-/** The toolbox for a scope: the palette, the other catalogue blocks, control, exits, events. */
-export function toolbox(blocks: Record<string, CatBlock>, scope: "block" | "global" | "main"): Toolbox {
+/** The toolbox for a scope: the palette, the other catalogue blocks, control, exits, events.
+ * `huntFields`: the hunt block's dropdown defaults when its type is registered (hunt.ts), else the
+ * hunt block is offered as a generic block with its parameters by name. */
+export function toolbox(
+  blocks: Record<string, CatBlock>,
+  scope: "block" | "global" | "main",
+  huntFields: Record<string, string> | null = null,
+): Toolbox {
   const palette: ToolboxItem[] = [];
   for (const [name, type] of Object.entries(PALETTE_TYPES)) {
     if (blocks[name]) palette.push({ kind: "block", type, extraState: rest(blocks[name]) });
@@ -329,7 +340,11 @@ export function toolbox(blocks: Record<string, CatBlock>, scope: "block" | "glob
   const others: ToolboxItem[] = Object.keys(blocks)
     .filter((n) => !(n in PALETTE_TYPES))
     .sort()
-    .map((n) => ({ kind: "block", type: "pl_action", fields: { BLOCK: n, ARGS: "" }, extraState: rest(blocks[n]) }));
+    .map((n) =>
+      n === "hunt" && huntFields
+        ? { kind: "block" as const, type: "pl_hunt", fields: huntFields, extraState: rest(blocks[n]) }
+        : { kind: "block" as const, type: "pl_action", fields: { BLOCK: n, ARGS: "" }, extraState: rest(blocks[n]) },
+    );
   const control: ToolboxItem[] = [
     { kind: "block", type: "pl_if", inputs: { COND: exprBlock("hp_percent() < 50") } },
     { kind: "block", type: "pl_repeat", inputs: { TIMES: exprBlock("3") } },

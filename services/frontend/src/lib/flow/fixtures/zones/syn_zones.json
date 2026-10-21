@@ -1,0 +1,78 @@
+{
+ "map": "syn_zones",
+ "sha256": "2af3c6acf811cd50ff7edb68d176b5c88ccdd49a4d57fcfaee517b1a52612d65",
+ "model": {
+  "map": "syn_zones",
+  "comment": [
+   "A SYNTHETIC zones file, written BY HAND in the /flows editor's form (blocks-from-hunt-flow.md B2):",
+   "the twin of the file zones.test.ts draws click by click. Same bytes, same sha256.",
+   "",
+   "  indented comment text is kept as written"
+  ],
+  "items": [
+   {
+    "kind": "no_cross",
+    "id": "door_1",
+    "note": "the west gap",
+    "points": [
+     [
+      10,
+      4
+     ],
+     [
+      10,
+      7
+     ],
+     [
+      13,
+      9
+     ]
+    ]
+   },
+   {
+    "kind": "no_cross",
+    "id": "door 2",
+    "note": "the \"north\" gap, near the café (path\\cell)",
+    "points": [
+     [
+      30,
+      40
+     ],
+     [
+      34,
+      40
+     ]
+    ]
+   },
+   {
+    "kind": "no_enter",
+    "id": "pit",
+    "note": "a room nobody should enter",
+    "points": [
+     [
+      50,
+      50
+     ],
+     [
+      60,
+      50
+     ],
+     [
+      60,
+      58
+     ],
+     [
+      50,
+      58
+     ]
+    ]
+   }
+  ]
+ },
+ "review": {
+  "reviewed_by": "batt",
+  "reviewed": "2026-10-21",
+  "delegation": ""
+ },
+ "notes": []
+}

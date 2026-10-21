@@ -1,0 +1,18 @@
+# A SYNTHETIC zones file, written BY HAND in the /flows editor's form (blocks-from-hunt-flow.md B2):
+# the twin of the file zones.test.ts draws click by click. Same bytes, same sha256.
+#
+#   indented comment text is kept as written
+map: syn_zones
+reviewed_by: "batt"
+reviewed: 2026-10-21
+no_cross:
+  - id: door_1
+    note: "the west gap"
+    points: [[10, 4], [10, 7], [13, 9]]
+  - id: "door 2"
+    note: "the \"north\" gap, near the café (path\\cell)"
+    points: [[30, 40], [34, 40]]
+no_enter:
+  - id: pit
+    note: "a room nobody should enter"
+    polygon: [[50, 50], [60, 50], [60, 58], [50, 58]]

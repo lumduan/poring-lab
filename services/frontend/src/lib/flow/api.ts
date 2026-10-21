@@ -2,7 +2,9 @@
 // COMPUTATION ONLY. Lint, simulate and the Python view take the IR and return documents; nothing
 // here reaches the mux, the executor or any agent channel. POSTs carry the console's CSRF token
 // (GET /settings/csrf, as the Settings page), fetched once and renewed on `csrf_invalid`.
+import type { HuntRules } from "./hunt.ts";
 import type { Flow } from "./ir.ts";
+import type { ZonesCheck, ZonesFile } from "./zones.ts";
 
 // "readiness" (Batt 2026-10-09, ADR-0020 contradictions #6): a binding not there YET for the target
 // environment. Listed apart from errors: it blocks the RUN (the run-start check), not the design.
@@ -116,7 +118,14 @@ export interface SimDoc {
 
 export interface CatalogueBlockDoc {
   name: string;
-  spec: { concept: string; kind: string; timeout_s: number; params: { name: string; type: string; required: boolean }[]; note?: string | null };
+  spec: {
+    concept: string;
+    kind: string;
+    timeout_s: number;
+    // group / choices: a parameter that picks a RULE VERSION (the hunt block, Amendment A 1)
+    params: { name: string; type: string; required: boolean; group?: string | null; choices?: string[] }[];
+    note?: string | null;
+  };
   status: string;
   badge: Badge;
   purpose: string | null;
@@ -132,6 +141,9 @@ export interface CatalogueDoc {
   safety_critical: string[];
   // ADR-0020 #17: the CONFIGURED run-time limits (the backend's flows_settings.runtime_limits)
   runtime_limits?: { default_s: number; max_s: number };
+  // B2: the hunt block's groups, rule versions and badges (config/flows/hunt; null when unread)
+  hunt_rules?: HuntRules | null;
+  hunt_rules_error?: string | null;
 }
 
 export interface WorldMap {
@@ -235,6 +247,17 @@ export class FlowsApi {
 
   python(flow: Flow): Promise<{ flow_hash: string; python: string }> {
     return this.post("/flows/python", { flow });
+  }
+
+  /** B2: config/map_zones/<map>.yaml as the editor imports it (never its reviewer). */
+  zonesFile(map: string, source: WorldSource, server: string): Promise<ZonesFile> {
+    const q = new URLSearchParams({ map, source, server });
+    return this.get(`/flows/zones/file?${q}`);
+  }
+
+  /** B2: the runner's zones loader on the editor's YAML text (checked, never written: D6). */
+  zonesCheck(map: string, yaml: string, world: WorldSource, server: string): Promise<ZonesCheck> {
+    return this.post("/flows/zones/check", { map, yaml, world, server });
   }
 }
 

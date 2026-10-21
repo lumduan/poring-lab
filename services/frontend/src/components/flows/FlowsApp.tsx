@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { InspectPanel, LintPanel, SimulatePanel, TextPanel, DEFAULT_SIM, scenarioOf, type SimForm } from "@/components/flows/Panels";
 import { ApiError, type CatalogueDoc, FlowsApi, type LintDoc, type SimDoc, type WorldSource } from "@/lib/flow/api";
 import type { Scope } from "@/lib/flow/blocks";
-import { addBlock, type BlockProps, connectExit, type EditResult, removeBlock, removeExit, setStart, updateBlock, type XY } from "@/lib/flow/canvas";
+import { addBlock, type BlockProps, connectExit, type EditResult, removeBlock, removeExit, setStart, setZonesRef, updateBlock, type XY } from "@/lib/flow/canvas";
 import { exportText, importFlow } from "@/lib/flow/importer";
 import { type AuthoredExit, canonical, emptyFlow, type Flow, MAX_JSON_BYTES } from "@/lib/flow/ir";
 import { lintLine } from "@/lib/flow/status";
@@ -21,6 +21,7 @@ const FlowCanvas = dynamic(() => import("@/components/flows/FlowCanvas"), {
   loading: () => <div className="p-4 text-sm text-neutral-400">Loading the canvas…</div>,
 });
 const BlockEditor = dynamic(() => import("@/components/flows/BlockEditor"), { ssr: false });
+const ZonesEditor = dynamic(() => import("@/components/flows/ZonesEditor"), { ssr: false });
 
 type Tab = "inspect" | "lint" | "simulate" | "json" | "python";
 const TABS: [Tab, string][] = [
@@ -55,6 +56,7 @@ export default function FlowsApp({ backendUrl }: { backendUrl: string | null }) 
   const [simBusy, setSimBusy] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [editor, setEditor] = useState<{ scope: Scope; title: string } | null>(null);
+  const [zonesFor, setZonesFor] = useState<string | null>(null); // the map block whose Zones layer is open
   const [tab, setTab] = useState<Tab>("inspect");
   const [message, setMessage] = useState<{ tone: "info" | "error"; text: string } | null>(null);
   const [notes, setNotes] = useState<string[]>([]);
@@ -235,6 +237,7 @@ export default function FlowsApp({ backendUrl }: { backendUrl: string | null }) 
                 onSimulateHere={(b) => { const f = { ...simForm, startBlock: b, single: true }; setSimForm(f); void simulate(f); }}
                 limits={catalogue?.runtime_limits ?? null}
                 onFlow={(f) => { setFlow(f); setMessage(null); }}
+                onZones={setZonesFor}
               />
             )}
             {tab === "lint" && <LintPanel lint={lintDoc} stale={lintStale} onSelect={(o) => setSelected(o.startsWith("block:") ? o : o === "global" ? "events:global" : null)} />}
@@ -245,6 +248,22 @@ export default function FlowsApp({ backendUrl }: { backendUrl: string | null }) 
           </div>
         </aside>
       </div>
+      {zonesFor && api && (() => {
+        const b = flow.workflow?.blocks.find((x) => x.name === zonesFor);
+        if (!b) return null;
+        return (
+          <ZonesEditor
+            api={api}
+            world={world}
+            server={flow.target.server}
+            map={b.map.map}
+            block={b.name}
+            zonesRef={b.zones ?? null}
+            onReference={(ref) => edit(setZonesRef(flow, b.name, ref))}
+            onClose={() => setZonesFor(null)}
+          />
+        );
+      })()}
       {editor && (
         <BlockEditor
           flow={flow}

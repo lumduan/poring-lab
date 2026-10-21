@@ -1,0 +1,152 @@
+[
+ {
+  "name": "00 no reviewed_by",
+  "yaml": "map: fix_map\nreviewed: 2026-10-21\nno_cross:\n  - id: nc1\n    note: across the entrance\n    points: [[28, 35], [31, 35]]\nno_enter:\n  - id: ne1\n    note: the room itself\n    polygon: [[16, 36], [44, 36], [44, 54], [16, 54], [16, 36]]\n",
+  "error": "config/map_zones/fix_map.yaml: no reviewed_by: a zones file names the PERSON who reviewed it (the agent never approves zones)"
+ },
+ {
+  "name": "01 no reviewed_by",
+  "yaml": "map: fix_map\nreviewed_by: ''\nreviewed: 2026-10-21\nno_cross:\n  - id: nc1\n    note: across the entrance\n    points: [[28, 35], [31, 35]]\nno_enter:\n  - id: ne1\n    note: the room itself\n    polygon: [[16, 36], [44, 36], [44, 54], [16, 54], [16, 36]]\n",
+  "error": "config/map_zones/fix_map.yaml: no reviewed_by: a zones file names the PERSON who reviewed it (the agent never approves zones)"
+ },
+ {
+  "name": "02 never approves",
+  "yaml": "map: fix_map\nreviewed_by: Claude\nreviewed: 2026-10-21\nno_cross:\n  - id: nc1\n    note: across the entrance\n    points: [[28, 35], [31, 35]]\nno_enter:\n  - id: ne1\n    note: the room itself\n    polygon: [[16, 36], [44, 36], [44, 54], [16, 54], [16, 36]]\n",
+  "error": "config/map_zones/fix_map.yaml: reviewed_by 'Claude': the agent never approves zones (a person does), except under a person's recorded delegation: 'agent (delegated by <person>, YYYY-MM-DD)' + a `delegation` note"
+ },
+ {
+  "name": "03 never approves",
+  "yaml": "map: fix_map\nreviewed_by: claude-agent\nreviewed: 2026-10-21\nno_cross:\n  - id: nc1\n    note: across the entrance\n    points: [[28, 35], [31, 35]]\nno_enter:\n  - id: ne1\n    note: the room itself\n    polygon: [[16, 36], [44, 36], [44, 54], [16, 54], [16, 36]]\n",
+  "error": "config/map_zones/fix_map.yaml: reviewed_by 'claude-agent': the agent never approves zones (a person does), except under a person's recorded delegation: 'agent (delegated by <person>, YYYY-MM-DD)' + a `delegation` note"
+ },
+ {
+  "name": "04 reviewed",
+  "yaml": "map: fix_map\nreviewed_by: batt\nno_cross:\n  - id: nc1\n    note: across the entrance\n    points: [[28, 35], [31, 35]]\nno_enter:\n  - id: ne1\n    note: the room itself\n    polygon: [[16, 36], [44, 36], [44, 54], [16, 54], [16, 36]]\n",
+  "error": "config/map_zones/fix_map.yaml: reviewed None: the review date, ISO (YYYY-MM-DD), is required"
+ },
+ {
+  "name": "05 reviewed",
+  "yaml": "map: fix_map\nreviewed_by: batt\nreviewed: yesterday\nno_cross:\n  - id: nc1\n    note: across the entrance\n    points: [[28, 35], [31, 35]]\nno_enter:\n  - id: ne1\n    note: the room itself\n    polygon: [[16, 36], [44, 36], [44, 54], [16, 54], [16, 36]]\n",
+  "error": "config/map_zones/fix_map.yaml: reviewed 'yesterday': the review date, ISO (YYYY-MM-DD), is required"
+ },
+ {
+  "name": "06 not a date",
+  "yaml": "map: fix_map\nreviewed_by: batt\nreviewed: '2026-13-40'\nno_cross:\n  - id: nc1\n    note: across the entrance\n    points: [[28, 35], [31, 35]]\nno_enter:\n  - id: ne1\n    note: the room itself\n    polygon: [[16, 36], [44, 36], [44, 54], [16, 54], [16, 36]]\n",
+  "error": "config/map_zones/fix_map.yaml: reviewed '2026-13-40' is not a date"
+ },
+ {
+  "name": "07 the file's name",
+  "yaml": "map: prt_fild08\nreviewed_by: batt\nreviewed: 2026-10-21\nno_cross:\n  - id: nc1\n    note: across the entrance\n    points: [[28, 35], [31, 35]]\nno_enter:\n  - id: ne1\n    note: the room itself\n    polygon: [[16, 36], [44, 36], [44, 54], [16, 54], [16, 36]]\n",
+  "error": "config/map_zones/fix_map.yaml: map 'prt_fild08' is not 'fix_map' (the file's name)"
+ },
+ {
+  "name": "08 unknown key",
+  "yaml": "map: fix_map\nreviewed_by: batt\nreviewed: 2026-10-21\nno_cross:\n  - id: nc1\n    note: across the entrance\n    points: [[28, 35], [31, 35]]\nno_enter:\n  - id: ne1\n    note: the room itself\n    polygon: [[16, 36], [44, 36], [44, 54], [16, 54], [16, 36]]\nno_enters: []\n",
+  "error": "config/map_zones/fix_map.yaml: unknown key(s) ['no_enters'] (allowed: ['delegation', 'map', 'no_cross', 'no_enter', 'reviewed', 'reviewed_by'])"
+ },
+ {
+  "name": "09 duplicate id",
+  "yaml": "map: fix_map\nreviewed_by: batt\nreviewed: 2026-10-21\nno_cross:\n  - id: nc1\n    note: across the entrance\n    points: [[28, 35], [31, 35]]\nno_enter:\n  - id: nc1\n    note: the room itself\n    polygon: [[16, 36], [44, 36], [44, 54], [16, 54], [16, 36]]\n",
+  "error": "config/map_zones/fix_map.yaml: no_enter 'nc1': a duplicate id (ids are unique per file)"
+ },
+ {
+  "name": "10 at least 2",
+  "yaml": "map: fix_map\nreviewed_by: batt\nreviewed: 2026-10-21\nno_cross:\n  - id: nc1\n    note: across the entrance\n    points: [[28, 35]]\nno_enter:\n  - id: ne1\n    note: the room itself\n    polygon: [[16, 36], [44, 36], [44, 54], [16, 54], [16, 36]]\n",
+  "error": "config/map_zones/fix_map.yaml: no_cross 'nc1': 1 point(s), at least 2"
+ },
+ {
+  "name": "11 at least 3",
+  "yaml": "map: fix_map\nreviewed_by: batt\nreviewed: 2026-10-21\nno_cross:\n  - id: nc1\n    note: across the entrance\n    points: [[28, 35], [31, 35]]\nno_enter:\n  - id: ne1\n    note: the room itself\n    polygon: [[16, 36], [44, 36]]\n",
+  "error": "config/map_zones/fix_map.yaml: no_enter 'ne1': 2 point(s), at least 3"
+ },
+ {
+  "name": "12 off the map",
+  "yaml": "map: fix_map\nreviewed_by: batt\nreviewed: 2026-10-21\nno_cross:\n  - id: nc1\n    note: across the entrance\n    points: [[28, 35], [31, 60]]\nno_enter:\n  - id: ne1\n    note: the room itself\n    polygon: [[16, 36], [44, 36], [44, 54], [16, 54], [16, 36]]\n",
+  "error": "config/map_zones/fix_map.yaml: no_cross 'nc1' point 1: (31, 60) is off the map (60 x 60 cells)"
+ },
+ {
+  "name": "13 two integers",
+  "yaml": "map: fix_map\nreviewed_by: batt\nreviewed: 2026-10-21\nno_cross:\n  - id: nc1\n    note: across the entrance\n    points: [[28, 35], [31.0, 35]]\nno_enter:\n  - id: ne1\n    note: the room itself\n    polygon: [[16, 36], [44, 36], [44, 54], [16, 54], [16, 36]]\n",
+  "error": "config/map_zones/fix_map.yaml: no_cross 'nc1' point 1: [31.0, 35] is not a cell [x, y] of two integers"
+ },
+ {
+  "name": "14 two integers",
+  "yaml": "map: fix_map\nreviewed_by: batt\nreviewed: 2026-10-21\nno_cross:\n  - id: nc1\n    note: across the entrance\n    points: [[28, 35], [true, 35]]\nno_enter:\n  - id: ne1\n    note: the room itself\n    polygon: [[16, 36], [44, 36], [44, 54], [16, 54], [16, 36]]\n",
+  "error": "config/map_zones/fix_map.yaml: no_cross 'nc1' point 1: [True, 35] is not a cell [x, y] of two integers"
+ },
+ {
+  "name": "15 repeats the one before",
+  "yaml": "map: fix_map\nreviewed_by: batt\nreviewed: 2026-10-21\nno_cross:\n  - id: nc1\n    note: across the entrance\n    points: [[28, 35], [28, 35], [31, 35]]\nno_enter:\n  - id: ne1\n    note: the room itself\n    polygon: [[16, 36], [44, 36], [44, 54], [16, 54], [16, 36]]\n",
+  "error": "config/map_zones/fix_map.yaml: no_cross 'nc1': point 1 repeats the one before it"
+ },
+ {
+  "name": "16 no area",
+  "yaml": "map: fix_map\nreviewed_by: batt\nreviewed: 2026-10-21\nno_cross:\n  - id: nc1\n    note: across the entrance\n    points: [[28, 35], [31, 35]]\nno_enter:\n  - id: ne1\n    note: the room itself\n    polygon: [[16, 36], [20, 40], [24, 44]]\n",
+  "error": "config/map_zones/fix_map.yaml: no_enter 'ne1': no area (its points are collinear)"
+ },
+ {
+  "name": "17 cross",
+  "yaml": "map: fix_map\nreviewed_by: batt\nreviewed: 2026-10-21\nno_cross:\n  - id: nc1\n    note: across the entrance\n    points: [[28, 35], [31, 35]]\nno_enter:\n  - id: ne1\n    note: the room itself\n    polygon: [[16, 36], [44, 50], [44, 36], [16, 54]]\n",
+  "error": "config/map_zones/fix_map.yaml: no_enter 'ne1': its edges cross (((16, 36), (44, 50)) and ((44, 36), (16, 54)))"
+ },
+ {
+  "name": "18 keys must be",
+  "yaml": "map: fix_map\nreviewed_by: batt\nreviewed: 2026-10-21\nno_cross:\n  - id: nc1\n    note: across the entrance\n    points: [[28, 35], [31, 35]]\nno_enter:\n  - id: ne1\n    polygon: [[16, 36], [44, 36], [44, 54], [16, 54], [16, 36]]\n",
+  "error": "config/map_zones/fix_map.yaml: no_enter[0]: keys must be id, note, polygon (missing ['note'], unknown [])"
+ },
+ {
+  "name": "19 note",
+  "yaml": "map: fix_map\nreviewed_by: batt\nreviewed: 2026-10-21\nno_cross:\n  - id: nc1\n    note: across the entrance\n    points: [[28, 35], [31, 35]]\nno_enter:\n  - id: ne1\n    note: ''\n    polygon: [[16, 36], [44, 36], [44, 54], [16, 54], [16, 36]]\n",
+  "error": "config/map_zones/fix_map.yaml: no_enter 'ne1': a short note is required"
+ },
+ {
+  "name": "20 keys must be",
+  "yaml": "map: fix_map\nreviewed_by: batt\nreviewed: 2026-10-21\nno_cross:\n  - id: nc1\n    note: across the entrance\n    points: [[28, 35], [31, 35]]\nno_enter:\n  - id: ne1\n    note: the room itself\n    points: [[16, 36], [44, 36], [44, 54], [16, 54], [16, 36]]\n",
+  "error": "config/map_zones/fix_map.yaml: no_enter[0]: keys must be id, note, polygon (missing ['polygon'], unknown ['points'])"
+ },
+ {
+  "name": "21 a list",
+  "yaml": "map: fix_map\nreviewed_by: batt\nreviewed: 2026-10-21\nno_cross: 3\nno_enter: []\n",
+  "error": "config/map_zones/fix_map.yaml: no_cross: a list of items, not int"
+ },
+ {
+  "name": "22 not readable YAML",
+  "yaml": "map: [unclosed\n",
+  "error": "config/map_zones/fix_map.yaml: not readable YAML (while parsing a flow sequence\n  in \"<unicode string>\", line 1, column 6:\n    map: [unclosed\n         ^\nexpected ',' or ']', but got '<stream end>'\n  in \"<unicode string>\", line 2, column 1:\n    \n    ^)"
+ },
+ {
+  "name": "d1 needs a `delegation` note",
+  "yaml": "map: fix_map\nreviewed_by: \"agent (delegated by batt, 2026-10-21)\"\nreviewed: 2026-10-21\nno_cross:\n  - id: nc1\n    note: across the entrance\n    points: [[28, 35], [31, 35]]\nno_enter:\n  - id: ne1\n    note: the room itself\n    polygon: [[16, 36], [44, 36], [44, 54], [16, 54], [16, 36]]\n",
+  "error": "config/map_zones/fix_map.yaml: reviewed_by 'agent (delegated by batt, 2026-10-21)': a delegated review needs a `delegation` note citing the person's decision"
+ },
+ {
+  "name": "d2 never approves",
+  "yaml": "map: fix_map\nreviewed_by: \"agent (delegated by claude, 2026-10-21)\"\ndelegation: \"Batt 2026-10-21, decision 1: zone authoring delegated\"\nreviewed: 2026-10-21\nno_cross:\n  - id: nc1\n    note: across the entrance\n    points: [[28, 35], [31, 35]]\nno_enter:\n  - id: ne1\n    note: the room itself\n    polygon: [[16, 36], [44, 36], [44, 54], [16, 54], [16, 36]]\n",
+  "error": "config/map_zones/fix_map.yaml: reviewed_by 'agent (delegated by claude, 2026-10-21)': the agent never approves zones (a person does), except under a person's recorded delegation: 'agent (delegated by <person>, YYYY-MM-DD)' + a `delegation` note"
+ },
+ {
+  "name": "d3 never approves",
+  "yaml": "map: fix_map\nreviewed_by: \"agent (approved by batt, 2026-10-21)\"\ndelegation: \"Batt 2026-10-21, decision 1: zone authoring delegated\"\nreviewed: 2026-10-21\nno_cross:\n  - id: nc1\n    note: across the entrance\n    points: [[28, 35], [31, 35]]\nno_enter:\n  - id: ne1\n    note: the room itself\n    polygon: [[16, 36], [44, 36], [44, 54], [16, 54], [16, 36]]\n",
+  "error": "config/map_zones/fix_map.yaml: reviewed_by 'agent (approved by batt, 2026-10-21)': the agent never approves zones (a person does), except under a person's recorded delegation: 'agent (delegated by <person>, YYYY-MM-DD)' + a `delegation` note"
+ },
+ {
+  "name": "d4 never approves",
+  "yaml": "map: fix_map\nreviewed_by: \"agent (delegated by batt)\"\ndelegation: \"Batt 2026-10-21, decision 1: zone authoring delegated\"\nreviewed: 2026-10-21\nno_cross:\n  - id: nc1\n    note: across the entrance\n    points: [[28, 35], [31, 35]]\nno_enter:\n  - id: ne1\n    note: the room itself\n    polygon: [[16, 36], [44, 36], [44, 54], [16, 54], [16, 36]]\n",
+  "error": "config/map_zones/fix_map.yaml: reviewed_by 'agent (delegated by batt)': the agent never approves zones (a person does), except under a person's recorded delegation: 'agent (delegated by <person>, YYYY-MM-DD)' + a `delegation` note"
+ },
+ {
+  "name": "d5 not a date",
+  "yaml": "map: fix_map\nreviewed_by: \"agent (delegated by batt, 2026-13-40)\"\ndelegation: \"Batt 2026-10-21, decision 1: zone authoring delegated\"\nreviewed: 2026-10-21\nno_cross:\n  - id: nc1\n    note: across the entrance\n    points: [[28, 35], [31, 35]]\nno_enter:\n  - id: ne1\n    note: the room itself\n    polygon: [[16, 36], [44, 36], [44, 54], [16, 54], [16, 36]]\n",
+  "error": "config/map_zones/fix_map.yaml: reviewed_by 'agent (delegated by batt, 2026-13-40)': the delegation's date is not a date"
+ },
+ {
+  "name": "d6 never approves",
+  "yaml": "map: fix_map\nreviewed_by: \"agent and claude (delegated by batt, 2026-10-21)\"\ndelegation: \"Batt 2026-10-21, decision 1: zone authoring delegated\"\nreviewed: 2026-10-21\nno_cross:\n  - id: nc1\n    note: across the entrance\n    points: [[28, 35], [31, 35]]\nno_enter:\n  - id: ne1\n    note: the room itself\n    polygon: [[16, 36], [44, 36], [44, 54], [16, 54], [16, 36]]\n",
+  "error": "config/map_zones/fix_map.yaml: reviewed_by 'agent and claude (delegated by batt, 2026-10-21)': the agent never approves zones (a person does), except under a person's recorded delegation: 'agent (delegated by <person>, YYYY-MM-DD)' + a `delegation` note"
+ },
+ {
+  "name": "d7 only a delegated reviewer",
+  "yaml": "map: fix_map\nreviewed_by: batt\ndelegation: \"x\"\nreviewed: 2026-10-21\nno_cross:\n  - id: nc1\n    note: across the entrance\n    points: [[28, 35], [31, 35]]\nno_enter:\n  - id: ne1\n    note: the room itself\n    polygon: [[16, 36], [44, 36], [44, 54], [16, 54], [16, 36]]\n",
+  "error": "config/map_zones/fix_map.yaml: delegation: only a delegated reviewer ('agent (delegated by <person>, YYYY-MM-DD)') carries one"
+ }
+]

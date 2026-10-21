@@ -19,6 +19,7 @@ import {
   type MapBlock,
   type MapEvent,
   type Stmt,
+  type ZonesRef,
   builtInEvents,
   clone,
   exitOf,
@@ -315,6 +316,23 @@ export function updateBlock(flow: Flow, name: string, props: BlockProps): EditRe
     for (const x of wf.blocks) for (const { exit } of exitsOf(x)) if (exit.to_block === name) exit.to_block = props.name;
     if (wf.start_block === name) wf.start_block = props.name;
   }
+  return { ok: true, flow: out };
+}
+
+/** Name the map node's zones file by its sha256 (B2), or remove the reference (`null`: the key is
+ * deleted, as MW1's canonical JSON leaves an absent reference out). The linter checks it is the
+ * block's own map and the file's current bytes; approval binds it. */
+export function setZonesRef(flow: Flow, name: string, ref: ZonesRef | null): EditResult {
+  const out = clone(flow);
+  const b = blockOf(out, name);
+  if (!b) return { ok: false, error: `no map block ${name}` };
+  if (ref === null) {
+    delete b.zones;
+    return { ok: true, flow: out };
+  }
+  if (ref.map !== b.map.map) return { ok: false, error: `the zones of ${ref.map} are not ${b.map.map}'s` };
+  if (!/^[0-9a-f]{64}$/.test(ref.sha256)) return { ok: false, error: "a zones reference names the file's sha256" };
+  b.zones = { map: ref.map, sha256: ref.sha256 };
   return { ok: true, flow: out };
 }
 

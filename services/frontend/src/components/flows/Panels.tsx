@@ -41,6 +41,7 @@ export function InspectPanel({
   onSimulateHere,
   limits,
   onFlow,
+  onZones,
 }: {
   flow: Flow;
   selected: string | null;
@@ -55,6 +56,7 @@ export function InspectPanel({
   onSimulateHere: (block: string) => void;
   limits: { default_s: number; max_s: number } | null;
   onFlow: (flow: Flow) => void;
+  onZones: (block: string) => void;
 }) {
   const block = selected?.startsWith("block:") ? flow.workflow?.blocks.find((b) => `block:${b.name}` === selected) : undefined;
   if (!selected) {
@@ -73,7 +75,7 @@ export function InspectPanel({
   if (block) {
     return (
       <>
-        <BlockInspector key={block.name + JSON.stringify(block.entries)} block={block} flow={flow} lint={lint} sim={sim} onUpdate={onUpdate} onDelete={onDelete} onStart={onStart} onOpen={onOpen} onSimulateHere={onSimulateHere} />
+        <BlockInspector key={block.name + JSON.stringify(block.entries)} block={block} flow={flow} lint={lint} sim={sim} onUpdate={onUpdate} onDelete={onDelete} onStart={onStart} onOpen={onOpen} onSimulateHere={onSimulateHere} onZones={onZones} />
         <StaticData api={api} world={world} server={flow.target.server} map={block.map.map} />
       </>
     );
@@ -155,6 +157,7 @@ function BlockInspector({
   onStart,
   onOpen,
   onSimulateHere,
+  onZones,
 }: {
   block: MapBlock;
   flow: Flow;
@@ -165,6 +168,7 @@ function BlockInspector({
   onStart: (name: string, entry: string) => void;
   onOpen: (id: string) => void;
   onSimulateHere: (block: string) => void;
+  onZones: (block: string) => void;
 }) {
   const e0 = block.entries[0];
   const [name, setName] = useState(block.name);
@@ -195,6 +199,7 @@ function BlockInspector({
     });
   };
   const l = lintLine(lintOf(lint, `block:${block.name}`));
+  const zoneFindings = (lint?.findings ?? []).filter((f) => f.owner === `block:${block.name}` && f.rule.startsWith("zones_")).map((f) => f.rule);
   return (
     <div className="space-y-3 text-xs">
       <div className="flex items-center gap-2">
@@ -223,6 +228,14 @@ function BlockInspector({
       <div className="flex items-center gap-2">
         <button className="rounded bg-sky-700 px-2.5 py-1 text-xs hover:bg-sky-600" onClick={save}>Apply</button>
         {err && <span className="text-red-300">{err}</span>}
+      </div>
+      <div className="space-y-1 rounded border border-neutral-800 p-2">
+        <div className="font-semibold">Zones (map-node data, config/map_zones/{block.map.map}.yaml)</div>
+        <div className="text-neutral-300">
+          {block.zones ? `this node names ${block.zones.map} ${block.zones.sha256.slice(0, 12)}…` : "this node names no zones file"}
+          {zoneFindings.length > 0 && <span className="text-red-300"> · {zoneFindings.join(" · ")}</span>}
+        </div>
+        <button className={btn} onClick={() => onZones(block.name)}>Open the Zones layer</button>
       </div>
       <div>
         <div className="mb-1 font-semibold">Exits</div>

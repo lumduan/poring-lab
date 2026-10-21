@@ -2192,7 +2192,12 @@ gate, the frame-age guard, packets as offline ground truth only, and Windows sta
 > section 7a): the key classes and the exported configs (`config/flows/hunt/`), the `hunt` block,
 > `MapBlock.zones` and lint with zones, and hunt_flow's decision code on the resolved config
 > (bytecode-proven). "Nothing in it is built" below is superseded for those steps; B2, B4 and B5
-> are not built.
+> are not built. ➡️ B1 and B3 merged (0919ce7).
+> ➡️ **2026-10-21 22:1x: B2 BUILT offline** (branch feat/blocks-b2, not merged; the plan's section 7b):
+> the hunt block's dropdowns of rule versions with badges (★ adopted, ◆ D8 hunting evidence), the
+> map node's Zones layer (drawn, checked by the runner's own loader through POST /flows/zones/check,
+> exported only), and /flows lint with the zones provider. B4 and B5 are not built; the amendment's
+> TEXT stays a draft.
 
 > **DRAFT for Batt's decision. NOT accepted; nothing in it is built.** The tables and the decisions
 > (D1-D9; D7 answered by Batt 2026-10-21, 13e497d) are in the plan, [docs/planning/blocks-from-hunt-flow.md](../planning/blocks-from-hunt-flow.md).

@@ -44,6 +44,32 @@ It prints JSON for two grids: client ∩ server walkability, and the runner's st
 - the runner's search area lost;
 - sampled clicks into each piece, every one refused by the click gate.
 
+## The /flows editor (B2, 2026-10-21: export only)
+
+The map node's **Zones layer** in /flows draws these files (docs/planning/blocks-from-hunt-flow.md
+section 3 and 7b). It never writes one: Batt decided "export only for now" (D6). A person downloads
+the YAML and commits it here; git is the review record.
+
+- **Check with the loader** sends the text to the backend, which runs THIS loader on it
+  (`map_zones.py`: the same messages as `check`, the same sha256 of the bytes). The cells each item
+  closes, the pieces it seals off and the search area are the loader's, drawn as returned.
+- **The editor never fills `reviewed_by`** (nor `reviewed`, nor `delegation`). They are typed for
+  each export, even when the editor started from the committed file; the file's own review is shown
+  only as a reference.
+- **The editor's form.** A file written by hand in exactly this form has the SAME bytes, so the same
+  sha256, as the editor's: `prt_fild08.yaml` is in it.
+  - The leading `#` lines first (`# ` + text, `#` alone for an empty line). Only that leading block
+    is kept.
+  - Then `map`, `reviewed_by`, `reviewed`, `delegation` (only when there is one), `no_cross`,
+    `no_enter`.
+  - `map` and every `id` plain when YAML reads them back as the same string (a letter or `_`
+    first, then letters, digits, `_`, `-`; never a word like `yes` or `null`), else double-quoted.
+  - `reviewed_by`, `delegation` and every `note` double-quoted; `reviewed` a plain date.
+  - Each item as `  - id: ...`, `    note: "..."`, `    points: [[x, y], ...]` (`polygon:` for an
+    area, its first point not repeated); `\n` line ends, one at the end.
+  - A file in another form (the example below: `reviewed_by: batt` plain) is still a valid file;
+    its editor twin just differs in bytes.
+
 ## Coordinates
 
 Points are **map cells**: `x` grows east, `y` grows **north**. These are the same numbers as:

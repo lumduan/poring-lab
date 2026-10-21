@@ -613,6 +613,21 @@ def test_the_gat_mount_is_the_backends_read_only_local_copy() -> None:
             assert "/dev/shm/poring-lab-tmp" not in str(conf.get("volumes", [])), (name, svc)
 
 
+def test_the_zones_code_is_the_dev_backends_read_only_mount_only() -> None:
+    """B2 (blocks-from-hunt-flow.md, 2026-10-21): the /flows Zones layer runs the runner's own zones
+    loader. Its code (./scripts) is bound READ-ONLY into the dev backend only, never anywhere else
+    and never writable; the backend finds it through ZONES_CODE_DIR."""
+    for name in ("compose.yaml", "compose.dev.yaml"):
+        for svc, conf in compose(name)["services"].items():
+            mounts = [str(v) for v in conf.get("volumes", []) if str(v).startswith("./scripts")]
+            if name == "compose.dev.yaml" and svc == "backend":
+                assert mounts == ["./scripts:/lab-scripts:ro"], mounts
+                assert conf["environment"]["ZONES_CODE_DIR"] == "/lab-scripts"
+            else:
+                assert not mounts, (name, svc, mounts)
+                assert "ZONES_CODE_DIR" not in (conf.get("environment") or {}), (name, svc)
+
+
 def focus_function(path: Path) -> str:
     text = path.read_text()
     start = text.index("focus_pointer_root() {")
