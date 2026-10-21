@@ -17,17 +17,20 @@ def pk(t: float, **kw: object) -> dict:
 
 
 def test_a_trial_scored_against_the_server() -> None:
-    packets = [pk(0.0, type="stat_change", name="max_hp", value=1000),
-               pk(0.0, type="stat_change", name="hp", value=1000),
-               pk(0.0, type="stat_change", name="sp", value=300),
-               pk(1.2, type="stat_change", name="sp", value=270),  # Auto Guard (30), after read 1
-               pk(2.0, type="stat_change", name="hp", value=500),  # crosses 55 %
-               pk(2.6, type="use_item_result", item_id=504, aid=sj.AID, ok=True),
-               pk(2.7, type="use_item_result", item_id=504, aid=123, ok=True),  # someone else's
-               pk(2.8, type="stat_change", name="hp", value=900),
-               pk(5.0, type="stat_change", name="hp", value=200),
-               pk(5.5, type="use_item_result", item_id=601, aid=sj.AID, ok=True),
-               pk(9.0, type="stat_change", name="hp", value=0)]  # fmt: skip
+    packets = [
+        pk(0.0, type="stat_change", name="max_hp", value=1000),
+        pk(0.0, type="stat_change", name="hp", value=1000),
+        pk(0.0, type="stat_change", name="sp", value=300),
+        pk(1.2, type="stat_change", name="sp", value=270),  # Auto Guard (30), after read 1
+        pk(2.0, type="stat_change", name="hp", value=500),  # crosses 55 %
+        pk(2.6, type="use_item_result", item_id=504, aid=sj.AID, ok=True),
+        pk(2.7, type="use_item_result", item_id=504, aid=123, ok=True),  # someone else's
+        pk(2.8, type="stat_change", name="hp", value=900),
+        pk(5.0, type="stat_change", name="hp", value=200),
+        pk(5.5, type="use_item_result", item_id=601, aid=sj.AID, ok=True),
+        pk(9.0, type="stat_change", name="hp", value=1),  # a death reads hp 1 ...
+        pk(9.0, type="entity_vanish", gid=sj.AID, reason=1),
+    ]  # ... the vanish is the cue
     events = [
         {"t_ns": int(t * S), "kind": "hp_read", "frac": f}
         for t, f in ((1.0, 1.0), (2.5, 0.52), (4.0, 0.88), (6.0, 0.20), (10.0, 0.0))
@@ -48,4 +51,14 @@ def test_a_trial_scored_against_the_server() -> None:
         and out["S1"]["within_5pct"] == 1.0
         and out["S1"]["over_read_share"] == 0.0
     )
-    assert out["hp_min"] == 0
+    assert out["hp_min"] == 1
+
+
+def test_maxhp_falls_back_when_no_max_hp_packet_is_in_the_window() -> None:
+    packets = [pk(5.0, type="stat_change", name="hp", value=500)]
+    events = [
+        {"t_ns": int(t * S), "kind": "hp_read", "frac": f} for t, f in ((4.0, 1.0), (6.0, 0.5))
+    ]
+    assert sj.judge(events, packets, offset_s=0.0)["S1"]["n"] == 0  # no MaxHP: nothing judged
+    out = sj.judge(events, packets, offset_s=0.0, max_hp=1000)
+    assert out["S1"]["n"] == 1 and out["S1"]["within_5pct"] == 1.0 and out["max_hp"] == 1000

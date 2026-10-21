@@ -13774,6 +13774,47 @@ Crusader stands still and does not attack: the detector cannot target orcs):**
 detector). One that fails is fixed and re-registered, never re-run under these bars. The
 thresholds (60 % / 25 % / 200 HP/s) are tuned only through a new pre-registration.
 
+**Run log (written during the trials):**
+- **T-S6 trial 1** (`20261021T184414-demo-crusader-survival-T-S6-C-t1`, pack C, 18:44-18:47,
+  judged frames pre-survival.jpg and survival-stand-268-107.jpg before it): **S6 FAILS.**
+  - The Crusader DIED ~100 s in: the server's own vanish of our id, reason 1 "died", with our HP
+    at 1 in the same instant, and an `npc_close` that is the server's death handling (no request
+    of ours: no npc_contact, attack, pickup or walk request in the trial).
+  - The runner did NOT stop. It read until its 180-s time box: the death dialog's signature never
+    matched.
+  - **Why** (an unscored diagnostic death, pack E, frames every 0.5 s,
+    `crusader/deathcap/`, 18:50-18:53):
+    - this client DOES draw the "Game option" death dialog, at the known box (client 505,450 280 x
+      70), with the buttons "저장한 지역으로 이동" (move to the save point) / "게임으로 돌아감"
+      (return to game);
+    - but the 10-04 signature's distance on it is **8.96** (bar `SIG_MATCH` 6.0; 72 before the
+      death). The signature was cut on the Novice's death of 10-04, on another dialog rendering.
+  - Also found:
+    - the HP bar read cannot resolve below ~5 % (the client draws a red, thin bar: 0.0523 while
+      the server's HP fell 60 -> 7 -> 1). It is fine for the 60 % / 25 % thresholds; it is also a
+      reason the death cue must be the dialog;
+    - the trial's damage was 2,058 HP / min against 366 HP / min of standing regen, from pack C
+      at FLEE 122;
+    - `@heal` after the trial did not apply while the character was dead: `@alive` first.
+  - The judge (3a4cfe1) read MaxHP 0 here: no max_hp packet fell inside the trial window. Fixed
+    (the verified MaxHP from the trial's manifest as the fallback; a death = our own "died"
+    vanish).
+  - **S1 FAILS too, on this trial's reads** (the judge fixed, re-run 19:0x):
+    - over the 430 reads BEFORE the death with true HP < 100 %: within 5 % of MaxHP **49.1 %**
+      (bar 95 %); over-reads (> +5 %) 31.2 %; median error +2 %;
+    - all 899 reads: within 5 % 23.5 %, over-reads 67 % (the 80 s after the death read 5.2 %
+      against a true 1 HP);
+    - the per-band means track the truth (0.31 vs 0.33, 0.49 vs 0.54, 0.71 vs 0.70, 0.85 vs
+      0.84), so the bar is unbiased but too coarse per read;
+    - the display offset does not explain it: the median |error| is 5.0 % at 0-0.6 s and 4.8 % at
+      1.5 s.
+  - **Per the decision rule, S1 and S6 are NOT re-run under these bars:** both are re-registered
+    as 3.96b:
+    - S1b: the HP DIGITS drawn on the bar ("a / b"), not the bar's length;
+    - S6b: the death dialog's signature re-cut on this client.
+  - T-S2 / T-S3 keep 3.96's bars. They wait for S1b and S6b, since their rules read S1 and stop
+    on S6.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.

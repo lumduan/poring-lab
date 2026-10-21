@@ -66,9 +66,18 @@ def sp_casts(sp: Sequence[tuple[int, int]], cost: int) -> list[int]:
     return [t for (t0, v0), (t, v) in zip(sp, sp[1:], strict=False) if v0 - v == cost]
 
 
+def deaths_of(packets: Sequence[Mapping[str, Any]], aid: int = AID) -> list[int]:
+    """PURE: the server's deaths of ours: our own id's vanish with reason "died" (1). The hp
+    packet at a death can read 1, not 0 (T-S6 trial 1, 2026-10-21), so hp == 0 is not the cue."""
+    return sorted(int(e["t_mono_ns"]) for e in packets
+                  if e.get("type") == "entity_vanish" and int(e.get("gid") or -1) == aid
+                  and int(e.get("reason") if e.get("reason") is not None else -1) == 1)  # fmt: skip
+
+
 def judge(events: Sequence[Mapping[str, Any]], packets: Sequence[Mapping[str, Any]],
-          offset_s: float = 0.376) -> dict[str, Any]:  # fmt: skip
-    """PURE: one trial's numbers for 3.96's bars."""
+          offset_s: float = 0.376, max_hp: int | None = None) -> dict[str, Any]:  # fmt: skip
+    """PURE: one trial's numbers for 3.96's bars. ``max_hp``: the fallback when no max_hp packet
+    is in force at the trial's start (the trial's manifest carries the verified MaxHP)."""
     hp, mx, sp = series(packets, "hp"), series(packets, "max_hp"), series(packets, "sp")
     reads = [e for e in events if e.get("kind") == "hp_read"]
     off = int(offset_s * NS)
@@ -78,7 +87,7 @@ def judge(events: Sequence[Mapping[str, Any]], packets: Sequence[Mapping[str, An
     over = 0
     for e in reads:
         t = int(e["t_ns"]) - off
-        h, m = at(hp, t), at(mx, t)
+        h, m = at(hp, t), (at(mx, t) or max_hp)
         if h is None or not m or h >= m:
             continue
         d = float(e["frac"]) - h / m
@@ -88,7 +97,7 @@ def judge(events: Sequence[Mapping[str, Any]], packets: Sequence[Mapping[str, An
     s1 = {"n": n, "within_5pct": round(sum(x <= 0.05 for x in err) / n, 4) if n else None,
           "over_read_share": round(over / n, 4) if n else None}  # fmt: skip
     pots, flys = items_used(packets, POTION), items_used(packets, FLY)
-    m0 = at(mx, t0) or 0
+    m0 = at(mx, t0) or max_hp or 0
     h0 = at(hp, t0 - off)  # the server's HP in force when the trial's reads begin
     win = ([(t0 - off, h0)] if h0 is not None else []) + [
         (t, v) for t, v in hp if t0 - off < t <= t1
@@ -97,7 +106,7 @@ def judge(events: Sequence[Mapping[str, Any]], packets: Sequence[Mapping[str, An
                  if m0 and va >= 0.55 * m0 > v]  # fmt: skip
     answered = sum(any(t <= p <= t + int(1.5 * NS) for p in pots) for t in crossings)
     high = sum(1 for p in pots if m0 and (at(hp, p) or 0) > 0.80 * m0)
-    deaths = [t for t, v in win if v == 0]
+    deaths = [t for t in deaths_of(packets) if t0 - off <= t <= t1 + off]
     ag = [t for t in sp_casts(sp, AG_SP) if t0 - off <= t <= t1]
     span = max(1, t1 - t0)
     up = 0
@@ -140,7 +149,11 @@ def main() -> int:
     ap.add_argument("sids", nargs="+")
     ap.add_argument("--offset-s", type=float, default=0.376)
     a = ap.parse_args()
-    out = {sid: judge(*load(sid), offset_s=a.offset_s) for sid in a.sids}
+    out = {}
+    for sid in a.sids:
+        man = json.loads((DEMO / sid / "manifest.json").read_text())
+        mx_ = (man.get("thresholds") or {}).get("MAX_HP")
+        out[sid] = judge(*load(sid), offset_s=a.offset_s, max_hp=mx_)
     print(json.dumps(out, indent=1))
     return 0
 
