@@ -566,3 +566,17 @@ def test_camera_check_real_positive_case(monkeypatch: pytest.MonkeyPatch) -> Non
     assert c1 is not None and c1 > 0.7
     best = occ.best_offset(frame, sheet, pred)
     assert best is not None and best[1:3] == (0, 0) and best[0] == pytest.approx(c1, abs=1e-6)
+
+
+def test_sessions_are_found_under_the_extra_roots(bfc: ModuleType, tmp_path: Path) -> None:
+    """A combined cache: v1's sessions under --datasets, a warp_watch block under its own root."""
+    nas, orc = tmp_path / "nas", tmp_path / "orc"
+    for root, sid in ((nas, "v1sess"), (orc, SID)):
+        (root / sid).mkdir(parents=True)
+        (root / sid / "manifest.json").write_text("{}")
+    a = SimpleNamespace(demo_root=tmp_path / "demo", datasets=nas, also_datasets=[orc])
+    assert bfc.resolve_session("v1sess", a) == nas / "v1sess"
+    assert bfc.resolve_session(SID, a) == orc / SID
+    assert bfc.dataset_session(SID, a) == orc / SID
+    with pytest.raises(SystemExit, match="no manifest"):
+        bfc.resolve_session("nowhere", a)

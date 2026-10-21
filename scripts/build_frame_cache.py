@@ -619,11 +619,21 @@ def v2_frames(
 
 def resolve_session(sid: str, a: argparse.Namespace) -> Path:
     """v2: a banked demo session under --demo-root (RAM) first, else the session under --datasets
-    (a recorded session, or a demo session dataset_ship already copied to the NAS)."""
-    for root in (a.demo_root, a.datasets):
+    (a recorded session, or a demo session dataset_ship already copied to the NAS), else under an
+    --also-datasets root (warp_watch's detector-collection/<map>: a combined cache)."""
+    roots = (a.demo_root, a.datasets, *(getattr(a, "also_datasets", None) or ()))
+    for root in roots:
         if (root / sid / "manifest.json").exists():
             return root / sid  # type: ignore[no-any-return]
-    raise SystemExit(f"{sid}: no manifest under {a.demo_root} or {a.datasets}")
+    raise SystemExit(f"{sid}: no manifest under {', '.join(str(r) for r in roots)}")
+
+
+def dataset_session(sid: str, a: argparse.Namespace) -> Path:
+    """v0 / v1: the session under --datasets, else under an --also-datasets root."""
+    for root in (a.datasets, *(getattr(a, "also_datasets", None) or ())):
+        if (root / sid / "manifest.json").exists():
+            return root / sid  # type: ignore[no-any-return]
+    return a.datasets / sid  # type: ignore[no-any-return]
 
 
 def decide(sess: Any, t: int, v2: V2Inputs) -> tuple[str, lv.Frame | None, list[str], str | None]:
@@ -725,7 +735,7 @@ def dry_run(a: argparse.Namespace, split: dict[str, list[str]], v2: V2Inputs) ->
 
 def v01_session(sid: str, part: str, a: argparse.Namespace, sink: ShardSink) -> dict[str, Any]:
     """One session, labels v0 / v1 (unchanged): qa_export.Labeler, v0 / v1's scene maps."""
-    path = a.datasets / sid
+    path = dataset_session(sid, a)
     manifest = json.loads((path / "manifest.json").read_text())
     labeler = qa_export.Labeler(path, labels=a.labels,
                                 **({"k": a.k} if a.k is not None else {}))  # fmt: skip
@@ -773,6 +783,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument("--every-jpeg", type=int, default=EVERY_JPEG, help="warp_watch (5 Hz) sessions")
     ap.add_argument("--max-per-session", type=int, default=None)
     ap.add_argument("--datasets", type=Path, default=NAS)
+    ap.add_argument(
+        "--also-datasets",
+        type=Path,
+        nargs="*",
+        default=[],
+        help="more session roots, searched after --datasets (e.g. "
+        "/mnt/poring-lab-datasets/detector-collection/orcsdun01 for a combined cache)",
+    )
     ap.add_argument("--out", type=Path, default=OUT)
     ap.add_argument("--shard-mb", type=int, default=512)
     ap.add_argument(
