@@ -3,12 +3,12 @@
 events (survive.py: hp_read, press, death, trial_end) against its packets (the server's truth).
 Nothing here reaches the runner.
 
-    survive_judge.py SID [SID ...] [--offset-s 0.376]
+    survive_judge.py SID [SID ...] [--offset-s 0.12]
 
 The truth (packets): our `stat_change` hp / max_hp; `use_item_result` 504 (White Potion) / 601 (Fly
 Wing) of ours; our `stat_change` sp falling by exactly 30 (Auto Guard 10) or 10 (Endure); hp 0 = a
 death. A read at host time t shows the server's HP at t - ``offset`` (the packet -> frame lag; 3.96
-names the measured one, else 375.9 ms).
+names the measured one: 120 ms, the label fix's 1d on this grab path, frozen 17:27; else 375.9 ms).
 
 Per 3.96's bars:
 - S1: |read - true| <= 5 % of MaxHP on >= 95 % of reads with true HP < 100 % (n >= 200); over-reads
@@ -152,7 +152,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)  # fmt: skip
     ap.add_argument("sids", nargs="+")
-    ap.add_argument("--offset-s", type=float, default=0.376)
+    ap.add_argument("--offset-s", type=float, default=0.12)
     a = ap.parse_args()
     out = {}
     for sid in a.sids:

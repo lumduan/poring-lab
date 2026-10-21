@@ -13843,6 +13843,32 @@ dialog's 10-04 signature (distance 8.96 on this client's dialog, bar 6.0).
    One trial; if it fails, S6 goes to Batt.
 3. S2, S3, S4 keep 3.96's bars, now run on S1b's read.
 
+**Run log (written during the build and the trials):**
+- **Building S1b (not scored):** two diagnostic captures, both no keys, at the 268,107 stand.
+  - `crusader/deathcap` (pack E, 217 JPEG frames, death at 54.6 s);
+  - `crusader/cap2` (pack A, 400 PNG frames, 7 min, NO death: HP never fell below 2,707; Divine
+    Protection + standing regen nearly hold 3 Orc Zombies).
+  - The held-out proof: **46 / 46 exact** (bar >= 98 %).
+  - DEVIATION, found on the data and reported: the regen ticks (ZC_RECOVERY 0x0A27) are not
+    decoded, so a packet label can sit one tick (155 HP = 3 points) under the screen. All 21 cap2
+    misses were exactly +3; without the rule cap2 read 84.6 % exact. So the proof labels only
+    frames whose last ABSOLUTE hp packet is <= 1 s old, and the glyphs were refit on those
+    (36 frames, all 11 glyphs). Committed 024bee0.
+- **Building S6b (not scored):** `crusader/cap3` (pack E): the old signature read 9.33 at the
+  death; the `dead_game_option@ko` variant was cut live (19:13).
+  - It reads 0.0 on the dialog, 78.3 on alive frames, 72.2 live after the revive.
+  - In this build step `@alive` was typed with the dialog up (the client closed it); survive.py
+    keeps the known button first.
+- **T-S6 trial b1** (`20261021T191455-demo-crusader-survival-T-S6-E-b1`, pack E, 19:14-19:16;
+  judged frame pre-T-S6b.jpg):
+  - **S6b PASS:** the runner stopped 0.08 s after the server's death (bar 2 s), sent no request
+    (only our own `@warp` map changes), clicked the dialog's known 2nd button, then `@alive`.
+  - S1b on this trial, at the registered offset (120 ms, the label fix's 1d; the judge's
+    default is now that): within 2 % **94.7 %** (n 208; 100 % within 5 %; 0 unread). S1b is scored
+    pooled over the trials.
+  - At 0.376 s the same reads give 80.8 %: under 8,394 HP / min of damage the truth's timing is
+    the limit, not the reader.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.

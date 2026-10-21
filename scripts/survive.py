@@ -149,6 +149,11 @@ def trial(a: argparse.Namespace) -> int:  # noqa: PLR0915
         if not got["ok"]:
             raise r.Stop(f"identity {got}")
         ui_gate.ensure_clear(agent, screen, why="survive-start")
+        x0, y0, w0, h0 = r.game_region()
+        start_pct = hpp.read(r.grab_after(screen, (x0, y0, w0, h0), r.ns()), glyphs)
+        if start_pct != 100 or r.is_state(screen, gv.DEAD_STATE):
+            raise r.Stop(f"survive: not a clean start (HP read {start_pct}, dead dialog?)")
+        ev({"kind": "start_check", "pct": start_pct})
         for mob, n in PACKS[a.pack]:
             cr.gm_line(agent, screen, f"@monster {mob} {n}", "crusader")
             ev({"kind": "spawn", "mob": mob, "n": n})
