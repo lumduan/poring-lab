@@ -218,7 +218,7 @@ outside GM windows; 2,985 standing labels scored). The output is local:
 
 - **When a monster is in the box, its species is right.** The wrong-species answers are mostly
   "none / unsure": nothing visible in the box. Black Mushroom accounts for 12-13 of them, Steel
-  Chonchon 6-7. Real confusions are few: Familiar read as White Plant or Pupa in 3-4 crops.
+  Chonchon 6-7. Real confusions are few: Familiar read as White Plant (B) or Lunatic (G) in 3-4 crops.
 - **The failures are in WHERE the box is, and in occlusion:**
   1. The bats' boxes sit next to the bat: both labellers called Drainliar and Familiar "off" in 5-8
      crops each. The flyers' anchor (drawn 38-88 native px above the cell) and the facing (3a)
