@@ -100,6 +100,30 @@ the GM's auto re-login OK at 02:51:57):
 | `pickup_request` + `act` from us (`pickup`) | attempt 1 `20261015T135025-demo-safety-check-pickup`: **no click**. The Knife landed 2 cells off (102,115) and EXPIRED after the server's 60 s floor-item lifetime, before the 24-cell scan (~2.3 s a cell, started ~19 s after the drop) reached it. Kept. Attempt 2 `20261015T135425-demo-safety-check-pickup`: drag, close and scan back to back | `pickup_request` 1, `pickup_result` 1, `act` pickup 1, `floor_item_vanish` → **PASS** |
 | `npc_contact` | `20261015T135559-demo-safety-check-npc-garnet` with the v3 reader: no TALK read twice, **no click** (the 10-10 weakness). Kept. `20261015T135734-demo-safety-check-npc-garnet` with the LIVE gate's reader (robust2, `--reader`, new) | **1 contact** (gid 110000895); the dialog closed by talk@1's safe decline (NEXT, NEXT, the menu cancelled, CLOSE: `npc_choose` 1 = the cancel, `npc_close_click` 1) → **PASS** |
 
+**Re-proven after the 2026-10-21 recreates** (Batt, ~19:3x: "The 0x0A27 decoder: approved to deploy
+via a guarded sniffer recreate tonight (the market is closed), with the §2a positive cases re-proven
+after, once the trial chain is done (never during a trial)"):
+- **Caught before the deploy:** the decoder commit 33b886c decoded 0x0A27 as a `recovery` event,
+  but `events.py` had no model for it. The live sniffer validates every decoded packet
+  (`validate_python`), and on 33b886c's models a 0x0A27 packet RAISES a ValidationError (checked
+  on a `Session`). Its test covered `decode()` only. Fixed in e590dbd: `RecoveryAmount` in
+  PacketEvent + FeedMessage, schema + `packets.gen.ts`, and an end-to-end Session -> parse_feed
+  test. Merged 388d638.
+- backend: `restart:backend@30` 20:20:37-20:21:15 ICT, so it parses the new feed lines. ASSIST
+  was restored by the marker; worst capture stall 4.5 %.
+- sniffer: `recreate:sniffer@30` 20:21:24-20:22:35, SNIFFER_COMMIT 46106c3. Self-test PASS
+  (length table, credential scrub 11 ids x 2). Worst stall 5.1 %. The auto GM re-login was OK, and
+  the interlock was green at 20:22:35. The client had been switched to the Novice GM (slot 1)
+  before it, since the re-login enters the remembered slot.
+
+| signal | positive case | result |
+|---|---|---|
+| the scrub itself | `scrub_check.py --since` 20:21:20 (2 capture files) | user **NOT FOUND**, password **NOT FOUND**; controls: character name FOUND, 1 `login_accepted` → **PASS** |
+| `attack_request` + `act` from us (`normal`) | `20261021T202313-demo-safety-check-monster-click --species red_plant` | 1 request, 4 acts, the same target (gid 110017964) → **PASS** |
+| `pickup_request` + `act` from us (`pickup`) | `20261021T202530-demo-safety-check-pickup` (the Knife dragged from the Eqp tab, then the scan clicked cell 101,114) | `pickup_request` 1, `pickup_result` 1, `floor_item_vanish` 1, 1 pickup act → **PASS** |
+| `npc_contact` | `20261021T202746-demo-safety-check-npc-garnet` (`--reader robust2`); NEXT x3 by Enter, each on a judged frame, then the menu's cancel clicked | **1 contact**; `npc_say` 7, `npc_wait` 3, `npc_next_click` 3, `npc_menu` 1, `npc_choose` 1 (the cancel), `npc_close_click` 1 → **PASS** |
+| `recovery` (NEW) | the decoder's own positive case needs SKILL regen: in the pinned source only `sregen` (Increase HP Recovery; `status_natural_heal`, flag 3) reaches `clif_heal`. Natural regen and potions send the absolute hp (flag 1). So it runs on the Crusader (IRP 10), not the Novice GM | **PENDING** (next) |
+
 - Two instrument fixes, the same day: `pickup-collect` / `npc-collect` recorded a no-click attempt
   as a crash; it is now a FAIL kept with `why: no click`. And `npc-click --reader` (default
   robust2).
