@@ -121,6 +121,14 @@ On a breach:
                 shards to it; nothing on the root disk), killed after <seconds> (default 7200).
                 Nothing else runs through it. A breach sends SIGINT: re-run with `--resume` later
                 (Batt, 2026-10-06: daytime caches pause on a trip and resume, never retry fast).
+  measure:du=<path> | measure:docker-df | measure:buildx-du
+                the DISK AUDIT's measurements (Batt, 2026-10-21: "measure ... under the IO guard,
+                nice 19 + ionice idle; one directory at a time; stop on any guard trip"). du:
+                `nice -n 19 ionice -c3 du -s -x --block-size=1 <path>`, ONE path per step, and only
+                under OUR roots (MEASURE_ROOTS: the repo, the shm archive, ~/.cache/poring-lab):
+                never a quant or system directory. docker-df: `docker system df -v` (it walks
+                the overlay dirs: once pushed quant-postgres to 15-18 % alone). buildx-du: the
+                current builder's cache records. Read-only; a trip kills it and stops the run.
 
     python3 scripts/guarded_build.py build:desktop build:rathena pull:db up:180        # strict 10%
     python3 scripts/guarded_build.py --sustain 30 --spike 25 build:rathena             # tolerant
@@ -208,6 +216,16 @@ DEV = [
 LAB_BUILDER = os.environ.get("LAB_BUILDX_BUILDER", "default")
 SERVICE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 RUN_ALLOWED = frozenset({"vision"})  # see run: in the docstring
+# measure:du= (the disk audit, Batt 2026-10-21): poring-lab's own paths only, never quant / system
+MEASURE_ROOTS = (
+    Path(__file__).resolve().parents[1],
+    Path("/home/batt/poring-lab-shm-archive"),
+    Path("/home/batt/.cache/poring-lab"),
+)
+MEASURE_FIXED = {
+    "docker-df": ["docker", "system", "df", "-v"],
+    "buildx-du": ["docker", "buildx", "du", "--verbose"],
+}
 REPLAY_RANGE = re.compile(r"^(\d{8}T\d{2})\.\.(\d{8}T\d{2})$")
 CAPTURE_NAME = re.compile(r"^capture-(\d{8}T\d{6})Z\.pcapng$")
 REPLAY_IMAGE = "poring-lab/sniffer:local"
@@ -293,6 +311,18 @@ def parse_step(step: str) -> Step:
         ):
             raise ValueError(f"{step}: expected tables[@<seconds>][=--update-lock|--accept-drift]")
         return Step("tables", [], float(secs or 1800), argv)
+    if kind == "measure":
+        what, eq, path = arg.partition("=")
+        if what in MEASURE_FIXED and not eq:
+            return Step("measure", [what])
+        if what != "du" or not eq:
+            raise ValueError(f"{step}: expected measure:du=<path>|docker-df|buildx-du")
+        target = Path(path)
+        if not target.is_absolute() or ".." in target.parts:
+            raise ValueError(f"{step}: an absolute path without '..'")
+        if not any(target == r or r in target.parents for r in MEASURE_ROOTS):
+            raise ValueError(f"{step}: only under {', '.join(str(r) for r in MEASURE_ROOTS)}")
+        return Step("measure", ["du"], None, [str(target)])
     if kind == "cache" or step.startswith("cache@") or step.startswith("cache="):
         head, eq, command = step.partition("=")
         _, _, secs = head.partition("@")
@@ -778,6 +808,13 @@ def verify_stop(
 
 CACHE_ARG = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")  # session ids, ids, numbers, paths
 CACHE_PY = REPO / ".venv" / "bin" / "python"
+
+
+def measure_cmd(step: Step) -> list[str]:
+    if step.services == ["du"]:
+        return ["nice", "-n", "19", "ionice", "-c3", "du", "-s", "-x", "--block-size=1",
+                *step.command]  # fmt: skip
+    return list(MEASURE_FIXED[step.services[0]])
 
 
 def cache_cmd(step: Step) -> list[str]:
@@ -1565,6 +1602,10 @@ def main() -> int:
                              host=b"scripts/gen_packet_tables.py")  # fmt: skip
             tail = log_path(step.label).read_text(errors="replace").splitlines()[-20:]
             print("\n".join(f"  | {line}" for line in tail), flush=True)
+        elif step.kind == "measure":
+            ok = run_process(step.label, measure_cmd(step), guard)
+            tail = log_path(step.label).read_text(errors="replace").splitlines()
+            print("\n".join(f"  | {line}" for line in tail[-200:]), flush=True)
         elif step.kind == "cache":
             ok = run_process(step.label, cache_cmd(step), guard, env=cache_env(),
                              host=b"scripts/build_frame_cache.py")  # fmt: skip

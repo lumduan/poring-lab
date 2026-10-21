@@ -910,3 +910,30 @@ def test_the_sniffer_code_gate(gb: ModuleType, monkeypatch: pytest.MonkeyPatch) 
     g = FakeGit(status="dirty")
     assert gb.sniffer_code_gate([gb.parse_step("restart:backend@30")], git=g) is None
     assert g.calls == []  # no sniffer step: git is never asked
+
+
+def test_measure_du_only_under_our_roots(gb: ModuleType) -> None:
+    """The disk audit (Batt 2026-10-21): one path per step, poring-lab's own paths only."""
+    step = gb.parse_step(f"measure:du={gb.REPO}/data")
+    assert step.kind == "measure" and step.command == [f"{gb.REPO}/data"]
+    assert gb.measure_cmd(step)[:6] == ["nice", "-n", "19", "ionice", "-c3", "du"]
+    assert gb.measure_cmd(step)[-1] == f"{gb.REPO}/data"
+    assert gb.parse_step("measure:du=/home/batt/poring-lab-shm-archive").command
+    for bad in (
+        "measure:du=/home/batt/docker/quant-orderbook-engine",  # not ours
+        "measure:du=/",
+        "measure:du=/var/lib/docker",
+        f"measure:du={gb.REPO}/../quant-ticker-engine",  # '..' out of the repo
+        "measure:du=data",  # relative
+        "measure:du",
+        "measure:rm=/tmp",
+    ):
+        with pytest.raises(ValueError):
+            gb.parse_step(bad)
+
+
+def test_measure_docker_steps_are_fixed_read_only_commands(gb: ModuleType) -> None:
+    assert gb.measure_cmd(gb.parse_step("measure:docker-df")) == ["docker", "system", "df", "-v"]
+    assert gb.measure_cmd(gb.parse_step("measure:buildx-du"))[:3] == ["docker", "buildx", "du"]
+    with pytest.raises(ValueError):
+        gb.parse_step("measure:docker-df=/x")
