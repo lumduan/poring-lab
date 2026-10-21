@@ -13910,6 +13910,55 @@ dialog's 10-04 signature (distance 8.96 on this client's dialog, bar 6.0).
 - S2 / S3 / S6b keep their bars (3.96 / 3.96b). If T-S2 F still shows no crossing below 55 %,
   S2's bar stays UNTESTED and goes to Batt (not a pass).
 
+**Run log (chain 2, 19:35-19:54; the stand 268,107; MaxHP 5260; judged by `survive_judge.py` at
+its default 120-ms offset; HP min from the server's packets):**
+
+| trial | pack | s | HP min | potions | escapes | deaths | S1b within 2 % | crossings < 55 % answered | F3 presses / real casts / uptime |
+|---|---|---|---|---|---|---|---|---|---|
+| T-S2 f1 (19:35) | F | 120 | 2709 (51.5 %) | 26 | 0 | 0 | 91.8 % | 4 / 4 | 1 / 1 / 98.8 % |
+| T-S2 f2 (19:38) | F | 120 | 2808 (53.4 %) | 32 | 0 | 0 | 90.6 % | 3 / 3 (1 potion above 80 %) | 1 / **0** / 0 (toggle-off) |
+| T-S2 f3 (19:41) | F | 120 | 2852 (54.2 %) | 27 | 0 | 0 | 92.0 % | 2 / 2 | 1 / 1 / 98.8 % |
+| T-S2 e1 (19:44) | E | 180 | 2909 (55.3 %) | 18 | 0 | 0 | 92.6 % | 0 (1 potion above 80 %) | 1 / **0** / 0 (toggle-off, Blind) |
+| T-S2 e2 (19:47) | E | 180 | 2909 (55.3 %) | 10 | 0 | 0 | 94.1 % | 0 | 1 / 1 / 99.2 % |
+| T-S3 c1 (19:51) | C | 180 | 3783 (71.9 %) | 0 | 1 at 71.9 % (rate 282 HP/s) | 0 | 88.0 % | - | - |
+| T-S3 c2 (19:53) | C | 180 | 4800 (91.3 %) | 0 | 1 at 91.3 % (rate 210 HP/s, ~3 s in) | 0 | 93.3 % (n 15) | - | - |
+| T-S3 c3 (19:53) | C | 180 | 4154 (79.0 %) | 0 | 1 at 79.0 % (rate 204 HP/s) | 0 | 78.4 % (n 88) | - | - |
+
+- **S2: PASS** on 3.96's bars.
+  - Every crossing below 55 % was answered within 1.5 s: **9 / 9** (bar >= 90 %).
+  - Potions above 80 % HP: 2 of 113 = 1.8 % (bar <= 10 %).
+  - Deaths 0 in T-S2.
+  - Pack F reached the threshold. 3.96b's packs C never crossed 55 %, so its three T-S2 trials
+    had nothing to answer.
+- **S4b: FAILS** (toggles-off in f2 and e1, bar 0). The cause, seen on frames, is in 3.96d; S4b2
+  replaces it.
+- **S3, the rate path:** the Fly Wing fired before death 3 / 3, at HP >= 10 % 3 / 3. But all three
+  escapes came from the 200 HP/s trigger at 72-91 % HP: a pack's opening burst crosses it, so it
+  spends a wing early. The HP path (< 25 %) was never reached -> 3.96e (T-S3h). T-S3 E e1/e2 were
+  not run (the chain was stopped after c3 to register T-S3h). S3's verdict pools T-S3 with T-S3h
+  (3.96e).
+- **S1b (3.96b's bar, pooled over every finished trial of 3.96b/c, 12 trials): FAILS.**
+  - Within 2 %: **91.05 %** (n 6,726; bar >= 95 %). Within 5 %: 99.46 %. Unread 0 of 6,739.
+  - The misses' shape: 448 of the 602 misses read **+2 or +3 points ABOVE** the packets' HP. One
+    regen tick is 155 HP = 2.9 points (IRP 10 standing), and ZC_RECOVERY 0x0A27 is not decoded,
+    so between absolute hp packets the truth sits one tick low (3.96b's deviation, the same +3).
+    The large negative misses (-11 to -19 points, 22 reads) are the screen lagging multi-hit
+    bursts (an Orc Skeleton hits for up to 236).
+  - Reads whose last absolute hp packet is <= 1 s old: 93.65 % (n 5,342). Even "fresh" truth
+    misses a tick that lands within the second.
+  - ⇒ the registered TRUTH cannot judge a 2 % bar while regen ticks are invisible. The 0x0A27
+    decoder (`feat/decode-recovery`, 33b886c) is approved to deploy tonight after the chain. A
+    re-judge of these banked trials with decoded ticks would be a JUDGE change: it goes to Batt, it
+    is labelled as such, and it is not a pass under this bar.
+- **Incident (c3):** I killed the chain loop after c2 to register T-S3h. The running trial's
+  stdout was the chain's command substitution, so killing the reader killed c3 in its cleanup:
+  `trial_end` was written, but no packets and no manifest.
+  - Cleanup re-run by hand at 19:59: `@killmonster2`, `@heal`, `@warp` back. Frames
+    after-c3 / after-c3-cleanup were judged: the stand, full HP / SP, chat closed, no dialog.
+  - The packets were backfilled from the sniffer archive (t0 = first event - 3 s, t1 = trial_end
+    + 15 s), and the manifest says `reconstructed`.
+  - Chain 3 writes each trial's output to a file, so this cannot recur.
+
 ### 3.96d crusader-survival@1d: S4b2 -- Auto Guard's re-cast blind-proof and remembered across trials (pre-registered 2026-10-21 19:48 ICT, the commit time of 3.96d's first commit, BEFORE S4b2 is built or run)
 
 **What happened to S4b (3.96c's chain):** S4b FAILS its bar (0 toggles-off).
