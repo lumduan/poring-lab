@@ -108,6 +108,7 @@ def link_redrops(rows: list[dict[str, Any]], items: Mapping[int, Mapping[str, An
     used: set[int] = set()
     for r in sorted(rows, key=lambda r_: int(r_["t"])):
         rd = rdp = 0
+        r["redrop_fids"] = []  # econ_row: the re-drops' own floor ids (their value counted once)
         for f in r.get("drops", ()):
             iid = items[f].get("item_id")
             if iid is None:
@@ -120,6 +121,7 @@ def link_redrops(rows: list[dict[str, Any]], items: Mapping[int, Mapping[str, An
                     continue
                 used.add(o)
                 rd += 1
+                r["redrop_fids"].append(f)
                 got = items[f]["fate"] == "picked"
                 rdp += got
                 row_of[o]["recovered_here"] += got
@@ -189,6 +191,13 @@ def column(s: Mapping[str, Any]) -> str:
 def session_rows(sid: str, sess: Any = None) -> list[dict[str, Any]]:
     """The kill rows of one banked session (packets + the bot's events); ``sess`` =
     search_study.load_session(sid) when the caller has it."""
+    return session_rows_items(sid, sess)[0]
+
+
+def session_rows_items(sid: str, sess: Any = None
+                       ) -> tuple[list[dict[str, Any]], dict[int, dict[str, Any]]]:  # fmt: skip
+    """session_rows plus the floor items' fates they were built from (arm_judge.item_fates;
+    econ_row values them)."""
     import arm_judge as aj
     import flow_judge as fj
     import hunt_core as hc
@@ -205,8 +214,9 @@ def session_rows(sid: str, sess: Any = None) -> list[dict[str, Any]]:
     pos = hc.walk_positions(sess.events)
     items = aj.item_fates(sess.events, pos, fj.mob_at)
     kills = aj.kills_of(sess.events)
-    return kill_rows(kills, items, lambda g, t: fj.mob_at(pos, g, t), engs,
-                     {int(r["k"]): r.get("gid") for r in rows}, sess.t0, sess.w1)  # fmt: skip
+    krows = kill_rows(kills, items, lambda g, t: fj.mob_at(pos, g, t), engs,
+                      {int(r["k"]): r.get("gid") for r in rows}, sess.t0, sess.w1)  # fmt: skip
+    return krows, items
 
 
 def arms(rows: Sequence[Mapping[str, Any]], split: Callable[[int], bool] = SPLITS["parity"]

@@ -165,7 +165,13 @@ def main() -> int:
         man = json.loads((DEMO / sid / "manifest.json").read_text())
         mx_ = (man.get("thresholds") or {}).get("MAX_HP")
         out[sid] = judge(*load(sid), offset_s=a.offset_s, max_hp=mx_)
-    print(json.dumps(out, indent=1))
+        try:  # the trial's ECONOMIC row (econ_row.py: costs only, the Crusader does not attack)
+            import econ_row
+
+            out[sid]["economics"] = econ_row.trial_row(sid)
+        except FileNotFoundError as e:
+            out[sid]["economics"] = {"why": str(e)}
+    print(json.dumps(out, indent=1, default=str))
     return 0
 
 

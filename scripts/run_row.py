@@ -28,6 +28,14 @@ Each run needs flow_judge.json (``--fresh`` writes it first: flow_judge.bot). Th
 - hard bars: NPC contacts / map changes / non-Creamy non-target jobs hit;
 - kill -> loot start (3.87's ruler: the kill's vanish packet -> the loot step's start, the
   engagements the runner ended "dead"), mean / p50; the run's end reason (its manifest).
+- ECONOMICS (Batt 2026-10-21, a block of its own: econ_row.py, docs/econ/economics.md): K, V
+  picked / dropped per kill at fixed NPC prices (plain and Overcharge 10), the looter carry, L by
+  value, W, V / W, consumables, gross / net zeny per hour, cost ratio, deaths / h, the 10-min
+  windows' Sharpe-like ratio, the fill time to 50 % / 90 % weight -- and the MAP MODEL beside it
+  (econ_model.py at this run's kill mix, K and L; model error = (measured - model) / model).
+  Under the "economics" key (JSON) and as a second table; the standard columns are unchanged.
+  It needs data/econ/items.json (econ_items.py build) and data/econ/maps.json (econ_model.py
+  build); without them the block says why.
 BATT is the demo's fixed benchmark (competition.md; Batt's night order): 300 kills / h, 44 seen,
 6.82 per sighting, 12.0 s per kill, 78 % of free targets, steer moving 92 %, seen -> click 1.11 s,
 death -> next 1.24 s, landing 100 %, loot 97 %, reversals 3.6 / min.
@@ -36,6 +44,7 @@ death -> next 1.24 s, landing 100 %, loot 97 %, reversals 3.6 / min.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import re
 import sys
@@ -46,6 +55,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 DEMO = Path("/dev/shm/poring-lab-demo")
+BATT_DEMO = "20261016T093835-demo-human-demo"  # his prt_fild08 demo (competition.md)
 NS = 1_000_000_000
 GM = 2000002
 CREAMY = 1018
@@ -164,7 +174,8 @@ def row(sid: str, fresh: bool = False) -> dict[str, Any]:
     sm = steer_moving_share(fld, sess.bot_events, t0, w1)
     import loot_complete as lc
 
-    lcs = lc.summary(lc.session_rows(sid, sess))
+    lc_rows, lc_items = lc.session_rows_items(sid, sess)
+    lcs = lc.summary(lc_rows)
     lc_c, lc_f = lc.cells(lcs)
     kls = kill_to_loot_start(sess.events, sess.engagements,
                              {int(r_["k"]): r_.get("gid") for r_ in ew["rows"]})  # fmt: skip
@@ -172,6 +183,7 @@ def row(sid: str, fresh: bool = False) -> dict[str, Any]:
         man = json.loads((DEMO / sid / "manifest.json").read_text())
     except (OSError, ValueError):
         man = {}
+    econ = economics(sid, sess, (lc_rows, lc_items))
     return {
         "session": sid,
         "engagements": ew["engagements"],
@@ -211,7 +223,19 @@ def row(sid: str, fresh: bool = False) -> dict[str, Any]:
         f"{lcs['kill_to_last_pickup_p50']:.2f} / {lcs['kill_to_last_pickup_mean']:.2f} "
         f"(n {lcs['kill_to_last_pickup_n']})",
         "end reason": str(man.get("ended") or "-")[:60],
+        "economics": econ,
     }  # fmt: skip
+
+
+def economics(sid: str, sess: Any = None, rows_items: Any = None) -> dict[str, Any]:
+    """The run's ECONOMIC block (econ_row.row), or {"why": ...} when the item table is not built
+    (never a failed row: the standard columns do not depend on it)."""
+    import econ_row
+
+    try:
+        return econ_row.row(sid, sess=sess, rows_items=rows_items)
+    except FileNotFoundError as e:
+        return {"session": sid, "why": {"economics": str(e)}}
 
 
 _FRAC = re.compile(r"^(\d+)/(\d+) = ")
@@ -327,6 +351,12 @@ def pool(rows_: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
             f"(n {int(nn)})")  # fmt: skip
     ends = [str(r.get("end reason") or "-") for r in rows_]
     out["end reason"] = ", ".join(f"{e} x{ends.count(e)}" for e in dict.fromkeys(ends))[:60]
+    ecs = [r["economics"] for r in rows_ if isinstance(r.get("economics"), dict)
+           and "K" in r["economics"]]  # fmt: skip
+    if ecs and len(ecs) == n:  # the economics pooled from the sums (econ_row.pool)
+        import econ_row
+
+        out["economics"] = econ_row.pool(ecs)
     return out
 
 
@@ -381,6 +411,14 @@ def main() -> int:
         for r_ in rows_
     ]
     print(box_table(cols))
+    ecols = [(h, c["economics"]) for h, c in cols[1:] if isinstance(c.get("economics"), dict)
+             and "K" in c["economics"]]  # fmt: skip
+    if ecols:
+        import econ_row
+
+        with contextlib.suppress(OSError, SystemExit):  # Batt's demo beside the runs, if banked
+            ecols.insert(0, ("BATT demo", econ_row.row(BATT_DEMO)))
+        print(econ_row.box(ecols))
     return 0
 
 
