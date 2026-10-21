@@ -198,6 +198,16 @@ def test_a_delegated_review_loads_only_in_its_exact_form(tmp_path: Path) -> None
             mz.load("fix_map", tmp_path, shape=(H, W))
 
 
+def test_v52_is_the_first_version_that_loads_the_zones() -> None:
+    import hunt_flow as hf
+
+    assert hf.PARAMS[52]["map_zones"] and not hf.PARAMS[52]["loot_gm_one_pass_ab"]
+    assert not any(hf.PARAMS[v].get("map_zones") for v in hf.PARAMS if v < 52)
+    assert {k: v for k, v in hf.PARAMS[52].items() if k not in ("map_zones",
+            "loot_gm_one_pass_ab")} == {k: v for k, v in hf.PARAMS[51].items()
+                                         if k != "loot_gm_one_pass_ab"}  # fmt: skip
+
+
 def test_the_repo_ships_prt_fild08_under_batts_recorded_delegation() -> None:
     """Batt authors the files -- or delegates one, recorded in it (2026-10-21: prt_fild08)."""
     assert mz.ZONES_DIR.name == "map_zones" and (mz.ZONES_DIR / "README.md").exists()
@@ -462,7 +472,9 @@ def test_the_runner_is_inert_without_a_zones_file() -> None:
     assert first == ["if", "zones", "is", "None:"] and body.split('"""')[2].split()[4:6] == [
         "return", "None"]  # fmt: skip
     assert "okr: Any = ok\n" in src and "z_seen: Any = None" in src
-    setup = _body(src, "zones = mz.load(MAP, shape=ok.shape)", 'if MAP == "prt_fild08":')
+    assert 'zones = mz.load(MAP, shape=ok.shape) if prm.get("map_zones") else None' in src
+    setup = _body(src, 'zones = mz.load(MAP, shape=ok.shape) if prm.get("map_zones")',
+                  'if MAP == "prt_fild08":')  # fmt: skip
     i_if = setup.index("if zones is not None:")
     for mut in ("mz.apply(", "okr = mz.route_grid(ok, zones)", "ok0 = mz.route_grid(ok0, zones)",
                 "z_seen = ", "z_free = "):  # fmt: skip

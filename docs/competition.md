@@ -1897,4 +1897,53 @@ nothing is pre-registered.
 | the next ring (the 7 x 7's edge) | 15 of the 35 (up to +3.4 points) | 24 hovers, ~5 s a pass, unless C skips most of them | `left_behind.py` gm_outside_cells_from_the_gm |
 | looter recovery (engage the looter on our pile; it re-drops) | the race: 19 items (4.3 points) | a new engagement type | `left_behind.py` gm_causes |
 | option C live (skip the EMPTY cells; needs an odometry "moved" gate) | the step -2.83 s p50 / -3.07 s mean, on 180 of 237 kills with picks; 0 / 514 items ever on a skipped cell | kill -> last pickup barely moves (2.53 -> 2.50 s p50) | `loot_sight.py`, `lc/c_lastpick.py` |
-| Batt's no-cross line at C1's door (his file) | C1 took 10.4 % of v51's hours, and 37.5 % of run 4's | his authoring | `map_zone_candidates.py`, the NAS package |
+| Batt's no-cross line at C1's door (his file) | C1 took 10.4 % of v51's hours, and 37.5 % of run 4's | his authoring (➡️ 2026-10-21: Batt DELEGATED it; the file is 13e497d, run as v52, 3.93, below) | `map_zone_candidates.py`, the NAS package |
+
+## Day run 21 Oct (Batt's decisions on the overnight report; until 16:00, one report at 16:00)
+
+Batt's decisions, received ~09:0x (verbatim where quoted):
+1. **Map zones delegated:** "I DELEGATE the zone authoring to you. Write
+   config/map_zones/prt_fild08.yaml yourself", with C1's line and C3's, proved offline, the
+   delegation recorded in the file, then merged, loaded and pre-registered.
+2. **Next loot version:** the GM's 5 x 5 PLUS the 3 x 3 around the believed death cell.
+3. Then option C live, as its own version (not today).
+4. Then search / approach: v45, v46, P3, v47 (not today). Looter-race work waits.
+5. **The blocks DIRECTION:** a plan only (docs + an ADR-0020 amendment draft). Stop for his
+   approval.
+
+His day order (~09:1x) puts it in order: zones -> loot, with the blocks plan offline in
+parallel.
+- **The GPU freeze is LIFTED (~09:1x).** Next big step: the detector for ORC DUNGEON F1
+  (orcsdun01), by warp-and-watch collection.
+- **The client alternates (~09:3x):** "Finish the current zone-version run, then a warp-and-watch
+  collection block on orcsdun01 (~45-60 min), then the next hunting run, then collection again
+  ... keep each hunting version's runs whole".
+
+### Map zones: Batt's delegation
+
+- **The file:** `config/map_zones/prt_fild08.yaml` (13e497d).
+  - `reviewed_by: "agent (delegated by batt, 2026-10-21)"` and a `delegation:` note citing
+    decision 1.
+  - The loader accepts the agent's name ONLY in that form, with that note. Any other agent-like
+    reviewer is still refused, so loading still fails closed.
+- **The lines:**
+  - `c1-door` (322,88)-(318,91): the 2-cell door into the south-east room C1;
+  - `c3-door` (50,36)-(46,36).
+  - C2 needs nothing: it lies inside C1.
+- **Added:** a room a line seals leaves the search area and the routes (`map_zones.sealed_off`).
+  A monster inside is seen, never engaged.
+- **The offline proof** (`map_zones.py prove`; the NAS folder
+  `/mnt/poring-lab-datasets/map-zones/prt_fild08/`: PROOF.md, before / after images):
+  - C1 is cut off whole (2391 cells) on client ∩ server AND on the stand grid, with and without
+    the corner rule;
+  - **0 cells newly unreachable elsewhere**;
+  - 200 / 200 sampled clicks into C1 refused;
+  - spawn cells lost 2.76 % (C1 2.66 %, ~3.7 of the 140 monsters);
+  - the search area 87867 -> 85491.
+- **CORRECTION (C3):** the overnight list called C3 a pocket behind a 2-cell door. It is an
+  ISLAND: 413 cells with no walkable link to the field (the bot never reached it in 18.1 h, 0 s).
+  Its "door" is the neck between its halves, and the line cuts off 88 cells nobody could reach.
+  Harmless, kept as Batt decided.
+- **The version:** v52 (`"map_zones": True` on v51's adopted base), pre-registered in
+  demonstrations 3.93. Whole runs, compared run-level with v51's.
+

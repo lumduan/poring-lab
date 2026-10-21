@@ -13316,6 +13316,86 @@ version is built).
     - 4 had no C read (the GM moved, or no EXP line).
   - The reader's miss: 1 item in 72.
 
+### 3.93 hunt-flow@52: MAP ZONES -- prt_fild08's zones file (C1 + C3 no-cross lines) on WHOLE runs, compared run-level with v51's runs (pre-registered 2026-10-21 09:27 ICT, the commit time, BEFORE its runs; Batt 2026-10-21, decision 1 on the overnight loot report: "Map zones: I DELEGATE the zone authoring to you ... Then merge feat/map-zones, load it, and pre-register a version: primary = time inside C1 per run-hour; guards = kills/h, loot completeness, hard bars"; Batt's day order, received ~09:1x: "Zones apply to whole runs (no per-engagement arms), so compare run-level against the v51 base runs with density reported beside it. Primary = time inside C1 per run-hour (should be ~0); guards = kills/h, loot completeness, hard bars. 3-4 runs as time allows.")
+
+**The ONE main change: `"map_zones": True`** (PARAMS[52]; the first version that loads the zones).
+- The runner loads `config/map_zones/prt_fild08.yaml` (13e497d, sha256 56e5230b... at that commit
+  -- the `map_zones` event at each run's start records the exact sha256). Batt delegated its
+  authoring in his decision 1, and the file records the delegation.
+- Its lines:
+  - `c1-door` (322,88)-(318,91) seals the south-east room C1;
+  - `c3-door` (50,36)-(46,36) splits the island C3 (unreachable from the field anyway).
+- The enforcement merged from `feat/map-zones` (0684d2c, 09:09):
+  - walk clicks, attack clicks, the burst's re-clicks and every loot path refuse a click whose
+    client walk crosses a line;
+  - routes plan on the grid without the line cells.
+- Added with the file (13e497d):
+  - **a room a line seals leaves the search area and the route grid** (`map_zones.sealed_off`);
+  - a monster there is seen, never engaged (`target_dropped`, zone `target_sealed`).
+
+**The offline proof** (`python3 scripts/map_zones.py prove prt_fild08`, 09:17; NAS
+`/mnt/poring-lab-datasets/map-zones/prt_fild08/PROOF.md` and the before / after images there):
+- **C1 is cut off whole:** 2391 cells, x 313-381 / y 66-148, on client ∩ server walkability AND
+  on the runner's stand grid, with and without rAthena's no-corner-cutting rule.
+- **0 cells newly unreachable elsewhere**, under both rules.
+- **200 / 200 sampled clicks from outside into C1 are refused** by the click gate (`walk_why`).
+  10 / 200 clicks between two outside cells near C1 are refused too: an over-reach, not a leak.
+- **The search area:** 87867 -> 85491 cells.
+- **Spawn cells lost:** 2479 of the server's 89999 (2.76 %); C1 alone holds 2.66 %, about 3.7 of
+  prt_fild08's 140 whole-map-random monsters.
+- **CORRECTION to the candidate list:** C3 is an ISLAND (413 cells, no walkable link to the
+  field). Its "door" is the neck between its halves, so its line cuts 88 cells nobody could reach.
+
+**Base:** v51 ADOPTED (3.92): Batt's loot rule with ONE pass on every engagement
+(`"loot_gm_one_pass_ab": False`).
+- Comparison: v51's 4 runs (3.92: T224434, T234607, T004744, T014926), run-level.
+- **Confound, named before the runs:** v51's even-k kills scanned up to 3 passes; v52 scans one
+  pass on every kill.
+  - 3.92 measured the step at 7.72 vs 10.11 s, about 1.2 s saved per kill on the half that changes.
+  - That is about +3 % kills / h, within the guards' slack.
+
+**Runs:** 60 min each on prt_fild08, seeds 20400101, 20400202, 20400303, 20400404, in that
+order.
+- 3-4 runs as time allows, one per client block. They alternate with the orcsdun01 collection
+  blocks (Batt ~09:3x: "Finish the current zone-version run, then a warp-and-watch collection
+  block ... then the next hunting run ... keep each hunting version's runs whole").
+- Each run is launched with `hunt_chain.py --version 52 --seeds <one seed>` after a judged
+  screenshot.
+
+**The instrument for the primary:** `scripts/map_zone_candidates.py --sessions <the runs>`.
+- It measures the GM's packet cells at 1 s steps inside C1's regions: the same tool and regions as
+  the 18.1-h baseline and v51's update (03:17).
+- Its positive case: v51 run 4 measured 1375 s inside.
+
+**Predictions (pooled over the runs; an interim after each, the verdict after >= 3 runs):**
+1. **P1, the change's purpose:** time inside C1 <= 30 s per run-hour, and no single stay
+   > 60 s.
+   - v51: 374.1 s / run-h (runs: 150, 0, 0, 1375 s). v43+: 310.7.
+   - The margin covers the instrument's 1-s steps on C1's door cells outside the line.
+2. **G1, kills / h:** pooled >= 81.2 (0.85 x v51's 95.5).
+   - If it fails while the monsters seen per 10 min (windowed, the same ruler) are < 20.7
+     (0.85 x v51's 24.4), the density-normalised figure decides instead: kills / h per seen /
+     10 min >= 3.33 (0.85 x v51's 3.91).
+3. **G2, loot completeness (gross, `loot_complete.py`):** pooled >= 73.4 % (v51's 79.4 - 6
+   points, the 3.89 null's edge). Net reported.
+4. **G3, hard bars:** 0. A Creamy hit is counted apart, not a stop.
+5. **Reported, not deciding:**
+   - the standard columns: kills / h, seen / 10 min, landing, gross and net completeness, left
+     behind / looters / expired, kill -> last pickup (Batt 1.56 s), loot step time, HAND-click
+     precision;
+   - time inside C2;
+   - the zone refusals by kind (walk / strike / target / loot) and the `target_sealed` drops;
+   - any `zone_exit`;
+   - kills / min inside vs outside C1.
+- **A fault, not a result:** any stay > 60 s inside C1 means a click got past the gate. The run's
+  events are read before the next run starts.
+
+**Decision rule:**
+- ADOPT the zones into the base if P1, G1, G2 and G3 pass over >= 3 runs.
+- If P1 passes and a guard fails, NOT adopted: report to Batt with the runs' split (searching /
+  steering / looting) and density.
+- If P1 fails, the gate leaked: a fault, investigated before any further run.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.

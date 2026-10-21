@@ -301,6 +301,10 @@ VERSIONS = {
     "once (own cell, 3 x 3, 5 x 5 edge), bursts on any HAND until it is gone (re-hovering only "
     "that cell), then the hunt resumes -- no second pass; even k keeps v50's passes (up to 3); "
     "interleaved per engagement. Base: v50's rule on every engagement (its verdict, 3.91)",
+    52: "MAP ZONES: prt_fild08's zones file (C1 + C3 no-cross lines, written under Batt's recorded "
+    "delegation; a room a line seals leaves the search area and the routes) enforced on WHOLE "
+    "runs (no per-engagement arms), compared run-level with v51's runs. Base: v51 ADOPTED (3.92): "
+    "one pass on every engagement",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -579,6 +583,13 @@ PARAMS[50] = {**PARAMS[48], "exp_dead_ab": False, "loot_gm": True, "loot_gm_ab":
 # 0.878, hard bars 0): the next version's base sets "loot_gm_one_pass_ab": False (one pass on all k)
 PARAMS[51] ={**PARAMS[50], "loot_gm_ab": False, "loot_gm_one_pass": True,
               "loot_gm_one_pass_ab": True}  # fmt: skip
+# 52 = MAP ZONES (Batt 2026-10-21, decision 1: "I DELEGATE the zone authoring to you ... Then
+# merge feat/map-zones, load it, and pre-register a version: primary = time inside C1 per
+# run-hour; guards = kills/h, loot completeness, hard bars"; day order: "Zones apply to whole runs
+# (no per-engagement arms), so compare run-level against the v51 base runs with density reported
+# beside it"): config/map_zones/prt_fild08.yaml (13e497d) loaded ("map_zones"), on v51's adopted
+# base (one pass on every engagement: "loot_gm_one_pass_ab" False). Pre-registered 3.93.
+PARAMS[52] = {**PARAMS[51], "loot_gm_one_pass_ab": False, "map_zones": True}
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -2423,8 +2434,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
     # gate, no event. With them: `ok` stays the zone-free stand grid (where the GM may STAND: the
     # minimap / settle checks), `okr` = ok minus both kinds (planned routes), `area` = area minus
     # both (the planners'), ok0 (the stall breaker's) minus both. A broken file refuses the run.
-    try:
-        zones = mz.load(MAP, shape=ok.shape)
+    try:  # (v52+: a version opts in with "map_zones"; an older version re-run stays what it was)
+        zones = mz.load(MAP, shape=ok.shape) if prm.get("map_zones") else None
     except mz.ZoneError as e:
         raise f0.FarmStop(f"hunt-flow refused: map zones: {e}") from None
     okr: Any = ok

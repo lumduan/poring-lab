@@ -109,7 +109,8 @@ part stays.
 
 ## How the runner enforces them
 
-`scripts/hunt_flow.py` applies the zones only when the file exists.
+`scripts/hunt_flow.py` applies the zones only when the file exists AND the version opts in with
+`"map_zones": True` (v52 onwards, 2026-10-21). An older version re-run stays what it was.
 
 - **Planning.** The search area loses both kinds. The headings, sweeps and coverage goals use the
   search area. Routes (approach, escape, stall breaker) use the walkable grid minus both kinds.
