@@ -6,10 +6,13 @@ file and holds the PURE geometry the runner (hunt_flow.py) enforces. Until his f
 nothing changes in the bot.
 
     map_zones.py check <map> [--root DIR]     validate a file, print what it removes
+    map_zones.py prove <map> [--root DIR]     what it seals and cuts off (the offline proof)
 
 THE FILE: config/map_zones/<map>.yaml (the format: config/map_zones/README.md). Static map data,
 Batt's own knowledge (ADR-0015: static map knowledge at plan time), reviewed: the loader refuses a
-file without ``reviewed_by`` -- the agent never approves a zone. No file = ``load`` -> None =
+file without ``reviewed_by`` -- the agent never approves a zone, except under a person's RECORDED
+delegation (Batt 2026-10-21, decision 1: ``reviewed_by: "agent (delegated by batt, 2026-10-21)"``
+plus a ``delegation`` note; ``DELEGATED``). No file = ``load`` -> None =
 INERT. A file that exists but is wrong raises ZoneError: the run must not start on it.
 
 COORDINATES: map cells, x east, y NORTH -- the server's, /where's and the minimap readout's (x, y).
@@ -63,7 +66,13 @@ AGENT_NAMES = frozenset({"agent", "ai", "assistant", "auto", "automatic", "bot",
 # the client-route proxy's A* bound: a walk click is <= ~15 cells away; an unreachable end costs
 # ~55 ms at this bound (20,000 nodes: ~300 ms; measured 2026-10-20 on a 400 x 400 grid)
 ROUTE_MAX_NODES = 4_000
-TOP_KEYS = frozenset({"map", "reviewed_by", "reviewed", "no_cross", "no_enter"})
+TOP_KEYS = frozenset({"map", "reviewed_by", "reviewed", "delegation", "no_cross", "no_enter"})
+# Batt 2026-10-21 (decision 1 on the overnight loot report): "I DELEGATE the zone authoring to you
+# ... Record the delegation in the file: reviewed_by: "agent (delegated by batt, 2026-10-21)", plus
+# a note pointing to this decision; keep fail-closed loading." So the agent's name passes ONLY in
+# this exact form, naming a delegator who is not the agent, with a real date, AND with a
+# `delegation` note (the decision it cites). Any other agent-like reviewer is still refused.
+DELEGATED = re.compile(r"agent \(delegated by ([A-Za-z0-9_.-]{1,40}), (\d{4}-\d{2}-\d{2})\)")
 MAP_NAME = re.compile(r"[A-Za-z0-9_@-]{1,40}")
 
 
@@ -97,6 +106,7 @@ class Zones:
     no_enter: tuple[NoEnter, ...] = ()
     path: str = ""
     sha256: str = ""
+    delegation: str = ""  # a delegated review's note (the person's decision it cites); else ""
 
 
 # --- the file -------------------------------------------------------------------------------------
@@ -224,8 +234,26 @@ def parse(data: Any, map_name: str, shape: tuple[int, int] | None = None,
     if not isinstance(rb, str) or not rb.strip():
         raise _bad(source, "no reviewed_by: a zones file names the PERSON who reviewed it (the "
                            "agent never approves zones)")  # fmt: skip
-    if set(re.split(r"[^a-z0-9]+", rb.strip().lower())) & AGENT_NAMES:
-        raise _bad(source, f"reviewed_by {rb!r}: the agent never approves zones (a person does)")
+    deleg = data.get("delegation")
+    if _agent_like(rb):
+        m = DELEGATED.fullmatch(rb.strip())
+        if m is None or _agent_like(m.group(1)):
+            raise _bad(
+                source,
+                f"reviewed_by {rb!r}: the agent never approves zones (a person "
+                "does), except under a person's recorded delegation: 'agent "
+                "(delegated by <person>, YYYY-MM-DD)' + a `delegation` note",
+            )
+        try:
+            date.fromisoformat(m.group(2))
+        except ValueError:
+            raise _bad(source, f"reviewed_by {rb!r}: the delegation's date is not a date") from None
+        if not isinstance(deleg, str) or not deleg.strip():
+            raise _bad(source, f"reviewed_by {rb!r}: a delegated review needs a `delegation` note "
+                               "citing the person's decision")  # fmt: skip
+    elif deleg is not None:
+        raise _bad(source, "delegation: only a delegated reviewer ('agent (delegated by <person>, "
+                           "YYYY-MM-DD)') carries one")  # fmt: skip
     rv = data.get("reviewed")
     if isinstance(rv, date):  # YAML reads 2026-10-21 as a date (a datetime is one too)
         reviewed = date(rv.year, rv.month, rv.day).isoformat()
@@ -241,7 +269,12 @@ def parse(data: Any, map_name: str, shape: tuple[int, int] | None = None,
     ne = _items(data, "no_enter", "polygon", 3, source, shape, ids)
     return Zones(map=map_name, reviewed_by=rb.strip(), reviewed=reviewed,
                  no_cross=tuple(NoCross(i, n, tuple(p)) for i, n, p in nc),
-                 no_enter=tuple(NoEnter(i, n, tuple(p)) for i, n, p in ne))  # fmt: skip
+                 no_enter=tuple(NoEnter(i, n, tuple(p)) for i, n, p in ne),
+                 delegation=deleg.strip() if isinstance(deleg, str) else "")  # fmt: skip
+
+
+def _agent_like(name: str) -> bool:
+    return bool(set(re.split(r"[^a-z0-9]+", name.strip().lower())) & AGENT_NAMES)
 
 
 def load(map_name: str, root: Path | str = ZONES_DIR, shape: tuple[int, int] | None = None
@@ -397,6 +430,59 @@ def route_grid(grid: Any, zones: Zones | None) -> Any:
     shape = np.shape(grid)
     return np.asarray(grid, dtype=bool) & ~no_enter_mask(zones, shape) & ~no_cross_mask(
         zones, shape)  # fmt: skip
+
+
+def _label8(mask: Any, corner: bool = False) -> tuple[Any, list[int]]:
+    """PURE: 8-connected components of ``mask``: (labels, sizes) -- label 0 is off the mask,
+    sizes[k] is component k's size (sizes[0] = 0). ``corner``: a diagonal step needs both side
+    cells (rAthena's and hunt_core.astar's rule); else none (a superset of the client's moves)."""
+    m = np.asarray(mask, dtype=bool)
+    h, w = m.shape
+    lab = np.zeros((h, w), np.int32)
+    sizes = [0]
+    for y0, x0 in zip(*np.nonzero(m), strict=True):
+        if lab[y0, x0]:
+            continue
+        n = len(sizes)
+        lab[y0, x0] = n
+        stack, size = [(int(y0), int(x0))], 0
+        while stack:
+            y, x = stack.pop()
+            size += 1
+            for dy in (-1, 0, 1):
+                for dx in (-1, 0, 1):
+                    yy, xx = y + dy, x + dx
+                    if not (0 <= yy < h and 0 <= xx < w and m[yy, xx]) or lab[yy, xx]:
+                        continue
+                    if corner and dy and dx and not (m[y, xx] and m[yy, x]):
+                        continue
+                    lab[yy, xx] = n
+                    stack.append((yy, xx))
+        sizes.append(size)
+    return lab, sizes
+
+
+def sealed_off(before: Any, after: Any, corner: bool = False) -> Any:
+    """PURE (Batt 2026-10-21, decision 1: a no-cross line SEALS a room): the cells of ``after`` --
+    the grid with the zones cut out, ``route_grid(before, zones)`` -- that the zones CUT OFF: they
+    lie in a smaller piece of a ``before`` component than that component's largest piece in
+    ``after``. prt_fild08's south-east room (C1) behind its door line is such a piece: nothing
+    reaches it without crossing the line, so the runner takes it out of the search area and the
+    route grid (still SEEN, never engaged). 8-connected WITHOUT the corner rule, a superset of the
+    client's moves: a piece cut off here is cut off for the client too. A new array."""
+    b = np.asarray(before, dtype=bool)
+    a = np.asarray(after, dtype=bool) & b
+    lb, _ = _label8(b, corner)
+    la, sa = _label8(a, corner)
+    best: dict[int, int] = {}  # before-component -> its largest after-piece
+    for k in range(1, len(sa)):
+        ys, xs = np.nonzero(la == k)
+        comp = int(lb[ys[0], xs[0]])
+        if comp not in best or sa[k] > sa[best[comp]]:
+            best[comp] = k
+    keep = np.zeros(len(sa), dtype=bool)
+    keep[list(best.values())] = True
+    return a & ~keep[la]
 
 
 # --- checks ---------------------------------------------------------------------------------------
@@ -568,13 +654,136 @@ def exit_path(ok_z: Any, area_z: Any, here: Cell, zones: Zones | None = None,
     return None
 
 
+def prove(
+    zones: Zones,
+    grid: Any,
+    server: Any = None,
+    area: Any = None,
+    free: Any = None,
+    samples: int = 200,
+    seed: int = 0,
+) -> dict[str, Any]:
+    """PURE (Batt 2026-10-21, decision 1: "PROVE it offline on client∩server walkability: no path
+    from outside into C1/C3 remains; nothing outside them becomes unreachable; list the cells and
+    spawn area lost"). On ``grid`` (client ∩ server walkable, or the runner's stand grid):
+    - ``cut``: each piece the zones cut off (``sealed_off``), its cells, box and the zone items it
+      borders, under BOTH connectivities (no corner rule: a superset of the client's moves, so a
+      piece sealed there is sealed for the client; the corner rule: rAthena's own);
+    - ``newly_unreachable``: cells of the grid's largest component that the zones leave outside
+      its largest remaining piece and that are neither a zone cell nor in a cut piece -- 0 means
+      nothing else was cut off (counted under the corner rule, the stricter one);
+    - ``server`` (the server's passable grid): its cells in the cut pieces, the share of the
+      map's spawn cells (prt_fild08's spawns are whole-map random) they hold;
+    - ``area`` (the runner's search area): the cells it loses, zone cells and cut pieces apart;
+    - ``free`` (the client-route proxy's zone-free grid): ``samples`` clicks from cells near each
+      piece into it, every one must be refused by ``walk_why``; and as many between two outside
+      cells near it, the refused ones counted (an over-reach, not a leak)."""
+    g = np.asarray(grid, dtype=bool)
+    h, w = g.shape
+    nc, ne = no_cross_mask(zones, (h, w)), no_enter_mask(zones, (h, w))
+    zone = nc | ne
+    after = route_grid(g, zones)
+    out: dict[str, Any] = {"walkable": int(g.sum()), "zone_cells": int((g & zone).sum())}
+    rng = np.random.default_rng(seed)
+    for corner in (False, True):
+        key = "corner_rule" if corner else "no_corner_rule"
+        cut = sealed_off(g, after, corner)
+        lab, sizes = _label8(cut, corner)
+        pieces = []
+        for k in range(1, len(sizes)):
+            m = lab == k
+            ys, xs = np.nonzero(m)
+            ring = np.zeros_like(m)
+            for dy in (-1, 0, 1):
+                for dx in (-1, 0, 1):
+                    ring |= np.roll(np.roll(m, dy, 0), dx, 1)
+            items = [
+                z.id
+                for z in zones.no_cross
+                if (ring & _masks(zones, (h, w))[0] & _one_line(z, (h, w))).any()
+            ]
+            items += [z.id for z, pm in zip(zones.no_enter, _masks(zones, (h, w))[1], strict=True)
+                      if (ring & pm).any()]  # fmt: skip
+            pc: dict[str, Any] = {"cells": int(m.sum()),
+                                  "box": [int(xs.min()), int(ys.min()), int(xs.max()),
+                                          int(ys.max())], "borders": items}  # fmt: skip
+            if server is not None:
+                sv = np.asarray(server, dtype=bool)[:h, :w]
+                pc["server_cells"] = int((m[: sv.shape[0], : sv.shape[1]] & sv).sum())
+            pieces.append(pc)
+        lb, sb = _label8(g, corner)
+        main_b = lb == int(np.argmax(sb))
+        la, sa = _label8(after & main_b, corner)
+        main_a = la == int(np.argmax(sa)) if len(sa) > 1 else np.zeros_like(g)
+        lost = main_b & ~main_a & ~zone & ~cut
+        out[key] = {"cut": pieces, "cut_cells": int(cut.sum()),
+                    "main_before": int(main_b.sum()), "main_after": int(main_a.sum()),
+                    "newly_unreachable": int(lost.sum()),
+                    "newly_unreachable_cells": _cells(lost)[:50]}  # fmt: skip
+        if not corner:
+            cut0, main0 = cut, main_a
+    if server is not None:
+        sv = np.zeros((h, w), dtype=bool)
+        s_ = np.asarray(server, dtype=bool)
+        sv[: min(h, s_.shape[0]), : min(w, s_.shape[1])] = s_[:h, :w]
+        out["spawn"] = {"server_passable": int(sv.sum()), "in_cut": int((sv & cut0).sum()),
+                        "in_zone_cells": int((sv & zone).sum()),
+                        "share": round(float((sv & (cut0 | zone)).sum()) / max(1, int(sv.sum())),
+                                       4)}  # fmt: skip
+    if area is not None:
+        a = np.asarray(area, dtype=bool)
+        out["area"] = {"before": int(a.sum()), "zone_cells": int((a & zone).sum()),
+                       "cut": int((a & cut0 & ~zone).sum()),
+                       "after": int((a & ~zone & ~cut0).sum())}  # fmt: skip
+    if free is not None:
+        fr = np.asarray(free, dtype=bool)
+        lab, sizes = _label8(cut0)
+        checks = []
+        for k in range(1, len(sizes)):
+            inside = np.argwhere(lab == k)
+            near = np.zeros((h, w), dtype=bool)
+            for y, x in inside:
+                near[max(0, y - 12) : y + 13, max(0, x - 12) : x + 13] = True
+            outside = np.argwhere(near & main0 & ~zone)
+            if not len(outside):
+                checks.append({"piece": k, "cells": len(inside), "note": "no outside cell near"})
+                continue
+            n_in, n_out = 0, 0
+            for _ in range(samples):
+                (yi, xi), (yo, xo) = inside[rng.integers(len(inside))], outside[
+                    rng.integers(len(outside))]  # fmt: skip
+                n_in += walk_why(zones, fr, (int(xo), int(yo)), (int(xi), int(yi))) is not None
+                (ya, xa), (yb, xb) = outside[rng.integers(len(outside))], outside[
+                    rng.integers(len(outside))]  # fmt: skip
+                n_out += walk_why(zones, fr, (int(xa), int(ya)), (int(xb), int(yb))) is not None
+            checks.append({"piece": k, "cells": len(inside), "into_refused": f"{n_in}/{samples}",
+                           "outside_to_outside_refused": f"{n_out}/{samples}"})  # fmt: skip
+        out["clicks"] = checks
+    return out
+
+
+def _cells(m: Any) -> list[list[int]]:
+    return [[int(x), int(y)] for y, x in zip(*np.nonzero(m), strict=True)]
+
+
+def _one_line(z: NoCross, shape: tuple[int, int]) -> Any:
+    m = np.zeros(shape, dtype=bool)
+    for a, b in z.segments():
+        for x, y in supercover(a, b):
+            if 0 <= x < shape[1] and 0 <= y < shape[0]:
+                m[y, x] = True
+    return m
+
+
 def summary(zones: Zones, shape: Sequence[int], ok: Any = None, area: Any = None
             ) -> dict[str, Any]:  # fmt: skip
     """The run-start record: the file, its review, the items and the cells they take."""
     nc, ne = no_cross_mask(zones, shape), no_enter_mask(zones, shape)
     out: dict[str, Any] = {
         "file": zones.path, "sha256": zones.sha256, "reviewed_by": zones.reviewed_by,
-        "reviewed": zones.reviewed, "no_cross": [z.id for z in zones.no_cross],
+        "reviewed": zones.reviewed, **({"delegation": zones.delegation} if zones.delegation
+                                         else {}),
+        "no_cross": [z.id for z in zones.no_cross],
         "no_enter": [z.id for z in zones.no_enter], "no_cross_cells": int(nc.sum()),
         "no_enter_cells": int(ne.sum()),
     }  # fmt: skip
@@ -592,7 +801,13 @@ def main() -> int:
     ck = sub.add_parser("check", help="validate config/map_zones/<map>.yaml on the map's grid")
     ck.add_argument("map")
     ck.add_argument("--root", default=str(ZONES_DIR))
+    pv = sub.add_parser("prove", help="what the file seals and cuts off (offline, `prove`)")
+    pv.add_argument("map")
+    pv.add_argument("--root", default=str(ZONES_DIR))
+    pv.add_argument("--samples", type=int, default=200)
     a = ap.parse_args()
+    if a.cmd == "prove":
+        return _prove_cli(a.map, a.root, a.samples)
     try:
         from poring_dataset import walkable as wk
 
@@ -616,6 +831,34 @@ def main() -> int:
     for ne in z.no_enter:
         taken[ne.id] = int((_poly_mask(ne.polygon, both.shape) & both).sum())
     print(json.dumps({"ok": True, **summary(z, both.shape, both), "walkable_taken": taken}))
+    return 0
+
+
+def _prove_cli(map_name: str, root: str, samples: int) -> int:
+    """``prove``: on client ∩ server walkability AND the runner's stand grid, with the runner's
+    search area (hunt_flow: warps + NPCs kept 10 cells off) -- the JSON of ``prove``."""
+    import anim_region as ar
+
+    from poring_dataset import walkable as wk
+
+    _, both = wk.load_both(map_name)
+    both = np.asarray(both, dtype=bool)
+    z = load(map_name, root, both.shape)
+    if z is None:
+        print(json.dumps({"ok": False, "error": f"no zones file for {map_name}"}))
+        return 1
+    server = wk.server_passable(wk.server_grid(map_name))
+    stand = np.asarray(ar.stand_grid(map_name, None), dtype=bool)
+    kb = Path(__file__).resolve().parents[1] / "data" / "kb"
+    warps = json.loads((kb / "warps.json").read_text()).get(map_name, [])
+    npcs = json.loads((kb / "npc_cells.json").read_text())["maps"].get(map_name, {})
+    keep = [(w_["x"], w_["y"], w_["span_x"], w_["span_y"]) for w_ in warps]
+    keep += [(n["x"], n["y"], 1, 1) for n in npcs.get("npcs", [])]
+    area = hc.search_area(stand, keep, margin=10)
+    out = {"map": map_name, "file": z.path, "sha256": z.sha256, "reviewed_by": z.reviewed_by,
+           "client_and_server": prove(z, both, server, None, both, samples),
+           "stand_grid": prove(z, stand, server, area, None, samples)}  # fmt: skip
+    print(json.dumps(out))
     return 0
 
 

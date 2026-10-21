@@ -166,11 +166,73 @@ def test_a_yml_beside_and_a_bad_map_name_refuse(tmp_path: Path) -> None:
         mz.load("../etc/passwd", tmp_path)
 
 
-def test_the_repo_ships_no_zones_file_but_the_format() -> None:
-    """Batt authors the files; the repo carries only the README (no prt_fild08.yaml)."""
+DELEGATED = GOOD.replace(
+    "reviewed_by: batt\n",
+    'reviewed_by: "agent (delegated by batt, 2026-10-21)"\n'
+    'delegation: "Batt 2026-10-21, decision 1: zone authoring delegated"\n',
+)
+
+
+def test_a_delegated_review_loads_only_in_its_exact_form(tmp_path: Path) -> None:
+    """Batt 2026-10-21 (decision 1): "I DELEGATE the zone authoring to you ... reviewed_by:
+    "agent (delegated by batt, 2026-10-21)", plus a note pointing to this decision; keep
+    fail-closed loading" -- the agent's name passes ONLY in that form with a delegation note."""
+    write(tmp_path, DELEGATED)
+    z = mz.load("fix_map", tmp_path, shape=(H, W))
+    assert z is not None and z.reviewed_by == "agent (delegated by batt, 2026-10-21)"
+    assert z.delegation.startswith("Batt 2026-10-21")
+    assert mz.summary(z, (H, W))["delegation"] == z.delegation
+    for bad, why in (
+        (DELEGATED.replace('delegation: "Batt 2026-10-21, decision 1: zone authoring delegated"\n',
+                           ""), "needs a `delegation` note"),
+        (DELEGATED.replace("delegated by batt", "delegated by claude"), "never approves"),
+        (DELEGATED.replace("delegated by batt", "approved by batt"), "never approves"),
+        (DELEGATED.replace("batt, 2026-10-21)", "batt)"), "never approves"),
+        (DELEGATED.replace("batt, 2026-10-21)", "batt, 2026-13-40)"), "not a date"),
+        (DELEGATED.replace('"agent (delegated', '"agent and claude (delegated'), "never approves"),
+        (GOOD.replace("reviewed_by: batt\n", 'reviewed_by: batt\ndelegation: "x"\n'),
+         "only a delegated reviewer"),
+    ):  # fmt: skip
+        write(tmp_path, bad)
+        with pytest.raises(mz.ZoneError, match=why):
+            mz.load("fix_map", tmp_path, shape=(H, W))
+
+
+def test_the_repo_ships_prt_fild08_under_batts_recorded_delegation() -> None:
+    """Batt authors the files -- or delegates one, recorded in it (2026-10-21: prt_fild08)."""
     assert mz.ZONES_DIR.name == "map_zones" and (mz.ZONES_DIR / "README.md").exists()
-    assert not list(mz.ZONES_DIR.glob("*.yaml")) and not list(mz.ZONES_DIR.glob("*.yml"))
-    assert mz.load("prt_fild08") is None
+    assert not list(mz.ZONES_DIR.glob("*.yml"))
+    assert sorted(p.name for p in mz.ZONES_DIR.glob("*.yaml")) == ["prt_fild08.yaml"]
+    z = mz.load("prt_fild08")
+    assert z is not None and z.reviewed_by == "agent (delegated by batt, 2026-10-21)"
+    assert "decision 1" in z.delegation
+    assert [(c.id, c.points) for c in z.no_cross] == [
+        ("c1-door", ((322, 88), (318, 91))), ("c3-door", ((50, 36), (46, 36)))]  # fmt: skip
+    assert z.no_enter == ()
+
+
+def test_a_line_seals_the_room_and_cuts_off_nothing_else() -> None:
+    """The fixture's room behind its entrance line is cut off whole (both connectivities); the
+    field loses nothing; a second door makes nothing sealed; ``prove`` says the same."""
+    ok = fixture_map()
+    z = zones_of(no_cross=[ENTRY_LINE])
+    after = mz.route_grid(ok, z)
+    room = np.zeros_like(ok)
+    room[36:55, 16:45] = True
+    for corner in (False, True):
+        cut = mz.sealed_off(ok, after, corner)
+        assert cut[ROOM[1], ROOM[0]] and not cut[FIELD[1], FIELD[0]]
+        assert (cut & ~room).sum() <= 6  # at most the door cells behind the line
+    pr = mz.prove(z, ok, server=ok, area=ok, free=ok, samples=40)
+    for k in ("no_corner_rule", "corner_rule"):
+        assert pr[k]["newly_unreachable"] == 0
+        assert [c["borders"] for c in pr[k]["cut"]] == [["nc0"]]
+    assert pr["clicks"][0]["into_refused"] == "40/40"
+    assert pr["spawn"]["in_cut"] == pr["no_corner_rule"]["cut_cells"]
+    two = ok.copy()
+    two[31:36, 40:42] = True  # a second door: the line seals nothing now
+    assert not mz.sealed_off(two, mz.route_grid(two, z)).any()
+    assert mz.sealed_off(ok, ok).sum() == 0  # no zones cut: nothing sealed
 
 
 # --- coordinates and masks ------------------------------------------------------------------------
@@ -406,6 +468,11 @@ def test_the_runner_is_inert_without_a_zones_file() -> None:
                 "z_seen = ", "z_free = "):  # fmt: skip
         assert setup.index(mut) > i_if, mut  # only with zones
     assert "area_s = area if zones is None else main_component(area)" in setup
+    # Batt 2026-10-21: a sealed room leaves the area and the routes (only with zones)
+    for mut in ("z_cut = mz.sealed_off(ok, okr)", "area = area & ~z_cut", "okr = okr & ~z_cut",
+                "ok0 = mz.route_grid(ok0, zones) & ~z_cut"):  # fmt: skip
+        assert setup.index(mut) > i_if, mut
+    assert setup.index("z_cut = mz.sealed_off(ok, okr)") < setup.index("z_seen = area0_ & ~area")
     assert "if zones is not None:  # map traps: the file this run enforces" in src
     assert '**({"map_zones": dict(zone_n)} if zones is not None else {}),' in src
     assert 'plan["escape"] = "zone_exit" if z_exit_ else False' in src
@@ -431,6 +498,7 @@ def test_targets_and_the_attack_click_check_the_zones() -> None:
     assert burst.index("zone_why(here, tr.predict(r.ns()))") < burst.index("agent.click(")
     loop = _body(src, "in_rng = cheb(pos, tcell) <= s_range or in_zone", "if in_rng:")
     assert '"target_no_enter" if mz.in_no_enter(zones, tc_z)' in loop
+    assert '"target_sealed" if (0 <= tc_z[0] < wz_' in loop and "z_cut[tc_z[1], tc_z[0]]" in loop
     assert "zone_why(pos, tcell) if in_rng else None" in loop and "banned.append" in loop
     for route in ("zone_path(okr, pos, tcell, rz_)", 'approach_path(okr, pos, tcell, prm["short"])',
                   'cont_click(ap, okr, "steer", tcell,', "hc.astar(okr, here_, c_)",

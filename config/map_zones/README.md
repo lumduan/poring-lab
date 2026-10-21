@@ -11,9 +11,18 @@ allows: static map knowledge used at plan time.
   The extension is `.yaml`; the loader refuses a `.yml`.
 - **No file means no change.** The hunt runner (`scripts/hunt_flow.py`) behaves exactly as before.
 - **A file that is there but wrong stops the run before any input.** The loader fails closed.
-- **The agent never writes or approves a zone.** Every file names the person who reviewed it, and
-  the loader refuses a file without one. It also refuses a reviewer named like the agent (`claude`,
-  `agent`, `bot`, `ai`, `assistant`, `auto`).
+- **The agent never writes or approves a zone on its own.** Every file names the person who
+  reviewed it, and the loader refuses a file without one. It also refuses a reviewer named like the
+  agent (`claude`, `agent`, `bot`, `ai`, `assistant`, `auto`).
+  - **The one exception: a person's recorded delegation** (Batt, 2026-10-21, decision 1 on the
+    overnight loot report: "I DELEGATE the zone authoring to you ... reviewed_by: "agent
+    (delegated by batt, 2026-10-21)", plus a note pointing to this decision; keep fail-closed
+    loading").
+  - The reviewer must then read exactly `agent (delegated by <person>, YYYY-MM-DD)`, with a person
+    who is not the agent and a real date.
+  - The file must also carry a top-level `delegation:` note citing the person's decision. Any other
+    agent-like reviewer is still refused, and `delegation:` without a delegated reviewer is refused.
+  - `prt_fild08.yaml` is the first such file.
 
 Check a file before a run:
 
@@ -21,6 +30,19 @@ Check a file before a run:
 
 It prints the items, how many cells each one takes, and the file's sha256. It exits 1 on any error
 in the file.
+
+Prove what a file seals and cuts off (Batt 2026-10-21: "PROVE it offline on client∩server
+walkability"):
+
+    python3 scripts/map_zones.py prove prt_fild08
+
+It prints JSON for two grids: client ∩ server walkability, and the runner's stand grid. For each:
+- every piece the zones cut off: its cells, box and the item it borders, under two connectivities
+  (with and without rAthena's no-corner-cutting rule);
+- the cells newly unreachable OUTSIDE those pieces (0 = nothing else was cut off);
+- the server's spawn cells lost;
+- the runner's search area lost;
+- sampled clicks into each piece, every one refused by the click gate.
 
 ## Coordinates
 
@@ -61,6 +83,13 @@ The loader also refuses:
 - a polygon with no area, whose edges cross, or that folds back on itself.
 
 ## What each kind does
+
+**A sealed room** (Batt 2026-10-21: "a no-cross line sealing C1's entrance"). When the lines
+and areas cut a part of the walkable map off from the rest, the runner drops that part from the
+search area and the route grid (`map_zones.sealed_off`). No heading, goal or route goes in. A
+monster there is still seen and tracked, but never engaged (`target_dropped`, zone
+`target_sealed`). The pieces cut off are the smaller ones; the largest piece of each walkable
+part stays.
 
 **`no_cross`: a wall.**
 - Every cell the line touches is closed to the GM. A line that passes exactly through a cell corner

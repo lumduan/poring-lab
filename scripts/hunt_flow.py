@@ -2430,6 +2430,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
     okr: Any = ok
     z_seen: Any = None  # the zones' area cells, still seen (tracks, unit and risk checks)
     z_free: Any = None  # the zone-free walkable grid: the client-route proxy's
+    z_cut: Any = None  # the cells the zones cut off (a sealed room): out of the area and routes
     z_info: dict[str, Any] = {}
     if zones is not None:
         if not prm.get("pipelined"):
@@ -2441,9 +2442,17 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
         z_info = mz.summary(zones, ok.shape, ok, area)
         area0_ = area
         area = mz.apply(ok, area, zones)[1]  # (its ok_z is the exit's grid: built per search)
-        z_seen = area0_ & ~area
         okr = mz.route_grid(ok, zones)
-        ok0 = mz.route_grid(ok0, zones)
+        # Batt 2026-10-21 (decision 1): a line SEALS a room -- the cells the zones cut off from
+        # the rest of their walkable part (C1 behind its door line) leave the search area and the
+        # route grid too: no heading, goal or route into them; a monster there is seen, never
+        # engaged (z_seen) and dropped as a target (target_sealed)
+        z_cut = mz.sealed_off(ok, okr)
+        area = area & ~z_cut
+        okr = okr & ~z_cut
+        z_seen = area0_ & ~area
+        ok0 = mz.route_grid(ok0, zones) & ~z_cut
+        z_info["sealed_cells"] = int(z_cut.sum())
     area_s = area if zones is None else main_component(area)  # map traps: no start in a sealed room
     if MAP == "prt_fild08":
         start = hunt.start_cell(area_s, seed)
@@ -5681,7 +5690,11 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                                 # engaged; in strike range, nor one whose walk-in (the client's
                                 # own path from here) breaks a zone -- dropped, its spot banned
                                 tc_z = (int(round(tcell[0])), int(round(tcell[1])))
+                                hz_, wz_ = z_cut.shape
                                 tz_ = ("target_no_enter" if mz.in_no_enter(zones, tc_z)
+                                       else "target_sealed" if (0 <= tc_z[0] < wz_
+                                                                and 0 <= tc_z[1] < hz_
+                                                                and z_cut[tc_z[1], tc_z[0]])
                                        else zone_why(pos, tcell) if in_rng else None)  # fmt: skip
                                 if tz_ is not None:
                                     zone_n["target"] += 1
