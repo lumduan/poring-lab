@@ -13869,7 +13869,7 @@ dialog's 10-04 signature (distance 8.96 on this client's dialog, bar 6.0).
   - At 0.376 s the same reads give 80.8 %: under 8,394 HP / min of damage the truth's timing is
     the limit, not the reader.
 
-### 3.96c crusader-survival@1c: S4 re-registered (Auto Guard is a TOGGLE) and the T-S2 packs made heavy enough to reach the thresholds (pre-registered 2026-10-21 __TIME__ ICT, the commit time, BEFORE S4b is built and before any further trial; Batt 2026-10-21 ~19:3x: "Auto Guard is a TOGGLE in rAthena (casting it while active turns it off): check that S4's re-cast first reads the Auto Guard status icon and only casts when it's OFF ... Make sure the remaining trials reach their thresholds (more summoned attackers, or test thresholds set higher for these positive cases), and report per trial: HP min, potions used, escapes, deaths.")
+### 3.96c crusader-survival@1c: S4 re-registered (Auto Guard is a TOGGLE) and the T-S2 packs made heavy enough to reach the thresholds (pre-registered 2026-10-21 19:32 ICT, the commit time of 3.96c's first commit, BEFORE S4b is built and before any further trial; Batt 2026-10-21 ~19:3x: "Auto Guard is a TOGGLE in rAthena (casting it while active turns it off): check that S4's re-cast first reads the Auto Guard status icon and only casts when it's OFF ... Make sure the remaining trials reach their thresholds (more summoned attackers, or test thresholds set higher for these positive cases), and report per trial: HP min, potions used, escapes, deaths.")
 
 **What happened (3.96b's chain, T-S2 C c1-c3, 19:17-19:29; the chain was stopped after c3):**
 - **S4 FAILS as built:** it pressed F3 at every trial's start (a timer only; the icon check
