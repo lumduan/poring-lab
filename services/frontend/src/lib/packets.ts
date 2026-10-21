@@ -50,6 +50,7 @@ export function kindOf(e: PacketEvent): Kind {
     case "drop_request":
       return "self";
     case "stat_change":
+    case "recovery": // 2026-10-21: ZC_RECOVERY heal amounts (regen ticks, potions)
     case "stat_raise_result":
     case "skill_update":
     case "skill_list":
@@ -143,6 +144,8 @@ export function describe(e: PacketEvent): string {
       return describeAct(e);
     case "stat_change":
       return `${e.name} = ${e.value}`;
+    case "recovery":
+      return `${e.name} +${e.amount}`;
     case "login_accepted":
       return `login accepted (aid ${e.aid})`;
     case "char_selected":
@@ -249,7 +252,7 @@ type Interaction = Exclude<
   {
     type:
       | "chat" | "self_move" | "self_move_request" | "map_enter" | "map_change" | "entity_appear"
-      | "entity_vanish" | "entity_stop" | "entity_turn" | "act" | "stat_change"
+      | "entity_vanish" | "entity_stop" | "entity_turn" | "act" | "stat_change" | "recovery"
       | "login_accepted" | "char_selected" | "time_sync" | "unknown" | "desync";
   }
 >;

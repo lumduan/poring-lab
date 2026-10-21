@@ -178,6 +178,16 @@ class StatChange(PacketEventBase):
     value: int
 
 
+class RecoveryAmount(PacketEventBase):
+    """ZC_RECOVERY (0x0A27 / 0x013D): a heal AMOUNT, not the new value -- potions, skills and the
+    regen ticks of (Moving) HP Recovery. A stat_change series alone misses every regen tick."""
+
+    type: Literal["recovery"] = "recovery"
+    var: int
+    name: str
+    amount: int
+
+
 class Chat(PacketEventBase):
     """Chat text decoded as cp874; `raw_hex` keeps the exact bytes (ground truth vs chatlog)."""
 
@@ -635,6 +645,7 @@ PacketEvent = Annotated[
     | EntityTurn
     | Act
     | StatChange
+    | RecoveryAmount
     | Chat
     | _Interaction
     | UnknownPacket
@@ -748,6 +759,7 @@ FeedMessage = Annotated[
     | EntityTurn
     | Act
     | StatChange
+    | RecoveryAmount
     | Chat
     | _Interaction
     | UnknownPacket
