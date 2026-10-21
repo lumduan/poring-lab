@@ -13713,6 +13713,24 @@ allows. An interim after each; the verdict after 4.
 - If P2's skipped-loss fails: NOT adopted, whatever the time.
 - Fewer than 4 runs: an interim, no verdict.
 
+**Run log:**
+- **Run 1** (`20261021T213402-demo-hunt-flow54`, seed 20420101, 21:34-22:37, time box; the
+  pre-run frame was judged; the first attempt at 21:33 was refused at the start check because the
+  GM was not yet confirmed immune after its login, so nothing ran).
+  - **INTERIM, no verdict before 4 runs:**
+    - P1, the loot step's mean time: fix 6.48 s / base 7.38 s = **0.878** (bar <= 0.93). The
+      mechanism: the gate passed on 41 of 73 fix steps (32 "moved"), skipping 10.3 edge cells
+      each, so **5.8 per fix-arm step** (bar >= 3.0).
+    - P2: completeness fix 86.0 % / base 80.9 % = **+5.1 points** (bar >= -6).
+      `gm_lost_on_skipped` = **0** (bar <= 2 per 100 fix items): none of the fix arm's 13
+      unpicked items (2 out of sight, 11 to looters) lay on a skipped cell.
+    - G3: hard bars 0 / 0 / 0; Creamy hits 0.
+  - Standard columns:
+    - 153.9 kills/h at 36.5 seen / 10 min; landing 79.1 %;
+    - completeness 82.7 % gross / 95.0 % net;
+    - kill -> last pickup p50 2.30 s.
+  - Economics (`run_row`): 825.6 z/h gross (930.5 with Overcharge); Sharpe-like 2.37.
+
 ### 3.96 crusader-survival@1: the Crusader's survival skills on prt_fild08, immunity OFF (pre-registered 2026-10-21 18:03 ICT, the commit time of 3.96's first commit, BEFORE they are built or run; Batt 2026-10-21 ~16:1x: "SURVIVAL SKILLS (build + test on prt_fild08 with immunity OFF before the dungeon; pre-register each): HP read from Basic Info (pixel), potion on a hotkey below a threshold, Fly Wing escape below a lower threshold or when more than N monsters are on us; Auto Guard re-cast on expiry; Endure when mobbed (optional). DEATH = stop the run, record the cause (a result, not a hard bar); the respawn dialog stays for the UI gate's known step only. Measure: deaths per hour, HP min, potions used, escapes." and ~16:4x: "Moving HP Recovery matters: I want to see whether HP regen keeps up while the bot walks and fights continuously.")
 
 **The character:** `Crus4b7e2`, built and verified (docs/planning/crusader-orcsdun01.md 2b):
