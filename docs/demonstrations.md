@@ -122,7 +122,7 @@ after, once the trial chain is done (never during a trial)"):
 | `attack_request` + `act` from us (`normal`) | `20261021T202313-demo-safety-check-monster-click --species red_plant` | 1 request, 4 acts, the same target (gid 110017964) → **PASS** |
 | `pickup_request` + `act` from us (`pickup`) | `20261021T202530-demo-safety-check-pickup` (the Knife dragged from the Eqp tab, then the scan clicked cell 101,114) | `pickup_request` 1, `pickup_result` 1, `floor_item_vanish` 1, 1 pickup act → **PASS** |
 | `npc_contact` | `20261021T202746-demo-safety-check-npc-garnet` (`--reader robust2`); NEXT x3 by Enter, each on a judged frame, then the menu's cancel clicked | **1 contact**; `npc_say` 7, `npc_wait` 3, `npc_next_click` 3, `npc_menu` 1, `npc_choose` 1 (the cancel), `npc_close_click` 1 → **PASS** |
-| `recovery` (NEW) | the decoder's own positive case needs SKILL regen: in the pinned source only `sregen` (Increase HP Recovery; `status_natural_heal`, flag 3) reaches `clif_heal`. Natural regen and potions send the absolute hp (flag 1). So it runs on the Crusader (IRP 10), not the Novice GM | **PENDING** (next) |
+| `recovery` (NEW) | the decoder's own positive case needs SKILL regen: in the pinned source only `sregen` (Increase HP Recovery; `status_natural_heal`, flag 3) reaches `clif_heal`. Natural regen and potions send the absolute hp (flag 1). So it runs on the Crusader (IRP 10), not the Novice GM: `20261021T212245-demo-crusader-regen-r1` (3.96f) | **12 `recovery` hp events of 155** in the standing phases, every 10 s as predicted; 0 while walking → **PASS** |
 
 - Two instrument fixes, the same day: `pickup-collect` / `npc-collect` recorded a no-click attempt
   as a crash; it is now a FAIL kept with `why: no click`. And `npc-click --reader` (default
@@ -14125,6 +14125,40 @@ path), each path reported apart.
 - the UI gate on every typed line; the name + job check before every GM line.
 
 This is a measurement, not an adoption: no bar decides a version.
+
+**Run log (`20261021T212245-demo-crusader-regen-r1`, 21:22:45-21:30:30; judged by `regen_walk.py
+judge`, packets):**
+
+| cycle / phase | minutes | walking share | IRP ticks (155) | of them while walking | natural ticks (33) | of them while walking | regen HP/min |
+|---|---|---|---|---|---|---|---|
+| 0 S | 1.01 | 0 | 6 | - | 10 | - | **1,234** |
+| 0 W | 1.04 | 0.30 | 4 | **0** | 10 | 0 | 909 |
+| 0 F | 1.01 | 0 | 3 (one capped at 5: HP met its max) | - | 5 | - | 470 (HP at max part of the phase) |
+| 1 S | 1.02 | 0 | 6 | - | 10 | - | **1,231** |
+| 1 W | 1.04 | 0.29 | 4 | **0** | 10 | 0 | 902 |
+| 1 F | 1.01 | 0 | 5 | - | 8 | - | 1,023 |
+
+- **Positive case, the `recovery` decoder: PASS.** 155-HP `recovery` events are decoded live (12
+  in the S phases), so the §2a row is now PASS.
+- **Standing:** 1,232 HP/min against the predicted 1,260.
+- **The walk rule: IRP never ticked while walking** (0 of 8 IRP ticks in W). They accrued only in
+  the standing gaps: 4 a minute at a 30 % walking share against 6 standing.
+- **Fighting (one Orc Zombie on us):** regen continues. Both kinds of tick arrive while the
+  monster hits. In cycle 0, HP reached its max, which stops skill regen.
+- **NOT answered: natural regen WHILE moving (Moving HP Recovery's doubled interval).**
+  - Every W click goes through the cursor gate (two reads), which costs about as long as the
+    9-cell walk. So the walking share was only ~30 %, and every natural tick (20 of 20) fell in a
+    standing gap.
+  - With MHR the interval while walking is 12 s, but a 6-s standing gap always comes first, so
+    walks shorter than 12 s cannot show it. This is a design limit, not evidence against MHR.
+  - Seeing it needs > 12 s of continuous walking: a long route, or re-clicks in motion, where
+    the cursor reads are unreliable ("cursor redraw lags in motion").
+- **For the dungeon (Batt's question):**
+  - At the bot's real rhythm (short walks between standing actions, here 30 % walking), regen is
+    ~905 HP/min: ~74 % of standing.
+  - Walking continuously, the source predicts ~165 HP/min, natural only (IRP is off).
+  - So regen "keeps up" only through the standing and fighting time. A pack's burst (2,200-17,000
+    HP/min in T-S2) is far above any regen: potions remain the real sustain.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
