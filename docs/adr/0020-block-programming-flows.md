@@ -39,6 +39,10 @@ next_action: "ACCEPTED by Batt 2026-10-08, with the decisions recorded at the op
   allowed EXTERNAL server (lint layer 6 and the safety rules in section 6 would change): only
   blocks verified on lab-rathena for the same client, locale and path; L3 there an assumption
   checked by pixels, with a safe stop on a mismatch; no packet-based verdicts there.
+- ➡️ 2026-10-21: [Amendment A](#amendment-a-draft-proposed-2026-10-21-not-accepted-behaviours-as-blocks-map-zones-as-map-node-data)
+  (DRAFT, PROPOSED, NOT accepted; at the end) would turn hunt-flow's adopted behaviours into
+  block parameters (a `hunt` block in the map node) and make map zones map-node data. The plan:
+  [blocks-from-hunt-flow.md](../planning/blocks-from-hunt-flow.md).
 - **Related:**
   - [ADR-0002](0002-input-mux.md): one input writer, the lease, releases on handoff;
   - [ADR-0003](0003-env-abstraction.md): the `Env` contract the blocks act through;
@@ -2176,3 +2180,83 @@ gate, the frame-age guard, packets as offline ground truth only, and Windows sta
 | **Our own text language instead of a Python subset** | It needs a grammar, a parser and tooling, and teaches nothing transferable. Python is the course's next step and what LLMs write well; `ast` is a robust, non-executing parser in the standard library |
 | **Users edit behavior trees directly** | Tick, running and fallback semantics are harder for no-code users than sequence, if, loop and events. The tree stays the executor's internal form, compiled from the IR |
 | **A state-machine editor** | ADR-0015 already replaced the FSM with behavior trees |
+
+## Amendment A (DRAFT, PROPOSED 2026-10-21, NOT accepted): behaviours as blocks; map zones as map-node data
+
+> **DRAFT for Batt's decision. NOT accepted; nothing in it is built.** The tables and the decisions
+> (D1-D9; D7 answered by Batt 2026-10-21, 13e497d) are in the plan, [docs/planning/blocks-from-hunt-flow.md](../planning/blocks-from-hunt-flow.md).
+> Lettering: this ADR's earlier changes (section 13, the dated ➡️ markers) carry no letters, so
+> this is its first lettered amendment.
+
+**Batt (2026-10-21, item 5):** "from now on, behaviours are to be expressed as BLOCKS in the flow
+editor (/flows, ADR-0020), not as pure code. Hunt-flow's PARAMS versions were the lab for finding
+what works; the result should become blocks a person can read and change."
+
+**Context.**
+- `scripts/hunt_flow.py` is a hard-coded flow: the first alternative this ADR rejected. It was the
+  lab: 51 PARAMS versions, each pre-registered (demonstrations.md 3.41-3.92) and adopted or not by
+  a verdict or by Batt.
+- Its adopted base (v51, 2026-10-21) ran 8 x 60 min on prt_fild08 with the hard bars at 0 (3.91,
+  3.92). It runs on the host, RDP only, with an immune GM.
+- Map zones (Batt's per-map no-cross lines and no-enter areas) were merged on 2026-10-21 (0684d2c)
+  as reviewed YAML that `hunt_flow.py` reads.
+
+**Proposed decisions.**
+1. **Adopted behaviours become block parameters, as named RULE VERSIONS.** A parameter is a
+   person's choice: targets / ignore, strike style, the dead + loot rule, the search rule, the stop.
+   The tuned constants travel with the version (e.g. `gm_scan_one_pass@51`), shown read-only. A new
+   constant is a new version, pre-registered (section 12, point 4).
+2. **Gates, safety, readers and constants stay in the engine.** They are never IR fields:
+   - the block schema forbids extra fields;
+   - a deny-list test refuses a gate key in any block parameter, preset or experiment diff;
+   - a safety number shown as a parameter may only tighten (the always-on "not weakened" rule);
+   - a gate change is code, pre-registered, and applies to every arm.
+3. **One task-level `hunt` block inside a map node** (section 3). Its targets and ignore list are
+   the map node's (13.3). The pipelined loop (perception, planner, executor) stays inside it.
+4. **Map zones are map-node data.**
+   - The file `config/map_zones/<map>.yaml` and its fail-closed loader stay the source of truth.
+   - The editor draws lines and areas on the map's walk grid, previews the closed cells as the
+     loader computes them, validates through the loader, and exports the same YAML.
+   - The map node references `{map, sha256}` and approval binds it. The run-start check refuses a
+     changed, missing or unreferenced file.
+   - `reviewed_by` names a person. The agent never approves a zone, except by Batt's explicit
+     delegation, recorded in the file.
+5. **Experiments run on block configs.**
+   - A version = the adopted config + a diff with ONE main change + named base fixes.
+   - Arms alternate per engagement, per loot step or in 10-min blocks (the fix arm on odd).
+   - The spec is committed with its demonstrations.md entry before any run.
+   - The judges are unchanged: the executor writes the same session files.
+   - PARAMS[1..51] are exported as configs, for the record.
+6. **A narrow live slice, MW3-hunt (only if Batt agrees, D9).**
+   - One map node, one hunt block, no exits; lab rAthena, RDP, ASSIST, Batt present.
+   - It may run before walk / talk readiness. For this slice only, it amends 13.8's order
+     (MW2-live first) and section 6's executor location: the host, RDP and the CPU detector, as
+     `hunt_flow.py`. The vision container on S2 stays the target.
+   - Its first run is an A/A check of adopted v51.
+
+**MW3 readiness (13.8), as of 2026-10-21: NOT met.**
+- Met: ADR-0005 and the interlock; hard bars 0 while hunting on prt_fild08; the position read on
+  RDP (where@2).
+- Not met:
+  - walk readiness on held-out maps under the typing policy (walk@17 not run);
+  - talk@1's scored trials; `take_warp`;
+  - insert@1, save@1, escape@1, rec@1, loot@1;
+  - the `dead` and `unexpected_map` positive cases;
+  - anything on S2;
+  - the TARGET / IGNORE positive case (mob 1018 is still hit, counted apart);
+  - the live executor.
+- The full table is in the plan, section 5.
+
+**Unchanged:**
+- CLAUDE.md rules 1-10; the mux as the only writer; the interlock;
+- the foreground gate, the frame-age guard, the UI gate, the always-on events;
+- packets as offline ground truth: the hard-bar monitor stays the experimenter's stop-only tool,
+  never a block input;
+- approval as a person's act; Windows stays clean.
+
+**Consequences.**
+- Positive: what the bot does on a field becomes readable and changeable in /flows; the
+  experiment record continues; zones get a drawing tool without a second format.
+- Costs: an exporter, a key classification and a deny-list to maintain; an engine split that must
+  stay bytecode-identical; one more IR field; the slice (6) needs a host-side executor that
+  section 6 did not plan.
