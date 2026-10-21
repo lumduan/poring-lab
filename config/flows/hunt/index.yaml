@@ -465,6 +465,15 @@ versions:
     engine: engine@42
     map_zones: true
     arms: [loot_race_ab, loot_fast_scan_ab]
+  55:
+    strike: arm_c@32
+    engage_on_the_way: on_the_way@19
+    dead: exp_line@48
+    loot: gm_fast_scan@54
+    search: heading_coverage@22
+    engine: engine@55
+    map_zones: true
+    arms: [loot_race_ab, loot_fast_scan_ab]
 rules:
   strike:
     read@1: {}
