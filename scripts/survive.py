@@ -51,7 +51,13 @@ POT_GAP_S = 0.7  # S2: no second F1 within this unless the bar rose since the la
 POT_MAX = 3  # S2: at most this many F1 ...
 POT_MAX_WIN_S = 2.0  # ... in this many seconds
 FLY_GAP_S = 3.0
-AG_RECAST_S = 290.0  # S4: Auto Guard lasts 300 s (skill_db CR_AUTOGUARD Duration1)
+AG_RECAST_S = 300.0  # S4b: Auto Guard lasts 300 s (skill_db CR_AUTOGUARD Duration1); a TOGGLE
+AG_ABSENT_S = 1.0  # S4b: the icon absent on every read for this long before F3 (3.96c)
+AG_ICON = Path(__file__).resolve().parents[1] / "data" / "crusader" / "ag_icon.npz"  # gitignored
+AG_X = (1230, 1235)  # the status column's x range for the icon's left edge (cut at 1232)
+AG_Y = (160, 430)  # its y range (the icons stack downward under the minimap)
+AG_MATCH = 30.0  # grey masked mean |diff|: on 0-14, absent 50.2 (19:3x frames; the midpoint)
+AG_EVERY = 3  # the icon is checked on every 3rd read
 ENDURE_S = 37.0  # S5: Endure 10 lasts 37 s (skill_db SM_ENDURE Duration1), cooldown 10 s
 READ_HZ = 5.0
 KEYS = {"potion": "F1", "fly": "F2", "autoguard": "F3", "endure": "F4"}
@@ -61,7 +67,12 @@ SETS = {
     "T-S6": {"S1", "S6"},
     "T-regen": {"S1"},
 }  # fmt: skip  (T-regen here = standing only; walking is not built: see 3.96's run log)
-PACKS = {"C": [(1153, 3), (1152, 2)], "E": [(1153, 3), (1152, 2), (1111, 1)], "none": []}
+PACKS = {
+    "C": [(1153, 3), (1152, 2)],
+    "E": [(1153, 3), (1152, 2), (1111, 1)],
+    "F": [(1153, 5), (1152, 3), (1111, 2)],
+    "none": [],
+}  # fmt: skip  (F: 3.96c)
 STAND = ("prt_fild08", 268, 107)  # detector_check's scene: open field (3.96 amendment 18:4x)
 
 
@@ -72,6 +83,7 @@ class State:
     pot_frac: float | None = None  # the bar at the last F1
     fly: float = -1e9
     ag: float = -1e9
+    ag_absent_since: float | None = None
     endure: float = -1e9
 
 
@@ -86,7 +98,26 @@ def rate_hp_s(hist: Sequence[tuple[float, float]], now: float, max_hp: float = M
     return (f0 - f1) * max_hp / (t1 - t0)
 
 
-def decide(st: State, now: float, frac: float, rules: set[str]) -> list[tuple[str, str]]:
+def _grey(a: Any) -> Any:
+    a = np.asarray(a)[..., :3].astype(np.float32)
+    return a[..., 0] * 0.114 + a[..., 1] * 0.587 + a[..., 2] * 0.299
+
+
+def ag_present(client_bgr: Any, tmpl: Any, mask: Any) -> bool:
+    """PURE: Auto Guard's status icon anywhere in the right-hand status column (its template, in
+    grey, on its own bright pixels: masked mean |diff| <= AG_MATCH)."""
+    from numpy.lib.stride_tricks import sliding_window_view
+
+    x0, x1 = AG_X
+    y0, y1 = AG_Y
+    reg = _grey(np.asarray(client_bgr)[y0 : y1 + 32, x0 : x1 + 32])
+    win = sliding_window_view(reg, (32, 32))  # (ny, nx, 32, 32)
+    d = np.abs(win[..., mask] - _grey(tmpl)[mask]).mean(axis=-1)
+    return bool(d.min() <= AG_MATCH)
+
+
+def decide(st: State, now: float, frac: float, rules: set[str],
+           ag_on: bool | None = None) -> list[tuple[str, str]]:  # fmt: skip
     """PURE: the hotkeys to press now, with why. The escape first (it ends the trial); then a
     potion; Auto Guard's re-cast; Endure. ``st`` is updated for what is returned."""
     out: list[tuple[str, str]] = []
@@ -106,10 +137,18 @@ def decide(st: State, now: float, frac: float, rules: set[str]) -> list[tuple[st
             st.pots.append(now)
             st.pot_frac = frac
             out.append(("potion", f"frac {frac:.3f}"))
-    if "S4" in rules and now - st.ag >= AG_RECAST_S:
-        first = st.ag < 0
-        st.ag = now
-        out.append(("autoguard", "first cast" if first else "recast"))
+    if "S4" in rules and ag_on is not None:
+        # S4b (3.96c): Auto Guard is a TOGGLE -- F3 only when its icon has been ABSENT on every read
+        # for AG_ABSENT_S and, after a cast of ours, its 300 s have passed
+        if ag_on:
+            st.ag_absent_since = None
+        else:
+            st.ag_absent_since = st.ag_absent_since if st.ag_absent_since is not None else now
+            if now - st.ag_absent_since >= AG_ABSENT_S and now - st.ag >= AG_RECAST_S:
+                first = st.ag < 0
+                st.ag = now
+                st.ag_absent_since = None
+                out.append(("autoguard", "first cast" if first else "recast"))
     if "S5" in rules and rate is not None and rate > RATE_ENDURE and now - st.endure >= ENDURE_S:
         st.endure = now
         out.append(("endure", f"rate {rate:.0f}"))
@@ -131,6 +170,8 @@ def trial(a: argparse.Namespace) -> int:  # noqa: PLR0915
     rules = SETS[a.set]
     z = np.load(hpp.GLYPHS)
     glyphs = {("%" if k == "pct" else k[1:]): z[k] for k in z.files}
+    agz = np.load(AG_ICON)
+    ag_t, ag_m = agz["template"], agz["mask"].astype(bool)
     sid = f"{time.strftime('%Y%m%dT%H%M%S')}-demo-crusader-survival-{a.set}-{a.pack}-{a.label}"
     out = DEMO / sid
     out.mkdir(parents=True, exist_ok=False)
@@ -154,6 +195,9 @@ def trial(a: argparse.Namespace) -> int:  # noqa: PLR0915
         if start_pct != 100 or r.is_state(screen, gv.DEAD_STATE):
             raise r.Stop(f"survive: not a clean start (HP read {start_pct}, dead dialog?)")
         ev({"kind": "start_check", "pct": start_pct})
+        if a.topup > 0:  # 3.96c: the potions back to 50 (weight under 50 %: regen not stopped)
+            cr.gm_line(agent, screen, f"@item 504 {int(a.topup)}", "crusader")
+            ev({"kind": "topup", "potions": int(a.topup)})
         for mob, n in PACKS[a.pack]:
             cr.gm_line(agent, screen, f"@monster {mob} {n}", "crusader")
             ev({"kind": "spawn", "mob": mob, "n": n})
@@ -168,10 +212,13 @@ def trial(a: argparse.Namespace) -> int:  # noqa: PLR0915
                 frame = r.grab_after(screen, (gx, gy, gw, gh), r.ns())
                 pct = hpp.read(frame, glyphs)
                 bar = gv.hp_fraction(frame)
+                # S4b's icon on every AG_EVERY-th read (~0.6 s apart: the rule needs >= 1 s absent)
+                check_ag = "S4" in rules and counts["reads"] % AG_EVERY == 1
+                ag_on = ag_present(frame, ag_t, ag_m) if check_ag else None
                 dead = r.is_state(screen, gv.DEAD_STATE)
                 counts["reads"] += 1
                 ev({"kind": "hp_read", "frac": None if pct is None else pct / 100.0, "pct": pct,
-                    "bar": round(bar, 4), "dead": dead})  # fmt: skip
+                    "bar": round(bar, 4), "dead": dead, "ag_on": ag_on})  # fmt: skip
                 if dead and "S6" in rules:
                     reason = "death"
                     last = [[round(t, 2), round(f, 4)] for t, f in list(st.hist)[-50:]]
@@ -181,7 +228,7 @@ def trial(a: argparse.Namespace) -> int:  # noqa: PLR0915
                     counts["unread"] = counts.get("unread", 0) + 1
                     time.sleep(max(0.0, 1.0 / READ_HZ - (time.monotonic() - tick)))
                     continue
-                for what, why in decide(st, time.monotonic(), pct / 100.0, rules):
+                for what, why in decide(st, time.monotonic(), pct / 100.0, rules, ag_on):
                     agent.keys(KEYS[what])
                     counts[what] += 1
                     ev({"kind": "press", "what": what, "key": KEYS[what], "why": why})
@@ -239,6 +286,7 @@ def main() -> int:
     t.add_argument("--pack", required=True, choices=sorted(PACKS))
     t.add_argument("--seconds", type=float, default=180.0)
     t.add_argument("--label", default="t")
+    t.add_argument("--topup", type=int, default=0, help="@item 504 N at the start (3.96c)")
     a = ap.parse_args()
     return trial(a)
 

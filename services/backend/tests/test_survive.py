@@ -37,11 +37,23 @@ def test_the_escape_fires_on_low_hp_or_a_fast_fall_and_wins_over_a_potion() -> N
     assert sv.decide(st, 2.5, 0.70, {"S3"}) == []  # at most once per 3 s
 
 
-def test_auto_guard_first_cast_then_every_290_s_and_endure_on_a_fast_fall() -> None:
+def test_auto_guard_is_a_toggle_cast_only_after_the_icon_is_absent_1_s() -> None:
     st = sv.State()
-    assert sv.decide(st, 0.0, 1.0, {"S4"}) == [("autoguard", "first cast")]
-    assert sv.decide(st, 289.0, 1.0, {"S4"}) == []
-    assert sv.decide(st, 290.0, 1.0, {"S4"}) == [("autoguard", "recast")]
+    assert sv.decide(st, 0.0, 1.0, {"S4"}, ag_on=None) == []  # unknown: never press
+    assert sv.decide(st, 0.0, 1.0, {"S4"}, ag_on=True) == []  # already on (another cast)
+    assert sv.decide(st, 1.0, 1.0, {"S4"}, ag_on=False) == []  # absent, but not 1 s yet
+    assert sv.decide(st, 2.0, 1.0, {"S4"}, ag_on=False) == [("autoguard", "first cast")]
+    assert sv.decide(st, 100.0, 1.0, {"S4"}, ag_on=False) == []  # our cast: 300 s not over
+    assert sv.decide(st, 290.0, 1.0, {"S4"}, ag_on=True) == []  # still on near the end
+    assert sv.decide(st, 302.5, 1.0, {"S4"}, ag_on=False) == []  # absent for 0 s so far
+    assert sv.decide(st, 303.6, 1.0, {"S4"}, ag_on=False) == [("autoguard", "recast")]
+
+
+def test_a_blink_resets_the_absence_clock_and_endure_fires_on_a_fast_fall() -> None:
+    st = sv.State()
+    sv.decide(st, 0.0, 1.0, {"S4"}, ag_on=False)
+    sv.decide(st, 0.8, 1.0, {"S4"}, ag_on=True)  # the icon back (a blink): the clock restarts
+    assert sv.decide(st, 1.2, 1.0, {"S4"}, ag_on=False) == []
     st = sv.State()
     for i, f in enumerate((1.0, 0.98, 0.96)):  # 0.02 / 0.5 s = 210 HP/s
         got = sv.decide(st, i * 0.5, f, {"S5"})
@@ -52,3 +64,15 @@ def test_no_rule_is_on_unless_its_set_says_so() -> None:
     st = sv.State()
     assert sv.decide(st, 0.0, 0.05, sv.SETS["T-S6"]) == []  # the death-stop set presses nothing
     assert sv.SETS["T-S3"] & {"S2"} == set() and sv.SETS["T-S2"] & {"S3"} == set()
+
+
+def test_the_icon_search_finds_the_template_in_the_status_column() -> None:
+    import numpy as np
+
+    rng = np.random.default_rng(1)
+    tmpl = rng.integers(0, 255, (32, 32, 3), dtype=np.uint8)
+    mask = np.ones((32, 32), bool)
+    frame = np.full((720, 1280, 3), 90, np.uint8)
+    assert not sv.ag_present(frame, tmpl, mask)
+    frame[201:233, 1233:1265] = tmpl  # a second icon slot below the first
+    assert sv.ag_present(frame, tmpl, mask)
