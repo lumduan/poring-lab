@@ -130,6 +130,8 @@ GATED = {
                                  "robust2's series) and the loot click (PICKUP read twice)"),
     "scripts/hunt_flow.py": (1, "hunt-flow@N's walk click from a standstill (search or steer): "
                                 "WALK by robust2's series"),
+    "scripts/regen_walk.py": (1, "crusader-regen@1 (3.96f): the W phase's walk click between two "
+                                 "checked cells (WALK by robust2's series)"),
 }  # fmt: skip
 
 
