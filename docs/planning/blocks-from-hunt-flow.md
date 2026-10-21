@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [ADR-0020, ADR-0015, ADR-0002, ADR-0007, ADR-0016, ../demonstrations.md, ../competition.md, ../../config/map_zones/README.md, mw2-block-editor.md, adr0020-contradictions.md]
-next_action: "B1 and B3 BUILT offline 2026-10-21 18:2x on feat/blocks-b1b3 (section 7a; not merged): the parent reviews and merges. B2 (the editor) is next; B4 waits for Batt to be present. Amendment A's text stays a DRAFT until Batt accepts it."
+next_action: "B1 and B3 MERGED (0919ce7). B2 (the editor) BUILT offline 2026-10-21 21:14-22:1x on feat/blocks-b2 (section 7b; not merged): the parent reviews and merges; its zones routes go live only after a guarded recreate:backend (the dev overlay's new read-only ./scripts mount), and Batt confirms the D8 evidence rows (config/flows/hunt/evidence.yaml) and 7b's open points. B4 waits for Batt to be present. Amendment A's text stays a DRAFT until Batt accepts it."
 title: "Behaviours as blocks: hunt-flow's adopted rules become a hunt block in the map node; map zones become map-node data (plan)"
 date: 2026-10-21
 owner: Batt
@@ -22,7 +22,9 @@ what works; the result should become blocks a person can read and change. ... Pl
 until I approve."
 
 Status: PROPOSED. ~~Nothing here is built, run or pre-registered.~~ ➡️ **2026-10-21 18:2x: B1 and
-B3 are BUILT offline** (section 7a, branch feat/blocks-b1b3); nothing is run live or pre-registered.
+B3 are BUILT offline** (section 7a, branch feat/blocks-b1b3; merged 0919ce7); nothing is run live or
+pre-registered. ➡️ **2026-10-21 22:1x: B2 (the editor) is BUILT offline** (section 7b, branch
+feat/blocks-b2, not merged); SIMULATE only.
 The ADR side is
 [ADR-0020 Amendment A](../adr/0020-block-programming-flows.md#amendment-a-draft-proposed-2026-10-21-not-accepted-behaviours-as-blocks-map-zones-as-map-node-data)
 (DRAFT).
@@ -222,7 +224,7 @@ Every layer below exists today. A block adds none and removes none.
 6. **The record.** The engine writes its gate table (names, versions) as the run's first event; the
    judge flags a session without it.
 
-## 7. Build proposal (B1 + B3 built 2026-10-21, offline: section 7a)
+## 7. Build proposal (B1 + B3 built 2026-10-21, offline: section 7a, merged 0919ce7; B2 built offline: section 7b)
 
 | step | what | where | acceptance |
 |---|---|---|---|
@@ -237,7 +239,7 @@ Every layer below exists today. A block adds none and removes none.
 Every step runs under CLAUDE.md rules 1-10: tmpfs worktrees, guarded steps, no disk-heavy work in
 the market-open windows, the census and safety tests on any click change.
 
-### 7a. B1 / B3 RESULT (built 2026-10-21 17:44-18:2x, offline; branch feat/blocks-b1b3, NOT merged)
+### 7a. B1 / B3 RESULT (built 2026-10-21 17:44-18:2x, offline; branch feat/blocks-b1b3, ~~NOT merged~~ ➡️ merged in 0919ce7)
 
 Built by a subagent in a tmpfs worktree, on main 5e5dbcf (v54 merged): commits bb1b867 + 1795b03
 (B1) and 1b058c3 (B3). Nothing ran live; no runtime behaviour changed (B3's proofs below).
@@ -286,7 +288,8 @@ clean on poring_flow + poring_skills. The full suite was not run.
    (`extra="forbid"`). To confirm against section 1's "a breaking change is a new version".
 2. **The run-start check** refuses named zones without a provider, but a flow that names NO zones
    still passes without one. B4's executor must always pass the provider, or a file the node does
-   not name is not caught. The backend's /flows routes pass none yet (B2).
+   not name is not caught. ~~The backend's /flows routes pass none yet (B2).~~ ➡️ B2 (7b): /flows
+   lint and simulate pass it whenever the runner's loader is importable; B4's executor still must.
 3. **The stop.** One `hunt` call is bounded by `timeout_s` (600, the IR's cap); the run's stop is
    the enclosing loop. B4 must keep the engine running across calls (or the cap changes).
 4. **Choices offered**: only rule versions that exist. Loot `none`, engage `off` and strike arms B /
@@ -301,8 +304,100 @@ clean on poring_flow + poring_skills. The full suite was not run.
 7. **A new PARAMS key no pattern names now refuses its own version's run** (fail closed, before any
    input). `params_export.py classify` names it; after a new version, `params_export.py export`
    writes its config (the test checks committed configs only).
-8. B2's editor does not know `zones` yet (`ir.ts`); the hunt block shows in the catalogue with
-   free-text parameters until B2's lists.
+8. ~~B2's editor does not know `zones` yet (`ir.ts`); the hunt block shows in the catalogue with
+   free-text parameters until B2's lists.~~ ➡️ B2 (7b): `ir.ts` carries `zones`; the hunt block has
+   its lists (a generic block only when the catalogue's lists are not there).
+
+### 7b. B2 RESULT (built 2026-10-21 21:14-22:1x, offline; branch feat/blocks-b2, NOT merged)
+
+Built by a subagent in a tmpfs worktree, on main 39da9e1 (B1 + B3 merged in 0919ce7): commits eb36002
+(backend), 8d5a803 (editor), 4fd3916 + 23e83bf (fixes), and this section's docs commit. SIMULATE
+only: no route, block or page added here sends input or reaches the mux, the executor or an agent
+channel; nothing is written by the backend. Nothing ran live.
+
+**B2: what exists now**
+- **The hunt block in the block editor** (`services/frontend/src/lib/flow/hunt.ts`): the `pl_hunt`
+  block type is built from the catalogue's lists: one dropdown per parameter, in Batt's groups
+  (engage: strike, engage on the way; dead + loot: dead, loot; search; stop = the enclosing loop,
+  no parameter), each a list of the registry's rule versions. NOTHING else is a field (a test pins
+  the saved fields to the registry's parameters: no gate, safety number, reader or constant).
+  IR -> blocks -> IR is exact; a hunt whose value is off the list (or without the catalogue's lists)
+  stays a generic block, exactly, and the linter's `rule_version` names it.
+- **The badges** (`packages/poring_flow/src/poring_flow/hunt_rules.py`, served in GET
+  /flows/catalogue as `hunt_rules`): per rule version, ★ the adopted base's (index `adopted` = 52),
+  ◆ hunting evidence by D8's rule (a pre-registered verdict, hard bars 0 / 0 / 0, >= 4 run-hours),
+  and the PARAMS versions that hold it; its numbers read-only (the block's tooltip and a "hunt rules"
+  panel). The evidence is a NEW hand-written record, `config/flows/hunt/evidence.yaml`: 3.91 (v50)
+  and 3.92 (v51), each 4 x 60 min on prt_fild08, RDP, hard bars 0, the GM immune. The block's D8
+  badge reads "one path (RDP), prt_fild08" BESIDE its L1 badge (still "unverified").
+- **The Zones layer of a map node** (`components/flows/ZonesEditor.tsx`, PathMap's zones layer,
+  `lib/flow/zones.ts`): draw a no-cross line (click cells, double-click to end) or a no-enter area
+  (click corners, close on the first); each item asks for its id and note; "Check with the loader"
+  draws the cells each item closes, the pieces the zones seal off and the largest search area,
+  EXACTLY as the backend's run of the loader returned them (the browser computes no cell).
+  "Start from this file" loads config/map_zones/<map>.yaml's items and comment, never its review.
+  The map node's zones reference is set from the COMMITTED file's sha256 (inspector + layer).
+- **The routes** (`services/backend/src/poring_backend/flows_zones.py`, routes_flows.py), under the
+  /flows rules (LAN, Origin, CSRF on POST, 20 / min, 1 MiB): `POST /flows/zones/check` runs the
+  RUNNER'S OWN loader (`scripts/map_zones.py`: the name check, YAML, `parse` with the map's shape,
+  its rasters, `route_grid`, `sealed_off`) on the YAML text and returns its error exactly as the
+  CLI prints it, the sha256 of the bytes, the cells, the preview and the diff against the file;
+  `GET /flows/zones/file` gives the editor its starting point. A hostile text meets the check's own
+  bounds first (200 items, 500 points / item, 4 M cells of segment boxes; the refusal says it is the
+  editor's limit). /flows lint and simulate now pass B1's zones provider (7a open point 2).
+- **YAML export** (D6, export only): the editor's form (`zonesYaml`, config/map_zones/README.md
+  "The /flows editor"): the YAML, its sha256 from the check, the diff, "Download <map>.yaml"; a
+  person commits it. `reviewed_by`, `reviewed` and `delegation` are TYPED for every export; the
+  editor never fills them, and the loader still refuses an agent-like reviewer (shown as it is).
+- **The deploy piece** (not done): compose.dev.yaml binds `./scripts` READ-ONLY into the dev backend
+  at /lab-scripts (`ZONES_CODE_DIR`; pinned in test_guards). It takes effect at a guarded
+  `recreate:backend`; until then the zones routes answer 503 `zones_engine_unavailable` and lint
+  notes zones references unchecked (fail closed).
+
+| B2 acceptance | result |
+|---|---|
+| round trips | IR -> blocks -> IR exact with the hunt block (and generic when off the list); the zones reference kept by the canvas and the block views, removed as an absent key (old hash back); zones file -> backend import -> editor model -> YAML byte for byte for both twins (`zones.test.ts`, `hunt.test.ts`) |
+| CSP clean | the worktree's PRODUCTION build (`next start`, the nonce CSP, no `unsafe-eval`) in headless Chromium over CDP, a stand-in backend from the worktree on 127.0.0.1 (no capture, no input): two passes (import a flow with a hunt; the Zones layer on field_1: a line and an area drawn by clicks, typed review, Check, a refused reviewer shown; the block editor with the hunt block and its rules panel, Apply; then prt_fild08, below): **0 CSP issues, 0 console errors, 0 exceptions, 0 log entries**. Static: the existing src scan (no innerHTML / eval) plus a B2 scan (no script, no remote source, the one link is the export's blob) |
+| an editor-made file loads with the sha of its hand-written twin | `syn_zones.yaml` (hand-written: 2 lines, an area, a quoted id, escaped quotes, a non-ASCII note, comment lines) and **config/map_zones/prt_fild08.yaml itself**: drawn click by click in the editor's model, the review typed -> byte-identical, sha256 equal to the loader's (ce9f99d28a9b... for prt_fild08). In the browser: "Start from this file" on prt_fild08 (review fields EMPTY), the review typed -> Check says "the same bytes (sha256 ce9f99d28a9b)", diff empty; "Reference the committed file" -> lint's `zones_unreferenced` (shown before) gone |
+| the loader's error corpus shows in the editor | the loader's own test corpus (test_map_zones: 23 parametrized cases + 7 delegated-review cases = 30): the check route returns, for every one, EXACTLY the message `map_zones.load` prints from the repo root; the editor shows it verbatim as text (`errors.json` fixture, drift-tested); in the browser a reviewer `claude` came back as the loader's own "the agent never approves zones" line |
+
+**Found by the browser check and fixed (4fd3916):** a click mapped to its cell from the canvas's
+border box, so at 2 px / cell half of each cell's pixels went to its neighbour (a click on (10, 20)
+drew (11, 19)); now the content box (`cellOfPixel`, tested). Also: the tall hunt block overlapped
+the next event hat (layout height).
+
+**Tests** (the worktree, the main venv; node 24 in the worktree's tmpfs install):
+- Python: poring_flow + poring_skills, routes_flows, flows_gat, map_zones, client_layout,
+  bytecode_proof, hunt_config, flows_zones (new, 46), guards, hunt_flow, click_census: 691 passed,
+  1 skipped, 1 failed. The failure is the environment: test_hunt_flow's
+  `test_pocket_escape_on_v43_run_2s_real_positions` needs gitignored generated data (poring_dataset's
+  `_generated` map cache, data/kb) that a tmpfs worktree does not have. It passes on main (1 passed),
+  and B2 changes none of the code it runs (hunt_flow, hunt_core, map_zones, poring_dataset untouched).
+- Frontend: `pnpm test` 206 (188 before: zones 11 + hunt 7 new); `pnpm typecheck`, `pnpm lint` and
+  `next build` clean.
+- ruff + ruff format clean; mypy --strict clean (117 files). The full suite was not run.
+
+**Open points for Batt**
+1. **The D8 evidence rows were written by the agent** from demonstrations 3.91 / 3.92 (each 4 x 60
+   min, hard bars 0, pre-registered, adopted). A rule version is badged by the versions whose
+   CONFIG holds it; v50 and v51 alternated arms per engagement, so each verdict's hours were shared
+   with the base arm's loot rule. Confirm the rows, or say how D8 should count arms.
+2. **A new read-only mount of `./scripts` in the dev backend** (the zones routes need the runner's
+   loader; no copy of the geometry anywhere). Alternative: build it into the backend image. Either
+   way a guarded recreate:backend, the parent's or Batt's call.
+3. **"YAML export" read narrowly as the zones file** (D6). The hunt configs
+   (config/flows/hunt/vNN.yaml) stay written only by params_export.py; exporting an experiment spec
+   from the editor is B5.
+4. **Lint now names `zones_unreferenced` (an ERROR) for every map node on prt_fild08** without a
+   zones reference, once deployed: B1's rule, now visible in /flows.
+5. **The editor's form** quotes `reviewed_by` always (prt_fild08's own form). A hand-written file in
+   another form (README's example `reviewed_by: batt`, plain) is a valid file, but its editor twin
+   differs in bytes, so in sha256. Only the LEADING comment block is kept.
+6. **The import never carries the review**, even for an unchanged re-export: a person types it
+   each time (the narrow reading of "the editor never fills it").
+7. **The search-area preview is on the GAT walk grid** the editor shows, not the runner's stand grid
+   (which also keeps 10 cells off warps and NPCs); the panel says so.
+8. Cosmetic: Blockly moves a badge common to every option outside the dropdown (loot's ◆).
 
 ## 8. What Batt needs to decide
 
@@ -315,7 +410,8 @@ when I'm present."
   zones from the editor are export-only; hunting evidence may badge the hunt block (D8); MW3-hunt
   may run before walk / talk readiness, for that slice only (D9).
 - B1-B3 started 17:4x (offline, a subagent in a tmpfs worktree). B4 waits for Batt to be present.
-  ➡️ B1 and B3 BUILT 18:2x (section 7a); B2 not started.
+  ➡️ B1 and B3 BUILT 18:2x (section 7a; merged 0919ce7); ~~B2 not started~~ ➡️ B2 BUILT 22:1x
+  offline (section 7b; not merged).
 - ADR-0020 Amendment A stays a DRAFT until Batt accepts its text; these answers are its inputs.
 
 The questions as asked:

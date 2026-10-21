@@ -284,9 +284,18 @@ Open `http://<host>:3000/flows` (not in the top bar yet). The page edits ADR-002
 - **Lint, Simulate, JSON, Python:** MW1's linter; a simulated run against static data (the
   synthetic sample sheets, or the lab's own data/kb) with a scenario you choose; JSON import /
   export; the Python view, read-only.
+- **The hunt block (B2, 2026-10-21):** one dropdown per parameter (engage; dead + loot; search),
+  each a list of rule versions: ★ the adopted base's, ◆ hunting evidence (Batt's D8). "Show the hunt
+  rules" lists each version's numbers, read-only.
+- **Zones (B2):** a map block's "Open the Zones layer" draws `config/map_zones/<map>.yaml`'s lines
+  and areas, checks them with the runner's own loader and EXPORTS the YAML (a person commits it;
+  `config/map_zones/README.md`). `zones_engine_unavailable` = the backend cannot import
+  `scripts/map_zones.py`: the dev backend needs its read-only `./scripts` mount (compose.dev.yaml,
+  a guarded `recreate:backend`).
 - **No live run:** nothing on the page reaches the executor, the mux or an input path. The backend's
   `/flows/*` routes only compute (public listener, LAN viewer, Origin; POSTs need the CSRF token,
-  20 a minute). See [docs/planning/mw2-block-editor.md](docs/planning/mw2-block-editor.md).
+  20 a minute). See [docs/planning/mw2-block-editor.md](docs/planning/mw2-block-editor.md) and
+  [docs/planning/blocks-from-hunt-flow.md](docs/planning/blocks-from-hunt-flow.md) (7b).
 
 **Bot typing needs the game window in front.** Before the bot types anything, the backend checks
 the game client's title bar on a fresh frame; clicks are never blocked.
