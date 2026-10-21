@@ -14399,6 +14399,29 @@ Reported, not deciding:
     - completeness 81.2 % gross / 91.2 % net;
     - kill -> last pickup p50 2.38 s.
   - Economics (`run_row`): 992.3 z/h gross (1,139.2 with Overcharge); Sharpe-like 1.22.
+- **Run 3** (`20261022T022302-demo-hunt-flow55`, seed 20420707, 02:23-03:24, time box; the pre-run
+  frame was judged).
+  - **INTERIM, no verdict before 4 runs:**
+    - P1: fix 6.79 s / base 7.84 s = **0.866**. The gate passed on 29 of 55 fix steps (26
+      "moved"), skipping 10.2 edge cells each, so **5.4 per fix-arm step**. The classification
+      took 251 ms p50.
+    - P2: completeness fix 79.2 % / base 96.4 % = **-17.2 points** on this run.
+      `gm_lost_on_skipped` = **0**.
+      - The fix arm's losses: out of sight 9 vs 0 (base). By cause: 4 outside the GM's plan near
+        the death cell, 3 outside the GM's plan, 2 gone before the hover (looters), 1 fell after
+        the step, 1 planned but not hovered. None lay on a skipped cell.
+      - Looters took 2 in each arm. Net of re-drops: fix 82.7 % / base 100 %.
+    - G3: hard bars 0 / 0 / 0. **Creamy hits 1 (1 request)**, counted apart.
+    - The NPC guard: 0 refusals. FrameGuard's v24 out-of-frame check refused 1 click (a press
+      outside the game region; nothing sent).
+  - **Pooled over runs 1-3 (still not a verdict):** P1 6.63 s / 7.85 s = 0.844, with 5.44 edge
+    cells skipped per fix step; P2 fix 162/207 = 78.3 % vs base 187/229 = 81.7 %, so -3.4 points
+    (bar >= -6); `gm_lost_on_skipped` 0.
+  - Standard columns:
+    - 111.0 kills/h at 23.5 seen / 10 min (the sparsest run so far); landing 81.0 %;
+    - completeness 86.7 % gross / 89.9 % net;
+    - kill -> last pickup p50 2.23 s.
+  - Economics (`run_row`): 467.8 z/h gross (520.8 with Overcharge); Sharpe-like 5.13.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
