@@ -13910,7 +13910,7 @@ dialog's 10-04 signature (distance 8.96 on this client's dialog, bar 6.0).
 - S2 / S3 / S6b keep their bars (3.96 / 3.96b). If T-S2 F still shows no crossing below 55 %,
   S2's bar stays UNTESTED and goes to Batt (not a pass).
 
-### 3.96d crusader-survival@1d: S4b2 -- Auto Guard's re-cast blind-proof and remembered across trials (pre-registered 2026-10-21 __TIME__ ICT, the commit time, BEFORE S4b2 is built or run)
+### 3.96d crusader-survival@1d: S4b2 -- Auto Guard's re-cast blind-proof and remembered across trials (pre-registered 2026-10-21 19:48 ICT, the commit time of 3.96d's first commit, BEFORE S4b2 is built or run)
 
 **What happened to S4b (3.96c's chain):** S4b FAILS its bar (0 toggles-off).
 - f1: a real cast, uptime 98.75 %.
