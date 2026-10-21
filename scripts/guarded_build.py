@@ -128,7 +128,14 @@ On a breach:
                 under OUR roots (MEASURE_ROOTS: the repo, the shm archive, ~/.cache/poring-lab):
                 never a quant or system directory. docker-df: `docker system df -v` (it walks
                 the overlay dirs: once pushed quant-postgres to 15-18 % alone). buildx-du: the
-                current builder's cache records. Read-only; a trip kills it and stops the run.
+                lab builder's (default) cache records. Read-only; a trip kills it and stops the run.
+  archive:<src>=<dst>
+                the disk audit's MOVE to the NAS (Batt, 2026-10-21: "long-term files live ONLY on
+                the NAS ... copy to the NAS paced (chunked, IO guard) ... verify, then delete
+                locally"). <src> under MEASURE_ROOTS, <dst> under NAS_ARCHIVE_ROOT and NOT existing.
+                Three phases, each under the guard: `rsync -a --bwlimit` (paced) -> a size+count
+                check (`rsync -a -n --itemize-changes` must list NOTHING) -> `rm -rf <src>`. A trip
+                or a failed check stops before the delete. One item per step.
 
     python3 scripts/guarded_build.py build:desktop build:rathena pull:db up:180        # strict 10%
     python3 scripts/guarded_build.py --sustain 30 --spike 25 build:rathena             # tolerant
@@ -222,9 +229,11 @@ MEASURE_ROOTS = (
     Path("/home/batt/poring-lab-shm-archive"),
     Path("/home/batt/.cache/poring-lab"),
 )
+NAS_ARCHIVE_ROOT = Path("/mnt/poring-lab-datasets")  # archive: destinations (tank-main/poring-lab)
+ARCHIVE_BWLIMIT_KIB = 20000  # ~20 MB/s off the shared disk
 MEASURE_FIXED = {
     "docker-df": ["docker", "system", "df", "-v"],
-    "buildx-du": ["docker", "buildx", "du", "--verbose"],
+    "buildx-du": ["docker", "buildx", "du", "--builder", "default", "--verbose"],  # LAB_BUILDER
 }
 REPLAY_RANGE = re.compile(r"^(\d{8}T\d{2})\.\.(\d{8}T\d{2})$")
 CAPTURE_NAME = re.compile(r"^capture-(\d{8}T\d{6})Z\.pcapng$")
@@ -323,6 +332,18 @@ def parse_step(step: str) -> Step:
         if not any(target == r or r in target.parents for r in MEASURE_ROOTS):
             raise ValueError(f"{step}: only under {', '.join(str(r) for r in MEASURE_ROOTS)}")
         return Step("measure", ["du"], None, [str(target)])
+    if kind == "archive":
+        src_s, eq, dst_s = arg.partition("=")
+        src, dst = Path(src_s), Path(dst_s)
+        if not eq or not src.is_absolute() or not dst.is_absolute():
+            raise ValueError(f"{step}: expected archive:<abs src>=<abs dst>")
+        if ".." in src.parts or ".." in dst.parts:
+            raise ValueError(f"{step}: no '..'")
+        if not any(r in src.parents for r in MEASURE_ROOTS):
+            raise ValueError(f"{step}: src only BELOW {', '.join(str(r) for r in MEASURE_ROOTS)}")
+        if NAS_ARCHIVE_ROOT not in dst.parents:
+            raise ValueError(f"{step}: dst only below {NAS_ARCHIVE_ROOT}")
+        return Step("archive", ["archive"], None, [str(src), str(dst)])
     if kind == "cache" or step.startswith("cache@") or step.startswith("cache="):
         head, eq, command = step.partition("=")
         _, _, secs = head.partition("@")
@@ -815,6 +836,40 @@ def measure_cmd(step: Step) -> list[str]:
         return ["nice", "-n", "19", "ionice", "-c3", "du", "-s", "-x", "--block-size=1",
                 *step.command]  # fmt: skip
     return list(MEASURE_FIXED[step.services[0]])
+
+
+def archive_cmds(step: Step) -> tuple[list[str], list[str], list[str]]:
+    """The archive: step's copy, check and delete commands (a dir is copied by its contents)."""
+    src, dst = step.command
+    a, b = (f"{src}/", f"{dst}/") if Path(src).is_dir() else (src, dst)
+    nice = ["nice", "-n", "19", "ionice", "-c3"]
+    copy = [*nice, "rsync", "-a", f"--bwlimit={ARCHIVE_BWLIMIT_KIB}", a, b]
+    check = [*nice, "rsync", "-a", "-n", "--itemize-changes", a, b]
+    return copy, check, [*nice, "rm", "-rf", "--", src]
+
+
+def run_archive(step: Step, guard: "Guard") -> bool:
+    src, dst = (Path(p) for p in step.command)
+    if not src.exists() or src.is_symlink():
+        print(f"[{ts()}] {step.label}: REFUSED: {src} missing or a symlink", flush=True)
+        return False
+    if dst.exists():
+        print(f"[{ts()}] {step.label}: REFUSED: {dst} exists (never overwrite)", flush=True)
+        return False
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    copy, check, delete = archive_cmds(step)
+    if not run_process(f"{step.label}-copy", copy, guard):
+        return False
+    if not run_process(f"{step.label}-check", check, guard):
+        return False
+    diff = [x for x in log_path(f"{step.label}-check").read_text(errors="replace").splitlines()
+            if x.strip()]  # fmt: skip
+    if diff:
+        print(f"[{ts()}] {step.label}: CHECK FAILED ({len(diff)} differ): {diff[:5]}", flush=True)
+        return False
+    print(f"[{ts()}] {step.label}: verified (size + count: nothing differs) -> deleting {src}",
+          flush=True)  # fmt: skip
+    return run_process(f"{step.label}-delete", delete, guard)
 
 
 def cache_cmd(step: Step) -> list[str]:
@@ -1602,6 +1657,8 @@ def main() -> int:
                              host=b"scripts/gen_packet_tables.py")  # fmt: skip
             tail = log_path(step.label).read_text(errors="replace").splitlines()[-20:]
             print("\n".join(f"  | {line}" for line in tail), flush=True)
+        elif step.kind == "archive":
+            ok = run_archive(step, guard)
         elif step.kind == "measure":
             ok = run_process(step.label, measure_cmd(step), guard)
             tail = log_path(step.label).read_text(errors="replace").splitlines()

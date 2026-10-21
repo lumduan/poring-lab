@@ -937,3 +937,32 @@ def test_measure_docker_steps_are_fixed_read_only_commands(gb: ModuleType) -> No
     assert gb.measure_cmd(gb.parse_step("measure:buildx-du"))[:3] == ["docker", "buildx", "du"]
     with pytest.raises(ValueError):
         gb.parse_step("measure:docker-df=/x")
+
+
+def test_archive_only_from_our_roots_to_the_nas(gb: ModuleType) -> None:
+    """The disk audit's move (Batt 2026-10-21): ours -> the NAS, copy, size+count check, delete."""
+    src = "/home/batt/poring-lab-shm-archive/poring-lab-demo/S1"
+    step = gb.parse_step(f"archive:{src}=/mnt/poring-lab-datasets/S1")
+    copy, check, delete = gb.archive_cmds(step)
+    assert "rsync" in copy and any(a.startswith("--bwlimit=") for a in copy)
+    assert {"-n", "--itemize-changes"} <= set(check)
+    assert delete[-2:] == ["--", src] and "rm" in delete
+    for bad in (
+        f"archive:{src}=/home/batt/elsewhere",  # dst not on the NAS
+        "archive:/home/batt/docker/quant-x/data=/mnt/poring-lab-datasets/x",  # not ours
+        "archive:/home/batt/poring-lab-shm-archive=/mnt/poring-lab-datasets/x",  # a root itself
+        f"archive:{src}=/mnt/poring-lab-datasets",  # the share root itself
+        f"archive:{src}=/mnt/poring-lab-datasets/../x",
+        f"archive:{src}",
+    ):
+        with pytest.raises(ValueError):
+            gb.parse_step(bad)
+
+
+def test_archive_refuses_an_existing_destination(gb: ModuleType, tmp_path: Path) -> None:
+    src, dst = tmp_path / "src", tmp_path / "dst"
+    src.mkdir()
+    dst.mkdir()
+    step = gb.Step("archive", ["archive"], None, [str(src), str(dst)])
+    assert gb.run_archive(step, guard=None) is False  # never overwrite: refused before any copy
+    assert src.exists()

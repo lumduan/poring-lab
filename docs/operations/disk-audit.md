@@ -1,0 +1,89 @@
+---
+title: "Disk audit: poring-lab's footprint on the shared root disk"
+status: living
+created: 2026-10-21
+last_reviewed: 2026-10-21
+owner: poring-lab
+---
+
+# Disk audit: poring-lab's footprint on the shared root disk
+
+**Rule (Batt, 2026-10-21):** long-term files live ONLY on the NAS. That covers datasets,
+recordings, session evidence, model weights, caches not in active use, and archives. The local disk
+holds only ACTIVE WORKING SETS, each with a retention note. Every report states our local disk
+footprint (CLAUDE.md "How we work").
+
+**How it is measured** (the disk carries live quant capture):
+- `python3 scripts/guarded_build.py --sustain 30 --spike 25 measure:du=<path>` measures ONE path
+  per step, with `nice -n 19 ionice -c3 du -s -x`. It runs only under our roots (the repo,
+  `/home/batt/poring-lab-shm-archive`, `~/.cache/poring-lab`), under the IO guard; a trip kills it.
+- `measure:docker-df` (`docker system df -v`) and `measure:buildx-du` (the lab builder, `default`).
+- Not ours: never walked. Only `df` and what `docker system df -v` shows.
+
+## Audit 1 -- 2026-10-21 20:34-20:42 ICT
+
+The root LV holds 613.5 GiB, with **474.6 GiB used (81 %)** and 111.5 GiB free. Every measurement
+step ran under the guard; the worst capture stall was 8.0 % (frigate), 0 s above 10 %.
+
+### Ours, item by item (sizes in GB = 10^9 bytes, measured 20:34-20:42)
+
+| # | path | size | what | last used | needed locally | NAS copy | action |
+|---|---|---|---|---|---|---|---|
+| 1 | `~/poring-lab-shm-archive/poring-lab-demo` | 2.88 | 37 old demo sessions (talk-cal, npc-click, ...) moved off /dev/shm 10-19 20:07 - 10-20 03:40, SYMLINKED back from `/dev/shm/poring-lab-demo` | 10-13 | no | no | **move** to the NAS datasets root (as sessions), verify, delete local, drop the symlinks |
+| 2 | `~/poring-lab-shm-archive/poring-lab-tmp` | 1.09 | 35 scratch dirs, SYMLINKED back from `/dev/shm/poring-lab-tmp`. Some are still WRITTEN through the links (npc-check today; nametags by hunt_flow, ui-gate by ui_gate), so rule-7 scratch lands on the shared disk | today (via links) | the names in use: yes (as tmpfs) | no | **move** to `scratch-archive/`; each name code still uses becomes a REAL /dev/shm dir, refilled where code reads it (sprites, src, where, q1, ...) |
+| 3 | `~/poring-lab-shm-archive/poring-lab-{kb,pktgen,rathena-src}` | 0.14 | stale copies; the live ones are real tmpfs dirs since option B (10-20) | 10-09 | no | no | **move** to `scratch-archive/` |
+| 4 | `data/input_log` | 0.83 | the backend's input log, one JSONL per day since 09-29 | today | the last 2 days | no | **move** 09-29 .. 10-19 to the NAS; keep 2 days (retention: 2 days local) |
+| 5 | `data/train` | 0.32 | training outputs v0 / v1 (10-04 .. 10-11) | 10-11 | read by species_check, gold_eval, train-day | no | **list**: Batt's call (weights + results -> NAS needs a path change) |
+| 6 | `data/nametags` | 0.20 | nametag cuts written by every hunt run, plus templates.npz | today | writer: yes | no | **list**: propose cuts -> NAS with a retention |
+| 7 | `data/metrics` | 0.06 | io_pressure CSVs (the IO baseline; not running since 10-12) | 10-12 | no | no | **move** |
+| 8 | `data/{gat,bench,walk6,kb,weights,ro_agent,ui_anchors,...}` | 0.10 | active inputs (GAT, cursor refs, KB, detector weights, UI templates) | today | yes | - | keep |
+| 9 | `.venv`, `.git`, sources | 0.51 | the env and the checkout | today | yes | - | keep |
+| 10 | `services/frontend/node_modules` | 0.50 | a HOST pnpm install from 09-29. frontend-dev never copies it (run-dev.mjs SKIP); only gen_protocol.sh's first branch would use it, and its frontend-dev branch works | 09-29 | no | n/a (regenerable) | **list**: delete proposed (no NAS value), needs Batt's OK |
+| 11 | `services/frontend/.qa-local` | 0.36 | the /qa label bundles (7 sessions, incl. Batt's hand-checked labels.json) | 10-05 | the /qa dev route + label_quality's default read it | no | **copy** to the NAS + verify now; the local delete waits on Batt (it breaks /qa until a NAS-backed path) |
+| 12 | `.mypy_cache` | 0.02 | stale (mypy runs with `--cache-dir=/dev/null`) | ? | no | n/a | **list**: delete proposed |
+| 13 | `~/.claude/projects/-home-batt-docker-poring-lab/<session>.jsonl` | 1.39 | THIS Claude session's transcript | live | yes while live | no | keep; propose a NAS archive after the session ends |
+| 14 | `~/.cache/poring-lab` | 0.0002 | locale-pack fingerprints | today | yes | - | keep |
+| 15 | Docker images (unique) | 12.29 | vision 10.34 (GPU work); gamestream 0.49; rathena-build 0.48 (0 containers); mariadb 0.34 (db, db-th); rathena 0.29; backend 0.24; sniffer 0.10. Plus ~0.86 desktop layers shared with gamestream, and base layers | images 2-3 weeks old | yes (rathena-build: ?) | - | keep; **list** rathena-build:local (the compile stage) |
+| 16 | Docker volumes | 0.54 | captures 0.22 (the 7-day pcap ring); db-data 0.17; **db-th-data 0.16** (the Thai experiment; its container exited, the th client copy was removed) | - | db-th: no | no | keep; **list** db-th (dump to the NAS + remove = Batt's call) |
+| 17 | Build cache (lab builder `default`) | ~10.3 records, **0.03 private** | the vision `uv sync` layer (9.52) etc. are SHARED with our images, so a prune frees ~nothing | 2 weeks | - | - | **not pruned** (a builder prune would also hit other projects' 3.15 GB private cache) |
+| 18 | Dangling images | 0 ours | the 3 dangling images are fitfirst + tuya-energy-mqtt | - | - | - | not touched |
+| 19 | Container logs | <= 0.27 | compose caps every service at 10 MB x 3 | - | - | - | bounded; not measurable without root |
+
+**Total ours ≈ 23.0 GB** (21.4 GiB):
+- repo 2.90;
+- the shm archive 4.11;
+- the transcript 1.39;
+- Docker ≈ 14.6: images ~13.4 with their shared layers, volumes 0.54, build cache private 0.03, logs <= 0.27.
+
+That is **≈ 4.5 % of the 474.6 GiB used**, and ≈ 3.5 % of the disk.
+
+### Not ours (no walk; `df` + `docker system df -v` only)
+- quant volumes: **95.98 GB**. crypto_cold_tier 48.52, orderbook_raw_log 33.54, orderbook_cold_tier
+  6.40, ticker_raw_log 5.77, and the small ones.
+- buildx `armbuilder` state volume: 19.34 GB (another project's arm64 builder; our builds use
+  `default`).
+- The dockerd build cache of other projects: ~16 GB of records, 3.15 GB of it private.
+- Other images, unique layers: **47.42 GB** (frigate-blackwell tags 12.9, ollama 9.19, quant / candy /
+  sec-archive / ... rollback tags).
+- ollama volume 3.30 GB; other named volumes 0.65 GB.
+- Anonymous volumes 1.51 GB: 13 with no labels; 2 are candy-closet-web's, 11 unattached (created
+  08-21 .. 10-14).
+- **Unattributed: roughly 290 GB.** It is outside Docker's view: bind-mounted project data, the
+  system, other users' files. It was not walked, by rule.
+
+### Growth vs earlier reports
+- Root 76 % (10-19 06:40) -> 80 % (10-19 19:45) -> 79 % -> 81 % now (+5 points ≈ +30 GiB).
+- **Ours in that time:**
+  - the shm archive, +4.11 GB, moved onto the disk 10-19 20:07 - 10-20 03:40. That was my own
+    cleanup putting /dev/shm overflow on the shared disk instead of the NAS, the exact thing the
+    new rule forbids.
+  - input_log +0.24 GB (10-19 .. 10-21);
+  - the session transcript growing.
+- Not ours: our images and build cache are 2-3 weeks old. The 10-19 06:40 -> 19:45 jump (+4
+  points ≈ +25 GiB in 13 h) is NOT ours: we wrote < 0.5 GB that day. The newest images on the disk
+  are other projects' (candy-closet 19-29 h old, m3u8 2 days, fitfirst 3-5 days, csm-set 7 days).
+
+## Actions (audit 1)
+
+Filled in as they are done. Each move: a paced rsync to the NAS under the guard, a size+count
+verification (rsync dry-run, nothing to transfer), then the local delete under the guard.
