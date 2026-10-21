@@ -23,8 +23,16 @@ Written under ``<out-root>/<session>/``:
   * ``reference.png``: the rendered idle sprite of every species in the class list (the 7
     orcsdun01 species + the 5 prt_fild08 ones), each under a LETTER (a seeded order, no name);
   * ``pack.json``: the crop files, the letters and the questions;
+  * ``grids/grid_NN.png``: the same crops, 20 to a grid (5 x 4), each under its number;
 - ``key/answer_key.json``: THE ANSWER KEY (crop number -> mob id, frame, box; letter -> mob id),
   in a DIFFERENT directory: the blind agents must never be given it.
+
+``--fix PARAMS`` (docs/planning/orcsdun01-detector.md 3b, scripts/orc_labels_fix.py): the monster
+boxes are the labels v2orc-fix FITTED boxes instead of v1's (facing 1a, anchor 1b, model occlusion
+1c, offset 1d -- the frozen PARAMS' offset replaces --offset-ms). A frame keeps its labels only
+when every visible monster's label is kept (an excluded one -- ``occluded_model``, ``crowd``,
+``ui``, ``unfit`` -- excludes the frame: ``fix_<reason>``), on top of the cache's own rules.
+``labels_summary.json`` then also counts the monster labels kept / excluded per species and reason.
 """
 
 from __future__ import annotations
@@ -53,6 +61,9 @@ OUT_ROOT = Path("/dev/shm/poring-lab-tmp/orc-labels")
 BOX_RGB = (0, 255, 0)
 TILE_H = 160  # contact sheet tile height
 BLIND_MIN_H = 240  # a blind crop is enlarged (nearest) to at least this height, at most x4
+GRID_COLS, GRID_ROWS = 5, 4  # the blind grids (the first round's layout)
+GRID_TILE = (279, 255)  # w, h of one grid tile, its number bar included
+GRID_BAR = 18
 QUESTIONS = [
     "Q1: is there a monster inside the green box? (yes / no / unsure)",
     "Q2: the box: good (tight around the monster) / loose (the monster is in it, with much "
@@ -156,7 +167,33 @@ def tile_sheet(tiles: Sequence[npt.NDArray[np.uint8]], cols: int = 8, gap: int =
     return sheet
 
 
+def grid_pages(n: int, per: int = GRID_COLS * GRID_ROWS) -> list[range]:
+    """Crop indices (0-based) per grid page, in order."""
+    return [range(i, min(n, i + per)) for i in range(0, n, per)]
+
+
 # --- rendering --------------------------------------------------------------------------------
+
+
+def blind_grid(crops: Sequence[tuple[str, Any]]) -> Any:
+    """The blind crops ``(number, RGB)`` on one white grid (5 x 4), each scaled (nearest) to fit
+    its tile under a ``#NNN`` bar -- the first round's layout."""
+    from PIL import Image, ImageDraw
+
+    tw, th = GRID_TILE
+    rows = (len(crops) + GRID_COLS - 1) // GRID_COLS
+    canvas = Image.new("RGB", (GRID_COLS * tw, rows * th), (255, 255, 255))
+    d = ImageDraw.Draw(canvas)
+    for i, (num, rgb) in enumerate(crops):
+        r, c = divmod(i, GRID_COLS)
+        x, y = c * tw, r * th
+        im = Image.fromarray(np.ascontiguousarray(rgb))
+        f = min(tw / im.width, (th - GRID_BAR) / im.height)
+        im = im.resize((max(1, int(im.width * f)), max(1, int(im.height * f))),
+                       Image.Resampling.NEAREST)  # fmt: skip
+        canvas.paste(im, (x, y + GRID_BAR))
+        d.text((x + 3, y + 3), f"#{num}", fill=(0, 0, 0))
+    return np.asarray(canvas)
 
 
 def to_tile(img: npt.NDArray[np.uint8], height: int, text: str | None = None) -> Any:
@@ -222,6 +259,13 @@ def collect(session: Path, a: argparse.Namespace) -> tuple[dict[str, Any], dict[
                                                             bfc.V2Inputs, Any]:  # fmt: skip
     """Pass 1 (packets only): the cache's decision on every --every-th frame; the monster labels
     of the frames it would write, per species."""
+    fix_params = None
+    if getattr(a, "fix", None) is not None:
+        import orc_labels_fix as olf
+
+        olf.refuse_test_block(session)
+        fix_params = olf.load_params(a.fix)
+        a.offset_ms = float(fix_params["offset_ms"])  # 1d replaces the benchmark's offset
     ns = argparse.Namespace(
         kb=a.kb, warp_visibility=a.warp_visibility, npc_sprites=a.npc_sprites,
         npc_sprite_names=a.npc_sprite_names, npc_extents=a.npc_extents,
@@ -242,8 +286,28 @@ def collect(session: Path, a: argparse.Namespace) -> tuple[dict[str, Any], dict[
     class_boxes: Counter[str] = Counter()
     frames_with: Counter[int] = Counter()
     items: dict[int, list[Item]] = defaultdict(list)
+    fixer = None
+    fix_kept: Counter[str] = Counter()
+    fix_excl: dict[str, Counter[str]] = defaultdict(Counter)
+    fix_hidden = 0
+    if fix_params is not None:
+        fixer = olf.FixLabeler(sess.labeler, fix_params)
     for ref in refs:
         outcome, fr, reasons, _mk = bfc.decide(sess, ref.t_mono_ns, v2)
+        fixed = None
+        if outcome == "ok" and fr is not None and fixer is not None:
+            fixed = fixer.frame(ref.t_mono_ns, qa_export.read_jpeg(ref))
+            if fixed is None:
+                outcome, reasons = "excluded", ["fix_no_world"]
+            else:
+                fix_hidden += fixed.hidden
+                for lab in fixed.kept:
+                    fix_kept[str(lab.mob)] += 1
+                for _gid, mob, why in fixed.excluded:
+                    fix_excl[why][str(mob)] += 1
+                if fixed.excluded:
+                    outcome = "excluded"
+                    reasons = [f"fix_{why}:{mob}" for _g, mob, why in fixed.excluded]
         outcomes[outcome] += 1
         if outcome == "excluded":
             for r in {r.split(":", 1)[0] for r in reasons}:
@@ -252,7 +316,8 @@ def collect(session: Path, a: argparse.Namespace) -> tuple[dict[str, Any], dict[
                 excluded_detail[r] += 1
         if outcome != "ok" or fr is None:
             continue
-        _text, written = bfc.v2_yolo(fr.labels, bfc.V2_SIZE, v2.classes.class_of)
+        labels = fr.labels if fixed is None else [b for b in fr.labels if b.cls != "monster"]
+        _text, written = bfc.v2_yolo(labels, bfc.V2_SIZE, v2.classes.class_of)
         mobs = set()
         for b in written:
             class_boxes[b.cls] += 1
@@ -261,6 +326,11 @@ def collect(session: Path, a: argparse.Namespace) -> tuple[dict[str, Any], dict[
             boxes[b.job] += 1
             mobs.add(b.job)
             items[b.job].append(Item(ref, b.job, b.gid, b.box, b.kind))
+        for lab in fixed.kept if fixed is not None else []:
+            class_boxes["monster"] += 1
+            boxes[lab.mob] += 1
+            mobs.add(lab.mob)
+            items[lab.mob].append(Item(ref, lab.mob, lab.gid, lab.box, "fit"))
         for m in mobs:
             frames_with[m] += 1
     summary = {"session": qa_export.session_id(manifest), "every": a.every,
@@ -273,6 +343,21 @@ def collect(session: Path, a: argparse.Namespace) -> tuple[dict[str, Any], dict[
                "labels": "v2 + --classes species", "classes": v2.classes.provenance(),
                "warp_rule": v2.provenance["warp_rule"],
                "offset_ms": sess.labeler.offset_ms}  # fmt: skip
+    if fix_params is not None:
+        summary["labels"] = (
+            "v2orc-fix (fitted monster boxes) + v2's frame rules + --classes species"
+        )
+        summary["fix"] = {
+            "params": str(a.fix), "measured_on": fix_params["measured_on"],
+            "offset_ms": fix_params["offset_ms"], "anchors_px": fix_params["anchors_px"],
+            "monster_labels_kept_by_species": dict(sorted(fix_kept.items())),
+            "monster_labels_excluded_by_reason": {k: dict(sorted(v.items()))
+                                                  for k, v in sorted(fix_excl.items())},
+            "monsters_not_visible": fix_hidden,
+            "note": "counted on the frames v2's own rules keep; a frame with any excluded "
+                    "monster label is excluded (fix_<reason>), so its kept labels are NOT in "
+                    "the crops",
+        }  # fmt: skip
     return summary, items, v2, sess
 
 
@@ -311,9 +396,12 @@ def write_outputs(session: Path, a: argparse.Namespace) -> dict[str, Any]:
     (sheets_dir / "sheets.json").write_text(json.dumps(sheet_rows, indent=1) + "\n")
     key_crops = {}
     names = []
+    enlarged = []
     for i, it in enumerate(blind, 1):
         name = f"{i:03d}.png"
-        save_png(blind_dir / "crops" / name, enlarge(crop(it)))
+        big = enlarge(crop(it))
+        save_png(blind_dir / "crops" / name, big)
+        enlarged.append((f"{i:03d}", big))
         names.append(name)
         key_crops[f"{i:03d}"] = {"mob": it.mob, "frame_id": it.ref.frame_id,
                                  "t_ns": it.ref.t_mono_ns, "gid": it.gid, "kind": it.kind,
@@ -323,13 +411,18 @@ def write_outputs(session: Path, a: argparse.Namespace) -> dict[str, Any]:
         blind_dir / "reference.png",
         reference_sheet({m: sess.labeler.sheets(m) for m in v2.classes.monsters}, letters),
     )
+    grids = []
+    for page, idx in enumerate(grid_pages(len(enlarged)), 1):
+        gname = f"grids/grid_{page:02d}.png"
+        save_png(blind_dir / gname, blind_grid([enlarged[i] for i in idx]))
+        grids.append(gname)
     (blind_dir / "pack.json").write_text(json.dumps({
-        "crops": names, "reference": "reference.png", "letters": sorted(letters),
+        "crops": names, "grids": grids, "reference": "reference.png", "letters": sorted(letters),
         "box": "the green rectangle drawn just outside the label box",
         "questions": QUESTIONS,
     }, indent=1) + "\n")  # fmt: skip
     key = {"session": sid, "seed": a.seed, "per_blind": a.per_blind,
-           "letters": letters, "crops": key_crops,
+           "labels": summary.get("labels"), "letters": letters, "crops": key_crops,
            "per_species": dict(Counter(str(v["mob"]) for v in key_crops.values())),
            "note": "THE ANSWER KEY: never give it (or this directory) to a blind labeller",
            }  # fmt: skip
@@ -356,6 +449,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument("--npc-sprite-names", type=Path, default=None)
     ap.add_argument("--npc-extents", type=Path, default=None)
     ap.add_argument("--npc-checked", type=Path, default=None)
+    ap.add_argument(
+        "--fix",
+        type=Path,
+        default=None,
+        help="labels v2orc-fix: the frozen parameters (orc_labels_fix.py freeze)",
+    )
     a = ap.parse_args(argv)
     out = write_outputs(a.session, a)
     print(json.dumps(out, indent=1))
