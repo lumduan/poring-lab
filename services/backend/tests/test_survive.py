@@ -41,6 +41,8 @@ def test_auto_guard_is_a_toggle_cast_only_after_the_icon_is_absent_1_s() -> None
     st = sv.State()
     assert sv.decide(st, 0.0, 1.0, {"S4"}, ag_on=None) == []  # unknown: never press
     assert sv.decide(st, 0.0, 1.0, {"S4"}, ag_on=True) == []  # already on (another cast)
+    assert st.ag == 0.0  # S4b2: an unknown cast seen on is assumed just made (F3 held 300 s)
+    st = sv.State()
     assert sv.decide(st, 1.0, 1.0, {"S4"}, ag_on=False) == []  # absent, but not 1 s yet
     assert sv.decide(st, 2.0, 1.0, {"S4"}, ag_on=False) == [("autoguard", "first cast")]
     assert sv.decide(st, 100.0, 1.0, {"S4"}, ag_on=False) == []  # our cast: 300 s not over
@@ -76,3 +78,37 @@ def test_the_icon_search_finds_the_template_in_the_status_column() -> None:
     assert not sv.ag_present(frame, tmpl, mask)
     frame[201:233, 1233:1265] = tmpl  # a second icon slot below the first
     assert sv.ag_present(frame, tmpl, mask)
+
+
+def test_s4b2_unknown_cast_seen_on_is_assumed_just_cast_and_persists(tmp_path) -> None:
+    st = sv.State()
+    assert sv.decide(st, 50.0, 1.0, {"S4"}, ag_on=True) == []  # on, cast unknown -> st.ag = 50
+    assert sv.decide(st, 100.0, 1.0, {"S4"}, ag_on=False) == []
+    assert sv.decide(st, 120.0, 1.0, {"S4"}, ag_on=False) == []  # absent 20 s, but < 300 s
+    assert sv.decide(st, 351.0, 1.0, {"S4"}, ag_on=False) == [("autoguard", "recast")]
+    f = tmp_path / "ag.json"
+    assert sv.load_ag_last(f) == -1e9
+    sv.save_ag_last(1234.5, f)
+    assert sv.load_ag_last(f) == 1234.5
+
+
+def test_s4b2_a_dark_screen_is_unknown() -> None:
+    import numpy as np
+
+    frame = np.full((720, 1280, 3), 120, np.uint8)
+    assert not sv.dark_screen(frame)
+    frame[150:550, 300:1100] = 5  # Blind: the game area black
+    assert sv.dark_screen(frame)
+
+
+def test_s3h_is_the_hp_path_alone() -> None:
+    """3.96e: T-S3h escapes only below 25 %, never on the fall rate (T-S3 c1-c3 escaped on the
+    rate at 72-91 % HP)."""
+    st = sv.State()
+    assert sv.decide(st, 0.0, 1.0, sv.SETS["T-S3h"]) == []
+    assert sv.decide(st, 1.0, 0.30, sv.SETS["T-S3h"]) == []  # 3500 HP/s, but HP above 25 %
+    st2 = sv.State()
+    sv.decide(st2, 0.0, 1.0, sv.SETS["T-S3"])
+    assert sv.decide(st2, 1.0, 0.30, sv.SETS["T-S3"])[0][0] == "fly"  # the rate path, unchanged
+    got = sv.decide(st, 1.4, 0.24, sv.SETS["T-S3h"])
+    assert got and got[0][0] == "fly" and got[0][1].startswith("hp")

@@ -58,12 +58,16 @@ AG_X = (1230, 1235)  # the status column's x range for the icon's left edge (cut
 AG_Y = (160, 430)  # its y range (the icons stack downward under the minimap)
 AG_MATCH = 30.0  # grey masked mean |diff|: on 0-14, absent 50.2 (19:3x frames; the midpoint)
 AG_EVERY = 3  # the icon is checked on every 3rd read
+AG_STATE = Path(__file__).resolve().parents[1] / "data" / "crusader" / "ag_state.json"  # S4b2
+DARK_BOX = (300, 150, 1100, 550)  # S4b2: the open-field box (client px) a Blind blackens
+DARK_GREY, DARK_SHARE = 25.0, 0.80  # S4b2: >= 80 % of it below grey 25 = a dark screen (unknown)
 ENDURE_S = 37.0  # S5: Endure 10 lasts 37 s (skill_db SM_ENDURE Duration1), cooldown 10 s
 READ_HZ = 5.0
 KEYS = {"potion": "F1", "fly": "F2", "autoguard": "F3", "endure": "F4"}
 SETS = {
     "T-S2": {"S1", "S2", "S4", "S6"},
     "T-S3": {"S1", "S3", "S6"},
+    "T-S3h": {"S1", "S3h", "S6"},  # 3.96e: S3's HP path alone (the rate trigger off)
     "T-S6": {"S1", "S6"},
     "T-regen": {"S1"},
 }  # fmt: skip  (T-regen here = standing only; walking is not built: see 3.96's run log)
@@ -116,6 +120,28 @@ def ag_present(client_bgr: Any, tmpl: Any, mask: Any) -> bool:
     return bool(d.min() <= AG_MATCH)
 
 
+def dark_screen(client_bgr: Any) -> bool:
+    """PURE (S4b2, 3.96d): Blind blackens the game area and the status icons with it (frames
+    crusader/agdiag, 2026-10-21): an icon read on such a frame is UNKNOWN, never absent."""
+    x0, y0, x1, y1 = DARK_BOX
+    g = _grey(np.asarray(client_bgr)[y0:y1, x0:x1])
+    return bool((g < DARK_GREY).mean() >= DARK_SHARE)
+
+
+def load_ag_last(path: Path = AG_STATE) -> float:
+    """Our last Auto Guard cast as CLOCK_MONOTONIC (time.monotonic, system-wide: comparable across
+    trials), or -1e9 when none is known (S4b2)."""
+    try:
+        return float(json.loads(path.read_text())["last_cast_mono"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return -1e9
+
+
+def save_ag_last(t: float, path: Path = AG_STATE) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"last_cast_mono": t, "wall": time.strftime("%Y-%m-%dT%H:%M:%S%z")}))
+
+
 def decide(st: State, now: float, frac: float, rules: set[str],
            ag_on: bool | None = None) -> list[tuple[str, str]]:  # fmt: skip
     """PURE: the hotkeys to press now, with why. The escape first (it ends the trial); then a
@@ -123,9 +149,10 @@ def decide(st: State, now: float, frac: float, rules: set[str],
     out: list[tuple[str, str]] = []
     st.hist.append((now, frac))
     rate = rate_hp_s(st.hist, now)
-    if "S3" in rules and now - st.fly >= FLY_GAP_S:
+    if ("S3" in rules or "S3h" in rules) and now - st.fly >= FLY_GAP_S:
         why = ("hp" if frac < T_FLY else
-               "rate" if rate is not None and rate > RATE_FLY else None)  # fmt: skip
+               "rate" if "S3" in rules and rate is not None and rate > RATE_FLY
+               else None)  # fmt: skip
         if why:
             st.fly = now
             return [("fly", f"{why}: frac {frac:.3f} rate {rate}")]
@@ -142,6 +169,8 @@ def decide(st: State, now: float, frac: float, rules: set[str],
         # for AG_ABSENT_S and, after a cast of ours, its 300 s have passed
         if ag_on:
             st.ag_absent_since = None
+            if st.ag < 0:  # S4b2: an unknown cast seen on -> assume it just happened
+                st.ag = now
         else:
             st.ag_absent_since = st.ag_absent_since if st.ag_absent_since is not None else now
             if now - st.ag_absent_since >= AG_ABSENT_S and now - st.ag >= AG_RECAST_S:
@@ -204,6 +233,7 @@ def trial(a: argparse.Namespace) -> int:  # noqa: PLR0915
         bench.close_chat(agent, screen)
         r.activate_client(agent, screen)
         st = State()
+        st.ag = load_ag_last()  # S4b2: the last cast survives across trials
         gx, gy, gw, gh = r.game_region()
         t_end = time.monotonic() + a.seconds
         try:
@@ -214,11 +244,13 @@ def trial(a: argparse.Namespace) -> int:  # noqa: PLR0915
                 bar = gv.hp_fraction(frame)
                 # S4b's icon on every AG_EVERY-th read (~0.6 s apart: the rule needs >= 1 s absent)
                 check_ag = "S4" in rules and counts["reads"] % AG_EVERY == 1
-                ag_on = ag_present(frame, ag_t, ag_m) if check_ag else None
+                dark = bool(check_ag and dark_screen(frame))
+                ag_on = ag_present(frame, ag_t, ag_m) if check_ag and not dark else None
                 dead = r.is_state(screen, gv.DEAD_STATE)
                 counts["reads"] += 1
                 ev({"kind": "hp_read", "frac": None if pct is None else pct / 100.0, "pct": pct,
-                    "bar": round(bar, 4), "dead": dead, "ag_on": ag_on})  # fmt: skip
+                    "bar": round(bar, 4), "dead": dead, "ag_on": ag_on,
+                    "dark": dark})  # fmt: skip
                 if dead and "S6" in rules:
                     reason = "death"
                     last = [[round(t, 2), round(f, 4)] for t, f in list(st.hist)[-50:]]
@@ -231,6 +263,8 @@ def trial(a: argparse.Namespace) -> int:  # noqa: PLR0915
                 for what, why in decide(st, time.monotonic(), pct / 100.0, rules, ag_on):
                     agent.keys(KEYS[what])
                     counts[what] += 1
+                    if what == "autoguard":
+                        save_ag_last(st.ag)  # S4b2
                     ev({"kind": "press", "what": what, "key": KEYS[what], "why": why})
                     if what == "fly":
                         reason = "escape"
