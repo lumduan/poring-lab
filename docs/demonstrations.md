@@ -13869,6 +13869,47 @@ dialog's 10-04 signature (distance 8.96 on this client's dialog, bar 6.0).
   - At 0.376 s the same reads give 80.8 %: under 8,394 HP / min of damage the truth's timing is
     the limit, not the reader.
 
+### 3.96c crusader-survival@1c: S4 re-registered (Auto Guard is a TOGGLE) and the T-S2 packs made heavy enough to reach the thresholds (pre-registered 2026-10-21 __TIME__ ICT, the commit time, BEFORE S4b is built and before any further trial; Batt 2026-10-21 ~19:3x: "Auto Guard is a TOGGLE in rAthena (casting it while active turns it off): check that S4's re-cast first reads the Auto Guard status icon and only casts when it's OFF ... Make sure the remaining trials reach their thresholds (more summoned attackers, or test thresholds set higher for these positive cases), and report per trial: HP min, potions used, escapes, deaths.")
+
+**What happened (3.96b's chain, T-S2 C c1-c3, 19:17-19:29; the chain was stopped after c3):**
+- **S4 FAILS as built:** it pressed F3 at every trial's start (a timer only; the icon check
+  3.96 named was NOT built).
+  - c1: a real cast (SP 312 -> 282; the judge missed it until 52fcab6), uptime 99.96 %.
+  - c2: Auto Guard was still active from c1, so the press TURNED IT OFF at no SP cost. The SP
+    series of c2 is empty, and its uptime is 0.
+  - c3: off -> a real cast again, uptime 99.95 %.
+- **The pinned source confirms the toggle:** `skill_db.yml` CR_AUTOGUARD `Flags: Toggleable`;
+  `skill.cpp:8320` / `:9753` `skill_disable_check`: "Checks if disabling skill - in which case no
+  SP requirements are necessary".
+- **S2 had nothing to answer:** potions at 60 % held packs C above 55 % in all three trials (HP
+  min 3087 / 2903 / 2921; potions 3 / 10 / 4; crossings below 55 %: 0).
+
+**S4b, the rule:**
+- F3 ONLY when Auto Guard's status icon has been ABSENT on every read for >= 1.0 s. After a cast
+  of ours, also only once 300 s have passed (the duration), so a blinking icon near the end can
+  never toggle it off.
+- The icon: the 32 x 32 template cut 19:31 from frames OFF / ON around a real cast (client
+  1232,169 below the minimap). It is searched in the right-hand status column x 1220-1275,
+  y 160-460, on the icon's own pixels.
+- **Bar (pooled over T-S2):** no F3 press while the icon is present (0 toggles-off: no press
+  without its 30-SP drop); uptime >= 90 %.
+
+**The trials from here (the stand 268,107; MaxHP 5260):**
+
+| set | pack | trials | seconds | why |
+|---|---|---|---|---|
+| T-S2 | **F** = 5 Orc Zombie + 3 Orc Skeleton + 2 Drainliar | 3 | **120** | heavy enough to push HP through 55 % between potions |
+| T-S2 | E | 2 | 180 | as 3.96 |
+| T-S3 | C | 3 | 180 | no potions: pack C killed in ~100 s (T-S6 t1), so 25 % is reached |
+| T-S3 | E | 2 | 180 | as 3.96 |
+
+- Before each T-S2 trial the potions are topped back to 50 by `@item 504 n` (n = the trial
+  before's uses, from its own presses), keeping the weight under 50 % so natural regen is not
+  stopped.
+- Each trial's report: HP min, potions used, escapes, deaths (plus S1b, S2, S3, S4b).
+- S2 / S3 / S6b keep their bars (3.96 / 3.96b). If T-S2 F still shows no crossing below 55 %,
+  S2's bar stays UNTESTED and goes to Batt (not a pass).
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
