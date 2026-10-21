@@ -13946,7 +13946,7 @@ casts Blind):**
 **Bars:** 0 toggles-off (every F3 press has its 30-SP drop); at least one re-cast in T-S4 a after
 the 300 s; uptime >= 90 % over both trials. Blind periods are reported (dark reads / all reads).
 
-### 3.96e crusader-survival@1e: S3's HP path (T-S3h) after the rate trigger pre-empted it (pre-registered 2026-10-21 __TIME__ ICT, the commit time, BEFORE T-S3h runs; Batt ~19:3x: "Make sure the remaining trials reach their thresholds")
+### 3.96e crusader-survival@1e: S3's HP path (T-S3h) after the rate trigger pre-empted it (pre-registered 2026-10-21 19:54 ICT, the commit time of 3.96e's first commit, BEFORE T-S3h runs; Batt ~19:3x: "Make sure the remaining trials reach their thresholds")
 
 **What happened (3.96c's T-S3, packs C):** every escape so far came from the RATE trigger, not the
 HP one.
