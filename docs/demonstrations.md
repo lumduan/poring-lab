@@ -14160,6 +14160,30 @@ judge`, packets):**
   - So regen "keeps up" only through the standing and fighting time. A pack's burst (2,200-17,000
     HP/min in T-S2) is far above any regen: potions remain the real sustain.
 
+### 3.96g crusader-survival@1g: S1b re-judged with the COMPLETE truth -- the decoded regen ticks (pre-registered 2026-10-21 __TIME__ ICT, the commit time, BEFORE the judge change is built and before its trials; Batt 21:1x: "make sure each step gets its positive case (... S1b HP reader vs the 95 % bar)")
+
+**Why:**
+- S1b FAILED its bar on the registered truth (3.96c run log): within 2 % on 91.05 % of reads (n
+  6,726).
+- 448 of its 602 misses read +2 / +3 points ABOVE the packets: one Increase HP Recovery tick (155
+  HP = 2.9 points). Skill regen is sent only as ZC_RECOVERY 0x0A27, and that was not decoded, so
+  the truth sat one tick low.
+- The decoder went live at the 20:21 recreate. Its positive case passed: 12 x 155 in 3.96f.
+
+**The ONE change (S1c = S1b's reader, UNCHANGED; only the truth changes):**
+- The truth at a read = the last absolute hp packet PLUS the `recovery` hp amounts the server sent
+  after it, capped at MaxHP (`survive_judge.py --truth recovery`).
+- The 120-ms offset is unchanged. The registered absolute-only truth is still reported beside it.
+
+**Trials:** NEW ones only, after this commit; the banked trials predate the decoder.
+- T-S2 E x 2, 180 s each, as 3.96c / 3.96d: rules S1b + S2 + S4b2 + S6b; the stand 268,107;
+  potions topped up.
+- They also add S4b2 data (reported).
+
+**Bars (3.96b's, unchanged):** within 2 % on >= 95 % of reads with true HP < 100 %, n >= 200
+(pooled over the two trials); unread <= 5 %. A pass makes S1 PASS. A fail is reported with its
+misses' shape, and S1 goes to Batt.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
