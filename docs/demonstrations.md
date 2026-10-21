@@ -13493,6 +13493,88 @@ order.
 - **The base for v53 is therefore PARAMS[52]** (map_zones True, one pass on every kill), as
   3.94's draft assumed.
 
+### 3.94 hunt-flow@53: THE UNION PLAN -- the one pass around the drawn GM PLUS the believed death cell's 3 x 3, interleaved per engagement (pre-registered 2026-10-21 14:46 ICT, the commit time, BEFORE its runs; Batt 2026-10-21, decision 2 on the overnight report: "Next loot version: the GM's 5x5 PLUS the 3x3 around the believed death cell (your measured +2.9 pts at ~0.26 s)"; day order: "LOOT: ... interleaved arms, pre-registered; start it as soon as the zone runs end; whatever runs fit before 16:00 (an interim read is fine; the verdict waits for 4 runs)")
+
+**The ONE main change** (the fix arm = odd k):
+- Params: `loot_gm_union` / `loot_gm_union_ab`, with `gm_union_on` and `gm_union_cells`. Built in
+  5bbe7ae on `feat/loot-union`; merged 8659cd3 (14:45).
+- The one pass hovers the drawn GM's own cell, its 3 x 3 and its 5 x 5's edge, as before.
+- **THEN it hovers the cells of the 3 x 3 around the believed death cell** (`loot.cell`) that the
+  5 x 5 does not hold. The death cell comes first, then the cell nearest the GM.
+- The same rules as every hover:
+  - HAND-only clicks in Batt's rhythm;
+  - the zone and NPC checks;
+  - the 12-s cap.
+- Each hover is logged with `union`, and the step's `out["union"]` gives its extra cells.
+- **The base arm (even k):** the base's one pass, unchanged.
+- No new click site: the same hover and HAND-click code.
+
+**Base: v52, ADOPTED 14:22 (3.93)** = `PARAMS[52]`:
+- v51's one pass on every kill;
+- the prt_fild08 zones file (sha256 ce9f99d2).
+- `PARAMS[53] = {**PARAMS[52], "loot_gm_union": True, "loot_gm_union_ab": True}`.
+
+**The measurement behind it** (competition.md "Next loot levers", offline, on v51's 4 runs):
+- 13 of the 35 items outside the GM's 5 x 5 lay in this 3 x 3 (up to +2.9 points of
+  completeness);
+- the union adds 1.28 hovers a step on average and none on 77 % of steps (~0.26 s).
+- v52's 3 runs agree: 31 of the 441 gm-step items lay outside the plan, 18 of them within 1 of
+  the death cell.
+- **+2.9 points is INSIDE the per-engagement null** (3.89: -5.4 .. +6.3). So completeness is a
+  guard here, not the primary. The primary is the mechanism.
+- **The arms' parity baseline, an A/A** (v52's 3 runs, the same treatment on both parities; P1's
+  instrument):
+  - left outside the GM's 5 x 5: 16 of the odd-k arm's 229 items (7.0 per 100), 15 of the
+    even-k arm's 228 (6.6 per 100); pooled ratio 1.06;
+  - **per run: 1.03, 2.00, 0.71.** A single run passes 0.75 by chance, and 4 pooled runs still
+    hold only ~20 such items per arm.
+  - Hence P1's second condition (b) below: the saving must be accounted for by items the union
+    actually picked.
+  - **(b)'s positive case** (the judge's dry run on v52 run 3 alone, an A/A): (a) passes at
+    0.714 by chance, and (b) fails, with 0 items picked on extra cells against 1.0 needed.
+
+**Runs:** 60 min each on prt_fild08, seeds 20410101, 20410202, 20410303, 20410404, as time
+allows. An interim after each; the verdict after 4.
+- Each run is launched with `hunt_chain.py --version 53 --seeds <one seed>`, after a judged
+  screenshot.
+- Runs alternate with the orcsdun01 collection blocks, as v52's did.
+
+**Predictions** (pooled, per arm). The instruments:
+- `arm_judge.py gmloot`: the arm's `items`, completeness, step time and M3;
+- `left_behind.py` (04d2a82, 14:34):
+  - `gm_causes_5x5_by_arm`: each unpicked item against the GM's 5 x 5 ALONE (no extra plan, the
+    union's hovers ignored), the same fixed region for both arms;
+  - `gm_extra_picked_by_arm`: the items picked on a union step's extra cells;
+  - `gm_causes_by_arm`: against each step's own plan, reported.
+- **Why not the step's own plan:** the union's plan grows, so its `outside_gm_plan` count shrinks
+  by bookkeeping alone. It was caught on a dry run of this judge at 14:3x, before registration.
+  On v52 the two classifications are equal.
+
+1. **P1, the purpose.** Both conditions must hold:
+   - **(a)** the items left outside the GM's 5 x 5 (`gm_causes_5x5_by_arm`: `outside_gm_plan` +
+     `outside_gm_plan_near_death_cell`), per 100 of the arm's items: **fix <= 0.75 x base**;
+   - **(b)** the mechanism: the fix arm's items picked on extra cells (`gm_extra_picked_by_arm`)
+     are **>= half the items (a) claims saved**. The saved items are (base per 100 - fix per 100)
+     x the fix arm's items / 100.
+2. **P2, no loss:** gross completeness, **fix - base >= -6 points** (the null's lower edge).
+3. **G3, the cost:** the loot step's mean time, **fix / base <= 1.10.**
+4. **G4, hard bars:** zero. A Creamy hit is counted, not a stop.
+5. **Reported, not deciding:**
+   - the standard columns per arm;
+   - extra hovers a step and what they read;
+   - items picked on an extra cell;
+   - M3 (HAND-click precision);
+   - kill -> last pickup;
+   - the gm causes per arm;
+   - time inside C1 (the zones stay on).
+
+**Decision rule:**
+- ADOPT the union into the base if P1, P2, G3 and G4 pass after 4 runs.
+- If P1 fails, the extra cells did not catch what the offline count said: NOT adopted.
+- With fewer than 4 runs today: an interim read, no verdict.
+
+**Run log (written during the runs):**
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
