@@ -13401,6 +13401,27 @@ order.
   steering / looting) and density.
 - If P1 fails, the gate leaked: a fault, investigated before any further run.
 
+**Run log (written during the runs):**
+- **Run 1** (seed 20400101, 1021T092850, 09:28:50 -> 10:31:56, time box):
+  - the judged screenshot before it: the standard layout, Lv 1, no dialog (the runner then set the
+    hunting state);
+  - the `map_zones` event: sha256 ce9f99d2, 2458 sealed cells.
+
+  | kills / h | seen / 10 min | landing | completeness gross (net) | left / looters / expired % | kill -> last pickup p50 / mean | loot step p50 / mean (odd / even k) | HAND precision (first / burst) | time inside C1 | hard bars | Creamy |
+  |---|---|---|---|---|---|---|---|---|---|---|
+  | 102.0 | 18.0 | 77.8 % | 81.9 % (88.1 %) | 11 / 7 / 0 | 3.34 / 3.60 s | 7.58 / 7.94 s and 7.88 / 7.85 s | 0.877 (0.967 / 0.522) | **0 s** (C2 0 s) | 0 / 0 / 0 | 2 (1 request) |
+
+  - **Zone refusals: none** (the summary's `map_zones` block is empty). The bot never tried a click
+    across a line.
+  - One `zone_exit` came from the way back: (295,99) -> (296,99), 2 cells, 24 cells from C1's door.
+    The GM stood one cell outside the search area, and with zones the way back is `exit_path`.
+  - Left behind, against the rule's own plan (`gm_causes`): 118 items, 101 picked. The rest:
+    - 9 outside the GM's 5 x 5 (4 within 1 of the death cell);
+    - 5 gone before their cell was hovered;
+    - 2 fell after the step;
+    - 1 read HAND.
+  - The density was low: 18.0 seen per 10 min, against v51's 24.4.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
