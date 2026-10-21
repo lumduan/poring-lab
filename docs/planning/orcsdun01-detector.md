@@ -361,6 +361,44 @@ frames; v2's own frame rules keep 4,343, as in round 1). Each visible orcsdun01 
 `20261021T103231-orcsdun01-col1/{labels_summary.json,sheets/}` (the labels, the contact sheets),
 `grf/data/model/` (the 23 RSMs), `scratch/overlay_*.png` (the 1c geometry check on col3).
 
+### 3d. RESULT: the blind check, round 2, on the FITTED labels (col1, seed 1, 2026-10-21 18:1x-18:26)
+
+- **The pack:** the label fix's (3c), `orc-labels-fix/blind-pack-seed1`.
+  - 30 crops per orcsdun01 species, drawn from every KEPT fitted label (3c's deviation: whole
+    frames alone would give Drainliar 6, White Plant 4, Black Mushroom 0), plus 15 Poring
+    controls.
+  - Two NEW blind labeller agents (C, D), each seeing only the pack.
+- **Scored by `scripts/blind_score.py`** (0a14c67, committed today; it reproduces round 1 exactly).
+  Bars (section 5): >= 90 % good from EACH labeller and the species right >= 95 %.
+
+| species | C good / species (off, loose) | D good / species (off, loose) | blind check |
+|---|---|---|---|
+| Orc Zombie 1153 | 93.3 / 100 (2, 0) | 90.0 / 100 (2, 1) | PASS |
+| Orc Skeleton 1152 | 90.0 / 100 (2, 1) | **86.7** / 100 (2, 2) | **FAIL** (D) |
+| White Plant 1082 | 100 / 100 | 100 / 100 | PASS |
+| Black Mushroom 1084 | 100 / 100 | 100 / 100 | PASS (56 kept labels only; no C1 verdict, 3c) |
+| Familiar 1005 | 96.7 / 100 (1, 0) | 96.7 / 100 (1, 0) | PASS |
+| Steel Chonchon 1042 | 90.0 / 100 (3, 0) | 90.0 / 100 (3, 0) | PASS |
+| Drainliar 1111 | 93.3 / 100 (2, 0) | 93.3 / 100 (2, 0) | PASS |
+| (Poring 1002, control) | 93.3 / 100 (0, 1) | 100 / 100 | PASS |
+
+- **Agreement C-D:** q1 225 / 225, q2 222 / 225, q3 225 / 225. Crops good with the right species
+  for both: 211 / 225 (round 1: 157).
+- **What the labellers flagged:**
+  - the "off" boxes cut a weapon (orc cleavers) or a wing (bats), or sit too high on a Steel
+    Chonchon;
+  - stacked orcs: the box fits the rear one;
+  - two-tone bats (one wing tinted), called Familiar by both.
+- **Against round 1 (5a, on the PREDICTED boxes):** every species FAILED there; now 7 of 8 pass.
+  The fit (3b item 0) is what changed the boxes.
+- **THE VERDICT UNDER 3b's RULE IS UNCHANGED: NOTHING TRAINS.** 3b: "If C1 fails pooled, nothing
+  trains, and the result goes to Batt". C1 failed pooled (15.6 %, 3c).
+  - C1 judges the PREDICTION (the camera, facing and anchor model).
+  - This check judges the fitted LABELS. They are what a model would train on, and they now pass
+    for 6 of 7 orcsdun01 species.
+  - Whether the fitted labels may train despite C1 is a new decision. It is Batt's: a new
+    pre-registration, not a reading of this one.
+
 ## 4. The class scheme (PROPOSED; Batt's default if he does not answer by the time the labels are ready)
 
 | id | class | from |
