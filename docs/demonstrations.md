@@ -13689,6 +13689,85 @@ allows. An interim after each; the verdict after 4.
 - If P2's skipped-loss fails: NOT adopted, whatever the time.
 - Fewer than 4 runs: an interim, no verdict.
 
+### 3.96 crusader-survival@1: the Crusader's survival skills on prt_fild08, immunity OFF (pre-registered 2026-10-21 __TIME__ ICT, the commit time, BEFORE they are built or run; Batt 2026-10-21 ~16:1x: "SURVIVAL SKILLS (build + test on prt_fild08 with immunity OFF before the dungeon; pre-register each): HP read from Basic Info (pixel), potion on a hotkey below a threshold, Fly Wing escape below a lower threshold or when more than N monsters are on us; Auto Guard re-cast on expiry; Endure when mobbed (optional). DEATH = stop the run, record the cause (a result, not a hard bar); the respawn dialog stays for the UI gate's known step only. Measure: deaths per hour, HP min, potions used, escapes." and ~16:4x: "Moving HP Recovery matters: I want to see whether HP regen keeps up while the bot walks and fights continuously.")
+
+**The character:** `Crus4b7e2`, built and verified (docs/planning/crusader-orcsdun01.md 2b):
+- MaxHP 5260, FLEE 122, hard DEF 31;
+- F1 White Potion, F2 Fly Wing, F3 Auto Guard (cast level 10), F4 Endure;
+- immunity OFF (never turned on for this character).
+
+**What the rules may read (pixels in, keys out):**
+- the HP bar on Basic Info (`gm_vitals.hp_fraction`);
+- its rate of fall over the last 2 s (from the same reads);
+- the death dialog's signature (`dead_game_option`);
+- Auto Guard's status icon (a template cut live from the first cast);
+- the clock since our own cast.
+
+The orcsdun01 species are unknown to today's detector, so **no rule counts attackers from boxes**.
+Batt's "more than N monsters on us" is carried by the HP's RATE of fall: a rate is what N
+attackers produce (crusader-orcsdun01-facts.md: 3 Orc Zombies ~24 HP/s, 3 OZ + 2 Orc Skeletons
+~104, + a Drainliar ~163, 8 around us ~249).
+
+**The rules (one module, `scripts/survive.py`, built after this; thresholds fixed HERE):**
+- **S2 potion:** HP < **60 %** -> F1. Then no second F1 until the bar has risen or 0.7 s have
+  passed, at most 3 in 2 s.
+- **S3 escape:** HP < **25 %**, or HP falling faster than **200 HP/s** over the last 2 s (~ a
+  4-5-orc pack) -> F2 (Fly Wing). At most once per 3 s.
+- **S4 Auto Guard:** F3 when its icon is absent, or 290 s after our last cast (duration 300 s,
+  `skill_db.yml` CR_AUTOGUARD Duration1; SP 30 at level 10).
+- **S5 Endure (optional):** F4 when HP falls faster than 100 HP/s and Endure is not active
+  (37 s at level 10, cooldown 10 s, SP 10).
+- **S6 death:** the dialog's signature -> the runner STOPS. It records the cause: the last 10 s
+  of HP reads, the spawned pack and the time. The dialog is closed ONLY by the UI gate's known
+  step (its second button), and `@alive` follows in the end-state restore. A death is a RESULT,
+  not a hard bar.
+
+**The test bed (prt_fild08, the bench's outdoor stand 170,375; the Crusader stands still and does
+not attack: the detector cannot target orcs):**
+- Each TRIAL spawns a pack beside the Crusader with `@monster` (crusader.gm_line, job check):
+  - pack C = 3 Orc Zombie 1153 + 2 Orc Skeleton 1152;
+  - pack E = C + 1 Drainliar 1111.
+- A trial runs 180 s, or until an escape or a death. Then `@killmonster2` (no drops), `@heal`,
+  and a judged frame before the next trial.
+
+| trial set | rules on | packs x trials | what it proves |
+|---|---|---|---|
+| T-S2 | S1 + S2 + S4 + S6 (no Fly Wing) | C x 3, E x 2 | potions hold a pack |
+| T-S3 | S1 + S3 + S6 (no potions) | C x 3, E x 2 | the escape fires before death |
+| T-S6 | S1 + S6 only (no keys) | C x 1 | the death stop (the positive case) |
+| T-regen | S1 only, no pack: walk 2 min, stand 2 min | - | Batt's Moving HP Recovery question (regen while moving vs still) |
+
+**Ground truth (packets, offline):**
+- `stat_change` hp / max_hp: the server's HP;
+- `use_item_result`: item 504 (potion) / 601 (Fly Wing) used;
+- our position jump after 601: the escape;
+- `stat_change` sp drops of exactly 30 / 10: Auto Guard / Endure casts;
+- HP 0: a death.
+
+**Pre-registered bars:**
+1. **S1, the HP read:** on every read with true HP < 100 %, the error is within **5 % of MaxHP**
+   on >= 95 % of reads (n >= 200). The read must NOT over-read by more than 5 % on >= 99 % (an
+   over-read hides danger). The packet -> frame offset is the measured one (labels 3b 1d), else
+   375.9 ms.
+2. **S2, potions:** in T-S2, each time true HP crossed below 55 %, a potion was used within
+   1.5 s on >= 90 % of crossings. Potions used while true HP > 80 % <= 10 % of uses. **Deaths 0**
+   in T-S2.
+3. **S3, the escape:** in T-S3 the Fly Wing fires before death in >= 4 of 5 trials, and true HP
+   at the escape is >= 10 % of max in >= 4 of 5.
+4. **S4, Auto Guard:** over T-S2's trials, uptime (casts x 300 s, clipped to the trials) >= 90 %
+   of trial time. No cast while it is active, except the 290-s re-cast: <= 1 per trial.
+5. **S6, the death stop:** in T-S6 the runner stops within 2 s of the server's HP 0, sends
+   nothing after it, and the dialog is closed only by its known step.
+6. **Hard bars (stop):** NPC contact, map change other than a Fly Wing's own landing (same map),
+   unknown UI state. A `@monster` spawn is the test's own; any attack request of ours is a
+   failure (the Crusader never clicks a monster here).
+7. **Reported:** deaths per hour, HP min, potions used, escapes, Auto Guard uptime, damage taken
+   per minute, regen per minute moving vs still (Moving HP Recovery).
+
+**Decision:** each skill that passes is carried into the orcsdun01 run (still waiting for the
+detector). One that fails is fixed and re-registered, never re-run under these bars. The
+thresholds (60 % / 25 % / 200 HP/s) are tuned only through a new pre-registration.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
