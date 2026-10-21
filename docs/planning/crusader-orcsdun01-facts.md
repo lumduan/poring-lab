@@ -570,7 +570,7 @@ so every non-walkable cell is a wall: it blocks both walking and sight.
 
 ### 3d. The aggro picture
 
-**The computation (`/dev/shm/.../py/aggro.py`).** For every walkable cell c, count the spawnable
+**The computation (a scratch script, since deleted; method below).** For every walkable cell c, count the spawnable
 cells s that can aggro c.
 - s lies in [15, 184]², walkable, Chebyshev distance <= 10.
 - The straight line from s to c (rAthena's `path_search_long` stepping, `path.cpp`) crosses no
@@ -755,13 +755,22 @@ player's kills):
 
 ## How it was computed (scratch only; nothing data-bearing is committed)
 
-All of it lives in `/dev/shm/poring-lab-tmp/crusader/dungeon/`:
-- `py/calc.py` and `py/calc2.py`: the tables, the skill simulation and the pack Monte Carlo;
-  outputs in `calc.out` and `calc2.out`.
-- `py/aggro.py`: the aggro reach per cell; `zones/aggro_*.npy`, `zones/aggro.json`.
-- `py/zones1-4.py` and `py/throat.py`: the widths, alcoves, pockets and pillars;
-  `zones/{multiscale,pockets,deadends}.json`.
-- `upstream/`: the pinned GPL sources, fetched read-only.
+The scratch work lived in `/dev/shm/poring-lab-tmp/crusader/dungeon/`. **It was deleted at the end
+of the task (2026-10-21), as the brief asked**, so re-deriving a number means re-running the method
+below:
+- **The tables and DPS:** the section 2a formulas, evaluated exactly over every damage roll.
+- **The skill-aware DPS:** a 100-ms-tick simulation of the mob skill rolls (berserk = one roll per
+  attack opportunity; angry = one roll per 1,000 ms), with the rates, casts and delays of section
+  1c.
+- **The typical encounter:** 20,000 Poisson draws.
+- **Aggro (3d):** a per-cell count over the server's wall map, with rAthena's line stepping and an
+  8-way, no-corner-cutting BFS.
+- **Geometry (3c):**
+  - `scripts/map_zone_candidates.py` `regions` / `doors` / `pockets` at `core_min` 3-8;
+  - a run-length width test for the <= 2-cell spots;
+  - the enclosed non-walkable components for the pillars.
+- **The upstream GPL sources:** fetched read-only at e985006 for reading only; deleted with the
+  rest.
 
 The walkability is client-derived (the GAT) and stays in /dev/shm. Only cell coordinates and counts
 appear here.
