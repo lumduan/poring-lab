@@ -184,6 +184,81 @@ outside GM windows; 2,985 standing labels scored). The output is local:
   - Even the best view, pooled at 5.0 %, misses the 2 % bar. So a facing fix alone would not
     pass C1; occlusion (and White Plant's cause) must come with it.
 
+### 3b. THE LABEL FIX (pre-registered 2026-10-21 __TIME__ ICT, the commit time, BEFORE it is built or any check re-runs; Batt's decisions on the day report)
+
+**Batt (verbatim, abridged):** "ORC DUNGEON labels (pre-register the fix, then re-run BOTH checks
+on col1 before any training): 0. Use the monster SPRITES (decoded client sprites, local only) as
+the primary source for boxes wherever possible: render the expected sprite (species, action,
+facing, frame) at the projected position, and fit the box to it. 1a. Facing: derive each
+monster's view from its WALK DIRECTION (85 % of the wrong facings come from walks); keep the
+best-of-8 drawn view as the cross-check. 1b. Flyers: measure the drawn anchor offset per species
+(Familiar, Drainliar, Steel Chonchon). 1c. Occlusion: read the map's RSW models and exclude labels
+under canopy/models. 1d. Measure the packet -> frame offset on this grab path. 2. v1's prt_fild08
+sessions keep v1's rules with the species split only. 3. Class scheme: the proposed 15 classes.
+4. More collection after the labels pass, stand-weighted at White Plant / Black Mushroom spawn
+areas."
+
+**The changes (one set, "labels v2orc-fix"):**
+- **1a. The facing from the walk direction.**
+  - A monster whose last move (packets: its move's from -> to) ended within the frame's past is
+    drawn facing that move's 8-way direction, kept after it stops, until a new move, an attack
+    or a turn packet changes it.
+  - Otherwise: the Timeline's facing, as before.
+  - The best-of-8 drawn view is REPORTED as the cross-check (agreement per species), never used
+    to choose.
+- **1b. The flyers' drawn anchor:** Familiar, Drainliar, Steel Chonchon. A per-species
+  (dx, dy) offset of the drawn sprite from the projected cell: the median best-NCC offset of
+  STANDING units. Measured on **col3** only.
+- **1c. Occlusion:**
+  - orcsdun01.rsw's models are read from the client GRF (local only, never committed) and
+    projected with the same camera.
+  - A label whose sprite box overlaps a model's projected box (canopy, rocks, pillars) is
+    EXCLUDED, never kept.
+  - The count is reported per species.
+- **1d. The packet -> frame offset on this grab path** (RDP, the frame bus, 5 Hz shards):
+  - measured on **col3**: moving units' packet positions against the best-NCC drawn positions
+    over a sweep of offsets, keeping the offset with the smallest median error;
+  - it replaces 375.9 ms (the 2026-10-02 RDP v2 baseline p50, a different path).
+- **0. Boxes from the sprites:**
+  - the expected sprite (species, action, facing from 1a, frame) is rendered at the projected
+    position (+ the 1b anchor, at the 1d time);
+  - the LABEL box is the rendered sprite's box, fitted to the frame by the best masked-NCC offset
+    within +/- 6 px (ground) / +/- 10 px (flyers);
+  - a fit below tau 0.092 or at the search edge = EXCLUDED.
+- All parameters (1b, 1d) are frozen from col3 BEFORE col1 is read. col2 (the pre-registered TEST
+  block) is not read at all.
+
+**The checks re-run on col1 (the SAME bars as sections 3 and 5):**
+- **C1 / C2 judge the PREDICTION, not the fitted box** (a fitted box would pass C1 by
+  construction):
+  - C1 = the masked NCC of the rendered sprite (facing from 1a, anchor from 1b, time from 1d) AT
+    the projected position, no fit; **< 2 % `bad_label` pooled**, tau 0.092;
+  - C2 = the best-NCC offset of the same: **median |dx|, |dy| <= 4 px ground, <= 6 px flyers**,
+    per species with >= 20 standing labels.
+  - Both are computed after the 1c exclusion. The excluded count is reported.
+- **The blind check judges the LABELS (the fitted boxes, after 1c):**
+  - two NEW blind labeller agents, a NEW seed, 30 crops per species;
+  - **>= 90 % "good" from each agent, the species right >= 95 %**.
+- **Reported, not deciding:**
+  - the facing agreement walk-rule vs best-of-8, per species;
+  - the measured 1b offsets and the 1d offset;
+  - the exclusions per reason (unfit, occluded, UI, crowd);
+  - the labels kept per species.
+
+**Decision rule:**
+- A species trains only if it passes C1, C2 (where it has >= 20 standing labels) and the blind
+  check.
+- A failing species is excluded and reported; the others may train under v2orc-vs-v1.md's
+  unchanged pre-registration.
+- If C1 fails pooled, nothing trains, and the result goes to Batt.
+
+**Also decided (Batt):**
+- 2. v1's prt_fild08 sessions keep v1's rules, with the species split only (no labels-v2
+  exclusions on them).
+- 3. The class scheme: the 15 classes of section 4 (no longer "proposed").
+- 4. More collection only AFTER the labels pass: stand-weighted dwells at White Plant (83,50) /
+  (58,67) and Black Mushroom (167,133) / (67,34).
+
 ## 4. The class scheme (PROPOSED; Batt's default if he does not answer by the time the labels are ready)
 
 | id | class | from |
