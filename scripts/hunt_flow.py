@@ -2884,7 +2884,10 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 finally:
                     if hunt_tabs:
                         cl.select_tab(agent_raw, screen, "battle")
-                ev({"kind": "where_fix", "ok": bool(got.get("ok")), "to": list(world.position)})
+                # 10-22: + relocalise's rejects (why each /where read was refused; reason words
+                # only): 3.95 run 2's failure at 289,101 could not be diagnosed without them
+                ev({"kind": "where_fix", "ok": bool(got.get("ok")), "to": list(world.position),
+                    "rejects": list(got.get("rejects") or [])[:20]})  # fmt: skip
                 if got.get("ok"):
                     return tuple(world.position)  # type: ignore[return-value]
                 raise f0.FarmStop("our cell is unknown (minimap and /where both failed)")
