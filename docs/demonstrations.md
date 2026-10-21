@@ -14365,6 +14365,27 @@ Reported, not deciding:
 - The window's 64 packets hold 0 `npc_contact` and 0 `npc_say`.
 
 **Run log:**
+- **Attempt at 00:15** (seed 20420505): the runner refused at its start check: `npc_px_guard` was
+  not classified in `hunt_config.PATTERNS`. Nothing ran. Classified "safety" (3b6c704), and the
+  chain was restarted at 00:17.
+- **Run 1** (`20261022T001736-demo-hunt-flow55`, seed 20420505, 00:17-01:21, time box; the pre-run
+  frame was judged).
+  - **INTERIM, no verdict before 4 runs:**
+    - P1: fix 6.37 s / base 7.89 s = **0.807** (bar <= 0.93). The gate passed on 42 of 72 fix
+      steps (30 "moved"), skipping 10.3 edge cells each, so **6.01 per fix-arm step** (bar >= 3.0).
+      The classification took 267 ms p50.
+    - P2: completeness fix 69.0 % / base 77.9 % = **-8.9 points** on this run (bar >= -6, judged
+      pooled after 4 runs). `gm_lost_on_skipped` = **0**: no unpicked item lay on a skipped cell.
+      - The fix arm's extra losses: out of sight 13 vs 5 (base), 4 fell after the step ended,
+        8 outside the GM's plan near the death cell, 3 hovered and read SWORD.
+      - Looters took 14 in each arm. Net of re-drops: fix 83.3 % / base 87.0 %.
+    - G3: hard bars 0 / 0 / 0; Creamy hits 0.
+    - **The NPC guard: 0 refusals** (`frame_guard` {}, no `npc_px_refused` event).
+  - Standard columns:
+    - 156.8 kills/h at 37.0 seen / 10 min; landing 79.1 %;
+    - completeness 72.7 % gross / 85.0 % net;
+    - kill -> last pickup p50 2.07 s.
+  - Economics (`run_row`): 1,295.7 z/h gross (1,530.5 with Overcharge); Sharpe-like 1.09.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
