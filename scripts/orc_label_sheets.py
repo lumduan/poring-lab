@@ -239,6 +239,7 @@ def collect(session: Path, a: argparse.Namespace) -> tuple[dict[str, Any], dict[
     excluded: Counter[str] = Counter()
     excluded_detail: Counter[str] = Counter()
     boxes: Counter[int] = Counter()
+    class_boxes: Counter[str] = Counter()
     frames_with: Counter[int] = Counter()
     items: dict[int, list[Item]] = defaultdict(list)
     for ref in refs:
@@ -254,6 +255,7 @@ def collect(session: Path, a: argparse.Namespace) -> tuple[dict[str, Any], dict[
         _text, written = bfc.v2_yolo(fr.labels, bfc.V2_SIZE, v2.classes.class_of)
         mobs = set()
         for b in written:
+            class_boxes[b.cls] += 1
             if b.cls != "monster" or b.job is None:
                 continue
             boxes[b.job] += 1
@@ -265,6 +267,7 @@ def collect(session: Path, a: argparse.Namespace) -> tuple[dict[str, Any], dict[
                "frames_considered": len(refs), "outcomes": dict(outcomes),
                "excluded_frames_by_reason": dict(excluded.most_common()),
                "excluded_detail": dict(excluded_detail.most_common()),
+               "boxes_by_class": dict(class_boxes.most_common()),
                "monster_boxes_by_species": {str(k): v for k, v in sorted(boxes.items())},
                "frames_with_species": {str(k): v for k, v in sorted(frames_with.items())},
                "labels": "v2 + --classes species", "classes": v2.classes.provenance(),

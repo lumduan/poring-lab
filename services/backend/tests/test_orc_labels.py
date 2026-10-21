@@ -516,3 +516,10 @@ def test_the_blind_pack_hides_the_classes_and_the_key_lives_elsewhere(
     assert not any(str(m) in text for m in ORDER)  # no mob id, no name in the pack
     assert sorted(p.name for p in pack.iterdir()) == ["crops", "pack.json", "reference.png"]
     assert (tmp_path / SID / "sheets" / "species_1005.png").exists()
+
+
+def test_dwell_spans_pair_by_ref() -> None:
+    ev = [{"event": "warp", "ref": 0, "t_mono_ns": 1}, {"event": "dwell_start", "ref": 0,
+          "t_mono_ns": 10}, {"event": "dwell_end", "ref": 0, "t_mono_ns": 40},
+          {"event": "dwell_start", "ref": 1, "t_mono_ns": 50}]  # fmt: skip
+    assert occ.dwell_spans(ev) == [(10, 40)]  # an unfinished dwell is not a span

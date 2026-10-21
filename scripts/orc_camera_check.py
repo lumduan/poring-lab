@@ -9,7 +9,10 @@ OFFLINE ONLY (ADR-0007: packets are ground truth for labels, never an agent inpu
 packets, its JPEG shards (read-only, NAS) and the local KB / decoded sprites (/dev/shm). No GPU, no
 client. JSON to stdout (and --out).
 
-The labels checked are the STANDING monsters on the session's map (orcsdun01):
+The frames read: every --every-th recorded frame inside a DWELL of the session's timeline
+(events.jsonl dwell_start..dwell_end: the GM settled at its stand; --all-frames lifts it), outside
+the GM-command windows. The labels checked are the STANDING monsters on the session's map
+(orcsdun01):
 - Timeline state ``idle`` for >= 1 s (its idle start >= 1 s back; an idle start never seen counts
   only when the unit was idle at the same cell 1 s earlier);
 - no other unit (players, our own GM, NPCs, portals, monsters) whose projected anchor lies within
@@ -319,6 +322,19 @@ def _gat(path: str) -> gatmod.Gat | None:
     return gatmod.parse(p.read_bytes()) if p.exists() else None
 
 
+def dwell_spans(events: Iterable[dict[str, Any]]) -> list[tuple[int, int]]:
+    """[dwell_start, dwell_end] (host ns) of warp_watch's timeline (events.jsonl), paired by the
+    dwell's ref: the GM settled at its stand, the frames the check reads."""
+    starts: dict[Any, int] = {}
+    spans = []
+    for e in events:
+        if e.get("event") == "dwell_start":
+            starts[e.get("ref")] = int(e["t_mono_ns"])
+        elif e.get("event") == "dwell_end" and e.get("ref") in starts:
+            spans.append((starts.pop(e.get("ref")), int(e["t_mono_ns"])))
+    return sorted(spans)
+
+
 def scene_for(lab: Any, map_name: str, pos: tuple[float, float]) -> Scene:
     """render.load_scene's Scene, its GAT parsed once per map."""
     cam = map_camera(lab.camera, map_key(map_name), lab.indoor)
@@ -391,6 +407,9 @@ def check(session: Path, a: argparse.Namespace) -> dict[str, Any]:
     size = lab.size
     refs = qa_export.jpeg_index(session, manifest)
     frames: Counter[str] = Counter({"recorded": len(refs)})
+    timeline = session / "events.jsonl"
+    dwells = (dwell_spans(json.loads(x) for x in timeline.read_text().splitlines() if x)
+              if a.dwells_only and timeline.exists() else None)  # fmt: skip
     dropped: Counter[str] = Counter()
     rows: list[dict[str, Any]] = []
     hue_px: dict[int, list[npt.NDArray[np.uint8]]] = defaultdict(list)
@@ -398,6 +417,9 @@ def check(session: Path, a: argparse.Namespace) -> dict[str, Any]:
     for ref in refs[:: a.every][: a.max_frames or None]:
         frames["read"] += 1
         t = ref.t_mono_ns
+        if dwells is not None and not in_windows(t, dwells):
+            frames["outside_dwell"] += 1
+            continue
         if in_windows(t, lab.windows):
             frames["gm_window"] += 1
             continue
@@ -482,21 +504,25 @@ def check(session: Path, a: argparse.Namespace) -> dict[str, Any]:
     by: dict[int, list[dict[str, Any]]] = defaultdict(list)
     for r in rows:
         by[int(r["mob"])].append(r)
+    keys = ("frame_id", "gid", "c1", "best", "dx", "dy", "box")
+    low = {}
     for mob, rs in sorted(by.items()):
         top = sorted(rs, key=lambda r: -r["c1"])[:POSITIVE_PER_SPECIES]
-        positives[str(mob)] = [{k: r.get(k) for k in ("frame_id", "gid", "c1", "best", "dx", "dy")}
-                               for r in top]  # fmt: skip
+        positives[str(mob)] = [{k: r.get(k) for k in keys} for r in top]
+        bad = [r for r in rs if r.get("why_low") == "bad_label"]
+        low[str(mob)] = [{k: r.get(k) for k in keys} for r in bad[:: max(1, len(bad) // 8)][:8]]
     _proj, which = projector_for(lab.camera, MAP, indoor_table=lab.indoor)
     return {
         "session": qa_export.session_id(manifest), "map": MAP, "projection": which,
         "camera": lab.camera_path.name, "k": a.k, "tau": a.tau, "offset_ms": lab.offset_ms,
         "offset_run": lab.offset_run, "every": a.every, "ui_layout": manifest.get("ui_layout"),
+        "dwells": None if dwells is None else len(dwells),
         "standing_rule": {"idle_s": STANDING_NS / 1e9, "isolation_px": ISOLATION_PX,
                           "ui_and_edge_margin_px": SEARCH_PX},
         "frames": dict(frames), "dropped": dict(sorted(dropped.items())),
         "monsters_in_sight_by_species": {str(k): v for k, v in sorted(seen_species.items())},
         "standing_scored_by_species": {str(m): len(rs) for m, rs in sorted(by.items())},
-        **result, "hue": hue, "positive_cases": positives,
+        **result, "hue": hue, "positive_cases": positives, "bad_label_examples": low,
         "caveats": ["frames are JPEG q80 (warp_watch); M4 fixed tau on H.264 frames",
                     "label_check's grey weights are applied to BGR frames, as in M4"],
     }  # fmt: skip
@@ -511,6 +537,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument("--tau", type=float, default=TAU_M4)
     ap.add_argument("--offset-ms", type=float, default=None)
     ap.add_argument("--max-frames", type=int, default=0)
+    ap.add_argument(
+        "--all-frames",
+        dest="dwells_only",
+        action="store_false",
+        help="also the frames outside the timeline's dwells (default: dwells only, GM settled)",
+    )
     ap.add_argument("--out", type=Path, default=None)
     a = ap.parse_args(argv)
     if a.k != K_V1 or a.tau != TAU_M4:
