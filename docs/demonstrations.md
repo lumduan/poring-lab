@@ -13620,6 +13620,75 @@ allows. An interim after each; the verdict after 4.
     first), then the 5 x 5 edge only on cells whose image changed since before the kill (option C
     + the odometry "moved" gate). Pre-registered separately.
 
+### 3.95 hunt-flow@54: THE FAST SCAN -- the one pass hovers the edge of the GM's 5 x 5 only where the image changed (pre-registered 2026-10-21 __TIME__ ICT, the commit time, BEFORE its runs; Batt 2026-10-21 ~16:4x on the day report: "Next loot work = a FASTER SCAN, not more cells: hover the 3x3 around the drawn GM FIRST (death-cell side first), then the 5x5 edge ONLY on cells whose image changed since before the kill (option C, held out 0/514 items lost, + the odometry "moved" gate). Pre-register it with loot step time as primary and completeness as guard. (If the 5x5 edge turns out to hold almost nothing live, say so and we drop it.) Its live test can move to orcsdun01 later")
+
+**The ONE main change** (the fix arm = odd k; built 5d683fc..b994088, merged 7236fcb):
+- `PARAMS[54] = {**PARAMS[52], "loot_fast_scan": True, "loot_fast_scan_ab": True,
+  "loot_fast_before_s": 0.45, "loot_fast_before_max_s": 0.4, "loot_fast_moved_cells": 0.25,
+  "loot_fast_thr": 0.04}` (`fast_scan_on`, `fast_scan_cells`, `fast_gate`, `fast_verdicts`).
+- The pass hovers the drawn GM's 3 x 3 in the base's own order, then ONLY the 5 x 5 edge cells
+  option C does not call "empty" (`loot_sight.classify`, the one implementation; the matcher's
+  "seen" cells first).
+- The WHOLE edge is hovered when the gate fails: no EXP line, no or an old before frame, the
+  runner's own floor odometry moved more than 0.25 cells between the two frames, or a fault.
+- **The base arm (even k):** v52's pass, unchanged.
+- **A one-factor test:** v52's pass ALREADY hovers the 3 x 3 first, death-cell side first, so the
+  arms differ ONLY in the edge filter.
+- No new click site; the census is unchanged (185 tests green at the merge).
+
+**Base: v52, ADOPTED 14:22 (3.93).** v53 was not adopted (Batt's decision, 3.94).
+
+**The measurements behind it** (competition.md "Loot: v54", offline, v51's 4 + v52's 3 runs):
+- **Batt's question, "does the edge hold almost nothing?": NO.**
+  - 202 of the 712 items gm steps picked lay on the edge (28.4 %, 0.28 a kill); 112 were picked
+    by an edge-cell click.
+  - The edge costs 16.8 hovers, 3.38 s a step.
+  - So the edge stays, and only its unchanged cells are skipped.
+- Option C on new data (v52, still kills): 2 of 267 items on "empty" cells. One was on the edge,
+  a low-contrast Clover (705) under THR. The gate catches 4 of the 5 edge items "empty" on moved
+  kills.
+- **Expected:** at 0.25 cells the gate passes ~57 % of kills, skipping ~10.6 edge cells each, so
+  ~1.0 s off a 7.7-s step (~0.87 x). The offline loss is 1 item in 645 kills.
+
+**Runs:**
+- 4 x 60 min on prt_fild08, the GM's hunting state (immune, STR 99 / Lv 70), seeds 20420101,
+  20420202, 20420303, 20420404.
+- Each run is launched with `hunt_chain.py --version 54 --seeds <one seed>` after a judged
+  screenshot.
+- An interim after each; the verdict after 4.
+- **If Batt moves the live test to orcsdun01** (his option), that is a NEW pre-registration: a
+  different map, character and detector. These bars stay for prt_fild08.
+
+**Predictions** (pooled, per arm). The instruments:
+- `arm_judge.py gmloot`: items, completeness and the loot step's time per arm;
+- `left_behind.py`: the causes per arm, and NEW, built and given a positive case before run 1:
+  - `gm_lost_on_skipped_by_arm`: our kill's items that lay on a cell the fix arm's pass SKIPPED
+    (the step's `fast_scan` events, `edge_skipped`) and were never picked;
+- the runner's `fast_scan` events: the gate's outcomes and the cells skipped.
+
+1. **P1, the purpose:** the loot step's mean time, **fix / base <= 0.93**. AND the mechanism:
+   **>= 3.0 edge cells skipped per fix-arm step** (the offline expectation is 6.1). Without
+   skipping, a step-time gain is not the fast scan's.
+2. **P2, the guard:** gross completeness, **fix - base >= -6 points** (the null's lower edge,
+   3.89). AND **`gm_lost_on_skipped` <= 2 per 100 fix-arm items** (the cost of skipping,
+   measured directly).
+3. **G3, hard bars:** 0. A Creamy hit is counted, not a stop.
+4. **Reported, not deciding:**
+   - the gate's outcomes (ok / moved / no_odo / old_before / no_before / no_line / error) and
+     their shares;
+   - edge cells skipped per gated step;
+   - the classification's ms;
+   - kill -> last pickup; M3;
+   - items picked on edge cells per arm;
+   - the standard columns; time inside C1.
+
+**Decision rule:**
+- ADOPT the fast scan into the base if P1, P2 and G3 pass after 4 runs.
+- If P1's mechanism fails (fewer than 3 skipped a step), the gate is the problem: NOT adopted; the
+  gate's outcomes go to Batt.
+- If P2's skipped-loss fails: NOT adopted, whatever the time.
+- Fewer than 4 runs: an interim, no verdict.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
