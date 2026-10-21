@@ -13759,7 +13759,7 @@ allows. An interim after each; the verdict after 4.
   - Economics (`run_row`): 806.3 z/h gross (918.2 with Overcharge); Sharpe-like 1.47. The model
     misses by +158.7 % here: the drops were worth 18.74 z/kill against the model's 7.24, and
     looters carried 6.94 z/kill. Not traced to an item tonight; it is the model's miss, not v54's.
-- **AMENDMENT 1 (2026-10-22, written after runs 1-3, BEFORE any further run of v54; a DEVIATION
+- **AMENDMENT 1 (2026-10-21 23:48 ICT, the commit time of 29f6df0; written after runs 1-3, BEFORE any further run of v54; a DEVIATION
   from the pre-registered seed list, NOT from its bars, arms or decision rule -- Batt may reject
   it, and the verdict is then an interim on the runs that used the registered seeds):**
   - why: seed 20420202's start cell cannot be read by the frozen readout reader (run 2 above). Its
