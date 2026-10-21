@@ -14085,6 +14085,47 @@ path), each path reported apart.
   raise it, or require HP below a floor too (for example rate > 200 AND HP < 50 %). Each is a new
   pre-registration.
 
+### 3.96f crusader-regen@1: HP regen while standing, walking and fighting, with Moving HP Recovery (pre-registered 2026-10-21 __TIME__ ICT, the commit time, BEFORE it is built or run; Batt 2026-10-21 ~16:4x: "Moving HP Recovery matters: I want to see whether HP regen keeps up while the bot walks and fights continuously", and again 21:1x: "report HP regen while walking/fighting with Moving HP Recovery")
+
+**What the pinned source predicts** (status.cpp `status_natural_heal` :15444-15560; e985006):
+- Natural HP regen ticks every `natural_healhp_interval` (6 s) by `1 + VIT/5 + MaxHP/200` (= 33 for
+  this Crusader). It is sent as the ABSOLUTE hp (`stat_change`).
+- Increase HP Recovery 10 ticks every 10 s by `5 x lv + MaxHP x lv / 500` (= 155). It is sent as
+  ZC_RECOVERY 0x0A27 (`recovery`, decoded live since the 20:21 recreate).
+- **While walking** (`ud->walktimer` set): skill regen (IRP) is OFF always (:15527). Natural regen
+  continues only with Moving HP Recovery (`regen->state.walk`, :4653), at the doubled interval
+  (12 s, :15550).
+- Attacking and being hit change neither rule.
+- Per minute: standing ≈ 330 + 930 = **1,260 HP/min**; walking ≈ **165 HP/min** (no IRP).
+
+**The trial (`scripts/regen_walk.py`, the Crusader at prt_fild08 268,107; the box 258-278 x
+102-112 passes `check_warps`: no warp span, no NPC touch area, server-walkable):**
+- 2 cycles, each starting with `@killmonster2` and `@heal -3000` (atcommand.cpp:1398-1399:
+  `status_damage`), so that HP stays under its max.
+- Each cycle has three 60-s phases:
+  - **S**, standing, no keys.
+  - **W**, walking: alternating 7-cell walks east / west, clicked by pixels only: two-motion hover,
+    WALK cursor read twice (`walk10.Prober9`, v3 refs), a direction flip only after a click.
+  - **F**, standing while ONE Orc Zombie attacks, with S1b + S2 (the potion at 60 %).
+- No Fly Wing, no Auto Guard.
+
+**Measures (packets, offline):**
+- recovery ticks (amount, count) and natural ticks (+33 steps of the hp series) per phase, each
+  tick classed by whether we were walking at it (our `self_move` paths);
+- HP/min regen per phase, against the predictions above.
+
+**Positive cases:**
+- the `recovery` decoder: >= 1 `recovery` hp event of 155 in an S phase (§2a's pending row);
+- the walk rule: no IRP tick while walking.
+
+**Safety:**
+- every W click needs the WALK cursor twice, and is skipped otherwise;
+- any `act` from us of kind `normal` in an S or W phase is a non-target hit: it stops the trial and
+  is reported;
+- the UI gate on every typed line; the name + job check before every GM line.
+
+This is a measurement, not an adoption: no bar decides a version.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
