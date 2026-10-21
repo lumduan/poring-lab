@@ -38,6 +38,9 @@ POTION, FLY = 504, 601
 AG_SP, ENDURE_SP = 30, 10
 AG_S = 300.0
 AID = 2000002  # the GM account's block id: the Crusader is a character on it (crusader.py)
+MAX_SP = (
+    312  # the Crusader's verified MaxSP (crusader-orcsdun01.md 2b): every trial starts at full SP
+)
 
 
 def series(packets: Sequence[Mapping[str, Any]], name: str) -> list[tuple[int, int]]:
@@ -61,9 +64,12 @@ def items_used(packets: Sequence[Mapping[str, Any]], item_id: int, aid: int = AI
                   and int(e.get("aid") or -1) == aid and e.get("ok", True))  # fmt: skip
 
 
-def sp_casts(sp: Sequence[tuple[int, int]], cost: int) -> list[int]:
-    """PURE: the times our SP fell by exactly ``cost`` (a cast of that skill)."""
-    return [t for (t0, v0), (t, v) in zip(sp, sp[1:], strict=False) if v0 - v == cost]
+def sp_casts(sp: Sequence[tuple[int, int]], cost: int, start: int | None = None) -> list[int]:
+    """PURE: the times our SP fell by exactly ``cost`` (a cast of that skill). ``start``: the SP in
+    force before the series (a trial starts at full SP after @heal, and the packet window begins
+    at the trial's start, so its first cast's drop has no earlier packet: T-S2 C c1, 312 -> 282)."""
+    seq = ([(-1, start)] if start is not None else []) + list(sp)
+    return [t for (_t0, v0), (t, v) in zip(seq, seq[1:], strict=False) if v0 - v == cost]
 
 
 def deaths_of(packets: Sequence[Mapping[str, Any]], aid: int = AID) -> list[int]:
@@ -112,7 +118,7 @@ def judge(events: Sequence[Mapping[str, Any]], packets: Sequence[Mapping[str, An
     answered = sum(any(t <= p <= t + int(1.5 * NS) for p in pots) for t in crossings)
     high = sum(1 for p in pots if m0 and (at(hp, p) or 0) > 0.80 * m0)
     deaths = [t for t in deaths_of(packets) if t0 - off <= t <= t1 + off]
-    ag = [t for t in sp_casts(sp, AG_SP) if t0 - off <= t <= t1]
+    ag = [t for t in sp_casts(sp, AG_SP, start=MAX_SP) if t0 - off <= t <= t1]
     span = max(1, t1 - t0)
     up = 0
     for i, t in enumerate(ag):

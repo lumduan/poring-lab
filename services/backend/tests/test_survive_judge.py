@@ -62,3 +62,9 @@ def test_maxhp_falls_back_when_no_max_hp_packet_is_in_the_window() -> None:
     assert sj.judge(events, packets, offset_s=0.0)["S1"]["n"] == 0  # no MaxHP: nothing judged
     out = sj.judge(events, packets, offset_s=0.0, max_hp=1000)
     assert out["S1"]["n"] == 1 and out["S1"]["within_5pct"] == 1.0 and out["max_hp"] == 1000
+
+
+def test_the_first_cast_after_a_full_sp_start_counts() -> None:
+    sp = [(10, 282), (20, 287)]  # the first packet already shows the cast's drop (312 -> 282)
+    assert sj.sp_casts(sp, 30) == []
+    assert sj.sp_casts(sp, 30, start=312) == [10]
