@@ -14422,6 +14422,48 @@ Reported, not deciding:
     - completeness 86.7 % gross / 89.9 % net;
     - kill -> last pickup p50 2.23 s.
   - Economics (`run_row`): 467.8 z/h gross (520.8 with Overcharge); Sharpe-like 5.13.
+- **Run 4** (`20261022T032441-demo-hunt-flow55`, seed 20420808, 03:24-04:26, time box; the pre-run
+  frame was judged).
+  - P1: fix 6.75 s / base 7.31 s = **0.923**. The gate passed on 35 of 55 fix steps (20
+    "moved"), skipping 10.2 edge cells each, so **6.49 per fix-arm step**. The classification took
+    262 ms p50.
+  - P2: completeness fix 73.8 % / base 83.3 % = **-9.6 points** on this run.
+    `gm_lost_on_skipped` = **0**.
+    - Looters took 14 in the fix arm vs 4 in the base. Net of re-drops: fix 94.2 % / base 86.3 %.
+    - The fix arm's other losses: 9 outside the GM's plan near the death cell (base 8), 3 outside
+      the plan (base 2), 5 gone before the hover, 1 fell after the step, 1 planned but not
+      hovered. None lay on a skipped cell.
+  - G3: hard bars 0 / 0 / 0. Creamy hits 0.
+  - The NPC guard: 0 refusals; FrameGuard refused nothing.
+  - Standard columns:
+    - 115.9 kills/h at 26.5 seen / 10 min; landing 82.7 %;
+    - completeness 76.6 % gross / 88.8 % net;
+    - kill -> last pickup p50 1.96 s.
+  - Economics (`run_row`): 802.3 z/h gross (928.2 with Overcharge); Sharpe-like 5.75.
+
+**VERDICT (2026-10-22 04:27 ICT, 4 runs, all on their time box): ADOPTED by its rule.**
+
+| bar | pooled over runs 1-4 | bar | result |
+|---|---|---|---|
+| P1 loot-step mean fix / base | 6.66 s / 7.73 s = **0.861** | <= 0.93 | PASS |
+| P1 edge cells skipped per fix step | **5.68** | >= 3.0 | PASS |
+| P2 completeness fix - base | fix 221/287 = 77.0 % vs base 237/289 = 82.0 %: **-5.0 points** | >= -6 | PASS |
+| P2 `gm_lost_on_skipped` | **0** per 100 fix items | <= 2 | PASS |
+| G3 hard bars (NPC / map / unknown UI / non-Creamy non-target) | **0** | 0 | PASS |
+
+- Per run, P2 was -8.9 / +13.7 / -17.2 / -9.6 points (53-87 items per arm per run); the pooled
+  -5.0 is within 1 point of the margin. The fast scan saves ~1.07 s per loot step and costs ~5
+  points of gross completeness; not one lost item lay on a skipped cell. The fix arm's extra
+  losses are items OUT OF SIGHT: outside the GM's 5 x 5 near the death cell, gone before the hover
+  (looters), or fallen after the step.
+- Creamy hits 6 over the 4 runs (0 / 5 / 1 / 0), counted apart. The NPC sprite guard refused 0
+  presses in 4 h (its live positive case passed before run 1).
+- **Adopted:** the adopted base moves to v55 with its live arm off (`hcfg.adopt`:
+  `loot_fast_scan_ab` False), i.e. the fast scan on every loot step, plus the NPC sprite guard.
+  The next version's PARAMS start from `{**PARAMS[55], "loot_fast_scan_ab": False}`.
+  `hunt_config.ADOPTED_VERSION` = 55 (the adoption commit, after this record).
+- Not added: a D8 evidence row for 3.97 (`config/flows/hunt/evidence.yaml` rows are hand-written
+  by a person). Listed for Batt.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
