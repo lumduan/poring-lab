@@ -135,3 +135,14 @@ def test_v54_edge_table_per_100_items_and_per_kill() -> None:
     assert t["a"]["picked_by_an_edge_click"] == 2 and t["a"]["of_them_on_edge"] == 4
     assert t["a"]["edge_hovers_per_step"] == 16.25 and t["a"]["edge_hover_s_per_step"] == 3.25
     assert t["pooled"]["on_edge"] == 3
+
+
+def test_v54_items_on_skipped_cells_are_the_fast_scans_cost() -> None:
+    evs = [{"kind": "fast_scan", "k": 5, "edge_skipped": [[10, 12], [12, 12]]},
+           {"kind": "fast_scan", "k": 5, "edge_skipped": [[8, 8]]},  # a second pass, unioned
+           {"kind": "fast_scan", "k": 6, "edge_skipped": [[1, 1]]}]  # fmt: skip
+    sk = lb.skipped_cells(evs, 5)
+    assert sk == {(10, 12), (12, 12), (8, 8)}
+    assert lb.lost_on_skipped((12, 12), sk) and lb.lost_on_skipped([8, 8], sk)
+    assert not lb.lost_on_skipped((1, 1), sk)  # another engagement's skip is not this step's
+    assert lb.skipped_cells(evs, 7) == set()  # no fast scan (the base arm): nothing skipped

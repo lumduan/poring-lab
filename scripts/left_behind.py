@@ -176,6 +176,18 @@ def gm_cause_5x5(item: Mapping[str, Any], fid: int, step: tuple[int, int],
                        [h for h in hovers if not h.get("union")])  # fmt: skip
 
 
+def skipped_cells(fast_events: Sequence[Mapping[str, Any]], k: int) -> set[tuple[int, int]]:
+    """PURE (v54, 3.95's P2): the edge cells engagement ``k``'s passes SKIPPED (the runner's
+    ``fast_scan`` events, ``edge_skipped``; every pass of the step, unioned)."""
+    return {(int(c[0]), int(c[1])) for e in fast_events if int(e.get("k", -1)) == k
+            for c in e.get("edge_skipped") or ()}  # fmt: skip
+
+
+def lost_on_skipped(cell: Sequence[int], skipped: set[tuple[int, int]]) -> bool:
+    """PURE: an unpicked item of ours lay on a cell the fast scan skipped (its cost)."""
+    return (int(cell[0]), int(cell[1])) in skipped
+
+
 def session(sid: str) -> dict[str, Any]:
     import arm_judge as aj
     import flow_judge as fj
@@ -195,15 +207,19 @@ def session(sid: str) -> dict[str, Any]:
     items = aj.item_fates(pk, pos, fj.mob_at)
     results = click_results(clicks, pk)
     rts = [r["t"] for r in results]
-    hov = [e for e in map(json.loads, filter(None, (d / "events.jsonl").read_text().splitlines()))
-           if e.get("kind") == "hand_hover" and e.get("arm") == "gm"]  # fmt: skip
+    evs = [json.loads(x) for x in filter(None, (d / "events.jsonl").read_text().splitlines())]
+    hov = [e for e in evs if e.get("kind") == "hand_hover" and e.get("arm") == "gm"]
     hts = [int(h["t_ns"]) for h in hov]
+    fsc = [e for e in evs if e.get("kind") == "fast_scan"]  # v54: each pass's skipped edge cells
+    fts = [int(e["t_ns"]) for e in fsc]
     gm_c: Counter[str] = Counter()
     gm_arm: Counter[str] = Counter()
     gm_fate: Counter[str] = Counter()
     gm_dist: Counter[int] = Counter()
     gm5_arm: Counter[str] = Counter()  # v53 P1: against the GM's 5 x 5 alone
     gm_extra_picked: Counter[str] = Counter()  # v53: picked on a union step's extra cells
+    gm_items_arm: Counter[str] = Counter()  # v54 (3.95's P2): gm-step items per arm
+    gm_lost_skip: Counter[str] = Counter()  # v54: never picked, on a cell the fast scan skipped
     gm_items = gm_picked = 0
     cts = [int(c["t"]) for c in clicks]
     causes: Counter[str] = Counter()
@@ -235,16 +251,27 @@ def session(sid: str) -> dict[str, Any]:
             bc_ = (int(lo["cell"][0]), int(lo["cell"][1]))
             near_ = [(bc_[0] + dx, bc_[1] + dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1)]
             extra = {c_ for c_ in near_ if all(cheb(c_, r_) > GM_PLAN for r_ in refs)}
+        skipped: set[tuple[int, int]] = set()
+        if gm_step and step is not None and e is not None:
+            lo_i, hi_i = (
+                bisect.bisect_left(fts, step[0] - NS),
+                bisect.bisect_right(fts, step[1] + NS),
+            )
+            skipped = skipped_cells(fsc[lo_i:hi_i], int(e["k"]))
         for f in aj.drops_of_kill(items, t_k, dcell):
             it = items[f]
             n_items += 1
             gm_items += gm_step
+            if gm_step:
+                gm_items_arm[arm_of(e)] += 1
             if it["fate"] == "picked":
                 picked += 1
                 gm_picked += gm_step
                 if gm_step and tuple(it["cell"]) in extra:
                     gm_extra_picked[arm_of(e)] += 1
                 continue
+            if gm_step and lost_on_skipped(it["cell"], skipped):
+                gm_lost_skip[arm_of(e)] += 1
             if gm_step and step is not None:
                 res_g = results[
                     bisect.bisect_left(rts, step[0]) : bisect.bisect_right(rts, step[1])
@@ -283,6 +310,8 @@ def session(sid: str) -> dict[str, Any]:
             "gm_cause_by_fate": dict(gm_fate.most_common()),
             "gm_causes_5x5_by_arm": dict(sorted(gm5_arm.items())),
             "gm_extra_picked_by_arm": dict(sorted(gm_extra_picked.items())),
+            "gm_items_by_arm": dict(sorted(gm_items_arm.items())),
+            "gm_lost_on_skipped_by_arm": dict(sorted(gm_lost_skip.items())),
             "gm_outside_cells_from_the_gm": {str(k): v
                                              for k, v in sorted(gm_dist.items())}}  # fmt: skip
 
@@ -445,7 +474,8 @@ def pooled(per: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
     out: dict[str, Any] = {"items": 0, "picked": 0, "not_picked": 0}
     for k in ("causes", "causes_by_arm", "cause_by_fate", "left_behind_what_took_the_gm_away",
               "gm_causes", "gm_causes_by_arm", "gm_cause_by_fate", "gm_causes_5x5_by_arm",
-              "gm_extra_picked_by_arm", "gm_outside_cells_from_the_gm"):  # fmt: skip
+              "gm_extra_picked_by_arm", "gm_outside_cells_from_the_gm", "gm_items_by_arm",
+              "gm_lost_on_skipped_by_arm"):  # fmt: skip
         c: Counter[str] = Counter()
         for v in per.values():
             c.update(v.get(k) or {})
