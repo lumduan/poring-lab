@@ -13730,6 +13730,45 @@ allows. An interim after each; the verdict after 4.
     - completeness 82.7 % gross / 95.0 % net;
     - kill -> last pickup p50 2.30 s.
   - Economics (`run_row`): 825.6 z/h gross (930.5 with Overcharge); Sharpe-like 2.37.
+- **Run 2** (`20261021T223719-demo-hunt-flow54`, seed 20420202, 22:37-22:38; the pre-run frame was
+  judged): **a SAFE stop at the start, 45 s, 0 engagements** -- "our cell is unknown (minimap and
+  /where both failed)". Not a v54 result (no loot step ran):
+  - the seed's start warp landed (the server's `map_change` to 289,101);
+  - the readout reader then REFUSED every frame for 5 s: it read the digits right (2 8 9 / 1 0 1)
+    but called them `uncovered_ink`. A light stroke of the cliff rocks behind the transparent
+    readout, between "289" and "101", is ink no glyph explains. Reproduced OFFLINE on 6 recorded
+    frames after the warp (all refused, same glyphs). Controls: run 4's pre-run frame (304,135) and
+    run 2's own (236,279) both read;
+  - the one typed `/where` failed too (not diagnosed tonight);
+  - the start cell is the seed's (`hunt.start_cell(area, seed)`), so a retry of this seed lands on
+    the same cell with the same camera. A fail-safe refusal, not a misread: the reader is NOT
+    changed mid-version.
+- **Run 3** (`20261021T223812-demo-hunt-flow54`, seed 20420303, 22:38-23:39, time box; the pre-run
+  frame was judged).
+  - **INTERIM, no verdict before 4 runs:**
+    - P1: fix 6.64 s / base 8.11 s = **0.819** (bar <= 0.93). The mechanism: the gate passed on
+      30 of 55 fix steps (25 "moved"), skipping 11.0 edge cells each, so **5.98 per fix-arm step**
+      (bar >= 3.0). The classification took 251 ms p50.
+    - P2: completeness fix 89.2 % / base 81.7 % = **+7.6 points** (bar >= -6).
+      `gm_lost_on_skipped` = **0** (bar <= 2 per 100 fix items).
+    - G3: hard bars 0 / 0 / 0. Creamy hits 1 (one request, counted apart).
+  - Standard columns:
+    - 114.9 kills/h at 33.0 seen / 10 min; landing 75.4 %;
+    - completeness 83.3 % gross / 88.5 % net;
+    - kill -> last pickup p50 3.13 s.
+  - Economics (`run_row`): 806.3 z/h gross (918.2 with Overcharge); Sharpe-like 1.47. The model
+    misses by +158.7 % here: the drops were worth 18.74 z/kill against the model's 7.24, and
+    looters carried 6.94 z/kill. Not traced to an item tonight; it is the model's miss, not v54's.
+- **AMENDMENT 1 (2026-10-22, written after runs 1-3, BEFORE any further run of v54; a DEVIATION
+  from the pre-registered seed list, NOT from its bars, arms or decision rule -- Batt may reject
+  it, and the verdict is then an interim on the runs that used the registered seeds):**
+  - why: seed 20420202's start cell cannot be read by the frozen readout reader (run 2 above). Its
+    run has no data, so the registered "4 runs" cannot be met with the 4 registered seeds;
+  - the retry: seed 20420202 once more, in the chain after run 4 (files suffixed `b`). If it
+    safe-stops at its start again, **seed 20420505 replaces it**, in the same chain;
+  - **the verdict = the first 4 runs that end on their time box, in chain order** (any later run
+    is reported as confirmation and does not change the verdict);
+  - a hard bar in any run counts (G3), wherever it falls.
 
 ### 3.96 crusader-survival@1: the Crusader's survival skills on prt_fild08, immunity OFF (pre-registered 2026-10-21 18:03 ICT, the commit time of 3.96's first commit, BEFORE they are built or run; Batt 2026-10-21 ~16:1x: "SURVIVAL SKILLS (build + test on prt_fild08 with immunity OFF before the dungeon; pre-register each): HP read from Basic Info (pixel), potion on a hotkey below a threshold, Fly Wing escape below a lower threshold or when more than N monsters are on us; Auto Guard re-cast on expiry; Endure when mobbed (optional). DEATH = stop the run, record the cause (a result, not a hard bar); the respawn dialog stays for the UI gate's known step only. Measure: deaths per hour, HP min, potions used, escapes." and ~16:4x: "Moving HP Recovery matters: I want to see whether HP regen keeps up while the bot walks and fights continuously.")
 
