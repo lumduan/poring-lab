@@ -192,6 +192,48 @@ outside GM windows; 2,985 standing labels scored). The output is local:
   - 20 frames from a held-out block on which both agents accept every box;
   - any disagreement is resolved by the parent, recorded, and shown to Batt.
 
+### 5a. RESULT: the blind label check on col1 (2026-10-21 ~12:10 ICT): FAIL for every orcsdun01 species
+
+- **The pack** (`scripts/orc_label_sheets.py`, seed 0):
+  - 30 crops per orcsdun01 species + col1's 15 Poring boxes = 225 crops;
+  - shown to the labellers as 12 numbered grids, with a reference sheet of 12 rendered sprites
+    (A-L);
+  - the answer key sat in a separate directory the labellers never opened.
+- **The labellers:** two blind agents, A and B, independent; B worked in reverse order. Their
+  agreement: Q1 (a monster in the box) 218 / 225, Q2 (the box) 201 / 225, Q3 (the species)
+  213 / 225.
+- **The bars** (section 5, fixed before): >= 90 % "good" from EACH labeller, and the species right
+  on >= 95 %.
+
+| species | crops | A: good / species right | B: good / species right | passes |
+|---|---|---|---|---|
+| Orc Zombie 1153 | 30 | 86.7 / 96.7 % | 83.3 / 96.7 % | no (good) |
+| Orc Skeleton 1152 | 30 | 86.7 / 100 % | 76.7 / 100 % | no (good) |
+| White Plant 1082 | 30 | 93.3 / 96.7 % | 86.7 / 93.3 % | no (B) |
+| Steel Chonchon 1042 | 30 | 76.7 / 76.7 % | 76.7 / 80.0 % | no |
+| Familiar 1005 | 30 | 60.0 / 83.3 % | 53.3 / 70.0 % | no |
+| Drainliar 1111 | 30 | 56.7 / 93.3 % | 50.0 / 96.7 % | no |
+| Black Mushroom 1084 | 30 | 70.0 / 60.0 % | 60.0 / 60.0 % | no |
+| (Poring 1002, prt_fild08 frames) | 15 | 100 / 100 % | 100 / 100 % | yes |
+
+- **When a monster is in the box, its species is right.** The wrong-species answers are mostly
+  "none / unsure": nothing visible in the box. Black Mushroom accounts for 12-13 of them, Steel
+  Chonchon 6-7. Real confusions are few: Familiar read as White Plant or Pupa in 3-4 crops.
+- **The failures are in WHERE the box is, and in occlusion:**
+  1. The bats' boxes sit next to the bat: both labellers called Drainliar and Familiar "off" in 5-8
+     crops each. The flyers' anchor (drawn 38-88 native px above the cell) and the facing (3a)
+     shift them.
+  2. The orcs are cut along one side: the facing model's asymmetric idle box (3a's diagnostic).
+  3. Black Mushrooms under tree canopy or map models: the packets place one there, and the client
+     draws nothing visible (FACTS 9.4: the RSW models were not read). Those labels need an
+     occlusion exclusion.
+- **=> No orcsdun01 label trains** (section 3's gate and this one). The fix is a labelling
+  hypothesis, pre-registered (the facing, the flyers' anchor, model occlusion), then both checks
+  re-run. That is Batt's call.
+- 157 of the 225 crops were "good" for both labellers with the right species. They are the
+  candidates for this map's small gold set once the labels are fixed.
+- The answers are local only (`/dev/shm/poring-lab-tmp/blind-A|B/answers.json`, client-derived).
+
 ## 6. Training and evaluation
 
 - **Training** runs on the combined cache: v1's sessions re-labelled per species + the orcsdun01
