@@ -291,8 +291,9 @@ def cmd_run(a: argparse.Namespace) -> int:  # noqa: PLR0915
             note("run_end", reason=reason, counts=dict(d.counts), gm=counts)
             if a.back and not counts["gm_disabled"]:
                 bm, bx, by = a.back.split(",")
+                t_b = r.ns()
                 ok = send(f"@warp {bm} {int(bx)} {int(by)}")
-                note("back", gm_line=f"@warp {bm} {bx} {by}", ok=ok)
+                note("back", gm_line=f"@warp {bm} {bx} {by}", ok=ok, t_sent_ns=t_b)
                 time.sleep(cv.ENTRY_SETTLE_S)
             # the chat input stays OPEN after the GM lines here (col1, 2026-10-21: chat_open True
             # after the back warp): closed by its known step (bench.close_chat: the UI gate, then
@@ -359,6 +360,9 @@ def cmd_judge(a: argparse.Namespace) -> int:
     with gzip.open(d / "packets.jsonl.gz", "rt") as fh:
         packets = [json.loads(x) for x in fh]
     timeline = [json.loads(x) for x in (d / "events.jsonl").read_text().splitlines() if x]
+    for x in timeline:  # col1's "back" line had no t_sent_ns (fixed after it): its typing bound
+        if x.get("gm_line") and "t_sent_ns" not in x:
+            x["t_sent_ns"] = int(x["t_mono_ns"]) - 10_000_000_000
     safety = cv.judge(packets, timeline)
     view = tuple(int(v) for v in a.view.split(",")) if a.view else VIEW
     out = {"sid": man["sid"], "safety": safety,

@@ -91,6 +91,20 @@ and its JSON. The summary:
     judged screenshot;
   - for hunting: the runner restores its own (layout, Lv 70 / STR 99, weight).
 
+### 2a. The collection log
+
+| block | session | time (ICT) | dwells | frames (GB) | safety (packets, `warp_watch.py judge`) | units seen on screen / unit-seconds (1 Hz, within 15 x 11 cells of the GM) |
+|---|---|---|---|---|---|---|
+| col1 | 20261021T103231-orcsdun01-col1 | 10:32-11:22 (seed 1, 30-s dwells) | 80 (all 80 warps landed as typed) | 15,028 (1.77) | no request, no GM act, 0 acts on the GM (3,627 monster moves); 81 / 81 GM lines seen at the server | Orc Zombie 80 / 10,223; Familiar 15 / 2,068; Steel Chonchon 10 / 1,484; Black Mushroom 10 / 1,157 (from 8 stands); Orc Skeleton 10 / 1,074; White Plant 5 / 789 (14 stands); Drainliar 5 / 449 (23 stands) |
+
+- **The live server matches the pinned list exactly:** 135 units of the 7 species.
+- **A dwell takes ~40 s, not the planned 32.5 s:** typing a GM line costs ~7 s. So ~73 dwells fit
+  in a 50-min block, not 92.
+- **The chat input stayed OPEN after the GM lines** (`chat_open` True). It is the chat window's own
+  input line, so it shows in col1's frames.
+  - It was closed by its known step before the next hunt run.
+  - Since 90a15bf, warp_watch closes it after its last line.
+
 ## 3. The camera check on the first block (bars fixed HERE, before its frames are read)
 
 The model was fitted on prt_fild08 / prt_church, and orcsdun01 uses the outdoor camera without a
