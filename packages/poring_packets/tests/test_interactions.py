@@ -341,3 +341,13 @@ def test_the_replay_emits_the_new_events(tmp_path: Path) -> None:
     s2.feed(seg("cs", 5121, 1, enter, cport=50003))
     shop = s2.feed(seg("sc", 5121, 1, SAMPLES[("sc", 0x0B77)], cport=50003))
     assert isinstance(shop[0], ShopBuyList) and shop[0].items[1].discount_price == 960
+
+
+def test_a_heal_amount_is_a_recovery_not_a_stat_change() -> None:
+    # ZC_RECOVERY 0x0A27 (the lab client's PACKETVER): var 5 = hp, amount i32 -- e.g. a regen tick
+    # of Increase HP Recovery 10 (155 HP), which carries no absolute hp value
+    got = decode("map", "sc", 0x0A27, struct.pack("<HHi", 0x0A27, 5, 155))
+    assert got is not None and got.type == "recovery"
+    assert got.fields == {"var": 5, "name": "hp", "amount": 155}
+    old = decode("map", "sc", 0x013D, struct.pack("<HHh", 0x013D, 7, 12))  # pre-2014 layout
+    assert old is not None and old.fields == {"var": 7, "name": "sp", "amount": 12}
