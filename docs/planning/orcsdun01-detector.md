@@ -163,6 +163,26 @@ outside GM windows; 2,985 standing labels scored). The output is local:
     shift sideways with the view.
   - The positive cases score 0.6-0.9 at offset (0, 0). Re-measuring decides what to change; this
     diagnostic does not.
+  - **Per species** (`facing_diagnostic` in the same JSON, read 15:0x; low share with the
+    Timeline facing -> with the best of 8 headings; where the facing came from):
+
+    | species | n | Timeline facing | best of 8 | facing differs | facing set by |
+    |---|---|---|---|---|---|
+    | Orc Zombie | 1,573 | 36.1 % | 5.5 % | 1,337 | walk 1,532 |
+    | Orc Skeleton | 222 | 49.5 % | 2.2 % | 191 | walk 213 |
+    | Steel Chonchon | 280 | 43.9 % | 3.6 % | 232 | walk 273 |
+    | Familiar | 445 | 22.0 % | 0.9 % | 390 | walk 431 |
+    | Drainliar | 101 | 19.8 % | 0.0 % | 86 | walk 90 |
+    | Black Mushroom | 130 | 69.2 % | 12.3 % | 83 | appear 130 |
+    | White Plant | 234 | 12.0 % | 12.0 % | 0 | appear 234 |
+
+  - So the FACING explains nearly all of the walkers' failures (<= 5.5 % with the best view).
+  - For the two immobile plants, two different things:
+    - Black Mushroom's facing at appearance is wrong for 83 of 130, and its 12 % residual is the
+      canopy and model occlusion of 5a;
+    - White Plant's 12 % is NOT the facing (0 differ). Something else, unmeasured.
+  - Even the best view, pooled at 5.0 %, misses the 2 % bar. So a facing fix alone would not
+    pass C1; occlusion (and White Plant's cause) must come with it.
 
 ## 4. The class scheme (PROPOSED; Batt's default if he does not answer by the time the labels are ready)
 
