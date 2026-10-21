@@ -14386,6 +14386,19 @@ Reported, not deciding:
     - completeness 72.7 % gross / 85.0 % net;
     - kill -> last pickup p50 2.07 s.
   - Economics (`run_row`): 1,295.7 z/h gross (1,530.5 with Overcharge); Sharpe-like 1.09.
+- **Run 2** (`20261022T012118-demo-hunt-flow55`, seed 20420606, 01:21-02:22, time box; the pre-run
+  frame was judged).
+  - **INTERIM, no verdict before 4 runs:**
+    - P1: fix 6.79 s / base 7.82 s = **0.868**. The gate passed on 27 of 60 fix steps (32
+      "moved", 1 "old_before"), skipping 10.7 edge cells each, so **4.8 per fix-arm step**.
+    - P2: completeness fix 89.6 % / base 75.9 % = **+13.7 points**. `gm_lost_on_skipped` = **0**.
+    - G3: hard bars 0 / 0 / 0. **Creamy hits 5 (3 requests)**, counted apart.
+    - The NPC guard: 0 refusals.
+  - Standard columns:
+    - 127.9 kills/h at 31.0 seen / 10 min; landing 75.7 %;
+    - completeness 81.2 % gross / 91.2 % net;
+    - kill -> last pickup p50 2.38 s.
+  - Economics (`run_row`): 992.3 z/h gross (1,139.2 with Overcharge); Sharpe-like 1.22.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
