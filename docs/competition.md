@@ -1897,7 +1897,7 @@ nothing is pre-registered.
 | the next ring (the 7 x 7's edge) | 15 of the 35 (up to +3.4 points) | 24 hovers, ~5 s a pass, unless C skips most of them | `left_behind.py` gm_outside_cells_from_the_gm |
 | looter recovery (engage the looter on our pile; it re-drops) | the race: 19 items (4.3 points) | a new engagement type | `left_behind.py` gm_causes |
 | option C live (skip the EMPTY cells; needs an odometry "moved" gate) | the step -2.83 s p50 / -3.07 s mean, on 180 of 237 kills with picks; 0 / 514 items ever on a skipped cell | kill -> last pickup barely moves (2.53 -> 2.50 s p50) | `loot_sight.py`, `lc/c_lastpick.py` |
-| Batt's no-cross line at C1's door (his file) | C1 took 10.4 % of v51's hours, and 37.5 % of run 4's | his authoring (➡️ 2026-10-21: Batt DELEGATED it; the file is 13e497d, run as v52, 3.93, below) | `map_zone_candidates.py`, the NAS package |
+| Batt's no-cross line at C1's door (his file) | C1 took 10.4 % of v51's hours, and 37.5 % of run 4's | his authoring (➡️ 2026-10-21: Batt DELEGATED it; the file is 13e497d, run as v52, 3.93, below; ➡️ ADOPTED 14:22: 0 s inside C1 over 3 runs) | `map_zone_candidates.py`, the NAS package |
 
 ## Day run 21 Oct (Batt's decisions on the overnight report; until 16:00, one report at 16:00)
 
@@ -1946,4 +1946,12 @@ parallel.
   Harmless, kept as Batt decided.
 - **The version:** v52 (`"map_zones": True` on v51's adopted base), pre-registered in
   demonstrations 3.93. Whole runs, compared run-level with v51's.
+- **The verdict (14:22, 3 runs, 3.08 h): ADOPTED into the base** (demonstrations 3.93).
+  - P1: **0 s inside C1 per run-hour** (v51 374.1), and no stay at all.
+  - G1: 132.3 kills / h at 29.3 seen / 10 min (v51: 95.5 at 24.4).
+  - G2: completeness 82.6 % gross, 93.2 % net (v51: 79.4 / 87.6).
+  - G3: hard bars 0.
+  - No click was ever refused: the sealed room simply left the search area and the routes.
+  - The kills / h rise is not the zones' doing: one pass on every kill (the named confound),
+    the density and the run spread differ.
 

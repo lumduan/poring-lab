@@ -13437,6 +13437,61 @@ order.
     - 1 clicked but became a walk;
     - 1 read HAND.
   - A dense hour: 37.0 seen per 10 min, the most of any v50-v52 run. det_fps 2.77.
+- **Run 3** (seed 20400303, 1021T131746, 13:17:46 -> 14:19:28, time box):
+  - The judged screenshot before it: the hunting layout, Lv 70, no dialog. Collection block col2
+    had closed its own chat input (`chat_closed`, open after: false).
+
+  | kills / h | seen / 10 min | landing | completeness gross (net) | left / looters / expired % | kill -> last pickup p50 / mean | loot step p50 / mean (odd / even k) | HAND precision (first / burst) | time inside C1 | hard bars | Creamy |
+  |---|---|---|---|---|---|---|---|---|---|---|
+  | 140.9 | 33.0 | 81.7 % | 82.5 % (93.4 %) | 5 / 12 / 1 | 1.91 / 2.64 s | 7.29 / 7.43 s and 7.60 / 7.65 s | 0.940 (0.973 / 0.762) | **0 s** (C2 0 s) | 0 / 0 / 0 | 0 |
+
+  - **Zone refusals: none** (the summary's `map_zones` block is empty). The run had 4
+    `zone_exit` events, all on the way back at the north edge, about 150 cells from C1's door:
+    - (214,299) -> (215,299) three times, 2 s apart;
+    - (43,314) -> (42,314) once.
+  - Left behind, against the rule's own plan (`gm_causes`): 159 items, 131 picked. The rest:
+    - 13 outside the GM's 5 x 5 (7 within 1 of the death cell);
+    - 6 gone before their cell was hovered;
+    - 3 planned, never hovered;
+    - 3 fell after the step;
+    - 2 clicked but became walks;
+    - 1 read empty.
+  - det_fps 3.09.
+
+**VERDICT (14:22 ICT, the clock; 3 runs, 3.08 h, pooled by `run_row.py --pool` and
+`map_zone_candidates.py --sessions`): ADOPTED. The zones join the base.**
+
+| | bar | v52 pooled (3 runs) | v51 (4 runs) | result |
+|---|---|---|---|---|
+| P1, time inside C1 | <= 30 s / run-h, no stay > 60 s | **0 s / run-h**, longest stay 0 s | 374.1 s / run-h | PASS |
+| G1, kills / h | >= 81.2 | **132.3** at 29.3 seen / 10 min (4.52 per seen / 10 min) | 95.5 at 24.4 (3.91) | PASS (density rule not needed) |
+| G2, completeness, gross | >= 73.4 % | **82.6 %** (net 93.2 %) | 79.4 % (net 87.6 %) | PASS |
+| G3, hard bars | 0 | **0 / 0 / 0** | 0 | PASS |
+
+- Reported, not deciding:
+  - landing 79.1 % (75.0-82.6);
+  - kill -> last pickup 2.63 / 3.07 s (Batt 1.56 / 2.53);
+  - left / looters / expired 5 / 12 / 0 %;
+  - Creamy 5 hits (3 requests), 1.67 / h;
+  - time inside C2 0 s;
+  - zone refusals 0 of every kind, `target_sealed` 0;
+  - 6 `zone_exit`, all on ways back far from C1;
+  - kills / min outside C1 2.15, inside none.
+- **The gate was never tested by the bot.** No click was refused, so these runs show that the
+  sealed room left the search area and the routes. They do not show the click gate stopping a
+  click (the offline proof's 200 / 200 does that).
+- **The kills / h rise is NOT the zones' effect.** The named confound (one pass on every kill), a
+  denser field (29.3 vs 24.4 seen / 10 min) and the run-to-run spread (102.0-153.9) all differ
+  from v51. The zones were not tested for speed; the guards ask only "no worse".
+- Left behind, pooled against the rule's plan: 441 items, 372 picked.
+  - 31 outside the GM's 5 x 5, 18 of them within 1 of the death cell: v53's union targets these;
+  - 21 gone before their cell was hovered (the race);
+  - 6 planned, never hovered;
+  - 5 fell after the step;
+  - 3 clicks became walks;
+  - 3 hovered and read wrong (2 HAND, 1 empty).
+- **The base for v53 is therefore PARAMS[52]** (map_zones True, one pass on every kill), as
+  3.94's draft assumed.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
