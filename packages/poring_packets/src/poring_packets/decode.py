@@ -572,6 +572,16 @@ def decode(server: str, direction: str, pid: int, b: bytes) -> Decoded | None:
             return Decoded("entity_stop", {"gid": _u32(b, 2), "x": _u16(b, 6), "y": _u16(b, 8)})
         if pid in (0x0091, 0x0AC7):
             return Decoded("map_change", {"map": text(b[2:18]), "x": _u16(b, 18), "y": _u16(b, 20)})
+        if pid in (0x0A27, 0x013D):
+            # ZC_RECOVERY (packets.hpp:1209-1222; clif_heal, clif.cpp:6840): the HEAL a unit gets --
+            # a potion, a skill, the regen ticks of Increase / Moving HP Recovery -- as an AMOUNT,
+            # not the new absolute value. var u16 @2 (5 = hp, 7 = sp); amount i32 @4 (0x0A27,
+            # PACKETVER >= 20141022: the lab client) or i16 @4 (0x013D). Without it a stat_change
+            # series misses every regen tick (the Crusader's HP labels, 2026-10-21).
+            var = _u16(b, 2)
+            amount = _i32(b, 4) if pid == 0x0A27 else _i16(b, 4)
+            return Decoded("recovery", {"var": var, "name": STAT_NAMES.get(var, f"var{var}"),
+                                        "amount": amount})  # fmt: skip
         if pid in (0x00B0, 0x00B1):
             var = _u16(b, 2)
             value = _i32(b, 4) if pid == 0x00B0 else _u32(b, 4)

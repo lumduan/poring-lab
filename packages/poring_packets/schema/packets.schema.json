@@ -2587,6 +2587,73 @@
       "title": "PickupResult",
       "type": "object"
     },
+    "RecoveryAmount": {
+      "additionalProperties": false,
+      "description": "ZC_RECOVERY (0x0A27 / 0x013D): a heal AMOUNT, not the new value -- potions, skills and the\nregen ticks of (Moving) HP Recovery. A stat_change series alone misses every regen tick.",
+      "properties": {
+        "amount": {
+          "type": "integer"
+        },
+        "dir": {
+          "enum": [
+            "cs",
+            "sc"
+          ],
+          "type": "string"
+        },
+        "gm_command": {
+          "default": false,
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "packet_id": {
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "server": {
+          "enum": [
+            "login",
+            "char",
+            "map"
+          ],
+          "type": "string"
+        },
+        "t_mono_ns": {
+          "description": "Kernel receive time mapped onto CLOCK_MONOTONIC.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "recovery",
+          "default": "recovery",
+          "type": "string"
+        },
+        "validation_account": {
+          "default": false,
+          "type": "boolean"
+        },
+        "var": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "t_mono_ns",
+        "server",
+        "dir",
+        "packet_id",
+        "validation_account",
+        "gm_command",
+        "type",
+        "var",
+        "name",
+        "amount"
+      ],
+      "title": "RecoveryAmount",
+      "type": "object"
+    },
     "SelfMove": {
       "additionalProperties": false,
       "description": "ZC_NOTIFY_PLAYERMOVE: our walk from (x0, y0) to (x1, y1) starting at server_tick.",
@@ -4183,6 +4250,7 @@
           "npc_wait": "#/$defs/NpcWait",
           "pickup_request": "#/$defs/PickupRequest",
           "pickup_result": "#/$defs/PickupResult",
+          "recovery": "#/$defs/RecoveryAmount",
           "self_move": "#/$defs/SelfMove",
           "self_move_request": "#/$defs/SelfMoveRequest",
           "shop_buy_list": "#/$defs/ShopBuyList",
@@ -4247,6 +4315,9 @@
         },
         {
           "$ref": "#/$defs/StatChange"
+        },
+        {
+          "$ref": "#/$defs/RecoveryAmount"
         },
         {
           "$ref": "#/$defs/Chat"

@@ -18,6 +18,7 @@ export interface PoringPackets {
     | EntityTurn
     | Act
     | StatChange
+    | RecoveryAmount
     | Chat
     | NpcContact
     | NpcSay
@@ -386,6 +387,28 @@ export interface StatChange {
   type: "stat_change";
   validation_account: boolean;
   value: number;
+  var: number;
+}
+/**
+ * ZC_RECOVERY (0x0A27 / 0x013D): a heal AMOUNT, not the new value -- potions, skills and the
+ * regen ticks of (Moving) HP Recovery. A stat_change series alone misses every regen tick.
+ *
+ * This interface was referenced by `PoringPackets`'s JSON-Schema
+ * via the `definition` "RecoveryAmount".
+ */
+export interface RecoveryAmount {
+  amount: number;
+  dir: "cs" | "sc";
+  gm_command: boolean;
+  name: string;
+  packet_id: number;
+  server: "login" | "char" | "map";
+  /**
+   * Kernel receive time mapped onto CLOCK_MONOTONIC.
+   */
+  t_mono_ns: number;
+  type: "recovery";
+  validation_account: boolean;
   var: number;
 }
 /**

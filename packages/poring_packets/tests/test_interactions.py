@@ -341,3 +341,30 @@ def test_the_replay_emits_the_new_events(tmp_path: Path) -> None:
     s2.feed(seg("cs", 5121, 1, enter, cport=50003))
     shop = s2.feed(seg("sc", 5121, 1, SAMPLES[("sc", 0x0B77)], cport=50003))
     assert isinstance(shop[0], ShopBuyList) and shop[0].items[1].discount_price == 960
+
+
+def test_a_heal_amount_is_a_recovery_not_a_stat_change() -> None:
+    # ZC_RECOVERY 0x0A27 (the lab client's PACKETVER): var 5 = hp, amount i32 -- e.g. a regen tick
+    # of Increase HP Recovery 10 (155 HP), which carries no absolute hp value
+    got = decode("map", "sc", 0x0A27, struct.pack("<HHi", 0x0A27, 5, 155))
+    assert got is not None and got.type == "recovery"
+    assert got.fields == {"var": 5, "name": "hp", "amount": 155}
+    old = decode("map", "sc", 0x013D, struct.pack("<HHh", 0x013D, 7, 12))  # pre-2014 layout
+    assert old is not None and old.fields == {"var": 7, "name": "sp", "amount": 12}
+
+
+def test_a_recovery_passes_the_sniffers_event_models_end_to_end() -> None:
+    # The sniffer validates every decoded packet against PacketEvent and the backend parses the
+    # feed with FeedMessage: a decoded type missing from either union raises inside the live
+    # sniffer (or is a counted drop at the backend). Found before the 2026-10-21 deploy.
+    from poring_packets.events import RecoveryAmount, parse_feed
+
+    s = Session(table({("map", "sc", 0x0A27): 8}), "192.168.1.169", set())
+    enter = cz_enter2(AID)
+    s.feed(seg("cs", 5121, 1, enter, cport=50004))
+    got = s.feed(seg("sc", 5121, 1, struct.pack("<HHi", 0x0A27, 5, 155), cport=50004))
+    rec = [e for e in got if e.type == "recovery"]
+    assert len(rec) == 1 and isinstance(rec[0], RecoveryAmount)
+    assert (rec[0].name, rec[0].amount, rec[0].packet_id) == ("hp", 155, 0x0A27)
+    again = parse_feed(rec[0].model_dump_json())
+    assert isinstance(again, RecoveryAmount) and again == rec[0]
