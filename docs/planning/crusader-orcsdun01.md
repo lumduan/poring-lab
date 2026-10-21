@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [orcsdun01-detector.md, crusader-build.md, crusader-orcsdun01-facts.md, ../benchmarks/v2orc-vs-v1.md, ../competition.md, ../demonstrations.md]
-next_action: "The build (section 2, scripted, judged screenshots), then the survival skills S1-S6 on prt_fild08 (section 3), each pre-registered before its run; then tell Batt the orcsdun01 human demo (section 9) is ready to record."
+next_action: "The build is DONE and verified (2b). Survival: 3.96 pre-registered 18:03; T-S6 trial 1 failed S1 (the bar) and S6 (the old death signature), both re-registered as 3.96b (the HP PERCENT text; the death dialog re-cut on this client) and S6b PASSED 19:16; the T-S2 / T-S3 trials run from 19:17 (demonstrations 3.96 / 3.96b run logs). The human demo (section 9) was armed 17:57-18:42 and got no input: re-arm when Batt says."
 title: "A Crusader hunting Orc Dungeon F1 (orcsdun01) for real: the test character, the build, the survival skills and the order (plan)"
 date: 2026-10-21
 owner: Batt
