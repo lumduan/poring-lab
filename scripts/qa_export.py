@@ -23,13 +23,23 @@
   classes and warp portals are not labelled; each box carries its sprite `facing`.
 * A session marked INVALID (dataset_ship.py mark-invalid: the manifest's "validity") is refused
   unless --allow-invalid.
+* WARP-AND-WATCH sessions (scripts/warp_watch.py, 2026-10-21): ``frames/shard-NNNNNN.tar`` with
+  ``<frame>.jpg`` + ``<frame>.json`` members (JPEG q80, 5 Hz) and a manifest of their own (sid,
+  t0_ns / t1_ns, backend, size, ui_layout, rec_hz). The labels take the game-region size from the
+  manifest, the UI rectangles of the RECORDED layout (client_layout.RECTS[ui_layout], not the
+  frozen standard set: the hunting layout uncovers rows the standard one hides), and, with no
+  recording config, the packet->frame offset labels_v2's demo sessions use for their backend
+  (rdp: xfreerdp's newest benchmark run). An unknown or missing layout fails closed.
 """
 
 import argparse
 import gzip
+import io
 import json
 import sys
+import tarfile
 from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -45,6 +55,7 @@ from poring_dataset.render import K_NOSTALRO, SpriteSheet, load_scene  # noqa: E
 from poring_dataset.shards import encode_png, read_shard  # noqa: E402
 from poring_dataset.sprites import parse_act, parse_spr  # noqa: E402
 from poring_dataset.timeline import Timeline  # noqa: E402
+from poring_dataset.ui_layout import UI_RECTS  # noqa: E402
 
 # v1 (M5): the decoded monster sprites (sprite_catalog.py --decode-mixcrypt; RAM, study only) and
 # the KB's job table (kb_build.py). Both are local, never committed.
@@ -122,6 +133,113 @@ class Sheets:
         return self.cache[job]
 
 
+# --- warp-and-watch sessions (scripts/warp_watch.py) ---------------------------------------------
+
+# the manifest keys scripts/warp_watch.py writes (a recorded session has session_id / game_region /
+# shards or format instead)
+WARP_WATCH_KEYS = ("sid", "t0_ns", "t1_ns", "backend", "size", "rec_hz")
+UiRects = tuple[tuple[int, int, int, int], ...]  # (x, y, w, h), poring_dataset.ui_layout's form
+
+
+def is_warp_watch(manifest: dict[str, Any]) -> bool:
+    """A warp_watch.py session's manifest (JPEG tar shards under frames/)."""
+    return all(k in manifest for k in WARP_WATCH_KEYS)
+
+
+def session_id(manifest: dict[str, Any]) -> str:
+    return str(manifest.get("session_id") or manifest.get("sid"))
+
+
+def ui_rects_for(manifest: dict[str, Any]) -> UiRects:
+    """The client's static UI windows of the session, (x, y, w, h): a warp_watch session's RECORDED
+    layout (client_layout.RECTS, x0 y0 x1 y1 there); any other session the frozen standard set
+    (ui_layout.UI_RECTS, unchanged). FAIL CLOSED: a warp_watch manifest without a known layout."""
+    if not is_warp_watch(manifest):
+        return UI_RECTS
+    import client_layout
+
+    name = manifest.get("ui_layout")
+    if name not in client_layout.RECTS:
+        raise SystemExit(f"{session_id(manifest)}: ui_layout {name!r} is not one of "
+                         f"{sorted(client_layout.RECTS)}: the UI rectangles are "
+                         "unknown")  # fmt: skip
+    return tuple((x0, y0, x1 - x0, y1 - y0) for x0, y0, x1, y1 in client_layout.RECTS[name])
+
+
+def recording_config(manifest: dict[str, Any]) -> dict[str, Any]:
+    """What auto_offset_ms matches on: the recording's own config, else (a warp_watch session has
+    none) labels_v2's demo rule for the backend (rdp -> xfreerdp)."""
+    if manifest.get("config"):
+        return dict(manifest["config"])
+    backend = str(manifest.get("backend") or "rdp")
+    return {"backend": backend, "client": {"name": "xfreerdp" if backend == "rdp" else None}}
+
+
+@dataclass(frozen=True, slots=True)
+class JpegRef:
+    """One warp_watch frame: its meta and where its JPEG bytes lie in a tar shard."""
+
+    frame_id: int
+    t_mono_ns: int
+    shard: Path
+    offset: int
+    size: int
+
+
+def jpeg_shards(session: Path, manifest: dict[str, Any] | None = None) -> list[Path]:
+    """The session's JPEG tar shards, in recording order (the recorder's own list when it wrote
+    one, else frames/shard-*.tar sorted by name -- the recorder numbers them in order)."""
+    rec = (manifest or {}).get("recorder") or {}
+    if rec.get("shards"):
+        return [session / "frames" / str(n) for n in rec["shards"]]
+    return sorted((session / "frames").glob("shard-*.tar"))
+
+
+def jpeg_index(session: Path, manifest: dict[str, Any] | None = None) -> list[JpegRef]:
+    """Every frame of a warp_watch session (tar headers and the small json members only; no JPEG
+    byte is read), in recording order (frame_id). The recorder rotates a shard between ANY two
+    members, so a frame's jpg and json may lie in two shards: they are paired across shards. A
+    json without its jpg (a cut shard) is skipped."""
+    jpgs: dict[str, tuple[Path, int, int]] = {}
+    metas: dict[str, dict[str, Any]] = {}
+    for shard in jpeg_shards(session, manifest):
+        with tarfile.open(shard) as tar:
+            for m in tar:
+                key, _, ext = m.name.partition(".")
+                if ext == "jpg":
+                    jpgs[key] = (shard, m.offset_data, m.size)
+                elif ext == "json":
+                    fh = tar.extractfile(m)
+                    assert fh is not None
+                    metas[key] = json.loads(fh.read())
+    out = [JpegRef(int(metas[k]["frame_id"]), int(metas[k]["t_mono_ns"]), *jpgs[k])
+           for k in set(jpgs) & set(metas)]  # fmt: skip
+    return sorted(out, key=lambda r: r.frame_id)
+
+
+def read_jpeg(ref: JpegRef) -> np.ndarray:
+    """The frame as BGR (one seek and read of its JPEG bytes), like the PNG / H.264 readers."""
+    from PIL import Image
+
+    with ref.shard.open("rb") as fh:
+        fh.seek(ref.offset)
+        data = fh.read(ref.size)
+    if len(data) != ref.size:
+        raise ValueError(f"{ref.shard}@{ref.offset}: short read ({len(data)} of {ref.size} bytes)")
+    rgb = np.asarray(Image.open(io.BytesIO(data)).convert("RGB"))
+    return np.ascontiguousarray(rgb[:, :, ::-1])
+
+
+def jpeg_frames(
+    session: Path, manifest: dict[str, Any], every: int = 1
+) -> Iterator[tuple[dict[str, Any], np.ndarray]]:
+    """Every ``every``-th frame of a warp_watch session as (meta{frame_id, t_mono_ns}, BGR)."""
+    for i, ref in enumerate(jpeg_index(session, manifest)):
+        if i % every:
+            continue
+        yield {"frame_id": ref.frame_id, "t_mono_ns": ref.t_mono_ns}, read_jpeg(ref)
+
+
 BUNDLES = ROOT / "services" / "frontend" / ".qa-local"
 COLOURS = {"player": (255, 200, 60), "monster": (60, 220, 255), "npc": (120, 255, 120)}  # BGR
 
@@ -174,6 +292,7 @@ class Labeler:
         self.labels, self.k = labels, k
         self.sheets = Sheets() if labels == "v1" else None
         self.manifest = json.loads((session / "manifest.json").read_text())
+        self.ui_rects = ui_rects_for(self.manifest)  # the recorded layout's (warp_watch)
         validity = self.manifest.get("validity") or {}
         if validity.get("status") == "INVALID" and not allow_invalid:
             raise SystemExit(f"{session.name} is marked INVALID ({validity.get('reason')}): "
@@ -188,7 +307,7 @@ class Labeler:
         self.projectors: dict[str | None, tuple[Any, str, float | None]] = {}
         self.offset_run = None
         if offset_ms == "auto":
-            self.offset_ms, self.offset_run = auto_offset_ms(self.manifest["config"])
+            self.offset_ms, self.offset_run = auto_offset_ms(recording_config(self.manifest))
         else:
             self.offset_ms = float(offset_ms)
         packets = session / "packets.jsonl.gz"
@@ -197,17 +316,21 @@ class Labeler:
             events = [json.loads(line) for line in fh]
         self.timeline = Timeline(events, mapcache.load(prere=True))
         self.windows = gm_windows(events)
-        region = self.manifest["game_region"]
-        self.size = (region[2], region[3])
+        if is_warp_watch(self.manifest):
+            self.size = (int(self.manifest["size"][0]), int(self.manifest["size"][1]))
+        else:
+            region = self.manifest["game_region"]
+            self.size = (region[2], region[3])
 
     @classmethod
     def from_events(cls, events: list[dict[str, Any]], backend: str, size: tuple[int, int],
-                    offset_ms: float, *, labels: str = "v1",
-                    k: float = K_NOSTALRO) -> "Labeler":  # fmt: skip
+                    offset_ms: float, *, labels: str = "v1", k: float = K_NOSTALRO,
+                    ui_rects: UiRects = UI_RECTS) -> "Labeler":  # fmt: skip
         """The same boxes for packets already in memory: a DEMO session has no recording manifest
         (demo_verify's attack branch, docs/demonstrations.md 3.3)."""
         self = cls.__new__(cls)
         self.labels, self.k = labels, k
+        self.ui_rects = ui_rects
         self.sheets = Sheets() if labels == "v1" else None
         self.manifest = {"backend": backend}
         self.camera_path = camera_file(backend)
@@ -238,9 +361,10 @@ class Labeler:
             assert self.sheets is not None
             boxes = labels_for_v1(world, projector, self.size, scene=scene,
                                   state=lambda gid: self.timeline.state(gid, tw),
-                                  sheet=self.sheets, k=self.k, camera_yaw=yaw)  # fmt: skip
+                                  sheet=self.sheets, k=self.k, camera_yaw=yaw,
+                                  ui_rects=self.ui_rects)  # fmt: skip
         else:
-            boxes = labels_for(world, projector, self.size, camera_yaw=yaw)
+            boxes = labels_for(world, projector, self.size, camera_yaw=yaw, ui_rects=self.ui_rects)
         return [
             {"x1": b.x0, "y1": b.y0, "x2": b.x1, "y2": b.y1, "cls": b.cls, "gid": b.gid,
              "facing": b.facing, "kind": b.kind, "state": b.state, "phase_known": b.phase_known}
@@ -254,7 +378,11 @@ def session_frames(
     """A session's frames as (meta{frame_id, t_mono_ns}, BGR GAME_REGION image), either format.
     PNG: every ``every``-th shard frame. H.264 (Batt 2026-10-04: the default): ``limit`` x 2
     frames spread evenly over the session, freeze spans excluded, each GOP decoded once and every
-    frame checked against the live decode (poring_dataset.h264) -- GM windows thin them later."""
+    frame checked against the live decode (poring_dataset.h264) -- GM windows thin them later.
+    warp_watch (JPEG shards): every ``every``-th frame."""
+    if is_warp_watch(manifest):
+        yield from jpeg_frames(session, manifest, every)
+        return
     if (manifest.get("format") or "png") == "h264":
         from poring_dataset.h264 import H264Session
 
@@ -298,7 +426,7 @@ def main() -> int:
     a = ap.parse_args()
     lab = Labeler(a.session, a.offset_ms, allow_invalid=a.allow_invalid)
     manifest, size = lab.manifest, lab.size
-    out_dir = BUNDLES / manifest["session_id"]
+    out_dir = BUNDLES / session_id(manifest)
     out_dir.mkdir(parents=True, exist_ok=True)
     frames_out: list[dict[str, Any]] = []
     sheet: list[np.ndarray] = []
@@ -316,17 +444,17 @@ def main() -> int:
         if a.sheet and len(sheet) < 12:
             sheet.append(draw(img, boxes))
     (out_dir / "labels.json").write_text(json.dumps({
-        "session": manifest["session_id"], "size": list(size), "offset_ms": lab.offset_ms,
+        "session": session_id(manifest), "size": list(size), "offset_ms": lab.offset_ms,
         "offset_run": lab.offset_run, "camera": lab.camera_path.name,
         "projection": sorted({which for _, which, _ in lab.projectors.values()}),
         "frames": frames_out,
     }))  # fmt: skip
     index_path = BUNDLES / "index.json"
     index = json.loads(index_path.read_text()) if index_path.exists() else {"sessions": []}
-    was_gold = any(s.get("gold") for s in index["sessions"] if s["id"] == manifest["session_id"])
-    index["sessions"] = [s for s in index["sessions"] if s["id"] != manifest["session_id"]]
-    index["sessions"].append({"id": manifest["session_id"],
-                              "title": f"{manifest['session_id']} ({manifest['backend']})",
+    sid = session_id(manifest)
+    was_gold = any(s.get("gold") for s in index["sessions"] if s["id"] == sid)
+    index["sessions"] = [s for s in index["sessions"] if s["id"] != sid]
+    index["sessions"].append({"id": sid, "title": f"{sid} ({manifest['backend']})",
                               "frames": len(frames_out), "gold": was_gold})  # fmt: skip
     index_path.write_text(json.dumps(index, indent=1))
     if a.sheet and sheet:

@@ -1,0 +1,8 @@
+{
+ "scheme": "v2orc",
+ "source": "docs/planning/orcsdun01-detector.md section 4 (PROPOSED; Batt's default, 2026-10-21)",
+ "note": "ids only: the names come from the local KB at run time (build_frame_cache.py --classes species --kb DIR)",
+ "fixed": {"player": 0, "npc": 1, "warp": 2},
+ "monster_first_id": 3,
+ "monsters": [1002, 1063, 1008, 1113, 1018, 1005, 1042, 1082, 1084, 1111, 1152, 1153]
+}
