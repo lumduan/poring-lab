@@ -14160,7 +14160,7 @@ judge`, packets):**
   - So regen "keeps up" only through the standing and fighting time. A pack's burst (2,200-17,000
     HP/min in T-S2) is far above any regen: potions remain the real sustain.
 
-### 3.96g crusader-survival@1g: S1b re-judged with the COMPLETE truth -- the decoded regen ticks (pre-registered 2026-10-21 __TIME__ ICT, the commit time, BEFORE the judge change is built and before its trials; Batt 21:1x: "make sure each step gets its positive case (... S1b HP reader vs the 95 % bar)")
+### 3.96g crusader-survival@1g: S1b re-judged with the COMPLETE truth -- the decoded regen ticks (pre-registered 2026-10-21 21:37 ICT, the commit time of 3.96g's first commit, BEFORE the judge change is built and before its trials; Batt 21:1x: "make sure each step gets its positive case (... S1b HP reader vs the 95 % bar)")
 
 **Why:**
 - S1b FAILED its bar on the registered truth (3.96c run log): within 2 % on 91.05 % of reads (n
