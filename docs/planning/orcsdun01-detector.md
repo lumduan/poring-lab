@@ -259,6 +259,24 @@ areas."
 - 4. More collection only AFTER the labels pass: stand-weighted dwells at White Plant (83,50) /
   (58,67) and Black Mushroom (167,133) / (67,34).
 
+### 3c. RESULT of the label fix on col1 (`scripts/orc_labels_fix.py`, a4d2493)
+
+**The parameters, measured on col3 and FROZEN at 17:27:20 ICT, before any col1 frame or packet was
+read** (`orc_labels_fix.py freeze`; params sha256 `fe1fb9b3…f6d5af`, local
+`/dev/shm/poring-lab-tmp/orc-labels-fix/params.json`). col2 is not read (the tools refuse it by
+name).
+
+| parameter | value | measured how (col3 `20261021T142100-orcsdun01-col3`, every 2nd frame in a dwell) |
+|---|---|---|
+| 1d packet -> frame offset | **120 ms** (replaces 375.9) | 260 samples (56 units; Orc Zombie 257, Orc Skeleton 3) that walk ONE move through the whole sweep, isolated, clear of the UI, edges and models; median error 2.24 px at 120 ms, 3.16 at 150, 16.3-17.8 at 350-400 (the old value's neighbourhood); coarse 50 ms 0..1000, then 10 ms ±50 |
+| 1b anchor, Familiar 1005 | (dx, dy) = **(1, -1) px** | 455 standing labels, MAD 1 / 1 |
+| 1b anchor, Steel Chonchon 1042 | **(0, -2) px** | 317 standing labels, MAD 1 / 1 |
+| 1b anchor, Drainliar 1111 | **(1, -1) px** | 271 standing labels, MAD 1 / 1 |
+| (reference only) ground species | Orc Zombie (1, -1), Orc Skeleton (1, -1), White Plant (0, 0), Black Mushroom (0, -1) | not applied: 1b is the flyers' |
+| fit radius, tau, k | ±6 px ground / ±10 px flyers, 0.092, 0.140 | 3b, section 3 |
+| 1c models | 162 RSW models (23 RSM 1.4 files), the client GRF, local | each model's projected vertex box; checked by eye on col3 frames |
+
+
 ## 4. The class scheme (PROPOSED; Batt's default if he does not answer by the time the labels are ready)
 
 | id | class | from |
