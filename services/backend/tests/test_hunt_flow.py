@@ -925,7 +925,8 @@ def test_v39_the_steer_may_click_the_routes_tail() -> None:
     assert p["steer_tail"] and p["steer_tail_ab"] and not p["heading_age_ab"]
     assert 39 in hf.VERSIONS and not hf.PARAMS[38].get("steer_tail")
     src = Path(hf.__file__).read_text()
-    assert 'cont_click(ap, ok, "steer", tcell,\n' in src and "tail=steer_tail_on(k)" in src
+    # (okr: the route grid since map zones -- the very object `ok` without a zones file)
+    assert 'cont_click(ap, okr, "steer", tcell,\n' in src and "tail=steer_tail_on(k)" in src
     # search clicks keep the old candidates (only the steer passes tail)
     assert src.count("tail=steer_tail_on(k)") == 1
     fb = src[src.index("v39: from the route point nearest the GM") :][:600]
