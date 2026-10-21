@@ -178,8 +178,8 @@ outside GM windows; 2,985 standing labels scored). The output is local:
 
   - So the FACING explains nearly all of the walkers' failures (<= 5.5 % with the best view).
   - For the two immobile plants, two different things:
-    - Black Mushroom's facing at appearance is wrong for 83 of 130, and its 12 % residual is the
-      canopy and model occlusion of 5a;
+    - Black Mushroom's facing at appearance is wrong for 83 of 130. Its 12 % residual is LIKELY
+      the canopy and model occlusion that 5a saw (not measured: the RSW models were not read);
     - White Plant's 12 % is NOT the facing (0 differ). Something else, unmeasured.
   - Even the best view, pooled at 5.0 %, misses the 2 % bar. So a facing fix alone would not
     pass C1; occlusion (and White Plant's cause) must come with it.
