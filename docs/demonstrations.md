@@ -14295,7 +14295,7 @@ frame was judged: the stand 268,107, full HP / SP, the UI gate clear, the screen
   inside the trial; the real uptime was ~100 %.
 - 0 dark reads, 0 deaths, 0 escapes (none needed).
 
-### 3.97 hunt-flow@55: THE FAST SCAN RE-REGISTERED after v54's G3 failure, with its fix -- no press on an NPC's drawn sprite (pre-registered 2026-10-22, the commit time of 3.97's first commit, BEFORE its positive case and its runs; 3.95's decision rule: "One that fails is fixed and re-registered, never re-run under these bars"; Batt 2026-10-21 overnight: "LOOT 'FASTER SCAN' (v54) on prt_fild08: as many runs as fit; no verdict before 4 runs")
+### 3.97 hunt-flow@55: THE FAST SCAN RE-REGISTERED after v54's G3 failure, with its fix -- no press on an NPC's drawn sprite (pre-registered 2026-10-22 00:10 ICT, the commit time of 3.97's first commit e097d7c, BEFORE its positive case and its runs; 3.95's decision rule: "One that fails is fixed and re-registered, never re-run under these bars"; Batt 2026-10-21 overnight: "LOOT 'FASTER SCAN' (v54) on prt_fild08: as many runs as fit; no verdict before 4 runs")
 
 **Why:**
 - v54 failed G3: in run 4 the STRIKE pressed the NPC Bard#brising's sprite (3.95 run log).
