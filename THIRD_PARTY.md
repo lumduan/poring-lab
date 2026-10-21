@@ -85,6 +85,24 @@
 | [nmeylan/nostalro-client](https://github.com/nmeylan/nostalro-client) | `15b3029059c04cf1d54d734f7233e5db3c108a9c` | Apache-2.0 (`LICENSE.md`) | `lib/formats/src/spr.rs`, `lib/formats/src/act.rs` (L7-13, 568-571, 620-634, 641-679), `lib/formats/src/lib.rs` (`read_string`, `version_at_least`), `lib/formats/src/map_coordinates.rs`, `lib/renderer/src/sprite.rs` (L842-956), `lib/renderer/src/sprite_projection.rs` (L154-178), `lib/renderer/src/camera.rs` (L425-439), `lib/game/src/entity.rs` (L1170-1178); read without porting: `client/src/game_updates/animation.rs`, `lib/game/src/shadow.rs`, `lib/game/src/sprite_loader.rs` |
 | [vE5li/korangar](https://github.com/vE5li/korangar) | `e14d3203ad63f35962f6492d8a6b348eb8f47d47` | MIT, © 2023 Lucas Pütz (`LICENSE.md`) | `korangar/src/world/animation/mod.rs` (L15-16, 40-68, 256-303), `korangar/src/world/cameras/mod.rs` (L47-67), `korangar/src/loaders/animation/mod.rs`, `korangar/src/loaders/map/mod.rs` (L31-32): cross-check only. ➡️ **2026-10-05:** `korangar/src/loaders/archive/native/mixcrypt.rs` (sha256 `6a682441…227b`) was read and ported into a **host-local study decoder that is never committed** (Batt: MIXCRYPT option (a), study only; loaded by `scripts/grf_read.py --decode-mixcrypt` from outside the repo; the pre-commit hook refuses it by name and fingerprint). Its DES helpers (a copy of RustCrypto `des`, Apache-2.0) were not ported: the DES block is our own `scripts/grf_des.py`, which reproduces korangar's test vector |
 
+### The RSW / RSM model geometry (2026-10-21, the orcsdun01 label fix 1c)
+- **Ported to:** `packages/poring_dataset/src/poring_dataset/rsw.py`.
+- **What:** the RSW object list (models, and the light / sound / effect records walked past) and
+  the RSM 1.x node mesh, plus the placement rule that puts a map model's vertices in the world
+  (the node chain T R S, the single-node rule, the box shift that puts the model's bottom on the
+  ground, the RSW instance's T Rz Rx Ry S about the map centre), re-expressed in Python/numpy (no
+  code copied verbatim), frame 0 only (no animation).
+- **Why:** docs/planning/orcsdun01-detector.md 3b (1c): a label whose sprite box overlaps a map
+  model's projected box is excluded. The projected boxes were checked by eye against the drawn
+  models on a col3 frame (an orc flag, a brazier, a firewood pile, a dead tree).
+- **The client data is NOT ours to ship:** the RSW and its RSMs are read from the client GRF into
+  `/dev/shm` only (`scripts/grf_read.py --decode-mixcrypt`, study only); the tests build theirs
+  from synthetic bytes.
+
+| Source | Commit | License | File read |
+|---|---|---|---|
+| [nmeylan/nostalro-client](https://github.com/nmeylan/nostalro-client) | `15b3029059c04cf1d54d734f7233e5db3c108a9c` | Apache-2.0 (`LICENSE.md`) | `lib/formats/src/rsw.rs`, `lib/formats/src/rsm.rs`, `lib/formats/src/lib.rs` (`read_vec3`, `version_at_least`), `lib/renderer/src/model.rs` (`load_rsw_instances`, `build_instance_matrix`, `bbox_shift_matrix`, `node_post_matrix`, `node_accum_matrices`, `calc_bounding_box`), `lib/renderer/src/rsm_anim.rs` (`node_local_matrix`, frame 0), `lib/formats/src/map_coordinates.rs`, `lib/renderer/src/sprite_projection.rs` (`project_entity_screen`: where an entity's cell stands in that world) |
+
 ## Our own code from public standards
 - **What:** `scripts/grf_des.py`, the GRF archive's header-only "DES" (flag 0x04).
 - **Sources:** the DES tables are FIPS PUB 46-3. The GRF construction is the publicly described one:

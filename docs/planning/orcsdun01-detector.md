@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [labels-v2-plan.md, training-cost.md, ../benchmarks/v1-vs-v0png.md, ../phase3-plan.md, ../operations/vision-long-lived.md]
-next_action: "The camera check on the first block (col1) FAILED (section 3a: C1 34.7 % bad_label, C2 Black Mushroom); per section 3 no orcsdun01 label trains until the re-measure (M4-style) and Batt's call. The diagnostic points at the sprite's view (the open outdoor facing, phase3-plan 5d-ii), not the camera. The labels, contact sheets and blind pack are built (local) for that work."
+next_action: "The label fix (3b) re-run on col1 FAILED C1 pooled (3c: 15.6 % bad_label against < 2 %; 3a was 34.7 %), so per 3b nothing trains and the result goes to Batt. C2 passes (1 / 1 px everywhere). The facing is what is left: after a straight (axis) move the client draws a DIAGONAL view (walk rule 0.4 % on axis moves). The literal 1c rule keeps 283 of 4,343 frames whole. The round-2 blind pack is built, not run (3c)."
 title: "orcsdun01 (Orc Dungeon F1): the facts, the collection, the camera check, the class scheme, the labels and the evaluation (plan)"
 date: 2026-10-21
 owner: Batt
@@ -140,6 +140,8 @@ measurement. The check:
 
 ### 3a. RESULT on the first block, col1 (`scripts/orc_camera_check.py`, run 2026-10-21 11:55 ICT): FAIL
 
+➡️ The fix this led to is pre-registered in 3b; its re-run on col1 is 3c (C1 15.6 %, still FAIL).
+
 Session `20261021T103231-orcsdun01-col1` (80 dwells, 15,028 frames; every 5th frame inside a dwell,
 outside GM windows; 2,985 standing labels scored). The output is local:
 `/dev/shm/poring-lab-tmp/orc-labels/<session>/camera_check.json`.
@@ -259,6 +261,106 @@ areas."
 - 4. More collection only AFTER the labels pass: stand-weighted dwells at White Plant (83,50) /
   (58,67) and Black Mushroom (167,133) / (67,34).
 
+### 3c. RESULT of the label fix on col1 (`scripts/orc_labels_fix.py`, a4d2493)
+
+**The parameters, measured on col3 and FROZEN at 17:27:20 ICT, before any col1 frame or packet was
+read** (`orc_labels_fix.py freeze`; params sha256 `fe1fb9b3…f6d5af`, local
+`/dev/shm/poring-lab-tmp/orc-labels-fix/params.json`). col2 is not read (the tools refuse it by
+name).
+
+| parameter | value | measured how (col3 `20261021T142100-orcsdun01-col3`, every 2nd frame in a dwell) |
+|---|---|---|
+| 1d packet -> frame offset | **120 ms** (replaces 375.9) | 260 samples (56 units; Orc Zombie 257, Orc Skeleton 3) that walk ONE move through the whole sweep, isolated, clear of the UI, edges and models; median error 2.24 px at 120 ms, 3.16 at 150, 16.3-17.8 at 350-400 (the old value's neighbourhood); coarse 50 ms 0..1000, then 10 ms ±50 |
+| 1b anchor, Familiar 1005 | (dx, dy) = **(1, -1) px** | 455 standing labels, MAD 1 / 1 |
+| 1b anchor, Steel Chonchon 1042 | **(0, -2) px** | 317 standing labels, MAD 1 / 1 |
+| 1b anchor, Drainliar 1111 | **(1, -1) px** | 271 standing labels, MAD 1 / 1 |
+| (reference only) ground species | Orc Zombie (1, -1), Orc Skeleton (1, -1), White Plant (0, 0), Black Mushroom (0, -1) | not applied: 1b is the flyers' |
+| fit radius, tau, k | ±6 px ground / ±10 px flyers, 0.092, 0.140 | 3b, section 3 |
+| 1c models | 162 RSW models (23 RSM 1.4 files), the client GRF, local | each model's projected vertex box; checked by eye on col3 frames |
+
+
+**THE CHECK on col1** (`orc_labels_fix.py check`, run 17:28 ICT at 13a5ae4, 49 s; every 5th
+frame inside a dwell, outside the GM windows: 2,325 frames read, 1,010 with standing labels).
+C1 / C2 judge the PREDICTION (facing 1a, anchor 1b, time 1d, no fit), after 1c.
+
+| species | standing scored | 1c: under a model, excluded | C1 `bad_label` (3a) | C2 median \|dx\| / \|dy\| px (bar) | C2 |
+|---|---|---|---|---|---|
+| Orc Zombie 1153 | 685 | 874 | 17.5 % (36.1) | 1 / 1 (4) | PASS |
+| Orc Skeleton 1152 | 131 | 91 | 29.8 % (49.6) | 1 / 1 (4) | PASS |
+| White Plant 1082 | 125 | 107 | **0.0 %** (12.0) | 1 / 1 (4) | PASS |
+| Black Mushroom 1084 | **0** | 132 (every one) | -- (69.2) | -- | NO VERDICT (0 labels) |
+| Familiar 1005 | 191 | 256 | 12.0 % (22.0) | 1 / 1 (6) | PASS |
+| Steel Chonchon 1042 | 178 | 116 | 15.7 % (43.9) | 1 / 1 (6) | PASS |
+| Drainliar 1111 | 56 | 37 | 5.4 % (19.8) | 1 / 1 (6) | PASS |
+| **pooled** | **1,366** | 1,613 | **15.6 %** (213; bar < 2 %; 3a 34.7) | | |
+
+- The other exclusions of the check: not standing 6,297; crowded 5,463; under the UI or at an edge
+  1,281. The C1 failures are all `bad_label` (0 `occluded` / `ui_covered`: the standing rule
+  isolates them). The 3a column is a different label set (1c removes labels, 1d moves the
+  standing window): an indication, not a like-for-like.
+- **VERDICT (3b's decision rule): C1 FAILS pooled (15.6 % against < 2 %), so NOTHING TRAINS and the
+  result goes to Batt.** C2 passes for every species with >= 20 labels (all at 1 / 1 px: the
+  position, anchor and offset are right). White Plant is the only species under 2 % on its own.
+  Black Mushroom has no standing label left after 1c: every one is under a model box.
+- **Reported, not deciding: the facing.** The walk rule's heading equals the best of the 8 drawn
+  views on 456 of its 1,208 labels (37.7 %). Per species, over all its scored labels (the rule set
+  the heading of 1,208 of the 1,366): Orc Zombie 37.7 %, Orc Skeleton 38.9 %, Familiar 36.1 %,
+  Steel Chonchon 35.4 %, Drainliar 44.6 %, White Plant 100 % (never moves: its appear heading). With the best of the 8 views the low share would be 0.44 % pooled (a max over
+  8, biased upward). Split by the shape of the move the rule used (a scratch diagnostic on the
+  same rows, `/dev/shm/poring-lab-tmp/orc-labels-fix/scratch/facing_diag.py`):
+
+  | move (from -> to) | labels | rule = best view | low (C1 < tau) | the Timeline's last step = best view |
+  |---|---|---|---|---|
+  | along an axis (dx or dy = 0) | 259 | **0.4 %** (best view: -45° 153, +45° 57, +90° 46) | 30.1 % | 0.4 % |
+  | exact diagonal | 160 | 68.8 % | 1.9 % | 65.6 % |
+  | mixed | 789 | 43.7 % | 15.8 % | 11.4 % |
+  | all | 1,208 | 37.7 % | 17.1 % | 16.2 % |
+
+  After a straight (axis) move the client draws a DIAGONAL view, never the axis one. The walk rule
+  beats the last step on mixed moves but leaves the axis moves wrong. That is material for the next
+  hypothesis (Batt's call), not tuned here.
+
+**THE LABELS on col1** (`orc_label_sheets.py --fix`, ab61cdf, every 3rd frame as round 1: 5,010
+frames; v2's own frame rules keep 4,343, as in round 1). Each visible orcsdun01 monster label:
+
+| species | kept (fitted) | under a model (1c) | unfit | crowd | UI | kept share |
+|---|---|---|---|---|---|---|
+| Orc Zombie 1153 | 6,942 | 8,869 | 722 | 323 | 178 | 40.8 % |
+| Orc Skeleton 1152 | 710 | 894 | 114 | 31 | 7 | 40.4 % |
+| White Plant 1082 | 722 | 623 | 0 | 9 | 0 | 53.3 % |
+| Black Mushroom 1084 | 56 | 1,719 | 0 | 0 | 0 | 3.2 % |
+| Familiar 1005 | 1,294 | 1,822 | 168 | 51 | 34 | 38.4 % |
+| Steel Chonchon 1042 | 1,198 | 971 | 129 | 39 | 18 | 50.9 % |
+| Drainliar 1111 | 390 | 318 | 14 | 10 | 0 | 53.3 % |
+| all | 11,312 | 15,216 | 1,147 | 463 | 237 | 39.9 % |
+
+- 1,551 more monsters fail v1's visibility rule (under half on screen, or half behind the UI) and
+  get no label, as in v1.
+- **The literal 1c rule empties the cache:** a frame with any excluded monster is excluded
+  (section 5: labelled completely or excluded), so only **283 of the 4,343 frames** stay whole
+  (6.5 %); 3,850 have a monster under a model box. A projected 2-D model box covers much of the
+  screen in this dungeon of trees, braziers and fences, in front of the sprite or behind it.
+  What a training cache does about it (per-label ignore regions, a depth-aware occlusion test) is
+  a new decision for Batt, not made here.
+- The fit fails (unfit / crowd / UI) on 1,847 of the 13,159 labels that are not under a model
+  (14.0 %).
+
+**THE BLIND PACK (round 2), built, NOT run** (the parent launches two new blind agents):
+- seed 1 (round 1: seed 0); 30 crops per orcsdun01 species, drawn from EVERY kept fitted label
+  (`--blind-from kept_labels`: the blind check judges the labels; whole frames alone would give
+  Drainliar 6, White Plant 4 and Black Mushroom 0 crops), plus col1's 15 Poring crops (prt_fild08
+  frames, v1's labels, as in round 1) = 225 crops, 12 numbered grids, the reference sheet A-L;
+- the pack: `/dev/shm/poring-lab-tmp/orc-labels-fix/blind-pack-seed1/` (with `instructions.txt`);
+  the answer key, in its own directory: `/dev/shm/poring-lab-tmp/orc-labels-fix/answer-key-seed1/`;
+- **under 3b's decision rule the blind round cannot make a species train while C1 fails pooled.**
+  It still measures the fitted boxes.
+
+**Where the outputs live (local, client-derived, never committed):**
+`/dev/shm/poring-lab-tmp/orc-labels-fix/` -- `col3/{offset,anchor}.json` (1d, 1b),
+`params.json`, `col1/camera_check_fix.json` + `col1/check_rows.json` (the check),
+`20261021T103231-orcsdun01-col1/{labels_summary.json,sheets/}` (the labels, the contact sheets),
+`grf/data/model/` (the 23 RSMs), `scratch/overlay_*.png` (the 1c geometry check on col3).
+
 ## 4. The class scheme (PROPOSED; Batt's default if he does not answer by the time the labels are ready)
 
 | id | class | from |
@@ -303,6 +405,8 @@ areas."
   - any disagreement is resolved by the parent, recorded, and shown to Batt.
 
 ### 5a. RESULT: the blind label check on col1 (2026-10-21 ~12:10 ICT): FAIL for every orcsdun01 species
+
+➡️ Round 2 (the label fix's fitted boxes, seed 1) is built but not run: 3c.
 
 - **The pack** (`scripts/orc_label_sheets.py`, seed 0):
   - 30 crops per orcsdun01 species + col1's 15 Poring boxes = 225 crops;

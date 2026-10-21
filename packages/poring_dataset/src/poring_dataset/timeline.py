@@ -47,6 +47,7 @@ from poring_packets.world import (
     Motion,
     Walk,
     World,
+    direction_toward,
     heading_of,
     path_cells,
     ticks_since,
@@ -168,7 +169,17 @@ class Timeline:
         return self.maps.get(name) if name else None
 
     def frame_world(self, t_ns: int) -> FrameWorld:
+        return self._frame_of(self.world_at(t_ns), t_ns)
+
+    def at(
+        self, t_ns: int
+    ) -> tuple[FrameWorld, tuple["ActorState", ...], dict[int, tuple[int, str]]]:
+        """frame_world, states and walk_rule_facings at `t_ns` from ONE replay of the events."""
         world = self.world_at(t_ns)
+        return self._frame_of(world, t_ns), self._states_of(world, t_ns), \
+            self._walk_rules_of(world, t_ns)  # fmt: skip
+
+    def _frame_of(self, world: World, t_ns: int) -> FrameWorld:
         tick = tick_of(t_ns)
         grid = self.grid(world.map)
         self_pos, self_heading = None, None
@@ -200,10 +211,26 @@ class Timeline:
     def states(self, t_ns: int) -> tuple[ActorState, ...]:
         """Every unit's state at `t_ns`: our own character first, then the entities in sight,
         then the ones playing their die animation."""
-        world = self.world_at(t_ns)
+        return self._states_of(self.world_at(t_ns), t_ns)
+
+    def _states_of(self, world: World, t_ns: int) -> tuple[ActorState, ...]:
         gids = [*([] if world.aid is None else [world.aid]), *world.entities, *world.dead]
         found = (self._state(world, gid, t_ns) for gid in gids)
         return tuple(s for s in found if s is not None)
+
+    def walk_rule_facings(self, t_ns: int) -> dict[int, tuple[int, str]]:
+        """Every entity in sight whose facing the WALK RULE sets at `t_ns` (walk_rule_facing):
+        gid -> (heading, "walk_rule"). Entities missing here keep the Timeline's facing."""
+        return self._walk_rules_of(self.world_at(t_ns), t_ns)
+
+    def _walk_rules_of(self, world: World, t_ns: int) -> dict[int, tuple[int, str]]:
+        grid = self.grid(world.map)
+        out = {}
+        for gid in world.entities:
+            found = walk_rule_facing(world, gid, t_ns, grid)
+            if found is not None:
+                out[gid] = found
+        return out
 
     def die_ms_of(self, job: int) -> int:
         return self.die_ms.get(job, self.default_die_ms)
@@ -292,6 +319,43 @@ def actor_state(
         ends.append((action.start_tick + action.duration_ms) % TICK_MOD)
     ages = [a for a in (ticks_since(tick, k) for k in ends if k is not None) if a >= 0]
     return shown("idle", t_ns - min(ages) * 1_000_000 if ages else None)
+
+
+def walk_rule_facing(
+    world: World, gid: int, t_ns: int, grid: MapGrid | None
+) -> tuple[int, str] | None:
+    """The orcsdun01 label fix's facing rule 1a (docs/planning/orcsdun01-detector.md 3b): a unit
+    whose LAST MOVE has ENDED by `t_ns` (arrived on walk_state's timing, or cut short by a stop)
+    faces that move's direction FROM -> TO (the packet's start and end cells; rAthena's rule for
+    the direction of a cell, poring_packets.world.direction_toward), kept after it stops until a
+    newer turn (ZC_CHANGE_DIRECTION, an appear heading, an attacker facing its target) or a newer
+    attack changes it. None otherwise (still walking, no move seen, or a newer change): the
+    caller keeps the Timeline's facing (actor_state). A tie goes to the change."""
+    ent = world.entities.get(gid)
+    if ent is None:
+        return None
+    tick = tick_of(t_ns)
+    ended: tuple[int, Walk] | None = None
+    if ent.walk is not None and ticks_since(tick, ent.walk.start_tick) >= 0:
+        end = (ent.walk.start_tick + walk_ms(ent.walk, grid)) % TICK_MOD
+        if ticks_since(tick, end) >= 0:
+            ended = (end, ent.walk)
+    elif ent.motion.cut is not None and ticks_since(tick, ent.motion.cut[1]) >= 0:
+        ended = (ent.motion.cut[1], ent.motion.cut[0])
+    if ended is None:
+        return None
+    end, walk = ended
+    heading = direction_toward(walk.x1 - walk.x0, walk.y1 - walk.y0)
+    if heading is None:
+        return None
+    age = ticks_since(tick, end)
+    turn, action = ent.motion.turn, ent.motion.action
+    if turn is not None and turn.tick is not None and 0 <= ticks_since(tick, turn.tick) <= age:
+        return None
+    if (action is not None and action.kind == "attacking"
+            and 0 <= ticks_since(tick, action.start_tick) <= age):  # fmt: skip
+        return None
+    return heading, "walk_rule"
 
 
 @lru_cache(maxsize=65536)

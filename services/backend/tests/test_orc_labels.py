@@ -515,7 +515,9 @@ def test_the_blind_pack_hides_the_classes_and_the_key_lives_elsewhere(
     assert sorted(key["letters"].values()) == sorted(ORDER)
     text = (pack / "pack.json").read_text()
     assert not any(str(m) in text for m in ORDER)  # no mob id, no name in the pack
-    assert sorted(p.name for p in pack.iterdir()) == ["crops", "pack.json", "reference.png"]
+    assert sorted(p.name for p in pack.iterdir()) == ["crops", "grids", "pack.json",
+                                                       "reference.png"]  # fmt: skip
+    assert sorted(p.name for p in (pack / "grids").iterdir()) == ["grid_01.png"]  # 8 crops
     assert (tmp_path / SID / "sheets" / "species_1005.png").exists()
 
 
