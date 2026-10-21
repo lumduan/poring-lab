@@ -74,3 +74,15 @@ def test_batts_rule_is_judged_against_its_own_plan_the_5x5_around_the_drawn_gm()
     assert lb.gm_cause_of({**it, "t_fall": step[1] + 1}, 1, step, ref, None, [], []) == (
         "fell_after_step"
     )
+
+
+def test_a_v53_union_step_counts_the_believed_3x3_in_its_plan() -> None:
+    """v53 (Batt 2026-10-21 decision 2): an item on the believed death cell's 3 x 3, outside the
+    GM's 5 x 5, is in a union step's plan (planned_not_hovered), not outside it."""
+    item = {"t_fall": 100, "cell": [20, 10]}
+    step = (90, 200)
+    refs = [(10, 10)]
+    assert lb.gm_cause_of(item, 1, step, refs, (19, 10), [], []) == (
+        "outside_gm_plan_near_death_cell")  # fmt: skip
+    assert lb.gm_cause_of(item, 1, step, refs, (19, 10), [], [], {(20, 10)}) == (
+        "planned_not_hovered")  # fmt: skip

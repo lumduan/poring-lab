@@ -28,7 +28,8 @@ and each unpicked item gets the first that holds:
   hovered_read_<X>      hovered while it lay there; the first such read was X (hand, empty,
                         unknown, sword, ...)
   planned_not_hovered   within GM_PLAN of a ref, never hovered (the cap, out of view, the end)
-  outside_gm_plan[_near_death_cell]   farther than GM_PLAN from every ref
+  outside_gm_plan[_near_death_cell]   farther than GM_PLAN from every ref (and, on a v53 union
+                        step, not in the believed death cell's 3 x 3 the step planned too)
 For each such item: its fate (left behind = out of our sight; looter; expired), and, for the left
 behind, what took the GM away -- the first non-loot click after the step (``why`` of
 clicks.jsonl: search, steer / strike = the next engagement) -- and how long after the step's end
@@ -52,7 +53,7 @@ import bisect
 import json
 import sys
 from collections import Counter
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -129,11 +130,12 @@ def cause_of(item: Mapping[str, Any], fid: int, looted: bool, step: tuple[int, i
 
 def gm_cause_of(item: Mapping[str, Any], fid: int, step: tuple[int, int],
                 refs: Sequence[Sequence[int]], death_cell: Sequence[int] | None,
-                results: Sequence[Mapping[str, Any]], hovers: Sequence[Mapping[str, Any]]
-                ) -> str:  # fmt: skip
+                results: Sequence[Mapping[str, Any]], hovers: Sequence[Mapping[str, Any]],
+                extra_plan: Collection[Sequence[int]] = ()) -> str:  # fmt: skip
     """PURE: the first cause that holds against BATT'S RULE'S OWN plan (module docstring), for an
     unpicked item of a kill whose step was a gm step. ``hovers`` = that step's hand_hover events
-    (time order), ``refs`` = their GM cells."""
+    (time order), ``refs`` = their GM cells. ``extra_plan`` (v53, the union plan): the believed
+    death cell's 3 x 3 cells outside the GM's 5 x 5 that the step planned too -- in the plan."""
     if int(item["t_fall"]) > step[1]:
         return "fell_after_step"
     cell = tuple(item["cell"])
@@ -147,7 +149,7 @@ def gm_cause_of(item: Mapping[str, Any], fid: int, step: tuple[int, int],
         t_gone = item.get("t_end") or item.get("t_out")
         first = next((h for h in on if t_gone is None or int(h["t_ns"]) < int(t_gone)), None)
         return "gone_before_hover" if first is None else f"hovered_read_{first['seen']}"
-    if any(cheb(cell, r_) <= GM_PLAN for r_ in refs):
+    if any(cheb(cell, r_) <= GM_PLAN for r_ in refs) or cell in {tuple(c) for c in extra_plan}:
         return "planned_not_hovered"
     return "outside_gm_plan" + ("_near_death_cell" if death_cell is not None
                                 and cheb(cell, death_cell) <= 1 else "")  # fmt: skip
@@ -205,6 +207,11 @@ def session(sid: str) -> dict[str, Any]:
                                  bisect.bisect_right(hts, step[1] + NS)]
                   if int(h.get("k", -1)) == int(e["k"])]  # fmt: skip
         refs = {tuple(h["ref"]) for h in hs if h.get("ref")}
+        extra: set[tuple[int, int]] = set()  # v53: a union step also planned the believed 3 x 3
+        if gm_step and lo.get("union") is not None and lo.get("cell"):
+            bc_ = (int(lo["cell"][0]), int(lo["cell"][1]))
+            near_ = [(bc_[0] + dx, bc_[1] + dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1)]
+            extra = {c_ for c_ in near_ if all(cheb(c_, r_) > GM_PLAN for r_ in refs)}
         for f in aj.drops_of_kill(items, t_k, dcell):
             it = items[f]
             n_items += 1
@@ -217,7 +224,7 @@ def session(sid: str) -> dict[str, Any]:
                 res_g = results[
                     bisect.bisect_left(rts, step[0]) : bisect.bisect_right(rts, step[1])
                 ]
-                c_g = gm_cause_of(it, f, step, sorted(refs), dcell, res_g, hs)
+                c_g = gm_cause_of(it, f, step, sorted(refs), dcell, res_g, hs, extra)
                 gm_c[c_g] += 1
                 gm_arm[f"{arm_of(e)}|{c_g}"] += 1
                 gm_fate[f"{c_g}|{it['fate']}"] += 1
