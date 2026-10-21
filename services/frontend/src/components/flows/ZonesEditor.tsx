@@ -236,7 +236,7 @@ export default function ZonesEditor({ api, world, server, map, block, zonesRef, 
             {f && !f.exists && <div className="text-neutral-400">No file: no zones on this map (the runner changes nothing).</div>}
             {f?.exists && (
               <>
-                <div className={f.ok ? "text-neutral-300" : "text-red-300"}>
+                <div className={`break-all ${f.ok ? "text-neutral-300" : "text-red-300"}`}>
                   sha256 {f.sha256} · {f.ok ? "the loader accepts it" : `the loader refuses it: ${f.error}`}
                 </div>
                 {f.review && (
@@ -288,7 +288,7 @@ export default function ZonesEditor({ api, world, server, map, block, zonesRef, 
             {check && (
               <div className={check.text === text ? "" : "opacity-60"} data-testid="zones-check">
                 {check.text !== text && <div className="text-amber-300">STALE: the zones changed since this check.</div>}
-                <ul>
+                <ul className="break-all">
                   {checkLines(check.doc).map((l, i) => (
                     <li key={i} className={TONE[l.tone]}>{l.text}</li>
                   ))}

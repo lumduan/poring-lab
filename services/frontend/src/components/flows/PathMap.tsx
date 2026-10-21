@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { PathSegment, WorldMap } from "@/lib/flow/api";
-import type { Cell, Draft, ZoneKind } from "@/lib/flow/zones";
+import { type Cell, cellOfPixel, type Draft, type ZoneKind } from "@/lib/flow/zones";
 
 const SEG_COLOURS = ["#38bdf8", "#f472b6", "#a3e635", "#fbbf24", "#c084fc", "#fb7185", "#2dd4bf"];
 // the search-area preview's classes (flows_zones.area_of): '.' the largest piece, 'z' closed by the
@@ -137,10 +137,13 @@ export default function PathMap({
     return <div className="text-xs text-neutral-500">{name}: no walk grid in the static data (routes are estimates)</div>;
   }
   const cellAt = (e: React.MouseEvent<HTMLCanvasElement>): Cell | null => {
-    const r = e.currentTarget.getBoundingClientRect();
-    const x = Math.floor((e.clientX - r.left) / scale);
-    const y = h - 1 - Math.floor((e.clientY - r.top) / scale);
-    return x >= 0 && x < w && y >= 0 && y < h ? [x, y] : null;
+    // the canvas's CONTENT box: past its border (clientLeft / clientTop), and in canvas pixels
+    // should CSS ever scale it (a border-blind version mapped half of each cell to its neighbour)
+    const el = e.currentTarget;
+    const r = el.getBoundingClientRect();
+    const sx = el.clientWidth ? el.width / el.clientWidth : 1;
+    const sy = el.clientHeight ? el.height / el.clientHeight : 1;
+    return cellOfPixel((e.clientX - r.left - el.clientLeft) * sx, (e.clientY - r.top - el.clientTop) * sy, scale, w, h);
   };
   return (
     <figure className="space-y-1">

@@ -120,6 +120,14 @@ export function zonesYaml(model: ZonesModel, review: Review): { ok: true; text: 
   return { ok: true, text: out.join("\n") + "\n" };
 }
 
+/** The cell under a pixel of the map canvas: (dx, dy) from the canvas CONTENT box's top-left, in
+ * canvas pixels; y grows NORTH (y = 0 is the bottom row). Null off the map. */
+export function cellOfPixel(dx: number, dy: number, scale: number, w: number, h: number): Cell | null {
+  const x = Math.floor(dx / scale);
+  const y = h - 1 - Math.floor(dy / scale);
+  return dx >= 0 && dy >= 0 && x >= 0 && x < w && y >= 0 && y < h ? [x, y] : null;
+}
+
 // --- drawing (a person's clicks; the loader's own rules refused early) ---------------------------
 export function startDraft(kind: ZoneKind): Draft {
   return { kind, points: [] };

@@ -12,6 +12,7 @@ import {
   addItem,
   addPoint,
   type Cell,
+  cellOfPixel,
   checkLines,
   commentLines,
   type Draft,
@@ -212,4 +213,16 @@ test("the Zones layer and the hunt block stay CSP clean: no script, no remote so
   const z = readFileSync(new URL("components/flows/ZonesEditor.tsx", root), "utf8");
   assert.deepEqual(z.match(/\.href = [^;]+;/g), [".href = url;"]); // the one link: the export's blob
   assert.match(z, /const url = URL\.createObjectURL\(new Blob\(\[text\]/);
+});
+
+test("a canvas pixel maps to its cell: every pixel of a cell, y north, nothing off the map", () => {
+  // zoom 2 on a 100 x 100 map: cell (x, y) covers content pixels [2x, 2x + 1] x [2(99 - y), 2(99 - y) + 1]
+  for (const [dx, dy, want] of [
+    [0, 0, [0, 99]], [1, 1, [0, 99]], [2, 1, [1, 99]], [21, 159, [10, 20]], [20, 158, [10, 20]],
+    [199, 199, [99, 0]], [200, 10, null], [-1, 10, null], [10, 200, null],
+  ] as [number, number, Cell | null][]) {
+    assert.deepEqual(cellOfPixel(dx, dy, 2, 100, 100), want, `${dx},${dy}`);
+  }
+  assert.deepEqual(cellOfPixel(7.9, 0, 8, 10, 10), [0, 9]);
+  assert.deepEqual(cellOfPixel(8, 0, 8, 10, 10), [1, 9]);
 });
