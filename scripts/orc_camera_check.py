@@ -94,6 +94,7 @@ C2_BAR_PX = {**{m: 4.0 for m in GROUND}, **{m: 6.0 for m in FLYERS}}
 FAMILIAR, DRAINLIAR = 1005, 1111
 UNIT_OBJTYPES = (0, 5, 6)  # player, monster, NPC (portals included: a drawn effect)
 POSITIVE_PER_SPECIES = 3
+HUE_CLEAN_NCC = 0.5  # the hue's clean variant: only bats the search found this well
 
 Rect = tuple[float, float, float, float]
 UiRects = tuple[tuple[int, int, int, int], ...]
@@ -313,6 +314,48 @@ def summarize(rows: Sequence[dict[str, Any]], tau: float) -> dict[str, Any]:
     }  # fmt: skip
 
 
+def heading_scores(frame: npt.NDArray[np.uint8], sheet: SpriteSheet, scene: Scene,
+                   cell: tuple[float, float], k: float) -> dict[int, float]:  # fmt: skip
+    """DIAGNOSTIC: label_check.score at the projected anchor for each of the 8 RO headings."""
+    out = {}
+    for h in range(8):
+        p = predict_sprite(Actor(cell, h, MonsterAction.IDLE), sheet, scene, k)
+        s = None if p is None else label_check.score(frame, sheet, p)
+        if s is not None:
+            out[h] = s
+    return out
+
+
+def facing_summary(rows: Sequence[dict[str, Any]], tau: float) -> dict[str, Any]:
+    """DIAGNOSTIC, NOT A BAR: how the labels would score if the sprite's VIEW were the best of
+    the 8 headings (the outdoor facing is an OPEN item of phase3-plan 5d-ii: "a wrong view lowers
+    the NCC"). The max over 8 views is biased upward; read it as an upper bound."""
+    by: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for r in rows:
+        if r.get("c1_any_heading") is not None:
+            by[str(r["mob"])].append(r)
+            by["pooled"].append(r)
+
+    def one(rs: list[dict[str, Any]]) -> dict[str, Any]:
+        n = len(rs)
+        low = sum(1 for r in rs if r["c1_any_heading"] < tau)
+        bad = sum(1 for r in rs if r["c1"] < tau)
+        return {"n": n, "low_share_timeline_facing": round(bad / n, 4) if n else None,
+                "low_share_best_of_8_headings": round(low / n, 4) if n else None,
+                "best_heading_differs": sum(1 for r in rs if r["best_heading"] != r["heading"]),
+                "heading_delta": dict(sorted(Counter(str((r["best_heading"] - r["heading"]) % 8)
+                                                     for r in rs).items())),
+                "facing_from": dict(Counter(str(r.get("facing_from")) for r in rs)),
+                "c1_median_timeline_facing": round(statistics.median(r["c1"] for r in rs), 3),
+                "c1_median_best_of_8": round(statistics.median(r["c1_any_heading"] for r in rs),
+                                             3)} if n else {"n": 0}  # fmt: skip
+
+    return {
+        "note": "DIAGNOSTIC, not a bar (the bars use the Timeline facing)",
+        **{m: one(rs) for m, rs in sorted(by.items())},
+    }
+
+
 # --- the session ------------------------------------------------------------------------------
 
 
@@ -413,6 +456,7 @@ def check(session: Path, a: argparse.Namespace) -> dict[str, Any]:
     dropped: Counter[str] = Counter()
     rows: list[dict[str, Any]] = []
     hue_px: dict[int, list[npt.NDArray[np.uint8]]] = defaultdict(list)
+    hue_clean: dict[int, list[npt.NDArray[np.uint8]]] = defaultdict(list)
     seen_species: Counter[int] = Counter()
     for ref in refs[:: a.every][: a.max_frames or None]:
         frames["read"] += 1
@@ -435,6 +479,7 @@ def check(session: Path, a: argparse.Namespace) -> dict[str, Any]:
         now = {s.gid: s for s in lab.timeline.states(tw)}
         prev = {s.gid: s for s in lab.timeline.states(tw - STANDING_NS)}
         cands: list[tuple[EntityState, SpriteSheet, SpritePrediction]] = []
+        st_of: dict[int, ActorState] = {}
         for e in world.entities:
             if e.objtype != 5 or e.hidden:
                 continue
@@ -461,6 +506,7 @@ def check(session: Path, a: argparse.Namespace) -> dict[str, Any]:
                 dropped["ui_or_edge"] += 1
                 continue
             cands.append((e, sheet, pred))
+            st_of[e.gid] = st
         if not cands:
             continue
         frames["with_standing"] += 1
@@ -484,19 +530,43 @@ def check(session: Path, a: argparse.Namespace) -> dict[str, Any]:
                 row.update({"best": round(bo[0], 4), "dx": bo[1], "dy": bo[2], "motion": bo[3]})
                 if e.job in (FAMILIAR, DRAINLIAR) and bo[0] >= a.tau:
                     hue_px[e.job].append(drawn_pixels(rgb, sheet, pred, bo[3], bo[1], bo[2]))
+            # DIAGNOSTIC (not a bar): the same NCC for each of the 8 headings at the anchor
+            facing = st_of[e.gid].facing
+            heading = int(facing if facing is not None else (e.heading or 0)) % 8
+            alt = heading_scores(bgr, sheet, scene, (float(e.x), float(e.y)), a.k)
+            h_best = max(alt, key=lambda h: alt[h]) if alt else heading
+            row.update({"heading": heading, "facing_from": st_of[e.gid].facing_from,
+                        "best_heading": h_best,
+                        "c1_any_heading": round(alt[h_best], 4) if alt else None})  # fmt: skip
+            if e.job in (FAMILIAR, DRAINLIAR) and alt:
+                ph = predict_sprite(Actor((float(e.x), float(e.y)), h_best, MonsterAction.IDLE),
+                                    sheet, scene, a.k)  # fmt: skip
+                bh = None if ph is None else best_offset(bgr, sheet, ph)
+                if ph is not None and bh is not None and bh[0] >= HUE_CLEAN_NCC:
+                    hue_clean[e.job].append(drawn_pixels(rgb, sheet, ph, bh[3], bh[1], bh[2]))
             rows.append(row)
     result = summarize(rows, a.tau)
+    result["facing_diagnostic"] = facing_summary(rows, a.tau)
     hue: dict[str, Any] = {}
     for mob in (FAMILIAR, DRAINLIAR):
         px = np.concatenate(hue_px[mob]) if hue_px[mob] else np.zeros((0, 3), np.uint8)
         sheet = lab.sheets(mob)
+        clean = np.concatenate(hue_clean[mob]) if hue_clean[mob] else np.zeros((0, 3), np.uint8)
         hue[str(mob)] = {
             "labels": len(hue_px[mob]),
             "drawn": hue_stats(px),
+            "labels_clean": len(hue_clean[mob]),
+            "drawn_clean": hue_stats(clean),
             "rendered_reference": None if sheet is None else reference_hue(sheet),
         }
     hue["gap_deg_drawn"] = hue_gap(hue[str(FAMILIAR)]["drawn"].get("hue_deg"),
                                    hue[str(DRAINLIAR)]["drawn"].get("hue_deg"))  # fmt: skip
+    fc, dc = hue[str(FAMILIAR)]["drawn_clean"], hue[str(DRAINLIAR)]["drawn_clean"]
+    hue["gap_deg_drawn_clean"] = hue_gap(fc.get("hue_deg"), dc.get("hue_deg"))
+    hue["clean_rule"] = (
+        f"the best of the 8 headings, at its best offset, NCC >= {HUE_CLEAN_NCC}: "
+        "the mask on the bat itself, not the ground around a wrong view"
+    )
     ref_f = hue[str(FAMILIAR)]["rendered_reference"] or {}
     ref_d = hue[str(DRAINLIAR)]["rendered_reference"] or {}
     hue["gap_deg_rendered"] = hue_gap(ref_f.get("hue_deg"), ref_d.get("hue_deg"))

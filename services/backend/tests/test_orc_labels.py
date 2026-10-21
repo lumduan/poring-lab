@@ -13,6 +13,7 @@ import gzip
 import importlib.util
 import io
 import json
+import os
 import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -523,3 +524,45 @@ def test_dwell_spans_pair_by_ref() -> None:
           "t_mono_ns": 10}, {"event": "dwell_end", "ref": 0, "t_mono_ns": 40},
           {"event": "dwell_start", "ref": 1, "t_mono_ns": 50}]  # fmt: skip
     assert occ.dwell_spans(ev) == [(10, 40)]  # an unfinished dwell is not a span
+
+
+# --- a REAL positive case (memory: a scorer needs one from a real session) -------------------
+
+COL1 = Path("/mnt/poring-lab-datasets/detector-collection/orcsdun01/20261021T103231-orcsdun01-col1")
+KB = Path(os.environ.get("PORING_KB", str(ROOT / "data" / "kb")))
+
+
+def test_camera_check_real_positive_case(monkeypatch: pytest.MonkeyPatch) -> None:
+    """col1 (the first orcsdun01 block, 2026-10-21), frame 2320: an Orc Zombie (gid 110093469)
+    standing alone; the label's sprite, at the projected anchor with k 0.14, is what the client
+    drew there (C1 0.79, the best offset (0, 0)). Local data only: skipped elsewhere."""
+    if not (COL1 / "manifest.json").exists() or not (KB / "classes.json").exists():
+        pytest.skip("col1 or the local KB is not here")
+    if not (qa_export.SPRITE_DIR / "orc_zombie.spr").exists():
+        pytest.skip("the decoded orcsdun01 sprites are not in the sprite dir")
+    from poring_dataset.render import Actor, MonsterAction, predict_sprite
+
+    monkeypatch.setattr(qa_export, "KB_CLASSES", KB / "classes.json")
+    monkeypatch.setattr(qa_export, "KB_SPRITE_NAMES", KB / "monster_sprite_names.json")
+    lab = qa_export.Labeler(COL1, "auto", labels="v1", k=0.14)
+    assert lab.ui_rects == qa_export.ui_rects_for({**dict.fromkeys(qa_export.WARP_WATCH_KEYS, 0),
+                                                   "ui_layout": "hunt"})  # fmt: skip
+    one = {"recorder": {"shards": ["shard-000001.tar"]}}  # frame 2320 lies in the 2nd shard
+    ref = next(r for r in qa_export.jpeg_index(COL1, one) if r.frame_id == 2320)
+    tw = ref.t_mono_ns - int(lab.offset_ms * 1e6)
+    world = lab.timeline.frame_world(tw)
+    ent = next(e for e in world.entities if e.gid == 110093469)
+    assert ent.job == 1153 and world.map == "orcsdun01.gat"
+    st = lab.timeline.state(ent.gid, tw)
+    assert occ.standing(st, lab.timeline.state(ent.gid, tw - occ.STANDING_NS))
+    assert st is not None and st.facing is not None
+    scene = occ.scene_for(lab, world.map, world.self_pos)  # type: ignore[arg-type]
+    sheet = lab.sheets(1153)
+    pred = predict_sprite(Actor((ent.x, ent.y), st.facing, MonsterAction.IDLE), sheet, scene, 0.14)
+    assert pred is not None
+    assert [round(v) for v in pred.box] == [473, 379, 523, 471]
+    frame = qa_export.read_jpeg(ref)
+    c1 = label_check.score(frame, sheet, pred)
+    assert c1 is not None and c1 > 0.7
+    best = occ.best_offset(frame, sheet, pred)
+    assert best is not None and best[1:3] == (0, 0) and best[0] == pytest.approx(c1, abs=1e-6)
