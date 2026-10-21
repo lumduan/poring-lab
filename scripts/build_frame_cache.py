@@ -14,7 +14,8 @@ files), never one file per frame on the shared disk. So:
   (freeze spans excluded) is kept;
 - labels come from qa_export's Labeler (the same as /qa and label_iou: the backend's camera, the
   packet->frame offset, GM-command windows skipped). Frames on any map other than the session's
-  scene maps (prt_fild08, prt_church) are skipped (p3-outdoor-b's stray minutes in prontera);
+  scene maps (prt_fild08, prt_church; orcsdun01 since 2026-10-21) are skipped (p3-outdoor-b's
+  stray minutes in prontera);
 - frames are written as JPEG q95: the default again since Batt's decision of 2026-10-09 (the
   matched-batch rerun found no detection gain for PNG's ~5x storage; docs/benchmarks/
   v0-png-vs-jpeg.md). ``--image png`` gives the lossless PNG of 2026-10-06..09, which v1png keeps

@@ -397,6 +397,7 @@ def peek(session: str, at_s: float, out: Path, datasets: Path, data: Path, k: fl
 SCENE_MAPS = (
     "prt_fild08",
     "prt_church",
+    "orcsdun01",
 )  # build_frame_cache.SCENE_MAPS (test_label_quality pins it)
 CENSUS_LAG_MS = 125
 NEAR_MISS_PX = 40.0  # model_misses: a detection this close to a missed hand box is a near miss
