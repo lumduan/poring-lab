@@ -59,7 +59,10 @@ CONFIG_DIR = Path(__file__).resolve().parents[1] / "config" / "flows" / "hunt"
 # The adopted base (blocks-from-hunt-flow.md section 2): v52 = v51 + "loot_gm_one_pass_ab" False
 # + "map_zones" True, ADOPTED 2026-10-21 14:22 (demonstrations.md 3.93). Adoption is a commit that
 # moves this number (the plan's section 4: "adoption = a commit moving the adopted config").
-ADOPTED_VERSION = 52
+# ➡️ v55 since 2026-10-22 04:32 (3.97 ADOPTED by its rule, 549b797): v55 with its live arm off
+# (`adopt`: "loot_fast_scan_ab" False) = v52 + the fast scan on every loot step + the NPC sprite
+# guard. The next version's PARAMS start from {**PARAMS[55], "loot_fast_scan_ab": False}.
+ADOPTED_VERSION = 55
 # The last PARAMS version whose keys a person reviewed in `PATTERNS` (the table below was written
 # against v54, 2026-10-21): later keys are classified by their pattern only and listed for review.
 REVIEWED_THROUGH = 54

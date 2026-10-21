@@ -2249,7 +2249,8 @@ what works; the result should become blocks a person can read and change."
    - It may run before walk / talk readiness. For this slice only, it amends 13.8's order
      (MW2-live first) and section 6's executor location: the host, RDP and the CPU detector, as
      `hunt_flow.py`. The vision container on S2 stays the target.
-   - Its first run is an A/A check of the adopted base (v51 when drafted; v52 since 14:22).
+   - Its first run is an A/A check of the adopted base (v51 when drafted; v52 since 14:22; v55
+     since 2026-10-22 04:32, demonstrations 3.97).
 
 **MW3 readiness (13.8), as of 2026-10-21: NOT met.**
 - Met: ADR-0005 and the interlock; hard bars 0 while hunting on prt_fild08; the position read on

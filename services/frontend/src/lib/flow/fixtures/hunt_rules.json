@@ -1,6 +1,6 @@
 {
  "block": "hunt",
- "adopted": 52,
+ "adopted": 55,
  "groups": [
   {
    "name": "engage",
@@ -35,7 +35,8 @@
         51,
         52,
         53,
-        54
+        54,
+        55
        ],
        "adopted": true,
        "evidence": [
@@ -105,7 +106,8 @@
         51,
         52,
         53,
-        54
+        54,
+        55
        ],
        "adopted": true,
        "evidence": [
@@ -156,7 +158,8 @@
         51,
         52,
         53,
-        54
+        54,
+        55
        ],
        "adopted": true,
        "evidence": [
@@ -186,6 +189,48 @@
     {
      "name": "loot",
      "choices": [
+      {
+       "id": "gm_fast_scan@54",
+       "known": true,
+       "values": {
+        "loot": true,
+        "loot_sweep": true,
+        "loot_max_s": 6.0,
+        "loot_max_clicks": 8,
+        "loot_blobs": true,
+        "loot_before_s": 1.8,
+        "loot_fixed": true,
+        "loot_center_clicks": 2,
+        "loot_ring_clicks": 1,
+        "loot_interval_s": 0.05,
+        "loot_fixed_max_s": 4.5,
+        "blob_gm_px": 70.0,
+        "loot_gm": true,
+        "loot_gm_stand_s": 0.5,
+        "loot_gm_wait_s": 0.45,
+        "loot_hand_still_s": 0.15,
+        "loot_gm_still_max_s": 1.2,
+        "loot_gm_settle_s": 0.8,
+        "loot_gm_burst_max": 6,
+        "loot_gm_burst_gap_s": 0.59,
+        "loot_gm_read_lead_s": 0.2,
+        "loot_gm_passes": 3,
+        "loot_gm_max_s": 12.0,
+        "loot_gm_edge": true,
+        "loot_gm_one_pass": true,
+        "loot_fast_scan": true,
+        "loot_fast_before_s": 0.45,
+        "loot_fast_before_max_s": 0.4,
+        "loot_fast_moved_cells": 0.25,
+        "loot_fast_thr": 0.04
+       },
+       "versions": [
+        54,
+        55
+       ],
+       "adopted": true,
+       "evidence": []
+      },
       {
        "id": "gm_scan_one_pass@51",
        "known": true,
@@ -220,7 +265,7 @@
         51,
         52
        ],
-       "adopted": true,
+       "adopted": false,
        "evidence": [
         {
          "entry": "3.92",
@@ -279,7 +324,7 @@
        ]
       }
      ],
-     "default": "gm_scan_one_pass@51"
+     "default": "gm_fast_scan@54"
     }
    ]
   },
@@ -331,7 +376,8 @@
         51,
         52,
         53,
-        54
+        54,
+        55
        ],
        "adopted": true,
        "evidence": [

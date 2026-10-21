@@ -122,10 +122,19 @@ def test_v51_and_v52_resolve_from_their_committed_configs_exactly() -> None:
         assert cfg["params_sha256"] == hcfg.params_sha256(P[v])
 
 
-def test_the_adopted_base_is_v51_adopted_plus_the_zones() -> None:
-    """The plan's section 2: the base is v51 with loot_gm_one_pass_ab False; since 14:22, v52 =
-    that + map_zones. Under blocks, adoption turns the arm flags off (`adopt`)."""
-    assert hcfg.ADOPTED_VERSION == 52
+def test_the_adopted_base_is_v55_with_its_arm_off() -> None:
+    """The plan's section 2: the base was v51 with loot_gm_one_pass_ab False; from 10-21 14:22, v52
+    = that + map_zones; since 10-22 04:32 (3.97 ADOPTED by its rule), v55 with loot_fast_scan_ab
+    False. Under blocks, adoption turns the live arm flags off (`adopt`)."""
+    assert hcfg.ADOPTED_VERSION == 55
+    adopted_v55 = hcfg.resolve(hcfg.adopt(hcfg.export(P, 55)))
+    assert hcfg.same(adopted_v55, {**P[55], "loot_fast_scan_ab": False})
+    assert all(P[55][k] == v for k, v in P[52].items())  # v55 only ADDS keys to v52 (v54 + guard)
+    ids55 = hcfg.rule_ids(P, 55)
+    assert ids55 == {"strike": "arm_c@32", "engage_on_the_way": "on_the_way@19",
+                     "dead": "exp_line@48", "loot": "gm_fast_scan@54",
+                     "search": "heading_coverage@22", "engine": "engine@55"}  # fmt: skip
+    # the history: v52 as it was adopted (10-21 14:22 .. 10-22 04:32)
     adopted_v51 = hcfg.resolve(hcfg.adopt(hcfg.export(P, 51)))
     assert hcfg.same(adopted_v51, {**P[51], "loot_gm_one_pass_ab": False})
     assert hcfg.same({**adopted_v51, "map_zones": True}, P[52])

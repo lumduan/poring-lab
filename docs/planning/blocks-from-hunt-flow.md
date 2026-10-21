@@ -54,6 +54,11 @@ merge chain it holds 209 keys (computed from the file on 2026-10-21, 0684d2c).
 ➡️ **SUPERSEDED 2026-10-21 14:22:** the adopted base is now **v52** = v51 + `"map_zones": True`
 (the prt_fild08 zones file, demonstrations 3.93 ADOPTED). Read "v51" below as "the adopted base";
 the key count grows by the one key.
+➡️ **SUPERSEDED AGAIN 2026-10-22 04:32 (549b797):** the adopted base is now **v55** with its live arm
+off (`adopt`: `"loot_fast_scan_ab": False`) = v52 + the fast scan on every loot step (loot rule
+`gm_fast_scan@54`) + the NPC sprite guard (`npc_px_guard`, `engine@55`); demonstrations 3.97 ADOPTED
+by its rule. `hunt_config.ADOPTED_VERSION` = 55; the `hunt` block's loot choices lead with
+`gm_fast_scan@54`. 3.97 has no D8 evidence row yet (a person's).
 
 **2a. Block parameters (a person chooses)**
 
@@ -248,11 +253,12 @@ Built by a subagent in a tmpfs worktree, on main 5e5dbcf (v54 merged): commits b
 - `scripts/hunt_config.py`: the key classes by ORDERED NAME PATTERNS (D3: never a frozen key list;
   a key no pattern names is refused, keys newer than `REVIEWED_THROUGH` = 54 are listed for review);
   `export` / `resolve` / `params_for` / `adopt`. `scripts/params_export.py classify | export | check`.
-- `config/flows/hunt/v01.yaml` ... `v54.yaml` (all 51 versions) and `index.yaml` (adopted: 52; each
+- `config/flows/hunt/v01.yaml` ... `v54.yaml` (all 51 versions; `v55.yaml` since 10-22) and `index.yaml` (adopted: 52; 55 since 10-22 04:32; each
   version's rule versions and arm flags; each rule version's numbers). Our own numbers only.
 - Each hunt parameter's value is a rule version `name@N`, N = the first PARAMS version with exactly
   these numbers. The adopted base v52 reads: strike `arm_c@32`, engage_on_the_way `on_the_way@19`,
   dead `exp_line@48`, loot `gm_scan_one_pass@51`, search `heading_coverage@22`, `engine@42`, zones on.
+  ➡️ Since 10-22 04:32 the adopted base is v55: the same but loot `gm_fast_scan@54` and `engine@55`.
 - `blocks.yaml` `hunt` (groups: engage = strike + engage_on_the_way; dead_loot = dead + loot;
   search; stop = the enclosing loop's condition and max_s, 13.5) and L1 `combat.hunt` (unverified).
   Every parameter is required and takes one of its `choices`.
@@ -324,7 +330,7 @@ channel; nothing is written by the backend. Nothing ran live.
   IR -> blocks -> IR is exact; a hunt whose value is off the list (or without the catalogue's lists)
   stays a generic block, exactly, and the linter's `rule_version` names it.
 - **The badges** (`packages/poring_flow/src/poring_flow/hunt_rules.py`, served in GET
-  /flows/catalogue as `hunt_rules`): per rule version, ★ the adopted base's (index `adopted` = 52),
+  /flows/catalogue as `hunt_rules`): per rule version, ★ the adopted base's (index `adopted` = 52; 55 since 10-22 04:32),
   ◆ hunting evidence by D8's rule (a pre-registered verdict, hard bars 0 / 0 / 0, >= 4 run-hours),
   and the PARAMS versions that hold it; its numbers read-only (the block's tooltip and a "hunt rules"
   panel). The evidence is a NEW hand-written record, `config/flows/hunt/evidence.yaml`: 3.91 (v50)
@@ -423,13 +429,13 @@ The questions as asked:
    or `search` / `engage` / `loot` blocks in a loop? Proposed: one. v2's pipelined loop (perception,
    planner and executor in parallel, pre-emption on the way) does not split into sequential blocks
    without a loss. And the name: `hunt`?
-3. **D3 · Freeze PARAMS when?** At the adopted base now (v51 when written; v52 since 14:22) (new versions only as block configs), or open until B4's
+3. **D3 · Freeze PARAMS when?** At the adopted base now (v51 when written; v52 since 14:22; v55 since 10-22 04:32) (new versions only as block configs), or open until B4's
    A/A passes? Proposed: open until B4, so competition.md's loot levers are not held up; frozen
    after.
 4. **D4 · Where configs and specs live.** Committed under `config/flows/` (mob ids + our numbers,
    like the zones files; `farm0.TARGETS` already commits ids), or under `data/` like filled flows
    (ADR-0020 7.1)?
-5. **D5 · The first block-driven run.** A live A/A of the adopted base (v51 when written; v52 since 14:22): the block runner against
+5. **D5 · The first block-driven run.** A live A/A of the adopted base (v51 when written; v52 since 14:22; v55 since 10-22 04:32): the block runner against
    `hunt_flow.py run --version 51`, alternating whole runs (2 + 2 x 60 min), judged against 3.89's
    null. Or the offline equality check only?
 6. **D6 · Zones from the editor.** Export only first (a person commits), or a save route (a new

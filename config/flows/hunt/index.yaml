@@ -4,7 +4,7 @@
 # runs (odd k / odd blocks). rules: every rule version's numbers, as a person would pick it.
 kind: hunt-config-index
 format: 1
-adopted: 52
+adopted: 55
 versions:
   1:
     strike: read@1

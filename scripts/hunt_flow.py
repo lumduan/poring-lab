@@ -630,6 +630,8 @@ PARAMS[54] = {**PARAMS[52], "loot_fast_scan": True, "loot_fast_scan_ab": True,
 # velocity lead moved the press ~290 px up, onto the NPC's sprite. The fix judges the PRESSED
 # pixel, in FrameGuard (every hunt-flow click passes there): a press inside a KB NPC's projected
 # sprite area (NPC_SPRITE_PX around the foot, the GM at measured_pos) is refused and counted.
+# ➡️ ADOPTED 2026-10-22 04:32 by its rule (3.97, 549b797: P1 0.861, P2 -5.0 pts, G3 0 over 4 h).
+# The adopted base = v55 with "loot_fast_scan_ab" False (hunt_config.ADOPTED_VERSION 55).
 PARAMS[55] = {**PARAMS[54], "npc_px_guard": True}
 
 

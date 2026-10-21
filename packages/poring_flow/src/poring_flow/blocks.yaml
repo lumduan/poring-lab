@@ -134,12 +134,14 @@ blocks:
     # a rule version; gates, safety, readers and constants stay in the engine (never a parameter).
     # The choices are the adopted base's (v52, config/flows/hunt/v52.yaml) and the alternatives
     # the plan names that exist as versions; another value is a new version, pre-registered.
+    # ➡️ The adopted base is v55 since 2026-10-22 04:32 (3.97): its loot rule gm_fast_scan@54
+    # joins the loot choices (first: the adopted one); the other rules are v52's, unchanged.
     concept: combat.hunt
     params:
       - {name: strike, type: str, required: true, group: engage, choices: [arm_c@32]}
       - {name: engage_on_the_way, type: str, required: true, group: engage, choices: [on_the_way@19]}
       - {name: dead, type: str, required: true, group: dead_loot, choices: [exp_line@48]}
-      - {name: loot, type: str, required: true, group: dead_loot, choices: [gm_scan_one_pass@51, gm_scan@50]}
+      - {name: loot, type: str, required: true, group: dead_loot, choices: [gm_fast_scan@54, gm_scan_one_pass@51, gm_scan@50]}
       - {name: search, type: str, required: true, group: search, choices: [heading_coverage@22]}
     timeout_s: 600
     long: true

@@ -46,15 +46,18 @@ def test_groups_are_the_registrys_with_the_adopted_rule_as_default() -> None:
     defaults = {p["name"]: p["default"] for g in doc["groups"] for p in g["params"]}
     assert defaults == {
         "strike": "arm_c@32", "engage_on_the_way": "on_the_way@19", "dead": "exp_line@48",
-        "loot": "gm_scan_one_pass@51", "search": "heading_coverage@22",
+        "loot": "gm_fast_scan@54", "search": "heading_coverage@22",
     }  # fmt: skip
-    assert doc["adopted"] == 52 and doc["groups"][-1]["params"] == []
+    assert doc["adopted"] == 55 and doc["groups"][-1]["params"] == []  # 52 until 3.97 (10-22 04:32)
 
 
 def test_each_rule_version_carries_its_numbers_and_the_versions_that_hold_it() -> None:
     doc = rules_doc(index(), evidence())
-    one = choice(doc, "loot", "gm_scan_one_pass@51")
-    assert one["adopted"] and one["known"] and one["versions"] == [51, 52]
+    fast = choice(doc, "loot", "gm_fast_scan@54")  # the adopted base's since 3.97 (v55)
+    assert fast["adopted"] and fast["known"] and fast["versions"] == [54, 55]
+    assert fast["values"]["loot_fast_scan"] is True and fast["values"]["loot_gm_one_pass"] is True
+    one = choice(doc, "loot", "gm_scan_one_pass@51")  # v52's, adopted until 3.97
+    assert not one["adopted"] and one["known"] and one["versions"] == [51, 52]
     assert one["values"]["loot_gm_one_pass"] is True and one["values"]["loot_gm_stand_s"] == 0.5
     v50 = choice(doc, "loot", "gm_scan@50")
     assert (
@@ -86,7 +89,7 @@ def test_d8_badges_come_only_from_qualifying_verdicts() -> None:
 def test_no_evidence_file_no_evidence_badge() -> None:
     doc = rules_doc(index(), None)
     assert doc["evidence"]["badges"] == [] and doc["evidence"]["verdicts"] == []
-    assert choice(doc, "loot", "gm_scan_one_pass@51")["adopted"]  # adoption is the index's
+    assert choice(doc, "loot", "gm_fast_scan@54")["adopted"]  # adoption is the index's
 
 
 def test_a_choice_the_index_does_not_know_is_shown_unknown() -> None:

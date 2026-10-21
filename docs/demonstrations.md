@@ -14441,7 +14441,7 @@ Reported, not deciding:
     - kill -> last pickup p50 1.96 s.
   - Economics (`run_row`): 802.3 z/h gross (928.2 with Overcharge); Sharpe-like 5.75.
 
-**VERDICT (2026-10-22 04:27 ICT, 4 runs, all on their time box): ADOPTED by its rule.**
+**VERDICT (recorded 2026-10-22 04:32 ICT, 549b797's commit time; 4 runs, all on their time box): ADOPTED by its rule.**
 
 | bar | pooled over runs 1-4 | bar | result |
 |---|---|---|---|

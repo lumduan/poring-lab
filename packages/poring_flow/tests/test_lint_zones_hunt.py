@@ -95,8 +95,8 @@ CASES = [
         lambda: flow(('loot="gm_scan_one_pass@51"', 'loot="gm_scan@49"')),
         zones(),
         [
-            f"{HUNT}: hunt's loot takes a rule version (gm_scan_one_pass@51, gm_scan@50), not "
-            "'gm_scan@49'"
+            f"{HUNT}: hunt's loot takes a rule version (gm_fast_scan@54, gm_scan_one_pass@51, "
+            "gm_scan@50), not 'gm_scan@49'"
         ],
         ok=lambda: flow(('loot="gm_scan_one_pass@51"', 'loot="gm_scan@50"')),
     ),
