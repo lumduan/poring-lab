@@ -33,6 +33,9 @@ boxes are the labels v2orc-fix FITTED boxes instead of v1's (facing 1a, anchor 1
 when every visible monster's label is kept (an excluded one -- ``occluded_model``, ``crowd``,
 ``ui``, ``unfit`` -- excludes the frame: ``fix_<reason>``), on top of the cache's own rules.
 ``labels_summary.json`` then also counts the monster labels kept / excluded per species and reason.
+The blind pack and the sheets sample every KEPT fitted label of the frames v2's own rules keep
+(``--blind-from kept_labels``, the default: 3b's blind check judges the LABELS), or only the labels
+of frames the cache would keep whole (``complete_frames``). ``--workers N`` forks the frames' work.
 """
 
 from __future__ import annotations
@@ -286,55 +289,58 @@ def collect(session: Path, a: argparse.Namespace) -> tuple[dict[str, Any], dict[
     class_boxes: Counter[str] = Counter()
     frames_with: Counter[int] = Counter()
     items: dict[int, list[Item]] = defaultdict(list)
-    fixer = None
+    kept_any: dict[int, list[Item]] = defaultdict(list)  # --fix: every kept label, any frame
     fix_kept: Counter[str] = Counter()
     fix_excl: dict[str, Counter[str]] = defaultdict(Counter)
     fix_hidden = 0
     fix_other_map = 0
+    _FIX.clear()
+    _FIX.update(sess=sess, v2=v2, fixer=None if fix_params is None else
+                olf.FixLabeler(sess.labeler, fix_params))  # fmt: skip
     if fix_params is not None:
-        fixer = olf.FixLabeler(sess.labeler, fix_params)
-    for ref in refs:
-        outcome, fr, reasons, _mk = bfc.decide(sess, ref.t_mono_ns, v2)
-        fixed = None
-        if outcome == "ok" and fr is not None and fixer is not None:
-            fixed = fixer.frame(ref.t_mono_ns, qa_export.read_jpeg(ref))
-            if fixed is not None and not fixed.applies:
-                fixed = None  # another map (prt_fild08 before the first warp): v1's labels
-                fix_other_map += 1
-            elif fixed is None:
-                outcome, reasons = "excluded", ["fix_no_world"]
-            else:
-                fix_hidden += fixed.hidden
-                for lab in fixed.kept:
-                    fix_kept[str(lab.mob)] += 1
-                for _gid, mob, why in fixed.excluded:
-                    fix_excl[why][str(mob)] += 1
-                if fixed.excluded:
-                    outcome = "excluded"
-                    reasons = [f"fix_{why}:{mob}" for _g, mob, why in fixed.excluded]
+        results = olf.run_parallel(_frame_fate, refs, getattr(a, "workers", 1))
+    else:
+        results = [_frame_fate(ref) for ref in refs]
+    for ref, outcome, reasons, written, fixed in results:
+        if fixed is not None and not fixed[0]:
+            fixed = None  # another map (prt_fild08 before the first warp): v1's labels
+            fix_other_map += 1
+        if fixed is not None:
+            _applies, kept, excl, hidden = fixed
+            fix_hidden += hidden
+            for mob, gid, box in kept:
+                fix_kept[str(mob)] += 1
+                kept_any[mob].append(Item(ref, mob, gid, box, "fit"))
+            for _gid, mob, why in excl:
+                fix_excl[why][str(mob)] += 1
+            if excl:
+                outcome = "excluded"
+                reasons = [f"fix_{why}:{mob}" for _g, mob, why in excl]
         outcomes[outcome] += 1
         if outcome == "excluded":
             for r in {r.split(":", 1)[0] for r in reasons}:
                 excluded[r] += 1
             for r in dict.fromkeys(reasons):
                 excluded_detail[r] += 1
-        if outcome != "ok" or fr is None:
+        if outcome != "ok":
             continue
-        labels = fr.labels if fixed is None else [b for b in fr.labels if b.cls != "monster"]
-        _text, written = bfc.v2_yolo(labels, bfc.V2_SIZE, v2.classes.class_of)
         mobs = set()
-        for b in written:
-            class_boxes[b.cls] += 1
-            if b.cls != "monster" or b.job is None:
+        for cls, job, gid, box, kind in written:
+            if fixed is not None and cls == "monster":
+                continue  # replaced by the fitted boxes
+            class_boxes[cls] += 1
+            if cls != "monster" or job is None:
                 continue
-            boxes[b.job] += 1
-            mobs.add(b.job)
-            items[b.job].append(Item(ref, b.job, b.gid, b.box, b.kind))
-        for lab in fixed.kept if fixed is not None else []:
+            boxes[job] += 1
+            mobs.add(job)
+            items[job].append(Item(ref, job, gid, box, kind))
+            if fix_params is not None:
+                kept_any[job].append(Item(ref, job, gid, box, kind))  # v1's, off orcsdun01
+        for mob, gid, box in fixed[1] if fixed is not None else []:
             class_boxes["monster"] += 1
-            boxes[lab.mob] += 1
-            mobs.add(lab.mob)
-            items[lab.mob].append(Item(ref, lab.mob, lab.gid, lab.box, "fit"))
+            boxes[mob] += 1
+            mobs.add(mob)
+            items[mob].append(Item(ref, mob, gid, box, "fit"))
         for m in mobs:
             frames_with[m] += 1
     summary = {"session": qa_export.session_id(manifest), "every": a.every,
@@ -360,10 +366,38 @@ def collect(session: Path, a: argparse.Namespace) -> tuple[dict[str, Any], dict[
             "monsters_not_visible": fix_hidden,
             "frames_off_orcsdun01_v1_labels": fix_other_map,
             "note": "counted on the frames v2's own rules keep; a frame with any excluded "
-                    "monster label is excluded (fix_<reason>), so its kept labels are NOT in "
-                    "the crops",
+                    "monster label is excluded (fix_<reason>) from the cache",
+            "kept_labels_by_species_any_frame": {str(k): len(v)
+                                                 for k, v in sorted(kept_any.items())},
+            "blind_and_sheets_from": a.blind_from,
         }  # fmt: skip
+        if a.blind_from == "kept_labels":
+            return summary, kept_any, v2, sess
     return summary, items, v2, sess
+
+
+_FIX: dict[str, Any] = {}  # the open v2 session (and --fix's labeller), inherited by fork
+
+
+def _frame_fate(ref: qa_export.JpegRef) -> tuple[Any, ...]:
+    """One frame's fate, small and picklable: (ref, outcome, reasons, v2's written labels as
+    (cls, job, gid, box, kind), the fix's (applies, kept (mob, gid, box), excluded (gid, mob,
+    reason), hidden) or None)."""
+    sess, v2, fixer = _FIX["sess"], _FIX["v2"], _FIX["fixer"]
+    outcome, fr, reasons, _mk = bfc.decide(sess, ref.t_mono_ns, v2)
+    written: list[tuple[str, int | None, int | None, tuple[float, ...], str]] = []
+    fixed = None
+    if outcome == "ok" and fr is not None:
+        _text, out = bfc.v2_yolo(fr.labels, bfc.V2_SIZE, v2.classes.class_of)
+        written = [(b.cls, b.job, b.gid, b.box, b.kind) for b in out]
+        if fixer is not None:
+            got = fixer.frame(ref.t_mono_ns, qa_export.read_jpeg(ref))
+            if got is None:
+                outcome, reasons = "excluded", ["fix_no_world"]
+            else:
+                fixed = (got.applies, [(k.mob, k.gid, k.box) for k in got.kept],
+                         list(got.excluded), got.hidden)  # fmt: skip
+    return ref, outcome, reasons, written, fixed
 
 
 def write_outputs(session: Path, a: argparse.Namespace) -> dict[str, Any]:
@@ -454,6 +488,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument("--npc-sprite-names", type=Path, default=None)
     ap.add_argument("--npc-extents", type=Path, default=None)
     ap.add_argument("--npc-checked", type=Path, default=None)
+    ap.add_argument("--workers", type=int, default=1, help="--fix: forked worker processes")
+    ap.add_argument(
+        "--blind-from", choices=("kept_labels", "complete_frames"), default="kept_labels",
+        help="--fix: the blind pack and the sheets sample every KEPT fitted label (default), or "
+        "only the labels of frames the cache would keep whole",
+    )  # fmt: skip
     ap.add_argument(
         "--fix",
         type=Path,
