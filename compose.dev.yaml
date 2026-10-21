@@ -61,6 +61,9 @@ services:
       PYTHONDONTWRITEBYTECODE: "1"
       # MW2 simulate on REAL routes (Batt 2026-10-09): the map GATs, read-only (routes_flows).
       PORING_GAT_DIR: /lab-gat
+      # B2 (blocks-from-hunt-flow.md, 2026-10-21): the /flows Zones layer checks the editor's YAML
+      # with the RUNNER'S OWN zones loader (scripts/map_zones.py + flow_zones.py), imported from here.
+      ZONES_CODE_DIR: /lab-scripts
     volumes:
       - ./packages/poring_env/src:/dev-src/poring_env:ro
       - ./packages/poring_packets/src:/dev-src/poring_packets:ro
@@ -71,6 +74,11 @@ services:
       # committed), not the /dev/shm extraction itself: the backend restarts at boot, and a bind of
       # a missing /dev/shm path would be created root-owned before the extraction runs.
       - ./data/gat:/lab-gat:ro
+      # B2: the zones loader's code, READ-ONLY, a DIRECTORY bind (no single-file inode trap). The
+      # backend imports only map_zones / hunt_core / flow_zones from it and restores its import
+      # path after (flows_zones.engine). Takes effect at a guarded recreate:backend; until then
+      # the zones routes answer 503 zones_engine_unavailable (fail closed). test_guards pins it.
+      - ./scripts:/lab-scripts:ro
 
   gamestream:
     # The clean room (2026-10-03): the loop and the S2 spike run from the host source, read-only.

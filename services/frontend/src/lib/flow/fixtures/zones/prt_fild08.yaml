@@ -1,0 +1,23 @@
+# prt_fild08's forbidden zones (map cells: x east, y north -- the minimap readout's, /where's and
+# the server's numbers). The format and what each kind does: README.md beside this file.
+#
+# DELEGATED REVIEW. Batt delegated the authoring of this file to the agent on 2026-10-21 (his
+# decision 1 on the overnight loot report, docs/competition.md "Map zones: Batt's delegation"):
+# "Map zones: I DELEGATE the zone authoring to you. Write config/map_zones/prt_fild08.yaml
+# yourself: a no-cross line sealing C1's entrance (your proposed (322,88)-(318,91)); C2 needs
+# nothing while C1 is sealed; add C3's line too (outside the search area, harmless)."
+# The candidates came from scripts/map_zone_candidates.py (the NAS list:
+# /mnt/poring-lab-datasets/map-zones/prt_fild08/CANDIDATES.md). The offline proof that these lines
+# seal C1 and C3 and cut off nothing else: `python3 scripts/map_zones.py prove prt_fild08`
+# (recorded in docs/demonstrations.md 3.93).
+map: prt_fild08
+reviewed_by: "agent (delegated by batt, 2026-10-21)"
+reviewed: 2026-10-21
+delegation: "Batt 2026-10-21, decision 1 on the overnight loot report: zone authoring delegated to the agent (C1 + C3 no-cross lines); docs/competition.md 'Map zones: Batt's delegation'"
+no_cross:
+  - id: c1-door
+    note: "the 2-cell door (x 319-320, y 89-91) into the south-east room C1 (2391 walkable cells cut off behind this line, `prove`; Batt's 21:01-21:03 clip); the bot circled inside up to 849 s, 0.37 vs 1.89 kills/min"
+    points: [[322, 88], [318, 91]]
+  - id: c3-door
+    note: "C3, the south-west island (413 cells, x 40-57, y 20-61): NOT connected to the field at all (only @warp reaches it); this line closes its 2-cell neck (x 48-49, y 35-36), cutting its south 88 cells off its north 325; harmless, kept as Batt decided"
+    points: [[50, 36], [46, 36]]

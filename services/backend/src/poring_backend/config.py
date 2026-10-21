@@ -95,6 +95,15 @@ class Settings(BaseSettings):
     # gamestream connect to); the allowlist's windows_host must equal it.
     environments_file: Path = Path("/lab-config/environments.yaml")
     win_host: str = ""
+    # --- the /flows editor's committed config (blocks-from-hunt-flow.md B2; READ-ONLY, the same
+    # ./config mount): the hunt block's rule-version index + evidence (config/flows/hunt) and the
+    # map zones files (config/map_zones; Batt D6 2026-10-21: the editor EXPORTS, a person commits).
+    flows_config_dir: Path = Path("/lab-config/flows")
+    zones_dir: Path = Path("/lab-config/map_zones")
+    # ZONES_CODE_DIR: where the runner's zones loader lives (scripts/map_zones.py + flow_zones.py),
+    # mounted read-only in dev mode (compose.dev.yaml). Unset and not importable: the zones routes
+    # answer 503 zones_engine_unavailable and lint names zones references unchecked (fail closed).
+    zones_code_dir: Path | None = None
     # The human-only settings store (2026-10-06): the server allowlist + its audit log, and the
     # foreground gate's templates. Mounted read-write into the BACKEND ONLY (compose.yaml
     # ./settings:/lab-settings; test_guards). vision can write ./data, so nothing here lives there.

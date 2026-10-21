@@ -6,6 +6,15 @@
     POST /flows/lint      {flow, world}          MW1's linter (layers 1-3), findings by node
     POST /flows/simulate  {flow, world, scenario}  the trace (poring_flow.trace): no game
     POST /flows/python    {flow}                 MW1's canonical Python view (read-only)
+    GET  /flows/zones/file?map=&source=&server=  config/map_zones/<map>.yaml for the editor to start
+                                                 from (its items, comment, the loader's verdict)
+    POST /flows/zones/check {map, yaml, world, server}  the RUNNER'S loader on the editor's YAML
+                                                 text: its error, sha256, the cells, the diff
+
+The zones routes (blocks-from-hunt-flow.md section 3, B2; Batt D6 2026-10-21: EXPORT only): the
+text is checked and returned, never written; a person commits the file and git is the review
+record. The loader is the runner's own (scripts/map_zones.py, via flows_zones): without it they
+answer 503 `zones_engine_unavailable`.
 
 What these routes NEVER do: send input, reach the mux, the executor, the agent channel or any
 socket; store anything. They compute and return. The IR in a body is HOSTILE input: MW1's own
@@ -39,6 +48,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, ValidationError
 
+from poring_backend import flows_zones
 from poring_backend.flows_settings import runtime_limits
 from poring_backend.routes_public import get_state
 from poring_backend.routes_settings import _browser_refusal, csrf_valid
@@ -168,6 +178,59 @@ def _resolver(state: AppState, flow: Any) -> Any:
     return default_resolver(flow.target, l3_root=Path(state.settings.data_dir) / "kb" / "bindings")
 
 
+def _zones_provider(state: AppState, world: Any) -> tuple[Any, list[str]]:
+    """The linter's zones provider over config/map_zones (B1's flow_zones, the loader's own
+    rasters), bounded by each sheet's walk grid; None + a note when the loader is not here (the
+    run-start check then refuses a flow that names zones: fail closed)."""
+    eng = flows_zones.engine(state.settings.zones_code_dir)
+    if eng is None:
+        return None, ["zones: the runner's zones loader is not available here (ZONES_CODE_DIR): "
+                      "zones files and references are unchecked"]  # fmt: skip
+    shapes = {}
+    for m, sheet in world.sheets.items() if world is not None else []:
+        if sheet.walk is not None:
+            shapes[m] = (sheet.walk.height, sheet.walk.width)
+    return flows_zones.provider(eng, state.settings.zones_dir, shapes), []
+
+
+def _zones_engine(request: Request, state: AppState) -> flows_zones.Engine:
+    eng = flows_zones.engine(state.settings.zones_code_dir)
+    if eng is None:
+        raise _fail(request, 503, "zones_engine_unavailable")
+    return eng
+
+
+def _walk_rows(state: AppState, source: World, server: str, map_name: str) -> list[str] | None:
+    from poring_flow import editor
+    from poring_flow.kbsheet import load_local_world
+
+    if source == "sample":
+        world = editor.sample_world([map_name])
+    else:
+        world, _ = load_local_world(server, [map_name], _kb_root(state), _gat_dir())
+    rows = editor.walk_rows(world, map_name)
+    return rows if rows and len(rows) * len(rows[0]) <= flows_zones.MAX_GRID else None
+
+
+def _hunt_rules(state: AppState) -> tuple[dict[str, Any] | None, str | None]:
+    """The hunt block's rule versions with their badges (poring_flow.hunt_rules) from the
+    committed config/flows/hunt index + evidence; None + why when they cannot be read."""
+    import yaml  # type: ignore[import-untyped]  # no stubs in the dev env
+
+    from poring_flow.hunt_rules import RulesError, rules_doc
+
+    root = Path(state.settings.flows_config_dir) / "hunt"
+    try:
+        index = yaml.safe_load((root / "index.yaml").read_text(encoding="utf-8"))
+        ev_path = root / "evidence.yaml"
+        evidence = (
+            yaml.safe_load(ev_path.read_text(encoding="utf-8")) if ev_path.is_file() else None
+        )
+        return rules_doc(index, evidence), None
+    except (OSError, yaml.YAMLError, RulesError, KeyError, TypeError, ValueError) as e:
+        return None, f"{type(e).__name__}: {str(e)[:200]}"
+
+
 async def _compute(request: Request, state: AppState, fn: Callable[[], Any]) -> Any:
     """One computation at a time, in a worker thread (the stream's event loop never waits)."""
     try:
@@ -193,7 +256,14 @@ async def get_catalogue(
     from poring_flow import editor
 
     default_s, max_s = runtime_limits(state)
-    doc = dict(await _compute(request, state, lambda: editor.catalogue_doc(client=client)))
+
+    def build() -> dict[str, Any]:
+        doc = dict(editor.catalogue_doc(client=client))
+        # B2: the hunt block's groups, rule versions and badges (config/flows/hunt, committed)
+        doc["hunt_rules"], doc["hunt_rules_error"] = _hunt_rules(state)
+        return doc
+
+    doc = dict(await _compute(request, state, build))
     # #17: the configured run-time limits (a new flow's default; the most a flow may set)
     return {**doc, "runtime_limits": {"default_s": default_s, "max_s": max_s}}
 
@@ -267,10 +337,12 @@ async def post_lint(request: Request, state: AppState = Depends(compute_gate)) -
 
     def run() -> dict[str, Any]:
         world, notes = _world(state, flow, env.world)
+        zp, znotes = _zones_provider(state, world)
         doc = editor.lint_doc(
-            flow, world=world, resolver=_resolver(state, flow), runtime_max_s=max_s
-        )
-        return {**doc, "world_notes": notes}
+            flow, world=world, resolver=_resolver(state, flow), runtime_max_s=max_s,
+            zones_provider=zp,
+        )  # fmt: skip
+        return {**doc, "world_notes": notes + znotes}
 
     return dict(await _compute(request, state, run))
 
@@ -293,9 +365,10 @@ async def post_simulate(
 
     def run() -> dict[str, Any]:
         world, notes = _world(state, flow, env.world)
+        zp, znotes = _zones_provider(state, world)
         lint = {**editor.lint_doc(flow, world=world, resolver=_resolver(state, flow),
-                                  runtime_max_s=max_s),
-                "world_notes": notes}  # fmt: skip
+                                  runtime_max_s=max_s, zones_provider=zp),
+                "world_notes": notes + znotes}  # fmt: skip
         result = trace.simulate(flow, world, scenario)
         return {"flow_hash": ir.flow_hash(flow), "trace": result, "lint": lint}
 
@@ -313,3 +386,69 @@ async def post_python(request: Request, state: AppState = Depends(compute_gate))
     from poring_flow import editor
 
     return dict(await _compute(request, state, lambda: editor.python_doc(flow)))
+
+
+# --- the zones layer (B2; Batt D6: export only) -------------------------------------------------
+class ZonesBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    map: str
+    yaml: str
+    world: World = "local"
+    server: str = "lab-rathena"
+
+
+@router.get("/zones/file")
+async def get_zones_file(
+    request: Request,
+    map: str = Query(max_length=40),
+    source: World = "local",
+    server: str = Query(default="lab-rathena", max_length=64),
+    state: AppState = Depends(read_gate),
+) -> dict[str, Any]:
+    _engine(request)
+    eng = _zones_engine(request, state)
+    if not state.flows_read_rate.allow(
+        request.client.host if request.client else "", time.monotonic()
+    ):
+        raise _fail(request, 429, "rate_limited")
+    if not MAP_ID.match(map) or not eng.mz.MAP_NAME.fullmatch(map) or not KEY.match(server):
+        raise _fail(request, 422, "invalid_query")
+
+    def build() -> dict[str, Any]:
+        rows = _walk_rows(state, source, server, map)
+        return flows_zones.read_file(eng, Path(state.settings.zones_dir), map, rows)
+
+    return dict(await _compute(request, state, build))
+
+
+@router.post("/zones/check")
+async def post_zones_check(
+    request: Request, state: AppState = Depends(compute_gate)
+) -> dict[str, Any]:
+    _engine(request)
+    eng = _zones_engine(request, state)
+    length = request.headers.get("content-length")
+    if length is not None and (not length.isdigit() or int(length) > MAX_BODY):
+        raise _fail(request, 413, "too_large")
+    chunks: list[bytes] = []
+    size = 0
+    async for chunk in request.stream():
+        size += len(chunk)
+        if size > MAX_BODY:
+            raise _fail(request, 413, "too_large")
+        chunks.append(chunk)
+    try:
+        body = ZonesBody.model_validate_json(b"".join(chunks))
+    except ValidationError as e:
+        raise _fail(request, 422, "invalid_body", errors=_errors(e)) from None
+    if len(body.yaml.encode("utf-8", errors="surrogatepass")) > MAX_IR_BYTES:
+        raise _fail(request, 413, "too_large")
+    if not MAP_ID.match(body.map) or not KEY.match(body.server):
+        raise _fail(request, 422, "invalid_query")
+
+    def run() -> dict[str, Any]:
+        rows = _walk_rows(state, body.world, body.server, body.map) if eng.mz.MAP_NAME.fullmatch(
+            body.map) else None  # fmt: skip
+        return flows_zones.check(eng, body.yaml, body.map, rows, Path(state.settings.zones_dir))
+
+    return dict(await _compute(request, state, run))
