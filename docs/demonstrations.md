@@ -13769,6 +13769,39 @@ allows. An interim after each; the verdict after 4.
   - **the verdict = the first 4 runs that end on their time box, in chain order** (any later run
     is reported as confirmation and does not change the verdict);
   - a hard bar in any run counts (G3), wherever it falls.
+- **Run 4** (`20261021T233956-demo-hunt-flow54`, seed 20420404, 23:39:56-23:50:33; the pre-run
+  frame was judged): **HARD BAR -- NPC CONTACT. The UI gate's background check stopped the run at
+  596 s** ("npc_dialog_open:next", frame `stop-22.png`: [Nelliorde]'s dialog with NEXT).
+  - The packets: OUR client sent `npc_contact` (CZ_CONTACTNPC, contact_type 1 = a click) to the
+    NPC `Bard#brising` (gid 110005545, job 51, cell 175,374,
+    `npc/quests/seals/brisingamen_seal.txt`) at 23:50:18, 15.3 s before the stop. The server
+    answered with the dialog (6 `npc_say` + `npc_wait`). The live monitor's last 3-min read
+    (23:50:01) came before it.
+  - The click: the STRIKE on track 113 (a Poring, dispatched at 173,357; the GM at ~171,360),
+    branch "direct", `risk []`, `pred_cell [172, 361]`, `aim_src focus:105`. The click went to
+    pixel **(734, 17.5), the top edge of the game region**. That is where the NPC's sprite had
+    appeared 1.64 s earlier. The burst that followed clicked near the GM (674.8, 328.5).
+  - The cause is in the STRIKE, not in v54's change (the loot step): it is in BOTH arms and in
+    every version since the focus aim (v16):
+    - the risk gate (`gate_risks`) judges the TRACK: `npc_near` = the track's predicted cell
+      within `gate_npc_cells` (12) of a KB NPC. Here (172,361) was 13 cells from (175,374): no risk,
+      the direct path;
+    - then `focus.aim` (the tracked target LED by its velocity) moved the click ~290 px up, to a
+      pixel that is still `in_view`. Nothing re-checked the pixel actually clicked.
+  - The NPC is in the KB (`npc_cells.json`, prt_fild08: 159,371 and 175,374). The GM was there
+    legitimately: the search area keeps 10 cells from NPCs, and 171,360 is 14 from the Bard.
+  - Afterwards: the dialog was never answered. The client was closed and relaunched by
+    `ro_agent.py recover gm` (Alt+F4, the documented stuck-client path; the disconnect ends the
+    script server-side) at 23:54-23:55. Nothing was pressed into the dialog: a NEXT dialog is a
+    STOP state for a person (ui_gate.py).
+- **VERDICT (2026-10-21, after run 4): v54 is NOT ADOPTED -- G3 FAILED** (a hard bar: NPC contact
+  in run 4). 3.95's decision rule needs P1, P2 and G3. Amendment 1 is moot: no further run of v54
+  under these bars (3.96's rule: "fixed and re-registered, never re-run under these bars").
+  - The interim numbers stand as evidence for the re-registration (runs 1 + 3, both time boxes):
+    P1 0.878 and 0.819 (mechanism 5.8 and 5.98 skipped per fix step); P2 +5.1 and +7.6 points;
+    0 items lost on skipped cells in either.
+  - The fix (the strike judges the CLICKED pixel) and the fast scan's re-registration follow in
+    3.97.
 
 ### 3.96 crusader-survival@1: the Crusader's survival skills on prt_fild08, immunity OFF (pre-registered 2026-10-21 18:03 ICT, the commit time of 3.96's first commit, BEFORE they are built or run; Batt 2026-10-21 ~16:1x: "SURVIVAL SKILLS (build + test on prt_fild08 with immunity OFF before the dungeon; pre-register each): HP read from Basic Info (pixel), potion on a hotkey below a threshold, Fly Wing escape below a lower threshold or when more than N monsters are on us; Auto Guard re-cast on expiry; Endure when mobbed (optional). DEATH = stop the run, record the cause (a result, not a hard bar); the respawn dialog stays for the UI gate's known step only. Measure: deaths per hour, HP min, potions used, escapes." and ~16:4x: "Moving HP Recovery matters: I want to see whether HP regen keeps up while the bot walks and fights continuously.")
 
