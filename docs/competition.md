@@ -1955,3 +1955,16 @@ parallel.
   - The kills / h rise is not the zones' doing: one pass on every kill (the named confound),
     the density and the run spread differ.
 
+### Loot: v53 the union plan (Batt's decision 2)
+
+- **The change:** the one pass around the drawn GM, PLUS the believed death cell's 3 x 3 cells
+  outside the GM's 5 x 5, interleaved per engagement (odd k). Merged 8659cd3 (14:45).
+- **Pre-registered:** demonstrations 3.94 (c1a8d52, 14:46), on v52.
+- **P1 is scored on a FIXED region:** items left outside the GM's 5 x 5 ALONE, fix <= 0.75 x
+  base, AND the items picked on extra cells must account for at least half that saving.
+  - Why: the union's own plan grows, so "outside the step's plan" shrinks by bookkeeping alone.
+    A dry run of the judge caught it before registration.
+  - Also: v52's same-treatment per-run ratios were 1.03, 2.00 and 0.71, so (a) alone passes by
+    chance.
+- The verdict waits for 4 runs. Today fits run 1 (an interim).
+
