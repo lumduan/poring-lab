@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [ADR-0020, ADR-0015, ADR-0002, ADR-0007, ADR-0016, ../demonstrations.md, ../competition.md, ../../config/map_zones/README.md, mw2-block-editor.md, adr0020-contradictions.md]
-next_action: "Batt reads this plan and ADR-0020 Amendment A (DRAFT, at the end of the ADR) and answers section 8 (D1-D9). Nothing is built until Batt approves (2026-10-21: 'Plan only: no build until I approve')."
+next_action: "B1 and B3 BUILT offline 2026-10-21 18:2x on feat/blocks-b1b3 (section 7a; not merged): the parent reviews and merges. B2 (the editor) is next; B4 waits for Batt to be present. Amendment A's text stays a DRAFT until Batt accepts it."
 title: "Behaviours as blocks: hunt-flow's adopted rules become a hunt block in the map node; map zones become map-node data (plan)"
 date: 2026-10-21
 owner: Batt
@@ -21,7 +21,9 @@ editor (/flows, ADR-0020), not as pure code. Hunt-flow's PARAMS versions were th
 what works; the result should become blocks a person can read and change. ... Plan only: no build
 until I approve."
 
-Status: PROPOSED. Nothing here is built, run or pre-registered. The ADR side is
+Status: PROPOSED. ~~Nothing here is built, run or pre-registered.~~ ➡️ **2026-10-21 18:2x: B1 and
+B3 are BUILT offline** (section 7a, branch feat/blocks-b1b3); nothing is run live or pre-registered.
+The ADR side is
 [ADR-0020 Amendment A](../adr/0020-block-programming-flows.md#amendment-a-draft-proposed-2026-10-21-not-accepted-behaviours-as-blocks-map-zones-as-map-node-data)
 (DRAFT).
 
@@ -144,7 +146,8 @@ rule's own fallback when the scan cannot start.
 | bytecode proofs for frozen decision code | unchanged: a rule version's code is frozen like a pre-registered rule |
 
 **The history.** A proposed `scripts/params_export.py` classifies every PARAMS key: block choice,
-rule constant, gate, reader, experiment flag, or inert.
+rule constant, gate, reader, experiment flag, or inert. ➡️ BUILT (B1, section 7a): the classes are
+finer (2b's five engine kinds; inert split into record and retired; map_node for the zones flag).
 - It exports PARAMS[1..51] as block configs for the record (our own numbers only).
 - A coverage test fails on an unclassified key, as the catalogue test does for L1.
 - The exported v51 config, resolved back through the engine, must EQUAL the adopted base dict
@@ -219,7 +222,7 @@ Every layer below exists today. A block adds none and removes none.
 6. **The record.** The engine writes its gate table (names, versions) as the run's first event; the
    judge flags a session without it.
 
-## 7. Build proposal (NOT started)
+## 7. Build proposal (B1 + B3 built 2026-10-21, offline: section 7a)
 
 | step | what | where | acceptance |
 |---|---|---|---|
@@ -234,6 +237,73 @@ Every layer below exists today. A block adds none and removes none.
 Every step runs under CLAUDE.md rules 1-10: tmpfs worktrees, guarded steps, no disk-heavy work in
 the market-open windows, the census and safety tests on any click change.
 
+### 7a. B1 / B3 RESULT (built 2026-10-21 17:44-18:2x, offline; branch feat/blocks-b1b3, NOT merged)
+
+Built by a subagent in a tmpfs worktree, on main 5e5dbcf (v54 merged): commits bb1b867 + 1795b03
+(B1) and 1b058c3 (B3). Nothing ran live; no runtime behaviour changed (B3's proofs below).
+
+**B1: what exists now**
+- `scripts/hunt_config.py`: the key classes by ORDERED NAME PATTERNS (D3: never a frozen key list;
+  a key no pattern names is refused, keys newer than `REVIEWED_THROUGH` = 54 are listed for review);
+  `export` / `resolve` / `params_for` / `adopt`. `scripts/params_export.py classify | export | check`.
+- `config/flows/hunt/v01.yaml` ... `v54.yaml` (all 51 versions) and `index.yaml` (adopted: 52; each
+  version's rule versions and arm flags; each rule version's numbers). Our own numbers only.
+- Each hunt parameter's value is a rule version `name@N`, N = the first PARAMS version with exactly
+  these numbers. The adopted base v52 reads: strike `arm_c@32`, engage_on_the_way `on_the_way@19`,
+  dead `exp_line@48`, loot `gm_scan_one_pass@51`, search `heading_coverage@22`, `engine@42`, zones on.
+- `blocks.yaml` `hunt` (groups: engage = strike + engage_on_the_way; dead_loot = dead + loot;
+  search; stop = the enclosing loop's condition and max_s, 13.5) and L1 `combat.hunt` (unverified).
+  Every parameter is required and takes one of its `choices`.
+- IR: `MapBlock.zones = {map, sha256}`; the Python view's `zones=zones("<map>", sha256="...")`;
+  `poring_flow.zones` (the provider interface) and `scripts/flow_zones.py` (the provider over
+  `map_zones.load` and its own rasters). The run-start check refuses a flow that names zones
+  without a provider.
+
+| B1 acceptance | result |
+|---|---|
+| 209 / 209 keys classified | v51: 209 / 209. v52 (the adopted base): 210 / 210 = choice 15, rule 32, gate 49, safety 3, reader 23, constant 37, recovery 10, experiment 13, record 4, retired 23, map_node 1. All 230 keys of all 51 versions (to v54): 0 unclassified |
+| exported v51 resolves to the adopted base exactly | every version's export resolves back to PARAMS[N] EXACTLY (keys, order, values, types: 1, 1.0 and True differ; tuples stay tuples); v51 and v52 also from their committed files. v51 adopted (its live arm flag off) = `{**PARAMS[51], "loot_gm_one_pass_ab": False}`; plus `"map_zones": True` = PARAMS[52] |
+| one lint fixture per new rule | 10 new rules (`rule_version`, `needs_targets`, `zones_map`, `zones_unreadable`, `zones_missing`, `zones_changed`, `zones_unreferenced`, `zones_entry`, `zones_exit`, `zones_targets` warning): each a failing fixture with its exact message and a passing twin (`packages/poring_flow/tests/test_lint_zones_hunt.py`); a coverage test names a new rule without one |
+
+**B3: what changed.** `hunt_flow.run()` hands its decision code `hcfg.params_for(PARAMS, version)`:
+PARAMS[version] exported as the hunt config and resolved back, refused before any input unless it is
+exactly PARAMS[version]. Three lines in `run()` and one import; nothing else in hunt_flow.py.
+
+| B3 acceptance | result |
+|---|---|
+| bytecode proof of the decision code | `scripts/nested_code_proof.py` (new: every code object by qualified name, closures included, line numbers ignored): 287 of 289 identical. Changed: `<module>` (the import) and `run`'s own body: the params_for call before `cl.select`, `cl.select` reads `prm`, `prm = PARAMS[version]` gone, and one `EXTENDED_ARG` (run's names table grew past 255 entries with `params_for`). Every decision closure inside `run` is identical. `scripts/bytecode_proof.py hunt_flow` vs main 5e5dbcf, `--harness hunt_flow.run`: 498 compared (PARAMS and VERSIONS included), 1 changed (`hunt_flow.run`), 40 added (`hunt_config.*`): PASS |
+| click census unchanged | `test_click_census.py` green, unchanged; no new click site |
+| session-file parity | the manifest written with the resolved dict is byte-identical to the one PARAMS[N] wrote, for all 51 versions (`DemoLog.start` into a scratch root, a fixed clock). `params` is the only session field that comes from PARAMS |
+
+**Tests** (run in the worktree, the main venv): test_hunt_flow + test_click_census 107 passed;
+test_hunt_config (new) 22 passed; poring_flow + poring_skills 337 passed (308 before); routes_flows,
+flows_gat, map_zones, client_layout, bytecode_proof 78 passed + 1 skipped. ruff clean; mypy --strict
+clean on poring_flow + poring_skills. The full suite was not run.
+
+**Open points**
+1. **No IR version bump** for `MapBlock.zones`: an absent reference is left out of the canonical
+   JSON, so every existing flow keeps its JSON and hash; an older engine refuses a flow that has one
+   (`extra="forbid"`). To confirm against section 1's "a breaking change is a new version".
+2. **The run-start check** refuses named zones without a provider, but a flow that names NO zones
+   still passes without one. B4's executor must always pass the provider, or a file the node does
+   not name is not caught. The backend's /flows routes pass none yet (B2).
+3. **The stop.** One `hunt` call is bounded by `timeout_s` (600, the IR's cap); the run's stop is
+   the enclosing loop. B4 must keep the engine running across calls (or the cap changes).
+4. **Choices offered**: only rule versions that exist. Loot `none`, engage `off` and strike arms B /
+   A have no version on the adopted base: each is a new version, pre-registered.
+5. **Names from "the first version with these numbers"**: `on_the_way@19` (v19, built and never
+   run, holds v26's engage numbers); `engine@42` (v42, not adopted, holds v51's engine numbers);
+   v49's loot reads `fixed_3x3@49`, as its HAND rule is retired.
+6. **Judgement calls in the pattern table** (reviewed through v54): `track_clear*` gate (2b lists
+   `track_*` under reader), `burst` reader and `burst_*` constant, `max_reads` gate, `exp_wait_s`
+   and `icon_radius` retired, `loot_hand_still_s` a loot constant (v50 reuses it), `steer_stuck_s`
+   recovery. Moving one is a one-pattern edit and a re-export.
+7. **A new PARAMS key no pattern names now refuses its own version's run** (fail closed, before any
+   input). `params_export.py classify` names it; after a new version, `params_export.py export`
+   writes its config (the test checks committed configs only).
+8. B2's editor does not know `zones` yet (`ir.ts`); the hunt block shows in the catalogue with
+   free-text parameters until B2's lists.
+
 ## 8. What Batt needs to decide
 
 **➡️ B0 DONE: Batt answered 2026-10-21 ~16:4x** (verbatim): "BLOCKS: D1 yes; D2 one "hunt" block
@@ -245,6 +315,7 @@ when I'm present."
   zones from the editor are export-only; hunting evidence may badge the hunt block (D8); MW3-hunt
   may run before walk / talk readiness, for that slice only (D9).
 - B1-B3 started 17:4x (offline, a subagent in a tmpfs worktree). B4 waits for Batt to be present.
+  ➡️ B1 and B3 BUILT 18:2x (section 7a); B2 not started.
 - ADR-0020 Amendment A stays a DRAFT until Batt accepts its text; these answers are its inputs.
 
 The questions as asked:
