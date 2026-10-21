@@ -1694,3 +1694,97 @@ def test_v54_the_before_frame_and_the_odometry_moved_gate() -> None:
     assert hf.fast_gate(line, ring, still[1:], t_st, prm)["gate"] == "no_odo"
     assert hf.fast_gate(line, ring, still[:2], t_st, prm)["gate"] == "no_odo"
     assert hf.odo_moved([], 0, 1) is None
+
+
+def _rdp_project() -> Any:
+    import ro_agent as r
+
+    from poring_dataset import camera as cam
+
+    cj = json.loads((r.ROOT / "packages/poring_dataset/src/poring_dataset/camera_rdp.json")
+                    .read_text())  # fmt: skip
+    c = cam.camera_from_json(cj["camera"])
+    return lambda o: c.project(o, np.zeros(len(o)))
+
+
+def test_v55_the_npc_sprite_guard_refuses_v54_run4s_press_on_the_bard() -> None:
+    """3.97's case, v54 run 4 (2026-10-21 23:50:18): the GM at ~171,360, the strike pressed
+    (734, 17.5) -- the top of Bard#brising's sprite (175,374) -- and the client contacted the NPC;
+    the burst after it pressed (674.8, 328.5), by the GM. Up to 2 cells of position error."""
+    proj = _rdp_project()
+    npcs = [(159, 371), (175, 374)]  # prt_fild08's KB NPCs (data/kb/npc_cells.json)
+    for dx in (-2, -1, 0, 1, 2):
+        for dy in (-2, -1, 0, 1, 2):
+            gm = (171.0 + dx, 360.0 + dy)
+            assert hf.npc_sprite_hit(734.0, 17.5, gm, npcs, proj) == (175, 374), gm
+            assert hf.npc_sprite_hit(674.8, 328.5, gm, npcs, proj) is None, gm
+    assert hf.npc_sprite_hit(734.0, 17.5, (250.0, 139.0), npcs, proj) is None  # NPCs off screen
+    assert hf.npc_sprite_hit(734.0, 17.5, (171.0, 360.0), [], proj) is None
+    # the other NPC (poring_war's Poring-looking sprite 909) is guarded the same way
+    pu, pv = proj(np.array([[159 - 171.0, 371 - 360.0]]))[0]
+    assert hf.npc_sprite_hit(float(pu), float(pv) - 20, (171.0, 360.0), npcs, proj) == (159, 371)
+
+
+def test_v55_frame_guard_refuses_a_press_its_npc_hook_names() -> None:
+    from collections import Counter
+
+    sent: list[tuple[int, int]] = []
+
+    class Fake:
+        def click(self, x: int, y: int, button: str = "left") -> None:
+            sent.append((x, y))
+
+    n: Counter[str] = Counter()
+    g = hf.FrameGuard(Fake(), (8, 30, 1280, 720), n)
+    g.click(700, 300)  # no hook: passes (v54 and earlier)
+    g.npc_hit = lambda x, y: (x, y) == (742, 47)  # the hook stays on the guard
+    assert not hasattr(g._a, "npc_hit")
+    g.click(742, 47)
+    g.click(700, 301)
+    assert sent == [(700, 300), (700, 301)]
+    assert n == Counter({"npc_refused": 1})
+
+
+def test_v55_is_v54_plus_the_npc_guard_and_the_run_installs_it() -> None:
+    import inspect
+
+    p55, p54 = hf.PARAMS[55], hf.PARAMS[54]
+    assert p55["npc_px_guard"] and not p54.get("npc_px_guard")
+    assert {k: v for k, v in p55.items() if k != "npc_px_guard"} == p54
+    assert hf.VERSIONS[55].startswith("THE FAST SCAN RE-REGISTERED")
+    src = inspect.getsource(hf.run)
+    assert 'if prm.get("npc_px_guard"):' in src and "agent.npc_hit = npc_hit" in src
+    assert "pos_fn[0] = lambda: measured_pos() or pos_box[0]" in src
+
+
+def test_v55_the_guard_on_v54_run4s_real_press() -> None:
+    """The REAL case from the session (skipped where /dev/shm no longer holds it): the strike's
+    press from clicks.jsonl, the GM at its packet track, the NPCs from the KB."""
+    import gzip
+
+    import flow_judge as fj
+    import pytest
+
+    d = Path("/dev/shm/poring-lab-demo/20261021T233956-demo-hunt-flow54")
+    if not (d / "clicks.jsonl").exists():
+        pytest.skip("v54 run 4's session is not in /dev/shm")
+    import ro_agent as r
+
+    kb = json.loads((r.ROOT / "data/kb/npc_cells.json").read_text())["maps"]["prt_fild08"]
+    npcs = [(int(n["x"]), int(n["y"])) for n in kb["npcs"]]
+    clicks = [json.loads(x) for x in (d / "clicks.jsonl").read_text().splitlines() if x]
+    with gzip.open(d / "packets.jsonl.gz", "rt") as fh:
+        pk = sorted((json.loads(x) for x in fh), key=lambda e: int(e["t_mono_ns"]))
+    contact = next(int(e["t_mono_ns"]) for e in pk if e.get("type") == "npc_contact")
+    pts, _ = fj.gm_track(pk)
+    proj = _rdp_project()
+    named = []
+    for c in clicks:
+        if "u" not in c:
+            continue
+        gm = [p[1] for p in pts if p[0] <= int(c["t"])][-1]
+        hit = hf.npc_sprite_hit(float(c["u"]), float(c["v"]), (float(gm[0]), float(gm[1])), npcs,
+                                proj)  # fmt: skip
+        if hit is not None:
+            named.append((c["kind"], round((contact - int(c["t"])) / 1e9, 2), hit))
+    assert named == [("strike", 0.08, (175, 374))]  # that press, 80 ms before the contact; no other

@@ -315,6 +315,10 @@ VERSIONS = {
     "the item matcher's cells first) -- the whole edge when the runner's own floor odometry says "
     "the GM moved between the two frames, or the before frame is missing or old; even k the "
     "base's pass; interleaved per engagement. Base: v52 ADOPTED (3.93; v53 not adopted)",
+    55: "THE FAST SCAN RE-REGISTERED after v54's G3 failure, with its FIX: no hunt-flow click "
+    "lands on a KB NPC's drawn sprite (FrameGuard refuses a press inside the NPC's projected "
+    "sprite area; v54 run 4's strike clicked Bard#brising). The A / B unchanged: on odd k the "
+    "fast scan, even k the base's pass. Base: v52 ADOPTED + the NPC sprite guard",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -621,6 +625,12 @@ PARAMS[53] = {**PARAMS[52], "loot_gm_union": True, "loot_gm_union_ab": True}
 PARAMS[54] = {**PARAMS[52], "loot_fast_scan": True, "loot_fast_scan_ab": True,
               "loot_fast_before_s": 0.45, "loot_fast_before_max_s": 0.4,
               "loot_fast_moved_cells": 0.25, "loot_fast_thr": 0.04}  # fmt: skip
+# 55 = v54 FIXED (3.97): v54 run 4 (2026-10-21 23:50:18) clicked the NPC Bard#brising: the strike's
+# risk gate judged the TRACK's cell (13 cells from the NPC vs gate_npc_cells 12), then focus.aim's
+# velocity lead moved the press ~290 px up, onto the NPC's sprite. The fix judges the PRESSED
+# pixel, in FrameGuard (every hunt-flow click passes there): a press inside a KB NPC's projected
+# sprite area (NPC_SPRITE_PX around the foot, the GM at measured_pos) is refused and counted.
+PARAMS[55] = {**PARAMS[54], "npc_px_guard": True}
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -661,15 +671,46 @@ def cheb(a: Sequence[float], b: Sequence[float]) -> float:
     return max(abs(a[0] - b[0]), abs(a[1] - b[1]))
 
 
+# 3.97: the area around a KB NPC's projected FOOT where no hunt-flow press may land (half width,
+# above, below; px of the game region). A human-sized NPC is drawn ~25 px wide and ~110 px tall
+# above its foot; the margins absorb a 2-cell error of the GM's measured position (~34 px a cell
+# across, ~24 px a cell up the screen at the lab's camera, measured at v54 run 4's spot)
+NPC_SPRITE_PX = (100.0, 170.0, 70.0)
+NPC_SPRITE_CELLS = 25  # NPCs farther than this from the GM are off the screen: not projected
+
+
+def npc_sprite_hit(u: float, v: float, gm: Sequence[float], npcs: Sequence[Sequence[int]],
+                   project: Any, area: tuple[float, float, float] = NPC_SPRITE_PX
+                   ) -> tuple[int, int] | None:  # fmt: skip
+    """PURE (3.97): the KB NPC (x, y) whose drawn sprite area holds the game-region pixel (u, v),
+    the GM at (fractional) cell ``gm``; else None. ``project(offsets)`` maps ground offsets (dx, dy)
+    from the GM to game-region pixels (the camera centres on the GM). The client resolves a press
+    on an NPC's SPRITE, not on its cell: v54 run 4's strike pressed 290 px from its target and
+    13 cells from the GM, on the top of Bard#brising's sprite."""
+    near = [(int(n[0]), int(n[1])) for n in npcs
+            if cheb(n, gm) <= NPC_SPRITE_CELLS]  # fmt: skip
+    if not near:
+        return None
+    px = np.asarray(project(np.array([[x - gm[0], y - gm[1]] for x, y in near], dtype=float)))
+    hw, up, down = area
+    for (pu, pv), n in zip(px, near, strict=True):
+        if abs(u - float(pu)) <= hw and float(pv) - up <= v <= float(pv) + down:
+            return n
+    return None
+
+
 class FrameGuard:
     """(v24) Every hunt-flow pointer input passes here (Batt: never a click outside the game
     frame). A MOVE is clamped into the game region: read_tag's pre-motion, 12 px up-left of a
     target at the top edge, gave y < 0, which the backend drops unanswered, and the run stopped on
     the missing ack (v23 attempt 2, 25.7 min). A CLICK outside the region is refused. Both are
-    counted in ``n`` ("clamped" / "refused"); everything else passes through to the agent."""
+    counted in ``n`` ("clamped" / "refused"); everything else passes through to the agent.
+    3.97 (v55): ``npc_hit(x, y)`` -- set by the run once the camera and the GM's position exist --
+    names a KB NPC whose drawn sprite holds the press; that press is refused ("npc_refused")."""
 
     def __init__(self, agent: Any, region: tuple[int, int, int, int], n: Counter[str]) -> None:
         self._a, self._r, self.n = agent, region, n
+        self.npc_hit: Any = None
 
     def inside(self, x: float, y: float) -> bool:
         x0, y0, w, h = self._r
@@ -686,13 +727,16 @@ class FrameGuard:
         if not self.inside(x, y):
             self.n["refused"] += 1
             return
+        if self.npc_hit is not None and self.npc_hit(x, y):  # 3.97: never on an NPC's sprite
+            self.n["npc_refused"] += 1
+            return
         self._a.click(x, y, button)  # the pass-through: every hunt-flow click comes here
 
     def __getattr__(self, k: str) -> Any:
         return getattr(self._a, k)
 
     def __setattr__(self, k: str, v: Any) -> None:
-        if k in ("_a", "_r", "n"):
+        if k in ("_a", "_r", "n", "npc_hit"):
             object.__setattr__(self, k, v)
         else:  # e.g. farm0.stop_on_takeover's hook must land on the real agent
             setattr(self._a, k, v)
@@ -2797,6 +2841,21 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
 
             last_fix = [0.0]
             pos_box: list[Cell] = [start]
+            # 3.97: the GM's position for the NPC sprite guard (measured_pos once it exists)
+            pos_fn: list[Any] = [lambda: pos_box[0]]
+            if prm.get("npc_px_guard"):
+                npc_xy = [(int(n_["x"]), int(n_["y"])) for n_ in npcs]
+
+                def npc_hit(x_: int, y_: int) -> bool:
+                    gm_ = pos_fn[0]()
+                    n_ = npc_sprite_hit(x_ - gx0, y_ - gy0, gm_, npc_xy,
+                                        lambda o: camera.project(o, np.zeros(len(o))))  # fmt: skip
+                    if n_ is not None:
+                        ev({"kind": "npc_px_refused", "npc": list(n_), "u": x_ - gx0,
+                            "v": y_ - gy0, "gm": [round(float(c_), 2) for c_ in gm_]})  # fmt: skip
+                    return n_ is not None
+
+                agent.npc_hit = npc_hit
 
             def settle(timeout: float = 5.0) -> Cell | None:
                 """Our cell once the GM stands: two minimap reads 0.3 s apart agree; else the
@@ -5052,6 +5111,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     return None
                 d_ = h_[-1][1] - a_[1]
                 return a_[0][0] + float(d_[0]), a_[0][1] + float(d_[1])
+
+            pos_fn[0] = lambda: measured_pos() or pos_box[0]  # 3.97: the guard's GM position
 
             def pos_at_frame(t_ns: int) -> tuple[float, float] | None:
                 """v6: our measured cell at ``t_ns`` (the minimap anchor + odometry then)."""
