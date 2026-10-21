@@ -305,6 +305,9 @@ VERSIONS = {
     "delegation; a room a line seals leaves the search area and the routes) enforced on WHOLE "
     "runs (no per-engagement arms), compared run-level with v51's runs. Base: v51 ADOPTED (3.92): "
     "one pass on every engagement",
+    53: "THE UNION PLAN: on odd k the one pass around the drawn GM (own cell, 3 x 3, 5 x 5 edge) "
+    "also hovers the believed death cell's 3 x 3 cells outside the GM's 5 x 5, after it; even k "
+    "the base's pass; interleaved per engagement. Base: 3.93's verdict",
 }
 PARAMS: dict[int, dict[str, Any]] = {
     1: {"walk_every_s": 0.8, "ahead": 6, "strike_cells": 3, "short": 2, "track_near": 2.0,
@@ -590,6 +593,13 @@ PARAMS[51] ={**PARAMS[50], "loot_gm_ab": False, "loot_gm_one_pass": True,
 # beside it"): config/map_zones/prt_fild08.yaml (13e497d) loaded ("map_zones"), on v51's adopted
 # base (one pass on every engagement: "loot_gm_one_pass_ab" False). Pre-registered 3.93.
 PARAMS[52] = {**PARAMS[51], "loot_gm_one_pass_ab": False, "map_zones": True}
+# 53 = THE UNION PLAN (Batt 2026-10-21, decision 2 on the overnight report: "Next loot version: the
+# GM's 5x5 PLUS the 3x3 around the believed death cell (your measured +2.9 pts at ~0.26 s)"; day
+# order: "interleaved arms, pre-registered; start it as soon as the zone runs end"): on odd k the
+# one pass also hovers the believed death cell's 3 x 3 cells outside the GM's 5 x 5
+# (gm_union_cells), after the 5 x 5; even k the base's pass. Its base is fixed by 3.93's verdict
+# (pre-registered 3.94).
+PARAMS[53] = {**PARAMS[52], "loot_gm_union": True, "loot_gm_union_ab": True}
 
 
 # --- pure parts (tested) --------------------------------------------------------------------------
@@ -1967,6 +1977,31 @@ def gm_scan_cells(gm: Cell, toward: Cell | None, edge: bool = True) -> list[Cell
     return out
 
 
+def gm_union_on(prm: dict[str, Any], k: int) -> bool:
+    """PURE (v53, Batt 2026-10-21 decision 2: "the GM's 5x5 PLUS the 3x3 around the believed death
+    cell"): does engagement ``k``'s scan add the believed death cell's 3 x 3? ``loot_gm_union``
+    on; with ``loot_gm_union_ab`` only odd k (the fix arm)."""
+    return bool(prm.get("loot_gm_union")) and (not prm.get("loot_gm_union_ab") or k % 2 == 1)
+
+
+def gm_union_cells(gm: Cell, dcell: Cell | None, edge: bool = True) -> list[Cell]:
+    """PURE (v53): ``gm_scan_cells`` (the drawn GM's own cell, 3 x 3, 5 x 5 edge; ordered toward
+    ``dcell``) and THEN the cells of the 3 x 3 around ``dcell`` (the believed death cell) that the
+    GM's 5 x 5 does not hold -- ``dcell`` first, then the nearest the GM -- each once. The
+    offline measurement ran on v51 (competition.md "Next loot levers": 13 of the 35 items
+    outside the GM's 5 x 5 lay in it, at 1.28 extra hovers a step, none on 77 % of steps)."""
+    out = gm_scan_cells(gm, dcell, edge)
+    if dcell is None:
+        return out
+    have = set(out)
+    near = [(dcell[0] + dx, dcell[1] + dy) for dy in (-1, 0, 1) for dx in (-1, 0, 1)]
+    near.sort(key=lambda c: (c != tuple(dcell), max(abs(c[0] - gm[0]), abs(c[1] - gm[1])), c[1],
+                             c[0]))  # fmt: skip
+    r_ = 2 if edge else 1
+    out += [c for c in near if max(abs(c[0] - gm[0]), abs(c[1] - gm[1])) > r_ and c not in have]
+    return out
+
+
 def hand_seen(verdict: str, rec: Mapping[str, float], pickup_min: float) -> str:
     """PURE (3.90): one hover's cursor (cursor_sword.check) as the scan reads it: "sword" (a unit
     under the pointer), "hand" (the PICKUP cursor: an item; recall >= ``pickup_min``), "empty"
@@ -3274,6 +3309,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                 passes = 0
                 k_g = int(eng_.get("k", 0))
                 given_up: set[Cell] = set()
+                extra_cells: set[Cell] = set()  # v53: the hovers outside the GM's 5 x 5 (logged)
 
                 def hover(c_: Cell, ref_: Cell, pass_: int, burst_: int,
                           t_click: float | None = None) -> tuple[str, Any]:  # fmt: skip
@@ -3286,6 +3322,7 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     sn_ = hand_seen(str(res_["verdict"]), res_["rec"], csw_h.PICKUP_MIN)
                     ev({"kind": "hand_hover", "arm": "gm", "k": k_g, "cell": list(c_),
                         "ref": list(ref_), "pass": pass_, "burst": burst_, "seen": sn_,
+                        "union": c_ in extra_cells,
                         "ms": res_["ms"], "reads": len(res_["reads"]),
                         "since_click_s": None if t_click is None
                         else round(time.monotonic() - t_click, 3),
@@ -3304,7 +3341,11 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                         break
                     ref, how_ = rf_
                     seen_c["ref_" + how_] += 1
-                    queue_ = gm_scan_cells(ref, dcell, bool(prm.get("loot_gm_edge", True)))
+                    union_ = gm_union_on(prm, k_g)  # v53: + the believed death cell's 3 x 3
+                    queue_ = (gm_union_cells if union_ else gm_scan_cells)(
+                        ref, dcell, bool(prm.get("loot_gm_edge", True)))  # fmt: skip
+                    if union_:
+                        extra_cells |= set(queue_) - set(gm_scan_cells(ref, dcell, True))
                     retried: set[Cell] = set()
                     found = False
                     while queue_:
@@ -3388,6 +3429,8 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
                     out["end"] = "one_pass"  # v51: the pass found a HAND; no second pass
                 out["hand"] = dict(seen_c)
                 out["passes"] = passes
+                if gm_union_on(prm, k_g):
+                    out["union"] = len(extra_cells)  # v53: the extra cells this step planned
 
             def loot_fixed_run(eng_: dict[str, Any], here2: Cell, dcell: Cell,
                                extra: Sequence[Any] = (),

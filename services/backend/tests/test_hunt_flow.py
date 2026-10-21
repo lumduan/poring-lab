@@ -1577,3 +1577,27 @@ def test_one_pass_bounds_the_pass_loop_and_keeps_the_burst() -> None:
     assert "and passes < gm_passes(prm, k_g)):" in body
     assert 'out["end"] = "one_pass"' in body
     assert "sn_g, px_g = hover(c_g, ref, passes, b_ + 1, t_cm)" in body
+
+
+def test_v53_the_union_plan_adds_the_believed_death_cells_3x3_outside_the_gms_5x5() -> None:
+    """Batt 2026-10-21, decision 2: "the GM's 5x5 PLUS the 3x3 around the believed death cell"."""
+    gm = (10, 10)
+    base = hf.gm_scan_cells(gm, (13, 10))
+    got = hf.gm_union_cells(gm, (13, 10))
+    assert got[: len(base)] == base and len(base) == 25  # the GM's 5 x 5 first, unchanged
+    extra = got[len(base) :]
+    assert extra[0] == (13, 10)  # the believed death cell first
+    assert sorted(extra) == [(13, 9), (13, 10), (13, 11), (14, 9), (14, 10), (14, 11)]
+    assert len(set(got)) == len(got)  # no cell twice
+    assert hf.gm_union_cells(gm, (11, 10)) == hf.gm_scan_cells(gm, (11, 10))  # inside: nothing
+    assert hf.gm_union_cells(gm, None) == hf.gm_scan_cells(gm, None)
+    p = hf.PARAMS[53]
+    assert {k: v for k, v in p.items() if k not in ("loot_gm_union", "loot_gm_union_ab")} == (
+        hf.PARAMS[52])  # fmt: skip
+    assert [hf.gm_union_on(p, k) for k in (1, 2, 3, 4)] == [True, False, True, False]
+    assert not any(hf.gm_union_on(hf.PARAMS[v], 1) for v in hf.PARAMS if v < 53)
+    src = Path(hf.__file__).read_text()
+    body = src.split("def loot_gm_steps(", 1)[1].split("def loot_fixed_run(", 1)[0]
+    assert "union_ = gm_union_on(prm, k_g)" in body
+    assert "(gm_union_cells if union_ else gm_scan_cells)(" in body
+    assert '"union": c_ in extra_cells,' in body
