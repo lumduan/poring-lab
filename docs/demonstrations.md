@@ -13910,6 +13910,42 @@ dialog's 10-04 signature (distance 8.96 on this client's dialog, bar 6.0).
 - S2 / S3 / S6b keep their bars (3.96 / 3.96b). If T-S2 F still shows no crossing below 55 %,
   S2's bar stays UNTESTED and goes to Batt (not a pass).
 
+### 3.96d crusader-survival@1d: S4b2 -- Auto Guard's re-cast blind-proof and remembered across trials (pre-registered 2026-10-21 __TIME__ ICT, the commit time, BEFORE S4b2 is built or run)
+
+**What happened to S4b (3.96c's chain):** S4b FAILS its bar (0 toggles-off).
+- f1: a real cast, uptime 98.75 %.
+- **f2: a toggle-off.** The icon read absent from 52 s while f1's cast was still active, and the
+  press cost no SP. S4b's 300-s guard only knew casts of ITS OWN process, and f1's cast was in
+  another one.
+- f3: a real cast, uptime 98.8 %. It held only because the cast was its own: the icon read absent
+  for 23 s (71.5-94.2 s) and again from 107 s while Auto Guard was active.
+- **e1: a toggle-off** at 10 s.
+- **Why the icon "vanished": BLIND.** Frames grabbed beside e1 (read-only, `crusader/agdiag/`,
+  155 of 162 "absent"): the game area turns BLACK except the minimap, and the status icons go
+  with it (Drainliar's and Familiar's Blind). Frame 43 shows the normal scene with no icon: e1
+  had already toggled it off.
+
+**S4b2, the rule (one change set):**
+1. **Dark screen = UNKNOWN, never "absent".** When >= 80 % of the game area's open-field box
+   (client 300-1100 x 150-550) reads near-black (grey < 25), the icon read is None, and no S4 press
+   is made on it.
+2. **The last cast is REMEMBERED per character:** `data/crusader/ag_state.json`, holding our
+   last F3 cast as CLOCK_MONOTONIC (system-wide, so comparable across processes). It is loaded at
+   each trial's start, and F3 waits 300 s from it.
+3. If no cast is known but the icon is seen present, the cast is assumed to have happened just
+   before the first sighting (the conservative side).
+4. Otherwise as S4b: absent on every check for >= 1 s, then F3.
+
+**Trials (T-S4, the stand 268,107, rules S1b + S2 + S4b2 + S6b; pack E has the Drainliar that
+casts Blind):**
+- T-S4 a: pack E, **330 s**: Auto Guard must EXPIRE mid-trial and be re-cast (the re-cast's
+  positive case).
+- T-S4 b: pack E, 180 s, started right after a, so a's cast carries over (the persistence's
+  positive case).
+
+**Bars:** 0 toggles-off (every F3 press has its 30-SP drop); at least one re-cast in T-S4 a after
+the 300 s; uptime >= 90 % over both trials. Blind periods are reported (dark reads / all reads).
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
