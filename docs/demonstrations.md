@@ -14274,6 +14274,26 @@ judge`, packets):**
 (pooled over the two trials); unread <= 5 %. A pass makes S1 PASS. A fail is reported with its
 misses' shape, and S1 goes to Batt.
 
+**Run log (2026-10-22 00:0x; both trials after this commit; the Crusader entered at 23:56 and its
+frame was judged: the stand 268,107, full HP / SP, the UI gate clear, the screen not dark):**
+
+| trial | session | end | reads | within 2 % (recovery truth) | within 2 % (absolute truth) | within 5 % | over-reads | potions | HP min | Auto Guard |
+|---|---|---|---|---|---|---|---|---|---|---|
+| g1 | `20261021T235737-demo-crusader-survival-T-S2-E-g1` | time box | 895 | 97.99 % | 91.73 % | 99.11 % | 0.11 % | 10 | 2,981 / 5,260 (56.7 %) | re-cast at 22.8 s (timer) |
+| g2 | `20261022T000130-demo-crusader-survival-T-S2-E-g2` | time box | 893 | 98.99 % | 94.29 % | 99.78 % | 0.11 % | 13 | 2,983 / 5,260 (56.7 %) | re-cast at 90.6 s, 290 s after g1's cast |
+| **pooled** | | | **1,788** | **98.49 %** | 93.01 % | 99.44 % | 0.11 % | 23 | | |
+
+- **S1c: PASS** (bar >= 95 % within 2 %, n >= 200; unread 0 of 1,788, bar <= 5 %). **S1 is PASS.**
+- The registered absolute-only truth, beside it: 93.01 %. The 5.5-point gap is the regen ticks
+  that the absolute truth missed: S1b's failure was the TRUTH's, not the reader's.
+- S2 beside it: no crossing of true HP below 55 % in either trial (the potions at 56-59 % held it;
+  HP min 56.7 %). 1 potion pressed above 80 % true HP (g1).
+- **S4b2, across trials:** g2 did NOT cast at its start (g1's cast, remembered in
+  `data/crusader/ag_state.json`, was still running), then re-cast 290 s after it. No double cast,
+  so Auto Guard was never toggled off. The judge's g2 "uptime" of 59.9 % counts only casts made
+  inside the trial; the real uptime was ~100 %.
+- 0 dark reads, 0 deaths, 0 escapes (none needed).
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
