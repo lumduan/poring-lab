@@ -43,7 +43,7 @@ step ran under the guard; the worst capture stall was 8.0 % (frigate), 0 s above
 | 12 | `.mypy_cache` | 0.02 | stale (mypy runs with `--cache-dir=/dev/null`) | ? | no | n/a | **list**: delete proposed |
 | 13 | `~/.claude/projects/-home-batt-docker-poring-lab/<session>.jsonl` | 1.39 | THIS Claude session's transcript | live | yes while live | no | keep; propose a NAS archive after the session ends |
 | 14 | `~/.cache/poring-lab` | 0.0002 | locale-pack fingerprints | today | yes | - | keep |
-| 15 | Docker images (unique) | 12.29 | vision 10.34 (GPU work); gamestream 0.49; rathena-build 0.48 (0 containers); mariadb 0.34 (db, db-th); rathena 0.29; backend 0.24; sniffer 0.10. Plus ~0.86 desktop layers shared with gamestream, and base layers | images 2-3 weeks old | yes (rathena-build: ?) | - | keep; **list** rathena-build:local (the compile stage) |
+| 15 | Docker images (unique) | 12.29 | vision 10.34 (GPU work); gamestream 0.49; rathena-build 0.48 (0 containers); mariadb 0.34 (db, db-th); rathena 0.29; backend 0.24; sniffer 0.10. Plus ~0.86 desktop layers shared with gamestream, and base layers | images 2-3 weeks old | yes; rathena-build too (21:4x: `gen_packet_tables.py` and `gen_mapcache_th.py` run their throwaway containers from it) | - | keep |
 | 16 | Docker volumes | 0.54 | captures 0.22 (the 7-day pcap ring); db-data 0.17; **db-th-data 0.16** (the Thai experiment; its container exited, the th client copy was removed) | - | db-th: no | no | keep; **list** db-th (dump to the NAS + remove = Batt's call) |
 | 17 | Build cache (lab builder `default`) | ~10.3 records, **0.03 private** | the vision `uv sync` layer (9.52) etc. are SHARED with our images, so a prune frees ~nothing | 2 weeks | - | - | **not pruned** (a builder prune would also hit other projects' 3.15 GB private cache) |
 | 18 | Dangling images | 0 ours | the 3 dangling images are fitfirst + tuya-energy-mqtt | - | - | - | not touched |
@@ -103,7 +103,6 @@ both listed), then the local delete under the guard.
   - `.mypy_cache` (0.02);
   - `data/train` (0.32);
   - `data/nametags` (0.20);
-  - `rathena-build:local` (0.48);
   - the `db-th-data` volume + its exited container (0.16);
   - the session transcript (1.39, live).
 - **Docker prune:** none. Our build-cache records share their bytes with our images (private
