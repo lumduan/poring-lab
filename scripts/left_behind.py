@@ -30,6 +30,10 @@ and each unpicked item gets the first that holds:
   planned_not_hovered   within GM_PLAN of a ref, never hovered (the cap, out of view, the end)
   outside_gm_plan[_near_death_cell]   farther than GM_PLAN from every ref (and, on a v53 union
                         step, not in the believed death cell's 3 x 3 the step planned too)
+``gm_causes_5x5_by_arm`` (v53, 3.94's P1) classifies the same items against the GM's 5 x 5 ALONE,
+as if no union cell were planned or hovered, so both arms are scored on the same fixed region (the
+union's plan grows, so ``outside_gm_plan`` in ``gm_causes`` shrinks by bookkeeping alone).
+``gm_extra_picked_by_arm`` counts the items picked on a union step's extra cells.
 For each such item: its fate (left behind = out of our sight; looter; expired), and, for the left
 behind, what took the GM away -- the first non-loot click after the step (``why`` of
 clicks.jsonl: search, steer / strike = the next engagement) -- and how long after the step's end
@@ -155,6 +159,16 @@ def gm_cause_of(item: Mapping[str, Any], fid: int, step: tuple[int, int],
                                 and cheb(cell, death_cell) <= 1 else "")  # fmt: skip
 
 
+def gm_cause_5x5(item: Mapping[str, Any], fid: int, step: tuple[int, int],
+                 refs: Sequence[Sequence[int]], death_cell: Sequence[int] | None,
+                 results: Sequence[Mapping[str, Any]],
+                 hovers: Sequence[Mapping[str, Any]]) -> str:  # fmt: skip
+    """PURE: ``gm_cause_of`` against the GM's 5 x 5 ALONE: no extra plan, and the union's own
+    hovers (``union`` true) ignored. The same fixed region for both arms (3.94's P1)."""
+    return gm_cause_of(item, fid, step, refs, death_cell, results,
+                       [h for h in hovers if not h.get("union")])  # fmt: skip
+
+
 def session(sid: str) -> dict[str, Any]:
     import arm_judge as aj
     import flow_judge as fj
@@ -181,6 +195,8 @@ def session(sid: str) -> dict[str, Any]:
     gm_arm: Counter[str] = Counter()
     gm_fate: Counter[str] = Counter()
     gm_dist: Counter[int] = Counter()
+    gm5_arm: Counter[str] = Counter()  # v53 P1: against the GM's 5 x 5 alone
+    gm_extra_picked: Counter[str] = Counter()  # v53: picked on a union step's extra cells
     gm_items = gm_picked = 0
     cts = [int(c["t"]) for c in clicks]
     causes: Counter[str] = Counter()
@@ -219,6 +235,8 @@ def session(sid: str) -> dict[str, Any]:
             if it["fate"] == "picked":
                 picked += 1
                 gm_picked += gm_step
+                if gm_step and tuple(it["cell"]) in extra:
+                    gm_extra_picked[arm_of(e)] += 1
                 continue
             if gm_step and step is not None:
                 res_g = results[
@@ -228,6 +246,8 @@ def session(sid: str) -> dict[str, Any]:
                 gm_c[c_g] += 1
                 gm_arm[f"{arm_of(e)}|{c_g}"] += 1
                 gm_fate[f"{c_g}|{it['fate']}"] += 1
+                c5 = gm_cause_5x5(it, f, step, sorted(refs), dcell, res_g, hs)
+                gm5_arm[f"{arm_of(e)}|{c5}"] += 1
                 if c_g.startswith("outside_gm_plan") and refs:
                     gm_dist[min(cheb(it["cell"], r_) for r_ in refs)] += 1
             res = [] if step is None else results[bisect.bisect_left(rts, step[0]):
@@ -254,6 +274,8 @@ def session(sid: str) -> dict[str, Any]:
             "gm_items": gm_items, "gm_picked": gm_picked,
             "gm_causes": dict(gm_c.most_common()), "gm_causes_by_arm": dict(sorted(gm_arm.items())),
             "gm_cause_by_fate": dict(gm_fate.most_common()),
+            "gm_causes_5x5_by_arm": dict(sorted(gm5_arm.items())),
+            "gm_extra_picked_by_arm": dict(sorted(gm_extra_picked.items())),
             "gm_outside_cells_from_the_gm": {str(k): v
                                              for k, v in sorted(gm_dist.items())}}  # fmt: skip
 
@@ -262,8 +284,8 @@ def pooled(per: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
     """PURE: the runs' counts summed (the time quantiles are not pooled)."""
     out: dict[str, Any] = {"items": 0, "picked": 0, "not_picked": 0}
     for k in ("causes", "causes_by_arm", "cause_by_fate", "left_behind_what_took_the_gm_away",
-              "gm_causes", "gm_causes_by_arm", "gm_cause_by_fate",
-              "gm_outside_cells_from_the_gm"):  # fmt: skip
+              "gm_causes", "gm_causes_by_arm", "gm_cause_by_fate", "gm_causes_5x5_by_arm",
+              "gm_extra_picked_by_arm", "gm_outside_cells_from_the_gm"):  # fmt: skip
         c: Counter[str] = Counter()
         for v in per.values():
             c.update(v.get(k) or {})

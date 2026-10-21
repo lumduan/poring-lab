@@ -86,3 +86,20 @@ def test_a_v53_union_step_counts_the_believed_3x3_in_its_plan() -> None:
         "outside_gm_plan_near_death_cell")  # fmt: skip
     assert lb.gm_cause_of(item, 1, step, refs, (19, 10), [], [], {(20, 10)}) == (
         "planned_not_hovered")  # fmt: skip
+
+
+def test_v53_p1_scores_both_arms_against_the_gms_5x5_alone() -> None:
+    """3.94's P1: the union's plan grows, so its own causes shrink by bookkeeping. Against the 5 x 5
+    ALONE (no extra plan, the union's hovers ignored) an item left on an extra cell is still
+    outside -- the same fixed region as the base arm's."""
+    item = {"t_fall": 100, "cell": [20, 10], "t_end": 150}
+    step = (90, 200)
+    refs = [(10, 10)]
+    hov = [{"t_ns": 120, "cell": [20, 10], "seen": "empty", "union": True}]
+    assert lb.gm_cause_of(item, 1, step, refs, (19, 10), [], hov, {(20, 10)}) == (
+        "hovered_read_empty")  # fmt: skip
+    assert lb.gm_cause_5x5(item, 1, step, refs, (19, 10), [], hov) == (
+        "outside_gm_plan_near_death_cell")  # fmt: skip
+    inside = {"t_fall": 100, "cell": [11, 10], "t_end": 150}
+    hov_in = [{"t_ns": 120, "cell": [11, 10], "seen": "empty"}]
+    assert lb.gm_cause_5x5(inside, 1, step, refs, (19, 10), [], hov_in) == "hovered_read_empty"
