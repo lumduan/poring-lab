@@ -86,6 +86,8 @@ def judge(events: Sequence[Mapping[str, Any]], packets: Sequence[Mapping[str, An
     err: list[float] = []
     over = 0
     for e in reads:
+        if e.get("frac") is None:  # an unreadable read (3.96b: reported, not scored)
+            continue
         t = int(e["t_ns"]) - off
         h, m = at(hp, t), (at(mx, t) or max_hp)
         if h is None or not m or h >= m:
@@ -95,7 +97,10 @@ def judge(events: Sequence[Mapping[str, Any]], packets: Sequence[Mapping[str, An
         over += d > 0.05
     n = len(err)
     s1 = {"n": n, "within_5pct": round(sum(x <= 0.05 for x in err) / n, 4) if n else None,
-          "over_read_share": round(over / n, 4) if n else None}  # fmt: skip
+          "within_2pct": round(sum(x <= 0.02 for x in err) / n, 4) if n else None,
+          "over_read_share": round(over / n, 4) if n else None,
+          "unread": sum(1 for e in reads if e.get("frac") is None),
+          "reads": len(reads)}  # fmt: skip
     pots, flys = items_used(packets, POTION), items_used(packets, FLY)
     m0 = at(mx, t0) or max_hp or 0
     h0 = at(hp, t0 - off)  # the server's HP in force when the trial's reads begin

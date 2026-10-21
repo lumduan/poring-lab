@@ -4,8 +4,10 @@ BEFORE this was built; Batt 2026-10-21: "HP read from Basic Info (pixel), potion
 threshold, Fly Wing escape below a lower threshold or when more than N monsters are on us; Auto
 Guard re-cast on expiry; Endure when mobbed (optional). DEATH = stop the run, record the cause").
 
-PIXELS IN, KEYS OUT. The rules read the Basic Info HP bar (gm_vitals.hp_fraction), its rate of fall
-over the last RATE_WIN_S, the death dialog's signature and the clock since our own casts; they
+PIXELS IN, KEYS OUT. The rules read the HP as Basic Info's PERCENT text (hp_percent.read;
+3.96b's S1b -- the bar's length failed S1, 3.96 run log), its rate of fall over the last
+RATE_WIN_S, the death dialog's signature (3.96b's S6b: the @ko variant cut on this client) and
+the clock since our own casts; an unreadable percent is None and no rule acts on it. They
 press the hotkeys F1 (White Potion), F2 (Fly Wing), F3 (Auto Guard, cast level 10), F4 (Endure).
 Today's detector cannot see orcsdun01's species, so no rule counts attackers from boxes: "more than
 N monsters on us" is carried by the HP's RATE of fall (3.96).
@@ -33,6 +35,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -119,11 +123,14 @@ def trial(a: argparse.Namespace) -> int:  # noqa: PLR0915
     import bench
     import crusader as cr
     import gm_vitals as gv
+    import hp_percent as hpp
     import record_session as rs
     import ro_agent as r
     import ui_gate
 
     rules = SETS[a.set]
+    z = np.load(hpp.GLYPHS)
+    glyphs = {("%" if k == "pct" else k[1:]): z[k] for k in z.files}
     sid = f"{time.strftime('%Y%m%dT%H%M%S')}-demo-crusader-survival-{a.set}-{a.pack}-{a.label}"
     out = DEMO / sid
     out.mkdir(parents=True, exist_ok=False)
@@ -154,16 +161,22 @@ def trial(a: argparse.Namespace) -> int:  # noqa: PLR0915
             while time.monotonic() < t_end:
                 tick = time.monotonic()
                 frame = r.grab_after(screen, (gx, gy, gw, gh), r.ns())
-                frac = gv.hp_fraction(frame)
+                pct = hpp.read(frame, glyphs)
+                bar = gv.hp_fraction(frame)
                 dead = r.is_state(screen, gv.DEAD_STATE)
                 counts["reads"] += 1
-                ev({"kind": "hp_read", "frac": round(frac, 4), "dead": dead})
+                ev({"kind": "hp_read", "frac": None if pct is None else pct / 100.0, "pct": pct,
+                    "bar": round(bar, 4), "dead": dead})  # fmt: skip
                 if dead and "S6" in rules:
                     reason = "death"
                     last = [[round(t, 2), round(f, 4)] for t, f in list(st.hist)[-50:]]
                     ev({"kind": "death", "last_reads": last})
                     break
-                for what, why in decide(st, time.monotonic(), frac, rules):
+                if pct is None:
+                    counts["unread"] = counts.get("unread", 0) + 1
+                    time.sleep(max(0.0, 1.0 / READ_HZ - (time.monotonic() - tick)))
+                    continue
+                for what, why in decide(st, time.monotonic(), pct / 100.0, rules):
                     agent.keys(KEYS[what])
                     counts[what] += 1
                     ev({"kind": "press", "what": what, "key": KEYS[what], "why": why})
