@@ -58,7 +58,7 @@ SETS = {
     "T-regen": {"S1"},
 }  # fmt: skip  (T-regen here = standing only; walking is not built: see 3.96's run log)
 PACKS = {"C": [(1153, 3), (1152, 2)], "E": [(1153, 3), (1152, 2), (1111, 1)], "none": []}
-STAND = ("prt_fild08", 170, 375)  # bench.SCENES' outdoor stand (the build's own warp cell)
+STAND = ("prt_fild08", 268, 107)  # detector_check's scene: open field (3.96 amendment 18:4x)
 
 
 @dataclass

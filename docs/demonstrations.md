@@ -13722,8 +13722,14 @@ attackers produce (crusader-orcsdun01-facts.md: 3 Orc Zombies ~24 HP/s, 3 OZ + 2
   step (its second button), and `@alive` follows in the end-state restore. A death is a RESULT,
   not a hard bar.
 
-**The test bed (prt_fild08, the bench's outdoor stand 170,375; the Crusader stands still and does
-not attack: the detector cannot target orcs):**
+**AMENDMENT 1 (2026-10-21 18:4x, BEFORE the first trial; judged frames pre-survival.jpg and
+survival-stand-268-107.jpg):** the stand moves from 170,375 to **268,107** (detector_check's
+prt_fild08 scene). The judged frame at 170,375 showed the castle gate's warp swirl under the
+character and an NPC 2-3 cells away: a pack fighting there risks the hard bars (map change, NPC
+contact). 268,107 is open field. Nothing else changes.
+
+**The test bed (prt_fild08, ~~the bench's outdoor stand 170,375~~ 268,107 by amendment 1; the
+Crusader stands still and does not attack: the detector cannot target orcs):**
 - Each TRIAL spawns a pack beside the Crusader with `@monster` (crusader.gm_line, job check):
   - pack C = 3 Orc Zombie 1153 + 2 Orc Skeleton 1152;
   - pack E = C + 1 Drainliar 1111.
