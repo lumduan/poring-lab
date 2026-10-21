@@ -38,11 +38,11 @@ reported too) and per EPISODE (one unit's one standing spell or one walk: the ma
 Also an ESTIMATE of C1's low share on this block (``c1_like``: standing, clear of the models, the
 rule's view scored at the projected place) -- an estimate on the fitting block, never the check.
 
-THE PROTOCOL (fixed at the commit time of this file's first commit, BEFORE half 2's rows were made): the rules
-were explored on half 1 only; ``fix2`` (fix2_heading) is the rule chosen there. Half 2 CONFIRMS it
-if, on its decisive rows (margin 0.05, best class >= tau 0.092), fix2's pooled agreement is >= 0.85
-AND it is >= the frozen 1a rule's (``a_whole_vector|yaw0``) in every state x move shape with >= 20
-rows. Every other rule is reported on both halves, unchanged.
+THE PROTOCOL (fixed at the commit time of this file's first commit, BEFORE half 2's rows were
+made): the rules were explored on half 1 only; ``fix2`` (fix2_heading) is the rule chosen there.
+Half 2 CONFIRMS it if, on its decisive rows (margin 0.05, best class >= tau 0.092), fix2's pooled
+agreement is >= 0.85 AND it is >= the frozen 1a rule's (``a_whole_vector|yaw0``) in every state x
+move shape with >= 20 rows. Every other rule is reported on both halves, unchanged.
 """
 
 from __future__ import annotations
@@ -588,6 +588,20 @@ def class_scores(bgr: npt.NDArray[np.uint8], sheet: SpriteSheet, scene: Any,
     return best, at0, union
 
 
+def prepare(sess: olf.Session, occl: olf.Occluders | None, params: dict[str, Any],
+            half: int) -> None:  # fmt: skip
+    """The job state frame_rows reads (inherited by the forked workers)."""
+    _STATE.clear()
+    _STATE.update(sess=sess, occl=occl, hist=History(sess.lab.timeline.events),
+                  offset_ns=int(float(params["offset_ms"]) * 1e6),
+                  anchors=olf.anchors_of(params), half=half)  # fmt: skip
+
+
+def frame_rows(ref: qa_export.JpegRef) -> tuple[list[dict[str, Any]], Counter[str]]:
+    """The rows of one frame (after ``prepare``)."""
+    return _rows_of(ref)
+
+
 def _rows_of(ref: qa_export.JpegRef) -> tuple[list[dict[str, Any]], Counter[str]]:
     sess, occl, hist = _STATE["sess"], _STATE["occl"], _STATE["hist"]
     off_ns, anchors, half = _STATE["offset_ns"], _STATE["anchors"], _STATE["half"]
@@ -711,13 +725,11 @@ def cmd_rows(a: argparse.Namespace) -> dict[str, Any]:
     occl = olf.Occluders(a.rsw, a.models) if a.models.exists() else None
     if occl is not None and occl.provenance()["rsw_sha256"] != params["occluders"]["rsw_sha256"]:
         raise SystemExit("the RSW differs from the frozen one")
-    hist = History(sess.lab.timeline.events)
     spans = halves(sess.dwells)[a.half]
     refs = [ref for ref in sess.refs[:: a.every]
             if in_windows(ref.t_mono_ns, spans)
             and not in_windows(ref.t_mono_ns, sess.lab.windows)]  # fmt: skip
-    _STATE.update(sess=sess, occl=occl, hist=hist, offset_ns=int(float(params["offset_ms"]) * 1e6),
-                  anchors=olf.anchors_of(params), half=a.half)  # fmt: skip
+    prepare(sess, occl, params, a.half)
     rows: list[dict[str, Any]] = []
     dropped: Counter[str] = Counter()
     for rs, d in olf.run_parallel(_rows_of, refs, a.workers):
