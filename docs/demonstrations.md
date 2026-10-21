@@ -14357,6 +14357,15 @@ Reported, not deciding:
 - A G3 failure: NOT adopted, fixed and re-registered.
 - Tonight: as many runs as fit before ~05:05 ICT (the end state follows; nothing runs at 06:00).
 
+**Positive case (2026-10-22 00:13:35-00:13:54, before run 1): PASS.**
+- The GM was warped to 175,366, and the minimap read 175,366.
+- The Bard's foot projected to (640.4, 182.4). The staged press at (640.4, 132.4) lies ON the
+  drawn Bard's head (frame `npcguard-pos/frame-before.png`: the area drawn around the sprite).
+- REFUSED: `npc_refused` 1, named (175,374), nothing sent.
+- The window's 64 packets hold 0 `npc_contact` and 0 `npc_say`.
+
+**Run log:**
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
