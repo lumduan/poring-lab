@@ -13,6 +13,7 @@
 // (`n:town.3`), so lint findings and simulate results land on the right block.
 import { DEF_BY_TYPE } from "./blockdefs.ts";
 import { argsText, ExprError, exprText, hasDo, parseArgs, parseExpr } from "./expr.ts";
+import { fieldOf, HUNT_TYPE, type HuntRules, paramOf, params as huntParams } from "./hunt.ts";
 import {
   type ActionStmt,
   type CellRef,
@@ -48,6 +49,10 @@ export type Workspace = { blocks: { languageVersion: 0; blocks: WsBlock[] } };
 export type FromResult = { ok: true; flow: Flow; warnings: string[] } | { ok: false; errors: string[] };
 /** Catalogue defaults for blocks dragged from the toolbox without their state. */
 export type Defaults = Record<string, { concept: string; timeout_s: number }>;
+/** `hunt`: the hunt block's rule versions (GET /flows/catalogue `hunt_rules`); with them a hunt
+ * whose every parameter is one of its choices shows as the pl_hunt block (hunt.ts), else as a
+ * generic block (lossless either way). */
+export type ConvertOptions = { hunt?: HuntRules | null };
 
 type ActionRest = Pick<ActionStmt, "concept" | "timeout_s" | "on_fail" | "outcome_to" | "note">;
 type HandlerRest = Pick<
@@ -69,6 +74,10 @@ const BLOCK_OF_TYPE: Record<string, string> = Object.fromEntries(
 // --- IR -> workspace ------------------------------------------------------------------------------
 class Ids {
   private used = new Set<string>();
+  hunt: HuntRules | null;
+  constructor(hunt: HuntRules | null = null) {
+    this.hunt = hunt;
+  }
   take(id: string): string {
     let out = id;
     for (let i = 2; this.used.has(out); i++) out = `${id}#${i}`;
@@ -134,11 +143,32 @@ function paramsPlain(a: ActionStmt): boolean {
   return Object.values(a.params).every((e) => !hasDo(e));
 }
 
+/** The pl_hunt fields of a hunt action: only when it has exactly the block's parameters, each a
+ * literal rule version among its choices (anything else stays a generic block, exactly). */
+function huntFields(a: ActionStmt, rules: HuntRules): Record<string, string> | null {
+  const ps = huntParams(rules);
+  const keys = Object.keys(a.params);
+  if (keys.length !== ps.length) return null;
+  const out: Record<string, string> = {};
+  for (const p of ps) {
+    const e = a.params[p.name];
+    if (!e || e.kind !== "lit" || typeof e.value !== "string") return null;
+    const v = e.value;
+    if (!p.choices.some((c) => c.id === v)) return null;
+    out[fieldOf(p.name)] = v;
+  }
+  return out;
+}
+
 function stmtBlock(s: Stmt, path: string, ids: Ids): WsBlock {
   const id = ids.take(`n:${path}`);
   const b = ((): WsBlock => {
     switch (s.kind) {
       case "action": {
+        if (s.block === "hunt" && ids.hunt) {
+          const f = huntFields(s, ids.hunt);
+          if (f) return { type: HUNT_TYPE, fields: f, extraState: actionRest(s) };
+        }
         const p = PALETTE[s.block];
         const keys = Object.keys(s.params);
         if (p && keys.length === 1 && keys[0] === p.param) {
@@ -306,8 +336,8 @@ function height(b: WsBlock | undefined): number {
 }
 
 /** The workspace JSON of one scope. */
-export function toWorkspace(flow: Flow, scope: Scope): Workspace {
-  const ids = new Ids();
+export function toWorkspace(flow: Flow, scope: Scope, opts: ConvertOptions = {}): Workspace {
+  const ids = new Ids(opts.hunt ?? null);
   const top: WsBlock[] = [];
   let y = 20;
   const place = (b: WsBlock, x: number) => {
@@ -478,6 +508,17 @@ class Reader {
     switch (b.type) {
       case "pl_action":
         return this.generic(b, where);
+      case HUNT_TYPE: {
+        // the dropdowns ARE the parameters: P_<NAME> -> <name>, each a rule version literal
+        const ps: Record<string, Expr> = {};
+        for (const [k, v] of Object.entries(b.fields ?? {})) {
+          const name = paramOf(k);
+          if (name === null) continue;
+          if (typeof v !== "string" || !v) this.err(where, `hunt: ${name} has no rule version`);
+          ps[name] = { kind: "lit", value: String(v) };
+        }
+        return { kind: "action", block: "hunt", params: ps, ...this.rest(b, "hunt", where) };
+      }
       case "pl_wait":
         return { kind: "wait_until", cond: { kind: "lit", value: false }, timeout_s: this.num(b, "SECONDS", where), outcome_to: null };
       case "pl_wait_until": {

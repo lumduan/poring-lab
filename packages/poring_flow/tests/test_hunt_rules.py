@@ -6,6 +6,7 @@ evidence badge, beside the L1 badge and never in place of it."""
 from __future__ import annotations
 
 import copy
+import json
 from pathlib import Path
 from typing import Any
 
@@ -15,7 +16,9 @@ import yaml  # type: ignore[import-untyped]  # no stubs in the dev env
 from poring_flow.catalogue import catalogue
 from poring_flow.hunt_rules import D8_MIN_HOURS, RulesError, d8_ok, rules_doc
 
-HUNT = Path(__file__).resolve().parents[3] / "config" / "flows" / "hunt"
+REPO = Path(__file__).resolve().parents[3]
+HUNT = REPO / "config" / "flows" / "hunt"
+TS_HUNT = REPO / "services/frontend/src/lib/flow/fixtures/hunt_rules.json"
 
 
 def index() -> dict[str, Any]:
@@ -107,3 +110,14 @@ def test_a_document_this_module_does_not_read_is_refused(which: str, edit: Any, 
     edit(idx if which == "index" else ev)
     with pytest.raises(RulesError, match=match):
         rules_doc(idx, ev)
+
+
+def hunt_fixture() -> str:
+    """The frontend's hunt-block fixture (hunt.test.ts, blocks.test.ts): the committed index and
+    evidence through rules_doc, as the catalogue serves it."""
+    return json.dumps(rules_doc(index(), evidence()), indent=1, ensure_ascii=False) + "\n"
+
+
+def test_the_frontends_hunt_fixture_is_current() -> None:
+    """Regenerate with: python scripts/gen_zones_fixtures.py"""
+    assert TS_HUNT.read_text(encoding="utf-8") == hunt_fixture(), "scripts/gen_zones_fixtures.py"

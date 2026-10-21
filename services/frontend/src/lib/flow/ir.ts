@@ -127,6 +127,10 @@ export type Disable = { kind: "disable"; key: string };
 export type Add = { kind: "add"; event: Handler; label: string | null };
 export type MapEvent = Override | Extend | Disable | Add;
 
+/** The map node's zones file (ADR-0020 Amendment A 4, DRAFT; B1): config/map_zones/<map>.yaml
+ * by its sha256, so the flow's hash covers the zones a person approved. ABSENT when there is none
+ * (MW1 leaves it out of the canonical JSON, so older flows keep their hash): never `null` here. */
+export type ZonesRef = { map: string; sha256: string };
 export type MapBlock = {
   name: string;
   map: MapRef;
@@ -136,6 +140,7 @@ export type MapBlock = {
   events: MapEvent[];
   main: Stmt[];
   resume_here: boolean;
+  zones?: ZonesRef;
 };
 export type Workflow = {
   start_block: string;
