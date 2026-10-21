@@ -2,7 +2,7 @@
 title: "Disk audit: poring-lab's footprint on the shared root disk"
 status: living
 created: 2026-10-21
-last_reviewed: 2026-10-21
+last_reviewed: 2026-10-22
 owner: poring-lab
 ---
 
@@ -120,3 +120,23 @@ both listed), then the local delete under the guard.
 | repo `services/` | 0.87 GB | 0.50 GB (node_modules, listed) |
 | `~/poring-lab-shm-archive` | 4.11 GB | gone |
 | ours in total | ≈ 23.0 GB (≈ 4.5 % of used) | **≈ 17.7 GB (≈ 3.5 % of the 464.8 GiB used; Docker ≈ 14.6 of it, the vision image 10.3)** |
+
+## Check -- 2026-10-22 04:44 ICT (end of the overnight; no moves)
+
+| | 21:10 (after audit 1) | 04:44 |
+|---|---|---|
+| root LV used | 464.8 GiB (80 %) | **468.9 GiB** (80 %), 117.2 GiB free |
+| ours in total | ≈ 17.7 GB | **≈ 17.8 GB** (≈ 3.5 % of used) |
+| repo `data/` (`measure:du`, 0.0 % stall) | 0.73 GB | 0.78 GB (today's input log; the nametag cuts of 4 hunt runs) |
+| the session transcript | 1.39 GB | 1.42 GB |
+| /dev/shm (ours, RAM) | ≈ 2.3 GB | 1.83 GB (the CPU detector 1.54) |
+
+- **+4.1 GiB in 7.5 h, NOT ours** (ours ≈ +0.1 GB; no build, no pull). `measure:docker-df` at
+  04:46 (worst stall 4.6 %): every quant volume at its 20:34 size (crypto_cold_tier 48.52,
+  orderbook_raw_log 33.54, ticker_raw_log 5.77 GB) and no new image. So the growth is outside
+  Docker's view (bind-mounted data, the system, other users). Not walked, by rule.
+  - One candidate, unverified: candy-closet's restic offsite-backup container (up 10 h at 04:46).
+- **Rate:** ≈ 13 GiB/day, the same as 10-19 -> 10-21 (+30 GiB in 2.6 days). At 117.2 GiB free that
+  is ≈ 9-10 days to full. Raised to Batt (the 2026-10-22 06:00 report).
+- Tonight's finished scratch went to `scratch-archive/2026-10-22/poring-lab-tmp/`; the 4 v55
+  sessions to the datasets root (`dataset_ship.py ship`, re-hashed on the NAS).
