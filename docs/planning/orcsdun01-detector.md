@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [labels-v2-plan.md, training-cost.md, ../benchmarks/v1-vs-v0png.md, ../phase3-plan.md, ../operations/vision-long-lived.md]
-next_action: "The label fix (3b) re-run on col1 FAILED C1 pooled (3c: 15.6 % bad_label against < 2 %; 3a was 34.7 %), so per 3b nothing trains and the result goes to Batt. C2 passes (1 / 1 px everywhere). The facing is what is left: after a straight (axis) move the client draws a DIAGONAL view (walk rule 0.4 % on axis moves). The literal 1c rule keeps 283 of 4,343 frames whole. The round-2 blind pack is built, not run (3c)."
+next_action: "Batt's call on the DRAFT 3e (NOT pre-registered, NOT run). The label fix (3b) FAILED C1 on col1 (3c, 15.6 %), so nothing trains. 3e, measured on col3 only, proposes fix 2: the drawn-view rule (93.8 % on the confirm half against 78.9 % for 1a; C1 estimated at about 4 % alone). It also lists options for the occlusion and the Orc Skeleton, and Batt's open questions."
 title: "orcsdun01 (Orc Dungeon F1): the facts, the collection, the camera check, the class scheme, the labels and the evaluation (plan)"
 date: 2026-10-21
 owner: Batt
@@ -160,6 +160,9 @@ outside GM windows; 2,985 standing labels scored). The output is local:
     is biased upward, so read it as an upper bound.
   - The Timeline facing differs from the best view on 78 % of the labels, mostly by 45° (±1
     heading), then 90°. 85 % of those facings were set by a walk.
+    ➡️ 3e (DRAFT) finds this count inflated by TIES: the ACT draws its directions in identical
+    pairs, so a best-of-8 that keeps the first of equal scores never names W, S or E. Read by image
+    in 3e.
   - This is the outdoor facing that phase3-plan 5d-ii left OPEN: "a wrong view lowers the NCC".
     The symmetric prt_fild08 sprites hid it; the asymmetric orc sprites show it, and their boxes
     shift sideways with the view.
@@ -320,6 +323,12 @@ C1 / C2 judge the PREDICTION (facing 1a, anchor 1b, time 1d, no fit), after 1c.
   beats the last step on mixed moves but leaves the axis moves wrong. That is material for the next
   hypothesis (Batt's call), not tuned here.
 
+  ➡️ **SUPERSEDED by 3e (a DRAFT, measured on col3 only):** the axis row above is mostly a TIE of
+  the best-of-8 (the ACT draws S = SW, W = NW, N = NE, E = SE). Read by image, the rule was right on
+  154 of the 259 axis-move labels. On col3 the client draws a unit that walked NORTH with NW's image
+  and one that walked EAST with NE's image; south and west match the rule. The 37.7 % and the
+  per-species agreement above count the same ties.
+
 **THE LABELS on col1** (`orc_label_sheets.py --fix`, ab61cdf, every 3rd frame as round 1: 5,010
 frames; v2's own frame rules keep 4,343, as in round 1). Each visible orcsdun01 monster label:
 
@@ -398,6 +407,277 @@ frames; v2's own frame rules keep 4,343, as in round 1). Each visible orcsdun01 
     for 6 of 7 orcsdun01 species.
   - Whether the fitted labels may train despite C1 is a new decision. It is Batt's: a new
     pre-registration, not a reading of this one.
+
+### 3e. DRAFT for Batt -- NOT pre-registered, NOT run: fix 2 (the drawn view), and options for the occlusion and the Orc Skeleton
+
+**Status: a DRAFT.** It is evidence for Batt's next hypothesis, written by an offline study on the
+FITTING block col3 only (2026-10-21, 21:4x-22:3x ICT). Nothing here is pre-registered, nothing
+re-runs on col1 until Batt approves, and col2 is not read (the tool refuses col1 and col2 by name).
+3b's rules, bars and parameters are unchanged.
+
+**The study** (`scripts/orc_facing_study.py`; 72cb479, its test 41ba6cf):
+- **Data:** col3 `20261021T142100-orcsdun01-col3`, every 2nd frame inside a dwell, outside the GM
+  windows, at 3c's frozen 1d offset (120 ms) and 1b anchors.
+- **Halves by time:** half 1 = the first 32 dwells, half 2 = the last 32.
+  - The rules were explored on half 1 only.
+  - The rule `fix2` and the confirmation test were committed at 22:04:51 (72cb479), BEFORE half 2's
+    rows were made (22:05-22:10).
+- **The samples:** every orcsdun01 monster STANDING (section 3's rule: idle >= 1 s) or WALKING,
+  isolated by 120 px, clear of the UI and the edges. Half 1: 4,377 samples; half 2: 4,282.
+- **The drawn view:**
+  - each view CLASS is scored by label_check's masked NCC (the best over the action's frames and
+    +-3 px standing / +-4 px walking);
+  - the drawn class is the best one;
+  - a sample counts when it is DECISIVE: best >= tau 0.092 and >= 0.05 above the second (96 % of
+    the samples).
+  - The decisive samples are also reported per EPISODE (one unit's one walk, or one standing spell:
+    its majority class).
+  - The picture is the same on all samples (fix2 90.1 / 91.5 %, 1a 78.1 / 77.3 %) and on the
+    samples clear of the model boxes (93.6 / 94.4 %, 1a 81.7 / 78.5 %; `score.json`).
+- **Nothing is ported from rAthena (GPL).** The diagonal-first path is our own code from its idea;
+  the A* is the Timeline's.
+- **Checked by eye:** col3 frame 1938, an Orc Zombie standing after an EAST move.
+  - It shows its BACK: NCC 0.69 for the N / NE image against 0.10 for the E / SE image, the cleaver
+    side the frozen 1a rule draws.
+  - That frame is the test's real positive case.
+
+**Finding 0. 3c's "diagonal after an axis move" is mostly a TIE, not the client.**
+- Every orcsdun01 ACT draws its 8 directions in identical PAIRS, in every frame of idle and walk:
+  - S = SW, W = NW, N = NE, E = SE for the walkers and the bats (4 distinct images);
+  - the two plants have 2 images, mirrored.
+- Under our mapping (camera.displayed_direction, yaw 0) an axis heading shares its image with its
+  CLOCKWISE diagonal. 3c's best-of-8 kept the first of equal scores, so it could never name W, S or
+  E.
+- Its "best view -45° on 153 of 259 axis moves" is that tie: the rule's own image.
+  - Read by image, the rule was right on 154 of col1's 259 axis-move labels and wrong on 103: 57
+    "+45°" and 46 "+90°".
+  - On col3 the wrong ones are the north and east moves (below). col1's split by direction is
+    not known here: col1 is not read.
+- 3a's "the Timeline facing differs from the best view on 78 %" carries the same tie.
+
+**Finding 1. What the client draws (by image).** The share of decisive samples where the rule's
+image is the drawn one, % (samples).
+
+Half 1 (explore):
+
+| rule | appeared standing | stand / axis | stand / diagonal | stand / mixed | walk / axis | walk / diagonal | walk / mixed | all |
+|---|---|---|---|---|---|---|---|---|
+| **fix2 (PROPOSED)** | 99.2 (240) | **98.2** (550) | 99.3 (421) | **86.8** (1,707) | **98.3** (176) | 96.2 (131) | **92.4** (930) | **92.3** (4,155) |
+| 1a as frozen (whole vector, map_calc_dir; our mapping) | 99.2 | 56.5 | 99.3 | 77.9 | 59.1 | 96.2 | 85.9 | 80.0 |
+| the Timeline facing (A* last step / appear) | 99.2 | 56.9 | 97.4 | 50.9 | 59.7 | 94.7 | 76.6 | 66.7 |
+| whole vector, 22.5° sectors | 99.2 | 56.5 | 99.3 | 74.1 | 59.1 | 96.2 | 80.8 | 77.3 |
+| last step of the Timeline's A* (rAthena's path_search on 2,534 of 2,540 walks) | 99.2 | 56.9 | 97.4 | 50.9 | 59.7 | 89.3 | 53.7 | 61.4 |
+| last step, diagonal-first path | 99.2 | 56.5 | 99.3 | 50.3 | 59.1 | 96.2 | 54.0 | 61.5 |
+| last step, straight-first path | 99.2 | 56.5 | 99.3 | 82.9 | 59.1 | 96.2 | 92.4 | 83.5 |
+| the step being walked | -- | -- | -- | -- | 59.7 | 94.7 | 76.6 | 76.1 (1,237) |
+| the appear packet's heading | 99.2 (240) | -- | -- | -- | -- | -- | -- | 99.2 |
+| eye -> unit azimuth (the camera angle), floored, on the A* last step (+ / -) | 39.6 / 60.4 | 48.4 / 50.4 | 97.4 / 99.3 | 53.4 / 47.1 | 55.1 / 44.3 | 89.3 / 90.8 | 47.1 / 52.6 | 56.2 / 56.1 |
+| approach: the diagonal turned from (the previous step / facing) | -- | 52.4 (252) | 99.3 | 83.5 | 44.7 (103) | 94.7 | 92.3 | 84.7 |
+| every axis heading takes its counter-clockwise image | 0.8 | 41.8 | 99.3 | 78.1 | 39.8 | 96.2 | 81.9 | 70.8 |
+
+Half 2 (CONFIRM; the same rules):
+
+| rule | appeared standing | stand / axis | stand / diagonal | stand / mixed | walk / axis | walk / diagonal | walk / mixed | all |
+|---|---|---|---|---|---|---|---|---|
+| **fix2 (PROPOSED)** | 97.7 (394) | **97.1** (477) | 98.6 (359) | **90.8** (1,626) | **98.2** (165) | 95.4 (152) | **92.8** (895) | **93.8** (4,068) |
+| 1a as frozen | 97.7 | 49.9 | 98.6 | 79.1 | 42.4 | 95.4 | 81.8 | 78.9 |
+| the Timeline facing | 97.7 | 49.9 | 98.6 | 49.3 | 42.4 | 93.4 | 73.5 | 65.1 |
+| whole vector, 22.5° sectors | 97.7 | 49.9 | 98.6 | 76.8 | 42.4 | 95.4 | 76.3 | 76.8 |
+| last step of the Timeline's A* | 97.7 | 49.9 | 98.6 | 49.3 | 42.4 | 93.4 | 46.4 | 59.1 |
+| last step, diagonal-first path | 97.7 | 49.9 | 98.6 | 47.4 | 42.4 | 95.4 | 47.0 | 58.6 |
+| last step, straight-first path | 97.7 | 49.9 | 98.6 | 84.3 | 42.4 | 95.4 | 92.8 | 83.4 |
+| the step being walked | -- | -- | -- | -- | 42.4 | 93.4 | 73.5 | 71.8 (1,212) |
+| the appear packet's heading | 97.7 (394) | -- | -- | -- | -- | -- | -- | 97.7 |
+| eye -> unit azimuth, floored, on the A* last step (+ / -) | 35.3 / 65.5 | 45.9 / 51.4 | 96.4 / 93.0 | 53.4 / 45.9 | 47.3 / 49.7 | 91.5 / 88.8 | 48.0 / 51.1 | 54.6 / 55.5 |
+| approach | 100 (5) | 40.0 (165) | 98.6 | 83.8 | 29.5 (61) | 94.7 | 91.8 | 84.9 |
+| every axis heading takes its counter-clockwise image | 3.0 | 47.4 | 98.6 | 79.2 | 55.8 | 95.4 | 84.4 | 70.6 |
+
+- **"Turning in place": no sample.** col3 has no entity_turn and no act packet: the GM is immune and
+  nothing fights.
+- **The confirmation test** (fixed in 72cb479, before half 2):
+  - fix2 pooled >= 0.85, and >= the frozen 1a rule in every state x move shape with >= 20 samples.
+  - **Half 2: 93.8 % pooled, and >= 1a in all 7 cells (equal in 3, higher in 4). CONFIRMED** (on
+    col3).
+  - Per episode: 93.9 % (883) against 77.0 % for 1a.
+  - Clear of the model boxes: 94.4 % (1,961) against 78.5 %.
+
+**The axis moves, by direction** (4-image species, decisive samples; fix2 / 1a as frozen):
+
+| last move | half 1 | half 2 |
+|---|---|---|
+| north | 99.3 / **0.0** % (139 samples, 37 episodes) | 98.8 / **0.6** % (165, 44) |
+| east | 98.2 / **1.2** % (165, 37) | 98.1 / **0.0** % (158, 37) |
+| south | 98.0 / 98.0 % (249, 51) | 93.2 / 93.2 % (146, 35) |
+| west | 97.7 / 97.7 % (173, 37) | 98.8 / 98.8 % (173, 39) |
+
+A unit that WALKED north shows the NW image (its back-left), not N / NE's. One that walked east
+shows the NE image (its back), not E / SE's (its front, the cleaver side). South and west are drawn
+as we draw them.
+
+**Per species** (all states; fix2 / 1a / the Timeline facing, % of decisive samples):
+
+| species | half 1 | half 2 |
+|---|---|---|
+| Orc Zombie 1153 | 92.4 / 79.8 / 66.7 (2,454) | 94.1 / 75.9 / 62.9 (2,356) |
+| Orc Skeleton 1152 | 94.9 / 81.4 / 62.7 (177) | 93.8 / 74.1 / 57.5 (386) |
+| Familiar 1005 | 88.7 / 74.6 / 55.8 (701) | 91.9 / 72.7 / 54.9 (370) |
+| Steel Chonchon 1042 | 91.5 / 73.4 / 64.7 (402) | 93.0 / 87.7 / 65.5 (357) |
+| Drainliar 1111 | 94.4 / 92.9 / 75.0 (196) | 89.9 / 85.0 / 66.0 (247) |
+| White Plant 1082 | 100 / 100 / 100 (225; 5 units) | 95.8 / 95.8 / 95.8 (166; 4 units) |
+| Black Mushroom 1084 | -- (none decisive) | 100 / 100 / 100 (186; 3 units) |
+
+**What the rule says, and what it rests on:**
+- **A unit that APPEARED standing** (a stand packet, no move since): its packet heading, our mapping.
+  - 97.7-99.2 %, but mostly the two plants (heading 0).
+  - The 4-image species give only a few units with an axis packet heading:
+    - north: 9 of 11 samples (about 5 units) drawn as N / NE;
+    - east: 15 of 15 (6 units) drawn as E / SE.
+  - A walk-set north or east is drawn otherwise, so the client treats the two sources
+    differently. That rests on few units.
+- **A WALKING unit:** the quadrant diagonal of its move vector (x1 - x0, y1 - y0), an axis vector
+  taken as dx = 0 -> west, dy = 0 -> north. So north -> NW, east -> NE, south -> SW, west -> NW.
+- **A unit STANDING after its move:**
+  - rAthena's map_calc_dir heading of the whole vector (3b's frozen 1a heading, 1:3 slopes);
+  - an axis heading takes the diagonal by the same zero convention; a diagonal stays.
+  - On mixed moves this beats the plain quadrant (86.8 / 90.8 against 82.9 / 84.3). While walking
+    the plain quadrant is better (92.4 / 92.8 against 84.5 / 87.0): the image switches to the
+    axis's late in the walk, or at arrival.
+- **Rejected by the data:**
+  - the last step of any path (A*, diagonal-first) -- the image is not the last step's;
+  - the eye -> unit azimuth (a perspective side rule): about chance on axis moves;
+  - "the side it turned from" -- chance on pure axis moves;
+  - 22.5° sectors (worse than the 1:3 rule);
+  - every axis heading taking its counter-clockwise image (right for N and E, wrong for S, W and
+    the packet headings).
+
+**Finding 2. What fix 2 would do to C1: an ESTIMATE on col3, not the check.**
+- **The measure:** standing samples clear of the model boxes; the rule's image scored at the
+  projected place, no shift (C1's own measure); the share below tau.
+- **Calibration:** the frozen 1a rule gives 14.7 % (half 1) and 15.1 % (half 2) here, close to
+  col1's real C1 of 15.6 % (3c).
+- **The best of the 4 images would give 0.4 / 0.2 %.** So what is left after fix2 is the facing,
+  not the position.
+
+| on col3 (standing, clear of models) | half 1 | half 2 |
+|---|---|---|
+| 1a as frozen | 14.7 % (267 / 1,815) | 15.1 % (203 / 1,346) |
+| **fix2** | **4.2 %** (77 / 1,815) | **4.2 %** (57 / 1,346) |
+| fix2, without the 150 ms before a unit's next move packet (2b) | 3.3 % | 3.0 % |
+| fix2, without the ambiguous mixed moves (2c) | 3.7 % | 3.1 % |
+| fix2 with 2b and 2c | 2.7 % (43 / 1,574) | 1.9 % (23 / 1,191) |
+
+- **Per species, fix2:**
+  - half 1: Orc Zombie 5.1, Orc Skeleton 2.9, Familiar 2.7, Steel Chonchon 6.3, Drainliar 6.6,
+    White Plant 0.0 %;
+  - half 2: 5.4, 1.0, 0.0, 10.4, 4.0, 0.0 %, Black Mushroom 0.0 %.
+- **⇒ fix 2 alone is projected to FAIL C1 again** (about 4 % against < 2 %), at about a quarter of
+  today's failure.
+- **The two residual mechanisms, found on half 1 and looked at again on half 2 after its one
+  reading** (so NOT confirmed):
+  - **2b, the next move:** in the 150 ms (timeline time) before a unit's next move packet, fix2
+    holds on only 40 / 64 (half 1) and 36 / 58 (half 2) standing samples. Of the wrong ones, 19 / 24
+    and 14 / 22 already show the NEXT move's image. The client turns at the packet, before the
+    visible step (the 120 ms offset was fitted on positions).
+  - **2c, the ambiguous mixed moves:** on a mixed move the image switches from the vector's
+    quadrant to the axis's late in the walk, and the switch slope is fuzzy:
+    - long / short ratio about 2-3.5 against map_calc_dir's sharp 3;
+    - "ambiguous" here = the vector's quadrant and map_calc_dir's quadrant name different images
+      (176 + 100 standing samples).
+- With both, the estimate is at the bar, 1.9-2.7 %. Without a confirmation it is not a basis for
+  a pre-registered expectation.
+
+**DRAFT TEXT for a pre-registration (Batt edits, approves or drops; NOT in force):**
+
+> **3e fix 2 (labels v2orc-fix2):** 3b unchanged except the facing (1a) and its mapping to the
+> sprite's image:
+> - (i) a monster that appeared standing and has not moved since: its appear heading, mapped as
+>   today;
+> - (ii) a walking monster: the image of the quadrant diagonal of its move vector (x1 - x0, y1 - y0)
+>   (dx = 0 counts as west, dy = 0 as north);
+> - (iii) a monster standing after its move: map_calc_dir's heading of that vector; an axis heading
+>   draws the image of the diagonal by the same convention (north -> NW, east -> NE, south -> SW,
+>   west -> NW).
+>
+> [Optional, Batt's choice:]
+> - (2b) a monster within 150 ms (timeline time) of its next move packet is EXCLUDED (as `unfit`);
+> - (2c) a standing label after a mixed move whose two candidate images differ is EXCLUDED, or
+>   fitted with both images and the better kept (labels only: C1 judges the prediction).
+>
+> 1b, 1c, 1d, tau, k and the fit radius are 3c's frozen values. C1 / C2 and the blind check re-run
+> on col1 with section 3 / 5's bars and 3b's decision rule. Expected from col3, not a bar: C1 about
+> 4 % without 2b / 2c, about 2-3 % with them.
+
+**The occlusion (3c: the literal 1c rule keeps 283 of 4,343 col1 frames whole).** Measured on col3:
+- **Most standing monsters under a model's 2-D box are drawn whole:** 2,888 of 2,897 have a best
+  image NCC >= tau.
+- **The orcs score about as well under a box as clear of one:** Orc Zombie (half 1) median 0.66
+  under a box, 0.70 clear.
+- **Only the White Plants under canopy are really hidden:** median 0.23 (half 1), 0.26 (both
+  halves), against 0.76-0.78 clear.
+- **What each rule keeps** on col3: 3b's label fit with either facing, every 6th dwell frame, 1,543
+  frames (scratch `occl_options.py`, 22:19-22:29). Monster labels only: v2's other frame rules (NPC,
+  warp, ...) are not applied here.
+
+  | col3 | the frozen 1a facing | fix2 |
+  |---|---|---|
+  | labels fitted and kept (not under a box) | 4,501 | 5,088 |
+  | excluded under a model box (1c) | 5,285 | 5,266 |
+  | excluded unfit / crowd / UI | 815 | **248** |
+  | under a box, the fit passes (O3 would keep) | 4,337 (82 %) | 4,760 (90 %) |
+  | frames whole: the literal 1c | 87 (5.6 %; col1's 3c: 6.5 %) | 144 (9.3 %) |
+  | frames whole: O3 | 543 (35.2 %) | **980 (63.5 %)** |
+  | frames whole: no model test at all (the upper bound) | 936 (60.7 %) | 1,321 (85.6 %) |
+  | kept labels stacked (IoU >= 0.3 with another kept label; S3) | 85 | 109 |
+  | frames whole: O3 + S3 | 529 | 954 |
+
+  - With fix2 the fit itself fails 70 % less often (815 -> 248 labels).
+  - O3 with fix2 keeps 980 of the 1,543 frames whole, against 87 today.
+
+| option | what | cost | risk |
+|---|---|---|---|
+| O1 per-label ignore regions | an excluded monster's box is masked in the image (YOLO has no ignore input), the frame kept | ~0.5 day (build_frame_cache writes masked frames) + a cache rebuild; col2 scoring needs a matching don't-care list | the mask is a visual cue the model can learn; it also hides neighbours |
+| O2 a depth test | the 162 placed RSM models' triangles rasterised into a depth buffer per dwell (the GM stands still: ~64-80 renders a block), the sprite's depth from render.anchor_and_depth; a label is hidden where a model surface is IN FRONT of most of its mask | ~1 day (the RSM reader exists) + ~0.5 day for alpha-textured leaves (GRF textures, /dev/shm only); a positive case on col3 (the canopy plants hidden, the boxed orcs visible) | leaves without alpha read as solid; node animation ignored |
+| O3 the fit's evidence instead of the 2-D box | a label under a model box is KEPT when its fit passes (>= tau, not at the edge); only a failed fit under a box excludes the frame | a few lines in FixLabeler + tests; minutes to re-label | tau 0.092 is low (a fit can pass on clutter); a hidden monster still excludes its frame; the blind check judges the boxes |
+| O4 = O2 + O3 | O2 decides hidden (no label, frame kept), O3 the box | O2's cost | O2's |
+
+**The Orc Skeleton's blind failure (3d: labeller D 86.7 % good; "off" boxes cut weapons; stacked
+orcs fitted to the rear one):**
+- **S1 fix 2 itself:**
+  - The frozen 1a rule drew the wrong image for 19-26 % of col3's Orc Skeleton samples (1a 81.4 /
+    74.1 % against fix2 94.9 / 93.8 %).
+  - A fit that starts from the mirrored or back image puts the cleaver on the wrong side. That is a
+    plausible source of "cuts the weapon", not shown here.
+  - Cost: none beyond fix 2. The next blind round measures it.
+- **S2 weapon reach:** the box = the fitted frame's box joined with the action's envelope for the
+  orcs.
+  - Cost: trivial.
+  - Risk: looser boxes (the labellers' "loose").
+- **S3 stacked orcs:** a label whose fitted box overlaps another kept label's by IoU >= 0.3
+  excludes its frame even when its fit passes. Today `crowd` counts only when the fit fails.
+  - Cost: trivial code.
+  - On col3: 85 (frozen facing) / 109 (fix2) stacked labels of 4,501 / 5,088, so O3 + S3 keeps 529
+    / 954 frames whole against O3's 543 / 980. Not split per species here.
+- **S4 sample size:** at 30 crops one crop is 3.3 points, and D's 86.7 % is 26 / 30. A larger
+  Orc Skeleton sample (e.g. 60) is only valid if fixed BEFORE the round.
+
+**Open questions for Batt:**
+1. Pre-register fix 2 as drafted? With 2b and / or 2c, or without?
+2. C1 is projected at about 4 % with fix 2 alone. Is a second C1 failure worth running to learn
+   from, or is C1 (the PREDICTION, no fit) still the right gate, now that the fitted labels pass the
+   blind check for 6 of 7 species (3d)?
+3. The occlusion: O1, O2, O3 or O4?
+4. The Orc Skeleton: S1 only, or also S2 / S3? And a larger blind sample for it?
+5. The packet-heading evidence for the 4-image species rests on about 6 units. Is that enough, or
+   should a dwell block record more appearances (any block will, at no extra cost)?
+
+**Where the evidence lives** (client-derived, never committed):
+- `/mnt/poring-lab-datasets/scratch-archive/2026-10-22/orc-facing/`:
+  - `rows-half1.json`, `rows-half2.json` (every sample);
+  - `score.json` (every rule, both halves, the three sample sets, the C1 estimate);
+  - `classes.json` (the view classes);
+  - `occl_options_{frozen,fix2}.json` (the occlusion options);
+  - `viz_axis.png` (the by-eye check);
+  - `scratch/` (the exploration scripts).
 
 ## 4. The class scheme (PROPOSED; Batt's default if he does not answer by the time the labels are ready)
 
