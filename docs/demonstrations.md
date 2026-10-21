@@ -14085,7 +14085,7 @@ path), each path reported apart.
   raise it, or require HP below a floor too (for example rate > 200 AND HP < 50 %). Each is a new
   pre-registration.
 
-### 3.96f crusader-regen@1: HP regen while standing, walking and fighting, with Moving HP Recovery (pre-registered 2026-10-21 __TIME__ ICT, the commit time, BEFORE it is built or run; Batt 2026-10-21 ~16:4x: "Moving HP Recovery matters: I want to see whether HP regen keeps up while the bot walks and fights continuously", and again 21:1x: "report HP regen while walking/fighting with Moving HP Recovery")
+### 3.96f crusader-regen@1: HP regen while standing, walking and fighting, with Moving HP Recovery (pre-registered 2026-10-21 21:17 ICT, the commit time of 3.96f's first commit, BEFORE it is built or run; Batt 2026-10-21 ~16:4x: "Moving HP Recovery matters: I want to see whether HP regen keeps up while the bot walks and fights continuously", and again 21:1x: "report HP regen while walking/fighting with Moving HP Recovery")
 
 **What the pinned source predicts** (status.cpp `status_natural_heal` :15444-15560; e985006):
 - Natural HP regen ticks every `natural_healhp_interval` (6 s) by `1 + VIT/5 + MaxHP/200` (= 33 for
