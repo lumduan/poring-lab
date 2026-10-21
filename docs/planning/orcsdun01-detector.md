@@ -96,6 +96,7 @@ and its JSON. The summary:
 | block | session | time (ICT) | dwells | frames (GB) | safety (packets, `warp_watch.py judge`) | units seen on screen / unit-seconds (1 Hz, within 15 x 11 cells of the GM) |
 |---|---|---|---|---|---|---|
 | col1 | 20261021T103231-orcsdun01-col1 | 10:32-11:22 (seed 1, 30-s dwells) | 80 (all 80 warps landed as typed) | 15,028 (1.77) | no request, no GM act, 0 acts on the GM (3,627 monster moves); 81 / 81 GM lines seen at the server | Orc Zombie 80 / 10,223; Familiar 15 / 2,068; Steel Chonchon 10 / 1,484; Black Mushroom 10 / 1,157 (from 8 stands); Orc Skeleton 10 / 1,074; White Plant 5 / 789 (14 stands); Drainliar 5 / 449 (23 stands) |
+| col2 (the pre-registered TEST block) | 20261021T122650-orcsdun01-col2 | 12:26-13:16 (seed 2, 30-s dwells) | 80 (80 / 80 landed) | 15,038 (1.76) | no request, no GM act, 0 acts on the GM (3,498 monster moves); 81 / 81 lines; the chat closed by warp_watch at its end | Orc Zombie 80 / 9,707; Familiar 15 / 1,570; Steel Chonchon 10 / 1,376; Orc Skeleton 10 / 1,365; Black Mushroom 10 / 1,279 (13 stands); Drainliar 5 / 643 (31 stands); White Plant 5 / 635 (9 stands) |
 
 - **The live server matches the pinned list exactly:** 135 units of the 7 species.
 - **A dwell takes ~40 s, not the planned 32.5 s:** typing a GM line costs ~7 s. So ~73 dwells fit
