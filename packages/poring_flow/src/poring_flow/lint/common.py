@@ -13,6 +13,7 @@ from poring_flow.catalogue import Catalogue
 from poring_flow.effective import Merged, global_set, merge
 from poring_flow.pyview import expr_src
 from poring_flow.sheet import MapSheet, World
+from poring_flow.zones import ZonesProvider
 
 # READINESS (Batt 2026-10-09, ADR-0020 contradictions #6): a binding that is not there YET for the
 # target environment (`resolve()` raised `Unsupported`). It is listed in the report and blocks the
@@ -55,6 +56,7 @@ class Ctx:
     world: World | None
     resolver: Resolver | None
     detector: Detector
+    zones: ZonesProvider | None = None  # Amendment A 4: None = not loaded (file checks skipped)
     findings: list[Finding] = field(default_factory=list)
     _seen: set[tuple[str, str, str]] = field(default_factory=set)
     _merged: dict[str, Merged] = field(default_factory=dict)

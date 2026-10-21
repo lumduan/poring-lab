@@ -1863,6 +1863,17 @@
           "maxItems": 100,
           "title": "Targets",
           "type": "array"
+        },
+        "zones": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ZonesRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -2968,6 +2979,28 @@
         "blocks"
       ],
       "title": "Workflow",
+      "type": "object"
+    },
+    "ZonesRef": {
+      "additionalProperties": false,
+      "description": "The map node's zones (Amendment A 4, DRAFT; blocks-from-hunt-flow.md section 3): the file\n`config/map_zones/<map>.yaml` stays the source of truth, the node names it by its sha256, so the\nflow's hash covers the zones a person approved. The linter checks the file is there, unchanged\nand the block's own map; a file for the block's map that the node does not name is an error.",
+      "properties": {
+        "map": {
+          "pattern": "^[A-Za-z0-9_@.\\-]{1,40}$",
+          "title": "Map",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "map",
+        "sha256"
+      ],
+      "title": "ZonesRef",
       "type": "object"
     }
   },

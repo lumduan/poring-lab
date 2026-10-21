@@ -27,6 +27,7 @@ from poring_flow.effective import global_set, merge
 from poring_flow.lint import Detector, Resolver, lint
 from poring_flow.runstart import verdict
 from poring_flow.sheet import World, load_world
+from poring_flow.zones import ZonesProvider
 from poring_skills.schema import Concept, load_l1
 
 Badge = Literal["verified_rdp_s2", "verified_rdp", "verified_s2", "unverified", "unknown", "core"]
@@ -148,9 +149,15 @@ def lint_doc(
     resolver: Resolver | None,
     detector: Detector | None = None,
     runtime_max_s: int | None = None,
+    zones_provider: ZonesProvider | None = None,
 ) -> dict[str, Any]:
     findings = lint(
-        flow, world=world, resolver=resolver, detector=detector, runtime_max_s=runtime_max_s
+        flow,
+        world=world,
+        resolver=resolver,
+        detector=detector,
+        runtime_max_s=runtime_max_s,
+        zones_provider=zones_provider,
     )
     roots = owners(flow)
     zero = {"error": 0, "readiness": 0, "warning": 0, "info": 0}
@@ -179,6 +186,7 @@ def lint_doc(
         world_loaded=world is not None,
         resolver_given=resolver is not None,
         runtime_max_s=runtime_max_s,
+        zones_loaded=zones_provider is not None,
     )
     return {
         "flow_hash": ir.flow_hash(flow),

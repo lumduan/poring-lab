@@ -1,0 +1,24 @@
+flow(
+    ir=2,
+    name="hunt_field",
+    max_runtime_s=3600,
+    start=entry("field", "south"),
+    target=target(client="kro-20211103-prere", server="lab-rathena", locale="en", path=RDP),
+)
+
+
+@map_block(
+    map_id("field_9"),
+    entries=[entry_at("south", cell("field_9", 20, 20))],
+    targets=[mob(9101), mob(9102)],
+    zones=zones("field_9", sha256="5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a"),
+)
+def field():
+    while weight_percent() < 80:
+        hunt(strike="arm_c@32", engage_on_the_way="on_the_way@19", dead="exp_line@48", loot="gm_scan_one_pass@51", search="heading_coverage@22")
+    take_exit(walk_exit(cell("field_9", 150, 150), to=entry("town", "arrival")))
+
+
+@map_block(map_id("town_9"), entries=[entry_at("arrival", cell("town_9", 10, 10))])
+def town():
+    stop("done")

@@ -59,6 +59,7 @@ HELPERS = (
     "bounded",
     "known",
     "range",
+    "zones",  # map_block(..., zones=zones(map, sha256=...)): the map node's zones (Amendment A 4)
 )
 CONSTANTS = {
     "OK": "ok",
@@ -83,12 +84,31 @@ CONSTANTS = {
 RESERVED = ("main",)  # the plain flow's node path root
 
 
+RULE_VERSION = r"^[a-z][a-z0-9_]*@[0-9]{1,4}$"  # name@N: PARAMS[N]'s numbers (hunt_config.py)
+
+
 class ParamSpec(BaseModel):
     model_config = _CFG
     name: str = Field(pattern=r"^[a-z][a-z0-9_]*$")
     type: ParamType
     required: bool = False
     positional: bool = False
+    # Amendment A 1 (2026-10-21, B1): a parameter that picks a RULE VERSION lists the versions a
+    # person may pick (their numbers travel with them, read-only); `group` is its group in the
+    # editor (Batt D2: one hunt block with groups). The linter refuses any other value.
+    group: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]*$")
+    choices: list[str] = []
+
+    @model_validator(mode="after")
+    def _choices(self) -> ParamSpec:
+        import re
+
+        if self.choices and self.type != "str":
+            raise ValueError(f"{self.name}: choices are rule versions, a str parameter's")
+        bad = [c for c in self.choices if not re.match(RULE_VERSION, c)]
+        if bad or len(set(self.choices)) != len(self.choices):
+            raise ValueError(f"{self.name}: choices are distinct name@N rule versions: {bad}")
+        return self
 
 
 class AssumeSpec(BaseModel):
@@ -117,6 +137,8 @@ class BlockSpec(BaseModel):
     assume: list[AssumeSpec] = []
     affects: dict[str, Literal["+", "-", "~"]] = {}
     types: bool = False
+    # it attacks the map block's TARGET species only (13.3): it runs in a map block with targets
+    needs_targets: bool = False
     note: str | None = None
 
     @model_validator(mode="after")

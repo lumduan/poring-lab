@@ -15,6 +15,9 @@ Inputs:
   `poring_skills.resolve.Unsupported`. `default_resolver(flow.target)` uses the real L1/L2/L3
   files; tests inject their own.
 - `detector`: what perception can do today (species naming, measured species).
+- `zones`: the map zones provider (`poring_flow.zones`, Amendment A 4): each map's zones file, as
+  the loader reads it. None means not loaded: the file checks are skipped, and the run-start check
+  refuses a flow that names zones (fail closed).
 
 Layers 4-6 (approval, runtime, interlock) are not here: the preparation report (`poring_flow.prep`)
 feeds approval; the interlock check of layer 6 is later work.
@@ -26,9 +29,10 @@ from pathlib import Path
 
 from poring_flow import ir
 from poring_flow.catalogue import Catalogue, catalogue
-from poring_flow.lint import events, loops, semantics, simulate, structure, where
+from poring_flow.lint import events, hunt, loops, semantics, simulate, structure, where, zones
 from poring_flow.lint.common import Ctx, Detector, Finding, Resolver
 from poring_flow.sheet import World
+from poring_flow.zones import ZonesProvider
 
 __all__ = [
     "Detector",
@@ -69,11 +73,12 @@ def lint(
     detector: Detector | None = None,
     cat: Catalogue | None = None,
     runtime_max_s: int | None = None,
+    zones_provider: ZonesProvider | None = None,
 ) -> list[Finding]:
     """`runtime_max_s`: the CONFIGURED maximum run time (#17; the backend's
     `flows_settings.runtime_limits`); None skips that check here (the run-start check refuses
-    without one)."""
-    ctx = Ctx(flow, cat or catalogue(), world, resolver, detector or Detector())
+    without one). `zones_provider`: the map zones (Amendment A 4); None skips the file checks."""
+    ctx = Ctx(flow, cat or catalogue(), world, resolver, detector or Detector(), zones_provider)
     if runtime_max_s is not None and flow.max_runtime_s > runtime_max_s:
         ctx.add(
             "runtime_max",
@@ -89,6 +94,8 @@ def lint(
     loops.check(ctx)
     events.check(ctx)
     where.check(ctx)  # the /where budget (#10)
+    hunt.check(ctx)  # rule versions; blocks that attack the map block's targets (2026-10-21)
+    zones.check(ctx)  # the map node's zones (Amendment A 4, 2026-10-21)
     return sorted(ctx.findings, key=lambda f: (f.layer, SEVERITY_ORDER[f.severity]))
 
 

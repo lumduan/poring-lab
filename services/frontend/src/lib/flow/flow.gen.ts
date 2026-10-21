@@ -201,6 +201,8 @@ export type ResumeHere = boolean;
  * @maxItems 100
  */
 export type Targets = MobRef[];
+export type Map2 = string;
+export type Sha256 = string;
 /**
  * @minItems 1
  * @maxItems 100
@@ -595,6 +597,7 @@ export interface MapBlock {
   name: Name5;
   resume_here?: ResumeHere;
   targets?: Targets;
+  zones?: ZonesRef | null;
 }
 /**
  * This interface was referenced by `Flow`'s JSON-Schema
@@ -641,4 +644,17 @@ export interface Add {
   event: Handler;
   kind?: Kind35;
   label?: Label2;
+}
+/**
+ * The map node's zones (Amendment A 4, DRAFT; blocks-from-hunt-flow.md section 3): the file
+ * `config/map_zones/<map>.yaml` stays the source of truth, the node names it by its sha256, so the
+ * flow's hash covers the zones a person approved. The linter checks the file is there, unchanged
+ * and the block's own map; a file for the block's map that the node does not name is an error.
+ *
+ * This interface was referenced by `Flow`'s JSON-Schema
+ * via the `definition` "ZonesRef".
+ */
+export interface ZonesRef {
+  map: Map2;
+  sha256: Sha256;
 }

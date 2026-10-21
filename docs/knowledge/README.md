@@ -13,7 +13,7 @@ What an action IS, in every RO client and server (Batt, 2026-10-07). How a clien
 
 Every entry starts **unverified**: written from memory, which may mix renewal, pre-renewal and regional versions. It flips to **verified** only when its rule passes a pre-registered alone-test on RDP AND S2 (docs/demonstrations.md); `verified_on` then names the client build, server, locale, path and session. The runtime outcome is a SCREEN check (packets are never decision input, ADR-0007); the offline outcome is the packet verifier used for tests and labels.
 
-39 concepts; 0 verified.
+40 concepts; 0 verified.
 
 | id | purpose | workflow wave | status | runtime outcome (screen) |
 |---|---|---|---|---|
@@ -26,6 +26,7 @@ Every entry starts **unverified**: written from memory, which may mix renewal, p
 | `char.sit` | Sit down to regenerate faster. | 1 Novice basics | unverified | the character sprite shows the sitting pose |
 | `char.stand` | Stand up after sitting. | 1 Novice basics | unverified | the standing pose |
 | `combat.attack_target` | Attack a chosen monster with a normal attack. | 2 combat | unverified | damage or a miss shown above the target; our swing animation |
+| `combat.hunt` | Hunt the map's target species as one task -- search, engage, kill, loot -- until the stop. | 2 combat | unverified | kills from the Battle Log's EXP lines; the weight readout rising after loot clicks |
 | `combat.use_skill` | Use a skill on a target, a cell or ourselves. | 3 Merchant job change | unverified | the skill effect and the SP bar dropping |
 | `item.equip` | Wear a weapon or armour piece. | 3 Merchant job change | unverified | the item appears in its slot in the equipment window |
 | `item.insert_card` | Put a card into a free slot of an equipment item. | - | unverified | the card leaves the inventory and the item shows it in its description |
@@ -207,6 +208,29 @@ Attack a chosen monster with a normal attack.
 - **Outcome, runtime (screen):** damage or a miss shown above the target; our swing animation
 - **Outcome, offline (packets):** an act from our id on the intended monster id within the window (`poring_dataset.verify.verify_attack`)
 - **Bindings needed:** `L2.input.attack_click`, `L3.mob.stats`
+
+## `combat.hunt`
+
+Hunt the map's target species as one task -- search, engage, kill, loot -- until the stop.
+
+- **Parameters:** strike, engage_on_the_way, dead, loot, search
+- **Status:** unverified
+- **Steps:**
+  1. Search the field along a remembered heading, preferring ground not seen lately.
+  2. Engage the nearest target species (a nearer one met on the way may take over) and keep the attack going until it dies.
+  3. Pick up its drops from the cells around the character, then resume the search.
+- **Preconditions:**
+  - On a field map where the target species spawn; weight below the attack limit; HP well above the stop threshold.
+- **Failure modes:**
+  - A non-target monster or an NPC is clicked (a misread species, a sprite under the pointer).
+  - The character circles inside a pocket or a room with a narrow entrance.
+  - Drops are left behind (a monster stands on them, or the scan misses their cell).
+- **Game rules:**
+  - At or above 90 % weight a character cannot attack.
+  - Each kill writes its base and job EXP to the Battle Log.
+- **Outcome, runtime (screen):** kills from the Battle Log's EXP lines; the weight readout rising after loot clicks
+- **Outcome, offline (packets):** attack requests on target-species ids only; no NPC contact, no non-target hit, no map change
+- **Bindings needed:** `L2.input.attack_click`, `L2.cue.pickup_cursor`, `L3.mob.stats`
 
 ## `combat.use_skill`
 

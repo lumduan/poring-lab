@@ -49,7 +49,15 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    ValidationError,
+    model_serializer,
+    model_validator,
+)
 
 from poring_skills.schema import CONCEPT_ID
 
@@ -465,6 +473,17 @@ MapEvent = Annotated[Override | Extend | Disable | Add, Field(discriminator="kin
 
 
 # --- the map block and the workflow (13.1) --------------------------------------------------------
+class ZonesRef(BaseModel):
+    """The map node's zones (Amendment A 4, DRAFT; blocks-from-hunt-flow.md section 3): the file
+    `config/map_zones/<map>.yaml` stays the source of truth, the node names it by its sha256, so the
+    flow's hash covers the zones a person approved. The linter checks the file is there, unchanged
+    and the block's own map; a file for the block's map that the node does not name is an error."""
+
+    model_config = CFG
+    map: str = Field(pattern=MAP_ID)
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
 class MapBlock(BaseModel):
     model_config = CFG
     name: str = Field(pattern=NAME)  # one map may hold several blocks (town_out, town_back)
@@ -475,6 +494,17 @@ class MapBlock(BaseModel):
     events: list[MapEvent] = Field(default=[], max_length=50)  # 13.6
     main: list[Stmt] = Field(min_length=1)  # every path ends in take_exit or stop
     resume_here: bool = True  # the relocation target for its map (13.6.6)
+    # Amendment A 4 (2026-10-21, B1): the map node's zones file. Left out of the canonical JSON
+    # when None, so every flow written before it keeps its JSON and its hash (no IR version bump:
+    # an engine that does not know the field refuses a flow that has one, extra="forbid")
+    zones: ZonesRef | None = None
+
+    @model_serializer(mode="wrap")
+    def _absent_zones(self, handler: SerializerFunctionWrapHandler) -> Any:
+        data = handler(self)
+        if self.zones is None and isinstance(data, dict):
+            data.pop("zones", None)
+        return data
 
     @model_validator(mode="before")
     @classmethod
