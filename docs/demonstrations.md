@@ -13815,7 +13815,7 @@ thresholds (60 % / 25 % / 200 HP/s) are tuned only through a new pre-registratio
   - T-S2 / T-S3 keep 3.96's bars. They wait for S1b and S6b, since their rules read S1 and stop
     on S6.
 
-### 3.96b crusader-survival@1b: S1 and S6 re-registered after T-S6 trial 1 (pre-registered 2026-10-21 __TIME__ ICT, the commit time, BEFORE either fix is built or any trial runs; 3.96's decision rule: "One that fails is fixed and re-registered, never re-run under these bars")
+### 3.96b crusader-survival@1b: S1 and S6 re-registered after T-S6 trial 1 (pre-registered 2026-10-21 18:57 ICT, the commit time of 3.96b's first commit, BEFORE either fix is built or any trial runs; 3.96's decision rule: "One that fails is fixed and re-registered, never re-run under these bars")
 
 **What failed (3.96 run log):** S1, the bar's length (49.1 % of reads within 5 %); S6, the death
 dialog's 10-04 signature (distance 8.96 on this client's dialog, bar 6.0).
