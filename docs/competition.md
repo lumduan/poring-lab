@@ -1967,4 +1967,10 @@ parallel.
   - Also: v52's same-treatment per-run ratios were 1.03, 2.00 and 0.71, so (a) alone passes by
     chance.
 - The verdict waits for 4 runs. Today fits run 1 (an interim).
+- **Run 1 interim (16:03, demonstrations 3.94 run log; no verdict):**
+  - (a) passes by chance: 6.25 vs 15.58 per 100 (0.401);
+  - (b) FAILS: 0 items picked on extra cells, against 3.73 needed;
+  - the union read 1 HAND in 129 hovers; 3 items in its cells were gone before it got there;
+  - P2 +13.8 pts; G3 1.07 x; hard bars 0; 151.0 kills/h; 0 s in C1.
+  - Runs 2-4 are not today.
 

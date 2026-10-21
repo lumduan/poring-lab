@@ -13575,6 +13575,39 @@ allows. An interim after each; the verdict after 4.
 
 **Run log (written during the runs):**
 
+- **Run 1** (`20261021T150152-demo-hunt-flow53`, seed 20410101, 15:01:52 -> 16:03:44 by the chain
+  log, end `time_box`; judged screenshot `pre-v53-20410101.jpg`; INTERIM, no verdict: 1 of 4 runs).
+  - Standard row:
+    - 172 engagements; landing 76.7 %; **151.0 kills/h**; seen 33.0 / 10 min; kills per sighting
+      4.58;
+    - seen -> click p50 5.16 s; death -> next 1.68 s;
+    - completeness 74.6 % (net 88.7 %); left / looters / expired 9 / 17 / 0 %;
+    - kill -> last pickup 1.91 / 2.63 s; reversals 4.37 / min;
+    - Creamy 0 (0 requests); time inside C1 **0 s**; det_fps 2.95.
+  - **G4: hard bars 0 / 0 / 0** (the live monitor: 170 target attack requests, no stop).
+  - Per arm (`arm_judge gmloot`):
+    - fix (odd k): 80 items, completeness 80.0 %, step 7.83 s, looters 10;
+    - base (even k): 77 items, completeness 66.2 %, step 7.32 s, looters 17.
+  - **P1a** (left outside the GM's 5 x 5 alone): fix 5 / 80 = 6.25 per 100; base 12 / 77 = 15.58;
+    ratio **0.401** (bar <= 0.75): passes on this run.
+  - **P1b** (the mechanism): items picked on extra cells, fix **0**, against 3.73 needed (half
+    the 7.5 items (a) claims saved) -> **FAILS**. The union picked nothing, so (a)'s gap is not
+    the union's work: the base arm had more looters (17 vs 10) and more items gone before the
+    hover (11 vs 5). This is the A/A's lesson (a single run passes 0.75 by chance), now on a live
+    run.
+  - P2: fix - base +13.8 pts (bar >= -6); G3: step 1.07 x (bar <= 1.10); M3 0.899 (first 0.964,
+    burst 0.63).
+  - The union's mechanics:
+    - 71 fix steps; 1.75 extra cells planned on average; none on 51 / 71 (72 %);
+    - 129 union hovers read: empty 109, sword 14, unknown 5, **hand 1** (k 135; clicked, not
+      credited as a pickup on an extra cell).
+    - 3 fix-arm items lay in union cells, but they were gone before the union's hovers reached
+      them: the own-plan classification lists them as `gone_before_hover` (8 vs the 5 x 5's 5).
+      The union hovers its cells LAST, after the 5 x 5 pass (~7 s into the step).
+  - Read: (b)'s positive case from the dry run now fails live, as designed. A verdict needs runs
+    2-4 (seeds 20410202 / 20410303 / 20410404), which do not fit today ("Not today" for
+    everything after this run; the end state follows).
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
