@@ -215,6 +215,7 @@ def cmd_plan(a: argparse.Namespace) -> int:
 def cmd_run(a: argparse.Namespace) -> int:  # noqa: PLR0915
     import multiprocessing as mp
 
+    import bench
     import client_layout as cl
     import collect_v2 as cv
     import dataset_activity as act
@@ -293,6 +294,13 @@ def cmd_run(a: argparse.Namespace) -> int:  # noqa: PLR0915
                 ok = send(f"@warp {bm} {int(bx)} {int(by)}")
                 note("back", gm_line=f"@warp {bm} {bx} {by}", ok=ok)
                 time.sleep(cv.ENTRY_SETTLE_S)
+            # the chat input stays OPEN after the GM lines here (col1, 2026-10-21: chat_open True
+            # after the back warp): closed by its known step (bench.close_chat: the UI gate, then
+            # Enter into the EMPTY input), read back, so the next block starts with it closed
+            if not counts["gm_disabled"]:
+                bench.close_chat(agent, screen)
+                time.sleep(1.0)
+                note("chat_closed", open_after=r.is_state(screen, "chat_open"))
         except r.Stop as exc:
             reason = f"stop: {exc}"
             note("run_end", reason=reason, gm=counts)
