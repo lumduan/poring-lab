@@ -13493,7 +13493,7 @@ order.
 - **The base for v53 is therefore PARAMS[52]** (map_zones True, one pass on every kill), as
   3.94's draft assumed.
 
-### 3.94 hunt-flow@53: THE UNION PLAN -- the one pass around the drawn GM PLUS the believed death cell's 3 x 3, interleaved per engagement (pre-registered 2026-10-21 14:46 ICT, the commit time, BEFORE its runs; Batt 2026-10-21, decision 2 on the overnight report: "Next loot version: the GM's 5x5 PLUS the 3x3 around the believed death cell (your measured +2.9 pts at ~0.26 s)"; day order: "LOOT: ... interleaved arms, pre-registered; start it as soon as the zone runs end; whatever runs fit before 16:00 (an interim read is fine; the verdict waits for 4 runs)")
+### 3.94 hunt-flow@53: ➡️ NOT ADOPTED (Batt's decision, 2026-10-21 ~16:4x; run 1 interim, below) -- THE UNION PLAN -- the one pass around the drawn GM PLUS the believed death cell's 3 x 3, interleaved per engagement (pre-registered 2026-10-21 14:46 ICT, the commit time, BEFORE its runs; Batt 2026-10-21, decision 2 on the overnight report: "Next loot version: the GM's 5x5 PLUS the 3x3 around the believed death cell (your measured +2.9 pts at ~0.26 s)"; day order: "LOOT: ... interleaved arms, pre-registered; start it as soon as the zone runs end; whatever runs fit before 16:00 (an interim read is fine; the verdict waits for 4 runs)")
 
 **The ONE main change** (the fix arm = odd k):
 - Params: `loot_gm_union` / `loot_gm_union_ab`, with `gm_union_on` and `gm_union_cells`. Built in
@@ -13607,6 +13607,18 @@ allows. An interim after each; the verdict after 4.
   - Read: (b)'s positive case from the dry run now fails live, as designed. A verdict needs runs
     2-4 (seeds 20410202 / 20410303 / 20410404), which do not fit today ("Not today" for
     everything after this run; the end state follows).
+- **VERDICT: NOT ADOPTED, by Batt's decision** (2026-10-21 ~16:4x, on the day report: "Drop v53's
+  union (the extra cells picked nothing). Stop v53 at its current state; no more v53 runs. Record
+  it as NOT ADOPTED by my decision, with run 1's interim as the evidence").
+  - The evidence: run 1 above. P1b, the mechanism, failed: 0 items picked on the extra cells
+    against 3.73 needed; 1 HAND in 129 union hovers.
+  - The pre-registered 4-run rule was NOT completed. Batt's decision replaces it; runs 2-4 are
+    cancelled.
+  - The base stays **v52**. `loot_gm_union` stays in the code, inert unless a version sets it
+    (PARAMS[53] only).
+  - Next loot work (Batt): a FASTER scan, not more cells. The GM's 3 x 3 first (death-cell side
+    first), then the 5 x 5 edge only on cells whose image changed since before the kill (option C
+    + the odometry "moved" gate). Pre-registered separately.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,

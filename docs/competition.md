@@ -1955,7 +1955,7 @@ parallel.
   - The kills / h rise is not the zones' doing: one pass on every kill (the named confound),
     the density and the run spread differ.
 
-### Loot: v53 the union plan (Batt's decision 2)
+### Loot: v53 the union plan (Batt's decision 2) -- ➡️ NOT ADOPTED (Batt, 2026-10-21 ~16:4x)
 
 - **The change:** the one pass around the drawn GM, PLUS the believed death cell's 3 x 3 cells
   outside the GM's 5 x 5, interleaved per engagement (odd k). Merged 8659cd3 (14:45).
@@ -1973,4 +1973,10 @@ parallel.
   - the union read 1 HAND in 129 hovers; 3 items in its cells were gone before it got there;
   - P2 +13.8 pts; G3 1.07 x; hard bars 0; 151.0 kills/h; 0 s in C1.
   - Runs 2-4 are not today.
+- **NOT ADOPTED, by Batt's decision** (~16:4x, on the day report): "Drop v53's union (the extra
+  cells picked nothing) ... no more v53 runs". The base stays v52.
+  - Next (Batt): a FASTER scan, not more cells. The GM's 3 x 3 first (death-cell side first),
+    then the 5 x 5 edge only where the image changed since before the kill (option C + the
+    odometry "moved" gate). Primary: the loot step time; guard: completeness. If the 5 x 5 edge
+    holds almost nothing live, it is dropped. Its live test may move to orcsdun01.
 
