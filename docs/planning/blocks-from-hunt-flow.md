@@ -236,6 +236,19 @@ the market-open windows, the census and safety tests on any click change.
 
 ## 8. What Batt needs to decide
 
+**➡️ B0 DONE: Batt answered 2026-10-21 ~16:4x** (verbatim): "BLOCKS: D1 yes; D2 one "hunt" block
+with groups; D3 keep PARAMS open until B4; D4 config/flows/ (committed); D5 the live A/A (2 + 2 x 60
+min); D6 export only for now; D8 yes; D9 yes for the MW3-hunt slice only. Start B1-B3 (offline); B4
+when I'm present."
+- So: one `hunt` block with groups; PARAMS stay open until B4's A/A passes; configs and specs are
+  committed under `config/flows/`; the first block-driven run is the live A/A, 2 + 2 x 60 min;
+  zones from the editor are export-only; hunting evidence may badge the hunt block (D8); MW3-hunt
+  may run before walk / talk readiness, for that slice only (D9).
+- B1-B3 started 17:4x (offline, a subagent in a tmpfs worktree). B4 waits for Batt to be present.
+- ADR-0020 Amendment A stays a DRAFT until Batt accepts its text; these answers are its inputs.
+
+The questions as asked:
+
 1. **D1 · The split.** Block parameters = a person's choices, as named rule versions (the
    constants travel with the version). Gates, safety, readers and constants stay in the engine.
    Accept?

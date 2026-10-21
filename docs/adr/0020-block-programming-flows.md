@@ -2183,6 +2183,12 @@ gate, the frame-age guard, packets as offline ground truth only, and Windows sta
 
 ## Amendment A (DRAFT, PROPOSED 2026-10-21, NOT accepted): behaviours as blocks; map zones as map-node data
 
+> ➡️ **2026-10-21 ~16:4x: Batt answered its open questions D1-D9** (the answers are recorded verbatim in
+> [blocks-from-hunt-flow.md section 8](../planning/blocks-from-hunt-flow.md#8-what-batt-needs-to-decide)):
+> one `hunt` block with groups; PARAMS open until B4; configs under `config/flows/`; a live A/A first;
+> zones export-only; D8 yes; D9 yes for the MW3-hunt slice only. B1-B3 (offline) started. The amendment's
+> TEXT is still a draft until Batt accepts it.
+
 > **DRAFT for Batt's decision. NOT accepted; nothing in it is built.** The tables and the decisions
 > (D1-D9; D7 answered by Batt 2026-10-21, 13e497d) are in the plan, [docs/planning/blocks-from-hunt-flow.md](../planning/blocks-from-hunt-flow.md).
 > Lettering: this ADR's earlier changes (section 13, the dated ➡️ markers) carry no letters, so
