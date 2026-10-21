@@ -152,7 +152,11 @@ PATTERNS: tuple[Pattern, ...] = (
         "gate",
         "gate: walk guard, risk gate, species identity, cursor SWORD, pointer rest, clearances",
     ),
-    _p(r"bg_check|freeze_guard|false_dead_fix", "safety", "safety: stops, the false-dead fix"),
+    _p(
+        r"bg_check|freeze_guard|false_dead_fix|npc_px_guard",
+        "safety",
+        "safety: stops, the false-dead fix, the NPC sprite guard (v55)",
+    ),
     _p(
         r"frame_cells|track_.+|focus(_.+)?|jump_reanchor|reacquire(_.+)?|ui_layout|burst"
         r"|short_read|hover_settle_s|fresh_s|min_box_px|motion_hz|moving_cells|follow_mouse",
