@@ -936,6 +936,7 @@ class FixFrame:
     kept: list[FixLabel]
     excluded: list[tuple[int, int, str]]  # (gid, mob, reason)
     hidden: int  # monsters v1's visibility rule leaves unlabelled (not an exclusion)
+    applies: bool = True  # False off orcsdun01: the frame keeps v1's labels (Batt's 3b item 2)
 
 
 class FixLabeler:
@@ -958,6 +959,8 @@ class FixLabeler:
         world, all_states, rules = lab.timeline.at(tw)
         if world.self_pos is None or not world.map:
             return None
+        if map_key(world.map) != MAP:
+            return FixFrame(t, [], [], 0, applies=False)  # the fix (and its models) is orcsdun01's
         scene = occ.scene_for(lab, world.map, world.self_pos)
         states = {s.gid: s for s in all_states}
         grey = bgr[:, :, :3].astype(float) @ label_check.GREY

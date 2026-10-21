@@ -293,6 +293,21 @@ def test_visibility_is_v1s_rule() -> None:
     assert olf.valid_map((8, 4), ((2, 1, 3, 2),)).sum() == 32 - 6
 
 
+def test_the_fix_applies_on_orcsdun01_only() -> None:
+    from types import SimpleNamespace
+
+    from poring_dataset.timeline import FrameWorld
+
+    def at(tw: int) -> Any:
+        return FrameWorld(tw, "prt_fild08.gat", None, (1.0, 1.0), ()), (), {}
+
+    lab = SimpleNamespace(timeline=SimpleNamespace(at=at), size=(64, 48), ui_rects=())
+    params = {"offset_ms": 120.0, "anchors_px": {}, "fit_px": {"1153": 6}, "tau": 0.092}
+    fixer = olf.FixLabeler(lab, params, occluders=object())  # type: ignore[arg-type]
+    got = fixer.frame(10**9, np.zeros((48, 64, 3), np.uint8))
+    assert got is not None and not got.applies and got.kept == [] and got.excluded == []
+
+
 def test_the_offset_sweep_picks_the_smallest_median() -> None:
     assert olf.pick_offset({0: 5.0, 50: 2.0, 100: 2.0, 150: None}) == 50  # a tie: the smaller
     assert olf.pick_offset({0: None}) is None

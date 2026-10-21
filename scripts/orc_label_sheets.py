@@ -290,6 +290,7 @@ def collect(session: Path, a: argparse.Namespace) -> tuple[dict[str, Any], dict[
     fix_kept: Counter[str] = Counter()
     fix_excl: dict[str, Counter[str]] = defaultdict(Counter)
     fix_hidden = 0
+    fix_other_map = 0
     if fix_params is not None:
         fixer = olf.FixLabeler(sess.labeler, fix_params)
     for ref in refs:
@@ -297,7 +298,10 @@ def collect(session: Path, a: argparse.Namespace) -> tuple[dict[str, Any], dict[
         fixed = None
         if outcome == "ok" and fr is not None and fixer is not None:
             fixed = fixer.frame(ref.t_mono_ns, qa_export.read_jpeg(ref))
-            if fixed is None:
+            if fixed is not None and not fixed.applies:
+                fixed = None  # another map (prt_fild08 before the first warp): v1's labels
+                fix_other_map += 1
+            elif fixed is None:
                 outcome, reasons = "excluded", ["fix_no_world"]
             else:
                 fix_hidden += fixed.hidden
@@ -354,6 +358,7 @@ def collect(session: Path, a: argparse.Namespace) -> tuple[dict[str, Any], dict[
             "monster_labels_excluded_by_reason": {k: dict(sorted(v.items()))
                                                   for k, v in sorted(fix_excl.items())},
             "monsters_not_visible": fix_hidden,
+            "frames_off_orcsdun01_v1_labels": fix_other_map,
             "note": "counted on the frames v2's own rules keep; a frame with any excluded "
                     "monster label is excluded (fix_<reason>), so its kept labels are NOT in "
                     "the crops",
