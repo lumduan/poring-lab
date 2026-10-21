@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [orcsdun01-detector.md, crusader-build.md, crusader-orcsdun01-facts.md, ../benchmarks/v2orc-vs-v1.md, ../competition.md, ../demonstrations.md]
-next_action: "The build is DONE and verified (2b). Survival: 3.96 pre-registered 18:03; T-S6 trial 1 failed S1 (the bar) and S6 (the old death signature), both re-registered as 3.96b (the HP PERCENT text; the death dialog re-cut on this client) and S6b PASSED 19:16; the T-S2 / T-S3 trials run from 19:17 (demonstrations 3.96 / 3.96b run logs). The human demo (section 9) was armed 17:57-18:42 and got no input: re-arm when Batt says."
+next_action: "Build DONE (2b). Survival 3.96-3.96g (demonstrations): S2 PASS, S3 PASS (the 200 HP/s rate trigger escapes at 72-91 % HP: a finding for Batt), S4b2 PASS, S6b PASS; S1b FAILED on the absolute truth (91 %) -> S1c (the decoded regen ticks, 3.96g) trials tonight; regen measured (3.96f: standing 1,232 HP/min; IRP off while walking). The orcsdun01 human demo is READY to arm (section 9): Batt says go. The dungeon run waits for the v2orc detector (its labels FAILED C1: orcsdun01-detector.md 3c/3d)."
 title: "A Crusader hunting Orc Dungeon F1 (orcsdun01) for real: the test character, the build, the survival skills and the order (plan)"
 date: 2026-10-21
 owner: Batt
@@ -340,3 +340,27 @@ record)."
   - immunity OFF;
   - the GM's Novice untouched.
 - The agent tells Batt when it is ready to record, and records nothing before he starts.
+
+**READY (prepared 2026-10-21 night, NOT run; Batt 21:1x: "Prepare (don't run)").** When Batt says
+go (~5 min):
+1. Switch the client to the Crusader: slot 2, measured at (388,156); a judged frame at character
+   select, then in game. `ro_agent.gm()` refuses while the Crusader is online; every GM line goes
+   through `crusader.gm_line` (name + job check).
+2. As the Crusader:
+   - `@heal`;
+   - potions back to 50 (`@item 504 n`);
+   - Fly Wings >= 10;
+   - `@warp orcsdun01 32 166`. That cell passes `check_warps`: no warp span (the entry warp to
+     in_orcs01 is 6 cells north at 32,172), no NPC touch area, walkable on the server.
+   - Hotkeys as built: F1 White Potion, F2 Fly Wing, F3 Auto Guard (a TOGGLE: press it only when
+     its icon is off), F4 Endure.
+   - Immunity is OFF: the Crusader is never made immune.
+3. `python3 scripts/human_demo.py arm --minutes 10 --tag human-demo-orcsdun01-crusader --end-quiet 120`
+   - it sends no input and records from his first input (frames 5 Hz on the NAS, the mux log's
+     source=human lines, packets);
+   - nothing of ours touches the client until he has been quiet for 120 s.
+4. Batt plays from the console (ASSIST; his input takes the lease).
+
+- The 17:57-18:42 attempt got no input (13,468 frames, 0 human events):
+  `/mnt/poring-lab-datasets/human-demos/20261021T175710-demo-human-demo-orcsdun01-crusader`.
+  It is a deletion candidate: Batt's call.
