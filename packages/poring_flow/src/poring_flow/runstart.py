@@ -14,6 +14,11 @@ severity has its enforcement point in code, tested, and not only in prose.
 - The flow's `max_runtime_s` must not exceed the CONFIGURED maximum run time (Batt 2026-10-09,
   contradictions #17: a Settings value, not a constant), given as `runtime_max_s`; without a
   configured value the run is refused.
+- A flow whose map nodes name ZONES (Amendment A 4, DRAFT, 2026-10-21) is refused without a zones
+  provider (`zones_provider`): the file checks would be skipped. With one, the linter refuses a
+  changed, missing, unreadable or unnamed file. (B1 keeps a flow WITHOUT zones references runnable
+  without a provider; the live executor (B4) passes one always, so that a file the node does not
+  name is caught.)
 - Simulation is design time and is NOT gated: `runtime.Sim` and `trace.simulate` run a flow that
   has readiness items (that is how a flow is designed before its bindings land).
 """
@@ -25,6 +30,7 @@ from dataclasses import dataclass
 from poring_flow import ir
 from poring_flow.lint import Detector, Finding, Resolver, lint
 from poring_flow.sheet import World
+from poring_flow.zones import ZonesProvider
 
 
 @dataclass(frozen=True)
@@ -61,15 +67,20 @@ def verdict(
     resolver_given: bool,
     runtime_max_s: int | None,
     approved_hash: str | None = None,
+    zones_loaded: bool = False,
 ) -> Verdict:
     """The gate's verdict from findings already computed (the editor shows it beside the lint).
-    `runtime_max_s` is the CONFIGURED maximum run time (#17): None refuses (fail closed)."""
+    `runtime_max_s` is the CONFIGURED maximum run time (#17): None refuses (fail closed).
+    `zones_loaded`: the findings were computed with a zones provider."""
     h = ir.flow_hash(flow)
     reasons = []
     if not world_loaded:
         reasons.append("no static data: references and routes are unchecked")
     if not resolver_given:
         reasons.append("no resolver: bindings are unchecked")
+    blocks = flow.workflow.blocks if flow.workflow else []
+    if not zones_loaded and any(b.zones is not None for b in blocks):
+        reasons.append("no zones data: the map nodes' zones references are unchecked")
     if runtime_max_s is None:
         reasons.append("no configured maximum run time")
     elif flow.max_runtime_s > runtime_max_s and not any(f.rule == "runtime_max" for f in findings):
@@ -91,11 +102,17 @@ def check(
     detector: Detector | None = None,
     approved_hash: str | None = None,
     runtime_max_s: int | None = None,
+    zones_provider: ZonesProvider | None = None,
 ) -> Verdict:
     """Re-lint NOW and return the verdict (no exception). `runtime_max_s`: the configured
-    maximum run time (#17); without one the run is refused."""
+    maximum run time (#17); without one the run is refused. `zones_provider`: the map zones."""
     findings = lint(
-        flow, world=world, resolver=resolver, detector=detector, runtime_max_s=runtime_max_s
+        flow,
+        world=world,
+        resolver=resolver,
+        detector=detector,
+        runtime_max_s=runtime_max_s,
+        zones_provider=zones_provider,
     )
     return verdict(
         flow,
@@ -104,6 +121,7 @@ def check(
         resolver_given=resolver is not None,
         runtime_max_s=runtime_max_s,
         approved_hash=approved_hash,
+        zones_loaded=zones_provider is not None,
     )
 
 
@@ -115,6 +133,7 @@ def require(
     detector: Detector | None = None,
     approved_hash: str | None = None,
     runtime_max_s: int | None = None,
+    zones_provider: ZonesProvider | None = None,
 ) -> Verdict:
     """The call a live run makes before its first input: returns the verdict, or raises
     `RunRefused` (with every reason) when the run may not start."""
@@ -125,6 +144,7 @@ def require(
         detector=detector,
         approved_hash=approved_hash,
         runtime_max_s=runtime_max_s,
+        zones_provider=zones_provider,
     )
     if not v.allowed:
         raise RunRefused(v)

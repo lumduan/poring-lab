@@ -1085,6 +1085,8 @@ def _map_block(fn: ast.FunctionDef, ctx: _Ctx) -> dict[str, Any]:
             out[k] = lit["value"]
         elif k == "resume_here":
             out[k] = _const(v, ctx)
+        elif k == "zones":
+            out[k] = _zones(v, ctx)
         else:
             ctx.err(v, f"map_block(...) has no argument {k}")
             raise _Bad
@@ -1095,6 +1097,24 @@ def _map_block(fn: ast.FunctionDef, ctx: _Ctx) -> dict[str, Any]:
     finally:
         ctx.in_block = was
     return out
+
+
+def _zones(node: ast.expr, ctx: _Ctx) -> dict[str, Any]:
+    """`zones("<map>", sha256="<64 hex>")`: the map node's zones file (Amendment A 4)."""
+    call = node if isinstance(node, ast.Call) else None
+    if (
+        call is None
+        or _call_name(call) != "zones"
+        or len(call.args) != 1
+        or set(_kw(call)) != {"sha256"}
+    ):
+        ctx.err(node, 'zones="..." is zones("<map>", sha256="<the file\'s sha256>")')
+        raise _Bad
+    m, sha = _const(call.args[0], ctx), _const(_kw(call)["sha256"], ctx)
+    if not isinstance(m, str) or not isinstance(sha, str):
+        ctx.err(call, "zones(...) takes the map and the sha256 as strings")
+        raise _Bad
+    return {"map": m, "sha256": sha}
 
 
 def _entry(node: ast.expr, ctx: _Ctx) -> dict[str, Any]:
@@ -1432,6 +1452,8 @@ def print_flow(flow: ir.Flow, cat: Catalogue | None = None) -> str:
             args.append("ignore=" + _lit_src(list(b.ignore)))
         if not b.resume_here:
             args.append("resume_here=False")
+        if b.zones is not None:
+            args.append(f"zones=zones({_s(b.zones.map)}, sha256={_s(b.zones.sha256)})")
         chunks.append((True, _def(_fit("@map_block", args, ""), b.name, b.main, cat)))
     for h in flow.handlers:
         chunks.append((True, _def(_fit("@on", _on_args(h, cat), ""), h.name, h.body, cat)))

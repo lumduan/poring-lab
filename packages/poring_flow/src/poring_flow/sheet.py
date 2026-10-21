@@ -54,6 +54,18 @@ class Spawn(BaseModel):
     mob: int
     count: int = Field(ge=1)
     boss: bool = False  # a boss spawn line
+    # the spawn line's area, (x0, y0, x1, y1) inclusive; None = anywhere on the map (rAthena's
+    # 0,0). The zones lint warns when every cell of a target's spawn areas is closed (2026-10-21)
+    area: tuple[int, int, int, int] | None = None
+
+    def cells(self, walk: Walk | None) -> set[Cell] | None:
+        """The walkable cells of its area (every cell when there is no walk grid); None for a
+        spawn anywhere on the map."""
+        if self.area is None:
+            return None
+        x0, y0, x1, y1 = self.area
+        out = {(x, y) for x in range(x0, x1 + 1) for y in range(y0, y1 + 1)}
+        return {c for c in out if walk.walkable(c)} if walk is not None else out
 
 
 class Warp(BaseModel):

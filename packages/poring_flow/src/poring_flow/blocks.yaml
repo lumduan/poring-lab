@@ -20,6 +20,11 @@
 #   assume       L1 preconditions that must be in the flow's `assumes` (13.5)
 #   affects      sensors it moves: + up, - down, ~ either way (loops, re-trigger)
 #   types        it types (the foreground gate applies)
+#   needs_targets it attacks the map block's TARGET species only: a map block with targets (13.3)
+# Per parameter, besides name / type / required / positional:
+#   group        its group in the editor (Batt D2, 2026-10-21: one hunt block with groups)
+#   choices      the RULE VERSIONS a person may pick (name@N: PARAMS[N]'s numbers, read-only;
+#                scripts/hunt_config.py, config/flows/hunt/index.yaml); the linter refuses others
 version: 1
 blocks:
   walk_to:
@@ -123,6 +128,26 @@ blocks:
     moves: near
     affects: {hp_percent: "-", sp_percent: "~", base_level: "+", job_level: "+", sees: "~", count_visible: "~", engagement_seen: "~"}
     note: in a map block without a mob it attacks only the block's TARGET species (13.3)
+  hunt:
+    # Amendment A 3 (DRAFT; Batt D2 2026-10-21: one `hunt` block with groups): hunt-flow's ADOPTED
+    # rules as ONE task-level block inside a map node. Its parameters are a person's choices, each
+    # a rule version; gates, safety, readers and constants stay in the engine (never a parameter).
+    # The choices are the adopted base's (v52, config/flows/hunt/v52.yaml) and the alternatives
+    # the plan names that exist as versions; another value is a new version, pre-registered.
+    concept: combat.hunt
+    params:
+      - {name: strike, type: str, required: true, group: engage, choices: [arm_c@32]}
+      - {name: engage_on_the_way, type: str, required: true, group: engage, choices: [on_the_way@19]}
+      - {name: dead, type: str, required: true, group: dead_loot, choices: [exp_line@48]}
+      - {name: loot, type: str, required: true, group: dead_loot, choices: [gm_scan_one_pass@51, gm_scan@50]}
+      - {name: search, type: str, required: true, group: search, choices: [heading_coverage@22]}
+    timeout_s: 600
+    long: true
+    moves: near
+    adds_weight: true
+    needs_targets: true
+    affects: {position: "~", hp_percent: "-", base_level: "+", job_level: "+", weight_percent: "+", item_count: "+", sees: "~", count_visible: "~", engagement_seen: "~"}
+    note: the stop group is the enclosing loop (13.5) -- its condition and max_s; one call hunts at most timeout_s. The map node's targets / ignore and its zones are the block's (13.3, Amendment A 4)
   finish_target:
     concept: combat.attack_target
     timeout_s: 60

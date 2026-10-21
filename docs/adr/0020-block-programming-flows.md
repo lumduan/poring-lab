@@ -2188,6 +2188,11 @@ gate, the frame-age guard, packets as offline ground truth only, and Windows sta
 > one `hunt` block with groups; PARAMS open until B4; configs under `config/flows/`; a live A/A first;
 > zones export-only; D8 yes; D9 yes for the MW3-hunt slice only. B1-B3 (offline) started. The amendment's
 > TEXT is still a draft until Batt accepts it.
+> ➡️ **2026-10-21 18:2x: B1 and B3 BUILT offline** (branch feat/blocks-b1b3, not merged; the plan's
+> section 7a): the key classes and the exported configs (`config/flows/hunt/`), the `hunt` block,
+> `MapBlock.zones` and lint with zones, and hunt_flow's decision code on the resolved config
+> (bytecode-proven). "Nothing in it is built" below is superseded for those steps; B2, B4 and B5
+> are not built.
 
 > **DRAFT for Batt's decision. NOT accepted; nothing in it is built.** The tables and the decisions
 > (D1-D9; D7 answered by Batt 2026-10-21, 13e497d) are in the plan, [docs/planning/blocks-from-hunt-flow.md](../planning/blocks-from-hunt-flow.md).

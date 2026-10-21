@@ -97,8 +97,9 @@ def test_read_on_frames_built_from_the_live_templates() -> None:
 def test_the_runner_selects_the_layout_before_the_masks_and_applies_it() -> None:
     src = (ROOT / "scripts/hunt_flow.py").read_text()
     run_ = src[src.index("def run(version: int") :]
-    assert run_.index('cl.select(PARAMS[version].get("ui_layout") or "standard")') < run_.index(
-        "import loot1")  # fmt: skip
+    # B3 (blocks plan, 2026-10-21): the layout comes from the RESOLVED config, read first
+    i_sel = run_.index('cl.select(prm.get("ui_layout") or "standard")')
+    assert run_.index("prm = hcfg.params_for(PARAMS, version)") < i_sel < run_.index("import loot1")
     i_lay = run_.index('lay_ = cl.ensure(agent_raw, screen, prm["ui_layout"])')
     assert run_.rindex("bench.close_chat(agent_raw, screen)", 0, i_lay) > i_lay - 400
     assert i_lay < run_.index("before = gm_state.ensure_hunting(")
