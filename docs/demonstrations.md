@@ -13995,6 +13995,31 @@ casts Blind):**
 **Bars:** 0 toggles-off (every F3 press has its 30-SP drop); at least one re-cast in T-S4 a after
 the 300 s; uptime >= 90 % over both trials. Blind periods are reported (dark reads / all reads).
 
+**Run log (chain 3, 20:07-20:17; S4b2 = e827c75; judged at the 120-ms offset; SP from the
+packets):**
+
+| trial | s | HP min | potions | escapes | deaths | F3 presses / real casts (SP 312 -> 282) | icon checks on / off / dark | uptime |
+|---|---|---|---|---|---|---|---|---|
+| T-S4 a (20:07) | 330 | 2892 (55.0 %) | 20 | 0 | 0 | 2 / 2 (at 1.5 s; the RE-CAST at 301.8 s) | 452 / 94 / 0 | 99.45 % |
+| T-S4 b (20:13) | 180 | 3032 (57.6 %) | 11 | 0 | 0 | 0 / 0 (a's re-cast carried over; it expired 42.9 s after b's last read) | 226 / 72 / 0 | 100 % |
+
+- **S4b2: PASS.**
+  - 0 toggles-off: every F3 press had its 30-SP drop.
+  - The re-cast came after the 300 s in T-S4 a (301.8 s).
+  - Uptime over both trials **99.65 %** (bar >= 90 %).
+- **What held it was the REMEMBERED cast (rule 2), not the dark rule (rule 1).** No check read a
+  dark screen in either trial. Yet the icon read ABSENT while Auto Guard was active on 94 + 72
+  checks: in a, two ~23-s stretches (21-44 s and 220-242 s); in b, 72 checks. S4b would have
+  toggled it off in b at the first 1-s absence.
+  - The absences are NOT explained: no dark frame, and no frames were saved by the runner.
+  - Open, for the dungeon: grab frames whenever the icon reads absent while a cast is remembered
+    (a diagnostic capture, unscored), to find what hides or moves it. Candidates: another status
+    icon pushing it down the column outside AG_X = 1230-1235, or a Blind that leaves the centre
+    lit (the 80 % rule then never trips).
+  - Until that is known, the guard's safety rests on `data/crusader/ag_state.json` being written
+    on every cast. It is per host and per character, and a cast by hand (Batt) is not recorded,
+    so the rule-3 assumption covers only a cast SEEN on.
+
 ### 3.96e crusader-survival@1e: S3's HP path (T-S3h) after the rate trigger pre-empted it (pre-registered 2026-10-21 19:54 ICT, the commit time of 3.96e's first commit, BEFORE T-S3h runs; Batt ~19:3x: "Make sure the remaining trials reach their thresholds")
 
 **What happened (3.96c's T-S3, packs C):** every escape so far came from the RATE trigger, not the
@@ -14016,6 +14041,25 @@ window is a NEW pre-registration (Batt's call, proposed in the report).
 **Bars (3.96's S3, unchanged):** the Fly Wing before death in >= 2 of 3 (scaled from 4 of 5); true
 HP at the escape >= 10 % in >= 2 of 3. S3's verdict pools T-S3 (the rate path) and T-S3h (the HP
 path), each path reported apart.
+
+**Run log (chain 3, 20:01-20:07; the stand 268,107; judged at the 120-ms offset):**
+
+| trial | HP min (true) | read at the F2 press | potions | escapes | deaths | true HP at the escape |
+|---|---|---|---|---|---|---|
+| T-S3h h1 (20:01) | 1284 (24.4 %) | 24 % | 0 | 1 | 0 | 24.4 % |
+| T-S3h h2 (20:03) | 1284 (24.4 %) | 24 % | 0 | 1 | 0 | 24.4 % |
+| T-S3h h3 (20:05) | 1297 (24.7 %) | 24 % | 0 | 1 | 0 | 24.7 % |
+
+- **S3's HP path: PASS** (the Fly Wing before death 3 / 3, bar 2 of 3; true HP at the escape >= 10 %
+  3 / 3). Each F2 came on the FIRST read below 25 %: rate 80-116 HP/s at the time, so the rate
+  trigger would not have fired.
+- **S3 pooled (3.96's bar, scaled):** T-S3 c1-c3 (the rate path) 3 / 3 + T-S3h 3 / 3 = **6 / 6
+  before death, 6 / 6 at >= 10 %** -> **PASS**.
+- **Finding for the dungeon (Batt's call, not changed here):** the 200 HP/s trigger spends a wing at
+  72-91 % HP on a 5-monster pack's opening burst. The HP path alone escaped at 24-25 % with a
+  margin of ~1,280 HP (about 4 Orc Skeleton hits at their 236 max). Options: drop the rate trigger,
+  raise it, or require HP below a floor too (for example rate > 200 AND HP < 50 %). Each is a new
+  pre-registration.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
