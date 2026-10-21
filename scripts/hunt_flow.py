@@ -44,6 +44,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import farm0 as f0  # noqa: E402
 import farm1 as f1  # noqa: E402
+import hunt_config as hcfg  # noqa: E402
 import hunt_core as hc  # noqa: E402
 import map_zones as mz  # noqa: E402
 import ro_agent as r  # noqa: E402
@@ -2547,9 +2548,13 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
 
     import client_layout as cl
 
+    # B3 (docs/planning/blocks-from-hunt-flow.md, 2026-10-21): the decision code reads the RESOLVED
+    # hunt config -- PARAMS[version] exported as the hunt block's config and resolved back, refused
+    # unless it is exactly PARAMS[version] (hunt_config.params_for); nothing below reads PARAMS
+    prm = hcfg.params_for(PARAMS, version)
     # v43 (Batt 2026-10-19): the run's UI rectangles follow its client layout -- selected BEFORE
     # any mask module (route_preview / ui_mask / work_zone / loot1) is imported below
-    cl.select(PARAMS[version].get("ui_layout") or "standard")
+    cl.select(prm.get("ui_layout") or "standard")
 
     import bench
     import cursor_gate
@@ -2576,7 +2581,6 @@ def run(version: int, minutes: float, seed: int) -> int:  # noqa: PLR0915
 
     if version not in VERSIONS:
         raise SystemExit(f"unknown version {version}")
-    prm = PARAMS[version]
     try:
         sword_active(prm, MAP)  # an unlisted map refuses before any input (UNTRAINED_SPECIES)
     except ValueError as e:
