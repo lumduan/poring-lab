@@ -2197,7 +2197,8 @@ what works; the result should become blocks a person can read and change."
   lab: 51 PARAMS versions, each pre-registered (demonstrations.md 3.41-3.92) and adopted or not by
   a verdict or by Batt.
 - Its adopted base (v51, 2026-10-21) ran 8 x 60 min on prt_fild08 with the hard bars at 0 (3.91,
-  3.92). It runs on the host, RDP only, with an immune GM.
+  3.92). ➡️ Since 14:22 the base is v52 (v51 + the prt_fild08 zones, 3.93 ADOPTED: 3 more runs,
+  hard bars 0). It runs on the host, RDP only, with an immune GM.
 - Map zones (Batt's per-map no-cross lines and no-enter areas) were merged on 2026-10-21 (0684d2c)
   as reviewed YAML that `hunt_flow.py` reads.
 
@@ -2232,7 +2233,7 @@ what works; the result should become blocks a person can read and change."
    - It may run before walk / talk readiness. For this slice only, it amends 13.8's order
      (MW2-live first) and section 6's executor location: the host, RDP and the CPU detector, as
      `hunt_flow.py`. The vision container on S2 stays the target.
-   - Its first run is an A/A check of adopted v51.
+   - Its first run is an A/A check of the adopted base (v51 when drafted; v52 since 14:22).
 
 **MW3 readiness (13.8), as of 2026-10-21: NOT met.**
 - Met: ADR-0005 and the interlock; hard bars 0 while hunting on prt_fild08; the position read on

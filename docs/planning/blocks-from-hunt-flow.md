@@ -47,6 +47,9 @@ action block becomes verified", point 4).
 
 **The base** is v51 as adopted: PARAMS[51] with `loot_gm_one_pass_ab` False. Resolved through the
 merge chain it holds 209 keys (computed from the file on 2026-10-21, 0684d2c).
+➡️ **SUPERSEDED 2026-10-21 14:22:** the adopted base is now **v52** = v51 + `"map_zones": True`
+(the prt_fild08 zones file, demonstrations 3.93 ADOPTED). Read "v51" below as "the adopted base";
+the key count grows by the one key.
 
 **2a. Block parameters (a person chooses)**
 
@@ -240,13 +243,13 @@ the market-open windows, the census and safety tests on any click change.
    or `search` / `engage` / `loot` blocks in a loop? Proposed: one. v2's pipelined loop (perception,
    planner and executor in parallel, pre-emption on the way) does not split into sequential blocks
    without a loss. And the name: `hunt`?
-3. **D3 · Freeze PARAMS when?** At v51 now (new versions only as block configs), or open until B4's
+3. **D3 · Freeze PARAMS when?** At the adopted base now (v51 when written; v52 since 14:22) (new versions only as block configs), or open until B4's
    A/A passes? Proposed: open until B4, so competition.md's loot levers are not held up; frozen
    after.
 4. **D4 · Where configs and specs live.** Committed under `config/flows/` (mob ids + our numbers,
    like the zones files; `farm0.TARGETS` already commits ids), or under `data/` like filled flows
    (ADR-0020 7.1)?
-5. **D5 · The first block-driven run.** A live A/A of adopted v51: the block runner against
+5. **D5 · The first block-driven run.** A live A/A of the adopted base (v51 when written; v52 since 14:22): the block runner against
    `hunt_flow.py run --version 51`, alternating whole runs (2 + 2 x 60 min), judged against 3.89's
    null. Or the offline equality check only?
 6. **D6 · Zones from the editor.** Export only first (a person commits), or a save route (a new
