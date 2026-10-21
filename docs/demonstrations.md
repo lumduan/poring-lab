@@ -13946,6 +13946,28 @@ casts Blind):**
 **Bars:** 0 toggles-off (every F3 press has its 30-SP drop); at least one re-cast in T-S4 a after
 the 300 s; uptime >= 90 % over both trials. Blind periods are reported (dark reads / all reads).
 
+### 3.96e crusader-survival@1e: S3's HP path (T-S3h) after the rate trigger pre-empted it (pre-registered 2026-10-21 __TIME__ ICT, the commit time, BEFORE T-S3h runs; Batt ~19:3x: "Make sure the remaining trials reach their thresholds")
+
+**What happened (3.96c's T-S3, packs C):** every escape so far came from the RATE trigger, not the
+HP one.
+- c1: 282 HP/s at 71 % HP;
+- c2: 210 HP/s at 91 % HP, ~3 s in;
+- c3: the chain was stopped after it.
+
+A 5-orc pack's opening burst alone crosses 200 HP/s. So S3's HP path (< 25 %) is never reached,
+and the rate trigger spends a Fly Wing at 71-91 % HP. That is a finding for the dungeon (a
+premature escape costs a wing and the pack's EXP). Any change to the 200 HP/s threshold or its
+window is a NEW pre-registration (Batt's call, proposed in the report).
+
+**T-S3h (this amendment):**
+- rules S1b + S3h + S6b, where S3h = S3 with the rate trigger OFF: F2 only when HP < 25 %;
+- pack C, 3 trials, 180 s each; no potions.
+- Pack C killed the standing Crusader in ~100 s (T-S6 t1), so 25 % is reached.
+
+**Bars (3.96's S3, unchanged):** the Fly Wing before death in >= 2 of 3 (scaled from 4 of 5); true
+HP at the escape >= 10 % in >= 2 of 3. S3's verdict pools T-S3 (the rate path) and T-S3h (the HP
+path), each path reported apart.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
