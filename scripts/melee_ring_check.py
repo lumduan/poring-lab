@@ -47,30 +47,43 @@ def deaths(packets: Sequence[Mapping[str, Any]]) -> dict[int, int]:
             if e.get("type") == "entity_vanish" and int(e.get("reason", -1)) == 1}  # fmt: skip
 
 
-def requests(packets: Sequence[Mapping[str, Any]], aid: int = AID) -> list[int]:
-    """PURE: our attack request times (sit / stand excluded)."""
-    return sorted(int(e["t_mono_ns"]) for e in packets if e.get("type") == "attack_request"
-                  and e.get("kind") not in ("sit", "stand")
+def requests(packets: Sequence[Mapping[str, Any]], aid: int = AID) -> list[tuple[int, int]]:
+    """PURE: [(t, target)] of our attack requests (sit / stand excluded), in time order."""
+    return sorted((int(e["t_mono_ns"]), int(e.get("target_gid") or -1)) for e in packets
+                  if e.get("type") == "attack_request" and e.get("kind") not in ("sit", "stand")
                   and int(e.get("target_gid") or -1) != aid)  # fmt: skip
 
 
 def scan_verdict(t0: int, t1: int, acts: Sequence[tuple[int, int]], dead: Mapping[int, int],
-                 reqs: Sequence[int]) -> dict[str, Any]:  # fmt: skip
-    """PURE: one hover window [t0, t1] while locked -> its verdict (the module's definitions)."""
+                 reqs: Sequence[int], req_targets: Sequence[int] | None = None
+                 ) -> dict[str, Any]:  # fmt: skip
+    """PURE: one hover window [t0, t1] while locked -> its verdict:
+    - no_target / not_swinging (our last act on X ended > ACT_GAP_S before t0: nothing to keep);
+    - x_dead (X died before t0) / died_inside (X died inside the window: the stop is the kill's);
+    - retargeted: an attack request of ours on ANOTHER unit inside the window, or our next act on
+      another unit while X lives; stopped: X alive, no act from t0 to t1 + ACT_GAP_S; else kept."""
     ts = [a[0] for a in acts]
+    lo, hi = bisect.bisect_left(reqs, t0), bisect.bisect_right(reqs, t1)
+    n_req = hi - lo
     i = bisect.bisect_left(ts, t0) - 1
-    n_req = bisect.bisect_right(reqs, t1) - bisect.bisect_left(reqs, t0)
     if i < 0:
         return {"verdict": "no_target", "requests": n_req}
     x = acts[i][1]
+    out: dict[str, Any] = {"requests": n_req, "x": x}
     if dead.get(x, 1 << 62) <= t0:
-        return {"verdict": "x_dead", "requests": n_req, "x": x}
+        return {**out, "verdict": "x_dead"}
+    if t0 - acts[i][0] > int(ACT_GAP_S * NS):
+        return {**out, "verdict": "not_swinging"}
+    if dead.get(x, 1 << 62) <= t1:
+        return {**out, "verdict": "died_inside"}
+    if req_targets is not None and any(g != x for g in req_targets[lo:hi]):
+        return {**out, "verdict": "retargeted", "by": "request"}
     j = bisect.bisect_left(ts, t0)
     if j >= len(acts) or acts[j][0] > t1 + int(ACT_GAP_S * NS):
-        return {"verdict": "stopped", "requests": n_req, "x": x}
-    if acts[j][1] != x and dead.get(x, 1 << 62) > acts[j][0]:
-        return {"verdict": "retargeted", "requests": n_req, "x": x, "to": acts[j][1]}
-    return {"verdict": "kept", "requests": n_req, "x": x,
+        return {**out, "verdict": "stopped"}
+    if acts[j][1] != x:
+        return {**out, "verdict": "retargeted", "to": acts[j][1]}
+    return {**out, "verdict": "kept",
             "acts_on_x": sum(1 for t, g in acts[j:] if t <= t1 and g == x)}  # fmt: skip
 
 
@@ -85,7 +98,8 @@ def judge(events: Sequence[Mapping[str, Any]], packets: Sequence[Mapping[str, An
             continue
         t1 = int(e["t_ns"])
         t0 = t1 - int(float(e.get("ms") or 0) * 1e6)
-        scans.append(scan_verdict(t0, t1, acts, dead, reqs))
+        scans.append(scan_verdict(t0, t1, acts, dead, [t for t, _ in reqs],
+                                  [g for _, g in reqs]))  # fmt: skip
     hand = []
     for e in events:
         if e.get("kind") != "handoff":

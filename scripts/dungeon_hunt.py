@@ -106,7 +106,7 @@ MAX_SHOTS = 40  # strike frames kept per run (JPEG, the session dir)
 NOENTRY_RED = 25  # red pixels in the 64 x 64 cursor crop: the client's no-entry ring
 CARVE_R = 2  # Amendment C: a stalled walk target's 5 x 5 leaves the route grid for the run
 MR_WALK_AHEAD = 3  # MELEE-RING (Batt 13:4x): short walk legs ("moving slowly") ...
-MR_QUEUE_SCAN_S = 2.0  # ... and while locked, ring 1 is re-read this often for the queue
+MR_AFTER_HIT_S = 0.3  # ... and while locked, ONE ring cell is read within this of our own hit
 IDLE_MAX_S = 45.0  # Amendment D: searching this long with no walk click and no move = stuck
 STUCK_STALLS = 4  # Amendment C: this many stalls within 60 s at one cell = stuck -> a Fly Wing
 STALL_CLICKS = 2  # walk clicks from the same cell without moving: turn, re-plan, scan ring 1
@@ -569,7 +569,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         mr = a.engage == "melee_ring"  # Batt 13:4x: the CURSOR engages, the detector does not
         boxes = BoxWatch(screen, (gx0, gy0, gw, gh), r) if a.boxes and not mr else None
         queue: list[dict[str, Any]] = []  # MELEE-RING: SWORD cells seen while fighting
-        last_qscan = 0.0
+        qscan_i = 0
+        ours_used = -2e9
         watch_i = 0
         st = Sustain()
         ag_last = sv.load_ag_last()
@@ -1000,31 +1001,33 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                         mode = "after"
                         ev({"kind": "fight_end", "kills": len(kills_seen), "why": "quiet kill"})
                         continue
-                    if mr and lock is not None and here is not None \
-                            and tick - last_qscan >= MR_QUEUE_SCAN_S:  # fmt: skip
-                        # MELEE-RING 2: while we swing, read the 8 cells around us (two-motion
-                        # hovers, never a click); every SWORD joins the queue
-                        last_qscan = tick
-                        t_q = time.monotonic()
-                        n_add, seen_ = 0, 0
+                    if mr and lock is not None and here is not None and last_ours != ours_used \
+                            and tick - last_ours <= MR_AFTER_HIT_S:  # fmt: skip
+                        # MELEE-RING 2, 3.99 Amendment G (the pilot: 1 retarget in 4 hover
+                        # windows): ONE ring cell right after our own hit (the Battle Log damage
+                        # line, between swings), then the pointer goes back onto the locked target
                         lrel = tuple(lock.get("rel") or ())
-                        for c_q in ring(1):
-                            if c_q == lrel:
-                                continue
-                            u_q, v_q = project(here, [c_q])[0]
-                            v_q -= BODY_UP
-                            if not in_view(u_q, v_q):
-                                continue
+                        cells_q = [c for c in ring(1) if c != lrel]
+                        c_q = cells_q[qscan_i % len(cells_q)]
+                        qscan_i += 1
+                        ours_used = last_ours  # one hover per swing (the lock's clock untouched)
+                        t_q = time.monotonic()
+                        u_q, v_q = project(here, [c_q])[0]
+                        v_q -= BODY_UP
+                        added_q, verdict_q = False, "off"
+                        if in_view(u_q, v_q):
                             res_q = hover(u_q, v_q)
-                            seen_ += 1
-                            if res_q["verdict"] == "sword":
-                                n_add += queue_add(
+                            verdict_q = res_q["verdict"]
+                            if verdict_q == "sword":
+                                added_q = queue_add(
                                     queue, (here[0] + c_q[0], here[1] + c_q[1]), tick
                                 )
-                            if guard_tick():
-                                break
-                        ev({"kind": "queue_scan", "hovers": seen_, "added": n_add,
-                            "queue": len(queue), "lock_cell": lock.get("cell"),
+                            if lrel:  # back onto the locked target (moves only, no click)
+                                u_l, v_l = project(here, [lrel])[0]
+                                agent.move(gx0 + round(u_l), gy0 + round(v_l - BODY_UP))
+                        ev({"kind": "queue_scan", "hovers": 1, "added": int(added_q),
+                            "verdict": verdict_q, "queue": len(queue), "rel": list(c_q),
+                            "lock_cell": lock.get("cell"),
                             "ms": round((time.monotonic() - t_q) * 1e3)})  # fmt: skip
                     if mr and lock is None and queue and here is not None:
                         # MELEE-RING 2: the current target died -> the next queued SWORD at once

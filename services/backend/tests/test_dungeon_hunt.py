@@ -183,16 +183,20 @@ def test_melee_ring_watches_the_cells_ahead_and_queues_each_sword_once() -> None
 
 
 def test_the_melee_ring_check_tells_kept_from_stopped_and_retargeted() -> None:
-    """melee_ring_check (offline): a hover window while locked keeps the swing when our next act
-    is on the same target; a 1.5-s silence is a stop; another live target is a retarget."""
+    """melee_ring_check (offline): a hover window while swinging keeps the swing when our next act
+    is on the same target; a 1.5-s silence is a stop; a request on another unit is a retarget;
+    a window that starts after the swing ended, or holds the kill, says so."""
     import melee_ring_check as mc
 
     s = mc.NS
     acts = [(0, 7), (int(0.73 * s), 7), (int(1.46 * s), 7)]
     assert mc.scan_verdict(int(0.5 * s), int(1.0 * s), acts, {}, [])["verdict"] == "kept"
-    assert mc.scan_verdict(int(2.0 * s), int(3.0 * s), acts, {}, [])["verdict"] == "stopped"
-    dead = mc.scan_verdict(int(2.0 * s), int(3.0 * s), acts, {7: int(1.8 * s)}, [])
-    assert dead["verdict"] == "x_dead"
+    acts_stop = [(0, 7), (int(0.73 * s), 7)]
+    assert mc.scan_verdict(int(1.0 * s), int(1.5 * s), acts_stop, {}, [])["verdict"] == "stopped"
+    assert mc.scan_verdict(int(3.0 * s), int(4.0 * s), acts, {}, [])["verdict"] == "not_swinging"
+    died = mc.scan_verdict(int(1.0 * s), int(2.0 * s), acts, {7: int(1.8 * s)}, [])
+    assert died["verdict"] == "died_inside"
+    rq = mc.scan_verdict(int(0.5 * s), int(1.0 * s), acts, {}, [int(0.6 * s)], [9])
+    assert rq["verdict"] == "retargeted" and rq["requests"] == 1
     acts2 = [(0, 7), (int(0.8 * s), 9)]
     assert mc.scan_verdict(int(0.5 * s), int(1.0 * s), acts2, {}, [])["verdict"] == "retargeted"
-    assert mc.scan_verdict(int(0.5 * s), int(1.0 * s), acts, {}, [int(0.6 * s)])["requests"] == 1
