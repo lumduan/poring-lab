@@ -827,6 +827,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     lock, goal_path = None, None
                     loot_list, fight_ref = [], None
                     mode = "search"
+                    here, last_taken = None, -1e9  # Amendment F: a new spot, the old hits gone
                 img = frame()
                 pct = hpp.read(img, glyphs)
                 spp = hpp.read(img, glyphs, hpp.SP_DY)
@@ -894,6 +895,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                             lock, goal_path = None, None
                             loot_list, fight_ref = [], None  # far away now
                             mode = "search"
+                            here, last_taken = None, -1e9  # Amendment F
                             time.sleep(1.0)
                         elif what == "heal":
                             if sitting:
@@ -1046,6 +1048,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     ev({"kind": "escape", "how": "fly", "why": "idle"})
                     idle_pos, idle_since, goal_path = None, tick, None
                     loot_list, fight_ref = [], None
+                    here, last_taken = None, -1e9  # Amendment F
                     time.sleep(1.0)
                     continue
                 # --- SEARCH: the heading walk
@@ -1102,6 +1105,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                                         ev({"kind": "escape", "how": "fly", "why": "stuck"})
                                         stalls_here.clear()
                                         loot_list, fight_ref = [], None
+                                        here, last_taken, goal_path = None, -1e9, None
                                         time.sleep(1.0)
                                         continue
                                     # monsters that only MISS write no log line: look around
