@@ -966,3 +966,22 @@ def test_archive_refuses_an_existing_destination(gb: ModuleType, tmp_path: Path)
     step = gb.Step("archive", ["archive"], None, [str(src), str(dst)])
     assert gb.run_archive(step, guard=None) is False  # never overwrite: refused before any copy
     assert src.exists()
+
+
+def test_voldump_and_volrm_take_only_the_allowed_volume_to_a_nas_tar(gb: ModuleType) -> None:
+    dst = "/mnt/poring-lab-datasets/archive/db-th-data/db-th-data-20261022.tar.gz"
+    step = gb.parse_step(f"voldump:db-th-data={dst}")
+    assert step.kind == "voldump" and step.services == ["db-th-data"] and step.command == [dst]
+    assert gb.parse_step(f"volrm:db-th-data={dst}").kind == "volrm"
+    for bad in (
+        "voldump:db-data=" + dst,  # the LAB's database: never
+        "voldump:db-th-data=/home/batt/x.tar.gz",  # not on the NAS
+        "voldump:db-th-data=/mnt/poring-lab-datasets/x.tgz",  # not *.tar.gz
+        "voldump:db-th-data=/mnt/poring-lab-datasets/../x.tar.gz",
+        "volrm:captures=" + dst,
+    ):
+        with pytest.raises(ValueError):
+            gb.parse_step(bad)
+    dump, count_vol, count_tar = gb.volume_cmds("db-th-data", dst)
+    assert "--network none" in dump[2] and "--cap-drop ALL" in dump[2] and "/v:ro" in dump[2]
+    assert dump[2].endswith("> " + dst) and "poring-lab_db-th-data" in count_vol[2]

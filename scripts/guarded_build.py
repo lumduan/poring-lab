@@ -136,6 +136,15 @@ On a breach:
                 Three phases, each under the guard: `rsync -a --bwlimit` (paced) -> a size+count
                 check (`rsync -a -n --itemize-changes` must list NOTHING) -> `rm -rf <src>`. A trip
                 or a failed check stops before the delete. One item per step.
+  voldump:<volume>=<dst.tar.gz> | volrm:<volume>=<dst.tar.gz>
+                a STOPPED volume to the NAS, then removed (Batt, 2026-10-22, decision 7: "db-th-data
+                dump to the NAS then remove"). Only VOLUME_ALLOWED volumes (db-th-data). voldump:
+                refused while any container that mounts it runs, or when <dst> (under
+                NAS_ARCHIVE_ROOT, *.tar.gz) exists; a COLD copy of the data directory -- a one-off,
+                network-less container of the volume's own image as its owner (cap-drop ALL),
+                `tar czf -` to the host's <dst> -- then the file count of the volume must equal
+                the archive's. volrm: only when <dst> is there and readable (`tar tzf`): `compose
+                rm -s -f` of its service, then `docker volume rm`. Restore: untar into a volume.
 
     python3 scripts/guarded_build.py build:desktop build:rathena pull:db up:180        # strict 10%
     python3 scripts/guarded_build.py --sustain 30 --spike 25 build:rathena             # tolerant
@@ -235,6 +244,10 @@ MEASURE_FIXED = {
     "docker-df": ["docker", "system", "df", "-v"],
     "buildx-du": ["docker", "buildx", "du", "--builder", "default", "--verbose"],  # LAB_BUILDER
 }
+# voldump: / volrm: (Batt 2026-10-22, decision 7): volume -> (the service that mounts it, its image,
+# the files' owner); the image is local (pull_policy never); the owner reads without DAC_OVERRIDE
+VOLUME_ALLOWED = {"db-th-data": ("db-th", "mariadb:11.8.9", "999:999")}
+COMPOSE_PROJECT = "poring-lab"
 REPLAY_RANGE = re.compile(r"^(\d{8}T\d{2})\.\.(\d{8}T\d{2})$")
 CAPTURE_NAME = re.compile(r"^capture-(\d{8}T\d{6})Z\.pcapng$")
 REPLAY_IMAGE = "poring-lab/sniffer:local"
@@ -332,6 +345,16 @@ def parse_step(step: str) -> Step:
         if not any(target == r or r in target.parents for r in MEASURE_ROOTS):
             raise ValueError(f"{step}: only under {', '.join(str(r) for r in MEASURE_ROOTS)}")
         return Step("measure", ["du"], None, [str(target)])
+    if kind in ("voldump", "volrm"):
+        name, eq, dst_s = arg.partition("=")
+        dst = Path(dst_s)
+        if name not in VOLUME_ALLOWED:
+            raise ValueError(f"{step}: only {', '.join(sorted(VOLUME_ALLOWED))}")
+        if not eq or not dst.is_absolute() or ".." in dst.parts or not dst.name.endswith(".tar.gz"):
+            raise ValueError(f"{step}: expected {kind}:<volume>=<abs dst>.tar.gz")
+        if NAS_ARCHIVE_ROOT not in dst.parents:
+            raise ValueError(f"{step}: dst only below {NAS_ARCHIVE_ROOT}")
+        return Step(kind, [name], None, [str(dst)])
     if kind == "archive":
         src_s, eq, dst_s = arg.partition("=")
         src, dst = Path(src_s), Path(dst_s)
@@ -846,6 +869,69 @@ def archive_cmds(step: Step) -> tuple[list[str], list[str], list[str]]:
     copy = [*nice, "rsync", "-a", f"--bwlimit={ARCHIVE_BWLIMIT_KIB}", a, b]
     check = [*nice, "rsync", "-a", "-n", "--itemize-changes", a, b]
     return copy, check, [*nice, "rm", "-rf", "--", src]
+
+
+def volume_cmds(name: str, dst: str) -> tuple[list[str], list[str], list[str]]:
+    """PURE: voldump's dump (stdout -> dst), its volume file count, and its archive file count."""
+    _svc, image, owner = VOLUME_ALLOWED[name]
+    vol = f"{COMPOSE_PROJECT}_{name}"
+    one_off = ["docker", "run", "--rm", "--network", "none", "--cap-drop", "ALL", "--user", owner,
+               "-v", f"{vol}:/v:ro", "--entrypoint"]  # fmt: skip
+    nice = ["nice", "-n", "19", "ionice", "-c3"]
+    dump = ["sh", "-c", shlex.join([*nice, *one_off, "tar", image, "czf", "-", "-C", "/v", "."])
+            + " > " + shlex.quote(dst)]  # fmt: skip
+    count_vol = ["sh", "-c", shlex.join([*one_off, "find", image, "/v", "-type", "f"])
+                 + " | wc -l"]  # fmt: skip
+    count_tar = ["sh", "-c", "tar tzvf " + shlex.quote(dst) + " | grep -c '^-'"]
+    return dump, count_vol, count_tar
+
+
+def _last_int(label: str) -> int | None:
+    lines = [
+        x.strip() for x in log_path(label).read_text(errors="replace").splitlines() if x.strip()
+    ]
+    try:
+        return int(lines[-1])
+    except (IndexError, ValueError):
+        return None
+
+
+def run_volume(step: Step, guard: "Guard") -> bool:
+    name, dst = step.services[0], Path(step.command[0])
+    svc, _image, _owner = VOLUME_ALLOWED[name]
+    vol = f"{COMPOSE_PROJECT}_{name}"
+    running = subprocess.run(["docker", "ps", "-q", "--filter", f"volume={vol}"],
+                             capture_output=True, text=True).stdout.strip()  # fmt: skip
+    if running:
+        print(f"[{ts()}] {step.label}: REFUSED: a running container mounts {vol}", flush=True)
+        return False
+    dump, count_vol, count_tar = volume_cmds(name, str(dst))
+    if step.kind == "voldump":
+        if dst.exists():
+            print(f"[{ts()}] {step.label}: REFUSED: {dst} exists (never overwrite)", flush=True)
+            return False
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        if not run_process(f"{step.label}-dump", dump, guard):
+            return False
+        if not run_process(f"{step.label}-count-vol", count_vol, guard):
+            return False
+        if not run_process(f"{step.label}-count-tar", count_tar, guard):
+            return False
+        n_vol, n_tar = _last_int(f"{step.label}-count-vol"), _last_int(f"{step.label}-count-tar")
+        if not n_vol or n_vol != n_tar:
+            print(f"[{ts()}] {step.label}: CHECK FAILED: {n_vol} files in {vol}, {n_tar} in "
+                  f"{dst}", flush=True)  # fmt: skip
+            return False
+        print(f"[{ts()}] {step.label}: verified ({n_vol} files, {dst.stat().st_size} bytes) -> "
+              f"{dst}", flush=True)  # fmt: skip
+        return True
+    if not dst.exists() or not run_process(f"{step.label}-count-tar", count_tar, guard) \
+            or not _last_int(f"{step.label}-count-tar"):  # fmt: skip
+        print(f"[{ts()}] {step.label}: REFUSED: no readable dump at {dst}", flush=True)
+        return False
+    if not run_process(f"{step.label}-rm", [*DEV, "rm", "-s", "-f", svc], guard):
+        return False
+    return run_process(f"{step.label}-volume-rm", ["docker", "volume", "rm", vol], guard)
 
 
 def run_archive(step: Step, guard: "Guard") -> bool:
@@ -1659,6 +1745,8 @@ def main() -> int:
             print("\n".join(f"  | {line}" for line in tail), flush=True)
         elif step.kind == "archive":
             ok = run_archive(step, guard)
+        elif step.kind in ("voldump", "volrm"):
+            ok = run_volume(step, guard)
         elif step.kind == "measure":
             ok = run_process(step.label, measure_cmd(step), guard)
             tail = log_path(step.label).read_text(errors="replace").splitlines()
