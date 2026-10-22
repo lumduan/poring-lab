@@ -43,6 +43,15 @@ The fix (3b), as built here:
   when its window touches a UI window, else ``unfit``). A frame with an EXCLUDED monster is not
   labelled completely, so it is excluded (section 5: "labelled completely or EXCLUDED").
 
+FIX 2, "labels v2orc-fix2" (3f, PRE-REGISTERED 2026-10-22 19:33:52 ICT, 8b7d629, before it was
+built): ``check --rule fix2`` / ``orc_label_sheets.py --fix PARAMS --rule fix2``. Only the facing
+changes (orc_facing_study.fix2_heading, reused): (i) appeared standing -> the Timeline's facing (the
+appear heading), (ii) WALKING -> the quadrant diagonal of its move's vector, (iii) after an ended
+move (3b's walk rule) -> its map_calc_dir heading taken to the diagonal. Excluded (as unfit):
+2b ``next_move``, a unit whose next move packet arrives < 150 ms after the label's timeline time;
+2c ``ambiguous_view``, an (iii) unit after a MIXED move whose two candidate images differ. 1b-1d,
+tau, k and the fit radius stay 3c's frozen values.
+
 C1 / C2 (the check) judge the PREDICTION, never the fitted box: C1 = label_check.score of the
 prediction at its projected position; C2 = its best-NCC offset within +-16 px. The standing rule,
 the bars and their summary are scripts/orc_camera_check.py's, unchanged.
@@ -51,6 +60,7 @@ the bars and their summary are scripts/orc_camera_check.py's, unchanged.
 from __future__ import annotations
 
 import argparse
+import bisect
 import functools
 import hashlib
 import json
@@ -76,7 +86,7 @@ import orc_camera_check as occ  # noqa: E402
 import qa_export  # noqa: E402
 
 from poring_dataset import rsw as rswmod  # noqa: E402
-from poring_dataset.camera import map_key  # noqa: E402
+from poring_dataset.camera import displayed_direction, map_key  # noqa: E402
 from poring_dataset.labels import ONE_SHOT, STATE_ACTION, in_windows  # noqa: E402
 from poring_dataset.render import (  # noqa: E402
     Actor,
@@ -87,8 +97,15 @@ from poring_dataset.render import (  # noqa: E402
     anchor_and_depth,
     predict_sprite,
 )
-from poring_dataset.timeline import ActorState, EntityState, FrameWorld, Timeline  # noqa: E402
+from poring_dataset.timeline import (  # noqa: E402
+    ActorState,
+    EntityState,
+    FrameWorld,
+    Timeline,
+    tick_of,
+)
 from poring_dataset.ui_layout import covered_fraction  # noqa: E402
+from poring_packets.world import World, ticks_since  # noqa: E402
 
 MAP = occ.MAP
 K = occ.K_V1
@@ -136,6 +153,137 @@ def facing_for(st: ActorState, ent_heading: int | None,
     if st.state == "walk" or rule is None:
         return timeline
     return int(rule[0]) % 8, rule[1]
+
+
+# --- fix 2 (3f): the drawn view, and the exclusions 2b / 2c ------------------------------------
+
+RULES = ("1a", "fix2")  # 1a: 3b's frozen walk rule (3c); fix2: 3f, orc_facing_study.fix2_heading
+NEXT_MOVE_NS = 150_000_000  # 2b: the 150 ms (timeline time) before a unit's next move packet
+NEXT_MOVE, AMBIGUOUS = "next_move", "ambiguous_view"  # 2b / 2c's exclusion reasons (as unfit)
+
+
+def _fs() -> Any:
+    """orc_facing_study, which imports this module: imported lazily (no cycle at load time)."""
+    import orc_facing_study
+
+    return orc_facing_study
+
+
+def labels_name(rule: str) -> str:
+    return {"1a": "v2orc-fix", "fix2": "v2orc-fix2"}[rule]
+
+
+def move_vector(world: World, gid: int, t_ns: int) -> tuple[int, int] | None:
+    """(x1 - x0, y1 - y0) of the move a unit WALKS, or of the move whose end set 3b's walk rule:
+    timeline.walk_rule_facing's own choice (its walk once started, else the walk a stop cut
+    short). None when it has none."""
+    ent = world.entities.get(gid)
+    if ent is None:
+        return None
+    tick = tick_of(t_ns)
+    walk = None
+    if ent.walk is not None and ticks_since(tick, ent.walk.start_tick) >= 0:
+        walk = ent.walk
+    elif ent.motion.cut is not None and ticks_since(tick, ent.motion.cut[1]) >= 0:
+        walk = ent.motion.cut[0]
+    return None if walk is None else (int(walk.x1 - walk.x0), int(walk.y1 - walk.y0))
+
+
+def fix2_facing(st: ActorState, ent_heading: int | None, rule: tuple[int, str] | None,
+                vector: tuple[int, int] | None) -> tuple[int, str]:  # fmt: skip
+    """3f's fix 2, as (heading, source):
+    - (ii) a WALKING unit: the quadrant diagonal of its move's vector;
+    - (iii) a unit not walking whose ended move set 3b's walk rule: that vector's map_calc_dir
+      heading, an axis heading taken to its diagonal (north -> NW, east -> NE, south -> SW,
+      west -> NW);
+    - (i) and every other unit: the Timeline's facing (the appear heading as the last resort),
+      as 1a's fallback.
+    The heading is orc_facing_study.fix2_heading (72cb479, confirmed on col3 in 3e), reused."""
+    walking = st.state == "walk"
+    if vector is not None and (walking or rule is not None):
+        row = {"source": "move", "state": "walk" if walking else "stand",
+               "move": {"d": [int(vector[0]), int(vector[1])]}}  # fmt: skip
+        h = _fs().fix2_heading(row)
+        if h is not None:
+            return int(h) % 8, "fix2:walk" if walking else "fix2:after_move"
+    return facing_for(st, ent_heading, None)
+
+
+class NextMoves:
+    """2b: per unit, the receive times of its MOVE packets (``entity_appear`` of kind ``move``,
+    0x09FD: the only appear that carries a destination, which is how the World starts a walk),
+    sorted."""
+
+    def __init__(self, events: Sequence[dict[str, Any]]) -> None:
+        by: dict[int, list[int]] = defaultdict(list)
+        for e in events:
+            if e.get("type") == "entity_appear" and (e.get("kind") == "move"
+                                                     or e.get("x1") is not None):  # fmt: skip
+                by[int(e["gid"])].append(int(e["t_mono_ns"]))
+        self.times = {g: sorted(ts) for g, ts in by.items()}
+
+    def soon(self, gid: int, tw: int, ns: int = NEXT_MOVE_NS) -> bool:
+        """A move packet of ``gid`` arrives AFTER timeline time ``tw``, less than ``ns`` later."""
+        ts = self.times.get(gid, [])
+        i = bisect.bisect_right(ts, tw)
+        return i < len(ts) and ts[i] - tw < ns
+
+
+def ambiguous_view(vector: tuple[int, int], heading: int, classes: Sequence[Sequence[int]],
+                   yaw: float) -> bool:  # fmt: skip
+    """2c: a MIXED move (dx, dy non-zero, |dx| != |dy|) whose vector's quadrant diagonal draws
+    another IMAGE than ``heading`` (the (iii) heading) in the action's view ``classes``."""
+    fs = _fs()
+    dx, dy = vector
+    if fs.shape_of(dx, dy) != "mixed":
+        return False
+    q = fs.quadrant(dx, dy)
+    return bool(fs.class_index(classes, displayed_direction(q, yaw))
+                != fs.class_index(classes, displayed_direction(heading, yaw)))  # fmt: skip
+
+
+class ViewClasses:
+    """(job, action group) -> orc_facing_study.view_classes of the species' ACT (cached)."""
+
+    def __init__(self) -> None:
+        self.cache: dict[tuple[int, int], list[tuple[int, ...]]] = {}
+
+    def __call__(self, sheet: SpriteSheet, job: int, group: int) -> list[tuple[int, ...]]:
+        key = (int(job), int(group))
+        if key not in self.cache:
+            self.cache[key] = _fs().view_classes(sheet, group)
+        return self.cache[key]
+
+
+@dataclass
+class FacingRule:
+    """The facing a label is drawn with under ``rule``: 1a (3b's) or fix2 (3f's, with 2b / 2c)."""
+
+    rule: str
+    moves: NextMoves
+    classes: ViewClasses
+
+    @classmethod
+    def for_events(cls, rule: str, events: Sequence[dict[str, Any]]) -> FacingRule:
+        if rule not in RULES:
+            raise SystemExit(f"unknown facing rule {rule!r} (one of {RULES})")
+        return cls(rule, NextMoves(events if rule == "fix2" else ()), ViewClasses())
+
+    def choose(self, world: World, e: EntityState, st: ActorState,
+               rules: dict[int, tuple[int, str]], tw: int, sheet: SpriteSheet,
+               yaw: float) -> tuple[tuple[int, str], str | None]:  # fmt: skip
+        """((heading, source), the exclusion reason or None) of entity ``e`` at timeline ``tw``."""
+        if self.rule == "1a":
+            return facing_for(st, e.heading, rules.get(e.gid)), None
+        vec = move_vector(world, e.gid, tw)
+        facing = fix2_facing(st, e.heading, rules.get(e.gid), vec)
+        if self.moves.soon(e.gid, tw):
+            return facing, NEXT_MOVE
+        if facing[1] == "fix2:after_move" and vec is not None:
+            group = int(STATE_ACTION.get(st.state, MonsterAction.IDLE))
+            if ambiguous_view(vec, facing[0], self.classes(sheet, e.job, group), yaw):
+                return facing, AMBIGUOUS
+        return facing, None
 
 
 def shift_ncc_valid(observed: npt.NDArray[np.float64], valid: npt.NDArray[np.bool_],
@@ -211,15 +359,20 @@ def agreement(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
             continue
         by[str(r["mob"])].append(r)
         by["pooled"].append(r)
-    note = ("REPORTED, not deciding: the walk rule's heading vs the best of the 8 drawn views "
-            "(biased upward: a max over 8)")  # fmt: skip
+    note = ("REPORTED, not deciding: the rule's heading vs the best of the 8 drawn views (biased "
+            "upward: a max over 8); agree = the same HEADING (a tie keeps the first: 3e's finding "
+            "0), image_agree = the same IMAGE (the view class)")  # fmt: skip
     out: dict[str, Any] = {"note": note}
     for key, rs in sorted(by.items()):
         n = len(rs)
         same = sum(1 for r in rs if r["best_heading"] == r["heading"])
-        rule = [r for r in rs if r["facing_from"] == "walk_rule"]
+        rule = [r for r in rs if r["facing_from"] in ("walk_rule", "fix2:walk", "fix2:after_move")]
+        img = [r for r in rs if r.get("same_image_as_best") is not None]
+        img_same = sum(1 for r in img if r["same_image_as_best"])
         out[key] = {
             "n": n, "agree": same, "agree_share": round(same / n, 4) if n else None,
+            "image_n": len(img), "image_agree": img_same,
+            "image_agree_share": round(img_same / len(img), 4) if img else None,
             "delta": dict(sorted(Counter(str((r["best_heading"] - r["heading"]) % 8)
                                          for r in rs).items())),
             "facing_from": dict(Counter(r["facing_from"] for r in rs)),
@@ -378,6 +531,9 @@ class Session:
             return None
         return occ.scene_for(self.lab, world.map, world.self_pos)
 
+    def facing_rule(self, rule: str) -> FacingRule:
+        return FacingRule.for_events(rule, self.lab.timeline.events)
+
 
 def actor_for(e: EntityState, st: ActorState, heading: int) -> Actor:
     action = STATE_ACTION.get(st.state, MonsterAction.IDLE)
@@ -425,12 +581,15 @@ Cand = tuple[EntityState, ActorState, SpriteSheet, SpritePrediction, tuple[int, 
 
 def standing_candidates(sess: Session, tw: int, anchors: dict[int, tuple[float, float]],
                         occluders: Occluders | None, dropped: Counter[str],
+                        facing_rule: FacingRule | None = None,
                         ) -> tuple[FrameWorld, Scene | None, dict[int, ActorState],
                                    list[Cand]]:  # fmt: skip
     """Section 3's STANDING labels at ``tw`` (idle >= 1 s, isolated 120 px, clear of the UI and the
-    edges by the C2 margin), facing 1a, anchor 1b; 1c's model overlap excluded."""
+    edges by the C2 margin), facing 1a (or ``facing_rule``'s: fix 2), anchor 1b; 1c's model
+    overlap excluded, then fix 2's 2b / 2c (3f)."""
     lab = sess.lab
-    world, states, rules = lab.timeline.at(tw)
+    replay, world, states, rules = lab.timeline.at_world(tw)
+    choice = facing_rule if facing_rule is not None else FacingRule.for_events("1a", ())
     scene = sess.scene(world)
     now = {s.gid: s for s in states}
     if scene is None:
@@ -450,7 +609,7 @@ def standing_candidates(sess: Session, tw: int, anchors: dict[int, tuple[float, 
         if sheet is None:
             dropped[f"no_sheet:{e.job}"] += 1
             continue
-        facing = facing_for(st, e.heading, rules.get(e.gid))
+        facing, why = choice.choose(replay, e, st, rules, tw, sheet, scene.camera.yaw)
         pred = predict(e, st, sheet, scene, facing[0], anchors)
         if pred is None:
             dropped["draws_nothing"] += 1
@@ -464,6 +623,10 @@ def standing_candidates(sess: Session, tw: int, anchors: dict[int, tuple[float, 
         if occluders is not None and occluders.hit(scene, pred.box) is not None:
             dropped["occluded_model"] += 1
             dropped[f"occluded_model:{e.job}"] += 1
+            continue
+        if why is not None:  # fix 2's 2b / 2c (3f): excluded, as unfit
+            dropped[why] += 1
+            dropped[f"{why}:{e.job}"] += 1
             continue
         out.append((e, st, sheet, pred, facing))
     return world, scene, now, out
@@ -749,10 +912,12 @@ def _check_rows(ref: qa_export.JpegRef) -> tuple[list[dict[str, Any]], Counter[s
                                                    Counter[int]]:  # fmt: skip
     sess, occluders = _JOB["sess"], _JOB["occluders"]
     off_ms, anchors = _JOB["offset_ms"], _JOB["anchors"]
+    facing_rule: FacingRule = _JOB["facing_rule"]
     dropped: Counter[str] = Counter()
     seen: Counter[int] = Counter()
     tw = ref.t_mono_ns - int(off_ms * 1e6)
-    world, scene, now, cands = standing_candidates(sess, tw, anchors, occluders, dropped)
+    world, scene, now, cands = standing_candidates(sess, tw, anchors, occluders, dropped,
+                                                   facing_rule)  # fmt: skip
     if scene is None:
         dropped["frame_no_scene"] += 1
         return [], dropped, seen
@@ -791,6 +956,13 @@ def _check_rows(ref: qa_export.JpegRef) -> tuple[list[dict[str, Any]], Counter[s
         if alt:
             hb = max(alt, key=lambda h: alt[h])
             row.update({"best_heading": hb, "c1_best_of_8": round(alt[hb], 4)})
+            # by IMAGE, not heading (3e finding 0: the ACT draws its directions in identical pairs)
+            classes = facing_rule.classes(sheet, e.job, int(MonsterAction.IDLE))
+            yaw = scene.camera.yaw
+            fs = _fs()
+            row["same_image_as_best"] = bool(
+                fs.class_index(classes, displayed_direction(facing[0], yaw))
+                == fs.class_index(classes, displayed_direction(hb, yaw)))  # fmt: skip
         rows.append(row)
     return rows, dropped, seen
 
@@ -803,7 +975,9 @@ def cmd_check(a: argparse.Namespace) -> dict[str, Any]:
     off_ms = float(params["offset_ms"])
     anchors = anchors_of(params)
     occluders = occluders_of(params)
-    _JOB.update(sess=sess, occluders=occluders, offset_ms=off_ms, anchors=anchors)
+    facing_rule = sess.facing_rule(a.rule)
+    _JOB.update(sess=sess, occluders=occluders, offset_ms=off_ms, anchors=anchors,
+                facing_rule=facing_rule)  # fmt: skip
     refs = list(sess.candidates(a.every))
     rows: list[dict[str, Any]] = []
     dropped: Counter[str] = Counter()
@@ -824,11 +998,18 @@ def cmd_check(a: argparse.Namespace) -> dict[str, Any]:
                                for r in sorted(rs, key=lambda r: -r["c1"])[:3]]  # fmt: skip
         bad = [r for r in rs if r.get("why_low") == "bad_label"]
         low[str(mob)] = [{k: r.get(k) for k in keys} for r in bad[:: max(1, len(bad) // 8)][:8]]
-    excl = {k.split(":", 1)[1]: v for k, v in dropped.items() if k.startswith("occluded_model:")}
+
+    def by_species(reason: str) -> dict[str, int]:
+        return dict(sorted((k.split(":", 1)[1], v) for k, v in dropped.items()
+                           if k.startswith(f"{reason}:")))  # fmt: skip
+
+    excl = by_species("occluded_model")
     if a.rows is not None:
         a.rows.write_text(json.dumps(rows) + "\n")
     return {
-        "what": "C1 / C2 on the labels v2orc-fix PREDICTION (no fit), section 3's bars",
+        "what": f"C1 / C2 on the labels {labels_name(a.rule)} PREDICTION (no fit), section 3's "
+                "bars",
+        "labels": labels_name(a.rule), "facing_rule": a.rule,
         "session": sess.sid, "checked_at": now_ict(), "commit": git_head(),
         "params": str(a.params), "params_sha256": sha256_file(a.params),
         "offset_ms": off_ms, "anchors_px": params["anchors_px"], "k": K, "tau": TAU,
@@ -837,7 +1018,9 @@ def cmd_check(a: argparse.Namespace) -> dict[str, Any]:
         "standing_rule": {"idle_s": occ.STANDING_NS / 1e9, "isolation_px": occ.ISOLATION_PX,
                           "ui_and_edge_margin_px": SEARCH_PX},
         "dropped": {k: v for k, v in sorted(dropped.items()) if ":" not in k},
-        "occluded_model_by_species": dict(sorted(excl.items())),
+        "occluded_model_by_species": excl,
+        "next_move_by_species": by_species(NEXT_MOVE),
+        "ambiguous_view_by_species": by_species(AMBIGUOUS),
         "monsters_in_sight_by_species": {str(k): v for k, v in sorted(seen.items())},
         "standing_scored_by_species": {str(m): len(rs) for m, rs in sorted(by.items())},
         **result,
@@ -943,9 +1126,11 @@ class FixLabeler:
     """The labels v2orc-fix monster boxes of a frame (section 3b, 0 + 1a-1d)."""
 
     def __init__(self, lab: qa_export.Labeler, params: dict[str, Any],
-                 occluders: Occluders | None = None) -> None:  # fmt: skip
+                 occluders: Occluders | None = None, rule: str = "1a") -> None:  # fmt: skip
         self.lab = lab
         self.params = params
+        self.rule = rule
+        self.facing = FacingRule.for_events(rule, getattr(lab.timeline, "events", ()))
         self.offset_ns = int(float(params["offset_ms"]) * 1e6)
         self.anchors = anchors_of(params)
         self.occluders = occluders if occluders is not None else occluders_of(params)
@@ -956,7 +1141,7 @@ class FixLabeler:
     def frame(self, t: int, bgr: npt.NDArray[np.uint8]) -> FixFrame | None:
         lab = self.lab
         tw = t - self.offset_ns
-        world, all_states, rules = lab.timeline.at(tw)
+        replay, world, all_states, rules = lab.timeline.at_world(tw)
         if world.self_pos is None or not world.map:
             return None
         if map_key(world.map) != MAP:
@@ -965,7 +1150,7 @@ class FixLabeler:
         states = {s.gid: s for s in all_states}
         grey = bgr[:, :, :3].astype(float) @ label_check.GREY
         preds: list[tuple[EntityState, ActorState, SpriteSheet, SpritePrediction,
-                          tuple[int, str]]] = []  # fmt: skip
+                          tuple[int, str], str | None]] = []  # fmt: skip
         out = FixFrame(t, [], [], 0)
         unit_boxes: list[tuple[int, Box]] = []
         me = anchor_and_depth(scene, scene.player)[0]
@@ -979,18 +1164,21 @@ class FixLabeler:
             st, sheet = states.get(e.gid), lab.sheets(e.job)
             if st is None or sheet is None:
                 continue
-            facing = facing_for(st, e.heading, rules.get(e.gid))
+            facing, why = self.facing.choose(replay, e, st, rules, tw, sheet, scene.camera.yaw)
             pred = predict(e, st, sheet, scene, facing[0], self.anchors)
             if pred is None:
                 continue
             if not visible(pred.box, lab.size, lab.ui_rects):
                 out.hidden += 1
                 continue
-            preds.append((e, st, sheet, pred, facing))
+            preds.append((e, st, sheet, pred, facing, why))
             unit_boxes.append((e.gid, pred.box))
-        for e, st, sheet, pred, facing in preds:
+        for e, st, sheet, pred, facing, why in preds:
             if self.occluders.hit(scene, pred.box) is not None:
                 out.excluded.append((e.gid, e.job, "occluded_model"))
+                continue
+            if why is not None:  # fix 2's 2b / 2c (3f): excluded, as unfit
+                out.excluded.append((e.gid, e.job, why))
                 continue
             r = self.fit_px.get(int(e.job), 6)
             fit = fit_label(grey, self.valid, sheet, pred, r)
@@ -1040,6 +1228,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     p = sub.add_parser("check")
     common(p)
     p.add_argument("--params", type=Path, required=True)
+    p.add_argument("--rule", choices=RULES, default="1a",
+                   help="the facing: 1a (3b, as 3c ran) or fix2 (3f, with 2b / 2c)")  # fmt: skip
     p.add_argument("--rows", type=Path, default=None, help="also every scored row (JSON)")
     a = ap.parse_args(argv)
     run = {"offset": cmd_offset, "anchor": cmd_anchor, "freeze": cmd_freeze, "check": cmd_check}

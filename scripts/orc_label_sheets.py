@@ -29,9 +29,11 @@ Written under ``<out-root>/<session>/``:
 
 ``--fix PARAMS`` (docs/planning/orcsdun01-detector.md 3b, scripts/orc_labels_fix.py): the monster
 boxes are the labels v2orc-fix FITTED boxes instead of v1's (facing 1a, anchor 1b, model occlusion
-1c, offset 1d -- the frozen PARAMS' offset replaces --offset-ms). A frame keeps its labels only
-when every visible monster's label is kept (an excluded one -- ``occluded_model``, ``crowd``,
-``ui``, ``unfit`` -- excludes the frame: ``fix_<reason>``), on top of the cache's own rules.
+1c, offset 1d -- the frozen PARAMS' offset replaces --offset-ms). ``--rule fix2`` (3f): labels
+v2orc-fix2, the facing of fix 2 and its exclusions ``next_move`` (2b) / ``ambiguous_view`` (2c).
+A frame keeps its labels only when every visible monster's label is kept (an excluded one --
+``occluded_model``, ``crowd``, ``ui``, ``unfit``, and with fix 2 ``next_move`` /
+``ambiguous_view`` -- excludes the frame: ``fix_<reason>``), on top of the cache's own rules.
 ``labels_summary.json`` then also counts the monster labels kept / excluded per species and reason.
 The blind pack and the sheets sample every KEPT fitted label of the frames v2's own rules keep
 (``--blind-from kept_labels``, the default: 3b's blind check judges the LABELS), or only the labels
@@ -295,8 +297,9 @@ def collect(session: Path, a: argparse.Namespace) -> tuple[dict[str, Any], dict[
     fix_hidden = 0
     fix_other_map = 0
     _FIX.clear()
+    rule = getattr(a, "rule", "1a")
     _FIX.update(sess=sess, v2=v2, fixer=None if fix_params is None else
-                olf.FixLabeler(sess.labeler, fix_params))  # fmt: skip
+                olf.FixLabeler(sess.labeler, fix_params, rule=rule))  # fmt: skip
     if fix_params is not None:
         results = olf.run_parallel(_frame_fate, refs, getattr(a, "workers", 1))
     else:
@@ -355,9 +358,10 @@ def collect(session: Path, a: argparse.Namespace) -> tuple[dict[str, Any], dict[
                "offset_ms": sess.labeler.offset_ms}  # fmt: skip
     if fix_params is not None:
         summary["labels"] = (
-            "v2orc-fix (fitted monster boxes) + v2's frame rules + --classes species"
+            f"{olf.labels_name(rule)} (fitted monster boxes) + v2's frame rules + --classes species"
         )
         summary["fix"] = {
+            "facing_rule": rule,
             "params": str(a.fix), "measured_on": fix_params["measured_on"],
             "offset_ms": fix_params["offset_ms"], "anchors_px": fix_params["anchors_px"],
             "monster_labels_kept_by_species": dict(sorted(fix_kept.items())),
@@ -499,6 +503,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         type=Path,
         default=None,
         help="labels v2orc-fix: the frozen parameters (orc_labels_fix.py freeze)",
+    )
+    ap.add_argument(
+        "--rule",
+        choices=("1a", "fix2"),
+        default="1a",
+        help="--fix: the facing, 1a (3b, as round 2) or fix2 (3f: labels v2orc-fix2, with the "
+        "exclusions 2b next_move / 2c ambiguous_view)",
     )
     a = ap.parse_args(argv)
     out = write_outputs(a.session, a)
