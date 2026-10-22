@@ -344,6 +344,8 @@ def moving_hp_recovery(packets: Sequence[Mapping[str, Any]], t0: int, t1: int,
         "regen_hp_per_min": round(sum(x["amount"] for x in tk) / mins, 1) if mins else None,
         "regen_hp_per_min_resting": round(sum(x["amount"] for x in in_rest) / (rest_ns / NS / 60),
                                           1) if rest_ns else None,
+        "regen_hp": sum(x["amount"] for x in tk),
+        "regen_hp_resting": sum(x["amount"] for x in in_rest),
         "recovery_not_regen": len(all_tk) - len(tk),
     }  # fmt: skip
 
@@ -507,13 +509,17 @@ def pool(rows: Sequence[Mapping[str, Any]], label: str = "pooled") -> dict[str, 
     for r in rows:
         for k in _SUMS:
             s[k] += float(r.get(k) or 0)
+        w = r.get("window") or {}
+        if w.get("t0") is not None and w.get("t1") is not None:  # exact, not the rounded hours
+            s["hours"] += (int(w["t1"]) - int(w["t0"])) / NS / 3600 - float(r.get("hours") or 0)
         s["rest_s"] += float((r.get("rest") or {}).get("seconds") or 0)
         s["sit_s"] += float((r.get("rest") or {}).get("sitting_seconds") or 0)
         for k, v in (r.get("loot") or {}).items():
             if k in ("items", "picked", "redrops", "recovered"):
                 s["loot_" + k] += float(v or 0)
         m = r.get("moving_hp_recovery") or {}
-        for k in ("walking_min", "natural_while_walking", "irp_while_walking"):
+        for k in ("walking_min", "natural_while_walking", "irp_while_walking", "regen_hp",
+                  "regen_hp_resting"):  # fmt: skip
             s[k] += float(m.get(k) or 0)
         hb = r.get("hard_bars") or {}
         for k in ("map_changes_other", "npc_contacts", "attack_requests_non_monster"):
@@ -559,9 +565,14 @@ def pool(rows: Sequence[Mapping[str, Any]], label: str = "pooled") -> dict[str, 
         "gross_h": econ.get("gross_h"), "cost_h": econ.get("cost_h"), "net_h": econ.get("net_h"),
         "cost_ratio": econ.get("cost_ratio"), "sharpe_10min": econ.get("sharpe_10min"),
         "economics": econ,
-        "moving_hp_recovery": {"walking_min": round(s["walking_min"], 3),
-                               "natural_while_walking": int(s["natural_while_walking"]),
-                               "irp_while_walking": int(s["irp_while_walking"])},
+        "moving_hp_recovery": {
+            "walking_min": round(s["walking_min"], 3),
+            "natural_while_walking": int(s["natural_while_walking"]),
+            "irp_while_walking": int(s["irp_while_walking"]),
+            "regen_hp_per_min": round(s["regen_hp"] / (h * 60), 1) if h else None,
+            "regen_hp_per_min_resting": round(s["regen_hp_resting"] / (s["rest_s"] / 60), 1)
+            if s["rest_s"] else None,
+        },
         "hard_bars": {k: int(s[k]) for k in ("map_changes_other", "npc_contacts",
                                              "attack_requests_non_monster")},
         "strikes": {"n": int(s["strikes"]), "landed": int(s["landed"]),
@@ -613,6 +624,7 @@ def cells(r: Mapping[str, Any]) -> dict[str, str]:
         "eng": " / ".join(str(eng.get(k, 0)) for k in ("battle_log", "hp_drop", "box")),
         "mhr": f"{_f(m.get('natural_while_walking'))} ({_f(m.get('walking_min'), 2)} min)",
         "irp_walk": _f(m.get("irp_while_walking")),
+        "regen": f"{_f(m.get('regen_hp_per_min'))} / {_f(m.get('regen_hp_per_min_resting'))}",
         "bars": f"{hb.get('map_changes_other')} / {hb.get('npc_contacts')} / "
         f"{hb.get('attack_requests_non_monster')}",
         "end": str(r.get("end_reason") or "-")[:40],
@@ -628,6 +640,7 @@ ROWS = (
     ("SP used / h / SP min", "sp"), ("HP min (% MaxHP)", "hp_min"),
     ("loot completeness [net]", "loot"), ("strikes landed", "landing"),
     ("engage battle_log / hp_drop / box", "eng"),
+    ("regen HP / min: all / resting", "regen"),
     ("MHR natural ticks walking (walk min)", "mhr"), ("IRP ticks walking (0)", "irp_walk"),
     ("HARD map other / NPC / non-mob atk", "bars"), ("end reason", "end"),
 )  # fmt: skip

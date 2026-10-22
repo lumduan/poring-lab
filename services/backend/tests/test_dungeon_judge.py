@@ -182,6 +182,13 @@ def test_natural_ticks_while_walking_are_moving_hp_recoverys_evidence() -> None:
     assert m["walking_min"] == 0.25 and m["walking_share"] == round(15 / 60, 4)
     assert m["regen_hp_per_min"] == round((33 + 155 + 33) / 1.0, 1)
     assert m["regen_hp_per_min_resting"] == round(33 / (10 / 60), 1)
+    assert m["regen_hp"] == 33 + 155 + 33 and m["regen_hp_resting"] == 33
+    r = judge(events, packets)
+    pm = dj.pool([r, r])["moving_hp_recovery"]  # pooled from the sums: the same rates
+    assert pm["regen_hp_per_min"] == m["regen_hp_per_min"]
+    assert pm["regen_hp_per_min_resting"] == m["regen_hp_per_min_resting"]
+    assert pm["natural_while_walking"] == 2 and pm["irp_while_walking"] == 2
+    assert "198.0" in dj.cells(dj.pool([r]))["regen"]
 
 
 def test_a_fly_wing_is_a_same_map_teleport_and_another_map_is_the_bar() -> None:
