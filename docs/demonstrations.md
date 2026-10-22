@@ -14812,6 +14812,19 @@ Reported, not deciding:
   - Engagements: loot_sword 26, box 17, battle_log 11, walk_sword 4, stall_scan 3. Chain: 59 %
     within 15 s, median 1.71 s. Moving HP Recovery: 1 natural tick while walking.
 
+**3.98 RESULT (recorded 2026-10-22 18:0x; no decision rule: a comparison for Batt).** The full
+runs, pooled per strategy (`dungeon_judge.py table`): A = r6 (40.0 min), B = r3 + r5 (85.0 min),
+C = r4 (36.4 min); runs 1, 2 and run 3's second attempt are partial, beside it:
+- NET z / h: A -6,049, B 4,225, C 798. Cost ratio: A 293 %, B 1 %, C 72 %. Sharpe-like: A -0.31,
+  B 0.81, C 1.82. Deaths: 0 in every strategy.
+- kills / h: A 91.5, B 87.5, C 84.1. HP min: A 56 %, B 54 %, C 29 %. Potions / h: A 7.5, B 0,
+  C 1.6. Fly Wings / h: A 3.0, B 0.7, C 1.6. Heals / h: C 14.8 (9 casts, all 9 confirmed).
+- Resting: 0 % in A / B / C's full runs (HP went under 60 % only inside fights, and the rest rule
+  fires after one); the one rest of the day came in 3.99's MR-B run 2.
+- Moving HP Recovery: natural ticks inside walks in pilot 4, r1, r3 and r6 (4 in all); IRP while
+  walking 0 everywhere; the source allows a natural tick while walking only with MHR.
+- Reading: sustain is NOT the binding constraint for this build on orcsdun01; A's potion rule
+  costs more than the map pays in White Potions; one run per strategy cell for A and C.
 ### 3.99 dungeon@3-melee_ring: MELEE-RING engagement (the CURSOR engages, not the detector) vs 3.98's defend-scan, sustain B fixed, in alternating runs inside 3.98's rotation (pre-registered 2026-10-22 13:56 ICT, the commit time of 3.99's first commit, BEFORE its pilot and its runs; Batt 2026-10-22 ~13:4x: "NEW ENGAGE OPTION (Batt's idea): 'MELEE-RING' engagement, driven by the CURSOR, not the detector ... pre-register it as its own version on orcsdun01 with the Crusader, compared with the current detector/defend-scan engagement in alternating runs within today's A/B/C rotation (keep the sustain strategy fixed for this comparison, e.g. B)")
 
 **Batt's behaviour, as built (`scripts/dungeon_hunt.py --engage melee_ring`, code c25f4c7):**
@@ -14901,6 +14914,34 @@ the NPC sprite guard and all gates stay underneath. Hard bars unchanged.
     another unit (run 3, defend-scan: 79 %, 0.87 s): the hand-off is not faster than defend-scan's
     ring scan after a kill -- an orc dies ~4 s after the strike, inside the strike's own 3-s burst,
     so the "swinging" phase where the queue hovers is short.
+- **Run 2** (MR, B, seed 22102, `20261022T171500-demo-dungeon-mr-B-mr2`, 17:15-17:56, TIME BOX,
+  40.4 min):
+  - 61 kills (90.6 /h), 39.7 s / kill; HP min 25.6 %; deaths 0; hard bars 0 (4 same-map changes
+    = the 4 Fly Wings: 2 B escapes at HP 25 % / 36 % falling 212 / 310 HP/s, 2 idle).
+  - **The day's only REST**: after the escapes, B walked to the entrance spot 28,165 and sat
+    101 s (HP 47 % -> 100 %): regen 1,638 HP / min while sitting (33 natural ticks; packets).
+    After it, the search found NO heading goal there (28,165 lies inside the 10-cell warp margin
+    of the search area, as does 187,28): two idle Fly Wings freed it.
+  - 1 potion; loot 55.3 % / 83.9 % net (looters took 34, 20 recovered); gross 4,507 / cost 2,139
+    / NET 2,368 z/h; Sharpe-like 0.67. Strikes 69, landed 56 (81.2 %).
+  - Engagements: loot_sword 21, battle_log 10, cursor 8, walk_sword 4. Queue windows: kept 144,
+    stopped 18, retargeted 7, died_inside 22, not_swinging 5; 6 requests inside windows;
+    13 hand-offs. Chain: 70.5 % within 15 s, median 1.67 s.
+
+**3.99 RESULT (recorded 2026-10-22 18:0x; no decision rule: a comparison for Batt).**
+MR-B (runs 1 + 2, 80.4 min) vs defend-B (3.98 r3 + r5, 85.0 min), sustain B, the same code:
+- kills / h 107.5 vs 87.5; s / kill 33.5 vs 41.1; net z / h 4,293 vs 4,225 (gross 5,412 vs 4,267,
+  cost 1,120 vs 42: MR's 5 Fly Wings + 1 potion in two big mobs); Sharpe-like 0.85 vs 0.81;
+- HP min 25.6 % vs 54.0 %; deaths 0 vs 0; loot 59.9 / 85.2 % vs 57.0 / 68.8 % (net: looter
+  re-drops recovered); landing 78.2 % vs 80.1 %; walking share ~7 % vs ~15 % (the short legs);
+- engagements: MR cursor 17, loot_sword 58, Battle Log 14, walk_sword 8 (no boxes) vs defend box
+  29, loot_sword 37, Battle Log 14, walk_sword 8, stall 2;
+- the hand-off is NOT faster: chain medians 1.20 / 1.67 s (MR) vs 0.87 / 0.90 s (defend);
+  hand-offs 29, the runner strikes ~0.1 s after reading the kill line, the packets show ~4 s from
+  the death to the next act (the kill line's own latency + the burst);
+- the between-swings hovers still disturb the swing: of 328 valid windows 16 retargeted (4.9 %)
+  and 31 stopped (9.5 %); 10 attack requests were sent inside hover windows.
+- Two runs per side, with density swings run to run: suggestive, NOT conclusive.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
