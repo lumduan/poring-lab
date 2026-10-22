@@ -15121,6 +15121,18 @@ still trips; a long walk to a struck target no longer does. The chain resumes at
     sparse spell.
   - The loot step is a fixed sink in EVERY run so far (722-965 s per 40 min, 30-40 % of the run,
     whatever the kills): 4.01's target.
+- **Pair 4 (C first):**
+  - **ci4** (C, seed 22207, `20261023T012031-demo-dungeon-H-ci4`, 01:20-02:02, time box, 40.0 min):
+    114 kills (**171.0 / h**), deaths 0, HP min 44.3 %, 0 potions / Fly Wings, 10 Heals, loot 70 /
+    85 %, net 9,658 z / h, met 26.5 / 10 min, walking 9.5 %, 21.1 s / kill (7.4 / 1.8 / 11.9),
+    landing 86 %, hard bars 0.
+  - **pi4** (P, seed 22208, `20261023T020310-demo-dungeon-patrol-H-pi4`, 02:03-02:43, time box,
+    40.0 min): 132 kills (**198.0 / h**), deaths 0, HP min 32.5 %, 0 potions, 1 Fly Wing, 18 Heals
+    (18 confirmed), loot 78 / 88 %, net 10,111 z / h, met 39 / 10 min, walking 5.6 %, 18.2 s / kill
+    (10.5 / 0.8 / 7.0), landing 81 %, hard bars 0.
+  - P - C: **+27.0 kills / h**, +12.5 met / 10 min.
+  - Noted at pi5's pre-run frame: the Crusader's Base EXP bar is nearly full (Lv 60 -> 61 within the
+    next runs; MaxHP / MaxSP rise for both arms alike from then on). The end state restores Lv 60.
 
 ### 4.01 dungeon@4 + LOOT v2: the changed cells first, a time budget per fight, no re-hover of empty cells, vs dungeon@4's loot (pre-registered 2026-10-22, the commit time of 4.01's first commit, BEFORE its code is merged or run; Batt's decision 4 on the 19:00 report: "Loot: hover the CHANGED cells first, the plain list cells after; a time budget per fight; skip cells already hovered empty"; his overnight brief: "Then, if time remains, the loot change (item 4) as its own version")
 
