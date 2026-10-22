@@ -1163,6 +1163,15 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     cr.gm_line(agent_raw, screen, cmd, "crusader")
                     time.sleep(0.8)
                 bench.close_chat(agent_raw, screen)
+            if reason != "death":  # 13:19: a stopped run left the Crusader at 30 % HP among
+                # orcs with no runner: after run_end (outside the measured window) it goes home
+                try:
+                    cr.gm_line(agent_raw, screen, f"@warp {CLEAR_STAND[0]} {CLEAR_STAND[1]} "
+                               f"{CLEAR_STAND[2]}", "crusader")  # fmt: skip
+                    time.sleep(3.0)
+                    bench.close_chat(agent_raw, screen)
+                except Exception as exc:  # noqa: BLE001 -- recorded; the next setup checks again
+                    print(f"end warp failed: {exc!r}", flush=True)
             print(r.to_png(screen.full(), out / "end.png"), flush=True)
     t1 = r.ns()
     evf.close()
