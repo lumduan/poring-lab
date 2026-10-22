@@ -14695,6 +14695,17 @@ Reported, not deciding:
   are (`rest_start` with `fallback: true`). It touches the rest path only, which A never takes;
   so run 1 (A) is unaffected, and every B / C run uses it.
 
+**Amendment C (2026-10-22 12:4x, after run 1 was stopped, BEFORE run 2; the parent):**
+- Run 1 (A) was STOPPED by the parent at 24.8 min (12:14:58-12:39:45): from ~20 min on the search
+  looped at 27,75 (57 `stall` events, ~4.6 s apart). The stall breaker turned the heading, but the
+  next heading goal planned the same route through 27,82, which the client would not walk to; no
+  kill came in those minutes.
+- Fix (code ec207aa): a stalled walk target's 5 x 5 leaves the route grid for the rest of the run,
+  and 4 stalls within 60 s at one cell = stuck -> a Fly Wing (`escape` why `stuck`; counted with the
+  Fly Wings, in every strategy).
+- Run 1 is reported as PARTIAL (beside the table, not pooled). The registered order continues
+  from run 2 (B C B C A C A).
+
 **Run log:** (filled as the runs end)
 
 ## 4. Labels from verified outcomes
