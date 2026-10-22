@@ -15070,6 +15070,21 @@ min) -- **reported APART (before Amendment I):**
 - **The pairs restart** with the amended code as pi1 / ci1, ci2 / pi2, ... (the same order rule and
   seeds from 22201); p1 is reported apart, c1 is a stopped attempt.
 
+**Run log after Amendment I** (`dungeon_judge.py` + `dungeon_style.py`, packets; s / kill =
+fighting / walking / standing outside fights):
+- **Pair 1:**
+  - **pi1** (P, seed 22201, `20261022T210654-demo-dungeon-patrol-H-pi1`, 21:06-21:49, time box,
+    40.2 min): the setup cleared the Etc tab on the RED line (9 stacks) and drank 40 potions
+    (weight 1,444 / 4,150 = 34.8 % at the start). 175 kills (**261.4 / h**), deaths 0, HP min
+    37.7 %, 0 potions, 2 Fly Wings (rate escapes at HP 37-39 %), 35 Heals (35 confirmed; SP used
+    1,400), loot 62 / 76 %, net 11,304 z / h, met 48 / 10 min, walking 5.7 %, 13.8 s / kill (7.7 /
+    0.5 / 5.6), rest 1.2 %, landing 86 %, hard bars 0.
+  - **ci1** (C, seed 22202, `20261022T214953-demo-dungeon-H-ci1`, 21:49-22:30, time box, 40.0 min):
+    82 kills (**123.0 / h**), deaths 0, HP min 75.9 %, 0 potions / Fly Wings, 4 Heals, loot 58 /
+    87 %, net 5,811 z / h, met 27 / 10 min, walking 7.4 %, 29.3 s / kill (8.1 / 2.0 / 19.2), rest 0,
+    landing 56 %, hard bars 0.
+  - P - C: **+138.4 kills / h**, +21 met / 10 min.
+
 ### 4.01 dungeon@4 + LOOT v2: the changed cells first, a time budget per fight, no re-hover of empty cells, vs dungeon@4's loot (pre-registered 2026-10-22, the commit time of 4.01's first commit, BEFORE its code is merged or run; Batt's decision 4 on the 19:00 report: "Loot: hover the CHANGED cells first, the plain list cells after; a time budget per fight; skip cells already hovered empty"; his overnight brief: "Then, if time remains, the loot change (item 4) as its own version")
 
 **Why:** Batt's demo vs the bot (crusader-orcsdun01.md 9a): the bot's largest gap is STANDING
