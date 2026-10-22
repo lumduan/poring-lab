@@ -14676,6 +14676,18 @@ Reported, not deciding:
 - A strategy with a death: its deaths/h is reported with the cause of each death (HP trace,
   attackers from the Battle Log and the packets).
 
+**Amendment A (2026-10-22 12:1x, BEFORE any counted run; the parent):**
+- Run 1's first attempt (`20261022T120918-demo-dungeon-A-r1`, seed 22001, 12:10:05-12:11:57) was
+  STOPPED by the parent after 1.9 min: 4 "box" engagements and no kill. The box, (628,276)-(661,312)
+  at score 0.39, is v1 boxing OUR OWN Crusader's upper body as a monster: confirmed live at 12:12 on
+  3 / 3 frames with no monster on the screen. (v1 never saw a Crusader; the prep doc's "0 false
+  boxes on the GM" was the Novice GM.)
+- Fix (0d8a204): a box centred on our drawn sprite (`SELF_BOX`, client x 610-672, y 268-375) is
+  skipped and counted (`box_watch.self_boxes_skipped`). A monster on a neighbour cell centres
+  outside it; one exactly north of us is excluded too, but it hits us (the Battle Log) anyway.
+- The attempt is NOT scored (its session is kept for the record). Run 1 restarts with the same
+  seed; the order and the rest are unchanged.
+
 **Run log:** (filled as the runs end)
 
 ## 4. Labels from verified outcomes
