@@ -15,10 +15,12 @@ import { fixture } from "./testkit.ts";
 
 const RULES = JSON.parse(readFileSync(new URL("./fixtures/hunt_rules.json", import.meta.url), "utf8")) as HuntRules;
 const ADOPTED = { strike: "arm_c@32", engage_on_the_way: "on_the_way@19", dead: "exp_line@48", loot: "gm_fast_scan@54", search: "heading_coverage@22" }; // the adopted base v55 (3.97; v52 until 10-22 04:32)
-// engage_source (Batt 2026-10-22): an OPTION, not required; absent = detector, so the IR above
-// (written before it) is a detector hunt and its dropdown shows "detector"
-const DEFAULTS = { ...ADOPTED, engage_source: "detector" };
-const SHOWN = { strike: "arm_c@32", engage_on_the_way: "on_the_way@19", engage_source: "detector", dead: "exp_line@48", loot: "gm_fast_scan@54", search: "heading_coverage@22" };
+// engage_source and search_route (Batt 2026-10-22): OPTIONS, not required; absent = detector /
+// heading, so the IR above (written before them) is a detector hunt searching by heading and its
+// dropdowns show "detector" and "heading"
+const DEFAULTS = { ...ADOPTED, engage_source: "detector", search_route: "heading" };
+const SHOWN = { strike: "arm_c@32", engage_on_the_way: "on_the_way@19", engage_source: "detector", dead: "exp_line@48", loot: "gm_fast_scan@54", search: "heading_coverage@22", search_route: "heading" };
+const OMIT = { engage_source: "detector", search_route: "heading" };
 const FARM: Scope = { kind: "block", name: "farm" };
 
 function withHunt(values: Record<string, string>): Flow {
@@ -94,7 +96,7 @@ test("dragged from the toolbox: the adopted base's rules, the catalogue's concep
   const item = tb.contents.find((c) => c.name === "More skills")!.contents.find((i) => i.type === HUNT_TYPE);
   assert.ok(item);
   assert.deepEqual(item.fields, defaultFields(RULES));
-  assert.deepEqual((item.extraState as { omit?: unknown }).omit, { engage_source: "detector" });
+  assert.deepEqual((item.extraState as { omit?: unknown }).omit, OMIT);
   const flow = clone(fixture("town_warp_farm"));
   const ws = viaJson(toWorkspace(flow, FARM, { hunt: RULES }));
   const dragged: WsBlock = { type: HUNT_TYPE, id: "fresh", fields: defaultFields(RULES), extraState: item.extraState };
@@ -128,7 +130,7 @@ test("engage_source: an option in the engage group, default detector, written on
   assert.equal(es.kind, "option");
   assert.equal(es.required, false);
   assert.equal(es.default, "detector");
-  assert.deepEqual(omitted(RULES), { engage_source: "detector" });
+  assert.deepEqual(omitted(RULES), OMIT);
   const def = huntDef(RULES, COLOURS.action);
   assert.equal(def.message1, "engage: strike %1  engage on the way %2  engage source %3");
   const dd = (def.args1 ?? []).find((a) => "name" in a && a.name === "P_ENGAGE_SOURCE");
@@ -157,6 +159,54 @@ test("engage_source: an option in the engage group, default detector, written on
 
 test("engage_source written AT its default, or not an option, stays a generic block, exactly", () => {
   for (const flow of [withHunt({ ...ADOPTED, engage_source: "detector" }), withHunt({ ...ADOPTED, engage_source: "cursor" })]) {
+    const ws = toWorkspace(flow, FARM, { hunt: RULES });
+    assert.equal(first(ws).type, "pl_action");
+    const back = fromWorkspace(flow, FARM, viaJson(ws));
+    assert.ok(back.ok);
+    assert.equal(canonical(back.flow), canonical(flow));
+  }
+});
+
+test("search_route: an option in the search group, default heading, written only when changed", () => {
+  const sr = params(RULES).find((p) => p.name === "search_route")!;
+  assert.equal(sr.kind, "option");
+  assert.equal(sr.required, false);
+  assert.equal(sr.default, "heading");
+  const def = huntDef(RULES, COLOURS.action);
+  assert.equal(def.message3, "search: search %1  search route %2");
+  const dd = (def.args3 ?? []).find((a) => "name" in a && a.name === "P_SEARCH_ROUTE");
+  assert.ok(dd && "options" in dd);
+  assert.deepEqual(dd.options, [["heading (default)", "heading"], ["patrol_route", "patrol_route"]]);
+  const [heading, patrol] = sr.choices;
+  assert.equal(badgeText(heading, RULES.adopted), "option · the default (absent = this)");
+  assert.equal(badgeText(patrol, RULES.adopted), "option");
+  assert.match(huntTooltip(RULES, "unverified"), /search_route: heading: .*patrol_route: .*AHEAD/);
+  // a person picks patrol_route: the IR gains search_route="patrol_route", nothing else changes
+  const flow = withHunt(ADOPTED);
+  const ws = viaJson(toWorkspace(flow, FARM, { hunt: RULES }));
+  first(ws).fields![fieldOf("search_route")] = "patrol_route";
+  const picked = fromWorkspace(flow, FARM, ws);
+  assert.ok(picked.ok);
+  assert.equal(canonical(picked.flow), canonical(withHunt({ ...ADOPTED, search_route: "patrol_route" })));
+  // ... it shows as the hunt block, and back to heading leaves the parameter out again (absent)
+  const ws2 = viaJson(toWorkspace(picked.flow, FARM, { hunt: RULES }));
+  assert.equal(first(ws2).type, HUNT_TYPE);
+  assert.equal(first(ws2).fields![fieldOf("search_route")], "patrol_route");
+  first(ws2).fields![fieldOf("search_route")] = "heading";
+  const back = fromWorkspace(picked.flow, FARM, ws2);
+  assert.ok(back.ok);
+  assert.equal(canonical(back.flow), canonical(flow));
+  // both options at once: each written, each round-trips
+  const both = withHunt({ ...ADOPTED, engage_source: "melee_ring", search_route: "patrol_route" });
+  const ws3 = toWorkspace(both, FARM, { hunt: RULES });
+  assert.equal(first(ws3).type, HUNT_TYPE);
+  const again = fromWorkspace(both, FARM, viaJson(ws3));
+  assert.ok(again.ok);
+  assert.equal(canonical(again.flow), canonical(both));
+});
+
+test("search_route written AT its default, or not an option, stays a generic block, exactly", () => {
+  for (const flow of [withHunt({ ...ADOPTED, search_route: "heading" }), withHunt({ ...ADOPTED, search_route: "spiral" })]) {
     const ws = toWorkspace(flow, FARM, { hunt: RULES });
     assert.equal(first(ws).type, "pl_action");
     const back = fromWorkspace(flow, FARM, viaJson(ws));

@@ -75,8 +75,8 @@ services:
       # a missing /dev/shm path would be created root-owned before the extraction runs.
       - ./data/gat:/lab-gat:ro
       # B2: the zones loader's code, READ-ONLY, a DIRECTORY bind (no single-file inode trap). The
-      # backend imports only map_zones / hunt_core / flow_zones from it and restores its import
-      # path after (flows_zones.engine). Takes effect at a guarded recreate:backend; until then
+      # backend imports only map_zones / hunt_core / flow_zones (and the patrol routes' map_routes /
+      # flow_routes, 2026-10-22) from it and restores its import path after (flows_zones.engine). Takes effect at a guarded recreate:backend; until then
       # the zones routes answer 503 zones_engine_unavailable (fail closed). test_guards pins it.
       - ./scripts:/lab-scripts:ro
 

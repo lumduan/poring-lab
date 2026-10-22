@@ -14,7 +14,8 @@ section 3 and B2; ADR-0020 Amendment A 4, DRAFT; Batt D6 2026-10-21: "export onl
   the file's review is returned as a REFERENCE (a person types the review of what they export;
   the agent never approves a zone).
 - ``provider``: the linter's zones provider (``scripts/flow_zones.py``, B1) for the lint and
-  simulate routes.
+  simulate routes; ``routes_provider``: the patrol routes' (``scripts/flow_routes.py`` over
+  ``scripts/map_routes.py``, Batt 2026-10-22), from the same code directory.
 
 The loader is imported lazily (``engine``): from the import path when it is there (the tests), else
 from ``ZONES_CODE_DIR`` (compose.dev.yaml mounts ``./scripts`` read-only). Without it the zones
@@ -49,12 +50,17 @@ MAX_GRID = 512 * 512  # as GET /flows/world's walk rows
 class Engine:
     mz: Any  # scripts/map_zones.py
     fz: Any  # scripts/flow_zones.py
+    fr: Any = None  # scripts/flow_routes.py (the patrol routes' provider); None: not there
 
 
 def _import() -> Engine:
     mz = importlib.import_module("map_zones")
     fz = importlib.import_module("flow_zones")
-    return Engine(mz, fz)
+    try:
+        fr = importlib.import_module("flow_routes")
+    except ImportError:  # the zones keep working; patrol hunts are then refused at run start
+        fr = None
+    return Engine(mz, fz, fr)
 
 
 _CACHE: dict[str, Engine | None] = {}
@@ -63,7 +69,8 @@ _CACHE: dict[str, Engine | None] = {}
 def engine(code_dir: Path | None) -> Engine | None:
     """The runner's zones loader, or None. With ``code_dir`` the import path is restored exactly
     afterwards (map_zones puts its own directory first while it imports hunt_core): nothing in
-    the backend ever resolves a module from the scripts directory but these two."""
+    the backend ever resolves a module from the scripts directory but these (map_zones,
+    flow_zones, map_routes, flow_routes and hunt_core)."""
     key = str(code_dir)
     if key in _CACHE:
         return _CACHE[key]
@@ -338,3 +345,9 @@ def read_file(e: Engine, zones_dir: Path, map_name: str, rows: list[str] | None
 def provider(e: Engine, zones_dir: Path, shapes: dict[str, tuple[int, int]]) -> Any:
     """The linter's zones provider over the committed files (scripts/flow_zones.py, B1)."""
     return e.fz.provider(zones_dir, shapes)
+
+
+def routes_provider(e: Engine, routes_dir: Path, shapes: dict[str, tuple[int, int]]) -> Any:
+    """The linter's patrol routes provider over the committed files (scripts/flow_routes.py), or
+    None when the routes loader is not there (a patrol hunt is then refused at run start)."""
+    return None if e.fr is None else e.fr.provider(routes_dir, shapes)

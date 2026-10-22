@@ -10,11 +10,14 @@
 //   poring_flow.hunt_rules): ★ the adopted base's rule, ◆ hunting evidence under Batt's D8 rule
 //   (a pre-registered verdict, hard bars 0, >= 4 h; one path, one map, an immune GM), and the
 //   PARAMS versions that hold it. The L1 badge (verified / unverified) stays beside them.
-// - OPTION parameters (Batt 2026-10-22: `engage_source`, detector | melee_ring) sit in their group
-//   as a dropdown of plain values: no version, no numbers, no badge; the registry's `default` is
-//   what an ABSENT parameter means, and the editor writes the parameter only when it differs from
-//   it (an explicit default stays a generic block, exactly). The linter refuses melee_ring on a map
-//   with an IGNORE list or a non-TARGET species and on any server but the lab's (lint/hunt.py).
+// - OPTION parameters (Batt 2026-10-22: `engage_source`, detector | melee_ring, and
+//   `search_route`, heading | patrol_route) sit in their group as a dropdown of plain values: no
+//   version, no numbers, no badge; the registry's `default` is what an ABSENT parameter means, and
+//   the editor writes the parameter only when it differs from it (an explicit default stays a
+//   generic block, exactly). The linter refuses melee_ring on a map with an IGNORE list or a
+//   non-TARGET species and on any server but the lab's, and patrol_route on a map without a
+//   routes file its loader accepts (lint/hunt.py). The route's waypoints are not drawn here yet
+//   (later, like the Zones layer: blocks-from-hunt-flow.md 7d).
 import type { BlockDef } from "./blockdefs.ts";
 
 export type HuntEvidence = { entry: string; version: number; map: string; path: string; hours: number; verdict: string; gm: string };

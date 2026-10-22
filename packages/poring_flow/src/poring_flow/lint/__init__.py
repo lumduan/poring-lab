@@ -18,6 +18,9 @@ Inputs:
 - `zones`: the map zones provider (`poring_flow.zones`, Amendment A 4): each map's zones file, as
   the loader reads it. None means not loaded: the file checks are skipped, and the run-start check
   refuses a flow that names zones (fail closed).
+- `routes`: the patrol routes provider (`poring_flow.patrol`, Batt 2026-10-22): each map's routes
+  file, as the loader reads it. None means not loaded: a patrol hunt's file checks are skipped,
+  and the run-start check refuses a flow with one (fail closed).
 
 Layers 4-6 (approval, runtime, interlock) are not here: the preparation report (`poring_flow.prep`)
 feeds approval; the interlock check of layer 6 is later work.
@@ -31,6 +34,7 @@ from poring_flow import ir
 from poring_flow.catalogue import Catalogue, catalogue
 from poring_flow.lint import events, hunt, loops, semantics, simulate, structure, where, zones
 from poring_flow.lint.common import Ctx, Detector, Finding, Resolver
+from poring_flow.patrol import RoutesProvider
 from poring_flow.sheet import World
 from poring_flow.zones import ZonesProvider
 
@@ -74,11 +78,14 @@ def lint(
     cat: Catalogue | None = None,
     runtime_max_s: int | None = None,
     zones_provider: ZonesProvider | None = None,
+    routes_provider: RoutesProvider | None = None,
 ) -> list[Finding]:
     """`runtime_max_s`: the CONFIGURED maximum run time (#17; the backend's
     `flows_settings.runtime_limits`); None skips that check here (the run-start check refuses
-    without one). `zones_provider`: the map zones (Amendment A 4); None skips the file checks."""
-    ctx = Ctx(flow, cat or catalogue(), world, resolver, detector or Detector(), zones_provider)
+    without one). `zones_provider`: the map zones (Amendment A 4); None skips the file checks.
+    `routes_provider`: the patrol routes (7d); None skips a patrol hunt's file checks."""
+    ctx = Ctx(flow, cat or catalogue(), world, resolver, detector or Detector(), zones_provider,
+              routes=routes_provider)  # fmt: skip
     if runtime_max_s is not None and flow.max_runtime_s > runtime_max_s:
         ctx.add(
             "runtime_max",
@@ -94,7 +101,7 @@ def lint(
     loops.check(ctx)
     events.check(ctx)
     where.check(ctx)  # the /where budget (#10)
-    hunt.check(ctx)  # rule versions; blocks that attack the map block's targets (2026-10-21)
+    hunt.check(ctx)  # rule versions, options; targets (2026-10-21); melee ring, patrol route
     zones.check(ctx)  # the map node's zones (Amendment A 4, 2026-10-21)
     return sorted(ctx.findings, key=lambda f: (f.layer, SEVERITY_ORDER[f.severity]))
 

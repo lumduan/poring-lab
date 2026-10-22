@@ -25,6 +25,11 @@ severity has its enforcement point in code, tested, and not only in prose.
   (`lint.hunt.LAB_SERVERS`) and the flow's target, and unless the static data the species check
   read is that server's. Never allowed by default: no attested server is a refusal. The linter
   already refuses the design on another target server, an IGNORE list or a non-target species.
+- A flow that hunts by the PATROL ROUTE (the hunt block's search_route `patrol_route`, Batt
+  2026-10-22; lint/hunt.py) is refused without a routes provider (`routes_provider`): the linter
+  would skip its file checks. With one, the re-lint refuses a map with no routes file or a file the
+  loader refuses (`patrol_route_missing`, `patrol_route_unreadable`), so a file that stopped
+  loading since approval refuses the run.
 - Simulation is design time and is NOT gated: `runtime.Sim` and `trace.simulate` run a flow that
   has readiness items (that is how a flow is designed before its bindings land).
 """
@@ -36,7 +41,15 @@ from dataclasses import dataclass
 from poring_flow import ir
 from poring_flow.catalogue import catalogue
 from poring_flow.lint import Detector, Finding, Resolver, lint
-from poring_flow.lint.hunt import LAB_SERVERS, MELEE_RING, melee_ring_paths
+from poring_flow.lint.hunt import (
+    LAB_SERVERS,
+    MELEE_RING,
+    PATROL_ROUTE,
+    SEARCH_ROUTE,
+    melee_ring_paths,
+    patrol_route_paths,
+)
+from poring_flow.patrol import RoutesProvider
 from poring_flow.sheet import World
 from poring_flow.zones import ZonesProvider
 
@@ -78,12 +91,14 @@ def verdict(
     zones_loaded: bool = False,
     server: str | None = None,
     world_server: str | None = None,
+    routes_loaded: bool = False,
 ) -> Verdict:
     """The gate's verdict from findings already computed (the editor shows it beside the lint).
     `runtime_max_s` is the CONFIGURED maximum run time (#17): None refuses (fail closed).
     `zones_loaded`: the findings were computed with a zones provider. `server`: the run's ATTESTED
     environment (None: not known here); `world_server`: the server of the static data linted
-    against. Both matter only to a melee-ring hunt."""
+    against. Both matter only to a melee-ring hunt. `routes_loaded`: the findings were computed
+    with a routes provider (a patrol hunt needs it)."""
     h = ir.flow_hash(flow)
     reasons = []
     reasons += _melee_ring(flow, server, world_server)
@@ -94,6 +109,8 @@ def verdict(
     blocks = flow.workflow.blocks if flow.workflow else []
     if not zones_loaded and any(b.zones is not None for b in blocks):
         reasons.append("no zones data: the map nodes' zones references are unchecked")
+    if not routes_loaded:
+        reasons += _patrol_route(flow)
     if runtime_max_s is None:
         reasons.append("no configured maximum run time")
     elif flow.max_runtime_s > runtime_max_s and not any(f.rule == "runtime_max" for f in findings):
@@ -117,10 +134,12 @@ def check(
     runtime_max_s: int | None = None,
     zones_provider: ZonesProvider | None = None,
     server: str | None = None,
+    routes_provider: RoutesProvider | None = None,
 ) -> Verdict:
     """Re-lint NOW and return the verdict (no exception). `runtime_max_s`: the configured
     maximum run time (#17); without one the run is refused. `zones_provider`: the map zones.
-    `server`: the ATTESTED environment the run would act on (a melee-ring hunt needs the lab's)."""
+    `server`: the ATTESTED environment the run would act on (a melee-ring hunt needs the lab's).
+    `routes_provider`: the patrol routes (a patrol hunt is refused without it)."""
     findings = lint(
         flow,
         world=world,
@@ -128,6 +147,7 @@ def check(
         detector=detector,
         runtime_max_s=runtime_max_s,
         zones_provider=zones_provider,
+        routes_provider=routes_provider,
     )
     return verdict(
         flow,
@@ -139,6 +159,7 @@ def check(
         zones_loaded=zones_provider is not None,
         server=server,
         world_server=world.server if world is not None else None,
+        routes_loaded=routes_provider is not None,
     )
 
 
@@ -152,10 +173,11 @@ def require(
     runtime_max_s: int | None = None,
     zones_provider: ZonesProvider | None = None,
     server: str | None = None,
+    routes_provider: RoutesProvider | None = None,
 ) -> Verdict:
     """The call a live run makes before its first input: returns the verdict, or raises
     `RunRefused` (with every reason) when the run may not start. `server`: the ATTESTED
-    environment (the interlock's attested server id)."""
+    environment (the interlock's attested server id). `routes_provider`: the patrol routes."""
     v = check(
         flow,
         world=world,
@@ -165,6 +187,7 @@ def require(
         runtime_max_s=runtime_max_s,
         zones_provider=zones_provider,
         server=server,
+        routes_provider=routes_provider,
     )
     if not v.allowed:
         raise RunRefused(v)
@@ -190,3 +213,12 @@ def _melee_ring(flow: ir.Flow, server: str | None, world_server: str | None) -> 
         out.append(f"{what}: the species were checked on {world_server}'s static data, not on "
                    f"{flow.target.server}'s")  # fmt: skip
     return out
+
+
+def _patrol_route(flow: ir.Flow) -> list[str]:
+    """A patrol hunt starts only with its routes file checked: without a provider, refused."""
+    paths = patrol_route_paths(flow, {n: b.spec for n, b in catalogue().blocks.items()})
+    if not paths:
+        return []
+    what = f"{len(paths)} hunt{'s' * (len(paths) != 1)} with {SEARCH_ROUTE} {PATROL_ROUTE}"
+    return [f"{what}: no routes data: the maps' routes files are unchecked"]

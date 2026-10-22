@@ -1,13 +1,13 @@
 """Block parameters that are RULE VERSIONS or OPTIONS, blocks that attack the map block's targets,
-and the hunt block's MELEE RING (ADR-0020 Amendment A 1 + 3, DRAFT; docs/planning/
-blocks-from-hunt-flow.md B1, 2026-10-21, and section 7c, Batt 2026-10-22).
+the hunt block's MELEE RING and its PATROL ROUTE (ADR-0020 Amendment A 1 + 3, DRAFT; docs/planning/
+blocks-from-hunt-flow.md B1, 2026-10-21, and sections 7c and 7d, Batt 2026-10-22).
 
 - `rule_version` (layer 1): a parameter with `choices` in the registry (the hunt block's strike,
   engage, dead, loot and search) takes one of them, as a literal. A rule version is `name@N`: its
   numbers are the ones PARAMS[N] ran (scripts/hunt_config.py); "the engine refuses an unknown rule
   version", and so does the linter, before approval.
-- `param_option` (layer 1): a parameter with `options` (the hunt block's engage_source) takes one
-  of them, as a literal; absent means its `default`.
+- `param_option` (layer 1): a parameter with `options` (the hunt block's engage_source and
+  search_route) takes one of them, as a literal; absent means its `default`.
 - `needs_targets` (layer 2): a block that attacks the map block's TARGET species (13.3) runs in a
   map block, and that block lists its targets.
 - THE MELEE RING (Batt 2026-10-22 ~13:45: "the option strikes EVERY monster in melee range, so its
@@ -24,6 +24,14 @@ blocks-from-hunt-flow.md B1, 2026-10-21, and section 7c, Batt 2026-10-22).
   The run-start check adds the ATTESTED environment (`runstart`: the server the run acts on, known
   only at run time). The NPC sprite guard and every gate of the engine stay underneath; none is a
   parameter and none is weakened here.
+- THE PATROL ROUTE (Batt 2026-10-22, the Crusader's orcsdun01 demo: a fixed circuit of waypoints
+  walked in ONE direction). For a hunt whose search_route is `patrol_route`, the map node's map
+  must have a reviewed routes file the runner's loader accepts (`config/routes/<map>.yaml`,
+  `scripts/map_routes.py`), as the routes provider reports it (`poring_flow.patrol`):
+  - `patrol_route_missing` (layer 2): the map has no routes file;
+  - `patrol_route_unreadable` (layer 2): the loader refuses the file (fail closed).
+  Without a provider these checks are skipped, as the zones file checks are, and the run-start
+  check refuses a patrol hunt (`runstart`: fail closed).
 """
 
 from __future__ import annotations
@@ -33,10 +41,13 @@ from collections.abc import Iterable, Mapping
 from poring_flow import ir
 from poring_flow.catalogue import BlockSpec
 from poring_flow.lint.common import Ctx
+from poring_flow.patrol import RoutesUnreadable
 from poring_flow.sheet import World
 
 ENGAGE_SOURCE = "engage_source"
 MELEE_RING = "melee_ring"
+SEARCH_ROUTE = "search_route"
+PATROL_ROUTE = "patrol_route"
 # The lab's OWN server (ADR-0006 environment 1, config/environments.yaml `lab-rathena`): a server
 # nobody else plays on, so striking every monster in melee range steals no one's kill. Deliberately
 # a fixed list, not the interlock's `allowed` status: an allowed SHARED server (the community one,
@@ -45,27 +56,46 @@ MELEE_RING = "melee_ring"
 LAB_SERVERS = frozenset({"lab-rathena"})
 
 
-def engage_source(a: ir.ActionStmt, spec: BlockSpec) -> str | None:
-    """The action's engage source as a literal (its default when absent); None when the block has
-    no such parameter or the value is not a literal (param_option names that)."""
-    p = next((p for p in spec.params if p.name == ENGAGE_SOURCE), None)
+def option(a: ir.ActionStmt, spec: BlockSpec, name: str) -> str | None:
+    """The action's OPTION parameter ``name`` as a literal (its default when absent); None when the
+    block has no such parameter or the value is not a literal (param_option names that)."""
+    p = next((p for p in spec.params if p.name == name), None)
     if p is None:
         return None
-    e = a.params.get(ENGAGE_SOURCE)
+    e = a.params.get(name)
     if e is None:
         return p.default
     return e.value if isinstance(e, ir.Lit) and isinstance(e.value, str) else None
 
 
-def melee_ring_paths(flow: ir.Flow, specs: Mapping[str, BlockSpec]) -> list[str]:
-    """The node paths of every action that hunts with the melee ring (runstart reads them)."""
+def engage_source(a: ir.ActionStmt, spec: BlockSpec) -> str | None:
+    """The action's engage source (its default when absent; ``option``)."""
+    return option(a, spec, ENGAGE_SOURCE)
+
+
+def search_route(a: ir.ActionStmt, spec: BlockSpec) -> str | None:
+    """The action's search route (its default, heading, when absent; ``option``)."""
+    return option(a, spec, SEARCH_ROUTE)
+
+
+def _paths(flow: ir.Flow, specs: Mapping[str, BlockSpec], name: str, value: str) -> list[str]:
     out = []
     for site in ir.sites(flow):
         for a in ir.actions_in(site.stmt):
             spec = specs.get(a.block)
-            if spec is not None and engage_source(a, spec) == MELEE_RING:
+            if spec is not None and option(a, spec, name) == value:
                 out.append(site.path)
     return out
+
+
+def melee_ring_paths(flow: ir.Flow, specs: Mapping[str, BlockSpec]) -> list[str]:
+    """The node paths of every action that hunts with the melee ring (runstart reads them)."""
+    return _paths(flow, specs, ENGAGE_SOURCE, MELEE_RING)
+
+
+def patrol_route_paths(flow: ir.Flow, specs: Mapping[str, BlockSpec]) -> list[str]:
+    """The node paths of every action that searches by the patrol route (runstart reads them)."""
+    return _paths(flow, specs, SEARCH_ROUTE, PATROL_ROUTE)
 
 
 def species_on(world: World, map_id: str) -> set[int] | None:
@@ -191,3 +221,32 @@ def check(ctx: Ctx) -> None:
                     )
             if engage_source(a, blk.spec) == MELEE_RING:
                 _melee_ring(ctx, site, a)
+            if search_route(a, blk.spec) == PATROL_ROUTE:
+                _patrol_route(ctx, site, a)
+
+
+def _patrol_route(ctx: Ctx, site: ir.Site, a: ir.ActionStmt) -> None:
+    b = site.block
+    if b is None or ctx.routes is None:
+        return  # needs_targets names a hunt outside a map block; no provider: runstart refuses
+    m = b.map.map
+    what = f"{a.block}'s {SEARCH_ROUTE} {PATROL_ROUTE} walks {m}'s reviewed patrol route"
+    try:
+        info = ctx.routes(m)
+    except RoutesUnreadable as e:
+        ctx.add(
+            "patrol_route_unreadable",
+            "error",
+            2,
+            site.path,
+            f"{what}, and the routes file of {m} is refused by its loader: {e}",
+        )
+        return
+    if info is None:
+        ctx.add(
+            "patrol_route_missing",
+            "error",
+            2,
+            site.path,
+            f"{what}, and {m} has no routes file (config/routes/{m}.yaml): refused",
+        )

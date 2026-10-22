@@ -412,3 +412,27 @@ def test_prove_loads_the_stand_grid_like_the_runner(
     monkeypatch.setattr(cam, "GAT_DIR", tmp_path / "no-gat")
     rc, out = run_cli(monkeypatch, capsys, "prove", "fix_map", "--root", str(tmp_path))
     assert rc == 2 and "no stand grid" in out["error"]
+
+
+# --- the flow linter's provider (scripts/flow_routes.py) ------------------------------------------
+
+
+def test_the_linters_provider_reads_the_file_through_the_loader(tmp_path: Path) -> None:
+    """flow_routes: the FIRST route as poring_flow.patrol.RouteInfo, None without a file, the
+    loader's refusal as RoutesUnreadable (fail closed), the map's shape bounding the waypoints."""
+    import flow_routes
+
+    from poring_flow.patrol import RoutesUnreadable
+
+    get = flow_routes.provider(tmp_path)
+    assert get("fix_map") is None
+    p = write(tmp_path, GOOD)
+    info = get("fix_map")
+    assert info is not None and info.sha256 == hashlib.sha256(p.read_bytes()).hexdigest()
+    assert (info.map, info.route, info.kind, info.routes) == ("fix_map", "ring", "loop", 2)
+    assert info.waypoints == ((10, 10), (49, 10), (49, 49), (10, 49))
+    with pytest.raises(RoutesUnreadable, match="off the map"):
+        flow_routes.provider(tmp_path, {"fix_map": (40, 40)})("fix_map")
+    write(tmp_path, GOOD.replace("kind: loop", "kind: circle"))
+    with pytest.raises(RoutesUnreadable, match="fix_map.yaml: route 'ring': kind 'circle'"):
+        get("fix_map")
