@@ -147,3 +147,13 @@ def test_a_box_on_our_own_crusader_is_not_a_monster() -> None:
     assert dh.self_box(641, 300)  # 3.98 run 1's false trigger: (628,277)-(661,312)
     assert not dh.self_box(606, 325)  # a monster on the west neighbour cell
     assert not dh.self_box(900, 300)
+
+
+def test_a_stalled_target_is_carved_out_of_the_route_grid() -> None:
+    import numpy as np
+
+    m = np.zeros((10, 10), dtype=bool)
+    dh.carve(m, (1, 1), 2)
+    assert m[0:4, 0:4].all() and m.sum() == 16  # clipped at the map's edge
+    dh.carve(m, (8, 8), 2)
+    assert m[6:10, 6:10].all() and m.sum() == 32

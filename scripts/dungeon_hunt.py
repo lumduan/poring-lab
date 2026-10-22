@@ -103,6 +103,8 @@ ARROW_UP = 150  # the lock arrow's search band: 150..10 px above the strike poin
 QUICK_S = 0.25  # guard_tick: an HP read at most this often inside a long action
 MAX_SHOTS = 40  # strike frames kept per run (JPEG, the session dir)
 NOENTRY_RED = 25  # red pixels in the 64 x 64 cursor crop: the client's no-entry ring
+CARVE_R = 2  # Amendment C: a stalled walk target's 5 x 5 leaves the route grid for the run
+STUCK_STALLS = 4  # Amendment C: this many stalls within 60 s at one cell = stuck -> a Fly Wing
 STALL_CLICKS = 2  # walk clicks from the same cell without moving: turn, re-plan, scan ring 1
 BOX_EVERY_S, BOX_FRESH_S = 1.0, 1.5  # the box watcher's rhythm and how old a box may be
 SELF_BOX = (610, 268, 672, 375)  # client px: our own drawn Crusader (a box centred here is us)
@@ -177,6 +179,14 @@ def rest_wanted(strat: Mapping[str, Any], hp: float, sp: float | None) -> bool:
         return False
     return not (strat.get("heal_below") is not None and sp is not None
                 and sp >= strat["heal_sp_min"])  # fmt: skip
+
+
+def carve(mask: Any, c: Sequence[int], r_: int) -> None:
+    """The (2 r_ + 1)^2 square around ``c`` set in ``mask`` (clipped to the map)."""
+    h, w = mask.shape
+    mask[max(0, c[1] - r_) : min(h, c[1] + r_ + 1), max(0, c[0] - r_) : min(w, c[0] + r_ + 1)] = (
+        True
+    )
 
 
 def turn_heading(st: dict[str, Any]) -> None:
@@ -532,6 +542,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         walk_st: dict[str, Any] = {"ang": float(rng.uniform(0, 2 * math.pi))}
         walk_from: Cell | None = None
         stall = 0
+        carved = np.zeros_like(okr, dtype=bool)  # Amendment C: cells the client would not walk to
+        stalls_here: list[float] = []
         noentry_n = 0
         goal_path: list[Cell] | None = None
         fly_at = -1e9
@@ -987,7 +999,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                                 "fallback": not at_spot})  # fmt: skip
                             continue
                         if goal_path is None or goal_path[-1] != spot:
-                            goal_path = hc.astar(okr, here, spot) if spot else None
+                            goal_path = hc.astar(okr & ~carved, here, spot) if spot else None
                             ev(
                                 {
                                     "kind": "rest_route",
@@ -1002,8 +1014,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                         goal_path is None or len(goal_path) < 2
                         or max(abs(goal_path[-1][0] - here[0]),
                                abs(goal_path[-1][1] - here[1])) <= 2):  # fmt: skip
-                    goal = hf.heading_goal(area, here, walk_st, rng)
-                    goal_path = None if goal is None else hc.astar(okr, here, goal)
+                    goal = hf.heading_goal(area & ~carved, here, walk_st, rng)
+                    goal_path = None if goal is None else hc.astar(okr & ~carved, here, goal)
                     ev({"kind": "goal", "to": None if goal is None else list(goal),
                         "len": None if goal_path is None else len(goal_path),
                         "turn": walk_st.get("turn")})  # fmt: skip
@@ -1014,7 +1026,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     if here in goal_path:
                         goal_path = goal_path[goal_path.index(here) :]
                     else:
-                        goal_path = hc.astar(okr, here, goal_path[-1])
+                        goal_path = hc.astar(okr & ~carved, here, goal_path[-1])
                     if goal_path and len(goal_path) >= 2:
 
                         def fits(c: Cell, h: Cell = here) -> bool:
@@ -1029,11 +1041,30 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                             res = hover(u, v)
                             if res["verdict"] == "clear":
                                 stall = stall + 1 if walk_from == here else 0
+                                if walk_from != here:
+                                    stalls_here.clear()
                                 walk_from = here
                                 if stall >= STALL_CLICKS:  # clicks that did not move us
                                     ev({"kind": "stall", "at": list(here), "to": list(c)})
                                     turn_heading(walk_st)
                                     goal_path, stall = None, 0
+                                    # Amendment C (run 1, 12:3x: 57 stalls at 27,75 -- the turn was
+                                    # undone by the next goal's same route): the target the client
+                                    # will not walk to leaves the route grid for the run
+                                    carve(carved, c, CARVE_R)
+                                    stalls_here.append(tick)
+                                    if (
+                                        sum(1 for t_ in stalls_here if tick - t_ <= 60.0)
+                                        >= STUCK_STALLS
+                                    ):
+                                        ev({"kind": "stuck", "at": list(here)})
+                                        press("fly", "stuck")
+                                        fly_at = time.monotonic()
+                                        ev({"kind": "escape", "how": "fly", "why": "stuck"})
+                                        stalls_here.clear()
+                                        loot_list, fight_ref = [], None
+                                        time.sleep(1.0)
+                                        continue
                                     # monsters that only MISS write no log line: look around
                                     found = scan("defend", ring(1), "sword")
                                     if found is not None:
