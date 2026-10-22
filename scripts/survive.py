@@ -45,6 +45,8 @@ MAX_HP = 5260  # the Crusader's verified MaxHP (crusader-orcsdun01.md 2b): HP/s 
 T_POT = 0.60  # S2: HP below this share -> F1
 T_FLY = 0.25  # S3: HP below this share -> F2
 RATE_FLY = 200.0  # S3: HP/s of fall over RATE_WIN_S -> F2 (~ a 4-5-orc pack)
+RATE_FLY_BELOW = 0.60  # S3's rate path only under this HP share (Batt 2026-10-22, decision 7:
+# "S3 rate trigger only when HP < 60 %"; 3.96e's T-S3 escaped on the rate at 72-91 % HP)
 RATE_ENDURE = 100.0  # S5: HP/s of fall -> F4
 RATE_WIN_S = 2.0
 POT_GAP_S = 0.7  # S2: no second F1 within this unless the bar rose since the last press
@@ -152,7 +154,7 @@ def decide(st: State, now: float, frac: float, rules: set[str],
     if ("S3" in rules or "S3h" in rules) and now - st.fly >= FLY_GAP_S:
         why = ("hp" if frac < T_FLY else
                "rate" if "S3" in rules and rate is not None and rate > RATE_FLY
-               else None)  # fmt: skip
+               and frac < RATE_FLY_BELOW else None)  # fmt: skip
         if why:
             st.fly = now
             return [("fly", f"{why}: frac {frac:.3f} rate {rate}")]

@@ -31,10 +31,13 @@ def test_the_escape_fires_on_low_hp_or_a_fast_fall_and_wins_over_a_potion() -> N
     st = sv.State()
     assert [w for w, _ in sv.decide(st, 0.0, 0.20, {"S2", "S3"})] == ["fly"]  # below 25 %
     st = sv.State()
-    fired = [(i, sv.decide(st, i * 0.5, f, {"S3"})) for i, f in enumerate((0.95, 0.90, 0.85))]
+    fired = [(i, sv.decide(st, i * 0.5, f, {"S3"})) for i, f in enumerate((0.69, 0.64, 0.59))]
     assert [x for _i, x in fired[:2]] == [[], []]  # the rate needs half the 2-s window first
-    assert [w for w, _ in fired[2][1]] == ["fly"]  # 0.10 / 1.0 s = 526 HP/s at 5260 HP
-    assert sv.decide(st, 2.5, 0.70, {"S3"}) == []  # at most once per 3 s
+    assert [w for w, _ in fired[2][1]] == ["fly"]  # 0.10 / 1.0 s = 526 HP/s at 5260 HP, < 60 %
+    assert sv.decide(st, 2.5, 0.40, {"S3"}) == []  # at most once per 3 s
+    st = sv.State()  # Batt 2026-10-22 (decision 7): the same fall ABOVE 60 % is no escape
+    fired = [sv.decide(st, i * 0.5, f, {"S3"}) for i, f in enumerate((0.95, 0.90, 0.85))]
+    assert fired == [[], [], []]
 
 
 def test_auto_guard_is_a_toggle_cast_only_after_the_icon_is_absent_1_s() -> None:
@@ -109,6 +112,6 @@ def test_s3h_is_the_hp_path_alone() -> None:
     assert sv.decide(st, 1.0, 0.30, sv.SETS["T-S3h"]) == []  # 3500 HP/s, but HP above 25 %
     st2 = sv.State()
     sv.decide(st2, 0.0, 1.0, sv.SETS["T-S3"])
-    assert sv.decide(st2, 1.0, 0.30, sv.SETS["T-S3"])[0][0] == "fly"  # the rate path, unchanged
+    assert sv.decide(st2, 1.0, 0.30, sv.SETS["T-S3"])[0][0] == "fly"  # the rate path (< 60 %)
     got = sv.decide(st, 1.4, 0.24, sv.SETS["T-S3h"])
     assert got and got[0][0] == "fly" and got[0][1].startswith("hp")
