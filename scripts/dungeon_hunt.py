@@ -947,6 +947,10 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                         r.to_png(cs["frame"], out / "stop-ui.png")
                         reason = f"hard_bar: unknown UI state {cs['decision']}"
                         break
+                # Amendment E: a fight, a loot step or a rest is activity, never idle (run 3: a
+                # fight in place + a 25-s loot step read as 45 s of idle and cost a Fly Wing)
+                if mode != "search":
+                    idle_since = tick
                 # --- FIGHT: locked, or scan for the attacker
                 if mode == "fight":
                     if lock is not None:
@@ -985,6 +989,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 # --- AFTER a fight: loot, then rest or search
                 if mode == "after" and (loot_list or fight_ref is not None):
                     got_ = loot_step(loot_list, fight_ref)
+                    idle_since = time.monotonic()
                     if got_ == "fight":
                         continue
                     loot_list, fight_ref = [], None
