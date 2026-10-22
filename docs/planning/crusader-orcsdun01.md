@@ -400,7 +400,7 @@ mr2). His numbers are the orcsdun01 TARGETS (Batt's overnight brief, item A).
 | | Batt (15 min) | bot defend (4 runs) | bot MR-B (2 runs) |
 |---|---|---|---|
 | kills / h | **472** | 84-92 | 90.6-124.5 |
-| gross zeny / h | **20,520** | 2,877-5,409 net-ish (3.98) | 4,507-6,235 gross |
+| gross zeny / h (net) | **20,520** (20,520) | 2,877-5,409 (-6,049-5,409) | 4,507-6,325 (2,368-6,235) |
 | potions / Fly Wings / Heals | **0 / 0 / 5** (20 / h) | 0-5 / 0-2 / 0-9 | 0-1 / 1-4 / 0 |
 | HP min | **74 %** | 29-59 % | 26-85 % |
 | time per kill (s) | **7.6** = 5.4 fight + 0.7 walk + 1.6 stand | 41.0 = 8.8 + 5.9 + 26.4 | 33.5 = 7.7 + 2.4 + 23.4 |
