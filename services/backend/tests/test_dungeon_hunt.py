@@ -275,3 +275,18 @@ def test_overweight_is_the_red_weight_line() -> None:
     frame2 = np.full((720, 1280, 3), 255, np.uint8)
     frame2[200:300, 200:300] = (20, 20, 230)  # red elsewhere (a monster): not the weight line
     assert not dh.overweight_red(frame2)
+
+
+def test_loot_v2_hovers_changed_cells_first_then_the_list_and_skips_known_empty_ones() -> None:
+    here = (10, 10)
+    changed = [(20.0, (14, 10)), (40.0, (12, 10))]
+    plan = {(11, 10), (12, 10), (13, 13)}
+    order = dh.loot_order(changed, plan, here, {}, [])
+    assert order[:2] == [((12, 10), "changed"), ((14, 10), "changed")]  # nearest changed first
+    assert [c for c, w in order if w == "list"] == [(11, 10), (13, 13)]  # then the list, once each
+    # hovered empty at t 5 -> skipped, unless a kill within 2 cells came AFTER that hover
+    assert (11, 10) not in [c for c, _w in dh.loot_order(changed, plan, here, {(11, 10): 5.0}, [])]
+    again = dh.loot_order(changed, plan, here, {(11, 10): 5.0}, [((12, 11), 6.0)])
+    assert (11, 10) in [c for c, _w in again]
+    far = dh.loot_order(changed, plan, here, {(11, 10): 5.0}, [((20, 20), 6.0)])
+    assert (11, 10) not in [c for c, _w in far]
