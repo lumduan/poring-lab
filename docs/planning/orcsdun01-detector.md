@@ -862,8 +862,12 @@ under T1's 5 %. T2 is the open question: round 2's Orc Skeleton failed at 86.7 %
 ### 3g. RESULT of fix 2 (3f) on col1 and on Batt's demo: T1 PASSES (C1 2.7 %); T2 waits for the blind round 3
 
 **The order of events** (times from `date` and the tools' own stamps, 2026-10-22 ICT):
-- 3f was pre-registered at **19:33:52** (8b7d629). Only col3's archived rows had been read before
-  it, for the 2b estimate.
+- 3f was pre-registered at **19:33:52** (8b7d629). Read before it:
+  - col3's archived rows, for the 2b estimate;
+  - the file lists and manifests of today's sessions;
+  - the demo's frame 1000, viewed by eye for its UI layout.
+
+  Nothing was labelled or checked on col1 or on today's sessions before that commit.
 - Fix 2 was built at 19:41:51 (11434a8), and the check ran at 19:42-19:43 at that commit.
 - col2 was not read.
 
