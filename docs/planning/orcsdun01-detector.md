@@ -1007,9 +1007,11 @@ through the adapter (a625def). Under 3f it is NOT added: its own C1 is 14.8 %.**
 
 - **Agreement E-F:** q1 225 / 225, q2 223 / 225, q3 224 / 225; good with the right species for
   both: 216 / 225 (round 2: 211).
-- **What failed:** the Familiar's "off" boxes cut a WING (a raised wing tip above or beside the box:
-  E 056 / 108 / 109, F 108), as round 2's labellers said of the bats; two were under a UI window
-  (005, 113). One crop is 3.3 points at n = 30: E's 26 / 30 against the 27 / 30 the bar needs.
+- **What failed (crops checked against the key):** the Familiar's not-good boxes are E 032 / 056 /
+  108 / 109 and F 032 / 108. Three cut a raised WING tip (056, 108, 109), as round 2's labellers
+  said of the bats; 032 is a Familiar STACKED on an Orc Skeleton (the box held the skeleton's
+  helmet; 3e's S3 case). One crop is 3.3 points at n = 30: E's 26 / 30 against the 27 / 30 the bar
+  needs.
 - **THE TRAINING TIER (3f): T1 PASS (C1 2.69 %), T2 FAIL -> NOTHING of orcsdun01 trains tonight,
   and the result goes to Batt** ("every species" is read literally, 3f). The GPU stays idle.
 - **For Batt (new decisions, not taken here):** (1) a wing-reach box for the bats (3e's S2 idea,
