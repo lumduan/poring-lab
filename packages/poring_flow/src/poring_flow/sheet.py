@@ -36,7 +36,7 @@ class Mob(BaseModel):
     chases: bool = False
     immobile: bool = False
     boss: bool = False
-    turns_into: list[int] = []  # metamorphosis (classes.json)
+    turns_into: list[int] = []  # metamorphosis (NPC_METAMORPHOSIS; kbsheet: mob_skills.json)
     look_alike: list[int] = []  # species the detector may confuse with this one
     # training-cost.md section 4's class; an owner / agent judgement, not derived
     difficulty: Literal["similar", "static", "normal", "boss_multi_form"] = "normal"
