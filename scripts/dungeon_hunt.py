@@ -292,14 +292,26 @@ def clear_etc(agent: Any, screen: Any, *, why: str, max_drops: int = 40) -> dict
         x, y, w, h = gs.PROMPT_OK_BOX
         return float(np.abs(gs.to_gray(f)[y : y + h, x : x + w] - ok_ref).mean()) <= gs.PROMPT_MATCH
 
+    def inv_open() -> bool:
+        return "inventory" in ui_gate.windows_at_home(
+            frame(), ui_gate._registry(ui_gate._require_ready())
+        )
+
+    # the chord is a TOGGLE (11:5x: a run of this opened on an open inventory, CLOSED it, and its
+    # tab click and drag went to the field): start clear, open, and READ it open before a click
+    ui_gate.ensure_clear(agent, screen, why=f"{why}:etc-start")
     r.activate_client(agent, screen)
     agent.chord(*ui_gate.window_keys("inventory"))
     time.sleep(1.0)
     try:
+        if not inv_open():
+            raise r.Stop(f"clear_etc ({why}): the inventory did not read open after its chord")
         gs._tab(agent, screen, "etc")
         fails = 0
         n = gs.INV_COLS * gs.INV_ROWS
         while out["dropped"] < max_drops:
+            if not inv_open():
+                raise r.Stop(f"clear_etc ({why}): the inventory closed during the drops")
             f = frame()
             crops = [gs.icon_crop(f, c % gs.INV_COLS, c // gs.INV_COLS) for c in range(n)]
             i = first_item([gs.classify_icon(c, refs)[0] for c in crops])
