@@ -14943,6 +14943,83 @@ MR-B (runs 1 + 2, 80.4 min) vs defend-B (3.98 r3 + r5, 85.0 min), sustain B, the
   and 31 stopped (9.5 %); 10 attack requests were sent inside hover windows.
 - Two runs per side, with density swings run to run: suggestive, NOT conclusive.
 
+### 4.00 dungeon@4: Batt's PATROL LOOP + his Heal rhythm vs the heading search, in PAIRED runs (pre-registered 2026-10-22, the commit time of 4.00's first commit, BEFORE its pilot and its runs; Batt's overnight brief 2026-10-22 ~19:3x, item B: "pre-register 'patrol loop + Batt's heal rhythm' (B+Heal, White Plant engaged) and run it in paired runs vs the current search, as many as fit"; his note ~19:1x: "PATROL LOOP, not a heading search ... walk the loop continuously in the same direction; a fight or a loot step interrupts it; afterwards resume at the NEXT waypoint AHEAD on the loop (never turn back to a passed one)")
+
+**Where it comes from: Batt's own 15-min demo** (`20261022T184536-demo-human-demo-orcsdun01-crusader`,
+his first input 18:45:55; `dungeon_judge.py row SID --live 900` and `dungeon_style.py row SID --live 900`):
+- 118 kills (472 / h), 0 deaths, HP min 73.7 %, 0 potions, 0 Fly Wings, 5 Heals (all confirmed),
+  0 s sitting, loot 68.2 % gross / 95.7 % net (looters 40, re-dropped 37), gross 20,520 z / h.
+- HOW: 33 fights (22 / 10 min) of 3.6 kills each; the pack 2 at once (median; p90 5); HP did not
+  drop in the median fight; every fight began at 100 %; kill time per orc = the bot's (Orc Zombie
+  5.0 s): he does NOT kill faster. He moved on 2.4 s after a fight (median) with one pickup; 97 %
+  of his targets were the NEAREST monster (77 % already hitting him), 1.08 attack clicks per kill;
+  he pulled ONE monster along in 15 min; 83 of 88 pickups within 10 s after a fight; 5 of 5 White
+  Plants seen were killed. He met 67 monsters / 10 min (the bot: 8.5-25.5).
+- Time per kill: his 7.6 s = 5.4 fighting + 0.7 walking + 1.6 standing; the bot's (3.98 defend,
+  4 full runs) 41.0 s = 8.8 + 5.9 + **26.4 standing** (its loot steps alone ~10.7 s / kill, the
+  scans ~3.5 s).
+- His Heals (packets): HP 92.4 / 74.8 / 85.8 / 97.9 / 92.4 % with SP 89-100 %, 4 of 5 with no hit
+  on him in the 3 s before: he heals BETWEEN fights, as soon as HP is down, while SP is near full.
+- His circuit: `config/routes/orcsdun01.yaml` (`batt-loop`, delegated review; 25 waypoints,
+  clockwise in map terms, 380 cells, passing both White Plant spawn areas). His "I always turn
+  LEFT": coming down from the entrance, the LEFT turn at the junction 66,124 is east, which takes
+  him clockwise around the central block.
+
+**The two arms (everything else identical; `scripts/dungeon_hunt.py`, dungeon@4, code e8273db + the
+`map_routes` loader merged before the pilot):**
+- **P (patrol):** `--search patrol` -- walk `batt-loop`'s waypoints in their listed order; join at
+  the nearest waypoint ahead (`map_routes.entry_index`) at the start and after a Fly Wing; a fight,
+  a loot step or a rest interrupts the loop, and the walk resumes at the NEXT waypoint AHEAD
+  (`map_routes.resume_index`: never a passed one); a waypoint counts as reached within 2 cells; one
+  that does not route (carved) is skipped forward.
+- **C (control, "the current search"):** `--search heading` -- 3.98's heading walk.
+- **The BASE both share (dungeon@4; Batt's decisions on the 19:00 report):**
+  - sustain **H = B + Heal** (decision 1, and his demo's rhythm): in a fight Heal below 50 % HP
+    while SP pays; between fights (no hit for 2 s) Heal below 93 % with SP >= 85 %; potions only
+    in an emergency (below 30 %); the Fly Wing escape as B (below 20 %, or > 200 HP/s under 40 %);
+  - **rest** after a fight when HP < 80 % or SP < 30 % (decision 1b), sitting until HP >= 99 % and
+    SP >= 40 % (<= 300 s); then back INTO the search area (the heading arm walks to the nearest
+    area cell first) or onto the route (the patrol arm re-joins it);
+  - decision 5's fixes: the strike's burst ENDS on our first damage line in the Battle Log, and a
+    walk target the cursor reads NO-ENTRY is carved off the route grid at once;
+  - **White Plants** (Batt: killed on purpose for the White Herb): passing within 7 cells of a White
+    Plant spawn area (83,50 +-5; 58,67 +-10; rAthena's spawn lines), the cursor sweeps its nearest
+    cells on a 2-cell lattice (<= 16 hovers; each area at most every 120 s); a SWORD there is struck
+    (`engage` by `plant`). v1 sees plants 0-2 %, and the sprite finder (`plant_finder.py`) did NOT
+    separate them on Batt's demo (true cells median NCC 0.41 vs empty 0.36): not used;
+  - unchanged from 3.98: defend-scan engagement (Battle Log / HP drop / v1 box near / walk / loot /
+    stall SWORD reads; arm C strikes), the loot list + sweep (decision 4's loot change is its own
+    version later), Auto Guard (S4b2), the zones, the idle / stall / Fly Wing fixes, FrameGuard.
+
+**Unscored pilot first** (P, ~5 min): the route joins, waypoints are reached and counted, a fight
+interrupts and the walk resumes AHEAD, the plant sweep runs. A bug found = an amendment before run 1
+(said so), never a silent change.
+
+**Runs:** 40 min each, the Crusader on orcsdun01, immunity OFF, a judged screenshot before each;
+PAIRS in alternation P, C, P, C, ... (P first in odd pairs, C first in even pairs, so the order
+within a pair alternates); seeds 22201, 22202, ...; as many pairs as fit, the last run ending its
+time box by ~06:30 (the end state by 07:00). A pair is complete only with both runs full; a partial
+run is reported apart.
+
+**Measures** (per run and pooled per arm; `dungeon_judge.py` + `dungeon_style.py`, packets; Batt's
+demo beside them as the TARGET): kills / h; walking share; monsters met / 10 min
+(`flow_judge.sight_windowed`); reversals / min; potions / h; Heals / h; net zeny / h (gross, cost,
+cost ratio, Sharpe-like); HP min; deaths / h; rests (count, sitting %); loot completeness (gross,
+net); White Plants (seen / killed) and White Herbs (fell / picked / value); the time per kill split
+(fighting / walking / standing outside fights); pack median; pulled / 10 min; the patrol's laps,
+waypoints reached, resumes and skips.
+
+**The targets (Batt's demo, 15 min):** 472 kills / h, 20,520 z / h gross, 0 potions, 5 Heals in 15
+min (20 / h), HP min 74 %, 7.6 s per kill, 67 monsters met / 10 min.
+
+**Comparison rule (descriptive; no adoption rule tonight):** per complete pair, P - C on kills / h
+and on monsters met / 10 min; reported per pair with the pair count and the pooled values. The
+expectation, stated before any run: P meets more monsters and kills more per hour than C in most
+pairs. Both arms are also set against Batt's targets, the gaps ranked by seconds lost per kill.
+
+**Hard bars (unchanged):** a map change, an unknown UI state, an NPC contact (orcsdun01 has none).
+A DEATH is a result: stop, record, restore (@alive, @heal), continue with the next run.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
