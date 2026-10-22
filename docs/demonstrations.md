@@ -15084,6 +15084,16 @@ fighting / walking / standing outside fights):
     87 %, net 5,811 z / h, met 27 / 10 min, walking 7.4 %, 29.3 s / kill (8.1 / 2.0 / 19.2), rest 0,
     landing 56 %, hard bars 0.
   - P - C: **+138.4 kills / h**, +21 met / 10 min.
+- **Pair 2 (C first):**
+  - **ci2** (C, seed 22203, `20261022T223111-demo-dungeon-H-ci2`, 22:31-23:11, time box, 40.1 min):
+    128 kills (**191.4 / h**), deaths 0, HP min 28.0 %, 3 potions (HP 27-29 %), 2 Fly Wings (rate
+    escapes at HP 28 % / 32 %, 204 / 543 HP/s), 28 Heals (28 confirmed), loot 60 / 79 %, net 2,816 z
+    / h, met 41 / 10 min, walking 7.7 %, 18.8 s / kill (9.3 / 1.1 / 8.4), landing 74 %, hard bars 0.
+  - **pi2** (P, seed 22204, `20261022T231226-demo-dungeon-patrol-H-pi2`, 23:12-23:54, time box, 40.1
+    min): 153 kills (**228.9 / h**), deaths 0, HP min 42.7 %, 0 potions / Fly Wings, 22 Heals (22
+    confirmed), loot 52 / 79 %, net 8,903 z / h, met 41.5 / 10 min, walking 6.6 %, 15.7 s / kill
+    (8.0 / 0.8 / 7.0), landing 83 %, hard bars 0.
+  - P - C: **+37.5 kills / h**, +0.5 met / 10 min.
 
 ### 4.01 dungeon@4 + LOOT v2: the changed cells first, a time budget per fight, no re-hover of empty cells, vs dungeon@4's loot (pre-registered 2026-10-22, the commit time of 4.01's first commit, BEFORE its code is merged or run; Batt's decision 4 on the 19:00 report: "Loot: hover the CHANGED cells first, the plain list cells after; a time budget per fight; skip cells already hovered empty"; his overnight brief: "Then, if time remains, the loot change (item 4) as its own version")
 
