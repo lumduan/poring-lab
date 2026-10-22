@@ -283,3 +283,18 @@ def test_amendment_j_a_jump_is_more_than_the_walk_could_cover() -> None:
     assert dh.is_jump((95, 57), (74, 54), 0.2)  # the same 21 cells in 0.2 s: a jump
     assert not dh.is_jump((95, 57), (80, 57), 0.1)  # 15 cells: under JUMP_CELLS, never a jump
     assert dh.is_jump((30, 160), (180, 20), 6.0)  # across the map in 6 s: a map change
+
+
+def test_loot_v2_hovers_changed_cells_first_then_the_list_and_skips_known_empty_ones() -> None:
+    here = (10, 10)
+    changed = [(20.0, (14, 10)), (40.0, (12, 10))]
+    plan = {(11, 10), (12, 10), (13, 13)}
+    order = dh.loot_order(changed, plan, here, {}, [])
+    assert order[:2] == [((12, 10), "changed"), ((14, 10), "changed")]  # nearest changed first
+    assert [c for c, w in order if w == "list"] == [(11, 10), (13, 13)]  # then the list, once each
+    # hovered empty at t 5 -> skipped, unless a kill within 2 cells came AFTER that hover
+    assert (11, 10) not in [c for c, _w in dh.loot_order(changed, plan, here, {(11, 10): 5.0}, [])]
+    again = dh.loot_order(changed, plan, here, {(11, 10): 5.0}, [((12, 11), 6.0)])
+    assert (11, 10) in [c for c, _w in again]
+    far = dh.loot_order(changed, plan, here, {(11, 10): 5.0}, [((20, 20), 6.0)])
+    assert (11, 10) not in [c for c, _w in far]

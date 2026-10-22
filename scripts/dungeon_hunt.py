@@ -115,6 +115,11 @@ LOOT_MAX_HOVERS, LOOT_MAX_PICKS, LOOT_MAX_S = 30, 10, 25.0  # one loot step's bo
 SWEEP_X, SWEEP_Y = 8, 6  # the sweep's cells: those in view around us (camera_rdp: 34 / 24 px)
 SWEEP_DIFF = 15.0  # a cell's 24 x 20 grey patch changed by this mean |diff| since the fight began
 SWEEP_MAX = 10  # at most this many changed cells hovered per sweep
+# loot v2 (Batt 2026-10-22, decision 4; docs/demonstrations.md 4.01): the CHANGED cells first, the
+# plain list cells after, a time budget per FIGHT (the loot steps after one fight share it), and a
+# cell hovered empty is skipped unless a kill came within 2 cells of it after that hover
+LOOT_FIGHT_BUDGET_S = 10.0
+LOOT_V2_MAX_HOVERS = 40
 PICKUP_MIN = 0.90  # cursor_sword: a drawn PICKUP hand
 WALK_AHEAD = 7  # the walk click's target: this many path cells ahead (in view)
 WALK_EVERY_S = 1.2
@@ -285,6 +290,33 @@ def is_jump(here: Cell, p_: Cell, since_s: float) -> bool:
     read (150 ms a cell + WALK_SLACK). A map change teleports at once, so it still trips."""
     d = max(abs(p_[0] - here[0]), abs(p_[1] - here[1]))
     return d > max(JUMP_CELLS, since_s / WALK_S_PER_CELL + WALK_SLACK)
+
+
+def loot_order(changed: Sequence[tuple[float, Cell]], plan: set[Cell], here: Cell,
+               empty: Mapping[Cell, float], kills: Sequence[tuple[Cell, float]]
+               ) -> list[tuple[Cell, str]]:  # fmt: skip
+    """PURE (loot v2, decision 4): the cells to hover, in order -- the CHANGED cells first (where
+    items fell; nearest first, then the larger change), then the plain list cells (nearest first).
+    A cell hovered EMPTY is skipped unless a kill within 2 cells of it came after that hover (a new
+    drop can land there)."""
+
+    def stale_empty(c: Cell) -> bool:
+        t_e = empty.get(c)
+        if t_e is None:
+            return False
+        return not any(cheb2(c, g) <= 2 and t_k > t_e for g, t_k in kills)
+
+    out: list[tuple[Cell, str]] = []
+    seen: set[Cell] = set()
+    for _d, c in sorted(changed, key=lambda dc: (cheb2(dc[1], here), -dc[0], dc[1])):
+        if c not in seen and not stale_empty(c):
+            out.append((c, "changed"))
+            seen.add(c)
+    for c in sorted(plan, key=lambda c: (cheb2(c, here), c)):
+        if c not in seen and not stale_empty(c):
+            out.append((c, "list"))
+            seen.add(c)
+    return out
 
 
 def route(base: Any, carved: Any, here: Cell, goal: Cell) -> list[Cell] | None:
@@ -713,7 +745,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             raise r.Stop("dungeon@4: the weight line reads RED (>= 50 %) after the setup")
         ev({"kind": "run_start", "strategy": a.strategy, "seed": a.seed, "engage": a.engage,
             "version": VERSION if a.engage == "defend_scan" else MR_VERSION,
-            "search": a.search, "route": None if rt is None else rt.id,
+            "search": a.search, "route": None if rt is None else rt.id, "loot": a.loot,
             "minutes": a.minutes, "map": MAP, "start": list(start), "inv_db": inv,
             "setup": setup, "weight": w_, "weight_before": w0, "cleared": cleared,
             "potions_to": p_to, "potions_drunk": drunk,
@@ -946,7 +978,117 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 return None
             return a_[y0_ : y0_ + 20, x0_ : x0_ + 24]
 
+        loot_v2 = a.loot == "v2"
+        loot_used: dict[float, float] = {}  # loot v2: the fight (its ref's time) -> seconds used
+        empty_cells: dict[Cell, float] = {}  # loot v2: cells hovered empty -> when
+
+        def changed_cells(ref: dict[str, Any] | None) -> list[tuple[float, Cell]]:
+            """Every cell in view whose image changed since the fight began (the sweep's rule)."""
+            if ref is None or here is None:
+                return []
+            img_now = frame()
+            out_c: list[tuple[float, Cell]] = []
+            h0 = ref["here"]
+            for dx in range(-SWEEP_X, SWEEP_X + 1):
+                for dy in range(-SWEEP_Y, SWEEP_Y + 1):
+                    c = (here[0] + dx, here[1] + dy)
+                    if (dx, dy) == (0, 0) or not (
+                        0 <= c[0] < ok.shape[1] and 0 <= c[1] < ok.shape[0]
+                    ):
+                        continue
+                    if not ok[c[1], c[0]] or mz.in_no_enter(zones, c):
+                        continue
+                    u, v = project(here, [(dx, dy)])[0]
+                    u0, v0 = project(h0, [(c[0] - h0[0], c[1] - h0[1])])[0]
+                    if not in_view(u, v):
+                        continue
+                    pa, pb = patch(ref["img"], u0, v0), patch(img_now, u, v)
+                    if pa is None or pb is None:
+                        continue
+                    diff = float(np.abs(pa - pb).mean())
+                    if diff >= SWEEP_DIFF:
+                        out_c.append((diff, c))
+            return out_c
+
         def loot_step(lst: list[tuple[Cell, float]], ref: dict[str, Any] | None) -> str:
+            if loot_v2:
+                return loot_step_v2(lst, ref)
+            return loot_step_v1(lst, ref)
+
+        def loot_step_v2(lst: list[tuple[Cell, float]], ref: dict[str, Any] | None) -> str:
+            """loot v2 (Batt decision 4): the changed cells first, then the plain list cells; one
+            time budget per FIGHT (LOOT_FIGHT_BUDGET_S, shared by the steps after one fight); a cell
+            hovered empty is skipped unless a kill came near it after that hover."""
+            nonlocal here, lock, mode
+            t_s = time.monotonic()
+            key = ref["t"] if ref is not None else t_s
+            left = LOOT_FIGHT_BUDGET_S - loot_used.get(key, 0.0)
+            out_: dict[str, Any] = {"kind": "loot_step", "loot": "v2", "list_kills": len(lst),
+                                    "budget_left_s": round(left, 2)}  # fmt: skip
+            if here is None or left <= 0:
+                ev({**out_, "end": "no_position" if here is None else "budget",
+                    "ms": round((time.monotonic() - t_s) * 1e3)})  # fmt: skip
+                return "none"
+            plan = {(g[0] + dx, g[1] + dy) for g, t_ in lst if t_s - t_ <= 55.0
+                    for dx in range(-2, 3) for dy in range(-2, 3)}  # fmt: skip
+            plan = {c for c in plan if 0 <= c[0] < ok.shape[1] and 0 <= c[1] < ok.shape[0]
+                    and ok[c[1], c[0]] and not mz.in_no_enter(zones, c)}  # fmt: skip
+            changed = changed_cells(ref)
+            order = loot_order(changed, plan, here, empty_cells, lst)
+            out_.update(
+                planned=len(plan),
+                changed=len(changed),
+                ordered=len(order),
+                skipped_empty=len(plan | {c for _d, c in changed}) - len(order),
+            )
+            picks, hovered, n_changed = 0, 0, 0
+            end = "done"
+            for c, why in order:
+                if picks >= LOOT_MAX_PICKS or hovered >= LOOT_V2_MAX_HOVERS:
+                    end = "bound"
+                    break
+                if time.monotonic() - t_s > left:
+                    end = "budget"
+                    break
+                if time.monotonic() - last_taken < 1.0:
+                    end = "hit"
+                    break
+                assert here is not None
+                rel = (c[0] - here[0], c[1] - here[1])
+                u, v = project(here, [rel])[0]
+                if not in_view(u, v):
+                    continue
+                hovered += 1
+                n_changed += why == "changed"
+                res = hover(u, v)
+                if guard_tick():
+                    end = "escape"
+                    break
+                if res["verdict"] == "sword":
+                    ev({"kind": "engage", "by": "loot_sword", "name": None})
+                    strike(u, v - BODY_UP, rel, "loot_sword")
+                    lock = {"t": time.monotonic(), "rel": rel, "cell": list(c)}
+                    mode = "fight"
+                    end = "fight"
+                    break
+                if pickup_seen(res["rec"]):
+                    d_ = max(abs(rel[0]), abs(rel[1]))
+                    click_at(u, v, "loot")
+                    ev({"kind": "loot_click", "u": round(u, 1), "v": round(v, 1),
+                        "rel": list(rel), "cell": list(c), "why": why})  # fmt: skip
+                    picks += 1
+                    time.sleep(0.45 + 0.2 * d_)
+                    here = read_here() or c
+                    empty_cells.pop(c, None)
+                else:
+                    empty_cells[c] = time.monotonic()
+            used = time.monotonic() - t_s
+            loot_used[key] = loot_used.get(key, 0.0) + used
+            ev({**out_, "hovered": hovered, "hovered_changed": n_changed, "picks": picks,
+                "end": end, "ms": round(used * 1e3)})  # fmt: skip
+            return "fight" if end == "fight" else "done"
+
+        def loot_step_v1(lst: list[tuple[Cell, float]], ref: dict[str, Any] | None) -> str:
             """Batt 2026-10-22 11:5x (his 11:44 clip: an item left in a mob fight). After the
             fight: (1) the LOOT LIST -- the union of the 5 x 5 around our cell at EVERY kill of
             the fight (items do not move; <= 55 s old), walkable and outside the zones, nearest
@@ -1309,6 +1451,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     if got_ == "fight":
                         continue
                     loot_list, fight_ref = [], None
+                    empty_cells.clear()  # loot v2: a new fight series starts clean
                 if sitting and overweight:  # Amendment I: sitting regenerates nothing
                     press("stand", "overweight")
                     sitting = False
@@ -1566,7 +1709,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     except Exception as exc:  # noqa: BLE001 -- the run is still recorded; the judge says so
         print(f"packets not written: {exc!r}")
     man = {"sid": sid, "version": VERSION if a.engage == "defend_scan" else MR_VERSION,
-           "engage": a.engage, "search": a.search, "strategy": a.strategy, "seed": a.seed,
+           "engage": a.engage, "search": a.search, "loot": a.loot, "strategy": a.strategy,
+           "seed": a.seed,
            "minutes": a.minutes, "reason": reason, "counts": dict(counts), "t0_ns": t0,
            "t1_ns": t1, "packets": n_pk, "params": strat}  # fmt: skip
     (out / "manifest.json").write_text(json.dumps(man, indent=1))
@@ -1589,6 +1733,13 @@ def main() -> int:
         choices=["defend_scan", "melee_ring"],
         default="defend_scan",
         help="the engagement source (Batt 13:4x): defend_scan (3.98) or melee_ring",
+    )
+    t.add_argument(
+        "--loot",
+        choices=["v1", "v2"],
+        default="v1",
+        help="the loot step: v1 (3.98's list + sweep) or v2 (Batt decision 4: changed cells first, "
+        "a budget per fight, no re-hover of empty cells; 4.01)",
     )
     t.add_argument(
         "--search",
