@@ -14720,6 +14720,14 @@ Reported, not deciding:
   B C A B C A (seeds 22003-22008), the same rotation pattern, starting with B (the strategy whose
   run failed). This replaces the registered B C B C A C A for the remaining runs.
 
+**Amendment E (2026-10-22 13:2x, run 3's first attempt stopped at 3.5 min; the parent):**
+- Amendment D's idle watchdog fired falsely at 13:18 (run 3 attempt 1, B, seed 22003): its check
+  sat after the fight block (which `continue`s), so a fight in place plus a 25-s loot step (9
+  pickups) read as 45 s of idle and pressed a Fly Wing. Left in, it would inflate Fly Wings/h and
+  the cost in every run.
+- Fix (code 8df938d): any non-search mode, and every loot step, resets the idle clock.
+- The attempt is NOT scored (kept as `...-B-r3-attempt1-stopped`); run 3 restarts with seed 22003.
+
 **Run log:** (filled as the runs end)
 
 ## 4. Labels from verified outcomes
