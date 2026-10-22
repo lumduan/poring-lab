@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [../planning/orcsdun01-detector.md, v1-vs-v0png.md, ../planning/labels-v2-plan.md, ../operations/vision-long-lived.md]
-next_action: "Collect col1-col3, pass the camera check and the blind label check, build the combined cache, then train (train-day.sh, WORKER=1, MID_CKPT=1) and score ONCE as written here."
+next_action: "Pass the plan's 3f TRAINING tier (C1 pooled on col1 <= 5 %, every orcsdun01 species passing blind round 3), build the combined cache, then train (train-day.sh, WORKER=1, MID_CKPT=1) and score ONCE as written here, with Amendment A's P1."
 ---
 
 # v2orc vs v1: per-species classes + orcsdun01, without forgetting prt_fild08 (pre-registered 2026-10-21)
@@ -18,6 +18,22 @@ not get worse than v1 (and Creamy recall reported); latency per frame on GPU vs 
 
 This file is written and committed BEFORE any v2orc model exists. It is scored once, as written.
 
+## Amendment A (2026-10-22, before any training; the clock time is the commit time of `../planning/orcsdun01-detector.md` 3f's first commit)
+
+Batt (2026-10-22 ~19:4x): "two tiers: TRAINING at C1 <= 5 % with every species passing the blind
+check; EVALUATION only on crops both blind labellers judged good (col2 stays TEST)". The plan's
+3f makes this operational. Two lines below change; nothing else does.
+- **The labels row:** orcsdun01 labels train only if 3f's TRAINING tier passes:
+  - C1 pooled on col1 <= 5 %;
+  - every orcsdun01 species passes the blind check, round 3.
+  - It replaces "used ONLY if the camera check and the blind label check pass for that species".
+  - The orcsdun01 TRAIN data: col1, col3 and the 2026-10-22 sessions 3f admits. col2 stays TEST.
+- **P1:** counted only on col2 crops that BOTH blind labellers of a post-training evaluation pack
+  judged good with the right species (3f's EVALUATION tier: seed 3, up to 60 crops per species,
+  recall and precision as 3f defines them).
+  - The bar is unchanged (>= 0.80 each, for a species with >= 50 evaluated crops).
+  - It replaces "The labels are the same packet labels the training used".
+
 ## The model and the data (fixed now)
 
 | | v1 (`v1png-20261008`, the live CPU detector) | v2orc (to train) |
@@ -25,7 +41,7 @@ This file is written and committed BEFORE any v2orc model exists. It is scored o
 | classes | player, monster, npc | the plan's section 4: player 0, npc 1, warp 2, then one class per monster species: 1002 1063 1008 1113 1018 1005 1042 1082 1084 1111 1152 1153 (`config/detector/classes-v2orc.json`) |
 | data | v1's sessions, v1 labels | v1's train / val sessions RE-LABELLED per species (the same frames, `--every` and split) + the orcsdun01 TRAIN blocks |
 | orcsdun01 split | - | **TEST = the block labelled `col2`, all of it, held out.** TRAIN = every other orcsdun01 block recorded before training starts. VAL = v1's val sessions only (val monitors training; it decides nothing) |
-| labels | v1 (`predict_sprite`, k 0.140) | the same labeller, per-species classes. orcsdun01 labels are used ONLY if the camera check (plan section 3) and the blind label check (plan section 5) pass for that species |
+| labels | v1 (`predict_sprite`, k 0.140) | the same labeller, per-species classes. orcsdun01 labels are used ONLY if the camera check (plan section 3) and the blind label check (plan section 5) pass for that species. ➡️ AMENDED (Amendment A, 2026-10-22): the plan's 3f TRAINING tier decides |
 | model, epochs, seed, imgsz | YOLO11n, 30, 20261004, 1280 | the same (from the same COCO YOLO11n weights; the head has more classes) |
 | batch / workers | 2 / 1 | 2 / 1. If the hunt's CPU detector slows while training, the loader is niced or its workers lowered; any change is recorded |
 | image format | PNG | the v1 sessions' frames as v1's cache (PNG); the orcsdun01 frames as recorded (JPEG q80); stated, not a variable here |
@@ -42,7 +58,8 @@ This file is written and committed BEFORE any v2orc model exists. It is scored o
 **P1, orcsdun01 per species**, on col2 (the weights are `last.pt` at epoch 30, conf 0.25):
 - Scored by `label_iou`'s POSITION scorer (v1's primary, `gold_eval.py score --metric position`):
   the centre falls in the label box, the class matches, and pairs are one-to-one. The labels are
-  the same packet labels the training used.
+  the same packet labels the training used. ➡️ AMENDED (Amendment A, 2026-10-22): only the col2
+  crops both blind labellers judged good count.
 - **The bar, for each species with >= 50 labels in col2: recall >= 0.80 AND precision >= 0.80.**
 - A species with fewer labels is reported, with no bar.
 

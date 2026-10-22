@@ -301,11 +301,16 @@ def test_the_fix_applies_on_orcsdun01_only() -> None:
     def at(tw: int) -> Any:
         return FrameWorld(tw, "prt_fild08.gat", None, (1.0, 1.0), ()), (), {}
 
-    lab = SimpleNamespace(timeline=SimpleNamespace(at=at), size=(64, 48), ui_rects=())
+    def at_world(tw: int) -> Any:
+        return (World(), *at(tw))
+
+    lab = SimpleNamespace(timeline=SimpleNamespace(at=at, at_world=at_world, events=()),
+                          size=(64, 48), ui_rects=())  # fmt: skip
     params = {"offset_ms": 120.0, "anchors_px": {}, "fit_px": {"1153": 6}, "tau": 0.092}
-    fixer = olf.FixLabeler(lab, params, occluders=object())  # type: ignore[arg-type]
-    got = fixer.frame(10**9, np.zeros((48, 64, 3), np.uint8))
-    assert got is not None and not got.applies and got.kept == [] and got.excluded == []
+    for rule in olf.RULES:
+        fixer = olf.FixLabeler(lab, params, occluders=object(), rule=rule)  # type: ignore[arg-type]
+        got = fixer.frame(10**9, np.zeros((48, 64, 3), np.uint8))
+        assert got is not None and not got.applies and got.kept == [] and got.excluded == []
 
 
 def test_the_offset_sweep_picks_the_smallest_median() -> None:
@@ -339,6 +344,104 @@ def test_the_blind_grid_pages_and_tiles() -> None:
     crops = [(f"{i:03d}", np.full((40, 60, 3), i * 10, np.uint8)) for i in range(1, 7)]
     g = ols.blind_grid(crops)
     assert g.shape == (2 * ols.GRID_TILE[1], ols.GRID_COLS * ols.GRID_TILE[0], 3)
+
+
+# --- fix 2 (3f): the drawn view, 2b next_move, 2c ambiguous_view --------------------------------
+
+N, NW, W, SW, S, SE, E, NE = range(8)
+PAIRED = [(0, 1), (2, 3), (4, 5), (6, 7)]  # every orcsdun01 walker / bat ACT (3e finding 0)
+
+
+def at_world(evs: list[dict[str, Any]], t_ms: int) -> tuple[Any, ...]:
+    return Timeline(evs).at_world(t_ms * MS)
+
+
+def test_at_world_is_at_with_the_world_first() -> None:
+    evs = [appear(9_000, 7, 10, 10, heading=4), move(9_990, 7, 10, 10, 15, 12, 10_000)]
+    tl = Timeline(evs)
+    w, *rest = tl.at_world(12_000 * MS)
+    assert isinstance(w, World) and tuple(rest) == tl.at(12_000 * MS)
+
+
+def test_the_move_vector_is_the_walk_rules_move() -> None:
+    evs = [appear(9_000, 7, 10, 10, heading=4), move(9_990, 7, 10, 10, 15, 12, 10_000),
+           appear(9_000, 8, 20, 20), move(9_990, 8, 20, 20, 26, 20, 10_000),
+           ev(10_500, "entity_stop", gid=8, x=22, y=20),
+           appear(9_000, 9, 40, 40, heading=2)]  # fmt: skip
+    assert olf.move_vector(world_at(evs, 9_995), 7, 9_995 * MS) is None  # not started yet
+    assert olf.move_vector(world_at(evs, 10_500), 7, 10_500 * MS) == (5, 2)  # walking
+    assert olf.move_vector(world_at(evs, 12_000), 7, 12_000 * MS) == (5, 2)  # arrived
+    assert olf.move_vector(world_at(evs, 11_000), 8, 11_000 * MS) == (6, 0)  # cut: the planned move
+    assert olf.move_vector(world_at(evs, 12_000), 9, 12_000 * MS) is None  # appeared standing
+    assert olf.move_vector(world_at(evs, 12_000), 99, 12_000 * MS) is None  # not in sight
+
+
+def test_fix2_facing_per_state() -> None:
+    """(ii) walking: the vector's quadrant; (iii) after the move: map_calc_dir, an axis taken to
+    its diagonal (north -> NW, east -> NE, south -> SW, west -> NW); (i) else the Timeline's."""
+    walk, idle = act_state("walk", E), act_state("idle", E)
+    assert olf.fix2_facing(walk, 4, None, (7, -2)) == (SE, "fix2:walk")
+    assert olf.fix2_facing(walk, 4, None, (0, 3)) == (NW, "fix2:walk")
+    assert olf.fix2_facing(idle, 4, (E, "walk_rule"), (7, -2)) == (NE, "fix2:after_move")
+    for d, want in (((3, 0), NE), ((0, 3), NW), ((0, -3), SW), ((-3, 0), NW), ((5, -3), SE)):
+        assert olf.fix2_facing(idle, 4, (0, "walk_rule"), d) == (want, "fix2:after_move")
+    # no ended move (a newer turn, or appeared standing): the Timeline's facing, as 1a's fallback
+    assert olf.fix2_facing(idle, 4, None, (3, 0)) == (E, "timeline:walk")
+    assert olf.fix2_facing(act_state("idle", N, "appear"), N, None, None) == (N, "timeline:appear")
+    assert olf.fix2_facing(act_state("idle", None, None), 3, None, None) == (3, "timeline:None")
+
+
+def test_next_move_is_a_move_packet_strictly_after_and_within_150_ms() -> None:
+    evs = [appear(9_000, 7, 10, 10), move(13_000, 7, 10, 10, 12, 10, 13_010),
+           ev(12_950, "entity_vanish", gid=8, reason=0),
+           {**move(14_000, 8, 1, 1, 2, 2, 14_010), "kind": "move"},  # as the decoder writes it
+           appear(12_960, 7, 10, 10, kind="stand")]  # fmt: skip
+    nm = olf.NextMoves(evs)
+    assert nm.times == {7: [13_000 * MS], 8: [14_000 * MS]}  # moves only: no stand / vanish
+    assert nm.soon(7, 12_900 * MS) and nm.soon(7, 12_851 * MS)
+    assert not nm.soon(7, 12_850 * MS)  # exactly 150 ms before: not within
+    assert not nm.soon(7, 13_000 * MS)  # the packet itself is already applied at its own time
+    assert not nm.soon(8, 12_900 * MS) and not nm.soon(99, 12_900 * MS)
+
+
+def test_ambiguous_view_is_a_mixed_move_whose_two_images_differ() -> None:
+    # (6, -1): the vector's quadrant is SE; map_calc_dir says east -> NE's image: two images
+    assert olf.ambiguous_view((6, -1), NE, PAIRED, 0.0)
+    # (5, 2): quadrant NE, map_calc_dir NE: one image
+    assert not olf.ambiguous_view((5, 2), NE, PAIRED, 0.0)
+    # axis and diagonal moves are never ambiguous (the two rules agree by construction)
+    assert not olf.ambiguous_view((3, 0), NE, PAIRED, 0.0)
+    assert not olf.ambiguous_view((-2, -2), SW, PAIRED, 0.0)
+    # a species whose ACT draws SE and NE alike (the plants' two images) has nothing to confuse
+    assert not olf.ambiguous_view((6, -1), NE, [(0, 1, 2, 3), (4, 5, 6, 7)], 0.0)
+
+
+def test_the_fix2_rule_chooses_and_excludes() -> None:
+    evs = [appear(9_000, 7, 10, 10, heading=4), move(9_990, 7, 10, 10, 15, 12, 10_000),
+           move(12_950, 7, 15, 12, 17, 12, 12_960),  # its next move
+           appear(9_000, 8, 30, 30, heading=4), move(9_990, 8, 30, 30, 36, 29, 10_000),
+           appear(9_000, 9, 40, 40, heading=2)]  # fmt: skip
+    rule = olf.FacingRule.for_events("fix2", evs)
+    rule.classes = lambda sheet, job, group: PAIRED  # type: ignore[method-assign,assignment]
+    one_a = olf.FacingRule.for_events("1a", evs)
+    tl = Timeline(evs)
+
+    def choose(r: olf.FacingRule, gid: int, t_ms: int) -> tuple[tuple[int, str], str | None]:
+        w, fw, states, rules = tl.at_world(t_ms * MS)
+        e = next(x for x in fw.entities if x.gid == gid)
+        st = next(s for s in states if s.gid == gid)
+        return r.choose(w, e, st, rules, t_ms * MS, None, 0.0)  # type: ignore[arg-type]
+
+    assert choose(rule, 7, 10_500) == ((NE, "fix2:walk"), None)  # (5, 2) walked
+    assert choose(rule, 7, 12_000) == ((NE, "fix2:after_move"), None)
+    assert choose(rule, 7, 12_900) == ((NE, "fix2:after_move"), "next_move")  # 2b: 50 ms before
+    assert choose(one_a, 7, 12_900) == ((NE, "walk_rule"), None)  # 1a has no 2b
+    # (6, -1) arrived: map_calc_dir east -> NE's image, the vector's quadrant SE's: 2c
+    assert choose(rule, 8, 12_000) == ((NE, "fix2:after_move"), "ambiguous_view")
+    assert choose(rule, 8, 10_500) == ((SE, "fix2:walk"), None)  # walking: one rule, no 2c
+    assert choose(rule, 9, 12_000) == ((W, "timeline:appear"), None)  # (i) appeared standing
+    with pytest.raises(SystemExit):
+        olf.FacingRule.for_events("best_of_8", evs)
 
 
 # --- REAL positive cases (local data only: skipped elsewhere) -----------------------------------
@@ -395,3 +498,128 @@ def test_real_walker_is_drawn_at_the_new_offset_not_the_old() -> None:
         assert bo is not None
         err[ms] = math.hypot(bo[1], bo[2])
     assert err[150] <= 2.0 and err[400] >= 8.0
+
+
+def test_real_fix2_draws_the_back_of_an_orc_after_an_east_move() -> None:
+    """THE REAL POSITIVE CASE of fix 2 (3f), through the labeller's own facing path: col3 frame 1938
+    (3e's by-eye case), Orc Zombie gid 110096085 standing after an EAST move (3, 0) shows its
+    BACK (the N / NE image). fix 2 draws NE (its back) and scores high AT the projected place;
+    the frozen 1a rule draws E (the E / SE image, the cleaver side) and scores low."""
+    if not (COL3 / "manifest.json").exists() or not (KB / "classes.json").exists():
+        pytest.skip("col3 or the local KB is not here")
+    import qa_export
+
+    sess = olf.Session.open(COL3, KB)
+    sheet = sess.lab.sheets(1153)
+    if sheet is None:
+        pytest.skip("the decoded sprites are not here")
+    ref = next(r for r in sess.refs if r.frame_id == 1938)
+    tw = ref.t_mono_ns - 120 * MS  # 3c's frozen 1d
+    replay, world, states, rules = sess.lab.timeline.at_world(tw)
+    e = next(x for x in world.entities if x.gid == 110096085)
+    st = next(x for x in states if x.gid == e.gid)
+    scene = sess.scene(world)
+    assert scene is not None and st.state == "idle"
+    assert olf.move_vector(replay, e.gid, tw) == (3, 0)
+    fix2 = sess.facing_rule("fix2")
+    (h2, src2), why = fix2.choose(replay, e, st, rules, tw, sheet, scene.camera.yaw)
+    (h1, src1), _ = sess.facing_rule("1a").choose(replay, e, st, rules, tw, sheet, scene.camera.yaw)
+    assert (h2, src2, why) == (NE, "fix2:after_move", None) and (h1, src1) == (E, "walk_rule")
+    classes = fix2.classes(sheet, 1153, 0)
+    assert classes == PAIRED
+    p2, p1 = (olf.predict(e, st, sheet, scene, h, {}) for h in (h2, h1))
+    assert p2 is not None and p1 is not None
+    assert classes[olf._fs().class_index(classes, p2.direction)] == (4, 5)  # the back view
+    bgr = qa_export.read_jpeg(ref)
+    s2, s1 = label_check.score(bgr, sheet, p2), label_check.score(bgr, sheet, p1)
+    assert s2 is not None and s1 is not None
+    assert s2 > 0.5 and s1 < olf.TAU  # measured 0.629 vs 0.060 (2026-10-22)
+
+
+# --- a HUMAN DEMO as extra training data (3f): frame files, the hunting layout per frame ---------
+
+
+def human_demo(tmp: Path, n: int = 4, size: tuple[int, int] = (64, 36)) -> Path:
+    """A human_demo.py session: manifest + packets beside it, the JPEG files elsewhere."""
+    from PIL import Image
+
+    frames = tmp / "human-demos" / "S" / "frames"
+    frames.mkdir(parents=True)
+    for k in range(n):
+        img = Image.new("RGB", size, (60, 100, 200))
+        img.save(frames / f"{k:05d}-{1_000_000_000 + k * 200_000_000}.jpg", quality=80)
+    s = tmp / "S"
+    s.mkdir()
+    (s / "manifest.json").write_text(json.dumps({
+        "kind": "demo", "actor": "human:batt", "backend": "rdp", "map": "orcsdun01",
+        "frames_dir": str(frames), "rec_hz": 5.0, "session_id": "S"}))  # fmt: skip
+    return s
+
+
+def test_a_human_demo_is_read_from_its_frame_files(tmp_path: Path) -> None:
+    import qa_export
+
+    s = human_demo(tmp_path)
+    man = json.loads((s / "manifest.json").read_text())
+    assert qa_export.is_human_demo(man) and not qa_export.is_warp_watch(man)
+    assert not qa_export.is_human_demo({**man, "actor": "bot"})
+    refs = qa_export.frame_refs(s, man)
+    assert [(r.frame_id, r.t_mono_ns) for r in refs] == [
+        (k, 1_000_000_000 + k * 200_000_000) for k in range(4)
+    ]
+    assert all(r.offset == 0 and r.size == r.shard.stat().st_size for r in refs)
+    b, g, r = (int(v) for v in qa_export.read_jpeg(refs[2])[18, 32])  # BGR, the whole file
+    assert abs(r - 60) <= 6 and abs(g - 100) <= 6 and abs(b - 200) <= 6
+    rects = qa_export.ui_rects_for(man)
+    assert rects[0] == (0, 0, 220, 143)  # the HUNTING layout's Basic Information (not standard's)
+    (refs[0].shard.parent / "x.jpg").write_bytes(b"")
+    with pytest.raises(SystemExit, match="not a <k>-<t_mono_ns>.jpg"):
+        qa_export.frame_refs(s, man)
+
+
+def test_a_human_demos_layout_is_checked_on_pixels(tmp_path: Path) -> None:
+    import qa_export
+
+    s = human_demo(tmp_path)
+    man = json.loads((s / "manifest.json").read_text())
+    assert qa_export.layout_check({"sid": "x"}) is None  # a recorded layout: nothing to check
+    with pytest.raises(SystemExit, match="templates"):
+        qa_export.layout_check(man, tmp_path / "none")  # fail closed
+    tm = tmp_path / "tm"
+    tm.mkdir()
+    for name, shape in (("arrow_collapsed", (11, 12)), ("arrow_expanded", (11, 12)),
+                        ("row1", (19, 16)), ("row2", (20, 14)), ("row4", (20, 14))):  # fmt: skip
+        np.save(tm / f"{name}.npy", np.full(shape, 200.0 if name == "arrow_collapsed" else 0.0))
+    check = qa_export.layout_check(man, tm)
+    black = np.zeros((720, 1280, 3), np.uint8)
+    assert not check(black)  # nothing readable: not the hunting layout
+
+
+# the demo recorded with Batt's Crusader, 2026-10-22 (local / NAS data only: skipped elsewhere)
+DEMO = Path("/mnt/poring-lab-datasets/20261022T184536-demo-human-demo-orcsdun01-crusader")
+LAYOUT_TM = Path(os.environ.get("PORING_LAYOUT_TEMPLATES",
+                                str(ROOT / "data" / "ui_anchors" / "layout")))  # fmt: skip
+
+
+def test_real_human_demo_frames_place_the_camera_and_read_the_hunt_layout() -> None:
+    """Batt's 2026-10-22 demo: 4,880 frame files in the hunting layout (frame 1000, seen by eye
+    2026-10-22 19:4x). Frame 990: the Crusader STANDS and the minimap reads "84 119" (by eye), the
+    cell the Timeline gives at the frame's time minus 1d's 120 ms. Then it walks (frame 1000 is 5
+    cells on). NOT asserted, an open observation: during that walk the readout ("88 123" at frame
+    1000) matches the Timeline at ~376 ms, not 120 ms -- the demo's C1 is split by our own motion
+    to measure what that does to the labels."""
+    if not (DEMO / "manifest.json").exists() or not (KB / "classes.json").exists():
+        pytest.skip("the demo or the local KB is not here")
+    if not LAYOUT_TM.exists():
+        pytest.skip("the layout templates are not here")
+    import qa_export
+
+    sess = olf.Session.open(DEMO, KB, LAYOUT_TM)
+    assert len(sess.refs) == 4880 and sess.lab.size == (1280, 720)
+    ref = {r.frame_id: r for r in sess.refs}
+    assert sess.layout_ok(qa_export.read_jpeg(ref[1000]))
+    assert not sess.layout_ok(np.zeros((720, 1280, 3), np.uint8))
+    w = sess.lab.timeline.frame_world(ref[990].t_mono_ns - 120 * MS)
+    assert w.map == "orcsdun01.gat" and w.self_pos == (84.0, 119.0)
+    w2 = sess.lab.timeline.frame_world(ref[1000].t_mono_ns - 120 * MS)
+    assert w2.self_pos is not None and w2.self_pos[0] - 84.0 > 4 and w2.self_pos[1] - 119.0 > 4

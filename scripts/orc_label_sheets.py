@@ -29,9 +29,11 @@ Written under ``<out-root>/<session>/``:
 
 ``--fix PARAMS`` (docs/planning/orcsdun01-detector.md 3b, scripts/orc_labels_fix.py): the monster
 boxes are the labels v2orc-fix FITTED boxes instead of v1's (facing 1a, anchor 1b, model occlusion
-1c, offset 1d -- the frozen PARAMS' offset replaces --offset-ms). A frame keeps its labels only
-when every visible monster's label is kept (an excluded one -- ``occluded_model``, ``crowd``,
-``ui``, ``unfit`` -- excludes the frame: ``fix_<reason>``), on top of the cache's own rules.
+1c, offset 1d -- the frozen PARAMS' offset replaces --offset-ms). ``--rule fix2`` (3f): labels
+v2orc-fix2, the facing of fix 2 and its exclusions ``next_move`` (2b) / ``ambiguous_view`` (2c).
+A frame keeps its labels only when every visible monster's label is kept (an excluded one --
+``occluded_model``, ``crowd``, ``ui``, ``unfit``, and with fix 2 ``next_move`` /
+``ambiguous_view`` -- excludes the frame: ``fix_<reason>``), on top of the cache's own rules.
 ``labels_summary.json`` then also counts the monster labels kept / excluded per species and reason.
 The blind pack and the sheets sample every KEPT fitted label of the frames v2's own rules keep
 (``--blind-from kept_labels``, the default: 3b's blind check judges the LABELS), or only the labels
@@ -277,11 +279,15 @@ def collect(session: Path, a: argparse.Namespace) -> tuple[dict[str, Any], dict[
     )  # fmt: skip
     v2 = bfc.V2Inputs.from_args(ns)
     assert v2.classes is not None
-    sess = bfc.make_v2_session(session, v2)
     manifest = json.loads((session / "manifest.json").read_text())
-    if not qa_export.is_warp_watch(manifest):
-        raise SystemExit(f"{session}: not a warp_watch session")
-    refs = qa_export.jpeg_index(session, manifest)[:: a.every]
+    if not (qa_export.is_warp_watch(manifest) or qa_export.is_human_demo(manifest)):
+        raise SystemExit(f"{session}: neither a warp_watch session nor a human demo")
+    layout = qa_export.layout_check(manifest, getattr(a, "layout_templates", None))
+    if layout is not None and fix_params is None:
+        raise SystemExit(f"{session}: a human demo is labelled with --fix only (its frames' UI "
+                         "layout is checked on the pixels the fit reads)")  # fmt: skip
+    sess = bfc.make_v2_session(session, v2)
+    refs = qa_export.frame_refs(session, manifest)[:: a.every]
     outcomes: Counter[str] = Counter()
     excluded: Counter[str] = Counter()
     excluded_detail: Counter[str] = Counter()
@@ -295,8 +301,9 @@ def collect(session: Path, a: argparse.Namespace) -> tuple[dict[str, Any], dict[
     fix_hidden = 0
     fix_other_map = 0
     _FIX.clear()
-    _FIX.update(sess=sess, v2=v2, fixer=None if fix_params is None else
-                olf.FixLabeler(sess.labeler, fix_params))  # fmt: skip
+    rule = getattr(a, "rule", "1a")
+    _FIX.update(sess=sess, v2=v2, layout=layout, fixer=None if fix_params is None else
+                olf.FixLabeler(sess.labeler, fix_params, rule=rule))  # fmt: skip
     if fix_params is not None:
         results = olf.run_parallel(_frame_fate, refs, getattr(a, "workers", 1))
     else:
@@ -355,9 +362,10 @@ def collect(session: Path, a: argparse.Namespace) -> tuple[dict[str, Any], dict[
                "offset_ms": sess.labeler.offset_ms}  # fmt: skip
     if fix_params is not None:
         summary["labels"] = (
-            "v2orc-fix (fitted monster boxes) + v2's frame rules + --classes species"
+            f"{olf.labels_name(rule)} (fitted monster boxes) + v2's frame rules + --classes species"
         )
         summary["fix"] = {
+            "facing_rule": rule,
             "params": str(a.fix), "measured_on": fix_params["measured_on"],
             "offset_ms": fix_params["offset_ms"], "anchors_px": fix_params["anchors_px"],
             "monster_labels_kept_by_species": dict(sorted(fix_kept.items())),
@@ -391,7 +399,11 @@ def _frame_fate(ref: qa_export.JpegRef) -> tuple[Any, ...]:
         _text, out = bfc.v2_yolo(fr.labels, bfc.V2_SIZE, v2.classes.class_of)
         written = [(b.cls, b.job, b.gid, b.box, b.kind) for b in out]
         if fixer is not None:
-            got = fixer.frame(ref.t_mono_ns, qa_export.read_jpeg(ref))
+            bgr = qa_export.read_jpeg(ref)
+            layout = _FIX.get("layout")
+            if layout is not None and not layout(bgr):  # a human demo in another UI layout (3f)
+                return ref, "excluded", ["ui_layout_mismatch"], written, None
+            got = fixer.frame(ref.t_mono_ns, bgr)
             if got is None:
                 outcome, reasons = "excluded", ["fix_no_world"]
             else:
@@ -490,6 +502,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument("--npc-checked", type=Path, default=None)
     ap.add_argument("--workers", type=int, default=1, help="--fix: forked worker processes")
     ap.add_argument(
+        "--layout-templates",
+        type=Path,
+        default=None,
+        help="a human demo: client_layout's templates (default its TEMPLATES)",
+    )
+    ap.add_argument(
         "--blind-from", choices=("kept_labels", "complete_frames"), default="kept_labels",
         help="--fix: the blind pack and the sheets sample every KEPT fitted label (default), or "
         "only the labels of frames the cache would keep whole",
@@ -499,6 +517,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         type=Path,
         default=None,
         help="labels v2orc-fix: the frozen parameters (orc_labels_fix.py freeze)",
+    )
+    ap.add_argument(
+        "--rule",
+        choices=("1a", "fix2"),
+        default="1a",
+        help="--fix: the facing, 1a (3b, as round 2) or fix2 (3f: labels v2orc-fix2, with the "
+        "exclusions 2b next_move / 2c ambiguous_view)",
     )
     a = ap.parse_args(argv)
     out = write_outputs(a.session, a)

@@ -175,8 +175,15 @@ class Timeline:
         self, t_ns: int
     ) -> tuple[FrameWorld, tuple["ActorState", ...], dict[int, tuple[int, str]]]:
         """frame_world, states and walk_rule_facings at `t_ns` from ONE replay of the events."""
+        return self.at_world(t_ns)[1:]
+
+    def at_world(
+        self, t_ns: int
+    ) -> tuple[World, FrameWorld, tuple["ActorState", ...], dict[int, tuple[int, str]]]:
+        """``at`` with the replayed World itself first (its entities' walks: the move vectors the
+        orcsdun01 label fix 2 reads, docs/planning/orcsdun01-detector.md 3f)."""
         world = self.world_at(t_ns)
-        return self._frame_of(world, t_ns), self._states_of(world, t_ns), \
+        return world, self._frame_of(world, t_ns), self._states_of(world, t_ns), \
             self._walk_rules_of(world, t_ns)  # fmt: skip
 
     def _frame_of(self, world: World, t_ns: int) -> FrameWorld:
