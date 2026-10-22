@@ -1019,7 +1019,14 @@ through the adapter (a625def). Under 3f it is NOT added: its own C1 is 14.8 %.**
   the Familiar class's orcsdun01 labels (its frames kept, the box ignored -- O1's mask problem); (3)
   accept the Familiar on F's 93.3 % with E's at 86.7 % (a single crop short). The cache tooling for
   the next attempt (`build_frame_cache --fix`, per-session label modes) is being built anyway
-  (feat/orc-cache).
+  (feat/orc-cache). ➡️ MERGED 2026-10-22 20:38 (c507a9b): `--fix PARAMS --rule fix2 --fix-sha256`,
+  `--v1-species-sessions`, `--collection orcsdun01`, col2 refused; the exact `cache@` step and the
+  dry run are on the NAS (`orc-fix2/cache-dry-run/`).
+- **The dry run's finding (for the occlusion decision):** under 3b's literal 1c rule the combined
+  TRAIN would hold <= 8,850 frames, of which orcsdun01 <= 657 (~7.4 %; col1 <= 397, col3 <= 260;
+  1c excludes 3,851 + 3,234 frames). Boxes per orcsdun01 class (upper bounds): Orc Zombie 1,275,
+  Orc Skeleton 241, Steel Chonchon 198, Familiar 155, Drainliar 64, White Plant 16, Black Mushroom
+  0. Batt's O1-O4 occlusion choice (3e) is what would change that.
 
 ## 4. The class scheme (PROPOSED; Batt's default if he does not answer by the time the labels are ready)
 
