@@ -393,6 +393,9 @@ services:
   # Switch with guarded steps (rm:sniffer,rathena then start:rathena-th,sniffer-th, and back).
   # Batt, 2026-10-05: NOT adopted (the Thai data adds nothing for vision); kept as a stopped option
   # (db-th stopped with `scripts/dev.sh --profile th stop db-th`; its volume is kept).
+  # ➡️ 2026-10-22 (Batt, decision 7): its volume was dumped to the NAS and REMOVED (guarded
+  # voldump: / volrm:, archive/db-th-data/db-th-data-20261022.tar.gz, a cold copy of the data
+  # directory). A start would create an EMPTY database: untar the dump into the volume first.
   # TH variables use ':-' (never ':?'): compose interpolates every service before it filters
   # profiles, so a required TH variable would break every compose command until .env has it.
   db-th:

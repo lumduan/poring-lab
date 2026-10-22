@@ -140,3 +140,19 @@ both listed), then the local delete under the guard.
   is ≈ 9-10 days to full. Raised to Batt (the 2026-10-22 06:00 report).
 - Tonight's finished scratch went to `scratch-archive/2026-10-22/poring-lab-tmp/`; the 4 v55
   sessions to the datasets root (`dataset_ship.py ship`, re-hashed on the NAS).
+
+## Moves -- 2026-10-22 19:54-20:26 ICT (Batt's decision 7 on the 19:00 report)
+
+Batt: "Disk: delete frontend/node_modules and .mypy_cache; data/train and data/nametags to the NAS;
+db-th-data dump to the NAS then remove; the transcript to the NAS after the session."
+
+| time | item | where | how | result |
+|---|---|---|---|---|
+| 19:54 | `services/frontend/node_modules` (476 MB, 27,506 files) + `.mypy_cache` (20 MB) | deleted | `nice rm -rf` (gitignored, unused: frontend-dev installs its own in tmpfs) | gone, 1 s |
+| 19:54 | `data/train` (310 MB, 142 files) | `archive/train/` | guarded `archive:` (copy, size+count check, delete) | verified + deleted; worst stall 4.4 % |
+| 19:57 | `data/nametags` (208 MB, 7,658 files) | `archive/nametags/` | guarded `archive:` | verified + deleted; worst stall **11.1 %, 6 s above 10 %** (inside the guard's limits) |
+| 20:25 | the `db-th-data` volume (0.16 GB, 413 files) | `archive/db-th-data/db-th-data-20261022.tar.gz` (2.1 MB; 156.4 MB uncompressed: preallocated InnoDB files) | NEW guarded `voldump:` (a07d3cf): a cold tar of the stopped volume, file counts 413 = 413 | verified; worst stall 10.3 %, 2 s |
+| 20:26 | the db-th container (exited) + the volume | removed | NEW guarded `volrm:` (only with the dump present) | done, 0.0 % |
+| (later) | the session transcript | `scratch-archive/` | after the session (Batt) | pending |
+
+- Not ours, unchanged: the root LV at the time of the moves read ~477 GiB used / 110 GiB free (df).
