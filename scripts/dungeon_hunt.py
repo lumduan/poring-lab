@@ -96,6 +96,8 @@ REST_NEAR = 1  # at the rest spot = within this many cells (Chebyshev)
 REST_MAX_S = 300.0
 REST_WALK_MAX_S = 120.0  # 3.98 Amendment B: the spot not reached in this long -> sit where we are
 UI_EVERY_S = 10.0
+FLY_SETTLE_S = 2.5  # Amendment H: the position is not read this long after a Fly Wing ...
+FLY_JUMP_S = 15.0  # ... and a jump within this long after one is never a hard bar
 JUMP_CELLS = 20  # a position jump this large without our Fly Wing = a map change (stop)
 WEIGHT_MAX = 0.48  # the setup refuses to start at or over this (natural regen stops at 50 %)
 POTIONS_TO, WINGS_TO = 40, 15  # the setup's top-up (by @item, against the DB's last save)
@@ -879,11 +881,15 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 ag_on = (sv.ag_present(img, ag_t, ag_m)
                          if n_reads % sv.AG_EVERY == 1 and not dark else None)  # fmt: skip
                 dead = r.is_state(screen, gv.DEAD_STATE)
-                pos = selfpos.read_minimap_xy(img, digits)
+                # Amendment H (r4 15:49): the minimap's coordinates still showed the OLD cell 0.25 s
+                # after a Fly Wing -- no read for FLY_SETTLE_S after one, and no jump bar for
+                # FLY_JUMP_S (a Fly Wing is a same-map teleport; packets judge map changes)
+                fresh = tick - fly_at >= FLY_SETTLE_S
+                pos = selfpos.read_minimap_xy(img, digits) if fresh else None
                 if pos is not None:
                     p_ = (int(pos[0]), int(pos[1]))
                     if (here is not None and max(abs(p_[0] - here[0]), abs(p_[1] - here[1]))
-                            > JUMP_CELLS and tick - fly_at > 6.0):  # fmt: skip
+                            > JUMP_CELLS and tick - fly_at > FLY_JUMP_S):  # fmt: skip
                         ev({"kind": "jump", "from": list(here), "to": list(p_)})
                         reason = "hard_bar: position jump (map change?)"
                         break
