@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [ADR-0020, ADR-0015, ADR-0002, ADR-0007, ADR-0016, ../demonstrations.md, ../competition.md, ../../config/map_zones/README.md, mw2-block-editor.md, adr0020-contradictions.md]
-next_action: "B1 and B3 MERGED (0919ce7). B2 (the editor) BUILT offline 2026-10-21 21:14-22:1x and MERGED (cea0c4c, section 7b); its zones routes go live only after a guarded recreate:backend (the dev overlay's new read-only ./scripts mount), and Batt confirms the D8 evidence rows (config/flows/hunt/evidence.yaml) and 7b's open points. B4 waits for Batt to be present. Amendment A's text stays a DRAFT until Batt accepts it."
+next_action: "B1 and B3 MERGED (0919ce7). B2 (the editor) BUILT offline 2026-10-21 21:14-22:1x and MERGED (cea0c4c, section 7b); its zones routes go live only after a guarded recreate:backend (the dev overlay's new read-only ./scripts mount), and Batt confirms the D8 evidence rows (config/flows/hunt/evidence.yaml) and 7b's open points. B4 waits for Batt to be present. Amendment A's text stays a DRAFT until Batt accepts it. 2026-10-22: the hunt block's melee-ring engage OPTION + lint / run-start refusals built offline (section 7c, feat/melee-ring-block, not merged)."
 title: "Behaviours as blocks: hunt-flow's adopted rules become a hunt block in the map node; map zones become map-node data (plan)"
 date: 2026-10-21
 owner: Batt
@@ -25,6 +25,9 @@ Status: PROPOSED. ~~Nothing here is built, run or pre-registered.~~ ➡️ **202
 B3 are BUILT offline** (section 7a, branch feat/blocks-b1b3; merged 0919ce7); nothing is run live or
 pre-registered. ➡️ **2026-10-21 22:1x: B2 (the editor) is BUILT offline** (section 7b, branch
 feat/blocks-b2, ~~not merged~~ ➡️ merged in cea0c4c); SIMULATE only.
+➡️ **2026-10-22: the hunt block's MELEE-RING engage option** (`engage_source`, default detector)
+and its lint / run-start refusals are BUILT offline (section 7c, branch feat/melee-ring-block, not
+merged); its runtime is `scripts/dungeon_hunt.py`, not the block engine.
 The ADR side is
 [ADR-0020 Amendment A](../adr/0020-block-programming-flows.md#amendment-a-draft-proposed-2026-10-21-not-accepted-behaviours-as-blocks-map-zones-as-map-node-data)
 (DRAFT).
@@ -67,6 +70,7 @@ by its rule. `hunt_config.ADOPTED_VERSION` = 55; the `hunt` block's loot choices
 | targets / ignore | hard-coded: `farm0.TARGETS`, `nametag.TARGET_NAMES` (mob 1002, 1063, 1008, 1113); 1018 counted apart (`hardbar_live.py`) | since v1 / v14 (3.41, 3.56) | the map node's `targets` / `ignore` (ADR-0020 13.3), by mob id. With PER-SPECIES detector classes (Batt 2026-10-21, the orcsdun01 order, item 4: "the hunt code maps species -> monster + target/ignore lists, so the species check comes from the detector"), the lists name classes the detector itself outputs |
 | strike style | `abc_arm` C (A the fallback when unsure or crowded) | 3.70's verdict; the default from v32 (3.72) | `strike`: C, B or A |
 | engage on the way | `opportunistic`, `opp_cells`, `preempt_*`, `retarget*` | v11, v13, v26 (3.53, 3.55, 3.67), in the base since | `engage_on_the_way`: on / off |
+| engage source (➡️ added 2026-10-22) | not a PARAMS key: `dungeon_hunt.py --engage` | Batt 2026-10-22 ~13:45 (an option, default OFF) | `engage_source`: an OPTION, `detector` (default, absent) or `melee_ring`; refused off the lab, with an IGNORE list or a non-target species (section 7c) |
 | dead rule | `exp_dead`, `exp_keep*`, `exp_loot_delay_s` (the Battle Log's EXP line; the target kept) | v48, ADOPTED by Batt 2026-10-20 14:58 (3.89) | `dead`: `exp_line@48` |
 | loot rule | `loot_gm*`, `loot_gm_one_pass` (stand 0.5 s, the drawn GM's own cell + 3 x 3 + 5 x 5 edge, HAND-only bursts, one pass) | v50 ADOPTED by Batt (3.91); v51 ADOPTED by its rule 2026-10-21 02:5x (3.92) | `loot`: `gm_scan_one_pass@51`, `gm_scan@50` or none |
 | search heading | `heading_search`, `heading_min_run`, `heading_drift_p`; `heading_cov`, `cov_*` | v18 (3.60), v22 (3.63), in the base since | `search`: `heading_coverage@22` |
@@ -229,7 +233,7 @@ Every layer below exists today. A block adds none and removes none.
 6. **The record.** The engine writes its gate table (names, versions) as the run's first event; the
    judge flags a session without it.
 
-## 7. Build proposal (B1 + B3 built 2026-10-21, offline: section 7a, merged 0919ce7; B2 built offline: section 7b)
+## 7. Build proposal (B1 + B3 built 2026-10-21, offline: section 7a, merged 0919ce7; B2 built offline: section 7b; the melee-ring engage option, 2026-10-22: section 7c)
 
 | step | what | where | acceptance |
 |---|---|---|---|
@@ -404,6 +408,101 @@ the next event hat (layout height).
 7. **The search-area preview is on the GAT walk grid** the editor shows, not the runner's stand grid
    (which also keeps 10 cells off warps and NPCs); the panel says so.
 8. Cosmetic: Blockly moves a badge common to every option outside the dropdown (loot's ◆).
+
+### 7c. The MELEE-RING engage option (Batt 2026-10-22 ~13:45; block option + lint / readiness built offline 2026-10-22, code commit 0ded2e7 at 14:12, branch feat/melee-ring-block, NOT merged)
+
+**Batt (2026-10-22 ~13:45, verbatim core):** "NEW ENGAGE OPTION: 'MELEE-RING' engagement, driven by
+the CURSOR, not the detector. Build it as a selectable option of the hunt block (engage source:
+'detector' | 'melee_ring'), default OFF; the user chooses per map. ... Safety: the option strikes
+EVERY monster in melee range, so its lint/readiness must refuse it on maps with an ignore list or
+non-target species, and on any server other than the lab (no kill-stealing on shared servers). NPCs
+read TALK, not SWORD, and are never struck; the NPC sprite guard and all gates stay underneath.
+Hard bars unchanged."
+
+**The behaviour** (the runtime's, recorded here; not in the block engine): keep the pointer near
+the character; strike any SWORD at once (arm C: nudge + burst to the lock arrow); queue every SWORD
+found in the 8 cells around the character while fighting; strike the next at once when the current
+dies (the EXP line); loot ONCE per fight over the union of every death cell's 5 x 5; then search
+again.
+- **Where it runs today:** `scripts/dungeon_hunt.py --engage melee_ring`, for the Crusader on
+  orcsdun01 (7 species, all of them targets, 0 script NPCs, the lab server). That runtime is the
+  parent session's; this branch does not touch it and does not lint a direct `dungeon_hunt.py` run.
+- **Not in `hunt_flow.py`:** prt_fild08 has the non-target Creamy, so the lint below refuses the
+  melee ring there anyway.
+- The block engine (B4) does not run it yet: the option is in the registry, the editor and the
+  linter; a block-driven melee-ring hunt needs B4 plus the runtime above behind the block.
+
+**The option.** `hunt(..., engage_source=...)`, group engage (after `engage_on_the_way`):
+`detector` (the default) or `melee_ring`.
+- **Default OFF, not required.** Absent = `detector`, so every flow written before it keeps its JSON
+  and its hash. The editor (/flows) shows the dropdown with "detector (default)" and writes the
+  parameter only when it is `melee_ring`; an IR that spells out `"detector"` stays a generic block,
+  exactly (the editor would leave it out, so showing it as the hunt block would not round-trip).
+- **An OPTION, not a rule version (why no `@N`).** A rule version means "PARAMS[N]'s numbers travel
+  with it" (`hunt_config.py` exports them from hunt_flow's PARAMS into `config/flows/hunt/index.yaml`).
+  The melee ring is no hunt_flow PARAMS rule: no PARAMS version holds it, it has no numbers and no
+  D8 evidence, so a `melee_ring@N` would name nothing. `blocks.yaml` therefore gains `options`,
+  `default` and `note` beside `choices`. `catalogue.ParamSpec` validates them: plain distinct names,
+  not both choices and options, the default one of the options, never required.
+  `hunt_config.classify("engage_source")` is None (no PARAMS key), and the registry test still holds
+  the rule-version parameters equal to `HUNT_PARAMS`.
+- In the editor's rules document (`hunt_rules.rules_doc`) every parameter now carries `kind`
+  (rule | option) and `required`. An option's values carry no ★ / ◆ badge and no numbers; its note
+  is shown in the rules panel and the tooltip.
+
+**The refusals**
+
+| rule | where | severity | refused when | the data it reads |
+|---|---|---|---|---|
+| `param_option` | lint, layer 1 | error | engage_source is not a literal `detector` / `melee_ring` | the registry |
+| `melee_ring_server` | lint, layer 1 | error | the flow's `target.server` is not the lab's own (`lint.hunt.LAB_SERVERS` = {lab-rathena}) | the flow |
+| `melee_ring_ignore` | lint, layer 2 | error | the enclosing map block has any IGNORE list | the map node |
+| `melee_ring_species` | lint, layer 2 | error | a species that can be on the map is not among the map node's TARGETS; or no map sheet is loaded for the map (fail closed: nothing proves the list) | the static data the linter gets (`World`): the map sheet's spawn lines, plus what they turn into (`Mob.turns_into`, transitively, as prep.py's training scope) |
+| run start | `runstart.check / require(server=...)` | refusal | no ATTESTED environment; the attested server is not the lab's, or not the flow's target; the static data checked was another server's | the interlock's attested server, which only the run knows |
+
+- **The static data** is, in the backend, the local KB: a generated sheet
+  `data/kb/maps/<server>/<map>.json` when there is one, else `kbsheet`'s sheet built from
+  `data/kb/spawns.json` (and mobs from `mobs.json`). kbsheet does NOT fill `turns_into` today, so on
+  KB data the check is the spawn lines; metamorphosis is counted only where the data carries it
+  (the synthetic test). A species that appears without a spawn line of the map (a summoned slave)
+  is not seen by this check: the runtime's gates stay the safety net there.
+- **Why a fixed `LAB_SERVERS`, not the interlock's `allowed` status:** `allowed` means "the bot may
+  act here", not "nobody else plays here". If the community server is ever approved it would be
+  allowed AND shared, and the melee ring must still be refused there. lab-rathena-th (ADR-0006
+  environment 1b, stopped, not adopted) is left out; adding a server is a reviewed code change.
+- **Where the environment is known:** the flow's `target.server` at lint time (layer 1); the
+  attested server only at run start. The MW3 executor passes it to `runstart.require(server=...)`.
+  The editor's run line (`lint_doc`) has none, so a melee-ring flow reads "no attested environment"
+  there, which is true: MW2 runs nothing.
+- A detector hunt meets none of these rules: the same map, IGNORE list and server pass as before.
+
+**Unchanged:** the NPC sprite guard (`npc_px_guard`, engine@55), the UI gate, every gate, safety
+stop, reader and constant of the engine (none is a parameter, none is weakened), the hard bars, and
+the detector's own TARGET / IGNORE handling. The option only chooses who proposes the target.
+
+**Tests (2026-10-22, the worktree's sources on the main .venv):**
+- `test_lint_zones_hunt.py`: one failing fixture with its exact message and one passing twin per new
+  rule (`param_option`, `melee_ring_server`, `melee_ring_ignore`, `melee_ring_species`); the
+  coverage test names every rule in lint/hunt.py.
+- Also: metamorphosis; no world / no sheet (fail closed); absent = detector (JSON unchanged, Python
+  view round trip); a detector hunt meets no melee-ring rule; the run start (lab attested = allowed;
+  none, another server, another server's data = refused); `ParamSpec` options validation.
+- `test_hunt_rules.py` (the option in the engage group, no version or badge), `test_hunt_config.py`
+  (the registry test), `hunt.test.ts` (+2: the dropdown and its default, melee_ring written,
+  detector left out, an explicit default kept generic). The fixture `hunt_rules.json` was
+  regenerated with `scripts/gen_zones_fixtures.py`.
+- Counts at 0ded2e7: pytest 432 passed (packages/poring_flow/tests + backend test_hunt_config,
+  test_flows_zones, test_routes_flows); `node --test src/lib/flow/*.test.ts` 47 / 47 (hunt 9, was
+  7); ruff clean on the changed files; mypy --strict clean (poring_flow + poring_skills, 28 files);
+  a standalone tsc --strict over the changed lib files (hunt.ts, blocks.ts, blockdefs.ts, api.ts,
+  hunt.test.ts) clean. NOT run: `pnpm typecheck` / `pnpm lint` (BlockEditor.tsx needs Blockly, React
+  and Next types: the frontend-dev container) and the full Python suite.
+
+**Open points for Batt**
+1. `LAB_SERVERS` holds lab-rathena only. Should the stopped lab-rathena-th count too?
+2. Metamorphosis from the KB: kbsheet reads no `classes.json`, so a target that turns into a
+   non-target is caught only where the sheet carries `turns_into`. prt_fild08 is refused anyway
+   (Creamy spawns there).
 
 ## 8. What Batt needs to decide
 
