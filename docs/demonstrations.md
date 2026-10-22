@@ -15022,6 +15022,26 @@ pairs. Both arms are also set against Batt's targets, the gaps ranked by seconds
 **Hard bars (unchanged):** a map change, an unknown UI state, an NPC contact (orcsdun01 has none).
 A DEATH is a result: stop, record, restore (@alive, @heal), continue with the next run.
 
+**Run conditions, recorded before run 1 (no rule changes):** 4.00's first commit is ddfdc9e
+(19:46:52 ICT). The client keeps Batt's HUNTING layout from his demo (the hotkey bar 1 row, Basic
+Info's panel collapsed, the Battle Log tab) for BOTH arms; 3.98 / 3.99 ran with 4 rows and the panel
+expanded. The runner's HP / SP / weight reads and UI gates are the ones hunt-flow uses in that
+layout (v43). Also riding along, no behaviour change: the Auto Guard icon diagnostic capture
+(d3be360, Batt's decision 7).
+
+**Unscored pilot (`20261022T200856-demo-dungeon-patrol-H-pilot`, 20:10-20:15, P, seed 22200): no
+amendment.**
+- 5.0 min, 24 kills (287 / h), HP min 95.6 %, 0 potions / Fly Wings / Heals (HP never under 93 %),
+  deaths 0, hard bars 0 (packets); loot 60.7 / 81.0 %; landing 25 / 30 (83 %).
+- The patrol joined at waypoint 13 (111,57; the start was 125,75), resumed after the fights and
+  counted it reached.
+- The burst ended on our damage line on 21 of 30 strikes (median ~1.3 s, 2 clicks); 4 on the lock
+  arrow, 5 on the bound.
+- The plant sweep ran twice (7 and 6 hovers, ~2.2-2.6 s) and read a SWORD both times. The second
+  strike landed. The first, 11 cells off at the frame's lower left under the canopy where a White
+  Plant stood (83,45; packets), sent NO attack request in 4 clicks (a passing monster or a stale
+  cursor): ~3.7 s lost, recorded, not changed.
+
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
   Timeline state)", with `predict_sprite`'s box attached.
