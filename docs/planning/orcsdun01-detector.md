@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "Warp-and-watch collection plus packet labels give a per-species detector for orcsdun01 that does not forget prt_fild08 (v1's gold set and held-out sessions no worse)."
-status: PROPOSED (collection running from 2026-10-21; the class scheme is Batt's default unless he answers; the evaluation is pre-registered in ../benchmarks/v2orc-vs-v1.md BEFORE training)
+status: PROPOSED (collection done 2026-10-21; the 15 classes decided (3b); label fix 2 + exclusions and the two tiers PRE-REGISTERED 2026-10-22 in 3f; the evaluation is pre-registered in ../benchmarks/v2orc-vs-v1.md BEFORE training, its P1 amended by 3f)
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [labels-v2-plan.md, training-cost.md, ../benchmarks/v1-vs-v0png.md, ../phase3-plan.md, ../operations/vision-long-lived.md]
-next_action: "Batt's call on the DRAFT 3e (NOT pre-registered, NOT run). The label fix (3b) FAILED C1 on col1 (3c, 15.6 %), so nothing trains. 3e, measured on col3 only, proposes fix 2: the drawn-view rule (93.8 % on the confirm half against 78.9 % for 1a; C1 estimated at about 4 % alone). It also lists options for the occlusion and the Orc Skeleton, and Batt's open questions."
+next_action: "3f (PRE-REGISTERED 2026-10-22): build fix 2 (i)-(iii) + 2b + 2c, run C1 / C2 on col1 (T1: C1 pooled <= 5 %), build the round-3 blind pack (seed 2) for two new blind labellers (T2: every species passes), label Batt's 2026-10-22 demo with the same rules. Train only if the training tier passes; else report why to Batt."
 title: "orcsdun01 (Orc Dungeon F1): the facts, the collection, the camera check, the class scheme, the labels and the evaluation (plan)"
 date: 2026-10-21
 owner: Batt
@@ -410,6 +410,10 @@ frames; v2's own frame rules keep 4,343, as in round 1). Each visible orcsdun01 
 
 ### 3e. DRAFT for Batt -- NOT pre-registered, NOT run: fix 2 (the drawn view), and options for the occlusion and the Orc Skeleton
 
+➡️ **SUPERSEDED as a draft: fix 2 is now PRE-REGISTERED in 3f** (Batt 2026-10-22 ~19:4x: "fix 2 +
+exclusions", read as (i)-(iii) with 2b AND 2c, the exclude variant). O1-O4 and S2-S4 were NOT
+adopted (3b's 1c stays). This section is kept unchanged below as the evidence 3f rests on.
+
 **Status: a DRAFT.** It is evidence for Batt's next hypothesis, written by an offline study on the
 FITTING block col3 only (2026-10-21, 21:4x-22:3x ICT). Nothing here is pre-registered, nothing
 re-runs on col1 until Batt approves, and col2 is not read (the tool refuses col1 and col2 by name).
@@ -679,6 +683,182 @@ orcs fitted to the rear one):**
   - `viz_axis.png` (the by-eye check);
   - `scratch/` (the exploration scripts).
 
+### 3f. PRE-REGISTERED: label fix 2 with the exclusions 2b and 2c, and the two tiers (Batt 2026-10-22 ~19:4x; pre-registered at the commit time of 3f's first commit, BEFORE fix 2 is built and BEFORE anything runs on col1 or on today's sessions)
+
+**Batt (verbatim), the overnight brief, item C:** "C. GPU: TRAIN THE DETECTOR FOR THIS MAP (accuracy
+of engagement). Pre-register label fix 2 + exclusions with the two tiers: TRAINING data passes at
+C1 <= 5 % with every species passing the blind check; EVALUATION only on crops both blind labellers
+judged good (col2 stays TEST). Add today's orcsdun01 sessions (the bot's runs and my demo, packets
+as truth, never col2) as extra training data. If the training tier passes: build the cache (IO
+rules), train on the GPU (long-lived worker, MID_CKPT, R3, VRAM cap) with v1's prt_fild08 data (v1
+rules + species split) and the 15 classes. Score against v2orc-vs-v1.md only after training ends.
+If it doesn't pass: report why."
+
+**Batt, earlier today (verbatim):** "orcsdun01 labels: pre-register fix 2 + exclusions; two tiers:
+TRAINING at C1 <= 5 % with every species passing the blind check; EVALUATION only on crops both
+blind labellers judged good. Train if the training tier passes."
+
+**The parent's interpretation (stated here, before anything runs; NOT Batt's words):**
+- "fix 2 + exclusions" = 3e's DRAFT TEXT (i)-(iii) WITH BOTH optional exclusions, 2b AND 2c, and
+  2c is the EXCLUDE variant (not "fit both images and keep the better").
+- **The occlusion:** Batt decided none of O1-O4, so 3b's literal 1c rule stays (a label whose
+  predicted sprite box overlaps a model's projected box is EXCLUDED; a frame with an excluded
+  monster is excluded from the cache).
+- **The Orc Skeleton:** S1 is fix 2 itself. S2 (weapon reach) and S3 (stacked orcs) are not
+  adopted (no decision); S4 is not adopted (30 crops per species, as 3b).
+
+**The fix, "labels v2orc-fix2": 3b unchanged except the facing (1a) and its mapping to the sprite's
+image.** The heading is `orc_facing_study.fix2_heading` (72cb479, confirmed on col3's half 2 in 3e),
+reused, never re-derived:
+- (i) a monster that appeared standing and has not moved since: its appear heading, mapped as today
+  (the Timeline's facing; any unit no rule below covers keeps the Timeline's facing, as in 3b);
+- (ii) a WALKING monster (the Timeline state `walk`): the heading of the quadrant diagonal of its
+  current move's vector (x1 - x0, y1 - y0), with dx = 0 counted as west and dy = 0 as north
+  (north -> NW, east -> NE, south -> SW, west -> NW);
+- (iii) a monster NOT walking whose last move has ended (3b's walk rule applies: arrived or cut
+  short, no newer turn or attack): map_calc_dir's heading of that move's vector (3b's frozen 1a
+  heading); an axis heading takes the diagonal by the same convention, a diagonal stays;
+- the heading is drawn with today's mapping (`camera.displayed_direction`).
+
+**The exclusions (each handled as `unfit`: the label is not kept, and its frame is excluded from the
+cache; each is counted under its own name):**
+- **2b `next_move`:** a monster whose NEXT move packet (an `entity_appear` of kind `move`, 0x09FD,
+  for its id) arrives within 150 ms AFTER the label's timeline time (the frame time minus 1d's
+  120 ms). Every monster label (standing or walking).
+  - 3e's estimate also counted vanish packets. On col3's rows that changes nothing: 2.7 % (half 1)
+    and 1.9 % (half 2) either way (measured on col3 only, 19:3x today, before this section was
+    committed).
+- **2c `ambiguous_view`:** a monster under (iii) whose move was MIXED (dx and dy both non-zero,
+  |dx| != |dy|) and whose two candidate images DIFFER: the image of the move vector's quadrant
+  diagonal (ii's rule) and the image (iii) names. "Image" = the view class of the action drawn
+  (`orc_facing_study.view_classes`: the ACT's directions that draw identical images).
+
+**Frozen, never re-measured:** 1b, 1c, 1d, tau 0.092, k 0.140 and the fit radius (±6 px ground /
+±10 px flyers) are 3c's values: `params.json`, sha256 `fe1fb9b3…f6d5af`, frozen 2026-10-21 17:27:20
+ICT on col3. col2 is not read by any of it.
+
+**The checks on col1** (the pre-registered fitting / check block): `orc_labels_fix.py check`, the
+same tool, parameters and frames as 3c (every 5th frame inside a dwell, outside the GM windows).
+C1 and C2 judge the PREDICTION (fix 2's facing, 1b, 1d; no fit), after the 1c, 2b and 2c
+exclusions:
+- **C1 pooled** = `bad_label` / standing labels scored, over the 7 orcsdun01 species pooled
+  (`orc_camera_check.summarize`, as in 3a and 3c). **This is the one number that gates (T1 below).**
+- Reported: C1 per species; C2 per species against section 3's bars; the exclusions per reason;
+  the facing agreement.
+
+**THE TWO TIERS (operational):**
+- **TRAINING tier.** Batt: "TRAINING data passes at C1 <= 5 % with every species passing the blind
+  check". orcsdun01 labels train only if BOTH hold:
+  - **T1:** C1 pooled on col1 <= 0.050 (the unrounded ratio). For the training decision this
+    replaces section 3's < 2 %.
+  - **T2:** EVERY orcsdun01 species passes the blind check, round 3:
+    - two NEW blind labeller agents;
+    - seed 2 (rounds 1 and 2 used 0 and 1);
+    - 30 crops per species, drawn from every KEPT fix-2 label of col1 (`--blind-from
+      kept_labels`, as round 2), plus col1's Poring controls;
+    - the bars of section 5: >= 90 % "good" from EACH labeller AND the species right >= 95 %;
+    - scored by `scripts/blind_score.py`;
+    - the instructions are round 2's, word for word.
+  - **"Every species" (the parent's reading):**
+    - one failing orcsdun01 species fails the tier: NOTHING of orcsdun01 trains, and the result
+      goes to Batt (3b's per-species exclusion is not applied);
+    - a species with fewer than 30 kept labels is sampled whole;
+    - a species with none fails T2;
+    - the Poring controls are reported and decide nothing.
+  - **Reported, NOT gating:** C1 per species, and C1 on today's added sessions (but see "an added
+    session" below).
+  - **C2 is not one of Batt's tiers.** It is reported against section 3's bars. If it fails for a
+    species, the parent tells Batt before any cache is built: a stop, not a verdict.
+- **EVALUATION tier.** Batt: "EVALUATION only on crops both blind labellers judged good (col2 stays
+  TEST)".
+  - col2 stays the TEST block: never read for training, fitting or any parameter, and not read
+    before training ends.
+  - **The parent's reading, fixed now (it amends v2orc-vs-v1.md's P1 before training; see its
+    Amendment A):**
+    - after training ends, col2 is labelled with fix 2 (these tools, these frozen parameters,
+      every 3rd frame as the cache);
+    - an evaluation pack is drawn from col2's KEPT labels: seed 3, up to 60 crops per species (so
+      a species can reach P1's 50-label bar);
+    - two NEW blind labellers judge it, with the same instructions;
+    - a crop is EVALUATED when BOTH answer q1 yes, q2 good, and q3 = the label's species.
+  - **P1 per species s, on the frames of the evaluated crops (the position metric):**
+    - recall = the evaluated s crops whose box contains the centre of a class-s detection
+      (one-to-one per frame) / the evaluated s crops;
+    - precision = those matches / the class-s detections whose centre falls inside ANY evaluated
+      crop's box;
+    - detections elsewhere in the frame are not scored: their truth is not verified.
+  - **The bar is P1's own:** recall and precision >= 0.80 for a species with >= 50 evaluated crops;
+    fewer: reported, no bar.
+
+**The extra training data: today's orcsdun01 sessions** (Batt: "the bot's runs and my demo,
+packets as truth, never col2").
+
+| session | what | frames | packets | labelled? |
+|---|---|---|---|---|
+| `20261022T114129-demo-dungeon-A-pilot1` | 3.98 pilot 1 (A) | none | yes | no: no frames |
+| `20261022T115210-demo-dungeon-B-pilot2` | 3.98 pilot 2 (B) | none | none | no: neither |
+| `20261022T115747-demo-dungeon-B-pilot3` | 3.98 pilot 3 (B) | 5 strike shots | yes | no (below) |
+| `20261022T120309-demo-dungeon-C-pilot4` | 3.98 pilot 4 (C) | 9 strike shots | yes | no (below) |
+| `20261022T120918-demo-dungeon-A-r1-attempt1-stopped` | 3.98 run 1, attempt 1 | none | none | no: neither |
+| `20261022T121416-demo-dungeon-A-r1` | 3.98 run 1 (A) | 40 strike shots | yes | no (below) |
+| `20261022T124204-demo-dungeon-B-r2` | 3.98 run 2 (B) | 23 strike shots | yes | no (below) |
+| `20261022T131504-demo-dungeon-B-r3-attempt1-stopped` | 3.98 run 3, attempt 1 | 17 strike shots | none | no: no packets |
+| `20261022T132000-demo-dungeon-B-r3` | 3.98 run 3, attempt 2 | 40 strike shots | yes | no (below) |
+| `20261022T133358-demo-dungeon-B-r3` | 3.98 run 3 (B) | 40 strike shots | yes | no (below) |
+| `20261022T142105-demo-dungeon-mr-B-mrpilot` | 3.99 pilot (MR) | 4 strike shots | yes | no (below) |
+| `20261022T142950-demo-dungeon-mr-B-mr1` | 3.99 run 1 (MR) | 40 strike shots | yes | no (below) |
+| `20261022T151124-demo-dungeon-C-r4` | 3.98 r4 (C) | 40 strike shots | yes | no (below) |
+| `20261022T155122-demo-dungeon-B-r5` | 3.98 r5 (B) | 40 strike shots | yes | no (below) |
+| `20261022T163311-demo-dungeon-A-r6` | 3.98 r6 (A) | 40 strike shots | yes | no (below) |
+| `20261022T171500-demo-dungeon-mr-B-mr2` | 3.99 run 2 (MR) | 40 strike shots | yes | no (below) |
+| `20261022T184536-demo-human-demo-orcsdun01-crusader` | Batt's Crusader demo | **4,880** (5 Hz, JPEG q80, `human-demos/<sid>/frames`) | yes (5,283 events) | **yes, with the adapter below** |
+
+- **The bot's runs (3.98 / 3.99) recorded NO continuous frames.** `dungeon_hunt.py` keeps at most
+  40 `strike-NNN.jpg` per run: evidence frames for the judge's eye.
+  - **The capture time is not stored.** The grab happens between the strike event's `t_ns` (the
+    first click) and `t_end_ns` (after the JPEG save). A label needs the frame's time to within
+    1d's scale (120 ms), or every moving monster is misplaced.
+  - **Every shot shows the Crusader in contact with its target** (the crowd rule).
+  - So they are NOT labelled, and not forced. Recording frames in the runner is a separate
+    change, not made here.
+- **Batt's demo is labelled by the SAME rules, with an adapter in the label tools (built after this
+  commit):**
+  - **Frames:** the JPEG files, each named `<k>-<t_mono_ns>.jpg`, the capture time. The recorder
+    grabs through the same `ro_agent.Screen` path at 5 Hz q80 as `warp_watch`, so 1d's 120 ms
+    applies.
+  - **The moving camera:** the label stack places the camera at the Timeline's own position at each
+    frame's timeline time (our `self_move`s, walked), as for any frame. No change.
+  - **The UI:** the demo records no layout. Its frames show Batt's hunting layout. The rectangles
+    are `client_layout.RECTS["hunt"]`.
+    - A frame is labelled only if `client_layout.read` (pixels) says it IS the hunt layout; any
+      other frame is EXCLUDED (`ui_layout_mismatch`).
+    - Other windows Batt may open (inventory, skills, item notices) are NOT detected. That is a
+      known limit, reported.
+  - **The candidate frames:** every frame on orcsdun01, outside the GM windows (there are no
+    dwells). C1 uses every 5th frame, as on col1; the labels use every 3rd frame, as the cache.
+  - **An added session trains only if:**
+    - the training tier passes (on col1, above); AND
+    - its OWN C1 pooled is <= 0.050 on >= 50 standing labels scored (Batt: "TRAINING data passes
+      at C1 <= 5 %"); with fewer it is not added (no measure).
+  - **It is NOT blind-checked separately.** The blind check is col1's round 3, as Batt said. The
+    demo's own conditions (fights, a moving camera, the Crusader's v0-size `player` box) are
+    reported as limits.
+- **Not added:** the 2026-10-21 demo (`20261021T175710-demo-human-demo-orcsdun01-crusader`).
+  Batt's words are "today's".
+
+**What follows if the training tier passes** (the parent's steps, under the IO rules and R1-R3):
+- **The combined cache:**
+  - orcsdun01's TRAIN blocks (col1, col3) plus the added sessions that qualify;
+  - fix 2's fitted monster boxes, v2's frame rules, the literal 1c rule, the 15 classes;
+  - v1's prt_fild08 sessions with v1's rules and the species split (3b item 2), split by session
+    as v1's cache.
+- Then training and the v2orc-vs-v1.md score, ONCE, after training ends.
+- **If the tier fails, nothing trains,** and the report says which condition failed and by how
+  much.
+
+**Expected, from col3 (an estimate, not a bar):** C1 about 1.9-2.7 % with fix 2 + 2b + 2c (3e),
+under T1's 5 %. T2 is the open question: round 2's Orc Skeleton failed at 86.7 % for one labeller.
+
 ## 4. The class scheme (PROPOSED; Batt's default if he does not answer by the time the labels are ready)
 
 | id | class | from |
@@ -724,7 +904,8 @@ orcs fitted to the rear one):**
 
 ### 5a. RESULT: the blind label check on col1 (2026-10-21 ~12:10 ICT): FAIL for every orcsdun01 species
 
-➡️ Round 2 (the label fix's fitted boxes, seed 1) is built but not run: 3c.
+➡️ Round 2 (the label fix's fitted boxes, seed 1) ran in 3d. Round 3 (fix 2, seed 2) is
+pre-registered in 3f.
 
 - **The pack** (`scripts/orc_label_sheets.py`, seed 0):
   - 30 crops per orcsdun01 species + col1's 15 Poring boxes = 225 crops;
