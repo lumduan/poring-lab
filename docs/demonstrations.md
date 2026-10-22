@@ -15200,7 +15200,8 @@ between fights, 24.8 s / kill (3.98 defend), of which its loot step ~10.7 s / ki
 to 25 s and 30 hovers); 83 of Batt's 88 pickups came within 10 s after a fight.
 
 **The change (`--loot v2`, code 271ece3 on feat/loot-v2, rebased on Amendment I; merged into main
-only after 4.00's chain ends, so 4.00's runs keep their code):**
+only after 4.00's chain ends, so 4.00's runs keep their code) -- ➡️ MERGED 2026-10-23 05:36 ICT
+(e28272f), after 4.00's last run; NOT run yet (no client time remained before the 07:00 end state):**
 1. **Changed cells first:** at the step's start, every in-view cell whose image changed since the
    fight began (3.98's sweep rule: a 24 x 20 grey patch, mean |diff| >= 15) is hovered first,
    nearest first; then the plain loot-list cells (the 5 x 5 around each kill of the fight), nearest

@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [orcsdun01-detector.md, crusader-build.md, crusader-orcsdun01-facts.md, ../benchmarks/v2orc-vs-v1.md, ../competition.md, ../demonstrations.md]
-next_action: "2026-10-22 night: Batt's decisions on the 19:00 report are recorded (section 10). His 15-min demo (9a) is the orcsdun01 TARGET (472 kills/h, 20,520 z/h gross, 0 potions, 5 Heals, HP min 74 %): the bot loses ~25 s per kill STANDING between fights. 4.00 (dungeon@4: his patrol loop + his Heal rhythm vs the heading search, paired) runs overnight; the loot change (decision 4) is the next version."
+next_action: "2026-10-23 05:4x (demonstrations 4.00 RESULT, 6 pairs): Batt's PATROL LOOP 186.0 kills/h vs the heading search 141.6 (P ahead in 5 of 6 pairs, mean +44.3), net 8,318 vs 5,642 z/h, deaths 0, hard bars 0, on dungeon@4's base (H = B + Heal, rest 80/30, the burst ends on our damage line, the no-entry carve, the plant sweep; Amendments I + J). Batt's 472 is the target: standing between fights is still the gap (the loot step); 4.01 (loot v2) is pre-registered and merged, not run. Batt decides: adopt the loop; the Black Mushroom box loop; the plant sweep."
 title: "A Crusader hunting Orc Dungeon F1 (orcsdun01) for real: the test character, the build, the survival skills and the order (plan)"
 date: 2026-10-21
 owner: Batt
