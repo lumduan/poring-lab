@@ -157,3 +157,15 @@ def test_a_stalled_target_is_carved_out_of_the_route_grid() -> None:
     assert m[0:4, 0:4].all() and m.sum() == 16  # clipped at the map's edge
     dh.carve(m, (8, 8), 2)
     assert m[6:10, 6:10].all() and m.sum() == 32
+
+
+def test_a_route_starts_even_when_our_own_cell_is_carved() -> None:
+    """Amendment D (3.98 run 2: 20 min standing at 45,60): a stall's carve can cover the cell we
+    then stand on; A* from a cell off the grid returned None forever. route() holds our cell."""
+    import numpy as np
+
+    g = np.ones((12, 12), dtype=bool)
+    carved = np.zeros_like(g)
+    dh.carve(carved, (3, 3), 2)  # covers (2, 2) .. (5, 5): our cell (4, 4) among them
+    p = dh.route(g, carved, (4, 4), (10, 10))
+    assert p is not None and p[0] == (4, 4) and p[-1] == (10, 10)

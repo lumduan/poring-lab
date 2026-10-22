@@ -104,6 +104,7 @@ QUICK_S = 0.25  # guard_tick: an HP read at most this often inside a long action
 MAX_SHOTS = 40  # strike frames kept per run (JPEG, the session dir)
 NOENTRY_RED = 25  # red pixels in the 64 x 64 cursor crop: the client's no-entry ring
 CARVE_R = 2  # Amendment C: a stalled walk target's 5 x 5 leaves the route grid for the run
+IDLE_MAX_S = 45.0  # Amendment D: searching this long with no walk click and no move = stuck
 STUCK_STALLS = 4  # Amendment C: this many stalls within 60 s at one cell = stuck -> a Fly Wing
 STALL_CLICKS = 2  # walk clicks from the same cell without moving: turn, re-plan, scan ring 1
 BOX_EVERY_S, BOX_FRESH_S = 1.0, 1.5  # the box watcher's rhythm and how old a box may be
@@ -179,6 +180,23 @@ def rest_wanted(strat: Mapping[str, Any], hp: float, sp: float | None) -> bool:
         return False
     return not (strat.get("heal_below") is not None and sp is not None
                 and sp >= strat["heal_sp_min"])  # fmt: skip
+
+
+def route(base: Any, carved: Any, here: Cell, goal: Cell) -> list[Cell] | None:
+    """A* on ``base`` minus the ``carved`` cells, with OUR cell held and the base grid restored
+    within CARVE_R of it (standing there proves the carved block reachable; hunt_flow's
+    approach_path holds our cell for the same reason). Amendment D: without it, run 2 stood 20 min
+    at 45,60 -- every route from inside a stall's carve came back None."""
+    import hunt_core as hc
+
+    b = np.asarray(base, dtype=bool)
+    g = b & ~np.asarray(carved, dtype=bool)
+    h, w = g.shape
+    y0, y1 = max(0, here[1] - CARVE_R), min(h, here[1] + CARVE_R + 1)
+    x0, x1 = max(0, here[0] - CARVE_R), min(w, here[0] + CARVE_R + 1)
+    g[y0:y1, x0:x1] = b[y0:y1, x0:x1]
+    g[here[1], here[0]] = True
+    return hc.astar(g, here, goal)  # type: ignore[no-any-return]
 
 
 def carve(mask: Any, c: Sequence[int], r_: int) -> None:
@@ -543,6 +561,9 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         walk_from: Cell | None = None
         stall = 0
         carved = np.zeros_like(okr, dtype=bool)  # Amendment C: cells the client would not walk to
+        idle_pos: Cell | None = None
+        idle_since = time.monotonic()
+        last_walk_click = time.monotonic()
         stalls_here: list[float] = []
         noentry_n = 0
         goal_path: list[Cell] | None = None
@@ -999,7 +1020,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                                 "fallback": not at_spot})  # fmt: skip
                             continue
                         if goal_path is None or goal_path[-1] != spot:
-                            goal_path = hc.astar(okr & ~carved, here, spot) if spot else None
+                            goal_path = route(okr, carved, here, spot) if spot else None
                             ev(
                                 {
                                     "kind": "rest_route",
@@ -1009,13 +1030,26 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                             )
                             if goal_path is None:
                                 mode = "search"
+                # Amendment D: the IDLE watchdog -- searching with no walk click, no fight and no
+                # move for IDLE_MAX_S = stuck (the routing fails, or the client will not walk)
+                if here != idle_pos or mode != "search":
+                    idle_pos, idle_since = here, tick
+                elif tick - max(idle_since, last_walk_click) > IDLE_MAX_S:
+                    ev({"kind": "stuck", "at": None if here is None else list(here), "why": "idle"})
+                    press("fly", "idle")
+                    fly_at = time.monotonic()
+                    ev({"kind": "escape", "how": "fly", "why": "idle"})
+                    idle_pos, idle_since, goal_path = None, tick, None
+                    loot_list, fight_ref = [], None
+                    time.sleep(1.0)
+                    continue
                 # --- SEARCH: the heading walk
                 if mode == "search" and here is not None and (
                         goal_path is None or len(goal_path) < 2
                         or max(abs(goal_path[-1][0] - here[0]),
                                abs(goal_path[-1][1] - here[1])) <= 2):  # fmt: skip
                     goal = hf.heading_goal(area & ~carved, here, walk_st, rng)
-                    goal_path = None if goal is None else hc.astar(okr & ~carved, here, goal)
+                    goal_path = None if goal is None else route(okr, carved, here, goal)
                     ev({"kind": "goal", "to": None if goal is None else list(goal),
                         "len": None if goal_path is None else len(goal_path),
                         "turn": walk_st.get("turn")})  # fmt: skip
@@ -1026,7 +1060,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                     if here in goal_path:
                         goal_path = goal_path[goal_path.index(here) :]
                     else:
-                        goal_path = hc.astar(okr & ~carved, here, goal_path[-1])
+                        goal_path = route(okr, carved, here, goal_path[-1])
                     if goal_path and len(goal_path) >= 2:
 
                         def fits(c: Cell, h: Cell = here) -> bool:
@@ -1075,6 +1109,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                                         mode = "fight"
                                     continue
                                 click_at(u, v, "walk")
+                                last_walk_click = tick
                                 ev({"kind": "walk", "from": list(here), "to": list(c),
                                     "clicked": True, "why": mode})  # fmt: skip
                             elif res["verdict"] == "sword":
