@@ -14463,7 +14463,9 @@ Reported, not deciding:
   The next version's PARAMS start from `{**PARAMS[55], "loot_fast_scan_ab": False}`.
   `hunt_config.ADOPTED_VERSION` = 55 (the adoption commit, after this record).
 - Not added: a D8 evidence row for 3.97 (`config/flows/hunt/evidence.yaml` rows are hand-written
-  by a person). Listed for Batt.
+  by a person). Listed for Batt. ➡️ **ADDED 2026-10-22 ~19:5x ICT by the agent on Batt's delegation**
+  (decision 7 on the 19:00 report: "v55: KEEP; write 3.97's D8 evidence row yourself"): 4 runs x
+  60 min, hard bars 0 / 0 / 0, pre-registered 00:10 -- it qualifies (D8 badge).
 
 ### 3.98 dungeon@2: the CRUSADER hunts Orc Dungeon F1 (orcsdun01) for real -- three SUSTAIN strategies A / B / C compared in whole runs (pre-registered 2026-10-22 12:08 ICT, the commit time of 3.98's first commit, BEFORE its scored runs; Batt 2026-10-22 day run: "the CRUSADER hunts ORC DUNGEON F1 for real, three sustain strategies compared ... each pre-registered; whole runs, ALTERNATED A/B/C so density and time of day spread evenly")
 

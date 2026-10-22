@@ -92,7 +92,12 @@ def test_d8_badges_come_only_from_qualifying_verdicts() -> None:
     assert doc["evidence"]["badges"] == ["one path (RDP), prt_fild08"]
     assert [e["entry"] for e in choice(doc, "loot", "gm_scan@50")["evidence"]] == ["3.91"]
     assert [e["entry"] for e in choice(doc, "loot", "gm_scan_one_pass@51")["evidence"]] == ["3.92"]
-    assert [e["entry"] for e in choice(doc, "strike", "arm_c@32")["evidence"]] == ["3.91", "3.92"]
+    assert [e["entry"] for e in choice(doc, "strike", "arm_c@32")["evidence"]] == [
+        "3.91",
+        "3.92",
+        "3.97",
+    ]
+    assert [e["entry"] for e in choice(doc, "loot", "gm_fast_scan@54")["evidence"]] == ["3.97"]
     # each D8 condition alone takes the badge away
     for change, why in (
         ({"pre_registered": ""}, "not pre-registered"),

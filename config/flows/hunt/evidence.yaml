@@ -32,3 +32,13 @@ verdicts:
     pre_registered: "2026-10-20 22:44 ICT"
     verdict: "ADOPTED by its own rule (P1, P2, M3, G5 pass)"
     gm: "immune (@monsterignore)"
+  - entry: "3.97"
+    version: 55
+    map: prt_fild08
+    path: rdp
+    runs: 4
+    minutes: 60
+    hard_bars: [0, 0, 0]
+    pre_registered: "2026-10-22 00:10 ICT"
+    verdict: "ADOPTED by its own rule (P1, P2, G3 pass; Creamy hits 6 counted apart); Batt KEEP 2026-10-22 -- this row written by the agent on Batt's delegation (decision 7 on the 19:00 report)"
+    gm: "immune (@monsterignore)"

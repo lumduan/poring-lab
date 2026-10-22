@@ -59,6 +59,15 @@
          "hours": 4.0,
          "verdict": "ADOPTED by its own rule (P1, P2, M3, G5 pass)",
          "gm": "immune (@monsterignore)"
+        },
+        {
+         "entry": "3.97",
+         "version": 55,
+         "map": "prt_fild08",
+         "path": "rdp",
+         "hours": 4.0,
+         "verdict": "ADOPTED by its own rule (P1, P2, G3 pass; Creamy hits 6 counted apart); Batt KEEP 2026-10-22 -- this row written by the agent on Batt's delegation (decision 7 on the 19:00 report)",
+         "gm": "immune (@monsterignore)"
         }
        ]
       }
@@ -131,6 +140,15 @@
          "path": "rdp",
          "hours": 4.0,
          "verdict": "ADOPTED by its own rule (P1, P2, M3, G5 pass)",
+         "gm": "immune (@monsterignore)"
+        },
+        {
+         "entry": "3.97",
+         "version": 55,
+         "map": "prt_fild08",
+         "path": "rdp",
+         "hours": 4.0,
+         "verdict": "ADOPTED by its own rule (P1, P2, G3 pass; Creamy hits 6 counted apart); Batt KEEP 2026-10-22 -- this row written by the agent on Batt's delegation (decision 7 on the 19:00 report)",
          "gm": "immune (@monsterignore)"
         }
        ]
@@ -215,6 +233,15 @@
          "hours": 4.0,
          "verdict": "ADOPTED by its own rule (P1, P2, M3, G5 pass)",
          "gm": "immune (@monsterignore)"
+        },
+        {
+         "entry": "3.97",
+         "version": 55,
+         "map": "prt_fild08",
+         "path": "rdp",
+         "hours": 4.0,
+         "verdict": "ADOPTED by its own rule (P1, P2, G3 pass; Creamy hits 6 counted apart); Batt KEEP 2026-10-22 -- this row written by the agent on Batt's delegation (decision 7 on the 19:00 report)",
+         "gm": "immune (@monsterignore)"
         }
        ]
       }
@@ -266,7 +293,17 @@
         55
        ],
        "adopted": true,
-       "evidence": []
+       "evidence": [
+        {
+         "entry": "3.97",
+         "version": 55,
+         "map": "prt_fild08",
+         "path": "rdp",
+         "hours": 4.0,
+         "verdict": "ADOPTED by its own rule (P1, P2, G3 pass; Creamy hits 6 counted apart); Batt KEEP 2026-10-22 -- this row written by the agent on Batt's delegation (decision 7 on the 19:00 report)",
+         "gm": "immune (@monsterignore)"
+        }
+       ]
       },
       {
        "id": "gm_scan_one_pass@51",
@@ -437,6 +474,15 @@
          "hours": 4.0,
          "verdict": "ADOPTED by its own rule (P1, P2, M3, G5 pass)",
          "gm": "immune (@monsterignore)"
+        },
+        {
+         "entry": "3.97",
+         "version": 55,
+         "map": "prt_fild08",
+         "path": "rdp",
+         "hours": 4.0,
+         "verdict": "ADOPTED by its own rule (P1, P2, G3 pass; Creamy hits 6 counted apart); Batt KEEP 2026-10-22 -- this row written by the agent on Batt's delegation (decision 7 on the 19:00 report)",
+         "gm": "immune (@monsterignore)"
         }
        ]
       }
@@ -485,6 +531,22 @@
      0
     ],
     "verdict": "ADOPTED by its own rule (P1, P2, M3, G5 pass)",
+    "gm": "immune (@monsterignore)",
+    "d8": true,
+    "why_not": ""
+   },
+   {
+    "entry": "3.97",
+    "version": 55,
+    "map": "prt_fild08",
+    "path": "rdp",
+    "hours": 4.0,
+    "hard_bars": [
+     0,
+     0,
+     0
+    ],
+    "verdict": "ADOPTED by its own rule (P1, P2, G3 pass; Creamy hits 6 counted apart); Batt KEEP 2026-10-22 -- this row written by the agent on Batt's delegation (decision 7 on the 19:00 report)",
     "gm": "immune (@monsterignore)",
     "d8": true,
     "why_not": ""
