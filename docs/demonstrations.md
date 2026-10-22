@@ -14706,6 +14706,20 @@ Reported, not deciding:
 - Run 1 is reported as PARTIAL (beside the table, not pooled). The registered order continues
   from run 2 (B C B C A C A).
 
+**Amendment D (2026-10-22 13:1x, after run 2 was stopped, BEFORE run 3; the parent):**
+- Run 2 (B, `20261022T124204-demo-dungeon-B-r2`) was STOPPED by the parent at 30.4 min (12:42:47-
+  13:12:31): from ~7 min on, every route came back None (~1,400 `goal` events per 5 min, no walk
+  click) and the Crusader stood at 45,60, killing only what walked up (3 kills in 23 min).
+  Amendment C's carve had covered the cell we then stood on, and A* refuses a start off its grid.
+  Offline: the plain grid routes 45,60 -> 68,91 in 32 steps.
+- Fix (code e391f44): every route holds our own cell and restores the plain grid within 2 cells of
+  it (standing there proves it reachable); and an IDLE watchdog: 45 s of searching with no walk
+  click and no move -> a Fly Wing (`stuck` why `idle`).
+- Runs 1 (A) and 2 (B) are reported as PARTIAL, beside the table, not pooled.
+- **The order is re-balanced so each strategy gets two full runs before ~18:00:** runs 3-8 =
+  B C A B C A (seeds 22003-22008), the same rotation pattern, starting with B (the strategy whose
+  run failed). This replaces the registered B C B C A C A for the remaining runs.
+
 **Run log:** (filled as the runs end)
 
 ## 4. Labels from verified outcomes
