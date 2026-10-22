@@ -589,10 +589,11 @@ def clean(ln: Line, lang: Lang | None = None) -> bool:
 
 # --- events and per-language line formats ------------------------------------------------------
 #
-# The EVENT model is fixed: damage {n, name}, taken {n, name} (2026-10-22), base_exp {n}, job_exp {n}, item {count} (the item's
-# name is never read), other. HOW a client language writes each event is DATA, one file per
-# language: data/ui_anchors/battle_log/<lang>/formats.json (gitignored: client text is never
-# committed; `formats-init en` writes the English one). Its schema:
+# The EVENT model is fixed: damage {n, name}, taken {n, name} (2026-10-22), base_exp {n},
+# job_exp {n}, item {count} (the item's name is never read), other. HOW a client language writes
+# each event is DATA, one file per language: data/ui_anchors/battle_log/<lang>/formats.json
+# (gitignored: client text is never committed; `formats-init en` writes the English one). Its
+# schema:
 #
 #   {"lang": "en",
 #    "render": {Render's fields; any left out keep the English lab client's values},
