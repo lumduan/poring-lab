@@ -57,6 +57,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 ROOT = Path(__file__).resolve().parents[1]
 DEMO = Path("/dev/shm/poring-lab-demo")
 MAP = "orcsdun01"
+MR_MAPS = frozenset({"orcsdun01"})  # every spawning species a target, 0 script NPCs (prep doc)
 MR_VERSION = "dungeon@3-melee_ring"  # Batt 2026-10-22 13:4x: the cursor-driven engagement
 VERSION = "dungeon@2"  # @1 = the 11:41 pilot; @2 = + Batt's loot list + sweep
 REST_FILE = ROOT / "config" / "dungeon" / "orcsdun01.json"  # rest spots (static map knowledge)
@@ -461,6 +462,18 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
     from poring_env import selfpos
 
     strat = STRATEGIES[a.strategy]
+    if a.engage == "melee_ring":
+        # Batt 13:4x: melee-ring strikes EVERY monster in melee range -- only on a map whose every
+        # spawning species is a target and that has no script NPC, on the lab server (the hunt
+        # block's lint / run start: poring_flow lint/hunt.py; this runner hunts MAP only, on the
+        # lab, where the interlock attests the lab rAthena)
+        kb_ = ROOT / "data" / "kb"
+        npcs_ = (
+            json.loads((kb_ / "npc_cells.json").read_text())["maps"].get(MAP, {}).get("npcs", [])
+        )
+        if MAP not in MR_MAPS or npcs_:
+            raise SystemExit(f"dungeon@3 refused: melee_ring on {MAP} (allowed {sorted(MR_MAPS)}, "
+                             f"{len(npcs_)} script NPCs)")  # fmt: skip
     z = np.load(hpp.GLYPHS)
     glyphs = {("%" if k == "pct" else k[1:]): z[k] for k in z.files}
     agz = np.load(sv.AG_ICON)
