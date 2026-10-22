@@ -71,7 +71,7 @@ import sys
 import time
 from collections import Counter, defaultdict
 from collections.abc import Iterator, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -1151,6 +1151,8 @@ class FixFrame:
     excluded: list[tuple[int, int, str]]  # (gid, mob, reason)
     hidden: int  # monsters v1's visibility rule leaves unlabelled (not an exclusion)
     applies: bool = True  # False off orcsdun01: the frame keeps v1's labels (Batt's 3b item 2)
+    # without pixels (a dry run): the labels the fit WOULD judge, (gid, mob, predicted box)
+    pending: list[tuple[int, int, Box]] = field(default_factory=list)
 
 
 class FixLabeler:
@@ -1169,7 +1171,10 @@ class FixLabeler:
         self.tau = float(params["tau"])
         self.valid = valid_map(lab.size, lab.ui_rects)
 
-    def frame(self, t: int, bgr: npt.NDArray[np.uint8]) -> FixFrame | None:
+    def frame(self, t: int, bgr: npt.NDArray[np.uint8] | None) -> FixFrame | None:
+        """The frame's fitted labels and exclusions. ``bgr=None`` (a dry run: packets only) runs
+        every rule up to the fit -- visibility, 1c, 2b, 2c -- and lists the labels the fit would
+        judge in ``pending`` (their unfit / crowd / UI fates need the pixels)."""
         lab = self.lab
         tw = t - self.offset_ns
         replay, world, all_states, rules = lab.timeline.at_world(tw)
@@ -1179,7 +1184,7 @@ class FixLabeler:
             return FixFrame(t, [], [], 0, applies=False)  # the fix (and its models) is orcsdun01's
         scene = occ.scene_for(lab, world.map, world.self_pos)
         states = {s.gid: s for s in all_states}
-        grey = bgr[:, :, :3].astype(float) @ label_check.GREY
+        grey = None if bgr is None else bgr[:, :, :3].astype(float) @ label_check.GREY
         preds: list[tuple[EntityState, ActorState, SpriteSheet, SpritePrediction,
                           tuple[int, str], str | None]] = []  # fmt: skip
         out = FixFrame(t, [], [], 0)
@@ -1210,6 +1215,9 @@ class FixLabeler:
                 continue
             if why is not None:  # fix 2's 2b / 2c (3f): excluded, as unfit
                 out.excluded.append((e.gid, e.job, why))
+                continue
+            if grey is None:  # no pixels: the fit's fate is unknown
+                out.pending.append((e.gid, e.job, pred.box))
                 continue
             r = self.fit_px.get(int(e.job), 6)
             fit = fit_label(grey, self.valid, sheet, pred, r)

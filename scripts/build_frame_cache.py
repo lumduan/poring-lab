@@ -93,6 +93,32 @@ V1 RULES + THE SPECIES SPLIT (Batt, orcsdun01-detector.md 3b item 2, restated 20
   (``excluded_species`` per session); v1 has no warp boxes, so ``warp`` stays empty there;
 - ``--dry-run``: packets and indexes only (no image read, nothing written).
 
+THE ORCSDUN01 LABEL FIX IN THE CACHE (orcsdun01-detector.md 3b / 3f):
+
+    build_frame_cache.py --labels v2 --classes species --kb DIR --fix PARAMS --rule fix2 ...
+
+- the frozen PARAMS (orc_labels_fix.py freeze; their 1d offset replaces --offset-ms) and the
+  facing rule: each frame v2's rules keep is FITTED where its pixels are read
+  (orc_labels_fix.FixLabeler, exactly as ``orc_label_sheets.py --fix``): its monster boxes are the
+  fitted ones; ANY excluded monster label (1c ``occluded_model``, 2b ``next_move``, 2c
+  ``ambiguous_view``, ``unfit``, ``crowd``, ``ui``) excludes the FRAME (``fix_<reason>:<mob>``);
+  a frame on another map keeps v2's labels (Batt's 3b item 2); a human demo's frame in another UI
+  layout is excluded (``ui_layout_mismatch``);
+- ``--dry-run`` reads no pixel, so it applies every rule up to the fit (visibility, 1c, 2b, 2c)
+  and counts the labels the fit would judge as PENDING: its kept frames are an UPPER BOUND.
+
+ONE BUILD, TWO LABEL MODES (3f: v1's prt_fild08 data with v1's rules + the species split, the
+orcsdun01 blocks with v2 + the fix):
+
+    build_frame_cache.py --labels v2 --classes species --fix PARAMS --rule fix2 ...
+                         --v1-species-sessions S [S ...]
+
+- the listed sessions (each also in a split) take the ``--labels v1 --classes species`` path;
+  every other session the build's own (v2); one class list, one manifest, one set of shards;
+- THE TEST BLOCK: a session named ``*-col2`` (orcsdun01's pre-registered TEST block) is refused
+  in train / val always, and in test unless ``--allow-test-block`` (3f: never read before
+  training ends).
+
 WARP-AND-WATCH sessions (scripts/warp_watch.py, JPEG tar shards; qa_export.is_warp_watch): every
 ``--every-jpeg``-th frame (5 Hz recordings; default 3, ~1.7 fps, near v1's ~2 fps), their labels in
 the recorded UI layout's rectangles. orcsdun01 is a scene map of v0 / v1 too.
@@ -109,7 +135,7 @@ import tarfile
 import time
 from collections import Counter
 from collections.abc import Callable, Iterator, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
 from typing import Any
@@ -440,6 +466,76 @@ def make_v2_session(path: Path, v2: V2Inputs) -> Any:
     return s
 
 
+TEST_BLOCK_SUFFIX = "-col2"  # orcsdun01's pre-registered TEST block (orc_labels_fix's rule)
+
+
+def is_test_block(sid: str) -> bool:
+    return sid.rstrip("/").endswith(TEST_BLOCK_SUFFIX)
+
+
+@dataclass(frozen=True)
+class FixInputs:
+    """``--fix PARAMS --rule R``: the orcsdun01 label fix's frozen parameters and facing rule
+    (orc_labels_fix.py; recorded in the progress file and the manifest)."""
+
+    params: dict[str, Any]
+    rule: str
+    provenance: dict[str, Any]
+
+    @classmethod
+    def from_args(cls, a: argparse.Namespace) -> FixInputs | None:
+        if getattr(a, "fix", None) is None:
+            return None
+        import orc_labels_fix as olf
+
+        params = olf.load_params(a.fix)
+        want = getattr(a, "fix_sha256", None)
+        if want is not None and sha256_of(a.fix) != want:
+            raise SystemExit(f"{a.fix}: sha256 {sha256_of(a.fix)}, not the frozen {want}")
+        if a.rule not in olf.RULES:
+            raise SystemExit(f"--rule {a.rule}: one of {olf.RULES}")
+        prov = {"labels": olf.labels_name(a.rule), "rule": a.rule, "params": str(a.fix),
+                "params_sha256": sha256_of(a.fix), "measured_on": params.get("measured_on"),
+                "offset_ms": float(params["offset_ms"]),
+                "rsw_sha256": (params.get("occluders") or {}).get("rsw_sha256")}  # fmt: skip
+        return cls(params, a.rule, prov)
+
+    def labeler(self, lab: Any) -> Any:
+        import orc_labels_fix as olf
+
+        return olf.FixLabeler(lab, self.params, rule=self.rule)
+
+
+def apply_fix(fr: lv.Frame, got: Any) -> tuple[lv.Frame | None, list[str]]:
+    """PURE: a frame v2's rules keep, under the fix's verdict on it (orc_labels_fix.FixFrame), as
+    ``orc_label_sheets.py --fix`` treats it: no world -> excluded; another map -> v2's labels
+    unchanged; any excluded monster label -> the FRAME excluded (``fix_<why>:<mob>``); else v2's
+    monster boxes are replaced by the fitted ones (kind ``fit``) -- and, without pixels (a dry
+    run), by the labels the fit would judge (kind ``fit_pending``, their predicted boxes)."""
+    if got is None:
+        return None, ["fix_no_world"]
+    if not got.applies:
+        return fr, []
+    if got.excluded:
+        return None, [f"fix_{why}:{mob}" for _gid, mob, why in got.excluded]
+    monsters = [lv.V2Label("monster", *k.box, gid=k.gid, job=k.mob, kind="fit") for k in got.kept]
+    monsters += [lv.V2Label("monster", *box, gid=gid, job=mob, kind="fit_pending")
+                 for gid, mob, box in getattr(got, "pending", ())]  # fmt: skip
+    labels = tuple(b for b in fr.labels if b.cls != "monster") + tuple(monsters)
+    return replace(fr, labels=labels), []
+
+
+def fixed_frame(fixer: Any, layout: Any, fr: lv.Frame, t: int,
+                img: np.ndarray | None) -> tuple[lv.Frame | None, list[str], Any]:  # fmt: skip
+    """The fix on ONE frame v2's rules keep: (the frame to write or None, the exclusion reasons,
+    the fixer's FixFrame). ``img=None`` (a dry run): every rule up to the fit (apply_fix)."""
+    if img is not None and layout is not None and not layout(img):
+        return None, ["ui_layout_mismatch"], None  # a human demo in another UI layout (3f)
+    got = fixer.frame(t, img)
+    fr2, reasons = apply_fix(fr, got)
+    return fr2, reasons, got
+
+
 def map_reasons(map_name: str, v2: V2Inputs) -> list[str]:
     """The map gates (fail closed): not in the KB; its GAT not extracted; a held GAT."""
     mk = map_key(map_name)
@@ -636,11 +732,21 @@ def v2_frames(
             yield fid, t, {"frame_id": fid}, None
 
 
+def extra_roots(a: argparse.Namespace) -> list[Path]:
+    """The session roots searched after --datasets: --also-datasets, then each --collection MAP's
+    warp_watch directory (<datasets>/detector-collection/<MAP>: a relative name, so the guarded
+    cache step -- whose arguments cannot start with "/" -- can name it)."""
+    roots = list(getattr(a, "also_datasets", None) or ())
+    for name in getattr(a, "collection", None) or ():
+        roots.append(a.datasets / "detector-collection" / name)
+    return roots
+
+
 def resolve_session(sid: str, a: argparse.Namespace) -> Path:
     """v2: a banked demo session under --demo-root (RAM) first, else the session under --datasets
     (a recorded session, or a demo session dataset_ship already copied to the NAS), else under an
     --also-datasets root (warp_watch's detector-collection/<map>: a combined cache)."""
-    roots = (a.demo_root, a.datasets, *(getattr(a, "also_datasets", None) or ()))
+    roots = (a.demo_root, a.datasets, *extra_roots(a))
     for root in roots:
         if (root / sid / "manifest.json").exists():
             return root / sid  # type: ignore[no-any-return]
@@ -649,7 +755,7 @@ def resolve_session(sid: str, a: argparse.Namespace) -> Path:
 
 def dataset_session(sid: str, a: argparse.Namespace) -> Path:
     """v0 / v1: the session under --datasets, else under an --also-datasets root."""
-    for root in (a.datasets, *(getattr(a, "also_datasets", None) or ())):
+    for root in (a.datasets, *extra_roots(a)):
         if (root / sid / "manifest.json").exists():
             return root / sid  # type: ignore[no-any-return]
     return a.datasets / sid  # type: ignore[no-any-return]
@@ -676,12 +782,18 @@ def decide(sess: Any, t: int, v2: V2Inputs) -> tuple[str, lv.Frame | None, list[
 
 
 def v2_session(
-    sid: str, part: str, path: Path, a: argparse.Namespace, v2: V2Inputs, sink: ShardSink | None
-) -> tuple[dict[str, Any], V2Tally]:
+    sid: str, part: str, path: Path, a: argparse.Namespace, v2: V2Inputs, sink: ShardSink | None,
+    fix: FixInputs | None = None,
+) -> tuple[dict[str, Any], V2Tally]:  # fmt: skip
     """One session's v2 frames: every candidate labelled by labels_v2's Session, gated, and (with a
-    sink) written; ``sink=None`` is the dry run (nothing read but packets and indexes)."""
+    sink) written; ``sink=None`` is the dry run (nothing read but packets and indexes). With
+    ``fix``: each kept frame fitted on its pixels (apply_fix; in a dry run, up to the fit)."""
     manifest = json.loads((path / "manifest.json").read_text())
     sess = make_v2_session(path, v2)
+    fixer = None if fix is None else fix.labeler(sess.labeler)
+    layout = None if fix is None else qa_export.layout_check(
+        manifest, getattr(a, "layout_templates", None))  # fmt: skip
+    fixed: Counter[str] = Counter()
     size = tuple(getattr(sess.labeler, "size", V2_SIZE))
     if size != V2_SIZE:
         raise SystemExit(f"{sid}: game region {size}, labels_v2 labels {V2_SIZE}")
@@ -706,15 +818,33 @@ def v2_session(
         if outcome == "excluded" or fr is None:
             tally.exclude(reasons)
             continue
-        text, written = v2_yolo(fr.labels, V2_SIZE, class_of)
-        tally.keep(fr, written)
+        img = None
         if sink is not None:
             assert load is not None
             img = load()
             if img.shape[:2] != (V2_SIZE[1], V2_SIZE[0]):
                 raise SystemExit(f"{sid}: frame {kid} is {img.shape[1]}x{img.shape[0]}, the "
                                  f"labels are {V2_SIZE[0]}x{V2_SIZE[1]}")  # fmt: skip
+        if fixer is not None:
+            fr2, reasons, got = fixed_frame(fixer, layout, fr, t, img)
+            if got is not None and got.applies:
+                fixed["frames_fitted" if img is not None else "frames_up_to_the_fit"] += 1
+                fixed["monsters_not_visible"] += got.hidden
+                fixed.update(f"excluded_label:{why}" for _g, _m, why in got.excluded)
+                fixed.update(f"kept_label:{k.mob}" for k in got.kept)
+                fixed.update(f"pending_label:{mob}" for _g, mob, _b in got.pending)
+            if fr2 is None:
+                tally.exclude(reasons)
+                continue
+            if got is not None and got.pending:
+                fixed["fit_pending_frames"] += 1  # kept here, decided by the pixels in a build
+            fr = fr2
+        text, written = v2_yolo(fr.labels, V2_SIZE, class_of)
+        tally.keep(fr, written)
+        if sink is not None:
+            assert img is not None
             info = {"session": sid, "t_mono_ns": t, "map": map_key(fr.map or ""), "labels": "v2",
+                    **({} if fix is None else {"fix": fix.provenance["labels"]}),
                     **extra,
                     "boxes": [[class_of(b), b.job, b.kind] for b in written],
                     "shadow": len(fr.shadow),
@@ -732,24 +862,85 @@ def v2_session(
     row.update(tally.as_dict())
     row["boxes"] = sum(tally.class_boxes.values())
     row["sprite_lookup_missing"] = {str(k): v for k, v in sorted(missing.items())}
+    if fix is not None:
+        row["labels"] = f"v2+{fix.provenance['labels']}"
+        row["fix"] = {k: v for k, v in sorted(fixed.items())}
     return row, tally
 
 
-def dry_run(a: argparse.Namespace, split: dict[str, list[str]], v2: V2Inputs) -> int:
-    """Counts only: no directory, no shard, no manifest, no image read."""
+def dry_run(
+    a: argparse.Namespace,
+    split: dict[str, list[str]],
+    v2: V2Inputs,
+    fix: FixInputs | None = None,
+    v1_species: frozenset[str] = frozenset(),
+) -> int:
+    """Counts only: no directory, no shard, no manifest, no image read. With ``fix`` the kept
+    orcsdun01 frames are an UPPER BOUND (the fit needs pixels: ``fix.fit_pending_frames``); the
+    ``--v1-species-sessions`` are counted on their own path and in ``combined`` (per class id)."""
     parts = {part: V2Tally() for part in split}
     total = V2Tally()
+    v1_parts: dict[str, Counter[str]] = {part: Counter() for part in split}
+    fix_parts: dict[str, Counter[str]] = {part: Counter() for part in split}
     for part, ids in split.items():
         for sid in ids:
-            row, tally = v2_session(sid, part, resolve_session(sid, a), a, v2, None)
+            if sid in v1_species:
+                row = v01_session(sid, part, a, None, mode=("v1", True))
+                row.pop("shards")
+                print(json.dumps({"session": sid, **row}), flush=True)
+                for k in ("kept", "gm_window", "off_scene", "boxes"):
+                    v1_parts[part][k] += int(row[k])
+                v1_parts[part].update({f"boxes:{k}": v for k, v in
+                                       row["boxes_by_class_id"].items()})  # fmt: skip
+                v1_parts[part].update({f"excluded:{k}": v for k, v in
+                                       row["excluded_species"].items()})  # fmt: skip
+                continue
+            row, tally = v2_session(sid, part, resolve_session(sid, a), a, v2, None, fix)
             row.pop("shards")
             print(json.dumps({"session": sid, **row}), flush=True)
             parts[part].merge(tally)
             total.merge(tally)
-    print(json.dumps({"dry_run": True, "labels": "v2", "inputs": v2.provenance,
-                      "splits": {p: t.as_dict() for p, t in parts.items()},
-                      "total": total.as_dict()}, indent=1))  # fmt: skip
+            fix_parts[part].update(row.get("fix") or {})
+    out: dict[str, Any] = {"dry_run": True, "labels": "v2", "inputs": v2.provenance,
+                           "splits": {p: t.as_dict() for p, t in parts.items()},
+                           "total": total.as_dict()}  # fmt: skip
+    if fix is not None:
+        out["fix"] = {
+            **fix.provenance,
+            "note": "no pixels in a dry run: every rule up to the fit "
+            "is applied; a frame with labels the fit would judge counts as kept "
+            "(fit_pending_frames): kept is an UPPER BOUND for these sessions",
+            "splits": {p: dict(sorted(c.items())) for p, c in fix_parts.items()},
+        }
+    if v1_species:
+        out["v1_species"] = {p: dict(sorted(c.items())) for p, c in v1_parts.items()}
+        out["combined"] = combined_counts(parts, v1_parts, v2)
+    print(json.dumps(out, indent=1))
     return 0
+
+
+def combined_counts(parts: dict[str, V2Tally], v1_parts: dict[str, Counter[str]],
+                    v2: V2Inputs) -> dict[str, Any]:  # fmt: skip
+    """PURE: per split, the frames kept and the boxes per CLASS ID over both label modes (the v2
+    sessions' classes by name / species, the v1 ones already by id)."""
+    assert v2.classes is not None
+    index, fixed = v2.classes.index, v2.classes.fixed
+    out: dict[str, Any] = {}
+    for part, t in parts.items():
+        ids: Counter[int] = Counter()
+        for cls, n in t.class_boxes.items():
+            if cls != "monster":
+                ids[fixed[cls]] += n
+        for job, n in t.species_boxes.items():
+            ids[index[job]] += n
+        v1 = v1_parts.get(part, Counter())
+        for k, n in v1.items():
+            if k.startswith("boxes:"):
+                ids[int(k.split(":", 1)[1])] += n
+        out[part] = {"frames_kept": t.kept + int(v1.get("kept", 0)),
+                     "frames_kept_v2": t.kept, "frames_kept_v1": int(v1.get("kept", 0)),
+                     "boxes_by_class_id": {str(k): v for k, v in sorted(ids.items())}}  # fmt: skip
+    return out
 
 
 def species_ids(boxes: list[dict[str, Any]], jobs: dict[int, int],
@@ -799,19 +990,21 @@ def dry_run_v1(a: argparse.Namespace, split: dict[str, list[str]]) -> int:
     return 0
 
 
-def v01_session(sid: str, part: str, a: argparse.Namespace,
-                sink: ShardSink | None) -> dict[str, Any]:  # fmt: skip
+def v01_session(sid: str, part: str, a: argparse.Namespace, sink: ShardSink | None,
+                mode: tuple[str, bool] | None = None) -> dict[str, Any]:  # fmt: skip
     """One session, labels v0 / v1 (unchanged): qa_export.Labeler, v0 / v1's scene maps. With
     ``--classes species`` (labels v1 only) the same frames and boxes, the classes split per species
-    (``species_ids``). ``sink=None``: a dry run (packets and indexes only, no image read)."""
+    (``species_ids``). ``sink=None``: a dry run (packets and indexes only, no image read). ``mode``
+    = (labels, species) overrides the build's own (``--v1-species-sessions``: ("v1", True))."""
+    labels, species = mode if mode is not None else (a.labels, a.classes == "species")
     path = dataset_session(sid, a)
     manifest = json.loads((path / "manifest.json").read_text())
     if getattr(a, "kb", None) is not None:  # the sprite names / species of --kb (as v2 reads them)
         qa_export.KB_CLASSES = a.kb / "classes.json"
         qa_export.KB_SPRITE_NAMES = a.kb / "monster_sprite_names.json"
-    labeler = qa_export.Labeler(path, labels=a.labels,
+    labeler = qa_export.Labeler(path, labels=labels,
                                 **({"k": a.k} if a.k is not None else {}))  # fmt: skip
-    classes = SpeciesClasses.load(a.class_list) if a.classes == "species" else None
+    classes = SpeciesClasses.load(a.class_list) if species else None
     w, h = labeler.size
     row: dict[str, Any] = {"split": part, "format": manifest.get("format") or "png", "kept": 0,
                            "gm_window": 0, "off_scene": 0, "boxes": 0, "shards": []}  # fmt: skip
@@ -839,7 +1032,7 @@ def v01_session(sid: str, part: str, a: argparse.Namespace,
         if sink is not None:
             key = f"{sid}.{fid:09d}"
             info: dict[str, Any] = {"session": sid, "frame_id": fid, "t_mono_ns": t,
-                                    "map": world_map, "labels": a.labels}  # fmt: skip
+                                    "map": world_map, "labels": labels}  # fmt: skip
             if ids is not None:
                 info["classes"] = "species"
             image = ({"png": encode_png(np.ascontiguousarray(img[:, :, :3]))}
@@ -854,6 +1047,8 @@ def v01_session(sid: str, part: str, a: argparse.Namespace,
     if classes is not None:
         row["excluded_species"] = _keyed(excluded)
         row["boxes_by_class_id"] = {str(k): v for k, v in sorted(class_boxes.items())}
+    if mode is not None:
+        row["labels"] = f"{labels}+species" if species else labels
     return row
 
 
@@ -959,6 +1154,48 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="v2: count only; no directory, shard or manifest; no image read",
     )
+    g.add_argument(
+        "--fix",
+        type=Path,
+        default=None,
+        help="v2 + --classes species: the orcsdun01 label fix's frozen parameters "
+        "(orc_labels_fix.py freeze); every kept frame is fitted on its pixels",
+    )
+    g.add_argument(
+        "--fix-sha256",
+        default=None,
+        help="--fix: refuse unless the parameter file has exactly this sha256 (the frozen one)",
+    )
+    g.add_argument(
+        "--collection",
+        nargs="*",
+        default=[],
+        help="session roots <--datasets>/detector-collection/<MAP> searched after --datasets "
+        "(e.g. orcsdun01: the warp_watch blocks), a name the guarded cache step accepts",
+    )
+    g.add_argument(
+        "--rule",
+        default="1a",
+        help="--fix: the facing rule (1a: 3b; fix2: 3f, with 2b / 2c)",
+    )
+    g.add_argument(
+        "--v1-species-sessions",
+        nargs="*",
+        default=[],
+        help="v2 + --classes species: these sessions (each in a split) take the --labels v1 "
+        "--classes species path instead (v1's rules + the species split; one cache)",
+    )
+    g.add_argument(
+        "--allow-test-block",
+        action="store_true",
+        help="admit a *-col2 session (orcsdun01's TEST block) in --test: only after training ends",
+    )
+    g.add_argument(
+        "--layout-templates",
+        type=Path,
+        default=None,
+        help="--fix on a human demo: client_layout's templates (default its TEMPLATES)",
+    )
     a = ap.parse_args(argv)
     split = {"train": a.train, "val": a.val, "test": a.test}
     seen = [s for ss in split.values() for s in ss]
@@ -968,6 +1205,27 @@ def main(argv: Sequence[str] | None = None) -> int:
         raise SystemExit("a session is in two splits: the split is BY SESSION")
     if GOLD in a.train or GOLD in a.val:
         raise SystemExit(f"{GOLD} is the hand-checked gold set: test only")
+    blocks = [s for s in seen if is_test_block(s)]
+    if [s for s in blocks if s not in a.test] or (blocks and not a.allow_test_block):
+        raise SystemExit(f"{blocks}: orcsdun01's pre-registered TEST block (3f) -- never in "
+                         "train / val, in test only after training ends "
+                         "(--allow-test-block)")  # fmt: skip
+    v1_species = frozenset(a.v1_species_sessions)
+    if v1_species:
+        if a.labels != "v2" or a.classes != "species":
+            raise SystemExit("--v1-species-sessions belongs to a --labels v2 --classes species "
+                             "build")  # fmt: skip
+        missing = sorted(v1_species - set(seen))
+        if missing:
+            raise SystemExit(f"--v1-species-sessions {missing}: not in any split")
+    if a.fix is not None and (a.labels != "v2" or a.classes != "species"):
+        raise SystemExit("--fix belongs to a --labels v2 --classes species build")
+    fix = FixInputs.from_args(a)
+    if fix is not None:
+        off = float(fix.params["offset_ms"])
+        if a.offset_ms is not None and float(a.offset_ms) != off:
+            raise SystemExit(f"--offset-ms {a.offset_ms} vs the fix's frozen 1d {off} ms")
+        a.offset_ms = off  # 1d replaces the benchmark's offset (orc_label_sheets.py --fix)
     if a.classes != "v2" and a.labels not in ("v1", "v2"):
         raise SystemExit("--classes species builds on --labels v1 (v1's rules, the species split "
                          "only) or --labels v2")  # fmt: skip
@@ -982,7 +1240,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                              "without --resume")  # fmt: skip
         if v2 is None:
             return dry_run_v1(a, split)
-        return dry_run(a, split, v2)
+        return dry_run(a, split, v2, fix, v1_species)
     cache_id = a.cache_id or f"{a.labels}-{time.strftime('%Y%m%dT%H%M%S')}"
     directory = a.out / cache_id
     args = {"labels": a.labels, "k": a.k, "every": a.every, "every_png": a.every_png,
@@ -992,6 +1250,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         args.update({"every_demo": a.every_demo, "every_jpeg": a.every_jpeg, "v2": v2.provenance})
     elif a.classes == "species":  # v1 + the species split (a v1 cache without it keeps its keys)
         args.update({"classes": SpeciesClasses.load(a.class_list).provenance()})
+    extra = {}  # a build without them keeps its keys (old invocations byte-identical)
+    if fix is not None:
+        extra["fix"] = fix.provenance
+    if v1_species:
+        extra["v1_species_sessions"] = sorted(v1_species)
+    args.update(extra)
     sessions: dict[str, Any] = {}
     shards: dict[str, Any] = {}
     if a.resume:
@@ -1010,8 +1274,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         for sid in ids:
             if sid in sessions:
                 continue  # done before the interruption (its shards were checked)
-            if v2 is not None:
-                row, _ = v2_session(sid, part, resolve_session(sid, a), a, v2, sink)
+            if sid in v1_species:
+                row = v01_session(sid, part, a, sink, mode=("v1", True))
+            elif v2 is not None:
+                row, _ = v2_session(sid, part, resolve_session(sid, a), a, v2, sink, fix)
             else:
                 row = v01_session(sid, part, a, sink)
             sink.close()  # a session owns its shards: complete, or absent after a resume
@@ -1035,6 +1301,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         manifest.update(
             {"every_demo": a.every_demo, "every_jpeg": a.every_jpeg, "v2": v2.provenance}
         )
+    manifest.update(extra)
     for name, doc in (("manifest.json", manifest), ("split.json", split)):
         write_json(directory, name, doc)
     print(json.dumps({"cache": str(directory), "frames": sum(r["kept"] for r in sessions.values()),

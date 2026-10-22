@@ -11,6 +11,7 @@ from __future__ import annotations
 import gzip
 import importlib.util
 import json
+import os
 import sys
 import tarfile
 from pathlib import Path
@@ -443,3 +444,244 @@ def test_yolo_lines_take_one_class_id_per_box(bfc: ModuleType) -> None:
     ]  # the off-frame box is dropped, ids stay paired
     with pytest.raises(ValueError):
         bfc.yolo_lines(boxes, 20, 20, [7])
+
+
+# --- the orcsdun01 label fix in the cache, and one build with two label modes (3f) --------------
+
+FIT = (50.0, 290.0, 92.0, 365.0)  # a fitted box the fake fixer hands back
+
+
+class FakeFixer:
+    """orc_labels_fix.FixLabeler's interface: t 100 fits its Poring (pending without pixels),
+    t 600 excludes its monster (1c: packets alone know it)."""
+
+    def frame(self, t: int, img: Any) -> SimpleNamespace:
+        if t == 600:
+            return SimpleNamespace(applies=True, kept=[], excluded=[(70, 1002, "occluded_model")],
+                                   pending=[], hidden=0)  # fmt: skip
+        if img is None:
+            return SimpleNamespace(applies=True, kept=[], excluded=[], hidden=0,
+                                   pending=[(100, 1002, (100.0, 300.0, 140.0, 360.0))])  # fmt: skip
+        return SimpleNamespace(applies=True, excluded=[], pending=[], hidden=1,
+                               kept=[SimpleNamespace(gid=100, mob=1002, box=FIT)])  # fmt: skip
+
+
+def test_apply_fix_is_orc_label_sheets_rule(bfc: ModuleType) -> None:
+    fr = lv.Frame(1, "orcsdun01.gat", TRAINABLE, (), ())
+    assert bfc.apply_fix(fr, None) == (None, ["fix_no_world"])
+    assert bfc.apply_fix(fr, SimpleNamespace(applies=False)) == (fr, [])  # another map: v2's
+    out, why = bfc.apply_fix(fr, SimpleNamespace(applies=True, kept=[], pending=[],
+                                                 excluded=[(1, 1153, "unfit"),
+                                                           (2, 1005, "next_move")]))  # fmt: skip
+    assert out is None and why == ["fix_unfit:1153", "fix_next_move:1005"]
+    out, why = bfc.apply_fix(fr, FakeFixer().frame(100, np.zeros(1)))
+    assert why == [] and out is not None
+    kinds = [(b.cls, b.kind) for b in out.labels]
+    assert kinds == [("player", "self"), ("npc", "sprite_opaque"), ("warp", "portal"),
+                     ("monster", "fit")]  # fmt: skip
+    assert out.labels[-1].box == FIT and out.labels[-1].job == 1002
+    out, _ = bfc.apply_fix(fr, FakeFixer().frame(100, None))  # a dry run: the predicted box
+    assert out is not None and out.labels[-1].kind == "fit_pending"
+
+
+def test_fixed_frame_checks_a_human_demos_layout_first(bfc: ModuleType) -> None:
+    fr = lv.Frame(100, "orcsdun01.gat", TRAINABLE, (), ())
+    img = np.zeros((720, 1280, 3), np.uint8)
+    assert bfc.fixed_frame(FakeFixer(), lambda im: False, fr, 100, img)[:2] == (
+        None, ["ui_layout_mismatch"])  # fmt: skip
+    out, why, got = bfc.fixed_frame(FakeFixer(), lambda im: True, fr, 100, img)
+    assert why == [] and out is not None and got.kept[0].box == FIT
+    out, _, got = bfc.fixed_frame(FakeFixer(), lambda im: False, fr, 100, None)  # no pixels
+    assert out is not None and got.pending
+
+
+def params_file(root: Path) -> Path:
+    p = root / "params.json"
+    p.write_text(json.dumps({"labels": "v2orc-fix", "offset_ms": 120.0, "measured_on": "col3",
+                             "occluders": {"rsw_sha256": "x"}}))  # fmt: skip
+    return p
+
+
+def v1_png_session(root: Path, sid: str) -> None:
+    w = ShardWriter(root / "nas" / sid)
+    for i in range(5):
+        w.add(i, 1000 + i, np.zeros((36, 64, 3), np.uint8))
+    w.close()
+    (root / "nas" / sid / "manifest.json").write_text(
+        json.dumps({"format": "png", "shards": w.shards})
+    )
+
+
+def test_the_test_block_and_the_mode_flags_fail_closed(
+    bfc: ModuleType, setup: dict[str, Path]
+) -> None:
+    col2 = "20261021T122650-orcsdun01-col2"
+    for argv in (["--train", col2], ["--val", col2], ["--test", col2]):
+        with pytest.raises(SystemExit, match="TEST block"):
+            bfc.main(["--labels", "v2", "--classes", "species", "--kb", str(setup["kb"]), *argv])
+    with pytest.raises(SystemExit, match="v1-species-sessions"):
+        bfc.main(["--labels", "v1", "--classes", "species", "--kb", str(setup["kb"]), "--train",
+                  "A", "--v1-species-sessions", "A"])  # fmt: skip
+    with pytest.raises(SystemExit, match="not in any split"):
+        bfc.main(["--labels", "v2", "--classes", "species", "--kb", str(setup["kb"]), "--train",
+                  "A", "--v1-species-sessions", "B"])  # fmt: skip
+    with pytest.raises(SystemExit, match="--fix belongs"):
+        bfc.main(["--labels", "v2", "--kb", str(setup["kb"]), "--train", "A", "--fix",
+                  str(params_file(setup["root"]))])  # fmt: skip
+    with pytest.raises(SystemExit, match="frozen 1d"):
+        bfc.main(["--labels", "v2", "--classes", "species", "--kb", str(setup["kb"]),
+                  "--train", "A", "--fix", str(params_file(setup["root"])),
+                  "--offset-ms", "375.9"])  # fmt: skip
+
+
+def test_one_build_two_label_modes_and_the_fix(
+    bfc: ModuleType, setup: dict[str, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """v1's session through ``v1 + species``, the orcsdun01 (here: synthetic) session through
+    ``v2 + species + fix``: one manifest, one class list, the fitted box written, the fix's
+    exclusion excluding the frame; the dry run counts both and marks the fit as pending."""
+    demo_session(setup["demo"])
+    v1sid = "20990101T000000-console-synthetic"
+    v1_png_session(setup["root"], v1sid)
+    k = setup["kb"]
+    listed = bfc.SpeciesClasses.load(bfc.SPECIES_LIST).monsters
+    (k / "classes.json").write_text(json.dumps({"x": {str(m): {"aegis": f"M{m}"} for m in listed}}))
+    monkeypatch.setattr(bfc.qa_export, "Labeler", SpeciesLabeler)
+    monkeypatch.setattr(bfc.FixInputs, "labeler", lambda self, lab: FakeFixer())
+    argv = ["--labels", "v2", "--classes", "species", "--kb", str(k),
+            "--npc-checked", str(setup["checked"]), "--demo-root", str(setup["demo"]),
+            "--datasets", str(setup["root"] / "nas"), "--out", str(setup["out"]),
+            "--image", "png", "--fix", str(params_file(setup["root"])), "--rule", "fix2",
+            "--train", SID, v1sid, "--v1-species-sessions", v1sid]  # fmt: skip
+    assert bfc.main([*argv, "--cache-id", "c"]) == 0
+    cache = setup["out"] / "c"
+    manifest = json.loads((cache / "manifest.json").read_text())
+    assert manifest["labels"] == "v2" and len(manifest["names"]) == 15
+    assert manifest["v1_species_sessions"] == [v1sid]
+    assert manifest["fix"]["labels"] == "v2orc-fix2" and manifest["fix"]["offset_ms"] == 120.0
+    assert manifest["v2"]["offset_ms"] == 120.0  # 1d replaces the benchmark's offset
+    v2row, v1row = manifest["sessions"][SID], manifest["sessions"][v1sid]
+    assert v2row["labels"] == "v2+v2orc-fix2" and v1row["labels"] == "v1+species"
+    assert (v2row["kept"], v2row["excluded"]["fix_occluded_model"]) == (1, 1)
+    assert v2row["fix"]["kept_label:1002"] == 1 and v2row["fix"]["frames_fitted"] == 2
+    assert (v1row["kept"], v1row["boxes_by_class_id"]) == (2, {"0": 2, "1": 2, "3": 2})
+    args = json.loads((cache / "progress.json").read_text())["args"]
+    assert args["fix"]["rule"] == "fix2" and args["v1_species_sessions"] == [v1sid]
+    got = members(cache / "shard-000000.tar")
+    fitted = got[f"{SID}.000000000.txt"].decode().splitlines()
+    cid = bfc.SpeciesClasses.load(bfc.SPECIES_LIST).index[1002]
+    x0, y0, x1, y1 = FIT
+    assert f"{cid} {(x0 + x1) / 2 / 1280:.6f} {(y0 + y1) / 2 / 720:.6f}" in fitted[-1]
+    info = json.loads(got[f"{SID}.000000000.json"])
+    assert info["fix"] == "v2orc-fix2" and info["boxes"][-1] == [cid, 1002, "fit"]
+    assert f"{SID}.000000005.txt" not in got  # t 600: its monster under a model box
+    v1got = members(cache / "shard-000001.tar")  # each session owns its shards
+    assert json.loads(v1got[f"{v1sid}.000000000.json"])["labels"] == "v1"
+    assert v1got[f"{v1sid}.000000000.txt"].decode().split()[0] == "0"  # player, the species ids
+    # the dry run of the same build
+    monkeypatch.setattr(bfc, "session_frames", lambda *a, **kw: pytest.fail("decoded a frame"))
+    monkeypatch.setattr(bfc, "recorded_times", lambda *a, **kw: iter(
+        [(i, 1000 + i) for i in range(5)]))  # fmt: skip
+    import io
+    from contextlib import redirect_stdout
+
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        assert bfc.main([*argv, "--dry-run"]) == 0
+    text = buf.getvalue()
+    out = json.loads(text[text.index("{\n") :])
+    assert out["fix"]["splits"]["train"]["fit_pending_frames"] == 1
+    assert out["combined"]["train"]["frames_kept"] == 1 + 2
+    assert out["combined"]["train"]["boxes_by_class_id"][str(cid)] == 1 + 2
+    assert out["v1_species"]["train"]["kept"] == 2
+    assert sorted(p.name for p in setup["out"].iterdir()) == ["c"]  # the dry run wrote nothing
+
+
+# the round-3 labels' block (orc_label_sheets.py --fix --rule fix2): local / NAS data only
+COL1 = Path("/mnt/poring-lab-datasets/detector-collection/orcsdun01/20261021T103231-orcsdun01-col1")
+KB = Path(os.environ.get("PORING_KB", str(ROOT / "data" / "kb")))
+FIX_PARAMS = Path(os.environ.get("PORING_FIX_PARAMS",
+                                 "/dev/shm/poring-lab-tmp/orc-cache/params.json"))  # fmt: skip
+
+
+def test_real_the_cache_fits_col1_exactly_as_orc_label_sheets() -> None:
+    """col1 (3g's fix-2 labels): frame 5457 is whole (two fitted monsters), 5160 is excluded by
+    2b (next_move), 5220 by the fit (unfit / ui) and 1c. The cache's path (fixed_frame) gives the
+    same verdict and the same fitted boxes as orc_label_sheets._frame_fate, and without pixels
+    the same packet-side exclusions, its pending labels being exactly the ones the fit judged."""
+    if not (COL1 / "manifest.json").exists() or not (KB / "classes.json").exists():
+        pytest.skip("col1 or the local KB is not here")
+    if not FIX_PARAMS.exists():
+        pytest.skip("the frozen fix parameters are not here")
+    import argparse
+
+    sys.path.insert(0, str(SCRIPTS))
+    import build_frame_cache as real_bfc
+    import orc_label_sheets as ols
+    import orc_labels_fix as olf
+
+    params = olf.load_params(FIX_PARAMS)
+    try:
+        olf.occluders_of(params)
+    except SystemExit:
+        pytest.skip("the frozen RSW / RSM models are not extracted here")
+    ns = argparse.Namespace(kb=KB, warp_visibility=None, npc_sprites=None, npc_sprite_names=None,
+                            npc_extents=None, npc_checked=None, cutin_rect=None,
+                            offset_ms=float(params["offset_ms"]), allow_hold=[], k=0.14,
+                            classes="species", class_list=real_bfc.SPECIES_LIST)  # fmt: skip
+    v2 = real_bfc.V2Inputs.from_args(ns)
+    sess = real_bfc.make_v2_session(COL1, v2)
+    fix = real_bfc.FixInputs.from_args(argparse.Namespace(fix=FIX_PARAMS, rule="fix2"))
+    assert fix is not None
+    fixer = fix.labeler(sess.labeler)
+    ols._FIX.clear()
+    ols._FIX.update(sess=sess, v2=v2, layout=None, fixer=fixer)
+    man = json.loads((COL1 / "manifest.json").read_text())
+    refs = {r.frame_id: r for r in real_bfc.qa_export.frame_refs(COL1, man)}
+    seen = {}
+    for fid in (5457, 5160, 5220):
+        ref = refs[fid]
+        outcome, fr, _r, mk = real_bfc.decide(sess, ref.t_mono_ns, v2)
+        assert outcome == "ok" and mk == "orcsdun01" and fr is not None
+        img = real_bfc.qa_export.read_jpeg(ref)
+        out, why, got = real_bfc.fixed_frame(fixer, None, fr, ref.t_mono_ns, img)
+        _ref, _o, _rs, _w, fixed = ols._frame_fate(ref)
+        assert fixed is not None and fixed[0]
+        assert (out is None) == bool(fixed[2])
+        if out is not None:
+            mine = sorted((b.job, b.gid, b.box) for b in out.labels if b.cls == "monster")
+            assert mine == sorted((m, g, box) for m, g, box in fixed[1])
+        seen[fid] = why
+        dry = fixer.frame(ref.t_mono_ns, None)
+        side = ("occluded_model", "next_move", "ambiguous_view")
+        assert sorted(dry.excluded) == sorted(x for x in got.excluded if x[2] in side)
+        assert sorted(g for g, _m, _b in dry.pending) == sorted(
+            [k.gid for k in got.kept] + [g for g, _m, w in got.excluded if w not in side]
+        )
+    assert seen[5457] == []
+    assert "fix_next_move:1153" in seen[5160]
+    assert {"fix_unfit:1153", "fix_ui:1153"} <= set(seen[5220])
+
+
+def test_collection_roots_and_the_frozen_params_hash(bfc: ModuleType, tmp_path: Path) -> None:
+    """The guarded cache step admits no argument starting with "/": --collection names the
+    warp_watch root relatively, and --fix-sha256 pins the frozen parameter file."""
+    import argparse
+
+    s = tmp_path / "nas" / "detector-collection" / "orcsdun01" / "S1"
+    s.mkdir(parents=True)
+    (s / "manifest.json").write_text("{}")
+    a = argparse.Namespace(demo_root=tmp_path / "demo", datasets=tmp_path / "nas",
+                           also_datasets=[], collection=["orcsdun01"])  # fmt: skip
+    assert bfc.resolve_session("S1", a) == s and bfc.dataset_session("S1", a) == s
+    with pytest.raises(SystemExit, match="no manifest"):
+        bfc.resolve_session("S1", argparse.Namespace(**{**vars(a), "collection": []}))
+    p = params_file(tmp_path)
+    good = bfc.sha256_of(p)
+    ns = argparse.Namespace(fix=p, rule="fix2", fix_sha256=good)
+    fix = bfc.FixInputs.from_args(ns)
+    assert fix is not None and fix.provenance["params_sha256"] == good
+    with pytest.raises(SystemExit, match="not the frozen"):
+        bfc.FixInputs.from_args(argparse.Namespace(fix=p, rule="fix2", fix_sha256="0" * 64))
+    with pytest.raises(SystemExit, match="rule"):
+        bfc.FixInputs.from_args(argparse.Namespace(fix=p, rule="best", fix_sha256=None))
