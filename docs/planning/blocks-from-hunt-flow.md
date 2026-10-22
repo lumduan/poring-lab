@@ -6,8 +6,8 @@ role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
-related: [ADR-0020, ADR-0015, ADR-0002, ADR-0007, ADR-0016, ../demonstrations.md, ../competition.md, ../../config/map_zones/README.md, mw2-block-editor.md, adr0020-contradictions.md]
-next_action: "B1 and B3 MERGED (0919ce7). B2 (the editor) BUILT offline 2026-10-21 21:14-22:1x and MERGED (cea0c4c, section 7b); its zones routes go live only after a guarded recreate:backend (the dev overlay's new read-only ./scripts mount), and Batt confirms the D8 evidence rows (config/flows/hunt/evidence.yaml) and 7b's open points. B4 waits for Batt to be present. Amendment A's text stays a DRAFT until Batt accepts it. 2026-10-22: the hunt block's melee-ring engage OPTION + lint / run-start refusals built offline (section 7c, feat/melee-ring-block, not merged)."
+related: [ADR-0020, ADR-0015, ADR-0002, ADR-0007, ADR-0016, ../demonstrations.md, ../competition.md, ../../config/map_zones/README.md, ../../config/routes/README.md, mw2-block-editor.md, adr0020-contradictions.md]
+next_action: "B1 and B3 MERGED (0919ce7). B2 (the editor) BUILT offline 2026-10-21 21:14-22:1x and MERGED (cea0c4c, section 7b); its zones routes go live only after a guarded recreate:backend (the dev overlay's new read-only ./scripts mount), and Batt confirms the D8 evidence rows (config/flows/hunt/evidence.yaml) and 7b's open points. B4 waits for Batt to be present. Amendment A's text stays a DRAFT until Batt accepts it. 2026-10-22: the hunt block's melee-ring engage OPTION + lint / run-start refusals built offline (section 7c, feat/melee-ring-block, merged 8c592d9). 2026-10-22 night: the PATROL ROUTE search option (search_route heading | patrol_route) + config/routes + its lint / run-start refusals built offline (section 7d, feat/patrol-routes, not merged); KB metamorphosis now reaches the species lint (7c open point 2 closed); the editor's routes drawing layer is later."
 title: "Behaviours as blocks: hunt-flow's adopted rules become a hunt block in the map node; map zones become map-node data (plan)"
 date: 2026-10-21
 owner: Batt
@@ -26,8 +26,11 @@ B3 are BUILT offline** (section 7a, branch feat/blocks-b1b3; merged 0919ce7); no
 pre-registered. ➡️ **2026-10-21 22:1x: B2 (the editor) is BUILT offline** (section 7b, branch
 feat/blocks-b2, ~~not merged~~ ➡️ merged in cea0c4c); SIMULATE only.
 ➡️ **2026-10-22: the hunt block's MELEE-RING engage option** (`engage_source`, default detector)
-and its lint / run-start refusals are BUILT offline (section 7c, branch feat/melee-ring-block, not
-merged); its runtime is `scripts/dungeon_hunt.py`, not the block engine.
+and its lint / run-start refusals are BUILT offline (section 7c, branch feat/melee-ring-block, ~~not
+merged~~ ➡️ merged in 8c592d9); its runtime is `scripts/dungeon_hunt.py`, not the block engine.
+➡️ **2026-10-22 night: the hunt block's PATROL ROUTE search option** (`search_route`, default
+heading) with the reviewed route files `config/routes/<map>.yaml` and its lint / run-start
+refusals is BUILT offline (section 7d, branch feat/patrol-routes, not merged).
 The ADR side is
 [ADR-0020 Amendment A](../adr/0020-block-programming-flows.md#amendment-a-draft-proposed-2026-10-21-not-accepted-behaviours-as-blocks-map-zones-as-map-node-data)
 (DRAFT).
@@ -233,7 +236,7 @@ Every layer below exists today. A block adds none and removes none.
 6. **The record.** The engine writes its gate table (names, versions) as the run's first event; the
    judge flags a session without it.
 
-## 7. Build proposal (B1 + B3 built 2026-10-21, offline: section 7a, merged 0919ce7; B2 built offline: section 7b; the melee-ring engage option, 2026-10-22: section 7c)
+## 7. Build proposal (B1 + B3 built 2026-10-21, offline: section 7a, merged 0919ce7; B2 built offline: section 7b; the melee-ring engage option, 2026-10-22: section 7c; the patrol route search option, 2026-10-22: section 7d)
 
 | step | what | where | acceptance |
 |---|---|---|---|
@@ -409,7 +412,7 @@ the next event hat (layout height).
    (which also keeps 10 cells off warps and NPCs); the panel says so.
 8. Cosmetic: Blockly moves a badge common to every option outside the dropdown (loot's ◆).
 
-### 7c. The MELEE-RING engage option (Batt 2026-10-22 ~13:45; block option + lint / readiness built offline 2026-10-22, code commit 0ded2e7 at 14:12, branch feat/melee-ring-block, NOT merged)
+### 7c. The MELEE-RING engage option (Batt 2026-10-22 ~13:45; block option + lint / readiness built offline 2026-10-22, code commit 0ded2e7 at 14:12, branch feat/melee-ring-block, ~~NOT merged~~ ➡️ merged in 8c592d9)
 
 **Batt (2026-10-22 ~13:45, verbatim core):** "NEW ENGAGE OPTION: 'MELEE-RING' engagement, driven by
 the CURSOR, not the detector. Build it as a selectable option of the hunt block (engage source:
@@ -462,10 +465,13 @@ again.
 
 - **The static data** is, in the backend, the local KB: a generated sheet
   `data/kb/maps/<server>/<map>.json` when there is one, else `kbsheet`'s sheet built from
-  `data/kb/spawns.json` (and mobs from `mobs.json`). kbsheet does NOT fill `turns_into` today, so on
-  KB data the check is the spawn lines; metamorphosis is counted only where the data carries it
-  (the synthetic test). A species that appears without a spawn line of the map (a summoned slave)
-  is not seen by this check: the runtime's gates stay the safety net there.
+  `data/kb/spawns.json` (and mobs from `mobs.json`). ~~kbsheet does NOT fill `turns_into` today, so
+  on KB data the check is the spawn lines; metamorphosis is counted only where the data carries it
+  (the synthetic test).~~ ➡️ **SUPERSEDED 2026-10-22 night (Batt decision 6; 13cba8e on
+  feat/patrol-routes): kbsheet fills `turns_into` from the KB's NPC_METAMORPHOSIS lines
+  (`mob_skills.json`), transitively, so on KB data the check is the spawn lines PLUS what they turn
+  into** (section 7d, "KB metamorphosis"). A species that appears without a spawn line of the map
+  (a summoned slave) is not seen by this check: the runtime's gates stay the safety net there.
 - **Why a fixed `LAB_SERVERS`, not the interlock's `allowed` status:** `allowed` means "the bot may
   act here", not "nobody else plays here". If the community server is ever approved it would be
   allowed AND shared, and the melee ring must still be refused there. lab-rathena-th (ADR-0006
@@ -500,9 +506,128 @@ the detector's own TARGET / IGNORE handling. The option only chooses who propose
 
 **Open points for Batt**
 1. `LAB_SERVERS` holds lab-rathena only. Should the stopped lab-rathena-th count too?
-2. Metamorphosis from the KB: kbsheet reads no `classes.json`, so a target that turns into a
+2. ~~Metamorphosis from the KB: kbsheet reads no `classes.json`, so a target that turns into a
    non-target is caught only where the sheet carries `turns_into`. prt_fild08 is refused anyway
-   (Creamy spawns there).
+   (Creamy spawns there).~~ ➡️ **CLOSED 2026-10-22 night by Batt's decision 6** ("Add
+   metamorphosis (turns_into) to the KB so the species lint sees it"; fix 13cba8e, section 7d).
+   The correction to the struck text: Creamy has NO spawn line on prt_fild08 (it appears only by
+   Pupa's metamorphosis), so until the fix a melee-ring hunt on prt_fild08 whose targets were the
+   four spawned species PASSED the lint; it is refused now unless Creamy is a target too.
+
+### 7d. The PATROL ROUTE search option (Batt 2026-10-22 overnight brief, items A and D-6; built offline 2026-10-22 night, branch feat/patrol-routes, NOT merged)
+
+**Batt (2026-10-22, the Crusader's demo in orcsdun01):** the map is a LOOP around a central block.
+Batt walks a fixed circuit of waypoints in ONE direction, never back and forth, so they keep
+meeting monsters as they respawn. After a fight: "resume at the NEXT waypoint AHEAD on the loop
+(never turn back to a passed one)". The waypoints are to be "drawable in the editor later, like
+the Zones layer".
+
+**The data: `config/routes/<map>.yaml`** (format and rules: config/routes/README.md;
+`scripts/map_routes.py`). The twin of the zones files:
+- reviewed static map data (ADR-0015), under the zones' own review rules through the same code
+  (`map_zones.review`: a person, or the agent under a person's recorded delegation);
+- one file per map; no file = no change; a wrong file refuses the run before any input;
+- `routes: [{id, kind: loop | path, note, waypoints}]`; the LISTED order is the walking direction;
+- `map_routes.py check MAP` (schema) and `prove MAP` (on the runner's stand grid with the zones:
+  every waypoint walkable and outside every zone, every leg connected on the route grid, each
+  leg's length);
+- the pure walking helpers `reached`, `next_index`, `resume_index`, `entry_index`.
+
+The orcsdun01 file is extracted from the demo by the parent session; it is not on this branch.
+
+**The option.** `hunt(..., search_route=...)`, group search (after `search`):
+- `heading` (the default): today's heading search, with the `search` rule version's numbers;
+- `patrol_route`: walk the map's reviewed patrol route (its file's FIRST route) continuously, in
+  its listed direction. A fight or a loot step interrupts it; then the walk resumes at the NEXT
+  waypoint AHEAD, never a passed one (`map_routes.resume_index`).
+
+It is built exactly like `engage_source` (7c):
+- **Not required.** Absent = `heading`, so every flow written before it keeps its JSON and hash.
+- **The editor** shows the dropdown with "heading (default)" and writes the parameter only when it
+  is `patrol_route`; an IR that spells out `"heading"` stays a generic block, exactly.
+- **An OPTION, not a rule version:** no hunt_flow PARAMS rule holds it (no version, no numbers, no
+  D8 evidence; `hunt_config.classify("search_route")` is None).
+
+**The refusals**
+
+| rule | where | severity | refused when | the data it reads |
+|---|---|---|---|---|
+| `param_option` | lint, layer 1 | error | search_route is not a literal `heading` / `patrol_route` | the registry |
+| `patrol_route_missing` | lint, layer 2 | error | the map node's map has no routes file | the routes provider |
+| `patrol_route_unreadable` | lint, layer 2 | error | the runner's loader refuses the map's routes file (fail closed) | the routes provider |
+| run start | `runstart.check / require(routes_provider=...)` | refusal | no routes provider was given (the lint would have skipped its file checks); with one, the re-lint's errors refuse a file gone or broken since approval | the provider at run start |
+
+- **The provider** (`poring_flow.patrol`) works like the zones provider. `scripts/flow_routes.py`
+  wraps the runner's loader.
+  - The backend's /flows lint and simulate pass it. `flows_zones.engine` imports `flow_routes`
+    beside `flow_zones` from `ZONES_CODE_DIR` (the same read-only `./scripts` mount; no compose
+    change). `Settings.routes_dir` is `/lab-config/routes`, the existing `./config` mount.
+  - Without it, `world_notes` says "patrol routes are unchecked" and the run line refuses a patrol
+    hunt.
+- **What the linter does NOT check:**
+  - the waypoints against the map's walkability and zones: that is `map_routes.py prove` (and the
+    runner's own check at its start);
+  - the route file's sha256: the flow does not name it (unlike `zones=zones(map, sha256)`), so
+    approval does not bind a route yet (open point 1).
+- **Where it runs:** not in the block engine (B4 is not built). The runtime is the parent session's
+  runner on orcsdun01, with `map_routes`' helpers.
+
+**Later (Batt): waypoints drawable in the editor, like the Zones layer.** NOT built: no routes
+layer, no check route, no export. Until then a person writes the YAML, and git is the review record.
+
+**KB metamorphosis (Batt decision 6, the same night).** "Add metamorphosis (turns_into) to the KB
+so the species lint sees it."
+- **Where the chain broke:**
+  - `lint/hunt.py`'s `species_on` (and `prep.py`'s training scope) read `Mob.turns_into`.
+  - The backend's world comes from `kbsheet.load_local_world`, which built each `Mob` from
+    `mobs.json` alone. It never read `data/kb/mob_skills.json`, where `kb_build.py` has written
+    every NPC_METAMORPHOSIS line (skill 193, val1..val5) since 10-09.
+  - So `turns_into` was always empty, and a turned-into species had no `Mob` at all.
+- **The fix (13cba8e):**
+  - kbsheet reads those lines (every positive value; rAthena picks one of them) and fills
+    `turns_into`;
+  - it adds the turned-into species' `Mob`s, transitively;
+  - without a readable file, a note says the species lists are the spawn lines only.
+- **The proof:** `test_kb_build.py` runs kb_build's parsers on its inline rAthena-format fixtures,
+  then kbsheet, then the lint. A melee-ring hunt on prt_fild08 targeting Pupa (1008) only is
+  refused for Creamy (1018); without `mob_skills.json` it passed.
+- **On the real local KB** (read-only, no rebuild): prt_fild08's species are 1002, 1008, 1018,
+  1063, 1113. orcsdun01's seven species (1005, 1042, 1082, 1084, 1111, 1152, 1153) turn into
+  nothing, and none has a summon skill (NPC_SUMMONSLAVE 196, NPC_SUMMONMONSTER 209, NPC_CALLSLAVE
+  352). Summons would not matter there today.
+
+**Tests (2026-10-22 night, the worktree's sources on the main .venv):**
+- `test_map_routes.py` (49, new): the loader and its refusals, the shared review, the proof on a
+  synthetic ring map, the walking helpers (an exhaustive never-back check), the CLIs, the provider.
+- `test_lint_zones_hunt.py` 43 → 52: one failing fixture + passing twin per new rule, the
+  search_route `param_option` case, absent = heading, the run start, the editor's run line.
+- `test_hunt_rules.py` 12 → 13, `test_flows_zones.py` 46 → 48 (/flows/lint through the provider;
+  the engine without flow_routes), `test_kbsheet.py` 7 → 9, `test_kb_build.py` 9 → 10.
+- `test_hunt_config.py`: the option set is {engage_source, search_route}.
+- `hunt.test.ts` +2. `hunt_rules.json` was regenerated with `scripts/gen_zones_fixtures.py`; the
+  zones fixtures came out unchanged, as the shared review keeps their messages identical.
+- Counts: pytest 652 passed (packages/poring_flow/tests + the backend's test_map_routes,
+  test_map_zones, test_flows_zones, test_routes_flows, test_hunt_config, test_kb_build,
+  test_guards, test_orc_dungeon_prep).
+- `node --test src/lib/flow/*.test.ts` 49 / 49, `src/lib/*.test.ts` 142 / 142.
+- ruff clean on the changed files; mypy --strict clean (poring_flow, poring_skills, backend: 65
+  files).
+- NOT run: `pnpm typecheck` / `pnpm lint` (the frontend-dev container) and the full Python suite.
+
+**Open points for Batt**
+1. Bind the route file in the flow, as the zones are (`routes=routes(map, sha256)` on the map node,
+   an IR change), so that approval binds the waypoints a person reviewed? Proposed together with
+   the drawing layer.
+2. A waypoint counts as reached within 2 cells (`REACH_TOL`), and a tie between the two legs keeps
+   the nearer waypoint (k+1). Both are the brief's rule, not measured: tune them on the first
+   patrol runs?
+3. `kb_build.py` (committed) cannot rebuild today's local KB:
+   - Its SPAWNS and WARPS lists have no orcsdun file, while the local `spawns.json`, `warps.json`
+     and `classes.json` carry orcsdun01 (written 10-21 10:18, outside the committed builder).
+   - Re-running it would drop orcsdun01's spawns and warps, which `dungeon_hunt.py` and the
+     orcsdun01 zones file read. That is why the KB was NOT rebuilt here.
+   - Its `classes.json` keeps a metamorphosis's val1 only. That makes no difference on the bot
+     maps today.
 
 ## 8. What Batt needs to decide
 
