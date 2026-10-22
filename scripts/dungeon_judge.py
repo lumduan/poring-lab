@@ -24,8 +24,9 @@ PER RUN -- from PACKETS (ours = the GM account's block id 2000002, the Crusader'
 - potions / Fly Wings and per hour: OUR use_item_result successes of 504 / 601 (aid filter);
 - Heals cast and per hour: NO skill-use packet is decoded (poring_packets has skill_list /
   skill_update only), so a Heal = our SP falling by EXACTLY 34 (AL_HEAL Lv 8); "confirmed" = an
-  HP rise of 544 (+-1), or one that ends exactly at MaxHP, within 1 s of it (an absolute hp
-  packet, or a decoded `recovery` amount);
+  HP rise of 544 (+-1), or a smaller one that ends exactly at MaxHP, within 1 s of it (an absolute
+  hp packet, or a decoded `recovery` amount). LIVE 2026-10-22: sp 312 -> 278 and hp +544 arrive
+  at the same t_mono_ns;
 - SP used (the sum of SP falls) and SP min; Auto Guard casts = SP falls of exactly 30 (a toggle:
   on or off, survive_judge's rule), Endure = 10. A fall that comes with a MaxSP change (a level /
   stat / character change) is not a cast and not SP used; one within a GM command's 2-s flag is
@@ -39,10 +40,14 @@ PER RUN -- from PACKETS (ours = the GM account's block id 2000002, the Crusader'
 - Moving HP Recovery: our walk spans (regen_walk.walk_spans: self_move paths) and the regen ticks
   (regen_walk.ticks: natural +33 steps of the hp series, IRP = `recovery` amounts): natural ticks
   WHILE walking (MHR's evidence) and the walking minutes; IRP ticks while walking (must be 0);
-- sitting % (our act kind sit -> stand), the cross-check of the resting spans;
+- sitting % (our act kind sit, action 2 -> the next stand, action 3; decoded, LIVE-checked
+  2026-10-22), the cross-check of the resting spans; natural ticks and regen HP / min while
+  sitting (every 3 s instead of 6);
 - HARD BARS: map changes to ANOTHER map (a Fly Wing is a same-map teleport: counted apart, and
   set beside the Fly Wings used), npc_contact, our attack requests on a non-monster (its latest
-  entity_appear's objtype != 5; a target never seen is "unknown", reported, not a bar).
+  entity_appear's objtype != 5; a target never seen is "unknown", reported, not a bar). A sit /
+  stand request (attack_request kind sit / stand, action 2 / 3, target = our own id) is NOT an
+  attack request anywhere here.
 From the runner's EVENTS: engagements by trigger (battle_log / hp_drop / box); strikes and their
 landing (a strike followed within 1.5 s by an attack_request of ours AND our act on a monster);
 the resting spans (rest_start -> rest_end, an open one closed at the window's end) and resting %;
@@ -174,24 +179,38 @@ def heal_casts(packets: Sequence[Mapping[str, Any]], t0: int, t1: int, sp_start:
                max_hp: int = MAX_HP, heal_hp: int = HEAL_HP, heal_sp: int = HEAL_SP,
                win_s: float = HEAL_WIN_S, skip: Container[int] = ()) -> dict[str, Any]:  # fmt: skip
     """PURE: our Heals. There is NO decoded skill-use packet, so a cast = our SP falling by
-    exactly ``heal_sp``; it is CONFIRMED by an HP rise of ``heal_hp`` (+-1), or one ending exactly
-    at MaxHP (a capped heal), within ``win_s`` of the fall -- on the HP series with the decoded
-    `recovery` amounts added (survive_judge.hp_with_recovery), so a heal sent either way counts."""
+    exactly ``heal_sp``; it is CONFIRMED by an HP rise of ``heal_hp`` (+-1), or a smaller one
+    ending exactly at MaxHP (a capped heal; the max_hp packet in force then, else ``max_hp``),
+    within ``win_s`` of the fall -- on the HP series with the decoded `recovery` amounts added
+    (survive_judge.hp_with_recovery), so a heal sent either way counts. LIVE 2026-10-22 11:4x
+    (20261022T113202-demo-crusader-live-sit-heal): a Heal Lv 8 on self = sp 312 -> 278 and an
+    absolute hp +544 at the SAME t_mono_ns, nothing else."""
     import survive_judge as sj
 
     sp = clip(series(packets, "sp"), t0, t1, sp_start)
     casts = [t for t, _d in falls(sp, heal_sp, skip)]
     hp = sj.hp_with_recovery(packets, max_hp)
+    mxs = series(packets, "max_hp")
     rises = [(t, v - v0, v) for (_a, v0), (t, v) in zip(hp, hp[1:], strict=False) if v > v0]
     ok = []
     for tc in casts:
         ok.append(any(abs(t - tc) <= win_s * NS
-                      and (abs(r - heal_hp) <= 1 or (v >= max_hp and 0 < r < heal_hp))
+                      and (abs(r - heal_hp) <= 1
+                           or (v >= (in_force(mxs, t) or max_hp) and 0 < r < heal_hp))
                       for t, r, v in rises))  # fmt: skip
     return {"casts": len(casts), "confirmed": sum(ok),
             "times_s": [round((t - t0) / NS, 2) for t in casts],
             "via": f"sp fall of exactly {heal_sp} (no skill-use packet is decoded); confirmed = "
             f"hp rise {heal_hp} +-1 or capped at MaxHP within {win_s} s"}  # fmt: skip
+
+
+def is_attack_request(e: Mapping[str, Any], aid: int = AID) -> bool:
+    """PURE: an attack request of ours: attack_request with action 0 / 7 (is_attack). NOT a sit /
+    stand request: LIVE 2026-10-22, those arrive as attack_request kind sit / stand, action 2 / 3,
+    target_gid = OUR OWN id -- excluded by kind and by target too."""
+    return (e.get("type") == "attack_request" and e.get("kind") not in ("sit", "stand")
+            and int(e.get("target_gid") or -1) != aid
+            and bool(e.get("is_attack") or int(e.get("action", -1)) in (0, 7)))  # fmt: skip
 
 
 def objtypes(packets: Sequence[Mapping[str, Any]]) -> list[tuple[int, int, int]]:
@@ -259,8 +278,7 @@ def strikes(events: Sequence[Mapping[str, Any]], packets: Sequence[Mapping[str, 
     (any act but pickup / sit / stand, its target's latest appear a monster). "request_only": the
     client asked, no act followed in time."""
     appears = objtypes(packets)
-    reqs = sorted(_t(e) for e in packets if e.get("type") == "attack_request"
-                  and (e.get("is_attack") or int(e.get("action", -1)) in (0, 7)))  # fmt: skip
+    reqs = sorted(_t(e) for e in packets if is_attack_request(e, aid))
     acts = sorted(_t(e) for e in packets if e.get("type") == "act"
                   and int(e.get("src_gid") or -1) == aid and e.get("kind") not in NOT_A_HIT
                   and objtype_at(appears, int(e.get("target_gid") or -1),
@@ -303,8 +321,7 @@ def hard_bars(packets: Sequence[Mapping[str, Any]], t0: int, t1: int, map_name: 
                 same_gm += bool(e.get("gm_command"))
         elif typ == "npc_contact":
             npc += 1
-        elif typ == "attack_request" and (e.get("is_attack")
-                                          or int(e.get("action", -1)) in (0, 7)):  # fmt: skip
+        elif is_attack_request(e, aid):
             o = objtype_at(appears, int(e.get("target_gid") or -1), t)
             if o is None:
                 unknown += 1
@@ -318,12 +335,15 @@ def hard_bars(packets: Sequence[Mapping[str, Any]], t0: int, t1: int, map_name: 
 
 
 def moving_hp_recovery(packets: Sequence[Mapping[str, Any]], t0: int, t1: int,
-                       rests: Sequence[tuple[int, int]] = ()) -> dict[str, Any]:  # fmt: skip
+                       rests: Sequence[tuple[int, int]] = (),
+                       sits: Sequence[tuple[int, int]] = ()) -> dict[str, Any]:  # fmt: skip
     """PURE: regen_walk's walk spans and ticks inside the window: natural ticks WHILE walking
     (Moving HP Recovery's evidence: without it natural regen stops while walking) and the walking
     minutes; IRP ticks while walking (must be 0); the regen while resting (``rests``). A
     `recovery` amount above IRP's 155 (a capped tick is smaller) is NOT regen -- e.g. a Heal, if
-    one is ever sent as ZC_RECOVERY -- and is counted apart ("recovery_not_regen")."""
+    one is ever sent as ZC_RECOVERY -- and is counted apart ("recovery_not_regen"). While
+    SITTING (``sits``: our act sit -> stand) natural regen ticks every 3 s instead of 6 (LIVE
+    2026-10-22: +32 every 3 s; IRP 155 every 10 s unchanged): the ticks and HP / min there."""
     import regen_walk as rw
 
     spans = rw.walk_spans(packets)
@@ -334,6 +354,8 @@ def moving_hp_recovery(packets: Sequence[Mapping[str, Any]], t0: int, t1: int,
     irp = [x for x in tk if x["kind"] == "irp"]
     rest_ns = sum(b - a for a, b in rests)
     in_rest = [x for x in tk if any(a <= x["t"] < b for a, b in rests)]
+    sit_ns = sum(b - a for a, b in sits)
+    in_sit = [x for x in tk if any(a <= x["t"] < b for a, b in sits)]
     mins = (t1 - t0) / NS / 60
     return {
         "walking_min": round(walk_ns / NS / 60, 3),
@@ -344,8 +366,13 @@ def moving_hp_recovery(packets: Sequence[Mapping[str, Any]], t0: int, t1: int,
         "regen_hp_per_min": round(sum(x["amount"] for x in tk) / mins, 1) if mins else None,
         "regen_hp_per_min_resting": round(sum(x["amount"] for x in in_rest) / (rest_ns / NS / 60),
                                           1) if rest_ns else None,
+        "natural_while_sitting": sum(1 for x in in_sit if x["kind"] == "natural"),
+        "sitting_min": round(sit_ns / NS / 60, 3),
+        "regen_hp_per_min_sitting": round(sum(x["amount"] for x in in_sit) / (sit_ns / NS / 60),
+                                          1) if sit_ns else None,
         "regen_hp": sum(x["amount"] for x in tk),
         "regen_hp_resting": sum(x["amount"] for x in in_rest),
+        "regen_hp_sitting": sum(x["amount"] for x in in_sit),
         "recovery_not_regen": len(all_tk) - len(tk),
     }  # fmt: skip
 
@@ -459,7 +486,7 @@ def judge(events: Sequence[Mapping[str, Any]], packets: Sequence[Mapping[str, An
         "cost": econ.get("cost"), "picked_value": econ.get("picked_value"),
         "cost_ratio": econ.get("cost_ratio"), "sharpe_10min": econ.get("sharpe_10min"),
         "economics": econ,
-        "moving_hp_recovery": moving_hp_recovery(packets, w0, w1, rests),
+        "moving_hp_recovery": moving_hp_recovery(packets, w0, w1, rests, sits),
         "sitting_pct": round(sit_ns / max(1, w1 - w0), 4),
         "hard_bars": hard_bars(packets, w0, w1, mp, aid),
         # events
@@ -519,7 +546,7 @@ def pool(rows: Sequence[Mapping[str, Any]], label: str = "pooled") -> dict[str, 
                 s["loot_" + k] += float(v or 0)
         m = r.get("moving_hp_recovery") or {}
         for k in ("walking_min", "natural_while_walking", "irp_while_walking", "regen_hp",
-                  "regen_hp_resting"):  # fmt: skip
+                  "regen_hp_resting", "regen_hp_sitting"):  # fmt: skip
             s[k] += float(m.get(k) or 0)
         hb = r.get("hard_bars") or {}
         for k in ("map_changes_other", "npc_contacts", "attack_requests_non_monster"):
@@ -572,6 +599,8 @@ def pool(rows: Sequence[Mapping[str, Any]], label: str = "pooled") -> dict[str, 
             "regen_hp_per_min": round(s["regen_hp"] / (h * 60), 1) if h else None,
             "regen_hp_per_min_resting": round(s["regen_hp_resting"] / (s["rest_s"] / 60), 1)
             if s["rest_s"] else None,
+            "regen_hp_per_min_sitting": round(s["regen_hp_sitting"] / (s["sit_s"] / 60), 1)
+            if s["sit_s"] else None,
         },
         "hard_bars": {k: int(s[k]) for k in ("map_changes_other", "npc_contacts",
                                              "attack_requests_non_monster")},
@@ -624,7 +653,8 @@ def cells(r: Mapping[str, Any]) -> dict[str, str]:
         "eng": " / ".join(str(eng.get(k, 0)) for k in ("battle_log", "hp_drop", "box")),
         "mhr": f"{_f(m.get('natural_while_walking'))} ({_f(m.get('walking_min'), 2)} min)",
         "irp_walk": _f(m.get("irp_while_walking")),
-        "regen": f"{_f(m.get('regen_hp_per_min'))} / {_f(m.get('regen_hp_per_min_resting'))}",
+        "regen": f"{_f(m.get('regen_hp_per_min'))} / {_f(m.get('regen_hp_per_min_resting'))} "
+        f"/ {_f(m.get('regen_hp_per_min_sitting'))}",
         "bars": f"{hb.get('map_changes_other')} / {hb.get('npc_contacts')} / "
         f"{hb.get('attack_requests_non_monster')}",
         "end": str(r.get("end_reason") or "-")[:40],
@@ -640,7 +670,7 @@ ROWS = (
     ("SP used / h / SP min", "sp"), ("HP min (% MaxHP)", "hp_min"),
     ("loot completeness [net]", "loot"), ("strikes landed", "landing"),
     ("engage battle_log / hp_drop / box", "eng"),
-    ("regen HP / min: all / resting", "regen"),
+    ("regen HP / min: all / resting / sitting", "regen"),
     ("MHR natural ticks walking (walk min)", "mhr"), ("IRP ticks walking (0)", "irp_walk"),
     ("HARD map other / NPC / non-mob atk", "bars"), ("end reason", "end"),
 )  # fmt: skip
@@ -747,12 +777,16 @@ SURVIVAL = {  # 3.96's trials (NAS): potions, a Fly Wing, a death, Auto Guard
 REGEN = "20261021T212245-demo-crusader-regen-r1"  # 3.96f
 HUNT = "20261022T032441-demo-hunt-flow55"  # 3.97 v55 run 4 (prt_fild08)
 HARD = "20261008T073847-demo-safety-check-npc-garnet"  # a warp to prt_church + an NPC contact
+LIVE = "20261022T113202-demo-crusader-live-sit-heal"  # the parent's live check: a Heal, a sit
+
+
+def present(sid: str) -> bool:
+    return (session_dir(sid) / "packets.jsonl.gz").exists()
 
 
 def positive(table: Mapping[str, Mapping[str, Any]] | None) -> list[dict[str, Any]]:
     """Each column against the judge that already owns it, on a REAL banked session (the lab's
     rule: a verifier proves a positive case). Returns [{case, got, want, ok}]."""
-    import regen_walk as rw
     import survive_judge as sj
 
     out: list[dict[str, Any]] = []
@@ -760,7 +794,16 @@ def positive(table: Mapping[str, Mapping[str, Any]] | None) -> list[dict[str, An
     def check(case: str, got: Any, want: Any) -> None:
         out.append({"case": case, "got": got, "want": want, "ok": got == want})
 
+    def skip(sid: str) -> bool:  # an absent session is SKIPPED, never a pass
+        if present(sid):
+            return False
+        out.append({"case": f"{sid}: SKIPPED (not banked here)", "got": None, "want": None,
+                    "ok": None})  # fmt: skip
+        return True
+
     for what, sid in SURVIVAL.items():
+        if skip(sid):
+            continue
         ev, pk, man = load(sid)
         r = judge(ev, pk, table, man, map_name="prt_fild08")
         s = sj.judge(ev, pk, offset_s=0.12, max_hp=(man.get("thresholds") or {}).get("MAX_HP"))
@@ -780,7 +823,61 @@ def positive(table: Mapping[str, Mapping[str, Any]] | None) -> list[dict[str, An
         mc = man.get("counts") or {}
         check(f"{what} {sid[9:15]}: potions / flys == the runner's own counts",
               (r["potions"], r["fly_wings"]), (mc.get("potion"), mc.get("fly")))  # fmt: skip
-    ev, pk, man = load(REGEN)
+    if not skip(LIVE):
+        live(load(LIVE), table, check)
+    if not skip(REGEN):
+        regen(load(REGEN), table, check)
+    if not skip(HARD):
+        ev, pk, man = load(HARD)
+        r = judge(ev, pk, table, man, map_name="prt_fild08")
+        check("hard bars garnet: map changes to another map (prt_church), NPC contacts",
+              (r["hard_bars"]["map_changes_other"], r["hard_bars"]["other_maps"],
+               r["hard_bars"]["npc_contacts"]), (1, ["prt_church"], 1))  # fmt: skip
+    if table is None:  # skipped, not failed: the GPL-derived table is built locally at run time
+        out.append({"case": "hunt v55: kills / economics / loot (SKIPPED: no item table)",
+                    "got": None, "want": None, "ok": None})  # fmt: skip
+        return out
+    if not skip(HUNT):
+        hunt(table, check)
+    return out
+
+
+Check = Any  # positive()'s check(case, got, want)
+
+
+def live(loaded: tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]],
+         table: Mapping[str, Mapping[str, Any]] | None, check: Check) -> None:  # fmt: skip
+    """The parent's LIVE check (2026-10-22 11:3x, the Crusader on the Heal tree): one Heal Lv 8
+    on self (sp 312 -> 278, hp +544 at the same tick), one sit -> stand (act sit / stand of ours;
+    the requests arrive as attack_request kind sit / stand with OUR id as the target), natural
+    regen every 3 s while sitting."""
+    ev, pk, man = loaded
+    r = judge(ev, pk, table, man)
+    check("live sit-heal: Heals = 1, HP-confirmed (sp -34 and hp +544 at the same tick)",
+          (r["heals"], r["heals_confirmed"]), (1, 1))  # fmt: skip
+    check("live sit-heal: the runner's heal press vs the packets", r["runner_vs_packets"]["heal"],
+          [1, 1])  # fmt: skip
+    check("live sit-heal: one sit span (act sit -> stand) vs the sit press",
+          r["runner_vs_packets"]["sit"], [1, 1])  # fmt: skip
+    sit_s = (r.get("rest") or {}).get("sitting_seconds")
+    check("live sit-heal: sitting seconds (act sit 739.72 -> stand 766.43 s: 26.7)", sit_s, 26.7)
+    raw = sum(1 for e in pk if e.get("type") == "attack_request"
+              and e.get("kind") in ("sit", "stand"))  # fmt: skip
+    hb = r["hard_bars"]
+    check("live sit-heal: 2 sit / stand requests, 0 counted as attack requests",
+          (raw, hb["attack_requests_non_monster"], hb["attack_requests_unknown_target"]),
+          (2, 0, 0))  # fmt: skip
+    m = r["moving_hp_recovery"]
+    check("live sit-heal: natural ticks while sitting (every 3 s: 9 in 26.7 s)",
+          m["natural_while_sitting"], 9)  # fmt: skip
+
+
+def regen(loaded: tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]],
+          table: Mapping[str, Mapping[str, Any]] | None, check: Check) -> None:  # fmt: skip
+    """3.96f's regen trial against regen_walk.judge, phase by phase (its own windows)."""
+    import regen_walk as rw
+
+    ev, pk, man = loaded
     rj = rw.judge(ev, pk)
     keys = ("irp_ticks", "natural_ticks", "irp_while_walking", "natural_while_walking")
     want = {k: sum(int(p[k]) for p in rj["phases"]) for k in keys}
@@ -800,15 +897,10 @@ def positive(table: Mapping[str, Mapping[str, Any]] | None) -> list[dict[str, An
     m = r["moving_hp_recovery"]
     check("regen r1 (manifest window): IRP while walking 0, natural while walking 0 (3.96f)",
           (m["irp_while_walking"], m["natural_while_walking"]), (0, 0))  # fmt: skip
-    ev, pk, man = load(HARD)
-    r = judge(ev, pk, table, man, map_name="prt_fild08")
-    check("hard bars garnet: map changes to another map (prt_church), NPC contacts",
-          (r["hard_bars"]["map_changes_other"], r["hard_bars"]["other_maps"],
-           r["hard_bars"]["npc_contacts"]), (1, ["prt_church"], 1))  # fmt: skip
-    if table is None:  # skipped, not failed: the GPL-derived table is built locally at run time
-        out.append({"case": "hunt v55: kills / economics / loot (SKIPPED: no item table)",
-                    "got": None, "want": None, "ok": None})  # fmt: skip
-        return out
+
+
+def hunt(table: Mapping[str, Mapping[str, Any]], check: Check) -> None:
+    """v55 run 4 against econ_row + loot_complete on search_study's window."""
     import econ_row as er
     import loot_complete as lc
     import search_study as ss
@@ -829,7 +921,6 @@ def positive(table: Mapping[str, Mapping[str, Any]] | None) -> list[dict[str, An
           (s["completeness"], s["completeness_net"]))  # fmt: skip
     check("hunt v55: hard bars (the map's own warp before the window is not counted)",
           r["hard_bars"]["pass"], True)  # fmt: skip
-    return out
 
 
 # --- the CLI -------------------------------------------------------------------------------------

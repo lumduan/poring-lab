@@ -161,6 +161,36 @@ def test_resting_spans_and_the_sitting_cross_check() -> None:
     assert r["strategy"] == "B"
 
 
+def test_a_sit_request_is_not_an_attack_and_sitting_regen_is_counted() -> None:
+    """LIVE 2026-10-22 (the parent's check): sit / stand arrive as attack_request kind sit / stand,
+    action 2 / 3, target = OUR OWN id, and as our act sit / stand (stand twice); natural regen
+    ticks +32 every 3 s while sitting (the +-1 of regen_walk's 33), IRP 155 every 10 s."""
+    packets = [hp(0, 4000), appear(0, MOB, 5)]
+    packets += [
+        pk(10, type="attack_request", target_gid=A, action=2, kind="sit", is_attack=False),
+        pk(10.001, type="act", src_gid=A, target_gid=0, damage=0, kind="sit", action=2),
+        hp(13, 4032), hp(16, 4064), pk(17, type="recovery", name="hp", var=5, amount=155),
+        hp(19, 4251), hp(22, 4283),
+        pk(25, type="attack_request", target_gid=A, action=3, kind="stand", is_attack=False),
+        pk(25.001, type="act", src_gid=A, target_gid=0, damage=0, kind="stand", action=3),
+        pk(25.001, type="act", src_gid=A, target_gid=0, damage=0, kind="stand", action=3),
+        pk(26, type="attack_request", target_gid=A, action=7, kind="repeat", is_attack=True),
+    ]  # fmt: skip
+    events = run(1, 60, "B") + [
+        ev(9.9, "press", what="sit", key="Insert", why="rest"),
+        ev(24.9, "press", what="stand", key="Insert", why="full"),
+    ]
+    r = judge(events, packets)
+    hb = r["hard_bars"]  # neither the sit / stand requests nor one aimed at ourselves count
+    assert hb["attack_requests_non_monster"] == 0 and hb["attack_requests_unknown_target"] == 0
+    assert dj.is_attack_request(packets[-1]) is False  # an attack aimed at OUR id: not ours
+    assert r["rest"]["sitting_seconds"] == 15.0 and r["runner_vs_packets"]["sit"] == [1, 1]
+    m = r["moving_hp_recovery"]
+    assert m["natural_while_sitting"] == 4 and m["sitting_min"] == 0.25
+    assert m["regen_hp_per_min_sitting"] == round((4 * 32 + 155) / 0.25, 1)
+    assert dj.pool([r])["moving_hp_recovery"]["regen_hp_per_min_sitting"] == 1132.0
+
+
 # --- packets: Moving HP Recovery, the hard bars ---------------------------------------------------
 
 
@@ -331,6 +361,10 @@ def test_real_positive_cases_agree_with_the_judges_that_own_each_column() -> Non
     assert got["potions 193536: potions == survive_judge S2"] == 26
     assert got["death 184414: deaths == survive_judge S6"] == 1
     assert got["autoguard 235737: Auto Guard == survive_judge S4"] == 1
+    if dj.present(dj.LIVE):  # the parent's live sit / Heal check (2026-10-22 11:3x)
+        assert got["live sit-heal: Heals = 1, HP-confirmed (sp -34 and hp +544 at the same tick)"
+                   ] == (1, 1)  # fmt: skip
+        assert got["live sit-heal: natural ticks while sitting (every 3 s: 9 in 26.7 s)"] == 9
     if table is not None:
         assert got["hunt v55: kills == econ_row (search_study window)"] == 116
         assert got["hunt v55: gross / cost / net z/h == econ_row"] == (802.3, 0.0, 802.3)
