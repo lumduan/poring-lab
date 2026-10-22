@@ -15105,6 +15105,23 @@ JUMP (the map-change hard bar) only when it is larger than JUMP_CELLS AND larger
 cover since the last read (`is_jump`: 150 ms a cell + 5). A map change teleports at once, so it
 still trips; a long walk to a struck target no longer does. The chain resumes at pi3 (the same seed).
 
+- **Pair 3:**
+  - **pi3** (P, seed 22205, `20261022T235817-demo-dungeon-patrol-H-pi3`, 23:58-00:38, time box,
+    40.0 min). Its pre-run frame was judged ~10 s AFTER its start: the restarted chain found attempt
+    1's `ok-pi3` still set (a procedural slip, recorded; the frame was fine: the stand, HP / SP
+    full, weight 38 %, the layout, no dialog). 71 kills (**106.5 / h**), deaths 0, HP min 40.9 %, 0
+    potions / Fly Wings, 9 Heals (9 confirmed), loot 92 / 97 %, net 5,262 z / h, met 27 / 10 min,
+    walking 11.9 % (3 laps: 77 waypoints reached, 31 resumes, 4 skips), 33.8 s / kill (9.7 / 3.6 /
+    20.5), landing 81 %, hard bars 0.
+  - **ci3** (C, seed 22206, `20261023T003921-demo-dungeon-H-ci3`, 00:39-01:19, time box, 40.0 min):
+    121 kills (**181.5 / h**), deaths 0, HP min 39.5 %, 0 potions, 1 Fly Wing, 8 Heals, loot 64 /
+    86 %, net 9,037 z / h, met 32 / 10 min, walking 9.1 %, 19.8 s / kill (7.9 / 1.6 / 10.3), landing
+    81 %, hard bars 0.
+  - P - C: **-75.0 kills / h**, -5 met / 10 min: the patrol walked its loop three times through a
+    sparse spell.
+  - The loot step is a fixed sink in EVERY run so far (722-965 s per 40 min, 30-40 % of the run,
+    whatever the kills): 4.01's target.
+
 ### 4.01 dungeon@4 + LOOT v2: the changed cells first, a time budget per fight, no re-hover of empty cells, vs dungeon@4's loot (pre-registered 2026-10-22, the commit time of 4.01's first commit, BEFORE its code is merged or run; Batt's decision 4 on the 19:00 report: "Loot: hover the CHANGED cells first, the plain list cells after; a time budget per fight; skip cells already hovered empty"; his overnight brief: "Then, if time remains, the loot change (item 4) as its own version")
 
 **Why:** Batt's demo vs the bot (crusader-orcsdun01.md 9a): the bot's largest gap is STANDING
