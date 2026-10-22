@@ -14796,6 +14796,13 @@ Reported, not deciding:
     Sharpe-like 1.82. Strikes 69, landed 60 (87.0 %).
   - Engagements: loot_sword 23, box 16, battle_log 10, walk_sword 7. Chain: 55 % within 15 s,
     median 1.11 s.
+- **r5** (B, seed 22005, `20261022T155122-demo-dungeon-B-r5`, 15:52-16:32, TIME BOX, 40 min):
+  - 58 kills (86.9 /h), 41.4 s / kill; HP min 54.1 %; 0 potions; 1 Fly Wing (the idle watchdog:
+    the no-entry re-plan at 106,54); 8 Auto Guard casts; rests 0; deaths 0; hard bars 0.
+  - Loot 38.3 % gross / 56.4 % net: LOOTERS took 26, 13 out of sight, 11 expired; net 2,893 z/h
+    (cost 90 z/h); Sharpe-like 1.75. Strikes 74, landed 53 (71.6 %).
+  - Engagements: loot_sword 24, box 18, battle_log 7, walk_sword 6, stall_scan 2. Chain: 72 %
+    within 15 s, median 0.90 s.
 
 ### 3.99 dungeon@3-melee_ring: MELEE-RING engagement (the CURSOR engages, not the detector) vs 3.98's defend-scan, sustain B fixed, in alternating runs inside 3.98's rotation (pre-registered 2026-10-22 13:56 ICT, the commit time of 3.99's first commit, BEFORE its pilot and its runs; Batt 2026-10-22 ~13:4x: "NEW ENGAGE OPTION (Batt's idea): 'MELEE-RING' engagement, driven by the CURSOR, not the detector ... pre-register it as its own version on orcsdun01 with the Crusader, compared with the current detector/defend-scan engagement in alternating runs within today's A/B/C rotation (keep the sustain strategy fixed for this comparison, e.g. B)")
 
