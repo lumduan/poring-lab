@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [orcsdun01-detector.md, crusader-build.md, crusader-orcsdun01-facts.md, ../benchmarks/v2orc-vs-v1.md, ../competition.md, ../demonstrations.md]
-next_action: "2026-10-22 RESULTS (demonstrations 3.98 / 3.99, comparisons, no decision rule): the Crusader hunted orcsdun01 for real, deaths 0 and hard bars 0 in every run; NET z/h A -6,049 / B 4,225 / C 798 (sustain is not the bottleneck at this build; B never rested in its full runs); MELEE-RING (MR-B) 107.5 kills/h vs defend-B 87.5, the same net. Batt decides: the sustain, the rest trigger, the skill tree (the Heal tree now, 2c), melee-ring, the next loot step (the list is right, the step slow), and two small runner fixes (the no-entry carve, the rest spots inside the warp margins)."
+next_action: "2026-10-22 night: Batt's decisions on the 19:00 report are recorded (section 10). His 15-min demo (9a) is the orcsdun01 TARGET (472 kills/h, 20,520 z/h gross, 0 potions, 5 Heals, HP min 74 %): the bot loses ~25 s per kill STANDING between fights. 4.00 (dungeon@4: his patrol loop + his Heal rhythm vs the heading search, paired) runs overnight; the loot change (decision 4) is the next version."
 title: "A Crusader hunting Orc Dungeon F1 (orcsdun01) for real: the test character, the build, the survival skills and the order (plan)"
 date: 2026-10-21
 owner: Batt
@@ -202,7 +202,7 @@ command: `LogCommands: true`).
   - Two-hand / Spear skills were never touched; 1 skill point and 15 status points are left
     (Batt's plan; the 15 are the DEX reserve for the re-spec loop).
 
-### 2c. Batt's HEAL tree (2026-10-22 11:21-11:31; the Crusader's tree for 3.98's A, B and C)
+### 2c. Batt's HEAL tree (2026-10-22 11:21-11:31; the Crusader's tree for 3.98's A, B and C) -- ➡️ the Crusader's STANDARD tree (Batt 2026-10-22, decision 2 on the 19:00 report: "The Heal tree (Magnum Break 4) is the Crusader's standard")
 
 - `@resetskill` (keeps Basic Skill 9 and the quest skills), then by learn_skill@1's rule:
   - first-job tab: Sword Mastery 10, Increase HP Recovery 10, Bash 10, Provoke 5, **Magnum Break
@@ -378,4 +378,98 @@ go (~5 min):
 
 - The 17:57-18:42 attempt got no input (13,468 frames, 0 human events):
   `/mnt/poring-lab-datasets/human-demos/20261021T175710-demo-human-demo-orcsdun01-crusader`.
-  It is a deletion candidate: Batt's call.
+  It is a deletion candidate: Batt's call. ➡️ DELETED 2026-10-22 ~19:5x ICT (Batt, decision 7: "NAS:
+  delete the no-input demo"): both its NAS directories; it had no INDEX line.
+
+**RECORDED 2026-10-22 (Batt, 15 min): `20261022T184536-demo-human-demo-orcsdun01-crusader`.**
+- Prepared 18:42-18:45 as above (potions to 50, Fly Wings 11, Auto Guard off, Batt's HUNTING
+  layout with the Battle Log tab), then `human_demo.py arm --minutes 15 --end-quiet 120 --map
+  orcsdun01 --character crusader --battle-log` (e607960 added the labels and the live Battle Log
+  reader, pixels only). Armed 18:45:36; his first input 18:45:55; the time box 19:01:56; quiet
+  19:11:48. 4,880 frames (NAS `human-demos/`), 2,745 detector frames, 5,283 packet events, 7,444
+  input events of his, 1,174 Battle Log lines. Banked to the NAS (dataset_ship, --keep-local).
+- He played ~10 min past the recording's end. Then the Crusader stood idle at 60,120 among orcs
+  until the agent warped it out at 19:14 (HP 96 %): Batt's decision 8 makes that rescue a standing
+  step (`scripts/demo_aftercare.py`).
+
+### 9a. Batt vs bot in orcsdun01 (offline, packets; `dungeon_judge.py row SID --live 900`, `dungeon_style.py`)
+
+The SAME ruler on his 15 min and on the bot's 3.98 / 3.99 full runs (defend = r3 r4 r5 r6, MR = mr1
+mr2). His numbers are the orcsdun01 TARGETS (Batt's overnight brief, item A).
+
+| | Batt (15 min) | bot defend (4 runs) | bot MR-B (2 runs) |
+|---|---|---|---|
+| kills / h | **472** | 84-92 | 90.6-124.5 |
+| gross zeny / h | **20,520** | 2,877-5,409 net-ish (3.98) | 4,507-6,235 gross |
+| potions / Fly Wings / Heals | **0 / 0 / 5** (20 / h) | 0-5 / 0-2 / 0-9 | 0-1 / 1-4 / 0 |
+| HP min | **74 %** | 29-59 % | 26-85 % |
+| time per kill (s) | **7.6** = 5.4 fight + 0.7 walk + 1.6 stand | 41.0 = 8.8 + 5.9 + 26.4 | 33.5 = 7.7 + 2.4 + 23.4 |
+| fights / 10 min, kills / fight | 22, **3.6** | 5.8-16.5, 0.9-2.5 | 11.7-13.1, 1.2-1.8 |
+| the pack (attackers at once; median / p90) | 2 / 5 | 1 / 3-7 | 1 / 2-3 |
+| kill time per orc (Orc Zombie, median) | 5.0 s | 5.0 s | 5.0 s |
+| moved on after a fight (median) | 2.4 s, 1 pickup | 1.2-13.2 s | 3.7-4.9 s |
+| monsters met / 10 min | **67** | 8.5-25.5 | 16.0-20.5 |
+| pulled along (per 10 min) | **0.7** | 3.6-4.5 | 2.0 |
+| pickups in a fight / after (<= 10 s) / elsewhere | 2 / 83 / 3 | 5-19 / 15-21 / 6-14 | 3-29 / 29 / 11-19 |
+| target = the nearest / already hitting us | 97 % / 77 % | 92-98 % / 79-90 % | 83-96 % / 85-90 % |
+| attack clicks per kill | 1.08 | 1.7-2.0 | 1.6-1.8 |
+| fights in corridors / mid / open (map: 44 / 18 / 38 %) | 36 / 21 / 42 % | 23-54 % corridor | 34-36 % corridor |
+| walking share, reversals / min | 10 %, 1.5 | 13-18 %, 0.8-1.8 | 8 %, 0.4-0.7 |
+
+**HOW he kept HP high while killing 4.5x faster:**
+1. **He does not kill faster.** An Orc Zombie takes 5.0 s for him and for the bot (the Crusader's
+   own damage). The gap is the time BETWEEN kills: 2.2 s of his 7.6 s per kill, 32 s of the bot's.
+2. **Small packs, all of them killed before moving on.** He took what stood next to him (97 % the
+   nearest, at 1 cell), 2 at once (p90 5), killed every one (3.6 per fight), and walked on 2.4 s
+   later with one pickup. HP did not drop in his median fight, and every fight began at 100 %.
+3. **He pulled nothing along** (1 monster in 15 min). The bot drags 2-4.5 monsters per 10 min into
+   its next fight: it walks away mid-fight (loot hovers, scans, the search), and the pack grows.
+   Its worst packs (p90 7 in r3) came after long loot steps.
+4. **He heals BETWEEN fights**, early: HP 92.4 / 74.8 / 85.8 / 97.9 / 92.4 % with SP 89-100 %, 4 of 5
+   with no hit in the 3 s before. HP never had room to fall far.
+5. **Where he fought is not the trick:** 36 % of his fights were in corridors (<= 2 cells to a wall)
+   against 44 % of the map's cells; he fought a little MORE in the open.
+6. **He meets 3-8x more monsters** (67 / 10 min): his loop (below) keeps him where they respawn.
+
+**The bot's gaps against these targets, ranked by seconds lost per kill:**
+1. **Standing outside fights: 24.8 s / kill (defend), 21.8 (MR).** The loot step ~10.7 s / kill (each
+   up to 25 s, 30 hovers), the defend scans ~3.5 s / kill, the rest the walk's stop-and-go (750-1,277
+   walk clicks a run, legs of 7 cells every 1.2 s) and the quiet waits before a fight ends.
+   Decision 4 (the loot change) is the next version for it.
+2. **Walking outside fights: 5.2 s / kill (defend), 1.7 (MR)** -- it meets few monsters: the
+   heading search (8.5-25.5 / 10 min against his 67). 4.00's patrol loop is tonight's test.
+3. **Fighting: 3.4 s / kill (defend), 2.3 (MR)** -- the strike's burst ran its 3 s (the lock arrow
+   seen on 22 %); 4.00 ends it on our first damage line (the pilot: ~1.3 s).
+
+**His circuit** (`config/routes/orcsdun01.yaml`, `batt-loop`): from the entrance down to the junction
+66,124, LEFT (east) along the north corridor, the north spur and the NE pocket, south down the east
+side, west along the south past the White Plants at 83,50, north up the west side past the plants at
+58,67: CLOCKWISE in map terms, 380 cells, ~0.9 of a lap in his 16 min.
+
+**White Plants:** he killed all 5 he saw (Batt: on purpose, for the White Herb). They dropped 1
+White Herb (NPC sell 60 z; he did not pick it in the window) plus Stems / Pointed Scales: 163 z of
+the 7,599 z his kills dropped (2 %) at NPC prices -- the herb's value is a market one. v1 sees
+plants 0-2 %; the sprite finder did not separate them (plant_finder.py): 4.00 sweeps their spawn
+areas with the cursor.
+
+## 10. What Batt decided on the 19:00 report (2026-10-22 ~19:2x, and his overnight brief)
+
+1. orcsdun01 sustain = **B + HEAL**: Heal when HP < 50 % and SP allows; potions only in
+   emergencies; the Fly Wing escape as now. With his demo's rhythm (Heal between fights while HP is
+   down and SP near full) -> 4.00's strategy H.
+   1b. Rest after a fight when HP < 80 % or SP < 30 %; back into the search area after resting.
+2. The Heal tree (Magnum Break 4) is the Crusader's standard (2c).
+3. Melee-ring: a later version ends the burst on our first damage line, then 4+ paired runs vs
+   defend-scan.
+4. Loot: hover the CHANGED cells first, the plain list cells after; a time budget per fight; skip
+   cells already hovered empty (its own version).
+5. Runner fixes approved: carve no-entry walk targets; end the burst on our first damage line (in
+   4.00's base, dungeon@4).
+6. lab-rathena-th: a one-line answer in the morning report; metamorphosis (turns_into) in the KB
+   (kbsheet, 13cba8e).
+7. v55 KEEP (the D8 row, 00dd8ce); the strike's velocity lead capped at 1 cell (its own version,
+   prt_fild08, later); S3's rate trigger only under 60 % HP (fb8926f); the Auto Guard icon
+   diagnostic capture (d3be360); the guarded recreate:backend for B2's zones routes (20:05);
+   the disk items; the NAS no-input demo deleted; two old branches dropped.
+8. Every human demo ends with the character taken out of a dangerous map at once (safe stand,
+   @heal), then judged (`demo_aftercare.py`, f377a89).
