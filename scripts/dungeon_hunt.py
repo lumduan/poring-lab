@@ -57,6 +57,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 ROOT = Path(__file__).resolve().parents[1]
 DEMO = Path("/dev/shm/poring-lab-demo")
 MAP = "orcsdun01"
+MR_VERSION = "dungeon@3-melee_ring"  # Batt 2026-10-22 13:4x: the cursor-driven engagement
 VERSION = "dungeon@2"  # @1 = the 11:41 pilot; @2 = + Batt's loot list + sweep
 REST_FILE = ROOT / "config" / "dungeon" / "orcsdun01.json"  # rest spots (static map knowledge)
 Cell = tuple[int, int]
@@ -104,6 +105,8 @@ QUICK_S = 0.25  # guard_tick: an HP read at most this often inside a long action
 MAX_SHOTS = 40  # strike frames kept per run (JPEG, the session dir)
 NOENTRY_RED = 25  # red pixels in the 64 x 64 cursor crop: the client's no-entry ring
 CARVE_R = 2  # Amendment C: a stalled walk target's 5 x 5 leaves the route grid for the run
+MR_WALK_AHEAD = 3  # MELEE-RING (Batt 13:4x): short walk legs ("moving slowly") ...
+MR_QUEUE_SCAN_S = 2.0  # ... and while locked, ring 1 is re-read this often for the queue
 IDLE_MAX_S = 45.0  # Amendment D: searching this long with no walk click and no move = stuck
 STUCK_STALLS = 4  # Amendment C: this many stalls within 60 s at one cell = stuck -> a Fly Wing
 STALL_CLICKS = 2  # walk clicks from the same cell without moving: turn, re-plan, scan ring 1
@@ -205,6 +208,26 @@ def carve(mask: Any, c: Sequence[int], r_: int) -> None:
     mask[max(0, c[1] - r_) : min(h, c[1] + r_ + 1), max(0, c[0] - r_) : min(w, c[0] + r_ + 1)] = (
         True
     )
+
+
+def forward_cells(here: Cell, nxt: Cell) -> list[Cell]:
+    """PURE (MELEE-RING): the ring-1 cells AHEAD of our walk, as offsets: the step toward ``nxt``
+    and its two 45-degree neighbours (the cells a monster meeting us is drawn on first)."""
+    dx = (nxt[0] > here[0]) - (nxt[0] < here[0])
+    dy = (nxt[1] > here[1]) - (nxt[1] < here[1])
+    if (dx, dy) == (0, 0):
+        return []
+    order = [(0, 1), (1, 1), (1, 0), (1, -1), (0, -1), (-1, -1), (-1, 0), (-1, 1)]
+    i = order.index((dx, dy))
+    return [order[i], order[(i + 1) % 8], order[(i - 1) % 8]]
+
+
+def queue_add(queue: list[dict[str, Any]], cell: Cell, t: float) -> bool:
+    """PURE (MELEE-RING): a SWORD cell joins the queue once (by absolute cell); True if added."""
+    if any(tuple(q["cell"]) == tuple(cell) for q in queue):
+        return False
+    queue.append({"cell": tuple(cell), "t": t})
+    return True
 
 
 def turn_heading(st: dict[str, Any]) -> None:
@@ -480,7 +503,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                else np.zeros(len(rel_)))  # fmt: skip
         return camera.project(rel_, alt)
 
-    sid = f"{time.strftime('%Y%m%dT%H%M%S')}-demo-dungeon-{a.strategy}-{a.label}"
+    mr_tag = "-mr" if a.engage == "melee_ring" else ""
+    sid = f"{time.strftime('%Y%m%dT%H%M%S')}-demo-dungeon{mr_tag}-{a.strategy}-{a.label}"
     out = DEMO / sid
     out.mkdir(parents=True, exist_ok=False)
     evf = (out / "events.jsonl").open("a")
@@ -534,14 +558,19 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
 
         w_ = gm_state._weight(gm_state._frames(screen))
         share = gm_state.weight_share(w_)
-        ev({"kind": "run_start", "strategy": a.strategy, "seed": a.seed, "version": VERSION,
+        ev({"kind": "run_start", "strategy": a.strategy, "seed": a.seed, "engage": a.engage,
+            "version": VERSION if a.engage == "defend_scan" else MR_VERSION,
             "minutes": a.minutes, "map": MAP, "start": list(start), "inv_db": inv,
             "setup": setup, "weight": w_, "weight_before": w0, "cleared": cleared,
             "params": strat, "rest_spots": spots})  # fmt: skip
         if share is not None and share >= WEIGHT_MAX:
             raise r.Stop(f"dungeon@1: weight {share:.2f} >= {WEIGHT_MAX} (a person first)")
         blt = hf.BattleLogTail(out / "battle_log_live.jsonl", owner_pid=__import__("os").getpid())
-        boxes = BoxWatch(screen, (gx0, gy0, gw, gh), r) if a.boxes else None
+        mr = a.engage == "melee_ring"  # Batt 13:4x: the CURSOR engages, the detector does not
+        boxes = BoxWatch(screen, (gx0, gy0, gw, gh), r) if a.boxes and not mr else None
+        queue: list[dict[str, Any]] = []  # MELEE-RING: SWORD cells seen while fighting
+        last_qscan = 0.0
+        watch_i = 0
         st = Sustain()
         ag_last = sv.load_ag_last()
         ag_absent: float | None = None
@@ -876,6 +905,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                             else list(here)})  # fmt: skip
                         if here is not None:  # the loot list: the 5 x 5 around us at this death
                             loot_list.append((here, tick))
+                        if mr and lock is not None and lock.get("cell"):  # it died: off the queue
+                            queue[:] = [q for q in queue if list(q["cell"]) != list(lock["cell"])]
                         lock = None
                 if not blt.alive():
                     reason = "battle_log_reader_died"
@@ -969,6 +1000,52 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                         mode = "after"
                         ev({"kind": "fight_end", "kills": len(kills_seen), "why": "quiet kill"})
                         continue
+                    if mr and lock is not None and here is not None \
+                            and tick - last_qscan >= MR_QUEUE_SCAN_S:  # fmt: skip
+                        # MELEE-RING 2: while we swing, read the 8 cells around us (two-motion
+                        # hovers, never a click); every SWORD joins the queue
+                        last_qscan = tick
+                        t_q = time.monotonic()
+                        n_add, seen_ = 0, 0
+                        lrel = tuple(lock.get("rel") or ())
+                        for c_q in ring(1):
+                            if c_q == lrel:
+                                continue
+                            u_q, v_q = project(here, [c_q])[0]
+                            v_q -= BODY_UP
+                            if not in_view(u_q, v_q):
+                                continue
+                            res_q = hover(u_q, v_q)
+                            seen_ += 1
+                            if res_q["verdict"] == "sword":
+                                n_add += queue_add(
+                                    queue, (here[0] + c_q[0], here[1] + c_q[1]), tick
+                                )
+                            if guard_tick():
+                                break
+                        ev({"kind": "queue_scan", "hovers": seen_, "added": n_add,
+                            "queue": len(queue), "lock_cell": lock.get("cell"),
+                            "ms": round((time.monotonic() - t_q) * 1e3)})  # fmt: skip
+                    if mr and lock is None and queue and here is not None:
+                        # MELEE-RING 2: the current target died -> the next queued SWORD at once
+                        t_h = time.monotonic()
+                        while queue and lock is None:
+                            q = queue.pop(0)
+                            rel_q = (q["cell"][0] - here[0], q["cell"][1] - here[1])
+                            if max(abs(rel_q[0]), abs(rel_q[1])) > 1:
+                                continue  # it was beside where we stood, not beside us now
+                            u_q, v_q = project(here, [rel_q])[0]
+                            v_q -= BODY_UP
+                            if not in_view(u_q, v_q):
+                                continue
+                            res_q = hover(u_q, v_q)
+                            if res_q["verdict"] != "sword":
+                                continue
+                            strike(u_q, v_q, rel_q, "queue")
+                            lock = {"t": time.monotonic(), "rel": rel_q, "cell": list(q["cell"])}
+                            ev({"kind": "handoff", "from_kill_ms": None if not kills_seen else
+                                round((t_h - kills_seen[-1]) * 1e3), "cell": list(q["cell"]),
+                                "queue_left": len(queue)})  # fmt: skip
                     if lock is None:
                         found = scan("defend", ring(1), "sword")
                         if found is None and not quiet:  # ring 2 only while hits still come
@@ -989,6 +1066,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                 if mode == "fight" or (lock is not None):
                     continue
                 # --- AFTER a fight: loot, then rest or search
+                if mode == "after":
+                    queue.clear()
                 if mode == "after" and (loot_list or fight_ref is not None):
                     got_ = loot_step(loot_list, fight_ref)
                     idle_since = time.monotonic()
@@ -1075,7 +1154,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                             u_, v_ = project(h, [(c[0] - h[0], c[1] - h[1])])[0]
                             return in_view(u_, v_) and mz.segment_violates(h, c, zones) is None
 
-                        wt_ = walk_target(goal_path, WALK_AHEAD, fits)
+                        wt_ = walk_target(goal_path, MR_WALK_AHEAD if mr else WALK_AHEAD, fits)
                         if wt_ is not None:
                             _i, c = wt_
                             rel = (c[0] - here[0], c[1] - here[1])
@@ -1135,6 +1214,27 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                                     if noentry_n >= 2:  # the client calls it a wall: turn
                                         turn_heading(walk_st)
                                         goal_path, noentry_n = None, 0
+                elif (mr and mode == "search" and here is not None and goal_path
+                        and len(goal_path) >= 2 and lock is None):  # fmt: skip
+                    # MELEE-RING 1 (between walk clicks): the pointer rests on a ring cell AHEAD of
+                    # our walk (rotating over three); a SWORD there = a strike at once (arm C)
+                    fwd = forward_cells(here, goal_path[1])
+                    if fwd:
+                        c_w = fwd[watch_i % len(fwd)]
+                        watch_i += 1
+                        u_w, v_w = project(here, [c_w])[0]
+                        v_w -= BODY_UP
+                        if in_view(u_w, v_w):
+                            res_w = hover(u_w, v_w)
+                            if res_w["verdict"] == "sword":
+                                ev({"kind": "engage", "by": "cursor", "name": None,
+                                    "rel": list(c_w)})  # fmt: skip
+                                if fight_ref is None:
+                                    fight_ref = {"img": img, "here": here, "t": tick}
+                                strike(u_w, v_w, c_w, "cursor")
+                                lock = {"t": time.monotonic(), "rel": c_w,
+                                        "cell": [here[0] + c_w[0], here[1] + c_w[1]]}  # fmt: skip
+                                mode, goal_path = "fight", None
                 if here is None and tick - last_pos_t > 30.0:
                     reason = "position unread for 30 s"
                     break
@@ -1185,7 +1285,8 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         n_pk = len(events)
     except Exception as exc:  # noqa: BLE001 -- the run is still recorded; the judge says so
         print(f"packets not written: {exc!r}")
-    man = {"sid": sid, "version": VERSION, "strategy": a.strategy, "seed": a.seed,
+    man = {"sid": sid, "version": VERSION if a.engage == "defend_scan" else MR_VERSION,
+           "engage": a.engage, "strategy": a.strategy, "seed": a.seed,
            "minutes": a.minutes, "reason": reason, "counts": dict(counts), "t0_ns": t0,
            "t1_ns": t1, "packets": n_pk, "params": strat}  # fmt: skip
     (out / "manifest.json").write_text(json.dumps(man, indent=1))
@@ -1203,6 +1304,12 @@ def main() -> int:
     t.add_argument("--minutes", type=float, default=45.0)
     t.add_argument("--seed", type=int, required=True)
     t.add_argument("--label", default="r")
+    t.add_argument(
+        "--engage",
+        choices=["defend_scan", "melee_ring"],
+        default="defend_scan",
+        help="the engagement source (Batt 13:4x): defend_scan (3.98) or melee_ring",
+    )
     t.add_argument(
         "--boxes",
         action=argparse.BooleanOptionalAction,

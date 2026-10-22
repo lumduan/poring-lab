@@ -169,3 +169,14 @@ def test_a_route_starts_even_when_our_own_cell_is_carved() -> None:
     dh.carve(carved, (3, 3), 2)  # covers (2, 2) .. (5, 5): our cell (4, 4) among them
     p = dh.route(g, carved, (4, 4), (10, 10))
     assert p is not None and p[0] == (4, 4) and p[-1] == (10, 10)
+
+
+def test_melee_ring_watches_the_cells_ahead_and_queues_each_sword_once() -> None:
+    """MELEE-RING (Batt 2026-10-22 13:4x): the pointer rests on the ring cells AHEAD of the walk;
+    while fighting, every SWORD cell joins the queue once."""
+    assert dh.forward_cells((10, 10), (11, 10)) == [(1, 0), (1, -1), (1, 1)]  # east, +-45
+    assert dh.forward_cells((10, 10), (10, 11))[0] == (0, 1)  # north (map y grows north)
+    assert dh.forward_cells((10, 10), (10, 10)) == []
+    q: list[dict[str, object]] = []
+    assert dh.queue_add(q, (5, 5), 1.0) and not dh.queue_add(q, (5, 5), 2.0)
+    assert dh.queue_add(q, (6, 5), 2.0) and [x["cell"] for x in q] == [(5, 5), (6, 5)]
