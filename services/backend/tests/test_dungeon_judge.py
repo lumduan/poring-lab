@@ -368,3 +368,11 @@ def test_real_positive_cases_agree_with_the_judges_that_own_each_column() -> Non
     if table is not None:
         assert got["hunt v55: kills == econ_row (search_study window)"] == 116
         assert got["hunt v55: gross / cost / net z/h == econ_row"] == (802.3, 0.0, 802.3)
+
+
+def test_live_window_is_first_input_plus_seconds_capped_at_the_end() -> None:
+    man = {"t0_live_ns": 10 * dj.NS, "t_end_ns": 900 * dj.NS}
+    assert dj.live_window(man, 600) == (10 * dj.NS, 610 * dj.NS)
+    assert dj.live_window(man, 3600) == (10 * dj.NS, 900 * dj.NS)  # capped at the recording
+    with pytest.raises(ValueError):
+        dj.live_window({"t_end_ns": 5}, 600)  # never played: no window invented

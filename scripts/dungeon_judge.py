@@ -13,7 +13,9 @@ A session is read from /dev/shm/poring-lab-demo/<sid>/ while fresh, else from th
 
 THE WINDOW: run_start -> run_end (events, t_ns = CLOCK_MONOTONIC, the packets' clock). Without
 them: the manifest's t0_ns..t1_ns (a survival trial), else its t0_mono_ns..t1_mono_ns (a hunt
-run); the row says which ("window.source").
+run); the row says which ("window.source"). ``--live S`` (a HUMAN demo, human_demo.py; Batt
+2026-10-22: "the recording counts from my first input"): the manifest's t0_live_ns (his first
+input) .. + S s, capped at its t_end_ns (the recording's end).
 
 PER RUN -- from PACKETS (ours = the GM account's block id 2000002, the Crusader's too):
 - kills / h: arm_judge.kills_of (a monster's death vanish <= 1.5 s after OUR damaging act);
@@ -752,9 +754,23 @@ def drop_order_of(map_name: str, path: Path | None = None) -> Mapping[str, Seque
             for k, v in md["species"].items()}  # fmt: skip
 
 
+def live_window(man: Mapping[str, Any], seconds: float) -> tuple[int, int]:
+    """PURE: a human demo's window: his first input (t0_live_ns) .. + seconds, capped at the
+    recording's end (t_end_ns)."""
+    t0 = man.get("t0_live_ns")
+    if not t0:
+        raise ValueError("--live: the manifest has no t0_live_ns (not a played human demo)")
+    t1 = int(t0) + int(seconds * NS)
+    end = man.get("t_end_ns")
+    return int(t0), min(t1, int(end)) if end else t1
+
+
 def row(sid: str, table: Mapping[str, Mapping[str, Any]] | None, map_name: str | None = None,
-        maps_path: Path | None = None, **kw: Any) -> dict[str, Any]:  # fmt: skip
+        maps_path: Path | None = None, live_s: float | None = None,
+        **kw: Any) -> dict[str, Any]:  # fmt: skip
     ev, pk, man = load(sid)
+    if live_s is not None:
+        kw["t0"], kw["t1"] = live_window(man, live_s)
     mp = (
         map_name
         or next((e.get("map") for e in ev if e.get("kind") == "run_start"), None)
@@ -935,6 +951,13 @@ def main() -> int:
         if name != "positive":
             p.add_argument("sids", nargs="+" if name == "table" else 1)
             p.add_argument("--map", default=None, help="the run's map (default: run_start's)")
+            p.add_argument(
+                "--live",
+                type=float,
+                default=None,
+                metavar="S",
+                help="a human demo: his first input .. + S s (manifest t0_live_ns)",
+            )
         p.add_argument("--items", type=Path, default=None,
                        help="the item table (default: data/econ/items.json)")  # fmt: skip
         if name == "table":
@@ -951,7 +974,7 @@ def main() -> int:
     rows = []
     for sid in a.sids:
         try:
-            rows.append(row(sid, table, a.map, maps))
+            rows.append(row(sid, table, a.map, maps, a.live))
         except (OSError, ValueError, KeyError) as e:  # reported, never a silent drop
             print(f"{sid}: skipped ({type(e).__name__}: {e})", file=sys.stderr)
     if not rows:
