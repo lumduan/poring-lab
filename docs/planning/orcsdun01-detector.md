@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [labels-v2-plan.md, training-cost.md, ../benchmarks/v1-vs-v0png.md, ../phase3-plan.md, ../operations/vision-long-lived.md]
-next_action: "3g: T1 PASSES (C1 pooled 2.7 % on col1 with fix 2); T2 = blind round 3 (seed 2, pack built on the NAS) is the parent's next step. Batt's demo is NOT added (own C1 14.8 %). If every orcsdun01 species passes T2: the cache needs build_frame_cache --fix and per-session label modes (v1 rules + species for v1, v2 + fix 2 for orcsdun01), then training; else report to Batt."
+next_action: "3h: the TRAINING TIER FAILS -- T1 passes (C1 2.69 % on col1), T2 (blind round 3) fails on ONE species, the Familiar (labeller E 86.7 % good < 90 %: wing tips cut). By 3f nothing of orcsdun01 trains; Batt's call: a wing-reach box for the bats, the Familiar's labels left out, or accept it. The cache tooling (build_frame_cache --fix, per-session label modes) is built anyway for the next attempt."
 title: "orcsdun01 (Orc Dungeon F1): the facts, the collection, the camera check, the class scheme, the labels and the evaluation (plan)"
 date: 2026-10-21
 owner: Batt
@@ -984,6 +984,40 @@ through the adapter (a625def). Under 3f it is NOT added: its own C1 is 14.8 %.**
      `--labels v1 --classes species`, the orcsdun01 blocks `--labels v2 --classes species --fix`,
      and one build takes one `--labels`.
 3. If a species fails, nothing of orcsdun01 trains, and the result goes to Batt.
+
+### 3h. RESULT: blind round 3 (T2) -- FAILS on ONE species, Familiar; by 3f NOTHING of orcsdun01 trains (scored 2026-10-22 ~20:1x ICT)
+
+- **The round:** two NEW blind labeller agents, E and F, each seeing only `blind-pack-seed2/`
+  (seed 2; 30 crops per orcsdun01 species from the KEPT fix-2 labels + 15 Poring controls = 225;
+  round 2's instructions, byte-identical). Scored by `scripts/blind_score.py` against
+  `answer-key-seed2/answer_key.json`; `answers-round3/score.json` and `both-good.json` on the NAS
+  (`scratch-archive/2026-10-22/orc-fix2/`).
+- **Bars (section 5, unchanged):** >= 90 % good from EACH labeller AND species right >= 95 %.
+
+| species | E good / species (off) | F good / species (off) | T2 |
+|---|---|---|---|
+| Orc Zombie 1153 | 96.7 / 96.7 (1) | 96.7 / 96.7 (1) | PASS |
+| Orc Skeleton 1152 | 96.7 / 100 (1) | 96.7 / 100 (1) | PASS (round 2: 86.7 % FAIL) |
+| White Plant 1082 | 100 / 100 | 100 / 100 | PASS |
+| Black Mushroom 1084 | 100 / 100 | 100 / 100 | PASS |
+| **Familiar 1005** | **86.7** / 96.7 (**4**) | 93.3 / 96.7 (2) | **FAIL (E)** |
+| Steel Chonchon 1042 | 96.7 / 100 (1) | 96.7 / 96.7 (1) | PASS |
+| Drainliar 1111 | 96.7 / 100 (1) | 96.7 / 100 (1) | PASS |
+| (Poring 1002, control) | 100 / 100 | 100 / 100 | PASS |
+
+- **Agreement E-F:** q1 225 / 225, q2 223 / 225, q3 224 / 225; good with the right species for
+  both: 216 / 225 (round 2: 211).
+- **What failed:** the Familiar's "off" boxes cut a WING (a raised wing tip above or beside the box:
+  E 056 / 108 / 109, F 108), as round 2's labellers said of the bats; two were under a UI window
+  (005, 113). One crop is 3.3 points at n = 30: E's 26 / 30 against the 27 / 30 the bar needs.
+- **THE TRAINING TIER (3f): T1 PASS (C1 2.69 %), T2 FAIL -> NOTHING of orcsdun01 trains tonight,
+  and the result goes to Batt** ("every species" is read literally, 3f). The GPU stays idle.
+- **For Batt (new decisions, not taken here):** (1) a wing-reach box for the bats (3e's S2 idea,
+  the action's envelope joined to the fit, for the Familiar and the Drainliar); (2) train without
+  the Familiar class's orcsdun01 labels (its frames kept, the box ignored -- O1's mask problem); (3)
+  accept the Familiar on F's 93.3 % with E's at 86.7 % (a single crop short). The cache tooling for
+  the next attempt (`build_frame_cache --fix`, per-session label modes) is being built anyway
+  (feat/orc-cache).
 
 ## 4. The class scheme (PROPOSED; Batt's default if he does not answer by the time the labels are ready)
 
