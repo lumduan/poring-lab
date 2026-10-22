@@ -14762,7 +14762,19 @@ Reported, not deciding:
   - 57 kills (297.5 /h); HP min 27.1 %; 1 potion (B's emergency, HP < 30 %), 2 Fly Wings (B's
     "mobbed" escapes at HP 28-33 % falling 234-286 HP/s); hard bars 0. Loot 50.7 %; gross 9,316 /
     cost 6,890 / NET 2,427 z/h.
-- **Run 3** (B, seed 22003, 13:35:1x-, attempt 3): running.
+- **Run 3** (B, seed 22003, `20261022T133358-demo-dungeon-B-r3`, 13:35:15-14:20:25, attempt 3,
+  TIME BOX): the first FULL run.
+  - 66 kills (88.0 /h; the last ~8 min in a killed-out stretch near 144-162,20-36), 40.9 s / kill;
+    HP min 58.9 %; 0 potions, 0 Fly Wings, 0 rests (HP was under 60 % only inside a fight, and back
+    over it when the fight ended); 9 Auto Guard casts; deaths 0; hard bars 0.
+  - Loot 78.6 % (55 of 70; 12 expired on the floor, 3 out of sight); gross = net 5,409 z/h;
+    Sharpe-like 0.77. Strikes 72, landed 64 (88.9 %).
+  - Engagements: loot_sword 13, box 11, battle_log 7, walk_sword 2. Chain: 79 % of kills followed
+    by our next act on another unit within 15 s, median 0.87 s after the death.
+  - Moving HP Recovery: 1 natural tick while walking (walking 15.3 % = 6.9 min); IRP while
+    walking 0.
+  - The loot list's reach covered all 15 unpicked items (dungeon_loot_list): the loot steps (29;
+    13 ended in a new fight, 6 hit their 25-s cap with 25-47 cells planned) were too slow.
 
 ### 3.99 dungeon@3-melee_ring: MELEE-RING engagement (the CURSOR engages, not the detector) vs 3.98's defend-scan, sustain B fixed, in alternating runs inside 3.98's rotation (pre-registered 2026-10-22 13:56 ICT, the commit time of 3.99's first commit, BEFORE its pilot and its runs; Batt 2026-10-22 ~13:4x: "NEW ENGAGE OPTION (Batt's idea): 'MELEE-RING' engagement, driven by the CURSOR, not the detector ... pre-register it as its own version on orcsdun01 with the Crusader, compared with the current detector/defend-scan engagement in alternating runs within today's A/B/C rotation (keep the sustain strategy fixed for this comparison, e.g. B)")
 
@@ -14836,7 +14848,23 @@ the NPC sprite guard and all gates stay underneath. Hard bars unchanged.
   so all five fit before ~18:20 (it is 14:3x). Order: MR-B, C, defend-B, A, MR-B; seeds 22101,
   22004, 22005, 22006, 22102.
 
-**Run log (3.99):** (filled as the runs end)
+**Run log (3.99):**
+- **Run 1** (MR, B, seed 22101, `20261022T142950-demo-dungeon-mr-B-mr1`, 14:30-15:10, TIME BOX,
+  40 min):
+  - 83 kills (124.5 /h), 28.9 s / kill; HP min 85.0 %; 0 potions; 1 Fly Wing (the idle watchdog:
+    a no-entry target the heading kept choosing, 45 s); deaths 0; hard bars 0.
+  - Loot 63.9 % gross / 86.3 % net: LOOTERS took 29 items during the fights (28 re-dropped,
+    15 recovered). Net 6,235 z/h (cost 90 z/h: the Fly Wing); Sharpe-like 1.02.
+  - Engagements: loot_sword 37, cursor 9, walk_sword 4, battle_log 4. Strikes 87, landed 66
+    (75.9 %).
+  - The between-swings hovers (Amendment G): 181, of which kept 137, stopped 13, retargeted 9
+    (5.7 % of the 159 with a living, swinging target), died_inside 19; 4 attack requests inside
+    hover windows. The queue saw a SWORD on 102 hovers; 16 hand-offs, struck ~0.1 s after the
+    kill line was read.
+  - Chain (all kills): 77 % chained within 15 s, median 1.20 s from the death to our next act on
+    another unit (run 3, defend-scan: 79 %, 0.87 s): the hand-off is not faster than defend-scan's
+    ring scan after a kill -- an orc dies ~4 s after the strike, inside the strike's own 3-s burst,
+    so the "swinging" phase where the queue hovers is short.
 
 ## 4. Labels from verified outcomes
 - A verified attack click at pixel p on gid G becomes a POINT label: "p belongs to G (class,
