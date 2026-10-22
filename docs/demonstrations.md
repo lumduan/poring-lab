@@ -14688,6 +14688,13 @@ Reported, not deciding:
 - The attempt is NOT scored (its session is kept for the record). Run 1 restarts with the same
   seed; the order and the rest are unchanged.
 
+**Amendment B (2026-10-22 12:2x, during run 1 = strategy A, BEFORE any B or C run; the parent):**
+- The rest walk had no fallback: the five rest spots lie far apart on a 200 x 200 map, and a spot
+  the client cannot reach would leave B / C walking with HP under 60 % until the run ends.
+- Now (code b7c9fa0): a rest spot not reached within 120 s of the decision to rest -> sit where we
+  are (`rest_start` with `fallback: true`). It touches the rest path only, which A never takes;
+  so run 1 (A) is unaffected, and every B / C run uses it.
+
 **Run log:** (filled as the runs end)
 
 ## 4. Labels from verified outcomes
