@@ -257,3 +257,21 @@ def test_amendment_i_h_carries_ten_potions_and_never_rests_overweight() -> None:
     assert dh.REGEN_STOP == 0.50
     src = (ROOT / "scripts" / "dungeon_hunt.py").read_text()
     assert "and not overweight" in src and '"why": "overweight"' in src
+
+
+def test_overweight_is_the_red_weight_line() -> None:
+    """Amendment I: the client paints Basic Info's weight line RED at >= 50 % (the digit reader
+    returns None there); 4 live frames gave 0 red px below 50 % and 281 at 2,110 / 4,150."""
+    import numpy as np
+
+    from poring_env import weight as wt
+
+    x, y, w, h = wt.rect_at()
+    frame = np.full((720, 1280, 3), 255, np.uint8)
+    frame[y + 5 : y + 15, x + 40 : x + 60] = (0, 0, 0)  # black text: not overweight
+    assert not dh.overweight_red(frame)
+    frame[y + 5 : y + 15, x + 60 : x + 70] = (20, 20, 230)  # 100 red px (BGR)
+    assert dh.overweight_red(frame)
+    frame2 = np.full((720, 1280, 3), 255, np.uint8)
+    frame2[200:300, 200:300] = (20, 20, 230)  # red elsewhere (a monster): not the weight line
+    assert not dh.overweight_red(frame2)

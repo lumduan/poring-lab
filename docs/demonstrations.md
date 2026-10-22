@@ -15062,6 +15062,11 @@ min) -- **reported APART (before Amendment I):**
 - The weight share is read every 10 s with the UI watch (outside fights). At >= 50 % there is **no
   rest** (`rest_skip`, rate-limited), and a sitting Crusader **stands** (`rest_end` overweight):
   sitting there regenerates nothing.
+- **Found while checking c1 (same amendment, before the restart):** the weight DIGIT reader returns
+  None on the line the client paints RED at >= 50 % ("no_label"), so c1's setup neither cleared the
+  Etc tab nor refused (fail-open). The red colour itself is now the signal (`overweight_red`: >= 50
+  red px on Basic Info's weight line; 4 live frames: 0 below 50 %, 281 at 2,110-2,115 / 4,150): the
+  setup clears on it, refuses if the line is still red after the setup, and the run's guard uses it.
 - **The pairs restart** with the amended code as pi1 / ci1, ci2 / pi2, ... (the same order rule and
   seeds from 22201); p1 is reported apart, c1 is a stopped attempt.
 

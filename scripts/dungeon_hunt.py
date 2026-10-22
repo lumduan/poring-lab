@@ -145,6 +145,9 @@ SELF_BOX = (610, 268, 672, 375)  # client px: our own drawn Crusader (a box cent
 BOX_NEAR_PX = 110.0  # a box's foot within this of our cell's point = "near" (~3 cells across)
 CALM_S = 2.0  # dungeon@4: no hit on us for this long = between fights (H's calm Heal)
 REGEN_STOP = 0.50  # Amendment I: at this weight share the server gives NO natural HP / SP regen
+WEIGHT_RED_MIN = 50  # Amendment I: red px on the weight line = the client's own >= 50 % colour
+# (measured 2026-10-22 21:0x on 4 frames: 0 below 50 %, 281 at 2,110-2,115 / 4,150; the digit
+# reader returns None on the red line: "no_label")
 PLANT_UP = 12  # px above a White Plant's cell point: its body (a small sprite)
 PLANT_NEAR, PLANT_HOVERS, PLANT_EVERY_S = 7, 16, 120.0  # the White Plant sweep (dungeon@4)
 WP_TOL = 2  # a patrol waypoint counts as reached within this many cells (map_routes.reached)
@@ -260,6 +263,18 @@ def plant_cells(area_: tuple[int, int, int, int], here: Cell, walkable: Any,
              for cy in range(max(0, y - ys), min(h, y + ys + 1))
              if (cx - x) % 2 == 0 and (cy - y) % 2 == 0 and walkable[cy, cx]]  # fmt: skip
     return sorted(cells, key=lambda c: (cheb2(c, here), c))[:n]
+
+
+def overweight_red(frame_bgr: Any) -> bool:
+    """PURE (Amendment I): the client draws the weight line in RED at >= 50 % weight (no natural
+    regen); the digit reader cannot read it (None), the colour itself is the signal. The line is
+    Basic Info's (poring_env.weight.rect_at(): x, y, w, h in the game region)."""
+    from poring_env import weight as wt
+
+    x, y, w, h = wt.rect_at()
+    a = np.asarray(frame_bgr)[y : y + h, x : x + w, :3].astype(np.int16)
+    b, g, r_ = a[..., 0], a[..., 1], a[..., 2]
+    return int(((r_ >= 150) & (g <= 90) & (b <= 90)).sum()) >= WEIGHT_RED_MIN
 
 
 def route(base: Any, carved: Any, here: Cell, goal: Cell) -> list[Cell] | None:
@@ -648,9 +663,11 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
             setup.append(f"@item 601 {WINGS_TO - inv.get(601, 0)}")
         import gm_state
 
-        w0 = gm_state._weight(gm_state._frames(screen))
+        fr0 = gm_state._frames(screen)
+        w0 = gm_state._weight(fr0)
+        red0 = overweight_red(fr0[0])  # Amendment I: the reader is blind to the red (>= 50 %) line
         cleared: dict[str, Any] | None = None
-        if (gm_state.weight_share(w0) or 0.0) >= CLEAR_AT:
+        if (gm_state.weight_share(w0) or 0.0) >= CLEAR_AT or (w0 is None and red0):
             cr.gm_line(agent_raw, screen, f"@warp {CLEAR_STAND[0]} {CLEAR_STAND[1]} "
                        f"{CLEAR_STAND[2]}", "crusader")  # fmt: skip
             time.sleep(3.0)
@@ -679,8 +696,11 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         def frame() -> Any:
             return np.ascontiguousarray(r.grab_after(screen, (gx0, gy0, gw, gh), r.ns())[..., :3])
 
-        w_ = gm_state._weight(gm_state._frames(screen))
+        fr1 = gm_state._frames(screen)
+        w_ = gm_state._weight(fr1)
         share = gm_state.weight_share(w_)
+        if share is None and overweight_red(fr1[0]):  # Amendment I: fail closed on the red line
+            raise r.Stop("dungeon@4: the weight line reads RED (>= 50 %) after the setup")
         ev({"kind": "run_start", "strategy": a.strategy, "seed": a.seed, "engage": a.engage,
             "version": VERSION if a.engage == "defend_scan" else MR_VERSION,
             "search": a.search, "route": None if rt is None else rt.id,
@@ -711,6 +731,7 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
         sitting = False
         rest_since = 0.0
         w_share: float | None = share  # Amendment I: the weight share, re-read every UI_EVERY_S
+        red_seen = False  # Amendment I: the weight line drawn red (>= 50 %) on the last read
         rest_skip_t = -1e9
         last_ui = time.monotonic()
         last_walk = 0.0
@@ -1169,11 +1190,16 @@ def run(a: argparse.Namespace) -> int:  # noqa: PLR0915, C901
                         reason = f"hard_bar: unknown UI state {cs['decision']}"
                         break
                     # Amendment I: the weight, read with the UI watch (no regen at >= 50 %)
-                    w_now = gm_state.weight_share(gm_state._weight(gm_state._frames(screen)))
-                    if w_now is not None and (w_share is None or abs(w_now - w_share) >= 0.005):
-                        ev({"kind": "weight", "share": round(w_now, 4)})
+                    frs = gm_state._frames(screen)
+                    w_now = gm_state.weight_share(gm_state._weight(frs))
+                    red_now = overweight_red(frs[0])
+                    if red_now != red_seen or (w_now is not None and (
+                            w_share is None or abs(w_now - w_share) >= 0.005)):  # fmt: skip
+                        ev({"kind": "weight", "share": None if w_now is None else round(w_now, 4),
+                            "red": red_now})  # fmt: skip
                     w_share = w_now if w_now is not None else w_share
-                overweight = w_share is not None and w_share >= REGEN_STOP
+                    red_seen = red_now
+                overweight = red_seen or (w_share is not None and w_share >= REGEN_STOP)
                 # Amendment E: a fight, a loot step or a rest is activity, never idle (run 3: a
                 # fight in place + a 25-s loot step read as 45 s of idle and cost a Fly Wing)
                 if mode != "search":
