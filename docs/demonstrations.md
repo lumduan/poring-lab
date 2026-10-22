@@ -14741,6 +14741,16 @@ Reported, not deciding:
   prt_fild08 stand unless dead. Twice today (13:19, 13:33) a stopped run left it at 30-42 % HP
   among orcs with no runner; both times the next setup warped it out in time.
 
+**Amendment H (2026-10-22 15:5x, after r4 ended on a FALSE hard bar 2 min before its box; the parent):**
+- r4 (C) at 38.0 of its 40 min: a correct C emergency Fly Wing (HP 32 % falling 460 HP/s, inside a
+  strike) teleported at once (packets: the wing used at 2172.75 s, the same-map change to 28,157 at
+  2172.78 s), but the minimap's coordinates still showed the OLD cell 0.25 s later. The runner took
+  that stale cell, fought at the new spot for ~9.5 s without a position read, and the next read
+  looked like a 40-cell jump. Amendment F's reset was right; the readout lags the teleport.
+- Fix (code de419ac): no position read for 2.5 s after any Fly Wing, and a jump within 15 s of one is
+  never a hard bar (map changes are the packets' judgement: 0 other-map changes today).
+- r4 is reported with its 38.0 minutes (its rates over that window).
+
 **Run log:**
 - **Run 1 attempt 1** (A, `20261022T120918-demo-dungeon-A-r1-attempt1-stopped`, 1.9 min): stopped,
   not scored (Amendment A).
