@@ -14741,7 +14741,28 @@ Reported, not deciding:
   prt_fild08 stand unless dead. Twice today (13:19, 13:33) a stopped run left it at 30-42 % HP
   among orcs with no runner; both times the next setup warped it out in time.
 
-**Run log:** (filled as the runs end)
+**Run log:**
+- **Run 1 attempt 1** (A, `20261022T120918-demo-dungeon-A-r1-attempt1-stopped`, 1.9 min): stopped,
+  not scored (Amendment A).
+- **Run 1** (A, seed 22001, `20261022T121416-demo-dungeon-A-r1`, 12:14:58-12:39:45, 24.8 min):
+  PARTIAL, stopped by the parent in a search stall loop (Amendment C); packets written afterwards.
+  - 64 kills (154.9 /h over the window incl. ~5 stuck minutes); HP min 77.2 %; 0 potions (HP never
+    under A's 60 %); 0 Fly Wings; 5 Auto Guard casts; deaths 0; hard bars 0 (0 other-map changes,
+    0 NPC contacts, 0 attacks on a non-monster).
+  - Loot 75.0 % gross / 87.9 % net; gross = net 7,914 z/h (no cost); Sharpe-like 4.14.
+  - Strikes 69, landed 54 (78.3 %); engagements: loot_sword 30, box 9, battle_log 5, stall_scan 1,
+    walk_sword 1. Moving HP Recovery: 1 natural tick while walking (walking 5.9 % of the time).
+- **Run 2** (B, seed 22002, `20261022T124204-demo-dungeon-B-r2`, 12:42:47-13:12:31, 29.7 min):
+  PARTIAL, stopped by the parent (routing returned None from ~7 min: Amendment D).
+  - 17 kills (35.2 /h, depressed by ~20 idle minutes); HP min 94.9 %; 0 potions, 0 Fly Wings, 0 rests
+    (HP never under 60 %); 6 Auto Guard casts; hard bars 0. Loot 85.7 % / 100 % net; 1,528 z/h.
+- **Run 3 attempt 1** (B, `...-B-r3-attempt1-stopped`, 3.5 min): stopped, not scored (Amendment E).
+- **Run 3 attempt 2** (B, seed 22003, `20261022T132000-demo-dungeon-B-r3`, 13:20:52-13:32:25,
+  11.5 min): PARTIAL, a FALSE hard bar (Amendment F; the packets: 0 other-map changes).
+  - 57 kills (297.5 /h); HP min 27.1 %; 1 potion (B's emergency, HP < 30 %), 2 Fly Wings (B's
+    "mobbed" escapes at HP 28-33 % falling 234-286 HP/s); hard bars 0. Loot 50.7 %; gross 9,316 /
+    cost 6,890 / NET 2,427 z/h.
+- **Run 3** (B, seed 22003, 13:35:1x-, attempt 3): running.
 
 ### 3.99 dungeon@3-melee_ring: MELEE-RING engagement (the CURSOR engages, not the detector) vs 3.98's defend-scan, sustain B fixed, in alternating runs inside 3.98's rotation (pre-registered 2026-10-22 13:56 ICT, the commit time of 3.99's first commit, BEFORE its pilot and its runs; Batt 2026-10-22 ~13:4x: "NEW ENGAGE OPTION (Batt's idea): 'MELEE-RING' engagement, driven by the CURSOR, not the detector ... pre-register it as its own version on orcsdun01 with the Crusader, compared with the current detector/defend-scan engagement in alternating runs within today's A/B/C rotation (keep the sustain strategy fixed for this comparison, e.g. B)")
 
